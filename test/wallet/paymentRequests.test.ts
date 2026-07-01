@@ -501,7 +501,7 @@ describe('payment requests', () => {
 
     test('maps a bare P2PK option to a single pubkey', () => {
       const nut10: NUT10Option = { kind: 'P2PK', data: PUBKEY, tags: [] };
-      expect(prWithNut10(nut10).toP2PKOptions()).toEqual({ pubkey: PUBKEY });
+      expect(prWithNut10(nut10).toP2PKOptions()).toEqual({ kind: 'P2PK', data: PUBKEY });
     });
 
     test('maps standard NUT-11 tags onto structured P2PK fields', () => {
@@ -518,7 +518,9 @@ describe('payment requests', () => {
         ],
       };
       expect(prWithNut10(nut10).toP2PKOptions()).toEqual({
-        pubkey: [PUBKEY, PUBKEY_2],
+        kind: 'P2PK',
+        data: PUBKEY,
+        pubkeys: [PUBKEY_2],
         locktime: 1700000000,
         requiredSignatures: 2,
         refundKeys: [REFUND],
@@ -530,7 +532,8 @@ describe('payment requests', () => {
     test('preserves non-standard tags as additionalTags', () => {
       const nut10: NUT10Option = { kind: 'P2PK', data: PUBKEY, tags: [['custom', 'value']] };
       expect(prWithNut10(nut10).toP2PKOptions()).toEqual({
-        pubkey: PUBKEY,
+        kind: 'P2PK',
+        data: PUBKEY,
         additionalTags: [['custom', 'value']],
       });
     });
@@ -567,11 +570,25 @@ describe('payment requests', () => {
         ],
       };
       expect(prWithNut10(nut10).toP2PKOptions()).toEqual({
-        hashlock: HASH,
-        pubkey: [PUBKEY],
+        kind: 'HTLC',
+        data: HASH,
+        pubkeys: [PUBKEY],
         locktime: 1700000000,
         refundKeys: [REFUND],
       });
+    });
+
+    test('maps a pubkey-less HTLC option to a hashlock-only lock', () => {
+      // NUT-14 allows an HTLC with no `pubkeys` tag: anyone with the preimage
+      // can spend. This must produce a buildable lock, not a poison-pill option.
+      const nut10: NUT10Option = { kind: 'HTLC', data: HASH, tags: [] };
+      const options = prWithNut10(nut10).toP2PKOptions()!;
+      expect(options).toEqual({ kind: 'HTLC', data: HASH });
+      const od = OutputData.createSingleP2PKData(options, 1, '00ad268c4d1f5826');
+      const secret = JSON.parse(new TextDecoder().decode(od.secret));
+      expect(secret[0]).toBe('HTLC');
+      expect(secret[1].data).toBe(HASH);
+      expect(secret[1].tags.find((t: string[]) => t[0] === 'pubkeys')).toBeUndefined();
     });
 
     test('ignores unknown/future kinds by returning undefined', () => {

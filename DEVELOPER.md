@@ -40,6 +40,17 @@ Notes:
 - `npm ci` requires a package-lock.json and produces a reproducible node_modules tree.
 - Node requirement: see `package.json` (engine: `node >=22.4.0`). Use `nvm`, `volta`, or `asdf` to pin your local Node version.
 
+#### The `@experimental` line
+
+Speculative work tied to **unmerged NUTs** (specs that may still change) is **not** merged into `main`, where it would become a compatibility promise we can't walk back. Instead those PRs stay open against `main` and are bundled onto a disposable `experimental` branch, published to npm under the `@experimental` dist-tag for real-world testing:
+
+```bash
+./scripts/make-experimental.sh 698 712    # rebuild from main + these PRs
+PUBLISH=1 ./scripts/make-experimental.sh 698   # …and npm publish --tag experimental
+```
+
+The branch is throwaway, rebuilt from scratch each run, never promoted from and never merged back. Work graduates by merging its individual PR into `main` the normal way. The bundle is passed as PR-number args (or kept in the gitignored `scripts/.experimental-prs`), so changing the mix is a local operation — no PR required. See the script header for the full rationale.
+
 ### ⚠️ Important — run `npm ci` after switching major branches
 
 When switching between major branches (for example `main` and a `vN-dev` branch) the lockfile and installed dependencies can differ. This frequently causes confusing failures when compiling or running `api-extractor`.
@@ -322,9 +333,14 @@ Releases on `main` are automated with [release-please](https://github.com/google
 
 > **Major bumps:** when breaking changes (`feat!` / `fix!`) land on `main`, release-please proposes the next major automatically. To control the pre-release cadence, add a `Release-As: X.0.0-rc.1` footer to a commit so the Release PR targets that version (it publishes to `next`).
 
-### Pre-releases / release candidates
+### Pre-releases: `next` (RC) vs `experimental` (unstable)
 
-Any version containing `-rc`, `-beta`, or `-alpha` publishes to the `next` dist-tag, regardless of branch. Cut these either from `main` (via a `Release-As` footer) or from a short-lived branch off `main` (bump `package.json`, tag, and publish a GitHub **pre-release**).
+Two distinct pre-release channels — don't conflate them:
+
+- **`next` — release candidates.** `-rc` versions only. The one pre-release we ship from `main`: finalized work that _will_ become GA barring a blocker. Cut from `main` (via a `Release-As: X.Y.Z-rc.1` footer) or a short-lived branch off `main`. `npm i @cashu/cashu-ts@next`.
+- **`experimental` — unstable.** `-beta` / `-alpha` versions. Off the release path: speculative bundles of _unmerged_ PRs for real-world testing; may change or be withdrawn and are **not** guaranteed to ship. Produced by [`scripts/make-experimental.sh`](#the-experimental-line), published under `@experimental`. `npm i @cashu/cashu-ts@experimental`.
+
+From `main` we only ever ship `-rc` (→ `next`) or full GA (→ `latest`); anything `-alpha`/`-beta` is unstable and lives on `experimental`. Rule of thumb: `@next` = "trust it, it's coming"; `@experimental` = "kick the tires, no promises".
 
 ### LTS releases on `vN-dev` (manual)
 
@@ -345,19 +361,21 @@ release-please only watches `main`, so prior-major maintenance releases are cut 
 
 ### npm dist-tags
 
-`version.yml` derives the dist-tag from the version being published:
+`version.yml` derives the dist-tag from the version being published (checked in this order):
 
-- Prerelease (`-rc` / `-beta` / `-alpha`) → `next`
+- `-beta` / `-alpha` → `experimental` (unstable)
+- `-rc` → `next` (release candidate)
 - Major equal to `LATEST_MAJOR` (a workflow-level env var) → `latest`
 - Any other major → `vN-lts`
 
-| Version       | Tag      | Install                              |
-| ------------- | -------- | ------------------------------------ |
-| Current major | `latest` | `npm install @cashu/cashu-ts`        |
-| Prerelease    | `next`   | `npm install @cashu/cashu-ts@next`   |
-| LTS           | `vN-lts` | `npm install @cashu/cashu-ts@v3-lts` |
+| Version            | Tag            | Stability                     | Install                                    |
+| ------------------ | -------------- | ----------------------------- | ------------------------------------------ |
+| Current major (GA) | `latest`       | stable                        | `npm install @cashu/cashu-ts`              |
+| `-rc`              | `next`         | release candidate — will ship | `npm install @cashu/cashu-ts@next`         |
+| `-beta` / `-alpha` | `experimental` | unstable — may change/vanish  | `npm install @cashu/cashu-ts@experimental` |
+| Prior major        | `vN-lts`       | maintenance                   | `npm install @cashu/cashu-ts@v3-lts`       |
 
-> `latest` is governed **solely** by `LATEST_MAJOR` in `version.yml`. Any major that is not `LATEST_MAJOR` (and is not a prerelease) falls through to `vN-lts` and can never accidentally become `latest`.
+> `latest` is governed **solely** by `LATEST_MAJOR` in `version.yml`. Any major that is not `LATEST_MAJOR` (and is not a prerelease) falls through to `vN-lts` and can never accidentally become `latest`. `experimental` and `next` are separate channels: a `-beta`/`-alpha` never lands on `next`, and neither ever becomes `latest`.
 
 ### Major transitions
 

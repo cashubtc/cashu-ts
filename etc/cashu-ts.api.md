@@ -240,6 +240,9 @@ export const BLS_G2_GENERATOR: WeierstrassPoint<Fp2>;
 // @public
 export const BLS_HASH_TO_CURVE_DST = "CASHU_BLS12_381_G1_XMD:SHA-256_SSWU_RO_";
 
+// @public
+export function buildMintBackupPayload(mints: string[], timestamp: number): string;
+
 // @public (undocumented)
 export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
 
@@ -403,6 +406,12 @@ export type DeriveKeysetIdOptions = {
     unit?: string;
     versionByte?: number;
     isDeprecatedBase64?: boolean;
+};
+
+// @public
+export function deriveMintBackupKeys(seed: Uint8Array): {
+    privkey: string;
+    pubkey: string;
 };
 
 // @public
@@ -765,6 +774,18 @@ export type KeysetPair = {
     privKeys: RawMintKeys;
 };
 
+// @public
+export type LockConditions = {
+    pubkeys?: string[];
+    locktime?: number;
+    refundKeys?: string[];
+    requiredSignatures?: number;
+    requiredRefundSignatures?: number;
+    additionalTags?: P2PKTag[];
+    blindKeys?: boolean;
+    sigFlag?: SigFlag;
+};
+
 // @public (undocumented)
 export type LockState = 'PERMANENT' | 'ACTIVE' | 'EXPIRED';
 
@@ -799,7 +820,7 @@ export class MeltBuilder<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | '
     asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: AmountLike[]): this;
     asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
-    asP2PK(options: P2PKOptions, denoms?: AmountLike[]): this;
+    asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]): this;
     asRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
@@ -1007,12 +1028,26 @@ export class Mint {
 }
 
 // @public
+export const MINT_BACKUP_D_TAG = "mint-list";
+
+// @public
+export const MINT_BACKUP_KIND = 30078;
+
+// @public
+export interface MintBackupPayload {
+    // (undocumented)
+    mints: string[];
+    // (undocumented)
+    timestamp: number;
+}
+
+// @public
 export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M extends 'bolt12' | 'onchain' ? false : true> {
     constructor(wallet: Wallet, method: M, amount: AmountLike, quote: MintQuoteFor<M>);
     asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: AmountLike[]): this;
     asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
-    asP2PK(options: P2PKOptions, denoms?: AmountLike[]): this;
+    asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]): this;
     asRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
@@ -1498,7 +1533,7 @@ export class P2PKBuilder {
     // (undocumented)
     blindKeys(): this;
     // (undocumented)
-    static fromOptions(opts: P2PKOptions): P2PKBuilder;
+    static fromOptions(p2pk: P2PKOptions): P2PKBuilder;
     // (undocumented)
     lockUntil(when: Date | number): this;
     // (undocumented)
@@ -1512,16 +1547,8 @@ export class P2PKBuilder {
 }
 
 // @public
-export type P2PKOptions = {
-    pubkey: string | string[];
-    locktime?: number;
-    refundKeys?: string[];
-    requiredSignatures?: number;
-    requiredRefundSignatures?: number;
-    additionalTags?: P2PKTag[];
-    blindKeys?: boolean;
-    sigFlag?: SigFlag;
-    hashlock?: string;
+export type P2PKOptions = SpendingConditionsBase & LockConditions & {
+    kind: 'P2PK' | 'HTLC';
 };
 
 // @public
@@ -1554,6 +1581,9 @@ export type P2PKWitness = {
 
 // @public
 export function parseHTLCSecret(secret: string | Secret): Secret;
+
+// @public
+export function parseMintBackupPayload(json: string): MintBackupPayload;
 
 // @public
 export function parseP2PKSecret(secret: string | Secret): Secret;
@@ -1740,7 +1770,7 @@ export class ReceiveBuilder {
     asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: AmountLike[]): this;
     asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
-    asP2PK(options: P2PKOptions, denoms?: AmountLike[]): this;
+    asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]): this;
     asRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
@@ -1839,13 +1869,13 @@ export class SendBuilder {
     asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: AmountLike[]): this;
     asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
-    asP2PK(options: P2PKOptions, denoms?: AmountLike[]): this;
+    asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]): this;
     asRandom(denoms?: AmountLike[]): this;
     includeFees(on?: boolean): this;
     keepAsCustom(data: OutputDataLike[]): this;
     keepAsDeterministic(counter?: number, denoms?: AmountLike[]): this;
     keepAsFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
-    keepAsP2PK(options: P2PKOptions, denoms?: AmountLike[]): this;
+    keepAsP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]): this;
     keepAsRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     offlineCloseMatch(requireDleq?: boolean): this;
@@ -1996,6 +2026,12 @@ export function signP2PKProofs(proofs: Proof[], privateKey: PrivKey | PrivKey[],
 
 // @public
 export function sortProofsById(proofs: Proof[]): Proof[];
+
+// @public
+export type SpendingConditionsBase = {
+    kind: SecretKind;
+    data: string;
+};
 
 // @public
 export function splitAmount(value: AmountLike, keyset: Keys, split?: AmountLike[], order?: 'desc' | 'asc'): Amount[];

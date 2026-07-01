@@ -201,6 +201,36 @@ Calls that already pass a `CompleteMeltOptions` object (or omit the third argume
 
 ---
 
+## `P2PKOptions` is now a `kind` + `data` spending condition
+
+`P2PKOptions` drops `pubkey: string | string[]` and `hashlock?`. It is now the NUT-10 envelope (`kind` + `data`) plus the shared NUT-11 `LockConditions` tags:
+
+```ts
+type P2PKOptions = SpendingConditionsBase & LockConditions & { kind: 'P2PK' | 'HTLC' };
+```
+
+`data` is the lock pubkey (`'P2PK'`) or the hashlock (`'HTLC'`); extra signers move from the old `pubkey` array to the `pubkeys` tag. This affects every place a lock is built: `asP2PK()`, `OutputData.createP2PKData()`, and `{ type: 'p2pk', options }` output configs. `P2PKBuilder` (`addLockPubkey`/`addHashlock`) is unchanged.
+
+### Migration
+
+```ts
+// Before
+asP2PK({ pubkey: pk });
+asP2PK({ pubkey: [a, b], requiredSignatures: 2 });
+asP2PK({ hashlock: h });
+asP2PK({ hashlock: h, pubkey: [a] });
+
+// After
+asP2PK({ kind: 'P2PK', data: pk });
+asP2PK({ kind: 'P2PK', data: a, pubkeys: [b], requiredSignatures: 2 });
+asP2PK({ kind: 'HTLC', data: h });
+asP2PK({ kind: 'HTLC', data: h, pubkeys: [a] });
+```
+
+`PaymentRequest.toP2PKOptions()` already returns the new shape, so pass its result straight to `asP2PK()`.
+
+---
+
 ## `PaymentRequest.singleUse` is now optional (tri-state)
 
 `PaymentRequest.singleUse` is now `boolean | undefined` (was a required `boolean` defaulting to `false`), so the flag can round-trip the absent/`false`/`true` distinction instead of always serializing `single_use=0`. Setting `false` or `true` is unchanged; only decoding shifts — a request that omits the flag now yields `singleUse: undefined` instead of `false`. Replace any `pr.singleUse === false` check with `!pr.singleUse` (true for both absent and explicit `false`).

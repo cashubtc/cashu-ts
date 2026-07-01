@@ -269,21 +269,22 @@ export class OutputData implements OutputDataLike {
   static createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string): OutputData {
     const amountValue = Amount.from(amount);
     const normalized = normalizeP2PKOptions(p2pk);
-    const lockKeys = Array.isArray(normalized.pubkey) ? normalized.pubkey : [normalized.pubkey];
+    const isHTLC = normalized.kind === 'HTLC';
     const refundKeys = normalized.refundKeys ?? [];
     const reqLock = normalized.requiredSignatures ?? 1;
     const reqRefund = normalized.requiredRefundSignatures ?? 1;
 
-    // Init vars
-    const hashlock = normalized.hashlock;
-    const isHTLC = typeof hashlock === 'string' && hashlock.length > 0;
-    let data = isHTLC ? hashlock : lockKeys[0];
-    let pubkeys = isHTLC ? lockKeys : lockKeys.slice(1);
+    // Canonical layout: `data` is the NUT-10 data slot (a pubkey for P2PK, a hashlock
+    // for HTLC); `pubkeys` is the optional `pubkeys` tag content.
+    let data = normalized.data;
+    let pubkeys = normalized.pubkeys ?? [];
     let refund = refundKeys;
 
-    // Optional key blinding (P2BK)
+    // Optional key blinding (P2BK). Only signing keys are blinded: for P2PK the data
+    // key signs and is blinded too; for HTLC the data is a hash, so it stays in clear.
     let Ehex: string | undefined;
-    if (p2pk.blindKeys) {
+    if (normalized.blindKeys) {
+      const lockKeys = isHTLC ? pubkeys : [data, ...pubkeys];
       const ordered = [...lockKeys, ...refundKeys];
       const { blinded, Ehex: _E } = deriveP2BKBlindedPubkeys(ordered);
       if (isHTLC) {

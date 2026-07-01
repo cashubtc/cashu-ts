@@ -334,7 +334,10 @@ describe('mint api', () => {
     await untilMintQuotePaid(wallet, request);
     const mintedProofs = await wallet.mintProofsBolt11(128, request.quote);
     // Send them P2PK locked to Bob
-    const { send } = await wallet.ops.send(64, mintedProofs).asP2PK({ pubkey: pubKeyBob }).run();
+    const { send } = await wallet.ops
+      .send(64, mintedProofs)
+      .asP2PK({ kind: 'P2PK', data: pubKeyBob })
+      .run();
     expectNUT10SecretDataToEqual(send, pubKeyBob);
     const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
     // Try and receive them with Alice's secret key (should fail)
@@ -496,7 +499,8 @@ describe('mint api', () => {
     const proofs = await wallet.ops
       .mintBolt11(3000, mintRequest.quote)
       .asP2PK({
-        pubkey: bytesToHex(pubKeyBob),
+        kind: 'P2PK',
+        data: bytesToHex(pubKeyBob),
       })
       .run();
     const meltRequest = await wallet.createMeltQuoteBolt11(invoice);
@@ -519,7 +523,8 @@ describe('mint api', () => {
     const preview = await wallet.ops
       .mintBolt11(50, mintRequest.quote)
       .asP2PK({
-        pubkey: bytesToHex(pubKeyBob),
+        kind: 'P2PK',
+        data: bytesToHex(pubKeyBob),
         sigFlag: 'SIG_ALL',
       })
       .prepare();
@@ -819,7 +824,7 @@ describe('Custom Outputs', () => {
   test('Default keepFactory', async () => {
     // First we create a keep factory, this is a function that will be used to construct all outputs that we "keep"
     function p2pkFactory(a: AmountLike, k: HasKeysetKeys) {
-      return OutputData.createSingleP2PKData({ pubkey: hexPk }, a, k.id);
+      return OutputData.createSingleP2PKData({ kind: 'P2PK', data: hexPk }, a, k.id);
     }
     const keepFactory: OutputType = { type: 'factory', factory: p2pkFactory };
     // We then construct and load the wallet
@@ -866,7 +871,7 @@ describe('Custom Outputs', () => {
     const testPk = '02' + 'ab'.repeat(32);
     const newFactory: OutputType = {
       type: 'factory',
-      factory: (a, k) => OutputData.createSingleP2PKData({ pubkey: testPk }, a, k.id),
+      factory: (a, k) => OutputData.createSingleP2PKData({ kind: 'P2PK', data: testPk }, a, k.id),
     };
     const newProofs = await wallet.receive(
       { proofs: unlockedProofs.send, mint: mintUrl, unit: wallet.unit },
@@ -879,7 +884,7 @@ describe('Custom Outputs', () => {
   test('Manual Factory Mint', async () => {
     function createFactory(pubkey: string): OutputDataFactory {
       function inner(a: AmountLike, k: HasKeysetKeys) {
-        return OutputData.createSingleP2PKData({ pubkey: pubkey }, a, k.id);
+        return OutputData.createSingleP2PKData({ kind: 'P2PK', data: pubkey }, a, k.id);
       }
       return inner;
     }
@@ -895,7 +900,7 @@ describe('Custom Outputs', () => {
   test('Manual Factory Send', async () => {
     function createFactory(pubkey: string): OutputDataFactory {
       function inner(a: AmountLike, k: HasKeysetKeys) {
-        return OutputData.createSingleP2PKData({ pubkey }, a, k.id);
+        return OutputData.createSingleP2PKData({ kind: 'P2PK', data: pubkey }, a, k.id);
       }
       return inner;
     }
@@ -928,8 +933,8 @@ describe('Custom Outputs', () => {
     const proofs = await wallet.mintProofsBolt11(40, quote.quote);
     const pk1 = '02' + 'aa'.repeat(32);
     const pk2 = '02' + 'bb'.repeat(32);
-    const data1 = OutputData.createP2PKData({ pubkey: pk1 }, 10, keys);
-    const data2 = OutputData.createP2PKData({ pubkey: pk2 }, 10, keys);
+    const data1 = OutputData.createP2PKData({ kind: 'P2PK', data: pk1 }, 10, keys);
+    const data2 = OutputData.createP2PKData({ kind: 'P2PK', data: pk2 }, 10, keys);
     const customConfig: OutputConfig = {
       keep: wallet.defaultOutputType(),
       send: { type: 'custom', data: [...data1, ...data2] },

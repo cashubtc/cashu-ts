@@ -1,6 +1,6 @@
 import { type Logger, NULL_LOGGER } from '../logger';
 import { nullIfUndefined } from '../utils/core';
-import { ABSOLUTE_MAX_BATCH_SIZE, ABSOLUTE_MAX_PER_MINT } from '../utils/limits';
+import { ABSOLUTE_MAX_BATCH_SIZE, ABSOLUTE_MAX_PER_MINT, MAX_METHOD_LENGTH } from '../utils/limits';
 import { normalizeSafeIntegerMetadata } from '../utils/normalizeNumbers';
 
 import { CTSError } from './Errors';
@@ -15,6 +15,18 @@ import {
 
 type Method = 'GET' | 'POST';
 type Endpoint = { method: Method; path: string };
+
+/**
+ * Per NUT-04/05, when `method_name` is null or omitted, wallets derive a human-readable name.
+ * Returns null for a missing/empty/non-string/over-long method so malformed (or hostile) entries
+ * stay null. The length cap avoids a potential memory-exhaustion DoS vector.
+ */
+function deriveMethodName(method: unknown): string | null {
+  if (typeof method !== 'string' || method.length > MAX_METHOD_LENGTH) return null;
+  const words = method.split(/[-_]/).filter((w) => w !== '');
+  if (words.length === 0) return null;
+  return words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
 
 type ProtectedIndex = {
   exact: Record<Method, Set<string>>;
@@ -68,13 +80,17 @@ export class MintInfo {
     };
   }
 
-  // Per NUT-04/05/25/XX, `min_amount`, `max_amount`, and `method_name` are `<x|null>`. Mints that
-  // omit them entirely (older Nutshell, etc.) leave the field as `undefined`; coerce to null so the
-  // normalized response is spec-valid and matches the declared types.
+  // Per NUT-04/05/25/XX, `min_amount` and `max_amount` are `<x|null>`. Mints that omit them entirely
+  // (older Nutshell, etc.) leave the field as `undefined`; coerce to null so the normalized response
+  // is spec-valid and matches the declared types. `method_name` is `<str|null>` but per NUT-04/05 a
+  // null/omitted name is derived deterministically from `method`, so we populate it here instead.
   private static normalizeSwapMethods(methods: SwapMethod[]): SwapMethod[] {
     return methods.map((m) => {
       const next = { ...m } as Record<string, unknown>;
-      nullIfUndefined(next, 'min_amount', 'max_amount', 'method_name');
+      nullIfUndefined(next, 'min_amount', 'max_amount');
+      if (next.method_name == null) {
+        next.method_name = deriveMethodName(next.method);
+      }
       return next as SwapMethod;
     });
   }

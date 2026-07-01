@@ -135,13 +135,14 @@ export class SendBuilder {
   }
 
   /**
-   * Use P2PK locked outputs for the sent proofs.
+   * Lock the sent proofs to a NUT-11 P2PK / NUT-14 HTLC spending condition.
    *
-   * @param options NUT 11 options like pubkey and locktime.
+   * @param p2pk A complete {@link P2PKOptions} (e.g. from {@link P2PKBuilder} or
+   *   {@link PaymentRequest.toP2PKOptions}); its `kind` selects P2PK vs HTLC.
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
-  asP2PK(options: P2PKOptions, denoms?: AmountLike[]) {
-    this.sendOT = { type: 'p2pk', options, denominations: denoms };
+  asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]) {
+    this.sendOT = { type: 'p2pk', options: p2pk, denominations: denoms };
     return this;
   }
 
@@ -189,13 +190,13 @@ export class SendBuilder {
   }
 
   /**
-   * Use P2PK locked change (NUT 11).
+   * Lock the change to a NUT-11 P2PK / NUT-14 HTLC spending condition.
    *
-   * @param options Locking options applied to the kept proofs.
+   * @param p2pk A complete {@link P2PKOptions} whose `kind` selects P2PK vs HTLC.
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
-  keepAsP2PK(options: P2PKOptions, denoms?: AmountLike[]) {
-    this.keepOT = { type: 'p2pk', options, denominations: denoms };
+  keepAsP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]) {
+    this.keepOT = { type: 'p2pk', options: p2pk, denominations: denoms };
     return this;
   }
 
@@ -408,15 +409,16 @@ export class ReceiveBuilder {
   }
 
   /**
-   * Use P2PK locked outputs for the received proofs.
+   * Lock the received proofs to a NUT-11 P2PK / NUT-14 HTLC spending condition.
    *
    * @remarks
-   * If denoms specified, proofsWeHave() will have no effect.
-   * @param options NUT 11 options like pubkey and locktime.
+   * If `denoms` is specified, `proofsWeHave()` has no effect.
+   * @param p2pk A complete {@link P2PKOptions} (e.g. from {@link P2PKBuilder} or
+   *   {@link PaymentRequest.toP2PKOptions}); its `kind` selects P2PK vs HTLC.
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
-  asP2PK(options: P2PKOptions, denoms?: AmountLike[]) {
-    this.outputType = { type: 'p2pk', options, denominations: denoms };
+  asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]) {
+    this.outputType = { type: 'p2pk', options: p2pk, denominations: denoms };
     return this;
   }
 
@@ -581,15 +583,16 @@ export class MintBuilder<
   }
 
   /**
-   * Use P2PK locked outputs for the minted proofs.
+   * Lock the minted proofs to a NUT-11 P2PK / NUT-14 HTLC spending condition.
    *
    * @remarks
-   * If denoms specified, proofsWeHave() will have no effect.
-   * @param options NUT 11 options like pubkey and locktime.
+   * If `denoms` is specified, `proofsWeHave()` has no effect.
+   * @param p2pk A complete {@link P2PKOptions} (e.g. from {@link P2PKBuilder} or
+   *   {@link PaymentRequest.toP2PKOptions}); its `kind` selects P2PK vs HTLC.
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
-  asP2PK(options: P2PKOptions, denoms?: AmountLike[]) {
-    this.outputType = { type: 'p2pk', options, denominations: denoms };
+  asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]) {
+    this.outputType = { type: 'p2pk', options: p2pk, denominations: denoms };
     return this;
   }
 
@@ -801,13 +804,14 @@ export class MeltBuilder<
   }
 
   /**
-   * Use P2PK-locked change (NUT-11).
+   * Lock the change to a NUT-11 P2PK / NUT-14 HTLC spending condition.
    *
-   * @param options NUT-11 locking options (e.g., pubkey, locktime).
+   * @param p2pk A complete {@link P2PKOptions} (e.g. from {@link P2PKBuilder} or
+   *   {@link PaymentRequest.toP2PKOptions}); its `kind` selects P2PK vs HTLC.
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
-  asP2PK(options: P2PKOptions, denoms?: AmountLike[]) {
-    this.outputType = { type: 'p2pk', options, denominations: denoms };
+  asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]) {
+    this.outputType = { type: 'p2pk', options: p2pk, denominations: denoms };
     return this;
   }
 

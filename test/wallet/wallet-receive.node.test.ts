@@ -440,7 +440,10 @@ describe('receive', () => {
       {},
       {
         type: 'p2pk',
-        options: { pubkey: '02a9acc1e594c8d2f91fbd5664973aaef2ff2b8c2f6cf5f419c17a35755a6ab5c4' },
+        options: {
+          kind: 'P2PK',
+          data: '02a9acc1e594c8d2f91fbd5664973aaef2ff2b8c2f6cf5f419c17a35755a6ab5c4',
+        },
       },
     );
     expect(proofs).toHaveLength(2);
