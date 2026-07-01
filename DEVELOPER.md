@@ -40,6 +40,17 @@ Notes:
 - `npm ci` requires a package-lock.json and produces a reproducible node_modules tree.
 - Node requirement: see `package.json` (engine: `node >=22.4.0`). Use `nvm`, `volta`, or `asdf` to pin your local Node version.
 
+#### Experimental `@beta` line
+
+Speculative work tied to **unmerged NUTs** (specs that may still change) is **not** merged into `main`, where it would become a compatibility promise we can't walk back. Instead those PRs stay open against `main` and are bundled onto a disposable `experimental` branch, published to npm under the `@beta` dist-tag for real-world testing:
+
+```bash
+./scripts/make-experimental.sh 698 712    # rebuild from main + these PRs
+PUBLISH=1 ./scripts/make-experimental.sh 698   # …and npm publish --tag beta
+```
+
+The branch is throwaway, rebuilt from scratch each run, never promoted from and never merged back. Work graduates by merging its individual PR into `main` the normal way. The bundle is passed as PR-number args (or kept in the gitignored `scripts/.experimental-prs`), so changing the mix is a local operation — no PR required. See the script header for the full rationale.
+
 ### ⚠️ Important — run `npm ci` after switching major branches
 
 When switching between major branches (for example `main` and a `vN-dev` branch) the lockfile and installed dependencies can differ. This frequently causes confusing failures when compiling or running `api-extractor`.
