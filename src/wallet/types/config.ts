@@ -54,7 +54,7 @@ export type OutputType =
     } & SharedOutputTypeProps)
   | ({
       /**
-       * Pay-to-public-key (P2PK) outputs.
+       * P2PK (NUT-11) or HTLC (NUT-14) locked outputs.
        *
        * @see P2PKOptions
        */

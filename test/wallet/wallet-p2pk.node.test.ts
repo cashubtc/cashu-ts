@@ -20,7 +20,7 @@ describe('P2PK BlindingData', () => {
     await wallet.loadMint();
     const keys = wallet.keyChain.getKeyset();
     const data = OutputData.createP2PKData(
-      { pubkey: PK1, locktime: 212, refundKeys: [REFUND1] },
+      { kind: 'P2PK', data: PK1, locktime: 212, refundKeys: [REFUND1] },
       21,
       keys,
     );
@@ -38,7 +38,7 @@ describe('P2PK BlindingData', () => {
     await wallet.loadMint();
     const keys = wallet.keyChain.getKeyset();
     const data = OutputData.createP2PKData(
-      { pubkey: PK1, locktime: 212, refundKeys: [REFUND1, REFUND2] },
+      { kind: 'P2PK', data: PK1, locktime: 212, refundKeys: [REFUND1, REFUND2] },
       21,
       keys,
     );
@@ -55,7 +55,7 @@ describe('P2PK BlindingData', () => {
     const wallet = new Wallet(mint);
     await wallet.loadMint();
     const keys = wallet.keyChain.getKeyset();
-    const data = OutputData.createP2PKData({ pubkey: PK1 }, 21, keys);
+    const data = OutputData.createP2PKData({ kind: 'P2PK', data: PK1 }, 21, keys);
     const decoder = new TextDecoder();
     const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
     allSecrets.forEach((s) => {
@@ -69,14 +69,18 @@ describe('P2PK BlindingData', () => {
     await wallet.loadMint();
     const keys = wallet.keyChain.getKeyset();
     expect(() =>
-      OutputData.createP2PKData({ pubkey: PK1, requiredSignatures: 5 }, 21, keys),
+      OutputData.createP2PKData({ kind: 'P2PK', data: PK1, requiredSignatures: 5 }, 21, keys),
     ).toThrow(/requiredSignatures \(n_sigs\) \(5\) exceeds available pubkeys \(1\)/i);
   });
   test('Create BlindingData locked to multiple pks with no requiredSignatures', async () => {
     const wallet = new Wallet(mint);
     await wallet.loadMint();
     const keys = wallet.keyChain.getKeyset();
-    const data = OutputData.createP2PKData({ pubkey: [PK1, PK2, PK3] }, 21, keys);
+    const data = OutputData.createP2PKData(
+      { kind: 'P2PK', data: PK1, pubkeys: [PK2, PK3] },
+      21,
+      keys,
+    );
     const decoder = new TextDecoder();
     const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
     allSecrets.forEach((s) => {
@@ -91,7 +95,7 @@ describe('P2PK BlindingData', () => {
     await wallet.loadMint();
     const keys = wallet.keyChain.getKeyset();
     const data = OutputData.createP2PKData(
-      { pubkey: [PK1, PK2, PK3], requiredSignatures: 2 },
+      { kind: 'P2PK', data: PK1, pubkeys: [PK2, PK3], requiredSignatures: 2 },
       21,
       keys,
     );
@@ -109,7 +113,11 @@ describe('P2PK BlindingData', () => {
     await wallet.loadMint();
     const keys = wallet.keyChain.getKeyset();
     expect(() =>
-      OutputData.createP2PKData({ pubkey: [PK1, PK2, PK3], requiredSignatures: 5 }, 21, keys),
+      OutputData.createP2PKData(
+        { kind: 'P2PK', data: PK1, pubkeys: [PK2, PK3], requiredSignatures: 5 },
+        21,
+        keys,
+      ),
     ).toThrow(/requiredSignatures \(n_sigs\) \(5\) exceeds available pubkeys \(3\)/i);
   });
   test('Create BlindingData locked to single refund key with default requiredRefundSignatures', async () => {
@@ -118,7 +126,8 @@ describe('P2PK BlindingData', () => {
     const keys = wallet.keyChain.getKeyset();
     const data = OutputData.createP2PKData(
       {
-        pubkey: PK1,
+        kind: 'P2PK',
+        data: PK1,
         locktime: 212,
         refundKeys: [REFUND1],
         requiredRefundSignatures: 1,
@@ -141,7 +150,7 @@ describe('P2PK BlindingData', () => {
     await wallet.loadMint();
     const keys = wallet.keyChain.getKeyset();
     const data = OutputData.createP2PKData(
-      { pubkey: PK1, locktime: 212, refundKeys: [REFUND1, REFUND2] },
+      { kind: 'P2PK', data: PK1, locktime: 212, refundKeys: [REFUND1, REFUND2] },
       21,
       keys,
     );
@@ -161,7 +170,8 @@ describe('P2PK BlindingData', () => {
     const keys = wallet.keyChain.getKeyset();
     const data = OutputData.createP2PKData(
       {
-        pubkey: PK1,
+        kind: 'P2PK',
+        data: PK1,
         locktime: 212,
         refundKeys: [REFUND1, REFUND2, REFUND3],
         requiredRefundSignatures: 2,
@@ -186,7 +196,8 @@ describe('P2PK BlindingData', () => {
     expect(() =>
       OutputData.createP2PKData(
         {
-          pubkey: PK1,
+          kind: 'P2PK',
+          data: PK1,
           locktime: 212,
           refundKeys: [REFUND1, REFUND2, REFUND3],
           requiredRefundSignatures: 5,
@@ -204,7 +215,9 @@ describe('P2PK BlindingData', () => {
     const keys = wallet.keyChain.getKeyset();
     const data = OutputData.createP2PKData(
       {
-        pubkey: [PK1, PK2, PK3],
+        kind: 'P2PK',
+        data: PK1,
+        pubkeys: [PK2, PK3],
         locktime: 212,
         refundKeys: [REFUND1, REFUND2],
         requiredSignatures: 2,

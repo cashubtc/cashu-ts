@@ -8,7 +8,7 @@ import { getEncodedToken } from '@cashu/cashu-ts';
 // or you fetched existing proofs from your app database
 const proofs = [...]; // array of proofs
 const pubkey = '02...'; // Your public key
-const { keep, send } = await wallet.ops.send(32, proofs).asP2PK({pubkey}).run();
+const { keep, send } = await wallet.ops.send(32, proofs).asP2PK({ kind: 'P2PK', data: pubkey }).run();
 const token = getEncodedToken({ mint: mintUrl, proofs: send });
 console.log(token);
 

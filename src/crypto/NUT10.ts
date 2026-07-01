@@ -12,6 +12,24 @@ export interface SecretData {
 
 export type Secret = [SecretKind, SecretData];
 
+/**
+ * The base spending conditions for every NUT-10 well-known secret.
+ *
+ * @remarks
+ * Lock kinds extend this with tag conditions (`LockConditions` → `P2PKOptions`); a future NUT-10
+ * kind need not.
+ */
+export type SpendingConditionsBase = {
+  /**
+   * The NUT-10 secret kind (eg: `'P2PK'` / `'HTLC'`).
+   */
+  kind: SecretKind;
+  /**
+   * The NUT-10 data slot: a pubkey for P2PK, a hashlock for HTLC.
+   */
+  data: string;
+};
+
 // ------------------------------
 // NUT-10 Secrets
 // ------------------------------

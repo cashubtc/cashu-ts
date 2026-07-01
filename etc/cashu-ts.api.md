@@ -774,6 +774,18 @@ export type KeysetPair = {
     privKeys: RawMintKeys;
 };
 
+// @public
+export type LockConditions = {
+    pubkeys?: string[];
+    locktime?: number;
+    refundKeys?: string[];
+    requiredSignatures?: number;
+    requiredRefundSignatures?: number;
+    additionalTags?: P2PKTag[];
+    blindKeys?: boolean;
+    sigFlag?: SigFlag;
+};
+
 // @public (undocumented)
 export type LockState = 'PERMANENT' | 'ACTIVE' | 'EXPIRED';
 
@@ -808,7 +820,7 @@ export class MeltBuilder<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | '
     asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: AmountLike[]): this;
     asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
-    asP2PK(options: P2PKOptions, denoms?: AmountLike[]): this;
+    asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]): this;
     asRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
@@ -1035,7 +1047,7 @@ export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M ex
     asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: AmountLike[]): this;
     asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
-    asP2PK(options: P2PKOptions, denoms?: AmountLike[]): this;
+    asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]): this;
     asRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
@@ -1521,7 +1533,7 @@ export class P2PKBuilder {
     // (undocumented)
     blindKeys(): this;
     // (undocumented)
-    static fromOptions(opts: P2PKOptions): P2PKBuilder;
+    static fromOptions(p2pk: P2PKOptions): P2PKBuilder;
     // (undocumented)
     lockUntil(when: Date | number): this;
     // (undocumented)
@@ -1535,16 +1547,8 @@ export class P2PKBuilder {
 }
 
 // @public
-export type P2PKOptions = {
-    pubkey: string | string[];
-    locktime?: number;
-    refundKeys?: string[];
-    requiredSignatures?: number;
-    requiredRefundSignatures?: number;
-    additionalTags?: P2PKTag[];
-    blindKeys?: boolean;
-    sigFlag?: SigFlag;
-    hashlock?: string;
+export type P2PKOptions = SpendingConditionsBase & LockConditions & {
+    kind: 'P2PK' | 'HTLC';
 };
 
 // @public
@@ -1756,7 +1760,7 @@ export class ReceiveBuilder {
     asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: AmountLike[]): this;
     asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
-    asP2PK(options: P2PKOptions, denoms?: AmountLike[]): this;
+    asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]): this;
     asRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
@@ -1855,13 +1859,13 @@ export class SendBuilder {
     asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: AmountLike[]): this;
     asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
-    asP2PK(options: P2PKOptions, denoms?: AmountLike[]): this;
+    asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]): this;
     asRandom(denoms?: AmountLike[]): this;
     includeFees(on?: boolean): this;
     keepAsCustom(data: OutputDataLike[]): this;
     keepAsDeterministic(counter?: number, denoms?: AmountLike[]): this;
     keepAsFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
-    keepAsP2PK(options: P2PKOptions, denoms?: AmountLike[]): this;
+    keepAsP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]): this;
     keepAsRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     offlineCloseMatch(requireDleq?: boolean): this;
@@ -2012,6 +2016,12 @@ export function signP2PKProofs(proofs: Proof[], privateKey: PrivKey | PrivKey[],
 
 // @public
 export function sortProofsById(proofs: Proof[]): Proof[];
+
+// @public
+export type SpendingConditionsBase = {
+    kind: SecretKind;
+    data: string;
+};
 
 // @public
 export function splitAmount(value: AmountLike, keyset: Keys, split?: AmountLike[], order?: 'desc' | 'asc'): Amount[];

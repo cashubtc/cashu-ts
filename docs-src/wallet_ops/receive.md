@@ -38,7 +38,7 @@ const proofs = await wallet.ops
 ```ts
 const proofs = await wallet.ops
   .receive(token)
-  .asP2PK({ pubkey, locktime }) // NUT-11 options for new proofs
+  .asP2PK({ kind: 'P2PK', data: pubkey, locktime }) // NUT-11 options for new proofs
   .privkey(['k1', 'k2', 'k3']) // sign incoming P2PK proofs
   .proofsWeHave(myExistingProofs) // helps denomination selection
   .run();

@@ -16,6 +16,7 @@ import {
   assertSecretKind,
   createSecret,
   type Secret,
+  type SpendingConditionsBase,
   getSecretKind,
 } from './NUT10';
 import { deriveP2BKSecretKeys } from './NUT28';
@@ -37,10 +38,15 @@ export type P2PKSpendingPath = 'MAIN' | 'REFUND' | 'UNLOCKED' | 'FAILED';
 export type P2PKTag = [key: string, ...values: string[]];
 
 /**
- * Options for configuring P2PK (Pay-to-Public-Key) locked proofs according to NUT-11.
+ * Shared NUT-11 lock tags, reused by P2PK (NUT-11) and HTLC (NUT-14).
+ *
+ * @remarks
+ * Every field is optional and maps onto an optional NUT-11 tag. `pubkeys` (additional / receiver
+ * keys) is _always_ optional (a keyless HTLC spends by preimage alone). The mandatory lock material
+ * lives in {@link SpendingConditionsBase.data}.
  */
-export type P2PKOptions = {
-  pubkey: string | string[];
+export type LockConditions = {
+  pubkeys?: string[];
   locktime?: number;
   refundKeys?: string[];
   requiredSignatures?: number;
@@ -48,8 +54,16 @@ export type P2PKOptions = {
   additionalTags?: P2PKTag[];
   blindKeys?: boolean; // default false
   sigFlag?: SigFlag;
-  hashlock?: string; // NUT-14 (HTLC)
 };
+
+/**
+ * A complete, persistable lock for the P2PK-based family.
+ *
+ * @remarks
+ * Comprises the NUT-10 {@link SpendingConditionsBase} envelope plus NUT-11 family
+ * {@link LockConditions} tags. `data` is a pubkey for `'P2PK'`, a hashlock for `'HTLC'`.
+ */
+export type P2PKOptions = SpendingConditionsBase & LockConditions & { kind: 'P2PK' | 'HTLC' };
 
 /**
  * Signature info for a single spending path (main or refund).
@@ -114,8 +128,8 @@ type WitnessData = {
 };
 
 /**
- * NUT-11 tag keys that map onto structured {@link P2PKOptions} fields, rather than being carried as
- * free-form `additionalTags`.
+ * NUT-11 tag keys that map onto structured {@link LockConditions} fields, rather than being carried
+ * as free-form `additionalTags`.
  *
  * @internal
  */
@@ -185,6 +199,23 @@ function normalizePubkey(pk: string): string {
 }
 
 /**
+ * Validate and canonicalise an HTLC hashlock (a SHA-256 digest).
+ *
+ * @remarks
+ * Lowercases so the stored hashlock byte-matches the lowercase output of createHTLCHash() /
+ * verifyHTLCHash().
+ * @param hashlock - Expected 64-char hex string.
+ * @throws If not a 64-character hex string.
+ * @internal
+ */
+export function normalizeHashlock(hashlock: string): string {
+  if (typeof hashlock !== 'string' || !/^[0-9a-f]{64}$/i.test(hashlock)) {
+    throw new CTSError('HTLC hashlock must be a 64-character hex string (SHA-256)');
+  }
+  return hashlock.toLowerCase();
+}
+
+/**
  * Dedupes pubkeys by their x-only portion (last 64 chars).
  *
  * @remarks
@@ -208,43 +239,54 @@ export function dedupeP2PKPubkeys(keys: string[]): string[] {
 }
 
 /**
- * Validate and normalize P2PK/HTLC output options.
+ * Validate and normalize a {@link P2PKOptions} into a canonical, deduplicated copy (not mutated).
  *
  * @remarks
- * Normalizes and deduplicates pubkeys, then enforces that requested signature thresholds are
- * satisfiable by the resulting key sets.
- *
- * External callers use {@link P2PKBuilder}: `P2PKBuilder.fromOptions(opts).toOptions()`
+ * Dedupes keys, defaults the signature threshold, and rejects unsatisfiable thresholds. External
+ * callers use `P2PKBuilder.fromOptions(p2pk).toOptions()`.
  * @internal
  */
 export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
-  const pubkeys = dedupeP2PKPubkeys(Array.isArray(p2pk.pubkey) ? p2pk.pubkey : [p2pk.pubkey]);
-  const refundKeys = dedupeP2PKPubkeys(p2pk.refundKeys ?? []);
-  // HTLC (NUT-14) locks the proof to a hashlock in Secret.data, so its pubkeys
-  // list is optional: with none, possession of the preimage alone spends. P2PK
-  // has no hashlock and so always needs at least one main key.
-  const isHTLC = typeof p2pk.hashlock === 'string' && p2pk.hashlock.length > 0;
-  if (pubkeys.length === 0 && !isHTLC) {
-    throw new CTSError('P2PK requires at least one pubkey');
+  const { kind } = p2pk;
+  if (kind !== 'P2PK' && kind !== 'HTLC') {
+    throw new CTSError(`Unknown lock kind: ${String(kind)}`);
   }
-  const totalKeys = pubkeys.length + refundKeys.length;
+  if (typeof p2pk.data !== 'string' || p2pk.data.length === 0) {
+    throw new CTSError(`${kind} requires a ${kind === 'HTLC' ? 'hashlock' : 'pubkey'} in data`);
+  }
+  const refundKeys = dedupeP2PKPubkeys(p2pk.refundKeys ?? []);
+
+  let data = p2pk.data;
+  let pubkeys: string[];
+  if (kind === 'P2PK') {
+    // data = primary pubkey, extras ride the pubkeys tag; dedupe both, data first.
+    const all = dedupeP2PKPubkeys([p2pk.data, ...(p2pk.pubkeys ?? [])]);
+    data = all[0];
+    pubkeys = all.slice(1);
+  } else {
+    // data is a hashlock (SHA-256), not a key; validate + canonicalise it. Only the
+    // (optional) pubkeys tag carries signers.
+    data = normalizeHashlock(data);
+    pubkeys = dedupeP2PKPubkeys(p2pk.pubkeys ?? []);
+  }
+
+  // Signers: P2PK - data key + pubkeys; HTLC - data is a hash, so only pubkeys.
+  const signerCount = (kind === 'P2PK' ? 1 : 0) + pubkeys.length;
+  const totalKeys = signerCount + refundKeys.length;
   if (totalKeys > 10) {
     throw new CTSError(`Too many pubkeys, ${totalKeys} provided, maximum allowed is 10 in total`);
   }
   if (p2pk.sigFlag !== undefined) assertSigFlag(p2pk.sigFlag);
 
-  // With no main pubkeys (hashlock-only HTLC) there is no threshold to default,
-  // so skip the implicit `?? 1`. Pass through an *explicit* requiredSignatures
-  // though, so assertSpendingConditionRules rejects an impossible threshold
-  // (n_sigs with zero pubkeys) loudly rather than silently weakening the lock to
-  // preimage-only.
+  // No signers (keyless HTLC) => no default threshold, but pass an explicit one through
+  // so an impossible n_sigs is rejected below, not silently dropped to preimage-only.
   const requiredSignatures =
-    pubkeys.length > 0 ? (p2pk.requiredSignatures ?? 1) : p2pk.requiredSignatures;
+    signerCount > 0 ? (p2pk.requiredSignatures ?? 1) : p2pk.requiredSignatures;
   const requiredRefundSignatures = p2pk.requiredRefundSignatures;
 
   // Shared semantic validation
   assertSpendingConditionRules({
-    mainKeyCount: pubkeys.length,
+    mainKeyCount: signerCount,
     refundKeyCount: refundKeys.length,
     nSigs: requiredSignatures,
     nSigsRefund: requiredRefundSignatures,
@@ -252,17 +294,19 @@ export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
   });
 
   return {
-    pubkey: pubkeys.length === 1 ? pubkeys[0] : pubkeys,
-    ...(p2pk.locktime !== undefined ? { locktime: p2pk.locktime } : {}),
-    ...(refundKeys.length > 0 ? { refundKeys } : {}),
+    kind,
+    data,
+    ...(pubkeys.length ? { pubkeys } : {}),
+    ...(refundKeys.length ? { refundKeys } : {}),
+    // Drop a redundant default threshold of 1 (1-of-N is implied); the builder does the same.
     ...(requiredSignatures !== undefined && requiredSignatures > 1 ? { requiredSignatures } : {}),
     ...(requiredRefundSignatures !== undefined && requiredRefundSignatures > 1
       ? { requiredRefundSignatures }
       : {}),
+    ...(p2pk.locktime !== undefined ? { locktime: p2pk.locktime } : {}),
     ...(p2pk.additionalTags?.length ? { additionalTags: p2pk.additionalTags } : {}),
     ...(p2pk.blindKeys ? { blindKeys: true } : {}),
     ...(p2pk.sigFlag !== undefined ? { sigFlag: p2pk.sigFlag } : {}),
-    ...(p2pk.hashlock ? { hashlock: p2pk.hashlock } : {}),
   };
 }
 

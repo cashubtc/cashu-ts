@@ -1398,65 +1398,123 @@ const _comp = (ch: string, prefix: '02' | '03' = '02') => `${prefix}${ch.repeat(
 
 describe('normalizeP2PKOptions', () => {
   const pk = _comp('a', '02');
+  const pk2 = _comp('c', '02');
   const refundPk = _comp('b', '02');
+  const hashlock = 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5';
 
-  test('throws when pubkey is an empty array', () => {
-    expect(() => normalizeP2PKOptions({ pubkey: [] as any })).toThrow(
-      /P2PK requires at least one pubkey/i,
+  test('throws on an unknown lock kind', () => {
+    expect(() => normalizeP2PKOptions({ kind: 'FOO', data: pk } as any)).toThrow(
+      /unknown lock kind: FOO/i,
     );
   });
 
-  test('allows an empty pubkey array for a hashlock-only HTLC (NUT-14)', () => {
+  test('throws when P2PK data is missing or empty', () => {
+    expect(() => normalizeP2PKOptions({ kind: 'P2PK', data: '' })).toThrow(
+      /P2PK requires a pubkey in data/i,
+    );
+    expect(() => normalizeP2PKOptions({ kind: 'P2PK', data: undefined } as any)).toThrow(
+      /P2PK requires a pubkey in data/i,
+    );
+  });
+
+  test('throws when HTLC data is empty', () => {
+    expect(() => normalizeP2PKOptions({ kind: 'HTLC', data: '' })).toThrow(
+      /HTLC requires a hashlock in data/i,
+    );
+  });
+
+  test('throws when HTLC hashlock is not 64-char hex', () => {
+    // A malformed hashlock yields an unspendable lock (no preimage can hash to it),
+    // so reject it at construction rather than minting a dead token.
+    expect(() => normalizeP2PKOptions({ kind: 'HTLC', data: 'invalid_hashlock' })).toThrow(
+      /HTLC hashlock must be a 64-character hex string/i,
+    );
+    // Right length, non-hex char.
+    expect(() => normalizeP2PKOptions({ kind: 'HTLC', data: 'z'.repeat(64) })).toThrow(
+      /HTLC hashlock must be a 64-character hex string/i,
+    );
+    // Valid hex, wrong length (32 bytes expected).
+    expect(() => normalizeP2PKOptions({ kind: 'HTLC', data: 'ab'.repeat(20) })).toThrow(
+      /HTLC hashlock must be a 64-character hex string/i,
+    );
+  });
+
+  test('lowercases the HTLC hashlock so it matches createHTLCHash output', () => {
+    // verifyHTLCHash compares against lowercase bytesToHex(sha256(preimage)); an
+    // uppercase hashlock passes the hex check but must be canonicalised to match.
+    expect(normalizeP2PKOptions({ kind: 'HTLC', data: hashlock.toUpperCase() })).toEqual({
+      kind: 'HTLC',
+      data: hashlock,
+    });
+  });
+
+  test('splits a P2PK lock into canonical data slot + pubkeys tag', () => {
+    // `data` is the NUT-10 data slot; extra keys ride the `pubkeys` tag. Empty key
+    // sets are dropped from the canonical result.
+    expect(
+      normalizeP2PKOptions({ kind: 'P2PK', data: pk, pubkeys: [pk2], requiredSignatures: 2 }),
+    ).toEqual({
+      kind: 'P2PK',
+      data: pk,
+      pubkeys: [pk2],
+      requiredSignatures: 2,
+    });
+  });
+
+  test('allows a hashlock-only HTLC with no pubkeys (NUT-14)', () => {
     // An HTLC carries its lock in the hashlock, so a pubkeys list is optional.
-    const hashlock = 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5';
-    const normalized = normalizeP2PKOptions({ pubkey: [], hashlock });
-    expect(normalized).toEqual({ pubkey: [], hashlock });
+    expect(normalizeP2PKOptions({ kind: 'HTLC', data: hashlock })).toEqual({
+      kind: 'HTLC',
+      data: hashlock,
+    });
   });
 
-  test('rejects an explicit n_sigs on a hashlock-only HTLC (no pubkeys to sign)', () => {
+  test('rejects an explicit n_sigs on a hashlock-only HTLC (no signers)', () => {
     // Skipping the *default* n_sigs is fine, but an explicit threshold with zero
-    // pubkeys is impossible and must fail loudly, not silently weaken the lock.
-    const hashlock = 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5';
-    expect(() => normalizeP2PKOptions({ pubkey: [], hashlock, requiredSignatures: 2 })).toThrow(
-      /exceeds available pubkeys/i,
-    );
-    expect(() => normalizeP2PKOptions({ pubkey: [], hashlock, requiredSignatures: 0 })).toThrow(
-      /positive integer/i,
-    );
+    // signers is impossible and must fail loudly, not silently weaken the lock.
+    expect(() =>
+      normalizeP2PKOptions({ kind: 'HTLC', data: hashlock, requiredSignatures: 2 }),
+    ).toThrow(/exceeds available pubkeys/i);
+    expect(() =>
+      normalizeP2PKOptions({ kind: 'HTLC', data: hashlock, requiredSignatures: 0 }),
+    ).toThrow(/positive integer/i);
   });
 
-  test('throws when pubkey contains an empty string', () => {
-    expect(() => normalizeP2PKOptions({ pubkey: [pk, ''] })).toThrow(/invalid pubkey/i);
+  test('throws when a pubkeys-tag entry is an empty string', () => {
+    expect(() => normalizeP2PKOptions({ kind: 'P2PK', data: pk, pubkeys: [''] })).toThrow(
+      /invalid pubkey/i,
+    );
   });
 
   test('throws when refundKeys contains an empty string', () => {
     expect(() =>
-      normalizeP2PKOptions({ pubkey: pk, locktime: 9999, refundKeys: [refundPk, ''] }),
+      normalizeP2PKOptions({ kind: 'P2PK', data: pk, locktime: 9999, refundKeys: [refundPk, ''] }),
     ).toThrow(/invalid pubkey/i);
   });
 
   test('throws when requiredSignatures is not an integer', () => {
-    expect(() => normalizeP2PKOptions({ pubkey: pk, requiredSignatures: 1.5 })).toThrow(
+    expect(() => normalizeP2PKOptions({ kind: 'P2PK', data: pk, requiredSignatures: 1.5 })).toThrow(
       /requiredSignatures \(n_sigs\) must be a positive integer/i,
     );
   });
 
   test('throws when requiredSignatures is less than 1', () => {
-    expect(() => normalizeP2PKOptions({ pubkey: pk, requiredSignatures: 0 })).toThrow(
+    expect(() => normalizeP2PKOptions({ kind: 'P2PK', data: pk, requiredSignatures: 0 })).toThrow(
       /requiredSignatures \(n_sigs\) must be a positive integer/i,
     );
   });
 
   test('throws when requiredRefundSignatures is set without refundKeys', () => {
     expect(() =>
-      normalizeP2PKOptions({ pubkey: pk, locktime: 9999, requiredRefundSignatures: 1 }),
+      normalizeP2PKOptions({ kind: 'P2PK', data: pk, locktime: 9999, requiredRefundSignatures: 1 }),
     ).toThrow(/requiredRefundSignatures \(n_sigs_refund\) requires refund keys/i);
   });
 
   test('throws when requiredRefundSignatures is not an integer', () => {
     expect(() =>
       normalizeP2PKOptions({
-        pubkey: pk,
+        kind: 'P2PK',
+        data: pk,
         locktime: 9999,
         refundKeys: [refundPk],
         requiredRefundSignatures: 1.5,
@@ -1467,7 +1525,8 @@ describe('normalizeP2PKOptions', () => {
   test('throws when requiredRefundSignatures is less than 1', () => {
     expect(() =>
       normalizeP2PKOptions({
-        pubkey: pk,
+        kind: 'P2PK',
+        data: pk,
         locktime: 9999,
         refundKeys: [refundPk],
         requiredRefundSignatures: 0,
@@ -1476,9 +1535,9 @@ describe('normalizeP2PKOptions', () => {
   });
 
   test('throws when sigFlag is not a valid SigFlag value', () => {
-    expect(() => normalizeP2PKOptions({ pubkey: pk, sigFlag: 'FOOBAR' as any })).toThrow(
-      /invalid sigflag/i,
-    );
+    expect(() =>
+      normalizeP2PKOptions({ kind: 'P2PK', data: pk, sigFlag: 'FOOBAR' as any }),
+    ).toThrow(/invalid sigflag/i);
   });
 });
 
