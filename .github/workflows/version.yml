@@ -44,7 +44,7 @@ jobs:
           MAJOR_VERSION=$(echo $VERSION | cut -d. -f1)
           if echo "$VERSION" | grep -qE '[-](beta|alpha)'; then
             # experimental / unstable — off the release path; may change or be withdrawn
-            echo "tag=beta" >> $GITHUB_OUTPUT
+            echo "tag=experimental" >> $GITHUB_OUTPUT
             echo "prerelease=true" >> $GITHUB_OUTPUT
           elif echo "$VERSION" | grep -qE '[-]rc'; then
             # release candidate — the only pre-release we ship from main; becomes GA

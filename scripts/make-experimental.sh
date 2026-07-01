@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # ============================================================================
-# make-experimental.sh — rebuild the disposable beta line
+# make-experimental.sh — rebuild the disposable experimental line
 # ============================================================================
 #
 # WHY THIS EXISTS (read this later when you've forgotten):
 #
 #   The branch/dist-tag layout, whatever the current major happens to be:
-#     vN-dev (LTS)  -> @lts      prior major, manual security-only cuts (no RP)
-#     main          -> @latest   current major in dev, FINALIZED work, release-please
-#     experimental  -> @beta     main + speculative PRs, THIS SCRIPT, disposable
+#     vN-dev (LTS)  -> @lts            prior major, manual security-only cuts (no RP)
+#     main          -> @latest         current major in dev, FINALIZED work, release-please
+#     experimental  -> @experimental   main + speculative PRs, THIS SCRIPT, disposable
 #
 #   (During a pre-GA window @latest may still sit on the previous major on its
 #   vN-dev branch and main sits on @next; once the current major ships, @latest
@@ -16,7 +16,7 @@
 #
 #   Speculative work tied to unmerged specs (NUTs that might still change) must
 #   NOT touch main — once on main it's a compatibility promise you can't walk
-#   back. So it rides a throwaway branch published as @beta for real-world
+#   back. So it rides a throwaway branch published as @experimental for real-world
 #   testing, while the PRs stay OPEN against main.
 #
 # THE RULES:
@@ -24,15 +24,15 @@
 #   * NEVER promote from it. NEVER merge it back to main.
 #   * Promote approved work by merging the individual PR into main (normal PR
 #     flow, one at a time onto clean main). Then delete it from PRS below and
-#     rebuild — @latest gains it, @beta drops it.
-#   * Order into beta is irrelevant to main: you promote branches individually,
+#     rebuild — @latest gains it, @experimental drops it.
+#   * Order into experimental is irrelevant to main: you promote branches individually,
 #     so speculative-vs-speculative conflicts here never recur on main.
 #   * git rerere banks your conflict fixes and replays them on the next rebuild,
 #     so this is usually hands-off.
 #
 # USAGE:
 #   ./scripts/make-experimental.sh 698 712        # rebuild with these PRs
-#   PUBLISH=1 ./scripts/make-experimental.sh 698   # …and npm publish --tag beta
+#   PUBLISH=1 ./scripts/make-experimental.sh 698   # …and npm publish --tag experimental
 #   ./scripts/make-experimental.sh                 # no args → read the local list
 #   REMOTE=fork ./scripts/make-experimental.sh 698 # PRs live on a non-default remote
 #
@@ -49,7 +49,7 @@ set -euo pipefail
 
 # --- config ------------------------------------------------------------------
 REMOTE="${REMOTE:-origin}"          # remote hosting the canonical repo + PRs (cashubtc)
-BASE="${BASE:-main}"                # curated line the beta sits on top of
+BASE="${BASE:-main}"                # curated line the experimental branch sits on top of
 BRANCH="${BRANCH:-experimental}"    # version-neutral; survives major bumps
 
 # PR list (merge order): CLI args win; else scripts/.experimental-prs, one PR
@@ -80,7 +80,7 @@ git branch -D "$BRANCH" 2>/dev/null || true
 # refspecs where `origin/*` actually tracks a fork — which would silently build
 # on a stale base. FETCH_HEAD is exactly what we just pulled, refspec-agnostic.
 git checkout -B "$BRANCH" FETCH_HEAD
-BASE_SHA=$(git rev-parse --short HEAD)   # the $BASE commit this beta sits on
+BASE_SHA=$(git rev-parse --short HEAD)   # the $BASE commit this build sits on
 
 for pr in "${PRS[@]}"; do
   echo ">> merging PR #$pr"
@@ -102,14 +102,14 @@ done
 echo ">> $BRANCH rebuilt: $BASE + ${PRS[*]}"
 
 if [[ "${PUBLISH:-}" == "1" ]]; then
-  # Beta version = main's core version + this bundle's commit sha, e.g.
-  # 5.0.0-beta.a1b2c3d. Unique per bundle (sha changes when PRs change), no
-  # state to track, and re-publishing an identical bundle is a harmless no-op
-  # (npm rejects the duplicate version). Prerelease version + the @beta tag mean
-  # plain `npm i cashu-ts` never picks this up — @latest is unaffected.
+  # Version = main's core version + bundle sha, e.g. 5.0.0-beta.a1b2c3d. The
+  # -beta identifier + the explicit @experimental tag mean plain `npm i cashu-ts`
+  # never picks it up (@latest unaffected). Unique per bundle (sha changes with
+  # the PRs); re-publishing an identical bundle is a harmless no-op (npm rejects
+  # the duplicate version).
   # compile (nothing else triggers it on publish) + unit tests on the MERGED
   # tree — each PR passed CI alone, but this catches breakage from combining
-  # them, which is the whole point of the beta. Not full `prtasks`: lint/format/
+  # them, which is the whole point of the experimental build. Not full `prtasks`: lint/format/
   # api-report are repo hygiene that don't affect the published lib/, and
   # api:update mutates files mid-publish. Skip tests with SKIP_TEST=1 to iterate.
   echo ">> building + testing merged tree"
@@ -121,9 +121,9 @@ if [[ "${PUBLISH:-}" == "1" ]]; then
   core=${ver%%-*}
   betaver="${core}-beta.$(git rev-parse --short HEAD)"
 
-  # Record what's in this beta so testers know what they're testing against.
-  # PR numbers (+ titles if `gh` is installed) go into a `betaBundle` field that
-  # ships in the package — `npm view cashu-ts@beta betaBundle` — and a
+  # Record what's in this build so testers know what they're testing against.
+  # PR numbers (+ titles if `gh` is installed) go into an `experimentalBundle` field that
+  # ships in the package — `npm view cashu-ts@experimental experimentalBundle` — and a
   # paste-ready summary is printed at the end for your announcement.
   slug=$(git config --get "remote.$REMOTE.url" | sed -E 's#.*github\.com[:/]##; s#\.git$##')
   summary=""
@@ -135,12 +135,12 @@ if [[ "${PUBLISH:-}" == "1" ]]; then
     summary+="  #$pr${title:+ — $title}  (https://github.com/$slug/pull/$pr)"$'\n'
   done
   prs_csv=$(IFS=,; echo "${PRS[*]}")
-  node -e "const fs=require('fs'),p=require('./package.json');p.betaBundle={base:'$BASE@$BASE_SHA',prs:[$prs_csv]};fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
+  node -e "const fs=require('fs'),p=require('./package.json');p.experimentalBundle={base:'$BASE@$BASE_SHA',prs:[$prs_csv]};fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
 
-  echo ">> publishing $betaver @beta"
+  echo ">> publishing $betaver @experimental"
   npm version "$betaver" --no-git-tag-version --allow-same-version
-  git commit -aqm "chore(beta): $betaver" --no-verify   # throwaway; skip husky/commitlint
-  npm publish --tag beta
+  git commit -aqm "chore(experimental): $betaver" --no-verify   # throwaway; skip husky/commitlint
+  npm publish --tag experimental
 
-  printf '\n=== announce ===\nnpm i cashu-ts@%s   (tag: beta)\nbundled on %s@%s:\n%s\n' "$betaver" "$BASE" "$BASE_SHA" "$summary"
+  printf '\n=== announce ===\nnpm i cashu-ts@%s   (tag: experimental)\nbundled on %s@%s:\n%s\n' "$betaver" "$BASE" "$BASE_SHA" "$summary"
 fi
