@@ -117,9 +117,9 @@ describe('payment requests', () => {
     // are pinned to lock canonical output: minimal CBOR (creqA, `a7` not `b9 0007`) and
     // minimal TLV with no redundant single_use=0 (creqB).
     const SPEC_CREQA =
-      'creqAp2FpdXByZWZlcnJlZF9mZWVfbWV0aG9kc2FhGGRhdWNzYXRhbYF4GGh0dHBzOi8vbWludC5leGFtcGxlLmNvbWJtcPViZnICYnNtgmZib2x0MTFmYm9sdDEy';
+      'creqAp2FpdXByZWZlcnJlZF9mZWVfbWV0aG9kc2FhGGRhdWNzYXRhbYF4GGh0dHBzOi8vbWludC5leGFtcGxlLmNvbWJtcPViZnICYnNtgqFibW5mYm9sdDExomJtbmZib2x0MTJibWYF';
     const SPEC_CREQB =
-      'CREQB1QYQP2URJV4NX2UNJV4J97EN9V40K6ET5DPHKGUCZQQYQQQQQQQQQQQRYQVQQZQQ9QQVXSAR5WPEN5TE0D45KUAPWV4UXZMTSD3JJUCM0D5YSQQGPPGQQSQQQQQQQQQQQQG9SQPNZDAK8GVF3PVQQVCN0D36RZVSDWZJ5Y';
+      'CREQB1QYQP2URJV4NX2UNJV4J97EN9V40K6ET5DPHKGUCZQQYQQQQQQQQQQQRYQVQQZQQ9QQVXSAR5WPEN5TE0D45KUAPWV4UXZMTSD3JJUCM0D5YSQQGPPGQQSQQQQQQQQQQQQG9SQZGPQQRXYMMVWSCNZZCQZSQSQPNZDAK8GVFJQGQQSQQQQQQQQQQQQ5SX95HX';
 
     test('encode/decode preferred mint list with fee reserve and supported methods (creqA)', () => {
       const request = new PaymentRequest(
@@ -133,7 +133,7 @@ describe('payment requests', () => {
         undefined,
         true, // mintsPreferred (advisory list)
         2, // feeReserve
-        ['bolt11', 'bolt12'], // supportedMethods
+        [{ method: 'bolt11' }, { method: 'bolt12', fee: 5 }], // supportedMethods
       );
 
       const pr = request.toEncodedRequest();
@@ -142,7 +142,8 @@ describe('payment requests', () => {
       const decoded = decodePaymentRequest(pr);
       expect(decoded.mintsPreferred).toBe(true);
       expect(decoded.feeReserve?.equals(2)).toBeTruthy();
-      expect(decoded.supportedMethods).toEqual(['bolt11', 'bolt12']);
+      expect(decoded.supportedMethods?.map((m) => m.method)).toEqual(['bolt11', 'bolt12']);
+      expect(decoded.supportedMethods?.[1].fee?.equals(5)).toBeTruthy();
     });
 
     test('encode/decode preferred mint list with fee reserve and supported methods (creqB)', () => {
@@ -157,7 +158,7 @@ describe('payment requests', () => {
         undefined,
         true,
         2,
-        ['bolt11', 'bolt12'],
+        [{ method: 'bolt11' }, { method: 'bolt12', fee: 5 }],
       );
 
       const encoded = request.toEncodedCreqB();
@@ -166,7 +167,53 @@ describe('payment requests', () => {
       const decoded = PaymentRequest.fromEncodedRequest(encoded);
       expect(decoded.mintsPreferred).toBe(true);
       expect(decoded.feeReserve?.equals(2)).toBeTruthy();
-      expect(decoded.supportedMethods).toEqual(['bolt11', 'bolt12']);
+      expect(decoded.supportedMethods?.map((m) => m.method)).toEqual(['bolt11', 'bolt12']);
+      expect(decoded.supportedMethods?.[1].fee?.equals(5)).toBeTruthy();
+    });
+
+    test('amountToSend stacks fr (non-preferred mint) and mf (per-method) fees', () => {
+      // Preferred list (mp=true), fr=2, bolt12 carries mf=5.
+      const pr = new PaymentRequest(
+        undefined,
+        'fees',
+        100,
+        'sat',
+        ['https://in.example.com'],
+        undefined,
+        undefined,
+        undefined,
+        true,
+        2,
+        [{ method: 'bolt11' }, { method: 'bolt12', fee: 5 }],
+      );
+
+      // In-list mint, no fee-bearing method: base only.
+      expect(pr.amountToSend('https://in.example.com').equals(100)).toBeTruthy();
+      // In-list mint + bolt12: base + mf.
+      expect(pr.amountToSend('https://in.example.com', 'bolt12').equals(105)).toBeTruthy();
+      // Outside mint + bolt11 (no mf): base + fr.
+      expect(pr.amountToSend('https://out.example.com', 'bolt11').equals(102)).toBeTruthy();
+      // Outside mint + bolt12: base + fr + mf.
+      expect(pr.amountToSend('https://out.example.com', 'bolt12').equals(107)).toBeTruthy();
+
+      // Strict list (mp absent): fr never applies even from an outside mint.
+      const strict = new PaymentRequest(
+        undefined,
+        'strict',
+        100,
+        'sat',
+        ['https://in.example.com'],
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        2,
+      );
+      expect(strict.amountToSend('https://out.example.com').equals(100)).toBeTruthy();
+
+      // No amount: cannot compute.
+      const noAmount = new PaymentRequest(undefined, 'noamt', undefined, 'sat');
+      expect(() => noAmount.amountToSend('https://x.example.com')).toThrow();
     });
 
     test('isMintListStrict resolves NUT-18 default-to-strict semantic', () => {

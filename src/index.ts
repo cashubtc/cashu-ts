@@ -83,6 +83,8 @@ export type {
   PaymentRequestPayload,
   PaymentRequestTransport,
   RawPaymentRequest,
+  RawSupportedMethod,
+  SupportedMethod,
   RawTransport,
   NUT10Option,
   RawNUT10Option,

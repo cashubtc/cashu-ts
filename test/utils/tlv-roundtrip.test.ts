@@ -359,12 +359,13 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
 
   describe('Preferred Mint List with Fee Reserve and Supported Methods', () => {
     // NUT-26 spec test vector — payment request with mp=true (preferred/advisory
-    // mint list), a fee reserve for non-preferred mints, and required mint methods.
+    // mint list), a fee required for non-preferred mints, and supported methods
+    // where bolt12 carries a per-method fee (mf=5) that stacks with fr.
     const encoded =
-      'CREQB1QYQP2URJV4NX2UNJV4J97EN9V40K6ET5DPHKGUCZQQYQQQQQQQQQQQRYQVQQZQQ9QQVXSAR5WPEN5TE0D45KUAPWV4UXZMTSD3JJUCM0D5YSQQGPPGQQSQQQQQQQQQQQQG9SQPNZDAK8GVF3PVQQVCN0D36RZVSDWZJ5Y';
+      'CREQB1QYQP2URJV4NX2UNJV4J97EN9V40K6ET5DPHKGUCZQQYQQQQQQQQQQQRYQVQQZQQ9QQVXSAR5WPEN5TE0D45KUAPWV4UXZMTSD3JJUCM0D5YSQQGPPGQQSQQQQQQQQQQQQG9SQZGPQQRXYMMVWSCNZZCQZSQSQPNZDAK8GVFJQGQQSQQQQQQQQQQQQ5SX95HX';
 
     test('roundtrip preferred mint list with fee reserve and supported methods', () => {
-      testRoundtrip(encoded, 'NUT-26 spec vector: mp=true, fr=2, sm=[bolt11, bolt12]');
+      testRoundtrip(encoded, 'NUT-26 spec vector: mp=true, fr=2, sm=[bolt11, bolt12(mf=5)]');
     });
 
     test('verify mp, fr, sm fields', () => {
@@ -377,14 +378,20 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
       expect(decoded.mints).toEqual(['https://mint.example.com']);
       expect(decoded.mintsPreferred).toBe(true);
       expect(decoded.feeReserve).toBe(BigInt(2));
-      expect(decoded.supportedMethods).toEqual(['bolt11', 'bolt12']);
+      expect(decoded.supportedMethods).toEqual([
+        { method: 'bolt11' },
+        { method: 'bolt12', fee: BigInt(5) },
+      ]);
 
       const reEncoded = encodeTLV(decoded);
       const finalDecoded = decodeTLV(reEncoded);
 
       expect(finalDecoded.mintsPreferred).toBe(true);
       expect(finalDecoded.feeReserve).toBe(BigInt(2));
-      expect(finalDecoded.supportedMethods).toEqual(['bolt11', 'bolt12']);
+      expect(finalDecoded.supportedMethods).toEqual([
+        { method: 'bolt11' },
+        { method: 'bolt12', fee: BigInt(5) },
+      ]);
     });
   });
 
