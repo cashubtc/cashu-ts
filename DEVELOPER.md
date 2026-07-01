@@ -333,9 +333,14 @@ Releases on `main` are automated with [release-please](https://github.com/google
 
 > **Major bumps:** when breaking changes (`feat!` / `fix!`) land on `main`, release-please proposes the next major automatically. To control the pre-release cadence, add a `Release-As: X.0.0-rc.1` footer to a commit so the Release PR targets that version (it publishes to `next`).
 
-### Pre-releases / release candidates
+### Pre-releases: `next` (RC) vs `beta` (unstable)
 
-Any version containing `-rc`, `-beta`, or `-alpha` publishes to the `next` dist-tag, regardless of branch. Cut these either from `main` (via a `Release-As` footer) or from a short-lived branch off `main` (bump `package.json`, tag, and publish a GitHub **pre-release**).
+Two distinct pre-release channels — don't conflate them:
+
+- **`next` — release candidates.** `-rc` versions only. The one pre-release we ship from `main`: finalized work that _will_ become GA barring a blocker. Cut from `main` (via a `Release-As: X.Y.Z-rc.1` footer) or a short-lived branch off `main`. `npm i @cashu/cashu-ts@next`.
+- **`beta` — experimental / unstable.** `-beta` / `-alpha` versions. Off the release path: speculative bundles of _unmerged_ PRs for real-world testing; may change or be withdrawn and are **not** guaranteed to ship. Produced by [`scripts/make-experimental.sh`](#experimental-beta-line), published under `@beta`. `npm i @cashu/cashu-ts@beta`.
+
+From `main` we only ever ship `-rc` (→ `next`) or full GA (→ `latest`); anything `-alpha`/`-beta` is unstable and lives on `beta`. Rule of thumb: `@next` = "trust it, it's coming"; `@beta` = "kick the tires, no promises".
 
 ### LTS releases on `vN-dev` (manual)
 
@@ -356,19 +361,21 @@ release-please only watches `main`, so prior-major maintenance releases are cut 
 
 ### npm dist-tags
 
-`version.yml` derives the dist-tag from the version being published:
+`version.yml` derives the dist-tag from the version being published (checked in this order):
 
-- Prerelease (`-rc` / `-beta` / `-alpha`) → `next`
+- `-beta` / `-alpha` → `beta` (experimental / unstable)
+- `-rc` → `next` (release candidate)
 - Major equal to `LATEST_MAJOR` (a workflow-level env var) → `latest`
 - Any other major → `vN-lts`
 
-| Version       | Tag      | Install                              |
-| ------------- | -------- | ------------------------------------ |
-| Current major | `latest` | `npm install @cashu/cashu-ts`        |
-| Prerelease    | `next`   | `npm install @cashu/cashu-ts@next`   |
-| LTS           | `vN-lts` | `npm install @cashu/cashu-ts@v3-lts` |
+| Version            | Tag      | Stability                     | Install                              |
+| ------------------ | -------- | ----------------------------- | ------------------------------------ |
+| Current major (GA) | `latest` | stable                        | `npm install @cashu/cashu-ts`        |
+| `-rc`              | `next`   | release candidate — will ship | `npm install @cashu/cashu-ts@next`   |
+| `-beta` / `-alpha` | `beta`   | unstable — may change/vanish  | `npm install @cashu/cashu-ts@beta`   |
+| Prior major        | `vN-lts` | maintenance                   | `npm install @cashu/cashu-ts@v3-lts` |
 
-> `latest` is governed **solely** by `LATEST_MAJOR` in `version.yml`. Any major that is not `LATEST_MAJOR` (and is not a prerelease) falls through to `vN-lts` and can never accidentally become `latest`.
+> `latest` is governed **solely** by `LATEST_MAJOR` in `version.yml`. Any major that is not `LATEST_MAJOR` (and is not a prerelease) falls through to `vN-lts` and can never accidentally become `latest`. `beta` and `next` are separate channels: a `-beta` never lands on `next`, and neither ever becomes `latest`.
 
 ### Major transitions
 
