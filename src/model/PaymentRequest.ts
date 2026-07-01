@@ -100,12 +100,13 @@ export class PaymentRequest {
   }
 
   /**
-   * The total amount to send from `mint` using `method`: the requested amount plus {@link feesFor}.
+   * The total amount to send from `mint` using `method`: the requested amount plus
+   * {@link PaymentRequest.feesFor | feesFor}.
    *
    * @param mint - The mint URL the payer will send from.
    * @param method - The payment method the payer relies on (matched against `sm`); omit if none.
    * @throws If the request has no amount. Amountless requests have no base to add fees to; use
-   *   {@link feesFor} and add it to the amount the payer chooses.
+   *   {@link PaymentRequest.feesFor | feesFor} and add it to the amount the payer chooses.
    */
   amountToSend(mint: string, method?: string): Amount {
     if (!this.amount) {
