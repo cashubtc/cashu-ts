@@ -12,3 +12,6 @@ test-results
 .claude
 .githooks
 .husky/_
+
+# local beta-bundle PR list (see scripts/make-experimental.sh)
+scripts/.experimental-prs
