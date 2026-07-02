@@ -1,5 +1,15 @@
 # Changelog
 
+## [4.6.1](https://github.com/cashubtc/cashu-ts/compare/v4.6.0...v4.6.1) (2026-07-02)
+
+
+### Bug Fixes
+
+* **htlc:** return false for a malformed preimage instead of throwing (v4-dev backport) ([#714](https://github.com/cashubtc/cashu-ts/issues/714)) ([3522fb6](https://github.com/cashubtc/cashu-ts/commit/3522fb6989f07518be074f033e75f11fd68f0017))
+* **htlc:** support hashlock-only (pubkey-less) HTLC locks ([#711](https://github.com/cashubtc/cashu-ts/issues/711)) ([2a1c3cc](https://github.com/cashubtc/cashu-ts/commit/2a1c3cc12a6725e56ae2e8b876352e16403b73ee))
+* **payment-request:** forward and harden nut10 on creqB decode ([#704](https://github.com/cashubtc/cashu-ts/issues/704)) ([386b745](https://github.com/cashubtc/cashu-ts/commit/386b745df1eca8529b5710eeb50ac9d56d123c68))
+* **wallet:** allow melt on inactive keyset when no change is created ([#706](https://github.com/cashubtc/cashu-ts/issues/706)) ([f5627d2](https://github.com/cashubtc/cashu-ts/commit/f5627d21a817784fde847f49d1923c6e7ec88a98))
+
 ## [4.5.0](https://github.com/cashubtc/cashu-ts/compare/v4.4.0...v4.5.0) (2026-05-21)
 
 
