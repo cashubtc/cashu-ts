@@ -30,10 +30,10 @@ jobs:
       was_successful: ${{ steps.create-pr.outputs.was_successful }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - id: create-pr
         name: Create backport pull requests
-        uses: korthout/backport-action@v4.5.2
+        uses: korthout/backport-action@v4.6.0
         with:
           # PAT so backport PRs trigger CI (default GITHUB_TOKEN PRs don't)
           github_token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
