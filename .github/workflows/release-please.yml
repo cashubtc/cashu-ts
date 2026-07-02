@@ -1,8 +1,10 @@
 name: release-please
+# v4-dev copy: watches and releases this LTS branch only. main's copy
+# (which targets main) is separate — push workflows run per-branch.
 on:
   push:
     branches:
-      - main
+      - v4-dev
 permissions:
   contents: write
   issues: write
@@ -16,4 +18,5 @@ jobs:
         id: release
         with:
           release-type: node
+          target-branch: v4-dev
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
