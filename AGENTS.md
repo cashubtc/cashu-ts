@@ -1,9 +1,5 @@
 # AGENTS
 
-Using cashu-ts? This file is for you. Developing cashu-ts itself? See
-`AGENTS-CONTRIBUTING.md` (alongside this file in a repo checkout, or
-[on GitHub](https://github.com/cashubtc/cashu-ts/blob/main/AGENTS-CONTRIBUTING.md)).
-
 TypeScript library for Cashu ecash wallets and mint interaction.
 
 ## Before you write code
@@ -26,3 +22,11 @@ deprecations before moving to the next. Some majors also ship a deeper
 - Usage recipes: `docs-src/` (contains usage, wallet events, WalletOps builder)
 - Full API reference: `etc/cashu-ts.api.md` (or `lib/types/index.d.ts`)
 - Migration guides: `migration-*.md` (plus any `.SKILL.md`)
+
+## Contributing to Cashu-TS Development
+
+Checkout the git repo at: https://github.com/cashubtc/cashu-ts
+
+**Study** `AGENTS-CONTRIBUTING.md` (alongside this file in a repo checkout).
+
+It contains repo map and conventions, coding guidelines, commit hygiene and more.

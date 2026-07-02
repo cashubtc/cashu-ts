@@ -20,7 +20,7 @@ npm run test:prepare
 
 ### Branching model
 
-`main` always tracks the **current major** under active development — there is no separate development branch for it. Each still-supported **prior major** is maintained on its own long-lived `vN-dev` branch for fixes only.
+`main` always tracks the **current major** under active development - there is no separate development branch for it. Each still-supported **prior major** is maintained on its own long-lived `vN-dev` branch for fixes only.
 
 Open PRs against the branch for the major you are targeting (don't mix majors in one PR):
 
@@ -31,9 +31,9 @@ Current branches:
 
 | Branch   | Major | Status                             |
 | -------- | ----- | ---------------------------------- |
-| `main`   | v5    | Current — active development       |
-| `v4-dev` | v4    | LTS — critical/security fixes only |
-| `v3-dev` | v3    | LTS — critical/security fixes only |
+| `main`   | v5    | Current - active development       |
+| `v4-dev` | v4    | LTS - critical/security fixes only |
+| `v3-dev` | v3    | LTS - critical/security fixes only |
 
 Notes:
 
@@ -49,9 +49,9 @@ Speculative work tied to **unmerged NUTs** (specs that may still change) is **no
 PUBLISH=1 ./scripts/make-experimental.sh 698   # …and npm publish --tag experimental
 ```
 
-The branch is throwaway, rebuilt from scratch each run, never promoted from and never merged back. Work graduates by merging its individual PR into `main` the normal way. The bundle is passed as PR-number args (or kept in the gitignored `scripts/.experimental-prs`), so changing the mix is a local operation — no PR required. See the script header for the full rationale.
+The branch is throwaway, rebuilt from scratch each run, never promoted from and never merged back. Work graduates by merging its individual PR into `main` the normal way. The bundle is passed as PR-number args (or kept in the gitignored `scripts/.experimental-prs`), so changing the mix is a local operation - no PR required. See the script header for the full rationale.
 
-### ⚠️ Important — run `npm ci` after switching major branches
+### ⚠️ Important - run `npm ci` after switching major branches
 
 When switching between major branches (for example `main` and a `vN-dev` branch) the lockfile and installed dependencies can differ. This frequently causes confusing failures when compiling or running `api-extractor`.
 
@@ -69,7 +69,7 @@ rm -rf node_modules
 npm ci
 ```
 
-This callout is important — please don't skip it when moving between major branches, it saves a lot of time debugging mysterious build/test failures.
+This callout is important - please don't skip it when moving between major branches, it saves a lot of time debugging mysterious build/test failures.
 
 ## Environment & toolchain
 
@@ -301,7 +301,7 @@ npm install <pkg> --save-dev
 
 Cashu-TS uses semantic versioning.
 
-`main` is the single primary development branch and tracks the **current major**. All new development is merged into `main` via pull requests. Each supported **prior major** is maintained on its own `vN-dev` branch for critical/security fixes only — open backports as a separate PR against the matching `vN-dev` branch (do not mix majors in a single PR). See [Branching model](#branching-model).
+`main` is the single primary development branch and tracks the **current major**. All new development is merged into `main` via pull requests. Each supported **prior major** is maintained on its own `vN-dev` branch for critical/security fixes only - open backports as a separate PR against the matching `vN-dev` branch (do not mix majors in a single PR). See [Branching model](#branching-model).
 
 ## Releases
 
@@ -335,12 +335,12 @@ Releases on `main` are automated with [release-please](https://github.com/google
 
 ### Pre-releases: `next` (RC) vs `experimental` (unstable)
 
-Two distinct pre-release channels — don't conflate them:
+Two distinct pre-release channels - don't conflate them:
 
-- **`next` — release candidates.** `-rc` versions only. The one pre-release we ship from `main`: finalized work that _will_ become GA barring a blocker. Cut from `main` (via a `Release-As: X.Y.Z-rc.1` footer) or a short-lived branch off `main`. `npm i @cashu/cashu-ts@next`.
-- **`experimental` — unstable.** `-beta` / `-alpha` versions. Off the release path: speculative bundles of _unmerged_ PRs for real-world testing; may change or be withdrawn and are **not** guaranteed to ship. Produced by [`scripts/make-experimental.sh`](#the-experimental-line), published under `@experimental`. `npm i @cashu/cashu-ts@experimental`.
+- **`next` - release candidates.** `-rc` versions only. The one pre-release we ship from `main`: finalized work that _will_ become GA barring a blocker. Cut from `main` (via a `Release-As: X.Y.Z-rc.1` footer) or a short-lived branch off `main`. `npm i @cashu/cashu-ts@next`.
+- **`experimental` - unstable.** `-experimental` versions (e.g. `5.0.0-experimental.a1b2c3d`). Off the release path: speculative bundles of _unmerged_ PRs for real-world testing; may change or be withdrawn and are **not** guaranteed to ship. Produced by [`scripts/make-experimental.sh`](#the-experimental-line), published under `@experimental`. `npm i @cashu/cashu-ts@experimental`.
 
-From `main` we only ever ship `-rc` (→ `next`) or full GA (→ `latest`); anything `-alpha`/`-beta` is unstable and lives on `experimental`. Rule of thumb: `@next` = "trust it, it's coming"; `@experimental` = "kick the tires, no promises".
+From `main` we only ever ship `-rc` (→ `next`) or full GA (→ `latest`); anything `-experimental` (or `-alpha`/`-beta`) is unstable and lives on `experimental`. Rule of thumb: `@next` = "trust it, it's coming"; `@experimental` = "kick the tires, no promises".
 
 ### LTS releases on `vN-dev` (manual)
 
@@ -363,7 +363,7 @@ release-please only watches `main`, so prior-major maintenance releases are cut 
 
 `version.yml` derives the dist-tag from the version being published (checked in this order):
 
-- `-beta` / `-alpha` → `experimental` (unstable)
+- `-experimental` / `-beta` / `-alpha` → `experimental` (unstable)
 - `-rc` → `next` (release candidate)
 - Major equal to `LATEST_MAJOR` (a workflow-level env var) → `latest`
 - Any other major → `vN-lts`
@@ -371,18 +371,18 @@ release-please only watches `main`, so prior-major maintenance releases are cut 
 | Version            | Tag            | Stability                     | Install                                    |
 | ------------------ | -------------- | ----------------------------- | ------------------------------------------ |
 | Current major (GA) | `latest`       | stable                        | `npm install @cashu/cashu-ts`              |
-| `-rc`              | `next`         | release candidate — will ship | `npm install @cashu/cashu-ts@next`         |
-| `-beta` / `-alpha` | `experimental` | unstable — may change/vanish  | `npm install @cashu/cashu-ts@experimental` |
+| `-rc`              | `next`         | release candidate - will ship | `npm install @cashu/cashu-ts@next`         |
+| `-experimental`    | `experimental` | unstable - may change/vanish  | `npm install @cashu/cashu-ts@experimental` |
 | Prior major        | `vN-lts`       | maintenance                   | `npm install @cashu/cashu-ts@v3-lts`       |
 
-> `latest` is governed **solely** by `LATEST_MAJOR` in `version.yml`. Any major that is not `LATEST_MAJOR` (and is not a prerelease) falls through to `vN-lts` and can never accidentally become `latest`. `experimental` and `next` are separate channels: a `-beta`/`-alpha` never lands on `next`, and neither ever becomes `latest`.
+> `latest` is governed **solely** by `LATEST_MAJOR` in `version.yml`. Any major that is not `LATEST_MAJOR` (and is not a prerelease) falls through to `vN-lts` and can never accidentally become `latest`. `experimental` and `next` are separate channels: an `-experimental` build never lands on `next`, and neither ever becomes `latest`.
 
 ### Major transitions
 
 Promoting a new major happens in two steps:
 
 1. **Incoming major lands on `main`.** release-please proposes the new major; cut release candidates (`-rc`), which publish to `next`. Leave `LATEST_MAJOR` unchanged so `latest` keeps pointing at the outgoing major, and start cutting the outgoing major's maintenance releases from its `vN-dev` branch.
-2. **GA.** Bump `LATEST_MAJOR` in `version.yml` (one-line PR) and cut the release on `main` — it publishes to `latest`, and the previous major automatically drops to `vN-lts`. Update the branch table above.
+2. **GA.** Bump `LATEST_MAJOR` in `version.yml` (one-line PR) and cut the release on `main` - it publishes to `latest`, and the previous major automatically drops to `vN-lts`. Update the branch table above.
 
 ### Notes on Versioning
 
