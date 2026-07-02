@@ -15,3 +15,5 @@ test-results
 
 # local beta-bundle PR list (see scripts/make-experimental.sh)
 scripts/.experimental-prs
+reports
+.stryker-tmp
