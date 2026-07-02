@@ -30,7 +30,7 @@ jobs:
             stop: DEV=1 make nutshell-stable-down
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Start ${{ matrix.mint }} at :latest
         run: ${{ matrix.start }}
