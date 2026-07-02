@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "vitest",
+  "vitest": {
+    "configFile": "vitest.stryker.config.ts"
+  },
+  "mutate": [
+    "src/crypto/**/*.ts",
+    "src/model/**/*.ts",
+    "src/wallet/**/*.ts",
+    "src/mint/**/*.ts",
+    "!src/**/index.ts"
+  ],
+  "reporters": ["html", "json", "clear-text", "progress"],
+  "htmlReporter": { "fileName": "reports/mutation/mutation.html" },
+  "jsonReporter": { "fileName": "reports/mutation/mutation.json" },
+  "incrementalFile": "reports/stryker-incremental.json",
+  "thresholds": { "high": 90, "low": 70, "break": null },
+  "tempDirName": ".stryker-tmp",
+  "cleanTempDir": true
+}

@@ -23,6 +23,7 @@ export default tseslint.config(
       '*.d.ts',
       'examples/**',
       'vite.config.ts',
+      'vitest.stryker.config.ts',
       'vitest.workspace.ts',
       'eslint.config.js',
       'post-process-dts.js',
