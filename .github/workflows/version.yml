@@ -4,6 +4,12 @@ permissions:
   contents: write
   id-token: write
 
+# *** NOTE: THIS WORKFLOW ONLY EVER RUNS FROM MAIN'S COPY ***
+# Release events execute the default branch's workflow files, so the copies on
+# vN-dev branches are inert: edit LATEST_MAJOR here on main, never anywhere else.
+# (Manual workflow_dispatch runs must also be dispatched from main — dispatching
+# from a vN-dev ref would use that branch's stale copy of this file.)
+#
 # Major version currently published under the npm `latest` dist-tag.
 # Bump this (e.g. "4" -> "5") in a reviewed PR when a new major reaches GA — see the release
 # strategy in DEVELOPER.md. Any major that is not LATEST_MAJOR publishes as `vN-lts`, never `latest`.

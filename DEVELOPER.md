@@ -301,7 +301,7 @@ npm install <pkg> --save-dev
 
 Cashu-TS uses semantic versioning.
 
-`main` is the single primary development branch and tracks the **current major**. All new development is merged into `main` via pull requests. Each supported **prior major** is maintained on its own `vN-dev` branch for critical/security fixes only - open backports as a separate PR against the matching `vN-dev` branch (do not mix majors in a single PR). See [Branching model](#branching-model).
+`main` is the single primary development branch and tracks the **current major**. All new development is merged into `main` via pull requests. Each supported **prior major** is maintained on its own `vN-dev` branch for critical/security fixes only - backports are label-driven: land the fix on `main` and add a `backport vN-dev` label to the PR (do not mix majors in a single PR). See [Branching model](#branching-model).
 
 ## Releases
 
@@ -342,22 +342,17 @@ Two distinct pre-release channels - don't conflate them:
 
 From `main` we only ever ship `-rc` (→ `next`) or full GA (→ `latest`); anything `-experimental` (or `-alpha`/`-beta`) is unstable and lives on `experimental`. Rule of thumb: `@next` = "trust it, it's coming"; `@experimental` = "kick the tires, no promises".
 
-### LTS releases on `vN-dev` (manual)
+### LTS releases on `vN-dev` (release-please)
 
-release-please only watches `main`, so prior-major maintenance releases are cut manually:
+LTS releases work exactly like `main` releases. Each `vN-dev` branch carries its own copy of the release-please workflow pointed at itself (`on.push.branches` + `target-branch` - push workflows run per-branch, so the copies never interfere):
 
-1. Open a release PR targeting `vN-dev`.
-2. Commit or cherry-pick the fix to the `vN-dev` branch.
-3. Bump `package.json` to the next patch version (e.g. `4.5.1`).
-4. Merge the PR into `v4-dev`.
-5. Tag the merged `v4-dev` commit that contains the version bump:
-   ```bash
-   git fetch origin v4-dev --tags
-   git tag -a v4.5.1 origin/v4-dev -m "v4.5.1"
-   git push origin v4.5.1
-   ```
-6. Create a GitHub Release from the tag (or use `workflow_dispatch` on the publish workflow with the tag).
-7. The publish workflow detects major version 4 and publishes to npm with the `v4-lts` dist-tag.
+1. Fixes land on `main` and reach `vN-dev` via `backport vN-dev` labels (see [Branching model](#branching-model)).
+2. Each backport merged into `vN-dev` creates or updates that branch's Release PR (e.g. `chore(v4-dev): release 4.6.1`), aggregating the changelog and computing the next version from the conventional commits.
+3. Merging the Release PR is the release action: it tags, publishes the GitHub Release, and `version.yml` pushes to npm with the dist-tag derived from `LATEST_MAJOR` (`latest` while the major is current, `vN-lts` after).
+
+No manual version bumps, tags, or GitHub Releases - and never commit directly to a `vN-dev` branch.
+
+> **Publish routing note:** release-triggered workflows always run from `main`'s `version.yml` (release events execute the default branch's workflow files), so `LATEST_MAJOR` only ever needs updating on `main`. The `version.yml` and `release-please.yml` copies on `vN-dev` branches are inert except for the `release-please.yml` branch pointer described above.
 
 ### npm dist-tags
 
@@ -381,15 +376,15 @@ release-please only watches `main`, so prior-major maintenance releases are cut 
 
 Promoting a new major happens in two steps:
 
-1. **Incoming major lands on `main`.** release-please proposes the new major; cut release candidates (`-rc`), which publish to `next`. Leave `LATEST_MAJOR` unchanged so `latest` keeps pointing at the outgoing major, and start cutting the outgoing major's maintenance releases from its `vN-dev` branch.
-2. **GA.** Bump `LATEST_MAJOR` in `version.yml` (one-line PR) and cut the release on `main` - it publishes to `latest`, and the previous major automatically drops to `vN-lts`. Update the branch table above.
+1. **Incoming major lands on `main`.** release-please proposes the new major; cut release candidates (`-rc`), which publish to `next`. Leave `LATEST_MAJOR` unchanged so `latest` keeps pointing at the outgoing major. Cut the outgoing major's `vN-dev` branch; in its first commit, point that branch's `release-please.yml` copy at itself (`on.push.branches` and `target-branch`), and create the `backport vN-dev` label. Maintenance releases then flow from the branch automatically.
+2. **GA.** Bump `LATEST_MAJOR` in `version.yml` (one-line PR on `main` - the only place it matters) and cut the release on `main` - it publishes to `latest`, and the previous major automatically drops to `vN-lts`. Update the branch table above.
 
 ### Notes on Versioning
 
 - Follow **Conventional Commits** to ensure correct version bumps.
 - Breaking API changes must be clearly marked (`feat!` / `fix!` or `BREAKING CHANGE:`) to trigger a major version bump.
-- Version numbers on `main` are determined automatically by release-please; contributors should not attempt to control versions directly.
-- LTS and RC versions are bumped manually in `package.json`.
+- Version numbers on `main` and `vN-dev` branches are determined automatically by each branch's release-please; contributors should not attempt to control versions directly.
+- RC cadence on `main` is controlled with `Release-As:` commit footers; nothing is bumped by hand in `package.json`.
 
 ## Troubleshooting (common issues)
 
