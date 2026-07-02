@@ -34,9 +34,25 @@ const activePrs = list('pr', REPO, `updated:>=${since} -created:>=${since}`, [
   '100',
 ]);
 const newIssues = list('issue', REPO, `created:>=${since}`, ['--state', 'open', '--limit', '100']);
-const mergedNuts = list('pr', NUTS_REPO, `merged:>=${since}`, ['--state', 'merged', '--limit', '100']);
+const mergedNuts = list('pr', NUTS_REPO, `merged:>=${since}`, [
+  '--state',
+  'merged',
+  '--limit',
+  '100',
+]);
 const discussion = ['issue', 'pr'].flatMap((k) =>
-  gh([k, 'list', '--repo', REPO, '--state', 'open', '--label', 'meeting-discussion', '--json', FIELDS]),
+  gh([
+    k,
+    'list',
+    '--repo',
+    REPO,
+    '--state',
+    'open',
+    '--label',
+    'meeting-discussion',
+    '--json',
+    FIELDS,
+  ]),
 );
 const reports = REPORT_LABELS.flatMap((l) =>
   gh(['issue', 'list', '--repo', REPO, '--state', 'open', '--label', l, '--json', FIELDS]),
@@ -67,9 +83,7 @@ add('Merged NUTS', mergedNuts);
 add('Backport', merged, isBackport);
 
 const fmt = (items) =>
-  items.length
-    ? items.map((i) => `- [#${i.number}](${i.url}) - ${i.title}`).join('\n')
-    : '- None';
+  items.length ? items.map((i) => `- [#${i.number}](${i.url}) - ${i.title}`).join('\n') : '- None';
 
 const userSections = [...byUser.values()]
   .sort((a, b) => a.display.localeCompare(b.display))
