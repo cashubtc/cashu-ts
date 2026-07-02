@@ -382,11 +382,15 @@ Promoting a new major happens in two steps:
 
    ```bash
    git push origin --delete gh-pages          # stale site gone (Pages setting survives)
-   gh workflow run typedoc.yml                # rebuilds docs root + CNAME + coverage
+   gh workflow run typedoc.yml --ref vX.Y.Z   # rebuilds docs root + CNAME + coverage
    gh workflow run mutation-testing-weekly.yml # rebuilds /mutation (close the extra report issue)
    ```
 
    Site 404s for the few minutes between delete and redeploy. Also retarget typedoc.yml's tag trigger (`v4.*`) to the new major.
+
+   ⚠️ **Always dispatch typedoc with `--ref <latest release tag of the npm-latest major>`.** A bare dispatch builds from `main` - wrong whenever `main` is ahead of `latest` (e.g. during an rc phase, the site would show unreleased next-major docs).
+
+   ⚠️ **typedoc.yml changes must land on the branch releases are tagged from.** Tag-triggered (and tag-ref'd) runs execute the workflow file _at that ref_, so edits to `main`'s copy never affect release deploys - keep `v4-dev`'s copy in sync (e.g. the `keep_files: true` setting protecting `/coverage` and `/mutation`).
 
 ### Notes on Versioning
 

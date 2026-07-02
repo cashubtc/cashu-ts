@@ -6,6 +6,9 @@ on:
   push:
     tags:
       - 'v4.*'
+  # Manual runs: pick the latest release tag of the npm-latest major as the
+  # ref — dispatching from main publishes unreleased next-major docs whenever
+  # main is ahead of latest (e.g. during an rc phase)
   workflow_dispatch:
 
 jobs:
