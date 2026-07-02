@@ -8,6 +8,7 @@ import {
 } from '../../src/crypto';
 import { test, describe, expect } from 'vitest';
 import { Amount, MintKeys, type Keys, type Proof, type Token, Keyset } from '../../src';
+import { CTSError } from '../../src/model/Errors';
 import * as utils from '../../src/utils';
 import {
   NUT02_V1_VECTOR1_KEYS,
