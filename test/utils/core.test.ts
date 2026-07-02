@@ -1468,6 +1468,23 @@ describe('getDecodedTokenBinary edge cases', () => {
   });
 });
 
+describe('tokenFromTemplate rejects valid CBOR of wrong shape', () => {
+  test('getDecodedToken (cashuB) throws CTSError, not a raw TypeError', () => {
+    const body = utils.encodeCBOR({ m: 'http://localhost:3338', u: 'sat' });
+    const token = 'cashuB' + utils.encodeUint8toBase64Url(body);
+    expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
+  });
+
+  test('getDecodedTokenBinary (crawB) throws CTSError, not a raw TypeError', () => {
+    const body = utils.encodeCBOR({ m: 'http://localhost:3338', u: 'sat' });
+    const prefix = new TextEncoder().encode('crawB');
+    const bytes = new Uint8Array(prefix.length + body.length);
+    bytes.set(prefix, 0);
+    bytes.set(body, prefix.length);
+    expect(() => utils.getDecodedTokenBinary(bytes)).toThrow(CTSError);
+  });
+});
+
 describe('deriveKeysetId edge cases', () => {
   test('throws for unknown version byte', () => {
     expect(() => utils.deriveKeysetId(keys, { versionByte: 99 })).toThrow(
