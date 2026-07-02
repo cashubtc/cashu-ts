@@ -1111,6 +1111,36 @@ describe('getDecodedTokenBinary edge cases', () => {
   });
 });
 
+describe('tokenFromTemplate rejects valid CBOR of wrong shape', () => {
+  test('getDecodedToken (cashuB) throws CTSError, not a raw TypeError', () => {
+    const body = utils.encodeCBOR({ m: 'http://localhost:3338', u: 'sat' });
+    const token = 'cashuB' + utils.encodeUint8toBase64Url(body);
+    expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
+  });
+
+  test('getDecodedTokenBinary (crawB) throws CTSError, not a raw TypeError', () => {
+    const body = utils.encodeCBOR({ m: 'http://localhost:3338', u: 'sat' });
+    const prefix = new TextEncoder().encode('crawB');
+    const bytes = new Uint8Array(prefix.length + body.length);
+    bytes.set(prefix, 0);
+    bytes.set(body, prefix.length);
+    expect(() => utils.getDecodedTokenBinary(bytes)).toThrow(CTSError);
+  });
+
+  test('throws CTSError when a token entry has no proofs array', () => {
+    const body = utils.encodeCBOR({ m: 'http://localhost:3338', u: 'sat', t: [{ i: 'nope' }] });
+    const token = 'cashuB' + utils.encodeUint8toBase64Url(body);
+    expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
+  });
+
+  test('defaults unit to sat when template omits it', () => {
+    const body = utils.encodeCBOR({ m: 'http://localhost:3338', t: [] });
+    const token = 'cashuB' + utils.encodeUint8toBase64Url(body);
+    const decoded = utils.getDecodedToken(token, []);
+    expect(decoded).toEqual({ mint: 'http://localhost:3338', proofs: [], unit: 'sat' });
+  });
+});
+
 describe('deriveKeysetId edge cases', () => {
   test('throws for unknown version byte', () => {
     expect(() => utils.deriveKeysetId(keys, { versionByte: 99 })).toThrow(
