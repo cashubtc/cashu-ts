@@ -42,6 +42,11 @@ jobs:
           # the open-issue job below files a tracking issue
           # Ignore merge commits from "update branch" syncs
           merge_commits: skip
+          # Backport marker goes at the END of the title: the default
+          # "[Backport vN-dev]" PREFIX breaks release-please's conventional-
+          # commit parsing after squash-merge (no release PR, no changelog
+          # entry — bit us on #743). A suffix keeps the subject parseable.
+          pull_title: '${pull_title} [backport ${target_branch}]'
 
   open-issue:
     name: Open issue for failed backports
