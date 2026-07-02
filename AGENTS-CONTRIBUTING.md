@@ -141,7 +141,8 @@ Hooks are installed by Husky:
 ## Branching and releases
 
 - `main` tracks the current major and is where active development lands.
-- Each supported prior major has a `vN-dev` LTS branch (`v4-dev`, `v3-dev`) for backports only; target the matching branch and don't mix majors in one PR.
+- Each supported prior major has a `vN-dev` LTS branch (`v4-dev`, `v3-dev`) for backports only; don't mix majors in one PR.
+- Backports are label-driven: land the fix on `main`, add a `backport vN-dev` label to the PR, and a bot opens the backport PR. Only cherry-pick manually when the bot fails (it opens a `backport`-labelled issue); never commit directly to a `vN-dev` branch.
 - Current-major releases on `main` are automated with release-please (don't bump versions by hand). LTS releases on `vN-dev` are cut manually (tag + GitHub Release).
 - npm `latest` is governed solely by `LATEST_MAJOR` in `.github/workflows/version.yml`.
 
