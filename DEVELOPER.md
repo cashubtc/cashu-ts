@@ -378,6 +378,15 @@ Promoting a new major happens in two steps:
 
 1. **Incoming major lands on `main`.** release-please proposes the new major; cut release candidates (`-rc`), which publish to `next`. Leave `LATEST_MAJOR` unchanged so `latest` keeps pointing at the outgoing major. Cut the outgoing major's `vN-dev` branch; in its first commit, point that branch's `release-please.yml` copy at itself (`on.push.branches` and `target-branch`), and create the `backport vN-dev` label. Maintenance releases then flow from the branch automatically.
 2. **GA.** Bump `LATEST_MAJOR` in `version.yml` (one-line PR on `main` - the only place it matters) and cut the release on `main` - it publishes to `latest`, and the previous major automatically drops to `vN-lts`. Update the branch table above.
+3. **Docs site switchover.** The typedoc deploy overlays gh-pages (`keep_files: true`, so `/coverage` and `/mutation` survive between deploys) - which means pages removed by the new major's docs linger until cleaned. Everything on gh-pages is a regenerable build artifact, so the clean is nuke-and-rebuild:
+
+   ```bash
+   git push origin --delete gh-pages          # stale site gone (Pages setting survives)
+   gh workflow run typedoc.yml                # rebuilds docs root + CNAME + coverage
+   gh workflow run mutation-testing-weekly.yml # rebuilds /mutation (close the extra report issue)
+   ```
+
+   Site 404s for the few minutes between delete and redeploy. Also retarget typedoc.yml's tag trigger (`v4.*`) to the new major.
 
 ### Notes on Versioning
 
