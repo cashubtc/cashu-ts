@@ -42,7 +42,7 @@ jobs:
         run: |
           VERSION=$(node -p "require('./package.json').version")
           MAJOR_VERSION=$(echo $VERSION | cut -d. -f1)
-          if echo "$VERSION" | grep -qE '[-](beta|alpha)'; then
+          if echo "$VERSION" | grep -qE '[-](experimental|beta|alpha)'; then
             # experimental / unstable — off the release path; may change or be withdrawn
             echo "tag=experimental" >> $GITHUB_OUTPUT
             echo "prerelease=true" >> $GITHUB_OUTPUT
