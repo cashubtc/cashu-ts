@@ -1,5 +1,24 @@
 # Changelog
 
+## [4.6.0](https://github.com/cashubtc/cashu-ts/compare/v4.5.1...v4.6.0) (2026-06-22)
+
+### Features
+
+* **payment-request:** add PaymentRequest.toP2PKOptions() (backport to v4-dev) ([#701](https://github.com/cashubtc/cashu-ts/issues/701)) ([6c47aeb](https://github.com/cashubtc/cashu-ts/commit/6c47aeb))
+* **wallet:** gate proof creation to active prefixed keysets (v4 backport) ([#692](https://github.com/cashubtc/cashu-ts/issues/692)) ([b43d23f](https://github.com/cashubtc/cashu-ts/commit/b43d23f))
+
+### Bug Fixes
+
+* **dleq:** use rejection sampling for deterministic DLEQ nonce (v4 backport) ([#699](https://github.com/cashubtc/cashu-ts/issues/699)) ([9c716a1](https://github.com/cashubtc/cashu-ts/commit/9c716a1))
+
+## [4.5.1](https://github.com/cashubtc/cashu-ts/compare/v4.5.0...v4.5.1) (2026-05-23)
+
+Deprecates the previous `checkProofsStates` signature in favour of a v5-compatible one. We recommend updating to the new signature before upgrading to v5.
+
+### Features
+
+* **wallet:** accept proof id in checkProofsStates ahead of v5 ([#669](https://github.com/cashubtc/cashu-ts/issues/669)) ([58edb64](https://github.com/cashubtc/cashu-ts/commit/58edb64))
+
 ## [4.5.0](https://github.com/cashubtc/cashu-ts/compare/v4.4.0...v4.5.0) (2026-05-21)
 
 

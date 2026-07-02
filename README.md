@@ -72,6 +72,10 @@ package.
 
 ---
 
+## Changelog
+
+Release notes for every version — across all release lines (current and LTS) — are on the [GitHub Releases page](https://github.com/cashubtc/cashu-ts/releases).
+
 ## Contribute
 
 We welcome contributions from anyone — newcomers, experienced developers, and AI-assisted workflows alike.
