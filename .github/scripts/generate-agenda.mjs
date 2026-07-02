@@ -40,6 +40,13 @@ const mergedNuts = list('pr', NUTS_REPO, `merged:>=${since}`, [
   '--limit',
   '100',
 ]);
+const newNuts = list('pr', NUTS_REPO, `created:>=${since}`, ['--state', 'open', '--limit', '100']);
+const activeNuts = list('pr', NUTS_REPO, `updated:>=${since} -created:>=${since}`, [
+  '--state',
+  'open',
+  '--limit',
+  '100',
+]);
 const discussion = ['issue', 'pr'].flatMap((k) =>
   gh([
     k,
@@ -79,11 +86,20 @@ add('Merged', merged, (pr) => !isBackport(pr));
 add('New Issue', newIssues);
 add('New PR', newPrs);
 add('Recently Active', activePrs);
-add('Merged NUTS', mergedNuts);
 add('Backport', merged, isBackport);
 
 const fmt = (items) =>
   items.length ? items.map((i) => `- [#${i.number}](${i.url}) - ${i.title}`).join('\n') : '- None';
+
+// Spec activity is an ecosystem feed, not personal credit: one section,
+// author inline. Open/active NUT PRs matter as much as merged ones here —
+// they're what the @experimental line tracks.
+const fmtNuts = (items) =>
+  items.length
+    ? items
+        .map((i) => `- [nuts#${i.number}](${i.url}) - ${i.title} (${i.author?.login || '?'})`)
+        .join('\n')
+    : '- None';
 
 const userSections = [...byUser.values()]
   .sort((a, b) => a.display.localeCompare(b.display))
@@ -99,6 +115,20 @@ Meeting Link: ${MEETING_LINK}
 ## Agenda By User
 
 ${userSections || '- None'}
+
+## NUT Spec Activity
+
+### Merged
+
+${fmtNuts(mergedNuts)}
+
+### New
+
+${fmtNuts(newNuts)}
+
+### Recently Active
+
+${fmtNuts(activeNuts)}
 
 ## Standing Reports
 
