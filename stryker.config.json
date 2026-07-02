@@ -4,7 +4,13 @@
   "vitest": {
     "configFile": "vitest.stryker.config.ts"
   },
-  "mutate": ["src/crypto/**/*.ts", "src/model/**/*.ts", "!src/**/index.ts"],
+  "mutate": [
+    "src/crypto/**/*.ts",
+    "src/model/**/*.ts",
+    "src/wallet/**/*.ts",
+    "src/mint/**/*.ts",
+    "!src/**/index.ts"
+  ],
   "reporters": ["html", "json", "clear-text", "progress"],
   "htmlReporter": { "fileName": "reports/mutation/mutation.html" },
   "jsonReporter": { "fileName": "reports/mutation/mutation.json" },
