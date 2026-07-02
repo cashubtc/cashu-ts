@@ -9,7 +9,7 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: read
+  contents: write # deploys the HTML report to gh-pages
   issues: write
 
 jobs:
@@ -38,6 +38,13 @@ jobs:
           name: mutation-report
           path: reports/mutation/
           retention-days: 90
+
+      - name: Deploy report to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./reports/mutation
+          destination_dir: mutation
 
       - name: Open report issue
         if: ${{ always() }}
@@ -74,7 +81,7 @@ jobs:
 
           ${top}
 
-          Full interactive report: [mutation-report artifact](${process.env.RUN_URL}) (open \`mutation.html\`).
+          Full interactive report: https://cashu-ts.dev/mutation/mutation.html (latest run; previous weeks in the [run artifacts](${process.env.RUN_URL})).
 
           💡 Local loop: \`npm run test:mutation:incremental\` re-tests only mutants in changed code.
           `);
