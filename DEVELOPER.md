@@ -25,7 +25,7 @@ npm run test:prepare
 Open PRs against the branch for the major you are targeting (don't mix majors in one PR):
 
 - Features and fixes for the current major → `main`
-- Backports to a maintained prior major → that major's `vN-dev` branch
+- Backports to a maintained prior major → land the fix on `main` first, then add a `backport vN-dev` label to the PR (before or after merge); a bot opens the backport PR automatically. If it hits a conflict it pushes nothing and files a `backport`-labelled tracking issue for a manual cherry-pick against that `vN-dev` branch.
 
 Current branches:
 
