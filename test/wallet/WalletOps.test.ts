@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
-import { WalletOps } from '../../src/wallet/WalletOps';
-import { Amount, type AmountLike } from '../../src/model/Amount';
 
+import { Amount, type AmountLike } from '../../src/model/Amount';
+import type { OutputData, OutputDataLike } from '../../src/model/OutputData';
 import type {
   Proof,
   MintQuoteBolt11Response,
@@ -12,7 +12,6 @@ import type {
   MeltQuoteBolt12Response,
   MeltQuoteOnchainResponse,
 } from '../../src/model/types';
-import type { OutputData, OutputDataLike } from '../../src/model/OutputData';
 import type {
   OutputType,
   OutputConfig,
@@ -26,6 +25,7 @@ import type {
   MeltPreview,
   MintPreview,
 } from '../../src/wallet/types';
+import { WalletOps } from '../../src/wallet/WalletOps';
 
 // ---- Function signatures for typed mocks ------------------------------------
 
@@ -146,7 +146,7 @@ class MockWallet {
   checkMintQuoteBolt11: Mock<CheckMintQuoteBolt11Fn> = vi.fn<CheckMintQuoteBolt11Fn>(
     async (id) => ({
       quote: id,
-      state: 'UNPAID' as any,
+      state: 'UNPAID',
       expiry: 0,
       request: '',
       amount: Amount.from(0),
@@ -195,7 +195,7 @@ const melt11: MeltQuoteBolt11Response = {
   quote: 'mq11',
   amount: Amount.from(5),
   fee_reserve: Amount.from(1),
-  state: 'UNPAID' as any,
+  state: 'UNPAID',
   expiry: 0,
   payment_preimage: null,
   request: 'lnbc1...',
@@ -206,7 +206,7 @@ const melt12: MeltQuoteBolt12Response = {
   quote: 'mq12',
   amount: Amount.from(7),
   fee_reserve: Amount.from(2),
-  state: 'UNPAID' as any,
+  state: 'UNPAID',
   expiry: 0,
   payment_preimage: null,
   request: 'lno1...',
@@ -227,7 +227,7 @@ const mint12: MintQuoteBolt12Response = {
 const meltOnchainSingle: MeltQuoteOnchainResponse = {
   quote: 'mq-onchain-melt-1',
   amount: Amount.from(10),
-  state: 'UNPAID' as any,
+  state: 'UNPAID',
   expiry: 0,
   request: 'bc1qrecipient',
   unit: 'sat',
@@ -239,7 +239,7 @@ const meltOnchainSingle: MeltQuoteOnchainResponse = {
 const meltOnchainMulti: MeltQuoteOnchainResponse = {
   quote: 'mq-onchain-melt-2',
   amount: Amount.from(10),
-  state: 'UNPAID' as any,
+  state: 'UNPAID',
   expiry: 0,
   request: 'bc1qrecipient',
   unit: 'sat',
@@ -679,14 +679,15 @@ describe('WalletOps builders', () => {
       expect(wallet.completeMint).toHaveBeenCalledWith(preview);
     });
 
+    // eslint-disable-next-line vitest/expect-expect -- compile-time check: @ts-expect-error is the assertion
     it('bolt12 requires privkey at compile time', () => {
       if (false as boolean) {
         // This is a compiler check - if you remove the exclude line below the
         // compiler should complain 'MintBuilder<"bolt12", false>' is not assignable
         // @ts-expect-error run should not be callable before privkey
-        ops.mintBolt12(7, mint12).run();
+        void ops.mintBolt12(7, mint12).run();
         // @ts-expect-error prepare should not be callable before privkey
-        ops.mintBolt12(7, mint12).prepare();
+        void ops.mintBolt12(7, mint12).prepare();
       }
 
       void ops.mintBolt12(7, mint12).privkey('k').run();
@@ -776,12 +777,13 @@ describe('WalletOps builders', () => {
       expect(cfg).toMatchObject({ privkey: 'new' });
     });
 
+    // eslint-disable-next-line vitest/expect-expect -- compile-time check: @ts-expect-error is the assertion
     it('onchain requires privkey at compile time', () => {
       if (false as boolean) {
         // @ts-expect-error run should not be callable before privkey
-        ops.mintOnchain(8, mintOnchain).run();
+        void ops.mintOnchain(8, mintOnchain).run();
         // @ts-expect-error prepare should not be callable before privkey
-        ops.mintOnchain(8, mintOnchain).prepare();
+        void ops.mintOnchain(8, mintOnchain).prepare();
       }
 
       void ops.mintOnchain(8, mintOnchain).privkey('k').run();
@@ -1031,7 +1033,7 @@ describe('WalletOps builders', () => {
     it('passes through the meltProofsOnchain return value', async () => {
       const change = [{ amount: Amount.one(), id: '00bd033559de27d0', secret: 's', C: 'C' }];
       wallet.meltProofsOnchain.mockResolvedValueOnce({
-        quote: { ...meltOnchainSingle, state: 'PAID' as any },
+        quote: { ...meltOnchainSingle, state: 'PAID' },
         change,
       });
 

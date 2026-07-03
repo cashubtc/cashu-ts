@@ -1,5 +1,5 @@
-import { setupServer } from 'msw/node';
 import { HttpResponse, http } from 'msw';
+import { setupServer } from 'msw/node';
 import { beforeAll, beforeEach, afterAll, afterEach, test, describe, expect, vi } from 'vitest';
 
 import { Mint, KeyChain, Keyset, type MintKeyset, type MintKeys } from '../../src';

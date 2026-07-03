@@ -1,4 +1,7 @@
+import { HttpResponse, http, delay } from 'msw';
+import { setupServer } from 'msw/node';
 import { beforeAll, beforeEach, test, describe, expect, afterAll, afterEach, vi } from 'vitest';
+
 import {
   Wallet,
   HttpResponseError,
@@ -7,10 +10,10 @@ import {
   RateLimitError,
   type ResponseMeta,
   type RequestFetch,
+  setGlobalRequestOptions,
+  type Nut19Policy,
 } from '../../src';
-import { HttpResponse, http, delay } from 'msw';
-import { setupServer } from 'msw/node';
-import { setGlobalRequestOptions } from '../../src';
+import { NULL_LOGGER, type Logger } from '../../src/logger';
 import request, { setRequestLogger } from '../../src/transport';
 import {
   parseRetryAfter,
@@ -19,8 +22,6 @@ import {
   errorMessage,
 } from '../../src/transport/request';
 import { MINTCACHE } from '../consts';
-import { Nut19Policy } from '../../src';
-import { NULL_LOGGER, type Logger } from '../../src/logger';
 
 // Setup mint cache for loadMint()
 const mintUrl = 'https://localhost:3338';
@@ -1434,6 +1435,7 @@ describe('onResponseMeta callback', () => {
 
     const result = await request({
       endpoint,
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises -- async-callback tolerance is what's under test
       onResponseMeta: async () => {
         throw new Error('async boom');
       },
@@ -1526,6 +1528,7 @@ describe('onResponseMeta callback', () => {
 
     const result = await request({
       endpoint,
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises -- async-callback tolerance is what's under test
       onResponseMeta: async () => {
         throw new Error('per-request async boom');
       },

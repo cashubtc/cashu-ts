@@ -1,8 +1,9 @@
-import { test, describe, expect } from 'vitest';
-import { signMintQuote, verifyMintQuoteSignature } from '../../src/crypto';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
+import { test, describe, expect } from 'vitest';
+
 import { Amount } from '../../src';
+import { signMintQuote, verifyMintQuoteSignature } from '../../src/crypto';
 
 /**
  * NUT-29 test vectors for batch mint signatures.

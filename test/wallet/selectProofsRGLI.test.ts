@@ -1,8 +1,9 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { selectProofsRGLI } from '../../src/wallet/SelectProofs';
-import { Proof } from '../../src/model/types';
-import { Amount } from '../../src/model/Amount';
+
 import { sumProofs } from '../../src';
+import { Amount } from '../../src/model/Amount';
+import { type Proof } from '../../src/model/types';
+import { selectProofsRGLI } from '../../src/wallet/SelectProofs';
 
 // -----------------------------------------------------------------
 // Most paths are exercised via wallet tests.
@@ -43,7 +44,7 @@ describe('selectProofsRGLI, focused unit tests', () => {
     const kc = keychainStub({ A: 2000 });
     const { logger } = loggerSpy();
 
-    const res = selectProofsRGLI(proofs as any, 1, kc, true, false, logger);
+    const res = selectProofsRGLI(proofs, 1, kc, true, false, logger);
     expect(res.send).toHaveLength(0);
     expect(res.keep).toHaveLength(2);
   });
@@ -55,7 +56,7 @@ describe('selectProofsRGLI, focused unit tests', () => {
     ];
     const kc = keychainStub({ A: 0 });
     // target smaller than smallest candidate, binary search returns null, endIndex zero
-    const res = selectProofsRGLI(proofs as any, 5, kc, false, true);
+    const res = selectProofsRGLI(proofs, 5, kc, false, true);
     expect(res.send).toHaveLength(0);
     expect(res.keep).toHaveLength(2);
   });
@@ -66,7 +67,7 @@ describe('selectProofsRGLI, focused unit tests', () => {
       { id: 'A', amount: Amount.from(4), secret: 's2', C: 'C2' },
     ];
     const kc = keychainStub({ A: 0 });
-    const res = selectProofsRGLI(proofs as any, 6, kc, false, false);
+    const res = selectProofsRGLI(proofs, 6, kc, false, false);
     expect(res.send.length + res.keep.length).toBe(2);
     expect(res.send.length).toBeGreaterThan(0);
   });
@@ -77,7 +78,7 @@ describe('selectProofsRGLI, focused unit tests', () => {
       { id: 'A', amount: Amount.from(4), secret: 's2', C: 'C2' },
     ];
     const kc = keychainStub({ A: 0 });
-    const res = selectProofsRGLI(proofs as any, Amount.from('6'), kc, false, false);
+    const res = selectProofsRGLI(proofs, Amount.from('6'), kc, false, false);
     expect(res.send.length).toBeGreaterThan(0);
   });
 
@@ -102,7 +103,7 @@ describe('selectProofsRGLI, focused unit tests', () => {
       { id: 'A', amount: Amount.from(3), secret: 's2', C: 'C2' },
     ];
     const kc = keychainStub({ A: 0 });
-    const res = selectProofsRGLI(proofs as any, 10, kc, true, false);
+    const res = selectProofsRGLI(proofs, 10, kc, true, false);
     expect(res.send).toHaveLength(0);
     expect(res.keep).toHaveLength(2);
   });
@@ -116,7 +117,7 @@ describe('selectProofsRGLI, focused unit tests', () => {
     const kc = keychainStub({ L: 600 }); // ceil(600 / 1000) equals one per thousand proofs
     const { logger, calls } = loggerSpy();
 
-    const res = selectProofsRGLI(proofs as any, 15, kc, true, false, logger);
+    const res = selectProofsRGLI(proofs, 15, kc, true, false, logger);
     const sum = sumProofs(res.send);
     const fee = Math.ceil((res.send.length * 600) / 1000);
     expect(sum.subtract(fee).greaterThanOrEqual(15)).toBeTruthy();
@@ -134,7 +135,7 @@ describe('selectProofsRGLI, focused unit tests', () => {
     let index = 0;
     vi.spyOn(Math, 'random').mockImplementation(() => randomValues[index++] ?? 0.9);
 
-    const res = selectProofsRGLI(proofs as any, 9, kc, false, false);
+    const res = selectProofsRGLI(proofs, 9, kc, false, false);
 
     expect(res.send.map((p) => p.amount.toNumber()).sort((a, b) => a - b)).toEqual([4, 5]);
     expect(res.keep.map((p) => p.amount.toNumber())).toEqual([6]);

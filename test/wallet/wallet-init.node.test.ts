@@ -14,9 +14,9 @@ import {
   type RequestFetch,
   type RequestFn,
 } from '../../src';
-
 import { NULL_LOGGER } from '../../src/logger';
 import { MINTCACHE } from '../consts';
+
 import {
   mintUrl,
   mint,

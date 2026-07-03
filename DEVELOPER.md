@@ -111,7 +111,7 @@ git commit --edit --file=.git/COMMIT_EDITMSG
 - `commit-msg`: validates the commit message with Commitlint and points you at `.git/COMMIT_EDITMSG` if the message needs fixing.
 - `pre-commit`: runs `lint-staged` on staged files only.
   - `*.{js,ts}`: `eslint --fix`, then `prettier --write`
-  - `*.{json,md,yml,yaml}`: `prettier --write`
+  - `*.{mjs,cjs,json,md,yml,yaml}`: `prettier --write`
 - `pre-push`: runs repository-wide `npm run check-lint` and `npm run check-format`.
 
 This keeps commits fast while still blocking pushes with lint or formatting drift.

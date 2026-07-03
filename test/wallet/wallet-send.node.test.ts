@@ -1,3 +1,4 @@
+import { hexToBytes } from '@noble/curves/utils.js';
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect } from 'vitest';
 
@@ -10,9 +11,7 @@ import {
   type ProofLike,
   type OutputConfig,
 } from '../../src';
-
 import { Bytes } from '../../src/utils';
-import { hexToBytes } from '@noble/curves/utils.js';
 
 import { useTestServer, mint, mintUrl, unit, logger, mintInfoResp } from './_setup';
 
@@ -22,7 +21,7 @@ const mintInfoRespWithNut12 = {
   nuts: { ...mintInfoResp.nuts, 12: { supported: true } },
 };
 
-function expectNUT10SecretDataToEqual(p: Array<Proof>, s: string) {
+function expectNUT10SecretDataToEqual(p: Proof[], s: string) {
   p.forEach((p) => {
     const parsedSecret = JSON.parse(p.secret);
     expect(parsedSecret[1].data).toBe(s);
@@ -846,7 +845,7 @@ describe('send', () => {
     server.use(
       http.post(mintUrl + '/v1/swap', async ({ request }) => {
         const body = (await request.json()) as {
-          outputs: { amount: number; B_: string; id: string }[];
+          outputs: Array<{ amount: number; B_: string; id: string }>;
         };
         return HttpResponse.json({
           signatures: body.outputs.map((o) => ({

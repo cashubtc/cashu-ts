@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { Amount } from '../../src/model/Amount';
 
 describe('Amount.from validation', () => {

@@ -1,11 +1,11 @@
+import { randomBytes } from '@noble/hashes/utils.js';
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect } from 'vitest';
-
-import { randomBytes } from '@noble/hashes/utils.js';
 
 import { Wallet, type MintKeys, type MintKeyset } from '../../src';
 import { deriveKeysetId, isValidHex, isBase64String } from '../../src/utils';
 import { DUMMY_TEST_KEYS, DUMMY_TEST_KEYSET, PUBKEYS } from '../consts';
+
 import { useTestServer, mint, mintUrl, token3sat } from './_setup';
 
 const server = useTestServer();

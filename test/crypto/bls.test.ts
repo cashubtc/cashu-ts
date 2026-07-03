@@ -1,8 +1,9 @@
-import { bytesToHex, hexToBytes, numberToBytesBE } from '@noble/curves/utils.js';
 import { bls12_381 } from '@noble/curves/bls12-381.js';
+import { bytesToHex, hexToBytes, numberToBytesBE } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
+
 import {
   BLS_FR_ORDER,
   BLS_HASH_TO_CURVE_DST,
@@ -237,7 +238,6 @@ describe('batchVerifyUnblindedSignatureBls', () => {
   // expand into two spendable proofs.
   test('rejects the C1 + C2 = C aggregation forgery (per-proof randomness)', () => {
     const aScalar = 5n;
-    const aBytes = hexToBytes(aScalar.toString(16).padStart(64, '0'));
     const K2 = bls12_381.G2.Point.BASE.multiply(aScalar);
     const secret1 = new TextEncoder().encode('forgery-victim-1');
     const secret2 = new TextEncoder().encode('forgery-victim-2');

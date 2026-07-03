@@ -1,5 +1,6 @@
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
+
 import { BLS_FR_ORDER, deriveSecretAndBlindingFactor } from '../../src/crypto';
 import { Bytes } from '../../src/utils';
 

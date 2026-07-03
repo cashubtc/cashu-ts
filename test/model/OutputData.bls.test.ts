@@ -11,8 +11,8 @@ import {
 import { verifyUnblindedSignature } from '../../src/crypto/NUT01';
 import { Amount } from '../../src/model/Amount';
 import { OutputData } from '../../src/model/OutputData';
-import { deriveKeysetId } from '../../src/utils';
 import type { HasKeysetKeys, SerializedBlindedSignature } from '../../src/model/types';
+import { deriveKeysetId } from '../../src/utils';
 
 // v3 (BLS12-381) round-trip through OutputData → simulated mint sign → toProof → pairing verify.
 //

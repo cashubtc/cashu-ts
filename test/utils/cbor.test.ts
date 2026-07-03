@@ -1,6 +1,7 @@
-import { decodeCBOR, encodeCBOR, Bytes } from '../../src/utils';
 import { hexToBytes } from '@noble/curves/utils.js';
 import { test, describe, expect } from 'vitest';
+
+import { decodeCBOR, encodeCBOR, Bytes } from '../../src/utils';
 // Note: do NOT import 'fs' or 'path' at top-level — the browser test runner
 // will attempt to import them and Vite externalizes those modules which causes
 // runtime errors. Load them dynamically inside a Node-only guard below.
@@ -135,7 +136,7 @@ describe('cbor decoder', () => {
   });
 
   test.each(decoderThrows)('decode throws for $name', ({ buf, throws }) => {
-    expect(() => decodeCBOR(buf)).toThrow(throws as RegExp);
+    expect(() => decodeCBOR(buf)).toThrow(throws);
   });
 
   test('decode byte string with 8-byte length (additionalInfo 27) decodes when hi=0,lo=5', () => {
@@ -215,33 +216,33 @@ describe('cbor encoder', () => {
   test('encode byte/string/array header forms (24 and 256 lengths)', () => {
     // byte string length 24 -> header should be 0x58 0x18
     const bs24 = new Uint8Array(24).fill(0x01);
-    const encBs24 = encodeCBOR(bs24 as any);
+    const encBs24 = encodeCBOR(bs24);
     expect(encBs24[0]).toBe(0x58);
     expect(encBs24[1]).toBe(24);
 
     // byte string length 256 -> header 0x59 0x01 0x00 (2-byte big-endian)
     const bs256 = new Uint8Array(256).fill(0x02);
-    const encBs256 = encodeCBOR(bs256 as any);
+    const encBs256 = encodeCBOR(bs256);
     expect(encBs256[0]).toBe(0x59);
     expect(encBs256[1]).toBe(0x01);
     expect(encBs256[2]).toBe(0x00);
 
     // string length 24
     const s24 = 'a'.repeat(24);
-    const encS24 = encodeCBOR(s24 as any);
+    const encS24 = encodeCBOR(s24);
     expect(encS24[0]).toBe(0x78);
     expect(encS24[1]).toBe(24);
 
     // array length 24 -> header 0x98 0x18
     const arr24 = new Array(24).fill(0).map((_, i) => i);
-    const encArr24 = encodeCBOR(arr24 as any);
+    const encArr24 = encodeCBOR(arr24);
     expect(encArr24[0]).toBe(0x98);
     expect(encArr24[1]).toBe(24);
   });
 
   test('encode string length 256 uses 2-byte length header and roundtrips', () => {
     const s256 = 'a'.repeat(256);
-    const enc = encodeCBOR(s256 as any);
+    const enc = encodeCBOR(s256);
     expect(enc[0]).toBe(0x79);
     expect(enc[1]).toBe(0x01);
     expect(enc[2]).toBe(0x00);
@@ -250,7 +251,7 @@ describe('cbor encoder', () => {
 
   test('encode array length 256 uses 2-byte length header and roundtrips', () => {
     const arr256 = Array.from({ length: 256 }, (_, i) => i);
-    const enc = encodeCBOR(arr256 as any);
+    const enc = encodeCBOR(arr256);
     expect(enc[0]).toBe(0x99);
     expect(enc[1]).toBe(0x01);
     expect(enc[2]).toBe(0x00);
@@ -259,7 +260,7 @@ describe('cbor encoder', () => {
 
   test('encode negative integer -257 uses 2-byte negative integer form and roundtrips', () => {
     const v = -257;
-    const enc = encodeCBOR(v as any);
+    const enc = encodeCBOR(v);
     expect(enc[0]).toBe(0x39);
     expect(enc[1]).toBe(0x01);
     expect(enc[2]).toBe(0x00);
@@ -268,7 +269,7 @@ describe('cbor encoder', () => {
 
   test('encode negative integer -25 uses 1-byte negative integer form and roundtrips', () => {
     const v = -25;
-    const enc = encodeCBOR(v as any);
+    const enc = encodeCBOR(v);
     expect(enc[0]).toBe(0x38);
     expect(enc[1]).toBe(24);
     expect(decodeCBOR(enc)).toBe(v);
@@ -276,7 +277,7 @@ describe('cbor encoder', () => {
 
   test('encode negative integer -65537 uses 4-byte negative integer form and roundtrips', () => {
     const v = -65537;
-    const enc = encodeCBOR(v as any);
+    const enc = encodeCBOR(v);
     expect(enc[0]).toBe(0x3a);
     expect(enc[1]).toBe(0x00);
     expect(enc[2]).toBe(0x01);
@@ -288,7 +289,7 @@ describe('cbor encoder', () => {
   test('encode byte string length 65536 uses 4-byte length header and roundtrips', () => {
     const len = 65536;
     const bs = new Uint8Array(len).fill(0x7f);
-    const enc = encodeCBOR(bs as any);
+    const enc = encodeCBOR(bs);
     // 0x5a indicates 4-byte length for byte strings
     expect(enc[0]).toBe(0x5a);
     expect(enc[1]).toBe(0x00);
@@ -303,7 +304,7 @@ describe('cbor encoder', () => {
   test('encode string length 65536 uses 4-byte length header and roundtrips', () => {
     const len = 65536;
     const s = 'a'.repeat(len);
-    const enc = encodeCBOR(s as any);
+    const enc = encodeCBOR(s);
     // 0x7a indicates 4-byte length for text strings
     expect(enc[0]).toBe(0x7a);
     expect(enc[1]).toBe(0x00);
@@ -317,21 +318,21 @@ describe('cbor encoder', () => {
 
   test('encodes max 32 bit unsigned integer and roundtrips', () => {
     const n = 0xffffffff; // 4294967295
-    const enc = encodeCBOR(n as any);
+    const enc = encodeCBOR(n);
     expect(Array.from(enc)).toEqual([0x1a, 0xff, 0xff, 0xff, 0xff]);
     expect(decodeCBOR(enc)).toBe(n);
   });
 
   test('encodes min 32 bit unsigned integer and roundtrips', () => {
     const n = 0x00010000; // 65536
-    const enc = encodeCBOR(n as any);
+    const enc = encodeCBOR(n);
     expect(Array.from(enc)).toEqual([0x1a, 0x00, 0x01, 0x00, 0x00]);
     expect(decodeCBOR(enc)).toBe(n);
   });
 
   test('encodes number >= 2^32 via bigint delegation and roundtrips', () => {
     const n = 4294967296; // 2^32, first value beyond 4-byte unsigned
-    const enc = encodeCBOR(n as any);
+    const enc = encodeCBOR(n);
     // Should use 8-byte form (additional-info 27)
     expect(enc[0]).toBe(0x1b);
     expect(enc.length).toBe(9);
@@ -340,7 +341,7 @@ describe('cbor encoder', () => {
 
   test('encodes negative number beyond -2^32 via bigint delegation and roundtrips', () => {
     const n = -4294967297; // first value beyond 4-byte negative
-    const enc = encodeCBOR(n as any);
+    const enc = encodeCBOR(n);
     // Should use 8-byte form under major type 1 (0x3b)
     expect(enc[0]).toBe(0x3b);
     expect(enc.length).toBe(9);
@@ -348,7 +349,7 @@ describe('cbor encoder', () => {
   });
 
   test.each(encoderThrows)('encoding unsupported $name throws', ({ decoded, throws }) => {
-    expect(() => encodeCBOR(decoded)).toThrow(throws as RegExp);
+    expect(() => encodeCBOR(decoded)).toThrow(throws);
   });
 
   test('encodes maps with 256 (2-byte) and 65536 (4-byte) lengths and roundtrips', () => {
@@ -384,7 +385,7 @@ describe('cbor encoder', () => {
   test('encodes negative integers correctly and roundtrips', () => {
     const values = [-1, -10, -1000];
     for (const v of values) {
-      const encoded = encodeCBOR(v as any);
+      const encoded = encodeCBOR(v);
       const decoded = decodeCBOR(encoded);
       expect(decoded).toBe(v);
       // inspect header bytes for a couple of cases
@@ -403,68 +404,68 @@ describe('cbor encoder', () => {
 
   test('direct integer branch coverage (0, 1, -1)', () => {
     // ensure encodeNumber handles unsigned and negative integer paths
-    const enc0 = encodeCBOR(0 as any);
+    const enc0 = encodeCBOR(0);
     expect(enc0[0]).toBe(0x00);
 
-    const enc1 = encodeCBOR(1 as any);
+    const enc1 = encodeCBOR(1);
     expect(enc1[0]).toBe(0x01);
 
-    const encNeg1 = encodeCBOR(-1 as any);
+    const encNeg1 = encodeCBOR(-1);
     expect(encNeg1[0]).toBe(0x20);
   });
 
   test('encodes bigint values using 8-byte uint64 form and roundtrips', () => {
     // Small bigint that fits in short form
     const small = 10n;
-    const encSmall = encodeCBOR(small as any);
+    const encSmall = encodeCBOR(small);
     expect(encSmall[0]).toBe(0x0a);
     expect(decodeCBOR(encSmall)).toBe(10);
 
     // bigint in 1-byte form
     const b200 = 200n;
-    const enc200 = encodeCBOR(b200 as any);
+    const enc200 = encodeCBOR(b200);
     expect(enc200[0]).toBe(0x18);
     expect(decodeCBOR(enc200)).toBe(200);
 
     // bigint in 2-byte form
     const b1000 = 1000n;
-    const enc1000 = encodeCBOR(b1000 as any);
+    const enc1000 = encodeCBOR(b1000);
     expect(enc1000[0]).toBe(0x19);
     expect(decodeCBOR(enc1000)).toBe(1000);
 
     // bigint in 4-byte form
     const b100000 = 100000n;
-    const enc100000 = encodeCBOR(b100000 as any);
+    const enc100000 = encodeCBOR(b100000);
     expect(enc100000[0]).toBe(0x1a);
     expect(decodeCBOR(enc100000)).toBe(100000);
 
     // bigint that exceeds 32-bit -> 8-byte uint64 form
     const big = 2n ** 33n; // 8589934592
-    const encBig = encodeCBOR(big as any);
+    const encBig = encodeCBOR(big);
     expect(encBig[0]).toBe(0x1b); // additional-info 27
     expect(decodeCBOR(encBig)).toBe(Number(big)); // fits in safe integer
 
     // bigint that exceeds MAX_SAFE_INTEGER -> decoded as bigint
     const huge = 2n ** 53n + 1n; // 9007199254740993
-    const encHuge = encodeCBOR(huge as any);
+    const encHuge = encodeCBOR(huge);
     expect(encHuge[0]).toBe(0x1b);
     expect(decodeCBOR(encHuge)).toBe(huge);
 
     // max uint64
     const maxUint64 = 2n ** 64n - 1n;
-    const encMax = encodeCBOR(maxUint64 as any);
+    const encMax = encodeCBOR(maxUint64);
     expect(encMax[0]).toBe(0x1b);
     expect(decodeCBOR(encMax)).toBe(maxUint64);
   });
 
   test('encodes negative bigint values and roundtrips', () => {
     const neg = -1n;
-    const encNeg = encodeCBOR(neg as any);
+    const encNeg = encodeCBOR(neg);
     expect(encNeg[0]).toBe(0x20);
     expect(decodeCBOR(encNeg)).toBe(-1);
 
     const negBig = -(2n ** 33n);
-    const encNegBig = encodeCBOR(negBig as any);
+    const encNegBig = encodeCBOR(negBig);
     expect(encNegBig[0]).toBe(0x3b); // major type 1, additional-info 27
     expect(decodeCBOR(encNegBig)).toBe(Number(negBig));
   });
@@ -478,7 +479,7 @@ describe('cbor encoder', () => {
     // 1.5
     {
       const v = 1.5;
-      const encoded = encodeCBOR(v as any);
+      const encoded = encodeCBOR(v);
       // float64 prefix 0xfb
       expect(encoded[0]).toBe(0xfb);
       const decoded = decodeCBOR(encoded) as number;
@@ -487,7 +488,7 @@ describe('cbor encoder', () => {
     // NaN
     {
       const v = NaN;
-      const encoded = encodeCBOR(v as any);
+      const encoded = encodeCBOR(v);
       expect(encoded[0]).toBe(0xfb);
       const decoded = decodeCBOR(encoded) as number;
       expect(Number.isNaN(decoded)).toBe(true);
@@ -495,7 +496,7 @@ describe('cbor encoder', () => {
     // Infinity
     {
       const v = Infinity;
-      const encoded = encodeCBOR(v as any);
+      const encoded = encodeCBOR(v);
       expect(encoded[0]).toBe(0xfb);
       const decoded = decodeCBOR(encoded) as number;
       expect(decoded).toBe(Infinity);
@@ -522,7 +523,7 @@ describe('cbor encoder', () => {
       return realObjectKeys(obj);
     };
     try {
-      expect(() => encodeCBOR(sentinel as any)).toThrow();
+      expect(() => encodeCBOR(sentinel)).toThrow();
     } finally {
       (Object.keys as any) = realObjectKeys;
     }
@@ -533,17 +534,12 @@ describe('cbor encoder', () => {
   test('encode byte string too long throws (fake Uint8Array)', () => {
     const fake = Object.create(Uint8Array.prototype);
     Object.defineProperty(fake, 'length', { value: 4294967296 });
-    expect(() => encodeCBOR(fake as any)).toThrow(/Byte string too long to encode/);
+    expect(() => encodeCBOR(fake)).toThrow(/Byte string too long to encode/);
   });
 
   test('encode string too long throws (mock TextEncoder)', () => {
     const RealTextEncoder = (globalThis as any).TextEncoder;
     // mock encode to return an object with huge length
-    (class MockTE {
-      encode(_: string) {
-        return { length: 4294967296 } as any;
-      }
-    }) as any;
     (globalThis as any).TextEncoder = function () {
       return { encode: (_s: string) => ({ length: 4294967296 }) as any };
     };
@@ -601,11 +597,11 @@ describe('raw v4 token cbor en/decoding', () => {
     const encoded = encodeCBOR(token);
     // const encodedString = Buffer.from(encoded).toString('base64url');
     const encodedString = base64urlEncode(encoded);
-    expect(encodedString).toBe(expectedBase64.replace(/\=+$/, ''));
+    expect(encodedString).toBe(expectedBase64.replace(/=+$/, ''));
   });
   test('decode v4 raw', () => {
-    // const decoded = decodeCBOR(Buffer.from(expectedBase64.replace(/\=+$/, ''), 'base64url'));
-    const decoded = decodeCBOR(base64urlDecode(expectedBase64.replace(/\=+$/, '')));
+    // const decoded = decodeCBOR(Buffer.from(expectedBase64.replace(/=+$/, ''), 'base64url'));
+    const decoded = decodeCBOR(base64urlDecode(expectedBase64.replace(/=+$/, '')));
     expect(decoded).toEqual(token);
   });
 });
@@ -620,6 +616,7 @@ describe('CBOR Test Vectors', () => {
     // file and rely on the focused unit tests above. Register a skipped
     // test so the test suite isn't empty (Vitest errors when a suite has
     // no tests).
+    // eslint-disable-next-line vitest/no-disabled-tests -- permanent browser-env placeholder, not a temporary skip
     test.skip('CBOR test vectors are skipped in browser environments', () => {
       // intentionally empty
     });
@@ -627,7 +624,9 @@ describe('CBOR Test Vectors', () => {
   }
 
   // Node-only: require fs/path dynamically to avoid bundling them for browser
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { readFileSync } = require('fs');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { resolve } = require('path');
   const testVectorsPath = resolve(__dirname, 'cbor-test-vectors/appendix_a.json');
   const _vectors: any[] = JSON.parse(readFileSync(testVectorsPath, 'utf-8'));
@@ -637,7 +636,7 @@ describe('CBOR Test Vectors', () => {
   const _vectorRows = _vectors.map((v, i) => [`CBOR vector ${v.cbor}`, v, i]);
 
   test.each(_vectorRows)('%s', (_title, vector, _index) => {
-    const { hex } = vector as any;
+    const { hex } = vector;
 
     // Skip vectors that contain indefinite/streaming markers (these are
     // outside the current decoder scope). This matches test vectors that
@@ -698,17 +697,19 @@ describe('CBOR Test Vectors', () => {
       if ((majorType === 0 || majorType === 1) && additionalInfo === 27) {
         skipEncode = true;
       }
-    } catch {}
+    } catch {
+      // encode not byte-identical for this vector; decode still asserted below
+    }
 
     // Always attempt decode to surface decode-time errors for every vector
     const decodedResult = decodeCBOR(Buffer.from(hex, 'hex'));
 
     // If the vector provides an expected decoded value, assert equality
     if ('decoded' in vector) {
-      expect(decodedResult).toEqual((vector as any).decoded);
+      expect(decodedResult).toEqual(vector.decoded);
 
       // Only run encode round-trip assertions for vectors that explicitly opt-in
-      if (!(vector as any).roundtrip) return;
+      if (!vector.roundtrip) return;
 
       // If we previously determined this vector cannot be round-tripped by
       // our encoder (float16/32/64, 8-byte integers, etc.), skip the
@@ -719,7 +720,7 @@ describe('CBOR Test Vectors', () => {
       // doesn't support (big integers outside JS safe integer range) or
       // for CBOR bignum tagged forms (tag 2/3) where JSON fixtures cannot
       // represent the precise BigInt value.
-      const decodedVal = (vector as any).decoded;
+      const decodedVal = vector.decoded;
       if (typeof decodedVal === 'number' && !Number.isSafeInteger(decodedVal)) {
         // needs BigInt/bignum support; skip encode assertion
         return;
@@ -727,7 +728,7 @@ describe('CBOR Test Vectors', () => {
       // skip tag-2/3 encoded bignums
       if (hex.startsWith('c2') || hex.startsWith('c3')) return;
 
-      const encodedResult = encodeCBOR((vector as any).decoded);
+      const encodedResult = encodeCBOR(vector.decoded);
       expect(Buffer.from(encodedResult).toString('hex')).toBe(hex);
     }
   });

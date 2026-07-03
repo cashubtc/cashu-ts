@@ -1,9 +1,9 @@
+import { randomBytes } from '@noble/hashes/utils.js';
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect, vi } from 'vitest';
 
 import { Wallet, Amount, type Proof } from '../../src';
 
-import { randomBytes } from '@noble/hashes/utils.js';
 import { useTestServer, mint, unit, dummyKeysResp, mintUrl, logger } from './_setup';
 
 const server = useTestServer();
@@ -15,10 +15,10 @@ describe('Restoring deterministic proofs', () => {
     let rounds = 0;
     const mockRestore = vi
       .spyOn(wallet, 'restore')
-      .mockImplementation(async (): Promise<{ proofs: Array<Proof> }> => {
+      .mockImplementation(async (): Promise<{ proofs: Proof[] }> => {
         if (rounds === 0) {
           rounds++;
-          return { proofs: Array(21).fill(1) as Array<Proof> };
+          return { proofs: Array(21).fill(1) as Proof[] };
         }
         rounds++;
         return { proofs: [] };
@@ -35,10 +35,10 @@ describe('Restoring deterministic proofs', () => {
     const mockRestore = vi
       .spyOn(wallet, 'restore')
       .mockImplementation(
-        async (): Promise<{ proofs: Array<Proof>; lastCounterWithSignature?: number }> => {
+        async (): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> => {
           if (rounds === 0) {
             rounds++;
-            return { proofs: Array(42).fill(1) as Array<Proof>, lastCounterWithSignature: 41 };
+            return { proofs: Array(42).fill(1) as Proof[], lastCounterWithSignature: 41 };
           }
           rounds++;
           return { proofs: [] };
@@ -61,7 +61,7 @@ describe('restore', () => {
     const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(32), logger });
     await wallet.loadMint();
     interface RestoreBody {
-      outputs: Array<unknown>;
+      outputs: unknown[];
     }
     let seenBody: RestoreBody = { outputs: [] };
 
