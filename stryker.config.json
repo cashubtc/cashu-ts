@@ -15,7 +15,7 @@
   "htmlReporter": { "fileName": "reports/mutation/mutation.html" },
   "jsonReporter": { "fileName": "reports/mutation/mutation.json" },
   "incrementalFile": "reports/stryker-incremental.json",
-  "thresholds": { "high": 90, "low": 70, "break": null },
+  "thresholds": { "high": 90, "low": 70, "break": 80 },
   "tempDirName": ".stryker-tmp",
   "cleanTempDir": true
 }

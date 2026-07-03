@@ -1,0 +1,59 @@
+name: Mutation testing (PR)
+
+# Incremental Stryker run for pull requests: re-tests only mutants in changed code
+# against the baseline seeded by the weekly full run. A regression that drops the
+# overall score below the `break` threshold (stryker.config.json) fails the check.
+# Codecov gates line coverage; this is the coarser "are the tests still meaningful" net.
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'test/**'
+      - 'stryker.config.json'
+      - 'vitest.stryker.config.ts'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+# Newer pushes cancel in-flight runs for the same PR.
+concurrency:
+  group: mutation-pr-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stryker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.x'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Restore the newest baseline seeded by the weekly run. A miss (e.g. fork PR, or
+      # before the first weekly) just means --incremental does a full run instead.
+      - name: Restore incremental baseline
+        uses: actions/cache/restore@v4
+        with:
+          path: reports/stryker-incremental.json
+          key: stryker-incremental-none
+          restore-keys: |
+            stryker-incremental-
+
+      - name: Run Stryker (incremental)
+        run: npm run test:mutation:incremental
+
+      - name: Upload mutation report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: mutation-report-pr
+          path: reports/mutation/
+          retention-days: 14
