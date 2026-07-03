@@ -72,6 +72,83 @@ describe('test DLEQ scheme', () => {
   });
 });
 
+describe('verifyDLEQProof rejects tampered proofs', () => {
+  // Fixed vector: A = aG for a = 2, matching the (B_, C_) pair used elsewhere.
+  const a = hexToBytes('0000000000000000000000000000000000000000000000000000000000000002');
+  const B_ = pointFromHex('02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2');
+  const A = pointFromHex('02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5');
+  const C_ = pointFromHex('0244eccfc7a348274458bb38044c7f3c389b3c2086c7ec18b5812d2877ab937787');
+
+  // Flip the low byte so the scalar stays well below the curve order n.
+  const flipLow = (b: Uint8Array): Uint8Array => {
+    const out = new Uint8Array(b);
+    out[out.length - 1] ^= 0x01;
+    return out;
+  };
+
+  test('valid proof verifies true (baseline)', () => {
+    const proof = createDLEQProof(B_, a);
+    expect(verifyDLEQProof(proof, B_, C_, A)).toBe(true);
+  });
+
+  test('tampered e verifies false', () => {
+    const proof = createDLEQProof(B_, a);
+    const bad = { s: proof.s, e: flipLow(proof.e) };
+    expect(verifyDLEQProof(bad, B_, C_, A)).toBe(false);
+  });
+
+  test('tampered s verifies false', () => {
+    const proof = createDLEQProof(B_, a);
+    const bad = { s: flipLow(proof.s), e: proof.e };
+    expect(verifyDLEQProof(bad, B_, C_, A)).toBe(false);
+  });
+
+  test('wrong mint key A verifies false', () => {
+    const proof = createDLEQProof(B_, a);
+    const wrongA = pointFromBytes(secp256k1.getPublicKey(secp256k1.utils.randomSecretKey(), true));
+    expect(verifyDLEQProof(proof, B_, C_, wrongA)).toBe(false);
+  });
+
+  test('wrong blinded message B_ verifies false', () => {
+    const proof = createDLEQProof(B_, a);
+    const wrongB_ = createRandomRawBlindedMessage().B_;
+    expect(verifyDLEQProof(proof, wrongB_, C_, A)).toBe(false);
+  });
+
+  test('wrong blind signature C_ verifies false', () => {
+    const proof = createDLEQProof(B_, a);
+    const wrongC_ = createRandomRawBlindedMessage().B_;
+    expect(verifyDLEQProof(proof, B_, wrongC_, A)).toBe(false);
+  });
+});
+
+describe('verifyDLEQProof_reblind blinding factor guard', () => {
+  test('throws when blinding factor r is undefined', () => {
+    // createDLEQProof returns { s, e } with no r; the reblind path requires it.
+    const mintPrivKey = secp256k1.utils.randomSecretKey();
+    const mintPubKey = pointFromBytes(secp256k1.getPublicKey(mintPrivKey, true));
+    const blindMsg = createRandomRawBlindedMessage();
+    const blindSig = createBlindSignature(blindMsg.B_, mintPrivKey, '');
+    const proof = constructUnblindedSignature(blindSig, blindMsg.r, blindMsg.secret, mintPubKey);
+    const dleq = createDLEQProof(blindMsg.B_, mintPrivKey);
+    expect(dleq.r).toBeUndefined();
+    expect(() => verifyDLEQProof_reblind(blindMsg.secret, dleq, proof.C, mintPubKey)).toThrow(
+      'verifyDLEQProof_reblind: Undefined blinding factor',
+    );
+  });
+
+  test('wrong blinding factor r verifies false', () => {
+    const mintPrivKey = secp256k1.utils.randomSecretKey();
+    const mintPubKey = pointFromBytes(secp256k1.getPublicKey(mintPrivKey, true));
+    const blindMsg = createRandomRawBlindedMessage();
+    const blindSig = createBlindSignature(blindMsg.B_, mintPrivKey, '');
+    const proof = constructUnblindedSignature(blindSig, blindMsg.r, blindMsg.secret, mintPubKey);
+    const dleq = createDLEQProof(blindMsg.B_, mintPrivKey);
+    dleq.r = createRandomRawBlindedMessage().r; // a blinding factor from an unrelated message
+    expect(verifyDLEQProof_reblind(blindMsg.secret, dleq, proof.C, mintPubKey)).toBe(false);
+  });
+});
+
 describe('deterministic nonce derivation — spec test vectors', () => {
   test('reproduces exact (e, s) for known (a, B_)', () => {
     const a = hexToBytes('0000000000000000000000000000000000000000000000000000000000000002');

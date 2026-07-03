@@ -11,6 +11,7 @@ import {
   blindMessageBls,
   unblindSignatureBls,
   createBlindSignatureBls,
+  getG2PubKeyFromPrivKey,
   verifyUnblindedSignatureBls,
   batchVerifyUnblindedSignatureBls,
   deriveBatchWeights,
@@ -76,11 +77,30 @@ describe('point parsing rejects the identity', () => {
   const G2_ZERO_HEX = 'c0' + '00'.repeat(95);
 
   test('pointFromHexG1 throws CTSError on G1 identity', () => {
+    // Message is pinned so a stripped label still fails: noble parses the identity fine, our is0
+    // guard is what rejects it.
     expect(() => pointFromHexG1(G1_ZERO_HEX)).toThrow(CTSError);
+    expect(() => pointFromHexG1(G1_ZERO_HEX)).toThrow(/G1 point at infinity/);
   });
 
   test('pointFromHexG2 throws CTSError on G2 identity', () => {
     expect(() => pointFromHexG2(G2_ZERO_HEX)).toThrow(CTSError);
+    expect(() => pointFromHexG2(G2_ZERO_HEX)).toThrow(/G2 point at infinity/);
+  });
+
+  test('over-length G1 hex defers to noble, not the canonical-range check', () => {
+    // Wrong-length input must skip the canonical check (that is noble's job to flag). First 48
+    // bytes here exceed p, so dropping the length guard would misreport it as non-canonical
+    // (CTSError) instead of letting noble's decoder reject the length (plain Error).
+    const overlong = 'ff'.repeat(48) + '00'.repeat(12); // 60 bytes; first 48 (top bits cleared) >= p
+    let err: unknown;
+    try {
+      pointFromHexG1(overlong);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(CTSError);
   });
 
   // NUT-00 Point Validation: encodings whose stripped field coordinate is >= p must be rejected.
@@ -94,15 +114,16 @@ describe('point parsing rejects the identity', () => {
   const G2_NONCANONICAL_C0_HEX = '80' + '00'.repeat(47) + FP_P_HEX;
 
   test('pointFromHexG1 rejects coordinate >= p', () => {
-    expect(() => pointFromHexG1(G1_NONCANONICAL_HEX)).toThrow(/non-canonical/);
+    // Label pinned to 'G1' so an emptied label mutant still fails (else the message keeps matching).
+    expect(() => pointFromHexG1(G1_NONCANONICAL_HEX)).toThrow(/G1 point non-canonical/);
   });
 
   test('pointFromHexG2 rejects c1 >= p', () => {
-    expect(() => pointFromHexG2(G2_NONCANONICAL_HEX)).toThrow(/non-canonical/);
+    expect(() => pointFromHexG2(G2_NONCANONICAL_HEX)).toThrow(/G2 point non-canonical/);
   });
 
   test('pointFromHexG2 rejects c0 >= p', () => {
-    expect(() => pointFromHexG2(G2_NONCANONICAL_C0_HEX)).toThrow(/non-canonical/);
+    expect(() => pointFromHexG2(G2_NONCANONICAL_C0_HEX)).toThrow(/G2 point non-canonical/);
   });
 });
 
@@ -148,12 +169,32 @@ describe('BLS deterministic round-trip (Nutshell test_deterministic_bls_steps)',
   });
 
   test('blindMessageBls rejects r=0', () => {
-    expect(() => blindMessageBls(secret, 0n)).toThrow();
+    // Match the CTSError message, not just "throws": without the guard, Y.multiply(0n) throws
+    // noble's 'invalid scalar' error instead, which would still satisfy a bare toThrow().
+    expect(() => blindMessageBls(secret, 0n)).toThrow(/Blinding factor/);
   });
 
   test('unblindSignatureBls rejects r=0', () => {
+    // Same reasoning: noble's Fr.inv(0) throws 'invert: expected non-zero number' (which contains
+    // "non-zero"), so pin the 'Blinding factor' wording to prove our guard fired first.
     const Y = hashToCurveBls(secret);
-    expect(() => unblindSignatureBls(Y, 0n)).toThrow();
+    expect(() => unblindSignatureBls(Y, 0n)).toThrow(/Blinding factor/);
+  });
+
+  test('createBlindSignatureBls rejects an all-zero mint scalar', () => {
+    // All-zero privKey reduces to a=0. Without the guard, B_.multiply(0n) throws noble's
+    // 'invalid scalar' error, so pin the CTSError wording.
+    const { B_ } = blindMessageBls(secret, 3n);
+    expect(() => createBlindSignatureBls(B_, new Uint8Array(32), 'test')).toThrow(
+      /Mint scalar must be non-zero/,
+    );
+  });
+
+  test('getG2PubKeyFromPrivKey rejects an all-zero private key', () => {
+    // a=0 -> BLS_G2_GENERATOR.multiply(0n) would throw noble's 'invalid scalar'; pin our wording.
+    expect(() => getG2PubKeyFromPrivKey(new Uint8Array(32))).toThrow(
+      /Mint scalar must be non-zero/,
+    );
   });
 });
 

@@ -31,4 +31,17 @@ describe('randomScalar uniform rejection sampling (no-r blinding path)', () => {
     // (BLS_FR_ORDER + 7) mod BLS_FR_ORDER = 7 — never 11.
     expect(r).toBe(11n);
   });
+
+  test('rejects a draw of exactly BLS_FR_ORDER (>= boundary, not >)', () => {
+    const secret = new TextEncoder().encode('unlinkability');
+    // A draw equal to the order must be rejected: as a scalar it is ≡ 0 and out of Fr*. A `>` (rather
+    // than `>=`) bound would wrongly accept it, so the 2nd in-range draw must be the one returned.
+    randomBytesMock
+      .mockReturnValueOnce(numberToBytesBE(BLS_FR_ORDER, 32))
+      .mockReturnValueOnce(numberToBytesBE(11n, 32));
+
+    const { r } = blindMessageBls(secret);
+
+    expect(r).toBe(11n);
+  });
 });

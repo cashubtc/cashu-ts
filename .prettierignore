@@ -5,5 +5,7 @@ package-lock.json
 temp
 etc
 coverage
+reports
+.stryker-tmp
 docs
 CHANGELOG.md
