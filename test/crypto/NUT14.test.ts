@@ -1,4 +1,8 @@
+import { schnorr } from '@noble/curves/secp256k1.js';
+import { bytesToHex } from '@noble/curves/utils.js';
 import { describe, expect, test, vi } from 'vitest';
+
+import { Amount, type Proof } from '../../src';
 import {
   createHTLCHash,
   createHTLCsecret,
@@ -10,9 +14,6 @@ import {
   verifyHTLCHash,
   verifyHTLCSpendingConditions,
 } from '../../src/crypto';
-import { Amount, Proof } from '../../src';
-import { schnorr } from '@noble/curves/secp256k1.js';
-import { bytesToHex } from '@noble/curves/utils.js';
 
 const PRIVKEY = schnorr.utils.randomSecretKey();
 const PUBKEY = bytesToHex(getPubKeyFromPrivKey(PRIVKEY));

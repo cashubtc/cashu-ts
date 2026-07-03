@@ -1,3 +1,7 @@
+import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
+import { test, describe, expect } from 'vitest';
+
+import { Amount, type MintKeys, type Keys, type Proof, type Token, Keyset } from '../../src';
 import {
   blindMessage,
   constructUnblindedSignature,
@@ -6,18 +10,8 @@ import {
   createBlindSignature,
   getPubKeyFromPrivKey,
 } from '../../src/crypto';
-import { test, describe, expect } from 'vitest';
-import { Amount, MintKeys, type Keys, type Proof, type Token, Keyset } from '../../src';
 import { CTSError } from '../../src/model/Errors';
 import * as utils from '../../src/utils';
-import {
-  NUT02_V1_VECTOR1_KEYS,
-  NUT02_V1_VECTOR2_KEYS,
-  NUT02_V2_VECTOR1_KEYS,
-  NUT02_V2_VECTOR2_KEYS,
-  NUT02_V2_VECTOR3_KEYS,
-  PUBKEYS,
-} from '../consts';
 import {
   bigIntStringify,
   getKeysetAmounts,
@@ -32,7 +26,14 @@ import {
   normalizeUrl,
   verifyDleqIfPresent,
 } from '../../src/utils';
-import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
+import {
+  NUT02_V1_VECTOR1_KEYS,
+  NUT02_V1_VECTOR2_KEYS,
+  NUT02_V2_VECTOR1_KEYS,
+  NUT02_V2_VECTOR2_KEYS,
+  NUT02_V2_VECTOR3_KEYS,
+  PUBKEYS,
+} from '../consts';
 
 const keys: Keys = {};
 for (let i = 1; i <= 2048; i *= 2) {
@@ -93,7 +94,7 @@ describe('test split custom amounts ', () => {
   test('testing non pow2', async () => {
     expect(() => utils.splitAmount(6, keys, illegal)).toThrow();
   });
-  const empty: Array<number> = [];
+  const empty: number[] = [];
   test('testing empty', async () => {
     const chunks = utils.splitAmount(5, keys, empty, 'desc');
     expect(chunks.map((a) => a.toNumber())).toStrictEqual([4, 1]);
@@ -808,7 +809,7 @@ describe('test deprecated base64 keyset id derivation', () => {
       '4611686018427387904': '02217ec885b5d75100a20b4337498afefd4ef76e4082cf361d32ae869c695e34a5',
       '9223372036854775808': '039f14f18f3ceaca7dcf18cd212eaf2656e65c337fc4a98cd4e7c119982338e57a',
     };
-    const idB64 = utils.deriveKeysetId(keys as unknown as Keys, { isDeprecatedBase64: true });
+    const idB64 = utils.deriveKeysetId(keys, { isDeprecatedBase64: true });
     expect(idB64).toBe('9mlfd5vCzgGl');
   });
   test('verifies MiniBits base64 keyset id', () => {

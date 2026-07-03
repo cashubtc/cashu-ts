@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { Amount, AmountWithUnit, AmountWithUnitError } from '../../src/model/Amount';
 
 describe('AmountWithUnit construction', () => {
@@ -252,8 +253,10 @@ describe('AmountWithUnit implicit coercion is safe', () => {
   const a = AmountWithUnit.from(100, 'sat');
 
   it('template literals produce unit-bearing string', () => {
+    /* eslint-disable @typescript-eslint/restrict-template-expressions -- template coercion is the tested behavior */
     expect(`${a}`).toBe('[sat]: 100');
     expect(`balance: ${a}`).toBe('balance: [sat]: 100');
+    /* eslint-enable @typescript-eslint/restrict-template-expressions */
   });
 
   it('String(x) produces unit-bearing string', () => {

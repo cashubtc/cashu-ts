@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { P2PKBuilder, type P2PKOptions } from '../../src/';
 
 // helpers to make valid hex keys

@@ -1,12 +1,16 @@
 import { test, describe, expect } from 'vitest';
-import { SigAll, SigAllSigningPackage, MeltQuoteState, Amount } from '../../src';
-import type {
-  OutputDataLike,
-  Proof,
-  P2PKWitness,
-  SerializedBlindedMessage,
-  MeltPreview,
-  SwapPreview,
+
+import {
+  SigAll,
+  type SigAllSigningPackage,
+  MeltQuoteState,
+  Amount,
+  type OutputDataLike,
+  type Proof,
+  type P2PKWitness,
+  type SerializedBlindedMessage,
+  type MeltPreview,
+  type SwapPreview,
 } from '../../src';
 
 const dummyProof: Proof = {

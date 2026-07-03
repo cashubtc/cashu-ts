@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { WalletEvents } from '../../src/wallet/WalletEvents';
-import type { Proof } from '../../src/model/types';
-import { hashToCurve } from '../../src/crypto';
-import { OperationCounters } from '../../src/wallet';
+
 import { Amount } from '../../src';
+import { hashToCurve } from '../../src/crypto';
+import type { Proof } from '../../src/model/types';
+import { type OperationCounters } from '../../src/wallet';
+import { WalletEvents } from '../../src/wallet/WalletEvents';
 
 // Helper: flush microtasks (needed because cancelSafely runs them async)
 const flushMicrotasks = async (n = 2) => {
@@ -639,9 +640,9 @@ describe('WalletEvents', () => {
       });
       const c3 = Promise.resolve(vi.fn());
 
-      g.add(c1);
-      g.add(c2);
-      g.add(c3);
+      void g.add(c1);
+      void g.add(c2);
+      void g.add(c3);
 
       g(); // invoke the composite canceller directly
       expect(g.cancelled).toBe(true);
@@ -654,7 +655,7 @@ describe('WalletEvents', () => {
       expect(inner).toHaveBeenCalled();
 
       const postCancel = vi.fn();
-      g.add(postCancel);
+      void g.add(postCancel);
       await flushMicrotasks();
       expect(postCancel).toHaveBeenCalled();
     });
@@ -662,7 +663,7 @@ describe('WalletEvents', () => {
     it('group canceller is idempotent, only cancels once', async () => {
       const g = events.group();
       const c = vi.fn();
-      g.add(c);
+      void g.add(c);
       g();
       g(); // second call no-op
       await flushMicrotasks();
@@ -671,7 +672,7 @@ describe('WalletEvents', () => {
 
     it('group handles rejected Promise<SubscriptionCanceller> without throwing', async () => {
       const g = events.group();
-      g.add(Promise.reject(new Error('reject-me')));
+      void g.add(Promise.reject(new Error('reject-me')));
       g();
       await flushMicrotasks();
       expect(g.cancelled).toBe(true);
@@ -683,7 +684,7 @@ describe('WalletEvents', () => {
       const throws = vi.fn(() => {
         throw new Error('boom');
       });
-      g.add(throws);
+      void g.add(throws);
       await flushMicrotasks();
       expect(throws).toHaveBeenCalled();
     });
@@ -769,7 +770,7 @@ describe('WalletEvents', () => {
       const g = events.group();
       g(); // cancel first
       const rejected = Promise.reject(new Error('nope'));
-      g.add(rejected);
+      void g.add(rejected);
       await flushMicrotasks();
       expect(g.cancelled).toBe(true);
     });

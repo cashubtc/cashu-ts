@@ -1,15 +1,16 @@
 import { hexToBytes } from '@noble/hashes/utils.js';
+import { describe, expect, test } from 'vitest';
+
 import {
   blindMessage,
   createBlindSignature,
   createNewMintKeys,
   serializeMintKeys,
   deserializeMintKeys,
-  SerializedMintKeys,
+  type SerializedMintKeys,
 } from '../../src/crypto';
-import { PUBKEYS, TEST_PRIV_KEY_PUBS } from '../consts';
-import { describe, expect, test } from 'vitest';
 import { hexToNumber } from '../../src/utils';
+import { PUBKEYS, TEST_PRIV_KEY_PUBS } from '../consts';
 
 describe('test blind sig', () => {
   test('blind sig', async () => {

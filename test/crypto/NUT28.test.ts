@@ -1,4 +1,7 @@
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
+import { hexToBytes, bytesToHex } from '@noble/hashes/utils.js';
+import { describe, expect, test } from 'vitest';
+
 import {
   pointFromHex,
   deriveP2BKSecretKey,
@@ -6,8 +9,6 @@ import {
   deriveP2BKSecretKeys,
 } from '../../src/crypto';
 import { hexToNumber, numberToHexPadded64 } from '../../src/utils';
-import { hexToBytes, bytesToHex } from '@noble/hashes/utils.js';
-import { describe, expect, test } from 'vitest';
 
 describe('blinded pubkeys & scalar arithmetic', () => {
   test('deriveP2BKSecretKey corresponds to pubkey addition: (p+r)·G == p·G + r·G', () => {
