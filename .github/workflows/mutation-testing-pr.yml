@@ -54,49 +54,59 @@ jobs:
       - name: Run Stryker (incremental)
         run: npm run test:mutation:incremental
 
-      # Summarise the result to the run page and to comment.md, even on a break-fail.
+      # Summarise to the run page and comment.md, even on a break-fail. Survivors are
+      # scoped to the files this PR changed (repo-wide survivors are noise on a PR;
+      # Codecov already covers per-PR line gaps). The overall score is still the gate.
       - name: Build report
         if: ${{ always() }}
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           [ -f reports/mutation/mutation.json ] || { echo "no mutation report produced"; exit 0; }
+
+          # Files this PR touches, to scope survivors to the change (empty for dispatch).
+          if [ -n "${PR_NUMBER:-}" ]; then
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
+              --jq '.[].filename' > changed-files.txt 2>/dev/null || : > changed-files.txt
+          else
+            : > changed-files.txt
+          fi
 
           node -e '
             const fs = require("fs");
             const r = require("./reports/mutation/mutation.json");
             const brk = require("./stryker.config.json").thresholds.break ?? 0;
-            const all = Object.entries(r.files).flatMap(([f, v]) =>
-              v.mutants.map((m) => ({ f: f.replace(/^src\//, ""), ...m }))
+            const changed = new Set(
+              fs.existsSync("changed-files.txt")
+                ? fs.readFileSync("changed-files.txt", "utf8").split("\n").filter(Boolean)
+                : []
             );
+            const all = Object.entries(r.files).flatMap(([f, v]) => v.mutants.map((m) => ({ f, ...m })));
             const by = (s) => all.filter((m) => m.status === s).length;
             const killed = by("Killed") + by("Timeout");
             const survived = by("Survived");
             const noCov = by("NoCoverage");
             const total = killed + survived + noCov;
             const score = total ? (killed / total) * 100 : 100;
-            const pass = score >= brk;
-            const icon = pass ? "✅" : "❌";
-            const survivors = all
-              .filter((m) => m.status === "Survived" || m.status === "NoCoverage")
-              .slice(0, 20)
-              .map((m) => `- \`${m.f}:${m.location.start.line}\` ${m.mutatorName}: \`${String(m.replacement || "").replace(/`/g, "‘").slice(0, 80)}\``)
-              .join("\n") || "_none_";
+            const icon = score >= brk ? "✅" : "❌";
+            const inPr = all.filter(
+              (m) => (m.status === "Survived" || m.status === "NoCoverage") && changed.has(m.f)
+            );
+            const list = inPr.length
+              ? inPr.slice(0, 30).map((m) => `- \`${m.f.replace(/^src\//, "")}:${m.location.start.line}\` ${m.mutatorName}: \`${String(m.replacement || "").replace(/`/g, "‘").slice(0, 80)}\``).join("\n")
+              : changed.size ? "✅ No surviving mutants in the source files this PR changed." : "_Changed files could not be determined; see the full report._";
             const body = `<!-- mutation-pr-report -->
           ### 🧬 Mutation testing (incremental)
 
-          ${icon} Mutation score: **${score.toFixed(1)}%** (break threshold: ${brk}%)
+          ${icon} Mutation score: **${score.toFixed(1)}%** (break threshold: ${brk}%) — repo-wide ${killed} killed / ${survived} survived / ${noCov} no-coverage.
 
-          | Killed | Survived | No coverage |
-          |--:|--:|--:|
-          | ${killed} | ${survived} | ${noCov} |
+          **Surviving mutants in files this PR changed (${inPr.length}):**
 
-          <details><summary>Top ${Math.min(20, survived + noCov)} survivors</summary>
+          ${list}
 
-          ${survivors}
-          </details>
-
-          Full interactive report: download the \`mutation-report-pr\` artifact from [this run](${process.env.RUN_URL}). Incremental run re-tests only mutants in changed code.
+          Full report (all files): download the \`mutation-report-pr\` artifact from [this run](${process.env.RUN_URL}). Codecov shows lines this PR left uncovered; this shows changed lines that run but aren’t asserted.
           `;
             fs.writeFileSync("comment.md", body);
             fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, body.replace("<!-- mutation-pr-report -->\n", ""));
