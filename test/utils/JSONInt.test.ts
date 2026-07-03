@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+
 import { JSONInt } from '../../src/utils/JSONInt';
 
 describe('bigint support baseline', () => {
@@ -158,6 +159,7 @@ describe('parse option: fallbackTo', () => {
   test('defaults to number when BigInt is unavailable', () => {
     const result = JSONInt.parse(input) as { key: number };
     expect(typeof result.key).toBe('number');
+    // eslint-disable-next-line no-loss-of-precision -- precision loss is what's asserted
     expect(result.key).toBe(12345678901234567);
   });
 

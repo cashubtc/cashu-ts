@@ -1,6 +1,8 @@
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect } from 'vitest';
+
 import { Wallet, Amount, CTSError, type Proof } from '../../src';
+
 import { mint, unit, mintUrl, useTestServer } from './_setup';
 
 const server = useTestServer();

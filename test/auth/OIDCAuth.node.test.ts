@@ -1,10 +1,10 @@
-import { setupServer } from 'msw/node';
+import { sha256 } from '@noble/hashes/sha2.js';
 import { http, HttpResponse } from 'msw';
+import { setupServer } from 'msw/node';
 import { beforeAll, afterAll, beforeEach, afterEach, describe, test, expect, vi } from 'vitest';
 
 import { OIDCAuth, type OIDCConfig, type TokenResponse } from '../../src/auth/OIDCAuth';
 import { Bytes, encodeUint8toBase64Url } from '../../src/utils';
-import { sha256 } from '@noble/hashes/sha2.js';
 
 const ISSUER = 'http://idp.local/realms/cashu';
 const OIDC_BASE = 'http://oidc.local';
@@ -286,7 +286,7 @@ describe('OIDCAuth: misc coverage', () => {
     server.use(http.get(DISCOVERY, () => new HttpResponse('{not-json', { status: 200 })));
 
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const oidc = new OIDCAuth(DISCOVERY, { logger: console as any });
+    const oidc = new OIDCAuth(DISCOVERY, { logger: console });
 
     await expect(oidc.loadConfig()).rejects.toThrow('OIDCAuth: invalid discovery document');
     expect(warn).toHaveBeenCalled(); // "OIDCAuth: bad discovery JSON"
@@ -403,7 +403,7 @@ test('postFormStrict returns {} on 200 with bad JSON and logs warn', async () =>
   server.use(http.get(DISCOVERY, () => HttpResponse.json({ token_endpoint: TOKEN })));
 
   const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-  const oidc = new OIDCAuth(DISCOVERY, { logger: console as any });
+  const oidc = new OIDCAuth(DISCOVERY, { logger: console });
   await oidc.loadConfig();
 
   server.use(http.post(TOKEN, () => new HttpResponse('{bad', { status: 200 })));
