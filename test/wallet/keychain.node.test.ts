@@ -2,8 +2,8 @@ import { HttpResponse, http } from 'msw';
 import { setupServer } from 'msw/node';
 import { beforeAll, beforeEach, afterAll, afterEach, test, describe, expect, vi } from 'vitest';
 
-import { Mint, KeyChain, Keyset, type MintKeyset, type MintKeys } from '../../src';
-import { isValidHex } from '../../src/utils';
+import { Mint, KeyChain, Keyset, type MintKeyset, type MintKeys, type Keys } from '../../src';
+import { deriveKeysetId, isValidHex } from '../../src/utils';
 import { DUMMY_TEST_KEYS, DUMMY_TEST_KEYSET, PUBKEYS } from '../consts';
 
 const mintUrl = 'http://localhost:3338';
@@ -90,6 +90,7 @@ beforeEach(() => {
 
 afterEach(() => {
   server.resetHandlers();
+  vi.restoreAllMocks();
 });
 
 afterAll(() => {
@@ -404,5 +405,167 @@ describe('Keyset', () => {
     expect(() => Keyset.fromMintApi(dummyKeysetResp.keysets[0], badKeys)).toThrow(
       /Mismatched keyset expiry/,
     );
+  });
+});
+
+// Build a genuinely-verifying v1 keyset for PUBKEYS at a given fee.
+// Fee is part of the v1 id preimage, so distinct fees give distinct ids.
+function makeV1Keyset(fee: number): { meta: MintKeyset; keys: MintKeys } {
+  const id = deriveKeysetId(PUBKEYS, {
+    versionByte: 1,
+    unit: 'sat',
+    input_fee_ppk: fee,
+  });
+  const meta: MintKeyset = { id, unit: 'sat', active: true, input_fee_ppk: fee };
+  return { meta, keys: { ...meta, keys: PUBKEYS } };
+}
+
+async function initChainWith(keysets: MintKeys[]): Promise<KeyChain> {
+  server.use(
+    http.get(mintUrl + '/v1/keysets', () =>
+      HttpResponse.json({ keysets: keysets.map((k) => ({ ...k, keys: undefined })) }),
+    ),
+    http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets })),
+  );
+  const chain = new KeyChain(mint, unit);
+  await chain.init();
+  return chain;
+}
+
+describe('KeyChain.getCheapestKeyset picks the lowest fee regardless of order', () => {
+  test('returns cheapest when the cheap keyset is not first in insertion order', async () => {
+    const expensive = makeV1Keyset(100);
+    const cheap = makeV1Keyset(1);
+    // Insert expensive first: an unsorted / no-op comparator would wrongly pick it.
+    const chain = await initChainWith([expensive.keys, cheap.keys]);
+    const active = chain.getCheapestKeyset();
+    expect(active.id).toBe(cheap.meta.id);
+    expect(active.fee).toBe(1);
+  });
+
+  test('returns cheapest when the cheap keyset is first in insertion order', async () => {
+    const cheap = makeV1Keyset(1);
+    const expensive = makeV1Keyset(100);
+    // Insert cheap first: a fee-summing comparator would wrongly reverse and pick expensive.
+    const chain = await initChainWith([cheap.keys, expensive.keys]);
+    const active = chain.getCheapestKeyset();
+    expect(active.id).toBe(cheap.meta.id);
+    expect(active.fee).toBe(1);
+  });
+});
+
+describe('KeyChain.ensureKeysetKeys', () => {
+  // v0 id for PUBKEYS: fee/unit are not part of the v0 preimage.
+  const KEYS_ID = deriveKeysetId(PUBKEYS, { versionByte: 0 });
+  const metaOnly: MintKeyset = { id: KEYS_ID, unit: 'sat', active: true, input_fee_ppk: 3 };
+
+  // Load a chain that knows the keyset meta but has no keys for it yet.
+  async function initMetaOnlyChain(): Promise<KeyChain> {
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () => HttpResponse.json({ keysets: [metaOnly] })),
+      http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [] })),
+    );
+    const chain = new KeyChain(mint, unit);
+    await chain.init();
+    return chain;
+  }
+
+  test('fetches, verifies and stores keys for a meta-only keyset', async () => {
+    const chain = await initMetaOnlyChain();
+    expect(chain.getKeyset(KEYS_ID).hasKeys).toBe(false);
+
+    server.use(
+      http.get(mintUrl + '/v1/keys/:id', ({ params }) =>
+        HttpResponse.json({
+          keysets: [{ id: params.id, unit: 'sat', active: true, input_fee_ppk: 3, keys: PUBKEYS }],
+        }),
+      ),
+    );
+
+    const ks = await chain.ensureKeysetKeys(KEYS_ID);
+    expect(ks.hasKeys).toBe(true);
+    expect(ks.keys).toEqual(PUBKEYS);
+    // The rebuilt keyset is now cached on the chain.
+    expect(chain.getKeyset(KEYS_ID).hasKeys).toBe(true);
+  });
+
+  test('returns the existing keyset without a fetch when keys are present', async () => {
+    const chain = new KeyChain(mint, unit);
+    await chain.init(); // dummy data: 00bd already has keys
+    const spy = vi.spyOn(mint, 'getKeys');
+    const ks = await chain.ensureKeysetKeys('00bd033559de27d0');
+    expect(ks.hasKeys).toBe(true);
+    expect(ks).toBe(chain.getKeyset('00bd033559de27d0'));
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  test('throws when the keyset id is unknown', async () => {
+    const chain = await initMetaOnlyChain();
+    await expect(chain.ensureKeysetKeys('deadbeef')).rejects.toThrow("Keyset 'deadbeef' not found");
+  });
+
+  test('throws when the mint returns no matching keyset', async () => {
+    const chain = await initMetaOnlyChain();
+    server.use(http.get(mintUrl + '/v1/keys/:id', () => HttpResponse.json({ keysets: [] })));
+    await expect(chain.ensureKeysetKeys(KEYS_ID)).rejects.toThrow(
+      `Mint returned no keys for keyset '${KEYS_ID}'`,
+    );
+  });
+
+  test('throws when the mint returns an empty keys map', async () => {
+    const chain = await initMetaOnlyChain();
+    server.use(
+      http.get(mintUrl + '/v1/keys/:id', ({ params }) =>
+        HttpResponse.json({ keysets: [{ id: params.id, unit: 'sat', active: true, keys: {} }] }),
+      ),
+    );
+    await expect(chain.ensureKeysetKeys(KEYS_ID)).rejects.toThrow(
+      `Mint returned no keys for keyset '${KEYS_ID}'`,
+    );
+  });
+
+  test('throws when the mint keyset has no keys field', async () => {
+    const chain = await initMetaOnlyChain();
+    server.use(
+      http.get(mintUrl + '/v1/keys/:id', ({ params }) =>
+        HttpResponse.json({ keysets: [{ id: params.id, unit: 'sat', active: true }] }),
+      ),
+    );
+    await expect(chain.ensureKeysetKeys(KEYS_ID)).rejects.toThrow(
+      `Mint returned no keys for keyset '${KEYS_ID}'`,
+    );
+  });
+
+  test('throws when fetched keys fail verification', async () => {
+    const chain = await initMetaOnlyChain();
+    const tampered: Keys = { ...(PUBKEYS as Keys), 1: (PUBKEYS as Keys)[2] };
+    server.use(
+      http.get(mintUrl + '/v1/keys/:id', ({ params }) =>
+        HttpResponse.json({
+          keysets: [{ id: params.id, unit: 'sat', active: true, input_fee_ppk: 3, keys: tampered }],
+        }),
+      ),
+    );
+    await expect(chain.ensureKeysetKeys(KEYS_ID)).rejects.toThrow(
+      `Keyset verification failed for ID ${KEYS_ID}`,
+    );
+  });
+
+  test('dedupes concurrent fetches for the same keyset', async () => {
+    const chain = await initMetaOnlyChain();
+    server.use(
+      http.get(mintUrl + '/v1/keys/:id', ({ params }) =>
+        HttpResponse.json({
+          keysets: [{ id: params.id, unit: 'sat', active: true, input_fee_ppk: 3, keys: PUBKEYS }],
+        }),
+      ),
+    );
+    const spy = vi.spyOn(mint, 'getKeys');
+    const [a, b] = await Promise.all([
+      chain.ensureKeysetKeys(KEYS_ID),
+      chain.ensureKeysetKeys(KEYS_ID),
+    ]);
+    expect(a).toBe(b);
+    expect(spy.mock.calls.filter((c) => c[0] === KEYS_ID)).toHaveLength(1);
   });
 });

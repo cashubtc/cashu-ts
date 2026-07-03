@@ -72,6 +72,7 @@ export function selectProofsRGLI(
   const shuffleArray = <T>(array: T[]): T[] => {
     const shuffled = [...array];
     for (let i = shuffled.length - 1; i > 0; i--) {
+      // Stryker disable next-line ArithmeticOperator: any in-range index yields a valid permutation; the shuffle need not be uniform
       const j = Math.floor(Math.random() * (i + 1));
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
@@ -192,7 +193,9 @@ export function selectProofsRGLI(
 
   // Max acceptable amount for non-exact matches
   const maxOverAmount = Math.min(
+    // Stryker disable next-line ArithmeticOperator: MAX_OVRPCT is 0, so the percentage arithmetic is identity
     Math.ceil(targetAmountNumber * (1 + MAX_OVRPCT / 100)),
+    // Stryker disable next-line ArithmeticOperator: MAX_OVRAMT is 0, so + and - are identical
     targetAmountNumber + MAX_OVRAMT,
     totalNetSum,
   );

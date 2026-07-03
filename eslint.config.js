@@ -12,6 +12,7 @@ export default tseslint.config(
     ignores: [
       'node_modules/**',
       '.claude/**',
+      '.stryker-tmp/**',
       'dist/**',
       'dist-scripts/**',
       'scripts/**',
