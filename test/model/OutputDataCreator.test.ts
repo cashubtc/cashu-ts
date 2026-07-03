@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 
 import { getPubKeyFromPrivKey } from '../../src/crypto';
 import { Amount, type AmountLike } from '../../src/model/Amount';
@@ -17,6 +17,23 @@ describe('DefaultOutputDataCreator', () => {
     expect(creator.createSingleDeterministicData(1, seed, 7, keysetId)).toEqual(
       OutputData.createSingleDeterministicData(1, seed, 7, keysetId),
     );
+  });
+
+  test('uses the batch path when the single-output hook is not overridden', () => {
+    const keyset: HasKeysetKeys = {
+      id: '012e23479a0029432eaad0d2040c09be53bab592d5cbf1d55e0dd26c9495951b30',
+      keys: { '1': 'unused', '2': 'unused' },
+    };
+    const seed = new Uint8Array([1]);
+    const creator = new DefaultOutputDataCreator();
+    const batchSpy = vi.spyOn(OutputData, 'createDeterministicData');
+
+    const outputs = creator.createDeterministicData(3, seed, 7, keyset, [1, 2]);
+
+    // Default hook must delegate to the optimized batch method, not the per-output loop.
+    expect(batchSpy).toHaveBeenCalledWith(3, seed, 7, keyset, [1, 2]);
+    batchSpy.mockRestore();
+    expect(outputs).toEqual(OutputData.createDeterministicData(3, seed, 7, keyset, [1, 2]));
   });
 
   test('delegates deterministic batch creation to subclassed single-output override', () => {
