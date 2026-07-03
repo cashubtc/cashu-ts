@@ -1,5 +1,6 @@
-import { test, describe, expect } from 'vitest';
 import { hexToBytes } from '@noble/hashes/utils.js';
+import { test, describe, expect } from 'vitest';
+
 import {
   deriveMintBackupKeys,
   buildMintBackupPayload,

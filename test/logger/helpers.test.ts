@@ -1,4 +1,5 @@
 import { describe, test, expect, vi } from 'vitest';
+
 import { fail, failIf, safeCallback } from '../../src/logger';
 import type { Logger } from '../../src/logger';
 

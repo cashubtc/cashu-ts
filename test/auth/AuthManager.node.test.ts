@@ -1,5 +1,14 @@
 // 1) Mock FIRST, and define everything INSIDE the factory (no outer refs)
-import { vi, describe, test, expect, beforeEach, afterEach, Mock, MockInstance } from 'vitest';
+import {
+  vi,
+  describe,
+  test,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+  type MockInstance,
+} from 'vitest';
 
 vi.mock('../../src/wallet', () => {
   // Instance mock: getCheapestKeyset returns a stub keyset
@@ -29,14 +38,14 @@ vi.mock('../../src/wallet', () => {
 });
 
 // 2) Now import everything else
-import * as wallet from '../../src/wallet';
+import { Amount, type RequestFn } from '../../src';
 import { AuthManager } from '../../src/auth/AuthManager';
+import type { Logger } from '../../src/logger';
+import { OutputData } from '../../src/model/OutputData';
 import type { Proof } from '../../src/model/types';
 import * as utils from '../../src/utils';
 import { encodeBase64toUint8, Bytes } from '../../src/utils';
-import { OutputData } from '../../src/model/OutputData';
-import { Amount, RequestFn } from '../../src';
-import type { Logger } from '../../src/logger';
+import * as wallet from '../../src/wallet';
 
 const mintUrl = 'http://mint.local';
 
@@ -163,7 +172,7 @@ describe('AuthManager: CAT lifecycle', () => {
   });
 
   test('ensureCAT returns possibly expired CAT if no OIDC or refresh fails', async () => {
-    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn, logger: console as any });
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn, logger: console });
     am['tokens'] = { accessToken: 'old-cat', expiresAt: Date.now() - 1000 };
     const cat = await am.ensureCAT(30);
     expect(cat).toBe('old-cat');
@@ -195,7 +204,7 @@ describe('AuthManager: constructor limits', () => {
 });
 
 test('ensureCAT warns when refresh throws', async () => {
-  const am = new AuthManager('http://mint', { request: vi.fn(), logger: console as any });
+  const am = new AuthManager('http://mint', { request: vi.fn(), logger: console });
   am['tokens'] = { accessToken: 'old', refreshToken: 'rr', expiresAt: Date.now() - 1 };
   am['oidc'] = { refresh: vi.fn().mockRejectedValue(new Error('nope')) } as any;
   const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -437,7 +446,7 @@ test('ensureCAT returns undefined when no CAT and no OIDC, hitting validForAtLea
 test('updateFromOIDC early-returns when access_token missing', () => {
   const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
   am['tokens'] = { accessToken: 'keep-me', refreshToken: 'r', expiresAt: 123 };
-  am['updateFromOIDC']({} as any);
+  am['updateFromOIDC']({});
   expect(am.getCAT()).toBe('keep-me');
   expect(am['tokens'].refreshToken).toBe('r');
   expect(am['tokens'].expiresAt).toBe(123);
@@ -477,7 +486,7 @@ describe('getBlindAuthToken coverage', () => {
     const am = new AuthManager(mintUrl, {
       request: reqSpy as RequestFn,
       desiredPoolSize: 1,
-      logger: console as any,
+      logger: console,
     });
     am['info'] = fakeInfo({ batMax: 1, blindProtected: true });
     am['keychain'] = {
@@ -504,7 +513,7 @@ describe('getBlindAuthToken coverage', () => {
     const am = new AuthManager(mintUrl, {
       request: reqSpy as RequestFn,
       desiredPoolSize: 1,
-      logger: console as any,
+      logger: console,
     });
     am['info'] = fakeInfo({ batMax: 1, blindProtected: false });
     am['keychain'] = {
@@ -624,7 +633,7 @@ test('getActiveKeys throws if keychain not initialised', () => {
 /* ---------- withLock via concurrent getBlindAuthToken ---------- */
 
 test('withLock serialises concurrent BAT pops', async () => {
-  const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn, logger: console as any });
+  const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn, logger: console });
   am['info'] = fakeInfo({ batMax: 1, blindProtected: true });
   am['keychain'] = {
     getCheapestKeyset: vi.fn().mockReturnValue({ id: 'k', keys: { 1: '02aa' } }),
@@ -689,7 +698,7 @@ test('topUp sets Clear-auth header when mint endpoint requires CAT', async () =>
 
   // Assert the Clear-auth header was set
   expect(reqSpy).toHaveBeenCalledTimes(1);
-  const callArg = reqSpy.mock.calls[0][0] as any;
+  const callArg = reqSpy.mock.calls[0][0];
   expect(callArg.endpoint).toBe('http://mint.local/v1/auth/blind/mint');
   expect(callArg.method).toBe('POST');
   expect(callArg.headers?.['Clear-auth']).toBe('cat123');

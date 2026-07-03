@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import {
   EphemeralCounterSource,
   type CounterRange,
@@ -102,22 +103,22 @@ describe('EphemeralCounterSource', () => {
   it('advanceToAtLeast handles previously unset counter', async () => {
     const src = new EphemeralCounterSource();
     await src.advanceToAtLeast('k', 3); // k not set yet
-    let snap = await src.snapshot();
+    const snap = await src.snapshot();
     expect(snap.k).toBe(3);
   });
 
   it('setNext sets absolute next and rejects negatives', async () => {
     const src = new EphemeralCounterSource();
-    await src.setNext!('k', 10);
+    await src.setNext('k', 10);
     const r = await src.reserve('k', 1);
     expect(r).toEqual({ start: 10, count: 1 });
-    await expect(src.setNext!('k', -5)).rejects.toThrow(/negative next/);
+    await expect(src.setNext('k', -5)).rejects.toThrow(/negative next/);
   });
 
   it('snapshot returns a shallow copy (mutations to returned object do not affect source)', async () => {
     const src = new EphemeralCounterSource({ a: 1 });
     const snap1 = await src.snapshot();
-    snap1.a = 999 as any; // mutate the snapshot
+    snap1.a = 999; // mutate the snapshot
     const snap2 = await src.snapshot();
     expect(snap2).toEqual({ a: 1 }); // source unchanged
   });

@@ -1,8 +1,9 @@
 import { test, describe, expect } from 'vitest';
-import { Amount, type Keys, type Proof, OutputType } from '../../src';
-import { PUBKEYS } from '../consts';
-import { getKeepAmounts, stringifyOutputTypeForLog } from '../../src/wallet/_internal';
+
+import { Amount, type Keys, type Proof, type OutputType } from '../../src';
 import { OutputData } from '../../src/model/OutputData';
+import { getKeepAmounts, stringifyOutputTypeForLog } from '../../src/wallet/_internal';
+import { PUBKEYS } from '../consts';
 
 describe('getKeepAmounts', () => {
   const amountsWeHave = [1, 2, 4, 4, 4, 8];

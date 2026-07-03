@@ -1,3 +1,4 @@
+import { hexToBytes } from '@noble/curves/utils.js';
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect, vi } from 'vitest';
 
@@ -12,13 +13,12 @@ import {
   type MintQuoteOnchainResponse,
   MeltQuoteState,
   MintQuoteState,
-  MintQuoteBolt11Response,
+  type MintQuoteBolt11Response,
   Amount,
-  AmountLike,
+  type AmountLike,
 } from '../../src';
-
 import { Bytes, sumProofs } from '../../src/utils';
-import { hexToBytes } from '@noble/curves/utils.js';
+
 import { useTestServer, mint, mintUrl, unit, logger, mintInfoResp } from './_setup';
 
 const server = useTestServer();

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
+
+import { Amount, CTSError, type Proof } from '../../src';
 import { getTagInt, hasTag, parseHTLCSecret, parseSecret } from '../../src/crypto';
-import { Amount, CTSError, Proof } from '../../src';
 
 const proof: Proof = {
   amount: Amount.from(2),

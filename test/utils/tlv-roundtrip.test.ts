@@ -6,6 +6,7 @@
  */
 
 import { describe, test, expect } from 'vitest';
+
 import { decodeBech32mToBytes, encodeBech32m } from '../../src/utils/bech32m';
 import { decodeTLV, encodeTLV } from '../../src/utils/tlv';
 import type { DecodedTLVPaymentRequest } from '../../src/utils/tlv';

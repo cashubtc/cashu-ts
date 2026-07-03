@@ -1,6 +1,9 @@
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 import { afterEach, describe, expect, test, vi } from 'vitest';
+
+import { Amount, type OutputDataLike } from '../../src';
 import {
   createP2PKsecret,
   signP2PKProof,
@@ -9,7 +12,7 @@ import {
   getP2PKExpectedWitnessPubkeys,
   getP2PKSigFlag,
   getP2PKWitnessSignatures,
-  Secret,
+  type Secret,
   isP2PKSpendAuthorised,
   getPubKeyFromPrivKey,
   createRandomSecretKey,
@@ -26,10 +29,8 @@ import {
   normalizeP2PKOptions,
   verifyP2PKSpendingConditions,
 } from '../../src/crypto';
-import { Proof, P2PKWitness } from '../../src/model/types';
-import { sha256 } from '@noble/hashes/sha2.js';
-import { Amount, OutputDataLike } from '../../src';
 import { ConsoleLogger, NULL_LOGGER } from '../../src/logger';
+import { type Proof, type P2PKWitness } from '../../src/model/types';
 
 const PRIVKEY = schnorr.utils.randomSecretKey();
 const PUBKEY = bytesToHex(getPubKeyFromPrivKey(PRIVKEY));
@@ -532,7 +533,7 @@ describe('P2BK fixed-vector ECDH tweak', () => {
     const Z = E.multiply(pBig);
     const Zx = Z.toBytes(false).slice(1, 33); // 32B X from uncompressed SEC1
     const i0 = new Uint8Array([0x00]);
-    let r = secp256k1.Point.Fn.fromBytes(sha256(new Uint8Array([...P2BK_DST, ...Zx, ...i0])));
+    const r = secp256k1.Point.Fn.fromBytes(sha256(new Uint8Array([...P2BK_DST, ...Zx, ...i0])));
 
     // Check blinded point matches P + r·G
     const expectPprime = P.add(secp256k1.Point.BASE.multiply(r));
@@ -940,7 +941,7 @@ describe('branch coverage helpers', () => {
     secret,
     C: 'C',
     amount: 1 as any, // satisfy type if needed by your model
-    id: 'x' as any,
+    id: 'x',
     witness: undefined,
   });
 
@@ -965,7 +966,7 @@ describe('branch coverage helpers', () => {
   });
 
   test('getP2PKWitnessSignatures, witness object with signatures undefined', () => {
-    const sigs = getP2PKWitnessSignatures({} as any);
+    const sigs = getP2PKWitnessSignatures({});
     expect(sigs).toEqual([]); // covers object path with fallback
   });
 });
@@ -986,13 +987,13 @@ describe('SIG_ALL, both message formats are actually signed', () => {
         id: '00a1',
         C: '03'.padEnd(66, '1'),
         secret,
-      } as Proof,
+      },
       {
         amount: Amount.from(2),
         id: '00a2',
         C: '03'.padEnd(66, '2'),
         secret,
-      } as Proof,
+      },
     ];
 
     // 3. Minimal outputs satisfying OutputDataLike
@@ -1333,9 +1334,9 @@ describe('NUT-11 test vectors', () => {
       {
         amount: Amount.from(2),
         id: '00bfa73302d12ffd',
-        secret: `[\"P2PK\",{\"nonce\":\"bbf9edf441d17097e39f5095a3313ba24d3055ab8a32f758ff41c10d45c4f3de\",\"data\":\"${pub}\",\"tags\":[[\"sigflag\",\"SIG_ALL\"]]}]`,
+        secret: `["P2PK",{"nonce":"bbf9edf441d17097e39f5095a3313ba24d3055ab8a32f758ff41c10d45c4f3de","data":"${pub}","tags":[["sigflag","SIG_ALL"]]}]`,
         C: '02a9d461ff36448469dccf828fa143833ae71c689886ac51b62c8d61ddaa10028b',
-        witness: `{\"signatures\":[\"${sig}\"]}`,
+        witness: `{"signatures":["${sig}"]}`,
       },
     ];
     const outputs = [

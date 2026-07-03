@@ -1,6 +1,7 @@
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
+
 import {
   createBlindSignature,
   hash_e,
@@ -12,8 +13,8 @@ import {
   constructUnblindedSignature,
   createRandomRawBlindedMessage,
 } from '../../src/crypto';
-import { OutputData } from '../../src/model/OutputData';
 import { Amount } from '../../src/model/Amount';
+import { OutputData } from '../../src/model/OutputData';
 
 describe('test hash_e', () => {
   test('test hash_e function', async () => {
@@ -54,7 +55,7 @@ describe('test DLEQ scheme', () => {
 
     // Mint
     const blindSignature = createBlindSignature(blindMessage.B_, mintPrivKey, '');
-    let dleqProof = createDLEQProof(blindMessage.B_, mintPrivKey);
+    const dleqProof = createDLEQProof(blindMessage.B_, mintPrivKey);
 
     // Wallet(Alice)
     const proof = constructUnblindedSignature(

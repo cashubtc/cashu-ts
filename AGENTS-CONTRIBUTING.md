@@ -98,6 +98,7 @@ DEV=1 make nutshell-stable-down
 ## Linting and TypeScript rules
 
 - Lint config lives in `eslint.config.js` (flat config).
+- Tests are linted too, with a relaxed override block (fixture `any`s allowed, but promise correctness and vitest hygiene — no `.only`, no assertion-free tests — are enforced). `test/tsconfig.json` exists so typed rules cover test files.
 - `any` is not allowed (prefer explicit types, generics, or `unknown` with narrowing).
 - Type-only imports/exports are required (`@typescript-eslint/consistent-type-imports`).
 - No Node-only modules in library code (`import/no-nodejs-modules`).

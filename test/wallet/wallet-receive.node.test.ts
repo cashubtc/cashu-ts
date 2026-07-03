@@ -1,3 +1,4 @@
+import { hexToBytes } from '@noble/curves/utils.js';
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect } from 'vitest';
 
@@ -11,7 +12,6 @@ import {
   type ProofLike,
 } from '../../src';
 
-import { hexToBytes } from '@noble/curves/utils.js';
 import { mint, unit, token3sat, mintUrl, logger, useTestServer } from './_setup';
 
 const server = useTestServer();
@@ -524,7 +524,7 @@ describe('receive', () => {
 
     const customData = OutputData.createRandomData(
       3,
-      wallet.keyChain.getKeyset('00bd033559de27d0')!,
+      wallet.keyChain.getKeyset('00bd033559de27d0'),
       [1, 1, 1],
     );
     const proofs = await wallet.receive(token3sat, {}, { type: 'custom', data: customData });

@@ -1,5 +1,6 @@
 import { numberToBytesBE } from '@noble/curves/utils.js';
 import { afterEach, describe, expect, test, vi } from 'vitest';
+
 import { BLS_FR_ORDER, blindMessageBls } from '../../src/crypto';
 
 // randomScalar() (module-private in curve_bls.ts) feeds the no-r path of blindMessageBls — the
@@ -9,6 +10,7 @@ import { BLS_FR_ORDER, blindMessageBls } from '../../src/crypto';
 const { randomBytesMock } = vi.hoisted(() => ({ randomBytesMock: vi.fn() }));
 
 vi.mock('@noble/curves/utils.js', async (importActual) => {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- vitest importActual generic
   const actual = await importActual<typeof import('@noble/curves/utils.js')>();
   return { ...actual, randomBytes: randomBytesMock };
 });

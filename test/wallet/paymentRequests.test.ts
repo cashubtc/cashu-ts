@@ -1,11 +1,11 @@
 import { test, describe, expect } from 'vitest';
+
 import {
   decodePaymentRequest,
   OutputData,
   PaymentRequest,
-  PaymentRequestTransport,
   PaymentRequestTransportType,
-  NUT10Option,
+  type NUT10Option,
 } from '../../src/index';
 
 describe('payment requests', () => {
@@ -16,7 +16,7 @@ describe('payment requests', () => {
           type: PaymentRequestTransportType.NOSTR,
           target: 'asd',
           tags: [['n', '17']],
-        } as PaymentRequestTransport,
+        },
       ],
       '4840f51e',
       1000,
@@ -28,7 +28,7 @@ describe('payment requests', () => {
         kind: 'P2PK',
         data: 'pubkey',
         tags: [['tag', 'tag-value']],
-      } as NUT10Option,
+      },
     );
     const pr = request.toEncodedRequest();
     expect(pr).toBeDefined();
@@ -86,7 +86,7 @@ describe('payment requests', () => {
         {
           type: PaymentRequestTransportType.POST,
           target: 'https://example.com/pay',
-        } as PaymentRequestTransport,
+        },
       ],
       'bigint_test',
       largeAmount,
@@ -210,7 +210,7 @@ describe('payment requests', () => {
             ['timeout', '7200'],
             ['refund', '03abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890cd'],
           ],
-        } as NUT10Option,
+        },
       );
 
       const encoded = pr.toEncodedCreqB();
@@ -244,7 +244,7 @@ describe('payment requests', () => {
           kind: 'P2PK',
           data: '02abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab',
           tags: [],
-        } as NUT10Option,
+        },
       );
 
       const decoded = PaymentRequest.fromEncodedRequest(pr.toEncodedCreqB());
