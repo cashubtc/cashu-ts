@@ -248,7 +248,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
       request: 'lno1offer...',
       unit: 'sat',
       amount: 100,
-    } as any);
+    });
 
     expect(res.amount).toEqual(Amount.from(response.amount));
     expect(res.expiry).toBe(123456);
