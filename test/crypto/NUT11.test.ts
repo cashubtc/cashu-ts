@@ -1409,6 +1409,29 @@ describe('normalizeP2PKOptions', () => {
     );
   });
 
+  test('P2PK: data pubkey counts as a slot, so 11 keys fill 11 slots and 12 overflow (NUT-28)', () => {
+    // NUT-28 allows up to 11 slots in [data, ...pubkeys, ...refund] (i_byte 0x00..0x0A).
+    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c'].map((c) => _comp(c));
+    const [data, ...rest] = keys; // rest has 11 distinct pubkeys
+    expect(() =>
+      normalizeP2PKOptions({ kind: 'P2PK', data, pubkeys: rest.slice(0, 10) }),
+    ).not.toThrow(); // data + 10 pubkeys = 11 slots
+    expect(() => normalizeP2PKOptions({ kind: 'P2PK', data, pubkeys: rest })).toThrow(
+      /maximum allowed is 11/,
+    ); // data + 11 pubkeys = 12 slots
+  });
+
+  test('HTLC: hashlock fills slot 0, so only 10 keys fit before overflowing 11 slots (NUT-28)', () => {
+    // For HTLC the data slot is a hash, not a key, so signing keys max out one lower than P2PK.
+    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b'].map((c) => _comp(c));
+    expect(() =>
+      normalizeP2PKOptions({ kind: 'HTLC', data: hashlock, pubkeys: keys.slice(0, 10) }),
+    ).not.toThrow(); // hash + 10 pubkeys = 11 slots
+    expect(() => normalizeP2PKOptions({ kind: 'HTLC', data: hashlock, pubkeys: keys })).toThrow(
+      /maximum allowed is 11/,
+    ); // hash + 11 pubkeys = 12 slots
+  });
+
   test('throws when P2PK data is missing or empty', () => {
     expect(() => normalizeP2PKOptions({ kind: 'P2PK', data: '' })).toThrow(
       /P2PK requires a pubkey in data/i,

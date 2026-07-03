@@ -272,9 +272,13 @@ export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
 
   // Signers: P2PK - data key + pubkeys; HTLC - data is a hash, so only pubkeys.
   const signerCount = (kind === 'P2PK' ? 1 : 0) + pubkeys.length;
-  const totalKeys = signerCount + refundKeys.length;
-  if (totalKeys > 10) {
-    throw new CTSError(`Too many pubkeys, ${totalKeys} provided, maximum allowed is 10 in total`);
+  // NUT-28: up to 11 locking slots in [data, ...pubkeys, ...refund] (i_byte 0x00..0x0A). `data`
+  // always fills slot 0 (a pubkey for P2PK, a hashlock for HTLC), so HTLC allows one fewer key.
+  const slotCount = 1 + pubkeys.length + refundKeys.length;
+  if (slotCount > 11) {
+    throw new CTSError(
+      `Too many pubkeys, ${slotCount} slots provided, maximum allowed is 11 in total`,
+    );
   }
   if (p2pk.sigFlag !== undefined) assertSigFlag(p2pk.sigFlag);
 
