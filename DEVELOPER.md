@@ -398,6 +398,7 @@ Promoting a new major happens in two steps:
 - Breaking API changes must be clearly marked (`feat!` / `fix!` or `BREAKING CHANGE:`) to trigger a major version bump.
 - Version numbers on `main` and `vN-dev` branches are determined automatically by each branch's release-please; contributors should not attempt to control versions directly.
 - RC cadence on `main` is controlled with `Release-As:` commit footers; nothing is bumped by hand in `package.json`.
+- To amend what release-please reads from a squash commit (add a missed changelog entry, split one commit into several lines, or hide a noisy one), put a `BEGIN_COMMIT_OVERRIDE ... END_COMMIT_OVERRIDE` block in the PR body before merging. Per-commit, not retroactive; see #748 for a worked example.
 
 ## Troubleshooting (common issues)
 
