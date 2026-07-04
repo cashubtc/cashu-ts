@@ -12,3 +12,5 @@ test-results
 .claude
 .githooks
 .husky/_
+reports
+.stryker-tmp
