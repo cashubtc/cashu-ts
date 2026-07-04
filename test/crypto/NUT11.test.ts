@@ -1481,6 +1481,22 @@ describe('normalizeP2PKOptions', () => {
       /invalid sigflag/i,
     );
   });
+
+  test('P2PK: data pubkey counts as a slot, so 11 keys fill 11 slots and 12 overflow (NUT-28)', () => {
+    // NUT-28 allows up to 11 slots in [data, ...pubkeys, ...refund] (i_byte 0x00..0x0A). For P2PK
+    // slot 0 is the first pubkey, so 11 pubkeys fill the 11 slots and a 12th overflows.
+    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c'].map((c) => _comp(c));
+    expect(() => normalizeP2PKOptions({ pubkey: keys.slice(0, 11) })).not.toThrow(); // 11 slots
+    expect(() => normalizeP2PKOptions({ pubkey: keys })).toThrow(/maximum allowed is 11/); // 12 slots
+  });
+
+  test('HTLC: hashlock fills slot 0, so only 10 keys fit before overflowing 11 slots (NUT-28)', () => {
+    // For HTLC the data slot is the hashlock, not a key, so signing keys max out one lower than P2PK.
+    const hashlock = 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5';
+    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b'].map((c) => _comp(c));
+    expect(() => normalizeP2PKOptions({ pubkey: keys.slice(0, 10), hashlock })).not.toThrow(); // hash + 10 = 11 slots
+    expect(() => normalizeP2PKOptions({ pubkey: keys, hashlock })).toThrow(/maximum allowed is 11/); // hash + 11 = 12 slots
+  });
 });
 
 describe('parseP2PKSecret — duplicate tag rejection', () => {
