@@ -1,5 +1,6 @@
 import { hexToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
+
 import { type Bip32KeyPurpose, createKeyPairDeriver, deriveKeyPair } from '../../src/crypto';
 
 // BIP39 seed (no passphrase) for the mnemonic in the NUT-11 / NUT-20 test vectors:
