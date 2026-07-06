@@ -1,5 +1,6 @@
 import { numberToBytesBE } from '@noble/curves/utils.js';
 import { afterEach, describe, expect, test, vi } from 'vitest';
+
 import { BLS_FR_ORDER, blindMessageBls } from '../../src/crypto';
 
 // randomScalar() (module-private in curve_bls.ts) feeds the no-r path of blindMessageBls — the
@@ -9,6 +10,7 @@ import { BLS_FR_ORDER, blindMessageBls } from '../../src/crypto';
 const { randomBytesMock } = vi.hoisted(() => ({ randomBytesMock: vi.fn() }));
 
 vi.mock('@noble/curves/utils.js', async (importActual) => {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- vitest importActual generic
   const actual = await importActual<typeof import('@noble/curves/utils.js')>();
   return { ...actual, randomBytes: randomBytesMock };
 });
@@ -27,6 +29,19 @@ describe('randomScalar uniform rejection sampling (no-r blinding path)', () => {
 
     // Rejection sampling keeps the 2nd draw = 11. Mod-reduction would consume only the 1st draw:
     // (BLS_FR_ORDER + 7) mod BLS_FR_ORDER = 7 — never 11.
+    expect(r).toBe(11n);
+  });
+
+  test('rejects a draw of exactly BLS_FR_ORDER (>= boundary, not >)', () => {
+    const secret = new TextEncoder().encode('unlinkability');
+    // A draw equal to the order must be rejected: as a scalar it is ≡ 0 and out of Fr*. A `>` (rather
+    // than `>=`) bound would wrongly accept it, so the 2nd in-range draw must be the one returned.
+    randomBytesMock
+      .mockReturnValueOnce(numberToBytesBE(BLS_FR_ORDER, 32))
+      .mockReturnValueOnce(numberToBytesBE(11n, 32));
+
+    const { r } = blindMessageBls(secret);
+
     expect(r).toBe(11n);
   });
 });

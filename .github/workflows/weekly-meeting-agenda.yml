@@ -1,0 +1,36 @@
+name: Weekly meeting agenda
+
+# Opens the Cashu-TS Development Meeting agenda issue, grouped by
+# contributor. Tag issues/PRs `meeting-discussion` during the week to put
+# them on the agenda; `drift` and `mutation-testing` issues appear under
+# Standing Reports automatically.
+on:
+  schedule:
+    - cron: '0 8 * * 3' # Wednesdays 08:00 UTC, 3h before the 11:00 meeting
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  agenda:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.x'
+
+      - name: Generate agenda and open issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node .github/scripts/generate-agenda.mjs > agenda.md
+          gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Cashu-TS Development Meeting — $(date -u +%Y-%m-%d)" \
+            --label meeting-agenda \
+            --body-file agenda.md

@@ -35,7 +35,7 @@ jobs:
             prepare_playwright_command: npm run test:prepare:ci:webkit
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Extract CDK versions
         id: versions
@@ -144,7 +144,7 @@ jobs:
             prepare_playwright_command: npm run test:prepare:ci:webkit
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Extract Nutshell versions
         id: versions

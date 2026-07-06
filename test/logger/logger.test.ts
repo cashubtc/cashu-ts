@@ -1,4 +1,5 @@
 import { afterEach, describe, test, expect, vi } from 'vitest';
+
 import { ConsoleLogger, NULL_LOGGER } from '../../src/logger';
 
 afterEach(() => {

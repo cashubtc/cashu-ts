@@ -6,10 +6,11 @@
  */
 
 import { describe, test, expect } from 'vitest';
+
+import { PaymentRequest } from '../../src/model/PaymentRequest';
 import { decodeBech32mToBytes, encodeBech32m } from '../../src/utils/bech32m';
 import { decodeTLV, encodeTLV } from '../../src/utils/tlv';
 import type { DecodedTLVPaymentRequest } from '../../src/utils/tlv';
-import { PaymentRequest } from '../../src/model/PaymentRequest';
 import { PaymentRequestTransportType } from '../../src/wallet/types/payment-requests';
 
 describe('NUT-26 Test Vectors', () => {

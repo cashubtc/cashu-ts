@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { P2PKBuilder, type P2PKOptions } from '../../src/';
 
 // helpers to make valid hex keys
@@ -97,6 +98,37 @@ describe('P2PKBuilder.toOptions()', () => {
     expect(o2.locktime).toBeTypeOf('number');
     expect(o2.locktime).toBe(nowSec + 60);
     expect(o2.sigFlag).toBe(undefined);
+  });
+
+  it('treats a Date by its getTime()/1000, not by numeric coercion', () => {
+    // getTime() = 500_000 ms => 500 s. A Date under the ms threshold must still be read
+    // as milliseconds via getTime(), never coerced to a raw number of seconds.
+    const opts = new P2PKBuilder()
+      .addLockPubkey(comp('a', '02'))
+      .lockUntil(new Date(500_000))
+      .toOptions();
+    expect(opts.locktime).toBe(500);
+  });
+
+  it('treats a numeric locktime of exactly 1e12 as milliseconds', () => {
+    // Boundary: values >= 1e12 are milliseconds, so 1e12 ms => 1e9 s.
+    const opts = new P2PKBuilder().addLockPubkey(comp('a', '02')).lockUntil(1e12).toOptions();
+    expect(opts.locktime).toBe(1e9);
+  });
+
+  it('keeps a numeric locktime below 1e12 as seconds', () => {
+    const opts = new P2PKBuilder()
+      .addLockPubkey(comp('a', '02'))
+      .lockUntil(999_999_999_999)
+      .toOptions();
+    expect(opts.locktime).toBe(999_999_999_999);
+  });
+
+  it('returns a defensive copy of additionalTags, isolated from later mutations', () => {
+    const b = new P2PKBuilder().addLockPubkey(comp('a', '02')).addTag('foo', ['bar']);
+    const opts = b.toOptions();
+    b.addTag('baz', ['qux']); // must not leak into the already-returned options
+    expect(opts.additionalTags).toEqual([['foo', 'bar']]);
   });
 
   it('requireLockSignatures throws on non-integer and values less than 1', () => {
@@ -199,17 +231,28 @@ describe('P2PKBuilder.toOptions()', () => {
     ).toThrow(/requires refund keys/i);
   });
 
-  it('enforces combined lock+refund keys limit of 10', () => {
-    // build 11 distinct keys
-    const chars = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b'];
+  it('enforces the combined lock+refund slot limit of 11 (NUT-28)', () => {
+    // 12 distinct keys; NUT-28 allows up to 11 slots ([data, ...pubkeys, ...refund]).
+    const chars = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c'];
     const keys = chars.map((c, i) => comp(c as any, i % 2 === 0 ? '02' : '03'));
 
-    const b = new P2PKBuilder()
-      .addLockPubkey(keys.slice(0, 8)) // 8 locks
-      .lockUntil(Date.now() + 60)
-      .addRefundPubkey(keys.slice(8)); // 3 refunds => total 11
+    // 8 locks + 3 refunds = 11 slots: allowed.
+    expect(() =>
+      new P2PKBuilder()
+        .addLockPubkey(keys.slice(0, 8))
+        .lockUntil(Date.now() + 60)
+        .addRefundPubkey(keys.slice(8, 11))
+        .toOptions(),
+    ).not.toThrow();
 
-    expect(() => b.toOptions()).toThrow(/Too many pubkeys/i);
+    // 8 locks + 4 refunds = 12 slots: rejected.
+    expect(() =>
+      new P2PKBuilder()
+        .addLockPubkey(keys.slice(0, 8))
+        .lockUntil(Date.now() + 60)
+        .addRefundPubkey(keys.slice(8))
+        .toOptions(),
+    ).toThrow(/Too many pubkeys/i);
   });
 
   it('round-trips via fromOptions', () => {

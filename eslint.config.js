@@ -1,4 +1,5 @@
 import eslint from '@eslint/js';
+import vitest from '@vitest/eslint-plugin';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 import prettierConfig from 'eslint-config-prettier';
@@ -11,10 +12,13 @@ export default tseslint.config(
     ignores: [
       'node_modules/**',
       '.claude/**',
+      '.stryker-tmp/**',
       'dist/**',
       'dist-scripts/**',
       'scripts/**',
-      'test/**',
+      // Consumer smoke harnesses: plain-JS external-consumer simulations in
+      // varying module systems, run by npm scripts — not vitest suites
+      'test/consumer/**',
       'coverage/**',
       'docs/**',
       '.jest/**',
@@ -23,6 +27,7 @@ export default tseslint.config(
       '*.d.ts',
       'examples/**',
       'vite.config.ts',
+      'vitest.stryker.config.ts',
       'vitest.workspace.ts',
       'eslint.config.js',
       'post-process-dts.js',
@@ -95,6 +100,41 @@ export default tseslint.config(
         typescript: { project: './tsconfig.json' }, // Explicitly point to tsconfig for path mappings/aliases if any
         node: true,
       },
+    },
+  },
+  // Test files: keep the correctness rules (no-floating-promises catches
+  // vacuously-passing async assertions) but relax fixture ergonomics, and
+  // add vitest hygiene (a committed .only silently skips the suite in CI).
+  {
+    files: ['test/**/*.ts'],
+    plugins: { vitest },
+    rules: {
+      'vitest/no-focused-tests': 'error',
+      'vitest/no-disabled-tests': 'warn',
+      // expect* covers helpers like expectNUT10SecretDataToEqual
+      'vitest/expect-expect': ['error', { assertFunctionNames: ['expect*', 'testRoundtrip'] }],
+      // _-prefix marks intentionally unused (mock params, destructuring)
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
+      ],
+      // mock-socket message types defeat string-ness proofs; runtime is fine
+      '@typescript-eslint/no-base-to-string': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-non-null-assertion': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      // async test wrappers and expect(obj.method) are idiomatic in tests
+      '@typescript-eslint/require-await': 'off',
+      '@typescript-eslint/unbound-method': 'off',
+      // noop mocks
+      '@typescript-eslint/no-empty-function': 'off',
+      'promise/param-names': 'off',
+      // Tests run under node/playwright, not in consumer bundles
+      'import/no-nodejs-modules': 'off',
     },
   },
 );

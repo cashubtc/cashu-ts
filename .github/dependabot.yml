@@ -1,0 +1,21 @@
+version: 2
+updates:
+  # Keeps action pins in .github/workflows current (Node-runtime deprecations,
+  # security fixes). npm deps are managed manually; mint Docker images are
+  # handled by the nightly renovate.yml script.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ['*']
+
+  # The composite action pins its own versions and needs its own entry
+  - package-ecosystem: github-actions
+    directory: /.github/actions/integration-against-mint
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ['*']

@@ -1,7 +1,8 @@
+import { type Client, Server, WebSocket } from 'mock-socket';
+import { vi, test, describe, expect, afterAll } from 'vitest';
+
 import { WSConnection, injectWebSocketImpl } from '../../src';
 import type { Logger } from '../../src';
-import { Client, Server, WebSocket } from 'mock-socket';
-import { vi, test, describe, expect, afterAll } from 'vitest';
 
 injectWebSocketImpl(WebSocket);
 
@@ -48,23 +49,24 @@ describe('testing WSConnection', () => {
     expect(connectionSpy).toHaveBeenCalled();
   });
   test('requesting subscription', async () => {
-    const message = (await new Promise(async (res) => {
+    const messagePromise = new Promise<string>((res) => {
       server.on('connection', (socket) => {
         socket.on('message', (m) => {
           res(m.toString());
         });
       });
-      const conn = new WSConnection(fakeUrl);
-      await conn.connect();
+    });
+    const conn = new WSConnection(fakeUrl);
+    await conn.connect();
 
-      const callback = vi.fn();
-      const errorCallback = vi.fn();
-      conn.createSubscription(
-        { kind: 'bolt11_mint_quote', filters: ['12345'] },
-        callback,
-        errorCallback,
-      );
-    })) as string;
+    const callback = vi.fn();
+    const errorCallback = vi.fn();
+    conn.createSubscription(
+      { kind: 'bolt11_mint_quote', filters: ['12345'] },
+      callback,
+      errorCallback,
+    );
+    const message = await messagePromise;
     expect(JSON.parse(message)).toMatchObject({
       jsonrpc: '2.0',
       method: 'subscribe',
@@ -86,18 +88,18 @@ describe('testing WSConnection', () => {
   });
   test('unsubscribing', async () => {
     let wsSocket: Client;
-    let subId: string;
     const conn = new WSConnection(fakeUrl);
-    await new Promise<void>(async (res) => {
+    const connected = new Promise<void>((res) => {
       server.on('connection', (socket) => {
         wsSocket = socket;
         res();
       });
-      conn.connect();
     });
+    await conn.connect();
+    await connected;
     const callback = vi.fn();
     const errorCallback = vi.fn();
-    subId = conn.createSubscription(
+    const subId = conn.createSubscription(
       { kind: 'bolt11_mint_quote', filters: ['123'] },
       callback,
       errorCallback,
@@ -112,14 +114,14 @@ describe('testing WSConnection', () => {
         }
       });
     });
-    await waitForSubscription(conn, subId!);
+    await waitForSubscription(conn, subId);
 
-    const message = await new Promise(async (res) => {
+    const message = await new Promise((res) => {
       wsSocket.on('message', (m) => {
         const parsed = JSON.parse(m.toString());
         if (parsed.method === 'unsubscribe') res(parsed);
       });
-      conn.cancelSubscription(subId!, callback);
+      conn.cancelSubscription(subId, callback);
     });
     expect(message).toMatchObject({ jsonrpc: '2.0', method: 'unsubscribe' });
   });
@@ -333,7 +335,8 @@ describe('WSConnection – close and lifecycle', () => {
         serverSocket = socket;
         res();
       });
-      conn.connect();
+      // connection event (below) is the sync point; connect() result unused
+      void conn.connect();
     });
 
     const closeCb = vi.fn();
@@ -360,7 +363,8 @@ describe('WSConnection – close and lifecycle', () => {
         socket.on('message', () => {}); // absorb subscribe, leave RPC pending
         res();
       });
-      conn.connect();
+      // connection event (below) is the sync point; connect() result unused
+      void conn.connect();
     });
 
     const errorCb = vi.fn();
@@ -387,7 +391,8 @@ describe('WSConnection – close and lifecycle', () => {
         socket.on('message', () => {}); // leave RPC pending
         res();
       });
-      conn.connect();
+      // connection event (below) is the sync point; connect() result unused
+      void conn.connect();
     });
 
     const errorCb = vi.fn();
@@ -414,7 +419,8 @@ describe('WSConnection – close and lifecycle', () => {
         serverSocket = socket;
         res();
       });
-      conn.connect();
+      // connection event (below) is the sync point; connect() result unused
+      void conn.connect();
     });
 
     serverSocket.dispatchEvent(new Event('error'));
@@ -680,7 +686,8 @@ describe('WSConnection – listener management', () => {
         socket.on('message', () => {}); // keep RPCs pending
         res();
       });
-      conn.connect();
+      // connection event (below) is the sync point; connect() result unused
+      void conn.connect();
     });
 
     const errorCb1 = vi.fn().mockImplementation(() => {

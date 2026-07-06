@@ -1,6 +1,7 @@
 import { bytesToHex } from '@noble/curves/utils.js';
 import { HDKey } from '@scure/bip32';
 import { describe, expect, test } from 'vitest';
+
 import { deriveSecretAndBlindingFactor, getKeysetIdInt } from '../../src/crypto';
 import { Bytes } from '../../src/utils';
 

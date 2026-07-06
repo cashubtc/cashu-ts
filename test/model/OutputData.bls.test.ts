@@ -10,9 +10,10 @@ import {
 } from '../../src/crypto';
 import { verifyUnblindedSignature } from '../../src/crypto/NUT01';
 import { Amount } from '../../src/model/Amount';
+import { CTSError } from '../../src/model/Errors';
 import { OutputData } from '../../src/model/OutputData';
-import { deriveKeysetId } from '../../src/utils';
 import type { HasKeysetKeys, SerializedBlindedSignature } from '../../src/model/types';
+import { deriveKeysetId } from '../../src/utils';
 
 // v3 (BLS12-381) round-trip through OutputData → simulated mint sign → toProof → pairing verify.
 //
@@ -216,6 +217,52 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
     const C = pointFromHexG1(proof.C);
     const secret = new TextEncoder().encode(proof.secret);
     expect(verifyUnblindedSignatureBls(G2PubKeys['2'], C, secret)).toBe(true);
+  });
+
+  test('wraps a missing v3 keyset key with the underlying cause', () => {
+    // Blank output, mint returns amount=128 which is not in the keyset, so `keys[128]` is
+    // undefined. The CTSError must carry a cause that names the offending amount, not an opaque
+    // downstream parse error.
+    const blank = OutputData.createSingleRandomData(0, keyset.id);
+    const B_ = pointFromHexG1(blank.blindedMessage.B_);
+    const signed = createBlindSignatureBls(B_, privKeys['2'], keyset.id);
+    const sig: SerializedBlindedSignature = {
+      id: keyset.id,
+      amount: Amount.from(128),
+      C_: signed.C_.toHex(true),
+    };
+    let caught: unknown;
+    try {
+      blank.toProof(sig, keyset);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(CTSError);
+    expect((caught as CTSError).message).toMatch(/Mint returned invalid signature or amount/);
+    const cause = (caught as CTSError).cause;
+    expect(cause).toBeInstanceOf(Error);
+    expect((cause as Error).message).toMatch(/Amount 128 not in keyset/);
+  });
+
+  test('does not attach p2pk_e when the output has no ephemeral key', () => {
+    const out = OutputData.createSingleRandomData(1, keyset.id);
+    const proof = out.toProof(signWithMint(out, privKeys, keyset.id), keyset);
+    expect('p2pk_e' in proof).toBe(false);
+  });
+
+  test('carries the P2BK ephemeral key onto a v3 proof', () => {
+    // A P2PK output on a v3 keyset blinds its lock key and records the ephemeral E; toProof must
+    // copy it to `p2pk_e` so the recipient can recover the blinding tweak. P2BK blinding always
+    // uses secp keys, independent of the keyset curve.
+    const secpPubkey = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+    const out = OutputData.createSingleP2PKData(
+      { kind: 'P2PK', data: secpPubkey, blindKeys: true },
+      1,
+      keyset.id,
+    );
+    expect(out.ephemeralE).toBeDefined();
+    const proof = out.toProof(signWithMint(out, privKeys, keyset.id), keyset);
+    expect(proof.p2pk_e).toBe(out.ephemeralE);
   });
 });
 

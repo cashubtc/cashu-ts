@@ -1,0 +1,108 @@
+name: Weekly mutation testing
+
+# Runs Stryker over the crypto/model source (see stryker.config.json) to find
+# code where planted bugs survive the unit test suite. Coverage says tests RAN
+# the code; mutation testing says whether they'd NOTICE it being wrong.
+on:
+  schedule:
+    - cron: '0 3 * * 5' # Fridays 03:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write # deploys the HTML report to gh-pages
+  issues: write
+
+jobs:
+  stryker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.x'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # --incremental on a fresh checkout has no baseline, so this is still a full
+      # authoritative run; the point is that it *writes* reports/stryker-incremental.json,
+      # which the PR workflow restores to re-test only mutants in changed code.
+      - name: Run Stryker
+        run: npm run test:mutation:incremental
+
+      # Seed the incremental baseline for PR runs. Written mid-run, so it exists even if
+      # the score dips below the break threshold and the step above fails.
+      - name: Cache incremental baseline
+        if: ${{ always() }}
+        uses: actions/cache/save@v4
+        with:
+          path: reports/stryker-incremental.json
+          key: stryker-incremental-${{ github.run_id }}
+
+      - name: Upload mutation report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: mutation-report
+          path: reports/mutation/
+          retention-days: 90
+
+      - name: Deploy report to GitHub Pages
+        if: ${{ always() }}
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./reports/mutation
+          destination_dir: mutation
+
+      - name: Open report issue
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          [ -f reports/mutation/mutation.json ] || { echo "no report produced"; exit 0; }
+
+          node -e '
+            const r = require("./reports/mutation/mutation.json");
+            const all = Object.entries(r.files).flatMap(([f, v]) =>
+              v.mutants.map((m) => ({ f, ...m }))
+            );
+            const by = (s) => all.filter((m) => m.status === s).length;
+            const killed = by("Killed") + by("Timeout");
+            const survived = by("Survived");
+            const noCov = by("NoCoverage");
+            const score = ((killed / (killed + survived + noCov)) * 100).toFixed(1);
+            const top = all
+              .filter((m) => m.status === "Survived" || m.status === "NoCoverage")
+              .slice(0, 10)
+              .map((m) => `- \`${m.f}:${m.location.start.line}\` ${m.mutatorName}: \`${(m.replacement || "").slice(0, 80)}\``)
+              .join("\n");
+            const fs = require("fs");
+            fs.writeFileSync("issue-body.md", `## Mutation Testing Results
+
+          - Mutation score: **${score}%**
+          - ✅ Killed: ${killed}
+          - ❌ Survived: ${survived}
+          - 🕳 No coverage: ${noCov}
+
+          ### Sample survivors
+
+          ${top}
+
+          Full interactive report: https://cashu-ts.dev/mutation/mutation.html (latest run; previous weeks in the [run artifacts](${process.env.RUN_URL})).
+
+          💡 Local loop: \`npm run test:mutation:incremental\` re-tests only mutants in changed code.
+          `);
+            fs.writeFileSync("issue-title.txt", `🧬 Weekly mutation report — score ${score}%`);
+          '
+
+          gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$(cat issue-title.txt)" \
+            --label mutation-testing \
+            --body-file issue-body.md

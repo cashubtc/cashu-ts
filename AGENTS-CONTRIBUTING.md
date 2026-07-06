@@ -98,6 +98,7 @@ DEV=1 make nutshell-stable-down
 ## Linting and TypeScript rules
 
 - Lint config lives in `eslint.config.js` (flat config).
+- Tests are linted too, with a relaxed override block (fixture `any`s allowed, but promise correctness and vitest hygiene — no `.only`, no assertion-free tests — are enforced). `test/tsconfig.json` exists so typed rules cover test files.
 - `any` is not allowed (prefer explicit types, generics, or `unknown` with narrowing).
 - Type-only imports/exports are required (`@typescript-eslint/consistent-type-imports`).
 - No Node-only modules in library code (`import/no-nodejs-modules`).
@@ -141,8 +142,9 @@ Hooks are installed by Husky:
 ## Branching and releases
 
 - `main` tracks the current major and is where active development lands.
-- Each supported prior major has a `vN-dev` LTS branch (`v4-dev`, `v3-dev`) for backports only; target the matching branch and don't mix majors in one PR.
-- Current-major releases on `main` are automated with release-please (don't bump versions by hand). LTS releases on `vN-dev` are cut manually (tag + GitHub Release).
+- Each supported prior major has a `vN-dev` LTS branch (`v4-dev`, `v3-dev`) for backports only; don't mix majors in one PR.
+- Backports are label-driven: land the fix on `main`, add a `backport vN-dev` label to the PR, and a bot opens the backport PR. Only cherry-pick manually when the bot fails (it opens a `backport`-labelled issue); never commit directly to a `vN-dev` branch.
+- All releases are automated with release-please (don't bump versions by hand): `main` and each `vN-dev` branch run their own copy of the workflow, and merging a branch's Release PR tags, creates the GitHub Release, and publishes to npm.
 - npm `latest` is governed solely by `LATEST_MAJOR` in `.github/workflows/version.yml`.
 
 ## Common pitfalls (save time)

@@ -29,18 +29,10 @@ describe('parseAmount tests', () => {
   });
 
   test('rejects unsupported types', () => {
-    expect(() => wallet.parseAmount(true as unknown, 'test')).toThrow(
-      'Unsupported amount input type',
-    );
-    expect(() => wallet.parseAmount(false as unknown, 'test')).toThrow(
-      'Unsupported amount input type',
-    );
-    expect(() => wallet.parseAmount({} as unknown, 'test')).toThrow(
-      'Unsupported amount input type',
-    );
-    expect(() => wallet.parseAmount(null as unknown, 'test')).toThrow(
-      'Unsupported amount input type',
-    );
+    expect(() => wallet.parseAmount(true, 'test')).toThrow('Unsupported amount input type');
+    expect(() => wallet.parseAmount(false, 'test')).toThrow('Unsupported amount input type');
+    expect(() => wallet.parseAmount({}, 'test')).toThrow('Unsupported amount input type');
+    expect(() => wallet.parseAmount(null, 'test')).toThrow('Unsupported amount input type');
     expect(() => wallet.parseAmount(undefined as unknown, 'test')).toThrow(
       'Unsupported amount input type',
     );

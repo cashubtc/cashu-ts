@@ -1,12 +1,13 @@
-import { test, describe, expect } from 'vitest';
-import { signMintQuote, verifyMintQuoteSignature } from '../../src/crypto';
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
-import { Amount, MintRequest } from '../../src';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+import { test, describe, expect } from 'vitest';
+
+import { Amount, type MintRequest } from '../../src';
+import { signMintQuote, verifyMintQuoteSignature } from '../../src/crypto';
 
 describe('mint quote signatures', () => {
   test('valid signature verification', () => {
-    let mintRequest = {
+    const mintRequest = {
       quote: '9d745270-1405-46de-b5c5-e2762b4f5e00',
       outputs: [
         {
@@ -45,7 +46,7 @@ describe('mint quote signatures', () => {
     expect(verifyMintQuoteSignature(pubkey, quote, blindedMessages, sig)).toBe(true);
   });
   test('invalid signature verification', () => {
-    let mintRequest = {
+    const mintRequest = {
       quote: '9d745270-1405-46de-b5c5-e2762b4f5e00',
       outputs: [
         {
@@ -84,7 +85,7 @@ describe('mint quote signatures', () => {
     expect(verifyMintQuoteSignature(pubkey, quote, blindedMessages, sig)).toBe(false);
   });
   test('signature creation', () => {
-    let mintRequest = {
+    const mintRequest = {
       quote: '9d745270-1405-46de-b5c5-e2762b4f5e00',
       outputs: [
         {

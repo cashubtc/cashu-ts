@@ -1,4 +1,8 @@
+import { schnorr } from '@noble/curves/secp256k1.js';
+import { bytesToHex } from '@noble/curves/utils.js';
 import { describe, expect, test, vi } from 'vitest';
+
+import { Amount, type Logger, type Proof } from '../../src';
 import {
   createHTLCHash,
   createHTLCsecret,
@@ -7,15 +11,25 @@ import {
   isHTLCSpendAuthorised,
   parseHTLCSecret,
   signP2PKProof,
+  signP2PKProofs,
   verifyHTLCHash,
   verifyHTLCSpendingConditions,
 } from '../../src/crypto';
-import { Amount, Proof } from '../../src';
-import { schnorr } from '@noble/curves/secp256k1.js';
-import { bytesToHex } from '@noble/curves/utils.js';
 
 const PRIVKEY = schnorr.utils.randomSecretKey();
 const PUBKEY = bytesToHex(getPubKeyFromPrivKey(PRIVKEY));
+const PRIVKEY2 = schnorr.utils.randomSecretKey();
+const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
+
+// Spy logger so pathway-specific debug messages can be asserted.
+const makeLogger = (): Logger => ({
+  error: vi.fn(),
+  warn: vi.fn(),
+  info: vi.fn(),
+  debug: vi.fn(),
+  trace: vi.fn(),
+  log: vi.fn(),
+});
 
 describe('NUT14 module core functions', () => {
   test('createHTLCsecret creates a valid secret', () => {
@@ -61,6 +75,26 @@ describe('NUT14 module core functions', () => {
     for (const bad of ['not-hex', 'zz', '', 'abc', 'g'.repeat(64)]) {
       expect(verifyHTLCHash(bad, 'ff'.repeat(32))).toBe(false);
     }
+  });
+
+  test('createHTLCHash rejects a non-hex preimage with a descriptive message', () => {
+    expect(() => createHTLCHash('zz')).toThrow(
+      'Preimage must be a 64 character hexadecimal string (32 bytes).',
+    );
+  });
+
+  test('createHTLCHash rejects a too-short preimage', () => {
+    expect(() => createHTLCHash('00'.repeat(31))).toThrow('64 character hexadecimal');
+  });
+
+  test('createHTLCHash rejects hex with an invalid leading character', () => {
+    // 'z' + 64 hex chars (65 total): only the leading `^` anchor rejects this.
+    expect(() => createHTLCHash('z' + '00'.repeat(32))).toThrow('64 character hexadecimal');
+  });
+
+  test('createHTLCHash rejects hex with trailing junk', () => {
+    // 64 hex chars + 'zz' (66 total): only the trailing `$` anchor rejects this.
+    expect(() => createHTLCHash('00'.repeat(32) + 'zz')).toThrow('64 character hexadecimal');
   });
 });
 
@@ -122,20 +156,48 @@ describe('HTLC hashlock-only receiver pathway (no pubkeys)', () => {
   test('successful spend yields an internally consistent result', () => {
     // With no main pubkeys the receiver path requires zero signatures, so the
     // result must not claim a signer was required (requiredSigners <= received).
-    const result = verifyHTLCSpendingConditions(proofFor(createHTLCsecret(HASH, []), PREIMAGE));
+    const logger = makeLogger();
+    const result = verifyHTLCSpendingConditions(
+      proofFor(createHTLCsecret(HASH, []), PREIMAGE),
+      logger,
+    );
     expect(result.success).toBe(true);
+    expect(result.path).toBe('MAIN'); // hashlock (receiver) pathway stamps MAIN
     expect(result.main.pubkeys).toEqual([]);
     expect(result.main.requiredSigners).toBe(0);
     expect(result.main.receivedSigners.length).toBeGreaterThanOrEqual(result.main.requiredSigners);
+    expect(logger.debug).toHaveBeenCalledWith(
+      'Spending condition satisfied via hashlock (receiver) pathway',
+      expect.anything(),
+    );
   });
 
-  test('wrong preimage fails', () => {
+  test('wrong preimage fails with a FAILED verdict', () => {
     const wrong = '1000000000000000000000000000000000000000000000000000000000000001';
-    expect(isHTLCSpendAuthorised(proofFor(createHTLCsecret(HASH, []), wrong))).toBe(false);
+    const proof = proofFor(createHTLCsecret(HASH, []), wrong);
+    expect(isHTLCSpendAuthorised(proof)).toBe(false);
+    const logger = makeLogger();
+    const result = verifyHTLCSpendingConditions(proof, logger);
+    expect(result.success).toBe(false);
+    expect(result.path).toBe('FAILED');
+    expect(logger.debug).toHaveBeenCalledWith(
+      'Hashlock spend failed, wrong preimage for hash',
+      expect.anything(),
+    );
   });
 
-  test('no preimage fails', () => {
-    expect(isHTLCSpendAuthorised(proofFor(createHTLCsecret(HASH, [])))).toBe(false);
+  test('no preimage fails with a FAILED verdict', () => {
+    const proof = proofFor(createHTLCsecret(HASH, []));
+    expect(isHTLCSpendAuthorised(proof)).toBe(false);
+    const logger = makeLogger();
+    const result = verifyHTLCSpendingConditions(proof, logger);
+    expect(result.success).toBe(false);
+    expect(result.path).toBe('FAILED');
+    // The no-preimage branch must be taken, not the wrong-preimage branch.
+    expect(logger.debug).toHaveBeenCalledWith(
+      'Hashlock spend failed, no preimage found',
+      expect.anything(),
+    );
   });
 
   test('malformed preimage fails without throwing', () => {
@@ -186,10 +248,47 @@ describe('getHTLCWitnessPreimage', () => {
     expect(getHTLCWitnessPreimage(JSON.stringify({}))).toBeUndefined();
   });
 
+  test('returns undefined for an empty-string preimage', () => {
+    // An empty preimage is not a valid witness: must be undefined, not ''.
+    expect(getHTLCWitnessPreimage({ preimage: '' })).toBeUndefined();
+    expect(getHTLCWitnessPreimage(JSON.stringify({ preimage: '' }))).toBeUndefined();
+  });
+
   test('returns undefined and logs error when JSON parse fails', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(getHTLCWitnessPreimage('{invalid')).toBeUndefined();
-    expect(spy).toHaveBeenCalled();
+    expect(spy).toHaveBeenCalledWith('Failed to parse HTLC witness string:', expect.anything());
     spy.mockRestore();
+  });
+});
+
+describe('HTLC refund (sender) pathway', () => {
+  const HASH = 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5';
+
+  const keyedRefundProof = (): Proof => ({
+    amount: Amount.from(2),
+    id: '00bfa73302d12ffd',
+    // Keyed HTLC, locktime in the past, one refund key.
+    secret: createHTLCsecret(HASH, [
+      ['pubkeys', PUBKEY],
+      ['locktime', '1'],
+      ['refund', PUBKEY2],
+    ]),
+    C: '03ff6567e2e6c31db5cb7189dab2b5121930086791c93899e4eff3dda61cb57273',
+    witness: undefined,
+  });
+
+  test('refund signature spends after locktime without a preimage', () => {
+    // Past locktime + valid refund signature: the sender reclaims via the P2PK
+    // REFUND path, which passes straight through the HTLC verdict.
+    const [signed] = signP2PKProofs([keyedRefundProof()], [bytesToHex(PRIVKEY2)]);
+    const result = verifyHTLCSpendingConditions(signed);
+    expect(result.success).toBe(true);
+    expect(result.path).toBe('REFUND');
+  });
+
+  test('unsigned refund proof does not spend', () => {
+    // No refund signature and no preimage: nothing authorises the spend.
+    expect(isHTLCSpendAuthorised(keyedRefundProof())).toBe(false);
   });
 });

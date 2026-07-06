@@ -6,6 +6,9 @@ on:
   push:
     tags:
       - 'v4.*'
+  # Manual runs: pick the latest release tag of the npm-latest major as the
+  # ref — dispatching from main publishes unreleased next-major docs whenever
+  # main is ahead of latest (e.g. during an rc phase)
   workflow_dispatch:
 
 jobs:
@@ -16,10 +19,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22.x'
           cache: 'npm'
@@ -40,15 +43,18 @@ jobs:
         run: npm run typedoc
 
       - name: Deploy Typedoc to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
+        uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           destination_dir: .
           publish_dir: ./docs
           cname: cashu-ts.dev
+          # Overlay instead of wiping the branch: /coverage and /mutation
+          # (weekly Stryker report) live alongside the typedoc root
+          keep_files: true
 
       - name: Deploy Coverage to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
+        uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           destination_dir: coverage/${{ github.head_ref || github.ref_name }}

@@ -20,20 +20,20 @@ npm run test:prepare
 
 ### Branching model
 
-`main` always tracks the **current major** under active development — there is no separate development branch for it. Each still-supported **prior major** is maintained on its own long-lived `vN-dev` branch for fixes only.
+`main` always tracks the **current major** under active development - there is no separate development branch for it. Each still-supported **prior major** is maintained on its own long-lived `vN-dev` branch for fixes only.
 
 Open PRs against the branch for the major you are targeting (don't mix majors in one PR):
 
 - Features and fixes for the current major → `main`
-- Backports to a maintained prior major → that major's `vN-dev` branch
+- Backports to a maintained prior major → land the fix on `main` first, then add a `backport vN-dev` label to the PR (before or after merge); a bot opens the backport PR automatically. If it hits a conflict it pushes nothing and files a `backport`-labelled tracking issue for a manual cherry-pick against that `vN-dev` branch.
 
 Current branches:
 
 | Branch   | Major | Status                             |
 | -------- | ----- | ---------------------------------- |
-| `main`   | v5    | Current — active development       |
-| `v4-dev` | v4    | LTS — critical/security fixes only |
-| `v3-dev` | v3    | LTS — critical/security fixes only |
+| `main`   | v5    | Current - active development       |
+| `v4-dev` | v4    | LTS - critical/security fixes only |
+| `v3-dev` | v3    | LTS - critical/security fixes only |
 
 Notes:
 
@@ -49,9 +49,9 @@ Speculative work tied to **unmerged NUTs** (specs that may still change) is **no
 PUBLISH=1 ./scripts/make-experimental.sh 698   # …and npm publish --tag experimental
 ```
 
-The branch is throwaway, rebuilt from scratch each run, never promoted from and never merged back. Work graduates by merging its individual PR into `main` the normal way. The bundle is passed as PR-number args (or kept in the gitignored `scripts/.experimental-prs`), so changing the mix is a local operation — no PR required. See the script header for the full rationale.
+The branch is throwaway, rebuilt from scratch each run, never promoted from and never merged back. Work graduates by merging its individual PR into `main` the normal way. The bundle is passed as PR-number args (or kept in the gitignored `scripts/.experimental-prs`), so changing the mix is a local operation - no PR required. See the script header for the full rationale.
 
-### ⚠️ Important — run `npm ci` after switching major branches
+### ⚠️ Important - run `npm ci` after switching major branches
 
 When switching between major branches (for example `main` and a `vN-dev` branch) the lockfile and installed dependencies can differ. This frequently causes confusing failures when compiling or running `api-extractor`.
 
@@ -69,7 +69,7 @@ rm -rf node_modules
 npm ci
 ```
 
-This callout is important — please don't skip it when moving between major branches, it saves a lot of time debugging mysterious build/test failures.
+This callout is important - please don't skip it when moving between major branches, it saves a lot of time debugging mysterious build/test failures.
 
 ## Environment & toolchain
 
@@ -111,7 +111,7 @@ git commit --edit --file=.git/COMMIT_EDITMSG
 - `commit-msg`: validates the commit message with Commitlint and points you at `.git/COMMIT_EDITMSG` if the message needs fixing.
 - `pre-commit`: runs `lint-staged` on staged files only.
   - `*.{js,ts}`: `eslint --fix`, then `prettier --write`
-  - `*.{json,md,yml,yaml}`: `prettier --write`
+  - `*.{mjs,cjs,json,md,yml,yaml}`: `prettier --write`
 - `pre-push`: runs repository-wide `npm run check-lint` and `npm run check-format`.
 
 This keeps commits fast while still blocking pushes with lint or formatting drift.
@@ -301,7 +301,7 @@ npm install <pkg> --save-dev
 
 Cashu-TS uses semantic versioning.
 
-`main` is the single primary development branch and tracks the **current major**. All new development is merged into `main` via pull requests. Each supported **prior major** is maintained on its own `vN-dev` branch for critical/security fixes only — open backports as a separate PR against the matching `vN-dev` branch (do not mix majors in a single PR). See [Branching model](#branching-model).
+`main` is the single primary development branch and tracks the **current major**. All new development is merged into `main` via pull requests. Each supported **prior major** is maintained on its own `vN-dev` branch for critical/security fixes only - backports are label-driven: land the fix on `main` and add a `backport vN-dev` label to the PR (do not mix majors in a single PR). See [Branching model](#branching-model).
 
 ## Releases
 
@@ -335,35 +335,30 @@ Releases on `main` are automated with [release-please](https://github.com/google
 
 ### Pre-releases: `next` (RC) vs `experimental` (unstable)
 
-Two distinct pre-release channels — don't conflate them:
+Two distinct pre-release channels - don't conflate them:
 
-- **`next` — release candidates.** `-rc` versions only. The one pre-release we ship from `main`: finalized work that _will_ become GA barring a blocker. Cut from `main` (via a `Release-As: X.Y.Z-rc.1` footer) or a short-lived branch off `main`. `npm i @cashu/cashu-ts@next`.
-- **`experimental` — unstable.** `-beta` / `-alpha` versions. Off the release path: speculative bundles of _unmerged_ PRs for real-world testing; may change or be withdrawn and are **not** guaranteed to ship. Produced by [`scripts/make-experimental.sh`](#the-experimental-line), published under `@experimental`. `npm i @cashu/cashu-ts@experimental`.
+- **`next` - release candidates.** `-rc` versions only. The one pre-release we ship from `main`: finalized work that _will_ become GA barring a blocker. Cut from `main` (via a `Release-As: X.Y.Z-rc.1` footer) or a short-lived branch off `main`. `npm i @cashu/cashu-ts@next`.
+- **`experimental` - unstable.** `-experimental` versions (e.g. `5.0.0-experimental.a1b2c3d`). Off the release path: speculative bundles of _unmerged_ PRs for real-world testing; may change or be withdrawn and are **not** guaranteed to ship. Produced by [`scripts/make-experimental.sh`](#the-experimental-line), published under `@experimental`. `npm i @cashu/cashu-ts@experimental`.
 
-From `main` we only ever ship `-rc` (→ `next`) or full GA (→ `latest`); anything `-alpha`/`-beta` is unstable and lives on `experimental`. Rule of thumb: `@next` = "trust it, it's coming"; `@experimental` = "kick the tires, no promises".
+From `main` we only ever ship `-rc` (→ `next`) or full GA (→ `latest`); anything `-experimental` (or `-alpha`/`-beta`) is unstable and lives on `experimental`. Rule of thumb: `@next` = "trust it, it's coming"; `@experimental` = "kick the tires, no promises".
 
-### LTS releases on `vN-dev` (manual)
+### LTS releases on `vN-dev` (release-please)
 
-release-please only watches `main`, so prior-major maintenance releases are cut manually:
+LTS releases work exactly like `main` releases. Each `vN-dev` branch carries its own copy of the release-please workflow pointed at itself (`on.push.branches` + `target-branch` - push workflows run per-branch, so the copies never interfere):
 
-1. Open a release PR targeting `vN-dev`.
-2. Commit or cherry-pick the fix to the `vN-dev` branch.
-3. Bump `package.json` to the next patch version (e.g. `4.5.1`).
-4. Merge the PR into `v4-dev`.
-5. Tag the merged `v4-dev` commit that contains the version bump:
-   ```bash
-   git fetch origin v4-dev --tags
-   git tag -a v4.5.1 origin/v4-dev -m "v4.5.1"
-   git push origin v4.5.1
-   ```
-6. Create a GitHub Release from the tag (or use `workflow_dispatch` on the publish workflow with the tag).
-7. The publish workflow detects major version 4 and publishes to npm with the `v4-lts` dist-tag.
+1. Fixes land on `main` and reach `vN-dev` via `backport vN-dev` labels (see [Branching model](#branching-model)).
+2. Each backport merged into `vN-dev` creates or updates that branch's Release PR (e.g. `chore(v4-dev): release 4.6.1`), aggregating the changelog and computing the next version from the conventional commits.
+3. Merging the Release PR is the release action: it tags, publishes the GitHub Release, and `version.yml` pushes to npm with the dist-tag derived from `LATEST_MAJOR` (`latest` while the major is current, `vN-lts` after).
+
+No manual version bumps, tags, or GitHub Releases - and never commit directly to a `vN-dev` branch.
+
+> **Publish routing note:** release-triggered workflows always run from `main`'s `version.yml` (release events execute the default branch's workflow files), so `LATEST_MAJOR` only ever needs updating on `main`. The `version.yml` and `release-please.yml` copies on `vN-dev` branches are inert except for the `release-please.yml` branch pointer described above.
 
 ### npm dist-tags
 
 `version.yml` derives the dist-tag from the version being published (checked in this order):
 
-- `-beta` / `-alpha` → `experimental` (unstable)
+- `-experimental` / `-beta` / `-alpha` → `experimental` (unstable)
 - `-rc` → `next` (release candidate)
 - Major equal to `LATEST_MAJOR` (a workflow-level env var) → `latest`
 - Any other major → `vN-lts`
@@ -371,25 +366,39 @@ release-please only watches `main`, so prior-major maintenance releases are cut 
 | Version            | Tag            | Stability                     | Install                                    |
 | ------------------ | -------------- | ----------------------------- | ------------------------------------------ |
 | Current major (GA) | `latest`       | stable                        | `npm install @cashu/cashu-ts`              |
-| `-rc`              | `next`         | release candidate — will ship | `npm install @cashu/cashu-ts@next`         |
-| `-beta` / `-alpha` | `experimental` | unstable — may change/vanish  | `npm install @cashu/cashu-ts@experimental` |
+| `-rc`              | `next`         | release candidate - will ship | `npm install @cashu/cashu-ts@next`         |
+| `-experimental`    | `experimental` | unstable - may change/vanish  | `npm install @cashu/cashu-ts@experimental` |
 | Prior major        | `vN-lts`       | maintenance                   | `npm install @cashu/cashu-ts@v3-lts`       |
 
-> `latest` is governed **solely** by `LATEST_MAJOR` in `version.yml`. Any major that is not `LATEST_MAJOR` (and is not a prerelease) falls through to `vN-lts` and can never accidentally become `latest`. `experimental` and `next` are separate channels: a `-beta`/`-alpha` never lands on `next`, and neither ever becomes `latest`.
+> `latest` is governed **solely** by `LATEST_MAJOR` in `version.yml`. Any major that is not `LATEST_MAJOR` (and is not a prerelease) falls through to `vN-lts` and can never accidentally become `latest`. `experimental` and `next` are separate channels: an `-experimental` build never lands on `next`, and neither ever becomes `latest`.
 
 ### Major transitions
 
 Promoting a new major happens in two steps:
 
-1. **Incoming major lands on `main`.** release-please proposes the new major; cut release candidates (`-rc`), which publish to `next`. Leave `LATEST_MAJOR` unchanged so `latest` keeps pointing at the outgoing major, and start cutting the outgoing major's maintenance releases from its `vN-dev` branch.
-2. **GA.** Bump `LATEST_MAJOR` in `version.yml` (one-line PR) and cut the release on `main` — it publishes to `latest`, and the previous major automatically drops to `vN-lts`. Update the branch table above.
+1. **Incoming major lands on `main`.** release-please proposes the new major; cut release candidates (`-rc`), which publish to `next`. Leave `LATEST_MAJOR` unchanged so `latest` keeps pointing at the outgoing major. Cut the outgoing major's `vN-dev` branch; in its first commit, point that branch's `release-please.yml` copy at itself (`on.push.branches` and `target-branch`), and create the `backport vN-dev` label. Maintenance releases then flow from the branch automatically.
+2. **GA.** Bump `LATEST_MAJOR` in `version.yml` (one-line PR on `main` - the only place it matters) and cut the release on `main` - it publishes to `latest`, and the previous major automatically drops to `vN-lts`. Update the branch table above.
+3. **Docs site switchover.** The typedoc deploy overlays gh-pages (`keep_files: true`, so `/coverage` and `/mutation` survive between deploys) - which means pages removed by the new major's docs linger until cleaned. Everything on gh-pages is a regenerable build artifact, so the clean is nuke-and-rebuild:
+
+   ```bash
+   git push origin --delete gh-pages          # stale site gone (Pages setting survives)
+   gh workflow run typedoc.yml --ref vX.Y.Z   # rebuilds docs root + CNAME + coverage
+   gh workflow run mutation-testing-weekly.yml # rebuilds /mutation (close the extra report issue)
+   ```
+
+   Site 404s for the few minutes between delete and redeploy. Also retarget typedoc.yml's tag trigger (`v4.*`) to the new major.
+
+   ⚠️ **Always dispatch typedoc with `--ref <latest release tag of the npm-latest major>`.** A bare dispatch builds from `main` - wrong whenever `main` is ahead of `latest` (e.g. during an rc phase, the site would show unreleased next-major docs).
+
+   ⚠️ **typedoc.yml changes must land on the branch releases are tagged from.** Tag-triggered (and tag-ref'd) runs execute the workflow file _at that ref_, so edits to `main`'s copy never affect release deploys - keep `v4-dev`'s copy in sync (e.g. the `keep_files: true` setting protecting `/coverage` and `/mutation`).
 
 ### Notes on Versioning
 
 - Follow **Conventional Commits** to ensure correct version bumps.
 - Breaking API changes must be clearly marked (`feat!` / `fix!` or `BREAKING CHANGE:`) to trigger a major version bump.
-- Version numbers on `main` are determined automatically by release-please; contributors should not attempt to control versions directly.
-- LTS and RC versions are bumped manually in `package.json`.
+- Version numbers on `main` and `vN-dev` branches are determined automatically by each branch's release-please; contributors should not attempt to control versions directly.
+- RC cadence on `main` is controlled with `Release-As:` commit footers; nothing is bumped by hand in `package.json`.
+- To amend what release-please reads from a squash commit (add a missed changelog entry, split one commit into several lines, or hide a noisy one), put a `BEGIN_COMMIT_OVERRIDE ... END_COMMIT_OVERRIDE` block in the PR body before merging. Per-commit, not retroactive; see #748 for a worked example.
 
 ## Troubleshooting (common issues)
 

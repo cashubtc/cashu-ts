@@ -1,12 +1,14 @@
 import { test, describe, expect } from 'vitest';
+
 import {
   decodePaymentRequest,
   OutputData,
   PaymentRequest,
-  PaymentRequestTransport,
   PaymentRequestTransportType,
-  NUT10Option,
+  type NUT10Option,
 } from '../../src/index';
+import { encodeBech32m } from '../../src/utils/bech32m';
+import { encodeTLV } from '../../src/utils/tlv';
 
 describe('payment requests', () => {
   test('encode payment requests', async () => {
@@ -16,7 +18,7 @@ describe('payment requests', () => {
           type: PaymentRequestTransportType.NOSTR,
           target: 'asd',
           tags: [['n', '17']],
-        } as PaymentRequestTransport,
+        },
       ],
       '4840f51e',
       1000,
@@ -28,7 +30,7 @@ describe('payment requests', () => {
         kind: 'P2PK',
         data: 'pubkey',
         tags: [['tag', 'tag-value']],
-      } as NUT10Option,
+      },
     );
     const pr = request.toEncodedRequest();
     expect(pr).toBeDefined();
@@ -86,7 +88,7 @@ describe('payment requests', () => {
         {
           type: PaymentRequestTransportType.POST,
           target: 'https://example.com/pay',
-        } as PaymentRequestTransport,
+        },
       ],
       'bigint_test',
       largeAmount,
@@ -327,6 +329,58 @@ describe('payment requests', () => {
     });
   });
 
+  describe('toRawRequest', () => {
+    test('omits every optional field, including the tri-state singleUse', () => {
+      // A request built with no arguments carries no optional fields; toStrictEqual
+      // distinguishes an absent key from one explicitly set to undefined, so this
+      // pins each `if (this.field)` guard as well as the singleUse tri-state.
+      const request = new PaymentRequest();
+      expect(request.singleUse).toBeUndefined();
+      expect(request.toRawRequest()).toStrictEqual({});
+    });
+
+    test('emits only the fields that are set', () => {
+      const request = new PaymentRequest(undefined, 'the-id', 1000, 'sat', undefined, undefined);
+      expect(request.toRawRequest()).toStrictEqual({ i: 'the-id', a: 1000n, u: 'sat' });
+    });
+  });
+
+  describe('toEncodedCreqA', () => {
+    test('produces the creqA (CBOR) encoding, identical to toEncodedRequest', () => {
+      const request = new PaymentRequest(
+        [{ type: PaymentRequestTransportType.POST, target: 'https://pay.example' }],
+        'creqa-id',
+        1000,
+        'sat',
+      );
+      const encoded = request.toEncodedCreqA();
+      expect(encoded.startsWith('creqA')).toBe(true);
+      expect(encoded).toBe(request.toEncodedRequest());
+
+      const decoded = decodePaymentRequest(encoded);
+      expect(decoded.id).toBe('creqa-id');
+      expect(decoded.amount?.equals(1000)).toBeTruthy();
+    });
+  });
+
+  describe('getTransport', () => {
+    test('returns undefined when the request has no transports', () => {
+      const request = new PaymentRequest(undefined, 'id');
+      expect(request.getTransport(PaymentRequestTransportType.NOSTR)).toBeUndefined();
+    });
+
+    test('matches on transport type and returns undefined for an absent type', () => {
+      const request = new PaymentRequest(
+        [{ type: PaymentRequestTransportType.POST, target: 'https://pay.example' }],
+        'id',
+      );
+      expect(request.getTransport(PaymentRequestTransportType.NOSTR)).toBeUndefined();
+      expect(request.getTransport(PaymentRequestTransportType.POST)?.target).toBe(
+        'https://pay.example',
+      );
+    });
+  });
+
   describe('toEncodedCreqB - creqB format (TLV + bech32m)', () => {
     test('encode and decode basic payment request with nostr transport', () => {
       const pr = new PaymentRequest(
@@ -426,7 +480,7 @@ describe('payment requests', () => {
             ['timeout', '7200'],
             ['refund', '03abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890cd'],
           ],
-        } as NUT10Option,
+        },
       );
 
       const encoded = pr.toEncodedCreqB();
@@ -460,7 +514,7 @@ describe('payment requests', () => {
           kind: 'P2PK',
           data: '02abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab',
           tags: [],
-        } as NUT10Option,
+        },
       );
 
       const decoded = PaymentRequest.fromEncodedRequest(pr.toEncodedCreqB());
@@ -468,6 +522,17 @@ describe('payment requests', () => {
       // Empty tags decode to undefined and fall back to [] on construction.
       expect(decoded.nut10?.kind).toBe('P2PK');
       expect(decoded.nut10?.tags).toStrictEqual([]);
+    });
+
+    test('a creqB without a single_use tag decodes singleUse as undefined (tri-state)', () => {
+      // Craft a TLV that omits the single_use tag to exercise the decode side:
+      // the absent/false/true distinction must survive, so no default is injected.
+      const tlv = encodeTLV({ id: 'noflag', unit: 'sat', mints: ['https://mint.example.com'] });
+      const encoded = encodeBech32m('creqb', tlv).toUpperCase();
+
+      const decoded = PaymentRequest.fromEncodedRequest(encoded);
+      expect(decoded.id).toBe('noflag');
+      expect(decoded.singleUse).toBeUndefined();
     });
 
     test('roundtrip from creqB test vector', () => {
@@ -530,6 +595,13 @@ describe('payment requests', () => {
         requiredRefundSignatures: 1,
         sigFlag: 'SIG_ALL',
       });
+    });
+
+    test('treats an absent tags field as no tags', () => {
+      // NUT10Option types `tags` as required, but a decoded/hand-built option can
+      // arrive without it; the parser must see an empty tag list, not a poison value.
+      const nut10 = { kind: 'P2PK', data: PUBKEY } as unknown as NUT10Option;
+      expect(prWithNut10(nut10).toP2PKOptions()).toEqual({ kind: 'P2PK', data: PUBKEY });
     });
 
     test('preserves non-standard tags as additionalTags', () => {

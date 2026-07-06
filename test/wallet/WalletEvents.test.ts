@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { WalletEvents } from '../../src/wallet/WalletEvents';
-import type { Proof } from '../../src/model/types';
-import { hashToCurve } from '../../src/crypto';
-import { OperationCounters } from '../../src/wallet';
+
 import { Amount } from '../../src';
+import { hashToCurve, hashToCurveBls } from '../../src/crypto';
+import type { Proof } from '../../src/model/types';
+import { type OperationCounters } from '../../src/wallet';
+import { WalletEvents } from '../../src/wallet/WalletEvents';
 
 // Helper: flush microtasks (needed because cancelSafely runs them async)
 const flushMicrotasks = async (n = 2) => {
@@ -645,9 +646,9 @@ describe('WalletEvents', () => {
       });
       const c3 = Promise.resolve(vi.fn());
 
-      g.add(c1);
-      g.add(c2);
-      g.add(c3);
+      void g.add(c1);
+      void g.add(c2);
+      void g.add(c3);
 
       g(); // invoke the composite canceller directly
       expect(g.cancelled).toBe(true);
@@ -660,7 +661,7 @@ describe('WalletEvents', () => {
       expect(inner).toHaveBeenCalled();
 
       const postCancel = vi.fn();
-      g.add(postCancel);
+      void g.add(postCancel);
       await flushMicrotasks();
       expect(postCancel).toHaveBeenCalled();
     });
@@ -668,7 +669,7 @@ describe('WalletEvents', () => {
     it('group canceller is idempotent, only cancels once', async () => {
       const g = events.group();
       const c = vi.fn();
-      g.add(c);
+      void g.add(c);
       g();
       g(); // second call no-op
       await flushMicrotasks();
@@ -677,7 +678,7 @@ describe('WalletEvents', () => {
 
     it('group handles rejected Promise<SubscriptionCanceller> without throwing', async () => {
       const g = events.group();
-      g.add(Promise.reject(new Error('reject-me')));
+      void g.add(Promise.reject(new Error('reject-me')));
       g();
       await flushMicrotasks();
       expect(g.cancelled).toBe(true);
@@ -689,7 +690,7 @@ describe('WalletEvents', () => {
       const throws = vi.fn(() => {
         throw new Error('boom');
       });
-      g.add(throws);
+      void g.add(throws);
       await flushMicrotasks();
       expect(throws).toHaveBeenCalled();
     });
@@ -785,7 +786,7 @@ describe('WalletEvents', () => {
       const g = events.group();
       g(); // cancel first
       const rejected = Promise.reject(new Error('nope'));
-      g.add(rejected);
+      void g.add(rejected);
       await flushMicrotasks();
       expect(g.cancelled).toBe(true);
     });
@@ -823,6 +824,530 @@ describe('WalletEvents', () => {
       expect(() =>
         (we as any)._emitCountersReserved({ keysetId: 'K', start: 0, count: 1 }),
       ).not.toThrow();
+    });
+  });
+
+  // A wallet whose connectWebSocket resolves but never populates webSocketConnection.
+  const makeNullWsWallet = () => ({
+    mint: { connectWebSocket: vi.fn(async () => {}), webSocketConnection: undefined },
+  });
+
+  // A fully controllable mint WS: deliver a PAID to one quote id, or error one id in isolation.
+  // setupFailIds makes createSubscription throw synchronously for those ids (setup rejection).
+  const makeControllableWallet = (setupFailIds: string[] = []) => {
+    const subs = new Map<
+      number,
+      { filters: string[]; cb: (p: any) => void; err: (e: any) => void }
+    >();
+    let nextId = 1;
+    const createSubscription = vi.fn(
+      (sub: { kind: string; filters: string[] }, cb: (p: any) => void, err: (e: any) => void) => {
+        if (sub.filters.some((f) => setupFailIds.includes(f))) {
+          throw new Error(`setup-failed:${sub.filters.join(',')}`);
+        }
+        const id = nextId++;
+        subs.set(id, { filters: sub.filters, cb, err });
+        return id;
+      },
+    );
+    const cancelSubscription = vi.fn((id: number) => {
+      subs.delete(id);
+    });
+    const ws = {
+      createSubscription,
+      cancelSubscription,
+      emitPaid: (quote: string) => {
+        for (const s of subs.values())
+          if (s.filters.includes(quote)) s.cb({ quote, state: 'PAID' });
+      },
+      failFor: (quote: string, error: any) => {
+        for (const s of subs.values()) if (s.filters.includes(quote)) s.err(error);
+      },
+    };
+    const wallet = { mint: { connectWebSocket: vi.fn(async () => {}), webSocketConnection: ws } };
+    return { wallet, ws };
+  };
+
+  describe('error normalization', () => {
+    it('serializes circular error objects without throwing (keeps [Circular])', async () => {
+      const p = events.onceMintPaid('circ');
+      await flushMicrotasks();
+      const ws = mock.mint.webSocketConnection!;
+      const circular: any = { name: 'loop' };
+      circular.self = circular;
+      ws.fail('bolt11_mint_quote', circular);
+      const err = (await p.catch((e) => e)) as Error;
+      // Circular detection must produce a [Circular] marker, not the toString fallback.
+      expect(err.message).toContain('[Circular]');
+      expect(err.message).not.toBe('[object Object]');
+    });
+
+    it('serializes objects with null-valued properties as JSON null', async () => {
+      const p = events.onceMintPaid('nullprop');
+      await flushMicrotasks();
+      const ws = mock.mint.webSocketConnection!;
+      ws.fail('bolt11_mint_quote', { a: null, b: 2 });
+      const err = (await p.catch((e) => e)) as Error;
+      expect(err.message).toContain('"a":null');
+      expect(err.message).not.toBe('[object Object]');
+    });
+
+    it('keeps string errors verbatim (no JSON quoting)', async () => {
+      const p = events.onceMintPaid('strerr');
+      await flushMicrotasks();
+      const ws = mock.mint.webSocketConnection!;
+      ws.fail('bolt11_mint_quote', 'plain-string-error');
+      const err = (await p.catch((e) => e)) as Error;
+      expect(err.message).toBe('plain-string-error');
+    });
+
+    it('attaches the original value as error cause', async () => {
+      const p = events.onceMintPaid('causeerr');
+      await flushMicrotasks();
+      const ws = mock.mint.webSocketConnection!;
+      const original = { code: 7, msg: 'z' };
+      ws.fail('bolt11_mint_quote', original);
+      const err = (await p.catch((e) => e)) as Error & { cause?: unknown };
+      expect(err.cause).toEqual(original);
+    });
+
+    it('abort error carries name AbortError and message Aborted', async () => {
+      const ac = new AbortController();
+      const p = events.onceMintPaid('abmsg', { signal: ac.signal });
+      ac.abort();
+      await expect(p).rejects.toMatchObject({ name: 'AbortError', message: 'Aborted' });
+    });
+  });
+
+  describe('withAbort wiring', () => {
+    it('aborting the signal after subscribing cancels the subscription', async () => {
+      const ac = new AbortController();
+      await events.mintQuoteUpdates(['a'], vi.fn(), vi.fn(), { signal: ac.signal });
+      const ws = mock.mint.webSocketConnection!;
+      expect(ws.cancelSubscription).not.toHaveBeenCalled();
+      ac.abort();
+      await flushMicrotasks();
+      expect(ws.cancelSubscription).toHaveBeenCalled();
+    });
+
+    it('an already-aborted signal cancels the subscription immediately', async () => {
+      const ac = new AbortController();
+      ac.abort();
+      await events.mintQuoteUpdates(['a'], vi.fn(), vi.fn(), { signal: ac.signal });
+      const ws = mock.mint.webSocketConnection!;
+      await flushMicrotasks();
+      expect(ws.cancelSubscription).toHaveBeenCalled();
+    });
+
+    it('the returned canceller detaches the abort listener (no double cancel on later abort)', async () => {
+      const ac = new AbortController();
+      const cancel = await events.mintQuoteUpdates(['a'], vi.fn(), vi.fn(), { signal: ac.signal });
+      const ws = mock.mint.webSocketConnection!;
+      cancel();
+      expect(ws.cancelSubscription).toHaveBeenCalledTimes(1);
+      ac.abort();
+      await flushMicrotasks();
+      expect(ws.cancelSubscription).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('null WebSocket connection', () => {
+    it('mintQuoteUpdates throws a descriptive error when no WS is established', async () => {
+      const ev = new WalletEvents(makeNullWsWallet() as any);
+      await expect(ev.mintQuoteUpdates(['a'], vi.fn(), vi.fn())).rejects.toThrow(
+        'Failed to establish WebSocket connection.',
+      );
+    });
+
+    it('meltQuoteUpdates throws a descriptive error when no WS is established', async () => {
+      const ev = new WalletEvents(makeNullWsWallet() as any);
+      await expect(ev.meltQuoteUpdates(['a'], vi.fn(), vi.fn())).rejects.toThrow(
+        'Failed to establish WebSocket connection.',
+      );
+    });
+
+    it('proofStateUpdates throws a descriptive error when no WS is established', async () => {
+      const ev = new WalletEvents(makeNullWsWallet() as any);
+      const proofs: Proof[] = [
+        { amount: Amount.from(1), id: '00bd033559de27d0', secret: 's', C: 'c' },
+      ];
+      await expect(ev.proofStateUpdates(proofs, vi.fn(), vi.fn())).rejects.toThrow(
+        'Failed to establish WebSocket connection.',
+      );
+    });
+
+    it('onceMintPaid rejects (does not hang) when subscription setup fails', async () => {
+      const ev = new WalletEvents(makeNullWsWallet() as any);
+      await expect(ev.onceMintPaid('q')).rejects.toThrow(
+        'Failed to establish WebSocket connection.',
+      );
+    });
+  });
+
+  describe('BLS keyset proofs', () => {
+    it('derives the subscription filter from the compressed BLS point', async () => {
+      const secret = 's-bls';
+      const proofs: Proof[] = [{ amount: Amount.from(1), id: '0200000000000000', secret, C: 'c' }];
+      const cb = vi.fn();
+      await events.proofStateUpdates(proofs, cb, vi.fn());
+
+      const ws = mock.mint.webSocketConnection!;
+      const [Y] = ws.firstFilters('proof_state');
+      const expected = hashToCurveBls(new TextEncoder().encode(secret)).toHex(true);
+      expect(Y).toBe(expected);
+
+      ws.emitProof({ Y, state: 0 });
+      expect(cb).toHaveBeenCalledWith(expect.objectContaining({ Y }));
+    });
+  });
+
+  describe('waitUntilPaid timeout handling', () => {
+    it('does not arm a timeout when timeoutMs is non-positive', async () => {
+      vi.useFakeTimers();
+      const p = events.onceMintPaid('neg', { timeoutMs: -1 });
+      await flushMicrotasks();
+      vi.advanceTimersByTime(50);
+      const ws = mock.mint.webSocketConnection!;
+      ws.emit('bolt11_mint_quote', { quote: 'neg', state: 'PAID' });
+      await expect(p).resolves.toMatchObject({ quote: 'neg' });
+      vi.useRealTimers();
+    });
+
+    it('clears the timeout timer on resolution', async () => {
+      vi.useFakeTimers();
+      const clearSpy = vi.spyOn(globalThis, 'clearTimeout');
+      const p = events.onceMintPaid('ct', { timeoutMs: 10000 });
+      await flushMicrotasks();
+      const ws = mock.mint.webSocketConnection!;
+      ws.emit('bolt11_mint_quote', { quote: 'ct', state: 'PAID' });
+      await p;
+      expect(clearSpy).toHaveBeenCalled();
+      clearSpy.mockRestore();
+      vi.useRealTimers();
+    });
+
+    it('does not call clearTimeout when no timeout was armed', async () => {
+      vi.useFakeTimers();
+      const clearSpy = vi.spyOn(globalThis, 'clearTimeout');
+      const p = events.onceMintPaid('noct');
+      await flushMicrotasks();
+      const ws = mock.mint.webSocketConnection!;
+      ws.emit('bolt11_mint_quote', { quote: 'noct', state: 'PAID' });
+      await p;
+      expect(clearSpy).not.toHaveBeenCalled();
+      clearSpy.mockRestore();
+      vi.useRealTimers();
+    });
+
+    it('removes the abort listener (by name) on resolution', async () => {
+      const ac = new AbortController();
+      const rmSpy = vi.spyOn(ac.signal, 'removeEventListener');
+      const p = events.onceMintPaid('rmabort', { signal: ac.signal });
+      await flushMicrotasks();
+      const ws = mock.mint.webSocketConnection!;
+      ws.emit('bolt11_mint_quote', { quote: 'rmabort', state: 'PAID' });
+      await p;
+      expect(rmSpy).toHaveBeenCalledWith('abort', expect.any(Function));
+    });
+
+    it('a pre-aborted signal rejects before any subscription is attempted', async () => {
+      const ac = new AbortController();
+      ac.abort();
+      const p = events.onceMintPaid('preab', { signal: ac.signal });
+      await flushMicrotasks();
+      expect(mock.mint.connectWebSocket).not.toHaveBeenCalled();
+      await expect(p).rejects.toMatchObject({ name: 'AbortError' });
+    });
+
+    it('cleans up exactly once (a late error after resolution does not re-cancel)', async () => {
+      const p = events.onceMintPaid('once');
+      await flushMicrotasks();
+      const ws = mock.mint.webSocketConnection!;
+      ws.emit('bolt11_mint_quote', { quote: 'once', state: 'PAID' });
+      ws.fail('bolt11_mint_quote', new Error('late'));
+      await p;
+      await flushMicrotasks(4);
+      expect(ws.cancelSubscription).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('onceAnyMintPaid resource handling', () => {
+    it('does not arm a timeout when timeoutMs is non-positive', async () => {
+      vi.useFakeTimers();
+      const { wallet, ws } = makeControllableWallet();
+      const ev = new WalletEvents(wallet as any);
+      const p = ev.onceAnyMintPaid(['a'], { timeoutMs: -1 });
+      await flushMicrotasks(4);
+      vi.advanceTimersByTime(50);
+      ws.emitPaid('a');
+      await expect(p).resolves.toMatchObject({ id: 'a' });
+      vi.useRealTimers();
+    });
+
+    it('clears the timeout timer on resolution', async () => {
+      vi.useFakeTimers();
+      const clearSpy = vi.spyOn(globalThis, 'clearTimeout');
+      const { wallet, ws } = makeControllableWallet();
+      const ev = new WalletEvents(wallet as any);
+      const p = ev.onceAnyMintPaid(['a'], { timeoutMs: 10000 });
+      await flushMicrotasks(4);
+      ws.emitPaid('a');
+      await p;
+      expect(clearSpy).toHaveBeenCalled();
+      clearSpy.mockRestore();
+      vi.useRealTimers();
+    });
+
+    it('does not call clearTimeout when no timeout was armed', async () => {
+      vi.useFakeTimers();
+      const clearSpy = vi.spyOn(globalThis, 'clearTimeout');
+      const { wallet, ws } = makeControllableWallet();
+      const ev = new WalletEvents(wallet as any);
+      const p = ev.onceAnyMintPaid(['a']);
+      await flushMicrotasks(4);
+      ws.emitPaid('a');
+      await p;
+      expect(clearSpy).not.toHaveBeenCalled();
+      clearSpy.mockRestore();
+      vi.useRealTimers();
+    });
+
+    it('removes the abort listener (by name) on resolution', async () => {
+      const ac = new AbortController();
+      const rmSpy = vi.spyOn(ac.signal, 'removeEventListener');
+      const { wallet, ws } = makeControllableWallet();
+      const ev = new WalletEvents(wallet as any);
+      const p = ev.onceAnyMintPaid(['a', 'b'], { signal: ac.signal });
+      await flushMicrotasks(4);
+      ws.emitPaid('a');
+      await expect(p).resolves.toMatchObject({ id: 'a' });
+      expect(rmSpy).toHaveBeenCalledWith('abort', expect.any(Function));
+    });
+
+    it('a pre-aborted signal rejects before any subscription is attempted', async () => {
+      const ac = new AbortController();
+      ac.abort();
+      const { wallet } = makeControllableWallet();
+      const ev = new WalletEvents(wallet as any);
+      const p = ev.onceAnyMintPaid(['a', 'b'], { signal: ac.signal });
+      await flushMicrotasks();
+      expect(wallet.mint.connectWebSocket).not.toHaveBeenCalled();
+      await expect(p).rejects.toMatchObject({ name: 'AbortError' });
+    });
+  });
+
+  describe('onceAnyMintPaid error semantics', () => {
+    it('by default ignores a single erroring stream and still resolves on another PAID', async () => {
+      const { wallet, ws } = makeControllableWallet();
+      const ev = new WalletEvents(wallet as any);
+      const p = ev.onceAnyMintPaid(['a', 'b']);
+      await flushMicrotasks(4);
+      ws.failFor('a', new Error('a-err'));
+      ws.emitPaid('b');
+      await expect(p).resolves.toMatchObject({ id: 'b' });
+    });
+
+    it('failOnError rejects on the first stream error even if another could pay', async () => {
+      const { wallet, ws } = makeControllableWallet();
+      const ev = new WalletEvents(wallet as any);
+      const p = ev.onceAnyMintPaid(['a', 'b'], { failOnError: true });
+      await flushMicrotasks(4);
+      ws.failFor('a', new Error('a-err'));
+      ws.emitPaid('b');
+      await expect(p).rejects.toThrow('a-err');
+    });
+
+    it('rejects with a descriptive error when every stream errors (undefined reasons)', async () => {
+      const { wallet, ws } = makeControllableWallet();
+      const ev = new WalletEvents(wallet as any);
+      const p = ev.onceAnyMintPaid(['a', 'b']);
+      await flushMicrotasks(4);
+      ws.failFor('a', undefined);
+      ws.failFor('b', undefined);
+      await expect(p).rejects.toThrow('No subscriptions remaining');
+    });
+
+    it('by default tolerates a setup failure on one id and resolves when another pays', async () => {
+      const { wallet, ws } = makeControllableWallet(['boom']);
+      const ev = new WalletEvents(wallet as any);
+      const p = ev.onceAnyMintPaid(['boom', 'ok']);
+      await flushMicrotasks(4);
+      ws.emitPaid('ok');
+      await expect(p).resolves.toMatchObject({ id: 'ok' });
+    });
+
+    it('rejects with the last setup error when every subscription fails to register', async () => {
+      const { wallet } = makeControllableWallet(['x', 'y']);
+      const ev = new WalletEvents(wallet as any);
+      const p = ev.onceAnyMintPaid(['x', 'y']);
+      await expect(p).rejects.toThrow(/setup-failed/);
+    });
+
+    it('failOnError rejects immediately on a setup failure, ignoring a pending payer', async () => {
+      const { wallet, ws } = makeControllableWallet(['boom']);
+      const ev = new WalletEvents(wallet as any);
+      const p = ev.onceAnyMintPaid(['boom', 'ok'], { failOnError: true });
+      await flushMicrotasks(4);
+      ws.emitPaid('ok');
+      await expect(p).rejects.toThrow(/setup-failed/);
+    });
+  });
+
+  describe('proofStatesStream buffering edges', () => {
+    it('treats a non-positive maxBuffer as unbounded', async () => {
+      const proofs: Proof[] = [{ amount: Amount.from(1), id: 'i', secret: 's', C: 'c' }];
+      const dropped: any[] = [];
+      const ac = new AbortController();
+      const iter = events.proofStatesStream(proofs, {
+        maxBuffer: -1,
+        signal: ac.signal,
+        onDrop: (d) => dropped.push(d),
+      });
+      const out: any[] = [];
+      const consumer = (async () => {
+        for await (const x of iter) out.push(x);
+        return out;
+      })();
+
+      await flushMicrotasks();
+      const ws = mock.mint.webSocketConnection!;
+      const [Y] = ws.firstFilters('proof_state');
+      ws.emitProof({ Y, n: 1 });
+      ws.emitProof({ Y, n: 2 });
+      ac.abort();
+
+      const result = await consumer;
+      expect(dropped).toEqual([]);
+      expect(result).toEqual([
+        expect.objectContaining({ n: 1 }),
+        expect.objectContaining({ n: 2 }),
+      ]);
+    });
+
+    it("drop:'newest' keeps the buffered head, not the tail", async () => {
+      const proofs: Proof[] = [{ amount: Amount.from(1), id: 'i', secret: 's', C: 'c' }];
+      const dropped: any[] = [];
+      const ac = new AbortController();
+      const iter = events.proofStatesStream(proofs, {
+        maxBuffer: 2,
+        drop: 'newest',
+        signal: ac.signal,
+        onDrop: (d) => dropped.push(d),
+      });
+      const out: any[] = [];
+      const consumer = (async () => {
+        for await (const x of iter) out.push(x);
+        return out;
+      })();
+
+      await flushMicrotasks();
+      const ws = mock.mint.webSocketConnection!;
+      const [Y] = ws.firstFilters('proof_state');
+      ws.emitProof({ Y, n: 1 });
+      ws.emitProof({ Y, n: 2 });
+      ws.emitProof({ Y, n: 3 });
+      ac.abort();
+
+      const result = await consumer;
+      expect(dropped).toEqual([expect.objectContaining({ n: 3 })]);
+      expect(result).toEqual([
+        expect.objectContaining({ n: 1 }),
+        expect.objectContaining({ n: 2 }),
+      ]);
+    });
+
+    it('removes the abort listener (by name) when the stream completes', async () => {
+      const proofs: Proof[] = [{ amount: Amount.from(1), id: 'i', secret: 's', C: 'c' }];
+      const ac = new AbortController();
+      const rmSpy = vi.spyOn(ac.signal, 'removeEventListener');
+      const iter = events.proofStatesStream(proofs, { signal: ac.signal });
+      const consumer = (async () => {
+        for await (const _ of iter) break;
+      })();
+
+      await flushMicrotasks();
+      const ws = mock.mint.webSocketConnection!;
+      const [Y] = ws.firstFilters('proof_state');
+      ws.emitProof({ Y, state: 0 });
+      await consumer;
+      await flushMicrotasks();
+      expect(rmSpy).toHaveBeenCalledWith('abort', expect.any(Function));
+    });
+  });
+
+  describe('group() lifecycle', () => {
+    it('a fresh group is not cancelled', () => {
+      const g = events.group();
+      expect(g.cancelled).toBe(false);
+    });
+
+    it('added cancellers are held until the group is invoked', async () => {
+      const g = events.group();
+      const c = vi.fn();
+      void g.add(c);
+      await flushMicrotasks();
+      expect(c).not.toHaveBeenCalled();
+      g();
+      await flushMicrotasks();
+      expect(c).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('waitUntilPaid default timeout message', () => {
+    // The public onceMint/MeltPaid wrappers always pass a message, so the internal default is only
+    // reachable directly. Assert the fallback text used when a caller omits it.
+    it('rejects with the built-in default message when no timeoutMsg is given', async () => {
+      vi.useFakeTimers();
+      const subscribeFn = () => Promise.resolve(() => {}); // never resolves the paid callback
+      const p = (events as any).waitUntilPaid(subscribeFn, 'id', { timeoutMs: 5 });
+      await flushMicrotasks();
+      vi.advanceTimersByTime(6);
+      await expect(p).rejects.toThrow('Timeout waiting for paid');
+      vi.useRealTimers();
+    });
+  });
+
+  describe('onceAnyMintPaid all-setup-fail fallback', () => {
+    // Every subscription rejects with no error value, so lastError stays nullish and the descriptive
+    // fallback message must surface instead of an undefined rejection.
+    it('rejects with "No subscriptions remaining" when all setups fail without an error', async () => {
+      // connectWebSocket rejects with a nullish reason, so each subscription setup rejects with no
+      // usable error and lastError stays nullish.
+      const wallet = {
+        mint: {
+          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- nullish reason is the case under test
+          connectWebSocket: vi.fn(() => Promise.reject(undefined)),
+          webSocketConnection: undefined,
+        },
+      };
+      const ev = new WalletEvents(wallet as any);
+      await expect(ev.onceAnyMintPaid(['a', 'b'])).rejects.toThrow('No subscriptions remaining');
+    });
+  });
+
+  describe('countersReserved error logging', () => {
+    // A throwing handler is swallowed, but the failure must be logged with the event name so callers
+    // can tell which hook failed.
+    it('logs the failure with the countersReserved event tag when a handler throws', () => {
+      const logger = {
+        warn: vi.fn(),
+        error: vi.fn(),
+        info: vi.fn(),
+        debug: vi.fn(),
+        trace: vi.fn(),
+        log: vi.fn(),
+      };
+      const we = new WalletEvents({ logger } as any);
+      we.countersReserved(() => {
+        throw new Error('boom');
+      });
+
+      (we as any)._emitCountersReserved({ keysetId: 'K', start: 0, count: 1, next: 1 });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        'callback failed',
+        expect.objectContaining({ event: 'countersReserved' }),
+      );
     });
   });
 });

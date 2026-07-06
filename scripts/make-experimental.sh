@@ -102,8 +102,9 @@ done
 echo ">> $BRANCH rebuilt: $BASE + ${PRS[*]}"
 
 if [[ "${PUBLISH:-}" == "1" ]]; then
-  # Version = main's core version + bundle sha, e.g. 5.0.0-beta.a1b2c3d. The
-  # -beta identifier + the explicit @experimental tag mean plain `npm i cashu-ts`
+  # Version = main's core version + bundle sha, e.g. 5.0.0-experimental.a1b2c3d.
+  # The -experimental identifier (matches the dist-tag; beta/rc stay reserved for
+  # real prereleases) + the explicit @experimental tag mean plain `npm i cashu-ts`
   # never picks it up (@latest unaffected). Unique per bundle (sha changes with
   # the PRs); re-publishing an identical bundle is a harmless no-op (npm rejects
   # the duplicate version).
@@ -119,7 +120,7 @@ if [[ "${PUBLISH:-}" == "1" ]]; then
   [[ "${SKIP_TEST:-}" == "1" ]] || npx vitest run --project node
   ver=$(node -p "require('./package.json').version")
   core=${ver%%-*}
-  betaver="${core}-beta.$(git rev-parse --short HEAD)"
+  expver="${core}-experimental.$(git rev-parse --short HEAD)"
 
   # Record what's in this build so testers know what they're testing against.
   # PR numbers (+ titles if `gh` is installed) go into an `experimentalBundle` field that
@@ -137,10 +138,10 @@ if [[ "${PUBLISH:-}" == "1" ]]; then
   prs_csv=$(IFS=,; echo "${PRS[*]}")
   node -e "const fs=require('fs'),p=require('./package.json');p.experimentalBundle={base:'$BASE@$BASE_SHA',prs:[$prs_csv]};fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
 
-  echo ">> publishing $betaver @experimental"
-  npm version "$betaver" --no-git-tag-version --allow-same-version
-  git commit -aqm "chore(experimental): $betaver" --no-verify   # throwaway; skip husky/commitlint
+  echo ">> publishing $expver @experimental"
+  npm version "$expver" --no-git-tag-version --allow-same-version
+  git commit -aqm "chore(experimental): $expver" --no-verify   # throwaway; skip husky/commitlint
   npm publish --tag experimental
 
-  printf '\n=== announce ===\nnpm i cashu-ts@%s   (tag: experimental)\nbundled on %s@%s:\n%s\n' "$betaver" "$BASE" "$BASE_SHA" "$summary"
+  printf '\n=== announce ===\nnpm i cashu-ts@%s   (tag: experimental)\nbundled on %s@%s:\n%s\n' "$expver" "$BASE" "$BASE_SHA" "$summary"
 fi

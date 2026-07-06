@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { Amount, Mint, Wallet, type MintKeys, Keyset, Proof } from '../../src';
+
+import { Amount, Mint, Wallet, type MintKeys, Keyset, type Proof } from '../../src';
 import { MINTCACHE } from '../consts';
 
 type ReqArgs = {
@@ -13,7 +14,7 @@ const makeRequestSpy = <T>(payload: T) => {
   const calls: ReqArgs[] = [];
   const req = async (options: ReqArgs) => {
     if (options.endpoint.endsWith('/v1/info')) {
-      return MINTCACHE.mintInfo as any;
+      return MINTCACHE.mintInfo;
     }
     calls.push({
       endpoint: options.endpoint,
@@ -67,7 +68,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
     const customRequest = async (options: ReqArgs) => {
       calls.push(options.endpoint);
       if (options.endpoint.endsWith('/v1/info')) {
-        return MINTCACHE.mintInfo as any;
+        return MINTCACHE.mintInfo;
       }
       throw new Error('unexpected endpoint');
     };
@@ -220,7 +221,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
     const { req, calls } = makeRequestSpy(response);
     const mint = new Mint(mintUrl, { customRequest: req });
     const meltQuotePayload = { request: 'lno1offer...', unit: 'sat', amount: 100 };
-    const res = await mint.createMeltQuoteBolt12(meltQuotePayload as any);
+    const res = await mint.createMeltQuoteBolt12(meltQuotePayload);
     expect(res.quote).toBe(response.quote);
     expect(res.amount).toEqual(Amount.from(response.amount));
     expect(res.fee_reserve).toEqual(Amount.from(response.fee_reserve));
@@ -308,7 +309,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
     const { req, calls } = makeRequestSpy(response);
     const mint = new Mint(mintUrl, { customRequest: req });
     const meltPayload = { quote: 'm123', inputs: [], outputs: [] };
-    const res = await mint.meltBolt12(meltPayload as any);
+    const res = await mint.meltBolt12(meltPayload);
     expect(res.quote).toBe(response.quote);
     expect(res.amount).toEqual(Amount.from(response.amount));
     const c = calls[0];
@@ -336,7 +337,7 @@ describe('Mint (BOLT12) – instance methods', () => {
       amount: 21,
       unit: 'sat',
       pubkey: '02abcd',
-    } as any);
+    });
     expect(res).toEqual(response);
     expect(spy).toHaveBeenCalledWith({ amount: 21, unit: 'sat', pubkey: '02abcd' });
   });
@@ -359,7 +360,7 @@ describe('Mint (BOLT12) – instance methods', () => {
     const s3 = vi
       .spyOn(mint, 'checkMeltQuoteBolt12')
       .mockResolvedValue(responses.checkMeltQuoteBolt12 as any);
-    const s4 = vi.spyOn(mint, 'mintBolt12').mockResolvedValue(responses.mintBolt12 as any);
+    const s4 = vi.spyOn(mint, 'mintBolt12').mockResolvedValue(responses.mintBolt12);
     const s5 = vi.spyOn(mint, 'meltBolt12').mockResolvedValue(responses.meltBolt12 as any);
     expect(
       await mint.createMeltQuoteBolt12({
@@ -480,7 +481,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
     const wallet = new Wallet(mint);
     wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
     const ks = makeKeysetFromCache(MINTCACHE.keys[0]);
-    vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValue(ks as any);
+    vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValue(ks);
     vi.spyOn(wallet as any, 'createOutputData').mockReturnValue([]);
     const meltQuote = {
       quote: 'm1',
@@ -513,7 +514,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
     const wallet = new Wallet(mint);
     wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
     const ks = makeKeysetFromCache(MINTCACHE.keys[0]);
-    vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValue(ks as any);
+    vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValue(ks);
     vi.spyOn(wallet as any, 'createOutputData').mockReturnValue([
       {
         blindedMessage: { amount: Amount.from(16), B_: 'B1', id: '009a1f293253e41e' },
@@ -573,7 +574,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
     const wallet = new Wallet(mint);
     wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
     const ks = makeKeysetFromCache(MINTCACHE.keys[0]);
-    vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValue(ks as any);
+    vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValue(ks);
     vi.spyOn(wallet as any, 'createOutputData').mockReturnValue([
       {
         blindedMessage: { amount: Amount.from(16), B_: 'B1', id: '009a1f293253e41e' },
