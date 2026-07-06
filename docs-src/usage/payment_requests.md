@@ -82,24 +82,22 @@ See [Create P2PK](./create_p2pk.md) for the builder.
 
 ## Create and encode a request (receiver side)
 
-The `PaymentRequest` constructor is positional. Each method `fee` accepts any `AmountLike` (number, bigint, string, or `Amount`).
+The `PaymentRequest` constructor takes an options object whose keys mirror the class properties; set only what you need. `amount` and each method `fee` accept any `AmountLike` (number, bigint, string, or `Amount`).
 
 ```typescript
 import { PaymentRequest, PaymentRequestTransportType } from '@cashu/cashu-ts';
 
-const request = new PaymentRequest(
-  [{ type: PaymentRequestTransportType.POST, target: 'https://pay.example.com' }], // transport
-  'inv-123', // id
-  100, // amount
-  'sat', // unit
-  ['https://my.mint'], // mints
-  'Coffee', // description
-  undefined, // singleUse (absent / true / false)
-  undefined, // nut10 locking condition
-  true, // mintsPreferred → advisory list
-  true, // netFees (nf) → amount is net of input fees
-  [{ method: 'bolt11' }, { method: 'bolt12', fee: 5 }], // supportedMethods (sm)
-);
+const request = new PaymentRequest({
+  transport: [{ type: PaymentRequestTransportType.POST, target: 'https://pay.example.com' }],
+  id: 'inv-123',
+  amount: 100,
+  unit: 'sat',
+  mints: ['https://my.mint'],
+  description: 'Coffee',
+  mintsPreferred: true, // advisory list
+  netFees: true, // amount is net of input fees
+  supportedMethods: [{ method: 'bolt11' }, { method: 'bolt12', fee: 5 }],
+});
 
 request.toEncodedCreqA(); // 'creqA…'  (CBOR)
 request.toEncodedCreqB(); // 'CREQB1…' (TLV + Bech32m, best for QR)

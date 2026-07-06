@@ -1593,15 +1593,12 @@ export function parseSecret(secret: string | Secret): Secret;
 
 // @public (undocumented)
 class PaymentRequest_2 {
-    constructor(transport?: PaymentRequestTransport[] | undefined, id?: string | undefined, amount?: AmountLike, unit?: string | undefined, mints?: string[] | undefined, description?: string | undefined, singleUse?: boolean, nut10?: NUT10Option | undefined, mintsPreferred?: boolean, netFees?: boolean, supportedMethods?: Array<{
-        method: string;
-        fee?: AmountLike;
-    }>);
+    constructor(options?: PaymentRequestOptions);
     // (undocumented)
     amount?: Amount;
     amountToSend(mint: string, mintMethods?: string[]): Amount;
     // (undocumented)
-    description?: string | undefined;
+    description?: string;
     feesFor(mint: string, mintMethods?: string[]): Amount;
     // (undocumented)
     static fromEncodedRequest(encodedRequest: string): PaymentRequest_2;
@@ -1609,16 +1606,16 @@ class PaymentRequest_2 {
     // (undocumented)
     getTransport(type: PaymentRequestTransportType): PaymentRequestTransport | undefined;
     // (undocumented)
-    id?: string | undefined;
+    id?: string;
     get isMintListStrict(): boolean | undefined;
     // (undocumented)
-    mints?: string[] | undefined;
+    mints?: string[];
     // (undocumented)
     mintsPreferred?: boolean;
     // (undocumented)
     netFees?: boolean;
     // (undocumented)
-    nut10?: NUT10Option | undefined;
+    nut10?: NUT10Option;
     // (undocumented)
     singleUse?: boolean;
     // (undocumented)
@@ -1631,11 +1628,29 @@ class PaymentRequest_2 {
     // (undocumented)
     toRawRequest(): RawPaymentRequest;
     // (undocumented)
-    transport?: PaymentRequestTransport[] | undefined;
+    transport?: PaymentRequestTransport[];
     // (undocumented)
-    unit?: string | undefined;
+    unit?: string;
 }
 export { PaymentRequest_2 as PaymentRequest }
+
+// @public
+export type PaymentRequestOptions = {
+    id?: string;
+    amount?: AmountLike;
+    unit?: string;
+    mints?: string[];
+    description?: string;
+    transport?: PaymentRequestTransport[];
+    singleUse?: boolean;
+    nut10?: NUT10Option;
+    mintsPreferred?: boolean;
+    netFees?: boolean;
+    supportedMethods?: Array<{
+        method: string;
+        fee?: AmountLike;
+    }>;
+};
 
 // @public (undocumented)
 export type PaymentRequestPayload = {

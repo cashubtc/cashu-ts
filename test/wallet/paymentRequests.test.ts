@@ -12,26 +12,26 @@ import { encodeTLV } from '../../src/utils/tlv';
 
 describe('payment requests', () => {
   test('encode payment requests', async () => {
-    const request = new PaymentRequest(
-      [
+    const request = new PaymentRequest({
+      transport: [
         {
           type: PaymentRequestTransportType.NOSTR,
           target: 'asd',
           tags: [['n', '17']],
         },
       ],
-      '4840f51e',
-      1000,
-      'sat',
-      ['https://mint.com'],
-      'test',
-      true, // single use
-      {
+      id: '4840f51e',
+      amount: 1000,
+      unit: 'sat',
+      mints: ['https://mint.com'],
+      description: 'test',
+      singleUse: true,
+      nut10: {
         kind: 'P2PK',
         data: 'pubkey',
         tags: [['tag', 'tag-value']],
       },
-    );
+    });
     const pr = request.toEncodedRequest();
     expect(pr).toBeDefined();
     const decodedRequest = decodePaymentRequest(pr);
@@ -83,18 +83,18 @@ describe('payment requests', () => {
   });
   test('encode and decode payment request with bigint amount (uint64)', async () => {
     const largeAmount = 2n ** 53n + 1n; // exceeds Number.MAX_SAFE_INTEGER
-    const request = new PaymentRequest(
-      [
+    const request = new PaymentRequest({
+      transport: [
         {
           type: PaymentRequestTransportType.POST,
           target: 'https://example.com/pay',
         },
       ],
-      'bigint_test',
-      largeAmount,
-      'sat',
-      ['https://mint.com'],
-    );
+      id: 'bigint_test',
+      amount: largeAmount,
+      unit: 'sat',
+      mints: ['https://mint.com'],
+    });
     const pr = request.toEncodedRequest();
     expect(pr).toBeDefined();
     const decoded = decodePaymentRequest(pr);
@@ -124,19 +124,15 @@ describe('payment requests', () => {
       'CREQB1QYQP2URJV4NX2UNJV4J97EN9V40K6ET5DPHKGUCZQQYQQQQQQQQQQQRYQVQQZQQ9QQVXSAR5WPEN5TE0D45KUAPWV4UXZMTSD3JJUCM0D5YSQQGPPGQQZQGTQQYSZQQXVFHKCAP3XY9SQ9QPQQRXYMMVWSCNYQSQPQQQQQQQQQQQQPGZ0CGYS';
 
     test('encode/decode preferred mint list with net fees and supported methods (creqA)', () => {
-      const request = new PaymentRequest(
-        undefined,
-        'preferred_fee_methods',
-        100,
-        'sat',
-        ['https://mint.example.com'],
-        undefined,
-        undefined, // singleUse absent
-        undefined,
-        true, // mintsPreferred (advisory list)
-        true, // netFees
-        [{ method: 'bolt11' }, { method: 'bolt12', fee: 5 }], // supportedMethods
-      );
+      const request = new PaymentRequest({
+        id: 'preferred_fee_methods',
+        amount: 100,
+        unit: 'sat',
+        mints: ['https://mint.example.com'],
+        mintsPreferred: true, // advisory list
+        netFees: true,
+        supportedMethods: [{ method: 'bolt11' }, { method: 'bolt12', fee: 5 }],
+      });
 
       const pr = request.toEncodedRequest();
       expect(pr).toBe(SPEC_CREQA);
@@ -149,19 +145,15 @@ describe('payment requests', () => {
     });
 
     test('encode/decode preferred mint list with net fees and supported methods (creqB)', () => {
-      const request = new PaymentRequest(
-        undefined,
-        'preferred_fee_methods',
-        100,
-        'sat',
-        ['https://mint.example.com'],
-        undefined,
-        undefined, // singleUse absent
-        undefined,
-        true,
-        true,
-        [{ method: 'bolt11' }, { method: 'bolt12', fee: 5 }],
-      );
+      const request = new PaymentRequest({
+        id: 'preferred_fee_methods',
+        amount: 100,
+        unit: 'sat',
+        mints: ['https://mint.example.com'],
+        mintsPreferred: true,
+        netFees: true,
+        supportedMethods: [{ method: 'bolt11' }, { method: 'bolt12', fee: 5 }],
+      });
 
       const encoded = request.toEncodedCreqB();
       expect(encoded).toBe(SPEC_CREQB);
@@ -175,19 +167,14 @@ describe('payment requests', () => {
 
     test('feesFor prices the lowest applicable per-method (mf) fee', () => {
       // Preferred list (mp=true), bolt11 carries no fee, bolt12 carries mf=5.
-      const pr = new PaymentRequest(
-        undefined,
-        'fees',
-        100,
-        'sat',
-        ['https://in.example.com'],
-        undefined,
-        undefined,
-        undefined,
-        true,
-        undefined,
-        [{ method: 'bolt11' }, { method: 'bolt12', fee: 5 }],
-      );
+      const pr = new PaymentRequest({
+        id: 'fees',
+        amount: 100,
+        unit: 'sat',
+        mints: ['https://in.example.com'],
+        mintsPreferred: true,
+        supportedMethods: [{ method: 'bolt11' }, { method: 'bolt12', fee: 5 }],
+      });
 
       // In-list mint: no per-method fee, whatever the mint supports.
       expect(pr.amountToSend('https://in.example.com', ['bolt12']).equals(100)).toBeTruthy();
@@ -201,19 +188,12 @@ describe('payment requests', () => {
       expect(pr.amountToSend('https://out.example.com').equals(100)).toBeTruthy();
 
       // No mint list: the fee applies from any mint.
-      const noList = new PaymentRequest(
-        undefined,
-        'nolist',
-        100,
-        'sat',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        [{ method: 'bolt12', fee: 5 }],
-      );
+      const noList = new PaymentRequest({
+        id: 'nolist',
+        amount: 100,
+        unit: 'sat',
+        supportedMethods: [{ method: 'bolt12', fee: 5 }],
+      });
       expect(noList.amountToSend('https://any.example.com', ['bolt12']).equals(105)).toBeTruthy();
 
       // feesFor returns the surcharge alone (0 when none applies).
@@ -222,59 +202,52 @@ describe('payment requests', () => {
 
       // Amountless request: amountToSend throws, but feesFor still prices the surcharge so the
       // payer can add it to their chosen amount.
-      const noAmount = new PaymentRequest(undefined, 'noamt', undefined, 'sat', [
-        'https://in.example.com',
-      ]);
+      const noAmount = new PaymentRequest({
+        id: 'noamt',
+        unit: 'sat',
+        mints: ['https://in.example.com'],
+      });
       expect(() => noAmount.amountToSend('https://x.example.com')).toThrow();
-      const mp = new PaymentRequest(
-        undefined,
-        'noamt_mp',
-        undefined,
-        'sat',
-        ['https://in.example.com'],
-        undefined,
-        undefined,
-        undefined,
-        true,
-        undefined,
-        [{ method: 'bolt12', fee: 5 }],
-      );
+      const mp = new PaymentRequest({
+        id: 'noamt_mp',
+        unit: 'sat',
+        mints: ['https://in.example.com'],
+        mintsPreferred: true,
+        supportedMethods: [{ method: 'bolt12', fee: 5 }],
+      });
       expect(mp.feesFor('https://out.example.com', ['bolt12']).equals(5)).toBeTruthy();
     });
 
     test('isMintListStrict resolves NUT-18 default-to-strict semantic', () => {
-      const noMints = new PaymentRequest(undefined, 'no_mints', 100, 'sat');
+      const noMints = new PaymentRequest({ id: 'no_mints', amount: 100, unit: 'sat' });
       expect(noMints.isMintListStrict).toBeUndefined();
 
-      const mintsOnly = new PaymentRequest(undefined, 'mints_only', 100, 'sat', [
-        'https://mint.example.com',
-      ]);
+      const mintsOnly = new PaymentRequest({
+        id: 'mints_only',
+        amount: 100,
+        unit: 'sat',
+        mints: ['https://mint.example.com'],
+      });
       expect(mintsOnly.isMintListStrict).toBe(true);
 
-      const explicitStrict = new PaymentRequest(
-        undefined,
-        'explicit_strict',
-        100,
-        'sat',
-        ['https://mint.example.com'],
-        undefined,
-        false,
-        undefined,
-        false, // mintsPreferred === false is strict
-      );
+      const explicitStrict = new PaymentRequest({
+        id: 'explicit_strict',
+        amount: 100,
+        unit: 'sat',
+        mints: ['https://mint.example.com'],
+        singleUse: false,
+        mintsPreferred: false, // explicit false is strict
+      });
       expect(explicitStrict.isMintListStrict).toBe(true);
 
-      const preferred = new PaymentRequest(
-        undefined,
-        'preferred',
-        100,
-        'sat',
-        ['https://mint.example.com'],
-        undefined,
-        false,
-        undefined,
-        true, // mintsPreferred === true is advisory
-      );
+      const preferred = new PaymentRequest({
+        id: 'preferred',
+        amount: 100,
+        unit: 'sat',
+        mints: ['https://mint.example.com'],
+        singleUse: false,
+        mintsPreferred: true, // true is advisory
+      });
       expect(preferred.isMintListStrict).toBe(false);
 
       // Decoded request with mints set and mp absent — should resolve to strict
@@ -314,9 +287,12 @@ describe('payment requests', () => {
     });
 
     test('mp/nf/sm absent by default (no serialization, no defaults injected)', () => {
-      const request = new PaymentRequest(undefined, 'no_prefs', 100, 'sat', [
-        'https://mint.example.com',
-      ]);
+      const request = new PaymentRequest({
+        id: 'no_prefs',
+        amount: 100,
+        unit: 'sat',
+        mints: ['https://mint.example.com'],
+      });
       const raw = request.toRawRequest();
       expect(raw.mp).toBeUndefined();
       expect(raw.nf).toBeUndefined();
@@ -340,19 +316,19 @@ describe('payment requests', () => {
     });
 
     test('emits only the fields that are set', () => {
-      const request = new PaymentRequest(undefined, 'the-id', 1000, 'sat', undefined, undefined);
+      const request = new PaymentRequest({ id: 'the-id', amount: 1000, unit: 'sat' });
       expect(request.toRawRequest()).toStrictEqual({ i: 'the-id', a: 1000n, u: 'sat' });
     });
   });
 
   describe('toEncodedCreqA', () => {
     test('produces the creqA (CBOR) encoding, identical to toEncodedRequest', () => {
-      const request = new PaymentRequest(
-        [{ type: PaymentRequestTransportType.POST, target: 'https://pay.example' }],
-        'creqa-id',
-        1000,
-        'sat',
-      );
+      const request = new PaymentRequest({
+        transport: [{ type: PaymentRequestTransportType.POST, target: 'https://pay.example' }],
+        id: 'creqa-id',
+        amount: 1000,
+        unit: 'sat',
+      });
       const encoded = request.toEncodedCreqA();
       expect(encoded.startsWith('creqA')).toBe(true);
       expect(encoded).toBe(request.toEncodedRequest());
@@ -365,15 +341,15 @@ describe('payment requests', () => {
 
   describe('getTransport', () => {
     test('returns undefined when the request has no transports', () => {
-      const request = new PaymentRequest(undefined, 'id');
+      const request = new PaymentRequest({ id: 'id' });
       expect(request.getTransport(PaymentRequestTransportType.NOSTR)).toBeUndefined();
     });
 
     test('matches on transport type and returns undefined for an absent type', () => {
-      const request = new PaymentRequest(
-        [{ type: PaymentRequestTransportType.POST, target: 'https://pay.example' }],
-        'id',
-      );
+      const request = new PaymentRequest({
+        transport: [{ type: PaymentRequestTransportType.POST, target: 'https://pay.example' }],
+        id: 'id',
+      });
       expect(request.getTransport(PaymentRequestTransportType.NOSTR)).toBeUndefined();
       expect(request.getTransport(PaymentRequestTransportType.POST)?.target).toBe(
         'https://pay.example',
@@ -383,21 +359,21 @@ describe('payment requests', () => {
 
   describe('toEncodedCreqB - creqB format (TLV + bech32m)', () => {
     test('encode and decode basic payment request with nostr transport', () => {
-      const pr = new PaymentRequest(
-        [
+      const pr = new PaymentRequest({
+        transport: [
           {
             type: PaymentRequestTransportType.NOSTR,
             target: 'nprofile1qqsrhuxx8l9ex335q7he0f09aej04zpazpl0ne2cgukyawd24mayt8g2lcy6q',
             tags: [['n', '17']],
           },
         ],
-        'test_id_123',
-        500,
-        'sat',
-        ['https://mint.example.com'],
-        'Test payment request',
-        true,
-      );
+        id: 'test_id_123',
+        amount: 500,
+        unit: 'sat',
+        mints: ['https://mint.example.com'],
+        description: 'Test payment request',
+        singleUse: true,
+      });
 
       const encoded = pr.toEncodedCreqB();
 
@@ -417,8 +393,8 @@ describe('payment requests', () => {
     });
 
     test('encode and decode payment request with POST transport', () => {
-      const pr = new PaymentRequest(
-        [
+      const pr = new PaymentRequest({
+        transport: [
           {
             type: PaymentRequestTransportType.POST,
             target: 'https://api.example.com/payment',
@@ -428,13 +404,12 @@ describe('payment requests', () => {
             ],
           },
         ],
-        'http_test',
-        250,
-        'sat',
-        ['https://mint.example.com'],
-        undefined,
-        false,
-      );
+        id: 'http_test',
+        amount: 250,
+        unit: 'sat',
+        mints: ['https://mint.example.com'],
+        singleUse: false,
+      });
 
       const encoded = pr.toEncodedCreqB();
       const decoded = PaymentRequest.fromEncodedRequest(encoded);
@@ -450,9 +425,11 @@ describe('payment requests', () => {
     });
 
     test('encode and decode minimal payment request', () => {
-      const pr = new PaymentRequest(undefined, 'minimal_id', undefined, 'sat', [
-        'https://mint.example.com',
-      ]);
+      const pr = new PaymentRequest({
+        id: 'minimal_id',
+        unit: 'sat',
+        mints: ['https://mint.example.com'],
+      });
 
       const encoded = pr.toEncodedCreqB();
       const decoded = PaymentRequest.fromEncodedRequest(encoded);
@@ -465,15 +442,14 @@ describe('payment requests', () => {
     });
 
     test('encode and decode payment request with NUT-10', () => {
-      const pr = new PaymentRequest(
-        undefined,
-        'p2pk_test',
-        1000,
-        'sat',
-        ['https://mint.example.com'],
-        'Locked payment',
-        false,
-        {
+      const pr = new PaymentRequest({
+        id: 'p2pk_test',
+        amount: 1000,
+        unit: 'sat',
+        mints: ['https://mint.example.com'],
+        description: 'Locked payment',
+        singleUse: false,
+        nut10: {
           kind: 'P2PK',
           data: '02abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab',
           tags: [
@@ -481,7 +457,7 @@ describe('payment requests', () => {
             ['refund', '03abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890cd'],
           ],
         },
-      );
+      });
 
       const encoded = pr.toEncodedCreqB();
       const decoded = PaymentRequest.fromEncodedRequest(encoded);
@@ -502,20 +478,17 @@ describe('payment requests', () => {
     });
 
     test('encode and decode payment request with tagless NUT-10', () => {
-      const pr = new PaymentRequest(
-        undefined,
-        'p2pk_test',
-        1000,
-        'sat',
-        undefined,
-        undefined,
-        false,
-        {
+      const pr = new PaymentRequest({
+        id: 'p2pk_test',
+        amount: 1000,
+        unit: 'sat',
+        singleUse: false,
+        nut10: {
           kind: 'P2PK',
           data: '02abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab',
           tags: [],
         },
-      );
+      });
 
       const decoded = PaymentRequest.fromEncodedRequest(pr.toEncodedCreqB());
 
@@ -561,7 +534,7 @@ describe('payment requests', () => {
     const HASH = '5d3f2c1b0a99887766554433221100ffeeddccbbaa99887766554433221100ff';
 
     const prWithNut10 = (nut10?: NUT10Option) =>
-      new PaymentRequest(undefined, 'id', 1, 'sat', undefined, undefined, false, nut10);
+      new PaymentRequest({ id: 'id', amount: 1, unit: 'sat', singleUse: false, nut10 });
 
     test('returns undefined when there is no nut10 option', () => {
       expect(prWithNut10(undefined).toP2PKOptions()).toBeUndefined();

@@ -17,37 +17,56 @@ import type {
 import { Amount, type AmountLike } from './Amount';
 import { CTSError } from './Errors';
 
+/**
+ * Constructor options for {@link PaymentRequest}. Keys mirror the class properties; `amount`,
+ * `netFees` and method `fee` values accept flexible input and are normalized on construction.
+ */
+export type PaymentRequestOptions = {
+  id?: string;
+  amount?: AmountLike;
+  unit?: string;
+  mints?: string[];
+  description?: string;
+  transport?: PaymentRequestTransport[];
+  singleUse?: boolean;
+  nut10?: NUT10Option;
+  mintsPreferred?: boolean;
+  netFees?: boolean;
+  supportedMethods?: Array<{ method: string; fee?: AmountLike }>;
+};
+
 export class PaymentRequest {
+  public id?: string;
   public amount?: Amount;
-  public netFees?: boolean;
+  public unit?: string;
+  public mints?: string[];
+  public description?: string;
+  public transport?: PaymentRequestTransport[];
   public singleUse?: boolean;
+  public nut10?: NUT10Option;
   public mintsPreferred?: boolean;
+  public netFees?: boolean;
   public supportedMethods?: SupportedMethod[];
 
-  constructor(
-    public transport?: PaymentRequestTransport[],
-    public id?: string,
-    amount?: AmountLike,
-    public unit?: string,
-    public mints?: string[],
-    public description?: string,
-    singleUse?: boolean,
-    public nut10?: NUT10Option,
-    mintsPreferred?: boolean,
-    netFees?: boolean,
-    supportedMethods?: Array<{ method: string; fee?: AmountLike }>,
-  ) {
-    this.amount = amount !== undefined ? Amount.from(amount) : undefined;
-    this.supportedMethods = supportedMethods?.map((m) => ({
+  constructor(options: PaymentRequestOptions = {}) {
+    this.id = options.id;
+    this.unit = options.unit;
+    this.mints = options.mints;
+    this.description = options.description;
+    this.transport = options.transport;
+    this.nut10 = options.nut10;
+    this.amount = options.amount !== undefined ? Amount.from(options.amount) : undefined;
+    this.supportedMethods = options.supportedMethods?.map((m) => ({
       method: m.method,
       fee: m.fee !== undefined ? Amount.from(m.fee) : undefined,
     }));
     // Coerce the optional flags to real booleans (preserving `undefined` for the
     // absent/tri-state case) so an untyped CBOR value (`0`/`1`/`null`) can't leak a
     // non-boolean into the getter or get re-serialized verbatim over the wire.
-    this.singleUse = singleUse === undefined ? undefined : Boolean(singleUse);
-    this.mintsPreferred = mintsPreferred === undefined ? undefined : Boolean(mintsPreferred);
-    this.netFees = netFees === undefined ? undefined : Boolean(netFees);
+    this.singleUse = options.singleUse === undefined ? undefined : Boolean(options.singleUse);
+    this.mintsPreferred =
+      options.mintsPreferred === undefined ? undefined : Boolean(options.mintsPreferred);
+    this.netFees = options.netFees === undefined ? undefined : Boolean(options.netFees);
   }
 
   /**
@@ -293,19 +312,19 @@ export class PaymentRequest {
         }
       : undefined;
     const supportedMethods = rawPaymentRequest.sm?.map((m) => ({ method: m.mn, fee: m.mf }));
-    return new PaymentRequest(
-      transports,
-      rawPaymentRequest.i,
-      rawPaymentRequest.a,
-      rawPaymentRequest.u,
-      rawPaymentRequest.m,
-      rawPaymentRequest.d,
-      rawPaymentRequest.s,
+    return new PaymentRequest({
+      transport: transports,
+      id: rawPaymentRequest.i,
+      amount: rawPaymentRequest.a,
+      unit: rawPaymentRequest.u,
+      mints: rawPaymentRequest.m,
+      description: rawPaymentRequest.d,
+      singleUse: rawPaymentRequest.s,
       nut10,
-      rawPaymentRequest.mp,
-      rawPaymentRequest.nf,
+      mintsPreferred: rawPaymentRequest.mp,
+      netFees: rawPaymentRequest.nf,
       supportedMethods,
-    );
+    });
   }
 
   static fromEncodedRequest(encodedRequest: string): PaymentRequest {
@@ -322,19 +341,19 @@ export class PaymentRequest {
             tags: decoded.nut10.tags ?? [],
           }
         : undefined;
-      return new PaymentRequest(
-        decoded.transports,
-        decoded.id,
-        decoded.amount,
-        decoded.unit,
-        decoded.mints,
-        decoded.description,
-        decoded.singleUse,
+      return new PaymentRequest({
+        transport: decoded.transports,
+        id: decoded.id,
+        amount: decoded.amount,
+        unit: decoded.unit,
+        mints: decoded.mints,
+        description: decoded.description,
+        singleUse: decoded.singleUse,
         nut10,
-        decoded.mintsPreferred,
-        decoded.netFees,
-        decoded.supportedMethods,
-      );
+        mintsPreferred: decoded.mintsPreferred,
+        netFees: decoded.netFees,
+        supportedMethods: decoded.supportedMethods,
+      });
     }
 
     // Version A: CBOR encoding (creqA...)
