@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'vitest';
 
-import { Amount, type AmountLike } from '../../src/model/Amount';
-import { DefaultOutputDataCreator } from '../../src/model/OutputDataCreator';
-import { OutputData, isOutputDataFactory } from '../../src/model/OutputData';
 import { getPubKeyFromPrivKey } from '../../src/crypto';
-import { Bytes } from '../../src/utils';
+import { Amount, type AmountLike } from '../../src/model/Amount';
+import { OutputData, isOutputDataFactory } from '../../src/model/OutputData';
 import type { OutputDataFactory, OutputDataLike } from '../../src/model/OutputData';
+import { DefaultOutputDataCreator } from '../../src/model/OutputDataCreator';
 import type { HasKeysetKeys, SerializedBlindedSignature, Proof } from '../../src/model/types';
+import { Bytes } from '../../src/utils';
 
 describe('DefaultOutputDataCreator', () => {
   test('delegates single deterministic output creation to OutputData', () => {

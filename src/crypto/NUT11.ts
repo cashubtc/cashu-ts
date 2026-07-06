@@ -114,9 +114,12 @@ type WitnessData = {
 };
 
 /**
+ * NUT-11 tag keys that map onto structured {@link P2PKOptions} fields, rather than being carried as
+ * free-form `additionalTags`.
+ *
  * @internal
  */
-const P2PK_KNOWN_TAG_KEYS = new Set([
+export const P2PK_KNOWN_TAG_KEYS = new Set([
   'locktime',
   'pubkeys',
   'n_sigs',
@@ -217,16 +220,31 @@ export function dedupeP2PKPubkeys(keys: string[]): string[] {
 export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
   const pubkeys = dedupeP2PKPubkeys(Array.isArray(p2pk.pubkey) ? p2pk.pubkey : [p2pk.pubkey]);
   const refundKeys = dedupeP2PKPubkeys(p2pk.refundKeys ?? []);
-  if (pubkeys.length === 0) {
+  // HTLC (NUT-14) locks the proof to a hashlock in Secret.data, so its pubkeys
+  // list is optional: with none, possession of the preimage alone spends. P2PK
+  // has no hashlock and so always needs at least one main key.
+  const isHTLC = typeof p2pk.hashlock === 'string' && p2pk.hashlock.length > 0;
+  if (pubkeys.length === 0 && !isHTLC) {
     throw new CTSError('P2PK requires at least one pubkey');
   }
-  const totalKeys = pubkeys.length + refundKeys.length;
-  if (totalKeys > 10) {
-    throw new CTSError(`Too many pubkeys, ${totalKeys} provided, maximum allowed is 10 in total`);
+  // NUT-28: up to 11 locking slots in [data, ...pubkeys, ...refund] (i_byte 0x00..0x0A). Slot 0 is
+  // the first pubkey for P2PK, but the hashlock for HTLC, so HTLC's hashlock costs a slot on top of
+  // the keys. P2PK thus allows 11 keys, HTLC 10.
+  const slotCount = (isHTLC ? 1 : 0) + pubkeys.length + refundKeys.length;
+  if (slotCount > 11) {
+    throw new CTSError(
+      `Too many pubkeys, ${slotCount} slots provided, maximum allowed is 11 in total`,
+    );
   }
   if (p2pk.sigFlag !== undefined) assertSigFlag(p2pk.sigFlag);
 
-  const requiredSignatures = p2pk.requiredSignatures ?? 1;
+  // With no main pubkeys (hashlock-only HTLC) there is no threshold to default,
+  // so skip the implicit `?? 1`. Pass through an *explicit* requiredSignatures
+  // though, so assertSpendingConditionRules rejects an impossible threshold
+  // (n_sigs with zero pubkeys) loudly rather than silently weakening the lock to
+  // preimage-only.
+  const requiredSignatures =
+    pubkeys.length > 0 ? (p2pk.requiredSignatures ?? 1) : p2pk.requiredSignatures;
   const requiredRefundSignatures = p2pk.requiredRefundSignatures;
 
   // Shared semantic validation
@@ -242,7 +260,7 @@ export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
     pubkey: pubkeys.length === 1 ? pubkeys[0] : pubkeys,
     ...(p2pk.locktime !== undefined ? { locktime: p2pk.locktime } : {}),
     ...(refundKeys.length > 0 ? { refundKeys } : {}),
-    ...(requiredSignatures > 1 ? { requiredSignatures } : {}),
+    ...(requiredSignatures !== undefined && requiredSignatures > 1 ? { requiredSignatures } : {}),
     ...(requiredRefundSignatures !== undefined && requiredRefundSignatures > 1
       ? { requiredRefundSignatures }
       : {}),
@@ -506,7 +524,10 @@ export function verifyP2PKSpendingConditions(
   const signatures = getP2PKWitnessSignatures(proof.witness);
   const locktime = getLocktime(secret);
   const lockState: LockState = deriveLockState(locktime);
-  const nsigs = resolveNSigs(secret, lockState, refundKeys);
+  // A path with no eligible keys requires no signatures (e.g. a keyless HTLC,
+  // spent by preimage alone). The `n_sigs` default of 1 only applies when there
+  // are main keys to satisfy it.
+  const nsigs = mainKeys.length === 0 ? 0 : resolveNSigs(secret, lockState, refundKeys);
   const nSigsRefund = resolveNSigsRefund(secret, lockState, refundKeys);
 
   // Verify signatures against both key sets

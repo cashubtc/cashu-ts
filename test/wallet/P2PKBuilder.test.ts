@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { P2PKBuilder, type P2PKOptions } from '../../src/';
 
 // helpers to make valid hex keys
@@ -151,17 +152,52 @@ describe('P2PKBuilder.toOptions()', () => {
     expect('requiredRefundSignatures' in o2).toBe(false);
   });
 
-  it('enforces combined lock+refund keys limit of 10', () => {
-    // build 11 distinct keys
-    const chars = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b'];
+  it('rejects an explicit n_sigs on a keyless HTLC (no lock keys to sign)', () => {
+    // The <=1 omission above is a redundant default *when keys back it*. With zero
+    // lock keys (hashlock-only HTLC) an explicit n_sigs=1 is contradictory and must
+    // surface, not be dropped into a spendable preimage-only lock. n_sigs>1 already
+    // survives the filter; n_sigs=1 is the value that previously slipped through.
+    expect(() =>
+      new P2PKBuilder().addHashlock('deadbeef').requireLockSignatures(1).toOptions(),
+    ).toThrow(/exceeds available pubkeys/i);
+    expect(() =>
+      new P2PKBuilder().addHashlock('deadbeef').requireLockSignatures(2).toOptions(),
+    ).toThrow(/exceeds available pubkeys/i);
+    // No explicit threshold => keyless HTLC builds fine.
+    const ok = new P2PKBuilder().addHashlock('deadbeef').toOptions();
+    expect('requiredSignatures' in ok).toBe(false);
+  });
+
+  it('rejects an explicit n_sigs_refund when there are no refund keys', () => {
+    // Same defect, refund side: n_sigs_refund=1 with zero refund keys is impossible
+    // and must throw rather than be silently dropped.
+    expect(() =>
+      new P2PKBuilder().addLockPubkey(comp('a', '02')).requireRefundSignatures(1).toOptions(),
+    ).toThrow(/requires refund keys/i);
+  });
+
+  it('enforces the combined lock+refund slot limit of 11 (NUT-28)', () => {
+    // 12 distinct keys; NUT-28 allows up to 11 slots ([data, ...pubkeys, ...refund]).
+    const chars = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c'];
     const keys = chars.map((c, i) => comp(c as any, i % 2 === 0 ? '02' : '03'));
 
-    const b = new P2PKBuilder()
-      .addLockPubkey(keys.slice(0, 8)) // 8 locks
-      .lockUntil(Date.now() + 60)
-      .addRefundPubkey(keys.slice(8)); // 3 refunds => total 11
+    // 8 locks + 3 refunds = 11 slots: allowed.
+    expect(() =>
+      new P2PKBuilder()
+        .addLockPubkey(keys.slice(0, 8))
+        .lockUntil(Date.now() + 60)
+        .addRefundPubkey(keys.slice(8, 11))
+        .toOptions(),
+    ).not.toThrow();
 
-    expect(() => b.toOptions()).toThrow(/Too many pubkeys/i);
+    // 8 locks + 4 refunds = 12 slots: rejected.
+    expect(() =>
+      new P2PKBuilder()
+        .addLockPubkey(keys.slice(0, 8))
+        .lockUntil(Date.now() + 60)
+        .addRefundPubkey(keys.slice(8))
+        .toOptions(),
+    ).toThrow(/Too many pubkeys/i);
   });
 
   it('round-trips via fromOptions', () => {

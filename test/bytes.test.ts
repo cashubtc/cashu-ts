@@ -1,4 +1,5 @@
 import { describe, test, expect } from 'vitest';
+
 import { Bytes } from '../src/utils/Bytes';
 
 describe('Bytes utility class', () => {

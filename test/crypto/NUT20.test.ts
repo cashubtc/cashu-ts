@@ -1,14 +1,15 @@
-import { test, describe, expect } from 'vitest';
-import { signMintQuote, verifyMintQuoteSignature } from '../../src/crypto';
-import { signMintQuoteAmended, verifyMintQuoteSignatureAmended } from '../../src/crypto/NUT20';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
-import { secp256k1 } from '@noble/curves/secp256k1.js';
-import { Amount, MintRequest } from '../../src';
+import { test, describe, expect } from 'vitest';
+
+import { Amount, type MintRequest } from '../../src';
+import { signMintQuote, verifyMintQuoteSignature } from '../../src/crypto';
+import { signMintQuoteAmended, verifyMintQuoteSignatureAmended } from '../../src/crypto/NUT20';
 
 describe('mint quote signatures (legacy message)', () => {
   test('valid signature verification', () => {
-    let mintRequest = {
+    const mintRequest = {
       quote: '9d745270-1405-46de-b5c5-e2762b4f5e00',
       outputs: [
         {
@@ -47,7 +48,7 @@ describe('mint quote signatures (legacy message)', () => {
     expect(verifyMintQuoteSignature(pubkey, quote, blindedMessages, sig)).toBe(true);
   });
   test('invalid signature verification', () => {
-    let mintRequest = {
+    const mintRequest = {
       quote: '9d745270-1405-46de-b5c5-e2762b4f5e00',
       outputs: [
         {
@@ -86,7 +87,7 @@ describe('mint quote signatures (legacy message)', () => {
     expect(verifyMintQuoteSignature(pubkey, quote, blindedMessages, sig)).toBe(false);
   });
   test('signature creation', () => {
-    let mintRequest = {
+    const mintRequest = {
       quote: '9d745270-1405-46de-b5c5-e2762b4f5e00',
       outputs: [
         {
@@ -286,7 +287,8 @@ describe('mint quote signature verification rejects malformed input (no throw)',
   const goodB_ = '036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2';
 
   // A server may pass outputs straight from JSON.parse; an attacker controls amount and B_.
-  const withOutputs = (outputs: unknown) => outputs as { amount: Amount; id: string; B_: string }[];
+  const withOutputs = (outputs: unknown) =>
+    outputs as Array<{ amount: Amount; id: string; B_: string }>;
 
   test('amended: negative amount verifies as false', () => {
     const outputs = withOutputs([{ amount: -1, id: keysetId, B_: goodB_ }]);

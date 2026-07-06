@@ -18,8 +18,11 @@
 // - Nutshell:
 // docker rm -f -v nutshell
 
-import { vi, test, describe, expect } from 'vitest';
 import { secp256k1, schnorr } from '@noble/curves/secp256k1.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils.js';
+import { vi, test, describe, expect } from 'vitest';
+
 import {
   Mint,
   Wallet,
@@ -31,22 +34,20 @@ import {
   type Token,
   MintOperationError,
   OutputData,
-  OutputDataFactory,
-  OutputConfig,
-  OutputType,
+  type OutputDataFactory,
+  type OutputConfig,
+  type OutputType,
   P2PKBuilder,
-  MintQuoteBaseResponse,
+  type MintQuoteBaseResponse,
   getEncodedToken,
   hexToNumber,
   numberToHexPadded64,
   sumProofs,
-  HasKeysetKeys,
+  type HasKeysetKeys,
   NetworkError,
-  AmountLike,
+  type AmountLike,
   CTSError,
 } from '../src';
-import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils.js';
-import { sha256 } from '@noble/hashes/sha2.js';
 
 const mintUrl = 'http://127.0.0.1:3338';
 const unit = 'sat';
@@ -69,7 +70,7 @@ async function untilMintQuotePaid(wallet: Wallet, quote: MintQuoteBaseResponse) 
   }
 }
 
-function expectNUT10SecretDataToEqual(p: Array<Proof>, s: string) {
+function expectNUT10SecretDataToEqual(p: Proof[], s: string) {
   p.forEach((p) => {
     const parsedSecret = JSON.parse(p.secret);
     expect(parsedSecret[1].data).toBe(s);
@@ -77,7 +78,7 @@ function expectNUT10SecretDataToEqual(p: Array<Proof>, s: string) {
 }
 
 function expectBlindedSecretDataToEqualECDH(
-  proofs: Array<Proof>,
+  proofs: Proof[],
   bobPrivHex: Uint8Array, // receiver’s private key
   bobPubHex: string, // receiver’s SEC1-compressed pubkey P
 ) {
@@ -640,6 +641,7 @@ describe('mint api', () => {
     expect(res).toBe(1);
     expect(mint.webSocketConnection?.activeSubscriptions.length).toBe(0);
   });
+  // eslint-disable-next-line vitest/expect-expect -- await-based: event promises resolving is the assertion
   test('websocket proof state + mint quote updates', async () => {
     const mint = new Mint(mintUrl);
     const wallet = new Wallet(mint);
@@ -776,7 +778,7 @@ describe('dleq', () => {
     }
     const mintRequest = await wallet.createMintQuoteBolt11(8);
     await untilMintQuotePaid(wallet, mintRequest);
-    let proofs = await wallet.mintProofsBolt11(8, mintRequest.quote);
+    const proofs = await wallet.mintProofsBolt11(8, mintRequest.quote);
     // alter dleq signature
     proofs.forEach((p) => {
       if (p.dleq != undefined) {

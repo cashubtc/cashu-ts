@@ -1,3 +1,4 @@
+import { randomBytes } from '@noble/hashes/utils.js';
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect, vi } from 'vitest';
 
@@ -10,13 +11,12 @@ import {
   OutputData,
   type SerializedOutputData,
   type SerializedBlindedSignature,
-  MeltQuoteBolt12Response,
-  AuthProvider,
-  OutputType,
+  type MeltQuoteBolt12Response,
+  type AuthProvider,
+  type OutputType,
   Amount,
 } from '../../src';
 
-import { randomBytes } from '@noble/hashes/utils.js';
 import { useTestServer, mint, mintUrl, unit, invoice, logger, mintInfoResp } from './_setup';
 
 const server = useTestServer();
@@ -413,6 +413,41 @@ describe('melt proofs', () => {
     expect(meltTxn.quote.quote).toBe('test_melt_quote');
   });
 
+  test('prepareMelt works on an inactive keyset when no change is created', async () => {
+    // A mint unwinding liabilities deactivates keysets but keeps melt open. Withdrawing with
+    // no NUT-08 change creates no outputs, so an inactive keyset must not block the melt.
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    (wallet.getKeyset() as unknown as { _active: boolean })._active = false;
+
+    const meltQuote: MeltQuoteBolt11Response = {
+      quote: 'test_melt_quote',
+      amount: Amount.from(10),
+      fee_reserve: Amount.from(3),
+      request: 'bolt11request',
+      state: MeltQuoteState.UNPAID,
+      expiry: 1234567890,
+      payment_preimage: null,
+      unit: 'sat',
+    };
+    const proofsToSend: Proof[] = [
+      { id: '00bd033559de27d0', amount: Amount.from(8), secret: 'secret1', C: 'C1' },
+      { id: '00bd033559de27d0', amount: Amount.from(5), secret: 'secret2', C: 'C2' },
+    ];
+
+    // No change requested: must not throw on the inactive keyset
+    const meltTxn = await wallet.prepareMelt('bolt11', meltQuote, proofsToSend, {
+      nut08Change: false,
+    });
+    expect(meltTxn.outputData).toHaveLength(0);
+    expect(meltTxn.inputs).toHaveLength(2);
+
+    // Change requested with a non-zero fee reserve: the output gate still applies
+    await expect(
+      wallet.prepareMelt('bolt11', meltQuote, proofsToSend, { nut08Change: true }),
+    ).rejects.toThrow('Melt change keyset is inactive');
+  });
+
   test('prepareMelt uses one NUT-08 blank for a 1-sat fee reserve', async () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
@@ -469,7 +504,7 @@ describe('melt proofs', () => {
           C: 'C2',
         },
       ];
-      let seenBody: any | undefined;
+      let seenBody: any;
       server.use(
         http.post(mintUrl + '/v1/melt/bolt11', async ({ request }) => {
           const body = await request.json();
@@ -536,7 +571,7 @@ describe('melt proofs', () => {
           C: 'C2',
         },
       ];
-      let seenBody: any | undefined;
+      let seenBody: any;
       server.use(
         http.post(mintUrl + '/v1/melt/bolt12', async ({ request }) => {
           const body = await request.json();

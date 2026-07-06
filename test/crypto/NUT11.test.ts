@@ -1,6 +1,9 @@
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 import { afterEach, describe, expect, test, vi } from 'vitest';
+
+import { Amount, type OutputDataLike } from '../../src';
 import {
   createP2PKsecret,
   signP2PKProof,
@@ -9,7 +12,7 @@ import {
   getP2PKExpectedWitnessPubkeys,
   getP2PKSigFlag,
   getP2PKWitnessSignatures,
-  Secret,
+  type Secret,
   isP2PKSpendAuthorised,
   getPubKeyFromPrivKey,
   createRandomSecretKey,
@@ -26,10 +29,8 @@ import {
   normalizeP2PKOptions,
   verifyP2PKSpendingConditions,
 } from '../../src/crypto';
-import { Proof, P2PKWitness } from '../../src/model/types';
-import { sha256 } from '@noble/hashes/sha2.js';
-import { Amount, OutputDataLike } from '../../src';
 import { ConsoleLogger, NULL_LOGGER } from '../../src/logger';
+import { type Proof, type P2PKWitness } from '../../src/model/types';
 
 const PRIVKEY = schnorr.utils.randomSecretKey();
 const PUBKEY = bytesToHex(getPubKeyFromPrivKey(PRIVKEY));
@@ -532,7 +533,7 @@ describe('P2BK fixed-vector ECDH tweak', () => {
     const Z = E.multiply(pBig);
     const Zx = Z.toBytes(false).slice(1, 33); // 32B X from uncompressed SEC1
     const i0 = new Uint8Array([0x00]);
-    let r = secp256k1.Point.Fn.fromBytes(sha256(new Uint8Array([...P2BK_DST, ...Zx, ...i0])));
+    const r = secp256k1.Point.Fn.fromBytes(sha256(new Uint8Array([...P2BK_DST, ...Zx, ...i0])));
 
     // Check blinded point matches P + r·G
     const expectPprime = P.add(secp256k1.Point.BASE.multiply(r));
@@ -940,7 +941,7 @@ describe('branch coverage helpers', () => {
     secret,
     C: 'C',
     amount: 1 as any, // satisfy type if needed by your model
-    id: 'x' as any,
+    id: 'x',
     witness: undefined,
   });
 
@@ -965,7 +966,7 @@ describe('branch coverage helpers', () => {
   });
 
   test('getP2PKWitnessSignatures, witness object with signatures undefined', () => {
-    const sigs = getP2PKWitnessSignatures({} as any);
+    const sigs = getP2PKWitnessSignatures({});
     expect(sigs).toEqual([]); // covers object path with fallback
   });
 });
@@ -986,13 +987,13 @@ describe('SIG_ALL, both message formats are actually signed', () => {
         id: '00a1',
         C: '03'.padEnd(66, '1'),
         secret,
-      } as Proof,
+      },
       {
         amount: Amount.from(2),
         id: '00a2',
         C: '03'.padEnd(66, '2'),
         secret,
-      } as Proof,
+      },
     ];
 
     // 3. Minimal outputs satisfying OutputDataLike
@@ -1333,9 +1334,9 @@ describe('NUT-11 test vectors', () => {
       {
         amount: Amount.from(2),
         id: '00bfa73302d12ffd',
-        secret: `[\"P2PK\",{\"nonce\":\"bbf9edf441d17097e39f5095a3313ba24d3055ab8a32f758ff41c10d45c4f3de\",\"data\":\"${pub}\",\"tags\":[[\"sigflag\",\"SIG_ALL\"]]}]`,
+        secret: `["P2PK",{"nonce":"bbf9edf441d17097e39f5095a3313ba24d3055ab8a32f758ff41c10d45c4f3de","data":"${pub}","tags":[["sigflag","SIG_ALL"]]}]`,
         C: '02a9d461ff36448469dccf828fa143833ae71c689886ac51b62c8d61ddaa10028b',
-        witness: `{\"signatures\":[\"${sig}\"]}`,
+        witness: `{"signatures":["${sig}"]}`,
       },
     ];
     const outputs = [
@@ -1406,6 +1407,25 @@ describe('normalizeP2PKOptions', () => {
     );
   });
 
+  test('allows an empty pubkey array for a hashlock-only HTLC (NUT-14)', () => {
+    // An HTLC carries its lock in the hashlock, so a pubkeys list is optional.
+    const hashlock = 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5';
+    const normalized = normalizeP2PKOptions({ pubkey: [], hashlock });
+    expect(normalized).toEqual({ pubkey: [], hashlock });
+  });
+
+  test('rejects an explicit n_sigs on a hashlock-only HTLC (no pubkeys to sign)', () => {
+    // Skipping the *default* n_sigs is fine, but an explicit threshold with zero
+    // pubkeys is impossible and must fail loudly, not silently weaken the lock.
+    const hashlock = 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5';
+    expect(() => normalizeP2PKOptions({ pubkey: [], hashlock, requiredSignatures: 2 })).toThrow(
+      /exceeds available pubkeys/i,
+    );
+    expect(() => normalizeP2PKOptions({ pubkey: [], hashlock, requiredSignatures: 0 })).toThrow(
+      /positive integer/i,
+    );
+  });
+
   test('throws when pubkey contains an empty string', () => {
     expect(() => normalizeP2PKOptions({ pubkey: [pk, ''] })).toThrow(/invalid pubkey/i);
   });
@@ -1460,6 +1480,22 @@ describe('normalizeP2PKOptions', () => {
     expect(() => normalizeP2PKOptions({ pubkey: pk, sigFlag: 'FOOBAR' as any })).toThrow(
       /invalid sigflag/i,
     );
+  });
+
+  test('P2PK: data pubkey counts as a slot, so 11 keys fill 11 slots and 12 overflow (NUT-28)', () => {
+    // NUT-28 allows up to 11 slots in [data, ...pubkeys, ...refund] (i_byte 0x00..0x0A). For P2PK
+    // slot 0 is the first pubkey, so 11 pubkeys fill the 11 slots and a 12th overflows.
+    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c'].map((c) => _comp(c));
+    expect(() => normalizeP2PKOptions({ pubkey: keys.slice(0, 11) })).not.toThrow(); // 11 slots
+    expect(() => normalizeP2PKOptions({ pubkey: keys })).toThrow(/maximum allowed is 11/); // 12 slots
+  });
+
+  test('HTLC: hashlock fills slot 0, so only 10 keys fit before overflowing 11 slots (NUT-28)', () => {
+    // For HTLC the data slot is the hashlock, not a key, so signing keys max out one lower than P2PK.
+    const hashlock = 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5';
+    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b'].map((c) => _comp(c));
+    expect(() => normalizeP2PKOptions({ pubkey: keys.slice(0, 10), hashlock })).not.toThrow(); // hash + 10 = 11 slots
+    expect(() => normalizeP2PKOptions({ pubkey: keys, hashlock })).toThrow(/maximum allowed is 11/); // hash + 11 = 12 slots
   });
 });
 

@@ -1,4 +1,4 @@
-import { KeyChain, KeyChainCache, type MintKeys, type MintKeyset } from '../src';
+import { KeyChain, type KeyChainCache, type MintKeys, type MintKeyset } from '../src';
 
 export const MINTINFORESP = JSON.parse(
   '{"name":"Testnut mint","pubkey":"0296d0aa13b6a31cf0cd974249f28c7b7176d7274712c95a41c7d8066d3f29d679","version":"Nutshell/0.16.3","description":"Mint for testing Cashu wallets","description_long":"This mint usually runs the latest main branch of the nutshell repository. It uses a FakeWallet, all your Lightning invoices will always be marked paid so that you can test minting and melting ecash via Lightning.","contact":[{"method":"email","info":"contact@me.com"},{"method":"twitter","info":"@me"},{"method":"nostr","info":"npub1337"}],"motd":"This is a message of the day field. You should display this field to your users if the content changes!","icon_url":"https://image.nostr.build/46ee47763c345d2cfa3317f042d332003f498ee281fb42808d47a7d3b9585911.png","time":1731684933,"nuts":{"4":{"methods":[{"method":"bolt11","unit":"sat","options":{"description":true}},{"method":"bolt11","unit":"usd","options":{"description":true}},{"method":"bolt11","unit":"eur","options":{"description":true}},{"method":"bolt12","unit":"sat","options":{"description":true}},{"method":"bolt12","unit":"usd","options":{"description":true}},{"method":"bolt12","unit":"eur","options":{"description":true}}],"disabled":false},"5":{"methods":[{"method":"bolt11","unit":"sat"},{"method":"bolt11","unit":"usd"},{"method":"bolt11","unit":"eur"},{"method":"bolt12","unit":"sat"},{"method":"bolt12","unit":"usd"},{"method":"bolt12","unit":"eur"}],"disabled":false},"7":{"supported":true},"8":{"supported":true},"9":{"supported":true},"10":{"supported":true},"11":{"supported":true},"12":{"supported":true},"14":{"supported":true},"17":{"supported":[{"method":"bolt11","unit":"sat","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]},{"method":"bolt11","unit":"usd","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]},{"method":"bolt11","unit":"eur","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]},{"method":"bolt12","unit":"sat","commands":["bolt12_melt_quote","proof_state","bolt12_mint_quote"]},{"method":"bolt12","unit":"usd","commands":["bolt12_melt_quote","proof_state","bolt12_mint_quote"]},{"method":"bolt12","unit":"eur","commands":["bolt12_melt_quote","proof_state","bolt12_mint_quote"]}]}}}',
@@ -201,7 +201,7 @@ export const NUT02_V1_VECTOR1_KEYS: MintKeys = {
     '2': '03fd4ce5a16b65576145949e6f99f445f8249fee17c606b688b504a849cdc452de',
     '4': '02648eccfa4c026960966276fa5a4cae46ce0fd432211a4f449bf84f13aa5f8303',
     '8': '02fdfd6796bfeac490cbee12f778f867f0a2c68f6508d17c649759ea0dc3547528',
-  } as MintKeys['keys'],
+  },
 };
 
 export const NUT02_V1_VECTOR2_KEYS: MintKeys = {
@@ -272,7 +272,7 @@ export const NUT02_V1_VECTOR2_KEYS: MintKeys = {
     '2305843009213693952': '033cdc225962c052d485f7cfbf55a5b2367d200fe1fe4373a347deb4cc99e9a099',
     '4611686018427387904': '024a4b806cf413d14b294719090a9da36ba75209c7657135ad09bc65328fba9e6f',
     '9223372036854775808': '0377a6fe114e291a8d8e991627c38001c8305b23b9e98b1c7b1893f5cd0dda6cad',
-  } as MintKeys['keys'],
+  },
 };
 
 export const NUT02_V2_VECTOR1_KEYS: MintKeys = {

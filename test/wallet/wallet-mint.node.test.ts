@@ -1,3 +1,4 @@
+import { hexToBytes } from '@noble/curves/utils.js';
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect, vi } from 'vitest';
 
@@ -12,19 +13,18 @@ import {
   type MintQuoteOnchainResponse,
   MeltQuoteState,
   MintQuoteState,
-  MintQuoteBolt11Response,
+  type MintQuoteBolt11Response,
   Amount,
-  AmountLike,
+  type AmountLike,
   Mint,
   MintOperationError,
   type RequestFn,
 } from '../../src';
-import request from '../../src/transport';
-
-import { Bytes, sumProofs } from '../../src/utils';
 import { verifyMintQuoteSignature } from '../../src/crypto';
 import { verifyMintQuoteSignatureAmended } from '../../src/crypto/NUT20';
-import { hexToBytes } from '@noble/curves/utils.js';
+import request from '../../src/transport';
+import { Bytes, sumProofs } from '../../src/utils';
+
 import { useTestServer, mint, mintUrl, unit, logger, mintInfoResp } from './_setup';
 
 const server = useTestServer();
@@ -827,7 +827,7 @@ describe('mint quote signature legacy fallback', () => {
       expect(seen).toHaveLength(2);
       // Amended attempt first, legacy on the retry, both over the same outputs.
       expect(
-        verifyMintQuoteSignature(pubkey, 'locked-quote', seen[1].outputs, seen[1].signatures![0]!),
+        verifyMintQuoteSignature(pubkey, 'locked-quote', seen[1].outputs, seen[1].signatures![0]),
       ).toBe(true);
       expect(seen[1].outputs).toEqual(seen[0].outputs);
     });

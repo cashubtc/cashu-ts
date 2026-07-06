@@ -4,7 +4,7 @@ import { Wallet, OutputData } from '../../src';
 
 import { mint, useTestServer } from './_setup';
 
-const server = useTestServer();
+useTestServer();
 
 // Valid-format 33-byte compressed pubkeys for testing
 const PK1 = '02' + 'aa'.repeat(32);

@@ -1,5 +1,8 @@
+import { type Client, Server, WebSocket } from 'mock-socket';
+import { HttpResponse, http } from 'msw';
+import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { Client, Server, WebSocket } from 'mock-socket';
+
 import {
   Mint,
   MintInfo,
@@ -10,8 +13,6 @@ import {
   Amount,
 } from '../../src';
 import type { AuthProvider, Logger, RequestFn } from '../../src';
-import { HttpResponse, http } from 'msw';
-import { setupServer } from 'msw/node';
 import { MINTINFORESP } from '../consts';
 
 type ReqArgs = {
@@ -882,7 +883,7 @@ describe('Mint normalization', () => {
 
     const response = await mint.mintBatchBolt11({
       quotes: ['q1', 'q2'],
-      quote_amounts: [Amount.from(1), Amount.from(2)] as any,
+      quote_amounts: [Amount.from(1), Amount.from(2)],
       outputs: [],
     });
 
@@ -903,7 +904,7 @@ describe('Mint normalization', () => {
 
     const response = await mint.mintBatchBolt12({
       quotes: ['q1'],
-      quote_amounts: [Amount.from(4)] as any,
+      quote_amounts: [Amount.from(4)],
       outputs: [],
     });
 

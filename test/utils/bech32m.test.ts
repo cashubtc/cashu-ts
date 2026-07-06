@@ -6,10 +6,11 @@
  */
 
 import { describe, test, expect } from 'vitest';
+
+import { PaymentRequest } from '../../src/model/PaymentRequest';
 import { decodeBech32mToBytes, encodeBech32m } from '../../src/utils/bech32m';
 import { decodeTLV, encodeTLV } from '../../src/utils/tlv';
 import type { DecodedTLVPaymentRequest } from '../../src/utils/tlv';
-import { PaymentRequest } from '../../src/model/PaymentRequest';
 import { PaymentRequestTransportType } from '../../src/wallet/types/payment-requests';
 
 describe('NUT-26 Test Vectors', () => {
@@ -136,10 +137,9 @@ describe('NUT-26 Test Vectors', () => {
       expect(decoded.amount).toBe(BigInt(expected.a));
       expect(decoded.mints).toEqual(expected.m);
       expect(decoded.nut10).toBeDefined();
-      expect(decoded.nut10).toHaveLength(1);
-      expect(decoded.nut10![0].kind).toBe(expected.nut10.k);
-      expect(decoded.nut10![0].data).toBe(expected.nut10.d);
-      expect(decoded.nut10![0].tags).toEqual(expected.nut10.t);
+      expect(decoded.nut10!.kind).toBe(expected.nut10.k);
+      expect(decoded.nut10!.data).toBe(expected.nut10.d);
+      expect(decoded.nut10!.tags).toEqual(expected.nut10.t);
     });
   });
 
@@ -432,10 +432,9 @@ describe('NUT-26 Test Vectors', () => {
       expect(decoded.amount).toBe(BigInt(expected.a));
       expect(decoded.mints).toEqual(expected.m);
       expect(decoded.nut10).toBeDefined();
-      expect(decoded.nut10).toHaveLength(1);
-      expect(decoded.nut10![0].kind).toBe(expected.nut10.k);
-      expect(decoded.nut10![0].data).toBe(expected.nut10.d);
-      expect(decoded.nut10![0].tags).toEqual(expected.nut10.t);
+      expect(decoded.nut10!.kind).toBe(expected.nut10.k);
+      expect(decoded.nut10!.data).toBe(expected.nut10.d);
+      expect(decoded.nut10!.tags).toEqual(expected.nut10.t);
     });
   });
 
@@ -539,13 +538,11 @@ describe('NUT-26 Encoding Test Vectors', () => {
         amount: BigInt(500),
         unit: 'sat',
         mints: ['https://mint.example.com'],
-        nut10: [
-          {
-            kind: 'P2PK',
-            data: '02c3b5bb27e361457c92d93d78dd73d3d53732110b2cfe8b50fbc0abc615e9c331',
-            tags: [['timeout', '3600']],
-          },
-        ],
+        nut10: {
+          kind: 'P2PK',
+          data: '02c3b5bb27e361457c92d93d78dd73d3d53732110b2cfe8b50fbc0abc615e9c331',
+          tags: [['timeout', '3600']],
+        },
       };
 
       const encoded = encodeTLV(request);

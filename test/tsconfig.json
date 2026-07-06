@@ -1,0 +1,6 @@
+{
+  // Gives eslint's typed rules (projectService) a project covering test/ —
+  // the root tsconfig only includes src/. Not used by builds or vitest.
+  "extends": "../tsconfig.json",
+  "include": ["**/*"]
+}

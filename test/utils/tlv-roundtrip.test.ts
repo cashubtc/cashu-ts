@@ -6,6 +6,7 @@
  */
 
 import { describe, test, expect } from 'vitest';
+
 import { decodeBech32mToBytes, encodeBech32m } from '../../src/utils/bech32m';
 import { decodeTLV, encodeTLV } from '../../src/utils/tlv';
 import type { DecodedTLVPaymentRequest } from '../../src/utils/tlv';
@@ -102,17 +103,76 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
       const decoded = decodeTLV(bytes);
 
       expect(decoded.nut10).toBeDefined();
-      expect(decoded.nut10).toHaveLength(1);
-      expect(decoded.nut10![0].kind).toBe('P2PK');
-      expect(decoded.nut10![0].data).toBe(
+      expect(decoded.nut10!.kind).toBe('P2PK');
+      expect(decoded.nut10!.data).toBe(
         '02c3b5bb27e361457c92d93d78dd73d3d53732110b2cfe8b50fbc0abc615e9c331',
       );
-      expect(decoded.nut10![0].tags).toEqual([['timeout', '3600']]);
+      expect(decoded.nut10!.tags).toEqual([['timeout', '3600']]);
 
       const reEncoded = encodeTLV(decoded);
       const finalDecoded = decodeTLV(reEncoded);
 
       expect(finalDecoded.nut10).toEqual(decoded.nut10);
+    });
+
+    test('rejects multiple nut10 spending conditions', () => {
+      // NUT-26 tag 0x08 is not repeatable. encodeTLV emits a single nut10, so
+      // hand-build a malformed payload by concatenating two nut10-only streams.
+      const onePart = encodeTLV({ nut10: { kind: 'HTLC', data: 'htlcdata' } });
+      const twoParts = new Uint8Array([...onePart, ...onePart]);
+      expect(() => decodeTLV(twoParts)).toThrow(/multiple nut10/);
+    });
+
+    test('rejects duplicate nut10 data field', () => {
+      // A single nut10 with two NUT10_TAG_DATA tags previously last-wins. Wire
+      // format per part: tag(1) + length(2, big-endian) + value.
+      const malformed = new Uint8Array([
+        0x08,
+        0x00,
+        18, // TAG_NUT10, length 18
+        0x01,
+        0x00,
+        0x01,
+        0x00, // NUT10_TAG_KIND = 0 (P2PK)
+        0x02,
+        0x00,
+        0x05,
+        97,
+        108,
+        105,
+        99,
+        101, // NUT10_TAG_DATA = "alice"
+        0x02,
+        0x00,
+        0x03,
+        98,
+        111,
+        98, // NUT10_TAG_DATA = "bob"
+      ]);
+      expect(() => decodeTLV(malformed)).toThrow(/multiple nut10 data/);
+    });
+
+    test('rejects duplicate nut10 kind field', () => {
+      const malformed = new Uint8Array([
+        0x08,
+        0x00,
+        14, // TAG_NUT10, length 14
+        0x01,
+        0x00,
+        0x01,
+        0x00, // NUT10_TAG_KIND = 0 (P2PK)
+        0x01,
+        0x00,
+        0x01,
+        0x01, // NUT10_TAG_KIND = 1 (HTLC)
+        0x02,
+        0x00,
+        0x03,
+        98,
+        111,
+        98, // NUT10_TAG_DATA = "bob"
+      ]);
+      expect(() => decodeTLV(malformed)).toThrow(/multiple nut10 kind/);
     });
   });
 
@@ -286,15 +346,15 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
       const decoded = decodeTLV(bytes);
 
       expect(decoded.nut10).toBeDefined();
-      expect(decoded.nut10![0].kind).toBe('HTLC');
-      expect(decoded.nut10![0].tags).toHaveLength(2);
+      expect(decoded.nut10!.kind).toBe('HTLC');
+      expect(decoded.nut10!.tags).toHaveLength(2);
 
       const reEncoded = encodeTLV(decoded);
       const finalDecoded = decodeTLV(reEncoded);
 
-      expect(finalDecoded.nut10![0].kind).toBe(decoded.nut10![0].kind);
-      expect(finalDecoded.nut10![0].data).toBe(decoded.nut10![0].data);
-      expect(finalDecoded.nut10![0].tags).toEqual(decoded.nut10![0].tags);
+      expect(finalDecoded.nut10!.kind).toBe(decoded.nut10!.kind);
+      expect(finalDecoded.nut10!.data).toBe(decoded.nut10!.data);
+      expect(finalDecoded.nut10!.tags).toEqual(decoded.nut10!.tags);
     });
   });
 
@@ -378,16 +438,14 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
         amount: BigInt(250),
         unit: 'sat',
         mints: ['https://mint.com'],
-        nut10: [
-          {
-            kind: 'P2PK',
-            data: '02abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab',
-            tags: [
-              ['timeout', '7200'],
-              ['refund', '03abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890cd'],
-            ],
-          },
-        ],
+        nut10: {
+          kind: 'P2PK',
+          data: '02abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab',
+          tags: [
+            ['timeout', '7200'],
+            ['refund', '03abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890cd'],
+          ],
+        },
       };
 
       const encoded = encodeTLV(request);
@@ -402,7 +460,6 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
         unit: 'sat',
         mints: ['https://mint.com'],
         transports: [], // Empty array should be omitted
-        nut10: [], // Empty array should be omitted
       };
 
       const encoded = encodeTLV(request);

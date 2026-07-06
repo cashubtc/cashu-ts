@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+
 import { MintInfo } from '../../src/model/MintInfo';
 import { MINTINFORESP } from '../consts';
 
@@ -92,7 +93,7 @@ describe('MintInfo protected endpoint matching', () => {
           cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
         },
       },
-    } as any);
+    });
     expect(info.isSupported(19)).toEqual({
       supported: true,
       params: {
@@ -123,7 +124,7 @@ describe('MintInfo protected endpoint matching', () => {
           protected_endpoints: [{ method: 'POST', path: '/v1/swap' }],
         },
       },
-    } as any);
+    });
 
     // min/max amounts are AmountLike — wire bigint values pass through as-is
     expect(info.nuts['4'].methods[0].min_amount).toBe(1n);
@@ -153,7 +154,7 @@ describe('MintInfo protected endpoint matching', () => {
               cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
             },
           },
-        } as any),
+        }),
     ).toThrow('nuts.19.ttl');
   });
 });
@@ -187,7 +188,7 @@ describe('MintInfo NUT-29 batch minting info', () => {
         ...MINTINFORESP.nuts,
         29: { max_batch_size: 100, methods: ['bolt11', 'bolt12'] },
       },
-    } as any);
+    });
     expect(info.isSupported(29)).toEqual({
       supported: true,
       params: { max_batch_size: 100, methods: ['bolt11', 'bolt12'] },
@@ -201,7 +202,7 @@ describe('MintInfo NUT-29 batch minting info', () => {
         ...MINTINFORESP.nuts,
         29: { methods: ['bolt11'] },
       },
-    } as any);
+    });
     const result = info.isSupported(29);
     expect(result.supported).toBe(true);
     expect(result.params).toEqual({ methods: ['bolt11'], max_batch_size: 100 });
@@ -214,7 +215,7 @@ describe('MintInfo NUT-29 batch minting info', () => {
         ...MINTINFORESP.nuts,
         29: { max_batch_size: 50 },
       },
-    } as any);
+    });
     const result = info.isSupported(29);
     expect(result.supported).toBe(true);
     expect(result.params).toEqual({ max_batch_size: 50 });
@@ -227,7 +228,7 @@ describe('MintInfo NUT-29 batch minting info', () => {
         ...MINTINFORESP.nuts,
         29: { max_batch_size: '100' as any },
       },
-    } as any);
+    });
     const result = info.isSupported(29);
     expect(result.supported).toBe(true);
     expect(result.params?.max_batch_size).toBe(100);
@@ -242,7 +243,7 @@ describe('MintInfo NUT-29 batch minting info', () => {
           ...MINTINFORESP.nuts,
           29: { max_batch_size: 2.5, methods: ['bolt11'] },
         },
-      } as any,
+      },
       logger,
     );
     const result = info.isSupported(29);
@@ -263,7 +264,7 @@ describe('MintInfo NUT-29 batch minting info', () => {
           ...MINTINFORESP.nuts,
           29: { max_batch_size: NaN },
         },
-      } as any,
+      },
       logger,
     );
     const result = info.isSupported(29);
@@ -284,7 +285,7 @@ describe('MintInfo NUT-29 batch minting info', () => {
           ...MINTINFORESP.nuts,
           29: { max_batch_size: -1 },
         },
-      } as any,
+      },
       logger,
     );
     const result = info.isSupported(29);
@@ -305,7 +306,7 @@ describe('MintInfo NUT-29 batch minting info', () => {
           ...MINTINFORESP.nuts,
           29: { max_batch_size: 500 },
         },
-      } as any,
+      },
       logger,
     );
     const result = info.isSupported(29);
@@ -326,7 +327,7 @@ describe('MintInfo NUT-29 batch minting info', () => {
           ...MINTINFORESP.nuts,
           29: { max_batch_size: 100 },
         },
-      } as any,
+      },
       logger,
     );
     const result = info.isSupported(29);
@@ -360,7 +361,7 @@ describe('MintInfo NUT-22 bat_max_mint normalization', () => {
             protected_endpoints: [{ method: 'POST', path: '/v1/swap' }],
           },
         },
-      } as any,
+      },
       logger,
     );
     expect(info.nuts['22']?.bat_max_mint).toBe(100);
@@ -382,7 +383,7 @@ describe('MintInfo NUT-22 bat_max_mint normalization', () => {
             protected_endpoints: [{ method: 'POST', path: '/v1/swap' }],
           },
         },
-      } as any,
+      },
       logger,
     );
     expect(info.nuts['22']?.bat_max_mint).toBe(100);
@@ -404,7 +405,7 @@ describe('MintInfo NUT-22 bat_max_mint normalization', () => {
             protected_endpoints: [{ method: 'POST', path: '/v1/swap' }],
           },
         },
-      } as any,
+      },
       logger,
     );
     expect(info.nuts['22']?.bat_max_mint).toBe(50);

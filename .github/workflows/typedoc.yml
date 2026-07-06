@@ -46,6 +46,11 @@ jobs:
           destination_dir: .
           publish_dir: ./docs
           cname: cashu-ts.dev
+          # Overlay instead of wiping the branch: /coverage and /mutation
+          # (weekly Stryker report, deployed from main) live alongside the
+          # typedoc root. Tag-triggered runs execute THIS branch's copy, so
+          # this setting must live here on v4-dev, not (only) on main.
+          keep_files: true
 
       - name: Deploy Coverage to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
