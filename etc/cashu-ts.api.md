@@ -623,6 +623,9 @@ export type IntRange<F extends number, T extends number> = Exclude<Enumerate<T>,
 export function isHTLCSpendAuthorised(proof: Proof, logger?: Logger, message?: string): boolean;
 
 // @public
+export function isMintOperationError(e: unknown): e is MintOperationError;
+
+// @public
 export function isP2PKSpendAuthorised(proof: Proof, logger?: Logger, message?: string): boolean;
 
 // @public
@@ -1691,7 +1694,7 @@ export type RequestArgs = {
     logger?: Logger;
 };
 
-// @public (undocumented)
+// @public
 export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
 
 // @public (undocumented)
