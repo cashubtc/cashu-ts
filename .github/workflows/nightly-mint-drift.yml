@@ -1,0 +1,69 @@
+name: Nightly mint drift check
+
+# Runs the node integration suite against the mints' :latest Docker images
+# (NOT the Makefile pins) to catch upstream drift the day it ships instead
+# of when a user hits it. Failures open a `drift`-labelled issue.
+on:
+  schedule:
+    - cron: '30 4 * * *' # daily at 04:30 UTC, after the 02:00 image updater
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  drift:
+    runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mint: cdk
+            container: cashu-dev-cdk
+            start: DEV=1 CDK_IMAGE=cashubtc/mintd:latest make cdk-stable-up
+            stop: DEV=1 make cdk-stable-down
+          - mint: nutshell
+            container: cashu-dev-nutshell
+            start: DEV=1 NUT_IMAGE=cashubtc/nutshell:latest make nutshell-stable-up
+            stop: DEV=1 make nutshell-stable-down
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Start ${{ matrix.mint }} at :latest
+        run: ${{ matrix.start }}
+
+      - name: Test against ${{ matrix.mint }}:latest
+        uses: ./.github/actions/integration-against-mint
+        with:
+          container_name: ${{ matrix.container }}
+
+      - name: Stop mint
+        if: ${{ always() }}
+        run: ${{ matrix.stop }}
+
+      - name: Open drift issue on failure
+        if: ${{ failure() }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MINT: ${{ matrix.mint }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Drift: integration tests fail against ${MINT}:latest"
+          # One open issue per mint — comment on it instead of duplicating
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --label drift --search "in:title \"$title\"" \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" \
+              --body "Still failing: $RUN_URL"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "$title" \
+              --label drift \
+              --body "The nightly drift check failed against \`${MINT}:latest\` (the Makefile-pinned version still passes PR CI, so this is upstream drift or a breaking mint release).
+
+          Run: $RUN_URL"
+          fi

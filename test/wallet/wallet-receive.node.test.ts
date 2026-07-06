@@ -1,3 +1,4 @@
+import { hexToBytes } from '@noble/curves/utils.js';
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect } from 'vitest';
 
@@ -11,7 +12,6 @@ import {
   type ProofLike,
 } from '../../src';
 
-import { hexToBytes } from '@noble/curves/utils.js';
 import { mint, unit, token3sat, mintUrl, logger, useTestServer } from './_setup';
 
 const server = useTestServer();
@@ -440,7 +440,10 @@ describe('receive', () => {
       {},
       {
         type: 'p2pk',
-        options: { pubkey: '02a9acc1e594c8d2f91fbd5664973aaef2ff2b8c2f6cf5f419c17a35755a6ab5c4' },
+        options: {
+          kind: 'P2PK',
+          data: '02a9acc1e594c8d2f91fbd5664973aaef2ff2b8c2f6cf5f419c17a35755a6ab5c4',
+        },
       },
     );
     expect(proofs).toHaveLength(2);
@@ -521,7 +524,7 @@ describe('receive', () => {
 
     const customData = OutputData.createRandomData(
       3,
-      wallet.keyChain.getKeyset('00bd033559de27d0')!,
+      wallet.keyChain.getKeyset('00bd033559de27d0'),
       [1, 1, 1],
     );
     const proofs = await wallet.receive(token3sat, {}, { type: 'custom', data: customData });

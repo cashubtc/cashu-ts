@@ -1,12 +1,12 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 
-import { Amount, type AmountLike } from '../../src/model/Amount';
-import { DefaultOutputDataCreator } from '../../src/model/OutputDataCreator';
-import { OutputData, isOutputDataFactory } from '../../src/model/OutputData';
 import { getPubKeyFromPrivKey } from '../../src/crypto';
-import { Bytes } from '../../src/utils';
+import { Amount, type AmountLike } from '../../src/model/Amount';
+import { OutputData, isOutputDataFactory } from '../../src/model/OutputData';
 import type { OutputDataFactory, OutputDataLike } from '../../src/model/OutputData';
+import { DefaultOutputDataCreator } from '../../src/model/OutputDataCreator';
 import type { HasKeysetKeys, SerializedBlindedSignature, Proof } from '../../src/model/types';
+import { Bytes } from '../../src/utils';
 
 describe('DefaultOutputDataCreator', () => {
   test('delegates single deterministic output creation to OutputData', () => {
@@ -17,6 +17,23 @@ describe('DefaultOutputDataCreator', () => {
     expect(creator.createSingleDeterministicData(1, seed, 7, keysetId)).toEqual(
       OutputData.createSingleDeterministicData(1, seed, 7, keysetId),
     );
+  });
+
+  test('uses the batch path when the single-output hook is not overridden', () => {
+    const keyset: HasKeysetKeys = {
+      id: '012e23479a0029432eaad0d2040c09be53bab592d5cbf1d55e0dd26c9495951b30',
+      keys: { '1': 'unused', '2': 'unused' },
+    };
+    const seed = new Uint8Array([1]);
+    const creator = new DefaultOutputDataCreator();
+    const batchSpy = vi.spyOn(OutputData, 'createDeterministicData');
+
+    const outputs = creator.createDeterministicData(3, seed, 7, keyset, [1, 2]);
+
+    // Default hook must delegate to the optimized batch method, not the per-output loop.
+    expect(batchSpy).toHaveBeenCalledWith(3, seed, 7, keyset, [1, 2]);
+    batchSpy.mockRestore();
+    expect(outputs).toEqual(OutputData.createDeterministicData(3, seed, 7, keyset, [1, 2]));
   });
 
   test('delegates deterministic batch creation to subclassed single-output override', () => {
@@ -103,7 +120,8 @@ describe('OutputData helpers', () => {
     const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
     const output = OutputData.createSingleP2PKData(
       {
-        pubkey,
+        kind: 'P2PK',
+        data: pubkey,
         blindKeys: true,
       },
       1,
@@ -120,8 +138,9 @@ describe('OutputData helpers', () => {
     const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
     const output = OutputData.createSingleP2PKData(
       {
-        pubkey,
-        hashlock: 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5',
+        kind: 'HTLC',
+        data: 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5',
+        pubkeys: [pubkey],
         blindKeys: true,
       },
       1,

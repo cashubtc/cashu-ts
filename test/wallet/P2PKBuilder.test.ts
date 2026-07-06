@@ -1,26 +1,30 @@
 import { describe, it, expect } from 'vitest';
+
 import { P2PKBuilder, type P2PKOptions } from '../../src/';
 
 // helpers to make valid hex keys
 const xonly = (ch: string) => ch.repeat(64); // 32-byte X-only
 const comp = (ch: string, prefix: '02' | '03' = '02') => `${prefix}${ch.repeat(64)}`;
+// a valid 64-char hex hashlock (SHA-256 output shape)
+const hashlock = 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5';
 
 describe('P2PKBuilder.toOptions()', () => {
   it('returns single lock key as a string', () => {
     const opts = new P2PKBuilder().addLockPubkey(comp('a', '02')).toOptions();
-    expect(typeof opts.pubkey).toBe('string');
-    expect(opts.pubkey).toBe(comp('a', '02'));
+    expect(typeof opts.data).toBe('string');
+    expect(opts.data).toBe(comp('a', '02'));
   });
 
-  it('returns multiple lock keys as an array and preserves insertion order', () => {
+  it('splits multiple lock keys into a single data key + pubkeys tag, preserving order', () => {
     const k1 = comp('a', '02');
     const k2 = comp('b', '03');
     const k3 = comp('c', '02');
 
     const opts = new P2PKBuilder().addLockPubkey([k1, k2]).addLockPubkey(k3).toOptions();
 
-    expect(Array.isArray(opts.pubkey)).toBe(true);
-    expect(opts.pubkey).toEqual([k1, k2, k3]);
+    // First key is the NUT-10 data slot; the rest ride the optional pubkeys tag.
+    expect(opts.data).toBe(k1);
+    expect(opts.pubkeys).toEqual([k2, k3]);
   });
 
   it('normalizes x-only lock keys to 02-prefixed compressed', () => {
@@ -28,7 +32,7 @@ describe('P2PKBuilder.toOptions()', () => {
     const expected = comp('1', '02'); // normalized
 
     const opts = new P2PKBuilder().addLockPubkey(x).toOptions();
-    expect(opts.pubkey).toBe(expected);
+    expect(opts.data).toBe(expected);
   });
 
   it('normalizes x-only refund keys to 02-prefixed compressed', () => {
@@ -54,8 +58,9 @@ describe('P2PKBuilder.toOptions()', () => {
       .addRefundPubkey([kA, kA, kB])
       .toOptions();
 
-    // pubkey is array because >1
-    expect(opts.pubkey).toEqual([kA, kB]);
+    // data slot holds the first key; the deduped remainder rides the pubkeys tag.
+    expect(opts.data).toBe(kA);
+    expect(opts.pubkeys).toEqual([kB]);
     expect(opts.refundKeys).toEqual([kA, kB]);
   });
 
@@ -93,6 +98,37 @@ describe('P2PKBuilder.toOptions()', () => {
     expect(o2.locktime).toBeTypeOf('number');
     expect(o2.locktime).toBe(nowSec + 60);
     expect(o2.sigFlag).toBe(undefined);
+  });
+
+  it('treats a Date by its getTime()/1000, not by numeric coercion', () => {
+    // getTime() = 500_000 ms => 500 s. A Date under the ms threshold must still be read
+    // as milliseconds via getTime(), never coerced to a raw number of seconds.
+    const opts = new P2PKBuilder()
+      .addLockPubkey(comp('a', '02'))
+      .lockUntil(new Date(500_000))
+      .toOptions();
+    expect(opts.locktime).toBe(500);
+  });
+
+  it('treats a numeric locktime of exactly 1e12 as milliseconds', () => {
+    // Boundary: values >= 1e12 are milliseconds, so 1e12 ms => 1e9 s.
+    const opts = new P2PKBuilder().addLockPubkey(comp('a', '02')).lockUntil(1e12).toOptions();
+    expect(opts.locktime).toBe(1e9);
+  });
+
+  it('keeps a numeric locktime below 1e12 as seconds', () => {
+    const opts = new P2PKBuilder()
+      .addLockPubkey(comp('a', '02'))
+      .lockUntil(999_999_999_999)
+      .toOptions();
+    expect(opts.locktime).toBe(999_999_999_999);
+  });
+
+  it('returns a defensive copy of additionalTags, isolated from later mutations', () => {
+    const b = new P2PKBuilder().addLockPubkey(comp('a', '02')).addTag('foo', ['bar']);
+    const opts = b.toOptions();
+    b.addTag('baz', ['qux']); // must not leak into the already-returned options
+    expect(opts.additionalTags).toEqual([['foo', 'bar']]);
   });
 
   it('requireLockSignatures throws on non-integer and values less than 1', () => {
@@ -151,19 +187,39 @@ describe('P2PKBuilder.toOptions()', () => {
     expect('requiredRefundSignatures' in o2).toBe(false);
   });
 
+  it('rejects an empty or malformed hashlock at addHashlock, not silently', () => {
+    // An empty hashlock must NOT be treated as "no hashlock" and degrade the intended
+    // HTLC into a plain P2PK lock (spendable with a signature, no preimage).
+    expect(() => new P2PKBuilder().addHashlock('')).toThrow(
+      /HTLC hashlock must be a 64-character hex string/i,
+    );
+    expect(() => new P2PKBuilder().addHashlock('not-a-hash')).toThrow(
+      /HTLC hashlock must be a 64-character hex string/i,
+    );
+    // Regression: empty hashlock + a lock key previously yielded { kind: 'P2PK' }.
+    expect(() =>
+      new P2PKBuilder().addHashlock('').addLockPubkey(comp('a', '02')).toOptions(),
+    ).toThrow(/HTLC hashlock must be a 64-character hex string/i);
+  });
+
+  it('lowercases the hashlock so it matches createHTLCHash output', () => {
+    const opts = new P2PKBuilder().addHashlock(hashlock.toUpperCase()).toOptions();
+    expect(opts).toEqual({ kind: 'HTLC', data: hashlock });
+  });
+
   it('rejects an explicit n_sigs on a keyless HTLC (no lock keys to sign)', () => {
     // The <=1 omission above is a redundant default *when keys back it*. With zero
     // lock keys (hashlock-only HTLC) an explicit n_sigs=1 is contradictory and must
     // surface, not be dropped into a spendable preimage-only lock. n_sigs>1 already
     // survives the filter; n_sigs=1 is the value that previously slipped through.
     expect(() =>
-      new P2PKBuilder().addHashlock('deadbeef').requireLockSignatures(1).toOptions(),
+      new P2PKBuilder().addHashlock(hashlock).requireLockSignatures(1).toOptions(),
     ).toThrow(/exceeds available pubkeys/i);
     expect(() =>
-      new P2PKBuilder().addHashlock('deadbeef').requireLockSignatures(2).toOptions(),
+      new P2PKBuilder().addHashlock(hashlock).requireLockSignatures(2).toOptions(),
     ).toThrow(/exceeds available pubkeys/i);
     // No explicit threshold => keyless HTLC builds fine.
-    const ok = new P2PKBuilder().addHashlock('deadbeef').toOptions();
+    const ok = new P2PKBuilder().addHashlock(hashlock).toOptions();
     expect('requiredSignatures' in ok).toBe(false);
   });
 
@@ -175,17 +231,28 @@ describe('P2PKBuilder.toOptions()', () => {
     ).toThrow(/requires refund keys/i);
   });
 
-  it('enforces combined lock+refund keys limit of 10', () => {
-    // build 11 distinct keys
-    const chars = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b'];
+  it('enforces the combined lock+refund slot limit of 11 (NUT-28)', () => {
+    // 12 distinct keys; NUT-28 allows up to 11 slots ([data, ...pubkeys, ...refund]).
+    const chars = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c'];
     const keys = chars.map((c, i) => comp(c as any, i % 2 === 0 ? '02' : '03'));
 
-    const b = new P2PKBuilder()
-      .addLockPubkey(keys.slice(0, 8)) // 8 locks
-      .lockUntil(Date.now() + 60)
-      .addRefundPubkey(keys.slice(8)); // 3 refunds => total 11
+    // 8 locks + 3 refunds = 11 slots: allowed.
+    expect(() =>
+      new P2PKBuilder()
+        .addLockPubkey(keys.slice(0, 8))
+        .lockUntil(Date.now() + 60)
+        .addRefundPubkey(keys.slice(8, 11))
+        .toOptions(),
+    ).not.toThrow();
 
-    expect(() => b.toOptions()).toThrow(/Too many pubkeys/i);
+    // 8 locks + 4 refunds = 12 slots: rejected.
+    expect(() =>
+      new P2PKBuilder()
+        .addLockPubkey(keys.slice(0, 8))
+        .lockUntil(Date.now() + 60)
+        .addRefundPubkey(keys.slice(8))
+        .toOptions(),
+    ).toThrow(/Too many pubkeys/i);
   });
 
   it('round-trips via fromOptions', () => {
@@ -196,15 +263,20 @@ describe('P2PKBuilder.toOptions()', () => {
       .requireLockSignatures(2)
       .requireRefundSignatures(1)
       .sigAll()
-      .addHashlock('foo')
+      .addHashlock(hashlock)
       .toOptions();
 
     const rebuilt = P2PKBuilder.fromOptions(original).toOptions();
     expect(rebuilt).toEqual(original);
   });
 
+  it('round-trips a keyless HTLC via fromOptions (no pubkeys)', () => {
+    const lock = { kind: 'HTLC', data: hashlock } as const;
+    expect(P2PKBuilder.fromOptions(lock).toOptions()).toEqual(lock);
+  });
+
   it('fromOptions with minimal shape leaves required* undefined', () => {
-    const minimal = { pubkey: '02' + 'b'.repeat(64) } as const;
+    const minimal = { kind: 'P2PK', data: '02' + 'b'.repeat(64) } as const;
     const round = P2PKBuilder.fromOptions(minimal).toOptions();
     expect(round).toEqual(minimal); // no extra props added
     expect('requiredSignatures' in round).toBe(false);
@@ -221,7 +293,8 @@ describe('P2PKBuilder.toOptions()', () => {
     const now = Math.floor(Date.now() / 1000) + 300;
 
     const src = {
-      pubkey: lock,
+      kind: 'P2PK',
+      data: lock,
       locktime: now,
       refundKeys: [r1, r2] as string[],
       requiredRefundSignatures: 2,
@@ -259,11 +332,11 @@ describe('P2PKBuilder, simple fuzzish case', () => {
       .sigAll()
       .toOptions();
 
-    const expLocks = ['02' + 'a'.repeat(64), '02' + 'b'.repeat(64)];
     const expRefunds = ['03' + 'c'.repeat(64)];
 
-    expect(Array.isArray(opts.pubkey)).toBe(true);
-    expect(opts.pubkey).toEqual(expLocks);
+    // Two unique lock keys: first is the data slot, second rides the pubkeys tag.
+    expect(opts.data).toBe('02' + 'a'.repeat(64));
+    expect(opts.pubkeys).toEqual(['02' + 'b'.repeat(64)]);
     expect(opts.refundKeys).toEqual(expRefunds);
     expect(opts.locktime).toBe(ms / 1000);
     expect(opts.sigFlag).toEqual('SIG_ALL');
@@ -377,7 +450,8 @@ describe('P2PKBuilder addTag and addTags', () => {
 
   it('fromOptions accepts options with additionalTags only and leaves shape untouched', () => {
     const minimalWithTags: P2PKOptions = {
-      pubkey: comp('a', '02'),
+      kind: 'P2PK',
+      data: comp('a', '02'),
       additionalTags: [['x'], ['y', '1'], ['z', 'a', 'b']],
     };
 

@@ -2,7 +2,7 @@
 
 # P2PKBuilder API
 
-Small helper that only shapes `P2PKOptions`, it does not create secrets.
+Small helper that shapes a `P2PKOptions` lock, it does not create secrets.
 
 ```ts
 new P2PKBuilder()
@@ -14,7 +14,7 @@ new P2PKBuilder()
   .addTag(key: string, values?: string[] | string) // add single tag (eg: NutZap 'e')
   .addTags(tags: P2PKTag[]) // add multiple tags at once
   .addHashlock(hashlock: string) // for NUT-14 "HTLC" kind secrets
-  .toOptions(): P2PKOptions;
+  .toOptions(): P2PKOptions; // { kind, data, ...tags }
 
 P2PKBuilder.fromOptions(opts: P2PKOptions): P2PKBuilder
 ```
@@ -30,5 +30,6 @@ import { P2PKBuilder } from '@cashu/cashu-ts';
 
 const p2pk = new P2PKBuilder().addLockPubkey('02abc...').lockUntil(1_712_345_678).toOptions();
 
+// `p2pk` already carries its `kind`, so pass it to `asP2PK`:
 await wallet.ops.send(5, proofs).asP2PK(p2pk).run();
 ```

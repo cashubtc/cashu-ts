@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
-import { WalletOps } from '../../src/wallet/WalletOps';
-import { Amount, type AmountLike } from '../../src/model/Amount';
 
+import { Amount, type AmountLike } from '../../src/model/Amount';
+import type { OutputData, OutputDataLike } from '../../src/model/OutputData';
 import type {
   Proof,
   MintQuoteBolt11Response,
@@ -12,7 +12,6 @@ import type {
   MeltQuoteBolt12Response,
   MeltQuoteOnchainResponse,
 } from '../../src/model/types';
-import type { OutputData, OutputDataLike } from '../../src/model/OutputData';
 import type {
   OutputType,
   OutputConfig,
@@ -26,6 +25,7 @@ import type {
   MeltPreview,
   MintPreview,
 } from '../../src/wallet/types';
+import { WalletOps } from '../../src/wallet/WalletOps';
 
 // ---- Function signatures for typed mocks ------------------------------------
 
@@ -146,7 +146,7 @@ class MockWallet {
   checkMintQuoteBolt11: Mock<CheckMintQuoteBolt11Fn> = vi.fn<CheckMintQuoteBolt11Fn>(
     async (id) => ({
       quote: id,
-      state: 'UNPAID' as any,
+      state: 'UNPAID',
       expiry: 0,
       request: '',
       amount: Amount.from(0),
@@ -195,7 +195,7 @@ const melt11: MeltQuoteBolt11Response = {
   quote: 'mq11',
   amount: Amount.from(5),
   fee_reserve: Amount.from(1),
-  state: 'UNPAID' as any,
+  state: 'UNPAID',
   expiry: 0,
   payment_preimage: null,
   request: 'lnbc1...',
@@ -206,7 +206,7 @@ const melt12: MeltQuoteBolt12Response = {
   quote: 'mq12',
   amount: Amount.from(7),
   fee_reserve: Amount.from(2),
-  state: 'UNPAID' as any,
+  state: 'UNPAID',
   expiry: 0,
   payment_preimage: null,
   request: 'lno1...',
@@ -227,7 +227,7 @@ const mint12: MintQuoteBolt12Response = {
 const meltOnchainSingle: MeltQuoteOnchainResponse = {
   quote: 'mq-onchain-melt-1',
   amount: Amount.from(10),
-  state: 'UNPAID' as any,
+  state: 'UNPAID',
   expiry: 0,
   request: 'bc1qrecipient',
   unit: 'sat',
@@ -239,7 +239,7 @@ const meltOnchainSingle: MeltQuoteOnchainResponse = {
 const meltOnchainMulti: MeltQuoteOnchainResponse = {
   quote: 'mq-onchain-melt-2',
   amount: Amount.from(10),
-  state: 'UNPAID' as any,
+  state: 'UNPAID',
   expiry: 0,
   request: 'bc1qrecipient',
   unit: 'sat',
@@ -376,16 +376,20 @@ describe('WalletOps builders', () => {
     it('supports sendP2PK and keepP2PK OutputTypes', async () => {
       await ops
         .send(7, proofs)
-        .asP2PK({ pubkey: 'pub', locktime: 123 }, [7])
-        .keepAsP2PK({ pubkey: ['a', 'b'], requiredSignatures: 2 }, [])
+        .asP2PK({ kind: 'P2PK', data: 'pub', locktime: 123 }, [7])
+        .keepAsP2PK({ kind: 'P2PK', data: 'a', pubkeys: ['b'], requiredSignatures: 2 }, [])
         .run();
 
       const [, , , outputConfig] = wallet.send.mock.calls[0];
       expect(outputConfig).toEqual({
-        send: { type: 'p2pk', options: { pubkey: 'pub', locktime: 123 }, denominations: [7] },
+        send: {
+          type: 'p2pk',
+          options: { kind: 'P2PK', data: 'pub', locktime: 123 },
+          denominations: [7],
+        },
         keep: {
           type: 'p2pk',
-          options: { pubkey: ['a', 'b'], requiredSignatures: 2 },
+          options: { kind: 'P2PK', data: 'a', pubkeys: ['b'], requiredSignatures: 2 },
           denominations: [],
         },
       });
@@ -402,16 +406,20 @@ describe('WalletOps builders', () => {
     it('supports prepareSwapToSend', async () => {
       await ops
         .send(7, proofs)
-        .asP2PK({ pubkey: 'pub', locktime: 123 }, [7])
-        .keepAsP2PK({ pubkey: ['a', 'b'], requiredSignatures: 2 }, [])
+        .asP2PK({ kind: 'P2PK', data: 'pub', locktime: 123 }, [7])
+        .keepAsP2PK({ kind: 'P2PK', data: 'a', pubkeys: ['b'], requiredSignatures: 2 }, [])
         .prepare();
 
       const [, , , outputConfig] = wallet.prepareSwapToSend.mock.calls[0];
       expect(outputConfig).toEqual({
-        send: { type: 'p2pk', options: { pubkey: 'pub', locktime: 123 }, denominations: [7] },
+        send: {
+          type: 'p2pk',
+          options: { kind: 'P2PK', data: 'pub', locktime: 123 },
+          denominations: [7],
+        },
         keep: {
           type: 'p2pk',
-          options: { pubkey: ['a', 'b'], requiredSignatures: 2 },
+          options: { kind: 'P2PK', data: 'a', pubkeys: ['b'], requiredSignatures: 2 },
           denominations: [],
         },
       });
@@ -469,6 +477,39 @@ describe('WalletOps builders', () => {
 
       const [, , cfg] = wallet.sendOffline.mock.calls[0];
       expect(cfg).toEqual({ includeFees: true, exactMatch: false, requireDleq: false });
+    });
+
+    it('keepAsRandom sets a random keep OutputType', async () => {
+      await ops.send(5, proofs).keepAsRandom([5]).run();
+
+      const [, , , outputConfig] = wallet.send.mock.calls[0];
+      expect(outputConfig!.keep).toEqual({ type: 'random', denominations: [5] });
+    });
+
+    it('offlineExactOnly signs the proofs when a privkey is set', async () => {
+      await ops.send(5, proofs).offlineExactOnly().privkey('sk').run();
+
+      expect(wallet.signP2PKProofs).toHaveBeenCalledTimes(1);
+      expect(wallet.signP2PKProofs).toHaveBeenCalledWith(proofs, 'sk');
+    });
+
+    it('offlineExactOnly does not sign when no privkey is set', async () => {
+      await ops.send(5, proofs).offlineExactOnly().run();
+
+      expect(wallet.signP2PKProofs).not.toHaveBeenCalled();
+    });
+
+    it('offlineCloseMatch signs the proofs when a privkey is set', async () => {
+      await ops.send(5, proofs).offlineCloseMatch().privkey('sk').run();
+
+      expect(wallet.signP2PKProofs).toHaveBeenCalledTimes(1);
+      expect(wallet.signP2PKProofs).toHaveBeenCalledWith(proofs, 'sk');
+    });
+
+    it('offlineCloseMatch does not sign when no privkey is set', async () => {
+      await ops.send(5, proofs).offlineCloseMatch().run();
+
+      expect(wallet.signP2PKProofs).not.toHaveBeenCalled();
     });
   });
 
@@ -547,12 +588,12 @@ describe('WalletOps builders', () => {
     });
 
     it('p2pk() OutputType for receive', async () => {
-      await ops.receive(token).asP2PK({ pubkey: 'PUB', locktime: 42 }, [7]).run();
+      await ops.receive(token).asP2PK({ kind: 'P2PK', data: 'PUB', locktime: 42 }, [7]).run();
 
       const [, , outputType] = wallet.receive.mock.calls[0];
       expect(outputType).toEqual({
         type: 'p2pk',
-        options: { pubkey: 'PUB', locktime: 42 },
+        options: { kind: 'P2PK', data: 'PUB', locktime: 42 },
         denominations: [7],
       });
     });
@@ -599,7 +640,7 @@ describe('WalletOps builders', () => {
     it('calls wallet.prepareMint with custom OutputType and config', async () => {
       await ops
         .mintBolt11(10, quote)
-        .asP2PK({ pubkey: 'P' }, [10])
+        .asP2PK({ kind: 'P2PK', data: 'P' }, [10])
         .privkey('sk')
         .onCountersReserved(() => {})
         .prepare();
@@ -611,7 +652,11 @@ describe('WalletOps builders', () => {
       expect(Amount.from(amount).equals(10)).toBeTruthy();
       // MintBuilder resolves string quote IDs via checkMintQuoteBolt11 before calling prepareMint
       expect(q.quote).toBe(quote);
-      expect(outputType).toEqual({ type: 'p2pk', options: { pubkey: 'P' }, denominations: [10] });
+      expect(outputType).toEqual({
+        type: 'p2pk',
+        options: { kind: 'P2PK', data: 'P' },
+        denominations: [10],
+      });
 
       expect(config).toBeDefined();
       const cfg = config!;
@@ -667,14 +712,15 @@ describe('WalletOps builders', () => {
       expect(wallet.completeMint).toHaveBeenCalledWith(preview);
     });
 
+    // eslint-disable-next-line vitest/expect-expect -- compile-time check: @ts-expect-error is the assertion
     it('bolt12 requires privkey at compile time', () => {
       if (false as boolean) {
         // This is a compiler check - if you remove the exclude line below the
         // compiler should complain 'MintBuilder<"bolt12", false>' is not assignable
         // @ts-expect-error run should not be callable before privkey
-        ops.mintBolt12(7, mint12).run();
+        void ops.mintBolt12(7, mint12).run();
         // @ts-expect-error prepare should not be callable before privkey
-        ops.mintBolt12(7, mint12).prepare();
+        void ops.mintBolt12(7, mint12).prepare();
       }
 
       void ops.mintBolt12(7, mint12).privkey('k').run();
@@ -764,12 +810,13 @@ describe('WalletOps builders', () => {
       expect(cfg).toMatchObject({ privkey: 'new' });
     });
 
+    // eslint-disable-next-line vitest/expect-expect -- compile-time check: @ts-expect-error is the assertion
     it('onchain requires privkey at compile time', () => {
       if (false as boolean) {
         // @ts-expect-error run should not be callable before privkey
-        ops.mintOnchain(8, mintOnchain).run();
+        void ops.mintOnchain(8, mintOnchain).run();
         // @ts-expect-error prepare should not be callable before privkey
-        ops.mintOnchain(8, mintOnchain).prepare();
+        void ops.mintOnchain(8, mintOnchain).prepare();
       }
 
       void ops.mintOnchain(8, mintOnchain).privkey('k').run();
@@ -823,6 +870,22 @@ describe('WalletOps builders', () => {
       expect(wallet.prepareMint).toHaveBeenCalledTimes(1);
       expect(wallet.completeMint).toHaveBeenCalledTimes(1);
       expect(wallet.completeMint).toHaveBeenCalledWith(preview);
+    });
+
+    it('bolt12 without privkey throws the BOLT12-specific message (not another branch)', async () => {
+      // Pins prepare()'s method dispatch: only the bolt12 branch names "BOLT12", so
+      // any mutant that routes a bolt12 quote through bolt11/onchain surfaces here.
+      const builder = ops.mintBolt12(7, mint12) as unknown as { prepare(): Promise<unknown> };
+      await expect(builder.prepare()).rejects.toThrow(
+        /privkey is required for BOLT12 mint quotes/i,
+      );
+    });
+
+    it('onchain without privkey throws the onchain-specific message (not another branch)', async () => {
+      const builder = ops.mintOnchain(8, mintOnchain) as unknown as { prepare(): Promise<unknown> };
+      await expect(builder.prepare()).rejects.toThrow(
+        /privkey is required for onchain mint quotes/i,
+      );
     });
 
     it('bolt11 locked quote without privkey throws at runtime', async () => {
@@ -933,7 +996,10 @@ describe('WalletOps builders', () => {
     });
 
     it('bolt11: supports P2PK OutputType', async () => {
-      await ops.meltBolt11(melt11, proofs).asP2PK({ pubkey: 'X', locktime: 99 }, []).run();
+      await ops
+        .meltBolt11(melt11, proofs)
+        .asP2PK({ kind: 'P2PK', data: 'X', locktime: 99 }, [])
+        .run();
 
       expect(wallet.prepareMelt).toHaveBeenCalledTimes(1);
       expect(wallet.completeMelt).toHaveBeenCalledTimes(1);
@@ -941,7 +1007,7 @@ describe('WalletOps builders', () => {
       const [, , , , ot] = wallet.prepareMelt.mock.calls[0];
       expect(ot).toEqual({
         type: 'p2pk',
-        options: { pubkey: 'X', locktime: 99 },
+        options: { kind: 'P2PK', data: 'X', locktime: 99 },
         denominations: [],
       });
     });
@@ -999,6 +1065,16 @@ describe('WalletOps builders', () => {
       expect(cfg).toMatchObject({ keysetId: 'kid', privkey: 'sk' });
     });
 
+    it('does not auto-select a fee option when one is already chosen for a multi-option quote', async () => {
+      // Auto-select only fires for a single-option quote with no explicit choice.
+      // Here fee_options[0].fee_index is 0, so a mutant that always auto-selects
+      // would clobber the explicit feeIndex(1) back to 0.
+      await ops.meltOnchain(meltOnchainMulti, proofs).privkey('sk').feeIndex(1).run();
+
+      const [, , idx] = wallet.meltProofsOnchain.mock.calls[0];
+      expect(idx).toBe(1);
+    });
+
     it('throws when multiple fee options exist and no feeIndex is selected', async () => {
       await expect(ops.meltOnchain(meltOnchainMulti, proofs).privkey('sk').run()).rejects.toThrow(
         /feeIndex is required/i,
@@ -1016,7 +1092,7 @@ describe('WalletOps builders', () => {
     it('passes through the meltProofsOnchain return value', async () => {
       const change = [{ amount: Amount.one(), id: '00bd033559de27d0', secret: 's', C: 'C' }];
       wallet.meltProofsOnchain.mockResolvedValueOnce({
-        quote: { ...meltOnchainSingle, state: 'PAID' as any },
+        quote: { ...meltOnchainSingle, state: 'PAID' },
         change,
       });
 

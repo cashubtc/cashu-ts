@@ -18,8 +18,11 @@
 // - Nutshell:
 // docker rm -f -v nutshell
 
-import { vi, test, describe, expect } from 'vitest';
 import { secp256k1, schnorr } from '@noble/curves/secp256k1.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils.js';
+import { vi, test, describe, expect } from 'vitest';
+
 import {
   Mint,
   Wallet,
@@ -31,23 +34,21 @@ import {
   type Token,
   MintOperationError,
   OutputData,
-  OutputDataFactory,
-  OutputConfig,
-  OutputType,
+  type OutputDataFactory,
+  type OutputConfig,
+  type OutputType,
   P2PKBuilder,
-  MintQuoteBaseResponse,
+  type MintQuoteBaseResponse,
   getEncodedToken,
   hexToNumber,
   isBlsKeyset,
   numberToHexPadded64,
   sumProofs,
-  HasKeysetKeys,
+  type HasKeysetKeys,
   NetworkError,
-  AmountLike,
+  type AmountLike,
   CTSError,
 } from '../src';
-import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils.js';
-import { sha256 } from '@noble/hashes/sha2.js';
 
 const mintUrl = 'http://127.0.0.1:3338';
 const unit = 'sat';
@@ -77,7 +78,7 @@ async function untilMintQuotePaid(wallet: Wallet, quote: MintQuoteBaseResponse) 
   }
 }
 
-function expectNUT10SecretDataToEqual(p: Array<Proof>, s: string) {
+function expectNUT10SecretDataToEqual(p: Proof[], s: string) {
   p.forEach((p) => {
     const parsedSecret = JSON.parse(p.secret);
     expect(parsedSecret[1].data).toBe(s);
@@ -85,7 +86,7 @@ function expectNUT10SecretDataToEqual(p: Array<Proof>, s: string) {
 }
 
 function expectBlindedSecretDataToEqualECDH(
-  proofs: Array<Proof>,
+  proofs: Proof[],
   bobPrivHex: Uint8Array, // receiver’s private key
   bobPubHex: string, // receiver’s SEC1-compressed pubkey P
 ) {
@@ -334,7 +335,10 @@ describe('mint api', () => {
     await untilMintQuotePaid(wallet, request);
     const mintedProofs = await wallet.mintProofsBolt11(128, request.quote);
     // Send them P2PK locked to Bob
-    const { send } = await wallet.ops.send(64, mintedProofs).asP2PK({ pubkey: pubKeyBob }).run();
+    const { send } = await wallet.ops
+      .send(64, mintedProofs)
+      .asP2PK({ kind: 'P2PK', data: pubKeyBob })
+      .run();
     expectNUT10SecretDataToEqual(send, pubKeyBob);
     const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
     // Try and receive them with Alice's secret key (should fail)
@@ -496,7 +500,8 @@ describe('mint api', () => {
     const proofs = await wallet.ops
       .mintBolt11(3000, mintRequest.quote)
       .asP2PK({
-        pubkey: bytesToHex(pubKeyBob),
+        kind: 'P2PK',
+        data: bytesToHex(pubKeyBob),
       })
       .run();
     const meltRequest = await wallet.createMeltQuoteBolt11(invoice);
@@ -519,7 +524,8 @@ describe('mint api', () => {
     const preview = await wallet.ops
       .mintBolt11(50, mintRequest.quote)
       .asP2PK({
-        pubkey: bytesToHex(pubKeyBob),
+        kind: 'P2PK',
+        data: bytesToHex(pubKeyBob),
         sigFlag: 'SIG_ALL',
       })
       .prepare();
@@ -648,6 +654,7 @@ describe('mint api', () => {
     expect(res).toBe(1);
     expect(mint.webSocketConnection?.activeSubscriptions.length).toBe(0);
   });
+  // eslint-disable-next-line vitest/expect-expect -- await-based: event promises resolving is the assertion
   test('websocket proof state + mint quote updates', async () => {
     const mint = new Mint(mintUrl);
     const wallet = new Wallet(mint);
@@ -789,7 +796,7 @@ describe('dleq', () => {
     if (isV3Mint(wallet)) return; // v3 proofs use pairing verification, no DLEQ
     const mintRequest = await wallet.createMintQuoteBolt11(8);
     await untilMintQuotePaid(wallet, mintRequest);
-    let proofs = await wallet.mintProofsBolt11(8, mintRequest.quote);
+    const proofs = await wallet.mintProofsBolt11(8, mintRequest.quote);
     // alter dleq signature
     proofs.forEach((p) => {
       if (p.dleq != undefined) {
@@ -819,7 +826,7 @@ describe('Custom Outputs', () => {
   test('Default keepFactory', async () => {
     // First we create a keep factory, this is a function that will be used to construct all outputs that we "keep"
     function p2pkFactory(a: AmountLike, k: HasKeysetKeys) {
-      return OutputData.createSingleP2PKData({ pubkey: hexPk }, a, k.id);
+      return OutputData.createSingleP2PKData({ kind: 'P2PK', data: hexPk }, a, k.id);
     }
     const keepFactory: OutputType = { type: 'factory', factory: p2pkFactory };
     // We then construct and load the wallet
@@ -866,7 +873,7 @@ describe('Custom Outputs', () => {
     const testPk = '02' + 'ab'.repeat(32);
     const newFactory: OutputType = {
       type: 'factory',
-      factory: (a, k) => OutputData.createSingleP2PKData({ pubkey: testPk }, a, k.id),
+      factory: (a, k) => OutputData.createSingleP2PKData({ kind: 'P2PK', data: testPk }, a, k.id),
     };
     const newProofs = await wallet.receive(
       { proofs: unlockedProofs.send, mint: mintUrl, unit: wallet.unit },
@@ -879,7 +886,7 @@ describe('Custom Outputs', () => {
   test('Manual Factory Mint', async () => {
     function createFactory(pubkey: string): OutputDataFactory {
       function inner(a: AmountLike, k: HasKeysetKeys) {
-        return OutputData.createSingleP2PKData({ pubkey: pubkey }, a, k.id);
+        return OutputData.createSingleP2PKData({ kind: 'P2PK', data: pubkey }, a, k.id);
       }
       return inner;
     }
@@ -895,7 +902,7 @@ describe('Custom Outputs', () => {
   test('Manual Factory Send', async () => {
     function createFactory(pubkey: string): OutputDataFactory {
       function inner(a: AmountLike, k: HasKeysetKeys) {
-        return OutputData.createSingleP2PKData({ pubkey }, a, k.id);
+        return OutputData.createSingleP2PKData({ kind: 'P2PK', data: pubkey }, a, k.id);
       }
       return inner;
     }
@@ -928,8 +935,8 @@ describe('Custom Outputs', () => {
     const proofs = await wallet.mintProofsBolt11(40, quote.quote);
     const pk1 = '02' + 'aa'.repeat(32);
     const pk2 = '02' + 'bb'.repeat(32);
-    const data1 = OutputData.createP2PKData({ pubkey: pk1 }, 10, keys);
-    const data2 = OutputData.createP2PKData({ pubkey: pk2 }, 10, keys);
+    const data1 = OutputData.createP2PKData({ kind: 'P2PK', data: pk1 }, 10, keys);
+    const data2 = OutputData.createP2PKData({ kind: 'P2PK', data: pk2 }, 10, keys);
     const customConfig: OutputConfig = {
       keep: wallet.defaultOutputType(),
       send: { type: 'custom', data: [...data1, ...data2] },

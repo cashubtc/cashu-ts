@@ -12,3 +12,8 @@ src
 examples
 /lib/cashu-ts.iife.js
 /lib/cashu-ts.iife.js.map
+
+# local build/test artifacts (absent in CI; keep out of local publishes)
+/temp
+/test-results
+/.claude

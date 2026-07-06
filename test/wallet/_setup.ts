@@ -1,8 +1,9 @@
-import { setupServer, type SetupServerApi } from 'msw/node';
-import { HttpResponse, http } from 'msw';
-import { beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
-import { Mint, ConsoleLogger, injectWebSocketImpl } from '../../src';
 import { WebSocket } from 'mock-socket';
+import { HttpResponse, http } from 'msw';
+import { setupServer, type SetupServerApi } from 'msw/node';
+import { beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
+
+import { Mint, ConsoleLogger, injectWebSocketImpl } from '../../src';
 import { DUMMY_TEST_KEYS, DUMMY_TEST_KEYSET } from '../consts';
 
 injectWebSocketImpl(WebSocket);

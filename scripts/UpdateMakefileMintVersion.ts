@@ -9,7 +9,6 @@ const MAKEFILE = 'Makefile';
 type Dep = {
   name: string;
   githubRepo: string;
-  dockerTagPrefix: string;
   stableVar: string;
   rcVar: string;
 };
@@ -18,14 +17,12 @@ const DEPENDENCIES: Dep[] = [
   {
     name: 'cashubtc/mintd',
     githubRepo: 'cashubtc/cdk',
-    dockerTagPrefix: 'v',
     stableVar: 'CDK_IMAGE',
     rcVar: 'CDK_IMAGE_RC',
   },
   {
     name: 'cashubtc/nutshell',
     githubRepo: 'cashubtc/nutshell',
-    dockerTagPrefix: '',
     stableVar: 'NUT_IMAGE',
     rcVar: 'NUT_IMAGE_RC',
   },
@@ -144,6 +141,16 @@ async function dockerTagExists(repo: string, tag: string): Promise<boolean> {
   return resp.ok;
 }
 
+// Upstream tagging is inconsistent (cdk usually prefixes tags with "v" but
+// sometimes doesn't), so probe both spellings and use whichever exists.
+async function resolveDockerTag(repo: string, version: string): Promise<string | null> {
+  for (const prefix of ['', 'v']) {
+    const tag = `${prefix}${version}`;
+    if (await dockerTagExists(repo, tag)) return tag;
+  }
+  return null;
+}
+
 function updateMakefile(varName: string, newTag: string) {
   const content = fs.readFileSync(MAKEFILE, 'utf-8');
   const regex = new RegExp(`^${varName}\\s*\\?=.*$`, 'm');
@@ -173,11 +180,13 @@ async function main() {
     const rc = getLatestRc(releases);
 
     if (stable) {
-      const dockerTag = `${dep.dockerTagPrefix}${stable}`;
-      if (await dockerTagExists(dep.name, dockerTag)) {
+      const dockerTag = await resolveDockerTag(dep.name, stable);
+      if (dockerTag) {
         updateMakefile(dep.stableVar, `${dep.name}:${dockerTag}`);
       } else {
-        console.log(`Docker image ${dep.name}:${dockerTag} not yet available, skipping`);
+        console.log(
+          `Docker image ${dep.name}:${stable} (with or without v) not yet available, skipping`,
+        );
       }
     }
 
@@ -185,11 +194,13 @@ async function main() {
       const stableVer = stable ? semverKey(stable) : [0, 0, 0];
       const rcVer = semverKey(rc.split('-')[0]);
       if (rcVer.some((v, i) => v > (stableVer[i] || 0))) {
-        const dockerTag = `${dep.dockerTagPrefix}${rc}`;
-        if (await dockerTagExists(dep.name, dockerTag)) {
+        const dockerTag = await resolveDockerTag(dep.name, rc);
+        if (dockerTag) {
           updateMakefile(dep.rcVar, `${dep.name}:${dockerTag}`);
         } else {
-          console.log(`Docker image ${dep.name}:${dockerTag} not yet available, skipping`);
+          console.log(
+            `Docker image ${dep.name}:${rc} (with or without v) not yet available, skipping`,
+          );
         }
       } else {
         console.log(`RC ${rc} is not newer than stable ${stable}, skipping RC update`);

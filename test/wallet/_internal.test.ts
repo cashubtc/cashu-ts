@@ -1,8 +1,9 @@
 import { test, describe, expect } from 'vitest';
-import { Amount, type Keys, type Proof, OutputType } from '../../src';
-import { PUBKEYS } from '../consts';
-import { getKeepAmounts, stringifyOutputTypeForLog } from '../../src/wallet/_internal';
+
+import { Amount, type Keys, type Proof, type OutputType } from '../../src';
 import { OutputData } from '../../src/model/OutputData';
+import { getKeepAmounts, stringifyOutputTypeForLog } from '../../src/wallet/_internal';
+import { PUBKEYS } from '../consts';
 
 describe('getKeepAmounts', () => {
   const amountsWeHave = [1, 2, 4, 4, 4, 8];
@@ -71,13 +72,13 @@ describe('stringifyOutputTypeForLog', () => {
   test('formats p2pk denominations as strings', () => {
     const result = stringifyOutputTypeForLog({
       type: 'p2pk',
-      options: { pubkey: '02'.padEnd(66, '1') },
+      options: { kind: 'P2PK', data: '02'.padEnd(66, '1') },
       denominations: [1, Amount.from(2)],
     });
     expect(result).toBe(
       JSON.stringify({
         type: 'p2pk',
-        options: { pubkey: '02'.padEnd(66, '1') },
+        options: { kind: 'P2PK', data: '02'.padEnd(66, '1') },
         denominations: ['1', '2'],
       }),
     );
@@ -116,12 +117,12 @@ describe('stringifyOutputTypeForLog', () => {
     expect(
       stringifyOutputTypeForLog({
         type: 'p2pk',
-        options: { pubkey: '02'.padEnd(66, '1') },
+        options: { kind: 'P2PK', data: '02'.padEnd(66, '1') },
       }),
     ).toBe(
       JSON.stringify({
         type: 'p2pk',
-        options: { pubkey: '02'.padEnd(66, '1') },
+        options: { kind: 'P2PK', data: '02'.padEnd(66, '1') },
         denominations: [],
       }),
     );

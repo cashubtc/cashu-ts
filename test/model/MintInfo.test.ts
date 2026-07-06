@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
+
 import { MintInfo } from '../../src/model/MintInfo';
+import { MAX_METHOD_LENGTH } from '../../src/utils/limits';
 import { MINTINFORESP } from '../consts';
 
 describe('MintInfo protected endpoint matching', () => {
@@ -83,6 +85,41 @@ describe('MintInfo protected endpoint matching', () => {
     expect(info.requiresBlindAuthToken('GET', '/v1/melt/quote/bolt12')).toBe(false);
   });
 
+  it('returns false for a non-GET/POST request method (runtime guard)', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        22: {
+          bat_max_mint: 100,
+          protected_endpoints: [{ method: 'POST', path: '/v1/swap' }],
+        },
+      },
+    });
+    expect(info.requiresBlindAuthToken('PUT' as any, '/v1/swap')).toBe(false);
+  });
+
+  it('skips malformed protected_endpoints entries and upcases the method', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        22: {
+          bat_max_mint: 100,
+          protected_endpoints: [
+            null, // not an object
+            { method: 123, path: '/v1/a' }, // non-string method
+            { method: 'GET', path: 42 }, // non-string path
+            { method: 'DELETE', path: '/v1/b' }, // unsupported verb
+            { method: 'post', path: '/v1/swap' }, // lowercase verb -> upcased
+          ] as any,
+        },
+      },
+    });
+    expect(info.requiresBlindAuthToken('POST', '/v1/swap')).toBe(true);
+    expect(info.requiresBlindAuthToken('GET', '/v1/a')).toBe(false);
+    expect(info.requiresBlindAuthToken('POST', '/v1/a')).toBe(false);
+    expect(info.requiresBlindAuthToken('GET', '/v1/b')).toBe(false);
+  });
+
   it('maps NUT-19 ttl null to Infinity', () => {
     const info = new MintInfo({
       ...MINTINFORESP,
@@ -92,7 +129,7 @@ describe('MintInfo protected endpoint matching', () => {
           cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
         },
       },
-    } as any);
+    });
     expect(info.isSupported(19)).toEqual({
       supported: true,
       params: {
@@ -131,7 +168,7 @@ describe('MintInfo protected endpoint matching', () => {
           protected_endpoints: [{ method: 'POST', path: '/v1/swap' }],
         },
       },
-    } as any);
+    });
 
     // min/max amounts are AmountLike — wire bigint values pass through as-is
     expect(info.nuts['4'].methods[0].min_amount).toBe(1n);
@@ -181,7 +218,7 @@ describe('MintInfo protected endpoint matching', () => {
           ],
         },
       },
-    } as any);
+    });
 
     const methods = info.nuts['4'].methods;
     expect(methods[0].method_name).toBe('Bolt11');
@@ -203,7 +240,7 @@ describe('MintInfo protected endpoint matching', () => {
           ],
         },
       },
-    } as any);
+    });
 
     const methods = info.nuts['4'].methods;
     expect(methods[0].method_name).toBeNull();
@@ -222,9 +259,23 @@ describe('MintInfo protected endpoint matching', () => {
           methods: [{ method: hugeMethod, unit: 'sat', min_amount: null, max_amount: null }],
         },
       },
-    } as any);
+    });
 
     expect(info.nuts['4'].methods[0].method_name).toBeNull();
+  });
+
+  it('derives method_name for a method of exactly MAX_METHOD_LENGTH chars', () => {
+    const method = 'a'.repeat(MAX_METHOD_LENGTH);
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        4: {
+          disabled: false,
+          methods: [{ method, unit: 'sat', min_amount: null, max_amount: null }],
+        },
+      },
+    });
+    expect(info.nuts['4'].methods[0].method_name).toBe('A' + 'a'.repeat(MAX_METHOD_LENGTH - 1));
   });
 
   it('supportedMethods lists usable methods and returns [] for disabled ops', () => {
@@ -243,7 +294,7 @@ describe('MintInfo protected endpoint matching', () => {
           methods: [{ method: 'bolt11', unit: 'sat', min_amount: null, max_amount: null }],
         },
       },
-    } as any);
+    });
 
     expect(info.supportedMethods('mint').map((m) => m.method)).toEqual(['bolt11', 'bolt12']);
     expect(info.supportedMethods('melt')).toEqual([]);
@@ -260,7 +311,7 @@ describe('MintInfo protected endpoint matching', () => {
               cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
             },
           },
-        } as any),
+        }),
     ).toThrow('nuts.19.ttl');
   });
 });
@@ -294,7 +345,7 @@ describe('MintInfo NUT-29 batch minting info', () => {
         ...MINTINFORESP.nuts,
         29: { max_batch_size: 100, methods: ['bolt11', 'bolt12'] },
       },
-    } as any);
+    });
     expect(info.isSupported(29)).toEqual({
       supported: true,
       params: { max_batch_size: 100, methods: ['bolt11', 'bolt12'] },
@@ -308,7 +359,7 @@ describe('MintInfo NUT-29 batch minting info', () => {
         ...MINTINFORESP.nuts,
         29: { methods: ['bolt11'] },
       },
-    } as any);
+    });
     const result = info.isSupported(29);
     expect(result.supported).toBe(true);
     expect(result.params).toEqual({ methods: ['bolt11'], max_batch_size: 100 });
@@ -321,7 +372,7 @@ describe('MintInfo NUT-29 batch minting info', () => {
         ...MINTINFORESP.nuts,
         29: { max_batch_size: 50 },
       },
-    } as any);
+    });
     const result = info.isSupported(29);
     expect(result.supported).toBe(true);
     expect(result.params).toEqual({ max_batch_size: 50 });
@@ -334,7 +385,7 @@ describe('MintInfo NUT-29 batch minting info', () => {
         ...MINTINFORESP.nuts,
         29: { max_batch_size: '100' as any },
       },
-    } as any);
+    });
     const result = info.isSupported(29);
     expect(result.supported).toBe(true);
     expect(result.params?.max_batch_size).toBe(100);
@@ -349,7 +400,7 @@ describe('MintInfo NUT-29 batch minting info', () => {
           ...MINTINFORESP.nuts,
           29: { max_batch_size: 2.5, methods: ['bolt11'] },
         },
-      } as any,
+      },
       logger,
     );
     const result = info.isSupported(29);
@@ -370,7 +421,7 @@ describe('MintInfo NUT-29 batch minting info', () => {
           ...MINTINFORESP.nuts,
           29: { max_batch_size: NaN },
         },
-      } as any,
+      },
       logger,
     );
     const result = info.isSupported(29);
@@ -391,7 +442,7 @@ describe('MintInfo NUT-29 batch minting info', () => {
           ...MINTINFORESP.nuts,
           29: { max_batch_size: -1 },
         },
-      } as any,
+      },
       logger,
     );
     const result = info.isSupported(29);
@@ -412,7 +463,7 @@ describe('MintInfo NUT-29 batch minting info', () => {
           ...MINTINFORESP.nuts,
           29: { max_batch_size: 500 },
         },
-      } as any,
+      },
       logger,
     );
     const result = info.isSupported(29);
@@ -433,7 +484,7 @@ describe('MintInfo NUT-29 batch minting info', () => {
           ...MINTINFORESP.nuts,
           29: { max_batch_size: 100 },
         },
-      } as any,
+      },
       logger,
     );
     const result = info.isSupported(29);
@@ -467,7 +518,7 @@ describe('MintInfo NUT-22 bat_max_mint normalization', () => {
             protected_endpoints: [{ method: 'POST', path: '/v1/swap' }],
           },
         },
-      } as any,
+      },
       logger,
     );
     expect(info.nuts['22']?.bat_max_mint).toBe(100);
@@ -489,7 +540,7 @@ describe('MintInfo NUT-22 bat_max_mint normalization', () => {
             protected_endpoints: [{ method: 'POST', path: '/v1/swap' }],
           },
         },
-      } as any,
+      },
       logger,
     );
     expect(info.nuts['22']?.bat_max_mint).toBe(100);
@@ -511,10 +562,29 @@ describe('MintInfo NUT-22 bat_max_mint normalization', () => {
             protected_endpoints: [{ method: 'POST', path: '/v1/swap' }],
           },
         },
-      } as any,
+      },
       logger,
     );
     expect(info.nuts['22']?.bat_max_mint).toBe(50);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('does not clamp bat_max_mint of exactly 100', () => {
+    const logger = mockLogger();
+    const info = new MintInfo(
+      {
+        ...MINTINFORESP,
+        nuts: {
+          ...MINTINFORESP.nuts,
+          22: {
+            bat_max_mint: 100,
+            protected_endpoints: [{ method: 'POST', path: '/v1/swap' }],
+          },
+        },
+      },
+      logger,
+    );
+    expect(info.nuts['22']?.bat_max_mint).toBe(100);
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
@@ -537,5 +607,152 @@ describe('MintInfo NUT-22 bat_max_mint normalization', () => {
     });
     expect(info.nuts['29']).toBeUndefined();
     expect(info.isSupported(29)).toEqual({ supported: false });
+  });
+});
+
+describe('MintInfo isSupported branches', () => {
+  it('reports generic nuts as unsupported when absent', () => {
+    const info = new MintInfo({ ...MINTINFORESP, nuts: {} });
+    expect(info.isSupported(7)).toEqual({ supported: false });
+    expect(info.isSupported(20)).toEqual({ supported: false });
+  });
+
+  it('reports mint/melt disabled with empty params when the nut is absent', () => {
+    const info = new MintInfo({ ...MINTINFORESP, nuts: {} });
+    expect(info.isSupported(4)).toEqual({ disabled: true, params: [] });
+    expect(info.isSupported(5)).toEqual({ disabled: true, params: [] });
+  });
+
+  it('reports mint disabled when the method list is empty', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: { 4: { disabled: false, methods: [] } },
+    });
+    expect(info.isSupported(4)).toEqual({ disabled: true, params: [] });
+  });
+
+  it('keeps advertised methods in params when the mint disables the operation', () => {
+    const method = {
+      method: 'bolt11',
+      unit: 'sat',
+      method_name: 'Lightning',
+      min_amount: null,
+      max_amount: null,
+    };
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: { 4: { disabled: true, methods: [method] } },
+    });
+    expect(info.isSupported(4)).toEqual({ disabled: true, params: [method] });
+  });
+
+  it('reports NUT-17 unsupported when absent or empty, supported with params otherwise', () => {
+    const absent = new MintInfo({ ...MINTINFORESP, nuts: {} });
+    expect(absent.isSupported(17)).toEqual({ supported: false });
+
+    const empty = new MintInfo({ ...MINTINFORESP, nuts: { 17: { supported: [] } } });
+    expect(empty.isSupported(17)).toEqual({ supported: false });
+
+    const ws = { method: 'bolt11', unit: 'sat', commands: ['proof_state'] };
+    const present = new MintInfo({ ...MINTINFORESP, nuts: { 17: { supported: [ws] } } });
+    expect(present.isSupported(17)).toEqual({ supported: true, params: [ws] });
+  });
+
+  it('reports NUT-15 unsupported when absent or empty, supported with params otherwise', () => {
+    const absent = new MintInfo({ ...MINTINFORESP, nuts: {} });
+    expect(absent.isSupported(15)).toEqual({ supported: false });
+
+    const empty = new MintInfo({ ...MINTINFORESP, nuts: { 15: { methods: [] } } });
+    expect(empty.isSupported(15)).toEqual({ supported: false });
+
+    const mpp = { method: 'bolt11', unit: 'sat' };
+    const present = new MintInfo({ ...MINTINFORESP, nuts: { 15: { methods: [mpp] } } });
+    expect(present.isSupported(15)).toEqual({ supported: true, params: [mpp] });
+  });
+
+  it('reports NUT-19 unsupported when cached_endpoints is empty or missing', () => {
+    const empty = new MintInfo({
+      ...MINTINFORESP,
+      nuts: { 19: { ttl: 60, cached_endpoints: [] } },
+    });
+    expect(empty.isSupported(19)).toEqual({ supported: false });
+
+    const missing = new MintInfo({
+      ...MINTINFORESP,
+      nuts: { 19: { ttl: 60 } as any },
+    });
+    expect(missing.isSupported(19)).toEqual({ supported: false });
+  });
+});
+
+describe('MintInfo method/unit capability checks', () => {
+  it('supportsNut04Description matches on unit when given, any unit otherwise', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        4: {
+          disabled: false,
+          methods: [
+            {
+              method: 'bolt11',
+              unit: 'usd',
+              method_name: null,
+              min_amount: null,
+              max_amount: null,
+              options: { description: true },
+            },
+          ],
+        },
+      },
+    });
+    expect(info.supportsNut04Description('bolt11')).toBe(true);
+    expect(info.supportsNut04Description('bolt11', 'usd')).toBe(true);
+    expect(info.supportsNut04Description('bolt11', 'sat')).toBe(false);
+  });
+
+  it('supportsNut04Description is falsy when NUT-4 info is absent', () => {
+    const info = new MintInfo({ ...MINTINFORESP, nuts: {} });
+    expect(info.supportsNut04Description('bolt11')).toBeFalsy();
+  });
+
+  it('supportsMintMeltMethod returns false when the operation is disabled', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        5: {
+          disabled: true,
+          methods: [{ method: 'bolt11', unit: 'sat', min_amount: null, max_amount: null }],
+        },
+      },
+    });
+    expect(info.supportsMintMeltMethod('melt', 'bolt11', 'sat')).toBe(false);
+  });
+
+  it('supportsAmountless defaults to bolt11/sat and requires an exact method/unit match', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        5: {
+          disabled: false,
+          methods: [
+            {
+              method: 'bolt11',
+              unit: 'sat',
+              min_amount: null,
+              max_amount: null,
+              options: { amountless: true },
+            },
+          ],
+        },
+      },
+    });
+    expect(info.supportsAmountless()).toBe(true);
+    expect(info.supportsAmountless('bolt11', 'usd')).toBe(false);
+    expect(info.supportsAmountless('bolt12')).toBe(false);
+  });
+
+  it('supportsAmountless returns false when NUT-5 info is absent', () => {
+    const info = new MintInfo({ ...MINTINFORESP, nuts: {} });
+    expect(info.supportsAmountless()).toBe(false);
   });
 });

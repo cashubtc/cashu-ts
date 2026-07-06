@@ -1126,7 +1126,7 @@ class Wallet {
    *
    * // With Custom output configuration
    * const customConfig: OutputConfig = {
-   *   send: { type: 'p2pk', options: { pubkey: '...' } },
+   *   send: { type: 'p2pk', options: { kind: 'P2PK', data: '...' } },
    *   keep: { type: 'deterministic', counter: 0 },
    * };
    * const customResult = await wallet.send(5, proofs, { includeFees: true }, customConfig);

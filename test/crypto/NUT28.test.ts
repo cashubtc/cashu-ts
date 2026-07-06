@@ -1,4 +1,7 @@
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
+import { hexToBytes, bytesToHex } from '@noble/hashes/utils.js';
+import { describe, expect, test } from 'vitest';
+
 import {
   pointFromHex,
   deriveP2BKSecretKey,
@@ -6,8 +9,6 @@ import {
   deriveP2BKSecretKeys,
 } from '../../src/crypto';
 import { hexToNumber, numberToHexPadded64 } from '../../src/utils';
-import { hexToBytes, bytesToHex } from '@noble/hashes/utils.js';
-import { describe, expect, test } from 'vitest';
 
 describe('blinded pubkeys & scalar arithmetic', () => {
   test('deriveP2BKSecretKey corresponds to pubkey addition: (p+r)·G == p·G + r·G', () => {
@@ -234,5 +235,66 @@ describe('P2BK test vectors, public API only', () => {
       const Kpub_i = bytesToHex(secp256k1.getPublicKey(hexToBytes(derived[i]), true));
       expect(Kpub_i).toBe(allSlotsBlinded[i]);
     }
+  });
+});
+
+describe('NUT28 uncovered branches and guards', () => {
+  const toHex = (x: bigint) => numberToHexPadded64(x);
+  const randScalar = () => hexToNumber(bytesToHex(secp256k1.utils.randomSecretKey()));
+  const compFromScalar = (x: bigint) => secp256k1.getPublicKey(hexToBytes(toHex(x)), true);
+
+  // Fixed test vector reused for the receiver-side single/non-matching cases
+  const Ehex = '02a8cda4cf448bfce9a9e46e588c06ea1780fcb94e3bbdf3277f42995d403a8b0c';
+  const privKeyBob = 'ad37e8abd800be3e8272b14045873f4353327eedeb702b72ddcc5c5adff5129c';
+  const slot0Blinded = '03b7c03eb05a0a539cfc438e81bcf38b65b7bb8685e8790f9b853bfe3d77ad5315';
+  const slot0DerivedSk2 = '47051623754422cb04bc24c0cfe2c1ddc8db1fcc18f0aa4b477df4aca2adc20e';
+
+  test('deriveP2BKBlindedPubkeys returns empty result for empty input', () => {
+    expect(deriveP2BKBlindedPubkeys([])).toEqual({ blinded: [], Ehex: '' });
+  });
+
+  test('deriveP2BKSecretKeys accepts a single (non-array) blinded pubkey', () => {
+    // slot 0 of the fixed vector, passed as a bare string not an array
+    expect(deriveP2BKSecretKeys(Ehex, privKeyBob, slot0Blinded)).toEqual([slot0DerivedSk2]);
+  });
+
+  test('deriveP2BKSecretKeys omits keys for a non-matching blinded pubkey', () => {
+    // Unrelated valid point: must not correspond to Bob's key, so nothing is derived
+    const unrelated = bytesToHex(secp256k1.getPublicKey(secp256k1.utils.randomSecretKey(), true));
+    expect(deriveP2BKSecretKeys(Ehex, privKeyBob, unrelated)).toEqual([]);
+  });
+
+  test('deriveP2BKSecretKey throws when naturalPub is not 33 bytes', () => {
+    const validBlind = compFromScalar(randScalar());
+    expect(() =>
+      deriveP2BKSecretKey(toHex(randScalar()), toHex(randScalar()), validBlind, new Uint8Array(32)),
+    ).toThrow('naturalPub must be 33 bytes');
+  });
+
+  test('deriveP2BKSecretKey throws when blindPubkey is not 33 bytes', () => {
+    expect(() =>
+      deriveP2BKSecretKey(toHex(randScalar()), toHex(randScalar()), new Uint8Array(32)),
+    ).toThrow('blindPubkey must be 33 bytes');
+  });
+
+  test('deriveP2BKSecretKey returns null when the blinded pubkey unblinds to infinity', () => {
+    // blindPubkey = r·G, so P = P′ - r·G = 0 (point at infinity)
+    const r = randScalar();
+    const out = deriveP2BKSecretKey(toHex(randScalar()), toHex(r), compFromScalar(r));
+    expect(out).toBeNull();
+  });
+
+  test('deriveP2BKSecretKey throws when the selected derived key is zero (blinded path)', () => {
+    // r = p makes skNeg = (n - p + r) mod n = 0; force skNeg selection via parity mismatch
+    const p = randScalar();
+    const r = p;
+    const R = secp256k1.Point.BASE.multiply(p); // r·G
+    const P = secp256k1.Point.BASE.multiply(randScalar()); // arbitrary unblinded point
+    const blindPubkey = P.add(R).toBytes(true); // P′ = P + r·G
+    const naturalPub = P.toBytes(true);
+    naturalPub[0] ^= 0x01; // same x, opposite parity -> selects skNeg
+    expect(() => deriveP2BKSecretKey(toHex(p), toHex(r), blindPubkey, naturalPub)).toThrow(
+      'Derived secret key is zero',
+    );
   });
 });

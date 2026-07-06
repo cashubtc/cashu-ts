@@ -302,8 +302,14 @@ function templateFromToken(token: Token): TokenV4Template {
 }
 
 function tokenFromTemplate(template: TokenV4Template): Token {
+  if (!template || !Array.isArray(template.t)) {
+    throw new CTSError('Invalid token template');
+  }
   const proofs: Proof[] = [];
-  template.t.forEach((t) =>
+  template.t.forEach((t) => {
+    if (!t || !Array.isArray(t.p)) {
+      throw new CTSError('Invalid token template');
+    }
     t.p.forEach((p) => {
       proofs.push({
         secret: p.s,
@@ -324,8 +330,8 @@ function tokenFromTemplate(template: TokenV4Template): Token {
           witness: p.w,
         }),
       });
-    }),
-  );
+    });
+  });
   const decodedToken: Token = { mint: template.m, proofs, unit: template.u || 'sat' };
   if (template.d) {
     decodedToken.memo = template.d;

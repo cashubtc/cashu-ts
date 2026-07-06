@@ -1,5 +1,9 @@
 import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { hexToBytes, bytesToHex } from '@noble/hashes/utils.js';
+import { describe, expect, test } from 'vitest';
+
 import {
   asBlsG1Point,
   asSecpPoint,
@@ -19,11 +23,8 @@ import {
   schnorrSignDigest,
   schnorrVerifyDigest,
 } from '../../src/crypto';
-import { Bytes } from '../../src/utils';
-import { hexToBytes, bytesToHex } from '@noble/hashes/utils.js';
-import { describe, expect, test } from 'vitest';
-import { sha256 } from '@noble/hashes/sha2.js';
 import { verifyUnblindedSignature } from '../../src/crypto/NUT01';
+import { Bytes } from '../../src/utils';
 
 const SECRET_MESSAGE = 'test_message';
 
@@ -54,25 +55,25 @@ describe('test crypto scheme', () => {
 
 describe('testing hash to curve', () => {
   test('testing string 0000....00', async () => {
-    let secret = hexToBytes('0000000000000000000000000000000000000000000000000000000000000000');
-    let Y = hashToCurve(secret);
-    let hexY = Y.toHex(true);
+    const secret = hexToBytes('0000000000000000000000000000000000000000000000000000000000000000');
+    const Y = hashToCurve(secret);
+    const hexY = Y.toHex(true);
     expect(hexY).toBe('024cce997d3b518f739663b757deaec95bcd9473c30a14ac2fd04023a739d1a725');
   });
 
   test('testing string 0000....01', async () => {
-    let secret = hexToBytes('0000000000000000000000000000000000000000000000000000000000000001');
-    let Y = hashToCurve(secret);
-    let hexY = Y.toHex(true);
+    const secret = hexToBytes('0000000000000000000000000000000000000000000000000000000000000001');
+    const Y = hashToCurve(secret);
+    const hexY = Y.toHex(true);
     expect(hexY).toBe('022e7158e11c9506f1aa4248bf531298daa7febd6194f003edcd9b93ade6253acf');
   });
 });
 
 describe('test blinding message', () => {
   test('testing string 0000....01', async () => {
-    var enc = new TextEncoder();
-    let secretUInt8 = enc.encode(SECRET_MESSAGE);
-    let { B_ } = blindMessage(
+    const enc = new TextEncoder();
+    const secretUInt8 = enc.encode(SECRET_MESSAGE);
+    const { B_ } = blindMessage(
       secretUInt8,
       Bytes.toBigInt(
         hexToBytes('0000000000000000000000000000000000000000000000000000000000000001'),
@@ -98,12 +99,12 @@ describe('test blinding message', () => {
 
 describe('test unblinding signature', () => {
   test('testing string 0000....01', async () => {
-    let C_ = pointFromHex('02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2');
-    let r = Bytes.toBigInt(
+    const C_ = pointFromHex('02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2');
+    const r = Bytes.toBigInt(
       hexToBytes('0000000000000000000000000000000000000000000000000000000000000001'),
     );
-    let A = pointFromHex('020000000000000000000000000000000000000000000000000000000000000001');
-    let C = unblindSignature(C_, r, A);
+    const A = pointFromHex('020000000000000000000000000000000000000000000000000000000000000001');
+    const C = unblindSignature(C_, r, A);
     expect(C.toHex(true)).toBe(
       '03c724d7e6a5443b39ac8acf11f40420adc4f99a02e7cc1b57703d9391f6d129cd',
     );

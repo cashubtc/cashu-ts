@@ -1,3 +1,4 @@
+import { randomBytes } from '@noble/hashes/utils.js';
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect, vi } from 'vitest';
 
@@ -10,13 +11,12 @@ import {
   OutputData,
   type SerializedOutputData,
   type SerializedBlindedSignature,
-  MeltQuoteBolt12Response,
-  AuthProvider,
-  OutputType,
+  type MeltQuoteBolt12Response,
+  type AuthProvider,
+  type OutputType,
   Amount,
 } from '../../src';
 
-import { randomBytes } from '@noble/hashes/utils.js';
 import { useTestServer, mint, mintUrl, unit, invoice, logger, mintInfoResp } from './_setup';
 
 const server = useTestServer();
@@ -504,7 +504,7 @@ describe('melt proofs', () => {
           C: 'C2',
         },
       ];
-      let seenBody: any | undefined;
+      let seenBody: any;
       server.use(
         http.post(mintUrl + '/v1/melt/bolt11', async ({ request }) => {
           const body = await request.json();
@@ -571,7 +571,7 @@ describe('melt proofs', () => {
           C: 'C2',
         },
       ];
-      let seenBody: any | undefined;
+      let seenBody: any;
       server.use(
         http.post(mintUrl + '/v1/melt/bolt12', async ({ request }) => {
           const body = await request.json();
