@@ -684,6 +684,9 @@ export function isBlsKeyset(keysetId: string): boolean;
 export function isHTLCSpendAuthorised(proof: Proof, logger?: Logger, message?: string): boolean;
 
 // @public
+export function isMintOperationError(e: unknown): e is MintOperationError;
+
+// @public
 export function isP2PKSpendAuthorised(proof: Proof, logger?: Logger, message?: string): boolean;
 
 // @public
@@ -1791,7 +1794,7 @@ export type RequestArgs = {
 // @public
 export type RequestFetch = typeof fetch;
 
-// @public (undocumented)
+// @public
 export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
 
 // @public (undocumented)

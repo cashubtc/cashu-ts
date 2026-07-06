@@ -83,7 +83,8 @@ class Mint {
 
   /**
    * @param mintUrl Requires mint URL to create this object.
-   * @param customRequest Optional, for custom network communication with the mint.
+   * @param customRequest Optional, for custom network communication with the mint. Implementations
+   *   must follow the {@link RequestFn} error contract.
    * @param requestFetch Optional fetch-compatible transport for the default mint request pipeline.
    *   Ignored when `customRequest` is supplied.
    * @param authTokenGetter Optional. Function to obtain a NUT-22 BlindedAuthToken (e.g. from a

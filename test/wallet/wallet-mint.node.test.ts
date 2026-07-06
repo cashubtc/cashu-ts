@@ -15,7 +15,11 @@ import {
   MintQuoteBolt11Response,
   Amount,
   AmountLike,
+  Mint,
+  MintOperationError,
+  type RequestFn,
 } from '../../src';
+import request from '../../src/transport';
 
 import { Bytes, sumProofs } from '../../src/utils';
 import { verifyMintQuoteSignature } from '../../src/crypto';
@@ -771,6 +775,87 @@ describe('mint quote signature legacy fallback', () => {
 
       await expect(wallet.mintProofsBolt11(1, makeLockedQuote(1), { privkey })).rejects.toThrow();
       expect(calls).toBe(1);
+    });
+
+    test('retries when a custom transport throws a look-alike MintOperationError', async () => {
+      const seen: SeenRequest[] = [];
+      legacyOnlyMint(seen);
+      // Transport that surfaces protocol errors as its own class (same name and shape, different
+      // constructor identity), as a consumer with a custom request layer might.
+      class LookAlikeError extends Error {
+        code: number;
+        constructor(code: number, detail: string) {
+          super(detail);
+          this.name = 'MintOperationError';
+          this.code = code;
+        }
+      }
+      const customRequest: RequestFn = async (args) => {
+        try {
+          return await request(args);
+        } catch (e) {
+          if (e instanceof MintOperationError) throw new LookAlikeError(e.code, e.message);
+          throw e;
+        }
+      };
+      const wallet = new Wallet(new Mint(mintUrl, { customRequest }), { unit });
+      await wallet.loadMint();
+
+      const proofs = await wallet.mintProofsBolt11(1, makeLockedQuote(1), { privkey });
+
+      expect(proofs).toHaveLength(1);
+      expect(seen).toHaveLength(2);
+      expect(
+        verifyMintQuoteSignatureLegacy(pubkey, 'locked-quote', seen[1].outputs, seen[1].signature),
+      ).toBe(true);
+    });
+
+    test('completeBatchMint retries with the legacy signatures on rejection', async () => {
+      type SeenBatchRequest = {
+        signatures?: string[];
+        outputs: SeenRequest['outputs'];
+      };
+      const seen: SeenBatchRequest[] = [];
+      // Batch counterpart of legacyOnlyMint: rejects the amended signature with 20008.
+      server.use(
+        http.post(mintUrl + '/v1/mint/bolt11/batch', async ({ request }) => {
+          const body = (await request.json()) as SeenBatchRequest;
+          seen.push(body);
+          const amended = verifyMintQuoteSignature(
+            pubkey,
+            'locked-quote',
+            body.outputs,
+            body.signatures?.[0] ?? '',
+          );
+          if (amended) {
+            return HttpResponse.json({ code: 20008, detail: 'invalid signature' }, { status: 400 });
+          }
+          return HttpResponse.json({
+            signatures: body.outputs.map((o) => ({ ...blindSig, amount: o.amount })),
+          });
+        }),
+      );
+      const wallet = await makeWallet();
+
+      const preview = await wallet.prepareBatchMint(
+        'bolt11',
+        [{ amount: 1, quote: makeLockedQuote(1) }],
+        { privkey },
+      );
+      const proofs = await wallet.completeBatchMint(preview);
+
+      expect(proofs).toHaveLength(1);
+      expect(seen).toHaveLength(2);
+      // Amended attempt first, legacy on the retry, both over the same outputs.
+      expect(
+        verifyMintQuoteSignatureLegacy(
+          pubkey,
+          'locked-quote',
+          seen[1].outputs,
+          seen[1].signatures![0]!,
+        ),
+      ).toBe(true);
+      expect(seen[1].outputs).toEqual(seen[0].outputs);
     });
 
     test('does not retry on an unrelated protocol error (only 20008 falls back)', async () => {

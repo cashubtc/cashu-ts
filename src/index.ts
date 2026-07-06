@@ -92,6 +92,7 @@ export type {
 export { type LogLevel, ConsoleLogger, type Logger } from './logger';
 export {
   CTSError,
+  isMintOperationError,
   MintOperationError,
   NetworkError,
   HttpResponseError,

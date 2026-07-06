@@ -9,7 +9,17 @@ import {
 import { type Nut19Policy } from '../model/types';
 import { JSONInt } from '../utils/JSONInt';
 
-// Generic request function type so callers can do requestInstance<T>(...)
+/**
+ * Pluggable request function used for all mint HTTP calls.
+ *
+ * @remarks
+ * Error contract: on a mint protocol error (JSON body with `code`/`detail`), implementations must
+ * throw an error `isMintOperationError` accepts, preferably this package's
+ * {@link MintOperationError}, with the NUT error code preserved. Wallet behavior that branches on
+ * mint error codes (eg the NUT-20 legacy signature retry) will not engage otherwise. If you only
+ * need a custom transport, prefer the `requestFetch` option ({@link RequestFetch}): the default
+ * pipeline then keeps this contract for you.
+ */
 export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
 
 /**

@@ -24,7 +24,7 @@ import { signMintQuoteLegacy } from '../crypto/NUT20';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
-import { CTSError, MintOperationError } from '../model/Errors';
+import { CTSError, isMintOperationError } from '../model/Errors';
 import { MintInfo } from '../model/MintInfo';
 import { OutputData, type OutputDataLike } from '../model/OutputData';
 import { DefaultOutputDataCreator, type OutputDataCreator } from '../model/OutputDataCreator';
@@ -2246,7 +2246,7 @@ class Wallet {
     } catch (e) {
       if (
         hasLegacySignature &&
-        e instanceof MintOperationError &&
+        isMintOperationError(e) &&
         e.code === MINT_QUOTE_SIGNATURE_INVALID_CODE
       ) {
         this._logger.warn(
