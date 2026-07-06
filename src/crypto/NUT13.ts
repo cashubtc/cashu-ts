@@ -82,7 +82,8 @@ export function deriveSecretAndBlindingFactor(
  * @param purpose - Key purpose (`'P2PK'` or `'QuoteLock'`), which selects the path's purpose index.
  * @param counter - Non-hardened BIP-32 child index.
  * @returns The derived keypair, both hex-encoded: compressed (02/03) `pubkey` and `privkey`.
- * @throws {@link CTSError} If derivation produces an invalid private key.
+ * @throws {@link CTSError} If the counter is not a non-hardened index (integer below 2^31) or
+ *   derivation produces an invalid private key.
  */
 export function deriveKeyPair(
   seed: Uint8Array,
@@ -116,6 +117,10 @@ export function createKeyPairDeriver(
   const index = PURPOSE_INDEX[purpose];
   const parentKey = HDKey.fromMasterSeed(seed).derive(`m/129373'/${index}'/0'/0'`);
   return (counter: number) => {
+    // deriveChild silently hardens indices >= 2^31, which xpub-only derivation cannot follow.
+    if (!Number.isInteger(counter) || counter < 0 || counter >= 0x80000000) {
+      throw new CTSError('Counter must be a non-hardened BIP-32 index (0 <= counter < 2^31)');
+    }
     const secretKey = parentKey.deriveChild(counter).privateKey;
     /* c8 ignore next */
     if (secretKey === null) {

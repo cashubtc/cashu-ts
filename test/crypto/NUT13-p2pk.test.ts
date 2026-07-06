@@ -49,4 +49,13 @@ describe('deterministic P2PK / quote-lock key derivation (NUT-11, NUT-20)', () =
       deriveKeyPair(SEED, 'QuoteLock', 0).pubkey,
     );
   });
+
+  // deriveChild would silently harden indices >= 2^31, breaking xpub watch-only derivation
+  test.each([0x80000000, -1, 1.5, Number.NaN])('rejects invalid counter %s', (counter) => {
+    expect(() => deriveKeyPair(SEED, 'P2PK', counter)).toThrow('non-hardened');
+  });
+
+  test('accepts the maximum non-hardened counter', () => {
+    expect(deriveKeyPair(SEED, 'P2PK', 0x7fffffff).pubkey).toMatch(/^0[23][0-9a-f]{64}$/);
+  });
 });
