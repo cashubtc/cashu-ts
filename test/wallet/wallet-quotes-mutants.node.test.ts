@@ -344,20 +344,25 @@ describe('validateMintQuote mutants', () => {
 });
 
 describe('validateMintQuoteAvailableAmount mutants', () => {
-  test('bolt11 skips the paid-minus-issued check entirely', async () => {
+  test('bolt11 enforces the paid-minus-issued check once a payment event is reported', async () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
-    // bolt11 must early-return: a large request against tiny amounts must still prepare.
+    // Accounting applies to every method: a non-zero snapshot caps what can be minted.
     const quote = {
-      quote: 'q-bolt11-skip',
+      quote: 'q-bolt11-capped',
       amount_paid: 1,
       amount_issued: 0,
     } as unknown as MintQuoteBolt11Response;
-    // The real signal is that prepareMint resolves (the guard early-returns); .method is
-    // just the echoed argument.
-    await expect(wallet.prepareMint('bolt11', 100, quote)).resolves.toBeDefined();
-    const preview = await wallet.prepareMint('bolt11', 100, quote);
-    expect(preview.method).toBe('bolt11');
+    await expect(wallet.prepareMint('bolt11', 100, quote)).rejects.toThrow(
+      'has only 1 available to mint; requested 100',
+    );
+    // A 0/0 snapshot is indistinguishable from a stale pre-payment quote: defer to the mint.
+    const staleQuote = {
+      quote: 'q-bolt11-stale',
+      amount_paid: 0,
+      amount_issued: 0,
+    } as unknown as MintQuoteBolt11Response;
+    await expect(wallet.prepareMint('bolt11', 100, staleQuote)).resolves.toBeDefined();
   });
 
   test('bolt12 with amount_paid but no amount_issued returns early', async () => {
