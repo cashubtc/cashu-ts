@@ -25,11 +25,16 @@ import {
   assertSigAllInputs,
   buildLegacyP2PKSigAllMessage,
   createSecret,
+  dedupeP2PKPubkeys,
   isHTLCSpendAuthorised,
+  isP2PKSigAll,
+  maybeDeriveP2BKPrivateKeys,
+  normalizeHashlock,
   normalizeP2PKOptions,
+  parseWitnessData,
   verifyP2PKSpendingConditions,
 } from '../../src/crypto';
-import { ConsoleLogger, NULL_LOGGER } from '../../src/logger';
+import { ConsoleLogger, type Logger, NULL_LOGGER } from '../../src/logger';
 import { type Proof, type P2PKWitness } from '../../src/model/types';
 
 const PRIVKEY = schnorr.utils.randomSecretKey();
@@ -1409,6 +1414,29 @@ describe('normalizeP2PKOptions', () => {
     );
   });
 
+  test('P2PK: data pubkey counts as a slot, so 11 keys fill 11 slots and 12 overflow (NUT-28)', () => {
+    // NUT-28 allows up to 11 slots in [data, ...pubkeys, ...refund] (i_byte 0x00..0x0A).
+    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c'].map((c) => _comp(c));
+    const [data, ...rest] = keys; // rest has 11 distinct pubkeys
+    expect(() =>
+      normalizeP2PKOptions({ kind: 'P2PK', data, pubkeys: rest.slice(0, 10) }),
+    ).not.toThrow(); // data + 10 pubkeys = 11 slots
+    expect(() => normalizeP2PKOptions({ kind: 'P2PK', data, pubkeys: rest })).toThrow(
+      /maximum allowed is 11/,
+    ); // data + 11 pubkeys = 12 slots
+  });
+
+  test('HTLC: hashlock fills slot 0, so only 10 keys fit before overflowing 11 slots (NUT-28)', () => {
+    // For HTLC the data slot is a hash, not a key, so signing keys max out one lower than P2PK.
+    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b'].map((c) => _comp(c));
+    expect(() =>
+      normalizeP2PKOptions({ kind: 'HTLC', data: hashlock, pubkeys: keys.slice(0, 10) }),
+    ).not.toThrow(); // hash + 10 pubkeys = 11 slots
+    expect(() => normalizeP2PKOptions({ kind: 'HTLC', data: hashlock, pubkeys: keys })).toThrow(
+      /maximum allowed is 11/,
+    ); // hash + 11 pubkeys = 12 slots
+  });
+
   test('throws when P2PK data is missing or empty', () => {
     expect(() => normalizeP2PKOptions({ kind: 'P2PK', data: '' })).toThrow(
       /P2PK requires a pubkey in data/i,
@@ -1827,5 +1855,309 @@ describe('verifyP2PKSpendingConditions signer counts', () => {
       ]),
     };
     expect(verifyP2PKSpendingConditions(proof).main.requiredSigners).toBe(2);
+  });
+});
+
+describe('pubkey and hashlock format checks', () => {
+  test('rejects a 66-char key with a prefix other than 02/03', () => {
+    expect(() => dedupeP2PKPubkeys(['04' + 'aa'.repeat(32)])).toThrow(/Invalid pubkey/);
+  });
+
+  test('rejects an overlong key even when it starts with 02', () => {
+    expect(() => dedupeP2PKPubkeys(['02' + 'aa'.repeat(33)])).toThrow(/got length 68/);
+  });
+
+  test('dedupes by full x-only portion, not just a shared suffix', () => {
+    const k1 = '02' + 'aa'.repeat(32);
+    const k2 = '02' + 'bb'.repeat(31) + 'aa'; // distinct key, same last 2 chars
+    expect(dedupeP2PKPubkeys([k1, k2])).toStrictEqual([k1, k2]);
+  });
+
+  test('normalizeHashlock rejects 65 hex chars (regex anchored both ends)', () => {
+    expect(() => normalizeHashlock('a'.repeat(65))).toThrow(/64-character hex/);
+  });
+
+  test('normalizeHashlock rejects non-string input outright', () => {
+    // A single-element array coerces to a 64-hex string, so only the typeof
+    // check stands between it and .toLowerCase() blowing up.
+    expect(() => normalizeHashlock(['e'.repeat(64)] as any)).toThrow(/64-character hex/);
+  });
+});
+
+describe('normalizeP2PKOptions canonical output shape', () => {
+  const pk = _comp('a');
+  const refundPk = _comp('b');
+
+  test('minimal P2PK options omit every optional key', () => {
+    expect(normalizeP2PKOptions({ kind: 'P2PK', data: pk })).toStrictEqual({
+      kind: 'P2PK',
+      data: pk,
+    });
+  });
+
+  test('keeps an explicit sigFlag', () => {
+    expect(normalizeP2PKOptions({ kind: 'P2PK', data: pk, sigFlag: 'SIG_ALL' })).toStrictEqual({
+      kind: 'P2PK',
+      data: pk,
+      sigFlag: 'SIG_ALL',
+    });
+  });
+
+  test('drops a redundant requiredSignatures of 1', () => {
+    expect(normalizeP2PKOptions({ kind: 'P2PK', data: pk, requiredSignatures: 1 })).toStrictEqual({
+      kind: 'P2PK',
+      data: pk,
+    });
+  });
+
+  test('drops a redundant requiredRefundSignatures of 1', () => {
+    expect(
+      normalizeP2PKOptions({
+        kind: 'P2PK',
+        data: pk,
+        locktime: 9999,
+        refundKeys: [refundPk],
+        requiredRefundSignatures: 1,
+      }),
+    ).toStrictEqual({ kind: 'P2PK', data: pk, locktime: 9999, refundKeys: [refundPk] });
+  });
+
+  test('accepts a multi-key P2PK secret within the slot limit', () => {
+    // NUT-28 permits up to 11 locking slots ([data, ...pubkeys, ...refund]); a 10-slot
+    // secret is comfortably valid. The exact upper bound is enforced in src separately.
+    const mkKey = (b: string) => '02' + b.repeat(32);
+    const bytes = ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9', 'b1'];
+    const [data, ...pubkeys] = bytes.map(mkKey); // data + 9 pubkeys = 10 slots
+    expect(() => normalizeP2PKOptions({ kind: 'P2PK', data, pubkeys })).not.toThrow();
+  });
+});
+
+describe('parseWitnessData preimage handling', () => {
+  test('drops an empty-string preimage', () => {
+    expect(parseWitnessData({ preimage: '', signatures: [] })).toStrictEqual({ signatures: [] });
+  });
+
+  test('keeps a non-empty preimage', () => {
+    expect(parseWitnessData({ preimage: 'ab', signatures: [] })).toStrictEqual({
+      preimage: 'ab',
+      signatures: [],
+    });
+  });
+});
+
+describe('locktime boundaries', () => {
+  const mkProof = (tags: string[][]): Proof => ({
+    amount: Amount.from(1),
+    id: '00000000000',
+    C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+    secret: JSON.stringify(['P2PK', { nonce: bytesToHex(randomBytes(32)), data: PUBKEY, tags }]),
+  });
+
+  test('a lock expiring exactly now is EXPIRED, not ACTIVE', () => {
+    const now = 1_750_000_000;
+    vi.useFakeTimers();
+    vi.setSystemTime(now * 1000);
+    try {
+      const result = verifyP2PKSpendingConditions(mkProof([['locktime', String(now)]]));
+      expect(result.lockState).toBe('EXPIRED');
+      expect(result.path).toBe('UNLOCKED');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('a future locktime reports ACTIVE and fails unsigned', () => {
+    const future = String(Math.floor(Date.now() / 1000) + 3600);
+    const result = verifyP2PKSpendingConditions(mkProof([['locktime', future]]));
+    expect(result.lockState).toBe('ACTIVE');
+    expect(result.path).toBe('FAILED');
+    expect(result.success).toBe(false);
+  });
+
+  test('locktime 0 is treated as no locktime (PERMANENT)', () => {
+    const result = verifyP2PKSpendingConditions(mkProof([['locktime', '0']]));
+    expect(result.lockState).toBe('PERMANENT');
+    expect(result.locktime).toBe(Infinity);
+  });
+
+  test('a small positive past locktime is EXPIRED, not PERMANENT', () => {
+    // 1 second after the epoch is a real, finite locktime firmly in the past.
+    const result = verifyP2PKSpendingConditions(mkProof([['locktime', '1']]));
+    expect(result.lockState).toBe('EXPIRED');
+    expect(result.locktime).toBe(1);
+  });
+
+  test('an active locktime still exposes the main keys as expected witnesses', () => {
+    const future = String(Math.floor(Date.now() / 1000) + 3600);
+    const secretStr = `["P2PK",{"nonce":"aa","data":"${PUBKEY}","tags":[["locktime","${future}"]]}]`;
+    expect(getP2PKExpectedWitnessPubkeys(secretStr)).toStrictEqual([PUBKEY]);
+  });
+});
+
+describe('refund path thresholds', () => {
+  const PRIVKEY2 = schnorr.utils.randomSecretKey();
+  const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
+  const PRIVKEY3 = schnorr.utils.randomSecretKey();
+  const PUBKEY3 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY3));
+
+  const mkProof = (tags: string[][]): Proof => ({
+    amount: Amount.from(1),
+    id: '00000000000',
+    C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+    secret: JSON.stringify(['P2PK', { nonce: bytesToHex(randomBytes(32)), data: PUBKEY, tags }]),
+  });
+
+  test('no refund keys yields an empty, zero-threshold refund path', () => {
+    const result = verifyP2PKSpendingConditions(mkProof([]));
+    expect(result.refund).toStrictEqual({ pubkeys: [], requiredSigners: 0, receivedSigners: [] });
+  });
+
+  test('refund threshold is 0 while the lock is still active', () => {
+    const future = String(Math.floor(Date.now() / 1000) + 3600);
+    const result = verifyP2PKSpendingConditions(
+      mkProof([
+        ['locktime', future],
+        ['refund', PUBKEY2],
+      ]),
+    );
+    expect(result.lockState).toBe('ACTIVE');
+    expect(result.refund.requiredSigners).toBe(0);
+  });
+
+  test('expired 2-of-2 refund multisig rejects a single refund signature', () => {
+    const tags: string[][] = [
+      ['locktime', '21'],
+      ['refund', PUBKEY2, PUBKEY3],
+      ['n_sigs_refund', '2'],
+    ];
+    const [oneSig] = signP2PKProofs([mkProof(tags)], [bytesToHex(PRIVKEY2)]);
+    const partial = verifyP2PKSpendingConditions(oneSig);
+    expect(partial.refund.requiredSigners).toBe(2);
+    expect(partial.refund.receivedSigners).toStrictEqual([PUBKEY2]);
+    expect(partial.success).toBe(false);
+    expect(partial.path).toBe('FAILED');
+
+    const [twoSigs] = signP2PKProofs([mkProof(tags)], [bytesToHex(PRIVKEY2), bytesToHex(PRIVKEY3)]);
+    const full = verifyP2PKSpendingConditions(twoSigs);
+    expect(full.success).toBe(true);
+    expect(full.path).toBe('REFUND');
+  });
+});
+
+describe('signing edge cases', () => {
+  const mkProof = (secret: string, witness?: Proof['witness']): Proof => ({
+    amount: Amount.from(1),
+    id: '00000000000',
+    C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+    secret,
+    witness,
+  });
+  const secretStr = `["P2PK",{"nonce":"aa","data":"${PUBKEY}"}]`;
+
+  test('signP2PKProof accepts a Uint8Array private key', () => {
+    const signed = signP2PKProof(mkProof(secretStr), PRIVKEY);
+    expect(isP2PKSpendAuthorised(signed)).toBe(true);
+  });
+
+  test('signP2PKProofs derives P2BK keys from a Uint8Array private key', () => {
+    const privBytes = createRandomSecretKey();
+    const pubHex = bytesToHex(getPubKeyFromPrivKey(privBytes));
+    const {
+      blinded: [P0_],
+      Ehex,
+    } = deriveP2BKBlindedPubkeys([pubHex]);
+    const proof = { ...mkProof(createP2PKsecret(P0_, [])), p2pk_e: Ehex } as any;
+    const [signed] = signP2PKProofs([proof], privBytes);
+    expect(isP2PKSpendAuthorised(signed)).toBe(true);
+  });
+
+  test('signing does not add a preimage key when the witness has none', () => {
+    const signed = signP2PKProof(mkProof(secretStr, { signatures: [] }), bytesToHex(PRIVKEY));
+    expect(Object.keys(signed.witness as P2PKWitness)).toStrictEqual(['signatures']);
+  });
+
+  test('warns per proof when a key is not required, leaving the proof unsigned', () => {
+    const otherPriv = schnorr.utils.randomSecretKey();
+    const otherPubX = bytesToHex(schnorr.getPublicKey(otherPriv));
+    const warn = vi.fn();
+    const logger: Logger = {
+      error: vi.fn(),
+      warn,
+      info: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+      log: vi.fn(),
+    };
+    const [result] = signP2PKProofs([mkProof(secretStr)], bytesToHex(otherPriv), logger);
+    expect(warn).toHaveBeenCalledWith(`Proof #1: Signature not required from [02|03]${otherPubX}`);
+    expect(result.witness).toBeUndefined();
+  });
+
+  test('maybeDeriveP2BKPrivateKeys tolerates a missing proof', () => {
+    const priv = bytesToHex(createRandomSecretKey());
+    expect(maybeDeriveP2BKPrivateKeys(priv, undefined as unknown as Proof)).toStrictEqual([priv]);
+  });
+});
+
+describe('SIG_ALL edge cases', () => {
+  test('hasP2PKSignedProof throws for a SIG_ALL proof when no message is supplied', () => {
+    // A witness (even with empty signatures) is needed to clear the no-witness guard and
+    // reach the SIG_ALL branch, which cannot verify without the message to sign.
+    const proof: Proof = {
+      amount: Amount.from(1),
+      id: '00000000000',
+      C: '03'.padEnd(66, '0'),
+      secret: createP2PKsecret(PUBKEY, [['sigflag', 'SIG_ALL']]),
+      witness: { signatures: [] },
+    };
+    expect(() => hasP2PKSignedProof(PUBKEY, proof)).toThrow(/Cannot verify a SIG_ALL proof/);
+  });
+
+  test('hasP2PKSignedProof returns false for a witness-less SIG_ALL proof (no early throw)', () => {
+    // The no-witness guard must short-circuit before the SIG_ALL/message check: a SIG_ALL
+    // proof with no witness reports "not signed" rather than throwing for a missing message.
+    const proof: Proof = {
+      amount: Amount.from(1),
+      id: '00000000000',
+      C: '03'.padEnd(66, '0'),
+      secret: createP2PKsecret(PUBKEY, [['sigflag', 'SIG_ALL']]),
+    };
+    expect(hasP2PKSignedProof(PUBKEY, proof)).toBe(false);
+  });
+
+  test('assertSigAllInputs names the proof whose kind differs from the first', () => {
+    const data = 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5';
+    const tags = [['sigflag', 'SIG_ALL']];
+    const s1 = createSecret('HTLC', data, tags);
+    const s2 = createSecret('P2PK', data, tags);
+    expect(() => assertSigAllInputs([{ secret: s1 } as any, { secret: s2 } as any])).toThrow(
+      'Proof #2 is not HTLC',
+    );
+  });
+
+  test('assertSigAllInputs names the proof that is not SIG_ALL', () => {
+    const s1 = createP2PKsecret(PUBKEY, [['sigflag', 'SIG_ALL']]);
+    const s2 = createP2PKsecret(PUBKEY, [['sigflag', 'SIG_INPUTS']]);
+    expect(() => assertSigAllInputs([{ secret: s1 } as any, { secret: s2 } as any])).toThrow(
+      'Proof #2 is not SIG_ALL',
+    );
+  });
+
+  test('isP2PKSigAll is true when any input is SIG_ALL, false when none is', () => {
+    const sigAll = { secret: createP2PKsecret(PUBKEY, [['sigflag', 'SIG_ALL']]) } as any;
+    const sigInputs = { secret: createP2PKsecret(PUBKEY) } as any;
+    expect(isP2PKSigAll([sigInputs, sigAll])).toBe(true);
+    expect(isP2PKSigAll([sigInputs])).toBe(false);
+    expect(isP2PKSigAll([])).toBe(false);
+  });
+
+  test('buildLegacyP2PKSigAllMessage concatenates secrets, outputs, then quoteId', () => {
+    const inputs = [{ secret: 's1' }, { secret: 's2' }];
+    const outputs = [
+      { blindedMessage: { amount: 1, B_: 'B1' } },
+      { blindedMessage: { amount: 2, B_: 'B2' } },
+    ] as any;
+    expect(buildLegacyP2PKSigAllMessage(inputs, outputs, 'q1')).toBe('s1s2B1B2q1');
+    expect(buildLegacyP2PKSigAllMessage(inputs, outputs)).toBe('s1s2B1B2');
   });
 });

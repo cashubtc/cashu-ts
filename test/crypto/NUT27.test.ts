@@ -8,6 +8,7 @@ import {
   MINT_BACKUP_KIND,
   MINT_BACKUP_D_TAG,
 } from '../../src/crypto';
+import { CTSError } from '../../src/model/Errors';
 
 // Deterministic 64-byte test seed (bytes 0x00..0x3f). cashu-ts works in seed
 // space, so we avoid a bip39 dependency in the test.
@@ -40,10 +41,12 @@ describe('NUT-27 deriveMintBackupKeys', () => {
     expect(deriveMintBackupKeys(SEED)).toEqual(deriveMintBackupKeys(SEED));
   });
 
-  test('rejects an empty or non-Uint8Array seed', () => {
-    expect(() => deriveMintBackupKeys(new Uint8Array(0))).toThrow();
+  test('rejects an empty or non-Uint8Array seed with an actionable message', () => {
+    expect(() => deriveMintBackupKeys(new Uint8Array(0))).toThrow(
+      'seed must be a non-empty Uint8Array',
+    );
     // @ts-expect-error testing runtime guard
-    expect(() => deriveMintBackupKeys('not bytes')).toThrow();
+    expect(() => deriveMintBackupKeys('not bytes')).toThrow('seed must be a non-empty Uint8Array');
   });
 });
 
@@ -54,31 +57,55 @@ describe('NUT-27 payload', () => {
     expect(parseMintBackupPayload(json)).toEqual({ mints, timestamp: 1703721600 });
   });
 
-  test('parse rejects non-JSON', () => {
-    expect(() => parseMintBackupPayload('{not json')).toThrow();
+  test('parse rejects non-JSON with an actionable message', () => {
+    expect(() => parseMintBackupPayload('{not json')).toThrow('backup content is not valid JSON');
   });
 
-  test('parse rejects a missing or malformed mints field', () => {
-    expect(() => parseMintBackupPayload(JSON.stringify({ timestamp: 1 }))).toThrow();
-    expect(() => parseMintBackupPayload(JSON.stringify({ mints: [1, 2], timestamp: 1 }))).toThrow();
+  test('parse preserves the underlying JSON syntax error as the cause', () => {
+    let caught: unknown;
+    try {
+      parseMintBackupPayload('{not json');
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(CTSError);
+    expect((caught as CTSError).cause).toBeInstanceOf(SyntaxError);
   });
 
-  test('parse rejects a non-integer timestamp', () => {
-    expect(() => parseMintBackupPayload(JSON.stringify({ mints: [], timestamp: 1.5 }))).toThrow();
+  test('parse rejects a missing mints field', () => {
+    expect(() => parseMintBackupPayload(JSON.stringify({ timestamp: 1 }))).toThrow(
+      'mints` must be an array of strings',
+    );
   });
 
-  test('build rejects non-string mints', () => {
+  test('parse rejects a mints array with any non-string element', () => {
+    // Mixed array: `every` must reject, unlike `some`.
+    expect(() =>
+      parseMintBackupPayload(JSON.stringify({ mints: ['https://mint.example', 1], timestamp: 1 })),
+    ).toThrow('mints` must be an array of strings');
+  });
+
+  test('parse rejects a non-integer timestamp with an actionable message', () => {
+    expect(() => parseMintBackupPayload(JSON.stringify({ mints: [], timestamp: 1.5 }))).toThrow(
+      'timestamp` must be an integer',
+    );
+  });
+
+  test('build rejects a mints array with any non-string element', () => {
+    // Mixed array: `every` must reject, unlike `some`.
     // @ts-expect-error testing runtime guard
-    expect(() => buildMintBackupPayload([1, 2], 1)).toThrow();
+    expect(() => buildMintBackupPayload(['https://mint.example', 1], 1)).toThrow(
+      'mints must be an array of strings',
+    );
   });
 
-  test('build rejects a non-integer timestamp', () => {
-    expect(() => buildMintBackupPayload([], 1.5)).toThrow();
+  test('build rejects a non-integer timestamp with an actionable message', () => {
+    expect(() => buildMintBackupPayload([], 1.5)).toThrow('timestamp must be an integer');
   });
 
   test('parse rejects JSON that is not an object', () => {
-    expect(() => parseMintBackupPayload('42')).toThrow();
-    expect(() => parseMintBackupPayload('null')).toThrow();
+    expect(() => parseMintBackupPayload('42')).toThrow('backup payload must be an object');
+    expect(() => parseMintBackupPayload('null')).toThrow('backup payload must be an object');
   });
 });
 

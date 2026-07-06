@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { Amount } from '../../src/model/Amount';
+import { Amount, AmountError, AmountWithUnit, AmountWithUnitError } from '../../src/model/Amount';
 
 describe('Amount.from validation', () => {
   it('rejects negative bigint amounts', () => {
@@ -242,5 +242,148 @@ describe('Amount arithmetic and comparisons', () => {
   it('computes min and max', () => {
     expect(Amount.min(3, 5).toBigInt()).toBe(3n);
     expect(Amount.max(3, 5).toBigInt()).toBe(5n);
+  });
+});
+
+describe('Amount.from normalizes every AmountLike input', () => {
+  it('maps number, bigint, decimal string and Amount to the same value', () => {
+    expect(Amount.from(21).toBigInt()).toBe(21n);
+    expect(Amount.from(21n).toBigInt()).toBe(21n);
+    expect(Amount.from('21').toBigInt()).toBe(21n);
+    expect(Amount.from(Amount.from(21)).toBigInt()).toBe(21n);
+    expect(Amount.from(0).toBigInt()).toBe(0n);
+  });
+
+  it('returns the same instance when given an Amount', () => {
+    const a = Amount.from(7);
+    expect(Amount.from(a)).toBe(a);
+  });
+
+  it('preserves values at the safe-integer boundary', () => {
+    const maxSafe = Amount.from(Number.MAX_SAFE_INTEGER);
+    expect(maxSafe.toBigInt()).toBe(9007199254740991n);
+    expect(maxSafe.toNumber()).toBe(Number.MAX_SAFE_INTEGER);
+  });
+});
+
+describe('Amount add / subtract / compareTo exact arithmetic', () => {
+  it('adds and subtracts exactly across AmountLike inputs', () => {
+    expect(Amount.from(10).add(5).toBigInt()).toBe(15n);
+    expect(Amount.from(10).add('90').toBigInt()).toBe(100n);
+    expect(Amount.from(10).subtract(4).toBigInt()).toBe(6n);
+  });
+
+  it('compareTo returns -1 / 0 / 1', () => {
+    expect(Amount.from(3).compareTo(5)).toBe(-1);
+    expect(Amount.from(5).compareTo(5)).toBe(0);
+    expect(Amount.from(7).compareTo(5)).toBe(1);
+  });
+});
+
+describe('AmountError metadata', () => {
+  it('sets .name to "AmountError"', () => {
+    expect.assertions(2);
+    try {
+      Amount.from(-1n);
+    } catch (e) {
+      expect(e).toBeInstanceOf(AmountError);
+      expect((e as AmountError).name).toBe('AmountError');
+    }
+  });
+});
+
+describe('Amount.scaledBy zero-numerator short-circuit', () => {
+  it('returns zero for scaledBy(0, 0) without reaching the divisor guard', () => {
+    // numerator zero short-circuits to zero before the denominator-zero check throws
+    expect(Amount.from(500).scaledBy(0, 0).toBigInt()).toBe(0n);
+  });
+});
+
+describe('Amount.min / max tie-breaking', () => {
+  it('min returns the first argument on a value tie', () => {
+    const a = Amount.from(5);
+    const b = Amount.from(5);
+    expect(Amount.min(a, b)).toBe(a);
+  });
+
+  it('max returns the first argument on a value tie', () => {
+    const a = Amount.from(5);
+    const b = Amount.from(5);
+    expect(Amount.max(a, b)).toBe(a);
+  });
+});
+
+describe('AmountWithUnitError metadata', () => {
+  it('sets .name to "AmountWithUnitError"', () => {
+    expect.assertions(2);
+    try {
+      AmountWithUnit.from(1, '');
+    } catch (e) {
+      expect(e).toBeInstanceOf(AmountWithUnitError);
+      expect((e as AmountWithUnitError).name).toBe('AmountWithUnitError');
+    }
+  });
+});
+
+describe('AmountWithUnit unit validation', () => {
+  it('accepts a non-empty string unit', () => {
+    const a = AmountWithUnit.from(100, 'sat');
+    expect(a.toAmount().toBigInt()).toBe(100n);
+    expect(a.unit).toBe('sat');
+  });
+
+  it('rejects an empty unit string', () => {
+    expect(() => AmountWithUnit.from(1, '')).toThrow('unit required');
+  });
+
+  it('rejects a non-string unit', () => {
+    expect(() => AmountWithUnit.from(1, undefined as unknown as string)).toThrow('unit required');
+  });
+});
+
+describe('AmountWithUnit coercion error messages', () => {
+  const a = AmountWithUnit.from(100, 'sat');
+
+  it('numeric coercion names the numeric hint', () => {
+    expect(() => Number(a)).toThrow(/numeric coercion/i);
+  });
+
+  it('default coercion names the default hint', () => {
+    // binary + supplies the "default" ToPrimitive hint
+    expect(() => (a as unknown as number) + 1).toThrow(/default coercion/i);
+  });
+});
+
+describe('AmountWithUnit strict comparators on equal values', () => {
+  const a = AmountWithUnit.from(100, 'sat');
+  const eq = AmountWithUnit.from(100, 'sat');
+
+  it('lessThan is false for equal values', () => {
+    expect(a.lessThan(eq)).toBe(false);
+  });
+
+  it('greaterThan is false for equal values', () => {
+    expect(a.greaterThan(eq)).toBe(false);
+  });
+});
+
+describe('AmountWithUnit.min / max tie-breaking', () => {
+  const a = AmountWithUnit.from(5, 'sat');
+  const b = AmountWithUnit.from(5, 'sat');
+
+  it('min returns the first argument on a value tie', () => {
+    expect(AmountWithUnit.min(a, b)).toBe(a);
+  });
+
+  it('max returns the first argument on a value tie', () => {
+    expect(AmountWithUnit.max(a, b)).toBe(a);
+  });
+});
+
+describe('AmountWithUnit.sum mismatch message', () => {
+  it('names both units on mismatch', () => {
+    expect(() =>
+      AmountWithUnit.sum([AmountWithUnit.from(1, 'sat'), AmountWithUnit.from(2, 'usd')]),
+    ).toThrow('unit mismatch: sat vs usd');
   });
 });
