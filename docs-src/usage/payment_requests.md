@@ -36,27 +36,34 @@ If `supportedMethods` (`sm`) is set, the sending mint must also support at least
 
 ## How much do I send, including fees?
 
-A preferred mint list can attach an extra fee (`fr`) for paying from a mint outside it, and each supported method can carry its own fee (`mf`). The two **stack additively**. `amountToSend` computes the total for you.
+Each supported method can carry a fee (`mf`) that compensates the receiver for melting out via it. The fee applies only when paying from a mint outside the request's mint list (or from any mint if no list is set); a payment from a listed mint carries none. When one applies, the payer owes the **lowest** `mf` among the listed methods their mint supports. `amountToSend` computes the total for you: pass the methods your mint supports as the second argument.
 
 `amountToSend` returns an `Amount`, so it flows straight into `wallet.ops.send` (which accepts any `AmountLike`). Convert only at the edge, for display or serialization.
 
 ```typescript
-// preferred list (mp=true), fr=2, and bolt12 carries mf=5
-pr.amountToSend('https://in-list.mint'); // Amount, base only    → 100
-pr.amountToSend('https://in-list.mint', 'bolt12'); // + mf       → 105
-pr.amountToSend('https://other.mint', 'bolt11'); // + fr         → 102
-pr.amountToSend('https://other.mint', 'bolt12'); // + fr + mf    → 107
+// list = [in-list.mint], bolt11 carries no fee, bolt12 carries mf=5
+pr.amountToSend('https://in-list.mint', ['bolt12']); // listed mint, no fee  → 100
+pr.amountToSend('https://other.mint', ['bolt11', 'bolt12']); // lowest = 0   → 100
+pr.amountToSend('https://other.mint', ['bolt12']); // + mf                   → 105
 
-const total = pr.amountToSend(myMint, 'bolt11');
+const total = pr.amountToSend(myMint, myMintMethods);
 await wallet.ops.send(total, proofs).run(); // Amount passed straight through
 ```
 
-`amountToSend` only sums the fees that apply; it does not reject a mint or method that is not allowed (that is the caller's decision, see above). It throws if the request has no amount.
+`amountToSend` only prices the fee that applies; it does not reject a mint or method that is not allowed (that is the caller's decision, see above). It throws if the request has no amount.
 
 For an **amountless** request (the payer chooses the amount), use `feesFor` to price the surcharge alone and add it to the chosen amount:
 
 ```typescript
-const total = chosenAmount.add(pr.feesFor(myMint, 'bolt12')); // fr + mf, or 0 if none apply
+const total = chosenAmount.add(pr.feesFor(myMint, ['bolt12'])); // mf, or 0 if none applies
+```
+
+If the request sets `netFees` (`nf`), the requested amount is **net of input fees**: the receiver must be able to swap or melt the proofs without dipping below it. Select proofs with fees included:
+
+```typescript
+const builder = wallet.ops.send(total, proofs);
+if (pr.netFees) builder.includeFees(true); // sender covers the receiver's input fee
+await builder.run();
 ```
 
 ## Locked requests
@@ -75,7 +82,7 @@ See [Create P2PK](./create_p2pk.md) for the builder.
 
 ## Create and encode a request (receiver side)
 
-The `PaymentRequest` constructor is positional. `feeReserve` and each method `fee` accept any `AmountLike` (number, bigint, string, or `Amount`).
+The `PaymentRequest` constructor is positional. Each method `fee` accepts any `AmountLike` (number, bigint, string, or `Amount`).
 
 ```typescript
 import { PaymentRequest, PaymentRequestTransportType } from '@cashu/cashu-ts';
@@ -90,7 +97,7 @@ const request = new PaymentRequest(
   undefined, // singleUse (absent / true / false)
   undefined, // nut10 locking condition
   true, // mintsPreferred → advisory list
-  2, // feeReserve (fr)
+  true, // netFees (nf) → amount is net of input fees
   [{ method: 'bolt11' }, { method: 'bolt12', fee: 5 }], // supportedMethods (sm)
 );
 

@@ -25,7 +25,7 @@ export type RawPaymentRequest = {
   s?: boolean; // single use
   m?: string[]; // mints
   mp?: boolean; // mints preferred: strict list when absent or false, advisory list when true
-  fr?: number | bigint; // fee reserve (additional, in request unit, when paying from a mint outside a preferred list)
+  nf?: boolean; // net fees: requested amount is net of input fees when true
   sm?: RawSupportedMethod[]; // supported methods the payee accepts, each with an optional per-method fee
   d?: string; // description
   t?: RawTransport[]; // transports
@@ -33,8 +33,9 @@ export type RawPaymentRequest = {
 };
 
 /**
- * A payment method the payee accepts, with an optional per-method fee the payer must add when using
- * it. The fee stacks additively with the top-level {@link PaymentRequest.feeReserve} (`fr`).
+ * A payment method the payee accepts, with an optional per-method fee. The fee applies only when
+ * paying from a mint outside the request's mint list (or from any mint if no list is set); the
+ * payer owes the lowest fee among the listed methods their mint supports (NUT-18).
  */
 export type SupportedMethod = {
   method: string;

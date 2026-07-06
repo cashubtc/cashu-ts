@@ -433,18 +433,18 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
     });
   });
 
-  describe('Preferred Mint List with Fee Reserve and Supported Methods', () => {
+  describe('Preferred Mint List with Supported Methods and Net Fees', () => {
     // NUT-26 spec test vector — payment request with mp=true (preferred/advisory
-    // mint list), a fee required for non-preferred mints, and supported methods
-    // where bolt12 carries a per-method fee (mf=5) that stacks with fr.
+    // mint list), an amount net of input fees (nf=true), and supported methods
+    // where bolt12 carries a per-method fee (mf=5) for non-preferred mints.
     const encoded =
-      'CREQB1QYQP2URJV4NX2UNJV4J97EN9V40K6ET5DPHKGUCZQQYQQQQQQQQQQQRYQVQQZQQ9QQVXSAR5WPEN5TE0D45KUAPWV4UXZMTSD3JJUCM0D5YSQQGPPGQQSQQQQQQQQQQQQG9SQZGPQQRXYMMVWSCNZZCQZSQSQPNZDAK8GVFJQGQQSQQQQQQQQQQQQ5SX95HX';
+      'CREQB1QYQP2URJV4NX2UNJV4J97EN9V40K6ET5DPHKGUCZQQYQQQQQQQQQQQRYQVQQZQQ9QQVXSAR5WPEN5TE0D45KUAPWV4UXZMTSD3JJUCM0D5YSQQGPPGQQZQGTQQYSZQQXVFHKCAP3XY9SQ9QPQQRXYMMVWSCNYQSQPQQQQQQQQQQQQPGZ0CGYS';
 
-    test('roundtrip preferred mint list with fee reserve and supported methods', () => {
-      testRoundtrip(encoded, 'NUT-26 spec vector: mp=true, fr=2, sm=[bolt11, bolt12(mf=5)]');
+    test('roundtrip preferred mint list with supported methods and net fees', () => {
+      testRoundtrip(encoded, 'NUT-26 spec vector: mp=true, nf=true, sm=[bolt11, bolt12(mf=5)]');
     });
 
-    test('verify mp, fr, sm fields', () => {
+    test('verify mp, nf, sm fields', () => {
       const bytes = decodeBech32mToBytes(encoded.toLowerCase());
       const decoded = decodeTLV(bytes);
 
@@ -453,7 +453,7 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
       expect(decoded.unit).toBe('sat');
       expect(decoded.mints).toEqual(['https://mint.example.com']);
       expect(decoded.mintsPreferred).toBe(true);
-      expect(decoded.feeReserve).toBe(BigInt(2));
+      expect(decoded.netFees).toBe(true);
       expect(decoded.supportedMethods).toEqual([
         { method: 'bolt11' },
         { method: 'bolt12', fee: BigInt(5) },
@@ -463,7 +463,7 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
       const finalDecoded = decodeTLV(reEncoded);
 
       expect(finalDecoded.mintsPreferred).toBe(true);
-      expect(finalDecoded.feeReserve).toBe(BigInt(2));
+      expect(finalDecoded.netFees).toBe(true);
       expect(finalDecoded.supportedMethods).toEqual([
         { method: 'bolt11' },
         { method: 'bolt12', fee: BigInt(5) },

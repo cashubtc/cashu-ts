@@ -111,17 +111,17 @@ describe('payment requests', () => {
     expect(() => decodePaymentRequest(prWithInvalidVersion)).toThrow('unsupported pr version');
   });
 
-  describe('mint preferences (mp, fr, sm)', () => {
-    // NUT-18/NUT-26 spec vector: preferred mint list (mp=true) with fee reserve and
-    // supported methods. single_use is absent, so neither encoding emits it. Both strings
-    // are pinned to lock canonical output: minimal CBOR (creqA, `a7` not `b9 0007`) and
-    // minimal TLV with no redundant single_use=0 (creqB).
+  describe('mint preferences (mp, nf, sm)', () => {
+    // NUT-18/NUT-26 spec vector: preferred mint list (mp=true), amount net of input
+    // fees (nf=true) and supported methods. single_use is absent, so neither encoding
+    // emits it. Both strings are pinned to lock canonical output: minimal CBOR (creqA,
+    // `a7` not `b9 0007`) and minimal TLV with no redundant single_use=0 (creqB).
     const SPEC_CREQA =
-      'creqAp2FpdXByZWZlcnJlZF9mZWVfbWV0aG9kc2FhGGRhdWNzYXRhbYF4GGh0dHBzOi8vbWludC5leGFtcGxlLmNvbWJtcPViZnICYnNtgqFibW5mYm9sdDExomJtbmZib2x0MTJibWYF';
+      'creqAp2FpdXByZWZlcnJlZF9mZWVfbWV0aG9kc2FhGGRhdWNzYXRhbYF4GGh0dHBzOi8vbWludC5leGFtcGxlLmNvbWJtcPVibmb1YnNtgqFibW5mYm9sdDExomJtbmZib2x0MTJibWYF';
     const SPEC_CREQB =
-      'CREQB1QYQP2URJV4NX2UNJV4J97EN9V40K6ET5DPHKGUCZQQYQQQQQQQQQQQRYQVQQZQQ9QQVXSAR5WPEN5TE0D45KUAPWV4UXZMTSD3JJUCM0D5YSQQGPPGQQSQQQQQQQQQQQQG9SQZGPQQRXYMMVWSCNZZCQZSQSQPNZDAK8GVFJQGQQSQQQQQQQQQQQQ5SX95HX';
+      'CREQB1QYQP2URJV4NX2UNJV4J97EN9V40K6ET5DPHKGUCZQQYQQQQQQQQQQQRYQVQQZQQ9QQVXSAR5WPEN5TE0D45KUAPWV4UXZMTSD3JJUCM0D5YSQQGPPGQQZQGTQQYSZQQXVFHKCAP3XY9SQ9QPQQRXYMMVWSCNYQSQPQQQQQQQQQQQQPGZ0CGYS';
 
-    test('encode/decode preferred mint list with fee reserve and supported methods (creqA)', () => {
+    test('encode/decode preferred mint list with net fees and supported methods (creqA)', () => {
       const request = new PaymentRequest(
         undefined,
         'preferred_fee_methods',
@@ -132,7 +132,7 @@ describe('payment requests', () => {
         undefined, // singleUse absent
         undefined,
         true, // mintsPreferred (advisory list)
-        2, // feeReserve
+        true, // netFees
         [{ method: 'bolt11' }, { method: 'bolt12', fee: 5 }], // supportedMethods
       );
 
@@ -141,12 +141,12 @@ describe('payment requests', () => {
 
       const decoded = decodePaymentRequest(pr);
       expect(decoded.mintsPreferred).toBe(true);
-      expect(decoded.feeReserve?.equals(2)).toBeTruthy();
+      expect(decoded.netFees).toBe(true);
       expect(decoded.supportedMethods?.map((m) => m.method)).toEqual(['bolt11', 'bolt12']);
       expect(decoded.supportedMethods?.[1].fee?.equals(5)).toBeTruthy();
     });
 
-    test('encode/decode preferred mint list with fee reserve and supported methods (creqB)', () => {
+    test('encode/decode preferred mint list with net fees and supported methods (creqB)', () => {
       const request = new PaymentRequest(
         undefined,
         'preferred_fee_methods',
@@ -157,7 +157,7 @@ describe('payment requests', () => {
         undefined, // singleUse absent
         undefined,
         true,
-        2,
+        true,
         [{ method: 'bolt11' }, { method: 'bolt12', fee: 5 }],
       );
 
@@ -166,13 +166,13 @@ describe('payment requests', () => {
 
       const decoded = PaymentRequest.fromEncodedRequest(encoded);
       expect(decoded.mintsPreferred).toBe(true);
-      expect(decoded.feeReserve?.equals(2)).toBeTruthy();
+      expect(decoded.netFees).toBe(true);
       expect(decoded.supportedMethods?.map((m) => m.method)).toEqual(['bolt11', 'bolt12']);
       expect(decoded.supportedMethods?.[1].fee?.equals(5)).toBeTruthy();
     });
 
-    test('amountToSend stacks fr (non-preferred mint) and mf (per-method) fees', () => {
-      // Preferred list (mp=true), fr=2, bolt12 carries mf=5.
+    test('feesFor prices the lowest applicable per-method (mf) fee', () => {
+      // Preferred list (mp=true), bolt11 carries no fee, bolt12 carries mf=5.
       const pr = new PaymentRequest(
         undefined,
         'fees',
@@ -183,37 +183,40 @@ describe('payment requests', () => {
         undefined,
         undefined,
         true,
-        2,
+        undefined,
         [{ method: 'bolt11' }, { method: 'bolt12', fee: 5 }],
       );
 
-      // In-list mint, no fee-bearing method: base only.
-      expect(pr.amountToSend('https://in.example.com').equals(100)).toBeTruthy();
-      // In-list mint + bolt12: base + mf.
-      expect(pr.amountToSend('https://in.example.com', 'bolt12').equals(105)).toBeTruthy();
-      // Outside mint + bolt11 (no mf): base + fr.
-      expect(pr.amountToSend('https://out.example.com', 'bolt11').equals(102)).toBeTruthy();
-      // Outside mint + bolt12: base + fr + mf.
-      expect(pr.amountToSend('https://out.example.com', 'bolt12').equals(107)).toBeTruthy();
+      // In-list mint: no per-method fee, whatever the mint supports.
+      expect(pr.amountToSend('https://in.example.com', ['bolt12']).equals(100)).toBeTruthy();
+      // Outside mint supporting both methods: owes the lowest fee (bolt11 = 0).
+      expect(
+        pr.amountToSend('https://out.example.com', ['bolt11', 'bolt12']).equals(100),
+      ).toBeTruthy();
+      // Outside mint supporting only the fee-bearing method: owes its mf.
+      expect(pr.amountToSend('https://out.example.com', ['bolt12']).equals(105)).toBeTruthy();
+      // Mint methods unknown/unsupported: prices as 0 (admissibility is the caller's check).
+      expect(pr.amountToSend('https://out.example.com').equals(100)).toBeTruthy();
 
-      // Strict list (mp absent): fr never applies even from an outside mint.
-      const strict = new PaymentRequest(
+      // No mint list: the fee applies from any mint.
+      const noList = new PaymentRequest(
         undefined,
-        'strict',
+        'nolist',
         100,
         'sat',
-        ['https://in.example.com'],
         undefined,
         undefined,
         undefined,
         undefined,
-        2,
+        undefined,
+        undefined,
+        [{ method: 'bolt12', fee: 5 }],
       );
-      expect(strict.amountToSend('https://out.example.com').equals(100)).toBeTruthy();
+      expect(noList.amountToSend('https://any.example.com', ['bolt12']).equals(105)).toBeTruthy();
 
       // feesFor returns the surcharge alone (0 when none applies).
-      expect(pr.feesFor('https://in.example.com').equals(0)).toBeTruthy();
-      expect(pr.feesFor('https://out.example.com', 'bolt12').equals(7)).toBeTruthy();
+      expect(pr.feesFor('https://in.example.com', ['bolt12']).equals(0)).toBeTruthy();
+      expect(pr.feesFor('https://out.example.com', ['bolt12']).equals(5)).toBeTruthy();
 
       // Amountless request: amountToSend throws, but feesFor still prices the surcharge so the
       // payer can add it to their chosen amount.
@@ -231,10 +234,10 @@ describe('payment requests', () => {
         undefined,
         undefined,
         true,
-        2,
+        undefined,
         [{ method: 'bolt12', fee: 5 }],
       );
-      expect(mp.feesFor('https://out.example.com', 'bolt12').equals(7)).toBeTruthy();
+      expect(mp.feesFor('https://out.example.com', ['bolt12']).equals(5)).toBeTruthy();
     });
 
     test('isMintListStrict resolves NUT-18 default-to-strict semantic', () => {
@@ -308,18 +311,18 @@ describe('payment requests', () => {
       expect(fromZero.isMintListStrict).toBe(true);
     });
 
-    test('mp/fr/sm absent by default (no serialization, no defaults injected)', () => {
+    test('mp/nf/sm absent by default (no serialization, no defaults injected)', () => {
       const request = new PaymentRequest(undefined, 'no_prefs', 100, 'sat', [
         'https://mint.example.com',
       ]);
       const raw = request.toRawRequest();
       expect(raw.mp).toBeUndefined();
-      expect(raw.fr).toBeUndefined();
+      expect(raw.nf).toBeUndefined();
       expect(raw.sm).toBeUndefined();
 
       const decoded = decodePaymentRequest(request.toEncodedRequest());
       expect(decoded.mintsPreferred).toBeUndefined();
-      expect(decoded.feeReserve).toBeUndefined();
+      expect(decoded.netFees).toBeUndefined();
       expect(decoded.supportedMethods).toBeUndefined();
     });
   });
