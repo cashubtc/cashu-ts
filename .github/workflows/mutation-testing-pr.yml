@@ -113,8 +113,11 @@ jobs:
           '
 
       # Upsert a single sticky comment (found by the hidden marker) on the PR.
+      # Skipped for fork PRs: their GITHUB_TOKEN is read-only no matter what the
+      # permissions block requests, so the comment would 403. The job summary
+      # (written above) still carries the same report.
       - name: Comment score on PR
-        if: ${{ always() && github.event_name == 'pull_request' }}
+        if: ${{ always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
         uses: actions/github-script@v7
         with:
           script: |
