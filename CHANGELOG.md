@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.7.1](https://github.com/cashubtc/cashu-ts/compare/v3.7.0...v3.7.1) (2026-07-08)
+
+
+### Bug Fixes
+
+* **p2bk:** NUT-28 slot cap and HTLC key slot order for v3 ([562eb7c](https://github.com/cashubtc/cashu-ts/commit/562eb7c3437d69748e5f5743902273d2fef5df72))
+
 ## [3.6.1](https://github.com/cashubtc/cashu-ts/compare/v3.6.0...v3.6.1) (2026-03-17)
 
 
