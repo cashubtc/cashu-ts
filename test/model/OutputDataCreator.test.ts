@@ -1,6 +1,8 @@
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 import { describe, expect, test } from 'vitest';
 
-import { getPubKeyFromPrivKey } from '../../src/crypto';
+import { getPubKeyFromPrivKey, P2BK_DST, pointFromHex } from '../../src/crypto';
 import { Amount, type AmountLike } from '../../src/model/Amount';
 import { OutputData, isOutputDataFactory } from '../../src/model/OutputData';
 import type { OutputDataFactory, OutputDataLike } from '../../src/model/OutputData';
@@ -113,6 +115,32 @@ describe('OutputData helpers', () => {
     const deserialized = OutputData.deserialize(OutputData.serialize(output));
 
     expect(deserialized.ephemeralE).toBe(output.ephemeralE);
+  });
+
+  test('HTLC blinding starts lock keys at slot 1 (NUT-28: hashlock occupies slot 0)', () => {
+    const privkey = Bytes.fromHex('01'.repeat(32));
+    const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
+    const output = OutputData.createSingleP2PKData(
+      {
+        pubkey,
+        hashlock: 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5',
+        blindKeys: true,
+      },
+      1,
+      '009a1f293253e41e',
+    );
+
+    const [, secret] = JSON.parse(new TextDecoder().decode(output.secret)) as [
+      string,
+      { data: string; tags: string[][] },
+    ];
+    const blinded = secret.tags.find(([tag]) => tag === 'pubkeys')![1];
+    // Independent receiver-side NUT-28 math: r1 = sha256(DST || Zx || 0x01), P' = P + r1·G
+    const p = secp256k1.Point.Fn.fromBytes(privkey);
+    const Zx = secp256k1.Point.fromHex(output.ephemeralE!).multiply(p).toBytes(true).slice(1);
+    const r1 = Bytes.toBigInt(sha256(Bytes.concat(P2BK_DST, Zx, Uint8Array.of(1))));
+    const expected = pointFromHex(pubkey).add(secp256k1.Point.BASE.multiply(r1)).toHex(true);
+    expect(blinded).toBe(expected);
   });
 
   test('keeps blinded HTLC lock keys in pubkeys tags', () => {
