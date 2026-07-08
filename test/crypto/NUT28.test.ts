@@ -238,6 +238,28 @@ describe('P2BK test vectors, public API only', () => {
   });
 });
 
+describe('slot offset (NUT-28: the data tag occupies slot 0)', () => {
+  // Fixed vector from 'P2BK test vectors, public API only' above: for an HTLC the hashlock
+  // holds slot 0, so the first lock key must be blinded/unblinded with slot index 1.
+  const eHex = '1cedb9df0c6872188b560ace9e35fd55c2532d53e19ae65b46159073886482ca';
+  const Ehex = '02a8cda4cf448bfce9a9e46e588c06ea1780fcb94e3bbdf3277f42995d403a8b0c';
+  const pubKeyBob = '02771fed6cb88aaac38b8b32104a942bf4b8f4696bc361171b3c7d06fa2ebddf06';
+  const privKeyBob = 'ad37e8abd800be3e8272b14045873f4353327eedeb702b72ddcc5c5adff5129c';
+  const slot1Blinded = '0352fb6d93360b7c2538eedf3c861f32ea5883fceec9f3e573d9d84377420da838';
+  const slot1DerivedSk2 = '9d1ffe00e1da5af5c882b1ea5ec8c18893e09349803c3c9e552823490af22458';
+
+  test('deriveP2BKBlindedPubkeys blinds the first key at slot 1 when data is not a pubkey', () => {
+    const { blinded } = deriveP2BKBlindedPubkeys([pubKeyBob], hexToBytes(eHex), false);
+    expect(blinded).toStrictEqual([slot1Blinded]);
+  });
+
+  test('deriveP2BKSecretKeys derives the slot 1 key when data is not a pubkey', () => {
+    expect(deriveP2BKSecretKeys(Ehex, privKeyBob, slot1Blinded, false)).toStrictEqual([
+      slot1DerivedSk2,
+    ]);
+  });
+});
+
 describe('NUT28 uncovered branches and guards', () => {
   const toHex = (x: bigint) => numberToHexPadded64(x);
   const randScalar = () => hexToNumber(bytesToHex(secp256k1.utils.randomSecretKey()));
