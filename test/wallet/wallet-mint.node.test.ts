@@ -33,6 +33,29 @@ const mintInfoRespWithNut12 = {
   nuts: { ...mintInfoResp.nuts, 12: { supported: true } },
 };
 
+const mintInfoRespWithBacs = {
+  ...mintInfoResp,
+  nuts: {
+    ...mintInfoResp.nuts,
+    4: {
+      methods: [
+        ...mintInfoResp.nuts['4'].methods,
+        { method: 'bacs', unit: 'sat' },
+        { method: 'swift', unit: 'sat' },
+      ],
+      disabled: false,
+    },
+    5: {
+      methods: [
+        ...mintInfoResp.nuts['5'].methods,
+        { method: 'bacs', unit: 'sat' },
+        { method: 'swift', unit: 'sat' },
+      ],
+      disabled: false,
+    },
+  },
+};
+
 function normalizeProofsForTest(proofs: Parameters<Wallet['signP2PKProofs']>[0]): Proof[] {
   return proofs.map((proof) => ({ ...proof, amount: Amount.from(proof.amount) }));
 }

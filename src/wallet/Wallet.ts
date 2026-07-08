@@ -1925,7 +1925,7 @@ class Wallet {
    * @returns Mint quote responses in request order.
    * @experimental only supported by CDK mint >= 0.16.0
    */
-  async checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(
+  async checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(
     method: string,
     quotes: Array<string | Pick<TRes, 'quote'>>,
     options?: { normalize?: (raw: Record<string, unknown>) => TRes },
