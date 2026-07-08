@@ -195,11 +195,6 @@ export interface AuthProvider {
 }
 
 // @public
-export type BatchCheckMintQuoteRequest = {
-    quotes: string[];
-};
-
-// @public
 export interface BatchMintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'quote' | 'pubkey'> = MintQuoteBaseResponse> {
     keysetId: string;
     // @deprecated (undocumented)
@@ -2234,7 +2229,7 @@ export class Wallet {
     checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, quote: string | Pick<TRes, 'quote'>, options?: {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
-    checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(method: string, quotes: Array<string | Pick<TRes, 'quote'>>, options?: {
+    checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, quotes: Array<string | Pick<TRes, 'quote'>>, options?: {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes[]>;
     checkMintQuoteBatchBolt11(quotes: Array<string | MintQuoteBolt11Response>): Promise<MintQuoteBolt11Response[]>;

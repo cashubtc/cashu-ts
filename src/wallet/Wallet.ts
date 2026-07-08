@@ -1932,8 +1932,9 @@ class Wallet {
    * @param quotes Quote IDs or quote objects (each object must have a `quote` field).
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns Mint quote responses in request order.
+   * @experimental only supported by CDK mint >= 0.16.0
    */
-  async checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(
+  async checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(
     method: string,
     quotes: Array<string | Pick<TRes, 'quote'>>,
     options?: { normalize?: (raw: Record<string, unknown>) => TRes },
@@ -1952,6 +1953,7 @@ class Wallet {
    * `checkMintQuoteBolt11()` per quote id when needed.
    * @param quotes Quote IDs or quote objects.
    * @returns Updated BOLT11 mint quotes in request order.
+   * @experimental only supported by CDK mint >= 0.16.0
    */
   async checkMintQuoteBatchBolt11(
     quotes: Array<string | MintQuoteBolt11Response>,
@@ -1968,6 +1970,7 @@ class Wallet {
    * `checkMintQuoteBolt12()` per quote id when needed.
    * @param quotes Quote IDs or quote objects.
    * @returns Updated BOLT12 mint quotes in request order.
+   * @experimental only supported by CDK mint >= 0.16.0
    */
   async checkMintQuoteBatchBolt12(
     quotes: Array<string | MintQuoteBolt12Response>,

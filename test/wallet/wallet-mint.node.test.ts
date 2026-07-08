@@ -1237,6 +1237,50 @@ describe('generic mint/melt methods', () => {
       expect(quotes[1].amount.toBigInt()).toBe(2000n);
     });
 
+    test('checkMintQuoteBatchBolt12 posts quote ids and normalizes responses', async () => {
+      server.use(
+        http.post(mintUrl + '/v1/mint/quote/bolt12/check', async ({ request }) => {
+          const body = (await request.json()) as { quotes: string[] };
+          expect(body).toEqual({ quotes: ['bolt12-batch-1'] });
+          return HttpResponse.json([
+            {
+              quote: 'bolt12-batch-1',
+              request: 'lno...',
+              unit: 'sat',
+              amount: null,
+              amount_paid: 42,
+              amount_issued: 0,
+              state: MintQuoteState.PAID,
+              expiry: 3600,
+              pubkey: '02a1',
+            },
+          ]);
+        }),
+      );
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+
+      // Pass a quote object rather than an id to cover id extraction
+      const quotes = await wallet.checkMintQuoteBatchBolt12([
+        {
+          quote: 'bolt12-batch-1',
+          request: 'lno...',
+          unit: 'sat',
+          amount: null,
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
+          state: MintQuoteState.UNPAID,
+          expiry: null,
+          pubkey: '02a1',
+        },
+      ]);
+
+      expect(quotes[0].quote).toBe('bolt12-batch-1');
+      expect(quotes[0].amount).toBeNull();
+      expect(quotes[0].amount_paid.toBigInt()).toBe(42n);
+      expect(quotes[0].amount_issued.toBigInt()).toBe(0n);
+    });
+
     test('checkMintQuoteBatch with custom method hits /v1/mint/quote/{method}/check', async () => {
       server.use(
         http.get(mintUrl + '/v1/info', () => HttpResponse.json(mintInfoRespWithBacs)),

@@ -65,24 +65,7 @@ const newProofs = await wallet.completeMint(preview);
 ```
 
 - BOLT12 always requires the full quote object and `.privkey(...)`.
-
-## 6) Batch check and batch mint
-
-```ts
-const checkedQuotes = await wallet.checkMintQuoteBatchBolt11(['quote-1', 'quote-2']);
-
-const preview = await wallet.prepareBatchMint(
-  'bolt11',
-  checkedQuotes.map((quote) => ({ amount: quote.amount, quote })),
-);
-
-const newProofs = await wallet.completeBatchMint(preview);
-```
-
-- `checkMintQuoteBatch*()` returns quote objects in the same order as the request.
-- `prepareBatchMint()` expects quote objects, not unchecked quote IDs.
 - For custom payment methods (e.g., BACS, SWIFT), use the generic wallet methods directly:
   `wallet.createMintQuote(method, ...)`, `wallet.checkMintQuote(method, ...)`,
-  `wallet.checkMintQuoteBatch(method, ...)`, `wallet.mintProofs(method, ...)`, or the two-step
-  `wallet.prepareMint(method, ...)` / `wallet.completeMint(...)`. See
-  [Mint Token – Custom Methods](../usage/mint_token.md) for examples.
+  `wallet.mintProofs(method, ...)`, or the two-step `wallet.prepareMint(method, ...)` /
+  `wallet.completeMint(...)`. See [Mint Token – Custom Methods](../usage/mint_token.md) for examples.

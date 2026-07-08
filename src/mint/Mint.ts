@@ -40,7 +40,7 @@ import {
   type SerializedBlindedSignature,
 } from '../model/types';
 import type { GetKeysResponse, GetKeysetsResponse } from '../model/types/keyset';
-import { type BatchCheckMintQuoteRequest, type BatchMintRequest } from '../model/types/NUT29';
+import { type BatchMintRequest } from '../model/types/NUT29';
 import request, {
   WSConnection,
   setRequestLogger,
@@ -411,6 +411,7 @@ class Mint {
    * @param options.customRequest Optional override for the request function.
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns Mint quote responses in request order.
+   * @experimental only supported by CDK mint >= 0.16.0
    */
   async checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(
     method: string,
@@ -425,11 +426,10 @@ class Mint {
       this._logger,
     );
 
-    const requestBody: BatchCheckMintQuoteRequest = { quotes };
     const data = await this.requestWithAuth<TRes[]>(
       'POST',
       `/v1/mint/quote/${method}/check`,
-      { requestBody },
+      { requestBody: { quotes } },
       options?.customRequest,
     );
 
@@ -461,6 +461,7 @@ class Mint {
    * @param quotes Quote IDs to check.
    * @param customRequest Optional override for the request function.
    * @returns Updated BOLT11 mint quotes in request order.
+   * @experimental only supported by CDK mint >= 0.16.0
    */
   async checkMintQuoteBatchBolt11(
     quotes: string[],
@@ -479,6 +480,7 @@ class Mint {
    * @param quotes Quote IDs to check.
    * @param customRequest Optional override for the request function.
    * @returns Updated BOLT12 mint quotes in request order.
+   * @experimental only supported by CDK mint >= 0.16.0
    */
   async checkMintQuoteBatchBolt12(
     quotes: string[],

@@ -134,3 +134,27 @@ if (available.greaterThanOrEqual(5000)) {
   const proofs = await wallet.mintProofs('bacs', 5000, updated);
 }
 ```
+
+## 5) Batch check and batch mint (NUT-29)
+
+Mints that support NUT-29 can check and mint multiple quotes in single requests.
+
+```ts
+const checked = await wallet.checkMintQuoteBatchBolt11(['quote-1', 'quote-2']);
+
+// prepareBatchMint() fails if any quote is unpaid, so batch the paid ones only
+const paid = checked.filter((quote) => quote.state === MintQuoteState.PAID);
+
+const preview = await wallet.prepareBatchMint(
+  'bolt11',
+  paid.map((quote) => ({ amount: quote.amount, quote })),
+);
+
+const newProofs = await wallet.completeBatchMint(preview);
+```
+
+- `checkMintQuoteBatch*()` returns quote objects in the same order as the request.
+- Custom methods use `wallet.checkMintQuoteBatch(method, quotes)` with the same `normalize`
+  callback as `checkMintQuote()` (see section 4).
+- Mints that predate the batch check endpoint return an error; fall back to the per-quote
+  `checkMintQuote*()` methods.
