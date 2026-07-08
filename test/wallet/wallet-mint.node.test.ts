@@ -16,7 +16,13 @@ import {
   type MintQuoteBolt11Response,
   Amount,
   type AmountLike,
+  Mint,
+  MintOperationError,
+  type RequestFn,
 } from '../../src';
+import { verifyMintQuoteSignature } from '../../src/crypto';
+import { verifyMintQuoteSignatureLegacy } from '../../src/crypto/NUT20';
+import request from '../../src/transport';
 import { Bytes, sumProofs } from '../../src/utils';
 
 import { useTestServer, mint, mintUrl, unit, logger, mintInfoResp } from './_setup';
@@ -616,6 +622,261 @@ describe('requestTokens', () => {
   });
 });
 
+describe('mint quote signature legacy fallback', () => {
+  const privkey = '0000000000000000000000000000000000000000000000000000000000000001';
+  const pubkey = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+
+  function spyLogger() {
+    return {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+      log: vi.fn(),
+    };
+  }
+
+  async function makeWallet(walletLogger?: ReturnType<typeof spyLogger>) {
+    const wallet = new Wallet(mint, { unit, logger: walletLogger });
+    await wallet.loadMint();
+    return wallet;
+  }
+
+  function makeLockedQuote(amount = 3): MintQuoteBolt11Response {
+    return {
+      quote: 'locked-quote',
+      request: 'lnbc...',
+      amount: Amount.from(amount),
+      unit: 'sat',
+      state: MintQuoteState.PAID,
+      expiry: null,
+      pubkey,
+    };
+  }
+
+  describe('prepare signs the amended message and keeps a legacy fallback', () => {
+    test('prepareMint', async () => {
+      const wallet = await makeWallet();
+      const preview = await wallet.prepareMint('bolt11', 3, makeLockedQuote(), { privkey });
+      const { outputs, signature } = preview.payload;
+      const legacy = preview.legacySignature!;
+
+      // Wire signature is the amended message; the fallback is the legacy message. Each verifies
+      // only against its own message — the DST makes them non-interchangeable.
+      expect(verifyMintQuoteSignature(pubkey, 'locked-quote', outputs, signature!)).toBe(true);
+      expect(verifyMintQuoteSignatureLegacy(pubkey, 'locked-quote', outputs, signature!)).toBe(
+        false,
+      );
+      expect(verifyMintQuoteSignatureLegacy(pubkey, 'locked-quote', outputs, legacy)).toBe(true);
+      expect(verifyMintQuoteSignature(pubkey, 'locked-quote', outputs, legacy)).toBe(false);
+    });
+
+    test('prepareBatchMint', async () => {
+      const wallet = await makeWallet();
+      const preview = await wallet.prepareBatchMint(
+        'bolt11',
+        [{ amount: 3, quote: makeLockedQuote() }],
+        { privkey },
+      );
+      const { outputs, signatures } = preview.payload;
+      const legacy = preview.legacySignatures![0]!;
+
+      expect(verifyMintQuoteSignature(pubkey, 'locked-quote', outputs, signatures![0]!)).toBe(true);
+      expect(verifyMintQuoteSignatureLegacy(pubkey, 'locked-quote', outputs, legacy)).toBe(true);
+    });
+
+    test('omits the legacy fallback for an unsigned (unlocked) quote', async () => {
+      const wallet = await makeWallet();
+      const preview = await wallet.prepareMint('bolt11', 3, { quote: 'unlocked' });
+      expect(preview.payload.signature).toBeUndefined();
+      expect(preview.legacySignature).toBeUndefined();
+    });
+  });
+
+  describe('completeMint retries with the legacy signature on rejection', () => {
+    const blindSig = {
+      id: '00bd033559de27d0',
+      amount: 1,
+      C_: '0361a2725cfd88f60ded718378e8049a4a6cee32e214a9870b44c3ffea2dc9e625',
+    };
+
+    type SeenRequest = {
+      signature: string;
+      outputs: Parameters<typeof verifyMintQuoteSignature>[2];
+    };
+
+    // Mint that verifies only the legacy message: rejects the amended signature with a NUT-20
+    // protocol error, accepts the legacy one. Records each request it is offered.
+    function legacyOnlyMint(seen: SeenRequest[]) {
+      server.use(
+        http.post(mintUrl + '/v1/mint/bolt11', async ({ request }) => {
+          const body = (await request.json()) as SeenRequest;
+          seen.push(body);
+          const amended = verifyMintQuoteSignature(
+            pubkey,
+            'locked-quote',
+            body.outputs,
+            body.signature ?? '',
+          );
+          if (amended) {
+            return HttpResponse.json({ code: 20008, detail: 'invalid signature' }, { status: 400 });
+          }
+          return HttpResponse.json({ signatures: [blindSig] });
+        }),
+      );
+    }
+
+    test('resends the same outputs with the legacy signature and warns', async () => {
+      const seen: SeenRequest[] = [];
+      legacyOnlyMint(seen);
+      const logger = spyLogger();
+      const wallet = await makeWallet(logger);
+
+      const proofs = await wallet.mintProofsBolt11(1, makeLockedQuote(1), { privkey });
+
+      expect(proofs).toHaveLength(1);
+      expect(seen).toHaveLength(2);
+      // Amended attempt first, legacy on the retry — both over the same outputs.
+      expect(
+        verifyMintQuoteSignature(pubkey, 'locked-quote', seen[0].outputs, seen[0].signature),
+      ).toBe(true);
+      expect(
+        verifyMintQuoteSignatureLegacy(pubkey, 'locked-quote', seen[1].outputs, seen[1].signature),
+      ).toBe(true);
+      expect(seen[1].outputs).toEqual(seen[0].outputs);
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('20008'));
+    });
+
+    test('does not retry when the mint accepts the amended signature', async () => {
+      let calls = 0;
+      server.use(
+        http.post(mintUrl + '/v1/mint/bolt11', () => {
+          calls += 1;
+          return HttpResponse.json({ signatures: [blindSig] });
+        }),
+      );
+      const wallet = await makeWallet();
+
+      await wallet.mintProofsBolt11(1, makeLockedQuote(1), { privkey });
+
+      expect(calls).toBe(1);
+    });
+
+    test('does not retry on a non-protocol failure', async () => {
+      let calls = 0;
+      server.use(
+        http.post(mintUrl + '/v1/mint/bolt11', () => {
+          calls += 1;
+          return HttpResponse.json({ error: 'boom' }, { status: 500 });
+        }),
+      );
+      const wallet = await makeWallet();
+
+      await expect(wallet.mintProofsBolt11(1, makeLockedQuote(1), { privkey })).rejects.toThrow();
+      expect(calls).toBe(1);
+    });
+
+    test('retries when a custom transport throws a look-alike MintOperationError', async () => {
+      const seen: SeenRequest[] = [];
+      legacyOnlyMint(seen);
+      // Transport that surfaces protocol errors as its own class (same name and shape, different
+      // constructor identity), as a consumer with a custom request layer might.
+      class LookAlikeError extends Error {
+        code: number;
+        constructor(code: number, detail: string) {
+          super(detail);
+          this.name = 'MintOperationError';
+          this.code = code;
+        }
+      }
+      const customRequest: RequestFn = async (args) => {
+        try {
+          return await request(args);
+        } catch (e) {
+          if (e instanceof MintOperationError) throw new LookAlikeError(e.code, e.message);
+          throw e;
+        }
+      };
+      const wallet = new Wallet(new Mint(mintUrl, { customRequest }), { unit });
+      await wallet.loadMint();
+
+      const proofs = await wallet.mintProofsBolt11(1, makeLockedQuote(1), { privkey });
+
+      expect(proofs).toHaveLength(1);
+      expect(seen).toHaveLength(2);
+      expect(
+        verifyMintQuoteSignatureLegacy(pubkey, 'locked-quote', seen[1].outputs, seen[1].signature),
+      ).toBe(true);
+    });
+
+    test('completeBatchMint retries with the legacy signatures on rejection', async () => {
+      type SeenBatchRequest = {
+        signatures?: string[];
+        outputs: SeenRequest['outputs'];
+      };
+      const seen: SeenBatchRequest[] = [];
+      // Batch counterpart of legacyOnlyMint: rejects the amended signature with 20008.
+      server.use(
+        http.post(mintUrl + '/v1/mint/bolt11/batch', async ({ request }) => {
+          const body = (await request.json()) as SeenBatchRequest;
+          seen.push(body);
+          const amended = verifyMintQuoteSignature(
+            pubkey,
+            'locked-quote',
+            body.outputs,
+            body.signatures?.[0] ?? '',
+          );
+          if (amended) {
+            return HttpResponse.json({ code: 20008, detail: 'invalid signature' }, { status: 400 });
+          }
+          return HttpResponse.json({
+            signatures: body.outputs.map((o) => ({ ...blindSig, amount: o.amount })),
+          });
+        }),
+      );
+      const wallet = await makeWallet();
+
+      const preview = await wallet.prepareBatchMint(
+        'bolt11',
+        [{ amount: 1, quote: makeLockedQuote(1) }],
+        { privkey },
+      );
+      const proofs = await wallet.completeBatchMint(preview);
+
+      expect(proofs).toHaveLength(1);
+      expect(seen).toHaveLength(2);
+      // Amended attempt first, legacy on the retry, both over the same outputs.
+      expect(
+        verifyMintQuoteSignatureLegacy(
+          pubkey,
+          'locked-quote',
+          seen[1].outputs,
+          seen[1].signatures![0],
+        ),
+      ).toBe(true);
+      expect(seen[1].outputs).toEqual(seen[0].outputs);
+    });
+
+    test('does not retry on an unrelated protocol error (only 20008 falls back)', async () => {
+      let calls = 0;
+      server.use(
+        http.post(mintUrl + '/v1/mint/bolt11', () => {
+          calls += 1;
+          // 20001 = quote not paid — a real failure the legacy signature cannot fix.
+          return HttpResponse.json({ code: 20001, detail: 'quote not paid' }, { status: 400 });
+        }),
+      );
+      const wallet = await makeWallet();
+
+      await expect(wallet.mintProofsBolt11(1, makeLockedQuote(1), { privkey })).rejects.toThrow(
+        /quote not paid/,
+      );
+      expect(calls).toBe(1);
+    });
+  });
+});
+
 describe('NUT-29 max_batch_size enforcement', () => {
   function makeBatchHandler() {
     server.use(
@@ -808,6 +1069,8 @@ describe('generic mint/melt methods', () => {
             quote: 'bacs-quote-unit',
             request: 'CASHU-REF-UNIT',
             unit: body.unit,
+            amount_paid: 0,
+            amount_issued: 0,
           });
         }),
       );
@@ -1131,6 +1394,39 @@ describe('generic mint/melt methods', () => {
       ).rejects.toThrow('Mint quote bolt12-partial has only 2 available to mint; requested 3');
     });
 
+    test('prepareMint rejects amounts above paid minus issued for custom methods', async () => {
+      const wallet = new Wallet(mint, { unit: 'sat' });
+      await wallet.loadMint();
+
+      await expect(
+        wallet.prepareMint('bacs', 3, {
+          quote: 'bacs-partial',
+          request: 'CASHU-REF',
+          unit: 'sat',
+          amount_paid: Amount.from(5),
+          amount_issued: Amount.from(3),
+        }),
+      ).rejects.toThrow('Mint quote bacs-partial has only 2 available to mint; requested 3');
+    });
+
+    test('prepareMint defers to the mint when the quote reports no payment activity', async () => {
+      // create -> pay externally -> mint with the original quote object is the
+      // canonical bolt11 flow; a 0/0 accounting snapshot may simply predate the
+      // payment and must not fail fast.
+      const wallet = new Wallet(mint, { unit: 'sat' });
+      await wallet.loadMint();
+
+      const preview = await wallet.prepareMint('bolt11', 3, {
+        quote: 'stale-unpaid',
+        request: 'lnbc1...',
+        unit: 'sat',
+        amount_paid: Amount.from(0),
+        amount_issued: Amount.from(0),
+      });
+
+      expect(preview.payload.quote).toBe('stale-unpaid');
+    });
+
     test('prepareMint keeps string-only quote support without available amount fields', async () => {
       const wallet = new Wallet(mint, { unit: 'sat' });
       await wallet.loadMint();
@@ -1219,6 +1515,7 @@ describe('generic mint/melt methods', () => {
         http.post(mintUrl + '/v1/melt/quote/bacs', () =>
           HttpResponse.json({
             quote: 'bacs-melt-1',
+            request: 'GB29NWBK60161331926819',
             amount: 5000,
             unit: 'gbp',
             state: MeltQuoteState.UNPAID,
@@ -1265,6 +1562,7 @@ describe('generic mint/melt methods', () => {
           const body = (await request.json()) as { unit: string };
           return HttpResponse.json({
             quote: 'bacs-melt-unit',
+            request: 'GB29NWBK60161331926819',
             amount: 5000,
             unit: body.unit,
             state: MeltQuoteState.UNPAID,
@@ -1289,6 +1587,7 @@ describe('generic mint/melt methods', () => {
         http.get(mintUrl + '/v1/melt/quote/bacs/bacs-melt-1', () =>
           HttpResponse.json({
             quote: 'bacs-melt-1',
+            request: 'GB29NWBK60161331926819',
             amount: 5000,
             unit: 'gbp',
             state: MeltQuoteState.PAID,
@@ -1343,6 +1642,7 @@ describe('generic mint/melt methods', () => {
         http.get(mintUrl + '/v1/melt/quote/bacs/bacs-melt-2', () =>
           HttpResponse.json({
             quote: 'bacs-melt-2',
+            request: 'GB29NWBK60161331926819',
             amount: 100,
             unit: 'gbp',
             state: MeltQuoteState.UNPAID,
@@ -1426,6 +1726,7 @@ describe('generic mint/melt methods', () => {
         http.post(mintUrl + '/v1/melt/bacs', () => {
           return HttpResponse.json({
             quote: 'bacs-melt-1',
+            request: 'GB29NWBK60161331926819',
             amount: 10,
             unit: 'sat',
             state: MeltQuoteState.PAID,
@@ -1780,6 +2081,7 @@ describe('generic mint/melt methods', () => {
         http.post(mintUrl + '/v1/melt/quote/swift', () =>
           HttpResponse.json({
             quote: 'swift-1',
+            request: 'SWIFT-REF',
             amount: 200,
             unit: 'usd',
             state: MeltQuoteState.UNPAID,

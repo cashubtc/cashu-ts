@@ -13,12 +13,15 @@ import { CTSError } from '../model/Errors';
 import { MintInfo } from '../model/MintInfo';
 import {
   type MintQuoteBaseResponse,
+  type MintQuoteGenericResponse,
   type MintQuoteBolt11Response,
   type MintQuoteBolt12Response,
   type MeltQuoteBaseResponse,
+  type MeltQuoteGenericResponse,
   type MeltQuoteBolt11Response,
   type MeltQuoteBolt12Response,
   MeltQuoteState,
+  MintQuoteState,
   type MintResponse,
   type GetInfoResponse,
   type MeltRequest,
@@ -83,7 +86,8 @@ class Mint {
 
   /**
    * @param mintUrl Requires mint URL to create this object.
-   * @param customRequest Optional, for custom network communication with the mint.
+   * @param customRequest Optional, for custom network communication with the mint. Implementations
+   *   must follow the {@link RequestFn} error contract.
    * @param requestFetch Optional fetch-compatible transport for the default mint request pipeline.
    *   Ignored when `customRequest` is supplied.
    * @param authTokenGetter Optional. Function to obtain a NUT-22 BlindedAuthToken (e.g. from a
@@ -237,7 +241,7 @@ class Mint {
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns The mint quote response.
    */
-  async createMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(
+  async createMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(
     method: string,
     payload: Record<string, unknown>,
     options?: { customRequest?: RequestFn; normalize?: (raw: Record<string, unknown>) => TRes },
@@ -331,7 +335,7 @@ class Mint {
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns The mint quote response.
    */
-  async checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(
+  async checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(
     method: string,
     quote: string,
     options?: { customRequest?: RequestFn; normalize?: (raw: Record<string, unknown>) => TRes },
@@ -568,7 +572,7 @@ class Mint {
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns The melt quote response.
    */
-  async createMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteBaseResponse>(
+  async createMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(
     method: string,
     payload: Record<string, unknown>,
     options?: { customRequest?: RequestFn; normalize?: (raw: Record<string, unknown>) => TRes },
@@ -664,7 +668,7 @@ class Mint {
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns The melt quote response.
    */
-  async checkMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteBaseResponse>(
+  async checkMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(
     method: string,
     quote: string,
     options?: { customRequest?: RequestFn; normalize?: (raw: Record<string, unknown>) => TRes },
@@ -1144,26 +1148,107 @@ class Mint {
   }
 
   /**
-   * Stacks normalizers for mint quote responses: first-class (bolt11/bolt12) normalization is
-   * applied for known methods, then any custom normalize callback. Works on untyped wire data
-   * internally — the caller casts the result to the desired TRes.
+   * Stacks normalizers for mint quote responses: base normalization (accounting, expiry,
+   * updated_at) is always applied, then first-class normalization for known methods, then any
+   * custom normalize callback. Works on untyped wire data internally — the caller casts the result
+   * to the desired TRes.
    */
   private normalizeMintQuoteResponse<TRes extends MintQuoteBaseResponse>(
     method: string,
     response: TRes,
     normalize?: (raw: Record<string, unknown>) => TRes,
   ): TRes {
-    // MintQuoteBaseResponse has no Amount fields to normalize at the base level.
-    // Stack first-class normalization for known methods.
+    const op = `${method} mint quote`;
     const data: Record<string, unknown> = { ...response };
+    this.normalizeMintBaseFields(data, method, op);
     if (method === 'bolt11') {
       this.normalizeMintQuoteBolt11Fields(data);
     } else if (method === 'bolt12') {
       this.normalizeMintQuoteBolt12Fields(data);
-    } else if (method === 'onchain') {
-      this.normalizeMintQuoteOnchainFields(data);
     }
     return normalize ? normalize(data) : (data as TRes);
+  }
+
+  /**
+   * Mutates `data` in place, normalizing protocol-mandatory mint quote base fields.
+   *
+   * NUT-04 requires `amount_paid`/`amount_issued` on every mint quote response; for mints that
+   * predate quote accounting they are derived from the legacy single-use `state` and `amount`.
+   */
+  private normalizeMintBaseFields(data: Record<string, unknown>, method: string, op: string): void {
+    this.normalizeQuoteMethod(data, method, op);
+    // nullish: absent (legacy bolt11) or off-spec null → derive
+    if (data.amount_paid != null && data.amount_issued != null) {
+      data.amount_paid = Amount.from(data.amount_paid as AmountLike);
+      data.amount_issued = Amount.from(data.amount_issued as AmountLike);
+    } else {
+      const derived = this.deriveMintQuoteAccounting(data);
+      if (!derived) {
+        this._logger.error('Invalid response from mint...', { data, op });
+        throw new CTSError('Invalid response from mint');
+      }
+      [data.amount_paid, data.amount_issued] = derived;
+    }
+    data.updated_at = normalizeSafeIntegerMetadata(
+      data.updated_at as number | undefined,
+      'mintQuote.updated_at',
+      null,
+    );
+    data.expiry = normalizeSafeIntegerMetadata(data.expiry as number, 'mintQuote.expiry', null);
+    if (
+      typeof data.quote !== 'string' ||
+      typeof data.request !== 'string' ||
+      typeof data.unit !== 'string'
+    ) {
+      this._logger.error('Invalid response from mint...', { data, op });
+      throw new CTSError('Invalid response from mint');
+    }
+  }
+
+  /**
+   * Mutates `data` in place, reconciling the quote's `method` with the request endpoint: absent is
+   * populated from the endpoint; a disagreeing value is a protocol violation.
+   */
+  private normalizeQuoteMethod(data: Record<string, unknown>, method: string, op: string): void {
+    if (data.method === undefined) {
+      data.method = method;
+    } else if (data.method !== method) {
+      this._logger.error('Invalid response from mint...', { data, op });
+      throw new CTSError('Invalid response from mint');
+    }
+  }
+
+  /**
+   * Derives `[amount_paid, amount_issued]` from the legacy single-use `state` and quote `amount`,
+   * or returns null when underivable.
+   */
+  private deriveMintQuoteAccounting(data: Record<string, unknown>): [Amount, Amount] | null {
+    if (
+      typeof data.state !== 'string' ||
+      !Object.values(MintQuoteState).includes(data.state as MintQuoteState)
+    ) {
+      return null;
+    }
+    if (data.state === MintQuoteState.UNPAID) {
+      return [Amount.from(0), Amount.from(0)];
+    }
+    let amount: Amount;
+    try {
+      amount = Amount.from(data.amount as AmountLike);
+    } catch {
+      return null;
+    }
+    return data.state === MintQuoteState.PAID ? [amount, Amount.from(0)] : [amount, amount];
+  }
+
+  /**
+   * Derives the deprecated single-use `state` from the accounting fields (NUT-04).
+   */
+  private deriveMintQuoteState(paid: Amount, issued: Amount): MintQuoteState {
+    if (paid.isZero() && issued.isZero()) {
+      return MintQuoteState.UNPAID;
+    }
+    return paid.greaterThan(issued) ? MintQuoteState.PAID : MintQuoteState.ISSUED;
   }
 
   /**
@@ -1171,11 +1256,15 @@ class Mint {
    */
   private normalizeMintQuoteBolt11Fields(data: Record<string, unknown>): void {
     data.amount = Amount.from(data.amount as AmountLike);
-    data.expiry = normalizeSafeIntegerMetadata(
-      data.expiry as number,
-      'mintQuoteBolt11.expiry',
-      null,
-    );
+    if (
+      typeof data.state !== 'string' ||
+      !Object.values(MintQuoteState).includes(data.state as MintQuoteState)
+    ) {
+      data.state = this.deriveMintQuoteState(
+        data.amount_paid as Amount,
+        data.amount_issued as Amount,
+      );
+    }
   }
 
   /**
@@ -1187,26 +1276,6 @@ class Mint {
     // values are coerced to Amount.
     nullIfUndefined(data, 'amount');
     data.amount = data.amount === null ? null : Amount.from(data.amount as Amount);
-    data.expiry = normalizeSafeIntegerMetadata(
-      data.expiry as number,
-      'mintQuoteBolt12.expiry',
-      null,
-    );
-    data.amount_paid = Amount.from(data.amount_paid as AmountLike);
-    data.amount_issued = Amount.from(data.amount_issued as AmountLike);
-  }
-
-  /**
-   * Mutates `data` in place, normalizing onchain mint-quote fields.
-   */
-  private normalizeMintQuoteOnchainFields(data: Record<string, unknown>): void {
-    data.expiry = normalizeSafeIntegerMetadata(
-      data.expiry as number,
-      'mintQuoteOnchain.expiry',
-      null,
-    );
-    data.amount_paid = Amount.from(data.amount_paid as Amount);
-    data.amount_issued = Amount.from(data.amount_issued as Amount);
   }
 
   /**
@@ -1221,7 +1290,7 @@ class Mint {
   ): TRes {
     const op = `${method} melt quote`;
     const data: Record<string, unknown> = { ...response };
-    this.normalizeMeltBaseFields(data, op);
+    this.normalizeMeltBaseFields(data, method, op);
     if (method === 'bolt11' || method === 'bolt12') {
       this.normalizeMeltBoltFields(data, op);
     } else if (method === 'onchain') {
@@ -1233,19 +1302,25 @@ class Mint {
   /**
    * Mutates `data` in place, normalizing protocol-mandatory melt base fields.
    */
-  private normalizeMeltBaseFields(data: Record<string, unknown>, op: string): void {
+  private normalizeMeltBaseFields(data: Record<string, unknown>, method: string, op: string): void {
+    this.normalizeQuoteMethod(data, method, op);
     data.amount = Amount.from(data.amount as AmountLike);
     data.expiry = normalizeSafeIntegerMetadata(
       data.expiry as number,
       'meltQuote.expiry',
       undefined,
     );
+    if (data.fee_reserve != null) {
+      // nullish
+      data.fee_reserve = Amount.from(data.fee_reserve as AmountLike);
+    }
     if (data.change) {
       data.change = this.normalizeSignatureAmounts(data.change as SerializedBlindedSignature[]);
     }
     if (
       !isObj(data) ||
       typeof data.quote !== 'string' ||
+      typeof data.request !== 'string' ||
       !(data.amount instanceof Amount) ||
       typeof data.unit !== 'string' ||
       typeof data.state !== 'string' ||
@@ -1261,8 +1336,8 @@ class Mint {
    * Mutates `data` in place, normalizing bolt11/bolt12-specific melt fields.
    */
   private normalizeMeltBoltFields(data: Record<string, unknown>, op: string): void {
-    data.fee_reserve = Amount.from(data.fee_reserve as AmountLike);
-    if (typeof data.request !== 'string' || !(data.fee_reserve instanceof Amount)) {
+    // Base normalization already coerced fee_reserve when present; bolt methods require it.
+    if (!(data.fee_reserve instanceof Amount)) {
       this._logger.error('Invalid response from mint...', { data, op });
       throw new CTSError('Invalid response from mint');
     }
@@ -1296,7 +1371,6 @@ class Mint {
     });
     nullIfUndefined(data, 'selected_fee_index', 'outpoint');
     if (
-      typeof data.request !== 'string' ||
       (data.selected_fee_index !== null && !Number.isSafeInteger(data.selected_fee_index)) ||
       (data.outpoint !== null && typeof data.outpoint !== 'string')
     ) {

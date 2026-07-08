@@ -86,19 +86,14 @@ The generic `createMintQuote()` / `mintProofs()` methods support arbitrary payme
 
 The mint must advertise the method at `/v1/mint/quote/{method}`.
 
+The NUT-04 base fields (`quote`, `request`, `unit`, `method`, `amount_paid`, `amount_issued`, `updated_at`, `expiry`) are normalized and validated automatically for every method — the optional `normalize` callback is only needed for method-specific fields. Without a type parameter, the generic methods return `MintQuoteGenericResponse`, which exposes method-specific fields as `unknown`.
+
 ```ts
-import {
-  Wallet,
-  Amount,
-  MintQuoteState,
-  type MintQuoteBaseResponse,
-  type AmountLike,
-} from '@cashu/cashu-ts';
+import { Wallet, Amount, type MintQuoteBaseResponse, type AmountLike } from '@cashu/cashu-ts';
 
 // Define your custom quote response type
 type BacsMintQuoteResponse = MintQuoteBaseResponse & {
   amount: Amount;
-  state: MintQuoteState;
   reference: string; // bank transfer reference
 };
 
@@ -132,8 +127,10 @@ const updated = await wallet.checkMintQuote<BacsMintQuoteResponse>('bacs', mintQ
   }),
 });
 
-// Mint once the bank transfer is confirmed
-if (updated.state === MintQuoteState.PAID) {
+// Mint once the bank transfer is confirmed. The accounting fields are the
+// method-independent way to read quote progress: paid minus issued is mintable.
+const available = updated.amount_paid.subtract(updated.amount_issued);
+if (available.greaterThanOrEqual(5000)) {
   const proofs = await wallet.mintProofs('bacs', 5000, updated);
 }
 ```

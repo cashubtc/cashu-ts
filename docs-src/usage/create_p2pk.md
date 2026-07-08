@@ -18,3 +18,6 @@ const privkey = '5d...'; // private key for pubkey
 const receiveProofs = await wallet2.receive(token, {privkey});
 // store receiveProofs in your app ..
 ```
+
+> Tip: derive `pubkey`/`privkey` deterministically from the wallet seed so the lock key is
+> recoverable without a separate backup. See [Derive Keys](./derive_keys.md).

@@ -27,6 +27,7 @@ If you are building a wallet integration from scratch, read these in order:
 | [Mint Token](./mint_token.md)                       | Create proofs from a paid quote, including two-step mint flows.                 |
 | [Create Token](./create_token.md)                   | Send standard Cashu tokens to another wallet.                                   |
 | [Create P2PK](./create_p2pk.md)                     | Send tokens locked to a public key.                                             |
+| [Derive Keys](./derive_keys.md)                     | Derive recoverable P2PK / NUT-20 keys deterministically from the wallet seed.   |
 | [Get Token](./get_token.md)                         | Inspect token metadata before wallet creation or decode it after load.          |
 | [Melt Token](./melt_token.md)                       | Pay BOLT11 invoices or other payment methods with wallet proofs.                |
 | [Payment Requests](./payment_requests.md)           | Decode, price (fees), fulfil, and create NUT-18 / NUT-26 payment requests.      |

@@ -65,6 +65,7 @@ const clientIdOf = (oidc: object): string | undefined => (oidc as { clientId?: s
 
 const meltBaseResp = {
   quote: 'q1',
+  request: 'pay-me',
   amount: 2,
   unit: 'sat',
   state: MeltQuoteState.UNPAID,
@@ -84,6 +85,7 @@ const meltOnchainResp = {
 const mintQuoteBolt11Resp = {
   quote: 'q1',
   request: 'lnbc1...',
+  unit: 'sat',
   state: 'UNPAID',
   amount: 1,
   expiry: 1,
@@ -92,6 +94,7 @@ const mintQuoteBolt11Resp = {
 const mintQuoteBolt12Resp = {
   quote: 'q1',
   request: 'lno1...',
+  unit: 'sat',
   state: 'UNPAID',
   amount: null,
   expiry: 1,
@@ -101,7 +104,8 @@ const mintQuoteBolt12Resp = {
 
 const mintQuoteOnchainResp = {
   quote: 'q1',
-  address: 'bc1qdeposit',
+  request: 'bc1qdeposit',
+  unit: 'sat',
   state: 'UNPAID',
   expiry: 1,
   pubkey: '02abcd',
@@ -150,7 +154,7 @@ describe('Mint mutation coverage', () => {
         expect(options.endpoint).toBe(mintUrl + '/v1/mint/quote/custom-pay');
         expect(options.method).toBe('POST');
         expect(options.requestBody).toEqual({ unit: 'sat' });
-        return { quote: 'q1', state: 'UNPAID', expiry: 1 };
+        return { quote: 'q1', request: 'pay-req', unit: 'sat', state: 'UNPAID', expiry: 1 };
       }) as RequestFn;
       const mint = new Mint(mintUrl, { customRequest: requestSpy });
 
@@ -164,7 +168,7 @@ describe('Mint mutation coverage', () => {
       const requestSpy = vi.fn(async (options: ReqArgs) => {
         expect(options.endpoint).toBe(mintUrl + '/v1/mint/quote/custom-pay/q1');
         expect(options.method).toBe('GET');
-        return { quote: 'q1', state: 'UNPAID', expiry: 1 };
+        return { quote: 'q1', request: 'pay-req', unit: 'sat', state: 'UNPAID', expiry: 1 };
       }) as RequestFn;
       const mint = new Mint(mintUrl, { customRequest: requestSpy });
 
@@ -477,20 +481,20 @@ describe('Mint mutation coverage', () => {
       });
     });
 
-    it('reports the bolt11 mint quote field when expiry is out of range', async () => {
+    it('reports the mint quote expiry field when a bolt11 expiry is out of range', async () => {
       const mint = new Mint(mintUrl, {
         customRequest: makeRequest({ ...mintQuoteBolt11Resp, expiry: 9007199254740993n }),
       });
 
-      await expect(mint.checkMintQuoteBolt11('q1')).rejects.toThrow('mintQuoteBolt11.expiry');
+      await expect(mint.checkMintQuoteBolt11('q1')).rejects.toThrow('mintQuote.expiry');
     });
 
-    it('reports the onchain mint quote field when expiry is out of range', async () => {
+    it('reports the mint quote expiry field when an onchain expiry is out of range', async () => {
       const mint = new Mint(mintUrl, {
         customRequest: makeRequest({ ...mintQuoteOnchainResp, expiry: 9007199254740993n }),
       });
 
-      await expect(mint.checkMintQuoteOnchain('q1')).rejects.toThrow('mintQuoteOnchain.expiry');
+      await expect(mint.checkMintQuoteOnchain('q1')).rejects.toThrow('mintQuote.expiry');
     });
   });
 

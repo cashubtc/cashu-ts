@@ -5,7 +5,7 @@ name: Weekly mutation testing
 # the code; mutation testing says whether they'd NOTICE it being wrong.
 on:
   schedule:
-    - cron: '0 3 * * 5' # Fridays 03:00 UTC
+    - cron: '23 3 * * 5' # Fridays 03:23 UTC (off-peak minute)
   workflow_dispatch: {}
 
 permissions:
