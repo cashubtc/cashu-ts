@@ -1,11 +1,13 @@
 import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { test, describe, expect } from 'vitest';
 
 import { Amount, type MintRequest } from '../../src';
 import { signMintQuote, verifyMintQuoteSignature } from '../../src/crypto';
+import { signMintQuoteAmended, verifyMintQuoteSignatureAmended } from '../../src/crypto/NUT20';
 
-describe('mint quote signatures', () => {
+describe('mint quote signatures (legacy message)', () => {
   test('valid signature verification', () => {
     const mintRequest = {
       quote: '9d745270-1405-46de-b5c5-e2762b4f5e00',
@@ -121,5 +123,186 @@ describe('mint quote signatures', () => {
     const blindedMessages = mintRequest.outputs;
     const signature = signMintQuote(privkey, quote, blindedMessages);
     expect(verifyMintQuoteSignature(pubkey, quote, blindedMessages, signature)).toBe(true);
+  });
+});
+
+/**
+ * Amended mint-quote signature message (cashubtc/nuts#375), shared by NUT-20 single and NUT-29
+ * batch minting. Wallet-internal on v4. Test vector from nuts/tests/29-tests.md (sk = 1).
+ */
+describe('mint quote signatures (amended message)', () => {
+  const pubkey = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+  const privkey = '0000000000000000000000000000000000000000000000000000000000000001';
+  const keysetId = '010000000000000000000000000000000000000000000000000000000000000000';
+
+  const allOutputs = [
+    {
+      amount: Amount.from(1),
+      id: keysetId,
+      B_: '036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2',
+    },
+    {
+      amount: Amount.from(1),
+      id: keysetId,
+      B_: '021f8a566c205633d029094747d2e18f44e05993dda7a5f88f496078205f656e59',
+    },
+  ];
+
+  // Canonical results from the spec test vector.
+  const expectedMsgToSign =
+    '43617368755f4d696e7451756f74655369675f76310000000c6c6f636b65642d71756f7465' +
+    '000000010100000021036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2' +
+    '000000010100000021021f8a566c205633d029094747d2e18f44e05993dda7a5f88f496078205f656e59';
+  const expectedMsgHash = '03dc68d6617bba502d8648efd0965bf393841082cf04fd03e5de4bcb5777cdfc';
+  const expectedSignature =
+    'a913e48177027d87e0e38c6f2021763c46997ff4866a4b63ebca800b0776b28519eab37377cf9bc1869e489d7b25747b7a998eaa1c33c2cac7fa168449d8267a';
+
+  test('canonical msg_to_sign hashes to the test vector', () => {
+    expect(bytesToHex(sha256(hexToBytes(expectedMsgToSign)))).toBe(expectedMsgHash);
+  });
+
+  test('test vector signature verifies correctly', () => {
+    expect(
+      verifyMintQuoteSignatureAmended(pubkey, 'locked-quote', allOutputs, expectedSignature),
+    ).toBe(true);
+    // The amended vector does not verify against the legacy message.
+    expect(verifyMintQuoteSignature(pubkey, 'locked-quote', allOutputs, expectedSignature)).toBe(
+      false,
+    );
+  });
+
+  test('signMintQuoteAmended over all outputs produces a valid signature', () => {
+    const signature = signMintQuoteAmended(privkey, 'locked-quote', allOutputs);
+    expect(verifyMintQuoteSignatureAmended(pubkey, 'locked-quote', allOutputs, signature)).toBe(
+      true,
+    );
+  });
+
+  test('signature over per-quote subset is invalid against full output set', () => {
+    const perQuoteSig = signMintQuoteAmended(privkey, 'locked-quote', [allOutputs[0]]);
+    expect(verifyMintQuoteSignatureAmended(pubkey, 'locked-quote', allOutputs, perQuoteSig)).toBe(
+      false,
+    );
+  });
+
+  test('signature is bound to output amounts', () => {
+    const signature = signMintQuoteAmended(privkey, 'locked-quote', allOutputs);
+    const reValued = [{ ...allOutputs[0], amount: Amount.from(2) }, allOutputs[1]];
+    expect(verifyMintQuoteSignatureAmended(pubkey, 'locked-quote', reValued, signature)).toBe(
+      false,
+    );
+  });
+
+  test('normalizes a raw JSON number amount (Amount instances pass through)', () => {
+    // A server may pass outputs straight from JSON.parse, where amount is a primitive number.
+    const numberOutputs = allOutputs.map((o) => ({ ...o, amount: o.amount.toNumber() }));
+    const cast = numberOutputs as unknown as typeof allOutputs;
+    expect(verifyMintQuoteSignatureAmended(pubkey, 'locked-quote', cast, expectedSignature)).toBe(
+      true,
+    );
+    const sig = signMintQuoteAmended(privkey, 'locked-quote', cast);
+    expect(verifyMintQuoteSignatureAmended(pubkey, 'locked-quote', allOutputs, sig)).toBe(true);
+  });
+
+  test('signature is bound to output order', () => {
+    const signature = signMintQuoteAmended(privkey, 'locked-quote', allOutputs);
+    const reordered = [allOutputs[1], allOutputs[0]];
+    expect(verifyMintQuoteSignatureAmended(pubkey, 'locked-quote', reordered, signature)).toBe(
+      false,
+    );
+  });
+
+  test('encodes amounts canonically (0 -> empty, even-length hex unpadded)', () => {
+    const outputs = [
+      { ...allOutputs[0], amount: Amount.from(0) },
+      { ...allOutputs[1], amount: Amount.from(16) },
+    ];
+    const signature = signMintQuoteAmended(privkey, 'locked-quote', outputs);
+    expect(verifyMintQuoteSignatureAmended(pubkey, 'locked-quote', outputs, signature)).toBe(true);
+    expect(verifyMintQuoteSignatureAmended(pubkey, 'locked-quote', allOutputs, signature)).toBe(
+      false,
+    );
+  });
+
+  test('rejects pubkeys that are not 33-byte compressed', () => {
+    const xOnly = pubkey.slice(2);
+    expect(
+      verifyMintQuoteSignatureAmended(xOnly, 'locked-quote', allOutputs, expectedSignature),
+    ).toBe(false);
+    const legacySig = signMintQuote(privkey, 'locked-quote', allOutputs);
+    expect(verifyMintQuoteSignature(xOnly, 'locked-quote', allOutputs, legacySig)).toBe(false);
+  });
+
+  test('each quote in a batch signs over the same output set, bound to its quote ID', () => {
+    const sigQuote1 = signMintQuoteAmended(privkey, 'quote-1', allOutputs);
+    const sigQuote2 = signMintQuoteAmended(privkey, 'quote-2', allOutputs);
+
+    expect(verifyMintQuoteSignatureAmended(pubkey, 'quote-1', allOutputs, sigQuote1)).toBe(true);
+    expect(verifyMintQuoteSignatureAmended(pubkey, 'quote-2', allOutputs, sigQuote2)).toBe(true);
+
+    // Each signature is bound to its quote ID
+    expect(verifyMintQuoteSignatureAmended(pubkey, 'quote-1', allOutputs, sigQuote2)).toBe(false);
+    expect(verifyMintQuoteSignatureAmended(pubkey, 'quote-2', allOutputs, sigQuote1)).toBe(false);
+  });
+
+  // Canonical NUT-20 single-mint vector from nuts/tests/20-test.md (sk = 1, UUIDv7 quote id).
+  describe('NUT-20 single-mint spec vector', () => {
+    const quote = '0192d3c0-7e8a-7c3d-8e9f-1a2b3c4d5e6f';
+    const outputs = [
+      {
+        amount: Amount.from(1),
+        id: '009a1f293253e41e',
+        B_: '036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2',
+      },
+      {
+        amount: Amount.from(1),
+        id: '009a1f293253e41e',
+        B_: '021f8a566c205633d029094747d2e18f44e05993dda7a5f88f496078205f656e59',
+      },
+    ];
+    const expectedMsgToSign =
+      '43617368755f4d696e7451756f74655369675f7631000000243031393264336330' +
+      '2d376538612d376333642d386539662d316132623363346435653666' +
+      '000000010100000021036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2' +
+      '000000010100000021021f8a566c205633d029094747d2e18f44e05993dda7a5f88f496078205f656e59';
+    const expectedMsgHash = 'c164fd384879f74ab6ea2e7cf13d90ed42e6df9d5de607eeb5c9cc7d36fb1c21';
+    const expectedSignature =
+      '4881093a332ff7c79f3e598ce5b249d64978b47165a0b19c18adf0ced0246228e61e702f0abaf1bf27b92be4336bdbabacfbe4c914076386b3c66fdcd0b3480e';
+
+    test('canonical msg_to_sign hashes to the test vector', () => {
+      expect(bytesToHex(sha256(hexToBytes(expectedMsgToSign)))).toBe(expectedMsgHash);
+    });
+
+    test('test vector signature verifies correctly', () => {
+      expect(verifyMintQuoteSignatureAmended(pubkey, quote, outputs, expectedSignature)).toBe(true);
+    });
+  });
+});
+
+describe('mint quote signature verification rejects malformed input (no throw)', () => {
+  const pubkey = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+  const keysetId = '010000000000000000000000000000000000000000000000000000000000000000';
+  const sig =
+    'a913e48177027d87e0e38c6f2021763c46997ff4866a4b63ebca800b0776b28519eab37377cf9bc1869e489d7b25747b7a998eaa1c33c2cac7fa168449d8267a';
+  const goodB_ = '036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2';
+
+  // A server may pass outputs straight from JSON.parse; an attacker controls amount and B_.
+  const withOutputs = (outputs: unknown) =>
+    outputs as Array<{ amount: Amount; id: string; B_: string }>;
+
+  test('amended: negative amount verifies as false', () => {
+    const outputs = withOutputs([{ amount: -1, id: keysetId, B_: goodB_ }]);
+    expect(verifyMintQuoteSignatureAmended(pubkey, 'q', outputs, sig)).toBe(false);
+  });
+
+  test('amended: invalid hex B_ verifies as false', () => {
+    const outputs = withOutputs([{ amount: 1, id: keysetId, B_: 'invalidhex' }]);
+    expect(verifyMintQuoteSignatureAmended(pubkey, 'q', outputs, sig)).toBe(false);
+  });
+
+  test('legacy: non-string quote with no outputs verifies as false', () => {
+    // message stays a non-string and utf8ToBytes would throw without the guard.
+    const quote = 256 as unknown as string;
+    expect(verifyMintQuoteSignature(pubkey, quote, [], sig)).toBe(false);
   });
 });

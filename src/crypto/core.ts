@@ -214,11 +214,33 @@ export const schnorrVerifyMessage = (
   pubkey: string,
   throws: boolean = false,
 ): boolean => {
+  return schnorrVerifyDigest(signature, computeMessageDigest(message), pubkey, throws);
+};
+
+/**
+ * Verifies a Schnorr signature on a message digest.
+ *
+ * @remarks
+ * This function swallows Schnorr verification errors (eg invalid signature / pubkey format) and
+ * treats them as false. If you want to throw such errors, use the throws param.
+ * @param signature - The Schnorr signature (hex-encoded).
+ * @param digest - The SHA-256 digest to verify (hex string or Uint8Array).
+ * @param pubkey - The public key (hex-encoded, X-only or with 02/03 prefix).
+ * @param throws - True: throws on error, False: swallows errors and returns false.
+ * @returns True if the signature is valid, false otherwise.
+ * @throws If throws param is true and error is encountered.
+ */
+export const schnorrVerifyDigest = (
+  signature: string,
+  digest: DigestInput,
+  pubkey: string,
+  throws: boolean = false,
+): boolean => {
   try {
-    const msghash = computeMessageDigest(message);
+    const digestBytes = typeof digest === 'string' ? hexToBytes(digest) : digest;
     // Use X-only pubkey: strip 02/03 prefix if pubkey is 66 hex chars (33 bytes)
     const pubkeyX = pubkey.length === 66 ? pubkey.slice(2) : pubkey;
-    return schnorr.verify(hexToBytes(signature), msghash, hexToBytes(pubkeyX));
+    return schnorr.verify(hexToBytes(signature), digestBytes, hexToBytes(pubkeyX));
   } catch (e) {
     if (throws) {
       throw e;

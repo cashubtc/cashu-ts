@@ -190,6 +190,8 @@ export interface AuthProvider {
 // @public
 export interface BatchMintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'quote' | 'pubkey'> = MintQuoteBaseResponse> {
     keysetId: string;
+    // @deprecated (undocumented)
+    legacySignatures?: Array<string | null>;
     // (undocumented)
     method: string;
     outputData: OutputDataLike[];
@@ -619,6 +621,9 @@ export type IntRange<F extends number, T extends number> = Exclude<Enumerate<T>,
 
 // @public
 export function isHTLCSpendAuthorised(proof: Proof, logger?: Logger, message?: string): boolean;
+
+// @public
+export function isMintOperationError(e: unknown): e is MintOperationError;
 
 // @public
 export function isP2PKSpendAuthorised(proof: Proof, logger?: Logger, message?: string): boolean;
@@ -1131,6 +1136,8 @@ export class MintOperationError extends HttpResponseError {
 // @public
 export interface MintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'quote'> = MintQuoteBaseResponse> {
     keysetId: string;
+    // @deprecated (undocumented)
+    legacySignature?: string;
     // (undocumented)
     method: string;
     outputData: OutputDataLike[];
@@ -1688,7 +1695,7 @@ export type RequestArgs = {
     logger?: Logger;
 };
 
-// @public (undocumented)
+// @public
 export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
 
 // @public (undocumented)
@@ -1720,6 +1727,9 @@ export const schnorrSignDigest: (digest: DigestInput, privateKey: PrivKey) => st
 
 // @public
 export const schnorrSignMessage: (message: string, privateKey: PrivKey) => string;
+
+// @public
+export const schnorrVerifyDigest: (signature: string, digest: DigestInput, pubkey: string, throws?: boolean) => boolean;
 
 // @public
 export const schnorrVerifyMessage: (signature: string, message: string, pubkey: string, throws?: boolean) => boolean;
