@@ -1,5 +1,20 @@
 # Changelog
 
+## [4.7.0](https://github.com/cashubtc/cashu-ts/compare/v4.6.1...v4.7.0) (2026-07-08)
+
+
+### Features
+
+* **nut29:** add batch quote checks [backport v4-dev] ([#774](https://github.com/cashubtc/cashu-ts/issues/774)) ([52d4107](https://github.com/cashubtc/cashu-ts/commit/52d4107986d5416f2a9f79710fc56187d360678c))
+
+
+### Bug Fixes
+
+* **crypto:** align NUT-29 batch quote signatures with amended spec ([#674](https://github.com/cashubtc/cashu-ts/issues/674)) ([41f6caf](https://github.com/cashubtc/cashu-ts/commit/41f6caf95cba851bb6cee39a7c3bc3fd3d77a938))
+* **p2bk:** align HTLC key slots with the [data, ...pubkeys, ...refund] order (NUT-28) ([6ce63d2](https://github.com/cashubtc/cashu-ts/commit/6ce63d2dbf71f905e2a02793b3156448ce0c47f1))
+* **p2pk:** cap NUT-28 locking slots at 11 ([#753](https://github.com/cashubtc/cashu-ts/issues/753)) ([#759](https://github.com/cashubtc/cashu-ts/issues/759)) ([e219976](https://github.com/cashubtc/cashu-ts/commit/e2199767c3bb47e2f676734701651eb32fb6e470))
+* **utils:** throw CTSError for malformed token templates ([#743](https://github.com/cashubtc/cashu-ts/issues/743)) ([723fdf9](https://github.com/cashubtc/cashu-ts/commit/723fdf99d63a1e8bc5e3b1f249644d93836b9d6b))
+
 ## [4.6.1](https://github.com/cashubtc/cashu-ts/compare/v4.6.0...v4.6.1) (2026-07-02)
 
 
