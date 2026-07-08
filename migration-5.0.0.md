@@ -228,3 +228,74 @@ asP2PK({ kind: 'HTLC', data: h, pubkeys: [a] });
 ```
 
 `PaymentRequest.toP2PKOptions()` already returns the new shape, so pass its result straight to `asP2PK()`.
+
+---
+
+## Mint quote responses now carry NUT-04 accounting fields
+
+`MintQuoteBaseResponse` (and every method-specific mint quote response) gains five required fields:
+
+- `amount_paid: Amount` — total paid to the mint for this quote
+- `amount_issued: Amount` — total ecash issued for this quote
+- `updated_at: number | null` — Unix timestamp of the last quote update (`null` when the mint does not report it)
+- `expiry: number | null` — moved here from the method-specific response types
+- `method: string` — the payment method, populated from the request endpoint when the mint omits it; a reported method that disagrees with the endpoint throws `Invalid response from mint`
+
+The difference `amount_paid − amount_issued` is the amount available to mint. The single-use `state` field is deprecated in NUT-04 in favour of the accounting fields, but cashu-ts always populates it on `MintQuoteBolt11Response` (derived from the accounting fields when the mint omits it).
+
+Quotes returned by `Wallet`/`Mint` methods need no change: normalization fills the fields in, deriving them from the legacy `state` and `amount` for mints that predate quote accounting.
+
+### Migration
+
+Code that constructs mint quote objects (test fixtures, hydrating stored quotes) must supply the new fields:
+
+```ts
+// Before
+const quote: MintQuoteBolt11Response = {
+  quote: 'q1',
+  request: 'lnbc…',
+  unit: 'sat',
+  amount: Amount.from(21),
+  state: 'UNPAID',
+  expiry: null,
+};
+
+// After
+const quote: MintQuoteBolt11Response = {
+  quote: 'q1',
+  request: 'lnbc…',
+  unit: 'sat',
+  amount: Amount.from(21),
+  state: 'UNPAID',
+  expiry: null,
+  method: 'bolt11',
+  amount_paid: Amount.from(0),
+  amount_issued: Amount.from(0),
+  updated_at: null,
+};
+```
+
+Generic mint quote responses (custom payment methods) are now base-validated like melt quotes always were: a response missing `quote`, `request` or `unit`, or whose accounting fields are absent and underivable, throws `Invalid response from mint` instead of passing through silently.
+
+---
+
+## Melt quote responses require `request` and carry `method`
+
+`request` (the method-specific payment routing instructions) moved from the bolt11/onchain response types into `MeltQuoteBaseResponse`, and the base type gains an optional `fee_reserve`. Melt quote responses from any method — including custom ones — that lack a `request` string now throw `Invalid response from mint`.
+
+`MeltQuoteBaseResponse` also gains a required `method: string` with the same semantics as on mint quotes: populated from the request endpoint when the mint omits it, throwing on a mismatch.
+
+bolt11, bolt12 and onchain flows are unaffected: those responses already required `request`. Code constructing a plain `MeltQuoteBaseResponse` must include `request` and `method`.
+
+---
+
+## Mintable amount is enforced for every payment method
+
+`prepareMint`/`mintProofs` previously rejected requests above `amount_paid − amount_issued` only for bolt12 and onchain quotes. v5 applies the check to any quote object that carries accounting fields, regardless of method.
+
+Two escape hatches keep stored-quote flows working:
+
+- Quote objects without accounting fields (e.g. minimal `{ quote: '…' }` references) skip the check, as before.
+- Quotes reporting `0/0` defer to the mint — a zero snapshot may simply have been fetched before the payment was made, so the create → pay externally → mint flow is unaffected.
+
+The practical change from v4: attempting to re-mint a quote object whose snapshot shows it fully issued (`amount_paid === amount_issued > 0`) now fails fast client-side instead of round-tripping to the mint for a rejection.
