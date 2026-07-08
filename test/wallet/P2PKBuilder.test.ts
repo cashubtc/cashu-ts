@@ -1,5 +1,10 @@
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 import { describe, it, expect } from 'vitest';
 import { P2PKBuilder, P2PKOptions } from '../../src/';
+import { getPubKeyFromPrivKey, P2BK_DST, pointFromHex } from '../../src/crypto';
+import { OutputData } from '../../src/model/OutputData';
+import { Bytes } from '../../src/utils';
 
 // helpers to make valid hex keys
 const xonly = (ch: string) => ch.repeat(64); // 32-byte X-only
@@ -367,5 +372,37 @@ describe('P2PKBuilder.blindKeys()', () => {
 
     const round = P2PKBuilder.fromOptions(opts).toOptions();
     expect(round.blindKeys).toBe(true);
+  });
+
+  it('HTLC blinding starts lock keys at slot 1 (NUT-28: hashlock occupies slot 0)', () => {
+    const privkey = Bytes.fromHex('01'.repeat(32));
+    const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
+    const output = OutputData.createSingleP2PKData(
+      {
+        pubkey,
+        hashlock: 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5',
+        blindKeys: true,
+      },
+      1,
+      '009a1f293253e41e',
+    );
+
+    const [, secret] = JSON.parse(new TextDecoder().decode(output.secret)) as [
+      string,
+      { data: string; tags: string[][] },
+    ];
+    const blinded = secret.tags.find(([tag]) => tag === 'pubkeys')![1];
+    // Ehex is stashed privately and only surfaces on the proof, so round-trip via toProof
+    const G = secp256k1.Point.BASE.toHex(true);
+    const proof = output.toProof(
+      { id: '009a1f293253e41e', amount: 1, C_: G },
+      { id: '009a1f293253e41e', keys: { '1': G } },
+    );
+    // Independent receiver-side NUT-28 math: r1 = sha256(DST || Zx || 0x01), P' = P + r1·G
+    const p = secp256k1.Point.Fn.fromBytes(privkey);
+    const Zx = secp256k1.Point.fromHex(proof.p2pk_e!).multiply(p).toBytes(true).slice(1);
+    const r1 = Bytes.toBigInt(sha256(Bytes.concat(P2BK_DST, Zx, Uint8Array.of(1))));
+    const expected = pointFromHex(pubkey).add(secp256k1.Point.BASE.multiply(r1)).toHex(true);
+    expect(blinded).toBe(expected);
   });
 });

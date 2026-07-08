@@ -292,7 +292,7 @@ export type DeriveKeysetIdOptions = {
 };
 
 // @public
-export function deriveP2BKBlindedPubkeys(pubkeys: string[], eBytes?: Uint8Array): {
+export function deriveP2BKBlindedPubkeys(pubkeys: string[], eBytes?: Uint8Array, dataIsPubkey?: boolean): {
     blinded: string[];
     Ehex: string;
 };
@@ -301,7 +301,7 @@ export function deriveP2BKBlindedPubkeys(pubkeys: string[], eBytes?: Uint8Array)
 export function deriveP2BKSecretKey(privkey: string | bigint, rBlind: string | bigint, blindPubkey?: Uint8Array, naturalPub?: Uint8Array): string | null;
 
 // @public
-export function deriveP2BKSecretKeys(Ehex: string, privateKey: string | string[], blindPubKey: string | string[]): string[];
+export function deriveP2BKSecretKeys(Ehex: string, privateKey: string | string[], blindPubKey: string | string[], dataIsPubkey?: boolean): string[];
 
 // @public (undocumented)
 export const deriveSecret: (seed: Uint8Array, keysetId: string, counter: number) => Uint8Array;

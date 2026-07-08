@@ -28,6 +28,7 @@ import {
   createSecret,
   getP2PKNSigsRefund,
   isHTLCSpendAuthorised,
+  maybeDeriveP2BKPrivateKeys,
 } from '../../src/crypto';
 import { Proof, P2PKWitness } from '../../src/model/types';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -1392,5 +1393,29 @@ describe('NUT-11 test vectors', () => {
     expect(() => assertSigAllInputs(proofs)).not.toThrow();
     const mts = buildP2PKSigAllMessage(proofs, outputs, quote);
     expect(isHTLCSpendAuthorised(proofs[0], NULL_LOGGER, mts)).toBe(true);
+  });
+});
+
+describe('P2BK legacy HTLC unblinding', () => {
+  const mkProof = (secret: string): Proof => ({
+    amount: 1,
+    id: '00000000000',
+    C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+    secret,
+  });
+
+  test('maybeDeriveP2BKPrivateKeys falls back to legacy slot 0 indexing for HTLC proofs', () => {
+    // Pre-fix senders blinded HTLC lock keys from slot 0; those proofs must stay spendable.
+    const privBytes = createRandomSecretKey();
+    const pubHex = bytesToHex(getPubKeyFromPrivKey(privBytes));
+    const {
+      blinded: [P0_],
+      Ehex,
+    } = deriveP2BKBlindedPubkeys([pubHex]); // legacy: first lock key at slot 0
+    const secret = `["HTLC",{"nonce":"aa","data":"ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5","tags":[["pubkeys","${P0_}"]]}]`;
+    const proof = { ...mkProof(secret), p2pk_e: Ehex };
+    const derived = maybeDeriveP2BKPrivateKeys(bytesToHex(privBytes), proof);
+    const derivedPubs = derived.map((k) => bytesToHex(getPubKeyFromPrivKey(hexToBytes(k))));
+    expect(derivedPubs).toContain(P0_);
   });
 });
