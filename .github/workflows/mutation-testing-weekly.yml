@@ -28,20 +28,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # --incremental on a fresh checkout has no baseline, so this is still a full
-      # authoritative run; the point is that it *writes* reports/stryker-incremental.json,
-      # which the PR workflow restores to re-test only mutants in changed code.
       - name: Run Stryker
-        run: npm run test:mutation:incremental
-
-      # Seed the incremental baseline for PR runs. Written mid-run, so it exists even if
-      # the score dips below the break threshold and the step above fails.
-      - name: Cache incremental baseline
-        if: ${{ always() }}
-        uses: actions/cache/save@v4
-        with:
-          path: reports/stryker-incremental.json
-          key: stryker-incremental-${{ github.run_id }}
+        run: npm run test:mutation
 
       - name: Upload mutation report
         if: ${{ always() }}
