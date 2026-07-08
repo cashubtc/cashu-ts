@@ -898,6 +898,12 @@ export class Mint {
         customRequest?: RequestFn;
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
+    checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(method: string, quotes: string[], options?: {
+        customRequest?: RequestFn;
+        normalize?: (raw: Record<string, unknown>) => TRes;
+    }): Promise<TRes[]>;
+    checkMintQuoteBatchBolt11(quotes: string[], customRequest?: RequestFn): Promise<MintQuoteBolt11Response[]>;
+    checkMintQuoteBatchBolt12(quotes: string[], customRequest?: RequestFn): Promise<MintQuoteBolt12Response[]>;
     checkMintQuoteBolt11(quote: string, customRequest?: RequestFn): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt12(quote: string, customRequest?: RequestFn): Promise<MintQuoteBolt12Response>;
     checkMintQuoteOnchain(quote: string, customRequest?: RequestFn): Promise<MintQuoteOnchainResponse>;
@@ -2079,6 +2085,11 @@ export class Wallet {
     checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(method: string, quote: string | Pick<TRes, 'quote'>, options?: {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
+    checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, quotes: Array<string | Pick<TRes, 'quote'>>, options?: {
+        normalize?: (raw: Record<string, unknown>) => TRes;
+    }): Promise<TRes[]>;
+    checkMintQuoteBatchBolt11(quotes: Array<string | MintQuoteBolt11Response>): Promise<MintQuoteBolt11Response[]>;
+    checkMintQuoteBatchBolt12(quotes: Array<string | MintQuoteBolt12Response>): Promise<MintQuoteBolt12Response[]>;
     checkMintQuoteBolt11(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt12(quote: string): Promise<MintQuoteBolt12Response>;
     checkMintQuoteOnchain(quote: string): Promise<MintQuoteOnchainResponse>;
