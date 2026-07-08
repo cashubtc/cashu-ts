@@ -1909,6 +1909,67 @@ class Wallet {
     return this.mint.checkMintQuoteOnchain(quote);
   }
 
+  /**
+   * Checks existing mint quotes for any payment method in one batched request.
+   *
+   * @remarks
+   * Generic method for checking multiple mint quote statuses. An optional `normalize` callback can
+   * be used to coerce method-specific response fields. Mints that predate this endpoint return an
+   * error; callers can fall back to `checkMintQuote()` per quote id when needed.
+   *
+   * For first-class methods, prefer the typed helpers: `checkMintQuoteBatchBolt11()`,
+   * `checkMintQuoteBatchBolt12()`.
+   * @param method The payment method (e.g., 'bolt11', 'bolt12', 'bacs', 'swift').
+   * @param quotes Quote IDs or quote objects (each object must have a `quote` field).
+   * @param options.normalize Optional callback to normalize method-specific response fields.
+   * @returns Mint quote responses in request order.
+   * @experimental only supported by CDK mint >= 0.16.0
+   */
+  async checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(
+    method: string,
+    quotes: Array<string | Pick<TRes, 'quote'>>,
+    options?: { normalize?: (raw: Record<string, unknown>) => TRes },
+  ): Promise<TRes[]> {
+    const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
+    return this.mint.checkMintQuoteBatch<TRes>(method, quoteIds, {
+      normalize: options?.normalize,
+    });
+  }
+
+  /**
+   * Checks existing BOLT11 mint quotes in one batched request.
+   *
+   * @remarks
+   * Mints that predate this endpoint return an error; callers can fall back to
+   * `checkMintQuoteBolt11()` per quote id when needed.
+   * @param quotes Quote IDs or quote objects.
+   * @returns Updated BOLT11 mint quotes in request order.
+   * @experimental only supported by CDK mint >= 0.16.0
+   */
+  async checkMintQuoteBatchBolt11(
+    quotes: Array<string | MintQuoteBolt11Response>,
+  ): Promise<MintQuoteBolt11Response[]> {
+    const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
+    return this.mint.checkMintQuoteBatchBolt11(quoteIds);
+  }
+
+  /**
+   * Checks existing BOLT12 mint quotes in one batched request.
+   *
+   * @remarks
+   * Mints that predate this endpoint return an error; callers can fall back to
+   * `checkMintQuoteBolt12()` per quote id when needed.
+   * @param quotes Quote IDs or quote objects.
+   * @returns Updated BOLT12 mint quotes in request order.
+   * @experimental only supported by CDK mint >= 0.16.0
+   */
+  async checkMintQuoteBatchBolt12(
+    quotes: Array<string | MintQuoteBolt12Response>,
+  ): Promise<MintQuoteBolt12Response[]> {
+    const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
+    return this.mint.checkMintQuoteBatchBolt12(quoteIds);
+  }
+
   // -----------------------------------------------------------------
   // Section: Mint Proofs
   // -----------------------------------------------------------------
