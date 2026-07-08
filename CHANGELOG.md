@@ -5,7 +5,7 @@
 
 ### Features
 
-* **nut29:** add batch quote checks [backport v4-dev] ([#774](https://github.com/cashubtc/cashu-ts/issues/774)) ([52d4107](https://github.com/cashubtc/cashu-ts/commit/52d4107986d5416f2a9f79710fc56187d360678c))
+* **nut29:** add batch quote checks ([#774](https://github.com/cashubtc/cashu-ts/issues/774)) ([52d4107](https://github.com/cashubtc/cashu-ts/commit/52d4107986d5416f2a9f79710fc56187d360678c))
 
 
 ### Bug Fixes
