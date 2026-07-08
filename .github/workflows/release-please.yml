@@ -1,8 +1,10 @@
 name: release-please
+# v3-dev copy: watches and releases this LTS branch only. main's copy
+# (which targets main) is separate — push workflows run per-branch.
 on:
   push:
     branches:
-      - main
+      - v3-dev
 permissions:
   contents: write
   issues: write
@@ -12,8 +14,9 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
-      - uses: googleapis/release-please-action@v4
+      - uses: googleapis/release-please-action@v4.4.0
         id: release
         with:
           release-type: node
+          target-branch: v3-dev
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
