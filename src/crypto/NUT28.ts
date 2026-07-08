@@ -22,13 +22,17 @@ export const P2BK_DST: Uint8Array<ArrayBufferLike> = utf8ToBytes('Cashu_P2BK_v1'
  * This is the Sender side API.
  * @param pubkeys Ordered SEC1 compressed pubkeys, [data, ...pubkeys, ...refund]
  * @param eBytes Optional. Fixed ephemeral secret key to use (eg for SIG_ALL / testing)
+ * @param dataIsPubkey Optional. False when slot 0 holds non-key data (eg an HTLC hashlock), so the
+ *   first pubkey takes slot 1.
  * @returns Blinded pubkeys in the same order, and Ehex as SEC1 compressed hex, 33 bytes.
  * @throws If a blinded key is at infinity.
  */
 export function deriveP2BKBlindedPubkeys(
   pubkeys: string[],
   eBytes?: Uint8Array,
+  dataIsPubkey = true,
 ): { blinded: string[]; Ehex: string } {
+  const slotOffset = dataIsPubkey ? 0 : 1;
   if (!pubkeys.length) return { blinded: [], Ehex: '' };
   // Create fresh ephemeral secret (e) if not supplied, and calculate pubkey (E)
   eBytes = eBytes ?? secp256k1.utils.randomSecretKey(); // 32 bytes
@@ -37,7 +41,7 @@ export function deriveP2BKBlindedPubkeys(
   // Blind each pubkey in turn
   const blinded = pubkeys.map((pubkey, i) => {
     const P = pointFromHex(pubkey);
-    const r = deriveP2BKBlindingTweakFromECDH(P, e, i);
+    const r = deriveP2BKBlindingTweakFromECDH(P, e, i + slotOffset);
     const P_ = P.add(secp256k1.Point.BASE.multiply(r));
     if (P_.equals(secp256k1.Point.ZERO)) throw new Error('Blinded key at infinity');
     return P_.toHex(true);
@@ -59,13 +63,17 @@ export function deriveP2BKBlindedPubkeys(
  * @param Ehex Ephemeral public key (E) as SEC1 hex.
  * @param privateKey Secret key or array of secret keys, hex.
  * @param blindPubKey Blinded public key or array of blinded public keys, hex.
+ * @param dataIsPubkey Optional. False when slot 0 holds non-key data (eg an HTLC hashlock), so the
+ *   first pubkey takes slot 1.
  * @returns Array of derived secret keys as 64 char hex.
  */
 export function deriveP2BKSecretKeys(
   Ehex: string,
   privateKey: string | string[],
   blindPubKey: string | string[],
+  dataIsPubkey = true,
 ): string[] {
+  const slotOffset = dataIsPubkey ? 0 : 1;
   const privs = Array.isArray(privateKey) ? privateKey : [privateKey];
   const pubs = Array.isArray(blindPubKey) ? blindPubKey : [blindPubKey];
   const out = new Set<string>();
@@ -74,7 +82,7 @@ export function deriveP2BKSecretKeys(
     const p = secp256k1.Point.Fn.fromBytes(hexToBytes(privHex));
     const P = secp256k1.getPublicKey(hexToBytes(privHex), true); // 33 bytes, validates on curve
     pubs.forEach((hexP_, i) => {
-      const r = deriveP2BKBlindingTweakFromECDH(E, p, i);
+      const r = deriveP2BKBlindingTweakFromECDH(E, p, i + slotOffset);
       const P_ = hexToBytes(hexP_);
       const kHex = deriveP2BKSecretKey(privHex, r, P_, P);
       if (kHex) out.add(kHex); // add only when this priv matches this P′
