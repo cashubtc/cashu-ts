@@ -1241,7 +1241,7 @@ describe('generic mint/melt methods', () => {
       server.use(
         http.post(mintUrl + '/v1/mint/quote/bolt12/check', async ({ request }) => {
           const body = (await request.json()) as { quotes: string[] };
-          expect(body).toEqual({ quotes: ['bolt12-batch-1'] });
+          expect(body).toEqual({ quotes: ['bolt12-batch-1', 'bolt12-batch-2'] });
           return HttpResponse.json([
             {
               quote: 'bolt12-batch-1',
@@ -1254,13 +1254,24 @@ describe('generic mint/melt methods', () => {
               expiry: 3600,
               pubkey: '02a1',
             },
+            {
+              quote: 'bolt12-batch-2',
+              request: 'lno...',
+              unit: 'sat',
+              amount: null,
+              amount_paid: 7,
+              amount_issued: 7,
+              state: MintQuoteState.ISSUED,
+              expiry: 3600,
+              pubkey: '02a1',
+            },
           ]);
         }),
       );
       const wallet = new Wallet(mint, { unit });
       await wallet.loadMint();
 
-      // Pass a quote object rather than an id to cover id extraction
+      // Mix a quote object and a bare id to cover both id-extraction branches
       const quotes = await wallet.checkMintQuoteBatchBolt12([
         {
           quote: 'bolt12-batch-1',
@@ -1273,12 +1284,14 @@ describe('generic mint/melt methods', () => {
           expiry: null,
           pubkey: '02a1',
         },
+        'bolt12-batch-2',
       ]);
 
-      expect(quotes[0].quote).toBe('bolt12-batch-1');
+      expect(quotes.map((quote) => quote.quote)).toEqual(['bolt12-batch-1', 'bolt12-batch-2']);
       expect(quotes[0].amount).toBeNull();
       expect(quotes[0].amount_paid.toBigInt()).toBe(42n);
       expect(quotes[0].amount_issued.toBigInt()).toBe(0n);
+      expect(quotes[1].amount_issued.toBigInt()).toBe(7n);
     });
 
     test('checkMintQuoteBatch with custom method hits /v1/mint/quote/{method}/check', async () => {
@@ -1320,7 +1333,7 @@ describe('generic mint/melt methods', () => {
 
       const quotes = await wallet.checkMintQuoteBatch<BacsMintQuoteRes>(
         'bacs',
-        ['bacs-batch-1', 'bacs-batch-2'],
+        ['bacs-batch-1', { quote: 'bacs-batch-2' }],
         {
           normalize: (raw) => ({
             ...(raw as BacsMintQuoteRes),
