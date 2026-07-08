@@ -1,4 +1,6 @@
+import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex } from '@noble/curves/utils.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 import { describe, expect, test } from 'vitest';
 
 import {
@@ -6,6 +8,7 @@ import {
   createDLEQProof,
   getPubKeyFromPrivKey,
   pointFromHex,
+  P2BK_DST,
 } from '../../src/crypto';
 import { verifyUnblindedSignature } from '../../src/crypto/NUT01';
 import { Amount } from '../../src/model/Amount';
@@ -17,7 +20,7 @@ import {
   RESERVED_P2PK_TAGS,
 } from '../../src/model/OutputData';
 import type { HasKeysetKeys, SerializedBlindedSignature } from '../../src/model/types';
-import { deriveKeysetId, numberToHexPadded64 } from '../../src/utils';
+import { Bytes, deriveKeysetId, numberToHexPadded64 } from '../../src/utils';
 
 // secp256k1 (v0/v1) round-trip through OutputData -> simulated mint sign+DLEQ -> toProof.
 // The mint side is simulated with createBlindSignature/createDLEQProof: the curve math matches a
@@ -254,6 +257,24 @@ describe('OutputData.createSingleP2PKData tag construction', () => {
     expect(pubkeysTag?.[1]).not.toBe(lock1);
     expect(pubkeysTag?.[2]).not.toBe(lock2);
     expect(refundTag?.slice(1)).toHaveLength(1);
+  });
+
+  test('HTLC blinding starts lock keys at slot 1 (NUT-28: hashlock occupies slot 0)', () => {
+    const hashlock = 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5';
+    const lockPriv = secpPriv(1);
+    const lock1 = pub(1);
+    const out = OutputData.createSingleP2PKData(
+      { kind: 'HTLC', data: hashlock, pubkeys: [lock1], blindKeys: true },
+      1,
+      KEYSET_ID,
+    );
+    const blinded = readSecret(out).tags.find(([t]) => t === 'pubkeys')![1];
+    // Independent receiver-side NUT-28 math: r1 = sha256(DST || Zx || 0x01), P' = P + r1·G
+    const p = secp256k1.Point.Fn.fromBytes(lockPriv);
+    const Zx = secp256k1.Point.fromHex(out.ephemeralE!).multiply(p).toBytes(true).slice(1);
+    const r1 = Bytes.toBigInt(sha256(Bytes.concat(P2BK_DST, Zx, Uint8Array.of(1))));
+    const expected = pointFromHex(lock1).add(secp256k1.Point.BASE.multiply(r1)).toHex(true);
+    expect(blinded).toBe(expected);
   });
 
   test('emits a locktime tag for locktime 0 (boundary)', () => {

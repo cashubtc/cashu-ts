@@ -2093,6 +2093,21 @@ describe('signing edge cases', () => {
     expect(result.witness).toBeUndefined();
   });
 
+  test('maybeDeriveP2BKPrivateKeys falls back to legacy slot 0 indexing for HTLC proofs', () => {
+    // Pre-fix senders blinded HTLC lock keys from slot 0; those proofs must stay spendable.
+    const privBytes = createRandomSecretKey();
+    const pubHex = bytesToHex(getPubKeyFromPrivKey(privBytes));
+    const {
+      blinded: [P0_],
+      Ehex,
+    } = deriveP2BKBlindedPubkeys([pubHex]); // legacy: first lock key at slot 0
+    const secret = `["HTLC",{"nonce":"aa","data":"ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5","tags":[["pubkeys","${P0_}"]]}]`;
+    const proof = { ...mkProof(secret), p2pk_e: Ehex };
+    const derived = maybeDeriveP2BKPrivateKeys(bytesToHex(privBytes), proof);
+    const derivedPubs = derived.map((k) => bytesToHex(getPubKeyFromPrivKey(hexToBytes(k))));
+    expect(derivedPubs).toContain(P0_);
+  });
+
   test('maybeDeriveP2BKPrivateKeys tolerates a missing proof', () => {
     const priv = bytesToHex(createRandomSecretKey());
     expect(maybeDeriveP2BKPrivateKeys(priv, undefined as unknown as Proof)).toStrictEqual([priv]);

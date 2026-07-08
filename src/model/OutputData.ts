@@ -286,7 +286,8 @@ export class OutputData implements OutputDataLike {
     if (normalized.blindKeys) {
       const lockKeys = isHTLC ? pubkeys : [data, ...pubkeys];
       const ordered = [...lockKeys, ...refundKeys];
-      const { blinded, Ehex: _E } = deriveP2BKBlindedPubkeys(ordered);
+      // For HTLC the hashlock occupies slot 0, so key slots start at 1 (NUT-28)
+      const { blinded, Ehex: _E } = deriveP2BKBlindedPubkeys(ordered, undefined, !isHTLC);
       if (isHTLC) {
         // hashlock is in data, all locking keys into pubkeys
         pubkeys = blinded.slice(0, lockKeys.length);

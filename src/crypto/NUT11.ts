@@ -664,7 +664,12 @@ export function maybeDeriveP2BKPrivateKeys(privateKey: string | string[], proof:
   // Extract pubkeys and keyset ID from proof
   const secret = parseP2PKSecret(proof.secret);
   const pubs = [...getP2PKWitnessPubkeys(secret), ...getP2PKWitnessRefundkeys(secret)];
-  return deriveP2BKSecretKeys(Ehex, privs, pubs);
+  // For HTLC the hashlock occupies slot 0, so key slots start at 1 (NUT-28)
+  const dataIsPubkey = getSecretKind(secret) === 'P2PK';
+  const keys = deriveP2BKSecretKeys(Ehex, privs, pubs, dataIsPubkey);
+  // Deprecated: retry from slot 0 for HTLC proofs blinded by older releases; remove next major
+  if (!dataIsPubkey && !keys.length) return deriveP2BKSecretKeys(Ehex, privs, pubs);
+  return keys;
 }
 
 // ------------------------------
