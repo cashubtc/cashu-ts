@@ -73,3 +73,17 @@ export class MintOperationError extends HttpResponseError {
     Object.setPrototypeOf(this, MintOperationError.prototype);
   }
 }
+
+/**
+ * True when `e` is a {@link MintOperationError}, including look-alikes by name + code.
+ *
+ * @remarks
+ * Prefer this over `instanceof`, which misses errors thrown by another copy of this package (eg:
+ * npm dedupe failure) or by a custom request layer declaring its own class.
+ */
+export function isMintOperationError(e: unknown): e is MintOperationError {
+  return (
+    e instanceof MintOperationError ||
+    (e instanceof Error && e.name === 'MintOperationError' && 'code' in e)
+  );
+}

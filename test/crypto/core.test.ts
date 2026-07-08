@@ -20,6 +20,8 @@ import {
   hash_e,
   isBlsKeyset,
   pointFromBytes,
+  schnorrSignDigest,
+  schnorrVerifyDigest,
 } from '../../src/crypto';
 import { verifyUnblindedSignature } from '../../src/crypto/NUT01';
 import { Bytes } from '../../src/utils';
@@ -225,5 +227,21 @@ describe('getKeysetIdInt', () => {
     const b64Id = 'AQID';
     const expected = BigInt(0x010203) % MOD;
     expect(getKeysetIdInt(b64Id)).toBe(expected);
+  });
+});
+
+describe('schnorrVerifyDigest', () => {
+  const privkey = '0000000000000000000000000000000000000000000000000000000000000001';
+  const pubkey = bytesToHex(secp256k1.getPublicKey(hexToBytes(privkey), true));
+  const digest = sha256(new TextEncoder().encode('msg'));
+  const signature = schnorrSignDigest(digest, privkey);
+
+  test('accepts a hex-string digest', () => {
+    expect(schnorrVerifyDigest(signature, bytesToHex(digest), pubkey)).toBe(true);
+  });
+
+  test('swallows malformed input by default and throws when asked', () => {
+    expect(schnorrVerifyDigest('not-hex', digest, pubkey)).toBe(false);
+    expect(() => schnorrVerifyDigest('not-hex', digest, pubkey, true)).toThrow();
   });
 });
