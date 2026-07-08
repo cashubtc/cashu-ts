@@ -113,24 +113,23 @@ describe('payment requests', () => {
     expect(() => decodePaymentRequest(prWithInvalidVersion)).toThrow('unsupported pr version');
   });
 
-  describe('mint preferences (mp, nf, sm)', () => {
-    // NUT-18/NUT-26 spec vector: preferred mint list (mp=true), amount net of input
-    // fees (nf=true) and supported methods. single_use is absent, so neither encoding
-    // emits it. Both strings are pinned to lock canonical output: minimal CBOR (creqA,
-    // `a7` not `b9 0007`) and minimal TLV with no redundant single_use=0 (creqB).
+  describe('mint preferences (mp, sm)', () => {
+    // NUT-18/NUT-26 spec vector: preferred mint list (mp=true) and supported
+    // methods. single_use is absent, so neither encoding emits it. Both strings
+    // are pinned to lock canonical output: minimal CBOR (creqA, `a6` not
+    // `b9 0006`) and minimal TLV with no redundant single_use=0 (creqB).
     const SPEC_CREQA =
-      'creqAp2FpdXByZWZlcnJlZF9mZWVfbWV0aG9kc2FhGGRhdWNzYXRhbYF4GGh0dHBzOi8vbWludC5leGFtcGxlLmNvbWJtcPVibmb1YnNtgqFibW5mYm9sdDExomJtbmZib2x0MTJibWYF';
+      'creqApmFpdXByZWZlcnJlZF9mZWVfbWV0aG9kc2FhGGRhdWNzYXRhbYF4GGh0dHBzOi8vbWludC5leGFtcGxlLmNvbWJtcPVic22CoWJtbmZib2x0MTGiYm1uZmJvbHQxMmJtZgU=';
     const SPEC_CREQB =
-      'CREQB1QYQP2URJV4NX2UNJV4J97EN9V40K6ET5DPHKGUCZQQYQQQQQQQQQQQRYQVQQZQQ9QQVXSAR5WPEN5TE0D45KUAPWV4UXZMTSD3JJUCM0D5YSQQGPPGQQZQGTQQYSZQQXVFHKCAP3XY9SQ9QPQQRXYMMVWSCNYQSQPQQQQQQQQQQQQPGZ0CGYS';
+      'CREQB1QYQP2URJV4NX2UNJV4J97EN9V40K6ET5DPHKGUCZQQYQQQQQQQQQQQRYQVQQZQQ9QQVXSAR5WPEN5TE0D45KUAPWV4UXZMTSD3JJUCM0D5YSQQGPPGQQJQGQQE3X7MR5XYCS5QQ5QYQQVCN0D36RZVSZQQYQQQQQQQQQQQQ9FJ2568';
 
-    test('encode/decode preferred mint list with net fees and supported methods (creqA)', () => {
+    test('encode/decode preferred mint list with supported methods (creqA)', () => {
       const request = new PaymentRequest({
         id: 'preferred_fee_methods',
         amount: 100,
         unit: 'sat',
         mints: ['https://mint.example.com'],
         mintsPreferred: true, // advisory list
-        netFees: true,
         supportedMethods: [{ method: 'bolt11' }, { method: 'bolt12', fee: 5 }],
       });
 
@@ -139,19 +138,17 @@ describe('payment requests', () => {
 
       const decoded = decodePaymentRequest(pr);
       expect(decoded.mintsPreferred).toBe(true);
-      expect(decoded.netFees).toBe(true);
       expect(decoded.supportedMethods?.map((m) => m.method)).toEqual(['bolt11', 'bolt12']);
       expect(decoded.supportedMethods?.[1].fee?.equals(5)).toBeTruthy();
     });
 
-    test('encode/decode preferred mint list with net fees and supported methods (creqB)', () => {
+    test('encode/decode preferred mint list with supported methods (creqB)', () => {
       const request = new PaymentRequest({
         id: 'preferred_fee_methods',
         amount: 100,
         unit: 'sat',
         mints: ['https://mint.example.com'],
         mintsPreferred: true,
-        netFees: true,
         supportedMethods: [{ method: 'bolt11' }, { method: 'bolt12', fee: 5 }],
       });
 
@@ -160,7 +157,6 @@ describe('payment requests', () => {
 
       const decoded = PaymentRequest.fromEncodedRequest(encoded);
       expect(decoded.mintsPreferred).toBe(true);
-      expect(decoded.netFees).toBe(true);
       expect(decoded.supportedMethods?.map((m) => m.method)).toEqual(['bolt11', 'bolt12']);
       expect(decoded.supportedMethods?.[1].fee?.equals(5)).toBeTruthy();
     });
@@ -286,7 +282,7 @@ describe('payment requests', () => {
       expect(fromZero.isMintListStrict).toBe(true);
     });
 
-    test('mp/nf/sm absent by default (no serialization, no defaults injected)', () => {
+    test('mp/sm absent by default (no serialization, no defaults injected)', () => {
       const request = new PaymentRequest({
         id: 'no_prefs',
         amount: 100,
@@ -295,12 +291,10 @@ describe('payment requests', () => {
       });
       const raw = request.toRawRequest();
       expect(raw.mp).toBeUndefined();
-      expect(raw.nf).toBeUndefined();
       expect(raw.sm).toBeUndefined();
 
       const decoded = decodePaymentRequest(request.toEncodedRequest());
       expect(decoded.mintsPreferred).toBeUndefined();
-      expect(decoded.netFees).toBeUndefined();
       expect(decoded.supportedMethods).toBeUndefined();
     });
   });

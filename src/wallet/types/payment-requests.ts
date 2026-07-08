@@ -25,7 +25,6 @@ export type RawPaymentRequest = {
   s?: boolean; // single use
   m?: string[]; // mints
   mp?: boolean; // mints preferred: strict list when absent or false, advisory list when true
-  nf?: boolean; // net fees: requested amount is net of input fees when true
   sm?: RawSupportedMethod[]; // supported methods the payee accepts, each with an optional per-method fee
   d?: string; // description
   t?: RawTransport[]; // transports

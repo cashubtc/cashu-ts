@@ -23,7 +23,6 @@ export type DecodedTLVPaymentRequest = {
   singleUse?: boolean;
   mints?: string[];
   mintsPreferred?: boolean;
-  netFees?: boolean;
   supportedMethods?: Array<{ method: string; fee?: bigint }>;
   description?: string;
   transports?: PaymentRequestTransport[];
@@ -44,8 +43,7 @@ export type DecodedTLVPaymentRequest = {
  * | 0x07 | transport        | sub-TLV   | Transport configuration (repeatable)                                          |
  * | 0x08 | nut10            | sub-TLV   | NUT-10 spending conditions (not yet implemented)                              |
  * | 0x09 | mint_preferred   | u8        | Mint list strictness flag: 0=false, 1=true; if absent, defaults to 0 (strict) |
- * | 0x0a | net_fees         | u8        | Net-of-input-fees flag: 0=false, 1=true; if absent, defaults to 0             |
- * | 0x0b | supported_method | sub-TLV   | Supported payment method with an optional per-method fee (repeatable)         |
+ * | 0x0a | supported_method | sub-TLV   | Supported payment method with an optional per-method fee (repeatable)         |
  */
 const TAG_ID = 0x01;
 const TAG_AMOUNT = 0x02;
@@ -56,8 +54,7 @@ const TAG_DESCRIPTION = 0x06;
 const TAG_TRANSPORT = 0x07;
 const TAG_NUT10 = 0x08;
 const TAG_MINT_PREFERRED = 0x09;
-const TAG_NET_FEES = 0x0a;
-const TAG_SUPPORTED_METHODS = 0x0b;
+const TAG_SUPPORTED_METHODS = 0x0a;
 
 /**
  * Transport Sub-TLV Tag definitions.
@@ -92,7 +89,7 @@ const NUT10_KIND_P2PK = 0;
 const NUT10_KIND_HTLC = 1;
 
 /**
- * Supported Method Sub-TLV Tag definitions (NUT-26 tag 0x0b).
+ * Supported Method Sub-TLV Tag definitions (NUT-26 tag 0x0a).
  *
  * | Sub-Tag | Field  | Type   | Description                       |
  * | ------- | ------ | ------ | --------------------------------- |
@@ -161,9 +158,6 @@ export function decodeTLV(data: Uint8Array): DecodedTLVPaymentRequest {
         break;
       case TAG_MINT_PREFERRED:
         result.mintsPreferred = parseU8(part.value) === 1;
-        break;
-      case TAG_NET_FEES:
-        result.netFees = parseU8(part.value) === 1;
         break;
       case TAG_SUPPORTED_METHODS:
         if (!result.supportedMethods) {
@@ -373,7 +367,7 @@ function parseNut10(value: Uint8Array): Nut10SpendingCondition {
 }
 
 /**
- * Parses a supported method (NUT-26 tag 0x0b) from its sub-TLV value.
+ * Parses a supported method (NUT-26 tag 0x0a) from its sub-TLV value.
  *
  * @param value - The supported_method sub-TLV value bytes.
  * @returns Parsed method with an optional per-method fee.
@@ -502,10 +496,6 @@ export function encodeTLV(request: DecodedTLVPaymentRequest): Uint8Array {
 
   if (request.mintsPreferred !== undefined) {
     parts.push(encodeTLVPart(TAG_MINT_PREFERRED, encodeU8(request.mintsPreferred ? 1 : 0)));
-  }
-
-  if (request.netFees !== undefined) {
-    parts.push(encodeTLVPart(TAG_NET_FEES, encodeU8(request.netFees ? 1 : 0)));
   }
 
   // Repeatable: supported_method
@@ -673,7 +663,7 @@ function encodeNut10(nut10: Nut10SpendingCondition): Uint8Array {
 }
 
 /**
- * Encodes a supported method into its TLV sub-structure (NUT-26 tag 0x0b).
+ * Encodes a supported method into its TLV sub-structure (NUT-26 tag 0x0a).
  *
  * @param method - The method name with an optional per-method fee.
  * @returns Encoded supported_method sub-TLV.

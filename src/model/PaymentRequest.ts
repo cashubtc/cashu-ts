@@ -18,8 +18,8 @@ import { Amount, type AmountLike } from './Amount';
 import { CTSError } from './Errors';
 
 /**
- * Constructor options for {@link PaymentRequest}. Keys mirror the class properties; `amount`,
- * `netFees` and method `fee` values accept flexible input and are normalized on construction.
+ * Constructor options for {@link PaymentRequest}. Keys mirror the class properties; `amount` and
+ * method `fee` values accept flexible input and are normalized on construction.
  */
 export type PaymentRequestOptions = {
   id?: string;
@@ -31,7 +31,6 @@ export type PaymentRequestOptions = {
   singleUse?: boolean;
   nut10?: NUT10Option;
   mintsPreferred?: boolean;
-  netFees?: boolean;
   supportedMethods?: Array<{ method: string; fee?: AmountLike }>;
 };
 
@@ -45,7 +44,6 @@ export class PaymentRequest {
   public singleUse?: boolean;
   public nut10?: NUT10Option;
   public mintsPreferred?: boolean;
-  public netFees?: boolean;
   public supportedMethods?: SupportedMethod[];
 
   constructor(options: PaymentRequestOptions = {}) {
@@ -66,7 +64,6 @@ export class PaymentRequest {
     this.singleUse = options.singleUse === undefined ? undefined : Boolean(options.singleUse);
     this.mintsPreferred =
       options.mintsPreferred === undefined ? undefined : Boolean(options.mintsPreferred);
-    this.netFees = options.netFees === undefined ? undefined : Boolean(options.netFees);
   }
 
   /**
@@ -154,9 +151,6 @@ export class PaymentRequest {
     if (this.mintsPreferred !== undefined) {
       rawRequest.mp = this.mintsPreferred;
     }
-    if (this.netFees !== undefined) {
-      rawRequest.nf = this.netFees;
-    }
     if (this.supportedMethods && this.supportedMethods.length > 0) {
       rawRequest.sm = this.supportedMethods.map((m) =>
         m.fee !== undefined ? { mn: m.method, mf: m.fee.toBigInt() } : { mn: m.method },
@@ -208,7 +202,6 @@ export class PaymentRequest {
       singleUse: this.singleUse,
       mints: this.mints,
       mintsPreferred: this.mintsPreferred,
-      netFees: this.netFees,
       supportedMethods: this.supportedMethods?.map((m) => ({
         method: m.method,
         fee: m.fee !== undefined ? m.fee.toBigInt() : undefined,
@@ -322,7 +315,6 @@ export class PaymentRequest {
       singleUse: rawPaymentRequest.s,
       nut10,
       mintsPreferred: rawPaymentRequest.mp,
-      netFees: rawPaymentRequest.nf,
       supportedMethods,
     });
   }
@@ -351,7 +343,6 @@ export class PaymentRequest {
         singleUse: decoded.singleUse,
         nut10,
         mintsPreferred: decoded.mintsPreferred,
-        netFees: decoded.netFees,
         supportedMethods: decoded.supportedMethods,
       });
     }

@@ -58,12 +58,10 @@ For an **amountless** request (the payer chooses the amount), use `feesFor` to p
 const total = chosenAmount.add(pr.feesFor(myMint, ['bolt12'])); // mf, or 0 if none applies
 ```
 
-If the request sets `netFees` (`nf`), the requested amount is **net of input fees**: the receiver must be able to swap or melt the proofs without dipping below it. Select proofs with fees included:
+The requested amount is **net of input fees** (NUT-18): the receiver must be able to swap or melt the proofs without dipping below it. Select proofs with fees included:
 
 ```typescript
-const builder = wallet.ops.send(total, proofs);
-if (pr.netFees) builder.includeFees(true); // sender covers the receiver's input fee
-await builder.run();
+await wallet.ops.send(total, proofs).includeFees(true).run(); // sender covers the receiver's input fee
 ```
 
 ## Locked requests
@@ -95,7 +93,6 @@ const request = new PaymentRequest({
   mints: ['https://my.mint'],
   description: 'Coffee',
   mintsPreferred: true, // advisory list
-  netFees: true, // amount is net of input fees
   supportedMethods: [{ method: 'bolt11' }, { method: 'bolt12', fee: 5 }],
 });
 

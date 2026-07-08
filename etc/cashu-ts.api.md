@@ -1613,8 +1613,6 @@ class PaymentRequest_2 {
     // (undocumented)
     mintsPreferred?: boolean;
     // (undocumented)
-    netFees?: boolean;
-    // (undocumented)
     nut10?: NUT10Option;
     // (undocumented)
     singleUse?: boolean;
@@ -1645,7 +1643,6 @@ export type PaymentRequestOptions = {
     singleUse?: boolean;
     nut10?: NUT10Option;
     mintsPreferred?: boolean;
-    netFees?: boolean;
     supportedMethods?: Array<{
         method: string;
         fee?: AmountLike;
@@ -1770,7 +1767,6 @@ export type RawPaymentRequest = {
     s?: boolean;
     m?: string[];
     mp?: boolean;
-    nf?: boolean;
     sm?: RawSupportedMethod[];
     d?: string;
     t?: RawTransport[];

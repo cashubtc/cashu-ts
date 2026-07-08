@@ -177,11 +177,11 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
   });
 
   describe('Supported Method sub-TLV (malformed)', () => {
-    // supported_method (tag 0x0b) is a sub-TLV: 0x01 method (string), 0x02 fee (u64).
+    // supported_method (tag 0x0a) is a sub-TLV: 0x01 method (string), 0x02 fee (u64).
     // Duplicate singular sub-tags and a missing method must be rejected, not last-wins.
     test('rejects duplicate method sub-tag', () => {
       const malformed = new Uint8Array([
-        0x0b,
+        0x0a,
         0x00,
         0x08, // TAG_SUPPORTED_METHODS, length 8
         0x01,
@@ -198,7 +198,7 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
 
     test('rejects duplicate fee sub-tag', () => {
       const malformed = new Uint8Array([
-        0x0b,
+        0x0a,
         0x00,
         26, // TAG_SUPPORTED_METHODS, length 26
         0x01,
@@ -233,7 +233,7 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
 
     test('rejects supported_method missing its method field', () => {
       const malformed = new Uint8Array([
-        0x0b,
+        0x0a,
         0x00,
         0x0b, // TAG_SUPPORTED_METHODS, length 11
         0x02,
@@ -434,18 +434,18 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
     });
   });
 
-  describe('Preferred Mint List with Supported Methods and Net Fees', () => {
+  describe('Preferred Mint List with Supported Methods', () => {
     // NUT-26 spec test vector — payment request with mp=true (preferred/advisory
-    // mint list), an amount net of input fees (nf=true), and supported methods
-    // where bolt12 carries a per-method fee (mf=5) for non-preferred mints.
+    // mint list) and supported methods where bolt12 carries a per-method fee
+    // (mf=5) for non-preferred mints.
     const encoded =
-      'CREQB1QYQP2URJV4NX2UNJV4J97EN9V40K6ET5DPHKGUCZQQYQQQQQQQQQQQRYQVQQZQQ9QQVXSAR5WPEN5TE0D45KUAPWV4UXZMTSD3JJUCM0D5YSQQGPPGQQZQGTQQYSZQQXVFHKCAP3XY9SQ9QPQQRXYMMVWSCNYQSQPQQQQQQQQQQQQPGZ0CGYS';
+      'CREQB1QYQP2URJV4NX2UNJV4J97EN9V40K6ET5DPHKGUCZQQYQQQQQQQQQQQRYQVQQZQQ9QQVXSAR5WPEN5TE0D45KUAPWV4UXZMTSD3JJUCM0D5YSQQGPPGQQJQGQQE3X7MR5XYCS5QQ5QYQQVCN0D36RZVSZQQYQQQQQQQQQQQQ9FJ2568';
 
-    test('roundtrip preferred mint list with supported methods and net fees', () => {
-      testRoundtrip(encoded, 'NUT-26 spec vector: mp=true, nf=true, sm=[bolt11, bolt12(mf=5)]');
+    test('roundtrip preferred mint list with supported methods', () => {
+      testRoundtrip(encoded, 'NUT-26 spec vector: mp=true, sm=[bolt11, bolt12(mf=5)]');
     });
 
-    test('verify mp, nf, sm fields', () => {
+    test('verify mp, sm fields', () => {
       const bytes = decodeBech32mToBytes(encoded.toLowerCase());
       const decoded = decodeTLV(bytes);
 
@@ -454,7 +454,6 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
       expect(decoded.unit).toBe('sat');
       expect(decoded.mints).toEqual(['https://mint.example.com']);
       expect(decoded.mintsPreferred).toBe(true);
-      expect(decoded.netFees).toBe(true);
       expect(decoded.supportedMethods).toEqual([
         { method: 'bolt11' },
         { method: 'bolt12', fee: BigInt(5) },
@@ -464,7 +463,6 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
       const finalDecoded = decodeTLV(reEncoded);
 
       expect(finalDecoded.mintsPreferred).toBe(true);
-      expect(finalDecoded.netFees).toBe(true);
       expect(finalDecoded.supportedMethods).toEqual([
         { method: 'bolt11' },
         { method: 'bolt12', fee: BigInt(5) },
