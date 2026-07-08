@@ -5,7 +5,7 @@ name: Nightly mint drift check
 # of when a user hits it. Failures open a `drift`-labelled issue.
 on:
   schedule:
-    - cron: '30 4 * * *' # daily at 04:30 UTC, after the 02:00 image updater
+    - cron: '30 4 * * *' # daily at 04:30 UTC, after the 02:23 image updater
   workflow_dispatch: {}
 
 permissions:
