@@ -143,7 +143,7 @@ Hooks are installed by Husky:
 
 - `main` tracks the current major and is where active development lands.
 - Each supported prior major has a `vN-dev` LTS branch (`v4-dev`, `v3-dev`) for backports only; don't mix majors in one PR.
-- Backports are label-driven: land the fix on `main`, add a `backport vN-dev` label to the PR, and a bot opens the backport PR. Only cherry-pick manually when the bot fails (it opens a `backport`-labelled issue); never commit directly to a `vN-dev` branch.
+- Backports are label-driven: land the fix on `main`, add a `backport vN-dev` label to the PR, and a bot opens the backport PR. On conflict the bot opens a DRAFT PR with the conflict committed (plus a `backport`-labelled tracking issue): finish it in place by resolving the conflicts (take the target branch's `etc/cashu-ts.api.md` and rerun `npm run api:update`), running `npm run prtasks`, pushing, and marking the PR ready. Never commit directly to a `vN-dev` branch.
 - All releases are automated with release-please (don't bump versions by hand): `main` and each `vN-dev` branch run their own copy of the workflow, and merging a branch's Release PR tags, creates the GitHub Release, and publishes to npm.
 - npm `latest` is governed solely by `LATEST_MAJOR` in `.github/workflows/version.yml`.
 
