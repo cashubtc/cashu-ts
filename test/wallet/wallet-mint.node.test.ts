@@ -1276,7 +1276,7 @@ describe('generic mint/melt methods', () => {
 
       const quotes = await wallet.checkMintQuoteBatch<BacsMintQuoteRes>(
         'bacs',
-        { quotes: ['bacs-batch-1', 'bacs-batch-2'] },
+        ['bacs-batch-1', 'bacs-batch-2'],
         {
           normalize: (raw) => ({
             ...(raw as BacsMintQuoteRes),

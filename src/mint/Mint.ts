@@ -40,7 +40,7 @@ import {
   type SerializedBlindedSignature,
 } from '../model/types';
 import type { GetKeysResponse, GetKeysetsResponse } from '../model/types/keyset';
-import { type BatchMintQuoteRequest, type BatchMintRequest } from '../model/types/NUT29';
+import { type BatchCheckMintQuoteRequest, type BatchMintRequest } from '../model/types/NUT29';
 import request, {
   WSConnection,
   setRequestLogger,
@@ -407,25 +407,33 @@ class Mint {
    * objects in the same order as the request. Normalization follows the same stacking pattern as
    * {@link Mint.checkMintQuote}.
    * @param method The payment method (e.g., 'bolt11', 'bolt12', or custom method name).
-   * @param checkPayload Payload containing quote IDs to check.
+   * @param quotes Quote IDs to check.
    * @param options.customRequest Optional override for the request function.
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns Mint quote responses in request order.
    */
   async checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(
     method: string,
-    checkPayload: BatchMintQuoteRequest,
+    quotes: string[],
     options?: { customRequest?: RequestFn; normalize?: (raw: Record<string, unknown>) => TRes },
   ): Promise<TRes[]> {
     failIf(!this.isValidMethodString(method), `Invalid mint quote method: ${method}`, this._logger);
+    failIf(quotes.length === 0, 'checkMintQuoteBatch: no quote ids provided', this._logger);
+    failIf(
+      new Set(quotes).size !== quotes.length,
+      'checkMintQuoteBatch: duplicate quote ids provided',
+      this._logger,
+    );
+
+    const requestBody: BatchCheckMintQuoteRequest = { quotes };
     const data = await this.requestWithAuth<TRes[]>(
       'POST',
       `/v1/mint/quote/${method}/check`,
-      { requestBody: checkPayload },
+      { requestBody },
       options?.customRequest,
     );
 
-    if (!Array.isArray(data)) {
+    if (!Array.isArray(data) || data.length !== quotes.length) {
       this._logger.error('Invalid response from mint...', {
         data,
         op: `checkMintQuoteBatch.${method}`,
@@ -433,9 +441,16 @@ class Mint {
       throw new CTSError('Invalid response from mint');
     }
 
-    return data.map((response) =>
-      this.normalizeMintQuoteResponse(method, response, options?.normalize),
-    );
+    return data.map((response, index) => {
+      if (response.quote !== quotes[index]) {
+        this._logger.error('Invalid response from mint...', {
+          data,
+          op: `checkMintQuoteBatch.${method}`,
+        });
+        throw new CTSError('Invalid response from mint');
+      }
+      return this.normalizeMintQuoteResponse(method, response, options?.normalize);
+    });
   }
 
   /**
@@ -443,15 +458,15 @@ class Mint {
    *
    * @remarks
    * Thin wrapper around checkMintQuoteBatch('bolt11', ...).
-   * @param checkPayload Payload containing quote IDs to check.
+   * @param quotes Quote IDs to check.
    * @param customRequest Optional override for the request function.
    * @returns Updated BOLT11 mint quotes in request order.
    */
   async checkMintQuoteBatchBolt11(
-    checkPayload: BatchMintQuoteRequest,
+    quotes: string[],
     customRequest?: RequestFn,
   ): Promise<MintQuoteBolt11Response[]> {
-    return this.checkMintQuoteBatch<MintQuoteBolt11Response>('bolt11', checkPayload, {
+    return this.checkMintQuoteBatch<MintQuoteBolt11Response>('bolt11', quotes, {
       customRequest,
     });
   }
@@ -461,15 +476,15 @@ class Mint {
    *
    * @remarks
    * Thin wrapper around checkMintQuoteBatch('bolt12', ...).
-   * @param checkPayload Payload containing quote IDs to check.
+   * @param quotes Quote IDs to check.
    * @param customRequest Optional override for the request function.
    * @returns Updated BOLT12 mint quotes in request order.
    */
   async checkMintQuoteBatchBolt12(
-    checkPayload: BatchMintQuoteRequest,
+    quotes: string[],
     customRequest?: RequestFn,
   ): Promise<MintQuoteBolt12Response[]> {
-    return this.checkMintQuoteBatch<MintQuoteBolt12Response>('bolt12', checkPayload, {
+    return this.checkMintQuoteBatch<MintQuoteBolt12Response>('bolt12', quotes, {
       customRequest,
     });
   }

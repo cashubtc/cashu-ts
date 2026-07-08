@@ -13,7 +13,7 @@ export type Nut29Info = {
 /**
  * Payload that needs to be sent to the mint when checking NUT-29 batched mint quotes.
  */
-export type BatchMintQuoteRequest = {
+export type BatchCheckMintQuoteRequest = {
   /**
    * Array of unique Quote IDs received from the mint.
    */

@@ -521,7 +521,7 @@ describe('Mint normalization', () => {
     }) as RequestFn;
     const mint = new Mint(mintUrl, { customRequest: requestSpy });
 
-    const quotes = await mint.checkMintQuoteBatchBolt11({ quotes: ['q1', 'q2'] });
+    const quotes = await mint.checkMintQuoteBatchBolt11(['q1', 'q2']);
 
     expect(quotes).toHaveLength(2);
     expect(quotes[0].quote).toBe('q1');
@@ -534,6 +534,7 @@ describe('Mint normalization', () => {
     const requestSpy = vi.fn(async (options: ReqArgs) => {
       expect(options.endpoint).toBe(mintUrl + '/v1/mint/quote/bolt12/check');
       expect(options.method).toBe('POST');
+      expect(options.requestBody).toEqual({ quotes: ['q1'] });
       return [
         {
           quote: 'q1',
@@ -549,7 +550,7 @@ describe('Mint normalization', () => {
     }) as RequestFn;
     const mint = new Mint(mintUrl, { customRequest: requestSpy });
 
-    const quotes = await mint.checkMintQuoteBatchBolt12({ quotes: ['q1'] });
+    const quotes = await mint.checkMintQuoteBatchBolt12(['q1']);
 
     expect(quotes[0].amount).toBeNull();
     expect(quotes[0].amount_paid.toBigInt()).toBe(42n);
@@ -578,16 +579,12 @@ describe('Mint normalization', () => {
       reference: string;
     };
 
-    const quotes = await mint.checkMintQuoteBatch<CustomQuote>(
-      'custom-pay',
-      { quotes: ['q1'] },
-      {
-        normalize: (raw) => ({
-          ...(raw as CustomQuote),
-          amount: Amount.from(raw.amount as number),
-        }),
-      },
-    );
+    const quotes = await mint.checkMintQuoteBatch<CustomQuote>('custom-pay', ['q1'], {
+      normalize: (raw) => ({
+        ...(raw as CustomQuote),
+        amount: Amount.from(raw.amount as number),
+      }),
+    });
 
     expect(quotes[0].reference).toBe('ABC');
     expect(quotes[0].amount.toBigInt()).toBe(5000n);
@@ -600,7 +597,7 @@ describe('Mint normalization', () => {
       logger,
     });
 
-    await expect(mint.checkMintQuoteBatchBolt11({ quotes: ['q1'] })).rejects.toThrow(
+    await expect(mint.checkMintQuoteBatchBolt11(['q1'])).rejects.toThrow(
       'Invalid response from mint',
     );
     expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
@@ -622,10 +619,76 @@ describe('Mint normalization', () => {
     ]) as RequestFn;
     const mint = new Mint(mintUrl, { customRequest: requestSpy });
 
-    const quotes = await mint.checkMintQuoteBatchBolt11({ quotes: ['q1'] });
+    const quotes = await mint.checkMintQuoteBatchBolt11(['q1']);
 
     expect(quotes[0].quote).toBe('q1');
     expect(quotes[0].amount.toBigInt()).toBe(100n);
+  });
+
+  it('checkMintQuoteBatch rejects an empty quote list before requesting the mint', async () => {
+    const requestSpy = vi.fn(async () => []) as RequestFn;
+    const mint = new Mint(mintUrl, { customRequest: requestSpy });
+
+    await expect(mint.checkMintQuoteBatchBolt11([])).rejects.toThrow(
+      'checkMintQuoteBatch: no quote ids provided',
+    );
+    expect(requestSpy).not.toHaveBeenCalled();
+  });
+
+  it('checkMintQuoteBatch rejects duplicate quote IDs before requesting the mint', async () => {
+    const requestSpy = vi.fn(async () => []) as RequestFn;
+    const mint = new Mint(mintUrl, { customRequest: requestSpy });
+
+    await expect(mint.checkMintQuoteBatchBolt11(['q1', 'q1'])).rejects.toThrow(
+      'checkMintQuoteBatch: duplicate quote ids provided',
+    );
+    expect(requestSpy).not.toHaveBeenCalled();
+  });
+
+  it('checkMintQuoteBatch rejects response length mismatches', async () => {
+    const mint = new Mint(mintUrl, {
+      customRequest: makeRequest([
+        {
+          quote: 'q1',
+          request: 'lnbc100...',
+          unit: 'sat',
+          amount: 100,
+          state: 'PAID',
+          expiry: 123,
+        },
+      ]),
+    });
+
+    await expect(mint.checkMintQuoteBatchBolt11(['q1', 'q2'])).rejects.toThrow(
+      'Invalid response from mint',
+    );
+  });
+
+  it('checkMintQuoteBatch rejects out-of-order quote responses', async () => {
+    const mint = new Mint(mintUrl, {
+      customRequest: makeRequest([
+        {
+          quote: 'q2',
+          request: 'lnbc50...',
+          unit: 'sat',
+          amount: 50,
+          state: 'PAID',
+          expiry: 123,
+        },
+        {
+          quote: 'q1',
+          request: 'lnbc100...',
+          unit: 'sat',
+          amount: 100,
+          state: 'PAID',
+          expiry: 123,
+        },
+      ]),
+    });
+
+    await expect(mint.checkMintQuoteBatchBolt11(['q1', 'q2'])).rejects.toThrow(
+      'Invalid response from mint',
+    );
   });
 
   it('throws for invalid custom method strings', async () => {
@@ -637,7 +700,7 @@ describe('Mint normalization', () => {
     await expect(mint.checkMintQuote('bad method', 'q1')).rejects.toThrow(
       'Invalid mint quote method: bad method',
     );
-    await expect(mint.checkMintQuoteBatch('bad method', { quotes: ['q1'] })).rejects.toThrow(
+    await expect(mint.checkMintQuoteBatch('bad method', ['q1'])).rejects.toThrow(
       'Invalid mint quote method: bad method',
     );
     await expect(mint.mint('bad method', { quote: 'q1', outputs: [] })).rejects.toThrow(
@@ -952,7 +1015,7 @@ describe('Mint normalization', () => {
       logger,
     });
 
-    await expect(mint.checkMintQuoteBatch('bolt11', { quotes: ['q1'] })).rejects.toThrow(
+    await expect(mint.checkMintQuoteBatch('bolt11', ['q1'])).rejects.toThrow(
       'Invalid response from mint',
     );
     expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {

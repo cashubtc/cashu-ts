@@ -51,7 +51,7 @@ import type {
 import type { SerializedBlindedSignature } from '../model/types/blinded';
 import type { KeyChainCache } from '../model/types/keyset';
 import { CheckStateEnum, type ProofState } from '../model/types/NUT07';
-import { type BatchMintQuoteRequest, type BatchMintRequest } from '../model/types/NUT29';
+import { type BatchMintRequest } from '../model/types/NUT29';
 import type { Proof, ProofLike } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 import type { RequestFetch, RequestFn } from '../transport';
@@ -1923,25 +1923,23 @@ class Wallet {
    *
    * @remarks
    * Generic method for checking multiple mint quote statuses. An optional `normalize` callback can
-   * be used to coerce method-specific response fields.
+   * be used to coerce method-specific response fields. Mints that predate this endpoint return an
+   * error; callers can fall back to `checkMintQuote()` per quote id when needed.
    *
    * For first-class methods, prefer the typed helpers: `checkMintQuoteBatchBolt11()`,
    * `checkMintQuoteBatchBolt12()`.
    * @param method The payment method (e.g., 'bolt11', 'bolt12', 'bacs', 'swift').
-   * @param quotes Batch check payload, quote IDs, or quote objects (each object must have a `quote`
-   *   field).
+   * @param quotes Quote IDs or quote objects (each object must have a `quote` field).
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns Mint quote responses in request order.
    */
   async checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(
     method: string,
-    quotes: BatchMintQuoteRequest | Array<string | Pick<TRes, 'quote'>>,
+    quotes: Array<string | Pick<TRes, 'quote'>>,
     options?: { normalize?: (raw: Record<string, unknown>) => TRes },
   ): Promise<TRes[]> {
-    const payload = Array.isArray(quotes)
-      ? { quotes: quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote)) }
-      : quotes;
-    return this.mint.checkMintQuoteBatch<TRes>(method, payload, {
+    const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
+    return this.mint.checkMintQuoteBatch<TRes>(method, quoteIds, {
       normalize: options?.normalize,
     });
   }
@@ -1949,31 +1947,33 @@ class Wallet {
   /**
    * Checks existing BOLT11 mint quotes in one batched request.
    *
-   * @param quotes Batch check payload, quote IDs, or quote objects.
+   * @remarks
+   * Mints that predate this endpoint return an error; callers can fall back to
+   * `checkMintQuoteBolt11()` per quote id when needed.
+   * @param quotes Quote IDs or quote objects.
    * @returns Updated BOLT11 mint quotes in request order.
    */
   async checkMintQuoteBatchBolt11(
-    quotes: BatchMintQuoteRequest | Array<string | MintQuoteBolt11Response>,
+    quotes: Array<string | MintQuoteBolt11Response>,
   ): Promise<MintQuoteBolt11Response[]> {
-    const payload = Array.isArray(quotes)
-      ? { quotes: quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote)) }
-      : quotes;
-    return this.mint.checkMintQuoteBatchBolt11(payload);
+    const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
+    return this.mint.checkMintQuoteBatchBolt11(quoteIds);
   }
 
   /**
    * Checks existing BOLT12 mint quotes in one batched request.
    *
-   * @param quotes Batch check payload, quote IDs, or quote objects.
+   * @remarks
+   * Mints that predate this endpoint return an error; callers can fall back to
+   * `checkMintQuoteBolt12()` per quote id when needed.
+   * @param quotes Quote IDs or quote objects.
    * @returns Updated BOLT12 mint quotes in request order.
    */
   async checkMintQuoteBatchBolt12(
-    quotes: BatchMintQuoteRequest | Array<string | MintQuoteBolt12Response>,
+    quotes: Array<string | MintQuoteBolt12Response>,
   ): Promise<MintQuoteBolt12Response[]> {
-    const payload = Array.isArray(quotes)
-      ? { quotes: quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote)) }
-      : quotes;
-    return this.mint.checkMintQuoteBatchBolt12(payload);
+    const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
+    return this.mint.checkMintQuoteBatchBolt12(quoteIds);
   }
 
   // -----------------------------------------------------------------
