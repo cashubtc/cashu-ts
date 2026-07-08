@@ -1191,6 +1191,163 @@ describe('generic mint/melt methods', () => {
       expect(quote.quote).toBe('bacs-quote-2');
     });
 
+    test('checkMintQuoteBatchBolt11 posts quote ids and normalizes responses', async () => {
+      server.use(
+        http.post(mintUrl + '/v1/mint/quote/bolt11/check', async ({ request }) => {
+          const body = (await request.json()) as { quotes: string[] };
+          expect(body).toEqual({ quotes: ['bolt11-batch-1', 'bolt11-batch-2'] });
+          return HttpResponse.json([
+            {
+              quote: 'bolt11-batch-1',
+              request: 'lnbc1000...',
+              unit: 'sat',
+              amount: 1000,
+              state: MintQuoteState.PAID,
+              expiry: 3600,
+            },
+            {
+              quote: 'bolt11-batch-2',
+              request: 'lnbc2000...',
+              unit: 'sat',
+              amount: 2000,
+              state: MintQuoteState.UNPAID,
+              expiry: 7200,
+            },
+          ]);
+        }),
+      );
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+
+      const quotes = await wallet.checkMintQuoteBatchBolt11([
+        'bolt11-batch-1',
+        {
+          quote: 'bolt11-batch-2',
+          request: 'local-request',
+          unit: 'sat',
+          amount: Amount.from(1),
+          state: MintQuoteState.UNPAID,
+          expiry: null,
+        },
+      ]);
+
+      expect(quotes.map((quote) => quote.quote)).toEqual(['bolt11-batch-1', 'bolt11-batch-2']);
+      expect(quotes[0].amount).toBeInstanceOf(Amount);
+      expect(quotes[0].amount.toBigInt()).toBe(1000n);
+      expect(quotes[1].amount.toBigInt()).toBe(2000n);
+    });
+
+    test('checkMintQuoteBatchBolt12 posts quote ids and normalizes responses', async () => {
+      server.use(
+        http.post(mintUrl + '/v1/mint/quote/bolt12/check', async ({ request }) => {
+          const body = (await request.json()) as { quotes: string[] };
+          expect(body).toEqual({ quotes: ['bolt12-batch-1', 'bolt12-batch-2'] });
+          return HttpResponse.json([
+            {
+              quote: 'bolt12-batch-1',
+              request: 'lno...',
+              unit: 'sat',
+              amount: null,
+              amount_paid: 42,
+              amount_issued: 0,
+              state: MintQuoteState.PAID,
+              expiry: 3600,
+              pubkey: '02a1',
+            },
+            {
+              quote: 'bolt12-batch-2',
+              request: 'lno...',
+              unit: 'sat',
+              amount: null,
+              amount_paid: 7,
+              amount_issued: 7,
+              state: MintQuoteState.ISSUED,
+              expiry: 3600,
+              pubkey: '02a1',
+            },
+          ]);
+        }),
+      );
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+
+      // Mix a quote object and a bare id to cover both id-extraction branches
+      const quotes = await wallet.checkMintQuoteBatchBolt12([
+        {
+          quote: 'bolt12-batch-1',
+          request: 'lno...',
+          unit: 'sat',
+          amount: null,
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
+          state: MintQuoteState.UNPAID,
+          expiry: null,
+          pubkey: '02a1',
+        },
+        'bolt12-batch-2',
+      ]);
+
+      expect(quotes.map((quote) => quote.quote)).toEqual(['bolt12-batch-1', 'bolt12-batch-2']);
+      expect(quotes[0].amount).toBeNull();
+      expect(quotes[0].amount_paid.toBigInt()).toBe(42n);
+      expect(quotes[0].amount_issued.toBigInt()).toBe(0n);
+      expect(quotes[1].amount_issued.toBigInt()).toBe(7n);
+    });
+
+    test('checkMintQuoteBatch with custom method hits /v1/mint/quote/{method}/check', async () => {
+      server.use(
+        http.get(mintUrl + '/v1/info', () => HttpResponse.json(mintInfoRespWithBacs)),
+        http.post(mintUrl + '/v1/mint/quote/bacs/check', async ({ request }) => {
+          const body = (await request.json()) as { quotes: string[] };
+          expect(body).toEqual({ quotes: ['bacs-batch-1', 'bacs-batch-2'] });
+          return HttpResponse.json([
+            {
+              quote: 'bacs-batch-1',
+              request: 'CASHU-REF-1',
+              unit: 'gbp',
+              amount: 5000,
+              reference: 'REF-1',
+              state: MintQuoteState.PAID,
+              expiry: null,
+            },
+            {
+              quote: 'bacs-batch-2',
+              request: 'CASHU-REF-2',
+              unit: 'gbp',
+              amount: 2500,
+              reference: 'REF-2',
+              state: MintQuoteState.UNPAID,
+              expiry: null,
+            },
+          ]);
+        }),
+      );
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+
+      type BacsMintQuoteRes = MintQuoteBaseResponse & {
+        amount: Amount;
+        reference: string;
+        state: MintQuoteState;
+      };
+
+      const quotes = await wallet.checkMintQuoteBatch<BacsMintQuoteRes>(
+        'bacs',
+        ['bacs-batch-1', { quote: 'bacs-batch-2' }],
+        {
+          normalize: (raw) => ({
+            ...(raw as BacsMintQuoteRes),
+            amount: Amount.from(raw.amount as AmountLike),
+          }),
+        },
+      );
+
+      expect(quotes[0].reference).toBe('REF-1');
+      expect(quotes[0].amount.toBigInt()).toBe(5000n);
+      expect(quotes[1].reference).toBe('REF-2');
+      expect(quotes[1].amount.toBigInt()).toBe(2500n);
+    });
+
     test('createMintQuoteOnchain returns normalized onchain quote', async () => {
       server.use(
         http.post(mintUrl + '/v1/mint/quote/onchain', async ({ request }) => {
