@@ -121,17 +121,38 @@ describe('P2PKBuilder.toOptions()', () => {
     expect('requiredRefundSignatures' in o2).toBe(false);
   });
 
-  it('enforces combined lock+refund keys limit of 10', () => {
-    // build 11 distinct keys
-    const chars = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b'];
+  it('enforces the combined lock+refund slot limit of 11 (NUT-28)', () => {
+    // 12 distinct keys; NUT-28 allows up to 11 slots ([data, ...pubkeys, ...refund]).
+    const chars = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c'];
     const keys = chars.map((c, i) => comp(c as any, i % 2 === 0 ? '02' : '03'));
 
-    const b = new P2PKBuilder()
-      .addLockPubkey(keys.slice(0, 8)) // 8 locks
-      .lockUntil(Date.now() + 60)
-      .addRefundPubkey(keys.slice(8)); // 3 refunds => total 11
+    // 8 locks + 3 refunds = 11 slots: allowed.
+    expect(() =>
+      new P2PKBuilder()
+        .addLockPubkey(keys.slice(0, 8))
+        .lockUntil(Date.now() + 60)
+        .addRefundPubkey(keys.slice(8, 11))
+        .toOptions(),
+    ).not.toThrow();
 
-    expect(() => b.toOptions()).toThrow(/Too many pubkeys/i);
+    // 8 locks + 4 refunds = 12 slots: rejected.
+    expect(() =>
+      new P2PKBuilder()
+        .addLockPubkey(keys.slice(0, 8))
+        .lockUntil(Date.now() + 60)
+        .addRefundPubkey(keys.slice(8))
+        .toOptions(),
+    ).toThrow(/Too many pubkeys/i);
+
+    // HTLC: hashlock occupies slot 0, so 11 keys is one too many.
+    expect(() =>
+      new P2PKBuilder()
+        .addHashlock('ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5')
+        .addLockPubkey(keys.slice(0, 8))
+        .lockUntil(Date.now() + 60)
+        .addRefundPubkey(keys.slice(8, 11))
+        .toOptions(),
+    ).toThrow(/Too many pubkeys/i);
   });
 
   it('round-trips via fromOptions', () => {

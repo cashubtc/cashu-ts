@@ -100,9 +100,14 @@ export class P2PKBuilder {
       );
     }
 
-    const total = locks.length + refunds.length;
-    if (total > 10)
-      throw new Error(`Too many pubkeys, ${total} provided, maximum allowed is 10 in total`);
+    // NUT-28: up to 11 locking slots in [data, ...pubkeys, ...refund] (i_byte 0x00..0x0A). Slot 0
+    // is the first pubkey for P2PK, but the hashlock for HTLC, so HTLC's hashlock costs a slot on
+    // top of the keys. P2PK thus allows 11 keys, HTLC 10.
+    const slotCount = (this.hashlock ? 1 : 0) + locks.length + refunds.length;
+    if (slotCount > 11)
+      throw new Error(
+        `Too many pubkeys, ${slotCount} slots provided, maximum allowed is 11 in total`,
+      );
 
     // Clamp required signatures to available keys
     const reqLock = this.nSigs ? Math.min(Math.max(1, this.nSigs), locks.length) : undefined;
