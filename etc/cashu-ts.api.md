@@ -207,6 +207,11 @@ export interface BatchMintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'qu
 }
 
 // @public
+export type BatchMintQuoteRequest = {
+    quotes: string[];
+};
+
+// @public
 export type BatchMintRequest = {
     quotes: string[];
     quote_amounts: Amount[];
@@ -992,6 +997,12 @@ export class Mint {
         customRequest?: RequestFn;
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
+    checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(method: string, checkPayload: BatchMintQuoteRequest, options?: {
+        customRequest?: RequestFn;
+        normalize?: (raw: Record<string, unknown>) => TRes;
+    }): Promise<TRes[]>;
+    checkMintQuoteBatchBolt11(checkPayload: BatchMintQuoteRequest, customRequest?: RequestFn): Promise<MintQuoteBolt11Response[]>;
+    checkMintQuoteBatchBolt12(checkPayload: BatchMintQuoteRequest, customRequest?: RequestFn): Promise<MintQuoteBolt12Response[]>;
     checkMintQuoteBolt11(quote: string, customRequest?: RequestFn): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt12(quote: string, customRequest?: RequestFn): Promise<MintQuoteBolt12Response>;
     checkMintQuoteOnchain(quote: string, customRequest?: RequestFn): Promise<MintQuoteOnchainResponse>;
@@ -2223,6 +2234,11 @@ export class Wallet {
     checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, quote: string | Pick<TRes, 'quote'>, options?: {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
+    checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(method: string, quotes: BatchMintQuoteRequest | Array<string | Pick<TRes, 'quote'>>, options?: {
+        normalize?: (raw: Record<string, unknown>) => TRes;
+    }): Promise<TRes[]>;
+    checkMintQuoteBatchBolt11(quotes: BatchMintQuoteRequest | Array<string | MintQuoteBolt11Response>): Promise<MintQuoteBolt11Response[]>;
+    checkMintQuoteBatchBolt12(quotes: BatchMintQuoteRequest | Array<string | MintQuoteBolt12Response>): Promise<MintQuoteBolt12Response[]>;
     checkMintQuoteBolt11(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt12(quote: string): Promise<MintQuoteBolt12Response>;
     checkMintQuoteOnchain(quote: string): Promise<MintQuoteOnchainResponse>;

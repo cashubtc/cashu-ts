@@ -40,7 +40,7 @@ import {
   type SerializedBlindedSignature,
 } from '../model/types';
 import type { GetKeysResponse, GetKeysetsResponse } from '../model/types/keyset';
-import { type BatchMintRequest } from '../model/types/NUT29';
+import { type BatchMintQuoteRequest, type BatchMintRequest } from '../model/types/NUT29';
 import request, {
   WSConnection,
   setRequestLogger,
@@ -397,6 +397,81 @@ class Mint {
     customRequest?: RequestFn,
   ): Promise<MintQuoteOnchainResponse> {
     return this.checkMintQuote<MintQuoteOnchainResponse>('onchain', quote, { customRequest });
+  }
+
+  /**
+   * Checks existing mint quotes for any payment method in one batched request.
+   *
+   * @remarks
+   * Uses `/v1/mint/quote/{method}/check` and validates method format. The mint returns quote
+   * objects in the same order as the request. Normalization follows the same stacking pattern as
+   * {@link Mint.checkMintQuote}.
+   * @param method The payment method (e.g., 'bolt11', 'bolt12', or custom method name).
+   * @param checkPayload Payload containing quote IDs to check.
+   * @param options.customRequest Optional override for the request function.
+   * @param options.normalize Optional callback to normalize method-specific response fields.
+   * @returns Mint quote responses in request order.
+   */
+  async checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(
+    method: string,
+    checkPayload: BatchMintQuoteRequest,
+    options?: { customRequest?: RequestFn; normalize?: (raw: Record<string, unknown>) => TRes },
+  ): Promise<TRes[]> {
+    failIf(!this.isValidMethodString(method), `Invalid mint quote method: ${method}`, this._logger);
+    const data = await this.requestWithAuth<TRes[]>(
+      'POST',
+      `/v1/mint/quote/${method}/check`,
+      { requestBody: checkPayload },
+      options?.customRequest,
+    );
+
+    if (!Array.isArray(data)) {
+      this._logger.error('Invalid response from mint...', {
+        data,
+        op: `checkMintQuoteBatch.${method}`,
+      });
+      throw new CTSError('Invalid response from mint');
+    }
+
+    return data.map((response) =>
+      this.normalizeMintQuoteResponse(method, response, options?.normalize),
+    );
+  }
+
+  /**
+   * Checks existing BOLT11 mint quotes in one batched request.
+   *
+   * @remarks
+   * Thin wrapper around checkMintQuoteBatch('bolt11', ...).
+   * @param checkPayload Payload containing quote IDs to check.
+   * @param customRequest Optional override for the request function.
+   * @returns Updated BOLT11 mint quotes in request order.
+   */
+  async checkMintQuoteBatchBolt11(
+    checkPayload: BatchMintQuoteRequest,
+    customRequest?: RequestFn,
+  ): Promise<MintQuoteBolt11Response[]> {
+    return this.checkMintQuoteBatch<MintQuoteBolt11Response>('bolt11', checkPayload, {
+      customRequest,
+    });
+  }
+
+  /**
+   * Checks existing BOLT12 mint quotes in one batched request.
+   *
+   * @remarks
+   * Thin wrapper around checkMintQuoteBatch('bolt12', ...).
+   * @param checkPayload Payload containing quote IDs to check.
+   * @param customRequest Optional override for the request function.
+   * @returns Updated BOLT12 mint quotes in request order.
+   */
+  async checkMintQuoteBatchBolt12(
+    checkPayload: BatchMintQuoteRequest,
+    customRequest?: RequestFn,
+  ): Promise<MintQuoteBolt12Response[]> {
+    return this.checkMintQuoteBatch<MintQuoteBolt12Response>('bolt12', checkPayload, {
+      customRequest,
+    });
   }
 
   // -----------------------------------------------------------------
