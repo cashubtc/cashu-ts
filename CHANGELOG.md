@@ -1,5 +1,33 @@
 # Changelog
 
+## [5.0.0-rc.3](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.2...v5.0.0-rc.3) (2026-07-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* **crypto:** align NUT-29 batch quote signatures with amended spec ([#675](https://github.com/cashubtc/cashu-ts/issues/675))
+* **nut04/05:** quote accounting and custom payment method base structs ([#698](https://github.com/cashubtc/cashu-ts/issues/698))
+
+### Features
+
+* **crypto:** deterministic P2PK & NUT-20 quote-lock key derivation ([#697](https://github.com/cashubtc/cashu-ts/issues/697)) ([042e56c](https://github.com/cashubtc/cashu-ts/commit/042e56ccb6275296a6c60bcc0b6403239ef5ae77))
+* **nut04/05:** quote accounting and custom payment method base structs ([#698](https://github.com/cashubtc/cashu-ts/issues/698)) ([0e373f9](https://github.com/cashubtc/cashu-ts/commit/0e373f99fc277072b4f7c2ecb7d2ba7d15c247e1))
+* **nut29:** add batch quote checks ([#768](https://github.com/cashubtc/cashu-ts/issues/768)) ([854d91f](https://github.com/cashubtc/cashu-ts/commit/854d91f22a401a3d0ccf2bc2690f621bb0de583e))
+
+
+### Bug Fixes
+
+* **crypto:** align NUT-29 batch quote signatures with amended spec ([#675](https://github.com/cashubtc/cashu-ts/issues/675)) ([f3a3841](https://github.com/cashubtc/cashu-ts/commit/f3a38411920f9a75d1c37a7d55bbf08e94d19704))
+* **p2bk:** align HTLC key slots with the [data, ...pubkeys, ...refund] order (NUT-28) ([#763](https://github.com/cashubtc/cashu-ts/issues/763)) ([bb0b766](https://github.com/cashubtc/cashu-ts/commit/bb0b76684f350a9433a0120cd35330ac4b7bd28c))
+* **p2pk:** cap NUT-28 locking slots at 11 (P2PK 11 keys, HTLC 10) ([#753](https://github.com/cashubtc/cashu-ts/issues/753)) ([80a55b9](https://github.com/cashubtc/cashu-ts/commit/80a55b9627a6cb180f72f5b3e1a03b4f098923cc))
+* **scripts:** probe docker tags with and without v prefix ([#726](https://github.com/cashubtc/cashu-ts/issues/726)) ([8667aca](https://github.com/cashubtc/cashu-ts/commit/8667acaa412ffb8695b964a764bf0c0cb4cd8fb4))
+* **utils:** throw CTSError for malformed token templates ([#742](https://github.com/cashubtc/cashu-ts/issues/742)) ([c60cd35](https://github.com/cashubtc/cashu-ts/commit/c60cd3578c8096a6d9e4cc6a76a99bfa7d07a359))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump actions/setup-node from 4 to 6 in /.github/actions/integration-against-mint in the github-actions group ([#729](https://github.com/cashubtc/cashu-ts/issues/729)) ([b94af5f](https://github.com/cashubtc/cashu-ts/commit/b94af5fe3fe2757ab41b6c18649d6c71c1df7d4a))
+
 ## [5.0.0-rc.2](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.1...v5.0.0-rc.2) (2026-07-01)
 
 
