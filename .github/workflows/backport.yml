@@ -20,6 +20,7 @@ jobs:
     # Skip closed-unmerged PRs and non-backport label events.
     # Label format: "backport <branch>", e.g. "backport v4-dev"
     if: |
+      github.repository == 'cashubtc/cashu-ts' &&
       github.event.pull_request.merged &&
       (
         github.event.action != 'labeled' ||

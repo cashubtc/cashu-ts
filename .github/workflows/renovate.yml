@@ -7,6 +7,7 @@ on:
 
 jobs:
   update-docker:
+    if: github.repository == 'cashubtc/cashu-ts'
     permissions:
       contents: write # Needed to push branches and commits
       pull-requests: write # Needed to create PRs
