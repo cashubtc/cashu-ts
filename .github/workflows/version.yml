@@ -27,6 +27,7 @@ on:
 
 jobs:
   build:
+    if: github.repository == 'cashubtc/cashu-ts'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo (release tag or manual tag)

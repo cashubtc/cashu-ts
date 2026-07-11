@@ -14,7 +14,7 @@ on:
 jobs:
   build:
     # Run on manual dispatch, or on non-prerelease v4 tags from mainline releases.
-    if: ${{ github.event_name == 'workflow_dispatch' || !contains(github.ref_name, '-') }}
+    if: ${{ github.repository == 'cashubtc/cashu-ts' && (github.event_name == 'workflow_dispatch' || !contains(github.ref_name, '-')) }}
     runs-on: ubuntu-latest
 
     steps:

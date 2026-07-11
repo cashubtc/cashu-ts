@@ -16,6 +16,7 @@ permissions:
 
 jobs:
   agenda:
+    if: github.repository == 'cashubtc/cashu-ts'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
