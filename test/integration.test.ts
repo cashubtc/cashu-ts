@@ -870,7 +870,7 @@ describe('Custom Outputs', () => {
     const signedMeltKeep = wallet.signP2PKProofs(meltKeep, hexSk);
     const unlockedProofs = await wallet.send(restAmount, signedMeltKeep);
     // Just to receive them and lock them again, but this time overwriting the default factory
-    const testPk = '02' + 'ab'.repeat(32);
+    const testPk = '02' + bytesToHex(schnorr.getPublicKey(new Uint8Array(32).fill(0xab)));
     const newFactory: OutputType = {
       type: 'factory',
       factory: (a, k) => OutputData.createSingleP2PKData({ kind: 'P2PK', data: testPk }, a, k.id),
@@ -890,7 +890,7 @@ describe('Custom Outputs', () => {
       }
       return inner;
     }
-    const mintPk = '02' + 'cd'.repeat(32);
+    const mintPk = '02' + bytesToHex(schnorr.getPublicKey(new Uint8Array(32).fill(0xcd)));
     const manualFactory: OutputType = { type: 'factory', factory: createFactory(mintPk) };
     const wallet = new Wallet(mintUrl);
     await wallet.loadMint();
@@ -911,8 +911,8 @@ describe('Custom Outputs', () => {
     const quote = await wallet.createMintQuoteBolt11(21);
     await untilMintQuotePaid(wallet, quote);
     const proofs = await wallet.mintProofsBolt11(21, quote.quote);
-    const sendPk = '02' + 'ee'.repeat(32);
-    const keepPk = '02' + 'ff'.repeat(32);
+    const sendPk = '02' + bytesToHex(schnorr.getPublicKey(new Uint8Array(32).fill(0xee)));
+    const keepPk = '02' + bytesToHex(schnorr.getPublicKey(new Uint8Array(32).fill(0xef)));
     const amount = sumProofs(proofs).subtract(wallet.getFeesForProofs(proofs));
     const { send, keep } = await wallet.send(
       amount,
@@ -933,8 +933,8 @@ describe('Custom Outputs', () => {
     const quote = await wallet.createMintQuoteBolt11(40);
     await untilMintQuotePaid(wallet, quote);
     const proofs = await wallet.mintProofsBolt11(40, quote.quote);
-    const pk1 = '02' + 'aa'.repeat(32);
-    const pk2 = '02' + 'bb'.repeat(32);
+    const pk1 = '02' + bytesToHex(schnorr.getPublicKey(new Uint8Array(32).fill(0xaa)));
+    const pk2 = '02' + bytesToHex(schnorr.getPublicKey(new Uint8Array(32).fill(0xbb)));
     const data1 = OutputData.createP2PKData({ kind: 'P2PK', data: pk1 }, 10, keys);
     const data2 = OutputData.createP2PKData({ kind: 'P2PK', data: pk2 }, 10, keys);
     const customConfig: OutputConfig = {
