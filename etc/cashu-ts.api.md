@@ -1021,6 +1021,13 @@ export class Mint {
     getKeys(keysetId?: string, mintUrl?: string, customRequest?: RequestFn): Promise<GetKeysResponse>;
     getKeySets(customRequest?: RequestFn): Promise<GetKeysetsResponse>;
     getLazyMintInfo(customRequest?: RequestFn): Promise<MintInfo>;
+    getMintQuotesByPubkey<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(method: string, payload: {
+        pubkeys: string[];
+        pubkey_signatures: string[];
+    }, options?: {
+        customRequest?: RequestFn;
+        normalize?: (raw: Record<string, unknown>) => TRes;
+    }): Promise<TRes[]>;
     get lastResponseMetadata(): ResponseMeta | undefined;
     melt<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, meltPayload: MeltRequest, options?: {
         customRequest?: RequestFn;
@@ -2048,6 +2055,9 @@ export const SigFlags: {
 export function signMintQuote(privkey: string, quote: string, blindedMessages: SerializedBlindedMessage[]): string;
 
 // @public
+export function signMintQuoteLookup(privkey: string, mintPubkey: string, pubkey: string): string;
+
+// @public
 export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: string): Proof;
 
 // @public
@@ -2180,6 +2190,9 @@ export function verifyHTLCHash(preimage: string, hash: string): boolean;
 // @public
 export function verifyHTLCSpendingConditions(proof: Proof, logger?: Logger, message?: string): P2PKVerificationResult;
 
+// @public
+export function verifyMintQuoteLookupSignature(pubkey: string, mintPubkey: string, signature: string): boolean;
+
 // @public (undocumented)
 export function verifyMintQuoteSignature(pubkey: string, quote: string, blindedMessages: SerializedBlindedMessage[], signature: string): boolean;
 
@@ -2267,6 +2280,7 @@ export class Wallet {
     getFeesForProofs(proofs: Array<Pick<Proof, 'id'>>): Amount;
     getKeyset(id?: string): Keyset;
     getMintInfo(): MintInfo;
+    getMintQuotesByPubkey(privkey: string | string[], method?: string): Promise<MintQuoteBaseResponse[]>;
     groupProofsByState<T extends ProofLike = Proof>(proofs: T[]): Promise<{
         unspent: T[];
         pending: T[];
