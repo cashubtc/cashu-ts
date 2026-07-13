@@ -5,6 +5,7 @@ import { type Logger, NULL_LOGGER } from '../logger';
 import { CTSError } from '../model/Errors';
 import { type OutputDataLike } from '../model/OutputData';
 import { type HTLCWitness, type P2PKWitness, type Proof } from '../model/types';
+import { type NUT10Option } from '../wallet/types/payment-requests';
 
 import { getValidSigners, schnorrSignMessage, schnorrVerifyMessage, type PrivKey } from './core';
 import { pointFromHex } from './curve_secp';
@@ -130,7 +131,7 @@ type WitnessData = {
 
 /**
  * NUT-11 tag keys that map onto structured {@link LockConditions} fields, rather than being carried
- * as free-form `additionalTags`.
+ * as free-form `additionalTags`, and are therefore reserved (not settable as additional tags).
  *
  * @internal
  */
@@ -330,6 +331,93 @@ export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
     ...(p2pk.additionalTags?.length ? { additionalTags: p2pk.additionalTags } : {}),
     ...(p2pk.blindKeys ? { blindKeys: true } : {}),
     ...(p2pk.sigFlag !== undefined ? { sigFlag: p2pk.sigFlag } : {}),
+  };
+}
+
+// ------------------------------
+// Lock Tag Serialization
+// ------------------------------
+
+/**
+ * Asserts P2PK Tag key is valid.
+ *
+ * @param key Tag Key.
+ * @throws If not a string, or is a reserved string.
+ * @internal
+ */
+export function assertValidTagKey(key: string) {
+  if (!key || typeof key !== 'string') throw new CTSError('tag key must be a non empty string');
+  if (P2PK_KNOWN_TAG_KEYS.has(key)) {
+    throw new CTSError(`additionalTags must not use reserved key "${key}"`);
+  }
+}
+
+/**
+ * Serializes NUT-11 lock fields into secret tags.
+ *
+ * @remarks
+ * Expects {@link normalizeP2PKOptions}-canonical input (deduped keys, redundant thresholds dropped).
+ * Thresholds are only emitted alongside their key tag.
+ * @throws If an additional tag uses a reserved or invalid key.
+ * @internal
+ */
+export function buildP2PKTags(lock: LockConditions): string[][] {
+  const tags: string[][] = [];
+  const pubkeys = lock.pubkeys ?? [];
+  const refund = lock.refundKeys ?? [];
+
+  const ts = lock.locktime ?? NaN;
+  if (Number.isSafeInteger(ts) && ts >= 0) {
+    tags.push(['locktime', String(ts)]);
+  }
+
+  if (pubkeys.length > 0) {
+    tags.push(['pubkeys', ...pubkeys]);
+    if ((lock.requiredSignatures ?? 1) > 1) {
+      tags.push(['n_sigs', String(lock.requiredSignatures)]);
+    }
+  }
+
+  if (refund.length > 0) {
+    tags.push(['refund', ...refund]);
+    if ((lock.requiredRefundSignatures ?? 1) > 1) {
+      tags.push(['n_sigs_refund', String(lock.requiredRefundSignatures)]);
+    }
+  }
+
+  if (lock.sigFlag == 'SIG_ALL') {
+    tags.push(['sigflag', 'SIG_ALL']);
+  }
+
+  if (lock.additionalTags?.length) {
+    const extraTags = lock.additionalTags.map(([k, ...vals]) => {
+      assertValidTagKey(k); // Validate key
+      return [k, ...vals.map(String)]; // all to strings
+    });
+    tags.push(...extraTags);
+  }
+
+  return tags;
+}
+
+/**
+ * Converts a {@link P2PKOptions} into the NUT-18 payment request `nut10` option.
+ *
+ * @remarks
+ * Validates and canonicalises the lock (deduped keys, redundant thresholds dropped). `blindKeys`
+ * throws: P2BK blinding is applied per output at send time, so a static request cannot carry it.
+ */
+export function p2pkOptionsToPRNut10(p2pk: P2PKOptions): NUT10Option {
+  const normalized = normalizeP2PKOptions(p2pk);
+  if (normalized.blindKeys) {
+    throw new CTSError(
+      'blindKeys is not expressible in a payment request; the sender applies P2BK blinding per output',
+    );
+  }
+  return {
+    kind: normalized.kind,
+    data: normalized.data,
+    tags: buildP2PKTags(normalized),
   };
 }
 

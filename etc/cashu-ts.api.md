@@ -1598,6 +1598,9 @@ export type P2PKOptions = SpendingConditionsBase & LockConditions & {
 };
 
 // @public
+export function p2pkOptionsToPRNut10(p2pk: P2PKOptions): NUT10Option;
+
+// @public
 export interface P2PKPathInfo {
     pubkeys: string[];
     receivedSigners: string[];
@@ -1643,6 +1646,7 @@ class PaymentRequest_2 {
     // (undocumented)
     amount?: Amount;
     amountToSend(mint: string, mintMethods?: string[]): Amount;
+    static builder(): PaymentRequestBuilder;
     // (undocumented)
     description?: string;
     feesFor(mint: string, mintMethods?: string[]): Amount;
@@ -1677,6 +1681,25 @@ class PaymentRequest_2 {
     unit?: string;
 }
 export { PaymentRequest_2 as PaymentRequest }
+
+// @public
+export class PaymentRequestBuilder {
+    addHttpPostTransport(url: string): this;
+    addMint(mint: string | string[]): this;
+    addNostrTransport(nprofile: string, nips?: string[]): this;
+    addSupportedMethod(method: string, fee?: AmountLike): this;
+    addTransport(transport: PaymentRequestTransport): this;
+    amount(amount: AmountLike, unit: string): this;
+    build(): PaymentRequest_2;
+    description(description: string): this;
+    id(id: string): this;
+    lock(p2pk: P2PKOptions): this;
+    mintsPreferred(preferred?: boolean): this;
+    nut10(option: NUT10Option): this;
+    // (undocumented)
+    singleUse(single?: boolean): this;
+    unit(unit: string): this;
+}
 
 // @public
 export type PaymentRequestOptions = {

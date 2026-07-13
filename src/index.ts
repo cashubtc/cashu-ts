@@ -77,7 +77,11 @@ export * from './utils/core';
 export { JSONInt, type JSONIntApi } from './utils/JSONInt';
 
 // Payment request facade (tests rely on these at top level)
-export { PaymentRequest, type PaymentRequestOptions } from './model/PaymentRequest';
+export {
+  PaymentRequest,
+  PaymentRequestBuilder,
+  type PaymentRequestOptions,
+} from './model/PaymentRequest';
 export { PaymentRequestTransportType } from './wallet/types';
 export type {
   PaymentRequestPayload,

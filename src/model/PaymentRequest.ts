@@ -1,16 +1,21 @@
 import { getTag, getTagInt, getTagScalar } from '../crypto/NUT10';
 import type { P2PKOptions, P2PKTag } from '../crypto/NUT11';
-import { P2PK_KNOWN_TAG_KEYS, normalizePubkey, parseP2PKSecret } from '../crypto/NUT11';
-import { encodeBase64toUint8, decodeCBOR, encodeCBOR, Bytes } from '../utils';
+import {
+  P2PK_KNOWN_TAG_KEYS,
+  normalizePubkey,
+  p2pkOptionsToPRNut10,
+  parseP2PKSecret,
+} from '../crypto/NUT11';
+import { encodeBase64toUint8, decodeCBOR, encodeCBOR, Bytes, normalizeUrl } from '../utils';
 import { decodeBech32mToBytes, encodeBech32m } from '../utils/bech32m';
 import { decodeTLV, encodeTLV } from '../utils/tlv';
 import type { DecodedTLVPaymentRequest } from '../utils/tlv';
+import { PaymentRequestTransportType } from '../wallet/types';
 import type {
   RawPaymentRequest,
   RawTransport,
   NUT10Option,
   PaymentRequestTransport,
-  PaymentRequestTransportType,
   SupportedMethod,
 } from '../wallet/types';
 
@@ -245,6 +250,13 @@ export class PaymentRequest {
   }
 
   /**
+   * A fresh {@link PaymentRequestBuilder}.
+   */
+  static builder(): PaymentRequestBuilder {
+    return new PaymentRequestBuilder();
+  }
+
+  /**
    * Converts this request's `nut10` locking option into a {@link P2PKOptions} for the wallet's
    * `.asP2PK()` gate, so a payer can lock proofs to exactly the condition the payee requested.
    *
@@ -379,5 +391,191 @@ export class PaymentRequest {
     const data = encodeBase64toUint8(encodedData);
     const decoded = decodeCBOR(data) as RawPaymentRequest;
     return this.fromRawRequest(decoded);
+  }
+}
+
+/**
+ * Fluent builder for authoring a {@link PaymentRequest} (NUT-18).
+ *
+ * @remarks
+ * Setters collect state in any order and never throw on cross-field state; `build()` is the single
+ * validation point. The {@link PaymentRequest} class itself stays lenient because it is also the
+ * decode type for foreign requests.
+ */
+export class PaymentRequestBuilder {
+  private _id?: string;
+  private _amount?: AmountLike;
+  private _unit?: string;
+  private _description?: string;
+  private _mints: string[] = [];
+  private _mintsPreferred?: boolean;
+  private _singleUse?: boolean;
+  private _transports: PaymentRequestTransport[] = [];
+  private _nut10?: NUT10Option;
+  private _methods: Array<{ method: string; fee?: AmountLike }> = [];
+
+  /**
+   * Sets the optional payment ID reference.
+   */
+  id(id: string): this {
+    this._id = id;
+    return this;
+  }
+
+  /**
+   * Sets the requested amount and its unit together (NUT-18: `u` MUST be set when `a` is set).
+   *
+   * @throws If the unit is empty.
+   */
+  amount(amount: AmountLike, unit: string): this {
+    if (!unit) {
+      throw new CTSError('amount requires a unit (NUT-18: `u` MUST be set when `a` is set)');
+    }
+    this._amount = amount;
+    this._unit = unit;
+    return this;
+  }
+
+  /**
+   * Sets the unit for an amountless request. The last write here or via `amount()` wins.
+   */
+  unit(unit: string): this {
+    this._unit = unit;
+    return this;
+  }
+
+  /**
+   * A human readable description for the payment request.
+   */
+  description(description: string): this {
+    this._description = description;
+    return this;
+  }
+
+  /**
+   * Appends to the mint list; URLs are normalized (as `Mint` does) and deduplicated, first-seen
+   * order preserved.
+   *
+   * @throws If a URL is not a valid mint URL.
+   */
+  addMint(mint: string | string[]): this {
+    const arr = Array.isArray(mint) ? mint : [mint];
+    for (const m of arr) {
+      const normalized = normalizeUrl(m);
+      if (!this._mints.includes(normalized)) this._mints.push(normalized);
+    }
+    return this;
+  }
+
+  /**
+   * Marks the mint list advisory (`mp`) rather than strict; requires mints at `build()`.
+   */
+  mintsPreferred(preferred = true): this {
+    this._mintsPreferred = preferred;
+    return this;
+  }
+
+  singleUse(single = true): this {
+    this._singleUse = single;
+    return this;
+  }
+
+  /**
+   * Appends a transport; order is preference order (NUT-18).
+   */
+  addTransport(transport: PaymentRequestTransport): this {
+    this._transports.push(transport);
+    return this;
+  }
+
+  /**
+   * Appends a nostr transport for the given NIPs (default NIP-17 direct messages).
+   *
+   * @throws If the target is not an nprofile, or `nips` is empty (the `n` tag MUST carry at least
+   *   one value).
+   */
+  addNostrTransport(nprofile: string, nips: string[] = ['17']): this {
+    if (!nprofile.startsWith('nprofile1')) {
+      throw new CTSError('nostr transport target must be an nprofile');
+    }
+    if (nips.length === 0) {
+      throw new CTSError('nostr transport requires at least one NIP (`n` tag value)');
+    }
+    return this.addTransport({
+      type: PaymentRequestTransportType.NOSTR,
+      target: nprofile,
+      tags: [['n', ...nips.map(String)]],
+    });
+  }
+
+  /**
+   * Appends an HTTP POST transport; the sender POSTs the payment payload to `url`.
+   */
+  addHttpPostTransport(url: string): this {
+    return this.addTransport({ type: PaymentRequestTransportType.POST, target: url });
+  }
+
+  /**
+   * Appends a NUT-05 melting method the payee accepts (`sm`), with an optional per-method fee.
+   *
+   * @throws If the method name is empty.
+   */
+  addSupportedMethod(method: string, fee?: AmountLike): this {
+    if (!method) {
+      throw new CTSError('supported method name must be a non-empty string');
+    }
+    this._methods.push({ method, fee });
+    return this;
+  }
+
+  /**
+   * Sets the `nut10` locking condition from a complete P2PK/HTLC {@link P2PKOptions} (e.g. from
+   * `P2PKBuilder.toOptions()`). Last call here or via `nut10()` wins.
+   *
+   * @throws If the lock is invalid or uses `blindKeys` (not expressible in a request).
+   */
+  lock(p2pk: P2PKOptions): this {
+    this._nut10 = p2pkOptionsToPRNut10(p2pk);
+    return this;
+  }
+
+  /**
+   * Sets the `nut10` locking condition verbatim, for kinds `lock()` cannot express.
+   */
+  nut10(option: NUT10Option): this {
+    this._nut10 = option;
+    return this;
+  }
+
+  /**
+   * Validates cross-field state and constructs the {@link PaymentRequest}.
+   *
+   * @throws If `mintsPreferred` is set without mints (NUT-18 ignores `mp` without `m`), or a
+   *   supported method is listed twice.
+   */
+  build(): PaymentRequest {
+    if (this._mintsPreferred !== undefined && this._mints.length === 0) {
+      throw new CTSError('mintsPreferred (mp) requires a mint list; add mints or drop the flag');
+    }
+    const seen = new Set<string>();
+    for (const m of this._methods) {
+      if (seen.has(m.method)) {
+        throw new CTSError(`duplicate supported method "${m.method}"`);
+      }
+      seen.add(m.method);
+    }
+    // Copy the collected arrays so reusing the builder cannot mutate the built request.
+    return new PaymentRequest({
+      id: this._id,
+      amount: this._amount,
+      unit: this._unit,
+      mints: this._mints.length ? [...this._mints] : undefined,
+      description: this._description,
+      transport: this._transports.length ? [...this._transports] : undefined,
+      singleUse: this._singleUse,
+      nut10: this._nut10,
+      mintsPreferred: this._mintsPreferred,
+      supportedMethods: this._methods.length ? this._methods : undefined,
+    });
   }
 }

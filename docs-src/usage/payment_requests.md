@@ -100,6 +100,29 @@ request.toEncodedCreqA(); // 'creqA…'  (CBOR)
 request.toEncodedCreqB(); // 'CREQB1…' (TLV + Bech32m, best for QR)
 ```
 
+### The builder
+
+`PaymentRequest.builder()` offers a fluent alternative that also handles the fiddly parts: transport tag formats, NUT-10 lock serialization, and cross-field validation. Setters can be called in any order; `build()` validates (eg `mintsPreferred` without mints throws) and returns the `PaymentRequest`.
+
+```typescript
+import { PaymentRequest, P2PKBuilder } from '@cashu/cashu-ts';
+
+const request = PaymentRequest.builder()
+  .id('inv-123')
+  .amount(100, 'sat') // unit is required with amount (NUT-18)
+  .description('Coffee')
+  .addMint('https://my.mint')
+  .mintsPreferred() // advisory list
+  .addNostrTransport(nprofile) // NIP-17 tags applied for you
+  .addHttpPostTransport('https://pay.example.com')
+  .addSupportedMethod('bolt11')
+  .addSupportedMethod('bolt12', 5) // with a per-method fee
+  .lock(new P2PKBuilder().addLockPubkey(receiverPk).toOptions()) // nut10 from a P2PK/HTLC lock
+  .build();
+```
+
+`lock()` takes a complete `P2PKOptions` (eg from `P2PKBuilder`, as with `asP2PK()`) and serializes it into the request's `nut10` option (the exact condition `toP2PKOptions()` reconstructs on the sender side). For NUT-10 kinds beyond P2PK/HTLC, pass a raw option with `nut10()`.
+
 ## Delivering the payment (sender side)
 
 Send the receiver a `PaymentRequestPayload` over the request's transport (HTTP POST body, Nostr DM, or in-band if no transport is given):

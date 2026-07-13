@@ -1,4 +1,5 @@
 import {
+  assertValidTagKey,
   dedupeP2PKPubkeys,
   normalizeHashlock,
   type LockConditions,
@@ -7,7 +8,7 @@ import {
   type P2PKOptions,
 } from '../crypto';
 import { CTSError } from '../model/Errors';
-import { assertValidTagKey, OutputData } from '../model/OutputData';
+import { OutputData } from '../model/OutputData';
 
 function toUnixSeconds(input: Date | number): number {
   if (input instanceof Date) return Math.floor(input.getTime() / 1000);
