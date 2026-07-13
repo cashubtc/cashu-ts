@@ -1645,7 +1645,10 @@ describe('generic mint/melt methods', () => {
           });
         }),
       );
-      const wallet = new Wallet(mint, { unit: 'sat' });
+      const seed = hexToBytes(
+        'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
+      );
+      const wallet = new Wallet(mint, { unit: 'sat', bip39seed: seed });
       await wallet.loadMint();
 
       const quote: MintQuoteOnchainResponse = {
@@ -1658,10 +1661,14 @@ describe('generic mint/melt methods', () => {
         amount_issued: Amount.from(0),
       };
 
-      const proofs = await wallet.mintProofsOnchain(1, quote, privkey);
+      const onCountersReserved = vi.fn();
+      const proofs = await wallet.mintProofsOnchain(1, quote, privkey, { onCountersReserved });
 
       expect(proofs).toHaveLength(1);
       expect(proofs[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
+      expect(onCountersReserved).toHaveBeenCalledWith(
+        expect.objectContaining({ start: 0, count: 1, next: 1 }),
+      );
     });
   });
 
