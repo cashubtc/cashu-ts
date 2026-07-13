@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.7.1](https://github.com/cashubtc/cashu-ts/compare/v4.7.0...v4.7.1) (2026-07-13)
+
+
+### Bug Fixes
+
+* **wallet:** widen config type on bolt12/onchain mint helpers ([#784](https://github.com/cashubtc/cashu-ts/issues/784)) ([df53e03](https://github.com/cashubtc/cashu-ts/commit/df53e03667bc90f6424c53f0411333a5047d654d))
+
 ## [4.7.0](https://github.com/cashubtc/cashu-ts/compare/v4.6.1...v4.7.0) (2026-07-08)
 
 
