@@ -129,6 +129,7 @@ function constructLookupMessage(mintPubkey: string, pubkey: string): string {
  *
  * @remarks
  * `mintPubkey` is the mint's NUT-06 info pubkey; it binds the signature to one mint.
+ * @experimental Implements a draft NUT; no released mint supports it yet.
  */
 export function signMintQuoteLookup(privkey: string, mintPubkey: string, pubkey: string): string {
   return schnorrSignMessage(constructLookupMessage(mintPubkey, pubkey), privkey);
@@ -136,6 +137,8 @@ export function signMintQuoteLookup(privkey: string, mintPubkey: string, pubkey:
 
 /**
  * Verifies a mint quote lookup signature. Malformed input returns false, never throws.
+ *
+ * @experimental Implements a draft NUT; no released mint supports it yet.
  */
 export function verifyMintQuoteLookupSignature(
   pubkey: string,

@@ -326,6 +326,9 @@ describe('mint quote lookup signatures (draft NUT)', () => {
   test('hex case does not change the message', () => {
     const signature = signMintQuoteLookup(privkey, mintPubkey.toUpperCase(), pubkey.toUpperCase());
     expect(verifyMintQuoteLookupSignature(pubkey, mintPubkey, signature)).toBe(true);
+    expect(
+      verifyMintQuoteLookupSignature(pubkey.toUpperCase(), mintPubkey.toUpperCase(), signature),
+    ).toBe(true);
   });
 
   test('rejects a signature bound to a different mint pubkey', () => {
