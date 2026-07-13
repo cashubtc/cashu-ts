@@ -2136,7 +2136,7 @@ class Wallet {
     amount: AmountLike,
     quote: MintQuoteBolt12Response,
     privkey: string,
-    config?: { keysetId?: string },
+    config?: Omit<MintProofsConfig, 'privkey'>,
     outputType?: OutputType,
   ): Promise<Proof[]> {
     this.requireSupport('mint', 'bolt12');
@@ -2169,7 +2169,7 @@ class Wallet {
     amount: AmountLike,
     quote: MintQuoteOnchainResponse,
     privkey: string,
-    config?: { keysetId?: string },
+    config?: Omit<MintProofsConfig, 'privkey'>,
     outputType?: OutputType,
   ): Promise<Proof[]> {
     this.requireSupport('mint', 'onchain');
