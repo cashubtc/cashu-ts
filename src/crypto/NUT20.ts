@@ -143,5 +143,10 @@ export function verifyMintQuoteLookupSignature(
   signature: string,
 ): boolean {
   if (!isCompressedPubkey(pubkey)) return false;
-  return schnorrVerifyMessage(signature, constructLookupMessage(mintPubkey, pubkey), pubkey);
+  // See verifyMintQuoteSignature: malformed input must verify as false rather than throw.
+  try {
+    return schnorrVerifyMessage(signature, constructLookupMessage(mintPubkey, pubkey), pubkey);
+  } catch {
+    return false;
+  }
 }

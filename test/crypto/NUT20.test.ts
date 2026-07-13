@@ -355,4 +355,11 @@ describe('mint quote lookup signatures (draft NUT)', () => {
     expect(verifyMintQuoteLookupSignature(pubkey, mintPubkey, 'not-hex')).toBe(false);
     expect(verifyMintQuoteLookupSignature(pubkey, mintPubkey, '')).toBe(false);
   });
+
+  test('non-string mint pubkey verifies as false rather than throwing', () => {
+    const signature = signMintQuoteLookup(privkey, mintPubkey, pubkey);
+    expect(verifyMintQuoteLookupSignature(pubkey, undefined as unknown as string, signature)).toBe(
+      false,
+    );
+  });
 });
