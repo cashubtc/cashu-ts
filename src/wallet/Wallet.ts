@@ -1912,34 +1912,6 @@ class Wallet {
   }
 
   /**
-   * Gets the NUT-20 locked mint quotes owned by the given private key(s).
-   *
-   * @remarks
-   * Signs a lookup per key against the mint's info pubkey. Returned quotes may span payment
-   * methods; each carries its own `method` field.
-   * @param privkey Private key(s) whose locked quotes to fetch.
-   * @param method The payment method path segment.
-   * @returns Normalized mint quote responses.
-   * @experimental Implements a draft NUT; no released mint supports it yet.
-   */
-  async getMintQuotesByPubkey(
-    privkey: string | string[],
-    method = 'bolt11',
-  ): Promise<MintQuoteBaseResponse[]> {
-    const mintPubkey = this.getMintInfo().pubkey;
-    this.failIf(
-      !mintPubkey || mintPubkey.length !== 66,
-      'Mint does not publish a usable pubkey in /v1/info',
-    );
-    const privkeys = Array.isArray(privkey) ? privkey : [privkey];
-    const pubkeys = privkeys.map((key) => bytesToHex(getPubKeyFromPrivKey(hexToBytes(key))));
-    const pubkey_signatures = privkeys.map((key, i) =>
-      signMintQuoteLookup(key, mintPubkey, pubkeys[i]),
-    );
-    return this.mint.getMintQuotesByPubkey(method, { pubkeys, pubkey_signatures });
-  }
-
-  /**
    * Gets an existing onchain mint quote from the mint.
    *
    * @param quote Quote ID.
@@ -2009,6 +1981,34 @@ class Wallet {
   ): Promise<MintQuoteBolt12Response[]> {
     const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
     return this.mint.checkMintQuoteBatchBolt12(quoteIds);
+  }
+
+  /**
+   * Gets the NUT-20 locked mint quotes owned by the given private key(s).
+   *
+   * @remarks
+   * Signs a lookup per key against the mint's info pubkey. Returned quotes may span payment
+   * methods; each carries its own `method` field.
+   * @param privkey Private key(s) whose locked quotes to fetch.
+   * @param method The payment method path segment.
+   * @returns Normalized mint quote responses.
+   * @experimental Implements a draft NUT; no released mint supports it yet.
+   */
+  async getMintQuotesByPubkey(
+    privkey: string | string[],
+    method = 'bolt11',
+  ): Promise<MintQuoteBaseResponse[]> {
+    const mintPubkey = this.getMintInfo().pubkey;
+    this.failIf(
+      !mintPubkey || mintPubkey.length !== 66,
+      'Mint does not publish a usable pubkey in /v1/info',
+    );
+    const privkeys = Array.isArray(privkey) ? privkey : [privkey];
+    const pubkeys = privkeys.map((key) => bytesToHex(getPubKeyFromPrivKey(hexToBytes(key))));
+    const pubkey_signatures = privkeys.map((key, i) =>
+      signMintQuoteLookup(key, mintPubkey, pubkeys[i]),
+    );
+    return this.mint.getMintQuotesByPubkey(method, { pubkeys, pubkey_signatures });
   }
 
   // -----------------------------------------------------------------
