@@ -1,10 +1,15 @@
-import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { test, describe, expect } from 'vitest';
 
 import { Amount, type MintRequest } from '../../src';
-import { signMintQuote, verifyMintQuoteSignature } from '../../src/crypto';
+import {
+  signMintQuote,
+  verifyMintQuoteSignature,
+  signMintQuoteLookup,
+  verifyMintQuoteLookupSignature,
+} from '../../src/crypto';
 import { signMintQuoteLegacy, verifyMintQuoteSignatureLegacy } from '../../src/crypto/NUT20';
 
 /**
@@ -292,5 +297,62 @@ describe('mint quote signature verification rejects malformed input (no throw)',
     // message stays a non-string and utf8ToBytes would throw without the guard.
     const quote = 256 as unknown as string;
     expect(verifyMintQuoteSignatureLegacy(pubkey, quote, [], sig)).toBe(false);
+  });
+});
+
+/**
+ * Mint quote lookup signatures (draft NUT: get quotes by pubkeys). Message is a plain UTF-8 concat,
+ * unlike the length-framed mint-quote transcript above.
+ */
+describe('mint quote lookup signatures (draft NUT)', () => {
+  const privkey = '0000000000000000000000000000000000000000000000000000000000000001';
+  const pubkey = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+  const mintPubkey = '0296d0aa13b6a31cf0cd974249f28c7b7176d7274712c95a41c7d8066d3f29d679';
+
+  test('signature commits to the spec preimage', () => {
+    const signature = signMintQuoteLookup(privkey, mintPubkey, pubkey);
+    // Independent reconstruction: "Cashu_MintQuoteLookup_v1" || mint_pubkey || pubkey as UTF-8.
+    const digest = sha256(
+      new TextEncoder().encode('Cashu_MintQuoteLookup_v1' + mintPubkey + pubkey),
+    );
+    expect(schnorr.verify(hexToBytes(signature), digest, hexToBytes(pubkey.slice(2)))).toBe(true);
+  });
+
+  test('sign/verify round trip', () => {
+    const signature = signMintQuoteLookup(privkey, mintPubkey, pubkey);
+    expect(verifyMintQuoteLookupSignature(pubkey, mintPubkey, signature)).toBe(true);
+  });
+
+  test('hex case does not change the message', () => {
+    const signature = signMintQuoteLookup(privkey, mintPubkey.toUpperCase(), pubkey.toUpperCase());
+    expect(verifyMintQuoteLookupSignature(pubkey, mintPubkey, signature)).toBe(true);
+  });
+
+  test('rejects a signature bound to a different mint pubkey', () => {
+    const otherMint = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+    const signature = signMintQuoteLookup(privkey, otherMint, pubkey);
+    expect(verifyMintQuoteLookupSignature(pubkey, mintPubkey, signature)).toBe(false);
+  });
+
+  test('rejects a signature from a different key', () => {
+    const otherPriv = '0000000000000000000000000000000000000000000000000000000000000002';
+    const signature = signMintQuoteLookup(otherPriv, mintPubkey, pubkey);
+    expect(verifyMintQuoteLookupSignature(pubkey, mintPubkey, signature)).toBe(false);
+  });
+
+  test('rejects non-compressed pubkeys', () => {
+    const signature = signMintQuoteLookup(privkey, mintPubkey, pubkey);
+    const xOnly = pubkey.slice(2);
+    // Uncompressed SEC1 form of the same point (G).
+    const uncompressed =
+      '0479be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798' +
+      '483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8';
+    expect(verifyMintQuoteLookupSignature(xOnly, mintPubkey, signature)).toBe(false);
+    expect(verifyMintQuoteLookupSignature(uncompressed, mintPubkey, signature)).toBe(false);
+  });
+
+  test('malformed signature returns false rather than throwing', () => {
+    expect(verifyMintQuoteLookupSignature(pubkey, mintPubkey, 'not-hex')).toBe(false);
+    expect(verifyMintQuoteLookupSignature(pubkey, mintPubkey, '')).toBe(false);
   });
 });
