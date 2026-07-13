@@ -6,7 +6,7 @@ Small helper that shapes a `P2PKOptions` lock, it does not create secrets.
 
 ```ts
 new P2PKBuilder()
-  .addLockPubkey(k: string | string[])    // accepts 02|03 compressed, or x only (Nostr)
+  .addLockPubkey(k: string | string[])    // 02|03 compressed only; for an x-only (Nostr) key prepend '02'
   .addRefundPubkey(k: string | string[])  // requires lockUntil(...) to be set
   .lockUntil(when: number | Date)         // unix seconds, unix ms, or Date
   .requireLockSignatures(n: number)       // n of m for lock keys
@@ -21,7 +21,7 @@ P2PKBuilder.fromOptions(opts: P2PKOptions): P2PKBuilder
 
 **Behaviour**
 
-Keys are normalized and de-duplicated, insertion order is preserved, total lock plus refund keys must be ≤ 10, refund keys will throw if no locktime is set.
+Keys must be 33-byte compressed hex and on the secp256k1 curve (NUT-11); a 32-byte x-only key (eg Nostr) throws until you prepend `'02'`, per NIP-61 practice. Keys are de-duplicated, insertion order is preserved, total lock plus refund keys must be ≤ 10, refund keys will throw if no locktime is set.
 
 Example usage:
 

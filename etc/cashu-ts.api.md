@@ -1367,6 +1367,9 @@ export class NetworkError extends CTSError {
 // @public
 export function normalizeProofAmounts(raw: ProofLike[]): Proof[];
 
+// @public (undocumented)
+export function normalizePubkey(pk: string): string;
+
 // @public
 export type NUT10Option = {
     kind: string;

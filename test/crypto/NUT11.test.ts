@@ -505,9 +505,7 @@ describe('test p2pk verify', () => {
       amount: Amount.from(1),
       id: '00000000',
       C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
-      secret: `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${bytesToHex(
-        randomBytes(32),
-      )}"}]`,
+      secret: `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`,
     };
     expect(isP2PKSpendAuthorised(proof)).toBe(false);
   });
@@ -647,18 +645,24 @@ describe('NUT-11 helper edge cases', () => {
   });
 
   test('getP2PKWitnessPubkeys: duplicate normalized keys in proof are rejected', () => {
-    const xOnly = 'aa'.repeat(32);
-    const upper = '02' + 'AA'.repeat(32); // same key, uppercase
-    const lower = '02' + 'aa'.repeat(32); // canonical form
+    const upper = '02' + _xonly('m').toUpperCase(); // same key, uppercase
+    const lower = '02' + _xonly('m'); // canonical form
     // Hand-craft a secret with duplicate pubkeys that differ only in case
-    const s = `["P2PK",{"nonce":"aa","data":"${upper}","tags":[["pubkeys","${xOnly}","${lower}"]]}]`;
+    const s = `["P2PK",{"nonce":"aa","data":"${upper}","tags":[["pubkeys","${lower}"]]}]`;
     expect(() => getP2PKExpectedWitnessPubkeys(s)).toThrow(
       'Duplicate main pubkeys are not allowed',
     );
   });
 
+  test('getP2PKWitnessPubkeys: x-only key in a proof secret is rejected as non-compliant', () => {
+    // A proof locked with an x-only key is unspendable on spec-conformant mints
+    // (eg CDK rejects the swap), so parsing fails loudly instead of lifting the key.
+    const s = `["P2PK",{"nonce":"aa","data":"${PUBKEY}","tags":[["pubkeys","${_xonly('m')}"]]}]`;
+    expect(() => getP2PKExpectedWitnessPubkeys(s)).toThrow(/prepend '02'/);
+  });
+
   test('getP2PKWitnessPubkeys: parity-distinct duplicates in proof are rejected', () => {
-    const x = 'ab'.repeat(32);
+    const x = _xonly('n');
     const even = `02${x}`;
     const odd = `03${x}`;
     const s = `["P2PK",{"nonce":"aa","data":"${even}","tags":[["pubkeys","${odd}"]]}]`;
@@ -668,8 +672,8 @@ describe('NUT-11 helper edge cases', () => {
   });
 
   test('getP2PKWitnessRefundkeys: duplicate normalized refund keys in proof are rejected', () => {
-    const upper = '03' + 'CC'.repeat(32);
-    const lower = '03' + 'cc'.repeat(32);
+    const upper = '03' + _xonly('r').toUpperCase();
+    const lower = '03' + _xonly('r');
     const s = `["P2PK",{"nonce":"aa","data":"${PUBKEY}","tags":[["locktime","1"],["refund","${upper}","${lower}"]]}]`;
     expect(() => getP2PKExpectedWitnessPubkeys(s)).toThrow(
       'Duplicate refund pubkeys are not allowed',
@@ -1398,9 +1402,11 @@ describe('NUT-11 test vectors', () => {
   });
 });
 
-// helpers to make valid hex keys
-const _xonly = (ch: string) => ch.repeat(64);
-const _comp = (ch: string, prefix: '02' | '03' = '02') => `${prefix}${ch.repeat(64)}`;
+// helpers to make valid on-curve keys, deterministically derived per label char
+const _X: Record<string, string> = {};
+const _xonly = (ch: string) =>
+  (_X[ch] ??= bytesToHex(schnorr.getPublicKey(new Uint8Array(32).fill(ch.charCodeAt(0)))));
+const _comp = (ch: string, prefix: '02' | '03' = '02') => `${prefix}${_xonly(ch)}`;
 
 describe('normalizeP2PKOptions', () => {
   const pk = _comp('a', '02');
@@ -1753,10 +1759,17 @@ describe('verifyP2PKSpendingConditions — semantic validation', () => {
     expect(() => verifyP2PKSpendingConditions(proof)).toThrow(/duplicate main pubkeys/i);
   });
 
-  test('rejects data pubkey in pubkeys tag (x-only vs compressed)', () => {
+  test('rejects an x-only key in the pubkeys tag as non-compliant', () => {
     const xOnly = pk1.slice(2);
     const proof = makeProof([
-      ['pubkeys', xOnly], // same key, different format
+      ['pubkeys', xOnly], // NUT-11 requires 33-byte compressed keys
+    ]);
+    expect(() => verifyP2PKSpendingConditions(proof)).toThrow(/prepend '02'/);
+  });
+
+  test('rejects the data pubkey repeated in the pubkeys tag with flipped parity', () => {
+    const proof = makeProof([
+      ['pubkeys', `03${pk1.slice(2)}`], // same key, different parity byte
     ]);
     expect(() => verifyP2PKSpendingConditions(proof)).toThrow(/duplicate main pubkeys/i);
   });
@@ -1868,9 +1881,18 @@ describe('pubkey and hashlock format checks', () => {
   });
 
   test('dedupes by full x-only portion, not just a shared suffix', () => {
-    const k1 = '02' + 'aa'.repeat(32);
-    const k2 = '02' + 'bb'.repeat(31) + 'aa'; // distinct key, same last 2 chars
+    // Two distinct real keys sharing their last 2 hex chars (precomputed): the
+    // regression guarded here is dedupe comparing slice(-64), not a shorter suffix.
+    const k1 = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+    const k2 = '0220df196be60ba71ae617a6b144757e0e87fffb45d447d9dc0d5480a034351198';
     expect(dedupeP2PKPubkeys([k1, k2])).toStrictEqual([k1, k2]);
+  });
+
+  test('rejects x-only input and off-curve keys', () => {
+    expect(() => dedupeP2PKPubkeys([_xonly('s')])).toThrow(/prepend '02'/);
+    // x = field prime: well-formed but not a curve point
+    const offCurve = '02fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f';
+    expect(() => dedupeP2PKPubkeys([offCurve])).toThrow(/secp256k1/);
   });
 
   test('normalizeHashlock rejects 65 hex chars (regex anchored both ends)', () => {
@@ -1925,9 +1947,8 @@ describe('normalizeP2PKOptions canonical output shape', () => {
   test('accepts a multi-key P2PK secret within the slot limit', () => {
     // NUT-28 permits up to 11 locking slots ([data, ...pubkeys, ...refund]); a 10-slot
     // secret is comfortably valid. The exact upper bound is enforced in src separately.
-    const mkKey = (b: string) => '02' + b.repeat(32);
-    const bytes = ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9', 'b1'];
-    const [data, ...pubkeys] = bytes.map(mkKey); // data + 9 pubkeys = 10 slots
+    const labels = ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'];
+    const [data, ...pubkeys] = labels.map((c) => _comp(c)); // data + 9 pubkeys = 10 slots
     expect(() => normalizeP2PKOptions({ kind: 'P2PK', data, pubkeys })).not.toThrow();
   });
 });
