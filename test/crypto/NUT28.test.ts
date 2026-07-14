@@ -2,12 +2,18 @@ import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
 import { hexToBytes, bytesToHex } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 
+import { Amount } from '../../src';
 import {
   pointFromHex,
   deriveP2BKSecretKey,
   deriveP2BKBlindedPubkeys,
   deriveP2BKSecretKeys,
+  maybeDeriveP2BKPrivateKeys,
+  signP2PKProof,
+  verifyHTLCSpendingConditions,
+  verifyP2PKSpendingConditions,
 } from '../../src/crypto';
+import { type Proof } from '../../src/model/types';
 import { hexToNumber, numberToHexPadded64 } from '../../src/utils';
 
 describe('blinded pubkeys & scalar arithmetic', () => {
@@ -318,5 +324,76 @@ describe('NUT28 uncovered branches and guards', () => {
     expect(() => deriveP2BKSecretKey(toHex(p), toHex(r), blindPubkey, naturalPub)).toThrow(
       'Derived secret key is zero',
     );
+  });
+});
+
+describe('NUT-28 P2BK example proof (nuts tests/28-tests.md)', () => {
+  // Verbatim from the NUT-28 test vectors: Bob's key P is blinded in data (slot 0)
+  const privKeyBob = 'ad37e8abd800be3e8272b14045873f4353327eedeb702b72ddcc5c5adff5129c';
+  const slot0Key = '47051623754422cb04bc24c0cfe2c1ddc8db1fcc18f0aa4b477df4aca2adc20e';
+  const proof: Proof = {
+    amount: Amount.from(64),
+    C: '0381855ddcc434a9a90b3564f29ef78e7271f8544d0056763b418b00e88525c0ff',
+    id: '009a1f293253e41e',
+    secret:
+      '["P2PK",{"nonce":"d4a17a88f5d0c09001f7b453c42c1f9d5a87363b1f6637a5a83fc31a6a3b7266","data":"03b7c03eb05a0a539cfc438e81bcf38b65b7bb8685e8790f9b853bfe3d77ad5315","tags":[]}]',
+    dleq: {
+      s: '6178978456c42eee8eefb50830fc3146be27b05619f04e3490dc596005f0cc78',
+      e: '23f2190b18bfd043d3a526103e15f4a938d646a6bf93b017e2bb7c85e1540b32',
+      r: 'd26a55aa39ca50957fdaf54036b01053b0de42048b96a6fb2a167e03f00d0a0f',
+    },
+    p2pk_e: '02a8cda4cf448bfce9a9e46e588c06ea1780fcb94e3bbdf3277f42995d403a8b0c',
+  };
+
+  test('derives the data spend key at slot 0', () => {
+    expect(maybeDeriveP2BKPrivateKeys(privKeyBob, proof)).toStrictEqual([slot0Key]);
+  });
+
+  test('spends with the slot 0 key', () => {
+    const signed = signP2PKProof(proof, slot0Key);
+    const result = verifyP2PKSpendingConditions(signed);
+    expect(result.success).toBe(true);
+    expect(result.path).toBe('MAIN');
+  });
+});
+
+describe('NUT-28 HTLC example proof (nuts tests/28-tests.md)', () => {
+  // Verbatim from the NUT-28 test vectors: the hashlock holds slot 0 (unblinded),
+  // Bob's key P is blinded at slot 1 (pubkeys) and again at slot 2 (refund).
+  const privKeyBob = 'ad37e8abd800be3e8272b14045873f4353327eedeb702b72ddcc5c5adff5129c';
+  const preimage = '0000000000000000000000000000000000000000000000000000000000000001'; // NUT-14 pair
+  const slot1Key = '9d1ffe00e1da5af5c882b1ea5ec8c18893e09349803c3c9e552823490af22458';
+  const slot2Key = '2770cf9f49f1f26eaef29d56a85483e8aabb2f3f1a6bec28ffa065a756bbfdb1';
+  const dleq = {
+    s: 'bd6ed079b954151898cadac38c3b8d3371c20d67e8c5f06af3cee4152ac317b4',
+    e: '9ec5b6f2095a8dc7d052a00e0bb050ac95e633e702575630cfd43cb58592d2a1',
+    r: 'e8349cf88e5a9f025f0072bf8a2db48d394bad9f7be3d8023f9ee90de1c1924d',
+  };
+  const proof: Proof = {
+    amount: Amount.from(64),
+    C: '0270aba098c920adafa1ce75acefb06d8cc541ef80270f70cc7b66375b789ed9be',
+    id: '009a1f293253e41e',
+    secret:
+      '["HTLC",{"nonce":"8b1f18aa85a2787903cfdc776fde0b8555bdb126eea02b05cd84de06a4f4b551","data":"ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5","tags":[["pubkeys","0352fb6d93360b7c2538eedf3c861f32ea5883fceec9f3e573d9d84377420da838"],["locktime","1689418329"],["refund","03667361ca925065dcafea0a705ba49e75bdd7975751fcc933e05953463c79fff1"]]}]',
+    dleq,
+    p2pk_e: '02a8cda4cf448bfce9a9e46e588c06ea1780fcb94e3bbdf3277f42995d403a8b0c',
+  };
+
+  test('derives the pubkeys spend key at slot 1 and the refund key at slot 2', () => {
+    expect(maybeDeriveP2BKPrivateKeys(privKeyBob, proof)).toStrictEqual([slot1Key, slot2Key]);
+  });
+
+  test('spends via the receiver pathway with the preimage and the slot 1 key', () => {
+    const signed = signP2PKProof({ ...proof, witness: { preimage } }, slot1Key);
+    const result = verifyHTLCSpendingConditions(signed);
+    expect(result.success).toBe(true);
+    expect(result.path).toBe('MAIN');
+  });
+
+  test('spends via the refund pathway with the slot 2 key after locktime', () => {
+    const signed = signP2PKProof(proof, slot2Key);
+    const result = verifyHTLCSpendingConditions(signed);
+    expect(result.success).toBe(true);
+    expect(result.path).toBe('REFUND');
   });
 });
