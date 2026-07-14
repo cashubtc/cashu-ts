@@ -263,6 +263,63 @@ describe('restoreEfficient (draft NUT-342)', () => {
     expect(restoreCalls()).toBeLessThan(40);
   });
 
+  test('re-probes the terminal window when T lies beyond window 0', async () => {
+    use342Info();
+    const seed = randomBytes(64);
+    // counters span two probe windows (0..4 and 5..9), so the search converges
+    // on window 1 and must fetch the terminal window again for its d_gap
+    const issued = new Map(
+      [0, 1, 2, 6, 7].map((c) => {
+        const output = blank(seed, c);
+        return [
+          output.blindedMessage.B_,
+          { counter: c, d_gap: encryptDGap(c, output.blindingFactor) },
+        ];
+      }),
+    );
+    useFakeRestoreMint(issued);
+
+    const wallet = new Wallet(mint, { unit, bip39seed: seed });
+    await wallet.loadMint();
+    const res = await wallet.restoreEfficient({ probeWindow: 5 });
+
+    expect(res.proofs).toHaveLength(5);
+    expect(res.lastCounterWithSignature).toBe(7);
+  });
+
+  test('falls back when the terminal window vanishes mid-search', async () => {
+    use342Info();
+    const seed = randomBytes(64);
+    // counters 5..6 sit in window 1; the mint answers for them exactly once,
+    // so the terminal re-probe comes back empty (inconsistent mint)
+    const window1 = new Map([5, 6].map((c) => [blank(seed, c).blindedMessage.B_, c] as const));
+    const anchor = blank(seed, 0).blindedMessage.B_;
+    let window1Answers = 1;
+    server.use(
+      http.post(mintUrl + '/v1/restore', async ({ request }) => {
+        const body = (await request.json()) as { outputs: Array<{ id: string; B_: string }> };
+        const hits = body.outputs.filter((o) => o.B_ === anchor || window1.has(o.B_));
+        const isWindow1 = hits.some((o) => window1.has(o.B_));
+        if (isWindow1 && window1Answers-- <= 0) {
+          return HttpResponse.json({ outputs: [], signatures: [] });
+        }
+        return HttpResponse.json({
+          outputs: hits,
+          signatures: hits.map((o) => ({ id: o.id, amount: 1, C_: VALID_POINT })),
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit, bip39seed: seed });
+    await wallet.loadMint();
+    const mockBatch = vi
+      .spyOn(wallet, 'batchRestore')
+      .mockResolvedValue({ proofs: [], lastCounterWithSignature: undefined });
+
+    await wallet.restoreEfficient({ probeWindow: 5 });
+
+    expect(mockBatch).toHaveBeenCalledTimes(1);
+  });
+
   test('accepts a plaintext integer d_gap', async () => {
     use342Info();
     const seed = randomBytes(64);
