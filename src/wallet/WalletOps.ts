@@ -79,7 +79,7 @@ export class WalletOps {
     if (pr.unit && pr.unit !== wallet.unit) {
       throw new CTSError(`request unit '${pr.unit}' does not match wallet unit '${wallet.unit}'`);
     }
-    // Strict mint list: the sender MUST only send proofs from listed mints (NUT-18).
+    // Strict mint list: the payer MUST only send proofs from listed mints (NUT-18).
     const listed = pr.includesMint(wallet.mint.mintUrl);
     if (pr.isMintListStrict && !listed) {
       throw new CTSError("this wallet's mint is not in the request's strict mint list");
@@ -103,7 +103,7 @@ export class WalletOps {
     if (pr.nut10 && !lock) {
       throw new CTSError(`cannot honour the request's nut10 lock kind '${pr.nut10.kind}'`);
     }
-    // Net of input fees (NUT-18): the receiver must net the requested amount after swapping.
+    // Net of input fees (NUT-18): the payee must net the requested amount after swapping.
     const builder = new SendBuilder(wallet, base.add(fee), proofs).includeFees(true);
     return lock ? builder.asP2PK(lock) : builder;
   }

@@ -116,7 +116,7 @@ export class PaymentRequest {
    */
   feesFor(mint: string, meltMethods?: string[]): Amount {
     this.assertUnitRule();
-    // Fees compensate the receiver for melting out: payments from a listed mint carry none.
+    // Fees compensate the payee for melting out: payments from a listed mint carry none.
     if (!this.supportedMethods?.length || this.mints?.includes(mint)) {
       return Amount.zero();
     }
@@ -533,7 +533,7 @@ export class PaymentRequestBuilder {
   }
 
   /**
-   * Appends an HTTP POST transport; the sender POSTs the payment payload to `url`.
+   * Appends an HTTP POST transport; the payer POSTs the payment payload to `url`.
    */
   addHttpPostTransport(url: string): this {
     return this.addTransport({ type: PaymentRequestTransportType.POST, target: url });
