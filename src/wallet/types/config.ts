@@ -45,6 +45,28 @@ export type BatchRestoreConfig = {
 };
 
 /**
+ * Config for {@link Wallet.restoreEfficient} (draft NUT-342, experimental).
+ */
+export type RestoreEfficientConfig = {
+  keysetId?: string;
+  /**
+   * Counters probed per binary-search request. Larger windows tolerate larger derivation gaps at
+   * the cost of revealing more nonces per probe. Default is `25`.
+   */
+  probeWindow?: number;
+};
+
+/**
+ * Returns the lowest deterministic counter among the app's unspent AND pending proofs for a keyset,
+ * or undefined when there are none (draft NUT-342, experimental).
+ *
+ * @remarks
+ * Pending proofs (e.g. inputs reserved for an in-flight swap or melt) MUST be included, or recovery
+ * windows may miss live proofs.
+ */
+export type RecoveryGapProvider = (keysetId: string) => Promise<number | undefined>;
+
+/**
  * Shared properties for most `OutputType` variants (except 'custom').
  */
 export interface SharedOutputTypeProps {

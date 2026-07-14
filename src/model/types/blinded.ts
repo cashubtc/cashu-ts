@@ -19,6 +19,11 @@ export type SerializedBlindedMessage = {
    * Keyset id.
    */
   id: string;
+  /**
+   * NUT-342 (draft, experimental) recovery gap: plaintext integer or hex-encoded AES-128-GCM
+   * payload. Omitted unless the wallet backs up recovery gaps.
+   */
+  d_gap?: number | string;
 };
 
 /**
@@ -44,6 +49,10 @@ export type SerializedBlindedSignature = {
    * DLEQ Proof.
    */
   dleq?: SerializedDLEQ;
+  /**
+   * NUT-342 (draft, experimental) recovery gap, echoed verbatim from the stored BlindedMessage.
+   */
+  d_gap?: number | string;
 };
 
 /*

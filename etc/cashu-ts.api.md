@@ -418,6 +418,9 @@ export type CurvePoint = {
 export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
 
 // @public
+export function decryptDGap(encryptedDGap: string, blindingFactor: bigint): number;
+
+// @public
 export function deriveKeyPair(seed: Uint8Array, purpose: Bip32KeyPurpose, counter: number): {
     pubkey: string;
     privkey: string;
@@ -484,6 +487,9 @@ export type DLEQ = {
     e: Uint8Array;
     r?: bigint;
 };
+
+// @public
+export function encryptDGap(dGap: number, blindingFactor: bigint): string;
 
 // @public (undocumented)
 export type Enumerate<N extends number, Acc extends number[] = []> = Acc['length'] extends N ? Acc[number] : Enumerate<N, [...Acc, Acc['length']]>;
@@ -591,6 +597,9 @@ export type GetInfoResponse = {
             }>;
         };
         '29'?: Nut29Info;
+        '342'?: {
+            supported: boolean;
+        };
     };
     motd?: string;
 };
@@ -1121,7 +1130,7 @@ export class MintInfo {
         params: SwapMethod[];
     };
     // (undocumented)
-    isSupported(num: 7 | 8 | 9 | 10 | 11 | 12 | 14 | 20): {
+    isSupported(num: 7 | 8 | 9 | 10 | 11 | 12 | 14 | 20 | 342): {
         supported: boolean;
     };
     // (undocumented)
@@ -1213,6 +1222,9 @@ export class MintInfo {
             }>;
         };
         '29'?: Nut29Info;
+        '342'?: {
+            supported: boolean;
+        };
     };
     // (undocumented)
     get pubkey(): string;
@@ -1826,6 +1838,9 @@ export type ReceiveConfig = {
     onCountersReserved?: OnCountersReserved;
 };
 
+// @public
+export type RecoveryGapProvider = (keysetId: string) => Promise<number | undefined>;
+
 // @public (undocumented)
 export type RequestArgs = {
     endpoint: string;
@@ -1860,6 +1875,12 @@ export type ResponseMeta = {
 // @public (undocumented)
 export type RestoreConfig = {
     keysetId?: string;
+};
+
+// @public
+export type RestoreEfficientConfig = {
+    keysetId?: string;
+    probeWindow?: number;
 };
 
 // @public (undocumented)
@@ -1957,6 +1978,7 @@ export type SerializedBlindedMessage = {
     amount: Amount;
     B_: string;
     id: string;
+    d_gap?: number | string;
 };
 
 // @public
@@ -1965,6 +1987,7 @@ export type SerializedBlindedSignature = {
     amount: Amount;
     C_: string;
     dleq?: SerializedDLEQ;
+    d_gap?: number | string;
 };
 
 // @public (undocumented)
@@ -2223,6 +2246,7 @@ export class Wallet {
         requireSigDleq?: boolean;
         customRequest?: RequestFn;
         requestFetch?: RequestFetch;
+        recoveryGapProvider?: RecoveryGapProvider;
         logger?: Logger;
     });
     batchRestore(config?: BatchRestoreConfig): Promise<{
@@ -2310,6 +2334,10 @@ export class Wallet {
     prepareSwapToSend(amount: AmountLike, proofs: ProofLike[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SwapPreview>;
     receive(token: Token | string | ProofLike[], config?: ReceiveConfig, outputType?: OutputType): Promise<Proof[]>;
     restore(start: number, count: number, config?: RestoreConfig): Promise<{
+        proofs: Proof[];
+        lastCounterWithSignature?: number;
+    }>;
+    restoreEfficient(config?: RestoreEfficientConfig): Promise<{
         proofs: Proof[];
         lastCounterWithSignature?: number;
     }>;

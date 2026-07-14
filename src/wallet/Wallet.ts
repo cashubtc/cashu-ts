@@ -7,6 +7,8 @@
 
 import { type AuthProvider } from '../auth/AuthProvider';
 import {
+  decryptDGap,
+  encryptDGap,
   signMintQuote,
   findSigningKey,
   signP2PKProofs as cryptoSignP2PKProofs,
@@ -91,8 +93,10 @@ import {
   type SwapTransaction,
   type MeltProofsResponse,
   type SendResponse,
+  type RecoveryGapProvider,
   type RestoreConfig,
   type BatchRestoreConfig,
+  type RestoreEfficientConfig,
   type SecretsPolicy,
   type SwapPreview,
   type MintPreview,
@@ -169,6 +173,7 @@ class Wallet {
   private _selectProofs: SelectProofs;
   private _outputDataCreator: OutputDataCreator;
   private _requireSigDleq = false;
+  private _recoveryGapProvider?: RecoveryGapProvider;
   private _logger: Logger;
 
   /**
@@ -214,6 +219,10 @@ class Wallet {
    * @param options.requestFetch Custom fetch-compatible transport for mint HTTP requests. Use this
    *   for per-wallet OHTTP, Tor, native HTTP clients, or proxies while preserving the default
    *   request pipeline. Ignored when `customRequest` is supplied.
+   * @param options.recoveryGapProvider Experimental (draft NUT-342). Returns the lowest
+   *   deterministic counter among the app's unspent and pending proofs for a keyset. When set and
+   *   the mint advertises support, deterministic outputs carry an encrypted recovery gap that
+   *   `restoreEfficient` uses to skip the NUT-13 linear scan.
    * @param options.logger Logger instance, default null logger.
    */
   constructor(
@@ -232,6 +241,7 @@ class Wallet {
       requireSigDleq?: boolean;
       customRequest?: RequestFn;
       requestFetch?: RequestFetch;
+      recoveryGapProvider?: RecoveryGapProvider; // optional, draft NUT-342
       logger?: Logger;
     },
   ) {
@@ -271,6 +281,7 @@ class Wallet {
     this._keyChain = new KeyChain(this.mint, this._unit);
     this._denominationTarget = options?.denominationTarget ?? this._denominationTarget;
     this._requireSigDleq = options?.requireSigDleq ?? this._requireSigDleq;
+    this._recoveryGapProvider = options?.recoveryGapProvider;
   }
 
   // Convenience wrappers for "log and throw"
@@ -669,6 +680,7 @@ class Wallet {
       requireSigDleq: this._requireSigDleq,
       logger: this._logger,
       counterSource: opts?.counterSource ?? this._counterSource,
+      recoveryGapProvider: this._recoveryGapProvider,
     });
     // Load mint info from our caches
     newWallet.loadMintFromCache(this.getMintInfo().cache, this._keyChain.cache);
@@ -805,11 +817,11 @@ class Wallet {
    * @param outputType The output configuration.
    * @returns Prepared output data.
    */
-  private createOutputData(
+  private async createOutputData(
     amount: AmountLike,
     keyset: Keyset,
     outputType: OutputType,
-  ): OutputDataLike[] {
+  ): Promise<OutputDataLike[]> {
     const outputAmount = this.parseAmount(amount, 'createOutputData', true); // allow zero
     if (
       // 'custom' OutputType has no denominations. Every other OutputType does.
@@ -849,6 +861,7 @@ class Wallet {
           keyset,
           outputType.denominations,
         );
+        await this.attachRecoveryGaps(outputData, outputType.counter, keyset.id);
         break;
       case 'p2pk':
         outputData = this._outputDataCreator.createP2PKData(
@@ -882,6 +895,32 @@ class Wallet {
       }
     }
     return outputData;
+  }
+
+  /**
+   * Attaches encrypted NUT-342 (draft) recovery gaps to a deterministic output batch.
+   *
+   * @remarks
+   * No-op unless a `recoveryGapProvider` is configured and the mint advertises support. Assumes the
+   * default creator's counter alignment (output `i` uses `startCounter + i`).
+   */
+  private async attachRecoveryGaps(
+    outputData: OutputDataLike[],
+    startCounter: number,
+    keysetId: string,
+  ): Promise<void> {
+    if (!this._recoveryGapProvider || outputData.length === 0) return;
+    if (!this._mintInfo?.isSupported(342).supported) return;
+    const firstUnspent = (await this._recoveryGapProvider(keysetId)) ?? startCounter;
+    this.failIf(
+      !Number.isInteger(firstUnspent) || firstUnspent < 0,
+      'recoveryGapProvider must return a non-negative integer counter',
+    );
+    // The new outputs are themselves unspent, so the window never starts after this batch
+    const first = Math.min(firstUnspent, startCounter);
+    outputData.forEach((output, i) => {
+      output.blindedMessage.d_gap = encryptDGap(startCounter + i - first, output.blindingFactor);
+    });
   }
 
   /**
@@ -1064,7 +1103,7 @@ class Wallet {
     });
 
     // Create outputs and execute swap
-    const outputs = this.createOutputData(this.preparedTotal(receiveOT), keyset, receiveOT);
+    const outputs = await this.createOutputData(this.preparedTotal(receiveOT), keyset, receiveOT);
 
     // Return SwapPreview
     return {
@@ -1306,8 +1345,8 @@ class Wallet {
     });
 
     // Create the output data
-    const sendOutputs = this.createOutputData(sendAmount, keyset, sendOT);
-    const keepOutputs = this.createOutputData(keepAmount, keyset, keepOT);
+    const sendOutputs = await this.createOutputData(sendAmount, keyset, sendOT);
+    const keepOutputs = await this.createOutputData(keepAmount, keyset, keepOT);
 
     // Return SwapPreview
     return {
@@ -1682,8 +1721,118 @@ class Wallet {
     count: number,
     config?: RestoreConfig,
   ): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
-    this.failIfNullish(this._seed, 'Cashu Wallet must be initialized with a seed to use restore');
     const { keysetId } = config || {};
+    const found = await this.restoreSignatures(start, count, keysetId);
+    const keyset = this.getKeyset(keysetId); // specified or wallet keyset
+
+    const restoredProofs: Proof[] = [];
+    let lastCounterWithSignature: number | undefined;
+
+    for (const { counter, signature, output } of found) {
+      lastCounterWithSignature = counter;
+      output.blindedMessage.amount = signature.amount;
+      restoredProofs.push(output.toProof(signature, keyset));
+    }
+
+    return {
+      proofs: restoredProofs,
+      lastCounterWithSignature,
+    };
+  }
+
+  /**
+   * Restores deterministic proofs using the draft NUT-342 recovery scheme (experimental).
+   *
+   * @remarks
+   * Binary-searches the counter space for the last issued signature, reads its recovery gap and
+   * batch-restores that window. Falls back to `batchRestore` (NUT-13 linear scan) when the mint
+   * does not advertise support, no gap was backed up, or the search fails. Like `batchRestore`,
+   * returned proofs may include spent ones; filter with `checkProofsStates`.
+   * @param options.keysetId Which keysetId to restore. Defaults to the instance's.
+   * @param options.probeWindow Counters probed per binary-search request (defaults to 25).
+   */
+  async restoreEfficient(
+    config?: RestoreEfficientConfig,
+  ): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
+    const { keysetId, probeWindow = 25 } = config ?? {};
+    this.failIf(
+      !Number.isInteger(probeWindow) || probeWindow < 1,
+      'probeWindow must be a positive integer',
+    );
+    if (this._mintInfo?.isSupported(342).supported) {
+      try {
+        const result = await this.restoreFromGapBackup(probeWindow, keysetId);
+        if (result) return result;
+        this._logger.info('No NUT-342 gap backup found, falling back to NUT-13 scan');
+      } catch (e) {
+        this._logger.warn('NUT-342 recovery failed, falling back to NUT-13 scan', { error: e });
+      }
+    }
+    return this.batchRestore({ keysetId, filterSpent: false });
+  }
+
+  /**
+   * NUT-342 (draft) recovery core: locate the last issued counter T via windowed binary search,
+   * decrypt its `d_gap` and restore `[T - d_gap, T]`.
+   *
+   * @returns Undefined when the mint has no signatures or no gap metadata for T (caller falls back
+   *   to the NUT-13 scan).
+   */
+  private async restoreFromGapBackup(
+    probeWindow: number,
+    keysetId?: string,
+  ): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number } | undefined> {
+    // Legacy keysets derive hardened BIP-32 children, capping counters at 2^31; HMAC keysets
+    // (v1 and later) use the full u32 space the spec searches.
+    const id = keysetId ?? this.keysetId;
+    const isLegacy = !/^[0-9a-fA-F]+$/.test(id) || id.startsWith('00');
+    const maxCounter = isLegacy ? 0x7fffffff : 0xffffffff;
+
+    // A window counts as issued if ANY counter in it has a signature. This tolerates derivation
+    // gaps up to probeWindow without breaking the search's monotonicity assumption.
+    const probe = (windowIndex: number) => {
+      const start = windowIndex * probeWindow;
+      return this.restoreSignatures(start, Math.min(probeWindow, maxCounter - start + 1), keysetId);
+    };
+
+    const firstWindow = await probe(0);
+    if (firstWindow.length === 0) return undefined;
+
+    let lo = 0;
+    let hi = Math.floor(maxCounter / probeWindow);
+    while (lo < hi) {
+      const mid = Math.floor((lo + hi + 1) / 2);
+      if ((await probe(mid)).length > 0) lo = mid;
+      else hi = mid - 1;
+    }
+
+    const terminalWindow = lo === 0 ? firstWindow : await probe(lo);
+    const terminal = terminalWindow[terminalWindow.length - 1];
+    if (!terminal || terminal.signature.d_gap == null) return undefined;
+
+    const { counter: t, signature, output } = terminal;
+    const dGap =
+      typeof signature.d_gap === 'string'
+        ? decryptDGap(signature.d_gap, output.blindingFactor)
+        : Number(signature.d_gap);
+    this.failIf(!Number.isInteger(dGap) || dGap < 0 || dGap > t, 'Mint returned an invalid d_gap');
+
+    return this.restore(t - dGap, dGap + 1, { keysetId });
+  }
+
+  /**
+   * Queries the NUT-09 restore endpoint for issued signatures over a deterministic counter range.
+   *
+   * @returns One entry per counter with an issued signature, ascending.
+   */
+  private async restoreSignatures(
+    start: number,
+    count: number,
+    keysetId?: string,
+  ): Promise<
+    Array<{ counter: number; signature: SerializedBlindedSignature; output: OutputDataLike }>
+  > {
+    this.failIfNullish(this._seed, 'Cashu Wallet must be initialized with a seed to use restore');
 
     // Ensure we have keys - wallet only loads active keysets by default
     await this._keyChain.ensureKeysetKeys(keysetId ?? this.keysetId);
@@ -1707,22 +1856,16 @@ class Wallet {
     const signatureMap: { [sig: string]: SerializedBlindedSignature } = {};
     outputs.forEach((o, i) => (signatureMap[o.B_] = signatures[i]));
 
-    const restoredProofs: Proof[] = [];
-    let lastCounterWithSignature: number | undefined;
-
+    const found: Array<{
+      counter: number;
+      signature: SerializedBlindedSignature;
+      output: OutputDataLike;
+    }> = [];
     for (let i = 0; i < outputData.length; i++) {
-      const matchingSig = signatureMap[outputData[i].blindedMessage.B_];
-      if (matchingSig) {
-        lastCounterWithSignature = start + i;
-        outputData[i].blindedMessage.amount = matchingSig.amount;
-        restoredProofs.push(outputData[i].toProof(matchingSig, keyset));
-      }
+      const signature = signatureMap[outputData[i].blindedMessage.B_];
+      if (signature) found.push({ counter: start + i, signature, output: outputData[i] });
     }
-
-    return {
-      proofs: restoredProofs,
-      lastCounterWithSignature,
-    };
+    return found;
   }
 
   // -----------------------------------------------------------------
@@ -2279,7 +2422,7 @@ class Wallet {
     });
 
     // Create outputs and mint payload
-    const outputs = this.createOutputData(mintAmount, keyset, mintOT);
+    const outputs = await this.createOutputData(mintAmount, keyset, mintOT);
     const blindedMessages = outputs.map((d) => d.blindedMessage);
     const mintPayload: MintRequest = {
       outputs: blindedMessages,
@@ -2476,7 +2619,7 @@ class Wallet {
     }
 
     // Create consolidated output data
-    const outputs = this.createOutputData(totalAmount, keyset, mintOT);
+    const outputs = await this.createOutputData(totalAmount, keyset, mintOT);
     const blindedMessages = outputs.map((d) => d.blindedMessage);
 
     // Sign each locked quote over ALL blinded messages (NUT-29).
@@ -3000,7 +3143,7 @@ class Wallet {
       });
       // Generate the blank outputs (no fees as we are receiving change)
       // Remember, zero amount + zero denomination passes splitAmount validation
-      outputData = this.createOutputData(0, keyset, meltOT);
+      outputData = await this.createOutputData(0, keyset, meltOT);
     }
 
     // Create melt preview
