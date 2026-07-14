@@ -23,13 +23,26 @@ pr.mints; // mints the receiver accepts (string[] | undefined)
 pr.getTransport('nostr'); // the transport of a given type, if present
 ```
 
+## Pay a request from your wallet
+
+`wallet.ops.sendToRequest` builds a send that enforces the request's payer-side rules in one step: the strict/preferred mint list, the unit rule, NUT-05 melt-method support (resolved from the wallet's `MintInfo`), the applicable per-method fee (`mf`), the request's lock, and net-of-input-fees selection. It throws if this wallet's mint cannot fulfil the request.
+
+```typescript
+const { keep, send } = await wallet.ops.sendToRequest(pr, proofs).run();
+
+// Amountless request: pass the chosen amount instead.
+const result = await wallet.ops.sendToRequest(pr, proofs, 100).run();
+```
+
+It returns the normal send builder, so further options (deterministic outputs, keyset, offline modes) chain as usual. The sections below unpack the individual rules for manual control.
+
 ## Which mint may I pay from?
 
 A request may carry a mint list that is either **strict** (send only from these mints) or **preferred** (prefer these, but others are allowed). `isMintListStrict` resolves the NUT-18 default-to-strict semantic so you do not have to:
 
 ```typescript
 // undefined = no list (any mint); true = strict; false = preferred/advisory
-const allowed = !pr.isMintListStrict || pr.mints?.includes(myMint);
+const allowed = !pr.isMintListStrict || pr.includesMint(myMint); // URL-normalized membership
 ```
 
 If `supportedMethods` (`sm`) is set, the sending mint must be able to **melt the request's `unit`** via at least one of those methods (`bolt11`, `bolt12`, `onchain`, etc): the check is against the mint's NUT-05 melt methods for that unit, not its NUT-04 mint methods. Checking that requires the sending mint's capabilities. See [Inspect Mint Capabilities](./mint_capabilities.md).
@@ -140,6 +153,18 @@ const payload: PaymentRequestPayload = {
 
 > [!IMPORTANT]
 > The receiver validates the incoming proofs themselves (DLEQ, and that any timelock is long enough) before accepting. Building a payload does not settle the payment.
+
+## Validating a payment (receiver side)
+
+The requested amount is what the receiver must **net**, so check incoming proofs against the input fees they will cost to swap, plus any per-method fee the payer owed, before treating the payment as settled. A wallet on the payload's mint has everything needed:
+
+```typescript
+if (!wallet.isPaymentRequestSatisfied(pr, payload.proofs)) {
+  // Underpaid: sum(proofs) - inputFees < amount + mf. Ignore or refund.
+}
+```
+
+For an amountless request, pass the amount you expected as the third argument. The check covers the amount only; mint admissibility (`isMintListStrict` / `includesMint`) and proof integrity (DLEQ, locks) remain separate checks.
 
 [nut18]: https://github.com/cashubtc/nuts/blob/main/18.md
 [nut26]: https://github.com/cashubtc/nuts/blob/main/26.md

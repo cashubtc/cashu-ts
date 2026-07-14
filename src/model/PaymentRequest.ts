@@ -149,6 +149,25 @@ export class PaymentRequest {
     return this.amount.add(this.feesFor(mint, meltMethods));
   }
 
+  /**
+   * Whether `mintUrl` is in the request's mint list, compared after URL normalization.
+   *
+   * @remarks
+   * Foreign requests may carry non-normalized or unparsable entries; those fall back to a raw
+   * string comparison. `false` when the request has no mint list.
+   */
+  includesMint(mintUrl: string): boolean {
+    const norm = (u: string) => {
+      try {
+        return normalizeUrl(u);
+      } catch {
+        return u;
+      }
+    };
+    const target = norm(mintUrl);
+    return this.mints?.some((m) => norm(m) === target) ?? false;
+  }
+
   toRawRequest() {
     this.assertUnitRule();
     const rawRequest: RawPaymentRequest = {};

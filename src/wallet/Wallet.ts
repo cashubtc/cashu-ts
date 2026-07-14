@@ -28,6 +28,7 @@ import { CTSError, isMintOperationError } from '../model/Errors';
 import { MintInfo } from '../model/MintInfo';
 import { OutputData, type OutputDataLike } from '../model/OutputData';
 import { DefaultOutputDataCreator, type OutputDataCreator } from '../model/OutputDataCreator';
+import type { PaymentRequest } from '../model/PaymentRequest';
 import type {
   GetInfoResponse,
   MeltRequest,
@@ -1491,6 +1492,46 @@ class Wallet {
   getFeesForProofs(proofs: Array<Pick<Proof, 'id'>>): Amount {
     const sumPPK = Amount.sum(proofs.map((proof) => this.getProofFeePPK(proof))).toBigInt();
     return Amount.from((sumPPK + 999n) / 1000n);
+  }
+
+  /**
+   * Payee-side NUT-18 settlement check: do these received proofs net the requested amount?
+   *
+   * @remarks
+   * Verifies `sum(proofs) - inputFees >= amount + mf`, with input fees from this wallet's keysets
+   * and `mf` priced from this mint's NUT-05 melt methods for the wallet unit. Checks the amount
+   * only; proof integrity (DLEQ, locks) remains a separate check.
+   * @param pr - The payment request being settled.
+   * @param proofs - The received proofs (from this wallet's mint).
+   * @param expectedAmount - Expected amount for amountless requests; ignored when the request sets
+   *   `a`.
+   * @throws If no amount is available to check against, the request unit does not match this
+   *   wallet, a proof keyset is unknown, or the request is invalid per NUT-18.
+   */
+  isPaymentRequestSatisfied(
+    pr: PaymentRequest,
+    proofs: Array<Pick<Proof, 'id' | 'amount'>>,
+    expectedAmount?: AmountLike,
+  ): boolean {
+    const expected =
+      pr.amount ?? (expectedAmount !== undefined ? Amount.from(expectedAmount) : undefined);
+    if (!expected) {
+      throw new CTSError('amountless payment request: pass the expected amount to check against');
+    }
+    if (pr.unit && pr.unit !== this._unit) {
+      throw new CTSError(`request unit '${pr.unit}' does not match wallet unit '${this._unit}'`);
+    }
+    // mf applies only when this mint is outside the request's mint list (NUT-18).
+    let mf = Amount.zero();
+    if (pr.supportedMethods?.length && !pr.includesMint(this.mint.mintUrl)) {
+      const meltMethods = this.getMintInfo()
+        .supportedMethods('melt')
+        .filter((m) => m.unit === this._unit)
+        .map((m) => m.method);
+      mf = pr.feesFor(this.mint.mintUrl, meltMethods);
+    }
+    const needed = expected.add(mf).add(this.getFeesForProofs(proofs));
+    return sumProofs(proofs).compareTo(needed) >= 0;
   }
 
   /**

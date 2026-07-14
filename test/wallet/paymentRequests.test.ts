@@ -238,6 +238,17 @@ describe('payment requests', () => {
       expect(() => foreign.feesFor('https://any.example.com', ['bolt12'])).toThrow(/unit/);
     });
 
+    test('includesMint matches the mint list after URL normalization', () => {
+      const pr = new PaymentRequest({
+        id: 'mints',
+        mints: ['https://MINT.example.com/', 'not a url'],
+      });
+      expect(pr.includesMint('https://mint.example.com')).toBe(true); // case + trailing slash
+      expect(pr.includesMint('https://other.example.com')).toBe(false);
+      expect(pr.includesMint('not a url')).toBe(true); // unparsable entries compare raw
+      expect(new PaymentRequest({ id: 'none' }).includesMint('https://any.mint')).toBe(false);
+    });
+
     test('isMintListStrict resolves NUT-18 default-to-strict semantic', () => {
       const noMints = new PaymentRequest({ id: 'no_mints', amount: 100, unit: 'sat' });
       expect(noMints.isMintListStrict).toBeUndefined();

@@ -2,6 +2,7 @@ import { type P2PKOptions } from '../crypto';
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { type OutputDataLike, type OutputDataFactory } from '../model/OutputData';
+import type { PaymentRequest } from '../model/PaymentRequest';
 import {
   type MeltQuoteBolt11Response,
   type MeltQuoteBolt12Response,
@@ -47,6 +48,64 @@ export class WalletOps {
   constructor(private wallet: Wallet) {}
   send(amount: AmountLike, proofs: ProofLike[]) {
     return new SendBuilder(this.wallet, amount, proofs);
+  }
+  /**
+   * Builds a send that satisfies a NUT-18 payment request from this wallet's mint.
+   *
+   * @remarks
+   * Enforces the payer-side MUSTs: strict mint list, unit rule, NUT-05 melt-method support
+   * (resolved from this wallet's MintInfo), the applicable per-method fee (`mf`), the request's
+   * `nut10` lock, and net-of-input-fees selection (`includeFees(true)`). Requires a loaded mint.
+   * @param pr - The decoded payment request.
+   * @param proofs - Proofs to select from.
+   * @param amount - Payer-chosen amount for amountless requests; forbidden when the request sets
+   *   `a`.
+   * @returns A preconfigured {@link SendBuilder}; chain further options and `.run()`.
+   * @throws If the wallet's mint, unit, or melt methods are unacceptable to the request, the
+   *   request's lock cannot be honoured, or the request is invalid per NUT-18.
+   */
+  sendToRequest(pr: PaymentRequest, proofs: ProofLike[], amount?: AmountLike) {
+    const wallet = this.wallet;
+    if (pr.amount && amount !== undefined) {
+      throw new CTSError('the request specifies its amount; omit the amount argument');
+    }
+    const base = pr.amount ?? (amount !== undefined ? Amount.from(amount) : undefined);
+    if (!base) {
+      throw new CTSError('amountless payment request: pass the chosen amount');
+    }
+    if (pr.amount && !pr.unit) {
+      throw new CTSError('invalid payment request: amount (a) without unit (u)');
+    }
+    if (pr.unit && pr.unit !== wallet.unit) {
+      throw new CTSError(`request unit '${pr.unit}' does not match wallet unit '${wallet.unit}'`);
+    }
+    // Strict mint list: the sender MUST only send proofs from listed mints (NUT-18).
+    const listed = pr.includesMint(wallet.mint.mintUrl);
+    if (pr.isMintListStrict && !listed) {
+      throw new CTSError("this wallet's mint is not in the request's strict mint list");
+    }
+    // Melt-method support and per-method fee (sm/mf): the mint MUST be able to melt the request
+    // unit via at least one listed method; the fee applies only from non-listed mints.
+    let fee = Amount.zero();
+    if (pr.supportedMethods?.length) {
+      const meltMethods = wallet
+        .getMintInfo()
+        .supportedMethods('melt')
+        .filter((m) => m.unit === wallet.unit)
+        .map((m) => m.method);
+      if (!pr.supportedMethods.some((m) => meltMethods.includes(m.method))) {
+        throw new CTSError(`mint cannot melt ${wallet.unit} via any method the request accepts`);
+      }
+      fee = listed ? Amount.zero() : pr.feesFor(wallet.mint.mintUrl, meltMethods);
+    }
+    // A nut10 kind toP2PKOptions cannot express would otherwise send unlocked; fail instead.
+    const lock = pr.toP2PKOptions();
+    if (pr.nut10 && !lock) {
+      throw new CTSError(`cannot honour the request's nut10 lock kind '${pr.nut10.kind}'`);
+    }
+    // Net of input fees (NUT-18): the receiver must net the requested amount after swapping.
+    const builder = new SendBuilder(wallet, base.add(fee), proofs).includeFees(true);
+    return lock ? builder.asP2PK(lock) : builder;
   }
   receive(token: Token | string | ProofLike[]) {
     return new ReceiveBuilder(this.wallet, token);
