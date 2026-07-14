@@ -9,6 +9,7 @@
 DOCKER ?= docker
 BIND_ADDR ?= 127.0.0.1
 PORT ?= 3338
+RATE_LIMIT_PM ?= 200
 
 NUT_342_CTX ?= https://github.com/cashubtc/nutshell.git\#feat/efficient-recovery
 NUT_342_IMAGE ?= cashu-dev-nutshell-342:local
@@ -21,7 +22,9 @@ NUT_ENVS = \
 	-e MINT_INPUT_FEE_PPK=100 \
 	-e MINT_LISTEN_HOST=0.0.0.0 \
 	-e MINT_LISTEN_PORT=3338 \
-	-e MINT_PRIVATE_KEY=TEST_PRIVATE_KEY
+	-e MINT_PRIVATE_KEY=TEST_PRIVATE_KEY \
+	-e MINT_TRANSACTION_RATE_LIMIT_PER_MINUTE=$(RATE_LIMIT_PM) \
+	-e MINT_GLOBAL_RATE_LIMIT_PER_MINUTE=$(RATE_LIMIT_PM)
 
 .PHONY: build up down demo demo-ci logs
 
