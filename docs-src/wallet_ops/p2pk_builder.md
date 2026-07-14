@@ -21,7 +21,7 @@ P2PKBuilder.fromOptions(opts: P2PKOptions): P2PKBuilder
 
 **Behaviour**
 
-Keys must be 33-byte compressed hex and on the secp256k1 curve (NUT-11); a 32-byte x-only key (eg Nostr) throws until you prepend `'02'`, per NIP-61 practice. Keys are de-duplicated, insertion order is preserved, total lock plus refund keys must be ≤ 10, refund keys will throw if no locktime is set.
+Keys must be 33-byte compressed hex and on the secp256k1 curve (NUT-11); a 32-byte x-only key (eg Nostr) throws until you prepend `'02'`, per NIP-61. Keys are de-duplicated, insertion order is preserved, total lock plus refund keys must be ≤ 11 for P2PK or ≤ 10 for HTLC (the hashlock takes a slot, NUT-28), refund keys will throw if no locktime is set.
 
 Example usage:
 
