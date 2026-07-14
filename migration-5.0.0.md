@@ -243,6 +243,24 @@ asP2PK({ kind: 'HTLC', data: h, pubkeys: [a] });
 
 ---
 
+## P2PK lock pubkeys must be 33-byte compressed and on-curve
+
+Authoring a lock (`P2PKBuilder.addLockPubkey`/`addRefundPubkey`, or raw `P2PKOptions` passed to `asP2PK()` and friends) now requires 33-byte compressed hex keys (66 chars, `02`/`03` prefix) that decompress to a valid secp256k1 point, per NUT-11. v4 accepted 32-byte x-only input and silently prefixed `02`; because a SHA-256 hashlock is also 64-hex, that leniency could turn a misplaced hashlock (or corrupt key) into a lock nobody can spend. With the strict rule, 64-hex input is only ever a hashlock and pubkey mistakes fail fast.
+
+The rule applies everywhere a P2PK pubkey is read, including parsing foreign input: `PaymentRequest.toP2PKOptions()` and proof verification (`verifyP2PKSpendingConditions` and friends) throw on a non-compliant key instead of repairing it. Paying a request creates new outputs under its lock, so a lifted key risks burning the payer's funds; and a proof already locked with such a key is rejected by spec-conformant mints anyway (CDK refuses the swap), so failing at parse names the broken proof rather than submitting a doomed spend. If you know such a key is a genuine x-only pubkey, prepend `'02'` and build the `P2PKOptions` yourself.
+
+### Migration
+
+```ts
+// Before (x-only, eg a Nostr key)
+new P2PKBuilder().addLockPubkey(nostrPubkeyHex);
+
+// After: prepend the even-y prefix (the same rule NIP-61 nutzaps use)
+new P2PKBuilder().addLockPubkey('02' + nostrPubkeyHex);
+```
+
+---
+
 ## Mint quote responses now carry NUT-04 accounting fields
 
 `MintQuoteBaseResponse` (and every method-specific mint quote response) gains five required fields:

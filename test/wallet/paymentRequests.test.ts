@@ -340,8 +340,9 @@ describe('payment requests', () => {
 
   describe('toP2PKOptions', () => {
     const PUBKEY = '03a16e8557f5a4229212f4df093791c8615c864a387d66fd990e9cdca5dcb5c9aa';
-    const PUBKEY_2 = '02000000000000000000000000000000000000000000000000000000000000000a';
-    const REFUND = '020000000000000000000000000000000000000000000000000000000000000b0b';
+    // Real curve points: G and 2G (strict validation decompresses every key).
+    const PUBKEY_2 = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+    const REFUND = '02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5';
     const HASH = '5d3f2c1b0a99887766554433221100ffeeddccbbaa99887766554433221100ff';
 
     const prWithNut10 = (nut10?: NUT10Option) =>
@@ -386,6 +387,20 @@ describe('payment requests', () => {
       // arrive without it; the parser must see an empty tag list, not a poison value.
       const nut10 = { kind: 'P2PK', data: PUBKEY } as unknown as NUT10Option;
       expect(prWithNut10(nut10).toP2PKOptions()).toEqual({ kind: 'P2PK', data: PUBKEY });
+    });
+
+    test('rejects x-only keys in a foreign request (paying would create new locked outputs)', () => {
+      // A 64-hex data slot in a P2PK request may be a hashlock from a non-compliant
+      // wallet; lifting it silently could burn the payer's funds, so it must throw.
+      const xOnly: NUT10Option = { kind: 'P2PK', data: PUBKEY.slice(2), tags: [] };
+      expect(() => prWithNut10(xOnly).toP2PKOptions()).toThrow(/prepend '02'/);
+
+      const xOnlyTag: NUT10Option = {
+        kind: 'P2PK',
+        data: PUBKEY,
+        tags: [['pubkeys', PUBKEY_2.slice(2)]],
+      };
+      expect(() => prWithNut10(xOnlyTag).toP2PKOptions()).toThrow(/prepend '02'/);
     });
 
     test('preserves non-standard tags as additionalTags', () => {

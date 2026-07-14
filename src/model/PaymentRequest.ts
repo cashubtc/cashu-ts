@@ -1,6 +1,6 @@
 import { getTag, getTagInt, getTagScalar } from '../crypto/NUT10';
 import type { P2PKOptions, P2PKTag } from '../crypto/NUT11';
-import { P2PK_KNOWN_TAG_KEYS, parseP2PKSecret } from '../crypto/NUT11';
+import { P2PK_KNOWN_TAG_KEYS, normalizePubkey, parseP2PKSecret } from '../crypto/NUT11';
 import { encodeBase64toUint8, decodeCBOR, encodeCBOR, Bytes } from '../utils';
 import { decodeBech32mToBytes, encodeBech32m } from '../utils/bech32m';
 import { decodeTLV, encodeTLV } from '../utils/tlv';
@@ -124,8 +124,9 @@ export class PaymentRequest {
    * @remarks
    * Supports `P2PK` (NUT-11) and `HTLC` (NUT-14) only; returns `undefined` for no `nut10` or an
    * unbuildable kind.
-   * @throws If the option is missing its `data` field, or carries malformed NUT-10 tags — invalid
-   *   lock semantics must not be silently dropped.
+   * @throws If the option is missing its `data` field, carries malformed NUT-10 tags, or holds a
+   *   non-compliant pubkey (x-only or off-curve). Paying this request creates new outputs under the
+   *   lock, so invalid lock semantics must not be silently dropped or repaired.
    */
   toP2PKOptions(): P2PKOptions | undefined {
     const nut10 = this.nut10;
@@ -146,17 +147,17 @@ export class PaymentRequest {
     ]);
     // `data` is the NUT-10 data slot (hashlock for HTLC, primary pubkey for P2PK);
     // the `pubkeys` tag carries the optional additional / receiver keys for either kind.
-    const taggedPubkeys = getTag(secret, 'pubkeys') ?? [];
+    const taggedPubkeys = (getTag(secret, 'pubkeys') ?? []).map(normalizePubkey);
     const options: P2PKOptions = {
       kind: isHTLC ? 'HTLC' : 'P2PK',
-      data: nut10.data,
+      data: isHTLC ? nut10.data : normalizePubkey(nut10.data),
       ...(taggedPubkeys.length ? { pubkeys: taggedPubkeys } : {}),
     };
 
     // Optional fields pass straight through: the accessors return undefined when
     // absent, and the builder ignores undefined options. getTag never yields [].
     options.locktime = getTagInt(secret, 'locktime');
-    options.refundKeys = getTag(secret, 'refund');
+    options.refundKeys = getTag(secret, 'refund')?.map(normalizePubkey);
     options.requiredSignatures = getTagInt(secret, 'n_sigs');
     options.requiredRefundSignatures = getTagInt(secret, 'n_sigs_refund');
     if (getTagScalar(secret, 'sigflag') === 'SIG_ALL') {

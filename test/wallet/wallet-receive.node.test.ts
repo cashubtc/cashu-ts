@@ -442,7 +442,7 @@ describe('receive', () => {
         type: 'p2pk',
         options: {
           kind: 'P2PK',
-          data: '02a9acc1e594c8d2f91fbd5664973aaef2ff2b8c2f6cf5f419c17a35755a6ab5c4',
+          data: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
         },
       },
     );
@@ -454,7 +454,7 @@ describe('receive', () => {
     const allSecrets = proofs.map((d) => JSON.parse(d.secret));
     allSecrets.forEach((s) => {
       expect(s[0] === 'P2PK');
-      expect(s[1].data).toBe('02a9acc1e594c8d2f91fbd5664973aaef2ff2b8c2f6cf5f419c17a35755a6ab5c4');
+      expect(s[1].data).toBe('0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798');
     });
     expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);

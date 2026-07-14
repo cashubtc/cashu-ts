@@ -1,3 +1,5 @@
+import { schnorr } from '@noble/curves/secp256k1.js';
+import { bytesToHex } from '@noble/curves/utils.js';
 import { test, describe, expect } from 'vitest';
 
 import { Wallet, OutputData } from '../../src';
@@ -6,13 +8,15 @@ import { mint, useTestServer } from './_setup';
 
 useTestServer();
 
-// Valid-format 33-byte compressed pubkeys for testing
-const PK1 = '02' + 'aa'.repeat(32);
-const PK2 = '02' + 'bb'.repeat(32);
-const PK3 = '02' + 'cc'.repeat(32);
-const REFUND1 = '02' + 'dd'.repeat(32);
-const REFUND2 = '02' + 'ee'.repeat(32);
-const REFUND3 = '02' + 'ff'.repeat(32);
+// Valid on-curve 33-byte compressed pubkeys for testing
+const key = (seed: number) =>
+  '02' + bytesToHex(schnorr.getPublicKey(new Uint8Array(32).fill(seed)));
+const PK1 = key(1);
+const PK2 = key(2);
+const PK3 = key(3);
+const REFUND1 = key(4);
+const REFUND2 = key(5);
+const REFUND3 = key(6);
 
 describe('P2PK BlindingData', () => {
   test('Create BlindingData locked to single pk with locktime and single refund key', async () => {

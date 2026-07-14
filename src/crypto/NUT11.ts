@@ -7,6 +7,7 @@ import { type OutputDataLike } from '../model/OutputData';
 import { type HTLCWitness, type P2PKWitness, type Proof } from '../model/types';
 
 import { getValidSigners, schnorrSignMessage, schnorrVerifyMessage, type PrivKey } from './core';
+import { pointFromHex } from './curve_secp';
 import {
   getTagInt,
   getTagScalar,
@@ -183,19 +184,37 @@ export function parseP2PKSecret(secret: string | Secret): Secret {
 // Normalizer Functions
 // ------------------------------
 
+// Decompression-validated keys; proofs typically share lock keys, so repeat parses are
+// common. Naive clear-on-full, swap for LRU if churn ever matters.
+const VALIDATED_PUBKEYS = new Set<string>();
+
 /**
- * Normalizes to lowercase 33 byte with 02 prefix for x only.
+ * Validates and lowercases a P2PK pubkey (NUT-11: 33-byte compressed hex).
  *
- * @param pk 33 byte compressed (02|03...), or 32 byte x-only. *
- * @throws If malformed.
+ * @remarks
+ * Strict: x-only input is rejected so a 64-hex value can only ever be a hashlock, and the key must
+ * decompress to a curve point. A non-compliant key burns funds when authored and is unspendable on
+ * spec-conformant mints when parsed.
+ * @throws If not 66-char 02/03 hex, or not a valid secp256k1 point.
+ * @internal
  */
-function normalizePubkey(pk: string): string {
+export function normalizePubkey(pk: string): string {
   const hex = pk.toLowerCase();
-  if (hex.length === 66 && (hex.startsWith('02') || hex.startsWith('03'))) return hex;
-  if (hex.length === 64) return `02${hex}`;
-  throw new CTSError(
-    `Invalid pubkey, expected 33 byte compressed or 32 byte x only, got length ${hex.length}`,
-  );
+  if (hex.length !== 66 || !(hex.startsWith('02') || hex.startsWith('03'))) {
+    throw new CTSError(
+      `Invalid pubkey: expected 33-byte compressed hex (66 chars); for an x-only (nostr) key, prepend '02', got length ${hex.length}`,
+    );
+  }
+  if (!VALIDATED_PUBKEYS.has(hex)) {
+    try {
+      pointFromHex(hex);
+    } catch (e) {
+      throw new CTSError('Invalid pubkey: not a valid secp256k1 point', { cause: e });
+    }
+    if (VALIDATED_PUBKEYS.size >= 1024) VALIDATED_PUBKEYS.clear();
+    VALIDATED_PUBKEYS.add(hex);
+  }
+  return hex;
 }
 
 /**
