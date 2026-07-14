@@ -100,7 +100,7 @@ export class PaymentRequest {
 
   /**
    * The per-method fee (`mf`) the payer must add when paying from `mint`: `0` if `mint` is in the
-   * mint list, otherwise the lowest fee among the `sm` methods that `mintMethods` says the mint
+   * mint list, otherwise the lowest fee among the `sm` methods that `meltMethods` says the mint
    * supports (NUT-18).
    *
    * Use this for amountless requests (where the payer chooses the amount): add the result to the
@@ -109,19 +109,19 @@ export class PaymentRequest {
    * mints/methods check that separately.
    *
    * @param mint - The mint URL the payer will send from.
-   * @param mintMethods - The methods the mint can melt the request unit via (its NUT-05 melt
+   * @param meltMethods - The methods the mint can melt the request unit via (its NUT-05 melt
    *   methods, matched against `sm`); omit if unknown (prices as `0`).
    * @throws If the request sets `a` or `sm` without `u` (invalid per NUT-18; `mf` is denominated in
    *   the request unit).
    */
-  feesFor(mint: string, mintMethods?: string[]): Amount {
+  feesFor(mint: string, meltMethods?: string[]): Amount {
     this.assertUnitRule();
     // Fees compensate the receiver for melting out: payments from a listed mint carry none.
     if (!this.supportedMethods?.length || this.mints?.includes(mint)) {
       return Amount.zero();
     }
     const applicable = this.supportedMethods
-      .filter((m) => mintMethods?.includes(m.method))
+      .filter((m) => meltMethods?.includes(m.method))
       .map((m) => m.fee ?? Amount.zero());
     if (!applicable.length) {
       return Amount.zero();
@@ -134,19 +134,19 @@ export class PaymentRequest {
    * {@link PaymentRequest.feesFor | feesFor}.
    *
    * @param mint - The mint URL the payer will send from.
-   * @param mintMethods - The methods the mint can melt the request unit via (its NUT-05 melt
+   * @param meltMethods - The methods the mint can melt the request unit via (its NUT-05 melt
    *   methods, matched against `sm`); omit if unknown.
    * @throws If the request has no amount (amountless requests have no base to add fees to; use
    *   {@link PaymentRequest.feesFor | feesFor} and add it to the amount the payer chooses), or no
    *   unit (invalid per NUT-18).
    */
-  amountToSend(mint: string, mintMethods?: string[]): Amount {
+  amountToSend(mint: string, meltMethods?: string[]): Amount {
     if (!this.amount) {
       throw new CTSError(
         'cannot compute amount to send: request has no amount; use feesFor() and add the payer-chosen amount',
       );
     }
-    return this.amount.add(this.feesFor(mint, mintMethods));
+    return this.amount.add(this.feesFor(mint, meltMethods));
   }
 
   toRawRequest() {
@@ -438,8 +438,13 @@ export class PaymentRequestBuilder {
 
   /**
    * Sets the unit for an amountless request. The last write here or via `amount()` wins.
+   *
+   * @throws If the unit is empty.
    */
   unit(unit: string): this {
+    if (!unit) {
+      throw new CTSError('unit must be a non-empty string');
+    }
     this._unit = unit;
     return this;
   }
@@ -550,12 +555,18 @@ export class PaymentRequestBuilder {
   /**
    * Validates cross-field state and constructs the {@link PaymentRequest}.
    *
-   * @throws If `mintsPreferred` is set without mints (NUT-18 ignores `mp` without `m`), or a
-   *   supported method is listed twice.
+   * @throws If `mintsPreferred` is set without mints (NUT-18 ignores `mp` without `m`), a supported
+   *   method is listed twice, or supported methods are set without a unit (NUT-18: `u` MUST be set
+   *   when `sm` is set).
    */
   build(): PaymentRequest {
     if (this._mintsPreferred !== undefined && this._mints.length === 0) {
       throw new CTSError('mintsPreferred (mp) requires a mint list; add mints or drop the flag');
+    }
+    if (this._methods.length > 0 && !this._unit) {
+      throw new CTSError(
+        'supported methods (sm) require a unit; set it via amount(value, unit) or unit()',
+      );
     }
     const seen = new Set<string>();
     for (const m of this._methods) {

@@ -1645,11 +1645,11 @@ class PaymentRequest_2 {
     constructor(options?: PaymentRequestOptions);
     // (undocumented)
     amount?: Amount;
-    amountToSend(mint: string, mintMethods?: string[]): Amount;
+    amountToSend(mint: string, meltMethods?: string[]): Amount;
     static builder(): PaymentRequestBuilder;
     // (undocumented)
     description?: string;
-    feesFor(mint: string, mintMethods?: string[]): Amount;
+    feesFor(mint: string, meltMethods?: string[]): Amount;
     // (undocumented)
     static fromEncodedRequest(encodedRequest: string): PaymentRequest_2;
     static fromRawRequest(rawPaymentRequest: RawPaymentRequest): PaymentRequest_2;

@@ -36,7 +36,7 @@ If `supportedMethods` (`sm`) is set, the sending mint must be able to **melt the
 
 ## How much do I send, including fees?
 
-Each supported method can carry a fee (`mf`) that compensates the receiver for melting out via it. The fee applies only when paying from a mint outside the request's mint list (or from any mint if no list is set); a payment from a listed mint carries none. When one applies, the payer owes the **lowest** `mf` among the listed methods their mint supports. `amountToSend` computes the total for you: pass the methods your mint supports as the second argument.
+Each supported method can carry a fee (`mf`) that compensates the receiver for melting out via it. The fee applies only when paying from a mint outside the request's mint list (or from any mint if no list is set); a payment from a listed mint carries none. When one applies, the payer owes the **lowest** `mf` among the listed methods their mint supports. `amountToSend` computes the total for you: pass the melt methods your mint supports as the second argument.
 
 `amountToSend` returns an `Amount`, so it flows straight into `wallet.ops.send` (which accepts any `AmountLike`). Convert only at the edge, for display or serialization.
 
@@ -46,7 +46,7 @@ pr.amountToSend('https://in-list.mint', ['bolt12']); // listed mint, no fee  →
 pr.amountToSend('https://other.mint', ['bolt11', 'bolt12']); // lowest = 0   → 100
 pr.amountToSend('https://other.mint', ['bolt12']); // + mf                   → 105
 
-const total = pr.amountToSend(myMint, myMintMethods);
+const total = pr.amountToSend(myMint, myMeltMethods);
 await wallet.ops.send(total, proofs).run(); // Amount passed straight through
 ```
 

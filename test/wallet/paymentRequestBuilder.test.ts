@@ -10,7 +10,8 @@ import {
 } from '../../src/index';
 
 const PUBKEY = '02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2';
-const PUBKEY2 = '03e7a51b73e5f2f6b5a6f0d63c6a5e1a3b2c4d5e6f708192a3b4c5d6e7f8091a2b';
+// A real on-curve point (secp256k1 G): main now rejects non-point pubkeys in P2PK locks.
+const PUBKEY2 = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
 const NPROFILE =
   'nprofile1qy28wumn8ghj7un9d3shjtnyv9kh2uewd9hsz9mhwden5te0wfjkccte9curxven9eehqctrv5hszrthwden5te0dehhxtnvdakqqgydaqy7curk439ykptkysv7udhdhu68sucm295akqefdehkf0d495cwunl5';
 
@@ -85,6 +86,7 @@ describe('PaymentRequestBuilder', () => {
   test('amount() rejects an empty unit; addSupportedMethod() rejects an empty method', () => {
     expect(() => new PaymentRequestBuilder().amount(100, '')).toThrowError(/requires a unit/);
     expect(() => new PaymentRequestBuilder().addSupportedMethod('')).toThrowError(/non-empty/);
+    expect(() => new PaymentRequestBuilder().unit('')).toThrowError(/non-empty/);
   });
 
   test('reusing the builder does not mutate an already-built request', () => {
@@ -100,10 +102,22 @@ describe('PaymentRequestBuilder', () => {
   test('duplicate supported methods throw at build()', () => {
     expect(() =>
       new PaymentRequestBuilder()
+        .unit('sat')
         .addSupportedMethod('bolt11')
         .addSupportedMethod('bolt11', 2)
         .build(),
     ).toThrowError(/duplicate supported method/);
+  });
+
+  test('supported methods without a unit throw at build(), in any call order', () => {
+    // NUT-18: u MUST be set if sm is set (mf and the melt check are denominated in it).
+    expect(() => new PaymentRequestBuilder().addSupportedMethod('bolt11').build()).toThrowError(
+      /require a unit/,
+    );
+    // amount() supplies the unit, satisfying the rule.
+    expect(() =>
+      new PaymentRequestBuilder().amount(100, 'sat').addSupportedMethod('bolt11').build(),
+    ).not.toThrow();
   });
 
   test('addNostrTransport validates target and nips', () => {
