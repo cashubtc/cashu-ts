@@ -32,7 +32,7 @@ A request may carry a mint list that is either **strict** (send only from these 
 const allowed = !pr.isMintListStrict || pr.mints?.includes(myMint);
 ```
 
-If `supportedMethods` (`sm`) is set, the sending mint must also support at least one of those methods (`bolt11`, `bolt12`, `onchain`, …). Checking that requires the sending mint's capabilities. See [Inspect Mint Capabilities](./mint_capabilities.md).
+If `supportedMethods` (`sm`) is set, the sending mint must be able to **melt the request's `unit`** via at least one of those methods (`bolt11`, `bolt12`, `onchain`, etc): the check is against the mint's NUT-05 melt methods for that unit, not its NUT-04 mint methods. Checking that requires the sending mint's capabilities. See [Inspect Mint Capabilities](./mint_capabilities.md).
 
 ## How much do I send, including fees?
 
@@ -50,7 +50,7 @@ const total = pr.amountToSend(myMint, myMintMethods);
 await wallet.ops.send(total, proofs).run(); // Amount passed straight through
 ```
 
-`amountToSend` only prices the fee that applies; it does not reject a mint or method that is not allowed (that is the caller's decision, see above). It throws if the request has no amount.
+`amountToSend` only prices the fee that applies; it does not reject a mint or method that is not allowed (that is the caller's decision, see above). It throws if the request has no amount, or no unit: NUT-18 requires `unit` whenever `amount` or `supportedMethods` is set (`mf` is denominated in the request unit), so encoding or pricing such a request fails, while plain decoding stays lenient for inspection.
 
 For an **amountless** request (the payer chooses the amount), use `feesFor` to price the surcharge alone and add it to the chosen amount:
 

@@ -214,6 +214,30 @@ describe('payment requests', () => {
       expect(mp.feesFor('https://out.example.com', ['bolt12']).equals(5)).toBeTruthy();
     });
 
+    test('unit rule: a or sm without u fails on encode and pricing, decode stays lenient', () => {
+      // NUT-18: u MUST be set if a or sm is set (mf is denominated in the request unit).
+      const smNoUnit = new PaymentRequest({
+        id: 'sm_no_unit',
+        mints: ['https://in.example.com'],
+        supportedMethods: [{ method: 'bolt12', fee: 5 }],
+      });
+      expect(() => smNoUnit.toEncodedRequest()).toThrow(/unit/);
+      expect(() => smNoUnit.toEncodedCreqB()).toThrow(/unit/);
+      expect(() => smNoUnit.feesFor('https://out.example.com', ['bolt12'])).toThrow(/unit/);
+
+      const amountNoUnit = new PaymentRequest({ id: 'a_no_unit', amount: 100 });
+      expect(() => amountNoUnit.toEncodedRequest()).toThrow(/unit/);
+      expect(() => amountNoUnit.amountToSend('https://any.example.com')).toThrow(/unit/);
+
+      // Foreign requests stay decodable for inspection; only encoding/pricing rejects.
+      const foreign = PaymentRequest.fromRawRequest({
+        i: 'foreign',
+        sm: [{ mn: 'bolt12', mf: 5 }],
+      });
+      expect(foreign.supportedMethods?.[0].fee?.equals(5)).toBeTruthy();
+      expect(() => foreign.feesFor('https://any.example.com', ['bolt12'])).toThrow(/unit/);
+    });
+
     test('isMintListStrict resolves NUT-18 default-to-strict semantic', () => {
       const noMints = new PaymentRequest({ id: 'no_mints', amount: 100, unit: 'sat' });
       expect(noMints.isMintListStrict).toBeUndefined();

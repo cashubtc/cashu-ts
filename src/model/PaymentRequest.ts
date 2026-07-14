@@ -81,6 +81,19 @@ export class PaymentRequest {
   }
 
   /**
+   * NUT-18: `u` MUST be set if `a` or `sm` is set: `mf` and the melt-method check are denominated
+   * in the request unit. Enforced when encoding or pricing; parsing stays lenient so foreign
+   * requests can still be inspected.
+   */
+  private assertUnitRule(): void {
+    if (!this.unit && (this.amount !== undefined || this.supportedMethods?.length)) {
+      throw new CTSError(
+        'invalid payment request: unit (u) is required when an amount (a) or supported methods (sm) are set',
+      );
+    }
+  }
+
+  /**
    * The per-method fee (`mf`) the payer must add when paying from `mint`: `0` if `mint` is in the
    * mint list, otherwise the lowest fee among the `sm` methods that `mintMethods` says the mint
    * supports (NUT-18).
@@ -91,10 +104,13 @@ export class PaymentRequest {
    * mints/methods check that separately.
    *
    * @param mint - The mint URL the payer will send from.
-   * @param mintMethods - The payment methods that mint supports (matched against `sm`); omit if
-   *   unknown (prices as `0`).
+   * @param mintMethods - The methods the mint can melt the request unit via (its NUT-05 melt
+   *   methods, matched against `sm`); omit if unknown (prices as `0`).
+   * @throws If the request sets `a` or `sm` without `u` (invalid per NUT-18; `mf` is denominated in
+   *   the request unit).
    */
   feesFor(mint: string, mintMethods?: string[]): Amount {
+    this.assertUnitRule();
     // Fees compensate the receiver for melting out: payments from a listed mint carry none.
     if (!this.supportedMethods?.length || this.mints?.includes(mint)) {
       return Amount.zero();
@@ -113,10 +129,11 @@ export class PaymentRequest {
    * {@link PaymentRequest.feesFor | feesFor}.
    *
    * @param mint - The mint URL the payer will send from.
-   * @param mintMethods - The payment methods that mint supports (matched against `sm`); omit if
-   *   unknown.
-   * @throws If the request has no amount. Amountless requests have no base to add fees to; use
-   *   {@link PaymentRequest.feesFor | feesFor} and add it to the amount the payer chooses.
+   * @param mintMethods - The methods the mint can melt the request unit via (its NUT-05 melt
+   *   methods, matched against `sm`); omit if unknown.
+   * @throws If the request has no amount (amountless requests have no base to add fees to; use
+   *   {@link PaymentRequest.feesFor | feesFor} and add it to the amount the payer chooses), or no
+   *   unit (invalid per NUT-18).
    */
   amountToSend(mint: string, mintMethods?: string[]): Amount {
     if (!this.amount) {
@@ -128,6 +145,7 @@ export class PaymentRequest {
   }
 
   toRawRequest() {
+    this.assertUnitRule();
     const rawRequest: RawPaymentRequest = {};
     if (this.transport) {
       rawRequest.t = this.transport.map((t: PaymentRequestTransport) => ({
@@ -195,6 +213,7 @@ export class PaymentRequest {
    * @experimental
    */
   toEncodedCreqB(): string {
+    this.assertUnitRule();
     const tlvRequest: DecodedTLVPaymentRequest = {
       id: this.id,
       amount: this.amount !== undefined ? this.amount.toBigInt() : undefined,
