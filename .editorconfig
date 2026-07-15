@@ -17,3 +17,7 @@ indent_size = 2
 [etc/*.api.md]
 indent_style = space
 indent_size = 4
+
+# Makefiles require tabs
+[{Makefile,makefile,*.mk}]
+indent_style = tab
