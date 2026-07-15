@@ -78,7 +78,7 @@ function add(type, items, filter = () => true) {
     const key = a.login || 'unknown';
     const display = a.name ? `${a.name} (${a.login})` : key;
     if (!byUser.has(key)) byUser.set(key, { display, rows: [] });
-    byUser.get(key).rows.push(`- **${type}:** [#${item.number}](${item.url}) - ${item.title}`);
+    byUser.get(key).rows.push(`- [ ] **${type}:** [#${item.number}](${item.url}) - ${item.title}`);
   }
 }
 
@@ -89,7 +89,9 @@ add('Recently Active', activePrs);
 add('Backport', merged, isBackport);
 
 const fmt = (items) =>
-  items.length ? items.map((i) => `- [#${i.number}](${i.url}) - ${i.title}`).join('\n') : '- None';
+  items.length
+    ? items.map((i) => `- [ ] [#${i.number}](${i.url}) - ${i.title}`).join('\n')
+    : '- None';
 
 // Spec activity is an ecosystem feed, not personal credit: one section,
 // author inline. Open/active NUT PRs matter as much as merged ones here —
@@ -97,7 +99,7 @@ const fmt = (items) =>
 const fmtNuts = (items) =>
   items.length
     ? items
-        .map((i) => `- [nuts#${i.number}](${i.url}) - ${i.title} (${i.author?.login || '?'})`)
+        .map((i) => `- [ ] [nuts#${i.number}](${i.url}) - ${i.title} (${i.author?.login || '?'})`)
         .join('\n')
     : '- None';
 
