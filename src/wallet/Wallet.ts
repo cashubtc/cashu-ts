@@ -1611,6 +1611,10 @@ class Wallet {
   /**
    * Restores batches of deterministic proofs until no more signatures are returned from the mint.
    *
+   * @remarks
+   * Batches are fetched through a bounded request pool and every batch in flight is processed, so
+   * the scan can probe (and recover proofs) up to `(BATCH_POOL_SIZE - 1) * batchSize` counters past
+   * the gap limit before it stops.
    * @param [gapLimit=300] The amount of empty counters that should be returned before restoring
    *   ends (defaults to 300). Default is `300`
    * @param [batchSize=300] The amount of proofs that should be restored at a time (defaults to
@@ -1632,16 +1636,25 @@ class Wallet {
     let lastCounterWithSignature: undefined | number;
     let emptyBatchesFound = 0;
 
+    // Batch positions are fixed, so each wave speculatively fetches the next BATCH_POOL_SIZE
+    // batches concurrently; only the stop decision is data-dependent. Results are consumed in
+    // counter order, and a non-empty batch past the gap limit resets the gap count: the reveal
+    // is already spent at request time, so proofs in flight are recovered rather than dropped.
     while (emptyBatchesFound < requiredEmptyBatches) {
-      const restoreRes = await this.restore(counter, batchSize, { keysetId });
-      if (restoreRes.proofs.length > 0) {
-        emptyBatchesFound = 0;
-        restoredProofs.push(...restoreRes.proofs);
-        lastCounterWithSignature = restoreRes.lastCounterWithSignature;
-      } else {
-        emptyBatchesFound++;
+      const starts = Array.from({ length: BATCH_POOL_SIZE }, (_, i) => counter + i * batchSize);
+      const wave = await runPool(starts, BATCH_POOL_SIZE, (start) =>
+        this.restore(start, batchSize, { keysetId }),
+      );
+      for (const restoreRes of wave) {
+        if (restoreRes.proofs.length > 0) {
+          emptyBatchesFound = 0;
+          restoredProofs.push(...restoreRes.proofs);
+          lastCounterWithSignature = restoreRes.lastCounterWithSignature;
+        } else {
+          emptyBatchesFound++;
+        }
       }
-      counter += batchSize;
+      counter += batchSize * BATCH_POOL_SIZE;
     }
     return { proofs: restoredProofs, lastCounterWithSignature };
   }

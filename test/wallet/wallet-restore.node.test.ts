@@ -12,35 +12,30 @@ describe('Restoring deterministic proofs', () => {
   test('Batch restore', async () => {
     const wallet = new Wallet(mint);
     await wallet.loadMint();
-    let rounds = 0;
     const mockRestore = vi
       .spyOn(wallet, 'restore')
-      .mockImplementation(async (): Promise<{ proofs: Proof[] }> => {
-        if (rounds === 0) {
-          rounds++;
+      .mockImplementation(async (start): Promise<{ proofs: Proof[] }> => {
+        if (start === 0) {
           return { proofs: Array(21).fill(1) as Proof[] };
         }
-        rounds++;
         return { proofs: [] };
       });
     const { proofs: restoredProofs } = await wallet.batchRestore();
     expect(restoredProofs.length).toBe(21);
-    expect(mockRestore).toHaveBeenCalledTimes(2);
+    // one pooled wave of 4 batches covers the gap limit
+    expect(mockRestore).toHaveBeenCalledTimes(4);
     mockRestore.mockClear();
   });
   test('Batch restore with custom values', async () => {
     const wallet = new Wallet(mint);
     await wallet.loadMint();
-    let rounds = 0;
     const mockRestore = vi
       .spyOn(wallet, 'restore')
       .mockImplementation(
-        async (): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> => {
-          if (rounds === 0) {
-            rounds++;
+        async (start): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> => {
+          if (start === 0) {
             return { proofs: Array(42).fill(1) as Proof[], lastCounterWithSignature: 41 };
           }
-          rounds++;
           return { proofs: [] };
         },
       );
@@ -50,8 +45,33 @@ describe('Restoring deterministic proofs', () => {
       0,
     );
     expect(restoredProofs.length).toBe(42);
-    expect(mockRestore).toHaveBeenCalledTimes(3);
+    expect(mockRestore).toHaveBeenCalledTimes(4);
     expect(lastCounterWithSignature).toBe(41);
+    mockRestore.mockClear();
+  });
+  test('Batch restore recovers proofs found past the gap limit in the same wave', async () => {
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+    // the gap limit is reached at start 300, but the batch at 600 is already in flight in
+    // the same wave; its proofs reset the gap count and are kept, not dropped.
+    const mockRestore = vi
+      .spyOn(wallet, 'restore')
+      .mockImplementation(
+        async (start): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> => {
+          if (start === 0) {
+            return { proofs: Array(5).fill(1) as Proof[], lastCounterWithSignature: 4 };
+          }
+          if (start === 600) {
+            return { proofs: Array(3).fill(1) as Proof[], lastCounterWithSignature: 602 };
+          }
+          return { proofs: [] };
+        },
+      );
+    const { proofs: restoredProofs, lastCounterWithSignature } = await wallet.batchRestore();
+    expect(restoredProofs.length).toBe(8);
+    expect(lastCounterWithSignature).toBe(602);
+    // the empty batch at 900 closes the gap again, so one wave suffices
+    expect(mockRestore).toHaveBeenCalledTimes(4);
     mockRestore.mockClear();
   });
 });
