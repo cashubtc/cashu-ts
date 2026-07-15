@@ -12,7 +12,7 @@
  * rounds, a Lightning melt with NUT-08 change, and one sent token that is never claimed. Every
  * operation backs up an encrypted recovery gap on the mint. Then a second wallet with the same seed
  * recovers everything via `restoreEfficient()`, including the unclaimed token. A plain
- * `batchRestore()` (NUT-13 linear scan) runs last for comparison.
+ * `batchRestore()` (the linear NUT-09 restore scan) runs last for comparison.
  */
 import { randomBytes } from '@noble/hashes/utils.js';
 
@@ -188,7 +188,7 @@ async function main() {
     console.log('  all search requests were <=25-nonce probes: the NUT-342 path ran, no fallback');
   }
 
-  // For comparison: the NUT-13 linear scan. Its cost grows with wallet age
+  // For comparison: the linear NUT-09 restore scan. Its cost grows with wallet age
   // (total counters used) and it silently misses proofs beyond the gap limit;
   // the NUT-342 search stays at ~30 requests regardless of age.
   const linear = countingFetch();

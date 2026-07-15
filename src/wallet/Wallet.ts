@@ -222,7 +222,7 @@ class Wallet {
    * @param options.recoveryGapProvider Experimental (draft NUT-342). Returns the lowest
    *   deterministic counter among the app's unspent and pending proofs for a keyset. When set and
    *   the mint advertises support, deterministic outputs carry an encrypted recovery gap that
-   *   `restoreEfficient` uses to skip the NUT-13 linear scan.
+   *   `restoreEfficient` uses to skip the linear NUT-09 restore scan.
    * @param options.logger Logger instance, default null logger.
    */
   constructor(
@@ -1745,9 +1745,9 @@ class Wallet {
    *
    * @remarks
    * Binary-searches the counter space for the last issued signature, reads its recovery gap and
-   * batch-restores that window. Falls back to `batchRestore` (NUT-13 linear scan) when the mint
-   * does not advertise support, no gap was backed up, or the search fails. Like `batchRestore`,
-   * returned proofs may include spent ones; filter with `checkProofsStates`.
+   * batch-restores that window. Falls back to `batchRestore` (the linear NUT-09 restore scan) when
+   * the mint does not advertise support, no gap was backed up, or the search fails. Like
+   * `batchRestore`, returned proofs may include spent ones; filter with `checkProofsStates`.
    * @param options.keysetId Which keysetId to restore. Defaults to the instance's.
    * @param options.probeWindow Counters probed per binary-search request (defaults to 25).
    */
@@ -1763,9 +1763,11 @@ class Wallet {
       try {
         const result = await this.restoreFromGapBackup(probeWindow, keysetId);
         if (result) return result;
-        this._logger.info('No NUT-342 gap backup found, falling back to NUT-13 scan');
+        this._logger.info('No NUT-342 gap backup found, falling back to linear NUT-09 scan');
       } catch (e) {
-        this._logger.warn('NUT-342 recovery failed, falling back to NUT-13 scan', { error: e });
+        this._logger.warn('NUT-342 recovery failed, falling back to linear NUT-09 scan', {
+          error: e,
+        });
       }
     }
     return this.batchRestore({ keysetId, filterSpent: false });
@@ -1776,7 +1778,7 @@ class Wallet {
    * decrypt its `d_gap` and restore `[T - d_gap, T]`.
    *
    * @returns Undefined when the mint has no signatures or no gap metadata for T (caller falls back
-   *   to the NUT-13 scan).
+   *   to the linear NUT-09 scan).
    */
   private async restoreFromGapBackup(
     probeWindow: number,
