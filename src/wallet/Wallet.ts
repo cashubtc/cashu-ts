@@ -54,6 +54,7 @@ import { CheckStateEnum, type ProofState } from '../model/types/NUT07';
 import { type BatchMintRequest } from '../model/types/NUT29';
 import type { Proof, ProofLike } from '../model/types/proof';
 import type { Token } from '../model/types/token';
+import { BATCH_POOL_SIZE, runPool } from '../transport';
 import type { RequestFetch, RequestFn } from '../transport';
 import {
   getDecodedToken,
@@ -3114,25 +3115,32 @@ class Wallet {
         ? hashToCurveBls(enc.encode(p.secret)).toHex(true)
         : hashToCurve(enc.encode(p.secret)).toHex(true),
     );
+    // Nutshell (mint_max_request_length) and CDK (max_inputs) both cap requests at 1000 items
+    // by default; half that leaves headroom for stricter operator configs.
     // TODO: Replace this with a value from the info endpoint of the mint eventually
-    const BATCH_SIZE = 100;
-    const states: ProofState[] = [];
+    const BATCH_SIZE = 500;
+    const slices: string[][] = [];
     for (let i = 0; i < Ys.length; i += BATCH_SIZE) {
-      const YsSlice = Ys.slice(i, i + BATCH_SIZE);
+      slices.push(Ys.slice(i, i + BATCH_SIZE));
+    }
+    // Slices are independent, so run them through the bounded pool; results keep slice order.
+    const batches = await runPool(slices, BATCH_POOL_SIZE, async (YsSlice) => {
       const { states: batchStates } = await this.mint.check({
         Ys: YsSlice,
       });
-      const stateMap: { [y: string]: ProofState } = {};
+      // don't trust the mint's ordering: map results onto the request slice so order is
+      // guaranteed and any omitted Y fails loudly instead of misaligning states
+      const proofStatesByY: { [y: string]: ProofState } = {};
       batchStates.forEach((s) => {
-        stateMap[s.Y] = s;
+        proofStatesByY[s.Y] = s;
       });
-      for (let j = 0; j < YsSlice.length; j++) {
-        const state = stateMap[YsSlice[j]];
-        this.failIfNullish(state, 'Could not find state for proof with Y: ' + YsSlice[j]);
-        states.push(state);
-      }
-    }
-    return states;
+      return YsSlice.map((y) => {
+        const state = proofStatesByY[y];
+        this.failIfNullish(state, 'Could not find state for proof with Y: ' + y);
+        return state;
+      });
+    });
+    return batches.flat();
   }
 
   /**
