@@ -1884,6 +1884,7 @@ class Wallet {
         let prev = lo - probeWindow;
         for (let i = 1; i <= gridBudget; i++) {
           const pos = Math.max(lo + Math.floor(step * i), prev + probeWindow);
+          /* c8 ignore next -- defensive; the clamp binds only when step < probeWindow, which keeps pos < ceiling */
           if (pos >= ceiling) break;
           ranges.push(window(pos));
           prev = pos;

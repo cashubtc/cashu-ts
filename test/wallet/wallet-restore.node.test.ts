@@ -556,6 +556,94 @@ describe('restoreEfficient (draft NUT-342)', () => {
 
     expect(mockBatch).toHaveBeenCalledTimes(1);
   });
+
+  test('falls back when both ladder stages find nothing (ladderSkip)', async () => {
+    use342Info();
+    const restoreCalls = useFakeRestoreMint(new Map());
+    const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(64) });
+    await wallet.loadMint();
+    const mockBatch = vi
+      .spyOn(wallet, 'batchRestore')
+      .mockResolvedValue({ proofs: [], lastCounterWithSignature: undefined });
+
+    await wallet.restoreEfficient({ probeWindow: 5, ladderSkip: 2 });
+
+    expect(restoreCalls()).toBe(2); // high ladder, then the deferred low rungs
+    expect(mockBatch).toHaveBeenCalledTimes(1);
+  });
+
+  test('pins T in the topmost ladder rung near the counter cap', async () => {
+    use342Info();
+    const seed = randomBytes(64);
+    // legacy keyset caps counters at 2^31; with probeWindow 1 the highest rung
+    // is exactly 2^30, so T there leaves no rung above to bound the ceiling
+    const t = 2 ** 30;
+    const output = blank(seed, t);
+    const issued = new Map([
+      [output.blindedMessage.B_, { counter: t, d_gap: encryptDGap(3, output.blindingFactor) }],
+    ]);
+    const restoreCalls = useFakeRestoreMint(issued);
+
+    const wallet = new Wallet(mint, { unit, bip39seed: seed });
+    await wallet.loadMint();
+    const res = await wallet.restoreEfficient({ probeWindow: 1 });
+
+    expect(res.proofs).toHaveLength(1);
+    expect(res.lastCounterWithSignature).toBe(t);
+    // ladder + grid rounds over (2^30, 2^31) + recovery chunk, within the round cap
+    expect(restoreCalls()).toBeLessThanOrEqual(12);
+  });
+
+  test('keeps the old ceiling when T sits in the last grid cell', async () => {
+    use342Info();
+    const seed = randomBytes(64);
+    // ladder pins (80, 160); with probeBudget 2 the first grid round probes
+    // [107,111] and [133,137], so T=134 is found in the final cell
+    const issued = new Map(
+      [80, 134].map((c) => {
+        const output = blank(seed, c);
+        return [
+          output.blindedMessage.B_,
+          { counter: c, ...(c === 134 && { d_gap: encryptDGap(54, output.blindingFactor) }) },
+        ];
+      }),
+    );
+    const restoreCalls = useFakeRestoreMint(issued);
+
+    const wallet = new Wallet(mint, { unit, bip39seed: seed });
+    await wallet.loadMint();
+    const res = await wallet.restoreEfficient({ probeWindow: 5, probeBudget: 2 });
+
+    // recovery window [80, 134] holds both issued counters
+    expect(res.proofs).toHaveLength(2);
+    expect(res.lastCounterWithSignature).toBe(134);
+    // ladder + grid + grid + tile + one recovery chunk
+    expect(restoreCalls()).toBe(5);
+  });
+
+  test('skips empty chunks inside a sparse recovery window', async () => {
+    use342Info();
+    const seed = randomBytes(64);
+    // T=40 with d_gap spanning the whole history; batchSize 10 makes chunks
+    // [10,19], [20,29] and [30,39] answer with no signatures at all
+    const issued = new Map(
+      [0, 1, 2, 3, 4, 5, 40].map((c) => {
+        const output = blank(seed, c);
+        return [
+          output.blindedMessage.B_,
+          { counter: c, ...(c === 40 && { d_gap: encryptDGap(40, output.blindingFactor) }) },
+        ];
+      }),
+    );
+    useFakeRestoreMint(issued);
+
+    const wallet = new Wallet(mint, { unit, bip39seed: seed });
+    await wallet.loadMint();
+    const res = await wallet.restoreEfficient({ probeWindow: 5, batchSize: 10 });
+
+    expect(res.proofs).toHaveLength(7);
+    expect(res.lastCounterWithSignature).toBe(40);
+  });
 });
 
 describe('recovery gap attachment (draft NUT-342)', () => {
