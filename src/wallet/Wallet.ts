@@ -1746,8 +1746,9 @@ class Wallet {
    * @remarks
    * Locates the last issued counter T with batched probe rounds (an exponential ladder, then grid
    * refinement), reads its recovery gap and restores `[T - d_gap, T]` in concurrent chunks:
-   * typically ~4 requests regardless of wallet age. Falls back to `batchRestore` (the linear NUT-09
-   * restore scan) when the mint does not advertise support, no gap was backed up, or the search
+   * typically ~4 requests regardless of wallet age. A found T with no backed-up gap restores `[0,
+   * T]` outright plus a gap-limit scan above. Falls back to `batchRestore` (the linear NUT-09
+   * restore scan) when the mint does not advertise support, no signatures exist, or the search
    * fails. Like `batchRestore`, spent proofs are dropped before returning;
    * `lastCounterWithSignature` still reflects every found signature.
    * @param options.keysetId Which keysetId to restore. Defaults to the instance's.
@@ -1803,7 +1804,9 @@ class Wallet {
           }
           return result;
         }
-        this._logger.info('No NUT-342 gap backup found, falling back to linear NUT-09 scan');
+        this._logger.info(
+          'No signatures found by NUT-342 probe, falling back to linear NUT-09 scan',
+        );
       } catch (e) {
         this._logger.warn('NUT-342 recovery failed, falling back to linear NUT-09 scan', {
           error: e,
@@ -1822,8 +1825,8 @@ class Wallet {
    * below it, assuming derivation gaps stay shorter than the window. Round 1 brackets T with an
    * exponential ladder in ONE request; later rounds tile or grid the remaining zone, one request
    * each, so T is pinned in ~3 rounds for any realistic wallet.
-   * @returns Undefined when the mint has no signatures or no gap metadata for T (caller falls back
-   *   to the linear NUT-09 scan).
+   * @returns Undefined when the mint has no signatures (caller falls back to the linear NUT-09
+   *   scan).
    */
   private async restoreFromGapBackup(
     probeWindow: number,
@@ -1896,13 +1899,20 @@ class Wallet {
       ceiling = ranges.map((r) => r.start).find((s) => s > floor.counter) ?? ceiling;
     }
 
-    if (floor.signature.d_gap == null) return undefined;
     const { counter: t, signature, output } = floor;
-    const dGap =
-      typeof signature.d_gap === 'string'
-        ? decryptDGap(signature.d_gap, output.blindingFactor)
-        : Number(signature.d_gap);
-    this.failIf(!Number.isInteger(dGap) || dGap < 0 || dGap > t, 'Mint returned an invalid d_gap');
+    // No backed-up gap for T: the probe still pinned it, so restore the whole space below T
+    // rather than discard the search, then gap-check above it for linear-scan parity.
+    let dGap = t;
+    if (signature.d_gap != null) {
+      dGap =
+        typeof signature.d_gap === 'string'
+          ? decryptDGap(signature.d_gap, output.blindingFactor)
+          : Number(signature.d_gap);
+      this.failIf(
+        !Number.isInteger(dGap) || dGap < 0 || dGap > t,
+        'Mint returned an invalid d_gap',
+      );
+    }
 
     // Restore [T - d_gap, T] in batchSize chunks. The range is known up front, so chunks run
     // through a bounded worker pool: full concurrency benefit, same total request count.
@@ -1919,6 +1929,24 @@ class Wallet {
         lastCounterWithSignature = Math.max(
           lastCounterWithSignature ?? 0,
           result.lastCounterWithSignature,
+        );
+      }
+    }
+
+    if (signature.d_gap == null) {
+      // Probe windows sample sparsely above T, so scan one gap limit past it: same ending
+      // guarantee as the linear scan, and any proofs found there are merged in.
+      const tail = await this.batchRestore({
+        batchSize,
+        counter: t + 1,
+        keysetId,
+        filterSpent: false,
+      });
+      proofs.push(...tail.proofs);
+      if (tail.lastCounterWithSignature !== undefined) {
+        lastCounterWithSignature = Math.max(
+          lastCounterWithSignature ?? 0,
+          tail.lastCounterWithSignature,
         );
       }
     }

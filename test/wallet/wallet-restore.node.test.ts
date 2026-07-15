@@ -519,7 +519,7 @@ describe('restoreEfficient (draft NUT-342)', () => {
     expect(mockBatch).toHaveBeenCalledTimes(1);
   });
 
-  test('falls back when the terminal signature carries no d_gap', async () => {
+  test('restores [0, T] and gap-checks above when T carries no d_gap', async () => {
     use342Info();
     const seed = randomBytes(64);
     const issued = new Map(
@@ -532,9 +532,40 @@ describe('restoreEfficient (draft NUT-342)', () => {
       .spyOn(wallet, 'batchRestore')
       .mockResolvedValue({ proofs: [], lastCounterWithSignature: undefined });
 
-    await wallet.restoreEfficient({ probeWindow: 5 });
+    const res = await wallet.restoreEfficient({ probeWindow: 5 });
 
+    // the probe pinned T=1, so the whole space below it is fetched, not rescanned linearly
+    expect(res.proofs.length).toBe(2);
+    expect(res.lastCounterWithSignature).toBe(1);
+    // one linear-scan gap check fires just above T
     expect(mockBatch).toHaveBeenCalledTimes(1);
+    expect(mockBatch).toHaveBeenCalledWith({
+      batchSize: 300,
+      counter: 2,
+      keysetId: undefined,
+      filterSpent: false,
+    });
+  });
+
+  test('merges tail proofs found above T during the no-d_gap gap check', async () => {
+    use342Info();
+    const seed = randomBytes(64);
+    const issued = new Map(
+      [0, 1].map((c) => [blank(seed, c).blindedMessage.B_, { counter: c }] as const),
+    );
+    useFakeRestoreMint(issued);
+    const wallet = new Wallet(mint, { unit, bip39seed: seed });
+    await wallet.loadMint();
+    vi.spyOn(wallet, 'batchRestore').mockResolvedValue({
+      proofs: [{ secret: 'tail' } as Proof],
+      lastCounterWithSignature: 5,
+    });
+
+    // filterSpent off: the mocked tail proof is a stub that a real state check would choke on
+    const res = await wallet.restoreEfficient({ probeWindow: 5, filterSpent: false });
+
+    expect(res.proofs.length).toBe(3);
+    expect(res.lastCounterWithSignature).toBe(5);
   });
 
   test('falls back when the mint returns an invalid d_gap', async () => {
