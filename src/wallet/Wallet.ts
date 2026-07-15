@@ -3128,12 +3128,14 @@ class Wallet {
       const { states: batchStates } = await this.mint.check({
         Ys: YsSlice,
       });
-      const stateMap: { [y: string]: ProofState } = {};
+      // don't trust the mint's ordering: map results onto the request slice so order is
+      // guaranteed and any omitted Y fails loudly instead of misaligning states
+      const proofStatesByY: { [y: string]: ProofState } = {};
       batchStates.forEach((s) => {
-        stateMap[s.Y] = s;
+        proofStatesByY[s.Y] = s;
       });
       return YsSlice.map((y) => {
-        const state = stateMap[y];
+        const state = proofStatesByY[y];
         this.failIfNullish(state, 'Could not find state for proof with Y: ' + y);
         return state;
       });
