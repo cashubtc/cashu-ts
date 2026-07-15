@@ -113,6 +113,33 @@ describe('Restoring deterministic proofs', () => {
     mockRestore.mockClear();
     mockStates.mockClear();
   });
+  test('Batch restore treats maxCounter as an inclusive ceiling and ends there', async () => {
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+    const calls: Array<[number, number]> = [];
+    const mockRestore = vi
+      .spyOn(wallet, 'restore')
+      .mockImplementation(async (start, count): Promise<{ proofs: Proof[] }> => {
+        calls.push([start, count]);
+        return { proofs: [1] as unknown as Proof[] };
+      });
+    // gapLimit Infinity: the gap rule never fires, so only the bound can end the scan
+    const { proofs } = await wallet.batchRestore({
+      gapLimit: Infinity,
+      batchSize: 100,
+      maxCounter: 349,
+      filterSpent: false,
+    });
+    // 350 counters in 100-batches; the last is clamped, nothing probes past the bound
+    expect(calls).toEqual([
+      [0, 100],
+      [100, 100],
+      [200, 100],
+      [300, 50],
+    ]);
+    expect(proofs.length).toBe(4);
+    mockRestore.mockClear();
+  });
 });
 
 describe('restore', () => {

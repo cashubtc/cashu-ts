@@ -116,6 +116,7 @@ If you were already passing full `Proof` objects (the normal case — `wallet.ch
 - `batchSize` defaults to 500 (was 300), matching the request size `checkProofsStates` already uses against reference mint caps.
 - Spent proofs are dropped by default via a NUT-07 state check before returning; pending proofs are kept. Pass `filterSpent: false` for the old raw output. `lastCounterWithSignature` always reflects all found signatures, so counter advancement is unaffected by filtering.
 - `gapLimit` is now a floor rather than an exact ceiling: batches already in flight when the gap closes are still processed, so proofs sitting shortly past the gap limit may still be recovered.
+- New `maxCounter` option: an inclusive scan ceiling, nothing above it is probed. Combine with `gapLimit: Infinity` to fetch a known counter range wall to wall.
 
 ### Migration
 

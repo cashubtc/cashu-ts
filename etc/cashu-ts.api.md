@@ -217,6 +217,7 @@ export type BatchMintRequest = {
 // @public
 export type BatchRestoreConfig = {
     gapLimit?: number;
+    maxCounter?: number;
     batchSize?: number;
     counter?: number;
     keysetId?: string;

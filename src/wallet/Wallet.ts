@@ -1618,7 +1618,10 @@ class Wallet {
    * the gap limit before it stops. `lastCounterWithSignature` always reflects all signatures found,
    * including those of proofs removed by `filterSpent`.
    * @param [config.gapLimit=300] Consecutive empty counters that end the scan. A floor, not an
-   *   exact ceiling: batches already in flight past it are still processed. Default is `300`
+   *   exact ceiling: batches already in flight past it are still processed. `Infinity` disables the
+   *   gap rule (use with `maxCounter`). Default is `300`
+   * @param [config.maxCounter] Inclusive scan ceiling; no counter above it is probed. Default is
+   *   unbounded.
    * @param [config.batchSize=500] Counters per restore request. Default is `500`
    * @param [config.counter=0] Starting counter. Default is `0`
    * @param [config.keysetId] Keyset to restore; defaults to the wallet's.
@@ -1629,6 +1632,7 @@ class Wallet {
   ): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
     const { gapLimit = 300, batchSize = 500, keysetId, filterSpent = true } = config ?? {};
     let counter = config?.counter ?? 0;
+    const bound = config?.maxCounter ?? Number.MAX_SAFE_INTEGER;
     const requiredEmptyBatches = Math.ceil(gapLimit / batchSize);
     let restoredProofs: Proof[] = [];
 
@@ -1639,10 +1643,13 @@ class Wallet {
     // batches concurrently; only the stop decision is data-dependent. Results are consumed in
     // counter order, and a non-empty batch past the gap limit resets the gap count: the reveal
     // is already spent at request time, so proofs in flight are recovered rather than dropped.
-    while (emptyBatchesFound < requiredEmptyBatches) {
-      const starts = Array.from({ length: BATCH_POOL_SIZE }, (_, i) => counter + i * batchSize);
+    while (emptyBatchesFound < requiredEmptyBatches && counter <= bound) {
+      const starts = Array.from(
+        { length: BATCH_POOL_SIZE },
+        (_, i) => counter + i * batchSize,
+      ).filter((s) => s <= bound);
       const wave = await runPool(starts, BATCH_POOL_SIZE, (start) =>
-        this.restore(start, batchSize, { keysetId }),
+        this.restore(start, Math.min(batchSize, bound - start + 1), { keysetId }),
       );
       for (const restoreRes of wave) {
         if (restoreRes.proofs.length > 0) {
