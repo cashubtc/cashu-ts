@@ -6,7 +6,7 @@ name: Weekly meeting agenda
 # Standing Reports automatically.
 on:
   schedule:
-    - cron: '23 8 * * 3' # Wednesdays 08:23 UTC (off-peak minute, more reliable), before the 11:00 meeting
+    - cron: '23 5 * * 3' # Wednesdays 05:23 UTC; GitHub delays crons here by 2.5-4h, still lands before the 11:00 meeting
   workflow_dispatch: {}
 
 permissions:
