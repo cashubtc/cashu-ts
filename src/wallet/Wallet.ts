@@ -1744,26 +1744,50 @@ class Wallet {
    * Restores deterministic proofs using the draft NUT-342 recovery scheme (experimental).
    *
    * @remarks
-   * Binary-searches the counter space for the last issued signature, reads its recovery gap and
-   * batch-restores that window. Falls back to `batchRestore` (the linear NUT-09 restore scan) when
-   * the mint does not advertise support, no gap was backed up, or the search fails. Like
-   * `batchRestore`, spent proofs are dropped before returning; `lastCounterWithSignature` still
-   * reflects every found signature.
+   * Locates the last issued counter T with batched probe rounds (an exponential ladder, then grid
+   * refinement), reads its recovery gap and restores `[T - d_gap, T]` in concurrent chunks:
+   * typically ~4 requests regardless of wallet age. Falls back to `batchRestore` (the linear NUT-09
+   * restore scan) when the mint does not advertise support, no gap was backed up, or the search
+   * fails. Like `batchRestore`, spent proofs are dropped before returning;
+   * `lastCounterWithSignature` still reflects every found signature.
    * @param options.keysetId Which keysetId to restore. Defaults to the instance's.
-   * @param options.probeWindow Counters probed per binary-search request (defaults to 25).
+   * @param options.probeWindow Nonces per probe window (defaults to 25).
+   * @param options.batchSize Chunk size for the final window restore (defaults to 300).
+   * @param options.probeBudget Probe windows per search request (defaults to 12).
    * @param options.filterSpent Drop spent proofs (NUT-07) before returning. Default is `true`.
    */
   async restoreEfficient(
     config?: RestoreEfficientConfig,
   ): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
-    const { keysetId, probeWindow = 25, filterSpent = true } = config ?? {};
+    const {
+      keysetId,
+      probeWindow = 25,
+      batchSize = 300,
+      probeBudget = 12,
+      filterSpent = true,
+    } = config ?? {};
+    this.failIf(
+      !Number.isInteger(probeBudget) || probeBudget < 2 || probeBudget > 40,
+      'probeBudget must be an integer between 2 and 40',
+    );
     this.failIf(
       !Number.isInteger(probeWindow) || probeWindow < 1,
       'probeWindow must be a positive integer',
     );
+    // Upper bound keeps recovery chunks inside common mint request caps and far below V8's
+    // spread-argument limit when chunk results are merged.
+    this.failIf(
+      !Number.isInteger(batchSize) || batchSize < 1 || batchSize > 1000,
+      'batchSize must be an integer between 1 and 1000',
+    );
     if (this._mintInfo?.isSupported(342).supported) {
       try {
-        const result = await this.restoreFromGapBackup(probeWindow, keysetId);
+        const result = await this.restoreFromGapBackup(
+          probeWindow,
+          batchSize,
+          probeBudget,
+          keysetId,
+        );
         if (result) {
           if (filterSpent && result.proofs.length > 0) {
             const states = await this.checkProofsStates(result.proofs);
@@ -1784,14 +1808,21 @@ class Wallet {
   }
 
   /**
-   * NUT-342 (draft) recovery core: locate the last issued counter T via windowed binary search,
-   * decrypt its `d_gap` and restore `[T - d_gap, T]`.
+   * NUT-342 (draft) recovery core: locate the last issued counter T with batched probe rounds,
+   * decrypt its `d_gap` and restore `[T - d_gap, T]` in concurrent chunks.
    *
+   * @remarks
+   * A probe window with any signature proves T is at or beyond it; an empty window proves T is
+   * below it, assuming derivation gaps stay shorter than the window. Round 1 brackets T with an
+   * exponential ladder in ONE request; later rounds tile or grid the remaining zone, one request
+   * each, so T is pinned in ~3 rounds for any realistic wallet.
    * @returns Undefined when the mint has no signatures or no gap metadata for T (caller falls back
    *   to the linear NUT-09 scan).
    */
   private async restoreFromGapBackup(
     probeWindow: number,
+    batchSize: number,
+    gridBudget: number,
     keysetId?: string,
   ): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number } | undefined> {
     // Legacy keysets derive hardened BIP-32 children, capping counters at 2^31; HMAC keysets
@@ -1799,37 +1830,77 @@ class Wallet {
     const id = keysetId ?? this.keysetId;
     const isLegacy = !/^[0-9a-fA-F]+$/.test(id) || id.startsWith('00');
     const maxCounter = isLegacy ? 0x7fffffff : 0xffffffff;
+    const window = (start: number): CounterRange => ({
+      start,
+      count: Math.min(probeWindow, maxCounter - start + 1),
+    });
 
-    // A window counts as issued if ANY counter in it has a signature. This tolerates derivation
-    // gaps up to probeWindow without breaking the search's monotonicity assumption.
-    const probe = (windowIndex: number) => {
-      const start = windowIndex * probeWindow;
-      return this.restoreSignatures(start, Math.min(probeWindow, maxCounter - start + 1), keysetId);
-    };
+    // Round 1: window 0 plus exponentially spaced rungs, all in one request.
+    const ladder: CounterRange[] = [window(0)];
+    for (let pos = probeWindow; pos <= maxCounter; pos *= 2) ladder.push(window(pos));
+    const first = await this.restoreSignaturesBatch(ladder, keysetId);
+    if (first.length === 0) return undefined;
 
-    const firstWindow = await probe(0);
-    if (firstWindow.length === 0) return undefined;
+    // floor: highest counter with a signature so far (candidate T).
+    // ceiling: exclusive upper bound on T (lowest probe position proven empty above floor).
+    let floor = first[first.length - 1];
+    let ceiling = ladder.map((r) => r.start).find((s) => s > floor.counter) ?? maxCounter + 1;
 
-    let lo = 0;
-    let hi = Math.floor(maxCounter / probeWindow);
-    while (lo < hi) {
-      const mid = Math.floor((lo + hi + 1) / 2);
-      if ((await probe(mid)).length > 0) lo = mid;
-      else hi = mid - 1;
+    // Rounds 2+: narrow (floor, ceiling) with one batched request per round. A zone within
+    // budget is tiled outright; a larger one is gridded evenly and narrowed on the answer.
+    for (let round = 0; floor.counter + 1 < ceiling; round++) {
+      this.failIf(round >= 16, 'NUT-342 probe rounds did not converge');
+      const lo = floor.counter + 1;
+      const width = ceiling - lo;
+      const tiled = width <= gridBudget * probeWindow;
+      const ranges: CounterRange[] = [];
+      if (tiled) {
+        for (let pos = lo; pos < ceiling; pos += probeWindow) {
+          ranges.push({ start: pos, count: Math.min(probeWindow, ceiling - pos) });
+        }
+      } else {
+        const step = width / (gridBudget + 1);
+        let prev = lo - probeWindow;
+        for (let i = 1; i <= gridBudget; i++) {
+          const pos = Math.max(lo + Math.floor(step * i), prev + probeWindow);
+          if (pos >= ceiling) break;
+          ranges.push(window(pos));
+          prev = pos;
+        }
+      }
+      const found = await this.restoreSignaturesBatch(ranges, keysetId);
+      if (found.length > 0) floor = found[found.length - 1];
+      if (tiled) break; // zone fully probed: floor is T
+      ceiling = ranges.map((r) => r.start).find((s) => s > floor.counter) ?? ceiling;
     }
 
-    const terminalWindow = lo === 0 ? firstWindow : await probe(lo);
-    const terminal = terminalWindow[terminalWindow.length - 1];
-    if (!terminal || terminal.signature.d_gap == null) return undefined;
-
-    const { counter: t, signature, output } = terminal;
+    const { counter: t, signature, output } = floor;
+    if (signature.d_gap == null) return undefined;
     const dGap =
       typeof signature.d_gap === 'string'
         ? decryptDGap(signature.d_gap, output.blindingFactor)
         : Number(signature.d_gap);
     this.failIf(!Number.isInteger(dGap) || dGap < 0 || dGap > t, 'Mint returned an invalid d_gap');
 
-    return this.restore(t - dGap, dGap + 1, { keysetId });
+    // Restore [T - d_gap, T] in batchSize chunks. The range is known up front, so chunks run
+    // through a bounded worker pool: full concurrency benefit, same total request count.
+    const starts: number[] = [];
+    for (let s = t - dGap; s <= t; s += batchSize) starts.push(s);
+    const results = await runPool(starts, BATCH_POOL_SIZE, (s) =>
+      this.restore(s, Math.min(batchSize, t - s + 1), { keysetId }),
+    );
+    const proofs: Proof[] = [];
+    let lastCounterWithSignature: number | undefined;
+    for (const result of results) {
+      proofs.push(...result.proofs);
+      if (result.lastCounterWithSignature !== undefined) {
+        lastCounterWithSignature = Math.max(
+          lastCounterWithSignature ?? 0,
+          result.lastCounterWithSignature,
+        );
+      }
+    }
+    return { proofs, lastCounterWithSignature };
   }
 
   /**
@@ -1837,9 +1908,24 @@ class Wallet {
    *
    * @returns One entry per counter with an issued signature, ascending.
    */
-  private async restoreSignatures(
+  private restoreSignatures(
     start: number,
     count: number,
+    keysetId?: string,
+  ): Promise<
+    Array<{ counter: number; signature: SerializedBlindedSignature; output: OutputDataLike }>
+  > {
+    return this.restoreSignaturesBatch([{ start, count }], keysetId);
+  }
+
+  /**
+   * Queries the NUT-09 restore endpoint for issued signatures over disjoint ascending counter
+   * ranges, all in a single request.
+   *
+   * @returns One entry per counter with an issued signature, ascending.
+   */
+  private async restoreSignaturesBatch(
+    ranges: CounterRange[],
     keysetId?: string,
   ): Promise<
     Array<{ counter: number; signature: SerializedBlindedSignature; output: OutputDataLike }>
@@ -1852,31 +1938,38 @@ class Wallet {
 
     // create deterministic blank outputs for unknown restore amounts
     // Note: zero amount + zero denomination passes splitAmount validation
-    const zeros = Array(count).fill(0);
-    const outputData = this._outputDataCreator.createDeterministicData(
-      0,
-      this._seed,
-      start,
-      keyset,
-      zeros,
-    );
+    const outputData: OutputDataLike[] = [];
+    const counters: number[] = [];
+    for (const range of ranges) {
+      const data = this._outputDataCreator.createDeterministicData(
+        0,
+        this._seed,
+        range.start,
+        keyset,
+        Array(range.count).fill(0),
+      );
+      data.forEach((d, i) => {
+        outputData.push(d);
+        counters.push(range.start + i);
+      });
+    }
 
     const { outputs, signatures } = await this.mint.restore({
       outputs: outputData.map((d) => d.blindedMessage),
     });
 
-    const signatureMap: { [sig: string]: SerializedBlindedSignature } = {};
-    outputs.forEach((o, i) => (signatureMap[o.B_] = signatures[i]));
+    const signaturesByB: { [b: string]: SerializedBlindedSignature } = {};
+    outputs.forEach((o, i) => (signaturesByB[o.B_] = signatures[i]));
 
     const found: Array<{
       counter: number;
       signature: SerializedBlindedSignature;
       output: OutputDataLike;
     }> = [];
-    for (let i = 0; i < outputData.length; i++) {
-      const signature = signatureMap[outputData[i].blindedMessage.B_];
-      if (signature) found.push({ counter: start + i, signature, output: outputData[i] });
-    }
+    outputData.forEach((d, i) => {
+      const signature = signaturesByB[d.blindedMessage.B_];
+      if (signature) found.push({ counter: counters[i], signature, output: d });
+    });
     return found;
   }
 

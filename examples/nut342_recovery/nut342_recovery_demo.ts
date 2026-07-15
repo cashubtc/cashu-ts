@@ -8,11 +8,13 @@
  *     make demo
  *     make down
  *
- * Flow: a wallet with a `recoveryGapProvider` gets a thorough workout — two mints, several swap
- * rounds, a Lightning melt with NUT-08 change, and one sent token that is never claimed. Every
+ * Flow: a wallet with a `recoveryGapProvider` gets a thorough workout — two mints, random-value
+ * swap churn, a Lightning melt with NUT-08 change, and one sent token that is never claimed. Every
  * operation backs up an encrypted recovery gap on the mint. Then a second wallet with the same seed
- * recovers everything via `restoreEfficient()`, including the unclaimed token. A plain
- * `batchRestore()` (the linear NUT-09 restore scan) runs last for comparison.
+ * recovers everything via `restoreEfficient()` (batched exponential-ladder search plus chunked
+ * window restore, typically ~4 requests). A plain `batchRestore()` (the linear NUT-09 restore scan)
+ * runs last for comparison, including the count of issued signatures each method lets the mint
+ * link.
  */
 import { randomBytes } from '@noble/hashes/utils.js';
 
@@ -50,27 +52,51 @@ async function firstUnspentCounter(): Promise<number | undefined> {
 }
 
 // ---------------------------------------------------------------------------
-// A fetch wrapper that records NUT-09 restore traffic (requests + nonces).
+// A fetch wrapper that records NUT-09 restore traffic. "Sent" counts unique
+// blinded messages revealed to the mint; "linked" counts the issued signatures
+// the mint could associate with this recovery session — the privacy metric.
 // ---------------------------------------------------------------------------
 function countingFetch() {
-  const stats = { requests: 0, nonces: 0, sizes: [] as number[] };
+  const stats = {
+    requests: 0,
+    total: 0,
+    sizes: [] as number[],
+    sent: new Set<string>(),
+    linked: new Set<string>(),
+  };
   const wrapped: typeof fetch = async (input, init) => {
     const url = input instanceof Request ? input.url : String(input);
-    if (url.endsWith('/v1/restore') && typeof init?.body === 'string') {
-      const body = JSON.parse(init.body) as { outputs: unknown[] };
+    const isRestore = url.endsWith('/v1/restore') && typeof init?.body === 'string';
+    if (isRestore) {
+      const body = JSON.parse(init!.body as string) as { outputs: Array<{ B_: string }> };
       stats.requests++;
-      stats.nonces += body.outputs.length;
+      stats.total += body.outputs.length;
       stats.sizes.push(body.outputs.length);
+      body.outputs.forEach((o) => stats.sent.add(o.B_));
     }
     // One retry on a dropped keep-alive socket: the dev mint closes idle connections
     // during the demo's long derivation pauses, and this traffic is read-only.
+    let res: Response;
     try {
-      return await fetch(input, init);
+      res = await fetch(input, init);
     } catch {
-      return fetch(input, init);
+      res = await fetch(input, init);
     }
+    if (isRestore && res.ok) {
+      const data = (await res.clone().json()) as { outputs?: Array<{ B_: string }> };
+      (data.outputs ?? []).forEach((o) => stats.linked.add(o.B_));
+    }
+    return res;
   };
   return { wrapped, stats };
+}
+
+function reportStats(label: string, stats: ReturnType<typeof countingFetch>['stats']) {
+  console.log(
+    `  ${label}: ${stats.requests} requests (sizes: ${stats.sizes.join(', ')}),\n` +
+      `  ${stats.total} messages sent (${stats.sent.size} unique), ` +
+      `${stats.linked.size} issued signatures linked`,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -88,7 +114,11 @@ async function mintSats(wallet: Wallet, amount: number) {
 }
 
 async function selfSwap(wallet: Wallet, amount: number) {
-  const { keep, send } = await wallet.send(amount, proofs, { onCountersReserved });
+  // includeFees: sender covers the receive fee, so tiny amounts stay receivable
+  const { keep, send } = await wallet.send(amount, proofs, {
+    onCountersReserved,
+    includeFees: true,
+  });
   proofs = keep;
   track([...keep, ...send]);
   const received = await wallet.receive(send, { onCountersReserved });
@@ -108,6 +138,10 @@ async function sendUnclaimed(wallet: Wallet, amount: number) {
 async function meltSats(wallet: Wallet, invoice: string) {
   const meltQuote = await wallet.createMeltQuoteBolt11(invoice);
   const amountToMelt = meltQuote.amount.add(meltQuote.fee_reserve);
+  if (sumProofs(proofs).compareTo(amountToMelt.add(30)) < 0) {
+    console.log(`Balance too low to melt ${meltQuote.amount} sats; skipping the melt leg`);
+    return;
+  }
   const { keep, send } = await wallet.send(amountToMelt, proofs, {
     onCountersReserved,
     includeFees: true,
@@ -142,10 +176,23 @@ async function main() {
   }
   console.log(`Mint advertises NUT-342 support (${wallet.keysetId})\n`);
 
-  // A thorough workout: every operation writes fresh encrypted gaps
+  // A thorough workout: every operation writes fresh encrypted gaps.
+  // Random-value swap churn approximates real wallet wear; override rounds
+  // with CHURN_ROUNDS=n for a longer history.
+  const churnRounds = Number(process.env.CHURN_ROUNDS ?? 4);
+  const churn = async (rounds: number) => {
+    for (let i = 0; i < rounds; i++) {
+      const balance = Number(sumProofs(proofs).toBigInt());
+      if (balance < 20) {
+        console.log(`Balance ${balance} too low to keep churning; stopping early`);
+        return;
+      }
+      await selfSwap(wallet, 1 + Math.floor(Math.random() * Math.max(1, balance / 4)));
+    }
+  };
+
   await mintSats(wallet, 1000);
-  await selfSwap(wallet, 400);
-  await selfSwap(wallet, 150);
+  await churn(churnRounds);
   await mintSats(wallet, 1500);
   await sendUnclaimed(wallet, 21);
   try {
@@ -158,8 +205,7 @@ async function main() {
     const target = await wallet.createMintQuoteBolt11(2000);
     await meltSats(wallet, target.request);
   }
-  await selfSwap(wallet, 100);
-  await selfSwap(wallet, 42);
+  await churn(churnRounds);
 
   const balance = sumProofs(proofs);
   const pending = sumProofs(sentPending);
@@ -187,17 +233,11 @@ async function main() {
       `(${unspent.length} unspent of ${restored.proofs.length} issued, ` +
       `T=${restored.lastCounterWithSignature})`,
   );
-  console.log(
-    `  ${efficient.stats.requests} restore requests, ${efficient.stats.nonces} nonces revealed ` +
-      `(final window: ${efficient.stats.sizes.at(-1)} nonces)`,
-  );
-  if (efficient.stats.sizes.slice(0, -1).every((s) => s <= 25)) {
-    console.log('  all search requests were <=25-nonce probes: the NUT-342 path ran, no fallback');
-  }
+  reportStats('NUT-342 ladder', efficient.stats);
 
   // For comparison: the linear NUT-09 restore scan. Its cost grows with wallet age
   // (total counters used) and it silently misses proofs beyond the gap limit;
-  // the NUT-342 search stays at ~30 requests regardless of age.
+  // the NUT-342 batched search stays at ~4 requests regardless of age.
   const linear = countingFetch();
   const legacy = new Wallet(mintUrl, { bip39seed: seed, requestFetch: linear.wrapped });
   await legacy.loadMint();
@@ -207,7 +247,7 @@ async function main() {
       (await legacy.groupProofsByState(scanned.proofs)).unspent,
     )} sats`,
   );
-  console.log(`  ${linear.stats.requests} restore requests, ${linear.stats.nonces} nonces sent`);
+  reportStats('NUT-09 scan   ', linear.stats);
 
   if (!sumProofs(unspent).equals(expected)) {
     throw new Error(`Recovery mismatch: expected ${expected}, got ${sumProofs(unspent)}`);

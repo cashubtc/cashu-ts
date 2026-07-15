@@ -325,11 +325,11 @@ describe('restoreEfficient (draft NUT-342)', () => {
     expect(mockStates).not.toHaveBeenCalled();
   });
 
-  test('re-probes the terminal window when T lies beyond window 0', async () => {
+  test('finds T beyond the first probe window', async () => {
     use342Info();
     const seed = randomBytes(64);
-    // counters span two probe windows (0..4 and 5..9), so the search converges
-    // on window 1 and must fetch the terminal window again for its d_gap
+    // counters span two probe windows (0..4 and 5..9), so the ladder alone
+    // cannot pin T and a refinement round must run
     const issued = new Map(
       [0, 1, 2, 6, 7].map((c) => {
         const output = blank(seed, c);
@@ -349,11 +349,11 @@ describe('restoreEfficient (draft NUT-342)', () => {
     expect(res.lastCounterWithSignature).toBe(7);
   });
 
-  test('falls back when the terminal window vanishes mid-search', async () => {
+  test('falls back safely when the mint answers probes inconsistently', async () => {
     use342Info();
     const seed = randomBytes(64);
-    // counters 5..6 sit in window 1; the mint answers for them exactly once,
-    // so the terminal re-probe comes back empty (inconsistent mint)
+    // counters 5..6 answer exactly once; later probes of the same region come
+    // back empty (inconsistent mint), which must never produce a bogus result
     const window1 = new Map([5, 6].map((c) => [blank(seed, c).blindedMessage.B_, c] as const));
     const anchor = blank(seed, 0).blindedMessage.B_;
     let window1Answers = 1;
@@ -396,6 +396,73 @@ describe('restoreEfficient (draft NUT-342)', () => {
 
     expect(res.proofs).toHaveLength(3);
     expect(res.lastCounterWithSignature).toBe(2);
+  });
+
+  test('pins T with a handful of batched probe requests', async () => {
+    use342Info();
+    const seed = randomBytes(64);
+    // a long history: every 2nd counter issued up to T=600 (in-window gaps of 1)
+    const counters: number[] = [];
+    for (let c = 0; c <= 600; c += 2) counters.push(c);
+    const issued = new Map(
+      counters.map((c) => {
+        const output = blank(seed, c);
+        return [
+          output.blindedMessage.B_,
+          {
+            counter: c,
+            ...(c === 600 && { d_gap: encryptDGap(40, output.blindingFactor) }),
+          },
+        ];
+      }),
+    );
+    const restoreCalls = useFakeRestoreMint(issued);
+
+    const wallet = new Wallet(mint, { unit, bip39seed: seed });
+    await wallet.loadMint();
+    const res = await wallet.restoreEfficient({ probeWindow: 5 });
+
+    // recovery window [560, 600] holds the 21 issued even counters
+    expect(res.proofs).toHaveLength(21);
+    expect(res.lastCounterWithSignature).toBe(600);
+    // ladder + grid + tile + one recovery chunk — versus ~29 sequential bisection probes
+    expect(restoreCalls()).toBeLessThanOrEqual(5);
+  });
+
+  test('chunks the recovery window into concurrent batches', async () => {
+    use342Info();
+    const seed = randomBytes(64);
+    // T=45 with the gap spanning the whole history; batchSize 10 forces 5 chunks
+    const issued = new Map(
+      Array.from({ length: 46 }, (_, c) => {
+        const output = blank(seed, c);
+        return [
+          output.blindedMessage.B_,
+          {
+            counter: c,
+            ...(c === 45 && { d_gap: encryptDGap(45, output.blindingFactor) }),
+          },
+        ] as const;
+      }),
+    );
+    const restoreCalls = useFakeRestoreMint(issued);
+
+    const wallet = new Wallet(mint, { unit, bip39seed: seed });
+    await wallet.loadMint();
+    const res = await wallet.restoreEfficient({ probeWindow: 5, batchSize: 10 });
+
+    expect(res.proofs).toHaveLength(46);
+    expect(res.lastCounterWithSignature).toBe(45);
+    // 2 search requests (ladder, tile) + ceil(46/10) = 5 recovery chunks
+    expect(restoreCalls()).toBe(7);
+  });
+
+  test('rejects an out-of-range batchSize', async () => {
+    const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(64) });
+    await wallet.loadMint();
+    await expect(wallet.restoreEfficient({ batchSize: 2000 })).rejects.toThrow(
+      'batchSize must be an integer between 1 and 1000',
+    );
   });
 
   test('falls back to batchRestore when the mint lacks support', async () => {
