@@ -457,6 +457,32 @@ describe('restoreEfficient (draft NUT-342)', () => {
     expect(restoreCalls()).toBe(7);
   });
 
+  test('fires the skipped low rungs when the keyset lives below the first rung', async () => {
+    use342Info();
+    const seed = randomBytes(64);
+    // ladderSkip 5 with probeWindow 5 puts the first rung at counter 160, far
+    // above this wallet's T=3; stage two (the deferred low rungs) must find it
+    const issued = new Map(
+      [0, 1, 3].map((c) => {
+        const output = blank(seed, c);
+        return [
+          output.blindedMessage.B_,
+          { counter: c, d_gap: encryptDGap(c, output.blindingFactor) },
+        ];
+      }),
+    );
+    const restoreCalls = useFakeRestoreMint(issued);
+
+    const wallet = new Wallet(mint, { unit, bip39seed: seed });
+    await wallet.loadMint();
+    const res = await wallet.restoreEfficient({ probeWindow: 5, ladderSkip: 5 });
+
+    expect(res.proofs).toHaveLength(3);
+    expect(res.lastCounterWithSignature).toBe(3);
+    // high ladder + deferred low rungs + tile + one recovery chunk
+    expect(restoreCalls()).toBe(4);
+  });
+
   test('rejects an out-of-range batchSize', async () => {
     const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(64) });
     await wallet.loadMint();

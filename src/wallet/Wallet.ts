@@ -1764,11 +1764,16 @@ class Wallet {
       probeWindow = 25,
       batchSize = 300,
       probeBudget = 12,
+      ladderSkip = 0,
       filterSpent = true,
     } = config ?? {};
     this.failIf(
       !Number.isInteger(probeBudget) || probeBudget < 2 || probeBudget > 40,
       'probeBudget must be an integer between 2 and 40',
+    );
+    this.failIf(
+      !Number.isInteger(ladderSkip) || ladderSkip < 0 || ladderSkip > 20,
+      'ladderSkip must be an integer between 0 and 20',
     );
     this.failIf(
       !Number.isInteger(probeWindow) || probeWindow < 1,
@@ -1786,6 +1791,7 @@ class Wallet {
           probeWindow,
           batchSize,
           probeBudget,
+          ladderSkip,
           keysetId,
         );
         if (result) {
@@ -1823,6 +1829,7 @@ class Wallet {
     probeWindow: number,
     batchSize: number,
     gridBudget: number,
+    ladderSkip: number,
     keysetId?: string,
   ): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number } | undefined> {
     // Legacy keysets derive hardened BIP-32 children, capping counters at 2^31; HMAC keysets
@@ -1835,16 +1842,30 @@ class Wallet {
       count: Math.min(probeWindow, maxCounter - start + 1),
     });
 
-    // Round 1: window 0 plus exponentially spaced rungs, all in one request.
-    const ladder: CounterRange[] = [window(0)];
-    for (let pos = probeWindow; pos <= maxCounter; pos *= 2) ladder.push(window(pos));
-    const first = await this.restoreSignaturesBatch(ladder, keysetId);
-    if (first.length === 0) return undefined;
+    // Round 1: exponentially spaced rungs in one request. With ladderSkip=0 this probes from
+    // counter 0; skipped low rungs avoid linking counters every aged wallet has used.
+    const ladder: CounterRange[] = ladderSkip === 0 ? [window(0)] : [];
+    for (let pos = probeWindow * 2 ** ladderSkip; pos <= maxCounter; pos *= 2) {
+      ladder.push(window(pos));
+    }
+    let first = await this.restoreSignaturesBatch(ladder, keysetId);
+    let rungs = ladder;
+    if (first.length === 0) {
+      if (ladderSkip === 0) return undefined;
+      // Stage 2: the keyset lives below the first rung, so fire the skipped rungs after all.
+      // Only young keysets reach here, and their low counters sit largely inside the recovery
+      // window, so the deferred rungs cost little extra linkage.
+      const lowRungs: CounterRange[] = [window(0)];
+      for (let k = 0; k < ladderSkip; k++) lowRungs.push(window(probeWindow * 2 ** k));
+      first = await this.restoreSignaturesBatch(lowRungs, keysetId);
+      if (first.length === 0) return undefined;
+      rungs = [...lowRungs, ...ladder];
+    }
 
     // floor: highest counter with a signature so far (candidate T).
     // ceiling: exclusive upper bound on T (lowest probe position proven empty above floor).
     let floor = first[first.length - 1];
-    let ceiling = ladder.map((r) => r.start).find((s) => s > floor.counter) ?? maxCounter + 1;
+    let ceiling = rungs.map((r) => r.start).find((s) => s > floor.counter) ?? maxCounter + 1;
 
     // Rounds 2+: narrow (floor, ceiling) with one batched request per round. A zone within
     // budget is tiled outright; a larger one is gridded evenly and narrowed on the answer.
@@ -1874,8 +1895,8 @@ class Wallet {
       ceiling = ranges.map((r) => r.start).find((s) => s > floor.counter) ?? ceiling;
     }
 
+    if (floor.signature.d_gap == null) return undefined;
     const { counter: t, signature, output } = floor;
-    if (signature.d_gap == null) return undefined;
     const dGap =
       typeof signature.d_gap === 'string'
         ? decryptDGap(signature.d_gap, output.blindingFactor)

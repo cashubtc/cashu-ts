@@ -19,6 +19,7 @@ import { DUMMY_TEST_KEYS } from '../test/consts';
 const RTT_MS = Number(process.env.RTT_MS ?? 50);
 const T_VALUES = (process.env.T_LIST ?? '100,1000,10000,100000').split(',').map(Number);
 const GRIDS = process.env.GRIDS?.split(',').map(Number);
+const SKIPS = process.env.SKIPS?.split(',').map(Number) ?? [undefined];
 const MAX_T = Math.max(...T_VALUES);
 const D_GAP = 100;
 const SKIP_EVERY = 137; // counter c is never issued when c % 137 === 136
@@ -125,7 +126,12 @@ function mockMint(t: number) {
   return { wrapped, stats };
 }
 
-async function run(method: 'efficient' | 'legacy', tRequested: number, probeBudget?: number) {
+async function run(
+  method: 'efficient' | 'legacy',
+  tRequested: number,
+  probeBudget?: number,
+  ladderSkip?: number,
+) {
   let t = tRequested;
   while (skipped(t)) t--; // T itself must be issued
   const { wrapped, stats } = mockMint(t);
@@ -137,12 +143,16 @@ async function run(method: 'efficient' | 'legacy', tRequested: number, probeBudg
       ? await wallet.restoreEfficient({
           probeWindow: 25,
           ...(probeBudget && { probeBudget }),
+          ...(ladderSkip && { ladderSkip }),
         })
       : await wallet.batchRestore();
   await wallet.groupProofsByState(res.proofs);
   const wallMs = Date.now() - started;
   return {
-    method: method === 'efficient' ? (probeBudget ? `${LABEL}-g${probeBudget}` : LABEL) : 'legacy',
+    method:
+      method === 'efficient'
+        ? `${LABEL}${probeBudget ? `-g${probeBudget}` : ''}${ladderSkip ? `-s${ladderSkip}` : ''}`
+        : 'legacy',
     T: t,
     calls: stats.restoreCalls + stats.checkCalls,
     restoreCalls: stats.restoreCalls,
@@ -159,8 +169,10 @@ async function run(method: 'efficient' | 'legacy', tRequested: number, probeBudg
 const rows: Array<Record<string, unknown>> = [];
 for (const t of T_VALUES) {
   for (const grid of GRIDS ?? [undefined]) {
-    rows.push(await run('efficient', t, grid));
-    console.error(`efficient T=${t} grid=${grid ?? 'default'} done`);
+    for (const skip of SKIPS) {
+      rows.push(await run('efficient', t, grid, skip));
+      console.error(`efficient T=${t} grid=${grid ?? 'default'} skip=${skip ?? 0} done`);
+    }
   }
   if (!process.env.SKIP_LEGACY) {
     rows.push(await run('legacy', t));

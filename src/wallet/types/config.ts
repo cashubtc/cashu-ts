@@ -66,6 +66,13 @@ export type RestoreEfficientConfig = {
    */
   probeBudget?: number;
   /**
+   * Low ladder rungs to skip: the first search rung starts at `probeWindow * 2^ladderSkip`. Aged
+   * wallets have used every low counter, so skipping avoids linking them; a keyset living below the
+   * first rung triggers one extra request that fires the skipped rungs instead. Must be 0-20.
+   * Default is `0` (probe from counter 0).
+   */
+  ladderSkip?: number;
+  /**
    * Drop spent proofs (NUT-07) before returning. Default is `true`
    */
   filterSpent?: boolean;
