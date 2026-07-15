@@ -108,6 +108,36 @@ If you were already passing full `Proof` objects (the normal case — `wallet.ch
 
 ---
 
+## `batchRestore` takes an options object and filters spent proofs
+
+`Wallet.batchRestore(gapLimit?, batchSize?, counter?, keysetId?)` is now `batchRestore(config?: BatchRestoreConfig)`. Behavior changes ride along:
+
+- Batches are fetched through a bounded request pool (4 in flight), cutting restore wall-clock to roughly a quarter; the request count is nearly unchanged.
+- `batchSize` defaults to 500 (was 300), matching the request size `checkProofsStates` already uses against reference mint caps.
+- Spent proofs are dropped by default via a NUT-07 state check before returning; pending proofs are kept. Pass `filterSpent: false` for the old raw output. `lastCounterWithSignature` always reflects all found signatures, so counter advancement is unaffected by filtering.
+- `gapLimit` is now a floor rather than an exact ceiling: batches already in flight when the gap closes are still processed, so proofs sitting shortly past the gap limit may still be recovered.
+
+### Migration
+
+```ts
+// Before
+const { proofs } = await wallet.batchRestore(300, 100, 0, keysetId);
+// ...followed by a manual checkProofsStates to drop spent proofs
+
+// After (spent filtering is built in)
+const { proofs } = await wallet.batchRestore({
+  gapLimit: 300,
+  batchSize: 100,
+  counter: 0,
+  keysetId,
+});
+
+// Bare calls need no change
+await wallet.batchRestore();
+```
+
+---
+
 ## `verifyDleqIfPresent` removed; `hasValidDleq` default flipped to spec semantics
 
 `verifyDleqIfPresent` is removed. Its NUT-12 "verify-if-present" semantic is now the default behavior of `hasValidDleq`, which gains an optional `{ require?: boolean }` argument for the stricter opt-in policy.

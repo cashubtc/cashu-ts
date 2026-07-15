@@ -92,6 +92,7 @@ import {
   type MeltProofsResponse,
   type SendResponse,
   type RestoreConfig,
+  type BatchRestoreConfig,
   type SecretsPolicy,
   type SwapPreview,
   type MintPreview,
@@ -1614,24 +1615,22 @@ class Wallet {
    * @remarks
    * Batches are fetched through a bounded request pool and every batch in flight is processed, so
    * the scan can probe (and recover proofs) up to `(BATCH_POOL_SIZE - 1) * batchSize` counters past
-   * the gap limit before it stops.
-   * @param [gapLimit=300] The amount of empty counters that should be returned before restoring
-   *   ends (defaults to 300). Default is `300`
-   * @param [batchSize=300] The amount of proofs that should be restored at a time (defaults to
-   *   300). Default is `300`
-   * @param [counter=0] The counter that should be used as a starting point (defaults to 0). Default
-   *   is `0`
-   * @param [keysetId] Which keysetId to use for the restoration. If none is passed the instance's
-   *   default one will be used.
+   * the gap limit before it stops. `lastCounterWithSignature` always reflects all signatures found,
+   * including those of proofs removed by `filterSpent`.
+   * @param [config.gapLimit=300] Consecutive empty counters that end the scan. A floor, not an
+   *   exact ceiling: batches already in flight past it are still processed. Default is `300`
+   * @param [config.batchSize=500] Counters per restore request. Default is `500`
+   * @param [config.counter=0] Starting counter. Default is `0`
+   * @param [config.keysetId] Keyset to restore; defaults to the wallet's.
+   * @param [config.filterSpent=true] Drop spent proofs (NUT-07) before returning. Default is `true`
    */
   async batchRestore(
-    gapLimit = 300,
-    batchSize = 300,
-    counter = 0,
-    keysetId?: string,
+    config?: BatchRestoreConfig,
   ): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
+    const { gapLimit = 300, batchSize = 500, keysetId, filterSpent = true } = config ?? {};
+    let counter = config?.counter ?? 0;
     const requiredEmptyBatches = Math.ceil(gapLimit / batchSize);
-    const restoredProofs: Proof[] = [];
+    let restoredProofs: Proof[] = [];
 
     let lastCounterWithSignature: undefined | number;
     let emptyBatchesFound = 0;
@@ -1655,6 +1654,11 @@ class Wallet {
         }
       }
       counter += batchSize * BATCH_POOL_SIZE;
+    }
+
+    if (filterSpent && restoredProofs.length > 0) {
+      const states = await this.checkProofsStates(restoredProofs);
+      restoredProofs = restoredProofs.filter((_, i) => states[i].state !== CheckStateEnum.SPENT);
     }
     return { proofs: restoredProofs, lastCounterWithSignature };
   }

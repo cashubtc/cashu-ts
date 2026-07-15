@@ -11,6 +11,33 @@ export type RestoreConfig = {
 };
 
 /**
+ * Configuration for `batchRestore`.
+ */
+export type BatchRestoreConfig = {
+  /**
+   * Consecutive empty counters that end the scan. A floor, not an exact ceiling: batches already in
+   * flight past it are still processed. Default is `300`
+   */
+  gapLimit?: number;
+  /**
+   * Counters per restore request. Default is `500`
+   */
+  batchSize?: number;
+  /**
+   * Starting counter. Default is `0`
+   */
+  counter?: number;
+  /**
+   * Keyset to restore; defaults to the wallet's.
+   */
+  keysetId?: string;
+  /**
+   * Drop spent proofs (NUT-07) before returning. Default is `true`
+   */
+  filterSpent?: boolean;
+};
+
+/**
  * Shared properties for most `OutputType` variants (except 'custom').
  */
 export interface SharedOutputTypeProps {

@@ -215,6 +215,15 @@ export type BatchMintRequest = {
 };
 
 // @public
+export type BatchRestoreConfig = {
+    gapLimit?: number;
+    batchSize?: number;
+    counter?: number;
+    keysetId?: string;
+    filterSpent?: boolean;
+};
+
+// @public
 export function batchVerifyUnblindedSignatureBls(items: Array<{
     K2: G2Point;
     C: G1Point;
@@ -2215,7 +2224,7 @@ export class Wallet {
         requestFetch?: RequestFetch;
         logger?: Logger;
     });
-    batchRestore(gapLimit?: number, batchSize?: number, counter?: number, keysetId?: string): Promise<{
+    batchRestore(config?: BatchRestoreConfig): Promise<{
         proofs: Proof[];
         lastCounterWithSignature?: number;
     }>;

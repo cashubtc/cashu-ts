@@ -2,11 +2,14 @@ import { randomBytes } from '@noble/hashes/utils.js';
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect, vi } from 'vitest';
 
-import { Wallet, Amount, type Proof } from '../../src';
+import { Wallet, Amount, CheckStateEnum, type Proof, type ProofState } from '../../src';
 
 import { useTestServer, mint, unit, dummyKeysResp, mintUrl, logger } from './_setup';
 
 const server = useTestServer();
+
+const allUnspent = (n: number): ProofState[] =>
+  Array(n).fill({ state: CheckStateEnum.UNSPENT }) as ProofState[];
 
 describe('Restoring deterministic proofs', () => {
   test('Batch restore', async () => {
@@ -20,11 +23,15 @@ describe('Restoring deterministic proofs', () => {
         }
         return { proofs: [] };
       });
+    const mockStates = vi.spyOn(wallet, 'checkProofsStates').mockResolvedValue(allUnspent(21));
     const { proofs: restoredProofs } = await wallet.batchRestore();
     expect(restoredProofs.length).toBe(21);
     // one pooled wave of 4 batches covers the gap limit
     expect(mockRestore).toHaveBeenCalledTimes(4);
+    // spent filtering is on by default
+    expect(mockStates).toHaveBeenCalledTimes(1);
     mockRestore.mockClear();
+    mockStates.mockClear();
   });
   test('Batch restore with custom values', async () => {
     const wallet = new Wallet(mint);
@@ -39,11 +46,11 @@ describe('Restoring deterministic proofs', () => {
           return { proofs: [] };
         },
       );
-    const { proofs: restoredProofs, lastCounterWithSignature } = await wallet.batchRestore(
-      100,
-      50,
-      0,
-    );
+    const { proofs: restoredProofs, lastCounterWithSignature } = await wallet.batchRestore({
+      gapLimit: 100,
+      batchSize: 50,
+      filterSpent: false,
+    });
     expect(restoredProofs.length).toBe(42);
     expect(mockRestore).toHaveBeenCalledTimes(4);
     expect(lastCounterWithSignature).toBe(41);
@@ -67,12 +74,44 @@ describe('Restoring deterministic proofs', () => {
           return { proofs: [] };
         },
       );
-    const { proofs: restoredProofs, lastCounterWithSignature } = await wallet.batchRestore();
+    const { proofs: restoredProofs, lastCounterWithSignature } = await wallet.batchRestore({
+      batchSize: 300,
+      filterSpent: false,
+    });
     expect(restoredProofs.length).toBe(8);
     expect(lastCounterWithSignature).toBe(602);
     // the empty batch at 900 closes the gap again, so one wave suffices
     expect(mockRestore).toHaveBeenCalledTimes(4);
     mockRestore.mockClear();
+  });
+  test('Batch restore drops spent proofs but keeps pending, counter unfiltered', async () => {
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+    const found = [{ secret: 'a' }, { secret: 'b' }, { secret: 'c' }, { secret: 'd' }] as Proof[];
+    const mockRestore = vi
+      .spyOn(wallet, 'restore')
+      .mockImplementation(
+        async (start): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> => {
+          if (start === 0) {
+            return { proofs: found, lastCounterWithSignature: 3 };
+          }
+          return { proofs: [] };
+        },
+      );
+    const mockStates = vi
+      .spyOn(wallet, 'checkProofsStates')
+      .mockResolvedValue([
+        { state: CheckStateEnum.UNSPENT },
+        { state: CheckStateEnum.SPENT },
+        { state: CheckStateEnum.PENDING },
+        { state: CheckStateEnum.UNSPENT },
+      ] as ProofState[]);
+    const { proofs: restoredProofs, lastCounterWithSignature } = await wallet.batchRestore();
+    expect(restoredProofs.map((p) => p.secret)).toEqual(['a', 'c', 'd']);
+    expect(lastCounterWithSignature).toBe(3);
+    expect(mockStates).toHaveBeenCalledWith(found);
+    mockRestore.mockClear();
+    mockStates.mockClear();
   });
 });
 
