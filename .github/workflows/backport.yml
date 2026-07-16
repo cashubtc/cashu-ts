@@ -43,7 +43,13 @@ jobs:
           # a DRAFT PR (finish it in place: resolve, regenerate the api report,
           # push). The action comments resolution steps on the original PR and
           # the open-issue job below still files a tracking issue.
-          conflict_resolution: draft_commit_conflicts
+          # In backport-action v4 this option lives under `experimental`; passed
+          # top-level it is silently ignored and the action falls back to
+          # fail-on-conflict (no draft PR pushed, as happened on #806/#807).
+          experimental: |
+            {
+              "conflict_resolution": "draft_commit_conflicts"
+            }
           # Ignore merge commits from "update branch" syncs
           merge_commits: skip
           # Backport marker goes at the END of the title: the default
