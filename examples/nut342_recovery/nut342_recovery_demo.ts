@@ -62,7 +62,13 @@ function countingFetch() {
       stats.nonces += body.outputs.length;
       stats.sizes.push(body.outputs.length);
     }
-    return fetch(input, init);
+    // One retry on a dropped keep-alive socket: the dev mint closes idle connections
+    // during the demo's long derivation pauses, and this traffic is read-only.
+    try {
+      return await fetch(input, init);
+    } catch {
+      return fetch(input, init);
+    }
   };
   return { wrapped, stats };
 }
