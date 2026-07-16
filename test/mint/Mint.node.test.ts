@@ -1052,14 +1052,14 @@ describe('Mint normalization', () => {
     });
   });
 
-  it('sanitizes base64 keyset ids and honors an alternate mint URL in getKeys', async () => {
+  it('honors an alternate mint URL in getKeys', async () => {
     const requestSpy = vi.fn(async (options: ReqArgs) => {
-      expect(options.endpoint).toBe('https://alt.example/v1/keys/ab_c-d');
+      expect(options.endpoint).toBe('https://alt.example/v1/keys/00ab01cd23ef45aa');
       return { keysets: [] };
     }) as RequestFn;
     const mint = new Mint(mintUrl, { customRequest: requestSpy });
 
-    const response = await mint.getKeys('ab/c+d', 'https://alt.example');
+    const response = await mint.getKeys('00ab01cd23ef45aa', 'https://alt.example');
 
     expect(response).toEqual({ keysets: [] });
     expect(requestSpy).toHaveBeenCalledTimes(1);

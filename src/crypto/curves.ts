@@ -2,7 +2,7 @@ import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 
 import { CTSError } from '../model/Errors';
-import { Bytes, encodeBase64toUint8, hexToNumber, isValidHex } from '../utils';
+import { hexToNumber, isValidHex } from '../utils';
 
 import { type G1Point, pointFromHexG1 } from './curve_bls';
 
@@ -54,12 +54,10 @@ export function isBlsKeyset(keysetId: string): boolean {
 }
 
 export const getKeysetIdInt = (keysetId: string): bigint => {
-  let keysetIdInt: bigint;
-  if (/^[a-fA-F0-9]+$/.test(keysetId)) {
-    keysetIdInt = hexToNumber(keysetId) % BigInt(2 ** 31 - 1);
-  } else {
-    //legacy keyset compatibility
-    keysetIdInt = Bytes.toBigInt(encodeBase64toUint8(keysetId)) % BigInt(2 ** 31 - 1);
+  if (!isValidHex(keysetId)) {
+    throw new CTSError(
+      `Unsupported keyset ID '${keysetId}': legacy base64 keyset IDs were removed in v5`,
+    );
   }
-  return keysetIdInt;
+  return hexToNumber(keysetId) % BigInt(2 ** 31 - 1);
 };

@@ -8,28 +8,45 @@
 
 v5 introduces support for **v3 keysets**, identified by a `02` prefix on the keyset id. v3 keysets use BLS12-381 instead of secp256k1 for the BDHKE blinding curve, with multiplicative blinding and pairing-based verification replacing DLEQ. Wire-compatible with Nutshell PR #999.
 
-Existing v0 (legacy base64), v1 (`00…`), and v2 (`01…`) keysets continue to work unchanged. The breaking change below was prompted by adding v3 support but is independent of which curve you target.
+Existing v1 (`00…`) and v2 (`01…`) keysets continue to work unchanged. Legacy v0 (base64-id) keysets are no longer supported at all (see the next section).
 
 ---
 
-## Keyset output policy: new proofs require an active, prefixed keyset
+## Legacy (base64-id) keysets removed
 
-Proofs on **any** keyset can still be spent, swapped, and restored. But v5 now enforces a policy on which keysets may be used to **create new proofs**: the output keyset must be active and have a hex-prefixed id (`00…`/`01…`/`02…`).
+Base64 keyset ids were removed from the Cashu spec in December 2023, and CDK-based mints and wallets have never supported them. v5 removes the remaining compatibility paths.
 
-Previously this was only enforced on the automatic path (the wallet binds to the cheapest active hex keyset). An explicit `config.keysetId` bypassed both checks, so outputs could be created on a deprecated legacy (base64-id) keyset or on an inactive keyset — which the mint would then reject.
+What changes:
 
-- `receive`, `prepareSwap`/`send`, `prepareMint`, `prepareBatchMint`, and `prepareMelt` now throw `Legacy keyset cannot be used to create new proofs` or `Inactive keyset cannot be used to create new proofs` if the resolved output keyset (explicit `keysetId` or wallet-bound) violates the policy.
+- `loadMint()`/`KeyChain` now **skip** keysets with a non-hex id when loading a mint. Mints that still list legacy keysets (eg Minibits) load fine; the legacy keysets simply never enter the keychain, so targeting one via `keysetId` fails with `Keyset '…' not found`.
+- Decoding a token whose proofs carry a base64 keyset id now throws (`legacy base64 keyset IDs were removed in v5`). These proofs could not be re-encoded or spent through v5 anyway, so the failure moves to the earliest point.
+- NUT-13 restore derivation (`deriveSecretAndBlindingFactor`, `getKeysetIdInt`) throws for base64 keyset ids: legacy proofs cannot be restored from seed with v5.
+- `DeriveKeysetIdOptions.isDeprecatedBase64` and `Keyset.hasHexId` are removed. `Keyset.verifyKeysetId()` returns `false` for non-hex ids. `Mint.getKeys(id)` no longer URL-encodes `/` and `+` in keyset ids.
+
+### Migration
+
+If your users may hold pre-2024 proofs (or seeds) from a nutshell mint, sweep them **before** shipping the upgrade, while your app is still on a release that supports legacy keysets: restore and swap so the balance moves onto a hex-id keyset. Note this window is closing anyway: nutshell mints migrating to CDK drop their legacy keysets in the process, after which such proofs are unredeemable at the mint regardless of wallet library.
+
+---
+
+## Keyset output policy: new proofs require an active keyset
+
+Proofs on any loaded keyset can still be spent, swapped, and restored. But v5 now enforces a policy on which keysets may be used to **create new proofs**: the output keyset must be active.
+
+Previously this was only enforced on the automatic path (the wallet binds to the cheapest active keyset). An explicit `config.keysetId` bypassed the check, so outputs could be created on an inactive keyset — which the mint would then reject.
+
+- `receive`, `prepareSwap`/`send`, `prepareMint`, `prepareBatchMint`, and `prepareMelt` now throw `Inactive keyset cannot be used to create new proofs` if the resolved output keyset (explicit `keysetId` or wallet-bound) violates the policy.
 - `completeSwap`/`completeMint`/`completeBatchMint` are **not** gated: the mint has already signed, so a persisted preview (NUT-19) still completes even if the keyset was deactivated in the meantime.
-- `restore()` is **not** gated: proofs on legacy keysets remain recoverable.
+- `restore()` is **not** gated: proofs on inactive keysets remain recoverable.
 - `bindKeyset()`/`withKeyset()` still allow binding to inactive keysets (useful for restore); the policy fires when an output operation is attempted.
 
-No migration is needed unless you deliberately created outputs on inactive or legacy keysets — those calls were already doomed to fail at the mint and now fail earlier with a clearer error.
+No migration is needed unless you deliberately created outputs on inactive keysets — those calls were already doomed to fail at the mint and now fail earlier with a clearer error.
 
 ---
 
 ## Mint quotes now require a usable active keyset
 
-All mint-quote creation methods (`createMintQuote`, `createMintQuoteBolt11`, `createLockedMintQuote`, `createMintQuoteBolt12`, `createMintQuoteOnchain`) now throw `no active keyset for unit '…' — a paid mint quote could not be redeemed` if the mint has no usable (active, hex-id, keyed) keyset for the wallet's unit. This prevents paying an invoice for a quote that could never be redeemed for proofs — `loadMint` deliberately tolerates keyset-less mints (e.g. a mint unwinding liabilities) by leaving the wallet unbound, so without this check the failure only surfaced after payment, at minting time.
+All mint-quote creation methods (`createMintQuote`, `createMintQuoteBolt11`, `createLockedMintQuote`, `createMintQuoteBolt12`, `createMintQuoteOnchain`) now throw `no active keyset for unit '…' — a paid mint quote could not be redeemed` if the mint has no usable (active, keyed) keyset for the wallet's unit. This prevents paying an invoice for a quote that could never be redeemed for proofs — `loadMint` deliberately tolerates keyset-less mints (e.g. a mint unwinding liabilities) by leaving the wallet unbound, so without this check the failure only surfaced after payment, at minting time.
 
 ### Migration
 

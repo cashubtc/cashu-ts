@@ -32,7 +32,7 @@ const dummyKeysResp: { keysets: MintKeys[] } = {
       },
     },
     {
-      id: '00inactive',
+      id: '00aabbccddeeff11',
       unit: 'sat',
       active: false,
       input_fee_ppk: 0,
@@ -61,13 +61,16 @@ const dummyKeysetResp: { keysets: MintKeyset[] } = {
       input_fee_ppk: 1,
     },
     {
-      id: '00inactive',
+      id: '00aabbccddeeff11',
       unit: 'sat',
       active: false,
       input_fee_ppk: 0,
     },
   ],
 };
+
+// Non-hex (legacy base64) keysets are skipped on load; only these ids reach the chain.
+const loadedKeysetIds = dummyKeysetResp.keysets.map((ks) => ks.id).filter((id) => isValidHex(id));
 
 const server = setupServer();
 
@@ -102,20 +105,19 @@ describe('KeyChain initialization', () => {
     const keyChain = new KeyChain(mint, unit);
     await keyChain.init();
 
-    // Verify keysets loaded and filtered by unit
+    // Verify keysets loaded and filtered by unit; legacy (non-hex) ids are skipped
     const keysets = keyChain.getKeysets();
-    expect(keysets).toHaveLength(4); // All from dummy, assuming same unit
-    expect(keysets.map((k) => k.id)).toEqual(dummyKeysetResp.keysets.map((ks) => ks.id));
+    expect(keysets).toHaveLength(3);
+    expect(keysets.map((k) => k.id)).toEqual(loadedKeysetIds);
 
     // Verify keys assigned
     const keysForFirst = keyChain.getKeyset('00bd033559de27d0').toMintKeys();
     expect(keysForFirst).toEqual(dummyKeysResp.keysets[0]);
 
-    // Verify active keyset (lowest fee, active, hex ID)
+    // Verify active keyset (lowest fee, active)
     const active = keyChain.getCheapestKeyset();
     expect(active.id).toBe('00bd033559de27d0'); // Fee 0, hex ID
     expect(active.fee).toBe(0);
-    expect(active.hasHexId).toBe(true);
     expect(isValidHex(active.id)).toBe(true);
 
     // Verify final_expiry assigned
@@ -126,20 +128,19 @@ describe('KeyChain initialization', () => {
     const keyChain = new KeyChain('http://localhost:3338', unit);
     await keyChain.init();
 
-    // Verify keysets loaded and filtered by unit
+    // Verify keysets loaded and filtered by unit; legacy (non-hex) ids are skipped
     const keysets = keyChain.getKeysets();
-    expect(keysets).toHaveLength(4); // All from dummy, assuming same unit
-    expect(keysets.map((k) => k.id)).toEqual(dummyKeysetResp.keysets.map((ks) => ks.id));
+    expect(keysets).toHaveLength(3);
+    expect(keysets.map((k) => k.id)).toEqual(loadedKeysetIds);
 
     // Verify keys assigned
     const keysForFirst = keyChain.getKeyset('00bd033559de27d0').toMintKeys();
     expect(keysForFirst).toEqual(dummyKeysResp.keysets[0]);
 
-    // Verify active keyset (lowest fee, active, hex ID)
+    // Verify active keyset (lowest fee, active)
     const active = keyChain.getCheapestKeyset();
     expect(active.id).toBe('00bd033559de27d0'); // Fee 0, hex ID
     expect(active.fee).toBe(0);
-    expect(active.hasHexId).toBe(true);
     expect(isValidHex(active.id)).toBe(true);
 
     // Verify final_expiry assigned
@@ -166,7 +167,7 @@ describe('KeyChain initialization', () => {
 
   test('should throw if no active hex keyset found', async () => {
     // Only include inactive and non-hex keysets
-    const limitedKeysetResp = { keysets: dummyKeysetResp.keysets.slice(2) }; // 'invalidbase64' and '00inactive'
+    const limitedKeysetResp = { keysets: dummyKeysetResp.keysets.slice(2) }; // 'invalidbase64' and '00aabbccddeeff11'
     const limitedKeysResp = { keysets: dummyKeysResp.keysets.slice(2) };
 
     server.use(
@@ -292,25 +293,20 @@ describe('KeyChain getters', () => {
     expect(keyset.fee).toBe(0);
     expect(keyset.expiry).toBe(1754296607);
     expect(keyset.hasKeys).toBe(true);
-    expect(keyset.hasHexId).toBe(true);
     expect(keyset.keys).toEqual(dummyKeysResp.keysets[0].keys);
   });
 
   test('should handle keyset without keys', () => {
-    const keyset = keyChain.getKeyset('00inactive');
-    expect(keyset.id).toBe('00inactive');
+    const keyset = keyChain.getKeyset('00aabbccddeeff11');
+    expect(keyset.id).toBe('00aabbccddeeff11');
     expect(keyset.isActive).toBe(false);
     expect(keyset.hasKeys).toBe(false);
-    expect(keyset.hasHexId).toBe(false);
     expect(keyset.toMintKeys()).toBe(null);
     expect(keyset.verify()).toBe(false);
+  });
 
-    // Also test non-hex
-    const nonHexKeyset = keyChain.getKeyset('invalidbase64');
-    expect(nonHexKeyset.hasHexId).toBe(false);
-    expect(nonHexKeyset.hasKeys).toBe(false);
-    expect(nonHexKeyset.toMintKeys()).toBe(null);
-    expect(nonHexKeyset.verify()).toBe(false);
+  test('legacy (base64-id) keysets are skipped on load', () => {
+    expect(() => keyChain.getKeyset('invalidbase64')).toThrow("Keyset 'invalidbase64' not found");
   });
 
   test('should throw on invalid keyset ID', () => {
@@ -325,14 +321,14 @@ describe('KeyChain getters', () => {
 
   test('should get keyset list', () => {
     const list = keyChain.getKeysets();
-    expect(list).toHaveLength(4);
-    expect(list.map((k) => k.id).sort()).toEqual(dummyKeysetResp.keysets.map((ks) => ks.id).sort());
+    expect(list).toHaveLength(3);
+    expect(list.map((k) => k.id).sort()).toEqual([...loadedKeysetIds].sort());
   });
 
   test('should get keyset IDs', () => {
     const list = keyChain.getAllKeysetIds();
-    expect(list).toHaveLength(4);
-    expect(list.sort()).toEqual(dummyKeysetResp.keysets.map((ks) => ks.id).sort());
+    expect(list).toHaveLength(3);
+    expect(list.sort()).toEqual([...loadedKeysetIds].sort());
   });
 
   test('getAllKeysetIds and getAllKeys span all units; getKeysets filters to wallet unit', async () => {
@@ -351,7 +347,7 @@ describe('KeyChain getters', () => {
 
     // getAllKeysetIds — includes all units, including usd keyset with no keys
     const allIds = multiChain.getAllKeysetIds();
-    expect(allIds).toHaveLength(5);
+    expect(allIds).toHaveLength(4);
     expect(allIds).toContain(usdKeysetId);
 
     // getAllKeys — only returns keysets with verified keys; usd has none so sat count unchanged

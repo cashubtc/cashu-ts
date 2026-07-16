@@ -979,11 +979,6 @@ class Mint {
     customRequest?: RequestFn,
   ): Promise<GetKeysResponse> {
     const targetUrl = mintUrl || this._mintUrl;
-    // backwards compatibility for base64 encoded keyset ids
-    if (keysetId) {
-      // make the keysetId url safe
-      keysetId = keysetId.replace(/\//g, '_').replace(/\+/g, '-');
-    }
     const requestInstance = customRequest ?? this._request;
     const data = await requestInstance<GetKeysResponse>({
       endpoint: keysetId

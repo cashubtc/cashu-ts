@@ -39,7 +39,7 @@ const SEED = hexToBytes(
 
 // Minimal Keyset-shaped stub for spying keyChain.getKeyset.
 function ks(id: string, unitStr = unit, hasKeys = true, fee = 0) {
-  return { id, unit: unitStr, hasKeys, fee, isActive: true, hasHexId: true } as never;
+  return { id, unit: unitStr, hasKeys, fee, isActive: true } as never;
 }
 
 // Mint info with a single active keyset that charges input fees.

@@ -221,12 +221,9 @@ describe('getKeysetIdInt', () => {
     expect(getKeysetIdInt(hexId)).toBe(expected);
   });
 
-  test('legacy base64 keyset id path', () => {
-    // 'AQID' base64 => bytes [0x01, 0x02, 0x03] => 0x010203
-    const MOD = BigInt(2 ** 31 - 1);
-    const b64Id = 'AQID';
-    const expected = BigInt(0x010203) % MOD;
-    expect(getKeysetIdInt(b64Id)).toBe(expected);
+  test('legacy base64 keyset id throws', () => {
+    expect(() => getKeysetIdInt('AQID')).toThrow(/legacy base64 keyset IDs/);
+    expect(() => getKeysetIdInt('0NI3TUAs1Sfy')).toThrow(/legacy base64 keyset IDs/);
   });
 });
 
