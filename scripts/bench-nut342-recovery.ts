@@ -140,12 +140,14 @@ async function run(
   const started = Date.now();
   const res =
     method === 'efficient'
-      ? await wallet.restoreEfficient({
+      ? // filterSpent off for both methods: each state-checks once, via groupProofsByState below
+        await wallet.restoreEfficient({
           probeWindow: 25,
+          filterSpent: false,
           ...(probeBudget && { probeBudget }),
           ...(ladderSkip && { ladderSkip }),
         })
-      : await wallet.batchRestore();
+      : await wallet.batchRestore({ filterSpent: false });
   await wallet.groupProofsByState(res.proofs);
   const wallMs = Date.now() - started;
   return {

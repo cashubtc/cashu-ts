@@ -18,7 +18,14 @@
  */
 import { randomBytes } from '@noble/hashes/utils.js';
 
-import { MeltQuoteState, MintQuoteState, Wallet, sumProofs, type Proof } from '../../src';
+import {
+  ConsoleLogger,
+  MeltQuoteState,
+  MintQuoteState,
+  Wallet,
+  sumProofs,
+  type Proof,
+} from '../../src';
 
 const mintUrl = 'http://localhost:3338';
 const seed = randomBytes(64);
@@ -91,9 +98,10 @@ function countingFetch() {
   return { wrapped, stats };
 }
 
-function reportStats(label: string, stats: ReturnType<typeof countingFetch>['stats']) {
+function reportStats(label: string, stats: ReturnType<typeof countingFetch>['stats'], ms: number) {
   console.log(
-    `  ${label}: ${stats.requests} requests (sizes: ${stats.sizes.join(', ')}),\n` +
+    `  ${label}: ${stats.requests} requests in ${(ms / 1000).toFixed(1)}s ` +
+      `(sizes: ${stats.sizes.join(', ')}),\n` +
       `  ${stats.total} messages sent (${stats.sent.size} unique), ` +
       `${stats.linked.size} issued signatures linked`,
   );
@@ -187,13 +195,13 @@ async function main() {
         console.log(`Balance ${balance} too low to keep churning; stopping early`);
         return;
       }
-      await selfSwap(wallet, 1 + Math.floor(Math.random() * Math.max(1, balance / 4)));
+      await selfSwap(wallet, 1 + Math.floor(Math.random() * Math.max(1, balance / 3)));
     }
   };
 
-  await mintSats(wallet, 1000);
+  await mintSats(wallet, 10000);
   await churn(churnRounds);
-  await mintSats(wallet, 1500);
+  await mintSats(wallet, 15000);
   await sendUnclaimed(wallet, 21);
   try {
     await meltSats(wallet, externalInvoice);
@@ -222,18 +230,28 @@ async function main() {
   console.log('\n--- Device lost! Recovering from seed on a fresh wallet ---\n');
 
   const efficient = countingFetch();
-  const recovery = new Wallet(mintUrl, { bip39seed: seed, requestFetch: efficient.wrapped });
+  // Debug logger: recovery degrades silently (chunk retries, scan fallback) without one.
+  const recovery = new Wallet(mintUrl, {
+    bip39seed: seed,
+    requestFetch: efficient.wrapped,
+    logger: new ConsoleLogger('debug'),
+  });
   await recovery.loadMint();
 
   // filterSpent off: the demo compares raw restore traffic and state-checks explicitly below
+  const efficientStart = performance.now();
   const restored = await recovery.restoreEfficient({ filterSpent: false });
+  const efficientMs = performance.now() - efficientStart;
   const { unspent } = await recovery.groupProofsByState(restored.proofs);
   console.log(
     `restoreEfficient: recovered ${sumProofs(unspent)} sats ` +
       `(${unspent.length} unspent of ${restored.proofs.length} issued, ` +
       `T=${restored.lastCounterWithSignature})`,
   );
-  reportStats('NUT-342 ladder', efficient.stats);
+  reportStats('NUT-342 ladder', efficient.stats, efficientMs);
+  console.log(
+    '  (sizes are the search: ladder, grid rounds, tile; then the d_gap window in chunks)',
+  );
 
   // For comparison: the linear NUT-09 restore scan. Its cost grows with wallet age
   // (total counters used) and it silently misses proofs beyond the gap limit;
@@ -241,13 +259,16 @@ async function main() {
   const linear = countingFetch();
   const legacy = new Wallet(mintUrl, { bip39seed: seed, requestFetch: linear.wrapped });
   await legacy.loadMint();
-  const scanned = await legacy.batchRestore();
+  const scanStart = performance.now();
+  // filterSpent off: restoreEfficient returns unfiltered, so the comparison stays like for like
+  const scanned = await legacy.batchRestore({ filterSpent: false });
+  const scanMs = performance.now() - scanStart;
   console.log(
     `\nbatchRestore:     recovered ${sumProofs(
       (await legacy.groupProofsByState(scanned.proofs)).unspent,
     )} sats`,
   );
-  reportStats('NUT-09 scan   ', linear.stats);
+  reportStats('NUT-09 scan   ', linear.stats, scanMs);
 
   if (!sumProofs(unspent).equals(expected)) {
     throw new Error(`Recovery mismatch: expected ${expected}, got ${sumProofs(unspent)}`);
