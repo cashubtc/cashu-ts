@@ -118,6 +118,11 @@ function deriveBip32SecretAndBlindingFactor(
   parentKey: HDKey,
   counter: number,
 ): DerivedSecretAndBlindingFactor {
+  // HARDENED_OFFSET + counter must stay in the hardened range; a counter outside [0, 2^31) would
+  // wrap to a different index and derive the wrong key rather than fail.
+  if (!Number.isInteger(counter) || counter < 0 || counter >= 0x80000000) {
+    throw new CTSError('Counter must be an integer in the range 0 <= counter < 2^31');
+  }
   const baseKey = parentKey.deriveChild(HARDENED_OFFSET + counter);
   const secret = baseKey.deriveChild(0).privateKey;
   const blindingFactor = baseKey.deriveChild(1).privateKey;
