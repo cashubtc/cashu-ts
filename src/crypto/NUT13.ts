@@ -48,8 +48,8 @@ type SecretAndBlindingFactorDeriver = (counter: number) => DerivedSecretAndBlind
  * values together is faster because it avoids repeating the shared path derivation common to the
  * secret and blinding factor.
  *
- * The function supports legacy base64 keyset IDs, deprecated hex keyset IDs with the `00` prefix,
- * and modern hex keyset IDs with the `01` prefix.
+ * The function supports legacy base64 keyset IDs (deprecated, removal planned for v6), deprecated
+ * hex keyset IDs with the `00` prefix, and modern hex keyset IDs with the `01` prefix.
  * @param seed - Wallet seed used for deterministic derivation.
  * @param keysetId - Mint keyset ID that selects the derivation method.
  * @param counter - Deterministic counter for the output.

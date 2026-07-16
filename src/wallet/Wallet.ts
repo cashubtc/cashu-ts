@@ -59,6 +59,7 @@ import type { RequestFetch, RequestFn } from '../transport';
 import {
   getDecodedToken,
   invoiceHasAmountInHRP,
+  isValidHex,
   normalizeProofAmounts,
   normalizeUrl,
   splitAmount,
@@ -375,7 +376,17 @@ class Wallet {
    * Finishes wiring up the wallet instance and checks we are "Go for launch".
    */
   private finishInit(): void {
-    this._logger.debug('KeyChain', { keychain: this._keyChain.cache });
+    const keychainCache = this._keyChain.cache;
+    this._logger.debug('KeyChain', { keychain: keychainCache });
+
+    // Legacy keysets still load (spend/restore only), but their days are numbered.
+    const legacyIds = keychainCache.keysets.map((k) => k.id).filter((id) => !isValidHex(id));
+    if (legacyIds.length > 0) {
+      this._logger.warn(
+        'Mint has legacy (base64-id) keysets. Support is deprecated and will be removed in cashu-ts v6; sweep any proofs held on these keysets.',
+        { keysets: legacyIds },
+      );
+    }
 
     // Go Keychain?
     if (this._boundKeysetId === PENDING_KEYSET_ID) {

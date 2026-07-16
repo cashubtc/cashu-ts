@@ -418,6 +418,9 @@ export type DeriveKeysetIdOptions = {
   input_fee_ppk?: number;
   unit?: string;
   versionByte?: number;
+  /**
+   * @deprecated Legacy base64 keyset ids will be removed in cashu-ts v6.
+   */
   isDeprecatedBase64?: boolean;
 };
 

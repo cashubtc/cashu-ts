@@ -1,8 +1,8 @@
 import { randomBytes } from '@noble/hashes/utils.js';
 import { HttpResponse, http } from 'msw';
-import { test, describe, expect } from 'vitest';
+import { test, describe, expect, vi } from 'vitest';
 
-import { Wallet, type MintKeys, type MintKeyset } from '../../src';
+import { Wallet, type Logger, type MintKeys, type MintKeyset } from '../../src';
 import { deriveKeysetId, isValidHex, isBase64String } from '../../src/utils';
 import { DUMMY_TEST_KEYS, DUMMY_TEST_KEYSET, PUBKEYS } from '../consts';
 
@@ -59,6 +59,42 @@ describe('Legacy (pre-v1) keyset output gating', () => {
     const keyset = wallet.keyChain.getKeyset(legacyId);
     expect(keyset.hasKeys).toBe(true);
     expect(keyset.hasHexId).toBe(false);
+  });
+
+  test('loadMint warns about deprecated legacy keysets, naming them', async () => {
+    const logger: Logger = {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+      log: vi.fn(),
+    };
+
+    useLegacyHandlers();
+    const wallet = new Wallet(mint, { logger });
+    await wallet.loadMint();
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringMatching(/legacy .*deprecated.*removed in cashu-ts v6/i),
+      { keysets: [legacyId] },
+    );
+  });
+
+  test('loadMint does not warn when the mint has no legacy keysets', async () => {
+    const logger: Logger = {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+      log: vi.fn(),
+    };
+
+    const wallet = new Wallet(mint, { logger });
+    await wallet.loadMint();
+
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
   test('prepareMint refuses to create proofs on a legacy keyset', async () => {
