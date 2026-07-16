@@ -93,6 +93,7 @@ import {
   type SendResponse,
   type RestoreConfig,
   type BatchRestoreConfig,
+  type RestoreAllConfig,
   type SecretsPolicy,
   type SwapPreview,
   type MintPreview,
@@ -1668,6 +1669,33 @@ class Wallet {
       restoredProofs = restoredProofs.filter((_, i) => states[i].state !== CheckStateEnum.SPENT);
     }
     return { proofs: restoredProofs, lastCounterWithSignature };
+  }
+
+  /**
+   * Restores deterministic proofs for every keyset in the wallet's unit.
+   *
+   * @remarks
+   * Runs `batchRestore` per keyset, inactive keysets included, and merges the results. After
+   * restoring, advance each keyset's counter from `lastCounters`.
+   */
+  async restoreAll(
+    config?: RestoreAllConfig,
+  ): Promise<{ proofs: Proof[]; lastCounters: Record<string, number> }> {
+    const keysetIds = this._keyChain
+      .getAllKeysetIds()
+      .filter((id) => this._keyChain.getKeyset(id).unit === this.unit);
+    let proofs: Proof[] = [];
+    const lastCounters: Record<string, number> = {};
+    for (const keysetId of keysetIds) {
+      const res = await this.batchRestore({ ...config, keysetId });
+      // concat, not push-spread: a keyset's result is unbounded and spread
+      // arguments hit V8's call-size limit around ~65k elements.
+      proofs = proofs.concat(res.proofs);
+      if (res.lastCounterWithSignature !== undefined) {
+        lastCounters[keysetId] = res.lastCounterWithSignature;
+      }
+    }
+    return { proofs, lastCounters };
   }
 
   /**

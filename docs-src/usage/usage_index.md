@@ -17,6 +17,7 @@ If you are building a wallet integration from scratch, read these in order:
 3. [Create Token](./create_token.md) or [Create P2PK](./create_p2pk.md) to send value.
 4. [Get Token](./get_token.md) to inspect or decode tokens safely.
 5. [Melt Token](./melt_token.md) to pay invoices with proofs.
+6. [Restore Proofs](./restore_proofs.md) to recover a wallet from its seed.
 
 ## Recipes
 
@@ -30,6 +31,7 @@ If you are building a wallet integration from scratch, read these in order:
 | [Derive Keys](./derive_keys.md)                     | Derive recoverable P2PK / NUT-20 keys deterministically from the wallet seed.   |
 | [Get Token](./get_token.md)                         | Inspect token metadata before wallet creation or decode it after load.          |
 | [Melt Token](./melt_token.md)                       | Pay BOLT11 invoices or other payment methods with wallet proofs.                |
+| [Restore Proofs](./restore_proofs.md)               | Recover deterministic proofs from the wallet seed across keysets.               |
 | [Bolt12](./bolt12.md)                               | Work with reusable BOLT12 offers for minting and melting.                       |
 | [NUT-19 Cached Responses](./nut19.md)               | Understand cached endpoint retries and timeout behavior.                        |
 | [Logging](./logging.md)                             | Enable and route library logs while debugging wallet or mint behavior.          |

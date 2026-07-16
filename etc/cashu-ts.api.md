@@ -1858,6 +1858,9 @@ export type ResponseMeta = {
     headers: Headers;
 };
 
+// @public
+export type RestoreAllConfig = Omit<BatchRestoreConfig, 'counter' | 'keysetId'>;
+
 // @public (undocumented)
 export type RestoreConfig = {
     keysetId?: string;
@@ -2313,6 +2316,10 @@ export class Wallet {
     restore(start: number, count: number, config?: RestoreConfig): Promise<{
         proofs: Proof[];
         lastCounterWithSignature?: number;
+    }>;
+    restoreAll(config?: RestoreAllConfig): Promise<{
+        proofs: Proof[];
+        lastCounters: Record<string, number>;
     }>;
     selectProofsToSend(proofs: ProofLike[], amountToSend: AmountLike, includeFees?: boolean, exactMatch?: boolean): SendResponse;
     send(amount: AmountLike, proofs: ProofLike[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SendResponse>;
