@@ -1881,6 +1881,9 @@ export type RestoreConfig = {
 export type RestoreEfficientConfig = {
     keysetId?: string;
     probeWindow?: number;
+    batchSize?: number;
+    probeBudget?: number;
+    ladderSkip?: number;
     filterSpent?: boolean;
 };
 

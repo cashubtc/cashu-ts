@@ -50,10 +50,28 @@ export type BatchRestoreConfig = {
 export type RestoreEfficientConfig = {
   keysetId?: string;
   /**
-   * Counters probed per binary-search request. Larger windows tolerate larger derivation gaps at
-   * the cost of revealing more nonces per probe. Default is `25`.
+   * Nonces per probe window; also the largest derivation gap the search tolerates. Larger windows
+   * are safer but reveal more nonces per probe round. Default is `25`.
    */
   probeWindow?: number;
+  /**
+   * Chunk size for the final window restore (mints cap request lengths); chunks are requested
+   * concurrently. Must be 1-1000. Default is `500`, matching `batchRestore`.
+   */
+  batchSize?: number;
+  /**
+   * Probe windows per search request (grid width). Larger budgets pin T in fewer rounds but land
+   * more probes in issued history, letting the mint link more old signatures to the recovery. Must
+   * be 2-40. Default is `12`.
+   */
+  probeBudget?: number;
+  /**
+   * Low ladder rungs to skip: the first search rung starts at `probeWindow * 2^ladderSkip`. Aged
+   * wallets have used every low counter, so skipping avoids linking them; a keyset living below the
+   * first rung triggers one extra request that fires the skipped rungs instead. Must be 0-20.
+   * Default is `0` (probe from counter 0).
+   */
+  ladderSkip?: number;
   /**
    * Drop spent proofs (NUT-07) before returning. Default is `true`
    */

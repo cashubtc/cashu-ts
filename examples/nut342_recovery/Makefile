@@ -9,7 +9,7 @@
 DOCKER ?= docker
 BIND_ADDR ?= 127.0.0.1
 PORT ?= 3338
-RATE_LIMIT_PM ?= 200
+RATE_LIMIT_PM ?= 5000
 
 NUT_342_CTX ?= https://github.com/cashubtc/nutshell.git\#feat/efficient-recovery
 NUT_342_IMAGE ?= cashu-dev-nutshell-342:local

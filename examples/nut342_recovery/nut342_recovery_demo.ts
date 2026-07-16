@@ -8,15 +8,24 @@
  *     make demo
  *     make down
  *
- * Flow: a wallet with a `recoveryGapProvider` gets a thorough workout — two mints, several swap
- * rounds, a Lightning melt with NUT-08 change, and one sent token that is never claimed. Every
+ * Flow: a wallet with a `recoveryGapProvider` gets a thorough workout — two mints, random-value
+ * swap churn, a Lightning melt with NUT-08 change, and one sent token that is never claimed. Every
  * operation backs up an encrypted recovery gap on the mint. Then a second wallet with the same seed
- * recovers everything via `restoreEfficient()`, including the unclaimed token. A plain
- * `batchRestore()` (the linear NUT-09 restore scan) runs last for comparison.
+ * recovers everything via `restoreEfficient()` (batched exponential-ladder search plus chunked
+ * window restore, typically ~4 requests). A plain `batchRestore()` (the linear NUT-09 restore scan)
+ * runs last for comparison, including the count of issued signatures each method lets the mint
+ * link.
  */
 import { randomBytes } from '@noble/hashes/utils.js';
 
-import { MeltQuoteState, MintQuoteState, Wallet, sumProofs, type Proof } from '../../src';
+import {
+  ConsoleLogger,
+  MeltQuoteState,
+  MintQuoteState,
+  Wallet,
+  sumProofs,
+  type Proof,
+} from '../../src';
 
 const mintUrl = 'http://localhost:3338';
 const seed = randomBytes(64);
@@ -50,27 +59,52 @@ async function firstUnspentCounter(): Promise<number | undefined> {
 }
 
 // ---------------------------------------------------------------------------
-// A fetch wrapper that records NUT-09 restore traffic (requests + nonces).
+// A fetch wrapper that records NUT-09 restore traffic. "Sent" counts unique
+// blinded messages revealed to the mint; "linked" counts the issued signatures
+// the mint could associate with this recovery session — the privacy metric.
 // ---------------------------------------------------------------------------
 function countingFetch() {
-  const stats = { requests: 0, nonces: 0, sizes: [] as number[] };
+  const stats = {
+    requests: 0,
+    total: 0,
+    sizes: [] as number[],
+    sent: new Set<string>(),
+    linked: new Set<string>(),
+  };
   const wrapped: typeof fetch = async (input, init) => {
     const url = input instanceof Request ? input.url : String(input);
-    if (url.endsWith('/v1/restore') && typeof init?.body === 'string') {
-      const body = JSON.parse(init.body) as { outputs: unknown[] };
+    const isRestore = url.endsWith('/v1/restore') && typeof init?.body === 'string';
+    if (isRestore) {
+      const body = JSON.parse(init!.body as string) as { outputs: Array<{ B_: string }> };
       stats.requests++;
-      stats.nonces += body.outputs.length;
+      stats.total += body.outputs.length;
       stats.sizes.push(body.outputs.length);
+      body.outputs.forEach((o) => stats.sent.add(o.B_));
     }
     // One retry on a dropped keep-alive socket: the dev mint closes idle connections
     // during the demo's long derivation pauses, and this traffic is read-only.
+    let res: Response;
     try {
-      return await fetch(input, init);
+      res = await fetch(input, init);
     } catch {
-      return fetch(input, init);
+      res = await fetch(input, init);
     }
+    if (isRestore && res.ok) {
+      const data = (await res.clone().json()) as { outputs?: Array<{ B_: string }> };
+      (data.outputs ?? []).forEach((o) => stats.linked.add(o.B_));
+    }
+    return res;
   };
   return { wrapped, stats };
+}
+
+function reportStats(label: string, stats: ReturnType<typeof countingFetch>['stats'], ms: number) {
+  console.log(
+    `  ${label}: ${stats.requests} requests in ${(ms / 1000).toFixed(1)}s ` +
+      `(sizes: ${stats.sizes.join(', ')}),\n` +
+      `  ${stats.total} messages sent (${stats.sent.size} unique), ` +
+      `${stats.linked.size} issued signatures linked`,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -88,13 +122,46 @@ async function mintSats(wallet: Wallet, amount: number) {
 }
 
 async function selfSwap(wallet: Wallet, amount: number) {
-  const { keep, send } = await wallet.send(amount, proofs, { onCountersReserved });
+  // includeFees: sender covers the receive fee, so tiny amounts stay receivable
+  const { keep, send } = await wallet.send(amount, proofs, {
+    onCountersReserved,
+    includeFees: true,
+  });
   proofs = keep;
   track([...keep, ...send]);
   const received = await wallet.receive(send, { onCountersReserved });
   proofs.push(...received);
   track(received);
   console.log(`Swapped ${amount} sats through the mint (balance ${sumProofs(proofs)})`);
+}
+
+// Wallet policy: refresh the oldest live proofs through the mint. d_gap is pinned by the
+// single oldest unspent proof, so rolling old proofs forward keeps the recovery window
+// small no matter how the regular churn selects its inputs.
+async function refreshOldest(wallet: Wallet, minNet = 10) {
+  const liveSecrets = new Set(proofs.map((p) => p.secret));
+  const byAge = batches
+    .filter((b) => [...b.secrets].some((s) => liveSecrets.has(s)))
+    .sort((a, b) => a.start - b.start);
+  if (byAge.length === 0) return;
+  // Grow the sweep until it clears fees with room to spare: dust batches alone would
+  // produce a zero-output receive (and skipping them would pin d_gap forever).
+  let oldest: Proof[] = [];
+  for (let k = 4; ; k += 4) {
+    const slice = byAge.slice(0, k);
+    oldest = proofs.filter((p) => slice.some((b) => b.secrets.has(p.secret)));
+    if (sumProofs(oldest).compareTo(wallet.getFeesForProofs(oldest).add(minNet)) >= 0) break;
+    if (k >= byAge.length) return; // all old value is dust; nothing sensible to refresh
+  }
+  const rest = proofs.filter((p) => !oldest.includes(p));
+  // One swap: receiving our own proofs re-issues them as fresh deterministic outputs,
+  // netting the input fee itself.
+  const received = await wallet.receive(oldest, { onCountersReserved });
+  proofs = [...rest, ...received];
+  track(received);
+  console.log(
+    `Refreshed ${oldest.length} oldest proofs (first unspent counter now ${await firstUnspentCounter()})`,
+  );
 }
 
 async function sendUnclaimed(wallet: Wallet, amount: number) {
@@ -108,6 +175,10 @@ async function sendUnclaimed(wallet: Wallet, amount: number) {
 async function meltSats(wallet: Wallet, invoice: string) {
   const meltQuote = await wallet.createMeltQuoteBolt11(invoice);
   const amountToMelt = meltQuote.amount.add(meltQuote.fee_reserve);
+  if (sumProofs(proofs).compareTo(amountToMelt.add(30)) < 0) {
+    console.log(`Balance too low to melt ${meltQuote.amount} sats; skipping the melt leg`);
+    return;
+  }
   const { keep, send } = await wallet.send(amountToMelt, proofs, {
     onCountersReserved,
     includeFees: true,
@@ -142,12 +213,34 @@ async function main() {
   }
   console.log(`Mint advertises NUT-342 support (${wallet.keysetId})\n`);
 
-  // A thorough workout: every operation writes fresh encrypted gaps
-  await mintSats(wallet, 1000);
-  await selfSwap(wallet, 400);
-  await selfSwap(wallet, 150);
-  await mintSats(wallet, 1500);
-  await sendUnclaimed(wallet, 21);
+  // A thorough workout: every operation writes fresh encrypted gaps. Knobs, so the
+  // d_gap regimes in the PR table are one-liners:
+  //   CHURN_ROUNDS=n     swap rounds per churn block (default 4)
+  //   REFRESH_EVERY=n    oldest-refresh cadence; 0 disables it (default 20)
+  //   SPEND_FRAC=f       max spend as a fraction of balance; small values model a
+  //                      lump-funded wallet making everyday payments (default 0.9)
+  //   PIN_MID=1          send the unclaimed token mid-history, pinning d_gap at ~T/2
+  const churnRounds = Number(process.env.CHURN_ROUNDS ?? 4);
+  const refreshEvery = Number(process.env.REFRESH_EVERY ?? 20);
+  const spendFrac = Number(process.env.SPEND_FRAC ?? 0.9);
+  const pinMid = process.env.PIN_MID === '1';
+  const churn = async (rounds: number) => {
+    for (let i = 0; i < rounds; i++) {
+      const balance = Number(sumProofs(proofs).toBigInt());
+      if (balance < 20) {
+        console.log(`Balance ${balance} too low to keep churning; stopping early`);
+        return;
+      }
+      await selfSwap(wallet, 1 + Math.floor(Math.random() * Math.max(1, balance * spendFrac)));
+      // periodically roll the oldest proofs forward (see refreshOldest)
+      if (refreshEvery > 0 && i % refreshEvery === refreshEvery - 1) await refreshOldest(wallet);
+    }
+  };
+
+  await mintSats(wallet, 10000);
+  await churn(churnRounds);
+  await mintSats(wallet, 15000);
+  if (pinMid) await sendUnclaimed(wallet, 21);
   try {
     await meltSats(wallet, externalInvoice);
   } catch {
@@ -158,8 +251,11 @@ async function main() {
     const target = await wallet.createMintQuoteBolt11(2000);
     await meltSats(wallet, target.request);
   }
-  await selfSwap(wallet, 100);
-  await selfSwap(wallet, 42);
+  await churn(churnRounds);
+  // Sent late in history by default: a pending token pins first-unspent at its own
+  // counter (the provider must include it), so an unclaimed token sent mid-history
+  // (PIN_MID=1) caps d_gap at ~T/2 no matter how well the wallet consolidates.
+  if (!pinMid) await sendUnclaimed(wallet, 21);
 
   const balance = sumProofs(proofs);
   const pending = sumProofs(sentPending);
@@ -176,38 +272,45 @@ async function main() {
   console.log('\n--- Device lost! Recovering from seed on a fresh wallet ---\n');
 
   const efficient = countingFetch();
-  const recovery = new Wallet(mintUrl, { bip39seed: seed, requestFetch: efficient.wrapped });
+  // Debug logger: recovery degrades silently (chunk retries, scan fallback) without one.
+  const recovery = new Wallet(mintUrl, {
+    bip39seed: seed,
+    requestFetch: efficient.wrapped,
+    logger: new ConsoleLogger('debug'),
+  });
   await recovery.loadMint();
 
   // filterSpent off: the demo compares raw restore traffic and state-checks explicitly below
+  const efficientStart = performance.now();
   const restored = await recovery.restoreEfficient({ filterSpent: false });
+  const efficientMs = performance.now() - efficientStart;
   const { unspent } = await recovery.groupProofsByState(restored.proofs);
   console.log(
     `restoreEfficient: recovered ${sumProofs(unspent)} sats ` +
       `(${unspent.length} unspent of ${restored.proofs.length} issued, ` +
       `T=${restored.lastCounterWithSignature})`,
   );
+  reportStats('NUT-342 ladder', efficient.stats, efficientMs);
   console.log(
-    `  ${efficient.stats.requests} restore requests, ${efficient.stats.nonces} nonces revealed ` +
-      `(final window: ${efficient.stats.sizes.at(-1)} nonces)`,
+    '  (sizes are the search: ladder, grid rounds, tile; then the d_gap window in chunks)',
   );
-  if (efficient.stats.sizes.slice(0, -1).every((s) => s <= 25)) {
-    console.log('  all search requests were <=25-nonce probes: the NUT-342 path ran, no fallback');
-  }
 
   // For comparison: the linear NUT-09 restore scan. Its cost grows with wallet age
   // (total counters used) and it silently misses proofs beyond the gap limit;
-  // the NUT-342 search stays at ~30 requests regardless of age.
+  // the NUT-342 batched search stays at ~4 requests regardless of age.
   const linear = countingFetch();
   const legacy = new Wallet(mintUrl, { bip39seed: seed, requestFetch: linear.wrapped });
   await legacy.loadMint();
-  const scanned = await legacy.batchRestore();
+  const scanStart = performance.now();
+  // filterSpent off: restoreEfficient returns unfiltered, so the comparison stays like for like
+  const scanned = await legacy.batchRestore({ filterSpent: false });
+  const scanMs = performance.now() - scanStart;
   console.log(
     `\nbatchRestore:     recovered ${sumProofs(
       (await legacy.groupProofsByState(scanned.proofs)).unspent,
     )} sats`,
   );
-  console.log(`  ${linear.stats.requests} restore requests, ${linear.stats.nonces} nonces sent`);
+  reportStats('NUT-09 scan   ', linear.stats, scanMs);
 
   if (!sumProofs(unspent).equals(expected)) {
     throw new Error(`Recovery mismatch: expected ${expected}, got ${sumProofs(unspent)}`);
