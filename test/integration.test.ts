@@ -19,7 +19,6 @@
 // docker rm -f -v nutshell
 
 import { secp256k1, schnorr } from '@noble/curves/secp256k1.js';
-import { sha256 } from '@noble/hashes/sha2.js';
 import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 import { vi, test, describe, expect } from 'vitest';
 
@@ -39,6 +38,8 @@ import {
   type OutputType,
   P2PKBuilder,
   type MintQuoteBaseResponse,
+  createHTLCHash,
+  deriveP2BKSecretKeys,
   getEncodedToken,
   hexToNumber,
   isBlsKeyset,
@@ -85,34 +86,25 @@ function expectNUT10SecretDataToEqual(p: Proof[], s: string) {
   });
 }
 
-function expectBlindedSecretDataToEqualECDH(
-  proofs: Proof[],
-  bobPrivHex: Uint8Array, // receiver’s private key
-  bobPubHex: string, // receiver’s SEC1-compressed pubkey P
-) {
+// Asserts Bob's key unblinds from each proof's lock key at the NUT-28 slot for its kind:
+// P2PK holds P′ in data (slot 0); HTLC holds the hashlock there, so its keys start at slot 1.
+// The derivation primitives are pinned to the spec vectors in test/crypto/NUT28.test.ts.
+function expectP2BKLockedToBob(proofs: Proof[], bobPriv: Uint8Array) {
   for (const p of proofs) {
     expect(p.p2pk_e).toBeDefined();
-
-    const E = secp256k1.Point.fromHex(p.p2pk_e as string);
-    const parsed = JSON.parse(p.secret) as ['P2PK', { data: string; tags?: string[][] }];
-    const blindedData = parsed[1].data; // this is P′ for slot 0
-
-    // Z = p · E
-    const pBig = secp256k1.Point.Fn.fromBytes(bobPrivHex);
-    const Z = E.multiply(pBig);
-    const Zx = Z.toBytes(false).slice(1, 33); // 32-byte X
-
-    // r = SHA-256(DST || Zx || kid || i=0) mod n, retry once if zero
-    const DST = new TextEncoder().encode('Cashu_P2BK_v1');
-    let r = secp256k1.Point.Fn.fromBytes(sha256(new Uint8Array([...DST, ...Zx, 0x00])));
-    if (r === 0n) {
-      r = secp256k1.Point.Fn.fromBytes(sha256(new Uint8Array([...DST, ...Zx, 0x00, 0xff])));
-      if (r === 0n) throw new Error('P2BK: tweak derivation failed in test');
-    }
-
-    const P = secp256k1.Point.fromHex(bobPubHex);
-    const Pprime = P.add(secp256k1.Point.BASE.multiply(r)).toHex(true);
-    expect(blindedData).toBe(Pprime);
+    const parsed = JSON.parse(p.secret) as [string, { data: string; tags?: string[][] }];
+    const isHTLC = parsed[0] === 'HTLC';
+    const lockKey = isHTLC ? parsed[1].tags?.find((t) => t[0] === 'pubkeys')?.[1] : parsed[1].data;
+    expect(lockKey).toBeDefined();
+    // Returns a spend key onl
+    // y if lockKey unblinds to Bob's pubkey at the expected slot
+    const derived = deriveP2BKSecretKeys(
+      p.p2pk_e as string,
+      bytesToHex(bobPriv),
+      lockKey as string,
+      !isHTLC,
+    );
+    expect(derived).toHaveLength(1);
   }
 }
 
@@ -446,7 +438,7 @@ describe('mint api', () => {
     const p2pkOpts = new P2PKBuilder().addLockPubkey(pubKeyBob).blindKeys().toOptions();
     const { send } = await wallet.ops.send(64, mintedProofs).asP2PK(p2pkOpts).run();
     // console.log('P2BK SEND', send);
-    expectBlindedSecretDataToEqualECDH(send, privKeyBob, pubKeyBob);
+    expectP2BKLockedToBob(send, privKeyBob);
     const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
     // console.log('P2BK token', encoded);
 
@@ -478,7 +470,7 @@ describe('mint api', () => {
     const p2pkOpts = new P2PKBuilder().addLockPubkey(pubKeyBob).blindKeys().toOptions();
     const { send } = await wallet.ops.send(64, mintedProofs).asP2PK(p2pkOpts).run();
     // console.log('P2BK SEND', send);
-    expectBlindedSecretDataToEqualECDH(send, privKeyBob, pubKeyBob);
+    expectP2BKLockedToBob(send, privKeyBob);
     const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
     // console.log('P2BK token', encoded);
 
@@ -486,6 +478,40 @@ describe('mint api', () => {
     const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyBob) });
     // console.log('P2BK RECEIVE', proofs);
 
+    expect(sumProofs(proofs).equals(63)).toBeTruthy();
+  });
+
+  test('send and receive p2bk HTLC', async () => {
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+
+    const privKeyBob = secp256k1.utils.randomSecretKey();
+    const pubKeyBob = bytesToHex(secp256k1.getPublicKey(privKeyBob));
+    const { hash, preimage } = createHTLCHash();
+
+    // Mint some proofs
+    const request = await wallet.createMintQuoteBolt11(128);
+    await untilMintQuotePaid(wallet, request);
+    const mintedProofs = await wallet.mintProofsBolt11(128, request.quote);
+
+    // Send them HTLC locked to Bob with blinded keys
+    const p2pkOpts = new P2PKBuilder()
+      .addHashlock(hash)
+      .addLockPubkey(pubKeyBob)
+      .blindKeys()
+      .toOptions();
+    const { send } = await wallet.ops.send(64, mintedProofs).asP2PK(p2pkOpts).run();
+
+    // The hashlock stays unblinded in the data slot; Bob's key blinds at slot 1 (NUT-28)
+    expectNUT10SecretDataToEqual(send, hash);
+    expectP2BKLockedToBob(send, privKeyBob);
+
+    // Try and receive them with Bob's secret key and the preimage (should succeed)
+    const encoded = getEncodedToken({
+      mint: mintUrl,
+      proofs: send.map((p) => ({ ...p, witness: { preimage } })),
+    });
+    const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyBob) });
     expect(sumProofs(proofs).equals(63)).toBeTruthy();
   });
   test('mint and melt p2pk', async () => {
