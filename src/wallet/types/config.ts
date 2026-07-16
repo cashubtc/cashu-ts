@@ -56,7 +56,7 @@ export type RestoreEfficientConfig = {
   probeWindow?: number;
   /**
    * Chunk size for the final window restore (mints cap request lengths); chunks are requested
-   * concurrently. Must be 1-1000. Default is `300`.
+   * concurrently. Must be 1-1000. Default is `500`, matching `batchRestore`.
    */
   batchSize?: number;
   /**

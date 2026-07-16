@@ -577,7 +577,7 @@ describe('restoreEfficient (draft NUT-342)', () => {
     // one linear-scan gap check fires just above T
     expect(mockBatch).toHaveBeenCalledTimes(1);
     expect(mockBatch).toHaveBeenCalledWith({
-      batchSize: 300,
+      batchSize: 500,
       counter: 2,
       keysetId: undefined,
       filterSpent: false,

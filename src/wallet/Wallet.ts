@@ -1753,7 +1753,7 @@ class Wallet {
    * `lastCounterWithSignature` still reflects every found signature.
    * @param options.keysetId Which keysetId to restore. Defaults to the instance's.
    * @param options.probeWindow Nonces per probe window (defaults to 25).
-   * @param options.batchSize Chunk size for the final window restore (defaults to 300).
+   * @param options.batchSize Chunk size for the final window restore (defaults to 500).
    * @param options.probeBudget Probe windows per search request (defaults to 12).
    * @param options.filterSpent Drop spent proofs (NUT-07) before returning. Default is `true`.
    */
@@ -1763,7 +1763,7 @@ class Wallet {
     const {
       keysetId,
       probeWindow = 25,
-      batchSize = 300,
+      batchSize = 500,
       probeBudget = 12,
       ladderSkip = 0,
       filterSpent = true,
