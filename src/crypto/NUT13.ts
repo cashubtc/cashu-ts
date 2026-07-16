@@ -1,7 +1,7 @@
 import { numberToBytesBE } from '@noble/curves/utils.js';
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { HDKey } from '@scure/bip32';
+import { HDKey, HARDENED_OFFSET } from '@scure/bip32';
 
 import { CTSError } from '../model/Errors';
 import { Bytes, isBase64String } from '../utils';
@@ -78,8 +78,9 @@ export function deriveSecretAndBlindingFactor(
  * Creates a deterministic deriver function for a seed/keyset pair.
  *
  * @remarks
- * For deprecated BIP-32 derivation this caches the master key once, so callers that derive many
- * counters can reuse the expensive seed setup.
+ * For deprecated BIP-32 derivation this caches the shared keyset parent node once, so each counter
+ * costs three child derivations instead of a full path walk from the master. Constructing an HDKey
+ * node computes its public key, so fewer nodes means fewer EC multiplications.
  * @internal
  */
 export function createSecretAndBlindingFactorDeriver(
@@ -88,8 +89,11 @@ export function createSecretAndBlindingFactorDeriver(
 ): SecretAndBlindingFactorDeriver {
   switch (getDerivationKind(keysetId)) {
     case DerivationKind.DEPRECATED_BIP32: {
-      const masterKey = HDKey.fromMasterSeed(seed);
-      return (counter: number) => deriveBip32SecretAndBlindingFactor(masterKey, keysetId, counter);
+      const keysetIdInt = getKeysetIdInt(keysetId);
+      const parentKey = HDKey.fromMasterSeed(seed).derive(
+        `${STANDARD_DERIVATION_PATH}/${keysetIdInt}'`,
+      );
+      return (counter: number) => deriveBip32SecretAndBlindingFactor(parentKey, counter);
     }
     case DerivationKind.HMAC_SHA256:
       return (counter: number) => deriveHmacSecretAndBlindingFactor(seed, keysetId, counter);
@@ -111,13 +115,10 @@ function getDerivationKind(keysetId: string): DerivationKind {
 }
 
 function deriveBip32SecretAndBlindingFactor(
-  hdKey: HDKey,
-  keysetId: string,
+  parentKey: HDKey,
   counter: number,
 ): DerivedSecretAndBlindingFactor {
-  const keysetIdInt = getKeysetIdInt(keysetId);
-  const baseDerivationPath = `${STANDARD_DERIVATION_PATH}/${keysetIdInt}'/${counter}'`;
-  const baseKey = hdKey.derive(baseDerivationPath);
+  const baseKey = parentKey.deriveChild(HARDENED_OFFSET + counter);
   const secret = baseKey.deriveChild(0).privateKey;
   const blindingFactor = baseKey.deriveChild(1).privateKey;
   /* c8 ignore next */
