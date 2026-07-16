@@ -39,12 +39,11 @@ wallet.on.countersReserved(({ keysetId, start, count, next }) => {
 // 3) Inspect current state, what will be reserved next
 const nextCounter = await wallet.counters.peekNext('0111111'); // 128
 
-// 4) After a restore or cross device sync, bump the cursor forward
-const { lastCounterWithSignature } = await wallet.batchRestore();
-if (lastCounterWithSignature != null) {
-  const next = lastCounterWithSignature + 1; // e.g. 137
-  await wallet.counters.advanceToAtLeast('0111111', next);
-  await saveNextToDb('0111111', next);
+// 4) After a restore or cross device sync, bump the cursors forward
+const { lastCounters } = await wallet.restoreAll();
+for (const [keysetId, last] of Object.entries(lastCounters)) {
+  await wallet.counters.advanceToAtLeast(keysetId, last + 1);
+  await saveNextToDb(keysetId, last + 1);
 }
 
 // 5) Parallel keysets without mutation

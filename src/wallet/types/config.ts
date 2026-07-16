@@ -45,6 +45,11 @@ export type BatchRestoreConfig = {
 };
 
 /**
+ * Configuration for `restoreAll`: `batchRestore` options minus the per-keyset fields.
+ */
+export type RestoreAllConfig = Omit<BatchRestoreConfig, 'counter' | 'keysetId'>;
+
+/**
  * Shared properties for most `OutputType` variants (except 'custom').
  */
 export interface SharedOutputTypeProps {

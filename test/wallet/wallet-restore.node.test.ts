@@ -142,6 +142,55 @@ describe('Restoring deterministic proofs', () => {
   });
 });
 
+describe('restoreAll', () => {
+  // Minimal Keyset-shaped stub; only `unit` is read by restoreAll's filter.
+  const ks = (unitStr: string) => ({ unit: unitStr }) as never;
+
+  test('restores every keyset in the wallet unit and merges results', async () => {
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+    vi.spyOn(wallet.keyChain, 'getAllKeysetIds').mockReturnValue(['A', 'B', 'C']);
+    vi.spyOn(wallet.keyChain, 'getKeyset').mockImplementation((id) =>
+      id === 'C' ? ks('eur') : ks('sat'),
+    );
+    const batchSpy = vi.spyOn(wallet, 'batchRestore').mockImplementation(async (config) => {
+      if (config?.keysetId === 'A') {
+        return {
+          proofs: [{ secret: 'a1' }, { secret: 'a2' }] as Proof[],
+          lastCounterWithSignature: 12,
+        };
+      }
+      return { proofs: [] }; // keyset B: nothing found
+    });
+
+    const { proofs, lastCounters } = await wallet.restoreAll();
+
+    expect(proofs.map((p) => p.secret)).toEqual(['a1', 'a2']);
+    // per-keyset counters: B absent (no signatures), C never scanned (wrong unit)
+    expect(lastCounters).toEqual({ A: 12 });
+    expect(batchSpy).toHaveBeenCalledTimes(2);
+    expect(batchSpy).toHaveBeenCalledWith({ keysetId: 'A' });
+    expect(batchSpy).toHaveBeenCalledWith({ keysetId: 'B' });
+  });
+
+  test('forwards scan options to every keyset', async () => {
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+    vi.spyOn(wallet.keyChain, 'getAllKeysetIds').mockReturnValue(['A']);
+    vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValue(ks('sat'));
+    const batchSpy = vi.spyOn(wallet, 'batchRestore').mockResolvedValue({ proofs: [] });
+
+    await wallet.restoreAll({ gapLimit: 100, batchSize: 50, filterSpent: false });
+
+    expect(batchSpy).toHaveBeenCalledWith({
+      gapLimit: 100,
+      batchSize: 50,
+      filterSpent: false,
+      keysetId: 'A',
+    });
+  });
+});
+
 describe('restore', () => {
   test('sends zero-amount blanks and maps signatures to proofs', async () => {
     const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(32), logger });
