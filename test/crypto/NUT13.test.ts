@@ -83,6 +83,15 @@ describe('derivation kind selection', () => {
     expect(bytesToHex(blindingFactor)).toBe(bytesToHex(expectedR as Uint8Array));
   });
 
+  test('rejects a negative counter on the deprecated BIP-32 path', () => {
+    // -1 is the boundary case: HARDENED_OFFSET + (-1) is a valid non-hardened index, so without the
+    // guard derivation would silently succeed with the wrong key instead of throwing.
+    const base64KeysetId = '0NI3TUAs1Sfa';
+    expect(() => deriveSecretAndBlindingFactor(seed, base64KeysetId, -1)).toThrow(
+      /Counter must be an integer/,
+    );
+  });
+
   test('throws for an unrecognized keyset id version, naming only the version byte', () => {
     // A pure-hex id with an unknown version prefix must throw; the message reports the 2-char
     // version slice exactly (anchored), pinning both the slice bounds and the message text.
