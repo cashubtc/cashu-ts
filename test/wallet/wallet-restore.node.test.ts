@@ -58,6 +58,13 @@ function useFakeRestoreMint(issued: Map<string, { counter: number; d_gap?: numbe
       }
       return HttpResponse.json({ outputs, signatures });
     }),
+    // default filterSpent state check: everything unspent
+    http.post(mintUrl + '/v1/checkstate', async ({ request }) => {
+      const body = (await request.json()) as { Ys: string[] };
+      return HttpResponse.json({
+        states: body.Ys.map((Y) => ({ Y, state: 'UNSPENT', witness: null })),
+      });
+    }),
   );
   return () => calls;
 }
@@ -263,6 +270,61 @@ describe('restoreEfficient (draft NUT-342)', () => {
     expect(restoreCalls()).toBeLessThan(40);
   });
 
+  test('drops spent proofs by default', async () => {
+    use342Info();
+    const seed = randomBytes(64);
+    const issued = new Map(
+      [0, 1, 2].map((c) => {
+        const output = blank(seed, c);
+        return [
+          output.blindedMessage.B_,
+          { counter: c, d_gap: encryptDGap(c, output.blindingFactor) },
+        ];
+      }),
+    );
+    useFakeRestoreMint(issued);
+
+    const wallet = new Wallet(mint, { unit, bip39seed: seed });
+    await wallet.loadMint();
+    const mockStates = vi
+      .spyOn(wallet, 'checkProofsStates')
+      .mockResolvedValue([
+        { state: CheckStateEnum.UNSPENT },
+        { state: CheckStateEnum.SPENT },
+        { state: CheckStateEnum.PENDING },
+      ] as ProofState[]);
+
+    const res = await wallet.restoreEfficient({ probeWindow: 5 });
+    // spent dropped, pending kept; the counter still reflects every signature
+    expect(res.proofs).toHaveLength(2);
+    expect(res.lastCounterWithSignature).toBe(2);
+    expect(mockStates).toHaveBeenCalledTimes(1);
+  });
+
+  test('keeps spent proofs with filterSpent: false', async () => {
+    use342Info();
+    const seed = randomBytes(64);
+    const issued = new Map(
+      [0, 1, 2].map((c) => {
+        const output = blank(seed, c);
+        return [
+          output.blindedMessage.B_,
+          { counter: c, d_gap: encryptDGap(c, output.blindingFactor) },
+        ];
+      }),
+    );
+    useFakeRestoreMint(issued);
+
+    const wallet = new Wallet(mint, { unit, bip39seed: seed });
+    await wallet.loadMint();
+    const mockStates = vi.spyOn(wallet, 'checkProofsStates');
+
+    const res = await wallet.restoreEfficient({ probeWindow: 5, filterSpent: false });
+    expect(res.proofs).toHaveLength(3);
+    // raw mode adds no state-check traffic
+    expect(mockStates).not.toHaveBeenCalled();
+  });
+
   test('re-probes the terminal window when T lies beyond window 0', async () => {
     use342Info();
     const seed = randomBytes(64);
@@ -346,7 +408,7 @@ describe('restoreEfficient (draft NUT-342)', () => {
     const res = await wallet.restoreEfficient();
 
     expect(res.proofs).toHaveLength(0);
-    expect(mockBatch).toHaveBeenCalledWith({ keysetId: undefined, filterSpent: false });
+    expect(mockBatch).toHaveBeenCalledWith({ keysetId: undefined, filterSpent: true });
   });
 
   test('falls back when the mint has no signatures at all', async () => {

@@ -1747,14 +1747,16 @@ class Wallet {
    * Binary-searches the counter space for the last issued signature, reads its recovery gap and
    * batch-restores that window. Falls back to `batchRestore` (the linear NUT-09 restore scan) when
    * the mint does not advertise support, no gap was backed up, or the search fails. Like
-   * `batchRestore`, returned proofs may include spent ones; filter with `checkProofsStates`.
+   * `batchRestore`, spent proofs are dropped before returning; `lastCounterWithSignature` still
+   * reflects every found signature.
    * @param options.keysetId Which keysetId to restore. Defaults to the instance's.
    * @param options.probeWindow Counters probed per binary-search request (defaults to 25).
+   * @param options.filterSpent Drop spent proofs (NUT-07) before returning. Default is `true`.
    */
   async restoreEfficient(
     config?: RestoreEfficientConfig,
   ): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
-    const { keysetId, probeWindow = 25 } = config ?? {};
+    const { keysetId, probeWindow = 25, filterSpent = true } = config ?? {};
     this.failIf(
       !Number.isInteger(probeWindow) || probeWindow < 1,
       'probeWindow must be a positive integer',
@@ -1762,7 +1764,15 @@ class Wallet {
     if (this._mintInfo?.isSupported(342).supported) {
       try {
         const result = await this.restoreFromGapBackup(probeWindow, keysetId);
-        if (result) return result;
+        if (result) {
+          if (filterSpent && result.proofs.length > 0) {
+            const states = await this.checkProofsStates(result.proofs);
+            result.proofs = result.proofs.filter(
+              (_, i) => states[i].state !== CheckStateEnum.SPENT,
+            );
+          }
+          return result;
+        }
         this._logger.info('No NUT-342 gap backup found, falling back to linear NUT-09 scan');
       } catch (e) {
         this._logger.warn('NUT-342 recovery failed, falling back to linear NUT-09 scan', {
@@ -1770,7 +1780,7 @@ class Wallet {
         });
       }
     }
-    return this.batchRestore({ keysetId, filterSpent: false });
+    return this.batchRestore({ keysetId, filterSpent });
   }
 
   /**

@@ -173,7 +173,8 @@ async function main() {
   const recovery = new Wallet(mintUrl, { bip39seed: seed, requestFetch: efficient.wrapped });
   await recovery.loadMint();
 
-  const restored = await recovery.restoreEfficient();
+  // filterSpent off: the demo compares raw restore traffic and state-checks explicitly below
+  const restored = await recovery.restoreEfficient({ filterSpent: false });
   const { unspent } = await recovery.groupProofsByState(restored.proofs);
   console.log(
     `restoreEfficient: recovered ${sumProofs(unspent)} sats ` +

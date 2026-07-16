@@ -1881,6 +1881,7 @@ export type RestoreConfig = {
 export type RestoreEfficientConfig = {
     keysetId?: string;
     probeWindow?: number;
+    filterSpent?: boolean;
 };
 
 // @public (undocumented)

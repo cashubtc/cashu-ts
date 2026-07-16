@@ -54,6 +54,10 @@ export type RestoreEfficientConfig = {
    * the cost of revealing more nonces per probe. Default is `25`.
    */
   probeWindow?: number;
+  /**
+   * Drop spent proofs (NUT-07) before returning. Default is `true`
+   */
+  filterSpent?: boolean;
 };
 
 /**
