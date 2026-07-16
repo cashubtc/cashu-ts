@@ -945,7 +945,7 @@ class Mint {
     const data = await this.requestWithAuth<CheckStateResponse>(
       'POST',
       '/v1/checkstate',
-      { requestBody: checkPayload },
+      { requestBody: checkPayload, idempotent: true },
       customRequest,
     );
 
@@ -1041,6 +1041,7 @@ class Mint {
       endpoint: joinUrls(this._mintUrl, '/v1/restore'),
       method: 'POST',
       requestBody: restorePayload,
+      idempotent: true,
       onResponseMeta: this._captureResponseMetadata,
     });
 
