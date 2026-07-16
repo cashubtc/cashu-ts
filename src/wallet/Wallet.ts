@@ -1918,9 +1918,19 @@ class Wallet {
     // through a bounded worker pool: full concurrency benefit, same total request count.
     const starts: number[] = [];
     for (let s = t - dGap; s <= t; s += batchSize) starts.push(s);
-    const results = await runPool(starts, BATCH_POOL_SIZE, (s) =>
-      this.restore(s, Math.min(batchSize, t - s + 1), { keysetId }),
+    const chunk = (s: number) => this.restore(s, Math.min(batchSize, t - s + 1), { keysetId });
+    // Failed chunks retry once after the pool drains: a transient error costs one extra request
+    // instead of discarding the pinned T for the caller's full-scan fallback.
+    const attempts = await runPool(starts, BATCH_POOL_SIZE, (s) =>
+      chunk(s).catch((e) => {
+        this._logger.debug('NUT-342 window chunk failed, retrying once', { start: s, error: e });
+        return undefined;
+      }),
     );
+    const results = [];
+    for (let i = 0; i < attempts.length; i++) {
+      results.push(attempts[i] ?? (await chunk(starts[i])));
+    }
     const proofs: Proof[] = [];
     let lastCounterWithSignature: number | undefined;
     for (const result of results) {

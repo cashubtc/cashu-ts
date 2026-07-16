@@ -457,6 +457,39 @@ describe('restoreEfficient (draft NUT-342)', () => {
     expect(restoreCalls()).toBe(7);
   });
 
+  test('retries a failed window chunk once instead of falling back', async () => {
+    use342Info();
+    const seed = randomBytes(64);
+    // Same shape as above: T=45, gap spanning the history, batchSize 10 forces 5 chunks
+    const issued = new Map(
+      Array.from({ length: 46 }, (_, c) => {
+        const output = blank(seed, c);
+        return [
+          output.blindedMessage.B_,
+          {
+            counter: c,
+            ...(c === 45 && { d_gap: encryptDGap(45, output.blindingFactor) }),
+          },
+        ] as const;
+      }),
+    );
+    const restoreCalls = useFakeRestoreMint(issued);
+
+    const wallet = new Wallet(mint, { unit, bip39seed: seed });
+    await wallet.loadMint();
+    // The first chunk fetch dies transiently; later calls run the real implementation
+    const chunkSpy = vi.spyOn(wallet, 'restore').mockRejectedValueOnce(new Error('transient'));
+    const scanSpy = vi.spyOn(wallet, 'batchRestore');
+    const res = await wallet.restoreEfficient({ probeWindow: 5, batchSize: 10 });
+
+    expect(res.proofs).toHaveLength(46);
+    expect(res.lastCounterWithSignature).toBe(45);
+    expect(chunkSpy).toHaveBeenCalledTimes(6); // 5 pool chunks + 1 retry
+    expect(scanSpy).not.toHaveBeenCalled(); // recovered without the full-scan fallback
+    // 2 search requests + 4 surviving pool chunks + 1 retried chunk
+    expect(restoreCalls()).toBe(7);
+  });
+
   test('fires the skipped low rungs when the keyset lives below the first rung', async () => {
     use342Info();
     const seed = randomBytes(64);
