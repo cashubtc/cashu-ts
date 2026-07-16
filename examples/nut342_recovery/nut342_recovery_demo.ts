@@ -129,7 +129,7 @@ async function selfSwap(wallet: Wallet, amount: number) {
   });
   proofs = keep;
   track([...keep, ...send]);
-  const received = await wallet.receive(send, { onCountersReserved, proofsWeHave: keep });
+  const received = await wallet.receive(send, { onCountersReserved });
   proofs.push(...received);
   track(received);
   console.log(`Swapped ${amount} sats through the mint (balance ${sumProofs(proofs)})`);
@@ -218,10 +218,17 @@ async function main() {
   }
   console.log(`Mint advertises NUT-342 support (${wallet.keysetId})\n`);
 
-  // A thorough workout: every operation writes fresh encrypted gaps.
-  // Random-value swap churn approximates real wallet wear; override rounds
-  // with CHURN_ROUNDS=n for a longer history.
+  // A thorough workout: every operation writes fresh encrypted gaps. Knobs, so the
+  // d_gap regimes in the PR table are one-liners:
+  //   CHURN_ROUNDS=n     swap rounds per churn block (default 4)
+  //   REFRESH_EVERY=n    oldest-refresh cadence; 0 disables it (default 20)
+  //   SPEND_FRAC=f       max spend as a fraction of balance; small values model a
+  //                      lump-funded wallet making everyday payments (default 0.9)
+  //   PIN_MID=1          send the unclaimed token mid-history, pinning d_gap at ~T/2
   const churnRounds = Number(process.env.CHURN_ROUNDS ?? 4);
+  const refreshEvery = Number(process.env.REFRESH_EVERY ?? 20);
+  const spendFrac = Number(process.env.SPEND_FRAC ?? 0.9);
+  const pinMid = process.env.PIN_MID === '1';
   const churn = async (rounds: number) => {
     for (let i = 0; i < rounds; i++) {
       const balance = Number(sumProofs(proofs).toBigInt());
@@ -229,15 +236,16 @@ async function main() {
         console.log(`Balance ${balance} too low to keep churning; stopping early`);
         return;
       }
-      await selfSwap(wallet, 1 + Math.floor(Math.random() * Math.max(1, balance * 0.9)));
-      // every 20 rounds, roll the oldest proofs forward (see refreshOldest)
-      if (i % 20 === 19) await refreshOldest(wallet);
+      await selfSwap(wallet, 1 + Math.floor(Math.random() * Math.max(1, balance * spendFrac)));
+      // periodically roll the oldest proofs forward (see refreshOldest)
+      if (refreshEvery > 0 && i % refreshEvery === refreshEvery - 1) await refreshOldest(wallet);
     }
   };
 
   await mintSats(wallet, 10000);
   await churn(churnRounds);
   await mintSats(wallet, 15000);
+  if (pinMid) await sendUnclaimed(wallet, 21);
   try {
     await meltSats(wallet, externalInvoice);
   } catch {
@@ -249,10 +257,10 @@ async function main() {
     await meltSats(wallet, target.request);
   }
   await churn(churnRounds);
-  // Sent late in history: a pending token pins first-unspent at its own counter (the
-  // provider must include it), so an unclaimed token sent mid-history would cap d_gap
-  // at ~half of T no matter how well the wallet consolidates.
-  await sendUnclaimed(wallet, 21);
+  // Sent late in history by default: a pending token pins first-unspent at its own
+  // counter (the provider must include it), so an unclaimed token sent mid-history
+  // (PIN_MID=1) caps d_gap at ~T/2 no matter how well the wallet consolidates.
+  if (!pinMid) await sendUnclaimed(wallet, 21);
 
   const balance = sumProofs(proofs);
   const pending = sumProofs(sentPending);
