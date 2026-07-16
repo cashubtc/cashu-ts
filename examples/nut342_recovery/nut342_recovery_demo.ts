@@ -129,10 +129,44 @@ async function selfSwap(wallet: Wallet, amount: number) {
   });
   proofs = keep;
   track([...keep, ...send]);
-  const received = await wallet.receive(send, { onCountersReserved });
+  const received = await wallet.receive(send, { onCountersReserved, proofsWeHave: keep });
   proofs.push(...received);
   track(received);
   console.log(`Swapped ${amount} sats through the mint (balance ${sumProofs(proofs)})`);
+}
+
+// Wallet policy: refresh the oldest live proofs through the mint. d_gap is pinned by the
+// single oldest unspent proof, so rolling old proofs forward keeps the recovery window
+// small no matter how the regular churn selects its inputs.
+async function refreshOldest(wallet: Wallet, minNet = 10) {
+  const liveSecrets = new Set(proofs.map((p) => p.secret));
+  const byAge = batches
+    .filter((b) => [...b.secrets].some((s) => liveSecrets.has(s)))
+    .sort((a, b) => a.start - b.start);
+  if (byAge.length === 0) return;
+  // Grow the sweep until it clears fees with room to spare: dust batches alone would
+  // produce a zero-output receive (and skipping them would pin d_gap forever).
+  let oldest: Proof[] = [];
+  for (let k = 4; ; k += 4) {
+    const slice = byAge.slice(0, k);
+    oldest = proofs.filter((p) => slice.some((b) => b.secrets.has(p.secret)));
+    if (sumProofs(oldest).compareTo(wallet.getFeesForProofs(oldest).add(minNet)) >= 0) break;
+    if (k >= byAge.length) return; // all old value is dust; nothing sensible to refresh
+  }
+  const rest = proofs.filter((p) => !oldest.includes(p));
+  // net of the input fee, so the swap consumes every old proof
+  const fee = wallet.getFeesForProofs(oldest);
+  const { keep, send } = await wallet.send(sumProofs(oldest).subtract(fee), oldest, {
+    onCountersReserved,
+  });
+  proofs = [...rest, ...keep];
+  track([...keep, ...send]);
+  const received = await wallet.receive(send, { onCountersReserved });
+  proofs.push(...received);
+  track(received);
+  console.log(
+    `Refreshed ${oldest.length} oldest proofs (first unspent counter now ${await firstUnspentCounter()})`,
+  );
 }
 
 async function sendUnclaimed(wallet: Wallet, amount: number) {
@@ -195,14 +229,15 @@ async function main() {
         console.log(`Balance ${balance} too low to keep churning; stopping early`);
         return;
       }
-      await selfSwap(wallet, 1 + Math.floor(Math.random() * Math.max(1, balance / 3)));
+      await selfSwap(wallet, 1 + Math.floor(Math.random() * Math.max(1, balance * 0.9)));
+      // every 20 rounds, roll the oldest proofs forward (see refreshOldest)
+      if (i % 20 === 19) await refreshOldest(wallet);
     }
   };
 
   await mintSats(wallet, 10000);
   await churn(churnRounds);
   await mintSats(wallet, 15000);
-  await sendUnclaimed(wallet, 21);
   try {
     await meltSats(wallet, externalInvoice);
   } catch {
@@ -214,6 +249,10 @@ async function main() {
     await meltSats(wallet, target.request);
   }
   await churn(churnRounds);
+  // Sent late in history: a pending token pins first-unspent at its own counter (the
+  // provider must include it), so an unclaimed token sent mid-history would cap d_gap
+  // at ~half of T no matter how well the wallet consolidates.
+  await sendUnclaimed(wallet, 21);
 
   const balance = sumProofs(proofs);
   const pending = sumProofs(sentPending);
