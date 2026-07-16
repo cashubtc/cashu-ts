@@ -1063,6 +1063,18 @@ describe('Wallet Restore', () => {
     expect(sumProofs(restoredProofs).equals(70)).toBeTruthy();
     expect(lastCounterWithSignature).toBe(7);
   });
+  test('Using restoreAll', async () => {
+    const seed = randomBytes(64);
+    const wallet = new Wallet(mintUrl, { bip39seed: seed });
+    await wallet.loadMint();
+    const mintQuote = await wallet.createMintQuoteBolt11(70);
+    await untilMintQuotePaid(wallet, mintQuote);
+    const proofs = await wallet.ops.mintBolt11(70, mintQuote.quote).asDeterministic(5).run();
+    const { proofs: restoredProofs, lastCounters } = await wallet.restoreAll();
+    expect(restoredProofs).toEqual(proofs);
+    expect(sumProofs(restoredProofs).equals(70)).toBeTruthy();
+    expect(lastCounters[wallet.keysetId]).toBe(7);
+  });
 });
 
 describe('CDK Mint NUT-19 Cache Tests', () => {
