@@ -1843,6 +1843,7 @@ export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
 // @public (undocumented)
 export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'> & Partial<Nut19Policy> & {
     requestTimeout?: number;
+    idempotent?: boolean;
     onResponseMeta?: (meta: ResponseMeta) => void;
     fetch?: RequestFetch;
 };

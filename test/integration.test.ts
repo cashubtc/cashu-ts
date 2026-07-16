@@ -1154,7 +1154,7 @@ describe('CDK Mint NUT-19 Cache Tests', () => {
     }
   }, 30500); // cdk mint has 30s ttl by default
 
-  test('Requests to endpoints not specified in NUT19 in MintInfo should not be replayed', async () => {
+  test('Requests to endpoints not specified in NUT19 in MintInfo skip the cache backoff', async () => {
     if (!(await shouldRunCDKTests())) {
       console.log('Skipping test - not CDK mint');
       return;
@@ -1172,7 +1172,8 @@ describe('CDK Mint NUT-19 Cache Tests', () => {
 
     try {
       await expect(wallet.mint.getKeys()).rejects.toThrow(NetworkError);
-      expect(fetchCallCount).toBe(1); // single request, without retries
+      // one attempt plus the single idempotent GET retry; no NUT-19 backoff loop
+      expect(fetchCallCount).toBe(2);
     } finally {
       globalThis.fetch = ogFetch;
     }
