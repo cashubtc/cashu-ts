@@ -92,6 +92,7 @@ import {
   type MeltProofsResponse,
   type SendResponse,
   type RestoreConfig,
+  type BatchRestoreConfig,
   type SecretsPolicy,
   type SwapPreview,
   type MintPreview,
@@ -1611,37 +1612,60 @@ class Wallet {
   /**
    * Restores batches of deterministic proofs until no more signatures are returned from the mint.
    *
-   * @param [gapLimit=300] The amount of empty counters that should be returned before restoring
-   *   ends (defaults to 300). Default is `300`
-   * @param [batchSize=300] The amount of proofs that should be restored at a time (defaults to
-   *   300). Default is `300`
-   * @param [counter=0] The counter that should be used as a starting point (defaults to 0). Default
-   *   is `0`
-   * @param [keysetId] Which keysetId to use for the restoration. If none is passed the instance's
-   *   default one will be used.
+   * @remarks
+   * Batches are fetched through a bounded request pool and every batch in flight is processed, so
+   * the scan can probe (and recover proofs) up to `(BATCH_POOL_SIZE - 1) * batchSize` counters past
+   * the gap limit before it stops. `lastCounterWithSignature` always reflects all signatures found,
+   * including those of proofs removed by `filterSpent`.
+   * @param [config.gapLimit=300] Consecutive empty counters that end the scan. A floor, not an
+   *   exact ceiling: batches already in flight past it are still processed. `Infinity` disables the
+   *   gap rule (use with `maxCounter`). Default is `300`
+   * @param [config.maxCounter] Inclusive scan ceiling; no counter above it is probed. Default is
+   *   unbounded.
+   * @param [config.batchSize=500] Counters per restore request. Default is `500`
+   * @param [config.counter=0] Starting counter. Default is `0`
+   * @param [config.keysetId] Keyset to restore; defaults to the wallet's.
+   * @param [config.filterSpent=true] Drop spent proofs (NUT-07) before returning. Default is `true`
    */
   async batchRestore(
-    gapLimit = 300,
-    batchSize = 300,
-    counter = 0,
-    keysetId?: string,
+    config?: BatchRestoreConfig,
   ): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
+    const { gapLimit = 300, batchSize = 500, keysetId, filterSpent = true } = config ?? {};
+    let counter = config?.counter ?? 0;
+    const bound = config?.maxCounter ?? Number.MAX_SAFE_INTEGER;
     const requiredEmptyBatches = Math.ceil(gapLimit / batchSize);
-    const restoredProofs: Proof[] = [];
+    let restoredProofs: Proof[] = [];
 
     let lastCounterWithSignature: undefined | number;
     let emptyBatchesFound = 0;
 
-    while (emptyBatchesFound < requiredEmptyBatches) {
-      const restoreRes = await this.restore(counter, batchSize, { keysetId });
-      if (restoreRes.proofs.length > 0) {
-        emptyBatchesFound = 0;
-        restoredProofs.push(...restoreRes.proofs);
-        lastCounterWithSignature = restoreRes.lastCounterWithSignature;
-      } else {
-        emptyBatchesFound++;
+    // Batch positions are fixed, so each wave speculatively fetches the next BATCH_POOL_SIZE
+    // batches concurrently; only the stop decision is data-dependent. Results are consumed in
+    // counter order, and a non-empty batch past the gap limit resets the gap count: the reveal
+    // is already spent at request time, so proofs in flight are recovered rather than dropped.
+    while (emptyBatchesFound < requiredEmptyBatches && counter <= bound) {
+      const starts = Array.from(
+        { length: BATCH_POOL_SIZE },
+        (_, i) => counter + i * batchSize,
+      ).filter((s) => s <= bound);
+      const wave = await runPool(starts, BATCH_POOL_SIZE, (start) =>
+        this.restore(start, Math.min(batchSize, bound - start + 1), { keysetId }),
+      );
+      for (const restoreRes of wave) {
+        if (restoreRes.proofs.length > 0) {
+          emptyBatchesFound = 0;
+          restoredProofs.push(...restoreRes.proofs);
+          lastCounterWithSignature = restoreRes.lastCounterWithSignature;
+        } else {
+          emptyBatchesFound++;
+        }
       }
-      counter += batchSize;
+      counter += batchSize * BATCH_POOL_SIZE;
+    }
+
+    if (filterSpent && restoredProofs.length > 0) {
+      const states = await this.checkProofsStates(restoredProofs);
+      restoredProofs = restoredProofs.filter((_, i) => states[i].state !== CheckStateEnum.SPENT);
     }
     return { proofs: restoredProofs, lastCounterWithSignature };
   }
