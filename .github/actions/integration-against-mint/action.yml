@@ -55,7 +55,7 @@ runs:
         echo "Mint responded to host HTTP at $host_url"
 
     - name: Setup Node.js
-      uses: actions/setup-node@v6
+      uses: actions/setup-node@v7
       with:
         node-version: '22.x'
         cache: npm
