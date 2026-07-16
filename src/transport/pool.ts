@@ -13,8 +13,8 @@ export const BATCH_POOL_SIZE = 4;
  *
  * @remarks
  * Not chunked: `limit` workers pull from a shared cursor, so a slow item never stalls the rest.
- * Lock-free because `next++` claims are synchronous; workers only interleave at the await. Rejects
- * on the first `fn` rejection (Promise.all); later rejections are absorbed.
+ * Lock-free because `next++` claims are synchronous; workers only interleave at the await. A
+ * failure stops new claims; in-flight items settle, then the pool rejects with that failure.
  * @internal
  */
 export async function runPool<T, R>(
@@ -30,10 +30,19 @@ export async function runPool<T, R>(
     // `next++` reads-then-bumps in one synchronous step, so every index is claimed exactly
     // once; the worker claims whatever is next by the time its await settles.
     for (let i = next++; i < items.length; i = next++) {
-      // Write by slot, so output order matches input order however workers finish.
-      results[i] = await fn(items[i], i);
+      try {
+        // Write by slot, so output order matches input order however workers finish.
+        results[i] = await fn(items[i], i);
+      } catch (e) {
+        // Poison the cursor so no worker claims another item after a failure.
+        next = items.length;
+        throw e;
+      }
     }
   });
-  await Promise.all(workers);
+  // Settle every worker before rejecting, so a rejection never leaves requests in flight.
+  const settled = await Promise.allSettled(workers);
+  const failed = settled.find((s): s is PromiseRejectedResult => s.status === 'rejected');
+  if (failed) throw failed.reason;
   return results;
 }
