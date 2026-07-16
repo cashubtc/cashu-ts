@@ -154,15 +154,10 @@ async function refreshOldest(wallet: Wallet, minNet = 10) {
     if (k >= byAge.length) return; // all old value is dust; nothing sensible to refresh
   }
   const rest = proofs.filter((p) => !oldest.includes(p));
-  // net of the input fee, so the swap consumes every old proof
-  const fee = wallet.getFeesForProofs(oldest);
-  const { keep, send } = await wallet.send(sumProofs(oldest).subtract(fee), oldest, {
-    onCountersReserved,
-  });
-  proofs = [...rest, ...keep];
-  track([...keep, ...send]);
-  const received = await wallet.receive(send, { onCountersReserved });
-  proofs.push(...received);
+  // One swap: receiving our own proofs re-issues them as fresh deterministic outputs,
+  // netting the input fee itself.
+  const received = await wallet.receive(oldest, { onCountersReserved });
+  proofs = [...rest, ...received];
   track(received);
   console.log(
     `Refreshed ${oldest.length} oldest proofs (first unspent counter now ${await firstUnspentCounter()})`,
