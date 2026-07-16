@@ -80,6 +80,10 @@ export type GetInfoResponse = {
       protected_endpoints: Array<{ method: 'GET' | 'POST'; path: string }>;
     };
     '29'?: Nut29Info;
+    '342'?: {
+      // Efficient wallet recovery (draft, experimental)
+      supported: boolean;
+    };
   };
   motd?: string;
 };
