@@ -40,6 +40,7 @@ wallet.on.countersReserved(({ keysetId, start, count, next }) => {
 const nextCounter = await wallet.counters.peekNext('0111111'); // 128
 
 // 4) After a restore or cross device sync, bump the cursors forward
+// (see usage/restore_proofs.md for the full restore flow)
 const { lastCounters } = await wallet.restoreAll();
 for (const [keysetId, last] of Object.entries(lastCounters)) {
   await wallet.counters.advanceToAtLeast(keysetId, last + 1);
