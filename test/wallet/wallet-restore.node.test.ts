@@ -18,6 +18,10 @@ import { useTestServer, mint, unit, dummyKeysResp, mintUrl, mintInfoResp, logger
 
 const server = useTestServer();
 
+// NUT-342 search tests derive hundreds of deterministic outputs per run; slow CI
+// runners can exceed the default 5s budget.
+vi.setConfig({ testTimeout: 15_000 });
+
 const allUnspent = (n: number): ProofState[] =>
   Array(n).fill({ state: CheckStateEnum.UNSPENT }) as ProofState[];
 
