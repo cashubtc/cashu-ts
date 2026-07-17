@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.7.2](https://github.com/cashubtc/cashu-ts/compare/v4.7.1...v4.7.2) (2026-07-17)
+
+
+### Bug Fixes
+
+* **crypto:** validate counter range in BIP-32 secret derivation [backport v4-dev] ([#808](https://github.com/cashubtc/cashu-ts/issues/808)) ([b3a8bd7](https://github.com/cashubtc/cashu-ts/commit/b3a8bd7b8fd2091d84db8549d4f9881b00a2d07c))
+
+
+### Performance Improvements
+
+* **crypto:** cache the keyset parent node in the BIP-32 deriver ([#802](https://github.com/cashubtc/cashu-ts/issues/802)) ([f53c8bb](https://github.com/cashubtc/cashu-ts/commit/f53c8bb2674023d9948a575d750c1d0987cecb98))
+
 ## [4.7.1](https://github.com/cashubtc/cashu-ts/compare/v4.7.0...v4.7.1) (2026-07-13)
 
 
