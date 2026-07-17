@@ -456,6 +456,20 @@ describe('SigAll — serializePackage / deserializePackage', () => {
       SigAll.deserializePackage(SigAll.serializePackage(tampered), { validateDigest: true }),
     ).toThrow('Digest validation failed');
   });
+
+  test('digest validation throws on tampered v1 digest', () => {
+    const pkg = SigAll.extractSwapPackage(makeSwapPreview());
+    const tampered = {
+      ...pkg,
+      digests: {
+        ...pkg.digests,
+        v1: pkg.digests.v1!.slice(0, 63) + (pkg.digests.v1!.endsWith('0') ? '1' : '0'),
+      },
+    };
+    expect(() =>
+      SigAll.deserializePackage(SigAll.serializePackage(tampered), { validateDigest: true }),
+    ).toThrow('Digest validation failed: v1 digest mismatch');
+  });
 });
 
 describe('SigAll — signPackage', () => {
