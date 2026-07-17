@@ -22,8 +22,10 @@ import {
   deriveP2BKBlindedPubkeys,
   P2BK_DST,
   buildP2PKSigAllMessage,
+  buildP2PKSigAllMessageV1,
   assertSigAllInputs,
   buildLegacyP2PKSigAllMessage,
+  computeMessageDigest,
   createSecret,
   dedupeP2PKPubkeys,
   isHTLCSpendAuthorised,
@@ -868,6 +870,89 @@ describe('buildP2PKSigAllMessage, SIG_ALL aggregation', () => {
     const m2 = buildP2PKSigAllMessage(inputs, outputs, q);
 
     expect(m1).toBe(m2);
+  });
+});
+
+describe('buildP2PKSigAllMessageV1, length-framed SIG_ALL aggregation', () => {
+  const mkProof = (secret: string, C: string) => ({ secret, C }) as any;
+  const mkOutput = (amount: number, B_: string) => ({ blindedMessage: { amount, B_ } }) as any;
+
+  const TAG_HEX = '43617368755f536967416c6c5369675f7631'; // "Cashu_SigAllSig_v1"
+
+  // Canonical vectors from nuts tests/11-test.md ("SIG_ALL v1 Message Vectors"),
+  // pinned byte-for-byte in the nutshell and cdk suites too.
+  const VECTOR_PUB = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+  const vectorInputs = [
+    mkProof(
+      `["P2PK",{"nonce":"859d4935c4907062a6297cf4e663e2835d90d97ecdd510745d32f6816323a41f","data":"${VECTOR_PUB}","tags":[["sigflag","SIG_ALL"]]}]`,
+      '02698c4e2b5f9534cd0687d87513c759790cf829aa5739184a3e3735471fbda904',
+    ),
+    mkProof(
+      `["P2PK",{"nonce":"16d937a29ae4e5d4a6e9f9959c4d4b9a8d6f2f7b2f0a1b3c4d5e6f708192a3b4","data":"${VECTOR_PUB}","tags":[["sigflag","SIG_ALL"]]}]`,
+      '02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5',
+    ),
+  ];
+  const vectorOutputs = [
+    mkOutput(8, '035015e6d7ade60ba8426cefaf1832bbd27257636e44a76b922d78e79b47cb689d'),
+    mkOutput(2, '0288d7649652d0a83fc9c966c969fb217f15904431e61a44b14999fabc1b5d9ac6'),
+  ];
+  const vectorQuote = '9d745270-1405-46de-b5c5-e2762b4f5e00';
+
+  test('matches the canonical cross-implementation vector', () => {
+    const swapMsg = buildP2PKSigAllMessageV1(vectorInputs, vectorOutputs);
+    expect(swapMsg.length).toBe(572);
+    expect(computeMessageDigest(swapMsg, true)).toBe(
+      '3fd05c896ff0d5a058f9180e577dced83539ea885f9bf6adf71f7ed084590dc2',
+    );
+    // Pinned signature by the well-known test key (privkey 0x...01)
+    expect(
+      schnorrVerifyMessage(
+        'b2b821f819f12ab61d261971187d19772aaad11422f9d5f3ffda6f97de03349e0e44976b5d44e3c850a99b621045167915caf3ef5b102abe69439e36b68f89d5',
+        swapMsg,
+        VECTOR_PUB,
+      ),
+    ).toBe(true);
+
+    const meltMsg = buildP2PKSigAllMessageV1(vectorInputs, vectorOutputs, vectorQuote);
+    expect(meltMsg.length).toBe(608);
+    expect(computeMessageDigest(meltMsg, true)).toBe(
+      '0ebae3a8dbe1107a7b6392a53b6fb3dfc18b38c4ab02b4b9a460ad8829e20ce1',
+    );
+    expect(
+      schnorrVerifyMessage(
+        '1493200b3f52cd67bdda888f67d80cf8862b4e7bd48a800828f5482218305c367f17dc3409cf89e6c795741605ccce2501f5e2b0f0e3ec54edcc7001a5863e3d',
+        meltMsg,
+        VECTOR_PUB,
+      ),
+    ).toBe(true);
+  });
+
+  test('starts with the domain tag, swaps commit an empty quote frame', () => {
+    const msg = buildP2PKSigAllMessageV1(vectorInputs, vectorOutputs);
+    expect(bytesToHex(msg.slice(0, 22))).toBe(TAG_HEX + '00000000');
+  });
+
+  test('amounts commit as canonical minimal big-endian bytes', () => {
+    const zero = buildP2PKSigAllMessageV1([], [mkOutput(0, 'b1')]);
+    expect(bytesToHex(zero)).toBe(TAG_HEX + '00000000' + '00000000' + '00000001' + 'b1');
+
+    const big = buildP2PKSigAllMessageV1([], [mkOutput(256, 'b1')]);
+    expect(bytesToHex(big)).toBe(TAG_HEX + '00000000' + '00000002' + '0100' + '00000001' + 'b1');
+  });
+
+  test('length framing prevents boundary-shift collisions', () => {
+    const outputs = [mkOutput(1, 'b1')];
+    const shiftedA = [mkProof('ab', 'cc'), mkProof('c', 'dd')];
+    const shiftedB = [mkProof('a', 'cc'), mkProof('bc', 'dd')];
+
+    // The legacy string concatenation cannot tell these apart...
+    expect(buildLegacyP2PKSigAllMessage(shiftedA, outputs)).toBe(
+      buildLegacyP2PKSigAllMessage(shiftedB, outputs),
+    );
+    // ...the framed format can.
+    const mA = buildP2PKSigAllMessageV1(shiftedA, outputs);
+    const mB = buildP2PKSigAllMessageV1(shiftedB, outputs);
+    expect(computeMessageDigest(mA, true)).not.toBe(computeMessageDigest(mB, true));
   });
 });
 

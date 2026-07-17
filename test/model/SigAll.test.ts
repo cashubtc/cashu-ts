@@ -21,10 +21,11 @@ const dummyProof: Proof = {
   C: '02' + '1'.repeat(64),
 };
 
+// B_ must be hex: the v1 message builder decodes it to raw bytes.
 const dummyBlindedMessage: SerializedBlindedMessage = {
   amount: Amount.from(32),
   id: 'bm1',
-  B_: 'dummyB',
+  B_: '02' + '2'.repeat(64),
 };
 
 const dummyOutput: OutputDataLike = {
@@ -88,19 +89,24 @@ describe('SigAll — computeDigests', () => {
     const digests = SigAll.computeDigests([dummyProof], [dummyBlindedMessage], 'dummyquote');
     expect(typeof digests.legacy).toBe('string');
     expect(typeof digests.current).toBe('string');
+    expect(typeof digests.v1).toBe('string');
     expect(digests.legacy.length).toBe(64);
     expect(digests.current.length).toBe(64);
+    expect(digests.v1.length).toBe(64);
   });
 
-  test('legacy and current digests differ', () => {
+  test('legacy, current and v1 digests all differ', () => {
     const digests = SigAll.computeDigests([dummyProof], [dummyBlindedMessage]);
     expect(digests.legacy).not.toBe(digests.current);
+    expect(digests.v1).not.toBe(digests.current);
+    expect(digests.v1).not.toBe(digests.legacy);
   });
 
   test('quoteId changes the digests', () => {
     const without = SigAll.computeDigests([dummyProof], [dummyBlindedMessage]);
     const with_ = SigAll.computeDigests([dummyProof], [dummyBlindedMessage], 'somequote');
     expect(without.current).not.toBe(with_.current);
+    expect(without.v1).not.toBe(with_.v1);
   });
 });
 
@@ -114,6 +120,7 @@ describe('SigAll — extractSwapPackage', () => {
     expect(pkg.outputs.length).toBe(2); // keepOutputs + sendOutputs
     expect(pkg.digests.current.length).toBe(64);
     expect(pkg.digests.legacy!.length).toBe(64);
+    expect(pkg.digests.v1!.length).toBe(64);
   });
 
   test('merges keepOutputs and sendOutputs in order', () => {
@@ -186,7 +193,11 @@ describe('SigAll — serializePackage / deserializePackage', () => {
 
   test('round-trip preserves large (unsafe integer) output amounts', () => {
     const largeAmount = Amount.from(9007199254740993n); // > MAX_SAFE_INTEGER
-    const largeBm: SerializedBlindedMessage = { amount: largeAmount, id: 'bm-large', B_: 'dummyB' };
+    const largeBm: SerializedBlindedMessage = {
+      amount: largeAmount,
+      id: 'bm-large',
+      B_: '02' + '2'.repeat(64),
+    };
     const pkg: SigAllSigningPackage = {
       version: 'sigallA',
       type: 'swap',
@@ -204,10 +215,10 @@ describe('SigAll — serializePackage / deserializePackage', () => {
         version: 'sigallA',
         type: 'swap',
         inputs: [{ secret: 'testsecret', C: '02' + '1'.repeat(64) }],
-        outputs: [{ amount: 32, id: 'bm1', B_: 'dummyB' }],
+        outputs: [{ amount: 32, id: 'bm1', B_: '02' + '2'.repeat(64) }],
         digests: SigAll.computeDigests(
           [dummyProof],
-          [{ amount: Amount.from(32), id: 'bm1', B_: 'dummyB' }],
+          [{ amount: Amount.from(32), id: 'bm1', B_: '02' + '2'.repeat(64) }],
         ),
       }),
     );
@@ -217,7 +228,11 @@ describe('SigAll — serializePackage / deserializePackage', () => {
 
   test('serializePackage emits unquoted integer amounts', () => {
     const largeAmount = Amount.from(9007199254740993n);
-    const largeBm: SerializedBlindedMessage = { amount: largeAmount, id: 'bm-large', B_: 'dummyB' };
+    const largeBm: SerializedBlindedMessage = {
+      amount: largeAmount,
+      id: 'bm-large',
+      B_: '02' + '2'.repeat(64),
+    };
     const pkg: SigAllSigningPackage = {
       version: 'sigallA',
       type: 'swap',
@@ -450,15 +465,15 @@ describe('SigAll — signPackage', () => {
     expect(signed.witness?.signatures.length).toBeGreaterThan(0);
   });
 
-  test('signs both legacy and current when legacy is present', () => {
+  test('signs every digest present (legacy + current + v1)', () => {
     const pkg = SigAll.extractSwapPackage(makeSwapPreview());
     expect(pkg.digests.legacy).toBeDefined();
+    expect(pkg.digests.v1).toBeDefined();
     const signed = SigAll.signPackage(pkg, dummyPrivkey);
-    // legacy + current = 2 signatures
-    expect(signed.witness?.signatures.length).toBe(2);
+    expect(signed.witness?.signatures.length).toBe(3);
   });
 
-  test('signs only current when legacy is absent', () => {
+  test('signs only current when legacy and v1 are absent (older peer package)', () => {
     const pkg = SigAll.extractSwapPackage(makeSwapPreview());
     const noLegacy: SigAllSigningPackage = {
       ...pkg,

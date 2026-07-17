@@ -10,6 +10,7 @@ import { CTSError } from '../model/Errors';
  */
 export type PrivKey = Uint8Array | string;
 export type DigestInput = Uint8Array | string; // hex string or bytes
+export type MessageInput = Uint8Array | string; // raw message bytes or UTF-8 string
 export type BlindSignature = {
   C_: WeierstrassPoint<bigint>;
   id: string;
@@ -38,17 +39,18 @@ export type UnblindedSignature = {
 // ------------------------------
 
 /**
- * Computes the SHA-256 hash of a UTF-8 message string.
+ * Computes the SHA-256 hash of a message.
  *
- * @param message To hash (UTF-8 encoded before hashing).
+ * @param message To hash (a UTF-8 string, encoded before hashing, or raw message bytes).
  * @param asHex Optional: True returns a hex-encoded hash string; otherwise returns raw bytes.
  * @returns SHA-256 hash as raw bytes or hex string, depending on `asHex`.
  */
-export function computeMessageDigest(message: string): Uint8Array;
-export function computeMessageDigest(message: string, asHex: false): Uint8Array;
-export function computeMessageDigest(message: string, asHex: true): string;
-export function computeMessageDigest(message: string, asHex = false): string | Uint8Array {
-  const hashBytes = sha256(new TextEncoder().encode(message));
+export function computeMessageDigest(message: MessageInput): Uint8Array;
+export function computeMessageDigest(message: MessageInput, asHex: false): Uint8Array;
+export function computeMessageDigest(message: MessageInput, asHex: true): string;
+export function computeMessageDigest(message: MessageInput, asHex = false): string | Uint8Array {
+  const messageBytes = typeof message === 'string' ? new TextEncoder().encode(message) : message;
+  const hashBytes = sha256(messageBytes);
   return asHex ? bytesToHex(hashBytes) : hashBytes;
 }
 
@@ -70,16 +72,16 @@ export const schnorrSignDigest = (digest: DigestInput, privateKey: PrivKey): str
 };
 
 /**
- * Signs a message string using Schnorr.
+ * Signs a message using Schnorr.
  *
  * @remarks
  * Signatures are non-deterministic because schnorr.sign() generates a new random auxiliary value
  * (auxRand) each time it is called.
- * @param message - The message to sign.
+ * @param message - The message to sign (UTF-8 string or raw bytes).
  * @param privateKey - The private key to sign with (hex string or Uint8Array).
  * @returns The signature in hex format.
  */
-export const schnorrSignMessage = (message: string, privateKey: PrivKey): string => {
+export const schnorrSignMessage = (message: MessageInput, privateKey: PrivKey): string => {
   const msghash = computeMessageDigest(message);
   return schnorrSignDigest(msghash, privateKey);
 };
@@ -91,7 +93,7 @@ export const schnorrSignMessage = (message: string, privateKey: PrivKey): string
  * This function swallows Schnorr verification errors (eg invalid signature / pubkey format) and
  * treats them as false. If you want to throw such errors, use the throws param.
  * @param signature - The Schnorr signature (hex-encoded).
- * @param message - The message to verify.
+ * @param message - The message to verify (UTF-8 string or raw bytes).
  * @param pubkey - The Cashu P2PK public key (hex-encoded, X-only or with 02/03 prefix).
  * @param throws - True: throws on error, False: swallows errors and returns false.
  * @returns True if the signature is valid, false otherwise.
@@ -99,7 +101,7 @@ export const schnorrSignMessage = (message: string, privateKey: PrivKey): string
  */
 export const schnorrVerifyMessage = (
   signature: string,
-  message: string,
+  message: MessageInput,
   pubkey: string,
   throws: boolean = false,
 ): boolean => {
@@ -167,7 +169,7 @@ export function findSigningKey(pubkey: string, privkeys: string | string[]): str
  */
 export function getValidSigners(
   signatures: string[],
-  message: string,
+  message: MessageInput,
   pubkeys: string[],
 ): string[] {
   const uniquePubs = Array.from(new Set(pubkeys));
@@ -188,7 +190,7 @@ export function getValidSigners(
  */
 export const meetsSignerThreshold = (
   signatures: string[],
-  message: string,
+  message: MessageInput,
   pubkeys: string[],
   threshold: number = 1,
 ): boolean => {

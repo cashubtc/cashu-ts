@@ -2,6 +2,7 @@ import {
   computeMessageDigest,
   buildLegacyP2PKSigAllMessage,
   buildP2PKSigAllMessage,
+  buildP2PKSigAllMessageV1,
   schnorrSignDigest,
 } from '../crypto';
 import { parseWitnessData } from '../crypto/NUT11';
@@ -23,6 +24,7 @@ const SIGALL_PREFIX = 'sigallA';
 export type SigAllDigests = {
   legacy: string;
   current: string;
+  v1: string;
 };
 
 /**
@@ -59,13 +61,17 @@ export type SigAllSigningPackage = {
    */
   digests: {
     /**
-     * For Nutshell (all releases), CDK < 0.14.0.
+     * For released Nutshell (<= 0.20.2), CDK < 0.14.0.
      */
     legacy?: string;
     /**
-     * From CDK >= 0.14.0.
+     * For CDK >= 0.14.0, unreleased Nutshell main.
      */
     current: string;
+    /**
+     * Length-framed spec format (`Cashu_SigAllSig_v1`). Optional for packages from older peers.
+     */
+    v1?: string;
   };
   /**
    * Signatures collected (to be injected into the first proof witness).
@@ -81,10 +87,12 @@ function computeDigests(
   const sigAllOutputs = outputs.map((blindedMessage) => ({ blindedMessage }));
   const legacyMsg = buildLegacyP2PKSigAllMessage(inputs, sigAllOutputs, quoteId);
   const currentMsg = buildP2PKSigAllMessage(inputs, sigAllOutputs, quoteId);
+  const v1Msg = buildP2PKSigAllMessageV1(inputs, sigAllOutputs, quoteId);
 
   return {
     legacy: computeMessageDigest(legacyMsg, true),
     current: computeMessageDigest(currentMsg, true),
+    v1: computeMessageDigest(v1Msg, true),
   };
 }
 
@@ -202,6 +210,9 @@ function deserializePackage(
     if (digests.legacy && recomputed.legacy !== digests.legacy) {
       throw new CTSError('Digest validation failed: legacy digest mismatch');
     }
+    if (digests.v1 && recomputed.v1 !== digests.v1) {
+      throw new CTSError('Digest validation failed: v1 digest mismatch');
+    }
   }
 
   return pkg;
@@ -218,6 +229,9 @@ function signPackage(pkg: SigAllSigningPackage, privkey: string): SigAllSigningP
   newSigs.push(schnorrSignDigest(pkg.digests.current, privkey));
   if (pkg.digests.legacy) {
     newSigs.push(schnorrSignDigest(pkg.digests.legacy, privkey));
+  }
+  if (pkg.digests.v1) {
+    newSigs.push(schnorrSignDigest(pkg.digests.v1, privkey));
   }
 
   // validate that signing actually produced signatures
@@ -323,14 +337,14 @@ function mergeSignatures(proofs: Proof[], pkg: SigAllSigningPackage): Proof[] {
  */
 export type SigAllApi = {
   /**
-   * Computes legacy and current SIG_ALL formats.
+   * Computes all known SIG_ALL message formats.
    *
    * @remarks
    * Returns hex-encoded SHA256 digests for each format to support multi-format signing.
    * @param inputs Proof array.
    * @param outputs Array of SerializedBlindMessage (NUT-00 `BlindMessages`).
    * @param quoteId Optional quote ID for melt transactions.
-   * @returns Object with legacy, and current digests (all hex strings)
+   * @returns Object with legacy, current and v1 digests (all hex strings)
    * @experimental
    */
   computeDigests: (
@@ -391,7 +405,7 @@ export type SigAllApi = {
    * Signs a SigAllSigningPackage and returns it with signatures attached.
    *
    * @remarks
-   * Collects signatures by signing legacy and current SIG_ALL formats for backward compatibility.
+   * Collects signatures by signing every digest present in the package for backward compatibility.
    * Multiple parties can call this sequentially to aggregate signatures for multi-party signing.
    * @param pkg The signing package (from extract*SigningPackage or another signer)
    * @param privkey Private key to sign with.
