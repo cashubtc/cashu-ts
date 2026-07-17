@@ -1,5 +1,42 @@
 # Changelog
 
+## [5.0.0-rc.4](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.3...v5.0.0-rc.4) (2026-07-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* **wallet:** pooled batch restore with config object and spent filtering ([#795](https://github.com/cashubtc/cashu-ts/issues/795))
+* **p2pk:** require compressed, on-curve pubkeys ([#781](https://github.com/cashubtc/cashu-ts/issues/781))
+
+### Features
+
+* **wallet:** pooled batch restore with config object and spent filtering ([#795](https://github.com/cashubtc/cashu-ts/issues/795)) ([0bc004b](https://github.com/cashubtc/cashu-ts/commit/0bc004bcfad309a3562beb4334588d0c4276f5bd))
+* **wallet:** restore every keyset in one call with restoreAll ([#797](https://github.com/cashubtc/cashu-ts/issues/797)) ([b319326](https://github.com/cashubtc/cashu-ts/commit/b3193262b7f2ab1d5e171485ae41a8e15eec0d95))
+
+
+### Bug Fixes
+
+* **crypto:** validate counter range in BIP-32 secret derivation ([#806](https://github.com/cashubtc/cashu-ts/issues/806)) ([e61c064](https://github.com/cashubtc/cashu-ts/commit/e61c0648fec9c62dc1b999ad18ff813b7fea3887))
+* **transport:** retry idempotent requests once on network errors ([#799](https://github.com/cashubtc/cashu-ts/issues/799)) ([7a824fe](https://github.com/cashubtc/cashu-ts/commit/7a824fef7383ca829d51b7fc391966d5321e26ee))
+* **transport:** stop pool claims after a failure ([#798](https://github.com/cashubtc/cashu-ts/issues/798)) ([5aea97b](https://github.com/cashubtc/cashu-ts/commit/5aea97baa4b1eea779110d474142b77c322d8371))
+* **wallet:** widen config type on bolt12/onchain mint helpers ([#783](https://github.com/cashubtc/cashu-ts/issues/783)) ([7775b0f](https://github.com/cashubtc/cashu-ts/commit/7775b0f6746c1fc2c8a8158abea64247324a5e80))
+
+
+### Performance Improvements
+
+* **crypto:** cache the keyset parent node in the BIP-32 deriver ([#796](https://github.com/cashubtc/cashu-ts/issues/796)) ([965ec73](https://github.com/cashubtc/cashu-ts/commit/965ec73088ace636aa4fefba599b3d62ae0f932b))
+* **wallet:** run state-check batches through a bounded request pool ([#789](https://github.com/cashubtc/cashu-ts/issues/789)) ([0a4725f](https://github.com/cashubtc/cashu-ts/commit/0a4725f2fba74c41d44e66afe984f60e446296e1))
+
+
+### Miscellaneous Chores
+
+* **docker:** update CDK_IMAGE_RC to cashubtc/mintd:0.17.3-rc.0 ([#775](https://github.com/cashubtc/cashu-ts/issues/775)) ([70a05b5](https://github.com/cashubtc/cashu-ts/commit/70a05b5dff15f8d16ff7c4a4513b818bb57bd0a5))
+
+
+### Code Refactoring
+
+* **p2pk:** require compressed, on-curve pubkeys ([#781](https://github.com/cashubtc/cashu-ts/issues/781)) ([98a4149](https://github.com/cashubtc/cashu-ts/commit/98a41492282bf402a250a06ec29a3d84370791cf))
+
 ## [5.0.0-rc.3](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.2...v5.0.0-rc.3) (2026-07-08)
 
 
