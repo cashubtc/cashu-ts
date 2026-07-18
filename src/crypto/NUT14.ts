@@ -5,6 +5,7 @@ import { type Logger, NULL_LOGGER } from '../logger';
 import { CTSError } from '../model/Errors';
 import { type HTLCWitness, type Proof } from '../model/types';
 
+import { type MessageInput } from './core';
 import {
   assertSecretKind,
   createSecret,
@@ -104,7 +105,7 @@ export function verifyHTLCHash(preimage: string, hash: string): boolean {
 export function verifyHTLCSpendingConditions(
   proof: Proof,
   logger: Logger = NULL_LOGGER,
-  message?: string,
+  message?: MessageInput,
 ): P2PKVerificationResult {
   // Init
   let result: P2PKVerificationResult;
@@ -172,7 +173,7 @@ export function verifyHTLCSpendingConditions(
 export function isHTLCSpendAuthorised(
   proof: Proof,
   logger: Logger = NULL_LOGGER,
-  message?: string,
+  message?: MessageInput,
 ): boolean {
   return verifyHTLCSpendingConditions(proof, logger, message).success;
 }

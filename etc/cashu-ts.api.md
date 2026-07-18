@@ -706,7 +706,7 @@ export type IntRange<F extends number, T extends number> = Exclude<Enumerate<T>,
 export function isBlsKeyset(keysetId: string): boolean;
 
 // @public
-export function isHTLCSpendAuthorised(proof: Proof, logger?: Logger, message?: string): boolean;
+export function isHTLCSpendAuthorised(proof: Proof, logger?: Logger, message?: MessageInput): boolean;
 
 // @public
 export function isMintOperationError(e: unknown): e is MintOperationError;
@@ -2197,7 +2197,7 @@ A: WeierstrassPoint<bigint>) => boolean;
 export function verifyHTLCHash(preimage: string, hash: string): boolean;
 
 // @public
-export function verifyHTLCSpendingConditions(proof: Proof, logger?: Logger, message?: string): P2PKVerificationResult;
+export function verifyHTLCSpendingConditions(proof: Proof, logger?: Logger, message?: MessageInput): P2PKVerificationResult;
 
 // @public (undocumented)
 export function verifyMintQuoteSignature(pubkey: string, quote: string, blindedMessages: SerializedBlindedMessage[], signature: string): boolean;
