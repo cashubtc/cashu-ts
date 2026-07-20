@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 
+import { Amount } from '../../src/model/Amount';
 import { MintInfo } from '../../src/model/MintInfo';
 import { MINTINFORESP } from '../consts';
 
@@ -455,6 +456,26 @@ describe('MintInfo snapshot accessors', () => {
     info.isSupported(4).params[0].method = 'bogus';
 
     expect(info.supportsMintMeltMethod('mint', 'bolt11', 'sat')).toBe(true);
+  });
+
+  it('preserves Amount instances (AmountLike) through the snapshot', () => {
+    // AmountLike admits Amount; a snapshot must not strip its prototype into {value}
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        4: {
+          disabled: false,
+          methods: [
+            { method: 'bolt11', unit: 'sat', min_amount: Amount.from(100), max_amount: null },
+          ],
+        },
+      },
+    });
+
+    const min = info.isSupported(4).params[0].min_amount;
+    expect(min).toBeInstanceOf(Amount);
+    expect(() => Amount.from(min!)).not.toThrow();
+    expect(Amount.from(min!).toBigInt()).toBe(100n);
   });
 
   it('cache, nuts and contact return snapshots', () => {
