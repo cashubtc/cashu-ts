@@ -3,6 +3,7 @@ import { nullIfUndefined } from '../utils/core';
 import { ABSOLUTE_MAX_BATCH_SIZE, ABSOLUTE_MAX_PER_MINT, MAX_METHOD_LENGTH } from '../utils/limits';
 import { normalizeSafeIntegerMetadata } from '../utils/normalizeNumbers';
 
+import { Amount } from './Amount';
 import { CTSError } from './Errors';
 import {
   type GetInfoResponse,
@@ -364,10 +365,13 @@ export class MintInfo {
 
   /**
    * Deep-copies a plain data value so accessors return snapshots, never internal references.
-   * Preserves bigints, which AmountLike fields may hold; JSON round-trips would not.
+   * Preserves bigints (AmountLike fields may hold them; JSON round-trips would not) and Amount
+   * instances (which AmountLike also admits): Amount is frozen and immutable, so sharing the
+   * reference is safe and structural copying would strip its prototype into a bare `{value}`.
    */
   private static snapshot<T>(value: T): T {
     if (value === null || typeof value !== 'object') return value;
+    if (value instanceof Amount) return value;
     if (Array.isArray(value)) {
       return (value as unknown[]).map((v) => MintInfo.snapshot(v)) as T;
     }
