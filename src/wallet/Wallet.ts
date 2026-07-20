@@ -67,7 +67,7 @@ import {
   ABSOLUTE_MAX_BATCH_SIZE,
 } from '../utils';
 
-import { getKeepAmounts, stringifyOutputTypeForLog } from './_internal';
+import { ceilLog2, getKeepAmounts, stringifyOutputTypeForLog } from './_internal';
 import {
   type CounterSource,
   EphemeralCounterSource,
@@ -3008,9 +3008,10 @@ class Wallet {
         { keyset: keyset.id },
       );
       keyset = this.getOutputKeyset(keysetId);
-      let count = Math.ceil(Math.log2(feeReserve.toNumberUnsafe())) || 1;
-      if (count < 0) count = 0; // Prevents: -Infinity
-      const denominations: number[] = count ? new Array<number>(count).fill(0) : [];
+      // NUT-08 blank outputs: ceil(log2(feeReserve)) blinded messages, at least one.
+      // Computed on bigint so a u64-scale reserve cannot lose precision to a float.
+      const count = Math.max(ceilLog2(feeReserve.toBigInt()), 1);
+      const denominations: number[] = new Array<number>(count).fill(0);
       this._logger.debug('Creating NUT-08 blanks for fee reserve', {
         feeReserve: feeReserve,
         denominations,
