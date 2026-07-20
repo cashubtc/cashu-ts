@@ -337,3 +337,122 @@ export function selectProofsRGLI(
   }
   return { keep: normalizedProofs, send: [] };
 }
+
+/**
+ * Keyset-rotation-aware proof selection. Wraps {@link selectProofsRGLI}.
+ *
+ * @remarks
+ * Prefers stale keysets (base64 first, then older versions, inactive before active),
+ * force-including whole stale buckets, dust and all, so balances rotate onto the current keyset.
+ * Falls back to plain RGLI when the biased attempt has no solution.
+ */
+export function selectProofsRotating(
+  proofs: ProofLike[],
+  amountToSelect: AmountLike,
+  keyChain: KeyChain,
+  includeFees: boolean = false,
+  exactMatch: boolean = false,
+  _logger: Logger = NULL_LOGGER,
+): SendResponse {
+  const normalizedProofs = normalizeProofAmounts(proofs);
+  const targetAmount = Amount.from(amountToSelect);
+  const target = targetAmount.toBigInt();
+
+  // Net sum under unified fee arithmetic (single ceil over the whole set).
+  // Bigint keeps the wrapper exact at u64 scale; only pools delegated to RGLI
+  // carry its number-arithmetic guard. Bigint not Amount because dust proofs
+  // can netOf() negative (eg: 1 sat proof at 2000ppk).
+  const netOf = (gross: bigint, ppk: bigint): bigint =>
+    gross - (includeFees ? (ppk + 999n) / 1000n : 0n);
+  // Partition the full set around a chosen send subset (proof secrets are unique)
+  const toSendResponse = (send: Proof[]): SendResponse => {
+    const sendSet = new Set(send.map((p) => p.secret));
+    return { keep: normalizedProofs.filter((p) => !sendSet.has(p.secret)), send };
+  };
+
+  // Bucket by staleness: version rank (base64 = 0, else first id byte + 1), with
+  // inactive before active within a version. Lower keys are staler.
+  const buckets = new Map<number, { proofs: Proof[]; gross: bigint; ppk: bigint }>();
+  for (const p of normalizedProofs) {
+    const ks = keyChain.getKeyset(p.id); // throws for unknown keyset ids
+    const rank = ks.hasHexId ? parseInt(p.id.slice(0, 2), 16) + 1 : 0;
+    const key = rank * 2 + (ks.isActive ? 1 : 0);
+    const bucket = buckets.get(key) ?? { proofs: [], gross: 0n, ppk: 0n };
+    bucket.proofs.push(p);
+    bucket.gross += p.amount.toBigInt();
+    bucket.ppk += BigInt(ks.fee);
+    buckets.set(key, bucket);
+  }
+  const order = [...buckets.keys()].sort((a, b) => a - b);
+
+  // Fast path: nothing to rotate
+  if (targetAmount.isZero() || order.length <= 1) {
+    return selectProofsRGLI(
+      normalizedProofs,
+      targetAmount,
+      keyChain,
+      includeFees,
+      exactMatch,
+      _logger,
+    );
+  }
+
+  // Walk stalest first, forcing whole buckets while the running net stays below target
+  const forced: Proof[] = [];
+  let fGross = 0n;
+  let fPpk = 0n;
+  let i = 0;
+  for (; i < order.length; i++) {
+    const b = buckets.get(order[i])!;
+    const candidateNet = netOf(fGross + b.gross, fPpk + b.ppk);
+    if (candidateNet > target) break; // boundary bucket (we will RGLI this one)
+    // the whole bucket is needed: add all its proofs and continue to next bucket
+    // push singly: spreading a huge bucket into push() can overflow the call stack
+    for (const q of b.proofs) forced.push(q);
+    fGross += b.gross;
+    fPpk += b.ppk;
+    if (candidateNet === target) return toSendResponse(forced); // forced buckets cover it exactly
+  }
+
+  // Delegate the residual to RGLI: boundary bucket first, then boundary plus fresher
+  // The walk forced buckets only while strictly below target (equality returned
+  // early), so the residual handed to RGLI is always at least 1
+  if (i < order.length) {
+    const residual = target - netOf(fGross, fPpk);
+    const boundary = buckets.get(order[i])!.proofs;
+    const fresher = order.slice(i + 1).flatMap((k) => buckets.get(k)!.proofs);
+    const pools = fresher.length ? [boundary, boundary.concat(fresher)] : [boundary];
+    for (const pool of pools) {
+      let attempt: SendResponse;
+      try {
+        attempt = selectProofsRGLI(pool, residual, keyChain, includeFees, exactMatch, _logger);
+      } catch (error) {
+        _logger.debug('selectProofsRotating: biased attempt failed', { error });
+        continue; // RGLI could not handle this pool (timeout or scale); widen or fall back
+      }
+      if (attempt.send.length === 0) continue;
+      // Splitting forced/residual can overstate fees by one, so verify the merged
+      // solution with a single ceil before accepting it
+      let mergedGross = fGross;
+      let mergedPpk = fPpk;
+      for (const p of attempt.send) {
+        mergedGross += p.amount.toBigInt();
+        mergedPpk += BigInt(keyChain.getKeyset(p.id).fee);
+      }
+      const mergedNet = netOf(mergedGross, mergedPpk);
+      if (exactMatch ? mergedNet === target : mergedNet >= target) {
+        return toSendResponse(forced.concat(attempt.send));
+      }
+    }
+  }
+
+  // No biased solution, or every bucket forced without covering the target: plain RGLI
+  return selectProofsRGLI(
+    normalizedProofs,
+    targetAmount,
+    keyChain,
+    includeFees,
+    exactMatch,
+    _logger,
+  );
+}
