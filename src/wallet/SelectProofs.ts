@@ -141,7 +141,10 @@ export function selectProofsRGLI(
     }
     const ppkfee = feeForProof(p);
     const amountNum = p.amount.toNumber(); // safe: guarded above
-    const exFee = includeFees ? amountNum - ppkfee / 1000 : amountNum;
+    // Floor the proof's own fee: keeps exFee an integer sort key, and the economical
+    // filter decides identically (amount > floor(ppk/1000) iff 1000 * amount > ppk);
+    // set-level fee accounting (sumExFees) is untouched
+    const exFee = includeFees ? amountNum - Math.floor(ppkfee / 1000) : amountNum;
     const obj = { proof: p, amountNum, exFee, ppkfee };
     // Sum all economical proofs (filtered below)
     if (!includeFees || exFee > 0) {
@@ -158,9 +161,9 @@ export function selectProofsRGLI(
   spendableProofs.sort((a, b) => a.exFee - b.exFee);
 
   // Remove proofs too large to be useful and adjust totals
-  // Exact Match: Keep proofs where exFee <= amountToSend + 1. Fees round up
-  // once per selection, not per proof, so the real net can be up to a sat
-  // below the exFee sum: a 6 sat proof at 500ppk has exFee 5.5 yet nets
+  // Exact Match: Keep proofs where exFee <= amountToSend + 1. exFee floors the
+  // proof's own fee while the real fee ceils once per selection, so the net can
+  // sit up to a sat below exFee: a 6 sat proof at 500ppk has exFee 6 yet nets
   // 6 - 1 = 5, an exact match that a bound of exFee <= amountToSend misses
   // Close Match: Keep proofs where exFee <= nextBiggerExFee
   if (spendableProofs.length > 0) {
