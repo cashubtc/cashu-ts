@@ -13,8 +13,8 @@ export const ABSOLUTE_MAX_PER_MINT = 100;
 export const ABSOLUTE_MAX_BATCH_SIZE = 100;
 
 /**
- * Max u64 (2^64 - 1): upper bound for amount and other u64 integer fields as they arrive from the
- * wire or an API caller. Enforced on ingest (`Amount.from`), not on arithmetic: Amount math
- * (percent, scale) intentionally uses intermediates above u64.
+ * Max u64 (2^64 - 1): the ceiling every Amount is held to. Enforced in the Amount constructor, so
+ * arithmetic results are bounded too; muldiv helpers keep their wide intermediate in bigint and
+ * only construct the divided-down result.
  */
 export const U64_MAX = 2n ** 64n - 1n;
