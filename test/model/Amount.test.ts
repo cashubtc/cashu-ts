@@ -49,6 +49,18 @@ describe('Amount.from validation', () => {
     // 90M-digit string must be refused up front, not run through regex/BigInt (DoS guard)
     expect(() => Amount.from('1' + '0'.repeat(90_000_000))).toThrow('exceeds u64 max');
   });
+
+  it('caps arithmetic results at u64, throwing on overflow', () => {
+    const max = Amount.from(2n ** 64n - 1n);
+    expect(() => max.add(1)).toThrow('exceeds u64 max');
+    expect(() => max.multiplyBy(2)).toThrow('exceeds u64 max');
+  });
+
+  it('scaledBy holds the wide intermediate in bigint and returns an in-range result', () => {
+    // a * n = 2.4e19 overflows u64, but round(a * n / d) = 3e9 is a valid amount
+    const result = Amount.from(6_000_000_000n).scaledBy(4_000_000_000n, 8_000_000_000n);
+    expect(result.toBigInt()).toBe(3_000_000_000n);
+  });
 });
 
 describe('Amount conversions', () => {
