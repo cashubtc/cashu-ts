@@ -433,3 +433,48 @@ describe('MintInfo NUT-22 bat_max_mint normalization', () => {
     expect(info.isSupported(29)).toEqual({ supported: false });
   });
 });
+
+describe('MintInfo snapshot accessors', () => {
+  it('mutating an isSupported(4) result cannot pollute the cache', () => {
+    const info = new MintInfo(MINTINFORESP);
+    const method = info.isSupported(4).params[0];
+
+    method.min_amount = 10n; // type-legal via AmountLike; must not reach the cache
+    method.options!.description = false;
+
+    expect(() => JSON.stringify(info.cache)).not.toThrow();
+    expect(info.isSupported(4).params[0]).toMatchObject({
+      min_amount: null,
+      options: { description: true },
+    });
+  });
+
+  it('isSupported(4).params returns copies', () => {
+    const info = new MintInfo(MINTINFORESP);
+
+    info.isSupported(4).params[0].method = 'bogus';
+
+    expect(info.supportsMintMeltMethod('mint', 'bolt11', 'sat')).toBe(true);
+  });
+
+  it('cache, nuts and contact return snapshots', () => {
+    const info = new MintInfo(MINTINFORESP);
+
+    (info.cache as any).nuts = {};
+    (info.nuts as any)[4] = undefined;
+    info.contact.length = 0;
+
+    expect(info.isSupported(4).disabled).toBe(false);
+    expect(info.cache.nuts?.[4]).toBeDefined();
+    expect(info.contact).toHaveLength(3);
+  });
+
+  it('nut17 params are copies', () => {
+    const info = new MintInfo(MINTINFORESP);
+
+    const ws = info.isSupported(17);
+    if (ws.params) ws.params.length = 0;
+
+    expect(info.isSupported(17).params).toHaveLength(6);
+  });
+});
