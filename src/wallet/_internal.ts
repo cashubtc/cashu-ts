@@ -7,6 +7,14 @@ import { splitAmount } from '../utils/core';
 
 import { type OutputType } from './types';
 
+/**
+ * Exact `ceil(log2(n))` for n >= 1, computed on bigint so u64-scale inputs never lose precision.
+ * Returns 0 for n <= 1. Used for NUT-08 blank output counts.
+ */
+export function ceilLog2(n: bigint): number {
+  return n <= 1n ? 0 : (n - 1n).toString(2).length;
+}
+
 function getKeysetAmountsAsc(keys: Keys): Amount[] {
   const amounts = Object.keys(keys).map((k) => Amount.from(k));
   amounts.sort((a, b) => a.compareTo(b));
