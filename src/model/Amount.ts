@@ -1,3 +1,5 @@
+import { U64_MAX } from '../utils/limits';
+
 import { CTSError } from './Errors';
 
 export class AmountError extends CTSError {
@@ -41,8 +43,8 @@ export class Amount {
   /**
    * Parse/normalize supported inputs into an Amount.
    *
-   * @throws If input is negative, or if a `number` input exceeds the safe integer limit, or if
-   *   input is not a finite integer.
+   * @throws If input is negative, exceeds the u64 range, is a non-finite/non-integer `number`, or
+   *   is above the safe integer limit for a `number`.
    */
   static from(input: AmountLike): Amount {
     if (input instanceof Amount) return input;
@@ -50,6 +52,9 @@ export class Amount {
     if (typeof input === 'bigint') {
       if (input < 0n) {
         throw new AmountError(`Amount must be >= 0, got ${input}`);
+      }
+      if (input > U64_MAX) {
+        throw new AmountError(`Amount exceeds u64 max, got ${input}`);
       }
       return new Amount(input);
     }
@@ -69,13 +74,23 @@ export class Amount {
     }
 
     if (typeof input === 'string') {
+      // Length-gate before regex/BigInt: u64 max is 20 digits, so a longer amount string is
+      // out of range by definition. Refuse it up front rather than run O(n) parsing on unbounded
+      // input.
+      if (input.length > 20) {
+        throw new AmountError(`Amount exceeds u64 max: "${input.slice(0, 20)}..."`);
+      }
       // Decimal-only canonical form
       if (!/^(0|[1-9]\d*)$/.test(input)) {
         throw new AmountError(
           `Invalid amount string "${input}". Expected non-negative decimal integer.`,
         );
       }
-      return new Amount(BigInt(input));
+      const value = BigInt(input);
+      if (value > U64_MAX) {
+        throw new AmountError(`Amount exceeds u64 max, got ${value}`);
+      }
+      return new Amount(value);
     }
 
     // Unknown type
