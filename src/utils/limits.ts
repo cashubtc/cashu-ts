@@ -19,3 +19,10 @@ export const ABSOLUTE_MAX_BATCH_SIZE = 100;
  * (split/map/join) on a multi-megabyte string, which a malicious mint could use to exhaust memory.
  */
 export const MAX_METHOD_LENGTH = 255;
+
+/**
+ * Max u64 (2^64 - 1): upper bound for amount and other u64 integer fields as they arrive from the
+ * wire or an API caller. Enforced on ingest (`Amount.from`), not on arithmetic: Amount math
+ * (percent, scale) intentionally uses intermediates above u64.
+ */
+export const U64_MAX = 2n ** 64n - 1n;
