@@ -1766,6 +1766,9 @@ export type SelectProofs = (proofs: ProofLike[], amountToSelect: AmountLike, key
 export function selectProofsRGLI(proofs: ProofLike[], amountToSelect: AmountLike, keyChain: KeyChain, includeFees?: boolean, exactMatch?: boolean, _logger?: Logger): SendResponse;
 
 // @public
+export function selectProofsRotating(proofs: ProofLike[], amountToSelect: AmountLike, keyChain: KeyChain, includeFees?: boolean, exactMatch?: boolean, _logger?: Logger): SendResponse;
+
+// @public
 export class SendBuilder {
     constructor(wallet: Wallet, amount: AmountLike, proofs: ProofLike[]);
     asCustom(data: OutputDataLike[]): this;

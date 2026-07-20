@@ -70,7 +70,7 @@ import {
 } from './CounterSource';
 import { KeyChain } from './KeyChain';
 import { type Keyset } from './Keyset';
-import { selectProofsRGLI, type SelectProofs } from './SelectProofs';
+import { selectProofsRotating, type SelectProofs } from './SelectProofs';
 import {
   type MeltPreview,
   type OutputType,
@@ -193,7 +193,7 @@ class Wallet {
    * @param options.counterInit Seed values for the built-in EphemeralCounterSource. Ignored if
    *   counterSource is also provided.
    * @param options.denominationTarget Target proofs per denomination, default 3.
-   * @param options.selectProofs Custom proof selection function.
+   * @param options.selectProofs Custom proof selection function. Default: selectProofsRotating.
    * @param options.outputDataCreator Custom OutputDataCreator implementation. The canonical and
    *   maintained implementation is the default Noble Curves based behavior exposed by
    *   `OutputData.create*()`. Custom creators are an escape hatch for runtime-specific needs, and
@@ -223,7 +223,7 @@ class Wallet {
     this.ops = new WalletOps(this);
     this.on = new WalletEvents(this);
     this._logger = options?.logger ?? NULL_LOGGER; // init early (seed can throw)
-    this._selectProofs = options?.selectProofs ?? selectProofsRGLI; // vital
+    this._selectProofs = options?.selectProofs ?? selectProofsRotating; // vital
     this._outputDataCreator = options?.outputDataCreator ?? new DefaultOutputDataCreator();
     this.mint =
       typeof mint === 'string'
@@ -1389,7 +1389,9 @@ class Wallet {
    *
    * @remarks
    * Uses an adapted Randomized Greedy with Local Improvement (RGLI) algorithm, which has a time
-   * complexity O(n log n) and space complexity O(n).
+   * complexity O(n log n) and space complexity O(n). The default selector prefers stale keysets
+   * (base64, older versions, inactive) so balances rotate onto the current keyset; pass
+   * `selectProofs: selectProofsRGLI` in the Wallet options for keyset-neutral selection.
    * @param proofs Array of proofs available to select from. Accepts {@link ProofLike} so proofs
    *   loaded from storage (with `amount: number`) work without manual conversion.
    * @param amountToSend The target amount to send.
