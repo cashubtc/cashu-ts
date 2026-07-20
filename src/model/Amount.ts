@@ -32,6 +32,12 @@ export class Amount {
   private readonly value: bigint;
 
   private constructor(value: bigint) {
+    // Single choke point for the u64 ceiling: every Amount, including arithmetic results, is
+    // <= u64 max. Muldiv helpers keep their wide intermediate in bigint and only construct the
+    // divided-down result, so a valid `a*n/d` still works while an out-of-range result throws.
+    if (value > U64_MAX) {
+      throw new AmountError(`Amount exceeds u64 max, got ${value}`);
+    }
     this.value = value;
     Object.freeze(this);
   }
@@ -53,10 +59,7 @@ export class Amount {
       if (input < 0n) {
         throw new AmountError(`Amount must be >= 0, got ${input}`);
       }
-      if (input > U64_MAX) {
-        throw new AmountError(`Amount exceeds u64 max, got ${input}`);
-      }
-      return new Amount(input);
+      return new Amount(input); // constructor enforces the u64 ceiling
     }
 
     if (typeof input === 'number') {
@@ -86,11 +89,7 @@ export class Amount {
           `Invalid amount string "${input}". Expected non-negative decimal integer.`,
         );
       }
-      const value = BigInt(input);
-      if (value > U64_MAX) {
-        throw new AmountError(`Amount exceeds u64 max, got ${value}`);
-      }
-      return new Amount(value);
+      return new Amount(BigInt(input)); // constructor enforces the u64 ceiling
     }
 
     // Unknown type
@@ -219,10 +218,10 @@ export class Amount {
         `ceilPercent: denominator must be a positive integer, got ${denominator}`,
       );
     }
-    // ceil(a * n / d) = floor((a * n + d - 1) / d)
-    return this.multiplyBy(numerator)
-      .add(denominator - 1)
-      .divideBy(denominator);
+    // ceil(a * n / d) = floor((a * n + d - 1) / d); the a*n intermediate stays in bigint
+    const num = BigInt(numerator);
+    const den = BigInt(denominator);
+    return new Amount((this.value * num + (den - 1n)) / den);
   }
 
   /**
@@ -247,7 +246,10 @@ export class Amount {
         `floorPercent: denominator must be a positive integer, got ${denominator}`,
       );
     }
-    return this.multiplyBy(numerator).divideBy(denominator);
+    // floor(a * n / d); the a*n intermediate stays in bigint
+    const num = BigInt(numerator);
+    const den = BigInt(denominator);
+    return new Amount((this.value * num) / den);
   }
 
   /**
@@ -306,14 +308,14 @@ export class Amount {
    * @throws If numerator or denominator are zero or negative.
    */
   scaledBy(numerator: AmountLike, denominator: AmountLike): Amount {
-    const n = Amount.from(numerator);
-    const d = Amount.from(denominator);
-    if (n.isZero()) return Amount.zero();
-    if (d.isZero()) {
+    const n = Amount.from(numerator).value;
+    const d = Amount.from(denominator).value;
+    if (n === 0n) return Amount.zero();
+    if (d === 0n) {
       throw new AmountError('scaledBy: denominator must be > 0');
     }
-    // round(a × n / d) = floor((2 × a × n + d) / (2 × d))
-    return this.multiplyBy(n).multiplyBy(2).add(d).divideBy(d.multiplyBy(2));
+    // round(a × n / d) = floor((2 × a × n + d) / (2 × d)); the 2*a*n intermediate stays in bigint
+    return new Amount((2n * this.value * n + d) / (2n * d));
   }
 
   // -----------------------------------------------------------------
