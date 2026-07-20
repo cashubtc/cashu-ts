@@ -986,10 +986,9 @@ export type MintContactInfo = {
     info: string;
 };
 
-// @public (undocumented)
+// @public
 export class MintInfo {
     constructor(info: GetInfoResponse, logger?: Logger);
-    // (undocumented)
     get cache(): GetInfoResponse;
     // (undocumented)
     get contact(): MintContactInfo[];
