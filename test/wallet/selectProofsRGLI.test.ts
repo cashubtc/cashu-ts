@@ -353,4 +353,16 @@ describe('selectProofsRGLI, invariants', () => {
       expect(sumProofs(res.send).toNumber()).toBeGreaterThanOrEqual(5);
     }
   });
+
+  test('exact match finds a proof whose exFee is above target but whose net hits it', () => {
+    // 6 sat at 500ppk: exFee 5.5 but net alone is 6 - ceil(500/1000) = 5
+    const proofs: Proof[] = [{ id: 'A', amount: Amount.from(6), secret: 's1', C: 'C1' }];
+    const kc = keychainStub({ A: 500 });
+
+    const res = selectProofsRGLI(proofs, 5, kc, true, true);
+
+    expect(res.send).toHaveLength(1);
+    expect(res.send[0].amount.toNumber()).toBe(6);
+    expect(res.keep).toHaveLength(0);
+  });
 });
