@@ -21,6 +21,12 @@ type ProtectedIndex = {
   prefix: Record<Method, string[]>;
 };
 
+/**
+ * Wraps a mint's `/v1/info` response with capability helpers.
+ *
+ * Constructable from any `GetInfoResponse`, including one persisted from an earlier session; no
+ * live connection is needed. Persist `cache` and rehydrate with `new MintInfo(stored)`.
+ */
 export class MintInfo {
   // Full mint info response
   private readonly _mintInfo: GetInfoResponse;
@@ -384,13 +390,22 @@ export class MintInfo {
   }
 
   /**
+   * Returns the mint's advertised settings for a (method, unit) pair for the given operation
+   * (`'mint'` → NUT-4, `'melt'` → NUT-5), or `undefined` when the pair is unsupported or the
+   * operation is disabled. The result carries the `min_amount`/`max_amount` limits and `options`.
+   */
+  getMintMeltMethod(op: 'mint' | 'melt', method: string, unit: string): SwapMethod | undefined {
+    const { disabled, params } = this.isSupported(op === 'mint' ? 4 : 5);
+    if (disabled) return undefined;
+    return params.find((m) => m.method === method && m.unit === unit);
+  }
+
+  /**
    * Checks if the mint advertises the given (method, unit) pair for the given operation (`'mint'` →
    * NUT-4, `'melt'` → NUT-5).
    */
   supportsMintMeltMethod(op: 'mint' | 'melt', method: string, unit: string): boolean {
-    const { disabled, params } = this.isSupported(op === 'mint' ? 4 : 5);
-    if (disabled) return false;
-    return params.some((m) => m.method === method && m.unit === unit);
+    return this.getMintMeltMethod(op, method, unit) !== undefined;
   }
 
   supportsAmountless(method: string = 'bolt11', unit: string = 'sat'): boolean {
