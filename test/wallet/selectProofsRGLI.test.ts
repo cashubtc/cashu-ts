@@ -186,6 +186,32 @@ describe('selectProofsRGLI, focused unit tests', () => {
 });
 
 describe('selectProofsRGLI, invariants', () => {
+  test('sub-sat fee proofs are kept and aggregate into a spendable sat', () => {
+    // 1 sat at 999ppk nets 0.001 alone; one thousand of them net exactly 1
+    const proofs: Proof[] = Array.from({ length: 1000 }, (_, i) => ({
+      id: 'A',
+      amount: Amount.from(1),
+      secret: `s${i}`,
+      C: `C${i}`,
+    }));
+    const kc = keychainStub({ A: 999 });
+
+    const res = selectProofsRGLI(proofs, 1, kc, true, false);
+
+    expect(res.send).toHaveLength(1000);
+    expect(res.keep).toHaveLength(0);
+  });
+
+  test('a 1 sat proof at 1000ppk is uneconomical and never selected', () => {
+    const proofs: Proof[] = [{ id: 'A', amount: Amount.from(1), secret: 's1', C: 'C1' }];
+    const kc = keychainStub({ A: 1000 });
+
+    const res = selectProofsRGLI(proofs, 1, kc, true, false);
+
+    expect(res.send).toHaveLength(0);
+    expect(res.keep).toHaveLength(1);
+  });
+
   test('exact match finds a proof whose exFee is above target but whose net hits it', () => {
     // 6 sat at 500ppk: exFee 5.5 but net alone is 6 - ceil(500/1000) = 5
     const proofs: Proof[] = [{ id: 'A', amount: Amount.from(6), secret: 's1', C: 'C1' }];
