@@ -37,7 +37,8 @@ type ProtectedIndex = {
  * Wraps a mint's `/v1/info` response with capability helpers.
  *
  * Constructable from any `GetInfoResponse`, including one persisted from an earlier session; no
- * live connection is needed. Persist `cache` and rehydrate with `new MintInfo(stored)`.
+ * live connection is needed. Persist `cache` and rehydrate with `new MintInfo(stored)`. Accessors
+ * return snapshots, never internal references.
  */
 export class MintInfo {
   // Full mint info response
@@ -256,21 +257,21 @@ export class MintInfo {
   private checkMintMelt(num: 4 | 5) {
     const mintMeltInfo = this._mintInfo.nuts[num];
     if (mintMeltInfo && mintMeltInfo.methods.length > 0 && !mintMeltInfo.disabled) {
-      return { disabled: false, params: mintMeltInfo.methods };
+      return { disabled: false, params: MintInfo.snapshot(mintMeltInfo.methods) };
     }
-    return { disabled: true, params: mintMeltInfo?.methods ?? [] };
+    return { disabled: true, params: MintInfo.snapshot(mintMeltInfo?.methods ?? []) };
   }
 
   private checkNut17() {
     if (this._mintInfo.nuts[17] && this._mintInfo.nuts[17].supported.length > 0) {
-      return { supported: true, params: this._mintInfo.nuts[17].supported };
+      return { supported: true, params: MintInfo.snapshot(this._mintInfo.nuts[17].supported) };
     }
     return { supported: false };
   }
 
   private checkNut15() {
     if (this._mintInfo.nuts[15] && this._mintInfo.nuts[15].methods.length > 0) {
-      return { supported: true, params: this._mintInfo.nuts[15].methods };
+      return { supported: true, params: MintInfo.snapshot(this._mintInfo.nuts[15].methods) };
     }
     return { supported: false };
   }
@@ -285,7 +286,7 @@ export class MintInfo {
           // map null to infinity, if not null map seconds to milliseconds.
           // this way ttl is always a number
           ttl: ttlSeconds === null ? Infinity : Math.max(ttlSeconds, 0) * 1000,
-          cached_endpoints: rawPolicy.cached_endpoints,
+          cached_endpoints: MintInfo.snapshot(rawPolicy.cached_endpoints),
         },
       };
     }
@@ -295,7 +296,7 @@ export class MintInfo {
   private checkNut29() {
     const nut29 = this._mintInfo.nuts?.[29];
     if (nut29) {
-      return { supported: true, params: nut29 };
+      return { supported: true, params: MintInfo.snapshot(nut29) };
     }
     return { supported: false };
   }
@@ -361,11 +362,30 @@ export class MintInfo {
 
   // ---------- getters ----------
 
+  /**
+   * Deep-copies a plain data value so accessors return snapshots, never internal references.
+   * Preserves bigints, which AmountLike fields may hold; JSON round-trips would not.
+   */
+  private static snapshot<T>(value: T): T {
+    if (value === null || typeof value !== 'object') return value;
+    if (Array.isArray(value)) {
+      return (value as unknown[]).map((v) => MintInfo.snapshot(v)) as T;
+    }
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = MintInfo.snapshot(v);
+    }
+    return out as T;
+  }
+
+  /**
+   * Snapshot of the full mint info response, safe to mutate or persist.
+   */
   get cache(): GetInfoResponse {
-    return this._mintInfo;
+    return MintInfo.snapshot(this._mintInfo);
   }
   get contact() {
-    return this._mintInfo.contact;
+    return MintInfo.snapshot(this._mintInfo.contact);
   }
   get description() {
     return this._mintInfo.description;
@@ -380,7 +400,7 @@ export class MintInfo {
     return this._mintInfo.pubkey;
   }
   get nuts() {
-    return this._mintInfo.nuts;
+    return MintInfo.snapshot(this._mintInfo.nuts);
   }
   get version() {
     return this._mintInfo.version;
