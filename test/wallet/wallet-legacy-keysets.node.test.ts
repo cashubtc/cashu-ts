@@ -10,8 +10,9 @@ import { useTestServer, mint, mintUrl, token3sat } from './_setup';
 
 const server = useTestServer();
 
-// Legacy (pre-v1) deprecated base64 keyset whose id verifies against its keys
-const legacyId = deriveKeysetId(PUBKEYS, { isDeprecatedBase64: true });
+// Legacy (pre-v1) deprecated base64 keyset id (a real one, still listed by the Minibits mint).
+// Removed in v5: these keysets are skipped on load, so the keys never need to verify.
+const legacyId = 'ctv28hTYzQwr';
 const legacyKeyset: MintKeyset = { id: legacyId, unit: 'sat', active: true, input_fee_ppk: 0 };
 const legacyKeys: MintKeys = { ...legacyKeyset, keys: PUBKEYS };
 
@@ -45,8 +46,8 @@ function useInactiveHandlers() {
   );
 }
 
-describe('Legacy (pre-v1) keyset output gating', () => {
-  test('fixture sanity: legacy keyset id is base64, not hex, and verifies', async () => {
+describe('Legacy (pre-v1) keyset removal', () => {
+  test('legacy keysets are skipped on load; the mint stays usable', async () => {
     expect(isValidHex(legacyId)).toBe(false);
     expect(isBase64String(legacyId)).toBe(true);
 
@@ -54,31 +55,27 @@ describe('Legacy (pre-v1) keyset output gating', () => {
     const wallet = new Wallet(mint);
     await wallet.loadMint();
 
-    // Keys must survive keychain verification, or the gate test below would
-    // pass for the wrong reason ('Keyset has no keys loaded').
-    const keyset = wallet.keyChain.getKeyset(legacyId);
-    expect(keyset.hasKeys).toBe(true);
-    expect(keyset.hasHexId).toBe(false);
+    // The legacy keyset never enters the keychain; the hex keyset is unaffected.
+    expect(() => wallet.keyChain.getKeyset(legacyId)).toThrow(/not found/i);
+    expect(wallet.keyChain.getKeyset(DUMMY_TEST_KEYSET.id).hasKeys).toBe(true);
   });
 
-  test('prepareMint refuses to create proofs on a legacy keyset', async () => {
+  test('prepareMint cannot target a legacy keyset', async () => {
     useLegacyHandlers();
     const wallet = new Wallet(mint);
     await wallet.loadMint();
 
     await expect(
       wallet.prepareMint('bolt11', 3, { quote: 'test-quote' }, { keysetId: legacyId }),
-    ).rejects.toThrow(/legacy keyset/i);
+    ).rejects.toThrow(/not found/i);
   });
 
-  test('receive refuses to create proofs on a legacy keyset', async () => {
+  test('receive cannot target a legacy keyset', async () => {
     useLegacyHandlers();
     const wallet = new Wallet(mint);
     await wallet.loadMint();
 
-    await expect(wallet.receive(token3sat, { keysetId: legacyId })).rejects.toThrow(
-      /legacy keyset/i,
-    );
+    await expect(wallet.receive(token3sat, { keysetId: legacyId })).rejects.toThrow(/not found/i);
   });
 
   test('prepareMint still works on the bound (hex) keyset', async () => {
@@ -185,16 +182,12 @@ describe('Legacy (pre-v1) keyset output gating', () => {
     expect(quote.quote).toBe('bolt11-quote-1');
   });
 
-  test('restore still works on a legacy keyset', async () => {
+  test('restore cannot target a legacy keyset', async () => {
     useLegacyHandlers();
-    server.use(
-      http.post(mintUrl + '/v1/restore', () => HttpResponse.json({ outputs: [], signatures: [] })),
-    );
 
     const wallet = new Wallet(mint, { bip39seed: randomBytes(32) });
     await wallet.loadMint();
 
-    const res = await wallet.restore(0, 2, { keysetId: legacyId });
-    expect(res.proofs).toEqual([]);
+    await expect(wallet.restore(0, 2, { keysetId: legacyId })).rejects.toThrow(/not found/i);
   });
 });

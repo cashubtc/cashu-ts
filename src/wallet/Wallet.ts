@@ -488,22 +488,18 @@ class Wallet {
    * Resolves the keyset used to create new proofs, enforcing the output policy.
    *
    * @remarks
-   * Legacy (pre-v1, base64-id) keysets may be spent and restored, but never used to create new
-   * proofs. Inactive keysets are rejected per NUT-02, the mint would refuse to sign outputs on
-   * them, so fail fast here. Unknown hex versions are already excluded upstream: their keys fail
+   * Inactive keysets are rejected per NUT-02, the mint would refuse to sign outputs on them, so
+   * fail fast here. Unknown hex versions are already excluded upstream: their keys fail
    * verification and `getKeyset` rejects keysets without keys.
    *
    * Only the prepare-side ops use this gate. The `complete*` ops use plain `getKeyset` as the mint
    * will have signed.
    * @param id Optional keyset id to resolve. If omitted, the wallet's bound keyset is used.
    * @returns The resolved `Keyset`.
-   * @throws If the keyset fails `getKeyset` validation, has a legacy (non-hex) id, or is inactive.
+   * @throws If the keyset fails `getKeyset` validation or is inactive.
    */
   private getOutputKeyset(id?: string): Keyset {
     const keyset = this.getKeyset(id);
-    this.failIf(!keyset.hasHexId, 'Legacy keyset cannot be used to create new proofs', {
-      keyset: keyset.id,
-    });
     this.failIf(!keyset.isActive, 'Inactive keyset cannot be used to create new proofs', {
       keyset: keyset.id,
     });
@@ -511,8 +507,8 @@ class Wallet {
   }
 
   /**
-   * Asserts the mint has at least one usable (active, hex-id, keyed) keyset for the wallet's unit
-   * before requesting a mint quote — a paid quote could otherwise never be redeemed for proofs.
+   * Asserts the mint has at least one usable (active, keyed) keyset for the wallet's unit before
+   * requesting a mint quote — a paid quote could otherwise never be redeemed for proofs.
    *
    * @param op Operation name for the error message.
    * @throws If the keychain is uninitialized or has no usable active keyset for the unit.

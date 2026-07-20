@@ -2,7 +2,7 @@ import { hexToBytes } from '@noble/curves/utils.js';
 
 import { CTSError } from '../model/Errors';
 import { type MintKeyset, type MintKeys } from '../model/types';
-import { isValidHex, deriveKeysetId, isBase64String } from '../utils';
+import { isValidHex, deriveKeysetId } from '../utils';
 import { normalizeMintKeyset, normalizeMintKeys } from '../utils/normalizeNumbers';
 
 export class Keyset {
@@ -49,10 +49,6 @@ export class Keyset {
 
   get hasKeys(): boolean {
     return Object.keys(this._keys).length > 0;
-  }
-
-  get hasHexId(): boolean {
-    return isValidHex(this._id);
   }
 
   get keys(): Record<number, string> {
@@ -117,15 +113,14 @@ export class Keyset {
   static verifyKeysetId(keys: MintKeys): boolean {
     try {
       if (!keys.keys || Object.keys(keys.keys).length === 0) return false;
+      if (!isValidHex(keys.id)) return false;
 
-      const isDeprecatedBase64 = isBase64String(keys.id) && !isValidHex(keys.id);
-      const versionByte = isValidHex(keys.id) ? hexToBytes(keys.id)[0] : 0;
+      const versionByte = hexToBytes(keys.id)[0];
       const derivedId = deriveKeysetId(keys.keys, {
         input_fee_ppk: keys.input_fee_ppk,
         expiry: keys.final_expiry,
         unit: keys.unit,
         versionByte,
-        isDeprecatedBase64,
       });
 
       return derivedId === keys.id;

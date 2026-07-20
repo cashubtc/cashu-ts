@@ -2,7 +2,7 @@ import { bytesToHex } from '@noble/curves/utils.js';
 import { HDKey } from '@scure/bip32';
 import { describe, expect, test } from 'vitest';
 
-import { deriveSecretAndBlindingFactor, getKeysetIdInt } from '../../src/crypto';
+import { deriveSecretAndBlindingFactor } from '../../src/crypto';
 import { Bytes } from '../../src/utils';
 
 // The standalone deriveSecret() helper was removed in v5; derive it locally for these tests.
@@ -130,20 +130,8 @@ describe('test private key derivation from derivation path -- deprecated', () =>
   });
 });
 
-describe('base64 keyset id uses deprecated derivation path', () => {
-  test('deriveSecret matches manual HD derivation for base64 keyset id', () => {
-    const base64KeysetId = '0NI3TUAs1Sfy'; // legacy-style base64 keyset id from fixtures
-    const counter = 2;
-
-    // Compute expected via deprecated path definition
-    const hdkey = HDKey.fromMasterSeed(seed);
-    const keysetIdInt = getKeysetIdInt(base64KeysetId);
-    const derivationPath = `m/129372'/0'/${keysetIdInt}'/${counter}'/0`;
-    const derived = hdkey.derive(derivationPath);
-    expect(derived.privateKey).not.toBeNull();
-    const expected = derived.privateKey || new Uint8Array();
-
-    const actual = deriveSecret(seed, base64KeysetId, counter);
-    expect(bytesToHex(actual)).toBe(bytesToHex(expected));
+describe('base64 keyset id is rejected', () => {
+  test('deriveSecret throws for a legacy base64 keyset id', () => {
+    expect(() => deriveSecret(seed, '0NI3TUAs1Sfy', 2)).toThrow(/legacy base64 keyset IDs/);
   });
 });

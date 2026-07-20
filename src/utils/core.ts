@@ -418,7 +418,6 @@ export type DeriveKeysetIdOptions = {
   input_fee_ppk?: number;
   unit?: string;
   versionByte?: number;
-  isDeprecatedBase64?: boolean;
 };
 
 /**
@@ -429,7 +428,6 @@ export type DeriveKeysetIdOptions = {
  * @param options.input_fee_ppk (optional) Input fee for keyset (in ppk)
  * @param options.unit (optional) the unit of the keyset. Default: sat.
  * @param options.versionByte (optional) version of the keyset ID. Default: 1.
- * @param options.isDeprecatedBase64 (optional) version of the keyset ID. Default: false.
  * @returns Keyset id of the keys.
  * @throws If keyset versionByte is not valid.
  */
@@ -438,17 +436,6 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
   const expiry = options?.expiry;
   const versionByte = options?.versionByte ?? 1; // default: 1
   const input_fee_ppk = options?.input_fee_ppk;
-  const isDeprecatedBase64 = options?.isDeprecatedBase64 ?? false; // default: false
-
-  if (isDeprecatedBase64) {
-    const pubkeysConcat = Object.entries(keys)
-      .sort(([amountA], [amountB]) => Amount.from(amountA).compareTo(amountB))
-      .map(([, pubKey]) => pubKey)
-      .reduce((prev: string, curr: string) => prev + curr, '');
-    const hash = sha256(Bytes.fromString(pubkeysConcat));
-    const b64 = Bytes.toBase64(hash);
-    return b64.slice(0, 12);
-  }
 
   switch (versionByte) {
     case 0: {
@@ -671,9 +658,9 @@ function mapShortKeysetIds(proofs: Proof[], keysetIds: readonly string[]): Proof
     try {
       idBytes = hexToBytes(proof.id);
     } catch {
-      // Base64 keysets don't need conversion
-      newProofs.push(proof);
-      continue;
+      throw new CTSError(
+        `Unsupported keyset ID '${proof.id}': legacy base64 keyset IDs were removed in v5`,
+      );
     }
 
     if (idBytes[0] === 0x00) {

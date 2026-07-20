@@ -4,7 +4,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { HDKey, HARDENED_OFFSET } from '@scure/bip32';
 
 import { CTSError } from '../model/Errors';
-import { Bytes, isBase64String } from '../utils';
+import { Bytes } from '../utils';
 
 import { BLS_FR_ORDER } from './curve_bls';
 import { getPubKeyFromPrivKey } from './curve_secp';
@@ -48,8 +48,8 @@ type SecretAndBlindingFactorDeriver = (counter: number) => DerivedSecretAndBlind
  * values together is faster because it avoids repeating the shared path derivation common to the
  * secret and blinding factor.
  *
- * The function supports legacy base64 keyset IDs, deprecated hex keyset IDs with the `00` prefix,
- * and modern hex keyset IDs with the `01` prefix.
+ * The function supports deprecated hex keyset IDs with the `00` prefix and modern hex keyset IDs
+ * with the `01` prefix. Legacy base64 keyset IDs throw (removed in v5).
  * @param seed - Wallet seed used for deterministic derivation.
  * @param keysetId - Mint keyset ID that selects the derivation method.
  * @param counter - Deterministic counter for the output.
@@ -162,14 +162,16 @@ export function createSecretAndBlindingFactorDeriver(
 
 function getDerivationKind(keysetId: string): DerivationKind {
   const isValidHex = /^[a-fA-F0-9]+$/.test(keysetId);
-  if (!isValidHex && isBase64String(keysetId)) {
-    return DerivationKind.DEPRECATED_BIP32;
+  if (!isValidHex) {
+    throw new CTSError(
+      `Unsupported keyset ID '${keysetId}': legacy base64 keyset IDs were removed in v5`,
+    );
   }
-  if (isValidHex && keysetId.startsWith('00')) {
+  if (keysetId.startsWith('00')) {
     return DerivationKind.DEPRECATED_BIP32;
   }
   // Strict version gate: does not assume future keyset versions are BLS.
-  if (isValidHex && (keysetId.startsWith('01') || keysetId.startsWith('02'))) {
+  if (keysetId.startsWith('01') || keysetId.startsWith('02')) {
     return DerivationKind.HMAC_SHA256;
   }
   throw new CTSError(`Unrecognized keyset ID version ${keysetId.slice(0, 2)}`);

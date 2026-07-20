@@ -432,7 +432,6 @@ export type DeriveKeysetIdOptions = {
     input_fee_ppk?: number;
     unit?: string;
     versionByte?: number;
-    isDeprecatedBase64?: boolean;
 };
 
 // @public
@@ -773,8 +772,6 @@ export class Keyset {
     // (undocumented)
     get fee(): number;
     static fromMintApi(meta: MintKeyset, keys?: MintKeys): Keyset;
-    // (undocumented)
-    get hasHexId(): boolean;
     // (undocumented)
     get hasKeys(): boolean;
     // (undocumented)

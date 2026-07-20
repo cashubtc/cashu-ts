@@ -8,6 +8,7 @@ import type {
   KeyChainCache,
   KeysetCache,
 } from '../model/types/keyset';
+import { isValidHex } from '../utils';
 
 import { Keyset } from './Keyset';
 
@@ -169,6 +170,10 @@ export class KeyChain {
     const keysMap = new Map<string, MintKeys>(allKeys.map((k) => [k.id, k]));
 
     for (const meta of allKeysets) {
+      // Skip legacy (base64-id) keysets: removed in v5.
+      if (!isValidHex(meta.id)) {
+        continue;
+      }
       const mk = keysMap.get(meta.id);
       const keyset = mk ? Keyset.fromMintApi(meta, mk) : Keyset.fromMintApi(meta);
 
@@ -204,7 +209,7 @@ export class KeyChain {
    * Get the cheapest active keyset.
    *
    * @remarks
-   * Selects active keyset with lowest fee and hex ID.
+   * Selects active keyset with lowest fee.
    * @returns Active Keyset.
    * @throws If none found or uninitialized.
    */
@@ -213,7 +218,7 @@ export class KeyChain {
       throw new CTSError('KeyChain not initialized');
     }
     const activeKeysets = Object.values(this.keysets).filter(
-      (k) => k.unit === this.unit && k.isActive && k.hasHexId && k.hasKeys,
+      (k) => k.unit === this.unit && k.isActive && k.hasKeys,
     );
     if (activeKeysets.length === 0) {
       throw new CTSError(`No active keyset found for unit: ${this.unit}`);
