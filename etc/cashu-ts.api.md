@@ -1104,7 +1104,7 @@ export type MintContactInfo = {
     info: string;
 };
 
-// @public (undocumented)
+// @public
 export class MintInfo {
     constructor(info: GetInfoResponse, logger?: Logger);
     // (undocumented)
@@ -1115,6 +1115,7 @@ export class MintInfo {
     get description(): string | undefined;
     // (undocumented)
     get description_long(): string | undefined;
+    getMintMeltMethod(op: 'mint' | 'melt', method: string, unit: string): SwapMethod | undefined;
     // (undocumented)
     isSupported(num: 4 | 5): {
         disabled: boolean;

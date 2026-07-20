@@ -728,6 +728,40 @@ describe('MintInfo method/unit capability checks', () => {
     expect(info.supportsMintMeltMethod('melt', 'bolt11', 'sat')).toBe(false);
   });
 
+  it('getMintMeltMethod returns the matched settings, also after a JSON round-trip', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        5: {
+          disabled: false,
+          methods: [{ method: 'bolt11', unit: 'sat', min_amount: 1, max_amount: 10_000 }],
+        },
+      },
+    });
+
+    const rehydrated = new MintInfo(JSON.parse(JSON.stringify(info.cache)));
+    for (const i of [info, rehydrated]) {
+      expect(i.getMintMeltMethod('melt', 'bolt11', 'sat')).toMatchObject({
+        min_amount: 1,
+        max_amount: 10_000,
+      });
+      expect(i.getMintMeltMethod('melt', 'bolt11', 'usd')).toBeUndefined();
+    }
+  });
+
+  it('getMintMeltMethod returns undefined when the operation is disabled', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        5: {
+          disabled: true,
+          methods: [{ method: 'bolt11', unit: 'sat', min_amount: null, max_amount: null }],
+        },
+      },
+    });
+    expect(info.getMintMeltMethod('melt', 'bolt11', 'sat')).toBeUndefined();
+  });
+
   it('supportsAmountless defaults to bolt11/sat and requires an exact method/unit match', () => {
     const info = new MintInfo({
       ...MINTINFORESP,
