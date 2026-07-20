@@ -224,3 +224,57 @@ describe('selectProofsRGLI, invariants', () => {
     expect(res.keep).toHaveLength(0);
   });
 });
+
+describe('selectProofsRGLI, u64-scale amounts', () => {
+  test('close match selects among proofs above Number.MAX_SAFE_INTEGER', () => {
+    const proofs: Proof[] = [
+      { id: 'A', amount: Amount.from(2n ** 60n), secret: 's1', C: 'C1' },
+      { id: 'A', amount: Amount.from(2n ** 59n), secret: 's2', C: 'C2' },
+    ];
+    const kc = keychainStub({ A: 0 });
+
+    const res = selectProofsRGLI(proofs, 2n ** 59n, kc, false, false);
+
+    expect(res.send.map((p) => p.amount.toBigInt())).toEqual([2n ** 59n]);
+  });
+
+  test('exact match nets a u64 target with fees, using the widened trim bound', () => {
+    // 2^60 at 500ppk nets 2^60 - 1; its exFee (2^60) sits exactly at target + 1
+    const proofs: Proof[] = [{ id: 'A', amount: Amount.from(2n ** 60n), secret: 's1', C: 'C1' }];
+    const kc = keychainStub({ A: 500 });
+
+    const res = selectProofsRGLI(proofs, 2n ** 60n - 1n, kc, true, true);
+
+    expect(res.send).toHaveLength(1);
+  });
+
+  test('exact match mixes huge and small proofs', () => {
+    const proofs: Proof[] = [
+      { id: 'A', amount: Amount.from(2n ** 60n), secret: 's1', C: 'C1' },
+      { id: 'A', amount: Amount.from(3), secret: 's2', C: 'C2' },
+      { id: 'A', amount: Amount.from(1), secret: 's3', C: 'C3' },
+    ];
+    const kc = keychainStub({ A: 0 });
+
+    const res = selectProofsRGLI(proofs, 2n ** 60n + 4n, kc, false, true);
+
+    expect(res.send).toHaveLength(3);
+  });
+
+  test('sums beyond MAX_SAFE_INTEGER stay exact even when single proofs are safe', () => {
+    // 1024 proofs of 2^44 + 1 sum past 2^53; double arithmetic would drift here
+    const amount = 2n ** 44n + 1n;
+    const proofs: Proof[] = Array.from({ length: 1024 }, (_, i) => ({
+      id: 'A',
+      amount: Amount.from(amount),
+      secret: `s${i}`,
+      C: `C${i}`,
+    }));
+    const kc = keychainStub({ A: 0 });
+
+    const res = selectProofsRGLI(proofs, 1024n * amount, kc, false, false);
+
+    expect(res.send).toHaveLength(1024);
+    expect(res.keep).toHaveLength(0);
+  });
+});
