@@ -1,5 +1,5 @@
 // Minimal types to avoid importing the whole wallet, keeps this module independent
-import { fail, failIf, failIfNullish, type Logger, NULL_LOGGER, measureTime } from '../logger';
+import { failIf, failIfNullish, type Logger, NULL_LOGGER, measureTime } from '../logger';
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import type { Proof, ProofLike } from '../model/types/proof';
@@ -27,34 +27,32 @@ export function selectProofsRGLI(
 ): SendResponse {
   const normalizedProofs = normalizeProofAmounts(proofs);
   const targetAmount = Amount.from(amountToSelect);
-  const targetAmountNumber = targetAmount.toNumber();
+  const targetAmountBig = targetAmount.toBigInt();
 
   // Init vars
   const MAX_TRIALS = 60; // 40-80 is optimal (per RGLI paper)
-  const MAX_OVRPCT = 0; // Acceptable close match overage (percent)
-  const MAX_OVRAMT = 0; // Acceptable close match overage (absolute)
   const MAX_TIMEMS = 1000; // Halt new trials if over time (in ms)
   const MAX_P2SWAP = 5000; // Max number of Phase 2 improvement swaps
   const timer = measureTime(); // start the clock
   let bestSubset: ProofWithFee[] | null = null;
-  let bestDelta = Infinity;
-  let bestAmount = 0;
-  let bestFeePPK = 0;
+  let bestDelta: bigint | null = null; // null = no valid solution yet
+  let bestAmount = 0n;
+  let bestFeePPK = 0n;
 
   /**
    * Helper Functions.
    */
-  // Caches proof amount (number) and fee
+  // Caches proof amount (bigint) and fee
   interface ProofWithFee {
     proof: Proof;
-    amountNum: number; // proof.amount.toNumber()
-    exFee: number;
-    ppkfee: number;
+    amountBig: bigint; // proof.amount.toBigInt()
+    exFee: bigint;
+    ppkfee: bigint;
   }
   // Looks up fee for a proof
-  const feeForProof = (proof: Proof): number => {
+  const feeForProof = (proof: Proof): bigint => {
     try {
-      return keyChain.getKeyset(proof.id).fee;
+      return BigInt(keyChain.getKeyset(proof.id).fee);
     } catch (e) {
       const message = `Could not get fee. No keyset found for keyset id: ${proof.id}`;
       _logger.error(message, {
@@ -64,9 +62,9 @@ export function selectProofsRGLI(
       throw new CTSError(message, { cause: e });
     }
   };
-  // Calculate net amount after fees
-  const sumExFees = (amount: number, feePPK: number): number => {
-    return amount - (includeFees ? Math.ceil(feePPK / 1000) : 0);
+  // Calculate net amount after fees (single ceil over the whole set)
+  const sumExFees = (amount: bigint, feePPK: bigint): bigint => {
+    return amount - (includeFees ? (feePPK + 999n) / 1000n : 0n);
   };
   // Shuffle array for randomization
   const shuffleArray = <T>(array: T[]): T[] => {
@@ -82,7 +80,7 @@ export function selectProofsRGLI(
   // If lessOrEqual=false, returns the leftmost index where exFee >= value
   const binarySearchIndex = (
     arr: ProofWithFee[],
-    value: number,
+    value: bigint,
     lessOrEqual: boolean,
   ): number | null => {
     let left = 0,
@@ -114,50 +112,41 @@ export function selectProofsRGLI(
     }
     arr.splice(left, 0, obj);
   };
-  // "Delta" is the excess over amountToSend including fees
-  // plus a tiebreaker to favour lower PPK keysets
-  // NB: Solutions under amountToSend are invalid (delta: Infinity)
-  const calculateDelta = (amount: number, feePPK: number): number => {
+  // "Delta" is the excess over amountToSend including fees, scaled by 1000 so the
+  // ppk tiebreaker (favour lower-fee keysets) stays in integers
+  // NB: Solutions under amountToSend are invalid (delta: null)
+  const calculateDelta = (amount: bigint, feePPK: bigint): bigint | null => {
     const netSum = sumExFees(amount, feePPK);
-    if (netSum < targetAmountNumber) return Infinity; // no good
-    return amount + feePPK / 1000 - targetAmountNumber;
+    if (netSum < targetAmountBig) return null; // no good
+    return 1000n * amount + feePPK - 1000n * targetAmountBig;
   };
 
   /**
    * Pre-processing.
    */
-  let totalAmount = 0;
-  let totalFeePPK = 0;
+  let totalAmount = 0n;
+  let totalFeePPK = 0n;
   const proofWithFees = normalizedProofs.map((p) => {
-    // Guard: this algorithm uses number arithmetic throughout. Amounts above MAX_SAFE_INTEGER
-    // (e.g. high-value proofs in msat-denomination mints) require a custom SelectProofs impl.
-    if (p.amount.greaterThan(Number.MAX_SAFE_INTEGER)) {
-      fail(
-        'selectProofsRGLI does not support proof amounts > Number.MAX_SAFE_INTEGER. ' +
-          'Provide a custom SelectProofs implementation for msat-scale wallets.',
-        _logger,
-      );
-    }
     const ppkfee = feeForProof(p);
-    const amountNum = p.amount.toNumber(); // safe: guarded above
+    const amountBig = p.amount.toBigInt();
     // Floor the proof's own fee: keeps exFee an integer sort key, and the economical
     // filter decides identically (amount > floor(ppk/1000) iff 1000 * amount > ppk);
     // set-level fee accounting (sumExFees) is untouched
-    const exFee = includeFees ? amountNum - Math.floor(ppkfee / 1000) : amountNum;
-    const obj = { proof: p, amountNum, exFee, ppkfee };
+    const exFee = includeFees ? amountBig - ppkfee / 1000n : amountBig;
+    const obj = { proof: p, amountBig, exFee, ppkfee };
     // Sum all economical proofs (filtered below)
-    if (!includeFees || exFee > 0) {
-      totalAmount += amountNum;
+    if (!includeFees || exFee > 0n) {
+      totalAmount += amountBig;
       totalFeePPK += ppkfee;
     }
     return obj;
   });
 
   // Filter uneconomical proofs (totals computed above)
-  let spendableProofs = includeFees ? proofWithFees.filter((obj) => obj.exFee > 0) : proofWithFees;
+  let spendableProofs = includeFees ? proofWithFees.filter((obj) => obj.exFee > 0n) : proofWithFees;
 
   // Sort by exFee ascending
-  spendableProofs.sort((a, b) => a.exFee - b.exFee);
+  spendableProofs.sort((a, b) => (a.exFee < b.exFee ? -1 : a.exFee > b.exFee ? 1 : 0));
 
   // Remove proofs too large to be useful and adjust totals
   // Exact Match: Keep proofs where exFee <= amountToSend + 1. exFee floors the
@@ -168,10 +157,10 @@ export function selectProofsRGLI(
   if (spendableProofs.length > 0) {
     let endIndex;
     if (exactMatch) {
-      const rightIndex = binarySearchIndex(spendableProofs, targetAmountNumber + 1, true);
+      const rightIndex = binarySearchIndex(spendableProofs, targetAmountBig + 1n, true);
       endIndex = rightIndex !== null ? rightIndex + 1 : 0;
     } else {
-      const biggerIndex = binarySearchIndex(spendableProofs, targetAmountNumber, false);
+      const biggerIndex = binarySearchIndex(spendableProofs, targetAmountBig, false);
       if (biggerIndex !== null) {
         const nextBiggerExFee = spendableProofs[biggerIndex].exFee;
         const rightIndex = binarySearchIndex(spendableProofs, nextBiggerExFee, true);
@@ -184,7 +173,7 @@ export function selectProofsRGLI(
     }
     // Adjust totals for removed proofs
     for (let i = endIndex; i < spendableProofs.length; i++) {
-      totalAmount -= spendableProofs[i].amountNum;
+      totalAmount -= spendableProofs[i].amountBig;
       totalFeePPK -= spendableProofs[i].ppkfee;
     }
     spendableProofs = spendableProofs.slice(0, endIndex);
@@ -192,16 +181,12 @@ export function selectProofsRGLI(
 
   // Validate using precomputed totals
   const totalNetSum = sumExFees(totalAmount, totalFeePPK);
-  if (targetAmount.isZero() || targetAmountNumber > totalNetSum) {
+  if (targetAmount.isZero() || targetAmountBig > totalNetSum) {
     return { keep: normalizedProofs, send: [] };
   }
 
-  // Max acceptable amount for non-exact matches
-  const maxOverAmount = Math.min(
-    Math.ceil(targetAmountNumber * (1 + MAX_OVRPCT / 100)),
-    targetAmountNumber + MAX_OVRAMT,
-    totalNetSum,
-  );
+  // Max acceptable amount for non-exact matches (close-match overage tolerance is zero)
+  const maxOverAmount = targetAmountBig < totalNetSum ? targetAmountBig : totalNetSum;
 
   /**
    * RGLI algorithm: Runs multiple trials (up to MAX_TRIALS) Each trial starts with randomized
@@ -213,17 +198,17 @@ export function selectProofsRGLI(
     // Add proofs up to target amount (after adjusting for fees)
     // for exact match or the first amount over target otherwise
     const S: ProofWithFee[] = [];
-    let amount = 0;
-    let feePPK = 0;
+    let amount = 0n;
+    let feePPK = 0n;
     for (const obj of shuffleArray(spendableProofs)) {
-      const newAmount = amount + obj.amountNum;
+      const newAmount = amount + obj.amountBig;
       const newFeePPK = feePPK + obj.ppkfee;
       const netSum = sumExFees(newAmount, newFeePPK);
-      if (exactMatch && netSum > targetAmountNumber) break;
+      if (exactMatch && netSum > targetAmountBig) break;
       S.push(obj);
       amount = newAmount;
       feePPK = newFeePPK;
-      if (netSum >= targetAmountNumber) break;
+      if (netSum >= targetAmountBig) break;
     }
 
     // PHASE 2: Local Improvement
@@ -245,8 +230,8 @@ export function selectProofsRGLI(
       // Exact or acceptable close match solution found?
       const netSum = sumExFees(amount, feePPK);
       if (
-        netSum === targetAmountNumber ||
-        (!exactMatch && netSum >= targetAmountNumber && netSum <= maxOverAmount)
+        netSum === targetAmountBig ||
+        (!exactMatch && netSum >= targetAmountBig && netSum <= maxOverAmount)
       ) {
         break;
       }
@@ -254,10 +239,10 @@ export function selectProofsRGLI(
       // Get details for proof being replaced (objP), and temporarily
       // calculate the subset amount/fee with that proof removed.
       const objP = S[i];
-      const tempAmount = amount - objP.amountNum;
+      const tempAmount = amount - objP.amountBig;
       const tempFeePPK = feePPK - objP.ppkfee;
       const tempNetSum = sumExFees(tempAmount, tempFeePPK);
-      const target = targetAmountNumber - tempNetSum;
+      const target = targetAmountBig - tempNetSum;
 
       // Find a better replacement proof (objQ) and swap it in
       // Exact match can only replace larger to close on the target
@@ -267,9 +252,9 @@ export function selectProofsRGLI(
       if (qIndex !== null) {
         const objQ = others[qIndex];
         if (!exactMatch || objQ.exFee > objP.exFee) {
-          if (target >= 0 || objQ.exFee <= objP.exFee) {
+          if (target >= 0n || objQ.exFee <= objP.exFee) {
             S[i] = objQ;
-            amount = tempAmount + objQ.amountNum;
+            amount = tempAmount + objQ.amountBig;
             feePPK = tempFeePPK + objQ.ppkfee;
             others.splice(qIndex, 1);
             insertSorted(others, objP);
@@ -279,11 +264,11 @@ export function selectProofsRGLI(
     }
     // Update best solution
     const delta = calculateDelta(amount, feePPK);
-    if (delta < bestDelta) {
+    if (delta !== null && (bestDelta === null || delta < bestDelta)) {
       _logger.debug(
         `selectProofsToSend: best solution found in trial #${trial} - amount: ${amount}, delta: ${delta}`,
       );
-      bestSubset = [...S].sort((a, b) => b.exFee - a.exFee); // copy & sort
+      bestSubset = [...S].sort((a, b) => (b.exFee < a.exFee ? -1 : b.exFee > a.exFee ? 1 : 0)); // copy & sort desc
       bestDelta = delta;
       bestAmount = amount;
       bestFeePPK = feePPK;
@@ -293,12 +278,12 @@ export function selectProofsRGLI(
       // to the original RGLI, which helps us identify close match and
       // optimal fee solutions more consistently
       const tempS = [...bestSubset]; // copy
-      while (tempS.length > 1 && bestDelta > 0) {
+      while (tempS.length > 1 && bestDelta > 0n) {
         const objP = tempS.pop() as ProofWithFee;
-        const tempAmount = amount - objP.amountNum;
+        const tempAmount = amount - objP.amountBig;
         const tempFeePPK = feePPK - objP.ppkfee;
         const tempDelta = calculateDelta(tempAmount, tempFeePPK);
-        if (tempDelta == Infinity) break;
+        if (tempDelta === null) break;
         if (tempDelta < bestDelta) {
           bestSubset = [...tempS];
           bestDelta = tempDelta;
@@ -310,11 +295,11 @@ export function selectProofsRGLI(
       }
     }
     // Check if solution is acceptable
-    if (bestSubset && bestDelta < Infinity) {
+    if (bestSubset && bestDelta !== null) {
       const bestSum = sumExFees(bestAmount, bestFeePPK);
       if (
-        bestSum === targetAmountNumber ||
-        (!exactMatch && bestSum >= targetAmountNumber && bestSum <= maxOverAmount)
+        bestSum === targetAmountBig ||
+        (!exactMatch && bestSum >= targetAmountBig && bestSum <= maxOverAmount)
       ) {
         break;
       }
@@ -331,7 +316,7 @@ export function selectProofsRGLI(
     }
   }
   // Return Result
-  if (bestSubset && bestDelta < Infinity) {
+  if (bestSubset && bestDelta !== null) {
     const bestProofs = bestSubset.map((obj) => obj.proof);
     const bestSubsetSet = new Set(bestProofs);
     const keep = normalizedProofs.filter((p) => !bestSubsetSet.has(p));
@@ -361,9 +346,7 @@ export function selectProofsRotating(
   const targetAmount = Amount.from(amountToSelect);
   const target = targetAmount.toBigInt();
 
-  // Net sum under unified fee arithmetic (single ceil over the whole set).
-  // Bigint keeps the wrapper exact at u64 scale; only pools delegated to RGLI
-  // carry its number-arithmetic guard. Bigint not Amount because dust proofs
+  // Net sum under unified fee arithmetic (single ceil over the whole set) Bigint not Amount because dust proofs
   // can netOf() negative (eg: 1 sat proof at 2000ppk).
   const netOf = (gross: bigint, ppk: bigint): bigint =>
     gross - (includeFees ? (ppk + 999n) / 1000n : 0n);
@@ -431,7 +414,7 @@ export function selectProofsRotating(
         attempt = selectProofsRGLI(pool, residual, keyChain, includeFees, exactMatch, _logger);
       } catch (error) {
         _logger.debug('selectProofsRotating: biased attempt failed', { error });
-        continue; // RGLI could not handle this pool (timeout or scale); widen or fall back
+        continue; // exact match timed out on a biased pool; widen or fall back
       }
       if (attempt.send.length === 0) continue;
       // Splitting forced/residual can overstate fees by one, so verify the merged
