@@ -142,6 +142,12 @@ export type RequestOptions = RequestArgs &
      */
     requestTimeout?: number;
     /**
+     * Marks the request as safe to replay (read-only, no side effects). Idempotent requests retry
+     * once on a network-level failure, recovering from dropped keep-alive sockets. GET requests
+     * default to `true`; POSTs must opt in.
+     */
+    idempotent?: boolean;
+    /**
      * Optional callback invoked on every HTTP response with structured rate-limit metadata. Fires
      * before the promise resolves (on success) or rejects (on error), so consumers always receive
      * metadata even when the request fails.
@@ -312,7 +318,19 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
     !!ttl;
 
   if (!isCachable) {
-    return await _request(options);
+    const idempotent = options.idempotent ?? requestMethod === 'GET';
+    if (!idempotent) {
+      return await _request(options);
+    }
+    try {
+      return await _request(options);
+    } catch (e) {
+      // One immediate retry on a connection-level failure (a dropped keep-alive socket is the
+      // common case); HTTP errors mean the server answered and are never retried here.
+      if (e instanceof CallerAbortError || !(e instanceof NetworkError)) throw e;
+      requestLogger.info('Network error on an idempotent request, retrying once', { e });
+      return await _request(options);
+    }
   }
 
   let retries = 0;
@@ -376,6 +394,7 @@ async function _request(options: RequestOptions): Promise<unknown> {
     // consumed by requestWithRetry, excluded from raw fetch options
     cached_endpoints,
     ttl,
+    idempotent,
     logger,
     ...fetchOptions
   } = options;
@@ -383,6 +402,7 @@ async function _request(options: RequestOptions): Promise<unknown> {
   // Intentionally unused vars (extracted from fetchOptions)
   void cached_endpoints;
   void ttl;
+  void idempotent;
   void logger;
 
   const requestFetch = fetchImpl ?? fetch;

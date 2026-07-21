@@ -321,7 +321,9 @@ describe('batchVerifyUnblindedSignatureBls', () => {
         bls12_381.pairing(Y1, K2),
       ),
     ).toBe(false);
-  });
+    // ~700ms of pairings in isolation; headroom for wall-clock dilation under the
+    // parallel multi-project run with coverage instrumentation.
+  }, 10000);
 
   test('empty batch is vacuously true', () => {
     expect(batchVerifyUnblindedSignatureBls([])).toBe(true);
@@ -480,5 +482,7 @@ describe('deriveBatchWeights (Fiat-Shamir transcript)', () => {
       expect(batchVerifyUnblindedSignatureBls(good)).toBe(true);
       expect(batchVerifyUnblindedSignatureBls(bad)).toBe(false);
     }
-  });
+    // ~700ms of pairings in isolation; headroom for wall-clock dilation under the
+    // parallel multi-project run with coverage instrumentation.
+  }, 10000);
 });

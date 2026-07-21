@@ -1,7 +1,7 @@
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect } from 'vitest';
 
-import { Wallet, CheckStateEnum, Amount } from '../../src';
+import { Wallet, CheckStateEnum, Amount, hashToCurve } from '../../src';
 
 import { mint, unit, mintUrl, useTestServer } from './_setup';
 
@@ -59,6 +59,38 @@ describe('checkProofsStates', () => {
 
     const result = await wallet.checkProofsStates(proofs);
     expect(result[0].witness).toBeNull();
+  });
+});
+
+describe('checkProofsStates batching', () => {
+  test('pools large proof sets into 500-Y batches, preserving order', async () => {
+    const requestSizes: number[] = [];
+    server.use(
+      http.post(mintUrl + '/v1/checkstate', async ({ request }) => {
+        const body = (await request.json()) as { Ys: string[] };
+        requestSizes.push(body.Ys.length);
+        return HttpResponse.json({
+          states: body.Ys.map((Y) => ({ Y, state: CheckStateEnum.UNSPENT, witness: null })),
+        });
+      }),
+    );
+    const many = Array.from({ length: 1250 }, (_, i) => ({
+      id: '00bd033559de27d0',
+      secret: `probe-secret-${i}`,
+    }));
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const states = await wallet.checkProofsStates(many);
+
+    // three batches (concurrent, so arrival order may vary)
+    expect(requestSizes.sort((a, b) => b - a)).toEqual([500, 500, 250]);
+    expect(states).toHaveLength(1250);
+    // states come back in input order regardless of batch completion order
+    const enc = new TextEncoder();
+    many.forEach((p, i) => {
+      expect(states[i].Y).toBe(hashToCurve(enc.encode(p.secret)).toHex(true));
+    });
   });
 });
 

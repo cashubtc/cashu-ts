@@ -19,3 +19,10 @@ export const ABSOLUTE_MAX_BATCH_SIZE = 100;
  * (split/map/join) on a multi-megabyte string, which a malicious mint could use to exhaust memory.
  */
 export const MAX_METHOD_LENGTH = 255;
+
+/**
+ * Max u64 (2^64 - 1): the ceiling every Amount is held to. Enforced in the Amount constructor, so
+ * arithmetic results are bounded too; muldiv helpers keep their wide intermediate in bigint and
+ * only construct the divided-down result.
+ */
+export const U64_MAX = 2n ** 64n - 1n;

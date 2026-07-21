@@ -54,6 +54,7 @@ import { CheckStateEnum, type ProofState } from '../model/types/NUT07';
 import { type BatchMintRequest } from '../model/types/NUT29';
 import type { Proof, ProofLike } from '../model/types/proof';
 import type { Token } from '../model/types/token';
+import { BATCH_POOL_SIZE, runPool } from '../transport';
 import type { RequestFetch, RequestFn } from '../transport';
 import {
   getDecodedToken,
@@ -66,7 +67,7 @@ import {
   ABSOLUTE_MAX_BATCH_SIZE,
 } from '../utils';
 
-import { getKeepAmounts, stringifyOutputTypeForLog } from './_internal';
+import { ceilLog2, getKeepAmounts, stringifyOutputTypeForLog } from './_internal';
 import {
   type CounterSource,
   EphemeralCounterSource,
@@ -75,7 +76,7 @@ import {
 } from './CounterSource';
 import { KeyChain } from './KeyChain';
 import { type Keyset } from './Keyset';
-import { selectProofsRGLI, type SelectProofs } from './SelectProofs';
+import { selectProofsRotating, type SelectProofs } from './SelectProofs';
 import {
   type MeltPreview,
   type OutputType,
@@ -91,6 +92,8 @@ import {
   type MeltProofsResponse,
   type SendResponse,
   type RestoreConfig,
+  type BatchRestoreConfig,
+  type RestoreAllConfig,
   type SecretsPolicy,
   type SwapPreview,
   type MintPreview,
@@ -197,7 +200,7 @@ class Wallet {
    * @param options.counterInit Seed values for the built-in EphemeralCounterSource. Ignored if
    *   counterSource is also provided.
    * @param options.denominationTarget Target proofs per denomination, default 3.
-   * @param options.selectProofs Custom proof selection function.
+   * @param options.selectProofs Custom proof selection function. Default: selectProofsRotating.
    * @param options.outputDataCreator Custom OutputDataCreator implementation. The canonical and
    *   maintained implementation is the default Noble Curves based behavior exposed by
    *   `OutputData.create*()`. Custom creators are an escape hatch for runtime-specific needs, and
@@ -236,7 +239,7 @@ class Wallet {
     this.ops = new WalletOps(this);
     this.on = new WalletEvents(this);
     this._logger = options?.logger ?? NULL_LOGGER; // init early (seed can throw)
-    this._selectProofs = options?.selectProofs ?? selectProofsRGLI; // vital
+    this._selectProofs = options?.selectProofs ?? selectProofsRotating; // vital
     this._outputDataCreator = options?.outputDataCreator ?? new DefaultOutputDataCreator();
     this.mint =
       typeof mint === 'string'
@@ -1405,7 +1408,9 @@ class Wallet {
    *
    * @remarks
    * Uses an adapted Randomized Greedy with Local Improvement (RGLI) algorithm, which has a time
-   * complexity O(n log n) and space complexity O(n).
+   * complexity O(n log n) and space complexity O(n). The default selector prefers stale keysets
+   * (base64, older versions, inactive) so balances rotate onto the current keyset; pass
+   * `selectProofs: selectProofsRGLI` in the Wallet options for keyset-neutral selection.
    * @param proofs Array of proofs available to select from. Accepts {@link ProofLike} so proofs
    *   loaded from storage (with `amount: number`) work without manual conversion.
    * @param amountToSend The target amount to send.
@@ -1610,39 +1615,89 @@ class Wallet {
   /**
    * Restores batches of deterministic proofs until no more signatures are returned from the mint.
    *
-   * @param [gapLimit=300] The amount of empty counters that should be returned before restoring
-   *   ends (defaults to 300). Default is `300`
-   * @param [batchSize=300] The amount of proofs that should be restored at a time (defaults to
-   *   300). Default is `300`
-   * @param [counter=0] The counter that should be used as a starting point (defaults to 0). Default
-   *   is `0`
-   * @param [keysetId] Which keysetId to use for the restoration. If none is passed the instance's
-   *   default one will be used.
+   * @remarks
+   * Batches are fetched through a bounded request pool and every batch in flight is processed, so
+   * the scan can probe (and recover proofs) up to `(BATCH_POOL_SIZE - 1) * batchSize` counters past
+   * the gap limit before it stops. `lastCounterWithSignature` always reflects all signatures found,
+   * including those of proofs removed by `filterSpent`.
+   * @param [config.gapLimit=300] Consecutive empty counters that end the scan. A floor, not an
+   *   exact ceiling: batches already in flight past it are still processed. `Infinity` disables the
+   *   gap rule (use with `maxCounter`). Default is `300`
+   * @param [config.maxCounter] Inclusive scan ceiling; no counter above it is probed. Default is
+   *   unbounded.
+   * @param [config.batchSize=500] Counters per restore request. Default is `500`
+   * @param [config.counter=0] Starting counter. Default is `0`
+   * @param [config.keysetId] Keyset to restore; defaults to the wallet's.
+   * @param [config.filterSpent=true] Drop spent proofs (NUT-07) before returning. Default is `true`
    */
   async batchRestore(
-    gapLimit = 300,
-    batchSize = 300,
-    counter = 0,
-    keysetId?: string,
+    config?: BatchRestoreConfig,
   ): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
+    const { gapLimit = 300, batchSize = 500, keysetId, filterSpent = true } = config ?? {};
+    let counter = config?.counter ?? 0;
+    const bound = config?.maxCounter ?? Number.MAX_SAFE_INTEGER;
     const requiredEmptyBatches = Math.ceil(gapLimit / batchSize);
-    const restoredProofs: Proof[] = [];
+    let restoredProofs: Proof[] = [];
 
     let lastCounterWithSignature: undefined | number;
     let emptyBatchesFound = 0;
 
-    while (emptyBatchesFound < requiredEmptyBatches) {
-      const restoreRes = await this.restore(counter, batchSize, { keysetId });
-      if (restoreRes.proofs.length > 0) {
-        emptyBatchesFound = 0;
-        restoredProofs.push(...restoreRes.proofs);
-        lastCounterWithSignature = restoreRes.lastCounterWithSignature;
-      } else {
-        emptyBatchesFound++;
+    // Batch positions are fixed, so each wave speculatively fetches the next BATCH_POOL_SIZE
+    // batches concurrently; only the stop decision is data-dependent. Results are consumed in
+    // counter order, and a non-empty batch past the gap limit resets the gap count: the reveal
+    // is already spent at request time, so proofs in flight are recovered rather than dropped.
+    while (emptyBatchesFound < requiredEmptyBatches && counter <= bound) {
+      const starts = Array.from(
+        { length: BATCH_POOL_SIZE },
+        (_, i) => counter + i * batchSize,
+      ).filter((s) => s <= bound);
+      const wave = await runPool(starts, BATCH_POOL_SIZE, (start) =>
+        this.restore(start, Math.min(batchSize, bound - start + 1), { keysetId }),
+      );
+      for (const restoreRes of wave) {
+        if (restoreRes.proofs.length > 0) {
+          emptyBatchesFound = 0;
+          restoredProofs.push(...restoreRes.proofs);
+          lastCounterWithSignature = restoreRes.lastCounterWithSignature;
+        } else {
+          emptyBatchesFound++;
+        }
       }
-      counter += batchSize;
+      counter += batchSize * BATCH_POOL_SIZE;
+    }
+
+    if (filterSpent && restoredProofs.length > 0) {
+      const states = await this.checkProofsStates(restoredProofs);
+      restoredProofs = restoredProofs.filter((_, i) => states[i].state !== CheckStateEnum.SPENT);
     }
     return { proofs: restoredProofs, lastCounterWithSignature };
+  }
+
+  /**
+   * Restores deterministic proofs for every keyset in the wallet's unit.
+   *
+   * @remarks
+   * Runs `batchRestore` per keyset, inactive keysets included, and merges the results. After
+   * restoring, advance each keyset's counter from `lastCounters`.
+   */
+  async restoreAll(
+    config?: RestoreAllConfig,
+  ): Promise<{ proofs: Proof[]; lastCounters: Record<string, number> }> {
+    const keysetIds = this._keyChain
+      .getAllKeysetIds()
+      .filter((id) => this._keyChain.getKeyset(id).unit === this.unit);
+    let proofs: Proof[] = [];
+    const lastCounters: Record<string, number> = {};
+    for (const keysetId of keysetIds) {
+      const res = await this.batchRestore({ ...config, keysetId });
+      // concat, not push-spread: a keyset's result is unbounded and spread
+      // arguments hit V8's call-size limit around ~65k elements.
+      proofs = proofs.concat(res.proofs);
+      if (res.lastCounterWithSignature !== undefined) {
+        lastCounters[keysetId] = res.lastCounterWithSignature;
+      }
+    }
+    return { proofs, lastCounters };
   }
 
   /**
@@ -1918,6 +1973,67 @@ class Wallet {
     return this.mint.checkMintQuoteOnchain(quote);
   }
 
+  /**
+   * Checks existing mint quotes for any payment method in one batched request.
+   *
+   * @remarks
+   * Generic method for checking multiple mint quote statuses. An optional `normalize` callback can
+   * be used to coerce method-specific response fields. Mints that predate this endpoint return an
+   * error; callers can fall back to `checkMintQuote()` per quote id when needed.
+   *
+   * For first-class methods, prefer the typed helpers: `checkMintQuoteBatchBolt11()`,
+   * `checkMintQuoteBatchBolt12()`.
+   * @param method The payment method (e.g., 'bolt11', 'bolt12', 'bacs', 'swift').
+   * @param quotes Quote IDs or quote objects (each object must have a `quote` field).
+   * @param options.normalize Optional callback to normalize method-specific response fields.
+   * @returns Mint quote responses in request order.
+   * @experimental only supported by CDK mint >= 0.16.0
+   */
+  async checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(
+    method: string,
+    quotes: Array<string | Pick<TRes, 'quote'>>,
+    options?: { normalize?: (raw: Record<string, unknown>) => TRes },
+  ): Promise<TRes[]> {
+    const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
+    return this.mint.checkMintQuoteBatch<TRes>(method, quoteIds, {
+      normalize: options?.normalize,
+    });
+  }
+
+  /**
+   * Checks existing BOLT11 mint quotes in one batched request.
+   *
+   * @remarks
+   * Mints that predate this endpoint return an error; callers can fall back to
+   * `checkMintQuoteBolt11()` per quote id when needed.
+   * @param quotes Quote IDs or quote objects.
+   * @returns Updated BOLT11 mint quotes in request order.
+   * @experimental only supported by CDK mint >= 0.16.0
+   */
+  async checkMintQuoteBatchBolt11(
+    quotes: Array<string | MintQuoteBolt11Response>,
+  ): Promise<MintQuoteBolt11Response[]> {
+    const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
+    return this.mint.checkMintQuoteBatchBolt11(quoteIds);
+  }
+
+  /**
+   * Checks existing BOLT12 mint quotes in one batched request.
+   *
+   * @remarks
+   * Mints that predate this endpoint return an error; callers can fall back to
+   * `checkMintQuoteBolt12()` per quote id when needed.
+   * @param quotes Quote IDs or quote objects.
+   * @returns Updated BOLT12 mint quotes in request order.
+   * @experimental only supported by CDK mint >= 0.16.0
+   */
+  async checkMintQuoteBatchBolt12(
+    quotes: Array<string | MintQuoteBolt12Response>,
+  ): Promise<MintQuoteBolt12Response[]> {
+    const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
+    return this.mint.checkMintQuoteBatchBolt12(quoteIds);
+  }
+
   // -----------------------------------------------------------------
   // Section: Mint Proofs
   // -----------------------------------------------------------------
@@ -2089,7 +2205,7 @@ class Wallet {
     amount: AmountLike,
     quote: MintQuoteBolt12Response,
     privkey: string,
-    config?: { keysetId?: string },
+    config?: Omit<MintProofsConfig, 'privkey'>,
     outputType?: OutputType,
   ): Promise<Proof[]> {
     this.requireSupport('mint', 'bolt12');
@@ -2122,7 +2238,7 @@ class Wallet {
     amount: AmountLike,
     quote: MintQuoteOnchainResponse,
     privkey: string,
-    config?: { keysetId?: string },
+    config?: Omit<MintProofsConfig, 'privkey'>,
     outputType?: OutputType,
   ): Promise<Proof[]> {
     this.requireSupport('mint', 'onchain');
@@ -2892,9 +3008,10 @@ class Wallet {
         { keyset: keyset.id },
       );
       keyset = this.getOutputKeyset(keysetId);
-      let count = Math.ceil(Math.log2(feeReserve.toNumberUnsafe())) || 1;
-      if (count < 0) count = 0; // Prevents: -Infinity
-      const denominations: number[] = count ? new Array<number>(count).fill(0) : [];
+      // NUT-08 blank outputs: ceil(log2(feeReserve)) blinded messages, at least one.
+      // Computed on bigint so a u64-scale reserve cannot lose precision to a float.
+      const count = Math.max(ceilLog2(feeReserve.toBigInt()), 1);
+      const denominations: number[] = new Array<number>(count).fill(0);
       this._logger.debug('Creating NUT-08 blanks for fee reserve', {
         feeReserve: feeReserve,
         denominations,
@@ -3053,25 +3170,32 @@ class Wallet {
         ? hashToCurveBls(enc.encode(p.secret)).toHex(true)
         : hashToCurve(enc.encode(p.secret)).toHex(true),
     );
+    // Nutshell (mint_max_request_length) and CDK (max_inputs) both cap requests at 1000 items
+    // by default; half that leaves headroom for stricter operator configs.
     // TODO: Replace this with a value from the info endpoint of the mint eventually
-    const BATCH_SIZE = 100;
-    const states: ProofState[] = [];
+    const BATCH_SIZE = 500;
+    const slices: string[][] = [];
     for (let i = 0; i < Ys.length; i += BATCH_SIZE) {
-      const YsSlice = Ys.slice(i, i + BATCH_SIZE);
+      slices.push(Ys.slice(i, i + BATCH_SIZE));
+    }
+    // Slices are independent, so run them through the bounded pool; results keep slice order.
+    const batches = await runPool(slices, BATCH_POOL_SIZE, async (YsSlice) => {
       const { states: batchStates } = await this.mint.check({
         Ys: YsSlice,
       });
-      const stateMap: { [y: string]: ProofState } = {};
+      // don't trust the mint's ordering: map results onto the request slice so order is
+      // guaranteed and any omitted Y fails loudly instead of misaligning states
+      const proofStatesByY: { [y: string]: ProofState } = {};
       batchStates.forEach((s) => {
-        stateMap[s.Y] = s;
+        proofStatesByY[s.Y] = s;
       });
-      for (let j = 0; j < YsSlice.length; j++) {
-        const state = stateMap[YsSlice[j]];
-        this.failIfNullish(state, 'Could not find state for proof with Y: ' + YsSlice[j]);
-        states.push(state);
-      }
-    }
-    return states;
+      return YsSlice.map((y) => {
+        const state = proofStatesByY[y];
+        this.failIfNullish(state, 'Could not find state for proof with Y: ' + y);
+        return state;
+      });
+    });
+    return batches.flat();
   }
 
   /**

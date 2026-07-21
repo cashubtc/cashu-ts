@@ -7,6 +7,7 @@ on:
 
 jobs:
   update-docker:
+    if: github.repository == 'cashubtc/cashu-ts'
     permissions:
       contents: write # Needed to push branches and commits
       pull-requests: write # Needed to create PRs
@@ -15,7 +16,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '22.x'
 

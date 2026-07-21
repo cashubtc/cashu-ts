@@ -2,8 +2,33 @@ import { test, describe, expect } from 'vitest';
 
 import { Amount, type Keys, type Proof, type OutputType } from '../../src';
 import { OutputData } from '../../src/model/OutputData';
-import { getKeepAmounts, stringifyOutputTypeForLog } from '../../src/wallet/_internal';
+import { ceilLog2, getKeepAmounts, stringifyOutputTypeForLog } from '../../src/wallet/_internal';
 import { PUBKEYS } from '../consts';
+
+describe('ceilLog2', () => {
+  test('matches Math.ceil(Math.log2(n)) for small values', () => {
+    for (const [n, want] of [
+      [1n, 0],
+      [2n, 1],
+      [3n, 2],
+      [4n, 2],
+      [5n, 3],
+      [8n, 3],
+      [9n, 4],
+      [16n, 4],
+    ] as const) {
+      expect(ceilLog2(n)).toBe(want);
+    }
+  });
+
+  test('is exact above Number.MAX_SAFE_INTEGER (float log2 would truncate)', () => {
+    // 2^53 is a power of two; 2^53 + 1 needs one more bit. The old
+    // toNumberUnsafe path truncated 2^53+1 back to 2^53 and returned 53.
+    expect(ceilLog2(2n ** 53n)).toBe(53);
+    expect(ceilLog2(2n ** 53n + 1n)).toBe(54);
+    expect(ceilLog2(2n ** 64n)).toBe(64);
+  });
+});
 
 describe('getKeepAmounts', () => {
   const amountsWeHave = [1, 2, 4, 4, 4, 8];

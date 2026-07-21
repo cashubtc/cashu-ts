@@ -108,6 +108,37 @@ If you were already passing full `Proof` objects (the normal case — `wallet.ch
 
 ---
 
+## `batchRestore` takes an options object and filters spent proofs
+
+`Wallet.batchRestore(gapLimit?, batchSize?, counter?, keysetId?)` is now `batchRestore(config?: BatchRestoreConfig)`. Behavior changes ride along:
+
+- Batches are fetched through a bounded request pool (4 in flight), cutting restore wall-clock to roughly a quarter; the request count is nearly unchanged.
+- `batchSize` defaults to 500 (was 300), matching the request size `checkProofsStates` already uses against reference mint caps.
+- Spent proofs are dropped by default via a NUT-07 state check before returning; pending proofs are kept. Pass `filterSpent: false` for the old raw output. `lastCounterWithSignature` always reflects all found signatures, so counter advancement is unaffected by filtering.
+- `gapLimit` is now a floor rather than an exact ceiling: batches already in flight when the gap closes are still processed, so proofs sitting shortly past the gap limit may still be recovered.
+- New `maxCounter` option: an inclusive scan ceiling, nothing above it is probed. Combine with `gapLimit: Infinity` to fetch a known counter range wall to wall.
+
+### Migration
+
+```ts
+// Before
+const { proofs } = await wallet.batchRestore(300, 100, 0, keysetId);
+// ...followed by a manual checkProofsStates to drop spent proofs
+
+// After (spent filtering is built in)
+const { proofs } = await wallet.batchRestore({
+  gapLimit: 300,
+  batchSize: 100,
+  counter: 0,
+  keysetId,
+});
+
+// Bare calls need no change
+await wallet.batchRestore();
+```
+
+---
+
 ## `verifyDleqIfPresent` removed; `hasValidDleq` default flipped to spec semantics
 
 `verifyDleqIfPresent` is removed. Its NUT-12 "verify-if-present" semantic is now the default behavior of `hasValidDleq`, which gains an optional `{ require?: boolean }` argument for the stricter opt-in policy.
@@ -240,6 +271,24 @@ asP2PK({ kind: 'HTLC', data: h, pubkeys: [a] });
 ```
 
 `PaymentRequest.toP2PKOptions()` already returns the new shape, so pass its result straight to `asP2PK()`.
+
+---
+
+## P2PK lock pubkeys must be 33-byte compressed and on-curve
+
+Authoring a lock (`P2PKBuilder.addLockPubkey`/`addRefundPubkey`, or raw `P2PKOptions` passed to `asP2PK()` and friends) now requires 33-byte compressed hex keys (66 chars, `02`/`03` prefix) that decompress to a valid secp256k1 point, per NUT-11. v4 accepted 32-byte x-only input and silently prefixed `02`; because a SHA-256 hashlock is also 64-hex, that leniency could turn a misplaced hashlock (or corrupt key) into a lock nobody can spend. With the strict rule, 64-hex input is only ever a hashlock and pubkey mistakes fail fast.
+
+The rule applies everywhere a P2PK pubkey is read, including parsing foreign input: `PaymentRequest.toP2PKOptions()` and proof verification (`verifyP2PKSpendingConditions` and friends) throw on a non-compliant key instead of repairing it. Paying a request creates new outputs under its lock, so a lifted key risks burning the payer's funds; and a proof already locked with such a key is rejected by spec-conformant mints anyway (CDK refuses the swap), so failing at parse names the broken proof rather than submitting a doomed spend. If you know such a key is a genuine x-only pubkey, prepend `'02'` and build the `P2PKOptions` yourself.
+
+### Migration
+
+```ts
+// Before (x-only, eg a Nostr key)
+new P2PKBuilder().addLockPubkey(nostrPubkeyHex);
+
+// After: prepend the even-y prefix (the same rule NIP-61 nutzaps use)
+new P2PKBuilder().addLockPubkey('02' + nostrPubkeyHex);
+```
 
 ---
 

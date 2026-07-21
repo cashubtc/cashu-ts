@@ -1,3 +1,5 @@
+import { U64_MAX } from '../utils/limits';
+
 import { CTSError } from './Errors';
 
 export class AmountError extends CTSError {
@@ -30,6 +32,12 @@ export class Amount {
   private readonly value: bigint;
 
   private constructor(value: bigint) {
+    // Single choke point for the u64 ceiling: every Amount, including arithmetic results, is
+    // <= u64 max. Muldiv helpers keep their wide intermediate in bigint and only construct the
+    // divided-down result, so a valid `a*n/d` still works while an out-of-range result throws.
+    if (value > U64_MAX) {
+      throw new AmountError(`Amount exceeds u64 max, got ${value}`);
+    }
     this.value = value;
     Object.freeze(this);
   }
@@ -41,8 +49,8 @@ export class Amount {
   /**
    * Parse/normalize supported inputs into an Amount.
    *
-   * @throws If input is negative, or if a `number` input exceeds the safe integer limit, or if
-   *   input is not a finite integer.
+   * @throws If input is negative, exceeds the u64 range, is a non-finite/non-integer `number`, or
+   *   is above the safe integer limit for a `number`.
    */
   static from(input: AmountLike): Amount {
     if (input instanceof Amount) return input;
@@ -51,7 +59,7 @@ export class Amount {
       if (input < 0n) {
         throw new AmountError(`Amount must be >= 0, got ${input}`);
       }
-      return new Amount(input);
+      return new Amount(input); // constructor enforces the u64 ceiling
     }
 
     if (typeof input === 'number') {
@@ -69,13 +77,19 @@ export class Amount {
     }
 
     if (typeof input === 'string') {
+      // Length-gate before regex/BigInt: u64 max is 20 digits, so a longer amount string is
+      // out of range by definition. Refuse it up front rather than run O(n) parsing on unbounded
+      // input.
+      if (input.length > 20) {
+        throw new AmountError(`Amount exceeds u64 max: "${input.slice(0, 20)}..."`);
+      }
       // Decimal-only canonical form
       if (!/^(0|[1-9]\d*)$/.test(input)) {
         throw new AmountError(
           `Invalid amount string "${input}". Expected non-negative decimal integer.`,
         );
       }
-      return new Amount(BigInt(input));
+      return new Amount(BigInt(input)); // constructor enforces the u64 ceiling
     }
 
     // Unknown type
@@ -204,10 +218,10 @@ export class Amount {
         `ceilPercent: denominator must be a positive integer, got ${denominator}`,
       );
     }
-    // ceil(a * n / d) = floor((a * n + d - 1) / d)
-    return this.multiplyBy(numerator)
-      .add(denominator - 1)
-      .divideBy(denominator);
+    // ceil(a * n / d) = floor((a * n + d - 1) / d); the a*n intermediate stays in bigint
+    const num = BigInt(numerator);
+    const den = BigInt(denominator);
+    return new Amount((this.value * num + (den - 1n)) / den);
   }
 
   /**
@@ -232,7 +246,10 @@ export class Amount {
         `floorPercent: denominator must be a positive integer, got ${denominator}`,
       );
     }
-    return this.multiplyBy(numerator).divideBy(denominator);
+    // floor(a * n / d); the a*n intermediate stays in bigint
+    const num = BigInt(numerator);
+    const den = BigInt(denominator);
+    return new Amount((this.value * num) / den);
   }
 
   /**
@@ -291,14 +308,14 @@ export class Amount {
    * @throws If numerator or denominator are zero or negative.
    */
   scaledBy(numerator: AmountLike, denominator: AmountLike): Amount {
-    const n = Amount.from(numerator);
-    const d = Amount.from(denominator);
-    if (n.isZero()) return Amount.zero();
-    if (d.isZero()) {
+    const n = Amount.from(numerator).value;
+    const d = Amount.from(denominator).value;
+    if (n === 0n) return Amount.zero();
+    if (d === 0n) {
       throw new AmountError('scaledBy: denominator must be > 0');
     }
-    // round(a × n / d) = floor((2 × a × n + d) / (2 × d))
-    return this.multiplyBy(n).multiplyBy(2).add(d).divideBy(d.multiplyBy(2));
+    // round(a × n / d) = floor((2 × a × n + d) / (2 × d)); the 2*a*n intermediate stays in bigint
+    return new Amount((2n * this.value * n + d) / (2n * d));
   }
 
   // -----------------------------------------------------------------

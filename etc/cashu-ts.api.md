@@ -215,6 +215,16 @@ export type BatchMintRequest = {
 };
 
 // @public
+export type BatchRestoreConfig = {
+    gapLimit?: number;
+    maxCounter?: number;
+    batchSize?: number;
+    counter?: number;
+    keysetId?: string;
+    filterSpent?: boolean;
+};
+
+// @public
 export function batchVerifyUnblindedSignatureBls(items: Array<{
     K2: G2Point;
     C: G1Point;
@@ -992,6 +1002,12 @@ export class Mint {
         customRequest?: RequestFn;
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
+    checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(method: string, quotes: string[], options?: {
+        customRequest?: RequestFn;
+        normalize?: (raw: Record<string, unknown>) => TRes;
+    }): Promise<TRes[]>;
+    checkMintQuoteBatchBolt11(quotes: string[], customRequest?: RequestFn): Promise<MintQuoteBolt11Response[]>;
+    checkMintQuoteBatchBolt12(quotes: string[], customRequest?: RequestFn): Promise<MintQuoteBolt12Response[]>;
     checkMintQuoteBolt11(quote: string, customRequest?: RequestFn): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt12(quote: string, customRequest?: RequestFn): Promise<MintQuoteBolt12Response>;
     checkMintQuoteOnchain(quote: string, customRequest?: RequestFn): Promise<MintQuoteOnchainResponse>;
@@ -1088,10 +1104,9 @@ export type MintContactInfo = {
     info: string;
 };
 
-// @public (undocumented)
+// @public
 export class MintInfo {
     constructor(info: GetInfoResponse, logger?: Logger);
-    // (undocumented)
     get cache(): GetInfoResponse;
     // (undocumented)
     get contact(): MintContactInfo[];
@@ -1099,6 +1114,7 @@ export class MintInfo {
     get description(): string | undefined;
     // (undocumented)
     get description_long(): string | undefined;
+    getMintMeltMethod(op: 'mint' | 'melt', method: string, unit: string): SwapMethod | undefined;
     // (undocumented)
     isSupported(num: 4 | 5): {
         disabled: boolean;
@@ -1859,6 +1875,7 @@ export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
 // @public (undocumented)
 export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'> & Partial<Nut19Policy> & {
     requestTimeout?: number;
+    idempotent?: boolean;
     onResponseMeta?: (meta: ResponseMeta) => void;
     fetch?: RequestFetch;
 };
@@ -1872,6 +1889,9 @@ export type ResponseMeta = {
     rateLimitPolicy?: string;
     headers: Headers;
 };
+
+// @public
+export type RestoreAllConfig = Omit<BatchRestoreConfig, 'counter' | 'keysetId'>;
 
 // @public (undocumented)
 export type RestoreConfig = {
@@ -1917,6 +1937,9 @@ export type SelectProofs = (proofs: ProofLike[], amountToSelect: AmountLike, key
 
 // @public (undocumented)
 export function selectProofsRGLI(proofs: ProofLike[], amountToSelect: AmountLike, keyChain: KeyChain, includeFees?: boolean, exactMatch?: boolean, _logger?: Logger): SendResponse;
+
+// @public
+export function selectProofsRotating(proofs: ProofLike[], amountToSelect: AmountLike, keyChain: KeyChain, includeFees?: boolean, exactMatch?: boolean, _logger?: Logger): SendResponse;
 
 // @public
 export class SendBuilder {
@@ -2247,7 +2270,7 @@ export class Wallet {
         requestFetch?: RequestFetch;
         logger?: Logger;
     });
-    batchRestore(gapLimit?: number, batchSize?: number, counter?: number, keysetId?: string): Promise<{
+    batchRestore(config?: BatchRestoreConfig): Promise<{
         proofs: Proof[];
         lastCounterWithSignature?: number;
     }>;
@@ -2261,6 +2284,11 @@ export class Wallet {
     checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, quote: string | Pick<TRes, 'quote'>, options?: {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
+    checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, quotes: Array<string | Pick<TRes, 'quote'>>, options?: {
+        normalize?: (raw: Record<string, unknown>) => TRes;
+    }): Promise<TRes[]>;
+    checkMintQuoteBatchBolt11(quotes: Array<string | MintQuoteBolt11Response>): Promise<MintQuoteBolt11Response[]>;
+    checkMintQuoteBatchBolt12(quotes: Array<string | MintQuoteBolt12Response>): Promise<MintQuoteBolt12Response[]>;
     checkMintQuoteBolt11(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt12(quote: string): Promise<MintQuoteBolt12Response>;
     checkMintQuoteOnchain(quote: string): Promise<MintQuoteOnchainResponse>;
@@ -2313,12 +2341,8 @@ export class Wallet {
     readonly mint: Mint;
     mintProofs<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>>(method: string, amount: AmountLike, quote: TQuote, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
     mintProofsBolt11(amount: AmountLike, quote: string | MintQuoteBolt11Response, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
-    mintProofsBolt12(amount: AmountLike, quote: MintQuoteBolt12Response, privkey: string, config?: {
-        keysetId?: string;
-    }, outputType?: OutputType): Promise<Proof[]>;
-    mintProofsOnchain(amount: AmountLike, quote: MintQuoteOnchainResponse, privkey: string, config?: {
-        keysetId?: string;
-    }, outputType?: OutputType): Promise<Proof[]>;
+    mintProofsBolt12(amount: AmountLike, quote: MintQuoteBolt12Response, privkey: string, config?: Omit<MintProofsConfig, 'privkey'>, outputType?: OutputType): Promise<Proof[]>;
+    mintProofsOnchain(amount: AmountLike, quote: MintQuoteOnchainResponse, privkey: string, config?: Omit<MintProofsConfig, 'privkey'>, outputType?: OutputType): Promise<Proof[]>;
     readonly on: WalletEvents;
     readonly ops: WalletOps;
     prepareBatchMint<TQuote extends Pick<MintQuoteBaseResponse, 'quote' | 'pubkey'>>(method: string, entries: Array<{
@@ -2333,6 +2357,10 @@ export class Wallet {
     restore(start: number, count: number, config?: RestoreConfig): Promise<{
         proofs: Proof[];
         lastCounterWithSignature?: number;
+    }>;
+    restoreAll(config?: RestoreAllConfig): Promise<{
+        proofs: Proof[];
+        lastCounters: Record<string, number>;
     }>;
     selectProofsToSend(proofs: ProofLike[], amountToSend: AmountLike, includeFees?: boolean, exactMatch?: boolean): SendResponse;
     send(amount: AmountLike, proofs: ProofLike[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SendResponse>;

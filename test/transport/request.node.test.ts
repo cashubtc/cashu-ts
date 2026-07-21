@@ -357,7 +357,7 @@ describe('requests', { timeout: 7500 }, () => {
     afterEach(() => {
       vi.restoreAllMocks();
     });
-    test('does not retry for non-cached endpoints', async () => {
+    test('does not enter the NUT-19 backoff loop for non-cached endpoints', async () => {
       const endpoint = mintUrl + '/v1/mint/quote';
 
       let requestCount = 0;
@@ -371,11 +371,12 @@ describe('requests', { timeout: 7500 }, () => {
       await expect(
         request({
           endpoint,
-          // no cached_endpoints specified - should not retry
+          // no cached_endpoints specified - should not enter the backoff loop
         }),
       ).rejects.toThrow(NetworkError);
 
-      expect(requestCount).toBe(1);
+      // one attempt plus the single idempotent GET retry, no backoff beyond that
+      expect(requestCount).toBe(2);
     });
 
     test('handles relative endpoints with normal request behavior', async () => {
@@ -457,7 +458,8 @@ describe('requests', { timeout: 7500 }, () => {
         .mockRejectedValue(new TypeError('Failed to parse URL from v1/keys'));
 
       await expect(request({ endpoint, ...retryPolicy })).rejects.toThrow(NetworkError);
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      // no NUT-19 backoff; just the single idempotent GET retry
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
     test('retries cached endpoints on NetworkError', async () => {
@@ -895,7 +897,8 @@ describe('requests', { timeout: 7500 }, () => {
 
       let thrown: unknown;
       try {
-        await request({ endpoint, signal: ac.signal, requestTimeout: 10 });
+        // idempotent off: a retry would race the caller abort and blur which error surfaces
+        await request({ endpoint, signal: ac.signal, requestTimeout: 10, idempotent: false });
       } catch (err) {
         thrown = err;
       } finally {
@@ -943,7 +946,8 @@ describe('requests', { timeout: 7500 }, () => {
         }),
       ).rejects.toThrow(NetworkError);
 
-      expect(getRequestCount).toBe(1);
+      // the GET misses the POST-only cache entry: one attempt plus the idempotent retry
+      expect(getRequestCount).toBe(2);
       expect(postRequestCount).toBeGreaterThan(1);
     });
 
@@ -1038,6 +1042,82 @@ describe('requests', { timeout: 7500 }, () => {
         vi.useRealTimers();
       }
     });
+  });
+});
+
+describe('idempotent single retry (non-cached endpoints)', () => {
+  test('GET retries once on NetworkError and succeeds', async () => {
+    const endpoint = mintUrl + '/v1/keys';
+    let requestCount = 0;
+    server.use(
+      http.get(endpoint, () => {
+        requestCount++;
+        return requestCount === 1 ? Response.error() : HttpResponse.json({ ok: true });
+      }),
+    );
+    const data = await request<{ ok: boolean }>({ endpoint });
+    expect(data.ok).toBe(true);
+    expect(requestCount).toBe(2);
+  });
+
+  test('GET retries only once', async () => {
+    const endpoint = mintUrl + '/v1/keys';
+    let requestCount = 0;
+    server.use(
+      http.get(endpoint, () => {
+        requestCount++;
+        return Response.error();
+      }),
+    );
+    await expect(request({ endpoint })).rejects.toThrow(NetworkError);
+    expect(requestCount).toBe(2);
+  });
+
+  test('POST does not retry by default', async () => {
+    const endpoint = mintUrl + '/v1/swap';
+    let requestCount = 0;
+    server.use(
+      http.post(endpoint, () => {
+        requestCount++;
+        return Response.error();
+      }),
+    );
+    await expect(request({ endpoint, method: 'POST', requestBody: {} })).rejects.toThrow(
+      NetworkError,
+    );
+    expect(requestCount).toBe(1);
+  });
+
+  test('an idempotent POST retries once on NetworkError', async () => {
+    const endpoint = mintUrl + '/v1/restore';
+    let requestCount = 0;
+    server.use(
+      http.post(endpoint, () => {
+        requestCount++;
+        return requestCount === 1 ? Response.error() : HttpResponse.json({ ok: true });
+      }),
+    );
+    const data = await request<{ ok: boolean }>({
+      endpoint,
+      method: 'POST',
+      requestBody: {},
+      idempotent: true,
+    });
+    expect(data.ok).toBe(true);
+    expect(requestCount).toBe(2);
+  });
+
+  test('HTTP errors are not retried, even when idempotent', async () => {
+    const endpoint = mintUrl + '/v1/keys';
+    let requestCount = 0;
+    server.use(
+      http.get(endpoint, () => {
+        requestCount++;
+        return new HttpResponse(JSON.stringify({ error: 'Service Unavailable' }), { status: 503 });
+      }),
+    );
+    await expect(request({ endpoint })).rejects.toThrow(HttpResponseError);
+    expect(requestCount).toBe(1);
   });
 });
 

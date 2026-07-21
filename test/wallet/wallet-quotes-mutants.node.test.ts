@@ -1155,13 +1155,22 @@ describe('batchRestore mutants', () => {
     const restoreSpy = vi
       .spyOn(wallet, 'restore')
       .mockResolvedValueOnce({ proofs: [fakeProof], lastCounterWithSignature: 0 })
+      .mockResolvedValueOnce({ proofs: [fakeProof], lastCounterWithSignature: 1 })
+      .mockResolvedValueOnce({ proofs: [fakeProof], lastCounterWithSignature: 2 })
+      .mockResolvedValueOnce({ proofs: [fakeProof], lastCounterWithSignature: 3 })
       .mockResolvedValue({ proofs: [] });
 
-    await wallet.batchRestore(1, 1, 0, KEYSET_ID);
+    await wallet.batchRestore({
+      gapLimit: 1,
+      batchSize: 1,
+      keysetId: KEYSET_ID,
+      filterSpent: false,
+    });
 
-    // First non-empty batch resets the empty run, then one empty batch ends it: two calls.
+    // Wave 1 probes counters 0-3 in order (a `-` mutant in the start math would probe -1).
     expect(restoreSpy).toHaveBeenNthCalledWith(1, 0, 1, { keysetId: KEYSET_ID });
-    // Counter must advance by batchSize (a `-=` mutant would call restore with -1).
     expect(restoreSpy).toHaveBeenNthCalledWith(2, 1, 1, { keysetId: KEYSET_ID });
+    // Wave 1 was all non-empty, so wave 2 must start at counter 4 (a `-=` advance mutant goes negative).
+    expect(restoreSpy).toHaveBeenNthCalledWith(5, 4, 1, { keysetId: KEYSET_ID });
   });
 });

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 
+import { Amount } from '../../src/model/Amount';
 import { MintInfo } from '../../src/model/MintInfo';
 import { MAX_METHOD_LENGTH } from '../../src/utils/limits';
 import { MINTINFORESP } from '../consts';
@@ -728,6 +729,40 @@ describe('MintInfo method/unit capability checks', () => {
     expect(info.supportsMintMeltMethod('melt', 'bolt11', 'sat')).toBe(false);
   });
 
+  it('getMintMeltMethod returns the matched settings, also after a JSON round-trip', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        5: {
+          disabled: false,
+          methods: [{ method: 'bolt11', unit: 'sat', min_amount: 1, max_amount: 10_000 }],
+        },
+      },
+    });
+
+    const rehydrated = new MintInfo(JSON.parse(JSON.stringify(info.cache)));
+    for (const i of [info, rehydrated]) {
+      expect(i.getMintMeltMethod('melt', 'bolt11', 'sat')).toMatchObject({
+        min_amount: 1,
+        max_amount: 10_000,
+      });
+      expect(i.getMintMeltMethod('melt', 'bolt11', 'usd')).toBeUndefined();
+    }
+  });
+
+  it('getMintMeltMethod returns undefined when the operation is disabled', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        5: {
+          disabled: true,
+          methods: [{ method: 'bolt11', unit: 'sat', min_amount: null, max_amount: null }],
+        },
+      },
+    });
+    expect(info.getMintMeltMethod('melt', 'bolt11', 'sat')).toBeUndefined();
+  });
+
   it('supportsAmountless defaults to bolt11/sat and requires an exact method/unit match', () => {
     const info = new MintInfo({
       ...MINTINFORESP,
@@ -754,5 +789,71 @@ describe('MintInfo method/unit capability checks', () => {
   it('supportsAmountless returns false when NUT-5 info is absent', () => {
     const info = new MintInfo({ ...MINTINFORESP, nuts: {} });
     expect(info.supportsAmountless()).toBe(false);
+  });
+});
+
+describe('MintInfo snapshot accessors', () => {
+  it('mutating a getMintMeltMethod result cannot pollute the cache', () => {
+    const info = new MintInfo(MINTINFORESP);
+    const method = info.getMintMeltMethod('mint', 'bolt11', 'sat')!;
+
+    method.min_amount = 10n; // type-legal via AmountLike; must not reach the cache
+    method.options!.description = false;
+
+    expect(() => JSON.stringify(info.cache)).not.toThrow();
+    expect(info.getMintMeltMethod('mint', 'bolt11', 'sat')).toMatchObject({
+      min_amount: null,
+      options: { description: true },
+    });
+  });
+
+  it('preserves Amount instances (AmountLike) through the snapshot', () => {
+    // AmountLike admits Amount; a snapshot must not strip its prototype into {value}
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        4: {
+          disabled: false,
+          methods: [
+            { method: 'bolt11', unit: 'sat', min_amount: Amount.from(100), max_amount: null },
+          ],
+        },
+      },
+    });
+
+    const min = info.getMintMeltMethod('mint', 'bolt11', 'sat')!.min_amount;
+    expect(min).toBeInstanceOf(Amount);
+    expect(() => Amount.from(min!)).not.toThrow();
+    expect(Amount.from(min!).toBigInt()).toBe(100n);
+  });
+
+  it('supportedMethods and isSupported(4).params return copies', () => {
+    const info = new MintInfo(MINTINFORESP);
+
+    info.supportedMethods('mint')[0].unit = 'zzz';
+    info.isSupported(4).params[0].method = 'bogus';
+
+    expect(info.supportsMintMeltMethod('mint', 'bolt11', 'sat')).toBe(true);
+  });
+
+  it('cache, nuts and contact return snapshots', () => {
+    const info = new MintInfo(MINTINFORESP);
+
+    (info.cache as any).nuts = {};
+    (info.nuts as any)[4] = undefined;
+    info.contact.length = 0;
+
+    expect(info.isSupported(4).disabled).toBe(false);
+    expect(info.cache.nuts?.[4]).toBeDefined();
+    expect(info.contact).toHaveLength(3);
+  });
+
+  it('nut17 and nut29 params are copies', () => {
+    const info = new MintInfo(MINTINFORESP);
+
+    const ws = info.isSupported(17);
+    if (ws.params) ws.params.length = 0;
+
+    expect(info.isSupported(17).params).toHaveLength(6);
   });
 });

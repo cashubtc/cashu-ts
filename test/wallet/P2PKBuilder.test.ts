@@ -1,10 +1,14 @@
+import { schnorr } from '@noble/curves/secp256k1.js';
+import { bytesToHex } from '@noble/curves/utils.js';
 import { describe, it, expect } from 'vitest';
 
 import { P2PKBuilder, type P2PKOptions } from '../../src/';
 
-// helpers to make valid hex keys
-const xonly = (ch: string) => ch.repeat(64); // 32-byte X-only
-const comp = (ch: string, prefix: '02' | '03' = '02') => `${prefix}${ch.repeat(64)}`;
+// helpers to make valid on-curve keys, deterministically derived per label char
+const X: Record<string, string> = {};
+const xonly = (ch: string) =>
+  (X[ch] ??= bytesToHex(schnorr.getPublicKey(new Uint8Array(32).fill(ch.charCodeAt(0)))));
+const comp = (ch: string, prefix: '02' | '03' = '02') => `${prefix}${xonly(ch)}`;
 // a valid 64-char hex hashlock (SHA-256 output shape)
 const hashlock = 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5';
 
@@ -27,25 +31,31 @@ describe('P2PKBuilder.toOptions()', () => {
     expect(opts.pubkeys).toEqual([k2, k3]);
   });
 
-  it('normalizes x-only lock keys to 02-prefixed compressed', () => {
+  it('rejects x-only lock keys with a prefix hint (NUT-11 requires compressed)', () => {
     const x = xonly('1'); // 32-byte X-only
-    const expected = comp('1', '02'); // normalized
-
-    const opts = new P2PKBuilder().addLockPubkey(x).toOptions();
-    expect(opts.data).toBe(expected);
+    expect(() => new P2PKBuilder().addLockPubkey(x)).toThrow(/prepend '02'/);
+    // the compressed form of the same key is accepted
+    const opts = new P2PKBuilder().addLockPubkey(`02${x}`).toOptions();
+    expect(opts.data).toBe(`02${x}`);
   });
 
-  it('normalizes x-only refund keys to 02-prefixed compressed', () => {
-    const x = xonly('2');
-    const expected = comp('2', '02');
+  it('rejects x-only refund keys', () => {
+    expect(() =>
+      new P2PKBuilder()
+        .addLockPubkey(comp('a', '02'))
+        .lockUntil(Date.now() + 60) // required when refund keys exist
+        .addRefundPubkey(xonly('2')),
+    ).toThrow(/prepend '02'/);
+  });
 
-    const opts = new P2PKBuilder()
-      .addLockPubkey(comp('a', '02'))
-      .lockUntil(Date.now() + 60) // required when refund keys exist
-      .addRefundPubkey(x)
-      .toOptions();
+  it('rejects a hashlock passed as a lock pubkey (64-hex is only ever a hashlock)', () => {
+    expect(() => new P2PKBuilder().addLockPubkey(hashlock)).toThrow(/prepend '02'/);
+  });
 
-    expect(opts.refundKeys).toEqual([expected]);
+  it('rejects a well-formed 66-hex key that is not on the curve', () => {
+    // x = p (the field prime) has no valid point; decompression must fail.
+    const offCurve = '02fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f';
+    expect(() => new P2PKBuilder().addLockPubkey(offCurve)).toThrow(/secp256k1/i);
   });
 
   it('de-duplicates lock and refund keys silently', () => {
@@ -276,7 +286,7 @@ describe('P2PKBuilder.toOptions()', () => {
   });
 
   it('fromOptions with minimal shape leaves required* undefined', () => {
-    const minimal = { kind: 'P2PK', data: '02' + 'b'.repeat(64) } as const;
+    const minimal = { kind: 'P2PK', data: comp('b', '02') } as const;
     const round = P2PKBuilder.fromOptions(minimal).toOptions();
     expect(round).toEqual(minimal); // no extra props added
     expect('requiredSignatures' in round).toBe(false);
@@ -287,9 +297,9 @@ describe('P2PKBuilder.toOptions()', () => {
   });
 
   it('fromOptions applies requiredRefundSignatures when provided', () => {
-    const lock = '02' + 'e'.repeat(64);
-    const r1 = '02' + 'f'.repeat(64);
-    const r2 = '03' + 'g'.repeat(64);
+    const lock = comp('e', '02');
+    const r1 = comp('f', '02');
+    const r2 = comp('g', '03');
     const now = Math.floor(Date.now() / 1000) + 300;
 
     const src = {
@@ -312,31 +322,31 @@ describe('P2PKBuilder.toOptions()', () => {
 });
 
 describe('P2PKBuilder, simple fuzzish case', () => {
-  // locks contain x-only upper, compressed upper, duplicates of x-only in both forms
-  const xA_upper = 'A'.repeat(64); // x only, becomes 02 + a…
-  const cB_upper = '02' + 'B'.repeat(64); // compressed, becomes 02 + b…
-  const xA_lower = 'a'.repeat(64); // duplicate of xA_upper
-  const cA_again = '02' + 'A'.repeat(64); // duplicate after normalisation
-  // refunds: compressed 03 upper, x-only that collides by x-only identity, duplicate 02 form
-  const r03C_upper = '03' + 'C'.repeat(64); // becomes 03 + c…
-  const rXc_lower = 'c'.repeat(64); // x only, deduped against 03 + c… by x-only identity
-  const r02c_dup = '02' + 'c'.repeat(64); // same x-only key, deduped
+  // locks contain case variants and 02/03 prefix variants of the same x coordinate
+  const cA_upper = '02' + xonly('a').toUpperCase(); // becomes 02 + a…
+  const cB_upper = '02' + xonly('b').toUpperCase(); // becomes 02 + b…
+  const cA_lower = '02' + xonly('a'); // duplicate of cA_upper (case)
+  const cA_03 = '03' + xonly('a'); // duplicate by x-only identity
+  // refunds: compressed 03 upper, plus 03-lower and 02 variants of the same x
+  const r03C_upper = '03' + xonly('c').toUpperCase(); // becomes 03 + c…
+  const r03c_lower = '03' + xonly('c'); // case duplicate
+  const r02c_dup = '02' + xonly('c'); // same x-only identity, deduped
   const ms = (Math.floor(Date.now() / 1000) + 123) * 1000; // exercise ms branch
 
   it('normalizes mixed inputs, deduplicates, preserves insertion order, and round-trips', () => {
     const opts = new P2PKBuilder()
-      .addLockPubkey([xA_upper, cB_upper, xA_lower, cA_again])
-      .addRefundPubkey([r03C_upper, rXc_lower, r02c_dup])
+      .addLockPubkey([cA_upper, cB_upper, cA_lower, cA_03])
+      .addRefundPubkey([r03C_upper, r03c_lower, r02c_dup])
       .lockUntil(ms)
       .requireLockSignatures(2) // exactly the two unique lock keys
       .sigAll()
       .toOptions();
 
-    const expRefunds = ['03' + 'c'.repeat(64)];
+    const expRefunds = ['03' + xonly('c')];
 
     // Two unique lock keys: first is the data slot, second rides the pubkeys tag.
-    expect(opts.data).toBe('02' + 'a'.repeat(64));
-    expect(opts.pubkeys).toEqual(['02' + 'b'.repeat(64)]);
+    expect(opts.data).toBe('02' + xonly('a'));
+    expect(opts.pubkeys).toEqual(['02' + xonly('b')]);
     expect(opts.refundKeys).toEqual(expRefunds);
     expect(opts.locktime).toBe(ms / 1000);
     expect(opts.sigFlag).toEqual('SIG_ALL');
@@ -351,8 +361,8 @@ describe('P2PKBuilder, simple fuzzish case', () => {
   it('rejects impossible thresholds after deduplication', () => {
     expect(() =>
       new P2PKBuilder()
-        .addLockPubkey([xA_upper, cB_upper, xA_lower, cA_again])
-        .addRefundPubkey([r03C_upper, rXc_lower, r02c_dup])
+        .addLockPubkey([cA_upper, cB_upper, cA_lower, cA_03])
+        .addRefundPubkey([r03C_upper, r03c_lower, r02c_dup])
         .lockUntil(ms)
         .requireLockSignatures(5) // 5 > 2 unique lock keys
         .sigAll()
@@ -474,7 +484,7 @@ describe('P2PKBuilder addTag and addTags', () => {
 
 describe('P2PKBuilder.blindKeys()', () => {
   it('sets blindKeys flag and round-trips via fromOptions', () => {
-    const k = '02' + 'a'.repeat(64);
+    const k = comp('a', '02');
     const opts = new P2PKBuilder().addLockPubkey(k).blindKeys().toOptions();
     expect(opts.blindKeys).toBe(true);
 

@@ -2,57 +2,192 @@ import { randomBytes } from '@noble/hashes/utils.js';
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect, vi } from 'vitest';
 
-import { Wallet, Amount, type Proof } from '../../src';
+import { Wallet, Amount, CheckStateEnum, type Proof, type ProofState } from '../../src';
 
 import { useTestServer, mint, unit, dummyKeysResp, mintUrl, logger } from './_setup';
 
 const server = useTestServer();
 
+const allUnspent = (n: number): ProofState[] =>
+  Array(n).fill({ state: CheckStateEnum.UNSPENT }) as ProofState[];
+
 describe('Restoring deterministic proofs', () => {
   test('Batch restore', async () => {
     const wallet = new Wallet(mint);
     await wallet.loadMint();
-    let rounds = 0;
     const mockRestore = vi
       .spyOn(wallet, 'restore')
-      .mockImplementation(async (): Promise<{ proofs: Proof[] }> => {
-        if (rounds === 0) {
-          rounds++;
+      .mockImplementation(async (start): Promise<{ proofs: Proof[] }> => {
+        if (start === 0) {
           return { proofs: Array(21).fill(1) as Proof[] };
         }
-        rounds++;
         return { proofs: [] };
       });
+    const mockStates = vi.spyOn(wallet, 'checkProofsStates').mockResolvedValue(allUnspent(21));
     const { proofs: restoredProofs } = await wallet.batchRestore();
     expect(restoredProofs.length).toBe(21);
-    expect(mockRestore).toHaveBeenCalledTimes(2);
+    // one pooled wave of 4 batches covers the gap limit
+    expect(mockRestore).toHaveBeenCalledTimes(4);
+    // spent filtering is on by default
+    expect(mockStates).toHaveBeenCalledTimes(1);
     mockRestore.mockClear();
+    mockStates.mockClear();
   });
   test('Batch restore with custom values', async () => {
     const wallet = new Wallet(mint);
     await wallet.loadMint();
-    let rounds = 0;
     const mockRestore = vi
       .spyOn(wallet, 'restore')
       .mockImplementation(
-        async (): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> => {
-          if (rounds === 0) {
-            rounds++;
+        async (start): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> => {
+          if (start === 0) {
             return { proofs: Array(42).fill(1) as Proof[], lastCounterWithSignature: 41 };
           }
-          rounds++;
           return { proofs: [] };
         },
       );
-    const { proofs: restoredProofs, lastCounterWithSignature } = await wallet.batchRestore(
-      100,
-      50,
-      0,
-    );
+    const { proofs: restoredProofs, lastCounterWithSignature } = await wallet.batchRestore({
+      gapLimit: 100,
+      batchSize: 50,
+      filterSpent: false,
+    });
     expect(restoredProofs.length).toBe(42);
-    expect(mockRestore).toHaveBeenCalledTimes(3);
+    expect(mockRestore).toHaveBeenCalledTimes(4);
     expect(lastCounterWithSignature).toBe(41);
     mockRestore.mockClear();
+  });
+  test('Batch restore recovers proofs found past the gap limit in the same wave', async () => {
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+    // the gap limit is reached at start 300, but the batch at 600 is already in flight in
+    // the same wave; its proofs reset the gap count and are kept, not dropped.
+    const mockRestore = vi
+      .spyOn(wallet, 'restore')
+      .mockImplementation(
+        async (start): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> => {
+          if (start === 0) {
+            return { proofs: Array(5).fill(1) as Proof[], lastCounterWithSignature: 4 };
+          }
+          if (start === 600) {
+            return { proofs: Array(3).fill(1) as Proof[], lastCounterWithSignature: 602 };
+          }
+          return { proofs: [] };
+        },
+      );
+    const { proofs: restoredProofs, lastCounterWithSignature } = await wallet.batchRestore({
+      batchSize: 300,
+      filterSpent: false,
+    });
+    expect(restoredProofs.length).toBe(8);
+    expect(lastCounterWithSignature).toBe(602);
+    // the empty batch at 900 closes the gap again, so one wave suffices
+    expect(mockRestore).toHaveBeenCalledTimes(4);
+    mockRestore.mockClear();
+  });
+  test('Batch restore drops spent proofs but keeps pending, counter unfiltered', async () => {
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+    const found = [{ secret: 'a' }, { secret: 'b' }, { secret: 'c' }, { secret: 'd' }] as Proof[];
+    const mockRestore = vi
+      .spyOn(wallet, 'restore')
+      .mockImplementation(
+        async (start): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> => {
+          if (start === 0) {
+            return { proofs: found, lastCounterWithSignature: 3 };
+          }
+          return { proofs: [] };
+        },
+      );
+    const mockStates = vi
+      .spyOn(wallet, 'checkProofsStates')
+      .mockResolvedValue([
+        { state: CheckStateEnum.UNSPENT },
+        { state: CheckStateEnum.SPENT },
+        { state: CheckStateEnum.PENDING },
+        { state: CheckStateEnum.UNSPENT },
+      ] as ProofState[]);
+    const { proofs: restoredProofs, lastCounterWithSignature } = await wallet.batchRestore();
+    expect(restoredProofs.map((p) => p.secret)).toEqual(['a', 'c', 'd']);
+    expect(lastCounterWithSignature).toBe(3);
+    expect(mockStates).toHaveBeenCalledWith(found);
+    mockRestore.mockClear();
+    mockStates.mockClear();
+  });
+  test('Batch restore treats maxCounter as an inclusive ceiling and ends there', async () => {
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+    const calls: Array<[number, number]> = [];
+    const mockRestore = vi
+      .spyOn(wallet, 'restore')
+      .mockImplementation(async (start, count): Promise<{ proofs: Proof[] }> => {
+        calls.push([start, count]);
+        return { proofs: [1] as unknown as Proof[] };
+      });
+    // gapLimit Infinity: the gap rule never fires, so only the bound can end the scan
+    const { proofs } = await wallet.batchRestore({
+      gapLimit: Infinity,
+      batchSize: 100,
+      maxCounter: 349,
+      filterSpent: false,
+    });
+    // 350 counters in 100-batches; the last is clamped, nothing probes past the bound
+    expect(calls).toEqual([
+      [0, 100],
+      [100, 100],
+      [200, 100],
+      [300, 50],
+    ]);
+    expect(proofs.length).toBe(4);
+    mockRestore.mockClear();
+  });
+});
+
+describe('restoreAll', () => {
+  // Minimal Keyset-shaped stub; only `unit` is read by restoreAll's filter.
+  const ks = (unitStr: string) => ({ unit: unitStr }) as never;
+
+  test('restores every keyset in the wallet unit and merges results', async () => {
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+    vi.spyOn(wallet.keyChain, 'getAllKeysetIds').mockReturnValue(['A', 'B', 'C']);
+    vi.spyOn(wallet.keyChain, 'getKeyset').mockImplementation((id) =>
+      id === 'C' ? ks('eur') : ks('sat'),
+    );
+    const batchSpy = vi.spyOn(wallet, 'batchRestore').mockImplementation(async (config) => {
+      if (config?.keysetId === 'A') {
+        return {
+          proofs: [{ secret: 'a1' }, { secret: 'a2' }] as Proof[],
+          lastCounterWithSignature: 12,
+        };
+      }
+      return { proofs: [] }; // keyset B: nothing found
+    });
+
+    const { proofs, lastCounters } = await wallet.restoreAll();
+
+    expect(proofs.map((p) => p.secret)).toEqual(['a1', 'a2']);
+    // per-keyset counters: B absent (no signatures), C never scanned (wrong unit)
+    expect(lastCounters).toEqual({ A: 12 });
+    expect(batchSpy).toHaveBeenCalledTimes(2);
+    expect(batchSpy).toHaveBeenCalledWith({ keysetId: 'A' });
+    expect(batchSpy).toHaveBeenCalledWith({ keysetId: 'B' });
+  });
+
+  test('forwards scan options to every keyset', async () => {
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+    vi.spyOn(wallet.keyChain, 'getAllKeysetIds').mockReturnValue(['A']);
+    vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValue(ks('sat'));
+    const batchSpy = vi.spyOn(wallet, 'batchRestore').mockResolvedValue({ proofs: [] });
+
+    await wallet.restoreAll({ gapLimit: 100, batchSize: 50, filterSpent: false });
+
+    expect(batchSpy).toHaveBeenCalledWith({
+      gapLimit: 100,
+      batchSize: 50,
+      filterSpent: false,
+      keysetId: 'A',
+    });
   });
 });
 

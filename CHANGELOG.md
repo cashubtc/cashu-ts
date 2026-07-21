@@ -1,5 +1,70 @@
 # Changelog
 
+## [5.0.0-rc.4](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.3...v5.0.0-rc.4) (2026-07-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* **wallet:** pooled batch restore with config object and spent filtering ([#795](https://github.com/cashubtc/cashu-ts/issues/795))
+* **p2pk:** require compressed, on-curve pubkeys ([#781](https://github.com/cashubtc/cashu-ts/issues/781))
+
+### Features
+
+* **wallet:** pooled batch restore with config object and spent filtering ([#795](https://github.com/cashubtc/cashu-ts/issues/795)) ([0bc004b](https://github.com/cashubtc/cashu-ts/commit/0bc004bcfad309a3562beb4334588d0c4276f5bd))
+* **wallet:** restore every keyset in one call with restoreAll ([#797](https://github.com/cashubtc/cashu-ts/issues/797)) ([b319326](https://github.com/cashubtc/cashu-ts/commit/b3193262b7f2ab1d5e171485ae41a8e15eec0d95))
+
+
+### Bug Fixes
+
+* **crypto:** validate counter range in BIP-32 secret derivation ([#806](https://github.com/cashubtc/cashu-ts/issues/806)) ([e61c064](https://github.com/cashubtc/cashu-ts/commit/e61c0648fec9c62dc1b999ad18ff813b7fea3887))
+* **transport:** retry idempotent requests once on network errors ([#799](https://github.com/cashubtc/cashu-ts/issues/799)) ([7a824fe](https://github.com/cashubtc/cashu-ts/commit/7a824fef7383ca829d51b7fc391966d5321e26ee))
+* **transport:** stop pool claims after a failure ([#798](https://github.com/cashubtc/cashu-ts/issues/798)) ([5aea97b](https://github.com/cashubtc/cashu-ts/commit/5aea97baa4b1eea779110d474142b77c322d8371))
+* **wallet:** widen config type on bolt12/onchain mint helpers ([#783](https://github.com/cashubtc/cashu-ts/issues/783)) ([7775b0f](https://github.com/cashubtc/cashu-ts/commit/7775b0f6746c1fc2c8a8158abea64247324a5e80))
+
+
+### Performance Improvements
+
+* **crypto:** cache the keyset parent node in the BIP-32 deriver ([#796](https://github.com/cashubtc/cashu-ts/issues/796)) ([965ec73](https://github.com/cashubtc/cashu-ts/commit/965ec73088ace636aa4fefba599b3d62ae0f932b))
+* **wallet:** run state-check batches through a bounded request pool ([#789](https://github.com/cashubtc/cashu-ts/issues/789)) ([0a4725f](https://github.com/cashubtc/cashu-ts/commit/0a4725f2fba74c41d44e66afe984f60e446296e1))
+
+
+### Miscellaneous Chores
+
+* **docker:** update CDK_IMAGE_RC to cashubtc/mintd:0.17.3-rc.0 ([#775](https://github.com/cashubtc/cashu-ts/issues/775)) ([70a05b5](https://github.com/cashubtc/cashu-ts/commit/70a05b5dff15f8d16ff7c4a4513b818bb57bd0a5))
+
+
+### Code Refactoring
+
+* **p2pk:** require compressed, on-curve pubkeys ([#781](https://github.com/cashubtc/cashu-ts/issues/781)) ([98a4149](https://github.com/cashubtc/cashu-ts/commit/98a41492282bf402a250a06ec29a3d84370791cf))
+
+## [5.0.0-rc.3](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.2...v5.0.0-rc.3) (2026-07-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* **crypto:** align NUT-29 batch quote signatures with amended spec ([#675](https://github.com/cashubtc/cashu-ts/issues/675))
+* **nut04/05:** quote accounting and custom payment method base structs ([#698](https://github.com/cashubtc/cashu-ts/issues/698))
+
+### Features
+
+* **crypto:** deterministic P2PK & NUT-20 quote-lock key derivation ([#697](https://github.com/cashubtc/cashu-ts/issues/697)) ([042e56c](https://github.com/cashubtc/cashu-ts/commit/042e56ccb6275296a6c60bcc0b6403239ef5ae77))
+* **nut04/05:** quote accounting and custom payment method base structs ([#698](https://github.com/cashubtc/cashu-ts/issues/698)) ([0e373f9](https://github.com/cashubtc/cashu-ts/commit/0e373f99fc277072b4f7c2ecb7d2ba7d15c247e1))
+* **nut29:** add batch quote checks ([#768](https://github.com/cashubtc/cashu-ts/issues/768)) ([854d91f](https://github.com/cashubtc/cashu-ts/commit/854d91f22a401a3d0ccf2bc2690f621bb0de583e))
+
+
+### Bug Fixes
+
+* **crypto:** align NUT-29 batch quote signatures with amended spec ([#675](https://github.com/cashubtc/cashu-ts/issues/675)) ([f3a3841](https://github.com/cashubtc/cashu-ts/commit/f3a38411920f9a75d1c37a7d55bbf08e94d19704))
+* **p2bk:** align HTLC key slots with the [data, ...pubkeys, ...refund] order (NUT-28) ([#763](https://github.com/cashubtc/cashu-ts/issues/763)) ([bb0b766](https://github.com/cashubtc/cashu-ts/commit/bb0b76684f350a9433a0120cd35330ac4b7bd28c))
+* **p2pk:** cap NUT-28 locking slots at 11 (P2PK 11 keys, HTLC 10) ([#753](https://github.com/cashubtc/cashu-ts/issues/753)) ([80a55b9](https://github.com/cashubtc/cashu-ts/commit/80a55b9627a6cb180f72f5b3e1a03b4f098923cc))
+* **scripts:** probe docker tags with and without v prefix ([#726](https://github.com/cashubtc/cashu-ts/issues/726)) ([8667aca](https://github.com/cashubtc/cashu-ts/commit/8667acaa412ffb8695b964a764bf0c0cb4cd8fb4))
+* **utils:** throw CTSError for malformed token templates ([#742](https://github.com/cashubtc/cashu-ts/issues/742)) ([c60cd35](https://github.com/cashubtc/cashu-ts/commit/c60cd3578c8096a6d9e4cc6a76a99bfa7d07a359))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump actions/setup-node from 4 to 6 in /.github/actions/integration-against-mint in the github-actions group ([#729](https://github.com/cashubtc/cashu-ts/issues/729)) ([b94af5f](https://github.com/cashubtc/cashu-ts/commit/b94af5fe3fe2757ab41b6c18649d6c71c1df7d4a))
+
 ## [5.0.0-rc.2](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.1...v5.0.0-rc.2) (2026-07-01)
 
 

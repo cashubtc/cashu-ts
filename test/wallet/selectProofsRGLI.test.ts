@@ -223,24 +223,6 @@ describe('selectProofsRGLI, default parameters', () => {
 });
 
 describe('selectProofsRGLI, guards and error context', () => {
-  test('throws for a proof amount above Number.MAX_SAFE_INTEGER', () => {
-    const proofs: Proof[] = [
-      { id: 'A', amount: Amount.from(BigInt(Number.MAX_SAFE_INTEGER) + 1n), secret: 's1', C: 'C1' },
-    ];
-    const kc = keychainStub({ A: 0 });
-
-    let caught: unknown;
-    try {
-      selectProofsRGLI(proofs, 5, kc);
-    } catch (e) {
-      caught = e;
-    }
-    expect(caught).toBeInstanceOf(Error);
-    // Both concatenated halves of the message must be present.
-    expect((caught as Error).message).toMatch(/does not support proof amounts/);
-    expect((caught as Error).message).toMatch(/Provide a custom SelectProofs/);
-  });
-
   test('fee lookup failure preserves the original error as cause and logs context', () => {
     const proofs: Proof[] = [{ id: 'MISSING', amount: Amount.from(4), secret: 's1', C: 'C1' }];
     const original = new Error('no keyset MISSING');
@@ -352,5 +334,97 @@ describe('selectProofsRGLI, invariants', () => {
       expect(res.send.length).toBeGreaterThan(0);
       expect(sumProofs(res.send).toNumber()).toBeGreaterThanOrEqual(5);
     }
+  });
+
+  test('sub-sat fee proofs are kept and aggregate into a spendable sat', () => {
+    // 1 sat at 999ppk nets 0.001 alone; one thousand of them net exactly 1
+    const proofs: Proof[] = Array.from({ length: 1000 }, (_, i) => ({
+      id: 'A',
+      amount: Amount.from(1),
+      secret: `s${i}`,
+      C: `C${i}`,
+    }));
+    const kc = keychainStub({ A: 999 });
+
+    const res = selectProofsRGLI(proofs, 1, kc, true, false);
+
+    expect(res.send).toHaveLength(1000);
+    expect(res.keep).toHaveLength(0);
+  });
+
+  test('a 1 sat proof at 1000ppk is uneconomical and never selected', () => {
+    const proofs: Proof[] = [{ id: 'A', amount: Amount.from(1), secret: 's1', C: 'C1' }];
+    const kc = keychainStub({ A: 1000 });
+
+    const res = selectProofsRGLI(proofs, 1, kc, true, false);
+
+    expect(res.send).toHaveLength(0);
+    expect(res.keep).toHaveLength(1);
+  });
+
+  test('exact match finds a proof whose exFee is above target but whose net hits it', () => {
+    // 6 sat at 500ppk: exFee 5.5 but net alone is 6 - ceil(500/1000) = 5
+    const proofs: Proof[] = [{ id: 'A', amount: Amount.from(6), secret: 's1', C: 'C1' }];
+    const kc = keychainStub({ A: 500 });
+
+    const res = selectProofsRGLI(proofs, 5, kc, true, true);
+
+    expect(res.send).toHaveLength(1);
+    expect(res.send[0].amount.toNumber()).toBe(6);
+    expect(res.keep).toHaveLength(0);
+  });
+});
+
+describe('selectProofsRGLI, u64-scale amounts', () => {
+  test('close match selects among proofs above Number.MAX_SAFE_INTEGER', () => {
+    const proofs: Proof[] = [
+      { id: 'A', amount: Amount.from(2n ** 60n), secret: 's1', C: 'C1' },
+      { id: 'A', amount: Amount.from(2n ** 59n), secret: 's2', C: 'C2' },
+    ];
+    const kc = keychainStub({ A: 0 });
+
+    const res = selectProofsRGLI(proofs, 2n ** 59n, kc, false, false);
+
+    expect(res.send.map((p) => p.amount.toBigInt())).toEqual([2n ** 59n]);
+  });
+
+  test('exact match nets a u64 target with fees, using the widened trim bound', () => {
+    // 2^60 at 500ppk nets 2^60 - 1; its exFee (2^60) sits exactly at target + 1
+    const proofs: Proof[] = [{ id: 'A', amount: Amount.from(2n ** 60n), secret: 's1', C: 'C1' }];
+    const kc = keychainStub({ A: 500 });
+
+    const res = selectProofsRGLI(proofs, 2n ** 60n - 1n, kc, true, true);
+
+    expect(res.send).toHaveLength(1);
+  });
+
+  test('exact match mixes huge and small proofs', () => {
+    const proofs: Proof[] = [
+      { id: 'A', amount: Amount.from(2n ** 60n), secret: 's1', C: 'C1' },
+      { id: 'A', amount: Amount.from(3), secret: 's2', C: 'C2' },
+      { id: 'A', amount: Amount.from(1), secret: 's3', C: 'C3' },
+    ];
+    const kc = keychainStub({ A: 0 });
+
+    const res = selectProofsRGLI(proofs, 2n ** 60n + 4n, kc, false, true);
+
+    expect(res.send).toHaveLength(3);
+  });
+
+  test('sums beyond MAX_SAFE_INTEGER stay exact even when single proofs are safe', () => {
+    // 1024 proofs of 2^44 + 1 sum past 2^53; double arithmetic would drift here
+    const amount = 2n ** 44n + 1n;
+    const proofs: Proof[] = Array.from({ length: 1024 }, (_, i) => ({
+      id: 'A',
+      amount: Amount.from(amount),
+      secret: `s${i}`,
+      C: `C${i}`,
+    }));
+    const kc = keychainStub({ A: 0 });
+
+    const res = selectProofsRGLI(proofs, 1024n * amount, kc, false, false);
+
+    expect(res.send).toHaveLength(1024);
+    expect(res.keep).toHaveLength(0);
   });
 });
