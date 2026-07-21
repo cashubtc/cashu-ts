@@ -31,6 +31,7 @@ If you are building a wallet integration from scratch, read these in order:
 | [Derive Keys](./derive_keys.md)                     | Derive recoverable P2PK / NUT-20 keys deterministically from the wallet seed.   |
 | [Get Token](./get_token.md)                         | Inspect token metadata before wallet creation or decode it after load.          |
 | [Melt Token](./melt_token.md)                       | Pay BOLT11 invoices or other payment methods with wallet proofs.                |
+| [Payment Requests](./payment_requests.md)           | Decode, price (fees), fulfil, and create NUT-18 / NUT-26 payment requests.      |
 | [Restore Proofs](./restore_proofs.md)               | Recover deterministic proofs from the wallet seed across keysets.               |
 | [Bolt12](./bolt12.md)                               | Work with reusable BOLT12 offers for minting and melting.                       |
 | [NUT-19 Cached Responses](./nut19.md)               | Understand cached endpoint retries and timeout behavior.                        |

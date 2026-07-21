@@ -360,3 +360,39 @@ Two escape hatches keep stored-quote flows working:
 - Quotes reporting `0/0` defer to the mint — a zero snapshot may simply have been fetched before the payment was made, so the create → pay externally → mint flow is unaffected.
 
 The practical change from v4: attempting to re-mint a quote object whose snapshot shows it fully issued (`amount_paid === amount_issued > 0`) now fails fast client-side instead of round-tripping to the mint for a rejection.
+
+---
+
+## `PaymentRequest.singleUse` is now optional (tri-state)
+
+`PaymentRequest.singleUse` is now `boolean | undefined` (was a required `boolean` defaulting to `false`), so the flag can round-trip the absent/`false`/`true` distinction instead of always serializing `single_use=0`. Setting `false` or `true` is unchanged; only decoding shifts — a request that omits the flag now yields `singleUse: undefined` instead of `false`. Replace any `pr.singleUse === false` check with `!pr.singleUse` (true for both absent and explicit `false`).
+
+---
+
+## `PaymentRequest` constructor takes an options object
+
+The v4 constructor was positional (`new PaymentRequest(transport, id, amount, unit, mints, description, singleUse, nut10)`); it now takes a single `PaymentRequestOptions` object whose keys mirror the class properties, so only the fields you set need naming:
+
+```ts
+// v4 — unused optional slots need explicit fillers
+new PaymentRequest(
+  undefined, // transport
+  'inv-123',
+  100,
+  'sat',
+  ['https://my.mint'],
+  undefined, // description
+  true, // singleUse
+);
+
+// v5 — name only the fields you set
+new PaymentRequest({
+  id: 'inv-123',
+  amount: 100,
+  unit: 'sat',
+  mints: ['https://my.mint'],
+  singleUse: true,
+});
+```
+
+Decoding (`decodePaymentRequest`, `PaymentRequest.fromEncodedRequest`, `fromRawRequest`) is unaffected. A positional call fails to type-check.

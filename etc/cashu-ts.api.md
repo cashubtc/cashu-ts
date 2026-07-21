@@ -1639,24 +1639,31 @@ export function parseSecret(secret: string | Secret): Secret;
 
 // @public (undocumented)
 class PaymentRequest_2 {
-    constructor(transport?: PaymentRequestTransport[] | undefined, id?: string | undefined, amount?: AmountLike, unit?: string | undefined, mints?: string[] | undefined, description?: string | undefined, singleUse?: boolean, nut10?: NUT10Option | undefined);
+    constructor(options?: PaymentRequestOptions);
     // (undocumented)
     amount?: Amount;
+    amountToSend(mint: string, mintMethods?: string[]): Amount;
     // (undocumented)
-    description?: string | undefined;
+    description?: string;
+    feesFor(mint: string, mintMethods?: string[]): Amount;
     // (undocumented)
     static fromEncodedRequest(encodedRequest: string): PaymentRequest_2;
     static fromRawRequest(rawPaymentRequest: RawPaymentRequest): PaymentRequest_2;
     // (undocumented)
     getTransport(type: PaymentRequestTransportType): PaymentRequestTransport | undefined;
     // (undocumented)
-    id?: string | undefined;
+    id?: string;
+    get isMintListStrict(): boolean | undefined;
     // (undocumented)
-    mints?: string[] | undefined;
+    mints?: string[];
     // (undocumented)
-    nut10?: NUT10Option | undefined;
+    mintsPreferred?: boolean;
     // (undocumented)
-    singleUse: boolean;
+    nut10?: NUT10Option;
+    // (undocumented)
+    singleUse?: boolean;
+    // (undocumented)
+    supportedMethods?: SupportedMethod[];
     toEncodedCreqA(): string;
     toEncodedCreqB(): string;
     // (undocumented)
@@ -1665,11 +1672,28 @@ class PaymentRequest_2 {
     // (undocumented)
     toRawRequest(): RawPaymentRequest;
     // (undocumented)
-    transport?: PaymentRequestTransport[] | undefined;
+    transport?: PaymentRequestTransport[];
     // (undocumented)
-    unit?: string | undefined;
+    unit?: string;
 }
 export { PaymentRequest_2 as PaymentRequest }
+
+// @public
+export type PaymentRequestOptions = {
+    id?: string;
+    amount?: AmountLike;
+    unit?: string;
+    mints?: string[];
+    description?: string;
+    transport?: PaymentRequestTransport[];
+    singleUse?: boolean;
+    nut10?: NUT10Option;
+    mintsPreferred?: boolean;
+    supportedMethods?: Array<{
+        method: string;
+        fee?: AmountLike;
+    }>;
+};
 
 // @public (undocumented)
 export type PaymentRequestPayload = {
@@ -1788,9 +1812,17 @@ export type RawPaymentRequest = {
     u?: string;
     s?: boolean;
     m?: string[];
+    mp?: boolean;
+    sm?: RawSupportedMethod[];
     d?: string;
     t?: RawTransport[];
     nut10?: RawNUT10Option;
+};
+
+// @public (undocumented)
+export type RawSupportedMethod = {
+    mn: string;
+    mf?: number | bigint;
 };
 
 // @public (undocumented)
@@ -2095,6 +2127,12 @@ export type SubscriptionCanceller = () => void;
 
 // @public
 export function sumProofs(proofs: Array<Pick<ProofLike, 'amount'>>): Amount;
+
+// @public
+export type SupportedMethod = {
+    method: string;
+    fee?: Amount;
+};
 
 // @public
 export type SwapMethod = {

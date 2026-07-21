@@ -11,28 +11,141 @@ import type {
   NUT10Option,
   PaymentRequestTransport,
   PaymentRequestTransportType,
+  SupportedMethod,
 } from '../wallet/types';
 
 import { Amount, type AmountLike } from './Amount';
 import { CTSError } from './Errors';
 
-export class PaymentRequest {
-  public amount?: Amount;
+/**
+ * Constructor options for {@link PaymentRequest}. Keys mirror the class properties; `amount` and
+ * method `fee` values accept flexible input and are normalized on construction.
+ */
+export type PaymentRequestOptions = {
+  id?: string;
+  amount?: AmountLike;
+  unit?: string;
+  mints?: string[];
+  description?: string;
+  transport?: PaymentRequestTransport[];
+  singleUse?: boolean;
+  nut10?: NUT10Option;
+  mintsPreferred?: boolean;
+  supportedMethods?: Array<{ method: string; fee?: AmountLike }>;
+};
 
-  constructor(
-    public transport?: PaymentRequestTransport[],
-    public id?: string,
-    amount?: AmountLike,
-    public unit?: string,
-    public mints?: string[],
-    public description?: string,
-    public singleUse: boolean = false,
-    public nut10?: NUT10Option,
-  ) {
-    this.amount = amount !== undefined ? Amount.from(amount) : undefined;
+export class PaymentRequest {
+  public id?: string;
+  public amount?: Amount;
+  public unit?: string;
+  public mints?: string[];
+  public description?: string;
+  public transport?: PaymentRequestTransport[];
+  public singleUse?: boolean;
+  public nut10?: NUT10Option;
+  public mintsPreferred?: boolean;
+  public supportedMethods?: SupportedMethod[];
+
+  constructor(options: PaymentRequestOptions = {}) {
+    this.id = options.id;
+    this.unit = options.unit;
+    this.mints = options.mints;
+    this.description = options.description;
+    this.transport = options.transport;
+    this.nut10 = options.nut10;
+    this.amount = options.amount !== undefined ? Amount.from(options.amount) : undefined;
+    this.supportedMethods = options.supportedMethods?.map((m) => ({
+      method: m.method,
+      fee: m.fee !== undefined ? Amount.from(m.fee) : undefined,
+    }));
+    // Coerce the optional flags to real booleans (preserving `undefined` for the
+    // absent/tri-state case) so an untyped CBOR value (`0`/`1`/`null`) can't leak a
+    // non-boolean into the getter or get re-serialized verbatim over the wire.
+    this.singleUse = options.singleUse === undefined ? undefined : Boolean(options.singleUse);
+    this.mintsPreferred =
+      options.mintsPreferred === undefined ? undefined : Boolean(options.mintsPreferred);
+  }
+
+  /**
+   * Resolves the NUT-18 mint list strictness per spec.
+   *
+   * - `undefined` if no mint list is set (`mp` SHOULD be ignored)
+   * - `true` if the list is strict (`mp` absent or `false`)
+   * - `false` if the list is preferred/advisory (`mp === true`)
+   */
+  get isMintListStrict(): boolean | undefined {
+    if (!this.mints?.length) {
+      return undefined;
+    }
+    return this.mintsPreferred !== true;
+  }
+
+  /**
+   * NUT-18: `u` MUST be set if `a` or `sm` is set: `mf` and the melt-method check are denominated
+   * in the request unit. Enforced when encoding or pricing; parsing stays lenient so foreign
+   * requests can still be inspected.
+   */
+  private assertUnitRule(): void {
+    if (!this.unit && (this.amount !== undefined || this.supportedMethods?.length)) {
+      throw new CTSError(
+        'invalid payment request: unit (u) is required when an amount (a) or supported methods (sm) are set',
+      );
+    }
+  }
+
+  /**
+   * The per-method fee (`mf`) the payer must add when paying from `mint`: `0` if `mint` is in the
+   * mint list, otherwise the lowest fee among the `sm` methods that `mintMethods` says the mint
+   * supports (NUT-18).
+   *
+   * Use this for amountless requests (where the payer chooses the amount): add the result to the
+   * chosen amount. This prices only the fee that applies; it does NOT validate admissibility (e.g.
+   * a strict mint list, or a mint supporting none of `sm`) — callers that must reject disallowed
+   * mints/methods check that separately.
+   *
+   * @param mint - The mint URL the payer will send from.
+   * @param mintMethods - The methods the mint can melt the request unit via (its NUT-05 melt
+   *   methods, matched against `sm`); omit if unknown (prices as `0`).
+   * @throws If the request sets `a` or `sm` without `u` (invalid per NUT-18; `mf` is denominated in
+   *   the request unit).
+   */
+  feesFor(mint: string, mintMethods?: string[]): Amount {
+    this.assertUnitRule();
+    // Fees compensate the receiver for melting out: payments from a listed mint carry none.
+    if (!this.supportedMethods?.length || this.mints?.includes(mint)) {
+      return Amount.zero();
+    }
+    const applicable = this.supportedMethods
+      .filter((m) => mintMethods?.includes(m.method))
+      .map((m) => m.fee ?? Amount.zero());
+    if (!applicable.length) {
+      return Amount.zero();
+    }
+    return applicable.reduce((min, fee) => Amount.min(min, fee));
+  }
+
+  /**
+   * The total amount to send from `mint`: the requested amount plus
+   * {@link PaymentRequest.feesFor | feesFor}.
+   *
+   * @param mint - The mint URL the payer will send from.
+   * @param mintMethods - The methods the mint can melt the request unit via (its NUT-05 melt
+   *   methods, matched against `sm`); omit if unknown.
+   * @throws If the request has no amount (amountless requests have no base to add fees to; use
+   *   {@link PaymentRequest.feesFor | feesFor} and add it to the amount the payer chooses), or no
+   *   unit (invalid per NUT-18).
+   */
+  amountToSend(mint: string, mintMethods?: string[]): Amount {
+    if (!this.amount) {
+      throw new CTSError(
+        'cannot compute amount to send: request has no amount; use feesFor() and add the payer-chosen amount',
+      );
+    }
+    return this.amount.add(this.feesFor(mint, mintMethods));
   }
 
   toRawRequest() {
+    this.assertUnitRule();
     const rawRequest: RawPaymentRequest = {};
     if (this.transport) {
       rawRequest.t = this.transport.map((t: PaymentRequestTransport) => ({
@@ -53,10 +166,18 @@ export class PaymentRequest {
     if (this.mints) {
       rawRequest.m = this.mints;
     }
+    if (this.mintsPreferred !== undefined) {
+      rawRequest.mp = this.mintsPreferred;
+    }
+    if (this.supportedMethods && this.supportedMethods.length > 0) {
+      rawRequest.sm = this.supportedMethods.map((m) =>
+        m.fee !== undefined ? { mn: m.method, mf: m.fee.toBigInt() } : { mn: m.method },
+      );
+    }
     if (this.description) {
       rawRequest.d = this.description;
     }
-    if (this.singleUse) {
+    if (this.singleUse !== undefined) {
       rawRequest.s = this.singleUse;
     }
     if (this.nut10) {
@@ -92,12 +213,18 @@ export class PaymentRequest {
    * @experimental
    */
   toEncodedCreqB(): string {
+    this.assertUnitRule();
     const tlvRequest: DecodedTLVPaymentRequest = {
       id: this.id,
       amount: this.amount !== undefined ? this.amount.toBigInt() : undefined,
       unit: this.unit,
       singleUse: this.singleUse,
       mints: this.mints,
+      mintsPreferred: this.mintsPreferred,
+      supportedMethods: this.supportedMethods?.map((m) => ({
+        method: m.method,
+        fee: m.fee !== undefined ? m.fee.toBigInt() : undefined,
+      })),
       description: this.description,
       transports: this.transport,
       nut10: this.nut10
@@ -197,16 +324,19 @@ export class PaymentRequest {
           tags: rawPaymentRequest.nut10.t,
         }
       : undefined;
-    return new PaymentRequest(
-      transports,
-      rawPaymentRequest.i,
-      rawPaymentRequest.a,
-      rawPaymentRequest.u,
-      rawPaymentRequest.m,
-      rawPaymentRequest.d,
-      rawPaymentRequest.s,
+    const supportedMethods = rawPaymentRequest.sm?.map((m) => ({ method: m.mn, fee: m.mf }));
+    return new PaymentRequest({
+      transport: transports,
+      id: rawPaymentRequest.i,
+      amount: rawPaymentRequest.a,
+      unit: rawPaymentRequest.u,
+      mints: rawPaymentRequest.m,
+      description: rawPaymentRequest.d,
+      singleUse: rawPaymentRequest.s,
       nut10,
-    );
+      mintsPreferred: rawPaymentRequest.mp,
+      supportedMethods,
+    });
   }
 
   static fromEncodedRequest(encodedRequest: string): PaymentRequest {
@@ -223,16 +353,18 @@ export class PaymentRequest {
             tags: decoded.nut10.tags ?? [],
           }
         : undefined;
-      return new PaymentRequest(
-        decoded.transports,
-        decoded.id,
-        decoded.amount,
-        decoded.unit,
-        decoded.mints,
-        decoded.description,
-        decoded.singleUse ?? false,
+      return new PaymentRequest({
+        transport: decoded.transports,
+        id: decoded.id,
+        amount: decoded.amount,
+        unit: decoded.unit,
+        mints: decoded.mints,
+        description: decoded.description,
+        singleUse: decoded.singleUse,
         nut10,
-      );
+        mintsPreferred: decoded.mintsPreferred,
+        supportedMethods: decoded.supportedMethods,
+      });
     }
 
     // Version A: CBOR encoding (creqA...)
