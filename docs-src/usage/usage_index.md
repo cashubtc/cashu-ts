@@ -37,6 +37,7 @@ If you are building a wallet integration from scratch, read these in order:
 | [NUT-19 Cached Responses](./nut19.md)               | Understand cached endpoint retries and timeout behavior.                        |
 | [Logging](./logging.md)                             | Enable and route library logs while debugging wallet or mint behavior.          |
 | [Amounts](./amounts.md)                             | Work with the `Amount` and `AmountWithUnit` value objects.                      |
+| [Helpers](./helpers.md)                             | Standalone public utility functions — currently mint URL normalization.         |
 
 ## Related docs
 
