@@ -379,6 +379,10 @@ describe('Keyset', () => {
     const keyset = new Keyset('testid', 'sat', true, undefined, undefined);
     expect(keyset.fee).toBe(0);
   });
+  test('version should be -1 for deprecated base64 IDs', () => {
+    const keyset = new Keyset('yjzQhxghPdrr', 'sat', true, undefined, undefined);
+    expect(keyset.version).toBe(-1);
+  });
   test('verifyKeysetId should return false if verifying keyset with no keys', () => {
     const badKeyset = { ...dummyKeysResp.keysets[0], keys: {} };
     const verify = Keyset.verifyKeysetId(badKeyset);
@@ -491,6 +495,13 @@ describe('KeyChain.getCheapestKeyset prefers the newest keyset version', () => {
     const expiring = makeKeyset(1, 1, 2000);
     const forever = makeKeyset(1, 1);
     const chain = await initChainWith([expiring.keys, forever.keys]);
+    expect(chain.getCheapestKeyset().id).toBe(forever.meta.id);
+  });
+
+  test('same version and fee: no expiry wins regardless of insertion order', async () => {
+    const forever = makeKeyset(1, 1);
+    const expiring = makeKeyset(1, 1, 2000);
+    const chain = await initChainWith([forever.keys, expiring.keys]);
     expect(chain.getCheapestKeyset().id).toBe(forever.meta.id);
   });
 });
