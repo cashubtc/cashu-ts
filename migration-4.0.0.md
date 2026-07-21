@@ -393,16 +393,16 @@ Several functions that were intended for internal use have been removed from the
 
 The following are still exported but are excluded from the trimmed type definitions and not part of the supported public API. Remove any external dependencies on them.
 
-| Function                | Notes                                          |
-| ----------------------- | ---------------------------------------------- |
-| `isValidHex`            | Internal helper.                               |
-| `hexToNumber`           | Crypto scalar helper (hex → bigint).           |
-| `numberToHexPadded64`   | Crypto scalar helper (bigint → 64-char hex).   |
-| `isObj`                 | HTTP response type guard.                      |
-| `joinUrls`              | Mint URL path builder.                         |
-| `sanitizeUrl`           | Renamed to `normalizeUrl` (internal).          |
-| `invoiceHasAmountInHRP` | BOLT-11 HRP amount detector.                   |
-| `bigIntStringify`       | `JSON.stringify` replacer for `bigint` values. |
+| Function                | Notes                                                     |
+| ----------------------- | --------------------------------------------------------- |
+| `isValidHex`            | Internal helper.                                          |
+| `hexToNumber`           | Crypto scalar helper (hex → bigint).                      |
+| `numberToHexPadded64`   | Crypto scalar helper (bigint → 64-char hex).              |
+| `isObj`                 | HTTP response type guard.                                 |
+| `joinUrls`              | Mint URL path builder.                                    |
+| `sanitizeUrl`           | Renamed to `normalizeMintUrl` and made public — see main. |
+| `invoiceHasAmountInHRP` | BOLT-11 HRP amount detector.                              |
+| `bigIntStringify`       | `JSON.stringify` replacer for `bigint` values.            |
 
 ### `handleTokens` no longer exported
 

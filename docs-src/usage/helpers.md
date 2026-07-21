@@ -12,7 +12,7 @@ Parses and normalizes a mint URL into its canonical form: validates the scheme (
 only), rejects credentials, query parameters, fragments, and encoded path delimiters, lowercases
 the host, and strips trailing slashes. Throws `CTSError` on invalid input.
 
-Use it anywhere a mint URL acts as an identity or cache key — two URLs that normalize
+Use it anywhere a mint URL acts as an identity or cache key, two URLs that normalize
 identically refer to the same mint. `Wallet` and `Mint` already apply it internally to the
 URLs you pass them; call it yourself when you key storage, deduplicate mints, or compare a
 token's mint URL against your own records.
