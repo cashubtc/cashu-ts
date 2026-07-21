@@ -6,6 +6,7 @@ import {
   asSecpPoint,
   blindMessage,
   blindMessageBls,
+  buildP2PKTags,
   constructUnblindedSignatureBls,
   createSecretAndBlindingFactorDeriver,
   constructUnblindedSignature,
@@ -89,33 +90,6 @@ export type SerializedOutputData = {
   secret: string;
   ephemeralE?: string;
 };
-
-/**
- * Core P2PK tags that must not be settable in additional tags.
- *
- * @internal
- */
-export const RESERVED_P2PK_TAGS = new Set([
-  'locktime',
-  'pubkeys',
-  'n_sigs',
-  'refund',
-  'n_sigs_refund',
-  'sigflag',
-]);
-
-/**
- * Asserts P2PK Tag key is valid.
- *
- * @param key Tag Key.
- * @throws If not a string, or is a reserved string.
- */
-export function assertValidTagKey(key: string) {
-  if (!key || typeof key !== 'string') throw new CTSError('tag key must be a non empty string');
-  if (RESERVED_P2PK_TAGS.has(key)) {
-    throw new CTSError(`additionalTags must not use reserved key "${key}"`);
-  }
-}
 
 export function isOutputDataFactory(
   value: OutputData[] | OutputDataFactory,
@@ -300,40 +274,16 @@ export class OutputData implements OutputDataLike {
       Ehex = _E;
     }
 
-    // build P2PK Tags (NUT-11)
-    const tags: string[][] = [];
-
-    const ts = normalized.locktime ?? NaN;
-    if (Number.isSafeInteger(ts) && ts >= 0) {
-      tags.push(['locktime', String(ts)]);
-    }
-
-    if (pubkeys.length > 0) {
-      tags.push(['pubkeys', ...pubkeys]);
-      if (reqLock > 1) {
-        tags.push(['n_sigs', String(reqLock)]);
-      }
-    }
-
-    if (refund.length > 0) {
-      tags.push(['refund', ...refund]);
-      if (reqRefund > 1) {
-        tags.push(['n_sigs_refund', String(reqRefund)]);
-      }
-    }
-
-    if (normalized.sigFlag == 'SIG_ALL') {
-      tags.push(['sigflag', 'SIG_ALL']);
-    }
-
-    // Append additional tags if any
-    if (normalized.additionalTags?.length) {
-      const extraTags = normalized.additionalTags.map(([k, ...vals]) => {
-        assertValidTagKey(k); // Validate key
-        return [k, ...vals.map(String)]; // all to strings
-      });
-      tags.push(...extraTags);
-    }
+    // build P2PK Tags (NUT-11), from the post-blinding key layout
+    const tags = buildP2PKTags({
+      locktime: normalized.locktime,
+      pubkeys,
+      refundKeys: refund,
+      requiredSignatures: reqLock,
+      requiredRefundSignatures: reqRefund,
+      sigFlag: normalized.sigFlag,
+      additionalTags: normalized.additionalTags,
+    });
 
     // Construct secret
     const kind = isHTLC ? 'HTLC' : 'P2PK';

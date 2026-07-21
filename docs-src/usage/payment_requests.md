@@ -36,7 +36,7 @@ If `supportedMethods` (`sm`) is set, the sending mint must be able to **melt the
 
 ## How much do I send, including fees?
 
-Each supported method can carry a fee (`mf`) that compensates the receiver for melting out via it. The fee applies only when paying from a mint outside the request's mint list (or from any mint if no list is set); a payment from a listed mint carries none. When one applies, the payer owes the **lowest** `mf` among the listed methods their mint supports. `amountToSend` computes the total for you: pass the methods your mint supports as the second argument.
+Each supported method can carry a fee (`mf`) that compensates the receiver for melting out via it. The fee applies only when paying from a mint outside the request's mint list (or from any mint if no list is set); a payment from a listed mint carries none. When one applies, the payer owes the **lowest** `mf` among the listed methods their mint supports. `amountToSend` computes the total for you: pass the melt methods your mint supports as the second argument.
 
 `amountToSend` returns an `Amount`, so it flows straight into `wallet.ops.send` (which accepts any `AmountLike`). Convert only at the edge, for display or serialization.
 
@@ -46,7 +46,7 @@ pr.amountToSend('https://in-list.mint', ['bolt12']); // listed mint, no fee  →
 pr.amountToSend('https://other.mint', ['bolt11', 'bolt12']); // lowest = 0   → 100
 pr.amountToSend('https://other.mint', ['bolt12']); // + mf                   → 105
 
-const total = pr.amountToSend(myMint, myMintMethods);
+const total = pr.amountToSend(myMint, myMeltMethods);
 await wallet.ops.send(total, proofs).run(); // Amount passed straight through
 ```
 
@@ -99,6 +99,29 @@ const request = new PaymentRequest({
 request.toEncodedCreqA(); // 'creqA…'  (CBOR)
 request.toEncodedCreqB(); // 'CREQB1…' (TLV + Bech32m, best for QR)
 ```
+
+### The builder
+
+`PaymentRequest.builder()` offers a fluent alternative that also handles the fiddly parts: transport tag formats, NUT-10 lock serialization, and cross-field validation. Setters can be called in any order; `build()` validates (eg `mintsPreferred` without mints throws) and returns the `PaymentRequest`.
+
+```typescript
+import { PaymentRequest, P2PKBuilder } from '@cashu/cashu-ts';
+
+const request = PaymentRequest.builder()
+  .id('inv-123')
+  .amount(100, 'sat') // unit is required with amount (NUT-18)
+  .description('Coffee')
+  .addMint('https://my.mint')
+  .mintsPreferred() // advisory list
+  .addNostrTransport(nprofile) // NIP-17 tags applied for you
+  .addHttpPostTransport('https://pay.example.com')
+  .addSupportedMethod('bolt11')
+  .addSupportedMethod('bolt12', 5) // with a per-method fee
+  .lock(new P2PKBuilder().addLockPubkey(receiverPk).toOptions()) // nut10 from a P2PK/HTLC lock
+  .build();
+```
+
+`lock()` takes a complete `P2PKOptions` (eg from `P2PKBuilder`, as with `asP2PK()`) and serializes it into the request's `nut10` option (the exact condition `toP2PKOptions()` reconstructs on the sender side). For NUT-10 kinds beyond P2PK/HTLC, pass a raw option with `nut10()`.
 
 ## Delivering the payment (sender side)
 

@@ -4,21 +4,18 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { describe, expect, test } from 'vitest';
 
 import {
+  assertValidTagKey,
   createBlindSignature,
   createDLEQProof,
   getPubKeyFromPrivKey,
   pointFromHex,
   P2BK_DST,
+  P2PK_KNOWN_TAG_KEYS,
 } from '../../src/crypto';
 import { verifyUnblindedSignature } from '../../src/crypto/NUT01';
 import { Amount } from '../../src/model/Amount';
 import { CTSError } from '../../src/model/Errors';
-import {
-  MAX_SECRET_LENGTH,
-  OutputData,
-  assertValidTagKey,
-  RESERVED_P2PK_TAGS,
-} from '../../src/model/OutputData';
+import { MAX_SECRET_LENGTH, OutputData } from '../../src/model/OutputData';
 import type { HasKeysetKeys, SerializedBlindedSignature } from '../../src/model/types';
 import { Bytes, deriveKeysetId, numberToHexPadded64 } from '../../src/utils';
 
@@ -167,7 +164,7 @@ describe('OutputData secp round-trip (secp256k1 + NUT-12 DLEQ)', () => {
 
 describe('OutputData.assertValidTagKey and reserved tags', () => {
   test('rejects every reserved P2PK tag key', () => {
-    for (const key of RESERVED_P2PK_TAGS) {
+    for (const key of P2PK_KNOWN_TAG_KEYS) {
       expect(() => assertValidTagKey(key)).toThrowError(/reserved key/);
     }
     // Explicit check for the last reserved entry, guarding against a dropped set member.

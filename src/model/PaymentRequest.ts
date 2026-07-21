@@ -1,16 +1,21 @@
 import { getTag, getTagInt, getTagScalar } from '../crypto/NUT10';
 import type { P2PKOptions, P2PKTag } from '../crypto/NUT11';
-import { P2PK_KNOWN_TAG_KEYS, normalizePubkey, parseP2PKSecret } from '../crypto/NUT11';
-import { encodeBase64toUint8, decodeCBOR, encodeCBOR, Bytes } from '../utils';
+import {
+  P2PK_KNOWN_TAG_KEYS,
+  normalizePubkey,
+  p2pkOptionsToPRNut10,
+  parseP2PKSecret,
+} from '../crypto/NUT11';
+import { encodeBase64toUint8, decodeCBOR, encodeCBOR, Bytes, normalizeUrl } from '../utils';
 import { decodeBech32mToBytes, encodeBech32m } from '../utils/bech32m';
 import { decodeTLV, encodeTLV } from '../utils/tlv';
 import type { DecodedTLVPaymentRequest } from '../utils/tlv';
+import { PaymentRequestTransportType } from '../wallet/types';
 import type {
   RawPaymentRequest,
   RawTransport,
   NUT10Option,
   PaymentRequestTransport,
-  PaymentRequestTransportType,
   SupportedMethod,
 } from '../wallet/types';
 
@@ -95,7 +100,7 @@ export class PaymentRequest {
 
   /**
    * The per-method fee (`mf`) the payer must add when paying from `mint`: `0` if `mint` is in the
-   * mint list, otherwise the lowest fee among the `sm` methods that `mintMethods` says the mint
+   * mint list, otherwise the lowest fee among the `sm` methods that `meltMethods` says the mint
    * supports (NUT-18).
    *
    * Use this for amountless requests (where the payer chooses the amount): add the result to the
@@ -104,19 +109,19 @@ export class PaymentRequest {
    * mints/methods check that separately.
    *
    * @param mint - The mint URL the payer will send from.
-   * @param mintMethods - The methods the mint can melt the request unit via (its NUT-05 melt
+   * @param meltMethods - The methods the mint can melt the request unit via (its NUT-05 melt
    *   methods, matched against `sm`); omit if unknown (prices as `0`).
    * @throws If the request sets `a` or `sm` without `u` (invalid per NUT-18; `mf` is denominated in
    *   the request unit).
    */
-  feesFor(mint: string, mintMethods?: string[]): Amount {
+  feesFor(mint: string, meltMethods?: string[]): Amount {
     this.assertUnitRule();
     // Fees compensate the receiver for melting out: payments from a listed mint carry none.
     if (!this.supportedMethods?.length || this.mints?.includes(mint)) {
       return Amount.zero();
     }
     const applicable = this.supportedMethods
-      .filter((m) => mintMethods?.includes(m.method))
+      .filter((m) => meltMethods?.includes(m.method))
       .map((m) => m.fee ?? Amount.zero());
     if (!applicable.length) {
       return Amount.zero();
@@ -129,19 +134,19 @@ export class PaymentRequest {
    * {@link PaymentRequest.feesFor | feesFor}.
    *
    * @param mint - The mint URL the payer will send from.
-   * @param mintMethods - The methods the mint can melt the request unit via (its NUT-05 melt
+   * @param meltMethods - The methods the mint can melt the request unit via (its NUT-05 melt
    *   methods, matched against `sm`); omit if unknown.
    * @throws If the request has no amount (amountless requests have no base to add fees to; use
    *   {@link PaymentRequest.feesFor | feesFor} and add it to the amount the payer chooses), or no
    *   unit (invalid per NUT-18).
    */
-  amountToSend(mint: string, mintMethods?: string[]): Amount {
+  amountToSend(mint: string, meltMethods?: string[]): Amount {
     if (!this.amount) {
       throw new CTSError(
         'cannot compute amount to send: request has no amount; use feesFor() and add the payer-chosen amount',
       );
     }
-    return this.amount.add(this.feesFor(mint, mintMethods));
+    return this.amount.add(this.feesFor(mint, meltMethods));
   }
 
   toRawRequest() {
@@ -242,6 +247,13 @@ export class PaymentRequest {
 
   getTransport(type: PaymentRequestTransportType) {
     return this.transport?.find((t: PaymentRequestTransport) => t.type === type);
+  }
+
+  /**
+   * A fresh {@link PaymentRequestBuilder}.
+   */
+  static builder(): PaymentRequestBuilder {
+    return new PaymentRequestBuilder();
   }
 
   /**
@@ -379,5 +391,202 @@ export class PaymentRequest {
     const data = encodeBase64toUint8(encodedData);
     const decoded = decodeCBOR(data) as RawPaymentRequest;
     return this.fromRawRequest(decoded);
+  }
+}
+
+/**
+ * Fluent builder for authoring a {@link PaymentRequest} (NUT-18).
+ *
+ * @remarks
+ * Setters collect state in any order and never throw on cross-field state; `build()` is the single
+ * validation point. The {@link PaymentRequest} class itself stays lenient because it is also the
+ * decode type for foreign requests.
+ */
+export class PaymentRequestBuilder {
+  private _id?: string;
+  private _amount?: AmountLike;
+  private _unit?: string;
+  private _description?: string;
+  private _mints: string[] = [];
+  private _mintsPreferred?: boolean;
+  private _singleUse?: boolean;
+  private _transports: PaymentRequestTransport[] = [];
+  private _nut10?: NUT10Option;
+  private _methods: Array<{ method: string; fee?: AmountLike }> = [];
+
+  /**
+   * Sets the optional payment ID reference.
+   */
+  id(id: string): this {
+    this._id = id;
+    return this;
+  }
+
+  /**
+   * Sets the requested amount and its unit together (NUT-18: `u` MUST be set when `a` is set).
+   *
+   * @throws If the unit is empty.
+   */
+  amount(amount: AmountLike, unit: string): this {
+    if (!unit) {
+      throw new CTSError('amount requires a unit (NUT-18: `u` MUST be set when `a` is set)');
+    }
+    this._amount = amount;
+    this._unit = unit;
+    return this;
+  }
+
+  /**
+   * Sets the unit for an amountless request. The last write here or via `amount()` wins.
+   *
+   * @throws If the unit is empty.
+   */
+  unit(unit: string): this {
+    if (!unit) {
+      throw new CTSError('unit must be a non-empty string');
+    }
+    this._unit = unit;
+    return this;
+  }
+
+  /**
+   * A human readable description for the payment request.
+   */
+  description(description: string): this {
+    this._description = description;
+    return this;
+  }
+
+  /**
+   * Appends to the mint list; URLs are normalized (as `Mint` does) and deduplicated, first-seen
+   * order preserved.
+   *
+   * @throws If a URL is not a valid mint URL.
+   */
+  addMint(mint: string | string[]): this {
+    const arr = Array.isArray(mint) ? mint : [mint];
+    for (const m of arr) {
+      const normalized = normalizeUrl(m);
+      if (!this._mints.includes(normalized)) this._mints.push(normalized);
+    }
+    return this;
+  }
+
+  /**
+   * Marks the mint list advisory (`mp`) rather than strict; requires mints at `build()`.
+   */
+  mintsPreferred(preferred = true): this {
+    this._mintsPreferred = preferred;
+    return this;
+  }
+
+  singleUse(single = true): this {
+    this._singleUse = single;
+    return this;
+  }
+
+  /**
+   * Appends a transport; order is preference order (NUT-18).
+   */
+  addTransport(transport: PaymentRequestTransport): this {
+    this._transports.push(transport);
+    return this;
+  }
+
+  /**
+   * Appends a nostr transport for the given NIPs (default NIP-17 direct messages).
+   *
+   * @throws If the target is not an nprofile, or `nips` is empty (the `n` tag MUST carry at least
+   *   one value).
+   */
+  addNostrTransport(nprofile: string, nips: string[] = ['17']): this {
+    if (!nprofile.startsWith('nprofile1')) {
+      throw new CTSError('nostr transport target must be an nprofile');
+    }
+    if (nips.length === 0) {
+      throw new CTSError('nostr transport requires at least one NIP (`n` tag value)');
+    }
+    return this.addTransport({
+      type: PaymentRequestTransportType.NOSTR,
+      target: nprofile,
+      tags: [['n', ...nips.map(String)]],
+    });
+  }
+
+  /**
+   * Appends an HTTP POST transport; the sender POSTs the payment payload to `url`.
+   */
+  addHttpPostTransport(url: string): this {
+    return this.addTransport({ type: PaymentRequestTransportType.POST, target: url });
+  }
+
+  /**
+   * Appends a NUT-05 melting method the payee accepts (`sm`), with an optional per-method fee.
+   *
+   * @throws If the method name is empty.
+   */
+  addSupportedMethod(method: string, fee?: AmountLike): this {
+    if (!method) {
+      throw new CTSError('supported method name must be a non-empty string');
+    }
+    this._methods.push({ method, fee });
+    return this;
+  }
+
+  /**
+   * Sets the `nut10` locking condition from a complete P2PK/HTLC {@link P2PKOptions} (e.g. from
+   * `P2PKBuilder.toOptions()`). Last call here or via `nut10()` wins.
+   *
+   * @throws If the lock is invalid or uses `blindKeys` (not expressible in a request).
+   */
+  lock(p2pk: P2PKOptions): this {
+    this._nut10 = p2pkOptionsToPRNut10(p2pk);
+    return this;
+  }
+
+  /**
+   * Sets the `nut10` locking condition verbatim, for kinds `lock()` cannot express.
+   */
+  nut10(option: NUT10Option): this {
+    this._nut10 = option;
+    return this;
+  }
+
+  /**
+   * Validates cross-field state and constructs the {@link PaymentRequest}.
+   *
+   * @throws If `mintsPreferred` is set without mints (NUT-18 ignores `mp` without `m`), a supported
+   *   method is listed twice, or supported methods are set without a unit (NUT-18: `u` MUST be set
+   *   when `sm` is set).
+   */
+  build(): PaymentRequest {
+    if (this._mintsPreferred !== undefined && this._mints.length === 0) {
+      throw new CTSError('mintsPreferred (mp) requires a mint list; add mints or drop the flag');
+    }
+    if (this._methods.length > 0 && !this._unit) {
+      throw new CTSError(
+        'supported methods (sm) require a unit; set it via amount(value, unit) or unit()',
+      );
+    }
+    const seen = new Set<string>();
+    for (const m of this._methods) {
+      if (seen.has(m.method)) {
+        throw new CTSError(`duplicate supported method "${m.method}"`);
+      }
+      seen.add(m.method);
+    }
+    // Copy the collected arrays so reusing the builder cannot mutate the built request.
+    return new PaymentRequest({
+      id: this._id,
+      amount: this._amount,
+      unit: this._unit,
+      mints: this._mints.length ? [...this._mints] : undefined,
+      description: this._description,
+      transport: this._transports.length ? [...this._transports] : undefined,
+      singleUse: this._singleUse,
+      nut10: this._nut10,
+      mintsPreferred: this._mintsPreferred,
+      supportedMethods: this._methods.length ? this._methods : undefined,
+    });
   }
 }
