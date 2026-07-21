@@ -56,10 +56,10 @@ export class Keyset {
   }
 
   /**
-   * Keyset ID version byte (`-1` for deprecated base64 IDs).
+   * Keyset ID version byte (`-1` for base64 or unparseable IDs).
    */
   get version(): number {
-    return this.hasHexId ? hexToBytes(this._id)[0] : -1;
+    return this.hasHexId && this._id.length % 2 === 0 ? hexToBytes(this._id)[0] : -1;
   }
 
   get keys(): Record<number, string> {
