@@ -186,7 +186,7 @@ export class KeyChain {
   // ---------------------------------------------------------------------
 
   /**
-   * Get a keyset by ID or the cheapest keyset if no ID is provided.
+   * Get a keyset by ID, or the cheapest modern keyset if no ID is provided.
    *
    * @param id Optional keyset ID.
    * @returns Keyset with keys.
@@ -201,10 +201,11 @@ export class KeyChain {
   }
 
   /**
-   * Get the cheapest active keyset.
+   * Get the cheapest modern active keyset.
    *
    * @remarks
-   * Selects active keyset with lowest fee and hex ID.
+   * Prefers the highest keyset ID version, then the lowest fee, then the latest `final_expiry` (no
+   * expiry sorts as never expiring).
    * @returns Active Keyset.
    * @throws If none found or uninitialized.
    */
@@ -218,7 +219,10 @@ export class KeyChain {
     if (activeKeysets.length === 0) {
       throw new CTSError(`No active keyset found for unit: ${this.unit}`);
     }
-    return activeKeysets.sort((a, b) => a.fee - b.fee)[0];
+    const never = Number.MAX_SAFE_INTEGER;
+    return activeKeysets.sort(
+      (a, b) => b.version - a.version || a.fee - b.fee || (b.expiry ?? never) - (a.expiry ?? never),
+    )[0];
   }
 
   /**

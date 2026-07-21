@@ -790,6 +790,7 @@ export class Keyset {
     get unit(): string;
     verify(): boolean;
     static verifyKeysetId(keys: MintKeys): boolean;
+    get version(): number;
 }
 
 // @public
