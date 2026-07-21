@@ -6,7 +6,7 @@ import {
   p2pkOptionsToPRNut10,
   parseP2PKSecret,
 } from '../crypto/NUT11';
-import { encodeBase64toUint8, decodeCBOR, encodeCBOR, Bytes, normalizeUrl } from '../utils';
+import { encodeBase64toUint8, decodeCBOR, encodeCBOR, Bytes, normalizeMintUrl } from '../utils';
 import { decodeBech32mToBytes, encodeBech32m } from '../utils/bech32m';
 import { decodeTLV, encodeTLV } from '../utils/tlv';
 import type { DecodedTLVPaymentRequest } from '../utils/tlv';
@@ -159,7 +159,7 @@ export class PaymentRequest {
   includesMint(mintUrl: string): boolean {
     const norm = (u: string) => {
       try {
-        return normalizeUrl(u);
+        return normalizeMintUrl(u);
       } catch {
         return u;
       }
@@ -485,7 +485,7 @@ export class PaymentRequestBuilder {
   addMint(mint: string | string[]): this {
     const arr = Array.isArray(mint) ? mint : [mint];
     for (const m of arr) {
-      const normalized = normalizeUrl(m);
+      const normalized = normalizeMintUrl(m);
       if (!this._mints.includes(normalized)) this._mints.push(normalized);
     }
     return this;
