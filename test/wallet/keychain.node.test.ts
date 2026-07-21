@@ -3,7 +3,7 @@ import { setupServer } from 'msw/node';
 import { beforeAll, beforeEach, afterAll, afterEach, test, describe, expect, vi } from 'vitest';
 
 import { Mint, KeyChain, Keyset, type MintKeyset, type MintKeys } from '../../src';
-import { isValidHex } from '../../src/utils';
+import { isValidHex, deriveKeysetId } from '../../src/utils';
 import { DUMMY_TEST_KEYS, DUMMY_TEST_KEYSET, PUBKEYS } from '../consts';
 
 const mintUrl = 'http://localhost:3338';
@@ -378,6 +378,10 @@ describe('Keyset', () => {
     const keyset = new Keyset('testid', 'sat', true, undefined, undefined);
     expect(keyset.fee).toBe(0);
   });
+  test('version should be -1 for deprecated base64 IDs', () => {
+    const keyset = new Keyset('yjzQhxghPdrr', 'sat', true, undefined, undefined);
+    expect(keyset.version).toBe(-1);
+  });
   test('verifyKeysetId should return false if verifying keyset with no keys', () => {
     const badKeyset = { ...dummyKeysResp.keysets[0], keys: {} };
     const verify = Keyset.verifyKeysetId(badKeyset);
@@ -404,5 +408,99 @@ describe('Keyset', () => {
     expect(() => Keyset.fromMintApi(dummyKeysetResp.keysets[0], badKeys)).toThrow(
       /Mismatched keyset expiry/,
     );
+  });
+});
+
+// Build a genuinely-verifying keyset for PUBKEYS at a given fee.
+// Fee and expiry are part of the v1+ id preimage, so distinct values give distinct ids.
+function makeKeyset(
+  fee: number,
+  versionByte = 1,
+  expiry?: number,
+): { meta: MintKeyset; keys: MintKeys } {
+  const id = deriveKeysetId(PUBKEYS, {
+    versionByte,
+    unit: 'sat',
+    input_fee_ppk: fee,
+    expiry,
+  });
+  const meta: MintKeyset = {
+    id,
+    unit: 'sat',
+    active: true,
+    input_fee_ppk: fee,
+    final_expiry: expiry,
+  };
+  return { meta, keys: { ...meta, keys: PUBKEYS } };
+}
+
+async function initChainWith(keysets: MintKeys[]): Promise<KeyChain> {
+  server.use(
+    http.get(mintUrl + '/v1/keysets', () =>
+      HttpResponse.json({ keysets: keysets.map((k) => ({ ...k, keys: undefined })) }),
+    ),
+    http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets })),
+  );
+  const chain = new KeyChain(mint, unit);
+  await chain.init();
+  return chain;
+}
+
+describe('KeyChain.getCheapestKeyset picks the lowest fee regardless of order', () => {
+  test('returns cheapest when the cheap keyset is not first in insertion order', async () => {
+    const expensive = makeKeyset(100);
+    const cheap = makeKeyset(1);
+    // Insert expensive first: an unsorted / no-op comparator would wrongly pick it.
+    const chain = await initChainWith([expensive.keys, cheap.keys]);
+    const active = chain.getCheapestKeyset();
+    expect(active.id).toBe(cheap.meta.id);
+    expect(active.fee).toBe(1);
+  });
+
+  test('returns cheapest when the cheap keyset is first in insertion order', async () => {
+    const cheap = makeKeyset(1);
+    const expensive = makeKeyset(100);
+    // Insert cheap first: a fee-summing comparator would wrongly reverse and pick expensive.
+    const chain = await initChainWith([cheap.keys, expensive.keys]);
+    const active = chain.getCheapestKeyset();
+    expect(active.id).toBe(cheap.meta.id);
+    expect(active.fee).toBe(1);
+  });
+});
+
+describe('KeyChain.getCheapestKeyset prefers the newest keyset version', () => {
+  test('picks a newer, dearer keyset over an older, cheaper one', async () => {
+    const oldCheap = makeKeyset(1, 0);
+    const newDear = makeKeyset(100, 1);
+    const chain = await initChainWith([oldCheap.keys, newDear.keys]);
+    expect(chain.getCheapestKeyset().id).toBe(newDear.meta.id);
+  });
+
+  test('same version: fee beats expiry', async () => {
+    const cheapExpiring = makeKeyset(1, 1, 1000);
+    const dearForever = makeKeyset(100, 1);
+    const chain = await initChainWith([dearForever.keys, cheapExpiring.keys]);
+    expect(chain.getCheapestKeyset().id).toBe(cheapExpiring.meta.id);
+  });
+
+  test('same version and fee: prefers the keyset expiring last', async () => {
+    const dyingSoon = makeKeyset(1, 1, 1000);
+    const dyingLater = makeKeyset(1, 1, 2000);
+    const chain = await initChainWith([dyingSoon.keys, dyingLater.keys]);
+    expect(chain.getCheapestKeyset().id).toBe(dyingLater.meta.id);
+  });
+
+  test('same version and fee: prefers no expiry over any expiry', async () => {
+    const expiring = makeKeyset(1, 1, 2000);
+    const forever = makeKeyset(1, 1);
+    const chain = await initChainWith([expiring.keys, forever.keys]);
+    expect(chain.getCheapestKeyset().id).toBe(forever.meta.id);
+  });
+
+  test('same version and fee: no expiry wins regardless of insertion order', async () => {
+    const forever = makeKeyset(1, 1);
+    const expiring = makeKeyset(1, 1, 2000);
+    const chain = await initChainWith([forever.keys, expiring.keys]);
+    expect(chain.getCheapestKeyset().id).toBe(forever.meta.id);
   });
 });
