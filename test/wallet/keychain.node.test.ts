@@ -382,6 +382,10 @@ describe('Keyset', () => {
     const keyset = new Keyset('yjzQhxghPdrr', 'sat', true, undefined, undefined);
     expect(keyset.version).toBe(-1);
   });
+  test('version should be -1 for odd-length hex IDs', () => {
+    const keyset = new Keyset('a', 'sat', true, undefined, undefined);
+    expect(keyset.version).toBe(-1);
+  });
   test('verifyKeysetId should return false if verifying keyset with no keys', () => {
     const badKeyset = { ...dummyKeysResp.keysets[0], keys: {} };
     const verify = Keyset.verifyKeysetId(badKeyset);
