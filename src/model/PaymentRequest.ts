@@ -116,7 +116,7 @@ export class PaymentRequest {
    */
   feesFor(mint: string, meltMethods?: string[]): Amount {
     this.assertUnitRule();
-    // Fees compensate the receiver for melting out: payments from a listed mint carry none.
+    // Fees compensate the payee for melting out: payments from a listed mint carry none.
     if (!this.supportedMethods?.length || this.mints?.includes(mint)) {
       return Amount.zero();
     }
@@ -147,6 +147,25 @@ export class PaymentRequest {
       );
     }
     return this.amount.add(this.feesFor(mint, meltMethods));
+  }
+
+  /**
+   * Whether `mintUrl` is in the request's mint list, compared after URL normalization.
+   *
+   * @remarks
+   * Foreign requests may carry non-normalized or unparsable entries; those fall back to a raw
+   * string comparison. `false` when the request has no mint list.
+   */
+  includesMint(mintUrl: string): boolean {
+    const norm = (u: string) => {
+      try {
+        return normalizeUrl(u);
+      } catch {
+        return u;
+      }
+    };
+    const target = norm(mintUrl);
+    return this.mints?.some((m) => norm(m) === target) ?? false;
   }
 
   toRawRequest() {
@@ -514,7 +533,7 @@ export class PaymentRequestBuilder {
   }
 
   /**
-   * Appends an HTTP POST transport; the sender POSTs the payment payload to `url`.
+   * Appends an HTTP POST transport; the payer POSTs the payment payload to `url`.
    */
   addHttpPostTransport(url: string): this {
     return this.addTransport({ type: PaymentRequestTransportType.POST, target: url });

@@ -411,7 +411,7 @@ export function p2pkOptionsToPRNut10(p2pk: P2PKOptions): NUT10Option {
   const normalized = normalizeP2PKOptions(p2pk);
   if (normalized.blindKeys) {
     throw new CTSError(
-      'blindKeys is not expressible in a payment request; the sender applies P2BK blinding per output',
+      'blindKeys is not expressible in a payment request; the payer applies P2BK blinding per output',
     );
   }
   return {

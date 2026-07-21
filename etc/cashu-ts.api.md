@@ -1657,6 +1657,7 @@ class PaymentRequest_2 {
     getTransport(type: PaymentRequestTransportType): PaymentRequestTransport | undefined;
     // (undocumented)
     id?: string;
+    includesMint(mintUrl: string): boolean;
     get isMintListStrict(): boolean | undefined;
     // (undocumented)
     mints?: string[];
@@ -2350,6 +2351,7 @@ export class Wallet {
         pending: T[];
         spent: T[];
     }>;
+    isPaymentRequestSatisfied(pr: PaymentRequest_2, proofs: Array<Pick<Proof, 'id' | 'amount'>>, expectedAmount?: AmountLike): boolean;
     get keyChain(): KeyChain;
     get keysetId(): string;
     loadMint(forceRefresh?: boolean): Promise<void>;
@@ -2464,6 +2466,7 @@ export class WalletOps {
     receive(token: Token | string | ProofLike[]): ReceiveBuilder;
     // (undocumented)
     send(amount: AmountLike, proofs: ProofLike[]): SendBuilder;
+    sendToRequest(pr: PaymentRequest_2, proofs: ProofLike[], amount?: AmountLike): SendBuilder;
 }
 
 // @public
