@@ -544,7 +544,9 @@ export function joinUrls(...parts: string[]): string {
  * Parses and normalizes a mint URL: validates the scheme (http/https only), rejects credentials,
  * query parameters, fragments, and encoded path delimiters, and strips any trailing slashes.
  *
- * @example normalizeMintUrl('https://Mint.Example.COM/'); // 'https://mint.example.com'
+ * @example
+ *
+ *     normalizeMintUrl('https://Mint.Example.COM/'); // 'https://mint.example.com'
  *
  * @throws CTSError if the URL is invalid, non-http(s), or contains credentials, query, fragment, or
  *   encoded path delimiters.
