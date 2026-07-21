@@ -9,8 +9,8 @@ into core.
 ## `normalizeMintUrl`
 
 Parses and normalizes a mint URL into its canonical form: validates the scheme (http/https
-only), rejects credentials, query parameters, fragments, and encoded path delimiters, lowercases
-the host, and strips trailing slashes. Throws `CTSError` on invalid input.
+only), rejects credentials, query parameters, fragments, and percent-encoded characters in the
+path, lowercases the host, and strips trailing slashes. Throws `CTSError` on invalid input.
 
 Use it anywhere a mint URL acts as an identity or cache key, two URLs that normalize
 identically refer to the same mint. `Wallet` and `Mint` already apply it internally to the
