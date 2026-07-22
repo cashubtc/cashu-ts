@@ -122,6 +122,56 @@ describe('wallet.maxSpendableAfterFees', () => {
   });
 });
 
+describe('wallet.getFeesToInclude', () => {
+  test('returns zero when the keyset charges no input fees', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    expect(wallet.getFeesToInclude(100).isZero()).toBe(true);
+  });
+
+  test('converges on the fee for the fee outputs themselves', async () => {
+    // 1000 ppk = 1 sat per proof.
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({
+          keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 1000 }],
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    // Fixture keys are {1,2}. Amount 2 is one output (naive fee 1), but the fee
+    // output itself incurs a fee: two inputs cost 2, so the converged fee is 2.
+    expect(wallet.getFeesToInclude(2).toString()).toBe('2');
+  });
+
+  test('nOutputs overrides the count derived from the default split', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({
+          keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 1000 }],
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    // Caller plans 3 outputs (custom denominations): 3 fee outputs converge on 6.
+    expect(wallet.getFeesToInclude(2, { nOutputs: 3 }).toString()).toBe('6');
+  });
+
+  test('throws when the keyset id is unknown', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    expect(() => wallet.getFeesToInclude(100, { keysetId: '00missingkeyset' })).toThrow(
+      /not found/,
+    );
+  });
+});
+
 describe('wallet.isPaymentRequestSatisfied', () => {
   test('enforces the net-of-input-fees formula (NUT-18)', async () => {
     // Keyset charges 1 sat per proof (1000 ppk), the spec's dust-protection scenario.

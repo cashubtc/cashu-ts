@@ -2347,6 +2347,10 @@ export class Wallet {
     defaultOutputType(): OutputType;
     getFeesForKeyset(nInputs: number, keysetId: string): Amount;
     getFeesForProofs(proofs: Array<Pick<Proof, 'id'>>): Amount;
+    getFeesToInclude(amount: AmountLike, opts?: {
+        keysetId?: string;
+        nOutputs?: number;
+    }): Amount;
     getKeyset(id?: string): Keyset;
     getMintInfo(): MintInfo;
     groupProofsByState<T extends ProofLike = Proof>(proofs: T[]): Promise<{
