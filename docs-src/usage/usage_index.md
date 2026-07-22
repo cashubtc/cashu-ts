@@ -20,6 +20,7 @@ If you are building a wallet integration from scratch, read these in order:
 
 ## Recipes
 
+<<<<<<< HEAD
 | Recipe                                | Use it for                                                             |
 | :------------------------------------ | :--------------------------------------------------------------------- |
 | [Create Wallet](./create_wallet.md)   | Initialize a wallet from a mint URL or cached mint state.              |
@@ -33,6 +34,26 @@ If you are building a wallet integration from scratch, read these in order:
 | [Logging](./logging.md)               | Enable and route library logs while debugging wallet or mint behavior. |
 | [Amounts](./amounts.md)               | Work with the `Amount` and `AmountWithUnit` value objects.             |
 | [Helpers](./helpers.md)               | Standalone public utility functions.                                   |
+=======
+| Recipe                                              | Use it for                                                                      |
+| :-------------------------------------------------- | :------------------------------------------------------------------------------ |
+| [Create Wallet](./create_wallet.md)                 | Initialize a wallet from a mint URL or cached mint state.                       |
+| [Inspect Mint Capabilities](./mint_capabilities.md) | Discover which methods you can mint/melt with and which NUTs the mint supports. |
+| [Mint Token](./mint_token.md)                       | Create proofs from a paid quote, including two-step mint flows.                 |
+| [Create Token](./create_token.md)                   | Send standard Cashu tokens to another wallet.                                   |
+| [Create P2PK](./create_p2pk.md)                     | Send tokens locked to a public key.                                             |
+| [Derive Keys](./derive_keys.md)                     | Derive recoverable P2PK / NUT-20 keys deterministically from the wallet seed.   |
+| [Get Token](./get_token.md)                         | Inspect token metadata before wallet creation or decode it after load.          |
+| [Melt Token](./melt_token.md)                       | Pay BOLT11 invoices or other payment methods with wallet proofs.                |
+| [Payment Requests](./payment_requests.md)           | Decode, price (fees), fulfil, and create NUT-18 / NUT-26 payment requests.      |
+| [Restore Proofs](./restore_proofs.md)               | Recover deterministic proofs from the wallet seed across keysets.               |
+| [Bolt12](./bolt12.md)                               | Work with reusable BOLT12 offers for minting and melting.                       |
+| [NUT-19 Cached Responses](./nut19.md)               | Understand cached endpoint retries and timeout behavior.                        |
+| [Logging](./logging.md)                             | Enable and route library logs while debugging wallet or mint behavior.          |
+| [Amounts](./amounts.md)                             | Work with the `Amount` and `AmountWithUnit` value objects.                      |
+| [Fees](./fees.md)                                   | Pick the right fee helper: input fees, sender-pays-fees, send-max, NUT-18.      |
+| [Helpers](./helpers.md)                             | Standalone public utility functions — currently mint URL normalization.         |
+>>>>>>> 7f69e49 (feat(wallet): add getFeesToInclude fee helper (#846))
 
 ## Related docs
 
