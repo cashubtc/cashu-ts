@@ -122,4 +122,58 @@ describe('EphemeralCounterSource', () => {
     const snap2 = await src.snapshot();
     expect(snap2).toEqual({ a: 1 }); // source unchanged
   });
+
+  it('reserve(n=0) does not create a counter entry', async () => {
+    const src = new EphemeralCounterSource();
+    const r = await src.reserve('k', 0);
+    expect(r).toEqual({ start: 0, count: 0 });
+    // The read-only peek must not persist a counter for the keyset.
+    expect(await src.snapshot()).toEqual({});
+  });
+
+  it('advanceToAtLeast(minNext=cur) leaves the counter untouched', async () => {
+    const src = new EphemeralCounterSource();
+    // minNext equals the default cursor (0): must not create an entry.
+    await src.advanceToAtLeast('k', 0);
+    expect(await src.snapshot()).toEqual({});
+
+    await src.reserve('k', 4); // next=4
+    await src.advanceToAtLeast('k', 4); // equal, no change
+    expect((await src.snapshot()).k).toBe(4);
+  });
+
+  it('setNext accepts zero and only rejects strictly-negative values', async () => {
+    const src = new EphemeralCounterSource();
+    await expect(src.setNext('k', 0)).resolves.toBeUndefined();
+    expect((await src.snapshot()).k).toBe(0);
+    const r = await src.reserve('k', 1);
+    expect(r).toEqual({ start: 0, count: 1 });
+    await expect(src.setNext('k', -1)).rejects.toThrow(/negative next/);
+  });
+
+  it('releases the per-key lock so later awaited reserves proceed', async () => {
+    const src = new EphemeralCounterSource();
+    // If the lock were never released, the second awaited reserve would hang/reject.
+    expect(await src.reserve('k', 1)).toEqual({ start: 0, count: 1 });
+    expect(await src.reserve('k', 1)).toEqual({ start: 1, count: 1 });
+    expect(await src.reserve('k', 1)).toEqual({ start: 2, count: 1 });
+    expect((await src.snapshot()).k).toBe(3);
+  });
+
+  it('serializes interleaved reserve and advance calls without gaps or overlaps', async () => {
+    const src = new EphemeralCounterSource();
+    const results = await Promise.all([
+      src.reserve('k', 2),
+      src.reserve('k', 3),
+      src.advanceToAtLeast('k', 1),
+      src.reserve('k', 1),
+    ]);
+    const reserves = results.filter((r): r is CounterRange => r !== undefined);
+    // Contiguous, non-overlapping allocation across the burst.
+    const covered = reserves
+      .flatMap((r) => Array.from({ length: r.count }, (_, i) => r.start + i))
+      .sort((a, b) => a - b);
+    expect(covered).toEqual([0, 1, 2, 3, 4, 5]);
+    expect((await src.snapshot()).k).toBe(6);
+  });
 });

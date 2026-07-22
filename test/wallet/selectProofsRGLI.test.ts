@@ -1,6 +1,6 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { sumProofs } from '../../src';
+import { CTSError, sumProofs } from '../../src';
 import { Amount } from '../../src/model/Amount';
 import { type Proof } from '../../src/model/types';
 import { selectProofsRGLI } from '../../src/wallet/SelectProofs';
@@ -185,7 +185,157 @@ describe('selectProofsRGLI, focused unit tests', () => {
   });
 });
 
+describe('selectProofsRGLI, default parameters', () => {
+  test('includeFees defaults to false (fees are not applied when the arg is omitted)', () => {
+    // 1 sat/proof fee (1000ppk). With includeFees=false the two 1-sat proofs net 2 and
+    // meet the target; if the default were true they would be uneconomical and dropped.
+    const proofs: Proof[] = [
+      { id: 'A', amount: Amount.from(1), secret: 's1', C: 'C1' },
+      { id: 'A', amount: Amount.from(1), secret: 's2', C: 'C2' },
+    ];
+    const kc = keychainStub({ A: 1000 });
+
+    // Three-arg call: both includeFees and exactMatch defaulted.
+    const res = selectProofsRGLI(proofs, 2, kc);
+
+    expect(res.send).toHaveLength(2);
+    expect(sumProofs(res.send).toNumber()).toBe(2);
+    expect(res.keep).toHaveLength(0);
+  });
+
+  test('exactMatch defaults to false (close match) when the arg is omitted', () => {
+    // No subset of {5,5} sums to 3, so exact match returns nothing, but a close match
+    // returns one 5-sat proof (net 5 >= 3). The omitted arg must behave as close match.
+    const proofs: Proof[] = [
+      { id: 'A', amount: Amount.from(5), secret: 's1', C: 'C1' },
+      { id: 'A', amount: Amount.from(5), secret: 's2', C: 'C2' },
+    ];
+    const kc = keychainStub({ A: 0 });
+
+    // Four-arg call: exactMatch defaulted, includeFees explicit.
+    const res = selectProofsRGLI(proofs, 3, kc, false);
+    expect(res.send.map((p) => p.amount.toNumber())).toEqual([5]);
+
+    // Sanity: the explicit exact-match variant of the same input returns nothing.
+    const exact = selectProofsRGLI(proofs, 3, kc, false, true);
+    expect(exact.send).toHaveLength(0);
+  });
+});
+
+describe('selectProofsRGLI, guards and error context', () => {
+  test('fee lookup failure preserves the original error as cause and logs context', () => {
+    const proofs: Proof[] = [{ id: 'MISSING', amount: Amount.from(4), secret: 's1', C: 'C1' }];
+    const original = new Error('no keyset MISSING');
+    const error = vi.fn<(m: string, ctx?: unknown) => void>();
+    const kc = {
+      getKeyset: () => {
+        throw original;
+      },
+      getKeysets: () => [{ id: 'K', fee: 0 }],
+    } as any;
+
+    let caught: unknown;
+    try {
+      selectProofsRGLI(proofs, 5, kc, false, false, { error } as any);
+    } catch (e) {
+      caught = e;
+    }
+    // The thrown CTSError chains the underlying lookup error.
+    expect(caught).toBeInstanceOf(CTSError);
+    expect((caught as CTSError).cause).toBe(original);
+    // The error log carries structured context (the raw error and keychain snapshot).
+    expect(error).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ error: original, keychain: [{ id: 'K', fee: 0 }] }),
+    );
+  });
+});
+
+describe('selectProofsRGLI, early-return guards', () => {
+  test('zero target returns keep-all and empty send', () => {
+    const proofs: Proof[] = [
+      { id: 'A', amount: Amount.from(5), secret: 's1', C: 'C1' },
+      { id: 'A', amount: Amount.from(5), secret: 's2', C: 'C2' },
+    ];
+    const kc = keychainStub({ A: 0 });
+
+    const res = selectProofsRGLI(proofs, 0, kc);
+    expect(res.send).toHaveLength(0);
+    expect(res.keep).toHaveLength(2);
+  });
+});
+
+describe('selectProofsRGLI, deterministic selection', () => {
+  test('exact match returns the unique full-set solution', () => {
+    // {1,2,4} sums to exactly 7 only as the whole set, so exact match must send all three.
+    const proofs: Proof[] = [
+      { id: 'A', amount: Amount.from(1), secret: 's1', C: 'C1' },
+      { id: 'A', amount: Amount.from(2), secret: 's2', C: 'C2' },
+      { id: 'A', amount: Amount.from(4), secret: 's3', C: 'C3' },
+    ];
+    const kc = keychainStub({ A: 0 });
+
+    const res = selectProofsRGLI(proofs, 7, kc, false, true);
+    expect(res.send.map((p) => p.amount.toNumber()).sort((a, b) => a - b)).toEqual([1, 2, 4]);
+    expect(res.keep).toHaveLength(0);
+  });
+
+  test('close match with a fixed RNG returns the exact-hit subset', () => {
+    // With Math.random pinned the shuffle is deterministic; {2,3,5} nets exactly 10.
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const proofs: Proof[] = [
+      { id: 'A', amount: Amount.from(1), secret: 's1', C: 'C1' },
+      { id: 'A', amount: Amount.from(2), secret: 's2', C: 'C2' },
+      { id: 'A', amount: Amount.from(3), secret: 's3', C: 'C3' },
+      { id: 'A', amount: Amount.from(5), secret: 's4', C: 'C4' },
+      { id: 'A', amount: Amount.from(8), secret: 's5', C: 'C5' },
+    ];
+    const kc = keychainStub({ A: 0 });
+
+    const res = selectProofsRGLI(proofs, 10, kc, false, false);
+    // Arbitrary-but-RNG-pinned tie-break: {2,3,5} and {2,8} both sum to 10. Asserting the
+    // exact subset the pinned shuffle lands on is a deliberate change-detector, not a unique
+    // spec solution.
+    expect(res.send.map((p) => p.amount.toNumber()).sort((a, b) => a - b)).toEqual([2, 3, 5]);
+    expect(sumProofs(res.send).toNumber()).toBe(10);
+  });
+
+  test('exact match with a seeded RNG swaps in the exact {2,4} subset', () => {
+    // Seeded sequence drives the greedy + local-improvement swaps to the exact solution.
+    const seq = [0.1, 0.9, 0.3, 0.7, 0.5, 0.2, 0.8];
+    let i = 0;
+    vi.spyOn(Math, 'random').mockImplementation(() => seq[i++ % seq.length]);
+    const proofs: Proof[] = [
+      { id: 'A', amount: Amount.from(1), secret: 's1', C: 'C1' },
+      { id: 'A', amount: Amount.from(2), secret: 's2', C: 'C2' },
+      { id: 'A', amount: Amount.from(4), secret: 's3', C: 'C3' },
+      { id: 'A', amount: Amount.from(8), secret: 's4', C: 'C4' },
+    ];
+    const kc = keychainStub({ A: 0 });
+
+    const res = selectProofsRGLI(proofs, 6, kc, false, true);
+    expect(res.send.map((p) => p.amount.toNumber()).sort((a, b) => a - b)).toEqual([2, 4]);
+  });
+});
+
 describe('selectProofsRGLI, invariants', () => {
+  test('a feasible close match never returns under the target (repeated unseeded runs)', () => {
+    // Exact 5 exists ({1,4}); every run must net >= target with no RNG mocking.
+    const proofs: Proof[] = [
+      { id: 'A', amount: Amount.from(1), secret: 's1', C: 'C1' },
+      { id: 'A', amount: Amount.from(2), secret: 's2', C: 'C2' },
+      { id: 'A', amount: Amount.from(4), secret: 's3', C: 'C3' },
+      { id: 'A', amount: Amount.from(8), secret: 's4', C: 'C4' },
+    ];
+    const kc = keychainStub({ A: 0 });
+
+    for (let run = 0; run < 25; run++) {
+      const res = selectProofsRGLI(proofs, 5, kc, false, false);
+      expect(res.send.length).toBeGreaterThan(0);
+      expect(sumProofs(res.send).toNumber()).toBeGreaterThanOrEqual(5);
+    }
+  });
+
   test('sub-sat fee proofs are kept and aggregate into a spendable sat', () => {
     // 1 sat at 999ppk nets 0.001 alone; one thousand of them net exactly 1
     const proofs: Proof[] = Array.from({ length: 1000 }, (_, i) => ({
