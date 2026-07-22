@@ -42,17 +42,19 @@ It returns the normal send builder, so further options (deterministic outputs, k
 
 ### 3. Deliver the payload
 
-Send the payee a `PaymentRequestPayload` over the request's transport (HTTP POST body, Nostr DM, or in-band if no transport is given):
+`encodePayload` packages the proofs into the default NUT-18 `PaymentRequestPayload`, serialized as bigint-safe JSON ready for the wire (plain `JSON.stringify` throws on proof amounts). It fills `id` and `unit` from the request and rejects a mint outside the request's strict mint list:
 
 ```typescript
-import type { PaymentRequestPayload } from '@cashu/cashu-ts';
+const { keep, send } = await wallet.ops.sendToRequest(pr, proofs).run();
+const body = pr.encodePayload(wallet.mint.mintUrl, send, { memo: 'thanks' });
 
-const payload: PaymentRequestPayload = {
-  id: pr.id,
-  mint: myMint,
-  unit: pr.unit ?? myUnit, // the requested unit, or the unit of what you send
-  proofs: send, // the locked/selected proofs
-};
+// HTTP POST transport; for a Nostr transport, send `body` as the DM content.
+const post = pr.getTransport('post');
+await fetch(post.target, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body,
+});
 ```
 
 > [!IMPORTANT]
@@ -101,6 +103,27 @@ const request = new PaymentRequest({
   mintsPreferred: true, // advisory list
   supportedMethods: [{ method: 'bolt11' }, { method: 'bolt12', fee: 5 }],
 });
+```
+
+### Receive the payload
+
+Payloads arrive as raw text from the payer's wallet, so parse with `decodePayload` rather than `JSON.parse` (which silently corrupts amounts above 2^53). It validates the shape and normalizes proof amounts to `bigint`; matching the payload to your request is your job:
+
+```typescript
+import { PaymentRequest, type PaymentRequestPayload } from '@cashu/cashu-ts';
+
+let payload: PaymentRequestPayload;
+try {
+  payload = PaymentRequest.decodePayload(body); // POST body or Nostr DM content
+} catch {
+  return; // malformed: ignore or 400
+}
+
+if (payload.id !== request.id) return; // not for this request
+// Accept only mints you chose: with a mint list on the request that is
+// `request.includesMint(payload.mint)`; without one, check against your own
+// accepted set. Never dial an unknown mint URL taken from a payload.
+if (!request.includesMint(payload.mint)) return;
 ```
 
 ### Validate a payment
