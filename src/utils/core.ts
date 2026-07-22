@@ -174,12 +174,12 @@ export function numberToHexPadded64(scalar: bigint): string {
 }
 
 /**
- * Returns `true` if the string contains only hexadecimal characters (case-insensitive).
+ * Returns `true` if the string is byte-decodable hex (even length, hex chars only).
  *
  * @internal
  */
 export function isValidHex(str: string) {
-  return /^[a-f0-9]+$/i.test(str);
+  return str.length % 2 === 0 && /^[a-f0-9]+$/i.test(str);
 }
 
 function hasNonHexId(p: Proof | Proof[]) {
