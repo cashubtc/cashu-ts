@@ -1252,6 +1252,9 @@ export class NetworkError extends CTSError {
 }
 
 // @public
+export function normalizeMintUrl(url: string): string;
+
+// @public
 export function normalizeProofAmounts(raw: ProofLike[]): Proof[];
 
 // @public

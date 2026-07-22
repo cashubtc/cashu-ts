@@ -22,6 +22,7 @@
     "docs-src/usage/bolt12.md",
     "docs-src/usage/nut19.md",
     "docs-src/usage/logging.md",
+    "docs-src/usage/helpers.md",
     "docs-src/wallet_ops/wallet_ops.md",
     "docs-src/wallet_ops/send.md",
     "docs-src/wallet_ops/receive.md",

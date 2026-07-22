@@ -50,8 +50,8 @@ import {
   joinUrls,
   normalizeMintKeys,
   normalizeMintKeyset,
+  normalizeMintUrl,
   normalizeSafeIntegerMetadata,
-  normalizeUrl,
   nullIfUndefined,
 } from '../utils';
 
@@ -95,7 +95,7 @@ class Mint {
       logger?: Logger;
     },
   ) {
-    this._mintUrl = normalizeUrl(mintUrl);
+    this._mintUrl = normalizeMintUrl(mintUrl);
     this._request = options?.customRequest ?? request;
     this._authProvider = options?.authProvider;
     this._logger = options?.logger ?? NULL_LOGGER;
