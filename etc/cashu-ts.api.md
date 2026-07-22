@@ -687,7 +687,6 @@ export class Keyset {
     // (undocumented)
     get fee(): number;
     static fromMintApi(meta: MintKeyset, keys?: MintKeys): Keyset;
-    // (undocumented)
     get hasHexId(): boolean;
     // (undocumented)
     get hasKeys(): boolean;
