@@ -312,6 +312,16 @@ describe('createMintQuoteBolt12 mutants', () => {
       'Mint quote is not locked to the requested pubkey',
     );
   });
+
+  test('rejects a missing pubkey with a clear error, not a TypeError', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    // A loosely-typed JS caller can omit the required pubkey; fail fast, not on `.toLowerCase()`.
+    await expect(wallet.createMintQuoteBolt12(undefined as unknown as string)).rejects.toThrow(
+      'A pubkey is required to lock the mint quote',
+    );
+  });
 });
 
 describe('createMintQuoteOnchain mutants', () => {
@@ -357,6 +367,15 @@ describe('createMintQuoteOnchain mutants', () => {
 
     await expect(wallet.createMintQuoteOnchain('02abcd')).rejects.toThrow(
       'Mint quote is not locked to the requested pubkey',
+    );
+  });
+
+  test('rejects a missing pubkey with a clear error, not a TypeError', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createMintQuoteOnchain(undefined as unknown as string)).rejects.toThrow(
+      'A pubkey is required to lock the mint quote',
     );
   });
 });
@@ -993,6 +1012,15 @@ describe('createLockedMintQuote mutants', () => {
 
     const quote = await wallet.createLockedMintQuote(100, PUBKEY);
     expect(quote.pubkey.toLowerCase()).toBe(PUBKEY);
+  });
+
+  test('rejects a missing pubkey with a clear error, not a TypeError', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createLockedMintQuote(100, undefined as unknown as string)).rejects.toThrow(
+      'A pubkey is required to lock the mint quote',
+    );
   });
 });
 
