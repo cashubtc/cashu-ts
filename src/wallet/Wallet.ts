@@ -762,11 +762,19 @@ class Wallet {
    * Iterates until the fee is stable, since fee outputs also incur fees.
    */
   private receiveFeeAmounts(nOutputs: number, keyset: Keyset): Amount[] {
+    // Bound the +1 convergence; any realistic keyset converges in a few dozen steps.
+    const maxIters = 1 << 12;
     let receiveFee = this.getFeesForKeyset(nOutputs, keyset.id);
     let receiveFeeAmounts = splitAmount(receiveFee, keyset.keys);
+    let iters = 0;
     while (
       this.getFeesForKeyset(nOutputs + receiveFeeAmounts.length, keyset.id).greaterThan(receiveFee)
     ) {
+      if (iters++ > maxIters) {
+        throw new CTSError(
+          `Fee calculation for keyset ${keyset.id} did not converge (input_fee_ppk too high for its denominations)`,
+        );
+      }
       receiveFee = receiveFee.add(1);
       receiveFeeAmounts = splitAmount(receiveFee, keyset.keys);
     }

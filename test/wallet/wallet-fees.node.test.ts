@@ -2,8 +2,28 @@ import { HttpResponse, http } from 'msw';
 import { test, describe, expect } from 'vitest';
 
 import { Wallet, Amount, CTSError, type Proof } from '../../src';
+import { deriveKeysetId } from '../../src/utils';
+import { PUBKEYS } from '../consts';
 
 import { mint, unit, mintUrl, useTestServer } from './_setup';
+
+// Full power-of-two denomination set, a realistic set for fee convergence. A v0 keyset id hashes
+// only the pubkeys (not the fee), so one id is valid for any advertised fee.
+const FULL_DENOM_ID = deriveKeysetId(PUBKEYS, { versionByte: 0 });
+
+// Advertise a full-denomination keyset with a given input fee, so fee convergence sees a realistic
+// denomination set rather than the {1,2} default fixture.
+const useKeysetWithFee = (server: ReturnType<typeof useTestServer>, input_fee_ppk: number) => {
+  const id = FULL_DENOM_ID;
+  const withKeys = { id, unit: 'sat', active: true, input_fee_ppk, keys: PUBKEYS };
+  server.use(
+    http.get(mintUrl + '/v1/keysets', () =>
+      HttpResponse.json({ keysets: [{ id, unit: 'sat', active: true, input_fee_ppk }] }),
+    ),
+    http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [withKeys] })),
+    http.get(mintUrl + '/v1/keys/' + id, () => HttpResponse.json({ keysets: [withKeys] })),
+  );
+};
 
 const server = useTestServer();
 
@@ -169,5 +189,24 @@ describe('wallet.getFeesToInclude', () => {
     expect(() => wallet.getFeesToInclude(100, { keysetId: '00missingkeyset' })).toThrow(
       /not found/,
     );
+  });
+
+  test('converges on the minimal (fewest-output) fee, not an overshoot', async () => {
+    // 3000 ppk = 3 sat per input. Spending 1 real output plus its fee outputs, a single 8 output
+    // is minimal: it covers the two-input fee (fee(2) = 6) with the fewest outputs. A convergence
+    // that jumps past the low-popcount value would settle on 9 (two outputs) instead.
+    useKeysetWithFee(server, 3000);
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    expect(wallet.getFeesToInclude(1).toString()).toBe('8');
+  });
+
+  test('fails fast instead of hanging when input_fee_ppk is degenerately large', async () => {
+    useKeysetWithFee(server, 10_000_000_000);
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    expect(() => wallet.getFeesToInclude(1)).toThrow(/did not converge/);
   });
 });
