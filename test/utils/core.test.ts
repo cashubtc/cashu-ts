@@ -23,7 +23,7 @@ import {
   deserializeProofs,
   normalizeProofAmounts,
   sortProofsById,
-  normalizeUrl,
+  normalizeMintUrl,
   verifyDleqIfPresent,
 } from '../../src/utils';
 import {
@@ -1242,70 +1242,72 @@ describe('mapShortKeysetIds via getDecodedToken (v2 keyset IDs)', () => {
   });
 });
 
-describe('normalizeUrl', () => {
+describe('normalizeMintUrl', () => {
   test('strips trailing slash', () => {
-    expect(normalizeUrl('https://mint.example.com/')).toBe('https://mint.example.com');
+    expect(normalizeMintUrl('https://mint.example.com/')).toBe('https://mint.example.com');
   });
   test('strips multiple trailing slashes', () => {
-    expect(normalizeUrl('https://mint.example.com///')).toBe('https://mint.example.com');
+    expect(normalizeMintUrl('https://mint.example.com///')).toBe('https://mint.example.com');
   });
   test('preserves path', () => {
-    expect(normalizeUrl('https://mint.example.com/v1/mint')).toBe(
+    expect(normalizeMintUrl('https://mint.example.com/v1/mint')).toBe(
       'https://mint.example.com/v1/mint',
     );
   });
   test('throws on malformed URL', () => {
-    expect(() => normalizeUrl('not-a-url')).toThrow('Invalid mint URL: not-a-url');
+    expect(() => normalizeMintUrl('not-a-url')).toThrow('Invalid mint URL: not-a-url');
   });
   test('throws on non-http scheme', () => {
-    expect(() => normalizeUrl('ftp://mint.example.com')).toThrow('Invalid mint URL scheme: ftp:');
+    expect(() => normalizeMintUrl('ftp://mint.example.com')).toThrow(
+      'Invalid mint URL scheme: ftp:',
+    );
   });
   test('accepts http', () => {
-    expect(normalizeUrl('http://localhost:3338')).toBe('http://localhost:3338');
+    expect(normalizeMintUrl('http://localhost:3338')).toBe('http://localhost:3338');
   });
   test('accepts .onion', () => {
-    expect(normalizeUrl('http://abc123.onion/path')).toBe('http://abc123.onion/path');
+    expect(normalizeMintUrl('http://abc123.onion/path')).toBe('http://abc123.onion/path');
   });
   test('rejects query parameters', () => {
-    expect(() => normalizeUrl('https://mint.example.com?token=abc')).toThrow(
+    expect(() => normalizeMintUrl('https://mint.example.com?token=abc')).toThrow(
       'Mint URL must not contain query parameters',
     );
   });
   test('rejects trailing ? with no query value', () => {
-    expect(() => normalizeUrl('https://mint.example.com/path?')).toThrow(
+    expect(() => normalizeMintUrl('https://mint.example.com/path?')).toThrow(
       'Mint URL must not contain query parameters',
     );
   });
   test('rejects fragment', () => {
-    expect(() => normalizeUrl('https://mint.example.com#section')).toThrow(
+    expect(() => normalizeMintUrl('https://mint.example.com#section')).toThrow(
       'Mint URL must not contain a fragment',
     );
   });
   test('rejects trailing # with no fragment value', () => {
-    expect(() => normalizeUrl('https://mint.example.com/path#')).toThrow(
+    expect(() => normalizeMintUrl('https://mint.example.com/path#')).toThrow(
       'Mint URL must not contain a fragment',
     );
   });
   test('rejects credentials', () => {
-    expect(() => normalizeUrl('https://user:pass@mint.example.com')).toThrow(
+    expect(() => normalizeMintUrl('https://user:pass@mint.example.com')).toThrow(
       'Mint URL must not contain credentials',
     );
-    expect(() => normalizeUrl('https://user@mint.example.com')).toThrow(
+    expect(() => normalizeMintUrl('https://user@mint.example.com')).toThrow(
       'Mint URL must not contain credentials',
     );
   });
   test('rejects percent-encoded path characters', () => {
-    expect(() => normalizeUrl('https://mint.example.com/path%3Ftoken=abc')).toThrow(
+    expect(() => normalizeMintUrl('https://mint.example.com/path%3Ftoken=abc')).toThrow(
       'Mint URL path must not contain percent-encoded characters',
     );
-    expect(() => normalizeUrl('https://mint.example.com/path%23fragment')).toThrow(
+    expect(() => normalizeMintUrl('https://mint.example.com/path%23fragment')).toThrow(
       'Mint URL path must not contain percent-encoded characters',
     );
-    expect(() => normalizeUrl('https://mint.example.com/path%2Fadmin')).toThrow(
+    expect(() => normalizeMintUrl('https://mint.example.com/path%2Fadmin')).toThrow(
       'Mint URL path must not contain percent-encoded characters',
     );
   });
   test('lowercases hostname', () => {
-    expect(normalizeUrl('https://Mint.Example.COM')).toBe('https://mint.example.com');
+    expect(normalizeMintUrl('https://Mint.Example.COM')).toBe('https://mint.example.com');
   });
 });

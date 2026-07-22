@@ -400,9 +400,12 @@ The following are still exported but are excluded from the trimmed type definiti
 | `numberToHexPadded64`   | Crypto scalar helper (bigint → 64-char hex).   |
 | `isObj`                 | HTTP response type guard.                      |
 | `joinUrls`              | Mint URL path builder.                         |
-| `sanitizeUrl`           | Renamed to `normalizeUrl` (internal).          |
 | `invoiceHasAmountInHRP` | BOLT-11 HRP amount detector.                   |
 | `bigIntStringify`       | `JSON.stringify` replacer for `bigint` values. |
+
+### `sanitizeUrl` renamed to `normalizeMintUrl`
+
+`sanitizeUrl` has been renamed to `normalizeMintUrl` and made part of the public API. It now also parses and validates the URL, rejecting invalid schemes, credentials, query parameters, fragments, and percent-encoded path characters, rather than only sanitizing it.
 
 ### `handleTokens` no longer exported
 
