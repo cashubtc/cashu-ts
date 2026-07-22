@@ -1112,6 +1112,35 @@ describe('getEncodedToken edge cases', () => {
     };
     expect(() => utils.getEncodedToken(token)).toThrow(/legacy keyset ID/);
   });
+  test('rejects a proof with a nullish id as legacy, not with a TypeError', () => {
+    // A hand-built or JSON-parsed token may carry id: undefined/null. The id checks must
+    // classify it as legacy and reject, not read .length off a nullish value.
+    for (const id of [undefined, null]) {
+      const token: Token = {
+        mint: 'http://localhost:3338',
+        proofs: [
+          { id: id as unknown as string, amount: Amount.from(1), secret: 'abc', C: '02abc' },
+        ],
+        unit: 'sat',
+      };
+      expect(() => utils.getEncodedToken(token)).toThrow(/legacy keyset ID/);
+    }
+  });
+});
+
+describe('isValidHex', () => {
+  test('returns false for non-string input without throwing', () => {
+    expect(utils.isValidHex(undefined as unknown as string)).toBe(false);
+    expect(utils.isValidHex(null)).toBe(false);
+    expect(utils.isValidHex(1234)).toBe(false);
+  });
+  test('returns false for empty and odd-length strings', () => {
+    expect(utils.isValidHex('')).toBe(false);
+    expect(utils.isValidHex('abc')).toBe(false);
+  });
+  test('returns true for even-length hex', () => {
+    expect(utils.isValidHex('00abcd')).toBe(true);
+  });
 });
 
 describe('getDecodedTokenBinary edge cases', () => {
