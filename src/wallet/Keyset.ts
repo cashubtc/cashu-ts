@@ -51,6 +51,9 @@ export class Keyset {
     return Object.keys(this._keys).length > 0;
   }
 
+  /**
+   * True if the ID is modern byte-encoded hex.
+   */
   get hasHexId(): boolean {
     return isValidHex(this._id);
   }
@@ -59,7 +62,7 @@ export class Keyset {
    * Keyset ID version byte (`-1` for base64 or unparseable IDs).
    */
   get version(): number {
-    return this.hasHexId && this._id.length % 2 === 0 ? hexToBytes(this._id)[0] : -1;
+    return this.hasHexId ? hexToBytes(this._id)[0] : -1;
   }
 
   get keys(): Record<number, string> {

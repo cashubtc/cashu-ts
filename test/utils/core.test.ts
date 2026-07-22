@@ -1104,6 +1104,14 @@ describe('getEncodedToken edge cases', () => {
     };
     expect(() => utils.getEncodedToken(token)).toThrow(/legacy keyset ID/);
   });
+  test('throws for proofs with odd-length hex keyset IDs', () => {
+    const token: Token = {
+      mint: 'http://localhost:3338',
+      proofs: [{ id: '00abc', amount: Amount.from(1), secret: 'abc', C: '02abc' }],
+      unit: 'sat',
+    };
+    expect(() => utils.getEncodedToken(token)).toThrow(/legacy keyset ID/);
+  });
 });
 
 describe('getDecodedTokenBinary edge cases', () => {
