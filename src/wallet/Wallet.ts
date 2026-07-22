@@ -1919,6 +1919,10 @@ class Wallet {
     const res = await this.mint.createMintQuoteBolt11(mintQuotePayload);
     this.failIf(typeof res.pubkey !== 'string', 'Mint returned unlocked mint quote');
     const resPubkey = res.pubkey!;
+    this.failIf(
+      resPubkey.toLowerCase() !== pubkey.toLowerCase(),
+      'Mint quote is not locked to the requested pubkey',
+    );
     return { ...res, pubkey: resPubkey, unit: res.unit || this._unit };
   }
 
@@ -1960,7 +1964,12 @@ class Wallet {
       description: options?.description,
     };
 
-    return this.mint.createMintQuoteBolt12(mintQuotePayload);
+    const res = await this.mint.createMintQuoteBolt12(mintQuotePayload);
+    this.failIf(
+      typeof res.pubkey !== 'string' || res.pubkey.toLowerCase() !== pubkey.toLowerCase(),
+      'Mint quote is not locked to the requested pubkey',
+    );
+    return res;
   }
 
   /**
@@ -1975,6 +1984,10 @@ class Wallet {
     this.requireSupport('mint', 'onchain');
     this.requireMintableKeyset('createMintQuoteOnchain');
     const res = await this.mint.createMintQuoteOnchain({ unit: this._unit, pubkey });
+    this.failIf(
+      typeof res.pubkey !== 'string' || res.pubkey.toLowerCase() !== pubkey.toLowerCase(),
+      'Mint quote is not locked to the requested pubkey',
+    );
     return { ...res, unit: res.unit || this._unit };
   }
 

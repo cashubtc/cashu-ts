@@ -289,6 +289,29 @@ describe('createMintQuoteBolt12 mutants', () => {
     expect(body.amount).toBeUndefined();
     expect(body.description).toBeUndefined();
   });
+
+  test('rejects when the mint returns a quote locked to a different pubkey', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/mint/quote/bolt12', () =>
+        HttpResponse.json({
+          quote: 'q-bolt12-other',
+          request: 'lno1offer...',
+          unit: 'sat',
+          pubkey: '02dcba',
+          state: MintQuoteState.UNPAID,
+          expiry: null,
+          amount_paid: 0,
+          amount_issued: 0,
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createMintQuoteBolt12('02abcd')).rejects.toThrow(
+      'Mint quote is not locked to the requested pubkey',
+    );
+  });
 });
 
 describe('createMintQuoteOnchain mutants', () => {
@@ -312,6 +335,29 @@ describe('createMintQuoteOnchain mutants', () => {
 
     const quote = await wallet.createMintQuoteOnchain('02abcd');
     expect(quote.unit).toBe('sat');
+  });
+
+  test('rejects when the mint returns a quote locked to a different pubkey', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/mint/quote/onchain', () =>
+        HttpResponse.json({
+          quote: 'onchain-q-other',
+          request: 'bc1qdeposit',
+          unit: 'sat',
+          pubkey: '02dcba',
+          state: MintQuoteState.UNPAID,
+          expiry: null,
+          amount_paid: 0,
+          amount_issued: 0,
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createMintQuoteOnchain('02abcd')).rejects.toThrow(
+      'Mint quote is not locked to the requested pubkey',
+    );
   });
 });
 
@@ -902,6 +948,51 @@ describe('createLockedMintQuote mutants', () => {
     await expect(wallet.createLockedMintQuote(100, PUBKEY)).rejects.toThrow(
       'Mint returned unlocked mint quote',
     );
+  });
+
+  test('rejects when the mint returns a quote locked to a different pubkey', async () => {
+    useNut20();
+    server.use(
+      http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
+        HttpResponse.json({
+          quote: 'locked-elsewhere',
+          request: 'lnbc...',
+          unit: 'sat',
+          amount: 100,
+          state: MintQuoteState.UNPAID,
+          expiry: null,
+          pubkey: '03' + PUBKEY.slice(2),
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createLockedMintQuote(100, PUBKEY)).rejects.toThrow(
+      'Mint quote is not locked to the requested pubkey',
+    );
+  });
+
+  test('accepts a case-variant echo of the requested pubkey', async () => {
+    useNut20();
+    server.use(
+      http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
+        HttpResponse.json({
+          quote: 'locked-upper',
+          request: 'lnbc...',
+          unit: 'sat',
+          amount: 100,
+          state: MintQuoteState.UNPAID,
+          expiry: null,
+          pubkey: PUBKEY.toUpperCase(),
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const quote = await wallet.createLockedMintQuote(100, PUBKEY);
+    expect(quote.pubkey.toLowerCase()).toBe(PUBKEY);
   });
 });
 
