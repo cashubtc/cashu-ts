@@ -15,6 +15,7 @@ import {
   isBlsKeyset,
   isP2PKSigAll,
   buildP2PKSigAllMessage,
+  buildP2PKSigAllMessageV1,
   assertSigAllInputs,
   buildLegacyP2PKSigAllMessage,
   parseSecret,
@@ -1473,6 +1474,7 @@ class Wallet {
     const messages = [
       buildLegacyP2PKSigAllMessage(normalizedProofs, outputData, quoteId),
       buildP2PKSigAllMessage(normalizedProofs, outputData, quoteId),
+      buildP2PKSigAllMessageV1(normalizedProofs, outputData, quoteId),
     ];
     for (const msg of messages) {
       signedFirst = cryptoSignP2PKProofs([signedFirst], privkey, this._logger, msg)[0];

@@ -1,5 +1,6 @@
 import { schnorr } from '@noble/curves/secp256k1.js';
-import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
+import { bytesToHex, hexToBytes, numberToBytesBE } from '@noble/curves/utils.js';
+import { utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { type Logger, NULL_LOGGER } from '../logger';
 import { CTSError } from '../model/Errors';
@@ -7,7 +8,13 @@ import { type OutputDataLike } from '../model/OutputData';
 import { type HTLCWitness, type P2PKWitness, type Proof } from '../model/types';
 import { type NUT10Option } from '../wallet/types/payment-requests';
 
-import { getValidSigners, schnorrSignMessage, schnorrVerifyMessage, type PrivKey } from './core';
+import {
+  getValidSigners,
+  schnorrSignMessage,
+  schnorrVerifyMessage,
+  type MessageInput,
+  type PrivKey,
+} from './core';
 import { pointFromHex } from './curve_secp';
 import {
   getTagInt,
@@ -21,6 +28,7 @@ import {
   type SpendingConditionsBase,
   getSecretKind,
 } from './NUT10';
+import { amountToMinimalBytes } from './NUT20';
 import { deriveP2BKSecretKeys } from './NUT28';
 
 export const SigFlags = {
@@ -524,7 +532,7 @@ export function signP2PKProofs(
   proofs: Proof[],
   privateKey: PrivKey | PrivKey[],
   logger: Logger = NULL_LOGGER,
-  message?: string,
+  message?: MessageInput,
 ): Proof[] {
   // Convert to hex strings for maybeDeriveP2BKPrivateKeys
   const toHex = (k: PrivKey): string => (typeof k === 'string' ? k : bytesToHex(k));
@@ -557,7 +565,7 @@ export function signP2PKProofs(
  * @returns Signed proofs.
  * @throws Error if signature is not required or proof is already signed.
  */
-export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: string): Proof {
+export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: MessageInput): Proof {
   const secret: Secret = parseP2PKSecret(proof.secret);
   message = message ?? proof.secret; // default message is secret
 
@@ -599,7 +607,7 @@ export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: strin
  * @param message - Optional. The message that was signed (for SIG_ALL)
  * @returns True if one of the signatures is theirs, false otherwise.
  */
-export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: string): boolean {
+export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: MessageInput): boolean {
   if (!proof.witness) {
     return false;
   }
@@ -648,7 +656,7 @@ export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: strin
 export function verifyP2PKSpendingConditions(
   proof: Proof,
   logger: Logger = NULL_LOGGER,
-  message?: string,
+  message?: MessageInput,
 ): P2PKVerificationResult {
   // Check if message is needed
   if (isP2PKSigAll([proof]) && !message) {
@@ -743,7 +751,7 @@ export function verifyP2PKSpendingConditions(
 export function isP2PKSpendAuthorised(
   proof: Proof,
   logger: Logger = NULL_LOGGER,
-  message?: string,
+  message?: MessageInput,
 ): boolean {
   return verifyP2PKSpendingConditions(proof, logger, message).success;
 }
@@ -808,37 +816,48 @@ export function assertSigAllInputs(inputs: Proof[]): void {
   }
 }
 
+// Domain-separation tag for the length-framed SIG_ALL message (shared by P2PK and HTLC).
+const SIG_ALL_DST = utf8ToBytes('Cashu_SigAllSig_v1');
+
 /**
- * Message aggregation for SIG_ALL.
+ * Message aggregation for SIG_ALL (spec v1): domain-separated, length-framed bytes.
  *
  * NOTE: Use `assertSigAllInputs()` to ensure valid message inputs.
  *
  * @remarks
- * Melt transactions MUST include the quoteId.
+ * Melt transactions MUST include the quoteId; swaps commit an empty quote field.
  * @param inputs Array of Proofs (only `secret` and `C` fields required).
  * @param outputs Array of OutputDataLike objects (OutputData, Factory etc).
  * @param quoteId Optional. Quote id for Melt transactions.
  * @internal
  */
-export function buildP2PKSigAllMessage(
+export function buildP2PKSigAllMessageV1(
   inputs: Array<Pick<Proof, 'secret' | 'C'>>,
   outputs: Array<Pick<OutputDataLike, 'blindedMessage'>>,
   quoteId?: string,
-): string {
-  const parts: string[] = [];
-  // Concat inputs: secret_0 || C_0 ...
+): Uint8Array {
+  const parts: Uint8Array[] = [SIG_ALL_DST];
+  const pushFramed = (bytes: Uint8Array): void => {
+    parts.push(numberToBytesBE(bytes.length, 4), bytes);
+  };
+  pushFramed(utf8ToBytes(quoteId ?? ''));
   for (const p of inputs) {
-    parts.push(p.secret, p.C);
+    pushFramed(utf8ToBytes(p.secret));
+    pushFramed(hexToBytes(p.C));
   }
-  // Concat outputs: amount_0 ||  B_0 ...
   for (const o of outputs) {
-    parts.push(String(o.blindedMessage.amount), o.blindedMessage.B_);
+    pushFramed(amountToMinimalBytes(o.blindedMessage));
+    pushFramed(hexToBytes(o.blindedMessage.B_));
   }
-  // Add quoteId for melts
-  if (quoteId) {
-    parts.push(quoteId);
+  // Manual copy rather than concatBytes(...parts): spreading per-field chunks
+  // would hit V8's argument-count limit on large transactions.
+  const message = new Uint8Array(parts.reduce((n, part) => n + part.length, 0));
+  let offset = 0;
+  for (const part of parts) {
+    message.set(part, offset);
+    offset += part.length;
   }
-  return parts.join('');
+  return message;
 }
 
 /**
@@ -980,6 +999,39 @@ function resolveNSigsRefund(secret: Secret, lockState: LockState, refundKeys: st
 // ------------------------------
 // Deprecated
 // ------------------------------
+
+/**
+ * Message aggregation for SIG_ALL.
+ *
+ * NOTE: Use `assertSigAllInputs()` to ensure valid message inputs.
+ *
+ * @remarks
+ * Melt transactions MUST include the quoteId.
+ * @param inputs Array of Proofs (only `secret` and `C` fields required).
+ * @param outputs Array of OutputDataLike objects (OutputData, Factory etc).
+ * @param quoteId Optional. Quote id for Melt transactions.
+ * @internal
+ */
+export function buildP2PKSigAllMessage(
+  inputs: Array<Pick<Proof, 'secret' | 'C'>>,
+  outputs: Array<Pick<OutputDataLike, 'blindedMessage'>>,
+  quoteId?: string,
+): string {
+  const parts: string[] = [];
+  // Concat inputs: secret_0 || C_0 ...
+  for (const p of inputs) {
+    parts.push(p.secret, p.C);
+  }
+  // Concat outputs: amount_0 ||  B_0 ...
+  for (const o of outputs) {
+    parts.push(String(o.blindedMessage.amount), o.blindedMessage.B_);
+  }
+  // Add quoteId for melts
+  if (quoteId) {
+    parts.push(quoteId);
+  }
+  return parts.join('');
+}
 
 /**
  * Message aggregation for SIG_ALL (legacy format).
