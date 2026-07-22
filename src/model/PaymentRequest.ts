@@ -8,6 +8,7 @@ import {
 } from '../crypto/NUT11';
 import { encodeBase64toUint8, decodeCBOR, encodeCBOR, Bytes, normalizeMintUrl } from '../utils';
 import { decodeBech32mToBytes, encodeBech32m } from '../utils/bech32m';
+import { JSONInt } from '../utils/JSONInt';
 import { decodeTLV, encodeTLV } from '../utils/tlv';
 import type { DecodedTLVPaymentRequest } from '../utils/tlv';
 import { PaymentRequestTransportType } from '../wallet/types';
@@ -15,12 +16,14 @@ import type {
   RawPaymentRequest,
   RawTransport,
   NUT10Option,
+  PaymentRequestPayload,
   PaymentRequestTransport,
   SupportedMethod,
 } from '../wallet/types';
 
 import { Amount, type AmountLike } from './Amount';
 import { CTSError } from './Errors';
+import type { Proof } from './types/proof';
 
 /**
  * Constructor options for {@link PaymentRequest}. Keys mirror the class properties; `amount` and
@@ -166,6 +169,94 @@ export class PaymentRequest {
     };
     const target = norm(mintUrl);
     return this.mints?.some((m) => norm(m) === target) ?? false;
+  }
+
+  /**
+   * Serializes the default NUT-18 payment payload for this request.
+   *
+   * @remarks
+   * BigInt-safe JSON; plain `JSON.stringify` throws on proof amounts. Proofs must come from `mint`
+   * and net the request after fees: `wallet.ops.sendToRequest` produces both, this only packages.
+   * Send it as the POST body or Nostr DM content.
+   * @param mint - The mint the proofs are from.
+   * @param proofs - The proofs to send (eg the `send` half of a send flow).
+   * @param opts.memo - Optional memo for the payee.
+   * @param opts.unit - Unit when the request has none (default 'sat').
+   * @throws If the request has a strict mint list and `mint` is not in it.
+   */
+  encodePayload(mint: string, proofs: Proof[], opts?: { memo?: string; unit?: string }): string {
+    if (this.isMintListStrict && !this.includesMint(mint)) {
+      throw new CTSError("mint is not in the request's strict mint list");
+    }
+    const payload: PaymentRequestPayload = {
+      ...(this.id !== undefined && { id: this.id }),
+      ...(opts?.memo !== undefined && { memo: opts.memo }),
+      unit: this.unit ?? opts?.unit ?? 'sat',
+      mint,
+      proofs,
+    };
+    return JSONInt.stringify(payload)!;
+  }
+
+  /**
+   * Parses a default NUT-18 payment payload received from a payer.
+   *
+   * @remarks
+   * BigInt-safe: proof amounts are normalized to `bigint` whatever their JSON size. Validates shape
+   * only; matching the payload to a request (id, mint, netting the amount) is the payee's job.
+   * @param json - Raw payload text (POST body or Nostr DM content).
+   * @throws {@link CTSError} If the text is not valid JSON or not payload-shaped.
+   */
+  static decodePayload(json: string): PaymentRequestPayload {
+    let raw: unknown;
+    try {
+      raw = JSONInt.parse(json, undefined, { strict: true });
+    } catch (e) {
+      throw new CTSError('invalid payment payload: not valid JSON', { cause: e });
+    }
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+      throw new CTSError('invalid payment payload: expected a JSON object');
+    }
+    const { id, memo, unit, mint, proofs } = raw as Record<string, unknown>;
+    if (typeof mint !== 'string' || !mint) {
+      throw new CTSError('invalid payment payload: missing mint');
+    }
+    if (typeof unit !== 'string' || !unit) {
+      throw new CTSError('invalid payment payload: missing unit');
+    }
+    if (id !== undefined && typeof id !== 'string') {
+      throw new CTSError('invalid payment payload: id must be a string');
+    }
+    if (memo !== undefined && typeof memo !== 'string') {
+      throw new CTSError('invalid payment payload: memo must be a string');
+    }
+    if (!Array.isArray(proofs) || proofs.length === 0) {
+      throw new CTSError('invalid payment payload: missing proofs');
+    }
+    const normalized = proofs.map((p: unknown, i: number) => {
+      if (
+        typeof p !== 'object' ||
+        p === null ||
+        Array.isArray(p) ||
+        typeof (p as Record<string, unknown>).id !== 'string' ||
+        typeof (p as Record<string, unknown>).secret !== 'string' ||
+        typeof (p as Record<string, unknown>).C !== 'string'
+      ) {
+        throw new CTSError(`invalid payment payload: malformed proof at index ${i}`);
+      }
+      const amount = (p as Record<string, unknown>).amount;
+      if (typeof amount !== 'number' && typeof amount !== 'bigint') {
+        throw new CTSError(`invalid payment payload: malformed proof amount at index ${i}`);
+      }
+      return { ...p, amount: Amount.from(amount).toBigInt() } as unknown as Proof;
+    });
+    return {
+      ...(id !== undefined && { id }),
+      ...(memo !== undefined && { memo }),
+      unit,
+      mint,
+      proofs: normalized,
+    };
   }
 
   toRawRequest() {

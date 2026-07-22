@@ -1650,8 +1650,13 @@ class PaymentRequest_2 {
     amount?: Amount;
     amountToSend(mint: string, meltMethods?: string[]): Amount;
     static builder(): PaymentRequestBuilder;
+    static decodePayload(json: string): PaymentRequestPayload;
     // (undocumented)
     description?: string;
+    encodePayload(mint: string, proofs: Proof[], opts?: {
+        memo?: string;
+        unit?: string;
+    }): string;
     feesFor(mint: string, meltMethods?: string[]): Amount;
     // (undocumented)
     static fromEncodedRequest(encodedRequest: string): PaymentRequest_2;

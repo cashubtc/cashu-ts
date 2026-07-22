@@ -708,3 +708,105 @@ describe('payment requests', () => {
     });
   });
 });
+
+describe('NUT-18 payment payloads', () => {
+  const MINT = 'https://mint.example';
+  const makeProof = (amount: bigint) => ({
+    id: '009a1f293253e41e',
+    amount,
+    secret: 'secret-string',
+    C: '02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2',
+  });
+
+  describe('encodePayload', () => {
+    test('round-trips through decodePayload, filling id and unit from the request', () => {
+      const pr = new PaymentRequest({ id: 'inv-1', unit: 'sat' });
+      const body = pr.encodePayload(MINT, [makeProof(9007199254740993n)], { memo: 'hi' });
+      expect(typeof body).toBe('string');
+
+      const payload = PaymentRequest.decodePayload(body);
+      expect(payload.id).toBe('inv-1');
+      expect(payload.unit).toBe('sat');
+      expect(payload.mint).toBe(MINT);
+      expect(payload.memo).toBe('hi');
+      // BigInt-safe: an amount beyond 2^53 survives exactly.
+      expect(payload.proofs[0].amount).toBe(9007199254740993n);
+    });
+
+    test('omits id and memo when absent and defaults the unit', () => {
+      const pr = new PaymentRequest({});
+      const payload = PaymentRequest.decodePayload(pr.encodePayload(MINT, [makeProof(1n)]));
+      expect(payload.id).toBeUndefined();
+      expect(payload.memo).toBeUndefined();
+      expect(payload.unit).toBe('sat');
+
+      const usd = new PaymentRequest({});
+      const p2 = PaymentRequest.decodePayload(
+        usd.encodePayload(MINT, [makeProof(1n)], { unit: 'usd' }),
+      );
+      expect(p2.unit).toBe('usd');
+    });
+
+    test('enforces a strict mint list but not a preferred one', () => {
+      const strict = new PaymentRequest({ mints: ['https://other.mint'] });
+      expect(() => strict.encodePayload(MINT, [makeProof(1n)])).toThrow(
+        "mint is not in the request's strict mint list",
+      );
+      // URL-normalized membership passes.
+      const listed = new PaymentRequest({ mints: [MINT + '/'] });
+      expect(() => listed.encodePayload(MINT, [makeProof(1n)])).not.toThrow();
+
+      const preferred = new PaymentRequest({ mints: ['https://other.mint'], mintsPreferred: true });
+      expect(() => preferred.encodePayload(MINT, [makeProof(1n)])).not.toThrow();
+    });
+  });
+
+  describe('decodePayload', () => {
+    const valid = () => ({
+      id: 'inv-1',
+      unit: 'sat',
+      mint: MINT,
+      proofs: [{ id: '009a1f293253e41e', amount: 2, secret: 's', C: '02ff' }],
+    });
+
+    test('normalizes small JSON number amounts to bigint', () => {
+      const payload = PaymentRequest.decodePayload(JSON.stringify(valid()));
+      expect(payload.proofs[0].amount).toBe(2n);
+    });
+
+    test('preserves unknown proof fields (witness, dleq)', () => {
+      const obj = valid();
+      (obj.proofs[0] as Record<string, unknown>).witness = '{"signatures":[]}';
+      const payload = PaymentRequest.decodePayload(JSON.stringify(obj));
+      expect(payload.proofs[0].witness).toBe('{"signatures":[]}');
+    });
+
+    test.each([
+      ['not JSON', 'nope{', /not valid JSON/],
+      ['a JSON array', '[]', /expected a JSON object/],
+      ['missing mint', JSON.stringify({ ...valid(), mint: undefined }), /missing mint/],
+      ['missing unit', JSON.stringify({ ...valid(), unit: 42 }), /missing unit/],
+      ['a non-string id', JSON.stringify({ ...valid(), id: 7 }), /id must be a string/],
+      ['a non-string memo', JSON.stringify({ ...valid(), memo: 7 }), /memo must be a string/],
+      ['missing proofs', JSON.stringify({ ...valid(), proofs: [] }), /missing proofs/],
+      [
+        'a malformed proof',
+        JSON.stringify({ ...valid(), proofs: [{ amount: 1 }] }),
+        /malformed proof at index 0/,
+      ],
+      [
+        'a non-numeric proof amount',
+        JSON.stringify({ ...valid(), proofs: [{ ...valid().proofs[0], amount: '2' }] }),
+        /malformed proof amount at index 0/,
+      ],
+    ])('rejects %s', (_name, input, expected) => {
+      expect(() => PaymentRequest.decodePayload(input)).toThrow(expected);
+    });
+
+    test('rejects a fractional proof amount', () => {
+      const obj = valid();
+      obj.proofs[0].amount = 1.5;
+      expect(() => PaymentRequest.decodePayload(JSON.stringify(obj))).toThrow();
+    });
+  });
+});
