@@ -1,13 +1,9 @@
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect } from 'vitest';
 
-<<<<<<< HEAD
 import { Wallet, Amount, CTSError, type Proof } from '../../src';
-=======
-import { Wallet, Amount, CTSError, PaymentRequest, type Proof } from '../../src';
 import { deriveKeysetId } from '../../src/utils';
 import { PUBKEYS } from '../consts';
->>>>>>> 308b3cd (fix(wallet): bound fee convergence loop (#854))
 
 import { mint, unit, mintUrl, useTestServer } from './_setup';
 
