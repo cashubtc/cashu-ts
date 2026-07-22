@@ -470,6 +470,39 @@ describe('WalletOps builders', () => {
       const [, , cfg] = wallet.sendOffline.mock.calls[0];
       expect(cfg).toEqual({ includeFees: true, exactMatch: false, requireDleq: false });
     });
+
+    it('keepAsRandom sets a random keep OutputType', async () => {
+      await ops.send(5, proofs).keepAsRandom([5]).run();
+
+      const [, , , outputConfig] = wallet.send.mock.calls[0];
+      expect(outputConfig!.keep).toEqual({ type: 'random', denominations: [5] });
+    });
+
+    it('offlineExactOnly signs the proofs when a privkey is set', async () => {
+      await ops.send(5, proofs).offlineExactOnly().privkey('sk').run();
+
+      expect(wallet.signP2PKProofs).toHaveBeenCalledTimes(1);
+      expect(wallet.signP2PKProofs).toHaveBeenCalledWith(proofs, 'sk');
+    });
+
+    it('offlineExactOnly does not sign when no privkey is set', async () => {
+      await ops.send(5, proofs).offlineExactOnly().run();
+
+      expect(wallet.signP2PKProofs).not.toHaveBeenCalled();
+    });
+
+    it('offlineCloseMatch signs the proofs when a privkey is set', async () => {
+      await ops.send(5, proofs).offlineCloseMatch().privkey('sk').run();
+
+      expect(wallet.signP2PKProofs).toHaveBeenCalledTimes(1);
+      expect(wallet.signP2PKProofs).toHaveBeenCalledWith(proofs, 'sk');
+    });
+
+    it('offlineCloseMatch does not sign when no privkey is set', async () => {
+      await ops.send(5, proofs).offlineCloseMatch().run();
+
+      expect(wallet.signP2PKProofs).not.toHaveBeenCalled();
+    });
   });
 
   // --------------------------- ReceiveBuilder --------------------------------
@@ -827,6 +860,22 @@ describe('WalletOps builders', () => {
       expect(wallet.completeMint).toHaveBeenCalledWith(preview);
     });
 
+    it('bolt12 without privkey throws the BOLT12-specific message (not another branch)', async () => {
+      // Pins prepare()'s method dispatch: only the bolt12 branch names "BOLT12", so
+      // any mutant that routes a bolt12 quote through bolt11/onchain surfaces here.
+      const builder = ops.mintBolt12(7, mint12) as unknown as { prepare(): Promise<unknown> };
+      await expect(builder.prepare()).rejects.toThrow(
+        /privkey is required for BOLT12 mint quotes/i,
+      );
+    });
+
+    it('onchain without privkey throws the onchain-specific message (not another branch)', async () => {
+      const builder = ops.mintOnchain(8, mintOnchain) as unknown as { prepare(): Promise<unknown> };
+      await expect(builder.prepare()).rejects.toThrow(
+        /privkey is required for onchain mint quotes/i,
+      );
+    });
+
     it('bolt11 locked quote without privkey throws at runtime', async () => {
       const lockedQuote = { ...mint12, request: 'lnbc1...', pubkey: '02abcd' } as any;
       await expect((ops.mintBolt11 as any)(10, lockedQuote).run()).rejects.toThrow(
@@ -999,6 +1048,16 @@ describe('WalletOps builders', () => {
       expect(ps).toBe(proofs);
       expect(idx).toBe(0);
       expect(cfg).toMatchObject({ keysetId: 'kid', privkey: 'sk' });
+    });
+
+    it('does not auto-select a fee option when one is already chosen for a multi-option quote', async () => {
+      // Auto-select only fires for a single-option quote with no explicit choice.
+      // Here fee_options[0].fee_index is 0, so a mutant that always auto-selects
+      // would clobber the explicit feeIndex(1) back to 0.
+      await ops.meltOnchain(meltOnchainMulti, proofs).privkey('sk').feeIndex(1).run();
+
+      const [, , idx] = wallet.meltProofsOnchain.mock.calls[0];
+      expect(idx).toBe(1);
     });
 
     it('throws when multiple fee options exist and no feeIndex is selected', async () => {

@@ -70,6 +70,7 @@ export function selectProofsRGLI(
   const shuffleArray = <T>(array: T[]): T[] => {
     const shuffled = [...array];
     for (let i = shuffled.length - 1; i > 0; i--) {
+      // Stryker disable next-line ArithmeticOperator: any in-range index yields a valid permutation; the shuffle need not be uniform
       const j = Math.floor(Math.random() * (i + 1));
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }

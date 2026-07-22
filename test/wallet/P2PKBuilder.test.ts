@@ -96,6 +96,37 @@ describe('P2PKBuilder.toOptions()', () => {
     expect(o2.sigFlag).toBe(undefined);
   });
 
+  it('treats a Date by its getTime()/1000, not by numeric coercion', () => {
+    // getTime() = 500_000 ms => 500 s. A Date under the ms threshold must still be read
+    // as milliseconds via getTime(), never coerced to a raw number of seconds.
+    const opts = new P2PKBuilder()
+      .addLockPubkey(comp('a', '02'))
+      .lockUntil(new Date(500_000))
+      .toOptions();
+    expect(opts.locktime).toBe(500);
+  });
+
+  it('treats a numeric locktime of exactly 1e12 as milliseconds', () => {
+    // Boundary: values >= 1e12 are milliseconds, so 1e12 ms => 1e9 s.
+    const opts = new P2PKBuilder().addLockPubkey(comp('a', '02')).lockUntil(1e12).toOptions();
+    expect(opts.locktime).toBe(1e9);
+  });
+
+  it('keeps a numeric locktime below 1e12 as seconds', () => {
+    const opts = new P2PKBuilder()
+      .addLockPubkey(comp('a', '02'))
+      .lockUntil(999_999_999_999)
+      .toOptions();
+    expect(opts.locktime).toBe(999_999_999_999);
+  });
+
+  it('returns a defensive copy of additionalTags, isolated from later mutations', () => {
+    const b = new P2PKBuilder().addLockPubkey(comp('a', '02')).addTag('foo', ['bar']);
+    const opts = b.toOptions();
+    b.addTag('baz', ['qux']); // must not leak into the already-returned options
+    expect(opts.additionalTags).toEqual([['foo', 'bar']]);
+  });
+
   it('requireLockSignatures throws on non-integer and values less than 1', () => {
     expect(() => new P2PKBuilder().requireLockSignatures(1.5)).toThrow(
       /requiredSignatures \(n_sigs\) must be a positive integer/i,

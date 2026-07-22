@@ -5,6 +5,7 @@ import {
   type SigAllSigningPackage,
   MeltQuoteState,
   Amount,
+  CTSError,
   type OutputDataLike,
   type Proof,
   type P2PKWitness,
@@ -590,5 +591,197 @@ describe('SigAll — full transport roundtrip', () => {
     const signed = SigAll.signPackage(decoded, dummyPrivkey);
     const merged = SigAll.mergeMeltPackage(signed, preview);
     expect((merged.inputs[0].witness as P2PKWitness).signatures!.length).toBeGreaterThan(0);
+  });
+});
+
+describe('SigAll — serializePackage omits falsy optional fields', () => {
+  test('empty/falsy quote, digests and witness are not emitted', () => {
+    // serializePackage only adds a key when its value is truthy; falsy optionals
+    // (eg an empty quote) must stay out of the transport JSON.
+    const pkg = {
+      version: 'sigallA',
+      type: 'swap',
+      quote: '',
+      inputs: [{ secret: 'testsecret', C: '02' + '1'.repeat(64) }],
+      outputs: [dummyBlindedMessage],
+      digests: null,
+      witness: null,
+    } as unknown as SigAllSigningPackage;
+
+    const json = decodeRawJson(SigAll.serializePackage(pkg));
+    expect(json).not.toContain('"quote"');
+    expect(json).not.toContain('"digests"');
+    expect(json).not.toContain('"witness"');
+  });
+});
+
+describe('SigAll — deserializePackage error causes', () => {
+  test('JSON parse failure attaches the underlying error as cause', () => {
+    const encoded = 'sigallA' + btoa('{not valid json}').replace(/=+$/, '');
+    let err: unknown;
+    try {
+      SigAll.deserializePackage(encoded);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(CTSError);
+    expect((err as { cause?: unknown }).cause).toBeInstanceOf(Error);
+  });
+});
+
+describe('SigAll — deserializePackage input/output shape guards', () => {
+  test('rejects a null input entry', () => {
+    expect(() =>
+      SigAll.deserializePackage(
+        encodeRaw({
+          version: 'sigallA',
+          type: 'swap',
+          inputs: [null],
+          outputs: [],
+          digests: { current: 'a'.repeat(64) },
+        }),
+      ),
+    ).toThrow('Invalid input at index 0');
+  });
+
+  test('rejects a non-object (primitive) input entry', () => {
+    expect(() =>
+      SigAll.deserializePackage(
+        encodeRaw({
+          version: 'sigallA',
+          type: 'swap',
+          inputs: [5],
+          outputs: [],
+          digests: { current: 'a'.repeat(64) },
+        }),
+      ),
+    ).toThrow('Invalid input at index 0');
+  });
+
+  test('rejects a non-object (primitive) output entry', () => {
+    expect(() =>
+      SigAll.deserializePackage(
+        encodeRaw({
+          version: 'sigallA',
+          type: 'swap',
+          inputs: [],
+          outputs: [5],
+          digests: { current: 'a'.repeat(64) },
+        }),
+      ),
+    ).toThrow('Invalid output at index 0');
+  });
+
+  test('rejects a non-string B_ on an output', () => {
+    expect(() =>
+      SigAll.deserializePackage(
+        encodeRaw({
+          version: 'sigallA',
+          type: 'swap',
+          inputs: [],
+          outputs: [{ amount: 1, B_: 123, id: 'id1' }],
+          digests: { current: 'a'.repeat(64) },
+        }),
+      ),
+    ).toThrow('B_ invalid');
+  });
+
+  test('rejects a non-string id on an output', () => {
+    expect(() =>
+      SigAll.deserializePackage(
+        encodeRaw({
+          version: 'sigallA',
+          type: 'swap',
+          inputs: [],
+          outputs: [{ amount: 1, B_: 'x', id: 123 }],
+          digests: { current: 'a'.repeat(64) },
+        }),
+      ),
+    ).toThrow('id invalid');
+  });
+
+  test('rejects a non-string digests.current', () => {
+    expect(() =>
+      SigAll.deserializePackage(
+        encodeRaw({
+          version: 'sigallA',
+          type: 'swap',
+          inputs: [],
+          outputs: [],
+          digests: { current: 123 },
+        }),
+      ),
+    ).toThrow('digests.current is required');
+  });
+});
+
+describe('SigAll — deserializePackage legacy digest validation', () => {
+  test('throws when only the legacy digest is tampered', () => {
+    // current digest stays valid so validation must fall through to the legacy check.
+    const pkg = SigAll.extractSwapPackage(makeSwapPreview());
+    const tampered = {
+      ...pkg,
+      digests: { current: pkg.digests.current, legacy: pkg.digests.legacy!.slice(0, 63) + '0' },
+    };
+    expect(() =>
+      SigAll.deserializePackage(SigAll.serializePackage(tampered), { validateDigest: true }),
+    ).toThrow('legacy digest mismatch');
+  });
+});
+
+describe('SigAll — signPackage requires a current digest', () => {
+  test('throws when digests is absent', () => {
+    const pkg = SigAll.extractSwapPackage(makeSwapPreview());
+    const noDigests = { ...pkg, digests: undefined } as unknown as SigAllSigningPackage;
+    expect(() => SigAll.signPackage(noDigests, dummyPrivkey)).toThrow(
+      'digests.current is required to sign package',
+    );
+  });
+});
+
+describe('SigAll — extractSwapPackage output-list fallbacks', () => {
+  test('treats missing keepOutputs as no keep outputs', () => {
+    const preview = { ...makeSwapPreview(), keepOutputs: undefined } as unknown as SwapPreview;
+    const pkg = SigAll.extractSwapPackage(preview);
+    expect(pkg.outputs.length).toBe(1); // sendOutputs only
+  });
+
+  test('treats missing sendOutputs as no send outputs', () => {
+    const preview = { ...makeSwapPreview(), sendOutputs: undefined } as unknown as SwapPreview;
+    const pkg = SigAll.extractSwapPackage(preview);
+    expect(pkg.outputs.length).toBe(1); // keepOutputs only
+  });
+});
+
+describe('SigAll — mergeSignatures edge cases', () => {
+  test('returns proofs unchanged when there are no inputs', () => {
+    const signed = SigAll.signPackage(SigAll.extractSwapPackage(makeSwapPreview()), dummyPrivkey);
+    const preview = { ...makeSwapPreview(), inputs: [] };
+    let merged: SwapPreview | undefined;
+    expect(() => {
+      merged = SigAll.mergeSwapPackage(signed, preview);
+    }).not.toThrow();
+    expect(merged!.inputs.length).toBe(0);
+  });
+
+  test('does not inject spurious signatures when the first proof has no witness', () => {
+    const preview = makeSwapPreview();
+    const signed = SigAll.signPackage(SigAll.extractSwapPackage(preview), dummyPrivkey);
+    const merged = SigAll.mergeSwapPackage(signed, preview);
+    const sigs = (merged.inputs[0].witness as P2PKWitness).signatures!;
+    // Exactly the package signatures, nothing prepended.
+    expect(sigs.length).toBe(signed.witness!.signatures.length);
+    expect(sigs).not.toContain('Stryker was here');
+  });
+
+  test('preserves non-signature witness fields (eg HTLC preimage) on the first proof', () => {
+    const proofWithPreimage: Proof = {
+      ...dummyProof,
+      witness: { preimage: 'deadbeef', signatures: ['x'] },
+    };
+    const preview = { ...makeSwapPreview(), inputs: [proofWithPreimage] };
+    const signed = SigAll.signPackage(SigAll.extractSwapPackage(preview), dummyPrivkey);
+    const merged = SigAll.mergeSwapPackage(signed, preview);
+    expect((merged.inputs[0].witness as { preimage?: string }).preimage).toBe('deadbeef');
   });
 });
