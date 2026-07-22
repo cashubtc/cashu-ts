@@ -60,8 +60,8 @@ import type { RequestFetch, RequestFn } from '../transport';
 import {
   getDecodedToken,
   invoiceHasAmountInHRP,
+  normalizeMintUrl,
   normalizeProofAmounts,
-  normalizeUrl,
   splitAmount,
   sumProofs,
   verifyProofsForReceive,
@@ -1007,7 +1007,7 @@ class Wallet {
       proofs = normalizeProofAmounts(token);
     } else {
       const decodedToken: Token = typeof token === 'string' ? this.decodeToken(token) : token;
-      const tokenMintUrl = normalizeUrl(decodedToken.mint);
+      const tokenMintUrl = normalizeMintUrl(decodedToken.mint);
       this.failIf(tokenMintUrl !== this.mint.mintUrl, 'Token belongs to a different mint', {
         token: tokenMintUrl,
         wallet: this.mint.mintUrl,
