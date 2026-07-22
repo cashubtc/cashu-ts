@@ -12,6 +12,14 @@ Existing v0 (legacy base64), v1 (`00…`), and v2 (`01…`) keysets continue to 
 
 ---
 
+## Legacy (base64-id) keysets are deprecated, removal planned for v6
+
+Base64 keyset ids were removed from the Cashu spec in December 2023 and have never been supported by CDK-based mints and wallets. v5 keeps support for spending and restoring proofs on legacy keysets (see the output policy below), but this is the last major that will: **v6 removes legacy keyset support entirely**.
+
+The wallet now logs a warning at `loadMint()` when a mint lists legacy keysets. If your users may hold pre-2024 proofs (or seeds) from a nutshell mint, sweep them during the v5 cycle: restore and swap so the balance moves onto a hex-id keyset. Note that nutshell mints migrating to CDK drop their legacy keysets in the process, after which such proofs are unredeemable at the mint regardless of wallet library.
+
+---
+
 ## Keyset output policy: new proofs require an active, prefixed keyset
 
 Proofs on **any** keyset can still be spent, swapped, and restored. But v5 now enforces a policy on which keysets may be used to **create new proofs**: the output keyset must be active and have a hex-prefixed id (`00…`/`01…`/`02…`).
