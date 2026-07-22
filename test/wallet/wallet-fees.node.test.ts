@@ -121,8 +121,6 @@ describe('wallet.maxSpendableAfterFees', () => {
     }
   });
 });
-<<<<<<< HEAD
-=======
 
 describe('wallet.getFeesToInclude', () => {
   test('returns zero when the keyset charges no input fees', async () => {
@@ -173,64 +171,3 @@ describe('wallet.getFeesToInclude', () => {
     );
   });
 });
-
-describe('wallet.isPaymentRequestSatisfied', () => {
-  test('enforces the net-of-input-fees formula (NUT-18)', async () => {
-    // Keyset charges 1 sat per proof (1000 ppk), the spec's dust-protection scenario.
-    server.use(
-      http.get(mintUrl + '/v1/keysets', () =>
-        HttpResponse.json({
-          keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 1000 }],
-        }),
-      ),
-    );
-    const wallet = new Wallet(mint, { unit });
-    await wallet.loadMint();
-
-    const pr = new PaymentRequest({ id: 'net', amount: 100, unit: 'sat' });
-    // 3 proofs cost 3 sats to swap: 103 - 3 >= 100 nets the amount, 102 - 3 does not.
-    expect(wallet.isPaymentRequestSatisfied(pr, proofsTotalling([50, 50, 3]))).toBe(true);
-    expect(wallet.isPaymentRequestSatisfied(pr, proofsTotalling([50, 50, 2]))).toBe(false);
-  });
-
-  test('adds mf when this mint is outside the request mint list', async () => {
-    const wallet = new Wallet(mint, { unit });
-    await wallet.loadMint();
-
-    const outside = new PaymentRequest({
-      id: 'mf',
-      amount: 100,
-      unit: 'sat',
-      mints: ['https://other.mint'],
-      mintsPreferred: true,
-      supportedMethods: [{ method: 'bolt11', fee: 5 }], // fixture mint melts bolt11/sat
-    });
-    expect(wallet.isPaymentRequestSatisfied(outside, proofsTotalling([105]))).toBe(true);
-    expect(wallet.isPaymentRequestSatisfied(outside, proofsTotalling([104]))).toBe(false);
-
-    // Listed mint (normalized match) owes no mf.
-    const listed = new PaymentRequest({
-      id: 'listed',
-      amount: 100,
-      unit: 'sat',
-      mints: [mintUrl + '/'],
-      supportedMethods: [{ method: 'bolt11', fee: 5 }],
-    });
-    expect(wallet.isPaymentRequestSatisfied(listed, proofsTotalling([100]))).toBe(true);
-  });
-
-  test('rejects unit mismatches and amountless requests without an expectation', async () => {
-    const wallet = new Wallet(mint, { unit });
-    await wallet.loadMint();
-
-    const usd = new PaymentRequest({ id: 'usd', amount: 100, unit: 'usd' });
-    expect(() => wallet.isPaymentRequestSatisfied(usd, proofsTotalling([100]))).toThrow(/unit/);
-
-    const amountless = new PaymentRequest({ id: 'free', unit: 'sat' });
-    expect(() => wallet.isPaymentRequestSatisfied(amountless, proofsTotalling([10]))).toThrow(
-      /amountless/,
-    );
-    expect(wallet.isPaymentRequestSatisfied(amountless, proofsTotalling([10]), 10)).toBe(true);
-  });
-});
->>>>>>> 7f69e49 (feat(wallet): add getFeesToInclude fee helper (#846))

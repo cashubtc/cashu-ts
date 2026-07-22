@@ -16,14 +16,12 @@ outputs yourself.
 
 ## Which helper, when
 
-| Question                                                       | Helper                                                  |
-| :------------------------------------------------------------- | :------------------------------------------------------ |
-| What does it cost to spend these exact proofs?                 | `Wallet.getFeesForProofs(proofs)`                       |
-| What would N inputs of a keyset cost?                          | `Wallet.getFeesForKeyset(nInputs, keysetId)`            |
-| Receiver must net `amount`: what does the sender add on top?   | `Wallet.getFeesToInclude(amount, opts?)`                |
-| What is the most this proof set can send or melt, after fees?  | `Wallet.maxSpendableAfterFees(proofs, feeReserve?)`     |
-| Payee: do these received proofs net a NUT-18 request?          | `Wallet.isPaymentRequestSatisfied(pr, proofs, amount?)` |
-| Payer: what do I owe on a NUT-18 request, method fee included? | `PaymentRequest.amountToSend(mintUrl, methods)`         |
+| Question                                                      | Helper                                              |
+| :------------------------------------------------------------ | :-------------------------------------------------- |
+| What does it cost to spend these exact proofs?                | `Wallet.getFeesForProofs(proofs)`                   |
+| What would N inputs of a keyset cost?                         | `Wallet.getFeesForKeyset(nInputs, keysetId)`        |
+| Receiver must net `amount`: what does the sender add on top?  | `Wallet.getFeesToInclude(amount, opts?)`            |
+| What is the most this proof set can send or melt, after fees? | `Wallet.maxSpendableAfterFees(proofs, feeReserve?)` |
 
 ## Exact-target: the receiver nets a fixed amount
 
@@ -62,12 +60,6 @@ for (let attempt = 0; attempt < 3; attempt++) {
 }
 if (!quote) throw new Error('Melt-all did not converge');
 ```
-
-## NUT-18 payment requests
-
-The payee checks that incoming proofs net the requested amount after the input fees they will cost
-to swap (`Wallet.isPaymentRequestSatisfied`); the payer totals the request amount plus the applicable
-method fee (`PaymentRequest.amountToSend`). Both are covered in [Payment Requests](./payment_requests.md).
 
 ## Related docs
 
