@@ -391,6 +391,17 @@ describe('Keyset', () => {
     const keyset = new Keyset('a', 'sat', true, undefined, undefined);
     expect(keyset.hasHexId).toBe(false);
   });
+  test('hasHexId and version resolve without throwing for a null id', () => {
+    // A mint response with id: null must classify as legacy, not crash on the id checks.
+    const keyset = new Keyset(null as unknown as string, 'sat', true, undefined, undefined);
+    expect(keyset.hasHexId).toBe(false);
+    expect(keyset.version).toBe(-1);
+  });
+  test('hasHexId and version resolve without throwing for an undefined id', () => {
+    const keyset = new Keyset(undefined as unknown as string, 'sat', true, undefined, undefined);
+    expect(keyset.hasHexId).toBe(false);
+    expect(keyset.version).toBe(-1);
+  });
   test('verifyKeysetId should return false if verifying keyset with no keys', () => {
     const badKeyset = { ...dummyKeysResp.keysets[0], keys: {} };
     const verify = Keyset.verifyKeysetId(badKeyset);

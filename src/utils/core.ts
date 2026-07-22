@@ -163,12 +163,15 @@ export function numberToHexPadded64(scalar: bigint): string {
 }
 
 /**
- * Returns `true` if the string is byte-decodable hex (even length, hex chars only).
+ * Returns `true` if the value is byte-decodable hex (a string, even length, hex chars only).
  *
+ * @remarks
+ * Accepts `unknown`: IDs reach here from decoded tokens and mint responses, so a non-string must
+ * return `false`, not throw.
  * @internal
  */
-export function isValidHex(str: string) {
-  return str.length % 2 === 0 && /^[a-f0-9]+$/i.test(str);
+export function isValidHex(str: unknown): str is string {
+  return typeof str === 'string' && str.length % 2 === 0 && /^[a-f0-9]+$/i.test(str);
 }
 
 function hasNonHexId(p: Proof | Proof[]) {
