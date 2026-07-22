@@ -749,21 +749,28 @@ class Wallet {
     // If includeFees, we create additional output amounts to cover the
     // fee the receiver will pay when they spend the proofs (ie sender pays fees)
     if (includeFees) {
-      let receiveFee = this.getFeesForKeyset(denominations.length, keyset.id);
-      let receiveFeeAmounts = splitAmount(receiveFee, keyset.keys);
-      while (
-        this.getFeesForKeyset(
-          denominations.length + receiveFeeAmounts.length,
-          keyset.id,
-        ).greaterThan(receiveFee)
-      ) {
-        receiveFee = receiveFee.add(1);
-        receiveFeeAmounts = splitAmount(receiveFee, keyset.keys);
-      }
-      newAmount = newAmount.add(receiveFee);
+      const receiveFeeAmounts = this.receiveFeeAmounts(denominations.length, keyset);
+      newAmount = newAmount.add(Amount.sum(receiveFeeAmounts));
       denominations = [...denominations, ...receiveFeeAmounts];
     }
     return { ...outputType, denominations };
+  }
+
+  /**
+   * Extra denominations that cover the input fee for spending `nOutputs` outputs plus themselves.
+   *
+   * Iterates until the fee is stable, since fee outputs also incur fees.
+   */
+  private receiveFeeAmounts(nOutputs: number, keyset: Keyset): Amount[] {
+    let receiveFee = this.getFeesForKeyset(nOutputs, keyset.id);
+    let receiveFeeAmounts = splitAmount(receiveFee, keyset.keys);
+    while (
+      this.getFeesForKeyset(nOutputs + receiveFeeAmounts.length, keyset.id).greaterThan(receiveFee)
+    ) {
+      receiveFee = receiveFee.add(1);
+      receiveFeeAmounts = splitAmount(receiveFee, keyset.keys);
+    }
+    return receiveFeeAmounts;
   }
 
   /**
@@ -1513,6 +1520,26 @@ class Wallet {
       this._logger.error(message, { e });
       throw new CTSError(message, { cause: e });
     }
+  }
+
+  /**
+   * Fee to add on top of `amount` so the resulting outputs can later be spent at no cost to the
+   * receiver (ie sender pays fees). This is the amount `includeFees` adds.
+   *
+   * @remarks
+   * The fee depends on the output count, taken from the default denomination split of `amount`.
+   * Pass `nOutputs` when pricing up custom denomination sets.
+   * @param amount The amount the receiver should net after swap fees.
+   * @param opts.keysetId Optional `keysetId` to price against (default: the wallet's bound keyset)
+   * @param opts.nOutputs Optional Override the output count for custom denoms (default: optimal
+   *   split).
+   * @returns The fee, zero when the keyset charges no input fees.
+   */
+  getFeesToInclude(amount: AmountLike, opts?: { keysetId?: string; nOutputs?: number }): Amount {
+    const keyset = this.getKeyset(opts?.keysetId);
+    const parsed = this.parseAmount(amount, 'getFeesToInclude', true);
+    const nOutputs = opts?.nOutputs ?? splitAmount(parsed, keyset.keys).length;
+    return Amount.sum(this.receiveFeeAmounts(nOutputs, keyset));
   }
 
   /**
