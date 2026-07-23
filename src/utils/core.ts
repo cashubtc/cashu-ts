@@ -33,12 +33,7 @@ import { encodeBase64ToJson, encodeBase64toUint8, encodeUint8toBase64Url } from 
 import { Bytes } from './Bytes';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { JSONInt } from './JSONInt';
-
-// Cap on outputs from the denomination fill. A normal split over a power-of-two keyset is at most a
-// few dozen; a coarse keyset (few, small denominations) over a large value could otherwise fill
-// millions. 8x cdk's default max_outputs (1000): clears any real mint, and a request carrying that
-// many outputs would be rejected for size anyway.
-const MAX_SPLIT_OUTPUTS = 8_192;
+import { MAX_SPLIT_OUTPUTS } from './limits';
 
 /**
  * Splits the amount into denominations of the provided keyset.
