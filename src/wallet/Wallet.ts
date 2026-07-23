@@ -763,7 +763,7 @@ class Wallet {
    */
   private receiveFeeAmounts(nOutputs: number, keyset: Keyset): Amount[] {
     // Bound the +1 convergence; any realistic keyset converges in a few dozen steps.
-    const maxIters = 1 << 12;
+    const maxIters = 4_096;
     let receiveFee = this.getFeesForKeyset(nOutputs, keyset.id);
     let receiveFeeAmounts = splitAmount(receiveFee, keyset.keys);
     let iters = 0;

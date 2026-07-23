@@ -6,6 +6,14 @@
 export const ABSOLUTE_MAX_PER_MINT = 100;
 
 /**
+ * Cap on outputs from the `splitAmount` denomination fill. A normal split over a power-of-two
+ * keyset is at most a few dozen; a coarse keyset (few, small denominations) over a large value
+ * could otherwise fill millions. 8x cdk's default max_outputs (1000): clears any real mint, and a
+ * request carrying that many outputs would be rejected for size anyway. Exceeding it throws.
+ */
+export const MAX_SPLIT_OUTPUTS = 8_192;
+
+/**
  * NUT-29: Hard ceiling for batch-mint size, the maximum number of quote entries a wallet may
  * include in a single `prepareBatchMint` call. Values advertised by a mint above this cap are
  * clamped.
