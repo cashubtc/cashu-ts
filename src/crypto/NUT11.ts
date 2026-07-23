@@ -8,7 +8,7 @@ import { type HTLCWitness, type P2PKWitness, type Proof } from '../model/types';
 import { type NUT10Option } from '../wallet/types/payment-requests';
 
 import { getValidSigners, schnorrSignMessage, schnorrVerifyMessage, type PrivKey } from './core';
-import { normalizePubkey } from './curve_secp';
+import { normalizeSecpPubkey } from './curve_secp';
 import {
   getTagInt,
   getTagScalar,
@@ -215,7 +215,7 @@ export function dedupeP2PKPubkeys(keys: string[]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
   for (const raw of keys) {
-    const k = normalizePubkey(raw);
+    const k = normalizeSecpPubkey(raw);
     const xOnly = k.slice(-64);
     if (!seen.has(xOnly)) {
       seen.add(xOnly);
@@ -901,7 +901,7 @@ function assertSpendingConditionRules(params: {
 function getP2PKWitnessPubkeys(secret: Secret): string[] {
   const data = getSecretKind(secret) === 'P2PK' ? getDataField(secret) : '';
   const pubkeys = getTag(secret, 'pubkeys') ?? [];
-  const keys = (data ? [data, ...pubkeys] : pubkeys).map((key) => normalizePubkey(key));
+  const keys = (data ? [data, ...pubkeys] : pubkeys).map((key) => normalizeSecpPubkey(key));
   if (dedupeP2PKPubkeys(keys).length !== keys.length) {
     throw new CTSError('Duplicate main pubkeys are not allowed');
   }
@@ -909,7 +909,7 @@ function getP2PKWitnessPubkeys(secret: Secret): string[] {
 }
 
 function getP2PKWitnessRefundkeys(secret: Secret): string[] {
-  const keys = (getTag(secret, 'refund') ?? []).map((key) => normalizePubkey(key));
+  const keys = (getTag(secret, 'refund') ?? []).map((key) => normalizeSecpPubkey(key));
   if (dedupeP2PKPubkeys(keys).length !== keys.length) {
     throw new CTSError('Duplicate refund pubkeys are not allowed');
   }

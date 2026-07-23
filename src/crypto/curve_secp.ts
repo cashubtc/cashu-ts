@@ -46,15 +46,14 @@ export function pointFromHex(hex: string) {
 const VALIDATED_PUBKEYS = new Set<string>();
 
 /**
- * Validates and lowercases a compressed secp256k1 public key (33-byte, 66-hex, 02/03 prefix).
+ * Validates a compressed secp256k1 pubkey and returns it lowercased (canonical form).
  *
  * @remarks
- * Strict: x-only input is rejected, and the key must decompress to a curve point. Used for P2PK
- * locks and NUT-20 quote-lock keys; a non-compliant key is unspendable on spec-conformant mints.
- * @throws If not 66-char 02/03 hex, or not a valid secp256k1 point.
- * @internal
+ * Strict: 66-char 02/03 hex that decompresses to a curve point; x-only is rejected. Throwing
+ * companion to {@link isValidSecpPubkey}.
+ * @throws {@link CTSError} If not 66-char 02/03 hex, or not a valid secp256k1 point.
  */
-export function normalizePubkey(pk: string): string {
+export function normalizeSecpPubkey(pk: string): string {
   const hex = pk.toLowerCase();
   if (hex.length !== 66 || !(hex.startsWith('02') || hex.startsWith('03'))) {
     throw new CTSError(
@@ -71,6 +70,19 @@ export function normalizePubkey(pk: string): string {
     VALIDATED_PUBKEYS.add(hex);
   }
   return hex;
+}
+
+/**
+ * True if `pk` is a valid compressed secp256k1 pubkey. Non-throwing companion to
+ * {@link normalizeSecpPubkey}.
+ */
+export function isValidSecpPubkey(pk: string): boolean {
+  try {
+    normalizeSecpPubkey(pk);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function getPubKeyFromPrivKey(privKey: Uint8Array): Uint8Array<ArrayBufferLike> {

@@ -715,6 +715,9 @@ export function isMintOperationError(e: unknown): e is MintOperationError;
 export function isP2PKSpendAuthorised(proof: Proof, logger?: Logger, message?: string): boolean;
 
 // @public
+export function isValidSecpPubkey(pk: string): boolean;
+
+// @public
 export const JSONInt: JSONIntApi;
 
 // @public (undocumented)
@@ -1379,6 +1382,9 @@ export function normalizeMintUrl(url: string): string;
 
 // @public
 export function normalizeProofAmounts(raw: ProofLike[]): Proof[];
+
+// @public
+export function normalizeSecpPubkey(pk: string): string;
 
 // @public
 export type NUT10Option = {
