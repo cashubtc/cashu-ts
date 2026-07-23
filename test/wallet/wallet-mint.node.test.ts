@@ -536,7 +536,7 @@ describe('requestTokens', () => {
       wallet.prepareMint('bolt11', 1, quote, {
         privkey: [pk1, pk2],
       }),
-    ).rejects.toThrow('multiple privkeys supplied for quote');
+    ).rejects.toThrow('multiple privkeys supplied for a quote without pubkey');
   });
 
   test('prepareBatchMint fails when no privkey matches locked quote pubkey', async () => {
@@ -1541,7 +1541,7 @@ describe('generic mint/melt methods', () => {
         wallet.prepareMint('bolt12', 3, quote, {
           privkey: '01'.repeat(32),
         }),
-      ).rejects.toThrow('Mint quote bolt12-partial has only 2 available to mint; requested 3');
+      ).rejects.toThrow('Mint quote has only 2 available to mint; requested 3');
     });
 
     test('prepareMint keeps string-only quote support without available amount fields', async () => {
@@ -1576,7 +1576,7 @@ describe('generic mint/melt methods', () => {
       };
 
       await expect(wallet.mintProofsOnchain(3, quote, '01'.repeat(32))).rejects.toThrow(
-        'Mint quote onchain-partial has only 2 available to mint; requested 3',
+        'Mint quote has only 2 available to mint; requested 3',
       );
     });
 

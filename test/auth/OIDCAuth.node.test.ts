@@ -591,7 +591,7 @@ describe('OIDCAuth: postFormLoose minimal success', () => {
     await o.loadConfig();
     const res = await o['postFormLoose'](TOKEN, 'grant_type=x');
     expect(res).toEqual({ ok: true });
-    expect(logger.debug).toHaveBeenCalledWith('OIDCAuth Response', { json: { ok: true } });
+    expect(logger.debug).toHaveBeenCalledWith('OIDCAuth Response', { status: 200 });
   });
 });
 
