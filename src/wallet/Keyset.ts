@@ -2,12 +2,8 @@ import { hexToBytes } from '@noble/curves/utils.js';
 
 import { CTSError } from '../model/Errors';
 import { type MintKeyset, type MintKeys } from '../model/types';
-import { isValidHex, deriveKeysetId, isBase64String } from '../utils';
+import { isValidHex, deriveKeysetId, isBase64String, MAX_KEYSET_DENOMINATIONS } from '../utils';
 import { normalizeMintKeyset, normalizeMintKeys } from '../utils/normalizeNumbers';
-
-// Mint-supplied keysets are untrusted; bound the denomination count before any
-// per-key work. Real keysets carry ~64 keys (powers of two), so 256 is ample.
-const MAX_KEYSET_DENOMINATIONS = 256;
 
 export class Keyset {
   private _id: string;
