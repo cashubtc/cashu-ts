@@ -32,7 +32,7 @@ import {
 const server = useTestServer();
 
 const KEYSET_ID = '00bd033559de27d0';
-// A valid compressed secp256k1 point (the generator), accepted by normalizePubkey.
+// A valid compressed secp256k1 point (the generator), accepted by normalizeSecpPubkey.
 const LOCK_PUBKEY = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
 const SIG_C = '0361a2725cfd88f60ded718378e8049a4a6cee32e214a9870b44c3ffea2dc9e625';
 const SEED = hexToBytes(
@@ -1043,7 +1043,7 @@ describe('createLockedMintQuote mutants', () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
 
-    // normalizePubkey runs before the NUT-20 support check, so this fails on the pubkey.
+    // normalizeSecpPubkey runs before the NUT-20 support check, so this fails on the pubkey.
     await expect(wallet.createLockedMintQuote(100, ' ')).rejects.toThrow('Invalid pubkey');
   });
 });
