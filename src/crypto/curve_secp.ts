@@ -54,12 +54,15 @@ const VALIDATED_PUBKEYS = new Set<string>();
  * @throws {@link CTSError} If not 66-char 02/03 hex, or not a valid secp256k1 point.
  */
 export function normalizeSecpPubkey(pk: string): string {
-  const hex = pk.toLowerCase();
-  if (hex.length !== 66 || !(hex.startsWith('02') || hex.startsWith('03'))) {
+  // Check type, length, and prefix before lowercasing: a non-string or oversized input is rejected
+  // as a CTSError (per this function's contract), not a raw TypeError, and without a full copy/scan.
+  if (typeof pk !== 'string' || pk.length !== 66 || !(pk.startsWith('02') || pk.startsWith('03'))) {
+    const got = typeof pk === 'string' ? `length ${pk.length}` : typeof pk;
     throw new CTSError(
-      `Invalid pubkey: expected 33-byte compressed hex (66 chars); for an x-only (nostr) key, prepend '02', got length ${hex.length}`,
+      `Invalid pubkey: expected 33-byte compressed hex (66 chars); for an x-only (nostr) key, prepend '02', got ${got}`,
     );
   }
+  const hex = pk.toLowerCase();
   if (!VALIDATED_PUBKEYS.has(hex)) {
     try {
       pointFromHex(hex);

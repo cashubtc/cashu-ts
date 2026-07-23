@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'vitest';
+import { describe, test, expect, vi } from 'vitest';
 
 import { normalizeSecpPubkey, isValidSecpPubkey } from '../../src';
 
@@ -19,6 +19,28 @@ describe('normalizeSecpPubkey', () => {
 
   test('rejects a well-formed hex value that is not on the curve', () => {
     expect(() => normalizeSecpPubkey('02' + 'f'.repeat(64))).toThrow(/not a valid secp256k1 point/);
+  });
+
+  test('rejects a non-string input as a CTSError, not a TypeError', () => {
+    for (const bad of [null, undefined, 123, {}, []]) {
+      expect(() => normalizeSecpPubkey(bad as string)).toThrow(/Invalid pubkey/);
+    }
+    expect(isValidSecpPubkey(null as unknown as string)).toBe(false);
+  });
+
+  test('rejects an oversized input on length, before lowercasing the whole string', () => {
+    const big = 'a'.repeat(1_000_000);
+    const spy = vi.spyOn(String.prototype, 'toLowerCase');
+    let threw = false;
+    try {
+      normalizeSecpPubkey(big);
+    } catch {
+      threw = true;
+    }
+    const lowercased = spy.mock.calls.length;
+    spy.mockRestore();
+    expect(threw).toBe(true);
+    expect(lowercased).toBe(0);
   });
 });
 
