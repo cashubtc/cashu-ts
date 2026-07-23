@@ -30,6 +30,26 @@ describe('Keyset.verifyKeysetId', () => {
     expect(Keyset.verifyKeysetId(mk)).toBe(false);
   });
 
+  test('returns false when the keys field is missing entirely', () => {
+    const mk = { id: GENUINE_ID, unit: 'sat', active: true } as MintKeys;
+    expect(Keyset.verifyKeysetId(mk)).toBe(false);
+  });
+
+  test('returns false for a keyset with more than 256 denominations', () => {
+    // Id derives genuinely for the oversized set, so rejection is due solely
+    // to the denomination-count bound.
+    const pubkey = (PUBKEYS as Keys)[1];
+    const oversized: Keys = {};
+    for (let i = 0; i < 257; i++) oversized[i + 1] = pubkey;
+    const mk: MintKeys = {
+      id: deriveKeysetId(oversized, { versionByte: 0 }),
+      unit: 'sat',
+      active: true,
+      keys: oversized,
+    };
+    expect(Keyset.verifyKeysetId(mk)).toBe(false);
+  });
+
   test('returns false when derived id does not match a tampered key', () => {
     const tampered: Keys = { ...(PUBKEYS as Keys), 1: (PUBKEYS as Keys)[2] };
     const mk: MintKeys = { id: GENUINE_ID, unit: 'sat', active: true, keys: tampered };

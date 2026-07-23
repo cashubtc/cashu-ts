@@ -5,6 +5,10 @@ import { type MintKeyset, type MintKeys } from '../model/types';
 import { isValidHex, deriveKeysetId, isBase64String } from '../utils';
 import { normalizeMintKeyset, normalizeMintKeys } from '../utils/normalizeNumbers';
 
+// Mint-supplied keysets are untrusted; bound the denomination count before any
+// per-key work. Real keysets carry ~64 keys (powers of two), so 256 is ample.
+const MAX_KEYSET_DENOMINATIONS = 256;
+
 export class Keyset {
   private _id: string;
   private _unit: string;
@@ -122,11 +126,13 @@ export class Keyset {
   /**
    * Verifies that a MintKeys DTO has a correct id for its keys/unit/expiry.
    *
-   * @returns True if verification succeeds, false otherwise (e.g: no keys or mismatch).
+   * @returns True if verification succeeds, false otherwise (e.g: no keys, too many keys, or
+   *   mismatch).
    */
   static verifyKeysetId(keys: MintKeys): boolean {
     try {
-      if (!keys.keys || Object.keys(keys.keys).length === 0) return false;
+      const count = keys.keys ? Object.keys(keys.keys).length : 0;
+      if (count === 0 || count > MAX_KEYSET_DENOMINATIONS) return false;
 
       const isDeprecatedBase64 = isBase64String(keys.id) && !isValidHex(keys.id);
       const versionByte = isValidHex(keys.id) ? hexToBytes(keys.id)[0] : 0;
