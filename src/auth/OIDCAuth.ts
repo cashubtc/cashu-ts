@@ -350,7 +350,7 @@ export class OIDCAuth {
     formBody: string,
   ): Promise<TSuccess> {
     try {
-      this.logger.debug('OIDCAuth Request', { formBody });
+      this.logger.debug('OIDCAuth Request', { endpoint });
       const res = await this.fetch(endpoint, {
         method: 'POST',
         headers: {
@@ -373,7 +373,7 @@ export class OIDCAuth {
         const msg = err.error_description || err.error || `HTTP ${res.status}`;
         throw new CTSError(`OIDCAuth: ${msg}`, { cause: parseError });
       }
-      this.logger.debug('OIDCAuth Response', { json });
+      this.logger.debug('OIDCAuth Response', { status: res.status });
       return (json ?? {}) as TSuccess;
     } catch (err) {
       this.logger.error('OIDCAuth: postFormStrict failed', { err });
@@ -387,7 +387,7 @@ export class OIDCAuth {
     formBody: string,
   ): Promise<T | TokenResponse> {
     try {
-      this.logger.debug('OIDCAuth Request', { formBody });
+      this.logger.debug('OIDCAuth Request', { endpoint });
       const res = await this.fetch(endpoint, {
         method: 'POST',
         headers: {
@@ -403,7 +403,7 @@ export class OIDCAuth {
       } catch (err) {
         this.logger.warn('OIDCAuth: bad JSON (loose)', { err });
       }
-      this.logger.debug('OIDCAuth Response', { json });
+      this.logger.debug('OIDCAuth Response', { status: res.status });
       return json ?? {};
     } catch (err) {
       this.logger.error('OIDCAuth: postFormLoose network error', { err });

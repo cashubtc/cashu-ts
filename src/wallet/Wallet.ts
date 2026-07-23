@@ -2208,7 +2208,7 @@ class Wallet {
     const availableAmount = amountPaid.subtract(amountIssued);
     this.failIf(
       requestedAmount.greaterThan(availableAmount),
-      `Mint quote ${quote.quote} has only ${availableAmount.toString()} available to mint; requested ${requestedAmount.toString()}`,
+      `Mint quote has only ${availableAmount.toString()} available to mint; requested ${requestedAmount.toString()}`,
       {
         method,
         amount_paid: amountPaid.toString(),
@@ -2231,7 +2231,7 @@ class Wallet {
         typeof quote.expiry === 'number' &&
         quote.expiry > 0 && // some mints (e.g. CDK) emit 0 for "no expiry"; spec says null
         quote.expiry < Math.floor(Date.now() / 1000),
-      `Mint quote ${quote.quote} has expired`,
+      `Mint quote has expired`,
     );
   }
 
@@ -2445,7 +2445,7 @@ class Wallet {
       const quotePubkey = 'pubkey' in quote ? (quote.pubkey as string | undefined) : undefined;
       this.failIf(
         !quotePubkey && Array.isArray(privkey),
-        `prepareMint: multiple privkeys supplied for quote '${quote.quote}' without pubkey`,
+        `prepareMint: multiple privkeys supplied for a quote without pubkey`,
       );
       const signingKey = quotePubkey
         ? findSigningKey(quotePubkey, privkey)
@@ -2633,7 +2633,7 @@ class Wallet {
     const signatures: Array<string | null> = [];
     const legacySignatures: Array<string | null> = []; // Temporary legacy message support
     let hasSignatures = false;
-    for (const entry of entries) {
+    for (const [i, entry] of entries.entries()) {
       const quotePubkey = 'pubkey' in entry.quote ? entry.quote.pubkey : undefined;
       if (quotePubkey && privkey) {
         const signingKey = findSigningKey(quotePubkey, privkey);
@@ -2643,7 +2643,7 @@ class Wallet {
       } else {
         if (privkey && !quotePubkey) {
           this._logger.warn(
-            `prepareBatchMint: privkey supplied but quote '${entry.quote.quote}' has no pubkey — treating as unlocked`,
+            `prepareBatchMint: privkey supplied but quote #${i + 1} has no pubkey; treating as unlocked`,
           );
         }
         signatures.push(null);
@@ -3215,7 +3215,10 @@ class Wallet {
     const change = this.createMeltChangeProofs(meltPreview.outputData, meltResponse.change ?? []);
 
     if (completeOptions.preferAsync) {
-      this._logger.debug('ASYNC MELT REQUESTED', meltResponse);
+      this._logger.debug('ASYNC MELT REQUESTED', {
+        state: meltResponse.state,
+        changeAmounts: change.map((p) => p.amount.toString()),
+      });
     } else {
       this._logger.debug('MELT COMPLETED', {
         changeAmounts: change.map((p) => p.amount.toString()),
