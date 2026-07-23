@@ -99,10 +99,9 @@ export function splitAmount(
   }
   for (const amtAsAmount of sortedKeyAmounts) {
     if (amtAsAmount.isZero()) continue;
-    // How many of this denomination fit into the remaining value. Guard the running total before
-    // building the array: a coarse keyset over a large value would otherwise fill millions of
-    // outputs (and a spread push of that many overflows the call stack). Compare against the
-    // remaining budget so an oversized count never reaches toNumber().
+    // Calculate how many of this denomination fit into the remaining value.
+    // Guard requireCount: small keyset denom + large value could be millions of outputs.
+    // Compare against remaining budget, so an oversized count never reaches toNumber().
     const requireCount = remainingValue.divideBy(amtAsAmount);
     const budget = MAX_SPLIT_OUTPUTS - normalizedSplit.length;
     if (budget <= 0 || requireCount.greaterThan(budget)) {
