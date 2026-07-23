@@ -108,6 +108,29 @@ describe('test split custom amounts ', () => {
   });
 });
 
+describe('splitAmount output bound', () => {
+  const onlyOnes: Keys = { 1: 'deadbeef' };
+
+  test('fills a small coarse split (no spread push)', () => {
+    const chunks = utils.splitAmount(100, onlyOnes);
+    expect(chunks).toHaveLength(100);
+    expect(chunks.every((a) => a.toNumber() === 1)).toBe(true);
+  });
+
+  test('rejects a coarse split that would exceed the output cap', () => {
+    // Only a 1-denomination keyset over a large value: previously built a huge array via a spread
+    // push (stack overflow / memory sink). Now bounded and rejected before allocating.
+    expect(() => utils.splitAmount(200000, onlyOnes)).toThrow(/would exceed .* outputs/);
+  });
+
+  test('allows exactly the cap and rejects one past it (inclusive boundary)', () => {
+    // 8_192 ones is exactly the cap: still built (proves the loop push holds at scale).
+    expect(utils.splitAmount(8_192, onlyOnes)).toHaveLength(8_192);
+    // One more output must be rejected, not allocated.
+    expect(() => utils.splitAmount(8_193, onlyOnes)).toThrow(/would exceed .* outputs/);
+  });
+});
+
 describe('test split different key amount', () => {
   test('testing amount 68251', async () => {
     const chunks = utils.splitAmount(68251, keys_base10, undefined, 'desc');

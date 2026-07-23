@@ -34,6 +34,12 @@ import { Bytes } from './Bytes';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { JSONInt } from './JSONInt';
 
+// Cap on outputs from the denomination fill. A normal split over a power-of-two keyset is at most a
+// few dozen; a coarse keyset (few, small denominations) over a large value could otherwise fill
+// millions. 8x cdk's default max_outputs (1000): clears any real mint, and a request carrying that
+// many outputs would be rejected for size anyway.
+const MAX_SPLIT_OUTPUTS = 8_192;
+
 /**
  * Splits the amount into denominations of the provided keyset.
  *
@@ -45,7 +51,8 @@ import { JSONInt } from './JSONInt';
  * @param split? Optional custom split amounts.
  * @param order? Optional order for split amounts (if fill was required)
  * @returns Array of split amounts.
- * @throws Error if split sum is greater than value or mint does not have keys for requested split.
+ * @throws Error if split sum is greater than value, the keyset lacks requested denominations, or
+ *   the fill would exceed an internal output cap (coarse denominations over a large value).
  */
 export function splitAmount(
   value: AmountLike,
@@ -97,10 +104,19 @@ export function splitAmount(
   }
   for (const amtAsAmount of sortedKeyAmounts) {
     if (amtAsAmount.isZero()) continue;
-    // Calculate how many of this denomination fit into the remaining value
-    const requireCount = remainingValue.divideBy(amtAsAmount).toNumber();
-    // Add them to the split and reduce the target value by added amounts
-    normalizedSplit.push(...Array<Amount>(requireCount).fill(amtAsAmount));
+    // How many of this denomination fit into the remaining value. Guard the running total before
+    // building the array: a coarse keyset over a large value would otherwise fill millions of
+    // outputs (and a spread push of that many overflows the call stack). Compare against the
+    // remaining budget so an oversized count never reaches toNumber().
+    const requireCount = remainingValue.divideBy(amtAsAmount);
+    const budget = MAX_SPLIT_OUTPUTS - normalizedSplit.length;
+    if (budget <= 0 || requireCount.greaterThan(budget)) {
+      throw new CTSError(`Cannot split amount: fill would exceed ${MAX_SPLIT_OUTPUTS} outputs`);
+    }
+    const count = requireCount.toNumber();
+    for (let i = 0; i < count; i++) {
+      normalizedSplit.push(amtAsAmount);
+    }
     remainingValue = remainingValue.subtract(amtAsAmount.multiplyBy(requireCount));
     // Break early once target is satisfied
     if (remainingValue.isZero()) break;
