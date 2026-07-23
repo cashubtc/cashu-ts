@@ -1084,11 +1084,15 @@ class Wallet {
    * If proofs are P2PK-locked to your public key, call signP2PKProofs first to sign them. The
    * default config uses exact match selection, and does not includeFees or requireDleq. Because the
    * send is offline, the user will unlock the signed proofs when they receive them online.
+   *
+   * When no offline selection matches the amount, this returns an empty `send`. In v5 it throws
+   * instead; wrap calls in try/catch to stay forward-compatible.
    * @param amount Amount to send.
    * @param proofs Array of proofs (must sum >= amount; pre-sign if P2PK-locked).
    * @param config Optional parameters for the send.
-   * @returns SendResponse with keep/send proofs.
-   * @throws Throws if the send cannot be completed offline.
+   * @returns SendResponse with keep/send proofs (`send` is empty when no offline match; see
+   *   remarks).
+   * @throws If funds are insufficient or proof selection times out.
    */
   sendOffline(amount: AmountLike, proofs: ProofLike[], config?: SendOfflineConfig): SendResponse {
     const sendAmount = this.parseAmount(amount, 'sendOffline');
