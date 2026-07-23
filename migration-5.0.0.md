@@ -203,6 +203,34 @@ If your consumer was already wrapping the loop in `try/catch` (e.g. to handle ab
 
 ---
 
+## `sendOffline` throws when no offline selection matches
+
+`wallet.sendOffline` documents that it throws when the send cannot be completed offline, and already threw on insufficient funds and on selection timeout. But when funds were sufficient and no selection matched the requested amount (e.g. an exact-match `sendOffline(3, [2, 4])`), v4 returned an empty `send` instead. v5 throws in that case too, so every "cannot complete offline" outcome is a single failure mode.
+
+`send()` is unaffected: its offline attempt already wraps `sendOffline` in `try/catch` and falls back to an online swap.
+
+### Migration
+
+Wrap direct `sendOffline` calls in `try/catch`, or pass `exactMatch: false` to accept a close match:
+
+```ts
+// Before: empty send on no match
+const { send } = wallet.sendOffline(3, proofs);
+if (send.length === 0) {
+  // fall back to an online swap yourself
+}
+
+// After: throws on no match
+try {
+  const { send } = wallet.sendOffline(3, proofs);
+  // ...
+} catch {
+  // no exact offline match: swap online, or retry with { exactMatch: false }
+}
+```
+
+---
+
 ## `deriveSecret` and `deriveBlindingFactor` removed
 
 The single-value NUT-13 derivation helpers `deriveSecret` and `deriveBlindingFactor` are removed. Use `deriveSecretAndBlindingFactor`, which derives both values for a counter in one call (and, for legacy BIP-32 keysets, avoids repeating the shared path derivation).
