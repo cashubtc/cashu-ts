@@ -27,6 +27,14 @@ export const SigFlags = {
 export type SigFlag = (typeof SigFlags)[keyof typeof SigFlags];
 const VALID_SIG_FLAGS: ReadonlySet<SigFlag> = new Set(Object.values(SigFlags));
 
+// Upper bounds on untrusted P2PK/HTLC secret and witness sizes, applied on the verify/sign path so
+// per-key and per-signature work stays bounded rather than scaling with input. NUT-28 caps a lock
+// at 11 slots (data + pubkeys + refund); SIG_ALL adds a signature per message variant per signer,
+// so signatures need more headroom than keys. These are work bounds, not the exact NUT-28 rule
+// (still enforced at build).
+const MAX_P2PK_PUBKEYS = 16;
+const MAX_P2PK_SIGNATURES = 64;
+
 export type LockState = 'PERMANENT' | 'ACTIVE' | 'EXPIRED';
 
 export type P2PKSpendingPath = 'MAIN' | 'REFUND' | 'UNLOCKED' | 'FAILED';
@@ -320,7 +328,11 @@ export function getP2PKSigFlag(secretStr: string | Secret): SigFlag {
  * @returns Array of witness signatures.
  */
 export function getP2PKWitnessSignatures(witness: Proof['witness']): string[] {
-  return parseWitnessData(witness)?.signatures ?? [];
+  const signatures = parseWitnessData(witness)?.signatures ?? [];
+  if (signatures.length > MAX_P2PK_SIGNATURES) {
+    throw new CTSError(`Too many witness signatures: ${signatures.length}`);
+  }
+  return signatures;
 }
 
 /**
@@ -343,8 +355,8 @@ export function parseWitnessData(witness: Proof['witness']): WitnessData | undef
     return undefined;
   }
   const data: WitnessData = {
-    // always normalize signatures to an array
-    signatures: parsed.signatures ?? [],
+    // always normalize signatures to an array (untrusted witness may carry a non-array value)
+    signatures: Array.isArray(parsed.signatures) ? parsed.signatures : [],
   };
 
   // Only set preimage if it is a non empty string
@@ -784,7 +796,15 @@ function assertSpendingConditionRules(params: {
 function getP2PKWitnessPubkeys(secret: Secret): string[] {
   const data = getSecretKind(secret) === 'P2PK' ? getDataField(secret) : '';
   const pubkeys = getTag(secret, 'pubkeys') ?? [];
+<<<<<<< HEAD
   const keys = (data ? [data, ...pubkeys] : pubkeys).map((key) => normalizePubkey(key));
+=======
+  // Bound EC decompression before mapping over untrusted keys.
+  if (pubkeys.length > MAX_P2PK_PUBKEYS) {
+    throw new CTSError(`Too many pubkeys: ${pubkeys.length}`);
+  }
+  const keys = (data ? [data, ...pubkeys] : pubkeys).map((key) => normalizeSecpPubkey(key));
+>>>>>>> e8b5c1e (fix(crypto): bound untrusted P2PK witness and CBOR decode input (#874))
   if (dedupeP2PKPubkeys(keys).length !== keys.length) {
     throw new CTSError('Duplicate main pubkeys are not allowed');
   }
@@ -792,7 +812,15 @@ function getP2PKWitnessPubkeys(secret: Secret): string[] {
 }
 
 function getP2PKWitnessRefundkeys(secret: Secret): string[] {
+<<<<<<< HEAD
   const keys = (getTag(secret, 'refund') ?? []).map((key) => normalizePubkey(key));
+=======
+  const refund = getTag(secret, 'refund') ?? [];
+  if (refund.length > MAX_P2PK_PUBKEYS) {
+    throw new CTSError(`Too many refund pubkeys: ${refund.length}`);
+  }
+  const keys = refund.map((key) => normalizeSecpPubkey(key));
+>>>>>>> e8b5c1e (fix(crypto): bound untrusted P2PK witness and CBOR decode input (#874))
   if (dedupeP2PKPubkeys(keys).length !== keys.length) {
     throw new CTSError('Duplicate refund pubkeys are not allowed');
   }

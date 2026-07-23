@@ -67,6 +67,54 @@ describe('test create p2pk secret', () => {
     expect(verify).toBe(true);
   });
 
+  test('non-array witness signatures verify as false, not a thrown TypeError', () => {
+    const proof: Proof = {
+      amount: Amount.from(1),
+      C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+      id: '00000000000',
+      secret: `["P2PK",{"nonce":"a","data":"${PUBKEY}"}]`,
+      witness: JSON.stringify({ signatures: 'not-an-array' }),
+    };
+    expect(isP2PKSpendAuthorised(proof)).toBe(false);
+  });
+
+  test('accepts a SIG_ALL-sized witness (multiple signatures per signer)', () => {
+    // SIG_ALL signs each message variant per signer, so a legitimate witness carries well over
+    // the 11-slot lock size; the cap must not reject it.
+    const sigAll = JSON.stringify({
+      signatures: Array.from({ length: 33 }, () => 'ab'.repeat(64)),
+    });
+    expect(getP2PKWitnessSignatures(sigAll)).toHaveLength(33);
+  });
+
+  test('a witness with too many signatures is rejected with a CTSError', () => {
+    const many = JSON.stringify({ signatures: Array.from({ length: 65 }, () => 'ab'.repeat(64)) });
+    expect(() => getP2PKWitnessSignatures(many)).toThrow(/Too many witness signatures/);
+  });
+
+  test('a secret with too many pubkeys is rejected before per-key work', () => {
+    const tag = Array.from({ length: 65 }, () => `"${PUBKEY}"`).join(',');
+    const proof: Proof = {
+      amount: Amount.from(1),
+      C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+      id: '00000000000',
+      secret: `["P2PK",{"nonce":"a","data":"${PUBKEY}","tags":[["pubkeys",${tag}]]}]`,
+    };
+    expect(() => verifyP2PKSpendingConditions(proof)).toThrow(/Too many pubkeys/);
+  });
+
+  test('a secret with too many refund pubkeys is rejected before per-key work', () => {
+    const tag = Array.from({ length: 65 }, () => `"${PUBKEY}"`).join(',');
+    const proof: Proof = {
+      amount: Amount.from(1),
+      C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+      id: '00000000000',
+      // A normal main key passes its cap; the oversized refund tag trips the refund cap.
+      secret: `["P2PK",{"nonce":"a","data":"${PUBKEY}","tags":[["refund",${tag}]]}]`,
+    };
+    expect(() => verifyP2PKSpendingConditions(proof)).toThrow(/Too many refund pubkeys/);
+  });
+
   test('sign and verify proofs', async () => {
     const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
     const proof1: Proof = {
