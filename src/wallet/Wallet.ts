@@ -1105,7 +1105,7 @@ class Wallet {
    * @param proofs Array of proofs (must sum >= amount; pre-sign if P2PK-locked).
    * @param config Optional parameters for the send.
    * @returns SendResponse with keep/send proofs.
-   * @throws Throws if the send cannot be completed offline.
+   * @throws If funds are insufficient, or no offline selection matches the amount.
    */
   sendOffline(amount: AmountLike, proofs: ProofLike[], config?: SendOfflineConfig): SendResponse {
     const sendAmount = this.parseAmount(amount, 'sendOffline');
@@ -1128,6 +1128,12 @@ class Wallet {
       sendAmount,
       includeFees,
       exactMatch,
+    );
+    // No selection covers the amount: fail rather than return an empty send. send() catches this
+    // and falls back to a swap; direct callers get a clear failure instead of a silent no-op.
+    this.failIf(
+      !sendAmount.isZero() && send.length === 0,
+      'Send cannot be completed offline for the requested amount',
     );
     // Ensure witnesses are serialized, strip DLEQ if not required, keep p2pk_e
     const sendPrepared = this._prepareInputsForMint(send, requireDleq, true);
