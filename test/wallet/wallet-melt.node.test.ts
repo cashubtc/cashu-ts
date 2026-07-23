@@ -892,13 +892,21 @@ describe('async melt preference body', () => {
       }),
     );
 
-    const wallet = new Wallet(mint, { unit });
+    const debug = vi.fn();
+    const wallet = new Wallet(mint, {
+      unit,
+      logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug, trace: vi.fn() },
+    });
     await wallet.loadMint();
     const meltTxn = await wallet.prepareMelt('bolt11', meltQuote, proofs);
     const res = await wallet.completeMelt(meltTxn, undefined, { preferAsync: true });
 
     expect(res.quote.quote).toBe(meltQuote.quote);
     expect(res.change).toHaveLength(0);
+    expect(debug).toHaveBeenCalledWith('ASYNC MELT REQUESTED', {
+      state: 'UNPAID',
+      changeAmounts: [],
+    });
   });
 
   test('bolt11: does not send prefer_async when preferAsync is not set', async () => {

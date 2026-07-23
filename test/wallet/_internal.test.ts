@@ -109,6 +109,24 @@ describe('stringifyOutputTypeForLog', () => {
     );
   });
 
+  test('logs placeholders for the natural keys when blindKeys is enabled', () => {
+    const lockKey = '02'.padEnd(66, 'a');
+    const additionalKey = '02'.padEnd(66, 'b');
+    const refundKey = '02'.padEnd(66, 'c');
+    const result = stringifyOutputTypeForLog({
+      type: 'p2pk',
+      options: {
+        pubkey: [lockKey, additionalKey],
+        refundKeys: [refundKey],
+        blindKeys: true,
+      },
+    });
+    expect(result).not.toContain(lockKey);
+    expect(result).not.toContain(additionalKey);
+    expect(result).not.toContain(refundKey);
+    expect(result).toContain('blindKeys');
+  });
+
   test('formats custom outputs as amount strings without serializing bigint internals', () => {
     const data = OutputData.createRandomData(3, keyset, [1, 2]);
     const result = stringifyOutputTypeForLog({
