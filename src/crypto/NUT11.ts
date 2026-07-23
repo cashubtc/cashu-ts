@@ -354,6 +354,8 @@ export function parseWitnessData(witness: Proof['witness']): WitnessData | undef
     console.error('Failed to parse witness string:', e);
     return undefined;
   }
+  // A parsed primitive (eg "null", "1", "true") is not a witness; treat it as absent.
+  if (!parsed || typeof parsed !== 'object') return undefined;
   const data: WitnessData = {
     // always normalize signatures to an array (untrusted witness may carry a non-array value)
     signatures: Array.isArray(parsed.signatures) ? parsed.signatures : [],
@@ -441,6 +443,14 @@ export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: strin
 
   if (alreadySigned) {
     throw new CTSError(`Proof already signed by [02|03]${pubkey}`);
+  }
+
+  // Appending must not push the witness past the cap the verify path enforces,
+  // else we'd hand back a proof getP2PKWitnessSignatures then rejects.
+  if (signatures.length >= MAX_P2PK_SIGNATURES) {
+    throw new CTSError(
+      `Cannot sign: witness already at the ${MAX_P2PK_SIGNATURES}-signature limit`,
+    );
   }
 
   // Add new signature
