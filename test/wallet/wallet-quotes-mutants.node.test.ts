@@ -400,7 +400,7 @@ describe('validateMintQuote mutants', () => {
     const nowSec = Math.floor(Date.now() / 1000);
 
     expect(() => wallet.validateMintQuote({ quote: 'q', expiry: nowSec - 100 })).toThrow(
-      'Mint quote q has expired',
+      'Mint quote has expired',
     );
     // 0 means "no expiry" (CDK quirk); a future expiry is still valid.
     expect(() => wallet.validateMintQuote({ quote: 'q', expiry: 0 })).not.toThrow();

@@ -314,9 +314,7 @@ export class AuthManager implements AuthProvider {
       const exp = typeof obj.exp === 'number' ? obj.exp : Number(obj.exp);
       if (Number.isFinite(exp) && exp > 0) return exp;
     } catch {
-      this.logger.warn('JWT access token was malformed.', {
-        token,
-      });
+      this.logger.warn('JWT access token was malformed.');
     }
     return;
   }
