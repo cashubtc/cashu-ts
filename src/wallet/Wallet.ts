@@ -937,11 +937,11 @@ class Wallet {
     const sortedOutputData: OutputDataLike[] = indices.map((i) => mergedBlindingData[i]);
     const sortedKeepVector: boolean[] = indices.map((i) => keepVector[i]);
     const outputs = sortedOutputData.map((d) => d.blindedMessage);
-    this._logger.debug('createSwapTransaction:', {
-      indices,
-      sortedKeepVector,
-      // outputs, // <-- removed for security
-    });
+    // this._logger.debug('createSwapTransaction:', {
+    //   indices,
+    //   sortedKeepVector,
+    //   outputs,
+    // });
     const payload: SwapRequest = {
       inputs,
       outputs,
