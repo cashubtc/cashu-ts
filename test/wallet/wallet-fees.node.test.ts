@@ -126,6 +126,24 @@ describe('wallet.maxSpendableAfterFees', () => {
     }
   });
 
+  test('computes an exact integer fee for a huge input_fee_ppk', async () => {
+    // nInputs * feePPK + 999 lands past Number.MAX_SAFE_INTEGER; number math would round up 1 sat.
+    useKeysetWithFee(server, 9007199254740000);
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    // ceil(1 * 9007199254740000 / 1000) = 9007199254740, not ...741
+    expect(wallet.getFeesForKeyset(1, FULL_DENOM_ID).toBigInt()).toBe(9007199254740n);
+  });
+
+  test('returns a zero fee for a zero-fee keyset', async () => {
+    useKeysetWithFee(server, 0);
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    expect(wallet.getFeesForKeyset(5, FULL_DENOM_ID).isZero()).toBe(true);
+  });
+
   test('throws with cause when a keyset fee lookup fails', async () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();

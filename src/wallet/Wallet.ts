@@ -1580,15 +1580,18 @@ class Wallet {
    * @returns Fee amount.
    */
   getFeesForKeyset(nInputs: number, keysetId: string): Amount {
+    let feePPK: number;
     try {
       // We must NOT fallback to wallet's keyset
-      const feePPK = this._keyChain.getKeyset(keysetId).fee;
-      return Amount.from(Math.floor(Math.max((nInputs * feePPK + 999) / 1000, 0)));
+      feePPK = this._keyChain.getKeyset(keysetId).fee;
     } catch (e) {
       const message = `No keyset found with ID ${keysetId}`;
       this._logger.error(message, { e });
       throw new CTSError(message, { cause: e });
     }
+    // fee = ceil(nInputs * feePPK / 1000). ceilPercent keeps the product in bigint, so a large
+    // (ingest-bounded) fee cannot lose integer precision the way number math would.
+    return Amount.from(nInputs).ceilPercent(feePPK, 1000);
   }
 
   /**
