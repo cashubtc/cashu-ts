@@ -114,8 +114,8 @@ describe('Amount.floorPercent', () => {
   it('returns zero for amounts smaller than the percentage unit', () => {
     expect(Amount.from(1).floorPercent(2).toBigInt()).toBe(0n);
   });
-  it('throws for non-positive numerator or denominator', () => {
-    expect(() => Amount.from(100).floorPercent(0)).toThrow('floorPercent');
+  it('returns zero for a zero numerator, throws for negative or zero denominator', () => {
+    expect(Amount.from(100).floorPercent(0).toBigInt()).toBe(0n);
     expect(() => Amount.from(100).floorPercent(2, 0)).toThrow('floorPercent');
     expect(() => Amount.from(100).floorPercent(-1)).toThrow('floorPercent');
   });
@@ -145,8 +145,8 @@ describe('Amount.ceilPercent', () => {
   it('returns at least 1 for any positive amount', () => {
     expect(Amount.from(1).ceilPercent(2).toBigInt()).toBe(1n);
   });
-  it('throws for non-positive numerator or denominator', () => {
-    expect(() => Amount.from(100).ceilPercent(0)).toThrow('ceilPercent');
+  it('returns zero for a zero numerator, throws for negative or zero denominator', () => {
+    expect(Amount.from(100).ceilPercent(0).toBigInt()).toBe(0n);
     expect(() => Amount.from(100).ceilPercent(2, 0)).toThrow('ceilPercent');
     expect(() => Amount.from(100).ceilPercent(-1)).toThrow('ceilPercent');
   });
