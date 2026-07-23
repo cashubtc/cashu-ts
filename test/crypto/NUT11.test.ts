@@ -78,6 +78,19 @@ describe('test create p2pk secret', () => {
     expect(isP2PKSpendAuthorised(proof)).toBe(false);
   });
 
+  test('a JSON-primitive witness (eg "null") verifies as false, not a thrown TypeError', () => {
+    const proof: Proof = {
+      amount: Amount.from(1),
+      C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+      id: '00000000000',
+      secret: `["P2PK",{"nonce":"a","data":"${PUBKEY}"}]`,
+      witness: 'null', // JSON.parse("null") === null, not an object
+    };
+    expect(isP2PKSpendAuthorised(proof)).toBe(false);
+    expect(parseWitnessData('null')).toBeUndefined();
+    expect(parseWitnessData('1')).toBeUndefined();
+  });
+
   test('accepts a SIG_ALL-sized witness (multiple signatures per signer)', () => {
     // SIG_ALL signs each message variant per signer, so a legitimate witness carries well over
     // the 11-slot lock size; the cap must not reject it.
@@ -90,6 +103,22 @@ describe('test create p2pk secret', () => {
   test('a witness with too many signatures is rejected with a CTSError', () => {
     const many = JSON.stringify({ signatures: Array.from({ length: 65 }, () => 'ab'.repeat(64)) });
     expect(() => getP2PKWitnessSignatures(many)).toThrow(/Too many witness signatures/);
+  });
+
+  test('signing a witness already at the cap throws instead of producing an over-cap proof', () => {
+    // A hostile proof arrives locked to our key with the maximum witness signatures already set.
+    // Appending our signature would make the verify path reject the proof we just produced.
+    const witness = JSON.stringify({
+      signatures: Array.from({ length: 64 }, () => 'ab'.repeat(64)),
+    });
+    const proof: Proof = {
+      amount: Amount.from(1),
+      C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+      id: '00000000000',
+      secret: `["P2PK",{"nonce":"a","data":"${PUBKEY}"}]`,
+      witness,
+    };
+    expect(() => signP2PKProof(proof, bytesToHex(PRIVKEY))).toThrow(/signature limit/);
   });
 
   test('a secret with too many pubkeys is rejected before per-key work', () => {
