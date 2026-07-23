@@ -84,12 +84,22 @@ export function stringifyOutputTypeForLog(ot: OutputType): string {
         counter: ot.counter,
         denominations: (ot.denominations ?? []).map((d) => Amount.from(d).toString()),
       });
-    case 'p2pk':
+    case 'p2pk': {
+      // P2BK: the natural keys are only blinded later, so log placeholders instead
+      const opts = ot.options;
+      const options = opts.blindKeys
+        ? {
+            ...opts,
+            pubkey: Array.isArray(opts.pubkey) ? opts.pubkey.map(() => '[redacted]') : '[redacted]',
+            refundKeys: opts.refundKeys?.map(() => '[redacted]'),
+          }
+        : opts;
       return JSON.stringify({
         type: 'p2pk',
-        options: ot.options,
+        options,
         denominations: (ot.denominations ?? []).map((d) => Amount.from(d).toString()),
       });
+    }
     case 'random':
       return JSON.stringify({
         type: 'random',
