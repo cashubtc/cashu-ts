@@ -20,6 +20,7 @@ import {
   parseSecret,
 } from '../crypto';
 // Internal transitional fallback — not part of crypto/index.ts
+import { normalizePubkey } from '../crypto/NUT11';
 import { signMintQuoteLegacy } from '../crypto/NUT20';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
@@ -1915,10 +1916,8 @@ class Wallet {
   ): Promise<MintQuoteBolt11Response> {
     this.requireSupport('mint', 'bolt11');
     this.requireMintableKeyset('createLockedMintQuote');
-    this.failIf(
-      typeof pubkey !== 'string' || pubkey.length === 0,
-      'A pubkey is required to lock the mint quote',
-    );
+    this.failIf(typeof pubkey !== 'string', 'A pubkey is required to lock the mint quote');
+    pubkey = normalizePubkey(pubkey);
     const mintAmount = this.parseAmount(amount, 'createLockedMintQuote');
     const { supported } = this.getMintInfo().isSupported(20);
     this.failIf(!supported, 'Mint does not support NUT-20');
@@ -1958,10 +1957,8 @@ class Wallet {
   ): Promise<MintQuoteBolt12Response> {
     this.requireSupport('mint', 'bolt12');
     this.requireMintableKeyset('createMintQuoteBolt12');
-    this.failIf(
-      typeof pubkey !== 'string' || pubkey.length === 0,
-      'A pubkey is required to lock the mint quote',
-    );
+    this.failIf(typeof pubkey !== 'string', 'A pubkey is required to lock the mint quote');
+    pubkey = normalizePubkey(pubkey);
     // Check if mint supports description for bolt12
     const mintInfo = this.getMintInfo();
     if (options?.description && !mintInfo.supportsNut04Description('bolt12', this._unit)) {
@@ -1999,10 +1996,8 @@ class Wallet {
   async createMintQuoteOnchain(pubkey: string): Promise<MintQuoteOnchainResponse> {
     this.requireSupport('mint', 'onchain');
     this.requireMintableKeyset('createMintQuoteOnchain');
-    this.failIf(
-      typeof pubkey !== 'string' || pubkey.length === 0,
-      'A pubkey is required to lock the mint quote',
-    );
+    this.failIf(typeof pubkey !== 'string', 'A pubkey is required to lock the mint quote');
+    pubkey = normalizePubkey(pubkey);
     const res = await this.mint.createMintQuoteOnchain({ unit: this._unit, pubkey });
     this.failIf(
       typeof res.pubkey !== 'string' || res.pubkey.toLowerCase() !== pubkey.toLowerCase(),
