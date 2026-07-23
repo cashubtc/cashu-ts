@@ -120,6 +120,19 @@ describe('sendOffline witness normalization', () => {
     expect(send[0].witness).toBeUndefined();
   });
 
+  test('throws when no offline selection matches, rather than returning an empty send', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    // Enough funds (6 >= 3) but no exact subset of {2, 4} sums to 3.
+    const proofs: Proof[] = [
+      { id: '00bd033559de27d0', amount: Amount.from(2), secret: 's1', C: 'C1' },
+      { id: '00bd033559de27d0', amount: Amount.from(4), secret: 's2', C: 'C2' },
+    ];
+
+    expect(() => wallet.sendOffline(3, proofs)).toThrow(/cannot be completed offline/);
+  });
+
   test('preserves witness on NUT-10 unknown secret kind', async () => {
     const wallet = new Wallet(mint, { unit, requireSigDleq: true });
     await wallet.loadMint();
