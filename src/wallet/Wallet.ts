@@ -20,7 +20,7 @@ import {
   parseSecret,
 } from '../crypto';
 // Internal transitional fallback — not part of crypto/index.ts
-import { normalizePubkey } from '../crypto/NUT11';
+import { normalizePubkey } from '../crypto/curve_secp';
 import { signMintQuoteLegacy } from '../crypto/NUT20';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';

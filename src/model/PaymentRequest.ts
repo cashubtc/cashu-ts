@@ -1,11 +1,7 @@
+import { normalizePubkey } from '../crypto/curve_secp';
 import { getTag, getTagInt, getTagScalar } from '../crypto/NUT10';
 import type { P2PKOptions, P2PKTag } from '../crypto/NUT11';
-import {
-  P2PK_KNOWN_TAG_KEYS,
-  normalizePubkey,
-  p2pkOptionsToPRNut10,
-  parseP2PKSecret,
-} from '../crypto/NUT11';
+import { P2PK_KNOWN_TAG_KEYS, p2pkOptionsToPRNut10, parseP2PKSecret } from '../crypto/NUT11';
 import { encodeBase64toUint8, decodeCBOR, encodeCBOR, Bytes, normalizeMintUrl } from '../utils';
 import { decodeBech32mToBytes, encodeBech32m } from '../utils/bech32m';
 import { JSONInt } from '../utils/JSONInt';

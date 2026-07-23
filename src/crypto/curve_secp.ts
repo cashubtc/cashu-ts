@@ -41,6 +41,38 @@ export function pointFromHex(hex: string) {
   return secp256k1.Point.fromHex(hex);
 }
 
+// Decompression-validated keys; callers typically share keys, so repeat parses are common. Naive
+// clear-on-full, swap for LRU if churn ever matters.
+const VALIDATED_PUBKEYS = new Set<string>();
+
+/**
+ * Validates and lowercases a compressed secp256k1 public key (33-byte, 66-hex, 02/03 prefix).
+ *
+ * @remarks
+ * Strict: x-only input is rejected, and the key must decompress to a curve point. Used for P2PK
+ * locks and NUT-20 quote-lock keys; a non-compliant key is unspendable on spec-conformant mints.
+ * @throws If not 66-char 02/03 hex, or not a valid secp256k1 point.
+ * @internal
+ */
+export function normalizePubkey(pk: string): string {
+  const hex = pk.toLowerCase();
+  if (hex.length !== 66 || !(hex.startsWith('02') || hex.startsWith('03'))) {
+    throw new CTSError(
+      `Invalid pubkey: expected 33-byte compressed hex (66 chars); for an x-only (nostr) key, prepend '02', got length ${hex.length}`,
+    );
+  }
+  if (!VALIDATED_PUBKEYS.has(hex)) {
+    try {
+      pointFromHex(hex);
+    } catch (e) {
+      throw new CTSError('Invalid pubkey: not a valid secp256k1 point', { cause: e });
+    }
+    if (VALIDATED_PUBKEYS.size >= 1024) VALIDATED_PUBKEYS.clear();
+    VALIDATED_PUBKEYS.add(hex);
+  }
+  return hex;
+}
+
 export function getPubKeyFromPrivKey(privKey: Uint8Array): Uint8Array<ArrayBufferLike> {
   return secp256k1.getPublicKey(privKey, true);
 }
