@@ -89,6 +89,16 @@ describe('cbor decoder', () => {
     expect(v).toBe(0x10);
   });
 
+  test('deeply nested input fails with a CTSError, not a stack overflow', () => {
+    // 0x81 = "array of length 1"; nesting it far past the depth cap must throw a CTSError
+    // rather than a RangeError that a decode-on-paste consumer would not catch.
+    const depth = 60000;
+    const buf = new Uint8Array(depth + 1);
+    buf.fill(0x81, 0, depth);
+    buf[depth] = 0x00;
+    expect(() => decodeCBOR(buf)).toThrow(/nesting exceeds the maximum depth/);
+  });
+
   test('decode float16 (0xf9) and float32 (0xfa) paths', () => {
     // float16 0x3c00 -> 1.0
     const f16 = new Uint8Array([0xf9, 0x3c, 0x00]);
