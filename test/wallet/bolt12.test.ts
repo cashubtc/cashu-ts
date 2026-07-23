@@ -387,13 +387,15 @@ describe('Mint (BOLT12) – instance methods', () => {
 
 describe('Wallet (BOLT12) – wrappers', () => {
   it('wallet.createMintQuoteBolt12 delegates to mint', async () => {
+    // A valid compressed secp256k1 point (the generator); the wallet validates the lock pubkey.
+    const pk = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
     const response = {
       quote: 'q1',
       request: 'lno1offer...',
       amount: 21,
       unit: 'sat',
       expiry: null,
-      pubkey: '02abcd',
+      pubkey: pk,
       amount_paid: 0,
       amount_issued: 0,
     };
@@ -401,14 +403,14 @@ describe('Wallet (BOLT12) – wrappers', () => {
     const mint = new Mint(mintUrl, { customRequest: req });
     const wallet = new Wallet(mint);
     wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
-    const res = await wallet.createMintQuoteBolt12('02abcd', { amount: 21, description: 'desc' });
+    const res = await wallet.createMintQuoteBolt12(pk, { amount: 21, description: 'desc' });
     expect(res.quote).toBe(response.quote);
     expect(res.amount).toEqual(Amount.from(response.amount));
     expect(res.amount_paid).toEqual(Amount.from(response.amount_paid));
     expect(res.amount_issued).toEqual(Amount.from(response.amount_issued));
     expect(calls).toHaveLength(1);
     expect(calls[0].requestBody).toEqual({
-      pubkey: '02abcd',
+      pubkey: pk,
       unit: 'sat',
       amount: 21n,
       description: 'desc',
