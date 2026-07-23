@@ -3214,15 +3214,11 @@ class Wallet {
     // Create any change Proofs
     const change = this.createMeltChangeProofs(meltPreview.outputData, meltResponse.change ?? []);
 
+    const changeAmounts = change.map((p) => p.amount.toString());
     if (completeOptions.preferAsync) {
-      this._logger.debug('ASYNC MELT REQUESTED', {
-        state: meltResponse.state,
-        changeAmounts: change.map((p) => p.amount.toString()),
-      });
+      this._logger.debug('ASYNC MELT REQUESTED', { state: meltResponse.state, changeAmounts });
     } else {
-      this._logger.debug('MELT COMPLETED', {
-        changeAmounts: change.map((p) => p.amount.toString()),
-      });
+      this._logger.debug('MELT COMPLETED', { changeAmounts });
     }
 
     // Merge preview quote with response to protect against incomplete response.
