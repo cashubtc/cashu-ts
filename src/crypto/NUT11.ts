@@ -796,15 +796,11 @@ function assertSpendingConditionRules(params: {
 function getP2PKWitnessPubkeys(secret: Secret): string[] {
   const data = getSecretKind(secret) === 'P2PK' ? getDataField(secret) : '';
   const pubkeys = getTag(secret, 'pubkeys') ?? [];
-<<<<<<< HEAD
-  const keys = (data ? [data, ...pubkeys] : pubkeys).map((key) => normalizePubkey(key));
-=======
   // Bound EC decompression before mapping over untrusted keys.
   if (pubkeys.length > MAX_P2PK_PUBKEYS) {
     throw new CTSError(`Too many pubkeys: ${pubkeys.length}`);
   }
-  const keys = (data ? [data, ...pubkeys] : pubkeys).map((key) => normalizeSecpPubkey(key));
->>>>>>> e8b5c1e (fix(crypto): bound untrusted P2PK witness and CBOR decode input (#874))
+  const keys = (data ? [data, ...pubkeys] : pubkeys).map((key) => normalizePubkey(key));
   if (dedupeP2PKPubkeys(keys).length !== keys.length) {
     throw new CTSError('Duplicate main pubkeys are not allowed');
   }
@@ -812,15 +808,11 @@ function getP2PKWitnessPubkeys(secret: Secret): string[] {
 }
 
 function getP2PKWitnessRefundkeys(secret: Secret): string[] {
-<<<<<<< HEAD
-  const keys = (getTag(secret, 'refund') ?? []).map((key) => normalizePubkey(key));
-=======
   const refund = getTag(secret, 'refund') ?? [];
   if (refund.length > MAX_P2PK_PUBKEYS) {
     throw new CTSError(`Too many refund pubkeys: ${refund.length}`);
   }
-  const keys = refund.map((key) => normalizeSecpPubkey(key));
->>>>>>> e8b5c1e (fix(crypto): bound untrusted P2PK witness and CBOR decode input (#874))
+  const keys = refund.map((key) => normalizePubkey(key));
   if (dedupeP2PKPubkeys(keys).length !== keys.length) {
     throw new CTSError('Duplicate refund pubkeys are not allowed');
   }
