@@ -207,11 +207,13 @@ export class Amount {
    *     amount.ceilPercent(1, 200); // ceil(0.5% of amount)
    *     amount.ceilPercent(15, 10); // ceil(1.5% of amount)
    *
-   * @throws If numerator or denominator are not positive integers.
+   * @throws If numerator is a negative or non-integer, or denominator is not a positive integer.
    */
   ceilPercent(numerator: number, denominator: number = 100): Amount {
-    if (!Number.isInteger(numerator) || numerator <= 0) {
-      throw new AmountError(`ceilPercent: numerator must be a positive integer, got ${numerator}`);
+    if (!Number.isInteger(numerator) || numerator < 0) {
+      throw new AmountError(
+        `ceilPercent: numerator must be a non-negative integer, got ${numerator}`,
+      );
     }
     if (!Number.isInteger(denominator) || denominator <= 0) {
       throw new AmountError(
@@ -235,11 +237,13 @@ export class Amount {
    *     amount.floorPercent(98); // floor(98% of amount)
    *     amount.floorPercent(1, 200); // floor(0.5% of amount)
    *
-   * @throws If numerator or denominator are not positive integers.
+   * @throws If numerator is a negative or non-integer, or denominator is not a positive integer.
    */
   floorPercent(numerator: number, denominator: number = 100): Amount {
-    if (!Number.isInteger(numerator) || numerator <= 0) {
-      throw new AmountError(`floorPercent: numerator must be a positive integer, got ${numerator}`);
+    if (!Number.isInteger(numerator) || numerator < 0) {
+      throw new AmountError(
+        `floorPercent: numerator must be a non-negative integer, got ${numerator}`,
+      );
     }
     if (!Number.isInteger(denominator) || denominator <= 0) {
       throw new AmountError(
