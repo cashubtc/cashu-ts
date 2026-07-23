@@ -1868,10 +1868,23 @@ class Wallet {
     // Custom methods are fine, but NUT-04 requires the mint to advertise them
     this.requireSupport('mint', method);
     this.requireMintableKeyset('createMintQuote');
-    const body = { ...payload, unit: this._unit };
+    // When the caller locks the quote (NUT-20), validate and normalize the pubkey.
+    const rawPubkey = payload.pubkey;
+    const normPubkey =
+      typeof rawPubkey === 'string' && rawPubkey.length > 0
+        ? normalizeSecpPubkey(rawPubkey)
+        : undefined;
+    const body = { ...payload, unit: this._unit, ...(normPubkey ? { pubkey: normPubkey } : {}) };
     const res = await this.mint.createMintQuote<TRes>(method, body, {
       normalize: options?.normalize,
     });
+    if (normPubkey) {
+      this.failIf(typeof res.pubkey !== 'string', 'Mint returned unlocked mint quote');
+      this.failIf(
+        res.pubkey!.toLowerCase() !== normPubkey,
+        'Mint quote is not locked to the requested pubkey',
+      );
+    }
     return { ...res, unit: res.unit || this._unit };
   }
 

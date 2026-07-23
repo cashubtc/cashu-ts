@@ -1085,6 +1085,64 @@ describe('generic mint/melt methods', () => {
       expect(quote.unit).toBe('sat');
     });
 
+    test('createMintQuote rejects a locked quote the mint echoes with the wrong pubkey', async () => {
+      const lockPubkey = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+      server.use(
+        http.get(mintUrl + '/v1/info', () => HttpResponse.json(mintInfoRespWithBacs)),
+        http.post(mintUrl + '/v1/mint/quote/bacs', () =>
+          HttpResponse.json({
+            quote: 'bacs-locked',
+            request: 'CASHU-REF',
+            unit: 'sat',
+            pubkey: '02dcba', // not the requested key
+            amount_paid: 0,
+            amount_issued: 0,
+          }),
+        ),
+      );
+      const wallet = new Wallet(mint, { unit: 'sat' });
+      await wallet.loadMint();
+
+      await expect(
+        wallet.createMintQuote('bacs', { amount: 5000n, pubkey: lockPubkey }),
+      ).rejects.toThrow('Mint quote is not locked to the requested pubkey');
+    });
+
+    test('createMintQuote accepts a locked quote the mint echoes correctly', async () => {
+      const lockPubkey = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+      server.use(
+        http.get(mintUrl + '/v1/info', () => HttpResponse.json(mintInfoRespWithBacs)),
+        http.post(mintUrl + '/v1/mint/quote/bacs', () =>
+          HttpResponse.json({
+            quote: 'bacs-locked-ok',
+            request: 'CASHU-REF',
+            unit: 'sat',
+            pubkey: lockPubkey,
+            amount_paid: 0,
+            amount_issued: 0,
+          }),
+        ),
+      );
+      const wallet = new Wallet(mint, { unit: 'sat' });
+      await wallet.loadMint();
+
+      const quote = await wallet.createMintQuote('bacs', { amount: 5000n, pubkey: lockPubkey });
+      expect(quote.pubkey).toBe(lockPubkey);
+      expect(quote.quote).toBe('bacs-locked-ok');
+    });
+
+    test('createMintQuote rejects a malformed lock pubkey (x-only) before requesting', async () => {
+      server.use(http.get(mintUrl + '/v1/info', () => HttpResponse.json(mintInfoRespWithBacs)));
+      const wallet = new Wallet(mint, { unit: 'sat' });
+      await wallet.loadMint();
+
+      // 64-char x-only key: v5 requires 33-byte compressed, so normalization rejects it up front.
+      const xOnly = '79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+      await expect(
+        wallet.createMintQuote('bacs', { amount: 5000n, pubkey: xOnly }),
+      ).rejects.toThrow('Invalid pubkey');
+    });
+
     test('createMintQuote for bolt11 delegates correctly', async () => {
       server.use(
         http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
