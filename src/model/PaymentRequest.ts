@@ -171,9 +171,9 @@ export class PaymentRequest {
    * Serializes the default NUT-18 payment payload for this request.
    *
    * @remarks
-   * BigInt-safe JSON; plain `JSON.stringify` throws on proof amounts. Proofs must come from `mint`
-   * and net the request after fees: `wallet.ops.sendToRequest` produces both, this only packages.
-   * Send it as the POST body or Nostr DM content.
+   * Plain `JSON.stringify` can't serialize the bigint proof amounts, so use this. Proofs must come
+   * from `mint` and net the request after fees: `wallet.ops.sendToRequest` produces both, this only
+   * packages. Send it as the POST body or Nostr DM content.
    * @param mint - The mint the proofs are from.
    * @param proofs - The proofs to send (eg the `send` half of a send flow).
    * @param opts.memo - Optional memo for the payee.
@@ -198,8 +198,9 @@ export class PaymentRequest {
    * Parses a default NUT-18 payment payload received from a payer.
    *
    * @remarks
-   * BigInt-safe: proof amounts are normalized to `bigint` whatever their JSON size. Validates shape
-   * only; matching the payload to a request (id, mint, netting the amount) is the payee's job.
+   * Validates payload shape only. To confirm the payment settles the request, pass the result to
+   * {@link Wallet.isPaymentRequestSatisfied}. Imposes no size limit of its own: cap the raw text at
+   * the transport (POST body, DM) before decoding.
    * @param json - Raw payload text (POST body or Nostr DM content).
    * @throws {@link CTSError} If the text is not valid JSON or not payload-shaped.
    */
@@ -241,6 +242,13 @@ export class PaymentRequest {
         throw new CTSError(`invalid payment payload: malformed proof at index ${i}`);
       }
       const amount = (p as Record<string, unknown>).amount;
+      if (typeof amount === 'string') {
+        // A quoted amount is the tell-tale of plain JSON.stringify over bigint proofs (or an
+        // Amount VO via toJSON). NUT-18 amounts are JSON numbers: point the payer at the encoder.
+        throw new CTSError(
+          `invalid payment payload: proof amount at index ${i} is a string; amounts must be JSON numbers (serialize with encodePayload() or JSONInt.stringify, not JSON.stringify)`,
+        );
+      }
       if (typeof amount !== 'number' && typeof amount !== 'bigint') {
         throw new CTSError(`invalid payment payload: malformed proof amount at index ${i}`);
       }

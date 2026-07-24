@@ -795,9 +795,9 @@ describe('NUT-18 payment payloads', () => {
         /malformed proof at index 0/,
       ],
       [
-        'a non-numeric proof amount',
+        'a quoted proof amount (plain JSON.stringify tell)',
         JSON.stringify({ ...valid(), proofs: [{ ...valid().proofs[0], amount: '2' }] }),
-        /malformed proof amount at index 0/,
+        /amounts must be JSON numbers/,
       ],
     ])('rejects %s', (_name, input, expected) => {
       expect(() => PaymentRequest.decodePayload(input)).toThrow(expected);
