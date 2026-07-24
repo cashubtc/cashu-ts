@@ -1266,6 +1266,22 @@ describe('response body size cap', () => {
     } as unknown as Response;
   };
 
+  test('returns a within-cap body on the no-stream fallback', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      noStreamResponse({ text: async () => JSON.stringify({ keysets: [] }) }),
+    );
+    const result = await request({ endpoint, maxResponseBytes: 1000 });
+    expect(result).toEqual({ keysets: [] });
+  });
+
+  test('returns a no-stream fallback body under a requestTimeout that does not fire', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      noStreamResponse({ text: async () => JSON.stringify({ ok: true }) }),
+    );
+    const result = await request({ endpoint, maxResponseBytes: 1000, requestTimeout: 1000 });
+    expect(result).toEqual({ ok: true });
+  });
+
   test('rejects an over-cap body on the no-stream fallback (no Content-Length)', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       noStreamResponse({ text: async () => 'y'.repeat(1008) }),
@@ -1273,6 +1289,23 @@ describe('response body size cap', () => {
     const thrown = await request({ endpoint, maxResponseBytes: 10 }).catch((e) => e);
     expect(thrown).toBeInstanceOf(HttpResponseError);
     expect((thrown as Error).message).toMatch(/exceeds 10 bytes/);
+  });
+
+  test('a foreign stream-read error surfaces as the stable "bad response"', async () => {
+    const reader = {
+      read: () => Promise.reject(new Error('stream broke')),
+      cancel: () => Promise.resolve(),
+    };
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      body: { getReader: () => reader },
+      text: async () => '',
+    } as unknown as Response);
+    const thrown = await request({ endpoint }).catch((e) => e);
+    expect(thrown).toBeInstanceOf(HttpResponseError);
+    expect((thrown as Error).message).toBe('bad response');
   });
 
   test('timeout stops a hung no-stream fallback body', async () => {
