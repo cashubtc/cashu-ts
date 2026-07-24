@@ -1121,6 +1121,203 @@ describe('idempotent single retry (non-cached endpoints)', () => {
   });
 });
 
+describe('response body size cap', () => {
+  const endpoint = mintUrl + '/v1/keys';
+
+  // A hand-rolled streamed Response: a plain reader so tests control chunk delivery and can
+  // simulate a body that stalls mid-stream (never delivering `done`). Avoids the ReadableStream
+  // global, which lint flags as unsupported on the declared Node floor.
+  const streamResponse = (
+    chunks: Uint8Array[],
+    opts: { hangAfter?: boolean; status?: number; contentLength?: number } = {},
+  ): Response => {
+    const { hangAfter = false, status = 200, contentLength } = opts;
+    const headers = new Headers({ 'Content-Type': 'application/json' });
+    if (contentLength !== undefined) headers.set('Content-Length', String(contentLength));
+    let i = 0;
+    let stalled: ((r: { done: boolean; value?: Uint8Array }) => void) | undefined;
+    const reader = {
+      read: () =>
+        new Promise<{ done: boolean; value?: Uint8Array }>((resolve) => {
+          if (i < chunks.length) return resolve({ done: false, value: chunks[i++] });
+          if (!hangAfter) return resolve({ done: true, value: undefined });
+          stalled = resolve; // stalled mid-stream; cancel() unblocks it, as a real stream does
+        }),
+      cancel: () => {
+        stalled?.({ done: true, value: undefined });
+        return Promise.resolve();
+      },
+    };
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      headers,
+      body: { getReader: () => reader },
+      text: async () => new TextDecoder().decode(concatChunks(chunks)),
+    } as unknown as Response;
+  };
+
+  const concatChunks = (chunks: Uint8Array[]): Uint8Array => {
+    const total = chunks.reduce((n, c) => n + c.byteLength, 0);
+    const out = new Uint8Array(total);
+    let off = 0;
+    for (const c of chunks) {
+      out.set(c, off);
+      off += c.byteLength;
+    }
+    return out;
+  };
+  const enc = (s: string) => new TextEncoder().encode(s);
+
+  afterEach(() => vi.restoreAllMocks());
+
+  test('rejects a success body over the cap via Content-Length pre-check', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      streamResponse([], { contentLength: 64 * 1024 * 1024 }),
+    );
+    const thrown = await request({ endpoint, maxResponseBytes: 1000 }).catch((e) => e);
+    expect(thrown).toBeInstanceOf(HttpResponseError);
+    expect((thrown as Error).message).toMatch(/exceeds 1000 bytes/);
+  });
+
+  test('rejects a streamed success body that exceeds the cap without Content-Length', async () => {
+    const chunk = enc('y'.repeat(600));
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(streamResponse([chunk, chunk]));
+    const thrown = await request({ endpoint, maxResponseBytes: 1000 }).catch((e) => e);
+    expect(thrown).toBeInstanceOf(HttpResponseError);
+    expect((thrown as Error).message).toMatch(/exceeds 1000 bytes/);
+  });
+
+  test('accepts a streamed body within the cap', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      streamResponse([enc(JSON.stringify({ keysets: [] }))]),
+    );
+    const result = await request({ endpoint, maxResponseBytes: 1000 });
+    expect(result).toEqual({ keysets: [] });
+  });
+
+  test('rejects an oversized error body but still surfaces an HttpResponseError', async () => {
+    const chunk = enc('z'.repeat(600));
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      streamResponse([chunk, chunk], { status: 500 }),
+    );
+    const thrown = await request({ endpoint, maxResponseBytes: 1000, idempotent: false }).catch(
+      (e) => e,
+    );
+    // The body read fails, but the status still drives a normal HttpResponseError.
+    expect(thrown).toBeInstanceOf(HttpResponseError);
+    expect((thrown as Error).message).toBe('bad response');
+    expect((thrown as InstanceType<typeof HttpResponseError>).status).toBe(500);
+  });
+
+  test('rejects a non-positive maxResponseBytes', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(streamResponse([]));
+    await expect(request({ endpoint, maxResponseBytes: 0 })).rejects.toThrow(
+      'maxResponseBytes must be a positive integer',
+    );
+  });
+
+  test('timeout during a hung body read maps to NetworkError', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      streamResponse([enc('{"keysets":')], { hangAfter: true }),
+    );
+    const thrown = await request({ endpoint, requestTimeout: 100, idempotent: false }).catch(
+      (e) => e,
+    );
+    expect(thrown).toBeInstanceOf(NetworkError);
+    expect((thrown as Error).message).toContain('Request timed out after 100ms');
+  });
+
+  test('caller abort during a hung body read maps to CallerAbortError', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      streamResponse([enc('{"keysets":')], { hangAfter: true }),
+    );
+    const ac = new AbortController();
+    setTimeout(() => ac.abort(), 25);
+    const thrown = await request({ endpoint, signal: ac.signal }).catch((e) => e);
+    expect(thrown).toBeInstanceOf(NetworkError);
+    expect((thrown as Error).name).toBe('CallerAbortError');
+  });
+
+  // No `body` stream (eg React Native / custom transports): forces the response.text() fallback.
+  const noStreamResponse = (opts: {
+    text: () => Promise<string>;
+    status?: number;
+    contentLength?: number;
+  }): Response => {
+    const { status = 200, contentLength } = opts;
+    const headers = new Headers();
+    if (contentLength !== undefined) headers.set('Content-Length', String(contentLength));
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      headers,
+      body: null,
+      text: opts.text,
+    } as unknown as Response;
+  };
+
+  test('rejects an over-cap body on the no-stream fallback (no Content-Length)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      noStreamResponse({ text: async () => 'y'.repeat(1008) }),
+    );
+    const thrown = await request({ endpoint, maxResponseBytes: 10 }).catch((e) => e);
+    expect(thrown).toBeInstanceOf(HttpResponseError);
+    expect((thrown as Error).message).toMatch(/exceeds 10 bytes/);
+  });
+
+  test('timeout stops a hung no-stream fallback body', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      noStreamResponse({ text: () => new Promise<string>(() => undefined) }),
+    );
+    const thrown = await request({ endpoint, requestTimeout: 100, idempotent: false }).catch(
+      (e) => e,
+    );
+    expect(thrown).toBeInstanceOf(NetworkError);
+    expect((thrown as Error).message).toContain('Request timed out after 100ms');
+  }, 2000);
+
+  test('timeout during a hung error body maps to NetworkError, not a 5xx', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      noStreamResponse({ status: 500, text: () => new Promise<string>(() => undefined) }),
+    );
+    const thrown = await request({ endpoint, requestTimeout: 100, idempotent: false }).catch(
+      (e) => e,
+    );
+    expect(thrown).toBeInstanceOf(NetworkError);
+    expect((thrown as Error).message).toContain('Request timed out after 100ms');
+  }, 2000);
+
+  test('caller abort during a hung error body maps to CallerAbortError, not a 4xx', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      noStreamResponse({ status: 404, text: () => new Promise<string>(() => undefined) }),
+    );
+    const ac = new AbortController();
+    setTimeout(() => ac.abort(), 25);
+    const thrown = await request({ endpoint, signal: ac.signal }).catch((e) => e);
+    expect(thrown).toBeInstanceOf(NetworkError);
+    expect((thrown as Error).name).toBe('CallerAbortError');
+  }, 2000);
+
+  test('a timed-out uncancellable no-stream read is not retried on a cached endpoint', async () => {
+    // The read cannot be cancelled and may still be consuming the body; retrying would start a
+    // second one. A cancellable read would retry up to 10x here, so assert exactly one fetch.
+    let fetchCount = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      fetchCount++;
+      return noStreamResponse({ text: () => new Promise<string>(() => undefined) });
+    });
+    const thrown = await request({
+      endpoint,
+      requestTimeout: 5,
+      ttl: 60000,
+      cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+    }).catch((e) => e);
+    expect(thrown).toBeInstanceOf(NetworkError);
+    expect(fetchCount).toBe(1);
+  }, 2000);
+});
+
 describe('parseRetryAfter', () => {
   test('returns undefined for null', () => {
     expect(parseRetryAfter(null)).toBeUndefined();
