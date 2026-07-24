@@ -20,6 +20,7 @@ import {
   detectBrowserLike,
   buildRequestHeaders,
   errorMessage,
+  readBodyText,
 } from '../../src/transport/request';
 import { MINTCACHE } from '../consts';
 
@@ -1196,6 +1197,12 @@ describe('response body size cap', () => {
     expect(result).toEqual({ keysets: [] });
   });
 
+  test('accepts a within-cap body split across many chunks', async () => {
+    const chunks = new Array<Uint8Array>(150_000).fill(enc('x'));
+    const text = await readBodyText(streamResponse(chunks), chunks.length);
+    expect(text).toHaveLength(chunks.length);
+  });
+
   test('rejects an oversized error body but still surfaces an HttpResponseError', async () => {
     const chunk = enc('z'.repeat(600));
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
@@ -1275,6 +1282,17 @@ describe('response body size cap', () => {
     );
     expect(thrown).toBeInstanceOf(NetworkError);
     expect((thrown as Error).message).toContain('Request timed out after 100ms');
+  }, 2000);
+
+  test('a timed-out uncancellable no-stream read is not retried on a non-cached endpoint', async () => {
+    let fetchCount = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      fetchCount++;
+      return noStreamResponse({ text: () => new Promise<string>(() => undefined) });
+    });
+    const thrown = await request({ endpoint, requestTimeout: 5 }).catch((e) => e);
+    expect(thrown).toBeInstanceOf(NetworkError);
+    expect(fetchCount).toBe(1);
   }, 2000);
 
   test('timeout during a hung error body maps to NetworkError, not a 5xx', async () => {

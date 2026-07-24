@@ -152,7 +152,13 @@ export async function readBodyText(
       }
       chunks.push(result.value);
     }
-    return Bytes.toString(Bytes.concat(...chunks));
+    const bytes = new Uint8Array(received);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return Bytes.toString(bytes);
   } finally {
     if (onAbort) signal?.removeEventListener('abort', onAbort);
     reader.cancel().catch(() => undefined); // release the connection; no-op if already closed
@@ -465,7 +471,13 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
     } catch (e) {
       // One immediate retry on a connection-level failure (a dropped keep-alive socket is the
       // common case); HTTP errors mean the server answered and are never retried here.
-      if (e instanceof CallerAbortError || !(e instanceof NetworkError)) throw e;
+      if (
+        e instanceof CallerAbortError ||
+        e instanceof UncancellableReadError ||
+        !(e instanceof NetworkError)
+      ) {
+        throw e;
+      }
       requestLogger.info('Network error on an idempotent request, retrying once', { e });
       return await _request(options);
     }
