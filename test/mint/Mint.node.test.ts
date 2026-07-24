@@ -1552,6 +1552,130 @@ afterAll(() => {
   mswServer.close();
 });
 
+describe('getMintQuotesByPubkey', () => {
+  const PUBKEY = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+  const SIG = 'aa'.repeat(64);
+  const bolt11Quote = {
+    quote: 'q1',
+    request: 'lnbc100...',
+    unit: 'sat',
+    method: 'bolt11',
+    amount: 100,
+    amount_paid: 100,
+    amount_issued: 0,
+    updated_at: 123,
+    state: 'PAID',
+    expiry: 456,
+    pubkey: PUBKEY,
+  };
+  const bolt12Quote = {
+    quote: 'q2',
+    request: 'lno1...',
+    unit: 'sat',
+    method: 'bolt12',
+    amount: null,
+    amount_paid: 42,
+    amount_issued: 0,
+    updated_at: 124,
+    expiry: null,
+    pubkey: PUBKEY,
+  };
+
+  it('posts to /v1/mint/quote/{method}/pubkey and normalizes mixed-method quotes', async () => {
+    const requestSpy = vi.fn(async (options: ReqArgs) => {
+      expect(options.endpoint).toBe(mintUrl + '/v1/mint/quote/bolt11/pubkey');
+      expect(options.method).toBe('POST');
+      expect(options.requestBody).toEqual({
+        pubkeys: [PUBKEY],
+        pubkey_signatures: [SIG],
+      });
+      return { quotes: [bolt11Quote, bolt12Quote] };
+    }) as RequestFn;
+    const mint = new Mint(mintUrl, { customRequest: requestSpy });
+
+    const quotes = await mint.getMintQuotesByPubkey('bolt11', {
+      pubkeys: [PUBKEY],
+      pubkey_signatures: [SIG],
+    });
+
+    expect(quotes).toHaveLength(2);
+    expect(quotes[0].method).toBe('bolt11');
+    expect(quotes[0].amount_paid).toBeInstanceOf(Amount);
+    expect(quotes[0].amount_paid.toBigInt()).toBe(100n);
+    // Second quote normalized as bolt12 despite the bolt11 path.
+    expect(quotes[1].method).toBe('bolt12');
+    expect(quotes[1].amount_paid.toBigInt()).toBe(42n);
+  });
+
+  it('falls back to the path method when a quote omits method', async () => {
+    const { method: _omit, ...methodless } = bolt11Quote;
+    const mint = new Mint(mintUrl, {
+      customRequest: makeRequest({ quotes: [methodless] }),
+    });
+
+    const quotes = await mint.getMintQuotesByPubkey('bolt11', {
+      pubkeys: [PUBKEY],
+      pubkey_signatures: [SIG],
+    });
+
+    expect(quotes[0].method).toBe('bolt11');
+  });
+
+  it('rejects a bare-array response', async () => {
+    const logger = createLogger();
+    const mint = new Mint(mintUrl, {
+      customRequest: makeRequest([bolt11Quote]),
+      logger,
+    });
+
+    await expect(
+      mint.getMintQuotesByPubkey('bolt11', { pubkeys: [PUBKEY], pubkey_signatures: [SIG] }),
+    ).rejects.toThrow('Invalid response from mint');
+  });
+
+  it('rejects a quote with a malformed method string', async () => {
+    const mint = new Mint(mintUrl, {
+      customRequest: makeRequest({ quotes: [{ ...bolt11Quote, method: 'BOLT11!' }] }),
+      logger: createLogger(),
+    });
+
+    await expect(
+      mint.getMintQuotesByPubkey('bolt11', { pubkeys: [PUBKEY], pubkey_signatures: [SIG] }),
+    ).rejects.toThrow('Invalid response from mint');
+  });
+
+  it('rejects invalid client input before any request', async () => {
+    const requestSpy = vi.fn(async () => ({ quotes: [] })) as RequestFn;
+    const mint = new Mint(mintUrl, { customRequest: requestSpy, logger: createLogger() });
+
+    await expect(
+      mint.getMintQuotesByPubkey('Bolt11', { pubkeys: [PUBKEY], pubkey_signatures: [SIG] }),
+    ).rejects.toThrow('Invalid mint quote method');
+    await expect(
+      mint.getMintQuotesByPubkey('bolt11', { pubkeys: [], pubkey_signatures: [] }),
+    ).rejects.toThrow('no pubkeys');
+    await expect(
+      mint.getMintQuotesByPubkey('bolt11', { pubkeys: [PUBKEY], pubkey_signatures: [] }),
+    ).rejects.toThrow('length mismatch');
+    await expect(
+      mint.getMintQuotesByPubkey('bolt11', {
+        pubkeys: [PUBKEY.slice(2)],
+        pubkey_signatures: [SIG],
+      }),
+    ).rejects.toThrow('compressed');
+    expect(requestSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns an empty array for an empty quotes envelope', async () => {
+    const mint = new Mint(mintUrl, { customRequest: makeRequest({ quotes: [] }) });
+    const quotes = await mint.getMintQuotesByPubkey('bolt11', {
+      pubkeys: [PUBKEY],
+      pubkey_signatures: [SIG],
+    });
+    expect(quotes).toEqual([]);
+  });
+});
+
 describe('Mint.lastResponseMetadata', () => {
   it('is undefined before any request', () => {
     const mint = new Mint(mswMintUrl);

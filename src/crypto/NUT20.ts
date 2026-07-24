@@ -5,7 +5,12 @@ import { hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { Amount } from '../model/Amount';
 import { type SerializedBlindedMessage } from '../model/types';
 
-import { schnorrSignDigest, schnorrVerifyDigest } from './core';
+import {
+  schnorrSignDigest,
+  schnorrSignMessage,
+  schnorrVerifyDigest,
+  schnorrVerifyMessage,
+} from './core';
 
 // Domain-separation tag.
 const MINT_QUOTE_SIG_DST = utf8ToBytes('Cashu_MintQuoteSig_v1');
@@ -106,6 +111,44 @@ export function verifyMintQuoteSignatureLegacy(
   // past schnorrVerifyDigest's try/catch.
   try {
     return schnorrVerifyDigest(signature, constructLegacyMessage(quote, blindedMessages), pubkey);
+  } catch {
+    return false;
+  }
+}
+
+// Domain-separation tag for mint quote lookup signatures (draft NUT: get quotes by pubkeys).
+const MINT_QUOTE_LOOKUP_DST = 'Cashu_MintQuoteLookup_v1';
+
+// Plain UTF-8 concat per the draft spec; hex is lowercased because the message is a string.
+function constructLookupMessage(mintPubkey: string, pubkey: string): string {
+  return MINT_QUOTE_LOOKUP_DST + mintPubkey.toLowerCase() + pubkey.toLowerCase();
+}
+
+/**
+ * Signs a mint quote lookup request for one pubkey (draft NUT: get quotes by pubkeys).
+ *
+ * @remarks
+ * `mintPubkey` is the mint's NUT-06 info pubkey; it binds the signature to one mint.
+ * @experimental Implements a draft NUT; no released mint supports it yet.
+ */
+export function signMintQuoteLookup(privkey: string, mintPubkey: string, pubkey: string): string {
+  return schnorrSignMessage(constructLookupMessage(mintPubkey, pubkey), privkey);
+}
+
+/**
+ * Verifies a mint quote lookup signature. Malformed input returns false, never throws.
+ *
+ * @experimental Implements a draft NUT; no released mint supports it yet.
+ */
+export function verifyMintQuoteLookupSignature(
+  pubkey: string,
+  mintPubkey: string,
+  signature: string,
+): boolean {
+  if (!isCompressedPubkey(pubkey)) return false;
+  // See verifyMintQuoteSignature: malformed input must verify as false rather than throw.
+  try {
+    return schnorrVerifyMessage(signature, constructLookupMessage(mintPubkey, pubkey), pubkey);
   } catch {
     return false;
   }

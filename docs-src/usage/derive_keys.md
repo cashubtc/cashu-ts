@@ -48,6 +48,19 @@ const quote = await wallet.createLockedMintQuote(64, pubkey);
 const proofs = await wallet.ops.mint(64, quote).privkey(privkey).run();
 ```
 
+## Find locked quotes by pubkey (experimental)
+
+Mints implementing the draft quote-lookup NUT can return every NUT-20 locked mint quote for
+your keys, which pairs well with restore scans:
+
+```typescript
+const quotes = await wallet.getMintQuotesByPubkey(privkey); // or [privkeyA, privkeyB]
+```
+
+The wallet signs the lookup with each key against the mint's info pubkey; the mint returns the
+quotes locked to the corresponding pubkeys. Quotes may span payment methods, so check each
+quote's `method` field.
+
 ## Counters
 
 A counter only tells you _how many_ keys exist, never _what each was for_, so this library does

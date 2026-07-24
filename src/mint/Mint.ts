@@ -491,6 +491,69 @@ class Mint {
     });
   }
 
+  /**
+   * Gets NUT-20 locked mint quotes for a set of public keys.
+   *
+   * @remarks
+   * Uses `/v1/mint/quote/{method}/pubkey`. Signatures must sign the lookup message for their pubkey
+   * (see `signMintQuoteLookup`). Returned quotes may span payment methods; each is normalized by
+   * its own `method` field, falling back to the path method when absent.
+   * @param method The payment method path segment (e.g., 'bolt11').
+   * @param payload Wire payload: pubkeys and same-order signatures.
+   * @param options.customRequest Optional override for the request function.
+   * @param options.normalize Optional callback to normalize method-specific response fields.
+   * @returns Normalized mint quote responses.
+   * @experimental Implements a draft NUT; no released mint supports it yet.
+   */
+  async getMintQuotesByPubkey<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(
+    method: string,
+    payload: { pubkeys: string[]; pubkey_signatures: string[] },
+    options?: { customRequest?: RequestFn; normalize?: (raw: Record<string, unknown>) => TRes },
+  ): Promise<TRes[]> {
+    const { pubkeys, pubkey_signatures } = payload;
+    failIf(!this.isValidMethodString(method), `Invalid mint quote method: ${method}`, this._logger);
+    failIf(pubkeys.length === 0, 'getMintQuotesByPubkey: no pubkeys provided', this._logger);
+    failIf(
+      pubkeys.length !== pubkey_signatures.length,
+      'getMintQuotesByPubkey: pubkeys and signatures length mismatch',
+      this._logger,
+    );
+    failIf(
+      pubkeys.some((pubkey) => pubkey.length !== 66),
+      'getMintQuotesByPubkey: pubkeys must be compressed 33-byte hex',
+      this._logger,
+    );
+
+    const data = await this.requestWithAuth<{ quotes: TRes[] }>(
+      'POST',
+      `/v1/mint/quote/${method}/pubkey`,
+      { requestBody: { pubkeys, pubkey_signatures } },
+      options?.customRequest,
+    );
+
+    const quotes = data?.quotes;
+    if (!Array.isArray(quotes)) {
+      this._logger.error('Invalid response from mint...', {
+        data,
+        op: `getMintQuotesByPubkey.${method}`,
+      });
+      throw new CTSError('Invalid response from mint');
+    }
+
+    return quotes.map((response) => {
+      const raw = response as Record<string, unknown>;
+      const quoteMethod = typeof raw.method === 'string' ? raw.method : method;
+      if (!this.isValidMethodString(quoteMethod)) {
+        this._logger.error('Invalid response from mint...', {
+          data,
+          op: `getMintQuotesByPubkey.${method}`,
+        });
+        throw new CTSError('Invalid response from mint');
+      }
+      return this.normalizeMintQuoteResponse(quoteMethod, response, options?.normalize);
+    });
+  }
+
   // -----------------------------------------------------------------
   // Section: Mint Proofs
   // -----------------------------------------------------------------
