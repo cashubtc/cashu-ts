@@ -973,6 +973,105 @@ describe('requests', { timeout: 7500 }, () => {
   });
 });
 
+describe('response body read timeout', () => {
+  const endpoint = mintUrl + '/v1/keys';
+  afterEach(() => vi.restoreAllMocks());
+
+  // A response whose text() never settles and ignores the abort signal, so only the read-vs-abort
+  // race can stop it. Previously the timeout was cleared once the headers arrived, so this hung
+  // forever; now the timeout and caller signal span the body read.
+  const hungBody = (status = 200) =>
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+      Promise.resolve({
+        ok: status >= 200 && status < 300,
+        status,
+        headers: new Headers(),
+        text: () => new Promise<string>(() => undefined),
+      } as unknown as Response),
+    );
+
+  test('requestTimeout covers a hung success body that ignores the signal', async () => {
+    hungBody(200);
+    const thrown = await request({ endpoint, requestTimeout: 100, idempotent: false }).catch(
+      (e) => e,
+    );
+    expect(thrown).toBeInstanceOf(NetworkError);
+    expect((thrown as Error).message).toContain('Request timed out after 100ms');
+  }, 2000);
+
+  test('caller abort covers a hung success body that ignores the signal', async () => {
+    hungBody(200);
+    const ac = new AbortController();
+    setTimeout(() => ac.abort(), 25);
+    const thrown = await request({ endpoint, signal: ac.signal }).catch((e) => e);
+    expect(thrown).toBeInstanceOf(NetworkError);
+    expect((thrown as Error).name).toBe('CallerAbortError');
+  }, 2000);
+
+  test('timeout during a hung error body maps to NetworkError, not a 5xx', async () => {
+    hungBody(500);
+    const thrown = await request({ endpoint, requestTimeout: 100, idempotent: false }).catch(
+      (e) => e,
+    );
+    expect(thrown).toBeInstanceOf(NetworkError);
+    expect((thrown as Error).message).toContain('Request timed out after 100ms');
+  }, 2000);
+
+  test('caller abort during a hung error body maps to CallerAbortError, not a 4xx', async () => {
+    hungBody(404);
+    const ac = new AbortController();
+    setTimeout(() => ac.abort(), 25);
+    const thrown = await request({ endpoint, signal: ac.signal }).catch((e) => e);
+    expect(thrown).toBeInstanceOf(NetworkError);
+    expect((thrown as Error).name).toBe('CallerAbortError');
+  }, 2000);
+
+  test('does not start a body read after the caller aborts', async () => {
+    let textCalls = 0;
+    const ac = new AbortController();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      text: async () => {
+        textCalls++;
+        return '{}';
+      },
+    } as unknown as Response);
+    const thrown = await request({
+      endpoint,
+      signal: ac.signal,
+      onResponseMeta: () => ac.abort(),
+    }).catch((e) => e);
+    expect(thrown).toBeInstanceOf(NetworkError);
+    expect((thrown as Error).name).toBe('CallerAbortError');
+    expect(textCalls).toBe(0);
+  }, 2000);
+
+  test('a timed-out uncancellable read is not retried on a cached endpoint', async () => {
+    // response.text() cannot be cancelled and may still be consuming the body; retrying would
+    // start a second read. A retryable timeout would fetch up to 10x here, so assert exactly one.
+    let fetchCount = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => {
+      fetchCount++;
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        text: () => new Promise<string>(() => undefined),
+      } as unknown as Response);
+    });
+    const thrown = await request({
+      endpoint,
+      requestTimeout: 5,
+      ttl: 60000,
+      cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+    }).catch((e) => e);
+    expect(thrown).toBeInstanceOf(NetworkError);
+    expect(fetchCount).toBe(1);
+  }, 2000);
+});
+
 describe('parseRetryAfter', () => {
   test('returns undefined for null', () => {
     expect(parseRetryAfter(null)).toBeUndefined();

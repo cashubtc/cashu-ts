@@ -84,6 +84,62 @@ export function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
 }
 
+/**
+ * Maps a body-read failure that happened under an armed timeout or caller signal to the matching
+ * abort error. The body is read via `response.text()`, which cannot be cancelled, so a timeout may
+ * leave the native read still consuming the body: it is reported as {@link UncancellableReadError}
+ * and not retried, or a second attempt would start another read. Returns `undefined` when neither
+ * signal aborted.
+ *
+ * @internal
+ */
+function abortError(
+  err: unknown,
+  timeoutController: AbortController | undefined,
+  requestTimeout: number | undefined,
+  callerSignal: AbortSignal | undefined,
+): NetworkError | undefined {
+  if (timeoutController?.signal.aborted) {
+    return new UncancellableReadError(`Request timed out after ${requestTimeout}ms`, {
+      cause: err,
+    });
+  }
+  if (callerSignal?.aborted) {
+    return new CallerAbortError(errorMessage(err, 'Request aborted by caller'));
+  }
+  return undefined;
+}
+
+/**
+ * Reads a response body as text, raced against `signal`.
+ *
+ * @remarks
+ * `response.text()` alone only unblocks on abort when the transport propagates the signal to its
+ * body stream (undici / browsers do, some native / React Native stacks do not). Racing the read
+ * against the signal makes the request timeout and caller abort effective on every transport.
+ * @internal
+ */
+async function readText(response: Response, signal?: AbortSignal): Promise<string> {
+  // Check before calling response.text(): arguments evaluate first, so an already-aborted request
+  // would otherwise start an uncancellable read before the race could notice.
+  if (signal?.aborted) throw new CTSError('response body read aborted');
+  const textPromise = response.text();
+  if (!signal) return textPromise;
+  textPromise.catch(() => undefined); // settles after we abort: keep it from going unhandled
+  let onAbort: (() => void) | undefined;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(new CTSError('response body read aborted'));
+    if (signal.aborted) onAbort();
+    else signal.addEventListener('abort', onAbort, { once: true });
+  });
+  aborted.catch(() => undefined);
+  try {
+    return await Promise.race([textPromise, aborted]);
+  } finally {
+    if (onAbort) signal.removeEventListener('abort', onAbort);
+  }
+}
+
 export type RequestArgs = {
   endpoint: string;
   requestBody?: Record<string, unknown>;
@@ -223,16 +279,29 @@ class CallerAbortError extends NetworkError {
 }
 
 /**
+ * A timeout that fired while reading a response body that could not be cancelled. The underlying
+ * read may still be consuming the body, so this is NOT retried: another attempt would start a
+ * second uncancellable read against the same (possibly unbounded) body.
+ */
+class UncancellableReadError extends NetworkError {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = 'UncancellableReadError';
+    Object.setPrototypeOf(this, UncancellableReadError.prototype);
+  }
+}
+
+/**
  * Returns true if the error warrants a retry on NUT-19 cached endpoints:
  *
  * - NetworkError: network-level failures (DNS, connection refused, AbortError/timeout)
  * - HttpResponseError with 5xx status: server-side transient errors (503, 502, etc.)
  *
  * 4xx errors (including 429 Too Many Requests) are NOT retried — they are bounced back to the
- * caller immediately.
+ * caller immediately. Caller aborts and uncancellable body-read timeouts are never retried.
  */
 function isRetryableError(e: unknown): boolean {
-  if (e instanceof CallerAbortError) return false;
+  if (e instanceof CallerAbortError || e instanceof UncancellableReadError) return false;
   if (e instanceof NetworkError) return true;
   return e instanceof HttpResponseError && e.status >= 500;
 }
@@ -402,102 +471,123 @@ async function _request(options: RequestOptions): Promise<unknown> {
     }
   }
 
-  let response: Response;
+  // Keep the timeout and abort wiring armed until the body is read, so requestTimeout
+  // covers the whole response rather than only connecting and reading the headers.
   try {
-    response = await fetch(endpoint, {
-      body,
-      headers,
-      // Anti-fingerprinting fetch options.
-      cache: 'no-store', // prevent cache tracking (eg ETag)
-      credentials: 'omit', // prevent cookie-based tracking
-      referrer: '', // prevent leaking the embedding page URL
-      referrerPolicy: 'no-referrer', // belt-and-braces for referrer across all contexts
-      ...fetchOptions, // allows override of above options
-      signal, // not overridable (includes caller signal)
-    });
-  } catch (err) {
-    const timedOut = !!timeoutController?.signal.aborted;
-    const callerAborted = !!callerSignal?.aborted;
-    if (timedOut) {
-      throw new NetworkError(`Request timed out after ${requestTimeout}ms`, { cause: err });
+    let response: Response;
+    try {
+      response = await fetch(endpoint, {
+        body,
+        headers,
+        // Anti-fingerprinting fetch options.
+        cache: 'no-store', // prevent cache tracking (eg ETag)
+        credentials: 'omit', // prevent cookie-based tracking
+        referrer: '', // prevent leaking the embedding page URL
+        referrerPolicy: 'no-referrer', // belt-and-braces for referrer across all contexts
+        ...fetchOptions, // allows override of above options
+        signal, // not overridable (includes caller signal)
+      });
+    } catch (err) {
+      const timedOut = !!timeoutController?.signal.aborted;
+      const callerAborted = !!callerSignal?.aborted;
+      if (timedOut) {
+        throw new NetworkError(`Request timed out after ${requestTimeout}ms`, { cause: err });
+      }
+      if (callerAborted) {
+        throw new CallerAbortError(errorMessage(err, 'Request aborted by caller'));
+      }
+      if (err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError')) {
+        throw new NetworkError(err.message, { cause: err });
+      }
+      // A fetch() promise only rejects when the request fails,
+      // for example, because of a badly-formed request URL or a network error.
+      throw new NetworkError(errorMessage(err, 'Network request failed'), { cause: err });
     }
-    if (callerAborted) {
-      throw new CallerAbortError(errorMessage(err, 'Request aborted by caller'));
+
+    // Parse Retry-After once for reuse in both ResponseMeta and RateLimitError
+    const retryAfterMs = parseRetryAfter(response.headers.get('Retry-After'));
+
+    // Build and fire ResponseMeta callback before any throw or return
+    if (onResponseMeta && response.headers) {
+      const meta: ResponseMeta = {
+        endpoint,
+        status: response.status,
+        retryAfterMs,
+        rateLimit: response.headers.get('RateLimit') ?? undefined,
+        rateLimitPolicy: response.headers.get('RateLimit-Policy') ?? undefined,
+        headers: response.headers,
+      };
+      safeCallback(onResponseMeta, meta, requestLogger, {
+        op: 'request.onResponseMeta',
+        status: response.status,
+        endpoint,
+      });
     }
-    if (err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError')) {
-      throw new NetworkError(err.message, { cause: err });
+
+    if (!response.ok) {
+      let errorData: ApiError;
+      let errorDataCause: unknown;
+      try {
+        errorData = parseErrorBody(await readText(response, signal));
+      } catch (err) {
+        // A stalled error body is still a timeout / caller abort, not a genuine 4xx/5xx: surface
+        // it as such so retry classification matches the success path.
+        const aborted = abortError(err, timeoutController, requestTimeout, callerSignal);
+        if (aborted) throw aborted;
+        errorDataCause = err;
+        errorData = { error: 'bad response' };
+      }
+
+      if (response.status === 429) {
+        throw new RateLimitError('429 Too Many Requests', retryAfterMs);
+      }
+
+      if (
+        response.status === 400 &&
+        'code' in errorData &&
+        typeof errorData.code === 'number' &&
+        'detail' in errorData &&
+        typeof errorData.detail === 'string'
+      ) {
+        throw new MintOperationError(errorData.code, errorData.detail);
+      }
+
+      let httpErrorMessage = 'HTTP request failed';
+      if ('error' in errorData && typeof errorData.error === 'string') {
+        httpErrorMessage = errorData.error;
+      } else if ('detail' in errorData && typeof errorData.detail === 'string') {
+        httpErrorMessage = errorData.detail;
+      }
+
+      throw new HttpResponseError(httpErrorMessage, response.status, { cause: errorDataCause });
     }
-    // A fetch() promise only rejects when the request fails,
-    // for example, because of a badly-formed request URL or a network error.
-    throw new NetworkError(errorMessage(err, 'Network request failed'), { cause: err });
+
+    let responseText: string;
+    try {
+      responseText = await readText(response, signal);
+    } catch (err) {
+      // A body-read failure under an armed signal is an abort, not a bad response: classify it
+      // like the fetch-level catch so cached-endpoint retry still engages on a timeout.
+      const aborted = abortError(err, timeoutController, requestTimeout, callerSignal);
+      if (aborted) throw aborted;
+      requestLogger.error('Failed to read HTTP response', { err });
+      // Keep the stable "bad response" message rather than exposing the transport error, with the
+      // original error retained as cause.
+      throw new HttpResponseError('bad response', response.status, { cause: err });
+    }
+
+    try {
+      if (!responseText) {
+        throw new CTSError('Empty response body');
+      }
+      return JSONInt.parse(responseText);
+    } catch (err) {
+      requestLogger.error('Failed to parse HTTP response', { err });
+      throw new HttpResponseError('bad response', response.status, { cause: err });
+    }
   } finally {
     clearTimeout(timeoutId);
     cleanupAbortListeners?.();
-  }
-
-  // Parse Retry-After once for reuse in both ResponseMeta and RateLimitError
-  const retryAfterMs = parseRetryAfter(response.headers.get('Retry-After'));
-
-  // Build and fire ResponseMeta callback before any throw or return
-  if (onResponseMeta && response.headers) {
-    const meta: ResponseMeta = {
-      endpoint,
-      status: response.status,
-      retryAfterMs,
-      rateLimit: response.headers.get('RateLimit') ?? undefined,
-      rateLimitPolicy: response.headers.get('RateLimit-Policy') ?? undefined,
-      headers: response.headers,
-    };
-    safeCallback(onResponseMeta, meta, requestLogger, {
-      op: 'request.onResponseMeta',
-      status: response.status,
-      endpoint,
-    });
-  }
-
-  if (!response.ok) {
-    let errorData: ApiError;
-    let errorDataCause: unknown;
-    try {
-      errorData = parseErrorBody(await response.text());
-    } catch (err) {
-      errorDataCause = err;
-      errorData = { error: 'bad response' };
-    }
-
-    if (response.status === 429) {
-      throw new RateLimitError('429 Too Many Requests', retryAfterMs);
-    }
-
-    if (
-      response.status === 400 &&
-      'code' in errorData &&
-      typeof errorData.code === 'number' &&
-      'detail' in errorData &&
-      typeof errorData.detail === 'string'
-    ) {
-      throw new MintOperationError(errorData.code, errorData.detail);
-    }
-
-    let errorMessage = 'HTTP request failed';
-    if ('error' in errorData && typeof errorData.error === 'string') {
-      errorMessage = errorData.error;
-    } else if ('detail' in errorData && typeof errorData.detail === 'string') {
-      errorMessage = errorData.detail;
-    }
-
-    throw new HttpResponseError(errorMessage, response.status, { cause: errorDataCause });
-  }
-
-  try {
-    const responseText = await response.text();
-    if (!responseText) {
-      throw new CTSError('Empty response body');
-    }
-    return JSONInt.parse(responseText);
-  } catch (err) {
-    requestLogger.error('Failed to parse HTTP response', { err });
-    throw new HttpResponseError('bad response', response.status, { cause: err });
   }
 }
 
