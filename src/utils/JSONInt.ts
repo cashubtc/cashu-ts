@@ -36,7 +36,7 @@ export interface JSONIntApi {
    * Returns `unknown`, so validate or cast the result to an application-specific type.
    *
    * Unquoted JSON number tokens are parsed to BigInt when outside the safe integer range, otherwise
-   * to number.
+   * to number. Integer tokens longer than 100 characters are rejected as a syntax error.
    */
   parse(
     source: string,
@@ -51,7 +51,8 @@ export interface JSONIntApi {
    * BigInt aware JSON stringify.
    *
    * @remarks
-   * - BigInt is stringified as an unquoted JSON number token.
+   * - BigInt is stringified as an unquoted JSON number token; a BigInt whose decimal form exceeds 100
+   *   characters throws, symmetric with the parse cap, so output always round-trips.
    * - Parsing the result may yield `number` or `bigint` depending on the value and parse options.
    * - Returns `undefined` for top-level values that JSON cannot represent, matching `JSON.stringify`
    *   behavior.
@@ -76,6 +77,10 @@ type JSONIntValue = JSONIntPrimitive | JSONIntValue[] | { [key: string]: JSONInt
 type ReviverFn = (this: unknown, key: string, value: unknown) => unknown;
 type ReplacerFn = (this: unknown, key: string, value: unknown) => unknown;
 type ReplacerList = ReadonlyArray<string | number>;
+
+// The largest legitimate Cashu integer is a u64 (20 digits); reject absurdly
+// long tokens before conversion. Applies in all runtimes and fallback modes.
+const MAX_INT_TOKEN_LENGTH = 100;
 
 let safeBigIntLimits: { max: bigint; min: bigint } | undefined;
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -281,6 +286,10 @@ class Parser {
       return n;
     }
 
+    if (token.length > MAX_INT_TOKEN_LENGTH) {
+      throw this.syntaxError('Number token too long');
+    }
+
     if (!this.bigIntCtor) {
       switch (this.fallbackTo) {
         case 'number': {
@@ -466,9 +475,15 @@ function stringify(
         return Number.isFinite(val) ? String(val) : 'null';
       case 'boolean':
         return val ? 'true' : 'false';
-      case 'bigint':
-        // Intentionally emit raw JSON number tokens for BigInt.
-        return String(val);
+      case 'bigint': {
+        // Emit BigInt as a raw JSON number token, but refuse one longer than the parser accepts
+        // (see MAX_INT_TOKEN_LENGTH) so stringify output always round-trips back through parse.
+        const token = String(val);
+        if (token.length > MAX_INT_TOKEN_LENGTH) {
+          throw new CTSError(`integer token exceeds ${MAX_INT_TOKEN_LENGTH} characters`);
+        }
+        return token;
+      }
       case 'undefined':
         return undefined;
       case 'object': {

@@ -58,6 +58,15 @@ describe('native BigInt support: stringify', () => {
     );
   });
 
+  test('rejects a BigInt whose decimal form exceeds the token cap (symmetric with parse)', () => {
+    const ok = BigInt('9'.repeat(100));
+    const out = JSONInt.stringify(ok)!;
+    expect(out).toBe('9'.repeat(100));
+    expect(JSONInt.parse(out)).toBe(ok); // round-trips at the boundary
+    // A value the parser would reject must not be emittable, so output always round-trips.
+    expect(() => JSONInt.stringify(BigInt('9'.repeat(101)))).toThrow('exceeds 100 characters');
+  });
+
   test('stringifies arrays with undefined as null', () => {
     const output = JSONInt.stringify([1, undefined, 3]);
     expect(output).toBe('[1,null,3]');
@@ -224,6 +233,12 @@ describe('parse errors', () => {
 
   test('rejects trailing input', () => {
     expect(() => JSONInt.parse('true false')).toThrow('Unexpected trailing input');
+  });
+
+  test('rejects oversized integer tokens', () => {
+    expect(JSONInt.parse('9'.repeat(100))).toBe(BigInt('9'.repeat(100)));
+    expect(() => JSONInt.parse('9'.repeat(101))).toThrow('Number token too long');
+    expect(() => JSONInt.parse(`{"amount":${'9'.repeat(101)}}`)).toThrow('Number token too long');
   });
 });
 
