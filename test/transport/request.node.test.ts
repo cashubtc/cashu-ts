@@ -1026,6 +1026,28 @@ describe('response body read timeout', () => {
     expect((thrown as Error).name).toBe('CallerAbortError');
   }, 2000);
 
+  test('does not start a body read after the caller aborts', async () => {
+    let textCalls = 0;
+    const ac = new AbortController();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      text: async () => {
+        textCalls++;
+        return '{}';
+      },
+    } as unknown as Response);
+    const thrown = await request({
+      endpoint,
+      signal: ac.signal,
+      onResponseMeta: () => ac.abort(),
+    }).catch((e) => e);
+    expect(thrown).toBeInstanceOf(NetworkError);
+    expect((thrown as Error).name).toBe('CallerAbortError');
+    expect(textCalls).toBe(0);
+  }, 2000);
+
   test('a timed-out uncancellable read is not retried on a cached endpoint', async () => {
     // response.text() cannot be cancelled and may still be consuming the body; retrying would
     // start a second read. A retryable timeout would fetch up to 10x here, so assert exactly one.

@@ -120,6 +120,9 @@ function abortError(
  * @internal
  */
 async function readText(response: Response, signal?: AbortSignal): Promise<string> {
+  // Check before calling response.text(): arguments evaluate first, so an already-aborted request
+  // would otherwise start an uncancellable read before the race could notice.
+  if (signal?.aborted) throw new CTSError('response body read aborted');
   const textPromise = response.text();
   if (!signal) return textPromise;
   textPromise.catch(() => undefined); // settles after we abort: keep it from going unhandled
