@@ -108,16 +108,20 @@ export async function readBodyText(
   maxBytes: number,
   signal?: AbortSignal,
 ): Promise<string> {
+  const body = response.body;
   const contentLength = Number(response.headers.get('Content-Length') ?? '');
   if (contentLength > maxBytes) {
+    if (body && typeof body.cancel === 'function') {
+      body.cancel().catch(() => undefined);
+    }
     throw new CTSError(`response body exceeds ${maxBytes} bytes`);
   }
 
-  const body = response.body;
   if (!body || typeof body.getReader !== 'function') {
     // No stream to cancel (eg React Native): race the whole-body read against the signal once,
     // then size-check (utf8 bytes >= string length, so the cheap length check catches gross
     // oversize without re-encoding).
+    if (signal?.aborted) throw new CTSError('response body read aborted');
     const text = await raceAbort(response.text(), signal);
     if (text.length > maxBytes || new TextEncoder().encode(text).length > maxBytes) {
       throw new CTSError(`response body exceeds ${maxBytes} bytes`);

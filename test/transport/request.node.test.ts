@@ -1137,6 +1137,10 @@ describe('response body size cap', () => {
     if (contentLength !== undefined) headers.set('Content-Length', String(contentLength));
     let i = 0;
     let stalled: ((r: { done: boolean; value?: Uint8Array }) => void) | undefined;
+    const cancel = () => {
+      stalled?.({ done: true, value: undefined });
+      return Promise.resolve();
+    };
     const reader = {
       read: () =>
         new Promise<{ done: boolean; value?: Uint8Array }>((resolve) => {
@@ -1144,16 +1148,13 @@ describe('response body size cap', () => {
           if (!hangAfter) return resolve({ done: true, value: undefined });
           stalled = resolve; // stalled mid-stream; cancel() unblocks it, as a real stream does
         }),
-      cancel: () => {
-        stalled?.({ done: true, value: undefined });
-        return Promise.resolve();
-      },
+      cancel,
     };
     return {
       ok: status >= 200 && status < 300,
       status,
       headers,
-      body: { getReader: () => reader },
+      body: { getReader: () => reader, cancel },
       text: async () => new TextDecoder().decode(concatChunks(chunks)),
     } as unknown as Response;
   };
@@ -1173,12 +1174,13 @@ describe('response body size cap', () => {
   afterEach(() => vi.restoreAllMocks());
 
   test('rejects a success body over the cap via Content-Length pre-check', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      streamResponse([], { contentLength: 64 * 1024 * 1024 }),
-    );
+    const response = streamResponse([], { contentLength: 64 * 1024 * 1024 });
+    const cancel = vi.spyOn(response.body!, 'cancel');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
     const thrown = await request({ endpoint, maxResponseBytes: 1000 }).catch((e) => e);
     expect(thrown).toBeInstanceOf(HttpResponseError);
     expect((thrown as Error).message).toMatch(/exceeds 1000 bytes/);
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   test('rejects a streamed success body that exceeds the cap without Content-Length', async () => {
@@ -1283,6 +1285,27 @@ describe('response body size cap', () => {
     expect(thrown).toBeInstanceOf(NetworkError);
     expect((thrown as Error).message).toContain('Request timed out after 100ms');
   }, 2000);
+
+  test('does not start a no-stream body read after the caller aborts', async () => {
+    let textCalls = 0;
+    const ac = new AbortController();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      noStreamResponse({
+        text: async () => {
+          textCalls++;
+          return '{}';
+        },
+      }),
+    );
+    const thrown = await request({
+      endpoint,
+      signal: ac.signal,
+      onResponseMeta: () => ac.abort(),
+    }).catch((e) => e);
+    expect(thrown).toBeInstanceOf(NetworkError);
+    expect((thrown as Error).name).toBe('CallerAbortError');
+    expect(textCalls).toBe(0);
+  });
 
   test('a timed-out uncancellable no-stream read is not retried on a non-cached endpoint', async () => {
     let fetchCount = 0;
