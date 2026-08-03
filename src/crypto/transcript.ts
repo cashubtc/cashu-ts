@@ -1,3 +1,4 @@
+import { schnorr } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
 
@@ -128,4 +129,41 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
  */
 export function transactionDigest(tx: TransactionShape): Uint8Array {
   return sha256(Bytes.concat(utf8ToBytes(TRANSCRIPT_DOMAIN_TAG), buildTransactionTranscript(tx)));
+}
+
+/**
+ * Key-path witness for one input: a BIP-340 signature over the transaction digest.
+ *
+ * @remarks
+ * Returns the witness JSON string (`{"signatures":[hex]}`, the spec's worked-example shape). The
+ * key must be the secret's key: `k` for a bare secret, `p' = k + t` for a tweaked one.
+ */
+export function signTransactionInput(digest: Uint8Array, secretKey: Uint8Array): string {
+  if (digest.length !== 32) {
+    throw new CTSError('Transaction digest must be 32 bytes');
+  }
+  const signature = schnorr.sign(digest, secretKey);
+  return JSON.stringify({ signatures: [Bytes.toHex(signature)] });
+}
+
+/**
+ * Verify one input's key-path witness against its 33-byte secret.
+ */
+export function verifyTransactionInputWitness(
+  digest: Uint8Array,
+  secretHex: string,
+  witnessJson: string,
+): boolean {
+  const secret = Bytes.fromHex(secretHex);
+  if (secret.length !== 33) return false;
+  let signatures: unknown;
+  try {
+    signatures = (JSON.parse(witnessJson) as { signatures?: unknown }).signatures;
+  } catch {
+    return false;
+  }
+  if (!Array.isArray(signatures) || signatures.length === 0) return false;
+  const sig: unknown = signatures[0];
+  if (typeof sig !== 'string' || !/^[0-9a-f]{128}$/.test(sig)) return false;
+  return schnorr.verify(Bytes.fromHex(sig), digest, secret.subarray(1));
 }

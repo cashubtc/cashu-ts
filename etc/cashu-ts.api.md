@@ -1909,6 +1909,9 @@ export type ReceiveConfig = {
     onCountersReserved?: OnCountersReserved;
 };
 
+// @public
+export function recoverV3SecretKeys(seed: Uint8Array, keysetId: string, secretsHex: string[], maxCounter: number): Map<string, Uint8Array>;
+
 // @public (undocumented)
 export type RequestArgs = {
     endpoint: string;
