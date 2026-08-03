@@ -41,6 +41,28 @@ export type V4ProofTemplate = {
    * Witness.
    */
   w?: string;
+  /**
+   * Taproot spend info (v3): what the next owner needs that the proof does not say.
+   */
+  si?: V4SpendInfoTemplate;
+};
+
+/**
+ * Template for taproot spend info inside a V4 Token.
+ */
+export type V4SpendInfoTemplate = {
+  /**
+   * Bearer private key (32 bytes). Mutually exclusive with `e`.
+   */
+  k?: Uint8Array;
+  /**
+   * Receiver-keyed DH ephemeral (33 bytes). Mutually exclusive with `k`.
+   */
+  e?: Uint8Array;
+  /**
+   * Serialized leaves, in slot-map order.
+   */
+  t?: Uint8Array[];
 };
 
 /**

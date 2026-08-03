@@ -1869,3 +1869,37 @@ describe('normalizeMintUrl', () => {
     expect(normalizeMintUrl('https://Mint.Example.COM')).toBe('https://mint.example.com');
   });
 });
+
+describe('taproot spend_info token serialization', () => {
+  test('spend_info roundtrips through V4 CBOR', () => {
+    const proof: Proof = {
+      id: '02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd',
+      amount: Amount.from(8),
+      secret: '02595a333ef377a29f6756365bd46bf3b5e571dd7a44081822f3bd0bf03b358075',
+      C: '84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327',
+      spend_info: {
+        k: '38b91aa1635556d47ce92d99c1a92a2ffb82e57bc292c039d1d7b84c13bd75c6',
+        tree: [
+          '00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80',
+        ],
+      },
+    };
+    const token: Token = { mint: 'https://mint.test', proofs: [proof], unit: 'sat' };
+    const encoded = utils.getEncodedToken(token);
+    const decoded = utils.getDecodedToken(encoded, [proof.id]);
+    expect(decoded.proofs).toHaveLength(1);
+    expect(decoded.proofs[0].spend_info).toEqual(proof.spend_info);
+  });
+
+  test('proofs without spend_info stay without it', () => {
+    const proof: Proof = {
+      id: '02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd',
+      amount: Amount.from(8),
+      secret: '02595a333ef377a29f6756365bd46bf3b5e571dd7a44081822f3bd0bf03b358075',
+      C: '84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327',
+    };
+    const token: Token = { mint: 'https://mint.test', proofs: [proof], unit: 'sat' };
+    const decoded = utils.getDecodedToken(utils.getEncodedToken(token), [proof.id]);
+    expect(decoded.proofs[0].spend_info).toBeUndefined();
+  });
+});

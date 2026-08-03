@@ -143,6 +143,82 @@ describe('v3 transaction witnesses', () => {
   );
 });
 
+describe('bearer spend info', () => {
+  test(
+    'send attaches k; receiver verifies, sweeps, and signs with it',
+    { timeout: 30_000 },
+    async () => {
+      const alice = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
+      await alice.loadMint();
+      const quote = await alice.createMintQuoteBolt11(64);
+      await alice.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
+      const minted = await alice.mintProofsBolt11(64, quote.quote);
+      const { send } = await alice.send(32n, minted);
+
+      // Bearer spend info rides on every sent v3 proof, and k matches the secret.
+      for (const proof of send) {
+        expect(proof.spend_info?.k).toMatch(/^[0-9a-f]{64}$/);
+      }
+
+      // Bob receives; his sweep swap must sign the received inputs with the bearer keys.
+      const bob = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
+      await bob.loadMint();
+      type SwapBody = {
+        inputs: Array<{ amount: number; id: string; secret: string; C: string; witness?: string }>;
+        outputs: Array<{ amount: number; id: string; B_: string }>;
+      };
+      let swapBody: SwapBody | undefined;
+      const realFetch = globalThis.fetch;
+      const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+        const url = typeof input === 'string' ? input : (input as Request).url;
+        if (url.endsWith('/v1/swap') && init?.body) {
+          swapBody = JSON.parse(init.body as string) as SwapBody;
+        }
+        return realFetch(input, init);
+      });
+      let received;
+      try {
+        received = await bob.receive(send);
+      } finally {
+        spy.mockRestore();
+      }
+      const body = swapBody as SwapBody;
+      expect(body).toBeDefined();
+      // MINT_INPUT_FEE_PPK=100: the sweep pays ceil(inputs * 100 / 1000) in fees.
+      const fee = Math.ceil((body.inputs.length * 100) / 1000);
+      expect(sumProofs(received).toString()).toBe(String(32 - fee));
+      const digest = transactionDigest({
+        proofInputs: body.inputs.map((p) => ({
+          amount: BigInt(p.amount),
+          keysetId: p.id,
+          secret: p.secret,
+          C: p.C,
+        })),
+        blindedOutputs: body.outputs.map((o) => ({
+          amount: BigInt(o.amount),
+          keysetId: o.id,
+          B_: o.B_,
+        })),
+      });
+      for (const input of body.inputs) {
+        expect(input.witness).toBeDefined();
+        expect(verifyTransactionInputWitness(digest, input.secret, input.witness as string)).toBe(
+          true,
+        );
+        // The bearer key itself must never reach the mint.
+        expect(JSON.stringify(input)).not.toContain('spend_info');
+      }
+
+      // A tampered bearer key is rejected at receive time.
+      const tampered = send.map((p) => ({
+        ...p,
+        spend_info: { k: '11'.repeat(32) },
+      }));
+      await expect(bob.receive(tampered)).rejects.toThrow(/Spend info key/);
+    },
+  );
+});
+
 describe('M2 roundtrip', () => {
   test(
     'mint -> swap -> melt on the v3 keyset, witnesses on every signed hop',

@@ -49,6 +49,24 @@ export type Proof = {
    * The witness for this proof.
    */
   witness?: string | P2PKWitness | HTLCWitness;
+  /**
+   * Taproot spend info (v3 keysets): what the next owner needs that the proof does not say.
+   */
+  spend_info?: SpendInfo;
+};
+
+/**
+ * Taproot spend info (spec 2.5): a key and, when conditions exist, the leaf tree.
+ *
+ * @remarks
+ * `k` and `E` are mutually exclusive: `k` (32-byte scalar hex) means "here is the key" (bearer),
+ * `E` (33-byte point hex) means "derive your key" (receiver-keyed). `tree` lists serialized leaves
+ * (hex) in slot-map order. Fund-critical for locked proofs: belongs in storage and backups.
+ */
+export type SpendInfo = {
+  k?: string;
+  E?: string;
+  tree?: string[];
 };
 
 /**
