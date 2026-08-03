@@ -86,12 +86,12 @@ describe('v3 transaction witnesses', () => {
     { timeout: 30_000 },
     async () => {
       const externalInvoice =
-        'lnbc20u1p5tj77hsp5hva2cwk48eajjatzje0wwyanfl2dmu87h7c30mnurfmu5mr6ypjspp53cmmk6mgvdrp7xpuf9vfyqyxjl5ce9dqs4prc6jh6eqf5ldmqvvshp55qf3c2rxuxqahgt2d7yp6xdrjdt5r2sm2uqsatyn3v7u0k09mnhqxq9z0rgqcqpnrzjq0xp6zfjhwvmq6tltd09jcdc82ml6eh3alzvnaw8httxcx7tu78syrvfkqqqm0qqqyqqqqlgqqqvx5qqjq9qxpqysgqunatemrzxl5srnxy4jpqeu4rhdfvkx0agvqeumkmx4mvsusc2er4t4h9jg396mfxp0lu72nueehapde6cv42ldd80pryz8jrxky3k5qqm6f4zx';
+        'lnbc100u1pjaxuyzpp5wn37d3mx38haqs7nd5he4j7pq4r806e6s83jdksxrd77pnanm3zqdpv2phhwetjv4jzqcneypqyc6t8dp6xu6twva2xjuzzda6qcqzzsxqrrsssp5ayy0uuhwgy8hwphvy7ptzpg2dfn8vt3vlgsk53rsvj76jvafhujs9qyyssqc8aj03s5au3tgu6pj0rm0ws4a838s8ffe3y3qkj77esh7qmgsz7qlvdlzgj6dvx7tx7zn6k352z85rvdqvlszrevvzakp96a4pvyn2cpgaaks6';
       const wallet = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
       await wallet.loadMint();
-      const quote = await wallet.createMintQuoteBolt11(3000);
+      const quote = await wallet.createMintQuoteBolt11(11000);
       await wallet.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
-      const proofs = await wallet.mintProofsBolt11(3000, quote.quote);
+      const proofs = await wallet.mintProofsBolt11(11000, quote.quote);
       const meltQuote = await wallet.createMeltQuoteBolt11(externalInvoice);
       const sendResponse = await wallet.send(meltQuote.fee_reserve.add(meltQuote.amount), proofs, {
         includeFees: true,
@@ -149,7 +149,7 @@ describe('M2 roundtrip', () => {
     { timeout: 40_000 },
     async () => {
       const externalInvoice =
-        'lnbc15u1p3xnhl2pp5jptserfk3zk4qy42tlucycrfwxhydvlemu9pqr93tuzlv9cc7g3sdqsvfhkcap3xyhx7un8cqzpgxqzjcsp5f8c52y2stc300gl6s4xswtjpc37hrnnr3c9wvtgjfuvqmpm35evq9qyyssqy4lgd8tj637qcjp05rdpxxykjenthxftej7a2zzmwrmrl70fyj9hvj0rewhzj7jfyuwkwcg9g2jpwtk3wkjtwnkdks84hsnu8xps5vsq4gj5hs';
+        'lnbc49730n1pjaxuxnpp5zw0ry2w2heyuv7wk4r6z38vvgnaudfst0hl2p5xnv0mjkxtavg2qdpv2phhwetjv4jzqcneypqyc6t8dp6xu6twva2xjuzzda6qcqzzsxqrrsssp5x8tv2ka0m95hgek25kauw540m0dx727stqqr07l8h37v5283sn5q9qyyssqeevcs6vxcdnerk5w5mwfmntsf8nze7nxrf97dywmga7v0742vhmxtjrulgu3kah4f2r6025j974jpjg4mkqhv2gdls5k7e5cvwdf4wcp3ytsvx';
       const seed = randomBytes(64);
       const wallet = new Wallet(mintUrl, { bip39seed: seed });
       await wallet.loadMint();
@@ -157,9 +157,9 @@ describe('M2 roundtrip', () => {
       expect(isBlsKeyset(keysetId)).toBe(true);
 
       // Mint
-      const quote = await wallet.createMintQuoteBolt11(3000);
+      const quote = await wallet.createMintQuoteBolt11(6000);
       await wallet.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
-      const minted = await wallet.mintProofsBolt11(3000, quote.quote);
+      const minted = await wallet.mintProofsBolt11(6000, quote.quote);
       expect(minted.every((p) => /^0[23][0-9a-f]{64}$/.test(p.secret))).toBe(true);
 
       // Swap (witness-signed; wire shape asserted by the dedicated spy test above)
