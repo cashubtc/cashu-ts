@@ -20,7 +20,9 @@ import {
 } from '../crypto';
 // Internal transitional fallback — not part of crypto/index.ts
 import { normalizeSecpPubkey } from '../crypto/curve_secp';
+import { recoverV3SecretKeys } from '../crypto/NUT13';
 import { signMintQuoteLegacy } from '../crypto/NUT20';
+import { signTransactionInput, transactionDigest } from '../crypto/transcript';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
@@ -1640,6 +1642,7 @@ class Wallet {
     );
 
     // Execute swap and validate result
+    await this._attachV3TransactionWitnesses(swapTransaction.payload, swapPreview.keysetId);
     const { signatures } = await this.withStaleKeysetRepair(() =>
       this.mint.swap(swapTransaction.payload),
     );
@@ -1955,6 +1958,53 @@ class Wallet {
       if (keepDleq && dleq) newProof = { ...newProof, dleq };
       return newProof;
     });
+  }
+
+  /**
+   * Attaches taproot transaction witnesses to v3 point-secret inputs (spec 2.2.2).
+   *
+   * @remarks
+   * Builds the transcript from the request's own inputs and outputs, then signs its digest with
+   * each input's recovered internal key (seed counter scan, spec 2.5.2). Inputs whose key is not
+   * recoverable (received proofs without spend info yet) are left unsigned; the mint tolerates that
+   * until transaction-level enforcement lands. No-op without a seed or on non-v3 keysets.
+   */
+  private async _attachV3TransactionWitnesses(
+    payload: SwapRequest,
+    keysetId: string,
+    meltQuote?: { quoteId: string; amount: Amount },
+  ): Promise<void> {
+    if (!isBlsKeyset(keysetId) || !this._seed) return;
+    const isPointSecret = (s: string) => /^0[23][0-9a-f]{64}$/.test(s);
+    if (!payload.inputs.every((p) => isPointSecret(p.secret))) return;
+    const digest = transactionDigest({
+      proofInputs: payload.inputs.map((p) => ({
+        amount: Amount.from(p.amount).toBigInt(),
+        keysetId: p.id,
+        secret: p.secret,
+        C: p.C,
+      })),
+      blindedOutputs: payload.outputs.map((o) => ({
+        amount: Amount.from(o.amount).toBigInt(),
+        keysetId: o.id,
+        B_: o.B_,
+      })),
+      meltQuoteOutputs: meltQuote
+        ? [{ amount: meltQuote.amount.toBigInt(), quoteId: meltQuote.quoteId }]
+        : undefined,
+    });
+    // Scan bound: the session counter plus headroom for proofs minted before this session.
+    const bound = (await this.counters.peekNext(keysetId)) + 128;
+    const keys = recoverV3SecretKeys(
+      this._seed,
+      keysetId,
+      payload.inputs.map((p) => p.secret),
+      bound,
+    );
+    for (const input of payload.inputs) {
+      const secretKey = keys.get(input.secret);
+      if (secretKey) input.witness = signTransactionInput(digest, secretKey);
+    }
   }
 
   /**
