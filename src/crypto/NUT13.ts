@@ -36,7 +36,14 @@ enum DerivationKind {
   HMAC_SHA256,
 }
 
-type DerivedSecretAndBlindingFactor = { blindingFactor: Uint8Array; secret: Uint8Array };
+type DerivedSecretAndBlindingFactor = {
+  blindingFactor: Uint8Array;
+  secret: Uint8Array;
+  /**
+   * V3 (`02…`) keysets only: the internal private key `k` behind the pubkey secret `K = k*G`.
+   */
+  secretKey?: Uint8Array;
+};
 type SecretAndBlindingFactorDeriver = (counter: number) => DerivedSecretAndBlindingFactor;
 
 /**
@@ -61,7 +68,7 @@ export function deriveSecretAndBlindingFactor(
   seed: Uint8Array,
   keysetId: string,
   counter: number,
-): { blindingFactor: Uint8Array; secret: Uint8Array } {
+): DerivedSecretAndBlindingFactor {
   const derive = createSecretAndBlindingFactorDeriver(seed, keysetId);
   return derive(counter);
 }
@@ -211,10 +218,34 @@ function deriveHmacSecretAndBlindingFactor(
     // be silently encoded as a different one even if the guard above is ever moved.
     numberToBytesBE(counter, 8),
   );
+  if (isBlsKeyset(keysetId)) {
+    const secretKey = deriveV3SecretKey(seed, base);
+    return {
+      secret: getPubKeyFromPrivKey(secretKey),
+      secretKey,
+      blindingFactor: computeBlindingFactor(seed, base, keysetId),
+    };
+  }
   return {
     secret: hmac(sha256, seed, Bytes.concat(base, Bytes.fromHex('00'))),
     blindingFactor: computeBlindingFactor(seed, base, keysetId),
   };
+}
+
+function deriveV3SecretKey(seed: Uint8Array, base: Uint8Array): Uint8Array {
+  // V3 (taproot secrets): the 0x00 branch derives the internal private key `k`; the proof secret
+  // is `K = k*G` (33-byte compressed). Same attempt-counter pattern as the 0x01 branch: append
+  // u32_BE(attempt) and take the first digest that is a valid secp256k1 key. Rejection here is a
+  // ~2^-128 event (n is close to 2^256); the loop exists to keep both branches on one pattern.
+  for (let attempt = 0; attempt < 1 << 16; attempt++) {
+    const msg = Bytes.concat(base, Bytes.fromHex('00'), numberToBytesBE(attempt, 4));
+    const digest = hmac(sha256, seed, msg);
+    const x = Bytes.toBigInt(digest);
+    if (x === 0n || x >= SECP256K1_N) continue;
+    return digest;
+  }
+  /* c8 ignore next */
+  throw new CTSError('V3 secret key derivation failed');
 }
 
 function computeBlindingFactor(seed: Uint8Array, base: Uint8Array, keysetId: string): Uint8Array {
