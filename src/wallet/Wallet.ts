@@ -19,7 +19,7 @@ import {
   parseSecret,
 } from '../crypto';
 // Internal transitional fallback — not part of crypto/index.ts
-import { normalizeSecpPubkey } from '../crypto/curve_secp';
+import { getPubKeyFromPrivKey, normalizeSecpPubkey } from '../crypto/curve_secp';
 import { recoverV3SecretKeys } from '../crypto/NUT13';
 import { signMintQuoteLegacy } from '../crypto/NUT20';
 import { signTransactionInput, transactionDigest } from '../crypto/transcript';
@@ -67,6 +67,7 @@ import { BATCH_POOL_SIZE, runPool } from '../transport';
 import type { RequestFetch, RequestFn } from '../transport';
 import {
   bolt11AmountMsat,
+  Bytes,
   getDecodedToken,
   invoiceHasAmountInHRP,
   normalizeMintUrl,
@@ -1642,7 +1643,12 @@ class Wallet {
     );
 
     // Execute swap and validate result
-    await this._attachV3TransactionWitnesses(swapTransaction.payload, swapPreview.keysetId);
+    await this._attachV3TransactionWitnesses(
+      swapTransaction.payload,
+      swapPreview.keysetId,
+      undefined,
+      this._collectSpendInfoKeys(swapPreview.inputs),
+    );
     const { signatures } = await this.withStaleKeysetRepair(() =>
       this.mint.swap(swapTransaction.payload),
     );
@@ -1671,6 +1677,7 @@ class Wallet {
         sendProofs.push(p);
       }
     });
+    await this._attachV3BearerSpendInfo(sendProofs);
     this._logger.debug('SEND COMPLETED', {
       unselectedProofs: unselectedProofs.map((p) => p.amount.toString()),
       keepProofs: keepProofs.map((p) => p.amount.toString()),
@@ -1680,6 +1687,39 @@ class Wallet {
       keep: [...keepProofs, ...unselectedProofs],
       send: sendProofs,
     };
+  }
+
+  /**
+   * Attaches bearer spend info (`k`) to freshly swapped v3 send proofs (spec 2.5.2).
+   *
+   * @remarks
+   * The bearer key is what lets the receiver run the 2.5.1 cascade and sign the sweep's transaction
+   * witness. Only bare seed-derived secrets qualify; proofs whose key cannot be recovered are left
+   * untouched. Mutates the passed proofs.
+   */
+  private async _attachV3BearerSpendInfo(sendProofs: Proof[]): Promise<void> {
+    if (!this._seed || sendProofs.length === 0) return;
+    const v3Proofs = sendProofs.filter(
+      (p) => isBlsKeyset(p.id) && /^0[23][0-9a-f]{64}$/.test(p.secret) && !p.spend_info,
+    );
+    if (v3Proofs.length === 0) return;
+    const byKeyset = new Map<string, Proof[]>();
+    for (const proof of v3Proofs) {
+      byKeyset.set(proof.id, [...(byKeyset.get(proof.id) ?? []), proof]);
+    }
+    for (const [keysetId, proofs] of byKeyset) {
+      const next = await this.counters.peekNext(keysetId);
+      const keys = recoverV3SecretKeys(
+        this._seed,
+        keysetId,
+        proofs.map((p) => p.secret),
+        next + 128,
+      );
+      for (const proof of proofs) {
+        const k = keys.get(proof.secret);
+        if (k) proof.spend_info = { k: Bytes.toHex(k) };
+      }
+    }
   }
 
   // -----------------------------------------------------------------
@@ -1953,6 +1993,8 @@ class Wallet {
     return proofs.map((p) => {
       const witness = this._normalizeWitness(p);
       const { dleq, p2pk_e, ...rest } = p; // isolate dleq and p2pk_e
+      // spend_info is local-only: bearer keys and trees never go to the mint
+      delete rest.spend_info;
       let newProof: Proof = { ...rest, witness }; // add back normalized witness
       if (keepP2pkE && p2pk_e) newProof = { ...newProof, p2pk_e };
       if (keepDleq && dleq) newProof = { ...newProof, dleq };
@@ -1973,6 +2015,7 @@ class Wallet {
     payload: Pick<MeltRequest, 'inputs' | 'outputs'>,
     keysetId: string,
     meltQuote?: { quoteId: string; amount: Amount },
+    extraKeys?: Map<string, Uint8Array>,
   ): Promise<void> {
     if (!isBlsKeyset(keysetId) || !this._seed) return;
     const isPointSecret = (s: string) => /^0[23][0-9a-f]{64}$/.test(s);
@@ -2002,9 +2045,29 @@ class Wallet {
       bound,
     );
     for (const input of payload.inputs) {
-      const secretKey = keys.get(input.secret);
+      const secretKey = keys.get(input.secret) ?? extraKeys?.get(input.secret);
       if (secretKey) input.witness = signTransactionInput(digest, secretKey);
     }
+  }
+
+  /**
+   * Collects bearer keys from the inputs' spend info, keyed by secret hex, verifying k*G.
+   */
+  private _collectSpendInfoKeys(inputs: Proof[]): Map<string, Uint8Array> {
+    const keys = new Map<string, Uint8Array>();
+    for (const proof of inputs) {
+      const k = proof.spend_info?.k;
+      if (!k || !/^[0-9a-f]{64}$/.test(k)) continue;
+      try {
+        const kBytes = Bytes.fromHex(k);
+        if (Bytes.toHex(getPubKeyFromPrivKey(kBytes)) === proof.secret) {
+          keys.set(proof.secret, kBytes);
+        }
+      } catch {
+        // invalid scalar: leave unsigned
+      }
+    }
+    return keys;
   }
 
   /**
@@ -3680,10 +3743,12 @@ class Wallet {
       (meltPreview.quote as unknown as { amount?: AmountLike }).amount ?? 0,
     );
     if (meltAmount.toBigInt() > 0n) {
-      await this._attachV3TransactionWitnesses(meltPayload, inputs[0]?.id ?? '', {
-        quoteId: quote,
-        amount: meltAmount,
-      });
+      await this._attachV3TransactionWitnesses(
+        meltPayload,
+        inputs[0]?.id ?? '',
+        { quoteId: quote, amount: meltAmount },
+        this._collectSpendInfoKeys(meltPreview.inputs),
+      );
     }
 
     // Execute melt and validate result

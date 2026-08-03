@@ -1816,6 +1816,7 @@ export type Proof = {
     dleq?: SerializedDLEQ;
     p2pk_e?: string;
     witness?: string | P2PKWitness | HTLCWitness;
+    spend_info?: SpendInfo;
 };
 
 // @public
@@ -2171,6 +2172,13 @@ export function signP2PKProofs(proofs: Proof[], privateKey: PrivKey | PrivKey[],
 
 // @public
 export function sortProofsById(proofs: Proof[]): Proof[];
+
+// @public
+export type SpendInfo = {
+    k?: string;
+    E?: string;
+    tree?: string[];
+};
 
 // @public
 export type SpendingConditionsBase = {

@@ -6,6 +6,7 @@ import {
   type G1Point,
   type G2Point,
   batchVerifyUnblindedSignatureBls,
+  getPubKeyFromPrivKey,
   isBlsKeyset,
   pointFromHex,
   pointFromHexG1,
@@ -303,6 +304,13 @@ function templateFromToken(token: Token): TokenV4Template {
             ...(p.witness && {
               w: JSON.stringify(p.witness),
             }),
+            ...(p.spend_info && {
+              si: {
+                ...(p.spend_info.k && { k: hexToBytes(p.spend_info.k) }),
+                ...(p.spend_info.E && { e: hexToBytes(p.spend_info.E) }),
+                ...(p.spend_info.tree && { t: p.spend_info.tree.map(hexToBytes) }),
+              },
+            }),
           }),
         ),
       }),
@@ -341,6 +349,13 @@ function tokenFromTemplate(template: TokenV4Template): Token {
         }),
         ...(p.w && {
           witness: p.w,
+        }),
+        ...(p.si && {
+          spend_info: {
+            ...(p.si.k && { k: bytesToHex(p.si.k) }),
+            ...(p.si.e && { E: bytesToHex(p.si.e) }),
+            ...(p.si.t && { tree: p.si.t.map(bytesToHex) }),
+          },
         }),
       });
     });
@@ -837,6 +852,22 @@ export function verifyProofsForReceive(
   }
 
   if (blsProofs.length === 0) return;
+
+  // Receive-time cascade step 1 (taproot secrets 2.5.1): a bearer key claimed by spend info must
+  // key-path spend the secret. A mismatched k is a proof we could never sweep: reject.
+  for (const p of blsProofs) {
+    const k = p.spend_info?.k;
+    if (k === undefined) continue;
+    let matches = false;
+    try {
+      matches = bytesToHex(getPubKeyFromPrivKey(hexToBytes(k))) === p.secret;
+    } catch {
+      matches = false;
+    }
+    if (!matches) {
+      throw new CTSError(`Spend info key does not match the proof secret${offenderSuffix(p)}`);
+    }
+  }
 
   // Batch path bypasses hasValidDleq, so the amount-in-keyset check is repeated here.
   const items = blsProofs.map((p) => {
