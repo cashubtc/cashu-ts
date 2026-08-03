@@ -22,6 +22,7 @@ import {
 import { getPubKeyFromPrivKey, normalizeSecpPubkey } from '../crypto/curve_secp';
 import { recoverV3SecretKeys } from '../crypto/NUT13';
 import { signMintQuoteLegacy } from '../crypto/NUT20';
+import { taprootLeafHash, taprootMerkleRoot, taprootTweakSeckey } from '../crypto/taproot';
 import { signTransactionInput, transactionDigest } from '../crypto/transcript';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
@@ -2045,6 +2046,7 @@ class Wallet {
       bound,
     );
     for (const input of payload.inputs) {
+      if (input.witness) continue; // pre-built witness (e.g. script path): leave it alone
       const secretKey = keys.get(input.secret) ?? extraKeys?.get(input.secret);
       if (secretKey) input.witness = signTransactionInput(digest, secretKey);
     }
@@ -2062,6 +2064,16 @@ class Wallet {
         const kBytes = Bytes.fromHex(k);
         if (Bytes.toHex(getPubKeyFromPrivKey(kBytes)) === proof.secret) {
           keys.set(proof.secret, kBytes);
+          continue;
+        }
+        // Locked proof: the key path signs with p' = k + t over the disclosed tree.
+        const tree = proof.spend_info?.tree;
+        if (tree && tree.length > 0) {
+          const root = taprootMerkleRoot(tree.map((leaf) => taprootLeafHash(Bytes.fromHex(leaf))));
+          const tweaked = taprootTweakSeckey(kBytes, root);
+          if (Bytes.toHex(getPubKeyFromPrivKey(tweaked)) === proof.secret) {
+            keys.set(proof.secret, tweaked);
+          }
         }
       } catch {
         // invalid scalar: leave unsigned
@@ -2078,6 +2090,10 @@ class Wallet {
    */
   private _normalizeWitness(proof: Proof): string | undefined {
     if (!proof.witness) return undefined;
+    // Taproot (v3) point secrets carry transaction witnesses (key or script path): keep them.
+    if (/^0[23][0-9a-f]{64}$/.test(proof.secret)) {
+      return typeof proof.witness !== 'string' ? JSON.stringify(proof.witness) : proof.witness;
+    }
     try {
       parseSecret(proof.secret);
     } catch {

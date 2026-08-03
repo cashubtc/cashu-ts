@@ -1,10 +1,26 @@
 // Taproot v3 integration tests. Require a nutshell mint with a BLS (v3)
 // keyset on port 3338: `DEV=1 make nutshell-bls-down nutshell-bls-up`.
 
-import { randomBytes } from '@noble/hashes/utils.js';
+import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 import { test, describe, expect, vi } from 'vitest';
 
-import { CheckStateEnum, Mint, Wallet, isBlsKeyset, sumProofs } from '../src';
+import {
+  Amount,
+  type AmountLike,
+  CheckStateEnum,
+  Mint,
+  OutputData,
+  Wallet,
+  isBlsKeyset,
+  sumProofs,
+} from '../src';
+import {
+  buildScriptPathWitness,
+  buildTaprootSecret,
+  TAPROOT_NUMS_KEY,
+} from '../src/crypto/taproot';
 import { transactionDigest, verifyTransactionInputWitness } from '../src/crypto/transcript';
 
 const mintUrl = 'http://127.0.0.1:3338';
@@ -267,4 +283,217 @@ describe('M2 roundtrip', () => {
       expect(unspentTotal.greaterThanOrEqual(sumProofs(sendResponse.keep))).toBe(true);
     },
   );
+});
+
+describe('M3 taproot conditions', () => {
+  const sk = (n: number) => {
+    const b = new Uint8Array(32);
+    b[31] = n;
+    return b;
+  };
+  const pk = (n: number) => bytesToHex(secp256k1.getPublicKey(sk(n), true));
+
+  async function mintPointProofs(amount: number) {
+    const wallet = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
+    await wallet.loadMint();
+    const quote = await wallet.createMintQuoteBolt11(amount);
+    await wallet.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
+    const proofs = await wallet.mintProofsBolt11(amount, quote.quote);
+    return { wallet, proofs, keysetId: wallet.keyChain.getCheapestKeyset().id };
+  }
+
+  /**
+   * Swap a single locked proof for random outputs via the raw mint API. Returns the mint response
+   * promise so callers can assert acceptance or rejection.
+   */
+  async function manualSwapLockedProof(
+    keysetId: string,
+    locked: { amount: bigint; secret: string; C: string },
+    buildWitness: (digest: Uint8Array) => string,
+  ) {
+    const mint = new Mint(mintUrl);
+    const fee = 1n; // one input at 100 ppk
+    // Power-of-two denominations for input - fee (31 = 16+8+4+2+1).
+    const outputAmounts = [16n, 8n, 4n, 2n, 1n];
+    expect(outputAmounts.reduce((a, b) => a + b, 0n)).toBe(locked.amount - fee);
+    const outputs = outputAmounts.map((a) => OutputData.createSingleRandomData(a, keysetId));
+    const payloadInputs = [
+      { amount: locked.amount, id: keysetId, secret: locked.secret, C: locked.C },
+    ];
+    const payloadOutputs = outputs.map((o) => o.blindedMessage);
+    const digest = transactionDigest({
+      proofInputs: payloadInputs.map((p) => ({
+        amount: p.amount,
+        keysetId: p.id,
+        secret: p.secret,
+        C: p.C,
+      })),
+      blindedOutputs: payloadOutputs.map((o) => ({
+        amount: Amount.from(o.amount).toBigInt(),
+        keysetId: o.id,
+        B_: o.B_,
+      })),
+    });
+    const witness = buildWitness(digest);
+    return mint.swap({
+      inputs: [{ ...payloadInputs[0], amount: Amount.from(locked.amount), witness }] as never,
+      outputs: payloadOutputs,
+    });
+  }
+
+  /**
+   * Mint, then swap one proof into a locked output with the given secret. Returns the locked proof
+   * fields.
+   */
+  async function createLockedProof(secretHex: string) {
+    const { wallet, proofs, keysetId } = await mintPointProofs(64);
+    const factory = (a: AmountLike, k: { id: string }) =>
+      OutputData.createSingleTaprootData(secretHex, a, k.id);
+    // Send exactly 32 (one denomination) so the factory mints a single locked output.
+    const { send } = await wallet.send(32n, proofs, undefined, {
+      send: { type: 'factory', factory },
+    });
+    expect(send).toHaveLength(1);
+    expect(send[0].secret).toBe(secretHex);
+    return { locked: send[0], keysetId };
+  }
+
+  test(
+    'key-path sweep of a locked proof: mint sees only a key and one signature',
+    {
+      timeout: 30_000,
+    },
+    async () => {
+      const internalPriv = bytesToHex(sk(21));
+      const internalPub = pk(21);
+      const { secret, tree } = buildTaprootSecret(internalPub, [
+        { type: 'after', n: 1, keys: [pk(22)], time: 4102444800 }, // far-future refund
+      ]);
+      const { locked } = await createLockedProof(secret);
+
+      // Bearer handoff: k + tree.
+      locked.spend_info = { k: internalPriv, tree };
+
+      const bob = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
+      await bob.loadMint();
+      type SwapBody = {
+        inputs: Array<{ secret: string; witness?: string }>;
+      };
+      let swapBody: SwapBody | undefined;
+      const realFetch = globalThis.fetch;
+      const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+        const url = typeof input === 'string' ? input : (input as Request).url;
+        if (url.endsWith('/v1/swap') && init?.body) {
+          swapBody = JSON.parse(init.body as string) as SwapBody;
+        }
+        return realFetch(input, init);
+      });
+      let received;
+      try {
+        received = await bob.receive([locked]);
+      } finally {
+        spy.mockRestore();
+      }
+      expect(received.length).toBeGreaterThan(0);
+      // The wire witness is a bare key-path signature: no leaf, no control block, one signature.
+      const wireInput = (swapBody as SwapBody).inputs.find((i) => i.secret === secret);
+      expect(wireInput?.witness).toBeDefined();
+      const parsed = JSON.parse(wireInput?.witness as string) as Record<string, unknown>;
+      expect(Object.keys(parsed)).toEqual(['signatures']);
+      expect((parsed.signatures as string[]).length).toBe(1);
+    },
+  );
+
+  test('refund via the after leaf (script path)', { timeout: 30_000 }, async () => {
+    const refundPriv = sk(23);
+    const { secret, tree } = buildTaprootSecret(pk(24), [
+      { type: 'after', n: 1, keys: [pk(23)], time: 1700000000 }, // past locktime
+    ]);
+    const { locked, keysetId } = await createLockedProof(secret);
+    await expect(
+      manualSwapLockedProof(keysetId, { amount: 32n, secret, C: locked.C }, (digest) =>
+        buildScriptPathWitness(tree, 0, pk(24), [bytesToHex(schnorr.sign(digest, refundPriv))]),
+      ),
+    ).resolves.toBeDefined();
+  });
+
+  test('hashlock spend (script path)', { timeout: 30_000 }, async () => {
+    const preimage = new Uint8Array(32).fill(7);
+    const holderPriv = sk(25);
+    const { secret, tree } = buildTaprootSecret(pk(26), [
+      { type: 'hashlock', n: 1, keys: [pk(25)], hash: bytesToHex(sha256(preimage)) },
+    ]);
+    const { locked, keysetId } = await createLockedProof(secret);
+    await expect(
+      manualSwapLockedProof(keysetId, { amount: 32n, secret, C: locked.C }, (digest) =>
+        buildScriptPathWitness(
+          tree,
+          0,
+          pk(26),
+          [bytesToHex(schnorr.sign(digest, holderPriv))],
+          bytesToHex(preimage),
+        ),
+      ),
+    ).resolves.toBeDefined();
+  });
+
+  test('2-of-3 threshold spend (script path)', { timeout: 30_000 }, async () => {
+    const { secret, tree } = buildTaprootSecret(pk(27), [
+      { type: 'threshold', n: 2, keys: [pk(31), pk(32), pk(33)] },
+    ]);
+    const { locked, keysetId } = await createLockedProof(secret);
+    await expect(
+      manualSwapLockedProof(keysetId, { amount: 32n, secret, C: locked.C }, (digest) =>
+        buildScriptPathWitness(tree, 0, pk(27), [
+          bytesToHex(schnorr.sign(digest, sk(31))),
+          bytesToHex(schnorr.sign(digest, sk(33))),
+        ]),
+      ),
+    ).resolves.toBeDefined();
+  });
+
+  test('NUMS script-only proof spends via its leaf', { timeout: 30_000 }, async () => {
+    const { secret, tree } = buildTaprootSecret(TAPROOT_NUMS_KEY, [
+      { type: 'threshold', n: 1, keys: [pk(34)] },
+    ]);
+    const { locked, keysetId } = await createLockedProof(secret);
+    await expect(
+      manualSwapLockedProof(keysetId, { amount: 32n, secret, C: locked.C }, (digest) =>
+        buildScriptPathWitness(tree, 0, TAPROOT_NUMS_KEY, [
+          bytesToHex(schnorr.sign(digest, sk(34))),
+        ]),
+      ),
+    ).resolves.toBeDefined();
+  });
+
+  test('wrong merkle path is rejected by the mint', { timeout: 30_000 }, async () => {
+    const { secret, tree } = buildTaprootSecret(pk(28), [
+      { type: 'threshold', n: 1, keys: [pk(35)] },
+      { type: 'after', n: 1, keys: [pk(35)], time: 1700000000 },
+    ]);
+    const { locked, keysetId } = await createLockedProof(secret);
+    await expect(
+      manualSwapLockedProof(keysetId, { amount: 32n, secret, C: locked.C }, (digest) => {
+        const good = JSON.parse(
+          buildScriptPathWitness(tree, 0, pk(28), [bytesToHex(schnorr.sign(digest, sk(35)))]),
+        ) as { control: { path: string[] } };
+        good.control.path = ['00'.repeat(32)];
+        return JSON.stringify(good);
+      }),
+    ).rejects.toThrow(/script path/i);
+  });
+
+  test('partial tree disclosure is rejected on receive', { timeout: 30_000 }, async () => {
+    const internalPriv = bytesToHex(sk(29));
+    const { secret, tree } = buildTaprootSecret(pk(29), [
+      { type: 'threshold', n: 1, keys: [pk(36)] },
+      { type: 'after', n: 1, keys: [pk(36)], time: 1700000000 },
+    ]);
+    const { locked } = await createLockedProof(secret);
+    const bob = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
+    await bob.loadMint();
+    // Only one of the two leaves disclosed: reconstruction misses the secret.
+    locked.spend_info = { k: internalPriv, tree: [tree[0]] };
+    await expect(bob.receive([locked])).rejects.toThrow(/reconstruct/);
+  });
 });

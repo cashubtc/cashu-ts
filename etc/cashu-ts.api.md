@@ -1528,6 +1528,7 @@ export class OutputData implements OutputDataLike {
     static createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string, eBytes?: Uint8Array): OutputData;
     // (undocumented)
     static createSingleRandomData(amount: AmountLike, keysetId: string): OutputData;
+    static createSingleTaprootData(secretHex: string, amount: AmountLike, keysetId: string): OutputData;
     static deserialize(serialized: SerializedOutputData): OutputData;
     // (undocumented)
     ephemeralE?: string;
