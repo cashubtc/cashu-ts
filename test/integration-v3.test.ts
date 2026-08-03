@@ -4,7 +4,7 @@
 import { randomBytes } from '@noble/hashes/utils.js';
 import { test, describe, expect, vi } from 'vitest';
 
-import { Mint, Wallet, isBlsKeyset } from '../src';
+import { CheckStateEnum, Mint, Wallet, isBlsKeyset, sumProofs } from '../src';
 import { transactionDigest, verifyTransactionInputWitness } from '../src/crypto/transcript';
 
 const mintUrl = 'http://127.0.0.1:3338';
@@ -139,6 +139,56 @@ describe('v3 transaction witnesses', () => {
           true,
         );
       }
+    },
+  );
+});
+
+describe('M2 roundtrip', () => {
+  test(
+    'mint -> swap -> melt on the v3 keyset, witnesses on every signed hop',
+    { timeout: 40_000 },
+    async () => {
+      const externalInvoice =
+        'lnbc15u1p3xnhl2pp5jptserfk3zk4qy42tlucycrfwxhydvlemu9pqr93tuzlv9cc7g3sdqsvfhkcap3xyhx7un8cqzpgxqzjcsp5f8c52y2stc300gl6s4xswtjpc37hrnnr3c9wvtgjfuvqmpm35evq9qyyssqy4lgd8tj637qcjp05rdpxxykjenthxftej7a2zzmwrmrl70fyj9hvj0rewhzj7jfyuwkwcg9g2jpwtk3wkjtwnkdks84hsnu8xps5vsq4gj5hs';
+      const seed = randomBytes(64);
+      const wallet = new Wallet(mintUrl, { bip39seed: seed });
+      await wallet.loadMint();
+      const keysetId = wallet.keyChain.getCheapestKeyset().id;
+      expect(isBlsKeyset(keysetId)).toBe(true);
+
+      // Mint
+      const quote = await wallet.createMintQuoteBolt11(3000);
+      await wallet.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
+      const minted = await wallet.mintProofsBolt11(3000, quote.quote);
+      expect(minted.every((p) => /^0[23][0-9a-f]{64}$/.test(p.secret))).toBe(true);
+
+      // Swap (witness-signed; wire shape asserted by the dedicated spy test above)
+      const meltQuote = await wallet.createMeltQuoteBolt11(externalInvoice);
+      const sendResponse = await wallet.send(meltQuote.fee_reserve.add(meltQuote.amount), minted, {
+        includeFees: true,
+      });
+
+      // Melt
+      const meltResult = await wallet.meltProofsBolt11(meltQuote, sendResponse.send);
+      expect(['PAID', 'PENDING']).toContain(meltResult.quote.state);
+
+      // NUT-09/13 restore from the same seed recovers key-path proofs
+      const restoreWallet = new Wallet(mintUrl, { bip39seed: seed });
+      await restoreWallet.loadMint();
+      const restored = await restoreWallet.restoreAll();
+      const restoredProofs = restored.proofs;
+      expect(restoredProofs.length).toBeGreaterThan(0);
+      expect(restoredProofs.every((p) => /^0[23][0-9a-f]{64}$/.test(p.secret))).toBe(true);
+      // Every keep-side proof is recovered from seed and still unspent (the melt may leave
+      // send-side proofs pending under the fakewallet's delayed external payment).
+      const restoredSecrets = new Set(restoredProofs.map((p) => p.secret));
+      for (const keep of sendResponse.keep) {
+        expect(restoredSecrets.has(keep.secret)).toBe(true);
+      }
+      const states = await restoreWallet.checkProofsStates(restoredProofs);
+      const unspent = restoredProofs.filter((_, i) => states[i].state === CheckStateEnum.UNSPENT);
+      const unspentTotal = sumProofs(unspent);
+      expect(unspentTotal.greaterThanOrEqual(sumProofs(sendResponse.keep))).toBe(true);
     },
   );
 });
