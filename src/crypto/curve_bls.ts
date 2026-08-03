@@ -57,7 +57,28 @@ const Fr = bls12_381.fields.Fr;
 const Fp_ORDER = bls12_381.fields.Fp.ORDER;
 
 export function hashToCurveBls(secret: Uint8Array): G1Point {
-  return bls12_381.G1.hashToCurve(secret, { DST: BLS_HASH_TO_CURVE_DST });
+  return bls12_381.G1.hashToCurve(taprootSecretHashInput(secret), { DST: BLS_HASH_TO_CURVE_DST });
+}
+
+/**
+ * Maps a v3 secret to its hash-to-curve input.
+ *
+ * @remarks
+ * Taproot secrets are 33-byte compressed points carried as 66-char hex in JSON; they hash as the
+ * raw 33 bytes. Anything else (legacy NUT-10 JSON secrets on v3 keysets, pre-taproot hex) hashes as
+ * its utf8 bytes until those flows migrate to leaves. The dispatch is unambiguous: no JSON or
+ * 64-char secret is 66 chars of hex with an 02/03 prefix.
+ */
+function taprootSecretHashInput(secretUtf8: Uint8Array): Uint8Array {
+  if (secretUtf8.length !== 66) return secretUtf8;
+  let hex = '';
+  for (const byte of secretUtf8) {
+    const c = String.fromCharCode(byte);
+    if (!/[0-9a-f]/.test(c)) return secretUtf8;
+    hex += c;
+  }
+  if (!hex.startsWith('02') && !hex.startsWith('03')) return secretUtf8;
+  return hexToBytes(hex);
 }
 
 /**
