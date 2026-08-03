@@ -350,6 +350,31 @@ export class OutputData implements OutputDataLike {
     );
   }
 
+  /**
+   * Output data for a taproot (v3) secret chosen by the caller: a bare `K` or a tweaked `P`.
+   *
+   * @remarks
+   * Pair with `buildTaprootSecret` for locked outputs; the caller keeps the tree (spend_info) and
+   * any keys. The secret travels as its 66-char hex; hashing uses the raw 33 bytes.
+   */
+  static createSingleTaprootData(
+    secretHex: string,
+    amount: AmountLike,
+    keysetId: string,
+  ): OutputData {
+    if (!/^0[23][0-9a-f]{64}$/.test(secretHex)) {
+      throw new CTSError('Taproot secret must be 33-byte compressed point hex');
+    }
+    const amountValue = Amount.from(amount);
+    const secretBytes = new TextEncoder().encode(secretHex);
+    const { r, B_ } = blindMessageForKeyset(secretBytes, keysetId);
+    return new OutputData(
+      new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
+      r,
+      secretBytes,
+    );
+  }
+
   static createDeterministicData(
     amount: AmountLike,
     seed: Uint8Array,
