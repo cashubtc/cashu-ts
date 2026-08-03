@@ -2,7 +2,12 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import { HDKey } from '@scure/bip32';
 import { describe, expect, test } from 'vitest';
 
-import { BLS_FR_ORDER, deriveSecretAndBlindingFactor, getKeysetIdInt } from '../../src/crypto';
+import {
+  BLS_FR_ORDER,
+  deriveSecretAndBlindingFactor,
+  getKeysetIdInt,
+  hashToCurveBls,
+} from '../../src/crypto';
 import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import { Bytes } from '../../src/utils';
 import { nut13_v3 as nut13Vectors } from '../vectors/taproot-v3.json';
@@ -58,6 +63,16 @@ describe('v3 (BLS) derivation', () => {
       expect(bytesToHex(secret)).toBe(output.secret);
       expect(bytesToHex(blindingFactor)).toBe(output.blinding_factor);
     }
+  });
+
+  test('point secrets hash to curve as raw bytes, pinned by the shared Y vector', () => {
+    const output = nut13Vectors.outputs[0];
+    // The utf8 hex string and the raw 33 bytes must land on the same Y: JSON carries hex, the
+    // hash input is binary (taproot secrets), and legacy non-point secrets still hash as utf8.
+    const yFromString = hashToCurveBls(new TextEncoder().encode(output.secret));
+    const yFromRaw = hashToCurveBls(Bytes.fromHex(output.secret));
+    expect(yFromString.toHex(true)).toBe(output.Y);
+    expect(yFromRaw.toHex(true)).toBe(output.Y);
   });
 
   test('v3 and v2 derivations diverge for the same seed/counter', () => {
