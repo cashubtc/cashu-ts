@@ -6,7 +6,7 @@ import { utf8ToBytes } from '@noble/hashes/utils.js';
 import { CTSError } from '../model/Errors';
 import { Bytes } from '../utils';
 
-import { pointFromBytes } from './curve_secp';
+import { getPubKeyFromPrivKey, pointFromBytes } from './curve_secp';
 
 /**
  * Taproot secrets (v3 keysets) crypto core: tagged hashes, canonical TLV, leaf serialization,
@@ -423,4 +423,109 @@ export function verifyTaprootCommitment(
   }
   const root = taprootRootFromPath(taprootLeafHash(serializedLeaf), merklePath);
   return Bytes.equals(taprootTweakPubkey(internalKey, root), secret);
+}
+
+/**
+ * NUMS internal key for script-only proofs: BIP-341's `H` point, compressed.
+ *
+ * @remarks
+ * Provably no known discrete log (lift_x of SHA256(G)); with it as `K`, all spending must go
+ * through the revealed leaves.
+ */
+export const TAPROOT_NUMS_KEY =
+  '0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0';
+
+/**
+ * Build a locked v3 secret: `P = K + tagged_hash(K || root)*G` over the leaves' tree.
+ *
+ * @returns The 33-byte secret hex and the serialized tree (spend_info order).
+ */
+export function buildTaprootSecret(
+  internalKeyHex: string,
+  leaves: TaprootLeaf[],
+): { secret: string; tree: string[] } {
+  if (leaves.length === 0) {
+    throw new CTSError('A locked secret requires at least one leaf');
+  }
+  const tree = leaves.map((leaf) => serializeTaprootLeaf(leaf));
+  const root = taprootMerkleRoot(tree.map(taprootLeafHash));
+  const secret = taprootTweakPubkey(Bytes.fromHex(internalKeyHex), root);
+  return { secret: Bytes.toHex(secret), tree: tree.map((leaf) => Bytes.toHex(leaf)) };
+}
+
+/**
+ * Build a script-path witness JSON for the leaf at `leafIndex` of the disclosed tree.
+ *
+ * @remarks
+ * Shape (spec 2.3.2): `{leaf, control: {K, path}, signatures, preimage?}`. Signatures are BIP-340
+ * over the transaction digest by the leaf's keys; `preimage` satisfies a hashlock leaf.
+ */
+export function buildScriptPathWitness(
+  tree: string[],
+  leafIndex: number,
+  internalKeyHex: string,
+  signatures: string[],
+  preimage?: string,
+): string {
+  const leafHashes = tree.map((leaf) => taprootLeafHash(Bytes.fromHex(leaf)));
+  const path = taprootMerklePath(leafHashes, leafIndex);
+  return JSON.stringify({
+    leaf: tree[leafIndex],
+    control: { K: internalKeyHex, path: path.map((h) => Bytes.toHex(h)) },
+    signatures,
+    ...(preimage !== undefined && { preimage }),
+  });
+}
+
+/**
+ * Receive-time verification cascade (spec 2.5.1) for one proof's spend info.
+ *
+ * @remarks
+ * Returns 'bare' (k key-path spends the secret directly) or 'tweaked' (the disclosed tree plus
+ * internal key reconstructs the secret, so the disclosure is provably complete). Throws on any
+ * mismatch, on tree-only spend info without a key source, and on leaves the wallet cannot parse
+ * (unknown version/type or unknown constraint fields fail closed).
+ */
+export function verifyTaprootSpendInfo(
+  secretHex: string,
+  spendInfo: { k?: string; K?: string; tree?: string[] },
+): 'bare' | 'tweaked' {
+  const secret = Bytes.fromHex(secretHex);
+  if (secret.length !== 33) {
+    throw new CTSError('Secret is not a 33-byte point');
+  }
+  let internalKey: Uint8Array | undefined;
+  if (spendInfo.k !== undefined) {
+    let derived: Uint8Array;
+    try {
+      derived = getPubKeyFromPrivKey(Bytes.fromHex(spendInfo.k));
+    } catch {
+      throw new CTSError('Spend info key is not a valid private key');
+    }
+    if (!spendInfo.tree || spendInfo.tree.length === 0) {
+      if (!Bytes.equals(derived, secret)) {
+        throw new CTSError('Spend info key does not match the proof secret');
+      }
+      return 'bare';
+    }
+    internalKey = derived;
+  } else if (spendInfo.K !== undefined) {
+    internalKey = Bytes.fromHex(spendInfo.K);
+    if (internalKey.length !== 33) {
+      throw new CTSError('Spend info internal key must be 33 bytes');
+    }
+  }
+  if (!spendInfo.tree || spendInfo.tree.length === 0 || internalKey === undefined) {
+    throw new CTSError('Spend info is incomplete: tree and a key source are required');
+  }
+  const treeBytes = spendInfo.tree.map((leaf) => Bytes.fromHex(leaf));
+  // Acceptance policy: every disclosed leaf must be one the wallet can reason about.
+  for (const leaf of treeBytes) {
+    parseTaprootLeaf(leaf);
+  }
+  const root = taprootMerkleRoot(treeBytes.map(taprootLeafHash));
+  if (!Bytes.equals(taprootTweakPubkey(internalKey, root), secret)) {
+    throw new CTSError('Disclosed tree does not reconstruct the proof secret');
+  }
+  return 'tweaked';
 }

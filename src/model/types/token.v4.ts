@@ -60,6 +60,10 @@ export type V4SpendInfoTemplate = {
    */
   e?: Uint8Array;
   /**
+   * Internal public key for script-only transfers (33 bytes).
+   */
+  i?: Uint8Array;
+  /**
    * Serialized leaves, in slot-map order.
    */
   t?: Uint8Array[];

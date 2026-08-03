@@ -2177,6 +2177,7 @@ export function sortProofsById(proofs: Proof[]): Proof[];
 export type SpendInfo = {
     k?: string;
     E?: string;
+    K?: string;
     tree?: string[];
 };
 

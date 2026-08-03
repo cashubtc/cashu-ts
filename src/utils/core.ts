@@ -6,7 +6,6 @@ import {
   type G1Point,
   type G2Point,
   batchVerifyUnblindedSignatureBls,
-  getPubKeyFromPrivKey,
   isBlsKeyset,
   pointFromHex,
   pointFromHexG1,
@@ -14,6 +13,7 @@ import {
   verifyDLEQProof_reblind,
   verifyUnblindedSignatureBls,
 } from '../crypto';
+import { verifyTaprootSpendInfo } from '../crypto/taproot';
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { PaymentRequest } from '../model/PaymentRequest';
@@ -308,6 +308,7 @@ function templateFromToken(token: Token): TokenV4Template {
               si: {
                 ...(p.spend_info.k && { k: hexToBytes(p.spend_info.k) }),
                 ...(p.spend_info.E && { e: hexToBytes(p.spend_info.E) }),
+                ...(p.spend_info.K && { i: hexToBytes(p.spend_info.K) }),
                 ...(p.spend_info.tree && { t: p.spend_info.tree.map(hexToBytes) }),
               },
             }),
@@ -354,6 +355,7 @@ function tokenFromTemplate(template: TokenV4Template): Token {
           spend_info: {
             ...(p.si.k && { k: bytesToHex(p.si.k) }),
             ...(p.si.e && { E: bytesToHex(p.si.e) }),
+            ...(p.si.i && { K: bytesToHex(p.si.i) }),
             ...(p.si.t && { tree: p.si.t.map(bytesToHex) }),
           },
         }),
@@ -853,19 +855,16 @@ export function verifyProofsForReceive(
 
   if (blsProofs.length === 0) return;
 
-  // Receive-time cascade step 1 (taproot secrets 2.5.1): a bearer key claimed by spend info must
-  // key-path spend the secret. A mismatched k is a proof we could never sweep: reject.
+  // Receive-time verification cascade (taproot secrets 2.5.1): spend info must reconstruct the
+  // secret (bare key, or complete disclosed tree). Anything partial or mismatched rejects.
   for (const p of blsProofs) {
-    const k = p.spend_info?.k;
-    if (k === undefined) continue;
-    let matches = false;
+    if (!p.spend_info) continue;
     try {
-      matches = bytesToHex(getPubKeyFromPrivKey(hexToBytes(k))) === p.secret;
-    } catch {
-      matches = false;
-    }
-    if (!matches) {
-      throw new CTSError(`Spend info key does not match the proof secret${offenderSuffix(p)}`);
+      verifyTaprootSpendInfo(p.secret, p.spend_info);
+    } catch (e) {
+      throw new CTSError(
+        `${e instanceof Error ? e.message : 'Invalid spend info'}${offenderSuffix(p)}`,
+      );
     }
   }
 

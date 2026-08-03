@@ -5,6 +5,10 @@ import { tagSchnorr } from '@scure/btc-signer/utils.js';
 import { describe, test, expect } from 'vitest';
 
 import {
+  buildScriptPathWitness,
+  buildTaprootSecret,
+  TAPROOT_NUMS_KEY,
+  verifyTaprootSpendInfo,
   taggedHash,
   tlvRecord,
   readTlvRecords,
@@ -324,5 +328,81 @@ describe('bearer contrast (vectors 6.1)', () => {
     expect(bytesToHex(secp256k1.getPublicKey(hexToBytes(v61.bearer_contrast.k), true))).toBe(
       v61.bearer_contrast.secret,
     );
+  });
+});
+
+describe('locked secret construction and spend info cascade', () => {
+  test('buildTaprootSecret reproduces the 6.1 locked secret', () => {
+    const internalKey = v61.internal_key;
+    const { secret, tree } = buildTaprootSecret(internalKey, [
+      { type: 'after', n: 1, keys: [v61.alice_refund_pub], time: v61.refund_time },
+    ]);
+    expect(secret).toBe(v61.secret);
+    expect(tree).toEqual([v61.leaf_after]);
+  });
+
+  test('buildScriptPathWitness reproduces the 6.1 witness shape', () => {
+    const witness = JSON.parse(
+      buildScriptPathWitness(
+        [v61.leaf_after],
+        0,
+        v61.internal_key,
+        v61.scriptpath_witness.signatures,
+      ),
+    ) as { leaf: string; control: { K: string; path: string[] }; signatures: string[] };
+    expect(witness.leaf).toBe(v61.scriptpath_witness.leaf);
+    expect(witness.control).toEqual(v61.scriptpath_witness.control);
+    expect(witness.signatures).toEqual(v61.scriptpath_witness.signatures);
+  });
+
+  test('cascade: bare key, tweaked with k, tweaked with K', () => {
+    const n13 = vectors.nut13_v3.outputs[0];
+    expect(verifyTaprootSpendInfo(n13.secret, { k: n13.secret_key })).toBe('bare');
+    // 6.1: k = (carol + r) mod n, tree discloses the after leaf.
+    const carolFull = (
+      (BigInt('0x' + v61.carol_priv) + BigInt('0x' + v61.p2bk_r)) %
+      secp256k1.Point.Fn.ORDER
+    )
+      .toString(16)
+      .padStart(64, '0');
+    expect(verifyTaprootSpendInfo(v61.secret, { k: carolFull, tree: [v61.leaf_after] })).toBe(
+      'tweaked',
+    );
+    // Script-only: explicit K.
+    expect(
+      verifyTaprootSpendInfo(v61.secret, { K: v61.internal_key, tree: [v61.leaf_after] }),
+    ).toBe('tweaked');
+  });
+
+  test('cascade rejects partial disclosure, wrong keys, unknown leaves', () => {
+    // Tree-only spend info: no key source.
+    expect(() => verifyTaprootSpendInfo(v61.secret, { tree: [v61.leaf_after] })).toThrow(
+      /incomplete/,
+    );
+    // Wrong bearer key.
+    expect(() => verifyTaprootSpendInfo(v61.secret, { k: '11'.repeat(32) })).toThrow(/match/);
+    // Partial (empty vs actual tree): bare check fails because the secret is tweaked.
+    expect(() => verifyTaprootSpendInfo(v61.secret, { K: v61.internal_key, tree: [] })).toThrow(
+      /incomplete/,
+    );
+    // Wrong tree does not reconstruct.
+    expect(() =>
+      verifyTaprootSpendInfo(v61.secret, { K: v61.internal_key, tree: [v62.leaf_after] }),
+    ).toThrow(/reconstruct/);
+    // 6.2 tree contains the unknown melt_to leaf: acceptance policy fails closed.
+    expect(() =>
+      verifyTaprootSpendInfo(v62.secret, {
+        K: v62.internal_key,
+        tree: [v62.leaf_melt_to, v62.leaf_after],
+      }),
+    ).toThrow(/type/);
+  });
+
+  test('NUMS key: script-only secret verifies and key is the BIP-341 H point', () => {
+    expect(TAPROOT_NUMS_KEY.slice(0, 2)).toBe('02');
+    const { secret, tree } = buildTaprootSecret(TAPROOT_NUMS_KEY, [
+      { type: 'threshold', n: 1, keys: [v61.carol_pub] },
+    ]);
+    expect(verifyTaprootSpendInfo(secret, { K: TAPROOT_NUMS_KEY, tree })).toBe('tweaked');
   });
 });

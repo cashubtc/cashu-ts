@@ -66,6 +66,10 @@ export type Proof = {
 export type SpendInfo = {
   k?: string;
   E?: string;
+  /**
+   * Internal public key for script-only transfers (33-byte hex), when neither `k` nor `E` travels.
+   */
+  K?: string;
   tree?: string[];
 };
 
