@@ -1970,7 +1970,7 @@ class Wallet {
    * until transaction-level enforcement lands. No-op without a seed or on non-v3 keysets.
    */
   private async _attachV3TransactionWitnesses(
-    payload: SwapRequest,
+    payload: Pick<MeltRequest, 'inputs' | 'outputs'>,
     keysetId: string,
     meltQuote?: { quoteId: string; amount: Amount },
   ): Promise<void> {
@@ -1984,7 +1984,7 @@ class Wallet {
         secret: p.secret,
         C: p.C,
       })),
-      blindedOutputs: payload.outputs.map((o) => ({
+      blindedOutputs: (payload.outputs ?? []).map((o) => ({
         amount: Amount.from(o.amount).toBigInt(),
         keysetId: o.id,
         B_: o.B_,
@@ -3673,6 +3673,18 @@ class Wallet {
       ...(completeOptions.preferAsync ? { prefer_async: true } : {}),
       ...extra,
     };
+
+    // Attach taproot transaction witnesses (v3 keysets). Skipped when the preview's quote does
+    // not carry its amount: the digest must match the mint's reconstruction exactly.
+    const meltAmount = Amount.from(
+      (meltPreview.quote as unknown as { amount?: AmountLike }).amount ?? 0,
+    );
+    if (meltAmount.toBigInt() > 0n) {
+      await this._attachV3TransactionWitnesses(meltPayload, inputs[0]?.id ?? '', {
+        quoteId: quote,
+        amount: meltAmount,
+      });
+    }
 
     // Execute melt and validate result
     const meltResponse: MeltQuoteBaseResponse = await this.withStaleKeysetRepair(() =>
