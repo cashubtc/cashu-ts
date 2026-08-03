@@ -111,14 +111,7 @@ describe('leaf serialization (vectors 6.1)', () => {
 });
 
 describe('leaf serialization (vectors 6.2)', () => {
-  test('melt_to and after leaves serialize to the vector bytes', () => {
-    const meltTo = serializeTaprootLeaf({
-      type: 'melt_to',
-      n: 1,
-      keys: [v62.kid_pub],
-      destination: v62.node_pub,
-    });
-    expect(bytesToHex(meltTo)).toBe(v62.leaf_melt_to);
+  test('after leaf serializes to the vector bytes', () => {
     const after = serializeTaprootLeaf({
       type: 'after',
       n: 1,
@@ -128,9 +121,15 @@ describe('leaf serialization (vectors 6.2)', () => {
     expect(bytesToHex(after)).toBe(v62.leaf_after);
   });
 
-  test('leaf hashes match the vectors', () => {
+  test('leaf hashes match the vectors (melt_to leaf as opaque bytes)', () => {
+    // The 6.2 melt_to covenant is a spec extensibility example, not an
+    // implemented leaf type; its bytes still pin the tree and tweak math.
     expect(bytesToHex(taprootLeafHash(hexToBytes(v62.leaf_melt_to)))).toBe(v62.leaf_hash_melt_to);
     expect(bytesToHex(taprootLeafHash(hexToBytes(v62.leaf_after)))).toBe(v62.leaf_hash_after);
+  });
+
+  test('the example melt_to leaf type (0x04) is unknown and fails closed', () => {
+    expect(() => parseTaprootLeaf(hexToBytes(v62.leaf_melt_to))).toThrow(/type/);
   });
 });
 

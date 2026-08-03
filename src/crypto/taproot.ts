@@ -33,7 +33,6 @@ export const TAPROOT_LEAF_TYPE = {
   threshold: 0x01,
   after: 0x02,
   hashlock: 0x03,
-  melt_to: 0x04,
 } as const;
 
 /**
@@ -43,7 +42,6 @@ const FIELD_N = 0x02;
 const FIELD_KEYS = 0x04;
 const FIELD_TIME = 0x06;
 const FIELD_HASH = 0x08;
-const FIELD_DESTINATION = 0x0a;
 
 /**
  * Suggested caps from spec 2.6, pending confirmation.
@@ -55,8 +53,7 @@ export const TAPROOT_MAX_TREE_DEPTH = 8;
  * A parsed declarative leaf (version 0x00).
  *
  * @remarks
- * `keys` are 33-byte compressed SEC1 hex. `time` is unix seconds. `hash` is 32 bytes hex,
- * `destination` a 33-byte node key hex.
+ * `keys` are 33-byte compressed SEC1 hex. `time` is unix seconds. `hash` is 32 bytes hex.
  */
 export type TaprootLeaf = {
   type: keyof typeof TAPROOT_LEAF_TYPE;
@@ -64,7 +61,6 @@ export type TaprootLeaf = {
   keys: string[];
   time?: number;
   hash?: string;
-  destination?: string;
 };
 
 /**
@@ -193,13 +189,6 @@ export function serializeTaprootLeaf(leaf: TaprootLeaf): Uint8Array {
     }
     fields.push(tlvRecord(FIELD_HASH, h));
   }
-  if (leaf.type === 'melt_to') {
-    const d = Bytes.fromHex(leaf.destination ?? '');
-    if (d.length !== 33) {
-      throw new CTSError('melt_to leaf requires a 33-byte destination key');
-    }
-    fields.push(tlvRecord(FIELD_DESTINATION, d));
-  }
   const out = Bytes.concat(new Uint8Array([TAPROOT_LEAF_VERSION, typeByte]), ...fields);
   if (out.length > TAPROOT_MAX_LEAF_BYTES) {
     throw new CTSError(`Leaf exceeds ${TAPROOT_MAX_LEAF_BYTES} bytes`);
@@ -236,7 +225,6 @@ export function parseTaprootLeaf(bytes: Uint8Array): TaprootLeaf {
   let keys: string[] | undefined;
   let time: number | undefined;
   let hash: string | undefined;
-  let destination: string | undefined;
   for (const rec of records) {
     switch (rec.type) {
       case FIELD_N:
@@ -269,12 +257,6 @@ export function parseTaprootLeaf(bytes: Uint8Array): TaprootLeaf {
         }
         hash = Bytes.toHex(rec.value);
         break;
-      case FIELD_DESTINATION:
-        if (rec.value.length !== 33) {
-          throw new CTSError('destination field must be 33 bytes');
-        }
-        destination = Bytes.toHex(rec.value);
-        break;
       default:
         if (rec.type % 2 === 0) {
           throw new CTSError(`Unknown constraint field: ${rec.type}`);
@@ -292,13 +274,9 @@ export function parseTaprootLeaf(bytes: Uint8Array): TaprootLeaf {
   if (typeName === 'hashlock' && hash === undefined) {
     throw new CTSError('hashlock leaf missing hash field');
   }
-  if (typeName === 'melt_to' && destination === undefined) {
-    throw new CTSError('melt_to leaf missing destination field');
-  }
   const leaf: TaprootLeaf = { type: typeName, n, keys };
   if (time !== undefined) leaf.time = time;
   if (hash !== undefined) leaf.hash = hash;
-  if (destination !== undefined) leaf.destination = destination;
   return leaf;
 }
 
