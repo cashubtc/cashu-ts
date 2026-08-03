@@ -275,3 +275,39 @@ function computeBlindingFactor(seed: Uint8Array, base: Uint8Array, keysetId: str
   }
   return numberToBytesBE(reduced, 32);
 }
+
+/**
+ * Recover the internal private keys behind self-owned v3 point secrets by counter scan.
+ *
+ * @remarks
+ * A self-owned plain v3 proof needs no stored spend info: `k` re-derives from the seed (spec
+ * 2.5.2). Scans counters `[0, maxCounter)` and trial-matches each derived `K` against the wanted
+ * secrets. Returns a map of secret hex to its 32-byte private key; unmatched secrets are absent.
+ * @param seed - Wallet seed.
+ * @param keysetId - V3 (`02…`) keyset id.
+ * @param secretsHex - The 66-char hex secrets to resolve.
+ * @param maxCounter - Exclusive scan bound; use the wallet's current counter for the keyset.
+ */
+export function recoverV3SecretKeys(
+  seed: Uint8Array,
+  keysetId: string,
+  secretsHex: string[],
+  maxCounter: number,
+): Map<string, Uint8Array> {
+  if (!isBlsKeyset(keysetId)) {
+    throw new CTSError('Secret key recovery is a v3 keyset operation');
+  }
+  if (!Number.isInteger(maxCounter) || maxCounter < 0 || maxCounter > 1 << 20) {
+    throw new CTSError('maxCounter must be an integer in [0, 2^20]');
+  }
+  const wanted = new Set(secretsHex);
+  const found = new Map<string, Uint8Array>();
+  for (let counter = 0; counter < maxCounter && found.size < wanted.size; counter++) {
+    const { secret, secretKey } = deriveSecretAndBlindingFactor(seed, keysetId, counter);
+    const secretHex = bytesToHex(secret);
+    if (wanted.has(secretHex) && secretKey) {
+      found.set(secretHex, secretKey);
+    }
+  }
+  return found;
+}
