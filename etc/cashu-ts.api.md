@@ -454,11 +454,10 @@ export function deriveP2BKSecretKey(privkey: string | bigint, rBlind: string | b
 // @public
 export function deriveP2BKSecretKeys(Ehex: string, privateKey: string | string[], blindPubKey: string | string[], dataIsPubkey?: boolean): string[];
 
+// Warning: (ae-forgotten-export) The symbol "DerivedSecretAndBlindingFactor" needs to be exported by the entry point index.d.ts
+//
 // @public
-export function deriveSecretAndBlindingFactor(seed: Uint8Array, keysetId: string, counter: number): {
-    blindingFactor: Uint8Array;
-    secret: Uint8Array;
-};
+export function deriveSecretAndBlindingFactor(seed: Uint8Array, keysetId: string, counter: number): DerivedSecretAndBlindingFactor;
 
 // @public (undocumented)
 export function deserializeMintKeys(serializedMintKeys: SerializedMintKeys): RawMintKeys;

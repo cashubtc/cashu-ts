@@ -3,7 +3,9 @@ import { HDKey } from '@scure/bip32';
 import { describe, expect, test } from 'vitest';
 
 import { BLS_FR_ORDER, deriveSecretAndBlindingFactor, getKeysetIdInt } from '../../src/crypto';
+import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import { Bytes } from '../../src/utils';
+import { nut13_v3 as nut13Vectors } from '../vectors/taproot-v3.json';
 
 // The standalone deriveBlindingFactor() helper was removed in v5; derive it locally for these tests.
 const deriveBlindingFactor = (seed: Uint8Array, keysetId: string, counter: number): Uint8Array =>
@@ -27,12 +29,34 @@ describe('v3 (BLS) derivation', () => {
 
   test('uses HMAC_SHA256 and produces a 32-byte blinding factor below BLS_FR_ORDER', () => {
     for (let counter = 0; counter < 8; counter++) {
-      const { blindingFactor, secret } = deriveSecretAndBlindingFactor(seed, v3KeysetId, counter);
+      const { blindingFactor, secret, secretKey } = deriveSecretAndBlindingFactor(
+        seed,
+        v3KeysetId,
+        counter,
+      );
       expect(blindingFactor).toHaveLength(32);
-      expect(secret).toHaveLength(32);
+      // Taproot secrets: the 0x00 branch derives a private key; the secret is K = k*G compressed.
+      expect(secret).toHaveLength(33);
+      expect([0x02, 0x03]).toContain(secret[0]);
+      expect(secretKey).toBeDefined();
+      expect(bytesToHex(getPubKeyFromPrivKey(secretKey as Uint8Array))).toBe(bytesToHex(secret));
       const r = Bytes.toBigInt(blindingFactor);
       expect(r).toBeGreaterThan(0n);
       expect(r).toBeLessThan(BLS_FR_ORDER);
+    }
+  });
+
+  test('matches the shared taproot-v3 nut13 vectors', () => {
+    const vseed = new TextEncoder().encode(nut13Vectors.seed_utf8);
+    for (const output of nut13Vectors.outputs) {
+      const { secret, secretKey, blindingFactor } = deriveSecretAndBlindingFactor(
+        vseed,
+        nut13Vectors.keyset_id,
+        output.counter,
+      );
+      expect(bytesToHex(secretKey as Uint8Array)).toBe(output.secret_key);
+      expect(bytesToHex(secret)).toBe(output.secret);
+      expect(bytesToHex(blindingFactor)).toBe(output.blinding_factor);
     }
   });
 
@@ -45,16 +69,24 @@ describe('v3 (BLS) derivation', () => {
     expect(bytesToHex(v2r)).not.toBe(bytesToHex(v3r));
   });
 
-  test('matches NUT-13 V3 spec vector (rejection sampling, attempt=1)', () => {
-    // Lock-in for nuts/tests/13-tests.md "Version 3: Secret derivation". The (seed, keyset, counter)
-    // tuple is chosen so attempt=0 produces x >= BLS_FR_ORDER and is rejected; attempt=1 succeeds.
-    // Implementations that omit the rejection loop will compute a different blinding_factor.
-    const { blindingFactor, secret } = deriveSecretAndBlindingFactor(seed, v3KeysetId, 3);
-    expect(bytesToHex(secret)).toBe(
-      '7a45e04943504b25273e9569ab7019ab62f814dade23998c12f5f4cb1bb7978a',
+  test('blinding factor rejection sampling still matches the pre-taproot pin (attempt=1)', () => {
+    // Lock-in from nuts/tests/13-tests.md "Version 3": the (seed, keyset, counter) tuple is chosen
+    // so the 0x01 branch rejects attempt=0 (x >= BLS_FR_ORDER) and succeeds at attempt=1. The
+    // taproot-secrets redefinition of the 0x00 branch must leave this branch untouched.
+    const { blindingFactor, secret, secretKey } = deriveSecretAndBlindingFactor(
+      seed,
+      v3KeysetId,
+      3,
     );
     expect(bytesToHex(blindingFactor)).toBe(
       '236dbcb12fc064ceeae6c5e2de7f79258374dccbf23ac0afdf72cf9eb53540c9',
+    );
+    // The 0x00 branch now derives a key (spec 2.4.2): secret is the compressed pubkey of it.
+    expect(bytesToHex(secretKey as Uint8Array)).toBe(
+      'efec313f695f39d7a6d72a784825a249e70b919006bbf9ccaa6b79d9106bb754',
+    );
+    expect(bytesToHex(secret)).toBe(
+      '03c687c9ed32e92b1a6301c07e30b433b2c810d0185b3c14f9c2c0851503da0932',
     );
   });
 });
