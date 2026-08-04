@@ -5,6 +5,8 @@
  * This is the instantiation point for the Cashu-TS library.
  */
 
+import { schnorr } from '@noble/curves/secp256k1.js';
+
 import { type AuthProvider } from '../auth/AuthProvider';
 import {
   signMintQuote,
@@ -2911,10 +2913,34 @@ class Wallet {
           ? privkey[0]
           : privkey;
       this.failIf(!signingKey, 'prepareMint: privkey is empty or correct privkey not provided');
-      // Sign the amended (nuts#375) message by default and keep a legacy signature over the same
-      // outputs as a fallback for not-yet-upgraded mints — see completeMint().
-      mintPayload.signature = signMintQuote(signingKey, quote.quote, blindedMessages);
-      legacySignature = signMintQuoteLegacy(signingKey, quote.quote, blindedMessages);
+      if (isBlsKeyset(keyset.id)) {
+        // V3 (taproot secrets): the quote is a transaction input; its lock key signs the
+        // transaction digest (spec 2.2.2 / 5). No legacy fallback on v3 keysets.
+        const digest = transactionDigest({
+          mintQuoteInputs: [
+            {
+              // The mint enforces sum(outputs) == quote.amount before the witness check,
+              // so the outputs sum is a faithful fallback when the quote object lacks it.
+              amount: Amount.from(
+                (quote as unknown as { amount?: AmountLike }).amount ??
+                  Amount.sum(blindedMessages.map((o) => Amount.from(o.amount))),
+              ).toBigInt(),
+              quoteId: quote.quote,
+            },
+          ],
+          blindedOutputs: blindedMessages.map((o) => ({
+            amount: Amount.from(o.amount).toBigInt(),
+            keysetId: o.id,
+            B_: o.B_,
+          })),
+        });
+        mintPayload.signature = Bytes.toHex(schnorr.sign(digest, Bytes.fromHex(signingKey)));
+      } else {
+        // Sign the amended (nuts#375) message by default and keep a legacy signature over the same
+        // outputs as a fallback for not-yet-upgraded mints — see completeMint().
+        mintPayload.signature = signMintQuote(signingKey, quote.quote, blindedMessages);
+        legacySignature = signMintQuoteLegacy(signingKey, quote.quote, blindedMessages);
+      }
     }
 
     return {
