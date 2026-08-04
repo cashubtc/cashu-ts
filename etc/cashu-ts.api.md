@@ -1410,6 +1410,9 @@ export function normalizeProofAmounts(raw: ProofLike[]): Proof[];
 export function normalizeSecpPubkey(pk: string): string;
 
 // @public
+export function normalizeXOnlySecretKey(privKey: Uint8Array): Uint8Array<ArrayBufferLike>;
+
+// @public
 export type NUT10Option = {
     kind: string;
     data: string;
