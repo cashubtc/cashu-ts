@@ -28,6 +28,9 @@ NUT_NAME ?= cashu-dev-nutshell
 NUT_BLS_PATH ?= ../nutshell
 NUT_BLS_IMAGE ?= cashu-dev-nutshell-bls:local
 NUT_BLS_NAME ?= cashu-dev-nutshell-bls
+# Second, pre-v3 keyset so the mint also serves NUT-10 and plain text secrets,
+# which belong to v1/v2 keysets only. v3 keysets take point secrets alone.
+NUT_BLS_V2_PATH ?= m/0'/0'/1'
 
 # ------------------------
 # Docker envs per dependency
@@ -166,6 +169,7 @@ nutshell-bls-up: nutshell-bls-build
 	$(DOCKER) run -d --name $(NUT_BLS_NAME) \
 		-p $(BIND_ADDR):$(PORT):3338 \
 		$(NUT_ENVS) \
+		-e MINT_V2_KEYSET_DERIVATION_PATH="$(NUT_BLS_V2_PATH)" \
 		$(NUT_BLS_IMAGE) poetry run mint
 
 nutshell-bls-down:
