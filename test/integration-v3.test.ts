@@ -321,7 +321,14 @@ describe('M3 taproot conditions', () => {
     // Power-of-two denominations for input - fee (31 = 16+8+4+2+1).
     const outputAmounts = [16n, 8n, 4n, 2n, 1n];
     expect(outputAmounts.reduce((a, b) => a + b, 0n)).toBe(locked.amount - fee);
-    const outputs = outputAmounts.map((a) => OutputData.createSingleRandomData(a, keysetId));
+    // v3 outputs carry point secrets; the swap's outputs are never spent here.
+    const outputs = outputAmounts.map((a) =>
+      OutputData.createSingleTaprootData(
+        bytesToHex(secp256k1.getPublicKey(randomBytes(32), true)),
+        a,
+        keysetId,
+      ),
+    );
     const payloadInputs = [
       { amount: locked.amount, id: keysetId, secret: locked.secret, C: locked.C },
     ];
@@ -488,6 +495,33 @@ describe('M3 taproot conditions', () => {
     ).rejects.toThrow(/script path/i);
   });
 
+  test('a NUT-10 secret is refused on a v3 keyset', { timeout: 30_000 }, async () => {
+    // One secret format per keyset version: NUT-10 well-known secrets live on
+    // legacy/v1/v2 keysets, v3 takes points. The wallet refuses to build one,
+    // and the mint refuses to accept one as an input.
+    const { locked, keysetId } = await createLockedProof(
+      buildTaprootSecret(pk(45), [{ type: 'threshold', n: 1, keys: [pk(45)] }]).secret,
+    );
+    expect(() =>
+      OutputData.createSingleP2PKData({ kind: 'P2PK', data: pk(45) }, 1n, keysetId),
+    ).toThrow();
+
+    const nut10Secret = JSON.stringify(['P2PK', { nonce: '00'.repeat(16), data: pk(45) }]);
+    const outputs = [16n, 8n, 4n, 2n, 1n].map((a) =>
+      OutputData.createSingleTaprootData(
+        bytesToHex(secp256k1.getPublicKey(randomBytes(32), true)),
+        a,
+        keysetId,
+      ),
+    );
+    await expect(
+      new Mint(mintUrl).swap({
+        inputs: [{ amount: 32n, id: keysetId, secret: nut10Secret, C: locked.C }],
+        outputs: outputs.map((o) => o.blindedMessage),
+      } as never),
+    ).rejects.toThrow(/point secret/i);
+  });
+
   test('partial tree disclosure is rejected on receive', { timeout: 30_000 }, async () => {
     const internalPriv = bytesToHex(sk(29));
     const { secret, tree } = buildTaprootSecret(pk(29), [
@@ -541,7 +575,13 @@ describe('M4 locked quotes', () => {
       ]);
       const quoteB = await wallet.createLockedMintQuote(32, lockB.secret);
       await wallet.on.onceMintPaid(quoteB.quote, { timeoutMs: 10_000 });
-      const outputsB = [OutputData.createSingleRandomData(32n, keysetId)];
+      const outputsB = [
+        OutputData.createSingleTaprootData(
+          bytesToHex(secp256k1.getPublicKey(randomBytes(32), true)),
+          32n,
+          keysetId,
+        ),
+      ];
       const digestB = transactionDigest({
         mintQuoteInputs: [{ amount: 32n, quoteId: quoteB.quote }],
         blindedOutputs: outputsB.map((o) => ({
@@ -566,7 +606,13 @@ describe('M4 locked quotes', () => {
       ]);
       const quoteC = await wallet.createLockedMintQuote(32, lockC.secret);
       await wallet.on.onceMintPaid(quoteC.quote, { timeoutMs: 10_000 });
-      const outputsC = [OutputData.createSingleRandomData(32n, keysetId)];
+      const outputsC = [
+        OutputData.createSingleTaprootData(
+          bytesToHex(secp256k1.getPublicKey(randomBytes(32), true)),
+          32n,
+          keysetId,
+        ),
+      ];
       const digestC = transactionDigest({
         mintQuoteInputs: [{ amount: 32n, quoteId: quoteC.quote }],
         blindedOutputs: outputsC.map((o) => ({

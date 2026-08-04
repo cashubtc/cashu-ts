@@ -3,6 +3,7 @@ import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
 
 import {
   asBlsG1Point,
+  assertV3PointSecret,
   asSecpPoint,
   blindMessage,
   blindMessageBls,
@@ -339,6 +340,11 @@ export class OutputData implements OutputDataLike {
   }
 
   static createSingleRandomData(amount: AmountLike, keysetId: string): OutputData {
+    if (isBlsKeyset(keysetId)) {
+      // A v3 secret is a point whose key signs the spend witness, so a random
+      // one would be unspendable. Use the deterministic or taproot constructors.
+      throw new CTSError('v3 keysets need a point secret: random outputs are unspendable');
+    }
     const amountValue = Amount.from(amount);
     const randomHex = bytesToHex(randomBytes(32));
     const secretBytes = new TextEncoder().encode(randomHex);
@@ -514,6 +520,7 @@ function blindMessageForKeyset(
   r?: bigint,
 ): { r: bigint; B_: CurvePoint } {
   if (isBlsKeyset(keysetId)) {
+    assertV3PointSecret(secret);
     const out = blindMessageBls(secret, r);
     return { r: out.r, B_: asBlsG1Point(out.B_) };
   }
