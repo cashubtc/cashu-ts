@@ -56,8 +56,8 @@ const unit = 'sat';
 
 // Set timeouts for this test suite file
 vi.setConfig({
-  testTimeout: 10_000,
-  hookTimeout: 10_000,
+  testTimeout: 30_000,
+  hookTimeout: 30_000,
   maxConcurrency: 1,
 });
 
@@ -76,6 +76,26 @@ async function untilMintQuotePaid(wallet: Wallet, quote: MintQuoteBaseResponse) 
     });
   } catch (e) {
     console.warn('Not paid in time or aborted', e);
+  }
+}
+
+// Wait until all given proofs report SPENT: the fakewallet settles outgoing
+// payments after a delay, so state checks right after melt can race it.
+async function untilProofsSpent(
+  wallet: Wallet,
+  proofs: Proof[],
+  meltQuoteId?: string,
+  timeoutMs = 20_000,
+) {
+  const started = Date.now();
+  for (;;) {
+    // The fakewallet settles delayed outgoing payments when the quote is
+    // re-checked, so nudge the melt quote before reading proof states.
+    if (meltQuoteId) await wallet.checkMeltQuoteBolt11(meltQuoteId).catch(() => undefined);
+    const states = await wallet.checkProofsStates(proofs);
+    if (states.every((s) => s.state === CheckStateEnum.SPENT)) return states;
+    if (Date.now() - started > timeoutMs) return states;
+    await new Promise((r) => setTimeout(r, 500));
   }
 }
 
@@ -199,7 +219,7 @@ describe('mint api', () => {
     // expect that we have not received the fee back, since it was external
     expect(sumProofs(response.change).lessThan(fee)).toBeTruthy();
     // check states of spent and kept proofs after payment
-    const sentProofsStates = await wallet.checkProofsStates(sendResponse.send);
+    const sentProofsStates = await untilProofsSpent(wallet, sendResponse.send, meltQuote.quote);
     expect(sentProofsStates).toBeDefined();
     // expect that all proofs are spent, i.e. all are CheckStateEnum.SPENT
     sentProofsStates.forEach((state) => {
@@ -233,7 +253,7 @@ describe('mint api', () => {
     const response = await wallet.meltProofsBolt11(meltQuote, sendResponse.send);
     expect(response).toBeDefined();
     expect(sumProofs(response.change).lessThan(fee)).toBeTruthy();
-    const sentProofsStates = await wallet.checkProofsStates(sendResponse.send);
+    const sentProofsStates = await untilProofsSpent(wallet, sendResponse.send, meltQuote.quote);
     expect(sentProofsStates).toBeDefined();
     sentProofsStates.forEach((state) => {
       expect(state.state).toBe(CheckStateEnum.SPENT);
@@ -723,7 +743,7 @@ describe('mint api', () => {
       void wallet.send(21, proofs, { keysetId }).catch(rej); // fire and forget
     });
     mint.disconnectWebSocket();
-  }, 10000);
+  }, 30000);
   test('mint with signed quote and payload', async () => {
     const wallet = new Wallet(mintUrl);
     await wallet.loadMint();
