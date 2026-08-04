@@ -7,6 +7,7 @@ import { CTSError } from '../model/Errors';
 import { Bytes } from '../utils';
 
 import { getPubKeyFromPrivKey, pointFromBytes } from './curve_secp';
+import { deriveP2BKBlindedPubkeys, deriveP2BKSlotSecretKey } from './NUT28';
 
 /**
  * Taproot secrets (v3 keysets) crypto core: tagged hashes, canonical TLV, leaf serialization,
@@ -488,11 +489,19 @@ export function buildScriptPathWitness(
  */
 export function verifyTaprootSpendInfo(
   secretHex: string,
-  spendInfo: { k?: string; K?: string; tree?: string[] },
-): 'bare' | 'tweaked' {
+  spendInfo: { k?: string; E?: string; K?: string; tree?: string[] },
+): 'bare' | 'tweaked' | 'receiver-keyed' {
   const secret = Bytes.fromHex(secretHex);
   if (secret.length !== 33) {
     throw new CTSError('Secret is not a 33-byte point');
+  }
+  // Receiver-keyed (E without k): verification happens at trial-match with the static key;
+  // the derivation pins the secret to the receiver, which a sender cannot have pre-tweaked (2.7).
+  if (spendInfo.E !== undefined && spendInfo.k === undefined) {
+    if (!/^0[23][0-9a-f]{64}$/.test(spendInfo.E)) {
+      throw new CTSError('Spend info ephemeral must be a 33-byte point');
+    }
+    return 'receiver-keyed';
   }
   let internalKey: Uint8Array | undefined;
   if (spendInfo.k !== undefined) {
@@ -528,4 +537,52 @@ export function verifyTaprootSpendInfo(
     throw new CTSError('Disclosed tree does not reconstruct the proof secret');
   }
   return 'tweaked';
+}
+
+/**
+ * Build a receiver-keyed v3 secret (spec 2.7): `K = P_receiver + r_0*G`, optionally tweaked.
+ *
+ * @remarks
+ * NUT-28 one layer down: fresh ephemeral per output (slot 0 is the base key). Leaf keys are carried
+ * verbatim here; blind-or-verbatim tagging travels with the key's delivery channel.
+ */
+export function deriveReceiverKeyedSecret(
+  receiverPubHex: string,
+  opts?: { leaves?: TaprootLeaf[]; eBytes?: Uint8Array },
+): { secret: string; E: string; tree?: string[] } {
+  const { blinded, Ehex } = deriveP2BKBlindedPubkeys([receiverPubHex], opts?.eBytes, true);
+  const internalKey = blinded[0];
+  if (opts?.leaves && opts.leaves.length > 0) {
+    const { secret, tree } = buildTaprootSecret(internalKey, opts.leaves);
+    return { secret, E: Ehex, tree };
+  }
+  return { secret: internalKey, E: Ehex };
+}
+
+/**
+ * Trial-match a receiver-keyed proof against a static private key (spec 2.7).
+ *
+ * @returns The key-path secret key (`k` bare, `k + t` tweaked) and the internal key, or undefined
+ *   when the proof is not keyed to this static key.
+ */
+export function recoverReceiverKeyedSecretKey(
+  secretHex: string,
+  EHex: string,
+  receiverPrivHex: string,
+  tree?: string[],
+): { secretKey: string; internalKey: string } | undefined {
+  let baseKey: string;
+  try {
+    baseKey = deriveP2BKSlotSecretKey(EHex, receiverPrivHex, 0);
+  } catch {
+    return undefined;
+  }
+  const internalKey = Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(baseKey)));
+  if (!tree || tree.length === 0) {
+    return internalKey === secretHex ? { secretKey: baseKey, internalKey } : undefined;
+  }
+  const root = taprootMerkleRoot(tree.map((leaf) => taprootLeafHash(Bytes.fromHex(leaf))));
+  const tweaked = taprootTweakSeckey(Bytes.fromHex(baseKey), root);
+  if (Bytes.toHex(getPubKeyFromPrivKey(tweaked)) !== secretHex) return undefined;
+  return { secretKey: Bytes.toHex(tweaked), internalKey };
 }

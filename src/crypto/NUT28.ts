@@ -196,3 +196,21 @@ function deriveP2BKBlindingTweakFromECDH(
   }
   return r;
 }
+
+/**
+ * Receiver-side slot key: `(p + r_i) mod n` for one slot, without a pubkey check.
+ *
+ * @remarks
+ * Taproot secrets (2.7) receiver flow: the caller verifies the result against the proof secret
+ * (bare `K = k*G`, or tweaked via the disclosed tree), so no blinded-key comparison happens here.
+ * The negated-derivation branch is retired (2.7): normalize x-only imports at the boundary.
+ */
+export function deriveP2BKSlotSecretKey(Ehex: string, privkeyHex: string, slotIndex = 0): string {
+  const E = pointFromHex(Ehex);
+  const p = hexToNumber(privkeyHex);
+  const r = deriveP2BKBlindingTweakFromECDH(E, p, slotIndex);
+  const k = deriveP2BKSecretKey(p, r);
+  /* c8 ignore next — deriveP2BKSecretKey without blindPubkey only returns null on zero key. */
+  if (k === null) throw new CTSError('P2BK: derived slot key is zero');
+  return k;
+}

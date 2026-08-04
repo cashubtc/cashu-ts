@@ -454,6 +454,9 @@ export function deriveP2BKSecretKey(privkey: string | bigint, rBlind: string | b
 // @public
 export function deriveP2BKSecretKeys(Ehex: string, privateKey: string | string[], blindPubKey: string | string[], dataIsPubkey?: boolean): string[];
 
+// @public
+export function deriveP2BKSlotSecretKey(Ehex: string, privkeyHex: string, slotIndex?: number): string;
+
 // Warning: (ae-forgotten-export) The symbol "DerivedSecretAndBlindingFactor" needs to be exported by the entry point index.d.ts
 //
 // @public

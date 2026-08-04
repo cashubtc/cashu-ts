@@ -19,6 +19,8 @@ import {
 import {
   buildScriptPathWitness,
   buildTaprootSecret,
+  deriveReceiverKeyedSecret,
+  recoverReceiverKeyedSecretKey,
   TAPROOT_NUMS_KEY,
   taprootLeafHash,
   taprootMerkleRoot,
@@ -582,6 +584,79 @@ describe('M4 locked quotes', () => {
           ]),
         }),
       ).rejects.toThrow();
+    },
+  );
+});
+
+describe('M4 receiver-keyed sends', () => {
+  test(
+    'receiver-keyed send, trial-matched receive, sweep (bare and locked)',
+    { timeout: 40_000 },
+    async () => {
+      const bobPriv = randomBytes(32);
+      const bobPub = bytesToHex(secp256k1.getPublicKey(bobPriv, true));
+      const strangerPriv = randomBytes(32);
+
+      // Sender derives per-output secrets keyed to Bob: one bare, one with a refund tree.
+      const bare = deriveReceiverKeyedSecret(bobPub);
+      const locked = deriveReceiverKeyedSecret(bobPub, {
+        leaves: [
+          {
+            type: 'after',
+            n: 1,
+            keys: [bobPub],
+            time: 4102444800,
+          },
+        ],
+      });
+
+      const { wallet, proofs } = await (async () => {
+        const w = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
+        await w.loadMint();
+        const quote = await w.createMintQuoteBolt11(128);
+        await w.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
+        return { wallet: w, proofs: await w.mintProofsBolt11(128, quote.quote) };
+      })();
+
+      let available = proofs;
+      const sendOne = async (secretHex: string) => {
+        const factory = (a: AmountLike, k: { id: string }) =>
+          OutputData.createSingleTaprootData(secretHex, a, k.id);
+        const { send, keep } = await wallet.send(32n, available, undefined, {
+          send: { type: 'factory', factory },
+        });
+        available = keep;
+        expect(send).toHaveLength(1);
+        return send[0];
+      };
+      const bareProof = await sendOne(bare.secret);
+      const lockedProof = await sendOne(locked.secret);
+      bareProof.spend_info = { E: bare.E };
+      lockedProof.spend_info = { E: locked.E, tree: locked.tree };
+
+      // A stranger's trial-match misses both.
+      expect(
+        recoverReceiverKeyedSecretKey(bareProof.secret, bare.E, bytesToHex(strangerPriv)),
+      ).toBeUndefined();
+
+      // Bob trial-matches, recovers key-path keys, and sweeps both proofs.
+      const bob = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
+      await bob.loadMint();
+      for (const proof of [bareProof, lockedProof]) {
+        const hit = recoverReceiverKeyedSecretKey(
+          proof.secret,
+          proof.spend_info?.E as string,
+          bytesToHex(bobPriv),
+          proof.spend_info?.tree,
+        );
+        expect(hit).toBeDefined();
+        // Sweep with the recovered key-path key: witness signs via spend_info.k.
+        proof.spend_info = { k: hit?.secretKey };
+      }
+      const received = await bob.receive([bareProof, lockedProof]);
+      expect(received.length).toBeGreaterThan(0);
+      // 64 sent minus the sweep's input fee (2 inputs at 100 ppk -> 1 sat).
+      expect(sumProofs(received).toString()).toBe('63');
     },
   );
 });
