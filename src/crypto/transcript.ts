@@ -28,7 +28,8 @@ export type TranscriptProofInput = {
   amount: bigint;
   keysetId: string;
   /**
-   * The proof's secret `P`: 33-byte compressed SEC1 hex.
+   * The proof's secret: a v3 point `P` as 33-byte compressed SEC1 hex, or a v0-v2 secret verbatim,
+   * which a mixed transaction carries alongside v3 inputs (spec 5).
    */
   secret: string;
   /**
@@ -66,9 +67,12 @@ function amountRecord(amount: bigint): Uint8Array {
 }
 
 function proofInputContainer(input: TranscriptProofInput): Uint8Array {
-  const secret = Bytes.fromHex(input.secret);
-  if (secret.length !== 33) {
-    throw new CTSError('Transcript proof secret must be 33 bytes');
+  // A v3 secret contributes its raw 33 bytes; a v0-v2 secret its utf8 bytes.
+  const secret = /^0[23][0-9a-f]{64}$/.test(input.secret)
+    ? Bytes.fromHex(input.secret)
+    : new TextEncoder().encode(input.secret);
+  if (secret.length === 0) {
+    throw new CTSError('Transcript proof secret must be non-empty');
   }
   return tlvRecord(
     CONTAINER_PROOF_INPUT,
