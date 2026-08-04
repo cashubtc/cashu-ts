@@ -14,6 +14,7 @@ import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { CTSError } from '../model/Errors';
 
 import type { BlindSignature, RawBlindedMessage, UnblindedSignature } from './core';
+import { normalizeSecpPubkey } from './curve_secp';
 
 export type G1Point = WeierstrassPoint<bigint>;
 export type G2Point = WeierstrassPoint<Fp2>;
@@ -93,8 +94,11 @@ function taprootSecretHashInput(secretUtf8: Uint8Array): Uint8Array {
 export function assertV3PointSecret(secret: Uint8Array | string): void {
   const hex =
     typeof secret === 'string' ? secret : new TextDecoder('utf-8', { fatal: false }).decode(secret);
-  if (hex.length !== 66 || !/^0[23][0-9a-f]{64}$/.test(hex)) {
-    throw new CTSError('v3 keysets take point secrets only');
+  try {
+    // Validates the curve point, not just the shape, and caches the result.
+    normalizeSecpPubkey(hex);
+  } catch (e) {
+    throw new CTSError('v3 keysets take point secrets only', { cause: e });
   }
 }
 

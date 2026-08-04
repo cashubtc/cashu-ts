@@ -176,6 +176,14 @@ class Wallet {
   public readonly counters: WalletCounters;
   private _keyChain: KeyChain;
   private _seed: Uint8Array | undefined = undefined;
+  /**
+   * Keys for randomly generated v3 point secrets, by secret hex.
+   *
+   * @remarks
+   * A seeded wallet re-derives its keys (NUT-13); a seedless one has nowhere else to keep them, so
+   * proofs created this way are spendable for the life of the wallet object only.
+   */
+  private _randomV3Keys = new Map<string, Uint8Array>();
   private _unit = 'sat';
   private _mintInfo: MintInfo | undefined = undefined;
   private _denominationTarget = 3;
@@ -1152,6 +1160,11 @@ class Wallet {
         this.fail('Invalid OutputType');
       }
     }
+    // Random v3 outputs carry their own key; keep it so the proof can be spent.
+    for (const d of outputData) {
+      const key = (d as { secretKey?: Uint8Array }).secretKey;
+      if (key) this._randomV3Keys.set(new TextDecoder().decode(d.secret), key);
+    }
     return outputData;
   }
 
@@ -2020,7 +2033,7 @@ class Wallet {
     meltQuote?: { quoteId: string; amount: Amount },
     extraKeys?: Map<string, Uint8Array>,
   ): Promise<void> {
-    if (!isBlsKeyset(keysetId) || !this._seed) return;
+    if (!isBlsKeyset(keysetId)) return;
     const isPointSecret = (s: string) => /^0[23][0-9a-f]{64}$/.test(s);
     if (!payload.inputs.every((p) => isPointSecret(p.secret))) return;
     const digest = transactionDigest({
@@ -2040,16 +2053,20 @@ class Wallet {
         : undefined,
     });
     // Scan bound: the session counter plus headroom for proofs minted before this session.
-    const bound = (await this.counters.peekNext(keysetId)) + 128;
-    const keys = recoverV3SecretKeys(
-      this._seed,
-      keysetId,
-      payload.inputs.map((p) => p.secret),
-      bound,
-    );
+    const keys = this._seed
+      ? recoverV3SecretKeys(
+          this._seed,
+          keysetId,
+          payload.inputs.map((p) => p.secret),
+          (await this.counters.peekNext(keysetId)) + 128,
+        )
+      : new Map<string, Uint8Array>();
     for (const input of payload.inputs) {
       if (input.witness) continue; // pre-built witness (e.g. script path): leave it alone
-      const secretKey = keys.get(input.secret) ?? extraKeys?.get(input.secret);
+      const secretKey =
+        keys.get(input.secret) ??
+        extraKeys?.get(input.secret) ??
+        this._randomV3Keys.get(input.secret);
       if (secretKey) input.witness = signTransactionInput(digest, secretKey);
     }
   }
