@@ -3,7 +3,7 @@
 
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
 import { test, describe, expect, vi } from 'vitest';
 
 import {
@@ -20,6 +20,9 @@ import {
   buildScriptPathWitness,
   buildTaprootSecret,
   TAPROOT_NUMS_KEY,
+  taprootLeafHash,
+  taprootMerkleRoot,
+  taprootTweakSeckey,
 } from '../src/crypto/taproot';
 import { transactionDigest, verifyTransactionInputWitness } from '../src/crypto/transcript';
 
@@ -496,4 +499,89 @@ describe('M3 taproot conditions', () => {
     locked.spend_info = { k: internalPriv, tree: [tree[0]] };
     await expect(bob.receive([locked])).rejects.toThrow(/reconstruct/);
   });
+});
+
+describe('M4 locked quotes', () => {
+  const sk = (n: number) => {
+    const b = new Uint8Array(32);
+    b[31] = n;
+    return b;
+  };
+  const pk = (n: number) => bytesToHex(secp256k1.getPublicKey(sk(n), true));
+
+  test(
+    'cardless ATM: recipient key-path mint, payer script-path reclaim after expiry',
+    { timeout: 40_000 },
+    async () => {
+      const wallet = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
+      await wallet.loadMint();
+      const keysetId = wallet.keyChain.getCheapestKeyset().id;
+
+      // Path A: quote locked to recipient with a far-future refund leaf; the
+      // recipient mints via key path (p' = k + t) before expiry.
+      const recipientPriv = sk(41);
+      const lockA = buildTaprootSecret(pk(41), [
+        { type: 'after', n: 1, keys: [pk(42)], time: 4102444800 },
+      ]);
+      const quoteA = await wallet.createLockedMintQuote(32, lockA.secret);
+      await wallet.on.onceMintPaid(quoteA.quote, { timeoutMs: 10_000 });
+      const rootA = taprootMerkleRoot(lockA.tree.map((l) => taprootLeafHash(hexToBytes(l))));
+      const tweakedPriv = taprootTweakSeckey(recipientPriv, rootA);
+      const proofs = await wallet.mintProofsBolt11(32, quoteA, {
+        privkey: bytesToHex(tweakedPriv),
+      });
+      expect(proofs.length).toBeGreaterThan(0);
+
+      // Path B: refund leaf already expired; the payer reclaims via script path.
+      const payerPriv = sk(43);
+      const lockB = buildTaprootSecret(pk(44), [
+        { type: 'after', n: 1, keys: [pk(43)], time: 1700000000 },
+      ]);
+      const quoteB = await wallet.createLockedMintQuote(32, lockB.secret);
+      await wallet.on.onceMintPaid(quoteB.quote, { timeoutMs: 10_000 });
+      const outputsB = [OutputData.createSingleRandomData(32n, keysetId)];
+      const digestB = transactionDigest({
+        mintQuoteInputs: [{ amount: 32n, quoteId: quoteB.quote }],
+        blindedOutputs: outputsB.map((o) => ({
+          amount: Amount.from(o.blindedMessage.amount).toBigInt(),
+          keysetId: o.blindedMessage.id,
+          B_: o.blindedMessage.B_,
+        })),
+      });
+      const mint = new Mint(mintUrl);
+      const response = await mint.mintBolt11({
+        quote: quoteB.quote,
+        outputs: outputsB.map((o) => o.blindedMessage),
+        signature: buildScriptPathWitness(lockB.tree, 0, pk(44), [
+          bytesToHex(schnorr.sign(digestB, payerPriv)),
+        ]),
+      });
+      expect(response.signatures).toHaveLength(1);
+
+      // Negative: reclaim before expiry fails (locktime not reached).
+      const lockC = buildTaprootSecret(pk(44), [
+        { type: 'after', n: 1, keys: [pk(43)], time: 4102444800 },
+      ]);
+      const quoteC = await wallet.createLockedMintQuote(32, lockC.secret);
+      await wallet.on.onceMintPaid(quoteC.quote, { timeoutMs: 10_000 });
+      const outputsC = [OutputData.createSingleRandomData(32n, keysetId)];
+      const digestC = transactionDigest({
+        mintQuoteInputs: [{ amount: 32n, quoteId: quoteC.quote }],
+        blindedOutputs: outputsC.map((o) => ({
+          amount: Amount.from(o.blindedMessage.amount).toBigInt(),
+          keysetId: o.blindedMessage.id,
+          B_: o.blindedMessage.B_,
+        })),
+      });
+      await expect(
+        mint.mintBolt11({
+          quote: quoteC.quote,
+          outputs: outputsC.map((o) => o.blindedMessage),
+          signature: buildScriptPathWitness(lockC.tree, 0, pk(44), [
+            bytesToHex(schnorr.sign(digestC, payerPriv)),
+          ]),
+        }),
+      ).rejects.toThrow();
+    },
+  );
 });
