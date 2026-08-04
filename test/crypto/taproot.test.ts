@@ -7,6 +7,8 @@ import { describe, test, expect } from 'vitest';
 import {
   buildScriptPathWitness,
   buildTaprootSecret,
+  deriveReceiverKeyedSecret,
+  recoverReceiverKeyedSecretKey,
   TAPROOT_NUMS_KEY,
   verifyTaprootSpendInfo,
   taggedHash,
@@ -404,5 +406,59 @@ describe('locked secret construction and spend info cascade', () => {
       { type: 'threshold', n: 1, keys: [v61.carol_pub] },
     ]);
     expect(verifyTaprootSpendInfo(secret, { K: TAPROOT_NUMS_KEY, tree })).toBe('tweaked');
+  });
+});
+
+describe('receiver-keyed derivation (2.7, vectors 6.1)', () => {
+  const eBytes = (() => {
+    const b = new Uint8Array(32);
+    b[31] = 5;
+    return b;
+  })();
+
+  test('sender derivation reproduces the 6.1 locked secret, E and tree', () => {
+    const out = deriveReceiverKeyedSecret(v61.carol_pub, {
+      leaves: [{ type: 'after', n: 1, keys: [v61.alice_refund_pub], time: v61.refund_time }],
+      eBytes,
+    });
+    expect(out.secret).toBe(v61.secret);
+    expect(out.E).toBe(v61.ephemeral_pub);
+    expect(out.tree).toEqual([v61.leaf_after]);
+  });
+
+  test('bare receiver-keyed secret is the internal key K', () => {
+    const out = deriveReceiverKeyedSecret(v61.carol_pub, { eBytes });
+    expect(out.secret).toBe(v61.internal_key);
+    expect(out.tree).toBeUndefined();
+  });
+
+  test('trial-match recovers the pinned key-path key', () => {
+    const hit = recoverReceiverKeyedSecretKey(v61.secret, v61.ephemeral_pub, v61.carol_priv, [
+      v61.leaf_after,
+    ]);
+    expect(hit).toBeDefined();
+    expect(hit?.secretKey).toBe(v61.keypath_priv);
+    expect(hit?.internalKey).toBe(v61.internal_key);
+    // Bare form matches too.
+    const bare = recoverReceiverKeyedSecretKey(v61.internal_key, v61.ephemeral_pub, v61.carol_priv);
+    expect(bare?.secretKey).toBeDefined();
+    expect(bytesToHex(secp256k1.getPublicKey(hexToBytes(bare!.secretKey), true))).toBe(
+      v61.internal_key,
+    );
+  });
+
+  test('trial-match misses for a foreign static key', () => {
+    expect(
+      recoverReceiverKeyedSecretKey(v61.secret, v61.ephemeral_pub, v61.alice_refund_priv, [
+        v61.leaf_after,
+      ]),
+    ).toBeUndefined();
+  });
+
+  test('cascade classifies E-carrying spend info as receiver-keyed', () => {
+    expect(
+      verifyTaprootSpendInfo(v61.secret, { E: v61.ephemeral_pub, tree: [v61.leaf_after] }),
+    ).toBe('receiver-keyed');
+    expect(() => verifyTaprootSpendInfo(v61.secret, { E: 'zz' })).toThrow(/ephemeral/);
   });
 });
