@@ -3120,12 +3120,34 @@ class Wallet {
     const signatures: Array<string | null> = [];
     const legacySignatures: Array<string | null> = []; // Temporary legacy message support
     let hasSignatures = false;
+    // V3: the batch is one transaction; every locked quote signs the digest
+    // covering all quote inputs (request order) and all outputs.
+    const v3BatchDigest = isBlsKeyset(keyset.id)
+      ? transactionDigest({
+          mintQuoteInputs: entries.map((e, i) => ({
+            amount: amounts[i].toBigInt(),
+            quoteId: e.quote.quote,
+          })),
+          blindedOutputs: blindedMessages.map((o) => ({
+            amount: Amount.from(o.amount).toBigInt(),
+            keysetId: o.id,
+            B_: o.B_,
+          })),
+        })
+      : undefined;
     for (const [i, entry] of entries.entries()) {
       const quotePubkey = 'pubkey' in entry.quote ? entry.quote.pubkey : undefined;
       if (quotePubkey && privkey) {
         const signingKey = findSigningKey(quotePubkey, privkey);
-        signatures.push(signMintQuote(signingKey, entry.quote.quote, blindedMessages));
-        legacySignatures.push(signMintQuoteLegacy(signingKey, entry.quote.quote, blindedMessages));
+        if (v3BatchDigest) {
+          signatures.push(Bytes.toHex(schnorr.sign(v3BatchDigest, Bytes.fromHex(signingKey))));
+          legacySignatures.push(null);
+        } else {
+          signatures.push(signMintQuote(signingKey, entry.quote.quote, blindedMessages));
+          legacySignatures.push(
+            signMintQuoteLegacy(signingKey, entry.quote.quote, blindedMessages),
+          );
+        }
         hasSignatures = true;
       } else {
         if (privkey && !quotePubkey) {
