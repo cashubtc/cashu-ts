@@ -495,6 +495,66 @@ describe('M3 taproot conditions', () => {
     ).rejects.toThrow(/script path/i);
   });
 
+  test('mixed transaction: the v3 input is verified per input', { timeout: 40_000 }, async () => {
+    // Spec 5: rules follow the proof's keyset and verification is per input, so a legacy input
+    // alongside a v3 one must not excuse the v3 input from carrying a witness.
+    const { keysets } = await new Mint(mintUrl).getKeySets();
+    const legacyKeyset = keysets.find((k) => k.unit === 'sat' && k.active && !isBlsKeyset(k.id));
+    expect(legacyKeyset, 'mint must serve a pre-v3 keyset for this test').toBeDefined();
+
+    const seed = randomBytes(64);
+    const v3Wallet = new Wallet(mintUrl, { bip39seed: seed });
+    await v3Wallet.loadMint();
+    const v3Quote = await v3Wallet.createMintQuoteBolt11(32);
+    await v3Wallet.on.onceMintPaid(v3Quote.quote, { timeoutMs: 10_000 });
+    const v3Proofs = await v3Wallet.mintProofsBolt11(32, v3Quote.quote);
+
+    const legacyWallet = new Wallet(mintUrl, { bip39seed: seed, keysetId: legacyKeyset!.id });
+    await legacyWallet.loadMint();
+    const legacyQuote = await legacyWallet.createMintQuoteBolt11(32);
+    await legacyWallet.on.onceMintPaid(legacyQuote.quote, { timeoutMs: 10_000 });
+    const legacyProofs = await legacyWallet.mintProofsBolt11(32, legacyQuote.quote);
+
+    const v3KeysetId = v3Proofs[0].id;
+    expect(isBlsKeyset(v3KeysetId)).toBe(true);
+    expect(isBlsKeyset(legacyProofs[0].id)).toBe(false);
+
+    // 64 in, 2 inputs at 100 ppk = 1 sat of fees, so 63 out.
+    const outputs = [32n, 16n, 8n, 4n, 2n, 1n].map((a) =>
+      OutputData.createSingleTaprootData(
+        bytesToHex(secp256k1.getPublicKey(randomBytes(32), true)),
+        a,
+        v3KeysetId,
+      ),
+    );
+    const inputs = [...v3Proofs, ...legacyProofs];
+    const digest = transactionDigest({
+      proofInputs: inputs.map((p) => ({
+        amount: Amount.from(p.amount).toBigInt(),
+        keysetId: p.id,
+        secret: p.secret,
+        C: p.C,
+      })),
+      blindedOutputs: outputs.map((o) => ({
+        amount: Amount.from(o.blindedMessage.amount).toBigInt(),
+        keysetId: o.blindedMessage.id,
+        B_: o.blindedMessage.B_,
+      })),
+    });
+
+    // Unsigned v3 input beside a legacy input: the mint must still demand its witness.
+    // Before per-input verification the whole check was skipped whenever any input was not a
+    // v3 point secret, so this swap went through and the lock was bypassed.
+    await expect(
+      new Mint(mintUrl).swap({
+        inputs: inputs.map((p) => ({ ...p })),
+        outputs: outputs.map((o) => o.blindedMessage),
+      }),
+    ).rejects.toThrow(/witness/i);
+    // The digest is well-formed over the mixed inputs (legacy secret carried verbatim).
+    expect(digest).toHaveLength(32);
+  });
+
   test('a NUT-10 secret is refused on a v3 keyset', { timeout: 30_000 }, async () => {
     // One secret format per keyset version: NUT-10 well-known secrets live on
     // legacy/v1/v2 keysets, v3 takes points. The wallet refuses to build one,

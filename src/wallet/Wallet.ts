@@ -1661,7 +1661,6 @@ class Wallet {
     // Execute swap and validate result
     await this._attachV3TransactionWitnesses(
       swapTransaction.payload,
-      swapPreview.keysetId,
       undefined,
       this._collectSpendInfoKeys(swapPreview.inputs),
     );
@@ -2023,19 +2022,18 @@ class Wallet {
    *
    * @remarks
    * Builds the transcript from the request's own inputs and outputs, then signs its digest with
-   * each input's recovered internal key (seed counter scan, spec 2.5.2). Inputs whose key is not
-   * recoverable (received proofs without spend info yet) are left unsigned; the mint tolerates that
-   * until transaction-level enforcement lands. No-op without a seed or on non-v3 keysets.
+   * each input's recovered internal key (seed counter scan, spec 2.5.2). Signing is per input, so a
+   * mixed transaction signs its v3 inputs and leaves v0-v2 inputs to their own rules (spec 5).
+   * Inputs whose key is not recoverable are left unsigned and the mint rejects them.
    */
   private async _attachV3TransactionWitnesses(
     payload: Pick<MeltRequest, 'inputs' | 'outputs'>,
-    keysetId: string,
     meltQuote?: { quoteId: string; amount: Amount },
     extraKeys?: Map<string, Uint8Array>,
   ): Promise<void> {
-    if (!isBlsKeyset(keysetId)) return;
     const isPointSecret = (s: string) => /^0[23][0-9a-f]{64}$/.test(s);
-    if (!payload.inputs.every((p) => isPointSecret(p.secret))) return;
+    const v3Inputs = payload.inputs.filter((p) => isBlsKeyset(p.id) && isPointSecret(p.secret));
+    if (v3Inputs.length === 0) return;
     const digest = transactionDigest({
       proofInputs: payload.inputs.map((p) => ({
         amount: Amount.from(p.amount).toBigInt(),
@@ -2052,15 +2050,24 @@ class Wallet {
         ? [{ amount: meltQuote.amount.toBigInt(), quoteId: meltQuote.quoteId }]
         : undefined,
     });
-    // Scan bound: the session counter plus headroom for proofs minted before this session.
-    const keys = this._seed
-      ? recoverV3SecretKeys(
-          this._seed,
-          keysetId,
-          payload.inputs.map((p) => p.secret),
-          (await this.counters.peekNext(keysetId)) + 128,
-        )
-      : new Map<string, Uint8Array>();
+    // Keys are derived per keyset, and a mixed transaction can carry v3 inputs from more than one,
+    // so recover per keyset. Scan bound: that keyset's counter plus headroom for proofs minted
+    // before this session.
+    const keys = new Map<string, Uint8Array>();
+    if (this._seed) {
+      const byKeyset = new Map<string, string[]>();
+      for (const p of v3Inputs) {
+        const secrets = byKeyset.get(p.id) ?? [];
+        secrets.push(p.secret);
+        byKeyset.set(p.id, secrets);
+      }
+      for (const [id, secrets] of byKeyset) {
+        const bound = (await this.counters.peekNext(id)) + 128;
+        for (const [secret, key] of recoverV3SecretKeys(this._seed, id, secrets, bound)) {
+          keys.set(secret, key);
+        }
+      }
+    }
     for (const input of payload.inputs) {
       if (input.witness) continue; // pre-built witness (e.g. script path): leave it alone
       const secretKey =
@@ -3826,7 +3833,6 @@ class Wallet {
     if (meltAmount.toBigInt() > 0n) {
       await this._attachV3TransactionWitnesses(
         meltPayload,
-        inputs[0]?.id ?? '',
         { quoteId: quote, amount: meltAmount },
         this._collectSpendInfoKeys(meltPreview.inputs),
       );

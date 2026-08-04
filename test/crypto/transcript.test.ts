@@ -137,12 +137,27 @@ describe('transaction transcript (vectors)', () => {
     expect(found.has('02'.padEnd(66, 'f'))).toBe(false);
   });
 
-  test('rejects a malformed proof secret', () => {
+  test('rejects an empty proof secret', () => {
     const swap = fromVectorTx(tv.swap.tx);
     const bad = {
       ...swap,
-      proofInputs: [{ ...swap.proofInputs![0], secret: 'aabb' }],
+      proofInputs: [{ ...swap.proofInputs![0], secret: '' }],
     };
-    expect(() => buildTransactionTranscript(bad)).toThrow(/33 bytes/);
+    expect(() => buildTransactionTranscript(bad)).toThrow(/non-empty/);
+  });
+
+  test('carries a v0-v2 secret verbatim beside a v3 input (mixed transaction)', () => {
+    // Spec 5: rules follow the proof's keyset and verification is per input, so a legacy
+    // secret rides in the transcript as its utf8 bytes rather than being rejected.
+    const swap = fromVectorTx(tv.swap.tx);
+    const legacySecret = '["P2PK",{"nonce":"00","data":"02aa"}]';
+    const mixed = {
+      ...swap,
+      proofInputs: [{ ...swap.proofInputs![0], secret: legacySecret }],
+    };
+    const bytes = buildTransactionTranscript(mixed);
+    const needle = new TextEncoder().encode(legacySecret);
+    const hay = bytesToHex(bytes);
+    expect(hay).toContain(bytesToHex(needle));
   });
 });
