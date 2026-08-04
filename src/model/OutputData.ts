@@ -14,6 +14,7 @@ import {
   createRandomSecretKey,
   deriveP2BKBlindedPubkeys,
   deriveSecretAndBlindingFactor,
+  getPubKeyFromPrivKey,
   isBlsKeyset,
   normalizeP2PKOptions,
   pointFromHex,
@@ -104,17 +105,27 @@ export class OutputData implements OutputDataLike {
   blindingFactor: bigint;
   secret: Uint8Array;
   ephemeralE?: string;
+  /**
+   * Key behind a randomly generated v3 point secret.
+   *
+   * @remarks
+   * Only set by {@link OutputData.createSingleRandomData} on v3 keysets, where the secret is a
+   * pubkey and its key signs the spend witness. Seeded wallets re-derive instead (NUT-13).
+   */
+  secretKey?: Uint8Array;
 
   constructor(
     blindedMessage: SerializedBlindedMessage,
     blindingFactor: bigint,
     secret: Uint8Array,
     ephemeralE?: string,
+    secretKey?: Uint8Array,
   ) {
     this.secret = secret;
     this.blindingFactor = blindingFactor;
     this.blindedMessage = blindedMessage;
     this.ephemeralE = ephemeralE;
+    this.secretKey = secretKey;
   }
 
   toProof(sig: SerializedBlindedSignature, keyset: HasKeysetKeys) {
@@ -341,9 +352,19 @@ export class OutputData implements OutputDataLike {
 
   static createSingleRandomData(amount: AmountLike, keysetId: string): OutputData {
     if (isBlsKeyset(keysetId)) {
-      // A v3 secret is a point whose key signs the spend witness, so a random
-      // one would be unspendable. Use the deterministic or taproot constructors.
-      throw new CTSError('v3 keysets need a point secret: random outputs are unspendable');
+      // v3 secrets are points, so a random secret is a random keypair: the key
+      // rides on the OutputData because it signs the spend witness later.
+      const amountValue = Amount.from(amount);
+      const privKey = createRandomSecretKey();
+      const secretBytes = new TextEncoder().encode(bytesToHex(getPubKeyFromPrivKey(privKey)));
+      const { r, B_ } = blindMessageForKeyset(secretBytes, keysetId);
+      return new OutputData(
+        new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
+        r,
+        secretBytes,
+        undefined,
+        privKey,
+      );
     }
     const amountValue = Amount.from(amount);
     const randomHex = bytesToHex(randomBytes(32));

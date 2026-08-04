@@ -82,10 +82,14 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
     expect(out.blindedMessage.id).toBe(keyset.id);
   });
 
-  test('createSingleRandomData refuses a v3 keyset', () => {
-    // A random secret has no key to sign the spend witness with, so the proof
-    // would be unspendable. v3 secrets come from the deterministic or taproot paths.
-    expect(() => OutputData.createSingleRandomData(1, keyset.id)).toThrow(CTSError);
+  test('createSingleRandomData gives a v3 output a real keypair', () => {
+    // v3 secrets are points, so a random secret is a random keypair; the key
+    // rides along because it signs the spend witness later.
+    const out = OutputData.createSingleRandomData(1, keyset.id);
+    const secretHex = new TextDecoder().decode(out.secret);
+    expect(secretHex).toMatch(/^0[23][0-9a-f]{64}$/);
+    expect(out.secretKey).toBeDefined();
+    expect(bytesToHex(secp256k1.getPublicKey(out.secretKey as Uint8Array, true))).toBe(secretHex);
   });
 
   // ~21 BLS pairings (7 amounts × 3 verifications each). Locally ~700ms, but under the
