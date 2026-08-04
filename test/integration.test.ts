@@ -759,8 +759,9 @@ describe('mint api', () => {
         )
         .catch(rej);
       // Wallet will try to avoid a swap if possible, so
-      // let's give it a keysetID to force one.
-      const keysetId = wallet.keyChain.getCheapestKeyset().id;
+      // let's give it a keysetID to force one. Naming any keyset forces the swap
+      // path, so use the wallet's own pre-v3 keyset.
+      const keysetId = wallet.keysetId;
       void wallet.send(21, proofs, { keysetId }).catch(rej); // fire and forget
     });
     mint.disconnectWebSocket();

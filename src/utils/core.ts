@@ -5,6 +5,7 @@ import {
   type DLEQ,
   type G1Point,
   type G2Point,
+  assertV3PointSecret,
   batchVerifyUnblindedSignatureBls,
   isBlsKeyset,
   pointFromHex,
@@ -778,6 +779,7 @@ export function hasValidDleq(
 
   if (isBlsKeyset(proof.id)) {
     try {
+      assertV3PointSecret(proof.secret);
       const K2 = pointFromHexG2(keyset.keys[proof.amount.toString()]);
       return verifyUnblindedSignatureBls(
         K2,

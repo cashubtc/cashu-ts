@@ -1,3 +1,4 @@
+import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { test, describe, expect } from 'vitest';
 
@@ -10,6 +11,7 @@ import {
   createBlindSignature,
   getPubKeyFromPrivKey,
   getG2PubKeyFromPrivKey,
+  hashToCurveBls,
 } from '../../src/crypto';
 import { CTSError } from '../../src/model/Errors';
 import * as utils from '../../src/utils';
@@ -744,13 +746,13 @@ describe('test zero-knowledge utilities', () => {
     );
   });
   describe('v3 (BLS) proof signature verification via hasValidDleq', () => {
-    // Locked Nutshell vector: secret="test_message", r=3, a=2 → C
+    // v3 proofs carry point secrets, so C is signed over the point's own Y. The
+    // primitive's Nutshell vector is pinned in the curve_bls tests instead.
     const v3Id = '02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d';
-    const v3Secret = 'test_message';
-    const v3C =
-      'b7a4881059133fd91a8753600d9a5e524c65d6224f6fe2d5aef9e59f1507fdad90b3b4d48ee46da5c8dfaa0b88e28b69';
-    // K2 = a * G2 with a=2 (compressed G2, 192 hex)
+    const v3Secret = bytesToHex(secp256k1.getPublicKey(hexToBytes('11'.repeat(32)), true));
+    // K2 = a * G2 with a=2 (compressed G2, 192 hex); C = a * Y
     const aBytes = hexToBytes('0'.repeat(63) + '2');
+    const v3C = hashToCurveBls(new TextEncoder().encode(v3Secret)).multiply(2n).toHex(true);
     const v3K2 = bytesToHex(getG2PubKeyFromPrivKey(aBytes));
 
     test('returns true for a v3 proof whose pairing equality holds', () => {
@@ -899,11 +901,10 @@ describe('test zero-knowledge utilities', () => {
     });
 
     describe('v3 BLS batches', () => {
-      // Locked Nutshell vector reused for the single-proof v3 happy path.
+      // Point secret with C = a * Y, the only shape a v3 keyset accepts.
       const v3Id = '02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d';
-      const v3Secret = 'test_message';
-      const v3C =
-        'b7a4881059133fd91a8753600d9a5e524c65d6224f6fe2d5aef9e59f1507fdad90b3b4d48ee46da5c8dfaa0b88e28b69';
+      const v3Secret = bytesToHex(secp256k1.getPublicKey(hexToBytes('11'.repeat(32)), true));
+      const v3C = hashToCurveBls(new TextEncoder().encode(v3Secret)).multiply(2n).toHex(true);
       const v3K2 = bytesToHex(getG2PubKeyFromPrivKey(hexToBytes('0'.repeat(63) + '2')));
       const v3Proof: Proof = {
         amount: Amount.from(1),

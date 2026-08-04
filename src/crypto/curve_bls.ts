@@ -64,10 +64,10 @@ export function hashToCurveBls(secret: Uint8Array): G1Point {
  * Maps a v3 secret to its hash-to-curve input.
  *
  * @remarks
- * Taproot secrets are 33-byte compressed points carried as 66-char hex in JSON; they hash as the
- * raw 33 bytes. Anything else (legacy NUT-10 JSON secrets on v3 keysets, pre-taproot hex) hashes as
- * its utf8 bytes until those flows migrate to leaves. The dispatch is unambiguous: no JSON or
- * 64-char secret is 66 chars of hex with an 02/03 prefix.
+ * Point secrets are 33-byte compressed points carried as 66-char hex in JSON and hash as the raw 33
+ * bytes; any other input hashes as given, which is how the BLS primitives' own test vectors drive
+ * them. The v3 rule that a proof secret MUST be a point is enforced by {@link assertV3PointSecret}
+ * where the keyset version is known, not here.
  */
 function taprootSecretHashInput(secretUtf8: Uint8Array): Uint8Array {
   if (secretUtf8.length !== 66) return secretUtf8;
@@ -79,6 +79,23 @@ function taprootSecretHashInput(secretUtf8: Uint8Array): Uint8Array {
   }
   if (!hex.startsWith('02') && !hex.startsWith('03')) return secretUtf8;
   return hexToBytes(hex);
+}
+
+/**
+ * Assert a secret is valid for a v3 keyset: a 33-byte compressed point.
+ *
+ * @remarks
+ * NUT-10 well-known secrets and plain text secrets belong to legacy/v1/v2 keysets. A keyset version
+ * accepts exactly one secret format, so v3 refuses everything else. Callers check the keyset
+ * first.
+ * @throws {CTSError} If the secret is not a 33-byte compressed point.
+ */
+export function assertV3PointSecret(secret: Uint8Array | string): void {
+  const hex =
+    typeof secret === 'string' ? secret : new TextDecoder('utf-8', { fatal: false }).decode(secret);
+  if (hex.length !== 66 || !/^0[23][0-9a-f]{64}$/.test(hex)) {
+    throw new CTSError('v3 keysets take point secrets only');
+  }
 }
 
 /**
