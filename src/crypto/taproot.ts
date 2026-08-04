@@ -501,6 +501,12 @@ export function verifyTaprootSpendInfo(
   if (secret.length !== 33) {
     throw new CTSError('Secret is not a 33-byte point');
   }
+  // `k` and `E` are mutually exclusive (spec 2.5.2): `k` says "here is the key", `E` says "derive
+  // your key". Carrying both is malformed, and it is the shape a re-gifted receiver-keyed scalar
+  // would take, which 2.5.2 warns hands the receiver's static key back to the original sender.
+  if (spendInfo.k !== undefined && spendInfo.E !== undefined) {
+    throw new CTSError('Spend info carries both k and E');
+  }
   // Receiver-keyed (E without k): verification happens at trial-match with the static key;
   // the derivation pins the secret to the receiver, which a sender cannot have pre-tweaked (2.7).
   if (spendInfo.E !== undefined && spendInfo.k === undefined) {

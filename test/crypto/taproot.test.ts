@@ -388,6 +388,15 @@ describe('locked secret construction and spend info cascade', () => {
     ).toBe('tweaked');
   });
 
+  test('cascade rejects spend info carrying both k and E', () => {
+    // Spec 2.5.2: k and E are mutually exclusive, and both-at-once is the shape a re-gifted
+    // receiver-keyed scalar takes, which hands the receiver's static key back to the sender.
+    const n13 = vectors.nut13_v3.outputs[0];
+    expect(() =>
+      verifyTaprootSpendInfo(n13.secret, { k: n13.secret_key, E: v61.ephemeral_pub }),
+    ).toThrow(/both k and E/);
+  });
+
   test('cascade rejects partial disclosure, wrong keys, unknown leaves', () => {
     // Tree-only spend info: no key source.
     expect(() => verifyTaprootSpendInfo(v61.secret, { tree: [v61.leaf_after] })).toThrow(
