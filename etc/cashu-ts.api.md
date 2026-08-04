@@ -145,6 +145,9 @@ export function asSecpPoint(pt: WeierstrassPoint<bigint>): CurvePoint;
 export function assertSecretKind(allowed: SecretKind | SecretKind[], secret: Secret | string): Secret;
 
 // @public
+export function assertV3PointSecret(secret: Uint8Array | string): void;
+
+// @public
 export class AuthManager implements AuthProvider {
     constructor(mintUrl: string, opts?: AuthManagerOptions);
     // (undocumented)
