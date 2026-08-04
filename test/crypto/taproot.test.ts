@@ -174,6 +174,18 @@ describe('leaf parsing fails closed', () => {
     expect(parseTaprootLeaf(leaf)).toEqual({ type: 'threshold', n: 1, keys: [v61.carol_pub] });
   });
 
+  test('a key and its parity twin reject: one signature would satisfy both', () => {
+    // Signatures verify against the x-only key, so listing both parities of one key would let an
+    // n-of-m be satisfied by fewer signatures than it names.
+    const key = v61.carol_pub;
+    const twin = (key.startsWith('02') ? '03' : '02') + key.slice(2);
+    const body = new Uint8Array([
+      ...tlvRecord(0x02, new Uint8Array([2])),
+      ...tlvRecord(0x04, new Uint8Array([...hexToBytes(key), ...hexToBytes(twin)])),
+    ]);
+    expect(() => parseTaprootLeaf(new Uint8Array([0x00, 0x01, ...body]))).toThrow(/distinct keys/);
+  });
+
   test('keys length not a multiple of 33 rejects', () => {
     const body = new Uint8Array([
       ...tlvRecord(0x02, new Uint8Array([1])),

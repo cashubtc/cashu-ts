@@ -242,6 +242,12 @@ export function parseTaprootLeaf(bytes: Uint8Array): TaprootLeaf {
         for (let i = 0; i < rec.value.length; i += 33) {
           keys.push(Bytes.toHex(rec.value.subarray(i, i + 33)));
         }
+        // Signatures verify against the x-only key, so two entries sharing an x coordinate are one
+        // signer wearing two hats: a threshold counting them separately would be satisfied by
+        // fewer signatures than it names.
+        if (new Set(keys.map((k) => k.slice(2))).size !== keys.length) {
+          throw new CTSError('keys field must list distinct keys');
+        }
         break;
       }
       case FIELD_TIME: {
