@@ -1517,7 +1517,7 @@ export interface OutputConfig {
 
 // @public (undocumented)
 export class OutputData implements OutputDataLike {
-    constructor(blindedMessage: SerializedBlindedMessage, blindingFactor: bigint, secret: Uint8Array, ephemeralE?: string);
+    constructor(blindedMessage: SerializedBlindedMessage, blindingFactor: bigint, secret: Uint8Array, ephemeralE?: string, secretKey?: Uint8Array);
     // (undocumented)
     blindedMessage: SerializedBlindedMessage;
     // (undocumented)
@@ -1540,6 +1540,7 @@ export class OutputData implements OutputDataLike {
     ephemeralE?: string;
     // (undocumented)
     secret: Uint8Array;
+    secretKey?: Uint8Array;
     static serialize(output: OutputDataLike): SerializedOutputData;
     static sumOutputAmounts(outputs: OutputDataLike[]): Amount;
     // (undocumented)
