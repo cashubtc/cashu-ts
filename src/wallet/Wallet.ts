@@ -1172,10 +1172,18 @@ class Wallet {
         this.fail('Invalid OutputType');
       }
     }
+    // A key backs at most one secret, ever (spec 2.4). Two outputs of the same amount sharing a
+    // secret unblind to the same C, so the second is the first again and its value is gone
+    // silently. Catches a factory handing every output one secret, or a reused ephemeral.
+    const decoder = new TextDecoder();
+    const secrets = outputData.map((d) => decoder.decode(d.secret));
+    if (new Set(secrets).size !== secrets.length) {
+      this.fail('Outputs must not share a secret');
+    }
     // Random v3 outputs carry their own key; keep it so the proof can be spent.
-    for (const d of outputData) {
-      const key = (d as { secretKey?: Uint8Array }).secretKey;
-      if (key) this._randomV3Keys.set(new TextDecoder().decode(d.secret), key);
+    for (let i = 0; i < outputData.length; i++) {
+      const key = (outputData[i] as { secretKey?: Uint8Array }).secretKey;
+      if (key) this._randomV3Keys.set(secrets[i], key);
     }
     return outputData;
   }
