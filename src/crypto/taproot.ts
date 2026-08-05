@@ -7,7 +7,11 @@ import { CTSError } from '../model/Errors';
 import { Bytes } from '../utils';
 
 import { getPubKeyFromPrivKey, pointFromBytes } from './curve_secp';
-import { deriveP2BKBlindedPubkeys, deriveP2BKSlotSecretKey } from './NUT28';
+import {
+  deriveP2BKBlindedPubkeyAtSlot,
+  deriveP2BKBlindedPubkeys,
+  deriveP2BKSlotSecretKey,
+} from './NUT28';
 
 /**
  * Taproot secrets (v3 keysets) crypto core: tagged hashes, canonical TLV, leaf serialization,
@@ -49,6 +53,11 @@ const FIELD_HASH = 0x08;
  */
 export const TAPROOT_MAX_LEAF_BYTES = 1024;
 export const TAPROOT_MAX_TREE_DEPTH = 8;
+
+/**
+ * Enumerated blinding slots per secret (spec 2.7), so the slot index stays one byte.
+ */
+export const TAPROOT_MAX_SLOTS = 255;
 
 /**
  * A parsed declarative leaf (version 0x00).
@@ -552,23 +561,123 @@ export function verifyTaprootSpendInfo(
 }
 
 /**
+ * Enumerate the positional blinding slots of a spend info tree (spec 2.7).
+ *
+ * @remarks
+ * Slot 0 is the base key and is not listed here. Slots 1.. are the `keys` entries: leaves in
+ * transmitted order, keys within a leaf in order. That order is normative, and self-checking: a
+ * misordered list shifts every index, so trial-matching misses rather than deriving wrong keys.
+ * @throws If the tree needs more than {@link TAPROOT_MAX_SLOTS} slots.
+ */
+export function enumerateLeafKeySlots(
+  leaves: TaprootLeaf[],
+): Array<{ leafIndex: number; keyIndex: number; slot: number; key: string }> {
+  const slots: Array<{ leafIndex: number; keyIndex: number; slot: number; key: string }> = [];
+  leaves.forEach((leaf, leafIndex) => {
+    leaf.keys.forEach((key, keyIndex) => {
+      slots.push({ leafIndex, keyIndex, slot: slots.length + 1, key: key.toLowerCase() });
+    });
+  });
+  if (slots.length + 1 > TAPROOT_MAX_SLOTS) {
+    throw new CTSError(`Spend info exceeds ${TAPROOT_MAX_SLOTS} slots`);
+  }
+  return slots;
+}
+
+/**
  * Build a receiver-keyed v3 secret (spec 2.7): `K = P_receiver + r_0*G`, optionally tweaked.
  *
  * @remarks
- * NUT-28 one layer down: fresh ephemeral per output (slot 0 is the base key). Leaf keys are carried
- * verbatim here; blind-or-verbatim tagging travels with the key's delivery channel.
+ * NUT-28 one layer down: fresh ephemeral per output, slot 0 is the base key and always blinded.
+ * Leaf keys are verbatim unless their owner tagged them blind-me, which travels with the key's
+ * delivery channel (a payment request marking), never in proof data; pass those keys as `blindKeys`
+ * and each occurrence is blinded at its own slot.
  */
 export function deriveReceiverKeyedSecret(
   receiverPubHex: string,
-  opts?: { leaves?: TaprootLeaf[]; eBytes?: Uint8Array },
+  opts?: { leaves?: TaprootLeaf[]; eBytes?: Uint8Array; blindKeys?: string[] },
 ): { secret: string; E: string; tree?: string[] } {
-  const { blinded, Ehex } = deriveP2BKBlindedPubkeys([receiverPubHex], opts?.eBytes, true);
+  const eBytes = opts?.eBytes ?? secp256k1.utils.randomSecretKey();
+  const { blinded, Ehex } = deriveP2BKBlindedPubkeys([receiverPubHex], eBytes, true);
   const internalKey = blinded[0];
-  if (opts?.leaves && opts.leaves.length > 0) {
-    const { secret, tree } = buildTaprootSecret(internalKey, opts.leaves);
-    return { secret, E: Ehex, tree };
+  if (!opts?.leaves || opts.leaves.length === 0) {
+    return { secret: internalKey, E: Ehex };
   }
-  return { secret: internalKey, E: Ehex };
+  const leaves = blindTaggedLeafKeys(opts.leaves, eBytes, opts.blindKeys);
+  const { secret, tree } = buildTaprootSecret(internalKey, leaves);
+  return { secret, E: Ehex, tree };
+}
+
+/**
+ * Replace every occurrence of a blind-me tagged key with its slot-blinded form (spec 2.7).
+ *
+ * @throws If a tagged key appears nowhere in the tree: the owner asked for a blinding the receiver
+ *   will look for, so a silent no-op would produce a proof nobody recognizes.
+ */
+function blindTaggedLeafKeys(
+  leaves: TaprootLeaf[],
+  eBytes: Uint8Array,
+  blindKeys?: string[],
+): TaprootLeaf[] {
+  const slots = enumerateLeafKeySlots(leaves); // also enforces the slot cap
+  if (!blindKeys || blindKeys.length === 0) return leaves;
+  const tagged = new Set(blindKeys.map((k) => k.toLowerCase()));
+  const out = leaves.map((leaf) => ({ ...leaf, keys: [...leaf.keys] }));
+  const hit = new Set<string>();
+  for (const { leafIndex, keyIndex, slot, key } of slots) {
+    if (!tagged.has(key)) continue;
+    hit.add(key);
+    out[leafIndex].keys[keyIndex] = deriveP2BKBlindedPubkeyAtSlot(key, eBytes, slot);
+  }
+  for (const key of tagged) {
+    if (!hit.has(key)) throw new CTSError(`Blind-me key is not in the tree: ${key}`);
+  }
+  return out;
+}
+
+/**
+ * Trial-match a spend info tree's leaf keys against the static keys held (spec 2.7).
+ *
+ * @remarks
+ * Walks every enumerated slot and tries each key: a verbatim key matches byte for byte, a blinded
+ * one when `(p + r_slot)*G` reproduces it. Non-matches are skipped, so a tree mixing both forms and
+ * several owners resolves in one pass. `EHex` may be omitted for a tree with no receiver-keyed
+ * sender, leaving only verbatim matches.
+ * @returns One entry per matching occurrence, with the key to sign that leaf with.
+ */
+export function recoverLeafKeySecretKeys(
+  tree: string[],
+  EHex: string | undefined,
+  privkeysHex: string[],
+): Array<{
+  leafIndex: number;
+  keyIndex: number;
+  slot: number;
+  secretKey: string;
+  blinded: boolean;
+}> {
+  const slots = enumerateLeafKeySlots(tree.map((leaf) => parseTaprootLeaf(Bytes.fromHex(leaf))));
+  const hits = [];
+  for (const privHex of privkeysHex) {
+    const pub = Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(privHex)));
+    for (const { leafIndex, keyIndex, slot, key } of slots) {
+      if (key === pub) {
+        hits.push({ leafIndex, keyIndex, slot, secretKey: privHex.toLowerCase(), blinded: false });
+        continue;
+      }
+      if (EHex === undefined) continue;
+      let candidate: string;
+      try {
+        candidate = deriveP2BKSlotSecretKey(EHex, privHex, slot);
+      } catch {
+        continue; // not a usable slot key for this static key
+      }
+      if (Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(candidate))) === key) {
+        hits.push({ leafIndex, keyIndex, slot, secretKey: candidate, blinded: true });
+      }
+    }
+  }
+  return hits;
 }
 
 /**
