@@ -930,3 +930,166 @@ describe('M6 leaf-key blinding through the wallet', () => {
     },
   );
 });
+
+describe('M7 mixed-keyset transactions through the wallet API', () => {
+  /**
+   * The mint serves a v3 (BLS) keyset beside a pre-v3 one; both are active for sat.
+   */
+  async function keysetPair() {
+    const { keysets } = await new Mint(mintUrl).getKeySets();
+    const v3 = keysets.find((k) => k.unit === 'sat' && k.active && isBlsKeyset(k.id));
+    const legacy = keysets.find((k) => k.unit === 'sat' && k.active && !isBlsKeyset(k.id));
+    expect(v3, 'mint must serve a v3 keyset').toBeDefined();
+    expect(legacy, 'mint must serve a pre-v3 keyset').toBeDefined();
+    return { v3: v3!.id, legacy: legacy!.id };
+  }
+
+  async function fund(keysetId: string, amount: number, seed: Uint8Array) {
+    const wallet = new Wallet(mintUrl, { bip39seed: seed, keysetId });
+    await wallet.loadMint();
+    const quote = await wallet.createMintQuoteBolt11(amount);
+    // Poll rather than subscribe: this helper funds several wallets per test, and a socket each
+    // is what the mint's connection limits notice first.
+    for (let i = 0; i < 40; i++) {
+      const state = await wallet.checkMintQuoteBolt11(quote.quote);
+      if (state.state === 'PAID') break;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    return { wallet, proofs: await wallet.mintProofsBolt11(amount, quote.quote) };
+  }
+
+  test('pre-v3 inputs with v3 outputs: the migration shape', { timeout: 60_000 }, async () => {
+    const { v3, legacy } = await keysetPair();
+    const seed = randomBytes(64);
+    const v3Side = await fund(v3, 32, seed);
+    const legacySide = await fund(legacy, 32, seed);
+    expect(legacySide.proofs.every((p) => !isBlsKeyset(p.id))).toBe(true);
+
+    const mixed = [...v3Side.proofs, ...legacySide.proofs];
+    const { send, keep } = await v3Side.wallet.send(48, mixed);
+    // Every output landed on the v3 keyset and carries a point secret.
+    for (const proof of [...send, ...keep]) {
+      expect(isBlsKeyset(proof.id)).toBe(true);
+      expect(proof.secret).toMatch(/^0[23][0-9a-f]{64}$/);
+    }
+    // Value is conserved net of the input fee over BOTH keysets.
+    const fee = v3Side.wallet.getFeesForProofs(mixed);
+    expect(sumProofs([...send, ...keep]).toBigInt()).toBe(64n - fee.toBigInt());
+    // The inputs are spent, and the outputs are live.
+    const states = await v3Side.wallet.checkProofsStates(mixed);
+    expect(states.every((s) => s.state === CheckStateEnum.SPENT)).toBe(true);
+    const live = await v3Side.wallet.checkProofsStates(send);
+    expect(live.every((s) => s.state === CheckStateEnum.UNSPENT)).toBe(true);
+  });
+
+  test('v3 inputs with pre-v3 outputs: the reverse direction', { timeout: 60_000 }, async () => {
+    const { v3, legacy } = await keysetPair();
+    const seed = randomBytes(64);
+    const v3Side = await fund(v3, 32, seed);
+    const legacySide = await fund(legacy, 32, seed);
+
+    const mixed = [...v3Side.proofs, ...legacySide.proofs];
+    const { send, keep } = await legacySide.wallet.send(48, mixed);
+    // Outputs are pre-v3, so they carry ordinary random string secrets.
+    for (const proof of [...send, ...keep]) {
+      expect(isBlsKeyset(proof.id)).toBe(false);
+      expect(proof.secret).not.toMatch(/^0[23][0-9a-f]{64}$/);
+    }
+    const fee = legacySide.wallet.getFeesForProofs(mixed);
+    expect(sumProofs([...send, ...keep]).toBigInt()).toBe(64n - fee.toBigInt());
+    const states = await legacySide.wallet.checkProofsStates(mixed);
+    expect(states.every((s) => s.state === CheckStateEnum.SPENT)).toBe(true);
+  });
+
+  test(
+    'one request, two rule sets: a NUT-11 locked pre-v3 input beside a v3 input',
+    { timeout: 60_000 },
+    async () => {
+      // Spec 5: rules follow the proof's keyset. The legacy input needs a NUT-11 signature over
+      // its own secret; the v3 input needs a transaction witness over the transcript. Both in one
+      // swap, from one call.
+      const { v3, legacy } = await keysetPair();
+      const seed = randomBytes(64);
+      const v3Side = await fund(v3, 32, seed);
+      const legacySide = await fund(legacy, 32, seed);
+
+      const bobPriv = bytesToHex(randomBytes(32));
+      const bobPub = bytesToHex(secp256k1.getPublicKey(hexToBytes(bobPriv), true));
+      const { send: locked } = await legacySide.wallet.ops
+        .send(16, legacySide.proofs)
+        .asP2PK({ kind: 'P2PK', data: bobPub })
+        .run();
+      expect(locked.every((p) => p.secret.includes('P2PK'))).toBe(true);
+
+      // The v3 wallet receives the locked pre-v3 proofs together with its own v3 proofs, whose
+      // keys it re-derives from its seed. One wallet, one request, both rule sets.
+      const bob = v3Side.wallet;
+      const mixed = [...locked, ...v3Side.proofs];
+      const received = await bob.receive(mixed, { privkey: bobPriv });
+      const fee = bob.getFeesForProofs(mixed);
+      expect(sumProofs(received).toBigInt()).toBe(sumProofs(mixed).toBigInt() - fee.toBigInt());
+      expect(received.every((p) => isBlsKeyset(p.id))).toBe(true);
+      const states = await bob.checkProofsStates(mixed);
+      expect(states.every((s) => s.state === CheckStateEnum.SPENT)).toBe(true);
+    },
+  );
+
+  test('melt with mixed inputs pays and returns change', { timeout: 60_000 }, async () => {
+    const { v3, legacy } = await keysetPair();
+    const seed = randomBytes(64);
+    const v3Side = await fund(v3, 6000, seed);
+    const legacySide = await fund(legacy, 2000, seed);
+    const mixed = [...v3Side.proofs, ...legacySide.proofs];
+
+    // Melt an invoice this mint issued, so the test is repeatable: a fixed external invoice can
+    // only be paid once per mint, and mint state outlives a single run.
+    const payee = new Wallet(mintUrl, { bip39seed: randomBytes(64), keysetId: legacy });
+    await payee.loadMint();
+    const target = await payee.createMintQuoteBolt11(1000);
+    const quote = await v3Side.wallet.createMeltQuoteBolt11(target.request);
+    const result = await v3Side.wallet.meltProofsBolt11(quote, mixed);
+    expect(result.quote.state).toBe('PAID');
+    // Change comes back on the wallet's own (v3) keyset, whatever the inputs were.
+    expect(result.change.every((p) => isBlsKeyset(p.id))).toBe(true);
+    const states = await v3Side.wallet.checkProofsStates(mixed);
+    expect(states.every((s) => s.state === CheckStateEnum.SPENT)).toBe(true);
+  });
+
+  test(
+    'restoreAll recovers a wallet holding both keysets, unspent only',
+    { timeout: 60_000 },
+    async () => {
+      // One seed, proofs on both keysets: restore has to walk each keyset's own counter branch,
+      // and v3 keys come from a different derivation than pre-v3 secrets.
+      const { v3, legacy } = await keysetPair();
+      const seed = randomBytes(64);
+      const v3Side = await fund(v3, 32, seed);
+      const legacySide = await fund(legacy, 32, seed);
+      expect(sumProofs(v3Side.proofs).toBigInt()).toBe(32n);
+      // Spend the legacy half, so restore must also tell live proofs from dead ones.
+      await legacySide.wallet.send(16, legacySide.proofs);
+
+      const fresh = new Wallet(mintUrl, { bip39seed: seed, keysetId: v3 });
+      await fresh.loadMint();
+      const { proofs, lastCounters } = await fresh.restoreAll({ batchSize: 50, gapLimit: 50 });
+      // Restore reports where each keyset's counter ended; advancing them is the caller's job,
+      // and skipping it re-derives outputs the mint has already signed.
+      for (const [keysetId, last] of Object.entries(lastCounters)) {
+        await fresh.counters.setNext?.(keysetId, last + 1);
+      }
+      const byKeyset = new Map<string, bigint>();
+      for (const p of proofs) {
+        byKeyset.set(p.id, (byKeyset.get(p.id) ?? 0n) + Amount.from(p.amount).toBigInt());
+      }
+      // The v3 half is intact; the legacy half restored only what the send left unspent.
+      expect(byKeyset.get(v3)).toBe(32n);
+      expect(byKeyset.get(legacy) ?? 0n).toBeGreaterThan(0n);
+      expect(byKeyset.get(legacy)).toBeLessThan(32n);
+      // Restored v3 proofs carry point secrets and are spendable: their keys re-derived.
+      const restoredV3 = proofs.filter((p) => p.id === v3);
+      expect(restoredV3.every((p) => /^0[23][0-9a-f]{64}$/.test(p.secret))).toBe(true);
+      const swept = await fresh.receive(restoredV3);
+      expect(sumProofs(swept).toBigInt()).toBeGreaterThan(0n);
+    },
+  );
+});
