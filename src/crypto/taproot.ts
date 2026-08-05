@@ -522,6 +522,22 @@ export function verifyTaprootSpendInfo(
     if (!/^0[23][0-9a-f]{64}$/.test(spendInfo.E)) {
       throw new CTSError('Spend info ephemeral must be a 33-byte point');
     }
+    // With K disclosed beside the tree (2.5), completeness is checkable here rather than only at
+    // trial-match, and by any holder rather than only the receiver.
+    if (spendInfo.K !== undefined && spendInfo.tree && spendInfo.tree.length > 0) {
+      const internalKey = Bytes.fromHex(spendInfo.K);
+      if (internalKey.length !== 33) {
+        throw new CTSError('Spend info internal key must be 33 bytes');
+      }
+      const leaves = spendInfo.tree.map((leaf) => Bytes.fromHex(leaf));
+      for (const leaf of leaves) {
+        parseTaprootLeaf(leaf);
+      }
+      const root = taprootMerkleRoot(leaves.map(taprootLeafHash));
+      if (!Bytes.equals(taprootTweakPubkey(internalKey, root), secret)) {
+        throw new CTSError('Disclosed tree does not reconstruct the proof secret');
+      }
+    }
     return 'receiver-keyed';
   }
   let internalKey: Uint8Array | undefined;
@@ -596,7 +612,7 @@ export function enumerateLeafKeySlots(
 export function deriveReceiverKeyedSecret(
   receiverPubHex: string,
   opts?: { leaves?: TaprootLeaf[]; eBytes?: Uint8Array; blindKeys?: string[] },
-): { secret: string; E: string; tree?: string[] } {
+): { secret: string; E: string; tree?: string[]; K?: string } {
   const eBytes = opts?.eBytes ?? secp256k1.utils.randomSecretKey();
   const { blinded, Ehex } = deriveP2BKBlindedPubkeys([receiverPubHex], eBytes, true);
   const internalKey = blinded[0];
@@ -605,7 +621,10 @@ export function deriveReceiverKeyedSecret(
   }
   const leaves = blindTaggedLeafKeys(opts.leaves, eBytes, opts.blindKeys);
   const { secret, tree } = buildTaprootSecret(internalKey, leaves);
-  return { secret, E: Ehex, tree };
+  // K travels with a disclosed tree (spec 2.5): a script-path control block needs it, and it is
+  // not recoverable from the secret and the tree, so without it every leaf key that is not the
+  // receiver's own is a key its owner cannot spend with.
+  return { secret, E: Ehex, tree, K: internalKey };
 }
 
 /**

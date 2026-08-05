@@ -32,6 +32,7 @@ import {
   taprootMerklePath,
   taprootMerkleRoot,
   taprootTweakSeckey,
+  type TaprootLeaf,
   verifyTaprootSpendInfo,
 } from '../src/crypto/taproot';
 import { transactionDigest, verifyTransactionInputWitness } from '../src/crypto/transcript';
@@ -1299,4 +1300,127 @@ describe('audit: spend info carrying both k and E', () => {
       ).rejects.toThrow(/both k and E/);
     },
   );
+});
+
+describe('M9 script path through the wallet API', () => {
+  async function fundV3(amount: number) {
+    const wallet = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
+    await wallet.loadMint();
+    const quote = await wallet.createMintQuoteBolt11(amount);
+    for (let i = 0; i < 40; i++) {
+      if ((await wallet.checkMintQuoteBolt11(quote.quote)).state === 'PAID') break;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    return { wallet, proofs: await wallet.mintProofsBolt11(amount, quote.quote) };
+  }
+
+  test(
+    'refund: the leaf owner spends a blinded leaf key through receive()',
+    { timeout: 60_000 },
+    async () => {
+      // The M6 circuit, now driven by the wallet instead of a hand-built payload.
+      const carolPub = bytesToHex(secp256k1.getPublicKey(randomBytes(32), true));
+      const alicePriv = bytesToHex(randomBytes(32));
+      const alicePub = bytesToHex(secp256k1.getPublicKey(hexToBytes(alicePriv), true));
+      const { wallet, proofs } = await fundV3(64);
+      const leaf: TaprootLeaf = { type: 'after', n: 1, keys: [alicePub], time: 1 };
+      const { send } = await wallet.ops
+        .send(32, proofs)
+        .asTaproot({ receiverPub: carolPub, leaves: [leaf], blindKeys: [alicePub] }, [32])
+        .run();
+      const proof = send[0];
+
+      // Alice asks what she can do with it, then does exactly that.
+      const alice = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
+      await alice.loadMint();
+      const options = await alice.spendOptions(proof, { privkeys: alicePriv });
+      expect(options.keyPath).toBe(false); // the key path is Carol's
+      expect(options.script).toHaveLength(1);
+      expect(options.script[0]).toMatchObject({ satisfiable: true, leafIndex: 0 });
+      expect(options.script[0].keys[0].blinded).toBe(true);
+
+      const received = await alice.receive([proof], {
+        privkey: alicePriv,
+        scriptPath: [{ secret: proof.secret, leafIndex: 0 }],
+      });
+      expect(sumProofs(received).toBigInt()).toBe(31n); // 32 less one input fee
+    },
+  );
+
+  test(
+    'a locktime the mint has not reached is refused, and spendOptions said so',
+    { timeout: 60_000 },
+    async () => {
+      const carolPub = bytesToHex(secp256k1.getPublicKey(randomBytes(32), true));
+      const alicePriv = bytesToHex(randomBytes(32));
+      const alicePub = bytesToHex(secp256k1.getPublicKey(hexToBytes(alicePriv), true));
+      const { wallet, proofs } = await fundV3(64);
+      const leaf: TaprootLeaf = { type: 'after', n: 1, keys: [alicePub], time: 4102444800 };
+      const { send } = await wallet.ops
+        .send(32, proofs)
+        .asTaproot({ receiverPub: carolPub, leaves: [leaf] }, [32])
+        .run();
+      const proof = send[0];
+
+      const alice = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
+      await alice.loadMint();
+      const options = await alice.spendOptions(proof, { privkeys: alicePriv });
+      expect(options.script[0]).toMatchObject({
+        satisfiable: false,
+        blockedBy: 'locktime',
+        availableAt: 4102444800,
+      });
+      // The wallet still builds it if asked; the mint is the one that says no.
+      await expect(
+        alice.receive([proof], {
+          privkey: alicePriv,
+          scriptPath: [{ secret: proof.secret, leafIndex: 0 }],
+        }),
+      ).rejects.toThrow();
+    },
+  );
+
+  test('a hashlock leaf spends with its preimage, not without', { timeout: 60_000 }, async () => {
+    const carolPub = bytesToHex(secp256k1.getPublicKey(randomBytes(32), true));
+    const alicePriv = bytesToHex(randomBytes(32));
+    const alicePub = bytesToHex(secp256k1.getPublicKey(hexToBytes(alicePriv), true));
+    const preimage = bytesToHex(randomBytes(32));
+    const leaf: TaprootLeaf = {
+      type: 'hashlock',
+      n: 1,
+      keys: [alicePub],
+      hash: bytesToHex(sha256(hexToBytes(preimage))),
+    };
+    const { wallet, proofs } = await fundV3(64);
+    const { send } = await wallet.ops
+      .send(32, proofs)
+      .asTaproot({ receiverPub: carolPub, leaves: [leaf] }, [32])
+      .run();
+    const proof = send[0];
+
+    const alice = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
+    await alice.loadMint();
+    expect((await alice.spendOptions(proof, { privkeys: alicePriv })).script[0].blockedBy).toBe(
+      'preimage',
+    );
+    // No preimage in the plan: refused before a request is built.
+    await expect(
+      alice.receive([proof], {
+        privkey: alicePriv,
+        scriptPath: [{ secret: proof.secret, leafIndex: 0 }],
+      }),
+    ).rejects.toThrow(/preimage/);
+    // The wrong preimage reaches the mint and is refused there.
+    await expect(
+      alice.receive([proof], {
+        privkey: alicePriv,
+        scriptPath: [{ secret: proof.secret, leafIndex: 0, preimage: 'ab'.repeat(32) }],
+      }),
+    ).rejects.toThrow();
+    const received = await alice.receive([proof], {
+      privkey: alicePriv,
+      scriptPath: [{ secret: proof.secret, leafIndex: 0, preimage }],
+    });
+    expect(sumProofs(received).toBigInt()).toBe(31n);
+  });
 });

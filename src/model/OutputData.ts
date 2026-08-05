@@ -440,12 +440,12 @@ export class OutputData implements OutputDataLike {
       throw new CTSError('Taproot outputs require a v3 keyset');
     }
     return splitAmount(amount, keyset.keys, customSplit).map((a) => {
-      const { secret, E, tree } = deriveReceiverKeyedSecret(options.receiverPub, {
+      const { secret, E, tree, K } = deriveReceiverKeyedSecret(options.receiverPub, {
         leaves: options.leaves,
         blindKeys: options.blindKeys,
       });
       const data = OutputData.createSingleTaprootData(secret, a, keyset.id);
-      data.spendInfo = { E, ...(tree && { tree }) };
+      data.spendInfo = { E, ...(tree && { tree, K }) };
       return data;
     });
   }

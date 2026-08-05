@@ -29,6 +29,7 @@ import {
 import { deriveSecretAndBlindingFactor, recoverV3SecretKeys } from '../crypto/NUT13';
 import { signMintQuoteLegacy } from '../crypto/NUT20';
 import {
+  buildScriptPathWitness,
   parseTaprootLeaf,
   recoverLeafKeySecretKeys,
   recoverReceiverKeyedSecretKey,
@@ -116,6 +117,7 @@ import {
   type CompleteMeltOptions,
   type SwapTransaction,
   type MeltProofsResponse,
+  type ScriptPathPlan,
   type SendResponse,
   type SpendOption,
   type SpendOptions,
@@ -1286,7 +1288,7 @@ class Wallet {
   ): Promise<Proof[]> {
     // Prepare and complete the send
     const txn = await this.prepareSwapToReceive(token, config, outputType);
-    const { keep } = await this.completeSwap(txn, config?.privkey);
+    const { keep } = await this.completeSwap(txn, config?.privkey, config?.scriptPath);
     return keep;
   }
 
@@ -1527,7 +1529,7 @@ class Wallet {
 
     // Prepare and complete the send
     const txn = await this.prepareSwapToSend(sendAmount, proofs, config, outputConfig);
-    return await this.completeSwap(txn, config?.privkey);
+    return await this.completeSwap(txn, config?.privkey, config?.scriptPath);
   }
 
   /**
@@ -1673,7 +1675,11 @@ class Wallet {
    * @returns SendResponse with keep/send proofs.
    * @throws {@link StaleKeysetError} If the mint rejects the outputs' keyset.
    */
-  async completeSwap(swapPreview: SwapPreview, privkey?: string | string[]): Promise<SendResponse> {
+  async completeSwap(
+    swapPreview: SwapPreview,
+    privkey?: string | string[],
+    scriptPath?: ScriptPathPlan[],
+  ): Promise<SendResponse> {
     const keepOutputs: OutputDataLike[] = swapPreview?.keepOutputs ? swapPreview.keepOutputs : [];
     const sendOutputs: OutputDataLike[] = swapPreview.sendOutputs ? swapPreview.sendOutputs : [];
     const unselectedProofs: Proof[] = swapPreview.unselectedProofs
@@ -1696,10 +1702,14 @@ class Wallet {
     );
 
     // Execute swap and validate result
+    const privkeys = privkey === undefined ? [] : [privkey].flat();
     await this._attachV3TransactionWitnesses(
       swapTransaction.payload,
       undefined,
       this._collectSpendInfoKeys(swapPreview.inputs, privkey),
+      scriptPath?.length
+        ? this._prepareScriptPathSpends(swapPreview.inputs, scriptPath, privkeys)
+        : undefined,
     );
     const { signatures } = await this.withStaleKeysetRepair(() =>
       this.mint.swap(swapTransaction.payload),
@@ -2067,6 +2077,10 @@ class Wallet {
     payload: Pick<MeltRequest, 'inputs' | 'outputs'>,
     meltQuote?: { quoteId: string; amount: Amount },
     extraKeys?: Map<string, Uint8Array>,
+    scriptSpends?: Map<
+      string,
+      { tree: string[]; leafIndex: number; K: string; preimage?: string; keys: string[] }
+    >,
   ): Promise<void> {
     const isPointSecret = (s: string) => /^0[23][0-9a-f]{64}$/.test(s);
     const v3Inputs = payload.inputs.filter((p) => isBlsKeyset(p.id) && isPointSecret(p.secret));
@@ -2104,6 +2118,23 @@ class Wallet {
           keys.set(secret, key);
         }
       }
+    }
+    // Script path spends first: they name their own leaf, so they take precedence over the key
+    // path even where both are available. Everything but the signature was settled before the
+    // request was built; only the digest was missing, and now it is not.
+    for (const [secret, spend] of scriptSpends ?? []) {
+      const input = payload.inputs.find((p) => p.secret === secret);
+      if (!input) {
+        this.fail('Script path plan names a secret not in this transaction');
+        continue;
+      }
+      input.witness = buildScriptPathWitness(
+        spend.tree,
+        spend.leafIndex,
+        spend.K,
+        spend.keys.map((k) => Bytes.toHex(schnorr.sign(digest, Bytes.fromHex(k)))),
+        spend.preimage,
+      );
     }
     for (const input of payload.inputs) {
       if (input.witness) continue; // pre-built witness (e.g. script path): leave it alone
@@ -2175,6 +2206,93 @@ class Wallet {
       return option;
     });
     return { keyPath, script };
+  }
+
+  /**
+   * Resolves each script path plan against its input, ready for signing once the digest exists.
+   *
+   * @remarks
+   * Runs on the original proofs, not the mint payload: `_prepareInputsForMint` strips spend_info,
+   * and the tree and internal key live there. Everything except the signature is settled here, so a
+   * plan that cannot be honoured fails before the request is built rather than at the mint.
+   */
+  private _prepareScriptPathSpends(
+    inputs: Proof[],
+    plans: ScriptPathPlan[],
+    privkeys: string[],
+  ): Map<
+    string,
+    { tree: string[]; leafIndex: number; K: string; preimage?: string; keys: string[] }
+  > {
+    const out = new Map<
+      string,
+      { tree: string[]; leafIndex: number; K: string; preimage?: string; keys: string[] }
+    >();
+    for (const plan of plans) {
+      const proof = inputs.find((p) => p.secret === plan.secret);
+      if (!proof) {
+        throw new CTSError(`Script path plan names a secret not in this transaction`);
+      }
+      if (out.has(plan.secret)) {
+        throw new CTSError('Script path plan names the same input twice');
+      }
+      const tree = proof.spend_info?.tree;
+      if (!tree || plan.leafIndex < 0 || plan.leafIndex >= tree.length) {
+        throw new CTSError(`Script path plan names leaf ${plan.leafIndex}, which is not disclosed`);
+      }
+      const leaf = parseTaprootLeaf(Bytes.fromHex(tree[plan.leafIndex]));
+      if (leaf.type === 'hashlock' && plan.preimage === undefined) {
+        throw new CTSError('Script path plan for a hashlock leaf needs a preimage');
+      }
+      // The control block's internal key, from whichever source the spend info offers (2.5.2).
+      const K = this._internalKeyOf(proof, privkeys);
+      if (!K) {
+        throw new CTSError('Script path spend needs the internal key, which the spend info lacks');
+      }
+      const recovered = recoverLeafKeySecretKeys(tree, proof.spend_info?.E, privkeys)
+        .filter((h) => h.leafIndex === plan.leafIndex)
+        .map((h) => h.secretKey);
+      const keys = [
+        ...new Set([...recovered, ...(plan.extraKeys ?? []).map((k: string) => k.toLowerCase())]),
+      ];
+      if (keys.length < leaf.n) {
+        throw new CTSError(
+          `Script path leaf needs ${leaf.n} signatures, ${keys.length} keys available`,
+        );
+      }
+      out.set(plan.secret, {
+        tree,
+        leafIndex: plan.leafIndex,
+        K,
+        ...(plan.preimage !== undefined && { preimage: plan.preimage }),
+        keys,
+      });
+    }
+    return out;
+  }
+
+  /**
+   * The internal key `K` behind a proof's secret, from its spend info: explicit, from a bearer
+   * scalar, or trial-matched from a receiver-keyed ephemeral. Undefined when none applies.
+   */
+  private _internalKeyOf(proof: Proof, privkeys: string[]): string | undefined {
+    const info = proof.spend_info;
+    if (!info) return undefined;
+    if (info.K) return info.K.toLowerCase();
+    if (info.k && /^[0-9a-f]{64}$/.test(info.k)) {
+      try {
+        return Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(info.k)));
+      } catch {
+        return undefined;
+      }
+    }
+    if (info.E) {
+      for (const priv of privkeys) {
+        const hit = recoverReceiverKeyedSecretKey(proof.secret, info.E, priv, info.tree);
+        if (hit) return hit.internalKey;
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -3715,7 +3833,11 @@ class Wallet {
     outputType?: OutputType,
   ): Promise<MeltProofsResponse<TQuote>> {
     const meltTxn = await this.prepareMelt(method, meltQuote, proofsToSend, config, outputType);
-    return this.completeMelt<TQuote>(meltTxn, config?.privkey);
+    return this.completeMelt<TQuote>(
+      meltTxn,
+      config?.privkey,
+      config?.scriptPath?.length ? { scriptPath: config.scriptPath } : undefined,
+    );
   }
 
   /**
@@ -4009,6 +4131,13 @@ class Wallet {
         meltPayload,
         { quoteId: quote, amount: meltAmount },
         this._collectSpendInfoKeys(meltPreview.inputs, privkey),
+        completeOptions.scriptPath?.length
+          ? this._prepareScriptPathSpends(
+              meltPreview.inputs,
+              completeOptions.scriptPath,
+              privkey === undefined ? [] : [privkey].flat(),
+            )
+          : undefined,
       );
     }
 
