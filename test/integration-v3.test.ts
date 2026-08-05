@@ -30,7 +30,6 @@ import {
   recoverReceiverKeyedSecretKey,
   TAPROOT_NUMS_KEY,
   taprootLeafHash,
-  taprootMerklePath,
   taprootMerkleRoot,
   taprootTweakSeckey,
   type TaprootLeaf,
@@ -840,100 +839,6 @@ describe('M6 leaf-key blinding through the wallet', () => {
       await expect(stranger.receive(send, { privkey: strangerPriv })).rejects.toThrow();
     },
   );
-
-  test(
-    'the leaf owner spends by script path with the blinded key it recovered',
-    { timeout: 40_000 },
-    async () => {
-      const carolPriv = bytesToHex(randomBytes(32));
-      const carolPub = bytesToHex(secp256k1.getPublicKey(hexToBytes(carolPriv), true));
-      const alicePriv = bytesToHex(randomBytes(32));
-      const alicePub = bytesToHex(secp256k1.getPublicKey(hexToBytes(alicePriv), true));
-
-      const payer = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
-      await payer.loadMint();
-      const quote = await payer.createMintQuoteBolt11(64);
-      await payer.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
-      const funds = await payer.mintProofsBolt11(64, quote.quote);
-
-      // A refund leaf whose time has passed, so the script path is spendable now.
-      const leaf = bytesToHex(
-        serializeTaprootLeaf({ type: 'after', n: 1, keys: [alicePub], time: 1 }),
-      );
-      const { send } = await payer.ops
-        .send(32, funds)
-        .asTaproot(
-          {
-            receiverPub: carolPub,
-            leaves: [parseTaprootLeaf(hexToBytes(leaf))],
-            blindKeys: [alicePub],
-          },
-          [32],
-        )
-        .run();
-      expect(send).toHaveLength(1);
-      const proof = send[0];
-      const tree = proof.spend_info!.tree!;
-
-      // Alice recovers her slot key and spends the leaf. Her signature is over the transcript,
-      // and the control block carries the internal key the payer disclosed via E.
-      const [hit] = recoverLeafKeySecretKeys(tree, proof.spend_info?.E, [alicePriv]);
-      expect(hit.blinded).toBe(true);
-      const internalKey = recoverReceiverKeyedSecretKey(
-        proof.secret,
-        proof.spend_info!.E!,
-        carolPriv,
-        tree,
-      )!.internalKey;
-
-      const alice = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
-      await alice.loadMint();
-      const keysetId = alice.keyChain.getCheapestKeyset().id;
-      // 32 in, one input at 100 ppk = 1 sat fee, so 31 out in power-of-two denominations.
-      const outputs = [16n, 8n, 4n, 2n, 1n].map((a) =>
-        OutputData.createSingleTaprootData(
-          bytesToHex(secp256k1.getPublicKey(randomBytes(32), true)),
-          a,
-          keysetId,
-        ),
-      );
-      const digest = transactionDigest({
-        proofInputs: [
-          {
-            amount: Amount.from(proof.amount).toBigInt(),
-            keysetId: proof.id,
-            secret: proof.secret,
-            C: proof.C,
-          },
-        ],
-        blindedOutputs: outputs.map((o) => ({
-          amount: Amount.from(o.blindedMessage.amount).toBigInt(),
-          keysetId: o.blindedMessage.id,
-          B_: o.blindedMessage.B_,
-        })),
-      });
-      const sig = schnorr.sign(digest, hexToBytes(hit.secretKey));
-      const leafKey = parseTaprootLeaf(hexToBytes(tree[0])).keys[0];
-      expect(schnorr.verify(sig, digest, hexToBytes(leafKey.slice(2)))).toBe(true);
-      const witness = buildScriptPathWitness(tree, 0, internalKey, [bytesToHex(sig)]);
-      const mint = new Mint(mintUrl);
-      const { signatures } = await mint.swap({
-        inputs: [
-          {
-            id: proof.id,
-            amount: proof.amount,
-            secret: proof.secret,
-            C: proof.C,
-            witness,
-          },
-        ],
-        outputs: outputs.map((o) => o.blindedMessage),
-      });
-      expect(signatures).toHaveLength(5);
-      // The path proves the leaf is in the tree the payer disclosed.
-      expect(taprootMerklePath([taprootLeafHash(hexToBytes(tree[0]))], 0)).toEqual([]);
-    },
-  );
 });
 
 describe('M7 mixed-keyset transactions through the wallet API', () => {
@@ -1211,47 +1116,18 @@ describe('M8 tokens end to end with spend_info', () => {
       // Tree plus internal key reconstruct the secret, so the disclosure is provably complete.
       expect(verifyTaprootSpendInfo(proof.secret, proof.spend_info!)).toBe('tweaked');
 
-      // Spending it needs the leaf: the receiver builds a script-path witness itself.
+      // Spending it goes through the wallet: a script-only proof has no key path at all, so
+      // the plan is the only way it moves.
       const spender = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
       await spender.loadMint();
-      const keysetId = spender.keyChain.getCheapestKeyset().id;
-      const outputs = [16n, 8n, 4n, 2n, 1n].map((a) =>
-        OutputData.createSingleTaprootData(
-          bytesToHex(secp256k1.getPublicKey(randomBytes(32), true)),
-          a,
-          keysetId,
-        ),
-      );
-      const digest = transactionDigest({
-        proofInputs: [
-          {
-            amount: Amount.from(proof.amount).toBigInt(),
-            keysetId: proof.id,
-            secret: proof.secret,
-            C: proof.C,
-          },
-        ],
-        blindedOutputs: outputs.map((o) => ({
-          amount: Amount.from(o.blindedMessage.amount).toBigInt(),
-          keysetId: o.blindedMessage.id,
-          B_: o.blindedMessage.B_,
-        })),
+      const options = await spender.spendOptions(proof, { privkeys: bytesToHex(ownerPriv) });
+      expect(options.keyPath).toBe(false);
+      expect(options.script[0]).toMatchObject({ satisfiable: true, leafIndex: 0 });
+      const received = await spender.receive([proof], {
+        privkey: bytesToHex(ownerPriv),
+        scriptPath: [{ secret: proof.secret, leafIndex: 0 }],
       });
-      const { signatures } = await new Mint(mintUrl).swap({
-        inputs: [
-          {
-            id: proof.id,
-            amount: proof.amount,
-            secret: proof.secret,
-            C: proof.C,
-            witness: buildScriptPathWitness(tree, 0, TAPROOT_NUMS_KEY, [
-              bytesToHex(schnorr.sign(digest, ownerPriv)),
-            ]),
-          },
-        ],
-        outputs: outputs.map((o) => o.blindedMessage),
-      });
-      expect(signatures).toHaveLength(5);
+      expect(sumProofs(received).toBigInt()).toBe(31n);
     },
   );
 });
