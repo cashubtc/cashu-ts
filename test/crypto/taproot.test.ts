@@ -179,6 +179,68 @@ describe('leaf parsing fails closed', () => {
     expect(parseTaprootLeaf(leaf)).toEqual({ type: 'threshold', n: 1, keys: [v61.carol_pub] });
   });
 
+  test('the 1024-byte cap applies to the body, excluding the version byte', () => {
+    const fields = new Uint8Array([
+      ...tlvRecord(0x02, new Uint8Array([1])),
+      ...tlvRecord(0x04, hexToBytes(v61.carol_pub)),
+    ]);
+    const atLimit = new Uint8Array([
+      0x00,
+      0x01,
+      ...fields,
+      ...tlvRecord(0x0d, new Uint8Array(1024 - 1 - fields.length - 3)),
+    ]);
+    expect(atLimit).toHaveLength(1025);
+    expect(parseTaprootLeaf(atLimit).type).toBe('threshold');
+
+    const overLimit = new Uint8Array([
+      0x00,
+      0x01,
+      ...fields,
+      ...tlvRecord(0x0d, new Uint8Array(1024 - fields.length - 3)),
+    ]);
+    expect(() => parseTaprootLeaf(overLimit)).toThrow(/body exceeds/);
+  });
+
+  test('known fields not defined for the selected leaf type reject', () => {
+    const thresholdWithTime = new Uint8Array([
+      0x00,
+      0x01,
+      ...tlvRecord(0x02, new Uint8Array([1])),
+      ...tlvRecord(0x04, hexToBytes(v61.carol_pub)),
+      ...tlvRecord(0x06, new Uint8Array([1])),
+    ]);
+    expect(() => parseTaprootLeaf(thresholdWithTime)).toThrow(/must not carry a time/);
+
+    const afterWithHash = new Uint8Array([
+      0x00,
+      0x02,
+      ...tlvRecord(0x02, new Uint8Array([1])),
+      ...tlvRecord(0x04, hexToBytes(v61.carol_pub)),
+      ...tlvRecord(0x06, new Uint8Array([1])),
+      ...tlvRecord(0x08, new Uint8Array(32)),
+    ]);
+    expect(() => parseTaprootLeaf(afterWithHash)).toThrow(/must not carry a hash/);
+    expect(() =>
+      serializeTaprootLeaf({
+        type: 'threshold',
+        n: 1,
+        keys: [v61.carol_pub],
+        time: 1,
+      }),
+    ).toThrow(/must not carry a time/);
+  });
+
+  test('leaf keys must be actual compressed curve points', () => {
+    const invalid = `02${'ff'.repeat(32)}`;
+    const body = new Uint8Array([
+      ...tlvRecord(0x02, new Uint8Array([1])),
+      ...tlvRecord(0x04, hexToBytes(invalid)),
+    ]);
+    expect(() => parseTaprootLeaf(new Uint8Array([0x00, 0x01, ...body]))).toThrow(/valid/);
+    expect(() => serializeTaprootLeaf({ type: 'threshold', n: 1, keys: [invalid] })).toThrow();
+  });
+
   test('a key and its parity twin reject: one signature would satisfy both', () => {
     // Signatures verify against the x-only key, so listing both parities of one key would let an
     // n-of-m be satisfied by fewer signatures than it names.
@@ -189,6 +251,9 @@ describe('leaf parsing fails closed', () => {
       ...tlvRecord(0x04, new Uint8Array([...hexToBytes(key), ...hexToBytes(twin)])),
     ]);
     expect(() => parseTaprootLeaf(new Uint8Array([0x00, 0x01, ...body]))).toThrow(/distinct keys/);
+    expect(() => serializeTaprootLeaf({ type: 'threshold', n: 2, keys: [key, twin] })).toThrow(
+      /distinct/,
+    );
   });
 
   test('keys length not a multiple of 33 rejects', () => {
@@ -340,6 +405,11 @@ describe('script-path commitment verification', () => {
       /depth/,
     );
   });
+
+  test('path hashes must be exactly 32 bytes', () => {
+    const filler = sha256(new Uint8Array([9]));
+    expect(() => taprootRootFromPath(filler, [filler.subarray(1)])).toThrow(/32 bytes/);
+  });
 });
 
 describe('bearer contrast (vectors 6.1)', () => {
@@ -402,6 +472,16 @@ describe('locked secret construction and spend info cascade', () => {
     ).toThrow(/both k and E/);
   });
 
+  test('cascade rejects a redundant K that disagrees with k', () => {
+    const n13 = vectors.nut13_v3.outputs[0];
+    expect(() =>
+      verifyTaprootSpendInfo(n13.secret, {
+        k: n13.secret_key,
+        K: v61.alice_refund_pub,
+      }),
+    ).toThrow(/does not match/);
+  });
+
   test('the empty tweak: an aggregated key with no tree (3.8)', () => {
     const v = vectors.empty_tweak;
     expect(bytesToHex(taprootTweakPubkey(hexToBytes(v.internal_key)))).toBe(v.secret);
@@ -444,6 +524,29 @@ describe('locked secret construction and spend info cascade', () => {
         tree: [v62.leaf_melt_to, v62.leaf_after],
       }),
     ).toThrow(/type/);
+  });
+
+  test('receiver-keyed disclosure parses every leaf even without K', () => {
+    expect(() =>
+      verifyTaprootSpendInfo(v62.secret, {
+        E: v61.ephemeral_pub,
+        tree: [v62.leaf_melt_to, v62.leaf_after],
+      }),
+    ).toThrow(/type/);
+  });
+
+  test('slot cap is enforced when building and receiving a full tree', () => {
+    const leaves: TaprootLeaf[] = Array.from({ length: 255 }, () => ({
+      type: 'threshold',
+      n: 1,
+      keys: [v61.carol_pub],
+    }));
+    expect(() => buildTaprootSecret(v61.internal_key, leaves)).toThrow(/slots/);
+
+    const tree = leaves.map((leaf) => bytesToHex(serializeTaprootLeaf(leaf)));
+    const root = taprootMerkleRoot(tree.map((leaf) => taprootLeafHash(hexToBytes(leaf))));
+    const secret = bytesToHex(taprootTweakPubkey(hexToBytes(v61.internal_key), root));
+    expect(() => verifyTaprootSpendInfo(secret, { K: v61.internal_key, tree })).toThrow(/slots/);
   });
 
   test('NUMS key: script-only secret verifies and key is the BIP-341 H point', () => {

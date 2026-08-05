@@ -88,6 +88,16 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
     expect(out.blindedMessage.id).toBe(keyset.id);
   });
 
+  test('taproot output construction rejects the wrong keyset and off-curve secrets', () => {
+    const valid = bytesToHex(secp256k1.getPublicKey(randomBytes(32), true));
+    expect(() => OutputData.createSingleTaprootData(valid, 1, `01${'11'.repeat(32)}`)).toThrow(
+      /v3 keyset/,
+    );
+    expect(() => OutputData.createSingleTaprootData(`02${'ff'.repeat(32)}`, 1, keyset.id)).toThrow(
+      /point secrets/,
+    );
+  });
+
   test('createSingleRandomData gives a v3 output a real keypair', () => {
     // v3 secrets are points, so a random secret is a random keypair; the key
     // rides along because it signs the spend witness later.
@@ -96,6 +106,9 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
     expect(secretHex).toMatch(/^0[23][0-9a-f]{64}$/);
     expect(out.secretKey).toBeDefined();
     expect(bytesToHex(secp256k1.getPublicKey(out.secretKey as Uint8Array, true))).toBe(secretHex);
+    expect(out.spendInfo?.k).toBe(bytesToHex(out.secretKey as Uint8Array));
+    const proof = out.toProof(signWithMint(out, privKeys, keyset.id), keyset);
+    expect(proof.spend_info?.k).toBe(out.spendInfo?.k);
   });
 
   // ~21 BLS pairings (7 amounts × 3 verifications each). Locally ~700ms, but under the

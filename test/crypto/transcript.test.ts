@@ -154,12 +154,34 @@ describe('transaction transcript (vectors)', () => {
     const legacySecret = '["P2PK",{"nonce":"00","data":"02aa"}]';
     const mixed = {
       ...swap,
-      proofInputs: [{ ...swap.proofInputs![0], secret: legacySecret }],
+      proofInputs: [
+        {
+          ...swap.proofInputs![0],
+          keysetId: `01${'11'.repeat(32)}`,
+          secret: legacySecret,
+        },
+      ],
     };
     const bytes = buildTransactionTranscript(mixed);
     const needle = new TextEncoder().encode(legacySecret);
     const hay = bytesToHex(bytes);
     expect(hay).toContain(bytesToHex(needle));
+  });
+
+  test('a point-shaped v0-v2 secret remains utf8', () => {
+    const swap = fromVectorTx(tv.swap.tx);
+    const legacySecret = tv.swap.tx.proof_inputs[0].secret;
+    const bytes = buildTransactionTranscript({
+      ...swap,
+      proofInputs: [
+        {
+          ...swap.proofInputs![0],
+          keysetId: `01${'11'.repeat(32)}`,
+          secret: legacySecret,
+        },
+      ],
+    });
+    expect(bytesToHex(bytes)).toContain(bytesToHex(new TextEncoder().encode(legacySecret)));
   });
 });
 

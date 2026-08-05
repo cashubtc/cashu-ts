@@ -1051,7 +1051,9 @@ describe('test zero-knowledge utilities', () => {
     describe('v3 BLS batches', () => {
       // Point secret with C = a * Y, the only shape a v3 keyset accepts.
       const v3Id = '02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d';
-      const v3Secret = bytesToHex(secp256k1.getPublicKey(hexToBytes('11'.repeat(32)), true));
+      const pointSecret = (n: number) =>
+        bytesToHex(secp256k1.getPublicKey(hexToBytes(n.toString(16).padStart(64, '0')), true));
+      const v3Secret = pointSecret(17);
       const v3C = hashToCurveBls(new TextEncoder().encode(v3Secret)).multiply(2n).toHex(true);
       const v3K2 = bytesToHex(getG2PubKeyFromPrivKey(hexToBytes('0'.repeat(63) + '2')));
       const v3Proof: Proof = {
@@ -1089,11 +1091,11 @@ describe('test zero-knowledge utilities', () => {
           keys: { [1]: K2hex, [2]: K2hex, [4]: K2hex, [8]: K2hex, [16]: K2hex },
         };
         const proofs = [
-          makeProof(1n, 's1', 7n),
-          makeProof(2n, 's2', 11n),
-          makeProof(4n, 's3', 13n),
-          makeProof(8n, 's4', 17n),
-          makeProof(16n, 's5', 19n),
+          makeProof(1n, pointSecret(1), 7n),
+          makeProof(2n, pointSecret(2), 11n),
+          makeProof(4n, pointSecret(3), 13n),
+          makeProof(8n, pointSecret(4), 17n),
+          makeProof(16n, pointSecret(5), 19n),
         ];
         expect(() => utils.verifyProofsForReceive(proofs, () => keyset)).not.toThrow();
       });
@@ -1120,11 +1122,11 @@ describe('test zero-knowledge utilities', () => {
           keys: { [1]: K2hex, [2]: K2hex, [4]: K2hex, [8]: K2hex, [16]: K2hex },
         };
         const good = [
-          makeProof(1n, 's1', 7n),
-          makeProof(2n, 's2', 11n),
-          makeProof(4n, 's3', 13n),
-          makeProof(8n, 's4', 17n),
-          makeProof(16n, 's5', 19n),
+          makeProof(1n, pointSecret(1), 7n),
+          makeProof(2n, pointSecret(2), 11n),
+          makeProof(4n, pointSecret(3), 13n),
+          makeProof(8n, pointSecret(4), 17n),
+          makeProof(16n, pointSecret(5), 19n),
         ];
         // Replace the C on the third proof with the first proof's C — keeps it on-curve
         // (so parseHex doesn't throw) but breaks pairing equality for that secret.
@@ -1143,6 +1145,18 @@ describe('test zero-knowledge utilities', () => {
 
       test('v3 proof with malformed C surfaces offender id in error', () => {
         const bad: Proof = { ...v3Proof, C: 'gg'.repeat(48) };
+        expect(() => utils.verifyProofsForReceive([bad], () => v3Keyset)).toThrow(
+          new RegExp(`invalid DLEQ.*keyset ${v3Id}`),
+        );
+      });
+
+      test('v3 receive rejects a signature-valid secret that is not a secp point', () => {
+        const secret = `02${'ff'.repeat(32)}`;
+        const bad: Proof = {
+          ...v3Proof,
+          secret,
+          C: hashToCurveBls(new TextEncoder().encode(secret)).multiply(2n).toHex(true),
+        };
         expect(() => utils.verifyProofsForReceive([bad], () => v3Keyset)).toThrow(
           new RegExp(`invalid DLEQ.*keyset ${v3Id}`),
         );

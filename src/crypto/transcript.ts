@@ -6,6 +6,7 @@ import { Amount } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { Bytes } from '../utils';
 
+import { isBlsKeyset } from './curves';
 import { minimalBE, tlvRecord } from './taproot';
 
 /**
@@ -74,7 +75,7 @@ function amountRecord(amount: bigint): Uint8Array {
 
 function proofInputContainer(input: TranscriptProofInput): Uint8Array {
   // A v3 secret contributes its raw 33 bytes; a v0-v2 secret its utf8 bytes.
-  const secret = /^0[23][0-9a-f]{64}$/.test(input.secret)
+  const secret = isBlsKeyset(input.keysetId)
     ? Bytes.fromHex(input.secret)
     : new TextEncoder().encode(input.secret);
   if (secret.length === 0) {
@@ -175,5 +176,9 @@ export function verifyTransactionInputWitness(
   if (!Array.isArray(signatures) || signatures.length === 0) return false;
   const sig: unknown = signatures[0];
   if (typeof sig !== 'string' || !/^[0-9a-f]{128}$/.test(sig)) return false;
-  return schnorr.verify(Bytes.fromHex(sig), digest, secret.subarray(1));
+  try {
+    return schnorr.verify(Bytes.fromHex(sig), digest, secret.subarray(1));
+  } catch {
+    return false;
+  }
 }
