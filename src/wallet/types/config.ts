@@ -1,4 +1,5 @@
 import { type P2PKOptions } from '../../crypto';
+import { type TaprootLeaf } from '../../crypto/taproot';
 import { type AmountLike } from '../../model/Amount';
 import { type OutputDataFactory, type OutputDataLike } from '../../model/OutputData';
 import type { ProofLike } from '../../model/types/proof';
@@ -100,6 +101,18 @@ export type OutputType =
        */
       type: 'p2pk';
       options: P2PKOptions;
+    } & SharedOutputTypeProps)
+  | ({
+      /**
+       * Receiver-keyed taproot outputs on a v3 keyset (spec 2.7).
+       *
+       * @remarks
+       * Each output is derived to `receiverPub` under its own fresh ephemeral, and carries the
+       * spend info the payee needs. `leaves` lock the outputs under a tree; `blindKeys` names the
+       * leaf keys their owner tagged blind-me.
+       */
+      type: 'taproot';
+      options: { receiverPub: string; leaves?: TaprootLeaf[]; blindKeys?: string[] };
     } & SharedOutputTypeProps)
   | ({
       /**

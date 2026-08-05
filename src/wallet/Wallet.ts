@@ -28,7 +28,12 @@ import {
 } from '../crypto/curve_secp';
 import { deriveSecretAndBlindingFactor, recoverV3SecretKeys } from '../crypto/NUT13';
 import { signMintQuoteLegacy } from '../crypto/NUT20';
-import { taprootLeafHash, taprootMerkleRoot, taprootTweakSeckey } from '../crypto/taproot';
+import {
+  recoverReceiverKeyedSecretKey,
+  taprootLeafHash,
+  taprootMerkleRoot,
+  taprootTweakSeckey,
+} from '../crypto/taproot';
 import { signTransactionInput, transactionDigest } from '../crypto/transcript';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
@@ -1149,6 +1154,14 @@ class Wallet {
           outputType.denominations,
         );
         break;
+      case 'taproot':
+        outputData = OutputData.createTaprootData(
+          outputType.options,
+          outputAmount,
+          keyset,
+          outputType.denominations,
+        );
+        break;
       case 'factory': {
         const factorySplit = splitAmount(outputAmount, keyset.keys, outputType.denominations);
         outputData = factorySplit.map((a) => outputType.factory(a, keyset));
@@ -1682,7 +1695,7 @@ class Wallet {
     await this._attachV3TransactionWitnesses(
       swapTransaction.payload,
       undefined,
-      this._collectSpendInfoKeys(swapPreview.inputs),
+      this._collectSpendInfoKeys(swapPreview.inputs, privkey),
     );
     const { signatures } = await this.withStaleKeysetRepair(() =>
       this.mint.swap(swapTransaction.payload),
@@ -2099,11 +2112,30 @@ class Wallet {
   }
 
   /**
-   * Collects bearer keys from the inputs' spend info, keyed by secret hex, verifying k*G.
+   * Collects key-path keys from the inputs' spend info, keyed by secret hex.
+   *
+   * @remarks
+   * Two sources (spec 2.5.2): a bearer `k`, verified by `k*G`, and a receiver-keyed `E`, which
+   * trial-matches against the static keys the caller holds. Proofs whose key is neither are left
+   * unsigned; the mint refuses them, which is the honest outcome.
    */
-  private _collectSpendInfoKeys(inputs: Proof[]): Map<string, Uint8Array> {
+  private _collectSpendInfoKeys(
+    inputs: Proof[],
+    privkeys?: string | string[],
+  ): Map<string, Uint8Array> {
     const keys = new Map<string, Uint8Array>();
+    const statics = privkeys === undefined ? [] : [privkeys].flat();
     for (const proof of inputs) {
+      const E = proof.spend_info?.E;
+      if (E && statics.length > 0) {
+        for (const priv of statics) {
+          const hit = recoverReceiverKeyedSecretKey(proof.secret, E, priv, proof.spend_info?.tree);
+          if (hit) {
+            keys.set(proof.secret, Bytes.fromHex(hit.secretKey));
+            break;
+          }
+        }
+      }
       const k = proof.spend_info?.k;
       if (!k || !/^[0-9a-f]{64}$/.test(k)) continue;
       try {
@@ -3902,7 +3934,7 @@ class Wallet {
       await this._attachV3TransactionWitnesses(
         meltPayload,
         { quoteId: quote, amount: meltAmount },
-        this._collectSpendInfoKeys(meltPreview.inputs),
+        this._collectSpendInfoKeys(meltPreview.inputs, privkey),
       );
     }
 

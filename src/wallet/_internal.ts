@@ -101,6 +101,14 @@ export function stringifyOutputTypeForLog(ot: OutputType): string {
         denominations: (ot.denominations ?? []).map((d) => Amount.from(d).toString()),
       });
     }
+    case 'taproot':
+      // The receiver key and its tree identify the payee: log the shape, not the keys.
+      return JSON.stringify({
+        type: 'taproot',
+        leaves: ot.options.leaves?.length ?? 0,
+        blindKeys: ot.options.blindKeys?.length ?? 0,
+        denominations: (ot.denominations ?? []).map((d) => Amount.from(d).toString()),
+      });
     case 'random':
       return JSON.stringify({
         type: 'random',

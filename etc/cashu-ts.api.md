@@ -1523,7 +1523,7 @@ export interface OutputConfig {
 
 // @public (undocumented)
 export class OutputData implements OutputDataLike {
-    constructor(blindedMessage: SerializedBlindedMessage, blindingFactor: bigint, secret: Uint8Array, ephemeralE?: string, secretKey?: Uint8Array);
+    constructor(blindedMessage: SerializedBlindedMessage, blindingFactor: bigint, secret: Uint8Array, ephemeralE?: string, secretKey?: Uint8Array, spendInfo?: SpendInfo);
     // (undocumented)
     blindedMessage: SerializedBlindedMessage;
     // (undocumented)
@@ -1541,6 +1541,11 @@ export class OutputData implements OutputDataLike {
     // (undocumented)
     static createSingleRandomData(amount: AmountLike, keysetId: string): OutputData;
     static createSingleTaprootData(secretHex: string, amount: AmountLike, keysetId: string): OutputData;
+    static createTaprootData(options: {
+        receiverPub: string;
+        leaves?: TaprootLeaf[];
+        blindKeys?: string[];
+    }, amount: AmountLike, keyset: HasKeysetKeys, customSplit?: AmountLike[]): OutputData[];
     static deserialize(serialized: SerializedOutputData): OutputData;
     // (undocumented)
     ephemeralE?: string;
@@ -1548,6 +1553,7 @@ export class OutputData implements OutputDataLike {
     secret: Uint8Array;
     secretKey?: Uint8Array;
     static serialize(output: OutputDataLike): SerializedOutputData;
+    spendInfo?: SpendInfo;
     static sumOutputAmounts(outputs: OutputDataLike[]): Amount;
     // (undocumented)
     toProof(sig: SerializedBlindedSignature, keyset: HasKeysetKeys): Proof;
@@ -1583,6 +1589,8 @@ export interface OutputDataLike {
     // (undocumented)
     secret: Uint8Array;
     // (undocumented)
+    spendInfo?: SpendInfo;
+    // (undocumented)
     toProof: (signature: SerializedBlindedSignature, keyset: HasKeysetKeys) => Proof;
 }
 
@@ -1595,6 +1603,13 @@ export type OutputType = ({
 } & SharedOutputTypeProps) | ({
     type: 'p2pk';
     options: P2PKOptions;
+} & SharedOutputTypeProps) | ({
+    type: 'taproot';
+    options: {
+        receiverPub: string;
+        leaves?: TaprootLeaf[];
+        blindKeys?: string[];
+    };
 } & SharedOutputTypeProps) | ({
     type: 'factory';
     factory: OutputDataFactory;
@@ -2031,6 +2046,11 @@ export class SendBuilder {
     asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
     asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]): this;
     asRandom(denoms?: AmountLike[]): this;
+    asTaproot(options: {
+        receiverPub: string;
+        leaves?: TaprootLeaf[];
+        blindKeys?: string[];
+    }, denoms?: AmountLike[]): this;
     includeFees(on?: boolean): this;
     keepAsCustom(data: OutputDataLike[]): this;
     keepAsDeterministic(counter?: number, denoms?: AmountLike[]): this;
@@ -2110,6 +2130,7 @@ export type SerializedOutputData = {
     blindingFactor: string;
     secret: string;
     ephemeralE?: string;
+    spendInfo?: SpendInfo;
 };
 
 // @public
@@ -2615,8 +2636,8 @@ export class WSConnection {
 
 // Warnings were encountered during analysis:
 //
-// lib/types/index.d.ts:4204:22 - (ae-forgotten-export) The symbol "TaprootLeaf" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4508:21 - (ae-forgotten-export) The symbol "RawTaprootOption" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:3785:17 - (ae-forgotten-export) The symbol "TaprootLeaf" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4549:21 - (ae-forgotten-export) The symbol "RawTaprootOption" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

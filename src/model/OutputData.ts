@@ -30,6 +30,7 @@ import {
   type G2Point,
   type P2PKOptions,
 } from '../crypto';
+import { deriveReceiverKeyedSecret, type TaprootLeaf } from '../crypto/taproot';
 import { Bytes, numberToHexPadded64, splitAmount } from '../utils';
 
 import { Amount, type AmountLike } from './Amount';
@@ -40,6 +41,7 @@ import {
   type Proof,
   type SerializedBlindedMessage,
   type SerializedBlindedSignature,
+  type SpendInfo,
 } from './types';
 
 /**
@@ -63,6 +65,7 @@ export interface OutputDataLike {
   blindingFactor: bigint;
   secret: Uint8Array;
   ephemeralE?: string;
+  spendInfo?: SpendInfo;
 
   toProof: (signature: SerializedBlindedSignature, keyset: HasKeysetKeys) => Proof;
 }
@@ -92,6 +95,7 @@ export type SerializedOutputData = {
   blindingFactor: string;
   secret: string;
   ephemeralE?: string;
+  spendInfo?: SpendInfo;
 };
 
 export function isOutputDataFactory(
@@ -113,6 +117,14 @@ export class OutputData implements OutputDataLike {
    * pubkey and its key signs the spend witness. Seeded wallets re-derive instead (NUT-13).
    */
   secretKey?: Uint8Array;
+  /**
+   * Spend info to travel with the resulting proof (spec 2.5).
+   *
+   * @remarks
+   * Set for receiver-keyed taproot outputs, where the ephemeral `E` and the disclosed tree are the
+   * only way the receiver can derive its key. Lost spend info means a proof nobody can spend.
+   */
+  spendInfo?: SpendInfo;
 
   constructor(
     blindedMessage: SerializedBlindedMessage,
@@ -120,12 +132,14 @@ export class OutputData implements OutputDataLike {
     secret: Uint8Array,
     ephemeralE?: string,
     secretKey?: Uint8Array,
+    spendInfo?: SpendInfo,
   ) {
     this.secret = secret;
     this.blindingFactor = blindingFactor;
     this.blindedMessage = blindedMessage;
     this.ephemeralE = ephemeralE;
     this.secretKey = secretKey;
+    this.spendInfo = spendInfo;
   }
 
   toProof(sig: SerializedBlindedSignature, keyset: HasKeysetKeys) {
@@ -184,6 +198,7 @@ export class OutputData implements OutputDataLike {
         secret: new TextDecoder().decode(unblinded.secret),
       };
       if (this.ephemeralE) proof.p2pk_e = this.ephemeralE;
+      if (this.spendInfo) proof.spend_info = this.spendInfo;
       return proof;
     }
 
@@ -239,6 +254,7 @@ export class OutputData implements OutputDataLike {
 
     // Add P2BK (Pay to Blinded Key) blinding factors if needed
     if (this.ephemeralE) proof.p2pk_e = this.ephemeralE;
+    if (this.spendInfo) proof.spend_info = this.spendInfo;
 
     return proof;
   }
@@ -402,6 +418,38 @@ export class OutputData implements OutputDataLike {
     );
   }
 
+  /**
+   * Output data for a receiver-keyed taproot send (spec 2.7): one output per denomination, each
+   * derived to the payee's static key under its own fresh ephemeral.
+   *
+   * @remarks
+   * Fresh `e` per output is the rule, not an optimisation: a shared ephemeral would reproduce `K`,
+   * hence the secret, hence the colliding `C` of 2.4. Each output carries its own spend info so the
+   * payee can derive its key; `leaves` build a tree over the internal key, and `blindKeys` are the
+   * leaf keys their owner tagged blind-me.
+   * @throws If the keyset is not v3: point secrets are keyset-gated, and a pre-v3 mint would read
+   *   this as a plain text secret.
+   */
+  static createTaprootData(
+    options: { receiverPub: string; leaves?: TaprootLeaf[]; blindKeys?: string[] },
+    amount: AmountLike,
+    keyset: HasKeysetKeys,
+    customSplit?: AmountLike[],
+  ): OutputData[] {
+    if (!isBlsKeyset(keyset.id)) {
+      throw new CTSError('Taproot outputs require a v3 keyset');
+    }
+    return splitAmount(amount, keyset.keys, customSplit).map((a) => {
+      const { secret, E, tree } = deriveReceiverKeyedSecret(options.receiverPub, {
+        leaves: options.leaves,
+        blindKeys: options.blindKeys,
+      });
+      const data = OutputData.createSingleTaprootData(secret, a, keyset.id);
+      data.spendInfo = { E, ...(tree && { tree }) };
+      return data;
+    });
+  }
+
   static createDeterministicData(
     amount: AmountLike,
     seed: Uint8Array,
@@ -477,6 +525,7 @@ export class OutputData implements OutputDataLike {
       blindingFactor: output.blindingFactor.toString(),
       secret: bytesToHex(output.secret),
       ...(output.ephemeralE && { ephemeralE: output.ephemeralE }),
+      ...(output.spendInfo && { spendInfo: output.spendInfo }),
     };
   }
 
@@ -501,6 +550,8 @@ export class OutputData implements OutputDataLike {
         BigInt(serialized.blindingFactor),
         hexToBytes(serialized.secret),
         serialized.ephemeralE,
+        undefined,
+        serialized.spendInfo,
       );
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
