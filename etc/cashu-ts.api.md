@@ -2014,12 +2014,49 @@ export const schnorrVerifyDigest: (signature: string, digest: DigestInput, pubke
 export const schnorrVerifyMessage: (signature: string, message: string, pubkey: string, throws?: boolean) => boolean;
 
 // @public
+export const ScriptPath: {
+    readonly extractSwapPackage: typeof extractSwapPackage;
+    readonly extractMeltPackage: typeof extractMeltPackage;
+    readonly serializePackage: typeof serializePackage;
+    readonly deserializePackage: typeof deserializePackage;
+    readonly signPackage: typeof signPackage;
+    readonly mergeSwapPackage: typeof mergeSwapPackage;
+    readonly mergeMeltPackage: typeof mergeMeltPackage;
+    readonly witnessFor: (spend: ScriptPathSpendRequest, tree: string[], leafIndex: number) => string;
+};
+
+// @public
 export type ScriptPathPlan = {
     secret: string;
     leafIndex: number;
     preimage?: string;
     extraKeys?: string[];
     cosign?: (digest: Uint8Array, leaf: TaprootLeaf) => Promise<string[]>;
+};
+
+// @public
+export type ScriptPathSigningPackage = {
+    version: typeof SCRIPT_PATH_PREFIX;
+    type: 'swap' | 'melt';
+    quote?: string;
+    inputs: Array<Pick<Proof, 'amount' | 'id' | 'secret' | 'C'>>;
+    outputs: SerializedBlindedMessage[];
+    quoteAmount?: bigint;
+    digest: string;
+    spends: ScriptPathSpendRequest[];
+};
+
+// @public
+export type ScriptPathSpendRequest = {
+    secret: string;
+    leaf: string;
+    control: {
+        K: string;
+        path: string[];
+    };
+    E?: string;
+    preimage?: string;
+    signatures: string[];
 };
 
 // @public (undocumented)
@@ -2673,8 +2710,16 @@ export class WSConnection {
 
 // Warnings were encountered during analysis:
 //
-// lib/types/index.d.ts:3790:17 - (ae-forgotten-export) The symbol "TaprootLeaf" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4554:21 - (ae-forgotten-export) The symbol "RawTaprootOption" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:3810:17 - (ae-forgotten-export) The symbol "TaprootLeaf" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4574:21 - (ae-forgotten-export) The symbol "RawTaprootOption" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4896:21 - (ae-forgotten-export) The symbol "extractSwapPackage" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4897:21 - (ae-forgotten-export) The symbol "extractMeltPackage" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4898:21 - (ae-forgotten-export) The symbol "serializePackage" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4899:21 - (ae-forgotten-export) The symbol "deserializePackage" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4900:21 - (ae-forgotten-export) The symbol "signPackage" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4901:21 - (ae-forgotten-export) The symbol "mergeSwapPackage" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4902:21 - (ae-forgotten-export) The symbol "mergeMeltPackage" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4956:21 - (ae-forgotten-export) The symbol "SCRIPT_PATH_PREFIX" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
