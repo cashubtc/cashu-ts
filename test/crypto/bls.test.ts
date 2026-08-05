@@ -5,6 +5,7 @@ import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 
 import {
+  assertV3PointSecret,
   BLS_FR_ORDER,
   BLS_HASH_TO_CURVE_DST,
   hashToCurveBls,
@@ -502,4 +503,22 @@ describe('deriveBatchWeights (Fiat-Shamir transcript)', () => {
     // ~700ms of pairings in isolation; headroom for wall-clock dilation under the
     // parallel multi-project run with coverage instrumentation.
   }, 10000);
+});
+
+describe('assertV3PointSecret', () => {
+  const secret = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+
+  test('accepts a lowercase point secret', () => {
+    expect(() => assertV3PointSecret(secret)).not.toThrow();
+  });
+
+  test('rejects upper-case hex: one spelling per secret', () => {
+    // Upper-case names the same point, but this side hashes it differently from the mint, so the
+    // proof would look valid to its owner while behaving as a different proof on the wire.
+    expect(() => assertV3PointSecret(secret.toUpperCase())).toThrow(/lowercase/);
+  });
+
+  test('rejects a well-shaped value that is not on the curve', () => {
+    expect(() => assertV3PointSecret('02' + 'cd'.repeat(32))).toThrow(/point secrets only/);
+  });
 });

@@ -94,6 +94,12 @@ function taprootSecretHashInput(secretUtf8: Uint8Array): Uint8Array {
 export function assertV3PointSecret(secret: Uint8Array | string): void {
   const hex =
     typeof secret === 'string' ? secret : new TextDecoder('utf-8', { fatal: false }).decode(secret);
+  // Lowercase is the canonical wire form. Upper-case hex would name the same point while hashing
+  // to a different `Y` here than at the mint, so the proof would look valid and behave as if it
+  // were a different one. One spelling per secret, checked before the point itself.
+  if (hex !== hex.toLowerCase()) {
+    throw new CTSError('v3 point secrets must be lowercase hex');
+  }
   try {
     // Validates the curve point, not just the shape, and caches the result.
     normalizeSecpPubkey(hex);
