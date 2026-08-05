@@ -1,3 +1,4 @@
+import type { TaprootLeaf } from '../../crypto/taproot';
 import type { OutputDataLike } from '../../model/OutputData';
 import type { MeltQuoteBaseResponse, Proof } from '../../model/types';
 
@@ -37,4 +38,44 @@ export type SendResponse = {
    */
   send: Proof[];
   serialized?: Array<{ proof: Proof; keep: boolean }>;
+};
+
+/**
+ * One disclosed leaf of a v3 proof's tree, and whether this wallet can spend through it.
+ *
+ * @remarks
+ * Taproot secrets 2.3 and 2.7. `keys` are the slot keys the wallet recovered for this leaf,
+ * verbatim or blinded. `satisfiable` is this wallet's own assessment from what it holds; the mint
+ * compares an `after` leaf against its own clock, so a leaf that unlocked seconds ago may still be
+ * refused.
+ */
+export type SpendOption = {
+  leafIndex: number;
+  leaf: TaprootLeaf;
+  keys: Array<{ keyIndex: number; secretKey: string; blinded: boolean }>;
+  satisfiable: boolean;
+  /**
+   * Why the leaf is not satisfiable from what this wallet holds. `preimage` means a hashlock leaf,
+   * which always needs one supplied by the caller.
+   */
+  blockedBy?: 'threshold' | 'locktime' | 'preimage';
+  /**
+   * Unix seconds an `after` leaf unlocks.
+   */
+  availableAt?: number;
+};
+
+/**
+ * What a v3 proof can be spent through: the key path, the script path, or neither.
+ */
+export type SpendOptions = {
+  /**
+   * True when the wallet can recover a key-path key: a bearer `k`, a receiver-keyed `E` matched
+   * against a supplied private key, or its own seed derivation.
+   */
+  keyPath: boolean;
+  /**
+   * One entry per disclosed leaf, in tree order. Empty when the proof discloses no tree.
+   */
+  script: SpendOption[];
 };

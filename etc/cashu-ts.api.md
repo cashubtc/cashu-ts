@@ -2235,6 +2235,26 @@ export type SpendingConditionsBase = {
 };
 
 // @public
+export type SpendOption = {
+    leafIndex: number;
+    leaf: TaprootLeaf;
+    keys: Array<{
+        keyIndex: number;
+        secretKey: string;
+        blinded: boolean;
+    }>;
+    satisfiable: boolean;
+    blockedBy?: 'threshold' | 'locktime' | 'preimage';
+    availableAt?: number;
+};
+
+// @public
+export type SpendOptions = {
+    keyPath: boolean;
+    script: SpendOption[];
+};
+
+// @public
 export function splitAmount(value: AmountLike, keyset: Keys, split?: AmountLike[], order?: 'desc' | 'asc'): Amount[];
 
 // @public
@@ -2516,6 +2536,10 @@ export class Wallet {
     send(amount: AmountLike, proofs: ProofLike[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SendResponse>;
     sendOffline(amount: AmountLike, proofs: ProofLike[], config?: SendOfflineConfig): SendResponse;
     signP2PKProofs(proofs: ProofLike[], privkey: string | string[], outputData?: OutputDataLike[], quoteId?: string): Proof[];
+    spendOptions(proof: Proof, opts?: {
+        privkeys?: string | string[];
+        now?: number;
+    }): Promise<SpendOptions>;
     get unit(): string;
     withKeyset(id: string, opts?: {
         counterSource?: CounterSource;
