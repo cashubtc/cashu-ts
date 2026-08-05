@@ -2019,6 +2019,7 @@ export type ScriptPathPlan = {
     leafIndex: number;
     preimage?: string;
     extraKeys?: string[];
+    cosign?: (digest: Uint8Array, leaf: TaprootLeaf) => Promise<string[]>;
 };
 
 // @public (undocumented)

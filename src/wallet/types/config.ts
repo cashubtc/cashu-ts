@@ -182,6 +182,16 @@ export type ScriptPathPlan = {
    * Keys to sign with beyond those the wallet recovers itself, hex.
    */
   extraKeys?: string[];
+  /**
+   * Co-signer hook for a leaf whose other keys live elsewhere, called once the transaction is fixed
+   * and its digest known.
+   *
+   * @remarks
+   * Awaited inside the send, so it may reach a remote signer, but the transaction is in flight
+   * while it runs: use it for ceremonies measured in seconds, not ones needing human approval
+   * across days. Returns BIP-340 signature hex over `digest` by the leaf's keys.
+   */
+  cosign?: (digest: Uint8Array, leaf: TaprootLeaf) => Promise<string[]>;
 };
 
 /**
