@@ -11,6 +11,7 @@ import {
   verifyTransactionInputWitness,
   type TransactionShape,
 } from '../../src/crypto/transcript';
+import { Amount } from '../../src/model/Amount';
 import vectors from '../vectors/taproot-v3.json';
 
 const tv = vectors.transcript;
@@ -159,5 +160,44 @@ describe('transaction transcript (vectors)', () => {
     const needle = new TextEncoder().encode(legacySecret);
     const hay = bytesToHex(bytes);
     expect(hay).toContain(bytesToHex(needle));
+  });
+});
+
+describe('amounts are normalized at the transcript boundary', () => {
+  const input = {
+    keysetId: '0200',
+    secret: '02'.padEnd(66, 'a'),
+    C: 'aa'.repeat(48),
+  };
+  const output = { amount: 1n, keysetId: '0200', B_: 'bb'.repeat(48) };
+
+  test('an Amount, a number and a bigint all digest the same', () => {
+    // Types are erased at the JS boundary. Before normalization an Amount instance encoded to
+    // different bytes, so the wallet signed a digest the mint never computes: a valid-looking
+    // proof nobody can spend.
+    const digests = [32n, 32, Amount.from(32)].map((amount) =>
+      bytesToHex(
+        transactionDigest({
+          proofInputs: [{ ...input, amount: amount }],
+          blindedOutputs: [output],
+        }),
+      ),
+    );
+    expect(new Set(digests).size).toBe(1);
+  });
+
+  test('a nonsense amount throws rather than encoding something', () => {
+    expect(() =>
+      transactionDigest({
+        proofInputs: [{ ...input, amount: 'not-a-number' }],
+        blindedOutputs: [output],
+      }),
+    ).toThrow();
+    expect(() =>
+      transactionDigest({
+        proofInputs: [{ ...input, amount: -1n }],
+        blindedOutputs: [output],
+      }),
+    ).toThrow();
   });
 });

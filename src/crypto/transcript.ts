@@ -2,6 +2,7 @@ import { schnorr } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
 
+import { Amount } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { Bytes } from '../utils';
 
@@ -60,10 +61,15 @@ export type TransactionShape = {
 };
 
 function amountRecord(amount: bigint): Uint8Array {
-  if (amount < 0n) {
+  // Normalize rather than trust the declared type: types are erased at the JS boundary, and an
+  // amount that is not a bigint (an Amount instance, a decimal string) would otherwise encode to
+  // different bytes, so the signature would be over a digest the mint never computes and the proof
+  // would look stuck for no visible reason.
+  const value = Amount.from(amount).toBigInt();
+  if (value < 0n) {
     throw new CTSError('Transcript amount must be non-negative');
   }
-  return tlvRecord(0x01, minimalBE(amount));
+  return tlvRecord(0x01, minimalBE(value));
 }
 
 function proofInputContainer(input: TranscriptProofInput): Uint8Array {
