@@ -1,8 +1,13 @@
 import { test, describe, expect } from 'vitest';
 
 import { Amount, type Keys, type Proof, type OutputType } from '../../src';
-import { OutputData } from '../../src/model/OutputData';
-import { ceilLog2, getKeepAmounts, stringifyOutputTypeForLog } from '../../src/wallet/_internal';
+import { OutputData, type OutputDataLike } from '../../src/model/OutputData';
+import {
+  ceilLog2,
+  getKeepAmounts,
+  orderOutputsForPayload,
+  stringifyOutputTypeForLog,
+} from '../../src/wallet/_internal';
 import { PUBKEYS } from '../consts';
 
 describe('ceilLog2', () => {
@@ -180,5 +185,32 @@ describe('stringifyOutputTypeForLog', () => {
       data,
     } as unknown as OutputType);
     expect(result).toBe('Unknown');
+  });
+});
+
+describe('orderOutputsForPayload', () => {
+  const out = (amount: number) =>
+    ({ blindedMessage: { amount: Amount.from(amount), B_: '', id: '' } }) as OutputDataLike;
+
+  test('interleaves keeps and sends by amount, and says which is which', () => {
+    // The case that matters: keeps are larger than sends, so construction order and payload
+    // order differ. Reading the split off position is exactly what the sort prevents.
+    const { outputData, keepVector, indices } = orderOutputsForPayload([out(16), out(8)], [out(4)]);
+    expect(outputData.map((d) => Number(d.blindedMessage.amount.toBigInt()))).toEqual([4, 8, 16]);
+    expect(keepVector).toEqual([false, true, true]);
+    expect(indices).toEqual([2, 1, 0]);
+  });
+
+  test('leaves construction order alone when asked', () => {
+    const { outputData, keepVector } = orderOutputsForPayload([out(16), out(8)], [out(4)], false);
+    expect(outputData.map((d) => Number(d.blindedMessage.amount.toBigInt()))).toEqual([16, 8, 4]);
+    expect(keepVector).toEqual([true, true, false]);
+  });
+
+  test('ties keep construction order, which still leaks their split', () => {
+    // Documented rather than fixed: randomizing within a tie makes the order unreproducible
+    // from a preview unless the choice travels with it.
+    const { keepVector } = orderOutputsForPayload([out(8)], [out(8)]);
+    expect(keepVector).toEqual([true, false]);
   });
 });

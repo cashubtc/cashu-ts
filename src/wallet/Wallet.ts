@@ -1243,12 +1243,13 @@ class Wallet {
     // Prepare inputs for mint
     inputs = this._prepareInputsForMint(inputs);
 
-    // Sort ASC by amount for privacy, but not for SIG_ALL, whose message fixes the order.
+    // Sort ASC by amount for privacy, SIG_ALL included: its message is built from this same
+    // ordering, so there is nothing left to fix in place.
     const {
       outputData: sortedOutputData,
       keepVector: sortedKeepVector,
       indices,
-    } = orderOutputsForPayload(keepOutputs, sendOutputs, !isP2PKSigAll(inputs));
+    } = orderOutputsForPayload(keepOutputs, sendOutputs);
     const outputs = sortedOutputData.map((d) => d.blindedMessage);
     // this._logger.debug('createSwapTransaction:', {
     //   indices,
@@ -1694,12 +1695,14 @@ class Wallet {
       ? swapPreview.unselectedProofs
       : [];
 
-    // Sign proofs if needed
+    // Sign proofs if needed. SIG_ALL covers the outputs, so it must see them in the order the
+    // payload will carry, which is what orderOutputsForPayload decides for both.
     if (privkey) {
-      swapPreview.inputs = this.signP2PKProofs(swapPreview.inputs, privkey, [
-        ...keepOutputs,
-        ...sendOutputs,
-      ]);
+      swapPreview.inputs = this.signP2PKProofs(
+        swapPreview.inputs,
+        privkey,
+        orderOutputsForPayload(keepOutputs, sendOutputs).outputData,
+      );
     }
 
     // Create swap transaction
