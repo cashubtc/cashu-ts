@@ -11,6 +11,12 @@ import {
   verifyUnblindedSignatureBls,
 } from '../../src/crypto';
 import { verifyUnblindedSignature } from '../../src/crypto/NUT01';
+import {
+  parseTaprootLeaf,
+  recoverLeafKeySecretKeys,
+  recoverReceiverKeyedSecretKey,
+  type TaprootLeaf,
+} from '../../src/crypto/taproot';
 import { Amount } from '../../src/model/Amount';
 import { CTSError } from '../../src/model/Errors';
 import { OutputData } from '../../src/model/OutputData';
@@ -323,5 +329,60 @@ describe('OutputData v3 — Nutshell PR #999 deterministic test vector', () => {
     const proof = od.toProof(sig, { id, keys: { '1': K2Hex } });
     expect(proof.C).toBe(NUTSHELL_C_HEX);
     expect(proof.secret).toBe(SECRET);
+  });
+});
+
+describe('OutputData.createTaprootData (receiver-keyed, spec 2.7)', () => {
+  const { keyset, privKeys } = makeV3Keyset();
+  const bobPriv = bytesToHex(randomBytes(32));
+  const bobPub = bytesToHex(secp256k1.getPublicKey(hexToBytes(bobPriv), true));
+
+  test('one fresh ephemeral per output, and the payee recovers each key', () => {
+    const outputs = OutputData.createTaprootData({ receiverPub: bobPub }, 7, keyset);
+    expect(outputs.map((o) => o.blindedMessage.amount.toString()).sort()).toEqual(['1', '2', '4']);
+    // Fresh e per output (2.4/2.7): distinct ephemerals, so distinct secrets.
+    const ephemerals = outputs.map((o) => o.spendInfo?.E);
+    expect(new Set(ephemerals).size).toBe(3);
+    expect(new Set(outputs.map((o) => new TextDecoder().decode(o.secret))).size).toBe(3);
+    for (const out of outputs) {
+      const proof = out.toProof(signWithMint(out, privKeys, keyset.id), keyset);
+      // Spend info travels onto the proof, and Bob trial-matches it.
+      expect(proof.spend_info?.E).toBe(out.spendInfo?.E);
+      expect(proof.spend_info?.tree).toBeUndefined();
+      const hit = recoverReceiverKeyedSecretKey(proof.secret, proof.spend_info!.E!, bobPriv);
+      expect(hit).toBeDefined();
+      expect(bytesToHex(secp256k1.getPublicKey(hexToBytes(hit!.secretKey), true))).toBe(
+        proof.secret,
+      );
+    }
+  });
+
+  test('a requested tree travels with each output, with blind-me keys blinded', () => {
+    const alicePriv = bytesToHex(randomBytes(32));
+    const alicePub = bytesToHex(secp256k1.getPublicKey(hexToBytes(alicePriv), true));
+    const leaves: TaprootLeaf[] = [{ type: 'after', n: 1, keys: [alicePub], time: 4102444800 }];
+    const [out] = OutputData.createTaprootData(
+      { receiverPub: bobPub, leaves, blindKeys: [alicePub] },
+      1,
+      keyset,
+    );
+    const proof = out.toProof(signWithMint(out, privKeys, keyset.id), keyset);
+    const tree = proof.spend_info!.tree!;
+    expect(tree).toHaveLength(1);
+    // The leaf key is not Alice's key verbatim, but Alice still finds it at slot 1.
+    expect(parseTaprootLeaf(hexToBytes(tree[0])).keys[0]).not.toBe(alicePub);
+    expect(recoverLeafKeySecretKeys(tree, proof.spend_info!.E, [alicePriv])).toEqual([
+      { leafIndex: 0, keyIndex: 0, slot: 1, secretKey: expect.any(String), blinded: true },
+    ]);
+    // And Bob's key path still reconstructs the tweaked secret over that tree.
+    const hit = recoverReceiverKeyedSecretKey(proof.secret, proof.spend_info!.E!, bobPriv, tree);
+    expect(hit).toBeDefined();
+  });
+
+  test('taproot outputs are refused on a pre-v3 keyset', () => {
+    const secpKeyset = { id: '00ad268c4d1f5826', keys: { '1': '02'.padEnd(66, 'a') } };
+    expect(() => OutputData.createTaprootData({ receiverPub: bobPub }, 1, secpKeyset)).toThrow(
+      /v3 keyset/,
+    );
   });
 });
