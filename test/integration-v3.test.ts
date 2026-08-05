@@ -14,6 +14,8 @@ import {
   OutputData,
   PaymentRequest,
   Wallet,
+  getDecodedToken,
+  getEncodedToken,
   isBlsKeyset,
   sumProofs,
 } from '../src';
@@ -30,6 +32,7 @@ import {
   taprootMerklePath,
   taprootMerkleRoot,
   taprootTweakSeckey,
+  verifyTaprootSpendInfo,
 } from '../src/crypto/taproot';
 import { transactionDigest, verifyTransactionInputWitness } from '../src/crypto/transcript';
 
@@ -1090,6 +1093,163 @@ describe('M7 mixed-keyset transactions through the wallet API', () => {
       expect(restoredV3.every((p) => /^0[23][0-9a-f]{64}$/.test(p.secret))).toBe(true);
       const swept = await fresh.receive(restoredV3);
       expect(sumProofs(swept).toBigInt()).toBeGreaterThan(0n);
+    },
+  );
+});
+
+describe('M8 tokens end to end with spend_info', () => {
+  async function fundV3(amount: number) {
+    const wallet = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
+    await wallet.loadMint();
+    const quote = await wallet.createMintQuoteBolt11(amount);
+    for (let i = 0; i < 40; i++) {
+      const state = await wallet.checkMintQuoteBolt11(quote.quote);
+      if (state.state === 'PAID') break;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    return { wallet, proofs: await wallet.mintProofsBolt11(amount, quote.quote) };
+  }
+
+  test(
+    'bearer k: token string carries the key, a keyless receiver sweeps it',
+    { timeout: 60_000 },
+    async () => {
+      const { wallet, proofs } = await fundV3(64);
+      const { send } = await wallet.send(32, proofs);
+      const token = getEncodedToken({ mint: mintUrl, proofs: send, unit: 'sat' });
+      expect(token.startsWith('cashuB')).toBe(true);
+
+      // The token is the only thing that crosses: decode it fresh and check the key survived.
+      const decoded = getDecodedToken(
+        token,
+        send.map((p) => p.id),
+      );
+      expect(decoded.proofs.every((p) => /^[0-9a-f]{64}$/.test(p.spend_info?.k ?? ''))).toBe(true);
+      expect(decoded.proofs).toEqual(send);
+
+      // A wallet with no keys and no seed relationship sweeps it from the string alone.
+      const receiver = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
+      await receiver.loadMint();
+      const received = await receiver.receive(token);
+      expect(sumProofs(received).toBigInt()).toBeGreaterThan(0n);
+      expect(received.every((p) => isBlsKeyset(p.id))).toBe(true);
+    },
+  );
+
+  test(
+    'receiver-keyed E, bare and under a blinded tree: only the payee sweeps',
+    { timeout: 60_000 },
+    async () => {
+      const carolPriv = bytesToHex(randomBytes(32));
+      const carolPub = bytesToHex(secp256k1.getPublicKey(hexToBytes(carolPriv), true));
+      const alicePriv = bytesToHex(randomBytes(32));
+      const alicePub = bytesToHex(secp256k1.getPublicKey(hexToBytes(alicePriv), true));
+      const { wallet, proofs } = await fundV3(64);
+
+      for (const leaves of [
+        undefined,
+        [{ type: 'after' as const, n: 1, keys: [alicePub], time: 4102444800 }],
+      ]) {
+        const { send, keep } = await wallet.ops
+          .send(16, proofs)
+          .asTaproot({ receiverPub: carolPub, leaves, ...(leaves && { blindKeys: [alicePub] }) })
+          .run();
+        proofs.length = 0;
+        proofs.push(...keep);
+        const token = getEncodedToken({ mint: mintUrl, proofs: send, unit: 'sat' });
+        const decoded = getDecodedToken(
+          token,
+          send.map((p) => p.id),
+        );
+        for (const p of decoded.proofs) {
+          expect(p.spend_info?.E).toMatch(/^0[23][0-9a-f]{64}$/);
+          expect(p.spend_info?.k).toBeUndefined();
+          expect(p.spend_info?.tree?.length ?? 0).toBe(leaves ? 1 : 0);
+          // The cascade classifies it without needing any key.
+          expect(verifyTaprootSpendInfo(p.secret, p.spend_info!)).toBe('receiver-keyed');
+        }
+
+        // Carol sweeps from the token string with her static key.
+        const carol = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
+        await carol.loadMint();
+        const stranger = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
+        await stranger.loadMint();
+        await expect(
+          stranger.receive(token, { privkey: bytesToHex(randomBytes(32)) }),
+        ).rejects.toThrow();
+        const received = await carol.receive(token, { privkey: carolPriv });
+        expect(sumProofs(received).toBigInt()).toBeGreaterThan(0n);
+      }
+    },
+  );
+
+  test(
+    'explicit K: a script-only token discloses its tree and spends through a leaf',
+    { timeout: 60_000 },
+    async () => {
+      // No key path at all: K is the NUMS point, so every spend goes through a leaf (2.3.5).
+      const ownerPriv = randomBytes(32);
+      const ownerPub = bytesToHex(secp256k1.getPublicKey(ownerPriv, true));
+      const { secret, tree } = buildTaprootSecret(TAPROOT_NUMS_KEY, [
+        { type: 'threshold', n: 1, keys: [ownerPub] },
+      ]);
+      const { wallet, proofs } = await fundV3(64);
+      const { send } = await wallet.ops
+        .send(32, proofs)
+        .asFactory((a, k) => OutputData.createSingleTaprootData(secret, a, k.id), [32])
+        .run();
+      expect(send).toHaveLength(1);
+      send[0].spend_info = { K: TAPROOT_NUMS_KEY, tree };
+
+      const token = getEncodedToken({ mint: mintUrl, proofs: send, unit: 'sat' });
+      const decoded = getDecodedToken(token, [send[0].id]);
+      const proof = decoded.proofs[0];
+      expect(proof.spend_info?.K).toBe(TAPROOT_NUMS_KEY);
+      expect(proof.spend_info?.tree).toEqual(tree);
+      // Tree plus internal key reconstruct the secret, so the disclosure is provably complete.
+      expect(verifyTaprootSpendInfo(proof.secret, proof.spend_info!)).toBe('tweaked');
+
+      // Spending it needs the leaf: the receiver builds a script-path witness itself.
+      const spender = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
+      await spender.loadMint();
+      const keysetId = spender.keyChain.getCheapestKeyset().id;
+      const outputs = [16n, 8n, 4n, 2n, 1n].map((a) =>
+        OutputData.createSingleTaprootData(
+          bytesToHex(secp256k1.getPublicKey(randomBytes(32), true)),
+          a,
+          keysetId,
+        ),
+      );
+      const digest = transactionDigest({
+        proofInputs: [
+          {
+            amount: Amount.from(proof.amount).toBigInt(),
+            keysetId: proof.id,
+            secret: proof.secret,
+            C: proof.C,
+          },
+        ],
+        blindedOutputs: outputs.map((o) => ({
+          amount: Amount.from(o.blindedMessage.amount).toBigInt(),
+          keysetId: o.blindedMessage.id,
+          B_: o.blindedMessage.B_,
+        })),
+      });
+      const { signatures } = await new Mint(mintUrl).swap({
+        inputs: [
+          {
+            id: proof.id,
+            amount: proof.amount,
+            secret: proof.secret,
+            C: proof.C,
+            witness: buildScriptPathWitness(tree, 0, TAPROOT_NUMS_KEY, [
+              bytesToHex(schnorr.sign(digest, ownerPriv)),
+            ]),
+          },
+        ],
+        outputs: outputs.map((o) => o.blindedMessage),
+      });
+      expect(signatures).toHaveLength(5);
     },
   );
 });

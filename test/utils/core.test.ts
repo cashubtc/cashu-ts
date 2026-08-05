@@ -38,6 +38,7 @@ import {
   NUT02_V3_VECTOR2_KEYS,
   PUBKEYS,
 } from '../consts';
+import vectors from '../vectors/taproot-v3.json';
 
 const keys: Keys = {};
 for (let i = 1; i <= 2048; i *= 2) {
@@ -1743,6 +1744,65 @@ describe('taproot spend_info token serialization', () => {
     const decoded = utils.getDecodedToken(encoded, [proof.id]);
     expect(decoded.proofs).toHaveLength(1);
     expect(decoded.proofs[0].spend_info).toEqual(proof.spend_info);
+  });
+
+  test('every spend_info shape survives the V4 round-trip', () => {
+    // Spec 2.5.2 shapes: bearer `k`, receiver-keyed `E`, explicit `K` for a script-only proof,
+    // each with and without a disclosed tree. All four CBOR fields must come back as they went in.
+    const leaf =
+      '00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80';
+    const blindedLeaf =
+      '0002020001010400210320b1a1272e7eaa44830375ecadf11b09a8ec5d1a4155253a897f31c8b27c974c06000101';
+    const shapes: Array<Record<string, unknown>> = [
+      { k: '38b91aa1635556d47ce92d99c1a92a2ffb82e57bc292c039d1d7b84c13bd75c6' },
+      { E: '022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4' },
+      {
+        E: '022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4',
+        tree: [blindedLeaf],
+      },
+      {
+        K: '0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0',
+        tree: [leaf, blindedLeaf],
+      },
+    ];
+    for (const spend_info of shapes) {
+      const proof: Proof = {
+        id: '02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd',
+        amount: Amount.from(8),
+        secret: '02595a333ef377a29f6756365bd46bf3b5e571dd7a44081822f3bd0bf03b358075',
+        C: '84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327',
+        spend_info,
+      };
+      const token: Token = { mint: 'https://mint.test', proofs: [proof], unit: 'sat' };
+      const decoded = utils.getDecodedToken(utils.getEncodedToken(token), [proof.id]);
+      expect(decoded.proofs[0].spend_info, JSON.stringify(spend_info)).toEqual(spend_info);
+    }
+  });
+
+  test('the shared token vectors: same spend_info from either encoder', () => {
+    // Cross-implementation pin. The two encoders differ on what NUT-00 leaves free (this one
+    // writes the short keyset id, nutshell the full one), so what must agree is the spend_info:
+    // both strings decode to the same fields here and in nutshell's mirror of this test.
+    const v = vectors.tokens_v4;
+    const fullId = vectors.nut13_v3.keyset_id;
+    for (const [name, shape] of Object.entries(v.shapes)) {
+      const proof: Proof = {
+        id: fullId,
+        amount: Amount.from(v.amount),
+        secret: shape.secret,
+        C: v.C,
+        spend_info: shape.spend_info,
+      };
+      const token: Token = { mint: v.mint, proofs: [proof], unit: v.unit };
+      // Our own encoding is pinned, so a change to this encoder is visible, not silent.
+      expect(utils.getEncodedToken(token), name).toBe(shape.token_cashu_ts);
+      for (const encoded of [shape.token_cashu_ts, shape.token_nutshell]) {
+        const decoded = utils.getDecodedToken(encoded, [fullId]);
+        expect(decoded.proofs[0].spend_info, name).toEqual(shape.spend_info);
+        expect(decoded.proofs[0].secret, name).toBe(shape.secret);
+        expect(decoded.proofs[0].id, name).toBe(fullId);
+      }
+    }
   });
 
   test('proofs without spend_info stay without it', () => {
