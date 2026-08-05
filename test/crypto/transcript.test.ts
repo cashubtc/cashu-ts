@@ -223,3 +223,35 @@ describe('amounts are normalized at the transcript boundary', () => {
     ).toThrow();
   });
 });
+
+describe('keyset ids in the transcript', () => {
+  const v3Input = {
+    amount: 1n,
+    keysetId: '0088553333aabbcc',
+    secret: '02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9',
+    C: 'aa'.repeat(48),
+  };
+  const out = { amount: 1n, keysetId: '0088553333aabbcc', B_: 'bb'.repeat(48) };
+
+  test('a legacy base64 keyset id contributes its utf8 bytes, not an exception', () => {
+    // Mixed transactions are normative (spec 5), and a pre-v1 keyset id is base64. Hex-decoding it
+    // would make such a transaction impossible to sign or verify rather than merely unusual.
+    const legacy = {
+      amount: 1n,
+      keysetId: 'I2yN+iRYfkzT',
+      secret: 'legacy-plain-secret',
+      C: 'ab'.repeat(33),
+    };
+    expect(
+      transactionDigest({ proofInputs: [legacy, v3Input], blindedOutputs: [out] }),
+    ).toHaveLength(32);
+    const transcript = buildTransactionTranscript({ proofInputs: [legacy], blindedOutputs: [out] });
+    expect(bytesToHex(transcript)).toContain(bytesToHex(new TextEncoder().encode('I2yN+iRYfkzT')));
+  });
+
+  test('an empty keyset id throws rather than encoding nothing', () => {
+    expect(() =>
+      transactionDigest({ proofInputs: [{ ...v3Input, keysetId: '' }], blindedOutputs: [out] }),
+    ).toThrow(/keyset id/);
+  });
+});

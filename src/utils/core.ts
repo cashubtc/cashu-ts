@@ -270,6 +270,19 @@ function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
   return prefix + version + base64Data;
 }
 
+/**
+ * True for a 33-byte compressed point secret, which is what a v3 keyset takes.
+ *
+ * @remarks
+ * A v3 witness signs one transaction's digest, so it means nothing outside that transaction and a
+ * token carries no transaction. Tokens therefore drop it in both directions: emitting one hands the
+ * next owner a witness that can never verify, and keeping one on receive leaves it in place of the
+ * signature the new owner must produce, so their sweep is refused for a witness a stranger chose.
+ */
+function isV3PointSecret(secret: string): boolean {
+  return /^0[23][0-9a-f]{64}$/.test(secret);
+}
+
 function templateFromToken(token: Token): TokenV4Template {
   const idMap: { [id: string]: Proof[] } = {};
   const mint = token.mint;
@@ -300,9 +313,10 @@ function templateFromToken(token: Token): TokenV4Template {
         ...(p.p2pk_e && {
           pe: hexToBytes(p.p2pk_e),
         }),
-        ...(p.witness && {
-          w: JSON.stringify(p.witness),
-        }),
+        ...(p.witness &&
+          !isV3PointSecret(p.secret) && {
+            w: JSON.stringify(p.witness),
+          }),
         ...(p.spend_info && {
           si: {
             ...(p.spend_info.k && { k: hexToBytes(p.spend_info.k) }),
@@ -345,9 +359,10 @@ function tokenFromTemplate(template: TokenV4Template): Token {
         ...(p.pe && {
           p2pk_e: bytesToHex(p.pe),
         }),
-        ...(p.w && {
-          witness: p.w,
-        }),
+        ...(p.w &&
+          !isV3PointSecret(p.s) && {
+            witness: p.w,
+          }),
         ...(p.si && {
           spend_info: {
             ...(p.si.k && { k: bytesToHex(p.si.k) }),

@@ -1978,3 +1978,43 @@ describe('taproot spend_info token serialization', () => {
     expect(decoded.proofs[0].spend_info).toBeUndefined();
   });
 });
+
+describe('v3 transaction witnesses do not travel in tokens', () => {
+  const v3Proof = {
+    amount: 8,
+    id: '0288553333aabbcc',
+    secret: '025cbdf0646e5db4eaa398f365f2ea7a0e3d419b7e0330e39ce92bddedcac4f9bc',
+    C: 'aa'.repeat(48),
+    witness: JSON.stringify({ signatures: ['00'.repeat(64)] }),
+    spend_info: { k: '00'.repeat(31) + '07' },
+  };
+
+  test('a witness is dropped on encode and on decode, spend info is kept', () => {
+    // A v3 witness signs one transaction's digest, so it can never verify against another. Kept on
+    // receive it would sit where the new owner's own signature has to go, and their sweep would be
+    // refused for a witness a stranger chose.
+    const encoded = utils.getEncodedToken({
+      mint: 'https://m.example',
+      unit: 'sat',
+      proofs: [v3Proof],
+    } as never);
+    const decoded = utils.getDecodedToken(encoded, ['0288553333aabbcc']);
+    expect(decoded.proofs[0].witness).toBeUndefined();
+    expect(decoded.proofs[0].spend_info).toEqual({ k: '00'.repeat(31) + '07' });
+  });
+
+  test('a pre-v3 witness still travels', () => {
+    const legacy = {
+      amount: 8,
+      id: '0088553333aabbcc',
+      secret: '["P2PK",{"nonce":"a","data":"b"}]',
+      C: '02' + 'aa'.repeat(32),
+      witness: JSON.stringify({ signatures: ['00'.repeat(64)] }),
+    };
+    const decoded = utils.getDecodedToken(
+      utils.getEncodedToken({ mint: 'https://m.example', unit: 'sat', proofs: [legacy] } as never),
+      ['0088553333aabbcc'],
+    );
+    expect(decoded.proofs[0].witness).toBeDefined();
+  });
+});
