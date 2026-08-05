@@ -2363,6 +2363,13 @@ class Wallet {
           if (Bytes.toHex(getPubKeyFromPrivKey(tweaked)) === proof.secret) {
             keys.set(proof.secret, tweaked);
           }
+          continue;
+        }
+        // Empty tweak, no tree (spec 3.8): p' = k + tagged_hash(tag, K). A true aggregate has no
+        // single holder of `k`, so this reaches only a single-party key using the same form.
+        const empty = taprootTweakSeckey(kBytes);
+        if (Bytes.toHex(getPubKeyFromPrivKey(empty)) === proof.secret) {
+          keys.set(proof.secret, empty);
         }
       } catch {
         // invalid scalar: leave unsigned

@@ -505,7 +505,7 @@ export function buildScriptPathWitness(
 export function verifyTaprootSpendInfo(
   secretHex: string,
   spendInfo: { k?: string; E?: string; K?: string; tree?: string[] },
-): 'bare' | 'tweaked' | 'receiver-keyed' {
+): 'bare' | 'tweaked' | 'receiver-keyed' | 'aggregated' {
   const secret = Bytes.fromHex(secretHex);
   if (secret.length !== 33) {
     throw new CTSError('Secret is not a 33-byte point');
@@ -549,10 +549,12 @@ export function verifyTaprootSpendInfo(
       throw new CTSError('Spend info key is not a valid private key');
     }
     if (!spendInfo.tree || spendInfo.tree.length === 0) {
-      if (!Bytes.equals(derived, secret)) {
-        throw new CTSError('Spend info key does not match the proof secret');
-      }
-      return 'bare';
+      if (Bytes.equals(derived, secret)) return 'bare';
+      // The empty-tweak step (2.5.1, 3.8): an aggregated key commits to having no script path by
+      // tweaking with nothing but itself. Checked here rather than only for a disclosed `K`,
+      // because a single-party key may use the same form.
+      if (Bytes.equals(taprootTweakPubkey(derived), secret)) return 'aggregated';
+      throw new CTSError('Spend info key does not match the proof secret');
     }
     internalKey = derived;
   } else if (spendInfo.K !== undefined) {
@@ -560,6 +562,12 @@ export function verifyTaprootSpendInfo(
     if (internalKey.length !== 33) {
       throw new CTSError('Spend info internal key must be 33 bytes');
     }
+  }
+  if (internalKey !== undefined && (!spendInfo.tree || spendInfo.tree.length === 0)) {
+    // `K` alone is complete when the secret is its empty tweak: nothing else can be committed.
+    // This is how an aggregated key arrives, since no single party holds its scalar to send.
+    if (Bytes.equals(taprootTweakPubkey(internalKey), secret)) return 'aggregated';
+    throw new CTSError('Spend info discloses a key that does not commit to the proof secret');
   }
   if (!spendInfo.tree || spendInfo.tree.length === 0 || internalKey === undefined) {
     throw new CTSError('Spend info is incomplete: tree and a key source are required');

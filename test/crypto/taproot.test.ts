@@ -402,6 +402,25 @@ describe('locked secret construction and spend info cascade', () => {
     ).toThrow(/both k and E/);
   });
 
+  test('the empty tweak: an aggregated key with no tree (3.8)', () => {
+    const v = vectors.empty_tweak;
+    expect(bytesToHex(taprootTweakPubkey(hexToBytes(v.internal_key)))).toBe(v.secret);
+    expect(taprootTweak(hexToBytes(v.internal_key)).toString(16).padStart(64, '0')).toBe(v.tweak);
+    // 2.5.1 inserts this step between the bare and tweaked branches, so both the disclosed-key
+    // and bearer-scalar forms must reach it: an aggregate has no single holder of the scalar,
+    // but a single-party key may use the same form.
+    expect(verifyTaprootSpendInfo(v.secret, { K: v.internal_key })).toBe('aggregated');
+    expect(verifyTaprootSpendInfo(v.secret, { k: v61.carol_priv })).toBe('aggregated');
+    // The key that signs it is (k + t) mod n, which is the tweak with no root.
+    expect(bytesToHex(taprootTweakSeckey(hexToBytes(v61.carol_priv)))).toBe(v.keypath_priv);
+    // A bare key is still bare: the empty tweak is only reached when the plain check fails.
+    expect(verifyTaprootSpendInfo(v61.carol_pub, { k: v61.carol_priv })).toBe('bare');
+    // And a key that commits to neither is still refused.
+    expect(() => verifyTaprootSpendInfo(v.secret, { K: v61.alice_refund_pub })).toThrow(
+      /does not commit/,
+    );
+  });
+
   test('cascade rejects partial disclosure, wrong keys, unknown leaves', () => {
     // Tree-only spend info: no key source.
     expect(() => verifyTaprootSpendInfo(v61.secret, { tree: [v61.leaf_after] })).toThrow(
@@ -409,9 +428,10 @@ describe('locked secret construction and spend info cascade', () => {
     );
     // Wrong bearer key.
     expect(() => verifyTaprootSpendInfo(v61.secret, { k: '11'.repeat(32) })).toThrow(/match/);
-    // Partial (empty vs actual tree): bare check fails because the secret is tweaked.
+    // Partial (empty vs actual tree): K alone would be complete only if the secret were its
+    // empty tweak (3.8), and this secret is tweaked over a real tree instead.
     expect(() => verifyTaprootSpendInfo(v61.secret, { K: v61.internal_key, tree: [] })).toThrow(
-      /incomplete/,
+      /does not commit/,
     );
     // Wrong tree does not reconstruct.
     expect(() =>
