@@ -96,7 +96,12 @@ import {
   REPAIR_COOLDOWN_MS,
 } from '../utils';
 
-import { ceilLog2, getKeepAmounts, stringifyOutputTypeForLog } from './_internal';
+import {
+  ceilLog2,
+  getKeepAmounts,
+  orderOutputsForPayload,
+  stringifyOutputTypeForLog,
+} from './_internal';
 import {
   type CounterSource,
   EphemeralCounterSource,
@@ -1238,23 +1243,12 @@ class Wallet {
     // Prepare inputs for mint
     inputs = this._prepareInputsForMint(inputs);
 
-    // Sort ASC by amount for privacy, but keep indices to return order afterwards
-    // But ONLY if the transaction is NOT SIG_ALL (as order is fixed for signing)
-    const mergedBlindingData = [...keepOutputs, ...sendOutputs];
-    const indices = mergedBlindingData.map((_, i) => i);
-    if (!isP2PKSigAll(inputs)) {
-      indices.sort((a, b) => {
-        return mergedBlindingData[a].blindedMessage.amount.compareTo(
-          mergedBlindingData[b].blindedMessage.amount,
-        );
-      });
-    }
-    const keepVector: boolean[] = [
-      ...Array.from({ length: keepOutputs.length }, () => true),
-      ...Array.from({ length: sendOutputs.length }, () => false),
-    ];
-    const sortedOutputData: OutputDataLike[] = indices.map((i) => mergedBlindingData[i]);
-    const sortedKeepVector: boolean[] = indices.map((i) => keepVector[i]);
+    // Sort ASC by amount for privacy, but not for SIG_ALL, whose message fixes the order.
+    const {
+      outputData: sortedOutputData,
+      keepVector: sortedKeepVector,
+      indices,
+    } = orderOutputsForPayload(keepOutputs, sendOutputs, !isP2PKSigAll(inputs));
     const outputs = sortedOutputData.map((d) => d.blindedMessage);
     // this._logger.debug('createSwapTransaction:', {
     //   indices,
