@@ -13,6 +13,7 @@ import {
   Mint,
   OutputData,
   PaymentRequest,
+  ScriptPath,
   Wallet,
   getDecodedToken,
   getEncodedToken,
@@ -1430,6 +1431,86 @@ describe('M9 script path through the wallet API', () => {
       });
       expect(sawDigest).toHaveLength(32);
       expect(sumProofs(received).toBigInt()).toBe(31n);
+    },
+  );
+
+  test(
+    'signing package: a co-signer signs out of band and the ceremony survives serialization',
+    { timeout: 60_000 },
+    async () => {
+      // The shape a phone needs: extract, put it down, sign somewhere else, merge, complete.
+      const carolPub = bytesToHex(secp256k1.getPublicKey(randomBytes(32), true));
+      const alicePriv = bytesToHex(randomBytes(32));
+      const alicePub = bytesToHex(secp256k1.getPublicKey(hexToBytes(alicePriv), true));
+      const bobPriv = bytesToHex(randomBytes(32));
+      const bobPub = bytesToHex(secp256k1.getPublicKey(hexToBytes(bobPriv), true));
+      const leaf: TaprootLeaf = { type: 'threshold', n: 2, keys: [alicePub, bobPub] };
+      const { wallet, proofs } = await fundV3(64);
+      const { send } = await wallet.ops
+        .send(32, proofs)
+        .asTaproot({ receiverPub: carolPub, leaves: [leaf], blindKeys: [alicePub] }, [32])
+        .run();
+      const proof = send[0];
+
+      const alice = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
+      await alice.loadMint();
+      const preview = await alice.prepareSwapToReceive([proof]);
+      const plan = { secret: proof.secret, leafIndex: 0 };
+      const pkg = ScriptPath.extractSwapPackage(preview, [plan]);
+      expect(pkg.spends[0].signatures).toHaveLength(0);
+      expect(pkg.spends[0].control.K).toBe(proof.spend_info?.K);
+
+      // Round-trip through the wire, twice, signed by a different party each time. Nothing but
+      // the string crosses, and it carries no secret and no blinding factor.
+      const wire = ScriptPath.serializePackage(pkg);
+      expect(wire.startsWith('tapspA')).toBe(true);
+      expect(wire).not.toContain(alicePriv);
+      let carried = ScriptPath.signPackage(ScriptPath.deserializePackage(wire), alicePriv);
+      carried = ScriptPath.signPackage(
+        ScriptPath.deserializePackage(ScriptPath.serializePackage(carried)),
+        bobPriv,
+      );
+      expect(carried.spends[0].signatures).toHaveLength(2);
+      // Alice's key was blinded into the leaf, so a verbatim signature would not have counted.
+      expect(parseTaprootLeaf(hexToBytes(carried.spends[0].leaf)).keys).not.toContain(alicePub);
+
+      const signed = ScriptPath.mergeSwapPackage(carried, preview);
+      const { keep } = await alice.completeSwap(signed);
+      expect(sumProofs(keep).toBigInt()).toBe(31n);
+    },
+  );
+
+  test(
+    'a signing package refuses a transaction whose outputs moved under it',
+    { timeout: 60_000 },
+    async () => {
+      const carolPub = bytesToHex(secp256k1.getPublicKey(randomBytes(32), true));
+      const alicePriv = bytesToHex(randomBytes(32));
+      const alicePub = bytesToHex(secp256k1.getPublicKey(hexToBytes(alicePriv), true));
+      const leaf: TaprootLeaf = { type: 'threshold', n: 1, keys: [alicePub] };
+      const { wallet, proofs } = await fundV3(64);
+      const { send } = await wallet.ops
+        .send(32, proofs)
+        .asTaproot({ receiverPub: carolPub, leaves: [leaf] }, [32])
+        .run();
+      const proof = send[0];
+
+      const alice = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
+      await alice.loadMint();
+      const preview = await alice.prepareSwapToReceive([proof]);
+      const pkg = ScriptPath.signPackage(
+        ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 0 }]),
+        alicePriv,
+      );
+      // A second preview builds different outputs, so the signatures do not cover it. Caught
+      // here rather than by the mint, which would only say the witness was invalid.
+      const other = await alice.prepareSwapToReceive([proof]);
+      expect(() => ScriptPath.mergeSwapPackage(pkg, other)).toThrow(/does not match/);
+      // And a package whose digest was edited is refused when it is read back.
+      const tampered = { ...pkg, digest: 'ab'.repeat(32) };
+      expect(() => ScriptPath.deserializePackage(ScriptPath.serializePackage(tampered))).toThrow(
+        /digest does not match/,
+      );
     },
   );
 

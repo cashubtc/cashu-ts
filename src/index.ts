@@ -140,3 +140,8 @@ export {
   type SigAllDigests,
   type SigAllSigningPackage,
 } from './model/SigAll';
+export {
+  ScriptPath,
+  type ScriptPathSigningPackage,
+  type ScriptPathSpendRequest,
+} from './model/ScriptPath';
