@@ -288,6 +288,7 @@ export type CheckStateResponse = {
 export type CompleteMeltOptions = {
     preferAsync?: boolean;
     extraPayload?: Record<string, unknown>;
+    scriptPath?: ScriptPathPlan[];
 };
 
 // @public
@@ -909,6 +910,7 @@ export interface MeltPreview<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'>
 export type MeltProofsConfig = {
     keysetId?: string;
     privkey?: string | string[];
+    scriptPath?: ScriptPathPlan[];
     onCountersReserved?: OnCountersReserved;
     nut08Change?: boolean;
 };
@@ -1946,6 +1948,7 @@ export class ReceiveBuilder {
 export type ReceiveConfig = {
     keysetId?: string;
     privkey?: string | string[];
+    scriptPath?: ScriptPathPlan[];
     requireDleq?: boolean;
     proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
     onCountersReserved?: OnCountersReserved;
@@ -2010,6 +2013,14 @@ export const schnorrVerifyDigest: (signature: string, digest: DigestInput, pubke
 // @public
 export const schnorrVerifyMessage: (signature: string, message: string, pubkey: string, throws?: boolean) => boolean;
 
+// @public
+export type ScriptPathPlan = {
+    secret: string;
+    leafIndex: number;
+    preimage?: string;
+    extraKeys?: string[];
+};
+
 // @public (undocumented)
 export type Secret = [SecretKind, SecretData];
 
@@ -2071,6 +2082,7 @@ export class SendBuilder {
 export type SendConfig = {
     keysetId?: string;
     privkey?: string | string[];
+    scriptPath?: ScriptPathPlan[];
     includeFees?: boolean;
     proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
     onCountersReserved?: OnCountersReserved;
@@ -2458,7 +2470,7 @@ export class Wallet {
     completeBatchMint(batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;
     completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote>, privkey?: string | string[], options?: CompleteMeltOptions): Promise<MeltProofsResponse<TQuote>>;
     completeMint(mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;
-    completeSwap(swapPreview: SwapPreview, privkey?: string | string[]): Promise<SendResponse>;
+    completeSwap(swapPreview: SwapPreview, privkey?: string | string[], scriptPath?: ScriptPathPlan[]): Promise<SendResponse>;
     readonly counters: WalletCounters;
     createLockedMintQuote(amount: AmountLike, pubkey: string, description?: string): Promise<MintQuoteBolt11Response & {
         pubkey: string;
@@ -2660,8 +2672,8 @@ export class WSConnection {
 
 // Warnings were encountered during analysis:
 //
-// lib/types/index.d.ts:3785:17 - (ae-forgotten-export) The symbol "TaprootLeaf" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4549:21 - (ae-forgotten-export) The symbol "RawTaprootOption" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:3790:17 - (ae-forgotten-export) The symbol "TaprootLeaf" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4554:21 - (ae-forgotten-export) The symbol "RawTaprootOption" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

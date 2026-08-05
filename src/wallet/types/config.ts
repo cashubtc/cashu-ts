@@ -158,11 +158,39 @@ export interface OutputConfig {
 export type OnCountersReserved = (info: OperationCounters) => void;
 
 /**
+ * A caller's choice to spend one v3 input through one leaf of its disclosed tree (spec 2.3.2).
+ *
+ * @remarks
+ * Keyed by `secret`, not by input index: selection decides the input order and the caller does not
+ * see it before the transaction is built. The wallet supplies the slot keys it holds for the leaf;
+ * `extraKeys` and `preimage` are what only the caller can provide.
+ */
+export type ScriptPathPlan = {
+  /**
+   * The input to spend this way, by its 33-byte point secret hex.
+   */
+  secret: string;
+  /**
+   * Which leaf of the proof's disclosed tree, by its index in that list.
+   */
+  leafIndex: number;
+  /**
+   * Preimage for a hashlock leaf, hex.
+   */
+  preimage?: string;
+  /**
+   * Keys to sign with beyond those the wallet recovers itself, hex.
+   */
+  extraKeys?: string[];
+};
+
+/**
  * Configuration for send operations.
  */
 export type SendConfig = {
   keysetId?: string;
   privkey?: string | string[];
+  scriptPath?: ScriptPathPlan[];
   includeFees?: boolean;
   proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
   onCountersReserved?: OnCountersReserved;
@@ -183,6 +211,7 @@ export type SendOfflineConfig = {
 export type ReceiveConfig = {
   keysetId?: string;
   privkey?: string | string[];
+  scriptPath?: ScriptPathPlan[];
   requireDleq?: boolean;
   proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
   onCountersReserved?: OnCountersReserved;
@@ -204,6 +233,7 @@ export type MintProofsConfig = {
 export type MeltProofsConfig = {
   keysetId?: string;
   privkey?: string | string[];
+  scriptPath?: ScriptPathPlan[];
   onCountersReserved?: OnCountersReserved;
   /**
    * Request NUT-08 blank outputs so the mint can return unspent fee reserve. Defaults to true. Set
@@ -219,4 +249,8 @@ export type CompleteMeltOptions = {
    * request (`quote`, `inputs`, `outputs`, `prefer_async`) are rejected.
    */
   extraPayload?: Record<string, unknown>;
+  /**
+   * Script path spends for v3 inputs, evaluated when the transaction digest exists.
+   */
+  scriptPath?: ScriptPathPlan[];
 };
