@@ -446,6 +446,9 @@ export function deriveMintBackupKeys(seed: Uint8Array): {
 };
 
 // @public
+export function deriveP2BKBlindedPubkeyAtSlot(pubkeyHex: string, eBytes: Uint8Array, slotIndex: number): string;
+
+// @public
 export function deriveP2BKBlindedPubkeys(pubkeys: string[], eBytes?: Uint8Array, dataIsPubkey?: boolean): {
     blinded: string[];
     Ehex: string;
@@ -1719,10 +1722,19 @@ class PaymentRequest_2 {
     toP2PKOptions(): P2PKOptions | undefined;
     // (undocumented)
     toRawRequest(): RawPaymentRequest;
+    toTaprootOptions(): {
+        receiverPub: string;
+        leaves?: TaprootLeaf[];
+        blindKeys?: string[];
+    } | undefined;
     // (undocumented)
     transport?: PaymentRequestTransport[];
     // (undocumented)
     unit?: string;
+    // Warning: (ae-forgotten-export) The symbol "TaprootOption" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    v3?: TaprootOption;
 }
 export { PaymentRequest_2 as PaymentRequest }
 
@@ -1740,6 +1752,7 @@ export class PaymentRequestBuilder {
     lock(p2pk: P2PKOptions): this;
     mintsPreferred(preferred?: boolean): this;
     nut10(option: NUT10Option): this;
+    requestTaproot(option: TaprootOption): this;
     // (undocumented)
     singleUse(single?: boolean): this;
     unit(unit: string): this;
@@ -1760,6 +1773,7 @@ export type PaymentRequestOptions = {
         method: string;
         fee?: AmountLike;
     }>;
+    v3?: TaprootOption;
 };
 
 // @public (undocumented)
@@ -1880,6 +1894,7 @@ export type RawPaymentRequest = {
     d?: string;
     t?: RawTransport[];
     nut10?: RawNUT10Option;
+    v3?: RawTaprootOption;
 };
 
 // @public (undocumented)
@@ -2597,6 +2612,11 @@ export class WSConnection {
     // (undocumented)
     readonly url: URL;
 }
+
+// Warnings were encountered during analysis:
+//
+// lib/types/index.d.ts:4204:22 - (ae-forgotten-export) The symbol "TaprootLeaf" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4508:21 - (ae-forgotten-export) The symbol "RawTaprootOption" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

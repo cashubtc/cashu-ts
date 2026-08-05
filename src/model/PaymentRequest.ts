@@ -2,6 +2,7 @@ import { normalizeSecpPubkey } from '../crypto/curve_secp';
 import { getTag, getTagInt, getTagScalar } from '../crypto/NUT10';
 import type { P2PKOptions, P2PKTag } from '../crypto/NUT11';
 import { P2PK_KNOWN_TAG_KEYS, p2pkOptionsToPRNut10, parseP2PKSecret } from '../crypto/NUT11';
+import { parseTaprootLeaf, serializeTaprootLeaf, type TaprootLeaf } from '../crypto/taproot';
 import { encodeBase64toUint8, decodeCBOR, encodeCBOR, Bytes, normalizeMintUrl } from '../utils';
 import { decodeBech32mToBytes, encodeBech32m } from '../utils/bech32m';
 import { JSONInt } from '../utils/JSONInt';
@@ -15,6 +16,7 @@ import type {
   PaymentRequestPayload,
   PaymentRequestTransport,
   SupportedMethod,
+  TaprootOption,
 } from '../wallet/types';
 
 import { Amount, type AmountLike } from './Amount';
@@ -36,6 +38,7 @@ export type PaymentRequestOptions = {
   nut10?: NUT10Option;
   mintsPreferred?: boolean;
   supportedMethods?: Array<{ method: string; fee?: AmountLike }>;
+  v3?: TaprootOption;
 };
 
 export class PaymentRequest {
@@ -49,9 +52,11 @@ export class PaymentRequest {
   public nut10?: NUT10Option;
   public mintsPreferred?: boolean;
   public supportedMethods?: SupportedMethod[];
+  public v3?: TaprootOption;
 
   constructor(options: PaymentRequestOptions = {}) {
     this.id = options.id;
+    this.v3 = options.v3;
     this.unit = options.unit;
     this.mints = options.mints;
     this.description = options.description;
@@ -306,6 +311,13 @@ export class PaymentRequest {
         t: this.nut10.tags,
       };
     }
+    if (this.v3) {
+      rawRequest.v3 = {
+        k: this.v3.receiverKey,
+        ...(this.v3.leaves?.length && { l: this.v3.leaves }),
+        ...(this.v3.blindKeys?.length && { b: this.v3.blindKeys }),
+      };
+    }
     return rawRequest;
   }
 
@@ -333,6 +345,11 @@ export class PaymentRequest {
    */
   toEncodedCreqB(): string {
     this.assertUnitRule();
+    // The creqB TLV grammar is NUT-26's registry and has no tag for the v3 option. Dropping it
+    // would encode a request for bearer proofs from a payee expecting derived ones.
+    if (this.v3) {
+      throw new CTSError('creqB cannot carry a v3 taproot option; encode as creqA');
+    }
     const tlvRequest: DecodedTLVPaymentRequest = {
       id: this.id,
       amount: this.amount !== undefined ? this.amount.toBigInt() : undefined,
@@ -429,6 +446,45 @@ export class PaymentRequest {
   }
 
   /**
+   * Converts this request's `v3` option into the arguments for a receiver-keyed taproot send (spec
+   * 2.7), so a payer can derive outputs to the payee's static key under the tree they asked for,
+   * honouring their blind-me tags.
+   *
+   * @remarks
+   * `undefined` when the request carries no v3 option. Leaves must round-trip byte for byte: a
+   * payer that cannot reproduce the payee's exact leaf bytes would build a different tree, hence a
+   * different secret, so it refuses rather than paying to something the payee did not ask for.
+   * @throws If the receiver key is not a valid point, or a requested leaf is unparsable or would
+   *   not re-serialize to the bytes the payee sent.
+   */
+  toTaprootOptions():
+    | { receiverPub: string; leaves?: TaprootLeaf[]; blindKeys?: string[] }
+    | undefined {
+    const v3 = this.v3;
+    if (!v3) return undefined;
+    if (!v3.receiverKey) {
+      throw new CTSError('v3 option is missing its receiver key');
+    }
+    const receiverPub = normalizeSecpPubkey(v3.receiverKey);
+    if (!v3.leaves?.length) {
+      return { receiverPub };
+    }
+    const leaves = v3.leaves.map((hex, i) => {
+      const bytes = Bytes.fromHex(hex);
+      const leaf = parseTaprootLeaf(bytes);
+      if (!Bytes.equals(serializeTaprootLeaf(leaf), bytes)) {
+        throw new CTSError(`requested leaf ${i} does not round-trip: cannot reproduce its bytes`);
+      }
+      return leaf;
+    });
+    return {
+      receiverPub,
+      leaves,
+      ...(v3.blindKeys?.length && { blindKeys: v3.blindKeys.map((k) => k.toLowerCase()) }),
+    };
+  }
+
+  /**
    * Creates a PaymentRequest from a raw payment request. Supports both creqA and creqB versions.
    *
    * @param rawPaymentRequest - The raw payment request string to create a PaymentRequest from.
@@ -451,7 +507,15 @@ export class PaymentRequest {
         }
       : undefined;
     const supportedMethods = rawPaymentRequest.sm?.map((m) => ({ method: m.mn, fee: m.mf }));
+    const v3 = rawPaymentRequest.v3
+      ? {
+          receiverKey: rawPaymentRequest.v3.k,
+          leaves: rawPaymentRequest.v3.l,
+          blindKeys: rawPaymentRequest.v3.b,
+        }
+      : undefined;
     return new PaymentRequest({
+      v3,
       transport: transports,
       id: rawPaymentRequest.i,
       amount: rawPaymentRequest.a,
@@ -526,6 +590,7 @@ export class PaymentRequestBuilder {
   private _singleUse?: boolean;
   private _transports: PaymentRequestTransport[] = [];
   private _nut10?: NUT10Option;
+  private _v3?: TaprootOption;
   private _methods: Array<{ method: string; fee?: AmountLike }> = [];
 
   /**
@@ -667,6 +732,38 @@ export class PaymentRequestBuilder {
   }
 
   /**
+   * Requests taproot (v3 keyset) outputs derived to `receiverKey`, optionally under a tree.
+   *
+   * @remarks
+   * Spec 2.7: the receiver key is blinded at slot 0 by the payer, so one request can be reused
+   * without linking payments. `leaves` are serialized leaf bytes and their order fixes the slot
+   * indices; `blindKeys` names the leaf keys to blind, the payee's own tag on its own keys.
+   * @throws If the receiver key is not a valid point, a leaf is unparsable, or a blind-me key is
+   *   not one of the leaves' keys.
+   */
+  requestTaproot(option: TaprootOption): this {
+    const v3: TaprootOption = {
+      receiverKey: normalizeSecpPubkey(option.receiverKey),
+      ...(option.leaves?.length && { leaves: [...option.leaves] }),
+      ...(option.blindKeys?.length && {
+        blindKeys: option.blindKeys.map((k) => normalizeSecpPubkey(k)),
+      }),
+    };
+    // Validate here rather than at build(): a request nobody can pay is worth catching at the
+    // point the payee wrote it, not at the payer.
+    const leafKeys = new Set(
+      (v3.leaves ?? []).flatMap((hex) => parseTaprootLeaf(Bytes.fromHex(hex)).keys),
+    );
+    for (const key of v3.blindKeys ?? []) {
+      if (!leafKeys.has(key)) {
+        throw new CTSError(`blind-me key is not in the requested tree: ${key}`);
+      }
+    }
+    this._v3 = v3;
+    return this;
+  }
+
+  /**
    * Validates cross-field state and constructs the {@link PaymentRequest}.
    *
    * @throws If `mintsPreferred` is set without mints (NUT-18 ignores `mp` without `m`), a supported
@@ -701,6 +798,7 @@ export class PaymentRequestBuilder {
       nut10: this._nut10,
       mintsPreferred: this._mintsPreferred,
       supportedMethods: this._methods.length ? this._methods : undefined,
+      v3: this._v3,
     });
   }
 }

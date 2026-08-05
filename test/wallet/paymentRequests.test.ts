@@ -812,3 +812,87 @@ describe('NUT-18 payment payloads', () => {
     });
   });
 });
+
+describe('taproot (v3) request marking', () => {
+  const carolPub = '02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9';
+  const alicePub = '02e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13';
+  // The 6.1 after leaf: n=1, keys=[alicePub], time=1755561600.
+  const leafAfter =
+    '00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80';
+
+  test('round-trips through creqA, tags and all', () => {
+    const pr = PaymentRequest.builder()
+      .amount(8, 'sat')
+      .requestTaproot({ receiverKey: carolPub, leaves: [leafAfter], blindKeys: [alicePub] })
+      .build();
+    const decoded = decodePaymentRequest(pr.toEncodedRequest());
+    expect(decoded.v3).toEqual({
+      receiverKey: carolPub,
+      leaves: [leafAfter],
+      blindKeys: [alicePub],
+    });
+    // A request with no tree is the bare receiver-keyed case, and stays that way.
+    const bare = PaymentRequest.builder().requestTaproot({ receiverKey: carolPub }).build();
+    expect(decodePaymentRequest(bare.toEncodedRequest()).v3).toEqual({ receiverKey: carolPub });
+  });
+
+  test('the option converts to sender-side derivation arguments', () => {
+    const pr = PaymentRequest.builder()
+      .requestTaproot({ receiverKey: carolPub, leaves: [leafAfter], blindKeys: [alicePub] })
+      .build();
+    expect(pr.toTaprootOptions()).toEqual({
+      receiverPub: carolPub,
+      leaves: [{ type: 'after', n: 1, keys: [alicePub], time: 1755561600 }],
+      blindKeys: [alicePub],
+    });
+    expect(new PaymentRequest({}).toTaprootOptions()).toBeUndefined();
+  });
+
+  test('the receiver key is validated and case-canonicalized, both directions', () => {
+    const upper = '02' + carolPub.slice(2).toUpperCase();
+    expect(
+      PaymentRequest.builder().requestTaproot({ receiverKey: upper }).build().v3?.receiverKey,
+    ).toBe(carolPub);
+    // A foreign request carrying the upper-case form canonicalizes on the way out.
+    expect(new PaymentRequest({ v3: { receiverKey: upper } }).toTaprootOptions()?.receiverPub).toBe(
+      carolPub,
+    );
+    // x-only is rejected here as everywhere: the prepend-02 convention is the caller's to apply.
+    expect(() =>
+      PaymentRequest.builder().requestTaproot({ receiverKey: carolPub.slice(2) }),
+    ).toThrow(/x-only/);
+    expect(() => new PaymentRequest({ v3: { receiverKey: '' } }).toTaprootOptions()).toThrow(
+      /missing its receiver key/,
+    );
+  });
+
+  test('a blind-me key outside the requested tree is refused when authored', () => {
+    expect(() =>
+      PaymentRequest.builder().requestTaproot({
+        receiverKey: carolPub,
+        leaves: [leafAfter],
+        blindKeys: [carolPub],
+      }),
+    ).toThrow(/not in the requested tree/);
+  });
+
+  test('a leaf the payer cannot reproduce byte for byte is refused', () => {
+    // Same leaf plus an odd (annotation) field: it parses, but this wallet would drop the
+    // annotation and hash a different leaf, so paying it would build the wrong tree.
+    const annotated = leafAfter + '0d0005' + '6c6162656c'; // odd field 0x0d, "label"
+    expect(() =>
+      new PaymentRequest({ v3: { receiverKey: carolPub, leaves: [annotated] } }).toTaprootOptions(),
+    ).toThrow(/round-trip/);
+    // An unknown leaf type fails closed the same way it does in spend info.
+    expect(() =>
+      new PaymentRequest({
+        v3: { receiverKey: carolPub, leaves: ['0004' + '02000101'] },
+      }).toTaprootOptions(),
+    ).toThrow(/type/);
+  });
+
+  test('creqB refuses a v3 option rather than dropping it', () => {
+    const pr = PaymentRequest.builder().requestTaproot({ receiverKey: carolPub }).build();
+    expect(() => pr.toEncodedCreqB()).toThrow(/creqA/);
+  });
+});
