@@ -29,6 +29,8 @@ import {
 import { deriveSecretAndBlindingFactor, recoverV3SecretKeys } from '../crypto/NUT13';
 import { signMintQuoteLegacy } from '../crypto/NUT20';
 import {
+  parseTaprootLeaf,
+  recoverLeafKeySecretKeys,
   recoverReceiverKeyedSecretKey,
   taprootLeafHash,
   taprootMerkleRoot,
@@ -115,6 +117,8 @@ import {
   type SwapTransaction,
   type MeltProofsResponse,
   type SendResponse,
+  type SpendOption,
+  type SpendOptions,
   type RestoreConfig,
   type BatchRestoreConfig,
   type RestoreAllConfig,
@@ -2109,6 +2113,68 @@ class Wallet {
         this._randomV3Keys.get(input.secret);
       if (secretKey) input.witness = signTransactionInput(digest, secretKey);
     }
+  }
+
+  /**
+   * What a v3 proof can be spent through: the key path, the script path, or neither.
+   *
+   * @remarks
+   * Offline apart from the seed scan's counter lookup, and it changes nothing. Use it to decide
+   * which leaf a script path plan should name, or to show a user why a proof is stuck.
+   *
+   * `satisfiable` is this wallet's own assessment from what it holds. The mint compares an `after`
+   * leaf against its own clock, so a leaf that unlocked seconds ago may still be refused, and a
+   * hashlock leaf is never satisfiable from the wallet alone: its preimage comes from the caller.
+   * @param proof A v3 (point secret) proof.
+   * @param opts.privkeys Static keys to trial-match, for receiver-keyed proofs and leaf keys.
+   * @param opts.now Unix seconds to judge locktimes against. Defaults to the current time.
+   * @throws If the proof is not a v3 point secret, or its disclosed tree holds a leaf this wallet
+   *   cannot parse (unknown version, type or constraint field: the same fail-closed rule the
+   *   receive cascade applies).
+   */
+  async spendOptions(
+    proof: Proof,
+    opts?: { privkeys?: string | string[]; now?: number },
+  ): Promise<SpendOptions> {
+    if (!/^0[23][0-9a-f]{64}$/.test(proof.secret)) {
+      throw new CTSError('Spend options are for v3 point secrets only');
+    }
+    const privkeys = opts?.privkeys === undefined ? [] : [opts.privkeys].flat();
+    const now = opts?.now ?? Math.floor(Date.now() / 1000);
+
+    // Key path: spend info first (bearer or receiver-keyed), then this wallet's own seed.
+    let keyPath = this._collectSpendInfoKeys([proof], privkeys).has(proof.secret);
+    if (!keyPath && this._seed) {
+      const bound = (await this.counters.peekNext(proof.id)) + 128;
+      keyPath = recoverV3SecretKeys(this._seed, proof.id, [proof.secret], bound).has(proof.secret);
+    }
+
+    const tree = proof.spend_info?.tree;
+    if (!tree || tree.length === 0) return { keyPath, script: [] };
+
+    // Parses every leaf, so an unknown one throws here rather than being reported as spendable.
+    const leaves = tree.map((leaf) => parseTaprootLeaf(Bytes.fromHex(leaf)));
+    const hits = recoverLeafKeySecretKeys(tree, proof.spend_info?.E, privkeys);
+    const script = leaves.map((leaf, leafIndex) => {
+      const keys = hits
+        .filter((h) => h.leafIndex === leafIndex)
+        .map(({ keyIndex, secretKey, blinded }) => ({ keyIndex, secretKey, blinded }));
+      const option: SpendOption = { leafIndex, leaf, keys, satisfiable: false };
+      if (leaf.type === 'after') option.availableAt = leaf.time;
+      // Order matters: report the condition the caller cannot work around first. A locktime is
+      // absolute, a preimage has to be supplied, and only then is it a matter of keys.
+      if (leaf.type === 'after' && leaf.time !== undefined && now < leaf.time) {
+        option.blockedBy = 'locktime';
+      } else if (leaf.type === 'hashlock') {
+        option.blockedBy = 'preimage';
+      } else if (keys.length < leaf.n) {
+        option.blockedBy = 'threshold';
+      } else {
+        option.satisfiable = true;
+      }
+      return option;
+    });
+    return { keyPath, script };
   }
 
   /**
