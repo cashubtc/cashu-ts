@@ -31,6 +31,7 @@ import { signMintQuoteLegacy } from '../crypto/NUT20';
 import {
   buildScriptPathWitness,
   parseTaprootLeaf,
+  type TaprootLeaf,
   recoverLeafKeySecretKeys,
   recoverReceiverKeyedSecretKey,
   taprootLeafHash,
@@ -139,6 +140,19 @@ const PENDING_KEYSET_ID = '__PENDING__';
 
 // NUT-20 "Signature for mint request invalid"
 const MINT_QUOTE_SIGNATURE_INVALID_CODE = 20008;
+
+/**
+ * One resolved script path spend, awaiting only the transaction digest.
+ */
+type ScriptPathSpend = {
+  tree: string[];
+  leafIndex: number;
+  K: string;
+  preimage?: string;
+  keys: string[];
+  leaf: TaprootLeaf;
+  cosign?: (digest: Uint8Array, leaf: TaprootLeaf) => Promise<string[]>;
+};
 
 /**
  * Class that represents a Cashu wallet.
@@ -2077,10 +2091,7 @@ class Wallet {
     payload: Pick<MeltRequest, 'inputs' | 'outputs'>,
     meltQuote?: { quoteId: string; amount: Amount },
     extraKeys?: Map<string, Uint8Array>,
-    scriptSpends?: Map<
-      string,
-      { tree: string[]; leafIndex: number; K: string; preimage?: string; keys: string[] }
-    >,
+    scriptSpends?: Map<string, ScriptPathSpend>,
   ): Promise<void> {
     const isPointSecret = (s: string) => /^0[23][0-9a-f]{64}$/.test(s);
     const v3Inputs = payload.inputs.filter((p) => isBlsKeyset(p.id) && isPointSecret(p.secret));
@@ -2128,11 +2139,24 @@ class Wallet {
         this.fail('Script path plan names a secret not in this transaction');
         continue;
       }
+      const mine = spend.keys.map((k: string) =>
+        Bytes.toHex(schnorr.sign(digest, Bytes.fromHex(k))),
+      );
+      // The co-signer sees the digest only now, which is why it is a hook and not a signature the
+      // caller could have supplied up front: the digest covers the outputs, and those are only
+      // fixed (and ordered) once the transaction is built.
+      const theirs = spend.cosign ? await spend.cosign(digest, spend.leaf) : [];
+      const signatures = [...new Set([...mine, ...theirs.map((sig: string) => sig.toLowerCase())])];
+      if (signatures.length < spend.leaf.n) {
+        this.fail(
+          `Script path leaf needs ${spend.leaf.n} signatures, ${signatures.length} produced`,
+        );
+      }
       input.witness = buildScriptPathWitness(
         spend.tree,
         spend.leafIndex,
         spend.K,
-        spend.keys.map((k) => Bytes.toHex(schnorr.sign(digest, Bytes.fromHex(k)))),
+        signatures,
         spend.preimage,
       );
     }
@@ -2220,14 +2244,8 @@ class Wallet {
     inputs: Proof[],
     plans: ScriptPathPlan[],
     privkeys: string[],
-  ): Map<
-    string,
-    { tree: string[]; leafIndex: number; K: string; preimage?: string; keys: string[] }
-  > {
-    const out = new Map<
-      string,
-      { tree: string[]; leafIndex: number; K: string; preimage?: string; keys: string[] }
-    >();
+  ): Map<string, ScriptPathSpend> {
+    const out = new Map<string, ScriptPathSpend>();
     for (const plan of plans) {
       const proof = inputs.find((p) => p.secret === plan.secret);
       if (!proof) {
@@ -2255,7 +2273,9 @@ class Wallet {
       const keys = [
         ...new Set([...recovered, ...(plan.extraKeys ?? []).map((k: string) => k.toLowerCase())]),
       ];
-      if (keys.length < leaf.n) {
+      // A co-signer contributes signatures, not keys, so its share cannot be counted until the
+      // digest exists. Everything else about the plan is checkable now.
+      if (!plan.cosign && keys.length < leaf.n) {
         throw new CTSError(
           `Script path leaf needs ${leaf.n} signatures, ${keys.length} keys available`,
         );
@@ -2266,6 +2286,8 @@ class Wallet {
         K,
         ...(plan.preimage !== undefined && { preimage: plan.preimage }),
         keys,
+        leaf,
+        ...(plan.cosign && { cosign: plan.cosign }),
       });
     }
     return out;

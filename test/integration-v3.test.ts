@@ -1380,6 +1380,59 @@ describe('M9 script path through the wallet API', () => {
     },
   );
 
+  test(
+    '2-of-3 threshold: the wallet signs with its key and a co-signer supplies the rest',
+    { timeout: 60_000 },
+    async () => {
+      const carolPub = bytesToHex(secp256k1.getPublicKey(randomBytes(32), true));
+      const alicePriv = bytesToHex(randomBytes(32));
+      const alicePub = bytesToHex(secp256k1.getPublicKey(hexToBytes(alicePriv), true));
+      const bobPriv = bytesToHex(randomBytes(32));
+      const bobPub = bytesToHex(secp256k1.getPublicKey(hexToBytes(bobPriv), true));
+      const idlePub = bytesToHex(secp256k1.getPublicKey(randomBytes(32), true));
+      const leaf: TaprootLeaf = { type: 'threshold', n: 2, keys: [alicePub, bobPub, idlePub] };
+      const { wallet, proofs } = await fundV3(64);
+      const { send } = await wallet.ops
+        .send(32, proofs)
+        .asTaproot({ receiverPub: carolPub, leaves: [leaf] }, [32])
+        .run();
+      const proof = send[0];
+
+      const alice = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
+      await alice.loadMint();
+      // Alice alone cannot meet the threshold, and the wallet says so before it builds anything.
+      expect((await alice.spendOptions(proof, { privkeys: alicePriv })).script[0]).toMatchObject({
+        satisfiable: false,
+        blockedBy: 'threshold',
+      });
+      await expect(
+        alice.receive([proof], {
+          privkey: alicePriv,
+          scriptPath: [{ secret: proof.secret, leafIndex: 0 }],
+        }),
+      ).rejects.toThrow(/needs 2 signatures/);
+
+      // Bob co-signs. He only ever sees the digest, never Alice's key or the proof's.
+      let sawDigest: Uint8Array | undefined;
+      const received = await alice.receive([proof], {
+        privkey: alicePriv,
+        scriptPath: [
+          {
+            secret: proof.secret,
+            leafIndex: 0,
+            cosign: async (digest, signingLeaf) => {
+              sawDigest = digest;
+              expect(signingLeaf.keys).toContain(bobPub);
+              return [bytesToHex(schnorr.sign(digest, hexToBytes(bobPriv)))];
+            },
+          },
+        ],
+      });
+      expect(sawDigest).toHaveLength(32);
+      expect(sumProofs(received).toBigInt()).toBe(31n);
+    },
+  );
+
   test('a hashlock leaf spends with its preimage, not without', { timeout: 60_000 }, async () => {
     const carolPub = bytesToHex(secp256k1.getPublicKey(randomBytes(32), true));
     const alicePriv = bytesToHex(randomBytes(32));
