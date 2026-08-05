@@ -509,6 +509,57 @@ describe('receiver-keyed derivation (2.7, vectors 6.1)', () => {
   });
 });
 
+describe('the leaf forms the worked examples never show', () => {
+  const lf = vectors.leaf_forms;
+
+  test('threshold and hashlock leaves serialize to the vector bytes', () => {
+    expect(
+      bytesToHex(serializeTaprootLeaf({ type: 'threshold', n: 1, keys: [v61.carol_pub] })),
+    ).toBe(lf.threshold_1of1);
+    expect(
+      bytesToHex(
+        serializeTaprootLeaf({
+          type: 'threshold',
+          n: 2,
+          keys: [v61.carol_pub, v61.alice_refund_pub],
+        }),
+      ),
+    ).toBe(lf.threshold_2of2);
+    expect(
+      bytesToHex(
+        serializeTaprootLeaf({
+          type: 'hashlock',
+          n: 1,
+          keys: [v61.carol_pub],
+          hash: lf.hashlock_hash,
+        }),
+      ),
+    ).toBe(lf.hashlock);
+  });
+
+  test('the odd-count fold: leaf 2 is promoted, so its path is one sibling', () => {
+    const hashes = lf.three_leaf_tree.map((l) => taprootLeafHash(hexToBytes(l)));
+    expect(bytesToHex(taprootMerkleRoot(hashes))).toBe(lf.three_leaf_root);
+    expect(taprootMerklePath(hashes, 2).map(bytesToHex)).toEqual(lf.three_leaf_path_index_2);
+    // A promoted leaf still proves membership, which is what makes the fold shape safe to fix.
+    expect(
+      verifyTaprootCommitment(
+        hexToBytes(lf.three_leaf_secret),
+        hexToBytes(v61.internal_key),
+        hexToBytes(lf.three_leaf_tree[2]),
+        taprootMerklePath(hashes, 2),
+      ),
+    ).toBe(true);
+  });
+
+  test('the NUMS key is BIP-341 H, and a blinded slot-1 key matches', () => {
+    expect(TAPROOT_NUMS_KEY).toBe(lf.nums_key);
+    expect(
+      deriveP2BKBlindedPubkeyAtSlot(lf.blind_slot1_key, hexToBytes(v61.ephemeral_priv), 1),
+    ).toBe(lf.blind_slot1_result);
+  });
+});
+
 describe('leaf-key blinding: the positional slot map (2.7)', () => {
   const eBytes = hexToBytes(v61.ephemeral_priv);
   const carolPub = v61.carol_pub;
