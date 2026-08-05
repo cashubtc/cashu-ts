@@ -15,6 +15,8 @@ import {
   recoverReceiverKeyedSecretKey,
   type TaprootLeaf,
   TAPROOT_NUMS_KEY,
+  TAPROOT_MAX_LEAF_TIME,
+  TAPROOT_MAX_TREE_DEPTH,
   verifyTaprootSpendInfo,
   taggedHash,
   tlvRecord,
@@ -200,6 +202,25 @@ describe('leaf parsing fails closed', () => {
       ...tlvRecord(0x0d, new Uint8Array(1024 - fields.length - 3)),
     ]);
     expect(() => parseTaprootLeaf(overLimit)).toThrow(/body exceeds/);
+
+    // Bounded so both implementations read the same leaf: unbounded here means a leaf a mint
+    // commits and spends that a wallet cannot parse, which strands the proof with its holder.
+    const hugeTime = new Uint8Array([
+      0x00,
+      0x02,
+      ...tlvRecord(0x02, new Uint8Array([1])),
+      ...tlvRecord(0x04, hexToBytes(v61.carol_pub)),
+      ...tlvRecord(0x06, hexToBytes('0fffffffffffffff')),
+    ]);
+    expect(() => parseTaprootLeaf(hugeTime)).toThrow(/time out of range/);
+    expect(() =>
+      serializeTaprootLeaf({
+        type: 'after',
+        n: 1,
+        keys: [v61.carol_pub],
+        time: TAPROOT_MAX_LEAF_TIME + 2,
+      }),
+    ).toThrow(/time out of range/);
   });
 
   test('known fields not defined for the selected leaf type reject', () => {
@@ -802,5 +823,37 @@ describe('leaf-key blinding: the positional slot map (2.7)', () => {
     const hit = recoverReceiverKeyedSecretKey(out.secret, out.E, v61.carol_priv, out.tree);
     expect(hit?.internalKey).toBe(v61.internal_key);
     expect(bytesToHex(secp256k1.getPublicKey(hexToBytes(hit!.secretKey), true))).toBe(out.secret);
+  });
+});
+
+describe('tree caps are enforced on a disclosed tree, not only on a witness path', () => {
+  const key = (i: number) =>
+    bytesToHex(secp256k1.getPublicKey(hexToBytes(i.toString(16).padStart(64, '0')), true));
+
+  test('a tree deeper than the cap has no usable script path, so it is refused', () => {
+    // Past 2^8 leaves every merkle path is longer than a verifier accepts, so the fallbacks a
+    // holder was told they had do not exist. Spec 2.6 makes the cap normative when verifying a
+    // disclosed tree, not only when building one.
+    const hashes = Array.from({ length: 2 ** TAPROOT_MAX_TREE_DEPTH }, (_, i) =>
+      taprootLeafHash(hexToBytes(i.toString(16).padStart(64, '0'))),
+    );
+    expect(() => taprootMerkleRoot(hashes)).not.toThrow();
+    expect(() => taprootMerkleRoot([...hashes, hashes[0]])).toThrow(/depth/);
+  });
+
+  test('the slot cap keeps a build inside the depth cap', () => {
+    const leaves: TaprootLeaf[] = Array.from({ length: 255 }, (_, i) => ({
+      type: 'threshold' as const,
+      n: 1,
+      keys: [key(i + 1)],
+    }));
+    expect(() => buildTaprootSecret(TAPROOT_NUMS_KEY, leaves)).toThrow(/slots/);
+    const ok = buildTaprootSecret(TAPROOT_NUMS_KEY, leaves.slice(0, 254));
+    expect(
+      taprootMerklePath(
+        ok.tree.map((leaf) => taprootLeafHash(hexToBytes(leaf))),
+        0,
+      ).length,
+    ).toBeLessThanOrEqual(TAPROOT_MAX_TREE_DEPTH);
   });
 });

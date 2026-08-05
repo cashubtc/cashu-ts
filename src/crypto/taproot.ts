@@ -55,6 +55,16 @@ export const TAPROOT_MAX_LEAF_BYTES = 1024;
 export const TAPROOT_MAX_TREE_DEPTH = 8;
 
 /**
+ * Largest unix time an `after` leaf may name (2^53 - 1).
+ *
+ * @remarks
+ * The point where implementations built on IEEE-754 integers stop counting exactly. Bounded so
+ * every implementation reads the same leaf: without it a leaf is valid at a mint and unparsable in
+ * a wallet, which strands the proof with its holder.
+ */
+export const TAPROOT_MAX_LEAF_TIME = Number.MAX_SAFE_INTEGER;
+
+/**
  * Enumerated blinding slots per secret (spec 2.7), so the slot index stays one byte.
  */
 export const TAPROOT_MAX_SLOTS = 255;
@@ -194,6 +204,9 @@ export function serializeTaprootLeaf(leaf: TaprootLeaf): Uint8Array {
     if (!Number.isInteger(leaf.time) || (leaf.time as number) < 0) {
       throw new CTSError('after leaf requires a unix time');
     }
+    if ((leaf.time as number) > TAPROOT_MAX_LEAF_TIME) {
+      throw new CTSError('time out of range');
+    }
     fields.push(tlvRecord(FIELD_TIME, minimalBE(BigInt(leaf.time as number))));
   } else if (leaf.time !== undefined) {
     throw new CTSError(`${leaf.type} leaf must not carry a time field`);
@@ -275,7 +288,7 @@ export function parseTaprootLeaf(bytes: Uint8Array): TaprootLeaf {
       }
       case FIELD_TIME: {
         const t = readMinimalBE(rec.value);
-        if (t > BigInt(Number.MAX_SAFE_INTEGER)) {
+        if (t > BigInt(TAPROOT_MAX_LEAF_TIME)) {
           throw new CTSError('time out of range');
         }
         time = Number(t);
@@ -333,10 +346,19 @@ export function taprootBranchHash(a: Uint8Array, b: Uint8Array): Uint8Array {
 
 /**
  * Fold leaf hashes to a merkle root: pairwise per level, odd hash promoted.
+ *
+ * @remarks
+ * The depth cap of 2.6 is enforced here, not only on a witness path, because it is a property of
+ * the tree: past `2^8` leaves every merkle path is longer than a verifier will accept, so the
+ * script paths a holder was told they had do not exist. The slot cap makes such a tree
+ * unconstructible in practice; this states the bound the spec names.
  */
 export function taprootMerkleRoot(leafHashes: Uint8Array[]): Uint8Array {
   if (leafHashes.length === 0) {
     throw new CTSError('Merkle root of zero leaves');
+  }
+  if (leafHashes.length > 2 ** TAPROOT_MAX_TREE_DEPTH) {
+    throw new CTSError(`Tree exceeds depth ${TAPROOT_MAX_TREE_DEPTH}`);
   }
   let level = leafHashes;
   while (level.length > 1) {

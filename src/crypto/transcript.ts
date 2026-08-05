@@ -4,7 +4,7 @@ import { utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { Amount } from '../model/Amount';
 import { CTSError } from '../model/Errors';
-import { Bytes } from '../utils';
+import { Bytes, isValidHex } from '../utils';
 
 import { isBlsKeyset } from './curves';
 import { minimalBE, tlvRecord } from './taproot';
@@ -73,6 +73,22 @@ function amountRecord(amount: bigint): Uint8Array {
   return tlvRecord(0x01, minimalBE(value));
 }
 
+/**
+ * A keyset id as transcript bytes: raw bytes when it is hex, utf8 otherwise.
+ *
+ * @remarks
+ * Legacy (pre-v1) keyset ids are base64, not hex, and a mixed transaction may carry one beside a v3
+ * input. Hex-decoding unconditionally turns that into an exception rather than a transcript, so
+ * such a transaction could be neither signed nor verified. Falling back to utf8 is the same rule
+ * the secret already follows.
+ */
+function keysetIdBytes(keysetId: string): Uint8Array {
+  if (keysetId.length === 0) {
+    throw new CTSError('Transcript keyset id must be non-empty');
+  }
+  return isValidHex(keysetId) ? Bytes.fromHex(keysetId) : utf8ToBytes(keysetId);
+}
+
 function proofInputContainer(input: TranscriptProofInput): Uint8Array {
   // A v3 secret contributes its raw 33 bytes; a v0-v2 secret its utf8 bytes.
   const secret = isBlsKeyset(input.keysetId)
@@ -85,7 +101,7 @@ function proofInputContainer(input: TranscriptProofInput): Uint8Array {
     CONTAINER_PROOF_INPUT,
     Bytes.concat(
       amountRecord(input.amount),
-      tlvRecord(0x02, Bytes.fromHex(input.keysetId)),
+      tlvRecord(0x02, keysetIdBytes(input.keysetId)),
       tlvRecord(0x03, secret),
       tlvRecord(0x04, Bytes.fromHex(input.C)),
     ),
@@ -107,7 +123,7 @@ function blindedOutputContainer(output: TranscriptBlindedOutput): Uint8Array {
     CONTAINER_BLINDED_OUTPUT,
     Bytes.concat(
       amountRecord(output.amount),
-      tlvRecord(0x02, Bytes.fromHex(output.keysetId)),
+      tlvRecord(0x02, keysetIdBytes(output.keysetId)),
       tlvRecord(0x03, Bytes.fromHex(output.B_)),
     ),
   );

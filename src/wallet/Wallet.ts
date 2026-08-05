@@ -2175,6 +2175,16 @@ class Wallet {
         this._randomV3Keys.get(input.secret);
       if (secretKey) input.witness = signTransactionInput(digest, secretKey);
     }
+    // Every v3 input signs (spec 2.2.2), so an unsigned one is a request the mint will refuse.
+    // Say which proof and why here, rather than letting it come back as a witness error naming
+    // nothing: the cause is always a key this wallet does not hold.
+    const unsigned = v3Inputs.find((p) => !p.witness);
+    if (unsigned) {
+      this.fail(
+        'No key to sign a v3 input: its spend info holds neither a bearer key nor an ephemeral this wallet can derive from, and it is not seed-derived',
+        { id: unsigned.id, amount: unsigned.amount.toString() },
+      );
+    }
   }
 
   /**
