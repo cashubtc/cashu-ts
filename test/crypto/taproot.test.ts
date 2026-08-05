@@ -1,14 +1,19 @@
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
+import { numberToBytesBE } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { hexToBytes, bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { tagSchnorr } from '@scure/btc-signer/utils.js';
 import { describe, test, expect } from 'vitest';
 
+import { deriveP2BKBlindedPubkeyAtSlot } from '../../src/crypto/NUT28';
 import {
   buildScriptPathWitness,
   buildTaprootSecret,
   deriveReceiverKeyedSecret,
+  enumerateLeafKeySlots,
+  recoverLeafKeySecretKeys,
   recoverReceiverKeyedSecretKey,
+  type TaprootLeaf,
   TAPROOT_NUMS_KEY,
   verifyTaprootSpendInfo,
   taggedHash,
@@ -481,5 +486,147 @@ describe('receiver-keyed derivation (2.7, vectors 6.1)', () => {
       verifyTaprootSpendInfo(v61.secret, { E: v61.ephemeral_pub, tree: [v61.leaf_after] }),
     ).toBe('receiver-keyed');
     expect(() => verifyTaprootSpendInfo(v61.secret, { E: 'zz' })).toThrow(/ephemeral/);
+  });
+});
+
+describe('leaf-key blinding: the positional slot map (2.7)', () => {
+  const eBytes = hexToBytes(v61.ephemeral_priv);
+  const carolPub = v61.carol_pub;
+  const alicePub = v61.alice_refund_pub;
+  // A third static key, to sit in a leaf beside the other two.
+  const bobPriv = '0000000000000000000000000000000000000000000000000000000000000007';
+  const bobPub = bytesToHex(secp256k1.getPublicKey(hexToBytes(bobPriv), true));
+
+  test('slots number the base key 0, then leaves in order, keys within a leaf in order', () => {
+    const slots = enumerateLeafKeySlots([
+      { type: 'threshold', n: 2, keys: [carolPub, alicePub] },
+      { type: 'after', n: 1, keys: [bobPub], time: v61.refund_time },
+    ]);
+    expect(slots.map((s) => s.slot)).toEqual([1, 2, 3]);
+    expect(slots.map((s) => s.key)).toEqual([carolPub, alicePub, bobPub]);
+    expect(slots.map((s) => [s.leafIndex, s.keyIndex])).toEqual([
+      [0, 0],
+      [0, 1],
+      [1, 0],
+    ]);
+  });
+
+  test('slot cap keeps the index inside one byte', () => {
+    const keys = Array.from({ length: 254 }, (_, i) =>
+      bytesToHex(secp256k1.getPublicKey(numberToBytesBE(BigInt(i + 2), 32), true)),
+    );
+    expect(enumerateLeafKeySlots([{ type: 'threshold', n: 1, keys }])).toHaveLength(254);
+    expect(() =>
+      enumerateLeafKeySlots([
+        { type: 'threshold', n: 1, keys },
+        { type: 'threshold', n: 1, keys: [carolPub] },
+      ]),
+    ).toThrow(/255 slots/);
+  });
+
+  test('sender blinds only the tagged keys, at their own slot', () => {
+    const leaves: TaprootLeaf[] = [
+      { type: 'threshold', n: 2, keys: [carolPub, alicePub] },
+      { type: 'after', n: 1, keys: [bobPub], time: v61.refund_time },
+    ];
+    const verbatim = deriveReceiverKeyedSecret(carolPub, { leaves, eBytes });
+    const blinded = deriveReceiverKeyedSecret(carolPub, { leaves, eBytes, blindKeys: [bobPub] });
+    expect(blinded.E).toBe(verbatim.E);
+    // Same slot 0, so the internal key is unchanged; the tree (hence the secret) is not.
+    expect(blinded.tree).toHaveLength(2);
+    expect(blinded.tree?.[0]).toBe(verbatim.tree?.[0]);
+    expect(blinded.tree?.[1]).not.toBe(verbatim.tree?.[1]);
+    expect(blinded.secret).not.toBe(verbatim.secret);
+    // The blinded key is bob's key at slot 3, and the leaf is otherwise untouched.
+    const leaf = parseTaprootLeaf(hexToBytes(blinded.tree![1]));
+    expect(leaf.keys).toEqual([deriveP2BKBlindedPubkeyAtSlot(bobPub, eBytes, 3)]);
+    expect(leaf.time).toBe(v61.refund_time);
+    // The caller's leaves are not mutated.
+    expect(leaves[1].keys).toEqual([bobPub]);
+  });
+
+  test('the same static key at two slots gets distinct tweaks', () => {
+    const leaves: TaprootLeaf[] = [
+      { type: 'threshold', n: 1, keys: [bobPub] },
+      { type: 'after', n: 1, keys: [bobPub], time: v61.refund_time },
+    ];
+    const out = deriveReceiverKeyedSecret(carolPub, { leaves, eBytes, blindKeys: [bobPub] });
+    const first = parseTaprootLeaf(hexToBytes(out.tree![0])).keys[0];
+    const second = parseTaprootLeaf(hexToBytes(out.tree![1])).keys[0];
+    expect(first).not.toBe(second);
+    expect(first).not.toBe(bobPub);
+    // Both are recovered, one per occurrence, each with its own key.
+    const hits = recoverLeafKeySecretKeys(out.tree!, out.E, [bobPriv]);
+    expect(hits.map((h) => h.slot)).toEqual([1, 2]);
+    expect(hits[0].secretKey).not.toBe(hits[1].secretKey);
+    for (const hit of hits) {
+      expect(hit.blinded).toBe(true);
+      const leafKey = parseTaprootLeaf(hexToBytes(out.tree![hit.leafIndex])).keys[hit.keyIndex];
+      expect(bytesToHex(secp256k1.getPublicKey(hexToBytes(hit.secretKey), true))).toBe(leafKey);
+    }
+  });
+
+  test('receiver walk resolves a tree mixing blinded and verbatim keys of two owners', () => {
+    const leaves: TaprootLeaf[] = [
+      { type: 'threshold', n: 2, keys: [carolPub, alicePub] },
+      { type: 'after', n: 1, keys: [bobPub], time: v61.refund_time },
+    ];
+    const out = deriveReceiverKeyedSecret(carolPub, {
+      leaves,
+      eBytes,
+      blindKeys: [bobPub, alicePub],
+    });
+    // Bob holds one blinded key; Alice holds the other; Carol's leaf key stayed verbatim.
+    expect(recoverLeafKeySecretKeys(out.tree!, out.E, [bobPriv])).toEqual([
+      { leafIndex: 1, keyIndex: 0, slot: 3, secretKey: expect.any(String), blinded: true },
+    ]);
+    expect(recoverLeafKeySecretKeys(out.tree!, out.E, [v61.alice_refund_priv])).toEqual([
+      { leafIndex: 0, keyIndex: 1, slot: 2, secretKey: expect.any(String), blinded: true },
+    ]);
+    expect(recoverLeafKeySecretKeys(out.tree!, out.E, [v61.carol_priv])).toEqual([
+      { leafIndex: 0, keyIndex: 0, slot: 1, secretKey: v61.carol_priv, blinded: false },
+    ]);
+    // All three at once, in slot order per key held.
+    expect(
+      recoverLeafKeySecretKeys(out.tree!, out.E, [v61.carol_priv, v61.alice_refund_priv, bobPriv])
+        .length,
+    ).toBe(3);
+  });
+
+  test('a stranger key matches nothing, and neither does the right key at the wrong slot', () => {
+    const leaves: TaprootLeaf[] = [{ type: 'threshold', n: 1, keys: [bobPub] }];
+    const out = deriveReceiverKeyedSecret(carolPub, { leaves, eBytes, blindKeys: [bobPub] });
+    const strangerPriv = bytesToHex(secp256k1.utils.randomSecretKey());
+    expect(recoverLeafKeySecretKeys(out.tree!, out.E, [strangerPriv])).toEqual([]);
+    // Same key, wrong slot: the tweak is index-bound, so an off-by-one finds nothing.
+    const shifted = buildTaprootSecret(v61.internal_key, [
+      { type: 'threshold', n: 1, keys: [deriveP2BKBlindedPubkeyAtSlot(bobPub, eBytes, 2)] },
+    ]).tree;
+    expect(recoverLeafKeySecretKeys(shifted, out.E, [bobPriv])).toEqual([]);
+    // Verbatim keys still resolve with no ephemeral in play.
+    const plain = buildTaprootSecret(v61.internal_key, leaves).tree;
+    expect(recoverLeafKeySecretKeys(plain, undefined, [bobPriv, strangerPriv])).toEqual([
+      { leafIndex: 0, keyIndex: 0, slot: 1, secretKey: bobPriv, blinded: false },
+    ]);
+  });
+
+  test('a blind-me key that is nowhere in the tree is an error, not a silent no-op', () => {
+    expect(() =>
+      deriveReceiverKeyedSecret(carolPub, {
+        leaves: [{ type: 'threshold', n: 1, keys: [bobPub] }],
+        eBytes,
+        blindKeys: [alicePub],
+      }),
+    ).toThrow(/not in the tree/);
+  });
+
+  test('a blinded leaf key does not disturb key-path recovery for the base key', () => {
+    const leaves: TaprootLeaf[] = [
+      { type: 'after', n: 1, keys: [alicePub], time: v61.refund_time },
+    ];
+    const out = deriveReceiverKeyedSecret(carolPub, { leaves, eBytes, blindKeys: [alicePub] });
+    const hit = recoverReceiverKeyedSecretKey(out.secret, out.E, v61.carol_priv, out.tree);
+    expect(hit?.internalKey).toBe(v61.internal_key);
+    expect(bytesToHex(secp256k1.getPublicKey(hexToBytes(hit!.secretKey), true))).toBe(out.secret);
   });
 });
