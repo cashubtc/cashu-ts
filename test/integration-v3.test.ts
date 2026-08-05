@@ -1253,3 +1253,50 @@ describe('M8 tokens end to end with spend_info', () => {
     },
   );
 });
+
+describe('audit: spend info carrying both k and E', () => {
+  test(
+    'a re-gifted derived scalar beside its ephemeral is refused, melt path included',
+    { timeout: 60_000 },
+    async () => {
+      // Spec 2.5.2: `k` and `E` are mutually exclusive, and a receiver-keyed proof's scalar is
+      // `p_static + r_i`. A proof carrying both means someone holds that scalar AND knows r_i, so
+      // they can recover the receiver's static private key. The cascade rejects the shape, but the
+      // cascade only runs on receive: melt reaches key collection directly.
+      const carolPriv = bytesToHex(randomBytes(32));
+      const carolPub = bytesToHex(secp256k1.getPublicKey(hexToBytes(carolPriv), true));
+      const payer = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
+      await payer.loadMint();
+      const quote = await payer.createMintQuoteBolt11(64);
+      for (let i = 0; i < 40; i++) {
+        if ((await payer.checkMintQuoteBolt11(quote.quote)).state === 'PAID') break;
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      const funds = await payer.mintProofsBolt11(64, quote.quote);
+      const { send } = await payer.ops
+        .send(32, funds)
+        .asTaproot({ receiverPub: carolPub }, [32])
+        .run();
+      const proof = send[0];
+
+      // The dangerous shape: the derived scalar re-gifted as a bearer key beside its ephemeral.
+      const derived = recoverReceiverKeyedSecretKey(proof.secret, proof.spend_info!.E!, carolPriv);
+      expect(derived).toBeDefined();
+      const poisoned = [
+        { ...proof, spend_info: { k: derived!.secretKey, E: proof.spend_info!.E } },
+      ];
+
+      const carol = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
+      await carol.loadMint();
+      // Receive already refused it (the cascade). Melt must refuse it too.
+      await expect(carol.receive(poisoned, { privkey: carolPriv })).rejects.toThrow(/both k and E/);
+      const payee = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
+      await payee.loadMint();
+      const target = await payee.createMintQuoteBolt11(8);
+      const meltQuote = await carol.createMeltQuoteBolt11(target.request);
+      await expect(
+        carol.meltProofsBolt11(meltQuote, poisoned, { privkey: carolPriv }),
+      ).rejects.toThrow(/both k and E/);
+    },
+  );
+});

@@ -2127,6 +2127,14 @@ class Wallet {
     const statics = privkeys === undefined ? [] : [privkeys].flat();
     for (const proof of inputs) {
       const E = proof.spend_info?.E;
+      // `k` and `E` are mutually exclusive (spec 2.5.2). Both present is the shape a re-gifted
+      // receiver-keyed scalar takes, and that scalar is `p_static + r_i`: whoever knows `r_i`
+      // recovers the receiver's static private key from it. The receive cascade rejects this, but
+      // it only runs on receive, and melt reaches here directly. Refuse loudly wherever it appears:
+      // this is a compromised key, not an input that merely cannot be signed.
+      if (E !== undefined && proof.spend_info?.k !== undefined) {
+        this.fail('Spend info carries both k and E');
+      }
       if (E && statics.length > 0) {
         for (const priv of statics) {
           const hit = recoverReceiverKeyedSecretKey(proof.secret, E, priv, proof.spend_info?.tree);
