@@ -19,6 +19,7 @@ import {
   buildP2PKSigAllMessageV0,
   assertSigAllInputs,
   parseSecret,
+  assertV3PointSecret,
 } from '../crypto';
 // Internal transitional fallback — not part of crypto/index.ts
 import {
@@ -2144,9 +2145,18 @@ class Wallet {
       // fixed (and ordered) once the transaction is built.
       const theirs = spend.cosign ? await spend.cosign(digest, spend.leaf) : [];
       const signatures = [...new Set([...mine, ...theirs.map((sig: string) => sig.toLowerCase())])];
-      if (signatures.length < spend.leaf.n) {
+      const validSigners = spend.leaf.keys.filter((key) =>
+        signatures.some((signature) => {
+          try {
+            return schnorr.verify(Bytes.fromHex(signature), digest, Bytes.fromHex(key).subarray(1));
+          } catch {
+            return false;
+          }
+        }),
+      ).length;
+      if (validSigners < spend.leaf.n) {
         this.fail(
-          `Script path leaf needs ${spend.leaf.n} signatures, ${signatures.length} produced`,
+          `Script path leaf needs ${spend.leaf.n} valid signatures, ${validSigners} produced`,
         );
       }
       input.witness = buildScriptPathWitness(
@@ -2188,9 +2198,7 @@ class Wallet {
     proof: Proof,
     opts?: { privkeys?: string | string[]; now?: number },
   ): Promise<SpendOptions> {
-    if (!/^0[23][0-9a-f]{64}$/.test(proof.secret)) {
-      throw new CTSError('Spend options are for v3 point secrets only');
-    }
+    assertV3PointSecret(proof.secret);
     const privkeys = opts?.privkeys === undefined ? [] : [opts.privkeys].flat();
     const now = opts?.now ?? Math.floor(Date.now() / 1000);
 
@@ -2297,7 +2305,6 @@ class Wallet {
   private _internalKeyOf(proof: Proof, privkeys: string[]): string | undefined {
     const info = proof.spend_info;
     if (!info) return undefined;
-    if (info.K) return info.K.toLowerCase();
     if (info.k && /^[0-9a-f]{64}$/.test(info.k)) {
       try {
         return Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(info.k)));
@@ -2309,6 +2316,13 @@ class Wallet {
       for (const priv of privkeys) {
         const hit = recoverReceiverKeyedSecretKey(proof.secret, info.E, priv, info.tree);
         if (hit) return hit.internalKey;
+      }
+    }
+    if (info.K) {
+      try {
+        return normalizeSecpPubkey(info.K);
+      } catch {
+        return undefined;
       }
     }
     return undefined;

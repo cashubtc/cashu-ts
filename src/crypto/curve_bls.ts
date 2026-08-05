@@ -57,6 +57,14 @@ const BLS_BATCH_DST = utf8ToBytes('Cashu_BLS_Batch_v1');
 const Fr = bls12_381.fields.Fr;
 const Fp_ORDER = bls12_381.fields.Fp.ORDER;
 
+function blsScalar(bytes: Uint8Array, label: string): bigint {
+  const scalar = bytes.length === 32 ? bytesToNumberBE(bytes) : 0n;
+  if (scalar === 0n || scalar >= BLS_FR_ORDER) {
+    throw new CTSError(`${label} scalar must be 32 bytes in Fr*`);
+  }
+  return scalar;
+}
+
 export function hashToCurveBls(secret: Uint8Array): G1Point {
   return bls12_381.G1.hashToCurve(taprootSecretHashInput(secret), { DST: BLS_HASH_TO_CURVE_DST });
 }
@@ -166,15 +174,10 @@ export function pointFromHexG2(hex: string): G2Point {
 /**
  * V3 (BLS) mint pubkey: K2 = a · G2_gen, compressed to 96 bytes.
  *
- * The 32-byte private key is interpreted as a big-endian scalar and reduced mod the BLS Fr order
- * (same convention as the mint-side blind signer for v3).
+ * The 32-byte private key is interpreted as a canonical non-zero big-endian BLS Fr scalar.
  */
 export function getG2PubKeyFromPrivKey(privKey: Uint8Array): Uint8Array<ArrayBufferLike> {
-  const a = Fr.fromBytes(privKey);
-  /* c8 ignore next 3 — defensive guard; a==0 requires all-zero privKey bytes (impossible in practice). */
-  if (a === 0n) {
-    throw new CTSError('Mint scalar must be non-zero');
-  }
+  const a = blsScalar(privKey, 'Mint');
   return BLS_G2_GENERATOR.multiply(a).toBytes(true);
 }
 
@@ -189,6 +192,10 @@ function randomScalar(): bigint {
   throw new CTSError('BLS random scalar generation failed');
 }
 
+export function createRandomBlsSecretKey(): Uint8Array {
+  return numberToBytesBE(randomScalar(), 32);
+}
+
 /**
  * Multiplicative blinding for BLS12-381 v3 keysets. Y = hashToCurveG1(secret) B_ = Y * r.
  *
@@ -199,8 +206,8 @@ export function blindMessageBls(secret: Uint8Array, r?: bigint): RawBlindedMessa
   const Y = hashToCurveBls(secret);
   if (r === undefined) {
     r = randomScalar();
-  } else if (r === 0n) {
-    throw new CTSError('Blinding factor r must be non-zero');
+  } else if (r <= 0n || r >= BLS_FR_ORDER) {
+    throw new CTSError('Blinding factor r must be in Fr*');
   }
   const B_ = Y.multiply(r);
   return { B_, r, secret };
@@ -211,8 +218,8 @@ export function blindMessageBls(secret: Uint8Array, r?: bigint): RawBlindedMessa
  * mint pubkey is not needed here.
  */
 export function unblindSignatureBls(C_: G1Point, r: bigint): G1Point {
-  if (r === 0n) {
-    throw new CTSError('Blinding factor r must be non-zero');
+  if (r <= 0n || r >= BLS_FR_ORDER) {
+    throw new CTSError('Blinding factor r must be in Fr*');
   }
   return C_.multiply(Fr.inv(r));
 }
@@ -229,7 +236,7 @@ export function constructUnblindedSignatureBls(
 /**
  * Mint-side blind signing: C_ = B_ * a where `a` is the mint's per-amount secret.
  *
- * @param privateKey 32-byte mint secret (big-endian); reduced mod Fr.
+ * @param privateKey Canonical 32-byte non-zero mint scalar in Fr.
  */
 export function createBlindSignatureBls(
   B_: G1Point,
@@ -241,10 +248,7 @@ export function createBlindSignatureBls(
   // small order via C_ = a * B_.
   if (B_.is0()) throw new CTSError('G1 point at infinity');
   if (!B_.isTorsionFree()) throw new CTSError('G1 point not in prime-order subgroup');
-  const a = Fr.fromBytes(privateKey);
-  if (a === 0n) {
-    throw new CTSError('Mint scalar must be non-zero');
-  }
+  const a = blsScalar(privateKey, 'Mint');
   const C_ = B_.multiply(a);
   return { C_, id };
 }

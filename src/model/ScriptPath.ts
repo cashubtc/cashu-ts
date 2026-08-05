@@ -1,13 +1,15 @@
 import { schnorr } from '@noble/curves/secp256k1.js';
 
 import { getPubKeyFromPrivKey } from '../crypto/curve_secp';
+import { deriveP2BKSlotSecretKey } from '../crypto/NUT28';
 import {
   buildScriptPathWitness,
+  enumerateLeafKeySlots,
   parseTaprootLeaf,
-  recoverLeafKeySecretKeys,
   taprootLeafHash,
   taprootMerklePath,
   type TaprootLeaf,
+  verifyTaprootCommitment,
 } from '../crypto/taproot';
 import { transactionDigest } from '../crypto/transcript';
 import { Bytes, JSONInt, encodeUint8toBase64Url } from '../utils';
@@ -44,6 +46,11 @@ export type ScriptPathSpendRequest = {
    * derive it. Absent for bearer and script-only proofs, whose leaf keys are verbatim.
    */
   E?: string;
+  /**
+   * Absolute NUT-28 slot of each leaf key. Needed to derive receiver-blinded keys when this is not
+   * the first leaf in the disclosed tree.
+   */
+  keySlots?: number[];
   /**
    * Preimage for a hashlock leaf, hex.
    */
@@ -133,6 +140,10 @@ function buildPackage(
       throw new CTSError('Script path package needs the internal key from the proof spend info');
     }
     const leafHashes = tree.map((leaf) => taprootLeafHash(Bytes.fromHex(leaf)));
+    const parsedTree = tree.map((leaf) => parseTaprootLeaf(Bytes.fromHex(leaf)));
+    const keySlots = enumerateLeafKeySlots(parsedTree)
+      .filter(({ leafIndex }) => leafIndex === plan.leafIndex)
+      .map(({ slot }) => slot);
     return {
       secret: plan.secret,
       leaf: tree[plan.leafIndex],
@@ -141,6 +152,7 @@ function buildPackage(
         path: taprootMerklePath(leafHashes, plan.leafIndex).map((h) => Bytes.toHex(h)),
       },
       ...(proof.spend_info?.E && { E: proof.spend_info.E }),
+      keySlots,
       ...(plan.preimage !== undefined && { preimage: plan.preimage }),
       signatures: [],
     };
@@ -202,6 +214,11 @@ function deserializePackage(input: string): ScriptPathSigningPackage {
     throw new CTSError('Failed to parse signing package', { cause: e });
   }
   const pkg = data as ScriptPathSigningPackage;
+  assertValidPackage(pkg);
+  return pkg;
+}
+
+function assertValidPackage(pkg: ScriptPathSigningPackage): void {
   if (!pkg || typeof pkg !== 'object' || pkg.version !== SCRIPT_PATH_PREFIX) {
     throw new CTSError('Invalid signing package version');
   }
@@ -214,22 +231,62 @@ function deserializePackage(input: string): ScriptPathSigningPackage {
   if (!/^[0-9a-f]{64}$/.test(pkg.digest ?? '')) {
     throw new CTSError('Signing package digest must be 32 bytes hex');
   }
-  // The digest is what everyone signs, so never take it on trust: recompute it from the package's
-  // own inputs and outputs. A tampered digest would otherwise collect signatures over a
-  // transaction nobody inspected.
+  if (
+    pkg.type === 'melt' &&
+    (typeof pkg.quote !== 'string' || pkg.quote.length === 0 || pkg.quoteAmount === undefined)
+  ) {
+    throw new CTSError('Melt signing package needs a quote and amount');
+  }
   const recomputed = Bytes.toHex(
     digestOf(
       pkg.inputs,
       pkg.outputs,
-      pkg.quote !== undefined && pkg.quoteAmount !== undefined
-        ? { quoteId: pkg.quote, amount: Amount.from(pkg.quoteAmount).toBigInt() }
+      pkg.type === 'melt'
+        ? { quoteId: pkg.quote!, amount: Amount.from(pkg.quoteAmount!).toBigInt() }
         : undefined,
     ),
   );
   if (recomputed !== pkg.digest) {
     throw new CTSError('Signing package digest does not match its inputs and outputs');
   }
-  return pkg;
+  const inputSecrets = new Set(pkg.inputs.map((input) => input.secret));
+  const spent = new Set<string>();
+  for (const spend of pkg.spends) {
+    if (!inputSecrets.has(spend.secret) || spent.has(spend.secret)) {
+      throw new CTSError('Signing package spend must name one unique transaction input');
+    }
+    spent.add(spend.secret);
+    let leaf: TaprootLeaf;
+    try {
+      leaf = parseTaprootLeaf(Bytes.fromHex(spend.leaf));
+      if (
+        !spend.control ||
+        !Array.isArray(spend.control.path) ||
+        !verifyTaprootCommitment(
+          Bytes.fromHex(spend.secret),
+          Bytes.fromHex(spend.control.K),
+          Bytes.fromHex(spend.leaf),
+          spend.control.path.map((hash) => Bytes.fromHex(hash)),
+        )
+      ) {
+        throw new Error('commitment mismatch');
+      }
+    } catch (e) {
+      throw new CTSError('Signing package leaf does not commit to its input secret', { cause: e });
+    }
+    if (!Array.isArray(spend.signatures)) {
+      throw new CTSError('Signing package signatures must be an array');
+    }
+    if (
+      spend.keySlots !== undefined &&
+      (!Array.isArray(spend.keySlots) ||
+        spend.keySlots.length !== leaf.keys.length ||
+        new Set(spend.keySlots).size !== spend.keySlots.length ||
+        spend.keySlots.some((slot) => !Number.isInteger(slot) || slot < 1 || slot > 254))
+    ) {
+      throw new CTSError('Signing package leaf key slots are malformed');
+    }
+  }
 }
 
 /**
@@ -241,14 +298,24 @@ function deserializePackage(input: string): ScriptPathSigningPackage {
  * @returns The package with any new signatures appended. Signs nothing if no leaf names the key.
  */
 function signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPathSigningPackage {
+  assertValidPackage(pkg);
   const digest = Bytes.fromHex(pkg.digest);
   const pub = Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(privkey)));
   const spends = pkg.spends.map((spend) => {
     const leaf = parseTaprootLeaf(Bytes.fromHex(spend.leaf));
     const keys: string[] = [];
     if (leaf.keys.includes(pub)) keys.push(privkey.toLowerCase());
-    for (const hit of recoverLeafKeySecretKeys([spend.leaf], spend.E, [privkey])) {
-      if (hit.blinded) keys.push(hit.secretKey);
+    if (spend.E !== undefined && spend.keySlots !== undefined) {
+      leaf.keys.forEach((key, index) => {
+        try {
+          const candidate = deriveP2BKSlotSecretKey(spend.E!, privkey, spend.keySlots![index]);
+          if (Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(candidate))) === key) {
+            keys.push(candidate);
+          }
+        } catch {
+          // Not a usable receiver-keyed slot for this private key.
+        }
+      });
     }
     if (keys.length === 0) return spend;
     const added = keys.map((k) => Bytes.toHex(schnorr.sign(digest, Bytes.fromHex(k))));
@@ -268,6 +335,8 @@ function signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPath
  *   signature threshold.
  */
 function mergeSwapPackage(pkg: ScriptPathSigningPackage, preview: SwapPreview): SwapPreview {
+  if (pkg.type !== 'swap') throw new CTSError('Cannot merge a melt package into a swap');
+  assertValidPackage(pkg);
   assertMatches(pkg, digestOf(preview.inputs, orderedOutputs(preview)));
   return { ...preview, inputs: applyWitnesses(pkg, preview.inputs) };
 }
@@ -276,6 +345,8 @@ function mergeMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | '
   pkg: ScriptPathSigningPackage,
   preview: MeltPreview<TQuote>,
 ): MeltPreview<TQuote> {
+  if (pkg.type !== 'melt') throw new CTSError('Cannot merge a swap package into a melt');
+  assertValidPackage(pkg);
   assertMatches(
     pkg,
     digestOf(
@@ -296,14 +367,24 @@ function assertMatches(pkg: ScriptPathSigningPackage, expected: Uint8Array): voi
 }
 
 function applyWitnesses(pkg: ScriptPathSigningPackage, inputs: Proof[]): Proof[] {
+  const digest = Bytes.fromHex(pkg.digest);
   const bySecret = new Map(pkg.spends.map((s) => [s.secret, s]));
   return inputs.map((proof) => {
     const spend = bySecret.get(proof.secret);
     if (!spend) return proof;
     const leaf = parseTaprootLeaf(Bytes.fromHex(spend.leaf));
-    if (spend.signatures.length < leaf.n) {
+    const validSigners = leaf.keys.filter((key) =>
+      spend.signatures.some((signature) => {
+        try {
+          return schnorr.verify(Bytes.fromHex(signature), digest, Bytes.fromHex(key).subarray(1));
+        } catch {
+          return false;
+        }
+      }),
+    ).length;
+    if (validSigners < leaf.n) {
       throw new CTSError(
-        `Script path leaf needs ${leaf.n} signatures, package has ${spend.signatures.length}`,
+        `Script path leaf needs ${leaf.n} valid signatures, package has ${validSigners}`,
       );
     }
     return {

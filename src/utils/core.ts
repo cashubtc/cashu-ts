@@ -881,6 +881,7 @@ export function verifyProofsForReceive(
     let K2: G2Point;
     let C: G1Point;
     try {
+      assertV3PointSecret(p.secret);
       K2 = pointFromHexG2(ks.keys[p.amount.toString()]);
       C = pointFromHexG1(p.C);
     } catch {

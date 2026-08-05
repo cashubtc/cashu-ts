@@ -49,7 +49,7 @@ const FIELD_TIME = 0x06;
 const FIELD_HASH = 0x08;
 
 /**
- * Suggested caps from spec 2.6, pending confirmation.
+ * Normative caps from spec 2.6. The leaf body excludes the leading version byte.
  */
 export const TAPROOT_MAX_LEAF_BYTES = 1024;
 export const TAPROOT_MAX_TREE_DEPTH = 8;
@@ -180,8 +180,12 @@ export function serializeTaprootLeaf(leaf: TaprootLeaf): Uint8Array {
     if (b.length !== 33) {
       throw new CTSError(`Leaf key must be 33 bytes, got ${b.length}`);
     }
+    pointFromBytes(b);
     return b;
   });
+  if (new Set(keyBytes.map((key) => Bytes.toHex(key).slice(2))).size !== keyBytes.length) {
+    throw new CTSError('Leaf must list distinct keys');
+  }
   const fields: Uint8Array[] = [
     tlvRecord(FIELD_N, new Uint8Array([leaf.n])),
     tlvRecord(FIELD_KEYS, Bytes.concat(...keyBytes)),
@@ -191,6 +195,8 @@ export function serializeTaprootLeaf(leaf: TaprootLeaf): Uint8Array {
       throw new CTSError('after leaf requires a unix time');
     }
     fields.push(tlvRecord(FIELD_TIME, minimalBE(BigInt(leaf.time as number))));
+  } else if (leaf.time !== undefined) {
+    throw new CTSError(`${leaf.type} leaf must not carry a time field`);
   }
   if (leaf.type === 'hashlock') {
     const h = Bytes.fromHex(leaf.hash ?? '');
@@ -198,10 +204,12 @@ export function serializeTaprootLeaf(leaf: TaprootLeaf): Uint8Array {
       throw new CTSError('hashlock leaf requires a 32-byte hash');
     }
     fields.push(tlvRecord(FIELD_HASH, h));
+  } else if (leaf.hash !== undefined) {
+    throw new CTSError(`${leaf.type} leaf must not carry a hash field`);
   }
   const out = Bytes.concat(new Uint8Array([TAPROOT_LEAF_VERSION, typeByte]), ...fields);
-  if (out.length > TAPROOT_MAX_LEAF_BYTES) {
-    throw new CTSError(`Leaf exceeds ${TAPROOT_MAX_LEAF_BYTES} bytes`);
+  if (out.length - 1 > TAPROOT_MAX_LEAF_BYTES) {
+    throw new CTSError(`Leaf body exceeds ${TAPROOT_MAX_LEAF_BYTES} bytes`);
   }
   return out;
 }
@@ -217,8 +225,8 @@ export function parseTaprootLeaf(bytes: Uint8Array): TaprootLeaf {
   if (bytes.length < 2) {
     throw new CTSError('Leaf too short');
   }
-  if (bytes.length > TAPROOT_MAX_LEAF_BYTES) {
-    throw new CTSError(`Leaf exceeds ${TAPROOT_MAX_LEAF_BYTES} bytes`);
+  if (bytes.length - 1 > TAPROOT_MAX_LEAF_BYTES) {
+    throw new CTSError(`Leaf body exceeds ${TAPROOT_MAX_LEAF_BYTES} bytes`);
   }
   if (bytes[0] !== TAPROOT_LEAF_VERSION) {
     throw new CTSError(`Unknown leaf version: ${bytes[0]}`);
@@ -249,7 +257,13 @@ export function parseTaprootLeaf(bytes: Uint8Array): TaprootLeaf {
         }
         keys = [];
         for (let i = 0; i < rec.value.length; i += 33) {
-          keys.push(Bytes.toHex(rec.value.subarray(i, i + 33)));
+          const key = rec.value.subarray(i, i + 33);
+          try {
+            pointFromBytes(key);
+          } catch {
+            throw new CTSError('Leaf key must be a valid compressed secp256k1 point');
+          }
+          keys.push(Bytes.toHex(key));
         }
         // Signatures verify against the x-only key, so two entries sharing an x coordinate are one
         // signer wearing two hats: a threshold counting them separately would be satisfied by
@@ -289,6 +303,12 @@ export function parseTaprootLeaf(bytes: Uint8Array): TaprootLeaf {
   }
   if (typeName === 'hashlock' && hash === undefined) {
     throw new CTSError('hashlock leaf missing hash field');
+  }
+  if (typeName !== 'after' && time !== undefined) {
+    throw new CTSError(`${typeName} leaf must not carry a time field`);
+  }
+  if (typeName !== 'hashlock' && hash !== undefined) {
+    throw new CTSError(`${typeName} leaf must not carry a hash field`);
   }
   const leaf: TaprootLeaf = { type: typeName, n, keys };
   if (time !== undefined) leaf.time = time;
@@ -370,6 +390,9 @@ export function taprootRootFromPath(leafHash: Uint8Array, path: Uint8Array[]): U
   if (path.length > TAPROOT_MAX_TREE_DEPTH) {
     throw new CTSError(`Merkle path exceeds depth ${TAPROOT_MAX_TREE_DEPTH}`);
   }
+  if (leafHash.length !== 32 || path.some((sibling) => sibling.length !== 32)) {
+    throw new CTSError('Merkle hashes must be 32 bytes');
+  }
   return path.reduce((acc, sibling) => taprootBranchHash(acc, sibling), leafHash);
 }
 
@@ -394,7 +417,7 @@ export function taprootTweak(internalKey: Uint8Array, merkleRoot?: Uint8Array): 
  */
 export function taprootTweakPubkey(internalKey: Uint8Array, merkleRoot?: Uint8Array): Uint8Array {
   const t = taprootTweak(internalKey, merkleRoot);
-  const P = pointFromBytes(internalKey).add(secp256k1.Point.BASE.multiply(t));
+  const P = pointFromBytes(internalKey).add(secp256k1.Point.BASE.multiplyUnsafe(t));
   if (P.is0()) {
     throw new CTSError('Tweaked key at infinity');
   }
@@ -463,6 +486,7 @@ export function buildTaprootSecret(
   if (leaves.length === 0) {
     throw new CTSError('A locked secret requires at least one leaf');
   }
+  enumerateLeafKeySlots(leaves);
   const tree = leaves.map((leaf) => serializeTaprootLeaf(leaf));
   const root = taprootMerkleRoot(tree.map(taprootLeafHash));
   const secret = taprootTweakPubkey(Bytes.fromHex(internalKeyHex), root);
@@ -507,7 +531,9 @@ export function verifyTaprootSpendInfo(
   spendInfo: { k?: string; E?: string; K?: string; tree?: string[] },
 ): 'bare' | 'tweaked' | 'receiver-keyed' | 'aggregated' {
   const secret = Bytes.fromHex(secretHex);
-  if (secret.length !== 33) {
+  try {
+    pointFromBytes(secret);
+  } catch {
     throw new CTSError('Secret is not a 33-byte point');
   }
   // `k` and `E` are mutually exclusive (spec 2.5.2): `k` says "here is the key", `E` says "derive
@@ -519,21 +545,25 @@ export function verifyTaprootSpendInfo(
   // Receiver-keyed (E without k): verification happens at trial-match with the static key;
   // the derivation pins the secret to the receiver, which a sender cannot have pre-tweaked (2.7).
   if (spendInfo.E !== undefined && spendInfo.k === undefined) {
-    if (!/^0[23][0-9a-f]{64}$/.test(spendInfo.E)) {
+    try {
+      pointFromBytes(Bytes.fromHex(spendInfo.E));
+    } catch {
       throw new CTSError('Spend info ephemeral must be a 33-byte point');
     }
+    const leaves =
+      spendInfo.tree && spendInfo.tree.length > 0
+        ? spendInfo.tree.map((leaf) => parseTaprootLeaf(Bytes.fromHex(leaf)))
+        : undefined;
+    if (leaves) enumerateLeafKeySlots(leaves);
     // With K disclosed beside the tree (2.5), completeness is checkable here rather than only at
     // trial-match, and by any holder rather than only the receiver.
-    if (spendInfo.K !== undefined && spendInfo.tree && spendInfo.tree.length > 0) {
+    if (spendInfo.K !== undefined && leaves) {
       const internalKey = Bytes.fromHex(spendInfo.K);
       if (internalKey.length !== 33) {
         throw new CTSError('Spend info internal key must be 33 bytes');
       }
-      const leaves = spendInfo.tree.map((leaf) => Bytes.fromHex(leaf));
-      for (const leaf of leaves) {
-        parseTaprootLeaf(leaf);
-      }
-      const root = taprootMerkleRoot(leaves.map(taprootLeafHash));
+      const treeBytes = spendInfo.tree!.map((leaf) => Bytes.fromHex(leaf));
+      const root = taprootMerkleRoot(treeBytes.map(taprootLeafHash));
       if (!Bytes.equals(taprootTweakPubkey(internalKey, root), secret)) {
         throw new CTSError('Disclosed tree does not reconstruct the proof secret');
       }
@@ -547,6 +577,17 @@ export function verifyTaprootSpendInfo(
       derived = getPubKeyFromPrivKey(Bytes.fromHex(spendInfo.k));
     } catch {
       throw new CTSError('Spend info key is not a valid private key');
+    }
+    if (spendInfo.K !== undefined) {
+      let disclosed: Uint8Array;
+      try {
+        disclosed = pointFromBytes(Bytes.fromHex(spendInfo.K)).toBytes(true);
+      } catch {
+        throw new CTSError('Spend info internal key must be a 33-byte point');
+      }
+      if (!Bytes.equals(disclosed, derived)) {
+        throw new CTSError('Spend info internal key does not match its private key');
+      }
     }
     if (!spendInfo.tree || spendInfo.tree.length === 0) {
       if (Bytes.equals(derived, secret)) return 'bare';
@@ -574,9 +615,8 @@ export function verifyTaprootSpendInfo(
   }
   const treeBytes = spendInfo.tree.map((leaf) => Bytes.fromHex(leaf));
   // Acceptance policy: every disclosed leaf must be one the wallet can reason about.
-  for (const leaf of treeBytes) {
-    parseTaprootLeaf(leaf);
-  }
+  const leaves = treeBytes.map(parseTaprootLeaf);
+  enumerateLeafKeySlots(leaves);
   const root = taprootMerkleRoot(treeBytes.map(taprootLeafHash));
   if (!Bytes.equals(taprootTweakPubkey(internalKey, root), secret)) {
     throw new CTSError('Disclosed tree does not reconstruct the proof secret');

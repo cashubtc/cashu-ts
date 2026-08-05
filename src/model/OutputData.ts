@@ -374,13 +374,15 @@ export class OutputData implements OutputDataLike {
       const privKey = createRandomSecretKey();
       const secretBytes = new TextEncoder().encode(bytesToHex(getPubKeyFromPrivKey(privKey)));
       const { r, B_ } = blindMessageForKeyset(secretBytes, keysetId);
-      return new OutputData(
+      const data = new OutputData(
         new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
         r,
         secretBytes,
         undefined,
         privKey,
       );
+      data.spendInfo = { k: bytesToHex(privKey) };
+      return data;
     }
     const amountValue = Amount.from(amount);
     const randomHex = bytesToHex(randomBytes(32));
@@ -405,9 +407,10 @@ export class OutputData implements OutputDataLike {
     amount: AmountLike,
     keysetId: string,
   ): OutputData {
-    if (!/^0[23][0-9a-f]{64}$/.test(secretHex)) {
-      throw new CTSError('Taproot secret must be 33-byte compressed point hex');
+    if (!isBlsKeyset(keysetId)) {
+      throw new CTSError('Taproot outputs require a v3 keyset');
     }
+    assertV3PointSecret(secretHex);
     const amountValue = Amount.from(amount);
     const secretBytes = new TextEncoder().encode(secretHex);
     const { r, B_ } = blindMessageForKeyset(secretBytes, keysetId);

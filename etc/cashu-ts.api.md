@@ -392,6 +392,9 @@ export function createNewMintKeys(pow2height: IntRange<0, 65>, seed?: Uint8Array
 // @public
 export function createP2PKsecret(pubkey: string, tags?: string[][]): string;
 
+// @public (undocumented)
+export function createRandomBlsSecretKey(): Uint8Array;
+
 // @public
 export function createRandomRawBlindedMessage(): RawBlindedMessage;
 
@@ -2055,6 +2058,7 @@ export type ScriptPathSpendRequest = {
         path: string[];
     };
     E?: string;
+    keySlots?: number[];
     preimage?: string;
     signatures: string[];
 };
@@ -2710,16 +2714,16 @@ export class WSConnection {
 
 // Warnings were encountered during analysis:
 //
-// lib/types/index.d.ts:3810:17 - (ae-forgotten-export) The symbol "TaprootLeaf" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4574:21 - (ae-forgotten-export) The symbol "RawTaprootOption" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4896:21 - (ae-forgotten-export) The symbol "extractSwapPackage" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4897:21 - (ae-forgotten-export) The symbol "extractMeltPackage" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4898:21 - (ae-forgotten-export) The symbol "serializePackage" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4899:21 - (ae-forgotten-export) The symbol "deserializePackage" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4900:21 - (ae-forgotten-export) The symbol "signPackage" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4901:21 - (ae-forgotten-export) The symbol "mergeSwapPackage" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4902:21 - (ae-forgotten-export) The symbol "mergeMeltPackage" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4956:21 - (ae-forgotten-export) The symbol "SCRIPT_PATH_PREFIX" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:3811:17 - (ae-forgotten-export) The symbol "TaprootLeaf" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4575:21 - (ae-forgotten-export) The symbol "RawTaprootOption" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4897:21 - (ae-forgotten-export) The symbol "extractSwapPackage" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4898:21 - (ae-forgotten-export) The symbol "extractMeltPackage" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4899:21 - (ae-forgotten-export) The symbol "serializePackage" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4900:21 - (ae-forgotten-export) The symbol "deserializePackage" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4901:21 - (ae-forgotten-export) The symbol "signPackage" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4902:21 - (ae-forgotten-export) The symbol "mergeSwapPackage" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4903:21 - (ae-forgotten-export) The symbol "mergeMeltPackage" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4957:21 - (ae-forgotten-export) The symbol "SCRIPT_PATH_PREFIX" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

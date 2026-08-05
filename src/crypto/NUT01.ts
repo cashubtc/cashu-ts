@@ -1,15 +1,18 @@
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
-import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
-import { sha256 } from '@noble/hashes/sha2.js';
 import { HDKey } from '@scure/bip32';
 
 import { CTSError } from '../model/Errors';
 import { deriveKeysetId } from '../utils';
 
 import { type UnblindedSignature } from './core';
-import { getG2PubKeyFromPrivKey, hashToCurveBls } from './curve_bls';
+import {
+  BLS_FR_ORDER,
+  createRandomBlsSecretKey,
+  getG2PubKeyFromPrivKey,
+  hashToCurveBls,
+} from './curve_bls';
 import { createRandomSecretKey, getPubKeyFromPrivKey, hashToCurve } from './curve_secp';
 import { isBlsKeyset } from './curves';
 
@@ -87,22 +90,27 @@ export function createNewMintKeys(
   while (counter < pow2height) {
     const index: string = (2n ** counter).toString();
     if (masterKey) {
-      // v3 hardens the per-amount path and hashes the BIP32 output before reducing mod Fr,
-      // matching Nutshell `derive_keys_v3`. Hardening prevents sibling-key derivation from
-      // a leaked child + xpub; the sha256 step gives a uniformly distributed input so the
-      // Fr reduction isn't biased (BIP32 outputs are mod secp's `n`, which differs from Fr).
-      // v1/v2 keep the original unhardened path for back-compat with existing fixtures.
-      // TODO v5: Harden the v1/v2 path and update TEST_PRIV_KEY_PUBS.
-      const path =
-        versionByte === 2 ? `${DERIVATION_PATH}/${counter}'` : `${DERIVATION_PATH}/${counter}`;
-      const k = masterKey.derive(path).privateKey;
-      if (k) {
-        privKeys[index] = versionByte === 2 ? sha256(k) : k;
+      if (versionByte === 2) {
+        for (let attempt = 0; attempt < 1 << 16; attempt++) {
+          const path = `${DERIVATION_PATH}/${counter}'/${attempt}'`;
+          const k = masterKey.derive(path).privateKey;
+          if (!k) throw new CTSError(`Could not derive Private key from: ${path}`);
+          const scalar = BigInt(`0x${bytesToHex(k)}`);
+          if (scalar === 0n || scalar >= BLS_FR_ORDER) continue;
+          privKeys[index] = k;
+          break;
+        }
+        if (!privKeys[index]) throw new CTSError(`Could not derive v3 private key for ${index}`);
       } else {
-        throw new CTSError(`Could not derive Private key from: ${path}`);
+        // v1/v2 keep the original unhardened path for back-compat with existing fixtures.
+        // TODO v5: Harden the v1/v2 path and update TEST_PRIV_KEY_PUBS.
+        const path = `${DERIVATION_PATH}/${counter}`;
+        const k = masterKey.derive(path).privateKey;
+        if (!k) throw new CTSError(`Could not derive Private key from: ${path}`);
+        privKeys[index] = k;
       }
     } else {
-      privKeys[index] = createRandomSecretKey();
+      privKeys[index] = versionByte === 2 ? createRandomBlsSecretKey() : createRandomSecretKey();
     }
 
     pubKeys[index] =
@@ -129,10 +137,12 @@ export function createNewMintKeys(
  */
 export function verifyUnblindedSignature(proof: UnblindedSignature, privKey: Uint8Array): boolean {
   if (isBlsKeyset(proof.id)) {
-    const a = bls12_381.fields.Fr.fromBytes(privKey);
-    /* c8 ignore next 3 — defensive guard; a==0 requires all-zero privKey bytes (impossible in practice). */
-    if (a === 0n) {
-      throw new CTSError('Mint scalar must be non-zero');
+    if (privKey.length !== 32) {
+      throw new CTSError('Mint scalar must be 32 bytes in Fr*');
+    }
+    const a = BigInt(`0x${bytesToHex(privKey)}`);
+    if (a === 0n || a >= BLS_FR_ORDER) {
+      throw new CTSError('Mint scalar must be 32 bytes in Fr*');
     }
     const Y = hashToCurveBls(proof.secret);
     return Y.multiply(a).equals(proof.C);

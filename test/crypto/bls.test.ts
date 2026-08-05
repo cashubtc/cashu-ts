@@ -173,6 +173,7 @@ describe('BLS deterministic round-trip (Nutshell test_deterministic_bls_steps)',
     // Match the CTSError message, not just "throws": without the guard, Y.multiply(0n) throws
     // noble's 'invalid scalar' error instead, which would still satisfy a bare toThrow().
     expect(() => blindMessageBls(secret, 0n)).toThrow(/Blinding factor/);
+    expect(() => blindMessageBls(secret, BLS_FR_ORDER)).toThrow(/in Fr/);
   });
 
   test('unblindSignatureBls rejects r=0', () => {
@@ -180,6 +181,7 @@ describe('BLS deterministic round-trip (Nutshell test_deterministic_bls_steps)',
     // "non-zero"), so pin the 'Blinding factor' wording to prove our guard fired first.
     const Y = hashToCurveBls(secret);
     expect(() => unblindSignatureBls(Y, 0n)).toThrow(/Blinding factor/);
+    expect(() => unblindSignatureBls(Y, BLS_FR_ORDER)).toThrow(/in Fr/);
   });
 
   test('createBlindSignatureBls rejects an all-zero mint scalar', () => {
@@ -187,7 +189,7 @@ describe('BLS deterministic round-trip (Nutshell test_deterministic_bls_steps)',
     // 'invalid scalar' error, so pin the CTSError wording.
     const { B_ } = blindMessageBls(secret, 3n);
     expect(() => createBlindSignatureBls(B_, new Uint8Array(32), 'test')).toThrow(
-      /Mint scalar must be non-zero/,
+      /Mint scalar must be 32 bytes in Fr/,
     );
   });
 
@@ -211,8 +213,15 @@ describe('BLS deterministic round-trip (Nutshell test_deterministic_bls_steps)',
   test('getG2PubKeyFromPrivKey rejects an all-zero private key', () => {
     // a=0 -> BLS_G2_GENERATOR.multiply(0n) would throw noble's 'invalid scalar'; pin our wording.
     expect(() => getG2PubKeyFromPrivKey(new Uint8Array(32))).toThrow(
-      /Mint scalar must be non-zero/,
+      /Mint scalar must be 32 bytes in Fr/,
     );
+  });
+
+  test('mint scalar helpers reject modular-reduction aliases', () => {
+    const outsideFr = new Uint8Array(32).fill(0xff);
+    const { B_ } = blindMessageBls(secret, 3n);
+    expect(() => createBlindSignatureBls(B_, outsideFr, 'test')).toThrow(/in Fr/);
+    expect(() => getG2PubKeyFromPrivKey(outsideFr)).toThrow(/in Fr/);
   });
 });
 

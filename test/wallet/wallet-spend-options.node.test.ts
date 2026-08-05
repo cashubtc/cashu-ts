@@ -45,6 +45,9 @@ describe('wallet.spendOptions: the key path', () => {
     await expect(
       wallet().spendOptions(v3Proof(JSON.stringify(['P2PK', { nonce: '', data: pub(1) }]))),
     ).rejects.toThrow(/point secrets/);
+    await expect(wallet().spendOptions(v3Proof(`02${'ff'.repeat(32)}`))).rejects.toThrow(
+      /point secrets/,
+    );
   });
 
   test('finds a bearer key, and reports none when the spend info is empty', async () => {
