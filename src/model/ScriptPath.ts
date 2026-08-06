@@ -5,6 +5,7 @@ import { deriveP2BKSlotSecretKey } from '../crypto/NUT28';
 import {
   buildScriptPathWitness,
   enumerateLeafKeySlots,
+  TAPROOT_MAX_SLOTS,
   parseTaprootLeaf,
   taprootLeafHash,
   taprootMerklePath,
@@ -305,17 +306,25 @@ function signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPath
     const leaf = parseTaprootLeaf(Bytes.fromHex(spend.leaf));
     const keys: string[] = [];
     if (leaf.keys.includes(pub)) keys.push(privkey.toLowerCase());
-    if (spend.E !== undefined && spend.keySlots !== undefined) {
-      leaf.keys.forEach((key, index) => {
+    if (spend.E !== undefined) {
+      // Match by value over the slot space rather than by the slot the package names for each
+      // position: the transmitted leaf order is not committed by the root, so a package built from
+      // a reordered tree would otherwise name the wrong slots and this signer would decline a leaf
+      // it can in fact satisfy. `keySlots` bounds the search where present.
+      const bound = Math.max(TAPROOT_MAX_SLOTS - 1, ...(spend.keySlots ?? [0]));
+      const blinded = new Map<string, string>();
+      for (let slot = 1; slot <= bound; slot++) {
         try {
-          const candidate = deriveP2BKSlotSecretKey(spend.E!, privkey, spend.keySlots![index]);
-          if (Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(candidate))) === key) {
-            keys.push(candidate);
-          }
+          const candidate = deriveP2BKSlotSecretKey(spend.E, privkey, slot);
+          blinded.set(Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(candidate))), candidate);
         } catch {
           // Not a usable receiver-keyed slot for this private key.
         }
-      });
+      }
+      for (const key of leaf.keys) {
+        const candidate = blinded.get(key);
+        if (candidate) keys.push(candidate);
+      }
     }
     if (keys.length === 0) return spend;
     const added = keys.map((k) => Bytes.toHex(schnorr.sign(digest, Bytes.fromHex(k))));

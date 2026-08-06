@@ -725,14 +725,49 @@ function blindTaggedLeafKeys(
 }
 
 /**
+ * Every slot key a static key could hold, by the blinded pubkey it produces (spec 2.7).
+ *
+ * @remarks
+ * The receiver's half of the slot map. It is built over the slot space rather than over positions
+ * on purpose: a sender assigns slots by walking the tree, but the transmitted order is not
+ * committed by the root (sorted-pair hashing fixes the leaf set, not an arrangement), so a
+ * reordered list would move every key off the slot its owner expected. What reordering cannot
+ * change is which slots are in use, since that is just the count of key occurrences. Matching by
+ * value against the whole slot space is therefore order-independent, and costs the same as checking
+ * one slot per position: one derivation per slot either way.
+ */
+function slotKeysByBlindedPubkey(
+  EHex: string,
+  privHex: string,
+  slotCount: number,
+): Map<string, { slot: number; secretKey: string }> {
+  const bySlot = new Map<string, { slot: number; secretKey: string }>();
+  for (let slot = 1; slot <= slotCount; slot++) {
+    let candidate: string;
+    try {
+      candidate = deriveP2BKSlotSecretKey(EHex, privHex, slot);
+    } catch {
+      continue; // not a usable slot key for this static key
+    }
+    bySlot.set(Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(candidate))), {
+      slot,
+      secretKey: candidate,
+    });
+  }
+  return bySlot;
+}
+
+/**
  * Trial-match a spend info tree's leaf keys against the static keys held (spec 2.7).
  *
  * @remarks
- * Walks every enumerated slot and tries each key: a verbatim key matches byte for byte, a blinded
- * one when `(p + r_slot)*G` reproduces it. Non-matches are skipped, so a tree mixing both forms and
- * several owners resolves in one pass. `EHex` may be omitted for a tree with no receiver-keyed
- * sender, leaving only verbatim matches.
- * @returns One entry per matching occurrence, with the key to sign that leaf with.
+ * A verbatim key matches byte for byte; a blinded one matches when some slot's `(p + r_slot)*G`
+ * reproduces it. Both are matched by value, not by position, so the transmitted leaf order carries
+ * no meaning here and a reordered tree resolves exactly as the sender's did. Non-matches are
+ * skipped, so a tree mixing both forms and several owners resolves in one pass. `EHex` may be
+ * omitted for a tree with no receiver-keyed sender, leaving only verbatim matches.
+ * @returns One entry per matching occurrence, with the key to sign that leaf with and the slot it
+ *   was actually derived at, which need not be the occurrence's position.
  */
 export function recoverLeafKeySecretKeys(
   tree: string[],
@@ -749,20 +784,24 @@ export function recoverLeafKeySecretKeys(
   const hits = [];
   for (const privHex of privkeysHex) {
     const pub = Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(privHex)));
+    const blindedKeys =
+      EHex === undefined
+        ? new Map<string, { slot: number; secretKey: string }>()
+        : slotKeysByBlindedPubkey(EHex, privHex, slots.length);
     for (const { leafIndex, keyIndex, slot, key } of slots) {
       if (key === pub) {
         hits.push({ leafIndex, keyIndex, slot, secretKey: privHex.toLowerCase(), blinded: false });
         continue;
       }
-      if (EHex === undefined) continue;
-      let candidate: string;
-      try {
-        candidate = deriveP2BKSlotSecretKey(EHex, privHex, slot);
-      } catch {
-        continue; // not a usable slot key for this static key
-      }
-      if (Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(candidate))) === key) {
-        hits.push({ leafIndex, keyIndex, slot, secretKey: candidate, blinded: true });
+      const blinded = blindedKeys.get(key);
+      if (blinded) {
+        hits.push({
+          leafIndex,
+          keyIndex,
+          slot: blinded.slot,
+          secretKey: blinded.secretKey,
+          blinded: true,
+        });
       }
     }
   }
