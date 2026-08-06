@@ -196,6 +196,9 @@ export function serializeTaprootLeaf(leaf: TaprootLeaf): Uint8Array {
   if (new Set(keyBytes.map((key) => Bytes.toHex(key).slice(2))).size !== keyBytes.length) {
     throw new CTSError('Leaf must list distinct keys');
   }
+  if (leaf.n > keyBytes.length) {
+    throw new CTSError('Threshold exceeds leaf key count');
+  }
   const fields: Uint8Array[] = [
     tlvRecord(FIELD_N, new Uint8Array([leaf.n])),
     tlvRecord(FIELD_KEYS, Bytes.concat(...keyBytes)),
@@ -310,6 +313,9 @@ export function parseTaprootLeaf(bytes: Uint8Array): TaprootLeaf {
   }
   if (n === undefined || keys === undefined) {
     throw new CTSError('Leaf missing required n or keys field');
+  }
+  if (n > keys.length) {
+    throw new CTSError('Threshold exceeds leaf key count');
   }
   if (typeName === 'after' && time === undefined) {
     throw new CTSError('after leaf missing time field');
@@ -655,8 +661,8 @@ export function verifyTaprootSpendInfo(
  *
  * @remarks
  * Slot 0 is the base key and is not listed here. Slots 1.. are the `keys` entries: leaves in
- * transmitted order, keys within a leaf in order. That order is normative, and self-checking: a
- * misordered list shifts every index, so trial-matching misses rather than deriving wrong keys.
+ * transmitted order, keys within a leaf in order. Receivers derive all occupied slots and match by
+ * key value, so the uncommitted leaf order cannot disable a path.
  * @throws If the tree needs more than {@link TAPROOT_MAX_SLOTS} slots.
  */
 export function enumerateLeafKeySlots(

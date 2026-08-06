@@ -1106,13 +1106,15 @@ describe('WalletOps builders', () => {
       );
     });
 
-    it('bolt11 locked quote without privkey throws at runtime', async () => {
+    it('delegates locked bolt11 quote key recovery to Wallet', async () => {
       const lockedQuote = { ...mint12, request: 'lnbc1...', pubkey: '02abcd' } as any;
-      await expect((ops.mintBolt11 as any)(10, lockedQuote).run()).rejects.toThrow(
-        /privkey is required/i,
-      );
-      await expect((ops.mintBolt11 as any)(10, lockedQuote).prepare()).rejects.toThrow(
-        /privkey is required/i,
+      await (ops.mintBolt11 as any)(10, lockedQuote).prepare();
+      expect(wallet.prepareMint).toHaveBeenCalledWith(
+        'bolt11',
+        expect.anything(),
+        lockedQuote,
+        {},
+        undefined,
       );
     });
   });

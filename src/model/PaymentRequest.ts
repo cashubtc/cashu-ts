@@ -741,8 +741,9 @@ export class PaymentRequestBuilder {
    *
    * @remarks
    * Spec 2.7: the receiver key is blinded at slot 0 by the payer, so one request can be reused
-   * without linking payments. `leaves` are serialized leaf bytes and their order fixes the slot
-   * indices; `blindKeys` names the leaf keys to blind, the payee's own tag on its own keys.
+   * without linking payments. The payer assigns slots in transmitted leaf order; the receiver
+   * derives every occupied slot and matches keys by value. `blindKeys` names the leaf keys to
+   * blind.
    * @throws If the receiver key is not a valid point, a leaf is unparsable, or a blind-me key is
    *   not one of the leaves' keys.
    */

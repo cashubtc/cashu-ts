@@ -66,7 +66,7 @@ describe('v3 transaction witnesses', () => {
       await wallet.loadMint();
       const quote = await wallet.createMintQuoteBolt11(64);
       await wallet.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
-      const proofs = await wallet.mintProofsBolt11(64, quote.quote);
+      const proofs = await wallet.mintProofsBolt11(64, quote);
 
       type SwapBody = {
         inputs: Array<{ amount: number; id: string; secret: string; C: string; witness?: string }>;

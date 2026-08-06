@@ -284,6 +284,17 @@ describe('leaf parsing fails closed', () => {
     ]);
     expect(() => parseTaprootLeaf(new Uint8Array([0x00, 0x01, ...body]))).toThrow(/multiple of 33/);
   });
+
+  test('threshold cannot exceed the key count', () => {
+    const body = new Uint8Array([
+      ...tlvRecord(0x02, new Uint8Array([2])),
+      ...tlvRecord(0x04, hexToBytes(v61.carol_pub)),
+    ]);
+    expect(() => parseTaprootLeaf(new Uint8Array([0x00, 0x01, ...body]))).toThrow(/key count/);
+    expect(() => serializeTaprootLeaf({ type: 'threshold', n: 2, keys: [v61.carol_pub] })).toThrow(
+      /key count/,
+    );
+  });
 });
 
 describe('merkle tree (vectors 6.2)', () => {
