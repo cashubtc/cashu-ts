@@ -192,6 +192,8 @@ export function getHTLCWitnessPreimage(witness: Proof['witness']): string | unde
     console.error('Failed to parse HTLC witness string:', e);
     return undefined;
   }
+  // A parsed primitive (eg "null", "1", "true") is not a witness; treat it as absent.
+  if (!parsed || typeof parsed !== 'object') return undefined;
   // Check preimage is a non-empty string
   const preimage = parsed.preimage;
   return typeof preimage === 'string' && preimage.length > 0 ? preimage : undefined;
