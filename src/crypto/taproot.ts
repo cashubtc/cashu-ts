@@ -348,10 +348,14 @@ export function taprootBranchHash(a: Uint8Array, b: Uint8Array): Uint8Array {
  * Fold leaf hashes to a merkle root: pairwise per level, odd hash promoted.
  *
  * @remarks
- * The depth cap of 2.6 is enforced here, not only on a witness path, because it is a property of
- * the tree: past `2^8` leaves every merkle path is longer than a verifier will accept, so the
- * script paths a holder was told they had do not exist. The slot cap makes such a tree
- * unconstructible in practice; this states the bound the spec names.
+ * Depth is a property of the tree, not of one leaf, so the cap is checked here and not only on a
+ * witness path. A tree of more than `2^8` leaves is deeper than the cap, so its long paths cannot
+ * be spent. A few of its leaves still can: the fold promotes an unpaired leaf to the next level,
+ * and a leaf promoted often enough keeps a short path (at 300 leaves, 44 are within the cap). So an
+ * oversized tree is part spendable and part not, and which part is which falls out of the fold
+ * rather than out of anything the builder chose. Refuse the whole tree.
+ *
+ * The slot cap already makes such a tree unbuildable; this states the bound the spec names.
  */
 export function taprootMerkleRoot(leafHashes: Uint8Array[]): Uint8Array {
   if (leafHashes.length === 0) {

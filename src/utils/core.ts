@@ -271,16 +271,20 @@ function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
 }
 
 /**
- * True for a 33-byte compressed point secret, which is what a v3 keyset takes.
+ * True when a token entry's witness is a v3 transaction witness, so it must not travel.
  *
  * @remarks
  * A v3 witness signs one transaction's digest, so it means nothing outside that transaction and a
- * token carries no transaction. Tokens therefore drop it in both directions: emitting one hands the
- * next owner a witness that can never verify, and keeping one on receive leaves it in place of the
+ * token carries no transaction. Tokens drop it in both directions: emitting one hands the next
+ * owner a witness that can never verify, and keeping one on receive leaves it in place of the
  * signature the new owner must produce, so their sweep is refused for a witness a stranger chose.
+ *
+ * Dispatch is on the keyset, not on the secret's shape. A pre-v3 secret is an arbitrary string and
+ * may happen to look like a compressed point, and that proof's witness is a NUT-11 witness which
+ * does travel. Which rules apply follows the keyset (spec 5), the same rule the transcript uses.
  */
-function isV3PointSecret(secret: string): boolean {
-  return /^0[23][0-9a-f]{64}$/.test(secret);
+function isV3TransactionWitness(keysetId: string, secret: string): boolean {
+  return isBlsKeyset(keysetId) && /^0[23][0-9a-f]{64}$/.test(secret);
 }
 
 function templateFromToken(token: Token): TokenV4Template {
@@ -314,7 +318,7 @@ function templateFromToken(token: Token): TokenV4Template {
           pe: hexToBytes(p.p2pk_e),
         }),
         ...(p.witness &&
-          !isV3PointSecret(p.secret) && {
+          !isV3TransactionWitness(id, p.secret) && {
             w: JSON.stringify(p.witness),
           }),
         ...(p.spend_info && {
@@ -360,7 +364,7 @@ function tokenFromTemplate(template: TokenV4Template): Token {
           p2pk_e: bytesToHex(p.pe),
         }),
         ...(p.w &&
-          !isV3PointSecret(p.s) && {
+          !isV3TransactionWitness(bytesToHex(t.i), p.s) && {
             witness: p.w,
           }),
         ...(p.si && {
