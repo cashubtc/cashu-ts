@@ -2630,11 +2630,7 @@ class Wallet {
       normalize: options?.normalize,
     });
     if (normPubkey) {
-      this.failIf(typeof res.pubkey !== 'string', 'Mint returned unlocked mint quote');
-      this.failIf(
-        res.pubkey!.toLowerCase() !== normPubkey,
-        'Mint quote is not locked to the requested pubkey',
-      );
+      this.assertQuoteLockedTo(res, normPubkey);
     }
     return { ...res, unit: res.unit || this._unit };
   }
@@ -2703,11 +2699,7 @@ class Wallet {
     const res = await this.mint.createMintQuoteBolt11(mintQuotePayload);
     this.assertBolt11MintQuoteAmount(res, mintAmount);
     if (lock) {
-      this.failIf(typeof res.pubkey !== 'string', 'Mint returned unlocked mint quote');
-      this.failIf(
-        res.pubkey!.toLowerCase() !== lock.pubkey,
-        'Mint quote is not locked to the requested pubkey',
-      );
+      this.assertQuoteLockedTo(res, lock.pubkey);
       this._quoteLockKeys.set(res.quote, lock.privkey);
     }
     return { ...res, unit: res.unit || this._unit };
@@ -2721,6 +2713,24 @@ class Wallet {
    * per quote and recoverable from the quote's pubkey later. Seedless wallets get a random key,
    * held only for the life of the wallet object.
    */
+  /**
+   * Asserts the mint locked a quote to the key it was asked for, and returns the key it echoed.
+   *
+   * @remarks
+   * A locked quote the wallet cannot sign for is worthless, and the wallet only finds that out at
+   * mint time unless it checks here. Shared by every path that sends a pubkey, because the way this
+   * went missing once already was a new locked path being added beside the ones that had it.
+   */
+  private assertQuoteLockedTo(res: { pubkey?: string }, requested: string): string {
+    this.failIf(typeof res.pubkey !== 'string', 'Mint returned unlocked mint quote');
+    const returned = res.pubkey as string;
+    this.failIf(
+      returned.toLowerCase() !== requested,
+      'Mint quote is not locked to the requested pubkey',
+    );
+    return returned;
+  }
+
   private async createV3QuoteLock(): Promise<{ pubkey: string; privkey: Uint8Array } | undefined> {
     let keysetId: string;
     try {
@@ -2783,12 +2793,7 @@ class Wallet {
     };
     const res = await this.mint.createMintQuoteBolt11(mintQuotePayload);
     this.assertBolt11MintQuoteAmount(res, mintAmount);
-    this.failIf(typeof res.pubkey !== 'string', 'Mint returned unlocked mint quote');
-    const resPubkey = res.pubkey!;
-    this.failIf(
-      resPubkey.toLowerCase() !== normPubkey,
-      'Mint quote is not locked to the requested pubkey',
-    );
+    const resPubkey = this.assertQuoteLockedTo(res, normPubkey);
     return { ...res, pubkey: resPubkey, unit: res.unit || this._unit };
   }
 
@@ -2833,10 +2838,7 @@ class Wallet {
     };
 
     const res = await this.mint.createMintQuoteBolt12(mintQuotePayload);
-    this.failIf(
-      typeof res.pubkey !== 'string' || res.pubkey.toLowerCase() !== normPubkey,
-      'Mint quote is not locked to the requested pubkey',
-    );
+    this.assertQuoteLockedTo(res, normPubkey);
     return res;
   }
 
@@ -2854,10 +2856,7 @@ class Wallet {
     this.failIf(typeof pubkey !== 'string', 'A pubkey is required to lock the mint quote');
     const normPubkey = normalizeSecpPubkey(pubkey);
     const res = await this.mint.createMintQuoteOnchain({ unit: this._unit, pubkey: normPubkey });
-    this.failIf(
-      typeof res.pubkey !== 'string' || res.pubkey.toLowerCase() !== normPubkey,
-      'Mint quote is not locked to the requested pubkey',
-    );
+    this.assertQuoteLockedTo(res, normPubkey);
     return { ...res, unit: res.unit || this._unit };
   }
 
