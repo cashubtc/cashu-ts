@@ -1870,4 +1870,26 @@ describe('v3 transaction witnesses do not travel in tokens', () => {
     );
     expect(decoded.proofs[0].witness).toBeDefined();
   });
+
+  test('a pre-v3 witness travels even when its secret looks like a point', () => {
+    // A pre-v3 secret is an arbitrary string and may happen to be 33 point-shaped bytes of hex.
+    // Its witness is a NUT-11 witness, which does travel, so the rule has to follow the keyset
+    // (spec 5) and not the secret's shape.
+    const lookalike = {
+      amount: 8,
+      id: '0088553333aabbcc', // v1 keyset: pre-v3 rules apply to it
+      secret: '025cbdf0646e5db4eaa398f365f2ea7a0e3d419b7e0330e39ce92bddedcac4f9bc',
+      C: '02' + 'aa'.repeat(32),
+      witness: JSON.stringify({ signatures: ['00'.repeat(64)] }),
+    };
+    const decoded = utils.getDecodedToken(
+      utils.getEncodedToken({
+        mint: 'https://m.example',
+        unit: 'sat',
+        proofs: [lookalike],
+      } as never),
+      ['0088553333aabbcc'],
+    );
+    expect(decoded.proofs[0].witness).toBeDefined();
+  });
 });
