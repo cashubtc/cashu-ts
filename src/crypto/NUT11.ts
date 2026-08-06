@@ -341,9 +341,14 @@ export function buildP2PKTags(lock: LockConditions): string[][] {
   const pubkeys = lock.pubkeys ?? [];
   const refund = lock.refundKeys ?? [];
 
-  const ts = lock.locktime ?? NaN;
-  if (Number.isSafeInteger(ts) && ts >= 0) {
-    tags.push(['locktime', String(ts)]);
+  // Reject a present-but-invalid locktime, don't drop it: refund keys without a locktime
+  // is a structural violation the verifier rejects outright ("refund keys require a
+  // locktime"), so a silent drop makes the whole proof unspendable, main keys included.
+  if (lock.locktime !== undefined) {
+    if (!Number.isSafeInteger(lock.locktime) || lock.locktime < 0) {
+      throw new CTSError(`locktime must be a non-negative integer, got ${lock.locktime}`);
+    }
+    tags.push(['locktime', String(lock.locktime)]);
   }
 
   if (pubkeys.length > 0) {
@@ -367,7 +372,12 @@ export function buildP2PKTags(lock: LockConditions): string[][] {
   if (lock.additionalTags?.length) {
     const extraTags = lock.additionalTags.map(([k, ...vals]) => {
       assertValidTagKey(k); // Validate key
-      return [k, ...vals.map(String)]; // all to strings
+      const stringVals = vals.map(String); // all to strings
+      // NUT-10 tag values must be non-empty strings (parseSecret rejects empties on read).
+      if (stringVals.some((v) => v.length === 0)) {
+        throw new CTSError(`tag "${k}" values must be non-empty strings`);
+      }
+      return [k, ...stringVals];
     });
     tags.push(...extraTags);
   }

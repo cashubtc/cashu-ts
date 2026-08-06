@@ -134,11 +134,40 @@ describe('P2PKBuilder.toOptions()', () => {
     expect(opts.locktime).toBe(999_999_999_999);
   });
 
+  it('rejects a non-finite, negative or invalid-Date locktime at the setter', () => {
+    // A silently-dropped locktime with refund keys present yields an unspendable proof
+    // (refund path needs a locktime), so an unusable value must fail here.
+    const base = () =>
+      new P2PKBuilder().addLockPubkey(comp('a', '02')).addRefundPubkey(comp('b', '02'));
+    for (const bad of [NaN, Infinity, -Infinity, -1]) {
+      expect(() => base().lockUntil(bad)).toThrow(/locktime/i);
+    }
+    expect(() => base().lockUntil(new Date(NaN))).toThrow(/locktime/i);
+  });
+
+  it('fromOptions preserves a canonical seconds locktime >= 1e12 (no ms heuristic on replay)', () => {
+    // A locktime already in seconds must round-trip exactly; lockUntil's ms heuristic
+    // must not re-interpret it (dividing by 1000 would expire the lock).
+    const src: P2PKOptions = {
+      kind: 'P2PK',
+      data: comp('a', '02'),
+      locktime: 1_000_000_000_000, // 1e12 seconds: a valid far-future lock
+      refundKeys: [comp('b', '02')],
+    };
+    expect(P2PKBuilder.fromOptions(src).toOptions().locktime).toBe(1_000_000_000_000);
+  });
+
   it('returns a defensive copy of additionalTags, isolated from later mutations', () => {
     const b = new P2PKBuilder().addLockPubkey(comp('a', '02')).addTag('foo', ['bar']);
     const opts = b.toOptions();
     b.addTag('baz', ['qux']); // must not leak into the already-returned options
     expect(opts.additionalTags).toEqual([['foo', 'bar']]);
+  });
+
+  it('rejects an empty tag value (parseSecret refuses empty tag strings)', () => {
+    const b = () => new P2PKBuilder().addLockPubkey(comp('a', '02'));
+    expect(() => b().addTag('memo', '')).toThrow(/non-empty/i);
+    expect(() => b().addTag('memo', ['ok', ''])).toThrow(/non-empty/i);
   });
 
   it('requireLockSignatures throws on non-integer and values less than 1', () => {
