@@ -45,9 +45,9 @@ export type RawPaymentRequest = {
  * @remarks
  * Spec 2.7 and the NUT-18 row of the delta map. `receiverKey` is blinded at slot 0, always, so a
  * request is reusable without linking payments. `leaves` are serialized leaf bytes (2.6 wire form)
- * hex, and their transmitted order fixes the slot indices. `blindKeys` are the leaf keys their
- * owner tagged blind-me; every other leaf key travels verbatim. The tag lives here, on the key's
- * delivery channel, and never in proof data.
+ * hex. The payer assigns slots in transmitted order and the receiver matches derived keys by value.
+ * `blindKeys` are the leaf keys their owner tagged blind-me; every other leaf key travels verbatim.
+ * The tag lives here, on the key's delivery channel, and never in proof data.
  */
 export type TaprootOption = {
   receiverKey: string;

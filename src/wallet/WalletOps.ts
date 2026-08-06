@@ -608,8 +608,8 @@ export class ReceiveBuilder {
  * Builder for minting proofs from a quote.
  *
  * @remarks
- * Bolt12 requires privkey by default, bolt11 only for locked quotes. The compiler will throw an
- * error if bolt12 and privkey() is omitted: MintBuilder<"bolt12", false>' is not assignable...
+ * Bolt12 requires privkey by default. The compiler will throw an error if bolt12 and privkey() is
+ * omitted: MintBuilder<"bolt12", false>' is not assignable...
  *
  * Use this builder for the typed, first-class mint methods. For arbitrary or future mint methods,
  * use the generic `wallet.prepareMint(method, …)` / `wallet.completeMint()` flow.
@@ -777,10 +777,6 @@ export class MintBuilder<
       const raw = this.quote as string | MintQuoteBolt11Response;
       const quote = typeof raw === 'string' ? await this.wallet.checkMintQuoteBolt11(raw) : raw;
       this.wallet.validateMintQuote(quote);
-      // Enforce privkey when the quote is locked
-      if (quote.pubkey && !this.config.privkey) {
-        throw new CTSError('privkey is required for locked BOLT11 mint quotes');
-      }
       return this.wallet.prepareMint(
         this.method,
         this.amount,

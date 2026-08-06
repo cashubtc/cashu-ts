@@ -2411,7 +2411,7 @@ class Wallet {
   private _normalizeWitness(proof: Proof): string | undefined {
     if (!proof.witness) return undefined;
     // Taproot (v3) point secrets carry transaction witnesses (key or script path): keep them.
-    if (/^0[23][0-9a-f]{64}$/.test(proof.secret)) {
+    if (isBlsKeyset(proof.id) && /^0[23][0-9a-f]{64}$/.test(proof.secret)) {
       return typeof proof.witness !== 'string' ? JSON.stringify(proof.witness) : proof.witness;
     }
     try {
@@ -2702,7 +2702,14 @@ class Wallet {
     };
     const res = await this.mint.createMintQuoteBolt11(mintQuotePayload);
     this.assertBolt11MintQuoteAmount(res, mintAmount);
-    if (lock) this._quoteLockKeys.set(res.quote, lock.privkey);
+    if (lock) {
+      this.failIf(typeof res.pubkey !== 'string', 'Mint returned unlocked mint quote');
+      this.failIf(
+        res.pubkey!.toLowerCase() !== lock.pubkey,
+        'Mint quote is not locked to the requested pubkey',
+      );
+      this._quoteLockKeys.set(res.quote, lock.privkey);
+    }
     return { ...res, unit: res.unit || this._unit };
   }
 
@@ -2729,6 +2736,22 @@ class Wallet {
     }
     const privkey = createRandomSecretKey();
     return { pubkey: Bytes.toHex(getPubKeyFromPrivKey(privkey)), privkey };
+  }
+
+  private async recoverV3QuoteLockKey(
+    keysetId: string,
+    quoteId: string,
+    quotePubkey?: string,
+  ): Promise<Uint8Array | undefined> {
+    const stored = this._quoteLockKeys.get(quoteId);
+    if (stored || !this._seed) return stored;
+    const pubkey = quotePubkey ?? (await this.checkMintQuoteBolt11(quoteId)).pubkey;
+    if (!pubkey) return undefined;
+    const normalizedPubkey = pubkey.toLowerCase();
+    const bound = (await this.counters.peekNext(keysetId)) + 128;
+    return recoverV3SecretKeys(this._seed, keysetId, [normalizedPubkey], bound).get(
+      normalizedPubkey,
+    );
   }
 
   /**
@@ -3243,29 +3266,21 @@ class Wallet {
       quote: quote.quote,
     };
 
-    // Require a privkey when the quote is known to be locked
-    if ('pubkey' in quote && quote.pubkey) {
-      this.failIf(!privkey, 'Can not sign locked quote without private key');
-    }
     // Sign whenever a privkey is provided — quote.pubkey may be absent if only the
     // quote ID was stored, but the caller still needs to produce a NUT-20 signature
     let legacySignature: string | undefined;
     // A v3 quote this wallet locked signs itself: the key is in the session store, or a seeded
     // wallet re-derives it from the quote's lock pubkey (it is a v3 secret like any other).
     if (!privkey && isBlsKeyset(keyset.id)) {
-      let key = this._quoteLockKeys.get(quote.quote);
-      if (!key && this._seed) {
-        let quotePubkey = 'pubkey' in quote ? (quote.pubkey as string | undefined) : undefined;
-        if (!quotePubkey && method === 'bolt11') {
-          // Callers may pass only the quote id, so ask the mint what the quote is locked to.
-          quotePubkey = (await this.checkMintQuoteBolt11(quote.quote)).pubkey;
-        }
-        if (quotePubkey) {
-          const bound = (await this.counters.peekNext(keyset.id)) + 128;
-          key = recoverV3SecretKeys(this._seed, keyset.id, [quotePubkey], bound).get(quotePubkey);
-        }
-      }
+      const quotePubkey = 'pubkey' in quote ? (quote.pubkey as string | undefined) : undefined;
+      const key =
+        quotePubkey || method === 'bolt11'
+          ? await this.recoverV3QuoteLockKey(keyset.id, quote.quote, quotePubkey)
+          : undefined;
       if (key) privkey = Bytes.toHex(key);
+    }
+    if ('pubkey' in quote && quote.pubkey) {
+      this.failIf(!privkey, 'Can not sign locked quote without private key');
     }
     if (privkey) {
       const quotePubkey = 'pubkey' in quote ? (quote.pubkey as string | undefined) : undefined;
@@ -3448,14 +3463,24 @@ class Wallet {
       this.validateMintQuote(entry.quote);
     }
 
+    const keyset = this.getOutputKeyset(keysetId);
+    const signingKeys = privkey ? [privkey].flat() : [];
+    if (isBlsKeyset(keyset.id)) {
+      for (const { quote } of entries) {
+        const quotePubkey = 'pubkey' in quote ? quote.pubkey : undefined;
+        if (!quotePubkey) continue;
+        const key = await this.recoverV3QuoteLockKey(keyset.id, quote.quote, quotePubkey);
+        if (key) signingKeys.push(Bytes.toHex(key));
+      }
+    }
+
     // Check locked quotes: require a privkey and verify it can sign
     const hasLockedQuotes = entries.some((e) => 'pubkey' in e.quote && e.quote.pubkey);
     if (hasLockedQuotes) {
-      this.failIf(!privkey, 'Can not sign locked quotes without private key');
+      this.failIf(signingKeys.length === 0, 'Can not sign locked quotes without private key');
     }
 
     // Parse amounts and determine keyset
-    const keyset = this.getOutputKeyset(keysetId);
     const amounts = entries.map((e) => this.parseAmount(e.amount, `prepareBatchMint: ${method}`));
     const totalAmount = Amount.sum(amounts);
 
@@ -3503,8 +3528,8 @@ class Wallet {
       : undefined;
     for (const [i, entry] of entries.entries()) {
       const quotePubkey = 'pubkey' in entry.quote ? entry.quote.pubkey : undefined;
-      if (quotePubkey && privkey) {
-        const signingKey = findSigningKey(quotePubkey, privkey);
+      if (quotePubkey && signingKeys.length > 0) {
+        const signingKey = findSigningKey(quotePubkey, signingKeys);
         if (v3BatchDigest) {
           signatures.push(Bytes.toHex(schnorr.sign(v3BatchDigest, Bytes.fromHex(signingKey))));
           legacySignatures.push(null);
