@@ -857,3 +857,56 @@ describe('tree caps are enforced on a disclosed tree, not only on a witness path
     ).toBeLessThanOrEqual(TAPROOT_MAX_TREE_DEPTH);
   });
 });
+
+describe('leaf key recovery does not depend on the transmitted tree order', () => {
+  const priv = (i: number) => i.toString(16).padStart(64, '0');
+  const pub = (i: number) => bytesToHex(secp256k1.getPublicKey(hexToBytes(priv(i)), true));
+
+  test('a reordered tree still resolves every blinded leaf key', () => {
+    // The root commits the leaf set, not an arrangement: sorted-pair hashing means a reordered list
+    // still reconstructs `P` and still passes the 2.5.1 completeness check. Slots are assigned by
+    // walking the transmitted order, so matching a key by its position would put every blinded key
+    // on the wrong slot and its owner would quietly lose the leaf. Match by value instead. Sorting
+    // the list is not an option here: blinding rewrites the leaf bytes, so a canonical order over
+    // them is only known after the slots it would decide have been assigned.
+    const leaves: TaprootLeaf[] = [
+      { type: 'threshold', n: 1, keys: [pub(3)] },
+      { type: 'after', n: 1, keys: [pub(4)], time: 1755561600 },
+    ];
+    const sent = deriveReceiverKeyedSecret(pub(9), { leaves, blindKeys: [pub(3), pub(4)] });
+    const tree = sent.tree as string[];
+    const reordered = [...tree].reverse();
+
+    // Both orders reconstruct the secret, which is exactly why the reorder is undetectable.
+    expect(verifyTaprootSpendInfo(sent.secret, { E: sent.E, K: sent.K, tree })).toBe(
+      'receiver-keyed',
+    );
+    expect(verifyTaprootSpendInfo(sent.secret, { E: sent.E, K: sent.K, tree: reordered })).toBe(
+      'receiver-keyed',
+    );
+
+    for (const order of [tree, reordered]) {
+      for (const i of [3, 4]) {
+        const hits = recoverLeafKeySecretKeys(order, sent.E, [priv(i)]);
+        expect(hits).toHaveLength(1);
+        expect(hits[0].blinded).toBe(true);
+        // The recovered key is the one the leaf actually names, wherever it sits.
+        const leaf = parseTaprootLeaf(hexToBytes(order[hits[0].leafIndex]));
+        expect(bytesToHex(secp256k1.getPublicKey(hexToBytes(hits[0].secretKey), true))).toBe(
+          leaf.keys[hits[0].keyIndex],
+        );
+      }
+    }
+  });
+
+  test('a stranger still matches nothing, in either order', () => {
+    const leaves: TaprootLeaf[] = [
+      { type: 'threshold', n: 1, keys: [pub(3)] },
+      { type: 'after', n: 1, keys: [pub(4)], time: 1755561600 },
+    ];
+    const sent = deriveReceiverKeyedSecret(pub(9), { leaves, blindKeys: [pub(3), pub(4)] });
+    const tree = sent.tree as string[];
+    expect(recoverLeafKeySecretKeys(tree, sent.E, [priv(7)])).toHaveLength(0);
+    expect(recoverLeafKeySecretKeys([...tree].reverse(), sent.E, [priv(7)])).toHaveLength(0);
+  });
+});
