@@ -663,6 +663,7 @@ export class KeyChain {
     getKeyset(id?: string): Keyset;
     getKeysets(): Keyset[];
     init(forceRefresh?: boolean): Promise<void>;
+    isUnitKeyset(id?: string): boolean;
     loadFromCache(cache: KeyChainCache): void;
     static mintToCacheDTO(mintUrl: string, allKeysets: MintKeyset[], allKeys: MintKeys[]): KeyChainCache;
 }
