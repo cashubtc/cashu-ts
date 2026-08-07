@@ -232,12 +232,11 @@ class Wallet {
     this._unit = options?.unit ?? this._unit;
     this._boundKeysetId = options?.keysetId ?? this._boundKeysetId;
     if (options?.bip39seed) {
+      // failIf forwards this context to the logger, so pass the type, never the seed.
       this.failIf(
         !(options.bip39seed instanceof Uint8Array),
         'bip39seed must be a valid Uint8Array',
-        {
-          bip39seed: options.bip39seed,
-        },
+        { received: typeof options.bip39seed },
       );
       this._seed = options.bip39seed;
     }
