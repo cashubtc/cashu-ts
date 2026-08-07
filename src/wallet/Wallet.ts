@@ -1523,7 +1523,7 @@ class Wallet {
    */
   isPaymentRequestSatisfied(
     pr: PaymentRequest,
-    proofs: Array<Pick<Proof, 'id' | 'amount'>>,
+    proofs: Array<Pick<Proof, 'id' | 'amount' | 'secret'>>,
     expectedAmount?: AmountLike,
   ): boolean {
     const expected =
@@ -1535,6 +1535,7 @@ class Wallet {
       throw new CTSError(`request unit '${pr.unit}' does not match wallet unit '${this._unit}'`);
     }
     this.assertProofsInWalletUnit(proofs);
+    this.assertNoDuplicateProofs(proofs);
     // mf applies only when this mint is outside the request's mint list (NUT-18).
     let mf = Amount.zero();
     if (pr.supportedMethods?.length && !pr.includesMint(this.mint.mintUrl)) {
@@ -1561,6 +1562,26 @@ class Wallet {
       !!badProof,
       `Proof has unrecognised keyset. '${badProof?.id}' is not a ${this._unit} keyset from this mint`,
       { id: badProof?.id },
+    );
+  }
+
+  /**
+   * Asserts no proof appears twice.
+   *
+   * @remarks
+   * A proof is bearer value redeemable once: the mint keys spent state on `Y =
+   * hash_to_curve(secret)` (NUT-07), so copies sharing a secret are one proof, not two.
+   * @throws If two proofs share a secret.
+   */
+  private assertNoDuplicateProofs(proofs: Array<Pick<Proof, 'secret'>>): void {
+    const secrets = new Set(proofs.map((p) => p.secret));
+    this.failIf(
+      secrets.size !== proofs.length,
+      'Duplicate proofs: each proof may appear only once',
+      {
+        proofs: proofs.length,
+        unique: secrets.size,
+      },
     );
   }
 

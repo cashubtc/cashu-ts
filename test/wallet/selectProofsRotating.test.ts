@@ -46,6 +46,13 @@ const secrets = (proofs: Proof[]) => proofs.map((p) => p.secret).sort();
 const total = (proofs: Proof[]) => proofs.reduce((a, p) => a + p.amount.toNumber(), 0);
 
 describe('selectProofsRotating', () => {
+  test('rejects duplicate bearer proofs instead of counting one proof twice', () => {
+    const p = P(V1A, 2);
+    const kc = keychainStub({ [V1A]: {} });
+
+    expect(() => selectProofsRotating([p, { ...p }], 4, kc)).toThrow(/duplicate/i);
+  });
+
   test('base64 outranks inactive hex keysets regardless of active status', () => {
     // Active base64 must be forced ahead of the inactive v1 bucket
     const b64 = P(B64, 2);

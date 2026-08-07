@@ -288,6 +288,16 @@ describe('wallet.isPaymentRequestSatisfied', () => {
     expect(wallet.isPaymentRequestSatisfied(amountless, proofsTotalling([10]), 10)).toBe(true);
   });
 
+  test('does not count repeated copies of one proof as distinct value', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const pr = new PaymentRequest({ id: 'dup', amount: 100, unit: 'sat' });
+    const [proof] = proofsTotalling([60]);
+
+    expect(() => wallet.isPaymentRequestSatisfied(pr, [proof, { ...proof }])).toThrow(/duplicate/i);
+  });
+
   test('rejects proofs from another unit on the same mint', async () => {
     const usdKeysetId = '009a1f293253e41f';
     server.use(
