@@ -225,6 +225,18 @@ describe('parse errors', () => {
   test('rejects trailing input', () => {
     expect(() => JSONInt.parse('true false')).toThrow('Unexpected trailing input');
   });
+
+  test('accepts nesting up to the depth cap and rejects one level beyond', () => {
+    const nested = (depth: number) => '['.repeat(depth) + ']'.repeat(depth);
+    expect(JSONInt.parse(nested(65))).toBeDefined();
+    expect(() => JSONInt.parse(nested(66))).toThrow('nesting exceeds the maximum depth');
+  });
+
+  test('deeply nested input throws a parse error, not a stack overflow', () => {
+    const deep = '['.repeat(100_000) + ']'.repeat(100_000);
+    expect(() => JSONInt.parse(deep)).toThrow(SyntaxError);
+    expect(() => JSONInt.parse(deep)).not.toThrow(RangeError);
+  });
 });
 
 describe('reviver behavior', () => {
