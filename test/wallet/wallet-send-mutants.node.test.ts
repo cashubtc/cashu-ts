@@ -24,8 +24,15 @@ const seed = hexToBytes(
   'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
 );
 
+// Each call gets its own secret: two proofs sharing one are the same bearer proof.
+let proofN = 0;
 function makeProof(amount: number): Proof {
-  return { id: keysetId, amount: Amount.from(amount), secret, C: proofC };
+  return {
+    id: keysetId,
+    amount: Amount.from(amount),
+    secret: `${secret.slice(0, -2)}${(++proofN).toString(16).padStart(2, '0')}`,
+    C: proofC,
+  };
 }
 
 interface SwapBody {
@@ -96,12 +103,13 @@ describe('send offline/swap routing', () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
 
-    const result = await wallet.send(1, [makeProof(1)]);
+    const proof = makeProof(1);
+    const result = await wallet.send(1, [proof]);
     expect(swap.calls).toBe(0);
     expect(result.keep).toHaveLength(0);
     expect(result.send).toHaveLength(1);
     // Offline path returns the original proof secret unchanged
-    expect(result.send[0].secret).toBe(secret);
+    expect(result.send[0].secret).toBe(proof.secret);
   });
 
   test('deterministic policy forces a swap even for an exact match', async () => {
@@ -109,11 +117,12 @@ describe('send offline/swap routing', () => {
     const wallet = new Wallet(mint, { unit, bip39seed: seed });
     await wallet.loadMint();
 
-    const result = await wallet.send(1, [makeProof(1)]);
+    const proof = makeProof(1);
+    const result = await wallet.send(1, [proof]);
     expect(swap.calls).toBe(1);
     expect(result.send).toHaveLength(1);
     // Swap produced a fresh deterministic secret, not the input secret
-    expect(result.send[0].secret).not.toBe(secret);
+    expect(result.send[0].secret).not.toBe(proof.secret);
   });
 
   test('keysetId override forces a swap', async () => {
