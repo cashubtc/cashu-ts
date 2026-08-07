@@ -82,6 +82,10 @@ type ReplacerList = ReadonlyArray<string | number>;
 // long tokens before conversion. Applies in all runtimes and fallback modes.
 const MAX_INT_TOKEN_LENGTH = 100;
 
+// Legitimate Cashu payloads nest a handful of levels; the recursive descent
+// overflows the call stack near ~5k. Mirrors MAX_CBOR_DEPTH in cbor.ts.
+const MAX_PARSE_DEPTH = 64;
+
 let safeBigIntLimits: { max: bigint; min: bigint } | undefined;
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -114,7 +118,7 @@ class Parser {
   ) {}
 
   parse(): JSONIntValue {
-    const out = this.parseValue();
+    const out = this.parseValue(0);
     this.skipWhitespace();
     if (!this.isEnd()) {
       throw this.syntaxError('Unexpected trailing input');
@@ -122,11 +126,14 @@ class Parser {
     return out;
   }
 
-  private parseValue(): JSONIntValue {
+  private parseValue(depth: number): JSONIntValue {
+    if (depth > MAX_PARSE_DEPTH) {
+      throw this.syntaxError('JSON nesting exceeds the maximum depth');
+    }
     this.skipWhitespace();
     const ch = this.peek();
-    if (ch === '{') return this.parseObject();
-    if (ch === '[') return this.parseArray();
+    if (ch === '{') return this.parseObject(depth);
+    if (ch === '[') return this.parseArray(depth);
     if (ch === '"') return this.parseString();
     if (ch === '-' || this.isDigit(ch)) return this.parseNumber();
     if (ch === 't') return this.parseLiteral('true', true);
@@ -135,7 +142,7 @@ class Parser {
     throw this.syntaxError(`Unexpected token '${ch || 'EOF'}'`);
   }
 
-  private parseObject(): { [key: string]: JSONIntValue } {
+  private parseObject(depth: number): { [key: string]: JSONIntValue } {
     this.expect('{');
     this.skipWhitespace();
     const out: { [key: string]: JSONIntValue } = {};
@@ -155,7 +162,7 @@ class Parser {
       this.expect(':');
       // Define explicitly to avoid __proto__ prototype pollution.
       Object.defineProperty(out, key, {
-        value: this.parseValue(),
+        value: this.parseValue(depth + 1),
         writable: true,
         enumerable: true,
         configurable: true,
@@ -173,7 +180,7 @@ class Parser {
     throw this.syntaxError('Unterminated object');
   }
 
-  private parseArray(): JSONIntValue[] {
+  private parseArray(depth: number): JSONIntValue[] {
     this.expect('[');
     this.skipWhitespace();
     const out: JSONIntValue[] = [];
@@ -183,7 +190,7 @@ class Parser {
     }
 
     while (!this.isEnd()) {
-      out.push(this.parseValue());
+      out.push(this.parseValue(depth + 1));
       this.skipWhitespace();
       const ch = this.peek();
       if (ch === ']') {
