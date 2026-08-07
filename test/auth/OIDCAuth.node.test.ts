@@ -122,6 +122,32 @@ describe('OIDCAuth: PKCE + auth code', () => {
     expect(sp.get('state')).toBe('abc123');
   });
 
+  test('buildAuthCodeUrl rejects a non-http(s) authorization_endpoint', async () => {
+    server.use(
+      http.get(DISCOVERY, () =>
+        HttpResponse.json({ ...goodDiscovery, authorization_endpoint: 'javascript:alert(1)' }),
+      ),
+    );
+    const oidc = new OIDCAuth(DISCOVERY, { clientId: 'cashu-client' });
+    const { challenge } = oidc.generatePKCE();
+    await expect(
+      oidc.buildAuthCodeUrl({ redirectUri: 'http://localhost/cb', codeChallenge: challenge }),
+    ).rejects.toThrow(/authorization_endpoint/i);
+  });
+
+  test('buildAuthCodeUrl rejects an unparseable authorization_endpoint', async () => {
+    server.use(
+      http.get(DISCOVERY, () =>
+        HttpResponse.json({ ...goodDiscovery, authorization_endpoint: 'not a url' }),
+      ),
+    );
+    const oidc = new OIDCAuth(DISCOVERY, { clientId: 'cashu-client' });
+    const { challenge } = oidc.generatePKCE();
+    await expect(
+      oidc.buildAuthCodeUrl({ redirectUri: 'http://localhost/cb', codeChallenge: challenge }),
+    ).rejects.toThrow(/not a valid URL/i);
+  });
+
   test('exchangeAuthCode posts correct form and fires callbacks', async () => {
     const bodies: string[] = [];
     server.use(
@@ -237,6 +263,39 @@ describe('OIDCAuth: device flow', () => {
     const start = await oidc.deviceStart();
     expect(start.device_code).toBe('dev-123');
     expect(start.user_code).toBe('UCODE-123');
+  });
+
+  test('deviceStart rejects a non-http(s) verification_uri', async () => {
+    server.use(
+      http.post(DEVICE_EP, () =>
+        HttpResponse.json({
+          device_code: 'dev-123',
+          user_code: 'UCODE-123',
+          verification_uri: 'javascript:alert(1)',
+          interval: 2,
+          expires_in: 600,
+        }),
+      ),
+    );
+    const oidc = new OIDCAuth(DISCOVERY, { clientId: 'cashu-client' });
+    await expect(oidc.deviceStart()).rejects.toThrow(/verification_uri/i);
+  });
+
+  test('deviceStart rejects a non-http(s) verification_uri_complete', async () => {
+    server.use(
+      http.post(DEVICE_EP, () =>
+        HttpResponse.json({
+          device_code: 'dev-123',
+          user_code: 'UCODE-123',
+          verification_uri: `${ISSUER}/device`,
+          verification_uri_complete: 'javascript:alert(1)',
+          interval: 2,
+          expires_in: 600,
+        }),
+      ),
+    );
+    const oidc = new OIDCAuth(DISCOVERY, { clientId: 'cashu-client' });
+    await expect(oidc.deviceStart()).rejects.toThrow(/verification_uri_complete/i);
   });
 
   test('devicePoll loops until access_token (authorization_pending → success)', async () => {
