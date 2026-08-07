@@ -60,6 +60,19 @@ describe('constructor mutants', () => {
     );
   });
 
+  test('never logs the rejected seed value', () => {
+    // failIf logs its context before throwing, so the value must not appear there.
+    const mnemonic = 'abandon abandon abandon abandon about';
+    const error = vi.fn();
+    const logger = { error, warn: vi.fn(), info: vi.fn(), debug: vi.fn(), trace: vi.fn() };
+
+    expect(() => new Wallet(mint, { unit, logger, bip39seed: mnemonic as never })).toThrow();
+
+    const logged = JSON.stringify(error.mock.calls);
+    expect(logged).not.toContain(mnemonic);
+    expect(logged).not.toContain('abandon');
+  });
+
   test('secretsPolicy overrides the default rather than being ANDed with it', () => {
     // `options.secretsPolicy ?? this._secretsPolicy`: an explicit 'random' must win even
     // when a seed is present (a `&&` mutant would collapse to the 'auto' default).
