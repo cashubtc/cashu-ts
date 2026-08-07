@@ -372,6 +372,13 @@ describe('KeyChain getters', () => {
     const satKeysets = multiChain.getKeysets();
     expect(satKeysets.every((k) => k.unit === 'sat')).toBe(true);
     expect(satKeysets.find((k) => k.id === usdKeysetId)).toBeUndefined();
+
+    // isUnitKeyset — wallet unit only, and never throws on a missing/unknown id
+    expect(multiChain.isUnitKeyset('00bd033559de27d0')).toBe(true);
+    expect(multiChain.isUnitKeyset(usdKeysetId)).toBe(false);
+    expect(multiChain.isUnitKeyset('notakeyset')).toBe(false);
+    expect(multiChain.isUnitKeyset('')).toBe(false);
+    expect(multiChain.isUnitKeyset(undefined)).toBe(false);
   });
 
   test('should throw getters if not initialized', () => {

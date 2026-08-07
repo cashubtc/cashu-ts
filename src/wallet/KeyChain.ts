@@ -298,6 +298,19 @@ export class KeyChain {
   }
 
   /**
+   * True if `id` is a keyset belonging to this KeyChain's unit.
+   *
+   * @remarks
+   * O(1) and non-throwing, unlike `getKeyset(id)` (cross-unit) and `getKeysets()` (allocates,
+   * throws when the unit has none). Use it to keep foreign-unit proofs out of amount arithmetic.
+   */
+  isUnitKeyset(id?: string): boolean {
+    if (!id) return false;
+    const keyset = this.keysets[id];
+    return keyset !== undefined && keyset.unit === this.unit;
+  }
+
+  /**
    * Returns all the keys in this KeyChain across all units.
    *
    * @returns Array of MintKeys objects.
