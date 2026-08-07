@@ -2,9 +2,11 @@ import { dedupeP2PKPubkeys, type P2PKOptions, type P2PKTag, type SigFlag } from 
 import { CTSError } from '../model/Errors';
 import { assertValidTagKey, OutputData } from '../model/OutputData';
 
-function toUnixSeconds(input: Date | number): number {
-  if (input instanceof Date) return Math.floor(input.getTime() / 1000);
-  return input < 1e12 ? Math.floor(input) : Math.floor(input / 1000); // > 1e12 = ms
+function assertUnixSeconds(seconds: number): number {
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    throw new CTSError(`locktime must be a non-negative finite Unix time, got ${seconds}`);
+  }
+  return Math.floor(seconds);
 }
 
 export class P2PKBuilder {
@@ -32,7 +34,15 @@ export class P2PKBuilder {
   }
 
   lockUntil(when: Date | number) {
-    this.locktime = toUnixSeconds(when);
+    let seconds: number;
+    if (when instanceof Date) {
+      seconds = when.getTime() / 1000;
+    } else {
+      // A value that looks like epoch milliseconds (>= 1e12) is read as ms so
+      // lockUntil(Date.now()) works; smaller values are treated as Unix seconds.
+      seconds = when < 1e12 ? when : when / 1000;
+    }
+    this.locktime = assertUnixSeconds(seconds);
     return this;
   }
 
@@ -55,7 +65,13 @@ export class P2PKBuilder {
   addTag(key: string, values?: string[] | string) {
     assertValidTagKey(key); //  Validate key
     const vals = values === undefined ? [] : Array.isArray(values) ? values : [values];
-    this.extraTags.push([key, ...vals.map(String)]); // all to strings
+    const stringVals = vals.map(String); // all to strings
+    // NUT-10 tag values must be non-empty strings; reject at the setter so an empty
+    // value fails here rather than producing a secret parseSecret later rejects.
+    if (stringVals.some((v) => v.length === 0)) {
+      throw new CTSError(`tag "${key}" values must be non-empty strings`);
+    }
+    this.extraTags.push([key, ...stringVals]);
     return this;
   }
 
@@ -123,6 +139,7 @@ export class P2PKBuilder {
 
   static fromOptions(opts: P2PKOptions): P2PKBuilder {
     const b = new P2PKBuilder();
+<<<<<<< HEAD
     const locks = Array.isArray(opts.pubkey) ? opts.pubkey : [opts.pubkey];
     b.addLockPubkey(locks);
     if (opts.locktime !== undefined) b.lockUntil(opts.locktime);
@@ -134,6 +151,24 @@ export class P2PKBuilder {
     if (opts.blindKeys) b.blindKeys();
     if (opts.sigFlag == 'SIG_ALL') b.sigAll();
     if (opts.hashlock) b.addHashlock(opts.hashlock);
+=======
+    if (p2pk.kind === 'HTLC') {
+      b.addHashlock(p2pk.data);
+      if (p2pk.pubkeys?.length) b.addLockPubkey(p2pk.pubkeys);
+    } else {
+      b.addLockPubkey([p2pk.data, ...(p2pk.pubkeys ?? [])]);
+    }
+    // p2pk.locktime is already canonical Unix seconds; assign directly so lockUntil's
+    // ms heuristic can't re-interpret a >= 1e12 second value and expire the lock.
+    if (p2pk.locktime !== undefined) b.locktime = assertUnixSeconds(p2pk.locktime);
+    if (p2pk.refundKeys?.length) b.addRefundPubkey(p2pk.refundKeys);
+    if (p2pk.requiredSignatures !== undefined) b.requireLockSignatures(p2pk.requiredSignatures);
+    if (p2pk.requiredRefundSignatures !== undefined)
+      b.requireRefundSignatures(p2pk.requiredRefundSignatures);
+    if (p2pk.additionalTags?.length) b.addTags(p2pk.additionalTags);
+    if (p2pk.blindKeys) b.blindKeys();
+    if (p2pk.sigFlag == 'SIG_ALL') b.sigAll();
+>>>>>>> 6985fa1 (fix(wallet): harden P2PK spending-condition locktime and tag validation (#894))
     return b;
   }
 }

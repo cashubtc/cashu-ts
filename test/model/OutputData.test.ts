@@ -141,6 +141,186 @@ describe('OutputData.assertValidTagKey and reserved tags', () => {
   });
 });
 
+<<<<<<< HEAD
+=======
+describe('OutputData.createSingleP2PKData tag construction', () => {
+  const KEYSET_ID = '009a1f293253e41e';
+  const pub = (i: number): string => bytesToHex(getPubKeyFromPrivKey(secpPriv(i)));
+
+  test('does not blind keys when blindKeys is unset', () => {
+    const data = pub(0);
+    const out = OutputData.createSingleP2PKData({ kind: 'P2PK', data }, 1, KEYSET_ID);
+    expect(out.ephemeralE).toBeUndefined();
+    // data key stays in the clear (kills `if (blindKeys)` -> true).
+    expect(readSecret(out).data).toBe(data);
+  });
+
+  test('P2PK blinding: data key blinded, pubkeys/refund sliced by role', () => {
+    const data = pub(0);
+    const extraPub = pub(1);
+    const refundKey = pub(2);
+    const out = OutputData.createSingleP2PKData(
+      {
+        kind: 'P2PK',
+        data,
+        pubkeys: [extraPub],
+        refundKeys: [refundKey],
+        locktime: 1700000000,
+        blindKeys: true,
+      },
+      1,
+      KEYSET_ID,
+    );
+    const { data: secretData, tags } = readSecret(out);
+    const pubkeysTag = tags.find(([t]) => t === 'pubkeys');
+    const refundTag = tags.find(([t]) => t === 'refund');
+
+    expect(out.ephemeralE).toBeDefined();
+    // First locking key sits in data, blinded (kills `if (isHTLC)` -> true and the else-block wipe).
+    expect(secretData).not.toBe(data);
+    expect(secretData).toMatch(/^0[23][0-9a-f]{64}$/);
+    // Exactly one extra locking key in pubkeys (kills slice(1, lockKeys.length) -> blinded).
+    expect(pubkeysTag?.slice(1)).toHaveLength(1);
+    expect(pubkeysTag?.[1]).not.toBe(extraPub);
+    // Exactly one refund key (kills slice(lockKeys.length) -> blinded).
+    expect(refundTag?.slice(1)).toHaveLength(1);
+    expect(refundTag?.[1]).not.toBe(refundKey);
+  });
+
+  test('HTLC blinding: hashlock stays clear, all lock keys blinded into pubkeys', () => {
+    const hashlock = 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5';
+    const lock1 = pub(1);
+    const lock2 = pub(2);
+    const refundKey = pub(3);
+    const out = OutputData.createSingleP2PKData(
+      {
+        kind: 'HTLC',
+        data: hashlock,
+        pubkeys: [lock1, lock2],
+        refundKeys: [refundKey],
+        locktime: 1700000000,
+        blindKeys: true,
+      },
+      1,
+      KEYSET_ID,
+    );
+    const { kind, data: secretData, tags } = readSecret(out);
+    const pubkeysTag = tags.find(([t]) => t === 'pubkeys');
+    const refundTag = tags.find(([t]) => t === 'refund');
+
+    expect(kind).toBe('HTLC');
+    expect(secretData).toBe(hashlock);
+    // Both lock keys land in pubkeys, blinded (kills slice(0, lockKeys.length) -> blinded, which
+    // would also fold the refund key into pubkeys).
+    expect(pubkeysTag?.slice(1)).toHaveLength(2);
+    expect(pubkeysTag?.[1]).not.toBe(lock1);
+    expect(pubkeysTag?.[2]).not.toBe(lock2);
+    expect(refundTag?.slice(1)).toHaveLength(1);
+  });
+
+  test('HTLC blinding starts lock keys at slot 1 (NUT-28: hashlock occupies slot 0)', () => {
+    const hashlock = 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5';
+    const lockPriv = secpPriv(1);
+    const lock1 = pub(1);
+    const out = OutputData.createSingleP2PKData(
+      { kind: 'HTLC', data: hashlock, pubkeys: [lock1], blindKeys: true },
+      1,
+      KEYSET_ID,
+    );
+    const blinded = readSecret(out).tags.find(([t]) => t === 'pubkeys')![1];
+    // Independent receiver-side NUT-28 math: r1 = sha256(DST || Zx || 0x01), P' = P + r1·G
+    const p = secp256k1.Point.Fn.fromBytes(lockPriv);
+    const Zx = secp256k1.Point.fromHex(out.ephemeralE!).multiply(p).toBytes(true).slice(1);
+    const r1 = Bytes.toBigInt(sha256(Bytes.concat(P2BK_DST, Zx, Uint8Array.of(1))));
+    const expected = pointFromHex(lock1).add(secp256k1.Point.BASE.multiply(r1)).toHex(true);
+    expect(blinded).toBe(expected);
+  });
+
+  test('emits a locktime tag for locktime 0 (boundary)', () => {
+    const out = OutputData.createSingleP2PKData(
+      { kind: 'P2PK', data: pub(0), locktime: 0 },
+      1,
+      KEYSET_ID,
+    );
+    const locktimeTag = readSecret(out).tags.find(([t]) => t === 'locktime');
+    // locktime 0 is valid (kills `ts >= 0` -> `ts > 0`).
+    expect(locktimeTag).toEqual(['locktime', '0']);
+  });
+
+  test('emits a locktime tag for a positive locktime', () => {
+    const out = OutputData.createSingleP2PKData(
+      { kind: 'P2PK', data: pub(0), locktime: 1700000000 },
+      1,
+      KEYSET_ID,
+    );
+    expect(readSecret(out).tags.find(([t]) => t === 'locktime')).toEqual([
+      'locktime',
+      '1700000000',
+    ]);
+  });
+
+  test('throws for a present but invalid locktime instead of silently dropping it', () => {
+    // Refund keys with a dropped locktime is a structural violation the verifier rejects
+    // outright (unspendable, main keys included), so a present-but-invalid value
+    // (negative / non-finite) must be rejected here, not omitted.
+    for (const bad of [-1, NaN, Infinity]) {
+      expect(() =>
+        OutputData.createSingleP2PKData(
+          { kind: 'P2PK', data: pub(0), locktime: bad },
+          1,
+          KEYSET_ID,
+        ),
+      ).toThrow(/locktime/i);
+    }
+  });
+
+  test('throws for an empty additionalTags value on the direct build path', () => {
+    expect(() =>
+      OutputData.createSingleP2PKData(
+        { kind: 'P2PK', data: pub(0), additionalTags: [['memo', '']] },
+        1,
+        KEYSET_ID,
+      ),
+    ).toThrow(/non-empty/i);
+  });
+
+  test('emits an exact sigflag tag for SIG_ALL', () => {
+    const out = OutputData.createSingleP2PKData(
+      { kind: 'P2PK', data: pub(0), sigFlag: 'SIG_ALL' },
+      1,
+      KEYSET_ID,
+    );
+    // Exact contents guard against dropped/blanked strings and the emptied push array.
+    expect(readSecret(out).tags.find(([t]) => t === 'sigflag')).toEqual(['sigflag', 'SIG_ALL']);
+  });
+
+  test('omits the sigflag tag when not SIG_ALL', () => {
+    const out = OutputData.createSingleP2PKData({ kind: 'P2PK', data: pub(0) }, 1, KEYSET_ID);
+    expect(readSecret(out).tags.find(([t]) => t === 'sigflag')).toBeUndefined();
+  });
+
+  test('accepts a secret of exactly MAX_SECRET_LENGTH code points', () => {
+    // Pad an additional tag value so the JSON secret hits the limit exactly. Each ASCII 'A' adds
+    // one code point with no JSON escaping, so length is linear in the pad size.
+    const build = (pad: number): OutputData =>
+      OutputData.createSingleP2PKData(
+        { kind: 'P2PK', data: pub(0), additionalTags: [['x', 'A'.repeat(pad)]] },
+        1,
+        KEYSET_ID,
+      );
+    // Measure with a single 'A' (an empty tag value is rejected), then add the rest.
+    const base = [...new TextDecoder().decode(build(1).secret)].length;
+    const target = MAX_SECRET_LENGTH - base + 1;
+
+    const atLimit = build(target);
+    // Exactly MAX_SECRET_LENGTH must be accepted (kills `>` -> `>=`).
+    expect([...new TextDecoder().decode(atLimit.secret)].length).toBe(MAX_SECRET_LENGTH);
+    // One over must be rejected.
+    expect(() => build(target + 1)).toThrowError(/Secret too long/);
+  });
+});
+
+>>>>>>> 6985fa1 (fix(wallet): harden P2PK spending-condition locktime and tag validation (#894))
 describe('OutputData.deserialize', () => {
   test('wraps a malformed serialized payload with the underlying cause', () => {
     const serialized = OutputData.serialize(
