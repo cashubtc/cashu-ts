@@ -3196,13 +3196,22 @@ class Wallet {
     // Prepare proofs for mint
     inputs = this._prepareInputsForMint(inputs);
 
-    // Construct melt payload
+    // Construct melt payload. Extension fields must not clobber the prepared request.
+    const extra = completeOptions.extraPayload;
+    if (extra) {
+      // Object.keys mirrors what the spread below copies (own enumerable keys).
+      const owned = ['quote', 'inputs', 'outputs', 'prefer_async'];
+      const reserved = Object.keys(extra).filter((k) => owned.includes(k));
+      this.failIf(reserved.length > 0, 'extraPayload cannot override reserved melt fields', {
+        reserved,
+      });
+    }
     const meltPayload: MeltRequest = {
       quote,
       inputs,
       outputs,
       ...(completeOptions.preferAsync ? { prefer_async: true } : {}),
-      ...completeOptions.extraPayload,
+      ...extra,
     };
 
     // Execute melt and validate result

@@ -909,6 +909,80 @@ describe('async melt preference body', () => {
     });
   });
 
+  test('completeMelt rejects extraPayload keys that collide with the prepared request', async () => {
+    const meltQuote = {
+      quote: 'q-reserved',
+      amount: Amount.from(1),
+      unit: 'sat',
+      request: invoice,
+      state: 'UNPAID',
+      fee_reserve: Amount.from(0),
+    } as unknown as MeltQuoteBolt11Response;
+    const proofs: Proof[] = [
+      {
+        id: '00bd033559de27d0',
+        amount: Amount.from(1),
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+      },
+    ];
+
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const meltTxn = await wallet.prepareMelt('bolt11', meltQuote, proofs);
+
+    for (const key of ['quote', 'inputs', 'outputs', 'prefer_async']) {
+      await expect(
+        wallet.completeMelt(meltTxn, undefined, { extraPayload: { [key]: 'clobber' } }),
+      ).rejects.toThrow(/reserved melt fields/);
+    }
+  });
+
+  test('completeMelt forwards non-reserved extraPayload fields', async () => {
+    const meltQuote = {
+      quote: 'q-extra-ok',
+      amount: Amount.from(1),
+      unit: 'sat',
+      request: invoice,
+      state: 'UNPAID',
+      fee_reserve: Amount.from(0),
+    } as unknown as MeltQuoteBolt11Response;
+    const proofs: Proof[] = [
+      {
+        id: '00bd033559de27d0',
+        amount: Amount.from(1),
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+      },
+    ];
+
+    server.use(
+      http.post(mintUrl + '/v1/melt/bolt11', async ({ request }) => {
+        const body = (await request.json()) as { quote: string; fee_index?: number };
+        expect(body.quote).toBe(meltQuote.quote);
+        expect(body.fee_index).toBe(2);
+        return HttpResponse.json({
+          quote: meltQuote.quote,
+          amount: meltQuote.amount,
+          unit: meltQuote.unit,
+          request: meltQuote.request,
+          state: 'UNPAID',
+          expiry: 1234567890,
+          fee_reserve: meltQuote.fee_reserve,
+          payment_preimage: null,
+          change: [],
+        });
+      }),
+    );
+
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const meltTxn = await wallet.prepareMelt('bolt11', meltQuote, proofs);
+    const res = await wallet.completeMelt(meltTxn, undefined, { extraPayload: { fee_index: 2 } });
+
+    expect(res.quote.quote).toBe(meltQuote.quote);
+  });
+
   test('bolt11: does not send prefer_async when preferAsync is not set', async () => {
     const meltQuote = {
       quote: 'q-async-1b',
