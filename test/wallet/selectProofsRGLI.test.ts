@@ -325,7 +325,10 @@ describe('selectProofsRGLI, invariants', () => {
     const proof: Proof = { id: 'A', amount: Amount.from(1), secret: 'same', C: 'C1' };
     const kc = keychainStub({ A: 0 });
 
-    expect(() => selectProofsRGLI([proof, { ...proof }], 2, kc, false, true)).toThrow(/duplicate/i);
+    // The index names the offending array position so a caller can find the bad row.
+    expect(() => selectProofsRGLI([proof, { ...proof }], 2, kc, false, true)).toThrow(
+      /duplicate proof at index 1/i,
+    );
   });
 
   test('a feasible close match never returns under the target (repeated unseeded runs)', () => {

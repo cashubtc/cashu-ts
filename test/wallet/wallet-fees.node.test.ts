@@ -295,7 +295,9 @@ describe('wallet.isPaymentRequestSatisfied', () => {
     const pr = new PaymentRequest({ id: 'dup', amount: 100, unit: 'sat' });
     const [proof] = proofsTotalling([60]);
 
-    expect(() => wallet.isPaymentRequestSatisfied(pr, [proof, { ...proof }])).toThrow(/duplicate/i);
+    expect(() => wallet.isPaymentRequestSatisfied(pr, [proof, { ...proof }])).toThrow(
+      /duplicate proof at index 1/i,
+    );
   });
 
   test('rejects proofs from another unit on the same mint', async () => {
