@@ -12,8 +12,11 @@ import {
   constructUnblindedSignature,
   createRandomRawBlindedMessage,
   getKeysetIdInt,
+  getValidSigners,
   hash_e,
+  meetsSignerThreshold,
   schnorrSignDigest,
+  schnorrSignMessage,
   schnorrVerifyDigest,
   pointFromBytes,
 } from '../../src/crypto';
@@ -158,5 +161,36 @@ describe('schnorrVerifyDigest', () => {
   test('swallows malformed input by default and throws when asked', () => {
     expect(schnorrVerifyDigest('not-hex', digest, pubkey)).toBe(false);
     expect(() => schnorrVerifyDigest('not-hex', digest, pubkey, true)).toThrow();
+  });
+
+  test('rejects a 33-byte pubkey with a non-02/03 prefix', () => {
+    expect(schnorrVerifyDigest(signature, digest, 'ff' + pubkey.slice(2))).toBe(false);
+  });
+});
+
+describe('getValidSigners / meetsSignerThreshold', () => {
+  const privkey = '0000000000000000000000000000000000000000000000000000000000000001';
+  const compressed = bytesToHex(secp256k1.getPublicKey(hexToBytes(privkey), true)); // 02-prefixed
+  const xOnly = compressed.slice(2);
+  const message = 'authorize-spend';
+  const signature = schnorrSignMessage(message, privkey);
+
+  test('one key listed under multiple encodings counts as a single signer', () => {
+    const signers = getValidSigners([signature], message, [
+      xOnly,
+      compressed,
+      '03' + xOnly,
+      compressed.toUpperCase(),
+    ]);
+    expect(signers).toEqual([xOnly]);
+  });
+
+  test('one signature cannot meet a 2-of-2 threshold across 02/03 encodings', () => {
+    expect(meetsSignerThreshold([signature], message, [compressed, '03' + xOnly], 2)).toBe(false);
+  });
+
+  test('non-string pubkey entries fail closed without throwing', () => {
+    const pubkeys = [42 as unknown as string, compressed];
+    expect(getValidSigners([signature], message, pubkeys)).toEqual([compressed]);
   });
 });
