@@ -10,11 +10,12 @@ import { selectProofsRGLI } from '../../src/wallet/SelectProofs';
 // These tests cover the edge case branches.
 // -----------------------------------------------------------------
 
-// Minimal keychain stub
+// Minimal keychain stub. Every listed id counts as this wallet's unit.
 function keychainStub(fees: Record<string, number>) {
   return {
     getKeyset: (id: string) => ({ fee: fees[id] ?? 0 }),
     getKeysets: () => Object.keys(fees).map((id) => ({ id, fee: fees[id] })),
+    isUnitKeyset: (id: string) => id in fees,
   } as any;
 }
 
@@ -159,6 +160,7 @@ describe('selectProofsRGLI, focused unit tests', () => {
     const kc = {
       getKeyset: () => ({ fee: 0 }),
       getKeysets: () => [{ id: 'Z', fee: 0 }],
+      isUnitKeyset: () => true,
     } as any;
 
     expect(() => selectProofsRGLI(proofs as any, 7, kc, false, true)).toThrow(/took too long/i);

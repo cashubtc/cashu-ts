@@ -1037,16 +1037,7 @@ class Wallet {
     }
 
     // Validate all proof keyset IDs use this wallet's unit
-    const knownIds = this._keyChain.getKeysets().map((k) => k.id);
-    const badProof = proofs.find((p) => !p.id || !knownIds.includes(p.id));
-    this.failIf(
-      !!badProof,
-      `Proof has unrecognised keyset. '${badProof?.id}' is not a ${this._unit} keyset from this mint`,
-      {
-        id: badProof?.id,
-        knownIds,
-      },
-    );
+    this.assertProofsInWalletUnit(proofs);
 
     // Check total amount
     const totalAmount = this.parseAmount(sumProofs(proofs), 'prepareSwapToReceive', true);
@@ -1543,6 +1534,7 @@ class Wallet {
     if (pr.unit && pr.unit !== this._unit) {
       throw new CTSError(`request unit '${pr.unit}' does not match wallet unit '${this._unit}'`);
     }
+    this.assertProofsInWalletUnit(proofs);
     // mf applies only when this mint is outside the request's mint list (NUT-18).
     let mf = Amount.zero();
     if (pr.supportedMethods?.length && !pr.includesMint(this.mint.mintUrl)) {
@@ -1554,6 +1546,22 @@ class Wallet {
     }
     const needed = expected.add(mf).add(this.getFeesForProofs(proofs));
     return sumProofs(proofs).compareTo(needed) >= 0;
+  }
+
+  /**
+   * Asserts every proof belongs to a keyset of the wallet's unit.
+   *
+   * @remarks
+   * Amounts are unit-less numbers, so a foreign-unit proof would otherwise count toward a total.
+   * @throws If any proof's keyset is unknown or belongs to another unit of this mint.
+   */
+  private assertProofsInWalletUnit(proofs: Array<Pick<Proof, 'id'>>): void {
+    const badProof = proofs.find((p) => !this._keyChain.isUnitKeyset(p.id));
+    this.failIf(
+      !!badProof,
+      `Proof has unrecognised keyset. '${badProof?.id}' is not a ${this._unit} keyset from this mint`,
+      { id: badProof?.id },
+    );
   }
 
   /**

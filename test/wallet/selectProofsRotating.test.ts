@@ -30,6 +30,7 @@ function keychainStub(keysets: Record<string, { fee?: number; active?: boolean }
       return entry(id);
     },
     getKeysets: () => Object.keys(keysets).map(entry),
+    isUnitKeyset: (id: string) => !!keysets[id],
   } as any;
 }
 
