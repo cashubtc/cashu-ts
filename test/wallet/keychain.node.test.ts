@@ -122,6 +122,16 @@ describe('KeyChain initialization', () => {
     expect(active.expiry).toBe(1754296607);
   });
 
+  test('getKeyset rejects prototype-chain ids instead of returning inherited values', async () => {
+    const keyChain = new KeyChain(mint, unit);
+    await keyChain.init();
+    // A bare object map resolves these to Object.prototype members (truthy), bypassing
+    // the not-found guard; the lookup must return nothing for a non-own id.
+    for (const id of ['__proto__', 'constructor', 'toString', 'hasOwnProperty']) {
+      expect(() => keyChain.getKeyset(id)).toThrow(/not found/i);
+    }
+  });
+
   test('should initialize with mintUrl and load keys and keysets', async () => {
     const keyChain = new KeyChain('http://localhost:3338', unit);
     await keyChain.init();

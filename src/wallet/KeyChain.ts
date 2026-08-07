@@ -22,7 +22,10 @@ import { Keyset } from './Keyset';
 export class KeyChain {
   private mint: Mint;
   private unit: string;
-  private keysets: { [id: string]: Keyset } = {};
+  // Object.create(null): a mint-supplied id of '__proto__'/'constructor'/etc must resolve to
+  // an own entry or nothing, never an inherited Object.prototype member (which is truthy and
+  // would slip past the not-found guard in getKeyset).
+  private keysets: { [id: string]: Keyset } = Object.create(null) as { [id: string]: Keyset };
   private pendingKeyFetches: Map<string, Promise<Keyset>> = new Map();
 
   private assertInitialized(): void {
@@ -163,8 +166,8 @@ export class KeyChain {
    * @param allKeys Keys data from mint.getKeys() API.
    */
   private buildKeychain(allKeysets: MintKeyset[], allKeys: MintKeys[]): void {
-    // Clear existing keysets to avoid stale data
-    this.keysets = {};
+    // Clear existing keysets to avoid stale data (null-proto, see the field declaration)
+    this.keysets = Object.create(null) as { [id: string]: Keyset };
 
     const keysMap = new Map<string, MintKeys>(allKeys.map((k) => [k.id, k]));
 
