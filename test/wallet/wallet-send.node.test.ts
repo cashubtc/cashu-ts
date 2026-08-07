@@ -133,6 +133,39 @@ describe('sendOffline witness normalization', () => {
     expect(() => wallet.sendOffline(3, proofs)).toThrow(/cannot be completed offline/);
   });
 
+  test('refuses to select proofs from another unit on the same mint', async () => {
+    const usdKeysetId = '009a1f293253e41f';
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({
+          keysets: [
+            { id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 0 },
+            { id: usdKeysetId, unit: 'usd', active: true, input_fee_ppk: 0 },
+          ],
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const usdProof: Proof = {
+      id: usdKeysetId,
+      amount: Amount.from(1),
+      secret: 's-usd',
+      C: 'C-usd',
+    };
+    const satProof: Proof = {
+      id: '00bd033559de27d0',
+      amount: Amount.from(1),
+      secret: 's-sat',
+      C: 'C-sat',
+    };
+
+    // Alone, and mixed into an otherwise valid sat pool.
+    expect(() => wallet.sendOffline(1, [usdProof])).toThrow(/unrecognised keyset/);
+    expect(() => wallet.sendOffline(2, [satProof, usdProof])).toThrow(/unrecognised keyset/);
+  });
+
   test('preserves witness on NUT-10 unknown secret kind', async () => {
     const wallet = new Wallet(mint, { unit, requireSigDleq: true });
     await wallet.loadMint();

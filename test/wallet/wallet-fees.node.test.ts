@@ -5,7 +5,7 @@ import { Wallet, Amount, CTSError, PaymentRequest, type Proof } from '../../src'
 import { deriveKeysetId } from '../../src/utils';
 import { PUBKEYS } from '../consts';
 
-import { mint, unit, mintUrl, useTestServer } from './_setup';
+import { mint, unit, mintUrl, useTestServer, dummyKeysetResp } from './_setup';
 
 // Full power-of-two denomination set, a realistic set for fee convergence. A v0 keyset id hashes
 // only the pubkeys (not the fee), so one id is valid for any advertised fee.
@@ -286,5 +286,28 @@ describe('wallet.isPaymentRequestSatisfied', () => {
       /amountless/,
     );
     expect(wallet.isPaymentRequestSatisfied(amountless, proofsTotalling([10]), 10)).toBe(true);
+  });
+
+  test('rejects proofs from another unit on the same mint', async () => {
+    const usdKeysetId = '009a1f293253e41f';
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({
+          keysets: [
+            ...dummyKeysetResp.keysets,
+            { id: usdKeysetId, unit: 'usd', active: true, input_fee_ppk: 0 },
+          ],
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const pr = new PaymentRequest({ id: 'unit', amount: 100, unit: 'sat' });
+    const usdProofs: Proof[] = [
+      { id: usdKeysetId, amount: Amount.from(100), secret: 'usd-secret', C: 'C-usd' },
+    ];
+
+    expect(() => wallet.isPaymentRequestSatisfied(pr, usdProofs)).toThrow(/not a sat keyset/);
   });
 });

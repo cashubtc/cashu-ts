@@ -49,10 +49,13 @@ export function selectProofsRGLI(
     exFee: bigint;
     ppkfee: bigint;
   }
-  // Looks up fee for a proof
+  // Looks up fee for a proof. Foreign-unit proofs are bearer value in another
+  // asset, so they must never be selectable against a target in this unit.
+  // Unit check follows the lookup, so an unknown id still reports as such.
   const feeForProof = (proof: Proof): bigint => {
+    let fee: number;
     try {
-      return BigInt(keyChain.getKeyset(proof.id).fee);
+      fee = keyChain.getKeyset(proof.id).fee;
     } catch (e) {
       const message = `Could not get fee. No keyset found for keyset id: ${proof.id}`;
       _logger.error(message, {
@@ -61,6 +64,13 @@ export function selectProofsRGLI(
       });
       throw new CTSError(message, { cause: e });
     }
+    failIf(
+      !keyChain.isUnitKeyset(proof.id),
+      `Proof has unrecognised keyset. '${proof.id}' is not a keyset for this wallet unit`,
+      _logger,
+      { id: proof.id },
+    );
+    return BigInt(fee);
   };
   // Calculate net amount after fees (single ceil over the whole set)
   const sumExFees = (amount: bigint, feePPK: bigint): bigint => {
@@ -362,6 +372,12 @@ export function selectProofsRotating(
   const buckets = new Map<number, { proofs: Proof[]; gross: bigint; ppk: bigint }>();
   for (const p of normalizedProofs) {
     const ks = keyChain.getKeyset(p.id); // throws for unknown keyset ids
+    failIf(
+      !keyChain.isUnitKeyset(p.id),
+      `Proof has unrecognised keyset. '${p.id}' is not a keyset for this wallet unit`,
+      _logger,
+      { id: p.id },
+    );
     const rank = ks.hasHexId ? parseInt(p.id.slice(0, 2), 16) + 1 : 0;
     const key = rank * 2 + (ks.isActive ? 1 : 0);
     const bucket = buckets.get(key) ?? { proofs: [], gross: 0n, ppk: 0n };
