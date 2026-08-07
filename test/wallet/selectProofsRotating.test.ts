@@ -50,7 +50,7 @@ describe('selectProofsRotating', () => {
     const p = P(V1A, 2);
     const kc = keychainStub({ [V1A]: {} });
 
-    expect(() => selectProofsRotating([p, { ...p }], 4, kc)).toThrow(/duplicate/i);
+    expect(() => selectProofsRotating([p, { ...p }], 4, kc)).toThrow(/duplicate proof at index 1/i);
   });
 
   test('base64 outranks inactive hex keysets regardless of active status', () => {

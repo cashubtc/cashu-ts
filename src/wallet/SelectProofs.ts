@@ -139,10 +139,13 @@ export function selectProofsRGLI(
   let totalFeePPK = 0n;
   // A proof is bearer value redeemable once, so we can't have duplicates.
   const seen = new Set<string>();
-  const proofWithFees = normalizedProofs.map((p) => {
-    failIf(seen.has(p.secret), 'Duplicate proofs: each proof may appear only once', _logger, {
-      id: p.id,
-    });
+  const proofWithFees = normalizedProofs.map((p, i) => {
+    failIf(
+      seen.has(p.secret),
+      `Duplicate proof at index ${i}: each proof may appear only once`,
+      _logger,
+      { index: i },
+    );
     seen.add(p.secret);
     const ppkfee = feeForProof(p);
     const amountBig = p.amount.toBigInt();
@@ -379,10 +382,13 @@ export function selectProofsRotating(
   // partition below, which identifies proofs by secret.
   const seen = new Set<string>();
   const buckets = new Map<number, { proofs: Proof[]; gross: bigint; ppk: bigint }>();
-  for (const p of normalizedProofs) {
-    failIf(seen.has(p.secret), 'Duplicate proofs: each proof may appear only once', _logger, {
-      id: p.id,
-    });
+  for (const [i, p] of normalizedProofs.entries()) {
+    failIf(
+      seen.has(p.secret),
+      `Duplicate proof at index ${i}: each proof may appear only once`,
+      _logger,
+      { index: i },
+    );
     seen.add(p.secret);
     const ks = keyChain.getKeyset(p.id); // throws for unknown keyset ids
     failIf(

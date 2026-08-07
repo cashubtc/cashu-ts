@@ -1574,15 +1574,16 @@ class Wallet {
    * @throws If two proofs share a secret.
    */
   private assertNoDuplicateProofs(proofs: Array<Pick<Proof, 'secret'>>): void {
-    const secrets = new Set(proofs.map((p) => p.secret));
-    this.failIf(
-      secrets.size !== proofs.length,
-      'Duplicate proofs: each proof may appear only once',
-      {
-        proofs: proofs.length,
-        unique: secrets.size,
-      },
-    );
+    const seen = new Set<string>();
+    for (const [i, p] of proofs.entries()) {
+      // Report the position, never the secret: it is the spending material.
+      this.failIf(
+        seen.has(p.secret),
+        `Duplicate proof at index ${i}: each proof may appear only once`,
+        { index: i },
+      );
+      seen.add(p.secret);
+    }
   }
 
   /**
