@@ -250,7 +250,7 @@ describe('send', () => {
     {
       id: '00bd033559de27d0',
       amount: Amount.from(1),
-      secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+      secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a01',
       C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
     },
   ];
@@ -285,7 +285,7 @@ describe('send', () => {
       {
         id: '00bd033559de27d0',
         amount: Amount.from(2),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a02',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
     ];
@@ -388,7 +388,7 @@ describe('send', () => {
       {
         id: '00bd033559de27d0',
         amount: Amount.from(2),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a03',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
     ]);
@@ -430,7 +430,7 @@ describe('send', () => {
         {
           id: '00bd033559de27d0',
           amount: Amount.from(2),
-          secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+          secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a04',
           C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
         },
       ],
@@ -472,7 +472,7 @@ describe('send', () => {
       {
         id: '00bd033559de27d0',
         amount: Amount.from(2),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a05',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
     ];
@@ -523,13 +523,13 @@ describe('send', () => {
       {
         id: '00bd033559de27d0',
         amount: Amount.from(2),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a06',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: '00bd033559de27d0',
         amount: Amount.from(2),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a07',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
     ];
@@ -592,13 +592,13 @@ describe('send', () => {
       {
         id: '00bd033559de27d0',
         amount: Amount.from(2),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a08',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: '00bd033559de27d0',
         amount: Amount.from(2),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a09',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
     ];
@@ -657,7 +657,7 @@ describe('send', () => {
         {
           id: '00bd033559de27d0',
           amount: Amount.from(2),
-          secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+          secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a0a',
           C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
         },
       ]),
@@ -711,13 +711,13 @@ describe('send', () => {
       {
         id: '00bd033559de27d0',
         amount: Amount.from(1),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a0b',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: '00bd033559de27d0',
         amount: Amount.from(8),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a0c',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
     ];
@@ -787,13 +787,13 @@ describe('send', () => {
       {
         id: '00bd033559de27d0',
         amount: Amount.from(1),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a0d',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: '00bd033559de27d0',
         amount: Amount.from(8),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a0e',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
     ];
@@ -847,13 +847,13 @@ describe('send', () => {
       {
         id: '00bd033559de27d0',
         amount: Amount.from(1),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a0f',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: '00bd033559de27d0',
         amount: Amount.from(8),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a10',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
     ];
@@ -886,13 +886,13 @@ describe('send', () => {
       {
         id: keysetId,
         amount: Amount.from(1),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a11',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: keysetId,
         amount: Amount.from(8),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a12',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
     ];
@@ -1015,13 +1015,13 @@ describe('send', () => {
       {
         id: keysetId,
         amount: Amount.from(1),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674aff',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: keysetId,
         amount: Amount.from(8),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a14',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
     ];
@@ -1045,13 +1045,13 @@ describe('send', () => {
         {
           id: '00bd033559de27d0',
           amount: Amount.from(1),
-          secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+          secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a15',
           C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
         },
         {
           id: '00bd033559de27d0',
           amount: Amount.from(8),
-          secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+          secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a16',
           C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
         },
       ]),
@@ -1079,13 +1079,13 @@ describe('send', () => {
       {
         id: keysetId,
         amount: Amount.from(1),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a17',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: keysetId,
         amount: Amount.from(8),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a18',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
     ];
@@ -1151,7 +1151,7 @@ describe('deterministic', () => {
           {
             id: '00bd033559de27d0',
             amount: Amount.from(2),
-            secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+            secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a19',
             C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
           },
         ],

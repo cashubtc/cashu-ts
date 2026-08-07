@@ -25,8 +25,15 @@ const seed = hexToBytes(
   'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
 );
 
+// Each call gets its own secret: two proofs sharing one are the same bearer proof.
+let proofN = 0;
 function makeProof(amount: number): Proof {
-  return { id: keysetId, amount: Amount.from(amount), secret, C: proofC };
+  return {
+    id: keysetId,
+    amount: Amount.from(amount),
+    secret: `${secret.slice(0, -2)}${(++proofN).toString(16).padStart(2, '0')}`,
+    C: proofC,
+  };
 }
 
 interface SwapBody {
