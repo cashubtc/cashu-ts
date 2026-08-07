@@ -8,6 +8,21 @@ const LEVEL_ORDER: Record<LogLevel, number> = {
   trace: 4,
 };
 
+const CONTROL_ESCAPES: Record<string, string> = { '\n': '\\n', '\r': '\\r', '\t': '\\t' };
+// eslint-disable-next-line no-control-regex -- matching control chars is the point
+const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/g;
+
+/**
+ * Escapes C0/C1 control characters so one message renders as one log line and cannot carry terminal
+ * escape sequences.
+ */
+function escapeControlChars(message: string): string {
+  return String(message).replace(
+    CONTROL_CHARS,
+    (ch) => CONTROL_ESCAPES[ch] ?? '\\x' + ch.charCodeAt(0).toString(16).padStart(2, '0'),
+  );
+}
+
 /**
  * Outputs messages to the console based on the specified log level.
  *
@@ -46,7 +61,7 @@ export class ConsoleLogger implements Logger {
     }
   }
   private header(level: LogLevel, message: string): string {
-    return `[${level.toUpperCase()}] ${message}`;
+    return `[${level.toUpperCase()}] ${escapeControlChars(message)}`;
   }
   private flattenContext(ctx?: Record<string, unknown>): Record<string, unknown> | undefined {
     if (!ctx) return undefined;
