@@ -79,6 +79,17 @@ describe('ConsoleLogger', () => {
     });
   });
 
+  test('escapes control characters in the message', () => {
+    const infoSpy = vi.spyOn(console, 'info');
+    const logger = new ConsoleLogger('info');
+
+    logger.info('alice logged out\n[INFO] admin role granted\r\x1b[31malert\x00');
+
+    expect(infoSpy).toHaveBeenCalledWith(
+      '[INFO] alice logged out\\n[INFO] admin role granted\\r\\x1b[31malert\\x00',
+    );
+  });
+
   test('generic log method works correctly', () => {
     const infoSpy = vi.spyOn(console, 'info');
     const debugSpy = vi.spyOn(console, 'debug');
