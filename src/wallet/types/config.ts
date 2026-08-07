@@ -199,5 +199,9 @@ export type PrepareMeltConfig = MeltProofsConfig & {
 
 export type CompleteMeltOptions = {
   preferAsync?: boolean;
+  /**
+   * Method-specific fields merged into the melt request. Keys that collide with the prepared
+   * request (`quote`, `inputs`, `outputs`, `prefer_async`) are rejected.
+   */
   extraPayload?: Record<string, unknown>;
 };
