@@ -40,6 +40,24 @@ export type OIDCAuthOptions = {
   onTokens?: (t: TokenResponse) => void | Promise<void>;
 };
 
+/**
+ * Assert a provider-supplied URL uses an http(s) scheme.
+ *
+ * @remarks
+ * Guards against a `javascript:`/`data:` endpoint that the client would navigate to or open.
+ */
+function assertHttpUrl(url: string, label: string): void {
+  let protocol: string;
+  try {
+    protocol = new URL(url).protocol;
+  } catch {
+    throw new CTSError(`OIDCAuth: ${label} is not a valid URL`);
+  }
+  if (protocol !== 'https:' && protocol !== 'http:') {
+    throw new CTSError(`OIDCAuth: ${label} must be an http(s) URL`);
+  }
+}
+
 export class OIDCAuth {
   private readonly discoveryUrl: string;
   private readonly logger: Logger;
@@ -158,6 +176,7 @@ export class OIDCAuth {
     if (!cfg.authorization_endpoint) {
       throw new CTSError('OIDCAuth: discovery lacks authorization_endpoint');
     }
+    assertHttpUrl(cfg.authorization_endpoint, 'authorization_endpoint');
     return `${cfg.authorization_endpoint}?${params.toString()}`;
   }
 
@@ -186,7 +205,13 @@ export class OIDCAuth {
     if (!ep) throw new CTSError('OIDCAuth: provider lacks device_authorization_endpoint');
 
     const form = this.toForm({ client_id: this.clientId, scope: this.scope });
-    return this.postFormStrict<DeviceStartResponse>(ep, form);
+    const res = await this.postFormStrict<DeviceStartResponse>(ep, form);
+    // The client displays/opens these; a javascript: scheme would run on open.
+    assertHttpUrl(res.verification_uri, 'verification_uri');
+    if (res.verification_uri_complete !== undefined) {
+      assertHttpUrl(res.verification_uri_complete, 'verification_uri_complete');
+    }
+    return res;
   }
 
   async devicePoll(device_code: string, intervalSec = 5): Promise<TokenResponse> {
