@@ -273,4 +273,9 @@ describe('getValidSigners / meetsSignerThreshold', () => {
   test('one signature cannot meet a 2-of-2 threshold across 02/03 encodings', () => {
     expect(meetsSignerThreshold([signature], message, [compressed, '03' + xOnly], 2)).toBe(false);
   });
+
+  test('non-string pubkey entries fail closed without throwing', () => {
+    const pubkeys = [42 as unknown as string, compressed];
+    expect(getValidSigners([signature], message, pubkeys)).toEqual([compressed]);
+  });
 });
