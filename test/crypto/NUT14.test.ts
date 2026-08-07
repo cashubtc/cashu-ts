@@ -260,6 +260,14 @@ describe('getHTLCWitnessPreimage', () => {
     expect(spy).toHaveBeenCalledWith('Failed to parse HTLC witness string:', expect.anything());
     spy.mockRestore();
   });
+
+  test('returns undefined for a parsed primitive witness (no throw)', () => {
+    // JSON.parse('null') yields null, which parses cleanly but is not a witness;
+    // reading .preimage off it must not throw at the verification boundary.
+    expect(getHTLCWitnessPreimage('null')).toBeUndefined();
+    expect(getHTLCWitnessPreimage('123')).toBeUndefined();
+    expect(getHTLCWitnessPreimage('"abcd"')).toBeUndefined();
+  });
 });
 
 describe('HTLC refund (sender) pathway', () => {
