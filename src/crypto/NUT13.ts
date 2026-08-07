@@ -138,6 +138,11 @@ function deriveHmacSecretAndBlindingFactor(
   keysetId: string,
   counter: number,
 ): DerivedSecretAndBlindingFactor {
+  // NUT-13 encodes the counter as u64, but cap at MAX_SAFE_INTEGER: past it
+  // `counter + 1 === counter`, so a batch would derive one counter twice.
+  if (!Number.isSafeInteger(counter) || counter < 0) {
+    throw new CTSError('Counter must be an integer in the range 0 <= counter <= 2^53 - 1');
+  }
   return {
     secret: deriveHmac(seed, keysetId, counter, DerivationType.SECRET),
     blindingFactor: deriveHmac(seed, keysetId, counter, DerivationType.BLINDING_FACTOR),
@@ -153,7 +158,9 @@ function deriveHmac(
   let message = Bytes.concat(
     Bytes.fromString('Cashu_KDF_HMAC_SHA256'),
     Bytes.fromHex(keysetId),
-    Bytes.writeBigUint64BE(BigInt(counter)),
+    // numberToBytesBE throws rather than wrapping, so an out-of-range counter can never
+    // be silently encoded as a different one even if the caller's guard is ever moved.
+    numberToBytesBE(counter, 8),
   );
 
   switch (secretOrBlinding) {
