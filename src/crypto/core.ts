@@ -127,9 +127,7 @@ export const schnorrVerifyDigest = (
 ): boolean => {
   try {
     const digestBytes = typeof digest === 'string' ? hexToBytes(digest) : digest;
-    // Use X-only pubkey: strip 02/03 prefix if pubkey is 66 hex chars (33 bytes)
-    const pubkeyX = pubkey.length === 66 ? pubkey.slice(2) : pubkey;
-    return schnorr.verify(hexToBytes(signature), digestBytes, hexToBytes(pubkeyX));
+    return schnorr.verify(hexToBytes(signature), digestBytes, hexToBytes(toXOnlyPubkey(pubkey)));
   } catch (e) {
     if (throws) {
       throw e;
@@ -137,6 +135,19 @@ export const schnorrVerifyDigest = (
   }
   return false; // default fail
 };
+
+/**
+ * X-only identity of a P2PK pubkey: lowercased hex with any 02/03 parity prefix stripped.
+ *
+ * @remarks
+ * Verification and signer dedupe must share this so they agree on key identity. Non-string and
+ * non-02/03 prefixed 33-byte inputs pass through unchanged and fail verification downstream.
+ */
+function toXOnlyPubkey(pubkey: string): string {
+  if (typeof pubkey !== 'string') return pubkey;
+  const hex = pubkey.toLowerCase();
+  return hex.length === 66 && (hex.startsWith('02') || hex.startsWith('03')) ? hex.slice(2) : hex;
+}
 
 /**
  * Find the private key that can sign for a given compressed public key.
@@ -163,15 +174,22 @@ export function findSigningKey(pubkey: string, privkeys: string | string[]): str
  * @param message - The message to verify.
  * @param pubkeys - The Cashu P2PK public key(s) (hex-encoded, X-only or with 02/03 prefix) to
  *   check.
- * @returns Array of public keys who validly signed, duplicates removed.
+ * @returns Array of public keys who validly signed, duplicates removed. The same key in different
+ *   encodings (X-only, 02/03 prefix, letter case) counts once; the first occurrence is returned.
  */
 export function getValidSigners(
   signatures: string[],
   message: string,
   pubkeys: string[],
 ): string[] {
-  const uniquePubs = Array.from(new Set(pubkeys));
-  return uniquePubs.filter((pubkey) =>
+  // Dedupe by x-only identity: BIP-340 ignores the parity prefix, so 02|X, 03|X
+  // and X all verify against the same signature and must count as one signer.
+  const uniquePubs = new Map<string, string>();
+  for (const pubkey of pubkeys) {
+    const xOnly = toXOnlyPubkey(pubkey);
+    if (!uniquePubs.has(xOnly)) uniquePubs.set(xOnly, pubkey);
+  }
+  return Array.from(uniquePubs.values()).filter((pubkey) =>
     signatures.some((sig) => schnorrVerifyMessage(sig, message, pubkey)),
   );
 }
