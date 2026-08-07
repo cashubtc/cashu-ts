@@ -89,6 +89,22 @@ describe('cbor decoder', () => {
     expect(v).toBe(0x10);
   });
 
+  test('decodeMap does not let a __proto__ key reparent or pollute the result', () => {
+    // CBOR for {"__proto__": {"polluted": true}}. Assigning this key with `map[k] = v`
+    // would hit the prototype setter and reparent the decoded object.
+    const buf = new Uint8Array([
+      0xa1, 0x69, 0x5f, 0x5f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x5f, 0x5f, 0xa1, 0x68, 0x70, 0x6f,
+      0x6c, 0x6c, 0x75, 0x74, 0x65, 0x64, 0xf5,
+    ]);
+    const result = decodeCBOR(buf) as Record<string, unknown>;
+    // Prototype untouched, no inherited "polluted" leaks in (globally or on the result).
+    expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+    expect(result.polluted).toBeUndefined();
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    // The entry is preserved as an own data key, not applied as a prototype.
+    expect(Object.prototype.hasOwnProperty.call(result, '__proto__')).toBe(true);
+  });
+
   test('deeply nested input fails with a CTSError, not a stack overflow', () => {
     // 0x81 = "array of length 1"; nesting it far past the depth cap must throw a CTSError
     // rather than a RangeError that a decode-on-paste consumer would not catch.
