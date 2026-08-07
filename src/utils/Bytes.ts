@@ -65,12 +65,6 @@ export class Bytes {
     return new Uint8Array(size);
   }
 
-  static writeBigUint64BE(value: bigint): Uint8Array {
-    const buffer = new ArrayBuffer(8);
-    new DataView(buffer).setBigUint64(0, value, false);
-    return new Uint8Array(buffer);
-  }
-
   static toBase64(bytes: Uint8Array): string {
     const bufferConstructor = getBufferConstructor();
     if (bufferConstructor) {
