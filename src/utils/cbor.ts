@@ -479,7 +479,14 @@ function decodeMap(
       throw new CTSError('Invalid key type');
     }
     const valueResult = decodeItem(view, keyResult.offset, depth + 1);
-    map[String(keyResult.value)] = valueResult.value;
+    // Define explicitly so a "__proto__" key becomes an own data property instead of
+    // hitting the prototype setter and reparenting the decoded map (see JSONInt.parseObject).
+    Object.defineProperty(map, String(keyResult.value), {
+      value: valueResult.value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
     currentOffset = valueResult.offset;
   }
   return { value: map, offset: currentOffset };
