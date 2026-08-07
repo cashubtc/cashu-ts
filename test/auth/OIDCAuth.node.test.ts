@@ -135,6 +135,19 @@ describe('OIDCAuth: PKCE + auth code', () => {
     ).rejects.toThrow(/authorization_endpoint/i);
   });
 
+  test('buildAuthCodeUrl rejects an unparseable authorization_endpoint', async () => {
+    server.use(
+      http.get(DISCOVERY, () =>
+        HttpResponse.json({ ...goodDiscovery, authorization_endpoint: 'not a url' }),
+      ),
+    );
+    const oidc = new OIDCAuth(DISCOVERY, { clientId: 'cashu-client' });
+    const { challenge } = oidc.generatePKCE();
+    await expect(
+      oidc.buildAuthCodeUrl({ redirectUri: 'http://localhost/cb', codeChallenge: challenge }),
+    ).rejects.toThrow(/not a valid URL/i);
+  });
+
   test('exchangeAuthCode posts correct form and fires callbacks', async () => {
     const bodies: string[] = [];
     server.use(
