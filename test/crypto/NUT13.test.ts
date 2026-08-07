@@ -59,6 +59,35 @@ describe('v3 (BLS) derivation', () => {
   });
 });
 
+describe('HMAC counter range', () => {
+  const seed = new TextEncoder().encode('nut13 counter range seed');
+  const v2KeysetId = '01abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567';
+
+  test('rejects counters that a uint64 encoding would alias onto a valid one', () => {
+    // setBigUint64 wraps, so 2^64 would serialize exactly like 0 and derive its secret.
+    expect(() => deriveSecretAndBlindingFactor(seed, v2KeysetId, 2 ** 64)).toThrow(/counter/i);
+    expect(() => deriveSecretAndBlindingFactor(seed, v2KeysetId, -1)).toThrow(/counter/i);
+    expect(() => deriveSecretAndBlindingFactor(seed, v2KeysetId, 1.5)).toThrow(/counter/i);
+    expect(() => deriveSecretAndBlindingFactor(seed, v2KeysetId, NaN)).toThrow(/counter/i);
+  });
+
+  test('rejects counters above MAX_SAFE_INTEGER, where +1 no longer yields a distinct value', () => {
+    // Number.MAX_SAFE_INTEGER + 2 === Number.MAX_SAFE_INTEGER + 3, so a batch would
+    // derive one counter twice and issue duplicate outputs.
+    expect(() => deriveSecretAndBlindingFactor(seed, v2KeysetId, 2 ** 53)).toThrow(/counter/i);
+    expect(() =>
+      deriveSecretAndBlindingFactor(seed, v2KeysetId, Number.MAX_SAFE_INTEGER + 2),
+    ).toThrow(/counter/i);
+  });
+
+  test('accepts the full safe range', () => {
+    expect(() => deriveSecretAndBlindingFactor(seed, v2KeysetId, 0)).not.toThrow();
+    expect(() =>
+      deriveSecretAndBlindingFactor(seed, v2KeysetId, Number.MAX_SAFE_INTEGER),
+    ).not.toThrow();
+  });
+});
+
 describe('derivation kind selection', () => {
   // Known BIP-32 seed (NUT-13 spec / NUT-09 fixtures).
   const seed = Bytes.fromHex(

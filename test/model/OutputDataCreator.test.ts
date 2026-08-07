@@ -36,6 +36,21 @@ describe('DefaultOutputDataCreator', () => {
     expect(outputs).toEqual(OutputData.createDeterministicData(3, seed, 7, keyset, [1, 2]));
   });
 
+  test('a batch whose counters run past the safe range is rejected, not silently aliased', () => {
+    const keyset: HasKeysetKeys = {
+      id: '012e23479a0029432eaad0d2040c09be53bab592d5cbf1d55e0dd26c9495951b30',
+      keys: { '1': 'unused', '2': 'unused' },
+    };
+    const creator = new DefaultOutputDataCreator();
+    const seed = new Uint8Array([1]);
+
+    // The first output is fine; the second lands on 2^53, where counter + 1 stops
+    // producing a distinct value, so a batch would derive one counter twice.
+    expect(() =>
+      creator.createDeterministicData(3, seed, Number.MAX_SAFE_INTEGER, keyset, [1, 2]),
+    ).toThrow(/counter/i);
+  });
+
   test('delegates deterministic batch creation to subclassed single-output override', () => {
     const calls: Array<{ amount: string; counter: number; keysetId: string }> = [];
     const keyset: HasKeysetKeys = {

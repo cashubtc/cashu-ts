@@ -282,36 +282,6 @@ describe('Bytes utility class', () => {
     });
   });
 
-  describe('writeBigUint64BE', () => {
-    test('should write bigint as big-endian bytes', () => {
-      const value = 0x0123456789abcdefn;
-      const result = Bytes.writeBigUint64BE(value);
-      const expected = new Uint8Array([0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef]);
-      expect(result).toEqual(expected);
-    });
-
-    test('should handle zero value', () => {
-      const value = 0n;
-      const result = Bytes.writeBigUint64BE(value);
-      const expected = new Uint8Array([0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-      expect(result).toEqual(expected);
-    });
-
-    test('should handle maximum uint64 value', () => {
-      const value = 0xffffffffffffffffn;
-      const result = Bytes.writeBigUint64BE(value);
-      const expected = new Uint8Array([0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]);
-      expect(result).toEqual(expected);
-    });
-
-    test('should handle small values', () => {
-      const value = 0x42n;
-      const result = Bytes.writeBigUint64BE(value);
-      const expected = new Uint8Array([0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x42]);
-      expect(result).toEqual(expected);
-    });
-  });
-
   describe('toBase64', () => {
     test('should convert Uint8Array to base64', () => {
       const bytes = new Uint8Array([0x68, 0x65, 0x6c, 0x6c, 0x6f]);
@@ -587,29 +557,6 @@ describe('Bytes utility class', () => {
       expect(extractedPart1).toEqual(part1);
       expect(extractedPart2).toEqual(part2);
       expect(extractedPart3).toEqual(part3);
-    });
-
-    test('bigint serialization consistency', () => {
-      const testValues = [
-        0n,
-        1n,
-        255n,
-        256n,
-        65535n,
-        65536n,
-        0xdeadbeefcafebaben,
-        0xffffffffffffffffn,
-      ];
-
-      testValues.forEach((value) => {
-        const bytes = Bytes.writeBigUint64BE(value);
-        expect(bytes.length).toBe(8);
-
-        // verify we can read it back with DataView
-        const view = new DataView(bytes.buffer);
-        const result = view.getBigUint64(0, false); // false = big endian
-        expect(result).toBe(value);
-      });
     });
 
     test('comparison and equality consistency', () => {
