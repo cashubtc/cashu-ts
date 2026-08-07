@@ -349,6 +349,28 @@ describe('Bytes utility class', () => {
       expect(typeof result).toBe('string');
       expect(result.length % 4).toBe(0);
     });
+
+    test('large arrays produce valid base64 on the btoa fallback path (no Buffer)', () => {
+      // Force the chunked btoa path that browsers use; harmless where Buffer
+      // is already absent.
+      const g = globalThis as typeof globalThis & { Buffer?: unknown };
+      const originalBuffer = g.Buffer;
+      try {
+        g.Buffer = undefined;
+        const size = 40000;
+        const bytes = new Uint8Array(size);
+        for (let i = 0; i < size; i++) {
+          bytes[i] = i % 256;
+        }
+        const result = Bytes.toBase64(bytes);
+        // '=' is only valid as trailing padding
+        expect(result.replace(/=+$/, '')).not.toContain('=');
+        // strict atob round-trip must reproduce the input
+        expect(Bytes.fromBase64(result)).toEqual(bytes);
+      } finally {
+        g.Buffer = originalBuffer;
+      }
+    });
   });
 
   describe('fromBase64', () => {
