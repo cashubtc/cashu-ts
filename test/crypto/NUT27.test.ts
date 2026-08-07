@@ -42,11 +42,16 @@ describe('NUT-27 deriveMintBackupKeys', () => {
   });
 
   test('rejects an empty or non-Uint8Array seed with an actionable message', () => {
-    expect(() => deriveMintBackupKeys(new Uint8Array(0))).toThrow(
-      'seed must be a non-empty Uint8Array',
-    );
+    expect(() => deriveMintBackupKeys(new Uint8Array(0))).toThrow(/64-byte/);
     // @ts-expect-error testing runtime guard
-    expect(() => deriveMintBackupKeys('not bytes')).toThrow('seed must be a non-empty Uint8Array');
+    expect(() => deriveMintBackupKeys('not bytes')).toThrow(/64-byte/);
+  });
+
+  test('rejects seeds that are not the documented 64-byte length', () => {
+    expect(() => deriveMintBackupKeys(new Uint8Array([1]))).toThrow(/64-byte/);
+    expect(() => deriveMintBackupKeys(new Uint8Array(32))).toThrow(/64-byte/);
+    expect(() => deriveMintBackupKeys(new Uint8Array(65))).toThrow(/64-byte/);
+    expect(() => deriveMintBackupKeys(new Uint8Array(64))).not.toThrow();
   });
 });
 
