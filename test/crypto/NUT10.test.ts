@@ -106,6 +106,20 @@ describe('NUT10 module core functions', () => {
     expect(getTagInt(proof.secret, 'not_exists')).toBeFalsy();
     expect(getTagInt(proof.secret, 'sigflag')).toBeFalsy();
   });
+
+  test('getTagInt rejects non-integer tag values instead of partial-parsing', () => {
+    // Number.parseInt would accept these; a spending-condition integer must not
+    // be inferred from a partial or non-decimal value (eg a locktime).
+    for (const bad of ['1700000000abc', '2 of 3', '0x1f', '1e3', '12.5', '  9']) {
+      const secret = createSecret('P2PK', DATA, [['locktime', bad]]);
+      expect(getTagInt(secret, 'locktime')).toBeUndefined();
+    }
+  });
+
+  test('getTagInt rejects an integer beyond safe range', () => {
+    const secret = createSecret('P2PK', DATA, [['locktime', '99999999999999999999']]);
+    expect(getTagInt(secret, 'locktime')).toBeUndefined();
+  });
 });
 
 describe('NUT10 parseSecret round-trip and serialization', () => {
@@ -181,6 +195,24 @@ describe('NUT10 parseSecret shape validation', () => {
   test('rejects a non-string nonce or data', () => {
     expect(() => parseSecret(`["P2PK",{"nonce":123,"data":"${DATA}"}]`)).toThrow(/nonce \/ data/);
     expect(() => parseSecret(`["P2PK",{"nonce":"${NONCE}","data":123}]`)).toThrow(/nonce \/ data/);
+  });
+
+  test('rejects a falsy non-array tags value', () => {
+    // A truthiness check let 0/false/"" slip past array validation and surface a
+    // raw TypeError in downstream tag readers; they must be rejected here instead.
+    for (const bad of ['0', 'false', '""']) {
+      expect(() =>
+        parseSecret(`["P2PK",{"nonce":"${NONCE}","data":"${DATA}","tags":${bad}}]`),
+      ).toThrow(/^Invalid NUT-10 secret tags$/);
+    }
+  });
+
+  test('tolerates an absent or null tags value, normalising null to undefined', () => {
+    expect(parseSecret(`["P2PK",{"nonce":"${NONCE}","data":"${DATA}"}]`)[1].tags).toBeUndefined();
+    // A tolerated null must not surface as a runtime null (the field is typed string[][] | undefined).
+    expect(
+      parseSecret(`["P2PK",{"nonce":"${NONCE}","data":"${DATA}","tags":null}]`)[1].tags,
+    ).toBeUndefined();
   });
 });
 
