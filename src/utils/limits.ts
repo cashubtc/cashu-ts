@@ -36,6 +36,14 @@ export const MAX_KEYSET_DENOMINATIONS = 256;
 export const MAX_METHOD_LENGTH = 255;
 
 /**
+ * Upper bound on entries we process from a mint-advertised list (NUT-04/05 `methods`, NUT-21/22
+ * `protected_endpoints`). Real mints advertise tens; the transport 8 MiB cap still admits ~100k
+ * small records, so an unbounded map/clone/sort over them is a memory-amplification vector. Lists
+ * longer than this are truncated with a warning rather than processed in full.
+ */
+export const MAX_MINT_INFO_LIST = 1_024;
+
+/**
  * Max u64 (2^64 - 1): the ceiling every Amount is held to. Enforced in the Amount constructor, so
  * arithmetic results are bounded too; muldiv helpers keep their wide intermediate in bigint and
  * only construct the divided-down result.
