@@ -219,7 +219,7 @@ describe('createMintQuoteBolt11 mutants', () => {
         body = (await request.json()) as Record<string, unknown>;
         return HttpResponse.json({
           quote: 'q-desc',
-          request: 'lnbc...',
+          request: 'lnbc10u1pfake', // HRP encodes the quoted 1,000 sat
           unit: '', // empty → wallet must substitute its own unit
           amount: 1000,
           state: MintQuoteState.UNPAID,
@@ -249,7 +249,7 @@ describe('createMintQuoteBolt11 mutants', () => {
       http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
         HttpResponse.json({
           quote: 'q-nodesc',
-          request: 'lnbc...',
+          request: 'lnbc10u1pfake',
           unit: 'sat',
           amount: 1000,
           state: MintQuoteState.UNPAID,
@@ -954,7 +954,7 @@ describe('createLockedMintQuote mutants', () => {
         body = (await request.json()) as Record<string, unknown>;
         return HttpResponse.json({
           quote: 'locked-q',
-          request: 'lnbc...',
+          request: 'lnbc1u1pfake', // HRP encodes the quoted 100 sat
           unit: '', // empty → wallet substitutes its own unit
           amount: 100,
           state: MintQuoteState.UNPAID,
@@ -981,7 +981,7 @@ describe('createLockedMintQuote mutants', () => {
       http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
         HttpResponse.json({
           quote: 'locked-but-unlocked',
-          request: 'lnbc...',
+          request: 'lnbc1u1pfake', // HRP encodes the quoted 100 sat
           unit: 'sat',
           amount: 100,
           state: MintQuoteState.UNPAID,
@@ -1004,7 +1004,7 @@ describe('createLockedMintQuote mutants', () => {
       http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
         HttpResponse.json({
           quote: 'locked-elsewhere',
-          request: 'lnbc...',
+          request: 'lnbc1u1pfake', // HRP encodes the quoted 100 sat
           unit: 'sat',
           amount: 100,
           state: MintQuoteState.UNPAID,
@@ -1027,7 +1027,7 @@ describe('createLockedMintQuote mutants', () => {
       http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
         HttpResponse.json({
           quote: 'locked-upper',
-          request: 'lnbc...',
+          request: 'lnbc1u1pfake', // HRP encodes the quoted 100 sat
           unit: 'sat',
           amount: 100,
           state: MintQuoteState.UNPAID,
@@ -1069,7 +1069,7 @@ describe('checkMintQuoteBolt11 mutants', () => {
         seen.push(params.quoteId as string);
         return HttpResponse.json({
           quote: params.quoteId,
-          request: 'lnbc...',
+          request: 'lnbc10n1pfake', // HRP encodes the quoted 1 sat
           unit: 'sat',
           amount: 1,
           state: MintQuoteState.UNPAID,
@@ -1293,7 +1293,7 @@ describe('createMultiPathMeltQuote mutants', () => {
     await wallet.loadMint();
     // `some` must match the sat entry among the two methods. An `every` mutant would reject
     // because the usd entry does not match.
-    const quote = await wallet.createMultiPathMeltQuote(invoice, 1000);
+    const quote = await wallet.createMultiPathMeltQuote(invoice, 5000);
     expect(quote.quote).toBe('mpp-quote');
   });
 });

@@ -67,7 +67,7 @@ describe('requests', { timeout: 7500 }, () => {
           state: 'UNPAID',
           unit: 'sat',
           expiry: 9999999999,
-          request: 'bolt11invoice...',
+          request: 'lnbc20u1pfake',
         });
       }),
     );
@@ -93,7 +93,7 @@ describe('requests', { timeout: 7500 }, () => {
           state: 'UNPAID',
           unit: 'sat',
           expiry: 9999999999,
-          request: 'bolt11invoice...',
+          request: 'lnbc20u1pfake',
         });
       }),
     );
@@ -128,7 +128,7 @@ describe('requests', { timeout: 7500 }, () => {
           state: 'UNPAID',
           unit: 'sat',
           expiry: 9999999999,
-          request: 'bolt11invoice...',
+          request: 'lnbc20u1pfake',
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       );
