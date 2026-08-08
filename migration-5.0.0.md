@@ -88,6 +88,43 @@ If you call `signMintQuote`/`verifyMintQuoteSignature` only to mint against a mi
 
 ---
 
+## `CounterSource` gains a required `reserveAt` method
+
+Only affects you if you implement `CounterSource` yourself; `createEphemeralCounterSource` and
+`Wallet` are updated. `reserve` and `advanceToAtLeast` are unchanged.
+
+Manual deterministic counters used to be honoured by bumping the cursor _after_ the outputs were
+assigned. A concurrent auto allocation on the same keyset could take counters inside the manual
+range first, after which the bump found the cursor already past and did nothing, leaving both
+operations deriving from the same counter. Wallets sharing one `CounterSource` are the documented
+multi-wallet pattern, so this was reachable without doing anything unusual.
+
+`reserveAt` claims the range up front instead, and throws when the range was already handed out.
+
+### Migration
+
+```ts
+class MyCounterSource implements CounterSource {
+  async reserve(keysetId: string, n: number): Promise<CounterRange> {
+    /* unchanged */
+  }
+
+  // New: claim [start, start + count) in one transaction.
+  async reserveAt(keysetId: string, start: number, count: number): Promise<CounterRange> {
+    // throw if start < next, else SET next = start + count
+  }
+
+  async advanceToAtLeast(keysetId: string, minNext: number): Promise<void> {
+    /* unchanged */
+  }
+}
+```
+
+The check and the update must be one atomic step. Reading the cursor and then bumping it in two
+calls reintroduces the window this closes.
+
+---
+
 ## `checkProofsStates` now requires `id` on every proof
 
 `Wallet.checkProofsStates` previously accepted `Array<Pick<Proof, 'secret'>>` — only `secret` was required. v5 requires both `id` and `secret`: `Array<Pick<Proof, 'secret' | 'id'>>`.

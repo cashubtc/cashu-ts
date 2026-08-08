@@ -575,16 +575,17 @@ class Wallet {
       }
     }
 
-    // If any deterministic OutputType has a manual counter (> 0), advance
-    // the counter source so future "auto" allocations do not reuse counters.
+    // Claim the manual range up front. Bumping the cursor afterwards would leave a window
+    // for a concurrent auto reservation to hand out counters inside the range, and the bump
+    // would then silently do nothing because the cursor had already moved past it.
     if (manual.length > 0) {
-      // Get the max counter manually allocated
+      const minManualStart = Math.min(...manual.map((ot) => ot.counter));
       const maxManualEnd = Math.max(...manual.map((ot) => ot.counter + ot.denominations!.length));
 
-      // Bump cursor to at least the end of the manually allocated range
-      await this._counterSource.advanceToAtLeast(keysetId, maxManualEnd);
-      this._logger.debug('Counter source advanced to respect manual deterministic counters', {
+      await this._counterSource.reserveAt(keysetId, minManualStart, maxManualEnd - minManualStart);
+      this._logger.debug('Counter source claimed manual deterministic range', {
         keysetId,
+        minManualStart,
         maxManualEnd,
       });
     }
