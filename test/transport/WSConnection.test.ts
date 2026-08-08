@@ -970,4 +970,97 @@ describe('WSConnection – listener management', () => {
 
     expect(() => sendRpcMessage('unsubscribe', { subId: 'missing' }, 1)).toThrow('Socket not open');
   });
+
+  test('a stale close event cannot clear listeners on a replacement socket', async () => {
+    class ControlledWebSocket {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSING = 2;
+      static readonly CLOSED = 3;
+      static readonly instances: ControlledWebSocket[] = [];
+
+      readyState = ControlledWebSocket.CONNECTING;
+      onopen: (() => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onclose: ((event: CloseEvent) => void) | null = null;
+      readonly sent: string[] = [];
+
+      constructor() {
+        ControlledWebSocket.instances.push(this);
+      }
+
+      open() {
+        this.readyState = ControlledWebSocket.OPEN;
+        this.onopen?.();
+      }
+
+      send(message: string) {
+        this.sent.push(message);
+      }
+
+      close() {
+        this.readyState = ControlledWebSocket.CLOSING;
+      }
+
+      emitClose() {
+        this.readyState = ControlledWebSocket.CLOSED;
+        this.onclose?.({ code: 1000, reason: '', wasClean: true } as CloseEvent);
+      }
+
+      emitMessage(message: string) {
+        this.onmessage?.({ data: message } as MessageEvent);
+      }
+
+      emitError() {
+        this.onerror?.({} as Event);
+      }
+    }
+
+    injectWebSocketImpl(ControlledWebSocket as unknown as typeof WebSocket);
+
+    try {
+      const conn = new WSConnection(fakeUrl);
+      const firstConnect = conn.connect();
+      const firstSocket = ControlledWebSocket.instances[0];
+      firstSocket.open();
+      await firstConnect;
+
+      conn.close();
+
+      const secondConnect = conn.connect();
+      const secondSocket = ControlledWebSocket.instances[1];
+      secondSocket.open();
+      await secondConnect;
+
+      const payloads: unknown[] = [];
+      const subId = conn.createSubscription(
+        { kind: 'bolt11_mint_quote', filters: ['quote-id'] },
+        (p) => payloads.push(p),
+        vi.fn(),
+      );
+      const request = JSON.parse(secondSocket.sent[0]);
+
+      // Every kind of late event from the superseded socket must be ignored: none may resolve the
+      // connection, tear down listeners, or deliver a frame to the replacement.
+      firstSocket.open(); // stale onopen
+      firstSocket.emitError(); // stale onerror
+      firstSocket.emitMessage(
+        JSON.stringify({ jsonrpc: '2.0', method: 'x', params: { subId, payload: 'stale' } }),
+      );
+      firstSocket.emitClose(); // stale onclose
+
+      secondSocket.emitMessage(
+        JSON.stringify({ jsonrpc: '2.0', result: { status: 'OK', subId }, id: request.id }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(conn.activeSubscriptions).toContain(subId);
+      // The stale frame must not have reached the replacement's subscriber.
+      expect(payloads).not.toContain('stale');
+      conn.close();
+    } finally {
+      injectWebSocketImpl(WebSocket);
+    }
+  });
 });
