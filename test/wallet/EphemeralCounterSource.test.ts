@@ -25,6 +25,15 @@ describe('EphemeralCounterSource', () => {
     expect((await src.reserve('ks', 0)).start).toBe(2);
   });
 
+  it('reserveAt rejects a negative start or count', async () => {
+    const src = new EphemeralCounterSource();
+
+    await expect(src.reserveAt('ks', -1, 1)).rejects.toThrow(/negative/i);
+    await expect(src.reserveAt('ks', 0, -1)).rejects.toThrow(/negative/i);
+    // Rejected calls must not move the cursor.
+    expect((await src.reserve('ks', 0)).start).toBe(0);
+  });
+
   it('reserveAt accepts a range starting exactly at the cursor', async () => {
     const src = new EphemeralCounterSource();
     await src.reserve('ks', 2);
