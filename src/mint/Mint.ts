@@ -1177,6 +1177,8 @@ class Mint {
       endpoint: joinUrls(this._mintUrl, path),
       method,
       headers,
+      // A CAT/BAT must never be replayed to a redirect target: fail rather than follow.
+      ...(bat || cat ? { redirect: 'error' as const } : {}),
       ...(nut19?.supported && nut19.params ? nut19.params : {}),
       onResponseMeta: this._captureResponseMetadata,
     });
