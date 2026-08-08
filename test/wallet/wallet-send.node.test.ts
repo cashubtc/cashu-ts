@@ -1,12 +1,14 @@
 import { hexToBytes } from '@noble/curves/utils.js';
 import { HttpResponse, http } from 'msw';
-import { test, describe, expect } from 'vitest';
+import { test, describe, expect, vi } from 'vitest';
 
 import {
   Wallet,
   Amount,
   CTSError,
   OutputData,
+  createEphemeralCounterSource,
+  type CounterSource,
   type Proof,
   type ProofLike,
   type OutputConfig,
@@ -1061,6 +1063,138 @@ describe('send', () => {
     expect(res.inputs.length).toBeGreaterThan(0);
     expect(res.inputs.every((p) => p.amount instanceof Amount)).toBe(true);
   });
+  test('warns when a manual counter range was already handed out', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({
+          keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 0 }],
+        }),
+      ),
+    );
+
+    const keysetId = '00bd033559de27d0';
+    const seed = hexToBytes(
+      'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
+    );
+    const proof = (n: number, amount: number): Proof => ({
+      id: keysetId,
+      amount: Amount.from(amount),
+      secret: `1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674b${n
+        .toString(16)
+        .padStart(2, '0')}`,
+      C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+    });
+
+    // Two wallets on one shared source: the documented multi-wallet pattern.
+    const counterSource = createEphemeralCounterSource();
+    const warn = vi.fn();
+    const spyLogger = { error: vi.fn(), warn, info: vi.fn(), debug: vi.fn(), trace: vi.fn() };
+    const autoWallet = new Wallet(mint, { unit, bip39seed: seed, counterSource });
+    const manualWallet = new Wallet(mint, {
+      unit,
+      bip39seed: seed,
+      counterSource,
+      logger: spyLogger,
+    });
+    await Promise.all([autoWallet.loadMint(), manualWallet.loadMint()]);
+
+    // The auto operation takes the low counters first.
+    await autoWallet.prepareSwapToSend(
+      2,
+      [proof(1, 4)],
+      {},
+      {
+        send: { type: 'deterministic', counter: 0 },
+        keep: { type: 'deterministic', counter: 0 },
+      },
+    );
+    expect(await autoWallet.counters.peekNext(keysetId)).toBeGreaterThan(1);
+
+    // Counter 1 was handed out above. The operation still completes (v4 behaviour is
+    // unchanged), but the collision is reported instead of passing silently.
+    const res = await manualWallet.prepareSwapToSend(
+      2,
+      [proof(2, 4)],
+      {},
+      {
+        send: { type: 'deterministic', counter: 1 },
+        keep: { type: 'deterministic', counter: 0 },
+      },
+    );
+    expect(res.sendOutputs?.length ?? 0).toBeGreaterThan(0);
+    expect(warn).toHaveBeenCalledWith(
+      'Manual deterministic counter range was already issued',
+      expect.objectContaining({ keysetId }),
+    );
+  });
+
+  test('warns for a reused manual counter range on a source without reserveAt', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({
+          keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 0 }],
+        }),
+      ),
+    );
+
+    const keysetId = '00bd033559de27d0';
+    const seed = hexToBytes(
+      'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
+    );
+    const proof = (n: number, amount: number): Proof => ({
+      id: keysetId,
+      amount: Amount.from(amount),
+      secret: `1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674c${n
+        .toString(16)
+        .padStart(2, '0')}`,
+      C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+    });
+
+    // A pre-reserveAt CounterSource: only the two original required methods.
+    const inner = createEphemeralCounterSource();
+    const legacySource: CounterSource = {
+      reserve: (id, n) => inner.reserve(id, n),
+      advanceToAtLeast: (id, n) => inner.advanceToAtLeast(id, n),
+    };
+    const warn = vi.fn();
+    const wallet = new Wallet(mint, {
+      unit,
+      bip39seed: seed,
+      counterSource: legacySource,
+      logger: { error: vi.fn(), warn, info: vi.fn(), debug: vi.fn(), trace: vi.fn() },
+    });
+    await wallet.loadMint();
+
+    // A fresh manual range draws no warning.
+    await wallet.prepareSwapToSend(
+      2,
+      [proof(1, 4)],
+      {},
+      {
+        send: { type: 'deterministic', counter: 5 },
+        keep: { type: 'deterministic', counter: 0 },
+      },
+    );
+    expect(warn).not.toHaveBeenCalled();
+    const next = await wallet.counters.peekNext(keysetId);
+    expect(next).toBeGreaterThan(5); // cursor still bumped past the manual range
+
+    // Asking for the same range again is reported.
+    await wallet.prepareSwapToSend(
+      2,
+      [proof(2, 4)],
+      {},
+      {
+        send: { type: 'deterministic', counter: 5 },
+        keep: { type: 'deterministic', counter: 0 },
+      },
+    );
+    expect(warn).toHaveBeenCalledWith(
+      'Manual deterministic counter range was already issued',
+      expect.objectContaining({ keysetId }),
+    );
+  });
+
   test('manual counters advances cursor, then auto allocation must not reuse counters', async () => {
     server.use(
       http.get(mintUrl + '/v1/keysets', () => {

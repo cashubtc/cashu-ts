@@ -551,14 +551,41 @@ class Wallet {
       }
     }
 
-    // If any deterministic OutputType has a manual counter (> 0), advance
-    // the counter source so future "auto" allocations do not reuse counters.
+    // If any deterministic OutputType has a manual counter (> 0), claim the range so
+    // "auto" allocations do not reuse counters. Prefer reserveAt (claims up front and
+    // detects a range that was already handed out); fall back to the historic bump for
+    // sources that do not implement it, with a best-effort peek to report reuse.
     if (manual.length > 0) {
-      // Get the max counter manually allocated
+      const minManualStart = Math.min(...manual.map((ot) => ot.counter));
       const maxManualEnd = Math.max(...manual.map((ot) => ot.counter + ot.denominations!.length));
 
-      // Bump cursor to at least the end of the manually allocated range
-      await this._counterSource.advanceToAtLeast(keysetId, maxManualEnd);
+      if (this._counterSource.reserveAt) {
+        try {
+          await this._counterSource.reserveAt(
+            keysetId,
+            minManualStart,
+            maxManualEnd - minManualStart,
+          );
+        } catch {
+          this._logger.warn('Manual deterministic counter range was already issued', {
+            keysetId,
+            minManualStart,
+            maxManualEnd,
+          });
+          await this._counterSource.advanceToAtLeast(keysetId, maxManualEnd);
+        }
+      } else {
+        // reserve(n=0) is the documented read-only peek of the cursor.
+        const { start: next } = await this._counterSource.reserve(keysetId, 0);
+        if (next > minManualStart) {
+          this._logger.warn('Manual deterministic counter range was already issued', {
+            keysetId,
+            minManualStart,
+            maxManualEnd,
+          });
+        }
+        await this._counterSource.advanceToAtLeast(keysetId, maxManualEnd);
+      }
       this._logger.debug('Counter source advanced to respect manual deterministic counters', {
         keysetId,
         maxManualEnd,

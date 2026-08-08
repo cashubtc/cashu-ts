@@ -19,6 +19,55 @@ describe('EphemeralCounterSource', () => {
     expect(snap).toEqual({ a: 5, b: 2 });
   });
 
+  it('reserveAt claims a caller-chosen range and moves the cursor past it', async () => {
+    const src = new EphemeralCounterSource();
+    const range = await src.reserveAt('ks', 5, 3);
+
+    expect(range).toEqual({ start: 5, count: 3 });
+    // The gap below the claim is burned: the cursor is monotonic.
+    expect((await src.reserve('ks', 0)).start).toBe(8);
+  });
+
+  it('reserveAt rejects a range whose start was already issued', async () => {
+    const src = new EphemeralCounterSource();
+    await src.reserve('ks', 2); // hands out 0,1
+
+    await expect(src.reserveAt('ks', 1, 2)).rejects.toThrow(/already/i);
+    // The failed claim must not move the cursor.
+    expect((await src.reserve('ks', 0)).start).toBe(2);
+  });
+
+  it('reserveAt rejects a negative start or count', async () => {
+    const src = new EphemeralCounterSource();
+
+    await expect(src.reserveAt('ks', -1, 1)).rejects.toThrow(/negative/i);
+    await expect(src.reserveAt('ks', 0, -1)).rejects.toThrow(/negative/i);
+    // Rejected calls must not move the cursor.
+    expect((await src.reserve('ks', 0)).start).toBe(0);
+  });
+
+  it('reserveAt accepts a range starting exactly at the cursor', async () => {
+    const src = new EphemeralCounterSource();
+    await src.reserve('ks', 2);
+
+    await expect(src.reserveAt('ks', 2, 1)).resolves.toEqual({ start: 2, count: 1 });
+  });
+
+  it('a claim and a concurrent auto reservation never overlap', async () => {
+    const src = new EphemeralCounterSource();
+    // Interleaved: whichever lands first, the two ranges must be disjoint.
+    const [claimed, auto] = await Promise.all([src.reserveAt('ks', 0, 2), src.reserve('ks', 2)]);
+
+    const used = new Set<number>();
+    for (const r of [claimed, auto]) {
+      for (let i = r.start; i < r.start + r.count; i++) {
+        expect(used.has(i)).toBe(false);
+        used.add(i);
+      }
+    }
+    expect(used.size).toBe(4);
+  });
+
   it('reserve(n=0) returns {start:0,count:0} and does not mutate state', async () => {
     const src = new EphemeralCounterSource();
     const r = await src.reserve('k', 0);
