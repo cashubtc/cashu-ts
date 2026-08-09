@@ -98,6 +98,8 @@ export type {
   RawTransport,
   NUT10Option,
   RawNUT10Option,
+  TaprootOption,
+  RawTaprootOption,
 } from './wallet/types';
 
 // Logging & errors
@@ -142,6 +144,8 @@ export {
 } from './model/SigAll';
 export {
   ScriptPath,
+  type ScriptPathApi,
   type ScriptPathSigningPackage,
   type ScriptPathSpendRequest,
 } from './model/ScriptPath';
+export { TAPROOT_LEAF_TYPE, type TaprootLeaf } from './crypto/taproot';

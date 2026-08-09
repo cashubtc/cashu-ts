@@ -1,4 +1,4 @@
-import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
 import { numberToBytesBE } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
@@ -550,6 +550,28 @@ export function buildScriptPathWitness(
 }
 
 /**
+ * How many of a leaf's keys have a valid BIP-340 signature over `digest`.
+ *
+ * @remarks
+ * Counts distinct keys, not signatures: one signer twice satisfies one threshold slot.
+ */
+export function countLeafSigners(
+  leaf: TaprootLeaf,
+  digest: Uint8Array,
+  signatures: string[],
+): number {
+  return leaf.keys.filter((key) =>
+    signatures.some((signature) => {
+      try {
+        return schnorr.verify(Bytes.fromHex(signature), digest, Bytes.fromHex(key).subarray(1));
+      } catch {
+        return false;
+      }
+    }),
+  ).length;
+}
+
+/**
  * Receive-time verification cascade (spec 2.5.1) for one proof's spend info.
  *
  * @remarks
@@ -746,7 +768,7 @@ function blindTaggedLeafKeys(
  * value against the whole slot space is therefore order-independent, and costs the same as checking
  * one slot per position: one derivation per slot either way.
  */
-function slotKeysByBlindedPubkey(
+export function slotKeysByBlindedPubkey(
   EHex: string,
   privHex: string,
   slotCount: number,

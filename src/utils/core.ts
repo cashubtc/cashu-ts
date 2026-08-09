@@ -8,6 +8,7 @@ import {
   assertV3PointSecret,
   batchVerifyUnblindedSignatureBls,
   isBlsKeyset,
+  isV3PointSecret,
   pointFromHex,
   pointFromHexG1,
   pointFromHexG2,
@@ -284,7 +285,7 @@ function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
  * does travel. Which rules apply follows the keyset (spec 5), the same rule the transcript uses.
  */
 function isV3TransactionWitness(keysetId: string, secret: string): boolean {
-  return isBlsKeyset(keysetId) && /^0[23][0-9a-f]{64}$/.test(secret);
+  return isBlsKeyset(keysetId) && isV3PointSecret(secret);
 }
 
 function templateFromToken(token: Token): TokenV4Template {

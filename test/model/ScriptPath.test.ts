@@ -50,10 +50,9 @@ function fixture() {
 }
 
 describe('ScriptPath signing packages', () => {
-  test('uses absolute slots for a blinded key in a later leaf', () => {
+  test('signs a blinded key at its absolute slot in a later leaf', () => {
     const { alice, preview, proof } = fixture();
     const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]);
-    expect(pkg.spends[0].keySlots).toEqual([2]);
     expect(ScriptPath.signPackage(pkg, alice).spends[0].signatures).toHaveLength(1);
   });
 

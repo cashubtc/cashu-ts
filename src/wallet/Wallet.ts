@@ -20,6 +20,7 @@ import {
   assertSigAllInputs,
   parseSecret,
   assertV3PointSecret,
+  isV3PointSecret,
 } from '../crypto';
 // Internal transitional fallback — not part of crypto/index.ts
 import {
@@ -31,6 +32,7 @@ import { deriveSecretAndBlindingFactor, recoverV3SecretKeys } from '../crypto/NU
 import { signMintQuoteLegacy } from '../crypto/NUT20';
 import {
   buildScriptPathWitness,
+  countLeafSigners,
   parseTaprootLeaf,
   type TaprootLeaf,
   recoverLeafKeySecretKeys,
@@ -146,6 +148,10 @@ const PENDING_KEYSET_ID = '__PENDING__';
 
 // NUT-20 "Signature for mint request invalid"
 const MINT_QUOTE_SIGNATURE_INVALID_CODE = 20008;
+
+// Headroom over the local counter when scanning seed derivations for v3 secrets, covering proofs
+// derived by another session or a restore since the counter was last persisted.
+const V3_SEED_SCAN_HEADROOM = 128;
 
 /**
  * One resolved script path spend, awaiting only the transaction digest.
@@ -1774,7 +1780,7 @@ class Wallet {
   private async _attachV3BearerSpendInfo(sendProofs: Proof[]): Promise<void> {
     if (!this._seed || sendProofs.length === 0) return;
     const v3Proofs = sendProofs.filter(
-      (p) => isBlsKeyset(p.id) && /^0[23][0-9a-f]{64}$/.test(p.secret) && !p.spend_info,
+      (p) => isBlsKeyset(p.id) && isV3PointSecret(p.secret) && !p.spend_info,
     );
     if (v3Proofs.length === 0) return;
     const byKeyset = new Map<string, Proof[]>();
@@ -1787,7 +1793,7 @@ class Wallet {
         this._seed,
         keysetId,
         proofs.map((p) => p.secret),
-        next + 128,
+        next + V3_SEED_SCAN_HEADROOM,
       );
       for (const proof of proofs) {
         const k = keys.get(proof.secret);
@@ -2091,8 +2097,7 @@ class Wallet {
     extraKeys?: Map<string, Uint8Array>,
     scriptSpends?: Map<string, ScriptPathSpend>,
   ): Promise<void> {
-    const isPointSecret = (s: string) => /^0[23][0-9a-f]{64}$/.test(s);
-    const v3Inputs = payload.inputs.filter((p) => isBlsKeyset(p.id) && isPointSecret(p.secret));
+    const v3Inputs = payload.inputs.filter((p) => isBlsKeyset(p.id) && isV3PointSecret(p.secret));
     if (v3Inputs.length === 0) return;
     const digest = transactionDigest({
       proofInputs: payload.inputs.map((p) => ({
@@ -2122,7 +2127,7 @@ class Wallet {
         byKeyset.set(p.id, secrets);
       }
       for (const [id, secrets] of byKeyset) {
-        const bound = (await this.counters.peekNext(id)) + 128;
+        const bound = (await this.counters.peekNext(id)) + V3_SEED_SCAN_HEADROOM;
         for (const [secret, key] of recoverV3SecretKeys(this._seed, id, secrets, bound)) {
           keys.set(secret, key);
         }
@@ -2145,15 +2150,7 @@ class Wallet {
       // fixed (and ordered) once the transaction is built.
       const theirs = spend.cosign ? await spend.cosign(digest, spend.leaf) : [];
       const signatures = [...new Set([...mine, ...theirs.map((sig: string) => sig.toLowerCase())])];
-      const validSigners = spend.leaf.keys.filter((key) =>
-        signatures.some((signature) => {
-          try {
-            return schnorr.verify(Bytes.fromHex(signature), digest, Bytes.fromHex(key).subarray(1));
-          } catch {
-            return false;
-          }
-        }),
-      ).length;
+      const validSigners = countLeafSigners(spend.leaf, digest, signatures);
       if (validSigners < spend.leaf.n) {
         this.fail(
           `Script path leaf needs ${spend.leaf.n} valid signatures, ${validSigners} produced`,
@@ -2215,7 +2212,7 @@ class Wallet {
     // Key path: spend info first (bearer or receiver-keyed), then this wallet's own seed.
     let keyPath = this._collectSpendInfoKeys([proof], privkeys).has(proof.secret);
     if (!keyPath && this._seed) {
-      const bound = (await this.counters.peekNext(proof.id)) + 128;
+      const bound = (await this.counters.peekNext(proof.id)) + V3_SEED_SCAN_HEADROOM;
       keyPath = recoverV3SecretKeys(this._seed, proof.id, [proof.secret], bound).has(proof.secret);
     }
 
@@ -2411,7 +2408,7 @@ class Wallet {
   private _normalizeWitness(proof: Proof): string | undefined {
     if (!proof.witness) return undefined;
     // Taproot (v3) point secrets carry transaction witnesses (key or script path): keep them.
-    if (isBlsKeyset(proof.id) && /^0[23][0-9a-f]{64}$/.test(proof.secret)) {
+    if (isBlsKeyset(proof.id) && isV3PointSecret(proof.secret)) {
       return typeof proof.witness !== 'string' ? JSON.stringify(proof.witness) : proof.witness;
     }
     try {
@@ -2758,7 +2755,7 @@ class Wallet {
     const pubkey = quotePubkey ?? (await this.checkMintQuoteBolt11(quoteId)).pubkey;
     if (!pubkey) return undefined;
     const normalizedPubkey = pubkey.toLowerCase();
-    const bound = (await this.counters.peekNext(keysetId)) + 128;
+    const bound = (await this.counters.peekNext(keysetId)) + V3_SEED_SCAN_HEADROOM;
     return recoverV3SecretKeys(this._seed, keysetId, [normalizedPubkey], bound).get(
       normalizedPubkey,
     );

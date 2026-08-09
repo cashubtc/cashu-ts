@@ -91,6 +91,17 @@ function taprootSecretHashInput(secretUtf8: Uint8Array): Uint8Array {
 }
 
 /**
+ * Shape test for a v3 point secret: 33-byte compressed-point lowercase hex.
+ *
+ * @remarks
+ * Dispatch, not validation: which rules apply follows the keyset, so pair with `isBlsKeyset`.
+ * {@link assertV3PointSecret} checks the actual curve point.
+ */
+export function isV3PointSecret(secret: string): boolean {
+  return /^0[23][0-9a-f]{64}$/.test(secret);
+}
+
+/**
  * Assert a secret is valid for a v3 keyset: a 33-byte compressed point.
  *
  * @remarks
