@@ -190,6 +190,23 @@ describe('BLS deterministic round-trip (Nutshell test_deterministic_bls_steps)',
     );
   });
 
+  test('createBlindSignatureBls rejects a B_ point outside the prime-order subgroup', () => {
+    // Order-3 point on y^2 = x^3 + 4 (x=0, y=2): on-curve but not torsion-free. fromAffine skips the
+    // subgroup check that fromHex/fromBytes enforce, standing in for a mint that builds B_ directly.
+    // Signing it would leak a mod 3 through C_ = a * B_.
+    const order3 = bls12_381.G1.Point.fromAffine({ x: 0n, y: 2n });
+    expect(order3.isTorsionFree()).toBe(false);
+    expect(() => createBlindSignatureBls(order3, hexToBytes('0'.repeat(63) + '2'), 'test')).toThrow(
+      CTSError,
+    );
+  });
+
+  test('createBlindSignatureBls rejects the G1 identity as B_', () => {
+    expect(() =>
+      createBlindSignatureBls(bls12_381.G1.Point.ZERO, hexToBytes('0'.repeat(63) + '2'), 'test'),
+    ).toThrow(CTSError);
+  });
+
   test('getG2PubKeyFromPrivKey rejects an all-zero private key', () => {
     // a=0 -> BLS_G2_GENERATOR.multiply(0n) would throw noble's 'invalid scalar'; pin our wording.
     expect(() => getG2PubKeyFromPrivKey(new Uint8Array(32))).toThrow(

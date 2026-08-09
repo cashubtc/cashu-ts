@@ -188,6 +188,11 @@ export function createBlindSignatureBls(
   privateKey: Uint8Array,
   id: string,
 ): BlindSignature {
+  // B_ is caller-supplied and may not have come through pointFromHexG1, so validate it here too:
+  // signing a point outside the prime-order subgroup would leak the mint scalar mod the point's
+  // small order via C_ = a * B_.
+  if (B_.is0()) throw new CTSError('G1 point at infinity');
+  if (!B_.isTorsionFree()) throw new CTSError('G1 point not in prime-order subgroup');
   const a = Fr.fromBytes(privateKey);
   if (a === 0n) {
     throw new CTSError('Mint scalar must be non-zero');
