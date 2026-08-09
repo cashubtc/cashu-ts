@@ -254,7 +254,7 @@ describe('createMintQuoteBolt11 mutants', () => {
         const body = (await request.json()) as { pubkey: string };
         return HttpResponse.json({
           quote: 'q-substituted',
-          request: 'lnbc...',
+          request: 'lnbc10n1pfake', // HRP encodes the quoted 1 sat
           unit: 'sat',
           amount: 1,
           state: MintQuoteState.UNPAID,
@@ -279,7 +279,7 @@ describe('createMintQuoteBolt11 mutants', () => {
         const body = (await request.json()) as { pubkey: string };
         return HttpResponse.json({
           quote: `q-auto-${++n}`,
-          request: 'lnbc...',
+          request: 'lnbc10n1pfake', // HRP encodes the quoted 1 sat
           unit: 'sat',
           amount: 1,
           state: MintQuoteState.PAID,
@@ -312,7 +312,7 @@ describe('createMintQuoteBolt11 mutants', () => {
         const body = (await request.json()) as { pubkey: string };
         return HttpResponse.json({
           quote: 'q-uppercase',
-          request: 'lnbc...',
+          request: 'lnbc10n1pfake', // HRP encodes the quoted 1 sat
           unit: 'sat',
           amount: 1,
           state: MintQuoteState.PAID,
