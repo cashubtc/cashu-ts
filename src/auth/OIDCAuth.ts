@@ -116,6 +116,13 @@ export class OIDCAuth {
     this.tokenListeners.push(fn);
   }
 
+  /**
+   * Remove a previously registered token listener (by reference).
+   */
+  removeTokenListener(fn: (t: TokenResponse) => void | Promise<void>): void {
+    this.tokenListeners = this.tokenListeners.filter((l) => l !== fn);
+  }
+
   // ---- Discovery ----
 
   async loadConfig(): Promise<OIDCConfig> {

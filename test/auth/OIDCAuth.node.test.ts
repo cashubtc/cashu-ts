@@ -181,6 +181,26 @@ describe('OIDCAuth: PKCE + auth code', () => {
     );
   });
 
+  test('removeTokenListener stops a listener from firing', async () => {
+    server.use(http.post(TOKEN_EP, () => HttpResponse.json(accessOk)));
+
+    const kept = vi.fn();
+    const removed = vi.fn();
+    const oidc = new OIDCAuth(DISCOVERY, { clientId: 'cashu-client' });
+    oidc.addTokenListener(kept);
+    oidc.addTokenListener(removed);
+    oidc.removeTokenListener(removed);
+
+    await oidc.exchangeAuthCode({
+      code: 'auth_code_123',
+      redirectUri: 'http://localhost:3388/callback',
+      codeVerifier: 'verifier_123',
+    });
+
+    expect(kept).toHaveBeenCalledTimes(1);
+    expect(removed).not.toHaveBeenCalled();
+  });
+
   test('token requests use the injected fetch implementation', async () => {
     const calls: Array<{ endpoint: string; body?: string }> = [];
     const customFetch = (async (
