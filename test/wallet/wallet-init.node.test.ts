@@ -397,7 +397,7 @@ describe('test info', () => {
       http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
         HttpResponse.json({
           quote: 'sat-quote',
-          request: 'lnbc...',
+          request: 'lnbc10u1pfake', // HRP encodes the quoted 1,000 sat
           unit: 'sat',
           amount: 1000,
           state: MintQuoteState.UNPAID,
@@ -501,7 +501,7 @@ describe('test fees', () => {
           quote: 'test_melt_quote_id',
           amount: Amount.from(2000),
           unit: 'sat',
-          request: '',
+          request: 'lnbc20u1pfake', // HRP encodes the quoted 2,000 sat
           fee_reserve: Amount.from(20),
           payment_preimage: null,
           state: 'UNPAID',
