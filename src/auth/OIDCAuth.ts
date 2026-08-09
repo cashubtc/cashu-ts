@@ -270,7 +270,11 @@ export class OIDCAuth {
     }
   > {
     const start = await this.deviceStart();
-    const interval = Math.max(start.interval ?? 1, intervalSec);
+    // Coerce the provider's interval to a number and validate it is finite and positive.
+    const providerInterval = Number(start.interval);
+    const safeProviderInterval =
+      Number.isFinite(providerInterval) && providerInterval > 0 ? providerInterval : 1;
+    const interval = Math.max(safeProviderInterval, intervalSec);
     let aborted = false;
 
     const poll = async (): Promise<TokenResponse> => {
