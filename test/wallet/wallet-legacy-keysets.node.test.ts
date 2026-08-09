@@ -170,7 +170,7 @@ describe('Legacy (pre-v1) keyset output gating', () => {
       http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
         HttpResponse.json({
           quote: 'bolt11-quote-1',
-          request: 'lnbc1000...',
+          request: 'lnbc10u1pfake', // HRP encodes the quoted 1,000 sat
           unit: 'sat',
           amount: 1000,
           state: 'UNPAID',

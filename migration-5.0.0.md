@@ -405,6 +405,22 @@ Generic mint quote responses (custom payment methods) are now base-validated lik
 
 ---
 
+## Bolt11 mint quotes are checked against the requested amount
+
+`createMintQuoteBolt11` and `createLockedMintQuote` now throw when the mint's response does not carry the amount that was asked for. For `sat` quotes the BOLT11 invoice's HRP amount must also equal the quoted amount; amountless or unreadable invoices fail the same check. The `checkMintQuoteBolt11` and `checkMintQuoteBatchBolt11` lookups apply the invoice check against each returned quote's own amount. Other units are not directly comparable to an invoice, so only the quoted amount is verified there.
+
+Apps talking to conforming mints need no change. Tests that stub bolt11 mint quote responses must give the invoice an HRP that matches the quoted amount, e.g. `request: 'lnbc10u1pfake'` for a 1,000 sat quote; the raw `createMintQuote('bolt11', …)` escape hatch remains unvalidated.
+
+---
+
+## Bolt11 melt quotes must not charge more than the invoice
+
+For `sat` quotes, `createMeltQuoteBolt11` now throws when the quote's `amount` exceeds the invoice's encoded amount (a sub-sat invoice may round up to the next sat). Amountless invoices are bounded by the caller's `amountMsat` when given, and `createMultiPathMeltQuote` is bounded by the requested partial amount. `checkMeltQuoteBolt11` applies the same bound against the quote's own `request`, and rejects a response whose `request` is not readable as a BOLT11 invoice. Undercharging is not rejected, and other units are not directly comparable to the invoice, so they are unchecked; the raw `createMeltQuote`/`checkMeltQuote` escape hatches also remain unvalidated.
+
+Test stubs follow the same HRP rule as mint quotes above.
+
+---
+
 ## Melt quote responses require `request` and carry `method`
 
 `request` (the method-specific payment routing instructions) moved from the bolt11/onchain response types into `MeltQuoteBaseResponse`, and the base type gains an optional `fee_reserve`. Melt quote responses from any method — including custom ones — that lack a `request` string now throw `Invalid response from mint`.

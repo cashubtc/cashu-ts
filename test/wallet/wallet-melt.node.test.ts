@@ -1200,3 +1200,143 @@ describe('async melt preference body', () => {
     expect(res.quote.quote).toBe('q-auth-12');
   });
 });
+
+describe('bolt11 melt quote amount validation', () => {
+  const meltQuoteJson = (amount: number, request: string) => ({
+    quote: 'melt-amt',
+    amount,
+    fee_reserve: 2,
+    unit: 'sat',
+    request,
+    state: 'UNPAID',
+    expiry: 1673972705,
+    payment_preimage: null,
+  });
+
+  test('createMeltQuoteBolt11 rejects a quote charging more than the invoice', async () => {
+    server.use(
+      http.post(
+        mintUrl + '/v1/melt/quote/bolt11',
+        () => HttpResponse.json(meltQuoteJson(2001, invoice)), // fixture invoice asks for 2,000 sat
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createMeltQuoteBolt11(invoice)).rejects.toThrow(/exceeds the invoice/i);
+  });
+
+  test('createMeltQuoteBolt11 accepts a quote matching the invoice', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/melt/quote/bolt11', () =>
+        HttpResponse.json(meltQuoteJson(2000, invoice)),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const quote = await wallet.createMeltQuoteBolt11(invoice);
+    expect(quote.amount.toBigInt()).toBe(2000n);
+  });
+
+  test('createMeltQuoteBolt11 allows rounding a sub-sat invoice up to the next sat', async () => {
+    const subSat = 'lnbc15000p1pfake'; // 1,500 msat
+    server.use(
+      http.post(mintUrl + '/v1/melt/quote/bolt11', () =>
+        HttpResponse.json(meltQuoteJson(2, subSat)),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createMeltQuoteBolt11(subSat)).resolves.toBeDefined();
+  });
+
+  test('createMeltQuoteBolt11 rejects rounding beyond the next sat', async () => {
+    const subSat = 'lnbc15000p1pfake'; // 1,500 msat
+    server.use(
+      http.post(mintUrl + '/v1/melt/quote/bolt11', () =>
+        HttpResponse.json(meltQuoteJson(3, subSat)),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createMeltQuoteBolt11(subSat)).rejects.toThrow(/exceeds the invoice/i);
+  });
+
+  test('createMeltQuoteBolt11 bounds an amountless invoice by the caller millisat amount', async () => {
+    const amountless = 'lnbc1pfake';
+    server.use(
+      http.post(
+        mintUrl + '/v1/melt/quote/bolt11',
+        () => HttpResponse.json(meltQuoteJson(6, amountless)), // caller authorized 5,000 msat = 5 sat
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createMeltQuoteBolt11(amountless, 5000)).rejects.toThrow(
+      /exceeds the invoice/i,
+    );
+  });
+
+  test('createMultiPathMeltQuote rejects a quote charging more than the partial amount', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/info', () =>
+        HttpResponse.json({
+          ...mintInfoResp,
+          nuts: { ...mintInfoResp.nuts, 15: { methods: [{ method: 'bolt11', unit: 'sat' }] } },
+        }),
+      ),
+      http.post(
+        mintUrl + '/v1/melt/quote/bolt11',
+        () => HttpResponse.json(meltQuoteJson(2, invoice)), // partial of 1,000 msat allows at most 1 sat
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createMultiPathMeltQuote(invoice, 1000)).rejects.toThrow(
+      /exceeds the invoice/i,
+    );
+  });
+
+  test('checkMeltQuoteBolt11 rejects when the quote charges more than its invoice', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/melt/quote/bolt11/melt-check-over', () =>
+        HttpResponse.json({ ...meltQuoteJson(2001, invoice), quote: 'melt-check-over' }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.checkMeltQuoteBolt11('melt-check-over')).rejects.toThrow(
+      /exceeds the invoice/i,
+    );
+  });
+
+  test('checkMeltQuoteBolt11 rejects an unreadable invoice in the response', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/melt/quote/bolt11/melt-check-junk', () =>
+        HttpResponse.json({ ...meltQuoteJson(1, 'not-an-invoice'), quote: 'melt-check-junk' }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.checkMeltQuoteBolt11('melt-check-junk')).rejects.toThrow(/bolt11 invoice/i);
+  });
+
+  test('checkMeltQuoteBolt11 accepts an amountless invoice in the response', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/melt/quote/bolt11/melt-check-amountless', () =>
+        HttpResponse.json({ ...meltQuoteJson(5, 'lnbc1pfake'), quote: 'melt-check-amountless' }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.checkMeltQuoteBolt11('melt-check-amountless')).resolves.toBeDefined();
+  });
+});

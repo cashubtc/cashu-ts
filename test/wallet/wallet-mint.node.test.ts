@@ -25,7 +25,7 @@ import { verifyMintQuoteSignatureLegacy } from '../../src/crypto/NUT20';
 import request from '../../src/transport';
 import { Bytes, sumProofs } from '../../src/utils';
 
-import { useTestServer, mint, mintUrl, unit, logger, mintInfoResp } from './_setup';
+import { useTestServer, mint, mintUrl, unit, logger, mintInfoResp, invoice } from './_setup';
 
 const server = useTestServer();
 const mintInfoRespWithNut12 = {
@@ -1148,7 +1148,7 @@ describe('generic mint/melt methods', () => {
         http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
           HttpResponse.json({
             quote: 'bolt11-quote-1',
-            request: 'lnbc1000...',
+            request: 'lnbc10u1pfake', // HRP encodes the quoted 1,000 sat
             unit: 'sat',
             amount: 1000,
             state: MintQuoteState.UNPAID,
@@ -1166,12 +1166,122 @@ describe('generic mint/melt methods', () => {
       expect(quote.amount.toBigInt()).toBe(1000n);
     });
 
+    test('rejects a mint quote whose invoice encodes a different sat amount', async () => {
+      server.use(
+        http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
+          HttpResponse.json({
+            quote: 'bolt11-amount-mismatch',
+            request: invoice, // 2,000 sat fixture invoice
+            unit: 'sat',
+            amount: 1,
+            state: MintQuoteState.UNPAID,
+            expiry: 3600,
+          }),
+        ),
+      );
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+
+      await expect(wallet.createMintQuoteBolt11(1)).rejects.toThrow(/invoice amount/i);
+    });
+
+    test('rejects a mint quote whose amount differs from the request', async () => {
+      server.use(
+        http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
+          HttpResponse.json({
+            quote: 'bolt11-echo-mismatch',
+            request: invoice, // internally consistent: 2,000 sat invoice and amount
+            unit: 'sat',
+            amount: 2000,
+            state: MintQuoteState.UNPAID,
+            expiry: 3600,
+          }),
+        ),
+      );
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+
+      await expect(wallet.createMintQuoteBolt11(1)).rejects.toThrow(/amount/i);
+    });
+
+    test('accepts a mint quote whose invoice matches the requested sat amount', async () => {
+      server.use(
+        http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
+          HttpResponse.json({
+            quote: 'bolt11-amount-match',
+            request: invoice, // 2,000 sat fixture invoice
+            unit: 'sat',
+            amount: 2000,
+            state: MintQuoteState.UNPAID,
+            expiry: 3600,
+          }),
+        ),
+      );
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+
+      const quote = await wallet.createMintQuoteBolt11(2000);
+      expect(quote.quote).toBe('bolt11-amount-match');
+    });
+
+    test('checkMintQuoteBolt11 rejects when the invoice does not match the quote amount', async () => {
+      server.use(
+        http.get(mintUrl + '/v1/mint/quote/bolt11/bolt11-check-mismatch', () =>
+          HttpResponse.json({
+            quote: 'bolt11-check-mismatch',
+            request: invoice, // 2,000 sat fixture invoice
+            unit: 'sat',
+            amount: 1,
+            state: MintQuoteState.UNPAID,
+            expiry: 3600,
+          }),
+        ),
+      );
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+
+      await expect(wallet.checkMintQuoteBolt11('bolt11-check-mismatch')).rejects.toThrow(
+        /invoice amount/i,
+      );
+    });
+
+    test('checkMintQuoteBatchBolt11 rejects a quote whose invoice does not match its amount', async () => {
+      server.use(
+        http.post(mintUrl + '/v1/mint/quote/bolt11/check', () =>
+          HttpResponse.json([
+            {
+              quote: 'bolt11-batch-ok',
+              request: invoice, // 2,000 sat fixture invoice
+              unit: 'sat',
+              amount: 2000,
+              state: MintQuoteState.UNPAID,
+              expiry: 3600,
+            },
+            {
+              quote: 'bolt11-batch-bad',
+              request: invoice, // 2,000 sat fixture invoice
+              unit: 'sat',
+              amount: 1,
+              state: MintQuoteState.UNPAID,
+              expiry: 3600,
+            },
+          ]),
+        ),
+      );
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+
+      await expect(
+        wallet.checkMintQuoteBatchBolt11(['bolt11-batch-ok', 'bolt11-batch-bad']),
+      ).rejects.toThrow(/invoice amount/i);
+    });
+
     test('checkMintQuoteBolt11 does not merge caller fields over mint response', async () => {
       server.use(
         http.get(mintUrl + '/v1/mint/quote/bolt11/bolt11-quote-merge', () =>
           HttpResponse.json({
             quote: 'bolt11-quote-merge',
-            request: 'lnbc-remote',
+            request: 'lnbc10u1premote', // HRP encodes the quoted 1,000 sat
             unit: 'sat',
             amount: 1000,
             state: MintQuoteState.PAID,
@@ -1191,7 +1301,7 @@ describe('generic mint/melt methods', () => {
         expiry: null,
       });
 
-      expect(quote.request).toBe('lnbc-remote');
+      expect(quote.request).toBe('lnbc10u1premote');
       expect(quote.unit).toBe('sat');
     });
 
@@ -1257,7 +1367,7 @@ describe('generic mint/melt methods', () => {
           return HttpResponse.json([
             {
               quote: 'bolt11-batch-1',
-              request: 'lnbc1000...',
+              request: 'lnbc10u1pfake', // HRP encodes the quoted 1,000 sat
               unit: 'sat',
               amount: 1000,
               state: MintQuoteState.PAID,
@@ -1265,7 +1375,7 @@ describe('generic mint/melt methods', () => {
             },
             {
               quote: 'bolt11-batch-2',
-              request: 'lnbc2000...',
+              request: 'lnbc20u1pfake', // HRP encodes the quoted 2,000 sat
               unit: 'sat',
               amount: 2000,
               state: MintQuoteState.UNPAID,
@@ -1837,7 +1947,7 @@ describe('generic mint/melt methods', () => {
             state: MeltQuoteState.PAID,
             expiry: 3600,
             fee_reserve: 50,
-            request: 'lnbc-remote',
+            request: 'lnbc50u1premote', // HRP encodes the quoted 5,000 sat
           }),
         ),
       );
@@ -1855,7 +1965,7 @@ describe('generic mint/melt methods', () => {
         payment_preimage: null,
       });
 
-      expect(quote.request).toBe('lnbc-remote');
+      expect(quote.request).toBe('lnbc50u1premote');
       expect(quote.unit).toBe('sat');
     });
 

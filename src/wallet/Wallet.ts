@@ -59,6 +59,7 @@ import type { Token } from '../model/types/token';
 import { BATCH_POOL_SIZE, runPool } from '../transport';
 import type { RequestFetch, RequestFn } from '../transport';
 import {
+  bolt11AmountMsat,
   getDecodedToken,
   invoiceHasAmountInHRP,
   normalizeMintUrl,
@@ -1919,6 +1920,33 @@ class Wallet {
   }
 
   /**
+   * Asserts a bolt11 mint quote matches the amount the caller asked for.
+   *
+   * @remarks
+   * For sat quotes the invoice HRP amount is compared too; other units are not directly comparable
+   * to the invoice, so only the quoted amount is checked.
+   */
+  private assertBolt11MintQuoteAmount(res: MintQuoteBolt11Response, expected: Amount): void {
+    this.failIf(!res.amount.equals(expected), 'Mint quote amount does not match', {
+      expected: expected.toString(),
+      quoted: res.amount.toString(),
+    });
+    if (this._unit !== 'sat') return;
+    let msat: bigint | null = null;
+    try {
+      msat = bolt11AmountMsat(res.request);
+    } catch {
+      // fall through: an unreadable invoice fails the comparison below
+    }
+    // A sat quote's invoice must ask for exactly the requested amount (in whole sats).
+    const matches = msat !== null && expected.multiplyBy(1000).equals(msat);
+    this.failIf(!matches, 'Mint quote invoice amount does not match the quote', {
+      expected: expected.toString(),
+      invoiceMsat: msat,
+    });
+  }
+
+  /**
    * Requests a mint quote from the mint. Response returns a Lightning payment request for the
    * requested given amount and unit.
    *
@@ -1949,6 +1977,7 @@ class Wallet {
       description: description,
     };
     const res = await this.mint.createMintQuoteBolt11(mintQuotePayload);
+    this.assertBolt11MintQuoteAmount(res, mintAmount);
     return { ...res, unit: res.unit || this._unit };
   }
 
@@ -1980,6 +2009,7 @@ class Wallet {
       pubkey: normPubkey,
     };
     const res = await this.mint.createMintQuoteBolt11(mintQuotePayload);
+    this.assertBolt11MintQuoteAmount(res, mintAmount);
     this.failIf(typeof res.pubkey !== 'string', 'Mint returned unlocked mint quote');
     const resPubkey = res.pubkey!;
     this.failIf(
@@ -2097,7 +2127,10 @@ class Wallet {
     quote: string | MintQuoteBolt11Response,
   ): Promise<MintQuoteBolt11Response> {
     const quoteId = typeof quote === 'string' ? quote : quote.quote;
-    return this.mint.checkMintQuoteBolt11(quoteId);
+    const res = await this.mint.checkMintQuoteBolt11(quoteId);
+    // No caller-side expectation here, so check the invoice against the quote's own amount.
+    this.assertBolt11MintQuoteAmount(res, res.amount);
+    return res;
   }
 
   /**
@@ -2162,7 +2195,9 @@ class Wallet {
     quotes: Array<string | MintQuoteBolt11Response>,
   ): Promise<MintQuoteBolt11Response[]> {
     const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
-    return this.mint.checkMintQuoteBatchBolt11(quoteIds);
+    const res = await this.mint.checkMintQuoteBatchBolt11(quoteIds);
+    for (const quote of res) this.assertBolt11MintQuoteAmount(quote, quote.amount);
+    return res;
   }
 
   /**
@@ -2766,6 +2801,27 @@ class Wallet {
   }
 
   /**
+   * Asserts a bolt11 melt quote does not charge more than the invoice asks for.
+   *
+   * @remarks
+   * Sat quotes only; other units are not directly comparable to the invoice. One-sided by design: a
+   * quote may round a sub-sat invoice up to the next sat, and undercharging is the mint's loss.
+   * Pass `null` when there is no millisat expectation to compare against.
+   */
+  private assertBolt11MeltQuoteAmount(
+    res: MeltQuoteBolt11Response,
+    expectedMsat: AmountLike | null,
+  ): void {
+    if (this._unit !== 'sat' || expectedMsat === null) return;
+    const msat = Amount.from(expectedMsat);
+    const maxSat = msat.ceilPercent(1, 1000); // ceil(msat / 1000)
+    this.failIf(res.amount.greaterThan(maxSat), 'Melt quote amount exceeds the invoice amount', {
+      quoted: res.amount.toString(),
+      invoiceMsat: msat.toString(),
+    });
+  }
+
+  /**
    * Requests a melt quote from the mint. Response returns amount and fees for a given unit in order
    * to pay a Lightning invoice.
    *
@@ -2807,6 +2863,16 @@ class Wallet {
         : {}),
     };
     const meltQuote = await this.mint.createMeltQuoteBolt11(meltQuotePayload);
+    let expectedMsat: AmountLike | null = null;
+    try {
+      expectedMsat = bolt11AmountMsat(invoice);
+    } catch {
+      // Unreadable caller invoice: the mint validates it; nothing to compare against.
+    }
+    if (expectedMsat === null && normalizedAmountMsat !== undefined) {
+      expectedMsat = normalizedAmountMsat;
+    }
+    this.assertBolt11MeltQuoteAmount(meltQuote, expectedMsat);
     return {
       ...meltQuote,
       unit: meltQuote.unit || this._unit,
@@ -2897,6 +2963,8 @@ class Wallet {
       options: { mpp: { amount: normalizedMillisatPartialAmount } },
     };
     const meltQuote = await this.mint.createMeltQuoteBolt11(meltQuotePayload);
+    // A partial quote is bounded by the caller's own millisat share, not the invoice total.
+    this.assertBolt11MeltQuoteAmount(meltQuote, normalizedMillisatPartialAmount);
     return { ...meltQuote, request: invoice, unit: this._unit };
   }
 
@@ -2939,7 +3007,18 @@ class Wallet {
     quote: string | MeltQuoteBolt11Response,
   ): Promise<MeltQuoteBolt11Response> {
     const quoteId = typeof quote === 'string' ? quote : quote.quote;
-    return this.mint.checkMeltQuoteBolt11(quoteId);
+    const res = await this.mint.checkMeltQuoteBolt11(quoteId);
+    // No caller-side expectation here, so check the quote against its own invoice.
+    if (this._unit === 'sat') {
+      let expectedMsat: bigint | null = null;
+      try {
+        expectedMsat = bolt11AmountMsat(res.request);
+      } catch {
+        this.fail('Melt quote request is not a valid bolt11 invoice', { quote: res.quote });
+      }
+      this.assertBolt11MeltQuoteAmount(res, expectedMsat);
+    }
+    return res;
   }
 
   /**
