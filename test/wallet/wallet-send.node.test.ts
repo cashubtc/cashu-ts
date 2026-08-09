@@ -7,6 +7,7 @@ import {
   Amount,
   CTSError,
   OutputData,
+  createEphemeralCounterSource,
   type Proof,
   type ProofLike,
   type OutputConfig,
@@ -1126,6 +1127,63 @@ describe('send', () => {
     expect(res.inputs.length).toBeGreaterThan(0);
     expect(res.inputs.every((p) => p.amount instanceof Amount)).toBe(true);
   });
+  test('a manual counter already handed out is rejected, not silently reused', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({
+          keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 0 }],
+        }),
+      ),
+    );
+
+    const keysetId = '00bd033559de27d0';
+    const seed = hexToBytes(
+      'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
+    );
+    const proof = (n: number, amount: number): Proof => ({
+      id: keysetId,
+      amount: Amount.from(amount),
+      secret: `1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674b${n
+        .toString(16)
+        .padStart(2, '0')}`,
+      C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+    });
+
+    // Two wallets on one shared source: the documented multi-wallet pattern.
+    const counterSource = createEphemeralCounterSource();
+    const opts = { unit, bip39seed: seed, counterSource };
+    const autoWallet = new Wallet(mint, opts);
+    const manualWallet = new Wallet(mint, opts);
+    await Promise.all([autoWallet.loadMint(), manualWallet.loadMint()]);
+
+    // The auto operation takes the low counters first.
+    await autoWallet.prepareSwapToSend(
+      2,
+      [proof(1, 4)],
+      {},
+      {
+        send: { type: 'deterministic', counter: 0 },
+        keep: { type: 'deterministic', counter: 0 },
+      },
+    );
+    const next = await autoWallet.counters.peekNext(keysetId);
+    expect(next).toBeGreaterThan(1);
+
+    // Counter 1 is now spent. Bumping the cursor afterwards would silently succeed and
+    // derive a duplicate; claiming the range surfaces it instead.
+    await expect(
+      manualWallet.prepareSwapToSend(
+        2,
+        [proof(2, 4)],
+        {},
+        {
+          send: { type: 'deterministic', counter: 1 },
+          keep: { type: 'deterministic', counter: 0 },
+        },
+      ),
+    ).rejects.toThrow(/already issued/i);
+  });
+
   test('manual counters advances cursor, then auto allocation must not reuse counters', async () => {
     server.use(
       http.get(mintUrl + '/v1/keysets', () => {

@@ -7,7 +7,7 @@ Deterministic outputs use per-keyset counters. The wallet reserves them atomical
 API at a glance:
 
 - `wallet.counters.peekNext(id)` – returns the current "next" for a keyset
-- `wallet.counters.advanceToAtLeast(id, n)` – bump forward if behind
+- `wallet.counters.advanceToAtLeast(id, n)` – bump forward if behind; no-op if already ahead (restore/sync)
 - `wallet.on.countersReserved(cb)` – subscribe to reservations (see [WalletEvents](./wallet_events/wallet_events.md) for subscription patterns)
 
 ** Optional:** - Depends on CounterSource:
@@ -99,7 +99,7 @@ The ephemeral source is memory-only — counters do not survive page reloads. Us
 ```ts
 function wireCounterPersistence(wallet: Wallet) {
   wallet.on.countersReserved(({ keysetId, next }) => {
-    saveNextToDb(keysetId, next);
+    saveNextToDb(keysetId, next); // your atomic save function
   });
 }
 
@@ -118,7 +118,9 @@ Because the source is shared, the global event on any wallet instance reflects t
 
 ### Custom CounterSource implementations
 
-`createEphemeralCounterSource` returns the built-in in-memory implementation. For durable storage you can implement `CounterSource` directly:
+`createEphemeralCounterSource` returns the built-in in-memory implementation, which survives restarts when paired with the `countersReserved` persistence above. For multi-wallet use inside a single app instance, it is usually enough.
+
+Implement `CounterSource` yourself when the cursor must live in your storage: when several tabs or processes reserve from one DB, or when a crash between reserving and saving must not risk reusing a counter. Each method is then one atomic transaction:
 
 ```ts
 import type { CounterSource, CounterRange } from '@cashu/cashu-ts';
@@ -127,9 +129,14 @@ class IndexedDbCounterSource implements CounterSource {
   async reserve(keysetId: string, n: number): Promise<CounterRange> {
     // atomic read-and-increment in your DB
   }
+  async reserveAt(keysetId: string, start: number, count: number): Promise<CounterRange> {
+    // one transaction: throw if start < next, else SET next = start + count
+  }
   async advanceToAtLeast(keysetId: string, minNext: number): Promise<void> {
     // conditional update: SET next = max(next, minNext)
   }
   // Optional: snapshot(), setNext()
 }
 ```
+
+`reserveAt` claims a caller-chosen range instead of taking the next free one, and throws when `start` is already below the cursor. Manual deterministic counters go through it, so a counter that another operation has already been given is reported rather than quietly reused. Do the check and the update in one transaction: splitting them leaves a window for a concurrent `reserve` to hand out counters inside the range.

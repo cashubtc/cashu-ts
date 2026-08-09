@@ -331,6 +331,7 @@ export interface CounterRange {
 export interface CounterSource {
     advanceToAtLeast(keysetId: string, minNext: number): Promise<void>;
     reserve(keysetId: string, n: number): Promise<CounterRange>;
+    reserveAt(keysetId: string, start: number, count: number): Promise<CounterRange>;
     setNext?(keysetId: string, next: number): Promise<void>;
     snapshot?(): Promise<Record<string, number>>;
 }
