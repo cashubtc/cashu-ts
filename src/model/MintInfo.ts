@@ -1,6 +1,10 @@
 import { type Logger, NULL_LOGGER } from '../logger';
 import { nullIfUndefined } from '../utils/core';
-import { ABSOLUTE_MAX_BATCH_SIZE, ABSOLUTE_MAX_PER_MINT } from '../utils/limits';
+import {
+  ABSOLUTE_MAX_BATCH_SIZE,
+  ABSOLUTE_MAX_PER_MINT,
+  MAX_MINT_INFO_LIST,
+} from '../utils/limits';
 import { normalizeSafeIntegerMetadata } from '../utils/normalizeNumbers';
 
 import { Amount } from './Amount';
@@ -41,10 +45,10 @@ export class MintInfo {
     const log = logger ?? NULL_LOGGER;
     this._mintInfo = MintInfo.normalizeInfo(info, log);
 
-    const pe22 = this.toEndpoints(this._mintInfo?.nuts?.[22]?.protected_endpoints);
+    const pe22 = this.toEndpoints(this._mintInfo?.nuts?.[22]?.protected_endpoints, log);
     this._protected22 = this.buildIndex(pe22);
 
-    const pe21 = this.toEndpoints(this._mintInfo?.nuts?.[21]?.protected_endpoints);
+    const pe21 = this.toEndpoints(this._mintInfo?.nuts?.[21]?.protected_endpoints, log);
     this._protected21 = this.buildIndex(pe21);
   }
 
@@ -57,7 +61,7 @@ export class MintInfo {
           ? {
               '4': {
                 ...info.nuts['4'],
-                methods: MintInfo.normalizeSwapMethods(info.nuts['4'].methods),
+                methods: MintInfo.normalizeSwapMethods(info.nuts['4'].methods, logger),
               },
             }
           : {}),
@@ -65,7 +69,7 @@ export class MintInfo {
           ? {
               '5': {
                 ...info.nuts['5'],
-                methods: MintInfo.normalizeSwapMethods(info.nuts['5'].methods),
+                methods: MintInfo.normalizeSwapMethods(info.nuts['5'].methods, logger),
               },
             }
           : {}),
@@ -79,8 +83,9 @@ export class MintInfo {
   // Per NUT-04/05/25/XX, `min_amount` and `max_amount` are `<int|null>`. Mints that omit
   // them entirely (older Nutshell, etc.) leave the field as `undefined`; coerce to null
   // so the runtime value matches the `AmountLike | null` type.
-  private static normalizeSwapMethods(methods: SwapMethod[]): SwapMethod[] {
-    return methods.map((m) => {
+  private static normalizeSwapMethods(methods: SwapMethod[], logger: Logger): SwapMethod[] {
+    const bounded = MintInfo.capList(methods, 'nuts.4/5.methods', logger);
+    return bounded.map((m) => {
       const next = { ...m } as Record<string, unknown>;
       nullIfUndefined(next, 'min_amount', 'max_amount');
       return next as SwapMethod;
@@ -288,10 +293,24 @@ export class MintInfo {
 
   // ---------- private helpers ----------
 
-  private toEndpoints(maybe: unknown): Endpoint[] {
+  /**
+   * Bounds a mint-advertised list to `MAX_MINT_INFO_LIST` before any per-entry work, warning once
+   * when it truncates. Guards against memory amplification from a hostile `/v1/info`.
+   */
+  private static capList<T>(list: T[], label: string, logger: Logger): T[] {
+    if (list.length <= MAX_MINT_INFO_LIST) return list;
+    logger.warn(`MintInfo: ${label} exceeds internal cap and was truncated`, {
+      advertised: list.length,
+      cap: MAX_MINT_INFO_LIST,
+    });
+    return list.slice(0, MAX_MINT_INFO_LIST);
+  }
+
+  private toEndpoints(maybe: unknown, logger: Logger): Endpoint[] {
     if (!Array.isArray(maybe)) return [];
+    const bounded = MintInfo.capList(maybe, 'nuts.21/22.protected_endpoints', logger);
     const out: Endpoint[] = [];
-    for (const e of maybe) {
+    for (const e of bounded) {
       if (e && typeof e === 'object') {
         const rec = e as Record<string, unknown>;
         const mm = rec.method;
