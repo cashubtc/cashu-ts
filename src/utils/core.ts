@@ -812,5 +812,54 @@ function removePrefix(token: string): string {
  * @internal
  */
 export function invoiceHasAmountInHRP(invoice: string): boolean {
-  return /^ln[a-z]{2,}[1-9][0-9]*(?:[mun]|0p)?1/i.test(invoice);
+  try {
+    return bolt11AmountMsat(invoice) !== null;
+  } catch {
+    return false; // malformed invoice or amount: no readable amount in the HRP
+  }
+}
+
+/**
+ * Msat per HRP amount unit for each BOLT11 multiplier ('p' is handled separately).
+ */
+const MULTIPLIER_MSAT: Record<string, bigint> = {
+  m: 100_000_000n, // milli-bitcoin
+  u: 100_000n, // micro-bitcoin
+  n: 100n, // nano-bitcoin
+};
+
+const MSAT_PER_BTC = 100_000_000_000n;
+
+/**
+ * Reads the amount a BOLT11 invoice asks for from its human readable part, in millisats.
+ *
+ * @remarks
+ * HRP only: no checksum or signature validation, that is the payer's job. Returns null for an
+ * amountless invoice.
+ * @throws If the string is not shaped like a BOLT11 invoice or the amount is malformed.
+ * @internal
+ */
+export function bolt11AmountMsat(pr: string): bigint | null {
+  if (typeof pr !== 'string') throw new CTSError('BOLT11 invoice must be a string');
+  const lower = pr.toLowerCase();
+  // The bech32 charset excludes '1', so the last '1' is the HRP separator.
+  const sep = lower.lastIndexOf('1');
+  if (!lower.startsWith('ln') || sep < 3 || sep === lower.length - 1) {
+    throw new CTSError('Invalid BOLT11 invoice');
+  }
+  const match = /^ln[a-z]+?(\d*)([munp]?)$/.exec(lower.slice(0, sep));
+  if (!match) throw new CTSError('Invalid BOLT11 invoice');
+
+  const [, digits, multiplier] = match;
+  if (digits === '') return null; // amountless invoice
+  // BOLT11 forbids leading zeros, which also rules out a zero amount.
+  if (digits.startsWith('0')) throw new CTSError('Invalid BOLT11 amount');
+  const n = BigInt(digits);
+  if (multiplier === '') return n * MSAT_PER_BTC;
+  if (multiplier === 'p') {
+    // Pico-bitcoin is 0.1 msat per unit; BOLT11 requires a multiple of 10.
+    if (n % 10n !== 0n) throw new CTSError('Invalid BOLT11 amount');
+    return n / 10n;
+  }
+  return n * MULTIPLIER_MSAT[multiplier];
 }
