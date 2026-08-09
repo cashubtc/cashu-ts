@@ -175,6 +175,36 @@ describe('AuthManager: CAT lifecycle', () => {
     const cat = await am.ensureCAT(30);
     expect(cat).toBe('old-cat');
   });
+
+  test('setCAT(undefined) is not undone by an in-flight refresh', async () => {
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+    am['tokens'] = { accessToken: 'old-cat', refreshToken: 'rrr', expiresAt: Date.now() - 1 };
+
+    let resolveRefresh!: (value: {
+      access_token: string;
+      refresh_token: string;
+      expires_in: number;
+    }) => void;
+    const refresh = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveRefresh = resolve;
+        }),
+    );
+    am['oidc'] = { refresh } as any;
+
+    // Launch the refresh, then clear the session while it is still in flight.
+    const pending = am.ensureCAT(30);
+    am.setCAT(undefined);
+
+    // The provider now answers the refresh that started before logout.
+    resolveRefresh({ access_token: 'new-cat', refresh_token: 'new-r', expires_in: 300 });
+
+    // The cleared session must stay cleared, not be resurrected by the late response.
+    expect(await pending).toBeUndefined();
+    expect(am.getCAT()).toBeUndefined();
+    expect(am['tokens'].refreshToken).toBeUndefined();
+  });
 });
 
 describe('AuthManager: constructor limits', () => {

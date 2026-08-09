@@ -78,6 +78,9 @@ export class AuthManager implements AuthProvider {
   private info?: MintInfo;
   private lockChain?: Promise<void>;
   private inflightRefresh?: Promise<void>;
+  // Bumped whenever the caller sets or clears the CAT. An in-flight refresh that started under an
+  // older generation must not write its result back (eg a refresh landing after logout).
+  private tokenGeneration = 0;
   private static readonly MIN_VALID_SECS = 30;
 
   // Open ID Connect (OIDC)
@@ -156,6 +159,8 @@ export class AuthManager implements AuthProvider {
   }
 
   setCAT(cat: string | undefined): void {
+    // Invalidate any in-flight refresh: the caller is taking control of the token state.
+    this.tokenGeneration++;
     this.tokens.accessToken = cat;
     if (!cat) {
       this.tokens.refreshToken = undefined;
@@ -178,10 +183,12 @@ export class AuthManager implements AuthProvider {
 
     // One refresh at a time
     if (!this.inflightRefresh) {
+      const startedGeneration = this.tokenGeneration;
       this.inflightRefresh = (async () => {
         try {
           const tok = await this.oidc!.refresh(this.tokens.refreshToken!);
-          this.updateFromOIDC(tok);
+          // Drop the result if the session was set or cleared while the refresh was in flight.
+          if (this.tokenGeneration === startedGeneration) this.updateFromOIDC(tok);
         } catch (err) {
           this.logger.warn('AuthManager: CAT refresh failed', { err });
         } finally {
