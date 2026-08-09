@@ -19,7 +19,6 @@ import {
   buildP2PKSigAllMessageV0,
   assertSigAllInputs,
   parseSecret,
-  assertV3PointSecret,
   isV3PointSecret,
 } from '../crypto';
 // Internal transitional fallback — not part of crypto/index.ts
@@ -30,18 +29,7 @@ import {
 } from '../crypto/curve_secp';
 import { deriveSecretAndBlindingFactor, recoverV3SecretKeys } from '../crypto/NUT13';
 import { signMintQuoteLegacy } from '../crypto/NUT20';
-import {
-  buildScriptPathWitness,
-  countLeafSigners,
-  parseTaprootLeaf,
-  type TaprootLeaf,
-  recoverLeafKeySecretKeys,
-  recoverReceiverKeyedSecretKey,
-  taprootLeafHash,
-  taprootMerkleRoot,
-  taprootTweakSeckey,
-} from '../crypto/taproot';
-import { signTransactionInput, transactionDigest } from '../crypto/transcript';
+import { transactionDigest } from '../crypto/transcript';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
@@ -115,6 +103,15 @@ import { KeyChain } from './KeyChain';
 import { type Keyset } from './Keyset';
 import { selectProofsRotating, type SelectProofs } from './SelectProofs';
 import {
+  type TaprootWalletState,
+  V3_SEED_SCAN_HEADROOM,
+  attachBearerSpendInfo,
+  attachTransactionWitnesses,
+  collectSpendInfoKeys,
+  prepareScriptPathSpends,
+  proofSpendOptions,
+} from './taproot';
+import {
   type MeltPreview,
   type OutputType,
   type OutputConfig,
@@ -128,7 +125,6 @@ import {
   type MeltProofsResponse,
   type ScriptPathPlan,
   type SendResponse,
-  type SpendOption,
   type SpendOptions,
   type RestoreConfig,
   type BatchRestoreConfig,
@@ -148,23 +144,6 @@ const PENDING_KEYSET_ID = '__PENDING__';
 
 // NUT-20 "Signature for mint request invalid"
 const MINT_QUOTE_SIGNATURE_INVALID_CODE = 20008;
-
-// Headroom over the local counter when scanning seed derivations for v3 secrets, covering proofs
-// derived by another session or a restore since the counter was last persisted.
-const V3_SEED_SCAN_HEADROOM = 128;
-
-/**
- * One resolved script path spend, awaiting only the transaction digest.
- */
-type ScriptPathSpend = {
-  tree: string[];
-  leafIndex: number;
-  K: string;
-  preimage?: string;
-  keys: string[];
-  leaf: TaprootLeaf;
-  cosign?: (digest: Uint8Array, leaf: TaprootLeaf) => Promise<string[]>;
-};
 
 /**
  * Class that represents a Cashu wallet.
@@ -1721,13 +1700,14 @@ class Wallet {
 
     // Execute swap and validate result
     const privkeys = privkey === undefined ? [] : [privkey].flat();
-    await this._attachV3TransactionWitnesses(
+    await attachTransactionWitnesses(
       swapTransaction.payload,
       undefined,
-      this._collectSpendInfoKeys(swapPreview.inputs, privkey),
+      collectSpendInfoKeys(swapPreview.inputs, privkey, this._logger),
       scriptPath?.length
-        ? this._prepareScriptPathSpends(swapPreview.inputs, scriptPath, privkeys)
+        ? prepareScriptPathSpends(swapPreview.inputs, scriptPath, privkeys)
         : undefined,
+      this._taprootState(),
     );
     const { signatures } = await this.withStaleKeysetRepair(() =>
       this.mint.swap(swapTransaction.payload),
@@ -1757,7 +1737,7 @@ class Wallet {
         sendProofs.push(p);
       }
     });
-    await this._attachV3BearerSpendInfo(sendProofs);
+    await attachBearerSpendInfo(sendProofs, this._taprootState());
     this._logger.debug('SEND COMPLETED', {
       unselectedProofs: unselectedProofs.map((p) => p.amount.toString()),
       keepProofs: keepProofs.map((p) => p.amount.toString()),
@@ -1767,39 +1747,6 @@ class Wallet {
       keep: [...keepProofs, ...unselectedProofs],
       send: sendProofs,
     };
-  }
-
-  /**
-   * Attaches bearer spend info (`k`) to freshly swapped v3 send proofs (spec 2.5.2).
-   *
-   * @remarks
-   * The bearer key is what lets the receiver run the 2.5.1 cascade and sign the sweep's transaction
-   * witness. Only bare seed-derived secrets qualify; proofs whose key cannot be recovered are left
-   * untouched. Mutates the passed proofs.
-   */
-  private async _attachV3BearerSpendInfo(sendProofs: Proof[]): Promise<void> {
-    if (!this._seed || sendProofs.length === 0) return;
-    const v3Proofs = sendProofs.filter(
-      (p) => isBlsKeyset(p.id) && isV3PointSecret(p.secret) && !p.spend_info,
-    );
-    if (v3Proofs.length === 0) return;
-    const byKeyset = new Map<string, Proof[]>();
-    for (const proof of v3Proofs) {
-      byKeyset.set(proof.id, [...(byKeyset.get(proof.id) ?? []), proof]);
-    }
-    for (const [keysetId, proofs] of byKeyset) {
-      const next = await this.counters.peekNext(keysetId);
-      const keys = recoverV3SecretKeys(
-        this._seed,
-        keysetId,
-        proofs.map((p) => p.secret),
-        next + V3_SEED_SCAN_HEADROOM,
-      );
-      for (const proof of proofs) {
-        const k = keys.get(proof.secret);
-        if (k) proof.spend_info = { k: Bytes.toHex(k) };
-      }
-    }
   }
 
   // -----------------------------------------------------------------
@@ -2083,105 +2030,15 @@ class Wallet {
   }
 
   /**
-   * Attaches taproot transaction witnesses to v3 point-secret inputs (spec 2.2.2).
-   *
-   * @remarks
-   * Builds the transcript from the request's own inputs and outputs, then signs its digest with
-   * each input's recovered internal key (seed counter scan, spec 2.5.2). Signing is per input, so a
-   * mixed transaction signs its v3 inputs and leaves v0-v2 inputs to their own rules (spec 5).
-   * Inputs whose key is not recoverable are left unsigned and the mint rejects them.
+   * The wallet state slice the taproot signing rules in `wallet/taproot.ts` read.
    */
-  private async _attachV3TransactionWitnesses(
-    payload: Pick<MeltRequest, 'inputs' | 'outputs'>,
-    meltQuote?: { quoteId: string; amount: Amount },
-    extraKeys?: Map<string, Uint8Array>,
-    scriptSpends?: Map<string, ScriptPathSpend>,
-  ): Promise<void> {
-    const v3Inputs = payload.inputs.filter((p) => isBlsKeyset(p.id) && isV3PointSecret(p.secret));
-    if (v3Inputs.length === 0) return;
-    const digest = transactionDigest({
-      proofInputs: payload.inputs.map((p) => ({
-        amount: Amount.from(p.amount).toBigInt(),
-        keysetId: p.id,
-        secret: p.secret,
-        C: p.C,
-      })),
-      blindedOutputs: (payload.outputs ?? []).map((o) => ({
-        amount: Amount.from(o.amount).toBigInt(),
-        keysetId: o.id,
-        B_: o.B_,
-      })),
-      meltQuoteOutputs: meltQuote
-        ? [{ amount: meltQuote.amount.toBigInt(), quoteId: meltQuote.quoteId }]
-        : undefined,
-    });
-    // Keys are derived per keyset, and a mixed transaction can carry v3 inputs from more than one,
-    // so recover per keyset. Scan bound: that keyset's counter plus headroom for proofs minted
-    // before this session.
-    const keys = new Map<string, Uint8Array>();
-    if (this._seed) {
-      const byKeyset = new Map<string, string[]>();
-      for (const p of v3Inputs) {
-        const secrets = byKeyset.get(p.id) ?? [];
-        secrets.push(p.secret);
-        byKeyset.set(p.id, secrets);
-      }
-      for (const [id, secrets] of byKeyset) {
-        const bound = (await this.counters.peekNext(id)) + V3_SEED_SCAN_HEADROOM;
-        for (const [secret, key] of recoverV3SecretKeys(this._seed, id, secrets, bound)) {
-          keys.set(secret, key);
-        }
-      }
-    }
-    // Script path spends first: they name their own leaf, so they take precedence over the key
-    // path even where both are available. Everything but the signature was settled before the
-    // request was built; only the digest was missing, and now it is not.
-    for (const [secret, spend] of scriptSpends ?? []) {
-      const input = payload.inputs.find((p) => p.secret === secret);
-      if (!input) {
-        this.fail('Script path plan names a secret not in this transaction');
-        continue;
-      }
-      const mine = spend.keys.map((k: string) =>
-        Bytes.toHex(schnorr.sign(digest, Bytes.fromHex(k))),
-      );
-      // The co-signer sees the digest only now, which is why it is a hook and not a signature the
-      // caller could have supplied up front: the digest covers the outputs, and those are only
-      // fixed (and ordered) once the transaction is built.
-      const theirs = spend.cosign ? await spend.cosign(digest, spend.leaf) : [];
-      const signatures = [...new Set([...mine, ...theirs.map((sig: string) => sig.toLowerCase())])];
-      const validSigners = countLeafSigners(spend.leaf, digest, signatures);
-      if (validSigners < spend.leaf.n) {
-        this.fail(
-          `Script path leaf needs ${spend.leaf.n} valid signatures, ${validSigners} produced`,
-        );
-      }
-      input.witness = buildScriptPathWitness(
-        spend.tree,
-        spend.leafIndex,
-        spend.K,
-        signatures,
-        spend.preimage,
-      );
-    }
-    for (const input of payload.inputs) {
-      if (input.witness) continue; // pre-built witness (e.g. script path): leave it alone
-      const secretKey =
-        keys.get(input.secret) ??
-        extraKeys?.get(input.secret) ??
-        this._randomV3Keys.get(input.secret);
-      if (secretKey) input.witness = signTransactionInput(digest, secretKey);
-    }
-    // Every v3 input signs (spec 2.2.2), so an unsigned one is a request the mint will refuse.
-    // Say which proof and why here, rather than letting it come back as a witness error naming
-    // nothing: the cause is always a key this wallet does not hold.
-    const unsigned = v3Inputs.find((p) => !p.witness);
-    if (unsigned) {
-      this.fail(
-        'No key to sign a v3 input: its spend info holds neither a bearer key nor an ephemeral this wallet can derive from, and it is not seed-derived',
-        { id: unsigned.id, amount: unsigned.amount.toString() },
-      );
-    }
+  private _taprootState(): TaprootWalletState {
+    return {
+      seed: this._seed,
+      counters: this.counters,
+      randomKeys: this._randomV3Keys,
+      logger: this._logger,
+    };
   }
 
   /**
@@ -2205,198 +2062,7 @@ class Wallet {
     proof: Proof,
     opts?: { privkeys?: string | string[]; now?: number },
   ): Promise<SpendOptions> {
-    assertV3PointSecret(proof.secret);
-    const privkeys = opts?.privkeys === undefined ? [] : [opts.privkeys].flat();
-    const now = opts?.now ?? Math.floor(Date.now() / 1000);
-
-    // Key path: spend info first (bearer or receiver-keyed), then this wallet's own seed.
-    let keyPath = this._collectSpendInfoKeys([proof], privkeys).has(proof.secret);
-    if (!keyPath && this._seed) {
-      const bound = (await this.counters.peekNext(proof.id)) + V3_SEED_SCAN_HEADROOM;
-      keyPath = recoverV3SecretKeys(this._seed, proof.id, [proof.secret], bound).has(proof.secret);
-    }
-
-    const tree = proof.spend_info?.tree;
-    if (!tree || tree.length === 0) return { keyPath, script: [] };
-
-    // Parses every leaf, so an unknown one throws here rather than being reported as spendable.
-    const leaves = tree.map((leaf) => parseTaprootLeaf(Bytes.fromHex(leaf)));
-    const hits = recoverLeafKeySecretKeys(tree, proof.spend_info?.E, privkeys);
-    const script = leaves.map((leaf, leafIndex) => {
-      const keys = hits
-        .filter((h) => h.leafIndex === leafIndex)
-        .map(({ keyIndex, secretKey, blinded }) => ({ keyIndex, secretKey, blinded }));
-      const option: SpendOption = { leafIndex, leaf, keys, satisfiable: false };
-      if (leaf.type === 'after') option.availableAt = leaf.time;
-      // Order matters: report the condition the caller cannot work around first. A locktime is
-      // absolute, a preimage has to be supplied, and only then is it a matter of keys.
-      if (leaf.type === 'after' && leaf.time !== undefined && now < leaf.time) {
-        option.blockedBy = 'locktime';
-      } else if (leaf.type === 'hashlock') {
-        option.blockedBy = 'preimage';
-      } else if (keys.length < leaf.n) {
-        option.blockedBy = 'threshold';
-      } else {
-        option.satisfiable = true;
-      }
-      return option;
-    });
-    return { keyPath, script };
-  }
-
-  /**
-   * Resolves each script path plan against its input, ready for signing once the digest exists.
-   *
-   * @remarks
-   * Runs on the original proofs, not the mint payload: `_prepareInputsForMint` strips spend_info,
-   * and the tree and internal key live there. Everything except the signature is settled here, so a
-   * plan that cannot be honoured fails before the request is built rather than at the mint.
-   */
-  private _prepareScriptPathSpends(
-    inputs: Proof[],
-    plans: ScriptPathPlan[],
-    privkeys: string[],
-  ): Map<string, ScriptPathSpend> {
-    const out = new Map<string, ScriptPathSpend>();
-    for (const plan of plans) {
-      const proof = inputs.find((p) => p.secret === plan.secret);
-      if (!proof) {
-        throw new CTSError(`Script path plan names a secret not in this transaction`);
-      }
-      if (out.has(plan.secret)) {
-        throw new CTSError('Script path plan names the same input twice');
-      }
-      const tree = proof.spend_info?.tree;
-      if (!tree || plan.leafIndex < 0 || plan.leafIndex >= tree.length) {
-        throw new CTSError(`Script path plan names leaf ${plan.leafIndex}, which is not disclosed`);
-      }
-      const leaf = parseTaprootLeaf(Bytes.fromHex(tree[plan.leafIndex]));
-      if (leaf.type === 'hashlock' && plan.preimage === undefined) {
-        throw new CTSError('Script path plan for a hashlock leaf needs a preimage');
-      }
-      // The control block's internal key, from whichever source the spend info offers (2.5.2).
-      const K = this._internalKeyOf(proof, privkeys);
-      if (!K) {
-        throw new CTSError('Script path spend needs the internal key, which the spend info lacks');
-      }
-      const recovered = recoverLeafKeySecretKeys(tree, proof.spend_info?.E, privkeys)
-        .filter((h) => h.leafIndex === plan.leafIndex)
-        .map((h) => h.secretKey);
-      const keys = [
-        ...new Set([...recovered, ...(plan.extraKeys ?? []).map((k: string) => k.toLowerCase())]),
-      ];
-      // A co-signer contributes signatures, not keys, so its share cannot be counted until the
-      // digest exists. Everything else about the plan is checkable now.
-      if (!plan.cosign && keys.length < leaf.n) {
-        throw new CTSError(
-          `Script path leaf needs ${leaf.n} signatures, ${keys.length} keys available`,
-        );
-      }
-      out.set(plan.secret, {
-        tree,
-        leafIndex: plan.leafIndex,
-        K,
-        ...(plan.preimage !== undefined && { preimage: plan.preimage }),
-        keys,
-        leaf,
-        ...(plan.cosign && { cosign: plan.cosign }),
-      });
-    }
-    return out;
-  }
-
-  /**
-   * The internal key `K` behind a proof's secret, from its spend info: explicit, from a bearer
-   * scalar, or trial-matched from a receiver-keyed ephemeral. Undefined when none applies.
-   */
-  private _internalKeyOf(proof: Proof, privkeys: string[]): string | undefined {
-    const info = proof.spend_info;
-    if (!info) return undefined;
-    if (info.k && /^[0-9a-f]{64}$/.test(info.k)) {
-      try {
-        return Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(info.k)));
-      } catch {
-        return undefined;
-      }
-    }
-    if (info.E) {
-      for (const priv of privkeys) {
-        const hit = recoverReceiverKeyedSecretKey(proof.secret, info.E, priv, info.tree);
-        if (hit) return hit.internalKey;
-      }
-    }
-    if (info.K) {
-      try {
-        return normalizeSecpPubkey(info.K);
-      } catch {
-        return undefined;
-      }
-    }
-    return undefined;
-  }
-
-  /**
-   * Collects key-path keys from the inputs' spend info, keyed by secret hex.
-   *
-   * @remarks
-   * Two sources (spec 2.5.2): a bearer `k`, verified by `k*G`, and a receiver-keyed `E`, which
-   * trial-matches against the static keys the caller holds. Proofs whose key is neither are left
-   * unsigned; the mint refuses them, which is the honest outcome.
-   */
-  private _collectSpendInfoKeys(
-    inputs: Proof[],
-    privkeys?: string | string[],
-  ): Map<string, Uint8Array> {
-    const keys = new Map<string, Uint8Array>();
-    const statics = privkeys === undefined ? [] : [privkeys].flat();
-    for (const proof of inputs) {
-      const E = proof.spend_info?.E;
-      // `k` and `E` are mutually exclusive (spec 2.5.2). Both present is the shape a re-gifted
-      // receiver-keyed scalar takes, and that scalar is `p_static + r_i`: whoever knows `r_i`
-      // recovers the receiver's static private key from it. The receive cascade rejects this, but
-      // it only runs on receive, and melt reaches here directly. Refuse loudly wherever it appears:
-      // this is a compromised key, not an input that merely cannot be signed.
-      if (E !== undefined && proof.spend_info?.k !== undefined) {
-        this.fail('Spend info carries both k and E');
-      }
-      if (E && statics.length > 0) {
-        for (const priv of statics) {
-          const hit = recoverReceiverKeyedSecretKey(proof.secret, E, priv, proof.spend_info?.tree);
-          if (hit) {
-            keys.set(proof.secret, Bytes.fromHex(hit.secretKey));
-            break;
-          }
-        }
-      }
-      const k = proof.spend_info?.k;
-      if (!k || !/^[0-9a-f]{64}$/.test(k)) continue;
-      try {
-        const kBytes = Bytes.fromHex(k);
-        if (Bytes.toHex(getPubKeyFromPrivKey(kBytes)) === proof.secret) {
-          keys.set(proof.secret, kBytes);
-          continue;
-        }
-        // Locked proof: the key path signs with p' = k + t over the disclosed tree.
-        const tree = proof.spend_info?.tree;
-        if (tree && tree.length > 0) {
-          const root = taprootMerkleRoot(tree.map((leaf) => taprootLeafHash(Bytes.fromHex(leaf))));
-          const tweaked = taprootTweakSeckey(kBytes, root);
-          if (Bytes.toHex(getPubKeyFromPrivKey(tweaked)) === proof.secret) {
-            keys.set(proof.secret, tweaked);
-          }
-          continue;
-        }
-        // Empty tweak, no tree (spec 3.8): p' = k + tagged_hash(tag, K). A true aggregate has no
-        // single holder of `k`, so this reaches only a single-party key using the same form.
-        const empty = taprootTweakSeckey(kBytes);
-        if (Bytes.toHex(getPubKeyFromPrivKey(empty)) === proof.secret) {
-          keys.set(proof.secret, empty);
-        }
-      } catch {
-        // invalid scalar: leave unsigned
-      }
-    }
-    return keys;
+    return proofSpendOptions(proof, opts, this._taprootState());
   }
 
   /**
@@ -4198,17 +3864,18 @@ class Wallet {
       (meltPreview.quote as unknown as { amount?: AmountLike }).amount ?? 0,
     );
     if (meltAmount.toBigInt() > 0n) {
-      await this._attachV3TransactionWitnesses(
+      await attachTransactionWitnesses(
         meltPayload,
         { quoteId: quote, amount: meltAmount },
-        this._collectSpendInfoKeys(meltPreview.inputs, privkey),
+        collectSpendInfoKeys(meltPreview.inputs, privkey, this._logger),
         completeOptions.scriptPath?.length
-          ? this._prepareScriptPathSpends(
+          ? prepareScriptPathSpends(
               meltPreview.inputs,
               completeOptions.scriptPath,
               privkey === undefined ? [] : [privkey].flat(),
             )
           : undefined,
+        this._taprootState(),
       );
     }
 
