@@ -117,23 +117,31 @@ export class WSConnection {
         settle(() => reject(err));
       };
 
+      let socket: WebSocket;
       try {
-        this.ws = new this._WS(this.url.toString());
+        socket = new this._WS(this.url.toString());
+        this.ws = socket;
       } catch (e) {
         fail(e);
         return;
       }
 
+      // A later connect() replaces this.ws with a new socket. This socket's own events must then
+      // no-op rather than mutate the replacement's shared state.
+      const isCurrent = () => this.ws === socket;
+
       timer = setTimeout(() => {
         fail(new CTSError(`WebSocket connect timeout after ${timeoutMs}ms`));
       }, timeoutMs);
 
-      this.ws.onopen = () => {
+      socket.onopen = () => {
+        if (!isCurrent()) return;
         opened = true;
         settle(resolve);
       };
 
-      this.ws.onerror = (ev) => {
+      socket.onerror = (ev) => {
+        if (!isCurrent()) return;
         if (!opened) {
           fail(new CTSError('Failed to open WebSocket'));
           return;
@@ -142,14 +150,18 @@ export class WSConnection {
         // do not call fail(), onclose will follow in most implementations
       };
 
-      this.ws.onmessage = (e: MessageEvent) => {
+      socket.onmessage = (e: MessageEvent) => {
+        if (!isCurrent()) return;
         this.messageQueue.enqueue(e.data as string);
         if (!this.handlingInterval) {
           this.handlingInterval = setInterval(this.handleNextMessage.bind(this), 0);
         }
       };
 
-      this.ws.onclose = (e: CloseEvent) => {
+      socket.onclose = (e: CloseEvent) => {
+        // Bail only if a replacement socket is now current. this.ws === undefined (explicit close,
+        // no reconnect) still runs teardown so onClose subscribers are notified.
+        if (this.ws && this.ws !== socket) return;
         this.connectionPromise = undefined;
 
         if (!opened) {
