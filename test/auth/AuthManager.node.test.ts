@@ -205,6 +205,42 @@ describe('AuthManager: CAT lifecycle', () => {
     expect(am.getCAT()).toBeUndefined();
     expect(am['tokens'].refreshToken).toBeUndefined();
   });
+
+  test('attachOIDC detaches the previous provider so its late token cannot install state', () => {
+    function providerStub() {
+      const listeners: Array<(t: unknown) => void> = [];
+      return {
+        listeners,
+        addTokenListener: (fn: (t: unknown) => void) => listeners.push(fn),
+        removeTokenListener: (fn: (t: unknown) => void) => {
+          const i = listeners.indexOf(fn);
+          if (i >= 0) listeners.splice(i, 1);
+        },
+        refresh: vi.fn(),
+        // Simulate a delayed authorization/device-flow completion.
+        fire: (t: unknown) => listeners.forEach((l) => l(t)),
+      };
+    }
+
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+    const first = providerStub();
+    const second = providerStub();
+
+    am.attachOIDC(first as any);
+    am.attachOIDC(second as any);
+
+    // The replaced provider must no longer hold a listener into this manager.
+    expect(first.listeners).toHaveLength(0);
+
+    // A delayed token from the detached provider must not install its credentials.
+    first.fire({ access_token: 'p1-cat', refresh_token: 'p1-refresh', expires_in: 300 });
+    expect(am.getCAT()).toBeUndefined();
+    expect(am['tokens'].refreshToken).toBeUndefined();
+
+    // The current provider still updates state.
+    second.fire({ access_token: 'p2-cat', refresh_token: 'p2-refresh', expires_in: 300 });
+    expect(am.getCAT()).toBe('p2-cat');
+  });
 });
 
 describe('AuthManager: constructor limits', () => {
