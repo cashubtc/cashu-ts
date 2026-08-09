@@ -425,6 +425,13 @@ export type CurvePoint = {
 // @public
 export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
 
+// @public (undocumented)
+export type DerivedSecretAndBlindingFactor = {
+    blindingFactor: Uint8Array;
+    secret: Uint8Array;
+    secretKey?: Uint8Array;
+};
+
 // @public
 export function deriveKeyPair(seed: Uint8Array, purpose: Bip32KeyPurpose, counter: number): {
     pubkey: string;
@@ -467,8 +474,6 @@ export function deriveP2BKSecretKeys(Ehex: string, privateKey: string | string[]
 // @public
 export function deriveP2BKSlotSecretKey(Ehex: string, privkeyHex: string, slotIndex?: number): string;
 
-// Warning: (ae-forgotten-export) The symbol "DerivedSecretAndBlindingFactor" needs to be exported by the entry point index.d.ts
-//
 // @public
 export function deriveSecretAndBlindingFactor(seed: Uint8Array, keysetId: string, counter: number): DerivedSecretAndBlindingFactor;
 
@@ -730,6 +735,9 @@ export function isMintOperationError(e: unknown): e is MintOperationError;
 
 // @public
 export function isP2PKSpendAuthorised(proof: Proof, logger?: Logger, message?: string): boolean;
+
+// @public
+export function isV3PointSecret(secret: string): boolean;
 
 // @public
 export function isValidSecpPubkey(pk: string): boolean;
@@ -1751,8 +1759,6 @@ class PaymentRequest_2 {
     transport?: PaymentRequestTransport[];
     // (undocumented)
     unit?: string;
-    // Warning: (ae-forgotten-export) The symbol "TaprootOption" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     v3?: TaprootOption;
 }
@@ -1924,6 +1930,13 @@ export type RawSupportedMethod = {
 };
 
 // @public (undocumented)
+export type RawTaprootOption = {
+    k: string;
+    l?: string[];
+    b?: string[];
+};
+
+// @public (undocumented)
 export type RawTransport = {
     t: PaymentRequestTransportType;
     a: string;
@@ -2017,15 +2030,18 @@ export const schnorrVerifyDigest: (signature: string, digest: DigestInput, pubke
 export const schnorrVerifyMessage: (signature: string, message: string, pubkey: string, throws?: boolean) => boolean;
 
 // @public
-export const ScriptPath: {
-    readonly extractSwapPackage: typeof extractSwapPackage;
-    readonly extractMeltPackage: typeof extractMeltPackage;
-    readonly serializePackage: typeof serializePackage;
-    readonly deserializePackage: typeof deserializePackage;
-    readonly signPackage: typeof signPackage;
-    readonly mergeSwapPackage: typeof mergeSwapPackage;
-    readonly mergeMeltPackage: typeof mergeMeltPackage;
-    readonly witnessFor: (spend: ScriptPathSpendRequest, tree: string[], leafIndex: number) => string;
+export const ScriptPath: ScriptPathApi;
+
+// @public
+export type ScriptPathApi = {
+    extractSwapPackage(preview: SwapPreview, plans: ScriptPathPlan[]): ScriptPathSigningPackage;
+    extractMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'amount'>>(preview: MeltPreview<TQuote>, plans: ScriptPathPlan[]): ScriptPathSigningPackage;
+    serializePackage(pkg: ScriptPathSigningPackage): string;
+    deserializePackage(input: string): ScriptPathSigningPackage;
+    signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPathSigningPackage;
+    mergeSwapPackage(pkg: ScriptPathSigningPackage, preview: SwapPreview): SwapPreview;
+    mergeMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'amount'>>(pkg: ScriptPathSigningPackage, preview: MeltPreview<TQuote>): MeltPreview<TQuote>;
+    witnessFor(spend: ScriptPathSpendRequest, tree: string[], leafIndex: number): string;
 };
 
 // @public
@@ -2039,7 +2055,7 @@ export type ScriptPathPlan = {
 
 // @public
 export type ScriptPathSigningPackage = {
-    version: typeof SCRIPT_PATH_PREFIX;
+    version: 'tapspA';
     type: 'swap' | 'melt';
     quote?: string;
     inputs: Array<Pick<Proof, 'amount' | 'id' | 'secret' | 'C'>>;
@@ -2058,7 +2074,6 @@ export type ScriptPathSpendRequest = {
         path: string[];
     };
     E?: string;
-    keySlots?: number[];
     preimage?: string;
     signatures: string[];
 };
@@ -2382,6 +2397,29 @@ export type SwapTransaction = {
     outputData: OutputDataLike[];
     keepVector: boolean[];
     sortedIndices: number[];
+};
+
+// @public
+export const TAPROOT_LEAF_TYPE: {
+    readonly threshold: 1;
+    readonly after: 2;
+    readonly hashlock: 3;
+};
+
+// @public
+export type TaprootLeaf = {
+    type: keyof typeof TAPROOT_LEAF_TYPE;
+    n: number;
+    keys: string[];
+    time?: number;
+    hash?: string;
+};
+
+// @public
+export type TaprootOption = {
+    receiverKey: string;
+    leaves?: string[];
+    blindKeys?: string[];
 };
 
 // @public
@@ -2711,19 +2749,6 @@ export class WSConnection {
     // (undocumented)
     readonly url: URL;
 }
-
-// Warnings were encountered during analysis:
-//
-// lib/types/index.d.ts:3853:17 - (ae-forgotten-export) The symbol "TaprootLeaf" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4619:21 - (ae-forgotten-export) The symbol "RawTaprootOption" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4947:21 - (ae-forgotten-export) The symbol "extractSwapPackage" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4948:21 - (ae-forgotten-export) The symbol "extractMeltPackage" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4949:21 - (ae-forgotten-export) The symbol "serializePackage" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4950:21 - (ae-forgotten-export) The symbol "deserializePackage" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4951:21 - (ae-forgotten-export) The symbol "signPackage" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4952:21 - (ae-forgotten-export) The symbol "mergeSwapPackage" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4953:21 - (ae-forgotten-export) The symbol "mergeMeltPackage" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:5007:21 - (ae-forgotten-export) The symbol "SCRIPT_PATH_PREFIX" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

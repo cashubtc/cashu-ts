@@ -1,12 +1,12 @@
 import { schnorr } from '@noble/curves/secp256k1.js';
 
 import { getPubKeyFromPrivKey } from '../crypto/curve_secp';
-import { deriveP2BKSlotSecretKey } from '../crypto/NUT28';
 import {
   buildScriptPathWitness,
-  enumerateLeafKeySlots,
+  countLeafSigners,
   TAPROOT_MAX_SLOTS,
   parseTaprootLeaf,
+  slotKeysByBlindedPubkey,
   taprootLeafHash,
   taprootMerklePath,
   type TaprootLeaf,
@@ -48,11 +48,6 @@ export type ScriptPathSpendRequest = {
    */
   E?: string;
   /**
-   * Absolute NUT-28 slot of each leaf key. Needed to derive receiver-blinded keys when this is not
-   * the first leaf in the disclosed tree.
-   */
-  keySlots?: number[];
-  /**
    * Preimage for a hashlock leaf, hex.
    */
   preimage?: string;
@@ -72,7 +67,7 @@ export type ScriptPathSpendRequest = {
  * can outlive the process that started it, which is the normal case on a phone.
  */
 export type ScriptPathSigningPackage = {
-  version: typeof SCRIPT_PATH_PREFIX;
+  version: 'tapspA';
   type: 'swap' | 'melt';
   /**
    * Melt quote id; melt packages only.
@@ -141,10 +136,6 @@ function buildPackage(
       throw new CTSError('Script path package needs the internal key from the proof spend info');
     }
     const leafHashes = tree.map((leaf) => taprootLeafHash(Bytes.fromHex(leaf)));
-    const parsedTree = tree.map((leaf) => parseTaprootLeaf(Bytes.fromHex(leaf)));
-    const keySlots = enumerateLeafKeySlots(parsedTree)
-      .filter(({ leafIndex }) => leafIndex === plan.leafIndex)
-      .map(({ slot }) => slot);
     return {
       secret: plan.secret,
       leaf: tree[plan.leafIndex],
@@ -153,7 +144,6 @@ function buildPackage(
         path: taprootMerklePath(leafHashes, plan.leafIndex).map((h) => Bytes.toHex(h)),
       },
       ...(proof.spend_info?.E && { E: proof.spend_info.E }),
-      keySlots,
       ...(plan.preimage !== undefined && { preimage: plan.preimage }),
       signatures: [],
     };
@@ -257,9 +247,8 @@ function assertValidPackage(pkg: ScriptPathSigningPackage): void {
       throw new CTSError('Signing package spend must name one unique transaction input');
     }
     spent.add(spend.secret);
-    let leaf: TaprootLeaf;
     try {
-      leaf = parseTaprootLeaf(Bytes.fromHex(spend.leaf));
+      parseTaprootLeaf(Bytes.fromHex(spend.leaf));
       if (
         !spend.control ||
         !Array.isArray(spend.control.path) ||
@@ -278,26 +267,9 @@ function assertValidPackage(pkg: ScriptPathSigningPackage): void {
     if (!Array.isArray(spend.signatures)) {
       throw new CTSError('Signing package signatures must be an array');
     }
-    if (
-      spend.keySlots !== undefined &&
-      (!Array.isArray(spend.keySlots) ||
-        spend.keySlots.length !== leaf.keys.length ||
-        new Set(spend.keySlots).size !== spend.keySlots.length ||
-        spend.keySlots.some((slot) => !Number.isInteger(slot) || slot < 1 || slot > 254))
-    ) {
-      throw new CTSError('Signing package leaf key slots are malformed');
-    }
   }
 }
 
-/**
- * Signs every spend in the package whose leaf names a key derived from `privkey`.
- *
- * @remarks
- * Handles both forms a leaf key takes: verbatim, and blinded at its positional slot, which needs
- * the package's `E` to derive. Signatures are deduplicated, so signing twice is harmless.
- * @returns The package with any new signatures appended. Signs nothing if no leaf names the key.
- */
 function signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPathSigningPackage {
   assertValidPackage(pkg);
   const digest = Bytes.fromHex(pkg.digest);
@@ -307,23 +279,14 @@ function signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPath
     const keys: string[] = [];
     if (leaf.keys.includes(pub)) keys.push(privkey.toLowerCase());
     if (spend.E !== undefined) {
-      // Match by value over the slot space rather than by the slot the package names for each
-      // position: the transmitted leaf order is not committed by the root, so a package built from
-      // a reordered tree would otherwise name the wrong slots and this signer would decline a leaf
-      // it can in fact satisfy. `keySlots` bounds the search where present.
-      const bound = Math.max(TAPROOT_MAX_SLOTS - 1, ...(spend.keySlots ?? [0]));
-      const blinded = new Map<string, string>();
-      for (let slot = 1; slot <= bound; slot++) {
-        try {
-          const candidate = deriveP2BKSlotSecretKey(spend.E, privkey, slot);
-          blinded.set(Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(candidate))), candidate);
-        } catch {
-          // Not a usable receiver-keyed slot for this private key.
-        }
-      }
+      // Match by value over the whole slot space: the true slot count is not recoverable from a
+      // single spend (the package carries one leaf, not the tree), and the transmitted leaf order
+      // is not committed by the root, so any narrower, position-derived search could decline a
+      // leaf this signer can in fact satisfy.
+      const blinded = slotKeysByBlindedPubkey(spend.E, privkey, TAPROOT_MAX_SLOTS - 1);
       for (const key of leaf.keys) {
         const candidate = blinded.get(key);
-        if (candidate) keys.push(candidate);
+        if (candidate) keys.push(candidate.secretKey);
       }
     }
     if (keys.length === 0) return spend;
@@ -333,16 +296,6 @@ function signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPath
   return { ...pkg, spends };
 }
 
-/**
- * Injects the package's witnesses into the preview it came from.
- *
- * @remarks
- * Recomputes the digest from the preview and refuses if it moved: a package signed against one set
- * of outputs cannot be spent against another, and output order is part of that. Without this the
- * failure surfaces at the mint as an invalid witness, naming nothing.
- * @throws If the package does not belong to this preview, or a spend is short of its leaf's
- *   signature threshold.
- */
 function mergeSwapPackage(pkg: ScriptPathSigningPackage, preview: SwapPreview): SwapPreview {
   if (pkg.type !== 'swap') throw new CTSError('Cannot merge a melt package into a swap');
   assertValidPackage(pkg);
@@ -382,15 +335,7 @@ function applyWitnesses(pkg: ScriptPathSigningPackage, inputs: Proof[]): Proof[]
     const spend = bySecret.get(proof.secret);
     if (!spend) return proof;
     const leaf = parseTaprootLeaf(Bytes.fromHex(spend.leaf));
-    const validSigners = leaf.keys.filter((key) =>
-      spend.signatures.some((signature) => {
-        try {
-          return schnorr.verify(Bytes.fromHex(signature), digest, Bytes.fromHex(key).subarray(1));
-        } catch {
-          return false;
-        }
-      }),
-    ).length;
+    const validSigners = countLeafSigners(leaf, digest, spend.signatures);
     if (validSigners < leaf.n) {
       throw new CTSError(
         `Script path leaf needs ${leaf.n} valid signatures, package has ${validSigners}`,
@@ -409,6 +354,61 @@ function applyWitnesses(pkg: ScriptPathSigningPackage, inputs: Proof[]): Proof[]
 }
 
 /**
+ * The {@link ScriptPath} surface.
+ */
+export type ScriptPathApi = {
+  /**
+   * Builds a signing package for a swap preview's script path plans.
+   */
+  extractSwapPackage(preview: SwapPreview, plans: ScriptPathPlan[]): ScriptPathSigningPackage;
+  /**
+   * Builds a signing package for a melt preview's script path plans.
+   */
+  extractMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'amount'>>(
+    preview: MeltPreview<TQuote>,
+    plans: ScriptPathPlan[],
+  ): ScriptPathSigningPackage;
+  /**
+   * Serializes a package to its `tapspA...` transport string.
+   */
+  serializePackage(pkg: ScriptPathSigningPackage): string;
+  /**
+   * Parses a transport string and fully validates it: digest, commitments, spend shape.
+   */
+  deserializePackage(input: string): ScriptPathSigningPackage;
+  /**
+   * Signs every spend in the package whose leaf names a key derived from `privkey`.
+   *
+   * @remarks
+   * Handles both forms a leaf key takes: verbatim, and blinded at a NUT-28 slot, which needs the
+   * package's `E` to derive. Signatures are deduplicated, so signing twice is harmless.
+   * @returns The package with any new signatures appended. Signs nothing if no leaf names the key.
+   */
+  signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPathSigningPackage;
+  /**
+   * Injects the package's witnesses into the swap preview it came from.
+   *
+   * @remarks
+   * Recomputes the digest from the preview and refuses if it moved: a package signed against one
+   * set of outputs cannot be spent against another, and output order is part of that.
+   * @throws If the package does not belong to this preview, or a spend is short of its leaf's
+   *   signature threshold.
+   */
+  mergeSwapPackage(pkg: ScriptPathSigningPackage, preview: SwapPreview): SwapPreview;
+  /**
+   * Melt counterpart of {@link ScriptPathApi.mergeSwapPackage}.
+   */
+  mergeMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'amount'>>(
+    pkg: ScriptPathSigningPackage,
+    preview: MeltPreview<TQuote>,
+  ): MeltPreview<TQuote>;
+  /**
+   * The witness a spend would produce, without a preview. Useful for inspection.
+   */
+  witnessFor(spend: ScriptPathSpendRequest, tree: string[], leafIndex: number): string;
+};
+
+/**
  * Out-of-band signing for script path spends (spec 2.3.2).
  *
  * @remarks
@@ -418,7 +418,7 @@ function applyWitnesses(pkg: ScriptPathSigningPackage, inputs: Proof[]): Proof[]
  * hook on {@link ScriptPathPlan} where it is a service answering in seconds.
  * @experimental
  */
-export const ScriptPath = {
+export const ScriptPath: ScriptPathApi = {
   extractSwapPackage,
   extractMeltPackage,
   serializePackage,
@@ -426,11 +426,8 @@ export const ScriptPath = {
   signPackage,
   mergeSwapPackage,
   mergeMeltPackage,
-  /**
-   * The witness a spend would produce, without a preview. Useful for inspection.
-   */
-  witnessFor: (spend: ScriptPathSpendRequest, tree: string[], leafIndex: number): string =>
+  witnessFor: (spend, tree, leafIndex) =>
     buildScriptPathWitness(tree, leafIndex, spend.control.K, spend.signatures, spend.preimage),
-} as const;
+};
 
 export type { TaprootLeaf };

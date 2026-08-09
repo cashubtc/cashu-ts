@@ -36,7 +36,7 @@ enum DerivationKind {
   HMAC_SHA256,
 }
 
-type DerivedSecretAndBlindingFactor = {
+export type DerivedSecretAndBlindingFactor = {
   blindingFactor: Uint8Array;
   secret: Uint8Array;
   /**
