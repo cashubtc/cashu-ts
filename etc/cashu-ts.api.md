@@ -1444,6 +1444,7 @@ export class OIDCAuth {
     passwordGrant(username: string, password: string): Promise<TokenResponse>;
     // (undocumented)
     refresh(refresh_token: string): Promise<TokenResponse>;
+    removeTokenListener(fn: (t: TokenResponse) => void | Promise<void>): void;
     // (undocumented)
     setClient(id: string): void;
     // (undocumented)
