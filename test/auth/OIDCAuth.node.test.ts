@@ -164,6 +164,26 @@ describe('OIDCAuth: PKCE + auth code', () => {
     );
   });
 
+  test('removeTokenListener stops a listener from firing', async () => {
+    server.use(http.post(TOKEN_EP, () => HttpResponse.json(accessOk)));
+
+    const kept = vi.fn();
+    const removed = vi.fn();
+    const oidc = new OIDCAuth(DISCOVERY, { clientId: 'cashu-client' });
+    oidc.addTokenListener(kept);
+    oidc.addTokenListener(removed);
+    oidc.removeTokenListener(removed);
+
+    await oidc.exchangeAuthCode({
+      code: 'auth_code_123',
+      redirectUri: 'http://localhost:3388/callback',
+      codeVerifier: 'verifier_123',
+    });
+
+    expect(kept).toHaveBeenCalledTimes(1);
+    expect(removed).not.toHaveBeenCalled();
+  });
+
   test('exchangeAuthCode throws if provider returns 400 (strict)', async () => {
     server.use(
       http.post(TOKEN_EP, () =>

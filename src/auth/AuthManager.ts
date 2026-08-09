@@ -85,6 +85,8 @@ export class AuthManager implements AuthProvider {
 
   // Open ID Connect (OIDC)
   private oidc?: OIDCAuth;
+  // The listener registered on the current `oidc`, kept so it can be detached on replacement.
+  private oidcListener?: (t: TokenResponse) => void;
   private tokens: StoredTokens = {};
 
   // Blind Auth Token (BAT) pool
@@ -128,8 +130,15 @@ export class AuthManager implements AuthProvider {
    * internal CAT/refresh state on new tokens.
    */
   attachOIDC(oidc: OIDCAuth): this {
+    // Detach the listener from any previously attached provider. Otherwise a delayed token from the
+    // old provider would still run updateFromOIDC, installing its credentials into this manager and
+    // handing its refresh token to whichever provider is now current.
+    if (this.oidc && this.oidcListener) {
+      this.oidc.removeTokenListener(this.oidcListener);
+    }
     this.oidc = oidc;
-    this.oidc.addTokenListener((t) => this.updateFromOIDC(t));
+    this.oidcListener = (t) => this.updateFromOIDC(t);
+    this.oidc.addTokenListener(this.oidcListener);
     return this;
   }
 
