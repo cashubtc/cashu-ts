@@ -277,6 +277,43 @@ describe('OIDCAuth: device flow', () => {
     }
   });
 
+  test('startDeviceAuth clamps a non-numeric provider interval instead of hot-looping', async () => {
+    server.use(
+      http.post(DEVICE_EP, () =>
+        HttpResponse.json({
+          device_code: 'dev-123',
+          user_code: 'UCODE-123',
+          verification_uri: `${ISSUER}/device`,
+          interval: 'not-a-number', // hostile provider: non-numeric interval
+          expires_in: 600,
+        }),
+      ),
+      http.post(TOKEN_EP, () =>
+        HttpResponse.json({ access_token: 'ok', token_type: 'Bearer', expires_in: 300 }),
+      ),
+    );
+    const oidc = new OIDCAuth(DISCOVERY, { clientId: 'cashu-client' });
+
+    // Capture the delay the loop would sleep for without actually waiting.
+    const delays: number[] = [];
+    const sleepSpy = vi
+      .spyOn(oidc as unknown as { sleep: (ms: number) => Promise<void> }, 'sleep')
+      .mockImplementation((ms: number) => {
+        delays.push(ms);
+        return Promise.resolve();
+      });
+
+    const start = await oidc.startDeviceAuth(5);
+    await start.poll();
+
+    expect(sleepSpy).toHaveBeenCalled();
+    // A malformed interval must not produce a NaN (immediate) sleep.
+    for (const ms of delays) {
+      expect(Number.isFinite(ms)).toBe(true);
+      expect(ms).toBeGreaterThanOrEqual(1000);
+    }
+  });
+
   test('startDeviceAuth: cancel() aborts polling', async () => {
     const oidc = new OIDCAuth(DISCOVERY, {
       clientId: 'cashu-client',
