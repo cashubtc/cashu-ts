@@ -257,6 +257,28 @@ describe('AuthManager: BAT pool minting/topUp/ensure', () => {
     } as any;
   }
 
+  test('topUp refuses redirects when a CAT accompanies the BAT mint', async () => {
+    const am = new AuthManager(mintUrl, {
+      request: reqSpy as RequestFn,
+      desiredPoolSize: 5,
+      maxPerMint: 99,
+    });
+    am['info'] = fakeInfo({ batMax: 2, needCATForMint: true });
+    am.setCAT('cat-token');
+    seedKeychain(am);
+
+    stubOutputs(2);
+    reqSpy.mockResolvedValueOnce({ signatures: [fakeSig, fakeSig] });
+    await am.ensure(5);
+
+    expect(reqSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        endpoint: expect.stringContaining('/v1/auth/blind/mint'),
+        redirect: 'error',
+      }),
+    );
+  });
+
   test('ensure() mints up to desired target but not beyond bat_max_mint', async () => {
     const am = new AuthManager(mintUrl, {
       request: reqSpy as RequestFn,
