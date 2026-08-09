@@ -70,6 +70,11 @@ export function createNewMintKeys(
     versionByte?: number;
   },
 ): KeysetPair {
+  // The IntRange type is erased at runtime; a plain-JS or JSON-derived caller can pass any number
+  // (including Infinity), and each iteration does an EC multiply. Bound it before the loop.
+  if (!Number.isInteger(pow2height) || pow2height < 0 || pow2height > 64) {
+    throw new CTSError('createNewMintKeys: pow2height must be an integer in [0, 64]');
+  }
   const { expiry, input_fee_ppk, unit = 'sat', versionByte = 1 } = options || {};
   let counter = 0n;
   const pubKeys: RawMintKeys = {};
