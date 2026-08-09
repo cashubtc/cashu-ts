@@ -374,6 +374,7 @@ export function getTokenMetadata(token: string): TokenMetadata {
       void id;
       return rest;
     }),
+    proofAmounts: tokenObj.proofs.map((p) => p.amount),
   };
 }
 

@@ -81,6 +81,13 @@ export type TokenMetadata = {
   amount: Amount;
   /**
    * The incomplete proofs of the token.
+   *
+   * @deprecated Removed in v5. Use {@link TokenMetadata.proofAmounts} to inspect amounts, or decode
+   *   the token with a loaded wallet to obtain proofs.
    */
   incompleteProofs: Array<Omit<Proof, 'id'>>;
+  /**
+   * The per-proof amounts of the token, in order.
+   */
+  proofAmounts: Amount[];
 };
