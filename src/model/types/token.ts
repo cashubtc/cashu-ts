@@ -80,7 +80,7 @@ export type TokenMetadata = {
    */
   amount: Amount;
   /**
-   * The incomplete proofs of the token.
+   * The per-proof amounts of the token, in order.
    */
-  incompleteProofs: Array<Omit<Proof, 'id'>>;
+  proofAmounts: Amount[];
 };

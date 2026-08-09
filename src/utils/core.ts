@@ -380,11 +380,7 @@ export function getTokenMetadata(token: string): TokenMetadata {
     mint: tokenObj.mint,
     amount: sumProofs(tokenObj.proofs),
     ...(tokenObj.memo && { memo: tokenObj.memo }),
-    incompleteProofs: tokenObj.proofs.map((p) => {
-      const { id, ...rest } = p;
-      void id;
-      return rest;
-    }),
+    proofAmounts: tokenObj.proofs.map((p) => p.amount),
   };
 }
 

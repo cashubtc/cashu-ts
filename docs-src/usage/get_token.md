@@ -16,12 +16,15 @@ try {
   console.log(meta.mint); // "https://mint.example.com"
   console.log(meta.unit); // "sat"
   console.log(meta.amount.toNumber()); // e.g. 64  (amount is Amount, not number)
+  console.log(meta.proofAmounts.map((a) => a.toString())); // e.g. ['32', '16', '16'] per-proof amounts
 } catch (_) {
   console.log('Invalid token');
 }
 ```
 
-`getTokenMetadata` never needs keyset data — it is always safe to call without a wallet.
+`getTokenMetadata` never needs keyset data — it is always safe to call without a wallet. It returns
+per-proof `proofAmounts` (amounts only) for inspection, not the proofs themselves: claim the token
+with `wallet.decodeToken` below to obtain spendable `Proof[]`.
 
 ## Post-wallet: `wallet.decodeToken`
 
