@@ -2714,16 +2714,16 @@ export class WSConnection {
 
 // Warnings were encountered during analysis:
 //
-// lib/types/index.d.ts:3812:17 - (ae-forgotten-export) The symbol "TaprootLeaf" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4578:21 - (ae-forgotten-export) The symbol "RawTaprootOption" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4906:21 - (ae-forgotten-export) The symbol "extractSwapPackage" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4907:21 - (ae-forgotten-export) The symbol "extractMeltPackage" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4908:21 - (ae-forgotten-export) The symbol "serializePackage" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4909:21 - (ae-forgotten-export) The symbol "deserializePackage" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4910:21 - (ae-forgotten-export) The symbol "signPackage" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4911:21 - (ae-forgotten-export) The symbol "mergeSwapPackage" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4912:21 - (ae-forgotten-export) The symbol "mergeMeltPackage" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:4966:21 - (ae-forgotten-export) The symbol "SCRIPT_PATH_PREFIX" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:3853:17 - (ae-forgotten-export) The symbol "TaprootLeaf" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4619:21 - (ae-forgotten-export) The symbol "RawTaprootOption" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4947:21 - (ae-forgotten-export) The symbol "extractSwapPackage" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4948:21 - (ae-forgotten-export) The symbol "extractMeltPackage" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4949:21 - (ae-forgotten-export) The symbol "serializePackage" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4950:21 - (ae-forgotten-export) The symbol "deserializePackage" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4951:21 - (ae-forgotten-export) The symbol "signPackage" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4952:21 - (ae-forgotten-export) The symbol "mergeSwapPackage" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:4953:21 - (ae-forgotten-export) The symbol "mergeMeltPackage" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:5007:21 - (ae-forgotten-export) The symbol "SCRIPT_PATH_PREFIX" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
