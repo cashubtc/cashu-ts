@@ -477,3 +477,27 @@ new PaymentRequest({
 ```
 
 Decoding (`decodePaymentRequest`, `PaymentRequest.fromEncodedRequest`, `fromRawRequest`) is unaffected. A positional call fails to type-check.
+
+---
+
+## `TokenMetadata.incompleteProofs` is replaced by `proofAmounts`
+
+`getTokenMetadata()` returned `incompleteProofs: Array<Omit<Proof, 'id'>>` — proofs with only the keyset id removed. Handing back partial proofs from a pre-wallet inspection helper was a recurring source of confusion, and the field carried far more than inspection needs. It is now `proofAmounts: Amount[]` — the per-proof amounts only, enough to inspect the proof set (e.g. reject a pathological all-1-sat token). Decode the token with a loaded wallet when you need the proofs themselves.
+
+### Migration
+
+To inspect amounts, read `proofAmounts`. To obtain actual proofs, decode the token with a loaded wallet.
+
+```ts
+// Before
+const { incompleteProofs } = getTokenMetadata(token);
+const amounts = incompleteProofs.map((p) => p.amount);
+
+// After
+const { proofAmounts } = getTokenMetadata(token);
+
+// Need the proofs themselves? Decode with a wallet (resolves keyset ids):
+const wallet = new Wallet(meta.mint, { unit: meta.unit });
+await wallet.loadMint();
+const { proofs } = wallet.decodeToken(token);
+```

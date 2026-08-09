@@ -2234,7 +2234,7 @@ export type TokenMetadata = {
     memo?: string;
     mint: string;
     amount: Amount;
-    incompleteProofs: Array<Omit<Proof, 'id'>>;
+    proofAmounts: Amount[];
 };
 
 // @public (undocumented)
