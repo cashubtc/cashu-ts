@@ -40,6 +40,15 @@ describe('new mint keys', () => {
     expect(serializedRandom).not.toEqual(PUBKEYS);
     expect(serializedRandom).toHaveProperty('288230376151711744');
   });
+
+  test('rejects an out-of-range or non-integer pow2height before generating keys', () => {
+    // Type is erased at runtime; a JS/JSON caller can pass anything.
+    for (const bad of [65, 1e6, Infinity, -1, 1.5, NaN]) {
+      expect(() => createNewMintKeys(bad as Parameters<typeof createNewMintKeys>[0])).toThrow(
+        /pow2height/i,
+      );
+    }
+  });
 });
 describe('serialize mint keys', () => {
   test('derive', () => {
