@@ -352,6 +352,13 @@ describe('test getTokenMetadata', () => {
           secret: 'f64259355a1f2d5d892c64f5beafae861da163998acb27f778761ac7e226dcf3',
         },
       ],
+      proofAmounts: [
+        Amount.from(4),
+        Amount.from(2),
+        Amount.from(2),
+        Amount.from(1),
+        Amount.from(1),
+      ],
     });
   });
   test('testing v4 Token', async () => {
@@ -413,6 +420,13 @@ describe('test getTokenMetadata', () => {
           },
           secret: 'f64259355a1f2d5d892c64f5beafae861da163998acb27f778761ac7e226dcf3',
         },
+      ],
+      proofAmounts: [
+        Amount.from(4),
+        Amount.from(2),
+        Amount.from(2),
+        Amount.from(1),
+        Amount.from(1),
       ],
     });
   });
