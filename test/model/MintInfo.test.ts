@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 
 import { Amount } from '../../src/model/Amount';
 import { MintInfo } from '../../src/model/MintInfo';
-import { MAX_METHOD_LENGTH } from '../../src/utils/limits';
+import { MAX_METHOD_LENGTH, MAX_MINT_INFO_LIST } from '../../src/utils/limits';
 import { MINTINFORESP } from '../consts';
 
 describe('MintInfo protected endpoint matching', () => {
@@ -855,5 +855,70 @@ describe('MintInfo snapshot accessors', () => {
     if (ws.params) ws.params.length = 0;
 
     expect(info.isSupported(17).params).toHaveLength(6);
+  });
+});
+
+describe('MintInfo list caps', () => {
+  function spyLogger() {
+    return { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn(), trace: vi.fn() };
+  }
+
+  it('truncates an oversized NUT-04 method list and warns', () => {
+    const logger = spyLogger();
+    const info = new MintInfo(
+      {
+        ...MINTINFORESP,
+        nuts: {
+          ...MINTINFORESP.nuts,
+          4: {
+            disabled: false,
+            methods: Array.from({ length: MAX_MINT_INFO_LIST + 5 }, () => ({
+              method: 'bolt11',
+              unit: 'sat',
+            })),
+          },
+        },
+      },
+      logger,
+    );
+
+    expect(info.nuts[4]?.methods).toHaveLength(MAX_MINT_INFO_LIST);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringMatching(/methods/i),
+      expect.objectContaining({ advertised: MAX_MINT_INFO_LIST + 5 }),
+    );
+  });
+
+  it('truncates an oversized protected-endpoint list before indexing and warns', () => {
+    const logger = spyLogger();
+    const endpoints = Array.from({ length: MAX_MINT_INFO_LIST + 5 }, (_, i) => ({
+      method: 'POST',
+      path: `/v1/x${i}`,
+    }));
+    // The endpoint just past the cap must not be treated as protected.
+    const info = new MintInfo(
+      {
+        ...MINTINFORESP,
+        nuts: {
+          ...MINTINFORESP.nuts,
+          22: { bat_max_mint: 100, protected_endpoints: endpoints },
+        },
+      },
+      logger,
+    );
+
+    expect(info.requiresBlindAuthToken('POST', '/v1/x0')).toBe(true);
+    expect(info.requiresBlindAuthToken('POST', `/v1/x${MAX_MINT_INFO_LIST + 4}`)).toBe(false);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringMatching(/endpoint/i),
+      expect.objectContaining({ advertised: MAX_MINT_INFO_LIST + 5 }),
+    );
+  });
+
+  it('leaves a normal-sized method list untouched', () => {
+    const logger = spyLogger();
+    const info = new MintInfo(MINTINFORESP, logger);
+    expect(info.nuts[4]?.methods?.length).toBeGreaterThan(0);
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 });
