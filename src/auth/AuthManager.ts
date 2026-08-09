@@ -421,6 +421,8 @@ export class AuthManager implements AuthProvider {
       endpoint: joinUrls(this.mintUrl, '/v1/auth/blind/mint'),
       method: 'POST',
       headers,
+      // A CAT must never be replayed to a redirect target: fail rather than follow.
+      ...(cat ? { redirect: 'error' as const } : {}),
       requestBody: payload,
     });
     if (!Array.isArray(res?.signatures) || res.signatures.length !== outputs.length) {
