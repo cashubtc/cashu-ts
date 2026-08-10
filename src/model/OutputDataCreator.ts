@@ -56,6 +56,11 @@ export class DefaultOutputDataCreator implements OutputDataCreator {
     keyset: HasKeysetKeys,
     customSplit?: AmountLike[],
   ): OutputDataLike[] {
+    if (this.createSingleP2PKData === DefaultOutputDataCreator.prototype.createSingleP2PKData) {
+      // Preserve subclasses that customize only the single-output hook. The default
+      // hook can use the batch path, which shares one P2BK ephemeral key for SIG_ALL.
+      return OutputData.createP2PKData(p2pk, amount, keyset, customSplit);
+    }
     const amounts = splitAmount(amount, keyset.keys, customSplit);
     return amounts.map((a) => this.createSingleP2PKData(p2pk, a, keyset.id));
   }
