@@ -752,3 +752,20 @@ describe('SigAll — transport format', () => {
     expect(() => SigAll.deserializePackage(encoded)).toThrow(/quote/);
   });
 });
+
+describe('SigAll — NUT-11 signing package vector', () => {
+  // Pinned byte-for-byte to the SigAllSigningPackage example in the NUT-11 test vectors.
+  const VECTOR =
+    'sigallAeyJ2ZXJzaW9uIjoic2lnYWxsQSIsInR5cGUiOiJzd2FwIiwiaW5wdXRzIjpbeyJzZWNyZXQiOiJbXCJQMlBLXCIse1wibm9uY2VcIjpcImM3ZjI4MGViNTVjMWU4NTY0ZTAzZGIwNjk3M2U5NGJjOWI2NjZkOWUxY2E0MmFkMjc4NDA4ZmU2MjU5NTAzMDNcIixcImRhdGFcIjpcIjAzMGQ4YWNlZGZlMDcyYzlmYTQ0OWExZWZlMDgxNzE1NzQwM2ZiZWM0NjBkOGU3OWY5NTc5NjYwNTZlNWRkNzZjMVwiLFwidGFnc1wiOltbXCJzaWdmbGFnXCIsXCJTSUdfQUxMXCJdXX1dIiwiQyI6IjAyYzk3ZWUzZDFkYjQxY2YwYTNkZGI2MDE3MjRiZTg3MTFhMDMyOTUwODExYmYzMjZmODIxOWM1MGM0ODA4ZDNjZCJ9XSwib3V0cHV0cyI6W3siYW1vdW50IjoyLCJpZCI6IjAwYmZhNzMzMDJkMTJmZmQiLCJCXyI6IjAzOGVjODUzZDY1YWUxYjc5YjVjZGJjMjc3NDE1MGIyY2IyODhkNmQyNmUxMjk1OGExNmZiMzNjMzJkOWE4NmMzOSJ9XSwid2l0bmVzcyI6eyJzaWduYXR1cmVzIjpbImNlMDE3Y2EyNWIxYjk3ZGYyZjcyZTRiNDlmNjlhYzI2YTI0MGNlMTRiMzY5MGE4ZmU2MTlkNDFjY2M0MmQzYzEyODJlMDczZjg1YWNkMzZkYzUwMDExNjM4OTA2ZjM1YjU2NjE1ZjI0ZTRkMDNlOGVmZmU4MjU3ZjZhODA4NTM4Il19fQ';
+
+  test('round-trips byte-for-byte and carries a valid SIG_ALL signature', () => {
+    const pkg = SigAll.deserializePackage(VECTOR);
+    expect(SigAll.serializePackage(pkg)).toBe(VECTOR);
+
+    // The witness signature verifies over the v0 digest recomputed from the
+    // package, for the lock pubkey inside the input secret.
+    const digest = SigAll.computeDigests(pkg.inputs, pkg.outputs).v0;
+    const lockPubkey = (JSON.parse(pkg.inputs[0].secret) as [string, { data: string }])[1].data;
+    expect(schnorrVerifyDigest(pkg.witness!.signatures[0], digest, lockPubkey)).toBe(true);
+  });
+});
