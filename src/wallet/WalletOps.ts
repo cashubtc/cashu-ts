@@ -109,7 +109,7 @@ export class WalletOps {
     // pre-v3 keysets. Honouring one would silently ignore the other.
     const taproot = pr.toTaprootOptions();
     if (taproot && lock) {
-      throw new CTSError('payment request carries both a nut10 lock and a v3 option');
+      throw new CTSError('payment request carries both a nut10 lock and a taproot option');
     }
     // Net of input fees (NUT-18): the payee must net the requested amount after swapping.
     const builder = new SendBuilder(wallet, base.add(fee), proofs).includeFees(true);
