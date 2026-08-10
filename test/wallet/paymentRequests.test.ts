@@ -895,8 +895,23 @@ describe('taproot (v3) request marking', () => {
     ).toThrow(/type/);
   });
 
-  test('creqB refuses a taproot option rather than dropping it', () => {
-    const pr = PaymentRequest.builder().requestTaproot({ receiverKey: carolPub }).build();
-    expect(() => pr.toEncodedCreqB()).toThrow(/creqA/);
+  test('creqB round-trips the option under NUT-26 tag 0x0b', () => {
+    const pr = PaymentRequest.builder()
+      .amount(8, 'sat')
+      .requestTaproot({ receiverKey: carolPub, leaves: [leafAfter], blindKeys: [alicePub] })
+      .build();
+    const encoded = pr.toEncodedCreqB();
+    expect(encoded.startsWith('CREQB1')).toBe(true);
+    const decoded = decodePaymentRequest(encoded);
+    expect(decoded.taproot).toEqual({
+      receiverKey: carolPub,
+      leaves: [leafAfter],
+      blindKeys: [alicePub],
+    });
+    expect(decoded.amount?.toNumber()).toBe(8);
+    expect(decoded.unit).toBe('sat');
+    // The bare receiver-keyed request survives too, with no leaves or blind keys materializing.
+    const bare = PaymentRequest.builder().requestTaproot({ receiverKey: carolPub }).build();
+    expect(decodePaymentRequest(bare.toEncodedCreqB()).taproot).toEqual({ receiverKey: carolPub });
   });
 });

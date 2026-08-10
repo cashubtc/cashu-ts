@@ -346,11 +346,6 @@ export class PaymentRequest {
    */
   toEncodedCreqB(): string {
     this.assertUnitRule();
-    // The creqB TLV grammar is NUT-26's registry and has no tag for the taproot option. Dropping it
-    // would encode a request for bearer proofs from a payee expecting derived ones.
-    if (this.taproot) {
-      throw new CTSError('creqB cannot carry a taproot option; encode as creqA');
-    }
     const tlvRequest: DecodedTLVPaymentRequest = {
       id: this.id,
       amount: this.amount !== undefined ? this.amount.toBigInt() : undefined,
@@ -371,6 +366,7 @@ export class PaymentRequest {
             tags: this.nut10.tags,
           }
         : undefined,
+      taproot: this.taproot,
     };
 
     const tlvBytes = encodeTLV(tlvRequest);
@@ -557,6 +553,7 @@ export class PaymentRequest {
         nut10,
         mintsPreferred: decoded.mintsPreferred,
         supportedMethods: decoded.supportedMethods,
+        taproot: decoded.taproot,
       });
     }
 
