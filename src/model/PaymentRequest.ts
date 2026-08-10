@@ -38,7 +38,7 @@ export type PaymentRequestOptions = {
   nut10?: NUT10Option;
   mintsPreferred?: boolean;
   supportedMethods?: Array<{ method: string; fee?: AmountLike }>;
-  v3?: TaprootOption;
+  taproot?: TaprootOption;
 };
 
 export class PaymentRequest {
@@ -52,11 +52,11 @@ export class PaymentRequest {
   public nut10?: NUT10Option;
   public mintsPreferred?: boolean;
   public supportedMethods?: SupportedMethod[];
-  public v3?: TaprootOption;
+  public taproot?: TaprootOption;
 
   constructor(options: PaymentRequestOptions = {}) {
     this.id = options.id;
-    this.v3 = options.v3;
+    this.taproot = options.taproot;
     this.unit = options.unit;
     this.mints = options.mints;
     this.description = options.description;
@@ -311,11 +311,11 @@ export class PaymentRequest {
         t: this.nut10.tags,
       };
     }
-    if (this.v3) {
-      rawRequest.v3 = {
-        k: this.v3.receiverKey,
-        ...(this.v3.leaves?.length && { l: this.v3.leaves }),
-        ...(this.v3.blindKeys?.length && { b: this.v3.blindKeys }),
+    if (this.taproot) {
+      rawRequest.taproot = {
+        k: this.taproot.receiverKey,
+        ...(this.taproot.leaves?.length && { l: this.taproot.leaves }),
+        ...(this.taproot.blindKeys?.length && { b: this.taproot.blindKeys }),
       };
     }
     return rawRequest;
@@ -345,10 +345,10 @@ export class PaymentRequest {
    */
   toEncodedCreqB(): string {
     this.assertUnitRule();
-    // The creqB TLV grammar is NUT-26's registry and has no tag for the v3 option. Dropping it
+    // The creqB TLV grammar is NUT-26's registry and has no tag for the taproot option. Dropping it
     // would encode a request for bearer proofs from a payee expecting derived ones.
-    if (this.v3) {
-      throw new CTSError('creqB cannot carry a v3 taproot option; encode as creqA');
+    if (this.taproot) {
+      throw new CTSError('creqB cannot carry a taproot option; encode as creqA');
     }
     const tlvRequest: DecodedTLVPaymentRequest = {
       id: this.id,
@@ -446,12 +446,12 @@ export class PaymentRequest {
   }
 
   /**
-   * Converts this request's `v3` option into the arguments for a receiver-keyed taproot send (spec
-   * 2.7), so a payer can derive outputs to the payee's static key under the tree they asked for,
-   * honouring their blind-me tags.
+   * Converts this request's `taproot` option into the arguments for a receiver-keyed taproot send
+   * (spec 2.7), so a payer can derive outputs to the payee's static key under the tree they asked
+   * for, honouring their blind-me tags.
    *
    * @remarks
-   * `undefined` when the request carries no v3 option. Leaves must round-trip byte for byte: a
+   * `undefined` when the request carries no taproot option. Leaves must round-trip byte for byte: a
    * payer that cannot reproduce the payee's exact leaf bytes would build a different tree, hence a
    * different secret, so it refuses rather than paying to something the payee did not ask for.
    * @throws If the receiver key is not a valid point, or a requested leaf is unparsable or would
@@ -460,16 +460,16 @@ export class PaymentRequest {
   toTaprootOptions():
     | { receiverPub: string; leaves?: TaprootLeaf[]; blindKeys?: string[] }
     | undefined {
-    const v3 = this.v3;
-    if (!v3) return undefined;
-    if (!v3.receiverKey) {
-      throw new CTSError('v3 option is missing its receiver key');
+    const taproot = this.taproot;
+    if (!taproot) return undefined;
+    if (!taproot.receiverKey) {
+      throw new CTSError('taproot option is missing its receiver key');
     }
-    const receiverPub = normalizeSecpPubkey(v3.receiverKey);
-    if (!v3.leaves?.length) {
+    const receiverPub = normalizeSecpPubkey(taproot.receiverKey);
+    if (!taproot.leaves?.length) {
       return { receiverPub };
     }
-    const leaves = v3.leaves.map((hex, i) => {
+    const leaves = taproot.leaves.map((hex, i) => {
       const bytes = Bytes.fromHex(hex);
       const leaf = parseTaprootLeaf(bytes);
       if (!Bytes.equals(serializeTaprootLeaf(leaf), bytes)) {
@@ -480,7 +480,9 @@ export class PaymentRequest {
     return {
       receiverPub,
       leaves,
-      ...(v3.blindKeys?.length && { blindKeys: v3.blindKeys.map((k) => k.toLowerCase()) }),
+      ...(taproot.blindKeys?.length && {
+        blindKeys: taproot.blindKeys.map((k) => k.toLowerCase()),
+      }),
     };
   }
 
@@ -507,15 +509,15 @@ export class PaymentRequest {
         }
       : undefined;
     const supportedMethods = rawPaymentRequest.sm?.map((m) => ({ method: m.mn, fee: m.mf }));
-    const v3 = rawPaymentRequest.v3
+    const taproot = rawPaymentRequest.taproot
       ? {
-          receiverKey: rawPaymentRequest.v3.k,
-          leaves: rawPaymentRequest.v3.l,
-          blindKeys: rawPaymentRequest.v3.b,
+          receiverKey: rawPaymentRequest.taproot.k,
+          leaves: rawPaymentRequest.taproot.l,
+          blindKeys: rawPaymentRequest.taproot.b,
         }
       : undefined;
     return new PaymentRequest({
-      v3,
+      taproot,
       transport: transports,
       id: rawPaymentRequest.i,
       amount: rawPaymentRequest.a,
@@ -743,7 +745,7 @@ export class PaymentRequestBuilder {
    *   not one of the leaves' keys.
    */
   requestTaproot(option: TaprootOption): this {
-    const v3: TaprootOption = {
+    const taproot: TaprootOption = {
       receiverKey: normalizeSecpPubkey(option.receiverKey),
       ...(option.leaves?.length && { leaves: [...option.leaves] }),
       ...(option.blindKeys?.length && {
@@ -753,14 +755,14 @@ export class PaymentRequestBuilder {
     // Validate here rather than at build(): a request nobody can pay is worth catching at the
     // point the payee wrote it, not at the payer.
     const leafKeys = new Set(
-      (v3.leaves ?? []).flatMap((hex) => parseTaprootLeaf(Bytes.fromHex(hex)).keys),
+      (taproot.leaves ?? []).flatMap((hex) => parseTaprootLeaf(Bytes.fromHex(hex)).keys),
     );
-    for (const key of v3.blindKeys ?? []) {
+    for (const key of taproot.blindKeys ?? []) {
       if (!leafKeys.has(key)) {
         throw new CTSError(`blind-me key is not in the requested tree: ${key}`);
       }
     }
-    this._v3 = v3;
+    this._v3 = taproot;
     return this;
   }
 
@@ -799,7 +801,7 @@ export class PaymentRequestBuilder {
       nut10: this._nut10,
       mintsPreferred: this._mintsPreferred,
       supportedMethods: this._methods.length ? this._methods : undefined,
-      v3: this._v3,
+      taproot: this._v3,
     });
   }
 }

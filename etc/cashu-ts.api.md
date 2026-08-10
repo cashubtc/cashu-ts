@@ -1743,6 +1743,8 @@ class PaymentRequest_2 {
     singleUse?: boolean;
     // (undocumented)
     supportedMethods?: SupportedMethod[];
+    // (undocumented)
+    taproot?: TaprootOption;
     toEncodedCreqA(): string;
     toEncodedCreqB(): string;
     // (undocumented)
@@ -1759,8 +1761,6 @@ class PaymentRequest_2 {
     transport?: PaymentRequestTransport[];
     // (undocumented)
     unit?: string;
-    // (undocumented)
-    v3?: TaprootOption;
 }
 export { PaymentRequest_2 as PaymentRequest }
 
@@ -1799,7 +1799,7 @@ export type PaymentRequestOptions = {
         method: string;
         fee?: AmountLike;
     }>;
-    v3?: TaprootOption;
+    taproot?: TaprootOption;
 };
 
 // @public (undocumented)
@@ -1920,7 +1920,7 @@ export type RawPaymentRequest = {
     d?: string;
     t?: RawTransport[];
     nut10?: RawNUT10Option;
-    v3?: RawTaprootOption;
+    taproot?: RawTaprootOption;
 };
 
 // @public (undocumented)

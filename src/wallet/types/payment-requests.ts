@@ -35,7 +35,7 @@ export type RawPaymentRequest = {
   d?: string; // description
   t?: RawTransport[]; // transports
   nut10?: RawNUT10Option;
-  v3?: RawTaprootOption; // taproot secrets: static receiver key, optional requested tree
+  taproot?: RawTaprootOption; // taproot secrets: static receiver key, optional requested tree
 };
 
 /**

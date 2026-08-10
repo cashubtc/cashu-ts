@@ -826,14 +826,16 @@ describe('taproot (v3) request marking', () => {
       .requestTaproot({ receiverKey: carolPub, leaves: [leafAfter], blindKeys: [alicePub] })
       .build();
     const decoded = decodePaymentRequest(pr.toEncodedRequest());
-    expect(decoded.v3).toEqual({
+    expect(decoded.taproot).toEqual({
       receiverKey: carolPub,
       leaves: [leafAfter],
       blindKeys: [alicePub],
     });
     // A request with no tree is the bare receiver-keyed case, and stays that way.
     const bare = PaymentRequest.builder().requestTaproot({ receiverKey: carolPub }).build();
-    expect(decodePaymentRequest(bare.toEncodedRequest()).v3).toEqual({ receiverKey: carolPub });
+    expect(decodePaymentRequest(bare.toEncodedRequest()).taproot).toEqual({
+      receiverKey: carolPub,
+    });
   });
 
   test('the option converts to sender-side derivation arguments', () => {
@@ -851,17 +853,17 @@ describe('taproot (v3) request marking', () => {
   test('the receiver key is validated and case-canonicalized, both directions', () => {
     const upper = '02' + carolPub.slice(2).toUpperCase();
     expect(
-      PaymentRequest.builder().requestTaproot({ receiverKey: upper }).build().v3?.receiverKey,
+      PaymentRequest.builder().requestTaproot({ receiverKey: upper }).build().taproot?.receiverKey,
     ).toBe(carolPub);
     // A foreign request carrying the upper-case form canonicalizes on the way out.
-    expect(new PaymentRequest({ v3: { receiverKey: upper } }).toTaprootOptions()?.receiverPub).toBe(
-      carolPub,
-    );
+    expect(
+      new PaymentRequest({ taproot: { receiverKey: upper } }).toTaprootOptions()?.receiverPub,
+    ).toBe(carolPub);
     // x-only is rejected here as everywhere: the prepend-02 convention is the caller's to apply.
     expect(() =>
       PaymentRequest.builder().requestTaproot({ receiverKey: carolPub.slice(2) }),
     ).toThrow(/x-only/);
-    expect(() => new PaymentRequest({ v3: { receiverKey: '' } }).toTaprootOptions()).toThrow(
+    expect(() => new PaymentRequest({ taproot: { receiverKey: '' } }).toTaprootOptions()).toThrow(
       /missing its receiver key/,
     );
   });
@@ -881,17 +883,19 @@ describe('taproot (v3) request marking', () => {
     // annotation and hash a different leaf, so paying it would build the wrong tree.
     const annotated = leafAfter + '0d0005' + '6c6162656c'; // odd field 0x0d, "label"
     expect(() =>
-      new PaymentRequest({ v3: { receiverKey: carolPub, leaves: [annotated] } }).toTaprootOptions(),
+      new PaymentRequest({
+        taproot: { receiverKey: carolPub, leaves: [annotated] },
+      }).toTaprootOptions(),
     ).toThrow(/round-trip/);
     // An unknown leaf type fails closed the same way it does in spend info.
     expect(() =>
       new PaymentRequest({
-        v3: { receiverKey: carolPub, leaves: ['0004' + '02000101'] },
+        taproot: { receiverKey: carolPub, leaves: ['0004' + '02000101'] },
       }).toTaprootOptions(),
     ).toThrow(/type/);
   });
 
-  test('creqB refuses a v3 option rather than dropping it', () => {
+  test('creqB refuses a taproot option rather than dropping it', () => {
     const pr = PaymentRequest.builder().requestTaproot({ receiverKey: carolPub }).build();
     expect(() => pr.toEncodedCreqB()).toThrow(/creqA/);
   });
