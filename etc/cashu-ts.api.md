@@ -1377,7 +1377,7 @@ export class OutputData implements OutputDataLike {
     // (undocumented)
     static createSingleDeterministicData(amount: AmountLike, seed: Uint8Array, counter: number, keysetId: string): OutputData;
     // (undocumented)
-    static createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string): OutputData;
+    static createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string, eBytes?: Uint8Array): OutputData;
     // (undocumented)
     static createSingleRandomData(amount: AmountLike, keysetId: string): OutputData;
     static deserialize(serialized: SerializedOutputData): OutputData;
