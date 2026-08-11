@@ -30,7 +30,7 @@ describe('deriveBlindingFactor', () => {
 
 describe('v3 (BLS) derivation', () => {
   const seed = new TextEncoder().encode('nut13 v3 test seed');
-  const v3KeysetId = '02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd';
+  const v3KeysetId = '02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6';
 
   test('uses HMAC_SHA256 and produces a 32-byte blinding factor below BLS_FR_ORDER', () => {
     for (let counter = 0; counter < 8; counter++) {
@@ -84,24 +84,24 @@ describe('v3 (BLS) derivation', () => {
     expect(bytesToHex(v2r)).not.toBe(bytesToHex(v3r));
   });
 
-  test('blinding factor rejection sampling still matches the pre-taproot pin (attempt=1)', () => {
+  test('blinding factor rejection sampling still matches the pre-taproot pin (attempt=3)', () => {
     // Lock-in from nuts/tests/13-tests.md "Version 3": the (seed, keyset, counter) tuple is chosen
-    // so the 0x01 branch rejects attempt=0 (x >= BLS_FR_ORDER) and succeeds at attempt=1. The
+    // so the 0x01 branch rejects attempts 0-2 (x >= BLS_FR_ORDER) and succeeds at attempt=3. The
     // taproot-secrets redefinition of the 0x00 branch must leave this branch untouched.
     const { blindingFactor, secret, secretKey } = deriveSecretAndBlindingFactor(
       seed,
       v3KeysetId,
-      3,
+      0,
     );
     expect(bytesToHex(blindingFactor)).toBe(
-      '236dbcb12fc064ceeae6c5e2de7f79258374dccbf23ac0afdf72cf9eb53540c9',
+      '513d1a0f0f01a09fdad2f7cea1403143fb86a1be2d152969b46b45cdaabd21aa',
     );
     // The 0x00 branch now derives a key (spec 2.4.2): secret is the compressed pubkey of it.
     expect(bytesToHex(secretKey as Uint8Array)).toBe(
-      'efec313f695f39d7a6d72a784825a249e70b919006bbf9ccaa6b79d9106bb754',
+      '7a7b3f7eb44f4a943041d936c0e0b2bf1dd0ac9a210bc8f8bc12b65cdbde9bd3',
     );
     expect(bytesToHex(secret)).toBe(
-      '03c687c9ed32e92b1a6301c07e30b433b2c810d0185b3c14f9c2c0851503da0932',
+      '0234df38671738d8e9ee205dc364fd4b45df8ed2ff91686e93d02ca1feb3b2f118',
     );
   });
 });
