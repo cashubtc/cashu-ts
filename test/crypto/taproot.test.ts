@@ -24,7 +24,9 @@ import {
   minimalBE,
   readMinimalBE,
   serializeTaprootLeaf,
+  serializeTaprootLeafHex,
   parseTaprootLeaf,
+  parseTaprootLeafHex,
   taprootLeafHash,
   taprootBranchHash,
   taprootMerkleRoot,
@@ -120,6 +122,17 @@ describe('leaf serialization (vectors 6.1)', () => {
 
   test('leaf hash matches the vector root (single leaf tree)', () => {
     expect(bytesToHex(taprootLeafHash(hexToBytes(v61.leaf_after)))).toBe(v61.merkle_root);
+  });
+
+  test('hex wrappers round-trip the wire form', () => {
+    const leaf = parseTaprootLeafHex(v61.leaf_after);
+    expect(leaf).toEqual({
+      type: 'after',
+      n: 1,
+      keys: [v61.alice_refund_pub],
+      time: v61.refund_time,
+    });
+    expect(serializeTaprootLeafHex(leaf)).toBe(v61.leaf_after);
   });
 });
 

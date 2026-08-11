@@ -483,9 +483,6 @@ export function deserializeMintKeys(serializedMintKeys: SerializedMintKeys): Raw
 // @public
 export function deserializeProofs(json: string | string[] | ProofLike[]): Proof[];
 
-// @public
-export function deserializeSwapPreview(serialized: SerializedSwapPreview): SwapPreview;
-
 // @public (undocumented)
 export type DeviceStartResponse = {
     device_code: string;
@@ -549,7 +546,6 @@ export type GetInfoResponse = {
     description?: string;
     description_long?: string;
     icon_url?: string;
-    max_array_length?: number;
     contact: MintContactInfo[];
     nuts: {
         '4': {
@@ -776,7 +772,6 @@ export class KeyChain {
     getCheapestKeyset(): Keyset;
     getKeyset(id?: string): Keyset;
     getKeysets(): Keyset[];
-    hasKeyset(id?: string): boolean;
     init(forceRefresh?: boolean): Promise<void>;
     isUnitKeyset(id?: string): boolean;
     loadFromCache(cache: KeyChainCache): void;
@@ -890,15 +885,6 @@ export class MeltBuilder<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | '
 }
 
 // @public
-export class MeltChangeError extends CTSError {
-    constructor(outputData: OutputDataLike[], quote: MeltQuoteBaseResponse, options?: {
-        cause?: unknown;
-    });
-    readonly outputData: OutputDataLike[];
-    readonly quote: MeltQuoteBaseResponse;
-}
-
-// @public
 export class MeltOnchainBuilder {
     constructor(wallet: Wallet, quote: MeltQuoteOnchainResponse, proofs: ProofLike[]);
     feeIndex(index: number): this;
@@ -923,7 +909,6 @@ export type MeltProofsConfig = {
     privkey?: string | string[];
     scriptPath?: ScriptPathPlan[];
     onCountersReserved?: OnCountersReserved;
-    nut08Change?: boolean;
 };
 
 // @public
@@ -1185,7 +1170,6 @@ export class MintInfo {
         supported: boolean;
         params?: Nut29Info;
     };
-    get maxArrayLength(): number;
     // (undocumented)
     get motd(): string | undefined;
     // (undocumented)
@@ -1432,7 +1416,7 @@ export function normalizeXOnlySecretKey(privKey: Uint8Array): Uint8Array<ArrayBu
 export type NUT10Option = {
     kind: string;
     data: string;
-    tags?: string[][];
+    tags: string[][];
 };
 
 // @public (undocumented)
@@ -1550,7 +1534,7 @@ export class OutputData implements OutputDataLike {
     // (undocumented)
     static createSingleDeterministicData(amount: AmountLike, seed: Uint8Array, counter: number, keysetId: string): OutputData;
     // (undocumented)
-    static createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string, eBytes?: Uint8Array): OutputData;
+    static createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string): OutputData;
     // (undocumented)
     static createSingleRandomData(amount: AmountLike, keysetId: string): OutputData;
     static createSingleTaprootData(secretHex: string, amount: AmountLike, keysetId: string): OutputData;
@@ -1709,6 +1693,12 @@ export function parseP2PKSecret(secret: string | Secret): Secret;
 // @public
 export function parseSecret(secret: string | Secret): Secret;
 
+// @public
+export function parseTaprootLeaf(bytes: Uint8Array): TaprootLeaf;
+
+// @public
+export function parseTaprootLeafHex(leafHex: string): TaprootLeaf;
+
 // @public (undocumented)
 class PaymentRequest_2 {
     constructor(options?: PaymentRequestOptions);
@@ -1855,6 +1845,11 @@ export type PostRestoreResponse = {
     signatures: SerializedBlindedSignature[];
 };
 
+// @public (undocumented)
+export type PrepareMeltConfig = MeltProofsConfig & {
+    nut08Change?: boolean;
+};
+
 // @public
 export type PrivKey = Uint8Array | string;
 
@@ -1905,7 +1900,7 @@ export type RawMintKeys = {
 export type RawNUT10Option = {
     k: string;
     d: string;
-    t?: string[][];
+    t: string[][];
 };
 
 // @public (undocumented)
@@ -2202,22 +2197,6 @@ export type SerializedOutputData = {
     spendInfo?: SpendInfo;
 };
 
-// @public
-export type SerializedProof = Omit<Proof, 'amount'> & {
-    amount: string;
-};
-
-// @public
-export type SerializedSwapPreview = {
-    amount: string;
-    fees: string;
-    keysetId: string;
-    inputs: SerializedProof[];
-    sendOutputs?: SerializedOutputData[];
-    keepOutputs?: SerializedOutputData[];
-    unselectedProofs?: SerializedProof[];
-};
-
 // @public (undocumented)
 export function serializeMintKeys(mintKeys: RawMintKeys): SerializedMintKeys;
 
@@ -2225,7 +2204,10 @@ export function serializeMintKeys(mintKeys: RawMintKeys): SerializedMintKeys;
 export function serializeProofs(proofs: Proof | Proof[]): string[];
 
 // @public
-export function serializeSwapPreview(preview: SwapPreview): SerializedSwapPreview;
+export function serializeTaprootLeaf(leaf: TaprootLeaf): Uint8Array;
+
+// @public
+export function serializeTaprootLeafHex(leaf: TaprootLeaf): string;
 
 // @public
 export function setGlobalRequestOptions(options: Partial<RequestOptions>): void;
@@ -2244,16 +2226,19 @@ export type SigAllApi = {
     extractSwapPackage: (preview: SwapPreview) => SigAllSigningPackage;
     extractMeltPackage: <TQuote extends Pick<MeltQuoteBaseResponse, 'quote'>>(preview: MeltPreview<TQuote>) => SigAllSigningPackage;
     serializePackage: (pkg: SigAllSigningPackage) => string;
-    deserializePackage: (input: string) => SigAllSigningPackage;
+    deserializePackage: (input: string, options?: {
+        validateDigest?: boolean;
+    }) => SigAllSigningPackage;
     signPackage: (pkg: SigAllSigningPackage, privkey: string) => SigAllSigningPackage;
     signDigest: (hexDigest: string, privkey: string) => string;
     mergeSwapPackage: (pkg: SigAllSigningPackage, preview: SwapPreview) => SwapPreview;
     mergeMeltPackage: <TQuote extends Pick<MeltQuoteBaseResponse, 'quote'>>(pkg: SigAllSigningPackage, preview: MeltPreview<TQuote>) => MeltPreview<TQuote>;
 };
 
-// @public
+// @public (undocumented)
 export type SigAllDigests = {
-    v0: string;
+    legacy: string;
+    current: string;
 };
 
 // @public
@@ -2263,6 +2248,10 @@ export type SigAllSigningPackage = {
     quote?: string;
     inputs: Array<Pick<Proof, 'secret' | 'C'>>;
     outputs: SerializedBlindedMessage[];
+    digests: {
+        legacy?: string;
+        current: string;
+    };
     witness?: {
         signatures: string[];
     };
@@ -2325,14 +2314,6 @@ export type SpendOptions = {
 
 // @public
 export function splitAmount(value: AmountLike, keyset: Keys, split?: AmountLike[], order?: 'desc' | 'asc'): Amount[];
-
-// @public
-export class StaleKeysetError extends CTSError {
-    constructor(repaired: boolean, options?: {
-        cause?: unknown;
-    });
-    readonly repaired: boolean;
-}
 
 // @public
 export function stripDleq(proofs: Proof[]): Array<Omit<Proof, 'dleq'>>;
@@ -2407,6 +2388,9 @@ export const TAPROOT_LEAF_TYPE: {
 };
 
 // @public
+export const TAPROOT_NUMS_KEY = "0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0";
+
+// @public
 export type TaprootLeaf = {
     type: keyof typeof TAPROOT_LEAF_TYPE;
     n: number;
@@ -2464,16 +2448,6 @@ export function unblindSignature(C_: WeierstrassPoint<bigint>, r: bigint, A: Wei
 // @public
 export function unblindSignatureBls(C_: G1Point, r: bigint): G1Point;
 
-// @public
-export class UnknownKeysetError extends CTSError {
-    constructor(keysetId: string, options?: {
-        refreshed?: boolean;
-        cause?: unknown;
-    });
-    readonly keysetId: string;
-    readonly refreshed: boolean;
-}
-
 // @public (undocumented)
 export const verifyDLEQProof: (dleq: DLEQ, B_: WeierstrassPoint<bigint>, C_: WeierstrassPoint<bigint>, A: WeierstrassPoint<bigint>) => boolean;
 
@@ -2519,7 +2493,6 @@ export class Wallet {
         selectProofs?: SelectProofs;
         outputDataCreator?: OutputDataCreator;
         requireSigDleq?: boolean;
-        strictCachedKeysets?: boolean;
         customRequest?: RequestFn;
         requestFetch?: RequestFetch;
         logger?: Logger;
@@ -2552,9 +2525,7 @@ export class Wallet {
     completeMint(mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;
     completeSwap(swapPreview: SwapPreview, privkey?: string | string[], scriptPath?: ScriptPathPlan[]): Promise<SendResponse>;
     readonly counters: WalletCounters;
-    createLockedMintQuote(amount: AmountLike, pubkey: string, description?: string): Promise<MintQuoteBolt11Response & {
-        pubkey: string;
-    }>;
+    createLockedMintQuote(amount: AmountLike, pubkey: string, description?: string): Promise<MintQuoteBolt11Response>;
     createMeltChangeProofs(outputData: OutputDataLike[], changeSigs: SerializedBlindedSignature[]): Proof[];
     createMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(method: string, payload: Record<string, unknown>, options?: {
         normalize?: (raw: Record<string, unknown>) => TRes;
@@ -2574,7 +2545,6 @@ export class Wallet {
     createMultiPathMeltQuote(invoice: string, millisatPartialAmount: AmountLike): Promise<MeltQuoteBolt11Response>;
     decodeToken(token: string): Token;
     defaultOutputType(): OutputType;
-    ensureOperableKeysets(ids: Array<string | undefined>): Promise<void>;
     getFeesForKeyset(nInputs: number, keysetId: string): Amount;
     getFeesForProofs(proofs: Array<Pick<Proof, 'id'>>): Amount;
     getFeesToInclude(amount: AmountLike, opts?: {
@@ -2611,7 +2581,7 @@ export class Wallet {
         amount: AmountLike;
         quote: TQuote;
     }>, config?: MintProofsConfig, outputType?: OutputType): Promise<BatchMintPreview<TQuote>>;
-    prepareMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(method: string, meltQuote: TQuote, proofsToSend: ProofLike[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltPreview<TQuote>>;
+    prepareMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(method: string, meltQuote: TQuote, proofsToSend: ProofLike[], config?: PrepareMeltConfig, outputType?: OutputType): Promise<MeltPreview<TQuote>>;
     prepareMint<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>>(method: string, amount: AmountLike, quote: TQuote, config?: MintProofsConfig, outputType?: OutputType): Promise<MintPreview<TQuote>>;
     prepareSwapToReceive(token: Token | string | ProofLike[], config?: ReceiveConfig, outputType?: OutputType): Promise<SwapPreview>;
     prepareSwapToSend(amount: AmountLike, proofs: ProofLike[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SwapPreview>;
@@ -2655,9 +2625,6 @@ export class WalletEvents {
         add: (c: CancellerLike) => CancellerLike;
         cancelled: boolean;
     };
-    keychainUpdated(cb: (payload: {
-        cache: KeyChainCache;
-    }) => void, opts?: SubscribeOpts): SubscriptionCanceller;
     meltQuotePaid(id: string, cb: (p: MeltQuoteBolt11Response) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
     meltQuoteUpdates(ids: string[], cb: (p: MeltQuoteBolt11Response) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
     mintQuotePaid(id: string, cb: (p: MintQuoteBolt11Response) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
