@@ -11,12 +11,6 @@ import { schnorrSignDigest, schnorrVerifyDigest } from './core';
 // Domain-separation tag.
 const MINT_QUOTE_SIG_DST = utf8ToBytes('Cashu_MintQuoteSig_v1');
 
-// Canonical minimal BE bytes of a non-negative amount (0 → empty, 1 → 0x01, 256 → 0x0100).
-// Amount.from defensively normalizes a raw JSON number/string (Amount passes through).
-function amountToMinimalBytes(blindedMessage: SerializedBlindedMessage): Uint8Array {
-  return Bytes.minimalBE(Amount.from(blindedMessage.amount).toBigInt());
-}
-
 /**
  * Mint-quote signature message per the amended NUT-20 (cashubtc/nuts#375): domain-separated and
  * length-framed, shared by NUT-20 single and NUT-29 batch minting.
@@ -30,7 +24,8 @@ function constructMessage(quote: string, blindedMessages: SerializedBlindedMessa
   transcript.update(numberToBytesBE(quoteBytes.length, 4));
   transcript.update(quoteBytes);
   for (const blindedMessage of blindedMessages) {
-    const amountBytes = amountToMinimalBytes(blindedMessage);
+    // Amount.from defensively normalizes a raw JSON number/string (Amount passes through).
+    const amountBytes = Bytes.minimalBE(Amount.from(blindedMessage.amount).toBigInt());
     transcript.update(numberToBytesBE(amountBytes.length, 4));
     transcript.update(amountBytes);
     const pointBytes = hexToBytes(blindedMessage.B_);
