@@ -2,7 +2,12 @@ import { normalizeSecpPubkey } from '../crypto/curve_secp';
 import { getTag, getTagInt, getTagScalar } from '../crypto/NUT10';
 import type { P2PKOptions, P2PKTag } from '../crypto/NUT11';
 import { P2PK_KNOWN_TAG_KEYS, p2pkOptionsToPRNut10, parseP2PKSecret } from '../crypto/NUT11';
-import { parseTaprootLeaf, serializeTaprootLeaf, type TaprootLeaf } from '../crypto/taproot';
+import {
+  parseTaprootLeaf,
+  serializeTaprootLeaf,
+  TAPROOT_NUMS_KEY,
+  type TaprootLeaf,
+} from '../crypto/taproot';
 import { encodeBase64toUint8, decodeCBOR, encodeCBOR, Bytes, normalizeMintUrl } from '../utils';
 import { decodeBech32mToBytes, encodeBech32m } from '../utils/bech32m';
 import { JSONInt } from '../utils/JSONInt';
@@ -462,6 +467,16 @@ export class PaymentRequest {
       throw new CTSError('taproot option is missing its receiver key');
     }
     const receiverPub = normalizeSecpPubkey(taproot.receiverKey);
+    // Spec 2.3.5: a NUMS base is never blinded, so a blinded leaf key is the only per-payment
+    // uniquifier; without one, every payment to this request would produce the same secret.
+    if (
+      receiverPub === TAPROOT_NUMS_KEY &&
+      !(taproot.leaves?.length && taproot.blindKeys?.length)
+    ) {
+      throw new CTSError(
+        'malformed request: a NUMS receiver key requires leaves with at least one blind-me key',
+      );
+    }
     if (!taproot.leaves?.length) {
       return { receiverPub };
     }
@@ -589,7 +604,7 @@ export class PaymentRequestBuilder {
   private _singleUse?: boolean;
   private _transports: PaymentRequestTransport[] = [];
   private _nut10?: NUT10Option;
-  private _v3?: TaprootOption;
+  private _taproot?: TaprootOption;
   private _methods: Array<{ method: string; fee?: AmountLike }> = [];
 
   /**
@@ -759,7 +774,13 @@ export class PaymentRequestBuilder {
         throw new CTSError(`blind-me key is not in the requested tree: ${key}`);
       }
     }
-    this._v3 = taproot;
+    if (
+      taproot.receiverKey === TAPROOT_NUMS_KEY &&
+      !(taproot.leaves?.length && taproot.blindKeys?.length)
+    ) {
+      throw new CTSError('A NUMS receiver key requires leaves with at least one blind-me key');
+    }
+    this._taproot = taproot;
     return this;
   }
 
@@ -798,7 +819,7 @@ export class PaymentRequestBuilder {
       nut10: this._nut10,
       mintsPreferred: this._mintsPreferred,
       supportedMethods: this._methods.length ? this._methods : undefined,
-      taproot: this._v3,
+      taproot: this._taproot,
     });
   }
 }

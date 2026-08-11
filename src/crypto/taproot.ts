@@ -706,7 +706,8 @@ export function enumerateLeafKeySlots(
  * Build a receiver-keyed v3 secret (spec 2.7): `K = P_receiver + r_0*G`, optionally tweaked.
  *
  * @remarks
- * NUT-28 one layer down: fresh ephemeral per output, slot 0 is the base key and always blinded.
+ * NUT-28 one layer down: fresh ephemeral per output, slot 0 is the base key and always blinded,
+ * except a NUMS base, which travels verbatim with uniqueness from a blinded leaf key (spec 2.3.5).
  * Leaf keys are verbatim unless their owner tagged them blind-me, which travels with the key's
  * delivery channel (a payment request marking), never in proof data; pass those keys as `blindKeys`
  * and each occurrence is blinded at its own slot.
@@ -716,6 +717,18 @@ export function deriveReceiverKeyedSecret(
   opts?: { leaves?: TaprootLeaf[]; eBytes?: Uint8Array; blindKeys?: string[] },
 ): { secret: string; E: string; tree?: string[]; K?: string } {
   const eBytes = opts?.eBytes ?? secp256k1.utils.randomSecretKey();
+  if (receiverPubHex.toLowerCase() === TAPROOT_NUMS_KEY) {
+    // Never blind a NUMS base (spec 2.3.5): nobody holds its scalar for the receiver's half of
+    // the ECDH, so a blinded NUMS is indistinguishable from a sender-owned key hiding a key
+    // path. Verbatim keeps it recognizable; per-proof uniqueness must then come from the tree,
+    // so a blinded leaf key is mandatory.
+    if (!opts?.leaves?.length || !opts.blindKeys?.length) {
+      throw new CTSError('A NUMS receiver key requires leaves with at least one blind-me key');
+    }
+    const leaves = blindTaggedLeafKeys(opts.leaves, eBytes, opts.blindKeys);
+    const { secret, tree } = buildTaprootSecret(TAPROOT_NUMS_KEY, leaves);
+    return { secret, E: Bytes.toHex(getPubKeyFromPrivKey(eBytes)), tree, K: TAPROOT_NUMS_KEY };
+  }
   const { blinded, Ehex } = deriveP2BKBlindedPubkeys([receiverPubHex], eBytes, true);
   const internalKey = blinded[0];
   if (!opts?.leaves || opts.leaves.length === 0) {
