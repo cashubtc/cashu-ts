@@ -331,6 +331,7 @@ export interface CounterRange {
 export interface CounterSource {
     advanceToAtLeast(keysetId: string, minNext: number): Promise<void>;
     reserve(keysetId: string, n: number): Promise<CounterRange>;
+    reserveAt(keysetId: string, start: number, count: number): Promise<CounterRange>;
     setNext?(keysetId: string, next: number): Promise<void>;
     snapshot?(): Promise<Record<string, number>>;
 }
@@ -715,6 +716,9 @@ export function isMintOperationError(e: unknown): e is MintOperationError;
 export function isP2PKSpendAuthorised(proof: Proof, logger?: Logger, message?: MessageInput): boolean;
 
 // @public
+export function isValidSecpPubkey(pk: string): boolean;
+
+// @public
 export const JSONInt: JSONIntApi;
 
 // @public (undocumented)
@@ -749,6 +753,7 @@ export class KeyChain {
     getKeyset(id?: string): Keyset;
     getKeysets(): Keyset[];
     init(forceRefresh?: boolean): Promise<void>;
+    isUnitKeyset(id?: string): boolean;
     loadFromCache(cache: KeyChainCache): void;
     static mintToCacheDTO(mintUrl: string, allKeysets: MintKeyset[], allKeys: MintKeys[]): KeyChainCache;
 }
@@ -773,7 +778,6 @@ export class Keyset {
     // (undocumented)
     get fee(): number;
     static fromMintApi(meta: MintKeyset, keys?: MintKeys): Keyset;
-    // (undocumented)
     get hasHexId(): boolean;
     // (undocumented)
     get hasKeys(): boolean;
@@ -790,6 +794,7 @@ export class Keyset {
     get unit(): string;
     verify(): boolean;
     static verifyKeysetId(keys: MintKeys): boolean;
+    get version(): number;
 }
 
 // @public
@@ -1107,10 +1112,9 @@ export type MintContactInfo = {
     info: string;
 };
 
-// @public (undocumented)
+// @public
 export class MintInfo {
     constructor(info: GetInfoResponse, logger?: Logger);
-    // (undocumented)
     get cache(): GetInfoResponse;
     // (undocumented)
     get contact(): MintContactInfo[];
@@ -1118,6 +1122,7 @@ export class MintInfo {
     get description(): string | undefined;
     // (undocumented)
     get description_long(): string | undefined;
+    getMintMeltMethod(op: 'mint' | 'melt', method: string, unit: string): SwapMethod | undefined;
     // (undocumented)
     isSupported(num: 4 | 5): {
         disabled: boolean;
@@ -1378,7 +1383,13 @@ export class NetworkError extends CTSError {
 }
 
 // @public
+export function normalizeMintUrl(url: string): string;
+
+// @public
 export function normalizeProofAmounts(raw: ProofLike[]): Proof[];
+
+// @public
+export function normalizeSecpPubkey(pk: string): string;
 
 // @public
 export type NUT10Option = {
@@ -1436,6 +1447,7 @@ export class OIDCAuth {
     passwordGrant(username: string, password: string): Promise<TokenResponse>;
     // (undocumented)
     refresh(refresh_token: string): Promise<TokenResponse>;
+    removeTokenListener(fn: (t: TokenResponse) => void | Promise<void>): void;
     // (undocumented)
     setClient(id: string): void;
     // (undocumented)
@@ -1501,7 +1513,7 @@ export class OutputData implements OutputDataLike {
     // (undocumented)
     static createSingleDeterministicData(amount: AmountLike, seed: Uint8Array, counter: number, keysetId: string): OutputData;
     // (undocumented)
-    static createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string): OutputData;
+    static createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string, eBytes?: Uint8Array): OutputData;
     // (undocumented)
     static createSingleRandomData(amount: AmountLike, keysetId: string): OutputData;
     static deserialize(serialized: SerializedOutputData): OutputData;
@@ -1601,6 +1613,9 @@ export type P2PKOptions = SpendingConditionsBase & LockConditions & {
 };
 
 // @public
+export function p2pkOptionsToPRNut10(p2pk: P2PKOptions): NUT10Option;
+
+// @public
 export interface P2PKPathInfo {
     pubkeys: string[];
     receivedSigners: string[];
@@ -1642,24 +1657,38 @@ export function parseSecret(secret: string | Secret): Secret;
 
 // @public (undocumented)
 class PaymentRequest_2 {
-    constructor(transport?: PaymentRequestTransport[] | undefined, id?: string | undefined, amount?: AmountLike, unit?: string | undefined, mints?: string[] | undefined, description?: string | undefined, singleUse?: boolean, nut10?: NUT10Option | undefined);
+    constructor(options?: PaymentRequestOptions);
     // (undocumented)
     amount?: Amount;
+    amountToSend(mint: string, meltMethods?: string[]): Amount;
+    static builder(): PaymentRequestBuilder;
+    static decodePayload(json: string): PaymentRequestPayload;
     // (undocumented)
-    description?: string | undefined;
+    description?: string;
+    encodePayload(mint: string, proofs: Proof[], opts?: {
+        memo?: string;
+        unit?: string;
+    }): string;
+    feesFor(mint: string, meltMethods?: string[]): Amount;
     // (undocumented)
     static fromEncodedRequest(encodedRequest: string): PaymentRequest_2;
     static fromRawRequest(rawPaymentRequest: RawPaymentRequest): PaymentRequest_2;
     // (undocumented)
     getTransport(type: PaymentRequestTransportType): PaymentRequestTransport | undefined;
     // (undocumented)
-    id?: string | undefined;
+    id?: string;
+    includesMint(mintUrl: string): boolean;
+    get isMintListStrict(): boolean | undefined;
     // (undocumented)
-    mints?: string[] | undefined;
+    mints?: string[];
     // (undocumented)
-    nut10?: NUT10Option | undefined;
+    mintsPreferred?: boolean;
     // (undocumented)
-    singleUse: boolean;
+    nut10?: NUT10Option;
+    // (undocumented)
+    singleUse?: boolean;
+    // (undocumented)
+    supportedMethods?: SupportedMethod[];
     toEncodedCreqA(): string;
     toEncodedCreqB(): string;
     // (undocumented)
@@ -1668,11 +1697,47 @@ class PaymentRequest_2 {
     // (undocumented)
     toRawRequest(): RawPaymentRequest;
     // (undocumented)
-    transport?: PaymentRequestTransport[] | undefined;
+    transport?: PaymentRequestTransport[];
     // (undocumented)
-    unit?: string | undefined;
+    unit?: string;
 }
 export { PaymentRequest_2 as PaymentRequest }
+
+// @public
+export class PaymentRequestBuilder {
+    addHttpPostTransport(url: string): this;
+    addMint(mint: string | string[]): this;
+    addNostrTransport(nprofile: string, nips?: string[]): this;
+    addSupportedMethod(method: string, fee?: AmountLike): this;
+    addTransport(transport: PaymentRequestTransport): this;
+    amount(amount: AmountLike, unit: string): this;
+    build(): PaymentRequest_2;
+    description(description: string): this;
+    id(id: string): this;
+    lock(p2pk: P2PKOptions): this;
+    mintsPreferred(preferred?: boolean): this;
+    nut10(option: NUT10Option): this;
+    // (undocumented)
+    singleUse(single?: boolean): this;
+    unit(unit: string): this;
+}
+
+// @public
+export type PaymentRequestOptions = {
+    id?: string;
+    amount?: AmountLike;
+    unit?: string;
+    mints?: string[];
+    description?: string;
+    transport?: PaymentRequestTransport[];
+    singleUse?: boolean;
+    nut10?: NUT10Option;
+    mintsPreferred?: boolean;
+    supportedMethods?: Array<{
+        method: string;
+        fee?: AmountLike;
+    }>;
+};
 
 // @public (undocumented)
 export type PaymentRequestPayload = {
@@ -1791,9 +1856,17 @@ export type RawPaymentRequest = {
     u?: string;
     s?: boolean;
     m?: string[];
+    mp?: boolean;
+    sm?: RawSupportedMethod[];
     d?: string;
     t?: RawTransport[];
     nut10?: RawNUT10Option;
+};
+
+// @public (undocumented)
+export type RawSupportedMethod = {
+    mn: string;
+    mf?: number | bigint;
 };
 
 // @public (undocumented)
@@ -1846,6 +1919,7 @@ export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
 // @public (undocumented)
 export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'> & Partial<Nut19Policy> & {
     requestTimeout?: number;
+    maxResponseBytes?: number;
     idempotent?: boolean;
     onResponseMeta?: (meta: ResponseMeta) => void;
     fetch?: RequestFetch;
@@ -1908,6 +1982,9 @@ export type SelectProofs = (proofs: ProofLike[], amountToSelect: AmountLike, key
 
 // @public (undocumented)
 export function selectProofsRGLI(proofs: ProofLike[], amountToSelect: AmountLike, keyChain: KeyChain, includeFees?: boolean, exactMatch?: boolean, _logger?: Logger): SendResponse;
+
+// @public
+export function selectProofsRotating(proofs: ProofLike[], amountToSelect: AmountLike, keyChain: KeyChain, includeFees?: boolean, exactMatch?: boolean, _logger?: Logger): SendResponse;
 
 // @public
 export class SendBuilder {
@@ -2021,19 +2098,16 @@ export type SigAllApi = {
     extractSwapPackage: (preview: SwapPreview) => SigAllSigningPackage;
     extractMeltPackage: <TQuote extends Pick<MeltQuoteBaseResponse, 'quote'>>(preview: MeltPreview<TQuote>) => SigAllSigningPackage;
     serializePackage: (pkg: SigAllSigningPackage) => string;
-    deserializePackage: (input: string, options?: {
-        validateDigest?: boolean;
-    }) => SigAllSigningPackage;
+    deserializePackage: (input: string) => SigAllSigningPackage;
     signPackage: (pkg: SigAllSigningPackage, privkey: string) => SigAllSigningPackage;
     signDigest: (hexDigest: string, privkey: string) => string;
     mergeSwapPackage: (pkg: SigAllSigningPackage, preview: SwapPreview) => SwapPreview;
     mergeMeltPackage: <TQuote extends Pick<MeltQuoteBaseResponse, 'quote'>>(pkg: SigAllSigningPackage, preview: MeltPreview<TQuote>) => MeltPreview<TQuote>;
 };
 
-// @public (undocumented)
+// @public
 export type SigAllDigests = {
-    legacy: string;
-    current: string;
+    v0: string;
     v1: string;
 };
 
@@ -2044,11 +2118,6 @@ export type SigAllSigningPackage = {
     quote?: string;
     inputs: Array<Pick<Proof, 'secret' | 'C'>>;
     outputs: SerializedBlindedMessage[];
-    digests: {
-        legacy?: string;
-        current: string;
-        v1?: string;
-    };
     witness?: {
         signatures: string[];
     };
@@ -2097,6 +2166,12 @@ export type SubscriptionCanceller = () => void;
 
 // @public
 export function sumProofs(proofs: Array<Pick<ProofLike, 'amount'>>): Amount;
+
+// @public
+export type SupportedMethod = {
+    method: string;
+    fee?: Amount;
+};
 
 // @public
 export type SwapMethod = {
@@ -2157,7 +2232,7 @@ export type TokenMetadata = {
     memo?: string;
     mint: string;
     amount: Amount;
-    incompleteProofs: Array<Omit<Proof, 'id'>>;
+    proofAmounts: Amount[];
 };
 
 // @public (undocumented)
@@ -2284,6 +2359,10 @@ export class Wallet {
     defaultOutputType(): OutputType;
     getFeesForKeyset(nInputs: number, keysetId: string): Amount;
     getFeesForProofs(proofs: Array<Pick<Proof, 'id'>>): Amount;
+    getFeesToInclude(amount: AmountLike, opts?: {
+        keysetId?: string;
+        nOutputs?: number;
+    }): Amount;
     getKeyset(id?: string): Keyset;
     getMintInfo(): MintInfo;
     groupProofsByState<T extends ProofLike = Proof>(proofs: T[]): Promise<{
@@ -2291,6 +2370,7 @@ export class Wallet {
         pending: T[];
         spent: T[];
     }>;
+    isPaymentRequestSatisfied(pr: PaymentRequest_2, proofs: Array<Pick<Proof, 'id' | 'amount' | 'secret'>>, expectedAmount?: AmountLike): boolean;
     get keyChain(): KeyChain;
     get keysetId(): string;
     loadMint(forceRefresh?: boolean): Promise<void>;
@@ -2405,6 +2485,7 @@ export class WalletOps {
     receive(token: Token | string | ProofLike[]): ReceiveBuilder;
     // (undocumented)
     send(amount: AmountLike, proofs: ProofLike[]): SendBuilder;
+    sendToRequest(pr: PaymentRequest_2, proofs: ProofLike[], amount?: AmountLike): SendBuilder;
 }
 
 // @public

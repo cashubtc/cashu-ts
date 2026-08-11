@@ -314,7 +314,14 @@ export function decodeCBOR(data: Uint8Array): ResultValue {
   return result.value;
 }
 
-function decodeItem(view: DataView, offset: number): DecodeResult<ResultValue> {
+// Bound decode recursion so a deeply nested (hostile) payload fails with a CTSError instead of
+// overflowing the stack. Real tokens and payment requests nest only a few levels.
+const MAX_CBOR_DEPTH = 64;
+
+function decodeItem(view: DataView, offset: number, depth = 0): DecodeResult<ResultValue> {
+  if (depth > MAX_CBOR_DEPTH) {
+    throw new CTSError('CBOR nesting exceeds the maximum depth');
+  }
   if (offset >= view.byteLength) {
     throw new CTSError('Unexpected end of data');
   }
@@ -332,9 +339,9 @@ function decodeItem(view: DataView, offset: number): DecodeResult<ResultValue> {
     case 3:
       return decodeString(view, offset, additionalInfo);
     case 4:
-      return decodeArray(view, offset, additionalInfo);
+      return decodeArray(view, offset, additionalInfo, depth);
     case 5:
-      return decodeMap(view, offset, additionalInfo);
+      return decodeMap(view, offset, additionalInfo, depth);
     case 7:
       return decodeSimpleAndFloat(view, offset, additionalInfo);
     default:
@@ -442,13 +449,14 @@ function decodeArray(
   view: DataView,
   offset: number,
   additionalInfo: number,
+  depth: number,
 ): DecodeResult<ResultValue[]> {
   const { value: length, offset: newOffset } = decodeLength(view, offset, additionalInfo);
   const len = Number(length);
   const array = [];
   let currentOffset = newOffset;
   for (let i = 0; i < len; i++) {
-    const result = decodeItem(view, currentOffset);
+    const result = decodeItem(view, currentOffset, depth + 1);
     array.push(result.value);
     currentOffset = result.offset;
   }
@@ -459,18 +467,26 @@ function decodeMap(
   view: DataView,
   offset: number,
   additionalInfo: number,
+  depth: number,
 ): DecodeResult<Record<string, ResultValue>> {
   const { value: length, offset: newOffset } = decodeLength(view, offset, additionalInfo);
   const len = Number(length);
   const map: { [key: string]: ResultValue } = {};
   let currentOffset = newOffset;
   for (let i = 0; i < len; i++) {
-    const keyResult = decodeItem(view, currentOffset);
+    const keyResult = decodeItem(view, currentOffset, depth + 1);
     if (!isResultKeyType(keyResult.value)) {
       throw new CTSError('Invalid key type');
     }
-    const valueResult = decodeItem(view, keyResult.offset);
-    map[String(keyResult.value)] = valueResult.value;
+    const valueResult = decodeItem(view, keyResult.offset, depth + 1);
+    // Define explicitly so a "__proto__" key becomes an own data property instead of
+    // hitting the prototype setter and reparenting the decoded map (see JSONInt.parseObject).
+    Object.defineProperty(map, String(keyResult.value), {
+      value: valueResult.value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
     currentOffset = valueResult.offset;
   }
   return { value: map, offset: currentOffset };

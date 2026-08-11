@@ -29,6 +29,38 @@ describe('Amount.from validation', () => {
   it('rejects unsupported input types', () => {
     expect(() => Amount.from({} as unknown as Amount)).toThrow('Unsupported amount input type');
   });
+
+  it('accepts the u64 max at the boundary', () => {
+    const u64Max = 2n ** 64n - 1n;
+    expect(Amount.from(u64Max).toBigInt()).toBe(u64Max);
+    expect(Amount.from(u64Max.toString()).toBigInt()).toBe(u64Max);
+  });
+
+  it('rejects bigints above the u64 range', () => {
+    expect(() => Amount.from(2n ** 64n)).toThrow('exceeds u64 max');
+  });
+
+  it('rejects decimal strings above the u64 range', () => {
+    // 20 digits but numerically above u64 max (needs the post-parse check, not just length)
+    expect(() => Amount.from('20000000000000000000')).toThrow('exceeds u64 max');
+  });
+
+  it('rejects over-long amount strings without parsing them', () => {
+    // 90M-digit string must be refused up front, not run through regex/BigInt (DoS guard)
+    expect(() => Amount.from('1' + '0'.repeat(90_000_000))).toThrow('exceeds u64 max');
+  });
+
+  it('caps arithmetic results at u64, throwing on overflow', () => {
+    const max = Amount.from(2n ** 64n - 1n);
+    expect(() => max.add(1)).toThrow('exceeds u64 max');
+    expect(() => max.multiplyBy(2)).toThrow('exceeds u64 max');
+  });
+
+  it('scaledBy holds the wide intermediate in bigint and returns an in-range result', () => {
+    // a * n = 2.4e19 overflows u64, but round(a * n / d) = 3e9 is a valid amount
+    const result = Amount.from(6_000_000_000n).scaledBy(4_000_000_000n, 8_000_000_000n);
+    expect(result.toBigInt()).toBe(3_000_000_000n);
+  });
 });
 
 describe('Amount conversions', () => {
@@ -82,8 +114,8 @@ describe('Amount.floorPercent', () => {
   it('returns zero for amounts smaller than the percentage unit', () => {
     expect(Amount.from(1).floorPercent(2).toBigInt()).toBe(0n);
   });
-  it('throws for non-positive numerator or denominator', () => {
-    expect(() => Amount.from(100).floorPercent(0)).toThrow('floorPercent');
+  it('returns zero for a zero numerator, throws for negative or zero denominator', () => {
+    expect(Amount.from(100).floorPercent(0).toBigInt()).toBe(0n);
     expect(() => Amount.from(100).floorPercent(2, 0)).toThrow('floorPercent');
     expect(() => Amount.from(100).floorPercent(-1)).toThrow('floorPercent');
   });
@@ -113,8 +145,8 @@ describe('Amount.ceilPercent', () => {
   it('returns at least 1 for any positive amount', () => {
     expect(Amount.from(1).ceilPercent(2).toBigInt()).toBe(1n);
   });
-  it('throws for non-positive numerator or denominator', () => {
-    expect(() => Amount.from(100).ceilPercent(0)).toThrow('ceilPercent');
+  it('returns zero for a zero numerator, throws for negative or zero denominator', () => {
+    expect(Amount.from(100).ceilPercent(0).toBigInt()).toBe(0n);
     expect(() => Amount.from(100).ceilPercent(2, 0)).toThrow('ceilPercent');
     expect(() => Amount.from(100).ceilPercent(-1)).toThrow('ceilPercent');
   });

@@ -1,7 +1,7 @@
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect, vi } from 'vitest';
 
-import { Wallet, Mint, type AuthProvider } from '../../src';
+import { Wallet, Mint, type AuthProvider, type RequestFn } from '../../src';
 
 import { mint, mintUrl, useTestServer } from './_setup';
 
@@ -68,5 +68,52 @@ describe('Clear Authentication', () => {
 
     // The refreshed token must appear in the Clear-auth header
     expect(receivedClearAuth).toBe(freshToken);
+  });
+});
+
+describe('Auth header redirect handling', () => {
+  const protectedSwapInfo = {
+    name: 'Testnut mint',
+    pubkey: '02abc',
+    version: 'Nutshell/x',
+    contact: [],
+    time: 0,
+    nuts: {
+      21: {
+        openid_discovery: 'https://auth.example.com/.well-known/openid-configuration',
+        client_id: 'cashu-client',
+        protected_endpoints: [{ method: 'POST', path: '/v1/swap' }],
+      },
+      22: {
+        bat_max_mint: 100,
+        protected_endpoints: [{ method: 'POST', path: '/v1/swap' }],
+      },
+    },
+  };
+
+  function mockAuthProvider(): AuthProvider {
+    return {
+      getBlindAuthToken: vi.fn().mockResolvedValue('bat-token'),
+      getCAT: vi.fn().mockReturnValue('cat-token'),
+      setCAT: vi.fn(),
+      ensureCAT: vi.fn().mockResolvedValue('cat-token'),
+    };
+  }
+
+  test('protected requests refuse redirects; unprotected requests are unchanged', async () => {
+    server.use(http.get(mintUrl + '/v1/info', () => HttpResponse.json(protectedSwapInfo)));
+
+    const authedSpy = vi.fn((args: { endpoint: string }) =>
+      Promise.resolve(args.endpoint.includes('/v1/info') ? protectedSwapInfo : { signatures: [] }),
+    );
+    const authedMint = new Mint(mintUrl, { authProvider: mockAuthProvider() });
+    await authedMint.swap({ inputs: [], outputs: [] }, authedSpy as unknown as RequestFn);
+    const authedArgs = authedSpy.mock.calls.find((c) => c[0].endpoint.includes('/v1/swap'))![0];
+    expect(authedArgs).toMatchObject({ redirect: 'error' });
+
+    const plainSpy = vi.fn().mockResolvedValue({ signatures: [] });
+    const plainMint = new Mint(mintUrl);
+    await plainMint.swap({ inputs: [], outputs: [] }, plainSpy);
+    expect(plainSpy.mock.calls[0][0]).not.toHaveProperty('redirect');
   });
 });

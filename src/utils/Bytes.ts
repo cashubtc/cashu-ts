@@ -65,22 +65,19 @@ export class Bytes {
     return new Uint8Array(size);
   }
 
-  static writeBigUint64BE(value: bigint): Uint8Array {
-    const buffer = new ArrayBuffer(8);
-    new DataView(buffer).setBigUint64(0, value, false);
-    return new Uint8Array(buffer);
-  }
-
   static toBase64(bytes: Uint8Array): string {
     const bufferConstructor = getBufferConstructor();
     if (bufferConstructor) {
       return bufferConstructor.from(bytes).toString('base64');
     }
-    // preventing stack overflow by chunking
-    if (bytes.length > 32768) {
+    // Chunk to avoid a String.fromCharCode arg-spread stack overflow. Chunk
+    // size must be a multiple of 3, else each chunk emits mid-string '='
+    // padding and the concatenated result is not valid base64.
+    const chunkSize = 32766;
+    if (bytes.length > chunkSize) {
       let result = '';
-      for (let i = 0; i < bytes.length; i += 32768) {
-        const chunk = bytes.slice(i, i + 32768);
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        const chunk = bytes.slice(i, i + chunkSize);
         result += btoa(String.fromCharCode(...chunk));
       }
       return result;

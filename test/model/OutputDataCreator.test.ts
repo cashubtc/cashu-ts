@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 
-import { getPubKeyFromPrivKey } from '../../src/crypto';
+import { getPubKeyFromPrivKey, type P2PKOptions } from '../../src/crypto';
 import { Amount, type AmountLike } from '../../src/model/Amount';
 import { OutputData, isOutputDataFactory } from '../../src/model/OutputData';
 import type { OutputDataFactory, OutputDataLike } from '../../src/model/OutputData';
@@ -34,6 +34,60 @@ describe('DefaultOutputDataCreator', () => {
     expect(batchSpy).toHaveBeenCalledWith(3, seed, 7, keyset, [1, 2]);
     batchSpy.mockRestore();
     expect(outputs).toEqual(OutputData.createDeterministicData(3, seed, 7, keyset, [1, 2]));
+  });
+
+  test('default P2PK batch shares one ephemeral key for a blinded SIG_ALL split', () => {
+    const privkey = Bytes.fromHex('01'.repeat(32));
+    const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
+    const keyset: HasKeysetKeys = {
+      id: '009a1f293253e41e',
+      keys: { '1': 'unused', '2': 'unused', '4': 'unused' },
+    };
+
+    const outputs = new DefaultOutputDataCreator().createP2PKData(
+      { kind: 'P2PK', data: pubkey, blindKeys: true, sigFlag: 'SIG_ALL' },
+      7,
+      keyset,
+    );
+
+    expect(outputs).toHaveLength(3);
+    expect(new Set(outputs.map((o) => o.ephemeralE)).size).toBe(1);
+  });
+
+  test('a subclassed single-output P2PK hook is still called once per split amount', () => {
+    const privkey = Bytes.fromHex('01'.repeat(32));
+    const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
+    const keyset: HasKeysetKeys = {
+      id: '009a1f293253e41e',
+      keys: { '1': 'unused', '2': 'unused', '4': 'unused' },
+    };
+    const seen: AmountLike[] = [];
+    class CustomCreator extends DefaultOutputDataCreator {
+      createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string): OutputData {
+        seen.push(amount);
+        return OutputData.createSingleP2PKData(p2pk, amount, keysetId);
+      }
+    }
+
+    const outputs = new CustomCreator().createP2PKData({ kind: 'P2PK', data: pubkey }, 7, keyset);
+
+    expect(outputs).toHaveLength(3);
+    expect(seen).toHaveLength(3);
+  });
+
+  test('a batch whose counters run past the safe range is rejected, not silently aliased', () => {
+    const keyset: HasKeysetKeys = {
+      id: '012e23479a0029432eaad0d2040c09be53bab592d5cbf1d55e0dd26c9495951b30',
+      keys: { '1': 'unused', '2': 'unused' },
+    };
+    const creator = new DefaultOutputDataCreator();
+    const seed = new Uint8Array([1]);
+
+    // The first output is fine; the second lands on 2^53, where counter + 1 stops
+    // producing a distinct value, so a batch would derive one counter twice.
+    expect(() =>
+      creator.createDeterministicData(3, seed, Number.MAX_SAFE_INTEGER, keyset, [1, 2]),
+    ).toThrow(/counter/i);
   });
 
   test('delegates deterministic batch creation to subclassed single-output override', () => {
@@ -158,6 +212,61 @@ describe('OutputData helpers', () => {
     expect(pubkeysTag?.slice(1)).toHaveLength(1);
     expect(pubkeysTag?.[1]).not.toBe(pubkey);
     expect(output.ephemeralE).toBeDefined();
+  });
+
+  test('a blinded SIG_ALL batch shares one ephemeral key across all outputs', () => {
+    const privkey = Bytes.fromHex('01'.repeat(32));
+    const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
+    const keyset: HasKeysetKeys = {
+      id: '009a1f293253e41e',
+      keys: { '1': 'unused', '2': 'unused', '4': 'unused' },
+    };
+
+    // 7 splits into three outputs. NUT-11 requires SIG_ALL proofs to carry identical
+    // data/tags, so the batch must reuse one ephemeral key per NUT-28.
+    const outputs = OutputData.createP2PKData(
+      { kind: 'P2PK', data: pubkey, blindKeys: true, sigFlag: 'SIG_ALL' },
+      7,
+      keyset,
+    );
+
+    expect(outputs).toHaveLength(3);
+    const secrets = outputs.map(
+      (o) =>
+        (
+          JSON.parse(new TextDecoder().decode(o.secret)) as [
+            string,
+            { data: string; tags: string[][] },
+          ]
+        )[1],
+    );
+    for (let i = 1; i < outputs.length; i++) {
+      expect(secrets[i].data).toBe(secrets[0].data);
+      expect(secrets[i].tags).toEqual(secrets[0].tags);
+      expect(outputs[i].ephemeralE).toBe(outputs[0].ephemeralE);
+    }
+  });
+
+  test('a blinded SIG_INPUTS batch blinds each output with its own ephemeral key', () => {
+    const privkey = Bytes.fromHex('01'.repeat(32));
+    const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
+    const keyset: HasKeysetKeys = {
+      id: '009a1f293253e41e',
+      keys: { '1': 'unused', '2': 'unused', '4': 'unused' },
+    };
+
+    const outputs = OutputData.createP2PKData(
+      { kind: 'P2PK', data: pubkey, blindKeys: true },
+      7,
+      keyset,
+    );
+
+    expect(outputs).toHaveLength(3);
+    const data = outputs.map(
+      (o) => (JSON.parse(new TextDecoder().decode(o.secret)) as [string, { data: string }])[1].data,
+    );
+    expect(new Set(data).size).toBe(outputs.length);
+    expect(new Set(outputs.map((o) => o.ephemeralE)).size).toBe(outputs.length);
   });
 });
 

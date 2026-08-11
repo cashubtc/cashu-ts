@@ -6,9 +6,11 @@ import {
   asSecpPoint,
   blindMessage,
   blindMessageBls,
+  buildP2PKTags,
   constructUnblindedSignatureBls,
   createSecretAndBlindingFactorDeriver,
   constructUnblindedSignature,
+  createRandomSecretKey,
   deriveP2BKBlindedPubkeys,
   deriveSecretAndBlindingFactor,
   isBlsKeyset,
@@ -89,33 +91,6 @@ export type SerializedOutputData = {
   secret: string;
   ephemeralE?: string;
 };
-
-/**
- * Core P2PK tags that must not be settable in additional tags.
- *
- * @internal
- */
-export const RESERVED_P2PK_TAGS = new Set([
-  'locktime',
-  'pubkeys',
-  'n_sigs',
-  'refund',
-  'n_sigs_refund',
-  'sigflag',
-]);
-
-/**
- * Asserts P2PK Tag key is valid.
- *
- * @param key Tag Key.
- * @throws If not a string, or is a reserved string.
- */
-export function assertValidTagKey(key: string) {
-  if (!key || typeof key !== 'string') throw new CTSError('tag key must be a non empty string');
-  if (RESERVED_P2PK_TAGS.has(key)) {
-    throw new CTSError(`additionalTags must not use reserved key "${key}"`);
-  }
-}
 
 export function isOutputDataFactory(
   value: OutputData[] | OutputDataFactory,
@@ -263,10 +238,23 @@ export class OutputData implements OutputDataLike {
     customSplit?: AmountLike[],
   ): OutputData[] {
     const amounts = splitAmount(amount, keyset.keys, customSplit);
-    return amounts.map((a) => this.createSingleP2PKData(p2pk, a, keyset.id));
+    // NUT-28: a SIG_ALL batch shares one ephemeral key so every secret carries the
+    // identical data/tags that NUT-11 requires; SIG_INPUTS keeps per-output keys.
+    const eBytes =
+      p2pk.blindKeys && p2pk.sigFlag === 'SIG_ALL' ? createRandomSecretKey() : undefined;
+    return amounts.map((a) => this.createSingleP2PKData(p2pk, a, keyset.id, eBytes));
   }
 
-  static createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string): OutputData {
+  /**
+   * @param eBytes Optional fixed P2BK ephemeral key; batch callers pass one shared key for SIG_ALL.
+   *   Omit for a fresh random key.
+   */
+  static createSingleP2PKData(
+    p2pk: P2PKOptions,
+    amount: AmountLike,
+    keysetId: string,
+    eBytes?: Uint8Array,
+  ): OutputData {
     const amountValue = Amount.from(amount);
     const normalized = normalizeP2PKOptions(p2pk);
     const isHTLC = normalized.kind === 'HTLC';
@@ -287,7 +275,7 @@ export class OutputData implements OutputDataLike {
       const lockKeys = isHTLC ? pubkeys : [data, ...pubkeys];
       const ordered = [...lockKeys, ...refundKeys];
       // For HTLC the hashlock occupies slot 0, so key slots start at 1 (NUT-28)
-      const { blinded, Ehex: _E } = deriveP2BKBlindedPubkeys(ordered, undefined, !isHTLC);
+      const { blinded, Ehex: _E } = deriveP2BKBlindedPubkeys(ordered, eBytes, !isHTLC);
       if (isHTLC) {
         // hashlock is in data, all locking keys into pubkeys
         pubkeys = blinded.slice(0, lockKeys.length);
@@ -300,40 +288,16 @@ export class OutputData implements OutputDataLike {
       Ehex = _E;
     }
 
-    // build P2PK Tags (NUT-11)
-    const tags: string[][] = [];
-
-    const ts = normalized.locktime ?? NaN;
-    if (Number.isSafeInteger(ts) && ts >= 0) {
-      tags.push(['locktime', String(ts)]);
-    }
-
-    if (pubkeys.length > 0) {
-      tags.push(['pubkeys', ...pubkeys]);
-      if (reqLock > 1) {
-        tags.push(['n_sigs', String(reqLock)]);
-      }
-    }
-
-    if (refund.length > 0) {
-      tags.push(['refund', ...refund]);
-      if (reqRefund > 1) {
-        tags.push(['n_sigs_refund', String(reqRefund)]);
-      }
-    }
-
-    if (normalized.sigFlag == 'SIG_ALL') {
-      tags.push(['sigflag', 'SIG_ALL']);
-    }
-
-    // Append additional tags if any
-    if (normalized.additionalTags?.length) {
-      const extraTags = normalized.additionalTags.map(([k, ...vals]) => {
-        assertValidTagKey(k); // Validate key
-        return [k, ...vals.map(String)]; // all to strings
-      });
-      tags.push(...extraTags);
-    }
+    // build P2PK Tags (NUT-11), from the post-blinding key layout
+    const tags = buildP2PKTags({
+      locktime: normalized.locktime,
+      pubkeys,
+      refundKeys: refund,
+      requiredSignatures: reqLock,
+      requiredRefundSignatures: reqRefund,
+      sigFlag: normalized.sigFlag,
+      additionalTags: normalized.additionalTags,
+    });
 
     // Construct secret
     const kind = isHTLC ? 'HTLC' : 'P2PK';

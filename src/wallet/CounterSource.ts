@@ -19,7 +19,22 @@ export interface CounterSource {
    */
   reserve(keysetId: string, n: number): Promise<CounterRange>;
   /**
+   * Reserve a caller-chosen range `[start, start+count)` for a keyset.
+   *
+   * @remarks
+   * Use for manual deterministic counters, where the caller picks the range rather than taking the
+   * next free one. MUST be atomic with `reserve()`: checking the cursor and bumping it in two calls
+   * leaves a window for a concurrent reservation to take counters inside the range. Counters below
+   * `start` are burned, matching `advanceToAtLeast`.
+   * @throws If `start` is below the cursor, i.e. the range was already handed out.
+   */
+  reserveAt(keysetId: string, start: number, count: number): Promise<CounterRange>;
+  /**
    * Monotonic bump, ensure the next counter is at least minNext.
+   *
+   * @remarks
+   * Unconditional: a cursor already past `minNext` is left alone. To take a specific range and find
+   * out whether it was already issued, use `reserveAt()`.
    */
   advanceToAtLeast(keysetId: string, minNext: number): Promise<void>;
   /**
@@ -86,6 +101,22 @@ export class EphemeralCounterSource implements CounterSource {
       if (n === 0) return { start: cur, count: 0 }; // report current, do not move
       this.next.set(keysetId, cur + n);
       return { start: cur, count: n };
+    });
+  }
+
+  async reserveAt(keysetId: string, start: number, count: number): Promise<CounterRange> {
+    if (start < 0 || count < 0) {
+      throw new CTSError('reserveAt called with a negative start or count');
+    }
+    return this.withLock(keysetId, () => {
+      const cur = this.next.get(keysetId) ?? 0;
+      if (start < cur) {
+        throw new CTSError(
+          `Counter ${start} for keyset ${keysetId} was already issued (next is ${cur})`,
+        );
+      }
+      this.next.set(keysetId, start + count);
+      return { start, count };
     });
   }
 

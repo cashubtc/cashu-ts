@@ -24,7 +24,7 @@ import {
   deserializeProofs,
   normalizeProofAmounts,
   sortProofsById,
-  normalizeUrl,
+  normalizeMintUrl,
 } from '../../src/utils';
 import {
   NUT02_V1_VECTOR1_KEYS,
@@ -105,6 +105,29 @@ describe('test split custom amounts ', () => {
   test('testing undefined', async () => {
     const chunks = utils.splitAmount(5, keys, undef);
     expect(chunks.map((a) => a.toNumber())).toStrictEqual([4, 1]);
+  });
+});
+
+describe('splitAmount output bound', () => {
+  const onlyOnes: Keys = { 1: 'deadbeef' };
+
+  test('fills a small coarse split (no spread push)', () => {
+    const chunks = utils.splitAmount(100, onlyOnes);
+    expect(chunks).toHaveLength(100);
+    expect(chunks.every((a) => a.toNumber() === 1)).toBe(true);
+  });
+
+  test('rejects a coarse split that would exceed the output cap', () => {
+    // Only a 1-denomination keyset over a large value: previously built a huge array via a spread
+    // push (stack overflow / memory sink). Now bounded and rejected before allocating.
+    expect(() => utils.splitAmount(200000, onlyOnes)).toThrow(/would exceed .* outputs/);
+  });
+
+  test('allows exactly the cap and rejects one past it (inclusive boundary)', () => {
+    // 8_192 ones is exactly the cap: still built (proves the loop push holds at scale).
+    expect(utils.splitAmount(8_192, onlyOnes)).toHaveLength(8_192);
+    // One more output must be rejected, not allocated.
+    expect(() => utils.splitAmount(8_193, onlyOnes)).toThrow(/would exceed .* outputs/);
   });
 });
 
@@ -320,57 +343,12 @@ describe('test getTokenMetadata', () => {
       unit: 'sat',
       mint: 'https://testnut.cashu.space',
       amount: Amount.from(10),
-      incompleteProofs: [
-        {
-          C: '027f390f7160a0171e0113a4311564447b2942833ae9dff0beb49cb314677ba6a4',
-          amount: Amount.from(4),
-          dleq: {
-            e: 'b5e5011baeb4c13d5c448745ae3b4dc4bf517b51e4eb03e9f74204e2c693cebe',
-            r: '7b7e868012f0d462406be790f713d8a42762c4a9efbbe2134df1cf9fc581df98',
-            s: '32475fe73ba9839dda273fb37e4deae3987aa086e68150a8b8187618cf146b0b',
-          },
-          secret: '4e585c19592a0a10007b451822e22f8129ec2753da0be3f22dec26a92b1302db',
-        },
-        {
-          C: '03957a7e9ab75f2152ba9eb5f1b6f3cd12dbb2b3100d4fabc3fd457f95b11dcbce',
-          amount: Amount.from(2),
-          dleq: {
-            e: 'bff2e8aee32ac15b21b38e991394f23e84c56845b1f74710d6741c67117c7d11',
-            r: '46d74791d56760b39317555f1283e2f4ad1cfa4a36a67c04e6cde510f22ed1ee',
-            s: '81cb23d0799341bc94f1f87235bc63f6b3a27c8b6f13a9dcf5f97a18485215c0',
-          },
-          secret: '16a0cc2214adcf80b19f60e972b7ad1d9efa7a1eed84de111df6b0d982f217fb',
-        },
-        {
-          C: '026f79804899c4c830475fab2bb030734f569d784cf7a02adf744e1fa695ab3d2d',
-          amount: Amount.from(2),
-          dleq: {
-            e: '3d7e00ffae6a115875b47fa4d5d41338f2105e53c354c96fe9449d1d9285d009',
-            r: 'b1347b584b48517761475c3a58fca47f80c368fcbbe06abdfdc8258235b41e21',
-            s: 'efe730298fae0764403efbfc004d5e7d8cabb6d62570061aabacc0c1e1796dae',
-          },
-          secret: 'a53274b9476067a7ae0c7d1fba7c3f53a7b4b3610f03af736c6e1fc5361ec6ac',
-        },
-        {
-          C: '03d01a81d573403e2803496358b2abefc2f4592e51d3f41f907e2d6c4792a6518f',
-          amount: Amount.from(1),
-          dleq: {
-            e: '5b0a219b83f0a5935dbd48187d7de38b06f22093e29394e919aeb9d4e6579103',
-            r: '16fa016d727fd7ac4cc390c18f33611d9418eba8fe557e168f671de99ae34b99',
-            s: '77f917378c5b0ed4c99d52fdab25f7cb201cb33ef3fb764083c6552cdaece39e',
-          },
-          secret: 'ab52ba6a75b6659859927a337083241c4adc79e76d4fdb2fb3a07cb2564b6462',
-        },
-        {
-          C: '0342d3499d47354e8c270f3d95b37d88cd2cbbc238a13d3ff02ad0f340d59e4fdd',
-          amount: Amount.from(1),
-          dleq: {
-            e: 'cfd3ef7d297dd21a4d9a76d63947fd47eb61cae331f8b8765df3b6e46d4d30a1',
-            r: 'b2cdebe02d50fcb9a82cd2956123a4ff868f20696fea7c3df596b2100d2968a0',
-            s: '9a63f7d05a8d9ef18d3d52b814e22716aff4e2f696f28727e31e86721015f1be',
-          },
-          secret: 'f64259355a1f2d5d892c64f5beafae861da163998acb27f778761ac7e226dcf3',
-        },
+      proofAmounts: [
+        Amount.from(4),
+        Amount.from(2),
+        Amount.from(2),
+        Amount.from(1),
+        Amount.from(1),
       ],
     });
   });
@@ -382,57 +360,12 @@ describe('test getTokenMetadata', () => {
       unit: 'sat',
       mint: 'https://testnut.cashu.space',
       amount: Amount.from(10),
-      incompleteProofs: [
-        {
-          C: '027f390f7160a0171e0113a4311564447b2942833ae9dff0beb49cb314677ba6a4',
-          amount: Amount.from(4),
-          dleq: {
-            e: 'b5e5011baeb4c13d5c448745ae3b4dc4bf517b51e4eb03e9f74204e2c693cebe',
-            r: '7b7e868012f0d462406be790f713d8a42762c4a9efbbe2134df1cf9fc581df98',
-            s: '32475fe73ba9839dda273fb37e4deae3987aa086e68150a8b8187618cf146b0b',
-          },
-          secret: '4e585c19592a0a10007b451822e22f8129ec2753da0be3f22dec26a92b1302db',
-        },
-        {
-          C: '03957a7e9ab75f2152ba9eb5f1b6f3cd12dbb2b3100d4fabc3fd457f95b11dcbce',
-          amount: Amount.from(2),
-          dleq: {
-            e: 'bff2e8aee32ac15b21b38e991394f23e84c56845b1f74710d6741c67117c7d11',
-            r: '46d74791d56760b39317555f1283e2f4ad1cfa4a36a67c04e6cde510f22ed1ee',
-            s: '81cb23d0799341bc94f1f87235bc63f6b3a27c8b6f13a9dcf5f97a18485215c0',
-          },
-          secret: '16a0cc2214adcf80b19f60e972b7ad1d9efa7a1eed84de111df6b0d982f217fb',
-        },
-        {
-          C: '026f79804899c4c830475fab2bb030734f569d784cf7a02adf744e1fa695ab3d2d',
-          amount: Amount.from(2),
-          dleq: {
-            e: '3d7e00ffae6a115875b47fa4d5d41338f2105e53c354c96fe9449d1d9285d009',
-            r: 'b1347b584b48517761475c3a58fca47f80c368fcbbe06abdfdc8258235b41e21',
-            s: 'efe730298fae0764403efbfc004d5e7d8cabb6d62570061aabacc0c1e1796dae',
-          },
-          secret: 'a53274b9476067a7ae0c7d1fba7c3f53a7b4b3610f03af736c6e1fc5361ec6ac',
-        },
-        {
-          C: '03d01a81d573403e2803496358b2abefc2f4592e51d3f41f907e2d6c4792a6518f',
-          amount: Amount.from(1),
-          dleq: {
-            e: '5b0a219b83f0a5935dbd48187d7de38b06f22093e29394e919aeb9d4e6579103',
-            r: '16fa016d727fd7ac4cc390c18f33611d9418eba8fe557e168f671de99ae34b99',
-            s: '77f917378c5b0ed4c99d52fdab25f7cb201cb33ef3fb764083c6552cdaece39e',
-          },
-          secret: 'ab52ba6a75b6659859927a337083241c4adc79e76d4fdb2fb3a07cb2564b6462',
-        },
-        {
-          C: '0342d3499d47354e8c270f3d95b37d88cd2cbbc238a13d3ff02ad0f340d59e4fdd',
-          amount: Amount.from(1),
-          dleq: {
-            e: 'cfd3ef7d297dd21a4d9a76d63947fd47eb61cae331f8b8765df3b6e46d4d30a1',
-            r: 'b2cdebe02d50fcb9a82cd2956123a4ff868f20696fea7c3df596b2100d2968a0',
-            s: '9a63f7d05a8d9ef18d3d52b814e22716aff4e2f696f28727e31e86721015f1be',
-          },
-          secret: 'f64259355a1f2d5d892c64f5beafae861da163998acb27f778761ac7e226dcf3',
-        },
+      proofAmounts: [
+        Amount.from(4),
+        Amount.from(2),
+        Amount.from(2),
+        Amount.from(1),
+        Amount.from(1),
       ],
     });
   });
@@ -1501,6 +1434,43 @@ describe('getEncodedToken edge cases', () => {
     };
     expect(() => utils.getEncodedToken(token)).toThrow(/legacy keyset ID/);
   });
+  test('throws for proofs with odd-length hex keyset IDs', () => {
+    const token: Token = {
+      mint: 'http://localhost:3338',
+      proofs: [{ id: '00abc', amount: Amount.from(1), secret: 'abc', C: '02abc' }],
+      unit: 'sat',
+    };
+    expect(() => utils.getEncodedToken(token)).toThrow(/legacy keyset ID/);
+  });
+  test('rejects a proof with a nullish id as legacy, not with a TypeError', () => {
+    // A hand-built or JSON-parsed token may carry id: undefined/null. The id checks must
+    // classify it as legacy and reject, not read .length off a nullish value.
+    for (const id of [undefined, null]) {
+      const token: Token = {
+        mint: 'http://localhost:3338',
+        proofs: [
+          { id: id as unknown as string, amount: Amount.from(1), secret: 'abc', C: '02abc' },
+        ],
+        unit: 'sat',
+      };
+      expect(() => utils.getEncodedToken(token)).toThrow(/legacy keyset ID/);
+    }
+  });
+});
+
+describe('isValidHex', () => {
+  test('returns false for non-string input without throwing', () => {
+    expect(utils.isValidHex(undefined as unknown as string)).toBe(false);
+    expect(utils.isValidHex(null)).toBe(false);
+    expect(utils.isValidHex(1234)).toBe(false);
+  });
+  test('returns false for empty and odd-length strings', () => {
+    expect(utils.isValidHex('')).toBe(false);
+    expect(utils.isValidHex('abc')).toBe(false);
+  });
+  test('returns true for even-length hex', () => {
+    expect(utils.isValidHex('00abcd')).toBe(true);
+  });
 });
 
 describe('getDecodedTokenBinary edge cases', () => {
@@ -1677,70 +1647,72 @@ describe('mapShortKeysetIds full-length pass-through (non-conformant tokens)', (
   });
 });
 
-describe('normalizeUrl', () => {
+describe('normalizeMintUrl', () => {
   test('strips trailing slash', () => {
-    expect(normalizeUrl('https://mint.example.com/')).toBe('https://mint.example.com');
+    expect(normalizeMintUrl('https://mint.example.com/')).toBe('https://mint.example.com');
   });
   test('strips multiple trailing slashes', () => {
-    expect(normalizeUrl('https://mint.example.com///')).toBe('https://mint.example.com');
+    expect(normalizeMintUrl('https://mint.example.com///')).toBe('https://mint.example.com');
   });
   test('preserves path', () => {
-    expect(normalizeUrl('https://mint.example.com/v1/mint')).toBe(
+    expect(normalizeMintUrl('https://mint.example.com/v1/mint')).toBe(
       'https://mint.example.com/v1/mint',
     );
   });
   test('throws on malformed URL', () => {
-    expect(() => normalizeUrl('not-a-url')).toThrow('Invalid mint URL: not-a-url');
+    expect(() => normalizeMintUrl('not-a-url')).toThrow('Invalid mint URL: not-a-url');
   });
   test('throws on non-http scheme', () => {
-    expect(() => normalizeUrl('ftp://mint.example.com')).toThrow('Invalid mint URL scheme: ftp:');
+    expect(() => normalizeMintUrl('ftp://mint.example.com')).toThrow(
+      'Invalid mint URL scheme: ftp:',
+    );
   });
   test('accepts http', () => {
-    expect(normalizeUrl('http://localhost:3338')).toBe('http://localhost:3338');
+    expect(normalizeMintUrl('http://localhost:3338')).toBe('http://localhost:3338');
   });
   test('accepts .onion', () => {
-    expect(normalizeUrl('http://abc123.onion/path')).toBe('http://abc123.onion/path');
+    expect(normalizeMintUrl('http://abc123.onion/path')).toBe('http://abc123.onion/path');
   });
   test('rejects query parameters', () => {
-    expect(() => normalizeUrl('https://mint.example.com?token=abc')).toThrow(
+    expect(() => normalizeMintUrl('https://mint.example.com?token=abc')).toThrow(
       'Mint URL must not contain query parameters',
     );
   });
   test('rejects trailing ? with no query value', () => {
-    expect(() => normalizeUrl('https://mint.example.com/path?')).toThrow(
+    expect(() => normalizeMintUrl('https://mint.example.com/path?')).toThrow(
       'Mint URL must not contain query parameters',
     );
   });
   test('rejects fragment', () => {
-    expect(() => normalizeUrl('https://mint.example.com#section')).toThrow(
+    expect(() => normalizeMintUrl('https://mint.example.com#section')).toThrow(
       'Mint URL must not contain a fragment',
     );
   });
   test('rejects trailing # with no fragment value', () => {
-    expect(() => normalizeUrl('https://mint.example.com/path#')).toThrow(
+    expect(() => normalizeMintUrl('https://mint.example.com/path#')).toThrow(
       'Mint URL must not contain a fragment',
     );
   });
   test('rejects credentials', () => {
-    expect(() => normalizeUrl('https://user:pass@mint.example.com')).toThrow(
+    expect(() => normalizeMintUrl('https://user:pass@mint.example.com')).toThrow(
       'Mint URL must not contain credentials',
     );
-    expect(() => normalizeUrl('https://user@mint.example.com')).toThrow(
+    expect(() => normalizeMintUrl('https://user@mint.example.com')).toThrow(
       'Mint URL must not contain credentials',
     );
   });
   test('rejects percent-encoded path characters', () => {
-    expect(() => normalizeUrl('https://mint.example.com/path%3Ftoken=abc')).toThrow(
+    expect(() => normalizeMintUrl('https://mint.example.com/path%3Ftoken=abc')).toThrow(
       'Mint URL path must not contain percent-encoded characters',
     );
-    expect(() => normalizeUrl('https://mint.example.com/path%23fragment')).toThrow(
+    expect(() => normalizeMintUrl('https://mint.example.com/path%23fragment')).toThrow(
       'Mint URL path must not contain percent-encoded characters',
     );
-    expect(() => normalizeUrl('https://mint.example.com/path%2Fadmin')).toThrow(
+    expect(() => normalizeMintUrl('https://mint.example.com/path%2Fadmin')).toThrow(
       'Mint URL path must not contain percent-encoded characters',
     );
   });
   test('lowercases hostname', () => {
-    expect(normalizeUrl('https://Mint.Example.COM')).toBe('https://mint.example.com');
+    expect(normalizeMintUrl('https://Mint.Example.COM')).toBe('https://mint.example.com');
   });
 });

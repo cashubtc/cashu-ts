@@ -122,6 +122,32 @@ describe('OIDCAuth: PKCE + auth code', () => {
     expect(sp.get('state')).toBe('abc123');
   });
 
+  test('buildAuthCodeUrl rejects a non-http(s) authorization_endpoint', async () => {
+    server.use(
+      http.get(DISCOVERY, () =>
+        HttpResponse.json({ ...goodDiscovery, authorization_endpoint: 'javascript:alert(1)' }),
+      ),
+    );
+    const oidc = new OIDCAuth(DISCOVERY, { clientId: 'cashu-client' });
+    const { challenge } = oidc.generatePKCE();
+    await expect(
+      oidc.buildAuthCodeUrl({ redirectUri: 'http://localhost/cb', codeChallenge: challenge }),
+    ).rejects.toThrow(/authorization_endpoint/i);
+  });
+
+  test('buildAuthCodeUrl rejects an unparseable authorization_endpoint', async () => {
+    server.use(
+      http.get(DISCOVERY, () =>
+        HttpResponse.json({ ...goodDiscovery, authorization_endpoint: 'not a url' }),
+      ),
+    );
+    const oidc = new OIDCAuth(DISCOVERY, { clientId: 'cashu-client' });
+    const { challenge } = oidc.generatePKCE();
+    await expect(
+      oidc.buildAuthCodeUrl({ redirectUri: 'http://localhost/cb', codeChallenge: challenge }),
+    ).rejects.toThrow(/not a valid URL/i);
+  });
+
   test('exchangeAuthCode posts correct form and fires callbacks', async () => {
     const bodies: string[] = [];
     server.use(
@@ -153,6 +179,26 @@ describe('OIDCAuth: PKCE + auth code', () => {
         '&client_id=cashu-client' +
         '&code_verifier=verifier_123',
     );
+  });
+
+  test('removeTokenListener stops a listener from firing', async () => {
+    server.use(http.post(TOKEN_EP, () => HttpResponse.json(accessOk)));
+
+    const kept = vi.fn();
+    const removed = vi.fn();
+    const oidc = new OIDCAuth(DISCOVERY, { clientId: 'cashu-client' });
+    oidc.addTokenListener(kept);
+    oidc.addTokenListener(removed);
+    oidc.removeTokenListener(removed);
+
+    await oidc.exchangeAuthCode({
+      code: 'auth_code_123',
+      redirectUri: 'http://localhost:3388/callback',
+      codeVerifier: 'verifier_123',
+    });
+
+    expect(kept).toHaveBeenCalledTimes(1);
+    expect(removed).not.toHaveBeenCalled();
   });
 
   test('token requests use the injected fetch implementation', async () => {
@@ -239,6 +285,39 @@ describe('OIDCAuth: device flow', () => {
     expect(start.user_code).toBe('UCODE-123');
   });
 
+  test('deviceStart rejects a non-http(s) verification_uri', async () => {
+    server.use(
+      http.post(DEVICE_EP, () =>
+        HttpResponse.json({
+          device_code: 'dev-123',
+          user_code: 'UCODE-123',
+          verification_uri: 'javascript:alert(1)',
+          interval: 2,
+          expires_in: 600,
+        }),
+      ),
+    );
+    const oidc = new OIDCAuth(DISCOVERY, { clientId: 'cashu-client' });
+    await expect(oidc.deviceStart()).rejects.toThrow(/verification_uri/i);
+  });
+
+  test('deviceStart rejects a non-http(s) verification_uri_complete', async () => {
+    server.use(
+      http.post(DEVICE_EP, () =>
+        HttpResponse.json({
+          device_code: 'dev-123',
+          user_code: 'UCODE-123',
+          verification_uri: `${ISSUER}/device`,
+          verification_uri_complete: 'javascript:alert(1)',
+          interval: 2,
+          expires_in: 600,
+        }),
+      ),
+    );
+    const oidc = new OIDCAuth(DISCOVERY, { clientId: 'cashu-client' });
+    await expect(oidc.deviceStart()).rejects.toThrow(/verification_uri_complete/i);
+  });
+
   test('devicePoll loops until access_token (authorization_pending → success)', async () => {
     vi.useFakeTimers();
     try {
@@ -265,6 +344,43 @@ describe('OIDCAuth: device flow', () => {
       expect(polls).toBe(3);
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  test('startDeviceAuth clamps a non-numeric provider interval instead of hot-looping', async () => {
+    server.use(
+      http.post(DEVICE_EP, () =>
+        HttpResponse.json({
+          device_code: 'dev-123',
+          user_code: 'UCODE-123',
+          verification_uri: `${ISSUER}/device`,
+          interval: 'not-a-number', // hostile provider: non-numeric interval
+          expires_in: 600,
+        }),
+      ),
+      http.post(TOKEN_EP, () =>
+        HttpResponse.json({ access_token: 'ok', token_type: 'Bearer', expires_in: 300 }),
+      ),
+    );
+    const oidc = new OIDCAuth(DISCOVERY, { clientId: 'cashu-client' });
+
+    // Capture the delay the loop would sleep for without actually waiting.
+    const delays: number[] = [];
+    const sleepSpy = vi
+      .spyOn(oidc as unknown as { sleep: (ms: number) => Promise<void> }, 'sleep')
+      .mockImplementation((ms: number) => {
+        delays.push(ms);
+        return Promise.resolve();
+      });
+
+    const start = await oidc.startDeviceAuth(5);
+    await start.poll();
+
+    expect(sleepSpy).toHaveBeenCalled();
+    // A malformed interval must not produce a NaN (immediate) sleep.
+    for (const ms of delays) {
+      expect(Number.isFinite(ms)).toBe(true);
+      expect(ms).toBeGreaterThanOrEqual(1000);
     }
   });
 
@@ -641,7 +757,7 @@ describe('OIDCAuth: postFormLoose minimal success', () => {
     await o.loadConfig();
     const res = await o['postFormLoose'](TOKEN, 'grant_type=x');
     expect(res).toEqual({ ok: true });
-    expect(logger.debug).toHaveBeenCalledWith('OIDCAuth Response', { json: { ok: true } });
+    expect(logger.debug).toHaveBeenCalledWith('OIDCAuth Response', { status: 200 });
   });
 });
 

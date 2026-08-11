@@ -4,21 +4,18 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { describe, expect, test } from 'vitest';
 
 import {
+  assertValidTagKey,
   createBlindSignature,
   createDLEQProof,
   getPubKeyFromPrivKey,
   pointFromHex,
   P2BK_DST,
+  P2PK_KNOWN_TAG_KEYS,
 } from '../../src/crypto';
 import { verifyUnblindedSignature } from '../../src/crypto/NUT01';
 import { Amount } from '../../src/model/Amount';
 import { CTSError } from '../../src/model/Errors';
-import {
-  MAX_SECRET_LENGTH,
-  OutputData,
-  assertValidTagKey,
-  RESERVED_P2PK_TAGS,
-} from '../../src/model/OutputData';
+import { MAX_SECRET_LENGTH, OutputData } from '../../src/model/OutputData';
 import type { HasKeysetKeys, SerializedBlindedSignature } from '../../src/model/types';
 import { Bytes, deriveKeysetId, numberToHexPadded64 } from '../../src/utils';
 
@@ -167,7 +164,7 @@ describe('OutputData secp round-trip (secp256k1 + NUT-12 DLEQ)', () => {
 
 describe('OutputData.assertValidTagKey and reserved tags', () => {
   test('rejects every reserved P2PK tag key', () => {
-    for (const key of RESERVED_P2PK_TAGS) {
+    for (const key of P2PK_KNOWN_TAG_KEYS) {
       expect(() => assertValidTagKey(key)).toThrowError(/reserved key/);
     }
     // Explicit check for the last reserved entry, guarding against a dropped set member.
@@ -300,14 +297,29 @@ describe('OutputData.createSingleP2PKData tag construction', () => {
     ]);
   });
 
-  test('omits the locktime tag for a negative locktime', () => {
-    const out = OutputData.createSingleP2PKData(
-      { kind: 'P2PK', data: pub(0), locktime: -1 },
-      1,
-      KEYSET_ID,
-    );
-    // -1 fails the `>= 0` guard; a mutated `||`/forced-true guard would emit the tag anyway.
-    expect(readSecret(out).tags.find(([t]) => t === 'locktime')).toBeUndefined();
+  test('throws for a present but invalid locktime instead of silently dropping it', () => {
+    // Refund keys with a dropped locktime is a structural violation the verifier rejects
+    // outright (unspendable, main keys included), so a present-but-invalid value
+    // (negative / non-finite) must be rejected here, not omitted.
+    for (const bad of [-1, NaN, Infinity]) {
+      expect(() =>
+        OutputData.createSingleP2PKData(
+          { kind: 'P2PK', data: pub(0), locktime: bad },
+          1,
+          KEYSET_ID,
+        ),
+      ).toThrow(/locktime/i);
+    }
+  });
+
+  test('throws for an empty additionalTags value on the direct build path', () => {
+    expect(() =>
+      OutputData.createSingleP2PKData(
+        { kind: 'P2PK', data: pub(0), additionalTags: [['memo', '']] },
+        1,
+        KEYSET_ID,
+      ),
+    ).toThrow(/non-empty/i);
   });
 
   test('emits an exact sigflag tag for SIG_ALL', () => {
@@ -334,8 +346,9 @@ describe('OutputData.createSingleP2PKData tag construction', () => {
         1,
         KEYSET_ID,
       );
-    const base = [...new TextDecoder().decode(build(0).secret)].length;
-    const target = MAX_SECRET_LENGTH - base;
+    // Measure with a single 'A' (an empty tag value is rejected), then add the rest.
+    const base = [...new TextDecoder().decode(build(1).secret)].length;
+    const target = MAX_SECRET_LENGTH - base + 1;
 
     const atLimit = build(target);
     // Exactly MAX_SECRET_LENGTH must be accepted (kills `>` -> `>=`).

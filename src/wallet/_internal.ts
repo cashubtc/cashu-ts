@@ -7,6 +7,14 @@ import { splitAmount } from '../utils/core';
 
 import { type OutputType } from './types';
 
+/**
+ * Exact `ceil(log2(n))` for n >= 1, computed on bigint so u64-scale inputs never lose precision.
+ * Returns 0 for n <= 1. Used for NUT-08 blank output counts.
+ */
+export function ceilLog2(n: bigint): number {
+  return n <= 1n ? 0 : (n - 1n).toString(2).length;
+}
+
 function getKeysetAmountsAsc(keys: Keys): Amount[] {
   const amounts = Object.keys(keys).map((k) => Amount.from(k));
   amounts.sort((a, b) => a.compareTo(b));
@@ -76,12 +84,23 @@ export function stringifyOutputTypeForLog(ot: OutputType): string {
         counter: ot.counter,
         denominations: (ot.denominations ?? []).map((d) => Amount.from(d).toString()),
       });
-    case 'p2pk':
+    case 'p2pk': {
+      // P2BK: the natural keys are only blinded later, so log placeholders instead
+      const opts = ot.options;
+      const options = opts.blindKeys
+        ? {
+            ...opts,
+            data: opts.kind === 'P2PK' ? '[redacted]' : opts.data,
+            pubkeys: opts.pubkeys?.map(() => '[redacted]'),
+            refundKeys: opts.refundKeys?.map(() => '[redacted]'),
+          }
+        : opts;
       return JSON.stringify({
         type: 'p2pk',
-        options: ot.options,
+        options,
         denominations: (ot.denominations ?? []).map((d) => Amount.from(d).toString()),
       });
+    }
     case 'random':
       return JSON.stringify({
         type: 'random',

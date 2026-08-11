@@ -22,7 +22,10 @@ import { Keyset } from './Keyset';
 export class KeyChain {
   private mint: Mint;
   private unit: string;
-  private keysets: { [id: string]: Keyset } = {};
+  // Object.create(null): a mint-supplied id of '__proto__'/'constructor'/etc must resolve to
+  // an own entry or nothing, never an inherited Object.prototype member (which is truthy and
+  // would slip past the not-found guard in getKeyset).
+  private keysets: { [id: string]: Keyset } = Object.create(null) as { [id: string]: Keyset };
   private pendingKeyFetches: Map<string, Promise<Keyset>> = new Map();
 
   private assertInitialized(): void {
@@ -163,8 +166,8 @@ export class KeyChain {
    * @param allKeys Keys data from mint.getKeys() API.
    */
   private buildKeychain(allKeysets: MintKeyset[], allKeys: MintKeys[]): void {
-    // Clear existing keysets to avoid stale data
-    this.keysets = {};
+    // Clear existing keysets to avoid stale data (null-proto, see the field declaration)
+    this.keysets = Object.create(null) as { [id: string]: Keyset };
 
     const keysMap = new Map<string, MintKeys>(allKeys.map((k) => [k.id, k]));
 
@@ -186,7 +189,7 @@ export class KeyChain {
   // ---------------------------------------------------------------------
 
   /**
-   * Get a keyset by ID or the cheapest keyset if no ID is provided.
+   * Get a keyset by ID, or the cheapest modern keyset if no ID is provided.
    *
    * @param id Optional keyset ID.
    * @returns Keyset with keys.
@@ -201,10 +204,11 @@ export class KeyChain {
   }
 
   /**
-   * Get the cheapest active keyset.
+   * Get the cheapest modern active keyset.
    *
    * @remarks
-   * Selects active keyset with lowest fee and hex ID.
+   * Prefers the highest keyset ID version, then the lowest fee, then the latest `final_expiry` (no
+   * expiry sorts as never expiring).
    * @returns Active Keyset.
    * @throws If none found or uninitialized.
    */
@@ -218,7 +222,10 @@ export class KeyChain {
     if (activeKeysets.length === 0) {
       throw new CTSError(`No active keyset found for unit: ${this.unit}`);
     }
-    return activeKeysets.sort((a, b) => a.fee - b.fee)[0];
+    const never = Number.MAX_SAFE_INTEGER;
+    return activeKeysets.sort(
+      (a, b) => b.version - a.version || a.fee - b.fee || (b.expiry ?? never) - (a.expiry ?? never),
+    )[0];
   }
 
   /**
@@ -288,6 +295,19 @@ export class KeyChain {
       throw new CTSError(`No keysets found for unit: ${this.unit}`);
     }
     return unitKeysets;
+  }
+
+  /**
+   * True if `id` is a keyset belonging to this KeyChain's unit.
+   *
+   * @remarks
+   * O(1) and non-throwing, unlike `getKeyset(id)` (cross-unit) and `getKeysets()` (allocates,
+   * throws when the unit has none). Use it to keep foreign-unit proofs out of amount arithmetic.
+   */
+  isUnitKeyset(id?: string): boolean {
+    if (!id) return false;
+    const keyset = this.keysets[id];
+    return keyset !== undefined && keyset.unit === this.unit;
   }
 
   /**

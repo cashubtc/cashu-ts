@@ -52,6 +52,24 @@ export type OIDCAuthOptions = {
   onTokens?: (t: TokenResponse) => void | Promise<void>;
 };
 
+/**
+ * Assert a provider-supplied URL uses an http(s) scheme.
+ *
+ * @remarks
+ * Guards against a `javascript:`/`data:` endpoint that the client would navigate to or open.
+ */
+function assertHttpUrl(url: string, label: string): void {
+  let protocol: string;
+  try {
+    protocol = new URL(url).protocol;
+  } catch {
+    throw new CTSError(`OIDCAuth: ${label} is not a valid URL`);
+  }
+  if (protocol !== 'https:' && protocol !== 'http:') {
+    throw new CTSError(`OIDCAuth: ${label} must be an http(s) URL`);
+  }
+}
+
 export class OIDCAuth {
   private readonly discoveryUrl: string;
   private readonly logger: Logger;
@@ -96,6 +114,13 @@ export class OIDCAuth {
    */
   addTokenListener(fn: (t: TokenResponse) => void | Promise<void>): void {
     this.tokenListeners.push(fn);
+  }
+
+  /**
+   * Remove a previously registered token listener (by reference).
+   */
+  removeTokenListener(fn: (t: TokenResponse) => void | Promise<void>): void {
+    this.tokenListeners = this.tokenListeners.filter((l) => l !== fn);
   }
 
   // ---- Discovery ----
@@ -172,6 +197,7 @@ export class OIDCAuth {
     if (!cfg.authorization_endpoint) {
       throw new CTSError('OIDCAuth: discovery lacks authorization_endpoint');
     }
+    assertHttpUrl(cfg.authorization_endpoint, 'authorization_endpoint');
     return `${cfg.authorization_endpoint}?${params.toString()}`;
   }
 
@@ -200,7 +226,13 @@ export class OIDCAuth {
     if (!ep) throw new CTSError('OIDCAuth: provider lacks device_authorization_endpoint');
 
     const form = this.toForm({ client_id: this.clientId, scope: this.scope });
-    return this.postFormStrict<DeviceStartResponse>(ep, form);
+    const res = await this.postFormStrict<DeviceStartResponse>(ep, form);
+    // The client displays/opens these; a javascript: scheme would run on open.
+    assertHttpUrl(res.verification_uri, 'verification_uri');
+    if (res.verification_uri_complete !== undefined) {
+      assertHttpUrl(res.verification_uri_complete, 'verification_uri_complete');
+    }
+    return res;
   }
 
   async devicePoll(device_code: string, intervalSec = 5): Promise<TokenResponse> {
@@ -245,7 +277,11 @@ export class OIDCAuth {
     }
   > {
     const start = await this.deviceStart();
-    const interval = Math.max(start.interval ?? 1, intervalSec);
+    // Coerce the provider's interval to a number and validate it is finite and positive.
+    const providerInterval = Number(start.interval);
+    const safeProviderInterval =
+      Number.isFinite(providerInterval) && providerInterval > 0 ? providerInterval : 1;
+    const interval = Math.max(safeProviderInterval, intervalSec);
     let aborted = false;
 
     const poll = async (): Promise<TokenResponse> => {
@@ -350,7 +386,7 @@ export class OIDCAuth {
     formBody: string,
   ): Promise<TSuccess> {
     try {
-      this.logger.debug('OIDCAuth Request', { formBody });
+      // this.logger.debug('OIDCAuth Request', { endpoint });
       const res = await this.fetch(endpoint, {
         method: 'POST',
         headers: {
@@ -373,7 +409,7 @@ export class OIDCAuth {
         const msg = err.error_description || err.error || `HTTP ${res.status}`;
         throw new CTSError(`OIDCAuth: ${msg}`, { cause: parseError });
       }
-      this.logger.debug('OIDCAuth Response', { json });
+      this.logger.debug('OIDCAuth Response', { status: res.status });
       return (json ?? {}) as TSuccess;
     } catch (err) {
       this.logger.error('OIDCAuth: postFormStrict failed', { err });
@@ -387,7 +423,7 @@ export class OIDCAuth {
     formBody: string,
   ): Promise<T | TokenResponse> {
     try {
-      this.logger.debug('OIDCAuth Request', { formBody });
+      // this.logger.debug('OIDCAuth Request', { endpoint });
       const res = await this.fetch(endpoint, {
         method: 'POST',
         headers: {
@@ -403,7 +439,7 @@ export class OIDCAuth {
       } catch (err) {
         this.logger.warn('OIDCAuth: bad JSON (loose)', { err });
       }
-      this.logger.debug('OIDCAuth Response', { json });
+      this.logger.debug('OIDCAuth Response', { status: res.status });
       return json ?? {};
     } catch (err) {
       this.logger.error('OIDCAuth: postFormLoose network error', { err });

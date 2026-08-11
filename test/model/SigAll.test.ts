@@ -5,7 +5,10 @@ import {
   type SigAllSigningPackage,
   MeltQuoteState,
   Amount,
+  computeMessageDigest,
   CTSError,
+  getPubKeyFromPrivKey,
+  schnorrVerifyDigest,
   type OutputDataLike,
   type Proof,
   type P2PKWitness,
@@ -13,6 +16,7 @@ import {
   type MeltPreview,
   type SwapPreview,
 } from '../../src';
+import { Bytes } from '../../src/utils';
 
 const dummyProof: Proof = {
   id: 'testid',
@@ -87,25 +91,21 @@ function decodeRawJson(input: string): string {
 describe('SigAll — computeDigests', () => {
   test('produces hex strings of correct length', () => {
     const digests = SigAll.computeDigests([dummyProof], [dummyBlindedMessage], 'dummyquote');
-    expect(typeof digests.legacy).toBe('string');
-    expect(typeof digests.current).toBe('string');
+    expect(typeof digests.v0).toBe('string');
     expect(typeof digests.v1).toBe('string');
-    expect(digests.legacy.length).toBe(64);
-    expect(digests.current.length).toBe(64);
+    expect(digests.v0.length).toBe(64);
     expect(digests.v1.length).toBe(64);
   });
 
-  test('legacy, current and v1 digests all differ', () => {
+  test('v0 and v1 digests differ', () => {
     const digests = SigAll.computeDigests([dummyProof], [dummyBlindedMessage]);
-    expect(digests.legacy).not.toBe(digests.current);
-    expect(digests.v1).not.toBe(digests.current);
-    expect(digests.v1).not.toBe(digests.legacy);
+    expect(digests.v1).not.toBe(digests.v0);
   });
 
   test('quoteId changes the digests', () => {
     const without = SigAll.computeDigests([dummyProof], [dummyBlindedMessage]);
     const with_ = SigAll.computeDigests([dummyProof], [dummyBlindedMessage], 'somequote');
-    expect(without.current).not.toBe(with_.current);
+    expect(without.v0).not.toBe(with_.v0);
     expect(without.v1).not.toBe(with_.v1);
   });
 });
@@ -118,9 +118,6 @@ describe('SigAll — extractSwapPackage', () => {
     expect(pkg.quote).toBeUndefined();
     expect(pkg.inputs.length).toBe(1);
     expect(pkg.outputs.length).toBe(2); // keepOutputs + sendOutputs
-    expect(pkg.digests.current.length).toBe(64);
-    expect(pkg.digests.legacy!.length).toBe(64);
-    expect(pkg.digests.v1!.length).toBe(64);
   });
 
   test('merges keepOutputs and sendOutputs in order', () => {
@@ -151,7 +148,6 @@ describe('SigAll — extractMeltPackage', () => {
     expect(pkg.quote).toBe('dummyquote');
     expect(pkg.inputs.length).toBe(1);
     expect(pkg.outputs.length).toBe(1);
-    expect(pkg.digests.current.length).toBe(64);
   });
 
   test('includes quote id', () => {
@@ -167,7 +163,6 @@ describe('SigAll — serializePackage / deserializePackage', () => {
       type: 'swap',
       inputs: [{ secret: 'testsecret', C: '02' + '1'.repeat(64) }],
       outputs: [dummyBlindedMessage],
-      digests: SigAll.computeDigests([dummyProof], [dummyBlindedMessage]),
       witness: { signatures: ['sig1'] },
     };
     const encoded = SigAll.serializePackage(pkg);
@@ -203,7 +198,6 @@ describe('SigAll — serializePackage / deserializePackage', () => {
       type: 'swap',
       inputs: [{ secret: 'testsecret', C: '02' + '1'.repeat(64) }],
       outputs: [largeBm],
-      digests: SigAll.computeDigests([dummyProof], [largeBm]),
     };
     const parsed = SigAll.deserializePackage(SigAll.serializePackage(pkg));
     expect(parsed.outputs[0].amount.equals(largeAmount)).toBeTruthy();
@@ -216,10 +210,6 @@ describe('SigAll — serializePackage / deserializePackage', () => {
         type: 'swap',
         inputs: [{ secret: 'testsecret', C: '02' + '1'.repeat(64) }],
         outputs: [{ amount: 32, id: 'bm1', B_: '02' + '2'.repeat(64) }],
-        digests: SigAll.computeDigests(
-          [dummyProof],
-          [{ amount: Amount.from(32), id: 'bm1', B_: '02' + '2'.repeat(64) }],
-        ),
       }),
     );
 
@@ -238,7 +228,6 @@ describe('SigAll — serializePackage / deserializePackage', () => {
       type: 'swap',
       inputs: [{ secret: 'testsecret', C: '02' + '1'.repeat(64) }],
       outputs: [largeBm],
-      digests: SigAll.computeDigests([dummyProof], [largeBm]),
     };
 
     const json = decodeRawJson(SigAll.serializePackage(pkg));
@@ -281,7 +270,6 @@ describe('SigAll — serializePackage / deserializePackage', () => {
           type: 'swap',
           inputs: [],
           outputs: [],
-          digests: { current: 'a'.repeat(64) },
         }),
       ),
     ).toThrow('Invalid signing package version');
@@ -295,7 +283,6 @@ describe('SigAll — serializePackage / deserializePackage', () => {
           type: 'unknown',
           inputs: [],
           outputs: [],
-          digests: { current: 'a'.repeat(64) },
         }),
       ),
     ).toThrow('Invalid signing package type');
@@ -309,7 +296,6 @@ describe('SigAll — serializePackage / deserializePackage', () => {
           type: 'swap',
           inputs: 'notanarray',
           outputs: [],
-          digests: { current: 'a'.repeat(64) },
         }),
       ),
     ).toThrow('inputs must be an array');
@@ -323,7 +309,6 @@ describe('SigAll — serializePackage / deserializePackage', () => {
           type: 'swap',
           inputs: [{ C: 'abc' }],
           outputs: [],
-          digests: { current: 'a'.repeat(64) },
         }),
       ),
     ).toThrow('secret must be string');
@@ -337,7 +322,6 @@ describe('SigAll — serializePackage / deserializePackage', () => {
           type: 'swap',
           inputs: [{ secret: 'x' }],
           outputs: [],
-          digests: { current: 'a'.repeat(64) },
         }),
       ),
     ).toThrow('C must be string');
@@ -351,7 +335,6 @@ describe('SigAll — serializePackage / deserializePackage', () => {
           type: 'swap',
           inputs: [],
           outputs: 'notanarray',
-          digests: { current: 'a'.repeat(64) },
         }),
       ),
     ).toThrow('outputs must be an array');
@@ -365,7 +348,6 @@ describe('SigAll — serializePackage / deserializePackage', () => {
           type: 'swap',
           inputs: [],
           outputs: [null],
-          digests: { current: 'a'.repeat(64) },
         }),
       ),
     ).toThrow('Invalid output at index 0');
@@ -379,7 +361,6 @@ describe('SigAll — serializePackage / deserializePackage', () => {
           type: 'swap',
           inputs: [],
           outputs: [{ B_: 'x', id: 'id1' }],
-          digests: { current: 'a'.repeat(64) },
         }),
       ),
     ).toThrow('amount must be a number or bigint');
@@ -393,7 +374,6 @@ describe('SigAll — serializePackage / deserializePackage', () => {
           type: 'swap',
           inputs: [],
           outputs: [{ amount: 1, id: 'id1' }],
-          digests: { current: 'a'.repeat(64) },
         }),
       ),
     ).toThrow('B_ invalid');
@@ -407,68 +387,9 @@ describe('SigAll — serializePackage / deserializePackage', () => {
           type: 'swap',
           inputs: [],
           outputs: [{ amount: 1, B_: 'x' }],
-          digests: { current: 'a'.repeat(64) },
         }),
       ),
     ).toThrow('id invalid');
-  });
-
-  test('throws if digests.current is missing', () => {
-    expect(() =>
-      SigAll.deserializePackage(
-        encodeRaw({
-          version: 'sigallA',
-          type: 'swap',
-          inputs: [],
-          outputs: [],
-        }),
-      ),
-    ).toThrow('digests.current is required');
-  });
-
-  test('throws if digests.current is empty string', () => {
-    expect(() =>
-      SigAll.deserializePackage(
-        encodeRaw({
-          version: 'sigallA',
-          type: 'swap',
-          inputs: [],
-          outputs: [],
-          digests: { current: '' },
-        }),
-      ),
-    ).toThrow('digests.current is required');
-  });
-
-  test('digest validation passes on correct digest', () => {
-    const pkg = SigAll.extractSwapPackage(makeSwapPreview());
-    const encoded = SigAll.serializePackage(pkg);
-    expect(() => SigAll.deserializePackage(encoded, { validateDigest: true })).not.toThrow();
-  });
-
-  test('digest validation throws on tampered current digest', () => {
-    const pkg = SigAll.extractSwapPackage(makeSwapPreview());
-    const tampered = {
-      ...pkg,
-      digests: { ...pkg.digests, current: pkg.digests.current.slice(0, 63) + '0' },
-    };
-    expect(() =>
-      SigAll.deserializePackage(SigAll.serializePackage(tampered), { validateDigest: true }),
-    ).toThrow('Digest validation failed');
-  });
-
-  test('digest validation throws on tampered v1 digest', () => {
-    const pkg = SigAll.extractSwapPackage(makeSwapPreview());
-    const tampered = {
-      ...pkg,
-      digests: {
-        ...pkg.digests,
-        v1: pkg.digests.v1!.slice(0, 63) + (pkg.digests.v1!.endsWith('0') ? '1' : '0'),
-      },
-    };
-    expect(() =>
-      SigAll.deserializePackage(SigAll.serializePackage(tampered), { validateDigest: true }),
-    ).toThrow('Digest validation failed: v1 digest mismatch');
   });
 });
 
@@ -479,22 +400,10 @@ describe('SigAll — signPackage', () => {
     expect(signed.witness?.signatures.length).toBeGreaterThan(0);
   });
 
-  test('signs every digest present (legacy + current + v1)', () => {
+  test('signs one signature per accepted format (v1 + v0)', () => {
     const pkg = SigAll.extractSwapPackage(makeSwapPreview());
-    expect(pkg.digests.legacy).toBeDefined();
-    expect(pkg.digests.v1).toBeDefined();
     const signed = SigAll.signPackage(pkg, dummyPrivkey);
-    expect(signed.witness?.signatures.length).toBe(3);
-  });
-
-  test('signs only current when legacy and v1 are absent (older peer package)', () => {
-    const pkg = SigAll.extractSwapPackage(makeSwapPreview());
-    const noLegacy: SigAllSigningPackage = {
-      ...pkg,
-      digests: { current: pkg.digests.current },
-    };
-    const signed = SigAll.signPackage(noLegacy, dummyPrivkey);
-    expect(signed.witness?.signatures.length).toBe(1);
+    expect(signed.witness?.signatures.length).toBe(2);
   });
 
   test('accumulates signatures across multiple signers (multi-party)', () => {
@@ -521,7 +430,7 @@ describe('SigAll — signPackage', () => {
 describe('SigAll — signDigest', () => {
   test('produces a hex string signature', () => {
     const digests = SigAll.computeDigests([dummyProof], [dummyBlindedMessage]);
-    const sig = SigAll.signDigest(digests.current, dummyPrivkey);
+    const sig = SigAll.signDigest(digests.v0, dummyPrivkey);
     expect(typeof sig).toBe('string');
     expect(sig.length).toBeGreaterThan(0);
   });
@@ -624,7 +533,7 @@ describe('SigAll — full transport roundtrip', () => {
 });
 
 describe('SigAll — serializePackage omits falsy optional fields', () => {
-  test('empty/falsy quote, digests and witness are not emitted', () => {
+  test('empty/falsy quote and witness are not emitted', () => {
     // serializePackage only adds a key when its value is truthy; falsy optionals
     // (eg an empty quote) must stay out of the transport JSON.
     const pkg = {
@@ -633,13 +542,11 @@ describe('SigAll — serializePackage omits falsy optional fields', () => {
       quote: '',
       inputs: [{ secret: 'testsecret', C: '02' + '1'.repeat(64) }],
       outputs: [dummyBlindedMessage],
-      digests: null,
       witness: null,
     } as unknown as SigAllSigningPackage;
 
     const json = decodeRawJson(SigAll.serializePackage(pkg));
     expect(json).not.toContain('"quote"');
-    expect(json).not.toContain('"digests"');
     expect(json).not.toContain('"witness"');
   });
 });
@@ -667,7 +574,6 @@ describe('SigAll — deserializePackage input/output shape guards', () => {
           type: 'swap',
           inputs: [null],
           outputs: [],
-          digests: { current: 'a'.repeat(64) },
         }),
       ),
     ).toThrow('Invalid input at index 0');
@@ -681,7 +587,6 @@ describe('SigAll — deserializePackage input/output shape guards', () => {
           type: 'swap',
           inputs: [5],
           outputs: [],
-          digests: { current: 'a'.repeat(64) },
         }),
       ),
     ).toThrow('Invalid input at index 0');
@@ -695,7 +600,6 @@ describe('SigAll — deserializePackage input/output shape guards', () => {
           type: 'swap',
           inputs: [],
           outputs: [5],
-          digests: { current: 'a'.repeat(64) },
         }),
       ),
     ).toThrow('Invalid output at index 0');
@@ -709,7 +613,6 @@ describe('SigAll — deserializePackage input/output shape guards', () => {
           type: 'swap',
           inputs: [],
           outputs: [{ amount: 1, B_: 123, id: 'id1' }],
-          digests: { current: 'a'.repeat(64) },
         }),
       ),
     ).toThrow('B_ invalid');
@@ -723,13 +626,12 @@ describe('SigAll — deserializePackage input/output shape guards', () => {
           type: 'swap',
           inputs: [],
           outputs: [{ amount: 1, B_: 'x', id: 123 }],
-          digests: { current: 'a'.repeat(64) },
         }),
       ),
     ).toThrow('id invalid');
   });
 
-  test('rejects a non-string digests.current', () => {
+  test('rejects a non-string-array witness.signatures', () => {
     expect(() =>
       SigAll.deserializePackage(
         encodeRaw({
@@ -737,34 +639,10 @@ describe('SigAll — deserializePackage input/output shape guards', () => {
           type: 'swap',
           inputs: [],
           outputs: [],
-          digests: { current: 123 },
+          witness: { signatures: [123] },
         }),
       ),
-    ).toThrow('digests.current is required');
-  });
-});
-
-describe('SigAll — deserializePackage legacy digest validation', () => {
-  test('throws when only the legacy digest is tampered', () => {
-    // current digest stays valid so validation must fall through to the legacy check.
-    const pkg = SigAll.extractSwapPackage(makeSwapPreview());
-    const tampered = {
-      ...pkg,
-      digests: { current: pkg.digests.current, legacy: pkg.digests.legacy!.slice(0, 63) + '0' },
-    };
-    expect(() =>
-      SigAll.deserializePackage(SigAll.serializePackage(tampered), { validateDigest: true }),
-    ).toThrow('legacy digest mismatch');
-  });
-});
-
-describe('SigAll — signPackage requires a current digest', () => {
-  test('throws when digests is absent', () => {
-    const pkg = SigAll.extractSwapPackage(makeSwapPreview());
-    const noDigests = { ...pkg, digests: undefined } as unknown as SigAllSigningPackage;
-    expect(() => SigAll.signPackage(noDigests, dummyPrivkey)).toThrow(
-      'digests.current is required to sign package',
-    );
+    ).toThrow('witness.signatures must be a string array');
   });
 });
 
@@ -812,5 +690,118 @@ describe('SigAll — mergeSignatures edge cases', () => {
     const signed = SigAll.signPackage(SigAll.extractSwapPackage(preview), dummyPrivkey);
     const merged = SigAll.mergeSwapPackage(signed, preview);
     expect((merged.inputs[0].witness as { preimage?: string }).preimage).toBe('deadbeef');
+  });
+});
+
+describe('SigAll — signing binds to package contents', () => {
+  const signerPubkey = () => Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(dummyPrivkey)));
+
+  test('signPackage emits signatures verifiable over the recomputed digests (v1, then v0)', () => {
+    const pkg = SigAll.extractSwapPackage(makeSwapPreview());
+    const signed = SigAll.signPackage(pkg, dummyPrivkey);
+
+    expect(signed.witness?.signatures).toHaveLength(2);
+    const digests = SigAll.computeDigests(pkg.inputs, pkg.outputs);
+    expect(schnorrVerifyDigest(signed.witness!.signatures[0], digests.v1, signerPubkey())).toBe(
+      true,
+    );
+    expect(schnorrVerifyDigest(signed.witness!.signatures[1], digests.v0, signerPubkey())).toBe(
+      true,
+    );
+  });
+
+  test('signPackage does not sign the amount-blind concat of secrets and B_ values', () => {
+    const pkg = SigAll.extractSwapPackage(makeSwapPreview());
+    const signed = SigAll.signPackage(pkg, dummyPrivkey);
+
+    const concat = pkg.inputs.map((i) => i.secret).join('') + pkg.outputs.map((o) => o.B_).join('');
+    const concatDigest = computeMessageDigest(concat, true);
+    for (const sig of signed.witness!.signatures) {
+      expect(schnorrVerifyDigest(sig, concatDigest, signerPubkey())).toBe(false);
+    }
+  });
+
+  test('a digests field smuggled into the package is ignored by sign and serialize', () => {
+    const pkg = SigAll.extractSwapPackage(makeSwapPreview());
+    const dirty = {
+      ...pkg,
+      digests: { current: '00'.repeat(32), legacy: '11'.repeat(32) },
+    } as unknown as SigAllSigningPackage;
+
+    const signed = SigAll.signPackage(dirty, dummyPrivkey);
+    const digests = SigAll.computeDigests(pkg.inputs, pkg.outputs);
+    expect(signed.witness?.signatures).toHaveLength(2);
+    expect(schnorrVerifyDigest(signed.witness!.signatures[0], digests.v1, signerPubkey())).toBe(
+      true,
+    );
+
+    const rounded = SigAll.deserializePackage(SigAll.serializePackage(dirty));
+    expect('digests' in rounded).toBe(false);
+  });
+
+  test('signPackage binds the melt quote', () => {
+    const pkg = SigAll.extractMeltPackage(makeMeltPreview());
+    const signed = SigAll.signPackage(pkg, dummyPrivkey);
+
+    const withQuote = SigAll.computeDigests(pkg.inputs, pkg.outputs, pkg.quote);
+    const withoutQuote = SigAll.computeDigests(pkg.inputs, pkg.outputs);
+    expect(schnorrVerifyDigest(signed.witness!.signatures[0], withQuote.v1, signerPubkey())).toBe(
+      true,
+    );
+    expect(schnorrVerifyDigest(signed.witness!.signatures[1], withQuote.v0, signerPubkey())).toBe(
+      true,
+    );
+    expect(
+      schnorrVerifyDigest(signed.witness!.signatures[0], withoutQuote.v1, signerPubkey()),
+    ).toBe(false);
+    expect(
+      schnorrVerifyDigest(signed.witness!.signatures[1], withoutQuote.v0, signerPubkey()),
+    ).toBe(false);
+  });
+});
+
+describe('SigAll — transport format', () => {
+  test('serializePackage emits the sigallA prefix and no digests', () => {
+    const encoded = SigAll.serializePackage(SigAll.extractSwapPackage(makeSwapPreview()));
+    expect(encoded.startsWith('sigallA')).toBe(true);
+    expect(JSON.stringify(SigAll.deserializePackage(encoded))).not.toContain('digests');
+  });
+
+  test('accepts a digest-carrying package from an older build and strips the field', () => {
+    const parsed = SigAll.deserializePackage(
+      encodeRaw({
+        version: 'sigallA',
+        type: 'swap',
+        inputs: [{ secret: 'testsecret', C: '02' + '1'.repeat(64) }],
+        outputs: [{ amount: 32, id: 'bm1', B_: 'dummyB' }],
+        digests: { current: 'a'.repeat(64), legacy: 'b'.repeat(64) },
+      }),
+    );
+
+    expect('digests' in parsed).toBe(false);
+    expect(parsed.inputs).toHaveLength(1);
+  });
+
+  test('rejects a melt package without a quote', () => {
+    const pkg = SigAll.extractMeltPackage(makeMeltPreview());
+    const encoded = SigAll.serializePackage({ ...pkg, quote: undefined });
+    expect(() => SigAll.deserializePackage(encoded)).toThrow(/quote/);
+  });
+});
+
+describe('SigAll — NUT-11 signing package vector', () => {
+  // Pinned byte-for-byte to the SigAllSigningPackage example in the NUT-11 test vectors.
+  const VECTOR =
+    'sigallAeyJ2ZXJzaW9uIjoic2lnYWxsQSIsInR5cGUiOiJzd2FwIiwiaW5wdXRzIjpbeyJzZWNyZXQiOiJbXCJQMlBLXCIse1wibm9uY2VcIjpcImM3ZjI4MGViNTVjMWU4NTY0ZTAzZGIwNjk3M2U5NGJjOWI2NjZkOWUxY2E0MmFkMjc4NDA4ZmU2MjU5NTAzMDNcIixcImRhdGFcIjpcIjAzMGQ4YWNlZGZlMDcyYzlmYTQ0OWExZWZlMDgxNzE1NzQwM2ZiZWM0NjBkOGU3OWY5NTc5NjYwNTZlNWRkNzZjMVwiLFwidGFnc1wiOltbXCJzaWdmbGFnXCIsXCJTSUdfQUxMXCJdXX1dIiwiQyI6IjAyYzk3ZWUzZDFkYjQxY2YwYTNkZGI2MDE3MjRiZTg3MTFhMDMyOTUwODExYmYzMjZmODIxOWM1MGM0ODA4ZDNjZCJ9XSwib3V0cHV0cyI6W3siYW1vdW50IjoyLCJpZCI6IjAwYmZhNzMzMDJkMTJmZmQiLCJCXyI6IjAzOGVjODUzZDY1YWUxYjc5YjVjZGJjMjc3NDE1MGIyY2IyODhkNmQyNmUxMjk1OGExNmZiMzNjMzJkOWE4NmMzOSJ9XSwid2l0bmVzcyI6eyJzaWduYXR1cmVzIjpbImNlMDE3Y2EyNWIxYjk3ZGYyZjcyZTRiNDlmNjlhYzI2YTI0MGNlMTRiMzY5MGE4ZmU2MTlkNDFjY2M0MmQzYzEyODJlMDczZjg1YWNkMzZkYzUwMDExNjM4OTA2ZjM1YjU2NjE1ZjI0ZTRkMDNlOGVmZmU4MjU3ZjZhODA4NTM4Il19fQ';
+
+  test('round-trips byte-for-byte and carries a valid SIG_ALL signature', () => {
+    const pkg = SigAll.deserializePackage(VECTOR);
+    expect(SigAll.serializePackage(pkg)).toBe(VECTOR);
+
+    // The witness signature verifies over the v0 digest recomputed from the
+    // package, for the lock pubkey inside the input secret.
+    const digest = SigAll.computeDigests(pkg.inputs, pkg.outputs).v0;
+    const lockPubkey = (JSON.parse(pkg.inputs[0].secret) as [string, { data: string }])[1].data;
+    expect(schnorrVerifyDigest(pkg.witness!.signatures[0], digest, lockPubkey)).toBe(true);
   });
 });

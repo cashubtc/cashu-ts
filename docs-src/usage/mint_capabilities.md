@@ -11,15 +11,20 @@ const wallet = new Wallet('http://localhost:3338');
 await wallet.loadMint();
 
 const info = wallet.getMintInfo();
+
+// optional: persist the response for offline use later
+// (see "Work offline from a stored response" below)
+localStorage.setItem('mintInfo', JSON.stringify(info.cache));
 ```
 
-Three helpers cover the common questions:
+Four helpers cover the common questions:
 
-| I want to…                               | Use                                             | Returns        |
-| :--------------------------------------- | :---------------------------------------------- | :------------- |
-| list the methods I can mint or melt with | `info.supportedMethods(op)`                     | `SwapMethod[]` |
-| check one method/unit pair               | `info.supportsMintMeltMethod(op, method, unit)` | `boolean`      |
-| inspect raw support for any NUT          | `info.isSupported(num)`                         | varies by NUT  |
+| I want to…                               | Use                                             | Returns                   |
+| :--------------------------------------- | :---------------------------------------------- | :------------------------ |
+| list the methods I can mint or melt with | `info.supportedMethods(op)`                     | `SwapMethod[]`            |
+| check one method/unit pair               | `info.supportsMintMeltMethod(op, method, unit)` | `boolean`                 |
+| read one pair's settings and limits      | `info.getMintMeltMethod(op, method, unit)`      | `SwapMethod \| undefined` |
+| inspect raw support for any NUT          | `info.isSupported(num)`                         | varies by NUT             |
 
 ## List supported methods
 
@@ -50,6 +55,34 @@ if (info.supportsMintMeltMethod('melt', 'bolt11', 'sat')) {
   // safe to prepare a bolt11 melt in sats
 }
 ```
+
+When you also need the amount limits, `getMintMeltMethod` returns the matched `SwapMethod`
+directly (`undefined` means the pair is unsupported or the operation is disabled):
+
+```ts
+const melt = info.getMintMeltMethod('melt', 'bolt11', 'sat');
+if (melt) {
+  console.log('melt limits:', melt.min_amount, '-', melt.max_amount); // null = no bound
+}
+```
+
+## Work offline from a stored response
+
+`MintInfo` does not need a live connection: its constructor accepts any persisted
+`GetInfoResponse`. Store `info.cache` while online (as in the first example above), and rehydrate
+later to answer capability questions before (or without) contacting the mint.
+
+```ts
+import { MintInfo } from '@cashu/cashu-ts';
+
+// e.g. when building the send screen at startup
+const stored = JSON.parse(localStorage.getItem('mintInfo')!);
+const offline = new MintInfo(stored);
+offline.getMintMeltMethod('melt', 'bolt11', 'sat'); // no network round-trip
+```
+
+To seed a whole wallet from persisted data (mint info plus keysets) so it starts without any
+network calls, use [`wallet.loadMintFromCache(storedInfo, keyChainCache)`](./create_wallet.md).
 
 ## Inspect raw NUT support
 

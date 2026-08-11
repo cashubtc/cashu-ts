@@ -33,6 +33,7 @@ import { encodeBase64ToJson, encodeBase64toUint8, encodeUint8toBase64Url } from 
 import { Bytes } from './Bytes';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { JSONInt } from './JSONInt';
+import { MAX_SPLIT_OUTPUTS } from './limits';
 
 /**
  * Splits the amount into denominations of the provided keyset.
@@ -45,7 +46,8 @@ import { JSONInt } from './JSONInt';
  * @param split? Optional custom split amounts.
  * @param order? Optional order for split amounts (if fill was required)
  * @returns Array of split amounts.
- * @throws Error if split sum is greater than value or mint does not have keys for requested split.
+ * @throws Error if split sum is greater than value, the keyset lacks requested denominations, or
+ *   the fill would exceed an internal output cap (coarse denominations over a large value).
  */
 export function splitAmount(
   value: AmountLike,
@@ -97,10 +99,18 @@ export function splitAmount(
   }
   for (const amtAsAmount of sortedKeyAmounts) {
     if (amtAsAmount.isZero()) continue;
-    // Calculate how many of this denomination fit into the remaining value
-    const requireCount = remainingValue.divideBy(amtAsAmount).toNumber();
-    // Add them to the split and reduce the target value by added amounts
-    normalizedSplit.push(...Array<Amount>(requireCount).fill(amtAsAmount));
+    // Calculate how many of this denomination fit into the remaining value.
+    // Guard requireCount: small keyset denom + large value could be millions of outputs.
+    // Compare against remaining budget, so an oversized count never reaches toNumber().
+    const requireCount = remainingValue.divideBy(amtAsAmount);
+    const budget = MAX_SPLIT_OUTPUTS - normalizedSplit.length;
+    if (budget <= 0 || requireCount.greaterThan(budget)) {
+      throw new CTSError(`Cannot split amount: fill would exceed ${MAX_SPLIT_OUTPUTS} outputs`);
+    }
+    const count = requireCount.toNumber();
+    for (let i = 0; i < count; i++) {
+      normalizedSplit.push(amtAsAmount);
+    }
     remainingValue = remainingValue.subtract(amtAsAmount.multiplyBy(requireCount));
     // Break early once target is satisfied
     if (remainingValue.isZero()) break;
@@ -174,12 +184,15 @@ export function numberToHexPadded64(scalar: bigint): string {
 }
 
 /**
- * Returns `true` if the string contains only hexadecimal characters (case-insensitive).
+ * Returns `true` if the value is byte-decodable hex (a string, even length, hex chars only).
  *
+ * @remarks
+ * Accepts `unknown`: IDs reach here from decoded tokens and mint responses, so a non-string must
+ * return `false`, not throw.
  * @internal
  */
-export function isValidHex(str: string) {
-  return /^[a-f0-9]+$/i.test(str);
+export function isValidHex(str: unknown): str is string {
+  return typeof str === 'string' && str.length % 2 === 0 && /^[a-f0-9]+$/i.test(str);
 }
 
 function hasNonHexId(p: Proof | Proof[]) {
@@ -367,11 +380,7 @@ export function getTokenMetadata(token: string): TokenMetadata {
     mint: tokenObj.mint,
     amount: sumProofs(tokenObj.proofs),
     ...(tokenObj.memo && { memo: tokenObj.memo }),
-    incompleteProofs: tokenObj.proofs.map((p) => {
-      const { id, ...rest } = p;
-      void id;
-      return rest;
-    }),
+    proofAmounts: tokenObj.proofs.map((p) => p.amount),
   };
 }
 
@@ -539,11 +548,17 @@ export function joinUrls(...parts: string[]): string {
 
 /**
  * Parses and normalizes a mint URL: validates the scheme (http/https only), rejects credentials,
- * query parameters, fragments, and encoded path delimiters, and strips any trailing slashes.
+ * query parameters, fragments, and percent-encoded characters in the path, and strips any trailing
+ * slashes.
  *
- * @internal
+ * @example
+ *
+ *     normalizeMintUrl('https://Mint.Example.COM/'); // 'https://mint.example.com'
+ *
+ * @throws CTSError if the URL is invalid, non-http(s), or contains credentials, query, fragment, or
+ *   percent-encoded characters in the path.
  */
-export function normalizeUrl(url: string): string {
+export function normalizeMintUrl(url: string): string {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -916,5 +931,54 @@ function removePrefix(token: string): string {
  * @internal
  */
 export function invoiceHasAmountInHRP(invoice: string): boolean {
-  return /^ln[a-z]{2,}[1-9][0-9]*(?:[mun]|0p)?1/i.test(invoice);
+  try {
+    return bolt11AmountMsat(invoice) !== null;
+  } catch {
+    return false; // malformed invoice or amount: no readable amount in the HRP
+  }
+}
+
+/**
+ * Msat per HRP amount unit for each BOLT11 multiplier ('p' is handled separately).
+ */
+const MULTIPLIER_MSAT: Record<string, bigint> = {
+  m: 100_000_000n, // milli-bitcoin
+  u: 100_000n, // micro-bitcoin
+  n: 100n, // nano-bitcoin
+};
+
+const MSAT_PER_BTC = 100_000_000_000n;
+
+/**
+ * Reads the amount a BOLT11 invoice asks for from its human readable part, in millisats.
+ *
+ * @remarks
+ * HRP only: no checksum or signature validation, that is the payer's job. Returns null for an
+ * amountless invoice.
+ * @throws If the string is not shaped like a BOLT11 invoice or the amount is malformed.
+ * @internal
+ */
+export function bolt11AmountMsat(pr: string): bigint | null {
+  if (typeof pr !== 'string') throw new CTSError('BOLT11 invoice must be a string');
+  const lower = pr.toLowerCase();
+  // The bech32 charset excludes '1', so the last '1' is the HRP separator.
+  const sep = lower.lastIndexOf('1');
+  if (!lower.startsWith('ln') || sep < 3 || sep === lower.length - 1) {
+    throw new CTSError('Invalid BOLT11 invoice');
+  }
+  const match = /^ln[a-z]+?(\d*)([munp]?)$/.exec(lower.slice(0, sep));
+  if (!match) throw new CTSError('Invalid BOLT11 invoice');
+
+  const [, digits, multiplier] = match;
+  if (digits === '') return null; // amountless invoice
+  // BOLT11 forbids leading zeros, which also rules out a zero amount.
+  if (digits.startsWith('0')) throw new CTSError('Invalid BOLT11 amount');
+  const n = BigInt(digits);
+  if (multiplier === '') return n * MSAT_PER_BTC;
+  if (multiplier === 'p') {
+    // Pico-bitcoin is 0.1 msat per unit; BOLT11 requires a multiple of 10.
+    if (n % 10n !== 0n) throw new CTSError('Invalid BOLT11 amount');
+    return n / 10n;
+  }
+  return n * MULTIPLIER_MSAT[multiplier];
 }

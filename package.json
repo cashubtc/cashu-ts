@@ -1,6 +1,6 @@
 {
   "name": "@cashu/cashu-ts",
-  "version": "5.0.0-rc.4",
+  "version": "5.0.0-rc.5",
   "description": "cashu library for communicating with a cashu mint",
   "type": "module",
   "engines": {
@@ -82,7 +82,7 @@
     "cashu"
   ],
   "author": "gandlaf21",
-  "license": "MIT",
+  "license": "MIT OR Apache-2.0",
   "devDependencies": {
     "@commitlint/cli": "^20.5.3",
     "@commitlint/config-conventional": "^20.5.3",

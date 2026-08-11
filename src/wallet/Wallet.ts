@@ -14,13 +14,13 @@ import {
   hashToCurveBls,
   isBlsKeyset,
   isP2PKSigAll,
-  buildP2PKSigAllMessage,
+  buildP2PKSigAllMessageV0,
   buildP2PKSigAllMessageV1,
   assertSigAllInputs,
-  buildLegacyP2PKSigAllMessage,
   parseSecret,
 } from '../crypto';
 // Internal transitional fallback — not part of crypto/index.ts
+import { normalizeSecpPubkey } from '../crypto/curve_secp';
 import { signMintQuoteLegacy } from '../crypto/NUT20';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
@@ -29,6 +29,7 @@ import { CTSError, isMintOperationError } from '../model/Errors';
 import { MintInfo } from '../model/MintInfo';
 import { OutputData, type OutputDataLike } from '../model/OutputData';
 import { DefaultOutputDataCreator, type OutputDataCreator } from '../model/OutputDataCreator';
+import type { PaymentRequest } from '../model/PaymentRequest';
 import type {
   GetInfoResponse,
   MeltRequest,
@@ -58,17 +59,18 @@ import type { Token } from '../model/types/token';
 import { BATCH_POOL_SIZE, runPool } from '../transport';
 import type { RequestFetch, RequestFn } from '../transport';
 import {
+  bolt11AmountMsat,
   getDecodedToken,
   invoiceHasAmountInHRP,
+  normalizeMintUrl,
   normalizeProofAmounts,
-  normalizeUrl,
   splitAmount,
   sumProofs,
   verifyProofsForReceive,
   ABSOLUTE_MAX_BATCH_SIZE,
 } from '../utils';
 
-import { getKeepAmounts, stringifyOutputTypeForLog } from './_internal';
+import { ceilLog2, getKeepAmounts, stringifyOutputTypeForLog } from './_internal';
 import {
   type CounterSource,
   EphemeralCounterSource,
@@ -77,7 +79,7 @@ import {
 } from './CounterSource';
 import { KeyChain } from './KeyChain';
 import { type Keyset } from './Keyset';
-import { selectProofsRGLI, type SelectProofs } from './SelectProofs';
+import { selectProofsRotating, type SelectProofs } from './SelectProofs';
 import {
   type MeltPreview,
   type OutputType,
@@ -201,7 +203,7 @@ class Wallet {
    * @param options.counterInit Seed values for the built-in EphemeralCounterSource. Ignored if
    *   counterSource is also provided.
    * @param options.denominationTarget Target proofs per denomination, default 3.
-   * @param options.selectProofs Custom proof selection function.
+   * @param options.selectProofs Custom proof selection function. Default: selectProofsRotating.
    * @param options.outputDataCreator Custom OutputDataCreator implementation. The canonical and
    *   maintained implementation is the default Noble Curves based behavior exposed by
    *   `OutputData.create*()`. Custom creators are an escape hatch for runtime-specific needs, and
@@ -240,7 +242,7 @@ class Wallet {
     this.ops = new WalletOps(this);
     this.on = new WalletEvents(this);
     this._logger = options?.logger ?? NULL_LOGGER; // init early (seed can throw)
-    this._selectProofs = options?.selectProofs ?? selectProofsRGLI; // vital
+    this._selectProofs = options?.selectProofs ?? selectProofsRotating; // vital
     this._outputDataCreator = options?.outputDataCreator ?? new DefaultOutputDataCreator();
     this.mint =
       typeof mint === 'string'
@@ -254,12 +256,11 @@ class Wallet {
     this._unit = options?.unit ?? this._unit;
     this._boundKeysetId = options?.keysetId ?? this._boundKeysetId;
     if (options?.bip39seed) {
+      // failIf forwards this context to the logger, so pass the type, never the seed.
       this.failIf(
         !(options.bip39seed instanceof Uint8Array),
         'bip39seed must be a valid Uint8Array',
-        {
-          bip39seed: options.bip39seed,
-        },
+        { received: typeof options.bip39seed },
       );
       this._seed = options.bip39seed;
     }
@@ -574,16 +575,17 @@ class Wallet {
       }
     }
 
-    // If any deterministic OutputType has a manual counter (> 0), advance
-    // the counter source so future "auto" allocations do not reuse counters.
+    // Claim the manual range up front. Bumping the cursor afterwards would leave a window
+    // for a concurrent auto reservation to hand out counters inside the range, and the bump
+    // would then silently do nothing because the cursor had already moved past it.
     if (manual.length > 0) {
-      // Get the max counter manually allocated
+      const minManualStart = Math.min(...manual.map((ot) => ot.counter));
       const maxManualEnd = Math.max(...manual.map((ot) => ot.counter + ot.denominations!.length));
 
-      // Bump cursor to at least the end of the manually allocated range
-      await this._counterSource.advanceToAtLeast(keysetId, maxManualEnd);
-      this._logger.debug('Counter source advanced to respect manual deterministic counters', {
+      await this._counterSource.reserveAt(keysetId, minManualStart, maxManualEnd - minManualStart);
+      this._logger.debug('Counter source claimed manual deterministic range', {
         keysetId,
+        minManualStart,
         maxManualEnd,
       });
     }
@@ -771,21 +773,36 @@ class Wallet {
     // If includeFees, we create additional output amounts to cover the
     // fee the receiver will pay when they spend the proofs (ie sender pays fees)
     if (includeFees) {
-      let receiveFee = this.getFeesForKeyset(denominations.length, keyset.id);
-      let receiveFeeAmounts = splitAmount(receiveFee, keyset.keys);
-      while (
-        this.getFeesForKeyset(
-          denominations.length + receiveFeeAmounts.length,
-          keyset.id,
-        ).greaterThan(receiveFee)
-      ) {
-        receiveFee = receiveFee.add(1);
-        receiveFeeAmounts = splitAmount(receiveFee, keyset.keys);
-      }
-      newAmount = newAmount.add(receiveFee);
+      const receiveFeeAmounts = this.receiveFeeAmounts(denominations.length, keyset);
+      newAmount = newAmount.add(Amount.sum(receiveFeeAmounts));
       denominations = [...denominations, ...receiveFeeAmounts];
     }
     return { ...outputType, denominations };
+  }
+
+  /**
+   * Extra denominations that cover the input fee for spending `nOutputs` outputs plus themselves.
+   *
+   * Iterates until the fee is stable, since fee outputs also incur fees.
+   */
+  private receiveFeeAmounts(nOutputs: number, keyset: Keyset): Amount[] {
+    // Bound the +1 convergence; any realistic keyset converges in a few dozen steps.
+    const maxIters = 4_096;
+    let receiveFee = this.getFeesForKeyset(nOutputs, keyset.id);
+    let receiveFeeAmounts = splitAmount(receiveFee, keyset.keys);
+    let iters = 0;
+    while (
+      this.getFeesForKeyset(nOutputs + receiveFeeAmounts.length, keyset.id).greaterThan(receiveFee)
+    ) {
+      if (iters++ > maxIters) {
+        throw new CTSError(
+          `Fee calculation for keyset ${keyset.id} did not converge (input_fee_ppk too high for its denominations)`,
+        );
+      }
+      receiveFee = receiveFee.add(1);
+      receiveFeeAmounts = splitAmount(receiveFee, keyset.keys);
+    }
+    return receiveFeeAmounts;
   }
 
   /**
@@ -921,11 +938,11 @@ class Wallet {
     const sortedOutputData: OutputDataLike[] = indices.map((i) => mergedBlindingData[i]);
     const sortedKeepVector: boolean[] = indices.map((i) => keepVector[i]);
     const outputs = sortedOutputData.map((d) => d.blindedMessage);
-    this._logger.debug('createSwapTransaction:', {
-      indices,
-      sortedKeepVector,
-      // outputs, // <-- removed for security
-    });
+    // this._logger.debug('createSwapTransaction:', {
+    //   indices,
+    //   sortedKeepVector,
+    //   outputs,
+    // });
     const payload: SwapRequest = {
       inputs,
       outputs,
@@ -1007,7 +1024,7 @@ class Wallet {
       proofs = normalizeProofAmounts(token);
     } else {
       const decodedToken: Token = typeof token === 'string' ? this.decodeToken(token) : token;
-      const tokenMintUrl = normalizeUrl(decodedToken.mint);
+      const tokenMintUrl = normalizeMintUrl(decodedToken.mint);
       this.failIf(tokenMintUrl !== this.mint.mintUrl, 'Token belongs to a different mint', {
         token: tokenMintUrl,
         wallet: this.mint.mintUrl,
@@ -1021,16 +1038,7 @@ class Wallet {
     }
 
     // Validate all proof keyset IDs use this wallet's unit
-    const knownIds = this._keyChain.getKeysets().map((k) => k.id);
-    const badProof = proofs.find((p) => !p.id || !knownIds.includes(p.id));
-    this.failIf(
-      !!badProof,
-      `Proof has unrecognised keyset. '${badProof?.id}' is not a ${this._unit} keyset from this mint`,
-      {
-        id: badProof?.id,
-        knownIds,
-      },
-    );
+    this.assertProofsInWalletUnit(proofs);
 
     // Check total amount
     const totalAmount = this.parseAmount(sumProofs(proofs), 'prepareSwapToReceive', true);
@@ -1089,7 +1097,7 @@ class Wallet {
    * @param proofs Array of proofs (must sum >= amount; pre-sign if P2PK-locked).
    * @param config Optional parameters for the send.
    * @returns SendResponse with keep/send proofs.
-   * @throws Throws if the send cannot be completed offline.
+   * @throws If funds are insufficient, or no offline selection matches the amount.
    */
   sendOffline(amount: AmountLike, proofs: ProofLike[], config?: SendOfflineConfig): SendResponse {
     const sendAmount = this.parseAmount(amount, 'sendOffline');
@@ -1112,6 +1120,12 @@ class Wallet {
       sendAmount,
       includeFees,
       exactMatch,
+    );
+    // No selection covers the amount: fail rather than return an empty send. send() catches this
+    // and falls back to a swap; direct callers get a clear failure instead of a silent no-op.
+    this.failIf(
+      !sendAmount.isZero() && send.length === 0,
+      'Send cannot be completed offline for the requested amount',
     );
     // Ensure witnesses are serialized, strip DLEQ if not required, keep p2pk_e
     const sendPrepared = this._prepareInputsForMint(send, requireDleq, true);
@@ -1409,7 +1423,9 @@ class Wallet {
    *
    * @remarks
    * Uses an adapted Randomized Greedy with Local Improvement (RGLI) algorithm, which has a time
-   * complexity O(n log n) and space complexity O(n).
+   * complexity O(n log n) and space complexity O(n). The default selector prefers stale keysets
+   * (base64, older versions, inactive) so balances rotate onto the current keyset; pass
+   * `selectProofs: selectProofsRGLI` in the Wallet options for keyset-neutral selection.
    * @param proofs Array of proofs available to select from. Accepts {@link ProofLike} so proofs
    *   loaded from storage (with `amount: number`) work without manual conversion.
    * @param amountToSend The target amount to send.
@@ -1464,14 +1480,13 @@ class Wallet {
     this.failIfNullish(outputData, 'OutputData is required for SIG_ALL proof signing.');
     assertSigAllInputs(normalizedProofs);
 
-    // SIG_ALL is in flux currently, so let's generate all known message formats
-    // and sign the first proof only against each message...
+    // SIG_ALL is in flux currently, so sign the first proof only against each
+    // supported message format...
     const [first, ...rest] = normalizedProofs;
     let signedFirst = first;
     const messages = [
-      buildLegacyP2PKSigAllMessage(normalizedProofs, outputData, quoteId),
-      buildP2PKSigAllMessage(normalizedProofs, outputData, quoteId),
       buildP2PKSigAllMessageV1(normalizedProofs, outputData, quoteId),
+      buildP2PKSigAllMessageV0(normalizedProofs, outputData, quoteId),
     ];
     for (const msg of messages) {
       signedFirst = cryptoSignP2PKProofs([signedFirst], privkey, this._logger, msg)[0];
@@ -1491,6 +1506,85 @@ class Wallet {
   getFeesForProofs(proofs: Array<Pick<Proof, 'id'>>): Amount {
     const sumPPK = Amount.sum(proofs.map((proof) => this.getProofFeePPK(proof))).toBigInt();
     return Amount.from((sumPPK + 999n) / 1000n);
+  }
+
+  /**
+   * Payee-side NUT-18 settlement check: do these received proofs net the requested amount?
+   *
+   * @remarks
+   * Verifies `sum(proofs) - inputFees >= amount + mf`, with input fees from this wallet's keysets
+   * and `mf` priced from this mint's NUT-05 melt methods for the wallet unit. Checks the amount
+   * only; proof integrity (DLEQ, locks) remains a separate check.
+   * @param pr - The payment request being settled.
+   * @param proofs - The received proofs (from this wallet's mint).
+   * @param expectedAmount - Expected amount for amountless requests; ignored when the request sets
+   *   `a`.
+   * @throws If no amount is available to check against, the request unit does not match this
+   *   wallet, a proof keyset is unknown, or the request is invalid per NUT-18.
+   */
+  isPaymentRequestSatisfied(
+    pr: PaymentRequest,
+    proofs: Array<Pick<Proof, 'id' | 'amount' | 'secret'>>,
+    expectedAmount?: AmountLike,
+  ): boolean {
+    const expected =
+      pr.amount ?? (expectedAmount !== undefined ? Amount.from(expectedAmount) : undefined);
+    if (!expected) {
+      throw new CTSError('amountless payment request: pass the expected amount to check against');
+    }
+    if (pr.unit && pr.unit !== this._unit) {
+      throw new CTSError(`request unit '${pr.unit}' does not match wallet unit '${this._unit}'`);
+    }
+    this.assertProofsInWalletUnit(proofs);
+    this.assertNoDuplicateProofs(proofs);
+    // mf applies only when this mint is outside the request's mint list (NUT-18).
+    let mf = Amount.zero();
+    if (pr.supportedMethods?.length && !pr.includesMint(this.mint.mintUrl)) {
+      const meltMethods = this.getMintInfo()
+        .supportedMethods('melt')
+        .filter((m) => m.unit === this._unit)
+        .map((m) => m.method);
+      mf = pr.feesFor(this.mint.mintUrl, meltMethods);
+    }
+    const needed = expected.add(mf).add(this.getFeesForProofs(proofs));
+    return sumProofs(proofs).compareTo(needed) >= 0;
+  }
+
+  /**
+   * Asserts every proof belongs to a keyset of the wallet's unit.
+   *
+   * @remarks
+   * Amounts are unit-less numbers, so a foreign-unit proof would otherwise count toward a total.
+   * @throws If any proof's keyset is unknown or belongs to another unit of this mint.
+   */
+  private assertProofsInWalletUnit(proofs: Array<Pick<Proof, 'id'>>): void {
+    const badProof = proofs.find((p) => !this._keyChain.isUnitKeyset(p.id));
+    this.failIf(
+      !!badProof,
+      `Proof has unrecognised keyset. '${badProof?.id}' is not a ${this._unit} keyset from this mint`,
+      { id: badProof?.id },
+    );
+  }
+
+  /**
+   * Asserts no proof appears twice.
+   *
+   * @remarks
+   * A proof is bearer value redeemable once: the mint keys spent state on `Y =
+   * hash_to_curve(secret)` (NUT-07), so copies sharing a secret are one proof, not two.
+   * @throws If two proofs share a secret.
+   */
+  private assertNoDuplicateProofs(proofs: Array<Pick<Proof, 'secret'>>): void {
+    const seen = new Set<string>();
+    for (const [i, p] of proofs.entries()) {
+      // Report the position, never the secret: it is the spending material.
+      this.failIf(
+        seen.has(p.secret),
+        `Duplicate proof at index ${i}: each proof may appear only once`,
+        { index: i },
+      );
+      seen.add(p.secret);
+    }
   }
 
   /**
@@ -1523,15 +1617,38 @@ class Wallet {
    * @returns Fee amount.
    */
   getFeesForKeyset(nInputs: number, keysetId: string): Amount {
+    let feePPK: number;
     try {
       // We must NOT fallback to wallet's keyset
-      const feePPK = this._keyChain.getKeyset(keysetId).fee;
-      return Amount.from(Math.floor(Math.max((nInputs * feePPK + 999) / 1000, 0)));
+      feePPK = this._keyChain.getKeyset(keysetId).fee;
     } catch (e) {
       const message = `No keyset found with ID ${keysetId}`;
       this._logger.error(message, { e });
       throw new CTSError(message, { cause: e });
     }
+    // fee = ceil(nInputs * feePPK / 1000). ceilPercent keeps the product in bigint, so a large
+    // (ingest-bounded) fee cannot lose integer precision the way number math would.
+    return Amount.from(nInputs).ceilPercent(feePPK, 1000);
+  }
+
+  /**
+   * Fee to add on top of `amount` so the resulting outputs can later be spent at no cost to the
+   * receiver (ie sender pays fees). This is the amount `includeFees` adds.
+   *
+   * @remarks
+   * The fee depends on the output count, taken from the default denomination split of `amount`.
+   * Pass `nOutputs` when pricing up custom denomination sets.
+   * @param amount The amount the receiver should net after swap fees.
+   * @param opts.keysetId Optional `keysetId` to price against (default: the wallet's bound keyset)
+   * @param opts.nOutputs Optional Override the output count for custom denoms (default: optimal
+   *   split).
+   * @returns The fee, zero when the keyset charges no input fees.
+   */
+  getFeesToInclude(amount: AmountLike, opts?: { keysetId?: string; nOutputs?: number }): Amount {
+    const keyset = this.getKeyset(opts?.keysetId);
+    const parsed = this.parseAmount(amount, 'getFeesToInclude', true);
+    const nOutputs = opts?.nOutputs ?? splitAmount(parsed, keyset.keys).length;
+    return Amount.sum(this.receiveFeeAmounts(nOutputs, keyset));
   }
 
   /**
@@ -1782,11 +1899,51 @@ class Wallet {
     // Custom methods are fine, but NUT-04 requires the mint to advertise them
     this.requireSupport('mint', method);
     this.requireMintableKeyset('createMintQuote');
-    const body = { ...payload, unit: this._unit };
+    // When the caller locks the quote (NUT-20), validate and normalize the pubkey.
+    const rawPubkey = payload.pubkey;
+    const normPubkey =
+      typeof rawPubkey === 'string' && rawPubkey.length > 0
+        ? normalizeSecpPubkey(rawPubkey)
+        : undefined;
+    const body = { ...payload, unit: this._unit, ...(normPubkey ? { pubkey: normPubkey } : {}) };
     const res = await this.mint.createMintQuote<TRes>(method, body, {
       normalize: options?.normalize,
     });
+    if (normPubkey) {
+      this.failIf(typeof res.pubkey !== 'string', 'Mint returned unlocked mint quote');
+      this.failIf(
+        res.pubkey!.toLowerCase() !== normPubkey,
+        'Mint quote is not locked to the requested pubkey',
+      );
+    }
     return { ...res, unit: res.unit || this._unit };
+  }
+
+  /**
+   * Asserts a bolt11 mint quote matches the amount the caller asked for.
+   *
+   * @remarks
+   * For sat quotes the invoice HRP amount is compared too; other units are not directly comparable
+   * to the invoice, so only the quoted amount is checked.
+   */
+  private assertBolt11MintQuoteAmount(res: MintQuoteBolt11Response, expected: Amount): void {
+    this.failIf(!res.amount.equals(expected), 'Mint quote amount does not match', {
+      expected: expected.toString(),
+      quoted: res.amount.toString(),
+    });
+    if (this._unit !== 'sat') return;
+    let msat: bigint | null = null;
+    try {
+      msat = bolt11AmountMsat(res.request);
+    } catch {
+      // fall through: an unreadable invoice fails the comparison below
+    }
+    // A sat quote's invoice must ask for exactly the requested amount (in whole sats).
+    const matches = msat !== null && expected.multiplyBy(1000).equals(msat);
+    this.failIf(!matches, 'Mint quote invoice amount does not match the quote', {
+      expected: expected.toString(),
+      invoiceMsat: msat,
+    });
   }
 
   /**
@@ -1820,6 +1977,7 @@ class Wallet {
       description: description,
     };
     const res = await this.mint.createMintQuoteBolt11(mintQuotePayload);
+    this.assertBolt11MintQuoteAmount(res, mintAmount);
     return { ...res, unit: res.unit || this._unit };
   }
 
@@ -1839,6 +1997,8 @@ class Wallet {
   ): Promise<MintQuoteBolt11Response> {
     this.requireSupport('mint', 'bolt11');
     this.requireMintableKeyset('createLockedMintQuote');
+    this.failIf(typeof pubkey !== 'string', 'A pubkey is required to lock the mint quote');
+    const normPubkey = normalizeSecpPubkey(pubkey);
     const mintAmount = this.parseAmount(amount, 'createLockedMintQuote');
     const { supported } = this.getMintInfo().isSupported(20);
     this.failIf(!supported, 'Mint does not support NUT-20');
@@ -1846,11 +2006,16 @@ class Wallet {
       unit: this._unit,
       amount: mintAmount,
       description: description,
-      pubkey: pubkey,
+      pubkey: normPubkey,
     };
     const res = await this.mint.createMintQuoteBolt11(mintQuotePayload);
+    this.assertBolt11MintQuoteAmount(res, mintAmount);
     this.failIf(typeof res.pubkey !== 'string', 'Mint returned unlocked mint quote');
     const resPubkey = res.pubkey!;
+    this.failIf(
+      resPubkey.toLowerCase() !== normPubkey,
+      'Mint quote is not locked to the requested pubkey',
+    );
     return { ...res, pubkey: resPubkey, unit: res.unit || this._unit };
   }
 
@@ -1874,6 +2039,8 @@ class Wallet {
   ): Promise<MintQuoteBolt12Response> {
     this.requireSupport('mint', 'bolt12');
     this.requireMintableKeyset('createMintQuoteBolt12');
+    this.failIf(typeof pubkey !== 'string', 'A pubkey is required to lock the mint quote');
+    const normPubkey = normalizeSecpPubkey(pubkey);
     // Check if mint supports description for bolt12
     const mintInfo = this.getMintInfo();
     if (options?.description && !mintInfo.supportsNut04Description('bolt12', this._unit)) {
@@ -1886,13 +2053,18 @@ class Wallet {
         : undefined;
 
     const mintQuotePayload: MintQuoteBolt12Request = {
-      pubkey: pubkey,
+      pubkey: normPubkey,
       unit: this._unit,
       amount,
       description: options?.description,
     };
 
-    return this.mint.createMintQuoteBolt12(mintQuotePayload);
+    const res = await this.mint.createMintQuoteBolt12(mintQuotePayload);
+    this.failIf(
+      typeof res.pubkey !== 'string' || res.pubkey.toLowerCase() !== normPubkey,
+      'Mint quote is not locked to the requested pubkey',
+    );
+    return res;
   }
 
   /**
@@ -1906,7 +2078,13 @@ class Wallet {
   async createMintQuoteOnchain(pubkey: string): Promise<MintQuoteOnchainResponse> {
     this.requireSupport('mint', 'onchain');
     this.requireMintableKeyset('createMintQuoteOnchain');
-    const res = await this.mint.createMintQuoteOnchain({ unit: this._unit, pubkey });
+    this.failIf(typeof pubkey !== 'string', 'A pubkey is required to lock the mint quote');
+    const normPubkey = normalizeSecpPubkey(pubkey);
+    const res = await this.mint.createMintQuoteOnchain({ unit: this._unit, pubkey: normPubkey });
+    this.failIf(
+      typeof res.pubkey !== 'string' || res.pubkey.toLowerCase() !== normPubkey,
+      'Mint quote is not locked to the requested pubkey',
+    );
     return { ...res, unit: res.unit || this._unit };
   }
 
@@ -1949,7 +2127,10 @@ class Wallet {
     quote: string | MintQuoteBolt11Response,
   ): Promise<MintQuoteBolt11Response> {
     const quoteId = typeof quote === 'string' ? quote : quote.quote;
-    return this.mint.checkMintQuoteBolt11(quoteId);
+    const res = await this.mint.checkMintQuoteBolt11(quoteId);
+    // No caller-side expectation here, so check the invoice against the quote's own amount.
+    this.assertBolt11MintQuoteAmount(res, res.amount);
+    return res;
   }
 
   /**
@@ -2014,7 +2195,9 @@ class Wallet {
     quotes: Array<string | MintQuoteBolt11Response>,
   ): Promise<MintQuoteBolt11Response[]> {
     const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
-    return this.mint.checkMintQuoteBatchBolt11(quoteIds);
+    const res = await this.mint.checkMintQuoteBatchBolt11(quoteIds);
+    for (const quote of res) this.assertBolt11MintQuoteAmount(quote, quote.amount);
+    return res;
   }
 
   /**
@@ -2090,7 +2273,7 @@ class Wallet {
     const availableAmount = amountPaid.subtract(amountIssued);
     this.failIf(
       requestedAmount.greaterThan(availableAmount),
-      `Mint quote ${quote.quote} has only ${availableAmount.toString()} available to mint; requested ${requestedAmount.toString()}`,
+      `Mint quote has only ${availableAmount.toString()} available to mint; requested ${requestedAmount.toString()}`,
       {
         method,
         amount_paid: amountPaid.toString(),
@@ -2113,7 +2296,7 @@ class Wallet {
         typeof quote.expiry === 'number' &&
         quote.expiry > 0 && // some mints (e.g. CDK) emit 0 for "no expiry"; spec says null
         quote.expiry < Math.floor(Date.now() / 1000),
-      `Mint quote ${quote.quote} has expired`,
+      `Mint quote has expired`,
     );
   }
 
@@ -2327,7 +2510,7 @@ class Wallet {
       const quotePubkey = 'pubkey' in quote ? (quote.pubkey as string | undefined) : undefined;
       this.failIf(
         !quotePubkey && Array.isArray(privkey),
-        `prepareMint: multiple privkeys supplied for quote '${quote.quote}' without pubkey`,
+        `prepareMint: multiple privkeys supplied for a quote without pubkey`,
       );
       const signingKey = quotePubkey
         ? findSigningKey(quotePubkey, privkey)
@@ -2515,7 +2698,7 @@ class Wallet {
     const signatures: Array<string | null> = [];
     const legacySignatures: Array<string | null> = []; // Temporary legacy message support
     let hasSignatures = false;
-    for (const entry of entries) {
+    for (const [i, entry] of entries.entries()) {
       const quotePubkey = 'pubkey' in entry.quote ? entry.quote.pubkey : undefined;
       if (quotePubkey && privkey) {
         const signingKey = findSigningKey(quotePubkey, privkey);
@@ -2525,7 +2708,7 @@ class Wallet {
       } else {
         if (privkey && !quotePubkey) {
           this._logger.warn(
-            `prepareBatchMint: privkey supplied but quote '${entry.quote.quote}' has no pubkey — treating as unlocked`,
+            `prepareBatchMint: privkey supplied but quote #${i + 1} has no pubkey; treating as unlocked`,
           );
         }
         signatures.push(null);
@@ -2618,6 +2801,27 @@ class Wallet {
   }
 
   /**
+   * Asserts a bolt11 melt quote does not charge more than the invoice asks for.
+   *
+   * @remarks
+   * Sat quotes only; other units are not directly comparable to the invoice. One-sided by design: a
+   * quote may round a sub-sat invoice up to the next sat, and undercharging is the mint's loss.
+   * Pass `null` when there is no millisat expectation to compare against.
+   */
+  private assertBolt11MeltQuoteAmount(
+    res: MeltQuoteBolt11Response,
+    expectedMsat: AmountLike | null,
+  ): void {
+    if (this._unit !== 'sat' || expectedMsat === null) return;
+    const msat = Amount.from(expectedMsat);
+    const maxSat = msat.ceilPercent(1, 1000); // ceil(msat / 1000)
+    this.failIf(res.amount.greaterThan(maxSat), 'Melt quote amount exceeds the invoice amount', {
+      quoted: res.amount.toString(),
+      invoiceMsat: msat.toString(),
+    });
+  }
+
+  /**
    * Requests a melt quote from the mint. Response returns amount and fees for a given unit in order
    * to pay a Lightning invoice.
    *
@@ -2659,6 +2863,16 @@ class Wallet {
         : {}),
     };
     const meltQuote = await this.mint.createMeltQuoteBolt11(meltQuotePayload);
+    let expectedMsat: AmountLike | null = null;
+    try {
+      expectedMsat = bolt11AmountMsat(invoice);
+    } catch {
+      // Unreadable caller invoice: the mint validates it; nothing to compare against.
+    }
+    if (expectedMsat === null && normalizedAmountMsat !== undefined) {
+      expectedMsat = normalizedAmountMsat;
+    }
+    this.assertBolt11MeltQuoteAmount(meltQuote, expectedMsat);
     return {
       ...meltQuote,
       unit: meltQuote.unit || this._unit,
@@ -2749,6 +2963,8 @@ class Wallet {
       options: { mpp: { amount: normalizedMillisatPartialAmount } },
     };
     const meltQuote = await this.mint.createMeltQuoteBolt11(meltQuotePayload);
+    // A partial quote is bounded by the caller's own millisat share, not the invoice total.
+    this.assertBolt11MeltQuoteAmount(meltQuote, normalizedMillisatPartialAmount);
     return { ...meltQuote, request: invoice, unit: this._unit };
   }
 
@@ -2791,7 +3007,18 @@ class Wallet {
     quote: string | MeltQuoteBolt11Response,
   ): Promise<MeltQuoteBolt11Response> {
     const quoteId = typeof quote === 'string' ? quote : quote.quote;
-    return this.mint.checkMeltQuoteBolt11(quoteId);
+    const res = await this.mint.checkMeltQuoteBolt11(quoteId);
+    // No caller-side expectation here, so check the quote against its own invoice.
+    if (this._unit === 'sat') {
+      let expectedMsat: bigint | null = null;
+      try {
+        expectedMsat = bolt11AmountMsat(res.request);
+      } catch {
+        this.fail('Melt quote request is not a valid bolt11 invoice', { quote: res.quote });
+      }
+      this.assertBolt11MeltQuoteAmount(res, expectedMsat);
+    }
+    return res;
   }
 
   /**
@@ -3008,9 +3235,10 @@ class Wallet {
         { keyset: keyset.id },
       );
       keyset = this.getOutputKeyset(keysetId);
-      let count = Math.ceil(Math.log2(feeReserve.toNumberUnsafe())) || 1;
-      if (count < 0) count = 0; // Prevents: -Infinity
-      const denominations: number[] = count ? new Array<number>(count).fill(0) : [];
+      // NUT-08 blank outputs: ceil(log2(feeReserve)) blinded messages, at least one.
+      // Computed on bigint so a u64-scale reserve cannot lose precision to a float.
+      const count = Math.max(ceilLog2(feeReserve.toBigInt()), 1);
+      const denominations: number[] = new Array<number>(count).fill(0);
       this._logger.debug('Creating NUT-08 blanks for fee reserve', {
         feeReserve: feeReserve,
         denominations,
@@ -3077,13 +3305,22 @@ class Wallet {
     // Prepare proofs for mint
     inputs = this._prepareInputsForMint(inputs);
 
-    // Construct melt payload
+    // Construct melt payload. Extension fields must not clobber the prepared request.
+    const extra = completeOptions.extraPayload;
+    if (extra) {
+      // Object.keys mirrors what the spread below copies (own enumerable keys).
+      const owned = ['quote', 'inputs', 'outputs', 'prefer_async'];
+      const reserved = Object.keys(extra).filter((k) => owned.includes(k));
+      this.failIf(reserved.length > 0, 'extraPayload cannot override reserved melt fields', {
+        reserved,
+      });
+    }
     const meltPayload: MeltRequest = {
       quote,
       inputs,
       outputs,
       ...(completeOptions.preferAsync ? { prefer_async: true } : {}),
-      ...completeOptions.extraPayload,
+      ...extra,
     };
 
     // Execute melt and validate result
@@ -3095,12 +3332,11 @@ class Wallet {
     // Create any change Proofs
     const change = this.createMeltChangeProofs(meltPreview.outputData, meltResponse.change ?? []);
 
+    const changeAmounts = change.map((p) => p.amount.toString());
     if (completeOptions.preferAsync) {
-      this._logger.debug('ASYNC MELT REQUESTED', meltResponse);
+      this._logger.debug('ASYNC MELT REQUESTED', { state: meltResponse.state, changeAmounts });
     } else {
-      this._logger.debug('MELT COMPLETED', {
-        changeAmounts: change.map((p) => p.amount.toString()),
-      });
+      this._logger.debug('MELT COMPLETED', { changeAmounts });
     }
 
     // Merge preview quote with response to protect against incomplete response.

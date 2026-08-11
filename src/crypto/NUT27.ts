@@ -18,6 +18,11 @@ export const MINT_BACKUP_D_TAG = 'mint-list';
 const BACKUP_DOMAIN_SEPARATOR = utf8ToBytes('cashu-mint-backup');
 
 /**
+ * Length of a BIP-39 seed, the only input NUT-27 derivation accepts.
+ */
+const BIP39_SEED_BYTES = 64;
+
+/**
  * Plaintext shape that gets NIP-44-encrypted into the event `content`.
  */
 export interface MintBackupPayload {
@@ -37,8 +42,12 @@ export interface MintBackupPayload {
  * @returns `{ privkey, pubkey }` as lowercase hex strings.
  */
 export function deriveMintBackupKeys(seed: Uint8Array): { privkey: string; pubkey: string } {
-  if (!(seed instanceof Uint8Array) || seed.length === 0) {
-    throw new CTSError('seed must be a non-empty Uint8Array');
+  // Derivation is defined over the 64-byte BIP-39 seed. Types are erased for JS callers,
+  // so check the length here rather than trusting the signature.
+  if (!(seed instanceof Uint8Array) || seed.length !== BIP39_SEED_BYTES) {
+    throw new CTSError(
+      'seed must be a 64-byte BIP-39 seed (Uint8Array), e.g. mnemonicToSeedSync()',
+    );
   }
   const privkey = sha256(Bytes.concat(seed, BACKUP_DOMAIN_SEPARATOR));
   const pubkey = schnorr.getPublicKey(privkey); // 32-byte x-only

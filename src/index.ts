@@ -13,7 +13,7 @@ export { Mint } from './mint';
 export { KeyChain } from './wallet/KeyChain';
 export { Keyset } from './wallet/Keyset';
 export { P2PKBuilder } from './wallet/P2PKBuilder';
-export { type SelectProofs, selectProofsRGLI } from './wallet/SelectProofs';
+export { type SelectProofs, selectProofsRGLI, selectProofsRotating } from './wallet/SelectProofs';
 export { Wallet } from './wallet/Wallet';
 export { WalletCounters } from './wallet/WalletCounters';
 export { WalletEvents } from './wallet/WalletEvents';
@@ -77,12 +77,18 @@ export * from './utils/core';
 export { JSONInt, type JSONIntApi } from './utils/JSONInt';
 
 // Payment request facade (tests rely on these at top level)
-export { PaymentRequest } from './model/PaymentRequest';
+export {
+  PaymentRequest,
+  PaymentRequestBuilder,
+  type PaymentRequestOptions,
+} from './model/PaymentRequest';
 export { PaymentRequestTransportType } from './wallet/types';
 export type {
   PaymentRequestPayload,
   PaymentRequestTransport,
   RawPaymentRequest,
+  RawSupportedMethod,
+  SupportedMethod,
   RawTransport,
   NUT10Option,
   RawNUT10Option,

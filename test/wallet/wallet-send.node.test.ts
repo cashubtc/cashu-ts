@@ -7,6 +7,7 @@ import {
   Amount,
   CTSError,
   OutputData,
+  createEphemeralCounterSource,
   type Proof,
   type ProofLike,
   type OutputConfig,
@@ -118,6 +119,52 @@ describe('sendOffline witness normalization', () => {
     const { send } = wallet.sendOffline(1, proofs);
     expect(send).toHaveLength(1);
     expect(send[0].witness).toBeUndefined();
+  });
+
+  test('throws when no offline selection matches, rather than returning an empty send', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    // Enough funds (6 >= 3) but no exact subset of {2, 4} sums to 3.
+    const proofs: Proof[] = [
+      { id: '00bd033559de27d0', amount: Amount.from(2), secret: 's1', C: 'C1' },
+      { id: '00bd033559de27d0', amount: Amount.from(4), secret: 's2', C: 'C2' },
+    ];
+
+    expect(() => wallet.sendOffline(3, proofs)).toThrow(/cannot be completed offline/);
+  });
+
+  test('refuses to select proofs from another unit on the same mint', async () => {
+    const usdKeysetId = '009a1f293253e41f';
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({
+          keysets: [
+            { id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 0 },
+            { id: usdKeysetId, unit: 'usd', active: true, input_fee_ppk: 0 },
+          ],
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const usdProof: Proof = {
+      id: usdKeysetId,
+      amount: Amount.from(1),
+      secret: 's-usd',
+      C: 'C-usd',
+    };
+    const satProof: Proof = {
+      id: '00bd033559de27d0',
+      amount: Amount.from(1),
+      secret: 's-sat',
+      C: 'C-sat',
+    };
+
+    // Alone, and mixed into an otherwise valid sat pool.
+    expect(() => wallet.sendOffline(1, [usdProof])).toThrow(/unrecognised keyset/);
+    expect(() => wallet.sendOffline(2, [satProof, usdProof])).toThrow(/unrecognised keyset/);
   });
 
   test('preserves witness on NUT-10 unknown secret kind', async () => {
@@ -269,7 +316,7 @@ describe('send', () => {
     {
       id: '00bd033559de27d0',
       amount: Amount.from(1),
-      secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+      secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a01',
       C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
     },
   ];
@@ -304,7 +351,7 @@ describe('send', () => {
       {
         id: '00bd033559de27d0',
         amount: Amount.from(2),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a02',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
     ];
@@ -407,7 +454,7 @@ describe('send', () => {
       {
         id: '00bd033559de27d0',
         amount: Amount.from(2),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a03',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
     ]);
@@ -449,7 +496,7 @@ describe('send', () => {
         {
           id: '00bd033559de27d0',
           amount: Amount.from(2),
-          secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+          secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a04',
           C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
         },
       ],
@@ -491,7 +538,7 @@ describe('send', () => {
       {
         id: '00bd033559de27d0',
         amount: Amount.from(2),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a05',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
     ];
@@ -542,13 +589,13 @@ describe('send', () => {
       {
         id: '00bd033559de27d0',
         amount: Amount.from(2),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a06',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: '00bd033559de27d0',
         amount: Amount.from(2),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a07',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
     ];
@@ -611,13 +658,13 @@ describe('send', () => {
       {
         id: '00bd033559de27d0',
         amount: Amount.from(2),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a08',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: '00bd033559de27d0',
         amount: Amount.from(2),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a09',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
     ];
@@ -676,7 +723,7 @@ describe('send', () => {
         {
           id: '00bd033559de27d0',
           amount: Amount.from(2),
-          secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+          secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a0a',
           C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
         },
       ]),
@@ -730,13 +777,13 @@ describe('send', () => {
       {
         id: '00bd033559de27d0',
         amount: Amount.from(1),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a0b',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: '00bd033559de27d0',
         amount: Amount.from(8),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a0c',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
     ];
@@ -806,13 +853,13 @@ describe('send', () => {
       {
         id: '00bd033559de27d0',
         amount: Amount.from(1),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a0d',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: '00bd033559de27d0',
         amount: Amount.from(8),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a0e',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
     ];
@@ -866,13 +913,13 @@ describe('send', () => {
       {
         id: '00bd033559de27d0',
         amount: Amount.from(1),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a0f',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: '00bd033559de27d0',
         amount: Amount.from(8),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a10',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
     ];
@@ -905,13 +952,13 @@ describe('send', () => {
       {
         id: keysetId,
         amount: Amount.from(1),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a11',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: keysetId,
         amount: Amount.from(8),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a12',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
     ];
@@ -1034,13 +1081,13 @@ describe('send', () => {
       {
         id: keysetId,
         amount: Amount.from(1),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674aff',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: keysetId,
         amount: Amount.from(8),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a14',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
     ];
@@ -1064,13 +1111,13 @@ describe('send', () => {
         {
           id: '00bd033559de27d0',
           amount: Amount.from(1),
-          secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+          secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a15',
           C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
         },
         {
           id: '00bd033559de27d0',
           amount: Amount.from(8),
-          secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+          secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a16',
           C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
         },
       ]),
@@ -1080,6 +1127,63 @@ describe('send', () => {
     expect(res.inputs.length).toBeGreaterThan(0);
     expect(res.inputs.every((p) => p.amount instanceof Amount)).toBe(true);
   });
+  test('a manual counter already handed out is rejected, not silently reused', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({
+          keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 0 }],
+        }),
+      ),
+    );
+
+    const keysetId = '00bd033559de27d0';
+    const seed = hexToBytes(
+      'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
+    );
+    const proof = (n: number, amount: number): Proof => ({
+      id: keysetId,
+      amount: Amount.from(amount),
+      secret: `1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674b${n
+        .toString(16)
+        .padStart(2, '0')}`,
+      C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+    });
+
+    // Two wallets on one shared source: the documented multi-wallet pattern.
+    const counterSource = createEphemeralCounterSource();
+    const opts = { unit, bip39seed: seed, counterSource };
+    const autoWallet = new Wallet(mint, opts);
+    const manualWallet = new Wallet(mint, opts);
+    await Promise.all([autoWallet.loadMint(), manualWallet.loadMint()]);
+
+    // The auto operation takes the low counters first.
+    await autoWallet.prepareSwapToSend(
+      2,
+      [proof(1, 4)],
+      {},
+      {
+        send: { type: 'deterministic', counter: 0 },
+        keep: { type: 'deterministic', counter: 0 },
+      },
+    );
+    const next = await autoWallet.counters.peekNext(keysetId);
+    expect(next).toBeGreaterThan(1);
+
+    // Counter 1 is now spent. Bumping the cursor afterwards would silently succeed and
+    // derive a duplicate; claiming the range surfaces it instead.
+    await expect(
+      manualWallet.prepareSwapToSend(
+        2,
+        [proof(2, 4)],
+        {},
+        {
+          send: { type: 'deterministic', counter: 1 },
+          keep: { type: 'deterministic', counter: 0 },
+        },
+      ),
+    ).rejects.toThrow(/already issued/i);
+  });
+
   test('manual counters advances cursor, then auto allocation must not reuse counters', async () => {
     server.use(
       http.get(mintUrl + '/v1/keysets', () => {
@@ -1098,13 +1202,13 @@ describe('send', () => {
       {
         id: keysetId,
         amount: Amount.from(1),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a17',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: keysetId,
         amount: Amount.from(8),
-        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a18',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
     ];
@@ -1170,7 +1274,7 @@ describe('deterministic', () => {
           {
             id: '00bd033559de27d0',
             amount: Amount.from(2),
-            secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+            secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a19',
             C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
           },
         ],

@@ -1,8 +1,14 @@
 import { type Logger, NULL_LOGGER } from '../logger';
 import { nullIfUndefined } from '../utils/core';
-import { ABSOLUTE_MAX_BATCH_SIZE, ABSOLUTE_MAX_PER_MINT, MAX_METHOD_LENGTH } from '../utils/limits';
+import {
+  ABSOLUTE_MAX_BATCH_SIZE,
+  ABSOLUTE_MAX_PER_MINT,
+  MAX_METHOD_LENGTH,
+  MAX_MINT_INFO_LIST,
+} from '../utils/limits';
 import { normalizeSafeIntegerMetadata } from '../utils/normalizeNumbers';
 
+import { Amount } from './Amount';
 import { CTSError } from './Errors';
 import {
   type GetInfoResponse,
@@ -33,6 +39,13 @@ type ProtectedIndex = {
   prefix: Record<Method, string[]>;
 };
 
+/**
+ * Wraps a mint's `/v1/info` response with capability helpers.
+ *
+ * Constructable from any `GetInfoResponse`, including one persisted from an earlier session; no
+ * live connection is needed. Persist `cache` and rehydrate with `new MintInfo(stored)`. Accessors
+ * return snapshots, never internal references.
+ */
 export class MintInfo {
   // Full mint info response
   private readonly _mintInfo: GetInfoResponse;
@@ -45,10 +58,10 @@ export class MintInfo {
     const log = logger ?? NULL_LOGGER;
     this._mintInfo = MintInfo.normalizeInfo(info, log);
 
-    const pe22 = this.toEndpoints(this._mintInfo?.nuts?.[22]?.protected_endpoints);
+    const pe22 = this.toEndpoints(this._mintInfo?.nuts?.[22]?.protected_endpoints, log);
     this._protected22 = this.buildIndex(pe22);
 
-    const pe21 = this.toEndpoints(this._mintInfo?.nuts?.[21]?.protected_endpoints);
+    const pe21 = this.toEndpoints(this._mintInfo?.nuts?.[21]?.protected_endpoints, log);
     this._protected21 = this.buildIndex(pe21);
   }
 
@@ -61,7 +74,7 @@ export class MintInfo {
           ? {
               '4': {
                 ...info.nuts['4'],
-                methods: MintInfo.normalizeSwapMethods(info.nuts['4'].methods),
+                methods: MintInfo.normalizeSwapMethods(info.nuts['4'].methods, logger),
               },
             }
           : {}),
@@ -69,7 +82,7 @@ export class MintInfo {
           ? {
               '5': {
                 ...info.nuts['5'],
-                methods: MintInfo.normalizeSwapMethods(info.nuts['5'].methods),
+                methods: MintInfo.normalizeSwapMethods(info.nuts['5'].methods, logger),
               },
             }
           : {}),
@@ -84,8 +97,9 @@ export class MintInfo {
   // (older Nutshell, etc.) leave the field as `undefined`; coerce to null so the normalized response
   // is spec-valid and matches the declared types. `method_name` is `<str|null>` but per NUT-04/05 a
   // null/omitted name is derived deterministically from `method`, so we populate it here instead.
-  private static normalizeSwapMethods(methods: SwapMethod[]): SwapMethod[] {
-    return methods.map((m) => {
+  private static normalizeSwapMethods(methods: SwapMethod[], logger: Logger): SwapMethod[] {
+    const bounded = MintInfo.capList(methods, 'nuts.4/5.methods', logger);
+    return bounded.map((m) => {
       const next = { ...m } as Record<string, unknown>;
       nullIfUndefined(next, 'min_amount', 'max_amount');
       if (next.method_name == null) {
@@ -250,21 +264,21 @@ export class MintInfo {
   private checkMintMelt(num: 4 | 5) {
     const mintMeltInfo = this._mintInfo.nuts[num];
     if (mintMeltInfo && mintMeltInfo.methods.length > 0 && !mintMeltInfo.disabled) {
-      return { disabled: false, params: mintMeltInfo.methods };
+      return { disabled: false, params: MintInfo.snapshot(mintMeltInfo.methods) };
     }
-    return { disabled: true, params: mintMeltInfo?.methods ?? [] };
+    return { disabled: true, params: MintInfo.snapshot(mintMeltInfo?.methods ?? []) };
   }
 
   private checkNut17() {
     if (this._mintInfo.nuts[17] && this._mintInfo.nuts[17].supported.length > 0) {
-      return { supported: true, params: this._mintInfo.nuts[17].supported };
+      return { supported: true, params: MintInfo.snapshot(this._mintInfo.nuts[17].supported) };
     }
     return { supported: false };
   }
 
   private checkNut15() {
     if (this._mintInfo.nuts[15] && this._mintInfo.nuts[15].methods.length > 0) {
-      return { supported: true, params: this._mintInfo.nuts[15].methods };
+      return { supported: true, params: MintInfo.snapshot(this._mintInfo.nuts[15].methods) };
     }
     return { supported: false };
   }
@@ -279,7 +293,7 @@ export class MintInfo {
           // map null to infinity, if not null map seconds to milliseconds.
           // this way ttl is always a number
           ttl: ttlSeconds === null ? Infinity : Math.max(ttlSeconds, 0) * 1000,
-          cached_endpoints: rawPolicy.cached_endpoints,
+          cached_endpoints: MintInfo.snapshot(rawPolicy.cached_endpoints),
         },
       };
     }
@@ -289,17 +303,31 @@ export class MintInfo {
   private checkNut29() {
     const nut29 = this._mintInfo.nuts?.[29];
     if (nut29) {
-      return { supported: true, params: nut29 };
+      return { supported: true, params: MintInfo.snapshot(nut29) };
     }
     return { supported: false };
   }
 
   // ---------- private helpers ----------
 
-  private toEndpoints(maybe: unknown): Endpoint[] {
+  /**
+   * Bounds a mint-advertised list to `MAX_MINT_INFO_LIST` before any per-entry work, warning once
+   * when it truncates. Guards against memory amplification from a hostile `/v1/info`.
+   */
+  private static capList<T>(list: T[], label: string, logger: Logger): T[] {
+    if (list.length <= MAX_MINT_INFO_LIST) return list;
+    logger.warn(`MintInfo: ${label} exceeds internal cap and was truncated`, {
+      advertised: list.length,
+      cap: MAX_MINT_INFO_LIST,
+    });
+    return list.slice(0, MAX_MINT_INFO_LIST);
+  }
+
+  private toEndpoints(maybe: unknown, logger: Logger): Endpoint[] {
     if (!Array.isArray(maybe)) return [];
+    const bounded = MintInfo.capList(maybe, 'nuts.21/22.protected_endpoints', logger);
     const out: Endpoint[] = [];
-    for (const e of maybe) {
+    for (const e of bounded) {
       if (e && typeof e === 'object') {
         const rec = e as Record<string, unknown>;
         const mm = rec.method;
@@ -355,11 +383,33 @@ export class MintInfo {
 
   // ---------- getters ----------
 
+  /**
+   * Deep-copies a plain data value so accessors return snapshots, never internal references.
+   * Preserves bigints (AmountLike fields may hold them; JSON round-trips would not) and Amount
+   * instances (which AmountLike also admits): Amount is frozen and immutable, so sharing the
+   * reference is safe and structural copying would strip its prototype into a bare `{value}`.
+   */
+  private static snapshot<T>(value: T): T {
+    if (value === null || typeof value !== 'object') return value;
+    if (value instanceof Amount) return value;
+    if (Array.isArray(value)) {
+      return (value as unknown[]).map((v) => MintInfo.snapshot(v)) as T;
+    }
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = MintInfo.snapshot(v);
+    }
+    return out as T;
+  }
+
+  /**
+   * Snapshot of the full mint info response, safe to mutate or persist.
+   */
   get cache(): GetInfoResponse {
-    return this._mintInfo;
+    return MintInfo.snapshot(this._mintInfo);
   }
   get contact() {
-    return this._mintInfo.contact;
+    return MintInfo.snapshot(this._mintInfo.contact);
   }
   get description() {
     return this._mintInfo.description;
@@ -374,7 +424,7 @@ export class MintInfo {
     return this._mintInfo.pubkey;
   }
   get nuts() {
-    return this._mintInfo.nuts;
+    return MintInfo.snapshot(this._mintInfo.nuts);
   }
   get version() {
     return this._mintInfo.version;
@@ -402,7 +452,8 @@ export class MintInfo {
   /**
    * Lists the method-unit settings the mint advertises for an operation (`'mint'` → NUT-4, `'melt'`
    * → NUT-5), or `[]` when that operation is disabled. Use this to discover what a consumer can
-   * mint or melt with; to test a single pair use `supportsMintMeltMethod`.
+   * mint or melt with; to test a single pair use `supportsMintMeltMethod`, or `getMintMeltMethod`
+   * to read its settings.
    */
   supportedMethods(op: 'mint' | 'melt'): SwapMethod[] {
     const { disabled, params } = this.isSupported(op === 'mint' ? 4 : 5);
@@ -410,13 +461,20 @@ export class MintInfo {
   }
 
   /**
+   * Returns the mint's advertised settings for a (method, unit) pair for the given operation
+   * (`'mint'` → NUT-4, `'melt'` → NUT-5), or `undefined` when the pair is unsupported or the
+   * operation is disabled. The result carries the `min_amount`/`max_amount` limits and `options`.
+   */
+  getMintMeltMethod(op: 'mint' | 'melt', method: string, unit: string): SwapMethod | undefined {
+    return this.supportedMethods(op).find((m) => m.method === method && m.unit === unit);
+  }
+
+  /**
    * Checks if the mint advertises the given (method, unit) pair for the given operation (`'mint'` →
    * NUT-4, `'melt'` → NUT-5).
    */
   supportsMintMeltMethod(op: 'mint' | 'melt', method: string, unit: string): boolean {
-    const { disabled, params } = this.isSupported(op === 'mint' ? 4 : 5);
-    if (disabled) return false;
-    return params.some((m) => m.method === method && m.unit === unit);
+    return this.getMintMeltMethod(op, method, unit) !== undefined;
   }
 
   supportsAmountless(method: string = 'bolt11', unit: string = 'sat'): boolean {

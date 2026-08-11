@@ -54,8 +54,8 @@ import {
   joinUrls,
   normalizeMintKeys,
   normalizeMintKeyset,
+  normalizeMintUrl,
   normalizeSafeIntegerMetadata,
-  normalizeUrl,
   nullIfUndefined,
 } from '../utils';
 
@@ -102,7 +102,7 @@ class Mint {
       logger?: Logger;
     },
   ) {
-    this._mintUrl = normalizeUrl(mintUrl);
+    this._mintUrl = normalizeMintUrl(mintUrl);
     if (options?.customRequest) {
       this._request = options.customRequest;
     } else if (options?.requestFetch) {
@@ -1177,6 +1177,8 @@ class Mint {
       endpoint: joinUrls(this._mintUrl, path),
       method,
       headers,
+      // A CAT/BAT must never be replayed to a redirect target: fail rather than follow.
+      ...(bat || cat ? { redirect: 'error' as const } : {}),
       ...(nut19?.supported && nut19.params ? nut19.params : {}),
       onResponseMeta: this._captureResponseMetadata,
     });

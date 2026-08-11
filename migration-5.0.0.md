@@ -88,6 +88,43 @@ If you call `signMintQuote`/`verifyMintQuoteSignature` only to mint against a mi
 
 ---
 
+## `CounterSource` gains a required `reserveAt` method
+
+Only affects you if you implement `CounterSource` yourself; `createEphemeralCounterSource` and
+`Wallet` are updated. `reserve` and `advanceToAtLeast` are unchanged.
+
+Manual deterministic counters used to be honoured by bumping the cursor _after_ the outputs were
+assigned. A concurrent auto allocation on the same keyset could take counters inside the manual
+range first, after which the bump found the cursor already past and did nothing, leaving both
+operations deriving from the same counter. Wallets sharing one `CounterSource` are the documented
+multi-wallet pattern, so this was reachable without doing anything unusual.
+
+`reserveAt` claims the range up front instead, and throws when the range was already handed out.
+
+### Migration
+
+```ts
+class MyCounterSource implements CounterSource {
+  async reserve(keysetId: string, n: number): Promise<CounterRange> {
+    /* unchanged */
+  }
+
+  // New: claim [start, start + count) in one transaction.
+  async reserveAt(keysetId: string, start: number, count: number): Promise<CounterRange> {
+    // throw if start < next, else SET next = start + count
+  }
+
+  async advanceToAtLeast(keysetId: string, minNext: number): Promise<void> {
+    /* unchanged */
+  }
+}
+```
+
+The check and the update must be one atomic step. Reading the cursor and then bumping it in two
+calls reintroduces the window this closes.
+
+---
+
 ## `checkProofsStates` now requires `id` on every proof
 
 `Wallet.checkProofsStates` previously accepted `Array<Pick<Proof, 'secret'>>` — only `secret` was required. v5 requires both `id` and `secret`: `Array<Pick<Proof, 'secret' | 'id'>>`.
@@ -200,6 +237,34 @@ try {
 ```
 
 If your consumer was already wrapping the loop in `try/catch` (e.g. to handle abort), no change is required beyond not assuming silent completion means all expected updates arrived.
+
+---
+
+## `sendOffline` throws when no offline selection matches
+
+`wallet.sendOffline` documents that it throws when the send cannot be completed offline, and already threw on insufficient funds and on selection timeout. But when funds were sufficient and no selection matched the requested amount (e.g. an exact-match `sendOffline(3, [2, 4])`), v4 returned an empty `send` instead. v5 throws in that case too, so every "cannot complete offline" outcome is a single failure mode.
+
+`send()` is unaffected: its offline attempt already wraps `sendOffline` in `try/catch` and falls back to an online swap.
+
+### Migration
+
+Wrap direct `sendOffline` calls in `try/catch`, or pass `exactMatch: false` to accept a close match:
+
+```ts
+// Before: empty send on no match
+const { send } = wallet.sendOffline(3, proofs);
+if (send.length === 0) {
+  // fall back to an online swap yourself
+}
+
+// After: throws on no match
+try {
+  const { send } = wallet.sendOffline(3, proofs);
+  // ...
+} catch {
+  // no exact offline match: swap online, or retry with { exactMatch: false }
+}
+```
 
 ---
 
@@ -340,6 +405,22 @@ Generic mint quote responses (custom payment methods) are now base-validated lik
 
 ---
 
+## Bolt11 mint quotes are checked against the requested amount
+
+`createMintQuoteBolt11` and `createLockedMintQuote` now throw when the mint's response does not carry the amount that was asked for. For `sat` quotes the BOLT11 invoice's HRP amount must also equal the quoted amount; amountless or unreadable invoices fail the same check. The `checkMintQuoteBolt11` and `checkMintQuoteBatchBolt11` lookups apply the invoice check against each returned quote's own amount. Other units are not directly comparable to an invoice, so only the quoted amount is verified there.
+
+Apps talking to conforming mints need no change. Tests that stub bolt11 mint quote responses must give the invoice an HRP that matches the quoted amount, e.g. `request: 'lnbc10u1pfake'` for a 1,000 sat quote; the raw `createMintQuote('bolt11', …)` escape hatch remains unvalidated.
+
+---
+
+## Bolt11 melt quotes must not charge more than the invoice
+
+For `sat` quotes, `createMeltQuoteBolt11` now throws when the quote's `amount` exceeds the invoice's encoded amount (a sub-sat invoice may round up to the next sat). Amountless invoices are bounded by the caller's `amountMsat` when given, and `createMultiPathMeltQuote` is bounded by the requested partial amount. `checkMeltQuoteBolt11` applies the same bound against the quote's own `request`, and rejects a response whose `request` is not readable as a BOLT11 invoice. Undercharging is not rejected, and other units are not directly comparable to the invoice, so they are unchecked; the raw `createMeltQuote`/`checkMeltQuote` escape hatches also remain unvalidated.
+
+Test stubs follow the same HRP rule as mint quotes above.
+
+---
+
 ## Melt quote responses require `request` and carry `method`
 
 `request` (the method-specific payment routing instructions) moved from the bolt11/onchain response types into `MeltQuoteBaseResponse`, and the base type gains an optional `fee_reserve`. Melt quote responses from any method — including custom ones — that lack a `request` string now throw `Invalid response from mint`.
@@ -360,3 +441,63 @@ Two escape hatches keep stored-quote flows working:
 - Quotes reporting `0/0` defer to the mint — a zero snapshot may simply have been fetched before the payment was made, so the create → pay externally → mint flow is unaffected.
 
 The practical change from v4: attempting to re-mint a quote object whose snapshot shows it fully issued (`amount_paid === amount_issued > 0`) now fails fast client-side instead of round-tripping to the mint for a rejection.
+
+---
+
+## `PaymentRequest.singleUse` is now optional (tri-state)
+
+`PaymentRequest.singleUse` is now `boolean | undefined` (was a required `boolean` defaulting to `false`), so the flag can round-trip the absent/`false`/`true` distinction instead of always serializing `single_use=0`. Setting `false` or `true` is unchanged; only decoding shifts — a request that omits the flag now yields `singleUse: undefined` instead of `false`. Replace any `pr.singleUse === false` check with `!pr.singleUse` (true for both absent and explicit `false`).
+
+---
+
+## `PaymentRequest` constructor takes an options object
+
+The v4 constructor was positional (`new PaymentRequest(transport, id, amount, unit, mints, description, singleUse, nut10)`); it now takes a single `PaymentRequestOptions` object whose keys mirror the class properties, so only the fields you set need naming:
+
+```ts
+// v4 — unused optional slots need explicit fillers
+new PaymentRequest(
+  undefined, // transport
+  'inv-123',
+  100,
+  'sat',
+  ['https://my.mint'],
+  undefined, // description
+  true, // singleUse
+);
+
+// v5 — name only the fields you set
+new PaymentRequest({
+  id: 'inv-123',
+  amount: 100,
+  unit: 'sat',
+  mints: ['https://my.mint'],
+  singleUse: true,
+});
+```
+
+Decoding (`decodePaymentRequest`, `PaymentRequest.fromEncodedRequest`, `fromRawRequest`) is unaffected. A positional call fails to type-check.
+
+---
+
+## `TokenMetadata.incompleteProofs` is replaced by `proofAmounts`
+
+`getTokenMetadata()` returned `incompleteProofs: Array<Omit<Proof, 'id'>>` — proofs with only the keyset id removed. Handing back partial proofs from a pre-wallet inspection helper was a recurring source of confusion, and the field carried far more than inspection needs. It is now `proofAmounts: Amount[]` — the per-proof amounts only, enough to inspect the proof set (e.g. reject a pathological all-1-sat token). Decode the token with a loaded wallet when you need the proofs themselves.
+
+### Migration
+
+To inspect amounts, read `proofAmounts`. To obtain actual proofs, decode the token with a loaded wallet.
+
+```ts
+// Before
+const { incompleteProofs } = getTokenMetadata(token);
+const amounts = incompleteProofs.map((p) => p.amount);
+
+// After
+const { proofAmounts } = getTokenMetadata(token);
+
+// Need the proofs themselves? Decode with a wallet (resolves keyset ids):
+const wallet = new Wallet(meta.mint, { unit: meta.unit });
+await wallet.loadMint();
+const { proofs } = wallet.decodeToken(token);
+```

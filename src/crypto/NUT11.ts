@@ -6,6 +6,7 @@ import { type Logger, NULL_LOGGER } from '../logger';
 import { CTSError } from '../model/Errors';
 import { type OutputDataLike } from '../model/OutputData';
 import { type HTLCWitness, type P2PKWitness, type Proof } from '../model/types';
+import { type NUT10Option } from '../wallet/types/payment-requests';
 
 import {
   getValidSigners,
@@ -14,7 +15,7 @@ import {
   type MessageInput,
   type PrivKey,
 } from './core';
-import { pointFromHex } from './curve_secp';
+import { normalizeSecpPubkey } from './curve_secp';
 import {
   getTagInt,
   getTagScalar,
@@ -36,6 +37,14 @@ export const SigFlags = {
 } as const;
 export type SigFlag = (typeof SigFlags)[keyof typeof SigFlags];
 const VALID_SIG_FLAGS: ReadonlySet<SigFlag> = new Set(Object.values(SigFlags));
+
+// Upper bounds on untrusted P2PK/HTLC secret and witness sizes, applied on the verify/sign path so
+// per-key and per-signature work stays bounded rather than scaling with input. NUT-28 caps a lock
+// at 11 slots (data + pubkeys + refund); SIG_ALL adds a signature per message variant per signer,
+// so signatures need more headroom than keys. These are work bounds, not the exact NUT-28 rule
+// (still enforced at build).
+const MAX_P2PK_PUBKEYS = 16;
+const MAX_P2PK_SIGNATURES = 64;
 
 export type LockState = 'PERMANENT' | 'ACTIVE' | 'EXPIRED';
 
@@ -138,7 +147,7 @@ type WitnessData = {
 
 /**
  * NUT-11 tag keys that map onto structured {@link LockConditions} fields, rather than being carried
- * as free-form `additionalTags`.
+ * as free-form `additionalTags`, and are therefore reserved (not settable as additional tags).
  *
  * @internal
  */
@@ -192,39 +201,6 @@ export function parseP2PKSecret(secret: string | Secret): Secret {
 // Normalizer Functions
 // ------------------------------
 
-// Decompression-validated keys; proofs typically share lock keys, so repeat parses are
-// common. Naive clear-on-full, swap for LRU if churn ever matters.
-const VALIDATED_PUBKEYS = new Set<string>();
-
-/**
- * Validates and lowercases a P2PK pubkey (NUT-11: 33-byte compressed hex).
- *
- * @remarks
- * Strict: x-only input is rejected so a 64-hex value can only ever be a hashlock, and the key must
- * decompress to a curve point. A non-compliant key burns funds when authored and is unspendable on
- * spec-conformant mints when parsed.
- * @throws If not 66-char 02/03 hex, or not a valid secp256k1 point.
- * @internal
- */
-export function normalizePubkey(pk: string): string {
-  const hex = pk.toLowerCase();
-  if (hex.length !== 66 || !(hex.startsWith('02') || hex.startsWith('03'))) {
-    throw new CTSError(
-      `Invalid pubkey: expected 33-byte compressed hex (66 chars); for an x-only (nostr) key, prepend '02', got length ${hex.length}`,
-    );
-  }
-  if (!VALIDATED_PUBKEYS.has(hex)) {
-    try {
-      pointFromHex(hex);
-    } catch (e) {
-      throw new CTSError('Invalid pubkey: not a valid secp256k1 point', { cause: e });
-    }
-    if (VALIDATED_PUBKEYS.size >= 1024) VALIDATED_PUBKEYS.clear();
-    VALIDATED_PUBKEYS.add(hex);
-  }
-  return hex;
-}
-
 /**
  * Validate and canonicalise an HTLC hashlock (a SHA-256 digest).
  *
@@ -255,7 +231,7 @@ export function dedupeP2PKPubkeys(keys: string[]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
   for (const raw of keys) {
-    const k = normalizePubkey(raw);
+    const k = normalizeSecpPubkey(raw);
     const xOnly = k.slice(-64);
     if (!seen.has(xOnly)) {
       seen.add(xOnly);
@@ -342,6 +318,103 @@ export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
 }
 
 // ------------------------------
+// Lock Tag Serialization
+// ------------------------------
+
+/**
+ * Asserts P2PK Tag key is valid.
+ *
+ * @param key Tag Key.
+ * @throws If not a string, or is a reserved string.
+ * @internal
+ */
+export function assertValidTagKey(key: string) {
+  if (!key || typeof key !== 'string') throw new CTSError('tag key must be a non empty string');
+  if (P2PK_KNOWN_TAG_KEYS.has(key)) {
+    throw new CTSError(`additionalTags must not use reserved key "${key}"`);
+  }
+}
+
+/**
+ * Serializes NUT-11 lock fields into secret tags.
+ *
+ * @remarks
+ * Expects {@link normalizeP2PKOptions}-canonical input (deduped keys, redundant thresholds dropped).
+ * Thresholds are only emitted alongside their key tag.
+ * @throws If an additional tag uses a reserved or invalid key.
+ * @internal
+ */
+export function buildP2PKTags(lock: LockConditions): string[][] {
+  const tags: string[][] = [];
+  const pubkeys = lock.pubkeys ?? [];
+  const refund = lock.refundKeys ?? [];
+
+  // Reject a present-but-invalid locktime, don't drop it: refund keys without a locktime
+  // is a structural violation the verifier rejects outright ("refund keys require a
+  // locktime"), so a silent drop makes the whole proof unspendable, main keys included.
+  if (lock.locktime !== undefined) {
+    if (!Number.isSafeInteger(lock.locktime) || lock.locktime < 0) {
+      throw new CTSError(`locktime must be a non-negative integer, got ${lock.locktime}`);
+    }
+    tags.push(['locktime', String(lock.locktime)]);
+  }
+
+  if (pubkeys.length > 0) {
+    tags.push(['pubkeys', ...pubkeys]);
+    if ((lock.requiredSignatures ?? 1) > 1) {
+      tags.push(['n_sigs', String(lock.requiredSignatures)]);
+    }
+  }
+
+  if (refund.length > 0) {
+    tags.push(['refund', ...refund]);
+    if ((lock.requiredRefundSignatures ?? 1) > 1) {
+      tags.push(['n_sigs_refund', String(lock.requiredRefundSignatures)]);
+    }
+  }
+
+  if (lock.sigFlag == 'SIG_ALL') {
+    tags.push(['sigflag', 'SIG_ALL']);
+  }
+
+  if (lock.additionalTags?.length) {
+    const extraTags = lock.additionalTags.map(([k, ...vals]) => {
+      assertValidTagKey(k); // Validate key
+      const stringVals = vals.map(String); // all to strings
+      // NUT-10 tag values must be non-empty strings (parseSecret rejects empties on read).
+      if (stringVals.some((v) => v.length === 0)) {
+        throw new CTSError(`tag "${k}" values must be non-empty strings`);
+      }
+      return [k, ...stringVals];
+    });
+    tags.push(...extraTags);
+  }
+
+  return tags;
+}
+
+/**
+ * Converts a {@link P2PKOptions} into the NUT-18 payment request `nut10` option.
+ *
+ * @remarks
+ * Validates and canonicalises the lock (deduped keys, redundant thresholds dropped). `blindKeys`
+ * throws: P2BK blinding is applied per output at send time, so a static request cannot carry it.
+ */
+export function p2pkOptionsToPRNut10(p2pk: P2PKOptions): NUT10Option {
+  const normalized = normalizeP2PKOptions(p2pk);
+  if (normalized.blindKeys) {
+    throw new CTSError(
+      'blindKeys is not expressible in a payment request; the payer applies P2BK blinding per output',
+    );
+  }
+  return {
+    kind: normalized.kind,
+    data: normalized.data,
+    tags: buildP2PKTags(normalized),
+  };
+}
+
+// ------------------------------
 // Public Getters
 // ------------------------------
 
@@ -390,7 +463,11 @@ export function getP2PKSigFlag(secretStr: string | Secret): SigFlag {
  * @returns Array of witness signatures.
  */
 export function getP2PKWitnessSignatures(witness: Proof['witness']): string[] {
-  return parseWitnessData(witness)?.signatures ?? [];
+  const signatures = parseWitnessData(witness)?.signatures ?? [];
+  if (signatures.length > MAX_P2PK_SIGNATURES) {
+    throw new CTSError(`Too many witness signatures: ${signatures.length}`);
+  }
+  return signatures;
 }
 
 /**
@@ -412,9 +489,11 @@ export function parseWitnessData(witness: Proof['witness']): WitnessData | undef
     console.error('Failed to parse witness string:', e);
     return undefined;
   }
+  // A parsed primitive (eg "null", "1", "true") is not a witness; treat it as absent.
+  if (!parsed || typeof parsed !== 'object') return undefined;
   const data: WitnessData = {
-    // always normalize signatures to an array
-    signatures: parsed.signatures ?? [],
+    // always normalize signatures to an array (untrusted witness may carry a non-array value)
+    signatures: Array.isArray(parsed.signatures) ? parsed.signatures : [],
   };
 
   // Only set preimage if it is a non empty string
@@ -499,6 +578,14 @@ export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: Messa
 
   if (alreadySigned) {
     throw new CTSError(`Proof already signed by [02|03]${pubkey}`);
+  }
+
+  // Appending must not push the witness past the cap the verify path enforces,
+  // else we'd hand back a proof getP2PKWitnessSignatures then rejects.
+  if (signatures.length >= MAX_P2PK_SIGNATURES) {
+    throw new CTSError(
+      `Cannot sign: witness already at the ${MAX_P2PK_SIGNATURES}-signature limit`,
+    );
   }
 
   // Add new signature
@@ -732,6 +819,39 @@ export function assertSigAllInputs(inputs: Proof[]): void {
 const SIG_ALL_DST = utf8ToBytes('Cashu_SigAllSig_v1');
 
 /**
+ * Message aggregation for SIG_ALL (v0, unframed concatenation).
+ *
+ * NOTE: Use `assertSigAllInputs()` to ensure valid message inputs.
+ *
+ * @remarks
+ * Melt transactions MUST include the quoteId.
+ * @param inputs Array of Proofs (only `secret` and `C` fields required).
+ * @param outputs Array of OutputDataLike objects (OutputData, Factory etc).
+ * @param quoteId Optional. Quote id for Melt transactions.
+ * @internal
+ */
+export function buildP2PKSigAllMessageV0(
+  inputs: Array<Pick<Proof, 'secret' | 'C'>>,
+  outputs: Array<Pick<OutputDataLike, 'blindedMessage'>>,
+  quoteId?: string,
+): string {
+  const parts: string[] = [];
+  // Concat inputs: secret_0 || C_0 ...
+  for (const p of inputs) {
+    parts.push(p.secret, p.C);
+  }
+  // Concat outputs: amount_0 ||  B_0 ...
+  for (const o of outputs) {
+    parts.push(String(o.blindedMessage.amount), o.blindedMessage.B_);
+  }
+  // Add quoteId for melts
+  if (quoteId) {
+    parts.push(quoteId);
+  }
+  return parts.join('');
+}
+
+/**
  * Message aggregation for SIG_ALL (spec v1): domain-separated, length-framed bytes.
  *
  * NOTE: Use `assertSigAllInputs()` to ensure valid message inputs.
@@ -865,7 +985,11 @@ function assertSpendingConditionRules(params: {
 function getP2PKWitnessPubkeys(secret: Secret): string[] {
   const data = getSecretKind(secret) === 'P2PK' ? getDataField(secret) : '';
   const pubkeys = getTag(secret, 'pubkeys') ?? [];
-  const keys = (data ? [data, ...pubkeys] : pubkeys).map((key) => normalizePubkey(key));
+  // Bound EC decompression before mapping over untrusted keys.
+  if (pubkeys.length > MAX_P2PK_PUBKEYS) {
+    throw new CTSError(`Too many pubkeys: ${pubkeys.length}`);
+  }
+  const keys = (data ? [data, ...pubkeys] : pubkeys).map((key) => normalizeSecpPubkey(key));
   if (dedupeP2PKPubkeys(keys).length !== keys.length) {
     throw new CTSError('Duplicate main pubkeys are not allowed');
   }
@@ -873,7 +997,11 @@ function getP2PKWitnessPubkeys(secret: Secret): string[] {
 }
 
 function getP2PKWitnessRefundkeys(secret: Secret): string[] {
-  const keys = (getTag(secret, 'refund') ?? []).map((key) => normalizePubkey(key));
+  const refund = getTag(secret, 'refund') ?? [];
+  if (refund.length > MAX_P2PK_PUBKEYS) {
+    throw new CTSError(`Too many refund pubkeys: ${refund.length}`);
+  }
+  const keys = refund.map((key) => normalizeSecpPubkey(key));
   if (dedupeP2PKPubkeys(keys).length !== keys.length) {
     throw new CTSError('Duplicate refund pubkeys are not allowed');
   }
@@ -906,71 +1034,4 @@ function resolveNSigsRefund(secret: Secret, lockState: LockState, refundKeys: st
     return Math.max(getTagInt(secret, 'n_sigs_refund') ?? 1, 1);
   }
   return 0; // refund lock inactive
-}
-
-// ------------------------------
-// Deprecated
-// ------------------------------
-
-/**
- * Message aggregation for SIG_ALL.
- *
- * NOTE: Use `assertSigAllInputs()` to ensure valid message inputs.
- *
- * @remarks
- * Melt transactions MUST include the quoteId.
- * @param inputs Array of Proofs (only `secret` and `C` fields required).
- * @param outputs Array of OutputDataLike objects (OutputData, Factory etc).
- * @param quoteId Optional. Quote id for Melt transactions.
- * @internal
- */
-export function buildP2PKSigAllMessage(
-  inputs: Array<Pick<Proof, 'secret' | 'C'>>,
-  outputs: Array<Pick<OutputDataLike, 'blindedMessage'>>,
-  quoteId?: string,
-): string {
-  const parts: string[] = [];
-  // Concat inputs: secret_0 || C_0 ...
-  for (const p of inputs) {
-    parts.push(p.secret, p.C);
-  }
-  // Concat outputs: amount_0 ||  B_0 ...
-  for (const o of outputs) {
-    parts.push(String(o.blindedMessage.amount), o.blindedMessage.B_);
-  }
-  // Add quoteId for melts
-  if (quoteId) {
-    parts.push(quoteId);
-  }
-  return parts.join('');
-}
-
-/**
- * Message aggregation for SIG_ALL (legacy format).
- *
- * @remarks
- * Melt transactions MUST include the quoteId.
- *
- * For compatibility with NutShell (all releases), CDK <v0.14.0.
- * @internal
- */
-export function buildLegacyP2PKSigAllMessage(
-  inputs: Array<Pick<Proof, 'secret'>>,
-  outputs: Array<Pick<OutputDataLike, 'blindedMessage'>>,
-  quoteId?: string,
-): string {
-  const parts: string[] = [];
-  // Concat inputs: secret_0 ...
-  for (const p of inputs) {
-    parts.push(p.secret);
-  }
-  // Concat outputs: B_0 ...
-  for (const o of outputs) {
-    parts.push(o.blindedMessage.B_);
-  }
-  // Add quoteId for melts
-  if (quoteId) {
-    parts.push(quoteId);
-  }
-  return parts.join('');
 }

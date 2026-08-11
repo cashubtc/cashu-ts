@@ -87,8 +87,8 @@ export function parseSecret(secret: string | Secret): Secret {
   if (typeof data.nonce !== 'string' || typeof data.data !== 'string') {
     throw new CTSError('Invalid NUT-10 secret nonce / data');
   }
-  if (data.tags) {
-    // Check data.tags is an array
+  if (data.tags != null) {
+    // Check data.tags is an array (a falsy non-array must be rejected here)
     if (!Array.isArray(data.tags)) {
       throw new CTSError('Invalid NUT-10 secret tags');
     }
@@ -107,8 +107,8 @@ export function parseSecret(secret: string | Secret): Secret {
     {
       nonce: data.nonce,
       data: data.data,
-      tags: data.tags,
-    } as SecretData,
+      tags: data.tags ?? undefined, // a tolerated null becomes undefined
+    },
   ];
 }
 
@@ -218,7 +218,7 @@ export function getTagScalar(secret: Secret | string, key: string): string | und
 }
 
 /**
- * Get the first scalar value of a tag parsed as base-10 integer, or undefined.
+ * Get the first scalar value of a tag parsed as a base-10 integer, or undefined.
  *
  * @param secret - The Proof secret.
  * @param key - Tag key to lookup.
@@ -227,6 +227,11 @@ export function getTagScalar(secret: Secret | string, key: string): string | und
 export function getTagInt(secret: Secret | string, key: string): number | undefined {
   const v = getTagScalar(secret, key);
   if (v === undefined) return undefined;
-  const n = Number.parseInt(v, 10);
-  return Number.isFinite(n) ? n : undefined;
+  // Strict integer parse: reject the partial parses ("1700000000abc" -> 1700000000)
+  // and hex/exponent/float forms Number.parseInt would accept. The sign is kept so a
+  // caller's semantic check (assertPositiveInteger, getLocktime's `<= 0`) still fails
+  // closed on an out-of-range value instead of it being silently dropped to undefined.
+  if (!/^-?\d+$/.test(v)) return undefined;
+  const n = Number(v);
+  return Number.isSafeInteger(n) ? n : undefined;
 }

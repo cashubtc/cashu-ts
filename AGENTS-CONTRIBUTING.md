@@ -89,6 +89,8 @@ DEV=1 make nutshell-stable-down
 - Prefer clear, boring code over clever tricks.
 - Be explicit about errors; fail fast with actionable messages.
 - Make invalid states unrepresentable (model with types).
+- Public API is called from plain JS, not only TypeScript: guard public method arguments at runtime; types are erased at the boundary.
+- Treat mint responses as untrusted: bound any loop or allocation they drive, and sanity-check numeric metadata (fees, counters) before use.
 - Optimize for readability over micro-performance.
 - Prefer early exits and flatter structures to avoid deep if/else nesting.
 - Do not add one-off helpers, new type aliases, exported types, or wider public API signatures unless they are clearly justified.
