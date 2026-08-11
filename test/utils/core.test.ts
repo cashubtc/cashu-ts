@@ -581,17 +581,16 @@ describe('test keyset derivation', () => {
       expiry: NUT02_V3_VECTOR2_KEYS.final_expiry,
     });
     expect(keysetId).toBe(NUT02_V3_VECTOR2_KEYS.id);
+    // final_expiry is keyset metadata; it does not change the id.
+    const noExpiryId = utils.deriveKeysetId(NUT02_V3_VECTOR2_KEYS.keys, {
+      versionByte: 2,
+      unit: NUT02_V3_VECTOR2_KEYS.unit,
+      input_fee_ppk: NUT02_V3_VECTOR2_KEYS.input_fee_ppk,
+    });
+    expect(noExpiryId).toBe(keysetId);
   });
 
-  test('NUT-02 V3 derivation is case-insensitive in unit and pubkey hex', () => {
-    const upperUnitId = utils.deriveKeysetId(NUT02_V3_VECTOR2_KEYS.keys, {
-      versionByte: 2,
-      unit: NUT02_V3_VECTOR2_KEYS.unit.toUpperCase(),
-      input_fee_ppk: NUT02_V3_VECTOR2_KEYS.input_fee_ppk,
-      expiry: NUT02_V3_VECTOR2_KEYS.final_expiry,
-    });
-    expect(upperUnitId).toBe(NUT02_V3_VECTOR2_KEYS.id);
-
+  test('NUT-02 V3 derivation is case-insensitive in pubkey hex and rejects an invalid unit', () => {
     const upperKeys = Object.fromEntries(
       Object.entries(NUT02_V3_VECTOR2_KEYS.keys).map(([k, v]) => [k, v.toUpperCase()]),
     );
@@ -599,13 +598,21 @@ describe('test keyset derivation', () => {
       versionByte: 2,
       unit: NUT02_V3_VECTOR2_KEYS.unit,
       input_fee_ppk: NUT02_V3_VECTOR2_KEYS.input_fee_ppk,
-      expiry: NUT02_V3_VECTOR2_KEYS.final_expiry,
     });
     expect(upperKeysId).toBe(NUT02_V3_VECTOR2_KEYS.id);
+
+    // V3 units must match [a-z0-9_-]+; they are rejected, not normalized.
+    expect(() =>
+      utils.deriveKeysetId(NUT02_V3_VECTOR2_KEYS.keys, {
+        versionByte: 2,
+        unit: NUT02_V3_VECTOR2_KEYS.unit.toUpperCase(),
+        input_fee_ppk: NUT02_V3_VECTOR2_KEYS.input_fee_ppk,
+      }),
+    ).toThrow(/unit/i);
   });
 
-  // Mirror of the V3 case-insensitivity test on the V2 (secp256k1) path. The two share the same
-  // preimage code path; this lock-in catches a future regression that lowercases for v3 only.
+  // The V2 (secp256k1) ASCII preimage still normalizes case; lock that in so the V3
+  // strict-unit rule does not leak into V2, whose ids are live.
   test('NUT-02 V2 derivation is case-insensitive in unit and pubkey hex', () => {
     const upperUnitId = utils.deriveKeysetId(NUT02_V2_VECTOR1_KEYS.keys, {
       versionByte: 1,
