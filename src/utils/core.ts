@@ -35,6 +35,7 @@ import {
   encodeUint8ToBase64,
   encodeUint8ToBase64Url,
 } from './base64';
+import { minimalBytesBE } from './bytes';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { JSONInt } from './JSONInt';
 import { MAX_PAYLOAD_DECODE_ATTEMPTS, MAX_PAYLOAD_LENGTH, MAX_SPLIT_OUTPUTS } from './limits';
@@ -591,14 +592,14 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
       );
       const keysBytes = mergeUInt8Arrays(
         ...sortedEntries.flatMap(([amount, pubkey]) => [
-          len32Framed(minimalBeBytes(BigInt(amount))),
+          len32Framed(minimalBytesBE(BigInt(amount))),
           len32Framed(hexToBytes(pubkey.toLowerCase())),
         ]),
       );
       const preimage = mergeUInt8Arrays(
         len32Framed(keysBytes),
         len32Framed(utf8ToBytes(unit)),
-        len32Framed(minimalBeBytes(BigInt(input_fee_ppk ?? 0))),
+        len32Framed(minimalBytesBE(BigInt(input_fee_ppk ?? 0))),
       );
       return '02' + bytesToHex(sha256(preimage));
     }
@@ -616,16 +617,6 @@ function mergeUInt8Arrays(...arrays: Uint8Array[]): Uint8Array {
     offset += arr.length;
   }
   return merged;
-}
-
-/**
- * Minimal big-endian bytes of a non-negative integer; 0 -> empty array.
- */
-function minimalBeBytes(n: bigint): Uint8Array {
-  if (n === 0n) return new Uint8Array(0);
-  let hex = n.toString(16);
-  if (hex.length % 2) hex = '0' + hex;
-  return hexToBytes(hex);
 }
 
 /**
