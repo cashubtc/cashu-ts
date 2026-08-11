@@ -1885,19 +1885,16 @@ export type SigAllApi = {
     extractSwapPackage: (preview: SwapPreview) => SigAllSigningPackage;
     extractMeltPackage: <TQuote extends Pick<MeltQuoteBaseResponse, 'quote'>>(preview: MeltPreview<TQuote>) => SigAllSigningPackage;
     serializePackage: (pkg: SigAllSigningPackage) => string;
-    deserializePackage: (input: string, options?: {
-        validateDigest?: boolean;
-    }) => SigAllSigningPackage;
+    deserializePackage: (input: string) => SigAllSigningPackage;
     signPackage: (pkg: SigAllSigningPackage, privkey: string) => SigAllSigningPackage;
     signDigest: (hexDigest: string, privkey: string) => string;
     mergeSwapPackage: (pkg: SigAllSigningPackage, preview: SwapPreview) => SwapPreview;
     mergeMeltPackage: <TQuote extends Pick<MeltQuoteBaseResponse, 'quote'>>(pkg: SigAllSigningPackage, preview: MeltPreview<TQuote>) => MeltPreview<TQuote>;
 };
 
-// @public (undocumented)
+// @public
 export type SigAllDigests = {
-    legacy: string;
-    current: string;
+    v0: string;
 };
 
 // @public
@@ -1907,10 +1904,6 @@ export type SigAllSigningPackage = {
     quote?: string;
     inputs: Array<Pick<Proof, 'secret' | 'C'>>;
     outputs: SerializedBlindedMessage[];
-    digests: {
-        legacy?: string;
-        current: string;
-    };
     witness?: {
         signatures: string[];
     };
