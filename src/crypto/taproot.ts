@@ -148,13 +148,7 @@ export function readTlvRecords(
  * Minimal big-endian encoding of a non-negative integer. Zero encodes to zero bytes.
  */
 export function minimalBE(value: bigint): Uint8Array {
-  if (value < 0n) {
-    throw new CTSError('Cannot encode negative integer');
-  }
-  if (value === 0n) return new Uint8Array(0);
-  let hexStr = value.toString(16);
-  if (hexStr.length % 2) hexStr = '0' + hexStr;
-  return Bytes.fromHex(hexStr);
+  return Bytes.minimalBE(value);
 }
 
 /**
