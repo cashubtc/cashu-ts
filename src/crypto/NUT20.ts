@@ -4,6 +4,7 @@ import { hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { Amount } from '../model/Amount';
 import { type SerializedBlindedMessage } from '../model/types';
+import { Bytes } from '../utils/Bytes';
 
 import { schnorrSignDigest, schnorrVerifyDigest } from './core';
 
@@ -13,10 +14,7 @@ const MINT_QUOTE_SIG_DST = utf8ToBytes('Cashu_MintQuoteSig_v1');
 // Canonical minimal BE bytes of a non-negative amount (0 → empty, 1 → 0x01, 256 → 0x0100).
 // Amount.from defensively normalizes a raw JSON number/string (Amount passes through).
 function amountToMinimalBytes(blindedMessage: SerializedBlindedMessage): Uint8Array {
-  const value = Amount.from(blindedMessage.amount).toBigInt();
-  if (value === 0n) return new Uint8Array(0);
-  const hex = value.toString(16);
-  return hexToBytes(hex.length % 2 === 1 ? '0' + hex : hex);
+  return Bytes.minimalBE(Amount.from(blindedMessage.amount).toBigInt());
 }
 
 /**

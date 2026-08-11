@@ -126,6 +126,15 @@ export class Bytes {
     return result;
   }
 
+  // Minimal big-endian bytes of a non-negative integer; zero encodes to zero bytes
+  // (fromBigInt encodes zero as [0x00]).
+  static minimalBE(value: bigint): Uint8Array {
+    if (value < 0n) {
+      throw new RangeError('value must be non-negative');
+    }
+    return value === 0n ? new Uint8Array(0) : Bytes.fromBigInt(value);
+  }
+
   static fromBigInt(value: bigint): Uint8Array {
     if (value < 0n) {
       throw new RangeError('value must be non-negative');
