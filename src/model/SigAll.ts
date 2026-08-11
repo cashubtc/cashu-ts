@@ -1,9 +1,4 @@
-import {
-  computeMessageDigest,
-  buildLegacyP2PKSigAllMessage,
-  buildP2PKSigAllMessage,
-  schnorrSignDigest,
-} from '../crypto';
+import { computeMessageDigest, buildP2PKSigAllMessageV0, schnorrSignDigest } from '../crypto';
 import { parseWitnessData } from '../crypto/NUT11';
 import { Bytes, JSONInt, encodeUint8toBase64Url } from '../utils';
 import type { MeltPreview, SwapPreview } from '../wallet/types';
@@ -18,11 +13,15 @@ import type { Proof, MeltQuoteBaseResponse, SerializedBlindedMessage } from './t
 const SIGALL_PREFIX = 'sigallA';
 
 /**
+ * Per-format SIG_ALL digests, keyed by transcript version.
+ *
  * @experimental
  */
 export type SigAllDigests = {
-  legacy: string;
-  current: string;
+  /**
+   * Unframed concatenation format (CDK >= 0.14.0, Nutshell > 0.20.2).
+   */
+  v0: string;
 };
 
 /**
@@ -43,7 +42,7 @@ export type SigAllSigningPackage = {
    */
   type: 'swap' | 'melt';
   /**
-   * For melt packages only.
+   * Required for melt packages, absent for swaps.
    */
   quote?: string;
   /**
@@ -54,19 +53,6 @@ export type SigAllSigningPackage = {
    * NUT-00 `BlindedMessages` for signing verification.
    */
   outputs: SerializedBlindedMessage[];
-  /**
-   * Per-format digests to support multiple SIG_ALL formats.
-   */
-  digests: {
-    /**
-     * For Nutshell (all releases), CDK < 0.14.0.
-     */
-    legacy?: string;
-    /**
-     * From CDK >= 0.14.0.
-     */
-    current: string;
-  };
   /**
    * Signatures collected (to be injected into the first proof witness).
    */
@@ -79,12 +65,10 @@ function computeDigests(
   quoteId?: string,
 ): SigAllDigests {
   const sigAllOutputs = outputs.map((blindedMessage) => ({ blindedMessage }));
-  const legacyMsg = buildLegacyP2PKSigAllMessage(inputs, sigAllOutputs, quoteId);
-  const currentMsg = buildP2PKSigAllMessage(inputs, sigAllOutputs, quoteId);
+  const v0Msg = buildP2PKSigAllMessageV0(inputs, sigAllOutputs, quoteId);
 
   return {
-    legacy: computeMessageDigest(legacyMsg, true),
-    current: computeMessageDigest(currentMsg, true),
+    v0: computeMessageDigest(v0Msg, true),
   };
 }
 
@@ -97,7 +81,6 @@ function serializePackage(pkg: SigAllSigningPackage): string {
   ordered.inputs = pkg.inputs;
   ordered.outputs = pkg.outputs;
 
-  if (pkg.digests) ordered.digests = pkg.digests;
   if (pkg.witness) ordered.witness = pkg.witness;
 
   const json = JSONInt.stringify(ordered) ?? '{}';
@@ -106,10 +89,7 @@ function serializePackage(pkg: SigAllSigningPackage): string {
   return `${SIGALL_PREFIX}${base64url}`;
 }
 
-function deserializePackage(
-  input: string,
-  options?: { validateDigest?: boolean },
-): SigAllSigningPackage {
+function deserializePackage(input: string): SigAllSigningPackage {
   if (!input.startsWith(SIGALL_PREFIX)) {
     throw new CTSError(`Invalid signing package: must start with "${SIGALL_PREFIX}"`);
   }
@@ -153,6 +133,12 @@ function deserializePackage(
     throw new CTSError(`Invalid signing package type: ${type}`);
   }
 
+  // The quote is part of the signed melt transcript; without it a melt package
+  // would produce a swap-shaped message.
+  if (type === 'melt' && (typeof pkg.quote !== 'string' || pkg.quote.length === 0)) {
+    throw new CTSError('Melt signing package requires a quote');
+  }
+
   if (!Array.isArray(pkg.inputs)) {
     throw new CTSError('Signing package inputs must be an array');
   }
@@ -188,42 +174,34 @@ function deserializePackage(
     output.amount = Amount.from(output.amount);
   }
 
-  const digests = pkg.digests as Record<string, string> | undefined;
-  if (!digests || typeof digests.current !== 'string' || digests.current.length === 0) {
-    throw new CTSError('Signing package digests.current is required');
-  }
-
-  // Optional digest validation
-  if (options?.validateDigest) {
-    const recomputed = computeDigests(pkg.inputs, pkg.outputs, pkg.quote);
-    if (recomputed.current !== digests.current) {
-      throw new CTSError('Digest validation failed: current digest mismatch');
-    }
-    if (digests.legacy && recomputed.legacy !== digests.legacy) {
-      throw new CTSError('Digest validation failed: legacy digest mismatch');
+  if (pkg.witness !== undefined) {
+    const witness = pkg.witness as { signatures?: unknown };
+    if (
+      !witness ||
+      typeof witness !== 'object' ||
+      !Array.isArray(witness.signatures) ||
+      witness.signatures.some((s) => typeof s !== 'string')
+    ) {
+      throw new CTSError('Signing package witness.signatures must be a string array');
     }
   }
 
-  return pkg;
+  // Rebuild from validated fields only, so unknown keys never survive transport.
+  return {
+    version: SIGALL_PREFIX,
+    type,
+    ...(type === 'melt' ? { quote: pkg.quote } : {}),
+    inputs: pkg.inputs.map((p) => ({ secret: p.secret, C: p.C })),
+    outputs: pkg.outputs.map((o) => ({ amount: o.amount, id: o.id, B_: o.B_ })),
+    ...(pkg.witness ? { witness: { signatures: pkg.witness.signatures } } : {}),
+  };
 }
 
 function signPackage(pkg: SigAllSigningPackage, privkey: string): SigAllSigningPackage {
-  const newSigs: string[] = [];
-
-  if (!pkg.digests?.current) {
-    throw new CTSError('digests.current is required to sign package');
-  }
-
-  // Sign precomputed digests
-  newSigs.push(schnorrSignDigest(pkg.digests.current, privkey));
-  if (pkg.digests.legacy) {
-    newSigs.push(schnorrSignDigest(pkg.digests.legacy, privkey));
-  }
-
-  // validate that signing actually produced signatures
-  if (newSigs.length === 0) {
-    throw new CTSError('No signatures produced during signing');
-  }
+  // Sign transcripts recomputed from the package contents; a signer only ever
+  // signs what the package shows, never a digest chosen elsewhere.
+  const digests = computeDigests(pkg.inputs, pkg.outputs, pkg.quote);
+  const newSigs = [schnorrSignDigest(digests.v0, privkey)];
 
   return {
     ...pkg,
@@ -258,27 +236,12 @@ function buildSigningPackage(
   outputs: SerializedBlindedMessage[],
   quoteId?: string,
 ): SigAllSigningPackage {
-  // compute legacy and current SIG_ALL digests for backward compatibility
-  const digests = computeDigests(inputs, outputs, quoteId);
-
-  // verify current digest was computed correctly (catches bugs).
-  const sigAllOutputs = outputs.map((blindedMessage) => ({ blindedMessage }));
-  const msg = buildP2PKSigAllMessage(inputs, sigAllOutputs, quoteId);
-  const expected = computeMessageDigest(msg, true);
-
-  if (digests.current !== expected) {
-    throw new CTSError(
-      'SIG_ALL digest computation mismatch - current digest does not match expected value',
-    );
-  }
-
   return {
     version: SIGALL_PREFIX,
     type,
     ...(quoteId ? { quote: quoteId } : {}),
     inputs: inputs.map((p) => ({ secret: p.secret, C: p.C })),
     outputs,
-    digests,
   };
 }
 
@@ -323,14 +286,12 @@ function mergeSignatures(proofs: Proof[], pkg: SigAllSigningPackage): Proof[] {
  */
 export type SigAllApi = {
   /**
-   * Computes legacy and current SIG_ALL formats.
+   * Computes the SIG_ALL digests for a transaction, keyed by transcript version.
    *
-   * @remarks
-   * Returns hex-encoded SHA256 digests for each format to support multi-format signing.
    * @param inputs Proof array.
    * @param outputs Array of SerializedBlindMessage (NUT-00 `BlindMessages`).
    * @param quoteId Optional quote ID for melt transactions.
-   * @returns Object with legacy, and current digests (all hex strings)
+   * @returns Hex-encoded SHA256 digest per format.
    * @experimental
    */
   computeDigests: (
@@ -379,19 +340,17 @@ export type SigAllApi = {
 
   /**
    * @remarks
-   * Accepts a sigallA-prefixed base64url string and rehydrates it into a SigAllSigningPackage.
+   * Accepts a sigallA-prefixed base64url string and rehydrates it into a SigAllSigningPackage. Only
+   * known fields survive the round trip.
    * @experimental
    */
-  deserializePackage: (
-    input: string,
-    options?: { validateDigest?: boolean },
-  ) => SigAllSigningPackage;
+  deserializePackage: (input: string) => SigAllSigningPackage;
 
   /**
    * Signs a SigAllSigningPackage and returns it with signatures attached.
    *
    * @remarks
-   * Collects signatures by signing legacy and current SIG_ALL formats for backward compatibility.
+   * Signs the SIG_ALL transcripts recomputed from the package's own inputs, outputs and quote.
    * Multiple parties can call this sequentially to aggregate signatures for multi-party signing.
    * @param pkg The signing package (from extract*SigningPackage or another signer)
    * @param privkey Private key to sign with.

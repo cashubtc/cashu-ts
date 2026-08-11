@@ -808,7 +808,7 @@ export function assertSigAllInputs(inputs: Proof[]): void {
 }
 
 /**
- * Message aggregation for SIG_ALL.
+ * Message aggregation for SIG_ALL (v0, unframed concatenation).
  *
  * NOTE: Use `assertSigAllInputs()` to ensure valid message inputs.
  *
@@ -819,7 +819,7 @@ export function assertSigAllInputs(inputs: Proof[]): void {
  * @param quoteId Optional. Quote id for Melt transactions.
  * @internal
  */
-export function buildP2PKSigAllMessage(
+export function buildP2PKSigAllMessageV0(
   inputs: Array<Pick<Proof, 'secret' | 'C'>>,
   outputs: Array<Pick<OutputDataLike, 'blindedMessage'>>,
   quoteId?: string,
@@ -982,38 +982,4 @@ function resolveNSigsRefund(secret: Secret, lockState: LockState, refundKeys: st
     return Math.max(getTagInt(secret, 'n_sigs_refund') ?? 1, 1);
   }
   return 0; // refund lock inactive
-}
-
-// ------------------------------
-// Deprecated
-// ------------------------------
-
-/**
- * Message aggregation for SIG_ALL (legacy format).
- *
- * @remarks
- * Melt transactions MUST include the quoteId.
- *
- * For compatibility with NutShell (all releases), CDK <v0.14.0.
- * @internal
- */
-export function buildLegacyP2PKSigAllMessage(
-  inputs: Array<Pick<Proof, 'secret'>>,
-  outputs: Array<Pick<OutputDataLike, 'blindedMessage'>>,
-  quoteId?: string,
-): string {
-  const parts: string[] = [];
-  // Concat inputs: secret_0 ...
-  for (const p of inputs) {
-    parts.push(p.secret);
-  }
-  // Concat outputs: B_0 ...
-  for (const o of outputs) {
-    parts.push(o.blindedMessage.B_);
-  }
-  // Add quoteId for melts
-  if (quoteId) {
-    parts.push(quoteId);
-  }
-  return parts.join('');
 }

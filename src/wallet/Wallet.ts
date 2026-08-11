@@ -14,9 +14,8 @@ import {
   hashToCurveBls,
   isBlsKeyset,
   isP2PKSigAll,
-  buildP2PKSigAllMessage,
+  buildP2PKSigAllMessageV0,
   assertSigAllInputs,
-  buildLegacyP2PKSigAllMessage,
   parseSecret,
 } from '../crypto';
 // Internal transitional fallback — not part of crypto/index.ts
@@ -1480,14 +1479,11 @@ class Wallet {
     this.failIfNullish(outputData, 'OutputData is required for SIG_ALL proof signing.');
     assertSigAllInputs(normalizedProofs);
 
-    // SIG_ALL is in flux currently, so let's generate all known message formats
-    // and sign the first proof only against each message...
+    // SIG_ALL is in flux currently, so sign the first proof only against each
+    // supported message format...
     const [first, ...rest] = normalizedProofs;
     let signedFirst = first;
-    const messages = [
-      buildLegacyP2PKSigAllMessage(normalizedProofs, outputData, quoteId),
-      buildP2PKSigAllMessage(normalizedProofs, outputData, quoteId),
-    ];
+    const messages = [buildP2PKSigAllMessageV0(normalizedProofs, outputData, quoteId)];
     for (const msg of messages) {
       signedFirst = cryptoSignP2PKProofs([signedFirst], privkey, this._logger, msg)[0];
     }
