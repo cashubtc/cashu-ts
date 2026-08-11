@@ -613,6 +613,37 @@ describe('receiver-keyed derivation (2.7, vectors 6.1)', () => {
     expect(out.tree).toBeUndefined();
   });
 
+  test('a NUMS receiver key derives verbatim, uniquely per ephemeral, and demands a blinded leaf', () => {
+    const leaves = [
+      { type: 'after', n: 1, keys: [v61.alice_refund_pub], time: v61.refund_time } as const,
+    ];
+    // Verbatim NUMS base (spec 2.3.5): a blinded NUMS could not be told apart from a
+    // sender-owned key hiding a key path.
+    const out = deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, {
+      leaves: [...leaves],
+      blindKeys: [v61.alice_refund_pub],
+      eBytes,
+    });
+    expect(out.K).toBe(TAPROOT_NUMS_KEY);
+    expect(verifyTaprootSpendInfo(out.secret, { E: out.E, K: out.K, tree: out.tree })).toBe(
+      'receiver-keyed',
+    );
+    // The blinded leaf key is the per-payment uniquifier: different ephemeral, different secret.
+    const eBytes2 = new Uint8Array(32);
+    eBytes2[31] = 7;
+    const out2 = deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, {
+      leaves: [...leaves],
+      blindKeys: [v61.alice_refund_pub],
+      eBytes: eBytes2,
+    });
+    expect(out2.secret).not.toBe(out.secret);
+    // Without one, every payment would repeat the same secret: refused.
+    expect(() =>
+      deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, { leaves: [...leaves], eBytes }),
+    ).toThrow(/blind-me/);
+    expect(() => deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, { eBytes })).toThrow(/blind-me/);
+  });
+
   test('trial-match recovers the pinned key-path key', () => {
     const hit = recoverReceiverKeyedSecretKey(v61.secret, v61.ephemeral_pub, v61.carol_priv, [
       v61.leaf_after,

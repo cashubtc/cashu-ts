@@ -895,6 +895,28 @@ describe('taproot (v3) request marking', () => {
     ).toThrow(/type/);
   });
 
+  test('a NUMS receiver key must come with a blind-me leaf key', () => {
+    const numsKey = '0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0';
+    // Authoring: refused without leaves, and without a blind-me key.
+    expect(() => PaymentRequest.builder().requestTaproot({ receiverKey: numsKey })).toThrow(
+      /blind-me/,
+    );
+    expect(() =>
+      PaymentRequest.builder().requestTaproot({ receiverKey: numsKey, leaves: [leafAfter] }),
+    ).toThrow(/blind-me/);
+    // With one, it builds, round-trips, and converts for the payer.
+    const pr = PaymentRequest.builder()
+      .requestTaproot({ receiverKey: numsKey, leaves: [leafAfter], blindKeys: [alicePub] })
+      .build();
+    expect(decodePaymentRequest(pr.toEncodedRequest()).toTaprootOptions()?.receiverPub).toBe(
+      numsKey,
+    );
+    // A foreign request that skipped authoring validation is refused by the payer.
+    expect(() =>
+      new PaymentRequest({ taproot: { receiverKey: numsKey } }).toTaprootOptions(),
+    ).toThrow(/blind-me/);
+  });
+
   test('creqB round-trips the option under NUT-26 tag 0x0b', () => {
     const pr = PaymentRequest.builder()
       .amount(8, 'sat')
