@@ -83,7 +83,7 @@ describe('v3 (BLS) mint keys', () => {
       { versionByte: 2, unit: 'sat' },
     );
 
-    expect(keysetId).toBe('029b80063a8a37c49c1d9e9d20eda8c5f4f7fecd0502c900061618c589fe5bd460');
+    expect(keysetId).toBe('02d86946ba2070151dc52e953df7458e8e9fe43192dee1c4b8c89fcd0b3573eab7');
 
     const expected: Record<string, string> = {
       '1':

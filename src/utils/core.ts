@@ -517,7 +517,8 @@ export type DeriveKeysetIdOptions = {
  * Returns the keyset id of a set of keys.
  *
  * @param keys Keys object to derive keyset id from.
- * @param options.expiry (optional) expiry of the keyset.
+ * @param options.expiry (optional) expiry of the keyset (V2 only; V3 does not commit expiry to the
+ *   id).
  * @param options.input_fee_ppk (optional) Input fee for keyset (in ppk)
  * @param options.unit (optional) the unit of the keyset. Default: sat.
  * @param options.versionByte (optional) version of the keyset ID. Default: 1.
@@ -553,12 +554,11 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
       const hashHex = bytesToHex(hash).slice(0, 14);
       return '00' + hashHex;
     }
-    case 1:
-    case 2: {
+    case 1: {
       if (!unit) {
-        throw new CTSError(`Cannot compute keyset ID version 0${versionByte}: unit is required.`);
+        throw new CTSError(`Cannot compute keyset ID version 01: unit is required.`);
       }
-      // Per NUT-02 V2/V3: pubkey hex and unit string MUST be lowercased in the preimage.
+      // Per NUT-02 V2: pubkey hex and unit string MUST be lowercased in the preimage.
       const sortedEntries = Object.entries(keys).sort(([amountA], [amountB]) =>
         Amount.from(amountA).compareTo(amountB),
       );
@@ -575,7 +575,32 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
       }
       const hash = sha256(utf8ToBytes(preimage));
       const hashHex = bytesToHex(hash);
-      return (versionByte === 2 ? '02' : '01') + hashHex;
+      return '01' + hashHex;
+    }
+    case 2: {
+      if (!unit) {
+        throw new CTSError(`Cannot compute keyset ID version 02: unit is required.`);
+      }
+      // Per NUT-02 V3: length-framed preimage over raw bytes; unit MUST match
+      // [a-z0-9_-]+ and final_expiry is not committed to the id.
+      if (!/^[a-z0-9_-]+$/.test(unit)) {
+        throw new CTSError(`Invalid keyset unit: ${unit}`);
+      }
+      const sortedEntries = Object.entries(keys).sort(([amountA], [amountB]) =>
+        Amount.from(amountA).compareTo(amountB),
+      );
+      const keysBytes = mergeUInt8Arrays(
+        ...sortedEntries.flatMap(([amount, pubkey]) => [
+          len32Framed(minimalBeBytes(BigInt(amount))),
+          len32Framed(hexToBytes(pubkey.toLowerCase())),
+        ]),
+      );
+      const preimage = mergeUInt8Arrays(
+        len32Framed(keysBytes),
+        len32Framed(utf8ToBytes(unit)),
+        len32Framed(minimalBeBytes(BigInt(input_fee_ppk ?? 0))),
+      );
+      return '02' + bytesToHex(sha256(preimage));
     }
     default:
       throw new CTSError(`Unrecognized keyset ID version: ${versionByte}`);
@@ -591,6 +616,26 @@ function mergeUInt8Arrays(...arrays: Uint8Array[]): Uint8Array {
     offset += arr.length;
   }
   return merged;
+}
+
+/**
+ * Minimal big-endian bytes of a non-negative integer; 0 -> empty array.
+ */
+function minimalBeBytes(n: bigint): Uint8Array {
+  if (n === 0n) return new Uint8Array(0);
+  let hex = n.toString(16);
+  if (hex.length % 2) hex = '0' + hex;
+  return hexToBytes(hex);
+}
+
+/**
+ * NUT-02 V3 len32 framing: 4-byte big-endian length prefix.
+ */
+function len32Framed(b: Uint8Array): Uint8Array {
+  const out = new Uint8Array(4 + b.length);
+  new DataView(out.buffer).setUint32(0, b.length, false);
+  out.set(b, 4);
+  return out;
 }
 
 /**
