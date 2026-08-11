@@ -493,6 +493,23 @@ describe('Bytes utility class', () => {
     });
   });
 
+  describe('minimalBE', () => {
+    test('should encode zero as zero bytes, unlike fromBigInt', () => {
+      expect(Bytes.minimalBE(0n)).toEqual(new Uint8Array(0));
+      expect(Bytes.fromBigInt(0n)).toEqual(new Uint8Array([0]));
+    });
+
+    test('should encode positive integers minimally', () => {
+      expect(Bytes.minimalBE(1n)).toEqual(new Uint8Array([0x01]));
+      expect(Bytes.minimalBE(256n)).toEqual(new Uint8Array([0x01, 0x00]));
+      expect(Bytes.minimalBE(65535n)).toEqual(new Uint8Array([0xff, 0xff]));
+    });
+
+    test('should throw for negative integers', () => {
+      expect(() => Bytes.minimalBE(-1n)).toThrow(RangeError);
+    });
+  });
+
   describe('integration tests', () => {
     test('hex roundtrip with various data', () => {
       const testCases = ['', '00', 'ff', 'deadbeef', '0123456789abcdef', 'a0b1c2d3e4f5'];
