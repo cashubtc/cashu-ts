@@ -336,6 +336,20 @@ export function parseTaprootLeaf(bytes: Uint8Array): TaprootLeaf {
 }
 
 /**
+ * Parse a hex-serialized leaf to its declarative form.
+ */
+export function parseTaprootLeafHex(leafHex: string): TaprootLeaf {
+  return parseTaprootLeaf(Bytes.fromHex(leafHex));
+}
+
+/**
+ * Serialize a leaf to its hex wire form, the shape spend info and payment requests carry.
+ */
+export function serializeTaprootLeafHex(leaf: TaprootLeaf): string {
+  return Bytes.toHex(serializeTaprootLeaf(leaf));
+}
+
+/**
  * Hash a serialized leaf: `tagged_hash("Cashu_TapLeaf", leaf)`.
  */
 export function taprootLeafHash(serializedLeaf: Uint8Array): Uint8Array {

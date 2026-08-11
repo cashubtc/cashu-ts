@@ -148,4 +148,12 @@ export {
   type ScriptPathSigningPackage,
   type ScriptPathSpendRequest,
 } from './model/ScriptPath';
-export { TAPROOT_LEAF_TYPE, type TaprootLeaf } from './crypto/taproot';
+export {
+  parseTaprootLeaf,
+  parseTaprootLeafHex,
+  serializeTaprootLeaf,
+  serializeTaprootLeafHex,
+  TAPROOT_LEAF_TYPE,
+  TAPROOT_NUMS_KEY,
+  type TaprootLeaf,
+} from './crypto/taproot';
