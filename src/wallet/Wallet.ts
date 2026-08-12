@@ -88,7 +88,6 @@ import {
   type ReceiveConfig,
   type MintProofsConfig,
   type MeltProofsConfig,
-  type PrepareMeltConfig,
   type CompleteMeltOptions,
   type SwapTransaction,
   type MeltProofsResponse,
@@ -1990,7 +1989,7 @@ class Wallet {
     amount: AmountLike,
     pubkey: string,
     description?: string,
-  ): Promise<MintQuoteBolt11Response> {
+  ): Promise<MintQuoteBolt11Response & { pubkey: string }> {
     this.requireSupport('mint', 'bolt11');
     this.requireMintableKeyset('createLockedMintQuote');
     this.failIf(typeof pubkey !== 'string', 'A pubkey is required to lock the mint quote');
@@ -3188,7 +3187,7 @@ class Wallet {
     method: string,
     meltQuote: TQuote,
     proofsToSend: ProofLike[],
-    config?: PrepareMeltConfig,
+    config?: MeltProofsConfig,
     outputType?: OutputType,
   ): Promise<MeltPreview<TQuote>> {
     this.validateMeltQuote(meltQuote);

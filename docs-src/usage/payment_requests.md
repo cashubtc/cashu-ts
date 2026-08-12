@@ -107,7 +107,7 @@ const request = new PaymentRequest({
 
 ### Receive the payload
 
-Payloads arrive as raw text from the payer's wallet, so parse with `decodePayload` rather than `JSON.parse` (which silently corrupts amounts above 2^53). It validates the shape and normalizes proof amounts to `bigint`; matching the payload to your request is your job:
+Payloads arrive as raw text from the payer's wallet, so parse with `decodePayload` rather than `JSON.parse` (which silently corrupts amounts above 2^53). It validates the shape and normalizes proof amounts to `Amount`, so the returned proofs are ready to use; matching the payload to your request is your job:
 
 ```typescript
 import { PaymentRequest, type PaymentRequestPayload } from '@cashu/cashu-ts';

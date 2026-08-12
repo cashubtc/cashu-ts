@@ -252,7 +252,7 @@ export class PaymentRequest {
       if (typeof amount !== 'number' && typeof amount !== 'bigint') {
         throw new CTSError(`invalid payment payload: malformed proof amount at index ${i}`);
       }
-      return { ...p, amount: Amount.from(amount).toBigInt() } as unknown as Proof;
+      return { ...(p as Omit<Proof, 'amount'>), amount: Amount.from(amount) };
     });
     return {
       ...(id !== undefined && { id }),

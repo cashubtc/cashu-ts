@@ -309,6 +309,48 @@ Calls that already pass a `CompleteMeltOptions` object (or omit the third argume
 
 ---
 
+## `PrepareMeltConfig` removed; `nut08Change` moved to `MeltProofsConfig`
+
+`PrepareMeltConfig` is removed. Its only distinction was `nut08Change`, which now lives on `MeltProofsConfig`, so every melt method takes the same config type. This also fixes the option being unusable through `meltProofs`, `meltProofsBolt11`, `meltProofsBolt12` and `meltProofsOnchain`: they forward their config to `prepareMelt`, so `nut08Change` worked at runtime but did not type check. In v4 the type remains as a deprecated alias of `MeltProofsConfig`.
+
+### Migration
+
+```ts
+// Before
+import { type PrepareMeltConfig } from '@cashu/cashu-ts';
+const config: PrepareMeltConfig = { nut08Change: false };
+
+// After
+import { type MeltProofsConfig } from '@cashu/cashu-ts';
+const config: MeltProofsConfig = { nut08Change: false };
+```
+
+Only the type name changes; the object shape is identical, so untyped call sites need no change.
+
+---
+
+## `NUT10Option.tags` is optional
+
+`NUT10Option.tags` and `RawNUT10Option.t` are now optional, matching NUT-10 and NUT-18, which both describe tags as optional. Constructing a payment request lock no longer needs a placeholder `tags: []`. Code that reads the field must handle `undefined`, which was already possible at runtime: decoding a request that omits tags produced one.
+
+### Migration
+
+```ts
+// Before
+if (request.nut10.tags.length > 0) {
+  /* … */
+}
+
+// After
+if (request.nut10.tags?.length) {
+  /* … */
+}
+```
+
+Absent and empty are equivalent, and neither is encoded.
+
+---
+
 ## `P2PKOptions` is now a `kind` + `data` spending condition
 
 `P2PKOptions` drops `pubkey: string | string[]` and `hashlock?`. It is now the NUT-10 envelope (`kind` + `data`) plus the shared NUT-11 `LockConditions` tags:
