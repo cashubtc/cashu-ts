@@ -80,7 +80,6 @@ import {
   type ReceiveConfig,
   type MintProofsConfig,
   type MeltProofsConfig,
-  type PrepareMeltConfig,
   type CompleteMeltOptions,
   type SwapTransaction,
   type MeltProofsResponse,
@@ -3069,7 +3068,7 @@ class Wallet {
     method: string,
     meltQuote: TQuote,
     proofsToSend: ProofLike[],
-    config?: PrepareMeltConfig,
+    config?: MeltProofsConfig,
     outputType?: OutputType,
   ): Promise<MeltPreview<TQuote>> {
     this.validateMeltQuote(meltQuote);

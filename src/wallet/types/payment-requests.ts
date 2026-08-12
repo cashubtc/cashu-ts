@@ -9,7 +9,7 @@ export type RawTransport = {
 export type RawNUT10Option = {
   k: string; // kind
   d: string; // data
-  t: string[][]; // tags
+  t?: string[][]; // tags (optional per NUT-18)
 };
 
 export type RawPaymentRequest = {
@@ -55,7 +55,8 @@ export type NUT10Option = {
    */
   data: string;
   /**
-   * Tags associated with the spending condition for additional data.
+   * Optional tags associated with the spending condition for additional data. Absent and empty are
+   * equivalent: neither is encoded.
    */
-  tags: string[][];
+  tags?: string[][];
 };
