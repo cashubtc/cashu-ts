@@ -1,37 +1,27 @@
-# Fixes: #[issue]
+<!-- Implementing NUTs? Open with a NUTS: tracking header. The "# " heading and bare refs
+     make GitHub render each one with its PR title:
 
-## Description
+     # NUTS:
 
-Provide a clear explanation of the problem you are solving and the motivation behind this PR.
-If this is AI-assisted, you may optionally note that here.
+     - cashubtc/nuts#xxx
 
----
+     Add "Fixes #xxx" to auto-close an issue. In the prose below, cite the NUT the change
+     lands in, e.g. [NUT-29](https://github.com/cashubtc/nuts/blob/main/29.md), rather than
+     the PR number: PRs get squashed and renumbered, the NUT is the stable home. -->
+
+## TL;DR
+
+<!-- One or two lines, the outcome. What this is, for someone reading nothing else. -->
+
+## Why
+
+<!-- The problem this solves. The diff shows what changed; it cannot show why. -->
 
 ## Changes
 
-- List the key changes in this PR
-- Keep the scope focused
-- Explain any non-obvious design decisions or trade-offs
+<!-- Key changes, plus any non-obvious decision or trade-off. Skip what the diff makes obvious. -->
 
----
+## Impact
 
-## Alignment & Discussion
-
-- Was an issue opened prior to this PR? [Yes / No]
-- Does this PR align with the current project direction and scope? [Yes / No]
-- Link any relevant discussion or RFC: [link]
-
----
-
-## Reviewer Notes
-
-- Anything reviewers should pay special attention to?
-- Known limitations or edge cases?
-- Any performance, security, or backwards-compatibility considerations?
-
----
-
-## Optional Notes
-
-- AI usage (tools, prompts, etc.)
-- Additional context or references
+<!-- What this means for consumers: breaking changes, compatibility, performance, security.
+     Delete this section if there genuinely is none. -->
