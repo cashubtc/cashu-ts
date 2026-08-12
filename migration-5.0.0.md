@@ -145,6 +145,28 @@ If you were already passing full `Proof` objects (the normal case — `wallet.ch
 
 ---
 
+## `isPaymentRequestSatisfied` now requires `secret` on every proof
+
+`Wallet.isPaymentRequestSatisfied` previously accepted `Array<Pick<Proof, 'id' | 'amount'>>`. v5 also requires `secret`: `Array<Pick<Proof, 'id' | 'amount' | 'secret'>>`.
+
+A proof is bearer value redeemable once, and the mint keys spent state on `Y = hash_to_curve(secret)` (NUT-07), so two copies sharing a secret are one proof rather than two. The check now rejects duplicates before totalling, which it cannot do without the secret. Otherwise the same proof passed twice would count twice and a request could look settled on half the value.
+
+### Migration
+
+```ts
+// Before
+wallet.isPaymentRequestSatisfied(pr, [{ id: '00bd033559de27d0', amount: Amount.from(4) }]);
+
+// After
+wallet.isPaymentRequestSatisfied(pr, [
+  { id: '00bd033559de27d0', amount: Amount.from(4), secret: '…' },
+]);
+```
+
+If you were already passing the proofs you received (the normal case — `proofs: Proof[]`), no change is required.
+
+---
+
 ## `batchRestore` takes an options object and filters spent proofs
 
 `Wallet.batchRestore(gapLimit?, batchSize?, counter?, keysetId?)` is now `batchRestore(config?: BatchRestoreConfig)`. Behavior changes ride along:
@@ -543,3 +565,27 @@ const wallet = new Wallet(meta.mint, { unit: meta.unit });
 await wallet.loadMint();
 const { proofs } = wallet.decodeToken(token);
 ```
+
+---
+
+## SIG_ALL signing packages no longer carry digests
+
+`SigAll` is `@experimental`, so this changes without a deprecation cycle.
+
+The signing package no longer transports the digests to be signed. `SigAllSigningPackage.digests` is removed, and `signPackage` recomputes them from the package's own `inputs`, `outputs` and `quote`, so a signer only ever signs what the package shows. `deserializePackage` therefore drops its options argument: with nothing carried, there is nothing to validate against, and `validateDigest` has no meaning.
+
+`SigAllDigests` changes shape at the same time, from a `legacy`/`current` pair to a single `v0` field naming the transcript version it belongs to (the unframed concatenation format, CDK >= 0.14.0 and Nutshell > 0.20.2).
+
+### Migration
+
+```ts
+// Before
+const pkg = SigAll.deserializePackage(input, { validateDigest: true });
+const digest = pkg.digests.current;
+
+// After
+const pkg = SigAll.deserializePackage(input);
+const digest = SigAll.computeDigests(pkg.inputs, pkg.outputs, pkg.quote).v0;
+```
+
+Callers that only round-trip packages through `serializePackage`/`deserializePackage` and sign with `signPackage` need no change: digests were an implementation detail of the transport and are now derived where they are used.
