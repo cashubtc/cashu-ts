@@ -254,7 +254,6 @@ const meltOnchainMulti: MeltQuoteOnchainResponse = {
 const mintOnchain: MintQuoteOnchainResponse = {
   quote: 'mq-onchain',
   request: 'bc1qdeposit',
-  amount: Amount.from(8),
   unit: 'sat',
   expiry: null,
   pubkey: '0200000',

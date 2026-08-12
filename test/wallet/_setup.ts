@@ -1,6 +1,6 @@
 import { WebSocket } from 'mock-socket';
 import { HttpResponse, http } from 'msw';
-import { setupServer, type SetupServerApi } from 'msw/node';
+import { setupServer, type SetupServer } from 'msw/node';
 import { beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
 
 import { Mint, ConsoleLogger, injectWebSocketImpl } from '../../src';
@@ -27,7 +27,7 @@ export const token3sat =
   'cashuBo2FtdWh0dHA6Ly9sb2NhbGhvc3Q6MzMzOGF1Y3NhdGF0gaJhaUgAvQM1Wd4n0GFwgqNhYQFhc3hAZTdjMWI3NmQxYjMxZTJiY2EyYjIyOWQxNjBiZGY2MDQ2ZjMzYmM0NTcwMjIyMzA0YjY1MTEwZDkyNmY3YWY4OWFjWCEDic2fT5iOOAp5idTUiKfJHFJ3-5MEfnoswe2OM5a4VP-jYWECYXN4QGRlNTVjMTVmYWVmZGVkN2Y5Yzk5OWMzZDRjNjJmODFiMGM2ZmUyMWE3NTJmZGVmZjZiMDg0Y2YyZGYyZjVjZjNhY1ghAt5AxZ2QODuIU8zzpLIIZKyDunWPzj2VnbuJNhAC6M5H';
 export const logger = new ConsoleLogger('debug');
 
-export function setupDefaultHandlers(server: SetupServerApi) {
+export function setupDefaultHandlers(server: SetupServer) {
   server.use(
     http.get(mintUrl + '/v1/info', () => {
       return HttpResponse.json(mintInfoResp);

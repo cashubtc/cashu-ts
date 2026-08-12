@@ -31,7 +31,7 @@ Husky hooks install automatically during local `npm ci` / `npm install` via the 
 
 - `commit-msg` enforces Conventional Commits.
 - `pre-commit` runs `lint-staged` on staged files. For `*.{js,ts}` it runs ESLint with `--fix` and Prettier; for `*.{json,md,yml,yaml}` it runs Prettier.
-- `pre-push` runs repository-wide `npm run check-lint` and `npm run check-format`.
+- `pre-push` runs repository-wide `npm run check-lint`, `npm run check-format` and `npm run check-types`.
 
 If you want more detail on the hook behavior, see the `Hooks` section in `DEVELOPER.md`.
 
@@ -58,7 +58,7 @@ We also have an "all-in-one" script that runs all CI tasks sequentially:
 npm run prtasks
 ```
 
-Tip: if you want to mirror the pre-push checks manually, run `npm run check-lint` and `npm run check-format`.
+Tip: if you want to mirror the pre-push checks manually, run `npm run check-lint`, `npm run check-format` and `npm run check-types`.
 
 ## API Extractor
 

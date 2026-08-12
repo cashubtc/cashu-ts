@@ -323,7 +323,7 @@ describe('Bytes utility class', () => {
     test('large arrays produce valid base64 on the btoa fallback path (no Buffer)', () => {
       // Force the chunked btoa path that browsers use; harmless where Buffer
       // is already absent.
-      const g = globalThis as typeof globalThis & { Buffer?: unknown };
+      const g = globalThis as unknown as { Buffer?: unknown };
       const originalBuffer = g.Buffer;
       try {
         g.Buffer = undefined;

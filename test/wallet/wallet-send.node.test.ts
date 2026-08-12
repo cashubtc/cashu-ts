@@ -1088,7 +1088,14 @@ describe('send', () => {
     // Two wallets on one shared source: the documented multi-wallet pattern.
     const counterSource = createEphemeralCounterSource();
     const warn = vi.fn();
-    const spyLogger = { error: vi.fn(), warn, info: vi.fn(), debug: vi.fn(), trace: vi.fn() };
+    const spyLogger = {
+      error: vi.fn(),
+      warn,
+      info: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+      log: vi.fn(),
+    };
     const autoWallet = new Wallet(mint, { unit, bip39seed: seed, counterSource });
     const manualWallet = new Wallet(mint, {
       unit,
@@ -1161,7 +1168,7 @@ describe('send', () => {
       unit,
       bip39seed: seed,
       counterSource: legacySource,
-      logger: { error: vi.fn(), warn, info: vi.fn(), debug: vi.fn(), trace: vi.fn() },
+      logger: { error: vi.fn(), warn, info: vi.fn(), debug: vi.fn(), trace: vi.fn(), log: vi.fn() },
     });
     await wallet.loadMint();
 
