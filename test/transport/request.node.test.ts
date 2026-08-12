@@ -210,7 +210,7 @@ describe('requests', { timeout: 7500 }, () => {
     const thrown = await request({ endpoint }).catch((e) => e);
     expect(thrown).toBeInstanceOf(HttpResponseError);
     expect(thrown).toMatchObject({ message: 'bad response', status: 200 });
-    expect(thrown.cause).toMatchObject({ message: 'Empty response body' });
+    expect((thrown as HttpResponseError).cause).toMatchObject({ message: 'Empty response body' });
   });
 
   test('maps malformed success JSON to bad response and logs parsing failure', async () => {
@@ -235,7 +235,7 @@ describe('requests', { timeout: 7500 }, () => {
       const thrown = await request({ endpoint }).catch((e) => e);
       expect(thrown).toBeInstanceOf(HttpResponseError);
       expect(thrown).toMatchObject({ message: 'bad response' });
-      expect(thrown.cause).toBeInstanceOf(Error);
+      expect((thrown as HttpResponseError).cause).toBeInstanceOf(Error);
       expect(logger.error).toHaveBeenCalledWith(
         'Failed to parse HTTP response',
         expect.objectContaining({ err: expect.any(Error) }),
@@ -257,7 +257,7 @@ describe('requests', { timeout: 7500 }, () => {
       const thrown = await request({ endpoint }).catch((e) => e);
       expect(thrown).toBeInstanceOf(NetworkError);
       expect(thrown).toMatchObject({ message: 'aborted by runtime' });
-      expect(thrown.cause).toBe(abortError);
+      expect((thrown as NetworkError).cause).toBe(abortError);
     } finally {
       fetchMock.mockRestore();
     }
@@ -279,7 +279,7 @@ describe('requests', { timeout: 7500 }, () => {
       const thrown = await request({ endpoint }).catch((e) => e);
       expect(thrown).toBeInstanceOf(HttpResponseError);
       expect(thrown).toMatchObject({ message: 'bad response', status: 503 });
-      expect(thrown.cause).toBe(bodyReadError);
+      expect((thrown as HttpResponseError).cause).toBe(bodyReadError);
     } finally {
       fetchMock.mockRestore();
     }
@@ -992,9 +992,7 @@ describe('response body read timeout', () => {
 
   test('requestTimeout covers a hung success body that ignores the signal', async () => {
     hungBody(200);
-    const thrown = await request({ endpoint, requestTimeout: 100, idempotent: false }).catch(
-      (e) => e,
-    );
+    const thrown = await request({ endpoint, requestTimeout: 100 }).catch((e) => e);
     expect(thrown).toBeInstanceOf(NetworkError);
     expect((thrown as Error).message).toContain('Request timed out after 100ms');
   }, 2000);
@@ -1010,9 +1008,7 @@ describe('response body read timeout', () => {
 
   test('timeout during a hung error body maps to NetworkError, not a 5xx', async () => {
     hungBody(500);
-    const thrown = await request({ endpoint, requestTimeout: 100, idempotent: false }).catch(
-      (e) => e,
-    );
+    const thrown = await request({ endpoint, requestTimeout: 100 }).catch((e) => e);
     expect(thrown).toBeInstanceOf(NetworkError);
     expect((thrown as Error).message).toContain('Request timed out after 100ms');
   }, 2000);

@@ -704,7 +704,14 @@ describe('MintInfo method/unit capability checks', () => {
 
 describe('MintInfo list caps', () => {
   function spyLogger() {
-    return { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn(), trace: vi.fn() };
+    return {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+      log: vi.fn(),
+    };
   }
 
   it('truncates an oversized NUT-04 method list and warns', () => {

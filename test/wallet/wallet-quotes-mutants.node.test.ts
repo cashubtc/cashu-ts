@@ -64,7 +64,14 @@ describe('constructor mutants', () => {
     // failIf logs its context before throwing, so the value must not appear there.
     const mnemonic = 'abandon abandon abandon abandon about';
     const error = vi.fn();
-    const logger = { error, warn: vi.fn(), info: vi.fn(), debug: vi.fn(), trace: vi.fn() };
+    const logger = {
+      error,
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+      log: vi.fn(),
+    };
 
     expect(() => new Wallet(mint, { unit, logger, bip39seed: mnemonic as never })).toThrow();
 
@@ -1019,7 +1026,7 @@ describe('createLockedMintQuote mutants', () => {
     await wallet.loadMint();
 
     const quote = await wallet.createLockedMintQuote(100, PUBKEY);
-    expect(quote.pubkey.toLowerCase()).toBe(PUBKEY);
+    expect(quote.pubkey!.toLowerCase()).toBe(PUBKEY);
   });
 
   test('rejects a missing pubkey with a clear error, not a TypeError', async () => {
@@ -1120,7 +1127,7 @@ describe('mintProofsBolt11 mutants', () => {
     // A wrong-unit quote object must be rejected by validateMintQuote. A mutant that always
     // takes the string-id branch would skip validation and fail later with a different error.
     await expect(
-      wallet.mintProofsBolt11(1, { quote: 'x', unit: 'usd' } as MintQuoteBolt11Response, []),
+      wallet.mintProofsBolt11(1, { quote: 'x', unit: 'usd' } as MintQuoteBolt11Response),
     ).rejects.toThrow("Quote unit 'usd' does not match wallet unit 'sat'");
   });
 });

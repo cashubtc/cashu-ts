@@ -895,7 +895,7 @@ describe('async melt preference body', () => {
     const debug = vi.fn();
     const wallet = new Wallet(mint, {
       unit,
-      logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug, trace: vi.fn() },
+      logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug, trace: vi.fn(), log: vi.fn() },
     });
     await wallet.loadMint();
     const meltTxn = await wallet.prepareMelt('bolt11', meltQuote, proofs);

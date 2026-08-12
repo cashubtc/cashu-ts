@@ -47,8 +47,8 @@ Local installs configure Husky hooks automatically.
 
 ## Common tasks
 
-CI check: `npm run prtasks` (lint, format, api:update, tests).
-Repo-wide lint checks: `npm run check-lint` and `npm run check-format`.
+CI check: `npm run prtasks` (lint, format, types, api:update, tests).
+Repo-wide checks: `npm run check-lint`, `npm run check-format` and `npm run check-types`.
 Integration tests: `npm run test-integration` (requires local mint, see below).
 Consumer smoke tests: `npm run test:consumer`.
 Other scripts: see `package.json`.
@@ -98,6 +98,7 @@ DEV=1 make nutshell-stable-down
 ## Linting and TypeScript rules
 
 - Lint config lives in `eslint.config.js` (flat config).
+- `npm run check-types` type checks the test tree (and, via its imports, `src/`). Vitest strips types without checking them, so this is the only thing that catches fixtures drifting from the library types.
 - `any` is not allowed (prefer explicit types, generics, or `unknown` with narrowing).
 - Type-only imports/exports are required (`@typescript-eslint/consistent-type-imports`).
 - No Node-only modules in library code (`import/no-nodejs-modules`).
@@ -111,7 +112,7 @@ Hooks are installed by Husky:
 
 - `commit-msg` enforces Conventional Commits.
 - `pre-commit` runs `lint-staged` on staged files.
-- `pre-push` runs `npm run check-lint` and `npm run check-format`.
+- `pre-push` runs `npm run check-lint`, `npm run check-format` and `npm run check-types`.
 
 ## If you are making changes (author flow)
 
