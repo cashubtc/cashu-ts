@@ -1,3 +1,5 @@
+import { type Amount } from '../Amount';
+
 import { type SerializedBlindedMessage, type SerializedBlindedSignature } from './blinded';
 
 export const MintQuoteState = {
@@ -43,6 +45,21 @@ export type MintQuoteBaseResponse = {
    * Optional. Public key the quote is locked to (NUT-20)
    */
   pubkey?: string;
+  /**
+   * Total amount paid to the mint for this quote, in `unit`. Absent on mints that predate the
+   * NUT-04 accounting fields; required from v5. Method-specific types may narrow it to required.
+   */
+  amount_paid?: Amount;
+  /**
+   * Total amount of ecash issued for this quote, in `unit`. The mintable amount is `amount_paid -
+   * amount_issued`, which supersedes the deprecated bolt11 `state`.
+   */
+  amount_issued?: Amount;
+  /**
+   * Unix timestamp of the last quote update, `null` when the mint does not report one. Optional so
+   * that callers constructing quote objects are unaffected; responses from `Mint` always carry it.
+   */
+  updated_at?: number | null;
 };
 
 /**

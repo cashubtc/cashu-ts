@@ -7,6 +7,7 @@ import {
   Mint,
   MintInfo,
   MeltQuoteState,
+  MintQuoteState,
   WSConnection,
   injectWebSocketImpl,
   RateLimitError,
@@ -368,6 +369,76 @@ describe('Mint normalization', () => {
 
     expect(response.amount.toBigInt()).toBe(21n);
     expect(response.expiry).toBeNull();
+  });
+
+  it.each([
+    ['UNPAID', 0, 0, MintQuoteState.UNPAID],
+    ['PAID', 21, 0, MintQuoteState.PAID],
+    ['ISSUED', 21, 21, MintQuoteState.ISSUED],
+  ])(
+    'derives a missing bolt11 state as %s from the accounting fields',
+    async (_label, paid, issued, expected) => {
+      // NUT-23 deprecates `state` and lets a mint omit it. Without this, consumers reading
+      // `state` would silently see undefined against a modern mint.
+      const mint = new Mint(mintUrl, {
+        customRequest: makeRequest({
+          quote: 'q1',
+          request: 'lnbc1...',
+          unit: 'sat',
+          amount: 21,
+          amount_paid: paid,
+          amount_issued: issued,
+          updated_at: 1234567800,
+          expiry: null,
+        }),
+      });
+
+      const response = await mint.checkMintQuoteBolt11('q1');
+
+      expect(response.state).toBe(expected);
+      expect(response.amount_paid?.toBigInt()).toBe(BigInt(paid));
+      expect(response.amount_issued?.toBigInt()).toBe(BigInt(issued));
+      expect(response.updated_at).toBe(1234567800);
+    },
+  );
+
+  it('keeps a mint-reported bolt11 state rather than deriving over it', async () => {
+    const mint = new Mint(mintUrl, {
+      customRequest: makeRequest({
+        quote: 'q1',
+        request: 'lnbc1...',
+        unit: 'sat',
+        amount: 21,
+        state: MintQuoteState.ISSUED,
+        amount_paid: 21,
+        amount_issued: 0, // would derive PAID; the mint's own value wins
+        expiry: null,
+      }),
+    });
+
+    const response = await mint.checkMintQuoteBolt11('q1');
+
+    expect(response.state).toBe(MintQuoteState.ISSUED);
+  });
+
+  it('leaves accounting absent for a mint that predates it, without fabricating zeros', async () => {
+    const mint = new Mint(mintUrl, {
+      customRequest: makeRequest({
+        quote: 'q1',
+        request: 'lnbc1...',
+        unit: 'sat',
+        amount: 21,
+        state: MintQuoteState.PAID,
+        expiry: null,
+      }),
+    });
+
+    const response = await mint.checkMintQuoteBolt11('q1');
+
+    expect(response.state).toBe(MintQuoteState.PAID);
+    expect(response.amount_paid).toBeUndefined();
+    expect(response.amount_issued).toBeUndefined();
+    expect(response.updated_at).toBeNull();
   });
 
   it('createMintQuoteBolt12 coerces omitted amount to null and normalizes paid and issued amounts', async () => {
