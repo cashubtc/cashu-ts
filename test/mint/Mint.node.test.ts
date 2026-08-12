@@ -11,8 +11,17 @@ import {
   injectWebSocketImpl,
   RateLimitError,
   Amount,
+  isMintableQuote,
+  isUnknownQuote,
 } from '../../src';
-import type { AuthProvider, Logger, MintQuoteBaseResponse, RequestFn } from '../../src';
+import type {
+  AuthProvider,
+  Logger,
+  MintQuoteBaseResponse,
+  MintQuoteBolt11Response,
+  MintQuoteBolt12Response,
+  RequestFn,
+} from '../../src';
 import { MINTINFORESP } from '../consts';
 
 type ReqArgs = {
@@ -521,7 +530,10 @@ describe('Mint normalization', () => {
     }) as RequestFn;
     const mint = new Mint(mintUrl, { customRequest: requestSpy });
 
-    const quotes = await mint.checkMintQuoteBatchBolt11(['q1', 'q2']);
+    const quotes = (await mint.checkMintQuoteBatchBolt11([
+      'q1',
+      'q2',
+    ])) as MintQuoteBolt11Response[];
 
     expect(quotes).toHaveLength(2);
     expect(quotes[0].quote).toBe('q1');
@@ -550,7 +562,7 @@ describe('Mint normalization', () => {
     }) as RequestFn;
     const mint = new Mint(mintUrl, { customRequest: requestSpy });
 
-    const quotes = await mint.checkMintQuoteBatchBolt12(['q1']);
+    const quotes = (await mint.checkMintQuoteBatchBolt12(['q1'])) as MintQuoteBolt12Response[];
 
     expect(quotes[0].amount).toBeNull();
     expect(quotes[0].amount_paid.toBigInt()).toBe(42n);
@@ -576,12 +588,12 @@ describe('Mint normalization', () => {
       reference: string;
     };
 
-    const quotes = await mint.checkMintQuoteBatch<CustomQuote>('custom-pay', ['q1'], {
+    const quotes = (await mint.checkMintQuoteBatch<CustomQuote>('custom-pay', ['q1'], {
       normalize: (raw) => ({
         ...(raw as CustomQuote),
         amount: Amount.from(raw.amount as number),
       }),
-    });
+    })) as CustomQuote[];
 
     expect(quotes[0].reference).toBe('ABC');
     expect(quotes[0].amount.toBigInt()).toBe(5000n);
@@ -616,10 +628,95 @@ describe('Mint normalization', () => {
     ]) as RequestFn;
     const mint = new Mint(mintUrl, { customRequest: requestSpy });
 
-    const quotes = await mint.checkMintQuoteBatchBolt11(['q1']);
+    const quotes = (await mint.checkMintQuoteBatchBolt11(['q1'])) as MintQuoteBolt11Response[];
 
     expect(quotes[0].quote).toBe('q1');
     expect(quotes[0].amount.toBigInt()).toBe(100n);
+  });
+
+  it('checkMintQuoteBatch returns unknown entries in place, in request order', async () => {
+    const mint = new Mint(mintUrl, {
+      customRequest: makeRequest([
+        {
+          quote: 'known-1',
+          request: 'lnbc100...',
+          unit: 'sat',
+          amount: 100,
+          amount_paid: 100,
+          amount_issued: 0,
+          updated_at: 1234567800,
+          expiry: 123,
+        },
+        { quote: 'not-a-valid-quote-id', unknown: true },
+        { quote: 'unknown-2', unknown: true, junk: 'dropped' },
+        {
+          quote: 'known-2',
+          request: 'lnbc50...',
+          unit: 'sat',
+          amount: 50,
+          amount_paid: 0,
+          amount_issued: 0,
+          updated_at: 1234567800,
+          expiry: 456,
+        },
+      ]),
+    });
+
+    const quotes = await mint.checkMintQuoteBatchBolt11([
+      'known-1',
+      'not-a-valid-quote-id',
+      'unknown-2',
+      'known-2',
+    ]);
+
+    expect(quotes).toHaveLength(4);
+    expect(quotes[1]).toEqual({ quote: 'not-a-valid-quote-id', unknown: true });
+    // Extra fields on unknown entries are dropped
+    expect(quotes[2]).toEqual({ quote: 'unknown-2', unknown: true });
+    expect(isUnknownQuote(quotes[0])).toBe(false);
+    const known = quotes[0] as MintQuoteBolt11Response;
+    expect(known.amount.toBigInt()).toBe(100n);
+    expect(known.state).toBe('PAID'); // derived from accounting
+  });
+
+  it('isMintableQuote narrows known quotes with a positive mintable amount', () => {
+    expect(isMintableQuote({ amount_paid: Amount.from(5), amount_issued: Amount.from(0) })).toBe(
+      true,
+    );
+    expect(isMintableQuote({ amount_paid: Amount.from(5), amount_issued: Amount.from(5) })).toBe(
+      false,
+    );
+    expect(isMintableQuote({ quote: 'x', unknown: true })).toBe(false);
+    // Raw wire numbers are coerced
+    expect(
+      isMintableQuote({ amount_paid: 1, amount_issued: 0 } as unknown as MintQuoteBolt11Response),
+    ).toBe(true);
+  });
+
+  it('checkMintQuoteBatch accepts an all-unknown response', async () => {
+    const mint = new Mint(mintUrl, {
+      customRequest: makeRequest([
+        { quote: 'q1', unknown: true },
+        { quote: 'q2', unknown: true },
+      ]),
+    });
+
+    const quotes = await mint.checkMintQuoteBatchBolt11(['q1', 'q2']);
+
+    expect(quotes).toEqual([
+      { quote: 'q1', unknown: true },
+      { quote: 'q2', unknown: true },
+    ]);
+  });
+
+  it('checkMintQuoteBatch rejects an unknown entry under the wrong quote id', async () => {
+    const mint = new Mint(mintUrl, {
+      customRequest: makeRequest([{ quote: 'other', unknown: true }]),
+    });
+
+    await expect(mint.checkMintQuoteBatchBolt11(['q1'])).rejects.toThrow(
+      'Invalid response from mint',
+    );
   });
 
   it('checkMintQuoteBatch rejects an empty quote list before requesting the mint', async () => {
