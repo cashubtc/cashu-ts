@@ -11,5 +11,9 @@
     "declaration": false,
     "emitDeclarationOnly": false
   },
-  "include": ["**/*"]
+  "include": ["**/*"],
+  // Consumer smoke harnesses import the built package by its published name, so
+  // they only resolve after a build. They have their own workflow (consumers.yml)
+  // and eslint skips them for the same reason.
+  "exclude": ["consumer/**"]
 }
