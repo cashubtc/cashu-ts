@@ -16,7 +16,6 @@ import {
   type MintQuoteBolt12Response,
   type MeltQuoteBolt11Response,
   type MintQuoteBaseResponse,
-  type PrepareMeltConfig,
 } from '../../src';
 
 import {
@@ -170,11 +169,7 @@ describe('_prepareInputsForMint mutants', () => {
       },
     ] as unknown as Proof[];
 
-    // meltProofsBolt11 declares MeltProofsConfig but forwards the config to prepareMelt, which
-    // is what honours nut08Change.
-    await wallet.meltProofsBolt11(meltQuote, proofsToSend, {
-      nut08Change: false,
-    } as PrepareMeltConfig);
+    await wallet.meltProofsBolt11(meltQuote, proofsToSend, { nut08Change: false });
 
     expect(sentInputs).toHaveLength(1);
     expect(sentInputs[0]).not.toHaveProperty('dleq');
@@ -1069,7 +1064,7 @@ describe('createLockedMintQuote mutants', () => {
     await wallet.loadMint();
 
     const quote = await wallet.createLockedMintQuote(100, PUBKEY);
-    expect(quote.pubkey!.toLowerCase()).toBe(PUBKEY);
+    expect(quote.pubkey.toLowerCase()).toBe(PUBKEY);
   });
 
   test('rejects a missing pubkey with a clear error, not a TypeError', async () => {

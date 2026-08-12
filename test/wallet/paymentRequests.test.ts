@@ -731,7 +731,7 @@ describe('NUT-18 payment payloads', () => {
       expect(payload.mint).toBe(MINT);
       expect(payload.memo).toBe('hi');
       // BigInt-safe: an amount beyond 2^53 survives exactly.
-      expect(payload.proofs[0].amount).toBe(9007199254740993n);
+      expect(payload.proofs[0].amount.toBigInt()).toBe(9007199254740993n);
     });
 
     test('omits id and memo when absent and defaults the unit', () => {
@@ -770,9 +770,10 @@ describe('NUT-18 payment payloads', () => {
       proofs: [{ id: '009a1f293253e41e', amount: 2, secret: 's', C: '02ff' }],
     });
 
-    test('normalizes small JSON number amounts to bigint', () => {
+    test('normalizes small JSON number amounts to Amount', () => {
       const payload = PaymentRequest.decodePayload(JSON.stringify(valid()));
-      expect(payload.proofs[0].amount).toBe(2n);
+      expect(payload.proofs[0].amount).toBeInstanceOf(Amount);
+      expect(payload.proofs[0].amount.toBigInt()).toBe(2n);
     });
 
     test('preserves unknown proof fields (witness, dleq)', () => {

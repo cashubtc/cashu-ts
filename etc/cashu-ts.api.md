@@ -888,6 +888,7 @@ export type MeltProofsConfig = {
     keysetId?: string;
     privkey?: string | string[];
     onCountersReserved?: OnCountersReserved;
+    nut08Change?: boolean;
 };
 
 // @public
@@ -1392,7 +1393,7 @@ export function normalizeSecpPubkey(pk: string): string;
 export type NUT10Option = {
     kind: string;
     data: string;
-    tags: string[][];
+    tags?: string[][];
 };
 
 // @public (undocumented)
@@ -1789,11 +1790,6 @@ export type PostRestoreResponse = {
     signatures: SerializedBlindedSignature[];
 };
 
-// @public (undocumented)
-export type PrepareMeltConfig = MeltProofsConfig & {
-    nut08Change?: boolean;
-};
-
 // @public
 export type PrivKey = Uint8Array | string;
 
@@ -1843,7 +1839,7 @@ export type RawMintKeys = {
 export type RawNUT10Option = {
     k: string;
     d: string;
-    t: string[][];
+    t?: string[][];
 };
 
 // @public (undocumented)
@@ -2333,7 +2329,9 @@ export class Wallet {
     completeMint(mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;
     completeSwap(swapPreview: SwapPreview, privkey?: string | string[]): Promise<SendResponse>;
     readonly counters: WalletCounters;
-    createLockedMintQuote(amount: AmountLike, pubkey: string, description?: string): Promise<MintQuoteBolt11Response>;
+    createLockedMintQuote(amount: AmountLike, pubkey: string, description?: string): Promise<MintQuoteBolt11Response & {
+        pubkey: string;
+    }>;
     createMeltChangeProofs(outputData: OutputDataLike[], changeSigs: SerializedBlindedSignature[]): Proof[];
     createMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(method: string, payload: Record<string, unknown>, options?: {
         normalize?: (raw: Record<string, unknown>) => TRes;
@@ -2389,7 +2387,7 @@ export class Wallet {
         amount: AmountLike;
         quote: TQuote;
     }>, config?: MintProofsConfig, outputType?: OutputType): Promise<BatchMintPreview<TQuote>>;
-    prepareMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(method: string, meltQuote: TQuote, proofsToSend: ProofLike[], config?: PrepareMeltConfig, outputType?: OutputType): Promise<MeltPreview<TQuote>>;
+    prepareMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(method: string, meltQuote: TQuote, proofsToSend: ProofLike[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltPreview<TQuote>>;
     prepareMint<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>>(method: string, amount: AmountLike, quote: TQuote, config?: MintProofsConfig, outputType?: OutputType): Promise<MintPreview<TQuote>>;
     prepareSwapToReceive(token: Token | string | ProofLike[], config?: ReceiveConfig, outputType?: OutputType): Promise<SwapPreview>;
     prepareSwapToSend(amount: AmountLike, proofs: ProofLike[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SwapPreview>;

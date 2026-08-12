@@ -380,7 +380,7 @@ describe('WalletOps builders', () => {
       const locked = new PaymentRequest({
         amount: 100,
         unit: 'sat',
-        nut10: { kind: 'P2PK', data: '02'.padEnd(66, 'a'), tags: [] },
+        nut10: { kind: 'P2PK', data: '02'.padEnd(66, 'a') },
       });
       await ops.sendToRequest(locked, proofs).run();
       const outputConfig = wallet.send.mock.calls[0][3];
@@ -389,7 +389,7 @@ describe('WalletOps builders', () => {
       const exotic = new PaymentRequest({
         amount: 100,
         unit: 'sat',
-        nut10: { kind: 'FROST', data: 'xyz', tags: [] },
+        nut10: { kind: 'FROST', data: 'xyz' },
       });
       expect(() => ops.sendToRequest(exotic, proofs)).toThrow(/nut10 lock/);
     });
