@@ -7,7 +7,7 @@ if ! command -v npm >/dev/null 2>&1; then
 	exit 1
 fi
 
-if ! npm run check-lint && npm run check-format; then
+if ! npm run check-lint || ! npm run check-format; then
 	echo "Pre-push checks failed. Push aborted." >&2
 	exit 1
 fi
