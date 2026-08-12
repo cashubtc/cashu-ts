@@ -40,7 +40,7 @@ import {
   type SerializedBlindedSignature,
 } from '../model/types';
 import type { GetKeysResponse, GetKeysetsResponse } from '../model/types/keyset';
-import { type BatchMintRequest } from '../model/types/NUT29';
+import { type BatchMintRequest, isUnknownQuote, type UnknownQuote } from '../model/types/NUT29';
 import request, {
   WSConnection,
   setRequestLogger,
@@ -403,21 +403,22 @@ class Mint {
    * Checks existing mint quotes for any payment method in one batched request.
    *
    * @remarks
-   * Uses `/v1/mint/quote/{method}/check` and validates method format. The mint returns quote
-   * objects in the same order as the request. Normalization follows the same stacking pattern as
+   * Uses `/v1/mint/quote/{method}/check` and validates method format. The mint returns one entry
+   * per requested quote ID, in request order; IDs the mint holds no record of come back as `{
+   * quote, unknown: true }` entries. Normalization follows the same stacking pattern as
    * {@link Mint.checkMintQuote}.
    * @param method The payment method (e.g., 'bolt11', 'bolt12', or custom method name).
    * @param quotes Quote IDs to check.
    * @param options.customRequest Optional override for the request function.
    * @param options.normalize Optional callback to normalize method-specific response fields.
-   * @returns Mint quote responses in request order.
+   * @returns Mint quote responses or unknown entries, in request order.
    * @experimental only supported by CDK mint >= 0.16.0
    */
   async checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(
     method: string,
     quotes: string[],
     options?: { customRequest?: RequestFn; normalize?: (raw: Record<string, unknown>) => TRes },
-  ): Promise<TRes[]> {
+  ): Promise<Array<TRes | UnknownQuote>> {
     failIf(!this.isValidMethodString(method), `Invalid mint quote method: ${method}`, this._logger);
     failIf(quotes.length === 0, 'checkMintQuoteBatch: no quote ids provided', this._logger);
     failIf(
@@ -426,7 +427,7 @@ class Mint {
       this._logger,
     );
 
-    const data = await this.requestWithAuth<TRes[]>(
+    const data = await this.requestWithAuth<Array<TRes | UnknownQuote>>(
       'POST',
       `/v1/mint/quote/${method}/check`,
       { requestBody: { quotes } },
@@ -441,13 +442,17 @@ class Mint {
       throw new CTSError('Invalid response from mint');
     }
 
-    return data.map((response, index) => {
+    return data.map((response, index): TRes | UnknownQuote => {
       if (response.quote !== quotes[index]) {
         this._logger.error('Invalid response from mint...', {
           data,
           op: `checkMintQuoteBatch.${method}`,
         });
         throw new CTSError('Invalid response from mint');
+      }
+      if (isUnknownQuote(response)) {
+        // Rebuild rather than pass through: drops any extra fields the mint sent.
+        return { quote: response.quote, unknown: true };
       }
       return this.normalizeMintQuoteResponse(method, response, options?.normalize);
     });
@@ -460,13 +465,13 @@ class Mint {
    * Thin wrapper around checkMintQuoteBatch('bolt11', ...).
    * @param quotes Quote IDs to check.
    * @param customRequest Optional override for the request function.
-   * @returns Updated BOLT11 mint quotes in request order.
+   * @returns Updated BOLT11 mint quotes or unknown entries, in request order.
    * @experimental only supported by CDK mint >= 0.16.0
    */
   async checkMintQuoteBatchBolt11(
     quotes: string[],
     customRequest?: RequestFn,
-  ): Promise<MintQuoteBolt11Response[]> {
+  ): Promise<Array<MintQuoteBolt11Response | UnknownQuote>> {
     return this.checkMintQuoteBatch<MintQuoteBolt11Response>('bolt11', quotes, {
       customRequest,
     });
@@ -479,13 +484,13 @@ class Mint {
    * Thin wrapper around checkMintQuoteBatch('bolt12', ...).
    * @param quotes Quote IDs to check.
    * @param customRequest Optional override for the request function.
-   * @returns Updated BOLT12 mint quotes in request order.
+   * @returns Updated BOLT12 mint quotes or unknown entries, in request order.
    * @experimental only supported by CDK mint >= 0.16.0
    */
   async checkMintQuoteBatchBolt12(
     quotes: string[],
     customRequest?: RequestFn,
-  ): Promise<MintQuoteBolt12Response[]> {
+  ): Promise<Array<MintQuoteBolt12Response | UnknownQuote>> {
     return this.checkMintQuoteBatch<MintQuoteBolt12Response>('bolt12', quotes, {
       customRequest,
     });
