@@ -1,5 +1,48 @@
 # Changelog
 
+## [5.0.0-rc.6](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.5...v5.0.0-rc.6) (2026-08-12)
+
+
+### Features
+
+* **wallet:** claim manual counter ranges up front with CounterSource.reserveAt ([#923](https://github.com/cashubtc/cashu-ts/issues/923)) ([8bee5dc](https://github.com/cashubtc/cashu-ts/commit/8bee5dcd4928f5605b238df5f49e0f16643e1948))
+
+
+### Bug Fixes
+
+* **auth:** coerce the device-flow polling interval to a finite value ([#929](https://github.com/cashubtc/cashu-ts/issues/929)) ([d2c3d9f](https://github.com/cashubtc/cashu-ts/commit/d2c3d9f0d4bb54fa0cee200b785a813aca1bd7ef))
+* **auth:** detach the OIDC token listener when the provider is replaced ([#939](https://github.com/cashubtc/cashu-ts/issues/939)) ([ae9ea8b](https://github.com/cashubtc/cashu-ts/commit/ae9ea8b2544ce1d07afcccc62af77f4e167f7a1c))
+* **auth:** drop a CAT refresh that completes after the session changes ([#927](https://github.com/cashubtc/cashu-ts/issues/927)) ([7443daf](https://github.com/cashubtc/cashu-ts/commit/7443daff7dce35b6408a24b1177c7a7a4a329587))
+* **auth:** stop following redirects on token-bearing requests ([#926](https://github.com/cashubtc/cashu-ts/issues/926)) ([ac80863](https://github.com/cashubtc/cashu-ts/commit/ac808637a59e7ddda05b78f7a670d26fbfcf0a50))
+* **auth:** validate OIDC provider URLs use an http(s) scheme ([#896](https://github.com/cashubtc/cashu-ts/issues/896)) ([11cf24d](https://github.com/cashubtc/cashu-ts/commit/11cf24dd9613e9e4825d6e7c2cec9b1f4a19c612))
+* **crypto:** bound pow2height in createNewMintKeys at runtime ([#938](https://github.com/cashubtc/cashu-ts/issues/938)) ([5bade9a](https://github.com/cashubtc/cashu-ts/commit/5bade9aa1d151c4d876cb5a201be7577b77a0b87))
+* **crypto:** bound the deterministic counter to the safe integer range ([#919](https://github.com/cashubtc/cashu-ts/issues/919)) ([54871f6](https://github.com/cashubtc/cashu-ts/commit/54871f6324815b9586e89a8976aa42fb622de2cd))
+* **crypto:** count unique signers by x-only pubkey identity ([#904](https://github.com/cashubtc/cashu-ts/issues/904)) ([673468f](https://github.com/cashubtc/cashu-ts/commit/673468f4f849855f28a7251734ece72969b1b189))
+* **crypto:** harden HTLC witness parsing edge cases ([#892](https://github.com/cashubtc/cashu-ts/issues/892)) ([52b51ea](https://github.com/cashubtc/cashu-ts/commit/52b51eade42f023891ec48cb3198b1045381659f))
+* **crypto:** require a 64-byte seed and slim the seed error context ([#920](https://github.com/cashubtc/cashu-ts/issues/920)) ([640b8fe](https://github.com/cashubtc/cashu-ts/commit/640b8fe03c6be24754ce19805133bebd1151f954))
+* **crypto:** tighten NUT-10 secret and tag-integer parsing ([#893](https://github.com/cashubtc/cashu-ts/issues/893)) ([6e1dfaf](https://github.com/cashubtc/cashu-ts/commit/6e1dfaf6d9c937e11c59b5825273aa8bc5b73a9d))
+* **crypto:** validate the blind point in the BLS signer ([#931](https://github.com/cashubtc/cashu-ts/issues/931)) ([4b49e08](https://github.com/cashubtc/cashu-ts/commit/4b49e089b912328641004795c2741d548cca337b))
+* guard CBOR and keyset map lookups against prototype-chain keys ([#895](https://github.com/cashubtc/cashu-ts/issues/895)) ([3798e44](https://github.com/cashubtc/cashu-ts/commit/3798e44874eb80fb88b8b458f6d40d6490b44ba3))
+* **logger:** escape control characters in log messages ([#906](https://github.com/cashubtc/cashu-ts/issues/906)) ([cc89ad3](https://github.com/cashubtc/cashu-ts/commit/cc89ad3c79b34f27c9fce57f4b34f40b8285703e))
+* **mintinfo:** bound mint-advertised method and endpoint lists ([#928](https://github.com/cashubtc/cashu-ts/issues/928)) ([2647472](https://github.com/cashubtc/cashu-ts/commit/26474725666ef59b691dde006103e60ffcd22c35))
+* **p2bk:** share one ephemeral key across a blinded SIG_ALL batch ([#946](https://github.com/cashubtc/cashu-ts/issues/946)) ([9189f36](https://github.com/cashubtc/cashu-ts/commit/9189f36f7ac0ed0b8ed834a2b38ea2556f78f131))
+* tidy response reads and number-token parsing ([#886](https://github.com/cashubtc/cashu-ts/issues/886)) ([24e1593](https://github.com/cashubtc/cashu-ts/commit/24e1593d60827e9b8efe715613cbf62b537e419d))
+* **token:** return per-proof amounts, not proofs, from getTokenMetadata ([#941](https://github.com/cashubtc/cashu-ts/issues/941)) ([2f00216](https://github.com/cashubtc/cashu-ts/commit/2f00216ea78dfaee653e37d041b16c1898e783a4))
+* **types:** align public API types with what the code returns ([#955](https://github.com/cashubtc/cashu-ts/issues/955)) ([98f8994](https://github.com/cashubtc/cashu-ts/commit/98f8994317aa89b9932bd2805ec2aeceb4a7549e))
+* **utils:** align base64 fallback chunk size to a 3-byte boundary ([#905](https://github.com/cashubtc/cashu-ts/issues/905)) ([6107ad7](https://github.com/cashubtc/cashu-ts/commit/6107ad743c80fd601fbb5a8510ee1e6156470af9))
+* **utils:** cap JSON nesting depth in JSONInt.parse ([#907](https://github.com/cashubtc/cashu-ts/issues/907)) ([c7b3589](https://github.com/cashubtc/cashu-ts/commit/c7b358927ce5dcef17c2f2de2d953840a309732b))
+* **wallet:** check bolt11 quote amounts against the invoice ([#925](https://github.com/cashubtc/cashu-ts/issues/925)) ([503ea70](https://github.com/cashubtc/cashu-ts/commit/503ea7086b6999ab69b47ac314f3451b53d8ba7d))
+* **wallet:** harden P2PK spending-condition locktime and tag validation ([#894](https://github.com/cashubtc/cashu-ts/issues/894)) ([6985fa1](https://github.com/cashubtc/cashu-ts/commit/6985fa1a67eabb83dc23fd6317db75722cb26930))
+* **wallet:** name the offending index when rejecting duplicate proofs ([#917](https://github.com/cashubtc/cashu-ts/issues/917)) ([308d441](https://github.com/cashubtc/cashu-ts/commit/308d441b9437ec36cac186d6f380dc5873e3e48d))
+* **wallet:** reject duplicate proofs before totalling or selecting ([#916](https://github.com/cashubtc/cashu-ts/issues/916)) ([dd34ef9](https://github.com/cashubtc/cashu-ts/commit/dd34ef982cab771ada3753e98fe9475dd270b012))
+* **wallet:** reject extraPayload keys reserved by the melt request ([#908](https://github.com/cashubtc/cashu-ts/issues/908)) ([e85314e](https://github.com/cashubtc/cashu-ts/commit/e85314e67c894a748485158755cd6b362219ac0d))
+* **ws:** ignore socket events from a replaced connection ([#930](https://github.com/cashubtc/cashu-ts/issues/930)) ([f6c8775](https://github.com/cashubtc/cashu-ts/commit/f6c877580a745d9aeff612267871f5cd9da9070d))
+
+
+### Performance Improvements
+
+* **wallet:** look up keyset unit by map instead of scanning ids ([#909](https://github.com/cashubtc/cashu-ts/issues/909)) ([ec6fc8b](https://github.com/cashubtc/cashu-ts/commit/ec6fc8b1d13384d81e36f28db6052e6a2aa05b94))
+
 ## [5.0.0-rc.5](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.4...v5.0.0-rc.5) (2026-07-23)
 
 
