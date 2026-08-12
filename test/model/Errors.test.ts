@@ -43,7 +43,8 @@ describe('CTSError', () => {
   test('cause is writable and reassignable', () => {
     const err = new CTSError('boom', { cause: new Error('first') });
     const replacement = new Error('second');
-    err.cause = replacement;
+    // `cause` is declared readonly, but the descriptor is writable at runtime.
+    (err as { cause?: unknown }).cause = replacement;
     expect(err.cause).toBe(replacement);
   });
 

@@ -47,8 +47,8 @@ Local installs configure Husky hooks automatically.
 
 ## Common tasks
 
-CI check: `npm run prtasks` (lint, format, api:update, tests).
-Repo-wide lint checks: `npm run check-lint` and `npm run check-format`.
+CI check: `npm run prtasks` (lint, format, types, api:update, tests).
+Repo-wide checks: `npm run check-lint`, `npm run check-format` and `npm run check-types`.
 Integration tests: `npm run test-integration` (requires local mint, see below).
 Consumer smoke tests: `npm run test:consumer`.
 Other scripts: see `package.json`.
@@ -101,6 +101,7 @@ DEV=1 make nutshell-stable-down
 
 - Lint config lives in `eslint.config.js` (flat config).
 - Tests are linted too, with a relaxed override block (fixture `any`s allowed, but promise correctness and vitest hygiene — no `.only`, no assertion-free tests — are enforced). `test/tsconfig.json` exists so typed rules cover test files.
+- `npm run check-types` type checks the test tree (and, via its imports, `src/`). Vitest strips types without checking them, so this is the only thing that catches fixtures drifting from the library types.
 - `any` is not allowed (prefer explicit types, generics, or `unknown` with narrowing).
 - Type-only imports/exports are required (`@typescript-eslint/consistent-type-imports`).
 - No Node-only modules in library code (`import/no-nodejs-modules`).
@@ -134,11 +135,11 @@ Hooks are installed by Husky:
 
 ## Amount model (v4 breaking change)
 
-- `Proof.amount` is `bigint`, not `number`. This changed in v4.
+- `Proof.amount` is an `Amount`, not a `number` or a raw `bigint`.
 - `AmountLike` (`number | bigint | string | Amount`) is the flexible input type for consumers.
 - `Amount` (`src/model/Amount.ts`) is the normalization and arithmetic layer. Use `Amount.from(x)` to convert any `AmountLike`, `.toBigInt()` to extract the raw value.
 - Mint response DTOs are normalized to `Amount` before reaching consumers — API response amount fields return `Amount` objects, not raw numbers.
-- When constructing `Proof` objects, always normalize: `amount: Amount.from(x).toBigInt()`.
+- When constructing `Proof` objects, always normalize: `amount: Amount.from(x)`. Use `ProofLike` (`amount: AmountLike`) to model un-normalized proofs from external storage.
 - Avoid `number` in canonical domain models and avoid `bigint | number` in stored/core types.
 
 ## Branching and releases

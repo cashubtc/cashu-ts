@@ -65,6 +65,7 @@ describe('melt proofs', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const proofsToSend: Proof[] = [
       {
@@ -119,6 +120,7 @@ describe('melt proofs', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const proofsToSend: Proof[] = [
       {
@@ -176,6 +178,7 @@ describe('melt proofs', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const proofsToSend: Proof[] = [
       {
@@ -225,6 +228,7 @@ describe('melt proofs', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const storedProofs = JSON.parse(
       JSON.stringify([
@@ -276,6 +280,7 @@ describe('melt proofs', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const proofsToSend: Proof[] = [
       {
@@ -345,6 +350,7 @@ describe('melt proofs', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
 
     const proofsToSend: Proof[] = [
@@ -388,6 +394,7 @@ describe('melt proofs', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const proofsToSend: Proof[] = [
       {
@@ -429,6 +436,7 @@ describe('melt proofs', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const proofsToSend: Proof[] = [
       { id: '00bd033559de27d0', amount: Amount.from(8), secret: 'secret1', C: 'C1' },
@@ -460,6 +468,7 @@ describe('melt proofs', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const proofsToSend: Proof[] = [
       {
@@ -489,6 +498,7 @@ describe('melt proofs', () => {
         expiry: 1234567890,
         payment_preimage: null,
         unit,
+        method: 'bolt11',
       };
       const proofsToSend: Proof[] = [
         {
@@ -556,6 +566,7 @@ describe('melt proofs', () => {
         expiry: 1234567890,
         payment_preimage: null,
         unit: 'sat',
+        method: 'bolt12',
       };
       const proofsToSend: Proof[] = [
         {
@@ -653,6 +664,7 @@ describe('melt proofs', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt12',
     };
     const proofsToSend: Proof[] = [
       {
@@ -741,6 +753,7 @@ describe('melt proofs', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const proofsToSend: Proof[] = [
       {
@@ -776,6 +789,7 @@ describe('async melt preference body', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const proofsToSend: Proof[] = [
       {
@@ -895,7 +909,7 @@ describe('async melt preference body', () => {
     const debug = vi.fn();
     const wallet = new Wallet(mint, {
       unit,
-      logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug, trace: vi.fn() },
+      logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug, trace: vi.fn(), log: vi.fn() },
     });
     await wallet.loadMint();
     const meltTxn = await wallet.prepareMelt('bolt11', meltQuote, proofs);

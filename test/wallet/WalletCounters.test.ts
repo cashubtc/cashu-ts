@@ -21,6 +21,14 @@ class MandatoryOnlySource implements CounterSource {
     return Promise.resolve({ start: cur, count: n });
   }
 
+  reserveAt(keysetId: string, start: number, count: number): Promise<CounterRange> {
+    const cur = this.next.get(keysetId) ?? 0;
+    if (start < 0 || count < 0) throw new Error('reserveAt called with a negative start or count');
+    if (start < cur) throw new Error(`Counter ${start} for keyset ${keysetId} was already issued`);
+    this.next.set(keysetId, start + count);
+    return Promise.resolve({ start, count });
+  }
+
   advanceToAtLeast(keysetId: string, minNext: number): Promise<void> {
     const cur = this.next.get(keysetId) ?? 0;
     if (minNext > cur) this.next.set(keysetId, minNext);
