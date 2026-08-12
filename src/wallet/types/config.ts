@@ -152,11 +152,18 @@ export type MeltProofsConfig = {
   keysetId?: string;
   privkey?: string | string[];
   onCountersReserved?: OnCountersReserved;
-};
-
-export type PrepareMeltConfig = MeltProofsConfig & {
+  /**
+   * Request NUT-08 blank outputs so the mint can return unspent fee reserve. Defaults to true. Set
+   * false to forfeit the change, which also permits melting on an inactive keyset.
+   */
   nut08Change?: boolean;
 };
+
+/**
+ * @deprecated Use {@link MeltProofsConfig}, which now carries `nut08Change`. This alias is retained
+ *   for compatibility and is removed in v5.
+ */
+export type PrepareMeltConfig = MeltProofsConfig;
 
 export type CompleteMeltOptions = {
   preferAsync?: boolean;
