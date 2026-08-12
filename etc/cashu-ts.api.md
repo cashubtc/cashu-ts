@@ -1173,6 +1173,9 @@ export type MintQuoteBaseResponse = {
     request: string;
     unit: string;
     pubkey?: string;
+    amount_paid?: Amount;
+    amount_issued?: Amount;
+    updated_at?: number | null;
 };
 
 // @public

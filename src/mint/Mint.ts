@@ -19,6 +19,7 @@ import {
   type MeltQuoteBolt11Response,
   type MeltQuoteBolt12Response,
   MeltQuoteState,
+  MintQuoteState,
   type MintResponse,
   type GetInfoResponse,
   type MeltRequest,
@@ -1236,9 +1237,8 @@ class Mint {
     response: TRes,
     normalize?: (raw: Record<string, unknown>) => TRes,
   ): TRes {
-    // MintQuoteBaseResponse has no Amount fields to normalize at the base level.
-    // Stack first-class normalization for known methods.
     const data: Record<string, unknown> = { ...response };
+    this.normalizeMintBaseFields(data);
     if (method === 'bolt11') {
       this.normalizeMintQuoteBolt11Fields(data);
     } else if (method === 'bolt12') {
@@ -1250,7 +1250,39 @@ class Mint {
   }
 
   /**
+   * Mutates `data` in place, normalizing protocol-mandatory mint quote base fields.
+   *
+   * The NUT-04 accounting fields are optional on this line, so a mint that predates them is left
+   * untouched rather than given fabricated zeros. v5 requires them and derives them from the legacy
+   * `state` instead.
+   */
+  private normalizeMintBaseFields(data: Record<string, unknown>): void {
+    if (data.amount_paid != null && data.amount_issued != null) {
+      data.amount_paid = Amount.from(data.amount_paid as AmountLike);
+      data.amount_issued = Amount.from(data.amount_issued as AmountLike);
+    }
+    data.updated_at = normalizeSafeIntegerMetadata(
+      data.updated_at as number | undefined,
+      'mintQuote.updated_at',
+      null,
+    );
+  }
+
+  /**
+   * Derives the deprecated single-use `state` from the NUT-04 accounting fields.
+   */
+  private deriveMintQuoteState(paid: Amount, issued: Amount): MintQuoteState {
+    if (paid.isZero() && issued.isZero()) {
+      return MintQuoteState.UNPAID;
+    }
+    return paid.greaterThan(issued) ? MintQuoteState.PAID : MintQuoteState.ISSUED;
+  }
+
+  /**
    * Mutates `data` in place, normalizing bolt11 mint-quote fields.
+   *
+   * NUT-23 deprecates `state` and lets mints omit it. Where it is missing, derive it from the
+   * accounting fields so consumers reading `state` keep working against a modern mint.
    */
   private normalizeMintQuoteBolt11Fields(data: Record<string, unknown>): void {
     data.amount = Amount.from(data.amount as AmountLike);
@@ -1259,6 +1291,15 @@ class Mint {
       'mintQuoteBolt11.expiry',
       null,
     );
+    if (
+      typeof data.state !== 'string' ||
+      !Object.values(MintQuoteState).includes(data.state as MintQuoteState)
+    ) {
+      // Accounting is optional on this line, so only derive where the mint reported it.
+      if (data.amount_paid instanceof Amount && data.amount_issued instanceof Amount) {
+        data.state = this.deriveMintQuoteState(data.amount_paid, data.amount_issued);
+      }
+    }
   }
 
   /**
