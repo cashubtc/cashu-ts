@@ -710,10 +710,16 @@ export function isBlsKeyset(keysetId: string): boolean;
 export function isHTLCSpendAuthorised(proof: Proof, logger?: Logger, message?: string): boolean;
 
 // @public
+export function isMintableQuote<T extends Pick<MintQuoteBaseResponse, 'amount_paid' | 'amount_issued'>>(entry: T | UnknownQuote): entry is T;
+
+// @public
 export function isMintOperationError(e: unknown): e is MintOperationError;
 
 // @public
 export function isP2PKSpendAuthorised(proof: Proof, logger?: Logger, message?: string): boolean;
+
+// @public
+export function isUnknownQuote(entry: unknown): entry is UnknownQuote;
 
 // @public
 export function isValidSecpPubkey(pk: string): boolean;
@@ -1011,9 +1017,9 @@ export class Mint {
     checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(method: string, quotes: string[], options?: {
         customRequest?: RequestFn;
         normalize?: (raw: Record<string, unknown>) => TRes;
-    }): Promise<TRes[]>;
-    checkMintQuoteBatchBolt11(quotes: string[], customRequest?: RequestFn): Promise<MintQuoteBolt11Response[]>;
-    checkMintQuoteBatchBolt12(quotes: string[], customRequest?: RequestFn): Promise<MintQuoteBolt12Response[]>;
+    }): Promise<Array<TRes | UnknownQuote>>;
+    checkMintQuoteBatchBolt11(quotes: string[], customRequest?: RequestFn): Promise<Array<MintQuoteBolt11Response | UnknownQuote>>;
+    checkMintQuoteBatchBolt12(quotes: string[], customRequest?: RequestFn): Promise<Array<MintQuoteBolt12Response | UnknownQuote>>;
     checkMintQuoteBolt11(quote: string, customRequest?: RequestFn): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt12(quote: string, customRequest?: RequestFn): Promise<MintQuoteBolt12Response>;
     checkMintQuoteOnchain(quote: string, customRequest?: RequestFn): Promise<MintQuoteOnchainResponse>;
@@ -2252,6 +2258,12 @@ export function unblindSignature(C_: WeierstrassPoint<bigint>, r: bigint, A: Wei
 // @public
 export function unblindSignatureBls(C_: G1Point, r: bigint): G1Point;
 
+// @public
+export type UnknownQuote = {
+    quote: string;
+    unknown: true;
+};
+
 // @public (undocumented)
 export const verifyDLEQProof: (dleq: DLEQ, B_: WeierstrassPoint<bigint>, C_: WeierstrassPoint<bigint>, A: WeierstrassPoint<bigint>) => boolean;
 
@@ -2317,9 +2329,9 @@ export class Wallet {
     }): Promise<TRes>;
     checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, quotes: Array<string | Pick<TRes, 'quote'>>, options?: {
         normalize?: (raw: Record<string, unknown>) => TRes;
-    }): Promise<TRes[]>;
-    checkMintQuoteBatchBolt11(quotes: Array<string | MintQuoteBolt11Response>): Promise<MintQuoteBolt11Response[]>;
-    checkMintQuoteBatchBolt12(quotes: Array<string | MintQuoteBolt12Response>): Promise<MintQuoteBolt12Response[]>;
+    }): Promise<Array<TRes | UnknownQuote>>;
+    checkMintQuoteBatchBolt11(quotes: Array<string | MintQuoteBolt11Response>): Promise<Array<MintQuoteBolt11Response | UnknownQuote>>;
+    checkMintQuoteBatchBolt12(quotes: Array<string | MintQuoteBolt12Response>): Promise<Array<MintQuoteBolt12Response | UnknownQuote>>;
     checkMintQuoteBolt11(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt12(quote: string): Promise<MintQuoteBolt12Response>;
     checkMintQuoteOnchain(quote: string): Promise<MintQuoteOnchainResponse>;
