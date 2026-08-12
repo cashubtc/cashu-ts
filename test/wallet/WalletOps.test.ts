@@ -160,11 +160,15 @@ class MockWallet {
   checkMintQuoteBolt11: Mock<CheckMintQuoteBolt11Fn> = vi.fn<CheckMintQuoteBolt11Fn>(
     async (id) => ({
       quote: id,
+      method: 'bolt11',
       state: 'UNPAID',
       expiry: 0,
       request: '',
       amount: Amount.from(0),
       unit: '',
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      updated_at: null,
     }),
   );
   validateMintQuote: Mock<ValidateMintQuoteFn> = vi.fn<ValidateMintQuoteFn>();
@@ -207,6 +211,7 @@ const quote = 'q123';
 
 const melt11: MeltQuoteBolt11Response = {
   quote: 'mq11',
+  method: 'bolt11',
   amount: Amount.from(5),
   fee_reserve: Amount.from(1),
   state: 'UNPAID',
@@ -218,6 +223,7 @@ const melt11: MeltQuoteBolt11Response = {
 
 const melt12: MeltQuoteBolt12Response = {
   quote: 'mq12',
+  method: 'bolt12',
   amount: Amount.from(7),
   fee_reserve: Amount.from(2),
   state: 'UNPAID',
@@ -229,6 +235,7 @@ const melt12: MeltQuoteBolt12Response = {
 
 const mint12: MintQuoteBolt12Response = {
   quote: 'mq12',
+  method: 'bolt12',
   request: 'lno1...',
   amount: Amount.from(7),
   unit: 'sat',
@@ -236,10 +243,12 @@ const mint12: MintQuoteBolt12Response = {
   pubkey: '0200000',
   amount_paid: Amount.from(0),
   amount_issued: Amount.from(0),
+  updated_at: null,
 };
 
 const meltOnchainSingle: MeltQuoteOnchainResponse = {
   quote: 'mq-onchain-melt-1',
+  method: 'onchain',
   amount: Amount.from(10),
   state: 'UNPAID',
   expiry: 0,
@@ -252,6 +261,7 @@ const meltOnchainSingle: MeltQuoteOnchainResponse = {
 
 const meltOnchainMulti: MeltQuoteOnchainResponse = {
   quote: 'mq-onchain-melt-2',
+  method: 'onchain',
   amount: Amount.from(10),
   state: 'UNPAID',
   expiry: 0,
@@ -267,13 +277,14 @@ const meltOnchainMulti: MeltQuoteOnchainResponse = {
 
 const mintOnchain: MintQuoteOnchainResponse = {
   quote: 'mq-onchain',
+  method: 'onchain',
   request: 'bc1qdeposit',
-  amount: Amount.from(8),
   unit: 'sat',
   expiry: null,
   pubkey: '0200000',
   amount_paid: Amount.from(0),
   amount_issued: Amount.from(0),
+  updated_at: null,
 };
 
 describe('WalletOps builders', () => {
@@ -369,7 +380,7 @@ describe('WalletOps builders', () => {
       const locked = new PaymentRequest({
         amount: 100,
         unit: 'sat',
-        nut10: { kind: 'P2PK', data: '02'.padEnd(66, 'a') },
+        nut10: { kind: 'P2PK', data: '02'.padEnd(66, 'a'), tags: [] },
       });
       await ops.sendToRequest(locked, proofs).run();
       const outputConfig = wallet.send.mock.calls[0][3];
@@ -378,7 +389,7 @@ describe('WalletOps builders', () => {
       const exotic = new PaymentRequest({
         amount: 100,
         unit: 'sat',
-        nut10: { kind: 'FROST', data: 'xyz' },
+        nut10: { kind: 'FROST', data: 'xyz', tags: [] },
       });
       expect(() => ops.sendToRequest(exotic, proofs)).toThrow(/nut10 lock/);
     });
@@ -813,7 +824,16 @@ describe('WalletOps builders', () => {
         payload: { quote, outputs: [] },
         outputData: [],
         keysetId: '123',
-        quote: { quote, request: '', unit: '' },
+        quote: {
+          quote,
+          method: 'bolt11',
+          request: '',
+          unit: '',
+          expiry: null,
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
+          updated_at: null,
+        },
       };
       wallet.prepareMint.mockResolvedValueOnce(preview);
 
@@ -873,7 +893,16 @@ describe('WalletOps builders', () => {
         payload: { quote: mint12.quote, outputs: [] },
         outputData: [],
         keysetId: '123',
-        quote: { quote: mint12.quote, request: '', unit: '' },
+        quote: {
+          quote: mint12.quote,
+          method: 'bolt12',
+          request: '',
+          unit: '',
+          expiry: null,
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
+          updated_at: null,
+        },
       };
       wallet.prepareMint.mockResolvedValueOnce(preview);
 

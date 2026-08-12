@@ -1,6 +1,15 @@
 {
   // Gives eslint's typed rules (projectService) a project covering test/ —
-  // the root tsconfig only includes src/. Not used by builds or vitest.
+  // the root tsconfig only includes src/. Also drives `npm run check-types`,
+  // which type checks test/ and, via its imports, src/. Not used by builds
+  // or vitest (vitest strips types without checking them).
   "extends": "../tsconfig.json",
+  "compilerOptions": {
+    // Tests import from ../src, so the project root sits above test/.
+    "rootDir": "..",
+    "noEmit": true,
+    "declaration": false,
+    "emitDeclarationOnly": false
+  },
   "include": ["**/*"]
 }

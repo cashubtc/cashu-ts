@@ -1,6 +1,7 @@
 import { test, describe, expect } from 'vitest';
 
 import {
+  Amount,
   decodePaymentRequest,
   OutputData,
   PaymentRequest,
@@ -713,7 +714,7 @@ describe('NUT-18 payment payloads', () => {
   const MINT = 'https://mint.example';
   const makeProof = (amount: bigint) => ({
     id: '009a1f293253e41e',
-    amount,
+    amount: Amount.from(amount),
     secret: 'secret-string',
     C: '02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2',
   });

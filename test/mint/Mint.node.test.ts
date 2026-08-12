@@ -12,7 +12,7 @@ import {
   RateLimitError,
   Amount,
 } from '../../src';
-import type { AuthProvider, Logger, RequestFn } from '../../src';
+import type { AuthProvider, Logger, MintQuoteBaseResponse, RequestFn } from '../../src';
 import { MINTINFORESP } from '../consts';
 
 type ReqArgs = {
@@ -571,10 +571,7 @@ describe('Mint normalization', () => {
     ]) as RequestFn;
     const mint = new Mint(mintUrl, { customRequest: requestSpy });
 
-    type CustomQuote = {
-      quote: string;
-      request: string;
-      unit: string;
+    type CustomQuote = MintQuoteBaseResponse & {
       amount: Amount;
       reference: string;
     };

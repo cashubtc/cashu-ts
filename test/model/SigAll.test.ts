@@ -47,8 +47,6 @@ function makeSwapPreview() {
     sendOutputs: [dummyOutput],
     amount: Amount.from(32),
     fees: Amount.from(0),
-    keysetIdts: [],
-    method: 'swap',
     keysetId: 'dummy-keyset-id',
   } as SwapPreview;
 }
@@ -64,12 +62,9 @@ function makeMeltPreview() {
       state: MeltQuoteState.PENDING,
       expiry: Date.now() + 10000,
     },
-    amount: Amount.from(32),
-    fees: 0,
-    keysetIdts: [],
     method: 'melt',
     keysetId: 'dummy-keyset-id',
-  } as MeltPreview;
+  } as MeltPreview<{ quote: string }>;
 }
 
 // Helper: encode an arbitrary object as a sigallA-prefixed string,

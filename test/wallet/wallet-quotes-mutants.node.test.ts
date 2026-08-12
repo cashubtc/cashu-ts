@@ -16,6 +16,7 @@ import {
   type MintQuoteBolt12Response,
   type MeltQuoteBolt11Response,
   type MintQuoteBaseResponse,
+  type PrepareMeltConfig,
 } from '../../src';
 
 import {
@@ -66,7 +67,14 @@ describe('constructor mutants', () => {
     // failIf logs its context before throwing, so the value must not appear there.
     const mnemonic = 'abandon abandon abandon abandon about';
     const error = vi.fn();
-    const logger = { error, warn: vi.fn(), info: vi.fn(), debug: vi.fn(), trace: vi.fn() };
+    const logger = {
+      error,
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+      log: vi.fn(),
+    };
 
     expect(() => new Wallet(mint, { unit, logger, bip39seed: mnemonic as never })).toThrow();
 
@@ -149,6 +157,7 @@ describe('_prepareInputsForMint mutants', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const proofsToSend = [
       {
@@ -161,7 +170,11 @@ describe('_prepareInputsForMint mutants', () => {
       },
     ] as unknown as Proof[];
 
-    await wallet.meltProofsBolt11(meltQuote, proofsToSend, { nut08Change: false });
+    // meltProofsBolt11 declares MeltProofsConfig but forwards the config to prepareMelt, which
+    // is what honours nut08Change.
+    await wallet.meltProofsBolt11(meltQuote, proofsToSend, {
+      nut08Change: false,
+    } as PrepareMeltConfig);
 
     expect(sentInputs).toHaveLength(1);
     expect(sentInputs[0]).not.toHaveProperty('dleq');
@@ -596,8 +609,12 @@ describe('prepareMint mutants', () => {
       request: 'lnbc...',
       amount: Amount.from(8),
       unit: 'sat',
+      method: 'bolt11',
       state: MintQuoteState.UNPAID,
       expiry: null,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      updated_at: null,
     };
     const preview = await wallet.prepareMint('bolt11', 8, quote);
     const total = Amount.sum(preview.outputData.map((o) => o.blindedMessage.amount));
@@ -614,8 +631,12 @@ describe('prepareMint mutants', () => {
       request: 'lnbc...',
       amount: Amount.from(3),
       unit: 'sat',
+      method: 'bolt11',
       state: MintQuoteState.UNPAID,
       expiry: null,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      updated_at: null,
     };
     await wallet.prepareMint('bolt11', 3, quote, { onCountersReserved });
     // amount 3 -> outputs [1,2]: start 0, count 2, next 2
@@ -656,8 +677,12 @@ describe('completeMint mutants', () => {
       request: 'lnbc...',
       amount: Amount.from(3),
       unit: 'sat',
+      method: 'bolt11',
       state: MintQuoteState.UNPAID,
       expiry: null,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      updated_at: null,
     };
     // amount 3 → outputs [1,2]; the mint returns only 1 signature.
     const preview = await wallet.prepareMint('bolt11', 3, quote);
@@ -778,6 +803,7 @@ describe('prepareMelt mutants', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const proofsToSend: Proof[] = [
       { id: KEYSET_ID, amount: Amount.from(5), secret: 's1', C: 'C1' },
@@ -804,6 +830,7 @@ describe('prepareMelt mutants', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     // sum 11, feeReserve 1 → the non-custom path would create a single blank.
     const proofsToSend: Proof[] = [
@@ -833,6 +860,7 @@ describe('prepareMelt mutants', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const proofsToSend: Proof[] = [
       { id: KEYSET_ID, amount: Amount.from(8), secret: 's1', C: 'C1' },
@@ -860,6 +888,7 @@ describe('prepareMelt mutants', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const proofsToSend: Proof[] = [
       { id: KEYSET_ID, amount: Amount.from(13), secret: 's1', C: 'C1' },
@@ -1040,7 +1069,7 @@ describe('createLockedMintQuote mutants', () => {
     await wallet.loadMint();
 
     const quote = await wallet.createLockedMintQuote(100, PUBKEY);
-    expect(quote.pubkey.toLowerCase()).toBe(PUBKEY);
+    expect(quote.pubkey!.toLowerCase()).toBe(PUBKEY);
   });
 
   test('rejects a missing pubkey with a clear error, not a TypeError', async () => {
@@ -1134,8 +1163,12 @@ describe('prepareMint signing / policy mutants', () => {
       request: 'lnbc...',
       amount: Amount.from(3),
       unit: 'sat',
+      method: 'bolt11',
       state: MintQuoteState.UNPAID,
       expiry: null,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      updated_at: null,
     };
     await wallet.prepareMint('bolt11', 3, quote, { onCountersReserved });
     expect(onCountersReserved).not.toHaveBeenCalled();
@@ -1149,7 +1182,7 @@ describe('mintProofsBolt11 mutants', () => {
     // A wrong-unit quote object must be rejected by validateMintQuote. A mutant that always
     // takes the string-id branch would skip validation and fail later with a different error.
     await expect(
-      wallet.mintProofsBolt11(1, { quote: 'x', unit: 'usd' } as MintQuoteBolt11Response, []),
+      wallet.mintProofsBolt11(1, { quote: 'x', unit: 'usd' } as MintQuoteBolt11Response),
     ).rejects.toThrow("Quote unit 'usd' does not match wallet unit 'sat'");
   });
 });
