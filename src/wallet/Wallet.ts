@@ -20,6 +20,7 @@ import {
   assertSigAllInputs,
   parseSecret,
   attachHTLCPreimage,
+  createSecretAndBlindingFactorDeriver,
   isV3PointSecret,
 } from '../crypto';
 // Internal transitional fallback — not part of crypto/index.ts
@@ -97,6 +98,7 @@ import {
   ceilLog2,
   getKeepAmounts,
   orderOutputsForPayload,
+  proofsFromRestoreResponse,
   stringifyOutputTypeForLog,
 } from './_internal';
 import {
@@ -2329,6 +2331,12 @@ class Wallet {
    * the scan can probe (and recover proofs) up to `(BATCH_POOL_SIZE - 1) * batchSize` counters past
    * the gap limit before it stops. `lastCounterWithSignature` always reflects all signatures found,
    * including those of proofs removed by `filterSpent`.
+   *
+   * `filterSpent` also picks the mechanism. When set (the default) each batch is state checked and
+   * only the counters that are not spent are restored, so signatures are fetched and unblinded for
+   * live proofs alone, and a spent proof's `B_` never reaches the mint alongside its `Y`. On a long
+   * history that is far cheaper. When false, it has to restore every issued counter to return
+   * them.
    * @param [config.gapLimit=300] Consecutive empty counters that end the scan. A floor, not an
    *   exact ceiling: batches already in flight past it are still processed. `Infinity` disables the
    *   gap rule (use with `maxCounter`). Default is `300`
@@ -2338,7 +2346,8 @@ class Wallet {
    *   `max_array_length` (NUT-06), or `500` when it advertises none.
    * @param [config.counter=0] Starting counter. Default is `0`
    * @param [config.keysetId] Keyset to restore; defaults to the wallet's.
-   * @param [config.filterSpent=true] Drop spent proofs (NUT-07) before returning. Default is `true`
+   * @param [config.filterSpent=true] Drop spent proofs (NUT-07) before returning, and skip
+   *   restoring them at all. Default is `true`
    */
   async batchRestore(
     config?: BatchRestoreConfig,
@@ -2354,7 +2363,7 @@ class Wallet {
     const requiredEmptyBatches = Math.ceil(gapLimit / batchSize);
     // Pin the scan: a keychain repair mid-scan can rebind an auto-bound wallet
     const scanKeyset = keysetId ?? this.keysetId;
-    let restoredProofs: Proof[] = [];
+    const restoredProofs: Proof[] = [];
 
     let lastCounterWithSignature: undefined | number;
     let emptyBatchesFound = 0;
@@ -2364,18 +2373,30 @@ class Wallet {
     // counter order, and a non-empty batch past the gap limit resets the gap count: the reveal
     // is already spent at request time, so proofs in flight are recovered rather than dropped.
     while (emptyBatchesFound < requiredEmptyBatches && counter <= bound) {
-      const starts = Array.from(
-        { length: BATCH_POOL_SIZE },
-        (_, i) => counter + i * batchSize,
-      ).filter((s) => s <= bound);
-      const wave = await runPool(starts, BATCH_POOL_SIZE, (start) =>
-        this.restore(start, Math.min(batchSize, bound - start + 1), { keysetId: scanKeyset }),
-      );
-      for (const restoreRes of wave) {
+      // positions only increase, so the first one past the bound ends the wave
+      const starts: number[] = [];
+      for (let i = 0; i < BATCH_POOL_SIZE; i++) {
+        const start = counter + i * batchSize;
+        if (start > bound) break;
+        starts.push(start);
+      }
+      const wave = await runPool(starts, BATCH_POOL_SIZE, async (start) => {
+        const count = Math.min(batchSize, bound - start + 1);
+        if (filterSpent) return this.restoreUnspent(start, count, scanKeyset);
+        const res = await this.restore(start, count, { keysetId: scanKeyset });
         // A batch of zero-value signatures yields no proofs but its counters are used
-        if (restoreRes.proofs.length > 0 || restoreRes.lastCounterWithSignature !== undefined) {
+        return {
+          ...res,
+          used: res.proofs.length > 0 || res.lastCounterWithSignature !== undefined,
+        };
+      });
+      for (const restoreRes of wave) {
+        if (restoreRes.used) {
           emptyBatchesFound = 0;
-          restoredProofs.push(...restoreRes.proofs);
+          // push singly: a caller-set batchSize can exceed V8's ~65k spread-argument limit
+          for (const p of restoreRes.proofs) {
+            restoredProofs.push(p);
+          }
           lastCounterWithSignature = restoreRes.lastCounterWithSignature;
         } else {
           emptyBatchesFound++;
@@ -2384,10 +2405,6 @@ class Wallet {
       counter += batchSize * BATCH_POOL_SIZE;
     }
 
-    if (filterSpent && restoredProofs.length > 0) {
-      const states = await this.checkProofsStates(restoredProofs);
-      restoredProofs = restoredProofs.filter((_, i) => states[i].state !== CheckStateEnum.SPENT);
-    }
     return { proofs: restoredProofs, lastCounterWithSignature };
   }
 
@@ -2453,37 +2470,96 @@ class Wallet {
       zeros,
     );
 
-    const { outputs, signatures } = await this.mint.restore({
+    const response = await this.mint.restore({
       outputs: outputData.map((d) => d.blindedMessage),
     });
-    // NUT-09: each signature names the keyset to unblind with, which need not be the scanned
-    // one. Zero-value entries are dropped below and need no keys.
-    await this._ensureOperableKeysets(
-      signatures.map((s) => (s?.amount.isZero() ? undefined : s?.id)),
-      { implicit: true },
+    await this._ensureKeysetsForSignatures(response.signatures);
+    // counters here are contiguous from `start`, so the index maps straight onto one
+    const { proofs, lastIndex } = proofsFromRestoreResponse(outputData, response, (id) =>
+      this.keysetForSignature(id),
     );
 
-    const signatureMap: { [sig: string]: SerializedBlindedSignature } = {};
-    outputs.forEach((o, i) => (signatureMap[o.B_] = signatures[i]));
+    return {
+      proofs,
+      lastCounterWithSignature: lastIndex < 0 ? undefined : start + lastIndex,
+    };
+  }
 
-    const restoredProofs: Proof[] = [];
-    let lastCounterWithSignature: number | undefined;
+  /**
+   * State checks a counter range, then restores only the counters that are not spent.
+   *
+   * @remarks
+   * `Y = hash_to_curve(secret)` needs no blinding factor and no unblinding, so the whole range
+   * costs one hash per counter. Spent counters are then dropped without ever revealing their `B_`,
+   * which both shrinks the restore and avoids handing the mint a `B_`/`Y` pair it could use to tie
+   * an issuance to its spend.
+   *
+   * `used` reports whether the range was ever issued into, which is what ends a scan: a range can
+   * be fully spent, so "no proofs returned" does not mean "never used" here.
+   */
+  private async restoreUnspent(
+    start: number,
+    count: number,
+    keysetId?: string,
+  ): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number; used: boolean }> {
+    this.failIfNullish(this._seed, 'Cashu Wallet must be initialized with a seed to use restore');
+    // Resolve once: an auto-bound wallet can rebind during the awaits below
+    const scanId = keysetId ?? this.keysetId;
+    await this._keyChain.ensureKeysetKeys(scanId);
+    const keyset = this.getKeyset(scanId);
+    const derive = createSecretAndBlindingFactorDeriver(this._seed, keyset.id);
 
-    for (let i = 0; i < outputData.length; i++) {
-      const matchingSig = signatureMap[outputData[i].blindedMessage.B_];
-      if (!matchingSig) continue; // counter was never issued into
-      lastCounterWithSignature = start + i;
-      // Signed at zero (a NUT-08 blank the mint did not omit): used counter, but no ecash
-      if (matchingSig.amount.isZero()) continue;
-      // The output stays a blank: toProof takes the amount and keyset from the signature
-      restoredProofs.push(
-        outputData[i].toProof(matchingSig, this.keysetForSignature(matchingSig.id)),
-      );
+    // Derive the whole range up front: secret and blinding factor come back together, and for
+    // BIP-32 keysets that shares one path walk. The state check needs only the secret, so no
+    // output is blinded until the spent counters have dropped out below. A counter whose
+    // derivation is invalid was skipped at issuance too, so it can hold no signature.
+    const counters: number[] = [];
+    const derived: Array<{ blindingFactor: Uint8Array; secret: Uint8Array }> = [];
+    for (let c = start; c < start + count; c++) {
+      try {
+        const d = derive(c);
+        counters.push(c);
+        derived.push(d);
+      } catch {
+        continue;
+      }
+    }
+    if (counters.length === 0) return { proofs: [], used: false };
+
+    const states = await this.checkProofsStates(
+      derived.map((d) => ({ secret: bytesToHex(d.secret), id: keyset.id })),
+    );
+
+    // Spent counters drop out here, so their B_ is never built or sent and the mint never sees
+    // the pair that would tie an issuance to its spend.
+    let lastIssued = -1;
+    const outputs: OutputData[] = [];
+    const outputCounters: number[] = [];
+    states.forEach((state, i) => {
+      if (state.state === CheckStateEnum.SPENT) {
+        lastIssued = Math.max(lastIssued, counters[i]);
+        return;
+      }
+      outputs.push(OutputData.fromDerivedBytes(0, keyset.id, derived[i]));
+      outputCounters.push(counters[i]);
+    });
+    // Every counter spent: the range is used but holds nothing, so skip the restore entirely.
+    if (outputs.length === 0) {
+      return { proofs: [], lastCounterWithSignature: lastIssued, used: true };
     }
 
+    const response = await this.mint.restore({ outputs: outputs.map((d) => d.blindedMessage) });
+    await this._ensureKeysetsForSignatures(response.signatures);
+    // outputCounters is ascending, so the last signed index carries the highest live counter
+    const { proofs, lastIndex } = proofsFromRestoreResponse(outputs, response, (id) =>
+      this.keysetForSignature(id),
+    );
+    if (lastIndex >= 0) lastIssued = Math.max(lastIssued, outputCounters[lastIndex]);
+
     return {
-      proofs: restoredProofs,
-      lastCounterWithSignature,
+      proofs,
+      lastCounterWithSignature: lastIssued < 0 ? undefined : lastIssued,
+      used: lastIssued >= 0,
     };
   }
 
@@ -4207,6 +4283,20 @@ class Wallet {
    * Must already be loaded (see `_ensureOperableKeysets`); `getKeyset` also rejects a keyset from
    * another unit, which a blank cannot vouch for itself.
    */
+  /**
+   * Loads the keysets a NUT-09 restore response was signed under.
+   *
+   * @remarks
+   * Each signature names its own keyset, which need not be the scanned one. Zero-value entries are
+   * dropped by the caller and need no keys.
+   */
+  private _ensureKeysetsForSignatures(signatures: SerializedBlindedSignature[]): Promise<void> {
+    return this._ensureOperableKeysets(
+      signatures.map((s) => (s?.amount.isZero() ? undefined : s?.id)),
+      { implicit: true },
+    );
+  }
+
   private keysetForSignature(id: string): Keyset {
     try {
       return this.getKeyset(id);
@@ -4236,29 +4326,36 @@ class Wallet {
         ? hashToCurveBls(enc.encode(p.secret)).toHex(true)
         : hashToCurve(enc.encode(p.secret)).toHex(true),
     );
-    const batchSize = this.maxArrayLength;
-    const slices: string[][] = [];
-    for (let i = 0; i < Ys.length; i += batchSize) {
-      slices.push(Ys.slice(i, i + batchSize));
+    // Shuffle the wire order to reduce linkability with B_'s (eg when coupled with a restore scan).
+    // Indices travel with the request, so callers still get their original order back.
+    const order = Ys.map((_, i) => i);
+    for (let i = order.length - 1; i > 0; i--) {
+      // Stryker disable next-line ArithmeticOperator: any in-range index yields a valid permutation; the shuffle need not be uniform
+      const j = Math.floor(Math.random() * (i + 1));
+      [order[i], order[j]] = [order[j], order[i]];
     }
-    // Slices are independent, so run them through the bounded pool; results keep slice order.
-    const batches = await runPool(slices, BATCH_POOL_SIZE, async (YsSlice) => {
-      const { states: batchStates } = await this.mint.check({
-        Ys: YsSlice,
-      });
+    const batchSize = this.maxArrayLength;
+    const slices: number[][] = [];
+    for (let i = 0; i < order.length; i += batchSize) {
+      slices.push(order.slice(i, i + batchSize));
+    }
+    const states = new Array<ProofState>(Ys.length);
+    // Slices are independent, so run them through the bounded pool.
+    await runPool(slices, BATCH_POOL_SIZE, async (slice) => {
+      const { states: batchStates } = await this.mint.check({ Ys: slice.map((i) => Ys[i]) });
       // don't trust the mint's ordering: map results onto the request slice so order is
       // guaranteed and any omitted Y fails loudly instead of misaligning states
       const proofStatesByY: { [y: string]: ProofState } = {};
       batchStates.forEach((s) => {
         proofStatesByY[s.Y] = s;
       });
-      return YsSlice.map((y) => {
-        const state = proofStatesByY[y];
-        this.failIfNullish(state, 'Could not find state for proof with Y: ' + y);
-        return state;
+      slice.forEach((i) => {
+        const state = proofStatesByY[Ys[i]];
+        this.failIfNullish(state, 'Could not find state for proof with Y: ' + Ys[i]);
+        states[i] = state;
       });
     });
-    return batches.flat();
+    return states;
   }
 
   /**
