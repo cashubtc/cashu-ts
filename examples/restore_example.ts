@@ -149,7 +149,17 @@ async function meltSats(wallet: Wallet, invoice: string) {
   }
   const { keep, send } = await wallet.send(amountToMelt, proofs, { includeFees: true });
   proofs = keep;
-  const { change } = await wallet.meltProofsBolt11(meltQuote, send);
+  let change: Proof[];
+  try {
+    ({ change } = await wallet.meltProofsBolt11(meltQuote, send));
+  } catch (e) {
+    // A failed melt may or may not have consumed its inputs. Take back whichever are still
+    // live: dropping them would leave balance sitting at the mint that this demo no longer
+    // tracks, which then turns up during recovery as a mismatch.
+    const { unspent, pending } = await wallet.groupProofsByState(send);
+    proofs.push(...unspent, ...pending);
+    throw e;
+  }
   proofs.push(...change); // NUT-08 change blanks are deterministic outputs too
   while ((await wallet.checkMeltQuoteBolt11(meltQuote.quote)).state !== MeltQuoteState.PAID) {
     await new Promise((r) => setTimeout(r, 200));
@@ -230,7 +240,15 @@ async function main() {
         console.log(`Balance ${balance} too low to keep churning; stopping early`);
         return;
       }
-      await selfSwap(wallet, 1 + Math.floor(Math.random() * Math.max(1, balance * spendFrac)));
+      try {
+        await selfSwap(wallet, 1 + Math.floor(Math.random() * Math.max(1, balance * spendFrac)));
+      } catch (e) {
+        // A low SPEND_FRAC fragments the wallet, and eventually the fee on the inputs a send
+        // needs is more than the dust can cover. That is a legitimate wallet to recover from,
+        // so stop churning rather than give up on the run.
+        console.log(`Cannot swap further (${(e as Error).message}); stopping the churn early`);
+        return;
+      }
     }
   };
 
