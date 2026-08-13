@@ -27,7 +27,8 @@ export type BatchRestoreConfig = {
    */
   maxCounter?: number;
   /**
-   * Counters per restore request. Default is `500`
+   * Counters per restore request. Defaults to the mint's advertised `max_request_length` (NUT-06),
+   * or `500` when it advertises none.
    */
   batchSize?: number;
   /**

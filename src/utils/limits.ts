@@ -21,6 +21,19 @@ export const MAX_SPLIT_OUTPUTS = 8_192;
 export const ABSOLUTE_MAX_BATCH_SIZE = 100;
 
 /**
+ * NUT-06: Fallback for `max_request_length` when a mint advertises none. Both reference mints cap
+ * request arrays at 1000 by default; half that leaves headroom for stricter operator configs.
+ */
+export const DEFAULT_MAX_REQUEST_LENGTH = 500;
+
+/**
+ * NUT-06: Hard ceiling for an advertised `max_request_length`. Bounds the work a mint can talk the
+ * wallet into doing per request (a restore batch is one derivation and one blinded message per
+ * entry). Values outside `[1, cap]` are clamped, the floor so batching loops still make progress.
+ */
+export const ABSOLUTE_MAX_REQUEST_LENGTH = 10_000;
+
+/**
  * NUT-02: Hard ceiling on the number of denominations a mint-supplied keyset may carry, checked
  * before any per-key work (id derivation hashes every pubkey). Real keysets carry ~64 keys (powers
  * of two to 2^63), so 256 is ample headroom. Oversized keysets fail id verification.

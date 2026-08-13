@@ -12,6 +12,10 @@ export type GetInfoResponse = {
   description?: string;
   description_long?: string;
   icon_url?: string;
+  /**
+   * Max length the mint accepts for any array in a request (`inputs`, `outputs`, `Ys`).
+   */
+  max_request_length?: number;
   contact: MintContactInfo[];
   nuts: {
     '4': {
