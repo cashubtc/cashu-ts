@@ -2,10 +2,46 @@
  * Internal wallet utilities — not part of the public API.
  */
 import { Amount, type AmountLike } from '../model/Amount';
-import type { Keys, Proof } from '../model/types';
+import { type OutputDataLike } from '../model/OutputData';
+import type {
+  HasKeysetKeys,
+  Keys,
+  Proof,
+  SerializedBlindedMessage,
+  SerializedBlindedSignature,
+} from '../model/types';
 import { splitAmount } from '../utils/core';
 
 import { type OutputType } from './types';
+
+/**
+ * Turns a NUT-09 restore response into proofs.
+ *
+ * @remarks
+ * The mint replies only for outputs it has signed, so results are matched back by `B_` rather than
+ * by position. `lastIndex` is the highest index in `outputData` that came back signed, or -1 for
+ * none; callers map that to a counter, because probed counters need not be contiguous.
+ */
+export function proofsFromRestoreResponse(
+  outputData: OutputDataLike[],
+  response: { outputs: SerializedBlindedMessage[]; signatures: SerializedBlindedSignature[] },
+  keyset: HasKeysetKeys,
+): { proofs: Proof[]; lastIndex: number } {
+  const signatureByB_: { [b: string]: SerializedBlindedSignature } = {};
+  response.outputs.forEach((o, i) => (signatureByB_[o.B_] = response.signatures[i]));
+
+  const proofs: Proof[] = [];
+  let lastIndex = -1;
+  outputData.forEach((data, i) => {
+    const signature = signatureByB_[data.blindedMessage.B_];
+    if (!signature) return; // counter was never issued into
+    lastIndex = i;
+    // restore outputs are blanks (amount 0), so the mint's amount is authoritative
+    data.blindedMessage.amount = signature.amount;
+    proofs.push(data.toProof(signature, keyset));
+  });
+  return { proofs, lastIndex };
+}
 
 /**
  * Exact `ceil(log2(n))` for n >= 1, computed on bigint so u64-scale inputs never lose precision.

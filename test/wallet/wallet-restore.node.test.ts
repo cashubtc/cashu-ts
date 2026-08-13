@@ -1,15 +1,21 @@
+import { bytesToHex } from '@noble/curves/utils.js';
 import { randomBytes } from '@noble/hashes/utils.js';
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect, vi } from 'vitest';
 
-import { Wallet, Amount, CheckStateEnum, type Proof, type ProofState } from '../../src';
+import {
+  Wallet,
+  Amount,
+  CheckStateEnum,
+  OutputData,
+  createSecretAndBlindingFactorDeriver,
+  hashToCurve,
+  type Proof,
+} from '../../src';
 
 import { useTestServer, mint, unit, dummyKeysResp, mintUrl, logger } from './_setup';
 
 const server = useTestServer();
-
-const allUnspent = (n: number): ProofState[] =>
-  Array(n).fill({ state: CheckStateEnum.UNSPENT }) as ProofState[];
 
 describe('Restoring deterministic proofs', () => {
   test('Batch restore', async () => {
@@ -23,15 +29,13 @@ describe('Restoring deterministic proofs', () => {
         }
         return { proofs: [] };
       });
-    const mockStates = vi.spyOn(wallet, 'checkProofsStates').mockResolvedValue(allUnspent(21));
-    const { proofs: restoredProofs } = await wallet.batchRestore();
+    // filterSpent: false is the plain restore path, which is what is mocked here; the default
+    // path state checks first and is covered end to end further down
+    const { proofs: restoredProofs } = await wallet.batchRestore({ filterSpent: false });
     expect(restoredProofs.length).toBe(21);
     // one pooled wave of 4 batches covers the gap limit
     expect(mockRestore).toHaveBeenCalledTimes(4);
-    // spent filtering is on by default
-    expect(mockStates).toHaveBeenCalledTimes(1);
     mockRestore.mockClear();
-    mockStates.mockClear();
   });
   test('Batch restore with custom values', async () => {
     const wallet = new Wallet(mint);
@@ -83,35 +87,6 @@ describe('Restoring deterministic proofs', () => {
     // the empty batch at 900 closes the gap again, so one wave suffices
     expect(mockRestore).toHaveBeenCalledTimes(4);
     mockRestore.mockClear();
-  });
-  test('Batch restore drops spent proofs but keeps pending, counter unfiltered', async () => {
-    const wallet = new Wallet(mint);
-    await wallet.loadMint();
-    const found = [{ secret: 'a' }, { secret: 'b' }, { secret: 'c' }, { secret: 'd' }] as Proof[];
-    const mockRestore = vi
-      .spyOn(wallet, 'restore')
-      .mockImplementation(
-        async (start): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> => {
-          if (start === 0) {
-            return { proofs: found, lastCounterWithSignature: 3 };
-          }
-          return { proofs: [] };
-        },
-      );
-    const mockStates = vi
-      .spyOn(wallet, 'checkProofsStates')
-      .mockResolvedValue([
-        { state: CheckStateEnum.UNSPENT },
-        { state: CheckStateEnum.SPENT },
-        { state: CheckStateEnum.PENDING },
-        { state: CheckStateEnum.UNSPENT },
-      ] as ProofState[]);
-    const { proofs: restoredProofs, lastCounterWithSignature } = await wallet.batchRestore();
-    expect(restoredProofs.map((p) => p.secret)).toEqual(['a', 'c', 'd']);
-    expect(lastCounterWithSignature).toBe(3);
-    expect(mockStates).toHaveBeenCalledWith(found);
-    mockRestore.mockClear();
-    mockStates.mockClear();
   });
   test('Batch restore treats maxCounter as an inclusive ceiling and ends there', async () => {
     const wallet = new Wallet(mint);
@@ -232,5 +207,75 @@ describe('restore', () => {
     expect(res.proofs.length).toBeGreaterThan(0);
     // proofs should be of amount 1 because we overprinted 1 in the signatures
     expect(res.proofs.every((p) => p.amount.equals(Amount.from(1)))).toBe(true);
+  });
+
+  test('state checks before restoring: skips spent, keeps pending, scans past a spent wave', async () => {
+    const seed = randomBytes(32);
+    const keysetId = dummyKeysResp.keysets[0].id;
+    const wallet = new Wallet(mint, { unit, bip39seed: seed, logger });
+    await wallet.loadMint();
+
+    // Counters 0-39 are issued and spent, 45 is issued and unspent, 46 is issued and pending,
+    // the rest were never used. 0-39 is exactly the first pooled wave at batchSize 10, so under
+    // a "no signatures means empty" rule the scan would stop there and never reach either.
+    const SPENT_THROUGH = 39;
+    const LIVE = 45;
+    const PENDING = 46;
+    const VALID_POINT = '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422';
+    const derive = createSecretAndBlindingFactorDeriver(seed, keysetId);
+    const enc = new TextEncoder();
+    const counterByY = new Map<string, number>();
+    const counterByB_ = new Map<string, number>();
+    for (let c = 0; c <= 120; c++) {
+      try {
+        const derived = derive(c);
+        counterByY.set(hashToCurve(enc.encode(bytesToHex(derived.secret))).toHex(true), c);
+        counterByB_.set(OutputData.fromDerivedBytes(0, keysetId, derived).blindedMessage.B_, c);
+      } catch {
+        continue; // invalid blinding factor: skipped at issuance, so never used
+      }
+    }
+
+    const restoredB_: string[] = [];
+    server.use(
+      http.post(mintUrl + '/v1/checkstate', async ({ request }) => {
+        const { Ys } = (await request.json()) as { Ys: string[] };
+        return HttpResponse.json({
+          states: Ys.map((Y) => {
+            const c = counterByY.get(Y) ?? Infinity;
+            let state: CheckStateEnum = CheckStateEnum.UNSPENT;
+            if (c <= SPENT_THROUGH) state = CheckStateEnum.SPENT;
+            if (c === PENDING) state = CheckStateEnum.PENDING;
+            return { Y, state, witness: null };
+          }),
+        });
+      }),
+      http.post(mintUrl + '/v1/restore', async ({ request }) => {
+        const body = (await request.json()) as { outputs: Array<{ B_: string }> };
+        body.outputs.forEach((o) => restoredB_.push(o.B_));
+        const issued = body.outputs.filter((o) => {
+          const c = counterByB_.get(o.B_);
+          return c === LIVE || c === PENDING;
+        });
+        return HttpResponse.json({
+          outputs: issued,
+          signatures: issued.map(() => ({ id: keysetId, amount: 1, C_: VALID_POINT })),
+        });
+      }),
+    );
+
+    const { proofs, lastCounterWithSignature } = await wallet.batchRestore({
+      batchSize: 10,
+      gapLimit: 10,
+    });
+
+    // pending is issued and still live, so it is recovered and it sets the high-water mark
+    expect(proofs).toHaveLength(2);
+    expect(lastCounterWithSignature).toBe(PENDING);
+    // the whole point: a spent proof's blinded message is never revealed to the mint
+    const spentRevealed = restoredB_.filter(
+      (b) => (counterByB_.get(b) ?? Infinity) <= SPENT_THROUGH,
+    );
+    expect(spentRevealed).toEqual([]);
   });
 });

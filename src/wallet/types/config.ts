@@ -40,7 +40,9 @@ export type BatchRestoreConfig = {
    */
   keysetId?: string;
   /**
-   * Drop spent proofs (NUT-07) before returning. Default is `true`
+   * Drop spent proofs (NUT-07) before returning. Also selects how the scan runs: when set, each
+   * batch is state checked and only the counters that are not spent are restored. Turning it off
+   * returns every issued proof, which requires restoring them all. Default is `true`
    */
   filterSpent?: boolean;
 };

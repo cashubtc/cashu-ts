@@ -385,6 +385,23 @@ export class OutputData implements OutputDataLike {
   }
 
   /**
+   * Builds OutputData from bytes already derived for a counter.
+   *
+   * @remarks
+   * For callers that walk a counter range themselves and need the secret before deciding whether to
+   * blind it, so the shared derivation is not repeated. Prefer
+   * {@link OutputData.createDeterministicData} for a contiguous range of outputs.
+   * @throws May throw if the blinding factor is out of range, as at issuance.
+   */
+  static fromDerivedBytes(
+    amount: AmountLike,
+    keysetId: string,
+    derived: { blindingFactor: Uint8Array; secret: Uint8Array },
+  ): OutputData {
+    return createSingleDeterministicDataFromBytes(amount, keysetId, derived);
+  }
+
+  /**
    * Calculates the sum of amounts in an array of OutputDataLike objects.
    *
    * @param outputs Array of OutputDataLike objects.
