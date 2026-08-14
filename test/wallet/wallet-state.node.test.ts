@@ -93,11 +93,11 @@ describe('checkProofsStates batching', () => {
     });
   });
 
-  test("sizes batches from the mint's advertised max_request_length", async () => {
+  test("sizes batches from the mint's advertised max_array_length", async () => {
     const requestSizes: number[] = [];
     server.use(
       http.get(mintUrl + '/v1/info', () => {
-        return HttpResponse.json({ ...mintInfoResp, max_request_length: 100 });
+        return HttpResponse.json({ ...mintInfoResp, max_array_length: 100 });
       }),
       http.post(mintUrl + '/v1/checkstate', async ({ request }) => {
         const body = (await request.json()) as { Ys: string[] };

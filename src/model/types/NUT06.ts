@@ -15,7 +15,7 @@ export type GetInfoResponse = {
   /**
    * Max length the mint accepts for any array in a request (`inputs`, `outputs`, `Ys`).
    */
-  max_request_length?: number;
+  max_array_length?: number;
   contact: MintContactInfo[];
   nuts: {
     '4': {

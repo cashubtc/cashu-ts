@@ -40,7 +40,7 @@ Semantics worth knowing:
 
 - **`gapLimit` is a floor, not an exact ceiling.** Batches are fetched through a small request pool, so a few batches are already in flight when the gap closes. Their results are still processed: proofs sitting shortly past the gap limit are recovered rather than dropped, and the scan may probe up to three extra batches of counters past the gap.
 - **`filterSpent` drops SPENT proofs and keeps PENDING ones** (a pending melt can fail and return them to spendable). Pass `filterSpent: false` for the raw output, e.g. for auditing. `lastCounterWithSignature` is never affected by filtering.
-- **`batchSize` defaults to what the mint will accept.** A mint advertising `max_request_length` (NUT-06) sets the default; without one it is 500. Setting it yourself is still allowed, but a value above the mint's cap gets the request rejected.
+- **`batchSize` defaults to what the mint will accept.** A mint advertising `max_array_length` (NUT-06) sets the default; without one it is 500. Setting it yourself is still allowed, but a value above the mint's cap gets the request rejected.
 - **`maxCounter` bounds the scan** (inclusive); nothing above it is probed. Combine with `gapLimit: Infinity` to fetch a known counter range wall to wall:
 
 ```typescript

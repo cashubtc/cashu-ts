@@ -1,10 +1,10 @@
 import { type Logger, NULL_LOGGER } from '../logger';
 import { nullIfUndefined } from '../utils/core';
 import {
+  ABSOLUTE_MAX_ARRAY_LENGTH,
   ABSOLUTE_MAX_BATCH_SIZE,
   ABSOLUTE_MAX_PER_MINT,
-  ABSOLUTE_MAX_REQUEST_LENGTH,
-  DEFAULT_MAX_REQUEST_LENGTH,
+  DEFAULT_MAX_ARRAY_LENGTH,
   MAX_METHOD_LENGTH,
   MAX_MINT_INFO_LIST,
 } from '../utils/limits';
@@ -56,12 +56,12 @@ export class MintInfo {
   // NUT-21, Clear-auth protected endpoints
   private readonly _protected21?: ProtectedIndex;
   // NUT-06, resolved request array cap
-  private readonly _maxRequestLength: number;
+  private readonly _maxArrayLength: number;
 
   constructor(info: GetInfoResponse, logger?: Logger) {
     const log = logger ?? NULL_LOGGER;
     this._mintInfo = MintInfo.normalizeInfo(info, log);
-    this._maxRequestLength = MintInfo.resolveMaxRequestLength(info.max_request_length, log);
+    this._maxArrayLength = MintInfo.resolveMaxArrayLength(info.max_array_length, log);
 
     const pe22 = this.toEndpoints(this._mintInfo?.nuts?.[22]?.protected_endpoints, log);
     this._protected22 = this.buildIndex(pe22);
@@ -115,27 +115,27 @@ export class MintInfo {
   }
 
   /**
-   * NUT-06: `max_request_length` bounds every array the wallet puts in a request, so it always
+   * NUT-06: `max_array_length` bounds every array the wallet puts in a request, so it always
    * resolves to a usable number. Missing or malformed falls back to the library default; an
-   * advertised value is clamped into `[1, ABSOLUTE_MAX_REQUEST_LENGTH]`. The response itself keeps
+   * advertised value is clamped into `[1, ABSOLUTE_MAX_ARRAY_LENGTH]`. The response itself keeps
    * whatever the mint sent, so `cache` never reports a limit the mint did not advertise.
    */
-  private static resolveMaxRequestLength(value: number | undefined, logger: Logger): number {
-    if (value == null) return DEFAULT_MAX_REQUEST_LENGTH;
+  private static resolveMaxArrayLength(value: number | undefined, logger: Logger): number {
+    if (value == null) return DEFAULT_MAX_ARRAY_LENGTH;
 
     let max: number;
     try {
-      max = normalizeSafeIntegerMetadata(value, 'max_request_length');
+      max = normalizeSafeIntegerMetadata(value, 'max_array_length');
     } catch {
-      logger.warn('MintInfo: max_request_length is malformed, defaulting to internal default', {
+      logger.warn('MintInfo: max_array_length is malformed, defaulting to internal default', {
         value,
       });
-      return DEFAULT_MAX_REQUEST_LENGTH;
+      return DEFAULT_MAX_ARRAY_LENGTH;
     }
 
-    if (max < 1 || max > ABSOLUTE_MAX_REQUEST_LENGTH) {
-      const clamped = Math.min(Math.max(max, 1), ABSOLUTE_MAX_REQUEST_LENGTH);
-      logger.warn('MintInfo: max_request_length is out of range and was clamped', {
+    if (max < 1 || max > ABSOLUTE_MAX_ARRAY_LENGTH) {
+      const clamped = Math.min(Math.max(max, 1), ABSOLUTE_MAX_ARRAY_LENGTH);
+      logger.warn('MintInfo: max_array_length is out of range and was clamped', {
         advertised: max,
         clampedTo: clamped,
       });
@@ -471,8 +471,8 @@ export class MintInfo {
    * NUT-06: max length the mint accepts for any array in a request (`inputs`, `outputs`, `Ys`).
    * Always a usable number: the library default when the mint advertises none.
    */
-  get maxRequestLength(): number {
-    return this._maxRequestLength;
+  get maxArrayLength(): number {
+    return this._maxArrayLength;
   }
 
   /**

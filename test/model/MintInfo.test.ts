@@ -3,8 +3,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { Amount } from '../../src/model/Amount';
 import { MintInfo } from '../../src/model/MintInfo';
 import {
-  ABSOLUTE_MAX_REQUEST_LENGTH,
-  DEFAULT_MAX_REQUEST_LENGTH,
+  ABSOLUTE_MAX_ARRAY_LENGTH,
+  DEFAULT_MAX_ARRAY_LENGTH,
   MAX_METHOD_LENGTH,
   MAX_MINT_INFO_LIST,
 } from '../../src/utils/limits';
@@ -935,7 +935,7 @@ describe('MintInfo list caps', () => {
   });
 });
 
-describe('MintInfo max_request_length (NUT-06)', () => {
+describe('MintInfo max_array_length (NUT-06)', () => {
   function mockLogger() {
     return {
       error: vi.fn(),
@@ -950,32 +950,32 @@ describe('MintInfo max_request_length (NUT-06)', () => {
   it('defaults to the library default when the mint advertises none', () => {
     const logger = mockLogger();
     const info = new MintInfo(MINTINFORESP, logger);
-    expect(info.maxRequestLength).toBe(DEFAULT_MAX_REQUEST_LENGTH);
+    expect(info.maxArrayLength).toBe(DEFAULT_MAX_ARRAY_LENGTH);
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
   it('uses an advertised value inside the allowed range', () => {
-    const info = new MintInfo({ ...MINTINFORESP, max_request_length: 1000 });
-    expect(info.maxRequestLength).toBe(1000);
+    const info = new MintInfo({ ...MINTINFORESP, max_array_length: 1000 });
+    expect(info.maxArrayLength).toBe(1000);
   });
 
   it('clamps an advertised value above the internal cap', () => {
     const logger = mockLogger();
     const info = new MintInfo(
-      { ...MINTINFORESP, max_request_length: ABSOLUTE_MAX_REQUEST_LENGTH + 1 },
+      { ...MINTINFORESP, max_array_length: ABSOLUTE_MAX_ARRAY_LENGTH + 1 },
       logger,
     );
-    expect(info.maxRequestLength).toBe(ABSOLUTE_MAX_REQUEST_LENGTH);
+    expect(info.maxArrayLength).toBe(ABSOLUTE_MAX_ARRAY_LENGTH);
     expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining('clamped'),
-      expect.objectContaining({ clampedTo: ABSOLUTE_MAX_REQUEST_LENGTH }),
+      expect.objectContaining({ clampedTo: ABSOLUTE_MAX_ARRAY_LENGTH }),
     );
   });
 
   it('raises a zero to 1 so batching still makes progress', () => {
     const logger = mockLogger();
-    const info = new MintInfo({ ...MINTINFORESP, max_request_length: 0 }, logger);
-    expect(info.maxRequestLength).toBe(1);
+    const info = new MintInfo({ ...MINTINFORESP, max_array_length: 0 }, logger);
+    expect(info.maxArrayLength).toBe(1);
     expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining('clamped'),
       expect.objectContaining({ advertised: 0, clampedTo: 1 }),
@@ -986,8 +986,8 @@ describe('MintInfo max_request_length (NUT-06)', () => {
     'falls back to the default for a malformed value (%s)',
     (value) => {
       const logger = mockLogger();
-      const info = new MintInfo({ ...MINTINFORESP, max_request_length: value }, logger);
-      expect(info.maxRequestLength).toBe(DEFAULT_MAX_REQUEST_LENGTH);
+      const info = new MintInfo({ ...MINTINFORESP, max_array_length: value }, logger);
+      expect(info.maxArrayLength).toBe(DEFAULT_MAX_ARRAY_LENGTH);
       expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining('malformed'),
         expect.objectContaining({ value }),

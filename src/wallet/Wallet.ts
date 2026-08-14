@@ -67,7 +67,7 @@ import {
   sumProofs,
   verifyProofsForReceive,
   ABSOLUTE_MAX_BATCH_SIZE,
-  DEFAULT_MAX_REQUEST_LENGTH,
+  DEFAULT_MAX_ARRAY_LENGTH,
 } from '../utils';
 
 import { ceilLog2, getKeepAmounts, stringifyOutputTypeForLog } from './_internal';
@@ -450,8 +450,8 @@ class Wallet {
    * NUT-06: the mint's advertised cap on the length of any array in a request, used to size the
    * checkstate and restore batches. Falls back to the library default until mint info is loaded.
    */
-  private get maxRequestLength(): number {
-    return this._mintInfo?.maxRequestLength ?? DEFAULT_MAX_REQUEST_LENGTH;
+  private get maxArrayLength(): number {
+    return this._mintInfo?.maxArrayLength ?? DEFAULT_MAX_ARRAY_LENGTH;
   }
 
   /**
@@ -1747,7 +1747,7 @@ class Wallet {
    * @param [config.maxCounter] Inclusive scan ceiling; no counter above it is probed. Default is
    *   unbounded.
    * @param [config.batchSize] Counters per restore request. Defaults to the mint's advertised
-   *   `max_request_length` (NUT-06), or `500` when it advertises none.
+   *   `max_array_length` (NUT-06), or `500` when it advertises none.
    * @param [config.counter=0] Starting counter. Default is `0`
    * @param [config.keysetId] Keyset to restore; defaults to the wallet's.
    * @param [config.filterSpent=true] Drop spent proofs (NUT-07) before returning. Default is `true`
@@ -1757,7 +1757,7 @@ class Wallet {
   ): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
     const {
       gapLimit = 300,
-      batchSize = this.maxRequestLength,
+      batchSize = this.maxArrayLength,
       keysetId,
       filterSpent = true,
     } = config ?? {};
@@ -3415,7 +3415,7 @@ class Wallet {
         ? hashToCurveBls(enc.encode(p.secret)).toHex(true)
         : hashToCurve(enc.encode(p.secret)).toHex(true),
     );
-    const batchSize = this.maxRequestLength;
+    const batchSize = this.maxArrayLength;
     const slices: string[][] = [];
     for (let i = 0; i < Ys.length; i += batchSize) {
       slices.push(Ys.slice(i, i + batchSize));
