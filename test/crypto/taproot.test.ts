@@ -627,8 +627,8 @@ describe('receiver-keyed derivation (2.7, vectors 6.1)', () => {
   });
 
   test('a NUMS receiver key derives verbatim, uniquely per ephemeral, and demands a blinded leaf', () => {
-    const leaves = [
-      { type: 'after', n: 1, keys: [v61.alice_refund_pub], time: v61.refund_time } as const,
+    const leaves: TaprootLeaf[] = [
+      { type: 'after', n: 1, keys: [v61.alice_refund_pub], time: v61.refund_time },
     ];
     // Verbatim NUMS base (spec 2.3.5): a blinded NUMS could not be told apart from a
     // sender-owned key hiding a key path.
