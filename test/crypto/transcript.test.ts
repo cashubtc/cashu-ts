@@ -203,7 +203,7 @@ describe('amounts are normalized at the transcript boundary', () => {
     const digests = [32n, 32, Amount.from(32)].map((amount) =>
       bytesToHex(
         transactionDigest({
-          proofInputs: [{ ...input, amount: amount }],
+          proofInputs: [{ ...input, amount: amount as unknown as bigint }],
           blindedOutputs: [output],
         }),
       ),
@@ -214,7 +214,7 @@ describe('amounts are normalized at the transcript boundary', () => {
   test('a nonsense amount throws rather than encoding something', () => {
     expect(() =>
       transactionDigest({
-        proofInputs: [{ ...input, amount: 'not-a-number' }],
+        proofInputs: [{ ...input, amount: 'not-a-number' as unknown as bigint }],
         blindedOutputs: [output],
       }),
     ).toThrow();

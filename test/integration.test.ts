@@ -71,7 +71,7 @@ let legacyKeysetId: string | undefined;
 beforeAll(async () => {
   const { keysets } = await new Mint(mintUrl).getKeySets();
   const preV3 = keysets.filter((k) => k.unit === unit && k.active && !isBlsKeyset(k.id));
-  legacyKeysetId = preV3.at(-1)?.id;
+  legacyKeysetId = preV3[preV3.length - 1]?.id;
 });
 
 // Wallet bound to the pre-v3 keyset. Falls back to the mint's default when the mint serves

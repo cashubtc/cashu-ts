@@ -29,7 +29,7 @@ const STRANGER = 9;
  */
 const v3Proof = (secret: string, spend_info?: SpendInfo): Proof => ({
   id: V3_KEYSET,
-  amount: Amount.from(8).toBigInt(),
+  amount: Amount.from(8),
   secret,
   C: 'aa'.repeat(48),
   ...(spend_info && { spend_info }),
