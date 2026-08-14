@@ -65,9 +65,9 @@ export const TAPROOT_MAX_TREE_DEPTH = 8;
 export const TAPROOT_MAX_LEAF_TIME = Number.MAX_SAFE_INTEGER;
 
 /**
- * Enumerated blinding slots per secret (spec 2.7), so the slot index stays one byte.
+ * Enumerated blinding slots per secret (spec 2.7): exactly one index byte.
  */
-export const TAPROOT_MAX_SLOTS = 255;
+export const TAPROOT_MAX_SLOTS = 256;
 
 /**
  * A parsed declarative leaf (version 0x00).

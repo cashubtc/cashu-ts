@@ -581,7 +581,7 @@ describe('locked secret construction and spend info cascade', () => {
   });
 
   test('slot cap is enforced when building and receiving a full tree', () => {
-    const leaves: TaprootLeaf[] = Array.from({ length: 255 }, () => ({
+    const leaves: TaprootLeaf[] = Array.from({ length: 256 }, () => ({
       type: 'threshold',
       n: 1,
       keys: [v61.carol_pub],
@@ -762,16 +762,16 @@ describe('leaf-key blinding: the positional slot map (2.7)', () => {
   });
 
   test('slot cap keeps the index inside one byte', () => {
-    const keys = Array.from({ length: 254 }, (_, i) =>
+    const keys = Array.from({ length: 255 }, (_, i) =>
       bytesToHex(secp256k1.getPublicKey(numberToBytesBE(BigInt(i + 2), 32), true)),
     );
-    expect(enumerateLeafKeySlots([{ type: 'threshold', n: 1, keys }])).toHaveLength(254);
+    expect(enumerateLeafKeySlots([{ type: 'threshold', n: 1, keys }])).toHaveLength(255);
     expect(() =>
       enumerateLeafKeySlots([
         { type: 'threshold', n: 1, keys },
         { type: 'threshold', n: 1, keys: [carolPub] },
       ]),
-    ).toThrow(/255 slots/);
+    ).toThrow(/256 slots/);
   });
 
   test('sender blinds only the tagged keys, at their own slot', () => {
@@ -897,13 +897,13 @@ describe('tree caps are enforced on a disclosed tree, not only on a witness path
   });
 
   test('the slot cap keeps a build inside the depth cap', () => {
-    const leaves: TaprootLeaf[] = Array.from({ length: 255 }, (_, i) => ({
+    const leaves: TaprootLeaf[] = Array.from({ length: 256 }, (_, i) => ({
       type: 'threshold' as const,
       n: 1,
       keys: [key(i + 1)],
     }));
     expect(() => buildTaprootSecret(TAPROOT_NUMS_KEY, leaves)).toThrow(/slots/);
-    const ok = buildTaprootSecret(TAPROOT_NUMS_KEY, leaves.slice(0, 254));
+    const ok = buildTaprootSecret(TAPROOT_NUMS_KEY, leaves.slice(0, 255));
     expect(
       taprootMerklePath(
         ok.tree.map((leaf) => taprootLeafHash(hexToBytes(leaf))),
