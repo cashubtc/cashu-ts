@@ -580,7 +580,8 @@ export function countLeafSigners(
 }
 
 /**
- * Receive-time verification cascade (spec 2.5.1) for one proof's spend info.
+ * Receive-time reconstruction check (spec 2.5.1 check 1) for one proof's spend info. Spendability
+ * (check 2) is the caller's: trial-match, seed recovery, or cosigning.
  *
  * @remarks
  * Returns 'bare' (k key-path spends the secret directly) or 'tweaked' (the disclosed tree plus
