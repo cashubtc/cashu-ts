@@ -2959,15 +2959,18 @@ class Wallet {
       if (isBlsKeyset(keyset.id)) {
         // V3 (taproot secrets): the quote is a transaction input; its lock key signs the
         // transaction digest (spec 2.2.2 / 5). No legacy fallback on v3 keysets.
+        // The transcript commits the quote's face amount, not this draw: the output
+        // section already binds the draw (spec 2.2.1). Amountless quotes commit 0;
+        // a bolt11 quote always has an amount, so an absent one is a caller omission.
+        const quoteAmount = (quote as unknown as { amount?: AmountLike }).amount;
+        this.failIf(
+          quoteAmount === undefined && method === 'bolt11',
+          'prepareMint: quote object lacks its amount; pass the full mint quote',
+        );
         const digest = transactionDigest({
           mintQuoteInputs: [
             {
-              // The mint enforces sum(outputs) == quote.amount before the witness check,
-              // so the outputs sum is a faithful fallback when the quote object lacks it.
-              amount: Amount.from(
-                (quote as unknown as { amount?: AmountLike }).amount ??
-                  Amount.sum(blindedMessages.map((o) => Amount.from(o.amount))),
-              ).toBigInt(),
+              amount: Amount.from(quoteAmount ?? 0).toBigInt(),
               quoteId: quote.quote,
             },
           ],
@@ -3178,7 +3181,11 @@ class Wallet {
     const v3BatchDigest = isBlsKeyset(keyset.id)
       ? transactionDigest({
           mintQuoteInputs: entries.map((e, i) => ({
-            amount: amounts[i].toBigInt(),
+            // Face amount, as in prepareMint. The entry amount is the draw; it only
+            // stands in when a slim quote object omits its own (full-draw batches).
+            amount: Amount.from(
+              ('amount' in e.quote ? (e.quote.amount as AmountLike) : undefined) ?? amounts[i],
+            ).toBigInt(),
             quoteId: e.quote.quote,
           })),
           blindedOutputs: blindedMessages.map((o) => ({
