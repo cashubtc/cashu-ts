@@ -14,6 +14,12 @@ export { KeyChain } from './wallet/KeyChain';
 export { Keyset } from './wallet/Keyset';
 export { P2PKBuilder } from './wallet/P2PKBuilder';
 export { type SelectProofs, selectProofsRGLI, selectProofsRotating } from './wallet/SelectProofs';
+export {
+  serializeSwapPreview,
+  deserializeSwapPreview,
+  type SerializedProof,
+  type SerializedSwapPreview,
+} from './wallet/SwapPreview';
 export { Wallet } from './wallet/Wallet';
 export { WalletCounters } from './wallet/WalletCounters';
 export { WalletEvents } from './wallet/WalletEvents';
