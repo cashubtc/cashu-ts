@@ -50,12 +50,15 @@ describe('transaction transcript (vectors)', () => {
     expect(tv.domain_tag).toBe(TRANSCRIPT_DOMAIN_TAG);
   });
 
-  test.each(['swap', 'mint', 'melt'] as const)('%s transcript and digest match', (name) => {
-    const example = tv[name];
-    const tx = fromVectorTx(example.tx);
-    expect(bytesToHex(buildTransactionTranscript(tx))).toBe(example.transcript);
-    expect(bytesToHex(transactionDigest(tx))).toBe(example.digest);
-  });
+  test.each(['swap', 'mint', 'melt', 'melt_with_change'] as const)(
+    '%s transcript and digest match',
+    (name) => {
+      const example = tv[name];
+      const tx = fromVectorTx(example.tx);
+      expect(bytesToHex(buildTransactionTranscript(tx))).toBe(example.transcript);
+      expect(bytesToHex(transactionDigest(tx))).toBe(example.digest);
+    },
+  );
 
   test('the swap signature is a key-path witness by the proof secret', () => {
     const digest = hexToBytes(tv.swap.digest);
