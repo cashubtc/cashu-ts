@@ -11,6 +11,7 @@ import {
   type CounterSource,
   serializeSwapPreview,
   deserializeSwapPreview,
+  type SerializedProof,
   type SerializedSwapPreview,
   type Proof,
   type ProofLike,
@@ -336,6 +337,21 @@ describe('send', () => {
       ],
     };
     expect(() => deserializeSwapPreview(bad)).toThrow(CTSError);
+  });
+
+  test('deserializeSwapPreview wraps non-Error throws', () => {
+    const bad: SerializedSwapPreview = {
+      amount: '1',
+      fees: '0',
+      keysetId: '00bd033559de27d0',
+      get inputs(): SerializedProof[] {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- exercising the non-Error path
+        throw 'not-an-error';
+      },
+    };
+    expect(() => deserializeSwapPreview(bad)).toThrow(
+      'Invalid SerializedSwapPreview: not-an-error',
+    );
   });
 
   test('rejects missing DLEQ on swap when mint advertises NUT-12', async () => {
