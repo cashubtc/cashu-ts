@@ -179,6 +179,109 @@ describe('requests', { timeout: 7500 }, () => {
     }
   });
 
+  test('global RequestInit overrides the per-request value', async () => {
+    let init: Parameters<RequestFetch>[1];
+    const captureFetch = (async (
+      _input: Parameters<RequestFetch>[0],
+      requestInit?: Parameters<RequestFetch>[1],
+    ) => {
+      init = requestInit;
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as RequestFetch;
+
+    setGlobalRequestOptions({ redirect: 'follow', cache: 'default' });
+
+    await request({ endpoint: `${mintUrl}/v1/info`, redirect: 'error', fetch: captureFetch });
+
+    expect(init?.redirect).toBe('follow');
+    expect(init?.cache).toBe('default');
+  });
+
+  test('redirect is error on requests carrying auth headers', async () => {
+    let init: Parameters<RequestFetch>[1];
+    const captureFetch = (async (
+      _input: Parameters<RequestFetch>[0],
+      requestInit?: Parameters<RequestFetch>[1],
+    ) => {
+      init = requestInit;
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as RequestFetch;
+
+    setGlobalRequestOptions({ redirect: 'follow' });
+
+    await request({
+      endpoint: `${mintUrl}/v1/info`,
+      headers: { 'Blind-auth': 'authABC' },
+      redirect: 'follow',
+      fetch: captureFetch,
+    });
+
+    expect(init?.redirect).toBe('error');
+  });
+
+  test('per-request library options override the global default', async () => {
+    const endpoint = mintUrl + '/v1/keys';
+    server.use(
+      http.get(endpoint, async () => {
+        await delay(3000);
+        return HttpResponse.json({ keysets: [] });
+      }),
+    );
+
+    setGlobalRequestOptions({ requestTimeout: 2000 });
+
+    const thrown = await request({ endpoint, requestTimeout: 20, idempotent: false }).catch(
+      (e) => e,
+    );
+
+    expect(thrown).toBeInstanceOf(NetworkError);
+    expect((thrown as Error).message).toContain('Request timed out after 20ms');
+  });
+
+  test('global library options apply when the request does not set them', async () => {
+    const endpoint = mintUrl + '/v1/keys';
+    server.use(
+      http.get(endpoint, async () => {
+        await delay(3000);
+        return HttpResponse.json({ keysets: [] });
+      }),
+    );
+
+    setGlobalRequestOptions({ requestTimeout: 20 });
+
+    const thrown = await request({ endpoint, idempotent: false }).catch((e) => e);
+
+    expect(thrown).toBeInstanceOf(NetworkError);
+    expect((thrown as Error).message).toContain('Request timed out after 20ms');
+  });
+
+  test('global and per-request headers merge, per-request winning', async () => {
+    let headers: Headers;
+    server.use(
+      http.get(mintUrl + '/v1/keys', ({ request }) => {
+        headers = request.headers;
+        return HttpResponse.json({ keysets: [] });
+      }),
+    );
+
+    setGlobalRequestOptions({ headers: { 'x-app': 'global', 'x-both': 'global' } });
+
+    await request({
+      endpoint: mintUrl + '/v1/keys',
+      headers: { 'x-call': 'per-request', 'x-both': 'per-request' },
+    });
+
+    expect(headers!.get('x-app')).toBe('global');
+    expect(headers!.get('x-call')).toBe('per-request');
+    expect(headers!.get('x-both')).toBe('per-request');
+  });
+
   test('handles HttpResponseError on non-200 response', async () => {
     server.use(
       http.get(mintUrl + '/v1/melt/quote/bolt11/test', () => {
