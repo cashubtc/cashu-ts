@@ -3689,8 +3689,8 @@ class Wallet {
    *
    * @remarks
    * Allows you to preview fees for a melt, get concrete outputs for P2PK SIG_ALL melts, and do any
-   * pre-melt tasks (such as marking proofs in-flight etc). Creates NUT-08 blanks (1-sat) for melt
-   * change and returns a MeltPreview, which you can melt using completeMelt.
+   * pre-melt tasks (such as marking proofs in-flight etc). Creates NUT-08 blanks (amount 0) for
+   * melt change and returns a MeltPreview, which you can melt using completeMelt.
    * @param method Payment method of the quote.
    * @param meltQuote The melt quote. Only `quote` (ID) and `amount` are required — a full
    *   `MeltQuoteBolt11Response` works, but `{ quote: string, amount: Amount }` is sufficient.
