@@ -2558,7 +2558,7 @@ export class Wallet {
         pending: T[];
         spent: T[];
     }>;
-    isPaymentRequestSatisfied(pr: PaymentRequest_2, proofs: Array<Pick<Proof, 'id' | 'amount' | 'secret'>>, expectedAmount?: AmountLike): boolean;
+    isPaymentRequestSatisfied(pr: PaymentRequest_2, proofs: Array<Pick<Proof, 'id' | 'amount' | 'secret' | 'spend_info'>>, expectedAmount?: AmountLike): boolean;
     get keyChain(): KeyChain;
     get keysetId(): string;
     loadMint(forceRefresh?: boolean): Promise<void>;
