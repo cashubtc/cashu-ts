@@ -2962,7 +2962,7 @@ class Wallet {
         // The transcript commits the quote's face amount, not this draw: the output
         // section already binds the draw (spec 2.2.1). Amountless quotes commit 0;
         // a bolt11 quote always has an amount, so an absent one is a caller omission.
-        const quoteAmount = (quote as unknown as { amount?: AmountLike }).amount;
+        const quoteAmount = 'amount' in quote ? (quote.amount as AmountLike) : undefined;
         this.failIf(
           quoteAmount === undefined && method === 'bolt11',
           'prepareMint: quote object lacks its amount; pass the full mint quote',
@@ -3867,9 +3867,9 @@ class Wallet {
 
     // Attach taproot transaction witnesses (v3 keysets). Skipped when the preview's quote does
     // not carry its amount: the digest must match the mint's reconstruction exactly.
-    const meltAmount = Amount.from(
-      (meltPreview.quote as unknown as { amount?: AmountLike }).amount ?? 0,
-    );
+    const quoteAmount =
+      'amount' in meltPreview.quote ? (meltPreview.quote.amount as AmountLike) : undefined;
+    const meltAmount = Amount.from(quoteAmount ?? 0);
     if (meltAmount.toBigInt() > 0n) {
       await attachTransactionWitnesses(
         meltPayload,
