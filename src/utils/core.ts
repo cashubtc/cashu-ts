@@ -33,7 +33,7 @@ import { encodeBase64ToJson, encodeBase64toUint8, encodeUint8toBase64Url } from 
 import { Bytes } from './Bytes';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { JSONInt } from './JSONInt';
-import { MAX_SPLIT_OUTPUTS } from './limits';
+import { MAX_PAYLOAD_DECODE_ATTEMPTS, MAX_SPLIT_OUTPUTS } from './limits';
 
 /**
  * Splits the amount into denominations of the provided keyset.
@@ -382,6 +382,68 @@ export function getTokenMetadata(token: string): TokenMetadata {
     ...(tokenObj.memo && { memo: tokenObj.memo }),
     proofAmounts: tokenObj.proofs.map((p) => p.amount),
   };
+}
+
+/**
+ * What {@link findCashuPayload} located: a cashu token, or a NUT-18 / NUT-26 payment request.
+ */
+export type CashuPayloadKind = 'token' | 'paymentRequest';
+
+/**
+ * One scanner per payload prefix: a literal prefix plus a single character class, so matching
+ * cannot backtrack catastrophically. The base64 class spans both alphabets so it never truncates a
+ * real payload, the decoder decides validity. `creqb1` (NUT-26) is matched case-insensitively
+ * because QR alphanumeric mode emits the uppercase form.
+ */
+const PAYLOAD_SCANNERS: ReadonlyArray<{ regExp: RegExp; kind: CashuPayloadKind }> = [
+  { regExp: /cashu[AB][A-Za-z0-9=_-]+/g, kind: 'token' },
+  { regExp: /creqA[A-Za-z0-9=_-]+/g, kind: 'paymentRequest' },
+  { regExp: /creqb1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+/gi, kind: 'paymentRequest' },
+];
+
+/**
+ * Finds the first cashu token (v3 or v4) or payment request (`creqA` NUT-18, `creqB` NUT-26)
+ * embedded in arbitrary text: chat messages, clipboard blobs, `bitcoin:` URI parameters, wallet URL
+ * fragments. Candidates are matched by prefix and then decoded to validate, so a prefix that does
+ * not decode is skipped. The match is returned verbatim, ready for {@link getDecodedToken} or
+ * `PaymentRequest.fromEncodedRequest`.
+ *
+ * @example
+ *
+ *     findCashuPayload('paying you back cashuBo2Ft… thanks!');
+ *     // { kind: 'token', payload: 'cashuBo2Ft…' }
+ *
+ * @returns The first valid payload by position, or `null` if the text carries none.
+ */
+export function findCashuPayload(text: string): { kind: CashuPayloadKind; payload: string } | null {
+  let searchFrom = 0;
+  for (let attempts = 0; attempts < MAX_PAYLOAD_DECODE_ATTEMPTS; attempts++) {
+    let earliestMatch: { index: number; text: string; kind: CashuPayloadKind } | null = null;
+    for (const scanner of PAYLOAD_SCANNERS) {
+      // Global regexes resume from lastIndex, so point each one at the current search position.
+      scanner.regExp.lastIndex = searchFrom;
+      const match = scanner.regExp.exec(text);
+      if (match && (earliestMatch === null || match.index < earliestMatch.index)) {
+        earliestMatch = { index: match.index, text: match[0], kind: scanner.kind };
+      }
+    }
+    if (earliestMatch === null) {
+      return null;
+    }
+    try {
+      if (earliestMatch.kind === 'token') {
+        handleTokens(removePrefix(earliestMatch.text));
+      } else {
+        PaymentRequest.fromEncodedRequest(earliestMatch.text);
+      }
+      return { kind: earliestMatch.kind, payload: earliestMatch.text };
+    } catch {
+      // Resume one character into the failed match because another valid
+      // payload may begin inside the same regex match.
+      searchFrom = earliestMatch.index + 1;
+    }
+  }
+  return null;
 }
 
 /**

@@ -15,6 +15,7 @@ import { CTSError } from '../../src/model/Errors';
 import * as utils from '../../src/utils';
 import {
   bigIntStringify,
+  findCashuPayload,
   getKeysetAmounts,
   hasValidDleq,
   hexToNumber,
@@ -26,6 +27,7 @@ import {
   sortProofsById,
   normalizeMintUrl,
 } from '../../src/utils';
+import { MAX_PAYLOAD_DECODE_ATTEMPTS } from '../../src/utils/limits';
 import {
   NUT02_V1_VECTOR1_KEYS,
   NUT02_V1_VECTOR2_KEYS,
@@ -368,6 +370,113 @@ describe('test getTokenMetadata', () => {
         Amount.from(1),
       ],
     });
+  });
+});
+
+describe('findCashuPayload', () => {
+  // Payload fixtures reused from the decode tests above and from paymentRequests.test.ts.
+  const V3_TOKEN =
+    'cashuAeyJ0b2tlbiI6W3sibWludCI6Imh0dHA6Ly9sb2NhbGhvc3Q6MzMzOCIsInByb29mcyI6W3siaWQiOiJJMnlOK2lSWWZrelQiLCJhbW91bnQiOjEsInNlY3JldCI6Ijk3emZtbWFHZjVrOE1nMGdhanBuYm1wZXJ2VHRFZUU4d3dLcmk3cldwVXM9IiwiQyI6IjAyMTk1MDgxZTYyMmY5OGJmYzE5YTA1ZWJlMjM0MWQ5NTVjMGQxMjU4OGM1OTQ4Yzg1OGQwN2FkZWMwMDdiYzFlNCJ9XX1dfQ';
+  const V4_TOKEN =
+    'cashuBpGF0gaJhaUgArSaMTR9YJmFwgaNhYQFhc3hAOWE2ZGJiODQ3YmQyMzJiYTc2ZGIwZGYxOTcyMTZiMjlkM2I4Y2MxNDU1M2NkMjc4MjdmYzFjYzk0MmZlZGI0ZWFjWCEDhhhUP_trhpXfStS6vN6So0qWvc2X3O4NfM-Y1HISZ5JhZGlUaGFuayB5b3VhbXVodHRwOi8vbG9jYWxob3N0OjMzMzhhdWNzYXQ=';
+  const CREQ_A =
+    'creqApGF0gaNhdGVub3N0cmFheKlucHJvZmlsZTFxeTI4d3VtbjhnaGo3dW45ZDNzaGp0bnl2OWtoMnVld2Q5aHN6OW1od2RlbjV0ZTB3ZmprY2N0ZTljdXJ4dmVuOWVlaHFjdHJ2NWhzenJ0aHdkZW41dGUwZGVoaHh0bnZkYWtxcWd5bWRleDNndmZzZnVqcDN4eW43ZTdxcnM4eXlxOWQ4enN1MnpxdWp4dXhjYXBmcXZ6YzhncnFka3RzYWeBgmFuYjE3YWloNDg0MGY1MWVhdWNzYXRhbYFwaHR0cHM6Ly9taW50LmNvbQ==';
+  const CREQ_B_UPPER =
+    'CREQB1QYQQSC3HVYUNQVFHXCPQQZQQQQQQQQQQQQ9QXQQPQQZSQ9MGW368QUE69UHNSVENXVH8XURPVDJN5VENXVUQWQREQYQQZQQZQQSGM6QFA3C8DTZ2FVZHVFQEACMWM0E50PE3K5TFMVPJJMN0VJ7M2TGRQQZSZMSZXYMSXQQHQ9EPGAMNWVAZ7TMJV4KXZ7FWV3SK6ATN9E5K7QCQRGQHY9MHWDEN5TE0WFJKCCTE9CURXVEN9EEHQCTRV5HSXQQSQ9EQ6AMNWVAZ7TMWDAEJUMR0DSRYDPGF';
+  const CREQ_B_LOWER = CREQ_B_UPPER.toLowerCase();
+  // Never decodes; burns one attempt.
+  const DECOY = 'cashuAzz';
+
+  test('finds a bare token', () => {
+    expect(findCashuPayload(V4_TOKEN)).toStrictEqual({ kind: 'token', payload: V4_TOKEN });
+  });
+
+  test('finds a token in prose, excluding trailing punctuation', () => {
+    const found = findCashuPayload(`here you go: ${V4_TOKEN}. thanks!`);
+    expect(found).toStrictEqual({ kind: 'token', payload: V4_TOKEN });
+  });
+
+  test('finds a token in a URL fragment', () => {
+    const found = findCashuPayload(`https://wallet.example/#token=${V4_TOKEN}`);
+    expect(found?.payload).toBe(V4_TOKEN);
+  });
+
+  test('finds a token in a query parameter', () => {
+    const found = findCashuPayload(`https://wallet.example/?token=${V4_TOKEN}&x=1`);
+    expect(found?.payload).toBe(V4_TOKEN);
+  });
+
+  test('finds a token behind a URI scheme', () => {
+    // The wrapper's own "cashu" is followed by ':', not [AB], so it cannot false-anchor.
+    const found = findCashuPayload(`web+cashu://${V4_TOKEN}`);
+    expect(found?.payload).toBe(V4_TOKEN);
+  });
+
+  test('finds a v3 token in prose', () => {
+    const found = findCashuPayload(`old wallet backup ${V3_TOKEN} from 2023`);
+    expect(found).toStrictEqual({ kind: 'token', payload: V3_TOKEN });
+  });
+
+  test('finds a creqA payment request in a bitcoin: URI parameter', () => {
+    const found = findCashuPayload(`bitcoin:bc1qexample?amount=0.001&cashu=${CREQ_A}`);
+    expect(found).toStrictEqual({ kind: 'paymentRequest', payload: CREQ_A });
+  });
+
+  test('finds a lowercase creqb1 payment request', () => {
+    expect(findCashuPayload(`pay me: ${CREQ_B_LOWER}`)).toStrictEqual({
+      kind: 'paymentRequest',
+      payload: CREQ_B_LOWER,
+    });
+  });
+
+  test('finds an uppercase CREQB1 payment request and returns it verbatim', () => {
+    // QR alphanumeric mode emits the uppercase form; it must come back un-normalized.
+    const found = findCashuPayload(`scanned: ${CREQ_B_UPPER}`);
+    expect(found).toStrictEqual({ kind: 'paymentRequest', payload: CREQ_B_UPPER });
+    expect(found?.payload).not.toBe(CREQ_B_LOWER);
+  });
+
+  test('re-enters the scan to find a payload swallowed by a failed candidate', () => {
+    // One unbroken charset run: the greedy cashuA candidate eats it all and fails, so the scan
+    // must resume inside that span rather than past it.
+    const found = findCashuPayload(`cashuAzzzz${V4_TOKEN}`);
+    expect(found).toStrictEqual({ kind: 'token', payload: V4_TOKEN });
+  });
+
+  test('returns the first valid payload by position', () => {
+    expect(findCashuPayload(`${V4_TOKEN} or ${CREQ_A}`)?.payload).toBe(V4_TOKEN);
+    expect(findCashuPayload(`${CREQ_A} or ${V4_TOKEN}`)?.payload).toBe(CREQ_A);
+  });
+
+  test('gives up once the decode attempt cap is exhausted', () => {
+    const decoys = Array(MAX_PAYLOAD_DECODE_ATTEMPTS).fill(DECOY).join(' ');
+    expect(findCashuPayload(`${decoys} ${V4_TOKEN}`)).toBeNull();
+  });
+
+  test('finds a payload on the last attempt within the cap', () => {
+    const decoys = Array(MAX_PAYLOAD_DECODE_ATTEMPTS - 1)
+      .fill(DECOY)
+      .join(' ');
+    expect(findCashuPayload(`${decoys} ${V4_TOKEN}`)?.payload).toBe(V4_TOKEN);
+  });
+
+  test('returns null when there is no payload', () => {
+    expect(findCashuPayload('')).toBeNull();
+    expect(findCashuPayload('just a normal sentence about cashu wallets')).toBeNull();
+  });
+
+  test('does not match an uppercased token prefix', () => {
+    expect(findCashuPayload(`CASHUB${V4_TOKEN.slice('cashuB'.length)}`)).toBeNull();
+  });
+
+  test('finds a token in a URL path without swallowing the next segment', () => {
+    // Regression: with `/` in the charset the match ran on into `/more`, and the decoders accept
+    // the trailing junk instead of rejecting it, so the payload came back corrupted rather than
+    // null. Adding `+` or `/` back must fail here.
+    const found = findCashuPayload(`https://wallet.example/${V4_TOKEN}/more`);
+    expect(found).toStrictEqual({ kind: 'token', payload: V4_TOKEN });
+    expect(findCashuPayload(`https://wallet.example/${V3_TOKEN}/more`)?.payload).toBe(V3_TOKEN);
+    expect(findCashuPayload(`https://wallet.example/${CREQ_A}/more`)?.payload).toBe(CREQ_A);
   });
 });
 

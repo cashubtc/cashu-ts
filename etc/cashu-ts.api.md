@@ -262,6 +262,9 @@ export function buildMintBackupPayload(mints: string[], timestamp: number): stri
 export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
 
 // @public
+export type CashuPayloadKind = 'token' | 'paymentRequest';
+
+// @public
 export const CheckStateEnum: {
     readonly UNSPENT: "UNSPENT";
     readonly PENDING: "PENDING";
@@ -491,6 +494,12 @@ export type DLEQ = {
 
 // @public (undocumented)
 export type Enumerate<N extends number, Acc extends number[] = []> = Acc['length'] extends N ? Acc[number] : Enumerate<N, [...Acc, Acc['length']]>;
+
+// @public
+export function findCashuPayload(text: string): {
+    kind: CashuPayloadKind;
+    payload: string;
+} | null;
 
 // @public
 export function findSigningKey(pubkey: string, privkeys: string | string[]): string;
