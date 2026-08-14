@@ -289,22 +289,25 @@ describe('send', () => {
     const bodies: string[] = [];
     server.use(
       http.post(mintUrl + '/v1/swap', async ({ request }) => {
-        bodies.push(await request.text());
+        const body = await request.text();
+        bodies.push(body);
+        const { outputs } = JSON.parse(body) as { outputs: Array<{ id: string; amount: number }> };
         return HttpResponse.json({
-          signatures: [
-            {
-              id: '00bd033559de27d0',
-              amount: 1,
-              C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-            },
-          ],
+          signatures: outputs.map((o) => ({
+            id: o.id,
+            amount: o.amount,
+            C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+          })),
         });
       }),
     );
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
 
-    const preview = await wallet.prepareSwapToSend(1, proofs);
+    // A 3-sat input sending 1 produces change, so keepOutputs round trips too.
+    const threeSat: Proof[] = [{ ...proofs[0], amount: Amount.from(3) }];
+    const preview = await wallet.prepareSwapToSend(1, threeSat);
+    expect(preview.keepOutputs?.length).toBeGreaterThan(0);
     const stored = JSON.stringify(serializeSwapPreview(preview));
     const revived = deserializeSwapPreview(JSON.parse(stored) as SerializedSwapPreview);
 
