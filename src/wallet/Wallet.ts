@@ -29,6 +29,7 @@ import {
 } from '../crypto/curve_secp';
 import { deriveSecretAndBlindingFactor, recoverV3SecretKeys } from '../crypto/NUT13';
 import { signMintQuoteLegacy } from '../crypto/NUT20';
+import { verifyTaprootRequestTree } from '../crypto/taproot';
 import { transactionDigest } from '../crypto/transcript';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
@@ -1845,18 +1846,20 @@ class Wallet {
    *
    * @remarks
    * Verifies `sum(proofs) - inputFees >= amount + mf`, with input fees from this wallet's keysets
-   * and `mf` priced from this mint's NUT-05 melt methods for the wallet unit. Checks the amount
-   * only; proof integrity (DLEQ, locks) remains a separate check.
+   * and `mf` priced from this mint's NUT-05 melt methods for the wallet unit. For a taproot
+   * request, each proof's spend info must also be exactly the requested tree. Proof integrity
+   * (pairing/DLEQ) and nut10 locks remain separate checks.
    * @param pr - The payment request being settled.
-   * @param proofs - The received proofs (from this wallet's mint).
+   * @param proofs - The received proofs (from this wallet's mint), with spend info when present.
    * @param expectedAmount - Expected amount for amountless requests; ignored when the request sets
    *   `a`.
    * @throws If no amount is available to check against, the request unit does not match this
-   *   wallet, a proof keyset is unknown, or the request is invalid per NUT-18.
+   *   wallet, a proof keyset is unknown, the request is invalid per NUT-18, or a taproot request's
+   *   proof does not disclose exactly the requested tree.
    */
   isPaymentRequestSatisfied(
     pr: PaymentRequest,
-    proofs: Array<Pick<Proof, 'id' | 'amount' | 'secret'>>,
+    proofs: Array<Pick<Proof, 'id' | 'amount' | 'secret' | 'spend_info'>>,
     expectedAmount?: AmountLike,
   ): boolean {
     const expected =
@@ -1869,6 +1872,14 @@ class Wallet {
     }
     this.assertProofsInWalletUnit(proofs);
     this.assertNoDuplicateProofs(proofs);
+    // A taproot request is satisfied only by proofs disclosing exactly the requested tree: an
+    // extra leaf is spend power the payee never asked for, eg a payer clawback (NUT-18).
+    const taprootOption = pr.toTaprootOptions();
+    if (taprootOption) {
+      for (const p of proofs) {
+        verifyTaprootRequestTree(taprootOption, p.spend_info);
+      }
+    }
     // mf applies only when this mint is outside the request's mint list (NUT-18).
     let mf = Amount.zero();
     if (pr.supportedMethods?.length && !pr.includesMint(this.mint.mintUrl)) {
