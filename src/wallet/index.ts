@@ -4,6 +4,7 @@ export * from './KeyChain';
 export * from './Keyset';
 export * from './P2PKBuilder';
 export * from './SelectProofs';
+export * from './SwapPreview';
 export * from './Wallet';
 export * from './WalletCounters';
 export * from './WalletEvents';

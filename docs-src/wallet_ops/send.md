@@ -87,3 +87,40 @@ const { keep, send } = await wallet.ops
 > Offline modes **cannot** be combined with custom output types (`asXXXX/keepAsXXXX`).
 > The builder will throw:
 > `Offline selection cannot be combined with custom output types. Remove send/keep output configuration, or use an online swap.`
+
+## 7) Crash-safe send: persist the preview
+
+A one-shot `run()` that dies between the mint's reply and your storage write has spent the
+inputs without you ever seeing the new proofs. Persisting the preview closes that window:
+`completeSwap` builds its request purely from the preview, so replaying a persisted preview
+posts a byte-identical `/v1/swap` body, and a mint that caches the endpoint (NUT-19) returns
+the original signatures.
+
+```ts
+import { deserializeSwapPreview, serializeSwapPreview } from '@cashu/cashu-ts';
+
+const preview = await wallet.ops.send(21, myProofs).prepare();
+
+// Unselected proofs can go back to storage now; they are not part of the replay.
+const backToStorage = preview.unselectedProofs ?? [];
+
+// Persist before completing. Previews contain Amount, bigint and Uint8Array values,
+// so use the helper rather than calling JSON.stringify(preview) directly.
+const stored = JSON.stringify(serializeSwapPreview(preview));
+
+const { keep, send } = await wallet.completeSwap(preview);
+
+// ... after a restart: load the mint again, then replay the same preview ...
+const { keep: change, send: recovered } = await wallet.completeSwap(
+  deserializeSwapPreview(JSON.parse(stored)),
+);
+```
+
+The replay window has bounds:
+
+- The mint must advertise `/v1/swap` in its NUT-19 `cached_endpoints`, and the replay must
+  happen inside the advertised TTL. See [NUT-19 Cached Responses](../usage/nut19.md).
+- Automatic NUT-19 retries only cover failures inside a running process. The persisted
+  preview is what covers a process restart.
+- A preview and a seed protect different windows: the preview covers a restart inside the
+  TTL; deterministic secrets plus NUT-09 restore cover loss after it.

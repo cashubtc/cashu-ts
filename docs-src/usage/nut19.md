@@ -89,10 +89,13 @@ try {
 
 If the controller aborts, the request fails immediately instead of being retried.
 
-## Persist previews for replay-safe mint and melt flows
+## Persist previews for replay-safe mint, melt and swap flows
 
-NUT-19 helps with transport-level retries, but wallet apps should still persist previews for
-operations that create blinded outputs.
+NUT-19 helps with transport-level retries, but those retries only cover failures inside a
+running process. Wallet apps should also persist previews for operations that create blinded
+outputs: replaying a persisted preview after a restart posts an identical request body, which
+hits the mint's cache and returns the original signatures. The window is bounded by the mint
+advertising the endpoint in `cached_endpoints` and by its TTL.
 
 ### Mint
 
@@ -112,20 +115,54 @@ const proofs = await wallet.completeMint(mintPreview);
 
 ### Melt
 
+A melt keeps a server-side handle (the quote), so the full preview does not need persisting:
+quote state is recoverable from the mint, the inputs are your own proofs, and once the quote
+pays, the NUT-08 change signatures ride on it. Persist the quote id plus the serialized change
+blanks (the only client-side state you cannot rebuild), then reconstruct change with
+`wallet.createMeltChangeProofs` once the quote is paid:
+
 ```ts
+import { OutputData } from '@cashu/cashu-ts';
+
 const meltPreview = await wallet.prepareMelt('bolt11', meltQuote, proofsToSend, {
   includeFees: true,
 });
 
-// Persist an app-defined serialized snapshot here.
-// Do not call JSON.stringify(meltPreview) directly; preview objects contain
-// Amount, bigint, Uint8Array, and class instances that need explicit rehydration.
+// Persist before completing.
+const stored = JSON.stringify({
+  quote: meltQuote.quote,
+  blanks: meltPreview.outputData.map((o) => OutputData.serialize(o)),
+});
+
 const result = await wallet.completeMelt(meltPreview);
 ```
+
+See [Melt § 4 (async melt change recovery)](../wallet_ops/melt.md) for the full
+recover-after-restart lifecycle.
+
+### Swap
+
+```ts
+import { deserializeSwapPreview, serializeSwapPreview } from '@cashu/cashu-ts';
+
+const receivePreview = await wallet.prepareSwapToReceive(token);
+const sendPreview = await wallet.prepareSwapToSend(21, proofs, { includeFees: true });
+
+// Swap previews have a serialize helper: persist the JSON-safe form, then
+// rehydrate it with deserializeSwapPreview to replay after a restart.
+const stored = JSON.stringify(serializeSwapPreview(receivePreview));
+const { keep } = await wallet.completeSwap(deserializeSwapPreview(JSON.parse(stored)));
+```
+
+`completeSwap` builds its request purely from the preview, so a replayed preview posts a
+byte-identical `/v1/swap` body. See [Receive § 5](../wallet_ops/receive.md) and
+[Send § 7](../wallet_ops/send.md) for the full serialize-and-rehydrate round trip.
 
 Use the same pattern with `wallet.ops`:
 
 ```ts
 const mintPreview = await wallet.ops.mintBolt11(64, quoteId).prepare();
 const meltPreview = await wallet.ops.meltBolt11(meltQuote, proofsToSend).prepare();
+const receivePreview = await wallet.ops.receive(token).prepare();
+const sendPreview = await wallet.ops.send(21, myProofs).prepare();
 ```

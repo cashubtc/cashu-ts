@@ -466,6 +466,9 @@ export function deserializeMintKeys(serializedMintKeys: SerializedMintKeys): Raw
 // @public
 export function deserializeProofs(json: string | string[] | ProofLike[]): Proof[];
 
+// @public
+export function deserializeSwapPreview(serialized: SerializedSwapPreview): SwapPreview;
+
 // @public (undocumented)
 export type DeviceStartResponse = {
     device_code: string;
@@ -2068,11 +2071,30 @@ export type SerializedOutputData = {
     ephemeralE?: string;
 };
 
+// @public
+export type SerializedProof = Omit<Proof, 'amount'> & {
+    amount: string;
+};
+
+// @public
+export type SerializedSwapPreview = {
+    amount: string;
+    fees: string;
+    keysetId: string;
+    inputs: SerializedProof[];
+    sendOutputs?: SerializedOutputData[];
+    keepOutputs?: SerializedOutputData[];
+    unselectedProofs?: SerializedProof[];
+};
+
 // @public (undocumented)
 export function serializeMintKeys(mintKeys: RawMintKeys): SerializedMintKeys;
 
 // @public
 export function serializeProofs(proofs: Proof | Proof[]): string[];
+
+// @public
+export function serializeSwapPreview(preview: SwapPreview): SerializedSwapPreview;
 
 // @public
 export function setGlobalRequestOptions(options: Partial<RequestOptions>): void;
