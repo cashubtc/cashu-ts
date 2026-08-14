@@ -779,6 +779,102 @@ function blindTaggedLeafKeys(
 }
 
 /**
+ * Payee-side NUT-18 check: the disclosed spend info is exactly the requested tree.
+ *
+ * @remarks
+ * One-to-one and order-insensitive: each disclosed leaf byte-identical to a distinct requested
+ * leaf, except blind-me keys substituted in place. An extra or missing leaf rejects: an appended
+ * leaf is spend power the payee never requested. Whether a substituted point is the tagged key's
+ * actual blinding is its owner's trial-match, not checked here.
+ * @throws If the spend info does not satisfy the request.
+ */
+export function verifyTaprootRequestTree(
+  option: { receiverPub: string; leaves?: TaprootLeaf[]; blindKeys?: string[] },
+  spendInfo: { k?: string; E?: string; K?: string; tree?: string[] } | undefined,
+): void {
+  if (!spendInfo) {
+    throw new CTSError('Taproot request: proof carries no spend info');
+  }
+  if (spendInfo.k !== undefined) {
+    throw new CTSError('Taproot request: a bearer key violates the receiver-keyed option');
+  }
+  if (spendInfo.E === undefined) {
+    throw new CTSError('Taproot request: spend info is missing the ephemeral E');
+  }
+  try {
+    pointFromBytes(Bytes.fromHex(spendInfo.E));
+  } catch {
+    throw new CTSError('Taproot request: spend info ephemeral must be a 33-byte point');
+  }
+  if (
+    option.receiverPub.toLowerCase() === TAPROOT_NUMS_KEY &&
+    spendInfo.K?.toLowerCase() !== TAPROOT_NUMS_KEY
+  ) {
+    throw new CTSError('Taproot request: a NUMS request requires the NUMS internal key verbatim');
+  }
+  const disclosed = spendInfo.tree ?? [];
+  const requested = option.leaves ?? [];
+  if (requested.length === 0) {
+    if (disclosed.length > 0) {
+      throw new CTSError('Taproot request: a tree was disclosed but none was requested');
+    }
+    return;
+  }
+  if (disclosed.length !== requested.length) {
+    throw new CTSError(
+      `Taproot request: expected ${requested.length} leaves, got ${disclosed.length}`,
+    );
+  }
+  const blind = new Set((option.blindKeys ?? []).map((key) => key.toLowerCase()));
+  const candidates = disclosed.map((hex) => {
+    const bytes = Bytes.fromHex(hex);
+    const leaf = parseTaprootLeaf(bytes);
+    // Round-trip pins canonical bytes: an annotation or non-minimal field is not what the payee
+    // asked for, even when inert.
+    if (!Bytes.equals(serializeTaprootLeaf(leaf), bytes)) {
+      throw new CTSError('Taproot request: disclosed leaf is not in requested canonical form');
+    }
+    const matches: number[] = [];
+    requested.forEach((req, j) => {
+      if (leafMatchesRequested(leaf, req, blind)) matches.push(j);
+    });
+    return matches;
+  });
+  if (!assignmentExists(candidates, new Array<boolean>(requested.length).fill(false), 0)) {
+    throw new CTSError('Taproot request: disclosed tree does not match the requested leaves');
+  }
+}
+
+/**
+ * One disclosed leaf against one requested leaf: byte-equal fields, keys equal in place, except a
+ * blind-me key, which must have been substituted (a verbatim value there ignores the owner's tag).
+ */
+function leafMatchesRequested(leaf: TaprootLeaf, req: TaprootLeaf, blind: Set<string>): boolean {
+  if (leaf.type !== req.type || leaf.n !== req.n) return false;
+  if (leaf.time !== req.time || leaf.hash?.toLowerCase() !== req.hash?.toLowerCase()) return false;
+  if (leaf.keys.length !== req.keys.length) return false;
+  return req.keys.every((reqKey, i) => {
+    const rk = reqKey.toLowerCase();
+    return blind.has(rk) ? leaf.keys[i] !== rk : leaf.keys[i] === rk;
+  });
+}
+
+/**
+ * Backtracking one-to-one assignment of disclosed leaves to requested leaves. Trees are small (a
+ * request names a handful of leaves), so exhaustive search is fine.
+ */
+function assignmentExists(candidates: number[][], used: boolean[], i: number): boolean {
+  if (i === candidates.length) return true;
+  for (const j of candidates[i]) {
+    if (used[j]) continue;
+    used[j] = true;
+    if (assignmentExists(candidates, used, i + 1)) return true;
+    used[j] = false;
+  }
+  return false;
+}
+
+/**
  * Every slot key a static key could hold, by the blinded pubkey it produces (spec 2.7).
  *
  * @remarks

@@ -18,6 +18,7 @@ import {
   TAPROOT_MAX_LEAF_TIME,
   TAPROOT_MAX_TREE_DEPTH,
   verifyTaprootSpendInfo,
+  verifyTaprootRequestTree,
   taggedHash,
   tlvRecord,
   readTlvRecords,
@@ -963,5 +964,87 @@ describe('leaf key recovery does not depend on the transmitted tree order', () =
     const tree = sent.tree as string[];
     expect(recoverLeafKeySecretKeys(tree, sent.E, [priv(7)])).toHaveLength(0);
     expect(recoverLeafKeySecretKeys([...tree].reverse(), sent.E, [priv(7)])).toHaveLength(0);
+  });
+});
+
+describe('verifyTaprootRequestTree (NUT-18 exact match)', () => {
+  const eBytes = numberToBytesBE(5n, 32);
+  const reqLeaves: TaprootLeaf[] = [
+    { type: 'after', n: 1, keys: [v61.alice_refund_pub], time: v61.refund_time },
+    { type: 'threshold', n: 1, keys: [v61.carol_pub] },
+  ];
+  const option = { receiverPub: v61.carol_pub, leaves: reqLeaves, blindKeys: [v61.carol_pub] };
+  const derive = () =>
+    deriveReceiverKeyedSecret(v61.carol_pub, {
+      leaves: reqLeaves,
+      blindKeys: [v61.carol_pub],
+      eBytes,
+    });
+
+  test('a faithful payment passes, in any leaf order', () => {
+    const out = derive();
+    const si = { E: out.E, K: out.K, tree: out.tree };
+    expect(() => verifyTaprootRequestTree(option, si)).not.toThrow();
+    expect(() =>
+      verifyTaprootRequestTree(option, { ...si, tree: [...(out.tree as string[])].reverse() }),
+    ).not.toThrow();
+  });
+
+  test('an appended or missing leaf rejects', () => {
+    const out = derive();
+    const extra = bytesToHex(
+      serializeTaprootLeaf({ type: 'after', n: 1, keys: [v61.alice_refund_pub], time: 1 }),
+    );
+    const tree = out.tree as string[];
+    expect(() =>
+      verifyTaprootRequestTree(option, { E: out.E, K: out.K, tree: [...tree, extra] }),
+    ).toThrow(/expected 2 leaves/);
+    expect(() => verifyTaprootRequestTree(option, { E: out.E, K: out.K, tree: [tree[0]] })).toThrow(
+      /expected 2 leaves/,
+    );
+  });
+
+  test('a tree the payee never requested rejects', () => {
+    const out = derive();
+    expect(() =>
+      verifyTaprootRequestTree(
+        { receiverPub: v61.carol_pub },
+        { E: out.E, K: out.K, tree: out.tree },
+      ),
+    ).toThrow(/none was requested/);
+  });
+
+  test('a verbatim key where blind-me was tagged rejects', () => {
+    const out = deriveReceiverKeyedSecret(v61.carol_pub, { leaves: reqLeaves, eBytes });
+    expect(() => verifyTaprootRequestTree(option, { E: out.E, K: out.K, tree: out.tree })).toThrow(
+      /does not match/,
+    );
+  });
+
+  test('bearer and absent spend info reject', () => {
+    const out = derive();
+    expect(() => verifyTaprootRequestTree(option, undefined)).toThrow(/no spend info/);
+    expect(() => verifyTaprootRequestTree(option, { k: '11'.repeat(32), tree: out.tree })).toThrow(
+      /bearer/,
+    );
+  });
+
+  test('a NUMS request requires the NUMS internal key verbatim', () => {
+    const numsOpt = {
+      receiverPub: TAPROOT_NUMS_KEY,
+      leaves: reqLeaves,
+      blindKeys: [v61.carol_pub],
+    };
+    const out = deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, {
+      leaves: reqLeaves,
+      blindKeys: [v61.carol_pub],
+      eBytes,
+    });
+    expect(() =>
+      verifyTaprootRequestTree(numsOpt, { E: out.E, K: out.K, tree: out.tree }),
+    ).not.toThrow();
+    expect(() =>
+      verifyTaprootRequestTree(numsOpt, { E: out.E, K: v61.internal_key, tree: out.tree }),
+    ).toThrow(/NUMS/);
   });
 });
