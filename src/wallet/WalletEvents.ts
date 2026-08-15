@@ -9,6 +9,7 @@ import type {
   MeltQuoteBolt11Response,
   MintQuoteBolt11Response,
 } from '../model/types';
+import type { KeyChainCache } from '../model/types/keyset';
 
 import { type OperationCounters } from './CounterSource';
 import type { Wallet } from './Wallet';
@@ -67,6 +68,9 @@ export class WalletEvents {
 
   // Callbacks registered for Counters Reserved events
   private countersReservedHandlers = new Set<(payload: OperationCounters) => void>();
+
+  // Callbacks registered for Keychain Updated events
+  private keychainUpdatedHandlers = new Set<(payload: { cache: KeyChainCache }) => void>();
 
   // Binds an abort signal to each subscription canceller
   private withAbort(
@@ -188,6 +192,37 @@ export class WalletEvents {
   public _emitCountersReserved(payload: OperationCounters) {
     for (const h of this.countersReservedHandlers) {
       safeCallback(h, payload, this.wallet.logger, { event: 'countersReserved' });
+    }
+  }
+
+  /**
+   * Register a callback that fires when the wallet updates its keychain from the network inside an
+   * operation (eg after repairing an unknown keyset, or lazily loading keys).
+   *
+   * Typical use: re-persist `payload.cache` so your stored copy stays complete.
+   *
+   * @param cb Handler called with { cache }.
+   * @returns A function that unsubscribes the handler.
+   */
+  public keychainUpdated(
+    cb: (payload: { cache: KeyChainCache }) => void,
+    opts?: SubscribeOpts,
+  ): SubscriptionCanceller {
+    this.keychainUpdatedHandlers.add(cb);
+    const cancel = () => this.keychainUpdatedHandlers.delete(cb);
+    return this.withAbort(opts?.signal, cancel);
+  }
+
+  /**
+   * @internal
+   */
+  public _emitKeychainUpdated(): void {
+    if (this.keychainUpdatedHandlers.size === 0) {
+      return; // cache getter allocates; skip when nobody listens
+    }
+    const payload = { cache: this.wallet.keyChain.cache };
+    for (const h of this.keychainUpdatedHandlers) {
+      safeCallback(h, payload, this.wallet.logger, { event: 'keychainUpdated' });
     }
   }
 
