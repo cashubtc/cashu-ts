@@ -28,6 +28,12 @@ change refresh once, then throw `UnknownKeysetError` if the id is still unknown 
 itself failed, with that failure as `cause`). `restore` does not take this path: an unknown id
 there throws a plain `CTSError`.
 
+`UnknownKeysetError.refreshed` says how much weight to give it:
+
+- **`true`** - the wallet asked the mint and the id is not there. Final.
+- **`false`** - it never asked (strict mode, or rate limit). The id may be fine; a retry or a
+  `loadMint(true)` can still resolve it.
+
 **A mint rejection.** Your snapshot still calls a retired keyset active, so outputs get built on
 it and only the mint knows better. `completeSwap`, `completeMint`, `completeBatchMint` and
 `completeMelt` treat a NUT-00 keyset error (the 12xxx class) as evidence: they refresh, then throw
@@ -56,7 +62,9 @@ refreshes cleanly, and your retry will still fail.
 
 **Rate limit.** One repair per minute per wallet. Inside the window the wallet skips the refresh
 and throws immediately, so a service fed junk keyset ids cannot be turned into a stream of mint
-requests. Calls you make yourself are never rate limited.
+requests. Those errors report that the wallet did not check (`refreshed: false`, `repaired: false`)
+rather than blaming the id, because one junk token can burn the window for genuine post-rotation
+ones. Calls you make yourself are never rate limited.
 
 ## Upgrading an existing handler
 
@@ -130,7 +138,7 @@ What changes:
 
 | Situation                    | Strict behavior                                                                 |
 | ---------------------------- | ------------------------------------------------------------------------------- |
-| Unknown keyset id            | `UnknownKeysetError` immediately, no repair attempt.                            |
+| Unknown keyset id            | `UnknownKeysetError` with `refreshed: false`, no repair attempt.                |
 | Known keyset, no keys loaded | `No keys loaded for keyset X` (receive), `Keyset has no keys loaded` (restore). |
 | Mint rejects a keyset        | `StaleKeysetError` with `repaired: false`.                                      |
 | `keychainUpdated`            | Never fires: nothing internal mutates the snapshot.                             |
