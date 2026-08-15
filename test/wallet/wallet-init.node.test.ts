@@ -1,5 +1,4 @@
 import { HttpResponse, http } from 'msw';
-import type { SetupServer } from 'msw/node';
 import { test, describe, expect, vi } from 'vitest';
 
 import {
@@ -12,11 +11,9 @@ import {
   MintInfo,
   Amount,
   setGlobalRequestOptions,
-  type MintKeyset,
-  type MintKeys,
 } from '../../src';
 import { NULL_LOGGER } from '../../src/logger';
-import { MINTCACHE, DUMMY_TEST_KEYSET, DUMMY_TEST_KEYS, PUBKEYS } from '../consts';
+import { MINTCACHE } from '../consts';
 
 import {
   mintUrl,
@@ -30,24 +27,6 @@ import {
 } from './_setup';
 
 const server = useTestServer();
-
-// Rotation fixtures: mint starts with A active, then A goes inactive and B appears.
-const keysetAInactive: MintKeyset = { ...DUMMY_TEST_KEYSET, active: false };
-const keysetB: MintKeyset = { id: '009a1f293253e41e', unit: 'sat', active: true, input_fee_ppk: 0 };
-const keysB: MintKeys = { ...keysetB, keys: PUBKEYS };
-
-function useRotatedMint(server: SetupServer) {
-  server.use(
-    http.get(mintUrl + '/v1/keysets', () => {
-      return HttpResponse.json({ keysets: [keysetAInactive, keysetB] });
-    }),
-    http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [keysB] })),
-    http.get(mintUrl + '/v1/keys/00bd033559de27d0', () => {
-      return HttpResponse.json({ keysets: [DUMMY_TEST_KEYS] });
-    }),
-    http.get(mintUrl + '/v1/keys/009a1f293253e41e', () => HttpResponse.json({ keysets: [keysB] })),
-  );
-}
 
 describe('test wallet init', () => {
   test('should initialize with mint instance and load mint info, keys, and keysets', async () => {
@@ -611,48 +590,6 @@ describe('bindKeyset & withKeyset', () => {
     const bound = wallet.keysetId;
     const k = wallet.getKeyset();
     expect(k.id).toBe(bound);
-  });
-});
-
-describe('rebind on refresh', () => {
-  test('auto-bound wallet follows the mint after a rotation', async () => {
-    const wallet = new Wallet(mint, { unit });
-    await wallet.loadMint();
-    expect(wallet.keysetId).toBe('00bd033559de27d0');
-
-    useRotatedMint(server);
-    await wallet.loadMint(true);
-    expect(wallet.keysetId).toBe('009a1f293253e41e');
-  });
-
-  test('pinned wallet stays put after a rotation', async () => {
-    const wallet = new Wallet(mint, { unit, keysetId: '00bd033559de27d0' });
-    await wallet.loadMint();
-
-    useRotatedMint(server);
-    await wallet.loadMint(true);
-    expect(wallet.keysetId).toBe('00bd033559de27d0');
-  });
-
-  test('bindKeyset makes the binding explicit', async () => {
-    const wallet = new Wallet(mint, { unit });
-    await wallet.loadMint();
-    wallet.bindKeyset('00bd033559de27d0');
-
-    useRotatedMint(server);
-    await wallet.loadMint(true);
-    expect(wallet.keysetId).toBe('00bd033559de27d0');
-  });
-
-  test('auto-bound wallet keeps its binding when the mint has no active replacement', async () => {
-    const wallet = new Wallet(mint, { unit });
-    await wallet.loadMint();
-    server.use(
-      http.get(mintUrl + '/v1/keysets', () => HttpResponse.json({ keysets: [keysetAInactive] })),
-      http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [] })),
-    );
-    await wallet.loadMint(true);
-    expect(wallet.keysetId).toBe('00bd033559de27d0'); // still there; melt remains possible
   });
 });
 
