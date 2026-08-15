@@ -1500,6 +1500,13 @@ class Wallet {
     const normalizedProofs = normalizeProofAmounts(proofs);
     const { keysetId, includeFees = false, onCountersReserved } = config || {};
 
+    // Rotation evidence check: repair the snapshot and load any missing keys before
+    // any assertion or fee math relies on it.
+    await this._ensureOperableKeysets(
+      normalizedProofs.map((p) => p.id),
+      { implicit: true },
+    );
+
     // Fallback to policy defaults if no outputConfig
     outputConfig = outputConfig ?? {
       send: this.defaultOutputType(),
@@ -3453,6 +3460,15 @@ class Wallet {
     this.validateMeltQuote(meltQuote);
     outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
     const { keysetId, onCountersReserved, nut08Change = true } = config || {};
+
+    // Rotation evidence check: repair the snapshot and load any missing keys before
+    // any assertion or fee math relies on it. Ids are read pre-normalization; the
+    // amounts change, the ids do not.
+    await this._ensureOperableKeysets(
+      proofsToSend.map((p) => p.id),
+      { implicit: true },
+    );
+
     // Plain getKeyset: melting needs no new outputs, so an inactive/legacy keyset must not
     // block withdrawal. A mint unwinding liabilities deactivates keysets but
     // keeps melt open; gate output creation below, not the melt itself.

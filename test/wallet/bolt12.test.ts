@@ -492,7 +492,13 @@ describe('Wallet (BOLT12) – wrappers', () => {
       unit: 'sat',
       request: 'lno1offer...',
     };
-    const proof: Proof = { amount: Amount.from(128), secret: 'secret1', C: 'C1', id: 'foo' };
+    // A real cached keyset id: melt makes its input ids operable before anything else.
+    const proof: Proof = {
+      amount: Amount.from(128),
+      secret: 'secret1',
+      C: 'C1',
+      id: '00bd033559de27d0',
+    };
     const res = await wallet.meltProofsBolt12(meltQuote as any, [proof]);
     expect(res.quote.quote).toEqual('m1');
     expect(res.change).toEqual([]);

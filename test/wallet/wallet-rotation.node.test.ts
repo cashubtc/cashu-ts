@@ -860,3 +860,69 @@ describe('strictCachedKeysets', () => {
     expect(counts().keysetsRequests).toBe(0); // strict inherited: no repair fired
   });
 });
+
+describe('send and melt inputs across a rotation', () => {
+  // Both ops resolve an output keyset of their own, so only the input proofs can
+  // carry an id the snapshot has never seen: a wallet restored from a stale cache
+  // holding proofs another device minted after that cache was written.
+  const proofOnAlien: ProofLike = { ...proofOnA, id: '00deadbeefdeadbe' };
+  const meltQuote: MeltQuoteBolt11Response = {
+    quote: 'melt-inputs',
+    amount: Amount.from(10),
+    fee_reserve: Amount.from(3),
+    request: 'bolt11request',
+    state: MeltQuoteState.UNPAID,
+    expiry: 1234567890,
+    payment_preimage: null,
+    unit: 'sat',
+    method: 'bolt11',
+  };
+  const meltProofsOn = (id: string): ProofLike[] => [
+    { ...proofOnA, id, amount: 8, secret: 'secret1', C: 'C1' },
+    { ...proofOnA, id, amount: 5, secret: 'secret2', C: 'C2' },
+  ]; // sum=13, feeReserve=3, amount=10
+
+  test('prepareSwapToSend repairs a stale snapshot before the fee math', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint(); // knows only A
+    const { counts } = useRotatedMint(server);
+
+    const preview = await wallet.prepareSwapToSend(1, [proofOnB]);
+    expect(preview.inputs[0].id).toBe('009a1f293253e41e');
+    expect(preview.keysetId).toBe('009a1f293253e41e'); // outputs on the repaired binding
+    expect(counts().keysetsRequests).toBe(1); // exactly one repair refresh
+  });
+
+  test('prepareSwapToSend reports a genuinely alien input id', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const { counts } = useRotatedMint(server);
+
+    const err = await wallet.prepareSwapToSend(1, [proofOnAlien]).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(UnknownKeysetError);
+    expect((err as UnknownKeysetError).keysetId).toBe('00deadbeefdeadbe');
+    expect((err as UnknownKeysetError).refreshed).toBe(true); // asked the mint, so this is final
+    expect(counts().keysetsRequests).toBe(1);
+  });
+
+  test('prepareMelt repairs a stale snapshot for its input proofs', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint(); // knows only A
+    const { counts } = useRotatedMint(server);
+
+    const preview = await wallet.prepareMelt('bolt11', meltQuote, meltProofsOn(keysetB.id));
+    expect(preview.inputs).toHaveLength(2);
+    expect(preview.keysetId).toBe('009a1f293253e41e'); // NUT-08 blanks on the repaired binding
+    expect(counts().keysetsRequests).toBe(1);
+  });
+
+  test('a complete snapshot fetches nothing on either path', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint(); // pre-rotation: A active, with keys
+    const { counts } = useRotatedMint(server); // would answer, if anything asked
+
+    await wallet.prepareSwapToSend(1, [proofOnA]);
+    await wallet.prepareMelt('bolt11', meltQuote, meltProofsOn(proofOnA.id));
+    expect(counts()).toEqual({ keysetsRequests: 0, keysARequests: 0 });
+  });
+});
