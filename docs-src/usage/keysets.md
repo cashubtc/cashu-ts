@@ -70,7 +70,21 @@ abandoned ones are recoverable with a NUT-09 restore.
 Internal repairs are limited to one per minute per wallet. Inside that window the wallet skips the
 refresh and throws the terminal error immediately (`UnknownKeysetError`, or `StaleKeysetError`
 with `repaired: false`), so a service fed a stream of junk keyset ids cannot be turned into a
-stream of outbound mint requests. Refreshes you ask for yourself are never rate limited.
+stream of outbound mint requests. Refreshes you ask for yourself are never rate limited, though a
+repair triggered by `ensureOperableKeysets()` does start the window for the next internal one;
+`loadMint(true)` does not, since it never goes through the repair path.
+
+## Preparing the snapshot yourself: `ensureOperableKeysets`
+
+`await wallet.ensureOperableKeysets(ids)` runs the same repair on demand: unknown ids get one
+`loadMint(true)`, keysets held without keys get theirs fetched, and an id the mint does not know
+throws `UnknownKeysetError`. Useful for integrations that verify proofs, or reconstruct persisted
+`outputData`, without running a wallet operation.
+
+Because it is an explicit request, it ignores both `strictCachedKeysets` and the repair rate limit:
+strict mode exists to stop network calls you did not ask for, and this is one you did. For the same
+reason it emits no `keychainUpdated`, so persist `wallet.keyChain.cache` yourself afterwards. It
+needs a loaded wallet, and says so rather than quietly doing nothing.
 
 ## Refreshing deliberately: `loadMint(true)`
 
@@ -97,9 +111,9 @@ wallet.on.keychainUpdated(({ cache }) => {
 });
 ```
 
-This event does not fire for `restore`'s own lazy key fetch, or for your own explicit
-`loadMint()` / `loadMint(true)` calls: persist `wallet.keyChain.cache` yourself after those (see
-[Create Wallet](./create_wallet.md)).
+This event does not fire for `restore`'s own lazy key fetch, or for calls you make yourself
+(`loadMint()`, `loadMint(true)`, `ensureOperableKeysets()`): persist `wallet.keyChain.cache`
+yourself after those (see [Create Wallet](./create_wallet.md)).
 
 ## Strict cached keysets
 
@@ -107,13 +121,15 @@ Set `strictCachedKeysets: true` in the `Wallet` constructor options if you run y
 persistence or state layer (eg a coco-style wallet) and want CTS to operate only on the keyset
 state you load, with no network call happening behind your back. With it set, operations never
 call `/v1/keysets` or `/v1/keys` on their own; the only calls that touch the network are the ones
-you make yourself (`loadMint`, `loadMint(true)`, `keyChain.ensureKeysetKeys`). An unrecognized
-keyset id throws `UnknownKeysetError` immediately, with no repair attempt; a known keyset with
-missing keys throws the same typed errors non-strict mode throws once its own repair path is
-exhausted (eg `No keys loaded for keyset X` from receive, or `Keyset has no keys loaded` from
-`restore`). `keychainUpdated` never fires under strict mode, since nothing internal mutates the
-snapshot. Use `keyChain.ensureKeysetKeys(id)` or `loadMint(true)` to refresh deliberately; those
-keep their normal semantics, including `loadMint(true)`'s carry-forward and rebind rules.
+you make yourself (`loadMint`, `loadMint(true)`, `keyChain.ensureKeysetKeys`,
+`ensureOperableKeysets`). An unrecognized keyset id throws `UnknownKeysetError` immediately, with
+no repair attempt; a known keyset with missing keys throws the same typed errors non-strict mode
+throws once its own repair path is exhausted (eg `No keys loaded for keyset X` from receive, or
+`Keyset has no keys loaded` from `restore`). A mint rejecting a keyset mid-operation throws
+`StaleKeysetError` with `repaired: false`, since strict mode does not refresh on its own.
+`keychainUpdated` never fires under strict mode, since nothing internal mutates the snapshot. Use
+`keyChain.ensureKeysetKeys(id)` or `loadMint(true)` to refresh deliberately; those keep their
+normal semantics, including `loadMint(true)`'s carry-forward and rebind rules.
 `restoreAll` stops at the first keyset without loaded keys under strict mode, so restoring across
 a rotation needs `keyChain.ensureKeysetKeys` called for each keyset first (or a fresh `loadMint`).
 Melt change that arrives on a keyset your snapshot holds keyless throws after the mint has already
