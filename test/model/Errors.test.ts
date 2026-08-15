@@ -7,6 +7,7 @@ import {
   MintOperationError,
   NetworkError,
   RateLimitError,
+  UnknownKeysetError,
 } from '../../src/model/Errors';
 
 describe('CTSError', () => {
@@ -133,5 +134,25 @@ describe('isMintOperationError', () => {
     expect(isMintOperationError(new Error('MintOperationError'))).toBe(false);
     expect(isMintOperationError({ name: 'MintOperationError', code: 20008 })).toBe(false);
     expect(isMintOperationError(undefined)).toBe(false);
+  });
+});
+
+describe('UnknownKeysetError', () => {
+  test('carries the keyset id and extends CTSError', () => {
+    const e = new UnknownKeysetError('00deadbeefdeadbe');
+    expect(e).toBeInstanceOf(CTSError);
+    expect(e.name).toBe('UnknownKeysetError');
+    expect(e.keysetId).toBe('00deadbeefdeadbe');
+    expect(e.message).toBe("Keyset '00deadbeefdeadbe' is not a keyset of this mint");
+    expect(e.cause).toBeUndefined();
+  });
+
+  test('names the refresh failure when a cause is given', () => {
+    const cause = new Error('offline');
+    const e = new UnknownKeysetError('00deadbeefdeadbe', { cause });
+    expect(e.message).toBe(
+      "Could not resolve unknown keyset '00deadbeefdeadbe': mint refresh failed",
+    );
+    expect(e.cause).toBe(cause);
   });
 });

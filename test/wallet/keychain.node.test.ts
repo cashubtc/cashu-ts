@@ -381,6 +381,15 @@ describe('KeyChain getters', () => {
     expect(multiChain.isUnitKeyset(undefined)).toBe(false);
   });
 
+  test('hasKeyset is a non-throwing existence check', async () => {
+    const keyChain = new KeyChain(mint, unit);
+    expect(keyChain.hasKeyset('009a1f293253e41e')).toBe(false); // uninitialized: no throw
+    await keyChain.init();
+    expect(keyChain.hasKeyset('009a1f293253e41e')).toBe(true);
+    expect(keyChain.hasKeyset('00deadbeefdeadbe')).toBe(false);
+    expect(keyChain.hasKeyset(undefined)).toBe(false);
+  });
+
   test('should throw getters if not initialized', () => {
     const uninitChain = new KeyChain(mint, unit);
     expect(() => uninitChain.getKeyset('any')).toThrow("Keyset 'any' not found");

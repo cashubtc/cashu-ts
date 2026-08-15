@@ -311,6 +311,16 @@ export class KeyChain {
   }
 
   /**
+   * True if `id` is a keyset this KeyChain knows about, any unit.
+   *
+   * @remarks
+   * O(1) and non-throwing, unlike `getKeyset(id)`. False for an uninitialized chain.
+   */
+  hasKeyset(id?: string): boolean {
+    return !!id && this.keysets[id] !== undefined;
+  }
+
+  /**
    * Returns all the keys in this KeyChain across all units.
    *
    * @returns Array of MintKeys objects.

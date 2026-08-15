@@ -44,6 +44,23 @@ export class NetworkError extends CTSError {
 }
 
 /**
+ * Thrown when a keyset id cannot be resolved against the mint, even after a refresh.
+ */
+export class UnknownKeysetError extends CTSError {
+  readonly keysetId: string;
+  constructor(keysetId: string, options?: { cause?: unknown }) {
+    const message =
+      options?.cause !== undefined
+        ? `Could not resolve unknown keyset '${keysetId}': mint refresh failed`
+        : `Keyset '${keysetId}' is not a keyset of this mint`;
+    super(message, options);
+    this.keysetId = keysetId;
+    this.name = 'UnknownKeysetError';
+    Object.setPrototypeOf(this, UnknownKeysetError.prototype);
+  }
+}
+
+/**
  * This error is thrown when the server responds with 429 Too Many Requests. `retryAfterMs` is the
  * parsed `Retry-After` header in milliseconds, or `undefined` when the header is absent or
  * unparseable.
