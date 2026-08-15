@@ -12,15 +12,19 @@ import { test, describe, expect, vi } from 'vitest';
 
 import {
   Wallet,
+  MintOperationError,
+  StaleKeysetError,
   UnknownKeysetError,
   Amount,
   MeltQuoteState,
+  MintQuoteState,
   type KeyChainCache,
   type MintKeyset,
   type MintKeys,
   type ProofLike,
   type Proof,
   type MeltQuoteBolt11Response,
+  type MintQuoteBolt11Response,
 } from '../../src';
 import { DUMMY_TEST_KEYSET, DUMMY_TEST_KEYS, PUBKEYS } from '../consts';
 
@@ -250,6 +254,260 @@ describe('receive across a rotation', () => {
     expect(spyKeySets).not.toHaveBeenCalled(); // no hidden loadMint(true)
 
     spyKeySets.mockRestore();
+  });
+});
+
+describe('mint rejection as rotation evidence', () => {
+  // A wallet loaded before the rotation has no unknown id to trip the repair: its
+  // snapshot still calls A active, so the outputs are built on A and the mint is the
+  // only thing that knows better.
+  function useRejectingSwap(server: SetupServer) {
+    let swapRequests = 0;
+    server.use(
+      http.post(mintUrl + '/v1/swap', () => {
+        swapRequests++;
+        if (swapRequests === 1) {
+          return HttpResponse.json(
+            { detail: 'Keyset is inactive, cannot sign messages', code: 12002 },
+            { status: 400 },
+          );
+        }
+        return HttpResponse.json({
+          signatures: [
+            {
+              id: '009a1f293253e41e',
+              amount: 1,
+              C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+            },
+          ],
+        });
+      }),
+    );
+    return { swaps: () => swapRequests };
+  }
+
+  test('receive heals the snapshot and succeeds when the caller runs it again', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint(); // pre-rotation: A is active and bound
+    expect(wallet.keysetId).toBe('00bd033559de27d0');
+
+    const { counts } = useRotatedMint(server); // the mint has moved on, the snapshot has not
+    const { swaps } = useRejectingSwap(server);
+
+    const err = await wallet.receive([proofOnA]).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(StaleKeysetError);
+    expect((err as StaleKeysetError).repaired).toBe(true);
+    expect(counts().keysetsRequests).toBe(1); // exactly one repair refresh
+    expect(wallet.keysetId).toBe('009a1f293253e41e');
+
+    const proofs = await wallet.receive([proofOnA]); // the caller's retry, on the fresh snapshot
+    expect(proofs[0].id).toBe('009a1f293253e41e');
+    expect(counts().keysetsRequests).toBe(1); // nothing refreshed a second time
+    expect(swaps()).toBe(2);
+  });
+
+  test('a retry that meets the same rejection reports an unrepaired snapshot', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const { counts } = useRotatedMint(server);
+
+    let swaps = 0;
+    server.use(
+      http.post(mintUrl + '/v1/swap', () => {
+        swaps++;
+        return HttpResponse.json(
+          { detail: 'Keyset is inactive, cannot sign messages', code: 12002 },
+          { status: 400 },
+        );
+      }),
+    );
+
+    const first = await wallet.receive([proofOnA]).catch((e: unknown) => e);
+    expect((first as StaleKeysetError).repaired).toBe(true);
+
+    const second = await wallet.receive([proofOnA]).catch((e: unknown) => e);
+    expect(second).toBeInstanceOf(StaleKeysetError);
+    expect((second as StaleKeysetError).repaired).toBe(false); // rate limited, so nothing changed
+    expect(swaps).toBe(2);
+    expect(counts().keysetsRequests).toBe(1);
+  });
+
+  test('completeBatchMint reports a rejected batch as a stale keyset', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint(); // pre-rotation: the batch outputs are built on A
+
+    const quote = (id: string): MintQuoteBolt11Response => ({
+      quote: id,
+      request: 'lnbc...',
+      amount: Amount.from(2),
+      unit: 'sat',
+      state: MintQuoteState.PAID,
+      amount_paid: Amount.from(2),
+      amount_issued: Amount.from(0),
+      updated_at: null,
+      expiry: null,
+    });
+    const preview = await wallet.prepareBatchMint('bolt11', [
+      { amount: 2, quote: quote('batch-a') },
+      { amount: 2, quote: quote('batch-b') },
+    ]);
+
+    const { counts } = useRotatedMint(server);
+    server.use(
+      http.post(mintUrl + '/v1/mint/bolt11/batch', () =>
+        HttpResponse.json(
+          { detail: 'Keyset is inactive, cannot sign messages', code: 12002 },
+          { status: 400 },
+        ),
+      ),
+    );
+
+    const err = await wallet.completeBatchMint(preview).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(StaleKeysetError);
+    expect((err as StaleKeysetError).repaired).toBe(true);
+    expect(counts().keysetsRequests).toBe(1);
+    expect(wallet.keysetId).toBe('009a1f293253e41e'); // ready for a re-prepared batch
+  });
+
+  test('completeSwap hands the split flow a repaired snapshot to re-prepare against', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const { counts } = useRotatedMint(server);
+    const { swaps } = useRejectingSwap(server);
+
+    const updates: KeyChainCache[] = [];
+    wallet.on.keychainUpdated(({ cache }) => updates.push(cache));
+
+    const stale = await wallet.prepareSwapToReceive([proofOnA]); // outputs on A
+    const err = await wallet.completeSwap(stale).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(StaleKeysetError);
+    expect((err as StaleKeysetError).repaired).toBe(true);
+    expect((err as StaleKeysetError).cause).toBeInstanceOf(MintOperationError);
+    expect(((err as StaleKeysetError).cause as MintOperationError).code).toBe(12002);
+    expect(counts().keysetsRequests).toBe(1);
+    expect(updates).toHaveLength(1); // the refreshed snapshot is worth persisting
+    expect(wallet.keyChain.hasKeyset('009a1f293253e41e')).toBe(true);
+    expect(wallet.keysetId).toBe('009a1f293253e41e');
+
+    const fresh = await wallet.prepareSwapToReceive([proofOnA]); // outputs on B
+    const { keep } = await wallet.completeSwap(fresh);
+    expect(keep[0].id).toBe('009a1f293253e41e');
+    expect(swaps()).toBe(2);
+  });
+
+  test('strict wallets report the rejection without repairing', async () => {
+    const wallet = new Wallet(mint, { unit, strictCachedKeysets: true });
+    await wallet.loadMint();
+    const { counts } = useRotatedMint(server);
+    const { swaps } = useRejectingSwap(server);
+
+    const err = await wallet.receive([proofOnA]).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(StaleKeysetError);
+    expect((err as StaleKeysetError).repaired).toBe(false);
+    expect(((err as StaleKeysetError).cause as MintOperationError).code).toBe(12002);
+    expect(counts().keysetsRequests).toBe(0);
+    expect(swaps()).toBe(1); // one attempt, and the caller is told not to bother repeating it
+  });
+
+  test('a failed refresh reports the rejection as unrepaired', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const { swaps } = useRejectingSwap(server);
+    server.use(http.get(mintUrl + '/v1/keysets', () => HttpResponse.error()));
+
+    const err = await wallet.receive([proofOnA]).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(StaleKeysetError);
+    expect((err as StaleKeysetError).repaired).toBe(false);
+    expect(swaps()).toBe(1);
+  });
+
+  test('a rejection outside the keyset error class propagates untouched', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const { counts } = useRotatedMint(server);
+    server.use(
+      http.post(mintUrl + '/v1/swap', () =>
+        HttpResponse.json({ detail: 'Token already spent', code: 11001 }, { status: 400 }),
+      ),
+    );
+
+    const err = await wallet.receive([proofOnA]).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(MintOperationError);
+    expect((err as MintOperationError).code).toBe(11001);
+    expect(counts().keysetsRequests).toBe(0);
+  });
+
+  test('a look-alike error with a non-finite code propagates untouched', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const { counts } = useRotatedMint(server);
+
+    // A custom request layer can raise a MintOperationError look-alike whose code never got
+    // parsed: absent, or NaN from a `Number(body.code)` on a missing field. isMintOperationError
+    // accepts both by name, and every range comparison against them is false, so without the
+    // finite check they would read as a keyset rejection.
+    for (const code of [undefined, NaN]) {
+      const lookAlike = Object.assign(new Error('mint said no'), {
+        name: 'MintOperationError',
+        code,
+      });
+      const spy = vi.spyOn(wallet.mint, 'swap').mockRejectedValue(lookAlike);
+
+      const err = await wallet.receive([proofOnA]).catch((e: unknown) => e);
+      expect(err).toBe(lookAlike); // not wrapped in StaleKeysetError
+      expect(counts().keysetsRequests).toBe(0); // and no repair fired
+
+      spy.mockRestore();
+    }
+  });
+});
+
+describe('repair rate limit', () => {
+  test('a second implicit repair inside the cooldown window is skipped', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const { counts } = useRotatedMint(server);
+
+    const first = await wallet
+      .receive([{ ...proofOnA, id: '00deadbeefdeadbe' }])
+      .catch((e: unknown) => e);
+    expect(first).toBeInstanceOf(UnknownKeysetError);
+    expect(counts().keysetsRequests).toBe(1);
+
+    const second = await wallet
+      .receive([{ ...proofOnA, id: '00c0ffeec0ffee00' }])
+      .catch((e: unknown) => e);
+    expect(second).toBeInstanceOf(UnknownKeysetError);
+    expect(counts().keysetsRequests).toBe(1); // no second refresh for the second alien id
+  });
+
+  test('the cooldown also gates the repair a mint rejection asks for', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const { counts } = useRotatedMint(server);
+
+    // Spend the window on an alien id, then meet a rejection on the way out
+    await expect(wallet.receive([{ ...proofOnA, id: '00deadbeefdeadbe' }])).rejects.toThrow(
+      UnknownKeysetError,
+    );
+    expect(counts().keysetsRequests).toBe(1);
+
+    let swaps = 0;
+    server.use(
+      http.post(mintUrl + '/v1/swap', () => {
+        swaps++;
+        return HttpResponse.json(
+          { detail: 'Keyset is inactive, cannot sign messages', code: 12002 },
+          { status: 400 },
+        );
+      }),
+    );
+
+    const err = await wallet.receive([proofOnA]).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(StaleKeysetError);
+    expect((err as StaleKeysetError).repaired).toBe(false);
+    expect(counts().keysetsRequests).toBe(1); // rate limited, no refresh
+    expect(swaps).toBe(1);
   });
 });
 

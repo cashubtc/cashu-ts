@@ -61,6 +61,32 @@ export class UnknownKeysetError extends CTSError {
 }
 
 /**
+ * Thrown when the mint rejects a keyset the wallet's snapshot considers current.
+ *
+ * @remarks
+ * `repaired: true` means the snapshot was refreshed before throwing: nothing retried for you, so
+ * run the operation again and it should succeed. Retrying consumes fresh counters on seeded wallets
+ * (recoverable via NUT-09 restore).
+ */
+export class StaleKeysetError extends CTSError {
+  /**
+   * True when the snapshot was refreshed before throwing, so the operation is worth running again.
+   */
+  readonly repaired: boolean;
+  constructor(repaired: boolean, options?: { cause?: unknown }) {
+    super(
+      repaired
+        ? 'Mint rejected a stale keyset; the snapshot has been refreshed, re-prepare the operation'
+        : 'Mint rejected a stale keyset; refresh the snapshot (loadMint(true)) and re-prepare',
+      options,
+    );
+    this.repaired = repaired;
+    this.name = 'StaleKeysetError';
+    Object.setPrototypeOf(this, StaleKeysetError.prototype);
+  }
+}
+
+/**
  * This error is thrown when the server responds with 429 Too Many Requests. `retryAfterMs` is the
  * parsed `Retry-After` header in milliseconds, or `undefined` when the header is absent or
  * unparseable.

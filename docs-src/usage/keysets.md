@@ -36,6 +36,42 @@ This applies to `receive` and melt change: both resolve unrecognized keyset ids 
 `restore` fetches keys directly and does not go through it, so an unknown keyset id there throws a
 plain `CTSError` with no retry.
 
+## Self-repair when the mint rejects a keyset
+
+A wallet loaded before a rotation has nothing unrecognized to trip the repair above: its snapshot
+still calls the retired keyset active, so it builds outputs on it and the mint is the only party
+that knows better. When `completeSwap`, `completeMint`, `completeBatchMint`, or `completeMelt` is
+rejected with a NUT-00 keyset error (the 12xxx class: unknown, inactive, or expired keyset), the
+wallet takes that as rotation evidence, refreshes the snapshot, and throws `StaleKeysetError` with
+the mint's error as `cause`.
+
+Its `repaired` flag says whether the refresh actually ran. `true` means the snapshot is current
+again, so running your call a second time should succeed (a 12001 caused by an input proof from
+another mint refreshes cleanly and still fails). `false` means nothing changed (strict mode, a
+failed refresh, or the rate limit below) and the next move is yours. Nothing retries for you: the
+rejected outputs were built on the stale keyset, so the wallet heals the snapshot and hands the
+decision back.
+
+```ts
+try {
+  return await wallet.receive(token);
+} catch (e) {
+  if (!(e instanceof StaleKeysetError) || !e.repaired) throw e;
+  return wallet.receive(token); // the snapshot is current now
+}
+```
+
+The same shape applies to the split flow: re-run your `prepare*` before completing again, since the
+outputs in hand are the rejected ones. On a seeded wallet that reserves fresh counters; the
+abandoned ones are recoverable with a NUT-09 restore.
+
+### Repair rate limit
+
+Internal repairs are limited to one per minute per wallet. Inside that window the wallet skips the
+refresh and throws the terminal error immediately (`UnknownKeysetError`, or `StaleKeysetError`
+with `repaired: false`), so a service fed a stream of junk keyset ids cannot be turned into a
+stream of outbound mint requests. Refreshes you ask for yourself are never rate limited.
+
 ## Refreshing deliberately: `loadMint(true)`
 
 Call `loadMint(true)` yourself to follow a mint proactively, for example on a schedule in a

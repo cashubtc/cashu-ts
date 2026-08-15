@@ -28,6 +28,14 @@ export const ABSOLUTE_MAX_BATCH_SIZE = 100;
 export const MAX_KEYSET_DENOMINATIONS = 256;
 
 /**
+ * Minimum gap between two internal snapshot repairs (`loadMint(true)` fired from inside an
+ * operation). Rotations are rare, so a wallet that keeps meeting keyset ids the mint rejects is
+ * being fed garbage: without this, each bad token would cost three outbound mint requests,
+ * repeatably. Explicit consumer refreshes are not rate limited.
+ */
+export const REPAIR_COOLDOWN_MS = 60_000;
+
+/**
  * Upper bound on entries we process from a mint-advertised list (NUT-04/05 `methods`, NUT-21/22
  * `protected_endpoints`). Real mints advertise tens; the transport 8 MiB cap still admits ~100k
  * small records, so an unbounded map/clone/sort over them is a memory-amplification vector. Lists

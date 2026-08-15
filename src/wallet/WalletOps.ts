@@ -737,7 +737,8 @@ export class MintBuilder<
    *
    * @remarks
    * This is equivalent to `const preview = await prepare(); await wallet.completeMint(preview)`.
-   * This method can only be called for bolt12 quotes when `.privkey()` is set.
+   * This method can only be called for bolt12 quotes when `.privkey()` is set. Builders are single
+   * use: run a fresh one after a `StaleKeysetError` with `repaired` true.
    * @returns The newly minted proofs.
    */
   async run(this: MintBuilder<M, true>) {
@@ -882,6 +883,8 @@ export class MeltBuilder<
   /**
    * Execute the melt against the quote.
    *
+   * @remarks
+   * Builders are single use: run a fresh one after a `StaleKeysetError` with `repaired` true.
    * @returns The melt result: `{ quote, change, outputData }`.
    */
   async run(): Promise<MeltProofsResponse<TQuote>> {

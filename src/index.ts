@@ -96,6 +96,7 @@ export {
   NetworkError,
   HttpResponseError,
   RateLimitError,
+  StaleKeysetError,
   UnknownKeysetError,
 } from './model/Errors';
 
