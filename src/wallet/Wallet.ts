@@ -687,7 +687,7 @@ class Wallet {
           throw failed[0].reason;
         }
         throw new CTSError(`Could not load keys for ${failed.length} keysets`, {
-          cause: failed.map((f) => f.reason),
+          cause: failed.map((f): unknown => f.reason),
         });
       }
     }
