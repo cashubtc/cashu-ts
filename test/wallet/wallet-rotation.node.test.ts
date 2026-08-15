@@ -628,6 +628,60 @@ describe('public ensureOperableKeysets', () => {
   });
 });
 
+describe('partial keyless fetches', () => {
+  // Two retired keysets in one op: the snapshot holds both keyless, and only one
+  // of the two key fetches comes back.
+  const keysetC: MintKeyset = {
+    id: '00ffffffffffffff',
+    unit: 'sat',
+    active: false,
+    input_fee_ppk: 0,
+  };
+  const proofOnC: ProofLike = { ...proofOnA, id: keysetC.id };
+
+  function useTwoRetiredKeysets(server: SetupServer, failing: string[]) {
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({ keysets: [keysetAInactive, keysetC, keysetB] }),
+      ),
+      http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [keysB] })),
+      http.get(mintUrl + '/v1/keys/00bd033559de27d0', () =>
+        failing.includes('00bd033559de27d0')
+          ? HttpResponse.error()
+          : HttpResponse.json({ keysets: [DUMMY_TEST_KEYS] }),
+      ),
+      http.get(mintUrl + '/v1/keys/' + keysetC.id, () => HttpResponse.error()),
+    );
+  }
+
+  test('emits for the keys that landed before failing the op', async () => {
+    useTwoRetiredKeysets(server, [keysetC.id]);
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint(); // A and C known but keyless, B active
+
+    const updates: KeyChainCache[] = [];
+    wallet.on.keychainUpdated(({ cache }) => updates.push(cache));
+
+    await expect(wallet.prepareSwapToReceive([proofOnA, proofOnC])).rejects.toThrow();
+    expect(updates).toHaveLength(1); // A's keys landed and are worth persisting
+    expect(wallet.keyChain.getKeyset('00bd033559de27d0').hasKeys).toBe(true);
+  });
+
+  test('reports both failures when no keys land at all', async () => {
+    useTwoRetiredKeysets(server, ['00bd033559de27d0', keysetC.id]);
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const updates: KeyChainCache[] = [];
+    wallet.on.keychainUpdated(({ cache }) => updates.push(cache));
+
+    await expect(wallet.prepareSwapToReceive([proofOnA, proofOnC])).rejects.toThrow(
+      /Could not load keys for 2 keysets/,
+    );
+    expect(updates).toHaveLength(0); // nothing changed, nothing to persist
+  });
+});
+
 describe('melt change across a rotation', () => {
   const meltQuote: MeltQuoteBolt11Response = {
     quote: 'melt-rotation',
