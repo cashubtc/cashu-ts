@@ -602,6 +602,23 @@ describe('public ensureOperableKeysets', () => {
     expect(counts().keysetsRequests).toBe(2); // asked for, so not rate limited
   });
 
+  test('leaves the wallet free to repair on its own afterwards', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint(); // knows only A
+    const { counts } = useRotatedMint(server);
+
+    await wallet.ensureOperableKeysets(['009a1f293253e41e']); // explicit repair
+    expect(counts().keysetsRequests).toBe(1);
+
+    // The window covers the wallet's own repairs, so this one must still run
+    const err = await wallet
+      .receive([{ ...proofOnA, id: '00deadbeefdeadbe' }])
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(UnknownKeysetError);
+    expect((err as UnknownKeysetError).refreshed).toBe(true); // it refreshed, not rate limited
+    expect(counts().keysetsRequests).toBe(2);
+  });
+
   test('rejects a non-array argument', async () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
