@@ -82,7 +82,8 @@ keep their normal semantics, including `loadMint(true)`'s carry-forward and rebi
 a rotation needs `keyChain.ensureKeysetKeys` called for each keyset first (or a fresh `loadMint`).
 Melt change that arrives on a keyset your snapshot holds keyless throws after the mint has already
 spent the inputs; recover with the persisted `outputData` plus an explicit `ensureKeysetKeys` and
-`createMeltChangeProofs` call, as documented on that method.
+`createMeltChangeProofs` call, as documented on that method. Wallets created with `withKeyset()`
+inherit the strict flag from their parent, so derived wallets respect the same network constraints.
 
 ## Long-lived wallets
 
