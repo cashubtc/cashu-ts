@@ -159,6 +159,7 @@ class Wallet {
   private _secretsPolicy: SecretsPolicy = 'auto';
   private _counterSource: CounterSource;
   private _boundKeysetId: string = PENDING_KEYSET_ID;
+  private _explicitBind: boolean = false;
   private _selectProofs: SelectProofs;
   private _outputDataCreator: OutputDataCreator;
   private _requireSigDleq = false;
@@ -230,6 +231,7 @@ class Wallet {
         : mint;
     this._unit = options?.unit ?? this._unit;
     this._boundKeysetId = options?.keysetId ?? this._boundKeysetId;
+    this._explicitBind = options?.keysetId !== undefined;
     if (options?.bip39seed) {
       // failIf forwards this context to the logger, so pass the type, never the seed.
       this.failIf(
@@ -368,8 +370,8 @@ class Wallet {
           err: (e as Error).message,
         });
       }
-    } else {
-      // Keyset ID was bound in wallet constructor, so ensure it exists and unit
+    } else if (this._explicitBind) {
+      // Keyset ID was pinned by the caller, so ensure it exists and unit
       // matches, but do NOT require keys yet. It may be an inactive keyset for
       // restore, and if so, keys will be fetched async later.
       const k = this._keyChain.getKeyset(this._boundKeysetId);
@@ -378,6 +380,29 @@ class Wallet {
         unit: k.unit,
         walletUnit: this._unit,
       });
+    } else {
+      // Auto-bound previously: follow the mint when the binding is no longer usable.
+      const current = this._keyChain.hasKeyset(this._boundKeysetId)
+        ? this._keyChain.getKeyset(this._boundKeysetId)
+        : undefined;
+      if (!current || !current.isActive || !current.hasKeys) {
+        try {
+          this._boundKeysetId = this._keyChain.getCheapestKeyset().id;
+          this._logger.info('Wallet rebound to active keyset after refresh', {
+            keysetId: this._boundKeysetId,
+          });
+        } catch (e) {
+          // No active replacement: keep a still-known binding (melt stays possible),
+          // unbind only if the keyset vanished from the mint entirely.
+          if (!current) {
+            this._boundKeysetId = PENDING_KEYSET_ID;
+          }
+          this._logger.warn('Bound keyset is stale and no active keyset is available', {
+            unit: this._unit,
+            err: (e as Error).message,
+          });
+        }
+      }
     }
 
     // Go Mintinfo?
@@ -646,6 +671,7 @@ class Wallet {
     });
     this.failIf(!ks.hasKeys, 'Keyset has no keys loaded', { keyset: ks.id });
     this._boundKeysetId = ks.id;
+    this._explicitBind = true;
     this._logger.debug('Wallet bound to keyset', {
       keysetId: ks.id,
       unit: ks.unit,
