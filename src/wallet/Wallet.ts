@@ -20,7 +20,7 @@ import { signMintQuoteAmended } from '../crypto/NUT20';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
-import { CTSError, isMintOperationError } from '../model/Errors';
+import { CTSError, UnknownKeysetError, isMintOperationError } from '../model/Errors';
 import { MintInfo } from '../model/MintInfo';
 import { OutputData, type OutputDataLike } from '../model/OutputData';
 import { DefaultOutputDataCreator, type OutputDataCreator } from '../model/OutputDataCreator';
@@ -159,6 +159,7 @@ class Wallet {
   private _secretsPolicy: SecretsPolicy = 'auto';
   private _counterSource: CounterSource;
   private _boundKeysetId: string = PENDING_KEYSET_ID;
+  private _pendingRepair: Promise<void> | null = null;
   private _explicitBind: boolean = false;
   private _selectProofs: SelectProofs;
   private _outputDataCreator: OutputDataCreator;
@@ -510,6 +511,50 @@ class Wallet {
       keyset: keyset.id,
     });
     return keyset;
+  }
+
+  /**
+   * Make the keychain usable for these keyset ids before an op takes decisions on it.
+   *
+   * @remarks
+   * Unknown ids trigger one shared `loadMint(true)` regardless of unit; still-unknown ids throw
+   * {@link UnknownKeysetError}. Known-but-keyless ids in the wallet's unit get keys fetched (a
+   * foreign-unit id is left for `assertProofsInWalletUnit` to reject). Emits `keychainUpdated`.
+   */
+  private async ensureOperableKeysets(ids: Array<string | undefined>): Promise<void> {
+    const wanted = [...new Set(ids.filter((id): id is string => !!id))];
+    const unknown = wanted.filter((id) => !this._keyChain.hasKeyset(id));
+    let changed = false;
+
+    if (unknown.length > 0) {
+      this._pendingRepair ??= this.loadMint(true).finally(() => {
+        this._pendingRepair = null;
+      });
+      try {
+        await this._pendingRepair;
+      } catch (e) {
+        throw new UnknownKeysetError(unknown[0], { cause: e });
+      }
+      changed = true;
+      const still = unknown.filter((id) => !this._keyChain.hasKeyset(id));
+      if (still.length > 0) {
+        // The refresh itself succeeded and is worth persisting before we fail the op.
+        this.on._emitKeychainUpdated();
+        throw new UnknownKeysetError(still[0]);
+      }
+    }
+
+    const keyless = wanted.filter(
+      (id) => this._keyChain.isUnitKeyset(id) && !this._keyChain.getKeyset(id).hasKeys,
+    );
+    if (keyless.length > 0) {
+      await Promise.all(keyless.map((id) => this._keyChain.ensureKeysetKeys(id)));
+      changed = true;
+    }
+
+    if (changed) {
+      this.on._emitKeychainUpdated();
+    }
   }
 
   /**
@@ -1063,6 +1108,10 @@ class Wallet {
       // Token object may come from JSON.parse/localStorage and need runtime rehydration.
       proofs = normalizeProofAmounts(decodedToken.proofs);
     }
+
+    // Rotation evidence check: repair the snapshot and load any missing keys before
+    // any assertion or fee math relies on it. See the keyset rotation design spec.
+    await this.ensureOperableKeysets(proofs.map((p) => p.id));
 
     // Validate all proof keyset IDs use this wallet's unit
     this.assertProofsInWalletUnit(proofs);
