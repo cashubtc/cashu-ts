@@ -115,14 +115,15 @@ describe('rebind on refresh', () => {
     expect(() => wallet.keysetId).toThrow(/no bound keyset/i);
   });
 
-  test('auto-bound wallet stays put when still usable, even if a cheaper active keyset appears', async () => {
+  test('auto-bound wallet follows the cheapest active keyset on refresh', async () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
     expect(wallet.keysetId).toBe('00bd033559de27d0');
 
-    // A stays active; B is a cheaper active keyset per getCheapestKeyset's ordering
-    // (see the rotation fixtures above, where the existing suite rebinds to B once
-    // A goes inactive). A still-usable binding must not chase it.
+    // A stays active alongside B: same version, same fee, but B has no final_expiry
+    // (never expiring) while A does, so getCheapestKeyset's expiry tie-break prefers
+    // B. Re-selection on every refresh means the wallet follows it even though A is
+    // still perfectly usable.
     server.use(
       http.get(mintUrl + '/v1/keysets', () =>
         HttpResponse.json({ keysets: [DUMMY_TEST_KEYSET, keysetB] }),
@@ -130,7 +131,7 @@ describe('rebind on refresh', () => {
       http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [keysB] })),
     );
     await wallet.loadMint(true);
-    expect(wallet.keysetId).toBe('00bd033559de27d0');
+    expect(wallet.keysetId).toBe('009a1f293253e41e');
   });
 });
 
