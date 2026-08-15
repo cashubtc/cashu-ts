@@ -530,12 +530,34 @@ class Wallet {
   }
 
   /**
+   * Make the snapshot usable for these keyset ids, without running an operation.
+   *
+   * @remarks
+   * Repairs unknown ids with one `loadMint(true)` and loads any missing keys. An explicit call is
+   * the consumer's own request, so it ignores `strictCachedKeysets` and the internal repair rate
+   * limit. It emits no `keychainUpdated`: persist `keyChain.cache` yourself afterwards, as with
+   * `loadMint`. Aimed at integrations that verify proofs without running wallet ops.
+   * @param ids Keyset ids to make operable. Undefined entries are ignored.
+   * @throws {@link UnknownKeysetError} For an id the mint does not know, or if the refresh fails.
+   * @throws {@link CTSError} If the wallet has never loaded mint info.
+   */
+  public async ensureOperableKeysets(ids: Array<string | undefined>): Promise<void> {
+    this.failIf(!Array.isArray(ids), 'ensureOperableKeysets: ids must be an array');
+    this.failIf(
+      !this._mintInfo,
+      'Mint info not initialized; call loadMint or loadMintFromCache first',
+    );
+    return this._ensureOperableKeysets(ids, { implicit: false });
+  }
+
+  /**
    * Start, or join, the shared snapshot repair refresh.
    *
    * @remarks
    * Returns null when an implicit repair falls inside the cooldown window, which the caller must
    * treat as terminal. A repair already in flight is always joined, cooldown or not, so concurrent
-   * ops still share one refresh.
+   * ops still share one refresh. Explicit repairs are never blocked, but do stamp the window; a
+   * consumer's own `loadMint(true)` does not, since it never comes through here.
    */
   private startRepair(implicit: boolean): Promise<void> | null {
     if (this._pendingRepair) {
@@ -556,9 +578,10 @@ class Wallet {
    *
    * @remarks
    * Unknown ids repair once via `loadMint(true)`, throwing {@link UnknownKeysetError} if still
-   * unknown; known-but-keyless ids get keys fetched. Both paths emit `keychainUpdated`. Implicit
-   * (op-driven) calls honor `strictCachedKeysets`, where unknown ids throw immediately and keyless
-   * ids are left for the caller, and the repair cooldown.
+   * unknown; known-but-keyless ids get keys fetched. Implicit (op-driven) calls honor
+   * `strictCachedKeysets`, where unknown ids throw immediately and keyless ids are left for the
+   * caller, and the repair cooldown, and emit `keychainUpdated` for anything they change. Explicit
+   * calls do the full pass and emit nothing: the consumer who asked persists the cache.
    */
   private async _ensureOperableKeysets(
     ids: Array<string | undefined>,
@@ -597,7 +620,9 @@ class Wallet {
       const still = unknown.filter((id) => !this._keyChain.hasKeyset(id));
       if (still.length > 0) {
         // The refresh itself succeeded and is worth persisting before we fail the op.
-        this.on._emitKeychainUpdated();
+        if (opts.implicit) {
+          this.on._emitKeychainUpdated();
+        }
         throw new UnknownKeysetError(still[0]);
       }
     }
@@ -609,7 +634,7 @@ class Wallet {
       try {
         await Promise.all(keyless.map((id) => this._keyChain.ensureKeysetKeys(id)));
       } catch (e) {
-        if (changed) {
+        if (changed && opts.implicit) {
           // A repair above already succeeded and is worth persisting even though this fetch failed.
           this.on._emitKeychainUpdated();
         }
@@ -618,7 +643,8 @@ class Wallet {
       changed = true;
     }
 
-    if (changed) {
+    // Explicit callers get no event: they asked for the change, so they persist the cache.
+    if (changed && opts.implicit) {
       this.on._emitKeychainUpdated();
     }
   }

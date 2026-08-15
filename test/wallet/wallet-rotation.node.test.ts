@@ -253,6 +253,12 @@ describe('receive across a rotation', () => {
     await expect(wallet.receive([proofOnA])).rejects.toThrow(/unrecognised keyset/i);
     expect(spyKeySets).not.toHaveBeenCalled(); // no hidden loadMint(true)
 
+    // The public entry point says so outright rather than quietly doing nothing
+    await expect(wallet.ensureOperableKeysets(['00bd033559de27d0'])).rejects.toThrow(
+      /Mint info not initialized; call loadMint/,
+    );
+    expect(spyKeySets).not.toHaveBeenCalled();
+
     spyKeySets.mockRestore();
   });
 });
@@ -508,6 +514,75 @@ describe('repair rate limit', () => {
     expect((err as StaleKeysetError).repaired).toBe(false);
     expect(counts().keysetsRequests).toBe(1); // rate limited, no refresh
     expect(swaps).toBe(1);
+  });
+});
+
+describe('public ensureOperableKeysets', () => {
+  test('backfills keys for a strict wallet on request', async () => {
+    const { counts } = useRotatedMint(server);
+    const wallet = new Wallet(mint, { unit, strictCachedKeysets: true });
+    await wallet.loadMint(); // single load against rotated handlers: A known-but-keyless
+    server.use(
+      http.post(mintUrl + '/v1/swap', () =>
+        HttpResponse.json({
+          signatures: [
+            {
+              id: '009a1f293253e41e',
+              amount: 1,
+              C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+            },
+          ],
+        }),
+      ),
+    );
+
+    const updates: KeyChainCache[] = [];
+    wallet.on.keychainUpdated(({ cache }) => updates.push(cache));
+
+    await wallet.ensureOperableKeysets(['00bd033559de27d0']);
+    expect(counts().keysARequests).toBe(1); // explicit call, so strict mode does not block it
+    expect(updates).toHaveLength(0); // the caller asked, so the caller persists
+
+    const proofs = await wallet.receive([proofOnA]);
+    expect(proofs[0].id).toBe('009a1f293253e41e');
+    expect(counts().keysARequests).toBe(1); // the op itself fetched nothing
+    expect(counts().keysetsRequests).toBe(1); // just the initial load
+    expect(updates).toHaveLength(0);
+  });
+
+  test('repairs an unknown id for a strict wallet', async () => {
+    const wallet = new Wallet(mint, { unit, strictCachedKeysets: true });
+    await wallet.loadMint(); // pre-rotation: knows only A
+    const { counts } = useRotatedMint(server);
+
+    await wallet.ensureOperableKeysets(['009a1f293253e41e']);
+    expect(counts().keysetsRequests).toBe(1);
+    expect(wallet.keyChain.hasKeyset('009a1f293253e41e')).toBe(true);
+  });
+
+  test('bypasses the repair cooldown', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const { counts } = useRotatedMint(server);
+
+    await expect(wallet.receive([{ ...proofOnA, id: '00deadbeefdeadbe' }])).rejects.toThrow(
+      UnknownKeysetError,
+    );
+    expect(counts().keysetsRequests).toBe(1); // implicit repair, which starts the window
+
+    await expect(wallet.ensureOperableKeysets(['00c0ffeec0ffee00'])).rejects.toThrow(
+      UnknownKeysetError,
+    );
+    expect(counts().keysetsRequests).toBe(2); // asked for, so not rate limited
+  });
+
+  test('rejects a non-array argument', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(
+      wallet.ensureOperableKeysets('00bd033559de27d0' as unknown as string[]),
+    ).rejects.toThrow(/must be an array/);
   });
 });
 

@@ -2146,6 +2146,7 @@ export class Wallet {
     createMultiPathMeltQuote(invoice: string, millisatPartialAmount: AmountLike): Promise<MeltQuoteBolt11Response>;
     decodeToken(token: string): Token;
     defaultOutputType(): OutputType;
+    ensureOperableKeysets(ids: Array<string | undefined>): Promise<void>;
     getFeesForKeyset(nInputs: number, keysetId: string): Amount;
     getFeesForProofs(proofs: Array<Pick<Proof, 'id'>>): Amount;
     getFeesToInclude(amount: AmountLike, opts?: {
