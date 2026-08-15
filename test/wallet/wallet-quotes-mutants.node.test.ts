@@ -414,17 +414,19 @@ describe('validateMintQuote mutants', () => {
     ).not.toThrow();
   });
 
-  test('expiry handling: past throws, zero and future are treated as valid', async () => {
+  test('expiry does not prevent minting a paid bolt11 quote', async () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
-    const nowSec = Math.floor(Date.now() / 1000);
+    const quote: MintQuoteBolt11Response = {
+      quote: 'expired-paid-quote',
+      request: 'lnbc...',
+      amount: Amount.from(42),
+      unit,
+      state: MintQuoteState.PAID,
+      expiry: 1,
+    };
 
-    expect(() => wallet.validateMintQuote({ quote: 'q', expiry: nowSec - 100 })).toThrow(
-      'Mint quote has expired',
-    );
-    // 0 means "no expiry" (CDK quirk); a future expiry is still valid.
-    expect(() => wallet.validateMintQuote({ quote: 'q', expiry: 0 })).not.toThrow();
-    expect(() => wallet.validateMintQuote({ quote: 'q', expiry: nowSec + 3600 })).not.toThrow();
+    await expect(wallet.prepareMint('bolt11', 42, quote)).resolves.toBeDefined();
   });
 });
 
@@ -1061,29 +1063,6 @@ describe('checkMintQuoteBolt11 mutants', () => {
     await wallet.checkMintQuoteBolt11('str-id');
     await wallet.checkMintQuoteBolt11({ quote: 'obj-id' } as MintQuoteBolt11Response);
     expect(seen).toEqual(['str-id', 'obj-id']);
-  });
-});
-
-describe('validateMintQuote expiry boundary mutants', () => {
-  test('an expiry equal to the current second is not expired', () => {
-    const wallet = new Wallet(mint, { unit });
-    const FIXED_MS = 1_700_000_000_000;
-    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(FIXED_MS);
-    try {
-      const nowSec = Math.floor(FIXED_MS / 1000);
-      // Spec: expired means strictly in the past. Equal-to-now must pass (a `<=` mutant throws).
-      expect(() => wallet.validateMintQuote({ quote: 'q', expiry: nowSec })).not.toThrow();
-    } finally {
-      nowSpy.mockRestore();
-    }
-  });
-
-  test('a non-number expiry is ignored even if it looks past', () => {
-    const wallet = new Wallet(mint, { unit });
-    // A stringified past expiry must be ignored (a `typeof === 'number'` -> true mutant throws).
-    expect(() =>
-      wallet.validateMintQuote({ quote: 'q', expiry: '100' as unknown as number }),
-    ).not.toThrow();
   });
 });
 

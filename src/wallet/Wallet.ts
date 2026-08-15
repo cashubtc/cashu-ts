@@ -2166,17 +2166,10 @@ class Wallet {
   /**
    * @internal
    */
-  validateMintQuote(quote: Partial<MintQuoteBaseResponse> & { expiry?: number | null }): void {
+  validateMintQuote(quote: Partial<MintQuoteBaseResponse>): void {
     this.failIf(
       'unit' in quote && typeof quote.unit === 'string' && quote.unit !== this.unit,
       `Quote unit '${quote.unit}' does not match wallet unit '${this.unit}'`,
-    );
-    this.failIf(
-      'expiry' in quote &&
-        typeof quote.expiry === 'number' &&
-        quote.expiry > 0 && // some mints (e.g. CDK) emit 0 for "no expiry"; spec says null
-        quote.expiry < Math.floor(Date.now() / 1000),
-      `Mint quote has expired`,
     );
   }
 
