@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Amount } from '../../src';
 import { hashToCurve } from '../../src/crypto';
 import type { Proof } from '../../src/model/types';
+import type { KeyChainCache } from '../../src/model/types/keyset';
 import { type OperationCounters } from '../../src/wallet';
 import { WalletEvents } from '../../src/wallet/WalletEvents';
 
@@ -1315,6 +1316,42 @@ describe('WalletEvents', () => {
         'callback failed',
         expect.objectContaining({ event: 'countersReserved' }),
       );
+    });
+  });
+
+  describe('WalletEvents.keychainUpdated', () => {
+    it('keychainUpdated delivers the current cache and unsubscribes cleanly', () => {
+      const we = new WalletEvents({} as any);
+
+      const cache: KeyChainCache = {
+        keysets: [
+          {
+            id: '00bd033559de27d0',
+            unit: 'sat',
+            active: true,
+            keys: { '1': 'key1', '2': 'key2' },
+          },
+        ],
+        mintUrl: 'https://example.com',
+        savedAt: Date.now(),
+      };
+
+      // Mock the wallet's keyChain.cache property
+      Object.defineProperty(we['wallet'], 'keyChain', {
+        value: { cache },
+        writable: true,
+      });
+
+      const seen: KeyChainCache[] = [];
+      const cancel = we.keychainUpdated(({ cache: c }) => seen.push(c));
+
+      (we as any)._emitKeychainUpdated();
+      expect(seen).toHaveLength(1);
+      expect(seen[0].keysets.map((k) => k.id)).toContain('00bd033559de27d0');
+
+      cancel();
+      (we as any)._emitKeychainUpdated();
+      expect(seen).toHaveLength(1);
     });
   });
 });
