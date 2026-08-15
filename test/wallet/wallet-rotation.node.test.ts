@@ -344,4 +344,18 @@ describe('strictCachedKeysets', () => {
     );
     expect(counts().keysARequests).toBe(0); // strict mode never backfills keys
   });
+
+  test('withKeyset derivative inherits strictCachedKeysets', async () => {
+    const wallet = new Wallet(mint, { unit, strictCachedKeysets: true });
+    await wallet.loadMint(); // pre-rotation defaults: A active with keys
+    const { counts } = useRotatedMint(server); // now A is inactive, B is active
+
+    const derived = wallet.withKeyset('00bd033559de27d0'); // seeded from the parent's cache
+    const err = await derived
+      .prepareSwapToReceive([proofOnB], { keysetId: '009a1f293253e41e' })
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(UnknownKeysetError);
+    expect(counts().keysetsRequests).toBe(0); // strict inherited: no repair fired
+  });
 });

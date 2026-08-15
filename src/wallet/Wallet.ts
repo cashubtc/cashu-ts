@@ -777,6 +777,7 @@ class Wallet {
       requireSigDleq: this._requireSigDleq,
       logger: this._logger,
       counterSource: opts?.counterSource ?? this._counterSource,
+      strictCachedKeysets: this._strictCachedKeysets,
     });
     // Load mint info from our caches
     newWallet.loadMintFromCache(this.getMintInfo().cache, this._keyChain.cache);
