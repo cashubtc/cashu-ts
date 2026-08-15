@@ -2083,6 +2083,7 @@ export class Wallet {
         selectProofs?: SelectProofs;
         outputDataCreator?: OutputDataCreator;
         requireSigDleq?: boolean;
+        strictCachedKeysets?: boolean;
         logger?: Logger;
     });
     batchRestore(gapLimit?: number, batchSize?: number, counter?: number, keysetId?: string): Promise<{

@@ -164,6 +164,7 @@ class Wallet {
   private _selectProofs: SelectProofs;
   private _outputDataCreator: OutputDataCreator;
   private _requireSigDleq = false;
+  private _strictCachedKeysets: boolean = false;
   private _logger: Logger;
 
   /**
@@ -202,6 +203,9 @@ class Wallet {
    * @param options.requireSigDleq Fail mint/swap/melt responses when the mint advertises NUT-12
    *   support but omits DLEQ proofs on returned blinded signatures. This is a fail-fast consistency
    *   check, not protection against a malicious mint already consuming inputs or payments.
+   * @param options.strictCachedKeysets Never fetch keyset data inside operations; only the snapshot
+   *   you load is used. Insufficient state throws the same typed errors as non-strict mode's
+   *   terminal cases. Default false.
    * @param options.logger Logger instance, default null logger.
    */
   constructor(
@@ -218,6 +222,7 @@ class Wallet {
       selectProofs?: SelectProofs; // optional override
       outputDataCreator?: OutputDataCreator;
       requireSigDleq?: boolean;
+      strictCachedKeysets?: boolean;
       logger?: Logger;
     },
   ) {
@@ -252,6 +257,7 @@ class Wallet {
     this._keyChain = new KeyChain(this.mint, this._unit);
     this._denominationTarget = options?.denominationTarget ?? this._denominationTarget;
     this._requireSigDleq = options?.requireSigDleq ?? this._requireSigDleq;
+    this._strictCachedKeysets = options?.strictCachedKeysets ?? this._strictCachedKeysets;
   }
 
   // Convenience wrappers for "log and throw"
@@ -518,9 +524,9 @@ class Wallet {
    * Make the keychain usable for these keyset ids, at op entry or where the ids first become known.
    *
    * @remarks
-   * Unknown ids trigger one shared `loadMint(true)` regardless of unit; still-unknown ids throw
-   * {@link UnknownKeysetError}. Known-but-keyless ids in the wallet's unit get keys fetched (a
-   * foreign-unit id is left for `assertProofsInWalletUnit` to reject). Emits `keychainUpdated`.
+   * Unknown ids repair once via `loadMint(true)`, throwing {@link UnknownKeysetError} if still
+   * unknown; known-but-keyless ids get keys fetched. Both paths emit `keychainUpdated`. Under
+   * `strictCachedKeysets`, unknown ids throw immediately and keyless ids are left for the caller.
    */
   private async ensureOperableKeysets(ids: Array<string | undefined>): Promise<void> {
     // Never-loaded wallet: an empty keychain is not rotation evidence. Let the op's own
@@ -530,6 +536,15 @@ class Wallet {
     }
 
     const wanted = [...new Set(ids.filter((id): id is string => !!id))];
+
+    if (this._strictCachedKeysets) {
+      const strictUnknown = wanted.filter((id) => !this._keyChain.hasKeyset(id));
+      if (strictUnknown.length > 0) {
+        throw new UnknownKeysetError(strictUnknown[0]);
+      }
+      return; // no backfill: downstream key checks report keyless keysets
+    }
+
     const unknown = wanted.filter((id) => !this._keyChain.hasKeyset(id));
     let changed = false;
 
@@ -1807,8 +1822,11 @@ class Wallet {
     this.failIfNullish(this._seed, 'Cashu Wallet must be initialized with a seed to use restore');
     const { keysetId } = config || {};
 
-    // Ensure we have keys - wallet only loads active keysets by default
-    await this._keyChain.ensureKeysetKeys(keysetId ?? this.keysetId);
+    // Ensure we have keys - wallet only loads active keysets by default.
+    // Under strictCachedKeysets, skip the fetch: getKeyset below reports a keyless keyset.
+    if (!this._strictCachedKeysets) {
+      await this._keyChain.ensureKeysetKeys(keysetId ?? this.keysetId);
+    }
     const keyset = this.getKeyset(keysetId); // specified or wallet keyset
 
     // create deterministic blank outputs for unknown restore amounts

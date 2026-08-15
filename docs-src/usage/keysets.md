@@ -65,6 +65,25 @@ This event does not fire for `restore`'s own lazy key fetch, or for your own exp
 `loadMint()` / `loadMint(true)` calls: persist `wallet.keyChain.cache` yourself after those (see
 [Create Wallet](./create_wallet.md)).
 
+## Strict cached keysets
+
+Set `strictCachedKeysets: true` in the `Wallet` constructor options if you run your own
+persistence or state layer (eg a coco-style wallet) and want CTS to operate only on the keyset
+state you load, with no network call happening behind your back. With it set, operations never
+call `/v1/keysets` or `/v1/keys` on their own; the only calls that touch the network are the ones
+you make yourself (`loadMint`, `loadMint(true)`, `keyChain.ensureKeysetKeys`). An unrecognized
+keyset id throws `UnknownKeysetError` immediately, with no repair attempt; a known keyset with
+missing keys throws the same typed errors non-strict mode throws once its own repair path is
+exhausted (eg `No keys loaded for keyset X` from receive, or `Keyset has no keys loaded` from
+`restore`). `keychainUpdated` never fires under strict mode, since nothing internal mutates the
+snapshot. Use `keyChain.ensureKeysetKeys(id)` or `loadMint(true)` to refresh deliberately; those
+keep their normal semantics, including `loadMint(true)`'s carry-forward and rebind rules.
+`restore` and `batchRestore` throw on a keyset without loaded keys under strict mode, so restoring
+across a rotation needs `keyChain.ensureKeysetKeys` called for each keyset first (or a fresh
+`loadMint`). Melt change that arrives on a keyset your snapshot holds keyless throws after the mint
+has already spent the inputs; recover with the persisted `outputData` plus an explicit
+`ensureKeysetKeys` and `createMeltChangeProofs` call, as documented on that method.
+
 ## Long-lived wallets
 
 A wallet that stays in memory across a mint rotation does not need proactive maintenance: the next
