@@ -100,4 +100,4 @@ waiting for an operation to force the issue.
 - [WalletEvents](../wallet_events/wallet_events.md) for subscription patterns (`signal`, timeouts,
   grouping).
 - Rotation behavior end to end:
-  [`wallet-rotation.node.test.ts`](https://github.com/cashubtc/cashu-ts/blob/main/test/wallet/wallet-rotation.node.test.ts).
+  [`wallet-rotation.node.test.ts`](https://github.com/cashubtc/cashu-ts/blob/v4-dev/test/wallet/wallet-rotation.node.test.ts).
