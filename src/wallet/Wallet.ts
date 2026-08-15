@@ -555,7 +555,15 @@ class Wallet {
       (id) => this._keyChain.isUnitKeyset(id) && !this._keyChain.getKeyset(id).hasKeys,
     );
     if (keyless.length > 0) {
-      await Promise.all(keyless.map((id) => this._keyChain.ensureKeysetKeys(id)));
+      try {
+        await Promise.all(keyless.map((id) => this._keyChain.ensureKeysetKeys(id)));
+      } catch (e) {
+        if (changed) {
+          // A repair above already succeeded and is worth persisting even though this fetch failed.
+          this.on._emitKeychainUpdated();
+        }
+        throw e;
+      }
       changed = true;
     }
 

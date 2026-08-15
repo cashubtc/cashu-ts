@@ -163,6 +163,24 @@ describe('receive across a rotation', () => {
     expect((err as UnknownKeysetError).cause).toBeDefined();
   });
 
+  test('a completed repair still emits when the trailing keyless fetch fails', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint(); // knows only A, with keys
+    wallet.keyChain.getKeyset('00bd033559de27d0').keys = {}; // A is now known but keyless
+    const { counts } = useRotatedMint(server); // B is unknown until the repair
+    server.use(http.get(mintUrl + '/v1/keys/00bd033559de27d0', () => HttpResponse.error()));
+
+    const updates: KeyChainCache[] = [];
+    wallet.on.keychainUpdated(({ cache }) => updates.push(cache));
+
+    // proofOnB forces the unknown-keyset repair; proofOnA then needs a keyless
+    // fetch that fails, after the repair already succeeded.
+    await expect(wallet.prepareSwapToReceive([proofOnA, proofOnB])).rejects.toThrow();
+    expect(counts().keysetsRequests).toBe(1); // repair ran once
+    expect(updates).toHaveLength(1); // repair's change was still persisted
+    expect(updates[0].keysets.map((k) => k.id)).toContain('009a1f293253e41e');
+  });
+
   test('a never-loaded wallet rejects honestly, without a hidden repair', async () => {
     const wallet = new Wallet(mint, { unit });
     const spyKeySets = vi.spyOn(wallet.mint, 'getKeySets');
