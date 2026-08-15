@@ -103,6 +103,7 @@ export {
   NetworkError,
   HttpResponseError,
   RateLimitError,
+  UnknownKeysetError,
 } from './model/Errors';
 
 // Low-level helpers/types that appear in public surfaces
