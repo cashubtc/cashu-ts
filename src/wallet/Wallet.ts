@@ -333,8 +333,9 @@ class Wallet {
    * Load mint information, keysets, and keys.
    *
    * @remarks
-   * Must be called before using other methods, unless loading mint from cache. See:
-   * `loadMintFromCache`.
+   * Must be called before other methods, unless loading from cache (`loadMintFromCache`). With
+   * `forceRefresh`, metadata refreshes, held keys are kept, and an auto-bound wallet rebinds to the
+   * cheapest active keyset only if its current one is unusable; pinned wallets stay pinned.
    * @param forceRefresh If true, re-fetches data even if cached.
    * @throws If fetching mint info, keysets, or keys fails.
    */
