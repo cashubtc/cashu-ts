@@ -82,9 +82,10 @@ export class UnknownKeysetError extends CTSError {
  * Thrown when a melt went through but its NUT-08 change could not be reconstructed.
  *
  * @remarks
- * The inputs are spent and the payment stands. Load the change keyset's keys (see
- * `keyChain.ensureKeysetKeys`), then pass `outputData` and the quote's `change` signatures to
- * `wallet.createMeltChangeProofs()` to recover the proofs.
+ * The inputs are spent and the payment stands. `cause` says which recovery applies: a keyset that
+ * can be loaded (see `keyChain.ensureKeysetKeys`) rebuilds from `outputData` and the quote's
+ * `change` signatures via `wallet.createMeltChangeProofs()`. Anything else, eg invalid DLEQ or a
+ * signature count mismatch, needs a NUT-09 restore on a seeded wallet.
  */
 export class MeltChangeError extends CTSError {
   /**
@@ -101,7 +102,7 @@ export class MeltChangeError extends CTSError {
     options?: { cause?: unknown },
   ) {
     super(
-      "Melt completed but its change could not be reconstructed; recover the proofs with this error's outputData and createMeltChangeProofs()",
+      'Melt completed but its change could not be reconstructed; see cause: a keyset that will load rebuilds via createMeltChangeProofs(), anything else needs a NUT-09 restore',
       options,
     );
     this.outputData = outputData;

@@ -70,7 +70,8 @@ ones. Calls you make yourself are never rate limited.
 **Melt change.** NUT-08 change is built after the mint has spent your inputs, so `completeMelt`
 cannot simply fail when the change keyset will not resolve. It throws `MeltChangeError`, which
 carries the blank `outputData` and the merged `quote`. The payment stands; rebuild the proofs once
-the keys are reachable:
+the keys are reachable. Check `cause` first: a missing keyset rebuilds this way, while an invalid
+DLEQ or a signature count mismatch does not, and needs a NUT-09 restore instead.
 
 ```ts
 try {

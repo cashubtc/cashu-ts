@@ -779,7 +779,8 @@ describe('melt proofs', () => {
     expect((result.cause as Error).message).toContain(
       'Mint returned 3 signatures, but only 1 blanks were provided',
     );
-    expect(result.outputData.length).toBeGreaterThan(0); // still recoverable
+    // Carried whatever the cause: this one needs a NUT-09 restore, not a rebuild
+    expect(result.outputData.length).toBeGreaterThan(0);
   });
 });
 
