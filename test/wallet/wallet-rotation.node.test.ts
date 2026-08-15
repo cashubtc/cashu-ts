@@ -89,6 +89,37 @@ describe('rebind on refresh', () => {
     await wallet.loadMint(true);
     expect(wallet.keysetId).toBe('00bd033559de27d0'); // still there; melt remains possible
   });
+
+  test('auto-bound wallet unbinds when its keyset vanishes and no active replacement exists', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    expect(wallet.keysetId).toBe('00bd033559de27d0');
+
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () => HttpResponse.json({ keysets: [] })),
+      http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [] })),
+    );
+    await wallet.loadMint(true);
+    expect(() => wallet.keysetId).toThrow(/no bound keyset/i);
+  });
+
+  test('auto-bound wallet stays put when still usable, even if a cheaper active keyset appears', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    expect(wallet.keysetId).toBe('00bd033559de27d0');
+
+    // A stays active; B is a cheaper active keyset per getCheapestKeyset's ordering
+    // (see the rotation fixtures above, where the existing suite rebinds to B once
+    // A goes inactive). A still-usable binding must not chase it.
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({ keysets: [DUMMY_TEST_KEYSET, keysetB] }),
+      ),
+      http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [keysB] })),
+    );
+    await wallet.loadMint(true);
+    expect(wallet.keysetId).toBe('00bd033559de27d0');
+  });
 });
 
 describe('receive across a rotation', () => {
