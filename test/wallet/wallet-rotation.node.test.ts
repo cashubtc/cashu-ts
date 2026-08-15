@@ -6,7 +6,7 @@
 
 import { HttpResponse, http } from 'msw';
 import type { SetupServer } from 'msw/node';
-import { test, describe, expect } from 'vitest';
+import { test, describe, expect, vi } from 'vitest';
 
 import {
   Wallet,
@@ -161,6 +161,16 @@ describe('receive across a rotation', () => {
     const err = await wallet.prepareSwapToReceive([proofOnB]).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(UnknownKeysetError);
     expect((err as UnknownKeysetError).cause).toBeDefined();
+  });
+
+  test('a never-loaded wallet rejects honestly, without a hidden repair', async () => {
+    const wallet = new Wallet(mint, { unit });
+    const spyKeySets = vi.spyOn(wallet.mint, 'getKeySets');
+
+    await expect(wallet.receive([proofOnA])).rejects.toThrow(/unrecognised keyset/i);
+    expect(spyKeySets).not.toHaveBeenCalled(); // no hidden loadMint(true)
+
+    spyKeySets.mockRestore();
   });
 });
 
