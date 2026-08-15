@@ -1,8 +1,9 @@
 // Rotation suite: what happens to a live Wallet when the mint rotates keysets.
 //
 // Contract: every async wallet op that consumes keyset ids must make the
-// snapshot operable at op entry (see Wallet.ensureOperableKeysets). When you
-// add such an op, add its rotation scenario to this file.
+// snapshot operable at op entry, or where the ids first become known (see
+// Wallet.ensureOperableKeysets). When you add such an op, add its rotation
+// scenario to this file.
 
 import { HttpResponse, http } from 'msw';
 import type { SetupServer } from 'msw/node';

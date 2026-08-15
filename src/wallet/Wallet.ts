@@ -538,7 +538,7 @@ class Wallet {
   }
 
   /**
-   * Make the keychain usable for these keyset ids before an op takes decisions on it.
+   * Make the keychain usable for these keyset ids, at op entry or where the ids first become known.
    *
    * @remarks
    * Unknown ids trigger one shared `loadMint(true)` regardless of unit; still-unknown ids throw
