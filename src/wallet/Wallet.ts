@@ -3279,8 +3279,16 @@ class Wallet {
       feeIndex,
       feeOptions: meltQuote.fee_options.map((o) => o.fee_index),
     });
-    // Ensure we have enough proofs
     const normalizedProofs = normalizeProofAmounts(proofsToSend);
+
+    // Rotation evidence check: repair the snapshot and load any missing keys before the
+    // input fee lookup relies on it. prepareMelt checks again below, a no-op by then.
+    await this._ensureOperableKeysets(
+      normalizedProofs.map((p) => p.id),
+      { implicit: true },
+    );
+
+    // Ensure we have enough proofs
     const inputFee = this.getFeesForProofs(normalizedProofs);
     const sendAmount = sumProofs(normalizedProofs);
     const totalRequired = meltQuote.amount.add(feeOption.fee_reserve).add(inputFee);
