@@ -1142,7 +1142,7 @@ class Wallet {
     }
 
     // Rotation evidence check: repair the snapshot and load any missing keys before
-    // any assertion or fee math relies on it. See the keyset rotation design spec.
+    // any assertion or fee math relies on it.
     await this.ensureOperableKeysets(proofs.map((p) => p.id));
 
     // Validate all proof keyset IDs use this wallet's unit
