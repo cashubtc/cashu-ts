@@ -10,6 +10,12 @@ const mintUrl = 'http://localhost:3338';
 const mint = new Mint(mintUrl);
 const unit = 'sat';
 
+// Rotation fixtures: mint starts with A active, then A goes inactive and B appears.
+const keysetA: MintKeyset = { ...DUMMY_TEST_KEYSET };
+const keysetAInactive: MintKeyset = { ...DUMMY_TEST_KEYSET, active: false };
+const keysetB: MintKeyset = { id: '009a1f293253e41e', unit: 'sat', active: true, input_fee_ppk: 0 };
+const keysB: MintKeys = { ...keysetB, keys: PUBKEYS };
+
 const dummyKeysResp: { keysets: MintKeys[] } = {
   keysets: [
     DUMMY_TEST_KEYS,
@@ -229,6 +235,69 @@ describe('KeyChain initialization', () => {
     await expect(keyChain.init()).resolves.toBeUndefined(); // init itself succeeds
     expect(() => keyChain.getCheapestKeyset()).toThrow('KeyChain not initialized');
     expect(() => keyChain.getKeysets()).toThrow('KeyChain not initialized');
+  });
+
+  test('init(true) keeps keys for a keyset the mint no longer serves keys for', async () => {
+    const keyChain = new KeyChain(mint, unit);
+    // Pre-rotation: A active with keys
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () => HttpResponse.json({ keysets: [keysetA] })),
+      http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [DUMMY_TEST_KEYS] })),
+    );
+    await keyChain.init();
+    expect(keyChain.getKeyset('00bd033559de27d0').hasKeys).toBe(true);
+
+    // Rotation: A inactive and gone from /v1/keys, B active
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({ keysets: [keysetAInactive, keysetB] }),
+      ),
+      http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [keysB] })),
+    );
+    await keyChain.init(true);
+
+    expect(keyChain.getKeyset('00bd033559de27d0').hasKeys).toBe(true); // carried forward
+    expect(keyChain.getKeyset('00bd033559de27d0').isActive).toBe(false); // metadata is fresh
+    expect(keyChain.getKeyset('009a1f293253e41e').hasKeys).toBe(true);
+  });
+
+  test('init(true) drops a keyset absent from the fresh metadata', async () => {
+    const keyChain = new KeyChain(mint, unit);
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () => HttpResponse.json({ keysets: [keysetA] })),
+      http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [DUMMY_TEST_KEYS] })),
+    );
+    await keyChain.init();
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () => HttpResponse.json({ keysets: [keysetB] })),
+      http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [keysB] })),
+    );
+    await keyChain.init(true);
+    expect(keyChain.hasKeyset('00bd033559de27d0')).toBe(false);
+  });
+
+  test('init(true) discards unverifiable fresh keys and carries forward prior verified keys', async () => {
+    const keyChain = new KeyChain(mint, unit);
+    // Pre-rotation: A active with valid DUMMY_TEST_KEYS
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () => HttpResponse.json({ keysets: [keysetA] })),
+      http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [DUMMY_TEST_KEYS] })),
+    );
+    await keyChain.init();
+    expect(keyChain.getKeyset('00bd033559de27d0').hasKeys).toBe(true);
+
+    // Refresh: A still active but /v1/keys serves PUBKEYS (wrong keys for A's id, fail verification)
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () => HttpResponse.json({ keysets: [keysetA] })),
+      http.get(mintUrl + '/v1/keys', () =>
+        HttpResponse.json({ keysets: [{ ...DUMMY_TEST_KEYSET, keys: PUBKEYS }] }),
+      ),
+    );
+    await keyChain.init(true);
+
+    // Prior verified keys carried forward (not replaced by bad fresh keys)
+    expect(keyChain.getKeyset('00bd033559de27d0').hasKeys).toBe(true);
+    expect(keyChain.getKeyset('00bd033559de27d0').keys).toEqual(DUMMY_TEST_KEYS.keys);
   });
 
   test('should preload from cache and match original cache', async () => {
