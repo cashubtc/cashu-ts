@@ -523,6 +523,12 @@ class Wallet {
    * foreign-unit id is left for `assertProofsInWalletUnit` to reject). Emits `keychainUpdated`.
    */
   private async ensureOperableKeysets(ids: Array<string | undefined>): Promise<void> {
+    // Never-loaded wallet: an empty keychain is not rotation evidence. Let the op's own
+    // assertions report initialization instead of a hidden loadMint(true) here.
+    if (!this._mintInfo) {
+      return;
+    }
+
     const wanted = [...new Set(ids.filter((id): id is string => !!id))];
     const unknown = wanted.filter((id) => !this._keyChain.hasKeyset(id));
     let changed = false;
