@@ -1,3 +1,6 @@
+import type { OutputDataLike } from './OutputData';
+import type { MeltQuoteBaseResponse } from './types/NUT05';
+
 /**
  * Base error for errors raised by cashu-ts itself.
  */
@@ -72,6 +75,39 @@ export class UnknownKeysetError extends CTSError {
     this.refreshed = refreshed;
     this.name = 'UnknownKeysetError';
     Object.setPrototypeOf(this, UnknownKeysetError.prototype);
+  }
+}
+
+/**
+ * Thrown when a melt went through but its NUT-08 change could not be reconstructed.
+ *
+ * @remarks
+ * The inputs are spent and the payment stands. Load the change keyset's keys (see
+ * `keyChain.ensureKeysetKeys`), then pass `outputData` and the quote's `change` signatures to
+ * `wallet.createMeltChangeProofs()` to recover the proofs.
+ */
+export class MeltChangeError extends CTSError {
+  /**
+   * The melt's blank outputs, the input to change recovery.
+   */
+  readonly outputData: OutputDataLike[];
+  /**
+   * The melt quote, merged from the preview and the mint's response.
+   */
+  readonly quote: MeltQuoteBaseResponse;
+  constructor(
+    outputData: OutputDataLike[],
+    quote: MeltQuoteBaseResponse,
+    options?: { cause?: unknown },
+  ) {
+    super(
+      "Melt completed but its change could not be reconstructed; recover the proofs with this error's outputData and createMeltChangeProofs()",
+      options,
+    );
+    this.outputData = outputData;
+    this.quote = quote;
+    this.name = 'MeltChangeError';
+    Object.setPrototypeOf(this, MeltChangeError.prototype);
   }
 }
 

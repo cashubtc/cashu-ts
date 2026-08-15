@@ -92,6 +92,31 @@ Code that never branched on those codes needs no change beyond expecting `StaleK
 
 ---
 
+## Melt change failures now throw `MeltChangeError`
+
+`completeMelt` builds NUT-08 change after the mint has spent the inputs. When that step fails (the change keyset's keys will not load, or the signatures do not check out), v4 threw the underlying error and the caller was left with nothing to rebuild from, since the convenience melts never expose the `MeltPreview`. v5 throws `MeltChangeError` instead, carrying the blank `outputData`, the merged `quote`, and the original failure as `cause`.
+
+### Migration
+
+Catch it where a melt can fail, and recover once the keys are reachable:
+
+```ts
+// Before: the melt is paid, and the change is gone
+await wallet.meltProofsBolt11(quote, proofs);
+
+// After: the change is rebuildable
+try {
+  await wallet.meltProofsBolt11(quote, proofs);
+} catch (e) {
+  if (!(e instanceof MeltChangeError)) throw e;
+  const sigs = e.quote.change ?? [];
+  await wallet.keyChain.ensureKeysetKeys(sigs[0].id);
+  const change = wallet.createMeltChangeProofs(e.outputData, sigs);
+}
+```
+
+---
+
 ## Crypto deep imports were reorganized
 
 The internal crypto module layout changed to separate curve-specific primitives from shared

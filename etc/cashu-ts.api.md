@@ -867,6 +867,15 @@ export class MeltBuilder<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | '
 }
 
 // @public
+export class MeltChangeError extends CTSError {
+    constructor(outputData: OutputDataLike[], quote: MeltQuoteBaseResponse, options?: {
+        cause?: unknown;
+    });
+    readonly outputData: OutputDataLike[];
+    readonly quote: MeltQuoteBaseResponse;
+}
+
+// @public
 export class MeltOnchainBuilder {
     constructor(wallet: Wallet, quote: MeltQuoteOnchainResponse, proofs: ProofLike[]);
     feeIndex(index: number): this;

@@ -66,6 +66,22 @@ requests. Those errors report that the wallet did not check (`refreshed: false`,
 rather than blaming the id, because one junk token can burn the window for genuine post-rotation
 ones. Calls you make yourself are never rate limited.
 
+**Melt change.** NUT-08 change is built after the mint has spent your inputs, so `completeMelt`
+cannot simply fail when the change keyset will not resolve. It throws `MeltChangeError`, which
+carries the blank `outputData` and the merged `quote`. The payment stands; rebuild the proofs once
+the keys are reachable:
+
+```ts
+try {
+  const { change } = await wallet.meltProofsBolt11(quote, proofs);
+} catch (e) {
+  if (!(e instanceof MeltChangeError)) throw e;
+  const sigs = e.quote.change ?? [];
+  await wallet.keyChain.ensureKeysetKeys(sigs[0].id); // or persist e.outputData for later
+  const change = wallet.createMeltChangeProofs(e.outputData, sigs);
+}
+```
+
 ## Refreshing on purpose
 
 ### `loadMint(true)`
@@ -129,8 +145,8 @@ Two things to plan for:
 
 - `restoreAll` stops at the first keyset without loaded keys. Call `keyChain.ensureKeysetKeys` per
   keyset (or a fresh `loadMint`) before restoring across a rotation.
-- Melt change arriving on a keyset you hold keyless throws after the mint has spent the inputs.
-  Recover with the persisted `outputData`, an explicit `ensureKeysetKeys`, and
+- Melt change arriving on a keyset you hold keyless throws `MeltChangeError` after the mint has
+  spent the inputs. Recover with its `outputData`, an explicit `ensureKeysetKeys`, and
   `createMeltChangeProofs`.
 
 ## Long-lived wallets

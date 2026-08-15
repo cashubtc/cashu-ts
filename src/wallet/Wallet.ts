@@ -26,6 +26,7 @@ import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
 import {
   CTSError,
+  MeltChangeError,
   StaleKeysetError,
   UnknownKeysetError,
   isMintOperationError,
@@ -3526,6 +3527,8 @@ class Wallet {
    * @returns Updated MeltProofsResponse.
    * @throws If melt fails or signatures don't match output count.
    * @throws {@link StaleKeysetError} If the mint rejects the outputs' keyset.
+   * @throws {@link MeltChangeError} If the melt went through but its change could not be built.
+   *   Carries the `outputData` and quote needed to recover the change later.
    */
   async completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(
     meltPreview: MeltPreview<TQuote>,
@@ -3570,16 +3573,25 @@ class Wallet {
       this.mint.melt<TQuote>(meltPreview.method, meltPayload),
     );
 
+    // Merge preview quote with response to protect against incomplete response.
+    const mergedQuote = { ...meltPreview.quote, ...meltResponse };
+
     // Create any change Proofs. Change may arrive on a rotated-out keyset, and a
     // permissive mint may sign change on a keyset other than the blanks' (NUT-08).
+    // The inputs are spent by now, so a failure here must hand back what recovery needs.
     const changeSigs = meltResponse.change ?? [];
-    if (changeSigs.length > 0) {
-      await this._ensureOperableKeysets(
-        changeSigs.map((s) => s.id),
-        { implicit: true },
-      );
+    let change: Proof[];
+    try {
+      if (changeSigs.length > 0) {
+        await this._ensureOperableKeysets(
+          changeSigs.map((s) => s.id),
+          { implicit: true },
+        );
+      }
+      change = this.createMeltChangeProofs(meltPreview.outputData, changeSigs);
+    } catch (e) {
+      throw new MeltChangeError(meltPreview.outputData, mergedQuote, { cause: e });
     }
-    const change = this.createMeltChangeProofs(meltPreview.outputData, changeSigs);
 
     const changeAmounts = change.map((p) => p.amount.toString());
     if (completeOptions.preferAsync) {
@@ -3588,9 +3600,7 @@ class Wallet {
       this._logger.debug('MELT COMPLETED', { changeAmounts });
     }
 
-    // Merge preview quote with response to protect against incomplete response.
     // Retain outputData if no change was returned, so async/onchain can recover it later.
-    const mergedQuote = { ...meltPreview.quote, ...meltResponse } as TQuote;
     return {
       quote: mergedQuote,
       change,
