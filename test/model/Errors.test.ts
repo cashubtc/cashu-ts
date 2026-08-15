@@ -147,7 +147,7 @@ describe('UnknownKeysetError', () => {
     expect(e.refreshed).toBe(false);
     expect(e.message).toBe(
       "Keyset '00deadbeefdeadbe' is not in the wallet snapshot and no refresh was attempted; " +
-        'retry or refresh with loadMint(true)',
+        'call loadMint(true), or retry once the repair cooldown clears',
     );
     expect(e.message).not.toContain('not a keyset of this mint');
     expect(e.cause).toBeUndefined();
