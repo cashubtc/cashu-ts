@@ -557,17 +557,19 @@ class Wallet {
    * @remarks
    * Returns null when an implicit repair falls inside the cooldown window, which the caller must
    * treat as terminal. A repair already in flight is always joined, cooldown or not, so concurrent
-   * ops still share one refresh. Explicit repairs are never blocked, but do stamp the window; a
-   * consumer's own `loadMint(true)` does not, since it never comes through here.
+   * ops still share one refresh. The window covers implicit repairs only: an explicit one neither
+   * waits for it nor starts it, so a consumer's call never suppresses the wallet's own repair.
    */
   private startRepair(implicit: boolean): Promise<void> | null {
     if (this._pendingRepair) {
       return this._pendingRepair;
     }
-    if (implicit && Date.now() - this._lastRepairAt < REPAIR_COOLDOWN_MS) {
-      return null;
+    if (implicit) {
+      if (Date.now() - this._lastRepairAt < REPAIR_COOLDOWN_MS) {
+        return null;
+      }
+      this._lastRepairAt = Date.now();
     }
-    this._lastRepairAt = Date.now();
     this._pendingRepair = this.loadMint(true).finally(() => {
       this._pendingRepair = null;
     });
