@@ -2264,10 +2264,11 @@ export function unblindSignatureBls(C_: G1Point, r: bigint): G1Point;
 // @public
 export class UnknownKeysetError extends CTSError {
     constructor(keysetId: string, options?: {
+        refreshed?: boolean;
         cause?: unknown;
     });
-    // (undocumented)
     readonly keysetId: string;
+    readonly refreshed: boolean;
 }
 
 // @public (undocumented)

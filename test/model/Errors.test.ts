@@ -139,11 +139,23 @@ describe('isMintOperationError', () => {
 });
 
 describe('UnknownKeysetError', () => {
-  test('carries the keyset id and extends CTSError', () => {
+  test('says the wallet never checked when no refresh ran', () => {
     const e = new UnknownKeysetError('00deadbeefdeadbe');
     expect(e).toBeInstanceOf(CTSError);
     expect(e.name).toBe('UnknownKeysetError');
     expect(e.keysetId).toBe('00deadbeefdeadbe');
+    expect(e.refreshed).toBe(false);
+    expect(e.message).toBe(
+      "Keyset '00deadbeefdeadbe' is not in the wallet snapshot and no refresh was attempted; " +
+        'retry or refresh with loadMint(true)',
+    );
+    expect(e.message).not.toContain('not a keyset of this mint');
+    expect(e.cause).toBeUndefined();
+  });
+
+  test('blames the mint only once a refresh has run', () => {
+    const e = new UnknownKeysetError('00deadbeefdeadbe', { refreshed: true });
+    expect(e.refreshed).toBe(true);
     expect(e.message).toBe("Keyset '00deadbeefdeadbe' is not a keyset of this mint");
     expect(e.cause).toBeUndefined();
   });
@@ -154,6 +166,7 @@ describe('UnknownKeysetError', () => {
     expect(e.message).toBe(
       "Could not resolve unknown keyset '00deadbeefdeadbe': mint refresh failed",
     );
+    expect(e.refreshed).toBe(false); // the refresh was attempted, but told us nothing
     expect(e.cause).toBe(cause);
   });
 });

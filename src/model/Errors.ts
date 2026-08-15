@@ -44,17 +44,32 @@ export class NetworkError extends CTSError {
 }
 
 /**
- * Thrown when a keyset id cannot be resolved against the mint, even after a refresh.
+ * Thrown when a keyset id cannot be resolved against the wallet's view of the mint.
+ *
+ * @remarks
+ * `refreshed: false` means the wallet never asked the mint (rate limited, or strict mode), so a
+ * retry or a `loadMint(true)` may still resolve the id.
  */
 export class UnknownKeysetError extends CTSError {
+  /**
+   * The keyset id that could not be resolved.
+   */
   readonly keysetId: string;
-  constructor(keysetId: string, options?: { cause?: unknown }) {
+  /**
+   * True when a refresh ran and the id was still unknown, so the mint really does not have it.
+   */
+  readonly refreshed: boolean;
+  constructor(keysetId: string, options?: { refreshed?: boolean; cause?: unknown }) {
+    const refreshed = options?.refreshed ?? false;
     const message =
       options?.cause !== undefined
         ? `Could not resolve unknown keyset '${keysetId}': mint refresh failed`
-        : `Keyset '${keysetId}' is not a keyset of this mint`;
+        : refreshed
+          ? `Keyset '${keysetId}' is not a keyset of this mint`
+          : `Keyset '${keysetId}' is not in the wallet snapshot and no refresh was attempted; retry or refresh with loadMint(true)`;
     super(message, options);
     this.keysetId = keysetId;
+    this.refreshed = refreshed;
     this.name = 'UnknownKeysetError';
     Object.setPrototypeOf(this, UnknownKeysetError.prototype);
   }

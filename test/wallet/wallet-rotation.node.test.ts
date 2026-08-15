@@ -191,6 +191,8 @@ describe('receive across a rotation', () => {
     const err = await wallet.prepareSwapToReceive([proofOnAlien]).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(UnknownKeysetError);
     expect((err as UnknownKeysetError).keysetId).toBe('00deadbeefdeadbe');
+    expect((err as UnknownKeysetError).refreshed).toBe(true); // asked the mint, so this is final
+    expect((err as UnknownKeysetError).message).toContain('is not a keyset of this mint');
     expect(counts().keysetsRequests).toBe(1); // it did try
   });
 
@@ -479,13 +481,35 @@ describe('repair rate limit', () => {
       .receive([{ ...proofOnA, id: '00deadbeefdeadbe' }])
       .catch((e: unknown) => e);
     expect(first).toBeInstanceOf(UnknownKeysetError);
+    expect((first as UnknownKeysetError).refreshed).toBe(true);
     expect(counts().keysetsRequests).toBe(1);
 
     const second = await wallet
       .receive([{ ...proofOnA, id: '00c0ffeec0ffee00' }])
       .catch((e: unknown) => e);
     expect(second).toBeInstanceOf(UnknownKeysetError);
+    expect((second as UnknownKeysetError).refreshed).toBe(false); // skipped, so nothing was checked
     expect(counts().keysetsRequests).toBe(1); // no second refresh for the second alien id
+  });
+
+  test('a genuine post-rotation id inside the window says the wallet did not check', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint(); // pre-rotation: knows only A
+
+    // One junk token burns the window against a mint that has not rotated yet
+    const junk = await wallet
+      .receive([{ ...proofOnA, id: '00deadbeefdeadbe' }])
+      .catch((e: unknown) => e);
+    expect((junk as UnknownKeysetError).refreshed).toBe(true);
+
+    const { counts } = useRotatedMint(server); // the rotation lands after that refresh
+    const genuine = await wallet.receive([proofOnB]).catch((e: unknown) => e);
+    expect(genuine).toBeInstanceOf(UnknownKeysetError);
+    expect((genuine as UnknownKeysetError).keysetId).toBe('009a1f293253e41e');
+    expect((genuine as UnknownKeysetError).refreshed).toBe(false);
+    // The id is perfectly good: the wallet may not say otherwise on the strength of a stale snapshot
+    expect((genuine as UnknownKeysetError).message).not.toContain('not a keyset of this mint');
+    expect(counts().keysetsRequests).toBe(0); // rate limited, so it never looked
   });
 
   test('the cooldown also gates the repair a mint rejection asks for', async () => {
@@ -661,6 +685,7 @@ describe('strictCachedKeysets', () => {
     const err = await wallet.prepareSwapToReceive([proofOnB]).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(UnknownKeysetError);
     expect((err as UnknownKeysetError).keysetId).toBe('009a1f293253e41e');
+    expect((err as UnknownKeysetError).refreshed).toBe(false); // strict never asks the mint
     expect(counts().keysetsRequests).toBe(0); // strict mode never repairs
     expect(updates).toHaveLength(0); // nothing internal mutated the snapshot
   });
