@@ -569,10 +569,12 @@ class Wallet {
    * Repairs unknown ids with one `loadMint(true)` and loads any missing keys. An explicit call is
    * the consumer's own request, so it ignores `strictCachedKeysets` and the internal repair rate
    * limit. It emits no `keychainUpdated`: persist `keyChain.cache` yourself afterwards, as with
-   * `loadMint`. Aimed at integrations that verify proofs without running wallet ops.
+   * `loadMint`, and after a throw too, since keys for the other ids may still have landed. Aimed at
+   * integrations that verify proofs without running wallet ops.
    * @param ids Keyset ids to make operable. Undefined entries are ignored.
    * @throws {@link UnknownKeysetError} For an id the mint does not know, or if the refresh fails.
-   * @throws {@link CTSError} If the wallet has never loaded mint info.
+   * @throws {@link CTSError} If the wallet has never loaded mint info, or if several key fetches
+   *   fail, with the individual failures as `cause`. A lone failure is rethrown as-is.
    */
   public async ensureOperableKeysets(ids: Array<string | undefined>): Promise<void> {
     this.failIf(!Array.isArray(ids), 'ensureOperableKeysets: ids must be an array');

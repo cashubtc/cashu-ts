@@ -92,6 +92,26 @@ Code that never branched on those codes needs no change beyond expecting `StaleK
 
 ---
 
+## Melt inputs are checked against the snapshot
+
+`prepareMelt` (and the `meltProofs*` wrappers) never looked up the keyset of an input proof, so proofs on an id the wallet did not hold were melted anyway. v5 resolves those ids first, exactly as `receive` does: unknown ids trigger one `loadMint(true)`, and an id the mint does not know throws `UnknownKeysetError`.
+
+The wallet could not price or verify those inputs before: input fees come from the keyset's `input_fee_ppk`, so an unheld keyset meant a fee of zero and a melt the mint could reject after the quote was locked in.
+
+### Migration
+
+Melting proofs from an external or restored source, on a wallet whose snapshot may predate them, needs the snapshot brought up to date first:
+
+```ts
+// Refresh, or resolve just the ids you are about to spend
+await wallet.ensureOperableKeysets(proofs.map((p) => p.id));
+await wallet.meltProofsBolt11(quote, proofs);
+```
+
+`loadMint(true)` does the same job wholesale. Under `strictCachedKeysets` nothing is fetched for you, so load the keysets yourself before melting.
+
+---
+
 ## Melt change failures now throw `MeltChangeError`
 
 `completeMelt` builds NUT-08 change after the mint has spent the inputs. When that step fails (the change keyset's keys will not load, or the signatures do not check out), v4 threw the underlying error and the caller was left with nothing to rebuild from, since the convenience melts never expose the `MeltPreview`. v5 throws `MeltChangeError` instead, carrying the blank `outputData`, the merged `quote`, and the original failure as `cause`.
@@ -110,7 +130,7 @@ try {
 } catch (e) {
   if (!(e instanceof MeltChangeError)) throw e;
   const sigs = e.quote.change ?? [];
-  await wallet.keyChain.ensureKeysetKeys(sigs[0].id);
+  await wallet.ensureOperableKeysets(sigs.map((s) => s.id)); // change may span keysets
   const change = wallet.createMeltChangeProofs(e.outputData, sigs);
 }
 ```

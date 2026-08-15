@@ -23,10 +23,11 @@ verified against it, so loading them late is safe.
 Two things count as evidence that a rotation happened. Both refresh the snapshot once, then throw:
 the wallet heals, you decide what to do next.
 
-**An unknown keyset id.** A proof names a keyset the snapshot has never seen. `receive` and melt
-change refresh once, then throw `UnknownKeysetError` if the id is still unknown (or if the refresh
-itself failed, with that failure as `cause`). `restore` does not take this path: an unknown id
-there throws a plain `CTSError`.
+**An unknown keyset id.** A proof names a keyset the snapshot has never seen. Every op that reads
+input proof ids (`receive`, `send` and `prepareSwapToSend`, `prepareMelt` and the `meltProofs*`
+wrappers) and melt change refresh once, then throw `UnknownKeysetError` if the id is still unknown
+(or if the refresh itself failed, with that failure as `cause`). `restore` does not take this path:
+an unknown id there throws a plain `CTSError`.
 
 `UnknownKeysetError.refreshed` says how much weight to give it:
 
@@ -77,7 +78,8 @@ try {
 } catch (e) {
   if (!(e instanceof MeltChangeError)) throw e;
   const sigs = e.quote.change ?? [];
-  await wallet.keyChain.ensureKeysetKeys(sigs[0].id); // or persist e.outputData for later
+  // a permissive mint may sign change across keysets, so cover every id
+  await wallet.ensureOperableKeysets(sigs.map((s) => s.id)); // or persist e.outputData for later
   const change = wallet.createMeltChangeProofs(e.outputData, sigs);
 }
 ```
@@ -104,6 +106,10 @@ await wallet.ensureOperableKeysets(proofs.map((p) => p.id));
 Runs the repair on demand: unknown ids get one refresh, keysets held without keys get theirs
 fetched, an id the mint does not know throws `UnknownKeysetError`. For integrations that verify
 proofs or reconstruct persisted `outputData` without running a wallet operation.
+
+Key fetches for several ids settle independently. One failure rethrows as-is; two or more throw a
+`CTSError` whose `cause` is the array of failures. Either way keys that did land are kept, so
+persist the cache even when the call throws.
 
 Being explicit, it ignores `strictCachedKeysets` and the rate limit, and emits no
 `keychainUpdated`. Persist `wallet.keyChain.cache` yourself afterwards. It needs a loaded wallet
