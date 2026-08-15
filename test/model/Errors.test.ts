@@ -7,6 +7,7 @@ import {
   MintOperationError,
   NetworkError,
   RateLimitError,
+  StaleKeysetError,
   UnknownKeysetError,
 } from '../../src/model/Errors';
 
@@ -152,6 +153,29 @@ describe('UnknownKeysetError', () => {
     const e = new UnknownKeysetError('00deadbeefdeadbe', { cause });
     expect(e.message).toBe(
       "Could not resolve unknown keyset '00deadbeefdeadbe': mint refresh failed",
+    );
+    expect(e.cause).toBe(cause);
+  });
+});
+
+describe('StaleKeysetError', () => {
+  test('reports a repaired snapshot and extends CTSError', () => {
+    const e = new StaleKeysetError(true);
+    expect(e).toBeInstanceOf(CTSError);
+    expect(e.name).toBe('StaleKeysetError');
+    expect(e.repaired).toBe(true);
+    expect(e.message).toBe(
+      'Mint rejected a stale keyset; the snapshot has been refreshed, re-prepare the operation',
+    );
+    expect(e.cause).toBeUndefined();
+  });
+
+  test('tells the caller to refresh when nothing was repaired', () => {
+    const cause = new MintOperationError(12002, 'Keyset is inactive, cannot sign messages');
+    const e = new StaleKeysetError(false, { cause });
+    expect(e.repaired).toBe(false);
+    expect(e.message).toBe(
+      'Mint rejected a stale keyset; refresh the snapshot (loadMint(true)) and re-prepare',
     );
     expect(e.cause).toBe(cause);
   });

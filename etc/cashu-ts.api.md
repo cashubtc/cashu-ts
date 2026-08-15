@@ -2147,6 +2147,14 @@ export type SpendingConditionsBase = {
 export function splitAmount(value: AmountLike, keyset: Keys, split?: AmountLike[], order?: 'desc' | 'asc'): Amount[];
 
 // @public
+export class StaleKeysetError extends CTSError {
+    constructor(repaired: boolean, options?: {
+        cause?: unknown;
+    });
+    readonly repaired: boolean;
+}
+
+// @public
 export function stripDleq(proofs: Proof[]): Array<Omit<Proof, 'dleq'>>;
 
 // @public (undocumented)
