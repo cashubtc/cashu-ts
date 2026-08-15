@@ -109,14 +109,22 @@ if (e instanceof StaleKeysetError && isMintOperationError(e.cause) && e.cause.co
 
 A melt whose change could not be rebuilt threw the underlying failure, and the convenience melts
 never expose the `MeltPreview`, so the change was lost with it. `completeMelt` now throws
-`MeltChangeError` carrying what recovery needs. Wrap your melt calls and rebuild as shown above.
+`MeltChangeError` carrying what recovery needs, with the original failure as `cause`. Wrap your
+melt calls and rebuild as shown above.
+
+Read the `cause` before you retry. Keys that would not load are transient, and the rebuild works
+once they are there. An invalid DLEQ or a signature count the blanks cannot account for will not
+fix itself, and on a seeded wallet a NUT-09 restore is the real path.
 
 ### Melt inputs are checked against the snapshot
 
-`prepareMelt` and the `meltProofs*` wrappers never looked up an input proof's keyset, so proofs on
-an id the wallet did not hold were melted anyway, and priced at a fee of zero because input fees
-come from the keyset's `input_fee_ppk`. They now resolve those ids first, exactly as `receive`
-does, and refuse an id the mint does not know.
+`prepareMelt` and the `meltProofs*` wrappers never looked up an input proof's keyset. `prepareMelt`
+takes its fee reserve from `sendAmount - quote.amount` and nothing else, so a bolt11 or bolt12 melt
+of proofs on an id the wallet did not hold went through regardless, with NUT-08 blanks bound to a
+stale keyset. `meltProofsOnchain` does price its inputs, and failed on the way with a raw
+`Could not get fee. No keyset found for keyset id: X`. All of them now resolve their input ids
+first, exactly as `receive` does, and refuse an id the mint does not know with `UnknownKeysetError`
+until the snapshot is repaired.
 
 Melting proofs from an external or restored source, on a wallet whose snapshot may predate them,
 means bringing the snapshot up to date first:
