@@ -67,6 +67,7 @@ import {
   sumProofs,
   verifyProofsForReceive,
   ABSOLUTE_MAX_BATCH_SIZE,
+  DEFAULT_MAX_ARRAY_LENGTH,
 } from '../utils';
 
 import { ceilLog2, getKeepAmounts, stringifyOutputTypeForLog } from './_internal';
@@ -443,6 +444,14 @@ class Wallet {
       'Mint info not initialized; call loadMint or loadMintFromCache first',
     );
     return this._mintInfo;
+  }
+
+  /**
+   * NUT-06: the mint's advertised cap on the length of any array in a request, used to size the
+   * checkstate and restore batches. Falls back to the library default until mint info is loaded.
+   */
+  private get maxArrayLength(): number {
+    return this._mintInfo?.maxArrayLength ?? DEFAULT_MAX_ARRAY_LENGTH;
   }
 
   /**
@@ -1737,7 +1746,8 @@ class Wallet {
    *   gap rule (use with `maxCounter`). Default is `300`
    * @param [config.maxCounter] Inclusive scan ceiling; no counter above it is probed. Default is
    *   unbounded.
-   * @param [config.batchSize=500] Counters per restore request. Default is `500`
+   * @param [config.batchSize] Counters per restore request. Defaults to the mint's advertised
+   *   `max_array_length` (NUT-06), or `500` when it advertises none.
    * @param [config.counter=0] Starting counter. Default is `0`
    * @param [config.keysetId] Keyset to restore; defaults to the wallet's.
    * @param [config.filterSpent=true] Drop spent proofs (NUT-07) before returning. Default is `true`
@@ -1745,7 +1755,12 @@ class Wallet {
   async batchRestore(
     config?: BatchRestoreConfig,
   ): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
-    const { gapLimit = 300, batchSize = 500, keysetId, filterSpent = true } = config ?? {};
+    const {
+      gapLimit = 300,
+      batchSize = this.maxArrayLength,
+      keysetId,
+      filterSpent = true,
+    } = config ?? {};
     let counter = config?.counter ?? 0;
     const bound = config?.maxCounter ?? Number.MAX_SAFE_INTEGER;
     const requiredEmptyBatches = Math.ceil(gapLimit / batchSize);
@@ -3393,13 +3408,10 @@ class Wallet {
         ? hashToCurveBls(enc.encode(p.secret)).toHex(true)
         : hashToCurve(enc.encode(p.secret)).toHex(true),
     );
-    // Nutshell (mint_max_request_length) and CDK (max_inputs) both cap requests at 1000 items
-    // by default; half that leaves headroom for stricter operator configs.
-    // TODO: Replace this with a value from the info endpoint of the mint eventually
-    const BATCH_SIZE = 500;
+    const batchSize = this.maxArrayLength;
     const slices: string[][] = [];
-    for (let i = 0; i < Ys.length; i += BATCH_SIZE) {
-      slices.push(Ys.slice(i, i + BATCH_SIZE));
+    for (let i = 0; i < Ys.length; i += batchSize) {
+      slices.push(Ys.slice(i, i + batchSize));
     }
     // Slices are independent, so run them through the bounded pool; results keep slice order.
     const batches = await runPool(slices, BATCH_POOL_SIZE, async (YsSlice) => {

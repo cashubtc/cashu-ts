@@ -3,7 +3,7 @@ import { test, describe, expect } from 'vitest';
 
 import { Wallet, CheckStateEnum, Amount, hashToCurve } from '../../src';
 
-import { mint, unit, mintUrl, useTestServer } from './_setup';
+import { mint, unit, mintUrl, mintInfoResp, useTestServer } from './_setup';
 
 const server = useTestServer();
 
@@ -91,6 +91,55 @@ describe('checkProofsStates batching', () => {
     many.forEach((p, i) => {
       expect(states[i].Y).toBe(hashToCurve(enc.encode(p.secret)).toHex(true));
     });
+  });
+
+  test("sizes batches from the mint's advertised max_array_length", async () => {
+    const requestSizes: number[] = [];
+    server.use(
+      http.get(mintUrl + '/v1/info', () => {
+        return HttpResponse.json({ ...mintInfoResp, max_array_length: 100 });
+      }),
+      http.post(mintUrl + '/v1/checkstate', async ({ request }) => {
+        const body = (await request.json()) as { Ys: string[] };
+        requestSizes.push(body.Ys.length);
+        return HttpResponse.json({
+          states: body.Ys.map((Y) => ({ Y, state: CheckStateEnum.UNSPENT, witness: null })),
+        });
+      }),
+    );
+    const many = Array.from({ length: 250 }, (_, i) => ({
+      id: '00bd033559de27d0',
+      secret: `probe-secret-${i}`,
+    }));
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await wallet.checkProofsStates(many);
+
+    expect(requestSizes.sort((a, b) => b - a)).toEqual([100, 100, 50]);
+  });
+
+  test('falls back to the library default before mint info is loaded', async () => {
+    const requestSizes: number[] = [];
+    server.use(
+      http.post(mintUrl + '/v1/checkstate', async ({ request }) => {
+        const body = (await request.json()) as { Ys: string[] };
+        requestSizes.push(body.Ys.length);
+        return HttpResponse.json({
+          states: body.Ys.map((Y) => ({ Y, state: CheckStateEnum.UNSPENT, witness: null })),
+        });
+      }),
+    );
+    const many = Array.from({ length: 600 }, (_, i) => ({
+      id: '00bd033559de27d0',
+      secret: `unloaded-secret-${i}`,
+    }));
+    // no loadMint(): checkProofsStates needs no keys, so the wallet has no mint info to size from
+    const wallet = new Wallet(mint, { unit });
+
+    await wallet.checkProofsStates(many);
+
+    expect(requestSizes.sort((a, b) => b - a)).toEqual([500, 100]);
   });
 });
 
