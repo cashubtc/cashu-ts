@@ -4,6 +4,7 @@ import { test, describe, expect, vi } from 'vitest';
 
 import {
   Wallet,
+  MeltChangeError,
   type Proof,
   type ProofLike,
   type MeltQuoteBolt11Response,
@@ -192,7 +193,10 @@ describe('melt proofs', () => {
       },
     ];
 
-    await expect(wallet.meltProofsBolt11(meltQuote, proofsToSend)).rejects.toThrow(
+    // The melt itself went through, so the failure arrives wrapped with the recovery data
+    const err = await wallet.meltProofsBolt11(meltQuote, proofsToSend).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(MeltChangeError);
+    expect(((err as MeltChangeError).cause as Error).message).toContain(
       'Mint supports NUT-12, but returned a signature without DLEQ proof',
     );
   });
@@ -758,7 +762,11 @@ describe('melt proofs', () => {
     ];
     const result = await wallet.meltProofsBolt11(meltQuote, proofsToSend).catch((e) => e);
 
-    expect(result.message).toContain('Mint returned 3 signatures, but only 1 blanks were provided');
+    expect(result).toBeInstanceOf(MeltChangeError);
+    expect((result.cause as Error).message).toContain(
+      'Mint returned 3 signatures, but only 1 blanks were provided',
+    );
+    expect(result.outputData.length).toBeGreaterThan(0); // still recoverable
   });
 });
 

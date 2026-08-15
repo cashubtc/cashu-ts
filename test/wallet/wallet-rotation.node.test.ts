@@ -12,6 +12,7 @@ import { test, describe, expect, vi } from 'vitest';
 
 import {
   Wallet,
+  MeltChangeError,
   MintOperationError,
   StaleKeysetError,
   UnknownKeysetError,
@@ -668,6 +669,51 @@ describe('melt change across a rotation', () => {
     const { change } = await wallet.completeMelt(preview);
     expect(change.length).toBeGreaterThan(0);
     expect(counts().keysARequests).toBe(1); // keys were fetched, not assumed
+  });
+
+  // The inputs are spent by the time change is built, so a failure here has to hand back
+  // enough to rebuild the change later, which the convenience melts otherwise swallow.
+  async function meltWithUnreachableChangeKeys() {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const preview = await wallet.prepareMelt('bolt11', meltQuote, proofsForMelt);
+
+    useRotatedMint(server);
+    await wallet.loadMint(true);
+    wallet.keyChain.getKeyset('00bd033559de27d0').keys = {}; // A is known but keyless
+    server.use(
+      http.get(mintUrl + '/v1/keys/00bd033559de27d0', () => HttpResponse.error()), // and stays that way
+      http.post(mintUrl + '/v1/melt/bolt11', () => HttpResponse.json(paidResponseWithChangeOnA)),
+    );
+
+    const err = await wallet.completeMelt(preview).catch((e: unknown) => e);
+    return { wallet, err };
+  }
+
+  test('unreachable change keys reject with the data recovery needs', async () => {
+    const { err } = await meltWithUnreachableChangeKeys();
+
+    expect(err).toBeInstanceOf(MeltChangeError);
+    expect((err as MeltChangeError).outputData.length).toBeGreaterThan(0);
+    expect((err as MeltChangeError).quote.quote).toBe('melt-rotation');
+    expect((err as MeltChangeError).quote.state).toBe(MeltQuoteState.PAID);
+    expect((err as MeltChangeError).cause).toBeDefined(); // the fetch failure that caused it
+  });
+
+  test('the change is recoverable from that error once the keys arrive', async () => {
+    const { wallet, err } = await meltWithUnreachableChangeKeys();
+    const { outputData, quote } = err as MeltChangeError;
+
+    server.use(
+      http.get(mintUrl + '/v1/keys/00bd033559de27d0', () =>
+        HttpResponse.json({ keysets: [DUMMY_TEST_KEYS] }),
+      ),
+    );
+    await wallet.keyChain.ensureKeysetKeys('00bd033559de27d0');
+
+    const change = wallet.createMeltChangeProofs(outputData, quote.change ?? []);
+    expect(change).toHaveLength(2);
+    expect(change.every((p) => p.id === '00bd033559de27d0')).toBe(true);
   });
 });
 
