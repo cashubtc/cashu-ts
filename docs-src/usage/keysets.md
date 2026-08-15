@@ -41,8 +41,8 @@ plain `CTSError` with no retry.
 Call `loadMint(true)` yourself to follow a mint proactively, for example on a schedule in a
 long-lived service. It:
 
-- refreshes metadata (active flags, fees) from the mint,
-- keeps whatever keys the wallet already holds, rather than re-fetching them,
+- refreshes metadata (active flags, fees) from the mint, re-fetching keys for active keysets,
+- keeps the keys the wallet already holds for any keyset the mint no longer serves,
 - rebinds an auto-bound wallet (constructed without `keysetId`, never `bindKeyset()`-ed) to the
   cheapest active keyset, but only once its current one is no longer usable (missing, inactive, or
   without keys). A still-usable binding is left alone even if a cheaper keyset is now active.
