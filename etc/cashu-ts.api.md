@@ -663,6 +663,7 @@ export class KeyChain {
     getCheapestKeyset(): Keyset;
     getKeyset(id?: string): Keyset;
     getKeysets(): Keyset[];
+    hasKeyset(id?: string): boolean;
     init(forceRefresh?: boolean): Promise<void>;
     isUnitKeyset(id?: string): boolean;
     loadFromCache(cache: KeyChainCache): void;
@@ -2033,6 +2034,15 @@ export type UnblindedSignature = {
 // @public (undocumented)
 export function unblindSignature(C_: WeierstrassPoint<bigint>, r: bigint, A: WeierstrassPoint<bigint>): WeierstrassPoint<bigint>;
 
+// @public
+export class UnknownKeysetError extends CTSError {
+    constructor(keysetId: string, options?: {
+        cause?: unknown;
+    });
+    // (undocumented)
+    readonly keysetId: string;
+}
+
 // @public @deprecated (undocumented)
 export function verifyDleqIfPresent(proof: Proof, keyset: HasKeysetKeys): boolean;
 
@@ -2198,6 +2208,9 @@ export class WalletEvents {
         add: (c: CancellerLike) => CancellerLike;
         cancelled: boolean;
     };
+    keychainUpdated(cb: (payload: {
+        cache: KeyChainCache;
+    }) => void, opts?: SubscribeOpts): SubscriptionCanceller;
     meltQuotePaid(id: string, cb: (p: MeltQuoteBolt11Response) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
     meltQuoteUpdates(ids: string[], cb: (p: MeltQuoteBolt11Response) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
     mintQuotePaid(id: string, cb: (p: MintQuoteBolt11Response) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
