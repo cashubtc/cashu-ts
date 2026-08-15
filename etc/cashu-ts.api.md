@@ -2045,10 +2045,11 @@ export function unblindSignature(C_: WeierstrassPoint<bigint>, r: bigint, A: Wei
 // @public
 export class UnknownKeysetError extends CTSError {
     constructor(keysetId: string, options?: {
+        refreshed?: boolean;
         cause?: unknown;
     });
-    // (undocumented)
     readonly keysetId: string;
+    readonly refreshed: boolean;
 }
 
 // @public @deprecated (undocumented)

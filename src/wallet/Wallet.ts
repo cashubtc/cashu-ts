@@ -577,11 +577,13 @@ class Wallet {
    * Make the keychain usable for these keyset ids, at op entry or where the ids first become known.
    *
    * @remarks
-   * Unknown ids repair once via `loadMint(true)`, throwing {@link UnknownKeysetError} if still
-   * unknown; known-but-keyless ids get keys fetched. Implicit (op-driven) calls honor
-   * `strictCachedKeysets`, where unknown ids throw immediately and keyless ids are left for the
-   * caller, and the repair cooldown, and emit `keychainUpdated` for anything they change. Explicit
-   * calls do the full pass and emit nothing: the consumer who asked persists the cache.
+   * Unknown ids repair once via `loadMint(true)`, throwing {@link UnknownKeysetError} with
+   * `refreshed: true` if still unknown; known-but-keyless ids get keys fetched. Calls that never
+   * reach the mint (strict mode, rate limited) throw it with `refreshed: false`. Implicit
+   * (op-driven) calls honor `strictCachedKeysets`, where unknown ids throw immediately and keyless
+   * ids are left for the caller, and the repair cooldown, and emit `keychainUpdated` for anything
+   * they change. Explicit calls do the full pass and emit nothing: the consumer who asked persists
+   * the cache.
    */
   private async _ensureOperableKeysets(
     ids: Array<string | undefined>,
@@ -598,7 +600,7 @@ class Wallet {
     if (opts.implicit && this._strictCachedKeysets) {
       const strictUnknown = wanted.filter((id) => !this._keyChain.hasKeyset(id));
       if (strictUnknown.length > 0) {
-        throw new UnknownKeysetError(strictUnknown[0]);
+        throw new UnknownKeysetError(strictUnknown[0]); // not refreshed: strict never asks the mint
       }
       return; // no backfill: downstream key checks report keyless keysets
     }
@@ -609,7 +611,8 @@ class Wallet {
     if (unknown.length > 0) {
       const repair = this.startRepair(opts.implicit);
       if (!repair) {
-        throw new UnknownKeysetError(unknown[0]); // rate limited: terminal for this op
+        // Rate limited: terminal for this op, and not refreshed, so the id may well be genuine.
+        throw new UnknownKeysetError(unknown[0]);
       }
       try {
         await repair;
@@ -623,7 +626,7 @@ class Wallet {
         if (opts.implicit) {
           this.on._emitKeychainUpdated();
         }
-        throw new UnknownKeysetError(still[0]);
+        throw new UnknownKeysetError(still[0], { refreshed: true });
       }
     }
 
