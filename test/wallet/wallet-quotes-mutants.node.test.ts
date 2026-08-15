@@ -434,12 +434,18 @@ describe('validateMintQuote mutants', () => {
   test('expiry does not prevent minting an available quote balance', async () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
-    const quote = {
+    const quote: MintQuoteBolt11Response = {
       quote: 'expired-paid-quote',
+      request: 'lnbc...',
+      amount: Amount.from(42),
+      unit: 'sat',
+      method: 'bolt11',
+      state: MintQuoteState.PAID,
       expiry: 1,
-      amount_paid: 42,
-      amount_issued: 0,
-    } as unknown as MintQuoteBolt11Response;
+      amount_paid: Amount.from(42),
+      amount_issued: Amount.from(0),
+      updated_at: null,
+    };
 
     await expect(wallet.prepareMint('bolt11', 42, quote)).resolves.toBeDefined();
     await expect(wallet.prepareMint('bolt11', 43, quote)).rejects.toThrow(

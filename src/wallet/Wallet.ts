@@ -2281,7 +2281,7 @@ class Wallet {
   /**
    * @internal
    */
-  validateMintQuote(quote: Partial<MintQuoteBaseResponse> & { expiry?: number | null }): void {
+  validateMintQuote(quote: Partial<MintQuoteBaseResponse>): void {
     this.failIf(
       'unit' in quote && typeof quote.unit === 'string' && quote.unit !== this.unit,
       `Quote unit '${quote.unit}' does not match wallet unit '${this.unit}'`,
