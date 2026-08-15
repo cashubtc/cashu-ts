@@ -776,15 +776,6 @@ export function hasValidDleq(
   if (proof?.dleq == undefined) {
     return !require;
   }
-  if (!hasCorrespondingKey(proof.amount, keyset.keys)) {
-    // An empty keyset means keys were never loaded (eg rotated-out keyset per NUT-01),
-    // not that the denomination is missing. Say so: the two failures have different fixes.
-    const message =
-      Object.keys(keyset.keys).length === 0
-        ? `No keys loaded for keyset ${keyset.id}`
-        : `Undefined key for amount ${proof.amount.toString()} in keyset ${keyset.id}`;
-    throw new CTSError(message);
-  }
 
   const key = keyset.keys[proof.amount.toString()];
   try {
