@@ -669,16 +669,27 @@ class Wallet {
       (id) => this._keyChain.isUnitKeyset(id) && !this._keyChain.getKeyset(id).hasKeys,
     );
     if (keyless.length > 0) {
-      try {
-        await Promise.all(keyless.map((id) => this._keyChain.ensureKeysetKeys(id)));
-      } catch (e) {
+      // allSettled, not all: a sibling failure must not hide the keys that did land, or the
+      // consumer never learns to persist them and refetches on every op.
+      const fetches = await Promise.allSettled(
+        keyless.map((id) => this._keyChain.ensureKeysetKeys(id)),
+      );
+      const failed = fetches.filter((f): f is PromiseRejectedResult => f.status === 'rejected');
+      if (failed.length < fetches.length) {
+        changed = true;
+      }
+      if (failed.length > 0) {
         if (changed && opts.implicit) {
-          // A repair above already succeeded and is worth persisting even though this fetch failed.
+          // Whatever landed (a repair above, or a sibling fetch) is worth persisting first.
           this.on._emitKeychainUpdated();
         }
-        throw e;
+        if (failed.length === 1) {
+          throw failed[0].reason;
+        }
+        throw new CTSError(`Could not load keys for ${failed.length} keysets`, {
+          cause: failed.map((f) => f.reason),
+        });
       }
-      changed = true;
     }
 
     // Explicit callers get no event: they asked for the change, so they persist the cache.
