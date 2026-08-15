@@ -3392,8 +3392,13 @@ class Wallet {
       meltPayload,
     );
 
-    // Create any change Proofs
-    const change = this.createMeltChangeProofs(meltPreview.outputData, meltResponse.change ?? []);
+    // Create any change Proofs. Change may arrive on a rotated-out keyset, and a
+    // permissive mint may sign change on a keyset other than the blanks' (NUT-08).
+    const changeSigs = meltResponse.change ?? [];
+    if (changeSigs.length > 0) {
+      await this.ensureOperableKeysets(changeSigs.map((s) => s.id));
+    }
+    const change = this.createMeltChangeProofs(meltPreview.outputData, changeSigs);
 
     const changeAmounts = change.map((p) => p.amount.toString());
     if (completeOptions.preferAsync) {
@@ -3416,9 +3421,9 @@ class Wallet {
    * Constructs melt change proofs from prepared OutputData and mint returned Change Signatures.
    *
    * @remarks
-   * Called internally by `completeMelt`; also useful for NUT-06 async melts and any other path that
-   * defers change construction (crash recovery, process hand-off). Keyset lookup is per-signature
-   * so multi-keyset responses (e.g. a permissive CDK mint) work transparently.
+   * Synchronous by design and called internally by `completeMelt` (which ensures keys first);
+   * direct callers deferring change construction (NUT-06 async melts, crash recovery) should `await
+   * wallet.keyChain.ensureKeysetKeys(id)` per signature keyset first.
    * @param outputData Outputs from `prepareMelt()`, or deserialised persisted OutputData.
    * @param changeSigs The optional `change` signatures from the melt response or paid quote.
    * @returns Spendable change proofs (possibly empty).

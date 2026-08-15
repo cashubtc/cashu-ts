@@ -11,10 +11,14 @@ import { test, describe, expect } from 'vitest';
 import {
   Wallet,
   UnknownKeysetError,
+  Amount,
+  MeltQuoteState,
   type KeyChainCache,
   type MintKeyset,
   type MintKeys,
   type ProofLike,
+  type Proof,
+  type MeltQuoteBolt11Response,
 } from '../../src';
 import { DUMMY_TEST_KEYSET, DUMMY_TEST_KEYS, PUBKEYS } from '../consts';
 
@@ -157,5 +161,67 @@ describe('receive across a rotation', () => {
     const err = await wallet.prepareSwapToReceive([proofOnB]).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(UnknownKeysetError);
     expect((err as UnknownKeysetError).cause).toBeDefined();
+  });
+});
+
+describe('melt change across a rotation', () => {
+  const meltQuote: MeltQuoteBolt11Response = {
+    quote: 'melt-rotation',
+    amount: Amount.from(10),
+    fee_reserve: Amount.from(3),
+    request: 'bolt11request',
+    state: MeltQuoteState.UNPAID,
+    expiry: 1234567890,
+    payment_preimage: null,
+    unit: 'sat',
+    method: 'bolt11',
+  };
+  const proofsForMelt: Proof[] = [
+    { id: '00bd033559de27d0', amount: Amount.from(8), secret: 'secret1', C: 'C1' },
+    { id: '00bd033559de27d0', amount: Amount.from(5), secret: 'secret2', C: 'C2' },
+  ]; // sum=13, feeReserve=3, amount=10
+  const paidResponseWithChangeOnA = {
+    quote: 'melt-rotation',
+    amount: 10,
+    unit: 'sat',
+    fee_reserve: 3,
+    state: MeltQuoteState.PAID,
+    expiry: 1234567890,
+    payment_preimage: 'preimage',
+    request: 'bolt11request',
+    change: [
+      {
+        id: '00bd033559de27d0',
+        amount: 1,
+        C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+      },
+      {
+        id: '00bd033559de27d0',
+        amount: 2,
+        C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+      },
+    ],
+  };
+
+  test('completeMelt reconstructs change on a keyset it holds keyless', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const preview = await wallet.prepareMelt('bolt11', meltQuote, proofsForMelt);
+
+    // Rotate underneath the in-flight melt: A goes inactive and keyless in the snapshot
+    const { counts } = useRotatedMint(server);
+    await wallet.loadMint(true);
+    // Sanity: the refresh kept A's keys (Task 2); blank them to simulate a wallet
+    // built fresh from post-rotation data, which is the failing production case.
+    wallet.keyChain.getKeyset('00bd033559de27d0').keys = {};
+
+    // Mint answers with change signed on A (the keyset the blanks were built on)
+    server.use(
+      http.post(mintUrl + '/v1/melt/bolt11', () => HttpResponse.json(paidResponseWithChangeOnA)),
+    );
+
+    const { change } = await wallet.completeMelt(preview);
+    expect(change.length).toBeGreaterThan(0);
+    expect(counts().keysARequests).toBe(1); // keys were fetched, not assumed
   });
 });
