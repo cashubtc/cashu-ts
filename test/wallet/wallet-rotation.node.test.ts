@@ -25,6 +25,7 @@ import {
   type ProofLike,
   type Proof,
   type MeltQuoteBolt11Response,
+  type MeltQuoteOnchainResponse,
   type MintQuoteBolt11Response,
 } from '../../src';
 import { DUMMY_TEST_KEYSET, DUMMY_TEST_KEYS, PUBKEYS } from '../consts';
@@ -914,6 +915,36 @@ describe('send and melt inputs across a rotation', () => {
     expect(preview.inputs).toHaveLength(2);
     expect(preview.keysetId).toBe('009a1f293253e41e'); // NUT-08 blanks on the repaired binding
     expect(counts().keysetsRequests).toBe(1);
+  });
+
+  test('meltProofsOnchain repairs the snapshot before its own fee check', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint(); // knows only A
+    const { counts } = useRotatedMint(server);
+
+    const onchainQuote: MeltQuoteOnchainResponse = {
+      quote: 'melt-onchain-inputs',
+      request: 'bc1qrecipient',
+      amount: Amount.from(10),
+      unit: 'sat',
+      method: 'onchain',
+      fee_options: [{ fee_index: 0, fee_reserve: Amount.from(2), estimated_blocks: 6 }],
+      selected_fee_index: null,
+      state: MeltQuoteState.UNPAID,
+      expiry: 3600,
+      outpoint: null,
+    };
+
+    // This wrapper does its own input fee math before delegating, so it needs the
+    // repair of its own. Deliberately underfunded: reaching the wrapper's amount
+    // check means the fee lookup found the repaired keyset, and the suite has no
+    // onchain melt endpoint to run past it.
+    const err = await wallet
+      .meltProofsOnchain(onchainQuote, [{ ...proofOnB, amount: 5 }], 0)
+      .catch((e: unknown) => e);
+
+    expect((err as Error).message).toContain('Not enough proofs to cover amount + fee');
+    expect(counts().keysetsRequests).toBe(1); // exactly one repair refresh
   });
 
   test('a complete snapshot fetches nothing on either path', async () => {
