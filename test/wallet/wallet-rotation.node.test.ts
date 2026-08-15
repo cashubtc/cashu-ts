@@ -218,6 +218,30 @@ describe('receive across a rotation', () => {
     expect(updates[0].keysets.map((k) => k.id)).toContain('009a1f293253e41e');
   });
 
+  test('a keyless fetch failure without a prior repair emits nothing', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint(); // pre-rotation defaults: A active with keys
+    wallet.keyChain.getKeyset('00bd033559de27d0').keys = {}; // A is now known but keyless
+
+    let keysetsRequests = 0;
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () => {
+        keysetsRequests++;
+        return HttpResponse.json({ keysets: [] });
+      }),
+      http.get(mintUrl + '/v1/keys/00bd033559de27d0', () => HttpResponse.error()),
+    );
+
+    const updates: KeyChainCache[] = [];
+    wallet.on.keychainUpdated(({ cache }) => updates.push(cache));
+
+    // proofOnA names a known keyset, so no unknown-id repair fires; the keyless
+    // fetch fails with nothing having changed beforehand.
+    await expect(wallet.prepareSwapToReceive([proofOnA])).rejects.toThrow();
+    expect(updates).toHaveLength(0); // no repair ran, nothing to persist
+    expect(keysetsRequests).toBe(0); // the unknown-id repair path was never invoked
+  });
+
   test('a never-loaded wallet rejects honestly, without a hidden repair', async () => {
     const wallet = new Wallet(mint, { unit });
     const spyKeySets = vi.spyOn(wallet.mint, 'getKeySets');
