@@ -65,6 +65,28 @@ The same shape applies to the split flow: re-run your `prepare*` before completi
 outputs in hand are the rejected ones. On a seeded wallet that reserves fresh counters; the
 abandoned ones are recoverable with a NUT-09 restore.
 
+### Upgrading an existing handler
+
+If you already branch on the 12xxx codes, your catch stops matching. Code that tested
+`isMintOperationError(e) && e.code === 12002`, or `e instanceof MintOperationError`, around
+`completeSwap`, `completeMint`, `completeBatchMint` or `completeMelt` now needs to test for
+`StaleKeysetError`. The mint's own error survives as `e.cause`, so whatever you read off it still
+reads the same from there.
+
+The class changes as well as the name. `MintOperationError` extends `HttpResponseError` and carries
+`status`; `StaleKeysetError` extends `CTSError` directly and does not. A handler reading `e.status`
+should read it from the cause instead:
+
+```ts
+// Before
+if (isMintOperationError(e) && e.code === 12002) log(e.status);
+
+// After
+if (e instanceof StaleKeysetError && isMintOperationError(e.cause) && e.cause.code === 12002) {
+  log(e.cause.status);
+}
+```
+
 ### Repair rate limit
 
 Internal repairs are limited to one per minute per wallet. Inside that window the wallet skips the
