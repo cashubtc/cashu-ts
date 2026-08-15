@@ -2307,6 +2307,7 @@ export class Wallet {
         selectProofs?: SelectProofs;
         outputDataCreator?: OutputDataCreator;
         requireSigDleq?: boolean;
+        strictCachedKeysets?: boolean;
         customRequest?: RequestFn;
         requestFetch?: RequestFetch;
         logger?: Logger;

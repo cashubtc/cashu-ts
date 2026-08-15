@@ -5,6 +5,7 @@
 // Wallet.ensureOperableKeysets). When you add such an op, add its rotation
 // scenario to this file.
 
+import { randomBytes } from '@noble/hashes/utils.js';
 import { HttpResponse, http } from 'msw';
 import type { SetupServer } from 'msw/node';
 import { test, describe, expect, vi } from 'vitest';
@@ -49,6 +50,16 @@ function useRotatedMint(server: SetupServer) {
   );
   return { counts: () => ({ keysetsRequests, keysARequests }) };
 }
+
+// Shared across describes below: a proof on the pre-rotation keyset (A) and its
+// counterpart on the post-rotation keyset (B).
+const proofOnA: ProofLike = {
+  id: '00bd033559de27d0',
+  amount: 1,
+  secret: '407915bc212be61a77e3e6d2aeb4c727980bda51cd06a6afc29e2861768a7837',
+  C: '02bc9097997d81afb2cc7346b5e4345a9346bd2a506eb7958598a72f0cf85163ea',
+};
+const proofOnB: ProofLike = { ...proofOnA, id: '009a1f293253e41e' };
 
 describe('rebind on refresh', () => {
   test('auto-bound wallet follows the mint after a rotation', async () => {
@@ -124,13 +135,6 @@ describe('rebind on refresh', () => {
 });
 
 describe('receive across a rotation', () => {
-  const proofOnA: ProofLike = {
-    id: '00bd033559de27d0',
-    amount: 1,
-    secret: '407915bc212be61a77e3e6d2aeb4c727980bda51cd06a6afc29e2861768a7837',
-    C: '02bc9097997d81afb2cc7346b5e4345a9346bd2a506eb7958598a72f0cf85163ea',
-  };
-  const proofOnB: ProofLike = { ...proofOnA, id: '009a1f293253e41e' };
   const proofOnAlien: ProofLike = { ...proofOnA, id: '00deadbeefdeadbe' };
 
   test('receives a pre-rotation token by loading the old keys once', async () => {
@@ -283,5 +287,61 @@ describe('melt change across a rotation', () => {
     const { change } = await wallet.completeMelt(preview);
     expect(change.length).toBeGreaterThan(0);
     expect(counts().keysARequests).toBe(1); // keys were fetched, not assumed
+  });
+});
+
+describe('strictCachedKeysets', () => {
+  test('unknown id throws typed, zero fetches', async () => {
+    const wallet = new Wallet(mint, { unit, strictCachedKeysets: true });
+    await wallet.loadMint(); // pre-rotation defaults: knows only A
+
+    const { counts } = useRotatedMint(server);
+    const updates: KeyChainCache[] = [];
+    wallet.on.keychainUpdated(({ cache }) => updates.push(cache));
+
+    const err = await wallet.prepareSwapToReceive([proofOnB]).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(UnknownKeysetError);
+    expect((err as UnknownKeysetError).keysetId).toBe('009a1f293253e41e');
+    expect(counts().keysetsRequests).toBe(0); // strict mode never repairs
+    expect(updates).toHaveLength(0); // nothing internal mutated the snapshot
+  });
+
+  test('keyless receive throws legibly, zero fetches', async () => {
+    const { counts } = useRotatedMint(server);
+    const wallet = new Wallet(mint, { unit, strictCachedKeysets: true });
+    await wallet.loadMint(); // single load against rotated handlers: A known-but-keyless
+
+    await expect(wallet.prepareSwapToReceive([proofOnA])).rejects.toThrow(
+      /No keys loaded for keyset 00bd033559de27d0/,
+    );
+    expect(counts().keysARequests).toBe(0); // strict mode never backfills keys
+  });
+
+  test('explicit backfill still works', async () => {
+    const { counts } = useRotatedMint(server);
+    const wallet = new Wallet(mint, { unit, strictCachedKeysets: true });
+    await wallet.loadMint();
+
+    await wallet.keyChain.ensureKeysetKeys('00bd033559de27d0'); // consumer's explicit call
+    expect(counts().keysARequests).toBe(1);
+
+    const preview = await wallet.prepareSwapToReceive([proofOnA]);
+    expect(preview.keysetId).toBe('009a1f293253e41e');
+    expect(counts().keysARequests).toBe(1); // no extra fetch from the op itself
+  });
+
+  test('strict restore surfaces keyless', async () => {
+    const { counts } = useRotatedMint(server);
+    const wallet = new Wallet(mint, {
+      unit,
+      bip39seed: randomBytes(32),
+      strictCachedKeysets: true,
+    });
+    await wallet.loadMint(); // single load against rotated handlers: A known-but-keyless
+
+    await expect(wallet.restore(0, 5, { keysetId: '00bd033559de27d0' })).rejects.toThrow(
+      /Keyset has no keys loaded/,
+    );
+    expect(counts().keysARequests).toBe(0); // strict mode never backfills keys
   });
 });
