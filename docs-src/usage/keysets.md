@@ -31,8 +31,8 @@ there throws a plain `CTSError`.
 `UnknownKeysetError.refreshed` says how much weight to give it:
 
 - **`true`** - the wallet asked the mint and the id is not there. Final.
-- **`false`** - it never asked (strict mode, or rate limit). The id may be fine; a retry or a
-  `loadMint(true)` can still resolve it.
+- **`false`** - no answer from the mint (strict mode, rate limit, or a failed refresh). The id may
+  be fine; a `loadMint(true)` or a retry can still resolve it.
 
 **A mint rejection.** Your snapshot still calls a retired keyset active, so outputs get built on
 it and only the mint knows better. `completeSwap`, `completeMint`, `completeBatchMint` and

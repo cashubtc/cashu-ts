@@ -601,12 +601,12 @@ class Wallet {
    *
    * @remarks
    * Unknown ids repair once via `loadMint(true)`, throwing {@link UnknownKeysetError} with
-   * `refreshed: true` if still unknown; known-but-keyless ids get keys fetched. Calls that never
-   * reach the mint (strict mode, rate limited) throw it with `refreshed: false`. Implicit
-   * (op-driven) calls honor `strictCachedKeysets`, where unknown ids throw immediately and keyless
-   * ids are left for the caller, and the repair cooldown, and emit `keychainUpdated` for anything
-   * they change. Explicit calls do the full pass and emit nothing: the consumer who asked persists
-   * the cache.
+   * `refreshed: true` if still unknown; known-but-keyless ids get keys fetched. Calls left without
+   * an answer (strict mode, rate limited, failed refresh) throw it with `refreshed: false`.
+   * Implicit (op-driven) calls honor `strictCachedKeysets`, where unknown ids throw immediately and
+   * keyless ids are left for the caller, and the repair cooldown, and emit `keychainUpdated` for
+   * anything they change. Explicit calls do the full pass and emit nothing: the consumer who asked
+   * persists the cache.
    */
   private async _ensureOperableKeysets(
     ids: Array<string | undefined>,

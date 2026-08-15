@@ -47,8 +47,8 @@ export class NetworkError extends CTSError {
  * Thrown when a keyset id cannot be resolved against the wallet's view of the mint.
  *
  * @remarks
- * `refreshed: false` means the wallet never asked the mint (rate limited, or strict mode), so a
- * retry or a `loadMint(true)` may still resolve the id.
+ * `refreshed: false` means the wallet has no answer from the mint (rate limited, strict mode, or a
+ * failed refresh), so a retry or a `loadMint(true)` may still resolve the id.
  */
 export class UnknownKeysetError extends CTSError {
   /**
@@ -66,7 +66,7 @@ export class UnknownKeysetError extends CTSError {
         ? `Could not resolve unknown keyset '${keysetId}': mint refresh failed`
         : refreshed
           ? `Keyset '${keysetId}' is not a keyset of this mint`
-          : `Keyset '${keysetId}' is not in the wallet snapshot and no refresh was attempted; retry or refresh with loadMint(true)`;
+          : `Keyset '${keysetId}' is not in the wallet snapshot and no refresh was attempted; call loadMint(true), or retry once the repair cooldown clears`;
     super(message, options);
     this.keysetId = keysetId;
     this.refreshed = refreshed;
