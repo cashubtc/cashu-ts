@@ -59,6 +59,8 @@ The typed methods (`createMintQuoteBolt11` etc.) already required `loadMint()` (
 
 When the mint rejects an operation with a NUT-00 keyset error (the 12xxx class: `12001` unknown, `12002` inactive, `12003` expired), `completeSwap`, `completeMint`, `completeBatchMint` and `completeMelt` no longer surface the raw `MintOperationError`. The wallet reads the rejection as evidence that its keyset snapshot is stale, refreshes it once, and throws `StaleKeysetError` with the mint's error as `cause`. Every other mint error is untouched.
 
+The class hierarchy changes with it. `MintOperationError` extends `HttpResponseError` and carries a `status`, while `StaleKeysetError` extends `CTSError` directly. A handler that caught `HttpResponseError` around these four ops, or read `.status` off the error, sees neither now: reach them through `e.cause`, which still holds the original `MintOperationError`.
+
 `repaired: true` means the refresh ran and the snapshot is current again, so running your call a second time should succeed. `repaired: false` means nothing changed (`strictCachedKeysets`, a failed refresh, or the internal repair rate limit) and recovery is yours to decide. Nothing retries for you: the rejected outputs were built on the stale keyset, so only a fresh prepare can fix them.
 
 ### Migration
