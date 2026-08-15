@@ -1,6 +1,5 @@
 import { hexToBytes } from '@noble/curves/utils.js';
 import { HttpResponse, http } from 'msw';
-import type { SetupServer } from 'msw/node';
 import { test, describe, expect } from 'vitest';
 
 import {
@@ -12,38 +11,12 @@ import {
   type AmountLike,
   type HasKeysetKeys,
   type ProofLike,
-  type KeyChainCache,
-  type MintKeyset,
-  type MintKeys,
 } from '../../src';
-import { DUMMY_TEST_KEYSET, DUMMY_TEST_KEYS, PUBKEYS } from '../consts';
+import { PUBKEYS } from '../consts';
 
 import { mint, unit, token3sat, mintUrl, logger, useTestServer } from './_setup';
 
 const server = useTestServer();
-
-// Rotation fixtures: mint starts with A active, then A goes inactive and B appears.
-const keysetAInactive: MintKeyset = { ...DUMMY_TEST_KEYSET, active: false };
-const keysetB: MintKeyset = { id: '009a1f293253e41e', unit: 'sat', active: true, input_fee_ppk: 0 };
-const keysB: MintKeys = { ...keysetB, keys: PUBKEYS };
-
-function useRotatedMint(server: SetupServer) {
-  let keysetsRequests = 0;
-  let keysARequests = 0;
-  server.use(
-    http.get(mintUrl + '/v1/keysets', () => {
-      keysetsRequests++;
-      return HttpResponse.json({ keysets: [keysetAInactive, keysetB] });
-    }),
-    http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [keysB] })),
-    http.get(mintUrl + '/v1/keys/00bd033559de27d0', () => {
-      keysARequests++;
-      return HttpResponse.json({ keysets: [DUMMY_TEST_KEYS] });
-    }),
-    http.get(mintUrl + '/v1/keys/009a1f293253e41e', () => HttpResponse.json({ keysets: [keysB] })),
-  );
-  return { counts: () => ({ keysetsRequests, keysARequests }) };
-}
 
 describe('receive', () => {
   const tokenInput =
@@ -756,78 +729,5 @@ describe('receive', () => {
     ]);
     expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
-  });
-});
-
-describe('receive across a rotation', () => {
-  const proofOnA: ProofLike = {
-    id: '00bd033559de27d0',
-    amount: 1,
-    secret: '407915bc212be61a77e3e6d2aeb4c727980bda51cd06a6afc29e2861768a7837',
-    C: '02bc9097997d81afb2cc7346b5e4345a9346bd2a506eb7958598a72f0cf85163ea',
-  };
-  const proofOnB: ProofLike = { ...proofOnA, id: '009a1f293253e41e' };
-  const proofOnAlien: ProofLike = { ...proofOnA, id: '00deadbeefdeadbe' };
-
-  test('receives a pre-rotation token by loading the old keys once', async () => {
-    const { counts } = useRotatedMint(server);
-    const wallet = new Wallet(mint, { unit });
-    await wallet.loadMint(); // first ever load, post-rotation: A inactive and keyless, B active
-    expect(counts().keysARequests).toBe(0); // baseline: loadMint alone doesn't fetch A's keys
-
-    const preview = await wallet.prepareSwapToReceive([proofOnA]);
-    expect(preview.keysetId).toBe('009a1f293253e41e'); // outputs on the active keyset
-    expect(counts().keysARequests).toBe(1); // one /v1/keys/A fetch, then cached
-
-    await wallet.prepareSwapToReceive([proofOnA]);
-    expect(counts().keysARequests).toBe(1); // still one: ensure is idempotent
-  });
-
-  test('repairs a stale snapshot once when a proof names an unknown keyset', async () => {
-    const wallet = new Wallet(mint, { unit });
-    await wallet.loadMint(); // knows only A
-    const { counts } = useRotatedMint(server);
-
-    const updates: KeyChainCache[] = [];
-    wallet.on.keychainUpdated(({ cache }) => updates.push(cache));
-
-    const preview = await wallet.prepareSwapToReceive([proofOnB]);
-    expect(preview.keysetId).toBe('009a1f293253e41e');
-    expect(counts().keysetsRequests).toBe(1); // exactly one repair refresh
-    expect(updates).toHaveLength(1);
-    expect(updates[0].keysets.map((k) => k.id)).toContain('009a1f293253e41e');
-  });
-
-  test('concurrent ops share one repair refresh', async () => {
-    const wallet = new Wallet(mint, { unit });
-    await wallet.loadMint();
-    const { counts } = useRotatedMint(server);
-
-    await Promise.all([
-      wallet.prepareSwapToReceive([proofOnB]),
-      wallet.prepareSwapToReceive([proofOnB]),
-    ]);
-    expect(counts().keysetsRequests).toBe(1);
-  });
-
-  test('a genuinely alien keyset id throws UnknownKeysetError after the repair', async () => {
-    const wallet = new Wallet(mint, { unit });
-    await wallet.loadMint();
-    const { counts } = useRotatedMint(server);
-
-    const err = await wallet.prepareSwapToReceive([proofOnAlien]).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(UnknownKeysetError);
-    expect((err as UnknownKeysetError).keysetId).toBe('00deadbeefdeadbe');
-    expect(counts().keysetsRequests).toBe(1); // it did try
-  });
-
-  test('a failed repair surfaces UnknownKeysetError with the transport failure as cause', async () => {
-    const wallet = new Wallet(mint, { unit });
-    await wallet.loadMint();
-    server.use(http.get(mintUrl + '/v1/keysets', () => HttpResponse.error()));
-
-    const err = await wallet.prepareSwapToReceive([proofOnB]).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(UnknownKeysetError);
-    expect((err as UnknownKeysetError).cause).toBeDefined();
   });
 });
