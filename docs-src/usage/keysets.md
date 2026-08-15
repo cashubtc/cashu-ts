@@ -115,7 +115,8 @@ never expose the `MeltPreview`, so the change was lost with it. `completeMelt` n
 
 Follows the mint. Refreshes metadata, re-fetches keys for active keysets, and:
 
-- keeps keys it already holds for keysets the mint no longer serves,
+- keeps keys it already holds for keysets the mint still lists but no longer serves keys for,
+- drops any keyset the mint stops listing altogether: metadata follows mint truth,
 - rebinds an **auto-bound** wallet to the cheapest active keyset (newest version, then lowest fee,
   then latest expiry),
 - leaves a **pinned** wallet alone (`keysetId` constructor option or `bindKeyset()`), even if its
