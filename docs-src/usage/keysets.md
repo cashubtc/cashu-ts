@@ -44,8 +44,8 @@ long-lived service. It:
 - refreshes metadata (active flags, fees) from the mint, re-fetching keys for active keysets,
 - keeps the keys the wallet already holds for any keyset the mint no longer serves,
 - rebinds an auto-bound wallet (constructed without `keysetId`, never `bindKeyset()`-ed) to the
-  cheapest active keyset, but only once its current one is no longer usable (missing, inactive, or
-  without keys). A still-usable binding is left alone even if a cheaper keyset is now active.
+  cheapest active keyset on every refresh, including the internal repair (newest keyset version
+  first, then lowest fee, then latest expiry).
 
 A wallet pinned via the `keysetId` constructor option or a `bindKeyset()` call stays pinned across
 the refresh, even if its keyset has since gone inactive.
@@ -89,8 +89,8 @@ spent the inputs; recover with the persisted `outputData` plus an explicit `ensu
 A wallet that stays in memory across a mint rotation does not need proactive maintenance: the next
 `receive` or melt change that meets an unrecognized keyset id repairs itself. Call `loadMint(true)`
 yourself when you want the wallet to reflect a rotation ahead of that, eg to keep
-`wallet.getMintInfo()` current, or to rebind sooner once your current keyset stops being usable
-rather than waiting for an operation to force the issue.
+`wallet.getMintInfo()` current, or to follow the mint's cheapest keyset immediately rather than
+waiting for an operation to force the issue.
 
 ## Related docs
 

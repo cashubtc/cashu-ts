@@ -340,8 +340,8 @@ class Wallet {
    *
    * @remarks
    * Must be called before other methods, unless loading from cache (`loadMintFromCache`). With
-   * `forceRefresh`, metadata refreshes, held keys are kept, and an auto-bound wallet rebinds to the
-   * cheapest active keyset only if its current one is unusable; pinned wallets stay pinned.
+   * `forceRefresh`, metadata refreshes, held keys are kept, and an auto-bound wallet re-applies
+   * cheapest-keyset selection on every refresh; pinned wallets stay pinned.
    * @param forceRefresh If true, re-fetches data even if cached.
    * @throws If fetching mint info, keysets, or keys fails.
    */
@@ -412,27 +412,29 @@ class Wallet {
         walletUnit: this._unit,
       });
     } else {
-      // Auto-bound previously: follow the mint when the binding is no longer usable.
+      // Auto-bound: re-apply keyset selection so the binding tracks mint truth.
+      // getCheapestKeyset prefers the newest version, then lowest fee, then latest expiry.
       const current = this._keyChain.hasKeyset(this._boundKeysetId)
         ? this._keyChain.getKeyset(this._boundKeysetId)
         : undefined;
-      if (!current || !current.isActive || !current.hasKeys) {
-        try {
-          this._boundKeysetId = this._keyChain.getCheapestKeyset().id;
-          this._logger.info('Wallet rebound to active keyset after refresh', {
-            keysetId: this._boundKeysetId,
-          });
-        } catch (e) {
-          // No active replacement: keep a still-known binding (melt stays possible),
-          // unbind only if the keyset vanished from the mint entirely.
-          if (!current) {
-            this._boundKeysetId = PENDING_KEYSET_ID;
-          }
-          this._logger.warn('Bound keyset is stale and no active keyset is available', {
-            unit: this._unit,
-            err: (e as Error).message,
+      try {
+        const next = this._keyChain.getCheapestKeyset().id;
+        if (next !== this._boundKeysetId) {
+          this._boundKeysetId = next;
+          this._logger.info('Wallet rebound to cheapest active keyset after refresh', {
+            keysetId: next,
           });
         }
+      } catch (e) {
+        // No active replacement: keep a still-known binding (melt stays possible),
+        // unbind only if the keyset vanished from the mint entirely.
+        if (!current) {
+          this._boundKeysetId = PENDING_KEYSET_ID;
+        }
+        this._logger.warn('No active keyset available after refresh', {
+          unit: this._unit,
+          err: (e as Error).message,
+        });
       }
     }
 
