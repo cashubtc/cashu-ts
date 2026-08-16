@@ -92,10 +92,13 @@ export { type LogLevel, ConsoleLogger, type Logger } from './logger';
 export {
   CTSError,
   isMintOperationError,
+  MeltChangeError,
   MintOperationError,
   NetworkError,
   HttpResponseError,
   RateLimitError,
+  StaleKeysetError,
+  UnknownKeysetError,
 } from './model/Errors';
 
 // Low-level helpers/types that appear in public surfaces

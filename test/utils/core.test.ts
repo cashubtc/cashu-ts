@@ -695,6 +695,12 @@ describe('test zero-knowledge utilities', () => {
     };
     expect(() => hasValidDleq(serializedProof, keyset)).toThrow(/Undefined key for amount/);
   });
+  test('hasValidDleq names key loading when the keyset is keyless', () => {
+    const keylessKeyset = { id: '00bd033559de27d0', unit: 'sat', keys: {} };
+    expect(() => hasValidDleq(serializedProof, keylessKeyset)).toThrow(
+      'No keys loaded for keyset 00bd033559de27d0',
+    );
+  });
 
   describe('verifyDleqIfPresent', () => {
     const keyset = {

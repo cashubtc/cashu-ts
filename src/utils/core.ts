@@ -718,7 +718,8 @@ function mapShortKeysetIds(proofs: Proof[], keysetIds: readonly string[]): Proof
  * @param opts.require Default `true`. When `false`, a proof without a DLEQ payload returns `true`
  *   (NUT-12 "MUST verify-if-present"). The default flips to `false` in v5.0.
  * @returns True if verification succeeded, false otherwise.
- * @throws Throws if the proof amount does not match any key in the provided keyset.
+ * @throws CTSError if the proof amount is not a denomination in the keyset, checked before the
+ *   missing-DLEQ shortcut so a keyless keyset is reported rather than silently passed.
  */
 export function hasValidDleq(
   proof: Proof,
@@ -726,13 +727,17 @@ export function hasValidDleq(
   opts?: { require?: boolean },
 ): boolean {
   const require = opts?.require ?? true;
+  if (!hasCorrespondingKey(proof.amount, keyset.keys)) {
+    // An empty keyset means keys were never loaded (eg rotated-out keyset per NUT-01),
+    // not that the denomination is missing. Say so: the two failures have different fixes.
+    const message =
+      Object.keys(keyset.keys).length === 0
+        ? `No keys loaded for keyset ${keyset.id}`
+        : `Undefined key for amount ${proof.amount.toString()} in keyset ${keyset.id}`;
+    throw new CTSError(message);
+  }
   if (proof?.dleq == undefined) {
     return !require;
-  }
-  if (!hasCorrespondingKey(proof.amount, keyset.keys)) {
-    throw new CTSError(
-      `Undefined key for amount ${proof.amount.toString()} in keyset ${keyset.id}`,
-    );
   }
   const key = keyset.keys[proof.amount.toString()];
   try {

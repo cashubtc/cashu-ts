@@ -664,6 +664,7 @@ export class KeyChain {
     getCheapestKeyset(): Keyset;
     getKeyset(id?: string): Keyset;
     getKeysets(): Keyset[];
+    hasKeyset(id?: string): boolean;
     init(forceRefresh?: boolean): Promise<void>;
     isUnitKeyset(id?: string): boolean;
     loadFromCache(cache: KeyChainCache): void;
@@ -762,6 +763,15 @@ export class MeltBuilder<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | '
     prepare(): Promise<MeltPreview<TQuote>>;
     privkey(k: string | string[]): this;
     run(): Promise<MeltProofsResponse<TQuote>>;
+}
+
+// @public
+export class MeltChangeError extends CTSError {
+    constructor(outputData: OutputDataLike[], quote: MeltQuoteBaseResponse, options?: {
+        cause?: unknown;
+    });
+    readonly outputData: OutputDataLike[];
+    readonly quote: MeltQuoteBaseResponse;
 }
 
 // @public
@@ -1938,6 +1948,14 @@ export function sortProofsById(proofs: Proof[]): Proof[];
 export function splitAmount(value: AmountLike, keyset: Keys, split?: AmountLike[], order?: 'desc' | 'asc'): Amount[];
 
 // @public
+export class StaleKeysetError extends CTSError {
+    constructor(repaired: boolean, options?: {
+        cause?: unknown;
+    });
+    readonly repaired: boolean;
+}
+
+// @public
 export function stripDleq(proofs: Proof[]): Array<Omit<Proof, 'dleq'>>;
 
 // @public (undocumented)
@@ -2035,6 +2053,16 @@ export type UnblindedSignature = {
 // @public (undocumented)
 export function unblindSignature(C_: WeierstrassPoint<bigint>, r: bigint, A: WeierstrassPoint<bigint>): WeierstrassPoint<bigint>;
 
+// @public
+export class UnknownKeysetError extends CTSError {
+    constructor(keysetId: string, options?: {
+        refreshed?: boolean;
+        cause?: unknown;
+    });
+    readonly keysetId: string;
+    readonly refreshed: boolean;
+}
+
 // @public @deprecated (undocumented)
 export function verifyDleqIfPresent(proof: Proof, keyset: HasKeysetKeys): boolean;
 
@@ -2075,6 +2103,7 @@ export class Wallet {
         selectProofs?: SelectProofs;
         outputDataCreator?: OutputDataCreator;
         requireSigDleq?: boolean;
+        strictCachedKeysets?: boolean;
         logger?: Logger;
     });
     batchRestore(gapLimit?: number, batchSize?: number, counter?: number, keysetId?: string): Promise<{
@@ -2129,6 +2158,7 @@ export class Wallet {
     createMultiPathMeltQuote(invoice: string, millisatPartialAmount: AmountLike): Promise<MeltQuoteBolt11Response>;
     decodeToken(token: string): Token;
     defaultOutputType(): OutputType;
+    ensureOperableKeysets(ids: Array<string | undefined>): Promise<void>;
     getFeesForKeyset(nInputs: number, keysetId: string): Amount;
     getFeesForProofs(proofs: Array<Pick<Proof, 'id'>>): Amount;
     getFeesToInclude(amount: AmountLike, opts?: {
@@ -2200,6 +2230,9 @@ export class WalletEvents {
         add: (c: CancellerLike) => CancellerLike;
         cancelled: boolean;
     };
+    keychainUpdated(cb: (payload: {
+        cache: KeyChainCache;
+    }) => void, opts?: SubscribeOpts): SubscriptionCanceller;
     meltQuotePaid(id: string, cb: (p: MeltQuoteBolt11Response) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
     meltQuoteUpdates(ids: string[], cb: (p: MeltQuoteBolt11Response) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
     mintQuotePaid(id: string, cb: (p: MintQuoteBolt11Response) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
