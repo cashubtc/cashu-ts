@@ -449,6 +449,7 @@ export type GetInfoResponse = {
     description?: string;
     description_long?: string;
     icon_url?: string;
+    max_array_length?: number;
     contact: MintContactInfo[];
     nuts: {
         '4': {
@@ -1028,6 +1029,7 @@ export class MintInfo {
         supported: boolean;
         params?: Nut29Info;
     };
+    get maxArrayLength(): number;
     // (undocumented)
     get motd(): string | undefined;
     // (undocumented)
