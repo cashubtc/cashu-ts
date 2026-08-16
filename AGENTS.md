@@ -100,6 +100,7 @@ DEV=1 make nutshell-stable-down
 - Lint config lives in `eslint.config.js` (flat config).
 - `npm run check-types` type checks the test tree (and, via its imports, `src/`). Vitest strips types without checking them, so this is the only thing that catches fixtures drifting from the library types.
 - `any` is not allowed (prefer explicit types, generics, or `unknown` with narrowing).
+- No double assertions through `unknown`/`any` in `src/` (`no-restricted-syntax`). Tests are exempt, but reserve casts for deliberately malformed inputs: a fixture that represents a valid protocol object must typecheck without assertions.
 - Type-only imports/exports are required (`@typescript-eslint/consistent-type-imports`).
 - No Node-only modules in library code (`import/no-nodejs-modules`).
 - Empty functions are disallowed (`@typescript-eslint/no-empty-function`).
