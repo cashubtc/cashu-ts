@@ -583,16 +583,17 @@ class Wallet {
    *
    * @remarks
    * Unknown ids repair once via `loadMint(true)`, throwing {@link UnknownKeysetError} with
-   * `refreshed: true` if still unknown; known-but-keyless ids get keys fetched. Calls left without
-   * an answer (strict mode, rate limited, failed refresh) throw it with `refreshed: false`.
-   * Implicit (op-driven) calls honor `strictCachedKeysets`, where unknown ids throw immediately and
-   * keyless ids are left for the caller, and the repair cooldown, and emit `keychainUpdated` for
-   * anything they change. Explicit calls do the full pass and emit nothing: the consumer who asked
-   * persists the cache.
+   * `refreshed: true` if still unknown; known-but-keyless ids get keys fetched unless
+   * `opts.fetchKeys` is false, which spend-side ops pass because their inputs need only the
+   * keyset's fee metadata, never its keys. Calls left without an answer (strict mode, rate limited,
+   * failed refresh) throw it with `refreshed: false`. Implicit (op-driven) calls honor
+   * `strictCachedKeysets`, where unknown ids throw immediately and keyless ids are left for the
+   * caller, and the repair cooldown, and emit `keychainUpdated` for anything they change. Explicit
+   * calls do the full pass and emit nothing: the consumer who asked persists the cache.
    */
   private async _ensureOperableKeysets(
     ids: Array<string | undefined>,
-    opts: { implicit: boolean },
+    opts: { implicit: boolean; fetchKeys?: boolean },
   ): Promise<void> {
     // Never-loaded wallet: an empty keychain is not rotation evidence. Let the op's own
     // assertions report initialization instead of a hidden loadMint(true) here.
@@ -635,9 +636,12 @@ class Wallet {
       }
     }
 
-    const keyless = wanted.filter(
-      (id) => this._keyChain.isUnitKeyset(id) && !this._keyChain.getKeyset(id).hasKeys,
-    );
+    const keyless =
+      opts.fetchKeys === false
+        ? []
+        : wanted.filter(
+            (id) => this._keyChain.isUnitKeyset(id) && !this._keyChain.getKeyset(id).hasKeys,
+          );
     if (keyless.length > 0) {
       // allSettled, not all: a sibling failure must not hide the keys that did land, or the
       // consumer never learns to persist them and refetches on every op.
@@ -1497,11 +1501,11 @@ class Wallet {
     const normalizedProofs = normalizeProofAmounts(proofs);
     const { keysetId, includeFees = false, onCountersReserved } = config || {};
 
-    // Rotation evidence check: repair the snapshot and load any missing keys before
-    // any assertion or fee math relies on it.
+    // Rotation evidence check: repair the snapshot before any assertion or fee math
+    // relies on it. Inputs are priced from keyset metadata, so keys are not fetched.
     await this._ensureOperableKeysets(
       normalizedProofs.map((p) => p.id),
-      { implicit: true },
+      { implicit: true, fetchKeys: false },
     );
 
     // Fallback to policy defaults if no outputConfig
@@ -3283,11 +3287,12 @@ class Wallet {
     });
     const normalizedProofs = normalizeProofAmounts(proofsToSend);
 
-    // Rotation evidence check: repair the snapshot and load any missing keys before the
-    // input fee lookup relies on it. prepareMelt checks again below, a no-op by then.
+    // Rotation evidence check: repair the snapshot before the input fee lookup relies on
+    // it. Inputs are priced from keyset metadata, so keys are not fetched. prepareMelt
+    // checks again below, a no-op by then.
     await this._ensureOperableKeysets(
       normalizedProofs.map((p) => p.id),
-      { implicit: true },
+      { implicit: true, fetchKeys: false },
     );
 
     // Ensure we have enough proofs
@@ -3337,13 +3342,23 @@ class Wallet {
     outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
     const { keysetId, onCountersReserved, nut08Change = true } = config || {};
 
-    // Rotation evidence check: repair the snapshot and load any missing keys before
-    // any assertion or fee math relies on it. Ids are read pre-normalization; the
-    // amounts change, the ids do not.
-    await this._ensureOperableKeysets(
-      proofsToSend.map((p) => p.id),
-      { implicit: true },
-    );
+    // Rotation evidence check: repair the snapshot so the output binding is current.
+    // bolt11/bolt12 melts never consult the input keyset (no keys, no fee metadata), so an
+    // id the mint delisted but still honors must not block the withdrawal: proceed and let
+    // the mint judge. Strict mode still refuses; so do non-keyset errors.
+    try {
+      await this._ensureOperableKeysets(
+        proofsToSend.map((p) => p.id),
+        { implicit: true, fetchKeys: false },
+      );
+    } catch (e) {
+      if (this._strictCachedKeysets || !(e instanceof UnknownKeysetError)) {
+        throw e;
+      }
+      this._logger.warn('Melt input keyset is not listed by the mint; proceeding anyway', {
+        keyset: e.keysetId,
+      });
+    }
 
     // Plain getKeyset: melting needs no new outputs, so an inactive/legacy keyset must not
     // block withdrawal. A mint unwinding liabilities deactivates keysets but

@@ -914,6 +914,42 @@ describe('send and melt inputs across a rotation', () => {
     expect(counts().keysetsRequests).toBe(1);
   });
 
+  test('prepareMelt proceeds past a delisted input keyset with a warning', async () => {
+    // The mint delists A entirely: it is not in /v1/keysets, but the mint still
+    // honors its proofs. A wallet loaded now knows only B.
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () => HttpResponse.json({ keysets: [keysetB] })),
+      http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [keysB] })),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint(); // knows only B
+
+    const warn = vi.spyOn(wallet.logger, 'warn');
+    const preview = await wallet.prepareMelt('bolt11', meltQuote, meltProofsOn(proofOnA.id));
+    expect(preview.inputs).toHaveLength(2);
+    expect(preview.keysetId).toBe('009a1f293253e41e'); // change blanks on the active keyset
+    expect(warn).toHaveBeenCalledWith(
+      'Melt input keyset is not listed by the mint; proceeding anyway',
+      { keyset: proofOnA.id },
+    );
+  });
+
+  test('prepareMelt still refuses a delisted input keyset in strict mode', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () => HttpResponse.json({ keysets: [keysetB] })),
+      http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [keysB] })),
+    );
+    const wallet = new Wallet(mint, { unit, strictCachedKeysets: true });
+    await wallet.loadMint(); // knows only B
+
+    const err = await wallet
+      .prepareMelt('bolt11', meltQuote, meltProofsOn(proofOnA.id))
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(UnknownKeysetError);
+    expect((err as UnknownKeysetError).keysetId).toBe(proofOnA.id);
+    expect((err as UnknownKeysetError).refreshed).toBe(false); // strict never asks the mint
+  });
+
   test('meltProofsOnchain repairs the snapshot before its own fee check', async () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint(); // knows only A
@@ -951,5 +987,23 @@ describe('send and melt inputs across a rotation', () => {
     await wallet.prepareSwapToSend(1, [proofOnA]);
     await wallet.prepareMelt('bolt11', meltQuote, meltProofsOn(proofOnA.id));
     expect(counts()).toEqual({ keysetsRequests: 0, keysARequests: 0 });
+  });
+
+  test('a failing key fetch does not block send or melt inputs', async () => {
+    // Post-rotation load: A is known but keyless, B is active and bound. Inputs sit on
+    // A. Spend-side ops price inputs from metadata, so the unused key fetch is skipped
+    // and its failure cannot fail the op.
+    const { counts } = useRotatedMint(server);
+    server.use(http.get(mintUrl + '/v1/keys/00bd033559de27d0', () => HttpResponse.error()));
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint(); // A known-but-keyless, bound to B
+
+    const sendPreview = await wallet.prepareSwapToSend(1, [proofOnA]);
+    expect(sendPreview.keysetId).toBe('009a1f293253e41e');
+
+    const meltPreview = await wallet.prepareMelt('bolt11', meltQuote, meltProofsOn(proofOnA.id));
+    expect(meltPreview.keysetId).toBe('009a1f293253e41e');
+
+    expect(counts().keysARequests).toBe(0); // never attempted
   });
 });

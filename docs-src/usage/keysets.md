@@ -26,8 +26,10 @@ the wallet heals, you decide what to do next.
 **An unknown keyset id.** A proof names a keyset the snapshot has never seen. Every op that reads
 input proof ids (`receive`, `send` and `prepareSwapToSend`, `prepareMelt` and the `meltProofs*`
 wrappers) and melt change refresh once, then throw `UnknownKeysetError` if the id is still unknown
-(or if the refresh itself failed, with that failure as `cause`). `restore` does not take this path:
-an unknown id there throws a plain `CTSError`.
+(or if the refresh itself failed, with that failure as `cause`). One exception: bolt11/bolt12 melts
+never consult the input keyset (no keys, no fee metadata), so an id the mint delisted but still
+honors proceeds with a warning instead of refusing. `restore` does not take this path: an unknown
+id there throws a plain `CTSError`.
 
 `UnknownKeysetError.refreshed` says how much weight to give it:
 
@@ -123,16 +125,22 @@ takes its fee reserve from `sendAmount - quote.amount` and nothing else, so a bo
 of proofs on an id the wallet did not hold went through regardless, with NUT-08 blanks bound to a
 stale keyset. `meltProofsOnchain` does price its inputs, and failed on the way with a raw
 `Could not get fee. No keyset found for keyset id: X`. All of them now resolve their input ids
-first, exactly as `receive` does, and refuse an id the mint does not know with
-`UnknownKeysetError`.
+first, exactly as `receive` does.
 
-Melting proofs from an external or restored source, on a wallet whose snapshot may predate them,
-means bringing the snapshot up to date first:
+What follows depends on the method. `meltProofsOnchain` prices its inputs from the keyset's
+`input_fee_ppk`, so an id the mint does not know throws `UnknownKeysetError`. bolt11 and bolt12
+never consult the input keyset at all, so an id still unknown after the refresh proceeds with a
+warning: whether a keyset it no longer lists is still honored is the mint's call, and refusing
+would leave those proofs with no way out. Strict mode still refuses, having never asked.
+
+Most callers need no change: the refresh finds the rotated-in keyset and the melt proceeds. If the
+mint has pruned the keyset outright, bolt11 and bolt12 melts still work; an onchain melt needs the
+snapshot brought up to date first:
 
 ```ts
 // Refresh, or resolve just the ids you are about to spend
 await wallet.ensureOperableKeysets(proofs.map((p) => p.id));
-await wallet.meltProofsBolt11(quote, proofs);
+await wallet.meltProofsOnchain(quote, proofs, feeIndex);
 ```
 
 `loadMint(true)` does the same job wholesale. Under `strictCachedKeysets` nothing is fetched for
