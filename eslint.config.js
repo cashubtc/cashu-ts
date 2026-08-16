@@ -80,6 +80,17 @@ export default tseslint.config(
       'n/no-unsupported-features/node-builtins': ['error', { ignores: ['CloseEvent'] }],
       // Ensure no node-only modules are used (as we support browsers too)
       'import/no-nodejs-modules': ['error'],
+      // Ban double assertions through unknown/any: they hide type drift.
+      // Relaxed for tests below (deliberately malformed fixtures need them).
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'TSAsExpression > TSAsExpression[typeAnnotation.type=/TSUnknownKeyword|TSAnyKeyword/]',
+          message:
+            'No double assertion through unknown/any. Type the value honestly, or eslint-disable with a reason.',
+        },
+      ],
       // Keep imports grouped and alphabetized within groups
       'import/order': [
         'error',
@@ -117,6 +128,9 @@ export default tseslint.config(
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
       ],
+      // Deliberately malformed fixtures need double assertions; valid fixtures
+      // should typecheck without them (reviewed, not linted)
+      'no-restricted-syntax': 'off',
       // mock-socket message types defeat string-ness proofs; runtime is fine
       '@typescript-eslint/no-base-to-string': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
