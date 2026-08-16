@@ -505,6 +505,7 @@ function stringify(
         try {
           if (Array.isArray(val)) {
             const parts: string[] = [];
+            // eslint-disable-next-line no-restricted-syntax -- array-as-record view for the shared index walk
             const arrayHolder = val as unknown as Record<string, unknown>;
             for (let i = 0; i < val.length; i += 1) {
               const item = serialize(arrayHolder, String(i));
