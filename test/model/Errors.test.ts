@@ -7,6 +7,8 @@ import {
   MintOperationError,
   NetworkError,
   RateLimitError,
+  StaleKeysetError,
+  UnknownKeysetError,
 } from '../../src/model/Errors';
 
 describe('CTSError', () => {
@@ -133,5 +135,61 @@ describe('isMintOperationError', () => {
     expect(isMintOperationError(new Error('MintOperationError'))).toBe(false);
     expect(isMintOperationError({ name: 'MintOperationError', code: 20008 })).toBe(false);
     expect(isMintOperationError(undefined)).toBe(false);
+  });
+});
+
+describe('UnknownKeysetError', () => {
+  test('says the wallet never checked when no refresh ran', () => {
+    const e = new UnknownKeysetError('00deadbeefdeadbe');
+    expect(e).toBeInstanceOf(CTSError);
+    expect(e.name).toBe('UnknownKeysetError');
+    expect(e.keysetId).toBe('00deadbeefdeadbe');
+    expect(e.refreshed).toBe(false);
+    expect(e.message).toBe(
+      "Keyset '00deadbeefdeadbe' is not in the wallet snapshot and no refresh was attempted; " +
+        'call loadMint(true), or retry once the repair cooldown clears',
+    );
+    expect(e.message).not.toContain('not a keyset of this mint');
+    expect(e.cause).toBeUndefined();
+  });
+
+  test('blames the mint only once a refresh has run', () => {
+    const e = new UnknownKeysetError('00deadbeefdeadbe', { refreshed: true });
+    expect(e.refreshed).toBe(true);
+    expect(e.message).toBe("Keyset '00deadbeefdeadbe' is not a keyset of this mint");
+    expect(e.cause).toBeUndefined();
+  });
+
+  test('names the refresh failure when a cause is given', () => {
+    const cause = new Error('offline');
+    const e = new UnknownKeysetError('00deadbeefdeadbe', { cause });
+    expect(e.message).toBe(
+      "Could not resolve unknown keyset '00deadbeefdeadbe': mint refresh failed",
+    );
+    expect(e.refreshed).toBe(false); // the refresh was attempted, but told us nothing
+    expect(e.cause).toBe(cause);
+  });
+});
+
+describe('StaleKeysetError', () => {
+  test('reports a repaired snapshot and extends CTSError', () => {
+    const e = new StaleKeysetError(true);
+    expect(e).toBeInstanceOf(CTSError);
+    expect(e.name).toBe('StaleKeysetError');
+    expect(e.repaired).toBe(true);
+    expect(e.message).toBe(
+      'Mint rejected a stale keyset; the snapshot has been refreshed, re-prepare the operation',
+    );
+    expect(e.cause).toBeUndefined();
+  });
+
+  test('tells the caller to refresh when nothing was repaired', () => {
+    const cause = new MintOperationError(12002, 'Keyset is inactive, cannot sign messages');
+    const e = new StaleKeysetError(false, { cause });
+    expect(e.repaired).toBe(false);
+    expect(e.message).toBe(
+      'Mint rejected a stale keyset; refresh the snapshot (loadMint(true)) and re-prepare',
+    );
+    expect(e.cause).toBe(cause);
   });
 });

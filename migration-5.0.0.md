@@ -55,6 +55,90 @@ The typed methods (`createMintQuoteBolt11` etc.) already required `loadMint()` (
 
 ---
 
+## Keyset rejections now throw `StaleKeysetError`
+
+When the mint rejects an operation with a NUT-00 keyset error (the 12xxx class: `12001` unknown, `12002` inactive, `12003` expired), `completeSwap`, `completeMint`, `completeBatchMint` and `completeMelt` no longer surface the raw `MintOperationError`. The wallet reads the rejection as evidence that its keyset snapshot is stale, refreshes it once, and throws `StaleKeysetError` with the mint's error as `cause`. Every other mint error is untouched.
+
+The class hierarchy changes with it. `MintOperationError` extends `HttpResponseError` and carries a `status`, while `StaleKeysetError` extends `CTSError` directly. A handler that caught `HttpResponseError` around these four ops, or read `.status` off the error, sees neither now: reach them through `e.cause`, which still holds the original `MintOperationError`.
+
+`repaired: true` means the refresh ran and the snapshot is current again, so running your call a second time should succeed. `repaired: false` means nothing changed (`strictCachedKeysets`, a failed refresh, or the internal repair rate limit) and recovery is yours to decide. Nothing retries for you: the rejected outputs were built on the stale keyset, so only a fresh prepare can fix them.
+
+### Migration
+
+Catch the new type where you handled the 12xxx codes:
+
+```ts
+// Before: a raw protocol error, and no snapshot repair
+try {
+  return await wallet.receive(token);
+} catch (e) {
+  if (isMintOperationError(e) && e.code === 12002) {
+    await wallet.loadMint(true); // your own refresh
+    return wallet.receive(token);
+  }
+  throw e;
+}
+
+// After: the wallet has already refreshed
+try {
+  return await wallet.receive(token);
+} catch (e) {
+  if (!(e instanceof StaleKeysetError) || !e.repaired) throw e;
+  return wallet.receive(token);
+}
+```
+
+Code that never branched on those codes needs no change beyond expecting `StaleKeysetError` instead of `MintOperationError`; the original is still available as `e.cause`.
+
+---
+
+## Melt inputs are checked against the snapshot
+
+`prepareMelt` (and the `meltProofs*` wrappers) never looked up the keyset of an input proof, so proofs on an id the wallet did not hold were melted anyway. v5 resolves those ids first, exactly as `receive` does: unknown ids trigger one `loadMint(true)`.
+
+What happens next depends on the method. `meltProofsOnchain`, which prices its inputs from the keyset's `input_fee_ppk`, throws `UnknownKeysetError` for an id the mint does not know. The bolt11 and bolt12 paths never consult the input keyset (no keys, no fee metadata), so an id still unknown after the refresh proceeds with a warning instead of refusing: the mint is the judge of whether it honors proofs on a keyset it no longer lists.
+
+### Migration
+
+Melting proofs from an external or restored source, on a wallet whose snapshot may predate them, needs no change: the refresh finds the rotated-in keyset and the melt proceeds.
+
+If the mint has pruned the keyset, no refresh resolves it and none of this helps. Bolt11 and bolt12 melts go through anyway, logging a warning. An onchain melt of those proofs cannot be priced, so it throws `UnknownKeysetError` and keeps throwing; melt them over bolt11 or bolt12 instead if you need them out.
+
+Under `strictCachedKeysets` nothing is fetched for you, so resolve the ids yourself before melting. The same call is useful outside strict mode when you want to choose the moment the network call happens:
+
+```ts
+// Resolve just the ids you are about to spend, or loadMint(true) for the lot
+await wallet.ensureOperableKeysets(proofs.map((p) => p.id));
+await wallet.meltProofsBolt11(quote, proofs);
+```
+
+---
+
+## Melt change failures now throw `MeltChangeError`
+
+`completeMelt` builds NUT-08 change after the mint has spent the inputs. When that step fails (the change keyset's keys will not load, or the signatures do not check out), v4 threw the underlying error and the caller was left with nothing to rebuild from, since the convenience melts never expose the `MeltPreview`. v5 throws `MeltChangeError` instead, carrying the blank `outputData`, the merged `quote`, and the original failure as `cause`.
+
+### Migration
+
+Catch it where a melt can fail, and recover once the keys are reachable. The `cause` says whether that is possible: a keyset that will load rebuilds, while an invalid DLEQ or a signature count mismatch needs a NUT-09 restore.
+
+```ts
+// Before: the melt is paid, and the change is gone
+await wallet.meltProofsBolt11(quote, proofs);
+
+// After: the change is rebuildable
+try {
+  await wallet.meltProofsBolt11(quote, proofs);
+} catch (e) {
+  if (!(e instanceof MeltChangeError)) throw e;
+  const sigs = e.quote.change ?? [];
+  await wallet.ensureOperableKeysets(sigs.map((s) => s.id)); // change may span keysets
+  const change = wallet.createMeltChangeProofs(e.outputData, sigs);
+}
+```
+
+---
+
 ## Crypto deep imports were reorganized
 
 The internal crypto module layout changed to separate curve-specific primitives from shared

@@ -1,3 +1,6 @@
+import type { OutputDataLike } from './OutputData';
+import type { MeltQuoteBaseResponse } from './types/NUT05';
+
 /**
  * Base error for errors raised by cashu-ts itself.
  */
@@ -40,6 +43,98 @@ export class NetworkError extends CTSError {
     super(message, options);
     this.name = 'NetworkError';
     Object.setPrototypeOf(this, NetworkError.prototype);
+  }
+}
+
+/**
+ * Thrown when a keyset id cannot be resolved against the wallet's view of the mint.
+ *
+ * @remarks
+ * `refreshed: false` means the wallet has no answer from the mint (rate limited, strict mode, or a
+ * failed refresh), so a retry or a `loadMint(true)` may still resolve the id.
+ */
+export class UnknownKeysetError extends CTSError {
+  /**
+   * The keyset id that could not be resolved.
+   */
+  readonly keysetId: string;
+  /**
+   * True when a refresh ran and the id was still unknown, so the mint really does not have it.
+   */
+  readonly refreshed: boolean;
+  constructor(keysetId: string, options?: { refreshed?: boolean; cause?: unknown }) {
+    const refreshed = options?.refreshed ?? false;
+    const message =
+      options?.cause !== undefined
+        ? `Could not resolve unknown keyset '${keysetId}': mint refresh failed`
+        : refreshed
+          ? `Keyset '${keysetId}' is not a keyset of this mint`
+          : `Keyset '${keysetId}' is not in the wallet snapshot and no refresh was attempted; call loadMint(true), or retry once the repair cooldown clears`;
+    super(message, options);
+    this.keysetId = keysetId;
+    this.refreshed = refreshed;
+    this.name = 'UnknownKeysetError';
+    Object.setPrototypeOf(this, UnknownKeysetError.prototype);
+  }
+}
+
+/**
+ * Thrown when a melt went through but its NUT-08 change could not be reconstructed.
+ *
+ * @remarks
+ * The inputs are spent and the payment stands. `cause` says which recovery applies: a keyset that
+ * can be loaded (see `keyChain.ensureKeysetKeys`) rebuilds from `outputData` and the quote's
+ * `change` signatures via `wallet.createMeltChangeProofs()`. Anything else, eg invalid DLEQ or a
+ * signature count mismatch, needs a NUT-09 restore on a seeded wallet.
+ */
+export class MeltChangeError extends CTSError {
+  /**
+   * The melt's blank outputs, the input to change recovery.
+   */
+  readonly outputData: OutputDataLike[];
+  /**
+   * The melt quote, merged from the preview and the mint's response.
+   */
+  readonly quote: MeltQuoteBaseResponse;
+  constructor(
+    outputData: OutputDataLike[],
+    quote: MeltQuoteBaseResponse,
+    options?: { cause?: unknown },
+  ) {
+    super(
+      'Melt completed but its change could not be reconstructed; see cause: a keyset that will load rebuilds via createMeltChangeProofs(), anything else needs a NUT-09 restore',
+      options,
+    );
+    this.outputData = outputData;
+    this.quote = quote;
+    this.name = 'MeltChangeError';
+    Object.setPrototypeOf(this, MeltChangeError.prototype);
+  }
+}
+
+/**
+ * Thrown when the mint rejects a keyset the wallet's snapshot considers current.
+ *
+ * @remarks
+ * `repaired: true` means the snapshot was refreshed before throwing: nothing retried for you, so
+ * run the operation again and it should succeed. Retrying consumes fresh counters on seeded wallets
+ * (recoverable via NUT-09 restore).
+ */
+export class StaleKeysetError extends CTSError {
+  /**
+   * True when the snapshot was refreshed before throwing, so the operation is worth running again.
+   */
+  readonly repaired: boolean;
+  constructor(repaired: boolean, options?: { cause?: unknown }) {
+    super(
+      repaired
+        ? 'Mint rejected a stale keyset; the snapshot has been refreshed, re-prepare the operation'
+        : 'Mint rejected a stale keyset; refresh the snapshot (loadMint(true)) and re-prepare',
+      options,
+    );
+    this.repaired = repaired;
+    this.name = 'StaleKeysetError';
+    Object.setPrototypeOf(this, StaleKeysetError.prototype);
   }
 }
 

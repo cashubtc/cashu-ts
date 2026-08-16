@@ -24,7 +24,13 @@ import { signMintQuoteLegacy } from '../crypto/NUT20';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
-import { CTSError, isMintOperationError } from '../model/Errors';
+import {
+  CTSError,
+  MeltChangeError,
+  StaleKeysetError,
+  UnknownKeysetError,
+  isMintOperationError,
+} from '../model/Errors';
 import { MintInfo } from '../model/MintInfo';
 import { OutputData, type OutputDataLike } from '../model/OutputData';
 import { DefaultOutputDataCreator, type OutputDataCreator } from '../model/OutputDataCreator';
@@ -68,6 +74,7 @@ import {
   verifyProofsForReceive,
   ABSOLUTE_MAX_BATCH_SIZE,
   DEFAULT_MAX_ARRAY_LENGTH,
+  REPAIR_COOLDOWN_MS,
 } from '../utils';
 
 import { ceilLog2, getKeepAmounts, stringifyOutputTypeForLog } from './_internal';
@@ -169,9 +176,13 @@ class Wallet {
   private _secretsPolicy: SecretsPolicy = 'auto';
   private _counterSource: CounterSource;
   private _boundKeysetId: string = PENDING_KEYSET_ID;
+  private _pendingRepair: Promise<void> | null = null;
+  private _lastRepairAt = 0;
+  private _explicitBind: boolean = false;
   private _selectProofs: SelectProofs;
   private _outputDataCreator: OutputDataCreator;
   private _requireSigDleq = false;
+  private _strictCachedKeysets: boolean = false;
   private _logger: Logger;
 
   /**
@@ -210,6 +221,9 @@ class Wallet {
    * @param options.requireSigDleq Fail mint/swap/melt responses when the mint advertises NUT-12
    *   support but omits DLEQ proofs on returned blinded signatures. This is a fail-fast consistency
    *   check, not protection against a malicious mint already consuming inputs or payments.
+   * @param options.strictCachedKeysets Never fetch keyset data inside operations; only the snapshot
+   *   you load is used. Insufficient state throws the same typed errors as non-strict mode's
+   *   terminal cases. Default false.
    * @param options.customRequest Custom mint request function. Use this to route all mint HTTP
    *   requests through runtime-specific transports such as OHTTP, Tor, native HTTP clients, or
    *   proxies. Only used when `mint` is passed as a URL string; pass a configured `Mint` instance
@@ -233,6 +247,7 @@ class Wallet {
       selectProofs?: SelectProofs; // optional override
       outputDataCreator?: OutputDataCreator;
       requireSigDleq?: boolean;
+      strictCachedKeysets?: boolean;
       customRequest?: RequestFn;
       requestFetch?: RequestFetch;
       logger?: Logger;
@@ -254,6 +269,7 @@ class Wallet {
         : mint;
     this._unit = options?.unit ?? this._unit;
     this._boundKeysetId = options?.keysetId ?? this._boundKeysetId;
+    this._explicitBind = options?.keysetId !== undefined;
     if (options?.bip39seed) {
       // failIf forwards this context to the logger, so pass the type, never the seed.
       this.failIf(
@@ -273,6 +289,7 @@ class Wallet {
     this._keyChain = new KeyChain(this.mint, this._unit);
     this._denominationTarget = options?.denominationTarget ?? this._denominationTarget;
     this._requireSigDleq = options?.requireSigDleq ?? this._requireSigDleq;
+    this._strictCachedKeysets = options?.strictCachedKeysets ?? this._strictCachedKeysets;
   }
 
   // Convenience wrappers for "log and throw"
@@ -331,8 +348,9 @@ class Wallet {
    * Load mint information, keysets, and keys.
    *
    * @remarks
-   * Must be called before using other methods, unless loading mint from cache. See:
-   * `loadMintFromCache`.
+   * Must be called before other methods, unless loading from cache (`loadMintFromCache`). With
+   * `forceRefresh`, metadata refreshes, held keys are kept, and an auto-bound wallet re-applies
+   * cheapest-keyset selection on every refresh; pinned wallets stay pinned.
    * @param forceRefresh If true, re-fetches data even if cached.
    * @throws If fetching mint info, keysets, or keys fails.
    */
@@ -392,8 +410,8 @@ class Wallet {
           err: (e as Error).message,
         });
       }
-    } else {
-      // Keyset ID was bound in wallet constructor, so ensure it exists and unit
+    } else if (this._explicitBind) {
+      // Keyset ID was pinned by the caller, so ensure it exists and unit
       // matches, but do NOT require keys yet. It may be an inactive keyset for
       // restore, and if so, keys will be fetched async later.
       const k = this._keyChain.getKeyset(this._boundKeysetId);
@@ -402,6 +420,31 @@ class Wallet {
         unit: k.unit,
         walletUnit: this._unit,
       });
+    } else {
+      // Auto-bound: re-apply keyset selection so the binding tracks mint truth.
+      // getCheapestKeyset prefers the newest version, then lowest fee, then latest expiry.
+      const current = this._keyChain.hasKeyset(this._boundKeysetId)
+        ? this._keyChain.getKeyset(this._boundKeysetId)
+        : undefined;
+      try {
+        const next = this._keyChain.getCheapestKeyset().id;
+        if (next !== this._boundKeysetId) {
+          this._boundKeysetId = next;
+          this._logger.info('Wallet rebound to cheapest active keyset after refresh', {
+            keysetId: next,
+          });
+        }
+      } catch (e) {
+        // No active replacement: keep a still-known binding (melt stays possible),
+        // unbind only if the keyset vanished from the mint entirely.
+        if (!current) {
+          this._boundKeysetId = PENDING_KEYSET_ID;
+        }
+        this._logger.warn('No active keyset available after refresh', {
+          unit: this._unit,
+          err: (e as Error).message,
+        });
+      }
     }
 
     // Go Mintinfo?
@@ -517,6 +560,200 @@ class Wallet {
       keyset: keyset.id,
     });
     return keyset;
+  }
+
+  /**
+   * Make the snapshot usable for these keyset ids, without running an operation.
+   *
+   * @remarks
+   * Repairs unknown ids with one `loadMint(true)` and loads any missing keys. An explicit call is
+   * the consumer's own request, so it ignores `strictCachedKeysets` and the internal repair rate
+   * limit. It emits no `keychainUpdated`: persist `keyChain.cache` yourself afterwards, as with
+   * `loadMint`, and after a throw too, since keys for the other ids may still have landed. Aimed at
+   * integrations that verify proofs without running wallet ops.
+   * @param ids Keyset ids to make operable. Undefined entries are ignored.
+   * @throws {@link UnknownKeysetError} For an id the mint does not know, or if the refresh fails.
+   * @throws {@link CTSError} If the wallet has never loaded mint info, or if several key fetches
+   *   fail, with the individual failures as `cause`. A lone failure is rethrown as-is.
+   */
+  public async ensureOperableKeysets(ids: Array<string | undefined>): Promise<void> {
+    this.failIf(!Array.isArray(ids), 'ensureOperableKeysets: ids must be an array');
+    this.failIf(
+      !this._mintInfo,
+      'Mint info not initialized; call loadMint or loadMintFromCache first',
+    );
+    return this._ensureOperableKeysets(ids, { implicit: false });
+  }
+
+  /**
+   * Start, or join, the shared snapshot repair refresh.
+   *
+   * @remarks
+   * Returns null when an implicit repair falls inside the cooldown window, which the caller must
+   * treat as terminal. A repair already in flight is always joined, cooldown or not, so concurrent
+   * ops still share one refresh. The window covers implicit repairs only: an explicit one neither
+   * waits for it nor starts it, so a consumer's call never suppresses the wallet's own repair.
+   */
+  private startRepair(implicit: boolean): Promise<void> | null {
+    if (this._pendingRepair) {
+      return this._pendingRepair;
+    }
+    if (implicit) {
+      if (Date.now() - this._lastRepairAt < REPAIR_COOLDOWN_MS) {
+        return null;
+      }
+      this._lastRepairAt = Date.now();
+    }
+    this._pendingRepair = this.loadMint(true).finally(() => {
+      this._pendingRepair = null;
+    });
+    return this._pendingRepair;
+  }
+
+  /**
+   * Make the keychain usable for these keyset ids, at op entry or where the ids first become known.
+   *
+   * @remarks
+   * Unknown ids repair once via `loadMint(true)`, throwing {@link UnknownKeysetError} with
+   * `refreshed: true` if still unknown; known-but-keyless ids get keys fetched unless
+   * `opts.fetchKeys` is false, which spend-side ops pass because their inputs need only the
+   * keyset's fee metadata, never its keys. Calls left without an answer (strict mode, rate limited,
+   * failed refresh) throw it with `refreshed: false`. Implicit (op-driven) calls honor
+   * `strictCachedKeysets`, where unknown ids throw immediately and keyless ids are left for the
+   * caller, and the repair cooldown, and emit `keychainUpdated` for anything they change. Explicit
+   * calls do the full pass and emit nothing: the consumer who asked persists the cache.
+   */
+  private async _ensureOperableKeysets(
+    ids: Array<string | undefined>,
+    opts: { implicit: boolean; fetchKeys?: boolean },
+  ): Promise<void> {
+    // Never-loaded wallet: an empty keychain is not rotation evidence. Let the op's own
+    // assertions report initialization instead of a hidden loadMint(true) here.
+    if (!this._mintInfo) {
+      return;
+    }
+
+    const wanted = [...new Set(ids.filter((id): id is string => !!id))];
+
+    if (opts.implicit && this._strictCachedKeysets) {
+      const strictUnknown = wanted.filter((id) => !this._keyChain.hasKeyset(id));
+      if (strictUnknown.length > 0) {
+        throw new UnknownKeysetError(strictUnknown[0]); // not refreshed: strict never asks the mint
+      }
+      return; // no backfill: downstream key checks report keyless keysets
+    }
+
+    const unknown = wanted.filter((id) => !this._keyChain.hasKeyset(id));
+    let changed = false;
+
+    if (unknown.length > 0) {
+      const repair = this.startRepair(opts.implicit);
+      if (!repair) {
+        // Rate limited: terminal for this op, and not refreshed, so the id may well be genuine.
+        throw new UnknownKeysetError(unknown[0]);
+      }
+      try {
+        await repair;
+      } catch (e) {
+        throw new UnknownKeysetError(unknown[0], { cause: e });
+      }
+      changed = true;
+      const still = unknown.filter((id) => !this._keyChain.hasKeyset(id));
+      if (still.length > 0) {
+        // The refresh itself succeeded and is worth persisting before we fail the op.
+        if (opts.implicit) {
+          this.on._emitKeychainUpdated();
+        }
+        throw new UnknownKeysetError(still[0], { refreshed: true });
+      }
+    }
+
+    const keyless =
+      opts.fetchKeys === false
+        ? []
+        : wanted.filter(
+            (id) => this._keyChain.isUnitKeyset(id) && !this._keyChain.getKeyset(id).hasKeys,
+          );
+    if (keyless.length > 0) {
+      // allSettled, not all: a sibling failure must not hide the keys that did land, or the
+      // consumer never learns to persist them and refetches on every op.
+      const fetches = await Promise.allSettled(
+        keyless.map((id) => this._keyChain.ensureKeysetKeys(id)),
+      );
+      const failed = fetches.filter((f): f is PromiseRejectedResult => f.status === 'rejected');
+      if (failed.length < fetches.length) {
+        changed = true;
+      }
+      if (failed.length > 0) {
+        if (changed && opts.implicit) {
+          // Whatever landed (a repair above, or a sibling fetch) is worth persisting first.
+          this.on._emitKeychainUpdated();
+        }
+        if (failed.length === 1) {
+          throw failed[0].reason;
+        }
+        throw new CTSError(`Could not load keys for ${failed.length} keysets`, {
+          cause: failed.map((f): unknown => f.reason),
+        });
+      }
+    }
+
+    // Explicit callers get no event: they asked for the change, so they persist the cache.
+    if (changed && opts.implicit) {
+      this.on._emitKeychainUpdated();
+    }
+  }
+
+  /**
+   * Refresh the snapshot after the mint rejected a keyset the wallet considered current.
+   *
+   * @returns True when the refresh ran, so the caller's operation is worth running again.
+   */
+  private async repairStaleSnapshot(): Promise<boolean> {
+    if (this._strictCachedKeysets) {
+      return false; // the snapshot is the consumer's to manage
+    }
+    const repair = this.startRepair(true);
+    if (!repair) {
+      return false; // rate limited
+    }
+    try {
+      await repair;
+    } catch (e) {
+      this._logger.warn('Snapshot refresh after a mint keyset rejection failed', {
+        err: (e as Error).message,
+      });
+      return false;
+    }
+    this.on._emitKeychainUpdated();
+    return true;
+  }
+
+  /**
+   * Run a mint request, treating a keyset rejection as evidence the snapshot is stale.
+   *
+   * @remarks
+   * Repairs the snapshot once and rethrows as {@link StaleKeysetError}. Nothing retries: the outputs
+   * were built on the rejected keyset, so the caller runs the operation again.
+   */
+  private async withStaleKeysetRepair<T>(request: () => Promise<T>): Promise<T> {
+    try {
+      return await request();
+    } catch (e) {
+      // NUT-00 reserves 12xxx for keyset errors (12001 unknown, 12002 inactive, 12003 expired).
+      // Mints that answer without a structured code are unaffected, as are look-alike errors from
+      // a custom request layer whose `code` is not a finite number (`Number(undefined)` is NaN):
+      // every range comparison against those is false, so check before comparing.
+      if (
+        !isMintOperationError(e) ||
+        !Number.isFinite(e.code) ||
+        e.code < 12000 ||
+        e.code >= 13000
+      ) {
+        throw e;
+      }
+      throw new StaleKeysetError(await this.repairStaleSnapshot(), { cause: e });
+    }
   }
 
   /**
@@ -652,6 +889,7 @@ class Wallet {
     });
     this.failIf(!ks.hasKeys, 'Keyset has no keys loaded', { keyset: ks.id });
     this._boundKeysetId = ks.id;
+    this._explicitBind = true;
     this._logger.debug('Wallet bound to keyset', {
       keysetId: ks.id,
       unit: ks.unit,
@@ -680,6 +918,7 @@ class Wallet {
       requireSigDleq: this._requireSigDleq,
       logger: this._logger,
       counterSource: opts?.counterSource ?? this._counterSource,
+      strictCachedKeysets: this._strictCachedKeysets,
     });
     // Load mint info from our caches
     newWallet.loadMintFromCache(this.getMintInfo().cache, this._keyChain.cache);
@@ -1044,6 +1283,13 @@ class Wallet {
       proofs = normalizeProofAmounts(decodedToken.proofs);
     }
 
+    // Rotation evidence check: repair the snapshot and load any missing keys before
+    // any assertion or fee math relies on it.
+    await this._ensureOperableKeysets(
+      proofs.map((p) => p.id),
+      { implicit: true },
+    );
+
     // Validate all proof keyset IDs use this wallet's unit
     this.assertProofsInWalletUnit(proofs);
 
@@ -1260,6 +1506,13 @@ class Wallet {
     const normalizedProofs = normalizeProofAmounts(proofs);
     const { keysetId, includeFees = false, onCountersReserved } = config || {};
 
+    // Rotation evidence check: repair the snapshot before any assertion or fee math
+    // relies on it. Inputs are priced from keyset metadata, so keys are not fetched.
+    await this._ensureOperableKeysets(
+      normalizedProofs.map((p) => p.id),
+      { implicit: true, fetchKeys: false },
+    );
+
     // Fallback to policy defaults if no outputConfig
     outputConfig = outputConfig ?? {
       send: this.defaultOutputType(),
@@ -1360,6 +1613,7 @@ class Wallet {
    * @param swapPreview With metadata for swap transaction.
    * @param privkey The private key(s) for signing.
    * @returns SendResponse with keep/send proofs.
+   * @throws {@link StaleKeysetError} If the mint rejects the outputs' keyset.
    */
   async completeSwap(swapPreview: SwapPreview, privkey?: string | string[]): Promise<SendResponse> {
     const keepOutputs: OutputDataLike[] = swapPreview?.keepOutputs ? swapPreview.keepOutputs : [];
@@ -1384,7 +1638,9 @@ class Wallet {
     );
 
     // Execute swap and validate result
-    const { signatures } = await this.mint.swap(swapTransaction.payload);
+    const { signatures } = await this.withStaleKeysetRepair(() =>
+      this.mint.swap(swapTransaction.payload),
+    );
     this.failIf(
       signatures.length !== swapTransaction.outputData.length,
       `Mint returned ${signatures.length} signatures, expected ${swapTransaction.outputData.length}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
@@ -1842,8 +2098,11 @@ class Wallet {
     this.failIfNullish(this._seed, 'Cashu Wallet must be initialized with a seed to use restore');
     const { keysetId } = config || {};
 
-    // Ensure we have keys - wallet only loads active keysets by default
-    await this._keyChain.ensureKeysetKeys(keysetId ?? this.keysetId);
+    // Ensure we have keys - wallet only loads active keysets by default.
+    // Under strictCachedKeysets, skip the fetch: getKeyset below reports a keyless keyset.
+    if (!this._strictCachedKeysets) {
+      await this._keyChain.ensureKeysetKeys(keysetId ?? this.keysetId);
+    }
     const keyset = this.getKeyset(keysetId); // specified or wallet keyset
 
     // create deterministic blank outputs for unknown restore amounts
@@ -2572,16 +2831,19 @@ class Wallet {
    * mint flow and is also what the named convenience helpers use internally.
    * @param mintPreview Preview returned by prepareMint.
    * @returns Minted proofs.
+   * @throws {@link StaleKeysetError} If the mint rejects the outputs' keyset.
    */
   async completeMint(
     mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>,
   ): Promise<Proof[]> {
     const { payload, outputData, keysetId, method, legacySignature } = mintPreview;
     // TODO: Remove legacy message support
-    const { signatures } = await this.withLegacyQuoteSigFallback(
-      legacySignature !== undefined,
-      () => this.mint.mint(method, payload),
-      () => this.mint.mint(method, { ...payload, signature: legacySignature }),
+    const { signatures } = await this.withStaleKeysetRepair(() =>
+      this.withLegacyQuoteSigFallback(
+        legacySignature !== undefined,
+        () => this.mint.mint(method, payload),
+        () => this.mint.mint(method, { ...payload, signature: legacySignature }),
+      ),
     );
     this.failIf(
       signatures.length !== outputData.length,
@@ -2743,6 +3005,7 @@ class Wallet {
    * Use with a `BatchMintPreview` returned by `prepareBatchMint()`.
    * @param batchPreview Preview returned by prepareBatchMint.
    * @returns Minted proofs.
+   * @throws {@link StaleKeysetError} If the mint rejects the outputs' keyset.
    * @experimental only supported by CDK mint >= 0.16.0
    */
   async completeBatchMint(
@@ -2750,10 +3013,12 @@ class Wallet {
   ): Promise<Proof[]> {
     const { method, payload, outputData, keysetId, legacySignatures } = batchPreview;
     // TODO: Remove legacy message support
-    const { signatures: sigs } = await this.withLegacyQuoteSigFallback(
-      legacySignatures !== undefined,
-      () => this.mint.mintBatch(method, payload),
-      () => this.mint.mintBatch(method, { ...payload, signatures: legacySignatures! }),
+    const { signatures: sigs } = await this.withStaleKeysetRepair(() =>
+      this.withLegacyQuoteSigFallback(
+        legacySignatures !== undefined,
+        () => this.mint.mintBatch(method, payload),
+        () => this.mint.mintBatch(method, { ...payload, signatures: legacySignatures! }),
+      ),
     );
     this.failIf(
       sigs.length !== outputData.length,
@@ -3154,8 +3419,17 @@ class Wallet {
       feeIndex,
       feeOptions: meltQuote.fee_options.map((o) => o.fee_index),
     });
-    // Ensure we have enough proofs
     const normalizedProofs = normalizeProofAmounts(proofsToSend);
+
+    // Rotation evidence check: repair the snapshot before the input fee lookup relies on
+    // it. Inputs are priced from keyset metadata, so keys are not fetched. prepareMelt
+    // checks again below, a no-op by then.
+    await this._ensureOperableKeysets(
+      normalizedProofs.map((p) => p.id),
+      { implicit: true, fetchKeys: false },
+    );
+
+    // Ensure we have enough proofs
     const inputFee = this.getFeesForProofs(normalizedProofs);
     const sendAmount = sumProofs(normalizedProofs);
     const totalRequired = meltQuote.amount.add(feeOption.fee_reserve).add(inputFee);
@@ -3201,6 +3475,25 @@ class Wallet {
     this.validateMeltQuote(meltQuote);
     outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
     const { keysetId, onCountersReserved, nut08Change = true } = config || {};
+
+    // Rotation evidence check: repair the snapshot so the output binding is current.
+    // bolt11/bolt12 melts never consult the input keyset (no keys, no fee metadata), so an
+    // id the mint delisted but still honors must not block the withdrawal: proceed and let
+    // the mint judge. Strict mode still refuses; so do non-keyset errors.
+    try {
+      await this._ensureOperableKeysets(
+        proofsToSend.map((p) => p.id),
+        { implicit: true, fetchKeys: false },
+      );
+    } catch (e) {
+      if (this._strictCachedKeysets || !(e instanceof UnknownKeysetError)) {
+        throw e;
+      }
+      this._logger.warn('Melt input keyset is not listed by the mint; proceeding anyway', {
+        keyset: e.keysetId,
+      });
+    }
+
     // Plain getKeyset: melting needs no new outputs, so an inactive/legacy keyset must not
     // block withdrawal. A mint unwinding liabilities deactivates keysets but
     // keeps melt open; gate output creation below, not the melt itself.
@@ -3287,6 +3580,9 @@ class Wallet {
    * @param options Optional override to request NUT-06 asynchronous melt or method-specific fields.
    * @returns Updated MeltProofsResponse.
    * @throws If melt fails or signatures don't match output count.
+   * @throws {@link StaleKeysetError} If the mint rejects the outputs' keyset.
+   * @throws {@link MeltChangeError} If the melt went through but its change could not be built.
+   *   Carries the `outputData` and quote needed to recover the change later.
    */
   async completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(
     meltPreview: MeltPreview<TQuote>,
@@ -3327,13 +3623,29 @@ class Wallet {
     };
 
     // Execute melt and validate result
-    const meltResponse: MeltQuoteBaseResponse = await this.mint.melt<TQuote>(
-      meltPreview.method,
-      meltPayload,
+    const meltResponse: MeltQuoteBaseResponse = await this.withStaleKeysetRepair(() =>
+      this.mint.melt<TQuote>(meltPreview.method, meltPayload),
     );
 
-    // Create any change Proofs
-    const change = this.createMeltChangeProofs(meltPreview.outputData, meltResponse.change ?? []);
+    // Merge preview quote with response to protect against incomplete response.
+    const mergedQuote = { ...meltPreview.quote, ...meltResponse };
+
+    // Create any change Proofs. Change may arrive on a rotated-out keyset, and a
+    // permissive mint may sign change on a keyset other than the blanks' (NUT-08).
+    // The inputs are spent by now, so a failure here must hand back what recovery needs.
+    const changeSigs = meltResponse.change ?? [];
+    let change: Proof[];
+    try {
+      if (changeSigs.length > 0) {
+        await this._ensureOperableKeysets(
+          changeSigs.map((s) => s.id),
+          { implicit: true },
+        );
+      }
+      change = this.createMeltChangeProofs(meltPreview.outputData, changeSigs);
+    } catch (e) {
+      throw new MeltChangeError(meltPreview.outputData, mergedQuote, { cause: e });
+    }
 
     const changeAmounts = change.map((p) => p.amount.toString());
     if (completeOptions.preferAsync) {
@@ -3342,9 +3654,7 @@ class Wallet {
       this._logger.debug('MELT COMPLETED', { changeAmounts });
     }
 
-    // Merge preview quote with response to protect against incomplete response.
     // Retain outputData if no change was returned, so async/onchain can recover it later.
-    const mergedQuote = { ...meltPreview.quote, ...meltResponse } as TQuote;
     return {
       quote: mergedQuote,
       change,
@@ -3356,9 +3666,9 @@ class Wallet {
    * Constructs melt change proofs from prepared OutputData and mint returned Change Signatures.
    *
    * @remarks
-   * Called internally by `completeMelt`; also useful for NUT-06 async melts and any other path that
-   * defers change construction (crash recovery, process hand-off). Keyset lookup is per-signature
-   * so multi-keyset responses (e.g. a permissive CDK mint) work transparently.
+   * Synchronous by design and called internally by `completeMelt` (which ensures keys first);
+   * direct callers deferring change construction (NUT-06 async melts, crash recovery) should `await
+   * wallet.keyChain.ensureKeysetKeys(id)` per signature keyset first.
    * @param outputData Outputs from `prepareMelt()`, or deserialised persisted OutputData.
    * @param changeSigs The optional `change` signatures from the melt response or paid quote.
    * @returns Spendable change proofs (possibly empty).

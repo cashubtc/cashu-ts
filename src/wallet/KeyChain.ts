@@ -166,7 +166,11 @@ export class KeyChain {
    * @param allKeys Keys data from mint.getKeys() API.
    */
   private buildKeychain(allKeysets: MintKeyset[], allKeys: MintKeys[]): void {
-    // Clear existing keysets to avoid stale data (null-proto, see the field declaration)
+    // Keep a reference to the outgoing snapshot so verified keys survive a refresh.
+    // NUT-01 only serves keys for active keysets, so a rebuild would otherwise blank
+    // every keyset that has rotated out. Keys are immutable per id (id commits to
+    // the key hash), so carrying them forward cannot go stale.
+    const previous = this.keysets;
     this.keysets = Object.create(null) as { [id: string]: Keyset };
 
     const keysMap = new Map<string, MintKeys>(allKeys.map((k) => [k.id, k]));
@@ -178,6 +182,12 @@ export class KeyChain {
       // Discard unverified keys
       if (!keyset.verify()) {
         keyset.keys = {};
+      }
+
+      // Carry forward previously verified keys for a keyset the mint no longer serves
+      const prior = previous[meta.id];
+      if (!keyset.hasKeys && prior?.hasKeys) {
+        keyset.keys = prior.keys;
       }
 
       this.keysets[keyset.id] = keyset;
@@ -308,6 +318,16 @@ export class KeyChain {
     if (!id) return false;
     const keyset = this.keysets[id];
     return keyset !== undefined && keyset.unit === this.unit;
+  }
+
+  /**
+   * True if `id` is a keyset this KeyChain knows about, any unit.
+   *
+   * @remarks
+   * O(1) and non-throwing, unlike `getKeyset(id)`. False for an uninitialized chain.
+   */
+  hasKeyset(id?: string): boolean {
+    return !!id && this.keysets[id] !== undefined;
   }
 
   /**

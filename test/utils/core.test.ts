@@ -737,6 +737,12 @@ describe('test zero-knowledge utilities', () => {
     };
     expect(() => hasValidDleq(serializedProof, keyset)).toThrow(/Undefined key for amount/);
   });
+  test('hasValidDleq names key loading when the keyset is keyless', () => {
+    const keylessKeyset = { id: '00bd033559de27d0', unit: 'sat', keys: {} };
+    expect(() => hasValidDleq(serializedProof, keylessKeyset)).toThrow(
+      'No keys loaded for keyset 00bd033559de27d0',
+    );
+  });
   describe('v3 (BLS) proof signature verification via hasValidDleq', () => {
     // Locked Nutshell vector: secret="test_message", r=3, a=2 → C
     const v3Id = '02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d';

@@ -41,6 +41,14 @@ export const ABSOLUTE_MAX_ARRAY_LENGTH = 10_000;
 export const MAX_KEYSET_DENOMINATIONS = 256;
 
 /**
+ * Minimum gap between two internal snapshot repairs (`loadMint(true)` fired from inside an
+ * operation). Rotations are rare, so a wallet that keeps meeting keyset ids the mint rejects is
+ * being fed garbage: without this, each bad token would cost three outbound mint requests,
+ * repeatably. Explicit consumer refreshes are not rate limited.
+ */
+export const REPAIR_COOLDOWN_MS = 60_000;
+
+/**
  * NUT-04/05: Upper bound on the length of a mint-advertised payment `method` string we will derive
  * a default `method_name` from. Real methods are short identifiers (`bolt11`, `onchain`); a value
  * beyond this is malformed/hostile, so we skip derivation rather than run unbounded string work

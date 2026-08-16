@@ -7,10 +7,12 @@ import {
   getDecodedToken,
   OutputData,
   Amount,
+  UnknownKeysetError,
   type AmountLike,
   type HasKeysetKeys,
   type ProofLike,
 } from '../../src';
+import { PUBKEYS } from '../consts';
 
 import { mint, unit, token3sat, mintUrl, logger, useTestServer } from './_setup';
 
@@ -86,6 +88,9 @@ describe('receive', () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
 
+    // Fully unknown keyset id: ensureOperableKeysets repairs the snapshot (still unmocked
+    // beyond the default handlers) and reports it as an UnknownKeysetError, not a plain
+    // unit-mismatch rejection.
     await expect(
       wallet.receive([
         {
@@ -95,11 +100,14 @@ describe('receive', () => {
           C: '02bc9097997d81afb2cc7346b5e4345a9346bd2a506eb7958598a72f0cf85163ea',
         },
       ]),
-    ).rejects.toThrow('Proof has unrecognised keyset');
+    ).rejects.toThrow(UnknownKeysetError);
   });
 
   test('receive Proof[] - wrong-unit keyset ID throws', async () => {
-    const usdKeysetId = '009a1f293253e41f';
+    // Known but keyless usd keyset: ensureOperableKeysets must not spend a /v1/keys/{id} request
+    // resolving a foreign-unit id before the unit check gets a chance to reject it.
+    const usdKeysetId = '009a1f293253e41e';
+    let usdKeysRequests = 0;
     server.use(
       http.get(mintUrl + '/v1/keysets', () =>
         HttpResponse.json({
@@ -109,6 +117,10 @@ describe('receive', () => {
           ],
         }),
       ),
+      http.get(mintUrl + '/v1/keys/' + usdKeysetId, () => {
+        usdKeysRequests++;
+        return HttpResponse.json({ keysets: [{ id: usdKeysetId, unit: 'usd', keys: PUBKEYS }] });
+      }),
     );
     const wallet = new Wallet(mint, { unit }); // sat wallet
     await wallet.loadMint();
@@ -123,7 +135,8 @@ describe('receive', () => {
           C: '02bc9097997d81afb2cc7346b5e4345a9346bd2a506eb7958598a72f0cf85163ea',
         },
       ]),
-    ).rejects.toThrow('Proof has unrecognised keyset');
+    ).rejects.toThrow('is not a sat keyset from this mint');
+    expect(usdKeysRequests).toBe(0); // foreign-unit keyless id: no key fetch attempted
   });
 
   test('test receive token from wrong mint', async () => {
