@@ -100,15 +100,17 @@ What happens next depends on the method. `meltProofsOnchain`, which prices its i
 
 ### Migration
 
-Melting proofs from an external or restored source, on a wallet whose snapshot may predate them, usually needs no change: the refresh finds the rotated-in keyset and the melt proceeds. If the mint has pruned the keyset entirely, bolt11/bolt12 melts still work; onchain melts need the snapshot brought up to date first:
+Melting proofs from an external or restored source, on a wallet whose snapshot may predate them, needs no change: the refresh finds the rotated-in keyset and the melt proceeds.
+
+If the mint has pruned the keyset, no refresh resolves it and none of this helps. Bolt11 and bolt12 melts go through anyway, logging a warning. An onchain melt of those proofs cannot be priced, so it throws `UnknownKeysetError` and keeps throwing; melt them over bolt11 or bolt12 instead if you need them out.
+
+Under `strictCachedKeysets` nothing is fetched for you, so resolve the ids yourself before melting. The same call is useful outside strict mode when you want to choose the moment the network call happens:
 
 ```ts
-// Refresh, or resolve just the ids you are about to spend
+// Resolve just the ids you are about to spend, or loadMint(true) for the lot
 await wallet.ensureOperableKeysets(proofs.map((p) => p.id));
-await wallet.meltProofsOnchain(quote, proofs, feeIndex);
+await wallet.meltProofsBolt11(quote, proofs);
 ```
-
-`loadMint(true)` does the same job wholesale. Under `strictCachedKeysets` nothing is fetched for you, so load the keysets yourself before melting.
 
 ---
 
