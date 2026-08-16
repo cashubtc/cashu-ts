@@ -133,9 +133,13 @@ never consult the input keyset at all, so an id still unknown after the refresh 
 warning: whether a keyset it no longer lists is still honored is the mint's call, and refusing
 would leave those proofs with no way out. Strict mode still refuses, having never asked.
 
-Most callers need no change: the refresh finds the rotated-in keyset and the melt proceeds. If the
-mint has pruned the keyset outright, bolt11 and bolt12 melts still work; an onchain melt needs the
-snapshot brought up to date first:
+Most callers need no change. While the mint still lists the keyset, the op's own refresh finds it
+and the melt proceeds. Once the mint has pruned it, bolt11 and bolt12 melts go ahead with the
+warning above, and an onchain melt of those proofs cannot be priced, so it throws. No amount of
+refreshing changes that.
+
+Resolving the ids yourself is worth doing under `strictCachedKeysets`, where the op never asks the
+mint on your behalf, or when you want to choose where the network call happens:
 
 ```ts
 // Refresh, or resolve just the ids you are about to spend
@@ -143,8 +147,9 @@ await wallet.ensureOperableKeysets(proofs.map((p) => p.id));
 await wallet.meltProofsOnchain(quote, proofs, feeIndex);
 ```
 
-`loadMint(true)` does the same job wholesale. Under `strictCachedKeysets` nothing is fetched for
-you, so load the keysets yourself before melting.
+`loadMint(true)` does the same job wholesale. Neither brings back a keyset the mint has dropped:
+`ensureOperableKeysets` refreshes and then throws `UnknownKeysetError` for an id still missing
+afterwards.
 
 ## Refreshing on purpose
 
