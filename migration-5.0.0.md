@@ -96,7 +96,7 @@ Code that never branched on those codes needs no change beyond expecting `StaleK
 
 `prepareMelt` (and the `meltProofs*` wrappers) never looked up the keyset of an input proof, so proofs on an id the wallet did not hold were melted anyway. v5 resolves those ids first, exactly as `receive` does: unknown ids trigger one `loadMint(true)`, and an id the mint does not know throws `UnknownKeysetError`.
 
-What happened before depended on the method. The bolt11 and bolt12 paths never touched the input keyset at all, since `prepareMelt` takes its fee reserve from the proofs' total minus the quote amount, so the melt went ahead with NUT-08 change blanks bound to whatever keyset the wallet held. `meltProofsOnchain`, which does price its inputs, failed instead with a raw `Could not get fee. No keyset found for keyset id: X`. All of them now refuse at prepare time until the snapshot is repaired.
+What happened before depended on the method. The bolt11 and bolt12 paths never touched the input keyset at all, since `prepareMelt` takes its fee reserve from the proofs' total minus the quote amount, so the melt went ahead with NUT-08 change blanks bound to whatever keyset the wallet held. `meltProofsOnchain`, which does price its inputs, failed instead with a raw `Could not get fee. No keyset found for keyset id: X`. All of them now refuse at prepare time.
 
 ### Migration
 
