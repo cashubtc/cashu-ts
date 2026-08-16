@@ -26,8 +26,10 @@ the wallet heals, you decide what to do next.
 **An unknown keyset id.** A proof names a keyset the snapshot has never seen. Every op that reads
 input proof ids (`receive`, `send` and `prepareSwapToSend`, `prepareMelt` and the `meltProofs*`
 wrappers) and melt change refresh once, then throw `UnknownKeysetError` if the id is still unknown
-(or if the refresh itself failed, with that failure as `cause`). `restore` does not take this path:
-an unknown id there throws a plain `CTSError`.
+(or if the refresh itself failed, with that failure as `cause`). One exception: bolt11/bolt12 melts
+never consult the input keyset (no keys, no fee metadata), so an id the mint delisted but still
+honors proceeds with a warning instead of refusing. `restore` does not take this path: an unknown
+id there throws a plain `CTSError`.
 
 `UnknownKeysetError.refreshed` says how much weight to give it:
 
