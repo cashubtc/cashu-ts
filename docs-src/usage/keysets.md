@@ -123,8 +123,8 @@ takes its fee reserve from `sendAmount - quote.amount` and nothing else, so a bo
 of proofs on an id the wallet did not hold went through regardless, with NUT-08 blanks bound to a
 stale keyset. `meltProofsOnchain` does price its inputs, and failed on the way with a raw
 `Could not get fee. No keyset found for keyset id: X`. All of them now resolve their input ids
-first, exactly as `receive` does, and refuse an id the mint does not know with `UnknownKeysetError`
-until the snapshot is repaired.
+first, exactly as `receive` does, and refuse an id the mint does not know with
+`UnknownKeysetError`.
 
 Melting proofs from an external or restored source, on a wallet whose snapshot may predate them,
 means bringing the snapshot up to date first:
