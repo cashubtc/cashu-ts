@@ -1,5 +1,18 @@
 # Changelog
 
+## [5.0.0-rc.7](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.6...v5.0.0-rc.7) (2026-08-16)
+
+
+### Features
+
+* **wallet:** follow keyset rotations and check melt inputs against the snapshot ([#978](https://github.com/cashubtc/cashu-ts/issues/978)) ([e29746e](https://github.com/cashubtc/cashu-ts/commit/e29746e5107846e54c20cb7e447e75c688642d3b))
+* **wallet:** size request batches from the mint's advertised cap ([#965](https://github.com/cashubtc/cashu-ts/issues/965)) ([bb890a1](https://github.com/cashubtc/cashu-ts/commit/bb890a1c2301869ccaa60166b9d00cf780ae9db6))
+
+
+### Bug Fixes
+
+* **wallet:** allow minting paid expired quotes ([#969](https://github.com/cashubtc/cashu-ts/issues/969)) ([8371af3](https://github.com/cashubtc/cashu-ts/commit/8371af3e7087ef46c7b60521efe10d150c37cba3))
+
 ## [5.0.0-rc.6](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.5...v5.0.0-rc.6) (2026-08-12)
 
 
