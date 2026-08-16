@@ -65,6 +65,7 @@ import {
   sumProofs,
   verifyDleqIfPresent,
   ABSOLUTE_MAX_BATCH_SIZE,
+  DEFAULT_MAX_ARRAY_LENGTH,
   REPAIR_COOLDOWN_MS,
 } from '../utils';
 
@@ -463,6 +464,14 @@ class Wallet {
       'Mint info not initialized; call loadMint or loadMintFromCache first',
     );
     return this._mintInfo;
+  }
+
+  /**
+   * NUT-06: the mint's advertised cap on the length of any array in a request, used to size the
+   * checkstate and restore batches. Falls back to the library default until mint info is loaded.
+   */
+  private get maxArrayLength(): number {
+    return this._mintInfo?.maxArrayLength ?? DEFAULT_MAX_ARRAY_LENGTH;
   }
 
   /**
@@ -1925,8 +1934,8 @@ class Wallet {
    *
    * @param [gapLimit=300] The amount of empty counters that should be returned before restoring
    *   ends (defaults to 300). Default is `300`
-   * @param [batchSize=300] The amount of proofs that should be restored at a time (defaults to
-   *   300). Default is `300`
+   * @param [batchSize] The amount of proofs that should be restored at a time. Defaults to the
+   *   mint's advertised `max_array_length` (NUT-06), or `500` when it advertises none.
    * @param [counter=0] The counter that should be used as a starting point (defaults to 0). Default
    *   is `0`
    * @param [keysetId] Which keysetId to use for the restoration. If none is passed the instance's
@@ -1934,18 +1943,19 @@ class Wallet {
    */
   async batchRestore(
     gapLimit = 300,
-    batchSize = 300,
+    batchSize?: number,
     counter = 0,
     keysetId?: string,
   ): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
-    const requiredEmptyBatches = Math.ceil(gapLimit / batchSize);
+    const size = batchSize ?? this.maxArrayLength;
+    const requiredEmptyBatches = Math.ceil(gapLimit / size);
     const restoredProofs: Proof[] = [];
 
     let lastCounterWithSignature: undefined | number;
     let emptyBatchesFound = 0;
 
     while (emptyBatchesFound < requiredEmptyBatches) {
-      const restoreRes = await this.restore(counter, batchSize, { keysetId });
+      const restoreRes = await this.restore(counter, size, { keysetId });
       if (restoreRes.proofs.length > 0) {
         emptyBatchesFound = 0;
         restoredProofs.push(...restoreRes.proofs);
@@ -1953,7 +1963,7 @@ class Wallet {
       } else {
         emptyBatchesFound++;
       }
-      counter += batchSize;
+      counter += size;
     }
     return { proofs: restoredProofs, lastCounterWithSignature };
   }
@@ -3604,11 +3614,10 @@ class Wallet {
     const Ys = proofs.map((p: Pick<Proof, 'secret'>) =>
       hashToCurve(enc.encode(p.secret)).toHex(true),
     );
-    // TODO: Replace this with a value from the info endpoint of the mint eventually
-    const BATCH_SIZE = 100;
+    const batchSize = this.maxArrayLength;
     const states: ProofState[] = [];
-    for (let i = 0; i < Ys.length; i += BATCH_SIZE) {
-      const YsSlice = Ys.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < Ys.length; i += batchSize) {
+      const YsSlice = Ys.slice(i, i + batchSize);
       const { states: batchStates } = await this.mint.check({
         Ys: YsSlice,
       });
