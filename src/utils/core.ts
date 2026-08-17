@@ -33,7 +33,7 @@ import { encodeBase64ToJson, encodeBase64toUint8, encodeUint8toBase64Url } from 
 import { Bytes } from './Bytes';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { JSONInt } from './JSONInt';
-import { MAX_PAYLOAD_DECODE_ATTEMPTS, MAX_SPLIT_OUTPUTS } from './limits';
+import { MAX_PAYLOAD_DECODE_ATTEMPTS, MAX_PAYLOAD_LENGTH, MAX_SPLIT_OUTPUTS } from './limits';
 
 /**
  * Splits the amount into denominations of the provided keyset.
@@ -390,23 +390,32 @@ export function getTokenMetadata(token: string): TokenMetadata {
 export type CashuPayloadKind = 'token' | 'paymentRequest';
 
 /**
- * One scanner per payload prefix: a literal prefix plus a single character class, so matching
- * cannot backtrack catastrophically. The base64 class spans both alphabets so it never truncates a
- * real payload, the decoder decides validity. `creqb1` (NUT-26) is matched case-insensitively
- * because QR alphanumeric mode emits the uppercase form.
+ * One scanner per payload prefix: a literal prefix plus a single character-class quantifier, so
+ * matching cannot backtrack catastrophically, bounded by {@link MAX_PAYLOAD_LENGTH} so a hostile run
+ * cannot produce one huge match for the decoders to chew on. Tokens and `creqA` use the base64url
+ * class only, `+` and `/` are excluded deliberately, since `/` lets a token in a URL path swallow
+ * the following segment and the decoders accept the trailing junk rather than reject it. `creqb1`
+ * (NUT-26) uses the bech32 class and is matched case-insensitively because QR alphanumeric mode
+ * emits the uppercase form.
  */
 const PAYLOAD_SCANNERS: ReadonlyArray<{ regExp: RegExp; kind: CashuPayloadKind }> = [
-  { regExp: /cashu[AB][A-Za-z0-9=_-]+/g, kind: 'token' },
-  { regExp: /creqA[A-Za-z0-9=_-]+/g, kind: 'paymentRequest' },
-  { regExp: /creqb1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+/gi, kind: 'paymentRequest' },
+  { regExp: new RegExp(`cashu[AB][A-Za-z0-9=_-]{1,${MAX_PAYLOAD_LENGTH}}`, 'g'), kind: 'token' },
+  {
+    regExp: new RegExp(`creqA[A-Za-z0-9=_-]{1,${MAX_PAYLOAD_LENGTH}}`, 'g'),
+    kind: 'paymentRequest',
+  },
+  {
+    regExp: new RegExp(`creqb1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{1,${MAX_PAYLOAD_LENGTH}}`, 'gi'),
+    kind: 'paymentRequest',
+  },
 ];
 
 /**
- * Finds the first cashu token (v3 or v4) or payment request (`creqA` NUT-18, `creqB` NUT-26)
- * embedded in arbitrary text: chat messages, clipboard blobs, `bitcoin:` URI parameters, wallet URL
- * fragments. Candidates are matched by prefix and then decoded to validate, so a prefix that does
- * not decode is skipped. The match is returned verbatim, ready for {@link getDecodedToken} or
- * `PaymentRequest.fromEncodedRequest`.
+ * Finds the first cashu token (v3 or v4) or payment request (`creqA` NUT-18, `creqb1` / `CREQB1`
+ * NUT-26) embedded in arbitrary text: chat messages, clipboard blobs, `bitcoin:` URI parameters,
+ * wallet URL fragments. Candidates are matched by prefix and then decoded to validate, so a prefix
+ * that does not decode is skipped. The match is returned verbatim, ready for {@link getDecodedToken}
+ * or `PaymentRequest.fromEncodedRequest`.
  *
  * @example
  *

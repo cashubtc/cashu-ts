@@ -77,3 +77,13 @@ export const U64_MAX = 2n ** 64n - 1n;
  * and a few near-misses, so 16 clears them; scans that exhaust the budget return null.
  */
 export const MAX_PAYLOAD_DECODE_ATTEMPTS = 16;
+
+/**
+ * Upper bound on the encoded payload a single `findCashuPayload` candidate may span. The scan
+ * quantifiers are bounded by it, so a hostile paste of millions of charset characters yields a
+ * capped candidate instead of one huge match handed to the base64/CBOR decoders, the attempt cap
+ * alone bounds how many candidates are tried, not the cost of each. 256 KiB is ~90x the largest
+ * token in the test tree and holds roughly a thousand proofs, so it clears any real payload; a
+ * longer run is truncated, fails to decode, and the scan moves on.
+ */
+export const MAX_PAYLOAD_LENGTH = 262_144;

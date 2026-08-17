@@ -27,7 +27,7 @@ import {
   sortProofsById,
   normalizeMintUrl,
 } from '../../src/utils';
-import { MAX_PAYLOAD_DECODE_ATTEMPTS } from '../../src/utils/limits';
+import { MAX_PAYLOAD_DECODE_ATTEMPTS, MAX_PAYLOAD_LENGTH } from '../../src/utils/limits';
 import {
   NUT02_V1_VECTOR1_KEYS,
   NUT02_V1_VECTOR2_KEYS,
@@ -467,6 +467,17 @@ describe('findCashuPayload', () => {
 
   test('does not match an uppercased token prefix', () => {
     expect(findCashuPayload(`CASHUB${V4_TOKEN.slice('cashuB'.length)}`)).toBeNull();
+  });
+
+  test('bounds a single candidate at MAX_PAYLOAD_LENGTH', () => {
+    // The attempt cap bounds how many candidates are decoded, not the cost of each: without a
+    // bounded quantifier a hostile run hands one enormous match to the base64/CBOR decoders.
+    const hostile = `cashuB${'A'.repeat(MAX_PAYLOAD_LENGTH * 2)}`;
+    const started = Date.now();
+    expect(findCashuPayload(hostile)).toBeNull();
+    expect(Date.now() - started).toBeLessThan(5_000);
+    // A payload sitting after the oversized run is still reachable.
+    expect(findCashuPayload(`${hostile} ${V4_TOKEN}`)?.payload).toBe(V4_TOKEN);
   });
 
   test('finds a token in a URL path without swallowing the next segment', () => {
