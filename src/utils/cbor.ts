@@ -311,6 +311,10 @@ function encodeObject(value: Record<string, unknown>, buffer: number[]) {
 export function decodeCBOR(data: Uint8Array): ResultValue {
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const result = decodeItem(view, 0);
+  // A complete payload consumes the whole buffer; reject trailing bytes.
+  if (result.offset !== data.byteLength) {
+    throw new CTSError('CBOR data has trailing bytes');
+  }
   return result.value;
 }
 

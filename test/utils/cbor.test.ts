@@ -115,6 +115,15 @@ describe('cbor decoder', () => {
     expect(() => decodeCBOR(buf)).toThrow(/nesting exceeds the maximum depth/);
   });
 
+  test('trailing bytes after a complete item are rejected', () => {
+    const encoded = encodeCBOR({ a: 1 });
+    const withJunk = new Uint8Array(encoded.length + 1);
+    withJunk.set(encoded);
+    withJunk[encoded.length] = 0x00;
+    expect(decodeCBOR(encoded)).toStrictEqual({ a: 1 });
+    expect(() => decodeCBOR(withJunk)).toThrow(/trailing bytes/);
+  });
+
   test('decode float16 (0xf9) and float32 (0xfa) paths', () => {
     // float16 0x3c00 -> 1.0
     const f16 = new Uint8Array([0xf9, 0x3c, 0x00]);
