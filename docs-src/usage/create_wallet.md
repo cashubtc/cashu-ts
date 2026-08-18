@@ -50,6 +50,8 @@ await wallet.loadMint();
 
 Use `setGlobalRequestOptions({ fetch })` when your whole app uses the same mint transport policy.
 
+Precedence depends on the option. Global values for fetch's own `RequestInit` (`cache`, `credentials`, `redirect` etc) are a process-wide transport policy and override the per-request value. Global values for library options (`requestTimeout`, `fetch`, `maxResponseBytes`, `idempotent`, NUT-19 policy) are defaults that a per-request value overrides. Global and per-request `headers` merge, with the per-request value winning per key. The exception is `redirect`, which is always `error` on a request carrying a NUT-21/22 auth header.
+
 Use `customRequest` when you need to replace the entire request pipeline instead of only the fetch-compatible transport.
 
 `requestFetch` only applies to Cashu mint HTTP requests. OIDC discovery and token requests use `oidc.fetch` because they target the identity provider and use OAuth/OIDC request and error semantics.
