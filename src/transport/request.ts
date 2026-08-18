@@ -244,12 +244,38 @@ export function parseRetryAfter(header: string | null): number | undefined {
   return undefined;
 }
 
+/**
+ * The options that are library semantics rather than fetch transport config.
+ *
+ * @remarks
+ * Precedence differs by class: a global value for these is only a default and the per-call value
+ * wins, while `RequestInit` fields go the other way (global is an embedder override). Adding an
+ * option to {@link RequestOptions} outside `RequestInit` will not compile until it is listed below.
+ * @internal
+ */
+type PerCallOption = Exclude<keyof RequestOptions, keyof RequestInit>;
+
+const PER_CALL_OPTIONS = {
+  endpoint: true,
+  requestBody: true,
+  logger: true,
+  ttl: true,
+  cached_endpoints: true,
+  requestTimeout: true,
+  onResponseMeta: true,
+} satisfies Record<PerCallOption, true>;
+
 let globalRequestOptions: Partial<RequestOptions> = {};
 let requestLogger = NULL_LOGGER;
 
 /**
- * An object containing any custom settings that you want to apply to the global fetch method.
+ * An object containing any custom settings that you want to apply to every mint request.
  *
+ * @remarks
+ * `RequestInit` fields (`cache`, `credentials`, `mode` etc) override the per-call value: they are
+ * process-wide transport policy. Library options (`requestTimeout`, NUT-19 policy) are defaults a
+ * per-call value overrides. `headers` merge, per-call wins per key; `redirect` is always `error` on
+ * requests carrying auth headers.
  * @param options See possible options here:
  *   https://developer.mozilla.org/en-US/docs/Web/API/fetch#options.
  */
@@ -269,6 +295,7 @@ export function setRequestLogger(logger: Logger): void {
 const MAX_CACHED_RETRIES = 9; // 10 requests total
 const MAX_DELAY = 1000; // 1 sec
 const BASE_DELAY = 100; // 100 ms
+const AUTH_HEADERS = ['blind-auth', 'clear-auth']; // NUT-21/22 tokens, lowercased for comparison
 
 class CallerAbortError extends NetworkError {
   constructor(message: string) {
@@ -442,6 +469,9 @@ async function _request(options: RequestOptions): Promise<unknown> {
 
   const body = requestBody ? JSONInt.stringify(requestBody) : undefined;
   const headers = buildRequestHeaders(body, requestHeaders);
+  const carriesAuth = Object.keys(headers).some((name) =>
+    AUTH_HEADERS.includes(name.toLowerCase()),
+  );
   const callerSignal = options.signal ?? undefined;
   if (callerSignal?.aborted) {
     throw new CallerAbortError('Request aborted by caller');
@@ -485,6 +515,7 @@ async function _request(options: RequestOptions): Promise<unknown> {
         referrer: '', // prevent leaking the embedding page URL
         referrerPolicy: 'no-referrer', // belt-and-braces for referrer across all contexts
         ...fetchOptions, // allows override of above options
+        ...(carriesAuth ? { redirect: 'error' as const } : undefined), // not overridable on auth requests
         signal, // not overridable (includes caller signal)
       });
     } catch (err) {
@@ -623,9 +654,11 @@ export default async function request<T>(options: RequestOptions): Promise<T> {
   const perRequest = options.onResponseMeta;
   const globalMeta = globalRequestOptions.onResponseMeta;
   const merged: RequestOptions = { ...options, ...globalRequestOptions };
-
-  // Default: per-request callback only
-  if (perRequest) merged.onResponseMeta = perRequest;
+  for (const key of Object.keys(PER_CALL_OPTIONS) as PerCallOption[]) {
+    if (options[key] !== undefined) (merged as Record<string, unknown>)[key] = options[key];
+  }
+  // Neither side owns the header bag: a global adds app-wide headers, per-call carries auth.
+  merged.headers = { ...globalRequestOptions.headers, ...options.headers };
 
   // Both set: wrap in safeCallback so a throw in one doesn't prevent the other from firing.
   if (perRequest && globalMeta && perRequest !== globalMeta) {
