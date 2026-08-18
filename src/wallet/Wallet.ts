@@ -1239,7 +1239,8 @@ class Wallet {
    *
    * @remarks
    * Allows you to preview fees for a receive, get concrete outputs for P2PK SIG_ALL transactions,
-   * and do any pre-swap tasks (such as marking proofs in-flight etc)
+   * and do any pre-swap tasks (such as marking proofs in-flight etc). Persist this preview
+   * (`serializeSwapPreview`) to support NUT-19 replay safety.
    * @example
    *
    * ```typescript
@@ -1478,7 +1479,8 @@ class Wallet {
    *
    * @remarks
    * Allows you to preview fees for a send, get concrete outputs for P2PK SIG_ALL transactions, and
-   * do any pre-swap tasks (such as marking proofs in-flight etc)
+   * do any pre-swap tasks (such as marking proofs in-flight etc). Persist this preview
+   * (`serializeSwapPreview`) to support NUT-19 replay safety.
    * @example
    *
    * ```typescript

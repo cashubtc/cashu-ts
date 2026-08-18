@@ -8,6 +8,10 @@ import {
   CTSError,
   OutputData,
   createEphemeralCounterSource,
+  serializeSwapPreview,
+  deserializeSwapPreview,
+  type SerializedProof,
+  type SerializedSwapPreview,
   type Proof,
   type ProofLike,
   type OutputConfig,
@@ -344,6 +348,74 @@ describe('send', () => {
     expect(result.send[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
     expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
+  });
+
+  test('swap preview round trips through serialize/deserialize and replays identically', async () => {
+    const bodies: string[] = [];
+    server.use(
+      http.post(mintUrl + '/v1/swap', async ({ request }) => {
+        const body = await request.text();
+        bodies.push(body);
+        const { outputs } = JSON.parse(body) as { outputs: Array<{ id: string; amount: number }> };
+        return HttpResponse.json({
+          signatures: outputs.map((o) => ({
+            id: o.id,
+            amount: o.amount,
+            C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+          })),
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    // A 3-sat input sending 1 produces change, so keepOutputs round trips too.
+    const threeSat: Proof[] = [{ ...proofs[0], amount: Amount.from(3) }];
+    const preview = await wallet.prepareSwapToSend(1, threeSat);
+    expect(preview.keepOutputs?.length).toBeGreaterThan(0);
+    const stored = JSON.stringify(serializeSwapPreview(preview));
+    const revived = deserializeSwapPreview(JSON.parse(stored) as SerializedSwapPreview);
+
+    const first = await wallet.completeSwap(preview);
+    const replayed = await wallet.completeSwap(revived);
+
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1]).toBe(bodies[0]);
+    expect(replayed.send).toHaveLength(1);
+    expect(replayed.send[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
+    expect(first.send[0].secret).toBe(replayed.send[0].secret);
+  });
+
+  test('deserializeSwapPreview rejects malformed output data', () => {
+    const bad: SerializedSwapPreview = {
+      amount: '1',
+      fees: '0',
+      keysetId: '00bd033559de27d0',
+      inputs: [],
+      sendOutputs: [
+        {
+          blindedMessage: { amount: '1', B_: '02beef', id: '00bd033559de27d0' },
+          blindingFactor: 'not-a-number',
+          secret: 'abcd',
+        },
+      ],
+    };
+    expect(() => deserializeSwapPreview(bad)).toThrow(CTSError);
+  });
+
+  test('deserializeSwapPreview wraps non-Error throws', () => {
+    const bad: SerializedSwapPreview = {
+      amount: '1',
+      fees: '0',
+      keysetId: '00bd033559de27d0',
+      get inputs(): SerializedProof[] {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- exercising the non-Error path
+        throw 'not-an-error';
+      },
+    };
+    expect(() => deserializeSwapPreview(bad)).toThrow(
+      'Invalid SerializedSwapPreview: not-an-error',
+    );
   });
 
   test('rejects missing DLEQ on swap when mint advertises NUT-12', async () => {
