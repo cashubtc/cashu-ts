@@ -130,7 +130,8 @@ export type SwapTransaction = {
  * Preview of a swap transaction created by prepareSend / prepareReceive.
  *
  * @remarks
- * Contains JSON-unsafe values (`bigint`, `Uint8Array`). Not intended for direct serialization.
+ * Contains JSON-unsafe values (`bigint`, `Uint8Array`); persist via `serializeSwapPreview` and
+ * rehydrate with `deserializeSwapPreview`.
  */
 export type SwapPreview = {
   /**
