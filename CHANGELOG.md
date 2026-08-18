@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.10.0](https://github.com/cashubtc/cashu-ts/compare/v4.9.0...v4.10.0) (2026-08-18)
+
+
+### Features
+
+* **wallet:** add swap preview serialize helpers and persistence docs ([#973](https://github.com/cashubtc/cashu-ts/issues/973)) ([696694f](https://github.com/cashubtc/cashu-ts/commit/696694ff8d2af075022434eb0772b1e727b45587))
+
+
+### Bug Fixes
+
+* **transport:** split request option precedence by option class ([#971](https://github.com/cashubtc/cashu-ts/issues/971)) ([c62073b](https://github.com/cashubtc/cashu-ts/commit/c62073b5041e710630ff8bddd29c4f53c63e2050))
+
 ## [4.9.0](https://github.com/cashubtc/cashu-ts/compare/v4.8.0...v4.9.0) (2026-08-16)
 
 
