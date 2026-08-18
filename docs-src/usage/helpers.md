@@ -20,12 +20,9 @@ normalizeMintUrl('ftp://mint.example.com'); // throws CTSError
 
 ## `findCashuPayload`
 
-Finds the first cashu token or payment request inside arbitrary text: a chat message, a clipboard
-blob, a `bitcoin:` URI parameter, a wallet URL fragment. Candidates are matched by prefix and then
-decoded to validate, so a prefix that does not decode is skipped and the search continues. The
-payload is returned exactly as it appeared, ready to hand to `getDecodedToken` or
-`decodePaymentRequest`. Scanning for the payload itself covers the wrapper forms, so there is no
-table of known wallet URL prefixes to maintain.
+Finds the first token or payment request out of a block of text which could be a chat message, a wallet URL with the token in its fragment, a `bitcoin:` URI carrying a request in a query parameter.
+
+A match is found by prefix and then decoded to verify they are correct, so anything that is not really a payload gets skipped and the scan carries on, because we are looking for a correct payload and not the wrapper. What it finds comes back exactly as it appeared, ready for `getDecodedToken` or `decodePaymentRequest`, or `null` if nothing decodes.
 
 ```ts
 import { findCashuPayload, getDecodedToken, decodePaymentRequest } from '@cashu/cashu-ts';
@@ -38,5 +35,3 @@ if (found?.kind === 'token') {
   const pr = decodePaymentRequest(found.payload);
 }
 ```
-
-Returns `null` when the text carries no payload that decodes.
