@@ -13,7 +13,7 @@ RATE_LIMIT_PM ?= 200
 # ------------------------
 # Pin versions
 # ------------------------
-CDK_IMAGE_RC ?= cashubtc/mintd:0.17.3-rc.0
+CDK_IMAGE_RC ?= cashubtc/mintd:0.18.0-rc.0
 CDK_IMAGE ?= cashubtc/mintd:0.17.5
 CDK_NAME ?= cashu-dev-cdk
 
@@ -41,6 +41,31 @@ CDK_ENVS = \
 	-e CDK_MINTD_FAKE_WALLET_MIN_DELAY=$(FAKE_DELAY) \
 	-e CDK_MINTD_FAKE_WALLET_MAX_DELAY=$(FAKE_DELAY) \
 	-e CDK_MINTD_MNEMONIC='abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'
+
+# mintd >= 0.18 boots from a config document seeded once with `config init`;
+# CDK_MINTD_* env vars no longer configure startup (only `env:` secret refs
+# are read). This document mirrors CDK_ENVS. Exported so the container can
+# write it to disk; older images lack the `config` subcommand and keep using
+# the env vars.
+define CDK_CONFIG_TOML
+[info]
+listen_host = "0.0.0.0"
+listen_port = 3338
+mnemonic = "env:CDK_MINTD_MNEMONIC"
+input_fee_ppk = $(INPUT_FEE_PPK)
+
+[database]
+engine = "sqlite"
+
+[payment_backend]
+backend = "fakewallet"
+unit = "sat"
+
+[fake_wallet]
+min_delay_time = $(FAKE_DELAY)
+max_delay_time = $(FAKE_DELAY)
+endef
+export CDK_CONFIG_TOML
 
 NUT_ENVS = \
 	-e MINT_LIGHTNING_BACKEND=FakeWallet \
@@ -73,7 +98,9 @@ cdk-up:
 	$(DOCKER) run --pull=always -d --name $(CDK_NAME) $(PLATFORM_FLAG) \
 		-p $(BIND_ADDR):$(PORT):3338 \
 		$(CDK_ENVS) \
-		$(CDK_IMAGE)
+		-e CDK_CONFIG_TOML \
+		$(CDK_IMAGE) \
+		sh -c 'printf "%s\n" "$$CDK_CONFIG_TOML" > /tmp/mintd.toml; cdk-mintd config init --file /tmp/mintd.toml || true; exec cdk-mintd'
 
 cdk-down:
 	-$(DOCKER) rm -f -v $(CDK_NAME)
