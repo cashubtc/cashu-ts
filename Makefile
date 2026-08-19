@@ -23,8 +23,10 @@ NUT_NAME ?= cashu-dev-nutshell
 
 # BLS (v3) Nutshell: no published image yet — build from a local checkout that
 # carries v3 support. Default path assumes the worktree sibling layout used
-# during the BLS bring-up (../nutshell on feature/bls12-381-v3-keyset, ≥0.21.0
-# which emits v3 keysets by default; see cashu/core/base.py).
+# during the BLS bring-up (../nutshell on rnd/taproot-v3-rebased, ≥0.21.0
+# which emits v3 keysets by default; see cashu/core/base.py). That branch stacks
+# the taproot work on PR #999 (feature/bls12-381-v3-keyset); the build uses
+# whatever ../nutshell has checked out, so switch branches there to compare.
 NUT_BLS_PATH ?= ../nutshell
 NUT_BLS_IMAGE ?= cashu-dev-nutshell-bls:local
 NUT_BLS_NAME ?= cashu-dev-nutshell-bls

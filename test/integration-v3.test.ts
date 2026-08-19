@@ -131,7 +131,7 @@ describeV3('v3 transaction witnesses', () => {
       await wallet.loadMint();
       const quote = await wallet.createMintQuoteBolt11(11000);
       await wallet.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
-      const proofs = await wallet.mintProofsBolt11(11000, quote.quote);
+      const proofs = await wallet.mintProofsBolt11(11000, quote);
       const meltQuote = await wallet.createMeltQuoteBolt11(externalInvoice);
       const sendResponse = await wallet.send(meltQuote.fee_reserve.add(meltQuote.amount), proofs, {
         includeFees: true,
@@ -192,7 +192,7 @@ describeV3('bearer spend info', () => {
       await alice.loadMint();
       const quote = await alice.createMintQuoteBolt11(64);
       await alice.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
-      const minted = await alice.mintProofsBolt11(64, quote.quote);
+      const minted = await alice.mintProofsBolt11(64, quote);
       const { send } = await alice.send(32n, minted);
 
       // Bearer spend info rides on every sent v3 proof, and k matches the secret.
@@ -275,7 +275,7 @@ describeV3('M2 roundtrip', () => {
       // Mint
       const quote = await wallet.createMintQuoteBolt11(6000);
       await wallet.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
-      const minted = await wallet.mintProofsBolt11(6000, quote.quote);
+      const minted = await wallet.mintProofsBolt11(6000, quote);
       expect(minted.every((p) => /^0[23][0-9a-f]{64}$/.test(p.secret))).toBe(true);
 
       // Swap (witness-signed; wire shape asserted by the dedicated spy test above)
@@ -322,7 +322,7 @@ describeV3('M3 taproot conditions', () => {
     await wallet.loadMint();
     const quote = await wallet.createMintQuoteBolt11(amount);
     await wallet.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
-    const proofs = await wallet.mintProofsBolt11(amount, quote.quote);
+    const proofs = await wallet.mintProofsBolt11(amount, quote);
     return { wallet, proofs, keysetId: wallet.keyChain.getCheapestKeyset().id };
   }
 
@@ -526,13 +526,13 @@ describeV3('M3 taproot conditions', () => {
     await v3Wallet.loadMint();
     const v3Quote = await v3Wallet.createMintQuoteBolt11(32);
     await v3Wallet.on.onceMintPaid(v3Quote.quote, { timeoutMs: 10_000 });
-    const v3Proofs = await v3Wallet.mintProofsBolt11(32, v3Quote.quote);
+    const v3Proofs = await v3Wallet.mintProofsBolt11(32, v3Quote);
 
     const legacyWallet = new Wallet(mintUrl, { bip39seed: seed, keysetId: legacyKeyset!.id });
     await legacyWallet.loadMint();
     const legacyQuote = await legacyWallet.createMintQuoteBolt11(32);
     await legacyWallet.on.onceMintPaid(legacyQuote.quote, { timeoutMs: 10_000 });
-    const legacyProofs = await legacyWallet.mintProofsBolt11(32, legacyQuote.quote);
+    const legacyProofs = await legacyWallet.mintProofsBolt11(32, legacyQuote);
 
     const v3KeysetId = v3Proofs[0].id;
     expect(isBlsKeyset(v3KeysetId)).toBe(true);
@@ -740,7 +740,7 @@ describeV3('M4 receiver-keyed sends', () => {
         await w.loadMint();
         const quote = await w.createMintQuoteBolt11(128);
         await w.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
-        return { wallet: w, proofs: await w.mintProofsBolt11(128, quote.quote) };
+        return { wallet: w, proofs: await w.mintProofsBolt11(128, quote) };
       })();
 
       let available = proofs;
@@ -802,7 +802,7 @@ describeV3('M6 leaf-key blinding through the wallet', () => {
       await payer.loadMint();
       const quote = await payer.createMintQuoteBolt11(128);
       await payer.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
-      const funds = await payer.mintProofsBolt11(128, quote.quote);
+      const funds = await payer.mintProofsBolt11(128, quote);
 
       // Carol's request: pay my static key, under a refund leaf, and blind my key in it.
       const pr = PaymentRequest.builder()
@@ -875,7 +875,7 @@ describeV3('M7 mixed-keyset transactions through the wallet API', () => {
       if (state.state === 'PAID') break;
       await new Promise((r) => setTimeout(r, 250));
     }
-    return { wallet, proofs: await wallet.mintProofsBolt11(amount, quote.quote) };
+    return { wallet, proofs: await wallet.mintProofsBolt11(amount, quote) };
   }
 
   test('pre-v3 inputs with v3 outputs: the migration shape', { timeout: 60_000 }, async () => {
@@ -1024,7 +1024,7 @@ describeV3('M8 tokens end to end with spend_info', () => {
       if (state.state === 'PAID') break;
       await new Promise((r) => setTimeout(r, 250));
     }
-    return { wallet, proofs: await wallet.mintProofsBolt11(amount, quote.quote) };
+    return { wallet, proofs: await wallet.mintProofsBolt11(amount, quote) };
   }
 
   test(
@@ -1160,7 +1160,7 @@ describeV3('audit: spend info carrying both k and E', () => {
         if ((await payer.checkMintQuoteBolt11(quote.quote)).state === 'PAID') break;
         await new Promise((r) => setTimeout(r, 250));
       }
-      const funds = await payer.mintProofsBolt11(64, quote.quote);
+      const funds = await payer.mintProofsBolt11(64, quote);
       const { send } = await payer.ops
         .send(32, funds)
         .asTaproot({ receiverPub: carolPub }, [32])
@@ -1198,7 +1198,7 @@ describeV3('M9 script path through the wallet API', () => {
       if ((await wallet.checkMintQuoteBolt11(quote.quote)).state === 'PAID') break;
       await new Promise((r) => setTimeout(r, 250));
     }
-    return { wallet, proofs: await wallet.mintProofsBolt11(amount, quote.quote) };
+    return { wallet, proofs: await wallet.mintProofsBolt11(amount, quote) };
   }
 
   test(
