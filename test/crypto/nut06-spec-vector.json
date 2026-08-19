@@ -1,0 +1,69 @@
+{
+  "name": "Bob's Cashu mint",
+  "pubkey": "0338596797cef0627f653cd6568387361b00314add55d9f1ea9c94f46ae421e3da",
+  "signature": "d1ae4c576e3ffa667df795b06655a5400e590653ae1f60f2a256c01e794a70328fee6fc8f4139c86458d12c0d4f04781581a5890a9ee83b9f7c72c78a641add0",
+  "version": "Nutshell/0.15.0",
+  "description": "The short mint description",
+  "description_long": "A description that can be a long piece of text.",
+  "contact": [
+    {
+      "method": "email",
+      "info": "contact@me.com"
+    },
+    {
+      "method": "twitter",
+      "info": "@me"
+    },
+    {
+      "method": "nostr",
+      "info": "npub..."
+    }
+  ],
+  "motd": "Message to display to users.",
+  "icon_url": "https://mint.host/icon.jpg",
+  "urls": [
+    "https://mint.host",
+    "http://mint8gv0sq5ul602uxt2fe0t80e3c2bi9fy0cxedp69v1vat6ruj81wv.onion"
+  ],
+  "time": 1725304480,
+  "tos_url": "https://mint.host/tos",
+  "nuts": {
+    "4": {
+      "methods": [
+        {
+          "method": "bolt11",
+          "unit": "sat",
+          "min_amount": 0,
+          "max_amount": 10000
+        }
+      ],
+      "disabled": false
+    },
+    "5": {
+      "methods": [
+        {
+          "method": "bolt11",
+          "unit": "sat",
+          "min_amount": 100,
+          "max_amount": 10000
+        }
+      ],
+      "disabled": false
+    },
+    "7": {
+      "supported": true
+    },
+    "8": {
+      "supported": true
+    },
+    "9": {
+      "supported": true
+    },
+    "10": {
+      "supported": true
+    },
+    "12": {
+      "supported": true
+    }
+  }
+}

@@ -1,4 +1,7 @@
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+import { schnorr } from '@noble/curves/secp256k1.js';
+import { hmac } from '@noble/hashes/hmac.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, it } from 'vitest';
 
 import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
@@ -28,6 +31,31 @@ function infoFor(privkey: string): GetInfoResponse {
     },
   };
 }
+
+// The worked example from the NUT-06 amendment (cashubtc/nuts#416): seed is the UTF-8 encoding of
+// 'NUT-06 example mint seed', BIP-340 aux randomness is zero-filled.
+import specVector from './nut06-spec-vector.json';
+
+describe('NUT-06 spec vector', () => {
+  const seed = utf8ToBytes('NUT-06 example mint seed');
+  const dst = utf8ToBytes('Cashu_Mint_Identity_v1');
+  const secret = hmac(sha256, seed, new Uint8Array([...dst, 0x00]));
+
+  it('derives the identity key from the example seed', () => {
+    expect(bytesToHex(getPubKeyFromPrivKey(secret))).toBe(specVector.pubkey);
+  });
+
+  it('reproduces the example signature with zero aux randomness', () => {
+    const { signature, time, ...payload } = specVector;
+    void time; // not signed
+    const digest = sha256(utf8ToBytes(canonicalizeJson(payload)));
+    expect(bytesToHex(schnorr.sign(digest, secret, new Uint8Array(32)))).toBe(signature);
+  });
+
+  it('verifies the example response', () => {
+    expect(verifyMintInfoSignature(specVector as unknown as GetInfoResponse)).toBe('valid');
+  });
+});
 
 describe('verifyMintInfoSignature', () => {
   it('signs the response without its signature and time members', () => {
