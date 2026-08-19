@@ -33,8 +33,19 @@ describe('Restoring deterministic proofs', () => {
     // path state checks first and is covered end to end further down
     const { proofs: restoredProofs } = await wallet.batchRestore({ filterSpent: false });
     expect(restoredProofs.length).toBe(21);
-    // one pooled wave of 4 batches covers the gap limit
-    expect(mockRestore).toHaveBeenCalledTimes(4);
+    // the opening batch finds usage, then one full pooled wave covers the gap limit
+    expect(mockRestore).toHaveBeenCalledTimes(5);
+    mockRestore.mockClear();
+  });
+  test('Batch restore settles an unused keyset with a single gap-width wave', async () => {
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+    const mockRestore = vi.spyOn(wallet, 'restore').mockResolvedValue({ proofs: [] as Proof[] });
+    const { proofs } = await wallet.batchRestore({ filterSpent: false });
+    expect(proofs).toEqual([]);
+    // one empty 500-batch already satisfies the 300 gap limit, so the scan never
+    // widens to the full pool and the keyset costs a single request
+    expect(mockRestore).toHaveBeenCalledTimes(1);
     mockRestore.mockClear();
   });
   test('Batch restore with custom values', async () => {
@@ -56,7 +67,8 @@ describe('Restoring deterministic proofs', () => {
       filterSpent: false,
     });
     expect(restoredProofs.length).toBe(42);
-    expect(mockRestore).toHaveBeenCalledTimes(4);
+    // gapLimit 100 at batchSize 50 opens two wide, then one full wave after the find
+    expect(mockRestore).toHaveBeenCalledTimes(6);
     expect(lastCounterWithSignature).toBe(41);
     mockRestore.mockClear();
   });
@@ -84,8 +96,8 @@ describe('Restoring deterministic proofs', () => {
     });
     expect(restoredProofs.length).toBe(8);
     expect(lastCounterWithSignature).toBe(602);
-    // the empty batch at 900 closes the gap again, so one wave suffices
-    expect(mockRestore).toHaveBeenCalledTimes(4);
+    // the empty batch at 900 closes the gap again, so the probe and one wave suffice
+    expect(mockRestore).toHaveBeenCalledTimes(5);
     mockRestore.mockClear();
   });
   test('Batch restore treats maxCounter as an inclusive ceiling and ends there', async () => {
