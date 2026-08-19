@@ -47,6 +47,13 @@ describe('canonicalizeJson', () => {
 
   it('drops undefined members, matching JSON', () => {
     expect(canonicalizeJson({ b: undefined, a: 1 })).toBe('{"a":1}');
+    expect(canonicalizeJson([undefined, 1])).toBe('[null,1]');
+  });
+
+  it('throws on a circular reference', () => {
+    const a: Record<string, unknown> = {};
+    a.self = a;
+    expect(() => canonicalizeJson(a)).toThrow(CTSError);
   });
 
   it('throws on a value with no JSON form', () => {
