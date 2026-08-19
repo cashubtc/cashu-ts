@@ -2021,7 +2021,9 @@ class Wallet {
    * @param [config.maxCounter] Inclusive scan ceiling; no counter above it is probed. Default is
    *   unbounded.
    * @param [config.batchSize] Counters per restore request. Defaults to the mint's advertised
-   *   `max_array_length` (NUT-06), or `500` when it advertises none.
+   *   `max_array_length` (NUT-06) capped at `500`: the scan pays a derivation, `Y` and blinded
+   *   message per counter and keeps `BATCH_POOL_SIZE` batches in flight, so a large advertised cap
+   *   would multiply client work per wave. Set it explicitly to trade that for round trips.
    * @param [config.counter=0] Starting counter. Default is `0`
    * @param [config.keysetId] Keyset to restore; defaults to the wallet's.
    * @param [config.filterSpent=true] Drop spent proofs (NUT-07) before returning, and skip
@@ -2032,7 +2034,10 @@ class Wallet {
   ): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
     const {
       gapLimit = 300,
-      batchSize = this.maxArrayLength,
+      // capped: the pool holds BATCH_POOL_SIZE batches in flight and every scanned counter costs
+      // client-side crypto, so the scan does not follow a large advertised cap the way the
+      // Y-only checkstate slices do
+      batchSize = Math.min(this.maxArrayLength, DEFAULT_MAX_ARRAY_LENGTH),
       keysetId,
       filterSpent = true,
     } = config ?? {};
