@@ -9,6 +9,10 @@
  * - `filterSpent: true` (the default) — state check each batch, restore only what is live.
  * - The default again at a smaller `batchSize`, which shrinks how far the scan overshoots.
  *
+ * A never-used seed then recovers from the same mint both ways. That is the shape of most keysets a
+ * multi-mint recovery scans (nothing issued, everything reports UNSPENT and is restored anyway),
+ * and it prices the state check when there is nothing for it to skip.
+ *
  * All three recover the same balance; what differs is the traffic. The report shows how many `B_`
  * and `Y` the wallet reveals and how many of those the mint has a record of. Only the wallet that
  * built an output can reproduce its `B_`, so a recognised one is close to proof of authorship,
@@ -16,7 +20,8 @@
  * weaker evidence. Revealing both for the same counter ties an issuance to its spend, which
  * blinding otherwise prevents.
  *
- * Env knobs: CHURN_ROUNDS, SPEND_FRAC, PIN_MID (see main).
+ * Env knobs: CHURN_ROUNDS, SPEND_FRAC, PIN_MID (see main); RESTORE_MS, CHECK_MS (see
+ * countingFetch).
  */
 import dns from 'node:dns';
 
@@ -79,6 +84,16 @@ function countingFetch() {
       stats.checkRequests++;
       (JSON.parse(body!) as { Ys: string[] }).Ys.forEach((y) => stats.yRevealed.add(y));
     }
+    // RESTORE_MS / CHECK_MS add synthetic latency per request, modelling mints whose endpoints
+    // respond at different speeds. Real mints differ by an order of magnitude here, and it decides
+    // the outcome: a slow /v1/restore rewards the state-checked scan, a slow /v1/checkstate
+    // punishes it.
+    const delayMs = isRestore
+      ? Number(process.env.RESTORE_MS ?? 0)
+      : isCheck
+        ? Number(process.env.CHECK_MS ?? 0)
+        : 0;
+    if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
     // One retry on a dropped keep-alive socket: the dev mint closes idle connections during
     // the demo's long derivation pauses, and this traffic is read-only.
     let res: Response;
@@ -177,8 +192,8 @@ async function meltSats(wallet: Wallet, invoice: string) {
  * spread between the oldest live counter and T is what a backwards scan with an early stop would
  * have to cover, so it says whether that stop is worth having.
  */
-function liveWindow(keysetId: string, found: Proof[], T: number) {
-  const derive = createSecretAndBlindingFactorDeriver(seed, keysetId);
+function liveWindow(walletSeed: Uint8Array, keysetId: string, found: Proof[], T: number) {
+  const derive = createSecretAndBlindingFactorDeriver(walletSeed, keysetId);
   const counterBySecret = new Map<string, number>();
   for (let c = 0; c <= T; c++) {
     try {
@@ -201,9 +216,10 @@ async function recover(
   filterSpent: boolean,
   expected: ReturnType<typeof sumProofs>,
   batchSize?: number,
+  walletSeed: Uint8Array = seed,
 ) {
   const counted = countingFetch();
-  const wallet = new Wallet(mintUrl, { bip39seed: seed, requestFetch: counted.wrapped });
+  const wallet = new Wallet(mintUrl, { bip39seed: walletSeed, requestFetch: counted.wrapped });
   await wallet.loadMint();
   const start = performance.now();
   const { proofs: all, lastCounters } = await wallet.restoreAll({ filterSpent, batchSize });
@@ -214,7 +230,7 @@ async function recover(
   console.log(`\n${label}: recovered ${recovered} sats (T=${JSON.stringify(lastCounters)})`);
   report(label, counted.stats, ms);
   for (const [keysetId, T] of Object.entries(lastCounters)) {
-    console.log(`  ${keysetId.slice(0, 8)}…: ${liveWindow(keysetId, found, T)}`);
+    console.log(`  ${keysetId.slice(0, 8)}…: ${liveWindow(walletSeed, keysetId, found, T)}`);
   }
   if (!recovered.equals(expected)) {
     throw new Error(`${label} mismatch: expected ${expected}, got ${recovered}`);
@@ -281,6 +297,14 @@ async function main() {
   await recover('filterSpent off     ', false, expected);
   await recover('filterSpent on      ', true, expected);
   await recover('filterSpent on @100 ', true, expected, 100);
+
+  // The empty-scan leg: a seed this mint has never signed for. Every counter reports UNSPENT and
+  // is restored regardless, so the state check can skip nothing and its cost shows undiluted.
+  console.log('\n--- Never-used seed: scanning a mint with nothing to find ---');
+  const freshSeed = randomBytes(64);
+  await recover('fresh seed, off     ', false, sumProofs([]), undefined, freshSeed);
+  await recover('fresh seed, on      ', true, sumProofs([]), undefined, freshSeed);
+
   console.log(
     `\nSuccess: both recovered ${expected} sats = ${balance} live + ${pending} unclaimed`,
   );
