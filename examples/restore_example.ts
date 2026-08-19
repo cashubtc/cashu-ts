@@ -20,7 +20,7 @@
  * weaker evidence. Revealing both for the same counter ties an issuance to its spend, which
  * blinding otherwise prevents.
  *
- * Env knobs: CHURN_ROUNDS, SPEND_FRAC, PIN_MID (see main); RESTORE_MS, CHECK_MS (see
+ * Env knobs: CHURN_ROUNDS, SPEND_FRAC, PIN_MID, BATCH (see main); RESTORE_MS, CHECK_MS (see
  * countingFetch).
  */
 import dns from 'node:dns';
@@ -246,9 +246,13 @@ async function main() {
   //   SPEND_FRAC=f    max spend as a fraction of balance; small values model a lump-funded
   //                   wallet making everyday payments, which leaves old proofs live (default 0.9)
   //   PIN_MID=1       send the unclaimed token mid-history rather than at the end
+  //   BATCH=n         batchSize for every leg except the @100 one (default: the mint's
+  //                   advertised cap); the client does one derivation, Y and blinded message
+  //                   per counter in a batch, so this also sweeps the crypto cost per wave
   const churnRounds = Number(process.env.CHURN_ROUNDS ?? 4);
   const spendFrac = Number(process.env.SPEND_FRAC ?? 0.9);
   const pinMid = process.env.PIN_MID === '1';
+  const batchSize = process.env.BATCH ? Number(process.env.BATCH) : undefined;
   const churn = async (rounds: number) => {
     for (let i = 0; i < rounds; i++) {
       const balance = Number(sumProofs(proofs).toBigInt());
@@ -294,16 +298,16 @@ async function main() {
   );
 
   console.log('\n--- Device lost! Recovering from seed on a fresh wallet ---');
-  await recover('filterSpent off     ', false, expected);
-  await recover('filterSpent on      ', true, expected);
+  await recover('filterSpent off     ', false, expected, batchSize);
+  await recover('filterSpent on      ', true, expected, batchSize);
   await recover('filterSpent on @100 ', true, expected, 100);
 
   // The empty-scan leg: a seed this mint has never signed for. Every counter reports UNSPENT and
   // is restored regardless, so the state check can skip nothing and its cost shows undiluted.
   console.log('\n--- Never-used seed: scanning a mint with nothing to find ---');
   const freshSeed = randomBytes(64);
-  await recover('fresh seed, off     ', false, sumProofs([]), undefined, freshSeed);
-  await recover('fresh seed, on      ', true, sumProofs([]), undefined, freshSeed);
+  await recover('fresh seed, off     ', false, sumProofs([]), batchSize, freshSeed);
+  await recover('fresh seed, on      ', true, sumProofs([]), batchSize, freshSeed);
 
   console.log(
     `\nSuccess: both recovered ${expected} sats = ${balance} live + ${pending} unclaimed`,
