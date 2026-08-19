@@ -79,11 +79,11 @@ export const U64_MAX = 2n ** 64n - 1n;
 export const MAX_PAYLOAD_DECODE_ATTEMPTS = 16;
 
 /**
- * Upper bound on the encoded payload a single `findCashuPayload` candidate may span. The scan
- * quantifiers are bounded by it, so a hostile paste of millions of charset characters yields a
- * capped candidate instead of one huge match handed to the base64/CBOR decoders, the attempt cap
- * alone bounds how many candidates are tried, not the cost of each. 256 KiB is ~90x the largest
- * token in the test tree and holds roughly a thousand proofs, so it clears any real payload; a
- * longer run is truncated, fails to decode, and the scan moves on.
+ * How much text a single `findCashuPayload` candidate may cover. The scan quantifiers are bounded
+ * by it, so a hostile paste of millions of charset characters yields a capped candidate rather than
+ * one huge match for the base64/CBOR decoders. {@link MAX_PAYLOAD_DECODE_ATTEMPTS} bounds how many
+ * candidates are tried; this bounds what each one costs. 1 MiB holds several thousand proofs, well
+ * past the largest token a wallet would hand a user, and it cannot go much higher: V8 matches a
+ * bounded quantifier recursively, so a match of a few million characters overflows the stack.
  */
-export const MAX_PAYLOAD_LENGTH = 262_144;
+export const MAX_PAYLOAD_LENGTH = 1_048_576;

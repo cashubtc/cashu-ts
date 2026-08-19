@@ -390,13 +390,13 @@ export function getTokenMetadata(token: string): TokenMetadata {
 export type CashuPayloadKind = 'token' | 'paymentRequest';
 
 /**
- * One scanner per payload prefix: a literal prefix plus a single character-class quantifier, so
- * matching cannot backtrack catastrophically, bounded by {@link MAX_PAYLOAD_LENGTH} so a hostile run
- * cannot produce one huge match for the decoders to chew on. Tokens and `creqA` use the base64url
- * class only, `+` and `/` are excluded deliberately, since `/` lets a token in a URL path swallow
- * the following segment and the decoders accept the trailing junk rather than reject it. `creqb1`
- * (NUT-26) uses the bech32 class and is matched case-insensitively because QR alphanumeric mode
- * emits the uppercase form.
+ * One scanner per payload prefix: a literal prefix plus a single character class, so matching
+ * cannot backtrack catastrophically, capped by {@link MAX_PAYLOAD_LENGTH}. Tokens and `creqA` use
+ * base64url, the alphabet NUT-00 mandates for these payloads. The two characters that separate it
+ * from standard base64 are delimiters in the places people paste tokens, `/` in URL paths and `+`
+ * as a space in query strings, so stopping at them keeps an embedded payload findable instead of
+ * swallowing its surroundings. `creqb1` (NUT-26) uses bech32m, matched case-insensitively because
+ * QR alphanumeric mode uppercases it.
  */
 const PAYLOAD_SCANNERS: ReadonlyArray<{ regExp: RegExp; kind: CashuPayloadKind }> = [
   { regExp: new RegExp(`cashu[AB][A-Za-z0-9=_-]{1,${MAX_PAYLOAD_LENGTH}}`, 'g'), kind: 'token' },
@@ -411,20 +411,26 @@ const PAYLOAD_SCANNERS: ReadonlyArray<{ regExp: RegExp; kind: CashuPayloadKind }
 ];
 
 /**
- * Finds the first cashu token (v3 or v4) or payment request (`creqA` NUT-18, `creqb1` / `CREQB1`
- * NUT-26) embedded in arbitrary text: chat messages, clipboard blobs, `bitcoin:` URI parameters,
- * wallet URL fragments. Candidates are matched by prefix and then decoded to validate, so a prefix
- * that does not decode is skipped. The match is returned verbatim, ready for {@link getDecodedToken}
- * or `PaymentRequest.fromEncodedRequest`.
+ * Finds the first token or payment request out of a block of text, wherever it sits. Covers v3 and
+ * v4 tokens and both request encodings (`creqA` per NUT-18, `creqb1` / `CREQB1` per NUT-26).
+ * Matches are found by prefix and then decoded to check them, so a prefix that is not really a
+ * payload gets skipped. What it finds comes back as it appeared, except for bech32m requests, which
+ * are lowercased to their canonical form. Feed it to {@link getDecodedToken} or
+ * `PaymentRequest.fromEncodedRequest`.
  *
  * @example
  *
  *     findCashuPayload('paying you back cashuBo2Ft… thanks!');
  *     // { kind: 'token', payload: 'cashuBo2Ft…' }
  *
- * @returns The first valid payload by position, or `null` if the text carries none.
+ * @returns The first valid payload by position or `null` if the text carries none, a valid payload
+ *   sits beyond `MAX_PAYLOAD_DECODE_ATTEMPTS` failed candidates, or the only candidate is a
+ *   multi-entry v3 token (unsupported).
  */
 export function findCashuPayload(text: string): { kind: CashuPayloadKind; payload: string } | null {
+  if (typeof text !== 'string') {
+    throw new CTSError('text must be a string');
+  }
   let searchFrom = 0;
   for (let attempts = 0; attempts < MAX_PAYLOAD_DECODE_ATTEMPTS; attempts++) {
     let earliestMatch: { index: number; text: string; kind: CashuPayloadKind } | null = null;
@@ -433,7 +439,12 @@ export function findCashuPayload(text: string): { kind: CashuPayloadKind; payloa
       scanner.regExp.lastIndex = searchFrom;
       const match = scanner.regExp.exec(text);
       if (match && (earliestMatch === null || match.index < earliestMatch.index)) {
-        earliestMatch = { index: match.index, text: match[0], kind: scanner.kind };
+        earliestMatch = {
+          index: match.index,
+          // A case-insensitive scanner emits canonical lowercase (bech32m case carries no data).
+          text: scanner.regExp.flags.includes('i') ? match[0].toLowerCase() : match[0],
+          kind: scanner.kind,
+        };
       }
     }
     if (earliestMatch === null) {

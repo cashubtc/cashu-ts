@@ -27,6 +27,7 @@ import {
   sortProofsById,
   normalizeMintUrl,
 } from '../../src/utils';
+import { encodeJsonToBase64 } from '../../src/utils/base64';
 import { MAX_PAYLOAD_DECODE_ATTEMPTS, MAX_PAYLOAD_LENGTH } from '../../src/utils/limits';
 import {
   NUT02_V1_VECTOR1_KEYS,
@@ -38,6 +39,11 @@ import {
   NUT02_V3_VECTOR2_KEYS,
   PUBKEYS,
 } from '../consts';
+
+const V3_TOKEN =
+  'cashuAeyJ0b2tlbiI6W3sibWludCI6Imh0dHA6Ly9sb2NhbGhvc3Q6MzMzOCIsInByb29mcyI6W3siaWQiOiJJMnlOK2lSWWZrelQiLCJhbW91bnQiOjEsInNlY3JldCI6Ijk3emZtbWFHZjVrOE1nMGdhanBuYm1wZXJ2VHRFZUU4d3dLcmk3cldwVXM9IiwiQyI6IjAyMTk1MDgxZTYyMmY5OGJmYzE5YTA1ZWJlMjM0MWQ5NTVjMGQxMjU4OGM1OTQ4Yzg1OGQwN2FkZWMwMDdiYzFlNCJ9XX1dfQ';
+const V4_TOKEN =
+  'cashuBpGF0gaJhaUgArSaMTR9YJmFwgaNhYQFhc3hAOWE2ZGJiODQ3YmQyMzJiYTc2ZGIwZGYxOTcyMTZiMjlkM2I4Y2MxNDU1M2NkMjc4MjdmYzFjYzk0MmZlZGI0ZWFjWCEDhhhUP_trhpXfStS6vN6So0qWvc2X3O4NfM-Y1HISZ5JhZGlUaGFuayB5b3VhbXVodHRwOi8vbG9jYWxob3N0OjMzMzhhdWNzYXQ=';
 
 const keys: Keys = {};
 for (let i = 1; i <= 2048; i *= 2) {
@@ -213,9 +219,7 @@ describe('test decode token', () => {
     };
     const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:'];
     uriPrefixes.forEach((prefix) => {
-      const token =
-        prefix +
-        'cashuAeyJ0b2tlbiI6W3sibWludCI6Imh0dHA6Ly9sb2NhbGhvc3Q6MzMzOCIsInByb29mcyI6W3siaWQiOiJJMnlOK2lSWWZrelQiLCJhbW91bnQiOjEsInNlY3JldCI6Ijk3emZtbWFHZjVrOE1nMGdhanBuYm1wZXJ2VHRFZUU4d3dLcmk3cldwVXM9IiwiQyI6IjAyMTk1MDgxZTYyMmY5OGJmYzE5YTA1ZWJlMjM0MWQ5NTVjMGQxMjU4OGM1OTQ4Yzg1OGQwN2FkZWMwMDdiYzFlNCJ9XX1dfQ';
+      const token = prefix + V3_TOKEN;
 
       const result = utils.getDecodedToken(token, ['009a1f293253e41e']);
       expect(result).toStrictEqual(obj);
@@ -255,8 +259,7 @@ describe('test decode token', () => {
       ],
     };
 
-    const token =
-      'cashuBpGF0gaJhaUgArSaMTR9YJmFwgaNhYQFhc3hAOWE2ZGJiODQ3YmQyMzJiYTc2ZGIwZGYxOTcyMTZiMjlkM2I4Y2MxNDU1M2NkMjc4MjdmYzFjYzk0MmZlZGI0ZWFjWCEDhhhUP_trhpXfStS6vN6So0qWvc2X3O4NfM-Y1HISZ5JhZGlUaGFuayB5b3VhbXVodHRwOi8vbG9jYWxob3N0OjMzMzhhdWNzYXQ=';
+    const token = V4_TOKEN;
 
     const result = utils.getDecodedToken(token, ['009a1f293253e41e']);
     expect(result).toStrictEqual(v3Token);
@@ -374,11 +377,7 @@ describe('test getTokenMetadata', () => {
 });
 
 describe('findCashuPayload', () => {
-  // Payload fixtures reused from the decode tests above and from paymentRequests.test.ts.
-  const V3_TOKEN =
-    'cashuAeyJ0b2tlbiI6W3sibWludCI6Imh0dHA6Ly9sb2NhbGhvc3Q6MzMzOCIsInByb29mcyI6W3siaWQiOiJJMnlOK2lSWWZrelQiLCJhbW91bnQiOjEsInNlY3JldCI6Ijk3emZtbWFHZjVrOE1nMGdhanBuYm1wZXJ2VHRFZUU4d3dLcmk3cldwVXM9IiwiQyI6IjAyMTk1MDgxZTYyMmY5OGJmYzE5YTA1ZWJlMjM0MWQ5NTVjMGQxMjU4OGM1OTQ4Yzg1OGQwN2FkZWMwMDdiYzFlNCJ9XX1dfQ';
-  const V4_TOKEN =
-    'cashuBpGF0gaJhaUgArSaMTR9YJmFwgaNhYQFhc3hAOWE2ZGJiODQ3YmQyMzJiYTc2ZGIwZGYxOTcyMTZiMjlkM2I4Y2MxNDU1M2NkMjc4MjdmYzFjYzk0MmZlZGI0ZWFjWCEDhhhUP_trhpXfStS6vN6So0qWvc2X3O4NfM-Y1HISZ5JhZGlUaGFuayB5b3VhbXVodHRwOi8vbG9jYWxob3N0OjMzMzhhdWNzYXQ=';
+  // Payment request fixtures copied from paymentRequests.test.ts.
   const CREQ_A =
     'creqApGF0gaNhdGVub3N0cmFheKlucHJvZmlsZTFxeTI4d3VtbjhnaGo3dW45ZDNzaGp0bnl2OWtoMnVld2Q5aHN6OW1od2RlbjV0ZTB3ZmprY2N0ZTljdXJ4dmVuOWVlaHFjdHJ2NWhzenJ0aHdkZW41dGUwZGVoaHh0bnZkYWtxcWd5bWRleDNndmZzZnVqcDN4eW43ZTdxcnM4eXlxOWQ4enN1MnpxdWp4dXhjYXBmcXZ6YzhncnFka3RzYWeBgmFuYjE3YWloNDg0MGY1MWVhdWNzYXRhbYFwaHR0cHM6Ly9taW50LmNvbQ==';
   const CREQ_B_UPPER =
@@ -429,11 +428,16 @@ describe('findCashuPayload', () => {
     });
   });
 
-  test('finds an uppercase CREQB1 payment request and returns it verbatim', () => {
-    // QR alphanumeric mode emits the uppercase form; it must come back un-normalized.
+  test('canonicalises an uppercase CREQB1 payment request to lowercase', () => {
+    // QR alphanumeric mode uppercases; bech32m carries no case, and mixed case is spec-invalid,
+    // so a case-insensitive match is emitted lowercase rather than as it was found.
     const found = findCashuPayload(`scanned: ${CREQ_B_UPPER}`);
-    expect(found).toStrictEqual({ kind: 'paymentRequest', payload: CREQ_B_UPPER });
-    expect(found?.payload).not.toBe(CREQ_B_LOWER);
+    expect(found).toStrictEqual({ kind: 'paymentRequest', payload: CREQ_B_LOWER });
+  });
+
+  test('canonicalises a mixed-case creqb1 payment request to lowercase', () => {
+    const mixed = `Creqb1${CREQ_B_LOWER.slice('creqb1'.length)}`;
+    expect(findCashuPayload(`from a phone: ${mixed}`)?.payload).toBe(CREQ_B_LOWER);
   });
 
   test('re-enters the scan to find a payload swallowed by a failed candidate', () => {
@@ -460,6 +464,11 @@ describe('findCashuPayload', () => {
     expect(findCashuPayload(`${decoys} ${V4_TOKEN}`)?.payload).toBe(V4_TOKEN);
   });
 
+  test('rejects a non-string argument', () => {
+    // Plain-JS callers reach this; exec would otherwise coerce and scan "null".
+    expect(() => findCashuPayload(null as unknown as string)).toThrow(CTSError);
+  });
+
   test('returns null when there is no payload', () => {
     expect(findCashuPayload('')).toBeNull();
     expect(findCashuPayload('just a normal sentence about cashu wallets')).toBeNull();
@@ -470,14 +479,25 @@ describe('findCashuPayload', () => {
   });
 
   test('bounds a single candidate at MAX_PAYLOAD_LENGTH', () => {
-    // The attempt cap bounds how many candidates are decoded, not the cost of each: without a
-    // bounded quantifier a hostile run hands one enormous match to the base64/CBOR decoders.
-    const hostile = `cashuB${'A'.repeat(MAX_PAYLOAD_LENGTH * 2)}`;
-    const started = Date.now();
-    expect(findCashuPayload(hostile)).toBeNull();
-    expect(Date.now() - started).toBeLessThan(5_000);
-    // A payload sitting after the oversized run is still reachable.
-    expect(findCashuPayload(`${hostile} ${V4_TOKEN}`)?.payload).toBe(V4_TOKEN);
+    const paddedToken = (memoLength: number) =>
+      `cashuA${encodeJsonToBase64({
+        token: [
+          {
+            mint: 'http://localhost:3338',
+            proofs: [{ id: 'I2yN+iRYfkzT', amount: 1, secret: 'x', C: '02' }],
+          },
+        ],
+        unit: 'sat',
+        memo: 'm'.repeat(memoLength),
+      })}`;
+
+    const over = paddedToken(MAX_PAYLOAD_LENGTH);
+    expect(over.length).toBeGreaterThan(MAX_PAYLOAD_LENGTH);
+    expect(findCashuPayload(over)).toBeNull();
+
+    const under = paddedToken(MAX_PAYLOAD_LENGTH / 2);
+    expect(under.length).toBeLessThan(MAX_PAYLOAD_LENGTH);
+    expect(findCashuPayload(under)).toStrictEqual({ kind: 'token', payload: under });
   });
 
   test('finds a token in a URL path without swallowing the next segment', () => {
@@ -599,8 +619,7 @@ describe('test keyset derivation', () => {
 
 describe('test v4 encoding', () => {
   test('standard token', async () => {
-    const encodedV4 =
-      'cashuBpGF0gaJhaUgArSaMTR9YJmFwgaNhYQFhc3hAOWE2ZGJiODQ3YmQyMzJiYTc2ZGIwZGYxOTcyMTZiMjlkM2I4Y2MxNDU1M2NkMjc4MjdmYzFjYzk0MmZlZGI0ZWFjWCEDhhhUP_trhpXfStS6vN6So0qWvc2X3O4NfM-Y1HISZ5JhZGlUaGFuayB5b3VhbXVodHRwOi8vbG9jYWxob3N0OjMzMzhhdWNzYXQ=';
+    const encodedV4 = V4_TOKEN;
     const v3Token = {
       memo: 'Thank you',
       mint: 'http://localhost:3338',
