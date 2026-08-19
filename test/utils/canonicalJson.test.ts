@@ -11,6 +11,12 @@ describe('canonicalizeJson', () => {
     expect(canonicalizeJson(input)).toBe('{"A":3,"a":{"A":2,"b":1},"z":2,"é":1}');
   });
 
+  it('sorts integer-like keys lexicographically, not numerically', () => {
+    // JS object enumeration puts integer-like keys in numeric order; JCS must not.
+    const nuts = { '4': 'a', '10': 'b', '17': 'c', '5': 'd' };
+    expect(canonicalizeJson(nuts)).toBe('{"10":"b","17":"c","4":"a","5":"d"}');
+  });
+
   it('keeps array order', () => {
     expect(canonicalizeJson([3, 1, { b: 1, a: 2 }])).toBe('[3,1,{"a":2,"b":1}]');
   });
