@@ -13,7 +13,7 @@ import {
   type Proof,
 } from '../../src';
 
-import { useTestServer, mint, unit, dummyKeysResp, mintUrl, logger } from './_setup';
+import { useTestServer, mint, unit, dummyKeysResp, mintUrl, mintInfoResp, logger } from './_setup';
 
 const server = useTestServer();
 
@@ -46,6 +46,26 @@ describe('Restoring deterministic proofs', () => {
     // one empty 500-batch already satisfies the 300 gap limit, so the scan never
     // widens to the full pool and the keyset costs a single request
     expect(mockRestore).toHaveBeenCalledTimes(1);
+    mockRestore.mockClear();
+  });
+  test('Batch restore caps its default batch at 500 despite a larger advertised cap', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/info', () => {
+        return HttpResponse.json({ ...mintInfoResp, max_array_length: 4000 });
+      }),
+    );
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+    const counts: number[] = [];
+    const mockRestore = vi
+      .spyOn(wallet, 'restore')
+      .mockImplementation(async (_start, count): Promise<{ proofs: Proof[] }> => {
+        counts.push(count);
+        return { proofs: [] };
+      });
+    await wallet.batchRestore({ filterSpent: false });
+    // the scan pays client crypto per counter, so it does not follow the advertised 4000
+    expect(counts).toEqual([500]);
     mockRestore.mockClear();
   });
   test('Batch restore with custom values', async () => {
