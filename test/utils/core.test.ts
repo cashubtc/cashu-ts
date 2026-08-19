@@ -500,6 +500,14 @@ describe('findCashuPayload', () => {
     expect(findCashuPayload(under)).toStrictEqual({ kind: 'token', payload: under });
   });
 
+  test('rejects a candidate carrying a junk suffix', () => {
+    // the decoders reject the trailing bytes rather than
+    // decode the valid prefix and hand back the junk attached.
+    expect(findCashuPayload(`${V4_TOKEN}abc`)).toBeNull();
+    expect(findCashuPayload(`${V3_TOKEN}abc`)).toBeNull();
+    expect(findCashuPayload(`${CREQ_A}abc`)).toBeNull();
+  });
+
   test('finds a token in a URL path without swallowing the next segment', () => {
     // Regression: with `/` in the charset the match ran on into `/more`, and the decoders accept
     // the trailing junk instead of rejecting it, so the payload came back corrupted rather than
