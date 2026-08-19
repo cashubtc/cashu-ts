@@ -748,7 +748,7 @@ describe('leaf-key blinding: the positional slot map (2.7)', () => {
   const bobPriv = '0000000000000000000000000000000000000000000000000000000000000007';
   const bobPub = bytesToHex(secp256k1.getPublicKey(hexToBytes(bobPriv), true));
 
-  test('slots number the base key 0, then leaves in order, keys within a leaf in order', () => {
+  test('slots number the internal key 0, then leaves in order, keys within a leaf in order', () => {
     const slots = enumerateLeafKeySlots([
       { type: 'threshold', n: 2, keys: [carolPub, alicePub] },
       { type: 'after', n: 1, keys: [bobPub], time: v61.refund_time },
@@ -871,7 +871,7 @@ describe('leaf-key blinding: the positional slot map (2.7)', () => {
     ).toThrow(/not in the tree/);
   });
 
-  test('a blinded leaf key does not disturb key-path recovery for the base key', () => {
+  test('a blinded leaf key does not disturb key-path recovery for the internal key', () => {
     const leaves: TaprootLeaf[] = [
       { type: 'after', n: 1, keys: [alicePub], time: v61.refund_time },
     ];

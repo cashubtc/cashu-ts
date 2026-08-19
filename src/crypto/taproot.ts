@@ -453,7 +453,7 @@ export function taprootTweak(internalKey: Uint8Array, merkleRoot?: Uint8Array): 
 }
 
 /**
- * Tweaked output key `P = K + t*G` as compressed SEC1 bytes.
+ * The v3 secret `P = K + t*G` as compressed SEC1 bytes.
  */
 export function taprootTweakPubkey(internalKey: Uint8Array, merkleRoot?: Uint8Array): Uint8Array {
   const t = taprootTweak(internalKey, merkleRoot);
@@ -691,9 +691,9 @@ export function verifyTaprootSpendInfo(
  * Enumerate the positional blinding slots of a spend info tree (spec 2.7).
  *
  * @remarks
- * Slot 0 is the base key and is not listed here. Slots 1.. are the `keys` entries: leaves in
- * transmitted order, keys within a leaf in order. Receivers derive all occupied slots and match by
- * key value, so the uncommitted leaf order cannot disable a path.
+ * Slot 0 is the internal key `K` and is not listed here. Slots 1.. are the `keys` entries: leaves
+ * in transmitted order, keys within a leaf in order. Receivers derive all occupied slots and match
+ * by key value, so the uncommitted leaf order cannot disable a path.
  * @throws If the tree needs more than {@link TAPROOT_MAX_SLOTS} slots.
  */
 export function enumerateLeafKeySlots(
@@ -715,11 +715,11 @@ export function enumerateLeafKeySlots(
  * Build a receiver-keyed v3 secret (spec 2.7): `K = P_receiver + r_0*G`, optionally tweaked.
  *
  * @remarks
- * NUT-28 one layer down: fresh ephemeral per output, slot 0 is the base key and always blinded,
- * except a NUMS base, which travels verbatim with uniqueness from a blinded leaf key (spec 2.3.5).
- * Leaf keys are verbatim unless their owner tagged them blind-me, which travels with the key's
- * delivery channel (a payment request marking), never in proof data; pass those keys as `blindKeys`
- * and each occurrence is blinded at its own slot.
+ * NUT-28 one layer down: fresh ephemeral per output, slot 0 is the internal key `K` and always
+ * blinded, except a NUMS internal key, which travels verbatim with uniqueness from a blinded leaf
+ * key (spec 2.3.5). Leaf keys are verbatim unless their owner tagged them blind-me, which travels
+ * with the key's delivery channel (a payment request marking), never in proof data; pass those keys
+ * as `blindKeys` and each occurrence is blinded at its own slot.
  */
 export function deriveReceiverKeyedSecret(
   receiverPubHex: string,
@@ -970,18 +970,18 @@ export function recoverReceiverKeyedSecretKey(
   receiverPrivHex: string,
   tree?: string[],
 ): { secretKey: string; internalKey: string } | undefined {
-  let baseKey: string;
+  let internalSeckey: string;
   try {
-    baseKey = deriveP2BKSlotSecretKey(EHex, receiverPrivHex, 0);
+    internalSeckey = deriveP2BKSlotSecretKey(EHex, receiverPrivHex, 0);
   } catch {
     return undefined;
   }
-  const internalKey = Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(baseKey)));
+  const internalKey = Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(internalSeckey)));
   if (!tree || tree.length === 0) {
-    return internalKey === secretHex ? { secretKey: baseKey, internalKey } : undefined;
+    return internalKey === secretHex ? { secretKey: internalSeckey, internalKey } : undefined;
   }
   const root = taprootMerkleRoot(tree.map((leaf) => taprootLeafHash(Bytes.fromHex(leaf))));
-  const tweaked = taprootTweakSeckey(Bytes.fromHex(baseKey), root);
+  const tweaked = taprootTweakSeckey(Bytes.fromHex(internalSeckey), root);
   if (Bytes.toHex(getPubKeyFromPrivKey(tweaked)) !== secretHex) return undefined;
   return { secretKey: Bytes.toHex(tweaked), internalKey };
 }
