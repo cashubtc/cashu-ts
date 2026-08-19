@@ -1,4 +1,4 @@
-import { test, describe, expect } from 'vitest';
+import { test, describe, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import {
   encodeBase64ToJson,
@@ -152,4 +152,39 @@ describe('isBase64String', () => {
   test('invalid: empty string', () => {
     expect(isBase64String('')).toBe(false);
   });
+});
+describe.each(['Buffer', 'atob fallback'])('strict base64 decoding (%s)', (backend) => {
+  const dec = new TextDecoder();
+
+  beforeEach(() => {
+    if (backend === 'atob fallback') vi.stubGlobal('Buffer', undefined);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  test.each([
+    ['mid-string padding', 'dGVz=dA=='],
+    ['invalid characters', 'dGVz$dA='],
+    ['excess padding', 'dGVzdA==='],
+    ['a length no padding can complete', 'dGVzd'],
+  ])('rejects %s', (_label, input) => {
+    expect(() => encodeBase64toUint8(input)).toThrow(/Invalid base64/);
+  });
+
+  test.each([
+    ['padded input', 'dGVzdA==', 'test'],
+    ['unpadded input', 'dGVzdA', 'test'],
+    ['short padding', 'dGVzdA=', 'test'],
+    ['spurious padding', 'dGVz=', 'tes'],
+    ['padding-only input', '==', ''],
+    ['line-wrapped input', 'dGVz\ndA==\n', 'test'],
+    ['edge Unicode whitespace', '\u00a0\ufeffdGVzdA==\u3000', 'test'],
+  ])('decodes %s', (_label, input, expected) => {
+    expect(dec.decode(encodeBase64toUint8(input))).toBe(expected);
+  });
+});
+
+test('v3 token path rejects excess padding', () => {
+  expect(() => encodeBase64ToJson('eyJhIjoxfQ===')).toThrow(/Invalid base64/);
 });

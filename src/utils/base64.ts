@@ -6,10 +6,7 @@ function encodeUint8toBase64(uint8array: Uint8Array): string {
 }
 
 function encodeUint8toBase64Url(bytes: Uint8Array): string {
-  return Bytes.toBase64(bytes)
-    .replace(/\+/g, '-') // Replace + with -
-    .replace(/\//g, '_') // Replace / with _
-    .replace(/=+$/, ''); // Remove padding characters
+  return base64urlFromBase64(Bytes.toBase64(bytes));
 }
 
 /**
@@ -50,18 +47,12 @@ function encodeJsonToBase64(jsonObj: unknown): string {
  * {@link encodeJsonToBase64}.
  */
 function encodeBase64ToJson<T extends object>(base64String: string): T {
-  const jsonString = Bytes.toString(Bytes.fromBase64(base64urlToBase64(base64String)));
+  const jsonString = Bytes.toString(Bytes.fromBase64(base64String));
   return JSONInt.parse(jsonString) as T;
 }
 
-function base64urlToBase64(str: string) {
-  return str.replace(/-/g, '+').replace(/_/g, '/').split('=')[0];
-  // .replace(/./g, '=');
-}
-
 function base64urlFromBase64(str: string) {
-  return str.replace(/\+/g, '-').replace(/\//g, '_').split('=')[0];
-  // .replace(/=/g, '.');
+  return str.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 function isBase64String(s: string): boolean {
@@ -87,7 +78,7 @@ function isBase64String(s: string): boolean {
 
     // Re-encode and compare to the original (allowing either standard or url-safe representation)
     const reStandard = Bytes.toBase64(decoded);
-    const reUrl = reStandard.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const reUrl = base64urlFromBase64(reStandard);
 
     // Also compare against original normalized-without-padding variant
     const originalNoPad = normalized.replace(/=+$/, '');

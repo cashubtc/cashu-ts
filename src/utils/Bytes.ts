@@ -86,17 +86,24 @@ export class Bytes {
   }
 
   static fromBase64(base64: string): Uint8Array {
-    base64 = base64.trim();
-    // normalize base64url to base64 and pad
-    let normalizedBase64 = base64.replace(/-/g, '+').replace(/_/g, '/');
-    while (normalizedBase64.length % 4) {
-      normalizedBase64 += '=';
+    // Normalize: trim, strip ASCII whitespace (line-wrapped input is common),
+    // map base64url to base64, drop trailing padding.
+    const unpadded = base64
+      .trim()
+      .replace(/[\t\n\f\r ]+/g, '')
+      .replace(/-/g, '+')
+      .replace(/_/g, '/')
+      .replace(/={1,2}$/, '');
+    if (/[^A-Za-z0-9+/]/.test(unpadded) || unpadded.length % 4 === 1) {
+      throw new CTSError('Invalid base64 string');
     }
+    // Re-pad canonically so both decoder backends see the same validated string.
+    const normalized = unpadded + '='.repeat((4 - (unpadded.length % 4)) % 4);
     const bufferConstructor = getBufferConstructor();
     if (bufferConstructor) {
-      return new Uint8Array(bufferConstructor.from(normalizedBase64, 'base64'));
+      return new Uint8Array(bufferConstructor.from(normalized, 'base64'));
     }
-    return new Uint8Array([...atob(normalizedBase64)].map((c) => c.charCodeAt(0)));
+    return new Uint8Array([...atob(normalized)].map((c) => c.charCodeAt(0)));
   }
   // NOTE: MUST remain a constant-time implementation (full byte check)
   // because callers rely on it (e.g. deriveP2BKSecretKey, verifyDLEQProof).
