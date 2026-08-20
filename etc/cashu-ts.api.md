@@ -331,7 +331,7 @@ export interface CounterRange {
     start: number;
 }
 
-// @public (undocumented)
+// @public
 export interface CounterSource {
     advanceToAtLeast(keysetId: string, minNext: number): Promise<void>;
     reserve(keysetId: string, n: number): Promise<CounterRange>;
@@ -425,6 +425,15 @@ export type CurvePoint = {
 // @public
 export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
 
+// @public
+export const DERIVATION_TYPE: {
+    readonly secretKey: 0;
+    readonly blindingFactor: 1;
+    readonly numsOffset: 2;
+    readonly leafKey: 3;
+    readonly quoteLock: 4;
+};
+
 // @public (undocumented)
 export type DerivedSecretAndBlindingFactor = {
     blindingFactor: Uint8Array;
@@ -451,10 +460,16 @@ export type DeriveKeysetIdOptions = {
 };
 
 // @public
+export function deriveLeafKey(seed: Uint8Array, keysetId: string, counter: number, index: number): Uint8Array;
+
+// @public
 export function deriveMintBackupKeys(seed: Uint8Array): {
     privkey: string;
     pubkey: string;
 };
+
+// @public
+export function deriveNumsOffset(seed: Uint8Array, keysetId: string, counter: number): Uint8Array;
 
 // @public
 export function deriveP2BKBlindedPubkeyAtSlot(pubkeyHex: string, eBytes: Uint8Array, slotIndex: number): string;
@@ -473,6 +488,9 @@ export function deriveP2BKSecretKeys(Ehex: string, privateKey: string | string[]
 
 // @public
 export function deriveP2BKSlotSecretKey(Ehex: string, privkeyHex: string, slotIndex?: number): string;
+
+// @public
+export function deriveQuoteLockKey(seed: Uint8Array, counter: number): Uint8Array;
 
 // @public
 export function deriveSecretAndBlindingFactor(seed: Uint8Array, keysetId: string, counter: number): DerivedSecretAndBlindingFactor;
@@ -1977,6 +1995,9 @@ export type ReceiveConfig = {
 };
 
 // @public
+export function recoverV3LeafKeys(seed: Uint8Array, keysetId: string, counter: number, keysHex: string[]): Map<string, Uint8Array>;
+
+// @public
 export function recoverV3SecretKeys(seed: Uint8Array, keysetId: string, secretsHex: string[], maxCounter: number): Map<string, Uint8Array>;
 
 // @public (undocumented)
@@ -2306,6 +2327,7 @@ export type SpendInfo = {
     k?: string;
     E?: string;
     K?: string;
+    u?: string;
     tree?: string[];
 };
 

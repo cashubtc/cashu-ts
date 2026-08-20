@@ -6,7 +6,7 @@ import { utf8ToBytes } from '@noble/hashes/utils.js';
 import { CTSError } from '../model/Errors';
 import { Bytes } from '../utils';
 
-import { getPubKeyFromPrivKey, pointFromBytes } from './curve_secp';
+import { getPubKeyFromPrivKey, pointFromBytes, pointFromHex } from './curve_secp';
 import {
   deriveP2BKBlindedPubkeyAtSlot,
   deriveP2BKBlindedPubkeys,
@@ -505,32 +505,71 @@ export function verifyTaprootCommitment(
 }
 
 /**
- * NUMS internal key for script-only proofs: BIP-341's `H` point, compressed.
+ * NUMS base point `H` for script-only proofs: BIP-341's `H`, compressed.
  *
  * @remarks
- * Provably no known discrete log (lift_x of SHA256(G)); with it as `K`, all spending must go
- * through the revealed leaves.
+ * Provably no known discrete log: `lift_x` of SHA-256 over G's **65-byte uncompressed** SEC1
+ * encoding. Never used as an internal key verbatim, since that repeats across proofs; it is the
+ * base of the per-proof offset `K = H + u*G` that {@link buildTaprootSecret} builds.
  */
 export const TAPROOT_NUMS_KEY =
   '0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0';
 
 /**
+ * Offset the NUMS base by `u`: `K = H + u*G` (spec 2.3.5).
+ *
+ * @remarks
+ * `u` is not the blinding factor `r`: it travels in spend info and is public.
+ * @throws If `u` is not a 32-byte scalar in `[1, n-1]`.
+ */
+export function numsOffsetKey(u: Uint8Array): Uint8Array {
+  if (u.length !== 32) {
+    throw new CTSError('NUMS offset must be 32 bytes');
+  }
+  const x = Bytes.toBigInt(u);
+  if (x === 0n || x >= secp256k1.Point.Fn.ORDER) {
+    throw new CTSError('NUMS offset is not a valid scalar');
+  }
+  return pointFromHex(TAPROOT_NUMS_KEY).add(secp256k1.Point.BASE.multiply(x)).toBytes(true);
+}
+
+/**
  * Build a locked v3 secret: `P = K + tagged_hash(K || root)*G` over the leaves' tree.
  *
- * @returns The 33-byte secret hex and the serialized tree (spend_info order).
+ * @remarks
+ * Passing {@link TAPROOT_NUMS_KEY} builds a script-only secret, offsetting it by a fresh `u` (spec
+ * 2.3.5) so the internal key is unique per proof while nobody holds its scalar. `u` is returned for
+ * disclosure in spend info; there is no way to ask for the base verbatim, because a repeated NUMS
+ * key repeats the secret whenever the tree does.
+ * @param opts.r - The NUMS offset to use rather than a random one, for a seed-derived proof (NUT-13
+ *   type `0x02`). Only meaningful for a NUMS internal key.
+ * @returns The 33-byte secret hex, the serialized tree (spend_info order), the internal key `K`,
+ *   and `u` when `K` is a NUMS offset.
  */
 export function buildTaprootSecret(
   internalKeyHex: string,
   leaves: TaprootLeaf[],
-): { secret: string; tree: string[] } {
+  opts?: { u?: Uint8Array },
+): { secret: string; tree: string[]; K: string; u?: string } {
   if (leaves.length === 0) {
     throw new CTSError('A locked secret requires at least one leaf');
   }
+  const isNums = internalKeyHex.toLowerCase() === TAPROOT_NUMS_KEY;
+  if (opts?.u !== undefined && !isNums) {
+    throw new CTSError('A NUMS offset applies only to the NUMS base key');
+  }
+  const u = isNums ? (opts?.u ?? secp256k1.utils.randomSecretKey()) : undefined;
+  const internalKey = u ? numsOffsetKey(u) : Bytes.fromHex(internalKeyHex);
   enumerateLeafKeySlots(leaves);
   const tree = leaves.map((leaf) => serializeTaprootLeaf(leaf));
   const root = taprootMerkleRoot(tree.map(taprootLeafHash));
-  const secret = taprootTweakPubkey(Bytes.fromHex(internalKeyHex), root);
-  return { secret: Bytes.toHex(secret), tree: tree.map((leaf) => Bytes.toHex(leaf)) };
+  const secret = taprootTweakPubkey(internalKey, root);
+  return {
+    secret: Bytes.toHex(secret),
+    tree: tree.map((leaf) => Bytes.toHex(leaf)),
+    K: Bytes.toHex(internalKey),
+    ...(u && { u: Bytes.toHex(u) }),
+  };
 }
 
 /**
@@ -591,7 +630,7 @@ export function countLeafSigners(
  */
 export function verifyTaprootSpendInfo(
   secretHex: string,
-  spendInfo: { k?: string; E?: string; K?: string; tree?: string[] },
+  spendInfo: { k?: string; E?: string; K?: string; tree?: string[]; u?: string },
 ): 'bare' | 'tweaked' | 'receiver-keyed' | 'aggregated' {
   const secret = Bytes.fromHex(secretHex);
   try {
@@ -604,6 +643,23 @@ export function verifyTaprootSpendInfo(
   // would take, which 2.5.2 warns hands the receiver's static key back to the original sender.
   if (spendInfo.k !== undefined && spendInfo.E !== undefined) {
     throw new CTSError('Spend info carries both k and E');
+  }
+  // `u` present means the internal key is a NUMS offset (spec 2.3.5), so it must reduce to the
+  // base: without this check `u` is decoration and a key path may still exist. Present iff the key
+  // is an offset, so a claimed offset that does not reduce is a lie, not an omission.
+  if (spendInfo.u !== undefined) {
+    if (spendInfo.K === undefined) {
+      throw new CTSError('Spend info carries a NUMS offset without its internal key');
+    }
+    let offsetKey: Uint8Array;
+    try {
+      offsetKey = numsOffsetKey(Bytes.fromHex(spendInfo.u));
+    } catch {
+      throw new CTSError('Spend info NUMS offset must be a 32-byte scalar');
+    }
+    if (!Bytes.equals(offsetKey, Bytes.fromHex(spendInfo.K))) {
+      throw new CTSError('Spend info internal key is not the claimed NUMS offset');
+    }
   }
   // Receiver-keyed (E without k): verification happens at trial-match with the static key;
   // the derivation pins the secret to the receiver, which a sender cannot have pre-tweaked (2.7).
@@ -716,27 +772,24 @@ export function enumerateLeafKeySlots(
  *
  * @remarks
  * NUT-28 one layer down: fresh ephemeral per output, slot 0 is the internal key `K` and always
- * blinded, except a NUMS internal key, which travels verbatim with uniqueness from a blinded leaf
- * key (spec 2.3.5). Leaf keys are verbatim unless their owner tagged them blind-me, which travels
- * with the key's delivery channel (a payment request marking), never in proof data; pass those keys
- * as `blindKeys` and each occurrence is blinded at its own slot.
+ * blinded, except a NUMS internal key, which is offset rather than ECDH-blinded (spec 2.3.5): with
+ * no scalar behind it there is no receiver half of the DH. Leaf keys are verbatim unless their
+ * owner tagged them blind-me, which travels with the key's delivery channel (a payment request
+ * marking), never in proof data; pass those keys as `blindKeys` and each occurrence is blinded at
+ * its own slot.
  */
 export function deriveReceiverKeyedSecret(
   receiverPubHex: string,
   opts?: { leaves?: TaprootLeaf[]; eBytes?: Uint8Array; blindKeys?: string[] },
-): { secret: string; E: string; tree?: string[]; K?: string } {
+): { secret: string; E: string; tree?: string[]; K?: string; u?: string } {
   const eBytes = opts?.eBytes ?? secp256k1.utils.randomSecretKey();
   if (receiverPubHex.toLowerCase() === TAPROOT_NUMS_KEY) {
-    // Never blind a NUMS base (spec 2.3.5): nobody holds its scalar for the receiver's half of
-    // the ECDH, so a blinded NUMS is indistinguishable from a sender-owned key hiding a key
-    // path. Verbatim keeps it recognizable; per-proof uniqueness must then come from the tree,
-    // so a blinded leaf key is mandatory.
-    if (!opts?.leaves?.length || !opts.blindKeys?.length) {
-      throw new CTSError('A NUMS receiver key requires leaves with at least one blind-me key');
+    if (!opts?.leaves?.length) {
+      throw new CTSError('A NUMS receiver key requires leaves: nothing else could spend the proof');
     }
     const leaves = blindTaggedLeafKeys(opts.leaves, eBytes, opts.blindKeys);
-    const { secret, tree } = buildTaprootSecret(TAPROOT_NUMS_KEY, leaves);
-    return { secret, E: Bytes.toHex(getPubKeyFromPrivKey(eBytes)), tree, K: TAPROOT_NUMS_KEY };
+    const { secret, tree, K, u } = buildTaprootSecret(TAPROOT_NUMS_KEY, leaves);
+    return { secret, E: Bytes.toHex(getPubKeyFromPrivKey(eBytes)), tree, K, u };
   }
   const { blinded, Ehex } = deriveP2BKBlindedPubkeys([receiverPubHex], eBytes, true);
   const internalKey = blinded[0];
@@ -790,7 +843,7 @@ function blindTaggedLeafKeys(
  */
 export function verifyTaprootRequestTree(
   option: { receiverPub: string; leaves?: TaprootLeaf[]; blindKeys?: string[] },
-  spendInfo: { k?: string; E?: string; K?: string; tree?: string[] } | undefined,
+  spendInfo: { k?: string; E?: string; K?: string; tree?: string[]; u?: string } | undefined,
 ): void {
   if (!spendInfo) {
     throw new CTSError('Taproot request: proof carries no spend info');
@@ -806,11 +859,25 @@ export function verifyTaprootRequestTree(
   } catch {
     throw new CTSError('Taproot request: spend info ephemeral must be a 33-byte point');
   }
-  if (
-    option.receiverPub.toLowerCase() === TAPROOT_NUMS_KEY &&
-    spendInfo.K?.toLowerCase() !== TAPROOT_NUMS_KEY
-  ) {
-    throw new CTSError('Taproot request: a NUMS request requires the NUMS internal key verbatim');
+  if (option.receiverPub.toLowerCase() === TAPROOT_NUMS_KEY) {
+    // A NUMS request asks for proofs with no key path, which the offset is what proves: `K` alone
+    // is just a point. Without both halves the payee has a key-path holder it cannot identify.
+    if (spendInfo.u === undefined || spendInfo.K === undefined) {
+      throw new CTSError(
+        'Taproot request: a NUMS request requires the internal key and its offset',
+      );
+    }
+    let offsetKey: Uint8Array;
+    try {
+      offsetKey = numsOffsetKey(Bytes.fromHex(spendInfo.u));
+    } catch {
+      throw new CTSError('Taproot request: NUMS offset must be a 32-byte scalar');
+    }
+    if (!Bytes.equals(offsetKey, Bytes.fromHex(spendInfo.K))) {
+      throw new CTSError('Taproot request: internal key is not the claimed NUMS offset');
+    }
+  } else if (spendInfo.u !== undefined) {
+    throw new CTSError('Taproot request: a NUMS offset on a receiver-keyed request');
   }
   const disclosed = spendInfo.tree ?? [];
   const requested = option.leaves ?? [];

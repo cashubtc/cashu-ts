@@ -64,6 +64,10 @@ export type V4SpendInfoTemplate = {
    */
   i?: Uint8Array;
   /**
+   * NUMS offset (32 bytes): present iff `i` is `H + u*G`, ie the proof has no key path.
+   */
+  u?: Uint8Array;
+  /**
    * Serialized leaves, in slot-map order.
    */
   t?: Uint8Array[];

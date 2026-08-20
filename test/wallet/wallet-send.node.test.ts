@@ -1450,6 +1450,6 @@ describe('output secret uniqueness (spec 2.4)', () => {
         keyset,
         { type: 'custom', data: [factory(), factory()] },
       ),
-    ).toThrow(/share a secret/);
+    ).toThrow(/Duplicate output secret/);
   });
 });

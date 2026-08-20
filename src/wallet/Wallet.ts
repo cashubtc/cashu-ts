@@ -27,7 +27,7 @@ import {
   getPubKeyFromPrivKey,
   normalizeSecpPubkey,
 } from '../crypto/curve_secp';
-import { deriveSecretAndBlindingFactor, recoverV3SecretKeys } from '../crypto/NUT13';
+import { deriveQuoteLockKey } from '../crypto/NUT13';
 import { signMintQuoteLegacy } from '../crypto/NUT20';
 import { verifyTaprootRequestTree } from '../crypto/taproot';
 import { transactionDigest } from '../crypto/transcript';
@@ -99,6 +99,7 @@ import {
   EphemeralCounterSource,
   type OperationCounters,
   type CounterRange,
+  QUOTE_COUNTER_KEY,
 } from './CounterSource';
 import { KeyChain } from './KeyChain';
 import { type Keyset } from './Keyset';
@@ -1200,10 +1201,16 @@ class Wallet {
     // A key backs at most one secret, ever (spec 2.4). Two outputs of the same amount sharing a
     // secret unblind to the same C, so the second is the first again and its value is gone
     // silently. Catches a factory handing every output one secret, or a reused ephemeral.
+    // The mint cannot catch this for us: outputs are blinded, and the same secret under different
+    // blinding factors gives different `B_`, so both get signed. It surfaces only when the first
+    // spend burns the shared `Y`, mint-wide and permanently (spec 2.4).
     const decoder = new TextDecoder();
     const secrets = outputData.map((d) => decoder.decode(d.secret));
-    if (new Set(secrets).size !== secrets.length) {
-      this.fail('Outputs must not share a secret');
+    const seenSecrets = new Set<string>();
+    for (const [i, secret] of secrets.entries()) {
+      // Report the position, never the secret: it is the spending material.
+      this.failIf(seenSecrets.has(secret), `Duplicate output secret at index ${i}`, { index: i });
+      seenSecrets.add(secret);
     }
     // Random v3 outputs carry their own key; keep it so the proof can be spent.
     for (let i = 0; i < outputData.length; i++) {
@@ -1262,6 +1269,14 @@ class Wallet {
   /**
    * Receive a token (swaps with mint for new proofs)
    *
+   * @remarks
+   * The swap is the sweep (spec 2.5.1): received proofs become the wallet's own seed-derived
+   * secrets, which matters whatever the spend info says. A bearer `k` leaves the sender holding the
+   * same scalar, and a bearer scalar can conceal a tweaked tree. A receiver-keyed `E` is wallet
+   * data and not seed-derivable, so the proof is unrecoverable from the seed alone until swept. A
+   * disclosed tree with neither leaves the key-path holder able to spend at any time, unless `K` is
+   * a NUMS offset. Spending a locked proof needs its key: pass `config.privkey` for a
+   * receiver-keyed proof, or `config.scriptPath` to take a leaf.
    * @example
    *
    * ```typescript
@@ -2414,16 +2429,23 @@ class Wallet {
     }
     if (!isBlsKeyset(keysetId)) return undefined;
     if (this._seed) {
-      const { start } = await this._counterSource.reserve(keysetId, 1);
-      const { secret, secretKey } = deriveSecretAndBlindingFactor(this._seed, keysetId, start);
-      if (secretKey) return { pubkey: Bytes.toHex(secret), privkey: secretKey };
+      const { start } = await this._counterSource.reserve(QUOTE_COUNTER_KEY, 1);
+      const privkey = deriveQuoteLockKey(this._seed, start);
+      return { pubkey: Bytes.toHex(getPubKeyFromPrivKey(privkey)), privkey };
     }
     const privkey = createRandomSecretKey();
     return { pubkey: Bytes.toHex(getPubKeyFromPrivKey(privkey)), privkey };
   }
 
+  /**
+   * Recovers a quote's lock key from the seed by scanning the quote counter.
+   *
+   * @remarks
+   * Targeted, not discovery: it matches against the quote's own `pubkey`, so a sparse counter costs
+   * one HMAC and one point multiply per counter and nothing else. No keyset is involved (NUT-13
+   * type `0x04`), so a rotation between quote and mint cannot strand the key.
+   */
   private async recoverV3QuoteLockKey(
-    keysetId: string,
     quoteId: string,
     quotePubkey?: string,
   ): Promise<Uint8Array | undefined> {
@@ -2432,10 +2454,12 @@ class Wallet {
     const pubkey = quotePubkey ?? (await this.checkMintQuoteBolt11(quoteId)).pubkey;
     if (!pubkey) return undefined;
     const normalizedPubkey = pubkey.toLowerCase();
-    const bound = (await this.counters.peekNext(keysetId)) + V3_SEED_SCAN_HEADROOM;
-    return recoverV3SecretKeys(this._seed, keysetId, [normalizedPubkey], bound).get(
-      normalizedPubkey,
-    );
+    const bound = (await this.counters.peekNext(QUOTE_COUNTER_KEY)) + V3_SEED_SCAN_HEADROOM;
+    for (let counter = 0; counter < bound; counter++) {
+      const privkey = deriveQuoteLockKey(this._seed, counter);
+      if (Bytes.toHex(getPubKeyFromPrivKey(privkey)) === normalizedPubkey) return privkey;
+    }
+    return undefined;
   }
 
   /**
@@ -2948,7 +2972,7 @@ class Wallet {
       const quotePubkey = 'pubkey' in quote ? (quote.pubkey as string | undefined) : undefined;
       const key =
         quotePubkey || method === 'bolt11'
-          ? await this.recoverV3QuoteLockKey(keyset.id, quote.quote, quotePubkey)
+          ? await this.recoverV3QuoteLockKey(quote.quote, quotePubkey)
           : undefined;
       if (key) privkey = Bytes.toHex(key);
     }
@@ -3145,7 +3169,7 @@ class Wallet {
       for (const { quote } of entries) {
         const quotePubkey = 'pubkey' in quote ? quote.pubkey : undefined;
         if (!quotePubkey) continue;
-        const key = await this.recoverV3QuoteLockKey(keyset.id, quote.quote, quotePubkey);
+        const key = await this.recoverV3QuoteLockKey(quote.quote, quotePubkey);
         if (key) signingKeys.push(Bytes.toHex(key));
       }
     }
