@@ -1,5 +1,19 @@
 # Changelog
 
+## [5.0.0-rc.8](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.7...v5.0.0-rc.8) (2026-08-20)
+
+
+### Features
+
+* **utils:** findCashuPayload to locate tokens and payment requests in text ([#967](https://github.com/cashubtc/cashu-ts/issues/967)) ([d094499](https://github.com/cashubtc/cashu-ts/commit/d09449955036e0630164d9da4fa44e9e744c86ba))
+* **wallet:** add swap preview serialize helpers and persistence docs ([#972](https://github.com/cashubtc/cashu-ts/issues/972)) ([02f0bfe](https://github.com/cashubtc/cashu-ts/commit/02f0bfe6e3f06b4c0027c4312d9fef1944e26d21))
+
+
+### Bug Fixes
+
+* **transport:** split request option precedence by option class ([#968](https://github.com/cashubtc/cashu-ts/issues/968)) ([603553d](https://github.com/cashubtc/cashu-ts/commit/603553dd2c4716ae7fb8c16b34de9220e176bda2))
+* **utils:** make base64 and CBOR payload decoding consistent across platforms ([#986](https://github.com/cashubtc/cashu-ts/issues/986)) ([59d36b1](https://github.com/cashubtc/cashu-ts/commit/59d36b1d38488881fdc886c98087d8b26a40b0ed))
+
 ## [5.0.0-rc.7](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.6...v5.0.0-rc.7) (2026-08-16)
 
 
