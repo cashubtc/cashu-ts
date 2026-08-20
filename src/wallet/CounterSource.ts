@@ -30,8 +30,8 @@ export const QUOTE_COUNTER_KEY = 'mint-quote-lock';
  * value silently mints duplicate proofs: the same counter re-derives the same secret **and** the
  * same blinding factor, and every proof after the first spend of that secret is refused as already
  * spent, mint-wide and permanently. Reserve and persist atomically, and never roll a cursor back.
- * Quote locks (see {@link QUOTE_COUNTER_KEY}) have no equivalent detector at all, since nothing
- * blinds them, so their cursor must advance on every quote request.
+ * Quote locks (see `QUOTE_COUNTER_KEY`) have no equivalent detector at all, since nothing blinds
+ * them, so their cursor must advance on every quote request.
  */
 export interface CounterSource {
   /**

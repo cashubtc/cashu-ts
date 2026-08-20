@@ -510,7 +510,7 @@ export function verifyTaprootCommitment(
  * @remarks
  * Provably no known discrete log: `lift_x` of SHA-256 over G's **65-byte uncompressed** SEC1
  * encoding. Never used as an internal key verbatim, since that repeats across proofs; it is the
- * base of the per-proof offset `K = H + u*G` that {@link buildTaprootSecret} builds.
+ * base of the per-proof offset `K = H + u*G` that `buildTaprootSecret` builds.
  */
 export const TAPROOT_NUMS_KEY =
   '0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0';
