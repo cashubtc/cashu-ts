@@ -23,7 +23,7 @@ describe('deriveBlindingFactor', () => {
 
 describe('v3 (BLS) derivation', () => {
   const seed = new TextEncoder().encode('nut13 v3 test seed');
-  const v3KeysetId = '02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd';
+  const v3KeysetId = '02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6';
 
   test('uses HMAC_SHA256 and produces a 32-byte blinding factor below BLS_FR_ORDER', () => {
     for (let counter = 0; counter < 8; counter++) {
@@ -45,16 +45,16 @@ describe('v3 (BLS) derivation', () => {
     expect(bytesToHex(v2r)).not.toBe(bytesToHex(v3r));
   });
 
-  test('matches NUT-13 V3 spec vector (rejection sampling, attempt=1)', () => {
+  test('matches NUT-13 V3 spec vector (rejection sampling, attempt=3)', () => {
     // Lock-in for nuts/tests/13-tests.md "Version 3: Secret derivation". The (seed, keyset, counter)
-    // tuple is chosen so attempt=0 produces x >= BLS_FR_ORDER and is rejected; attempt=1 succeeds.
+    // tuple is chosen so attempts 0-2 produce x >= BLS_FR_ORDER and are rejected; attempt=3 succeeds.
     // Implementations that omit the rejection loop will compute a different blinding_factor.
-    const { blindingFactor, secret } = deriveSecretAndBlindingFactor(seed, v3KeysetId, 3);
+    const { blindingFactor, secret } = deriveSecretAndBlindingFactor(seed, v3KeysetId, 0);
     expect(bytesToHex(secret)).toBe(
-      '7a45e04943504b25273e9569ab7019ab62f814dade23998c12f5f4cb1bb7978a',
+      '1b46679baea2775038059f5c6aa74a1d82526b33836668219ccdec01aa7d82ef',
     );
     expect(bytesToHex(blindingFactor)).toBe(
-      '236dbcb12fc064ceeae6c5e2de7f79258374dccbf23ac0afdf72cf9eb53540c9',
+      '513d1a0f0f01a09fdad2f7cea1403143fb86a1be2d152969b46b45cdaabd21aa',
     );
   });
 });
