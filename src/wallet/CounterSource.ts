@@ -9,7 +9,30 @@ export interface CounterRange {
   count: number;
 }
 
+/**
+ * The counter key for mint quote lock keys (NUT-13 derivation type `0x04`).
+ *
+ * @remarks
+ * One cursor per wallet, not per keyset: a mint quote is requested before any keyset is chosen, so
+ * its lock key derives without one. It is a counter of its own because a quote may mint nothing,
+ * and because a lock key may be handed over for delegated minting and so must never collide with a
+ * proof secret key. A `CounterSource` sees it as just another key to persist, so nothing
+ * implementing the interface needs to know about purposes; do not assume every key is a keyset id.
+ */
+export const QUOTE_COUNTER_KEY = 'mint-quote-lock';
+
 // CounterSource.ts
+/**
+ * Persistence for deterministic derivation counters.
+ *
+ * @remarks
+ * A counter value describes one allocation completely, so an implementation that ever replays a
+ * value silently mints duplicate proofs: the same counter re-derives the same secret **and** the
+ * same blinding factor, and every proof after the first spend of that secret is refused as already
+ * spent, mint-wide and permanently. Reserve and persist atomically, and never roll a cursor back.
+ * Quote locks (see {@link QUOTE_COUNTER_KEY}) have no equivalent detector at all, since nothing
+ * blinds them, so their cursor must advance on every quote request.
+ */
 export interface CounterSource {
   /**
    * Reserve n counters for a keyset.

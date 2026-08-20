@@ -484,15 +484,16 @@ describeV3('M3 taproot conditions', () => {
   });
 
   test('NUMS script-only proof spends via its leaf', { timeout: 30_000 }, async () => {
-    const { secret, tree } = buildTaprootSecret(TAPROOT_NUMS_KEY, [
+    // The internal key is the offset H + u*G, not H, so the control block carries the offset key.
+    const { secret, tree, K, u } = buildTaprootSecret(TAPROOT_NUMS_KEY, [
       { type: 'threshold', n: 1, keys: [pk(34)] },
     ]);
+    expect(u).toBeDefined();
+    expect(verifyTaprootSpendInfo(secret, { K, u, tree })).toBe('tweaked');
     const { locked, keysetId } = await createLockedProof(secret);
     await expect(
       manualSwapLockedProof(keysetId, { amount: 32n, secret, C: locked.C }, (digest) =>
-        buildScriptPathWitness(tree, 0, TAPROOT_NUMS_KEY, [
-          bytesToHex(schnorr.sign(digest, sk(34))),
-        ]),
+        buildScriptPathWitness(tree, 0, K, [bytesToHex(schnorr.sign(digest, sk(34)))]),
       ),
     ).resolves.toBeDefined();
   });
@@ -1104,10 +1105,10 @@ describeV3('M8 tokens end to end with spend_info', () => {
     'explicit K: a script-only token discloses its tree and spends through a leaf',
     { timeout: 60_000 },
     async () => {
-      // No key path at all: K is the NUMS point, so every spend goes through a leaf (2.3.5).
+      // No key path at all: K is a NUMS offset, so every spend goes through a leaf (2.3.5).
       const ownerPriv = randomBytes(32);
       const ownerPub = bytesToHex(secp256k1.getPublicKey(ownerPriv, true));
-      const { secret, tree } = buildTaprootSecret(TAPROOT_NUMS_KEY, [
+      const { secret, tree, K, u } = buildTaprootSecret(TAPROOT_NUMS_KEY, [
         { type: 'threshold', n: 1, keys: [ownerPub] },
       ]);
       const { wallet, proofs } = await fundV3(64);
@@ -1116,12 +1117,15 @@ describeV3('M8 tokens end to end with spend_info', () => {
         .asFactory((a, k) => OutputData.createSingleTaprootData(secret, a, k.id), [32])
         .run();
       expect(send).toHaveLength(1);
-      send[0].spend_info = { K: TAPROOT_NUMS_KEY, tree };
+      send[0].spend_info = { K, u, tree };
 
       const token = getEncodedToken({ mint: mintUrl, proofs: send, unit: 'sat' });
       const decoded = getDecodedToken(token, [send[0].id]);
       const proof = decoded.proofs[0];
-      expect(proof.spend_info?.K).toBe(TAPROOT_NUMS_KEY);
+      // The offset survives the token round-trip: without it the payee cannot tell that no key
+      // path exists, since K alone is just a point.
+      expect(proof.spend_info?.K).toBe(K);
+      expect(proof.spend_info?.u).toBe(u);
       expect(proof.spend_info?.tree).toEqual(tree);
       // Tree plus internal key reconstruct the secret, so the disclosure is provably complete.
       expect(verifyTaprootSpendInfo(proof.secret, proof.spend_info!)).toBe('tweaked');

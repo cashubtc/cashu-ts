@@ -61,7 +61,8 @@ export type Proof = {
  * @remarks
  * `k` and `E` are mutually exclusive: `k` (32-byte scalar hex) means "here is the key" (bearer),
  * `E` (33-byte point hex) means "derive your key" (receiver-keyed). `tree` lists serialized leaves
- * (hex) in slot-map order. Fund-critical for locked proofs: belongs in storage and backups.
+ * (hex) in slot-map order. Fund-critical for locked proofs: belongs in storage and backups, and
+ * until the proof is swept it is the only thing that can spend it.
  */
 export type SpendInfo = {
   k?: string;
@@ -70,6 +71,12 @@ export type SpendInfo = {
    * Internal public key for script-only transfers (33-byte hex), when neither `k` nor `E` travels.
    */
   K?: string;
+  /**
+   * NUMS offset (32-byte hex): present iff `K` is `H + u*G`, which is what proves the proof has no
+   * key path. Holders check `K - u*G == H`. Distinct from the blinding factor `r`, which never
+   * travels.
+   */
+  u?: string;
   tree?: string[];
 };
 

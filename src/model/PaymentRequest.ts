@@ -468,15 +468,11 @@ export class PaymentRequest {
       throw new CTSError('taproot option is missing its receiver key');
     }
     const receiverPub = normalizeSecpPubkey(taproot.receiverKey);
-    // Spec 2.3.5: a NUMS base is never blinded, so a blinded leaf key is the only per-payment
-    // uniquifier; without one, every payment to this request would produce the same secret.
-    if (
-      receiverPub === TAPROOT_NUMS_KEY &&
-      !(taproot.leaves?.length && taproot.blindKeys?.length)
-    ) {
-      throw new CTSError(
-        'malformed request: a NUMS receiver key requires leaves with at least one blind-me key',
-      );
+    // Spec 2.3.5: the payer offsets the NUMS base per output, so uniqueness no longer depends on
+    // the tree and the requested leaves are reproduced unchanged. Leaves are still required:
+    // nothing else could spend a proof with no key path.
+    if (receiverPub === TAPROOT_NUMS_KEY && !taproot.leaves?.length) {
+      throw new CTSError('malformed request: a NUMS receiver key requires leaves');
     }
     if (!taproot.leaves?.length) {
       return { receiverPub };
@@ -779,11 +775,8 @@ export class PaymentRequestBuilder {
         throw new CTSError(`blind-me key is not in the requested tree: ${key}`);
       }
     }
-    if (
-      taproot.receiverKey === TAPROOT_NUMS_KEY &&
-      !(taproot.leaves?.length && taproot.blindKeys?.length)
-    ) {
-      throw new CTSError('A NUMS receiver key requires leaves with at least one blind-me key');
+    if (taproot.receiverKey === TAPROOT_NUMS_KEY && !taproot.leaves?.length) {
+      throw new CTSError('A NUMS receiver key requires leaves');
     }
     this._taproot = taproot;
     return this;

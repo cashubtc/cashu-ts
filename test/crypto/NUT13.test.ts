@@ -9,6 +9,12 @@ import {
   hashToCurveBls,
 } from '../../src/crypto';
 import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
+import {
+  deriveLeafKey,
+  deriveNumsOffset,
+  deriveQuoteLockKey,
+  recoverV3LeafKeys,
+} from '../../src/crypto/NUT13';
 import { Bytes } from '../../src/utils';
 import { nut13_v3 as nut13Vectors } from '../vectors/taproot-v3.json';
 
@@ -84,24 +90,89 @@ describe('v3 (BLS) derivation', () => {
     expect(bytesToHex(v2r)).not.toBe(bytesToHex(v3r));
   });
 
-  test('blinding factor rejection sampling still matches the pre-taproot pin (attempt=3)', () => {
-    // Lock-in from nuts/tests/13-tests.md "Version 3": the (seed, keyset, counter) tuple is chosen
-    // so the 0x01 branch rejects attempts 0-2 (x >= BLS_FR_ORDER) and succeeds at attempt=3. The
-    // taproot-secrets redefinition of the 0x00 branch must leave this branch untouched.
+  test('the framed v3 message pins these values (nuts tests/13-tests.md "Version 3")', () => {
+    // Lock-in for the framed message: the (seed, keyset, counter) tuple is chosen so the 0x01
+    // branch rejects several attempts before succeeding, exercising the rejection loop.
     const { blindingFactor, secret, secretKey } = deriveSecretAndBlindingFactor(
       seed,
       v3KeysetId,
       0,
     );
     expect(bytesToHex(blindingFactor)).toBe(
-      '513d1a0f0f01a09fdad2f7cea1403143fb86a1be2d152969b46b45cdaabd21aa',
+      '156857a0bce1b2788895f1885a21c56cf000df0de1e855608c7ccb6d9e2d7728',
     );
-    // The 0x00 branch now derives a key (spec 2.4.2): secret is the compressed pubkey of it.
     expect(bytesToHex(secretKey as Uint8Array)).toBe(
-      '7a7b3f7eb44f4a943041d936c0e0b2bf1dd0ac9a210bc8f8bc12b65cdbde9bd3',
+      '47196dc081150ce13fd0e478b8b71831b825be389211c9c56a8062a61af70347',
     );
     expect(bytesToHex(secret)).toBe(
-      '0234df38671738d8e9ee205dc364fd4b45df8ed2ff91686e93d02ca1feb3b2f118',
+      '02e6e7cfa7b82d4b3b449fa6466c893469a727d0214d48db4956a6054b8022a29b',
+    );
+  });
+
+  test('the other derivation types match the shared vectors', () => {
+    const vseed = new TextEncoder().encode(nut13Vectors.seed_utf8);
+    const id = nut13Vectors.keyset_id;
+    for (const output of nut13Vectors.outputs) {
+      expect(bytesToHex(deriveNumsOffset(vseed, id, output.counter))).toBe(output.nums_offset);
+    }
+    for (const leaf of nut13Vectors.leaf_keys) {
+      const key = deriveLeafKey(vseed, id, leaf.counter, leaf.index);
+      expect(bytesToHex(key)).toBe(leaf.privkey);
+      expect(bytesToHex(getPubKeyFromPrivKey(key))).toBe(leaf.pubkey);
+    }
+    for (const lock of nut13Vectors.quote_locks) {
+      const key = deriveQuoteLockKey(vseed, lock.counter);
+      expect(bytesToHex(key)).toBe(lock.privkey);
+      expect(bytesToHex(getPubKeyFromPrivKey(key))).toBe(lock.pubkey);
+    }
+  });
+
+  test('each type derives its own scalar at one counter', () => {
+    // One counter describes one proof completely, so the components must not collide: a quote lock
+    // may be handed over and a leaf key is published, while the secret key must stay secret.
+    const derived = [
+      deriveSecretAndBlindingFactor(seed, v3KeysetId, 4).secretKey as Uint8Array,
+      deriveSecretAndBlindingFactor(seed, v3KeysetId, 4).blindingFactor,
+      deriveNumsOffset(seed, v3KeysetId, 4),
+      deriveLeafKey(seed, v3KeysetId, 4, 0),
+      deriveQuoteLockKey(seed, 4),
+    ].map(bytesToHex);
+    expect(new Set(derived).size).toBe(derived.length);
+    // The leaf index is in the message, not just the caller's bookkeeping.
+    expect(bytesToHex(deriveLeafKey(seed, v3KeysetId, 4, 1))).not.toBe(derived[3]);
+  });
+
+  test('leaf keys recover by value, whatever the tree order', () => {
+    const own = [0, 1, 2].map((i) => deriveLeafKey(seed, v3KeysetId, 9, i));
+    const ownPubs = own.map((k) => bytesToHex(getPubKeyFromPrivKey(k)));
+    const foreign = '02'.padEnd(66, 'a');
+    // Shuffled, and mixed with a key the wallet does not own: position tells you nothing.
+    const found = recoverV3LeafKeys(seed, v3KeysetId, 9, [ownPubs[2], foreign, ownPubs[0]]);
+    expect(found.size).toBe(2);
+    expect(bytesToHex(found.get(ownPubs[0]) as Uint8Array)).toBe(bytesToHex(own[0]));
+    expect(bytesToHex(found.get(ownPubs[2]) as Uint8Array)).toBe(bytesToHex(own[2]));
+    expect(found.has(foreign)).toBe(false);
+    // A different counter is a different proof allocation, so nothing matches.
+    expect(recoverV3LeafKeys(seed, v3KeysetId, 10, ownPubs).size).toBe(0);
+  });
+
+  test('the new types are v3 only', () => {
+    const v2KeysetId = '01abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567';
+    expect(() => deriveNumsOffset(seed, v2KeysetId, 0)).toThrow(/v3 keyset/);
+    expect(() => deriveLeafKey(seed, v2KeysetId, 0, 0)).toThrow(/v3 keyset/);
+    expect(() => deriveLeafKey(seed, v3KeysetId, 0, -1)).toThrow(/index/);
+  });
+
+  test('framing is v3 only: the deployed v2 message is byte-for-byte unchanged', () => {
+    // Reframing v2 would silently re-derive every deployed secret, and a wallet restoring from
+    // seed would find nothing rather than error. These are the pre-taproot v2 values.
+    const v2KeysetId = '01b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6';
+    const { secret, blindingFactor } = deriveSecretAndBlindingFactor(seed, v2KeysetId, 0);
+    expect(bytesToHex(secret)).toBe(
+      'd3c8abcd88c04e6e635604448ec8e1b2f5a5e51a8773f313e32284db78a5cb9b',
+    );
+    expect(bytesToHex(blindingFactor)).toBe(
+      'ceae166b8ba3bf3f8c175b6d4fbbe87a67746ee42dd6bbad587786b5772f28c3',
     );
   });
 });

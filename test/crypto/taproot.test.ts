@@ -26,6 +26,7 @@ import {
   readMinimalBE,
   serializeTaprootLeaf,
   serializeTaprootLeafHex,
+  numsOffsetKey,
   parseTaprootLeaf,
   parseTaprootLeafHex,
   taprootLeafHash,
@@ -595,12 +596,45 @@ describe('locked secret construction and spend info cascade', () => {
     expect(() => verifyTaprootSpendInfo(secret, { K: v61.internal_key, tree })).toThrow(/slots/);
   });
 
-  test('NUMS key: script-only secret verifies and key is the BIP-341 H point', () => {
+  test('NUMS base: H is lift_x(SHA256(G uncompressed))', () => {
     expect(TAPROOT_NUMS_KEY.slice(0, 2)).toBe('02');
-    const { secret, tree } = buildTaprootSecret(TAPROOT_NUMS_KEY, [
-      { type: 'threshold', n: 1, keys: [v61.carol_pub] },
-    ]);
-    expect(verifyTaprootSpendInfo(secret, { K: TAPROOT_NUMS_KEY, tree })).toBe('tweaked');
+    const G = secp256k1.Point.BASE.toBytes(false);
+    expect(TAPROOT_NUMS_KEY.slice(2)).toBe(bytesToHex(sha256(G)));
+  });
+
+  test('a script-only secret offsets H per proof and discloses r', () => {
+    const leaves: TaprootLeaf[] = [{ type: 'threshold', n: 1, keys: [v61.carol_pub] }];
+    const { secret, tree, K, u } = buildTaprootSecret(TAPROOT_NUMS_KEY, leaves);
+    expect(u).toMatch(/^[0-9a-f]{64}$/);
+    expect(K).not.toBe(TAPROOT_NUMS_KEY);
+    // K - u*G == H: the offset is what proves there is no key path.
+    expect(bytesToHex(numsOffsetKey(hexToBytes(u!)))).toBe(K);
+    expect(verifyTaprootSpendInfo(secret, { K, u, tree })).toBe('tweaked');
+    // Fresh r per proof, so the same tree yields a different secret every time.
+    expect(buildTaprootSecret(TAPROOT_NUMS_KEY, leaves).secret).not.toBe(secret);
+  });
+
+  test('a claimed NUMS offset that does not reduce to H is refused', () => {
+    const leaves: TaprootLeaf[] = [{ type: 'threshold', n: 1, keys: [v61.carol_pub] }];
+    const { secret, tree, u } = buildTaprootSecret(TAPROOT_NUMS_KEY, leaves);
+    // Same secret, but K claimed as an offset of something else.
+    expect(() => verifyTaprootSpendInfo(secret, { K: v61.internal_key, u, tree })).toThrow(
+      /not the claimed NUMS offset/,
+    );
+    expect(() => verifyTaprootSpendInfo(secret, { u, tree })).toThrow(/without its internal key/);
+    expect(() => verifyTaprootSpendInfo(secret, { K: v61.internal_key, u: '00', tree })).toThrow(
+      /32-byte scalar/,
+    );
+  });
+
+  test('the NUMS base is not reachable as a verbatim internal key', () => {
+    const leaves: TaprootLeaf[] = [{ type: 'threshold', n: 1, keys: [v61.carol_pub] }];
+    const { K } = buildTaprootSecret(TAPROOT_NUMS_KEY, leaves);
+    expect(K).not.toBe(TAPROOT_NUMS_KEY);
+    // An offset only applies to the base; asking for one anywhere else is a mistake, not a no-op.
+    expect(() =>
+      buildTaprootSecret(v61.internal_key, leaves, { u: new Uint8Array(32).fill(1) }),
+    ).toThrow(/only to the NUMS base/);
   });
 });
 
@@ -627,35 +661,26 @@ describe('receiver-keyed derivation (2.7, vectors 6.1)', () => {
     expect(out.tree).toBeUndefined();
   });
 
-  test('a NUMS receiver key derives verbatim, uniquely per ephemeral, and demands a blinded leaf', () => {
+  test('a NUMS receiver key is offset per proof and needs no blinded leaf', () => {
     const leaves: TaprootLeaf[] = [
       { type: 'after', n: 1, keys: [v61.alice_refund_pub], time: v61.refund_time },
     ];
-    // Verbatim NUMS base (spec 2.3.5): a blinded NUMS could not be told apart from a
-    // sender-owned key hiding a key path.
-    const out = deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, {
-      leaves: [...leaves],
-      blindKeys: [v61.alice_refund_pub],
-      eBytes,
-    });
-    expect(out.K).toBe(TAPROOT_NUMS_KEY);
-    expect(verifyTaprootSpendInfo(out.secret, { E: out.E, K: out.K, tree: out.tree })).toBe(
-      'receiver-keyed',
+    // The NUMS base is offset, not ECDH-blinded (spec 2.3.5): nobody holds its scalar for the
+    // receiver's half of the DH. Uniqueness comes from r, so the tree travels unchanged.
+    const out = deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, { leaves: [...leaves], eBytes });
+    expect(out.K).not.toBe(TAPROOT_NUMS_KEY);
+    expect(bytesToHex(numsOffsetKey(hexToBytes(out.u!)))).toBe(out.K);
+    expect(out.tree).toEqual([v61.leaf_after]);
+    expect(
+      verifyTaprootSpendInfo(out.secret, { E: out.E, K: out.K, u: out.u, tree: out.tree }),
+    ).toBe('receiver-keyed');
+    // Same ephemeral, same tree, different proof: r is what makes the secret fresh.
+    const again = deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, { leaves: [...leaves], eBytes });
+    expect(again.secret).not.toBe(out.secret);
+    // Leaves are still required: with no key path, nothing else could spend the proof.
+    expect(() => deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, { eBytes })).toThrow(
+      /requires leaves/,
     );
-    // The blinded leaf key is the per-payment uniquifier: different ephemeral, different secret.
-    const eBytes2 = new Uint8Array(32);
-    eBytes2[31] = 7;
-    const out2 = deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, {
-      leaves: [...leaves],
-      blindKeys: [v61.alice_refund_pub],
-      eBytes: eBytes2,
-    });
-    expect(out2.secret).not.toBe(out.secret);
-    // Without one, every payment would repeat the same secret: refused.
-    expect(() =>
-      deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, { leaves: [...leaves], eBytes }),
-    ).toThrow(/blind-me/);
-    expect(() => deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, { eBytes })).toThrow(/blind-me/);
   });
 
   test('trial-match recovers the pinned key-path key', () => {
@@ -1029,22 +1054,28 @@ describe('verifyTaprootRequestTree (NUT-18 exact match)', () => {
     );
   });
 
-  test('a NUMS request requires the NUMS internal key verbatim', () => {
-    const numsOpt = {
-      receiverPub: TAPROOT_NUMS_KEY,
-      leaves: reqLeaves,
-      blindKeys: [v61.carol_pub],
-    };
-    const out = deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, {
-      leaves: reqLeaves,
-      blindKeys: [v61.carol_pub],
-      eBytes,
-    });
+  test('a NUMS request requires an internal key that reduces to H', () => {
+    // No blind-me tag: the offset supplies uniqueness, so the requested tree comes back unchanged.
+    const numsOpt = { receiverPub: TAPROOT_NUMS_KEY, leaves: reqLeaves };
+    const out = deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, { leaves: reqLeaves, eBytes });
     expect(() =>
-      verifyTaprootRequestTree(numsOpt, { E: out.E, K: out.K, tree: out.tree }),
+      verifyTaprootRequestTree(numsOpt, { E: out.E, K: out.K, u: out.u, tree: out.tree }),
     ).not.toThrow();
+    // K without its offset is just a point: the payee cannot tell a key path from none.
+    expect(() => verifyTaprootRequestTree(numsOpt, { E: out.E, K: out.K, tree: out.tree })).toThrow(
+      /requires the internal key and its offset/,
+    );
     expect(() =>
-      verifyTaprootRequestTree(numsOpt, { E: out.E, K: v61.internal_key, tree: out.tree }),
-    ).toThrow(/NUMS/);
+      verifyTaprootRequestTree(numsOpt, {
+        E: out.E,
+        K: v61.internal_key,
+        u: out.u,
+        tree: out.tree,
+      }),
+    ).toThrow(/not the claimed NUMS offset/);
+    // An offset where the request asked for a receiver-keyed send is a different lock entirely.
+    expect(() =>
+      verifyTaprootRequestTree(option, { E: out.E, K: out.K, u: out.u, tree: out.tree }),
+    ).toThrow(/NUMS offset on a receiver-keyed request/);
   });
 });
