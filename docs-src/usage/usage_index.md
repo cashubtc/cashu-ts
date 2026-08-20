@@ -39,7 +39,7 @@ If you are building a wallet integration from scratch, read these in order:
 | [Logging](./logging.md)                             | Enable and route library logs while debugging wallet or mint behavior.          |
 | [Amounts](./amounts.md)                             | Work with the `Amount` and `AmountWithUnit` value objects.                      |
 | [Fees](./fees.md)                                   | Pick the right fee helper: input fees, sender-pays-fees, send-max, NUT-18.      |
-| [Helpers](./helpers.md)                             | Standalone public utility functions — currently mint URL normalization.         |
+| [Helpers](./helpers.md)                             | Standalone helpers: normalize mint URLs, find tokens and payment requests.      |
 
 ## Related docs
 

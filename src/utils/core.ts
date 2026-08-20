@@ -33,7 +33,7 @@ import { encodeBase64ToJson, encodeBase64toUint8, encodeUint8toBase64Url } from 
 import { Bytes } from './Bytes';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { JSONInt } from './JSONInt';
-import { MAX_SPLIT_OUTPUTS } from './limits';
+import { MAX_PAYLOAD_DECODE_ATTEMPTS, MAX_PAYLOAD_LENGTH, MAX_SPLIT_OUTPUTS } from './limits';
 
 /**
  * Splits the amount into denominations of the provided keyset.
@@ -382,6 +382,88 @@ export function getTokenMetadata(token: string): TokenMetadata {
     ...(tokenObj.memo && { memo: tokenObj.memo }),
     proofAmounts: tokenObj.proofs.map((p) => p.amount),
   };
+}
+
+/**
+ * What {@link findCashuPayload} located: a cashu token, or a NUT-18 / NUT-26 payment request.
+ */
+export type CashuPayloadKind = 'token' | 'paymentRequest';
+
+/**
+ * One scanner per payload prefix: a literal prefix plus a single character class, so matching
+ * cannot backtrack catastrophically, capped by {@link MAX_PAYLOAD_LENGTH}. Tokens and `creqA` use
+ * base64url, the alphabet NUT-00 mandates for these payloads. The two characters that separate it
+ * from standard base64 are delimiters in the places people paste tokens, `/` in URL paths and `+`
+ * as a space in query strings, so stopping at them keeps an embedded payload findable instead of
+ * swallowing its surroundings. `creqb1` (NUT-26) uses bech32m, matched case-insensitively because
+ * QR alphanumeric mode uppercases it.
+ */
+const PAYLOAD_SCANNERS: ReadonlyArray<{ regExp: RegExp; kind: CashuPayloadKind }> = [
+  { regExp: new RegExp(`cashu[AB][A-Za-z0-9=_-]{1,${MAX_PAYLOAD_LENGTH}}`, 'g'), kind: 'token' },
+  {
+    regExp: new RegExp(`creqA[A-Za-z0-9=_-]{1,${MAX_PAYLOAD_LENGTH}}`, 'g'),
+    kind: 'paymentRequest',
+  },
+  {
+    regExp: new RegExp(`creqb1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{1,${MAX_PAYLOAD_LENGTH}}`, 'gi'),
+    kind: 'paymentRequest',
+  },
+];
+
+/**
+ * Finds the first token or payment request out of a block of text, wherever it sits. Covers v3 and
+ * v4 tokens and both request encodings (`creqA` per NUT-18, `creqb1` / `CREQB1` per NUT-26).
+ * Matches are found by prefix and then decoded to check them, so a prefix that is not really a
+ * payload gets skipped. What it finds comes back as it appeared, except for bech32m requests, which
+ * are lowercased to their canonical form. Feed it to {@link getDecodedToken} or
+ * `PaymentRequest.fromEncodedRequest`.
+ *
+ * @example
+ *
+ *     findCashuPayload('paying you back cashuBo2Ft… thanks!');
+ *     // { kind: 'token', payload: 'cashuBo2Ft…' }
+ *
+ * @returns The first valid payload by position or `null` if the text carries none, a valid payload
+ *   sits beyond `MAX_PAYLOAD_DECODE_ATTEMPTS` failed candidates, or the only candidate is a
+ *   multi-entry v3 token (unsupported).
+ */
+export function findCashuPayload(text: string): { kind: CashuPayloadKind; payload: string } | null {
+  if (typeof text !== 'string') {
+    throw new CTSError('text must be a string');
+  }
+  let searchFrom = 0;
+  for (let attempts = 0; attempts < MAX_PAYLOAD_DECODE_ATTEMPTS; attempts++) {
+    let earliestMatch: { index: number; text: string; kind: CashuPayloadKind } | null = null;
+    for (const scanner of PAYLOAD_SCANNERS) {
+      // Global regexes resume from lastIndex, so point each one at the current search position.
+      scanner.regExp.lastIndex = searchFrom;
+      const match = scanner.regExp.exec(text);
+      if (match && (earliestMatch === null || match.index < earliestMatch.index)) {
+        earliestMatch = {
+          index: match.index,
+          // A case-insensitive scanner emits canonical lowercase (bech32m case carries no data).
+          text: scanner.regExp.flags.includes('i') ? match[0].toLowerCase() : match[0],
+          kind: scanner.kind,
+        };
+      }
+    }
+    if (earliestMatch === null) {
+      return null;
+    }
+    try {
+      if (earliestMatch.kind === 'token') {
+        handleTokens(removePrefix(earliestMatch.text));
+      } else {
+        PaymentRequest.fromEncodedRequest(earliestMatch.text);
+      }
+      return { kind: earliestMatch.kind, payload: earliestMatch.text };
+    } catch {
+      // Resume one character into the failed match because another valid
+      // payload may begin inside the same regex match.
+      searchFrom = earliestMatch.index + 1;
+    }
+  }
+  return null;
 }
 
 /**
