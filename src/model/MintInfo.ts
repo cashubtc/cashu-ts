@@ -1,3 +1,4 @@
+import { verifyMintInfoSignature } from '../crypto/NUT06';
 import { type Logger, NULL_LOGGER } from '../logger';
 import { nullIfUndefined } from '../utils/core';
 import {
@@ -57,9 +58,16 @@ export class MintInfo {
   private readonly _protected21?: ProtectedIndex;
   // NUT-06, resolved request array cap
   private readonly _maxArrayLength: number;
+  // NUT-06, verdict on the mint's signature over the response as received
+  private readonly _signatureState: 'unsigned' | 'valid' | 'invalid';
 
   constructor(info: GetInfoResponse, logger?: Logger) {
     const log = logger ?? NULL_LOGGER;
+    // Verify before normalizing: normalization rewrites members the signature covers.
+    this._signatureState = verifyMintInfoSignature(info);
+    if (this._signatureState === 'invalid') {
+      log.warn('MintInfo: mint info signature did not verify against the advertised pubkey');
+    }
     this._mintInfo = MintInfo.normalizeInfo(info, log);
     this._maxArrayLength = MintInfo.resolveMaxArrayLength(info.max_array_length, log);
 
@@ -70,9 +78,19 @@ export class MintInfo {
     this._protected21 = this.buildIndex(pe21);
   }
 
+  /**
+   * Fills in derived members and bounds hostile ones.
+   *
+   * @remarks
+   * Drops `signature`: the normalized response no longer canonicalizes to the bytes the mint
+   * signed, so keeping it would invite a later re-check to read as tampering. Verify first (see
+   * {@link MintInfo.signatureState}).
+   */
   static normalizeInfo(info: GetInfoResponse, logger: Logger = NULL_LOGGER): GetInfoResponse {
+    const { signature, ...rest } = info;
+    void signature; // not used
     return {
-      ...info,
+      ...rest,
       nuts: {
         ...info.nuts,
         ...(info.nuts['4']
@@ -457,6 +475,19 @@ export class MintInfo {
   }
   get pubkey() {
     return this._mintInfo.pubkey;
+  }
+  /**
+   * Whether the mint signed this response, and whether that signature verified (NUT-06).
+   *
+   * @remarks
+   * `'unsigned'` covers every mint that predates the signature and every copy that has been
+   * normalized or persisted: `cache` does not carry the signature, so a rehydrated `MintInfo`
+   * reports `'unsigned'` rather than false tampering. Signatures are self-certifying, so a
+   * `'valid'` verdict only means something against a `pubkey` you pinned earlier or know out of
+   * band. Policy is the application's: this library does not refuse to talk to a mint over it.
+   */
+  get signatureState(): 'unsigned' | 'valid' | 'invalid' {
+    return this._signatureState;
   }
   get nuts() {
     return MintInfo.snapshot(this._mintInfo.nuts);

@@ -160,18 +160,20 @@ class Mint {
   }
 
   /**
-   * Fetches mint's info at the /info endpoint.
+   * Fetches mint's info at the /info endpoint, as received.
    *
+   * @remarks
+   * No normalization: only an unmodified response canonicalizes to the bytes the mint signed, so
+   * `new MintInfo(info)` can verify it. `MintInfo` normalizes on construction.
    * @param customRequest Optional override for the request function.
    * @returns The mint's information response.
    */
   async getInfo(customRequest?: RequestFn): Promise<GetInfoResponse> {
     const requestInstance = customRequest ?? this._request;
-    const response = await requestInstance<GetInfoResponse>({
+    return requestInstance<GetInfoResponse>({
       endpoint: joinUrls(this._mintUrl, '/v1/info'),
       onResponseMeta: this._captureResponseMetadata,
     });
-    return MintInfo.normalizeInfo(response);
   }
 
   /**
