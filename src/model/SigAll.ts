@@ -1,4 +1,9 @@
-import { computeMessageDigest, buildP2PKSigAllMessageV0, schnorrSignDigest } from '../crypto';
+import {
+  computeMessageDigest,
+  buildP2PKSigAllMessageV0,
+  buildP2PKSigAllMessageV1,
+  schnorrSignDigest,
+} from '../crypto';
 import { parseWitnessData } from '../crypto/NUT11';
 import { Bytes, JSONInt, encodeUint8toBase64Url } from '../utils';
 import type { MeltPreview, SwapPreview } from '../wallet/types';
@@ -22,6 +27,10 @@ export type SigAllDigests = {
    * Unframed concatenation format (CDK >= 0.14.0, Nutshell > 0.20.2).
    */
   v0: string;
+  /**
+   * Length-framed spec format (`Cashu_SigAllSig_v1`, cashubtc/nuts#404).
+   */
+  v1: string;
 };
 
 /**
@@ -66,9 +75,11 @@ function computeDigests(
 ): SigAllDigests {
   const sigAllOutputs = outputs.map((blindedMessage) => ({ blindedMessage }));
   const v0Msg = buildP2PKSigAllMessageV0(inputs, sigAllOutputs, quoteId);
+  const v1Msg = buildP2PKSigAllMessageV1(inputs, sigAllOutputs, quoteId);
 
   return {
     v0: computeMessageDigest(v0Msg, true),
+    v1: computeMessageDigest(v1Msg, true),
   };
 }
 
@@ -201,7 +212,7 @@ function signPackage(pkg: SigAllSigningPackage, privkey: string): SigAllSigningP
   // Sign transcripts recomputed from the package contents; a signer only ever
   // signs what the package shows, never a digest chosen elsewhere.
   const digests = computeDigests(pkg.inputs, pkg.outputs, pkg.quote);
-  const newSigs = [schnorrSignDigest(digests.v0, privkey)];
+  const newSigs = [schnorrSignDigest(digests.v1, privkey), schnorrSignDigest(digests.v0, privkey)];
 
   return {
     ...pkg,
