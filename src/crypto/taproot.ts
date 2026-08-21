@@ -783,20 +783,28 @@ export function enumerateLeafKeySlots(
  * owner tagged them blind-me, which travels with the key's delivery channel (a payment request
  * marking), never in proof data; pass those keys as `blindKeys` and each occurrence is blinded at
  * its own slot.
+ *
+ * `E` travels iff it blinded something (NUT-18): a NUMS proof with no blind-me keys takes its
+ * uniqueness from the offset and carries no ephemeral, since an `E` would tell the payee "derive
+ * your key" when nobody can.
  */
 export function deriveReceiverKeyedSecret(
   receiverPubHex: string,
   opts?: { leaves?: TaprootLeaf[]; eBytes?: Uint8Array; blindKeys?: string[] },
-): { secret: string; E: string; tree?: string[]; K?: string; u?: string } {
-  const eBytes = opts?.eBytes ?? secp256k1.utils.randomSecretKey();
+): { secret: string; E?: string; tree?: string[]; K?: string; u?: string } {
   if (receiverPubHex.toLowerCase() === TAPROOT_NUMS_KEY) {
     if (!opts?.leaves?.length) {
       throw new CTSError('A NUMS receiver key requires leaves: nothing else could spend the proof');
     }
+    if (!opts.blindKeys?.length) {
+      return buildTaprootSecret(TAPROOT_NUMS_KEY, opts.leaves);
+    }
+    const eBytes = opts.eBytes ?? secp256k1.utils.randomSecretKey();
     const leaves = blindTaggedLeafKeys(opts.leaves, eBytes, opts.blindKeys);
     const { secret, tree, K, u } = buildTaprootSecret(TAPROOT_NUMS_KEY, leaves);
     return { secret, E: Bytes.toHex(getPubKeyFromPrivKey(eBytes)), tree, K, u };
   }
+  const eBytes = opts?.eBytes ?? secp256k1.utils.randomSecretKey();
   const { blinded, Ehex } = deriveP2BKBlindedPubkeys([receiverPubHex], eBytes, true);
   const internalKey = blinded[0];
   if (!opts?.leaves || opts.leaves.length === 0) {
@@ -857,13 +865,22 @@ export function verifyTaprootRequestTree(
   if (spendInfo.k !== undefined) {
     throw new CTSError('Taproot request: a bearer key violates the receiver-keyed option');
   }
-  if (spendInfo.E === undefined) {
-    throw new CTSError('Taproot request: spend info is missing the ephemeral E');
-  }
-  try {
-    pointFromBytes(Bytes.fromHex(spendInfo.E));
-  } catch {
-    throw new CTSError('Taproot request: spend info ephemeral must be a 33-byte point');
+  // `E` is present iff it blinded something (NUT-18): always for a receiver-keyed request, and
+  // for a NUMS request only when it tags blind-me keys. Both directions are checked, so presence
+  // is part of the exact match rather than a free-floating field.
+  const needsE =
+    option.receiverPub.toLowerCase() !== TAPROOT_NUMS_KEY || (option.blindKeys ?? []).length > 0;
+  if (needsE) {
+    if (spendInfo.E === undefined) {
+      throw new CTSError('Taproot request: spend info is missing the ephemeral E');
+    }
+    try {
+      pointFromBytes(Bytes.fromHex(spendInfo.E));
+    } catch {
+      throw new CTSError('Taproot request: spend info ephemeral must be a 33-byte point');
+    }
+  } else if (spendInfo.E !== undefined) {
+    throw new CTSError('Taproot request: an ephemeral on a request that blinds nothing');
   }
   if (option.receiverPub.toLowerCase() === TAPROOT_NUMS_KEY) {
     // A NUMS request asks for proofs with no key path, which the offset is what proves: `K` alone

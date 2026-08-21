@@ -762,7 +762,7 @@ describeV3('M4 receiver-keyed sends', () => {
 
       // A stranger's trial-match misses both.
       expect(
-        recoverReceiverKeyedSecretKey(bareProof.secret, bare.E, bytesToHex(strangerPriv)),
+        recoverReceiverKeyedSecretKey(bareProof.secret, bare.E!, bytesToHex(strangerPriv)),
       ).toBeUndefined();
 
       // Bob trial-matches, recovers key-path keys, and sweeps both proofs.

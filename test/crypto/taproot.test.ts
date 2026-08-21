@@ -695,16 +695,18 @@ describe('receiver-keyed derivation (2.7, vectors 6.1)', () => {
       { type: 'after', n: 1, keys: [v61.alice_refund_pub], time: v61.refund_time },
     ];
     // The NUMS base is offset, not ECDH-blinded (spec 2.3.5): nobody holds its scalar for the
-    // receiver's half of the DH. Uniqueness comes from r, so the tree travels unchanged.
-    const out = deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, { leaves: [...leaves], eBytes });
+    // receiver's half of the DH. Uniqueness comes from u, so the tree travels unchanged, and with
+    // nothing blinded there is no ephemeral at all (NUT-18).
+    const out = deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, { leaves: [...leaves] });
+    expect(out.E).toBeUndefined();
     expect(out.K).not.toBe(TAPROOT_NUMS_KEY);
     expect(bytesToHex(numsOffsetKey(hexToBytes(out.u!)))).toBe(out.K);
     expect(out.tree).toEqual([v61.leaf_after]);
-    expect(
-      verifyTaprootSpendInfo(out.secret, { E: out.E, K: out.K, u: out.u, tree: out.tree }),
-    ).toBe('receiver-keyed');
-    // Same ephemeral, same tree, different proof: r is what makes the secret fresh.
-    const again = deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, { leaves: [...leaves], eBytes });
+    expect(verifyTaprootSpendInfo(out.secret, { K: out.K, u: out.u, tree: out.tree })).toBe(
+      'tweaked',
+    );
+    // Same tree, different proof: u is what makes the secret fresh.
+    const again = deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, { leaves: [...leaves] });
     expect(again.secret).not.toBe(out.secret);
     // Leaves are still required: with no key path, nothing else could spend the proof.
     expect(() => deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, { eBytes })).toThrow(
@@ -930,7 +932,7 @@ describe('leaf-key blinding: the positional slot map (2.7)', () => {
       { type: 'after', n: 1, keys: [alicePub], time: v61.refund_time },
     ];
     const out = deriveReceiverKeyedSecret(carolPub, { leaves, eBytes, blindKeys: [alicePub] });
-    const hit = recoverReceiverKeyedSecretKey(out.secret, out.E, v61.carol_priv, out.tree);
+    const hit = recoverReceiverKeyedSecretKey(out.secret, out.E!, v61.carol_priv, out.tree);
     expect(hit?.internalKey).toBe(v61.internal_key);
     expect(bytesToHex(secp256k1.getPublicKey(hexToBytes(hit!.secretKey), true))).toBe(out.secret);
   });
@@ -1091,19 +1093,28 @@ describe('verifyTaprootRequestTree (NUT-18 exact match)', () => {
   });
 
   test('a NUMS request requires an internal key that reduces to H', () => {
-    // No blind-me tag: the offset supplies uniqueness, so the requested tree comes back unchanged.
+    // No blind-me tag: the offset supplies uniqueness, the requested tree comes back unchanged,
+    // and no ephemeral travels (NUT-18: E is present iff it blinded something).
     const numsOpt = { receiverPub: TAPROOT_NUMS_KEY, leaves: reqLeaves };
-    const out = deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, { leaves: reqLeaves, eBytes });
+    const out = deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, { leaves: reqLeaves });
     expect(() =>
-      verifyTaprootRequestTree(numsOpt, { E: out.E, K: out.K, u: out.u, tree: out.tree }),
+      verifyTaprootRequestTree(numsOpt, { K: out.K, u: out.u, tree: out.tree }),
     ).not.toThrow();
+    // An ephemeral that blinded nothing is a signal the payee cannot act on.
+    expect(() =>
+      verifyTaprootRequestTree(numsOpt, {
+        E: v61.ephemeral_pub,
+        K: out.K,
+        u: out.u,
+        tree: out.tree,
+      }),
+    ).toThrow(/blinds nothing/);
     // K without its offset is just a point: the payee cannot tell a key path from none.
-    expect(() => verifyTaprootRequestTree(numsOpt, { E: out.E, K: out.K, tree: out.tree })).toThrow(
+    expect(() => verifyTaprootRequestTree(numsOpt, { K: out.K, tree: out.tree })).toThrow(
       /requires the internal key and its offset/,
     );
     expect(() =>
       verifyTaprootRequestTree(numsOpt, {
-        E: out.E,
         K: v61.internal_key,
         u: out.u,
         tree: out.tree,
@@ -1111,7 +1122,31 @@ describe('verifyTaprootRequestTree (NUT-18 exact match)', () => {
     ).toThrow(/not the claimed NUMS offset/);
     // An offset where the request asked for a receiver-keyed send is a different lock entirely.
     expect(() =>
-      verifyTaprootRequestTree(option, { E: out.E, K: out.K, u: out.u, tree: out.tree }),
+      verifyTaprootRequestTree(option, {
+        E: v61.ephemeral_pub,
+        K: out.K,
+        u: out.u,
+        tree: out.tree,
+      }),
     ).toThrow(/NUMS offset on a receiver-keyed request/);
+  });
+
+  test('a NUMS request with blind-me keys keeps the ephemeral, both directions', () => {
+    const numsOptB = {
+      receiverPub: TAPROOT_NUMS_KEY,
+      leaves: reqLeaves,
+      blindKeys: [v61.alice_refund_pub],
+    };
+    const out = deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, {
+      leaves: reqLeaves,
+      blindKeys: [v61.alice_refund_pub],
+      eBytes,
+    });
+    expect(out.E).toBeDefined();
+    const si = { E: out.E, K: out.K, u: out.u, tree: out.tree };
+    expect(() => verifyTaprootRequestTree(numsOptB, si)).not.toThrow();
+    expect(() => verifyTaprootRequestTree(numsOptB, { ...si, E: undefined })).toThrow(
+      /missing the ephemeral/,
+    );
   });
 });
