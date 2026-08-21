@@ -914,6 +914,24 @@ describe('taproot (v3) request marking', () => {
     ).toThrow(/requires leaves/);
   });
 
+  test('creqA carries the option under the nutroot key, pinned to the spec vector', () => {
+    // The NUT-18 vectors' NUMS request, byte for byte: a=8, u=sat, nutroot {k, l, b}.
+    const specVector =
+      'creqAo2FhCGF1Y3NhdGdudXRyb290o2FreEIwMjUwOTI5Yjc0YzFhMDQ5NTRiNzhiNGI2MDM1ZTk3YTVlMDc4YTVhMGYyOGVjOTZkNTQ3YmZlZTlhY2U4MDNhYzBhbIF4YjAwMDIwMjAwMDEwMTA0MDAyMTAyZTQ5M2RiZjFjMTBkODBmMzU4MWU0OTA0OTMwYjE0MDRjYzZjMTM5MDBlZTA3NTg0NzRmYTk0YWJlOGM0Y2QxMzA2MDAwNDY4YTNiZTgwYWKBeEIwMmU0OTNkYmYxYzEwZDgwZjM1ODFlNDkwNDkzMGIxNDA0Y2M2YzEzOTAwZWUwNzU4NDc0ZmE5NGFiZThjNGNkMTM=';
+    const numsKey = '0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0';
+    const pr = PaymentRequest.builder()
+      .amount(8, 'sat')
+      .requestTaproot({ receiverKey: numsKey, leaves: [leafAfter], blindKeys: [alicePub] })
+      .build();
+    expect(pr.toEncodedRequest()).toBe(specVector);
+    const decoded = decodePaymentRequest(specVector);
+    expect(decoded.taproot).toEqual({
+      receiverKey: numsKey,
+      leaves: [leafAfter],
+      blindKeys: [alicePub],
+    });
+  });
+
   test('creqB round-trips the option under NUT-26 tag 0x0b', () => {
     const pr = PaymentRequest.builder()
       .amount(8, 'sat')

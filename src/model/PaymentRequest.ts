@@ -317,7 +317,7 @@ export class PaymentRequest {
       };
     }
     if (this.taproot) {
-      rawRequest.taproot = {
+      rawRequest.nutroot = {
         k: this.taproot.receiverKey,
         ...(this.taproot.leaves?.length && { l: this.taproot.leaves }),
         ...(this.taproot.blindKeys?.length && { b: this.taproot.blindKeys }),
@@ -516,11 +516,11 @@ export class PaymentRequest {
         }
       : undefined;
     const supportedMethods = rawPaymentRequest.sm?.map((m) => ({ method: m.mn, fee: m.mf }));
-    const taproot = rawPaymentRequest.taproot
+    const taproot = rawPaymentRequest.nutroot
       ? {
-          receiverKey: rawPaymentRequest.taproot.k,
-          leaves: rawPaymentRequest.taproot.l,
-          blindKeys: rawPaymentRequest.taproot.b,
+          receiverKey: rawPaymentRequest.nutroot.k,
+          leaves: rawPaymentRequest.nutroot.l,
+          blindKeys: rawPaymentRequest.nutroot.b,
         }
       : undefined;
     return new PaymentRequest({
