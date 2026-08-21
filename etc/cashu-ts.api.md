@@ -1904,6 +1904,7 @@ export type ProofState = {
     Y: string;
     state: CheckStateEnum;
     witness: string | null;
+    digest?: string | null;
 };
 
 // @public
