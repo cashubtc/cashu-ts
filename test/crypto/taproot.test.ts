@@ -335,8 +335,10 @@ describe('merkle tree (vectors 6.2)', () => {
 
   test('four leaves fold as the spec diagram and paths verify', () => {
     const hashes = [1, 2, 3, 4].map((i) => sha256(new Uint8Array([i])));
-    const b12 = taprootBranchHash(hashes[0], hashes[1]);
-    const b34 = taprootBranchHash(hashes[2], hashes[3]);
+    // The fold sorts, so build the expected tree over the sorted list.
+    const sorted = [...hashes].sort((a, b) => (bytesToHex(a) < bytesToHex(b) ? -1 : 1));
+    const b12 = taprootBranchHash(sorted[0], sorted[1]);
+    const b34 = taprootBranchHash(sorted[2], sorted[3]);
     const root = taprootBranchHash(b12, b34);
     expect(bytesToHex(taprootMerkleRoot(hashes))).toBe(bytesToHex(root));
     for (let i = 0; i < 4; i++) {
@@ -348,11 +350,38 @@ describe('merkle tree (vectors 6.2)', () => {
 
   test('three leaves: odd leaf promoted, single-sibling path', () => {
     const hashes = [1, 2, 3].map((i) => sha256(new Uint8Array([i])));
-    const root = taprootBranchHash(taprootBranchHash(hashes[0], hashes[1]), hashes[2]);
+    const sorted = [...hashes].sort((a, b) => (bytesToHex(a) < bytesToHex(b) ? -1 : 1));
+    const root = taprootBranchHash(taprootBranchHash(sorted[0], sorted[1]), sorted[2]);
     expect(bytesToHex(taprootMerkleRoot(hashes))).toBe(bytesToHex(root));
-    const path = taprootMerklePath(hashes, 2);
+    // The promoted (last sorted) leaf has the single-sibling path.
+    const promoted = hashes.findIndex((h) => h === sorted[2]);
+    const path = taprootMerklePath(hashes, promoted);
     expect(path).toHaveLength(1);
-    expect(bytesToHex(taprootRootFromPath(hashes[2], path))).toBe(bytesToHex(root));
+    expect(bytesToHex(taprootRootFromPath(hashes[promoted], path))).toBe(bytesToHex(root));
+  });
+
+  test('the root is a function of the leaf set: every permutation folds identically', () => {
+    // Before the sorted fold, a 3-leaf tree had three distinct roots across its six orders; a
+    // wallet reordering leaves in storage broke its own proofs. Every permutation must now fold
+    // to one root, with every path still verifying.
+    const hashes = [1, 2, 3].map((i) => sha256(new Uint8Array([i])));
+    const root = bytesToHex(taprootMerkleRoot(hashes));
+    const perms = [
+      [0, 1, 2],
+      [0, 2, 1],
+      [1, 0, 2],
+      [1, 2, 0],
+      [2, 0, 1],
+      [2, 1, 0],
+    ];
+    for (const perm of perms) {
+      const order = perm.map((i) => hashes[i]);
+      expect(bytesToHex(taprootMerkleRoot(order))).toBe(root);
+      for (let i = 0; i < order.length; i++) {
+        const path = taprootMerklePath(order, i);
+        expect(bytesToHex(taprootRootFromPath(order[i], path))).toBe(root);
+      }
+    }
   });
 });
 
@@ -944,21 +973,28 @@ describe('leaf key recovery does not depend on the transmitted tree order', () =
   const pub = (i: number) => bytesToHex(secp256k1.getPublicKey(hexToBytes(priv(i)), true));
 
   test('a reordered tree still resolves every blinded leaf key', () => {
-    // The root commits the leaf set, not an arrangement: sorted-pair hashing means a reordered list
+    // The root commits the leaf set, not an arrangement: the fold sorts, so a reordered list
     // still reconstructs `P` and still passes the 2.5.1 completeness check. Slots are assigned by
     // walking the transmitted order, so matching a key by its position would put every blinded key
     // on the wrong slot and its owner would quietly lose the leaf. Match by value instead. Sorting
-    // the list is not an option here: blinding rewrites the leaf bytes, so a canonical order over
-    // them is only known after the slots it would decide have been assigned.
+    // the transmitted list to assign slots is not an option: blinding rewrites the leaf bytes, so
+    // a canonical order over them is only known after the slots it would decide have been assigned
+    // (the fold's sort is over the leaf HASHES, after blinding, which is why it is not circular).
     const leaves: TaprootLeaf[] = [
       { type: 'threshold', n: 1, keys: [pub(3)] },
       { type: 'after', n: 1, keys: [pub(4)], time: 1755561600 },
+      { type: 'hashlock', n: 1, keys: [pub(5)], hash: 'a1'.repeat(32) },
     ];
-    const sent = deriveReceiverKeyedSecret(pub(9), { leaves, blindKeys: [pub(3), pub(4)] });
+    const sent = deriveReceiverKeyedSecret(pub(9), {
+      leaves,
+      blindKeys: [pub(3), pub(4), pub(5)],
+    });
     const tree = sent.tree as string[];
+    // Reversing three leaves changes which leaves pair, so the old transmitted-order fold
+    // produced a different root here: this is a permutation the sort has to absorb.
     const reordered = [...tree].reverse();
 
-    // Both orders reconstruct the secret, which is exactly why the reorder is undetectable.
+    // Both orders reconstruct the secret: the fold sorts, so order carries no meaning.
     expect(verifyTaprootSpendInfo(sent.secret, { E: sent.E, K: sent.K, tree })).toBe(
       'receiver-keyed',
     );
@@ -967,7 +1003,7 @@ describe('leaf key recovery does not depend on the transmitted tree order', () =
     );
 
     for (const order of [tree, reordered]) {
-      for (const i of [3, 4]) {
+      for (const i of [3, 4, 5]) {
         const hits = recoverLeafKeySecretKeys(order, sent.E, [priv(i)]);
         expect(hits).toHaveLength(1);
         expect(hits[0].blinded).toBe(true);

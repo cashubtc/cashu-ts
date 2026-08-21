@@ -22,9 +22,9 @@ import {
  * taproot-secrets.md sections 2.1, 2.3, 2.6.
  */
 
-export const TAPROOT_LEAF_TAG = 'Cashu_TapLeaf';
-export const TAPROOT_BRANCH_TAG = 'Cashu_TapBranch';
-export const TAPROOT_TWEAK_TAG = 'Cashu_TapTweak';
+export const TAPROOT_LEAF_TAG = 'Cashu_NutrootLeaf';
+export const TAPROOT_BRANCH_TAG = 'Cashu_NutrootBranch';
+export const TAPROOT_TWEAK_TAG = 'Cashu_NutrootTweak';
 
 /**
  * Current leaf version for the declarative leaf family.
@@ -344,7 +344,7 @@ export function serializeTaprootLeafHex(leaf: TaprootLeaf): string {
 }
 
 /**
- * Hash a serialized leaf: `tagged_hash("Cashu_TapLeaf", leaf)`.
+ * Hash a serialized leaf: `tagged_hash("Cashu_NutrootLeaf", leaf)`.
  */
 export function taprootLeafHash(serializedLeaf: Uint8Array): Uint8Array {
   return taggedHash(TAPROOT_LEAF_TAG, serializedLeaf);
@@ -359,9 +359,13 @@ export function taprootBranchHash(a: Uint8Array, b: Uint8Array): Uint8Array {
 }
 
 /**
- * Fold leaf hashes to a merkle root: pairwise per level, odd hash promoted.
+ * Fold leaf hashes to a merkle root: sorted ascending, then pairwise per level, odd hash promoted.
  *
  * @remarks
+ * The sort makes the root a function of the leaf set: any transmitted order reconstructs, so a
+ * store or codec that does not preserve list order cannot invalidate a proof. Slot assignment (spec
+ * 2.7) still walks the transmitted order; receivers match slot keys by value.
+ *
  * Depth is a property of the tree, not of one leaf, so the cap is checked here and not only on a
  * witness path. A tree of more than `2^8` leaves is deeper than the cap, so its long paths cannot
  * be spent. A few of its leaves still can: the fold promotes an unpaired leaf to the next level,
@@ -378,7 +382,7 @@ export function taprootMerkleRoot(leafHashes: Uint8Array[]): Uint8Array {
   if (leafHashes.length > 2 ** TAPROOT_MAX_TREE_DEPTH) {
     throw new CTSError(`Tree exceeds depth ${TAPROOT_MAX_TREE_DEPTH}`);
   }
-  let level = leafHashes;
+  let level = [...leafHashes].sort((a, b) => Bytes.compare(a, b));
   while (level.length > 1) {
     const next: Uint8Array[] = [];
     for (let i = 0; i + 1 < level.length; i += 2) {
@@ -393,15 +397,17 @@ export function taprootMerkleRoot(leafHashes: Uint8Array[]): Uint8Array {
 }
 
 /**
- * Merkle path for the leaf at `index`: sibling hashes on the way up.
+ * Merkle path for the leaf at `index` (an index into the transmitted list): sibling hashes on the
+ * way up the sorted fold.
  */
 export function taprootMerklePath(leafHashes: Uint8Array[], index: number): Uint8Array[] {
   if (!Number.isInteger(index) || index < 0 || index >= leafHashes.length) {
     throw new CTSError(`Leaf index out of range: ${index}`);
   }
   const path: Uint8Array[] = [];
-  let level = leafHashes;
-  let pos = index;
+  let level = [...leafHashes].sort((a, b) => Bytes.compare(a, b));
+  // Equal hashes are interchangeable under sorted-pair hashing, so first match is enough.
+  let pos = level.findIndex((h) => Bytes.equals(h, leafHashes[index]));
   while (level.length > 1) {
     const next: Uint8Array[] = [];
     for (let i = 0; i + 1 < level.length; i += 2) {
@@ -437,7 +443,7 @@ export function taprootRootFromPath(leafHash: Uint8Array, path: Uint8Array[]): U
 }
 
 /**
- * Taproot tweak scalar: `tagged_hash("Cashu_TapTweak", K || root) mod n`.
+ * Taproot tweak scalar: `tagged_hash("Cashu_NutrootTweak", K || root) mod n`.
  *
  * @remarks
  * Omit `root` for the empty tweak (aggregated keys, spec 3.8): `tagged_hash(tag, K)`.
@@ -946,12 +952,12 @@ function assignmentExists(candidates: number[][], used: boolean[], i: number): b
  *
  * @remarks
  * The receiver's half of the slot map. It is built over the slot space rather than over positions
- * on purpose: a sender assigns slots by walking the tree, but the transmitted order is not
- * committed by the root (sorted-pair hashing fixes the leaf set, not an arrangement), so a
- * reordered list would move every key off the slot its owner expected. What reordering cannot
- * change is which slots are in use, since that is just the count of key occurrences. Matching by
- * value against the whole slot space is therefore order-independent, and costs the same as checking
- * one slot per position: one derivation per slot either way.
+ * on purpose: a sender assigns slots by walking the tree, but the root commits the leaf set, not
+ * the transmitted order (the fold sorts), so a reordered list still reconstructs while every key
+ * sits off the slot its owner expected. What reordering cannot change is which slots are in use,
+ * since that is just the count of key occurrences. Matching by value against the whole slot space
+ * is therefore order-independent, and costs the same as checking one slot per position: one
+ * derivation per slot either way.
  */
 export function slotKeysByBlindedPubkey(
   EHex: string,
