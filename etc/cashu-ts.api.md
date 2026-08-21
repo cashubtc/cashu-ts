@@ -1945,7 +1945,7 @@ export type RawPaymentRequest = {
     d?: string;
     t?: RawTransport[];
     nut10?: RawNUT10Option;
-    taproot?: RawTaprootOption;
+    nutroot?: RawTaprootOption;
 };
 
 // @public (undocumented)
