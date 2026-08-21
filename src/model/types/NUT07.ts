@@ -5,6 +5,13 @@ export type ProofState = {
   Y: string;
   state: CheckStateEnum;
   witness: string | null;
+  /**
+   * Transaction digest the witness's signatures cover, hex (v3 spends only).
+   *
+   * @remarks
+   * A v3 witness signs the transaction digest, not the secret, so it verifies only against this.
+   */
+  digest?: string | null;
 };
 
 /**
