@@ -429,7 +429,8 @@ export class OutputData implements OutputDataLike {
    * Fresh `e` per output is the rule, not an optimisation: a shared ephemeral would reproduce `K`,
    * hence the secret, hence the colliding `C` of 2.4. Each output carries its own spend info so the
    * payee can derive its key; `leaves` build a tree over the internal key, and `blindKeys` are the
-   * leaf keys their owner tagged blind-me.
+   * leaf keys their owner tagged blind-me. A NUMS output with no blind-me keys blinds nothing and
+   * carries no ephemeral at all (NUT-18).
    * @throws If the keyset is not v3: point secrets are keyset-gated, and a pre-v3 mint would read
    *   this as a plain text secret.
    */
@@ -448,7 +449,7 @@ export class OutputData implements OutputDataLike {
         blindKeys: options.blindKeys,
       });
       const data = OutputData.createSingleTaprootData(secret, a, keyset.id);
-      data.spendInfo = { E, ...(tree && { tree, K }), ...(u && { u }) };
+      data.spendInfo = { ...(E && { E }), ...(tree && { tree, K }), ...(u && { u }) };
       return data;
     });
   }
