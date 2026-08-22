@@ -41,7 +41,7 @@ export const TAPROOT_LEAF_TYPE = {
 } as const;
 
 /**
- * Leaf body field types. Even = constraint (unknown fails closed), odd = annotation (ignorable).
+ * Leaf body field types. Allocated types are even; odd types are reserved, unknown fails closed.
  */
 const FIELD_N = 0x02;
 const FIELD_KEYS = 0x04;
@@ -228,8 +228,8 @@ export function serializeTaprootLeaf(leaf: TaprootLeaf): Uint8Array {
  * Parse a serialized leaf.
  *
  * @remarks
- * Fails closed: unknown leaf version or type, unknown even (constraint) fields, missing required
- * fields, and non-canonical streams all throw. Unknown odd (annotation) fields are ignored.
+ * Fails closed: unknown leaf version, type or field, missing required fields, and non-canonical
+ * streams all throw. Odd field types are reserved, so unknown rejects regardless of parity.
  */
 export function parseTaprootLeaf(bytes: Uint8Array): TaprootLeaf {
   if (bytes.length < 2) {
@@ -298,11 +298,8 @@ export function parseTaprootLeaf(bytes: Uint8Array): TaprootLeaf {
         hash = Bytes.toHex(rec.value);
         break;
       default:
-        if (rec.type % 2 === 0) {
-          throw new CTSError(`Unknown constraint field: ${rec.type}`);
-        }
-        // Odd = annotation, safe to ignore.
-        break;
+        // Odd types are reserved, so an unknown field of either parity rejects.
+        throw new CTSError(`Unknown leaf field: ${rec.type}`);
     }
   }
   if (n === undefined || keys === undefined) {
@@ -613,15 +610,32 @@ export function countLeafSigners(
   digest: Uint8Array,
   signatures: string[],
 ): number {
-  return leaf.keys.filter((key) =>
-    signatures.some((signature) => {
+  return selectLeafSignatures(leaf, digest, signatures).length;
+}
+
+/**
+ * Pick one valid signature per leaf key, dropping duplicates and non-verifying extras.
+ *
+ * @remarks
+ * The result never exceeds the leaf's key count, the bound NUT-10 puts on script-path witnesses.
+ */
+export function selectLeafSignatures(
+  leaf: TaprootLeaf,
+  digest: Uint8Array,
+  signatures: string[],
+): string[] {
+  const selected: string[] = [];
+  for (const key of leaf.keys) {
+    const match = signatures.find((signature) => {
       try {
         return schnorr.verify(Bytes.fromHex(signature), digest, Bytes.fromHex(key).subarray(1));
       } catch {
         return false;
       }
-    }),
-  ).length;
+    });
+    if (match !== undefined) selected.push(match);
+  }
+  return selected;
 }
 
 /**

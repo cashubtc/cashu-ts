@@ -5,11 +5,11 @@ import { getPubKeyFromPrivKey, normalizeSecpPubkey } from '../crypto/curve_secp'
 import { recoverV3SecretKeys } from '../crypto/NUT13';
 import {
   buildScriptPathWitness,
-  countLeafSigners,
   parseTaprootLeaf,
   type TaprootLeaf,
   recoverLeafKeySecretKeys,
   recoverReceiverKeyedSecretKey,
+  selectLeafSignatures,
   taprootLeafHash,
   taprootMerkleRoot,
   taprootTweakSeckey,
@@ -162,11 +162,15 @@ export async function attachTransactionWitnesses(
     // caller could have supplied up front: the digest covers the outputs, and those are only
     // fixed (and ordered) once the transaction is built.
     const theirs = spend.cosign ? await spend.cosign(digest, spend.leaf) : [];
-    const signatures = [...new Set([...mine, ...theirs.map((sig: string) => sig.toLowerCase())])];
-    const validSigners = countLeafSigners(spend.leaf, digest, signatures);
-    if (validSigners < spend.leaf.n) {
+    // One valid signature per leaf key: the mint bounds `signatures` at the leaf's key count, so
+    // duplicates and non-verifying cosigner extras are trimmed rather than forwarded.
+    const signatures = selectLeafSignatures(spend.leaf, digest, [
+      ...mine,
+      ...theirs.map((sig: string) => sig.toLowerCase()),
+    ]);
+    if (signatures.length < spend.leaf.n) {
       fail(
-        `Script path leaf needs ${spend.leaf.n} valid signatures, ${validSigners} produced`,
+        `Script path leaf needs ${spend.leaf.n} valid signatures, ${signatures.length} produced`,
         state.logger,
       );
     }
