@@ -804,6 +804,35 @@ describe('the leaf forms the worked examples never show', () => {
     ).toBe(true);
   });
 
+  test('duplicate leaves fold without deduplication and stay spendable', () => {
+    // NUT-10 duplicate-pair vector: the fold commits the leaf multiset.
+    const leaf = lf.threshold_1of1;
+    const h = nutrootLeafHash(hexToBytes(leaf));
+    expect(bytesToHex(h)).toBe('23e8ff1693496ecad495b7ed3cdd7f8595c52a3adc0b92475835b0fb839116cb');
+    const dupRoot = nutrootMerkleRoot([h, h]);
+    expect(bytesToHex(dupRoot)).toBe(
+      '1eaf291448e2f3c3a4fc00bfd591917bbb807e63af0fb905d054002bddd2cbc6',
+    );
+    expect(bytesToHex(dupRoot)).not.toBe(bytesToHex(nutrootMerkleRoot([h])));
+    const K6 = '03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556';
+    const secret = '03dd2f11ab23b670222ada50325b5d49cd07e1d7a721d9b52fa2039df1f1b0dbfd';
+    for (const index of [0, 1]) {
+      const path = nutrootMerklePath([h, h], index);
+      expect(path.map(bytesToHex)).toEqual([bytesToHex(h)]);
+      expect(
+        verifyNutrootCommitment(hexToBytes(secret), hexToBytes(K6), hexToBytes(leaf), path),
+      ).toBe(true);
+    }
+    // Receive-time reconstruction accepts the duplicated disclosure.
+    expect(verifyNutrootSpendInfo(secret, { K: K6, tree: [leaf, leaf] })).toBe('tweaked');
+    // Promotion, not self-pairing: appending a duplicate always moves the root.
+    const h2 = nutrootLeafHash(hexToBytes(lf.three_leaf_tree[1]));
+    const h3 = nutrootLeafHash(hexToBytes(lf.three_leaf_tree[2]));
+    expect(bytesToHex(nutrootMerkleRoot([h, h2, h3]))).not.toBe(
+      bytesToHex(nutrootMerkleRoot([h, h2, h3, h3])),
+    );
+  });
+
   test('the NUMS key is BIP-341 H, and a blinded slot-1 key matches', () => {
     expect(NUTROOT_NUMS_KEY).toBe(lf.nums_key);
     expect(
