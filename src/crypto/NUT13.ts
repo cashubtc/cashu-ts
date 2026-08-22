@@ -9,7 +9,7 @@ import { Bytes, isBase64String } from '../utils';
 import { BLS_FR_ORDER } from './curve_bls';
 import { getPubKeyFromPrivKey } from './curve_secp';
 import { getKeysetIdInt, isBlsKeyset } from './curves';
-import { TAPROOT_MAX_SLOTS } from './taproot';
+import { NUTROOT_MAX_SLOTS } from './nutroot';
 
 const STANDARD_DERIVATION_PATH = `m/129372'/0'`;
 
@@ -418,7 +418,7 @@ export function recoverV3LeafKeys(
   assertV3Keyset(keysetId, 'Leaf key');
   const wanted = new Set(keysHex.map((key) => key.toLowerCase()));
   const found = new Map<string, Uint8Array>();
-  for (let index = 0; index < TAPROOT_MAX_SLOTS - 1 && found.size < wanted.size; index++) {
+  for (let index = 0; index < NUTROOT_MAX_SLOTS - 1 && found.size < wanted.size; index++) {
     const secretKey = deriveLeafKey(seed, keysetId, counter, index);
     const pubkey = bytesToHex(getPubKeyFromPrivKey(secretKey));
     if (wanted.has(pubkey)) found.set(pubkey, secretKey);

@@ -16,7 +16,7 @@ import {
   recoverV3LeafKeys,
 } from '../../src/crypto/NUT13';
 import { Bytes } from '../../src/utils';
-import { nut13_v3 as nut13Vectors } from '../vectors/taproot-v3.json';
+import { nut13_v3 as nut13Vectors } from '../vectors/nutroot-v3.json';
 
 // The standalone deriveBlindingFactor() helper was removed in v5; derive it locally for these tests.
 const deriveBlindingFactor = (seed: Uint8Array, keysetId: string, counter: number): Uint8Array =>
@@ -46,7 +46,7 @@ describe('v3 (BLS) derivation', () => {
         counter,
       );
       expect(blindingFactor).toHaveLength(32);
-      // Taproot secrets: the 0x00 branch derives a private key; the secret is K = k*G compressed.
+      // Nutroot secrets: the 0x00 branch derives a private key; the secret is K = k*G compressed.
       expect(secret).toHaveLength(33);
       expect([0x02, 0x03]).toContain(secret[0]);
       expect(secretKey).toBeDefined();
@@ -57,7 +57,7 @@ describe('v3 (BLS) derivation', () => {
     }
   });
 
-  test('matches the shared taproot-v3 nut13 vectors', () => {
+  test('matches the shared nutroot-v3 nut13 vectors', () => {
     const vseed = new TextEncoder().encode(nut13Vectors.seed_utf8);
     for (const output of nut13Vectors.outputs) {
       const { secret, secretKey, blindingFactor } = deriveSecretAndBlindingFactor(
@@ -74,7 +74,7 @@ describe('v3 (BLS) derivation', () => {
   test('point secrets hash to curve as raw bytes, pinned by the shared Y vector', () => {
     const output = nut13Vectors.outputs[0];
     // The utf8 hex string and the raw 33 bytes must land on the same Y: JSON carries hex, the
-    // hash input is binary (taproot secrets), and legacy non-point secrets still hash as utf8.
+    // hash input is binary (nutroot secrets), and legacy non-point secrets still hash as utf8.
     const yFromString = hashToCurveBls(new TextEncoder().encode(output.secret));
     const yFromRaw = hashToCurveBls(Bytes.fromHex(output.secret));
     expect(yFromString.toHex(true)).toBe(output.Y);
@@ -165,7 +165,7 @@ describe('v3 (BLS) derivation', () => {
 
   test('framing is v3 only: the deployed v2 message is byte-for-byte unchanged', () => {
     // Reframing v2 would silently re-derive every deployed secret, and a wallet restoring from
-    // seed would find nothing rather than error. These are the pre-taproot v2 values.
+    // seed would find nothing rather than error. These are the pre-nutroot v2 values.
     const v2KeysetId = '01b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6';
     const { secret, blindingFactor } = deriveSecretAndBlindingFactor(seed, v2KeysetId, 0);
     expect(bytesToHex(secret)).toBe(

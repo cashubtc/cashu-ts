@@ -42,13 +42,13 @@ export type V4ProofTemplate = {
    */
   w?: string;
   /**
-   * Taproot spend info (v3): what the next owner needs that the proof does not say.
+   * Nutroot spend info (v3): what the next owner needs that the proof does not say.
    */
   si?: V4SpendInfoTemplate;
 };
 
 /**
- * Template for taproot spend info inside a V4 Token.
+ * Template for nutroot spend info inside a V4 Token.
  */
 export type V4SpendInfoTemplate = {
   /**

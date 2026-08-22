@@ -3,15 +3,15 @@ import { schnorr } from '@noble/curves/secp256k1.js';
 import { getPubKeyFromPrivKey } from '../crypto/curve_secp';
 import {
   buildScriptPathWitness,
-  TAPROOT_MAX_SLOTS,
-  parseTaprootLeaf,
+  NUTROOT_MAX_SLOTS,
+  parseNutrootLeaf,
   selectLeafSignatures,
   slotKeysByBlindedPubkey,
-  taprootLeafHash,
-  taprootMerklePath,
-  type TaprootLeaf,
-  verifyTaprootCommitment,
-} from '../crypto/taproot';
+  nutrootLeafHash,
+  nutrootMerklePath,
+  type NutrootLeaf,
+  verifyNutrootCommitment,
+} from '../crypto/nutroot';
 import { transactionDigest } from '../crypto/transcript';
 import { Bytes, JSONInt, encodeUint8toBase64Url } from '../utils';
 import { orderOutputsForPayload } from '../wallet/_internal';
@@ -24,7 +24,7 @@ import type { MeltQuoteBaseResponse, Proof, SerializedBlindedMessage } from './t
 /**
  * Transport prefix for a serialized script path signing package.
  */
-const SCRIPT_PATH_PREFIX = 'tapspA';
+const SCRIPT_PATH_PREFIX = 'nutspA';
 
 /**
  * One input's script path spend, awaiting signatures.
@@ -67,7 +67,7 @@ export type ScriptPathSpendRequest = {
  * can outlive the process that started it, which is the normal case on a phone.
  */
 export type ScriptPathSigningPackage = {
-  version: 'tapspA';
+  version: 'nutspA';
   type: 'swap' | 'melt';
   /**
    * Melt quote id; melt packages only.
@@ -131,17 +131,17 @@ function buildPackage(
     }
     const K = proof.spend_info?.K;
     if (!K) {
-      // Spec 2.5: K travels with a disclosed tree precisely so a signer who is not the receiver
+      // NUT-10: K travels with a disclosed tree precisely so a signer who is not the receiver
       // can build a control block.
       throw new CTSError('Script path package needs the internal key from the proof spend info');
     }
-    const leafHashes = tree.map((leaf) => taprootLeafHash(Bytes.fromHex(leaf)));
+    const leafHashes = tree.map((leaf) => nutrootLeafHash(Bytes.fromHex(leaf)));
     return {
       secret: plan.secret,
       leaf: tree[plan.leafIndex],
       control: {
         K,
-        path: taprootMerklePath(leafHashes, plan.leafIndex).map((h) => Bytes.toHex(h)),
+        path: nutrootMerklePath(leafHashes, plan.leafIndex).map((h) => Bytes.toHex(h)),
       },
       ...(proof.spend_info?.E && { E: proof.spend_info.E }),
       ...(plan.preimage !== undefined && { preimage: plan.preimage }),
@@ -248,11 +248,11 @@ function assertValidPackage(pkg: ScriptPathSigningPackage): void {
     }
     spent.add(spend.secret);
     try {
-      parseTaprootLeaf(Bytes.fromHex(spend.leaf));
+      parseNutrootLeaf(Bytes.fromHex(spend.leaf));
       if (
         !spend.control ||
         !Array.isArray(spend.control.path) ||
-        !verifyTaprootCommitment(
+        !verifyNutrootCommitment(
           Bytes.fromHex(spend.secret),
           Bytes.fromHex(spend.control.K),
           Bytes.fromHex(spend.leaf),
@@ -275,7 +275,7 @@ function signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPath
   const digest = Bytes.fromHex(pkg.digest);
   const pub = Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(privkey)));
   const spends = pkg.spends.map((spend) => {
-    const leaf = parseTaprootLeaf(Bytes.fromHex(spend.leaf));
+    const leaf = parseNutrootLeaf(Bytes.fromHex(spend.leaf));
     const keys: string[] = [];
     if (leaf.keys.includes(pub)) keys.push(privkey.toLowerCase());
     if (spend.E !== undefined) {
@@ -283,7 +283,7 @@ function signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPath
       // single spend (the package carries one leaf, not the tree), and the transmitted leaf order
       // is not committed by the root, so any narrower, position-derived search could decline a
       // leaf this signer can in fact satisfy.
-      const blinded = slotKeysByBlindedPubkey(spend.E, privkey, TAPROOT_MAX_SLOTS - 1);
+      const blinded = slotKeysByBlindedPubkey(spend.E, privkey, NUTROOT_MAX_SLOTS - 1);
       for (const key of leaf.keys) {
         const candidate = blinded.get(key);
         if (candidate) keys.push(candidate.secretKey);
@@ -334,7 +334,7 @@ function applyWitnesses(pkg: ScriptPathSigningPackage, inputs: Proof[]): Proof[]
   return inputs.map((proof) => {
     const spend = bySecret.get(proof.secret);
     if (!spend) return proof;
-    const leaf = parseTaprootLeaf(Bytes.fromHex(spend.leaf));
+    const leaf = parseNutrootLeaf(Bytes.fromHex(spend.leaf));
     // One valid signature per leaf key: the mint bounds `signatures` at the leaf's key count, so
     // duplicates and non-verifying cosigner extras are trimmed rather than forwarded.
     const signatures = selectLeafSignatures(leaf, digest, spend.signatures);
@@ -371,7 +371,7 @@ export type ScriptPathApi = {
     plans: ScriptPathPlan[],
   ): ScriptPathSigningPackage;
   /**
-   * Serializes a package to its `tapspA...` transport string.
+   * Serializes a package to its `nutspA...` transport string.
    */
   serializePackage(pkg: ScriptPathSigningPackage): string;
   /**
@@ -411,7 +411,7 @@ export type ScriptPathApi = {
 };
 
 /**
- * Out-of-band signing for script path spends (spec 2.3.2).
+ * Out-of-band signing for script path spends (NUT-10).
  *
  * @remarks
  * Extract a package from a preview, send it to whoever holds the keys, merge the signatures back,
@@ -432,4 +432,4 @@ export const ScriptPath: ScriptPathApi = {
     buildScriptPathWitness(tree, leafIndex, spend.control.K, spend.signatures, spend.preimage),
 };
 
-export type { TaprootLeaf };
+export type { NutrootLeaf };

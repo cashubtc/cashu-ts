@@ -30,7 +30,7 @@ import {
   type G2Point,
   type P2PKOptions,
 } from '../crypto';
-import { deriveReceiverKeyedSecret, type TaprootLeaf } from '../crypto/taproot';
+import { deriveReceiverKeyedSecret, type NutrootLeaf } from '../crypto/nutroot';
 import { Bytes, numberToHexPadded64, splitAmount } from '../utils';
 
 import { Amount, type AmountLike } from './Amount';
@@ -118,10 +118,10 @@ export class OutputData implements OutputDataLike {
    */
   secretKey?: Uint8Array;
   /**
-   * Spend info to travel with the resulting proof (spec 2.5).
+   * Spend info to travel with the resulting proof (NUT-10).
    *
    * @remarks
-   * Set for receiver-keyed taproot outputs, where the ephemeral `E` and the disclosed tree are the
+   * Set for receiver-keyed nutroot outputs, where the ephemeral `E` and the disclosed tree are the
    * only way the receiver can derive its key. Lost spend info means a proof nobody can spend.
    */
   spendInfo?: SpendInfo;
@@ -396,19 +396,19 @@ export class OutputData implements OutputDataLike {
   }
 
   /**
-   * Output data for a taproot (v3) secret chosen by the caller: a bare `K` or a tweaked `P`.
+   * Output data for a nutroot (v3) secret chosen by the caller: a bare `K` or a tweaked `P`.
    *
    * @remarks
-   * Pair with `buildTaprootSecret` for locked outputs; the caller keeps the tree (spend_info) and
+   * Pair with `buildNutrootSecret` for locked outputs; the caller keeps the tree (spend_info) and
    * any keys. The secret travels as its 66-char hex; hashing uses the raw 33 bytes.
    */
-  static createSingleTaprootData(
+  static createSingleNutrootData(
     secretHex: string,
     amount: AmountLike,
     keysetId: string,
   ): OutputData {
     if (!isBlsKeyset(keysetId)) {
-      throw new CTSError('Taproot outputs require a v3 keyset');
+      throw new CTSError('Nutroot outputs require a v3 keyset');
     }
     assertV3PointSecret(secretHex);
     const amountValue = Amount.from(amount);
@@ -422,7 +422,7 @@ export class OutputData implements OutputDataLike {
   }
 
   /**
-   * Output data for a receiver-keyed taproot send (spec 2.7): one output per denomination, each
+   * Output data for a receiver-keyed nutroot send (NUT-28): one output per denomination, each
    * derived to the payee's static key under its own fresh ephemeral.
    *
    * @remarks
@@ -434,21 +434,21 @@ export class OutputData implements OutputDataLike {
    * @throws If the keyset is not v3: point secrets are keyset-gated, and a pre-v3 mint would read
    *   this as a plain text secret.
    */
-  static createTaprootData(
-    options: { receiverPub: string; leaves?: TaprootLeaf[]; blindKeys?: string[] },
+  static createNutrootData(
+    options: { receiverPub: string; leaves?: NutrootLeaf[]; blindKeys?: string[] },
     amount: AmountLike,
     keyset: HasKeysetKeys,
     customSplit?: AmountLike[],
   ): OutputData[] {
     if (!isBlsKeyset(keyset.id)) {
-      throw new CTSError('Taproot outputs require a v3 keyset');
+      throw new CTSError('Nutroot outputs require a v3 keyset');
     }
     return splitAmount(amount, keyset.keys, customSplit).map((a) => {
       const { secret, E, tree, K, u } = deriveReceiverKeyedSecret(options.receiverPub, {
         leaves: options.leaves,
         blindKeys: options.blindKeys,
       });
-      const data = OutputData.createSingleTaprootData(secret, a, keyset.id);
+      const data = OutputData.createSingleNutrootData(secret, a, keyset.id);
       data.spendInfo = { ...(E && { E }), ...(tree && { tree, K }), ...(u && { u }) };
       return data;
     });

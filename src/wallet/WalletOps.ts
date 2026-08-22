@@ -1,5 +1,5 @@
 import { type P2PKOptions } from '../crypto';
-import { type TaprootLeaf } from '../crypto/taproot';
+import { type NutrootLeaf } from '../crypto/nutroot';
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { type OutputDataLike, type OutputDataFactory } from '../model/OutputData';
@@ -105,15 +105,15 @@ export class WalletOps {
     if (pr.nut10 && !lock) {
       throw new CTSError(`cannot honour the request's nut10 lock kind '${pr.nut10.kind}'`);
     }
-    // A request cannot ask for both: v3 outputs are taproot-only, and NUT-10 secrets belong to
+    // A request cannot ask for both: v3 outputs are nutroot-only, and NUT-10 secrets belong to
     // pre-v3 keysets. Honouring one would silently ignore the other.
-    const taproot = pr.toTaprootOptions();
-    if (taproot && lock) {
-      throw new CTSError('payment request carries both a nut10 lock and a taproot option');
+    const nutroot = pr.toNutrootOptions();
+    if (nutroot && lock) {
+      throw new CTSError('payment request carries both a nut10 lock and a nutroot option');
     }
     // Net of input fees (NUT-18): the payee must net the requested amount after swapping.
     const builder = new SendBuilder(wallet, base.add(fee), proofs).includeFees(true);
-    if (taproot) return builder.asTaproot(taproot);
+    if (nutroot) return builder.asNutroot(nutroot);
     return lock ? builder.asP2PK(lock) : builder;
   }
   receive(token: Token | string | ProofLike[]) {
@@ -217,21 +217,21 @@ export class SendBuilder {
   }
 
   /**
-   * Derive the sent proofs to a payee's static key on a v3 keyset (spec 2.7).
+   * Derive the sent proofs to a payee's static key on a v3 keyset (NUT-28).
    *
    * @remarks
    * Each output gets its own ephemeral, so two payments to one key are unlinkable, and each carries
    * the spend info the payee derives from. Optional `leaves` lock the outputs under a tree;
    * `blindKeys` are the leaf keys their owner tagged blind-me.
    * @param options Receiver key and optional tree, e.g. from
-   *   {@link PaymentRequest.toTaprootOptions}.
+   *   {@link PaymentRequest.toNutrootOptions}.
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
-  asTaproot(
-    options: { receiverPub: string; leaves?: TaprootLeaf[]; blindKeys?: string[] },
+  asNutroot(
+    options: { receiverPub: string; leaves?: NutrootLeaf[]; blindKeys?: string[] },
     denoms?: AmountLike[],
   ) {
-    this.sendOT = { type: 'taproot', options, denominations: denoms };
+    this.sendOT = { type: 'nutroot', options, denominations: denoms };
     return this;
   }
 

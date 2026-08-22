@@ -15,7 +15,7 @@ import {
   verifyDLEQProof_reblind,
   verifyUnblindedSignatureBls,
 } from '../crypto';
-import { verifyTaprootSpendInfo } from '../crypto/taproot';
+import { verifyNutrootSpendInfo } from '../crypto/nutroot';
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { PaymentRequest } from '../model/PaymentRequest';
@@ -282,7 +282,7 @@ function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
  *
  * Dispatch is on the keyset, not on the secret's shape. A pre-v3 secret is an arbitrary string and
  * may happen to look like a compressed point, and that proof's witness is a NUT-11 witness which
- * does travel. Which rules apply follows the keyset (spec 5), the same rule the transcript uses.
+ * does travel. Which rules apply follows the keyset (NUT-10), the same rule the transcript uses.
  */
 function isV3TransactionWitness(keysetId: string, secret: string): boolean {
   return isBlsKeyset(keysetId) && isV3PointSecret(secret);
@@ -992,12 +992,12 @@ export function verifyProofsForReceive(
 
   if (blsProofs.length === 0) return;
 
-  // Receive-time verification cascade (taproot secrets 2.5.1): spend info must reconstruct the
+  // Receive-time verification cascade (nutroot secrets 2.5.1): spend info must reconstruct the
   // secret (bare key, or complete disclosed tree). Anything partial or mismatched rejects.
   for (const p of blsProofs) {
     if (!p.spend_info) continue;
     try {
-      verifyTaprootSpendInfo(p.secret, p.spend_info);
+      verifyNutrootSpendInfo(p.secret, p.spend_info);
     } catch (e) {
       throw new CTSError(
         `${e instanceof Error ? e.message : 'Invalid spend info'}${offenderSuffix(p)}`,

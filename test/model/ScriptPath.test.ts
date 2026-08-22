@@ -4,9 +4,9 @@ import { describe, expect, test } from 'vitest';
 
 import {
   deriveReceiverKeyedSecret,
-  serializeTaprootLeaf,
-  type TaprootLeaf,
-} from '../../src/crypto/taproot';
+  serializeNutrootLeaf,
+  type NutrootLeaf,
+} from '../../src/crypto/nutroot';
 import { Amount } from '../../src/model/Amount';
 import { OutputData } from '../../src/model/OutputData';
 import { ScriptPath } from '../../src/model/ScriptPath';
@@ -23,7 +23,7 @@ const pub = (n: number) => bytesToHex(secp256k1.getPublicKey(sk(n), true));
 
 function fixture() {
   const alice = bytesToHex(sk(2));
-  const leaves: TaprootLeaf[] = [
+  const leaves: NutrootLeaf[] = [
     { type: 'threshold', n: 1, keys: [pub(3)] },
     { type: 'threshold', n: 1, keys: [pub(2)] },
   ];
@@ -64,7 +64,7 @@ describe('ScriptPath signing packages', () => {
       spends: [
         {
           ...pkg.spends[0],
-          leaf: bytesToHex(serializeTaprootLeaf({ ...leaves[1], keys: [pub(6)] })),
+          leaf: bytesToHex(serializeNutrootLeaf({ ...leaves[1], keys: [pub(6)] })),
         },
       ],
     };

@@ -1,4 +1,4 @@
-import type { TaprootLeaf } from '../../crypto/taproot';
+import type { NutrootLeaf } from '../../crypto/nutroot';
 import type { OutputDataLike } from '../../model/OutputData';
 import type { MeltQuoteBaseResponse, Proof } from '../../model/types';
 
@@ -44,14 +44,14 @@ export type SendResponse = {
  * One disclosed leaf of a v3 proof's tree, and whether this wallet can spend through it.
  *
  * @remarks
- * Taproot secrets 2.3 and 2.7. `keys` are the slot keys the wallet recovered for this leaf,
+ * Nutroot secrets 2.3 and 2.7. `keys` are the slot keys the wallet recovered for this leaf,
  * verbatim or blinded. `satisfiable` is this wallet's own assessment from what it holds; the mint
  * compares an `after` leaf against its own clock, so a leaf that unlocked seconds ago may still be
  * refused.
  */
 export type SpendOption = {
   leafIndex: number;
-  leaf: TaprootLeaf;
+  leaf: NutrootLeaf;
   keys: Array<{ keyIndex: number; secretKey: string; blinded: boolean }>;
   satisfiable: boolean;
   /**

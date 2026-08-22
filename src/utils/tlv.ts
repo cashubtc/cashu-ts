@@ -2,7 +2,7 @@ import { bech32 } from '@scure/base';
 
 import { CTSError } from '../model/Errors';
 import { PaymentRequestTransportType } from '../wallet/types/payment-requests';
-import type { PaymentRequestTransport, TaprootOption } from '../wallet/types/payment-requests';
+import type { PaymentRequestTransport, NutrootOption } from '../wallet/types/payment-requests';
 
 import { Bytes } from './Bytes';
 
@@ -29,7 +29,7 @@ export type DecodedTLVPaymentRequest = {
   description?: string;
   transports?: PaymentRequestTransport[];
   nut10?: Nut10SpendingCondition;
-  taproot?: TaprootOption;
+  nutroot?: NutrootOption;
 };
 
 /**
@@ -47,7 +47,7 @@ export type DecodedTLVPaymentRequest = {
  * | 0x08 | nut10            | sub-TLV   | NUT-10 spending conditions (not yet implemented)                              |
  * | 0x09 | mint_preferred   | u8        | Mint list strictness flag: 0=false, 1=true; if absent, defaults to 0 (strict) |
  * | 0x0a | supported_method | sub-TLV   | Supported payment method with an optional per-method fee (repeatable)         |
- * | 0x0b | taproot          | sub-TLV   | Taproot locking option (NUT-18 `taproot`)                                     |
+ * | 0x0b | nutroot          | sub-TLV   | Nutroot locking option (NUT-18 `nutroot`)                                     |
  */
 const TAG_ID = 0x01;
 const TAG_AMOUNT = 0x02;
@@ -59,7 +59,7 @@ const TAG_TRANSPORT = 0x07;
 const TAG_NUT10 = 0x08;
 const TAG_MINT_PREFERRED = 0x09;
 const TAG_SUPPORTED_METHODS = 0x0a;
-const TAG_TAPROOT = 0x0b;
+const TAG_NUTROOT = 0x0b;
 
 /**
  * Transport Sub-TLV Tag definitions.
@@ -105,7 +105,7 @@ const SUPPORTED_METHOD_TAG_METHOD = 0x01;
 const SUPPORTED_METHOD_TAG_FEE = 0x02;
 
 /**
- * Taproot Sub-TLV Tag definitions (NUT-26 tag 0x0b). Values are raw bytes, hex in JSON.
+ * Nutroot Sub-TLV Tag definitions (NUT-26 tag 0x0b). Values are raw bytes, hex in JSON.
  *
  * | Sub-Tag | Field        | Type  | Description                                           |
  * | ------- | ------------ | ----- | ----------------------------------------------------- |
@@ -113,9 +113,9 @@ const SUPPORTED_METHOD_TAG_FEE = 0x02;
  * | 0x02    | leaf         | bytes | Serialized condition leaf (repeatable, request order) |
  * | 0x03    | blind_key    | bytes | Leaf key tagged blind-me, 33 bytes (repeatable)       |
  */
-const TAPROOT_TAG_RECEIVER_KEY = 0x01;
-const TAPROOT_TAG_LEAF = 0x02;
-const TAPROOT_TAG_BLIND_KEY = 0x03;
+const NUTROOT_TAG_RECEIVER_KEY = 0x01;
+const NUTROOT_TAG_LEAF = 0x02;
+const NUTROOT_TAG_BLIND_KEY = 0x03;
 
 type TLVPart = {
   tag: number;
@@ -177,12 +177,12 @@ export function decodeTLV(data: Uint8Array): DecodedTLVPaymentRequest {
       case TAG_MINT_PREFERRED:
         result.mintsPreferred = parseU8(part.value) === 1;
         break;
-      case TAG_TAPROOT:
-        // Not repeatable: a second taproot option makes the requested lock ambiguous.
-        if (result.taproot) {
-          throw new CTSError('invalid pr: multiple taproot options');
+      case TAG_NUTROOT:
+        // Not repeatable: a second nutroot option makes the requested lock ambiguous.
+        if (result.nutroot) {
+          throw new CTSError('invalid pr: multiple nutroot options');
         }
-        result.taproot = parseTaprootOption(part.value);
+        result.nutroot = parseNutrootOption(part.value);
         break;
       case TAG_SUPPORTED_METHODS:
         if (!result.supportedMethods) {
@@ -430,12 +430,12 @@ function parseSupportedMethod(value: Uint8Array): { method: string; fee?: bigint
 }
 
 /**
- * Parses a taproot locking option (NUT-26 tag 0x0b) from its sub-TLV value.
+ * Parses a nutroot locking option (NUT-26 tag 0x0b) from its sub-TLV value.
  *
- * @param value - The taproot sub-TLV value bytes.
+ * @param value - The nutroot sub-TLV value bytes.
  * @returns Parsed option with hex-encoded keys and leaves, request order preserved.
  */
-function parseTaprootOption(value: Uint8Array): TaprootOption {
+function parseNutrootOption(value: Uint8Array): NutrootOption {
   const parts = decodeAllParts(value);
 
   let receiverKey: string | undefined;
@@ -444,22 +444,22 @@ function parseTaprootOption(value: Uint8Array): TaprootOption {
 
   for (const part of parts) {
     switch (part.tag) {
-      case TAPROOT_TAG_RECEIVER_KEY:
+      case NUTROOT_TAG_RECEIVER_KEY:
         // Singular: a duplicate makes the receiver ambiguous.
         if (receiverKey !== undefined) {
-          throw new CTSError('invalid pr: multiple taproot receiver keys');
+          throw new CTSError('invalid pr: multiple nutroot receiver keys');
         }
         if (part.value.length !== 33) {
-          throw new CTSError('taproot receiver_key must be 33 bytes');
+          throw new CTSError('nutroot receiver_key must be 33 bytes');
         }
         receiverKey = Bytes.toHex(part.value);
         break;
-      case TAPROOT_TAG_LEAF:
+      case NUTROOT_TAG_LEAF:
         leaves.push(Bytes.toHex(part.value));
         break;
-      case TAPROOT_TAG_BLIND_KEY:
+      case NUTROOT_TAG_BLIND_KEY:
         if (part.value.length !== 33) {
-          throw new CTSError('taproot blind_key must be 33 bytes');
+          throw new CTSError('nutroot blind_key must be 33 bytes');
         }
         blindKeys.push(Bytes.toHex(part.value));
         break;
@@ -467,7 +467,7 @@ function parseTaprootOption(value: Uint8Array): TaprootOption {
   }
 
   if (receiverKey === undefined) {
-    throw new CTSError('taproot option missing required receiver_key field');
+    throw new CTSError('nutroot option missing required receiver_key field');
   }
 
   return {
@@ -578,9 +578,9 @@ export function encodeTLV(request: DecodedTLVPaymentRequest): Uint8Array {
     }
   }
 
-  // Not repeatable: single taproot locking option (NUT-26 tag 0x0b)
-  if (request.taproot) {
-    parts.push(encodeTLVPart(TAG_TAPROOT, encodeTaprootOption(request.taproot)));
+  // Not repeatable: single nutroot locking option (NUT-26 tag 0x0b)
+  if (request.nutroot) {
+    parts.push(encodeTLVPart(TAG_NUTROOT, encodeNutrootOption(request.nutroot)));
   }
 
   // Concatenate all parts
@@ -766,26 +766,26 @@ function encodeSupportedMethod(method: { method: string; fee?: bigint }): Uint8A
 }
 
 /**
- * Encodes a taproot locking option into its TLV sub-structure (NUT-26 tag 0x0b).
+ * Encodes a nutroot locking option into its TLV sub-structure (NUT-26 tag 0x0b).
  *
- * @param taproot - The option with hex-encoded keys and leaves.
- * @returns Encoded taproot sub-TLV; leaves keep request order.
+ * @param nutroot - The option with hex-encoded keys and leaves.
+ * @returns Encoded nutroot sub-TLV; leaves keep request order.
  */
-function encodeTaprootOption(taproot: TaprootOption): Uint8Array {
-  const receiverKey = Bytes.fromHex(taproot.receiverKey);
+function encodeNutrootOption(nutroot: NutrootOption): Uint8Array {
+  const receiverKey = Bytes.fromHex(nutroot.receiverKey);
   if (receiverKey.length !== 33) {
-    throw new CTSError('taproot receiver_key must be 33 bytes');
+    throw new CTSError('nutroot receiver_key must be 33 bytes');
   }
-  const parts: Uint8Array[] = [encodeTLVPart(TAPROOT_TAG_RECEIVER_KEY, receiverKey)];
-  for (const leaf of taproot.leaves ?? []) {
-    parts.push(encodeTLVPart(TAPROOT_TAG_LEAF, Bytes.fromHex(leaf)));
+  const parts: Uint8Array[] = [encodeTLVPart(NUTROOT_TAG_RECEIVER_KEY, receiverKey)];
+  for (const leaf of nutroot.leaves ?? []) {
+    parts.push(encodeTLVPart(NUTROOT_TAG_LEAF, Bytes.fromHex(leaf)));
   }
-  for (const key of taproot.blindKeys ?? []) {
+  for (const key of nutroot.blindKeys ?? []) {
     const keyBytes = Bytes.fromHex(key);
     if (keyBytes.length !== 33) {
-      throw new CTSError('taproot blind_key must be 33 bytes');
+      throw new CTSError('nutroot blind_key must be 33 bytes');
     }
-    parts.push(encodeTLVPart(TAPROOT_TAG_BLIND_KEY, keyBytes));
+    parts.push(encodeTLVPart(NUTROOT_TAG_BLIND_KEY, keyBytes));
   }
 
   // Concatenate all sub-parts

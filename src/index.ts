@@ -98,8 +98,8 @@ export type {
   RawTransport,
   NUT10Option,
   RawNUT10Option,
-  TaprootOption,
-  RawTaprootOption,
+  NutrootOption,
+  RawNutrootOption,
 } from './wallet/types';
 
 // Logging & errors
@@ -149,11 +149,11 @@ export {
   type ScriptPathSpendRequest,
 } from './model/ScriptPath';
 export {
-  parseTaprootLeaf,
-  parseTaprootLeafHex,
-  serializeTaprootLeaf,
-  serializeTaprootLeafHex,
-  TAPROOT_LEAF_TYPE,
-  TAPROOT_NUMS_KEY,
-  type TaprootLeaf,
-} from './crypto/taproot';
+  parseNutrootLeaf,
+  parseNutrootLeafHex,
+  serializeNutrootLeaf,
+  serializeNutrootLeafHex,
+  NUTROOT_LEAF_TYPE,
+  NUTROOT_NUMS_KEY,
+  type NutrootLeaf,
+} from './crypto/nutroot';

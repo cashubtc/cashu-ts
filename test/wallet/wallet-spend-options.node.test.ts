@@ -5,11 +5,11 @@ import { test, describe, expect } from 'vitest';
 import { Amount, Wallet } from '../../src';
 import { deriveSecretAndBlindingFactor } from '../../src/crypto/NUT13';
 import {
-  buildTaprootSecret,
+  buildNutrootSecret,
   deriveReceiverKeyedSecret,
-  serializeTaprootLeaf,
-  type TaprootLeaf,
-} from '../../src/crypto/taproot';
+  serializeNutrootLeaf,
+  type NutrootLeaf,
+} from '../../src/crypto/nutroot';
 import type { Proof, SpendInfo } from '../../src/model/types';
 
 import { mint, useTestServer } from './_setup';
@@ -90,14 +90,14 @@ describe('wallet.spendOptions: the key path', () => {
 });
 
 describe('wallet.spendOptions: the script path', () => {
-  const threshold = (keys: string[], n = 1): TaprootLeaf => ({ type: 'threshold', n, keys });
-  const after = (time: number, keys: string[]): TaprootLeaf => ({
+  const threshold = (keys: string[], n = 1): NutrootLeaf => ({ type: 'threshold', n, keys });
+  const after = (time: number, keys: string[]): NutrootLeaf => ({
     type: 'after',
     n: 1,
     keys,
     time,
   });
-  const hashlock = (keys: string[]): TaprootLeaf => ({
+  const hashlock = (keys: string[]): NutrootLeaf => ({
     type: 'hashlock',
     n: 1,
     keys,
@@ -107,8 +107,8 @@ describe('wallet.spendOptions: the script path', () => {
   /**
    * A locked proof over `leaves`, disclosed with its internal key.
    */
-  const locked = (leaves: TaprootLeaf[], internalSeed = BOB) => {
-    const { secret, tree } = buildTaprootSecret(pub(internalSeed), leaves);
+  const locked = (leaves: NutrootLeaf[], internalSeed = BOB) => {
+    const { secret, tree } = buildNutrootSecret(pub(internalSeed), leaves);
     return v3Proof(secret, { K: pub(internalSeed), tree });
   };
 
@@ -198,7 +198,7 @@ describe('wallet.spendOptions: the script path', () => {
   test('an unparseable leaf throws rather than being reported as spendable', async () => {
     // Leaf type 0x7f is not in the registry: the receive cascade fails closed on it, so this must
     // not quietly report a tree it cannot reason about.
-    const good = serializeTaprootLeaf(threshold([pub(ALICE)]));
+    const good = serializeNutrootLeaf(threshold([pub(ALICE)]));
     const unknown = new Uint8Array(good);
     unknown[1] = 0x7f;
     const proof = v3Proof(pub(BOB), { K: pub(BOB), tree: [bytesToHex(unknown)] });

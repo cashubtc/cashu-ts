@@ -12,11 +12,11 @@ import {
 } from '../../src/crypto';
 import { verifyUnblindedSignature } from '../../src/crypto/NUT01';
 import {
-  parseTaprootLeaf,
+  parseNutrootLeaf,
   recoverLeafKeySecretKeys,
   recoverReceiverKeyedSecretKey,
-  type TaprootLeaf,
-} from '../../src/crypto/taproot';
+  type NutrootLeaf,
+} from '../../src/crypto/nutroot';
 import { Amount } from '../../src/model/Amount';
 import { CTSError } from '../../src/model/Errors';
 import { OutputData } from '../../src/model/OutputData';
@@ -72,7 +72,7 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
   // v3 secrets are 33-byte compressed points: the key behind the point signs the
   // spend witness, so outputs are built from a real keypair.
   const v3Output = (amount: number): OutputData =>
-    OutputData.createSingleTaprootData(
+    OutputData.createSingleNutrootData(
       bytesToHex(secp256k1.getPublicKey(randomBytes(32), true)),
       amount,
       keyset.id,
@@ -88,12 +88,12 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
     expect(out.blindedMessage.id).toBe(keyset.id);
   });
 
-  test('taproot output construction rejects the wrong keyset and off-curve secrets', () => {
+  test('nutroot output construction rejects the wrong keyset and off-curve secrets', () => {
     const valid = bytesToHex(secp256k1.getPublicKey(randomBytes(32), true));
-    expect(() => OutputData.createSingleTaprootData(valid, 1, `01${'11'.repeat(32)}`)).toThrow(
+    expect(() => OutputData.createSingleNutrootData(valid, 1, `01${'11'.repeat(32)}`)).toThrow(
       /v3 keyset/,
     );
-    expect(() => OutputData.createSingleTaprootData(`02${'ff'.repeat(32)}`, 1, keyset.id)).toThrow(
+    expect(() => OutputData.createSingleNutrootData(`02${'ff'.repeat(32)}`, 1, keyset.id)).toThrow(
       /point secrets/,
     );
   });
@@ -345,13 +345,13 @@ describe('OutputData v3 — Nutshell PR #999 deterministic test vector', () => {
   });
 });
 
-describe('OutputData.createTaprootData (receiver-keyed, spec 2.7)', () => {
+describe('OutputData.createNutrootData (receiver-keyed, NUT-28)', () => {
   const { keyset, privKeys } = makeV3Keyset();
   const bobPriv = bytesToHex(randomBytes(32));
   const bobPub = bytesToHex(secp256k1.getPublicKey(hexToBytes(bobPriv), true));
 
   test('one fresh ephemeral per output, and the payee recovers each key', () => {
-    const outputs = OutputData.createTaprootData({ receiverPub: bobPub }, 7, keyset);
+    const outputs = OutputData.createNutrootData({ receiverPub: bobPub }, 7, keyset);
     expect(outputs.map((o) => o.blindedMessage.amount.toString()).sort()).toEqual(['1', '2', '4']);
     // Fresh e per output (2.4/2.7): distinct ephemerals, so distinct secrets.
     const ephemerals = outputs.map((o) => o.spendInfo?.E);
@@ -373,8 +373,8 @@ describe('OutputData.createTaprootData (receiver-keyed, spec 2.7)', () => {
   test('a requested tree travels with each output, with blind-me keys blinded', () => {
     const alicePriv = bytesToHex(randomBytes(32));
     const alicePub = bytesToHex(secp256k1.getPublicKey(hexToBytes(alicePriv), true));
-    const leaves: TaprootLeaf[] = [{ type: 'after', n: 1, keys: [alicePub], time: 4102444800 }];
-    const [out] = OutputData.createTaprootData(
+    const leaves: NutrootLeaf[] = [{ type: 'after', n: 1, keys: [alicePub], time: 4102444800 }];
+    const [out] = OutputData.createNutrootData(
       { receiverPub: bobPub, leaves, blindKeys: [alicePub] },
       1,
       keyset,
@@ -383,7 +383,7 @@ describe('OutputData.createTaprootData (receiver-keyed, spec 2.7)', () => {
     const tree = proof.spend_info!.tree!;
     expect(tree).toHaveLength(1);
     // The leaf key is not Alice's key verbatim, but Alice still finds it at slot 1.
-    expect(parseTaprootLeaf(hexToBytes(tree[0])).keys[0]).not.toBe(alicePub);
+    expect(parseNutrootLeaf(hexToBytes(tree[0])).keys[0]).not.toBe(alicePub);
     expect(recoverLeafKeySecretKeys(tree, proof.spend_info!.E, [alicePriv])).toEqual([
       { leafIndex: 0, keyIndex: 0, slot: 1, secretKey: expect.any(String), blinded: true },
     ]);
@@ -392,9 +392,9 @@ describe('OutputData.createTaprootData (receiver-keyed, spec 2.7)', () => {
     expect(hit).toBeDefined();
   });
 
-  test('taproot outputs are refused on a pre-v3 keyset', () => {
+  test('nutroot outputs are refused on a pre-v3 keyset', () => {
     const secpKeyset = { id: '00ad268c4d1f5826', keys: { '1': '02'.padEnd(66, 'a') } };
-    expect(() => OutputData.createTaprootData({ receiverPub: bobPub }, 1, secpKeyset)).toThrow(
+    expect(() => OutputData.createNutrootData({ receiverPub: bobPub }, 1, secpKeyset)).toThrow(
       /v3 keyset/,
     );
   });

@@ -14,27 +14,26 @@ import {
 } from './NUT28';
 
 /**
- * Taproot secrets (v3 keysets) crypto core: tagged hashes, canonical TLV, leaf serialization,
+ * Nutroot secrets (v3 keysets) crypto core: tagged hashes, canonical TLV, leaf serialization,
  * merkle tree, and tweak math.
  *
  * @remarks
- * BIP341's commitment machinery with Cashu tags and compressed (not x-only) keys. Spec:
- * taproot-secrets.md sections 2.1, 2.3, 2.6.
+ * BIP341's commitment machinery with Cashu tags and compressed (not x-only) keys. Spec: NUT-10.
  */
 
-export const TAPROOT_LEAF_TAG = 'Cashu_NutrootLeaf';
-export const TAPROOT_BRANCH_TAG = 'Cashu_NutrootBranch';
-export const TAPROOT_TWEAK_TAG = 'Cashu_NutrootTweak';
+export const NUTROOT_LEAF_TAG = 'Cashu_NutrootLeaf';
+export const NUTROOT_BRANCH_TAG = 'Cashu_NutrootBranch';
+export const NUTROOT_TWEAK_TAG = 'Cashu_NutrootTweak';
 
 /**
  * Current leaf version for the declarative leaf family.
  */
-export const TAPROOT_LEAF_VERSION = 0x00;
+export const NUTROOT_LEAF_VERSION = 0x00;
 
 /**
  * Leaf type registry (version 0x00). A number means one thing forever.
  */
-export const TAPROOT_LEAF_TYPE = {
+export const NUTROOT_LEAF_TYPE = {
   threshold: 0x01,
   after: 0x02,
   hashlock: 0x03,
@@ -49,10 +48,10 @@ const FIELD_TIME = 0x06;
 const FIELD_HASH = 0x08;
 
 /**
- * Normative caps from spec 2.6. The leaf body excludes the leading version byte.
+ * Normative caps from NUT-10. The leaf body excludes the leading version byte.
  */
-export const TAPROOT_MAX_LEAF_BYTES = 1024;
-export const TAPROOT_MAX_TREE_DEPTH = 8;
+export const NUTROOT_MAX_LEAF_BYTES = 1024;
+export const NUTROOT_MAX_TREE_DEPTH = 8;
 
 /**
  * Largest unix time an `after` leaf may name (2^53 - 1).
@@ -62,12 +61,12 @@ export const TAPROOT_MAX_TREE_DEPTH = 8;
  * every implementation reads the same leaf: without it a leaf is valid at a mint and unparsable in
  * a wallet, which strands the proof with its holder.
  */
-export const TAPROOT_MAX_LEAF_TIME = Number.MAX_SAFE_INTEGER;
+export const NUTROOT_MAX_LEAF_TIME = Number.MAX_SAFE_INTEGER;
 
 /**
- * Enumerated blinding slots per secret (spec 2.7): exactly one index byte.
+ * Enumerated blinding slots per secret (NUT-28): exactly one index byte.
  */
-export const TAPROOT_MAX_SLOTS = 256;
+export const NUTROOT_MAX_SLOTS = 256;
 
 /**
  * A parsed declarative leaf (version 0x00).
@@ -75,8 +74,8 @@ export const TAPROOT_MAX_SLOTS = 256;
  * @remarks
  * `keys` are 33-byte compressed SEC1 hex. `time` is unix seconds. `hash` is 32 bytes hex.
  */
-export type TaprootLeaf = {
-  type: keyof typeof TAPROOT_LEAF_TYPE;
+export type NutrootLeaf = {
+  type: keyof typeof NUTROOT_LEAF_TYPE;
   n: number;
   keys: string[];
   time?: number;
@@ -168,8 +167,8 @@ export function readMinimalBE(bytes: Uint8Array): bigint {
  * @remarks
  * The returned bytes are the leaf everywhere: spend info, witness, and hash preimage.
  */
-export function serializeTaprootLeaf(leaf: TaprootLeaf): Uint8Array {
-  const typeByte = TAPROOT_LEAF_TYPE[leaf.type];
+export function serializeNutrootLeaf(leaf: NutrootLeaf): Uint8Array {
+  const typeByte = NUTROOT_LEAF_TYPE[leaf.type];
   if (typeByte === undefined) {
     throw new CTSError(`Unknown leaf type: ${leaf.type}`);
   }
@@ -201,7 +200,7 @@ export function serializeTaprootLeaf(leaf: TaprootLeaf): Uint8Array {
     if (!Number.isInteger(leaf.time) || (leaf.time as number) < 0) {
       throw new CTSError('after leaf requires a unix time');
     }
-    if ((leaf.time as number) > TAPROOT_MAX_LEAF_TIME) {
+    if ((leaf.time as number) > NUTROOT_MAX_LEAF_TIME) {
       throw new CTSError('time out of range');
     }
     fields.push(tlvRecord(FIELD_TIME, minimalBE(BigInt(leaf.time as number))));
@@ -217,9 +216,9 @@ export function serializeTaprootLeaf(leaf: TaprootLeaf): Uint8Array {
   } else if (leaf.hash !== undefined) {
     throw new CTSError(`${leaf.type} leaf must not carry a hash field`);
   }
-  const out = Bytes.concat(new Uint8Array([TAPROOT_LEAF_VERSION, typeByte]), ...fields);
-  if (out.length - 1 > TAPROOT_MAX_LEAF_BYTES) {
-    throw new CTSError(`Leaf body exceeds ${TAPROOT_MAX_LEAF_BYTES} bytes`);
+  const out = Bytes.concat(new Uint8Array([NUTROOT_LEAF_VERSION, typeByte]), ...fields);
+  if (out.length - 1 > NUTROOT_MAX_LEAF_BYTES) {
+    throw new CTSError(`Leaf body exceeds ${NUTROOT_MAX_LEAF_BYTES} bytes`);
   }
   return out;
 }
@@ -231,19 +230,19 @@ export function serializeTaprootLeaf(leaf: TaprootLeaf): Uint8Array {
  * Fails closed: unknown leaf version, type or field, missing required fields, and non-canonical
  * streams all throw. Odd field types are reserved, so unknown rejects regardless of parity.
  */
-export function parseTaprootLeaf(bytes: Uint8Array): TaprootLeaf {
+export function parseNutrootLeaf(bytes: Uint8Array): NutrootLeaf {
   if (bytes.length < 2) {
     throw new CTSError('Leaf too short');
   }
-  if (bytes.length - 1 > TAPROOT_MAX_LEAF_BYTES) {
-    throw new CTSError(`Leaf body exceeds ${TAPROOT_MAX_LEAF_BYTES} bytes`);
+  if (bytes.length - 1 > NUTROOT_MAX_LEAF_BYTES) {
+    throw new CTSError(`Leaf body exceeds ${NUTROOT_MAX_LEAF_BYTES} bytes`);
   }
-  if (bytes[0] !== TAPROOT_LEAF_VERSION) {
+  if (bytes[0] !== NUTROOT_LEAF_VERSION) {
     throw new CTSError(`Unknown leaf version: ${bytes[0]}`);
   }
   const typeByte = bytes[1];
-  const typeName = (Object.keys(TAPROOT_LEAF_TYPE) as Array<keyof typeof TAPROOT_LEAF_TYPE>).find(
-    (k) => TAPROOT_LEAF_TYPE[k] === typeByte,
+  const typeName = (Object.keys(NUTROOT_LEAF_TYPE) as Array<keyof typeof NUTROOT_LEAF_TYPE>).find(
+    (k) => NUTROOT_LEAF_TYPE[k] === typeByte,
   );
   if (!typeName) {
     throw new CTSError(`Unknown leaf type: ${typeByte}`);
@@ -285,7 +284,7 @@ export function parseTaprootLeaf(bytes: Uint8Array): TaprootLeaf {
       }
       case FIELD_TIME: {
         const t = readMinimalBE(rec.value);
-        if (t > BigInt(TAPROOT_MAX_LEAF_TIME)) {
+        if (t > BigInt(NUTROOT_MAX_LEAF_TIME)) {
           throw new CTSError('time out of range');
         }
         time = Number(t);
@@ -320,7 +319,7 @@ export function parseTaprootLeaf(bytes: Uint8Array): TaprootLeaf {
   if (typeName !== 'hashlock' && hash !== undefined) {
     throw new CTSError(`${typeName} leaf must not carry a hash field`);
   }
-  const leaf: TaprootLeaf = { type: typeName, n, keys };
+  const leaf: NutrootLeaf = { type: typeName, n, keys };
   if (time !== undefined) leaf.time = time;
   if (hash !== undefined) leaf.hash = hash;
   return leaf;
@@ -329,30 +328,30 @@ export function parseTaprootLeaf(bytes: Uint8Array): TaprootLeaf {
 /**
  * Parse a hex-serialized leaf to its declarative form.
  */
-export function parseTaprootLeafHex(leafHex: string): TaprootLeaf {
-  return parseTaprootLeaf(Bytes.fromHex(leafHex));
+export function parseNutrootLeafHex(leafHex: string): NutrootLeaf {
+  return parseNutrootLeaf(Bytes.fromHex(leafHex));
 }
 
 /**
  * Serialize a leaf to its hex wire form, the shape spend info and payment requests carry.
  */
-export function serializeTaprootLeafHex(leaf: TaprootLeaf): string {
-  return Bytes.toHex(serializeTaprootLeaf(leaf));
+export function serializeNutrootLeafHex(leaf: NutrootLeaf): string {
+  return Bytes.toHex(serializeNutrootLeaf(leaf));
 }
 
 /**
  * Hash a serialized leaf: `tagged_hash("Cashu_NutrootLeaf", leaf)`.
  */
-export function taprootLeafHash(serializedLeaf: Uint8Array): Uint8Array {
-  return taggedHash(TAPROOT_LEAF_TAG, serializedLeaf);
+export function nutrootLeafHash(serializedLeaf: Uint8Array): Uint8Array {
+  return taggedHash(NUTROOT_LEAF_TAG, serializedLeaf);
 }
 
 /**
  * Hash a branch of two child hashes, sorted pair, no left/right flags.
  */
-export function taprootBranchHash(a: Uint8Array, b: Uint8Array): Uint8Array {
+export function nutrootBranchHash(a: Uint8Array, b: Uint8Array): Uint8Array {
   const sorted = Bytes.compare(a, b) <= 0 ? [a, b] : [b, a];
-  return taggedHash(TAPROOT_BRANCH_TAG, sorted[0], sorted[1]);
+  return taggedHash(NUTROOT_BRANCH_TAG, sorted[0], sorted[1]);
 }
 
 /**
@@ -372,18 +371,18 @@ export function taprootBranchHash(a: Uint8Array, b: Uint8Array): Uint8Array {
  *
  * The slot cap already makes such a tree unbuildable; this states the bound the spec names.
  */
-export function taprootMerkleRoot(leafHashes: Uint8Array[]): Uint8Array {
+export function nutrootMerkleRoot(leafHashes: Uint8Array[]): Uint8Array {
   if (leafHashes.length === 0) {
     throw new CTSError('Merkle root of zero leaves');
   }
-  if (leafHashes.length > 2 ** TAPROOT_MAX_TREE_DEPTH) {
-    throw new CTSError(`Tree exceeds depth ${TAPROOT_MAX_TREE_DEPTH}`);
+  if (leafHashes.length > 2 ** NUTROOT_MAX_TREE_DEPTH) {
+    throw new CTSError(`Tree exceeds depth ${NUTROOT_MAX_TREE_DEPTH}`);
   }
   let level = [...leafHashes].sort((a, b) => Bytes.compare(a, b));
   while (level.length > 1) {
     const next: Uint8Array[] = [];
     for (let i = 0; i + 1 < level.length; i += 2) {
-      next.push(taprootBranchHash(level[i], level[i + 1]));
+      next.push(nutrootBranchHash(level[i], level[i + 1]));
     }
     if (level.length % 2 === 1) {
       next.push(level[level.length - 1]);
@@ -397,7 +396,7 @@ export function taprootMerkleRoot(leafHashes: Uint8Array[]): Uint8Array {
  * Merkle path for the leaf at `index` (an index into the transmitted list): sibling hashes on the
  * way up the sorted fold.
  */
-export function taprootMerklePath(leafHashes: Uint8Array[], index: number): Uint8Array[] {
+export function nutrootMerklePath(leafHashes: Uint8Array[], index: number): Uint8Array[] {
   if (!Number.isInteger(index) || index < 0 || index >= leafHashes.length) {
     throw new CTSError(`Leaf index out of range: ${index}`);
   }
@@ -408,7 +407,7 @@ export function taprootMerklePath(leafHashes: Uint8Array[], index: number): Uint
   while (level.length > 1) {
     const next: Uint8Array[] = [];
     for (let i = 0; i + 1 < level.length; i += 2) {
-      next.push(taprootBranchHash(level[i], level[i + 1]));
+      next.push(nutrootBranchHash(level[i], level[i + 1]));
     }
     const odd = level.length % 2 === 1;
     if (odd) {
@@ -429,37 +428,37 @@ export function taprootMerklePath(leafHashes: Uint8Array[], index: number): Uint
 /**
  * Recompute a root from a leaf hash and its merkle path.
  */
-export function taprootRootFromPath(leafHash: Uint8Array, path: Uint8Array[]): Uint8Array {
-  if (path.length > TAPROOT_MAX_TREE_DEPTH) {
-    throw new CTSError(`Merkle path exceeds depth ${TAPROOT_MAX_TREE_DEPTH}`);
+export function nutrootRootFromPath(leafHash: Uint8Array, path: Uint8Array[]): Uint8Array {
+  if (path.length > NUTROOT_MAX_TREE_DEPTH) {
+    throw new CTSError(`Merkle path exceeds depth ${NUTROOT_MAX_TREE_DEPTH}`);
   }
   if (leafHash.length !== 32 || path.some((sibling) => sibling.length !== 32)) {
     throw new CTSError('Merkle hashes must be 32 bytes');
   }
-  return path.reduce((acc, sibling) => taprootBranchHash(acc, sibling), leafHash);
+  return path.reduce((acc, sibling) => nutrootBranchHash(acc, sibling), leafHash);
 }
 
 /**
- * Taproot tweak scalar: `tagged_hash("Cashu_NutrootTweak", K || root) mod n`.
+ * Nutroot tweak scalar: `tagged_hash("Cashu_NutrootTweak", K || root) mod n`.
  *
  * @remarks
- * Omit `root` for the empty tweak (aggregated keys, spec 3.8): `tagged_hash(tag, K)`.
+ * Omit `root` for the empty tweak (aggregated keys, NUT-10): `tagged_hash(tag, K)`.
  */
-export function taprootTweak(internalKey: Uint8Array, merkleRoot?: Uint8Array): bigint {
+export function nutrootTweak(internalKey: Uint8Array, merkleRoot?: Uint8Array): bigint {
   if (internalKey.length !== 33) {
     throw new CTSError('Internal key must be 33 bytes');
   }
   const digest = merkleRoot
-    ? taggedHash(TAPROOT_TWEAK_TAG, internalKey, merkleRoot)
-    : taggedHash(TAPROOT_TWEAK_TAG, internalKey);
+    ? taggedHash(NUTROOT_TWEAK_TAG, internalKey, merkleRoot)
+    : taggedHash(NUTROOT_TWEAK_TAG, internalKey);
   return Bytes.toBigInt(digest) % secp256k1.Point.Fn.ORDER;
 }
 
 /**
  * The v3 secret `P = K + t*G` as compressed SEC1 bytes.
  */
-export function taprootTweakPubkey(internalKey: Uint8Array, merkleRoot?: Uint8Array): Uint8Array {
-  const t = taprootTweak(internalKey, merkleRoot);
+export function nutrootTweakPubkey(internalKey: Uint8Array, merkleRoot?: Uint8Array): Uint8Array {
+  const t = nutrootTweak(internalKey, merkleRoot);
   const P = pointFromBytes(internalKey).add(secp256k1.Point.BASE.multiplyUnsafe(t));
   if (P.is0()) {
     throw new CTSError('Tweaked key at infinity');
@@ -470,7 +469,7 @@ export function taprootTweakPubkey(internalKey: Uint8Array, merkleRoot?: Uint8Ar
 /**
  * Tweaked private key `p' = (k + t) mod n` for the key path.
  */
-export function taprootTweakSeckey(seckey: Uint8Array, merkleRoot?: Uint8Array): Uint8Array {
+export function nutrootTweakSeckey(seckey: Uint8Array, merkleRoot?: Uint8Array): Uint8Array {
   if (seckey.length !== 32) {
     throw new CTSError('Secret key must be 32 bytes');
   }
@@ -480,7 +479,7 @@ export function taprootTweakSeckey(seckey: Uint8Array, merkleRoot?: Uint8Array):
     throw new CTSError('Invalid secret key');
   }
   const K = secp256k1.Point.BASE.multiply(k).toBytes(true);
-  const t = taprootTweak(K, merkleRoot);
+  const t = nutrootTweak(K, merkleRoot);
   const p = (k + t) % order;
   if (p === 0n) {
     throw new CTSError('Tweaked secret key is zero');
@@ -494,7 +493,7 @@ export function taprootTweakSeckey(seckey: Uint8Array, merkleRoot?: Uint8Array):
  * @remarks
  * Commitment only; evaluating the revealed leaf's conditions is the caller's job.
  */
-export function verifyTaprootCommitment(
+export function verifyNutrootCommitment(
   secret: Uint8Array,
   internalKey: Uint8Array,
   serializedLeaf: Uint8Array,
@@ -503,8 +502,8 @@ export function verifyTaprootCommitment(
   if (secret.length !== 33) {
     throw new CTSError('Secret must be 33 bytes');
   }
-  const root = taprootRootFromPath(taprootLeafHash(serializedLeaf), merklePath);
-  return Bytes.equals(taprootTweakPubkey(internalKey, root), secret);
+  const root = nutrootRootFromPath(nutrootLeafHash(serializedLeaf), merklePath);
+  return Bytes.equals(nutrootTweakPubkey(internalKey, root), secret);
 }
 
 /**
@@ -513,13 +512,13 @@ export function verifyTaprootCommitment(
  * @remarks
  * Provably no known discrete log: `lift_x` of SHA-256 over G's **65-byte uncompressed** SEC1
  * encoding. Never used as an internal key verbatim, since that repeats across proofs; it is the
- * base of the per-proof offset `K = H + u*G` that `buildTaprootSecret` builds.
+ * base of the per-proof offset `K = H + u*G` that `buildNutrootSecret` builds.
  */
-export const TAPROOT_NUMS_KEY =
+export const NUTROOT_NUMS_KEY =
   '0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0';
 
 /**
- * Offset the NUMS base by `u`: `K = H + u*G` (spec 2.3.5).
+ * Offset the NUMS base by `u`: `K = H + u*G` (NUT-10).
  *
  * @remarks
  * `u` is not the blinding factor `r`: it travels in spend info and is public.
@@ -533,14 +532,14 @@ export function numsOffsetKey(u: Uint8Array): Uint8Array {
   if (x === 0n || x >= secp256k1.Point.Fn.ORDER) {
     throw new CTSError('NUMS offset is not a valid scalar');
   }
-  return pointFromHex(TAPROOT_NUMS_KEY).add(secp256k1.Point.BASE.multiply(x)).toBytes(true);
+  return pointFromHex(NUTROOT_NUMS_KEY).add(secp256k1.Point.BASE.multiply(x)).toBytes(true);
 }
 
 /**
  * Build a locked v3 secret: `P = K + tagged_hash(K || root)*G` over the leaves' tree.
  *
  * @remarks
- * Passing {@link TAPROOT_NUMS_KEY} builds a script-only secret, offsetting it by a fresh `u` (spec
+ * Passing {@link NUTROOT_NUMS_KEY} builds a script-only secret, offsetting it by a fresh `u` (spec
  * 2.3.5) so the internal key is unique per proof while nobody holds its scalar. `u` is returned for
  * disclosure in spend info; there is no way to ask for the base verbatim, because a repeated NUMS
  * key repeats the secret whenever the tree does.
@@ -549,24 +548,24 @@ export function numsOffsetKey(u: Uint8Array): Uint8Array {
  * @returns The 33-byte secret hex, the serialized tree (spend_info order), the internal key `K`,
  *   and `u` when `K` is a NUMS offset.
  */
-export function buildTaprootSecret(
+export function buildNutrootSecret(
   internalKeyHex: string,
-  leaves: TaprootLeaf[],
+  leaves: NutrootLeaf[],
   opts?: { u?: Uint8Array },
 ): { secret: string; tree: string[]; K: string; u?: string } {
   if (leaves.length === 0) {
     throw new CTSError('A locked secret requires at least one leaf');
   }
-  const isNums = internalKeyHex.toLowerCase() === TAPROOT_NUMS_KEY;
+  const isNums = internalKeyHex.toLowerCase() === NUTROOT_NUMS_KEY;
   if (opts?.u !== undefined && !isNums) {
     throw new CTSError('A NUMS offset applies only to the NUMS base key');
   }
   const u = isNums ? (opts?.u ?? secp256k1.utils.randomSecretKey()) : undefined;
   const internalKey = u ? numsOffsetKey(u) : Bytes.fromHex(internalKeyHex);
   enumerateLeafKeySlots(leaves);
-  const tree = leaves.map((leaf) => serializeTaprootLeaf(leaf));
-  const root = taprootMerkleRoot(tree.map(taprootLeafHash));
-  const secret = taprootTweakPubkey(internalKey, root);
+  const tree = leaves.map((leaf) => serializeNutrootLeaf(leaf));
+  const root = nutrootMerkleRoot(tree.map(nutrootLeafHash));
+  const secret = nutrootTweakPubkey(internalKey, root);
   return {
     secret: Bytes.toHex(secret),
     tree: tree.map((leaf) => Bytes.toHex(leaf)),
@@ -579,8 +578,8 @@ export function buildTaprootSecret(
  * Build a script-path witness JSON for the leaf at `leafIndex` of the disclosed tree.
  *
  * @remarks
- * Shape (spec 2.3.2): `{leaf, control: {K, path}, signatures, preimage?}`. Signatures are BIP-340
- * over the transaction digest by the leaf's keys; `preimage` satisfies a hashlock leaf.
+ * Shape (NUT-10): `{leaf, control: {K, path}, signatures, preimage?}`. Signatures are BIP-340 over
+ * the transaction digest by the leaf's keys; `preimage` satisfies a hashlock leaf.
  */
 export function buildScriptPathWitness(
   tree: string[],
@@ -589,8 +588,8 @@ export function buildScriptPathWitness(
   signatures: string[],
   preimage?: string,
 ): string {
-  const leafHashes = tree.map((leaf) => taprootLeafHash(Bytes.fromHex(leaf)));
-  const path = taprootMerklePath(leafHashes, leafIndex);
+  const leafHashes = tree.map((leaf) => nutrootLeafHash(Bytes.fromHex(leaf)));
+  const path = nutrootMerklePath(leafHashes, leafIndex);
   return JSON.stringify({
     leaf: tree[leafIndex],
     control: { K: internalKeyHex, path: path.map((h) => Bytes.toHex(h)) },
@@ -606,7 +605,7 @@ export function buildScriptPathWitness(
  * Counts distinct keys, not signatures: one signer twice satisfies one threshold slot.
  */
 export function countLeafSigners(
-  leaf: TaprootLeaf,
+  leaf: NutrootLeaf,
   digest: Uint8Array,
   signatures: string[],
 ): number {
@@ -620,7 +619,7 @@ export function countLeafSigners(
  * The result never exceeds the leaf's key count, the bound NUT-10 puts on script-path witnesses.
  */
 export function selectLeafSignatures(
-  leaf: TaprootLeaf,
+  leaf: NutrootLeaf,
   digest: Uint8Array,
   signatures: string[],
 ): string[] {
@@ -639,8 +638,8 @@ export function selectLeafSignatures(
 }
 
 /**
- * Receive-time reconstruction check (spec 2.5.1 check 1) for one proof's spend info. Spendability
- * (check 2) is the caller's: trial-match, seed recovery, or cosigning.
+ * Receive-time reconstruction check (NUT-10) for one proof's spend info. Spendability (check 2) is
+ * the caller's: trial-match, seed recovery, or cosigning.
  *
  * @remarks
  * Returns 'bare' (k key-path spends the secret directly) or 'tweaked' (the disclosed tree plus
@@ -648,7 +647,7 @@ export function selectLeafSignatures(
  * mismatch, on tree-only spend info without a key source, and on leaves the wallet cannot parse
  * (unknown version/type or unknown constraint fields fail closed).
  */
-export function verifyTaprootSpendInfo(
+export function verifyNutrootSpendInfo(
   secretHex: string,
   spendInfo: { k?: string; E?: string; K?: string; tree?: string[]; u?: string },
 ): 'bare' | 'tweaked' | 'receiver-keyed' | 'aggregated' {
@@ -658,13 +657,13 @@ export function verifyTaprootSpendInfo(
   } catch {
     throw new CTSError('Secret is not a 33-byte point');
   }
-  // `k` and `E` are mutually exclusive (spec 2.5.2): `k` says "here is the key", `E` says "derive
+  // `k` and `E` are mutually exclusive (NUT-10): `k` says "here is the key", `E` says "derive
   // your key". Carrying both is malformed, and it is the shape a re-gifted receiver-keyed scalar
   // would take, which 2.5.2 warns hands the receiver's static key back to the original sender.
   if (spendInfo.k !== undefined && spendInfo.E !== undefined) {
     throw new CTSError('Spend info carries both k and E');
   }
-  // `u` present means the internal key is a NUMS offset (spec 2.3.5), so it must reduce to the
+  // `u` present means the internal key is a NUMS offset (NUT-10), so it must reduce to the
   // base: without this check `u` is decoration and a key path may still exist. Present iff the key
   // is an offset, so a claimed offset that does not reduce is a lie, not an omission.
   if (spendInfo.u !== undefined) {
@@ -691,7 +690,7 @@ export function verifyTaprootSpendInfo(
     }
     const leaves =
       spendInfo.tree && spendInfo.tree.length > 0
-        ? spendInfo.tree.map((leaf) => parseTaprootLeaf(Bytes.fromHex(leaf)))
+        ? spendInfo.tree.map((leaf) => parseNutrootLeaf(Bytes.fromHex(leaf)))
         : undefined;
     if (leaves) enumerateLeafKeySlots(leaves);
     // With K disclosed beside the tree (2.5), completeness is checkable here rather than only at
@@ -702,8 +701,8 @@ export function verifyTaprootSpendInfo(
         throw new CTSError('Spend info internal key must be 33 bytes');
       }
       const treeBytes = spendInfo.tree!.map((leaf) => Bytes.fromHex(leaf));
-      const root = taprootMerkleRoot(treeBytes.map(taprootLeafHash));
-      if (!Bytes.equals(taprootTweakPubkey(internalKey, root), secret)) {
+      const root = nutrootMerkleRoot(treeBytes.map(nutrootLeafHash));
+      if (!Bytes.equals(nutrootTweakPubkey(internalKey, root), secret)) {
         throw new CTSError('Disclosed tree does not reconstruct the proof secret');
       }
     }
@@ -733,7 +732,7 @@ export function verifyTaprootSpendInfo(
       // The empty-tweak step (2.5.1, 3.8): an aggregated key commits to having no script path by
       // tweaking with nothing but itself. Checked here rather than only for a disclosed `K`,
       // because a single-party key may use the same form.
-      if (Bytes.equals(taprootTweakPubkey(derived), secret)) return 'aggregated';
+      if (Bytes.equals(nutrootTweakPubkey(derived), secret)) return 'aggregated';
       throw new CTSError('Spend info key does not match the proof secret');
     }
     internalKey = derived;
@@ -746,7 +745,7 @@ export function verifyTaprootSpendInfo(
   if (internalKey !== undefined && (!spendInfo.tree || spendInfo.tree.length === 0)) {
     // `K` alone is complete when the secret is its empty tweak: nothing else can be committed.
     // This is how an aggregated key arrives, since no single party holds its scalar to send.
-    if (Bytes.equals(taprootTweakPubkey(internalKey), secret)) return 'aggregated';
+    if (Bytes.equals(nutrootTweakPubkey(internalKey), secret)) return 'aggregated';
     throw new CTSError('Spend info discloses a key that does not commit to the proof secret');
   }
   if (!spendInfo.tree || spendInfo.tree.length === 0 || internalKey === undefined) {
@@ -754,26 +753,26 @@ export function verifyTaprootSpendInfo(
   }
   const treeBytes = spendInfo.tree.map((leaf) => Bytes.fromHex(leaf));
   // Acceptance policy: every disclosed leaf must be one the wallet can reason about.
-  const leaves = treeBytes.map(parseTaprootLeaf);
+  const leaves = treeBytes.map(parseNutrootLeaf);
   enumerateLeafKeySlots(leaves);
-  const root = taprootMerkleRoot(treeBytes.map(taprootLeafHash));
-  if (!Bytes.equals(taprootTweakPubkey(internalKey, root), secret)) {
+  const root = nutrootMerkleRoot(treeBytes.map(nutrootLeafHash));
+  if (!Bytes.equals(nutrootTweakPubkey(internalKey, root), secret)) {
     throw new CTSError('Disclosed tree does not reconstruct the proof secret');
   }
   return 'tweaked';
 }
 
 /**
- * Enumerate the positional blinding slots of a spend info tree (spec 2.7).
+ * Enumerate the positional blinding slots of a spend info tree (NUT-28).
  *
  * @remarks
  * Slot 0 is the internal key `K` and is not listed here. Slots 1.. are the `keys` entries: leaves
  * in transmitted order, keys within a leaf in order. Receivers derive all occupied slots and match
  * by key value, so the uncommitted leaf order cannot disable a path.
- * @throws If the tree needs more than {@link TAPROOT_MAX_SLOTS} slots.
+ * @throws If the tree needs more than {@link NUTROOT_MAX_SLOTS} slots.
  */
 export function enumerateLeafKeySlots(
-  leaves: TaprootLeaf[],
+  leaves: NutrootLeaf[],
 ): Array<{ leafIndex: number; keyIndex: number; slot: number; key: string }> {
   const slots: Array<{ leafIndex: number; keyIndex: number; slot: number; key: string }> = [];
   leaves.forEach((leaf, leafIndex) => {
@@ -781,22 +780,22 @@ export function enumerateLeafKeySlots(
       slots.push({ leafIndex, keyIndex, slot: slots.length + 1, key: key.toLowerCase() });
     });
   });
-  if (slots.length + 1 > TAPROOT_MAX_SLOTS) {
-    throw new CTSError(`Spend info exceeds ${TAPROOT_MAX_SLOTS} slots`);
+  if (slots.length + 1 > NUTROOT_MAX_SLOTS) {
+    throw new CTSError(`Spend info exceeds ${NUTROOT_MAX_SLOTS} slots`);
   }
   return slots;
 }
 
 /**
- * Build a receiver-keyed v3 secret (spec 2.7): `K = P_receiver + r_0*G`, optionally tweaked.
+ * Build a receiver-keyed v3 secret (NUT-28): `K = P_receiver + r_0*G`, optionally tweaked.
  *
  * @remarks
  * NUT-28 one layer down: fresh ephemeral per output, slot 0 is the internal key `K` and always
- * blinded, except a NUMS internal key, which is offset rather than ECDH-blinded (spec 2.3.5): with
- * no scalar behind it there is no receiver half of the DH. Leaf keys are verbatim unless their
- * owner tagged them blind-me, which travels with the key's delivery channel (a payment request
- * marking), never in proof data; pass those keys as `blindKeys` and each occurrence is blinded at
- * its own slot.
+ * blinded, except a NUMS internal key, which is offset rather than ECDH-blinded (NUT-10): with no
+ * scalar behind it there is no receiver half of the DH. Leaf keys are verbatim unless their owner
+ * tagged them blind-me, which travels with the key's delivery channel (a payment request marking),
+ * never in proof data; pass those keys as `blindKeys` and each occurrence is blinded at its own
+ * slot.
  *
  * `E` travels iff it blinded something (NUT-18): a NUMS proof with no blind-me keys takes its
  * uniqueness from the offset and carries no ephemeral, since an `E` would tell the payee "derive
@@ -804,18 +803,18 @@ export function enumerateLeafKeySlots(
  */
 export function deriveReceiverKeyedSecret(
   receiverPubHex: string,
-  opts?: { leaves?: TaprootLeaf[]; eBytes?: Uint8Array; blindKeys?: string[] },
+  opts?: { leaves?: NutrootLeaf[]; eBytes?: Uint8Array; blindKeys?: string[] },
 ): { secret: string; E?: string; tree?: string[]; K?: string; u?: string } {
-  if (receiverPubHex.toLowerCase() === TAPROOT_NUMS_KEY) {
+  if (receiverPubHex.toLowerCase() === NUTROOT_NUMS_KEY) {
     if (!opts?.leaves?.length) {
       throw new CTSError('A NUMS receiver key requires leaves: nothing else could spend the proof');
     }
     if (!opts.blindKeys?.length) {
-      return buildTaprootSecret(TAPROOT_NUMS_KEY, opts.leaves);
+      return buildNutrootSecret(NUTROOT_NUMS_KEY, opts.leaves);
     }
     const eBytes = opts.eBytes ?? secp256k1.utils.randomSecretKey();
     const leaves = blindTaggedLeafKeys(opts.leaves, eBytes, opts.blindKeys);
-    const { secret, tree, K, u } = buildTaprootSecret(TAPROOT_NUMS_KEY, leaves);
+    const { secret, tree, K, u } = buildNutrootSecret(NUTROOT_NUMS_KEY, leaves);
     return { secret, E: Bytes.toHex(getPubKeyFromPrivKey(eBytes)), tree, K, u };
   }
   const eBytes = opts?.eBytes ?? secp256k1.utils.randomSecretKey();
@@ -825,24 +824,24 @@ export function deriveReceiverKeyedSecret(
     return { secret: internalKey, E: Ehex };
   }
   const leaves = blindTaggedLeafKeys(opts.leaves, eBytes, opts.blindKeys);
-  const { secret, tree } = buildTaprootSecret(internalKey, leaves);
-  // K travels with a disclosed tree (spec 2.5): a script-path control block needs it, and it is
+  const { secret, tree } = buildNutrootSecret(internalKey, leaves);
+  // K travels with a disclosed tree (NUT-10): a script-path control block needs it, and it is
   // not recoverable from the secret and the tree, so without it every leaf key that is not the
   // receiver's own is a key its owner cannot spend with.
   return { secret, E: Ehex, tree, K: internalKey };
 }
 
 /**
- * Replace every occurrence of a blind-me tagged key with its slot-blinded form (spec 2.7).
+ * Replace every occurrence of a blind-me tagged key with its slot-blinded form (NUT-28).
  *
  * @throws If a tagged key appears nowhere in the tree: the owner asked for a blinding the receiver
  *   will look for, so a silent no-op would produce a proof nobody recognizes.
  */
 function blindTaggedLeafKeys(
-  leaves: TaprootLeaf[],
+  leaves: NutrootLeaf[],
   eBytes: Uint8Array,
   blindKeys?: string[],
-): TaprootLeaf[] {
+): NutrootLeaf[] {
   const slots = enumerateLeafKeySlots(leaves); // also enforces the slot cap
   if (!blindKeys || blindKeys.length === 0) return leaves;
   const tagged = new Set(blindKeys.map((k) => k.toLowerCase()));
@@ -869,74 +868,74 @@ function blindTaggedLeafKeys(
  * actual blinding is its owner's trial-match, not checked here.
  * @throws If the spend info does not satisfy the request.
  */
-export function verifyTaprootRequestTree(
-  option: { receiverPub: string; leaves?: TaprootLeaf[]; blindKeys?: string[] },
+export function verifyNutrootRequestTree(
+  option: { receiverPub: string; leaves?: NutrootLeaf[]; blindKeys?: string[] },
   spendInfo: { k?: string; E?: string; K?: string; tree?: string[]; u?: string } | undefined,
 ): void {
   if (!spendInfo) {
-    throw new CTSError('Taproot request: proof carries no spend info');
+    throw new CTSError('Nutroot request: proof carries no spend info');
   }
   if (spendInfo.k !== undefined) {
-    throw new CTSError('Taproot request: a bearer key violates the receiver-keyed option');
+    throw new CTSError('Nutroot request: a bearer key violates the receiver-keyed option');
   }
   // `E` is present iff it blinded something (NUT-18): always for a receiver-keyed request, and
   // for a NUMS request only when it tags blind-me keys. Both directions are checked, so presence
   // is part of the exact match rather than a free-floating field.
   const needsE =
-    option.receiverPub.toLowerCase() !== TAPROOT_NUMS_KEY || (option.blindKeys ?? []).length > 0;
+    option.receiverPub.toLowerCase() !== NUTROOT_NUMS_KEY || (option.blindKeys ?? []).length > 0;
   if (needsE) {
     if (spendInfo.E === undefined) {
-      throw new CTSError('Taproot request: spend info is missing the ephemeral E');
+      throw new CTSError('Nutroot request: spend info is missing the ephemeral E');
     }
     try {
       pointFromBytes(Bytes.fromHex(spendInfo.E));
     } catch {
-      throw new CTSError('Taproot request: spend info ephemeral must be a 33-byte point');
+      throw new CTSError('Nutroot request: spend info ephemeral must be a 33-byte point');
     }
   } else if (spendInfo.E !== undefined) {
-    throw new CTSError('Taproot request: an ephemeral on a request that blinds nothing');
+    throw new CTSError('Nutroot request: an ephemeral on a request that blinds nothing');
   }
-  if (option.receiverPub.toLowerCase() === TAPROOT_NUMS_KEY) {
+  if (option.receiverPub.toLowerCase() === NUTROOT_NUMS_KEY) {
     // A NUMS request asks for proofs with no key path, which the offset is what proves: `K` alone
     // is just a point. Without both halves the payee has a key-path holder it cannot identify.
     if (spendInfo.u === undefined || spendInfo.K === undefined) {
       throw new CTSError(
-        'Taproot request: a NUMS request requires the internal key and its offset',
+        'Nutroot request: a NUMS request requires the internal key and its offset',
       );
     }
     let offsetKey: Uint8Array;
     try {
       offsetKey = numsOffsetKey(Bytes.fromHex(spendInfo.u));
     } catch {
-      throw new CTSError('Taproot request: NUMS offset must be a 32-byte scalar');
+      throw new CTSError('Nutroot request: NUMS offset must be a 32-byte scalar');
     }
     if (!Bytes.equals(offsetKey, Bytes.fromHex(spendInfo.K))) {
-      throw new CTSError('Taproot request: internal key is not the claimed NUMS offset');
+      throw new CTSError('Nutroot request: internal key is not the claimed NUMS offset');
     }
   } else if (spendInfo.u !== undefined) {
-    throw new CTSError('Taproot request: a NUMS offset on a receiver-keyed request');
+    throw new CTSError('Nutroot request: a NUMS offset on a receiver-keyed request');
   }
   const disclosed = spendInfo.tree ?? [];
   const requested = option.leaves ?? [];
   if (requested.length === 0) {
     if (disclosed.length > 0) {
-      throw new CTSError('Taproot request: a tree was disclosed but none was requested');
+      throw new CTSError('Nutroot request: a tree was disclosed but none was requested');
     }
     return;
   }
   if (disclosed.length !== requested.length) {
     throw new CTSError(
-      `Taproot request: expected ${requested.length} leaves, got ${disclosed.length}`,
+      `Nutroot request: expected ${requested.length} leaves, got ${disclosed.length}`,
     );
   }
   const blind = new Set((option.blindKeys ?? []).map((key) => key.toLowerCase()));
   const candidates = disclosed.map((hex) => {
     const bytes = Bytes.fromHex(hex);
-    const leaf = parseTaprootLeaf(bytes);
+    const leaf = parseNutrootLeaf(bytes);
     // Round-trip pins canonical bytes: an annotation or non-minimal field is not what the payee
     // asked for, even when inert.
-    if (!Bytes.equals(serializeTaprootLeaf(leaf), bytes)) {
-      throw new CTSError('Taproot request: disclosed leaf is not in requested canonical form');
+    if (!Bytes.equals(serializeNutrootLeaf(leaf), bytes)) {
+      throw new CTSError('Nutroot request: disclosed leaf is not in requested canonical form');
     }
     const matches: number[] = [];
     requested.forEach((req, j) => {
@@ -945,7 +944,7 @@ export function verifyTaprootRequestTree(
     return matches;
   });
   if (!assignmentExists(candidates, new Array<boolean>(requested.length).fill(false), 0)) {
-    throw new CTSError('Taproot request: disclosed tree does not match the requested leaves');
+    throw new CTSError('Nutroot request: disclosed tree does not match the requested leaves');
   }
 }
 
@@ -953,7 +952,7 @@ export function verifyTaprootRequestTree(
  * One disclosed leaf against one requested leaf: byte-equal fields, keys equal in place, except a
  * blind-me key, which must have been substituted (a verbatim value there ignores the owner's tag).
  */
-function leafMatchesRequested(leaf: TaprootLeaf, req: TaprootLeaf, blind: Set<string>): boolean {
+function leafMatchesRequested(leaf: NutrootLeaf, req: NutrootLeaf, blind: Set<string>): boolean {
   if (leaf.type !== req.type || leaf.n !== req.n) return false;
   if (leaf.time !== req.time || leaf.hash?.toLowerCase() !== req.hash?.toLowerCase()) return false;
   if (leaf.keys.length !== req.keys.length) return false;
@@ -979,7 +978,7 @@ function assignmentExists(candidates: number[][], used: boolean[], i: number): b
 }
 
 /**
- * Every slot key a static key could hold, by the blinded pubkey it produces (spec 2.7).
+ * Every slot key a static key could hold, by the blinded pubkey it produces (NUT-28).
  *
  * @remarks
  * The receiver's half of the slot map. It is built over the slot space rather than over positions
@@ -1012,7 +1011,7 @@ export function slotKeysByBlindedPubkey(
 }
 
 /**
- * Trial-match a spend info tree's leaf keys against the static keys held (spec 2.7).
+ * Trial-match a spend info tree's leaf keys against the static keys held (NUT-28).
  *
  * @remarks
  * A verbatim key matches byte for byte; a blinded one matches when some slot's `(p + r_slot)*G`
@@ -1034,7 +1033,7 @@ export function recoverLeafKeySecretKeys(
   secretKey: string;
   blinded: boolean;
 }> {
-  const slots = enumerateLeafKeySlots(tree.map((leaf) => parseTaprootLeaf(Bytes.fromHex(leaf))));
+  const slots = enumerateLeafKeySlots(tree.map((leaf) => parseNutrootLeaf(Bytes.fromHex(leaf))));
   const hits = [];
   for (const privHex of privkeysHex) {
     const pub = Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(privHex)));
@@ -1063,7 +1062,7 @@ export function recoverLeafKeySecretKeys(
 }
 
 /**
- * Trial-match a receiver-keyed proof against a static private key (spec 2.7).
+ * Trial-match a receiver-keyed proof against a static private key (NUT-28).
  *
  * @returns The key-path secret key (`k` bare, `k + t` tweaked) and the internal key, or undefined
  *   when the proof is not keyed to this static key.
@@ -1084,8 +1083,8 @@ export function recoverReceiverKeyedSecretKey(
   if (!tree || tree.length === 0) {
     return internalKey === secretHex ? { secretKey: internalSeckey, internalKey } : undefined;
   }
-  const root = taprootMerkleRoot(tree.map((leaf) => taprootLeafHash(Bytes.fromHex(leaf))));
-  const tweaked = taprootTweakSeckey(Bytes.fromHex(internalSeckey), root);
+  const root = nutrootMerkleRoot(tree.map((leaf) => nutrootLeafHash(Bytes.fromHex(leaf))));
+  const tweaked = nutrootTweakSeckey(Bytes.fromHex(internalSeckey), root);
   if (Bytes.toHex(getPubKeyFromPrivKey(tweaked)) !== secretHex) return undefined;
   return { secretKey: Bytes.toHex(tweaked), internalKey };
 }

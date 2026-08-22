@@ -1,9 +1,9 @@
-// Regenerates the keyset-id-dependent parts of test/vectors/taproot-v3.json in place:
+// Regenerates the keyset-id-dependent parts of test/vectors/nutroot-v3.json in place:
 // nut13_v3 outputs, the swap/mint/melt transcripts and digests, the swap signature, and
-// the token_cashu_ts strings. Run from repo root: npx tsx scripts/generate-taproot-vectors.ts
+// the token_cashu_ts strings. Run from repo root: npx tsx scripts/generate-nutroot-vectors.ts
 //
 // token_nutshell strings are nutshell's encoder output and are NOT touched here; when ids
-// change, regenerate them with nutshell (see tests/test_taproot.py's token builder) and
+// change, regenerate them with nutshell (see tests/test_nutroot.py's token builder) and
 // update both copies of the vector file in the same commit set.
 import { readFileSync, writeFileSync } from 'node:fs';
 
@@ -22,14 +22,14 @@ import type { TransactionShape } from '../src/crypto/transcript';
 import { Amount } from '../src/model/Amount';
 import { decodeCBOR, encodeCBOR } from '../src/utils/cbor';
 import {
-  buildTaprootSecret,
-  parseTaprootLeafHex,
-  type TaprootLeaf,
-  TAPROOT_NUMS_KEY,
-} from '../src/crypto/taproot';
+  buildNutrootSecret,
+  parseNutrootLeafHex,
+  type NutrootLeaf,
+  NUTROOT_NUMS_KEY,
+} from '../src/crypto/nutroot';
 import { deriveKeysetId, getEncodedToken } from '../src/utils/core';
 
-const PATH = 'test/vectors/taproot-v3.json';
+const PATH = 'test/vectors/nutroot-v3.json';
 const SECP256K1_N = BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141');
 
 // NUT-02 V3 vector 1 (nuts tests/02-tests.md): keys are 7*G2 and 13*G2, unit sat, no fee.
@@ -182,9 +182,9 @@ tv.shapes.bearer_k.spend_info.k = d.nut13_v3.outputs[0].secret_key;
 {
   const base = tv.shapes.explicit_K_tree;
   const leaves = base.spend_info.tree.map((leaf: string) =>
-    parseTaprootLeafHex(leaf),
-  ) as TaprootLeaf[];
-  const built = buildTaprootSecret(TAPROOT_NUMS_KEY, leaves, {
+    parseNutrootLeafHex(leaf),
+  ) as NutrootLeaf[];
+  const built = buildNutrootSecret(NUTROOT_NUMS_KEY, leaves, {
     u: hexToBytes(d.nut13_v3.outputs[0].nums_offset),
   });
   if (built.tree.join() !== base.spend_info.tree.join()) {
