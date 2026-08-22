@@ -1430,7 +1430,7 @@ describe('deterministic', () => {
   );
 });
 
-describe('output secret uniqueness (spec 2.4)', () => {
+describe('output secret uniqueness (NUT-10)', () => {
   test('rejects a factory that hands every output the same secret', async () => {
     // A key backs at most one secret: two outputs of the same amount sharing one unblind to the
     // same C, so the second is the first again and its value is gone with no error anywhere.

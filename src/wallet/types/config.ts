@@ -1,5 +1,5 @@
 import { type P2PKOptions } from '../../crypto';
-import { type TaprootLeaf } from '../../crypto/taproot';
+import { type NutrootLeaf } from '../../crypto/nutroot';
 import { type AmountLike } from '../../model/Amount';
 import { type OutputDataFactory, type OutputDataLike } from '../../model/OutputData';
 import type { ProofLike } from '../../model/types/proof';
@@ -104,15 +104,15 @@ export type OutputType =
     } & SharedOutputTypeProps)
   | ({
       /**
-       * Receiver-keyed taproot outputs on a v3 keyset (spec 2.7).
+       * Receiver-keyed nutroot outputs on a v3 keyset (NUT-28).
        *
        * @remarks
        * Each output is derived to `receiverPub` under its own fresh ephemeral, and carries the
        * spend info the payee needs. `leaves` lock the outputs under a tree; `blindKeys` names the
        * leaf keys their owner tagged blind-me.
        */
-      type: 'taproot';
-      options: { receiverPub: string; leaves?: TaprootLeaf[]; blindKeys?: string[] };
+      type: 'nutroot';
+      options: { receiverPub: string; leaves?: NutrootLeaf[]; blindKeys?: string[] };
     } & SharedOutputTypeProps)
   | ({
       /**
@@ -158,7 +158,7 @@ export interface OutputConfig {
 export type OnCountersReserved = (info: OperationCounters) => void;
 
 /**
- * A caller's choice to spend one v3 input through one leaf of its disclosed tree (spec 2.3.2).
+ * A caller's choice to spend one v3 input through one leaf of its disclosed tree (NUT-10).
  *
  * @remarks
  * Keyed by `secret`, not by input index: selection decides the input order and the caller does not
@@ -191,7 +191,7 @@ export type ScriptPathPlan = {
    * while it runs: use it for ceremonies measured in seconds, not ones needing human approval
    * across days. Returns BIP-340 signature hex over `digest` by the leaf's keys.
    */
-  cosign?: (digest: Uint8Array, leaf: TaprootLeaf) => Promise<string[]>;
+  cosign?: (digest: Uint8Array, leaf: NutrootLeaf) => Promise<string[]>;
 };
 
 /**

@@ -5,15 +5,15 @@ import { getPubKeyFromPrivKey, normalizeSecpPubkey } from '../crypto/curve_secp'
 import { recoverV3SecretKeys } from '../crypto/NUT13';
 import {
   buildScriptPathWitness,
-  parseTaprootLeaf,
-  type TaprootLeaf,
+  parseNutrootLeaf,
+  type NutrootLeaf,
   recoverLeafKeySecretKeys,
   recoverReceiverKeyedSecretKey,
   selectLeafSignatures,
-  taprootLeafHash,
-  taprootMerkleRoot,
-  taprootTweakSeckey,
-} from '../crypto/taproot';
+  nutrootLeafHash,
+  nutrootMerkleRoot,
+  nutrootTweakSeckey,
+} from '../crypto/nutroot';
 import { signTransactionInput, transactionDigest } from '../crypto/transcript';
 import { type Logger, fail } from '../logger';
 import { Amount } from '../model/Amount';
@@ -25,20 +25,20 @@ import { Bytes } from '../utils';
 import type { ScriptPathPlan, SpendOption, SpendOptions } from './types';
 
 /**
- * Wallet-side taproot secrets logic: witness attachment, spend info key recovery, and script path
+ * Wallet-side nutroot secrets logic: witness attachment, spend info key recovery, and script path
  * planning. Free functions over an explicit state slice, so Wallet stays orchestration.
  */
 
 /**
- * Headroom over the local counter when scanning seed derivations for taproot secrets, covering
+ * Headroom over the local counter when scanning seed derivations for nutroot secrets, covering
  * proofs derived by another session or a restore since the counter was last persisted.
  */
 export const V3_SEED_SCAN_HEADROOM = 128;
 
 /**
- * The slice of wallet state the taproot signing rules read.
+ * The slice of wallet state the nutroot signing rules read.
  */
-export type TaprootWalletState = {
+export type NutrootWalletState = {
   seed?: Uint8Array;
   counters: { peekNext(keysetId: string): Promise<number> };
   /**
@@ -57,12 +57,12 @@ export type ScriptPathSpend = {
   K: string;
   preimage?: string;
   keys: string[];
-  leaf: TaprootLeaf;
-  cosign?: (digest: Uint8Array, leaf: TaprootLeaf) => Promise<string[]>;
+  leaf: NutrootLeaf;
+  cosign?: (digest: Uint8Array, leaf: NutrootLeaf) => Promise<string[]>;
 };
 
 /**
- * Attaches bearer spend info (`k`) to freshly swapped v3 send proofs (spec 2.5.2).
+ * Attaches bearer spend info (`k`) to freshly swapped v3 send proofs (NUT-10).
  *
  * @remarks
  * The bearer key is what lets the receiver run the 2.5.1 cascade and sign the sweep's transaction
@@ -71,7 +71,7 @@ export type ScriptPathSpend = {
  */
 export async function attachBearerSpendInfo(
   sendProofs: Proof[],
-  state: TaprootWalletState,
+  state: NutrootWalletState,
 ): Promise<void> {
   if (!state.seed || sendProofs.length === 0) return;
   const v3Proofs = sendProofs.filter(
@@ -98,12 +98,12 @@ export async function attachBearerSpendInfo(
 }
 
 /**
- * Attaches taproot transaction witnesses to v3 point-secret inputs (spec 2.2.2).
+ * Attaches nutroot transaction witnesses to v3 point-secret inputs (NUT-10).
  *
  * @remarks
  * Builds the transcript from the request's own inputs and outputs, then signs its digest with each
- * input's recovered internal key (seed counter scan, spec 2.5.2). Signing is per input, so a mixed
- * transaction signs its v3 inputs and leaves v0-v2 inputs to their own rules (spec 5). Inputs whose
+ * input's recovered internal key (seed counter scan, NUT-13). Signing is per input, so a mixed
+ * transaction signs its v3 inputs and leaves v0-v2 inputs to their own rules (NUT-10). Inputs whose
  * key is not recoverable are left unsigned and the mint rejects them.
  */
 export async function attachTransactionWitnesses(
@@ -111,7 +111,7 @@ export async function attachTransactionWitnesses(
   meltQuote: { quoteId: string; amount: Amount } | undefined,
   extraKeys: Map<string, Uint8Array> | undefined,
   scriptSpends: Map<string, ScriptPathSpend> | undefined,
-  state: TaprootWalletState,
+  state: NutrootWalletState,
 ): Promise<void> {
   const v3Inputs = payload.inputs.filter((p) => isBlsKeyset(p.id) && isV3PointSecret(p.secret));
   if (v3Inputs.length === 0) return;
@@ -188,7 +188,7 @@ export async function attachTransactionWitnesses(
       keys.get(input.secret) ?? extraKeys?.get(input.secret) ?? state.randomKeys.get(input.secret);
     if (secretKey) input.witness = signTransactionInput(digest, secretKey);
   }
-  // Every v3 input signs (spec 2.2.2), so an unsigned one is a request the mint will refuse.
+  // Every v3 input signs (NUT-10), so an unsigned one is a request the mint will refuse.
   // Say which proof and why here, rather than letting it come back as a witness error naming
   // nothing: the cause is always a key this wallet does not hold.
   const unsigned = v3Inputs.find((p) => !p.witness);
@@ -207,7 +207,7 @@ export async function attachTransactionWitnesses(
 export async function proofSpendOptions(
   proof: Proof,
   opts: { privkeys?: string | string[]; now?: number } | undefined,
-  state: TaprootWalletState,
+  state: NutrootWalletState,
 ): Promise<SpendOptions> {
   assertV3PointSecret(proof.secret);
   const privkeys = opts?.privkeys === undefined ? [] : [opts.privkeys].flat();
@@ -224,7 +224,7 @@ export async function proofSpendOptions(
   if (!tree || tree.length === 0) return { keyPath, script: [] };
 
   // Parses every leaf, so an unknown one throws here rather than being reported as spendable.
-  const leaves = tree.map((leaf) => parseTaprootLeaf(Bytes.fromHex(leaf)));
+  const leaves = tree.map((leaf) => parseNutrootLeaf(Bytes.fromHex(leaf)));
   const hits = recoverLeafKeySecretKeys(tree, proof.spend_info?.E, privkeys);
   const script = leaves.map((leaf, leafIndex) => {
     const keys = hits
@@ -274,7 +274,7 @@ export function prepareScriptPathSpends(
     if (!tree || plan.leafIndex < 0 || plan.leafIndex >= tree.length) {
       throw new CTSError(`Script path plan names leaf ${plan.leafIndex}, which is not disclosed`);
     }
-    const leaf = parseTaprootLeaf(Bytes.fromHex(tree[plan.leafIndex]));
+    const leaf = parseNutrootLeaf(Bytes.fromHex(tree[plan.leafIndex]));
     if (leaf.type === 'hashlock' && plan.preimage === undefined) {
       throw new CTSError('Script path plan for a hashlock leaf needs a preimage');
     }
@@ -343,7 +343,7 @@ function internalKeyOf(proof: Proof, privkeys: string[]): string | undefined {
  * Collects key-path keys from the inputs' spend info, keyed by secret hex.
  *
  * @remarks
- * Two sources (spec 2.5.2): a bearer `k`, verified by `k*G`, and a receiver-keyed `E`, which
+ * Two sources (NUT-10): a bearer `k`, verified by `k*G`, and a receiver-keyed `E`, which
  * trial-matches against the static keys the caller holds. Proofs whose key is neither are left
  * unsigned; the mint refuses them, which is the honest outcome.
  */
@@ -356,7 +356,7 @@ export function collectSpendInfoKeys(
   const statics = privkeys === undefined ? [] : [privkeys].flat();
   for (const proof of inputs) {
     const E = proof.spend_info?.E;
-    // `k` and `E` are mutually exclusive (spec 2.5.2). Both present is the shape a re-gifted
+    // `k` and `E` are mutually exclusive (NUT-10). Both present is the shape a re-gifted
     // receiver-keyed scalar takes, and that scalar is `p_static + r_i`: whoever knows `r_i`
     // recovers the receiver's static private key from it. The receive cascade rejects this, but
     // it only runs on receive, and melt reaches here directly. Refuse loudly wherever it appears:
@@ -384,16 +384,16 @@ export function collectSpendInfoKeys(
       // Locked proof: the key path signs with p' = k + t over the disclosed tree.
       const tree = proof.spend_info?.tree;
       if (tree && tree.length > 0) {
-        const root = taprootMerkleRoot(tree.map((leaf) => taprootLeafHash(Bytes.fromHex(leaf))));
-        const tweaked = taprootTweakSeckey(kBytes, root);
+        const root = nutrootMerkleRoot(tree.map((leaf) => nutrootLeafHash(Bytes.fromHex(leaf))));
+        const tweaked = nutrootTweakSeckey(kBytes, root);
         if (Bytes.toHex(getPubKeyFromPrivKey(tweaked)) === proof.secret) {
           keys.set(proof.secret, tweaked);
         }
         continue;
       }
-      // Empty tweak, no tree (spec 3.8): p' = k + tagged_hash(tag, K). A true aggregate has no
+      // Empty tweak, no tree (NUT-10): p' = k + tagged_hash(tag, K). A true aggregate has no
       // single holder of `k`, so this reaches only a single-party key using the same form.
-      const empty = taprootTweakSeckey(kBytes);
+      const empty = nutrootTweakSeckey(kBytes);
       if (Bytes.toHex(getPubKeyFromPrivKey(empty)) === proof.secret) {
         keys.set(proof.secret, empty);
       }

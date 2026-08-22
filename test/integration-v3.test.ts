@@ -1,4 +1,4 @@
-// Taproot v3 integration tests. Require a nutshell mint with a BLS (v3)
+// Nutroot v3 integration tests. Require a nutshell mint with a BLS (v3)
 // keyset on port 3338: `DEV=1 make nutshell-bls-down nutshell-bls-up`.
 
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
@@ -22,19 +22,19 @@ import {
 } from '../src';
 import {
   buildScriptPathWitness,
-  buildTaprootSecret,
+  buildNutrootSecret,
   deriveReceiverKeyedSecret,
-  parseTaprootLeaf,
+  parseNutrootLeaf,
   recoverLeafKeySecretKeys,
-  serializeTaprootLeaf,
+  serializeNutrootLeaf,
   recoverReceiverKeyedSecretKey,
-  TAPROOT_NUMS_KEY,
-  taprootLeafHash,
-  taprootMerkleRoot,
-  taprootTweakSeckey,
-  type TaprootLeaf,
-  verifyTaprootSpendInfo,
-} from '../src/crypto/taproot';
+  NUTROOT_NUMS_KEY,
+  nutrootLeafHash,
+  nutrootMerkleRoot,
+  nutrootTweakSeckey,
+  type NutrootLeaf,
+  verifyNutrootSpendInfo,
+} from '../src/crypto/nutroot';
 import { transactionDigest, verifyTransactionInputWitness } from '../src/crypto/transcript';
 
 const mintUrl = 'http://127.0.0.1:3338';
@@ -309,7 +309,7 @@ describeV3('M2 roundtrip', () => {
   );
 });
 
-describeV3('M3 taproot conditions', () => {
+describeV3('M3 nutroot conditions', () => {
   const sk = (n: number) => {
     const b = new Uint8Array(32);
     b[31] = n;
@@ -342,7 +342,7 @@ describeV3('M3 taproot conditions', () => {
     expect(outputAmounts.reduce((a, b) => a + b, 0n)).toBe(locked.amount - fee);
     // v3 outputs carry point secrets; the swap's outputs are never spent here.
     const outputs = outputAmounts.map((a) =>
-      OutputData.createSingleTaprootData(
+      OutputData.createSingleNutrootData(
         bytesToHex(secp256k1.getPublicKey(randomBytes(32), true)),
         a,
         keysetId,
@@ -379,7 +379,7 @@ describeV3('M3 taproot conditions', () => {
   async function createLockedProof(secretHex: string) {
     const { wallet, proofs, keysetId } = await mintPointProofs(64);
     const factory = (a: AmountLike, k: { id: string }) =>
-      OutputData.createSingleTaprootData(secretHex, a, k.id);
+      OutputData.createSingleNutrootData(secretHex, a, k.id);
     // Send exactly 32 (one denomination) so the factory mints a single locked output.
     const { send } = await wallet.send(32n, proofs, undefined, {
       send: { type: 'factory', factory },
@@ -397,7 +397,7 @@ describeV3('M3 taproot conditions', () => {
     async () => {
       const internalPriv = bytesToHex(sk(21));
       const internalPub = pk(21);
-      const { secret, tree } = buildTaprootSecret(internalPub, [
+      const { secret, tree } = buildNutrootSecret(internalPub, [
         { type: 'after', n: 1, keys: [pk(22)], time: 4102444800 }, // far-future refund
       ]);
       const { locked } = await createLockedProof(secret);
@@ -437,7 +437,7 @@ describeV3('M3 taproot conditions', () => {
 
   test('refund via the after leaf (script path)', { timeout: 30_000 }, async () => {
     const refundPriv = sk(23);
-    const { secret, tree } = buildTaprootSecret(pk(24), [
+    const { secret, tree } = buildNutrootSecret(pk(24), [
       { type: 'after', n: 1, keys: [pk(23)], time: 1700000000 }, // past locktime
     ]);
     const { locked, keysetId } = await createLockedProof(secret);
@@ -451,7 +451,7 @@ describeV3('M3 taproot conditions', () => {
   test('hashlock spend (script path)', { timeout: 30_000 }, async () => {
     const preimage = new Uint8Array(32).fill(7);
     const holderPriv = sk(25);
-    const { secret, tree } = buildTaprootSecret(pk(26), [
+    const { secret, tree } = buildNutrootSecret(pk(26), [
       { type: 'hashlock', n: 1, keys: [pk(25)], hash: bytesToHex(sha256(preimage)) },
     ]);
     const { locked, keysetId } = await createLockedProof(secret);
@@ -469,7 +469,7 @@ describeV3('M3 taproot conditions', () => {
   });
 
   test('2-of-3 threshold spend (script path)', { timeout: 30_000 }, async () => {
-    const { secret, tree } = buildTaprootSecret(pk(27), [
+    const { secret, tree } = buildNutrootSecret(pk(27), [
       { type: 'threshold', n: 2, keys: [pk(31), pk(32), pk(33)] },
     ]);
     const { locked, keysetId } = await createLockedProof(secret);
@@ -485,11 +485,11 @@ describeV3('M3 taproot conditions', () => {
 
   test('NUMS script-only proof spends via its leaf', { timeout: 30_000 }, async () => {
     // The internal key is the offset H + u*G, not H, so the control block carries the offset key.
-    const { secret, tree, K, u } = buildTaprootSecret(TAPROOT_NUMS_KEY, [
+    const { secret, tree, K, u } = buildNutrootSecret(NUTROOT_NUMS_KEY, [
       { type: 'threshold', n: 1, keys: [pk(34)] },
     ]);
     expect(u).toBeDefined();
-    expect(verifyTaprootSpendInfo(secret, { K, u, tree })).toBe('tweaked');
+    expect(verifyNutrootSpendInfo(secret, { K, u, tree })).toBe('tweaked');
     const { locked, keysetId } = await createLockedProof(secret);
     await expect(
       manualSwapLockedProof(keysetId, { amount: 32n, secret, C: locked.C }, (digest) =>
@@ -499,7 +499,7 @@ describeV3('M3 taproot conditions', () => {
   });
 
   test('wrong merkle path is rejected by the mint', { timeout: 30_000 }, async () => {
-    const { secret, tree } = buildTaprootSecret(pk(28), [
+    const { secret, tree } = buildNutrootSecret(pk(28), [
       { type: 'threshold', n: 1, keys: [pk(35)] },
       { type: 'after', n: 1, keys: [pk(35)], time: 1700000000 },
     ]);
@@ -516,7 +516,7 @@ describeV3('M3 taproot conditions', () => {
   });
 
   test('mixed transaction: the v3 input is verified per input', { timeout: 40_000 }, async () => {
-    // Spec 5: rules follow the proof's keyset and verification is per input, so a legacy input
+    // NUT-10: rules follow the proof's keyset and verification is per input, so a legacy input
     // alongside a v3 one must not excuse the v3 input from carrying a witness.
     const { keysets } = await new Mint(mintUrl).getKeySets();
     const legacyKeyset = keysets.find((k) => k.unit === 'sat' && k.active && !isBlsKeyset(k.id));
@@ -541,7 +541,7 @@ describeV3('M3 taproot conditions', () => {
 
     // 64 in, 2 inputs at 100 ppk = 1 sat of fees, so 63 out.
     const outputs = [32n, 16n, 8n, 4n, 2n, 1n].map((a) =>
-      OutputData.createSingleTaprootData(
+      OutputData.createSingleNutrootData(
         bytesToHex(secp256k1.getPublicKey(randomBytes(32), true)),
         a,
         v3KeysetId,
@@ -580,7 +580,7 @@ describeV3('M3 taproot conditions', () => {
     // legacy/v1/v2 keysets, v3 takes points. The wallet refuses to build one,
     // and the mint refuses to accept one as an input.
     const { locked, keysetId } = await createLockedProof(
-      buildTaprootSecret(pk(45), [{ type: 'threshold', n: 1, keys: [pk(45)] }]).secret,
+      buildNutrootSecret(pk(45), [{ type: 'threshold', n: 1, keys: [pk(45)] }]).secret,
     );
     expect(() =>
       OutputData.createSingleP2PKData({ kind: 'P2PK', data: pk(45) }, 1n, keysetId),
@@ -588,7 +588,7 @@ describeV3('M3 taproot conditions', () => {
 
     const nut10Secret = JSON.stringify(['P2PK', { nonce: '00'.repeat(16), data: pk(45) }]);
     const outputs = [16n, 8n, 4n, 2n, 1n].map((a) =>
-      OutputData.createSingleTaprootData(
+      OutputData.createSingleNutrootData(
         bytesToHex(secp256k1.getPublicKey(randomBytes(32), true)),
         a,
         keysetId,
@@ -604,7 +604,7 @@ describeV3('M3 taproot conditions', () => {
 
   test('partial tree disclosure is rejected on receive', { timeout: 30_000 }, async () => {
     const internalPriv = bytesToHex(sk(29));
-    const { secret, tree } = buildTaprootSecret(pk(29), [
+    const { secret, tree } = buildNutrootSecret(pk(29), [
       { type: 'threshold', n: 1, keys: [pk(36)] },
       { type: 'after', n: 1, keys: [pk(36)], time: 1700000000 },
     ]);
@@ -636,13 +636,13 @@ describeV3('M4 locked quotes', () => {
       // Path A: quote locked to recipient with a far-future refund leaf; the
       // recipient mints via key path (p' = k + t) before expiry.
       const recipientPriv = sk(41);
-      const lockA = buildTaprootSecret(pk(41), [
+      const lockA = buildNutrootSecret(pk(41), [
         { type: 'after', n: 1, keys: [pk(42)], time: 4102444800 },
       ]);
       const quoteA = await wallet.createLockedMintQuote(32, lockA.secret);
       await wallet.on.onceMintPaid(quoteA.quote, { timeoutMs: 10_000 });
-      const rootA = taprootMerkleRoot(lockA.tree.map((l) => taprootLeafHash(hexToBytes(l))));
-      const tweakedPriv = taprootTweakSeckey(recipientPriv, rootA);
+      const rootA = nutrootMerkleRoot(lockA.tree.map((l) => nutrootLeafHash(hexToBytes(l))));
+      const tweakedPriv = nutrootTweakSeckey(recipientPriv, rootA);
       const proofs = await wallet.mintProofsBolt11(32, quoteA, {
         privkey: bytesToHex(tweakedPriv),
       });
@@ -650,13 +650,13 @@ describeV3('M4 locked quotes', () => {
 
       // Path B: refund leaf already expired; the payer reclaims via script path.
       const payerPriv = sk(43);
-      const lockB = buildTaprootSecret(pk(44), [
+      const lockB = buildNutrootSecret(pk(44), [
         { type: 'after', n: 1, keys: [pk(43)], time: 1700000000 },
       ]);
       const quoteB = await wallet.createLockedMintQuote(32, lockB.secret);
       await wallet.on.onceMintPaid(quoteB.quote, { timeoutMs: 10_000 });
       const outputsB = [
-        OutputData.createSingleTaprootData(
+        OutputData.createSingleNutrootData(
           bytesToHex(secp256k1.getPublicKey(randomBytes(32), true)),
           32n,
           keysetId,
@@ -681,13 +681,13 @@ describeV3('M4 locked quotes', () => {
       expect(response.signatures).toHaveLength(1);
 
       // Negative: reclaim before expiry fails (locktime not reached).
-      const lockC = buildTaprootSecret(pk(44), [
+      const lockC = buildNutrootSecret(pk(44), [
         { type: 'after', n: 1, keys: [pk(43)], time: 4102444800 },
       ]);
       const quoteC = await wallet.createLockedMintQuote(32, lockC.secret);
       await wallet.on.onceMintPaid(quoteC.quote, { timeoutMs: 10_000 });
       const outputsC = [
-        OutputData.createSingleTaprootData(
+        OutputData.createSingleNutrootData(
           bytesToHex(secp256k1.getPublicKey(randomBytes(32), true)),
           32n,
           keysetId,
@@ -747,7 +747,7 @@ describeV3('M4 receiver-keyed sends', () => {
       let available = proofs;
       const sendOne = async (secretHex: string) => {
         const factory = (a: AmountLike, k: { id: string }) =>
-          OutputData.createSingleTaprootData(secretHex, a, k.id);
+          OutputData.createSingleNutrootData(secretHex, a, k.id);
         const { send, keep } = await wallet.send(32n, available, undefined, {
           send: { type: 'factory', factory },
         });
@@ -808,11 +808,11 @@ describeV3('M6 leaf-key blinding through the wallet', () => {
       // Carol's request: pay my static key, under a refund leaf, and blind my key in it.
       const pr = PaymentRequest.builder()
         .amount(32, 'sat')
-        .requestTaproot({
+        .requestNutroot({
           receiverKey: carolPub,
           leaves: [
             bytesToHex(
-              serializeTaprootLeaf({ type: 'after', n: 1, keys: [alicePub], time: 4102444800 }),
+              serializeNutrootLeaf({ type: 'after', n: 1, keys: [alicePub], time: 4102444800 }),
             ),
           ],
           blindKeys: [alicePub],
@@ -826,14 +826,14 @@ describeV3('M6 leaf-key blinding through the wallet', () => {
         const tree = proof.spend_info?.tree;
         expect(tree).toHaveLength(1);
         // The leaf carries a blinded key, not Alice's key verbatim.
-        expect(parseTaprootLeaf(hexToBytes(tree![0])).keys[0]).not.toBe(alicePub);
+        expect(parseNutrootLeaf(hexToBytes(tree![0])).keys[0]).not.toBe(alicePub);
 
         // Alice recognises her own key at slot 1; a stranger's key matches nothing.
         const mine = recoverLeafKeySecretKeys(tree!, proof.spend_info?.E, [alicePriv]);
         expect(mine).toHaveLength(1);
         expect(mine[0]).toMatchObject({ leafIndex: 0, keyIndex: 0, slot: 1, blinded: true });
         expect(bytesToHex(secp256k1.getPublicKey(hexToBytes(mine[0].secretKey), true))).toBe(
-          parseTaprootLeaf(hexToBytes(tree![0])).keys[0],
+          parseNutrootLeaf(hexToBytes(tree![0])).keys[0],
         );
         expect(recoverLeafKeySecretKeys(tree!, proof.spend_info?.E, [strangerPriv])).toEqual([]);
       }
@@ -926,7 +926,7 @@ describeV3('M7 mixed-keyset transactions through the wallet API', () => {
     'one request, two rule sets: a NUT-11 locked pre-v3 input beside a v3 input',
     { timeout: 60_000 },
     async () => {
-      // Spec 5: rules follow the proof's keyset. The legacy input needs a NUT-11 signature over
+      // NUT-10: rules follow the proof's keyset. The legacy input needs a NUT-11 signature over
       // its own secret; the v3 input needs a transaction witness over the transcript. Both in one
       // swap, from one call.
       const { v3, legacy } = await keysetPair();
@@ -1070,7 +1070,7 @@ describeV3('M8 tokens end to end with spend_info', () => {
       ]) {
         const { send, keep } = await wallet.ops
           .send(16, proofs)
-          .asTaproot({ receiverPub: carolPub, leaves, ...(leaves && { blindKeys: [alicePub] }) })
+          .asNutroot({ receiverPub: carolPub, leaves, ...(leaves && { blindKeys: [alicePub] }) })
           .run();
         proofs.length = 0;
         proofs.push(...keep);
@@ -1084,7 +1084,7 @@ describeV3('M8 tokens end to end with spend_info', () => {
           expect(p.spend_info?.k).toBeUndefined();
           expect(p.spend_info?.tree?.length ?? 0).toBe(leaves ? 1 : 0);
           // The cascade classifies it without needing any key.
-          expect(verifyTaprootSpendInfo(p.secret, p.spend_info!)).toBe('receiver-keyed');
+          expect(verifyNutrootSpendInfo(p.secret, p.spend_info!)).toBe('receiver-keyed');
         }
 
         // Carol sweeps from the token string with her static key.
@@ -1108,13 +1108,13 @@ describeV3('M8 tokens end to end with spend_info', () => {
       // No key path at all: K is a NUMS offset, so every spend goes through a leaf (2.3.5).
       const ownerPriv = randomBytes(32);
       const ownerPub = bytesToHex(secp256k1.getPublicKey(ownerPriv, true));
-      const { secret, tree, K, u } = buildTaprootSecret(TAPROOT_NUMS_KEY, [
+      const { secret, tree, K, u } = buildNutrootSecret(NUTROOT_NUMS_KEY, [
         { type: 'threshold', n: 1, keys: [ownerPub] },
       ]);
       const { wallet, proofs } = await fundV3(64);
       const { send } = await wallet.ops
         .send(32, proofs)
-        .asFactory((a, k) => OutputData.createSingleTaprootData(secret, a, k.id), [32])
+        .asFactory((a, k) => OutputData.createSingleNutrootData(secret, a, k.id), [32])
         .run();
       expect(send).toHaveLength(1);
       send[0].spend_info = { K, u, tree };
@@ -1128,7 +1128,7 @@ describeV3('M8 tokens end to end with spend_info', () => {
       expect(proof.spend_info?.u).toBe(u);
       expect(proof.spend_info?.tree).toEqual(tree);
       // Tree plus internal key reconstruct the secret, so the disclosure is provably complete.
-      expect(verifyTaprootSpendInfo(proof.secret, proof.spend_info!)).toBe('tweaked');
+      expect(verifyNutrootSpendInfo(proof.secret, proof.spend_info!)).toBe('tweaked');
 
       // Spending it goes through the wallet: a script-only proof has no key path at all, so
       // the plan is the only way it moves.
@@ -1151,7 +1151,7 @@ describeV3('audit: spend info carrying both k and E', () => {
     'a re-gifted derived scalar beside its ephemeral is refused, melt path included',
     { timeout: 60_000 },
     async () => {
-      // Spec 2.5.2: `k` and `E` are mutually exclusive, and a receiver-keyed proof's scalar is
+      // NUT-10: `k` and `E` are mutually exclusive, and a receiver-keyed proof's scalar is
       // `p_static + r_i`. A proof carrying both means someone holds that scalar AND knows r_i, so
       // they can recover the receiver's static private key. The cascade rejects the shape, but the
       // cascade only runs on receive: melt reaches key collection directly.
@@ -1167,7 +1167,7 @@ describeV3('audit: spend info carrying both k and E', () => {
       const funds = await payer.mintProofsBolt11(64, quote);
       const { send } = await payer.ops
         .send(32, funds)
-        .asTaproot({ receiverPub: carolPub }, [32])
+        .asNutroot({ receiverPub: carolPub }, [32])
         .run();
       const proof = send[0];
 
@@ -1214,10 +1214,10 @@ describeV3('M9 script path through the wallet API', () => {
       const alicePriv = bytesToHex(randomBytes(32));
       const alicePub = bytesToHex(secp256k1.getPublicKey(hexToBytes(alicePriv), true));
       const { wallet, proofs } = await fundV3(64);
-      const leaf: TaprootLeaf = { type: 'after', n: 1, keys: [alicePub], time: 1 };
+      const leaf: NutrootLeaf = { type: 'after', n: 1, keys: [alicePub], time: 1 };
       const { send } = await wallet.ops
         .send(32, proofs)
-        .asTaproot({ receiverPub: carolPub, leaves: [leaf], blindKeys: [alicePub] }, [32])
+        .asNutroot({ receiverPub: carolPub, leaves: [leaf], blindKeys: [alicePub] }, [32])
         .run();
       const proof = send[0];
 
@@ -1246,10 +1246,10 @@ describeV3('M9 script path through the wallet API', () => {
       const alicePriv = bytesToHex(randomBytes(32));
       const alicePub = bytesToHex(secp256k1.getPublicKey(hexToBytes(alicePriv), true));
       const { wallet, proofs } = await fundV3(64);
-      const leaf: TaprootLeaf = { type: 'after', n: 1, keys: [alicePub], time: 4102444800 };
+      const leaf: NutrootLeaf = { type: 'after', n: 1, keys: [alicePub], time: 4102444800 };
       const { send } = await wallet.ops
         .send(32, proofs)
-        .asTaproot({ receiverPub: carolPub, leaves: [leaf] }, [32])
+        .asNutroot({ receiverPub: carolPub, leaves: [leaf] }, [32])
         .run();
       const proof = send[0];
 
@@ -1281,11 +1281,11 @@ describeV3('M9 script path through the wallet API', () => {
       const bobPriv = bytesToHex(randomBytes(32));
       const bobPub = bytesToHex(secp256k1.getPublicKey(hexToBytes(bobPriv), true));
       const idlePub = bytesToHex(secp256k1.getPublicKey(randomBytes(32), true));
-      const leaf: TaprootLeaf = { type: 'threshold', n: 2, keys: [alicePub, bobPub, idlePub] };
+      const leaf: NutrootLeaf = { type: 'threshold', n: 2, keys: [alicePub, bobPub, idlePub] };
       const { wallet, proofs } = await fundV3(64);
       const { send } = await wallet.ops
         .send(32, proofs)
-        .asTaproot({ receiverPub: carolPub, leaves: [leaf] }, [32])
+        .asNutroot({ receiverPub: carolPub, leaves: [leaf] }, [32])
         .run();
       const proof = send[0];
 
@@ -1334,11 +1334,11 @@ describeV3('M9 script path through the wallet API', () => {
       const alicePub = bytesToHex(secp256k1.getPublicKey(hexToBytes(alicePriv), true));
       const bobPriv = bytesToHex(randomBytes(32));
       const bobPub = bytesToHex(secp256k1.getPublicKey(hexToBytes(bobPriv), true));
-      const leaf: TaprootLeaf = { type: 'threshold', n: 2, keys: [alicePub, bobPub] };
+      const leaf: NutrootLeaf = { type: 'threshold', n: 2, keys: [alicePub, bobPub] };
       const { wallet, proofs } = await fundV3(64);
       const { send } = await wallet.ops
         .send(32, proofs)
-        .asTaproot({ receiverPub: carolPub, leaves: [leaf], blindKeys: [alicePub] }, [32])
+        .asNutroot({ receiverPub: carolPub, leaves: [leaf], blindKeys: [alicePub] }, [32])
         .run();
       const proof = send[0];
 
@@ -1353,7 +1353,7 @@ describeV3('M9 script path through the wallet API', () => {
       // Round-trip through the wire, twice, signed by a different party each time. Nothing but
       // the string crosses, and it carries no secret and no blinding factor.
       const wire = ScriptPath.serializePackage(pkg);
-      expect(wire.startsWith('tapspA')).toBe(true);
+      expect(wire.startsWith('nutspA')).toBe(true);
       expect(wire).not.toContain(alicePriv);
       let carried = ScriptPath.signPackage(ScriptPath.deserializePackage(wire), alicePriv);
       carried = ScriptPath.signPackage(
@@ -1362,7 +1362,7 @@ describeV3('M9 script path through the wallet API', () => {
       );
       expect(carried.spends[0].signatures).toHaveLength(2);
       // Alice's key was blinded into the leaf, so a verbatim signature would not have counted.
-      expect(parseTaprootLeaf(hexToBytes(carried.spends[0].leaf)).keys).not.toContain(alicePub);
+      expect(parseNutrootLeaf(hexToBytes(carried.spends[0].leaf)).keys).not.toContain(alicePub);
 
       const signed = ScriptPath.mergeSwapPackage(carried, preview);
       const { keep } = await alice.completeSwap(signed);
@@ -1377,11 +1377,11 @@ describeV3('M9 script path through the wallet API', () => {
       const carolPub = bytesToHex(secp256k1.getPublicKey(randomBytes(32), true));
       const alicePriv = bytesToHex(randomBytes(32));
       const alicePub = bytesToHex(secp256k1.getPublicKey(hexToBytes(alicePriv), true));
-      const leaf: TaprootLeaf = { type: 'threshold', n: 1, keys: [alicePub] };
+      const leaf: NutrootLeaf = { type: 'threshold', n: 1, keys: [alicePub] };
       const { wallet, proofs } = await fundV3(64);
       const { send } = await wallet.ops
         .send(32, proofs)
-        .asTaproot({ receiverPub: carolPub, leaves: [leaf] }, [32])
+        .asNutroot({ receiverPub: carolPub, leaves: [leaf] }, [32])
         .run();
       const proof = send[0];
 
@@ -1409,7 +1409,7 @@ describeV3('M9 script path through the wallet API', () => {
     const alicePriv = bytesToHex(randomBytes(32));
     const alicePub = bytesToHex(secp256k1.getPublicKey(hexToBytes(alicePriv), true));
     const preimage = bytesToHex(randomBytes(32));
-    const leaf: TaprootLeaf = {
+    const leaf: NutrootLeaf = {
       type: 'hashlock',
       n: 1,
       keys: [alicePub],
@@ -1418,7 +1418,7 @@ describeV3('M9 script path through the wallet API', () => {
     const { wallet, proofs } = await fundV3(64);
     const { send } = await wallet.ops
       .send(32, proofs)
-      .asTaproot({ receiverPub: carolPub, leaves: [leaf] }, [32])
+      .asNutroot({ receiverPub: carolPub, leaves: [leaf] }, [32])
       .run();
     const proof = send[0];
 

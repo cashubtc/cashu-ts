@@ -1468,6 +1468,32 @@ export type Nut29Info = {
     max_batch_size?: number;
 };
 
+// @public
+export const NUTROOT_LEAF_TYPE: {
+    readonly threshold: 1;
+    readonly after: 2;
+    readonly hashlock: 3;
+};
+
+// @public
+export const NUTROOT_NUMS_KEY = "0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0";
+
+// @public
+export type NutrootLeaf = {
+    type: keyof typeof NUTROOT_LEAF_TYPE;
+    n: number;
+    keys: string[];
+    time?: number;
+    hash?: string;
+};
+
+// @public
+export type NutrootOption = {
+    receiverKey: string;
+    leaves?: string[];
+    blindKeys?: string[];
+};
+
 // @public (undocumented)
 export class OIDCAuth {
     constructor(discoveryUrl: string, opts?: OIDCAuthOptions);
@@ -1561,22 +1587,22 @@ export class OutputData implements OutputDataLike {
     blindingFactor: bigint;
     // (undocumented)
     static createDeterministicData(amount: AmountLike, seed: Uint8Array, counter: number, keyset: HasKeysetKeys, customSplit?: AmountLike[]): OutputData[];
+    static createNutrootData(options: {
+        receiverPub: string;
+        leaves?: NutrootLeaf[];
+        blindKeys?: string[];
+    }, amount: AmountLike, keyset: HasKeysetKeys, customSplit?: AmountLike[]): OutputData[];
     // (undocumented)
     static createP2PKData(p2pk: P2PKOptions, amount: AmountLike, keyset: HasKeysetKeys, customSplit?: AmountLike[]): OutputData[];
     // (undocumented)
     static createRandomData(amount: AmountLike, keyset: HasKeysetKeys, customSplit?: AmountLike[]): OutputData[];
     // (undocumented)
     static createSingleDeterministicData(amount: AmountLike, seed: Uint8Array, counter: number, keysetId: string): OutputData;
+    static createSingleNutrootData(secretHex: string, amount: AmountLike, keysetId: string): OutputData;
     // (undocumented)
     static createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string, eBytes?: Uint8Array): OutputData;
     // (undocumented)
     static createSingleRandomData(amount: AmountLike, keysetId: string): OutputData;
-    static createSingleTaprootData(secretHex: string, amount: AmountLike, keysetId: string): OutputData;
-    static createTaprootData(options: {
-        receiverPub: string;
-        leaves?: TaprootLeaf[];
-        blindKeys?: string[];
-    }, amount: AmountLike, keyset: HasKeysetKeys, customSplit?: AmountLike[]): OutputData[];
     static deserialize(serialized: SerializedOutputData): OutputData;
     // (undocumented)
     ephemeralE?: string;
@@ -1635,10 +1661,10 @@ export type OutputType = ({
     type: 'p2pk';
     options: P2PKOptions;
 } & SharedOutputTypeProps) | ({
-    type: 'taproot';
+    type: 'nutroot';
     options: {
         receiverPub: string;
-        leaves?: TaprootLeaf[];
+        leaves?: NutrootLeaf[];
         blindKeys?: string[];
     };
 } & SharedOutputTypeProps) | ({
@@ -1722,16 +1748,16 @@ export function parseHTLCSecret(secret: string | Secret): Secret;
 export function parseMintBackupPayload(json: string): MintBackupPayload;
 
 // @public
+export function parseNutrootLeaf(bytes: Uint8Array): NutrootLeaf;
+
+// @public
+export function parseNutrootLeafHex(leafHex: string): NutrootLeaf;
+
+// @public
 export function parseP2PKSecret(secret: string | Secret): Secret;
 
 // @public
 export function parseSecret(secret: string | Secret): Secret;
-
-// @public
-export function parseTaprootLeaf(bytes: Uint8Array): TaprootLeaf;
-
-// @public
-export function parseTaprootLeafHex(leafHex: string): TaprootLeaf;
 
 // @public (undocumented)
 class PaymentRequest_2 {
@@ -1764,23 +1790,23 @@ class PaymentRequest_2 {
     // (undocumented)
     nut10?: NUT10Option;
     // (undocumented)
+    nutroot?: NutrootOption;
+    // (undocumented)
     singleUse?: boolean;
     // (undocumented)
     supportedMethods?: SupportedMethod[];
-    // (undocumented)
-    taproot?: TaprootOption;
     toEncodedCreqA(): string;
     toEncodedCreqB(): string;
     // (undocumented)
     toEncodedRequest(): string;
+    toNutrootOptions(): {
+        receiverPub: string;
+        leaves?: NutrootLeaf[];
+        blindKeys?: string[];
+    } | undefined;
     toP2PKOptions(): P2PKOptions | undefined;
     // (undocumented)
     toRawRequest(): RawPaymentRequest;
-    toTaprootOptions(): {
-        receiverPub: string;
-        leaves?: TaprootLeaf[];
-        blindKeys?: string[];
-    } | undefined;
     // (undocumented)
     transport?: PaymentRequestTransport[];
     // (undocumented)
@@ -1802,7 +1828,7 @@ export class PaymentRequestBuilder {
     lock(p2pk: P2PKOptions): this;
     mintsPreferred(preferred?: boolean): this;
     nut10(option: NUT10Option): this;
-    requestTaproot(option: TaprootOption): this;
+    requestNutroot(option: NutrootOption): this;
     // (undocumented)
     singleUse(single?: boolean): this;
     unit(unit: string): this;
@@ -1823,7 +1849,7 @@ export type PaymentRequestOptions = {
         method: string;
         fee?: AmountLike;
     }>;
-    taproot?: TaprootOption;
+    nutroot?: NutrootOption;
 };
 
 // @public (undocumented)
@@ -1934,6 +1960,13 @@ export type RawNUT10Option = {
 };
 
 // @public (undocumented)
+export type RawNutrootOption = {
+    k: string;
+    l?: string[];
+    b?: string[];
+};
+
+// @public (undocumented)
 export type RawPaymentRequest = {
     i?: string;
     a?: number | bigint;
@@ -1945,20 +1978,13 @@ export type RawPaymentRequest = {
     d?: string;
     t?: RawTransport[];
     nut10?: RawNUT10Option;
-    nutroot?: RawTaprootOption;
+    nutroot?: RawNutrootOption;
 };
 
 // @public (undocumented)
 export type RawSupportedMethod = {
     mn: string;
     mf?: number | bigint;
-};
-
-// @public (undocumented)
-export type RawTaprootOption = {
-    k: string;
-    l?: string[];
-    b?: string[];
 };
 
 // @public (undocumented)
@@ -2078,12 +2104,12 @@ export type ScriptPathPlan = {
     leafIndex: number;
     preimage?: string;
     extraKeys?: string[];
-    cosign?: (digest: Uint8Array, leaf: TaprootLeaf) => Promise<string[]>;
+    cosign?: (digest: Uint8Array, leaf: NutrootLeaf) => Promise<string[]>;
 };
 
 // @public
 export type ScriptPathSigningPackage = {
-    version: 'tapspA';
+    version: 'nutspA';
     type: 'swap' | 'melt';
     quote?: string;
     inputs: Array<Pick<Proof, 'amount' | 'id' | 'secret' | 'C'>>;
@@ -2140,13 +2166,13 @@ export class SendBuilder {
     asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: AmountLike[]): this;
     asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
-    asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]): this;
-    asRandom(denoms?: AmountLike[]): this;
-    asTaproot(options: {
+    asNutroot(options: {
         receiverPub: string;
-        leaves?: TaprootLeaf[];
+        leaves?: NutrootLeaf[];
         blindKeys?: string[];
     }, denoms?: AmountLike[]): this;
+    asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]): this;
+    asRandom(denoms?: AmountLike[]): this;
     includeFees(on?: boolean): this;
     keepAsCustom(data: OutputDataLike[]): this;
     keepAsDeterministic(counter?: number, denoms?: AmountLike[]): this;
@@ -2250,16 +2276,16 @@ export type SerializedSwapPreview = {
 export function serializeMintKeys(mintKeys: RawMintKeys): SerializedMintKeys;
 
 // @public
+export function serializeNutrootLeaf(leaf: NutrootLeaf): Uint8Array;
+
+// @public
+export function serializeNutrootLeafHex(leaf: NutrootLeaf): string;
+
+// @public
 export function serializeProofs(proofs: Proof | Proof[]): string[];
 
 // @public
 export function serializeSwapPreview(preview: SwapPreview): SerializedSwapPreview;
-
-// @public
-export function serializeTaprootLeaf(leaf: TaprootLeaf): Uint8Array;
-
-// @public
-export function serializeTaprootLeafHex(leaf: TaprootLeaf): string;
 
 // @public
 export function setGlobalRequestOptions(options: Partial<RequestOptions>): void;
@@ -2341,7 +2367,7 @@ export type SpendingConditionsBase = {
 // @public
 export type SpendOption = {
     leafIndex: number;
-    leaf: TaprootLeaf;
+    leaf: NutrootLeaf;
     keys: Array<{
         keyIndex: number;
         secretKey: string;
@@ -2432,32 +2458,6 @@ export type SwapTransaction = {
     outputData: OutputDataLike[];
     keepVector: boolean[];
     sortedIndices: number[];
-};
-
-// @public
-export const TAPROOT_LEAF_TYPE: {
-    readonly threshold: 1;
-    readonly after: 2;
-    readonly hashlock: 3;
-};
-
-// @public
-export const TAPROOT_NUMS_KEY = "0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0";
-
-// @public
-export type TaprootLeaf = {
-    type: keyof typeof TAPROOT_LEAF_TYPE;
-    n: number;
-    keys: string[];
-    time?: number;
-    hash?: string;
-};
-
-// @public
-export type TaprootOption = {
-    receiverKey: string;
-    leaves?: string[];
-    blindKeys?: string[];
 };
 
 // @public

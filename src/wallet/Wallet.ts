@@ -29,7 +29,7 @@ import {
 } from '../crypto/curve_secp';
 import { deriveQuoteLockKey } from '../crypto/NUT13';
 import { signMintQuoteLegacy } from '../crypto/NUT20';
-import { verifyTaprootRequestTree } from '../crypto/taproot';
+import { verifyNutrootRequestTree } from '../crypto/nutroot';
 import { transactionDigest } from '../crypto/transcript';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
@@ -103,16 +103,16 @@ import {
 } from './CounterSource';
 import { KeyChain } from './KeyChain';
 import { type Keyset } from './Keyset';
-import { selectProofsRotating, type SelectProofs } from './SelectProofs';
 import {
-  type TaprootWalletState,
+  type NutrootWalletState,
   V3_SEED_SCAN_HEADROOM,
   attachBearerSpendInfo,
   attachTransactionWitnesses,
   collectSpendInfoKeys,
   prepareScriptPathSpends,
   proofSpendOptions,
-} from './taproot';
+} from './nutroot';
+import { selectProofsRotating, type SelectProofs } from './SelectProofs';
 import {
   type MeltPreview,
   type OutputType,
@@ -1167,8 +1167,8 @@ class Wallet {
           outputType.denominations,
         );
         break;
-      case 'taproot':
-        outputData = OutputData.createTaprootData(
+      case 'nutroot':
+        outputData = OutputData.createNutrootData(
           outputType.options,
           outputAmount,
           keyset,
@@ -1198,12 +1198,12 @@ class Wallet {
         this.fail('Invalid OutputType');
       }
     }
-    // A key backs at most one secret, ever (spec 2.4). Two outputs of the same amount sharing a
+    // A key backs at most one secret, ever (NUT-10). Two outputs of the same amount sharing a
     // secret unblind to the same C, so the second is the first again and its value is gone
     // silently. Catches a factory handing every output one secret, or a reused ephemeral.
     // The mint cannot catch this for us: outputs are blinded, and the same secret under different
     // blinding factors gives different `B_`, so both get signed. It surfaces only when the first
-    // spend burns the shared `Y`, mint-wide and permanently (spec 2.4).
+    // spend burns the shared `Y`, mint-wide and permanently (NUT-10).
     const decoder = new TextDecoder();
     const secrets = outputData.map((d) => decoder.decode(d.secret));
     const seenSecrets = new Set<string>();
@@ -1270,13 +1270,13 @@ class Wallet {
    * Receive a token (swaps with mint for new proofs)
    *
    * @remarks
-   * The swap is the sweep (spec 2.5.1): received proofs become the wallet's own seed-derived
-   * secrets, which matters whatever the spend info says. A bearer `k` leaves the sender holding the
-   * same scalar, and a bearer scalar can conceal a tweaked tree. A receiver-keyed `E` is wallet
-   * data and not seed-derivable, so the proof is unrecoverable from the seed alone until swept. A
-   * disclosed tree with neither leaves the key-path holder able to spend at any time, unless `K` is
-   * a NUMS offset. Spending a locked proof needs its key: pass `config.privkey` for a
-   * receiver-keyed proof, or `config.scriptPath` to take a leaf.
+   * The swap is the sweep (NUT-10): received proofs become the wallet's own seed-derived secrets,
+   * which matters whatever the spend info says. A bearer `k` leaves the sender holding the same
+   * scalar, and a bearer scalar can conceal a tweaked tree. A receiver-keyed `E` is wallet data and
+   * not seed-derivable, so the proof is unrecoverable from the seed alone until swept. A disclosed
+   * tree with neither leaves the key-path holder able to spend at any time, unless `K` is a NUMS
+   * offset. Spending a locked proof needs its key: pass `config.privkey` for a receiver-keyed
+   * proof, or `config.scriptPath` to take a leaf.
    * @example
    *
    * ```typescript
@@ -1723,7 +1723,7 @@ class Wallet {
       scriptPath?.length
         ? prepareScriptPathSpends(swapPreview.inputs, scriptPath, privkeys)
         : undefined,
-      this._taprootState(),
+      this._nutrootState(),
     );
     const { signatures } = await this.withStaleKeysetRepair(() =>
       this.mint.swap(swapTransaction.payload),
@@ -1753,7 +1753,7 @@ class Wallet {
         sendProofs.push(p);
       }
     });
-    await attachBearerSpendInfo(sendProofs, this._taprootState());
+    await attachBearerSpendInfo(sendProofs, this._nutrootState());
     this._logger.debug('SEND COMPLETED', {
       unselectedProofs: unselectedProofs.map((p) => p.amount.toString()),
       keepProofs: keepProofs.map((p) => p.amount.toString()),
@@ -1861,7 +1861,7 @@ class Wallet {
    *
    * @remarks
    * Verifies `sum(proofs) - inputFees >= amount + mf`, with input fees from this wallet's keysets
-   * and `mf` priced from this mint's NUT-05 melt methods for the wallet unit. For a taproot
+   * and `mf` priced from this mint's NUT-05 melt methods for the wallet unit. For a nutroot
    * request, each proof's spend info must also be exactly the requested tree. Proof integrity
    * (pairing/DLEQ) and nut10 locks remain separate checks.
    * @param pr - The payment request being settled.
@@ -1869,7 +1869,7 @@ class Wallet {
    * @param expectedAmount - Expected amount for amountless requests; ignored when the request sets
    *   `a`.
    * @throws If no amount is available to check against, the request unit does not match this
-   *   wallet, a proof keyset is unknown, the request is invalid per NUT-18, or a taproot request's
+   *   wallet, a proof keyset is unknown, the request is invalid per NUT-18, or a nutroot request's
    *   proof does not disclose exactly the requested tree.
    */
   isPaymentRequestSatisfied(
@@ -1887,12 +1887,12 @@ class Wallet {
     }
     this.assertProofsInWalletUnit(proofs);
     this.assertNoDuplicateProofs(proofs);
-    // A taproot request is satisfied only by proofs disclosing exactly the requested tree: an
+    // A nutroot request is satisfied only by proofs disclosing exactly the requested tree: an
     // extra leaf is spend power the payee never asked for, eg a payer clawback (NUT-18).
-    const taprootOption = pr.toTaprootOptions();
-    if (taprootOption) {
+    const nutrootOption = pr.toNutrootOptions();
+    if (nutrootOption) {
       for (const p of proofs) {
-        verifyTaprootRequestTree(taprootOption, p.spend_info);
+        verifyNutrootRequestTree(nutrootOption, p.spend_info);
       }
     }
     // mf applies only when this mint is outside the request's mint list (NUT-18).
@@ -2056,9 +2056,9 @@ class Wallet {
   }
 
   /**
-   * The wallet state slice the taproot signing rules in `wallet/taproot.ts` read.
+   * The wallet state slice the nutroot signing rules in `wallet/nutroot.ts` read.
    */
-  private _taprootState(): TaprootWalletState {
+  private _nutrootState(): NutrootWalletState {
     return {
       seed: this._seed,
       counters: this.counters,
@@ -2088,7 +2088,7 @@ class Wallet {
     proof: Proof,
     opts?: { privkeys?: string | string[]; now?: number },
   ): Promise<SpendOptions> {
-    return proofSpendOptions(proof, opts, this._taprootState());
+    return proofSpendOptions(proof, opts, this._nutrootState());
   }
 
   /**
@@ -2099,7 +2099,7 @@ class Wallet {
    */
   private _normalizeWitness(proof: Proof): string | undefined {
     if (!proof.witness) return undefined;
-    // Taproot (v3) point secrets carry transaction witnesses (key or script path): keep them.
+    // Nutroot (v3) point secrets carry transaction witnesses (key or script path): keep them.
     if (isBlsKeyset(proof.id) && isV3PointSecret(proof.secret)) {
       return typeof proof.witness !== 'string' ? JSON.stringify(proof.witness) : proof.witness;
     }
@@ -2376,7 +2376,7 @@ class Wallet {
       }
     }
 
-    // Spec 2.2.2/5: a mint quote is a transaction input and inputs sign, so minting onto a v3
+    // NUT-10: a mint quote is a transaction input and inputs sign, so minting onto a v3
     // keyset needs a locked quote. Lock it here rather than making every caller do it.
     const lock = await this.createV3QuoteLock();
     const mintQuotePayload: MintQuoteBolt11Request = {
@@ -2992,10 +2992,10 @@ class Wallet {
           : privkey;
       this.failIf(!signingKey, 'prepareMint: privkey is empty or correct privkey not provided');
       if (isBlsKeyset(keyset.id)) {
-        // V3 (taproot secrets): the quote is a transaction input; its lock key signs the
-        // transaction digest (spec 2.2.2 / 5). No legacy fallback on v3 keysets.
+        // V3 (nutroot secrets): the quote is a transaction input; its lock key signs the
+        // transaction digest (NUT-10). No legacy fallback on v3 keysets.
         // The transcript commits the quote's face amount, not this draw: the output
-        // section already binds the draw (spec 2.2.1). Amountless quotes commit 0;
+        // section already binds the draw (NUT-10). Amountless quotes commit 0;
         // a bolt11 quote always has an amount, so an absent one is a caller omission.
         const quoteAmount = 'amount' in quote ? (quote.amount as AmountLike) : undefined;
         this.failIf(
@@ -3900,7 +3900,7 @@ class Wallet {
       ...extra,
     };
 
-    // Attach taproot transaction witnesses (v3 keysets). Skipped when the preview's quote does
+    // Attach nutroot transaction witnesses (v3 keysets). Skipped when the preview's quote does
     // not carry its amount: the digest must match the mint's reconstruction exactly.
     const quoteAmount =
       'amount' in meltPreview.quote ? (meltPreview.quote.amount as AmountLike) : undefined;
@@ -3917,7 +3917,7 @@ class Wallet {
               privkey === undefined ? [] : [privkey].flat(),
             )
           : undefined,
-        this._taprootState(),
+        this._nutrootState(),
       );
     }
 

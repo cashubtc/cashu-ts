@@ -50,13 +50,13 @@ export type Proof = {
    */
   witness?: string | P2PKWitness | HTLCWitness;
   /**
-   * Taproot spend info (v3 keysets): what the next owner needs that the proof does not say.
+   * Nutroot spend info (v3 keysets): what the next owner needs that the proof does not say.
    */
   spend_info?: SpendInfo;
 };
 
 /**
- * Taproot spend info (spec 2.5): a key and, when conditions exist, the leaf tree.
+ * Nutroot spend info (NUT-10): a key and, when conditions exist, the leaf tree.
  *
  * @remarks
  * `k` and `E` are mutually exclusive: `k` (32-byte scalar hex) means "here is the key" (bearer),

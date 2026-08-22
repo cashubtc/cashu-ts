@@ -813,7 +813,7 @@ describe('NUT-18 payment payloads', () => {
   });
 });
 
-describe('taproot (v3) request marking', () => {
+describe('nutroot (v3) request marking', () => {
   const carolPub = '02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9';
   const alicePub = '02e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13';
   // The 6.1 after leaf: n=1, keys=[alicePub], time=1755561600.
@@ -823,54 +823,54 @@ describe('taproot (v3) request marking', () => {
   test('round-trips through creqA, tags and all', () => {
     const pr = PaymentRequest.builder()
       .amount(8, 'sat')
-      .requestTaproot({ receiverKey: carolPub, leaves: [leafAfter], blindKeys: [alicePub] })
+      .requestNutroot({ receiverKey: carolPub, leaves: [leafAfter], blindKeys: [alicePub] })
       .build();
     const decoded = decodePaymentRequest(pr.toEncodedRequest());
-    expect(decoded.taproot).toEqual({
+    expect(decoded.nutroot).toEqual({
       receiverKey: carolPub,
       leaves: [leafAfter],
       blindKeys: [alicePub],
     });
     // A request with no tree is the bare receiver-keyed case, and stays that way.
-    const bare = PaymentRequest.builder().requestTaproot({ receiverKey: carolPub }).build();
-    expect(decodePaymentRequest(bare.toEncodedRequest()).taproot).toEqual({
+    const bare = PaymentRequest.builder().requestNutroot({ receiverKey: carolPub }).build();
+    expect(decodePaymentRequest(bare.toEncodedRequest()).nutroot).toEqual({
       receiverKey: carolPub,
     });
   });
 
   test('the option converts to sender-side derivation arguments', () => {
     const pr = PaymentRequest.builder()
-      .requestTaproot({ receiverKey: carolPub, leaves: [leafAfter], blindKeys: [alicePub] })
+      .requestNutroot({ receiverKey: carolPub, leaves: [leafAfter], blindKeys: [alicePub] })
       .build();
-    expect(pr.toTaprootOptions()).toEqual({
+    expect(pr.toNutrootOptions()).toEqual({
       receiverPub: carolPub,
       leaves: [{ type: 'after', n: 1, keys: [alicePub], time: 1755561600 }],
       blindKeys: [alicePub],
     });
-    expect(new PaymentRequest({}).toTaprootOptions()).toBeUndefined();
+    expect(new PaymentRequest({}).toNutrootOptions()).toBeUndefined();
   });
 
   test('the receiver key is validated and case-canonicalized, both directions', () => {
     const upper = '02' + carolPub.slice(2).toUpperCase();
     expect(
-      PaymentRequest.builder().requestTaproot({ receiverKey: upper }).build().taproot?.receiverKey,
+      PaymentRequest.builder().requestNutroot({ receiverKey: upper }).build().nutroot?.receiverKey,
     ).toBe(carolPub);
     // A foreign request carrying the upper-case form canonicalizes on the way out.
     expect(
-      new PaymentRequest({ taproot: { receiverKey: upper } }).toTaprootOptions()?.receiverPub,
+      new PaymentRequest({ nutroot: { receiverKey: upper } }).toNutrootOptions()?.receiverPub,
     ).toBe(carolPub);
     // x-only is rejected here as everywhere: the prepend-02 convention is the caller's to apply.
     expect(() =>
-      PaymentRequest.builder().requestTaproot({ receiverKey: carolPub.slice(2) }),
+      PaymentRequest.builder().requestNutroot({ receiverKey: carolPub.slice(2) }),
     ).toThrow(/x-only/);
-    expect(() => new PaymentRequest({ taproot: { receiverKey: '' } }).toTaprootOptions()).toThrow(
+    expect(() => new PaymentRequest({ nutroot: { receiverKey: '' } }).toNutrootOptions()).toThrow(
       /missing its receiver key/,
     );
   });
 
   test('a blind-me key outside the requested tree is refused when authored', () => {
     expect(() =>
-      PaymentRequest.builder().requestTaproot({
+      PaymentRequest.builder().requestNutroot({
         receiverKey: carolPub,
         leaves: [leafAfter],
         blindKeys: [carolPub],
@@ -884,33 +884,33 @@ describe('taproot (v3) request marking', () => {
     const annotated = leafAfter + '0d0005' + '6c6162656c'; // odd field 0x0d, "label"
     expect(() =>
       new PaymentRequest({
-        taproot: { receiverKey: carolPub, leaves: [annotated] },
-      }).toTaprootOptions(),
+        nutroot: { receiverKey: carolPub, leaves: [annotated] },
+      }).toNutrootOptions(),
     ).toThrow(/field/);
     // An unknown leaf type fails closed the same way it does in spend info.
     expect(() =>
       new PaymentRequest({
-        taproot: { receiverKey: carolPub, leaves: ['0004' + '02000101'] },
-      }).toTaprootOptions(),
+        nutroot: { receiverKey: carolPub, leaves: ['0004' + '02000101'] },
+      }).toNutrootOptions(),
     ).toThrow(/type/);
   });
 
   test('a NUMS receiver key must come with leaves, but needs no blind-me key', () => {
     const numsKey = '0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0';
     // Authoring: refused without leaves, since nothing else could spend a proof with no key path.
-    expect(() => PaymentRequest.builder().requestTaproot({ receiverKey: numsKey })).toThrow(
+    expect(() => PaymentRequest.builder().requestNutroot({ receiverKey: numsKey })).toThrow(
       /requires leaves/,
     );
     // The payer's per-output offset supplies uniqueness, so no blind-me tag is needed.
     const pr = PaymentRequest.builder()
-      .requestTaproot({ receiverKey: numsKey, leaves: [leafAfter] })
+      .requestNutroot({ receiverKey: numsKey, leaves: [leafAfter] })
       .build();
-    expect(decodePaymentRequest(pr.toEncodedRequest()).toTaprootOptions()?.receiverPub).toBe(
+    expect(decodePaymentRequest(pr.toEncodedRequest()).toNutrootOptions()?.receiverPub).toBe(
       numsKey,
     );
     // A foreign request that skipped authoring validation is refused by the payer.
     expect(() =>
-      new PaymentRequest({ taproot: { receiverKey: numsKey } }).toTaprootOptions(),
+      new PaymentRequest({ nutroot: { receiverKey: numsKey } }).toNutrootOptions(),
     ).toThrow(/requires leaves/);
   });
 
@@ -921,11 +921,11 @@ describe('taproot (v3) request marking', () => {
     const numsKey = '0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0';
     const pr = PaymentRequest.builder()
       .amount(8, 'sat')
-      .requestTaproot({ receiverKey: numsKey, leaves: [leafAfter], blindKeys: [alicePub] })
+      .requestNutroot({ receiverKey: numsKey, leaves: [leafAfter], blindKeys: [alicePub] })
       .build();
     expect(pr.toEncodedRequest()).toBe(specVector);
     const decoded = decodePaymentRequest(specVector);
-    expect(decoded.taproot).toEqual({
+    expect(decoded.nutroot).toEqual({
       receiverKey: numsKey,
       leaves: [leafAfter],
       blindKeys: [alicePub],
@@ -935,12 +935,12 @@ describe('taproot (v3) request marking', () => {
   test('creqB round-trips the option under NUT-26 tag 0x0b', () => {
     const pr = PaymentRequest.builder()
       .amount(8, 'sat')
-      .requestTaproot({ receiverKey: carolPub, leaves: [leafAfter], blindKeys: [alicePub] })
+      .requestNutroot({ receiverKey: carolPub, leaves: [leafAfter], blindKeys: [alicePub] })
       .build();
     const encoded = pr.toEncodedCreqB();
     expect(encoded.startsWith('CREQB1')).toBe(true);
     const decoded = decodePaymentRequest(encoded);
-    expect(decoded.taproot).toEqual({
+    expect(decoded.nutroot).toEqual({
       receiverKey: carolPub,
       leaves: [leafAfter],
       blindKeys: [alicePub],
@@ -948,7 +948,7 @@ describe('taproot (v3) request marking', () => {
     expect(decoded.amount?.toNumber()).toBe(8);
     expect(decoded.unit).toBe('sat');
     // The bare receiver-keyed request survives too, with no leaves or blind keys materializing.
-    const bare = PaymentRequest.builder().requestTaproot({ receiverKey: carolPub }).build();
-    expect(decodePaymentRequest(bare.toEncodedCreqB()).taproot).toEqual({ receiverKey: carolPub });
+    const bare = PaymentRequest.builder().requestNutroot({ receiverKey: carolPub }).build();
+    expect(decodePaymentRequest(bare.toEncodedCreqB()).nutroot).toEqual({ receiverKey: carolPub });
   });
 });

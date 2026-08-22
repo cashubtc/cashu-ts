@@ -12,7 +12,7 @@ import {
   type TransactionShape,
 } from '../../src/crypto/transcript';
 import { Amount } from '../../src/model/Amount';
-import vectors from '../vectors/taproot-v3.json';
+import vectors from '../vectors/nutroot-v3.json';
 
 const tv = vectors.transcript;
 
@@ -151,7 +151,7 @@ describe('transaction transcript (vectors)', () => {
   });
 
   test('carries a v0-v2 secret verbatim beside a v3 input (mixed transaction)', () => {
-    // Spec 5: rules follow the proof's keyset and verification is per input, so a legacy
+    // NUT-10: rules follow the proof's keyset and verification is per input, so a legacy
     // secret rides in the transcript as its utf8 bytes rather than being rejected.
     const swap = fromVectorTx(tv.swap.tx);
     const legacySecret = '["P2PK",{"nonce":"00","data":"02aa"}]';
@@ -237,7 +237,7 @@ describe('keyset ids in the transcript', () => {
   const out = { amount: 1n, keysetId: '0088553333aabbcc', B_: 'bb'.repeat(48) };
 
   test('a legacy base64 keyset id contributes its utf8 bytes, not an exception', () => {
-    // Mixed transactions are normative (spec 5), and a pre-v1 keyset id is base64. Hex-decoding it
+    // Mixed transactions are normative (NUT-10), and a pre-v1 keyset id is base64. Hex-decoding it
     // would make such a transaction impossible to sign or verify rather than merely unusual.
     const legacy = {
       amount: 1n,

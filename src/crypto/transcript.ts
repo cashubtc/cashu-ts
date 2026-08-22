@@ -7,10 +7,10 @@ import { CTSError } from '../model/Errors';
 import { Bytes, isValidHex } from '../utils';
 
 import { isBlsKeyset } from './curves';
-import { minimalBE, tlvRecord } from './taproot';
+import { minimalBE, tlvRecord } from './nutroot';
 
 /**
- * Transaction transcript (taproot secrets spec 2.2.1): the one message every input signs.
+ * Transaction transcript (NUT-10): the one message every input signs.
  *
  * @remarks
  * `msg = domain tag || TLV stream`; each input carries one BIP-340 signature over `SHA256(msg)`.
@@ -31,7 +31,7 @@ export type TranscriptProofInput = {
   keysetId: string;
   /**
    * The proof's secret: a v3 point `P` as 33-byte compressed SEC1 hex, or a v0-v2 secret verbatim,
-   * which a mixed transaction carries alongside v3 inputs (spec 5).
+   * which a mixed transaction carries alongside v3 inputs (NUT-10).
    */
   secret: string;
   /**

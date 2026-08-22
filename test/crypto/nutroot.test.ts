@@ -8,42 +8,42 @@ import { describe, test, expect } from 'vitest';
 import { deriveP2BKBlindedPubkeyAtSlot } from '../../src/crypto/NUT28';
 import {
   buildScriptPathWitness,
-  buildTaprootSecret,
+  buildNutrootSecret,
   deriveReceiverKeyedSecret,
   enumerateLeafKeySlots,
   recoverLeafKeySecretKeys,
   recoverReceiverKeyedSecretKey,
-  type TaprootLeaf,
-  TAPROOT_NUMS_KEY,
-  TAPROOT_MAX_LEAF_TIME,
-  TAPROOT_MAX_TREE_DEPTH,
-  verifyTaprootSpendInfo,
-  verifyTaprootRequestTree,
+  type NutrootLeaf,
+  NUTROOT_NUMS_KEY,
+  NUTROOT_MAX_LEAF_TIME,
+  NUTROOT_MAX_TREE_DEPTH,
+  verifyNutrootSpendInfo,
+  verifyNutrootRequestTree,
   taggedHash,
   tlvRecord,
   readTlvRecords,
   minimalBE,
   readMinimalBE,
-  serializeTaprootLeaf,
-  serializeTaprootLeafHex,
+  serializeNutrootLeaf,
+  serializeNutrootLeafHex,
   numsOffsetKey,
-  parseTaprootLeaf,
+  parseNutrootLeaf,
   selectLeafSignatures,
-  parseTaprootLeafHex,
-  taprootLeafHash,
-  taprootBranchHash,
-  taprootMerkleRoot,
-  taprootMerklePath,
-  taprootRootFromPath,
-  taprootTweak,
-  taprootTweakPubkey,
-  taprootTweakSeckey,
-  verifyTaprootCommitment,
-  TAPROOT_LEAF_TAG,
-  TAPROOT_BRANCH_TAG,
-  TAPROOT_TWEAK_TAG,
-} from '../../src/crypto/taproot';
-import vectors from '../vectors/taproot-v3.json';
+  parseNutrootLeafHex,
+  nutrootLeafHash,
+  nutrootBranchHash,
+  nutrootMerkleRoot,
+  nutrootMerklePath,
+  nutrootRootFromPath,
+  nutrootTweak,
+  nutrootTweakPubkey,
+  nutrootTweakSeckey,
+  verifyNutrootCommitment,
+  NUTROOT_LEAF_TAG,
+  NUTROOT_BRANCH_TAG,
+  NUTROOT_TWEAK_TAG,
+} from '../../src/crypto/nutroot';
+import vectors from '../vectors/nutroot-v3.json';
 
 const v61 = vectors.example_6_1;
 const v62 = vectors.example_6_2;
@@ -51,15 +51,15 @@ const v62 = vectors.example_6_2;
 describe('tagged hashes', () => {
   test('match the @scure/btc-signer oracle for the Cashu tags', () => {
     const msg = utf8ToBytes('cross-check message');
-    for (const tag of [TAPROOT_LEAF_TAG, TAPROOT_BRANCH_TAG, TAPROOT_TWEAK_TAG]) {
+    for (const tag of [NUTROOT_LEAF_TAG, NUTROOT_BRANCH_TAG, NUTROOT_TWEAK_TAG]) {
       expect(bytesToHex(taggedHash(tag, msg))).toBe(bytesToHex(tagSchnorr(tag, msg)));
     }
   });
 
   test('vector tags are the module tags', () => {
-    expect(vectors.tags.leaf).toBe(TAPROOT_LEAF_TAG);
-    expect(vectors.tags.branch).toBe(TAPROOT_BRANCH_TAG);
-    expect(vectors.tags.tweak).toBe(TAPROOT_TWEAK_TAG);
+    expect(vectors.tags.leaf).toBe(NUTROOT_LEAF_TAG);
+    expect(vectors.tags.branch).toBe(NUTROOT_BRANCH_TAG);
+    expect(vectors.tags.tweak).toBe(NUTROOT_TWEAK_TAG);
   });
 });
 
@@ -104,7 +104,7 @@ describe('TLV primitives', () => {
 
 describe('leaf serialization (vectors 6.1)', () => {
   test('after leaf serializes to the vector bytes', () => {
-    const leaf = serializeTaprootLeaf({
+    const leaf = serializeNutrootLeaf({
       type: 'after',
       n: 1,
       keys: [v61.alice_refund_pub],
@@ -114,7 +114,7 @@ describe('leaf serialization (vectors 6.1)', () => {
   });
 
   test('after leaf parses back', () => {
-    const parsed = parseTaprootLeaf(hexToBytes(v61.leaf_after));
+    const parsed = parseNutrootLeaf(hexToBytes(v61.leaf_after));
     expect(parsed).toEqual({
       type: 'after',
       n: 1,
@@ -124,24 +124,24 @@ describe('leaf serialization (vectors 6.1)', () => {
   });
 
   test('leaf hash matches the vector root (single leaf tree)', () => {
-    expect(bytesToHex(taprootLeafHash(hexToBytes(v61.leaf_after)))).toBe(v61.merkle_root);
+    expect(bytesToHex(nutrootLeafHash(hexToBytes(v61.leaf_after)))).toBe(v61.merkle_root);
   });
 
   test('hex wrappers round-trip the wire form', () => {
-    const leaf = parseTaprootLeafHex(v61.leaf_after);
+    const leaf = parseNutrootLeafHex(v61.leaf_after);
     expect(leaf).toEqual({
       type: 'after',
       n: 1,
       keys: [v61.alice_refund_pub],
       time: v61.refund_time,
     });
-    expect(serializeTaprootLeafHex(leaf)).toBe(v61.leaf_after);
+    expect(serializeNutrootLeafHex(leaf)).toBe(v61.leaf_after);
   });
 });
 
 describe('leaf serialization (vectors 6.2)', () => {
   test('after leaf serializes to the vector bytes', () => {
-    const after = serializeTaprootLeaf({
+    const after = serializeNutrootLeaf({
       type: 'after',
       n: 1,
       keys: [v62.kid_pub],
@@ -153,12 +153,12 @@ describe('leaf serialization (vectors 6.2)', () => {
   test('leaf hashes match the vectors (melt_to leaf as opaque bytes)', () => {
     // The 6.2 melt_to covenant is a spec extensibility example, not an
     // implemented leaf type; its bytes still pin the tree and tweak math.
-    expect(bytesToHex(taprootLeafHash(hexToBytes(v62.leaf_melt_to)))).toBe(v62.leaf_hash_melt_to);
-    expect(bytesToHex(taprootLeafHash(hexToBytes(v62.leaf_after)))).toBe(v62.leaf_hash_after);
+    expect(bytesToHex(nutrootLeafHash(hexToBytes(v62.leaf_melt_to)))).toBe(v62.leaf_hash_melt_to);
+    expect(bytesToHex(nutrootLeafHash(hexToBytes(v62.leaf_after)))).toBe(v62.leaf_hash_after);
   });
 
   test('the example melt_to leaf type (0x04) is unknown and fails closed', () => {
-    expect(() => parseTaprootLeaf(hexToBytes(v62.leaf_melt_to))).toThrow(/type/);
+    expect(() => parseNutrootLeaf(hexToBytes(v62.leaf_melt_to))).toThrow(/type/);
   });
 });
 
@@ -167,14 +167,14 @@ describe('leaf parsing fails closed', () => {
     const bytes = hexToBytes(v61.leaf_after);
     const bad = new Uint8Array(bytes);
     bad[0] = 0x01;
-    expect(() => parseTaprootLeaf(bad)).toThrow(/version/);
+    expect(() => parseNutrootLeaf(bad)).toThrow(/version/);
   });
 
   test('unknown leaf type', () => {
     const bytes = hexToBytes(v61.leaf_after);
     const bad = new Uint8Array(bytes);
     bad[1] = 0x7f;
-    expect(() => parseTaprootLeaf(bad)).toThrow(/type/);
+    expect(() => parseNutrootLeaf(bad)).toThrow(/type/);
   });
 
   test('unknown even field rejects', () => {
@@ -184,7 +184,7 @@ describe('leaf parsing fails closed', () => {
       ...tlvRecord(0x0c, new Uint8Array([1])),
     ]);
     const leaf = new Uint8Array([0x00, 0x01, ...body]);
-    expect(() => parseTaprootLeaf(leaf)).toThrow(/field/);
+    expect(() => parseNutrootLeaf(leaf)).toThrow(/field/);
   });
 
   test('unknown odd field rejects: odd types are reserved, not ignorable', () => {
@@ -193,7 +193,7 @@ describe('leaf parsing fails closed', () => {
       ...hexToBytes(vectors.leaf_forms.threshold_1of1),
       ...tlvRecord(0x09, hexToBytes('deadbeef')),
     ]);
-    expect(() => parseTaprootLeaf(leaf)).toThrow(/field/);
+    expect(() => parseNutrootLeaf(leaf)).toThrow(/field/);
   });
 
   test('the 1024-byte cap applies to the body, excluding the version byte', () => {
@@ -210,7 +210,7 @@ describe('leaf parsing fails closed', () => {
     expect(atLimit).toHaveLength(1025);
     // At the cap the length check passes and parsing reaches the padding field, which rejects as
     // unknown; one byte more and the length check itself fires first.
-    expect(() => parseTaprootLeaf(atLimit)).toThrow(/Unknown leaf field/);
+    expect(() => parseNutrootLeaf(atLimit)).toThrow(/Unknown leaf field/);
 
     const overLimit = new Uint8Array([
       0x00,
@@ -218,7 +218,7 @@ describe('leaf parsing fails closed', () => {
       ...fields,
       ...tlvRecord(0x0d, new Uint8Array(1024 - fields.length - 3)),
     ]);
-    expect(() => parseTaprootLeaf(overLimit)).toThrow(/body exceeds/);
+    expect(() => parseNutrootLeaf(overLimit)).toThrow(/body exceeds/);
 
     // Bounded so both implementations read the same leaf: unbounded here means a leaf a mint
     // commits and spends that a wallet cannot parse, which strands the proof with its holder.
@@ -229,13 +229,13 @@ describe('leaf parsing fails closed', () => {
       ...tlvRecord(0x04, hexToBytes(v61.carol_pub)),
       ...tlvRecord(0x06, hexToBytes('0fffffffffffffff')),
     ]);
-    expect(() => parseTaprootLeaf(hugeTime)).toThrow(/time out of range/);
+    expect(() => parseNutrootLeaf(hugeTime)).toThrow(/time out of range/);
     expect(() =>
-      serializeTaprootLeaf({
+      serializeNutrootLeaf({
         type: 'after',
         n: 1,
         keys: [v61.carol_pub],
-        time: TAPROOT_MAX_LEAF_TIME + 2,
+        time: NUTROOT_MAX_LEAF_TIME + 2,
       }),
     ).toThrow(/time out of range/);
   });
@@ -248,7 +248,7 @@ describe('leaf parsing fails closed', () => {
       ...tlvRecord(0x04, hexToBytes(v61.carol_pub)),
       ...tlvRecord(0x06, new Uint8Array([1])),
     ]);
-    expect(() => parseTaprootLeaf(thresholdWithTime)).toThrow(/must not carry a time/);
+    expect(() => parseNutrootLeaf(thresholdWithTime)).toThrow(/must not carry a time/);
 
     const afterWithHash = new Uint8Array([
       0x00,
@@ -258,9 +258,9 @@ describe('leaf parsing fails closed', () => {
       ...tlvRecord(0x06, new Uint8Array([1])),
       ...tlvRecord(0x08, new Uint8Array(32)),
     ]);
-    expect(() => parseTaprootLeaf(afterWithHash)).toThrow(/must not carry a hash/);
+    expect(() => parseNutrootLeaf(afterWithHash)).toThrow(/must not carry a hash/);
     expect(() =>
-      serializeTaprootLeaf({
+      serializeNutrootLeaf({
         type: 'threshold',
         n: 1,
         keys: [v61.carol_pub],
@@ -275,8 +275,8 @@ describe('leaf parsing fails closed', () => {
       ...tlvRecord(0x02, new Uint8Array([1])),
       ...tlvRecord(0x04, hexToBytes(invalid)),
     ]);
-    expect(() => parseTaprootLeaf(new Uint8Array([0x00, 0x01, ...body]))).toThrow(/valid/);
-    expect(() => serializeTaprootLeaf({ type: 'threshold', n: 1, keys: [invalid] })).toThrow();
+    expect(() => parseNutrootLeaf(new Uint8Array([0x00, 0x01, ...body]))).toThrow(/valid/);
+    expect(() => serializeNutrootLeaf({ type: 'threshold', n: 1, keys: [invalid] })).toThrow();
   });
 
   test('a key and its parity twin reject: one signature would satisfy both', () => {
@@ -288,8 +288,8 @@ describe('leaf parsing fails closed', () => {
       ...tlvRecord(0x02, new Uint8Array([2])),
       ...tlvRecord(0x04, new Uint8Array([...hexToBytes(key), ...hexToBytes(twin)])),
     ]);
-    expect(() => parseTaprootLeaf(new Uint8Array([0x00, 0x01, ...body]))).toThrow(/distinct keys/);
-    expect(() => serializeTaprootLeaf({ type: 'threshold', n: 2, keys: [key, twin] })).toThrow(
+    expect(() => parseNutrootLeaf(new Uint8Array([0x00, 0x01, ...body]))).toThrow(/distinct keys/);
+    expect(() => serializeNutrootLeaf({ type: 'threshold', n: 2, keys: [key, twin] })).toThrow(
       /distinct/,
     );
   });
@@ -299,7 +299,7 @@ describe('leaf parsing fails closed', () => {
       ...tlvRecord(0x02, new Uint8Array([1])),
       ...tlvRecord(0x04, hexToBytes(v61.carol_pub).subarray(0, 32)),
     ]);
-    expect(() => parseTaprootLeaf(new Uint8Array([0x00, 0x01, ...body]))).toThrow(/multiple of 33/);
+    expect(() => parseNutrootLeaf(new Uint8Array([0x00, 0x01, ...body]))).toThrow(/multiple of 33/);
   });
 
   test('threshold cannot exceed the key count', () => {
@@ -307,8 +307,8 @@ describe('leaf parsing fails closed', () => {
       ...tlvRecord(0x02, new Uint8Array([2])),
       ...tlvRecord(0x04, hexToBytes(v61.carol_pub)),
     ]);
-    expect(() => parseTaprootLeaf(new Uint8Array([0x00, 0x01, ...body]))).toThrow(/key count/);
-    expect(() => serializeTaprootLeaf({ type: 'threshold', n: 2, keys: [v61.carol_pub] })).toThrow(
+    expect(() => parseNutrootLeaf(new Uint8Array([0x00, 0x01, ...body]))).toThrow(/key count/);
+    expect(() => serializeNutrootLeaf({ type: 'threshold', n: 2, keys: [v61.carol_pub] })).toThrow(
       /key count/,
     );
   });
@@ -318,48 +318,48 @@ describe('merkle tree (vectors 6.2)', () => {
   test('two-leaf root matches, pair sorted', () => {
     const hMelt = hexToBytes(v62.leaf_hash_melt_to);
     const hAfter = hexToBytes(v62.leaf_hash_after);
-    expect(bytesToHex(taprootBranchHash(hMelt, hAfter))).toBe(v62.merkle_root);
-    expect(bytesToHex(taprootBranchHash(hAfter, hMelt))).toBe(v62.merkle_root);
-    expect(bytesToHex(taprootMerkleRoot([hMelt, hAfter]))).toBe(v62.merkle_root);
+    expect(bytesToHex(nutrootBranchHash(hMelt, hAfter))).toBe(v62.merkle_root);
+    expect(bytesToHex(nutrootBranchHash(hAfter, hMelt))).toBe(v62.merkle_root);
+    expect(bytesToHex(nutrootMerkleRoot([hMelt, hAfter]))).toBe(v62.merkle_root);
   });
 
   test('merkle paths recompute the root', () => {
     const hMelt = hexToBytes(v62.leaf_hash_melt_to);
     const hAfter = hexToBytes(v62.leaf_hash_after);
     const leaves = [hMelt, hAfter];
-    const pathMelt = taprootMerklePath(leaves, 0);
+    const pathMelt = nutrootMerklePath(leaves, 0);
     expect(pathMelt.map(bytesToHex)).toEqual(v62.melt_witness.control.path);
-    expect(bytesToHex(taprootRootFromPath(hMelt, pathMelt))).toBe(v62.merkle_root);
-    const pathAfter = taprootMerklePath(leaves, 1);
+    expect(bytesToHex(nutrootRootFromPath(hMelt, pathMelt))).toBe(v62.merkle_root);
+    const pathAfter = nutrootMerklePath(leaves, 1);
     expect(pathAfter.map(bytesToHex)).toEqual(v62.after_witness_path);
-    expect(bytesToHex(taprootRootFromPath(hAfter, pathAfter))).toBe(v62.merkle_root);
+    expect(bytesToHex(nutrootRootFromPath(hAfter, pathAfter))).toBe(v62.merkle_root);
   });
 
   test('four leaves fold as the spec diagram and paths verify', () => {
     const hashes = [1, 2, 3, 4].map((i) => sha256(new Uint8Array([i])));
     // The fold sorts, so build the expected tree over the sorted list.
     const sorted = [...hashes].sort((a, b) => (bytesToHex(a) < bytesToHex(b) ? -1 : 1));
-    const b12 = taprootBranchHash(sorted[0], sorted[1]);
-    const b34 = taprootBranchHash(sorted[2], sorted[3]);
-    const root = taprootBranchHash(b12, b34);
-    expect(bytesToHex(taprootMerkleRoot(hashes))).toBe(bytesToHex(root));
+    const b12 = nutrootBranchHash(sorted[0], sorted[1]);
+    const b34 = nutrootBranchHash(sorted[2], sorted[3]);
+    const root = nutrootBranchHash(b12, b34);
+    expect(bytesToHex(nutrootMerkleRoot(hashes))).toBe(bytesToHex(root));
     for (let i = 0; i < 4; i++) {
-      const path = taprootMerklePath(hashes, i);
+      const path = nutrootMerklePath(hashes, i);
       expect(path).toHaveLength(2);
-      expect(bytesToHex(taprootRootFromPath(hashes[i], path))).toBe(bytesToHex(root));
+      expect(bytesToHex(nutrootRootFromPath(hashes[i], path))).toBe(bytesToHex(root));
     }
   });
 
   test('three leaves: odd leaf promoted, single-sibling path', () => {
     const hashes = [1, 2, 3].map((i) => sha256(new Uint8Array([i])));
     const sorted = [...hashes].sort((a, b) => (bytesToHex(a) < bytesToHex(b) ? -1 : 1));
-    const root = taprootBranchHash(taprootBranchHash(sorted[0], sorted[1]), sorted[2]);
-    expect(bytesToHex(taprootMerkleRoot(hashes))).toBe(bytesToHex(root));
+    const root = nutrootBranchHash(nutrootBranchHash(sorted[0], sorted[1]), sorted[2]);
+    expect(bytesToHex(nutrootMerkleRoot(hashes))).toBe(bytesToHex(root));
     // The promoted (last sorted) leaf has the single-sibling path.
     const promoted = hashes.findIndex((h) => h === sorted[2]);
-    const path = taprootMerklePath(hashes, promoted);
+    const path = nutrootMerklePath(hashes, promoted);
     expect(path).toHaveLength(1);
-    expect(bytesToHex(taprootRootFromPath(hashes[promoted], path))).toBe(bytesToHex(root));
+    expect(bytesToHex(nutrootRootFromPath(hashes[promoted], path))).toBe(bytesToHex(root));
   });
 
   test('the root is a function of the leaf set: every permutation folds identically', () => {
@@ -367,7 +367,7 @@ describe('merkle tree (vectors 6.2)', () => {
     // wallet reordering leaves in storage broke its own proofs. Every permutation must now fold
     // to one root, with every path still verifying.
     const hashes = [1, 2, 3].map((i) => sha256(new Uint8Array([i])));
-    const root = bytesToHex(taprootMerkleRoot(hashes));
+    const root = bytesToHex(nutrootMerkleRoot(hashes));
     const perms = [
       [0, 1, 2],
       [0, 2, 1],
@@ -378,10 +378,10 @@ describe('merkle tree (vectors 6.2)', () => {
     ];
     for (const perm of perms) {
       const order = perm.map((i) => hashes[i]);
-      expect(bytesToHex(taprootMerkleRoot(order))).toBe(root);
+      expect(bytesToHex(nutrootMerkleRoot(order))).toBe(root);
       for (let i = 0; i < order.length; i++) {
-        const path = taprootMerklePath(order, i);
-        expect(bytesToHex(taprootRootFromPath(order[i], path))).toBe(root);
+        const path = nutrootMerklePath(order, i);
+        expect(bytesToHex(nutrootRootFromPath(order[i], path))).toBe(root);
       }
     }
   });
@@ -391,22 +391,22 @@ describe('tweak math (vectors)', () => {
   test('6.1 tweak and P', () => {
     const K = hexToBytes(v61.internal_key);
     const root = hexToBytes(v61.merkle_root);
-    expect(taprootTweak(K, root).toString(16).padStart(64, '0')).toBe(v61.tweak);
-    expect(bytesToHex(taprootTweakPubkey(K, root))).toBe(v61.secret);
+    expect(nutrootTweak(K, root).toString(16).padStart(64, '0')).toBe(v61.tweak);
+    expect(bytesToHex(nutrootTweakPubkey(K, root))).toBe(v61.secret);
   });
 
   test('6.2 tweak and P', () => {
     const K = hexToBytes(v62.internal_key);
     const root = hexToBytes(v62.merkle_root);
-    expect(taprootTweak(K, root).toString(16).padStart(64, '0')).toBe(v62.tweak);
-    expect(bytesToHex(taprootTweakPubkey(K, root))).toBe(v62.secret);
+    expect(nutrootTweak(K, root).toString(16).padStart(64, '0')).toBe(v62.tweak);
+    expect(bytesToHex(nutrootTweakPubkey(K, root))).toBe(v62.secret);
   });
 
   test('6.1 tweaked seckey lands on P and signs for it', () => {
     const carolFull =
       (BigInt('0x' + v61.carol_priv) + BigInt('0x' + v61.p2bk_r)) % secp256k1.Point.Fn.ORDER;
     const internalSeckey = carolFull.toString(16).padStart(64, '0');
-    const pPrime = taprootTweakSeckey(hexToBytes(internalSeckey), hexToBytes(v61.merkle_root));
+    const pPrime = nutrootTweakSeckey(hexToBytes(internalSeckey), hexToBytes(v61.merkle_root));
     expect(bytesToHex(pPrime)).toBe(v61.keypath_priv);
     expect(bytesToHex(secp256k1.getPublicKey(pPrime, true))).toBe(v61.secret);
     const sig = schnorr.sign(hexToBytes(v61.transcript_digest), pPrime, new Uint8Array(32));
@@ -435,7 +435,7 @@ describe('tweak math (vectors)', () => {
 describe('script-path commitment verification', () => {
   test('6.1 single-leaf witness verifies', () => {
     expect(
-      verifyTaprootCommitment(
+      verifyNutrootCommitment(
         hexToBytes(v61.secret),
         hexToBytes(v61.scriptpath_witness.control.K),
         hexToBytes(v61.scriptpath_witness.leaf),
@@ -446,7 +446,7 @@ describe('script-path commitment verification', () => {
 
   test('6.2 melt witness verifies', () => {
     expect(
-      verifyTaprootCommitment(
+      verifyNutrootCommitment(
         hexToBytes(v62.secret),
         hexToBytes(v62.melt_witness.control.K),
         hexToBytes(v62.melt_witness.leaf),
@@ -457,7 +457,7 @@ describe('script-path commitment verification', () => {
 
   test('wrong merkle path fails', () => {
     expect(
-      verifyTaprootCommitment(
+      verifyNutrootCommitment(
         hexToBytes(v62.secret),
         hexToBytes(v62.melt_witness.control.K),
         hexToBytes(v62.melt_witness.leaf),
@@ -468,7 +468,7 @@ describe('script-path commitment verification', () => {
 
   test('wrong internal key fails', () => {
     expect(
-      verifyTaprootCommitment(
+      verifyNutrootCommitment(
         hexToBytes(v62.secret),
         hexToBytes(v61.internal_key),
         hexToBytes(v62.melt_witness.leaf),
@@ -479,14 +479,14 @@ describe('script-path commitment verification', () => {
 
   test('path deeper than the depth cap throws', () => {
     const filler = sha256(new Uint8Array([9]));
-    expect(() => taprootRootFromPath(filler, new Array(9).fill(filler) as Uint8Array[])).toThrow(
+    expect(() => nutrootRootFromPath(filler, new Array(9).fill(filler) as Uint8Array[])).toThrow(
       /depth/,
     );
   });
 
   test('path hashes must be exactly 32 bytes', () => {
     const filler = sha256(new Uint8Array([9]));
-    expect(() => taprootRootFromPath(filler, [filler.subarray(1)])).toThrow(/32 bytes/);
+    expect(() => nutrootRootFromPath(filler, [filler.subarray(1)])).toThrow(/32 bytes/);
   });
 });
 
@@ -499,9 +499,9 @@ describe('bearer contrast (vectors 6.1)', () => {
 });
 
 describe('locked secret construction and spend info cascade', () => {
-  test('buildTaprootSecret reproduces the 6.1 locked secret', () => {
+  test('buildNutrootSecret reproduces the 6.1 locked secret', () => {
     const internalKey = v61.internal_key;
-    const { secret, tree } = buildTaprootSecret(internalKey, [
+    const { secret, tree } = buildNutrootSecret(internalKey, [
       { type: 'after', n: 1, keys: [v61.alice_refund_pub], time: v61.refund_time },
     ]);
     expect(secret).toBe(v61.secret);
@@ -524,7 +524,7 @@ describe('locked secret construction and spend info cascade', () => {
 
   test('selectLeafSignatures keeps one valid signature per key, dropping duplicates and extras', () => {
     const digest = hexToBytes(v61.transcript_digest);
-    const leaf: TaprootLeaf = {
+    const leaf: NutrootLeaf = {
       type: 'after',
       n: 1,
       keys: [v61.alice_refund_pub],
@@ -538,7 +538,7 @@ describe('locked secret construction and spend info cascade', () => {
 
   test('cascade: bare key, tweaked with k, tweaked with K', () => {
     const n13 = vectors.nut13_v3.outputs[0];
-    expect(verifyTaprootSpendInfo(n13.secret, { k: n13.secret_key })).toBe('bare');
+    expect(verifyNutrootSpendInfo(n13.secret, { k: n13.secret_key })).toBe('bare');
     // 6.1: k = (carol + r) mod n, tree discloses the after leaf.
     const carolFull = (
       (BigInt('0x' + v61.carol_priv) + BigInt('0x' + v61.p2bk_r)) %
@@ -546,28 +546,28 @@ describe('locked secret construction and spend info cascade', () => {
     )
       .toString(16)
       .padStart(64, '0');
-    expect(verifyTaprootSpendInfo(v61.secret, { k: carolFull, tree: [v61.leaf_after] })).toBe(
+    expect(verifyNutrootSpendInfo(v61.secret, { k: carolFull, tree: [v61.leaf_after] })).toBe(
       'tweaked',
     );
     // Script-only: explicit K.
     expect(
-      verifyTaprootSpendInfo(v61.secret, { K: v61.internal_key, tree: [v61.leaf_after] }),
+      verifyNutrootSpendInfo(v61.secret, { K: v61.internal_key, tree: [v61.leaf_after] }),
     ).toBe('tweaked');
   });
 
   test('cascade rejects spend info carrying both k and E', () => {
-    // Spec 2.5.2: k and E are mutually exclusive, and both-at-once is the shape a re-gifted
+    // NUT-10: k and E are mutually exclusive, and both-at-once is the shape a re-gifted
     // receiver-keyed scalar takes, which hands the receiver's static key back to the sender.
     const n13 = vectors.nut13_v3.outputs[0];
     expect(() =>
-      verifyTaprootSpendInfo(n13.secret, { k: n13.secret_key, E: v61.ephemeral_pub }),
+      verifyNutrootSpendInfo(n13.secret, { k: n13.secret_key, E: v61.ephemeral_pub }),
     ).toThrow(/both k and E/);
   });
 
   test('cascade rejects a redundant K that disagrees with k', () => {
     const n13 = vectors.nut13_v3.outputs[0];
     expect(() =>
-      verifyTaprootSpendInfo(n13.secret, {
+      verifyNutrootSpendInfo(n13.secret, {
         k: n13.secret_key,
         K: v61.alice_refund_pub,
       }),
@@ -576,42 +576,42 @@ describe('locked secret construction and spend info cascade', () => {
 
   test('the empty tweak: an aggregated key with no tree (3.8)', () => {
     const v = vectors.empty_tweak;
-    expect(bytesToHex(taprootTweakPubkey(hexToBytes(v.internal_key)))).toBe(v.secret);
-    expect(taprootTweak(hexToBytes(v.internal_key)).toString(16).padStart(64, '0')).toBe(v.tweak);
+    expect(bytesToHex(nutrootTweakPubkey(hexToBytes(v.internal_key)))).toBe(v.secret);
+    expect(nutrootTweak(hexToBytes(v.internal_key)).toString(16).padStart(64, '0')).toBe(v.tweak);
     // 2.5.1 inserts this step between the bare and tweaked branches, so both the disclosed-key
     // and bearer-scalar forms must reach it: an aggregate has no single holder of the scalar,
     // but a single-party key may use the same form.
-    expect(verifyTaprootSpendInfo(v.secret, { K: v.internal_key })).toBe('aggregated');
-    expect(verifyTaprootSpendInfo(v.secret, { k: v61.carol_priv })).toBe('aggregated');
+    expect(verifyNutrootSpendInfo(v.secret, { K: v.internal_key })).toBe('aggregated');
+    expect(verifyNutrootSpendInfo(v.secret, { k: v61.carol_priv })).toBe('aggregated');
     // The key that signs it is (k + t) mod n, which is the tweak with no root.
-    expect(bytesToHex(taprootTweakSeckey(hexToBytes(v61.carol_priv)))).toBe(v.keypath_priv);
+    expect(bytesToHex(nutrootTweakSeckey(hexToBytes(v61.carol_priv)))).toBe(v.keypath_priv);
     // A bare key is still bare: the empty tweak is only reached when the plain check fails.
-    expect(verifyTaprootSpendInfo(v61.carol_pub, { k: v61.carol_priv })).toBe('bare');
+    expect(verifyNutrootSpendInfo(v61.carol_pub, { k: v61.carol_priv })).toBe('bare');
     // And a key that commits to neither is still refused.
-    expect(() => verifyTaprootSpendInfo(v.secret, { K: v61.alice_refund_pub })).toThrow(
+    expect(() => verifyNutrootSpendInfo(v.secret, { K: v61.alice_refund_pub })).toThrow(
       /does not commit/,
     );
   });
 
   test('cascade rejects partial disclosure, wrong keys, unknown leaves', () => {
     // Tree-only spend info: no key source.
-    expect(() => verifyTaprootSpendInfo(v61.secret, { tree: [v61.leaf_after] })).toThrow(
+    expect(() => verifyNutrootSpendInfo(v61.secret, { tree: [v61.leaf_after] })).toThrow(
       /incomplete/,
     );
     // Wrong bearer key.
-    expect(() => verifyTaprootSpendInfo(v61.secret, { k: '11'.repeat(32) })).toThrow(/match/);
+    expect(() => verifyNutrootSpendInfo(v61.secret, { k: '11'.repeat(32) })).toThrow(/match/);
     // Partial (empty vs actual tree): K alone would be complete only if the secret were its
     // empty tweak (3.8), and this secret is tweaked over a real tree instead.
-    expect(() => verifyTaprootSpendInfo(v61.secret, { K: v61.internal_key, tree: [] })).toThrow(
+    expect(() => verifyNutrootSpendInfo(v61.secret, { K: v61.internal_key, tree: [] })).toThrow(
       /does not commit/,
     );
     // Wrong tree does not reconstruct.
     expect(() =>
-      verifyTaprootSpendInfo(v61.secret, { K: v61.internal_key, tree: [v62.leaf_after] }),
+      verifyNutrootSpendInfo(v61.secret, { K: v61.internal_key, tree: [v62.leaf_after] }),
     ).toThrow(/reconstruct/);
     // 6.2 tree contains the unknown melt_to leaf: acceptance policy fails closed.
     expect(() =>
-      verifyTaprootSpendInfo(v62.secret, {
+      verifyNutrootSpendInfo(v62.secret, {
         K: v62.internal_key,
         tree: [v62.leaf_melt_to, v62.leaf_after],
       }),
@@ -620,7 +620,7 @@ describe('locked secret construction and spend info cascade', () => {
 
   test('receiver-keyed disclosure parses every leaf even without K', () => {
     expect(() =>
-      verifyTaprootSpendInfo(v62.secret, {
+      verifyNutrootSpendInfo(v62.secret, {
         E: v61.ephemeral_pub,
         tree: [v62.leaf_melt_to, v62.leaf_after],
       }),
@@ -628,57 +628,57 @@ describe('locked secret construction and spend info cascade', () => {
   });
 
   test('slot cap is enforced when building and receiving a full tree', () => {
-    const leaves: TaprootLeaf[] = Array.from({ length: 256 }, () => ({
+    const leaves: NutrootLeaf[] = Array.from({ length: 256 }, () => ({
       type: 'threshold',
       n: 1,
       keys: [v61.carol_pub],
     }));
-    expect(() => buildTaprootSecret(v61.internal_key, leaves)).toThrow(/slots/);
+    expect(() => buildNutrootSecret(v61.internal_key, leaves)).toThrow(/slots/);
 
-    const tree = leaves.map((leaf) => bytesToHex(serializeTaprootLeaf(leaf)));
-    const root = taprootMerkleRoot(tree.map((leaf) => taprootLeafHash(hexToBytes(leaf))));
-    const secret = bytesToHex(taprootTweakPubkey(hexToBytes(v61.internal_key), root));
-    expect(() => verifyTaprootSpendInfo(secret, { K: v61.internal_key, tree })).toThrow(/slots/);
+    const tree = leaves.map((leaf) => bytesToHex(serializeNutrootLeaf(leaf)));
+    const root = nutrootMerkleRoot(tree.map((leaf) => nutrootLeafHash(hexToBytes(leaf))));
+    const secret = bytesToHex(nutrootTweakPubkey(hexToBytes(v61.internal_key), root));
+    expect(() => verifyNutrootSpendInfo(secret, { K: v61.internal_key, tree })).toThrow(/slots/);
   });
 
   test('NUMS base: H is lift_x(SHA256(G uncompressed))', () => {
-    expect(TAPROOT_NUMS_KEY.slice(0, 2)).toBe('02');
+    expect(NUTROOT_NUMS_KEY.slice(0, 2)).toBe('02');
     const G = secp256k1.Point.BASE.toBytes(false);
-    expect(TAPROOT_NUMS_KEY.slice(2)).toBe(bytesToHex(sha256(G)));
+    expect(NUTROOT_NUMS_KEY.slice(2)).toBe(bytesToHex(sha256(G)));
   });
 
   test('a script-only secret offsets H per proof and discloses r', () => {
-    const leaves: TaprootLeaf[] = [{ type: 'threshold', n: 1, keys: [v61.carol_pub] }];
-    const { secret, tree, K, u } = buildTaprootSecret(TAPROOT_NUMS_KEY, leaves);
+    const leaves: NutrootLeaf[] = [{ type: 'threshold', n: 1, keys: [v61.carol_pub] }];
+    const { secret, tree, K, u } = buildNutrootSecret(NUTROOT_NUMS_KEY, leaves);
     expect(u).toMatch(/^[0-9a-f]{64}$/);
-    expect(K).not.toBe(TAPROOT_NUMS_KEY);
+    expect(K).not.toBe(NUTROOT_NUMS_KEY);
     // K - u*G == H: the offset is what proves there is no key path.
     expect(bytesToHex(numsOffsetKey(hexToBytes(u!)))).toBe(K);
-    expect(verifyTaprootSpendInfo(secret, { K, u, tree })).toBe('tweaked');
+    expect(verifyNutrootSpendInfo(secret, { K, u, tree })).toBe('tweaked');
     // Fresh r per proof, so the same tree yields a different secret every time.
-    expect(buildTaprootSecret(TAPROOT_NUMS_KEY, leaves).secret).not.toBe(secret);
+    expect(buildNutrootSecret(NUTROOT_NUMS_KEY, leaves).secret).not.toBe(secret);
   });
 
   test('a claimed NUMS offset that does not reduce to H is refused', () => {
-    const leaves: TaprootLeaf[] = [{ type: 'threshold', n: 1, keys: [v61.carol_pub] }];
-    const { secret, tree, u } = buildTaprootSecret(TAPROOT_NUMS_KEY, leaves);
+    const leaves: NutrootLeaf[] = [{ type: 'threshold', n: 1, keys: [v61.carol_pub] }];
+    const { secret, tree, u } = buildNutrootSecret(NUTROOT_NUMS_KEY, leaves);
     // Same secret, but K claimed as an offset of something else.
-    expect(() => verifyTaprootSpendInfo(secret, { K: v61.internal_key, u, tree })).toThrow(
+    expect(() => verifyNutrootSpendInfo(secret, { K: v61.internal_key, u, tree })).toThrow(
       /not the claimed NUMS offset/,
     );
-    expect(() => verifyTaprootSpendInfo(secret, { u, tree })).toThrow(/without its internal key/);
-    expect(() => verifyTaprootSpendInfo(secret, { K: v61.internal_key, u: '00', tree })).toThrow(
+    expect(() => verifyNutrootSpendInfo(secret, { u, tree })).toThrow(/without its internal key/);
+    expect(() => verifyNutrootSpendInfo(secret, { K: v61.internal_key, u: '00', tree })).toThrow(
       /32-byte scalar/,
     );
   });
 
   test('the NUMS base is not reachable as a verbatim internal key', () => {
-    const leaves: TaprootLeaf[] = [{ type: 'threshold', n: 1, keys: [v61.carol_pub] }];
-    const { K } = buildTaprootSecret(TAPROOT_NUMS_KEY, leaves);
-    expect(K).not.toBe(TAPROOT_NUMS_KEY);
+    const leaves: NutrootLeaf[] = [{ type: 'threshold', n: 1, keys: [v61.carol_pub] }];
+    const { K } = buildNutrootSecret(NUTROOT_NUMS_KEY, leaves);
+    expect(K).not.toBe(NUTROOT_NUMS_KEY);
     // An offset only applies to the base; asking for one anywhere else is a mistake, not a no-op.
     expect(() =>
-      buildTaprootSecret(v61.internal_key, leaves, { u: new Uint8Array(32).fill(1) }),
+      buildNutrootSecret(v61.internal_key, leaves, { u: new Uint8Array(32).fill(1) }),
     ).toThrow(/only to the NUMS base/);
   });
 });
@@ -707,25 +707,25 @@ describe('receiver-keyed derivation (2.7, vectors 6.1)', () => {
   });
 
   test('a NUMS receiver key is offset per proof and needs no blinded leaf', () => {
-    const leaves: TaprootLeaf[] = [
+    const leaves: NutrootLeaf[] = [
       { type: 'after', n: 1, keys: [v61.alice_refund_pub], time: v61.refund_time },
     ];
-    // The NUMS base is offset, not ECDH-blinded (spec 2.3.5): nobody holds its scalar for the
+    // The NUMS base is offset, not ECDH-blinded (NUT-10): nobody holds its scalar for the
     // receiver's half of the DH. Uniqueness comes from u, so the tree travels unchanged, and with
     // nothing blinded there is no ephemeral at all (NUT-18).
-    const out = deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, { leaves: [...leaves] });
+    const out = deriveReceiverKeyedSecret(NUTROOT_NUMS_KEY, { leaves: [...leaves] });
     expect(out.E).toBeUndefined();
-    expect(out.K).not.toBe(TAPROOT_NUMS_KEY);
+    expect(out.K).not.toBe(NUTROOT_NUMS_KEY);
     expect(bytesToHex(numsOffsetKey(hexToBytes(out.u!)))).toBe(out.K);
     expect(out.tree).toEqual([v61.leaf_after]);
-    expect(verifyTaprootSpendInfo(out.secret, { K: out.K, u: out.u, tree: out.tree })).toBe(
+    expect(verifyNutrootSpendInfo(out.secret, { K: out.K, u: out.u, tree: out.tree })).toBe(
       'tweaked',
     );
     // Same tree, different proof: u is what makes the secret fresh.
-    const again = deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, { leaves: [...leaves] });
+    const again = deriveReceiverKeyedSecret(NUTROOT_NUMS_KEY, { leaves: [...leaves] });
     expect(again.secret).not.toBe(out.secret);
     // Leaves are still required: with no key path, nothing else could spend the proof.
-    expect(() => deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, { eBytes })).toThrow(
+    expect(() => deriveReceiverKeyedSecret(NUTROOT_NUMS_KEY, { eBytes })).toThrow(
       /requires leaves/,
     );
   });
@@ -755,9 +755,9 @@ describe('receiver-keyed derivation (2.7, vectors 6.1)', () => {
 
   test('cascade classifies E-carrying spend info as receiver-keyed', () => {
     expect(
-      verifyTaprootSpendInfo(v61.secret, { E: v61.ephemeral_pub, tree: [v61.leaf_after] }),
+      verifyNutrootSpendInfo(v61.secret, { E: v61.ephemeral_pub, tree: [v61.leaf_after] }),
     ).toBe('receiver-keyed');
-    expect(() => verifyTaprootSpendInfo(v61.secret, { E: 'zz' })).toThrow(/ephemeral/);
+    expect(() => verifyNutrootSpendInfo(v61.secret, { E: 'zz' })).toThrow(/ephemeral/);
   });
 });
 
@@ -766,11 +766,11 @@ describe('the leaf forms the worked examples never show', () => {
 
   test('threshold and hashlock leaves serialize to the vector bytes', () => {
     expect(
-      bytesToHex(serializeTaprootLeaf({ type: 'threshold', n: 1, keys: [v61.carol_pub] })),
+      bytesToHex(serializeNutrootLeaf({ type: 'threshold', n: 1, keys: [v61.carol_pub] })),
     ).toBe(lf.threshold_1of1);
     expect(
       bytesToHex(
-        serializeTaprootLeaf({
+        serializeNutrootLeaf({
           type: 'threshold',
           n: 2,
           keys: [v61.carol_pub, v61.alice_refund_pub],
@@ -779,7 +779,7 @@ describe('the leaf forms the worked examples never show', () => {
     ).toBe(lf.threshold_2of2);
     expect(
       bytesToHex(
-        serializeTaprootLeaf({
+        serializeNutrootLeaf({
           type: 'hashlock',
           n: 1,
           keys: [v61.carol_pub],
@@ -790,22 +790,22 @@ describe('the leaf forms the worked examples never show', () => {
   });
 
   test('the odd-count fold: leaf 2 is promoted, so its path is one sibling', () => {
-    const hashes = lf.three_leaf_tree.map((l) => taprootLeafHash(hexToBytes(l)));
-    expect(bytesToHex(taprootMerkleRoot(hashes))).toBe(lf.three_leaf_root);
-    expect(taprootMerklePath(hashes, 2).map(bytesToHex)).toEqual(lf.three_leaf_path_index_2);
+    const hashes = lf.three_leaf_tree.map((l) => nutrootLeafHash(hexToBytes(l)));
+    expect(bytesToHex(nutrootMerkleRoot(hashes))).toBe(lf.three_leaf_root);
+    expect(nutrootMerklePath(hashes, 2).map(bytesToHex)).toEqual(lf.three_leaf_path_index_2);
     // A promoted leaf still proves membership, which is what makes the fold shape safe to fix.
     expect(
-      verifyTaprootCommitment(
+      verifyNutrootCommitment(
         hexToBytes(lf.three_leaf_secret),
         hexToBytes(v61.internal_key),
         hexToBytes(lf.three_leaf_tree[2]),
-        taprootMerklePath(hashes, 2),
+        nutrootMerklePath(hashes, 2),
       ),
     ).toBe(true);
   });
 
   test('the NUMS key is BIP-341 H, and a blinded slot-1 key matches', () => {
-    expect(TAPROOT_NUMS_KEY).toBe(lf.nums_key);
+    expect(NUTROOT_NUMS_KEY).toBe(lf.nums_key);
     expect(
       deriveP2BKBlindedPubkeyAtSlot(lf.blind_slot1_key, hexToBytes(v61.ephemeral_priv), 1),
     ).toBe(lf.blind_slot1_result);
@@ -848,7 +848,7 @@ describe('leaf-key blinding: the positional slot map (2.7)', () => {
   });
 
   test('sender blinds only the tagged keys, at their own slot', () => {
-    const leaves: TaprootLeaf[] = [
+    const leaves: NutrootLeaf[] = [
       { type: 'threshold', n: 2, keys: [carolPub, alicePub] },
       { type: 'after', n: 1, keys: [bobPub], time: v61.refund_time },
     ];
@@ -861,7 +861,7 @@ describe('leaf-key blinding: the positional slot map (2.7)', () => {
     expect(blinded.tree?.[1]).not.toBe(verbatim.tree?.[1]);
     expect(blinded.secret).not.toBe(verbatim.secret);
     // The blinded key is bob's key at slot 3, and the leaf is otherwise untouched.
-    const leaf = parseTaprootLeaf(hexToBytes(blinded.tree![1]));
+    const leaf = parseNutrootLeaf(hexToBytes(blinded.tree![1]));
     expect(leaf.keys).toEqual([deriveP2BKBlindedPubkeyAtSlot(bobPub, eBytes, 3)]);
     expect(leaf.time).toBe(v61.refund_time);
     // The caller's leaves are not mutated.
@@ -869,13 +869,13 @@ describe('leaf-key blinding: the positional slot map (2.7)', () => {
   });
 
   test('the same static key at two slots gets distinct tweaks', () => {
-    const leaves: TaprootLeaf[] = [
+    const leaves: NutrootLeaf[] = [
       { type: 'threshold', n: 1, keys: [bobPub] },
       { type: 'after', n: 1, keys: [bobPub], time: v61.refund_time },
     ];
     const out = deriveReceiverKeyedSecret(carolPub, { leaves, eBytes, blindKeys: [bobPub] });
-    const first = parseTaprootLeaf(hexToBytes(out.tree![0])).keys[0];
-    const second = parseTaprootLeaf(hexToBytes(out.tree![1])).keys[0];
+    const first = parseNutrootLeaf(hexToBytes(out.tree![0])).keys[0];
+    const second = parseNutrootLeaf(hexToBytes(out.tree![1])).keys[0];
     expect(first).not.toBe(second);
     expect(first).not.toBe(bobPub);
     // Both are recovered, one per occurrence, each with its own key.
@@ -884,13 +884,13 @@ describe('leaf-key blinding: the positional slot map (2.7)', () => {
     expect(hits[0].secretKey).not.toBe(hits[1].secretKey);
     for (const hit of hits) {
       expect(hit.blinded).toBe(true);
-      const leafKey = parseTaprootLeaf(hexToBytes(out.tree![hit.leafIndex])).keys[hit.keyIndex];
+      const leafKey = parseNutrootLeaf(hexToBytes(out.tree![hit.leafIndex])).keys[hit.keyIndex];
       expect(bytesToHex(secp256k1.getPublicKey(hexToBytes(hit.secretKey), true))).toBe(leafKey);
     }
   });
 
   test('receiver walk resolves a tree mixing blinded and verbatim keys of two owners', () => {
-    const leaves: TaprootLeaf[] = [
+    const leaves: NutrootLeaf[] = [
       { type: 'threshold', n: 2, keys: [carolPub, alicePub] },
       { type: 'after', n: 1, keys: [bobPub], time: v61.refund_time },
     ];
@@ -917,17 +917,17 @@ describe('leaf-key blinding: the positional slot map (2.7)', () => {
   });
 
   test('a stranger key matches nothing, and neither does the right key at the wrong slot', () => {
-    const leaves: TaprootLeaf[] = [{ type: 'threshold', n: 1, keys: [bobPub] }];
+    const leaves: NutrootLeaf[] = [{ type: 'threshold', n: 1, keys: [bobPub] }];
     const out = deriveReceiverKeyedSecret(carolPub, { leaves, eBytes, blindKeys: [bobPub] });
     const strangerPriv = bytesToHex(secp256k1.utils.randomSecretKey());
     expect(recoverLeafKeySecretKeys(out.tree!, out.E, [strangerPriv])).toEqual([]);
     // Same key, wrong slot: the tweak is index-bound, so an off-by-one finds nothing.
-    const shifted = buildTaprootSecret(v61.internal_key, [
+    const shifted = buildNutrootSecret(v61.internal_key, [
       { type: 'threshold', n: 1, keys: [deriveP2BKBlindedPubkeyAtSlot(bobPub, eBytes, 2)] },
     ]).tree;
     expect(recoverLeafKeySecretKeys(shifted, out.E, [bobPriv])).toEqual([]);
     // Verbatim keys still resolve with no ephemeral in play.
-    const plain = buildTaprootSecret(v61.internal_key, leaves).tree;
+    const plain = buildNutrootSecret(v61.internal_key, leaves).tree;
     expect(recoverLeafKeySecretKeys(plain, undefined, [bobPriv, strangerPriv])).toEqual([
       { leafIndex: 0, keyIndex: 0, slot: 1, secretKey: bobPriv, blinded: false },
     ]);
@@ -944,7 +944,7 @@ describe('leaf-key blinding: the positional slot map (2.7)', () => {
   });
 
   test('a blinded leaf key does not disturb key-path recovery for the internal key', () => {
-    const leaves: TaprootLeaf[] = [
+    const leaves: NutrootLeaf[] = [
       { type: 'after', n: 1, keys: [alicePub], time: v61.refund_time },
     ];
     const out = deriveReceiverKeyedSecret(carolPub, { leaves, eBytes, blindKeys: [alicePub] });
@@ -960,29 +960,29 @@ describe('tree caps are enforced on a disclosed tree, not only on a witness path
 
   test('a tree deeper than the cap has no usable script path, so it is refused', () => {
     // Past 2^8 leaves every merkle path is longer than a verifier accepts, so the fallbacks a
-    // holder was told they had do not exist. Spec 2.6 makes the cap normative when verifying a
+    // holder was told they had do not exist. NUT-10 makes the cap normative when verifying a
     // disclosed tree, not only when building one.
-    const hashes = Array.from({ length: 2 ** TAPROOT_MAX_TREE_DEPTH }, (_, i) =>
-      taprootLeafHash(hexToBytes(i.toString(16).padStart(64, '0'))),
+    const hashes = Array.from({ length: 2 ** NUTROOT_MAX_TREE_DEPTH }, (_, i) =>
+      nutrootLeafHash(hexToBytes(i.toString(16).padStart(64, '0'))),
     );
-    expect(() => taprootMerkleRoot(hashes)).not.toThrow();
-    expect(() => taprootMerkleRoot([...hashes, hashes[0]])).toThrow(/depth/);
+    expect(() => nutrootMerkleRoot(hashes)).not.toThrow();
+    expect(() => nutrootMerkleRoot([...hashes, hashes[0]])).toThrow(/depth/);
   });
 
   test('the slot cap keeps a build inside the depth cap', () => {
-    const leaves: TaprootLeaf[] = Array.from({ length: 256 }, (_, i) => ({
+    const leaves: NutrootLeaf[] = Array.from({ length: 256 }, (_, i) => ({
       type: 'threshold' as const,
       n: 1,
       keys: [key(i + 1)],
     }));
-    expect(() => buildTaprootSecret(TAPROOT_NUMS_KEY, leaves)).toThrow(/slots/);
-    const ok = buildTaprootSecret(TAPROOT_NUMS_KEY, leaves.slice(0, 255));
+    expect(() => buildNutrootSecret(NUTROOT_NUMS_KEY, leaves)).toThrow(/slots/);
+    const ok = buildNutrootSecret(NUTROOT_NUMS_KEY, leaves.slice(0, 255));
     expect(
-      taprootMerklePath(
-        ok.tree.map((leaf) => taprootLeafHash(hexToBytes(leaf))),
+      nutrootMerklePath(
+        ok.tree.map((leaf) => nutrootLeafHash(hexToBytes(leaf))),
         0,
       ).length,
-    ).toBeLessThanOrEqual(TAPROOT_MAX_TREE_DEPTH);
+    ).toBeLessThanOrEqual(NUTROOT_MAX_TREE_DEPTH);
   });
 });
 
@@ -998,7 +998,7 @@ describe('leaf key recovery does not depend on the transmitted tree order', () =
     // the transmitted list to assign slots is not an option: blinding rewrites the leaf bytes, so
     // a canonical order over them is only known after the slots it would decide have been assigned
     // (the fold's sort is over the leaf HASHES, after blinding, which is why it is not circular).
-    const leaves: TaprootLeaf[] = [
+    const leaves: NutrootLeaf[] = [
       { type: 'threshold', n: 1, keys: [pub(3)] },
       { type: 'after', n: 1, keys: [pub(4)], time: 1755561600 },
       { type: 'hashlock', n: 1, keys: [pub(5)], hash: 'a1'.repeat(32) },
@@ -1013,10 +1013,10 @@ describe('leaf key recovery does not depend on the transmitted tree order', () =
     const reordered = [...tree].reverse();
 
     // Both orders reconstruct the secret: the fold sorts, so order carries no meaning.
-    expect(verifyTaprootSpendInfo(sent.secret, { E: sent.E, K: sent.K, tree })).toBe(
+    expect(verifyNutrootSpendInfo(sent.secret, { E: sent.E, K: sent.K, tree })).toBe(
       'receiver-keyed',
     );
-    expect(verifyTaprootSpendInfo(sent.secret, { E: sent.E, K: sent.K, tree: reordered })).toBe(
+    expect(verifyNutrootSpendInfo(sent.secret, { E: sent.E, K: sent.K, tree: reordered })).toBe(
       'receiver-keyed',
     );
 
@@ -1026,7 +1026,7 @@ describe('leaf key recovery does not depend on the transmitted tree order', () =
         expect(hits).toHaveLength(1);
         expect(hits[0].blinded).toBe(true);
         // The recovered key is the one the leaf actually names, wherever it sits.
-        const leaf = parseTaprootLeaf(hexToBytes(order[hits[0].leafIndex]));
+        const leaf = parseNutrootLeaf(hexToBytes(order[hits[0].leafIndex]));
         expect(bytesToHex(secp256k1.getPublicKey(hexToBytes(hits[0].secretKey), true))).toBe(
           leaf.keys[hits[0].keyIndex],
         );
@@ -1035,7 +1035,7 @@ describe('leaf key recovery does not depend on the transmitted tree order', () =
   });
 
   test('a stranger still matches nothing, in either order', () => {
-    const leaves: TaprootLeaf[] = [
+    const leaves: NutrootLeaf[] = [
       { type: 'threshold', n: 1, keys: [pub(3)] },
       { type: 'after', n: 1, keys: [pub(4)], time: 1755561600 },
     ];
@@ -1046,9 +1046,9 @@ describe('leaf key recovery does not depend on the transmitted tree order', () =
   });
 });
 
-describe('verifyTaprootRequestTree (NUT-18 exact match)', () => {
+describe('verifyNutrootRequestTree (NUT-18 exact match)', () => {
   const eBytes = numberToBytesBE(5n, 32);
-  const reqLeaves: TaprootLeaf[] = [
+  const reqLeaves: NutrootLeaf[] = [
     { type: 'after', n: 1, keys: [v61.alice_refund_pub], time: v61.refund_time },
     { type: 'threshold', n: 1, keys: [v61.carol_pub] },
   ];
@@ -1063,22 +1063,22 @@ describe('verifyTaprootRequestTree (NUT-18 exact match)', () => {
   test('a faithful payment passes, in any leaf order', () => {
     const out = derive();
     const si = { E: out.E, K: out.K, tree: out.tree };
-    expect(() => verifyTaprootRequestTree(option, si)).not.toThrow();
+    expect(() => verifyNutrootRequestTree(option, si)).not.toThrow();
     expect(() =>
-      verifyTaprootRequestTree(option, { ...si, tree: [...(out.tree as string[])].reverse() }),
+      verifyNutrootRequestTree(option, { ...si, tree: [...(out.tree as string[])].reverse() }),
     ).not.toThrow();
   });
 
   test('an appended or missing leaf rejects', () => {
     const out = derive();
     const extra = bytesToHex(
-      serializeTaprootLeaf({ type: 'after', n: 1, keys: [v61.alice_refund_pub], time: 1 }),
+      serializeNutrootLeaf({ type: 'after', n: 1, keys: [v61.alice_refund_pub], time: 1 }),
     );
     const tree = out.tree as string[];
     expect(() =>
-      verifyTaprootRequestTree(option, { E: out.E, K: out.K, tree: [...tree, extra] }),
+      verifyNutrootRequestTree(option, { E: out.E, K: out.K, tree: [...tree, extra] }),
     ).toThrow(/expected 2 leaves/);
-    expect(() => verifyTaprootRequestTree(option, { E: out.E, K: out.K, tree: [tree[0]] })).toThrow(
+    expect(() => verifyNutrootRequestTree(option, { E: out.E, K: out.K, tree: [tree[0]] })).toThrow(
       /expected 2 leaves/,
     );
   });
@@ -1086,7 +1086,7 @@ describe('verifyTaprootRequestTree (NUT-18 exact match)', () => {
   test('a tree the payee never requested rejects', () => {
     const out = derive();
     expect(() =>
-      verifyTaprootRequestTree(
+      verifyNutrootRequestTree(
         { receiverPub: v61.carol_pub },
         { E: out.E, K: out.K, tree: out.tree },
       ),
@@ -1095,15 +1095,15 @@ describe('verifyTaprootRequestTree (NUT-18 exact match)', () => {
 
   test('a verbatim key where blind-me was tagged rejects', () => {
     const out = deriveReceiverKeyedSecret(v61.carol_pub, { leaves: reqLeaves, eBytes });
-    expect(() => verifyTaprootRequestTree(option, { E: out.E, K: out.K, tree: out.tree })).toThrow(
+    expect(() => verifyNutrootRequestTree(option, { E: out.E, K: out.K, tree: out.tree })).toThrow(
       /does not match/,
     );
   });
 
   test('bearer and absent spend info reject', () => {
     const out = derive();
-    expect(() => verifyTaprootRequestTree(option, undefined)).toThrow(/no spend info/);
-    expect(() => verifyTaprootRequestTree(option, { k: '11'.repeat(32), tree: out.tree })).toThrow(
+    expect(() => verifyNutrootRequestTree(option, undefined)).toThrow(/no spend info/);
+    expect(() => verifyNutrootRequestTree(option, { k: '11'.repeat(32), tree: out.tree })).toThrow(
       /bearer/,
     );
   });
@@ -1111,14 +1111,14 @@ describe('verifyTaprootRequestTree (NUT-18 exact match)', () => {
   test('a NUMS request requires an internal key that reduces to H', () => {
     // No blind-me tag: the offset supplies uniqueness, the requested tree comes back unchanged,
     // and no ephemeral travels (NUT-18: E is present iff it blinded something).
-    const numsOpt = { receiverPub: TAPROOT_NUMS_KEY, leaves: reqLeaves };
-    const out = deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, { leaves: reqLeaves });
+    const numsOpt = { receiverPub: NUTROOT_NUMS_KEY, leaves: reqLeaves };
+    const out = deriveReceiverKeyedSecret(NUTROOT_NUMS_KEY, { leaves: reqLeaves });
     expect(() =>
-      verifyTaprootRequestTree(numsOpt, { K: out.K, u: out.u, tree: out.tree }),
+      verifyNutrootRequestTree(numsOpt, { K: out.K, u: out.u, tree: out.tree }),
     ).not.toThrow();
     // An ephemeral that blinded nothing is a signal the payee cannot act on.
     expect(() =>
-      verifyTaprootRequestTree(numsOpt, {
+      verifyNutrootRequestTree(numsOpt, {
         E: v61.ephemeral_pub,
         K: out.K,
         u: out.u,
@@ -1126,11 +1126,11 @@ describe('verifyTaprootRequestTree (NUT-18 exact match)', () => {
       }),
     ).toThrow(/blinds nothing/);
     // K without its offset is just a point: the payee cannot tell a key path from none.
-    expect(() => verifyTaprootRequestTree(numsOpt, { K: out.K, tree: out.tree })).toThrow(
+    expect(() => verifyNutrootRequestTree(numsOpt, { K: out.K, tree: out.tree })).toThrow(
       /requires the internal key and its offset/,
     );
     expect(() =>
-      verifyTaprootRequestTree(numsOpt, {
+      verifyNutrootRequestTree(numsOpt, {
         K: v61.internal_key,
         u: out.u,
         tree: out.tree,
@@ -1138,7 +1138,7 @@ describe('verifyTaprootRequestTree (NUT-18 exact match)', () => {
     ).toThrow(/not the claimed NUMS offset/);
     // An offset where the request asked for a receiver-keyed send is a different lock entirely.
     expect(() =>
-      verifyTaprootRequestTree(option, {
+      verifyNutrootRequestTree(option, {
         E: v61.ephemeral_pub,
         K: out.K,
         u: out.u,
@@ -1149,19 +1149,19 @@ describe('verifyTaprootRequestTree (NUT-18 exact match)', () => {
 
   test('a NUMS request with blind-me keys keeps the ephemeral, both directions', () => {
     const numsOptB = {
-      receiverPub: TAPROOT_NUMS_KEY,
+      receiverPub: NUTROOT_NUMS_KEY,
       leaves: reqLeaves,
       blindKeys: [v61.alice_refund_pub],
     };
-    const out = deriveReceiverKeyedSecret(TAPROOT_NUMS_KEY, {
+    const out = deriveReceiverKeyedSecret(NUTROOT_NUMS_KEY, {
       leaves: reqLeaves,
       blindKeys: [v61.alice_refund_pub],
       eBytes,
     });
     expect(out.E).toBeDefined();
     const si = { E: out.E, K: out.K, u: out.u, tree: out.tree };
-    expect(() => verifyTaprootRequestTree(numsOptB, si)).not.toThrow();
-    expect(() => verifyTaprootRequestTree(numsOptB, { ...si, E: undefined })).toThrow(
+    expect(() => verifyNutrootRequestTree(numsOptB, si)).not.toThrow();
+    expect(() => verifyNutrootRequestTree(numsOptB, { ...si, E: undefined })).toThrow(
       /missing the ephemeral/,
     );
   });

@@ -394,18 +394,18 @@ describe('WalletOps builders', () => {
       expect(() => ops.sendToRequest(exotic, proofs)).toThrow(/nut10 lock/);
     });
 
-    it('honours a taproot option, and refuses one carrying both locks', async () => {
+    it('honours a nutroot option, and refuses one carrying both locks', async () => {
       const carolPub = '02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9';
       const leafAfter =
         '00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80';
-      const taprootPr = new PaymentRequest({
+      const nutrootPr = new PaymentRequest({
         amount: 100,
         unit: 'sat',
-        taproot: { receiverKey: carolPub, leaves: [leafAfter] },
+        nutroot: { receiverKey: carolPub, leaves: [leafAfter] },
       });
-      await ops.sendToRequest(taprootPr, proofs).run();
+      await ops.sendToRequest(nutrootPr, proofs).run();
       const outputConfig = wallet.send.mock.calls[0][3];
-      expect(outputConfig?.send.type).toBe('taproot');
+      expect(outputConfig?.send.type).toBe('nutroot');
       expect(outputConfig?.send).toMatchObject({
         options: { receiverPub: carolPub, leaves: [{ type: 'after', n: 1 }] },
       });
@@ -416,10 +416,10 @@ describe('WalletOps builders', () => {
         amount: 100,
         unit: 'sat',
         nut10: { kind: 'P2PK', data: '02'.padEnd(66, 'a') },
-        taproot: { receiverKey: carolPub },
+        nutroot: { receiverKey: carolPub },
       });
       expect(() => ops.sendToRequest(both, proofs)).toThrow(
-        /both a nut10 lock and a taproot option/,
+        /both a nut10 lock and a nutroot option/,
       );
     });
   });

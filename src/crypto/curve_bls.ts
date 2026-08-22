@@ -66,7 +66,7 @@ function blsScalar(bytes: Uint8Array, label: string): bigint {
 }
 
 export function hashToCurveBls(secret: Uint8Array): G1Point {
-  return bls12_381.G1.hashToCurve(taprootSecretHashInput(secret), { DST: BLS_HASH_TO_CURVE_DST });
+  return bls12_381.G1.hashToCurve(nutrootSecretHashInput(secret), { DST: BLS_HASH_TO_CURVE_DST });
 }
 
 /**
@@ -78,7 +78,7 @@ export function hashToCurveBls(secret: Uint8Array): G1Point {
  * them. The v3 rule that a proof secret MUST be a point is enforced by {@link assertV3PointSecret}
  * where the keyset version is known, not here.
  */
-function taprootSecretHashInput(secretUtf8: Uint8Array): Uint8Array {
+function nutrootSecretHashInput(secretUtf8: Uint8Array): Uint8Array {
   if (secretUtf8.length !== 66) return secretUtf8;
   let hex = '';
   for (const byte of secretUtf8) {

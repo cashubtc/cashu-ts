@@ -49,9 +49,9 @@ export function deriveP2BKBlindedPubkeys(
  * Blind one public key at one slot: `P' = P + r_i*G`.
  *
  * @remarks
- * Sender side, for the positional slot map of taproot secrets (spec 2.7): the same static key at
- * two slots gets distinct tweaks from the distinct index. `eBytes` must be the ephemeral secret
- * whose `E` travels with the proof.
+ * Sender side, for the positional slot map of nutroot secrets (NUT-28): the same static key at two
+ * slots gets distinct tweaks from the distinct index. `eBytes` must be the ephemeral secret whose
+ * `E` travels with the proof.
  * @throws If the blinded key is at infinity.
  */
 export function deriveP2BKBlindedPubkeyAtSlot(
@@ -218,7 +218,7 @@ function deriveP2BKBlindingTweakFromECDH(
  * Receiver-side slot key: `(p + r_i) mod n` for one slot, without a pubkey check.
  *
  * @remarks
- * Taproot secrets (2.7) receiver flow: the caller verifies the result against the proof secret
+ * Nutroot secrets (2.7) receiver flow: the caller verifies the result against the proof secret
  * (bare `K = k*G`, or tweaked via the disclosed tree), so no blinded-key comparison happens here.
  * The negated-derivation branch is retired (2.7): normalize x-only imports at the boundary.
  */

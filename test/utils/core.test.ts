@@ -38,7 +38,7 @@ import {
   NUT02_V3_VECTOR2_KEYS,
   PUBKEYS,
 } from '../consts';
-import vectors from '../vectors/taproot-v3.json';
+import vectors from '../vectors/nutroot-v3.json';
 
 const keys: Keys = {};
 for (let i = 1; i <= 2048; i *= 2) {
@@ -1746,7 +1746,7 @@ describe('normalizeMintUrl', () => {
   });
 });
 
-describe('taproot spend_info token serialization', () => {
+describe('nutroot spend_info token serialization', () => {
   test('spend_info roundtrips through V4 CBOR', () => {
     const proof: Proof = {
       id: '02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd',
@@ -1768,7 +1768,7 @@ describe('taproot spend_info token serialization', () => {
   });
 
   test('every spend_info shape survives the V4 round-trip', () => {
-    // Spec 2.5.2 shapes: bearer `k`, receiver-keyed `E`, explicit `K` for a script-only proof,
+    // NUT-10 spend info shapes: bearer `k`, receiver-keyed `E`, explicit `K` for a script-only proof,
     // each with and without a disclosed tree. All four CBOR fields must come back as they went in.
     const leaf =
       '00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80';
@@ -1881,7 +1881,7 @@ describe('v3 transaction witnesses do not travel in tokens', () => {
   test('a pre-v3 witness travels even when its secret looks like a point', () => {
     // A pre-v3 secret is an arbitrary string and may happen to be 33 point-shaped bytes of hex.
     // Its witness is a NUT-11 witness, which does travel, so the rule has to follow the keyset
-    // (spec 5) and not the secret's shape.
+    // (NUT-10) and not the secret's shape.
     const lookalike = {
       amount: 8,
       id: '0088553333aabbcc', // v1 keyset: pre-v3 rules apply to it
