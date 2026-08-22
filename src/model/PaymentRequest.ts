@@ -2,6 +2,12 @@ import { normalizeSecpPubkey } from '../crypto/curve_secp';
 import { getTag, getTagInt, getTagScalar } from '../crypto/NUT10';
 import type { P2PKOptions, P2PKTag } from '../crypto/NUT11';
 import { P2PK_KNOWN_TAG_KEYS, p2pkOptionsToPRNut10, parseP2PKSecret } from '../crypto/NUT11';
+import {
+  parseNutrootLeaf,
+  serializeNutrootLeaf,
+  NUTROOT_NUMS_KEY,
+  type NutrootLeaf,
+} from '../crypto/nutroot';
 import { encodeBase64toUint8, decodeCBOR, encodeCBOR, Bytes, normalizeMintUrl } from '../utils';
 import { decodeBech32mToBytes, encodeBech32m } from '../utils/bech32m';
 import { JSONInt } from '../utils/JSONInt';
@@ -15,6 +21,7 @@ import type {
   PaymentRequestPayload,
   PaymentRequestTransport,
   SupportedMethod,
+  NutrootOption,
 } from '../wallet/types';
 
 import { Amount, type AmountLike } from './Amount';
@@ -36,6 +43,7 @@ export type PaymentRequestOptions = {
   nut10?: NUT10Option;
   mintsPreferred?: boolean;
   supportedMethods?: Array<{ method: string; fee?: AmountLike }>;
+  nutroot?: NutrootOption;
 };
 
 export class PaymentRequest {
@@ -49,9 +57,11 @@ export class PaymentRequest {
   public nut10?: NUT10Option;
   public mintsPreferred?: boolean;
   public supportedMethods?: SupportedMethod[];
+  public nutroot?: NutrootOption;
 
   constructor(options: PaymentRequestOptions = {}) {
     this.id = options.id;
+    this.nutroot = options.nutroot;
     this.unit = options.unit;
     this.mints = options.mints;
     this.description = options.description;
@@ -306,6 +316,13 @@ export class PaymentRequest {
         t: this.nut10.tags,
       };
     }
+    if (this.nutroot) {
+      rawRequest.nutroot = {
+        k: this.nutroot.receiverKey,
+        ...(this.nutroot.leaves?.length && { l: this.nutroot.leaves }),
+        ...(this.nutroot.blindKeys?.length && { b: this.nutroot.blindKeys }),
+      };
+    }
     return rawRequest;
   }
 
@@ -353,6 +370,7 @@ export class PaymentRequest {
             tags: this.nut10.tags,
           }
         : undefined,
+      nutroot: this.nutroot,
     };
 
     const tlvBytes = encodeTLV(tlvRequest);
@@ -429,6 +447,53 @@ export class PaymentRequest {
   }
 
   /**
+   * Converts this request's `nutroot` option into the arguments for a receiver-keyed nutroot send
+   * (NUT-28), so a payer can derive outputs to the payee's static key under the tree they asked
+   * for, honouring their blind-me tags.
+   *
+   * @remarks
+   * `undefined` when the request carries no nutroot option. Leaves must round-trip byte for byte: a
+   * payer that cannot reproduce the payee's exact leaf bytes would build a different tree, hence a
+   * different secret, so it refuses rather than paying to something the payee did not ask for.
+   * @throws If the receiver key is not a valid point, or a requested leaf is unparsable or would
+   *   not re-serialize to the bytes the payee sent.
+   */
+  toNutrootOptions():
+    | { receiverPub: string; leaves?: NutrootLeaf[]; blindKeys?: string[] }
+    | undefined {
+    const nutroot = this.nutroot;
+    if (!nutroot) return undefined;
+    if (!nutroot.receiverKey) {
+      throw new CTSError('nutroot option is missing its receiver key');
+    }
+    const receiverPub = normalizeSecpPubkey(nutroot.receiverKey);
+    // NUT-10: the payer offsets the NUMS base per output, so uniqueness no longer depends on
+    // the tree and the requested leaves are reproduced unchanged. Leaves are still required:
+    // nothing else could spend a proof with no key path.
+    if (receiverPub === NUTROOT_NUMS_KEY && !nutroot.leaves?.length) {
+      throw new CTSError('malformed request: a NUMS receiver key requires leaves');
+    }
+    if (!nutroot.leaves?.length) {
+      return { receiverPub };
+    }
+    const leaves = nutroot.leaves.map((hex, i) => {
+      const bytes = Bytes.fromHex(hex);
+      const leaf = parseNutrootLeaf(bytes);
+      if (!Bytes.equals(serializeNutrootLeaf(leaf), bytes)) {
+        throw new CTSError(`requested leaf ${i} does not round-trip: cannot reproduce its bytes`);
+      }
+      return leaf;
+    });
+    return {
+      receiverPub,
+      leaves,
+      ...(nutroot.blindKeys?.length && {
+        blindKeys: nutroot.blindKeys.map((k) => k.toLowerCase()),
+      }),
+    };
+  }
+
+  /**
    * Creates a PaymentRequest from a raw payment request. Supports both creqA and creqB versions.
    *
    * @param rawPaymentRequest - The raw payment request string to create a PaymentRequest from.
@@ -451,7 +516,15 @@ export class PaymentRequest {
         }
       : undefined;
     const supportedMethods = rawPaymentRequest.sm?.map((m) => ({ method: m.mn, fee: m.mf }));
+    const nutroot = rawPaymentRequest.nutroot
+      ? {
+          receiverKey: rawPaymentRequest.nutroot.k,
+          leaves: rawPaymentRequest.nutroot.l,
+          blindKeys: rawPaymentRequest.nutroot.b,
+        }
+      : undefined;
     return new PaymentRequest({
+      nutroot,
       transport: transports,
       id: rawPaymentRequest.i,
       amount: rawPaymentRequest.a,
@@ -490,6 +563,7 @@ export class PaymentRequest {
         nut10,
         mintsPreferred: decoded.mintsPreferred,
         supportedMethods: decoded.supportedMethods,
+        nutroot: decoded.nutroot,
       });
     }
 
@@ -526,6 +600,7 @@ export class PaymentRequestBuilder {
   private _singleUse?: boolean;
   private _transports: PaymentRequestTransport[] = [];
   private _nut10?: NUT10Option;
+  private _nutroot?: NutrootOption;
   private _methods: Array<{ method: string; fee?: AmountLike }> = [];
 
   /**
@@ -667,6 +742,42 @@ export class PaymentRequestBuilder {
   }
 
   /**
+   * Requests nutroot (v3 keyset) outputs derived to `receiverKey`, optionally under a tree.
+   *
+   * @remarks
+   * NUT-28: the receiver key is blinded at slot 0 by the payer, so one request can be reused
+   * without linking payments. The payer assigns slots in transmitted leaf order; the receiver
+   * derives every occupied slot and matches keys by value. `blindKeys` names the leaf keys to
+   * blind.
+   * @throws If the receiver key is not a valid point, a leaf is unparsable, or a blind-me key is
+   *   not one of the leaves' keys.
+   */
+  requestNutroot(option: NutrootOption): this {
+    const nutroot: NutrootOption = {
+      receiverKey: normalizeSecpPubkey(option.receiverKey),
+      ...(option.leaves?.length && { leaves: [...option.leaves] }),
+      ...(option.blindKeys?.length && {
+        blindKeys: option.blindKeys.map((k) => normalizeSecpPubkey(k)),
+      }),
+    };
+    // Validate here rather than at build(): a request nobody can pay is worth catching at the
+    // point the payee wrote it, not at the payer.
+    const leafKeys = new Set(
+      (nutroot.leaves ?? []).flatMap((hex) => parseNutrootLeaf(Bytes.fromHex(hex)).keys),
+    );
+    for (const key of nutroot.blindKeys ?? []) {
+      if (!leafKeys.has(key)) {
+        throw new CTSError(`blind-me key is not in the requested tree: ${key}`);
+      }
+    }
+    if (nutroot.receiverKey === NUTROOT_NUMS_KEY && !nutroot.leaves?.length) {
+      throw new CTSError('A NUMS receiver key requires leaves');
+    }
+    this._nutroot = nutroot;
+    return this;
+  }
+
+  /**
    * Validates cross-field state and constructs the {@link PaymentRequest}.
    *
    * @throws If `mintsPreferred` is set without mints (NUT-18 ignores `mp` without `m`), a supported
@@ -701,6 +812,7 @@ export class PaymentRequestBuilder {
       nut10: this._nut10,
       mintsPreferred: this._mintsPreferred,
       supportedMethods: this._methods.length ? this._methods : undefined,
+      nutroot: this._nutroot,
     });
   }
 }

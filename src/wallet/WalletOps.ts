@@ -1,4 +1,5 @@
 import { type P2PKOptions } from '../crypto';
+import { type NutrootLeaf } from '../crypto/nutroot';
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { type OutputDataLike, type OutputDataFactory } from '../model/OutputData';
@@ -103,8 +104,15 @@ export class WalletOps {
     if (pr.nut10 && !lock) {
       throw new CTSError(`cannot honour the request's nut10 lock kind '${pr.nut10.kind}'`);
     }
+    // A request cannot ask for both: v3 outputs are nutroot-only, and NUT-10 secrets belong to
+    // pre-v3 keysets. Honouring one would silently ignore the other.
+    const nutroot = pr.toNutrootOptions();
+    if (nutroot && lock) {
+      throw new CTSError('payment request carries both a nut10 lock and a nutroot option');
+    }
     // Net of input fees (NUT-18): the payee must net the requested amount after swapping.
     const builder = new SendBuilder(wallet, base.add(fee), proofs).includeFees(true);
+    if (nutroot) return builder.asNutroot(nutroot);
     return lock ? builder.asP2PK(lock) : builder;
   }
   receive(token: Token | string | ProofLike[]) {
@@ -202,6 +210,25 @@ export class SendBuilder {
    */
   asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]) {
     this.sendOT = { type: 'p2pk', options: p2pk, denominations: denoms };
+    return this;
+  }
+
+  /**
+   * Derive the sent proofs to a payee's static key on a v3 keyset (NUT-28).
+   *
+   * @remarks
+   * Each output gets its own ephemeral, so two payments to one key are unlinkable, and each carries
+   * the spend info the payee derives from. Optional `leaves` lock the outputs under a tree;
+   * `blindKeys` are the leaf keys their owner tagged blind-me.
+   * @param options Receiver key and optional tree, e.g. from
+   *   {@link PaymentRequest.toNutrootOptions}.
+   * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+   */
+  asNutroot(
+    options: { receiverPub: string; leaves?: NutrootLeaf[]; blindKeys?: string[] },
+    denoms?: AmountLike[],
+  ) {
+    this.sendOT = { type: 'nutroot', options, denominations: denoms };
     return this;
   }
 
@@ -581,8 +608,8 @@ export class ReceiveBuilder {
  * Builder for minting proofs from a quote.
  *
  * @remarks
- * Bolt12 requires privkey by default, bolt11 only for locked quotes. The compiler will throw an
- * error if bolt12 and privkey() is omitted: MintBuilder<"bolt12", false>' is not assignable...
+ * Bolt12 requires privkey by default. The compiler will throw an error if bolt12 and privkey() is
+ * omitted: MintBuilder<"bolt12", false>' is not assignable...
  *
  * Use this builder for the typed, first-class mint methods. For arbitrary or future mint methods,
  * use the generic `wallet.prepareMint(method, …)` / `wallet.completeMint()` flow.
@@ -750,10 +777,6 @@ export class MintBuilder<
       const raw = this.quote as string | MintQuoteBolt11Response;
       const quote = typeof raw === 'string' ? await this.wallet.checkMintQuoteBolt11(raw) : raw;
       this.wallet.validateMintQuote(quote);
-      // Enforce privkey when the quote is locked
-      if (quote.pubkey && !this.config.privkey) {
-        throw new CTSError('privkey is required for locked BOLT11 mint quotes');
-      }
       return this.wallet.prepareMint(
         this.method,
         this.amount,

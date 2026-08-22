@@ -23,11 +23,16 @@ NUT_NAME ?= cashu-dev-nutshell
 
 # BLS (v3) Nutshell: no published image yet — build from a local checkout that
 # carries v3 support. Default path assumes the worktree sibling layout used
-# during the BLS bring-up (../nutshell on feature/bls12-381-v3-keyset, ≥0.21.0
-# which emits v3 keysets by default; see cashu/core/base.py).
+# during the BLS bring-up (../nutshell on rnd/taproot-v3-rebased, ≥0.21.0
+# which emits v3 keysets by default; see cashu/core/base.py). That branch stacks
+# the nutroot work on PR #999 (feature/bls12-381-v3-keyset); the build uses
+# whatever ../nutshell has checked out, so switch branches there to compare.
 NUT_BLS_PATH ?= ../nutshell
 NUT_BLS_IMAGE ?= cashu-dev-nutshell-bls:local
 NUT_BLS_NAME ?= cashu-dev-nutshell-bls
+# Second, pre-v3 keyset so the mint also serves NUT-10 and plain text secrets,
+# which belong to v1/v2 keysets only. v3 keysets take point secrets alone.
+NUT_BLS_V2_PATH ?= m/0'/0'/1'
 
 # ------------------------
 # Docker envs per dependency
@@ -166,6 +171,7 @@ nutshell-bls-up: nutshell-bls-build
 	$(DOCKER) run -d --name $(NUT_BLS_NAME) \
 		-p $(BIND_ADDR):$(PORT):3338 \
 		$(NUT_ENVS) \
+		-e MINT_V2_KEYSET_DERIVATION_PATH="$(NUT_BLS_V2_PATH)" \
 		$(NUT_BLS_IMAGE) poetry run mint
 
 nutshell-bls-down:

@@ -36,18 +36,35 @@ export function deriveP2BKBlindedPubkeys(
   const slotOffset = dataIsPubkey ? 0 : 1;
   if (!pubkeys.length) return { blinded: [], Ehex: '' };
   // Create fresh ephemeral secret (e) if not supplied, and calculate pubkey (E)
-  eBytes = eBytes ?? secp256k1.utils.randomSecretKey(); // 32 bytes
-  const e = secp256k1.Point.Fn.fromBytes(eBytes); // bigint in [1..n-1]
-  const E = secp256k1.getPublicKey(eBytes, true); // SEC1 compressed (bytes)
+  const secret = eBytes ?? secp256k1.utils.randomSecretKey(); // 32 bytes
+  const E = secp256k1.getPublicKey(secret, true); // SEC1 compressed (bytes)
   // Blind each pubkey in turn
-  const blinded = pubkeys.map((pubkey, i) => {
-    const P = pointFromHex(pubkey);
-    const r = deriveP2BKBlindingTweakFromECDH(P, e, i + slotOffset);
-    const P_ = P.add(secp256k1.Point.BASE.multiply(r));
-    if (P_.equals(secp256k1.Point.ZERO)) throw new CTSError('Blinded key at infinity');
-    return P_.toHex(true);
-  });
+  const blinded = pubkeys.map((pubkey, i) =>
+    deriveP2BKBlindedPubkeyAtSlot(pubkey, secret, i + slotOffset),
+  );
   return { blinded, Ehex: bytesToHex(E) };
+}
+
+/**
+ * Blind one public key at one slot: `P' = P + r_i*G`.
+ *
+ * @remarks
+ * Sender side, for the positional slot map of nutroot secrets (NUT-28): the same static key at two
+ * slots gets distinct tweaks from the distinct index. `eBytes` must be the ephemeral secret whose
+ * `E` travels with the proof.
+ * @throws If the blinded key is at infinity.
+ */
+export function deriveP2BKBlindedPubkeyAtSlot(
+  pubkeyHex: string,
+  eBytes: Uint8Array,
+  slotIndex: number,
+): string {
+  const e = secp256k1.Point.Fn.fromBytes(eBytes); // bigint in [1..n-1]
+  const P = pointFromHex(pubkeyHex);
+  const r = deriveP2BKBlindingTweakFromECDH(P, e, slotIndex);
+  const P_ = P.add(secp256k1.Point.BASE.multiply(r));
+  if (P_.equals(secp256k1.Point.ZERO)) throw new CTSError('Blinded key at infinity');
+  return P_.toHex(true);
 }
 
 /**
@@ -195,4 +212,22 @@ function deriveP2BKBlindingTweakFromECDH(
     }
   }
   return r;
+}
+
+/**
+ * Receiver-side slot key: `(p + r_i) mod n` for one slot, without a pubkey check.
+ *
+ * @remarks
+ * Nutroot secrets (2.7) receiver flow: the caller verifies the result against the proof secret
+ * (bare `K = k*G`, or tweaked via the disclosed tree), so no blinded-key comparison happens here.
+ * The negated-derivation branch is retired (2.7): normalize x-only imports at the boundary.
+ */
+export function deriveP2BKSlotSecretKey(Ehex: string, privkeyHex: string, slotIndex = 0): string {
+  const E = pointFromHex(Ehex);
+  const p = hexToNumber(privkeyHex);
+  const r = deriveP2BKBlindingTweakFromECDH(E, p, slotIndex);
+  const k = deriveP2BKSecretKey(p, r);
+  /* c8 ignore next — deriveP2BKSecretKey without blindPubkey only returns null on zero key. */
+  if (k === null) throw new CTSError('P2BK: derived slot key is zero');
+  return k;
 }

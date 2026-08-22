@@ -1,5 +1,7 @@
 import { bls12_381 } from '@noble/curves/bls12-381.js';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
+import { randomBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 
 import {
@@ -9,6 +11,12 @@ import {
   verifyUnblindedSignatureBls,
 } from '../../src/crypto';
 import { verifyUnblindedSignature } from '../../src/crypto/NUT01';
+import {
+  parseNutrootLeaf,
+  recoverLeafKeySecretKeys,
+  recoverReceiverKeyedSecretKey,
+  type NutrootLeaf,
+} from '../../src/crypto/nutroot';
 import { Amount } from '../../src/model/Amount';
 import { CTSError } from '../../src/model/Errors';
 import { OutputData } from '../../src/model/OutputData';
@@ -61,21 +69,53 @@ function signWithMint(
 describe('OutputData v3 round-trip (BLS12-381)', () => {
   const { keyset, privKeys, G2PubKeys } = makeV3Keyset();
 
+  // v3 secrets are 33-byte compressed points: the key behind the point signs the
+  // spend witness, so outputs are built from a real keypair.
+  const v3Output = (amount: number): OutputData =>
+    OutputData.createSingleNutrootData(
+      bytesToHex(secp256k1.getPublicKey(randomBytes(32), true)),
+      amount,
+      keyset.id,
+    );
+
   test('keyset id is a valid v3 id (prefix 02, 66 hex chars)', () => {
     expect(keyset.id).toMatch(/^02[0-9a-f]{64}$/);
   });
 
-  test('createSingleRandomData produces a 96-hex G1 B_ for v3 keyset', () => {
-    const out = OutputData.createSingleRandomData(1, keyset.id);
+  test('a v3 output produces a 96-hex G1 B_', () => {
+    const out = v3Output(1);
     expect(out.blindedMessage.B_).toMatch(/^[0-9a-f]{96}$/);
     expect(out.blindedMessage.id).toBe(keyset.id);
+  });
+
+  test('nutroot output construction rejects the wrong keyset and off-curve secrets', () => {
+    const valid = bytesToHex(secp256k1.getPublicKey(randomBytes(32), true));
+    expect(() => OutputData.createSingleNutrootData(valid, 1, `01${'11'.repeat(32)}`)).toThrow(
+      /v3 keyset/,
+    );
+    expect(() => OutputData.createSingleNutrootData(`02${'ff'.repeat(32)}`, 1, keyset.id)).toThrow(
+      /point secrets/,
+    );
+  });
+
+  test('createSingleRandomData gives a v3 output a real keypair', () => {
+    // v3 secrets are points, so a random secret is a random keypair; the key
+    // rides along because it signs the spend witness later.
+    const out = OutputData.createSingleRandomData(1, keyset.id);
+    const secretHex = new TextDecoder().decode(out.secret);
+    expect(secretHex).toMatch(/^0[23][0-9a-f]{64}$/);
+    expect(out.secretKey).toBeDefined();
+    expect(bytesToHex(secp256k1.getPublicKey(out.secretKey as Uint8Array, true))).toBe(secretHex);
+    expect(out.spendInfo?.k).toBe(bytesToHex(out.secretKey as Uint8Array));
+    const proof = out.toProof(signWithMint(out, privKeys, keyset.id), keyset);
+    expect(proof.spend_info?.k).toBe(out.spendInfo?.k);
   });
 
   // ~21 BLS pairings (7 amounts × 3 verifications each). Locally ~700ms, but under the
   // 4-environment parallel run (node + chromium + firefox + webkit), CPU contention can
   // push this past the 5s default. Bumped to absorb that noise.
   test('full mint → swap path: outputs round-trip and verify under pairing', () => {
-    const outputs = AMOUNTS.map((a) => OutputData.createSingleRandomData(a, keyset.id));
+    const outputs = AMOUNTS.map((a) => v3Output(a));
     const sigs = outputs.map((o) => signWithMint(o, privKeys, keyset.id));
 
     const proofs = outputs.map((o, i) => o.toProof(sigs[i], keyset));
@@ -114,7 +154,7 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
   });
 
   test('toProof rejects a forged C_ via inline pairing check', () => {
-    const out = OutputData.createSingleRandomData(8, keyset.id);
+    const out = v3Output(8);
 
     // Forge: substitute another amount's signing key on the same B_. The resulting C does not
     // satisfy `e(C, G2) == e(Y, K2_8)`, so toProof's inline pairing check MUST throw. This is
@@ -131,7 +171,7 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
   });
 
   test('toProof rejects a completely garbage C_ (CTF: malicious mint)', () => {
-    const out = OutputData.createSingleRandomData(8, keyset.id);
+    const out = v3Output(8);
     // A G1 point unrelated to the output's Y is overwhelmingly unlikely to satisfy the pairing.
     const garbageC_ = bls12_381.G1.Point.BASE.multiply(424242n);
     const garbageSig: SerializedBlindedSignature = {
@@ -143,7 +183,7 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
   });
 
   test('round-trip preserves the wallet-chosen secret bytes', () => {
-    const out = OutputData.createSingleRandomData(2, keyset.id);
+    const out = v3Output(2);
     const originalSecret = new TextDecoder().decode(out.secret);
     const sig = signWithMint(out, privKeys, keyset.id);
     const proof = out.toProof(sig, keyset);
@@ -154,7 +194,7 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
     // Request amount=8; mint returns a perfectly valid v3 signature for amount=4 on the
     // same B_. The pairing check against K2_4 would succeed — funds-loss vector if the
     // request/response amount mismatch is not enforced before key lookup.
-    const out = OutputData.createSingleRandomData(8, keyset.id);
+    const out = v3Output(8);
     const B_ = pointFromHexG1(out.blindedMessage.B_);
     const downgraded = createBlindSignatureBls(B_, privKeys['4'], keyset.id);
     const downgradedSig: SerializedBlindedSignature = {
@@ -171,7 +211,7 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
     // A buggy or malicious mint that returns un-parseable hex must not leak a generic
     // Error after the inputs have been destroyed. toProof must surface a CTSError that
     // tells the wallet how to recover.
-    const out = OutputData.createSingleRandomData(1, keyset.id);
+    const out = v3Output(1);
     const sig: SerializedBlindedSignature = {
       id: keyset.id,
       amount: Amount.from(1),
@@ -186,7 +226,7 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
     // Blank outputs (amount=0) let the mint pick the denomination. If the picked amount
     // isn't in our keyset, keys[amount] is undefined and pointFromHexG2(undefined) used
     // to throw an opaque TypeError — now it must be a CTSError with the recovery hint.
-    const blank = OutputData.createSingleRandomData(0, keyset.id);
+    const blank = v3Output(0);
     const B_ = pointFromHexG1(blank.blindedMessage.B_);
     // 128 (not in AMOUNTS) — mint signs with some scalar but the wallet has no K2_128.
     const signed = createBlindSignatureBls(B_, privKeys['2'], keyset.id);
@@ -203,7 +243,7 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
   test('toProof accepts amount=0 blank (NUT-08 fee change / NUT-09 restore)', () => {
     // Blank outputs declare amount=0 up front; the mint chooses the actual denomination.
     // toProof must trust sig.amount for key lookup and final Proof.amount in this case.
-    const blank = OutputData.createSingleRandomData(0, keyset.id);
+    const blank = v3Output(0);
     const B_ = pointFromHexG1(blank.blindedMessage.B_);
     // Mint fills in amount=2 from the blank
     const filled = createBlindSignatureBls(B_, privKeys['2'], keyset.id);
@@ -223,7 +263,7 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
     // Blank output, mint returns amount=128 which is not in the keyset, so `keys[128]` is
     // undefined. The CTSError must carry a cause that names the offending amount, not an opaque
     // downstream parse error.
-    const blank = OutputData.createSingleRandomData(0, keyset.id);
+    const blank = v3Output(0);
     const B_ = pointFromHexG1(blank.blindedMessage.B_);
     const signed = createBlindSignatureBls(B_, privKeys['2'], keyset.id);
     const sig: SerializedBlindedSignature = {
@@ -245,24 +285,22 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
   });
 
   test('does not attach p2pk_e when the output has no ephemeral key', () => {
-    const out = OutputData.createSingleRandomData(1, keyset.id);
+    const out = v3Output(1);
     const proof = out.toProof(signWithMint(out, privKeys, keyset.id), keyset);
     expect('p2pk_e' in proof).toBe(false);
   });
 
-  test('carries the P2BK ephemeral key onto a v3 proof', () => {
-    // A P2PK output on a v3 keyset blinds its lock key and records the ephemeral E; toProof must
-    // copy it to `p2pk_e` so the recipient can recover the blinding tweak. P2BK blinding always
-    // uses secp keys, independent of the keyset curve.
+  test('refuses a NUT-10 P2PK output on a v3 keyset', () => {
+    // P2PK is a NUT-10 well-known secret, which belongs to legacy/v1/v2 keysets.
+    // The v3 way to lock to a key is a point secret, tweaked or bare.
     const secpPubkey = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
-    const out = OutputData.createSingleP2PKData(
-      { kind: 'P2PK', data: secpPubkey, blindKeys: true },
-      1,
-      keyset.id,
-    );
-    expect(out.ephemeralE).toBeDefined();
-    const proof = out.toProof(signWithMint(out, privKeys, keyset.id), keyset);
-    expect(proof.p2pk_e).toBe(out.ephemeralE);
+    expect(() =>
+      OutputData.createSingleP2PKData(
+        { kind: 'P2PK', data: secpPubkey, blindKeys: true },
+        1,
+        keyset.id,
+      ),
+    ).toThrow(CTSError);
   });
 });
 
@@ -304,5 +342,60 @@ describe('OutputData v3 — Nutshell PR #999 deterministic test vector', () => {
     const proof = od.toProof(sig, { id, keys: { '1': K2Hex } });
     expect(proof.C).toBe(NUTSHELL_C_HEX);
     expect(proof.secret).toBe(SECRET);
+  });
+});
+
+describe('OutputData.createNutrootData (receiver-keyed, NUT-28)', () => {
+  const { keyset, privKeys } = makeV3Keyset();
+  const bobPriv = bytesToHex(randomBytes(32));
+  const bobPub = bytesToHex(secp256k1.getPublicKey(hexToBytes(bobPriv), true));
+
+  test('one fresh ephemeral per output, and the payee recovers each key', () => {
+    const outputs = OutputData.createNutrootData({ receiverPub: bobPub }, 7, keyset);
+    expect(outputs.map((o) => o.blindedMessage.amount.toString()).sort()).toEqual(['1', '2', '4']);
+    // Fresh e per output (2.4/2.7): distinct ephemerals, so distinct secrets.
+    const ephemerals = outputs.map((o) => o.spendInfo?.E);
+    expect(new Set(ephemerals).size).toBe(3);
+    expect(new Set(outputs.map((o) => new TextDecoder().decode(o.secret))).size).toBe(3);
+    for (const out of outputs) {
+      const proof = out.toProof(signWithMint(out, privKeys, keyset.id), keyset);
+      // Spend info travels onto the proof, and Bob trial-matches it.
+      expect(proof.spend_info?.E).toBe(out.spendInfo?.E);
+      expect(proof.spend_info?.tree).toBeUndefined();
+      const hit = recoverReceiverKeyedSecretKey(proof.secret, proof.spend_info!.E!, bobPriv);
+      expect(hit).toBeDefined();
+      expect(bytesToHex(secp256k1.getPublicKey(hexToBytes(hit!.secretKey), true))).toBe(
+        proof.secret,
+      );
+    }
+  });
+
+  test('a requested tree travels with each output, with blind-me keys blinded', () => {
+    const alicePriv = bytesToHex(randomBytes(32));
+    const alicePub = bytesToHex(secp256k1.getPublicKey(hexToBytes(alicePriv), true));
+    const leaves: NutrootLeaf[] = [{ type: 'after', n: 1, keys: [alicePub], time: 4102444800 }];
+    const [out] = OutputData.createNutrootData(
+      { receiverPub: bobPub, leaves, blindKeys: [alicePub] },
+      1,
+      keyset,
+    );
+    const proof = out.toProof(signWithMint(out, privKeys, keyset.id), keyset);
+    const tree = proof.spend_info!.tree!;
+    expect(tree).toHaveLength(1);
+    // The leaf key is not Alice's key verbatim, but Alice still finds it at slot 1.
+    expect(parseNutrootLeaf(hexToBytes(tree[0])).keys[0]).not.toBe(alicePub);
+    expect(recoverLeafKeySecretKeys(tree, proof.spend_info!.E, [alicePriv])).toEqual([
+      { leafIndex: 0, keyIndex: 0, slot: 1, secretKey: expect.any(String), blinded: true },
+    ]);
+    // And Bob's key path still reconstructs the tweaked secret over that tree.
+    const hit = recoverReceiverKeyedSecretKey(proof.secret, proof.spend_info!.E!, bobPriv, tree);
+    expect(hit).toBeDefined();
+  });
+
+  test('nutroot outputs are refused on a pre-v3 keyset', () => {
+    const secpKeyset = { id: '00ad268c4d1f5826', keys: { '1': '02'.padEnd(66, 'a') } };
+    expect(() => OutputData.createNutrootData({ receiverPub: bobPub }, 1, secpKeyset)).toThrow(
+      /v3 keyset/,
+    );
   });
 });

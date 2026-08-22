@@ -5,14 +5,17 @@ import {
   type DLEQ,
   type G1Point,
   type G2Point,
+  assertV3PointSecret,
   batchVerifyUnblindedSignatureBls,
   isBlsKeyset,
+  isV3PointSecret,
   pointFromHex,
   pointFromHexG1,
   pointFromHexG2,
   verifyDLEQProof_reblind,
   verifyUnblindedSignatureBls,
 } from '../crypto';
+import { verifyNutrootSpendInfo } from '../crypto/nutroot';
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { PaymentRequest } from '../model/PaymentRequest';
@@ -268,6 +271,23 @@ function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
   return prefix + version + base64Data;
 }
 
+/**
+ * True when a token entry's witness is a v3 transaction witness, so it must not travel.
+ *
+ * @remarks
+ * A v3 witness signs one transaction's digest, so it means nothing outside that transaction and a
+ * token carries no transaction. Tokens drop it in both directions: emitting one hands the next
+ * owner a witness that can never verify, and keeping one on receive leaves it in place of the
+ * signature the new owner must produce, so their sweep is refused for a witness a stranger chose.
+ *
+ * Dispatch is on the keyset, not on the secret's shape. A pre-v3 secret is an arbitrary string and
+ * may happen to look like a compressed point, and that proof's witness is a NUT-11 witness which
+ * does travel. Which rules apply follows the keyset (NUT-10), the same rule the transcript uses.
+ */
+function isV3TransactionWitness(keysetId: string, secret: string): boolean {
+  return isBlsKeyset(keysetId) && isV3PointSecret(secret);
+}
+
 function templateFromToken(token: Token): TokenV4Template {
   const idMap: { [id: string]: Proof[] } = {};
   const mint = token.mint;
@@ -300,8 +320,18 @@ function templateFromToken(token: Token): TokenV4Template {
             ...(p.p2pk_e && {
               pe: hexToBytes(p.p2pk_e),
             }),
-            ...(p.witness && {
-              w: JSON.stringify(p.witness),
+            ...(p.witness &&
+              !isV3TransactionWitness(id, p.secret) && {
+                w: JSON.stringify(p.witness),
+              }),
+            ...(p.spend_info && {
+              si: {
+                ...(p.spend_info.k && { k: hexToBytes(p.spend_info.k) }),
+                ...(p.spend_info.E && { e: hexToBytes(p.spend_info.E) }),
+                ...(p.spend_info.K && { i: hexToBytes(p.spend_info.K) }),
+                ...(p.spend_info.u && { u: hexToBytes(p.spend_info.u) }),
+                ...(p.spend_info.tree && { t: p.spend_info.tree.map(hexToBytes) }),
+              },
             }),
           }),
         ),
@@ -339,8 +369,18 @@ function tokenFromTemplate(template: TokenV4Template): Token {
         ...(p.pe && {
           p2pk_e: bytesToHex(p.pe),
         }),
-        ...(p.w && {
-          witness: p.w,
+        ...(p.w &&
+          !isV3TransactionWitness(bytesToHex(t.i), p.s) && {
+            witness: p.w,
+          }),
+        ...(p.si && {
+          spend_info: {
+            ...(p.si.k && { k: bytesToHex(p.si.k) }),
+            ...(p.si.e && { E: bytesToHex(p.si.e) }),
+            ...(p.si.i && { K: bytesToHex(p.si.i) }),
+            ...(p.si.u && { u: bytesToHex(p.si.u) }),
+            ...(p.si.t && { tree: p.si.t.map(bytesToHex) }),
+          },
         }),
       });
     });
@@ -516,7 +556,8 @@ export type DeriveKeysetIdOptions = {
  * Returns the keyset id of a set of keys.
  *
  * @param keys Keys object to derive keyset id from.
- * @param options.expiry (optional) expiry of the keyset.
+ * @param options.expiry (optional) expiry of the keyset (V2 only; V3 does not commit expiry to the
+ *   id).
  * @param options.input_fee_ppk (optional) Input fee for keyset (in ppk)
  * @param options.unit (optional) the unit of the keyset. Default: sat.
  * @param options.versionByte (optional) version of the keyset ID. Default: 1.
@@ -552,12 +593,11 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
       const hashHex = Bytes.toHex(hash).slice(0, 14);
       return '00' + hashHex;
     }
-    case 1:
-    case 2: {
+    case 1: {
       if (!unit) {
-        throw new CTSError(`Cannot compute keyset ID version 0${versionByte}: unit is required.`);
+        throw new CTSError(`Cannot compute keyset ID version 01: unit is required.`);
       }
-      // Per NUT-02 V2/V3: pubkey hex and unit string MUST be lowercased in the preimage.
+      // Per NUT-02 V2: pubkey hex and unit string MUST be lowercased in the preimage.
       const sortedEntries = Object.entries(keys).sort(([amountA], [amountB]) =>
         Amount.from(amountA).compareTo(amountB),
       );
@@ -574,7 +614,32 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
       }
       const hash = sha256(Bytes.fromString(preimage));
       const hashHex = Bytes.toHex(hash);
-      return (versionByte === 2 ? '02' : '01') + hashHex;
+      return '01' + hashHex;
+    }
+    case 2: {
+      if (!unit) {
+        throw new CTSError(`Cannot compute keyset ID version 02: unit is required.`);
+      }
+      // Per NUT-02 V3: length-framed preimage over raw bytes; unit MUST match
+      // [a-z0-9_-]+ and final_expiry is not committed to the id.
+      if (!/^[a-z0-9_-]+$/.test(unit)) {
+        throw new CTSError(`Invalid keyset unit: ${unit}`);
+      }
+      const sortedEntries = Object.entries(keys).sort(([amountA], [amountB]) =>
+        Amount.from(amountA).compareTo(amountB),
+      );
+      const keysBytes = mergeUInt8Arrays(
+        ...sortedEntries.flatMap(([amount, pubkey]) => [
+          len32Framed(Bytes.minimalBE(BigInt(amount))),
+          len32Framed(hexToBytes(pubkey.toLowerCase())),
+        ]),
+      );
+      const preimage = mergeUInt8Arrays(
+        len32Framed(keysBytes),
+        len32Framed(Bytes.fromString(unit)),
+        len32Framed(Bytes.minimalBE(BigInt(input_fee_ppk ?? 0))),
+      );
+      return '02' + Bytes.toHex(sha256(preimage));
     }
     default:
       throw new CTSError(`Unrecognized keyset ID version: ${versionByte}`);
@@ -590,6 +655,16 @@ function mergeUInt8Arrays(...arrays: Uint8Array[]): Uint8Array {
     offset += arr.length;
   }
   return merged;
+}
+
+/**
+ * NUT-02 V3 len32 framing: 4-byte big-endian length prefix.
+ */
+function len32Framed(b: Uint8Array): Uint8Array {
+  const out = new Uint8Array(4 + b.length);
+  new DataView(out.buffer).setUint32(0, b.length, false);
+  out.set(b, 4);
+  return out;
 }
 
 /**
@@ -843,6 +918,7 @@ export function hasValidDleq(
 
   if (isBlsKeyset(proof.id)) {
     try {
+      assertV3PointSecret(proof.secret);
       const K2 = pointFromHexG2(keyset.keys[proof.amount.toString()]);
       return verifyUnblindedSignatureBls(
         K2,
@@ -920,6 +996,19 @@ export function verifyProofsForReceive(
 
   if (blsProofs.length === 0) return;
 
+  // Receive-time verification cascade (nutroot secrets 2.5.1): spend info must reconstruct the
+  // secret (bare key, or complete disclosed tree). Anything partial or mismatched rejects.
+  for (const p of blsProofs) {
+    if (!p.spend_info) continue;
+    try {
+      verifyNutrootSpendInfo(p.secret, p.spend_info);
+    } catch (e) {
+      throw new CTSError(
+        `${e instanceof Error ? e.message : 'Invalid spend info'}${offenderSuffix(p)}`,
+      );
+    }
+  }
+
   // Batch path bypasses hasValidDleq, so the amount-in-keyset check is repeated here.
   const items = blsProofs.map((p) => {
     const ks = getKeyset(p.id);
@@ -931,6 +1020,7 @@ export function verifyProofsForReceive(
     let K2: G2Point;
     let C: G1Point;
     try {
+      assertV3PointSecret(p.secret);
       K2 = pointFromHexG2(ks.keys[p.amount.toString()]);
       C = pointFromHexG1(p.C);
     } catch {

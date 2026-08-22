@@ -1429,3 +1429,27 @@ describe('deterministic', () => {
     },
   );
 });
+
+describe('output secret uniqueness (NUT-10)', () => {
+  test('rejects a factory that hands every output the same secret', async () => {
+    // A key backs at most one secret: two outputs of the same amount sharing one unblind to the
+    // same C, so the second is the first again and its value is gone with no error anywhere.
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const keyset = wallet.keyChain.getKeyset(wallet.keysetId);
+    const fixedSecret = new TextEncoder().encode('one-secret-for-every-output');
+    const factory = () =>
+      new OutputData(
+        { amount: Amount.from(1), B_: '02'.padEnd(66, 'a'), id: keyset.id },
+        1n,
+        fixedSecret,
+      );
+    expect(() =>
+      (wallet as unknown as { createOutputData: (...a: unknown[]) => unknown }).createOutputData(
+        Amount.from(2),
+        keyset,
+        { type: 'custom', data: [factory(), factory()] },
+      ),
+    ).toThrow(/Duplicate output secret/);
+  });
+});

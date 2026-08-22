@@ -98,6 +98,8 @@ export type {
   RawTransport,
   NUT10Option,
   RawNUT10Option,
+  NutrootOption,
+  RawNutrootOption,
 } from './wallet/types';
 
 // Logging & errors
@@ -140,3 +142,18 @@ export {
   type SigAllDigests,
   type SigAllSigningPackage,
 } from './model/SigAll';
+export {
+  ScriptPath,
+  type ScriptPathApi,
+  type ScriptPathSigningPackage,
+  type ScriptPathSpendRequest,
+} from './model/ScriptPath';
+export {
+  parseNutrootLeaf,
+  parseNutrootLeafHex,
+  serializeNutrootLeaf,
+  serializeNutrootLeafHex,
+  NUTROOT_LEAF_TYPE,
+  NUTROOT_NUMS_KEY,
+  type NutrootLeaf,
+} from './crypto/nutroot';

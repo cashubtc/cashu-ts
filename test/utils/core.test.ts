@@ -1,3 +1,4 @@
+import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { test, describe, expect } from 'vitest';
 
@@ -10,6 +11,7 @@ import {
   createBlindSignature,
   getPubKeyFromPrivKey,
   getG2PubKeyFromPrivKey,
+  hashToCurveBls,
 } from '../../src/crypto';
 import { CTSError } from '../../src/model/Errors';
 import * as utils from '../../src/utils';
@@ -39,6 +41,7 @@ import {
   NUT02_V3_VECTOR2_KEYS,
   PUBKEYS,
 } from '../consts';
+import vectors from '../vectors/nutroot-v3.json';
 
 const V3_TOKEN =
   'cashuAeyJ0b2tlbiI6W3sibWludCI6Imh0dHA6Ly9sb2NhbGhvc3Q6MzMzOCIsInByb29mcyI6W3siaWQiOiJJMnlOK2lSWWZrelQiLCJhbW91bnQiOjEsInNlY3JldCI6Ijk3emZtbWFHZjVrOE1nMGdhanBuYm1wZXJ2VHRFZUU4d3dLcmk3cldwVXM9IiwiQyI6IjAyMTk1MDgxZTYyMmY5OGJmYzE5YTA1ZWJlMjM0MWQ5NTVjMGQxMjU4OGM1OTQ4Yzg1OGQwN2FkZWMwMDdiYzFlNCJ9XX1dfQ';
@@ -578,17 +581,16 @@ describe('test keyset derivation', () => {
       expiry: NUT02_V3_VECTOR2_KEYS.final_expiry,
     });
     expect(keysetId).toBe(NUT02_V3_VECTOR2_KEYS.id);
+    // final_expiry is keyset metadata; it does not change the id.
+    const noExpiryId = utils.deriveKeysetId(NUT02_V3_VECTOR2_KEYS.keys, {
+      versionByte: 2,
+      unit: NUT02_V3_VECTOR2_KEYS.unit,
+      input_fee_ppk: NUT02_V3_VECTOR2_KEYS.input_fee_ppk,
+    });
+    expect(noExpiryId).toBe(keysetId);
   });
 
-  test('NUT-02 V3 derivation is case-insensitive in unit and pubkey hex', () => {
-    const upperUnitId = utils.deriveKeysetId(NUT02_V3_VECTOR2_KEYS.keys, {
-      versionByte: 2,
-      unit: NUT02_V3_VECTOR2_KEYS.unit.toUpperCase(),
-      input_fee_ppk: NUT02_V3_VECTOR2_KEYS.input_fee_ppk,
-      expiry: NUT02_V3_VECTOR2_KEYS.final_expiry,
-    });
-    expect(upperUnitId).toBe(NUT02_V3_VECTOR2_KEYS.id);
-
+  test('NUT-02 V3 derivation is case-insensitive in pubkey hex and rejects an invalid unit', () => {
     const upperKeys = Object.fromEntries(
       Object.entries(NUT02_V3_VECTOR2_KEYS.keys).map(([k, v]) => [k, v.toUpperCase()]),
     );
@@ -596,13 +598,21 @@ describe('test keyset derivation', () => {
       versionByte: 2,
       unit: NUT02_V3_VECTOR2_KEYS.unit,
       input_fee_ppk: NUT02_V3_VECTOR2_KEYS.input_fee_ppk,
-      expiry: NUT02_V3_VECTOR2_KEYS.final_expiry,
     });
     expect(upperKeysId).toBe(NUT02_V3_VECTOR2_KEYS.id);
+
+    // V3 units must match [a-z0-9_-]+; they are rejected, not normalized.
+    expect(() =>
+      utils.deriveKeysetId(NUT02_V3_VECTOR2_KEYS.keys, {
+        versionByte: 2,
+        unit: NUT02_V3_VECTOR2_KEYS.unit.toUpperCase(),
+        input_fee_ppk: NUT02_V3_VECTOR2_KEYS.input_fee_ppk,
+      }),
+    ).toThrow(/unit/i);
   });
 
-  // Mirror of the V3 case-insensitivity test on the V2 (secp256k1) path. The two share the same
-  // preimage code path; this lock-in catches a future regression that lowercases for v3 only.
+  // The V2 (secp256k1) ASCII preimage still normalizes case; lock that in so the V3
+  // strict-unit rule does not leak into V2, whose ids are live.
   test('NUT-02 V2 derivation is case-insensitive in unit and pubkey hex', () => {
     const upperUnitId = utils.deriveKeysetId(NUT02_V2_VECTOR1_KEYS.keys, {
       versionByte: 1,
@@ -891,13 +901,13 @@ describe('test zero-knowledge utilities', () => {
     );
   });
   describe('v3 (BLS) proof signature verification via hasValidDleq', () => {
-    // Locked Nutshell vector: secret="test_message", r=3, a=2 → C
+    // v3 proofs carry point secrets, so C is signed over the point's own Y. The
+    // primitive's Nutshell vector is pinned in the curve_bls tests instead.
     const v3Id = '02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d';
-    const v3Secret = 'test_message';
-    const v3C =
-      'b7a4881059133fd91a8753600d9a5e524c65d6224f6fe2d5aef9e59f1507fdad90b3b4d48ee46da5c8dfaa0b88e28b69';
-    // K2 = a * G2 with a=2 (compressed G2, 192 hex)
+    const v3Secret = bytesToHex(secp256k1.getPublicKey(hexToBytes('11'.repeat(32)), true));
+    // K2 = a * G2 with a=2 (compressed G2, 192 hex); C = a * Y
     const aBytes = hexToBytes('0'.repeat(63) + '2');
+    const v3C = hashToCurveBls(new TextEncoder().encode(v3Secret)).multiply(2n).toHex(true);
     const v3K2 = bytesToHex(getG2PubKeyFromPrivKey(aBytes));
 
     test('returns true for a v3 proof whose pairing equality holds', () => {
@@ -1046,11 +1056,12 @@ describe('test zero-knowledge utilities', () => {
     });
 
     describe('v3 BLS batches', () => {
-      // Locked Nutshell vector reused for the single-proof v3 happy path.
+      // Point secret with C = a * Y, the only shape a v3 keyset accepts.
       const v3Id = '02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d';
-      const v3Secret = 'test_message';
-      const v3C =
-        'b7a4881059133fd91a8753600d9a5e524c65d6224f6fe2d5aef9e59f1507fdad90b3b4d48ee46da5c8dfaa0b88e28b69';
+      const pointSecret = (n: number) =>
+        bytesToHex(secp256k1.getPublicKey(hexToBytes(n.toString(16).padStart(64, '0')), true));
+      const v3Secret = pointSecret(17);
+      const v3C = hashToCurveBls(new TextEncoder().encode(v3Secret)).multiply(2n).toHex(true);
       const v3K2 = bytesToHex(getG2PubKeyFromPrivKey(hexToBytes('0'.repeat(63) + '2')));
       const v3Proof: Proof = {
         amount: Amount.from(1),
@@ -1087,11 +1098,11 @@ describe('test zero-knowledge utilities', () => {
           keys: { [1]: K2hex, [2]: K2hex, [4]: K2hex, [8]: K2hex, [16]: K2hex },
         };
         const proofs = [
-          makeProof(1n, 's1', 7n),
-          makeProof(2n, 's2', 11n),
-          makeProof(4n, 's3', 13n),
-          makeProof(8n, 's4', 17n),
-          makeProof(16n, 's5', 19n),
+          makeProof(1n, pointSecret(1), 7n),
+          makeProof(2n, pointSecret(2), 11n),
+          makeProof(4n, pointSecret(3), 13n),
+          makeProof(8n, pointSecret(4), 17n),
+          makeProof(16n, pointSecret(5), 19n),
         ];
         expect(() => utils.verifyProofsForReceive(proofs, () => keyset)).not.toThrow();
       });
@@ -1118,11 +1129,11 @@ describe('test zero-knowledge utilities', () => {
           keys: { [1]: K2hex, [2]: K2hex, [4]: K2hex, [8]: K2hex, [16]: K2hex },
         };
         const good = [
-          makeProof(1n, 's1', 7n),
-          makeProof(2n, 's2', 11n),
-          makeProof(4n, 's3', 13n),
-          makeProof(8n, 's4', 17n),
-          makeProof(16n, 's5', 19n),
+          makeProof(1n, pointSecret(1), 7n),
+          makeProof(2n, pointSecret(2), 11n),
+          makeProof(4n, pointSecret(3), 13n),
+          makeProof(8n, pointSecret(4), 17n),
+          makeProof(16n, pointSecret(5), 19n),
         ];
         // Replace the C on the third proof with the first proof's C — keeps it on-curve
         // (so parseHex doesn't throw) but breaks pairing equality for that secret.
@@ -1141,6 +1152,18 @@ describe('test zero-knowledge utilities', () => {
 
       test('v3 proof with malformed C surfaces offender id in error', () => {
         const bad: Proof = { ...v3Proof, C: 'gg'.repeat(48) };
+        expect(() => utils.verifyProofsForReceive([bad], () => v3Keyset)).toThrow(
+          new RegExp(`invalid DLEQ.*keyset ${v3Id}`),
+        );
+      });
+
+      test('v3 receive rejects a signature-valid secret that is not a secp point', () => {
+        const secret = `02${'ff'.repeat(32)}`;
+        const bad: Proof = {
+          ...v3Proof,
+          secret,
+          C: hashToCurveBls(new TextEncoder().encode(secret)).multiply(2n).toHex(true),
+        };
         expect(() => utils.verifyProofsForReceive([bad], () => v3Keyset)).toThrow(
           new RegExp(`invalid DLEQ.*keyset ${v3Id}`),
         );
@@ -1867,5 +1890,160 @@ describe('normalizeMintUrl', () => {
   });
   test('lowercases hostname', () => {
     expect(normalizeMintUrl('https://Mint.Example.COM')).toBe('https://mint.example.com');
+  });
+});
+
+describe('nutroot spend_info token serialization', () => {
+  test('spend_info roundtrips through V4 CBOR', () => {
+    const proof: Proof = {
+      id: '02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd',
+      amount: Amount.from(8),
+      secret: '02595a333ef377a29f6756365bd46bf3b5e571dd7a44081822f3bd0bf03b358075',
+      C: '84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327',
+      spend_info: {
+        k: '38b91aa1635556d47ce92d99c1a92a2ffb82e57bc292c039d1d7b84c13bd75c6',
+        tree: [
+          '00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80',
+        ],
+      },
+    };
+    const token: Token = { mint: 'https://mint.test', proofs: [proof], unit: 'sat' };
+    const encoded = utils.getEncodedToken(token);
+    const decoded = utils.getDecodedToken(encoded, [proof.id]);
+    expect(decoded.proofs).toHaveLength(1);
+    expect(decoded.proofs[0].spend_info).toEqual(proof.spend_info);
+  });
+
+  test('every spend_info shape survives the V4 round-trip', () => {
+    // NUT-10 spend info shapes: bearer `k`, receiver-keyed `E`, explicit `K` for a script-only proof,
+    // each with and without a disclosed tree. All four CBOR fields must come back as they went in.
+    const leaf =
+      '00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80';
+    const blindedLeaf =
+      '0002020001010400210320b1a1272e7eaa44830375ecadf11b09a8ec5d1a4155253a897f31c8b27c974c06000101';
+    const shapes: Array<Record<string, unknown>> = [
+      { k: '38b91aa1635556d47ce92d99c1a92a2ffb82e57bc292c039d1d7b84c13bd75c6' },
+      { E: '022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4' },
+      {
+        E: '022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4',
+        tree: [blindedLeaf],
+      },
+      {
+        K: '0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0',
+        tree: [leaf, blindedLeaf],
+      },
+    ];
+    for (const spend_info of shapes) {
+      const proof: Proof = {
+        id: '02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd',
+        amount: Amount.from(8),
+        secret: '02595a333ef377a29f6756365bd46bf3b5e571dd7a44081822f3bd0bf03b358075',
+        C: '84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327',
+        spend_info,
+      };
+      const token: Token = { mint: 'https://mint.test', proofs: [proof], unit: 'sat' };
+      const decoded = utils.getDecodedToken(utils.getEncodedToken(token), [proof.id]);
+      expect(decoded.proofs[0].spend_info, JSON.stringify(spend_info)).toEqual(spend_info);
+    }
+  });
+
+  test('the shared token vectors: same spend_info from either encoder', () => {
+    // Cross-implementation pin. The two encoders differ on what NUT-00 leaves free (this one
+    // writes the short keyset id, nutshell the full one), so what must agree is the spend_info:
+    // both strings decode to the same fields here and in nutshell's mirror of this test.
+    const v = vectors.tokens_v4;
+    const fullId = vectors.nut13_v3.keyset_id;
+    for (const [name, shape] of Object.entries(v.shapes)) {
+      const proof: Proof = {
+        id: fullId,
+        amount: Amount.from(v.amount),
+        secret: shape.secret,
+        C: v.C,
+        spend_info: shape.spend_info,
+      };
+      const token: Token = { mint: v.mint, proofs: [proof], unit: v.unit };
+      // Our own encoding is pinned, so a change to this encoder is visible, not silent.
+      expect(utils.getEncodedToken(token), name).toBe(shape.token_cashu_ts);
+      for (const encoded of [shape.token_cashu_ts, shape.token_nutshell]) {
+        const decoded = utils.getDecodedToken(encoded, [fullId]);
+        expect(decoded.proofs[0].spend_info, name).toEqual(shape.spend_info);
+        expect(decoded.proofs[0].secret, name).toBe(shape.secret);
+        expect(decoded.proofs[0].id, name).toBe(fullId);
+      }
+    }
+  });
+
+  test('proofs without spend_info stay without it', () => {
+    const proof: Proof = {
+      id: '02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd',
+      amount: Amount.from(8),
+      secret: '02595a333ef377a29f6756365bd46bf3b5e571dd7a44081822f3bd0bf03b358075',
+      C: '84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327',
+    };
+    const token: Token = { mint: 'https://mint.test', proofs: [proof], unit: 'sat' };
+    const decoded = utils.getDecodedToken(utils.getEncodedToken(token), [proof.id]);
+    expect(decoded.proofs[0].spend_info).toBeUndefined();
+  });
+});
+
+describe('v3 transaction witnesses do not travel in tokens', () => {
+  const v3Proof = {
+    amount: 8,
+    id: '0288553333aabbcc',
+    secret: '025cbdf0646e5db4eaa398f365f2ea7a0e3d419b7e0330e39ce92bddedcac4f9bc',
+    C: 'aa'.repeat(48),
+    witness: JSON.stringify({ signatures: ['00'.repeat(64)] }),
+    spend_info: { k: '00'.repeat(31) + '07' },
+  };
+
+  test('a witness is dropped on encode and on decode, spend info is kept', () => {
+    // A v3 witness signs one transaction's digest, so it can never verify against another. Kept on
+    // receive it would sit where the new owner's own signature has to go, and their sweep would be
+    // refused for a witness a stranger chose.
+    const encoded = utils.getEncodedToken({
+      mint: 'https://m.example',
+      unit: 'sat',
+      proofs: [v3Proof],
+    } as never);
+    const decoded = utils.getDecodedToken(encoded, ['0288553333aabbcc']);
+    expect(decoded.proofs[0].witness).toBeUndefined();
+    expect(decoded.proofs[0].spend_info).toEqual({ k: '00'.repeat(31) + '07' });
+  });
+
+  test('a pre-v3 witness still travels', () => {
+    const legacy = {
+      amount: 8,
+      id: '0088553333aabbcc',
+      secret: '["P2PK",{"nonce":"a","data":"b"}]',
+      C: '02' + 'aa'.repeat(32),
+      witness: JSON.stringify({ signatures: ['00'.repeat(64)] }),
+    };
+    const decoded = utils.getDecodedToken(
+      utils.getEncodedToken({ mint: 'https://m.example', unit: 'sat', proofs: [legacy] } as never),
+      ['0088553333aabbcc'],
+    );
+    expect(decoded.proofs[0].witness).toBeDefined();
+  });
+
+  test('a pre-v3 witness travels even when its secret looks like a point', () => {
+    // A pre-v3 secret is an arbitrary string and may happen to be 33 point-shaped bytes of hex.
+    // Its witness is a NUT-11 witness, which does travel, so the rule has to follow the keyset
+    // (NUT-10) and not the secret's shape.
+    const lookalike = {
+      amount: 8,
+      id: '0088553333aabbcc', // v1 keyset: pre-v3 rules apply to it
+      secret: '025cbdf0646e5db4eaa398f365f2ea7a0e3d419b7e0330e39ce92bddedcac4f9bc',
+      C: '02' + 'aa'.repeat(32),
+      witness: JSON.stringify({ signatures: ['00'.repeat(64)] }),
+    };
+    const decoded = utils.getDecodedToken(
+      utils.getEncodedToken({
+        mint: 'https://m.example',
+        unit: 'sat',
+        proofs: [lookalike],
+      } as never),
+      ['0088553333aabbcc'],
+    );
+    expect(decoded.proofs[0].witness).toBeDefined();
   });
 });

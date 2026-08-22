@@ -89,6 +89,7 @@
     "@commitlint/config-conventional": "^20.5.3",
     "@eslint/js": "^9.39.4",
     "@microsoft/api-extractor": "^7.58.7",
+    "@scure/btc-signer": "^2.2.0",
     "@stryker-mutator/core": "^9.6.1",
     "@stryker-mutator/vitest-runner": "^9.6.1",
     "@types/node": "^25.6.0",

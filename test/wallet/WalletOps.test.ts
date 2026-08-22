@@ -393,6 +393,35 @@ describe('WalletOps builders', () => {
       });
       expect(() => ops.sendToRequest(exotic, proofs)).toThrow(/nut10 lock/);
     });
+
+    it('honours a nutroot option, and refuses one carrying both locks', async () => {
+      const carolPub = '02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9';
+      const leafAfter =
+        '00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80';
+      const nutrootPr = new PaymentRequest({
+        amount: 100,
+        unit: 'sat',
+        nutroot: { receiverKey: carolPub, leaves: [leafAfter] },
+      });
+      await ops.sendToRequest(nutrootPr, proofs).run();
+      const outputConfig = wallet.send.mock.calls[0][3];
+      expect(outputConfig?.send.type).toBe('nutroot');
+      expect(outputConfig?.send).toMatchObject({
+        options: { receiverPub: carolPub, leaves: [{ type: 'after', n: 1 }] },
+      });
+
+      // Both kinds of lock in one request: NUT-10 secrets are pre-v3 only, so honouring one
+      // would silently drop the other.
+      const both = new PaymentRequest({
+        amount: 100,
+        unit: 'sat',
+        nut10: { kind: 'P2PK', data: '02'.padEnd(66, 'a') },
+        nutroot: { receiverKey: carolPub },
+      });
+      expect(() => ops.sendToRequest(both, proofs)).toThrow(
+        /both a nut10 lock and a nutroot option/,
+      );
+    });
   });
 
   // --------------------------- SendBuilder -----------------------------------
@@ -1029,13 +1058,15 @@ describe('WalletOps builders', () => {
       );
     });
 
-    it('bolt11 locked quote without privkey throws at runtime', async () => {
+    it('delegates locked bolt11 quote key recovery to Wallet', async () => {
       const lockedQuote = { ...mint12, request: 'lnbc1...', pubkey: '02abcd' } as any;
-      await expect((ops.mintBolt11 as any)(10, lockedQuote).run()).rejects.toThrow(
-        /privkey is required/i,
-      );
-      await expect((ops.mintBolt11 as any)(10, lockedQuote).prepare()).rejects.toThrow(
-        /privkey is required/i,
+      await (ops.mintBolt11 as any)(10, lockedQuote).prepare();
+      expect(wallet.prepareMint).toHaveBeenCalledWith(
+        'bolt11',
+        expect.anything(),
+        lockedQuote,
+        {},
+        undefined,
       );
     });
   });

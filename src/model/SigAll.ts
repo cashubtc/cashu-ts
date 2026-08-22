@@ -1,6 +1,7 @@
 import { computeMessageDigest, buildP2PKSigAllMessageV0, schnorrSignDigest } from '../crypto';
 import { parseWitnessData } from '../crypto/NUT11';
 import { Bytes, JSONInt, encodeUint8toBase64Url } from '../utils';
+import { orderOutputsForPayload } from '../wallet/_internal';
 import type { MeltPreview, SwapPreview } from '../wallet/types';
 
 import { Amount } from './Amount';
@@ -210,8 +211,12 @@ function signPackage(pkg: SigAllSigningPackage, privkey: string): SigAllSigningP
 }
 
 function extractSwapPackage(preview: SwapPreview): SigAllSigningPackage {
-  // Merge keep + send outputs in order (both needed for complete transaction message)
-  const allOutputs = [...(preview.keepOutputs || []), ...(preview.sendOutputs || [])];
+  // Both halves are needed for the message, in the order the payload will carry them: the same
+  // ordering the swap applies, or the signatures cover outputs the mint never sees.
+  const allOutputs = orderOutputsForPayload(
+    preview.keepOutputs ?? [],
+    preview.sendOutputs ?? [],
+  ).outputData;
   return buildSigningPackage(
     'swap',
     preview.inputs,

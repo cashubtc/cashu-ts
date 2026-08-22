@@ -145,6 +145,9 @@ export function asSecpPoint(pt: WeierstrassPoint<bigint>): CurvePoint;
 export function assertSecretKind(allowed: SecretKind | SecretKind[], secret: Secret | string): Secret;
 
 // @public
+export function assertV3PointSecret(secret: Uint8Array | string): void;
+
+// @public
 export class AuthManager implements AuthProvider {
     constructor(mintUrl: string, opts?: AuthManagerOptions);
     // (undocumented)
@@ -288,6 +291,7 @@ export type CheckStateResponse = {
 export type CompleteMeltOptions = {
     preferAsync?: boolean;
     extraPayload?: Record<string, unknown>;
+    scriptPath?: ScriptPathPlan[];
 };
 
 // @public
@@ -330,7 +334,7 @@ export interface CounterRange {
     start: number;
 }
 
-// @public (undocumented)
+// @public
 export interface CounterSource {
     advanceToAtLeast(keysetId: string, minNext: number): Promise<void>;
     reserve(keysetId: string, n: number): Promise<CounterRange>;
@@ -391,6 +395,9 @@ export function createNewMintKeys(pow2height: IntRange<0, 65>, seed?: Uint8Array
 // @public
 export function createP2PKsecret(pubkey: string, tags?: string[][]): string;
 
+// @public (undocumented)
+export function createRandomBlsSecretKey(): Uint8Array;
+
 // @public
 export function createRandomRawBlindedMessage(): RawBlindedMessage;
 
@@ -422,6 +429,22 @@ export type CurvePoint = {
 export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
 
 // @public
+export const DERIVATION_TYPE: {
+    readonly secretKey: 0;
+    readonly blindingFactor: 1;
+    readonly numsOffset: 2;
+    readonly leafKey: 3;
+    readonly quoteLock: 4;
+};
+
+// @public (undocumented)
+export type DerivedSecretAndBlindingFactor = {
+    blindingFactor: Uint8Array;
+    secret: Uint8Array;
+    secretKey?: Uint8Array;
+};
+
+// @public
 export function deriveKeyPair(seed: Uint8Array, purpose: Bip32KeyPurpose, counter: number): {
     pubkey: string;
     privkey: string;
@@ -440,10 +463,19 @@ export type DeriveKeysetIdOptions = {
 };
 
 // @public
+export function deriveLeafKey(seed: Uint8Array, keysetId: string, counter: number, index: number): Uint8Array;
+
+// @public
 export function deriveMintBackupKeys(seed: Uint8Array): {
     privkey: string;
     pubkey: string;
 };
+
+// @public
+export function deriveNumsOffset(seed: Uint8Array, keysetId: string, counter: number): Uint8Array;
+
+// @public
+export function deriveP2BKBlindedPubkeyAtSlot(pubkeyHex: string, eBytes: Uint8Array, slotIndex: number): string;
 
 // @public
 export function deriveP2BKBlindedPubkeys(pubkeys: string[], eBytes?: Uint8Array, dataIsPubkey?: boolean): {
@@ -458,10 +490,13 @@ export function deriveP2BKSecretKey(privkey: string | bigint, rBlind: string | b
 export function deriveP2BKSecretKeys(Ehex: string, privateKey: string | string[], blindPubKey: string | string[], dataIsPubkey?: boolean): string[];
 
 // @public
-export function deriveSecretAndBlindingFactor(seed: Uint8Array, keysetId: string, counter: number): {
-    blindingFactor: Uint8Array;
-    secret: Uint8Array;
-};
+export function deriveP2BKSlotSecretKey(Ehex: string, privkeyHex: string, slotIndex?: number): string;
+
+// @public
+export function deriveQuoteLockKey(seed: Uint8Array, counter: number): Uint8Array;
+
+// @public
+export function deriveSecretAndBlindingFactor(seed: Uint8Array, keysetId: string, counter: number): DerivedSecretAndBlindingFactor;
 
 // @public (undocumented)
 export function deserializeMintKeys(serializedMintKeys: SerializedMintKeys): RawMintKeys;
@@ -729,6 +764,9 @@ export function isMintOperationError(e: unknown): e is MintOperationError;
 export function isP2PKSpendAuthorised(proof: Proof, logger?: Logger, message?: string): boolean;
 
 // @public
+export function isV3PointSecret(secret: string): boolean;
+
+// @public
 export function isValidSecpPubkey(pk: string): boolean;
 
 // @public
@@ -910,6 +948,7 @@ export interface MeltPreview<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'>
 export type MeltProofsConfig = {
     keysetId?: string;
     privkey?: string | string[];
+    scriptPath?: ScriptPathPlan[];
     onCountersReserved?: OnCountersReserved;
     nut08Change?: boolean;
 };
@@ -1414,6 +1453,9 @@ export function normalizeProofAmounts(raw: ProofLike[]): Proof[];
 export function normalizeSecpPubkey(pk: string): string;
 
 // @public
+export function normalizeXOnlySecretKey(privKey: Uint8Array): Uint8Array<ArrayBufferLike>;
+
+// @public
 export type NUT10Option = {
     kind: string;
     data: string;
@@ -1433,6 +1475,32 @@ export type Nut19Policy = {
 export type Nut29Info = {
     methods?: string[];
     max_batch_size?: number;
+};
+
+// @public
+export const NUTROOT_LEAF_TYPE: {
+    readonly threshold: 1;
+    readonly after: 2;
+    readonly hashlock: 3;
+};
+
+// @public
+export const NUTROOT_NUMS_KEY = "0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0";
+
+// @public
+export type NutrootLeaf = {
+    type: keyof typeof NUTROOT_LEAF_TYPE;
+    n: number;
+    keys: string[];
+    time?: number;
+    hash?: string;
+};
+
+// @public
+export type NutrootOption = {
+    receiverKey: string;
+    leaves?: string[];
+    blindKeys?: string[];
 };
 
 // @public (undocumented)
@@ -1521,19 +1589,25 @@ export interface OutputConfig {
 
 // @public (undocumented)
 export class OutputData implements OutputDataLike {
-    constructor(blindedMessage: SerializedBlindedMessage, blindingFactor: bigint, secret: Uint8Array, ephemeralE?: string);
+    constructor(blindedMessage: SerializedBlindedMessage, blindingFactor: bigint, secret: Uint8Array, ephemeralE?: string, secretKey?: Uint8Array, spendInfo?: SpendInfo);
     // (undocumented)
     blindedMessage: SerializedBlindedMessage;
     // (undocumented)
     blindingFactor: bigint;
     // (undocumented)
     static createDeterministicData(amount: AmountLike, seed: Uint8Array, counter: number, keyset: HasKeysetKeys, customSplit?: AmountLike[]): OutputData[];
+    static createNutrootData(options: {
+        receiverPub: string;
+        leaves?: NutrootLeaf[];
+        blindKeys?: string[];
+    }, amount: AmountLike, keyset: HasKeysetKeys, customSplit?: AmountLike[]): OutputData[];
     // (undocumented)
     static createP2PKData(p2pk: P2PKOptions, amount: AmountLike, keyset: HasKeysetKeys, customSplit?: AmountLike[]): OutputData[];
     // (undocumented)
     static createRandomData(amount: AmountLike, keyset: HasKeysetKeys, customSplit?: AmountLike[]): OutputData[];
     // (undocumented)
     static createSingleDeterministicData(amount: AmountLike, seed: Uint8Array, counter: number, keysetId: string): OutputData;
+    static createSingleNutrootData(secretHex: string, amount: AmountLike, keysetId: string): OutputData;
     // (undocumented)
     static createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string, eBytes?: Uint8Array): OutputData;
     // (undocumented)
@@ -1543,7 +1617,9 @@ export class OutputData implements OutputDataLike {
     ephemeralE?: string;
     // (undocumented)
     secret: Uint8Array;
+    secretKey?: Uint8Array;
     static serialize(output: OutputDataLike): SerializedOutputData;
+    spendInfo?: SpendInfo;
     static sumOutputAmounts(outputs: OutputDataLike[]): Amount;
     // (undocumented)
     toProof(sig: SerializedBlindedSignature, keyset: HasKeysetKeys): Proof;
@@ -1579,6 +1655,8 @@ export interface OutputDataLike {
     // (undocumented)
     secret: Uint8Array;
     // (undocumented)
+    spendInfo?: SpendInfo;
+    // (undocumented)
     toProof: (signature: SerializedBlindedSignature, keyset: HasKeysetKeys) => Proof;
 }
 
@@ -1591,6 +1669,13 @@ export type OutputType = ({
 } & SharedOutputTypeProps) | ({
     type: 'p2pk';
     options: P2PKOptions;
+} & SharedOutputTypeProps) | ({
+    type: 'nutroot';
+    options: {
+        receiverPub: string;
+        leaves?: NutrootLeaf[];
+        blindKeys?: string[];
+    };
 } & SharedOutputTypeProps) | ({
     type: 'factory';
     factory: OutputDataFactory;
@@ -1672,6 +1757,12 @@ export function parseHTLCSecret(secret: string | Secret): Secret;
 export function parseMintBackupPayload(json: string): MintBackupPayload;
 
 // @public
+export function parseNutrootLeaf(bytes: Uint8Array): NutrootLeaf;
+
+// @public
+export function parseNutrootLeafHex(leafHex: string): NutrootLeaf;
+
+// @public
 export function parseP2PKSecret(secret: string | Secret): Secret;
 
 // @public
@@ -1708,6 +1799,8 @@ class PaymentRequest_2 {
     // (undocumented)
     nut10?: NUT10Option;
     // (undocumented)
+    nutroot?: NutrootOption;
+    // (undocumented)
     singleUse?: boolean;
     // (undocumented)
     supportedMethods?: SupportedMethod[];
@@ -1715,6 +1808,11 @@ class PaymentRequest_2 {
     toEncodedCreqB(): string;
     // (undocumented)
     toEncodedRequest(): string;
+    toNutrootOptions(): {
+        receiverPub: string;
+        leaves?: NutrootLeaf[];
+        blindKeys?: string[];
+    } | undefined;
     toP2PKOptions(): P2PKOptions | undefined;
     // (undocumented)
     toRawRequest(): RawPaymentRequest;
@@ -1739,6 +1837,7 @@ export class PaymentRequestBuilder {
     lock(p2pk: P2PKOptions): this;
     mintsPreferred(preferred?: boolean): this;
     nut10(option: NUT10Option): this;
+    requestNutroot(option: NutrootOption): this;
     // (undocumented)
     singleUse(single?: boolean): this;
     unit(unit: string): this;
@@ -1759,6 +1858,7 @@ export type PaymentRequestOptions = {
         method: string;
         fee?: AmountLike;
     }>;
+    nutroot?: NutrootOption;
 };
 
 // @public (undocumented)
@@ -1826,6 +1926,7 @@ export type Proof = {
     dleq?: SerializedDLEQ;
     p2pk_e?: string;
     witness?: string | P2PKWitness | HTLCWitness;
+    spend_info?: SpendInfo;
 };
 
 // @public
@@ -1838,6 +1939,7 @@ export type ProofState = {
     Y: string;
     state: CheckStateEnum;
     witness: string | null;
+    digest?: string | null;
 };
 
 // @public
@@ -1867,6 +1969,13 @@ export type RawNUT10Option = {
 };
 
 // @public (undocumented)
+export type RawNutrootOption = {
+    k: string;
+    l?: string[];
+    b?: string[];
+};
+
+// @public (undocumented)
 export type RawPaymentRequest = {
     i?: string;
     a?: number | bigint;
@@ -1878,6 +1987,7 @@ export type RawPaymentRequest = {
     d?: string;
     t?: RawTransport[];
     nut10?: RawNUT10Option;
+    nutroot?: RawNutrootOption;
 };
 
 // @public (undocumented)
@@ -1914,10 +2024,17 @@ export class ReceiveBuilder {
 export type ReceiveConfig = {
     keysetId?: string;
     privkey?: string | string[];
+    scriptPath?: ScriptPathPlan[];
     requireDleq?: boolean;
     proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
     onCountersReserved?: OnCountersReserved;
 };
+
+// @public
+export function recoverV3LeafKeys(seed: Uint8Array, keysetId: string, counter: number, keysHex: string[]): Map<string, Uint8Array>;
+
+// @public
+export function recoverV3SecretKeys(seed: Uint8Array, keysetId: string, secretsHex: string[], maxCounter: number): Map<string, Uint8Array>;
 
 // @public (undocumented)
 export type RequestArgs = {
@@ -1975,6 +2092,55 @@ export const schnorrVerifyDigest: (signature: string, digest: DigestInput, pubke
 // @public
 export const schnorrVerifyMessage: (signature: string, message: string, pubkey: string, throws?: boolean) => boolean;
 
+// @public
+export const ScriptPath: ScriptPathApi;
+
+// @public
+export type ScriptPathApi = {
+    extractSwapPackage(preview: SwapPreview, plans: ScriptPathPlan[]): ScriptPathSigningPackage;
+    extractMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'amount'>>(preview: MeltPreview<TQuote>, plans: ScriptPathPlan[]): ScriptPathSigningPackage;
+    serializePackage(pkg: ScriptPathSigningPackage): string;
+    deserializePackage(input: string): ScriptPathSigningPackage;
+    signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPathSigningPackage;
+    mergeSwapPackage(pkg: ScriptPathSigningPackage, preview: SwapPreview): SwapPreview;
+    mergeMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'amount'>>(pkg: ScriptPathSigningPackage, preview: MeltPreview<TQuote>): MeltPreview<TQuote>;
+    witnessFor(spend: ScriptPathSpendRequest, tree: string[], leafIndex: number): string;
+};
+
+// @public
+export type ScriptPathPlan = {
+    secret: string;
+    leafIndex: number;
+    preimage?: string;
+    extraKeys?: string[];
+    cosign?: (digest: Uint8Array, leaf: NutrootLeaf) => Promise<string[]>;
+};
+
+// @public
+export type ScriptPathSigningPackage = {
+    version: 'nutspA';
+    type: 'swap' | 'melt';
+    quote?: string;
+    inputs: Array<Pick<Proof, 'amount' | 'id' | 'secret' | 'C'>>;
+    outputs: SerializedBlindedMessage[];
+    quoteAmount?: bigint;
+    digest: string;
+    spends: ScriptPathSpendRequest[];
+};
+
+// @public
+export type ScriptPathSpendRequest = {
+    secret: string;
+    leaf: string;
+    control: {
+        K: string;
+        path: string[];
+    };
+    E?: string;
+    preimage?: string;
+    signatures: string[];
+};
+
 // @public (undocumented)
 export type Secret = [SecretKind, SecretData];
 
@@ -2009,6 +2175,11 @@ export class SendBuilder {
     asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: AmountLike[]): this;
     asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
+    asNutroot(options: {
+        receiverPub: string;
+        leaves?: NutrootLeaf[];
+        blindKeys?: string[];
+    }, denoms?: AmountLike[]): this;
     asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]): this;
     asRandom(denoms?: AmountLike[]): this;
     includeFees(on?: boolean): this;
@@ -2031,6 +2202,7 @@ export class SendBuilder {
 export type SendConfig = {
     keysetId?: string;
     privkey?: string | string[];
+    scriptPath?: ScriptPathPlan[];
     includeFees?: boolean;
     proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
     onCountersReserved?: OnCountersReserved;
@@ -2090,6 +2262,7 @@ export type SerializedOutputData = {
     blindingFactor: string;
     secret: string;
     ephemeralE?: string;
+    spendInfo?: SpendInfo;
 };
 
 // @public
@@ -2110,6 +2283,12 @@ export type SerializedSwapPreview = {
 
 // @public (undocumented)
 export function serializeMintKeys(mintKeys: RawMintKeys): SerializedMintKeys;
+
+// @public
+export function serializeNutrootLeaf(leaf: NutrootLeaf): Uint8Array;
+
+// @public
+export function serializeNutrootLeafHex(leaf: NutrootLeaf): string;
 
 // @public
 export function serializeProofs(proofs: Proof | Proof[]): string[];
@@ -2180,9 +2359,38 @@ export function signP2PKProofs(proofs: Proof[], privateKey: PrivKey | PrivKey[],
 export function sortProofsById(proofs: Proof[]): Proof[];
 
 // @public
+export type SpendInfo = {
+    k?: string;
+    E?: string;
+    K?: string;
+    u?: string;
+    tree?: string[];
+};
+
+// @public
 export type SpendingConditionsBase = {
     kind: SecretKind;
     data: string;
+};
+
+// @public
+export type SpendOption = {
+    leafIndex: number;
+    leaf: NutrootLeaf;
+    keys: Array<{
+        keyIndex: number;
+        secretKey: string;
+        blinded: boolean;
+    }>;
+    satisfiable: boolean;
+    blockedBy?: 'threshold' | 'locktime' | 'preimage';
+    availableAt?: number;
+};
+
+// @public
+export type SpendOptions = {
+    keyPath: boolean;
+    script: SpendOption[];
 };
 
 // @public
@@ -2389,7 +2597,7 @@ export class Wallet {
     completeBatchMint(batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;
     completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote>, privkey?: string | string[], options?: CompleteMeltOptions): Promise<MeltProofsResponse<TQuote>>;
     completeMint(mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;
-    completeSwap(swapPreview: SwapPreview, privkey?: string | string[]): Promise<SendResponse>;
+    completeSwap(swapPreview: SwapPreview, privkey?: string | string[], scriptPath?: ScriptPathPlan[]): Promise<SendResponse>;
     readonly counters: WalletCounters;
     createLockedMintQuote(amount: AmountLike, pubkey: string, description?: string): Promise<MintQuoteBolt11Response & {
         pubkey: string;
@@ -2427,7 +2635,7 @@ export class Wallet {
         pending: T[];
         spent: T[];
     }>;
-    isPaymentRequestSatisfied(pr: PaymentRequest_2, proofs: Array<Pick<Proof, 'id' | 'amount' | 'secret'>>, expectedAmount?: AmountLike): boolean;
+    isPaymentRequestSatisfied(pr: PaymentRequest_2, proofs: Array<Pick<Proof, 'id' | 'amount' | 'secret' | 'spend_info'>>, expectedAmount?: AmountLike): boolean;
     get keyChain(): KeyChain;
     get keysetId(): string;
     loadMint(forceRefresh?: boolean): Promise<void>;
@@ -2467,6 +2675,10 @@ export class Wallet {
     send(amount: AmountLike, proofs: ProofLike[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SendResponse>;
     sendOffline(amount: AmountLike, proofs: ProofLike[], config?: SendOfflineConfig): SendResponse;
     signP2PKProofs(proofs: ProofLike[], privkey: string | string[], outputData?: OutputDataLike[], quoteId?: string): Proof[];
+    spendOptions(proof: Proof, opts?: {
+        privkeys?: string | string[];
+        now?: number;
+    }): Promise<SpendOptions>;
     get unit(): string;
     withKeyset(id: string, opts?: {
         counterSource?: CounterSource;

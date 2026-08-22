@@ -17,6 +17,7 @@ import {
   type MeltQuoteBolt11Response,
   type MintQuoteBaseResponse,
 } from '../../src';
+import { NUT02_V3_VECTOR1_KEYS, NUT02_V3_VECTOR1_KEYSET } from '../consts';
 
 import {
   useTestServer,
@@ -125,6 +126,23 @@ describe('finishInit / getKeyset mutants', () => {
 });
 
 describe('_prepareInputsForMint mutants', () => {
+  test('does not dispatch a point-shaped legacy secret as v3', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const proof = {
+      id: KEYSET_ID,
+      amount: Amount.from(1),
+      secret: LOCK_PUBKEY,
+      C: SIG_C,
+      witness: '{"signatures":["stale"]}',
+    } as Proof;
+
+    const [prepared] = (
+      wallet as unknown as { _prepareInputsForMint(proofs: Proof[]): Proof[] }
+    )._prepareInputsForMint([proof]);
+    expect(prepared.witness).toBeUndefined();
+  });
+
   test('completeMelt strips dleq and p2pk_e from the inputs sent to the mint', async () => {
     let sentInputs: Array<Record<string, unknown>> = [];
     server.use(
@@ -220,6 +238,99 @@ describe('restore mutants', () => {
 });
 
 describe('createMintQuoteBolt11 mutants', () => {
+  function useV3Keyset() {
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({ keysets: [NUT02_V3_VECTOR1_KEYSET] }),
+      ),
+      http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [NUT02_V3_VECTOR1_KEYS] })),
+    );
+  }
+
+  test('rejects substitution of its automatic v3 quote lock', async () => {
+    useV3Keyset();
+    server.use(
+      http.post(mintUrl + '/v1/mint/quote/bolt11', async ({ request }) => {
+        const body = (await request.json()) as { pubkey: string };
+        return HttpResponse.json({
+          quote: 'q-substituted',
+          request: 'lnbc10n1pfake', // HRP encodes the quoted 1 sat
+          unit: 'sat',
+          amount: 1,
+          state: MintQuoteState.UNPAID,
+          expiry: null,
+          pubkey: (body.pubkey.startsWith('02') ? '03' : '02') + body.pubkey.slice(2),
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createMintQuoteBolt11(1)).rejects.toThrow(
+      'Mint quote is not locked to the requested pubkey',
+    );
+  });
+
+  test('batch mint reuses automatic v3 quote locks', async () => {
+    useV3Keyset();
+    let n = 0;
+    server.use(
+      http.post(mintUrl + '/v1/mint/quote/bolt11', async ({ request }) => {
+        const body = (await request.json()) as { pubkey: string };
+        return HttpResponse.json({
+          quote: `q-auto-${++n}`,
+          request: 'lnbc10n1pfake', // HRP encodes the quoted 1 sat
+          unit: 'sat',
+          amount: 1,
+          state: MintQuoteState.PAID,
+          expiry: null,
+          pubkey: body.pubkey,
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const quotes = await Promise.all([
+      wallet.createMintQuoteBolt11(1),
+      wallet.createMintQuoteBolt11(1),
+    ]);
+
+    const preview = await wallet.prepareBatchMint(
+      'bolt11',
+      quotes.map((quote) => ({ amount: 1, quote })),
+    );
+    expect(preview.payload.signatures).toHaveLength(2);
+    expect(preview.payload.signatures?.every((signature) => typeof signature === 'string')).toBe(
+      true,
+    );
+  });
+
+  test('seed recovery accepts uppercase quote pubkeys after restart', async () => {
+    useV3Keyset();
+    server.use(
+      http.post(mintUrl + '/v1/mint/quote/bolt11', async ({ request }) => {
+        const body = (await request.json()) as { pubkey: string };
+        return HttpResponse.json({
+          quote: 'q-uppercase',
+          request: 'lnbc10n1pfake', // HRP encodes the quoted 1 sat
+          unit: 'sat',
+          amount: 1,
+          state: MintQuoteState.PAID,
+          expiry: null,
+          pubkey: body.pubkey.toUpperCase(),
+        });
+      }),
+    );
+    const first = new Wallet(mint, { unit, bip39seed: SEED });
+    await first.loadMint();
+    const quote = await first.createMintQuoteBolt11(1);
+
+    const restarted = new Wallet(mint, { unit, bip39seed: SEED });
+    await restarted.loadMint();
+    const preview = await restarted.prepareMint('bolt11', 1, quote);
+    expect(preview.payload.signature).toMatch(/^[0-9a-f]{128}$/);
+  });
+
   test('forwards the description and fills the wallet unit when the mint omits it', async () => {
     let body: Record<string, unknown> = {};
     server.use(

@@ -41,6 +41,36 @@ export type V4ProofTemplate = {
    * Witness.
    */
   w?: string;
+  /**
+   * Nutroot spend info (v3): what the next owner needs that the proof does not say.
+   */
+  si?: V4SpendInfoTemplate;
+};
+
+/**
+ * Template for nutroot spend info inside a V4 Token.
+ */
+export type V4SpendInfoTemplate = {
+  /**
+   * Bearer private key (32 bytes). Mutually exclusive with `e`.
+   */
+  k?: Uint8Array;
+  /**
+   * Receiver-keyed DH ephemeral (33 bytes). Mutually exclusive with `k`.
+   */
+  e?: Uint8Array;
+  /**
+   * Internal public key for script-only transfers (33 bytes).
+   */
+  i?: Uint8Array;
+  /**
+   * NUMS offset (32 bytes): present iff `i` is `H + u*G`, ie the proof has no key path.
+   */
+  u?: Uint8Array;
+  /**
+   * Serialized leaves, in slot-map order.
+   */
+  t?: Uint8Array[];
 };
 
 /**
