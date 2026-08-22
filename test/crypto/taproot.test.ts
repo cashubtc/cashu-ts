@@ -28,6 +28,7 @@ import {
   serializeTaprootLeafHex,
   numsOffsetKey,
   parseTaprootLeaf,
+  selectLeafSignatures,
   parseTaprootLeafHex,
   taprootLeafHash,
   taprootBranchHash,
@@ -176,24 +177,23 @@ describe('leaf parsing fails closed', () => {
     expect(() => parseTaprootLeaf(bad)).toThrow(/type/);
   });
 
-  test('unknown even field is a constraint and rejects', () => {
+  test('unknown even field rejects', () => {
     const body = new Uint8Array([
       ...tlvRecord(0x02, new Uint8Array([1])),
       ...tlvRecord(0x04, hexToBytes(v61.carol_pub)),
       ...tlvRecord(0x0c, new Uint8Array([1])),
     ]);
     const leaf = new Uint8Array([0x00, 0x01, ...body]);
-    expect(() => parseTaprootLeaf(leaf)).toThrow(/constraint/);
+    expect(() => parseTaprootLeaf(leaf)).toThrow(/field/);
   });
 
-  test('unknown odd field is an annotation and is ignored', () => {
-    const body = new Uint8Array([
-      ...tlvRecord(0x02, new Uint8Array([1])),
-      ...tlvRecord(0x04, hexToBytes(v61.carol_pub)),
-      ...tlvRecord(0x0d, utf8ToBytes('label')),
+  test('unknown odd field rejects: odd types are reserved, not ignorable', () => {
+    // The NUT-10 rejection vector: threshold_1of1_key3 with a four-byte field 0x09 appended.
+    const leaf = new Uint8Array([
+      ...hexToBytes(vectors.leaf_forms.threshold_1of1),
+      ...tlvRecord(0x09, hexToBytes('deadbeef')),
     ]);
-    const leaf = new Uint8Array([0x00, 0x01, ...body]);
-    expect(parseTaprootLeaf(leaf)).toEqual({ type: 'threshold', n: 1, keys: [v61.carol_pub] });
+    expect(() => parseTaprootLeaf(leaf)).toThrow(/field/);
   });
 
   test('the 1024-byte cap applies to the body, excluding the version byte', () => {
@@ -208,7 +208,9 @@ describe('leaf parsing fails closed', () => {
       ...tlvRecord(0x0d, new Uint8Array(1024 - 1 - fields.length - 3)),
     ]);
     expect(atLimit).toHaveLength(1025);
-    expect(parseTaprootLeaf(atLimit).type).toBe('threshold');
+    // At the cap the length check passes and parsing reaches the padding field, which rejects as
+    // unknown; one byte more and the length check itself fires first.
+    expect(() => parseTaprootLeaf(atLimit)).toThrow(/Unknown leaf field/);
 
     const overLimit = new Uint8Array([
       0x00,
@@ -518,6 +520,20 @@ describe('locked secret construction and spend info cascade', () => {
     expect(witness.leaf).toBe(v61.scriptpath_witness.leaf);
     expect(witness.control).toEqual(v61.scriptpath_witness.control);
     expect(witness.signatures).toEqual(v61.scriptpath_witness.signatures);
+  });
+
+  test('selectLeafSignatures keeps one valid signature per key, dropping duplicates and extras', () => {
+    const digest = hexToBytes(v61.transcript_digest);
+    const leaf: TaprootLeaf = {
+      type: 'after',
+      n: 1,
+      keys: [v61.alice_refund_pub],
+      time: v61.refund_time,
+    };
+    const valid = v61.scriptpath_witness.signatures[0];
+    const garbage = '00'.repeat(64);
+    expect(selectLeafSignatures(leaf, digest, [garbage, valid, valid])).toEqual([valid]);
+    expect(selectLeafSignatures(leaf, digest, [garbage])).toEqual([]);
   });
 
   test('cascade: bare key, tweaked with k, tweaked with K', () => {

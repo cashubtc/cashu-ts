@@ -3,9 +3,9 @@ import { schnorr } from '@noble/curves/secp256k1.js';
 import { getPubKeyFromPrivKey } from '../crypto/curve_secp';
 import {
   buildScriptPathWitness,
-  countLeafSigners,
   TAPROOT_MAX_SLOTS,
   parseTaprootLeaf,
+  selectLeafSignatures,
   slotKeysByBlindedPubkey,
   taprootLeafHash,
   taprootMerklePath,
@@ -335,10 +335,12 @@ function applyWitnesses(pkg: ScriptPathSigningPackage, inputs: Proof[]): Proof[]
     const spend = bySecret.get(proof.secret);
     if (!spend) return proof;
     const leaf = parseTaprootLeaf(Bytes.fromHex(spend.leaf));
-    const validSigners = countLeafSigners(leaf, digest, spend.signatures);
-    if (validSigners < leaf.n) {
+    // One valid signature per leaf key: the mint bounds `signatures` at the leaf's key count, so
+    // duplicates and non-verifying cosigner extras are trimmed rather than forwarded.
+    const signatures = selectLeafSignatures(leaf, digest, spend.signatures);
+    if (signatures.length < leaf.n) {
       throw new CTSError(
-        `Script path leaf needs ${leaf.n} valid signatures, package has ${validSigners}`,
+        `Script path leaf needs ${leaf.n} valid signatures, package has ${signatures.length}`,
       );
     }
     return {
@@ -346,7 +348,7 @@ function applyWitnesses(pkg: ScriptPathSigningPackage, inputs: Proof[]): Proof[]
       witness: JSON.stringify({
         leaf: spend.leaf,
         control: spend.control,
-        signatures: spend.signatures,
+        signatures,
         ...(spend.preimage !== undefined && { preimage: spend.preimage }),
       }),
     };

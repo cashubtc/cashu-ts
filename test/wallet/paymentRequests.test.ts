@@ -879,14 +879,14 @@ describe('taproot (v3) request marking', () => {
   });
 
   test('a leaf the payer cannot reproduce byte for byte is refused', () => {
-    // Same leaf plus an odd (annotation) field: it parses, but this wallet would drop the
-    // annotation and hash a different leaf, so paying it would build the wrong tree.
+    // Same leaf plus an unknown odd field: odd types are reserved, so the leaf no longer even
+    // parses, failing before the canonical-form round-trip gets a say.
     const annotated = leafAfter + '0d0005' + '6c6162656c'; // odd field 0x0d, "label"
     expect(() =>
       new PaymentRequest({
         taproot: { receiverKey: carolPub, leaves: [annotated] },
       }).toTaprootOptions(),
-    ).toThrow(/round-trip/);
+    ).toThrow(/field/);
     // An unknown leaf type fails closed the same way it does in spend info.
     expect(() =>
       new PaymentRequest({
