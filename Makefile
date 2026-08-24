@@ -30,9 +30,10 @@ NUT_NAME ?= cashu-dev-nutshell
 NUT_BLS_PATH ?= ../nutshell
 NUT_BLS_IMAGE ?= cashu-dev-nutshell-bls:local
 NUT_BLS_NAME ?= cashu-dev-nutshell-bls
-# Second, pre-v3 keyset so the mint also serves NUT-10 and plain text secrets,
-# which belong to v1/v2 keysets only. v3 keysets take point secrets alone.
-NUT_BLS_V2_PATH ?= m/0'/0'/1'
+# Data volume shared by the seed (stable) and BLS mint runs, so the BLS mint
+# comes up as a mint upgraded into v3: legacy keysets from the database, which
+# serve NUT-10 and plain text secrets, plus its own fresh v3 keyset.
+NUT_BLS_VOLUME ?= cashu-dev-nutshell-bls-data
 
 # ------------------------
 # Docker envs per dependency
@@ -166,13 +167,24 @@ nutshell-rc-down:
 nutshell-bls-build:
 	$(DOCKER) build -t $(NUT_BLS_IMAGE) $(NUT_BLS_PATH)
 
+# A fresh mint on the BLS branch generates v3 keysets only, so the legacy
+# keysets come from the upgrade path instead: seed the volume by running the
+# stable mint once, then start the BLS mint on the same database. One mint
+# then serves both generations, which the mixed-transaction tests need.
 nutshell-bls-up: nutshell-bls-build
 	-$(DOCKER) rm -f -v $(NUT_BLS_NAME) >/dev/null 2>&1 || true
+	-$(DOCKER) volume rm $(NUT_BLS_VOLUME) >/dev/null 2>&1 || true
+	-$(DOCKER) run --rm --name $(NUT_BLS_NAME)-seed \
+		-v $(NUT_BLS_VOLUME):/app/data \
+		$(NUT_ENVS) \
+		--entrypoint sh $(NUT_IMAGE) -c "timeout 15 poetry run mint; true"
 	$(DOCKER) run -d --name $(NUT_BLS_NAME) \
 		-p $(BIND_ADDR):$(PORT):3338 \
+		-v $(NUT_BLS_VOLUME):/app/data \
 		$(NUT_ENVS) \
-		-e MINT_V2_KEYSET_DERIVATION_PATH="$(NUT_BLS_V2_PATH)" \
+		-e MINT_DERIVATION_PATH="m/0'/0'/1'" \
 		$(NUT_BLS_IMAGE) poetry run mint
 
 nutshell-bls-down:
 	-$(DOCKER) rm -f -v $(NUT_BLS_NAME)
+	-$(DOCKER) volume rm $(NUT_BLS_VOLUME)
