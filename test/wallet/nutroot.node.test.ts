@@ -159,10 +159,15 @@ describe('collectSpendInfoKeys', () => {
     expect(misses.size).toBe(0);
   });
 
-  test('malformed and out-of-curve bearer keys are skipped, not thrown', () => {
+  test('malformed, out-of-curve and non-reconstructing bearer keys are skipped, not thrown', () => {
     const shortK = v3Proof(PUB_A, { k: 'abcd' });
     const overOrder = v3Proof(PUB_B, { k: 'ff'.repeat(32) });
-    const keys = collectSpendInfoKeys([shortK, overOrder], undefined, NULL_LOGGER);
+    // A valid scalar whose tweak over the disclosed tree lands elsewhere.
+    const { secret, tree } = buildNutrootSecret(PUB_A, [
+      { type: 'threshold', n: 1, keys: [PUB_B] },
+    ]);
+    const wrongTreeKey = v3Proof(secret, { k: PRIV_B, tree });
+    const keys = collectSpendInfoKeys([shortK, overOrder, wrongTreeKey], undefined, NULL_LOGGER);
     expect(keys.size).toBe(0);
   });
 });
@@ -256,6 +261,44 @@ describe('prepareScriptPathSpends', () => {
     expect(() =>
       prepareScriptPathSpends([proof], [{ secret: built.secret, leafIndex: 0 }], []),
     ).toThrow(/1 signatures, 0 keys/);
+  });
+
+  test('recovers a verbatim leaf key from the privkeys held, no extraKeys needed', () => {
+    const out = prepareScriptPathSpends(
+      [lockedProof()],
+      [{ secret: built.secret, leafIndex: 0 }],
+      [PRIV_B],
+    );
+    expect(out.get(built.secret)!.keys).toEqual([PRIV_B]);
+  });
+
+  test('an undecodable key source falls through, and no source at all fails loudly', () => {
+    // An out-of-curve bearer scalar yields no internal key.
+    const badScalar = v3Proof(built.secret, { k: 'ff'.repeat(32), tree: built.tree });
+    expect(() =>
+      prepareScriptPathSpends(
+        [badScalar],
+        [{ secret: built.secret, leafIndex: 0, extraKeys: [PRIV_B] }],
+        [],
+      ),
+    ).toThrow(/internal key/);
+    // An undecodable explicit K likewise.
+    const badPoint = v3Proof(built.secret, { K: `02${'00'.repeat(32)}`, tree: built.tree });
+    expect(() =>
+      prepareScriptPathSpends(
+        [badPoint],
+        [{ secret: built.secret, leafIndex: 0, extraKeys: [PRIV_B] }],
+        [],
+      ),
+    ).toThrow(/internal key/);
+    // A malformed k falls through to the explicit K beside it.
+    const fallback = v3Proof(built.secret, { k: 'not-hex', K: PUB_A, tree: built.tree });
+    const out = prepareScriptPathSpends(
+      [fallback],
+      [{ secret: built.secret, leafIndex: 0, extraKeys: [PRIV_B] }],
+      [],
+    );
+    expect(out.get(built.secret)!.K).toBe(PUB_A);
   });
 
   test('a cosigner defers the key count to signing time', () => {

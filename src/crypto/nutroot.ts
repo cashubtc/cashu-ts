@@ -936,6 +936,7 @@ export function verifyNutrootRequestTree(
     const leaf = parseNutrootLeaf(bytes);
     // Round-trip pins canonical bytes: an annotation or non-minimal field is not what the payee
     // asked for, even when inert.
+    /* v8 ignore next 3 -- backstop: parseNutrootLeaf admits only canonical bytes today */
     if (!Bytes.equals(serializeNutrootLeaf(leaf), bytes)) {
       throw new CTSError('Nutroot request: disclosed leaf is not in requested canonical form');
     }
@@ -1001,10 +1002,11 @@ export function slotKeysByBlindedPubkey(
     let candidate: string;
     try {
       candidate = deriveP2BKSlotSecretKey(EHex, privHex, slot);
-      /* v8 ignore next 3 -- rejection sampling: an invalid derived scalar is improbable */
+      /* v8 ignore start -- rejection sampling: an invalid derived scalar is improbable */
     } catch {
       continue; // not a usable slot key for this static key
     }
+    /* v8 ignore stop */
     bySlot.set(Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(candidate))), {
       slot,
       secretKey: candidate,

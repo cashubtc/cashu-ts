@@ -480,6 +480,7 @@ export class PaymentRequest {
     const leaves = nutroot.leaves.map((hex, i) => {
       const bytes = Bytes.fromHex(hex);
       const leaf = parseNutrootLeaf(bytes);
+      /* v8 ignore next 3 -- backstop: parseNutrootLeaf admits only canonical bytes today */
       if (!Bytes.equals(serializeNutrootLeaf(leaf), bytes)) {
         throw new CTSError(`requested leaf ${i} does not round-trip: cannot reproduce its bytes`);
       }

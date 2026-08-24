@@ -379,7 +379,11 @@ describe('transcript input guards', () => {
 
   test('witness verification returns false for a secret that is not on the curve', () => {
     const witness = JSON.stringify({ signatures: ['ab'.repeat(64)] });
+    // x = 0 and x >= p both fail closed, whether the library reports or throws.
     expect(verifyTransactionInputWitness(new Uint8Array(32), `02${'00'.repeat(32)}`, witness)).toBe(
+      false,
+    );
+    expect(verifyTransactionInputWitness(new Uint8Array(32), `02${'ff'.repeat(32)}`, witness)).toBe(
       false,
     );
   });

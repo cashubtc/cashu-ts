@@ -304,6 +304,7 @@ export class AuthManager implements AuthProvider {
       let witness: string | undefined;
       if (isBlsKeyset(proof.id)) {
         const k = proof.spend_info?.k;
+        /* v8 ignore next 3 -- unreachable: the purge above removed keyless BATs */
         if (!k) {
           throw new CTSError('AuthManager: version 02 BAT is missing its signing key');
         }

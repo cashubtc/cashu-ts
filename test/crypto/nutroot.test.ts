@@ -1350,6 +1350,8 @@ describe('validation fails closed (constructor and verifier guards)', () => {
     expect(() =>
       verifyNutrootRequestTree({ receiverPub: P1 }, { E: keyed.E, tree: ['00'.repeat(40)] }),
     ).toThrow(/none was requested/);
+    // The bare faithful payment: nothing requested, nothing disclosed.
+    expect(() => verifyNutrootRequestTree({ receiverPub: P1 }, { E: keyed.E })).not.toThrow();
   });
 
   test('recoverReceiverKeyedSecretKey returns undefined on undecodable inputs', () => {
