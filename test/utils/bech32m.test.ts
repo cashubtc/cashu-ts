@@ -8,10 +8,46 @@
 import { describe, test, expect } from 'vitest';
 
 import { PaymentRequest } from '../../src/model/PaymentRequest';
-import { decodeBech32mToBytes, encodeBech32m } from '../../src/utils/bech32m';
+import {
+  decodeBech32m,
+  decodeBech32mToBytes,
+  encodeBech32m,
+  isBech32m,
+} from '../../src/utils/bech32m';
 import { decodeTLV, encodeTLV } from '../../src/utils/tlv';
 import type { DecodedTLVPaymentRequest } from '../../src/utils/tlv';
 import { PaymentRequestTransportType } from '../../src/wallet/types/payment-requests';
+
+describe('bech32m primitives', () => {
+  // BIP-350 valid test vector: 32 data chars = 20 byte-aligned bytes, HRP "abcdef".
+  const BIP350_VALID = 'abcdef1l7aum6echk45nj3s0wdvt2fg8x9yrzpqzd3ryx';
+
+  test('decodes a BIP-350 vector and round-trips it', () => {
+    const { hrp, data } = decodeBech32m(BIP350_VALID);
+    expect(hrp).toBe('abcdef');
+    expect(encodeBech32m(hrp, data)).toBe(BIP350_VALID);
+  });
+
+  test('rejects a missing or misplaced separator', () => {
+    expect(() => decodeBech32m('noseparator')).toThrow(/separator/);
+    expect(() => decodeBech32m('1datawithemptyhrp')).toThrow(/separator/);
+    expect(() => decodeBech32m('trailingsep1')).toThrow(/separator/);
+  });
+
+  test('isBech32m accepts valid strings and checks the HRP', () => {
+    expect(isBech32m(BIP350_VALID)).toBe(true);
+    expect(isBech32m(BIP350_VALID, 'abcdef')).toBe(true);
+    expect(isBech32m(BIP350_VALID, 'other')).toBe(false);
+  });
+
+  test('isBech32m rejects bad checksums and bech32 (non-m) strings', () => {
+    // Flip one data character: the checksum no longer holds.
+    expect(isBech32m(`${BIP350_VALID.slice(0, -1)}q`)).toBe(false);
+    // A valid BIP-173 bech32 string uses the other checksum constant.
+    expect(isBech32m('a12uel5l')).toBe(false);
+    expect(isBech32m('not bech32 at all')).toBe(false);
+  });
+});
 
 describe('NUT-26 Test Vectors', () => {
   describe('Basic Payment Request', () => {
