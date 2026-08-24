@@ -4,7 +4,9 @@ import { describe, test, expect } from 'vitest';
 
 import { recoverV3SecretKeys } from '../../src/crypto/NUT13';
 import {
+  buildRequestTranscript,
   buildTransactionTranscript,
+  requestDigest,
   signTransactionInput,
   transactionDigest,
   TRANSCRIPT_DOMAIN_TAG,
@@ -256,5 +258,48 @@ describe('keyset ids in the transcript', () => {
     expect(() =>
       transactionDigest({ proofInputs: [{ ...v3Input, keysetId: '' }], blindedOutputs: [out] }),
     ).toThrow(/keyset id/);
+  });
+});
+
+describe('request transcript (NUT-22 vector)', () => {
+  // nuts tests/22-tests.md: a BAT (secret key 3) authorizing POST /v1/swap.
+  const METHOD = 'POST';
+  const TARGET = '/v1/swap';
+  const BODY = new TextEncoder().encode('illustrative request body');
+  const SECRET = '02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9';
+  const DIGEST = 'ed581b087f06e474da2417eaf96d358244cb1b1b14464b2e3d8706f9a67bc10c';
+  const WITNESS = JSON.stringify({
+    signatures: [
+      '6a120a859e0cb85f9cb3d7a69c756d4f4f8ac0954785d7c9a9262ed937ddb3123d10a296a5ded693974f2b4722f89f9d00498d50f0706eb94bd967e5f3c7b85c',
+    ],
+  });
+
+  test('pins the transcript and digest byte for byte', () => {
+    expect(bytesToHex(buildRequestTranscript(METHOD, TARGET, BODY))).toBe(
+      '050035010004504f53540200082f76312f73776170030020bc14236ec9e2bf6d961268b7463d7be83e01554adfd063361e9e3ae985edce19',
+    );
+    expect(bytesToHex(requestDigest(METHOD, TARGET, BODY))).toBe(DIGEST);
+  });
+
+  test('the vector witness verifies against the BAT secret, and binds the request', () => {
+    expect(
+      verifyTransactionInputWitness(requestDigest(METHOD, TARGET, BODY), SECRET, WITNESS),
+    ).toBe(true);
+    expect(verifyTransactionInputWitness(requestDigest('GET', TARGET, BODY), SECRET, WITNESS)).toBe(
+      false,
+    );
+    expect(
+      verifyTransactionInputWitness(
+        requestDigest(METHOD, TARGET, new TextEncoder().encode('substituted body')),
+        SECRET,
+        WITNESS,
+      ),
+    ).toBe(false);
+  });
+
+  test('an empty body hashes the empty byte string', () => {
+    expect(bytesToHex(buildRequestTranscript('GET', '/v1/info', new Uint8Array()))).toContain(
+      'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    );
   });
 });

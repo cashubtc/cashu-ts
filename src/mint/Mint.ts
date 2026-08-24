@@ -52,6 +52,7 @@ import request, {
 import {
   isObj,
   joinUrls,
+  JSONInt,
   normalizeMintKeys,
   normalizeMintKeyset,
   normalizeMintUrl,
@@ -1141,11 +1142,12 @@ class Mint {
     method: 'GET' | 'POST',
     path: string,
     mintInfo?: MintInfo,
+    body?: string,
   ): Promise<string | undefined> {
     if (!this._authProvider) return undefined;
     const info = mintInfo ?? (await this.getLazyMintInfo());
     if (!info.requiresBlindAuthToken(method, path)) return undefined;
-    const bat = await this._authProvider.getBlindAuthToken({ method, path });
+    const bat = await this._authProvider.getBlindAuthToken({ method, path, body });
     return bat;
   }
 
@@ -1163,8 +1165,10 @@ class Mint {
     if (this._authProvider) {
       mintInfo = await this.getLazyMintInfo(customRequest);
     }
-    // Get BAT/CAT token if this endpoint is protected
-    const bat = await this.handleBlindAuth(method, path, mintInfo);
+    // Get BAT/CAT token if this endpoint is protected. The body string handed to
+    // blind auth must be the bytes the transport sends: same object, same stringify.
+    const bodyString = init.requestBody ? JSONInt.stringify(init.requestBody) : undefined;
+    const bat = await this.handleBlindAuth(method, path, mintInfo, bodyString);
     const cat = await this.handleClearAuth(method, path, mintInfo);
     const headers: Record<string, string> = {
       ...(init.headers ?? {}),

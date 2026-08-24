@@ -1,3 +1,7 @@
+import { utf8ToBytes } from '@noble/hashes/utils.js';
+
+import { isBlsKeyset } from '../crypto/curves';
+import { requestDigest, signTransactionInput } from '../crypto/transcript';
 import { type Logger, NULL_LOGGER } from '../logger';
 import { Amount } from '../model/Amount';
 import { CTSError } from '../model/Errors';
@@ -261,9 +265,11 @@ export class AuthManager implements AuthProvider {
   async getBlindAuthToken({
     method,
     path,
+    body,
   }: {
     method: 'GET' | 'POST';
     path: string;
+    body?: string;
   }): Promise<string> {
     if (this.info && !this.info.requiresBlindAuthToken(method, path)) {
       this.logger.warn('Endpoint is not marked as protected by NUT-22; still issuing BAT', {
@@ -285,7 +291,21 @@ export class AuthManager implements AuthProvider {
         path,
         remaining: this.pool.length,
       });
-      return serializeBAT(proof);
+      // A version 02 BAT signs the request it authorizes (NUT-22): the key rides
+      // on the pooled proof's spend info from mint time. The target must be the
+      // origin-form request-target as sent, so a mint served under a URL subpath
+      // signs its full path.
+      let witness: string | undefined;
+      if (isBlsKeyset(proof.id)) {
+        const k = proof.spend_info?.k;
+        if (!k) {
+          throw new CTSError('AuthManager: version 02 BAT is missing its signing key');
+        }
+        const url = new URL(joinUrls(this.mintUrl, path));
+        const digest = requestDigest(method, url.pathname + url.search, utf8ToBytes(body ?? ''));
+        witness = signTransactionInput(digest, Bytes.fromHex(k));
+      }
+      return serializeBAT(proof, witness);
     });
   }
 
@@ -478,9 +498,14 @@ export class AuthManager implements AuthProvider {
  * Uses URL-safe base64 _with_ padding (`=`) as required by CDK (`general_purpose::URL_SAFE`).
  * Stripping the padding causes a decode error on the mint side with keysets v2.
  */
-function serializeBAT(proof: Proof): string {
-  // strip dleq per NUT-22
-  const tokenStr = JSON.stringify({ id: proof.id, secret: proof.secret, C: proof.C });
+function serializeBAT(proof: Proof, witness?: string): string {
+  // strip dleq per NUT-22; a version 02 BAT carries its request witness
+  const tokenStr = JSON.stringify({
+    id: proof.id,
+    secret: proof.secret,
+    C: proof.C,
+    ...(witness !== undefined && { witness }),
+  });
   const base64url = encodeUint8toBase64UrlPadded(Bytes.fromString(tokenStr));
   return `authA${base64url}`;
 }

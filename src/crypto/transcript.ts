@@ -25,6 +25,7 @@ const CONTAINER_PROOF_INPUT = 0x01;
 const CONTAINER_MINT_QUOTE_INPUT = 0x02;
 const CONTAINER_BLINDED_OUTPUT = 0x03;
 const CONTAINER_MELT_QUOTE_OUTPUT = 0x04;
+const CONTAINER_AUTHORIZED_REQUEST = 0x05;
 
 export type TranscriptProofInput = {
   amount: bigint;
@@ -156,6 +157,40 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
  */
 export function transactionDigest(tx: TransactionShape): Uint8Array {
   return sha256(Bytes.concat(utf8ToBytes(TRANSCRIPT_DOMAIN_TAG), buildTransactionTranscript(tx)));
+}
+
+/**
+ * Serialize a request to its authorized-request transcript (NUT-22).
+ *
+ * @remarks
+ * One 0x05 container: 01 the uppercase HTTP method, 02 the origin-form request-target as sent, 03
+ * SHA256 over the exact body bytes (a request without a body hashes the empty byte string).
+ */
+export function buildRequestTranscript(
+  method: string,
+  target: string,
+  body: Uint8Array,
+): Uint8Array {
+  if (!method || !target) {
+    throw new CTSError('Request transcript requires a method and a target');
+  }
+  return tlvRecord(
+    CONTAINER_AUTHORIZED_REQUEST,
+    Bytes.concat(
+      tlvRecord(0x01, utf8ToBytes(method.toUpperCase())),
+      tlvRecord(0x02, utf8ToBytes(target)),
+      tlvRecord(0x03, sha256(body)),
+    ),
+  );
+}
+
+/**
+ * The 32-byte digest a version 02 BAT witness signs (NUT-22).
+ */
+export function requestDigest(method: string, target: string, body: Uint8Array): Uint8Array {
+  return sha256(
+    Bytes.concat(utf8ToBytes(TRANSCRIPT_DOMAIN_TAG), buildRequestTranscript(method, target, body)),
+  );
 }
 
 /**

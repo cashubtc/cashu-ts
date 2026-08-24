@@ -304,6 +304,7 @@ describe('Mint normalization', () => {
     expect(authProvider.getBlindAuthToken).toHaveBeenCalledWith({
       method: 'POST',
       path: '/v1/swap',
+      body: '{"inputs":[],"outputs":[]}',
     });
     expect(response.signatures[0].amount.toBigInt()).toBe(1n);
   });
