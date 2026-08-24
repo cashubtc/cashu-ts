@@ -340,8 +340,12 @@ describe('mint api', () => {
     expect(result).toBeInstanceOf(MintOperationError);
     const e = result as MintOperationError;
     expect(e.name).toBe('MintOperationError');
-    expect([0, 20008]).toContain(e.code); // nutshell + cdk
-    expect(e.message.toLowerCase()).toMatch(/witness.*p2pk.*signature/); // nutshell + cdk
+    // nutshell + cdk. Nutshell reports a missing witness differently since #1008
+    // reworked SIG_ALL/P2PK: <=0.20.3 leaks an AssertionError as code 0 with
+    // "Witness is missing for p2pk signature"; current main raises TransactionError
+    // (11000) with "no signatures in proof."
+    expect([0, 11000, 20008]).toContain(e.code);
+    expect(e.message.toLowerCase()).toMatch(/witness.*p2pk.*signature|no signatures in proof/);
     // Try and receive them with Bob's secret key (should suceed)
     const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyBob) });
     expect(sumProofs(proofs).equals(63)).toBeTruthy();
@@ -371,7 +375,10 @@ describe('mint api', () => {
     const e = result as MintOperationError;
     expect(e.name).toBe('MintOperationError');
     expect([11000, 20008]).toContain(e.code); // nutshell + cdk
-    expect(e.message.toLowerCase()).toMatch(/no witness|signatures not provided/); // nutshell + cdk
+    // "no witness in proof." became "no signatures in proof." in nutshell #1008.
+    expect(e.message.toLowerCase()).toMatch(
+      /no witness|no signatures in proof|signatures not provided/,
+    ); // nutshell + cdk
     // Try and receive them with Bob's secret key (should suceed)
     const { keep } = await wallet.completeSwap(txn, bytesToHex(privKeyBob));
     expect(sumProofs(keep).equals(64)).toBeTruthy();
