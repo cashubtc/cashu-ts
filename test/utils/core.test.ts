@@ -2047,3 +2047,21 @@ describe('v3 transaction witnesses do not travel in tokens', () => {
     expect(decoded.proofs[0].witness).toBeDefined();
   });
 });
+
+describe('verifyProofsForReceive: v3 spend info cascade', () => {
+  test('an invalid spend info rejects and names the offending proof', () => {
+    const secret = bytesToHex(secp256k1.getPublicKey(hexToBytes('11'.repeat(32)), true));
+    const proof: Proof = {
+      id: `02${'ab'.repeat(32)}`,
+      amount: Amount.from(1),
+      secret,
+      C: '00'.repeat(48),
+      spend_info: { k: '22'.repeat(32) }, // a scalar that does not reconstruct the secret
+    };
+    expect(() =>
+      utils.verifyProofsForReceive([proof], () => {
+        throw new Error('keyset lookup must not be reached');
+      }),
+    ).toThrow(/does not match the proof secret.*keyset 02ab/);
+  });
+});

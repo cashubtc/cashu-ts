@@ -214,3 +214,31 @@ describe('orderOutputsForPayload', () => {
     expect(keepVector).toEqual([true, false]);
   });
 });
+
+describe('stringifyOutputTypeForLog: nutroot', () => {
+  test('logs the tree shape, never the key material', () => {
+    const receiverPub = `02${'ab'.repeat(32)}`;
+    const leafKey = `02${'cd'.repeat(32)}`;
+    const ot: OutputType = {
+      type: 'nutroot',
+      options: {
+        receiverPub,
+        leaves: [
+          { type: 'threshold', n: 1, keys: [leafKey] },
+          { type: 'threshold', n: 1, keys: [leafKey] },
+        ],
+        blindKeys: [leafKey],
+      },
+      denominations: [1, 2],
+    };
+    const s = stringifyOutputTypeForLog(ot);
+    expect(JSON.parse(s)).toEqual({
+      type: 'nutroot',
+      leaves: 2,
+      blindKeys: 1,
+      denominations: ['1', '2'],
+    });
+    expect(s).not.toContain(receiverPub);
+    expect(s).not.toContain(leafKey);
+  });
+});

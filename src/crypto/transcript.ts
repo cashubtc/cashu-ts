@@ -68,6 +68,7 @@ function amountRecord(amount: bigint): Uint8Array {
   // different bytes, so the signature would be over a digest the mint never computes and the proof
   // would look stuck for no visible reason.
   const value = Amount.from(amount).toBigInt();
+  /* v8 ignore next 3 -- unreachable: Amount.from refuses negatives first */
   if (value < 0n) {
     throw new CTSError('Transcript amount must be non-negative');
   }

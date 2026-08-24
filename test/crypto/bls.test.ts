@@ -531,3 +531,22 @@ describe('assertV3PointSecret', () => {
     expect(() => assertV3PointSecret('02' + 'cd'.repeat(32))).toThrow(/point secrets only/);
   });
 });
+
+describe('hashToCurveBls binary-secret dispatch', () => {
+  test('a point-hex secret and its raw 33 bytes land on the same point', () => {
+    const point = `02${'ab'.repeat(32)}`;
+    const asHexUtf8 = hashToCurveBls(utf8ToBytes(point));
+    const asRawBytes = hashToCurveBls(hexToBytes(point));
+    expect(asHexUtf8.equals(asRawBytes)).toBe(true);
+  });
+
+  test('66 chars that are not lowercase point hex hash as given', () => {
+    const point = `02${'ab'.repeat(32)}`;
+    // Same length, but uppercase hex and a non-point prefix are both "just a string".
+    const upper = hashToCurveBls(utf8ToBytes(point.toUpperCase()));
+    const nonPoint = hashToCurveBls(utf8ToBytes(`04${'ab'.repeat(32)}`));
+    const canonical = hashToCurveBls(utf8ToBytes(point));
+    expect(upper.equals(canonical)).toBe(false);
+    expect(nonPoint.equals(canonical)).toBe(false);
+  });
+});

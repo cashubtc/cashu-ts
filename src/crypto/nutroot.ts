@@ -460,6 +460,7 @@ export function nutrootTweak(internalKey: Uint8Array, merkleRoot?: Uint8Array): 
 export function nutrootTweakPubkey(internalKey: Uint8Array, merkleRoot?: Uint8Array): Uint8Array {
   const t = nutrootTweak(internalKey, merkleRoot);
   const P = pointFromBytes(internalKey).add(secp256k1.Point.BASE.multiplyUnsafe(t));
+  /* v8 ignore next 3 -- needs K = -t*G, cryptographically improbable */
   if (P.is0()) {
     throw new CTSError('Tweaked key at infinity');
   }
@@ -481,6 +482,7 @@ export function nutrootTweakSeckey(seckey: Uint8Array, merkleRoot?: Uint8Array):
   const K = secp256k1.Point.BASE.multiply(k).toBytes(true);
   const t = nutrootTweak(K, merkleRoot);
   const p = (k + t) % order;
+  /* v8 ignore next 3 -- needs k = -t mod n, cryptographically improbable */
   if (p === 0n) {
     throw new CTSError('Tweaked secret key is zero');
   }
@@ -999,6 +1001,7 @@ export function slotKeysByBlindedPubkey(
     let candidate: string;
     try {
       candidate = deriveP2BKSlotSecretKey(EHex, privHex, slot);
+      /* v8 ignore next 3 -- rejection sampling: an invalid derived scalar is improbable */
     } catch {
       continue; // not a usable slot key for this static key
     }

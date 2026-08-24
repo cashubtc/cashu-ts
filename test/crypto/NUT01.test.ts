@@ -8,6 +8,7 @@ import {
   createNewMintKeys,
   serializeMintKeys,
   deserializeMintKeys,
+  verifyUnblindedSignature,
   type SerializedMintKeys,
 } from '../../src/crypto';
 import { hexToNumber } from '../../src/utils';
@@ -113,5 +114,19 @@ describe('v3 (BLS) mint keys', () => {
 
     const serialized = serializeMintKeys(pubKeys);
     expect(serialized).toEqual(expected);
+  });
+});
+
+describe('verifyUnblindedSignature: BLS scalar guards', () => {
+  test('rejects a mint scalar outside Fr*', () => {
+    const proof = {
+      id: `02${'ab'.repeat(32)}`,
+      secret: `02${'cd'.repeat(32)}`,
+      C: null,
+    } as any;
+    // Wrong width, zero, and >= the Fr order are all outside the scalar field.
+    expect(() => verifyUnblindedSignature(proof, new Uint8Array(31))).toThrow(/Fr\*/);
+    expect(() => verifyUnblindedSignature(proof, new Uint8Array(32))).toThrow(/Fr\*/);
+    expect(() => verifyUnblindedSignature(proof, new Uint8Array(32).fill(0xff))).toThrow(/Fr\*/);
   });
 });

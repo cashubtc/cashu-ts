@@ -339,3 +339,57 @@ describe('request transcript with a query string (NUT-22 vector)', () => {
     ).toBe(false);
   });
 });
+
+describe('transcript input guards', () => {
+  const input = { amount: 1n, keysetId: '0200', secret: '02'.padEnd(66, 'a'), C: 'aa'.repeat(48) };
+  const out = { amount: 1n, keysetId: '0200', B_: 'bb'.repeat(48) };
+
+  test('a negative amount cannot enter the transcript', () => {
+    // Amount.from refuses first; the transcript's own guard is defense-in-depth behind it.
+    expect(() =>
+      buildTransactionTranscript({
+        proofInputs: [{ ...input, amount: -1n }],
+        blindedOutputs: [out],
+      }),
+    ).toThrow(/>= 0|non-negative/);
+  });
+
+  test('an empty quote id is refused', () => {
+    expect(() =>
+      buildTransactionTranscript({
+        proofInputs: [input],
+        blindedOutputs: [out],
+        meltQuoteOutputs: [{ amount: 1n, quoteId: '' }],
+      }),
+    ).toThrow(/non-empty/);
+  });
+
+  test('request transcripts need a method and a target', () => {
+    expect(() => buildRequestTranscript('', '/x', new Uint8Array())).toThrow(/method and a target/);
+    expect(() => buildRequestTranscript('GET', '', new Uint8Array())).toThrow(
+      /method and a target/,
+    );
+  });
+
+  test('signTransactionInput refuses a digest that is not 32 bytes', () => {
+    expect(() => signTransactionInput(new Uint8Array(31), hexToBytes('11'.repeat(32)))).toThrow(
+      /32 bytes/,
+    );
+  });
+
+  test('witness verification returns false for a secret that is not on the curve', () => {
+    const witness = JSON.stringify({ signatures: ['ab'.repeat(64)] });
+    expect(verifyTransactionInputWitness(new Uint8Array(32), `02${'00'.repeat(32)}`, witness)).toBe(
+      false,
+    );
+  });
+
+  test('recoverV3SecretKeys guards its keyset and scan bound', () => {
+    const seed = new TextEncoder().encode('seed');
+    expect(() => recoverV3SecretKeys(seed, `00${'11'.repeat(32)}`, [], 4)).toThrow(/v3 keyset/);
+    const bls = vectors.nut13_v3.keyset_id;
+    expect(() => recoverV3SecretKeys(seed, bls, [], -1)).toThrow(/maxCounter/);
+    expect(() => recoverV3SecretKeys(seed, bls, [], 1.5)).toThrow(/maxCounter/);
+    expect(() => recoverV3SecretKeys(seed, bls, [], (1 << 20) + 1)).toThrow(/maxCounter/);
+  });
+});

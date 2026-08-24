@@ -96,10 +96,12 @@ export function createNewMintKeys(
           const k = masterKey.derive(path).privateKey;
           if (!k) throw new CTSError(`Could not derive Private key from: ${path}`);
           const scalar = BigInt(`0x${bytesToHex(k)}`);
+          /* v8 ignore next -- rejection sampling: seed-dependent, not deterministically testable */
           if (scalar === 0n || scalar >= BLS_FR_ORDER) continue;
           privKeys[index] = k;
           break;
         }
+        /* v8 ignore next -- unreachable short of 2^16 consecutive rejections */
         if (!privKeys[index]) throw new CTSError(`Could not derive v3 private key for ${index}`);
       } else {
         // v1/v2 keep the original unhardened path for back-compat with existing fixtures.
