@@ -9,6 +9,7 @@ import { deriveP2BKBlindedPubkeyAtSlot } from '../../src/crypto/NUT28';
 import {
   buildScriptPathWitness,
   buildNutrootSecret,
+  countLeafSigners,
   deriveReceiverKeyedSecret,
   enumerateLeafKeySlots,
   recoverLeafKeySecretKeys,
@@ -1193,5 +1194,165 @@ describe('verifyNutrootRequestTree (NUT-18 exact match)', () => {
     expect(() => verifyNutrootRequestTree(numsOptB, { ...si, E: undefined })).toThrow(
       /missing the ephemeral/,
     );
+  });
+});
+
+describe('validation fails closed (constructor and verifier guards)', () => {
+  const pubOf = (n: number) =>
+    bytesToHex(secp256k1.getPublicKey(numberToBytesBE(BigInt(n), 32), true));
+  const P1 = pubOf(11);
+  const P2 = pubOf(12);
+  const K1 = numberToBytesBE(11n, 32);
+  const ORDER = secp256k1.Point.Fn.ORDER;
+
+  test('tlvRecord rejects invalid types and oversized values', () => {
+    expect(() => tlvRecord(-1, new Uint8Array(1))).toThrow(/Invalid TLV type/);
+    expect(() => tlvRecord(256, new Uint8Array(1))).toThrow(/Invalid TLV type/);
+    expect(() => tlvRecord(1.5, new Uint8Array(1))).toThrow(/Invalid TLV type/);
+    expect(() => tlvRecord(1, new Uint8Array(0x10000))).toThrow(/too long/);
+  });
+
+  test('serializeNutrootLeaf rejects malformed leaves', () => {
+    const base: NutrootLeaf = { type: 'threshold', n: 1, keys: [P1] };
+    expect(() => serializeNutrootLeaf({ ...base, type: 'weird' as NutrootLeaf['type'] })).toThrow(
+      /Unknown leaf type/,
+    );
+    expect(() => serializeNutrootLeaf({ ...base, n: 0 })).toThrow(/Invalid threshold/);
+    expect(() => serializeNutrootLeaf({ ...base, n: 1.5 })).toThrow(/Invalid threshold/);
+    expect(() => serializeNutrootLeaf({ ...base, n: 256 })).toThrow(/Invalid threshold/);
+    expect(() => serializeNutrootLeaf({ ...base, keys: [] })).toThrow(/at least one key/);
+    expect(() => serializeNutrootLeaf({ ...base, keys: ['aabb'] })).toThrow(/33 bytes/);
+    expect(() => serializeNutrootLeaf({ type: 'after', n: 1, keys: [P1], time: -1 })).toThrow(
+      /unix time/,
+    );
+    expect(() => serializeNutrootLeaf({ type: 'after', n: 1, keys: [P1], time: 1.5 })).toThrow(
+      /unix time/,
+    );
+    expect(() =>
+      serializeNutrootLeaf({ type: 'hashlock', n: 1, keys: [P1], hash: 'aabb' }),
+    ).toThrow(/32-byte hash/);
+    // A hash on a leaf type that has no hash semantics is a foreign field, not decoration.
+    expect(() => serializeNutrootLeaf({ ...base, hash: '00'.repeat(32) })).toThrow(
+      /must not carry a hash/,
+    );
+  });
+
+  test('serializeNutrootLeaf enforces the 1024-byte body cap', () => {
+    const keys = Array.from({ length: 31 }, (_, i) => pubOf(i + 1));
+    expect(() => serializeNutrootLeaf({ type: 'threshold', n: 1, keys })).toThrow(/1024 bytes/);
+  });
+
+  test('parseNutrootLeaf rejects structurally broken bodies', () => {
+    expect(() => parseNutrootLeaf(new Uint8Array([0x00]))).toThrow(/too short/);
+    const body = (fields: Uint8Array[]) =>
+      new Uint8Array([0x00, 0x01, ...fields.flatMap((f) => [...f])]);
+    const nRec = tlvRecord(0x02, new Uint8Array([1]));
+    const keysRec = tlvRecord(0x04, hexToBytes(P1));
+    // n must be exactly one nonzero byte.
+    expect(() => parseNutrootLeaf(body([tlvRecord(0x02, new Uint8Array([0])), keysRec]))).toThrow(
+      /Invalid threshold/,
+    );
+    expect(() =>
+      parseNutrootLeaf(body([tlvRecord(0x02, new Uint8Array([0, 1])), keysRec])),
+    ).toThrow(/Invalid threshold/);
+    expect(() => parseNutrootLeaf(body([nRec]))).toThrow(/missing required n or keys/);
+    expect(() => parseNutrootLeaf(body([keysRec]))).toThrow(/missing required n or keys/);
+    // after (0x02) without time; hashlock (0x03) without hash; hash of the wrong width.
+    const afterBody = new Uint8Array([0x00, 0x02, ...nRec, ...keysRec]);
+    expect(() => parseNutrootLeaf(afterBody)).toThrow(/missing time/);
+    const hashlockBody = new Uint8Array([0x00, 0x03, ...nRec, ...keysRec]);
+    expect(() => parseNutrootLeaf(hashlockBody)).toThrow(/missing hash/);
+    const shortHash = tlvRecord(0x08, new Uint8Array(31));
+    expect(() =>
+      parseNutrootLeaf(new Uint8Array([0x00, 0x03, ...nRec, ...keysRec, ...shortHash])),
+    ).toThrow(/32 bytes/);
+  });
+
+  test('merkle helpers reject empty trees and out-of-range indices', () => {
+    expect(() => nutrootMerkleRoot([])).toThrow(/zero leaves/);
+    const hashes = [nutrootLeafHash(serializeNutrootLeaf({ type: 'threshold', n: 1, keys: [P1] }))];
+    expect(() => nutrootMerklePath(hashes, 1)).toThrow(/out of range/);
+    expect(() => nutrootMerklePath(hashes, -1)).toThrow(/out of range/);
+  });
+
+  test('tweak functions validate their key material', () => {
+    expect(() => nutrootTweakPubkey(new Uint8Array(32))).toThrow(/33 bytes/);
+    expect(() => nutrootTweakSeckey(new Uint8Array(31))).toThrow(/32 bytes/);
+    expect(() => nutrootTweakSeckey(new Uint8Array(32))).toThrow(/Invalid secret key/);
+    expect(() => nutrootTweakSeckey(numberToBytesBE(ORDER, 32))).toThrow(/Invalid secret key/);
+  });
+
+  test('verifyNutrootCommitment requires a 33-byte secret', () => {
+    expect(() =>
+      verifyNutrootCommitment(new Uint8Array(32), hexToBytes(P1), new Uint8Array(2), []),
+    ).toThrow(/33 bytes/);
+  });
+
+  test('numsOffsetKey requires a valid scalar', () => {
+    expect(() => numsOffsetKey(new Uint8Array(32))).toThrow(/valid scalar/);
+    expect(() => numsOffsetKey(numberToBytesBE(ORDER, 32))).toThrow(/valid scalar/);
+  });
+
+  test('buildNutrootSecret requires at least one leaf', () => {
+    expect(() => buildNutrootSecret(P1, [])).toThrow(/at least one leaf/);
+  });
+
+  test('countLeafSigners counts distinct satisfied keys, skipping garbage signatures', () => {
+    const leaf: NutrootLeaf = { type: 'threshold', n: 1, keys: [P1] };
+    const digest = sha256(utf8ToBytes('digest'));
+    const sig = bytesToHex(schnorr.sign(digest, K1));
+    expect(countLeafSigners(leaf, digest, ['not-hex!', sig])).toBe(1);
+    expect(countLeafSigners(leaf, digest, ['not-hex!'])).toBe(0);
+  });
+
+  test('verifyNutrootSpendInfo rejects malformed secrets and key material', () => {
+    const built = buildNutrootSecret(P1, [{ type: 'threshold', n: 1, keys: [P2] }]);
+    expect(() => verifyNutrootSpendInfo('zz', {})).toThrow();
+    expect(() => verifyNutrootSpendInfo('00'.repeat(33), {})).toThrow(/not a 33-byte point/);
+    expect(() => verifyNutrootSpendInfo(built.secret, { k: 'zz' })).toThrow(
+      /not a valid private key/,
+    );
+    expect(() =>
+      verifyNutrootSpendInfo(built.secret, { k: bytesToHex(K1), K: '00'.repeat(33) }),
+    ).toThrow(/33-byte point/);
+    // K alone must be 33 bytes before any reconstruction is attempted.
+    expect(() => verifyNutrootSpendInfo(built.secret, { K: 'aabb', tree: built.tree })).toThrow(
+      /33 bytes/,
+    );
+  });
+
+  test('verifyNutrootSpendInfo checks a receiver-keyed disclosure reconstructs the secret', () => {
+    const keyed = deriveReceiverKeyedSecret(P1, {
+      leaves: [{ type: 'threshold', n: 1, keys: [P2] }],
+    });
+    // Faithful disclosure passes as receiver-keyed.
+    expect(verifyNutrootSpendInfo(keyed.secret, { E: keyed.E, K: keyed.K, tree: keyed.tree })).toBe(
+      'receiver-keyed',
+    );
+    // A substituted internal key no longer reconstructs the secret.
+    expect(() =>
+      verifyNutrootSpendInfo(keyed.secret, { E: keyed.E, K: P2, tree: keyed.tree }),
+    ).toThrow(/does not reconstruct/);
+    expect(() =>
+      verifyNutrootSpendInfo(keyed.secret, { E: keyed.E, K: 'aabb', tree: keyed.tree }),
+    ).toThrow(/33 bytes/);
+  });
+
+  test('verifyNutrootRequestTree rejects malformed ephemerals, offsets and phantom trees', () => {
+    const keyed = deriveReceiverKeyedSecret(P1);
+    expect(() => verifyNutrootRequestTree({ receiverPub: P1 }, { E: 'zz' })).toThrow(
+      /33-byte point/,
+    );
+    expect(() =>
+      verifyNutrootRequestTree({ receiverPub: NUTROOT_NUMS_KEY }, { K: NUTROOT_NUMS_KEY, u: 'zz' }),
+    ).toThrow(/32-byte scalar/);
+    // A tree disclosed on a request that asked for none is extra spend power.
+    expect(() =>
+      verifyNutrootRequestTree({ receiverPub: P1 }, { E: keyed.E, tree: ['00'.repeat(40)] }),
+    ).toThrow(/none was requested/);
+  });
+
+  test('recoverReceiverKeyedSecretKey returns undefined on undecodable inputs', () => {
+    expect(recoverReceiverKeyedSecretKey(P1, 'zz', bytesToHex(K1))).toBeUndefined();
   });
 });
