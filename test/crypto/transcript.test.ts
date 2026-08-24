@@ -303,3 +303,39 @@ describe('request transcript (NUT-22 vector)', () => {
     );
   });
 });
+
+describe('request transcript with a query string (NUT-22 vector)', () => {
+  // nuts tests/22-tests.md: the target is the origin-form request-target as sent, query string
+  // unsorted and percent-encoded as transmitted; the absent body hashes the empty byte string.
+  const METHOD = 'GET';
+  const TARGET = '/v1/mint/quote/bolt11/quote123?b=2&a=1&q=a%20b';
+  const BODY = new Uint8Array();
+  const SECRET = '02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9';
+  const DIGEST = '6ed8e3a69429d4845ddcfa8728c7461c97b0c189592228c25266c630f62b1680';
+  const WITNESS = JSON.stringify({
+    signatures: [
+      '9306bc19ad0e497185a34ec9a49de0bd8161bcdf1c58f0fd9f108a7603affb1d24b1a2fd6d513bf843ac92c29c95614beb535ace4e3a4a8677d688388209fb88',
+    ],
+  });
+
+  test('pins the transcript and digest byte for byte', () => {
+    expect(bytesToHex(buildRequestTranscript(METHOD, TARGET, BODY))).toBe(
+      '05005a01000347455402002e2f76312f6d696e742f71756f74652f626f6c7431312f71756f74653132333f623d3226613d3126713d6125323062030020e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    );
+    expect(bytesToHex(requestDigest(METHOD, TARGET, BODY))).toBe(DIGEST);
+  });
+
+  test('the vector witness verifies, and a re-sorted query string does not', () => {
+    expect(
+      verifyTransactionInputWitness(requestDigest(METHOD, TARGET, BODY), SECRET, WITNESS),
+    ).toBe(true);
+    const sorted = '/v1/mint/quote/bolt11/quote123?a=1&b=2&q=a%20b';
+    expect(
+      verifyTransactionInputWitness(requestDigest(METHOD, sorted, BODY), SECRET, WITNESS),
+    ).toBe(false);
+    const reEncoded = '/v1/mint/quote/bolt11/quote123?b=2&a=1&q=a+b';
+    expect(
+      verifyTransactionInputWitness(requestDigest(METHOD, reEncoded, BODY), SECRET, WITNESS),
+    ).toBe(false);
+  });
+});
