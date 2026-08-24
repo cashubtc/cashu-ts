@@ -279,18 +279,24 @@ export class AuthManager implements AuthProvider {
     }
 
     return this.withLock(async () => {
+      // A version 02 BAT without its signing key can never be presented (eg a
+      // serializer stripped spend_info): purge before counting, so one bad
+      // proof neither drains the pool one throw at a time nor wedges it.
+      const unusable = this.pool.filter((p) => isBlsKeyset(p.id) && !p.spend_info?.k);
+      if (unusable.length > 0) {
+        this.logger.warn('AuthManager: discarding version 02 BATs missing their signing key', {
+          count: unusable.length,
+        });
+        this.pool = this.pool.filter((p) => !unusable.includes(p));
+      }
       await this.ensure(1);
       if (this.pool.length === 0) {
         throw new CTSError('AuthManager: no BATs available and minting failed');
       }
-      // Pop one BAT and serialize without DLEQ for the header. Per NUT-22, wallets
-      // SHOULD delete BAT even on error, so no need to track it in-flight.
-      const proof = this.pool.pop()!;
-      this.logger.debug('AuthManager: BAT requested', {
-        method,
-        path,
-        remaining: this.pool.length,
-      });
+      // Peek, sign, then pop: a proof that cannot produce its witness must not
+      // drain the pool. Once popped, per NUT-22 wallets SHOULD delete the BAT
+      // even on error, so no in-flight tracking is needed.
+      const proof = this.pool[this.pool.length - 1];
       // A version 02 BAT signs the request it authorizes (NUT-22): the key rides
       // on the pooled proof's spend info from mint time. The target must be the
       // origin-form request-target as sent, so a mint served under a URL subpath
@@ -305,6 +311,12 @@ export class AuthManager implements AuthProvider {
         const digest = requestDigest(method, url.pathname + url.search, utf8ToBytes(body ?? ''));
         witness = signTransactionInput(digest, Bytes.fromHex(k));
       }
+      this.pool.pop();
+      this.logger.debug('AuthManager: BAT requested', {
+        method,
+        path,
+        remaining: this.pool.length,
+      });
       return serializeBAT(proof, witness);
     });
   }
@@ -319,6 +331,9 @@ export class AuthManager implements AuthProvider {
     const seen = new Map(this.pool.map((p) => [p.secret, p]));
     for (const p of proofs) {
       if (!p || !p.secret || !p.C || !p.id) continue; // shape check
+      // A version 02 BAT without its signing key can never be presented (eg a
+      // serializer stripped spend_info): importing it just schedules an error.
+      if (isBlsKeyset(p.id) && !p.spend_info?.k) continue;
       if (!seen.has(p.secret)) {
         this.pool.push(p);
         seen.set(p.secret, p);
@@ -330,7 +345,11 @@ export class AuthManager implements AuthProvider {
    * Return a deep-copied snapshot of the current BAT pool (full Proofs, including dleq).
    */
   exportPool(): Proof[] {
-    return this.pool.map((p) => ({ ...p, dleq: p.dleq ? { ...p.dleq } : undefined }));
+    return this.pool.map((p) => ({
+      ...p,
+      dleq: p.dleq ? { ...p.dleq } : undefined,
+      spend_info: p.spend_info ? { ...p.spend_info } : undefined,
+    }));
   }
 
   // ------------------------------

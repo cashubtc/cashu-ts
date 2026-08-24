@@ -1,4 +1,6 @@
 // 1) Mock FIRST, and define everything INSIDE the factory (no outer refs)
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { utf8ToBytes } from '@noble/hashes/utils.js';
 import {
   vi,
   describe,
@@ -40,6 +42,7 @@ vi.mock('../../src/wallet', () => {
 // 2) Now import everything else
 import { Amount, type RequestFn } from '../../src';
 import { AuthManager } from '../../src/auth/AuthManager';
+import { requestDigest, verifyTransactionInputWitness } from '../../src/crypto/transcript';
 import type { Logger } from '../../src/logger';
 import { OutputData } from '../../src/model/OutputData';
 import type { Proof } from '../../src/model/types';
@@ -67,7 +70,7 @@ function getKeyChainMock(): Mock & {
  * Helpers
  * -------------------------- */
 
-function decodeBAT(batHeader: string): { id: string; secret: string; C: string } {
+function decodeBAT(batHeader: string): { id: string; secret: string; C: string; witness?: string } {
   const base64url = batHeader.slice('authA'.length);
   return JSON.parse(Bytes.toString(encodeBase64toUint8(base64url)));
 }
@@ -629,6 +632,50 @@ describe('getBlindAuthToken coverage', () => {
     expect(ensureSpy).toHaveBeenCalledWith(1);
     ensureSpy.mockRestore();
   });
+
+  test('version 02 BAT: witness verifies against the digest of the sent bytes', async () => {
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+    am['info'] = fakeInfo({ batMax: 1, blindProtected: true });
+    am['keychain'] = {
+      getCheapestKeyset: vi.fn().mockReturnValue({ id: '02aabbccddeeff00', keys: { 1: '02aa' } }),
+    } as any;
+
+    const k = '11'.repeat(32);
+    const secret = Bytes.toHex(secp256k1.getPublicKey(Bytes.fromHex(k), true));
+    am['pool'] = [
+      { id: '02aabbccddeeff00', C: 'C', secret, amount: Amount.from(1), spend_info: { k } },
+    ];
+
+    const body = '{"quote":"q","outputs":[]}';
+    const path = '/v1/mint/bolt11?x=1';
+    const bat = await am.getBlindAuthToken({ method: 'POST', path, body });
+    const parsed = decodeBAT(bat);
+    expect(parsed.witness).toBeDefined();
+    const digest = requestDigest('POST', path, utf8ToBytes(body));
+    expect(verifyTransactionInputWitness(digest, secret, parsed.witness!)).toBe(true);
+    // a different body must not verify against the same witness
+    const other = requestDigest('POST', path, utf8ToBytes(body + ' '));
+    expect(verifyTransactionInputWitness(other, secret, parsed.witness!)).toBe(false);
+  });
+
+  test('version 02 BATs missing their signing key are purged, not served', async () => {
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+    am['info'] = fakeInfo({ batMax: 1, blindProtected: true });
+    am['keychain'] = {
+      getCheapestKeyset: vi.fn().mockReturnValue({ id: '02aabbccddeeff00', keys: { 1: '02aa' } }),
+    } as any;
+
+    const k = '11'.repeat(32);
+    const secret = Bytes.toHex(secp256k1.getPublicKey(Bytes.fromHex(k), true));
+    const keyed = { id: '02aabbccddeeff00', C: 'C', secret, amount: 1, spend_info: { k } } as any;
+    const keyless = { id: '02aabbccddeeff00', C: 'C2', secret: '02aa', amount: 1 } as any;
+    // keyless sits on top of the pool: it must be skimmed off, not served or wedged on
+    am['pool'] = [keyed, keyless];
+
+    const bat = await am.getBlindAuthToken({ method: 'POST', path: '/v1/swap' });
+    expect(decodeBAT(bat).secret).toBe(secret);
+    expect(am['pool']).toHaveLength(0);
+  });
 });
 
 /* ---------- importPool / exportPool ---------- */
@@ -661,6 +708,40 @@ test('importPool dedupes by secret and exportPool deep-copies and preserves miss
   snap[0].secret = 'mut';
   const snap2 = am.exportPool();
   expect(snap2[0].secret).not.toBe('mut');
+});
+
+test('importPool skips a version 02 BAT missing its signing key', () => {
+  const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+  const keyless: Proof = { id: '02aabbccddeeff00', C: 'C1', secret: 'S1', amount: 1 } as any;
+  const keyed: Proof = {
+    id: '02aabbccddeeff00',
+    C: 'C2',
+    secret: 'S2',
+    amount: 1,
+    spend_info: { k: '11'.repeat(32) },
+  } as any;
+
+  am.importPool([keyless, keyed], 'replace');
+  const snap = am.exportPool();
+  expect(snap).toHaveLength(1);
+  expect(snap[0].secret).toBe('S2');
+});
+
+test('exportPool clones spend_info so mutation does not reach the pool', () => {
+  const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+  am['pool'] = [
+    {
+      id: '02aabbccddeeff00',
+      C: 'C',
+      secret: 'S',
+      amount: 1,
+      spend_info: { k: '11'.repeat(32) },
+    } as any,
+  ];
+
+  const snap = am.exportPool();
+  snap[0].spend_info!.k = 'mut';
+  expect(am.exportPool()[0].spend_info!.k).toBe('11'.repeat(32));
 });
 
 /* ---------- topUp error branches ---------- */

@@ -1165,8 +1165,8 @@ class Mint {
     if (this._authProvider) {
       mintInfo = await this.getLazyMintInfo(customRequest);
     }
-    // Get BAT/CAT token if this endpoint is protected. The body string handed to
-    // blind auth must be the bytes the transport sends: same object, same stringify.
+    // Serialize once and pass the string down: blind auth signs these exact bytes,
+    // and the transport contract sends a string body verbatim.
     const bodyString = init.requestBody ? JSONInt.stringify(init.requestBody) : undefined;
     const bat = await this.handleBlindAuth(method, path, mintInfo, bodyString);
     const cat = await this.handleClearAuth(method, path, mintInfo);
@@ -1178,6 +1178,7 @@ class Mint {
     const nut19 = mintInfo?.isSupported(19);
     return requestInstance<T>({
       ...init,
+      requestBody: bodyString,
       endpoint: joinUrls(this._mintUrl, path),
       method,
       headers,

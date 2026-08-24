@@ -673,3 +673,28 @@ const digest = SigAll.computeDigests(pkg.inputs, pkg.outputs, pkg.quote).v0;
 ```
 
 Callers that only round-trip packages through `serializePackage`/`deserializePackage` and sign with `signPackage` need no change: digests were an implementation detail of the transport and are now derived where they are used.
+
+---
+
+## Custom `RequestFn`: string bodies must be sent verbatim
+
+`RequestArgs.requestBody` widens from `Record<string, unknown>` to `Record<string, unknown> | string`. `Mint` now serializes each request body once and hands the transport the string, because blind auth (NUT-22) signs the exact bytes sent: a transport that re-serializes breaks the witness.
+
+The default request pipeline (including the `requestFetch` option) handles both shapes; only a custom `RequestFn` passed via `customRequest` needs a change.
+
+### Migration
+
+```ts
+// Before: always an object, serialize it yourself
+const customRequest: RequestFn = async ({ endpoint, requestBody, ...rest }) => {
+  return myTransport(endpoint, { body: JSON.stringify(requestBody), ...rest });
+};
+
+// After: send a string body byte-verbatim, serialize only objects
+const customRequest: RequestFn = async ({ endpoint, requestBody, ...rest }) => {
+  const body = typeof requestBody === 'string' ? requestBody : JSONInt.stringify(requestBody);
+  return myTransport(endpoint, { body, ...rest });
+};
+```
+
+A transport that re-serializes the string sends quoted JSON and fails at the mint, so a missed migration surfaces as a hard request error, not a silent auth failure. Prefer `JSONInt.stringify` over `JSON.stringify` for object bodies: it emits bigint amounts as plain JSON numbers.

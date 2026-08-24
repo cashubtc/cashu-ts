@@ -17,9 +17,10 @@ import { JSONInt } from '../utils/JSONInt';
  * Error contract: on a mint protocol error (JSON body with `code`/`detail`), implementations must
  * throw an error `isMintOperationError` accepts, preferably this package's
  * {@link MintOperationError}, with the NUT error code preserved. Wallet behavior that branches on
- * mint error codes (eg the NUT-20 legacy signature retry) will not engage otherwise. If you only
- * need a custom transport, prefer the `requestFetch` option ({@link RequestFetch}): the default
- * pipeline then keeps this contract for you.
+ * mint error codes (eg the NUT-20 legacy signature retry) will not engage otherwise. A string
+ * `requestBody` must be transmitted byte-verbatim: blind auth (NUT-22) signs those exact bytes, so
+ * re-serializing breaks the witness. If you only need a custom transport, prefer the `requestFetch`
+ * option ({@link RequestFetch}): the default pipeline then keeps this contract for you.
  */
 export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
 
@@ -221,7 +222,11 @@ function abortError(
 
 export type RequestArgs = {
   endpoint: string;
-  requestBody?: Record<string, unknown>;
+  /**
+   * A string is sent byte-verbatim (it is what blind auth signed); an object is JSON-serialized by
+   * the transport.
+   */
+  requestBody?: Record<string, unknown> | string;
   headers?: Record<string, string>;
   logger?: Logger;
 };
@@ -599,7 +604,12 @@ async function _request(options: RequestOptions): Promise<unknown> {
   const responseByteCap = maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
 
   const requestFetch = fetchImpl ?? fetch;
-  const body = requestBody ? JSONInt.stringify(requestBody) : undefined;
+  const body =
+    typeof requestBody === 'string'
+      ? requestBody
+      : requestBody
+        ? JSONInt.stringify(requestBody)
+        : undefined;
   const headers = buildRequestHeaders(body, requestHeaders);
   const carriesAuth = Object.keys(headers).some((name) =>
     AUTH_HEADERS.includes(name.toLowerCase()),
