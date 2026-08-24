@@ -82,11 +82,11 @@ describe('ScriptPath signing packages', () => {
     expect(() => ScriptPath.mergeSwapPackage(pkg, preview)).toThrow(/valid signatures/);
   });
 
-  test('signs a verbatim leaf key, and signing with an unrelated key adds nothing', () => {
+  // Each signPackage on a receiver-keyed proof trial-matches 255 blinding slots, so these
+  // stay one call per test to fit slow CI runners inside the default timeout.
+  test('signs a verbatim leaf key', () => {
     const { preview, proof } = fixture();
     const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 0 }]);
-    // Leaf 0 names pub(3) verbatim; sk(9) appears nowhere in the tree.
-    expect(ScriptPath.signPackage(pkg, bytesToHex(sk(9))).spends[0].signatures).toHaveLength(0);
     const signed = ScriptPath.signPackage(pkg, bytesToHex(sk(3)));
     expect(signed.spends[0].signatures).toHaveLength(1);
     // The signature is BIP-340 by the leaf key over the package digest.
@@ -97,6 +97,13 @@ describe('ScriptPath signing packages', () => {
         hexToBytes(pub(3)).subarray(1),
       ),
     ).toBe(true);
+  });
+
+  test('signing with a key the tree does not name adds nothing', () => {
+    const { preview, proof } = fixture();
+    const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 0 }]);
+    // Leaf 0 names pub(3) verbatim; sk(9) appears nowhere in the tree.
+    expect(ScriptPath.signPackage(pkg, bytesToHex(sk(9))).spends[0].signatures).toHaveLength(0);
   });
 
   test('round-trips through the nutspA transport string', () => {
