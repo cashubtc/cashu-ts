@@ -10,7 +10,7 @@ import {
   type NutrootLeaf,
 } from '../crypto/nutroot';
 import { encodeBase64toUint8, decodeCBOR, encodeCBOR, Bytes, normalizeMintUrl } from '../utils';
-import { decodeBech32mToBytes, encodeBech32m } from '../utils/bech32m';
+import { decodeBech32m, encodeBech32m } from '../utils/bech32m';
 import { JSONInt } from '../utils/JSONInt';
 import { decodeTLV, encodeTLV } from '../utils/tlv';
 import type { DecodedTLVPaymentRequest } from '../utils/tlv';
@@ -548,7 +548,11 @@ export class PaymentRequest {
 
     // Version B: bech32m + TLV encoding (creqb...)
     if (lowerRequest.startsWith('creqb')) {
-      const data = decodeBech32mToBytes(lowerRequest);
+      // The HRP must be exactly `creqb` (NUT-26); a longer HRP shares the prefix but is not it.
+      const { hrp, data } = decodeBech32m(lowerRequest);
+      if (hrp !== 'creqb') {
+        throw new CTSError('unsupported pr: invalid prefix');
+      }
       const decoded = decodeTLV(data);
       const nut10 = decoded.nut10
         ? {
@@ -572,12 +576,13 @@ export class PaymentRequest {
       });
     }
 
-    // Version A: CBOR encoding (creqA...)
-    if (!encodedRequest.startsWith('creq')) {
+    // Version A: CBOR encoding (creqA...). The prefix check is case-insensitive (NUT-26);
+    // the base64 payload keeps its case.
+    if (!lowerRequest.startsWith('creq')) {
       throw new CTSError('unsupported pr: invalid prefix');
     }
-    const version = encodedRequest[4];
-    if (version !== 'A') {
+    const version = lowerRequest[4];
+    if (version !== 'a') {
       throw new CTSError('unsupported pr version');
     }
     const encodedData = encodedRequest.slice(5);

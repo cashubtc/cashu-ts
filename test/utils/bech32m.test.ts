@@ -861,3 +861,28 @@ describe('NUT-26 Encoding Test Vectors', () => {
     });
   });
 });
+
+describe('NUT-26 Nutroot Locking vector', () => {
+  // tests/26-test.md "Nutroot Locking": tag 0x0b with receiver key, one leaf, one blind-me key.
+  const encoded =
+    'CREQB1QGQQSQQQQQQQQQQQPQPSQQGQPVQ8CQGQYYP0JVY2QXF93SCSFY6YLP0CN4FZNDF3EPZCXMUEKZRQRUGNHNSRD7GZQQCSQQSZQQQSZPQQYYPWFY7M78QSMQ8NTQ0YJPYNPV2QFNRVZWGQACR4S360499TARZV6YCXQQZX3GA7SQPSQGGZUJFAHUWPPKQ0XKQ7FYZFXZC5QNXXCYUSPMS8TPR5L222H6XYE5FSC2L8YN';
+  const nutroot = {
+    receiverKey: '02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9',
+    leaves: [
+      '00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80',
+    ],
+    blindKeys: ['02e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13'],
+  };
+
+  test('decodes the nutroot option from the spec string', () => {
+    const pr = PaymentRequest.fromEncodedRequest(encoded);
+    expect(pr.amount?.toNumber()).toBe(8);
+    expect(pr.unit).toBe('sat');
+    expect(pr.nutroot).toEqual(nutroot);
+  });
+
+  test('re-encodes byte for byte', () => {
+    const pr = new PaymentRequest({ amount: 8, unit: 'sat', nutroot });
+    expect(pr.toEncodedCreqB()).toBe(encoded);
+  });
+});

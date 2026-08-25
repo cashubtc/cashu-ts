@@ -538,6 +538,21 @@ describe('payment requests', () => {
       expect(decoded.singleUse).toBeUndefined();
     });
 
+    test('rejects a bech32m string whose HRP is not exactly creqb', () => {
+      // NUT-26: valid bech32m with HRP `creqb`; a longer HRP sharing the prefix is not it.
+      const tlv = encodeTLV({ id: 'hrp', unit: 'sat', mints: ['https://mint.example.com'] });
+      const wrongHrp = encodeBech32m('creqbx', tlv);
+      expect(() => PaymentRequest.fromEncodedRequest(wrongHrp)).toThrow(/prefix/);
+    });
+
+    test('creqA prefix detection is case-insensitive', () => {
+      // NUT-26: the creqA check SHOULD be case-insensitive; the base64 payload keeps its case.
+      const encoded = new PaymentRequest({ amount: 10, unit: 'sat' }).toEncodedRequest();
+      const shouted = `CREQA${encoded.slice(5)}`;
+      const decoded = PaymentRequest.fromEncodedRequest(shouted);
+      expect(decoded.amount?.equals(10)).toBeTruthy();
+    });
+
     test('roundtrip from creqB test vector', () => {
       // Use an existing test vector
       const originalEncoded =
