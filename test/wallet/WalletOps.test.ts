@@ -405,12 +405,17 @@ describe('WalletOps builders', () => {
         unit: 'sat',
         nutroot: { receiverKey: carolPub, leaves: [leafAfter] },
       });
+      // A nutroot-only request asks for v3 outputs only: a pre-v3 payer cannot pay it (NUT-18).
+      expect(() => ops.sendToRequest(nutrootPr, proofs)).toThrow(/v3/);
+
+      wallet.keysetId = `02${'ab'.repeat(32)}`;
       await ops.sendToRequest(nutrootPr, proofs).run();
       const outputConfig = wallet.send.mock.calls[0][3];
       expect(outputConfig?.send.type).toBe('lock');
       expect(outputConfig?.send).toMatchObject({
         options: { mainKeys: [carolPub], leaves: [{ type: 'after', n: 1 }] },
       });
+      wallet.keysetId = '00ad268c4d1f5826';
 
       // Both encodings of one condition: the payer follows the one its keyset takes.
       const both = new PaymentRequest({
@@ -1169,6 +1174,18 @@ describe('WalletOps builders', () => {
       expect(typeof (cfg as MeltProofsConfig).onCountersReserved).toBe('function');
 
       expect(maybeOT).toBeUndefined();
+    });
+
+    it('scriptPath plans reach the wallet from all three builders', async () => {
+      const plans = [{ secret: `02${'ab'.repeat(32)}`, leafIndex: 0 }];
+      await ops.send(5, proofs).scriptPath(plans).run();
+      expect(wallet.send.mock.calls[0][2]).toMatchObject({ scriptPath: plans });
+      await ops.receive(token).scriptPath(plans).run();
+      expect(wallet.receive.mock.calls[0][1]).toMatchObject({ scriptPath: plans });
+      await ops.meltBolt11(melt11, proofs).scriptPath(plans).run();
+      expect(wallet.prepareMelt.mock.calls[0][3]).toMatchObject({ scriptPath: plans });
+      // completeMelt must see the plans too, or the witness step cannot use them.
+      expect(wallet.completeMelt.mock.calls[0][2]).toEqual({ scriptPath: plans });
     });
 
     it('bolt11: supports OutputType (random) and passes it to prepareMelt', async () => {

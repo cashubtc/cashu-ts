@@ -241,6 +241,13 @@ export type MeltProofsConfig = {
   nut08Change?: boolean;
 };
 
+export type CompleteSwapOptions = {
+  /**
+   * Script path spends for v3 inputs, evaluated when the transaction digest exists.
+   */
+  scriptPath?: ScriptPathPlan[];
+};
+
 export type CompleteMeltOptions = {
   preferAsync?: boolean;
   /**

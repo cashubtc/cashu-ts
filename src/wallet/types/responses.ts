@@ -44,19 +44,20 @@ export type SendResponse = {
  * One disclosed leaf of a v3 proof's tree, and whether this wallet can spend through it.
  *
  * @remarks
- * Nutroot secrets 2.3 and 2.7. `keys` are the slot keys the wallet recovered for this leaf,
- * verbatim or blinded. `satisfiable` is this wallet's own assessment from what it holds; the mint
- * compares an `after` leaf against its own clock, so a leaf that unlocked seconds ago may still be
- * refused.
+ * Nutroot secrets 2.3 and 2.7. `keys` are the on-tree public keys the wallet can sign for, verbatim
+ * or blinded; the scalars stay internal (planning and diagnostics need none). `satisfiable` is this
+ * wallet's own assessment from what it holds; the mint compares an `after` leaf against its own
+ * clock, so a leaf that unlocked seconds ago may still be refused.
  */
 export type SpendOption = {
   leafIndex: number;
   leaf: NutrootLeaf;
-  keys: Array<{ keyIndex: number; secretKey: string; blinded: boolean }>;
+  keys: Array<{ keyIndex: number; pubkey: string; blinded: boolean }>;
   satisfiable: boolean;
   /**
-   * Why the leaf is not satisfiable from what this wallet holds. `preimage` means a hashlock leaf,
-   * which always needs one supplied by the caller.
+   * Why the leaf is not satisfiable from what this wallet holds: an unexpired locktime, then a key
+   * shortfall, then `preimage`, meaning a hashlock leaf whose keys are covered and which only needs
+   * the caller-supplied preimage.
    */
   blockedBy?: 'threshold' | 'locktime' | 'preimage';
   /**

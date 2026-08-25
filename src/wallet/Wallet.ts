@@ -124,9 +124,9 @@ import {
   type MintProofsConfig,
   type MeltProofsConfig,
   type CompleteMeltOptions,
+  type CompleteSwapOptions,
   type SwapTransaction,
   type MeltProofsResponse,
-  type ScriptPathPlan,
   type SendResponse,
   type SpendOptions,
   type RestoreConfig,
@@ -1301,7 +1301,11 @@ class Wallet {
   ): Promise<Proof[]> {
     // Prepare and complete the send
     const txn = await this.prepareSwapToReceive(token, config, outputType);
-    const { keep } = await this.completeSwap(txn, config?.privkey, config?.scriptPath);
+    const { keep } = await this.completeSwap(
+      txn,
+      config?.privkey,
+      config?.scriptPath?.length ? { scriptPath: config.scriptPath } : undefined,
+    );
     return keep;
   }
 
@@ -1542,7 +1546,11 @@ class Wallet {
 
     // Prepare and complete the send
     const txn = await this.prepareSwapToSend(sendAmount, proofs, config, outputConfig);
-    return await this.completeSwap(txn, config?.privkey, config?.scriptPath);
+    return await this.completeSwap(
+      txn,
+      config?.privkey,
+      config?.scriptPath?.length ? { scriptPath: config.scriptPath } : undefined,
+    );
   }
 
   /**
@@ -1691,8 +1699,9 @@ class Wallet {
   async completeSwap(
     swapPreview: SwapPreview,
     privkey?: string | string[],
-    scriptPath?: ScriptPathPlan[],
+    options?: CompleteSwapOptions,
   ): Promise<SendResponse> {
+    const scriptPath = options?.scriptPath;
     const keepOutputs: OutputDataLike[] = swapPreview?.keepOutputs ? swapPreview.keepOutputs : [];
     const sendOutputs: OutputDataLike[] = swapPreview.sendOutputs ? swapPreview.sendOutputs : [];
     const unselectedProofs: Proof[] = swapPreview.unselectedProofs
@@ -3219,14 +3228,19 @@ class Wallet {
     // covering all quote inputs (request order) and all outputs.
     const v3BatchDigest = isBlsKeyset(keyset.id)
       ? transactionDigest({
-          mintQuoteInputs: entries.map((e, i) => ({
-            // Face amount, as in prepareMint. The entry amount is the draw; it only
-            // stands in when a slim quote object omits its own (full-draw batches).
-            amount: Amount.from(
-              ('amount' in e.quote ? (e.quote.amount as AmountLike) : undefined) ?? amounts[i],
-            ).toBigInt(),
-            quoteId: e.quote.quote,
-          })),
+          mintQuoteInputs: entries.map((e, i) => {
+            // Face amount, as in prepareMint: the transcript never commits the draw,
+            // so a slim bolt11 quote object cannot stand in for it.
+            const quoteAmount = 'amount' in e.quote ? (e.quote.amount as AmountLike) : undefined;
+            this.failIf(
+              quoteAmount === undefined && method === 'bolt11',
+              `prepareBatchMint: quote #${i + 1} lacks its amount; pass the full mint quote`,
+            );
+            return {
+              amount: Amount.from(quoteAmount ?? 0).toBigInt(),
+              quoteId: e.quote.quote,
+            };
+          }),
           blindedOutputs: blindedMessages.map((o) => ({
             amount: Amount.from(o.amount).toBigInt(),
             keysetId: o.id,
@@ -3643,7 +3657,11 @@ class Wallet {
   ): Promise<MeltProofsResponse<MeltQuoteBolt11Response>> {
     this.requireSupport('melt', 'bolt11');
     const meltTxn = await this.prepareMelt('bolt11', meltQuote, proofsToSend, config, outputType);
-    return this.completeMelt<MeltQuoteBolt11Response>(meltTxn, config?.privkey);
+    return this.completeMelt<MeltQuoteBolt11Response>(
+      meltTxn,
+      config?.privkey,
+      config?.scriptPath?.length ? { scriptPath: config.scriptPath } : undefined,
+    );
   }
 
   /**
@@ -3666,7 +3684,11 @@ class Wallet {
   ): Promise<MeltProofsResponse<MeltQuoteBolt12Response>> {
     this.requireSupport('melt', 'bolt12');
     const meltTxn = await this.prepareMelt('bolt12', meltQuote, proofsToSend, config, outputType);
-    return this.completeMelt<MeltQuoteBolt12Response>(meltTxn, config?.privkey);
+    return this.completeMelt<MeltQuoteBolt12Response>(
+      meltTxn,
+      config?.privkey,
+      config?.scriptPath?.length ? { scriptPath: config.scriptPath } : undefined,
+    );
   }
 
   /**
@@ -3726,6 +3748,7 @@ class Wallet {
     const meltTxn = await this.prepareMelt('onchain', meltQuote, normalizedProofs, config);
     const response = await this.completeMelt<MeltQuoteOnchainResponse>(meltTxn, config?.privkey, {
       extraPayload: { fee_index: feeIndex },
+      ...(config?.scriptPath?.length && { scriptPath: config.scriptPath }),
     });
     return response;
   }
@@ -3904,15 +3927,19 @@ class Wallet {
       ...extra,
     };
 
-    // Attach nutroot transaction witnesses (v3 keysets). Skipped when the preview's quote does
-    // not carry its amount: the digest must match the mint's reconstruction exactly.
+    // Attach nutroot transaction witnesses (v3 keysets). The digest binds the quote amount,
+    // so a slim quote object cannot sign v3 inputs: fail fast rather than send them unsigned.
     const quoteAmount =
       'amount' in meltPreview.quote ? (meltPreview.quote.amount as AmountLike) : undefined;
-    const meltAmount = Amount.from(quoteAmount ?? 0);
-    if (meltAmount.toBigInt() > 0n) {
+    this.failIf(
+      quoteAmount === undefined &&
+        inputs.some((p) => isBlsKeyset(p.id) && isV3PointSecret(p.secret)),
+      'melting v3 inputs needs the melt quote amount; pass the full quote object',
+    );
+    if (quoteAmount !== undefined) {
       await attachTransactionWitnesses(
         meltPayload,
-        { quoteId: quote, amount: meltAmount },
+        { quoteId: quote, amount: Amount.from(quoteAmount) },
         collectSpendInfoKeys(meltPreview.inputs, privkey, this._logger),
         completeOptions.scriptPath?.length
           ? prepareScriptPathSpends(

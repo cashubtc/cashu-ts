@@ -26,6 +26,7 @@ import {
   type OnCountersReserved,
   type MeltProofsConfig,
   type MeltProofsResponse,
+  type ScriptPathPlan,
   type MeltPreview,
   type MintPreview,
 } from './types';
@@ -110,8 +111,13 @@ export class WalletOps {
     const nutroot = pr.toNutrootOptions();
     // Net of input fees (NUT-18): the payee must net the requested amount after swapping.
     const builder = new SendBuilder(wallet, base.add(fee), proofs).includeFees(true);
-    if (nutroot && (!lock || isBlsKeyset(wallet.keysetId))) {
+    if (nutroot && isBlsKeyset(wallet.keysetId)) {
       return builder.asLocked(nutrootToLockOptions(nutroot));
+    }
+    // Nutroot alone asks for v3 outputs only (NUT-18): a payer that cannot
+    // produce them must refuse, never lock to the key verbatim.
+    if (nutroot && !lock) {
+      throw new CTSError("the request's nutroot lock needs a v3 keyset this wallet does not use");
     }
     return lock ? builder.asLocked(p2pkToLockOptions(lock)) : builder;
   }
@@ -316,6 +322,14 @@ export class SendBuilder {
    */
   privkey(k: string | string[]) {
     this.config.privkey = k;
+    return this;
+  }
+
+  /**
+   * Script-path spend plans for v3 locked inputs (NUT-10).
+   */
+  scriptPath(plans: ScriptPathPlan[]) {
+    this.config.scriptPath = plans;
     return this;
   }
 
@@ -540,6 +554,14 @@ export class ReceiveBuilder {
    */
   privkey(k: string | string[]) {
     this.config.privkey = k;
+    return this;
+  }
+
+  /**
+   * Script-path spend plans for v3 locked inputs (NUT-10).
+   */
+  scriptPath(plans: ScriptPathPlan[]) {
+    this.config.scriptPath = plans;
     return this;
   }
 
@@ -922,6 +944,14 @@ export class MeltBuilder<
   }
 
   /**
+   * Script-path spend plans for v3 locked inputs (NUT-10).
+   */
+  scriptPath(plans: ScriptPathPlan[]) {
+    this.config.scriptPath = plans;
+    return this;
+  }
+
+  /**
    * Receive a callback once counters are atomically reserved for deterministic outputs.
    *
    * @param cb Called with OperationCounters when counters are reserved.
@@ -966,7 +996,9 @@ export class MeltBuilder<
     );
 
     // Step 2, sign if needed and complete the melt
-    return this.wallet.completeMelt(preview, this.config.privkey);
+    return this.wallet.completeMelt(preview, this.config.privkey, {
+      ...(this.config.scriptPath && { scriptPath: this.config.scriptPath }),
+    });
   }
 }
 
@@ -1019,6 +1051,14 @@ export class MeltOnchainBuilder {
    */
   privkey(k: string | string[]) {
     this.config.privkey = k;
+    return this;
+  }
+
+  /**
+   * Script-path spend plans for v3 locked inputs (NUT-10).
+   */
+  scriptPath(plans: ScriptPathPlan[]) {
+    this.config.scriptPath = plans;
     return this;
   }
 

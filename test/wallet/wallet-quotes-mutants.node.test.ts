@@ -305,6 +305,33 @@ describe('createMintQuoteBolt11 mutants', () => {
     );
   });
 
+  test('batch mint refuses a locked quote object missing its face amount', async () => {
+    useV3Keyset();
+    server.use(
+      http.post(mintUrl + '/v1/mint/quote/bolt11', async ({ request }) => {
+        const body = (await request.json()) as { pubkey: string };
+        return HttpResponse.json({
+          quote: 'q-slim-batch',
+          request: 'lnbc20n1pfake', // HRP encodes the quoted 2 sat
+          unit: 'sat',
+          amount: 2,
+          state: MintQuoteState.PAID,
+          expiry: null,
+          pubkey: body.pubkey,
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const quote = await wallet.createMintQuoteBolt11(2);
+    // A partial draw against a slim quote: the transcript commits the face
+    // amount (NUT-10), which the slim object cannot supply.
+    const slim = { quote: quote.quote, unit: quote.unit, pubkey: quote.pubkey };
+    await expect(wallet.prepareBatchMint('bolt11', [{ amount: 1, quote: slim }])).rejects.toThrow(
+      /amount/,
+    );
+  });
+
   test('seed recovery accepts uppercase quote pubkeys after restart', async () => {
     useV3Keyset();
     server.use(

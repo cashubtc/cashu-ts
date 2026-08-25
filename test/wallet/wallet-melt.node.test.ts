@@ -15,6 +15,7 @@ import {
   type MeltQuoteBolt12Response,
   type AuthProvider,
   type OutputType,
+  type MeltPreview,
   Amount,
 } from '../../src';
 
@@ -879,6 +880,29 @@ describe('async melt preference body', () => {
       /is not loaded in this wallet.*restoring \(NUT-09\)/is,
     );
   });
+  test('completeMelt refuses v3 inputs when the quote amount is unknown', async () => {
+    // A v3 input must sign the transcript, which binds the quote amount; a slim
+    // quote object cannot produce that digest, so fail fast rather than send unsigned.
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const v3KeysetId = `02${'cd'.repeat(32)}`;
+    const preview: MeltPreview<Pick<MeltQuoteBolt11Response, 'quote'>> = {
+      method: 'bolt11',
+      inputs: [
+        {
+          id: v3KeysetId,
+          amount: Amount.from(1),
+          secret: `02${'ab'.repeat(32)}`,
+          C: '84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327',
+        },
+      ],
+      outputData: [],
+      keysetId: v3KeysetId,
+      quote: { quote: 'q-slim' },
+    };
+    await expect(wallet.completeMelt(preview)).rejects.toThrow(/quote amount/);
+  });
+
   test('completeMelt sends prefer_async when { preferAsync: true } is passed', async () => {
     const meltQuote = {
       quote: 'q-async-boolean',

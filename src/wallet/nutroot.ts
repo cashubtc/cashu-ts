@@ -229,17 +229,19 @@ export async function proofSpendOptions(
   const script = leaves.map((leaf, leafIndex) => {
     const keys = hits
       .filter((h) => h.leafIndex === leafIndex)
-      .map(({ keyIndex, secretKey, blinded }) => ({ keyIndex, secretKey, blinded }));
+      // Report the on-tree key, never the recovered scalar: this surface is for
+      // planning and diagnostics, which apps log and store.
+      .map(({ keyIndex, blinded }) => ({ keyIndex, pubkey: leaf.keys[keyIndex], blinded }));
     const option: SpendOption = { leafIndex, leaf, keys, satisfiable: false };
     if (leaf.type === 'after') option.availableAt = leaf.time;
-    // Order matters: report the condition the caller cannot work around first. A locktime is
-    // absolute, a preimage has to be supplied, and only then is it a matter of keys.
+    // Order matters: a locktime is absolute; then the key shortfall, which the leaf itself does
+    // not show; a hashlock's preimage need is readable off leaf.type, so it reports last.
     if (leaf.type === 'after' && leaf.time !== undefined && now < leaf.time) {
       option.blockedBy = 'locktime';
-    } else if (leaf.type === 'hashlock') {
-      option.blockedBy = 'preimage';
     } else if (keys.length < leaf.n) {
       option.blockedBy = 'threshold';
+    } else if (leaf.type === 'hashlock') {
+      option.blockedBy = 'preimage';
     } else {
       option.satisfiable = true;
     }

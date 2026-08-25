@@ -118,7 +118,8 @@ describe('wallet.spendOptions: the script path', () => {
     expect(script).toHaveLength(1);
     expect(script[0]).toMatchObject({ leafIndex: 0, satisfiable: true });
     expect(script[0].blockedBy).toBeUndefined();
-    expect(script[0].keys).toEqual([{ keyIndex: 0, secretKey: priv(ALICE), blinded: false }]);
+    // The inspection surface reports which keys matched, never the scalars themselves.
+    expect(script[0].keys).toEqual([{ keyIndex: 0, pubkey: pub(ALICE), blinded: false }]);
     expect(script[0].leaf).toEqual(threshold([pub(ALICE)]));
   });
 
@@ -157,6 +158,14 @@ describe('wallet.spendOptions: the script path', () => {
     expect(stranger.script[0].blockedBy).toBe('threshold');
   });
 
+  test('a hashlock short on keys reports the threshold, not the preimage', async () => {
+    // leaf.type already says a preimage is needed; the key shortfall is the
+    // information the caller cannot read off the leaf itself.
+    const proof = locked([hashlock([pub(ALICE)])]);
+    const { script } = await wallet().spendOptions(proof, { privkeys: priv(STRANGER) });
+    expect(script[0]).toMatchObject({ satisfiable: false, blockedBy: 'threshold' });
+  });
+
   test('a hashlock always needs a preimage, even holding the key', async () => {
     const proof = locked([hashlock([pub(ALICE)])]);
     const { script } = await wallet().spendOptions(proof, { privkeys: priv(ALICE) });
@@ -192,7 +201,8 @@ describe('wallet.spendOptions: the script path', () => {
     expect(keyPath).toBe(true); // Bob's key path, over the disclosed tree
     expect(script[0].satisfiable).toBe(true);
     expect(script[0].keys[0].blinded).toBe(true);
-    expect(script[0].keys[0].secretKey).not.toBe(priv(ALICE));
+    // The reported key is the on-tree blinded form, not Alice's verbatim pubkey.
+    expect(script[0].keys[0].pubkey).not.toBe(pub(ALICE));
   });
 
   test('an unparseable leaf throws rather than being reported as spendable', async () => {
