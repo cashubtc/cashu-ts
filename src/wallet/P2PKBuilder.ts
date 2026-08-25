@@ -17,7 +17,14 @@ function assertUnixSeconds(seconds: number): number {
   return Math.floor(seconds);
 }
 
-export class P2PKBuilder {
+/**
+ * Builder for lock spending conditions.
+ *
+ * @remarks
+ * The v5 name for `P2PKBuilder`: adopt it (with `addMainPubkey` and `requireMainSignatures`) and
+ * the v5 upgrade keeps these call sites compiling.
+ */
+export class LockBuilder {
   // Keys are deduplicated by x-only identity and first-seen order preserved.
   private lockKeys: string[] = [];
   private refundKeys: string[] = [];
@@ -29,10 +36,17 @@ export class P2PKBuilder {
   private sigFlag?: SigFlag;
   private hashlock?: string;
 
-  addLockPubkey(pk: string | string[]) {
+  addMainPubkey(pk: string | string[]) {
     const arr = Array.isArray(pk) ? pk : [pk];
     this.lockKeys = dedupeP2PKPubkeys([...this.lockKeys, ...arr]);
     return this;
+  }
+
+  /**
+   * @deprecated Use `addMainPubkey`. Removed in v5.
+   */
+  addLockPubkey(pk: string | string[]) {
+    return this.addMainPubkey(pk);
   }
 
   addRefundPubkey(pk: string | string[]) {
@@ -54,11 +68,18 @@ export class P2PKBuilder {
     return this;
   }
 
-  requireLockSignatures(n: number) {
+  requireMainSignatures(n: number) {
     if (!Number.isInteger(n) || n < 1)
       throw new CTSError(`requiredSignatures (n_sigs) must be a positive integer, got ${n}`);
     this.nSigs = n;
     return this;
+  }
+
+  /**
+   * @deprecated Use `requireMainSignatures`. Removed in v5.
+   */
+  requireLockSignatures(n: number) {
+    return this.requireMainSignatures(n);
   }
 
   requireRefundSignatures(n: number) {
@@ -156,19 +177,19 @@ export class P2PKBuilder {
     return p2pk;
   }
 
-  static fromOptions(p2pk: P2PKOptions): P2PKBuilder {
-    const b = new P2PKBuilder();
+  static fromOptions(p2pk: P2PKOptions): LockBuilder {
+    const b = new LockBuilder();
     if (p2pk.kind === 'HTLC') {
       b.addHashlock(p2pk.data);
-      if (p2pk.pubkeys?.length) b.addLockPubkey(p2pk.pubkeys);
+      if (p2pk.pubkeys?.length) b.addMainPubkey(p2pk.pubkeys);
     } else {
-      b.addLockPubkey([p2pk.data, ...(p2pk.pubkeys ?? [])]);
+      b.addMainPubkey([p2pk.data, ...(p2pk.pubkeys ?? [])]);
     }
     // p2pk.locktime is already canonical Unix seconds; assign directly so lockUntil's
     // ms heuristic can't re-interpret a >= 1e12 second value and expire the lock.
     if (p2pk.locktime !== undefined) b.locktime = assertUnixSeconds(p2pk.locktime);
     if (p2pk.refundKeys?.length) b.addRefundPubkey(p2pk.refundKeys);
-    if (p2pk.requiredSignatures !== undefined) b.requireLockSignatures(p2pk.requiredSignatures);
+    if (p2pk.requiredSignatures !== undefined) b.requireMainSignatures(p2pk.requiredSignatures);
     if (p2pk.requiredRefundSignatures !== undefined)
       b.requireRefundSignatures(p2pk.requiredRefundSignatures);
     if (p2pk.additionalTags?.length) b.addTags(p2pk.additionalTags);
@@ -177,3 +198,12 @@ export class P2PKBuilder {
     return b;
   }
 }
+
+/**
+ * @deprecated Renamed {@link LockBuilder}. This alias is removed in v5.
+ */
+export const P2PKBuilder = LockBuilder;
+/**
+ * @deprecated Renamed {@link LockBuilder}. This alias is removed in v5.
+ */
+export type P2PKBuilder = LockBuilder;

@@ -2,7 +2,7 @@ import { schnorr } from '@noble/curves/secp256k1.js';
 import { bytesToHex } from '@noble/curves/utils.js';
 import { describe, it, expect } from 'vitest';
 
-import { P2PKBuilder, type P2PKOptions } from '../../src/';
+import { LockBuilder, P2PKBuilder, type P2PKOptions } from '../../src/';
 
 // helpers to make valid on-curve keys, deterministically derived per label char
 const X: Record<string, string> = {};
@@ -519,5 +519,14 @@ describe('P2PKBuilder.blindKeys()', () => {
 
     const round = P2PKBuilder.fromOptions(opts).toOptions();
     expect(round.blindKeys).toBe(true);
+  });
+});
+
+describe('LockBuilder aliases (v5 names)', () => {
+  it('LockBuilder is P2PKBuilder, and the v5 method names match the old ones', () => {
+    expect(P2PKBuilder).toBe(LockBuilder);
+    const a = new LockBuilder().addMainPubkey(comp('a', '02')).requireMainSignatures(1).toOptions();
+    const b = new LockBuilder().addLockPubkey(comp('a', '02')).requireLockSignatures(1).toOptions();
+    expect(a).toEqual(b);
   });
 });

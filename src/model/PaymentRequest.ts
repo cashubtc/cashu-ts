@@ -7,6 +7,7 @@ import { decodeBech32mToBytes, encodeBech32m } from '../utils/bech32m';
 import { JSONInt } from '../utils/JSONInt';
 import { decodeTLV, encodeTLV } from '../utils/tlv';
 import type { DecodedTLVPaymentRequest } from '../utils/tlv';
+import type { LockBuilder } from '../wallet/P2PKBuilder';
 import { PaymentRequestTransportType } from '../wallet/types';
 import type {
   RawPaymentRequest,
@@ -648,12 +649,16 @@ export class PaymentRequestBuilder {
   }
 
   /**
-   * Sets the `nut10` locking condition from a complete P2PK/HTLC {@link P2PKOptions} (e.g. from
-   * `P2PKBuilder.toOptions()`). Last call here or via `nut10()` wins.
+   * Sets the `nut10` locking condition from a {@link LockBuilder} or complete P2PK/HTLC
+   * {@link P2PKOptions}. Last call here or via `nut10()` wins.
    *
    * @throws If the lock is invalid or uses `blindKeys` (not expressible in a request).
    */
-  lock(p2pk: P2PKOptions): this {
+  lock(lock: P2PKOptions | LockBuilder): this {
+    const p2pk =
+      typeof (lock as LockBuilder).toOptions === 'function'
+        ? (lock as LockBuilder).toOptions()
+        : (lock as P2PKOptions);
     this._nut10 = p2pkOptionsToPRNut10(p2pk);
     return this;
   }
