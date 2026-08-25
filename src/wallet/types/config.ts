@@ -1,9 +1,9 @@
-import { type P2PKOptions } from '../../crypto';
 import { type NutrootLeaf } from '../../crypto/nutroot';
 import { type AmountLike } from '../../model/Amount';
 import { type OutputDataFactory, type OutputDataLike } from '../../model/OutputData';
 import type { ProofLike } from '../../model/types/proof';
 import { type OperationCounters } from '../CounterSource';
+import { type LockOptions } from '../lock';
 
 export type SecretsPolicy = 'auto' | 'deterministic' | 'random';
 
@@ -95,24 +95,13 @@ export type OutputType =
     } & SharedOutputTypeProps)
   | ({
       /**
-       * P2PK (NUT-11) or HTLC (NUT-14) locked outputs.
+       * Locked outputs: semantic spending conditions the wallet encodes for the active keyset
+       * (NUT-11/14 tags on pre-v3, a nutroot tree on v3).
        *
-       * @see P2PKOptions
+       * @see LockOptions
        */
-      type: 'p2pk';
-      options: P2PKOptions;
-    } & SharedOutputTypeProps)
-  | ({
-      /**
-       * Receiver-keyed nutroot outputs on a v3 keyset (NUT-28).
-       *
-       * @remarks
-       * Each output is derived to `receiverPub` under its own fresh ephemeral, and carries the
-       * spend info the payee needs. `leaves` lock the outputs under a tree; `blindKeys` names the
-       * leaf keys their owner tagged blind-me.
-       */
-      type: 'nutroot';
-      options: { receiverPub: string; leaves?: NutrootLeaf[]; blindKeys?: string[] };
+      type: 'lock';
+      options: LockOptions;
     } & SharedOutputTypeProps)
   | ({
       /**

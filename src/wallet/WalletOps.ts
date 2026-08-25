@@ -1,5 +1,4 @@
-import { type P2PKOptions } from '../crypto';
-import { type NutrootLeaf } from '../crypto/nutroot';
+import { isBlsKeyset } from '../crypto';
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { type OutputDataLike, type OutputDataFactory } from '../model/OutputData';
@@ -16,7 +15,8 @@ import {
 import type { ProofLike } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 
-import { LockBuilder } from './P2PKBuilder';
+import { nutrootToLockOptions, p2pkToLockOptions, type LockOptions } from './lock';
+import { LockBuilder } from './LockBuilder';
 import {
   type OutputType,
   type OutputConfig,
@@ -105,16 +105,15 @@ export class WalletOps {
     if (pr.nut10 && !lock) {
       throw new CTSError(`cannot honour the request's nut10 lock kind '${pr.nut10.kind}'`);
     }
-    // A request cannot ask for both: v3 outputs are nutroot-only, and NUT-10 secrets belong to
-    // pre-v3 keysets. Honouring one would silently ignore the other.
+    // Both options are one condition in two encodings (NUT-18): follow the one this wallet's
+    // keyset takes, preferring nutroot on a v3 keyset.
     const nutroot = pr.toNutrootOptions();
-    if (nutroot && lock) {
-      throw new CTSError('payment request carries both a nut10 lock and a nutroot option');
-    }
     // Net of input fees (NUT-18): the payee must net the requested amount after swapping.
     const builder = new SendBuilder(wallet, base.add(fee), proofs).includeFees(true);
-    if (nutroot) return builder.asNutroot(nutroot);
-    return lock ? builder.asP2PK(lock) : builder;
+    if (nutroot && (!lock || isBlsKeyset(wallet.keysetId))) {
+      return builder.asLocked(nutrootToLockOptions(nutroot));
+    }
+    return lock ? builder.asLocked(p2pkToLockOptions(lock)) : builder;
   }
   receive(token: Token | string | ProofLike[]) {
     return new ReceiveBuilder(this.wallet, token);
@@ -203,35 +202,14 @@ export class SendBuilder {
   }
 
   /**
-   * Lock the sent proofs to a spending condition.
+   * Lock the sent proofs to spending conditions; the wallet encodes them for the active keyset.
    *
-   * @remarks
-   * The v5 name for `asP2PK`, taking a {@link LockBuilder} directly or its options.
-   * @param lock A {@link LockBuilder}, or complete {@link P2PKOptions}.
+   * @param lock Semantic {@link LockOptions}, or a {@link LockBuilder} to take them from.
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
-  asLocked(lock: P2PKOptions | LockBuilder, denoms?: AmountLike[]) {
+  asLocked(lock: LockOptions | LockBuilder, denoms?: AmountLike[]) {
     const options = lock instanceof LockBuilder ? lock.toOptions() : lock;
-    this.sendOT = { type: 'p2pk', options, denominations: denoms };
-    return this;
-  }
-
-  /**
-   * Derive the sent proofs to a payee's static key on a v3 keyset (NUT-28).
-   *
-   * @remarks
-   * Each output gets its own ephemeral, so two payments to one key are unlinkable, and each carries
-   * the spend info the payee derives from. Optional `leaves` lock the outputs under a tree;
-   * `blindKeys` are the leaf keys their owner tagged blind-me.
-   * @param options Receiver key and optional tree, e.g. from
-   *   {@link PaymentRequest.toNutrootOptions}.
-   * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-   */
-  asNutroot(
-    options: { receiverPub: string; leaves?: NutrootLeaf[]; blindKeys?: string[] },
-    denoms?: AmountLike[],
-  ) {
-    this.sendOT = { type: 'nutroot', options, denominations: denoms };
+    this.sendOT = { type: 'lock', options, denominations: denoms };
     return this;
   }
 
@@ -279,24 +257,15 @@ export class SendBuilder {
   }
 
   /**
-   * Lock the change to a spending condition.
+   * Lock the change to spending conditions; the wallet encodes them for the active keyset.
    *
-   * @remarks
-   * The v5 name for `keepAsP2PK`, taking a {@link LockBuilder} directly or its options.
-   * @param lock A {@link LockBuilder}, or complete {@link P2PKOptions}.
+   * @param lock Semantic {@link LockOptions}, or a {@link LockBuilder} to take them from.
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
-  keepAsLocked(lock: P2PKOptions | LockBuilder, denoms?: AmountLike[]) {
+  keepAsLocked(lock: LockOptions | LockBuilder, denoms?: AmountLike[]) {
     const options = lock instanceof LockBuilder ? lock.toOptions() : lock;
-    this.keepOT = { type: 'p2pk', options, denominations: denoms };
+    this.keepOT = { type: 'lock', options, denominations: denoms };
     return this;
-  }
-
-  /**
-   * @deprecated Use `keepAsLocked`. Removed in v5.
-   */
-  keepAsP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]) {
-    return this.keepAsLocked(p2pk, denoms);
   }
 
   /**
@@ -508,25 +477,17 @@ export class ReceiveBuilder {
   }
 
   /**
-   * Lock the received proofs to a spending condition.
+   * Lock the received proofs to spending conditions; the wallet encodes them for the active keyset.
    *
    * @remarks
-   * If `denoms` is specified, `proofsWeHave()` has no effect. This is the v5 name for `asP2PK`,
-   * taking a {@link LockBuilder} directly or its options.
-   * @param lock A {@link LockBuilder}, or complete {@link P2PKOptions}.
+   * If `denoms` is specified, `proofsWeHave()` has no effect.
+   * @param lock Semantic {@link LockOptions}, or a {@link LockBuilder} to take them from.
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
-  asLocked(lock: P2PKOptions | LockBuilder, denoms?: AmountLike[]) {
+  asLocked(lock: LockOptions | LockBuilder, denoms?: AmountLike[]) {
     const options = lock instanceof LockBuilder ? lock.toOptions() : lock;
-    this.outputType = { type: 'p2pk', options, denominations: denoms };
+    this.outputType = { type: 'lock', options, denominations: denoms };
     return this;
-  }
-
-  /**
-   * @deprecated Use `asLocked`. Removed in v5.
-   */
-  asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]) {
-    return this.asLocked(p2pk, denoms);
   }
 
   /**
@@ -690,25 +651,17 @@ export class MintBuilder<
   }
 
   /**
-   * Lock the minted proofs to a spending condition.
+   * Lock the minted proofs to spending conditions; the wallet encodes them for the active keyset.
    *
    * @remarks
-   * If `denoms` is specified, `proofsWeHave()` has no effect. This is the v5 name for `asP2PK`,
-   * taking a {@link LockBuilder} directly or its options.
-   * @param lock A {@link LockBuilder}, or complete {@link P2PKOptions}.
+   * If `denoms` is specified, `proofsWeHave()` has no effect.
+   * @param lock Semantic {@link LockOptions}, or a {@link LockBuilder} to take them from.
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
-  asLocked(lock: P2PKOptions | LockBuilder, denoms?: AmountLike[]) {
+  asLocked(lock: LockOptions | LockBuilder, denoms?: AmountLike[]) {
     const options = lock instanceof LockBuilder ? lock.toOptions() : lock;
-    this.outputType = { type: 'p2pk', options, denominations: denoms };
+    this.outputType = { type: 'lock', options, denominations: denoms };
     return this;
-  }
-
-  /**
-   * @deprecated Use `asLocked`. Removed in v5.
-   */
-  asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]) {
-    return this.asLocked(p2pk, denoms);
   }
 
   /**
@@ -916,24 +869,15 @@ export class MeltBuilder<
   }
 
   /**
-   * Lock the change to a spending condition.
+   * Lock the change to spending conditions; the wallet encodes them for the active keyset.
    *
-   * @remarks
-   * The v5 name for `asP2PK`, taking a {@link LockBuilder} directly or its options.
-   * @param lock A {@link LockBuilder}, or complete {@link P2PKOptions}.
+   * @param lock Semantic {@link LockOptions}, or a {@link LockBuilder} to take them from.
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
-  asLocked(lock: P2PKOptions | LockBuilder, denoms?: AmountLike[]) {
+  asLocked(lock: LockOptions | LockBuilder, denoms?: AmountLike[]) {
     const options = lock instanceof LockBuilder ? lock.toOptions() : lock;
-    this.outputType = { type: 'p2pk', options, denominations: denoms };
+    this.outputType = { type: 'lock', options, denominations: denoms };
     return this;
-  }
-
-  /**
-   * @deprecated Use `asLocked`. Removed in v5.
-   */
-  asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]) {
-    return this.asLocked(p2pk, denoms);
   }
 
   /**

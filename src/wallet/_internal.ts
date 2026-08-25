@@ -85,31 +85,20 @@ export function stringifyOutputTypeForLog(ot: OutputType): string {
         counter: ot.counter,
         denominations: (ot.denominations ?? []).map((d) => Amount.from(d).toString()),
       });
-    case 'p2pk': {
-      // P2BK: the natural keys are only blinded later, so log placeholders instead
+    case 'lock': {
+      // Keys and hashes identify the parties: log the shape, not the material.
       const opts = ot.options;
-      const options = opts.blindKeys
-        ? {
-            ...opts,
-            data: opts.kind === 'P2PK' ? '[redacted]' : opts.data,
-            pubkeys: opts.pubkeys?.map(() => '[redacted]'),
-            refundKeys: opts.refundKeys?.map(() => '[redacted]'),
-          }
-        : opts;
       return JSON.stringify({
-        type: 'p2pk',
-        options,
+        type: 'lock',
+        mainKeys: opts.mainKeys?.length ?? 0,
+        refundKeys: opts.refundKeys?.length ?? 0,
+        ...(opts.hashlock && { hashlock: true }),
+        ...(opts.locktime !== undefined && { locktime: opts.locktime }),
+        ...(opts.leaves?.length && { leaves: opts.leaves.length }),
+        ...(opts.blindKeys && { blindKeys: true }),
         denominations: (ot.denominations ?? []).map((d) => Amount.from(d).toString()),
       });
     }
-    case 'nutroot':
-      // The receiver key and its tree identify the payee: log the shape, not the keys.
-      return JSON.stringify({
-        type: 'nutroot',
-        leaves: ot.options.leaves?.length ?? 0,
-        blindKeys: ot.options.blindKeys?.length ?? 0,
-        denominations: (ot.denominations ?? []).map((d) => Amount.from(d).toString()),
-      });
     case 'random':
       return JSON.stringify({
         type: 'random',

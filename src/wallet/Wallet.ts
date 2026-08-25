@@ -103,6 +103,7 @@ import {
 } from './CounterSource';
 import { KeyChain } from './KeyChain';
 import { type Keyset } from './Keyset';
+import { lockToNutrootOptions, lockToP2PKOptions } from './lock';
 import {
   type NutrootWalletState,
   V3_SEED_SCAN_HEADROOM,
@@ -1159,21 +1160,22 @@ class Wallet {
           outputType.denominations,
         );
         break;
-      case 'p2pk':
-        outputData = this._outputDataCreator.createP2PKData(
-          outputType.options,
-          outputAmount,
-          keyset,
-          outputType.denominations,
-        );
-        break;
-      case 'nutroot':
-        outputData = OutputData.createNutrootData(
-          outputType.options,
-          outputAmount,
-          keyset,
-          outputType.denominations,
-        );
+      case 'lock':
+        // The one place the keyset version is known: semantic lock options encode here, so
+        // consumers never pick an encoding. Inexpressible shapes refuse naming the reason.
+        outputData = isBlsKeyset(keyset.id)
+          ? OutputData.createNutrootData(
+              lockToNutrootOptions(outputType.options),
+              outputAmount,
+              keyset,
+              outputType.denominations,
+            )
+          : this._outputDataCreator.createP2PKData(
+              lockToP2PKOptions(outputType.options),
+              outputAmount,
+              keyset,
+              outputType.denominations,
+            );
         break;
       case 'factory': {
         const factorySplit = splitAmount(outputAmount, keyset.keys, outputType.denominations);
@@ -1888,10 +1890,12 @@ class Wallet {
     this.assertProofsInWalletUnit(proofs);
     this.assertNoDuplicateProofs(proofs);
     // A nutroot request is satisfied only by proofs disclosing exactly the requested tree: an
-    // extra leaf is spend power the payee never asked for, eg a payer clawback (NUT-18).
+    // extra leaf is spend power the payee never asked for, eg a payer clawback (NUT-18). When the
+    // request also publishes nut10, a pre-v3 proof settles under that option instead.
     const nutrootOption = pr.toNutrootOptions();
     if (nutrootOption) {
       for (const p of proofs) {
+        if (pr.nut10 && !(isBlsKeyset(p.id) && isV3PointSecret(p.secret))) continue;
         verifyNutrootRequestTree(nutrootOption, p.spend_info);
       }
     }

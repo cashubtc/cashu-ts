@@ -237,8 +237,8 @@ export function dedupeP2PKPubkeys(keys: string[]): string[] {
  * Validate and normalize a {@link P2PKOptions} into a canonical, deduplicated copy (not mutated).
  *
  * @remarks
- * Dedupes keys, defaults the signature threshold, and rejects unsatisfiable thresholds. External
- * callers use `P2PKBuilder.fromOptions(p2pk).toOptions()`.
+ * Dedupes keys, defaults the signature threshold, and rejects unsatisfiable thresholds.
+ * `LockBuilder` and `PaymentRequest.toP2PKOptions()` call this internally.
  * @internal
  */
 export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {

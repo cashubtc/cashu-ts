@@ -27,7 +27,10 @@ import { deriveKeyPair, getEncodedToken } from '@cashu/cashu-ts';
 const counter = 0; // your next unused P2PK counter
 const { pubkey, privkey } = deriveKeyPair(seed, 'P2PK', counter);
 
-const { send } = await wallet.ops.send(32, proofs).asP2PK({ pubkey }).run();
+const { send } = await wallet.ops
+  .send(32, proofs)
+  .asLocked({ mainKeys: [pubkey] })
+  .run();
 const token = getEncodedToken({ mint: mintUrl, proofs: send });
 
 // Later: re-derive the same key from seed + counter to unlock the proofs:

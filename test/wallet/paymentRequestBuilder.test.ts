@@ -2,7 +2,8 @@ import { test, describe, expect } from 'vitest';
 
 import {
   LockBuilder,
-  P2PKBuilder,
+  lockToP2PKOptions,
+  parseNutrootLeafHex,
   PaymentRequest,
   PaymentRequestBuilder,
   PaymentRequestTransportType,
@@ -132,13 +133,102 @@ describe('PaymentRequestBuilder', () => {
     expect(pr.getTransport(PaymentRequestTransportType.NOSTR)?.tags).toEqual([['n', '17', '04']]);
   });
 
-  test('lock() accepts P2PKBuilder output and round-trips via toP2PKOptions()', () => {
-    const builder = new P2PKBuilder()
-      .addLockPubkey([PUBKEY, PUBKEY2])
+  test('lock() accepts a LockBuilder and semantic LockOptions directly', () => {
+    const viaBuilder = new PaymentRequestBuilder()
+      .lock(new LockBuilder().addMainPubkey(PUBKEY))
+      .build();
+    expect(viaBuilder.nut10?.kind).toBe('P2PK');
+    expect(viaBuilder.nut10?.data).toBe(PUBKEY);
+
+    const viaOptions = new PaymentRequestBuilder()
+      .lock({ mainKeys: [PUBKEY, PUBKEY2], requiredMainSignatures: 2 })
+      .build();
+    expect(viaOptions.nut10?.data).toBe(PUBKEY);
+    expect(viaOptions.nut10?.tags).toContainEqual(['pubkeys', PUBKEY2]);
+    expect(viaOptions.nut10?.tags).toContainEqual(['n_sigs', '2']);
+  });
+
+  test('lock() emits both encodings when both can express the condition', () => {
+    const pr = new PaymentRequestBuilder().lock({ mainKeys: [PUBKEY] }).build();
+    expect(pr.nut10?.kind).toBe('P2PK');
+    expect(pr.nut10?.data).toBe(PUBKEY);
+    expect(pr.nutroot?.receiverKey).toBe(PUBKEY);
+  });
+
+  test('lock() emits only the encoding that fits a one-sided shape', () => {
+    const tagged = new PaymentRequestBuilder()
+      .lock({ mainKeys: [PUBKEY], additionalTags: [['e', 'abc']] })
+      .build();
+    expect(tagged.nut10?.tags).toContainEqual(['e', 'abc']);
+    expect(tagged.nutroot).toBeUndefined();
+
+    const treed = new PaymentRequestBuilder()
+      .lock({
+        mainKeys: [PUBKEY],
+        leaves: [{ type: 'after', n: 1, time: 2085000000, keys: [PUBKEY2] }],
+      })
+      .build();
+    expect(treed.nut10).toBeUndefined();
+    expect(treed.nutroot?.receiverKey).toBe(PUBKEY);
+    expect(treed.nutroot?.leaves).toHaveLength(1);
+  });
+
+  test('lock() refuses a shape neither encoding expresses', () => {
+    expect(() =>
+      new PaymentRequestBuilder().lock({
+        mainKeys: [PUBKEY],
+        additionalTags: [['e', 'abc']],
+        leaves: [{ type: 'threshold', n: 1, keys: [PUBKEY2] }],
+      }),
+    ).toThrow(/no permitted request encoding/i);
+  });
+
+  test('legacy: false generates the current spec alone', () => {
+    const pr = new PaymentRequestBuilder().lock({ mainKeys: [PUBKEY] }, { legacy: false }).build();
+    expect(pr.nutroot?.receiverKey).toBe(PUBKEY);
+    expect(pr.nut10).toBeUndefined();
+    // A v2-only shape with legacy emission disabled has nowhere to go.
+    expect(() =>
+      new PaymentRequestBuilder().lock(
+        { mainKeys: [PUBKEY], additionalTags: [['e', 'abc']] },
+        { legacy: false },
+      ),
+    ).toThrow();
+  });
+
+  test('wire P2PKOptions input still targets nut10 alone', () => {
+    const pr = new PaymentRequestBuilder().lock({ kind: 'P2PK', data: PUBKEY }).build();
+    expect(pr.nut10?.data).toBe(PUBKEY);
+    expect(pr.nutroot).toBeUndefined();
+  });
+
+  test('requestNutroot() accepts semantic LockOptions and serializes the tree', () => {
+    const pr = new PaymentRequestBuilder()
+      .requestNutroot({
+        mainKeys: [PUBKEY],
+        leaves: [{ type: 'after', n: 1, time: 2085000000, keys: [PUBKEY2] }],
+        blindKeys: [PUBKEY2],
+      })
+      .build();
+    expect(pr.nutroot?.receiverKey).toBe(PUBKEY);
+    expect(pr.nutroot?.leaves).toHaveLength(1);
+    expect(parseNutrootLeafHex(pr.nutroot!.leaves![0])).toEqual({
+      type: 'after',
+      n: 1,
+      time: 2085000000,
+      keys: [PUBKEY2],
+    });
+    expect(pr.nutroot?.blindKeys).toEqual([PUBKEY2]);
+  });
+
+  test('lock() accepts encoded LockBuilder output and round-trips via toP2PKOptions()', () => {
+    const builder = new LockBuilder()
+      .addMainPubkey([PUBKEY, PUBKEY2])
       .addRefundPubkey(PUBKEY)
       .lockUntil(2085000000)
-      .requireLockSignatures(2);
-    const pr = new PaymentRequestBuilder().lock(builder.toOptions()).build();
+      .requireMainSignatures(2);
+    const options = lockToP2PKOptions(builder.toOptions());
+    const pr = new PaymentRequestBuilder().lock(options).build();
 
     expect(pr.nut10?.kind).toBe('P2PK');
     expect(pr.nut10?.data).toBe(PUBKEY);
@@ -149,18 +239,7 @@ describe('PaymentRequestBuilder', () => {
 
     // the payer-side parser reconstructs the same lock
     const roundTripped = pr.toP2PKOptions();
-    expect(roundTripped).toEqual(builder.toOptions());
-  });
-
-  test('lock() accepts a LockBuilder directly', () => {
-    const viaBuilder = new PaymentRequestBuilder()
-      .lock(new LockBuilder().addMainPubkey(PUBKEY))
-      .build();
-    const viaOptions = new PaymentRequestBuilder()
-      .lock(new LockBuilder().addMainPubkey(PUBKEY).toOptions())
-      .build();
-    expect(viaBuilder.nut10).toEqual(viaOptions.nut10);
-    expect(viaBuilder.nut10?.data).toBe(PUBKEY);
+    expect(roundTripped).toEqual(options);
   });
 
   test('lock() accepts raw P2PKOptions and validates them', () => {

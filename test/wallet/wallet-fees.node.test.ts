@@ -274,6 +274,30 @@ describe('wallet.isPaymentRequestSatisfied', () => {
     expect(wallet.isPaymentRequestSatisfied(listed, proofsTotalling([100]))).toBe(true);
   });
 
+  test('a both-encoded request settles legacy proofs under the nut10 option', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const carol = '02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9';
+
+    const both = new PaymentRequest({
+      id: 'both',
+      amount: 100,
+      unit: 'sat',
+      nut10: { kind: 'P2PK', data: carol },
+      nutroot: { receiverKey: carol },
+    });
+    expect(wallet.isPaymentRequestSatisfied(both, proofsTotalling([100]))).toBe(true);
+
+    // nutroot alone is a request for v3 outputs only: legacy proofs cannot settle it.
+    const v3only = new PaymentRequest({
+      id: 'v3only',
+      amount: 100,
+      unit: 'sat',
+      nutroot: { receiverKey: carol },
+    });
+    expect(() => wallet.isPaymentRequestSatisfied(v3only, proofsTotalling([100]))).toThrow();
+  });
+
   test('rejects unit mismatches and amountless requests without an expectation', async () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();

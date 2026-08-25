@@ -938,7 +938,7 @@ describeV3('M7 mixed-keyset transactions through the wallet API', () => {
       const bobPub = bytesToHex(secp256k1.getPublicKey(hexToBytes(bobPriv), true));
       const { send: locked } = await legacySide.wallet.ops
         .send(16, legacySide.proofs)
-        .asP2PK({ kind: 'P2PK', data: bobPub })
+        .asLocked({ mainKeys: [bobPub] })
         .run();
       expect(locked.every((p) => p.secret.includes('P2PK'))).toBe(true);
 
@@ -1070,7 +1070,7 @@ describeV3('M8 tokens end to end with spend_info', () => {
       ]) {
         const { send, keep } = await wallet.ops
           .send(16, proofs)
-          .asNutroot({ receiverPub: carolPub, leaves, ...(leaves && { blindKeys: [alicePub] }) })
+          .asLocked({ mainKeys: [carolPub], leaves, ...(leaves && { blindKeys: [alicePub] }) })
           .run();
         proofs.length = 0;
         proofs.push(...keep);
@@ -1167,7 +1167,7 @@ describeV3('audit: spend info carrying both k and E', () => {
       const funds = await payer.mintProofsBolt11(64, quote);
       const { send } = await payer.ops
         .send(32, funds)
-        .asNutroot({ receiverPub: carolPub }, [32])
+        .asLocked({ mainKeys: [carolPub] }, [32])
         .run();
       const proof = send[0];
 
@@ -1217,7 +1217,7 @@ describeV3('M9 script path through the wallet API', () => {
       const leaf: NutrootLeaf = { type: 'after', n: 1, keys: [alicePub], time: 1 };
       const { send } = await wallet.ops
         .send(32, proofs)
-        .asNutroot({ receiverPub: carolPub, leaves: [leaf], blindKeys: [alicePub] }, [32])
+        .asLocked({ mainKeys: [carolPub], leaves: [leaf], blindKeys: [alicePub] }, [32])
         .run();
       const proof = send[0];
 
@@ -1249,7 +1249,7 @@ describeV3('M9 script path through the wallet API', () => {
       const leaf: NutrootLeaf = { type: 'after', n: 1, keys: [alicePub], time: 4102444800 };
       const { send } = await wallet.ops
         .send(32, proofs)
-        .asNutroot({ receiverPub: carolPub, leaves: [leaf] }, [32])
+        .asLocked({ mainKeys: [carolPub], leaves: [leaf] }, [32])
         .run();
       const proof = send[0];
 
@@ -1285,7 +1285,7 @@ describeV3('M9 script path through the wallet API', () => {
       const { wallet, proofs } = await fundV3(64);
       const { send } = await wallet.ops
         .send(32, proofs)
-        .asNutroot({ receiverPub: carolPub, leaves: [leaf] }, [32])
+        .asLocked({ mainKeys: [carolPub], leaves: [leaf] }, [32])
         .run();
       const proof = send[0];
 
@@ -1338,7 +1338,7 @@ describeV3('M9 script path through the wallet API', () => {
       const { wallet, proofs } = await fundV3(64);
       const { send } = await wallet.ops
         .send(32, proofs)
-        .asNutroot({ receiverPub: carolPub, leaves: [leaf], blindKeys: [alicePub] }, [32])
+        .asLocked({ mainKeys: [carolPub], leaves: [leaf], blindKeys: [alicePub] }, [32])
         .run();
       const proof = send[0];
 
@@ -1381,7 +1381,7 @@ describeV3('M9 script path through the wallet API', () => {
       const { wallet, proofs } = await fundV3(64);
       const { send } = await wallet.ops
         .send(32, proofs)
-        .asNutroot({ receiverPub: carolPub, leaves: [leaf] }, [32])
+        .asLocked({ mainKeys: [carolPub], leaves: [leaf] }, [32])
         .run();
       const proof = send[0];
 
@@ -1418,7 +1418,7 @@ describeV3('M9 script path through the wallet API', () => {
     const { wallet, proofs } = await fundV3(64);
     const { send } = await wallet.ops
       .send(32, proofs)
-      .asNutroot({ receiverPub: carolPub, leaves: [leaf] }, [32])
+      .asLocked({ mainKeys: [carolPub], leaves: [leaf] }, [32])
       .run();
     const proof = send[0];
 

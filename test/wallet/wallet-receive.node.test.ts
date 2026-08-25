@@ -452,10 +452,9 @@ describe('receive', () => {
       token3sat,
       {},
       {
-        type: 'p2pk',
+        type: 'lock',
         options: {
-          kind: 'P2PK',
-          data: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+          mainKeys: ['0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798'],
         },
       },
     );

@@ -5,6 +5,7 @@ import { P2PK_KNOWN_TAG_KEYS, p2pkOptionsToPRNut10, parseP2PKSecret } from '../c
 import {
   parseNutrootLeaf,
   serializeNutrootLeaf,
+  serializeNutrootLeafHex,
   NUTROOT_NUMS_KEY,
   type NutrootLeaf,
 } from '../crypto/nutroot';
@@ -13,7 +14,8 @@ import { decodeBech32mToBytes, encodeBech32m } from '../utils/bech32m';
 import { JSONInt } from '../utils/JSONInt';
 import { decodeTLV, encodeTLV } from '../utils/tlv';
 import type { DecodedTLVPaymentRequest } from '../utils/tlv';
-import type { LockBuilder } from '../wallet/P2PKBuilder';
+import { lockToNutrootOptions, lockToP2PKOptions, type LockOptions } from '../wallet/lock';
+import type { LockBuilder } from '../wallet/LockBuilder';
 import { PaymentRequestTransportType } from '../wallet/types';
 import type {
   RawPaymentRequest,
@@ -390,8 +392,9 @@ export class PaymentRequest {
   }
 
   /**
-   * Converts this request's `nut10` locking option into a {@link P2PKOptions} for the wallet's
-   * `.asP2PK()` gate, so a payer can lock proofs to exactly the condition the payee requested.
+   * Converts this request's `nut10` locking option into a wire {@link P2PKOptions}; decode with
+   * `p2pkToLockOptions()` for `.asLocked()`, so a payer locks proofs to exactly the requested
+   * condition.
    *
    * @remarks
    * Supports `P2PK` (NUT-11) and `HTLC` (NUT-14) only; returns `undefined` for no `nut10` or an
@@ -725,17 +728,41 @@ export class PaymentRequestBuilder {
   }
 
   /**
-   * Sets the `nut10` locking condition from a {@link LockBuilder} or complete P2PK/HTLC
-   * {@link P2PKOptions}. Last call here or via `nut10()` wins.
+   * Sets the locking condition from semantic {@link LockOptions}, a {@link LockBuilder}, or wire
+   * {@link P2PKOptions}. Replaces any condition set earlier.
    *
-   * @throws If the lock is invalid or uses `blindKeys` (not expressible in a request).
+   * @remarks
+   * Semantic input is encoded as `nutroot` (the current spec) and, while `legacy` is not `false`,
+   * also as `nut10` so payers that predate v3 can pay: a NUT-18 transition measure. Wire
+   * `P2PKOptions` target `nut10` alone; `requestNutroot()` makes a deliberately v3-only request.
+   * @throws If no permitted encoding can express the lock, or a wire lock is invalid.
    */
-  lock(lock: P2PKOptions | LockBuilder): this {
-    const p2pk =
-      typeof (lock as LockBuilder).toOptions === 'function'
-        ? (lock as LockBuilder).toOptions()
-        : (lock as P2PKOptions);
-    this._nut10 = p2pkOptionsToPRNut10(p2pk);
+  lock(lock: LockOptions | LockBuilder | P2PKOptions, opts?: { legacy?: boolean }): this {
+    const semantic = asLockOptions(lock);
+    if (!semantic) {
+      this._nut10 = p2pkOptionsToPRNut10(lock as P2PKOptions);
+      return this;
+    }
+    const reasons: string[] = [];
+    const tryEncode = <T>(encode: () => T): T | undefined => {
+      try {
+        return encode();
+      } catch (e) {
+        reasons.push(e instanceof Error ? e.message : String(e));
+        return undefined;
+      }
+    };
+    const nut10 =
+      opts?.legacy === false
+        ? undefined
+        : tryEncode(() => p2pkOptionsToPRNut10(lockToP2PKOptions(semantic)));
+    const nutroot = tryEncode(() => encodeNutrootRequest(semantic));
+    if (!nut10 && !nutroot) {
+      throw new CTSError(`lock fits no permitted request encoding: ${reasons.join('; ')}`);
+    }
+    this._nut10 = nut10;
+    this._nutroot = undefined;
+    if (nutroot) this.requestNutroot(nutroot);
     return this;
   }
 
@@ -758,7 +785,11 @@ export class PaymentRequestBuilder {
    * @throws If the receiver key is not a valid point, a leaf is unparsable, or a blind-me key is
    *   not one of the leaves' keys.
    */
-  requestNutroot(option: NutrootOption): this {
+  requestNutroot(lock: NutrootOption | LockOptions | LockBuilder): this {
+    const semantic = asLockOptions(lock);
+    const option: NutrootOption = semantic
+      ? encodeNutrootRequest(semantic)
+      : (lock as NutrootOption);
     const nutroot: NutrootOption = {
       receiverKey: normalizeSecpPubkey(option.receiverKey),
       ...(option.leaves?.length && { leaves: [...option.leaves] }),
@@ -821,4 +852,30 @@ export class PaymentRequestBuilder {
       nutroot: this._nutroot,
     });
   }
+}
+
+/**
+ * Reads semantic lock input; undefined for a wire shape (`P2PKOptions` carries `kind`, a
+ * `NutrootOption` carries `receiverKey`).
+ */
+function asLockOptions(
+  lock: LockOptions | LockBuilder | P2PKOptions | NutrootOption,
+): LockOptions | undefined {
+  if (typeof (lock as LockBuilder).toOptions === 'function') {
+    return (lock as LockBuilder).toOptions();
+  }
+  if ('kind' in lock || 'receiverKey' in lock) return undefined;
+  return lock as LockOptions;
+}
+
+/**
+ * Encodes semantic lock options as a wire nutroot request.
+ */
+function encodeNutrootRequest(lock: LockOptions): NutrootOption {
+  const { receiverPub, leaves, blindKeys } = lockToNutrootOptions(lock);
+  return {
+    receiverKey: receiverPub,
+    ...(leaves?.length && { leaves: leaves.map((leaf) => serializeNutrootLeafHex(leaf)) }),
+    ...(blindKeys?.length && { blindKeys }),
+  };
 }

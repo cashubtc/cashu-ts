@@ -67,7 +67,7 @@ await fetch(post.target, {
 `PaymentRequest.builder()` handles the fiddly parts for you: transport tag formats, NUT-10 lock serialization, mint URL normalization, and cross-field validation. Setters can be called in any order; `build()` validates (eg `mintsPreferred` without mints throws) and returns the `PaymentRequest`.
 
 ```typescript
-import { PaymentRequest, P2PKBuilder } from '@cashu/cashu-ts';
+import { PaymentRequest, LockBuilder } from '@cashu/cashu-ts';
 
 const request = PaymentRequest.builder()
   .id('inv-123')
@@ -79,14 +79,14 @@ const request = PaymentRequest.builder()
   .addHttpPostTransport('https://pay.example.com')
   .addSupportedMethod('bolt11')
   .addSupportedMethod('bolt12', 5) // with a per-method fee
-  .lock(new P2PKBuilder().addLockPubkey(payeePk).toOptions()) // nut10 from a P2PK/HTLC lock
+  .lock(new LockBuilder().addMainPubkey(payeePk)) // nut10 from semantic lock conditions
   .build();
 
 request.toEncodedCreqA(); // 'creqA…'  (CBOR)
 request.toEncodedCreqB(); // 'CREQB1…' (TLV + Bech32m, best for QR)
 ```
 
-`lock()` takes a complete `P2PKOptions` (eg from `P2PKBuilder`, as with `asP2PK()`) and serializes it into the request's `nut10` option (the exact condition `toP2PKOptions()` reconstructs on the payer side). For NUT-10 kinds beyond P2PK/HTLC, pass a raw option with `nut10()`.
+`lock()` takes semantic `LockOptions`, a `LockBuilder`, or wire `P2PKOptions`. Semantic input is encoded as `nutroot` (the current spec) and, by default, also as the legacy `nut10` option so payers that predate v3 can pay: a transition measure, disabled with `lock(x, { legacy: false })`. Each payer follows the encoding its keyset takes. Shapes only one encoding fits (extra tags, or leaves/blind lists) emit that one alone. Use `requestNutroot()` for a deliberately v3-only request, and `nut10()` with a raw option for NUT-10 kinds beyond P2PK/HTLC.
 
 Alternatively, the `PaymentRequest` constructor takes an options object whose keys mirror the class properties; set only what you need. `amount` and each method `fee` accept any `AmountLike` (number, bigint, string, or `Amount`).
 
@@ -185,13 +185,13 @@ await wallet.ops.send(total, proofs).includeFees(true).run(); // payer covers th
 
 ### Locked requests
 
-A request may require the token be locked to a spending condition (P2PK / HTLC). `toP2PKOptions()` converts that condition into the options accepted by the P2PK builder, so you can produce proofs locked exactly as the payee asked:
+A request may require the token be locked to a spending condition (P2PK / HTLC). `toP2PKOptions()` reads that condition as wire `P2PKOptions`; convert with `p2pkToLockOptions()` and the wallet produces proofs locked exactly as the payee asked:
 
 ```typescript
 const opts = pr.toP2PKOptions(); // undefined = no lockable nut10 condition
 const builder = wallet.ops.send(pr.amountToSend(myMint), proofs);
 // Lock only when the request asks for it; otherwise send unlocked.
-if (opts) builder.asP2PK(opts);
+if (opts) builder.asLocked(p2pkToLockOptions(opts));
 const { keep, send } = await builder.run();
 ```
 

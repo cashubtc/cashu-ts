@@ -36,7 +36,7 @@ import {
   type OutputDataFactory,
   type OutputConfig,
   type OutputType,
-  P2PKBuilder,
+  LockBuilder,
   type MintQuoteBaseResponse,
   createHTLCHash,
   deriveP2BKSecretKeys,
@@ -377,7 +377,7 @@ describe('mint api', () => {
     // Send them P2PK locked to Bob
     const { send } = await wallet.ops
       .send(64, mintedProofs)
-      .asP2PK({ kind: 'P2PK', data: pubKeyBob })
+      .asLocked({ mainKeys: [pubKeyBob] })
       .run();
     expectNUT10SecretDataToEqual(send, pubKeyBob);
     const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
@@ -412,8 +412,8 @@ describe('mint api', () => {
     await untilMintQuotePaid(wallet, request);
     const mintedProofs = await wallet.mintProofsBolt11(128, request.quote);
     // Send them P2PK locked to Bob
-    const p2pk = new P2PKBuilder().addLockPubkey(pubKeyBob).sigAll().toOptions();
-    const { send } = await wallet.ops.send(64, mintedProofs).asP2PK(p2pk).includeFees().run();
+    const p2pk = new LockBuilder().addMainPubkey(pubKeyBob).sigAll().toOptions();
+    const { send } = await wallet.ops.send(64, mintedProofs).asLocked(p2pk).includeFees().run();
     expectNUT10SecretDataToEqual(send, pubKeyBob);
     const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
     const txn = await wallet.prepareSwapToReceive(encoded);
@@ -445,15 +445,15 @@ describe('mint api', () => {
     const mintedProofs = await wallet.mintProofsBolt11(128, request.quote);
 
     // Send them P2PK locked to Alice, with extra tags
-    const p2pk = new P2PKBuilder()
-      .addLockPubkey(pubKeyAlice)
+    const p2pk = new LockBuilder()
+      .addMainPubkey(pubKeyAlice)
       .addTags([
         ['e', 'abc'],
         ['p', '123'],
       ])
       .addTag('msg', 'hello')
       .toOptions();
-    const { send } = await wallet.ops.send(64, mintedProofs).asP2PK(p2pk).run();
+    const { send } = await wallet.ops.send(64, mintedProofs).asLocked(p2pk).run();
     expectNUT10SecretDataToEqual(send, pubKeyAlice);
     send.forEach((p) => {
       const parsedSecret = JSON.parse(p.secret);
@@ -490,8 +490,8 @@ describe('mint api', () => {
     const mintedProofs = await wallet.mintProofsBolt11(128, request.quote);
 
     // Send them P2BK locked to Bob
-    const p2pkOpts = new P2PKBuilder().addLockPubkey(pubKeyBob).blindKeys().toOptions();
-    const { send } = await wallet.ops.send(64, mintedProofs).asP2PK(p2pkOpts).run();
+    const p2pkOpts = new LockBuilder().addMainPubkey(pubKeyBob).blindKeys().toOptions();
+    const { send } = await wallet.ops.send(64, mintedProofs).asLocked(p2pkOpts).run();
     // console.log('P2BK SEND', send);
     expectP2BKLockedToBob(send, privKeyBob);
     const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
@@ -522,8 +522,8 @@ describe('mint api', () => {
     const mintedProofs = await wallet.mintProofsBolt11(128, request.quote);
 
     // Send them P2BK locked to Bob
-    const p2pkOpts = new P2PKBuilder().addLockPubkey(pubKeyBob).blindKeys().toOptions();
-    const { send } = await wallet.ops.send(64, mintedProofs).asP2PK(p2pkOpts).run();
+    const p2pkOpts = new LockBuilder().addMainPubkey(pubKeyBob).blindKeys().toOptions();
+    const { send } = await wallet.ops.send(64, mintedProofs).asLocked(p2pkOpts).run();
     // console.log('P2BK SEND', send);
     expectP2BKLockedToBob(send, privKeyBob);
     const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
@@ -550,12 +550,12 @@ describe('mint api', () => {
     const mintedProofs = await wallet.mintProofsBolt11(128, request.quote);
 
     // Send them HTLC locked to Bob with blinded keys
-    const p2pkOpts = new P2PKBuilder()
+    const p2pkOpts = new LockBuilder()
       .addHashlock(hash)
-      .addLockPubkey(pubKeyBob)
+      .addMainPubkey(pubKeyBob)
       .blindKeys()
       .toOptions();
-    const { send } = await wallet.ops.send(64, mintedProofs).asP2PK(p2pkOpts).run();
+    const { send } = await wallet.ops.send(64, mintedProofs).asLocked(p2pkOpts).run();
 
     // The hashlock stays unblinded in the data slot; Bob's key blinds at slot 1 (NUT-28)
     expectNUT10SecretDataToEqual(send, hash);
@@ -580,10 +580,7 @@ describe('mint api', () => {
     await untilMintQuotePaid(wallet, mintRequest);
     const proofs = await wallet.ops
       .mintBolt11(3000, mintRequest.quote)
-      .asP2PK({
-        kind: 'P2PK',
-        data: bytesToHex(pubKeyBob),
-      })
+      .asLocked({ mainKeys: [bytesToHex(pubKeyBob)] })
       .run();
     const meltRequest = await wallet.createMeltQuoteBolt11(invoice);
     const fee = meltRequest.fee_reserve;
@@ -604,11 +601,7 @@ describe('mint api', () => {
     await untilMintQuotePaid(wallet, mintRequest);
     const preview = await wallet.ops
       .mintBolt11(50, mintRequest.quote)
-      .asP2PK({
-        kind: 'P2PK',
-        data: bytesToHex(pubKeyBob),
-        sigFlag: 'SIG_ALL',
-      })
+      .asLocked({ mainKeys: [bytesToHex(pubKeyBob)], sigAll: true })
       .prepare();
     const proofs = await wallet.completeMint(preview);
     // console.log('input proofs', proofs);

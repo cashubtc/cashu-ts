@@ -2,7 +2,20 @@ import { schnorr } from '@noble/curves/secp256k1.js';
 import { bytesToHex } from '@noble/curves/utils.js';
 import { describe, it, expect } from 'vitest';
 
-import { LockBuilder, P2PKBuilder, type P2PKOptions } from '../../src/';
+import { LockBuilder, lockToP2PKOptions, p2pkToLockOptions, type P2PKOptions } from '../../src/';
+
+// The original P2PKBuilder specs, preserved as end-to-end coverage of LockBuilder plus the two
+// wire converters: build semantically, assert on the NUT-11 encoding exactly as before.
+class P2PKBuilder extends LockBuilder {
+  toOptions(): P2PKOptions {
+    return lockToP2PKOptions(super.toOptions());
+  }
+  static fromOptions(p2pk: P2PKOptions): P2PKBuilder {
+    const b = new P2PKBuilder();
+    Object.assign(b, LockBuilder.fromOptions(p2pkToLockOptions(p2pk)));
+    return b;
+  }
+}
 
 // helpers to make valid on-curve keys, deterministically derived per label char
 const X: Record<string, string> = {};
@@ -14,7 +27,7 @@ const hashlock = 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8b
 
 describe('P2PKBuilder.toOptions()', () => {
   it('returns single lock key as a string', () => {
-    const opts = new P2PKBuilder().addLockPubkey(comp('a', '02')).toOptions();
+    const opts = new P2PKBuilder().addMainPubkey(comp('a', '02')).toOptions();
     expect(typeof opts.data).toBe('string');
     expect(opts.data).toBe(comp('a', '02'));
   });
@@ -24,7 +37,7 @@ describe('P2PKBuilder.toOptions()', () => {
     const k2 = comp('b', '03');
     const k3 = comp('c', '02');
 
-    const opts = new P2PKBuilder().addLockPubkey([k1, k2]).addLockPubkey(k3).toOptions();
+    const opts = new P2PKBuilder().addMainPubkey([k1, k2]).addMainPubkey(k3).toOptions();
 
     // First key is the NUT-10 data slot; the rest ride the optional pubkeys tag.
     expect(opts.data).toBe(k1);
@@ -33,29 +46,29 @@ describe('P2PKBuilder.toOptions()', () => {
 
   it('rejects x-only lock keys with a prefix hint (NUT-11 requires compressed)', () => {
     const x = xonly('1'); // 32-byte X-only
-    expect(() => new P2PKBuilder().addLockPubkey(x)).toThrow(/prepend '02'/);
+    expect(() => new P2PKBuilder().addMainPubkey(x)).toThrow(/prepend '02'/);
     // the compressed form of the same key is accepted
-    const opts = new P2PKBuilder().addLockPubkey(`02${x}`).toOptions();
+    const opts = new P2PKBuilder().addMainPubkey(`02${x}`).toOptions();
     expect(opts.data).toBe(`02${x}`);
   });
 
   it('rejects x-only refund keys', () => {
     expect(() =>
       new P2PKBuilder()
-        .addLockPubkey(comp('a', '02'))
+        .addMainPubkey(comp('a', '02'))
         .lockUntil(Date.now() + 60) // required when refund keys exist
         .addRefundPubkey(xonly('2')),
     ).toThrow(/prepend '02'/);
   });
 
   it('rejects a hashlock passed as a lock pubkey (64-hex is only ever a hashlock)', () => {
-    expect(() => new P2PKBuilder().addLockPubkey(hashlock)).toThrow(/prepend '02'/);
+    expect(() => new P2PKBuilder().addMainPubkey(hashlock)).toThrow(/prepend '02'/);
   });
 
   it('rejects a well-formed 66-hex key that is not on the curve', () => {
     // x = p (the field prime) has no valid point; decompression must fail.
     const offCurve = '02fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f';
-    expect(() => new P2PKBuilder().addLockPubkey(offCurve)).toThrow(/secp256k1/i);
+    expect(() => new P2PKBuilder().addMainPubkey(offCurve)).toThrow(/secp256k1/i);
   });
 
   it('de-duplicates lock and refund keys silently', () => {
@@ -63,7 +76,7 @@ describe('P2PKBuilder.toOptions()', () => {
     const kB = comp('b', '03');
 
     const opts = new P2PKBuilder()
-      .addLockPubkey([kA, kA, kB, kB])
+      .addMainPubkey([kA, kA, kB, kB])
       .lockUntil(Date.now() + 60)
       .addRefundPubkey([kA, kA, kB])
       .toOptions();
@@ -75,22 +88,22 @@ describe('P2PKBuilder.toOptions()', () => {
   });
 
   it('throws when building with no lock pubkeys', () => {
-    expect(() => new P2PKBuilder().toOptions()).toThrow(/At least one lock pubkey is required/i);
+    expect(() => new P2PKBuilder().toOptions()).toThrow(/At least one main pubkey/i);
   });
 
   it('throws when an empty lock pubkey is added', () => {
-    expect(() => new P2PKBuilder().addLockPubkey('')).toThrow(/invalid pubkey/i);
+    expect(() => new P2PKBuilder().addMainPubkey('')).toThrow(/invalid pubkey/i);
   });
 
   it('throws when an empty refund pubkey is added', () => {
-    expect(() => new P2PKBuilder().addLockPubkey(comp('a', '02')).addRefundPubkey('')).toThrow(
+    expect(() => new P2PKBuilder().addMainPubkey(comp('a', '02')).addRefundPubkey('')).toThrow(
       /invalid pubkey/i,
     );
   });
 
   it('throws if refund keys are provided without locktime', () => {
     expect(() =>
-      new P2PKBuilder().addLockPubkey(comp('a', '02')).addRefundPubkey(comp('b', '02')).toOptions(),
+      new P2PKBuilder().addMainPubkey(comp('a', '02')).addRefundPubkey(comp('b', '02')).toOptions(),
     ).toThrow(/refund keys require a locktime/i);
   });
 
@@ -98,9 +111,9 @@ describe('P2PKBuilder.toOptions()', () => {
     const nowSec = Math.floor(Date.now() / 1000) + 60;
     const nowMs = (nowSec + 60) * 1000;
 
-    const o1 = new P2PKBuilder().addLockPubkey(comp('a', '02')).lockUntil(nowSec).toOptions();
+    const o1 = new P2PKBuilder().addMainPubkey(comp('a', '02')).lockUntil(nowSec).toOptions();
     const o2 = new P2PKBuilder()
-      .addLockPubkey(comp('b', '02'))
+      .addMainPubkey(comp('b', '02'))
       .lockUntil(new Date(nowMs))
       .toOptions();
 
@@ -114,7 +127,7 @@ describe('P2PKBuilder.toOptions()', () => {
     // getTime() = 500_000 ms => 500 s. A Date under the ms threshold must still be read
     // as milliseconds via getTime(), never coerced to a raw number of seconds.
     const opts = new P2PKBuilder()
-      .addLockPubkey(comp('a', '02'))
+      .addMainPubkey(comp('a', '02'))
       .lockUntil(new Date(500_000))
       .toOptions();
     expect(opts.locktime).toBe(500);
@@ -122,13 +135,13 @@ describe('P2PKBuilder.toOptions()', () => {
 
   it('treats a numeric locktime of exactly 1e12 as milliseconds', () => {
     // Boundary: values >= 1e12 are milliseconds, so 1e12 ms => 1e9 s.
-    const opts = new P2PKBuilder().addLockPubkey(comp('a', '02')).lockUntil(1e12).toOptions();
+    const opts = new P2PKBuilder().addMainPubkey(comp('a', '02')).lockUntil(1e12).toOptions();
     expect(opts.locktime).toBe(1e9);
   });
 
   it('keeps a numeric locktime below 1e12 as seconds', () => {
     const opts = new P2PKBuilder()
-      .addLockPubkey(comp('a', '02'))
+      .addMainPubkey(comp('a', '02'))
       .lockUntil(999_999_999_999)
       .toOptions();
     expect(opts.locktime).toBe(999_999_999_999);
@@ -138,7 +151,7 @@ describe('P2PKBuilder.toOptions()', () => {
     // A silently-dropped locktime with refund keys present yields an unspendable proof
     // (refund path needs a locktime), so an unusable value must fail here.
     const base = () =>
-      new P2PKBuilder().addLockPubkey(comp('a', '02')).addRefundPubkey(comp('b', '02'));
+      new P2PKBuilder().addMainPubkey(comp('a', '02')).addRefundPubkey(comp('b', '02'));
     for (const bad of [NaN, Infinity, -Infinity, -1]) {
       expect(() => base().lockUntil(bad)).toThrow(/locktime/i);
     }
@@ -158,33 +171,33 @@ describe('P2PKBuilder.toOptions()', () => {
   });
 
   it('returns a defensive copy of additionalTags, isolated from later mutations', () => {
-    const b = new P2PKBuilder().addLockPubkey(comp('a', '02')).addTag('foo', ['bar']);
+    const b = new P2PKBuilder().addMainPubkey(comp('a', '02')).addTag('foo', ['bar']);
     const opts = b.toOptions();
     b.addTag('baz', ['qux']); // must not leak into the already-returned options
     expect(opts.additionalTags).toEqual([['foo', 'bar']]);
   });
 
   it('rejects an empty tag value (parseSecret refuses empty tag strings)', () => {
-    const b = () => new P2PKBuilder().addLockPubkey(comp('a', '02'));
+    const b = () => new P2PKBuilder().addMainPubkey(comp('a', '02'));
     expect(() => b().addTag('memo', '')).toThrow(/non-empty/i);
     expect(() => b().addTag('memo', ['ok', ''])).toThrow(/non-empty/i);
   });
 
-  it('requireLockSignatures throws on non-integer and values less than 1', () => {
-    expect(() => new P2PKBuilder().requireLockSignatures(1.5)).toThrow(
-      /requiredSignatures \(n_sigs\) must be a positive integer/i,
+  it('requireMainSignatures throws on non-integer and values less than 1', () => {
+    expect(() => new P2PKBuilder().requireMainSignatures(1.5)).toThrow(
+      /requiredMainSignatures must be a positive integer/i,
     );
-    expect(() => new P2PKBuilder().requireLockSignatures(0)).toThrow(
-      /requiredSignatures \(n_sigs\) must be a positive integer/i,
+    expect(() => new P2PKBuilder().requireMainSignatures(0)).toThrow(
+      /requiredMainSignatures must be a positive integer/i,
     );
   });
 
   it('requireRefundSignatures throws on non-integer and values less than 1', () => {
     expect(() => new P2PKBuilder().requireRefundSignatures(1.5)).toThrow(
-      /requiredRefundSignatures \(n_sigs_refund\) must be a positive integer/i,
+      /requiredRefundSignatures must be a positive integer/i,
     );
     expect(() => new P2PKBuilder().requireRefundSignatures(0)).toThrow(
-      /requiredRefundSignatures \(n_sigs_refund\) must be a positive integer/i,
+      /requiredRefundSignatures must be a positive integer/i,
     );
   });
 
@@ -193,11 +206,11 @@ describe('P2PKBuilder.toOptions()', () => {
     const k2 = comp('b', '02');
 
     expect(() =>
-      new P2PKBuilder().addLockPubkey([k1, k2]).requireLockSignatures(5).toOptions(),
+      new P2PKBuilder().addMainPubkey([k1, k2]).requireMainSignatures(5).toOptions(),
     ).toThrow(/requiredSignatures \(n_sigs\) \(5\) exceeds available pubkeys \(2\)/i);
 
     // ask for 1 => property omitted (default 1)
-    const o2 = new P2PKBuilder().addLockPubkey([k1, k2]).requireLockSignatures(1).toOptions();
+    const o2 = new P2PKBuilder().addMainPubkey([k1, k2]).requireMainSignatures(1).toOptions();
     expect('requiredSignatures' in o2).toBe(false);
   });
 
@@ -207,7 +220,7 @@ describe('P2PKBuilder.toOptions()', () => {
 
     expect(() =>
       new P2PKBuilder()
-        .addLockPubkey(comp('a', '02'))
+        .addMainPubkey(comp('a', '02'))
         .lockUntil(Date.now() + 60)
         .addRefundPubkey([r1, r2])
         .requireRefundSignatures(5)
@@ -217,7 +230,7 @@ describe('P2PKBuilder.toOptions()', () => {
     );
 
     const o2 = new P2PKBuilder()
-      .addLockPubkey(comp('b', '02'))
+      .addMainPubkey(comp('b', '02'))
       .lockUntil(Date.now() + 60)
       .addRefundPubkey([r1, r2])
       .requireRefundSignatures(1)
@@ -237,7 +250,7 @@ describe('P2PKBuilder.toOptions()', () => {
     );
     // Regression: empty hashlock + a lock key previously yielded { kind: 'P2PK' }.
     expect(() =>
-      new P2PKBuilder().addHashlock('').addLockPubkey(comp('a', '02')).toOptions(),
+      new P2PKBuilder().addHashlock('').addMainPubkey(comp('a', '02')).toOptions(),
     ).toThrow(/HTLC hashlock must be a 64-character hex string/i);
   });
 
@@ -252,10 +265,10 @@ describe('P2PKBuilder.toOptions()', () => {
     // surface, not be dropped into a spendable preimage-only lock. n_sigs>1 already
     // survives the filter; n_sigs=1 is the value that previously slipped through.
     expect(() =>
-      new P2PKBuilder().addHashlock(hashlock).requireLockSignatures(1).toOptions(),
+      new P2PKBuilder().addHashlock(hashlock).requireMainSignatures(1).toOptions(),
     ).toThrow(/exceeds available pubkeys/i);
     expect(() =>
-      new P2PKBuilder().addHashlock(hashlock).requireLockSignatures(2).toOptions(),
+      new P2PKBuilder().addHashlock(hashlock).requireMainSignatures(2).toOptions(),
     ).toThrow(/exceeds available pubkeys/i);
     // No explicit threshold => keyless HTLC builds fine.
     const ok = new P2PKBuilder().addHashlock(hashlock).toOptions();
@@ -266,7 +279,7 @@ describe('P2PKBuilder.toOptions()', () => {
     // Same defect, refund side: n_sigs_refund=1 with zero refund keys is impossible
     // and must throw rather than be silently dropped.
     expect(() =>
-      new P2PKBuilder().addLockPubkey(comp('a', '02')).requireRefundSignatures(1).toOptions(),
+      new P2PKBuilder().addMainPubkey(comp('a', '02')).requireRefundSignatures(1).toOptions(),
     ).toThrow(/requires refund keys/i);
   });
 
@@ -278,7 +291,7 @@ describe('P2PKBuilder.toOptions()', () => {
     // 8 locks + 3 refunds = 11 slots: allowed.
     expect(() =>
       new P2PKBuilder()
-        .addLockPubkey(keys.slice(0, 8))
+        .addMainPubkey(keys.slice(0, 8))
         .lockUntil(Date.now() + 60)
         .addRefundPubkey(keys.slice(8, 11))
         .toOptions(),
@@ -287,7 +300,7 @@ describe('P2PKBuilder.toOptions()', () => {
     // 8 locks + 4 refunds = 12 slots: rejected.
     expect(() =>
       new P2PKBuilder()
-        .addLockPubkey(keys.slice(0, 8))
+        .addMainPubkey(keys.slice(0, 8))
         .lockUntil(Date.now() + 60)
         .addRefundPubkey(keys.slice(8))
         .toOptions(),
@@ -296,10 +309,10 @@ describe('P2PKBuilder.toOptions()', () => {
 
   it('round-trips via fromOptions', () => {
     const original = new P2PKBuilder()
-      .addLockPubkey([comp('a', '02'), comp('b', '03')])
+      .addMainPubkey([comp('a', '02'), comp('b', '03')])
       .lockUntil(Date.now() + 3600)
       .addRefundPubkey([comp('c', '02')])
-      .requireLockSignatures(2)
+      .requireMainSignatures(2)
       .requireRefundSignatures(1)
       .sigAll()
       .addHashlock(hashlock)
@@ -346,7 +359,7 @@ describe('P2PKBuilder.toOptions()', () => {
   });
 
   it('rejects invalid pubkey formats up front', () => {
-    expect(() => new P2PKBuilder().addLockPubkey('zz')).toThrow(/Invalid pubkey/i);
+    expect(() => new P2PKBuilder().addMainPubkey('zz')).toThrow(/Invalid pubkey/i);
   });
 });
 
@@ -364,10 +377,10 @@ describe('P2PKBuilder, simple fuzzish case', () => {
 
   it('normalizes mixed inputs, deduplicates, preserves insertion order, and round-trips', () => {
     const opts = new P2PKBuilder()
-      .addLockPubkey([cA_upper, cB_upper, cA_lower, cA_03])
+      .addMainPubkey([cA_upper, cB_upper, cA_lower, cA_03])
       .addRefundPubkey([r03C_upper, r03c_lower, r02c_dup])
       .lockUntil(ms)
-      .requireLockSignatures(2) // exactly the two unique lock keys
+      .requireMainSignatures(2) // exactly the two unique lock keys
       .sigAll()
       .toOptions();
 
@@ -390,10 +403,10 @@ describe('P2PKBuilder, simple fuzzish case', () => {
   it('rejects impossible thresholds after deduplication', () => {
     expect(() =>
       new P2PKBuilder()
-        .addLockPubkey([cA_upper, cB_upper, cA_lower, cA_03])
+        .addMainPubkey([cA_upper, cB_upper, cA_lower, cA_03])
         .addRefundPubkey([r03C_upper, r03c_lower, r02c_dup])
         .lockUntil(ms)
-        .requireLockSignatures(5) // 5 > 2 unique lock keys
+        .requireMainSignatures(5) // 5 > 2 unique lock keys
         .sigAll()
         .toOptions(),
     ).toThrow(/requiredSignatures \(n_sigs\) \(5\) exceeds available pubkeys \(2\)/i);
@@ -402,19 +415,19 @@ describe('P2PKBuilder, simple fuzzish case', () => {
 
 describe('P2PKBuilder addTag and addTags', () => {
   it('omits additionalTags when unused', () => {
-    const opts = new P2PKBuilder().addLockPubkey(comp('a', '02')).toOptions();
+    const opts = new P2PKBuilder().addMainPubkey(comp('a', '02')).toOptions();
     expect('additionalTags' in opts).toBe(false);
   });
 
   it('adds a single tag with no values', () => {
-    const opts = new P2PKBuilder().addLockPubkey(comp('a', '02')).addTag('memo').toOptions();
+    const opts = new P2PKBuilder().addMainPubkey(comp('a', '02')).addTag('memo').toOptions();
 
     expect(opts.additionalTags).toEqual([['memo']]);
   });
 
   it('adds a single tag with one value', () => {
     const opts = new P2PKBuilder()
-      .addLockPubkey(comp('a', '02'))
+      .addMainPubkey(comp('a', '02'))
       .addTag('memo', 'invoice-42')
       .toOptions();
 
@@ -423,7 +436,7 @@ describe('P2PKBuilder addTag and addTags', () => {
 
   it('adds a single tag with multiple values and preserves order', () => {
     const opts = new P2PKBuilder()
-      .addLockPubkey(comp('a', '02'))
+      .addMainPubkey(comp('a', '02'))
       .addTag('meta', ['region=eu', 'channel=web', 'v=1'])
       .toOptions();
 
@@ -432,7 +445,7 @@ describe('P2PKBuilder addTag and addTags', () => {
 
   it('accepts multiple calls to addTag and addTags, preserves insertion order', () => {
     const opts = new P2PKBuilder()
-      .addLockPubkey(comp('a', '02'))
+      .addMainPubkey(comp('a', '02'))
       .addTag('a', '1')
       .addTags([['b', '2'], ['c']])
       .addTag('d', ['3', '4'])
@@ -443,7 +456,7 @@ describe('P2PKBuilder addTag and addTags', () => {
 
   it('allows duplicate non reserved keys, preserves both entries', () => {
     const opts = new P2PKBuilder()
-      .addLockPubkey(comp('a', '02'))
+      .addMainPubkey(comp('a', '02'))
       .addTag('note', 'x')
       .addTag('note', 'y')
       .toOptions();
@@ -455,7 +468,7 @@ describe('P2PKBuilder addTag and addTags', () => {
   });
 
   it('rejects reserved keys in addTag', () => {
-    const b = new P2PKBuilder().addLockPubkey(comp('a', '02'));
+    const b = new P2PKBuilder().addMainPubkey(comp('a', '02'));
     expect(() => b.addTag('locktime', '123')).toThrow(/reserved/i);
     expect(() => b.addTag('pubkeys', ['x'])).toThrow(/reserved/i);
     expect(() => b.addTag('n_sigs', '2')).toThrow(/reserved/i);
@@ -464,18 +477,18 @@ describe('P2PKBuilder addTag and addTags', () => {
   });
 
   it('rejects reserved keys in addTags', () => {
-    const b = new P2PKBuilder().addLockPubkey(comp('a', '02'));
+    const b = new P2PKBuilder().addMainPubkey(comp('a', '02'));
     expect(() => b.addTags([['pubkeys', 'x']])).toThrow(/reserved/i);
   });
 
   it('rejects empty tag key', () => {
-    const b = new P2PKBuilder().addLockPubkey(comp('a', '02'));
+    const b = new P2PKBuilder().addMainPubkey(comp('a', '02'));
     expect(() => b.addTag('', 'v')).toThrow(/key must be a non empty string/i);
   });
 
   it('round trips additionalTags via fromOptions', () => {
     const original = new P2PKBuilder()
-      .addLockPubkey([comp('a', '02'), comp('b', '03')])
+      .addMainPubkey([comp('a', '02'), comp('b', '03')])
       .addTag('memo', 'invoice-007')
       .addTags([
         ['purpose', 'donation'],
@@ -498,11 +511,11 @@ describe('P2PKBuilder addTag and addTags', () => {
     expect(round).toEqual(minimalWithTags);
   });
   it('throws if a reserved key is set in additionalTags', () => {
-    const b = new P2PKBuilder().addLockPubkey(comp('a', '02'));
+    const b = new P2PKBuilder().addMainPubkey(comp('a', '02'));
     expect(() => b.addTag('refund', comp('b', '02'))).toThrow(/must not use reserved key/i);
   });
   it('throws if secret is too long', () => {
-    const b = new P2PKBuilder().addLockPubkey(comp('a', '02'));
+    const b = new P2PKBuilder().addMainPubkey(comp('a', '02'));
     // add 10
     for (let i = 0; i < 12; i++) {
       b.addTag(`k${i}`, comp('a', '02'));
@@ -514,19 +527,10 @@ describe('P2PKBuilder addTag and addTags', () => {
 describe('P2PKBuilder.blindKeys()', () => {
   it('sets blindKeys flag and round-trips via fromOptions', () => {
     const k = comp('a', '02');
-    const opts = new P2PKBuilder().addLockPubkey(k).blindKeys().toOptions();
+    const opts = new P2PKBuilder().addMainPubkey(k).blindKeys().toOptions();
     expect(opts.blindKeys).toBe(true);
 
     const round = P2PKBuilder.fromOptions(opts).toOptions();
     expect(round.blindKeys).toBe(true);
-  });
-});
-
-describe('LockBuilder aliases (v5 names)', () => {
-  it('LockBuilder is P2PKBuilder, and the v5 method names match the old ones', () => {
-    expect(P2PKBuilder).toBe(LockBuilder);
-    const a = new LockBuilder().addMainPubkey(comp('a', '02')).requireMainSignatures(1).toOptions();
-    const b = new LockBuilder().addLockPubkey(comp('a', '02')).requireLockSignatures(1).toOptions();
-    expect(a).toEqual(b);
   });
 });

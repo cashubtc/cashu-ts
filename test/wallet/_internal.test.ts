@@ -99,38 +99,44 @@ describe('stringifyOutputTypeForLog', () => {
     expect(result).toBe(JSON.stringify({ type: 'factory', denominations: ['1', '2'] }));
   });
 
-  test('formats p2pk denominations as strings', () => {
+  test('formats lock denominations as strings', () => {
     const result = stringifyOutputTypeForLog({
-      type: 'p2pk',
-      options: { kind: 'P2PK', data: '02'.padEnd(66, '1') },
+      type: 'lock',
+      options: { mainKeys: ['02'.padEnd(66, '1')] },
       denominations: [1, Amount.from(2)],
     });
-    expect(result).toBe(
-      JSON.stringify({
-        type: 'p2pk',
-        options: { kind: 'P2PK', data: '02'.padEnd(66, '1') },
-        denominations: ['1', '2'],
-      }),
-    );
+    expect(JSON.parse(result)).toEqual({
+      type: 'lock',
+      mainKeys: 1,
+      refundKeys: 0,
+      denominations: ['1', '2'],
+    });
   });
 
-  test('logs placeholders for the natural keys when blindKeys is enabled', () => {
+  test('logs the key counts, never the key material', () => {
     const lockKey = '02'.padEnd(66, 'a');
     const additionalKey = '02'.padEnd(66, 'b');
     const refundKey = '02'.padEnd(66, 'c');
     const result = stringifyOutputTypeForLog({
-      type: 'p2pk',
+      type: 'lock',
       options: {
-        kind: 'P2PK',
-        data: lockKey,
-        pubkeys: [additionalKey],
+        mainKeys: [lockKey, additionalKey],
+        locktime: 123,
         refundKeys: [refundKey],
         blindKeys: true,
       },
     });
-    expect(result).not.toContain(lockKey);
-    expect(result).not.toContain(additionalKey);
-    expect(result).not.toContain(refundKey);
+    expect(JSON.parse(result)).toEqual({
+      type: 'lock',
+      mainKeys: 2,
+      refundKeys: 1,
+      locktime: 123,
+      blindKeys: true,
+      denominations: [],
+    });
+    for (const key of [lockKey, additionalKey, refundKey]) {
+      expect(result).not.toContain(key);
+    }
     expect(result).toContain('blindKeys');
   });
 
@@ -165,17 +171,13 @@ describe('stringifyOutputTypeForLog', () => {
     ).toBe(JSON.stringify({ type: 'factory', denominations: [] }));
 
     expect(
-      stringifyOutputTypeForLog({
-        type: 'p2pk',
-        options: { kind: 'P2PK', data: '02'.padEnd(66, '1') },
-      }),
-    ).toBe(
-      JSON.stringify({
-        type: 'p2pk',
-        options: { kind: 'P2PK', data: '02'.padEnd(66, '1') },
-        denominations: [],
-      }),
-    );
+      JSON.parse(
+        stringifyOutputTypeForLog({
+          type: 'lock',
+          options: { mainKeys: ['02'.padEnd(66, '1')] },
+        }),
+      ),
+    ).toEqual({ type: 'lock', mainKeys: 1, refundKeys: 0, denominations: [] });
   });
 
   test('returns unknown for unknown type', () => {
@@ -215,14 +217,14 @@ describe('orderOutputsForPayload', () => {
   });
 });
 
-describe('stringifyOutputTypeForLog: nutroot', () => {
+describe('stringifyOutputTypeForLog: lock with leaves', () => {
   test('logs the tree shape, never the key material', () => {
-    const receiverPub = `02${'ab'.repeat(32)}`;
+    const mainKey = `02${'ab'.repeat(32)}`;
     const leafKey = `02${'cd'.repeat(32)}`;
     const ot: OutputType = {
-      type: 'nutroot',
+      type: 'lock',
       options: {
-        receiverPub,
+        mainKeys: [mainKey],
         leaves: [
           { type: 'threshold', n: 1, keys: [leafKey] },
           { type: 'threshold', n: 1, keys: [leafKey] },
@@ -233,12 +235,14 @@ describe('stringifyOutputTypeForLog: nutroot', () => {
     };
     const s = stringifyOutputTypeForLog(ot);
     expect(JSON.parse(s)).toEqual({
-      type: 'nutroot',
+      type: 'lock',
+      mainKeys: 1,
+      refundKeys: 0,
       leaves: 2,
-      blindKeys: 1,
+      blindKeys: true,
       denominations: ['1', '2'],
     });
-    expect(s).not.toContain(receiverPub);
+    expect(s).not.toContain(mainKey);
     expect(s).not.toContain(leafKey);
   });
 });

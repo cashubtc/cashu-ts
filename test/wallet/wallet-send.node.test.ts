@@ -576,7 +576,7 @@ describe('send', () => {
         // p2pk: { pubkey: 'pk' }
       },
       {
-        send: { type: 'p2pk', options: { kind: 'P2PK', data: '02' + 'aa'.repeat(32) } },
+        send: { type: 'lock', options: { mainKeys: ['02' + 'aa'.repeat(32)] } },
       },
     );
 

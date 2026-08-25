@@ -465,31 +465,78 @@ Absent and empty are equivalent, and neither is encoded.
 type P2PKOptions = SpendingConditionsBase & LockConditions & { kind: 'P2PK' | 'HTLC' };
 ```
 
-`data` is the lock pubkey (`'P2PK'`) or the hashlock (`'HTLC'`); extra signers move from the old `pubkey` array to the `pubkeys` tag. This affects every place a lock is built: `asP2PK()`, `OutputData.createP2PKData()`, and `{ type: 'p2pk', options }` output configs. `P2PKBuilder` (`addLockPubkey`/`addHashlock`) is unchanged.
+`data` is the lock pubkey (`'P2PK'`) or the hashlock (`'HTLC'`); extra signers move from the old `pubkey` array to the `pubkeys` tag. In v5 `P2PKOptions` is a wire-level type: it appears where NUT-11 is the actual format (`PaymentRequestBuilder.lock()`, `PaymentRequest.toP2PKOptions()`, `OutputData.createP2PKData()`, proof verification). Locks themselves are authored as `LockOptions` (next section); convert stored or wire `P2PKOptions` with `p2pkToLockOptions()`.
+
+---
+
+## Locks are semantic: `LockBuilder`, `LockOptions`, `asLocked()`
+
+v5 serves two keyset generations, and each has its own lock encoding: NUT-11/14 tag secrets on pre-v3 keysets, nutroot trees on v3 (BLS) keysets. In v5 you no longer author an encoding. You state the spending conditions as `LockOptions`, and the wallet encodes them for whichever keyset is active. A lock built for a mint that later rotates to v3 keeps working; shapes an encoding cannot express refuse loudly at build time, naming the reason, instead of failing at the mint.
+
+```ts
+type LockOptions = {
+  mainKeys?: string[]; // main-path keys; requiredMainSignatures of them must sign (default 1)
+  requiredMainSignatures?: number;
+  hashlock?: string; // SHA-256; a preimage is then required alongside signatures
+  locktime?: number; // unix seconds; activates the refund path, the main path never expires
+  refundKeys?: string[];
+  requiredRefundSignatures?: number;
+  leaves?: NutrootLeaf[]; // explicit tree leaves (eg staged reclaim windows); v3 only
+  blindKeys?: boolean | string[]; // true = every key; a list = exactly those keys (v3 only)
+  additionalTags?: P2PKTag[]; // extra NUT-11 secret tags; pre-v3 only
+  sigAll?: boolean; // NUT-11 SIG_ALL; on v3 this is the default and only behavior
+};
+```
+
+### Renames
+
+| v4 / early rc                                | v5                                        |
+| -------------------------------------------- | ----------------------------------------- |
+| `P2PKBuilder`                                | `LockBuilder`                             |
+| `.addLockPubkey()`                           | `.addMainPubkey()`                        |
+| `.requireLockSignatures()`                   | `.requireMainSignatures()`                |
+| `.toOptions(): P2PKOptions`                  | `.toOptions(): LockOptions`               |
+| `.asP2PK(p2pk)` / `.keepAsP2PK(p2pk)`        | `.asLocked(lock)` / `.keepAsLocked(lock)` |
+| `.asNutroot(options)`                        | `.asLocked(lock)`                         |
+| `{ type: 'p2pk', options }` output config    | `{ type: 'lock', options }`               |
+| `{ type: 'nutroot', options }` output config | `{ type: 'lock', options }`               |
+
+`asLocked()` accepts `LockOptions` or a `LockBuilder` directly. Refund and hashlock methods keep their names (`addRefundPubkey`, `requireRefundSignatures`, `addHashlock`, `lockUntil`, `sigAll`); main/refund is now the one vocabulary across the builder, the type, and verification results.
 
 ### Migration
 
 ```ts
 // Before
-asP2PK({ pubkey: pk });
-asP2PK({ pubkey: [a, b], requiredSignatures: 2 });
-asP2PK({ hashlock: h });
-asP2PK({ hashlock: h, pubkey: [a] });
+const p2pk = new P2PKBuilder().addLockPubkey([a, b]).requireLockSignatures(2).toOptions();
+await wallet.ops.send(64, proofs).asP2PK(p2pk).run();
+await wallet.ops.send(64, proofs).asNutroot({ receiverPub: carol, leaves }).run();
 
 // After
-asP2PK({ kind: 'P2PK', data: pk });
-asP2PK({ kind: 'P2PK', data: a, pubkeys: [b], requiredSignatures: 2 });
-asP2PK({ kind: 'HTLC', data: h });
-asP2PK({ kind: 'HTLC', data: h, pubkeys: [a] });
+const lock = new LockBuilder().addMainPubkey([a, b]).requireMainSignatures(2).toOptions();
+await wallet.ops.send(64, proofs).asLocked(lock).run();
+await wallet.ops
+  .send(64, proofs)
+  .asLocked({ mainKeys: [carol], leaves })
+  .run();
 ```
 
-`PaymentRequest.toP2PKOptions()` already returns the new shape, so pass its result straight to `asP2PK()`.
+### What each keyset version refuses
+
+Pre-v3 keysets refuse `leaves` and a `blindKeys` list (NUT-11 blinds all keys or none). v3 keysets refuse `additionalTags` (v3 secrets carry no tags), a locktime with no refund keys, and a hashlock with no keys (v3 transactions must be signed); lock the timeout to your own refund key instead. `sigAll` is absorbed on v3: every v3 input signs the whole transaction.
+
+### Payment requests carry both encodings
+
+`PaymentRequestBuilder.lock()` accepts the same semantic forms (`LockOptions` or a `LockBuilder`; wire `P2PKOptions` still target `nut10` alone) and emits `nutroot` plus, by default, the legacy `nut10` option so payers that predate v3 can pay; `lock(x, { legacy: false })` emits the current spec alone. `sendToRequest` follows the option the wallet's keyset takes instead of refusing a request that carries both, and `isPaymentRequestSatisfied` settles legacy proofs under `nut10` when both were published. `requestNutroot()` (which also accepts the semantic forms) remains the way to make a deliberately v3-only request.
+
+### New in the semantic surface
+
+`LockBuilder.addLeaf()` adds explicit tree leaves beyond the NUT-11 vocabulary (eg multiple `after` leaves for staged reclaim), and `blindKeys(['02…'])` blinds a chosen subset of keys; both are v3-only shapes and refuse on a pre-v3 keyset. Converters bridge the boundaries: `p2pkToLockOptions()` for stored or wire `P2PKOptions`, `lockToP2PKOptions()` where NUT-11 is the required format, and `nutrootToLockOptions()` to read a proof's disclosed tree back as lock conditions.
 
 ---
 
 ## P2PK lock pubkeys must be 33-byte compressed and on-curve
 
-Authoring a lock (`P2PKBuilder.addLockPubkey`/`addRefundPubkey`, or raw `P2PKOptions` passed to `asP2PK()` and friends) now requires 33-byte compressed hex keys (66 chars, `02`/`03` prefix) that decompress to a valid secp256k1 point, per NUT-11. v4 accepted 32-byte x-only input and silently prefixed `02`; because a SHA-256 hashlock is also 64-hex, that leniency could turn a misplaced hashlock (or corrupt key) into a lock nobody can spend. With the strict rule, 64-hex input is only ever a hashlock and pubkey mistakes fail fast.
+Authoring a lock (`LockBuilder.addMainPubkey`/`addRefundPubkey`, or raw key material passed to `asLocked()` and friends) now requires 33-byte compressed hex keys (66 chars, `02`/`03` prefix) that decompress to a valid secp256k1 point, per NUT-11. v4 accepted 32-byte x-only input and silently prefixed `02`; because a SHA-256 hashlock is also 64-hex, that leniency could turn a misplaced hashlock (or corrupt key) into a lock nobody can spend. With the strict rule, 64-hex input is only ever a hashlock and pubkey mistakes fail fast.
 
 The rule applies everywhere a P2PK pubkey is read, including parsing foreign input: `PaymentRequest.toP2PKOptions()` and proof verification (`verifyP2PKSpendingConditions` and friends) throw on a non-compliant key instead of repairing it. Paying a request creates new outputs under its lock, so a lifted key risks burning the payer's funds; and a proof already locked with such a key is rejected by spec-conformant mints anyway (CDK refuses the swap), so failing at parse names the broken proof rather than submitting a doomed spend. If you know such a key is a genuine x-only pubkey, prepend `'02'` and build the `P2PKOptions` yourself.
 
@@ -500,7 +547,7 @@ The rule applies everywhere a P2PK pubkey is read, including parsing foreign inp
 new P2PKBuilder().addLockPubkey(nostrPubkeyHex);
 
 // After: prepend the even-y prefix (the same rule NIP-61 nutzaps use)
-new P2PKBuilder().addLockPubkey('02' + nostrPubkeyHex);
+new LockBuilder().addMainPubkey('02' + nostrPubkeyHex);
 ```
 
 ---
