@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 
+import { LockBuilder } from '../../src';
 import { Amount, type AmountLike } from '../../src/model/Amount';
 import type { OutputData, OutputDataLike } from '../../src/model/OutputData';
 import { PaymentRequest } from '../../src/model/PaymentRequest';
@@ -496,6 +497,29 @@ describe('WalletOps builders', () => {
       );
     });
 
+    it('asLocked accepts a LockBuilder directly and matches asP2PK', async () => {
+      const pk = '02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2';
+      const builder = new LockBuilder().addMainPubkey(pk);
+      await ops.send(7, proofs).asLocked(builder, [7]).run();
+      const [, , , outputConfig] = wallet.send.mock.calls[0];
+      expect(outputConfig).toEqual({
+        send: { type: 'p2pk', options: builder.toOptions(), denominations: [7] },
+      });
+    });
+
+    it('keepAsLocked accepts a LockBuilder directly', async () => {
+      const builder = new LockBuilder().addMainPubkey(
+        '02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2',
+      );
+      await ops.send(7, proofs).asRandom([7]).keepAsLocked(builder, []).run();
+      const [, , , outputConfig] = wallet.send.mock.calls[0];
+      expect(outputConfig?.keep).toEqual({
+        type: 'p2pk',
+        options: builder.toOptions(),
+        denominations: [],
+      });
+    });
+
     it('supports sendP2PK and keepP2PK OutputTypes', async () => {
       await ops
         .send(7, proofs)
@@ -710,6 +734,19 @@ describe('WalletOps builders', () => {
       expect(outputType).toEqual({ type: 'random', denominations: [1, 2, 3] });
     });
 
+    it('asLocked accepts a LockBuilder for receive', async () => {
+      const builder = new LockBuilder().addMainPubkey(
+        '02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2',
+      );
+      await ops.receive(token).asLocked(builder, [7]).run();
+      const [, , outputType] = wallet.receive.mock.calls[0];
+      expect(outputType).toEqual({
+        type: 'p2pk',
+        options: builder.toOptions(),
+        denominations: [7],
+      });
+    });
+
     it('p2pk() OutputType for receive', async () => {
       await ops.receive(token).asP2PK({ kind: 'P2PK', data: 'PUB', locktime: 42 }, [7]).run();
 
@@ -758,6 +795,19 @@ describe('WalletOps builders', () => {
       await ops.mintBolt11('10', quote).prepare();
       expect(wallet.prepareMint).toHaveBeenCalledTimes(1);
       expect(Amount.from(wallet.prepareMint.mock.calls[0][1]).equals(10)).toBeTruthy();
+    });
+
+    it('asLocked accepts a LockBuilder for mint', async () => {
+      const builder = new LockBuilder().addMainPubkey(
+        '02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2',
+      );
+      await ops.mintBolt11(10, quote).asLocked(builder, [10]).prepare();
+      const [, , , , outputType] = wallet.prepareMint.mock.calls[0];
+      expect(outputType).toEqual({
+        type: 'p2pk',
+        options: builder.toOptions(),
+        denominations: [10],
+      });
     });
 
     it('calls wallet.prepareMint with custom OutputType and config', async () => {
@@ -1134,6 +1184,19 @@ describe('WalletOps builders', () => {
 
       const [, , , , ot] = wallet.prepareMelt.mock.calls[0];
       expect(ot).toEqual({ type: 'deterministic', counter: 0, denominations: [] });
+    });
+
+    it('asLocked accepts a LockBuilder for melt', async () => {
+      const builder = new LockBuilder().addMainPubkey(
+        '02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2',
+      );
+      await ops.meltBolt11(melt11, proofs).asLocked(builder, []).run();
+      const [, , , , ot] = wallet.prepareMelt.mock.calls[0];
+      expect(ot).toEqual({
+        type: 'p2pk',
+        options: builder.toOptions(),
+        denominations: [],
+      });
     });
 
     it('bolt11: supports P2PK OutputType', async () => {

@@ -1,6 +1,7 @@
 import { test, describe, expect } from 'vitest';
 
 import {
+  LockBuilder,
   P2PKBuilder,
   PaymentRequest,
   PaymentRequestBuilder,
@@ -149,6 +150,17 @@ describe('PaymentRequestBuilder', () => {
     // the payer-side parser reconstructs the same lock
     const roundTripped = pr.toP2PKOptions();
     expect(roundTripped).toEqual(builder.toOptions());
+  });
+
+  test('lock() accepts a LockBuilder directly', () => {
+    const viaBuilder = new PaymentRequestBuilder()
+      .lock(new LockBuilder().addMainPubkey(PUBKEY))
+      .build();
+    const viaOptions = new PaymentRequestBuilder()
+      .lock(new LockBuilder().addMainPubkey(PUBKEY).toOptions())
+      .build();
+    expect(viaBuilder.nut10).toEqual(viaOptions.nut10);
+    expect(viaBuilder.nut10?.data).toBe(PUBKEY);
   });
 
   test('lock() accepts raw P2PKOptions and validates them', () => {

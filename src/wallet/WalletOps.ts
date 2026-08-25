@@ -15,6 +15,7 @@ import {
 import type { ProofLike } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 
+import { LockBuilder } from './P2PKBuilder';
 import {
   type OutputType,
   type OutputConfig,
@@ -105,7 +106,7 @@ export class WalletOps {
     }
     // Net of input fees (NUT-18): the payee must net the requested amount after swapping.
     const builder = new SendBuilder(wallet, base.add(fee), proofs).includeFees(true);
-    return lock ? builder.asP2PK(lock) : builder;
+    return lock ? builder.asLocked(lock) : builder;
   }
   receive(token: Token | string | ProofLike[]) {
     return new ReceiveBuilder(this.wallet, token);
@@ -194,15 +195,24 @@ export class SendBuilder {
   }
 
   /**
-   * Lock the sent proofs to a NUT-11 P2PK / NUT-14 HTLC spending condition.
+   * Lock the sent proofs to a spending condition.
    *
-   * @param p2pk A complete {@link P2PKOptions} (e.g. from {@link P2PKBuilder} or
-   *   {@link PaymentRequest.toP2PKOptions}); its `kind` selects P2PK vs HTLC.
+   * @remarks
+   * The v5 name for `asP2PK`, taking a {@link LockBuilder} directly or its options.
+   * @param lock A {@link LockBuilder}, or complete {@link P2PKOptions}.
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
-  asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]) {
-    this.sendOT = { type: 'p2pk', options: p2pk, denominations: denoms };
+  asLocked(lock: P2PKOptions | LockBuilder, denoms?: AmountLike[]) {
+    const options = lock instanceof LockBuilder ? lock.toOptions() : lock;
+    this.sendOT = { type: 'p2pk', options, denominations: denoms };
     return this;
+  }
+
+  /**
+   * @deprecated Use `asLocked`. Removed in v5.
+   */
+  asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]) {
+    return this.asLocked(p2pk, denoms);
   }
 
   /**
@@ -249,14 +259,24 @@ export class SendBuilder {
   }
 
   /**
-   * Lock the change to a NUT-11 P2PK / NUT-14 HTLC spending condition.
+   * Lock the change to a spending condition.
    *
-   * @param p2pk A complete {@link P2PKOptions} whose `kind` selects P2PK vs HTLC.
+   * @remarks
+   * The v5 name for `keepAsP2PK`, taking a {@link LockBuilder} directly or its options.
+   * @param lock A {@link LockBuilder}, or complete {@link P2PKOptions}.
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
-  keepAsP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]) {
-    this.keepOT = { type: 'p2pk', options: p2pk, denominations: denoms };
+  keepAsLocked(lock: P2PKOptions | LockBuilder, denoms?: AmountLike[]) {
+    const options = lock instanceof LockBuilder ? lock.toOptions() : lock;
+    this.keepOT = { type: 'p2pk', options, denominations: denoms };
     return this;
+  }
+
+  /**
+   * @deprecated Use `keepAsLocked`. Removed in v5.
+   */
+  keepAsP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]) {
+    return this.keepAsLocked(p2pk, denoms);
   }
 
   /**
@@ -468,17 +488,25 @@ export class ReceiveBuilder {
   }
 
   /**
-   * Lock the received proofs to a NUT-11 P2PK / NUT-14 HTLC spending condition.
+   * Lock the received proofs to a spending condition.
    *
    * @remarks
-   * If `denoms` is specified, `proofsWeHave()` has no effect.
-   * @param p2pk A complete {@link P2PKOptions} (e.g. from {@link P2PKBuilder} or
-   *   {@link PaymentRequest.toP2PKOptions}); its `kind` selects P2PK vs HTLC.
+   * If `denoms` is specified, `proofsWeHave()` has no effect. This is the v5 name for `asP2PK`,
+   * taking a {@link LockBuilder} directly or its options.
+   * @param lock A {@link LockBuilder}, or complete {@link P2PKOptions}.
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
-  asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]) {
-    this.outputType = { type: 'p2pk', options: p2pk, denominations: denoms };
+  asLocked(lock: P2PKOptions | LockBuilder, denoms?: AmountLike[]) {
+    const options = lock instanceof LockBuilder ? lock.toOptions() : lock;
+    this.outputType = { type: 'p2pk', options, denominations: denoms };
     return this;
+  }
+
+  /**
+   * @deprecated Use `asLocked`. Removed in v5.
+   */
+  asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]) {
+    return this.asLocked(p2pk, denoms);
   }
 
   /**
@@ -642,17 +670,25 @@ export class MintBuilder<
   }
 
   /**
-   * Lock the minted proofs to a NUT-11 P2PK / NUT-14 HTLC spending condition.
+   * Lock the minted proofs to a spending condition.
    *
    * @remarks
-   * If `denoms` is specified, `proofsWeHave()` has no effect.
-   * @param p2pk A complete {@link P2PKOptions} (e.g. from {@link P2PKBuilder} or
-   *   {@link PaymentRequest.toP2PKOptions}); its `kind` selects P2PK vs HTLC.
+   * If `denoms` is specified, `proofsWeHave()` has no effect. This is the v5 name for `asP2PK`,
+   * taking a {@link LockBuilder} directly or its options.
+   * @param lock A {@link LockBuilder}, or complete {@link P2PKOptions}.
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
-  asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]) {
-    this.outputType = { type: 'p2pk', options: p2pk, denominations: denoms };
+  asLocked(lock: P2PKOptions | LockBuilder, denoms?: AmountLike[]) {
+    const options = lock instanceof LockBuilder ? lock.toOptions() : lock;
+    this.outputType = { type: 'p2pk', options, denominations: denoms };
     return this;
+  }
+
+  /**
+   * @deprecated Use `asLocked`. Removed in v5.
+   */
+  asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]) {
+    return this.asLocked(p2pk, denoms);
   }
 
   /**
@@ -864,15 +900,24 @@ export class MeltBuilder<
   }
 
   /**
-   * Lock the change to a NUT-11 P2PK / NUT-14 HTLC spending condition.
+   * Lock the change to a spending condition.
    *
-   * @param p2pk A complete {@link P2PKOptions} (e.g. from {@link P2PKBuilder} or
-   *   {@link PaymentRequest.toP2PKOptions}); its `kind` selects P2PK vs HTLC.
+   * @remarks
+   * The v5 name for `asP2PK`, taking a {@link LockBuilder} directly or its options.
+   * @param lock A {@link LockBuilder}, or complete {@link P2PKOptions}.
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
-  asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]) {
-    this.outputType = { type: 'p2pk', options: p2pk, denominations: denoms };
+  asLocked(lock: P2PKOptions | LockBuilder, denoms?: AmountLike[]) {
+    const options = lock instanceof LockBuilder ? lock.toOptions() : lock;
+    this.outputType = { type: 'p2pk', options, denominations: denoms };
     return this;
+  }
+
+  /**
+   * @deprecated Use `asLocked`. Removed in v5.
+   */
+  asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]) {
+    return this.asLocked(p2pk, denoms);
   }
 
   /**
