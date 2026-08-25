@@ -219,6 +219,39 @@ function assertValidPackage(pkg: ScriptPathSigningPackage): void {
   if (!Array.isArray(pkg.inputs) || !Array.isArray(pkg.outputs) || !Array.isArray(pkg.spends)) {
     throw new CTSError('Malformed signing package');
   }
+  // JSONInt flattens Amount to bare integers, so a decoded package must be rehydrated
+  // before consumers touch it; digestOf normalizing internally would otherwise mask this.
+  for (const [i, input] of pkg.inputs.entries()) {
+    if (
+      !input ||
+      typeof input !== 'object' ||
+      typeof input.secret !== 'string' ||
+      typeof input.id !== 'string' ||
+      typeof input.C !== 'string'
+    ) {
+      throw new CTSError(`Signing package input ${i} is malformed`);
+    }
+    try {
+      input.amount = Amount.from(input.amount);
+    } catch (e) {
+      throw new CTSError(`Signing package input ${i} amount is invalid`, { cause: e });
+    }
+  }
+  for (const [i, output] of pkg.outputs.entries()) {
+    if (
+      !output ||
+      typeof output !== 'object' ||
+      typeof output.B_ !== 'string' ||
+      typeof output.id !== 'string'
+    ) {
+      throw new CTSError(`Signing package output ${i} is malformed`);
+    }
+    try {
+      output.amount = Amount.from(output.amount);
+    } catch (e) {
+      throw new CTSError(`Signing package output ${i} amount is invalid`, { cause: e });
+    }
+  }
   if (!/^[0-9a-f]{64}$/.test(pkg.digest ?? '')) {
     throw new CTSError('Signing package digest must be 32 bytes hex');
   }
@@ -227,6 +260,13 @@ function assertValidPackage(pkg: ScriptPathSigningPackage): void {
     (typeof pkg.quote !== 'string' || pkg.quote.length === 0 || pkg.quoteAmount === undefined)
   ) {
     throw new CTSError('Melt signing package needs a quote and amount');
+  }
+  if (pkg.quoteAmount !== undefined) {
+    try {
+      pkg.quoteAmount = Amount.from(pkg.quoteAmount).toBigInt();
+    } catch (e) {
+      throw new CTSError('Signing package quote amount is invalid', { cause: e });
+    }
   }
   const recomputed = Bytes.toHex(
     digestOf(

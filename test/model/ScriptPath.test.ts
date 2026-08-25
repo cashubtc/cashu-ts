@@ -120,6 +120,16 @@ describe('ScriptPath signing packages', () => {
     expect(signed.spends[0].signatures).toHaveLength(1);
   });
 
+  test('deserialize rehydrates amounts to their model types', () => {
+    const { preview, proof } = fixture();
+    const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]);
+    const decoded = ScriptPath.deserializePackage(ScriptPath.serializePackage(pkg));
+    // JSONInt flattens Amount to bare integers; the other side must get Amounts back.
+    expect(decoded.inputs[0].amount).toBeInstanceOf(Amount);
+    expect(decoded.inputs[0].amount.toBigInt()).toBe(1n);
+    expect(decoded.outputs[0].amount).toBeInstanceOf(Amount);
+  });
+
   test('extract refuses plans it cannot honour', () => {
     const { preview, proof } = fixture();
     expect(() => ScriptPath.extractSwapPackage(preview, [])).toThrow(/at least one plan/);
@@ -244,6 +254,16 @@ describe('ScriptPath melt packages', () => {
     ]);
     // Same inputs; the quote container must move the digest (NUT-10 melt transcript).
     expect(melt.digest).not.toBe(swap.digest);
+  });
+
+  test('deserialize rehydrates the melt quote amount as bigint', () => {
+    const { meltPreview, proof } = meltFixture();
+    const pkg = ScriptPath.extractMeltPackage(meltPreview, [
+      { secret: proof.secret, leafIndex: 1 },
+    ]);
+    const decoded = ScriptPath.deserializePackage(ScriptPath.serializePackage(pkg));
+    expect(typeof decoded.quoteAmount).toBe('bigint');
+    expect(decoded.quoteAmount).toBe(1n);
   });
 
   test('sign and merge complete a melt spend end to end', () => {
