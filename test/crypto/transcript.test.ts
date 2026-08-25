@@ -131,6 +131,15 @@ describe('transaction transcript (vectors)', () => {
     expect(verifyTransactionInputWitness(digest, 'aabb', good)).toBe(false);
   });
 
+  test('rejects a key-path witness with more than one signature entry', () => {
+    // NUT-10: `signatures` MUST contain exactly one entry; a doubled valid
+    // signature makes the witness invalid (tests/10-tests.md rejection vector).
+    const digest = hexToBytes(tv.swap.digest);
+    const secret = tv.swap.tx.proof_inputs[0].secret;
+    const doubled = JSON.stringify({ signatures: [tv.swap.signature, tv.swap.signature] });
+    expect(verifyTransactionInputWitness(digest, secret, doubled)).toBe(false);
+  });
+
   test('recoverV3SecretKeys resolves self-owned secrets by counter scan', () => {
     const seed = new TextEncoder().encode(vectors.nut13_v3.seed_utf8);
     const keysetId = vectors.nut13_v3.keyset_id;

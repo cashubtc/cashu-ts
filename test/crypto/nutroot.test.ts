@@ -189,11 +189,12 @@ describe('leaf parsing fails closed', () => {
   });
 
   test('unknown odd field rejects: odd types are reserved, not ignorable', () => {
-    // The NUT-10 rejection vector: threshold_1of1_key3 with a four-byte field 0x09 appended.
+    // The NUT-10 rejection vector (shared JSON): threshold_1of1_key3 with field 0x09 appended.
     const leaf = new Uint8Array([
       ...hexToBytes(vectors.leaf_forms.threshold_1of1),
       ...tlvRecord(0x09, hexToBytes('deadbeef')),
     ]);
+    expect(bytesToHex(leaf)).toBe(vectors.leaf_forms.leaf_unknown_field);
     expect(() => parseNutrootLeaf(leaf)).toThrow(/field/);
   });
 
@@ -523,6 +524,19 @@ describe('locked secret construction and spend info cascade', () => {
     expect(witness.signatures).toEqual(v61.scriptpath_witness.signatures);
   });
 
+  test('buildScriptPathWitness enforces the NUT-10 witness bounds', () => {
+    const sig = v61.scriptpath_witness.signatures[0];
+    // The 6.1 leaf lists one key: more signature entries than keys is a witness
+    // every conforming mint rejects, so refuse to emit it.
+    expect(() => buildScriptPathWitness([v61.leaf_after], 0, v61.internal_key, [sig, sig])).toThrow(
+      /signature/,
+    );
+    // A preimage is at most 32 bytes.
+    expect(() =>
+      buildScriptPathWitness([v61.leaf_after], 0, v61.internal_key, [sig], 'ab'.repeat(33)),
+    ).toThrow(/preimage/);
+  });
+
   test('selectLeafSignatures keeps one valid signature per key, dropping duplicates and extras', () => {
     const digest = hexToBytes(v61.transcript_digest);
     const leaf: NutrootLeaf = {
@@ -806,17 +820,16 @@ describe('the leaf forms the worked examples never show', () => {
   });
 
   test('duplicate leaves fold without deduplication and stay spendable', () => {
-    // NUT-10 duplicate-pair vector: the fold commits the leaf multiset.
-    const leaf = lf.threshold_1of1;
+    // NUT-10 duplicate-pair vector (shared JSON): the fold commits the leaf multiset.
+    const [leaf] = lf.duplicate_pair_tree;
+    expect(lf.duplicate_pair_tree).toEqual([lf.threshold_1of1, lf.threshold_1of1]);
     const h = nutrootLeafHash(hexToBytes(leaf));
-    expect(bytesToHex(h)).toBe('23e8ff1693496ecad495b7ed3cdd7f8595c52a3adc0b92475835b0fb839116cb');
+    expect(bytesToHex(h)).toBe(lf.duplicate_pair_leaf_hash);
     const dupRoot = nutrootMerkleRoot([h, h]);
-    expect(bytesToHex(dupRoot)).toBe(
-      '1eaf291448e2f3c3a4fc00bfd591917bbb807e63af0fb905d054002bddd2cbc6',
-    );
+    expect(bytesToHex(dupRoot)).toBe(lf.duplicate_pair_root);
     expect(bytesToHex(dupRoot)).not.toBe(bytesToHex(nutrootMerkleRoot([h])));
-    const K6 = '03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556';
-    const secret = '03dd2f11ab23b670222ada50325b5d49cd07e1d7a721d9b52fa2039df1f1b0dbfd';
+    const K6 = lf.duplicate_pair_internal_key;
+    const secret = lf.duplicate_pair_secret;
     for (const index of [0, 1]) {
       const path = nutrootMerklePath([h, h], index);
       expect(path.map(bytesToHex)).toEqual([bytesToHex(h)]);
@@ -1089,6 +1102,47 @@ describe('verifyNutrootRequestTree (NUT-18 exact match)', () => {
       blindKeys: [v61.carol_pub],
       eBytes,
     });
+
+  test('NUMS payment proofs reproduce the NUT-18 vectors', () => {
+    // tests/18-tests.md "NUMS (leaves-only) request": leaf keyed to test key 4,
+    // paid with ephemeral 5 / u = 7 (blind-me set), then with u = 9 and no blinding.
+    const requestedLeaf =
+      '00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80';
+    const blindedLeaf =
+      '000202000101040021039ca57991c48db95252bff61e02c31cf9b1e9ec2ef27d9dee33db6f0324e6ca8106000468a3be80';
+    const numsOption = {
+      receiverPub: NUTROOT_NUMS_KEY,
+      leaves: [parseNutrootLeafHex(requestedLeaf)],
+      blindKeys: ['02e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13'],
+    };
+    const blinded = buildNutrootSecret(NUTROOT_NUMS_KEY, [parseNutrootLeafHex(blindedLeaf)], {
+      u: numberToBytesBE(7n, 32),
+    });
+    expect(blinded.secret).toBe(
+      '02fb23814e330739413a6e3982a21916002962002bc101ac105a28e0cf3bcb46d1',
+    );
+    expect(blinded.K).toBe('028edfebd6fdea3e1d89359af20868a2e76315b36cdb1a79de497a1757ca7bd407');
+    const siBlinded = {
+      E: '022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4',
+      K: blinded.K,
+      u: blinded.u,
+      tree: blinded.tree,
+    };
+    expect(() => verifyNutrootRequestTree(numsOption, siBlinded)).not.toThrow();
+    expect(verifyNutrootSpendInfo(blinded.secret, siBlinded)).toBe('receiver-keyed');
+
+    // Without the blind-me entry: verbatim leaf, no ephemeral travels.
+    const plain = buildNutrootSecret(NUTROOT_NUMS_KEY, [parseNutrootLeafHex(requestedLeaf)], {
+      u: numberToBytesBE(9n, 32),
+    });
+    expect(plain.secret).toBe('030b5dc180dd2ef76be0f0319fc5c254511fede8c8563a823d3b0fcd6f9012a0b2');
+    expect(plain.K).toBe('03b948fab26606a34380c4515ece4c27d25fcf53eb95d1041630ab44f2be4f7331');
+    const siPlain = { K: plain.K, u: plain.u, tree: plain.tree };
+    expect(() =>
+      verifyNutrootRequestTree({ ...numsOption, blindKeys: undefined }, siPlain),
+    ).not.toThrow();
+    expect(verifyNutrootSpendInfo(plain.secret, siPlain)).toBe('tweaked');
+  });
 
   test('a faithful payment passes, in any leaf order', () => {
     const out = derive();

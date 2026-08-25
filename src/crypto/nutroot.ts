@@ -590,6 +590,15 @@ export function buildScriptPathWitness(
   signatures: string[],
   preimage?: string,
 ): string {
+  // NUT-10 witness bounds: no more signature entries than the leaf lists keys,
+  // and a preimage of at most 32 bytes. A mint rejects either, so never emit them.
+  const leaf = parseNutrootLeaf(Bytes.fromHex(tree[leafIndex] ?? ''));
+  if (signatures.length > leaf.keys.length) {
+    throw new CTSError('Witness holds more signatures than the leaf lists keys');
+  }
+  if (preimage !== undefined && Bytes.fromHex(preimage).length > 32) {
+    throw new CTSError('Witness preimage exceeds 32 bytes');
+  }
   const leafHashes = tree.map((leaf) => nutrootLeafHash(Bytes.fromHex(leaf)));
   const path = nutrootMerklePath(leafHashes, leafIndex);
   return JSON.stringify({

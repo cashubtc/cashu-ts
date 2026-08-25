@@ -225,7 +225,8 @@ export function verifyTransactionInputWitness(
   } catch {
     return false;
   }
-  if (!Array.isArray(signatures) || signatures.length === 0) return false;
+  // Exactly one entry (NUT-10): a doubled signature invalidates the witness.
+  if (!Array.isArray(signatures) || signatures.length !== 1) return false;
   const sig: unknown = signatures[0];
   if (typeof sig !== 'string' || !/^[0-9a-f]{128}$/.test(sig)) return false;
   try {
