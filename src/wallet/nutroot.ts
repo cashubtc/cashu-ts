@@ -41,10 +41,6 @@ export const V3_SEED_SCAN_HEADROOM = 128;
 export type NutrootWalletState = {
   seed?: Uint8Array;
   counters: { peekNext(keysetId: string): Promise<number> };
-  /**
-   * Per-secret keys for random (seedless) v3 outputs, held for the wallet object's life.
-   */
-  randomKeys: Map<string, Uint8Array>;
   logger: Logger;
 };
 
@@ -184,8 +180,7 @@ export async function attachTransactionWitnesses(
   }
   for (const input of payload.inputs) {
     if (input.witness) continue; // pre-built witness (e.g. script path): leave it alone
-    const secretKey =
-      keys.get(input.secret) ?? extraKeys?.get(input.secret) ?? state.randomKeys.get(input.secret);
+    const secretKey = keys.get(input.secret) ?? extraKeys?.get(input.secret);
     if (secretKey) input.witness = signTransactionInput(digest, secretKey);
   }
   // Every v3 input signs (NUT-10), so an unsigned one is a request the mint will refuse.

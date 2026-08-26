@@ -63,6 +63,7 @@ import type {
   MintQuoteOnchainResponse,
   MintQuoteBolt11Request,
   MintQuoteBolt12Request,
+  SpendInfo,
   SwapRequest,
 } from '../model/types';
 import type { SerializedBlindedSignature } from '../model/types/blinded';
@@ -199,14 +200,6 @@ class Wallet {
   public readonly counters: WalletCounters;
   private _keyChain: KeyChain;
   private _seed: Uint8Array | undefined = undefined;
-  /**
-   * Keys for randomly generated v3 point secrets, by secret hex.
-   *
-   * @remarks
-   * A seeded wallet re-derives its keys (NUT-13); a seedless one has nowhere else to keep them, so
-   * proofs created this way are spendable for the life of the wallet object only.
-   */
-  private _randomV3Keys = new Map<string, Uint8Array>();
   private _unit = 'sat';
   private _mintInfo: MintInfo | undefined = undefined;
   private _denominationTarget = 3;
@@ -1206,10 +1199,13 @@ class Wallet {
       this.failIf(seenSecrets.has(secret), `Duplicate output secret at index ${i}`, { index: i });
       seenSecrets.add(secret);
     }
-    // Random v3 outputs carry their own key; keep it so the proof can be spent.
-    for (let i = 0; i < outputData.length; i++) {
-      const key = (outputData[i] as { secretKey?: Uint8Array }).secretKey;
-      if (key) this._randomV3Keys.set(secrets[i], key);
+    // A random v3 output's key rides to the proof as spend info; mirror it for a custom
+    // factory that set only secretKey, so the proof still carries its own key.
+    for (const output of outputData) {
+      const data = output as { secretKey?: Uint8Array; spendInfo?: SpendInfo };
+      if (data.secretKey && !data.spendInfo) {
+        data.spendInfo = { k: Bytes.toHex(data.secretKey) };
+      }
     }
     return outputData;
   }
@@ -2067,7 +2063,6 @@ class Wallet {
     return {
       seed: this._seed,
       counters: this.counters,
-      randomKeys: this._randomV3Keys,
       logger: this._logger,
     };
   }

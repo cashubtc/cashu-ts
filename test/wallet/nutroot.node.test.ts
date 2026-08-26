@@ -37,7 +37,6 @@ function makeState(seed?: Uint8Array): NutrootWalletState {
   return {
     seed,
     counters: { peekNext: vi.fn().mockResolvedValue(0) },
-    randomKeys: new Map(),
     logger: NULL_LOGGER,
   };
 }
@@ -330,13 +329,17 @@ describe('attachTransactionWitnesses', () => {
     ).toBe(true);
   });
 
-  test('falls back to extraKeys, then the random-key store', async () => {
+  test('falls back to extraKeys, which carry the keys proofs hold in spend info', async () => {
     const fromExtra = v3Proof(PUB_A);
-    const fromRandom = v3Proof(PUB_B);
+    // A random v3 output's key rides on the proof (spend_info.k), not in wallet state; callers
+    // deliver it here through collectSpendInfoKeys, merged with any caller-held keys.
+    const fromRandom = v3Proof(PUB_B, { k: PRIV_B });
     const state = makeState(undefined);
-    state.randomKeys.set(PUB_B, Bytes.fromHex(PRIV_B));
     const payload = { inputs: [fromExtra, fromRandom], outputs: [OUTPUT] };
-    const extra = new Map([[PUB_A, Bytes.fromHex(PRIV_A)]]);
+    const extra = new Map([
+      [PUB_A, Bytes.fromHex(PRIV_A)],
+      ...collectSpendInfoKeys([fromRandom], undefined, NULL_LOGGER),
+    ]);
     await attachTransactionWitnesses(payload, undefined, extra, undefined, state);
     const digest = digestOf([fromExtra, fromRandom]);
     expect(verifyTransactionInputWitness(digest, PUB_A, fromExtra.witness as string)).toBe(true);

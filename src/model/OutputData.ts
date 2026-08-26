@@ -114,7 +114,9 @@ export class OutputData implements OutputDataLike {
    *
    * @remarks
    * Only set by {@link OutputData.createSingleRandomData} on v3 keysets, where the secret is a
-   * pubkey and its key signs the spend witness. Seeded wallets re-derive instead (NUT-13).
+   * pubkey and its key signs the spend witness. The key travels to the proof as `spendInfo.k`
+   * (mirrored by the wallet when a custom factory sets only this field); seeded wallets re-derive
+   * instead (NUT-13).
    */
   secretKey?: Uint8Array;
   /**
