@@ -42,7 +42,8 @@ export class LockBuilder {
   }
 
   /**
-   * Adds refund-path key(s), active after the locktime; requires {@link lockUntil}.
+   * Adds refund-path key(s), active after the locktime; requires
+   * {@link LockBuilder.lockUntil | lockUntil}.
    */
   addRefundPubkey(pk: string | string[]) {
     const arr = Array.isArray(pk) ? pk : [pk];
@@ -103,7 +104,7 @@ export class LockBuilder {
   }
 
   /**
-   * Adds multiple NUT-11 tags at once; see {@link addTag}.
+   * Adds multiple NUT-11 tags at once; see {@link LockBuilder.addTag | addTag}.
    */
   addTags(tags: P2PKTag[]) {
     for (const [k, ...vals] of tags) this.addTag(k, vals);

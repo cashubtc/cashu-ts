@@ -30,7 +30,7 @@ import {
 import { deriveQuoteLockKey } from '../crypto/NUT13';
 import { signMintQuoteLegacy } from '../crypto/NUT20';
 import { verifyNutrootRequestTree } from '../crypto/nutroot';
-import { transactionDigest } from '../crypto/transcript';
+import { digestForPayload } from '../crypto/transcript';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
@@ -2356,10 +2356,11 @@ class Wallet {
    * it (`config.privkey`), and a lost key means an unredeemable quote.
    *
    * @remarks
-   * Every new quote is locked: {@link createQuoteLockKey} makes a keypair, and a seeded wallet can
-   * re-derive a lost one ({@link recoverQuoteLockKey}). A mint that cannot lock (no NUT-20) fails
-   * the echo check below, before the quote id is returned, so nothing is payable. For an unlocked
-   * legacy quote, drop to the generic `createMintQuote()`.
+   * Every new quote is locked: {@link Wallet.createQuoteLockKey | createQuoteLockKey} makes a
+   * keypair, and a seeded wallet can re-derive a lost one
+   * ({@link Wallet.recoverQuoteLockKey | recoverQuoteLockKey}). A mint that cannot lock (no NUT-20)
+   * fails the echo check below, before the quote id is returned, so nothing is payable. For an
+   * unlocked legacy quote, drop to the generic `createMintQuote()`.
    * @param amount Amount requesting for mint.
    * @param pubkey Public key to lock the quote to.
    * @param description Optional description for the mint quote.
@@ -2416,8 +2417,8 @@ class Wallet {
    * otherwise.
    *
    * @remarks
-   * Derived keys are recoverable via {@link recoverQuoteLockKey}; random ones exist only in the
-   * returned object, so persist the key with its quote.
+   * Derived keys are recoverable via {@link Wallet.recoverQuoteLockKey | recoverQuoteLockKey};
+   * random ones exist only in the returned object, so persist the key with its quote.
    */
   async createQuoteLockKey(): Promise<{ pubkey: string; privkey: string }> {
     let privkey: Uint8Array;
@@ -2964,18 +2965,9 @@ class Wallet {
           quoteAmount === undefined && method === 'bolt11',
           'prepareMint: quote object lacks its amount; pass the full mint quote',
         );
-        const digest = transactionDigest({
-          mintQuoteInputs: [
-            {
-              amount: Amount.from(quoteAmount ?? 0).toBigInt(),
-              quoteId: quote.quote,
-            },
-          ],
-          blindedOutputs: blindedMessages.map((o) => ({
-            amount: Amount.from(o.amount).toBigInt(),
-            keysetId: o.id,
-            B_: o.B_,
-          })),
+        const digest = digestForPayload({
+          mintQuotes: [{ quoteId: quote.quote, amount: quoteAmount ?? 0 }],
+          outputs: blindedMessages,
         });
         mintPayload.signature = Bytes.toHex(schnorr.sign(digest, Bytes.fromHex(signingKey)));
       } else {
@@ -3172,8 +3164,8 @@ class Wallet {
     // V3: the batch is one transaction; every locked quote signs the digest
     // covering all quote inputs (request order) and all outputs.
     const v3BatchDigest = isBlsKeyset(keyset.id)
-      ? transactionDigest({
-          mintQuoteInputs: entries.map((e, i) => {
+      ? digestForPayload({
+          mintQuotes: entries.map((e, i) => {
             // Face amount, as in prepareMint: the transcript never commits the draw,
             // so a slim bolt11 quote object cannot stand in for it.
             const quoteAmount = 'amount' in e.quote ? (e.quote.amount as AmountLike) : undefined;
@@ -3181,16 +3173,9 @@ class Wallet {
               quoteAmount === undefined && method === 'bolt11',
               `prepareBatchMint: quote #${i + 1} lacks its amount; pass the full mint quote`,
             );
-            return {
-              amount: Amount.from(quoteAmount ?? 0).toBigInt(),
-              quoteId: e.quote.quote,
-            };
+            return { quoteId: e.quote.quote, amount: quoteAmount ?? 0 };
           }),
-          blindedOutputs: blindedMessages.map((o) => ({
-            amount: Amount.from(o.amount).toBigInt(),
-            keysetId: o.id,
-            B_: o.B_,
-          })),
+          outputs: blindedMessages,
         })
       : undefined;
     for (const [i, entry] of entries.entries()) {

@@ -5,14 +5,14 @@ import {
   buildScriptPathWitness,
   NUTROOT_MAX_SLOTS,
   parseNutrootLeaf,
-  selectLeafSignatures,
+  selectRequiredLeafSignatures,
   slotKeysByBlindedPubkey,
   nutrootLeafHash,
   nutrootMerklePath,
   type NutrootLeaf,
   verifyNutrootCommitment,
 } from '../crypto/nutroot';
-import { transactionDigest } from '../crypto/transcript';
+import { digestForPayload } from '../crypto/transcript';
 import { Bytes, JSONInt, encodeUint8toBase64Url } from '../utils';
 import { orderOutputsForPayload } from '../wallet/_internal';
 import type { MeltPreview, ScriptPathPlan, SwapPreview } from '../wallet/types';
@@ -91,22 +91,7 @@ function digestOf(
   outputs: SerializedBlindedMessage[],
   meltQuote?: { quoteId: string; amount: bigint },
 ): Uint8Array {
-  return transactionDigest({
-    proofInputs: inputs.map((p) => ({
-      amount: Amount.from(p.amount).toBigInt(),
-      keysetId: p.id,
-      secret: p.secret,
-      C: p.C,
-    })),
-    blindedOutputs: outputs.map((o) => ({
-      amount: Amount.from(o.amount).toBigInt(),
-      keysetId: o.id,
-      B_: o.B_,
-    })),
-    ...(meltQuote && {
-      meltQuoteOutputs: [{ amount: meltQuote.amount, quoteId: meltQuote.quoteId }],
-    }),
-  });
+  return digestForPayload({ inputs, outputs, ...(meltQuote && { meltQuote }) });
 }
 
 function buildPackage(
@@ -375,14 +360,7 @@ function applyWitnesses(pkg: ScriptPathSigningPackage, inputs: Proof[]): Proof[]
     const spend = bySecret.get(proof.secret);
     if (!spend) return proof;
     const leaf = parseNutrootLeaf(Bytes.fromHex(spend.leaf));
-    // One valid signature per leaf key: the mint bounds `signatures` at the leaf's key count, so
-    // duplicates and non-verifying cosigner extras are trimmed rather than forwarded.
-    const signatures = selectLeafSignatures(leaf, digest, spend.signatures);
-    if (signatures.length < leaf.n) {
-      throw new CTSError(
-        `Script path leaf needs ${leaf.n} valid signatures, package has ${signatures.length}`,
-      );
-    }
+    const signatures = selectRequiredLeafSignatures(leaf, digest, spend.signatures);
     return {
       ...proof,
       witness: JSON.stringify({

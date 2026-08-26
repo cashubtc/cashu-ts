@@ -658,6 +658,28 @@ export function selectLeafSignatures(
 }
 
 /**
+ * {@link selectLeafSignatures}, requiring the leaf's threshold.
+ *
+ * @remarks
+ * The mint bounds `signatures` at the leaf's key count, so duplicates and non-verifying cosigner
+ * extras are trimmed rather than forwarded.
+ * @throws If fewer than `leaf.n` distinct keys have a valid signature over `digest`.
+ */
+export function selectRequiredLeafSignatures(
+  leaf: NutrootLeaf,
+  digest: Uint8Array,
+  signatures: string[],
+): string[] {
+  const selected = selectLeafSignatures(leaf, digest, signatures);
+  if (selected.length < leaf.n) {
+    throw new CTSError(
+      `Script path leaf needs ${leaf.n} valid signatures, ${selected.length} produced`,
+    );
+  }
+  return selected;
+}
+
+/**
  * Receive-time reconstruction check (NUT-10) for one proof's spend info. Spendability (check 2) is
  * the caller's: trial-match, seed recovery, or cosigning.
  *

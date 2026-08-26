@@ -2,7 +2,7 @@ import { schnorr } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
 
-import { Amount } from '../model/Amount';
+import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { Bytes, isValidHex } from '../utils';
 
@@ -158,6 +158,41 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
  */
 export function transactionDigest(tx: TransactionShape): Uint8Array {
   return sha256(Bytes.concat(utf8ToBytes(TRANSCRIPT_DOMAIN_TAG), buildTransactionTranscript(tx)));
+}
+
+/**
+ * {@link transactionDigest} over payload wire shapes: proofs, quotes and blinded messages as the
+ * request carries them, amounts in any {@link AmountLike} form.
+ */
+export function digestForPayload(payload: {
+  inputs?: Array<{ amount: AmountLike; id: string; secret: string; C: string }>;
+  mintQuotes?: Array<{ quoteId: string; amount: AmountLike }>;
+  outputs?: Array<{ amount: AmountLike; id: string; B_: string }>;
+  meltQuote?: { quoteId: string; amount: AmountLike };
+}): Uint8Array {
+  const quote = (q: { quoteId: string; amount: AmountLike }): TranscriptQuote => ({
+    amount: Amount.from(q.amount).toBigInt(),
+    quoteId: q.quoteId,
+  });
+  return transactionDigest({
+    ...(payload.inputs && {
+      proofInputs: payload.inputs.map((p) => ({
+        amount: Amount.from(p.amount).toBigInt(),
+        keysetId: p.id,
+        secret: p.secret,
+        C: p.C,
+      })),
+    }),
+    ...(payload.mintQuotes && { mintQuoteInputs: payload.mintQuotes.map(quote) }),
+    ...(payload.outputs && {
+      blindedOutputs: payload.outputs.map((o) => ({
+        amount: Amount.from(o.amount).toBigInt(),
+        keysetId: o.id,
+        B_: o.B_,
+      })),
+    }),
+    ...(payload.meltQuote && { meltQuoteOutputs: [quote(payload.meltQuote)] }),
+  });
 }
 
 /**

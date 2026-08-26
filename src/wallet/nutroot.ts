@@ -9,14 +9,14 @@ import {
   type NutrootLeaf,
   recoverLeafKeySecretKeys,
   recoverReceiverKeyedSecretKey,
-  selectLeafSignatures,
+  selectRequiredLeafSignatures,
   nutrootLeafHash,
   nutrootMerkleRoot,
   nutrootTweakSeckey,
 } from '../crypto/nutroot';
-import { signTransactionInput, transactionDigest } from '../crypto/transcript';
+import { digestForPayload, signTransactionInput } from '../crypto/transcript';
 import { type Logger, fail } from '../logger';
-import { Amount } from '../model/Amount';
+import { type Amount } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { type MeltRequest } from '../model/types';
 import type { Proof } from '../model/types/proof';
@@ -111,21 +111,10 @@ export async function attachTransactionWitnesses(
 ): Promise<void> {
   const v3Inputs = payload.inputs.filter((p) => isBlsKeyset(p.id) && isV3PointSecret(p.secret));
   if (v3Inputs.length === 0) return;
-  const digest = transactionDigest({
-    proofInputs: payload.inputs.map((p) => ({
-      amount: Amount.from(p.amount).toBigInt(),
-      keysetId: p.id,
-      secret: p.secret,
-      C: p.C,
-    })),
-    blindedOutputs: (payload.outputs ?? []).map((o) => ({
-      amount: Amount.from(o.amount).toBigInt(),
-      keysetId: o.id,
-      B_: o.B_,
-    })),
-    meltQuoteOutputs: meltQuote
-      ? [{ amount: meltQuote.amount.toBigInt(), quoteId: meltQuote.quoteId }]
-      : undefined,
+  const digest = digestForPayload({
+    inputs: payload.inputs,
+    outputs: payload.outputs ?? [],
+    ...(meltQuote && { meltQuote }),
   });
   // Keys are derived per keyset, and a mixed transaction can carry v3 inputs from more than one,
   // so recover per keyset. Scan bound: that keyset's counter plus headroom for proofs minted
@@ -158,18 +147,10 @@ export async function attachTransactionWitnesses(
     // caller could have supplied up front: the digest covers the outputs, and those are only
     // fixed (and ordered) once the transaction is built.
     const theirs = spend.cosign ? await spend.cosign(digest, spend.leaf) : [];
-    // One valid signature per leaf key: the mint bounds `signatures` at the leaf's key count, so
-    // duplicates and non-verifying cosigner extras are trimmed rather than forwarded.
-    const signatures = selectLeafSignatures(spend.leaf, digest, [
+    const signatures = selectRequiredLeafSignatures(spend.leaf, digest, [
       ...mine,
       ...theirs.map((sig: string) => sig.toLowerCase()),
     ]);
-    if (signatures.length < spend.leaf.n) {
-      fail(
-        `Script path leaf needs ${spend.leaf.n} valid signatures, ${signatures.length} produced`,
-        state.logger,
-      );
-    }
     input.witness = buildScriptPathWitness(
       spend.tree,
       spend.leafIndex,
