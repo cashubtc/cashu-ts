@@ -10,7 +10,7 @@ import { getPubKeyFromPrivKey, pointFromBytes, pointFromHex } from './curve_secp
 import {
   deriveP2BKBlindedPubkeyAtSlot,
   deriveP2BKBlindedPubkeys,
-  deriveP2BKSlotSecretKey,
+  deriveP2BKSlotSecretKeyCandidates,
 } from './NUT28';
 
 /**
@@ -692,7 +692,7 @@ export function verifyNutrootSpendInfo(
     }
   }
   // Receiver-keyed (E without k): verification happens at trial-match with the static key;
-  // the derivation pins the secret to the receiver, which a sender cannot have pre-tweaked (2.7).
+  // the derivation pins the secret to the receiver, which a sender cannot have pre-tweaked (NUT-28).
   if (spendInfo.E !== undefined && spendInfo.k === undefined) {
     try {
       pointFromBytes(Bytes.fromHex(spendInfo.E));
@@ -704,7 +704,7 @@ export function verifyNutrootSpendInfo(
         ? spendInfo.tree.map((leaf) => parseNutrootLeaf(Bytes.fromHex(leaf)))
         : undefined;
     if (leaves) enumerateLeafKeySlots(leaves);
-    // With K disclosed beside the tree (2.5), completeness is checkable here rather than only at
+    // With K disclosed beside the tree (NUT-10), completeness is checkable here rather than only at
     // trial-match, and by any holder rather than only the receiver.
     if (spendInfo.K !== undefined && leaves) {
       const internalKey = Bytes.fromHex(spendInfo.K);
@@ -740,7 +740,7 @@ export function verifyNutrootSpendInfo(
     }
     if (!spendInfo.tree || spendInfo.tree.length === 0) {
       if (Bytes.equals(derived, secret)) return 'bare';
-      // The empty-tweak step (2.5.1, 3.8): an aggregated key commits to having no script path by
+      // The empty-tweak step (NUT-10): an aggregated key commits to having no script path by
       // tweaking with nothing but itself. Checked here rather than only for a disclosed `K`,
       // because a single-party key may use the same form.
       if (Bytes.equals(nutrootTweakPubkey(derived), secret)) return 'aggregated';
@@ -1008,18 +1008,18 @@ export function slotKeysByBlindedPubkey(
 ): Map<string, { slot: number; secretKey: string }> {
   const bySlot = new Map<string, { slot: number; secretKey: string }>();
   for (let slot = 1; slot <= slotCount; slot++) {
-    let candidate: string;
+    let candidates: [string, string];
     try {
-      candidate = deriveP2BKSlotSecretKey(EHex, privHex, slot);
+      candidates = deriveP2BKSlotSecretKeyCandidates(EHex, privHex, slot);
       /* v8 ignore start -- rejection sampling: an invalid derived scalar is improbable */
     } catch {
       continue; // not a usable slot key for this static key
     }
     /* v8 ignore stop */
-    bySlot.set(Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(candidate))), {
-      slot,
-      secretKey: candidate,
-    });
+    // Both parity candidates: an x-only import may hold n - p for the published point (NUT-28).
+    for (const secretKey of candidates) {
+      bySlot.set(Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(secretKey))), { slot, secretKey });
+    }
   }
   return bySlot;
 }
@@ -1055,9 +1055,13 @@ export function recoverLeafKeySecretKeys(
       EHex === undefined
         ? new Map<string, { slot: number; secretKey: string }>()
         : slotKeysByBlindedPubkey(EHex, privHex, slots.length);
+    // The negated point is the same hex with the parity prefix flipped, so an x-only import that
+    // holds n - p still byte-matches its published verbatim key (NUT-28).
+    const pubNeg = (pub.startsWith('02') ? '03' : '02') + pub.slice(2);
     for (const { leafIndex, keyIndex, slot, key } of slots) {
-      if (key === pub) {
-        hits.push({ leafIndex, keyIndex, slot, secretKey: privHex.toLowerCase(), blinded: false });
+      if (key === pub || key === pubNeg) {
+        const secretKey = key === pub ? privHex.toLowerCase() : negateScalarHex(privHex);
+        hits.push({ leafIndex, keyIndex, slot, secretKey, blinded: false });
         continue;
       }
       const blinded = blindedKeys.get(key);
@@ -1078,6 +1082,8 @@ export function recoverLeafKeySecretKeys(
 /**
  * Trial-match a receiver-keyed proof against a static private key (NUT-28).
  *
+ * @remarks
+ * Both parity candidates are tried, so a scalar from an x-only import matches too.
  * @returns The key-path secret key (`k` bare, `k + t` tweaked) and the internal key, or undefined
  *   when the proof is not keyed to this static key.
  */
@@ -1087,18 +1093,33 @@ export function recoverReceiverKeyedSecretKey(
   receiverPrivHex: string,
   tree?: string[],
 ): { secretKey: string; internalKey: string } | undefined {
-  let internalSeckey: string;
+  let candidates: [string, string];
   try {
-    internalSeckey = deriveP2BKSlotSecretKey(EHex, receiverPrivHex, 0);
+    candidates = deriveP2BKSlotSecretKeyCandidates(EHex, receiverPrivHex, 0);
   } catch {
     return undefined;
   }
-  const internalKey = Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(internalSeckey)));
-  if (!tree || tree.length === 0) {
-    return internalKey === secretHex ? { secretKey: internalSeckey, internalKey } : undefined;
+  const root =
+    tree && tree.length > 0
+      ? nutrootMerkleRoot(tree.map((leaf) => nutrootLeafHash(Bytes.fromHex(leaf))))
+      : undefined;
+  for (const internalSeckey of candidates) {
+    const internalKey = Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(internalSeckey)));
+    if (root === undefined) {
+      if (internalKey === secretHex) return { secretKey: internalSeckey, internalKey };
+      continue;
+    }
+    const tweaked = nutrootTweakSeckey(Bytes.fromHex(internalSeckey), root);
+    if (Bytes.toHex(getPubKeyFromPrivKey(tweaked)) === secretHex) {
+      return { secretKey: Bytes.toHex(tweaked), internalKey };
+    }
   }
-  const root = nutrootMerkleRoot(tree.map((leaf) => nutrootLeafHash(Bytes.fromHex(leaf))));
-  const tweaked = nutrootTweakSeckey(Bytes.fromHex(internalSeckey), root);
-  if (Bytes.toHex(getPubKeyFromPrivKey(tweaked)) !== secretHex) return undefined;
-  return { secretKey: Bytes.toHex(tweaked), internalKey };
+  return undefined;
+}
+
+/**
+ * The other parity's scalar for the same x coordinate: `n - p` (NUT-28 x-only imports).
+ */
+function negateScalarHex(privHex: string): string {
+  return Bytes.toHex(numberToBytesBE(secp256k1.Point.Fn.ORDER - BigInt('0x' + privHex), 32));
 }

@@ -49,6 +49,10 @@ import vectors from '../vectors/nutroot-v3.json';
 const v61 = vectors.example_6_1;
 const v62 = vectors.example_6_2;
 
+// The scalar an x-only (nostr) import may hold: n - d, whose pubkey is the negated point.
+const negate = (priv: string) =>
+  bytesToHex(numberToBytesBE(secp256k1.Point.Fn.ORDER - BigInt('0x' + priv), 32));
+
 describe('tagged hashes', () => {
   test('match the @scure/btc-signer oracle for the Cashu tags', () => {
     const msg = utf8ToBytes('cross-check message');
@@ -589,7 +593,7 @@ describe('locked secret construction and spend info cascade', () => {
     ).toThrow(/does not match/);
   });
 
-  test('the empty tweak: an aggregated key with no tree (3.8)', () => {
+  test('the empty tweak: an aggregated key with no tree (NUT-10)', () => {
     const v = vectors.empty_tweak;
     expect(bytesToHex(nutrootTweakPubkey(hexToBytes(v.internal_key)))).toBe(v.secret);
     expect(nutrootTweak(hexToBytes(v.internal_key)).toString(16).padStart(64, '0')).toBe(v.tweak);
@@ -616,7 +620,7 @@ describe('locked secret construction and spend info cascade', () => {
     // Wrong bearer key.
     expect(() => verifyNutrootSpendInfo(v61.secret, { k: '11'.repeat(32) })).toThrow(/match/);
     // Partial (empty vs actual tree): K alone would be complete only if the secret were its
-    // empty tweak (3.8), and this secret is tweaked over a real tree instead.
+    // empty tweak (NUT-10), and this secret is tweaked over a real tree instead.
     expect(() => verifyNutrootSpendInfo(v61.secret, { K: v61.internal_key, tree: [] })).toThrow(
       /does not commit/,
     );
@@ -698,7 +702,7 @@ describe('locked secret construction and spend info cascade', () => {
   });
 });
 
-describe('receiver-keyed derivation (2.7, vectors 6.1)', () => {
+describe('receiver-keyed derivation (NUT-28, vectors 6.1)', () => {
   const eBytes = (() => {
     const b = new Uint8Array(32);
     b[31] = 5;
@@ -758,6 +762,19 @@ describe('receiver-keyed derivation (2.7, vectors 6.1)', () => {
     expect(bytesToHex(secp256k1.getPublicKey(hexToBytes(bare!.secretKey), true))).toBe(
       v61.internal_key,
     );
+  });
+
+  test('an odd-parity import of the static key still trial-matches (NUT-28)', () => {
+    const negCarol = negate(v61.carol_priv);
+    expect(
+      recoverReceiverKeyedSecretKey(v61.secret, v61.ephemeral_pub, negCarol, [v61.leaf_after]),
+    ).toEqual(
+      recoverReceiverKeyedSecretKey(v61.secret, v61.ephemeral_pub, v61.carol_priv, [
+        v61.leaf_after,
+      ]),
+    );
+    const bare = recoverReceiverKeyedSecretKey(v61.internal_key, v61.ephemeral_pub, negCarol);
+    expect(bare?.internalKey).toBe(v61.internal_key);
   });
 
   test('trial-match misses for a foreign static key', () => {
@@ -855,7 +872,7 @@ describe('the leaf forms the worked examples never show', () => {
   });
 });
 
-describe('leaf-key blinding: the positional slot map (2.7)', () => {
+describe('leaf-key blinding: the positional slot map (NUT-28)', () => {
   const eBytes = hexToBytes(v61.ephemeral_priv);
   const carolPub = v61.carol_pub;
   const alicePub = v61.alice_refund_pub;
@@ -974,6 +991,24 @@ describe('leaf-key blinding: the positional slot map (2.7)', () => {
     expect(recoverLeafKeySecretKeys(plain, undefined, [bobPriv, strangerPriv])).toEqual([
       { leafIndex: 0, keyIndex: 0, slot: 1, secretKey: bobPriv, blinded: false },
     ]);
+  });
+
+  test('an odd-parity import matches blinded and verbatim leaf keys alike (NUT-28)', () => {
+    const leaves: NutrootLeaf[] = [
+      { type: 'threshold', n: 2, keys: [carolPub, alicePub] },
+      { type: 'after', n: 1, keys: [bobPub], time: v61.refund_time },
+    ];
+    const out = deriveReceiverKeyedSecret(carolPub, { leaves, eBytes, blindKeys: [bobPub] });
+    // Blinded (bob) and verbatim (carol) keys: the negated import yields the same hits.
+    expect(recoverLeafKeySecretKeys(out.tree!, out.E, [negate(bobPriv)])).toEqual(
+      recoverLeafKeySecretKeys(out.tree!, out.E, [bobPriv]),
+    );
+    expect(recoverLeafKeySecretKeys(out.tree!, out.E, [negate(v61.carol_priv)])).toEqual(
+      recoverLeafKeySecretKeys(out.tree!, out.E, [v61.carol_priv]),
+    );
+    // A negated stranger is still a stranger.
+    const strangerPriv = bytesToHex(secp256k1.utils.randomSecretKey());
+    expect(recoverLeafKeySecretKeys(out.tree!, out.E, [negate(strangerPriv)])).toEqual([]);
   });
 
   test('a blind-me key that is nowhere in the tree is an error, not a silent no-op', () => {

@@ -215,19 +215,27 @@ function deriveP2BKBlindingTweakFromECDH(
 }
 
 /**
- * Receiver-side slot key: `(p + r_i) mod n` for one slot, without a pubkey check.
+ * Both parity candidates for a receiver-side slot key: `(p + r_i) mod n` and `(n - p + r_i) mod n`.
  *
  * @remarks
- * Nutroot secrets (2.7) receiver flow: the caller verifies the result against the proof secret
- * (bare `K = k*G`, or tweaked via the disclosed tree), so no blinded-key comparison happens here.
- * The negated-derivation branch is retired (2.7): normalize x-only imports at the boundary.
+ * Nutroot receiver flow (NUT-28): the caller verifies each candidate against the proof secret (bare
+ * `K = k*G`, or tweaked via the disclosed tree), so no blinded-key comparison happens here. A
+ * scalar imported from an x-only context may be `n - d` for the published point; `Zx` is
+ * parity-independent, so both candidates share one ECDH.
  */
-export function deriveP2BKSlotSecretKey(Ehex: string, privkeyHex: string, slotIndex = 0): string {
+export function deriveP2BKSlotSecretKeyCandidates(
+  Ehex: string,
+  privkeyHex: string,
+  slotIndex = 0,
+): [string, string] {
   const E = pointFromHex(Ehex);
   const p = hexToNumber(privkeyHex);
+  const n = secp256k1.Point.CURVE().n;
+  if (p <= 0n || p >= n) throw new CTSError('Invalid private key');
   const r = deriveP2BKBlindingTweakFromECDH(E, p, slotIndex);
-  const k = deriveP2BKSecretKey(p, r);
-  /* c8 ignore next — deriveP2BKSecretKey without blindPubkey only returns null on zero key. */
-  if (k === null) throw new CTSError('P2BK: derived slot key is zero');
-  return k;
+  const std = (p + r) % n;
+  const neg = (n - p + r) % n;
+  /* c8 ignore next — zero requires r = n - p or r = p, rejection-sampled away. */
+  if (std === 0n || neg === 0n) throw new CTSError('P2BK: derived slot key is zero');
+  return [numberToHexPadded64(std), numberToHexPadded64(neg)];
 }
