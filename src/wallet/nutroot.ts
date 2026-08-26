@@ -280,7 +280,7 @@ export function prepareScriptPathSpends(
     if (leaf.type === 'hashlock' && plan.preimage === undefined) {
       throw new CTSError('Script path plan for a hashlock leaf needs a preimage');
     }
-    // The control block's internal key, from whichever source the spend info offers (2.5.2).
+    // The control block's internal key, from whichever source the spend info offers (NUT-10).
     const K = internalKeyOf(proof, privkeys);
     if (!K) {
       throw new CTSError('Script path spend needs the internal key, which the spend info lacks');

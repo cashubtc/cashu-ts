@@ -353,7 +353,7 @@ describe('OutputData.createNutrootData (receiver-keyed, NUT-28)', () => {
   test('one fresh ephemeral per output, and the payee recovers each key', () => {
     const outputs = OutputData.createNutrootData({ receiverPub: bobPub }, 7, keyset);
     expect(outputs.map((o) => o.blindedMessage.amount.toString()).sort()).toEqual(['1', '2', '4']);
-    // Fresh e per output (2.4/2.7): distinct ephemerals, so distinct secrets.
+    // Fresh e per output (NUT-28): distinct ephemerals, so distinct secrets.
     const ephemerals = outputs.map((o) => o.spendInfo?.E);
     expect(new Set(ephemerals).size).toBe(3);
     expect(new Set(outputs.map((o) => new TextDecoder().decode(o.secret))).size).toBe(3);

@@ -1105,7 +1105,7 @@ describeV3('M8 tokens end to end with spend_info', () => {
     'explicit K: a script-only token discloses its tree and spends through a leaf',
     { timeout: 60_000 },
     async () => {
-      // No key path at all: K is a NUMS offset, so every spend goes through a leaf (2.3.5).
+      // No key path at all: K is a NUMS offset, so every spend goes through a leaf (NUT-10).
       const ownerPriv = randomBytes(32);
       const ownerPub = bytesToHex(secp256k1.getPublicKey(ownerPriv, true));
       const { secret, tree, K, u } = buildNutrootSecret(NUTROOT_NUMS_KEY, [

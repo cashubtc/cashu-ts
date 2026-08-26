@@ -16,7 +16,7 @@ import { minimalBE, tlvRecord } from './nutroot';
  * `msg = domain tag || TLV stream`; each input carries one BIP-340 signature over `SHA256(msg)`.
  * Containers: 0x01 proof input, 0x02 mint quote input, 0x03 blinded message output, 0x04 melt quote
  * output. Container types ascend (inputs before outputs by construction); elements keep request
- * order within their type; field streams inside are ascending unique (2.6).
+ * order within their type; field streams inside are ascending unique (NUT-10).
  */
 
 export const TRANSCRIPT_DOMAIN_TAG = 'Cashu_Transaction_v1';
