@@ -57,9 +57,8 @@ describe('decodeTLV fails closed on malformed streams', () => {
 
   test('nut10 structural violations', () => {
     const data = rec(0x02, utf8('02aa'));
-    expect(() => decodeTLV(bytes(rec(0x08, [...rec(0x01, [9]), ...data])))).toThrow(
-      /Unsupported NUT-10 kind: 9/,
-    );
+    // An unknown kind is not a structural violation: it decodes preserved (NUT-26).
+    expect(decodeTLV(bytes(rec(0x08, [...rec(0x01, [9]), ...data]))).nut10?.kind).toBe('9');
     expect(() => decodeTLV(bytes(rec(0x08, data)))).toThrow(/missing required kind/);
     expect(() => decodeTLV(bytes(rec(0x08, rec(0x01, [0]))))).toThrow(/missing required data/);
   });

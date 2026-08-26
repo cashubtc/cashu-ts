@@ -115,6 +115,23 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
       expect(finalDecoded.nut10).toEqual(decoded.nut10);
     });
 
+    test('unknown nut10 kind decodes and re-encodes byte-faithfully', () => {
+      // NUT-26: unknown kinds SHOULD be preserved on re-encode, MAY be ignored in validation.
+      const encoded = encodeTLV({ nut10: { kind: '42', data: 'future-kind-data' } });
+      const decoded = decodeTLV(encoded);
+      expect(decoded.nut10).toEqual({ kind: '42', data: 'future-kind-data' });
+      expect(encodeTLV(decoded)).toEqual(encoded);
+    });
+
+    test('rejects a nut10 kind that maps to no byte', () => {
+      expect(() => encodeTLV({ nut10: { kind: 'SIGIL', data: 'x' } })).toThrow(
+        /Unsupported NUT-10 type/,
+      );
+      expect(() => encodeTLV({ nut10: { kind: '999', data: 'x' } })).toThrow(
+        /Unsupported NUT-10 type/,
+      );
+    });
+
     test('rejects multiple nut10 spending conditions', () => {
       // NUT-26 tag 0x08 is not repeatable. encodeTLV emits a single nut10, so
       // hand-build a malformed payload by concatenating two nut10-only streams.

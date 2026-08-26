@@ -278,7 +278,9 @@ function nut10KindToType(kind: number): string {
     case NUT10_KIND_HTLC:
       return 'HTLC';
     default:
-      throw new CTSError(`Unsupported NUT-10 kind: ${kind}`);
+      // Unknown kinds decode to their decimal string and re-encode byte-faithfully (NUT-26);
+      // validation refuses them downstream (toP2PKOptions -> sendToRequest's guard).
+      return String(kind);
   }
 }
 
@@ -650,8 +652,12 @@ function nut10TypeToKind(type: string): number {
       return NUT10_KIND_P2PK;
     case 'HTLC':
       return NUT10_KIND_HTLC;
-    default:
+    default: {
+      // A preserved unknown kind: its decimal string maps back to the wire byte (NUT-26).
+      const kind = /^\d{1,3}$/.test(type) ? Number(type) : NaN;
+      if (Number.isInteger(kind) && kind <= 0xff) return kind;
       throw new CTSError(`Unsupported NUT-10 type: ${type}`);
+    }
   }
 }
 
