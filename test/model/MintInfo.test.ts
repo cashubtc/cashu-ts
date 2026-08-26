@@ -8,7 +8,7 @@ import {
   MAX_METHOD_LENGTH,
   MAX_MINT_INFO_LIST,
 } from '../../src/utils/limits';
-import { MINTINFORESP } from '../consts';
+import { MINTINFORESP, signMintInfo } from '../consts';
 
 describe('MintInfo protected endpoint matching', () => {
   it('matches exact literal path', () => {
@@ -994,4 +994,35 @@ describe('MintInfo max_array_length (NUT-06)', () => {
       );
     },
   );
+});
+
+describe('MintInfo signature (NUT-06)', () => {
+  it('reports unsigned for a mint that does not sign its info', () => {
+    expect(new MintInfo(MINTINFORESP).signatureState).toBe('unsigned');
+  });
+
+  it('verifies the response as received', () => {
+    const info = new MintInfo(signMintInfo(MINTINFORESP));
+    expect(info.signatureState).toBe('valid');
+  });
+
+  it('warns and reports invalid when the response was altered in flight', () => {
+    const logger = {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+      log: vi.fn(),
+    };
+    const tampered = { ...signMintInfo(MINTINFORESP), motd: 'Send your ecash here instead' };
+    expect(new MintInfo(tampered, logger).signatureState).toBe('invalid');
+    expect(logger.warn).toHaveBeenCalled();
+  });
+
+  it('reports unsigned once normalized: cache does not carry the signature', () => {
+    const info = new MintInfo(signMintInfo(MINTINFORESP));
+    expect(info.cache.signature).toBeUndefined();
+    expect(new MintInfo(info.cache).signatureState).toBe('unsigned');
+  });
 });

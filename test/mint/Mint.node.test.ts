@@ -13,7 +13,7 @@ import {
   Amount,
 } from '../../src';
 import type { AuthProvider, Logger, MintQuoteBaseResponse, RequestFn } from '../../src';
-import { MINTINFORESP } from '../consts';
+import { MINTINFORESP, signMintInfo } from '../consts';
 
 type ReqArgs = {
   endpoint: string;
@@ -70,6 +70,14 @@ describe('Mint normalization', () => {
 
     expect(requestSpy).toHaveBeenCalledTimes(1);
     expect(info1).toBe(info2);
+  });
+
+  it('hands MintInfo the response as received, so the signature verifies', async () => {
+    const signed = signMintInfo(MINTINFORESP);
+    const mint = new Mint(mintUrl, { customRequest: (async () => signed) as RequestFn });
+
+    expect(await mint.getInfo()).toEqual(signed);
+    expect((await mint.getLazyMintInfo()).signatureState).toBe('valid');
   });
 
   it('setMintInfo accepts raw info objects and seeds the cache', async () => {

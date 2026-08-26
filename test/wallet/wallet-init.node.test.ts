@@ -551,7 +551,7 @@ describe('test info', () => {
           ],
         },
       },
-    } as any);
+    });
 
     expect(info.supportsAmountless('bolt11', 'sat')).toBe(true);
 
@@ -580,7 +580,7 @@ describe('test info', () => {
           ],
         },
       },
-    } as any);
+    });
 
     expect(info2.supportsAmountless('bolt11', 'sat')).toBe(false);
   });
