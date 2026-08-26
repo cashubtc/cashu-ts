@@ -5,10 +5,9 @@
  * This is the instantiation point for the Cashu-TS library.
  */
 
-import { schnorr } from '@noble/curves/secp256k1.js';
-
 import { type AuthProvider } from '../auth/AuthProvider';
 import {
+  schnorrSignDigest,
   signMintQuote,
   findSigningKey,
   signP2PKProofs as cryptoSignP2PKProofs,
@@ -2969,7 +2968,7 @@ class Wallet {
           mintQuotes: [{ quoteId: quote.quote, amount: quoteAmount ?? 0 }],
           outputs: blindedMessages,
         });
-        mintPayload.signature = Bytes.toHex(schnorr.sign(digest, Bytes.fromHex(signingKey)));
+        mintPayload.signature = schnorrSignDigest(digest, signingKey);
       } else {
         // Sign the amended (nuts#375) message by default and keep a legacy signature over the same
         // outputs as a fallback for not-yet-upgraded mints — see completeMint().
@@ -3183,7 +3182,7 @@ class Wallet {
       if (quotePubkey && signingKeys.length > 0) {
         const signingKey = findSigningKey(quotePubkey, signingKeys);
         if (v3BatchDigest) {
-          signatures.push(Bytes.toHex(schnorr.sign(v3BatchDigest, Bytes.fromHex(signingKey))));
+          signatures.push(schnorrSignDigest(v3BatchDigest, signingKey));
           legacySignatures.push(null);
         } else {
           signatures.push(signMintQuote(signingKey, entry.quote.quote, blindedMessages));

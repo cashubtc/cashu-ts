@@ -1,5 +1,4 @@
-import { schnorr } from '@noble/curves/secp256k1.js';
-
+import { schnorrSignDigest } from '../crypto/core';
 import { getPubKeyFromPrivKey } from '../crypto/curve_secp';
 import {
   buildScriptPathWitness,
@@ -315,7 +314,7 @@ function signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPath
       }
     }
     if (keys.length === 0) return spend;
-    const added = keys.map((k) => Bytes.toHex(schnorr.sign(digest, Bytes.fromHex(k))));
+    const added = keys.map((k) => schnorrSignDigest(digest, k));
     return { ...spend, signatures: [...new Set([...spend.signatures, ...added])] };
   });
   return { ...pkg, spends };

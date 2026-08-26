@@ -1,6 +1,4 @@
-import { schnorr } from '@noble/curves/secp256k1.js';
-
-import { assertV3PointSecret, isBlsKeyset, isV3PointSecret } from '../crypto';
+import { assertV3PointSecret, isBlsKeyset, isV3PointSecret, schnorrSignDigest } from '../crypto';
 import { getPubKeyFromPrivKey, normalizeSecpPubkey } from '../crypto/curve_secp';
 import { recoverV3SecretKeys } from '../crypto/NUT13';
 import {
@@ -142,7 +140,7 @@ export async function attachTransactionWitnesses(
     if (!input) {
       fail('Script path plan names a secret not in this transaction', state.logger);
     }
-    const mine = spend.keys.map((k: string) => Bytes.toHex(schnorr.sign(digest, Bytes.fromHex(k))));
+    const mine = spend.keys.map((k: string) => schnorrSignDigest(digest, k));
     // The co-signer sees the digest only now, which is why it is a hook and not a signature the
     // caller could have supplied up front: the digest covers the outputs, and those are only
     // fixed (and ordered) once the transaction is built.
