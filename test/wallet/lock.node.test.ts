@@ -24,12 +24,12 @@ const TIME = 1_800_000_000;
 
 describe('lockToNutrootOptions (v3 encoder)', () => {
   test('single main key, no conditions: receiver-keyed bare secret', () => {
-    expect(lockToNutrootOptions({ mainKeys: [PUB_A] })).toEqual({ receiverPub: PUB_A });
+    expect(lockToNutrootOptions({ mainKeys: [PUB_A] })).toEqual({ receiverKey: PUB_A });
   });
 
   test('normalizes an uppercase key to lowercase', () => {
     expect(lockToNutrootOptions({ mainKeys: [PUB_A.toUpperCase()] })).toEqual({
-      receiverPub: PUB_A,
+      receiverKey: PUB_A,
     });
   });
 
@@ -37,14 +37,14 @@ describe('lockToNutrootOptions (v3 encoder)', () => {
     expect(
       lockToNutrootOptions({ mainKeys: [PUB_A, PUB_B, PUB_C], requiredMainSignatures: 2 }),
     ).toEqual({
-      receiverPub: NUTROOT_NUMS_KEY,
+      receiverKey: NUTROOT_NUMS_KEY,
       leaves: [{ type: 'threshold', n: 2, keys: [PUB_A, PUB_B, PUB_C] }],
     });
   });
 
   test('multiple keys with threshold 1 still map to NUMS + threshold leaf', () => {
     expect(lockToNutrootOptions({ mainKeys: [PUB_A, PUB_B] })).toEqual({
-      receiverPub: NUTROOT_NUMS_KEY,
+      receiverKey: NUTROOT_NUMS_KEY,
       leaves: [{ type: 'threshold', n: 1, keys: [PUB_A, PUB_B] }],
     });
   });
@@ -53,7 +53,7 @@ describe('lockToNutrootOptions (v3 encoder)', () => {
     expect(
       lockToNutrootOptions({ mainKeys: [PUB_A], locktime: TIME, refundKeys: [PUB_R] }),
     ).toEqual({
-      receiverPub: PUB_A,
+      receiverKey: PUB_A,
       leaves: [{ type: 'after', n: 1, time: TIME, keys: [PUB_R] }],
     });
   });
@@ -67,20 +67,20 @@ describe('lockToNutrootOptions (v3 encoder)', () => {
         requiredRefundSignatures: 2,
       }),
     ).toEqual({
-      receiverPub: PUB_A,
+      receiverKey: PUB_A,
       leaves: [{ type: 'after', n: 2, time: TIME, keys: [PUB_R, PUB_B] }],
     });
   });
 
   test('refund keys without a locktime are dropped: inert under NUT-11 too', () => {
     expect(lockToNutrootOptions({ mainKeys: [PUB_A], refundKeys: [PUB_R] })).toEqual({
-      receiverPub: PUB_A,
+      receiverKey: PUB_A,
     });
   });
 
   test('hashlock maps to NUMS + hashlock leaf even for a single key: a key path would bypass the preimage', () => {
     expect(lockToNutrootOptions({ hashlock: HASH, mainKeys: [PUB_A] })).toEqual({
-      receiverPub: NUTROOT_NUMS_KEY,
+      receiverKey: NUTROOT_NUMS_KEY,
       leaves: [{ type: 'hashlock', n: 1, hash: HASH, keys: [PUB_A] }],
     });
   });
@@ -95,7 +95,7 @@ describe('lockToNutrootOptions (v3 encoder)', () => {
         refundKeys: [PUB_R],
       }),
     ).toEqual({
-      receiverPub: NUTROOT_NUMS_KEY,
+      receiverKey: NUTROOT_NUMS_KEY,
       leaves: [
         { type: 'hashlock', n: 2, hash: HASH, keys: [PUB_A, PUB_B] },
         { type: 'after', n: 1, time: TIME, keys: [PUB_R] },
@@ -113,7 +113,7 @@ describe('lockToNutrootOptions (v3 encoder)', () => {
         ],
       }),
     ).toEqual({
-      receiverPub: PUB_A,
+      receiverKey: PUB_A,
       leaves: [
         { type: 'after', n: 1, time: TIME, keys: [PUB_R] },
         { type: 'after', n: 2, time: TIME + 100, keys: [PUB_B, PUB_C] },
@@ -123,7 +123,7 @@ describe('lockToNutrootOptions (v3 encoder)', () => {
 
   test('explicit leaves with no main key: script-only NUMS lock', () => {
     expect(lockToNutrootOptions({ leaves: [{ type: 'threshold', n: 1, keys: [PUB_B] }] })).toEqual({
-      receiverPub: NUTROOT_NUMS_KEY,
+      receiverKey: NUTROOT_NUMS_KEY,
       leaves: [{ type: 'threshold', n: 1, keys: [PUB_B] }],
     });
   });
@@ -137,7 +137,7 @@ describe('lockToNutrootOptions (v3 encoder)', () => {
         blindKeys: true,
       }),
     ).toEqual({
-      receiverPub: NUTROOT_NUMS_KEY,
+      receiverKey: NUTROOT_NUMS_KEY,
       leaves: [
         { type: 'threshold', n: 1, keys: [PUB_A, PUB_B] },
         { type: 'after', n: 1, time: TIME, keys: [PUB_B, PUB_R] },
@@ -153,7 +153,7 @@ describe('lockToNutrootOptions (v3 encoder)', () => {
         blindKeys: [PUB_B.toUpperCase()],
       }),
     ).toEqual({
-      receiverPub: NUTROOT_NUMS_KEY,
+      receiverKey: NUTROOT_NUMS_KEY,
       leaves: [{ type: 'threshold', n: 1, keys: [PUB_A, PUB_B] }],
       blindKeys: [PUB_B],
     });
@@ -161,13 +161,13 @@ describe('lockToNutrootOptions (v3 encoder)', () => {
 
   test('blindKeys true on a bare single-key lock adds nothing: derivation already blinds it', () => {
     expect(lockToNutrootOptions({ mainKeys: [PUB_A], blindKeys: true })).toEqual({
-      receiverPub: PUB_A,
+      receiverKey: PUB_A,
     });
   });
 
   test('sigAll is absorbed: every v3 input signs the whole transaction', () => {
     expect(lockToNutrootOptions({ mainKeys: [PUB_A], sigAll: true })).toEqual({
-      receiverPub: PUB_A,
+      receiverKey: PUB_A,
     });
   });
 
@@ -351,7 +351,7 @@ describe('nutrootToLockOptions (readable conditions)', () => {
     const tree = [
       Bytes.toHex(serializeNutrootLeaf({ type: 'after', n: 1, time: TIME, keys: [PUB_R] })),
     ];
-    expect(nutrootToLockOptions({ receiverPub: PUB_A, leaves: tree })).toEqual({
+    expect(nutrootToLockOptions({ receiverKey: PUB_A, leaves: tree })).toEqual({
       mainKeys: [PUB_A],
       leaves: [{ type: 'after', n: 1, time: TIME, keys: [PUB_R] }],
     });

@@ -516,16 +516,14 @@ type LockOptions = {
 
 ### Renames
 
-| v4 / early rc                                | v5                                        |
-| -------------------------------------------- | ----------------------------------------- |
-| `P2PKBuilder`                                | `LockBuilder`                             |
-| `.addLockPubkey()`                           | `.addMainPubkey()`                        |
-| `.requireLockSignatures()`                   | `.requireMainSignatures()`                |
-| `.toOptions(): P2PKOptions`                  | `.toOptions(): LockOptions`               |
-| `.asP2PK(p2pk)` / `.keepAsP2PK(p2pk)`        | `.asLocked(lock)` / `.keepAsLocked(lock)` |
-| `.asNutroot(options)`                        | `.asLocked(lock)`                         |
-| `{ type: 'p2pk', options }` output config    | `{ type: 'lock', options }`               |
-| `{ type: 'nutroot', options }` output config | `{ type: 'lock', options }`               |
+| v4 / early rc                             | v5                                        |
+| ----------------------------------------- | ----------------------------------------- |
+| `P2PKBuilder`                             | `LockBuilder`                             |
+| `.addLockPubkey()`                        | `.addMainPubkey()`                        |
+| `.requireLockSignatures()`                | `.requireMainSignatures()`                |
+| `.toOptions(): P2PKOptions`               | `.toOptions(): LockOptions`               |
+| `.asP2PK(p2pk)` / `.keepAsP2PK(p2pk)`     | `.asLocked(lock)` / `.keepAsLocked(lock)` |
+| `{ type: 'p2pk', options }` output config | `{ type: 'lock', options }`               |
 
 `asLocked()` accepts `LockOptions` or a `LockBuilder` directly. Refund and hashlock methods keep their names (`addRefundPubkey`, `requireRefundSignatures`, `addHashlock`, `lockUntil`, `sigAll`); main/refund is now the one vocabulary across the builder, the type, and verification results.
 
@@ -535,15 +533,10 @@ type LockOptions = {
 // Before
 const p2pk = new P2PKBuilder().addLockPubkey([a, b]).requireLockSignatures(2).toOptions();
 await wallet.ops.send(64, proofs).asP2PK(p2pk).run();
-await wallet.ops.send(64, proofs).asNutroot({ receiverPub: carol, leaves }).run();
 
 // After
 const lock = new LockBuilder().addMainPubkey([a, b]).requireMainSignatures(2).toOptions();
 await wallet.ops.send(64, proofs).asLocked(lock).run();
-await wallet.ops
-  .send(64, proofs)
-  .asLocked({ mainKeys: [carol], leaves })
-  .run();
 ```
 
 ### What each keyset version refuses

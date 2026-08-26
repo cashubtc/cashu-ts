@@ -163,4 +163,5 @@ export {
   NUTROOT_LEAF_TYPE,
   NUTROOT_NUMS_KEY,
   type NutrootLeaf,
+  type ParsedNutrootOption,
 } from './crypto/nutroot';

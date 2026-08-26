@@ -1130,7 +1130,7 @@ describe('verifyNutrootRequestTree (NUT-18 exact match)', () => {
     { type: 'after', n: 1, keys: [v61.alice_refund_pub], time: v61.refund_time },
     { type: 'threshold', n: 1, keys: [v61.carol_pub] },
   ];
-  const option = { receiverPub: v61.carol_pub, leaves: reqLeaves, blindKeys: [v61.carol_pub] };
+  const option = { receiverKey: v61.carol_pub, leaves: reqLeaves, blindKeys: [v61.carol_pub] };
   const derive = () =>
     deriveReceiverKeyedSecret(v61.carol_pub, {
       leaves: reqLeaves,
@@ -1146,7 +1146,7 @@ describe('verifyNutrootRequestTree (NUT-18 exact match)', () => {
     const blindedLeaf =
       '000202000101040021039ca57991c48db95252bff61e02c31cf9b1e9ec2ef27d9dee33db6f0324e6ca8106000468a3be80';
     const numsOption = {
-      receiverPub: NUTROOT_NUMS_KEY,
+      receiverKey: NUTROOT_NUMS_KEY,
       leaves: [parseNutrootLeafHex(requestedLeaf)],
       blindKeys: ['02e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13'],
     };
@@ -1206,7 +1206,7 @@ describe('verifyNutrootRequestTree (NUT-18 exact match)', () => {
     const out = derive();
     expect(() =>
       verifyNutrootRequestTree(
-        { receiverPub: v61.carol_pub },
+        { receiverKey: v61.carol_pub },
         { E: out.E, K: out.K, tree: out.tree },
       ),
     ).toThrow(/none was requested/);
@@ -1230,7 +1230,7 @@ describe('verifyNutrootRequestTree (NUT-18 exact match)', () => {
   test('a NUMS request requires an internal key that reduces to H', () => {
     // No blind-me tag: the offset supplies uniqueness, the requested tree comes back unchanged,
     // and no ephemeral travels (NUT-18: E is present iff it blinded something).
-    const numsOpt = { receiverPub: NUTROOT_NUMS_KEY, leaves: reqLeaves };
+    const numsOpt = { receiverKey: NUTROOT_NUMS_KEY, leaves: reqLeaves };
     const out = deriveReceiverKeyedSecret(NUTROOT_NUMS_KEY, { leaves: reqLeaves });
     expect(() =>
       verifyNutrootRequestTree(numsOpt, { K: out.K, u: out.u, tree: out.tree }),
@@ -1268,7 +1268,7 @@ describe('verifyNutrootRequestTree (NUT-18 exact match)', () => {
 
   test('a NUMS request with blind-me keys keeps the ephemeral, both directions', () => {
     const numsOptB = {
-      receiverPub: NUTROOT_NUMS_KEY,
+      receiverKey: NUTROOT_NUMS_KEY,
       leaves: reqLeaves,
       blindKeys: [v61.alice_refund_pub],
     };
@@ -1429,18 +1429,18 @@ describe('validation fails closed (constructor and verifier guards)', () => {
 
   test('verifyNutrootRequestTree rejects malformed ephemerals, offsets and phantom trees', () => {
     const keyed = deriveReceiverKeyedSecret(P1);
-    expect(() => verifyNutrootRequestTree({ receiverPub: P1 }, { E: 'zz' })).toThrow(
+    expect(() => verifyNutrootRequestTree({ receiverKey: P1 }, { E: 'zz' })).toThrow(
       /33-byte point/,
     );
     expect(() =>
-      verifyNutrootRequestTree({ receiverPub: NUTROOT_NUMS_KEY }, { K: NUTROOT_NUMS_KEY, u: 'zz' }),
+      verifyNutrootRequestTree({ receiverKey: NUTROOT_NUMS_KEY }, { K: NUTROOT_NUMS_KEY, u: 'zz' }),
     ).toThrow(/32-byte scalar/);
     // A tree disclosed on a request that asked for none is extra spend power.
     expect(() =>
-      verifyNutrootRequestTree({ receiverPub: P1 }, { E: keyed.E, tree: ['00'.repeat(40)] }),
+      verifyNutrootRequestTree({ receiverKey: P1 }, { E: keyed.E, tree: ['00'.repeat(40)] }),
     ).toThrow(/none was requested/);
     // The bare faithful payment: nothing requested, nothing disclosed.
-    expect(() => verifyNutrootRequestTree({ receiverPub: P1 }, { E: keyed.E })).not.toThrow();
+    expect(() => verifyNutrootRequestTree({ receiverKey: P1 }, { E: keyed.E })).not.toThrow();
   });
 
   test('recoverReceiverKeyedSecretKey returns undefined on undecodable inputs', () => {

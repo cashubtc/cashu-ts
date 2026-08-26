@@ -1,5 +1,10 @@
 import type { P2PKOptions, P2PKTag } from '../crypto/NUT11';
-import { NUTROOT_NUMS_KEY, parseNutrootLeaf, type NutrootLeaf } from '../crypto/nutroot';
+import {
+  NUTROOT_NUMS_KEY,
+  parseNutrootLeaf,
+  type NutrootLeaf,
+  type ParsedNutrootOption,
+} from '../crypto/nutroot';
 import { CTSError } from '../model/Errors';
 import { Bytes } from '../utils';
 
@@ -59,11 +64,7 @@ const lc = (k: string) => k.toLowerCase();
  * @throws On a shape v3 cannot express: extra tags, anyone-after-locktime, a keyless hashlock, an
  *   unattainable threshold, or an empty lock.
  */
-export function lockToNutrootOptions(lock: LockOptions): {
-  receiverPub: string;
-  leaves?: NutrootLeaf[];
-  blindKeys?: string[];
-} {
+export function lockToNutrootOptions(lock: LockOptions): ParsedNutrootOption {
   if (lock.additionalTags?.length) {
     throw new CTSError('Extra tags do not fit a v3 lock: v3 secrets carry no tags');
   }
@@ -112,7 +113,7 @@ export function lockToNutrootOptions(lock: LockOptions): {
       ? [...new Set(leaves.flatMap((leaf) => leaf.keys))]
       : (Array.isArray(lock.blindKeys) ? lock.blindKeys : []).map(lc);
   return {
-    receiverPub: keyPath ? mainKeys[0] : NUTROOT_NUMS_KEY,
+    receiverKey: keyPath ? mainKeys[0] : NUTROOT_NUMS_KEY,
     ...(leaves.length > 0 && { leaves }),
     ...(blindKeys.length > 0 && { blindKeys }),
   };
@@ -199,16 +200,16 @@ export function p2pkToLockOptions(p2pk: P2PKOptions): LockOptions {
  * never collapsed back into the sugar fields: what was authored as a tree reads as a tree.
  */
 export function nutrootToLockOptions(options: {
-  receiverPub: string;
+  receiverKey: string;
   leaves?: Array<NutrootLeaf | string>;
   blindKeys?: string[];
 }): LockOptions {
   const leaves = (options.leaves ?? []).map((leaf) =>
     typeof leaf === 'string' ? parseNutrootLeaf(Bytes.fromHex(leaf)) : leaf,
   );
-  const isNums = lc(options.receiverPub) === NUTROOT_NUMS_KEY;
+  const isNums = lc(options.receiverKey) === NUTROOT_NUMS_KEY;
   return {
-    ...(!isNums && { mainKeys: [lc(options.receiverPub)] }),
+    ...(!isNums && { mainKeys: [lc(options.receiverKey)] }),
     ...(leaves.length > 0 && { leaves }),
     ...(options.blindKeys?.length && { blindKeys: options.blindKeys.map(lc) }),
   };

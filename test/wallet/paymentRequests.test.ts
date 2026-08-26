@@ -858,7 +858,7 @@ describe('nutroot (v3) request marking', () => {
       .requestNutroot({ receiverKey: carolPub, leaves: [leafAfter], blindKeys: [alicePub] })
       .build();
     expect(pr.toNutrootOptions()).toEqual({
-      receiverPub: carolPub,
+      receiverKey: carolPub,
       leaves: [{ type: 'after', n: 1, keys: [alicePub], time: 1755561600 }],
       blindKeys: [alicePub],
     });
@@ -872,7 +872,7 @@ describe('nutroot (v3) request marking', () => {
     ).toBe(carolPub);
     // A foreign request carrying the upper-case form canonicalizes on the way out.
     expect(
-      new PaymentRequest({ nutroot: { receiverKey: upper } }).toNutrootOptions()?.receiverPub,
+      new PaymentRequest({ nutroot: { receiverKey: upper } }).toNutrootOptions()?.receiverKey,
     ).toBe(carolPub);
     // x-only is rejected here as everywhere: the prepend-02 convention is the caller's to apply.
     expect(() =>
@@ -920,7 +920,7 @@ describe('nutroot (v3) request marking', () => {
     const pr = PaymentRequest.builder()
       .requestNutroot({ receiverKey: numsKey, leaves: [leafAfter] })
       .build();
-    expect(decodePaymentRequest(pr.toEncodedRequest()).toNutrootOptions()?.receiverPub).toBe(
+    expect(decodePaymentRequest(pr.toEncodedRequest()).toNutrootOptions()?.receiverKey).toBe(
       numsKey,
     );
     // A foreign request that skipped authoring validation is refused by the payer.

@@ -7,7 +7,7 @@ import {
   serializeNutrootLeaf,
   serializeNutrootLeafHex,
   NUTROOT_NUMS_KEY,
-  type NutrootLeaf,
+  type ParsedNutrootOption,
 } from '../crypto/nutroot';
 import { encodeBase64toUint8, decodeCBOR, encodeCBOR, Bytes, normalizeMintUrl } from '../utils';
 import { decodeBech32m, encodeBech32m } from '../utils/bech32m';
@@ -462,23 +462,21 @@ export class PaymentRequest {
    * @throws If the receiver key is not a valid point, or a requested leaf is unparsable or would
    *   not re-serialize to the bytes the payee sent.
    */
-  toNutrootOptions():
-    | { receiverPub: string; leaves?: NutrootLeaf[]; blindKeys?: string[] }
-    | undefined {
+  toNutrootOptions(): ParsedNutrootOption | undefined {
     const nutroot = this.nutroot;
     if (!nutroot) return undefined;
     if (!nutroot.receiverKey) {
       throw new CTSError('nutroot option is missing its receiver key');
     }
-    const receiverPub = normalizeSecpPubkey(nutroot.receiverKey);
+    const receiverKey = normalizeSecpPubkey(nutroot.receiverKey);
     // NUT-10: the payer offsets the NUMS base per output, so uniqueness no longer depends on
     // the tree and the requested leaves are reproduced unchanged. Leaves are still required:
     // nothing else could spend a proof with no key path.
-    if (receiverPub === NUTROOT_NUMS_KEY && !nutroot.leaves?.length) {
+    if (receiverKey === NUTROOT_NUMS_KEY && !nutroot.leaves?.length) {
       throw new CTSError('malformed request: a NUMS receiver key requires leaves');
     }
     if (!nutroot.leaves?.length) {
-      return { receiverPub };
+      return { receiverKey };
     }
     const leaves = nutroot.leaves.map((hex, i) => {
       const bytes = Bytes.fromHex(hex);
@@ -490,7 +488,7 @@ export class PaymentRequest {
       return leaf;
     });
     return {
-      receiverPub,
+      receiverKey,
       leaves,
       ...(nutroot.blindKeys?.length && {
         blindKeys: nutroot.blindKeys.map((k) => k.toLowerCase()),
@@ -877,9 +875,9 @@ function asLockOptions(
  * Encodes semantic lock options as a wire nutroot request.
  */
 function encodeNutrootRequest(lock: LockOptions): NutrootOption {
-  const { receiverPub, leaves, blindKeys } = lockToNutrootOptions(lock);
+  const { receiverKey, leaves, blindKeys } = lockToNutrootOptions(lock);
   return {
-    receiverKey: receiverPub,
+    receiverKey,
     ...(leaves?.length && { leaves: leaves.map((leaf) => serializeNutrootLeafHex(leaf)) }),
     ...(blindKeys?.length && { blindKeys }),
   };

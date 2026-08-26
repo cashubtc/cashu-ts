@@ -351,7 +351,7 @@ describe('OutputData.createNutrootData (receiver-keyed, NUT-28)', () => {
   const bobPub = bytesToHex(secp256k1.getPublicKey(hexToBytes(bobPriv), true));
 
   test('one fresh ephemeral per output, and the payee recovers each key', () => {
-    const outputs = OutputData.createNutrootData({ receiverPub: bobPub }, 7, keyset);
+    const outputs = OutputData.createNutrootData({ receiverKey: bobPub }, 7, keyset);
     expect(outputs.map((o) => o.blindedMessage.amount.toString()).sort()).toEqual(['1', '2', '4']);
     // Fresh e per output (NUT-28): distinct ephemerals, so distinct secrets.
     const ephemerals = outputs.map((o) => o.spendInfo?.E);
@@ -375,7 +375,7 @@ describe('OutputData.createNutrootData (receiver-keyed, NUT-28)', () => {
     const alicePub = bytesToHex(secp256k1.getPublicKey(hexToBytes(alicePriv), true));
     const leaves: NutrootLeaf[] = [{ type: 'after', n: 1, keys: [alicePub], time: 4102444800 }];
     const [out] = OutputData.createNutrootData(
-      { receiverPub: bobPub, leaves, blindKeys: [alicePub] },
+      { receiverKey: bobPub, leaves, blindKeys: [alicePub] },
       1,
       keyset,
     );
@@ -394,7 +394,7 @@ describe('OutputData.createNutrootData (receiver-keyed, NUT-28)', () => {
 
   test('nutroot outputs are refused on a pre-v3 keyset', () => {
     const secpKeyset = { id: '00ad268c4d1f5826', keys: { '1': '02'.padEnd(66, 'a') } };
-    expect(() => OutputData.createNutrootData({ receiverPub: bobPub }, 1, secpKeyset)).toThrow(
+    expect(() => OutputData.createNutrootData({ receiverKey: bobPub }, 1, secpKeyset)).toThrow(
       /v3 keyset/,
     );
   });

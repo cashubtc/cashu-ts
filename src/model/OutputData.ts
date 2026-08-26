@@ -30,7 +30,7 @@ import {
   type G2Point,
   type P2PKOptions,
 } from '../crypto';
-import { deriveReceiverKeyedSecret, type NutrootLeaf } from '../crypto/nutroot';
+import { deriveReceiverKeyedSecret, type ParsedNutrootOption } from '../crypto/nutroot';
 import { Bytes, numberToHexPadded64, splitAmount } from '../utils';
 
 import { Amount, type AmountLike } from './Amount';
@@ -437,7 +437,7 @@ export class OutputData implements OutputDataLike {
    *   this as a plain text secret.
    */
   static createNutrootData(
-    options: { receiverPub: string; leaves?: NutrootLeaf[]; blindKeys?: string[] },
+    options: ParsedNutrootOption,
     amount: AmountLike,
     keyset: HasKeysetKeys,
     customSplit?: AmountLike[],
@@ -446,7 +446,7 @@ export class OutputData implements OutputDataLike {
       throw new CTSError('Nutroot outputs require a v3 keyset');
     }
     return splitAmount(amount, keyset.keys, customSplit).map((a) => {
-      const { secret, E, tree, K, u } = deriveReceiverKeyedSecret(options.receiverPub, {
+      const { secret, E, tree, K, u } = deriveReceiverKeyedSecret(options.receiverKey, {
         leaves: options.leaves,
         blindKeys: options.blindKeys,
       });

@@ -83,6 +83,15 @@ export type NutrootLeaf = {
 };
 
 /**
+ * The parsed working form of a wire `NutrootOption`: same option, leaves parsed.
+ */
+export type ParsedNutrootOption = {
+  receiverKey: string;
+  leaves?: NutrootLeaf[];
+  blindKeys?: string[];
+};
+
+/**
  * BIP340-style tagged hash: `SHA256(SHA256(tag) || SHA256(tag) || messages)`.
  */
 export function taggedHash(tag: string, ...messages: Uint8Array[]): Uint8Array {
@@ -880,7 +889,7 @@ function blindTaggedLeafKeys(
  * @throws If the spend info does not satisfy the request.
  */
 export function verifyNutrootRequestTree(
-  option: { receiverPub: string; leaves?: NutrootLeaf[]; blindKeys?: string[] },
+  option: ParsedNutrootOption,
   spendInfo: { k?: string; E?: string; K?: string; tree?: string[]; u?: string } | undefined,
 ): void {
   if (!spendInfo) {
@@ -893,7 +902,7 @@ export function verifyNutrootRequestTree(
   // for a NUMS request only when it tags blind-me keys. Both directions are checked, so presence
   // is part of the exact match rather than a free-floating field.
   const needsE =
-    option.receiverPub.toLowerCase() !== NUTROOT_NUMS_KEY || (option.blindKeys ?? []).length > 0;
+    option.receiverKey.toLowerCase() !== NUTROOT_NUMS_KEY || (option.blindKeys ?? []).length > 0;
   if (needsE) {
     if (spendInfo.E === undefined) {
       throw new CTSError('Nutroot request: spend info is missing the ephemeral E');
@@ -906,7 +915,7 @@ export function verifyNutrootRequestTree(
   } else if (spendInfo.E !== undefined) {
     throw new CTSError('Nutroot request: an ephemeral on a request that blinds nothing');
   }
-  if (option.receiverPub.toLowerCase() === NUTROOT_NUMS_KEY) {
+  if (option.receiverKey.toLowerCase() === NUTROOT_NUMS_KEY) {
     // A NUMS request asks for proofs with no key path, which the offset is what proves: `K` alone
     // is just a point. Without both halves the payee has a key-path holder it cannot identify.
     if (spendInfo.u === undefined || spendInfo.K === undefined) {
