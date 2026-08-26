@@ -2584,9 +2584,22 @@ export type WebSocketSupport = {
     commands: string[];
 };
 
+// @public
+export class WsAuthError extends CTSError {
+    constructor(message: string, options?: {
+        code?: number;
+        terminal?: boolean;
+        cause?: unknown;
+    });
+    // (undocumented)
+    readonly code?: number;
+    // (undocumented)
+    readonly terminal: boolean;
+}
+
 // @public (undocumented)
 export class WSConnection {
-    constructor(url: string, logger?: Logger);
+    constructor(url: string, logger?: Logger, getAuthToken?: () => Promise<string | undefined>);
     // (undocumented)
     get activeSubscriptions(): string[];
     // (undocumented)
@@ -2598,6 +2611,7 @@ export class WSConnection {
     connect(timeoutMs?: number): Promise<void>;
     // (undocumented)
     createSubscription<TPayload = unknown>(params: Omit<JsonRpcReqParams, 'subId'>, callback: (payload: TPayload) => void, errorCallback: (e: Error) => void): string;
+    ensureAuthenticated(timeoutMs?: number): Promise<void>;
     // (undocumented)
     ensureConnection(timeoutMs?: number): Promise<void>;
     // (undocumented)
@@ -2612,6 +2626,15 @@ export class WSConnection {
     setLogger(logger: Logger): void;
     // (undocumented)
     readonly url: URL;
+}
+
+// @public
+export class WsRpcError extends CTSError {
+    constructor(code: number, message: string, options?: {
+        cause?: unknown;
+    });
+    // (undocumented)
+    readonly code: number;
 }
 
 // (No @packageDocumentation comment for this package)

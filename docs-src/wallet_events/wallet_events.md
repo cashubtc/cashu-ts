@@ -14,6 +14,8 @@
 
 > **Note:** For the 'Updates' subscriptions, the first call auto-establishes a mint WebSocket and errors surface via the onErr callback.
 
+> **Note:** When the mint protects `GET /v1/ws` (NUT-21/NUT-22), the connection is authenticated in-band before the first subscription, since a browser WebSocket cannot send an auth header. That costs one blind auth token per connection, not per subscription, and a connection that never subscribes spends nothing. Repeated rejections stop the wallet from retrying rather than draining the token pool; the resulting `WsAuthError` carries `terminal: true`.
+
 **One-shot helpers:**
 
 - `wallet.on.onceMintPaid(id, { signal, timeoutMs })` – resolve once quote paid

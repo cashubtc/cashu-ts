@@ -112,6 +112,8 @@ export {
   RateLimitError,
   StaleKeysetError,
   UnknownKeysetError,
+  WsAuthError,
+  WsRpcError,
 } from './model/Errors';
 
 // Low-level helpers/types that appear in public surfaces

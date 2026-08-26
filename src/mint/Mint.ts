@@ -1074,7 +1074,11 @@ class Mint {
       const wsUrl = mintUrl.toString();
 
       if (!this.ws) {
-        this.ws = new WSConnection(wsUrl, this._logger);
+        this.ws = new WSConnection(
+          wsUrl,
+          this._logger,
+          this._authProvider ? () => this.getWsAuthToken() : undefined,
+        );
       }
 
       await this.ws.ensureConnection();
@@ -1147,6 +1151,23 @@ class Mint {
     if (!info.requiresBlindAuthToken(method, path)) return undefined;
     const bat = await this._authProvider.getBlindAuthToken({ method, path });
     return bat;
+  }
+
+  /**
+   * Returns the token for the in-band NUT-17 WebSocket `authenticate` command, or undefined when
+   * the mint does not protect `/v1/ws`.
+   *
+   * @remarks
+   * A blind auth token is preferred because the command carries exactly one credential and the mint
+   * recognises a BAT by its `authA` prefix. The clear auth branch is forward looking: mints today
+   * expect a CAT in the upgrade header and refuse a header-less upgrade outright, which fails
+   * before any frame can be sent, so it only engages on a mint that accepts one.
+   */
+  private async getWsAuthToken(): Promise<string | undefined> {
+    const info = await this.getLazyMintInfo();
+    const bat = await this.handleBlindAuth('GET', '/v1/ws', info);
+    if (bat) return bat;
+    return this.handleClearAuth('GET', '/v1/ws', info);
   }
 
   private async requestWithAuth<T>(

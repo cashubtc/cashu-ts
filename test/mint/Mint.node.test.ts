@@ -1514,6 +1514,134 @@ describe('Mint normalization', () => {
     }
   });
 
+  const wsAuthMintInfo = (protectedEndpoints: {
+    nut21?: Array<{ method: 'GET' | 'POST'; path: string }>;
+    nut22?: Array<{ method: 'GET' | 'POST'; path: string }>;
+  }) => ({
+    name: 'mint',
+    pubkey: '02abcd',
+    version: 'test',
+    contact: [],
+    nuts: {
+      '4': { disabled: false, methods: [] },
+      '5': { disabled: false, methods: [] },
+      '21': {
+        openid_discovery: 'https://auth.example/.well-known/openid-configuration',
+        client_id: 'cashu-client',
+        protected_endpoints: protectedEndpoints.nut21 ?? [],
+      },
+      '22': {
+        bat_max_mint: 5,
+        protected_endpoints: protectedEndpoints.nut22 ?? [],
+      },
+    },
+  });
+
+  const wsAuthProvider = () => ({
+    getBlindAuthToken: vi.fn(async () => 'authAbat'),
+    getCAT: vi.fn(() => 'cat-fallback'),
+    setCAT: vi.fn(),
+    ensureCAT: vi.fn(async () => 'cat123'),
+  });
+
+  /**
+   * Connects a mint to a mock-socket server and hands back the frames the wallet sent.
+   */
+  const connectForAuth = async (mint: Mint, wsUrl: string) => {
+    injectWebSocketImpl(WebSocket);
+    const server = new Server(wsUrl, { mock: false });
+    const frames: string[] = [];
+
+    await new Promise<void>((res) => {
+      server.on('connection', (socket) => {
+        socket.on('message', (m) => frames.push(m.toString()));
+        res();
+      });
+      void mint.connectWebSocket();
+    });
+
+    return { server, frames };
+  };
+
+  it('connectWebSocket does not spend an auth token', async () => {
+    const authProvider: AuthProvider = wsAuthProvider();
+    const mint = new Mint('https://mint.example/cashu', { authProvider });
+    mint.setMintInfo(wsAuthMintInfo({ nut22: [{ method: 'GET', path: '/v1/ws' }] }));
+
+    const { server } = await connectForAuth(mint, fakeWsUrl);
+    try {
+      expect(authProvider.getBlindAuthToken).not.toHaveBeenCalled();
+    } finally {
+      mint.disconnectWebSocket();
+      server.close();
+    }
+  });
+
+  it('ensureAuthenticated sends the blind auth token for a NUT-22 protected /v1/ws', async () => {
+    const authProvider: AuthProvider = wsAuthProvider();
+    const mint = new Mint('https://mint.example/cashu', { authProvider });
+    mint.setMintInfo(wsAuthMintInfo({ nut22: [{ method: 'GET', path: '/v1/ws' }] }));
+
+    const { server, frames } = await connectForAuth(mint, fakeWsUrl);
+    const pending = mint.webSocketConnection?.ensureAuthenticated(50).catch(() => {});
+    try {
+      await new Promise((res) => setTimeout(res, 20));
+
+      expect(authProvider.getBlindAuthToken).toHaveBeenCalledWith({
+        method: 'GET',
+        path: '/v1/ws',
+      });
+      expect(JSON.parse(frames[0])).toMatchObject({
+        method: 'authenticate',
+        params: { token: 'authAbat' },
+      });
+    } finally {
+      mint.disconnectWebSocket();
+      await pending;
+      server.close();
+    }
+  });
+
+  it('ensureAuthenticated falls back to the clear auth token when only NUT-21 protects /v1/ws', async () => {
+    const authProvider: AuthProvider = wsAuthProvider();
+    const mint = new Mint('https://mint.example/cashu', { authProvider });
+    mint.setMintInfo(wsAuthMintInfo({ nut21: [{ method: 'GET', path: '/v1/ws' }] }));
+
+    const { server, frames } = await connectForAuth(mint, fakeWsUrl);
+    const pending = mint.webSocketConnection?.ensureAuthenticated(50).catch(() => {});
+    try {
+      await new Promise((res) => setTimeout(res, 20));
+
+      expect(authProvider.getBlindAuthToken).not.toHaveBeenCalled();
+      expect(JSON.parse(frames[0])).toMatchObject({
+        method: 'authenticate',
+        params: { token: 'cat123' },
+      });
+    } finally {
+      mint.disconnectWebSocket();
+      await pending;
+      server.close();
+    }
+  });
+
+  it('ensureAuthenticated sends nothing when /v1/ws is unprotected', async () => {
+    const authProvider: AuthProvider = wsAuthProvider();
+    const mint = new Mint('https://mint.example/cashu', { authProvider });
+    mint.setMintInfo(wsAuthMintInfo({ nut22: [{ method: 'POST', path: '/v1/swap' }] }));
+
+    const { server, frames } = await connectForAuth(mint, fakeWsUrl);
+    try {
+      await mint.webSocketConnection?.ensureAuthenticated(50);
+
+      expect(authProvider.getBlindAuthToken).not.toHaveBeenCalled();
+      expect(authProvider.ensureCAT).not.toHaveBeenCalled();
+      expect(frames).toHaveLength(0);
+    } finally {
+      mint.disconnectWebSocket();
+      server.close();
+    }
+  });
+
   it('connectWebSocket resets the connection when ensureConnection fails', async () => {
     injectWebSocketImpl(WebSocket);
     const ensureSpy = vi
