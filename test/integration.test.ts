@@ -1216,8 +1216,10 @@ describe('CDK Mint NUT-19 Cache Tests', () => {
     const nut19 = mintInfo.isSupported(19);
     expect(nut19.supported).toBe(true);
 
-    // create mint quote first
-    const request = await lockedMintQuote(wallet, 100);
+    // Deliberately an unlocked quote (the generic escape hatch): a locked quote signs the
+    // amended NUT-20 message, and a mint without it (CDK) triggers the legacy-signature
+    // retry, adding a POST this test's call count would misread as a cache retry.
+    const request = await wallet.createMintQuote('bolt11', { amount: 100 });
     await untilMintQuotePaid(wallet, request);
 
     // mock fetch for the mint operation
@@ -1235,9 +1237,7 @@ describe('CDK Mint NUT-19 Cache Tests', () => {
 
     try {
       // mint with NUT-19 cache retry - should handle network failure
-      const proofs = await wallet.mintProofsBolt11(100, request.quote, {
-        privkey: request.privkey,
-      });
+      const proofs = await wallet.mintProofsBolt11(100, request.quote);
       expect(proofs).toBeDefined();
       expect(sumProofs(proofs).equals(100)).toBeTruthy();
       expect(fetchCallCount).toBe(3); // 1 + 2 retries
