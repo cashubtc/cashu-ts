@@ -30,6 +30,39 @@ describe('deriveBlindingFactor', () => {
   });
 });
 
+describe('v2 derivation spec vectors', () => {
+  // Lock-in for nuts/tests/13-tests.md "Version 2: Secret derivation". cashu-ts works in seed
+  // space, so the spec's mnemonic ("half depart obvious quality work element tank gorilla view
+  // sugar picture humble") is pre-derived to its BIP39 seed here.
+  const seed = Bytes.fromHex(
+    'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25' +
+      '780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
+  );
+  const v2KeysetId = '015ba18a8adcd02e715a58358eb618da4a4b3791151a4bee5e968bb88406ccf76a';
+  const secrets = [
+    'db5561a07a6e6490f8dadeef5be4e92f7cebaecf2f245356b5b2a4ec40687298',
+    'b70e7b10683da3bf1cdf0411206f8180c463faa16014663f39f2529b2fda922e',
+    '78a7ac32ccecc6b83311c6081b89d84bb4128f5a0d0c5e1af081f301c7a513f5',
+    '094a2b6c63bfa7970bc09cda0e1cfc9cd3d7c619b8e98fabcfc60aea9e4963e5',
+    '5e89fc5d30d0bf307ddf0a3ac34aa7a8ee3702169dafa3d3fe1d0cae70ecd5ef',
+  ];
+  const blindingFactors = [
+    '6d26181a3695e32e9f88b80f039ba1ae2ab5a200ad4ce9dbc72c6d3769f2b035',
+    'bde4354cee75545bea1a2eee035a34f2d524cee2bb01613823636e998386952e',
+    'f40cc1218f085b395c8e1e5aaa25dccc851be3c6c7526a0f4e57108f12d6dac4',
+    '099ed70fc2f7ac769bc20b2a75cb662e80779827b7cc358981318643030577d0',
+    '5550337312d223ba62e3f75cfe2ab70477b046d98e3e71804eade3956c7b98cf',
+  ];
+
+  test('matches NUT-13 V2 spec vectors for counters 0-4', () => {
+    for (let counter = 0; counter < secrets.length; counter++) {
+      const { secret, blindingFactor } = deriveSecretAndBlindingFactor(seed, v2KeysetId, counter);
+      expect(bytesToHex(secret)).toBe(secrets[counter]);
+      expect(bytesToHex(blindingFactor)).toBe(blindingFactors[counter]);
+    }
+  });
+});
+
 describe('HMAC counter range', () => {
   const seed = new TextEncoder().encode('nut13 counter range seed');
   const v2KeysetId = '01abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567';
