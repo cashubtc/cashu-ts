@@ -1,6 +1,10 @@
 import { assertV3PointSecret, isBlsKeyset, isV3PointSecret, schnorrSignDigest } from '../crypto';
-import { getPubKeyFromPrivKey, normalizeSecpPubkey } from '../crypto/curve_secp';
-import { recoverV3SecretKeys } from '../crypto/NUT13';
+import {
+  createRandomSecretKey,
+  getPubKeyFromPrivKey,
+  normalizeSecpPubkey,
+} from '../crypto/curve_secp';
+import { deriveQuoteLockKey, recoverV3SecretKeys } from '../crypto/NUT13';
 import {
   buildScriptPathWitness,
   parseNutrootLeaf,
@@ -20,6 +24,7 @@ import { type MeltRequest } from '../model/types';
 import type { Proof } from '../model/types/proof';
 import { Bytes } from '../utils';
 
+import { QUOTE_COUNTER_KEY } from './CounterSource';
 import type { ScriptPathPlan, SpendOption, SpendOptions } from './types';
 
 /**
@@ -38,7 +43,7 @@ export const V3_SEED_SCAN_HEADROOM = 128;
  */
 export type NutrootWalletState = {
   seed?: Uint8Array;
-  counters: { peekNext(keysetId: string): Promise<number> };
+  counters: { peekNext(counterKey: string): Promise<number> };
   logger: Logger;
 };
 
@@ -378,4 +383,63 @@ export function collectSpendInfoKeys(
     }
   }
   return keys;
+}
+
+/**
+ * Creates a quote lock keypair; the full contract is documented on `Wallet.createQuoteLockKey`.
+ *
+ * @remarks
+ * Seed-derived from a freshly reserved quote counter when seeded, random otherwise. Reserving (and
+ * any persistence events it fires) is the caller's, via `reserveQuoteCounter`.
+ */
+export async function createQuoteLockKeyPair(
+  seed: Uint8Array | undefined,
+  reserveQuoteCounter: () => Promise<number>,
+): Promise<{ pubkey: string; privkey: string }> {
+  const privkey = seed
+    ? deriveQuoteLockKey(seed, await reserveQuoteCounter())
+    : createRandomSecretKey();
+  return { pubkey: Bytes.toHex(getPubKeyFromPrivKey(privkey)), privkey: Bytes.toHex(privkey) };
+}
+
+/**
+ * Scans the quote counter for the key behind a quote lock pubkey; the full contract is documented
+ * on `Wallet.recoverQuoteLockKey`. Returns undefined for a pubkey the seed never derived.
+ */
+export async function scanQuoteLockKey(
+  pubkey: string,
+  state: NutrootWalletState,
+): Promise<string | undefined> {
+  if (!state.seed) fail('recoverQuoteLockKey requires a seeded wallet', state.logger);
+  const seed = state.seed;
+  const normalizedPubkey = normalizeSecpPubkey(pubkey);
+  const bound = (await state.counters.peekNext(QUOTE_COUNTER_KEY)) + V3_SEED_SCAN_HEADROOM;
+  for (let counter = 0; counter < bound; counter++) {
+    const privkey = deriveQuoteLockKey(seed, counter);
+    if (Bytes.toHex(getPubKeyFromPrivKey(privkey)) === normalizedPubkey) {
+      return Bytes.toHex(privkey);
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Asserts the mint locked a quote to the key it was asked for, and returns the key it echoed.
+ *
+ * @remarks
+ * A locked quote the wallet cannot sign for is worthless, and the wallet only finds that out at
+ * mint time unless it checks here. Shared by every path that sends a pubkey, because the way this
+ * went missing once already was a new locked path being added beside the ones that had it.
+ */
+export function assertQuoteLockedTo(
+  res: { pubkey?: string },
+  requested: string,
+  logger: Logger,
+): string {
+  if (typeof res.pubkey !== 'string') fail('Mint returned unlocked mint quote', logger);
+  const returned = res.pubkey;
+  if (returned.toLowerCase() !== requested) {
+    fail('Mint quote is not locked to the requested pubkey', logger);
+  }
+  return returned;
 }

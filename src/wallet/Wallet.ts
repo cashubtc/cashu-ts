@@ -21,12 +21,7 @@ import {
   isV3PointSecret,
 } from '../crypto';
 // Internal transitional fallback — not part of crypto/index.ts
-import {
-  createRandomSecretKey,
-  getPubKeyFromPrivKey,
-  normalizeSecpPubkey,
-} from '../crypto/curve_secp';
-import { deriveQuoteLockKey } from '../crypto/NUT13';
+import { normalizeSecpPubkey } from '../crypto/curve_secp';
 import { signMintQuoteLegacy } from '../crypto/NUT20';
 import { verifyNutrootRequestTree } from '../crypto/nutroot';
 import { digestForPayload } from '../crypto/transcript';
@@ -106,12 +101,14 @@ import { type Keyset } from './Keyset';
 import { lockToNutrootOptions, lockToP2PKOptions } from './lock';
 import {
   type NutrootWalletState,
-  V3_SEED_SCAN_HEADROOM,
+  assertQuoteLockedTo,
   attachBearerSpendInfo,
   attachTransactionWitnesses,
   collectSpendInfoKeys,
+  createQuoteLockKeyPair,
   prepareScriptPathSpends,
   proofSpendOptions,
+  scanQuoteLockKey,
 } from './nutroot';
 import { selectProofsRotating, type SelectProofs } from './SelectProofs';
 import {
@@ -2318,7 +2315,7 @@ class Wallet {
       normalize: options?.normalize,
     });
     if (normPubkey) {
-      this.assertQuoteLockedTo(res, normPubkey);
+      assertQuoteLockedTo(res, normPubkey, this._logger);
     }
     return { ...res, unit: res.unit || this._unit };
   }
@@ -2389,26 +2386,8 @@ class Wallet {
     };
     const res = await this.mint.createMintQuoteBolt11(mintQuotePayload);
     this.assertBolt11MintQuoteAmount(res, mintAmount);
-    this.assertQuoteLockedTo(res, normPubkey);
+    assertQuoteLockedTo(res, normPubkey, this._logger);
     return { ...res, unit: res.unit || this._unit };
-  }
-
-  /**
-   * Asserts the mint locked a quote to the key it was asked for, and returns the key it echoed.
-   *
-   * @remarks
-   * A locked quote the wallet cannot sign for is worthless, and the wallet only finds that out at
-   * mint time unless it checks here. Shared by every path that sends a pubkey, because the way this
-   * went missing once already was a new locked path being added beside the ones that had it.
-   */
-  private assertQuoteLockedTo(res: { pubkey?: string }, requested: string): string {
-    this.failIf(typeof res.pubkey !== 'string', 'Mint returned unlocked mint quote');
-    const returned = res.pubkey as string;
-    this.failIf(
-      returned.toLowerCase() !== requested,
-      'Mint quote is not locked to the requested pubkey',
-    );
-    return returned;
   }
 
   /**
@@ -2420,8 +2399,7 @@ class Wallet {
    * random ones exist only in the returned object, so persist the key with its quote.
    */
   async createQuoteLockKey(): Promise<{ pubkey: string; privkey: string }> {
-    let privkey: Uint8Array;
-    if (this._seed) {
+    return createQuoteLockKeyPair(this._seed, async () => {
       const range = await this._counterSource.reserve(QUOTE_COUNTER_KEY, 1);
       // Event-persisted sources must see the quote cursor move too, or a restart
       // re-derives keys already handed out.
@@ -2431,11 +2409,8 @@ class Wallet {
         count: range.count,
         next: range.start + range.count,
       });
-      privkey = deriveQuoteLockKey(this._seed, range.start);
-    } else {
-      privkey = createRandomSecretKey();
-    }
-    return { pubkey: Bytes.toHex(getPubKeyFromPrivKey(privkey)), privkey: Bytes.toHex(privkey) };
+      return range.start;
+    });
   }
 
   /**
@@ -2449,17 +2424,7 @@ class Wallet {
    * @throws {@link CTSError} On a seedless wallet, which has nothing to scan.
    */
   async recoverQuoteLockKey(pubkey: string): Promise<string | undefined> {
-    const seed = this._seed;
-    this.failIf(!seed, 'recoverQuoteLockKey requires a seeded wallet');
-    const normalizedPubkey = normalizeSecpPubkey(pubkey);
-    const bound = (await this.counters.peekNext(QUOTE_COUNTER_KEY)) + V3_SEED_SCAN_HEADROOM;
-    for (let counter = 0; counter < bound; counter++) {
-      const privkey = deriveQuoteLockKey(seed as Uint8Array, counter);
-      if (Bytes.toHex(getPubKeyFromPrivKey(privkey)) === normalizedPubkey) {
-        return Bytes.toHex(privkey);
-      }
-    }
-    return undefined;
+    return scanQuoteLockKey(pubkey, this._nutrootState());
   }
 
   /**
@@ -2503,7 +2468,7 @@ class Wallet {
     };
 
     const res = await this.mint.createMintQuoteBolt12(mintQuotePayload);
-    this.assertQuoteLockedTo(res, normPubkey);
+    assertQuoteLockedTo(res, normPubkey, this._logger);
     return res;
   }
 
@@ -2521,7 +2486,7 @@ class Wallet {
     this.failIf(typeof pubkey !== 'string', 'A pubkey is required to lock the mint quote');
     const normPubkey = normalizeSecpPubkey(pubkey);
     const res = await this.mint.createMintQuoteOnchain({ unit: this._unit, pubkey: normPubkey });
-    this.assertQuoteLockedTo(res, normPubkey);
+    assertQuoteLockedTo(res, normPubkey, this._logger);
     return { ...res, unit: res.unit || this._unit };
   }
 
