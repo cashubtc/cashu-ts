@@ -324,6 +324,14 @@ describe('p2pkToLockOptions (wire decoder)', () => {
     };
     expect(p2pkToLockOptions(lockToP2PKOptions(lock))).toEqual(lock);
   });
+
+  test('rejects malformed input at the converter, not at encode time', () => {
+    expect(() => p2pkToLockOptions({ kind: 'P2PK', data: 'not-a-key' })).toThrow(/pubkey/i);
+    expect(() => p2pkToLockOptions({ kind: 'HTLC', data: 'not-a-hash' })).toThrow(/hashlock/i);
+    expect(() => p2pkToLockOptions({ kind: 'P2PK', data: PUB_A, requiredSignatures: 5 })).toThrow(
+      /exceeds/,
+    );
+  });
 });
 
 describe('nutrootToLockOptions (readable conditions)', () => {
@@ -355,6 +363,20 @@ describe('nutrootToLockOptions (readable conditions)', () => {
       mainKeys: [PUB_A],
       leaves: [{ type: 'after', n: 1, time: TIME, keys: [PUB_R] }],
     });
+  });
+
+  test('rejects malformed input at the converter, not at encode time', () => {
+    expect(() => nutrootToLockOptions({ receiverKey: 'not-a-key' })).toThrow(/pubkey/i);
+    expect(() => nutrootToLockOptions({ receiverKey: PUB_A, blindKeys: ['junk'] })).toThrow(
+      /pubkey/i,
+    );
+    // A parsed-form leaf is validated like addLeaf; a threshold above its key count cannot spend.
+    expect(() =>
+      nutrootToLockOptions({
+        receiverKey: PUB_A,
+        leaves: [{ type: 'threshold', n: 2, keys: [PUB_B] }],
+      }),
+    ).toThrow(/exceeds/);
   });
 });
 

@@ -1,7 +1,14 @@
-import type { P2PKOptions, P2PKTag } from '../crypto/NUT11';
+import { normalizeSecpPubkey } from '../crypto/curve_secp';
+import {
+  dedupeP2PKPubkeys,
+  normalizeP2PKOptions,
+  type P2PKOptions,
+  type P2PKTag,
+} from '../crypto/NUT11';
 import {
   NUTROOT_NUMS_KEY,
   parseNutrootLeaf,
+  serializeNutrootLeaf,
   type NutrootLeaf,
   type ParsedNutrootOption,
 } from '../crypto/nutroot';
@@ -171,8 +178,11 @@ export function lockToP2PKOptions(lock: LockOptions): P2PKOptions {
 
 /**
  * Decodes NUT-11/14 options back to semantic lock options.
+ *
+ * @throws On malformed input (bad keys or hashlock, impossible thresholds).
  */
 export function p2pkToLockOptions(p2pk: P2PKOptions): LockOptions {
+  p2pk = normalizeP2PKOptions(p2pk);
   const mainKeys =
     p2pk.kind === 'HTLC' ? (p2pk.pubkeys ?? []) : [p2pk.data, ...(p2pk.pubkeys ?? [])];
   return {
@@ -196,21 +206,25 @@ export function p2pkToLockOptions(p2pk: P2PKOptions): LockOptions {
  * Decodes a nutroot lock to readable lock options, faithfully.
  *
  * @remarks
- * Leaves may be parsed or serialized (the wire form a proof's spend info discloses). Leaves are
- * never collapsed back into the sugar fields: what was authored as a tree reads as a tree.
+ * Leaves may be parsed or serialized (the wire form a proof's spend info discloses), and always
+ * decode as `leaves`, never back into `locktime`/`refundKeys`/`hashlock`.
+ * @throws On malformed input (invalid receiver key, blind key, or leaf).
  */
 export function nutrootToLockOptions(options: {
   receiverKey: string;
   leaves?: Array<NutrootLeaf | string>;
   blindKeys?: string[];
 }): LockOptions {
-  const leaves = (options.leaves ?? []).map((leaf) =>
-    typeof leaf === 'string' ? parseNutrootLeaf(Bytes.fromHex(leaf)) : leaf,
-  );
-  const isNums = lc(options.receiverKey) === NUTROOT_NUMS_KEY;
+  const leaves = (options.leaves ?? []).map((leaf) => {
+    if (typeof leaf === 'string') return parseNutrootLeaf(Bytes.fromHex(leaf));
+    serializeNutrootLeaf(leaf); // validate the parsed form the same way addLeaf does
+    return leaf;
+  });
+  const receiverKey = normalizeSecpPubkey(options.receiverKey);
+  const isNums = receiverKey === NUTROOT_NUMS_KEY;
   return {
-    ...(!isNums && { mainKeys: [lc(options.receiverKey)] }),
+    ...(!isNums && { mainKeys: [receiverKey] }),
     ...(leaves.length > 0 && { leaves }),
-    ...(options.blindKeys?.length && { blindKeys: options.blindKeys.map(lc) }),
+    ...(options.blindKeys?.length && { blindKeys: dedupeP2PKPubkeys(options.blindKeys) }),
   };
 }
