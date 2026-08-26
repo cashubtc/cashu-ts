@@ -26,7 +26,7 @@ LockBuilder.fromOptions(lock: LockOptions): LockBuilder
 
 Keys must be 33-byte compressed hex and on the secp256k1 curve (NUT-11); a 32-byte x-only key (eg Nostr) throws until you prepend `'02'`, per NIP-61. Keys are de-duplicated, insertion order is preserved, total main plus refund keys must be ≤ 11 for a plain lock or ≤ 10 with a hashlock (the hashlock takes a slot, NUT-28), refund keys will throw if no locktime is set.
 
-Shapes only one encoding can express refuse at encode time, naming the reason: extra tags, anyone-after-locktime, and keyless hashlocks do not fit v3; explicit leaves and partial blind lists do not fit pre-v3. See the [v5 migration guide](../../migration-5.0.0.md) for the full matrix.
+Shapes only one encoding can express refuse at encode time, naming the reason: extra tags, anyone-after-locktime, and keyless hashlocks do not fit v3; explicit leaves and partial blind lists do not fit pre-v3. See the [v5 migration guide](../../migration-5.0.0.md) for the full matrix. The spending side (inspecting, receiving, and script-path spends of locked proofs) is covered in [Spending Locked Proofs](./spend_locked.md).
 
 Example usage:
 

@@ -18,6 +18,7 @@ You can access `WalletOps` from inside a wallet instance using: `wallet.ops` or 
 | [Mint](./mint.md)                             |
 | [Melt](./melt.md)                             |
 | [LockBuilder](./lock_builder.md)              |
+| [Spending Locked Proofs](./spend_locked.md)   |
 | [Error Handling Pattern](./error_handling.md) |
 
 ## Notes

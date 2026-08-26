@@ -35,6 +35,8 @@ const proofs = await wallet.ops
 
 ## 3) P2PK locked receive (multisig)
 
+On a v3 keyset locked proofs arrive as nutroot secrets instead of NUT-11 tags; the same `.privkey(...)` call signs them, and script-path spends are covered in [Spending Locked Proofs](./spend_locked.md).
+
 ```ts
 const proofs = await wallet.ops
   .receive(token)
