@@ -35,17 +35,24 @@ const newProofs = await wallet.ops
 
 ## 4) Locked BOLT11 quote signing
 
+Every new quote is locked to a pubkey you supply, and minting signs with its private key. The
+wallet never stores the key: keep it safe until the quote is redeemed.
+
 ```ts
-// Create a locked mint quote
-const pubkey = '02...'; // Your public key
-const quote = await wallet.createLockedMintQuote(64, pubkey);
+// Make a lock keypair (seed-derived on a seeded wallet, random otherwise)
+const { pubkey, privkey } = await wallet.createQuoteLockKey();
+const quote = await wallet.createMintQuoteBolt11(64, pubkey);
 
 // Sign and mint
 const newProofs = await wallet.ops
   .mintBolt11(50, quote)
-  .privkey('user-secret-key') // sign locked mint quote
+  .privkey(privkey) // sign locked mint quote
   .run();
 ```
+
+A seeded wallet that lost the key can re-derive it with
+`wallet.recoverQuoteLockKey(quote.pubkey)`. For an unlocked quote on a pre-v3 keyset, drop to the
+generic `createMintQuote()`.
 
 ## 5) Two-step BOLT12 mint
 

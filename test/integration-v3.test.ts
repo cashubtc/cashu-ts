@@ -37,6 +37,15 @@ import {
 } from '../src/crypto/nutroot';
 import { transactionDigest, verifyTransactionInputWitness } from '../src/crypto/transcript';
 
+type LockedQuote = Awaited<ReturnType<Wallet['createMintQuoteBolt11']>> & { privkey: string };
+/**
+ * V5 consumer pattern: make a lock key, lock the quote to it, keep the key beside the quote.
+ */
+async function lockedMintQuote(wallet: Wallet, amount: number): Promise<LockedQuote> {
+  const { pubkey, privkey } = await wallet.createQuoteLockKey();
+  return { ...(await wallet.createMintQuoteBolt11(amount, pubkey)), privkey };
+}
+
 const mintUrl = 'http://127.0.0.1:3338';
 
 // The v3 suite needs a mint serving a BLS (02) keyset. CI also runs this file against
@@ -74,9 +83,9 @@ describeV3('v3 transaction witnesses', () => {
     async () => {
       const wallet = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
       await wallet.loadMint();
-      const quote = await wallet.createMintQuoteBolt11(64);
+      const quote = await lockedMintQuote(wallet, 64);
       await wallet.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
-      const proofs = await wallet.mintProofsBolt11(64, quote);
+      const proofs = await wallet.mintProofsBolt11(64, quote, { privkey: quote.privkey });
 
       type SwapBody = {
         inputs: Array<{ amount: number; id: string; secret: string; C: string; witness?: string }>;
@@ -129,9 +138,9 @@ describeV3('v3 transaction witnesses', () => {
         'lnbc100u1pjaxuyzpp5wn37d3mx38haqs7nd5he4j7pq4r806e6s83jdksxrd77pnanm3zqdpv2phhwetjv4jzqcneypqyc6t8dp6xu6twva2xjuzzda6qcqzzsxqrrsssp5ayy0uuhwgy8hwphvy7ptzpg2dfn8vt3vlgsk53rsvj76jvafhujs9qyyssqc8aj03s5au3tgu6pj0rm0ws4a838s8ffe3y3qkj77esh7qmgsz7qlvdlzgj6dvx7tx7zn6k352z85rvdqvlszrevvzakp96a4pvyn2cpgaaks6';
       const wallet = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
       await wallet.loadMint();
-      const quote = await wallet.createMintQuoteBolt11(11000);
+      const quote = await lockedMintQuote(wallet, 11000);
       await wallet.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
-      const proofs = await wallet.mintProofsBolt11(11000, quote);
+      const proofs = await wallet.mintProofsBolt11(11000, quote, { privkey: quote.privkey });
       const meltQuote = await wallet.createMeltQuoteBolt11(externalInvoice);
       const sendResponse = await wallet.send(meltQuote.fee_reserve.add(meltQuote.amount), proofs, {
         includeFees: true,
@@ -190,9 +199,9 @@ describeV3('bearer spend info', () => {
     async () => {
       const alice = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
       await alice.loadMint();
-      const quote = await alice.createMintQuoteBolt11(64);
+      const quote = await lockedMintQuote(alice, 64);
       await alice.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
-      const minted = await alice.mintProofsBolt11(64, quote);
+      const minted = await alice.mintProofsBolt11(64, quote, { privkey: quote.privkey });
       const { send } = await alice.send(32n, minted);
 
       // Bearer spend info rides on every sent v3 proof, and k matches the secret.
@@ -273,9 +282,9 @@ describeV3('M2 roundtrip', () => {
       expect(isBlsKeyset(keysetId)).toBe(true);
 
       // Mint
-      const quote = await wallet.createMintQuoteBolt11(6000);
+      const quote = await lockedMintQuote(wallet, 6000);
       await wallet.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
-      const minted = await wallet.mintProofsBolt11(6000, quote);
+      const minted = await wallet.mintProofsBolt11(6000, quote, { privkey: quote.privkey });
       expect(minted.every((p) => /^0[23][0-9a-f]{64}$/.test(p.secret))).toBe(true);
 
       // Swap (witness-signed; wire shape asserted by the dedicated spy test above)
@@ -320,9 +329,9 @@ describeV3('M3 nutroot conditions', () => {
   async function mintPointProofs(amount: number) {
     const wallet = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
     await wallet.loadMint();
-    const quote = await wallet.createMintQuoteBolt11(amount);
+    const quote = await lockedMintQuote(wallet, amount);
     await wallet.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
-    const proofs = await wallet.mintProofsBolt11(amount, quote);
+    const proofs = await wallet.mintProofsBolt11(amount, quote, { privkey: quote.privkey });
     return { wallet, proofs, keysetId: wallet.keyChain.getCheapestKeyset().id };
   }
 
@@ -525,15 +534,17 @@ describeV3('M3 nutroot conditions', () => {
     const seed = randomBytes(64);
     const v3Wallet = new Wallet(mintUrl, { bip39seed: seed });
     await v3Wallet.loadMint();
-    const v3Quote = await v3Wallet.createMintQuoteBolt11(32);
+    const v3Quote = await lockedMintQuote(v3Wallet, 32);
     await v3Wallet.on.onceMintPaid(v3Quote.quote, { timeoutMs: 10_000 });
-    const v3Proofs = await v3Wallet.mintProofsBolt11(32, v3Quote);
+    const v3Proofs = await v3Wallet.mintProofsBolt11(32, v3Quote, { privkey: v3Quote.privkey });
 
     const legacyWallet = new Wallet(mintUrl, { bip39seed: seed, keysetId: legacyKeyset!.id });
     await legacyWallet.loadMint();
-    const legacyQuote = await legacyWallet.createMintQuoteBolt11(32);
+    const legacyQuote = await lockedMintQuote(legacyWallet, 32);
     await legacyWallet.on.onceMintPaid(legacyQuote.quote, { timeoutMs: 10_000 });
-    const legacyProofs = await legacyWallet.mintProofsBolt11(32, legacyQuote);
+    const legacyProofs = await legacyWallet.mintProofsBolt11(32, legacyQuote, {
+      privkey: legacyQuote.privkey,
+    });
 
     const v3KeysetId = v3Proofs[0].id;
     expect(isBlsKeyset(v3KeysetId)).toBe(true);
@@ -639,7 +650,7 @@ describeV3('M4 locked quotes', () => {
       const lockA = buildNutrootSecret(pk(41), [
         { type: 'after', n: 1, keys: [pk(42)], time: 4102444800 },
       ]);
-      const quoteA = await wallet.createLockedMintQuote(32, lockA.secret);
+      const quoteA = await wallet.createMintQuoteBolt11(32, lockA.secret);
       await wallet.on.onceMintPaid(quoteA.quote, { timeoutMs: 10_000 });
       const rootA = nutrootMerkleRoot(lockA.tree.map((l) => nutrootLeafHash(hexToBytes(l))));
       const tweakedPriv = nutrootTweakSeckey(recipientPriv, rootA);
@@ -653,7 +664,7 @@ describeV3('M4 locked quotes', () => {
       const lockB = buildNutrootSecret(pk(44), [
         { type: 'after', n: 1, keys: [pk(43)], time: 1700000000 },
       ]);
-      const quoteB = await wallet.createLockedMintQuote(32, lockB.secret);
+      const quoteB = await wallet.createMintQuoteBolt11(32, lockB.secret);
       await wallet.on.onceMintPaid(quoteB.quote, { timeoutMs: 10_000 });
       const outputsB = [
         OutputData.createSingleNutrootData(
@@ -684,7 +695,7 @@ describeV3('M4 locked quotes', () => {
       const lockC = buildNutrootSecret(pk(44), [
         { type: 'after', n: 1, keys: [pk(43)], time: 4102444800 },
       ]);
-      const quoteC = await wallet.createLockedMintQuote(32, lockC.secret);
+      const quoteC = await wallet.createMintQuoteBolt11(32, lockC.secret);
       await wallet.on.onceMintPaid(quoteC.quote, { timeoutMs: 10_000 });
       const outputsC = [
         OutputData.createSingleNutrootData(
@@ -739,9 +750,12 @@ describeV3('M4 receiver-keyed sends', () => {
       const { wallet, proofs } = await (async () => {
         const w = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
         await w.loadMint();
-        const quote = await w.createMintQuoteBolt11(128);
+        const quote = await lockedMintQuote(w, 128);
         await w.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
-        return { wallet: w, proofs: await w.mintProofsBolt11(128, quote) };
+        return {
+          wallet: w,
+          proofs: await w.mintProofsBolt11(128, quote, { privkey: quote.privkey }),
+        };
       })();
 
       let available = proofs;
@@ -801,9 +815,9 @@ describeV3('M6 leaf-key blinding through the wallet', () => {
 
       const payer = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
       await payer.loadMint();
-      const quote = await payer.createMintQuoteBolt11(128);
+      const quote = await lockedMintQuote(payer, 128);
       await payer.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
-      const funds = await payer.mintProofsBolt11(128, quote);
+      const funds = await payer.mintProofsBolt11(128, quote, { privkey: quote.privkey });
 
       // Carol's request: pay my static key, under a refund leaf, and blind my key in it.
       const pr = PaymentRequest.builder()
@@ -868,7 +882,7 @@ describeV3('M7 mixed-keyset transactions through the wallet API', () => {
   async function fund(keysetId: string, amount: number, seed: Uint8Array) {
     const wallet = new Wallet(mintUrl, { bip39seed: seed, keysetId });
     await wallet.loadMint();
-    const quote = await wallet.createMintQuoteBolt11(amount);
+    const quote = await lockedMintQuote(wallet, amount);
     // Poll rather than subscribe: this helper funds several wallets per test, and a socket each
     // is what the mint's connection limits notice first.
     for (let i = 0; i < 40; i++) {
@@ -876,7 +890,10 @@ describeV3('M7 mixed-keyset transactions through the wallet API', () => {
       if (state.state === 'PAID') break;
       await new Promise((r) => setTimeout(r, 250));
     }
-    return { wallet, proofs: await wallet.mintProofsBolt11(amount, quote) };
+    return {
+      wallet,
+      proofs: await wallet.mintProofsBolt11(amount, quote, { privkey: quote.privkey }),
+    };
   }
 
   test('pre-v3 inputs with v3 outputs: the migration shape', { timeout: 60_000 }, async () => {
@@ -966,7 +983,7 @@ describeV3('M7 mixed-keyset transactions through the wallet API', () => {
     // only be paid once per mint, and mint state outlives a single run.
     const payee = new Wallet(mintUrl, { bip39seed: randomBytes(64), keysetId: legacy });
     await payee.loadMint();
-    const target = await payee.createMintQuoteBolt11(1000);
+    const target = await lockedMintQuote(payee, 1000);
     const quote = await v3Side.wallet.createMeltQuoteBolt11(target.request);
     const result = await v3Side.wallet.meltProofsBolt11(quote, mixed);
     expect(result.quote.state).toBe('PAID');
@@ -1019,13 +1036,16 @@ describeV3('M8 tokens end to end with spend_info', () => {
   async function fundV3(amount: number) {
     const wallet = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
     await wallet.loadMint();
-    const quote = await wallet.createMintQuoteBolt11(amount);
+    const quote = await lockedMintQuote(wallet, amount);
     for (let i = 0; i < 40; i++) {
       const state = await wallet.checkMintQuoteBolt11(quote.quote);
       if (state.state === 'PAID') break;
       await new Promise((r) => setTimeout(r, 250));
     }
-    return { wallet, proofs: await wallet.mintProofsBolt11(amount, quote) };
+    return {
+      wallet,
+      proofs: await wallet.mintProofsBolt11(amount, quote, { privkey: quote.privkey }),
+    };
   }
 
   test(
@@ -1159,12 +1179,12 @@ describeV3('audit: spend info carrying both k and E', () => {
       const carolPub = bytesToHex(secp256k1.getPublicKey(hexToBytes(carolPriv), true));
       const payer = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
       await payer.loadMint();
-      const quote = await payer.createMintQuoteBolt11(64);
+      const quote = await lockedMintQuote(payer, 64);
       for (let i = 0; i < 40; i++) {
         if ((await payer.checkMintQuoteBolt11(quote.quote)).state === 'PAID') break;
         await new Promise((r) => setTimeout(r, 250));
       }
-      const funds = await payer.mintProofsBolt11(64, quote);
+      const funds = await payer.mintProofsBolt11(64, quote, { privkey: quote.privkey });
       const { send } = await payer.ops
         .send(32, funds)
         .asLocked({ mainKeys: [carolPub] }, [32])
@@ -1184,7 +1204,7 @@ describeV3('audit: spend info carrying both k and E', () => {
       await expect(carol.receive(poisoned, { privkey: carolPriv })).rejects.toThrow(/both k and E/);
       const payee = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
       await payee.loadMint();
-      const target = await payee.createMintQuoteBolt11(8);
+      const target = await lockedMintQuote(payee, 8);
       const meltQuote = await carol.createMeltQuoteBolt11(target.request);
       await expect(
         carol.meltProofsBolt11(meltQuote, poisoned, { privkey: carolPriv }),
@@ -1197,12 +1217,15 @@ describeV3('M9 script path through the wallet API', () => {
   async function fundV3(amount: number) {
     const wallet = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
     await wallet.loadMint();
-    const quote = await wallet.createMintQuoteBolt11(amount);
+    const quote = await lockedMintQuote(wallet, amount);
     for (let i = 0; i < 40; i++) {
       if ((await wallet.checkMintQuoteBolt11(quote.quote)).state === 'PAID') break;
       await new Promise((r) => setTimeout(r, 250));
     }
-    return { wallet, proofs: await wallet.mintProofsBolt11(amount, quote) };
+    return {
+      wallet,
+      proofs: await wallet.mintProofsBolt11(amount, quote, { privkey: quote.privkey }),
+    };
   }
 
   test(

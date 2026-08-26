@@ -37,34 +37,43 @@ describe('Wallet._normalizeWitness', () => {
   });
 });
 
-describe('Wallet v3 quote lock keys', () => {
+describe('Wallet quote lock keys', () => {
   const SEED = hexToBytes('11'.repeat(64));
-  type QuoteLockAccess = {
-    createV3QuoteLock(): Promise<{ pubkey: string; privkey: Uint8Array } | undefined>;
-    recoverV3QuoteLockKey(quoteId: string, pubkey?: string): Promise<Uint8Array | undefined>;
-  };
 
-  test('createV3QuoteLock leaves the quote unlocked when no keyset is loaded', async () => {
-    const wallet = new Wallet(mintUrl, { unit: 'sat' }) as unknown as QuoteLockAccess;
-    await expect(wallet.createV3QuoteLock()).resolves.toBeUndefined();
+  test('createQuoteLockKey derives from the seed and consumes the quote counter', async () => {
+    const wallet = new Wallet(mintUrl, { unit: 'sat', bip39seed: SEED });
+    const first = await wallet.createQuoteLockKey();
+    expect(bytesToHex(deriveQuoteLockKey(SEED, 0))).toBe(first.privkey);
+    expect(bytesToHex(getPubKeyFromPrivKey(hexToBytes(first.privkey)))).toBe(first.pubkey);
+    // The counter moved: the next key is a different derivation.
+    const second = await wallet.createQuoteLockKey();
+    expect(bytesToHex(deriveQuoteLockKey(SEED, 1))).toBe(second.privkey);
   });
 
-  test('recoverV3QuoteLockKey scans the seed to the quote pubkey, and misses cleanly', async () => {
-    const wallet = new Wallet(mintUrl, {
-      unit: 'sat',
-      bip39seed: SEED,
-    }) as unknown as QuoteLockAccess;
+  test('createQuoteLockKey is random without a seed', async () => {
+    const wallet = new Wallet(mintUrl, { unit: 'sat' });
+    const a = await wallet.createQuoteLockKey();
+    const b = await wallet.createQuoteLockKey();
+    expect(a.privkey).not.toBe(b.privkey);
+    expect(bytesToHex(getPubKeyFromPrivKey(hexToBytes(a.privkey)))).toBe(a.pubkey);
+  });
+
+  test('recoverQuoteLockKey scans the seed to the quote pubkey, and misses cleanly', async () => {
+    const wallet = new Wallet(mintUrl, { unit: 'sat', bip39seed: SEED });
     const expected = deriveQuoteLockKey(SEED, 3);
     const pubkey = bytesToHex(getPubKeyFromPrivKey(expected));
-    const found = await wallet.recoverV3QuoteLockKey('q1', pubkey.toUpperCase());
-    expect(bytesToHex(found!)).toBe(bytesToHex(expected));
+    await expect(wallet.recoverQuoteLockKey(pubkey.toUpperCase())).resolves.toBe(
+      bytesToHex(expected),
+    );
     // A pubkey this seed never derived scans to nothing rather than guessing.
     const foreign = bytesToHex(getPubKeyFromPrivKey(hexToBytes('22'.repeat(32))));
-    await expect(wallet.recoverV3QuoteLockKey('q2', foreign)).resolves.toBeUndefined();
+    await expect(wallet.recoverQuoteLockKey(foreign)).resolves.toBeUndefined();
   });
 
-  test('recoverV3QuoteLockKey without a seed returns nothing', async () => {
-    const wallet = new Wallet(mintUrl, { unit: 'sat' }) as unknown as QuoteLockAccess;
-    await expect(wallet.recoverV3QuoteLockKey('q1', POINT)).resolves.toBeUndefined();
+  test('recoverQuoteLockKey without a seed throws, not a silent miss', async () => {
+    const wallet = new Wallet(mintUrl, { unit: 'sat' });
+    await expect(wallet.recoverQuoteLockKey(POINT)).rejects.toThrow(
+      'recoverQuoteLockKey requires a seeded wallet',
+    );
   });
 });

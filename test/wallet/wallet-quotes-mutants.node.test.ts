@@ -247,38 +247,43 @@ describe('createMintQuoteBolt11 mutants', () => {
     );
   }
 
-  test('rejects substitution of its automatic v3 quote lock', async () => {
-    useV3Keyset();
+  // Echoes the requested lock pubkey, as an honest mint does.
+  function useEchoQuote(id: string, amount = 1, transform?: (pubkey: string) => string) {
     server.use(
       http.post(mintUrl + '/v1/mint/quote/bolt11', async ({ request }) => {
         const body = (await request.json()) as { pubkey: string };
         return HttpResponse.json({
-          quote: 'q-substituted',
-          request: 'lnbc10n1pfake', // HRP encodes the quoted 1 sat
+          quote: id,
+          request: amount === 2 ? 'lnbc20n1pfake' : 'lnbc10n1pfake', // HRP encodes the amount
           unit: 'sat',
-          amount: 1,
-          state: MintQuoteState.UNPAID,
+          amount,
+          state: MintQuoteState.PAID,
           expiry: null,
-          pubkey: (body.pubkey.startsWith('02') ? '03' : '02') + body.pubkey.slice(2),
+          pubkey: transform ? transform(body.pubkey) : body.pubkey,
         });
       }),
     );
+  }
+
+  test('rejects substitution of the requested quote lock', async () => {
+    useV3Keyset();
+    useEchoQuote('q-substituted', 1, (pk) => (pk.startsWith('02') ? '03' : '02') + pk.slice(2));
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
-
-    await expect(wallet.createMintQuoteBolt11(1)).rejects.toThrow(
+    const { pubkey } = await wallet.createQuoteLockKey();
+    await expect(wallet.createMintQuoteBolt11(1, pubkey)).rejects.toThrow(
       'Mint quote is not locked to the requested pubkey',
     );
   });
 
-  test('batch mint reuses automatic v3 quote locks', async () => {
+  test('batch mint signs each locked quote from the config keys', async () => {
     useV3Keyset();
     let n = 0;
     server.use(
       http.post(mintUrl + '/v1/mint/quote/bolt11', async ({ request }) => {
         const body = (await request.json()) as { pubkey: string };
         return HttpResponse.json({
-          quote: `q-auto-${++n}`,
+          quote: `q-batch-${++n}`,
           request: 'lnbc10n1pfake', // HRP encodes the quoted 1 sat
           unit: 'sat',
           amount: 1,
@@ -290,14 +295,17 @@ describe('createMintQuoteBolt11 mutants', () => {
     );
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
+    const lockA = await wallet.createQuoteLockKey();
+    const lockB = await wallet.createQuoteLockKey();
     const quotes = await Promise.all([
-      wallet.createMintQuoteBolt11(1),
-      wallet.createMintQuoteBolt11(1),
+      wallet.createMintQuoteBolt11(1, lockA.pubkey),
+      wallet.createMintQuoteBolt11(1, lockB.pubkey),
     ]);
 
     const preview = await wallet.prepareBatchMint(
       'bolt11',
       quotes.map((quote) => ({ amount: 1, quote })),
+      { privkey: [lockA.privkey, lockB.privkey] },
     );
     expect(preview.payload.signatures).toHaveLength(2);
     expect(preview.payload.signatures?.every((signature) => typeof signature === 'string')).toBe(
@@ -307,54 +315,36 @@ describe('createMintQuoteBolt11 mutants', () => {
 
   test('batch mint refuses a locked quote object missing its face amount', async () => {
     useV3Keyset();
-    server.use(
-      http.post(mintUrl + '/v1/mint/quote/bolt11', async ({ request }) => {
-        const body = (await request.json()) as { pubkey: string };
-        return HttpResponse.json({
-          quote: 'q-slim-batch',
-          request: 'lnbc20n1pfake', // HRP encodes the quoted 2 sat
-          unit: 'sat',
-          amount: 2,
-          state: MintQuoteState.PAID,
-          expiry: null,
-          pubkey: body.pubkey,
-        });
-      }),
-    );
+    useEchoQuote('q-slim-batch', 2);
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
-    const quote = await wallet.createMintQuoteBolt11(2);
+    const lock = await wallet.createQuoteLockKey();
+    const quote = await wallet.createMintQuoteBolt11(2, lock.pubkey);
     // A partial draw against a slim quote: the transcript commits the face
     // amount (NUT-10), which the slim object cannot supply.
     const slim = { quote: quote.quote, unit: quote.unit, pubkey: quote.pubkey };
-    await expect(wallet.prepareBatchMint('bolt11', [{ amount: 1, quote: slim }])).rejects.toThrow(
-      /amount/,
-    );
+    await expect(
+      wallet.prepareBatchMint('bolt11', [{ amount: 1, quote: slim }], { privkey: lock.privkey }),
+    ).rejects.toThrow(/amount/);
   });
 
-  test('seed recovery accepts uppercase quote pubkeys after restart', async () => {
+  test('a locked quote without its key fails fast, and recoverQuoteLockKey repairs it', async () => {
     useV3Keyset();
-    server.use(
-      http.post(mintUrl + '/v1/mint/quote/bolt11', async ({ request }) => {
-        const body = (await request.json()) as { pubkey: string };
-        return HttpResponse.json({
-          quote: 'q-uppercase',
-          request: 'lnbc10n1pfake', // HRP encodes the quoted 1 sat
-          unit: 'sat',
-          amount: 1,
-          state: MintQuoteState.PAID,
-          expiry: null,
-          pubkey: body.pubkey.toUpperCase(),
-        });
-      }),
-    );
+    // Uppercase echo: recovery and signing must be case-insensitive on the pubkey.
+    useEchoQuote('q-lost-key', 1, (pk) => pk.toUpperCase());
     const first = new Wallet(mint, { unit, bip39seed: SEED });
     await first.loadMint();
-    const quote = await first.createMintQuoteBolt11(1);
+    const { pubkey } = await first.createQuoteLockKey();
+    const stored = await first.createMintQuoteBolt11(1, pubkey);
 
+    // The stored quote's key was lost: nothing is recovered implicitly.
     const restarted = new Wallet(mint, { unit, bip39seed: SEED });
     await restarted.loadMint();
-    const preview = await restarted.prepareMint('bolt11', 1, quote);
+    await expect(restarted.prepareMint('bolt11', 1, stored)).rejects.toThrow(/recoverQuoteLockKey/);
+    // The explicit repair: scan the seed to the quote's pubkey, pass the key in config.
+    const privkey = await restarted.recoverQuoteLockKey(stored.pubkey!);
+    expect(privkey).toMatch(/^[0-9a-f]{64}$/);
+    const preview = await restarted.prepareMint('bolt11', 1, stored, { privkey });
     expect(preview.payload.signature).toMatch(/^[0-9a-f]{128}$/);
   });
 
@@ -370,13 +360,14 @@ describe('createMintQuoteBolt11 mutants', () => {
           amount: 1000,
           state: MintQuoteState.UNPAID,
           expiry: null,
+          pubkey: body.pubkey,
         });
       }),
     );
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
 
-    const quote = await wallet.createMintQuoteBolt11(1000, 'a description');
+    const quote = await wallet.createMintQuoteBolt11(1000, LOCK_PUBKEY, 'a description');
     expect(body.description).toBe('a description');
     expect(quote.unit).toBe('sat');
   });
@@ -392,25 +383,30 @@ describe('createMintQuoteBolt11 mutants', () => {
           },
         }),
       ),
-      http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
-        HttpResponse.json({
+      http.post(mintUrl + '/v1/mint/quote/bolt11', async ({ request }) => {
+        const body = (await request.json()) as { pubkey: string };
+        return HttpResponse.json({
           quote: 'q-nodesc',
           request: 'lnbc10u1pfake',
           unit: 'sat',
           amount: 1000,
           state: MintQuoteState.UNPAID,
           expiry: null,
-        }),
-      ),
+          pubkey: body.pubkey,
+        });
+      }),
     );
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
 
-    await expect(wallet.createMintQuoteBolt11(1000, 'desc')).rejects.toThrow(
+    await expect(wallet.createMintQuoteBolt11(1000, LOCK_PUBKEY, 'desc')).rejects.toThrow(
       'Mint does not support description for bolt11',
     );
     // No description → the support check must be skipped, so this succeeds.
-    await expect(wallet.createMintQuoteBolt11(1000)).resolves.toHaveProperty('quote', 'q-nodesc');
+    await expect(wallet.createMintQuoteBolt11(1000, LOCK_PUBKEY)).resolves.toHaveProperty(
+      'quote',
+      'q-nodesc',
+    );
   });
 });
 
@@ -1094,31 +1090,10 @@ describe('createMintQuote (generic) mutants', () => {
   });
 });
 
-describe('createLockedMintQuote mutants', () => {
+describe('caller-locked createMintQuoteBolt11 mutants', () => {
   const PUBKEY = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
 
-  function useNut20() {
-    server.use(
-      http.get(mintUrl + '/v1/info', () =>
-        HttpResponse.json({
-          ...mintInfoResp,
-          nuts: { ...mintInfoResp.nuts, 20: { supported: true } },
-        }),
-      ),
-    );
-  }
-
-  test('rejects when the mint does not advertise NUT-20', async () => {
-    // Default fixture omits NUT-20.
-    const wallet = new Wallet(mint, { unit });
-    await wallet.loadMint();
-    await expect(wallet.createLockedMintQuote(100, PUBKEY)).rejects.toThrow(
-      'Mint does not support NUT-20',
-    );
-  });
-
   test('sends the pubkey, amount, description and unit, and fills a missing response unit', async () => {
-    useNut20();
     let body: Record<string, unknown> = {};
     server.use(
       http.post(mintUrl + '/v1/mint/quote/bolt11', async ({ request }) => {
@@ -1137,7 +1112,7 @@ describe('createLockedMintQuote mutants', () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
 
-    const quote = await wallet.createLockedMintQuote(100, PUBKEY, 'a description');
+    const quote = await wallet.createMintQuoteBolt11(100, PUBKEY, 'a description');
     expect(body.pubkey).toBe(PUBKEY);
     expect(body.amount).toBe(100);
     expect(body.unit).toBe('sat');
@@ -1147,7 +1122,6 @@ describe('createLockedMintQuote mutants', () => {
   });
 
   test('rejects when the mint returns an unlocked quote (no pubkey)', async () => {
-    useNut20();
     server.use(
       http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
         HttpResponse.json({
@@ -1164,13 +1138,12 @@ describe('createLockedMintQuote mutants', () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
 
-    await expect(wallet.createLockedMintQuote(100, PUBKEY)).rejects.toThrow(
+    await expect(wallet.createMintQuoteBolt11(100, PUBKEY)).rejects.toThrow(
       'Mint returned unlocked mint quote',
     );
   });
 
   test('rejects when the mint returns a quote locked to a different pubkey', async () => {
-    useNut20();
     server.use(
       http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
         HttpResponse.json({
@@ -1187,13 +1160,12 @@ describe('createLockedMintQuote mutants', () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
 
-    await expect(wallet.createLockedMintQuote(100, PUBKEY)).rejects.toThrow(
+    await expect(wallet.createMintQuoteBolt11(100, PUBKEY)).rejects.toThrow(
       'Mint quote is not locked to the requested pubkey',
     );
   });
 
   test('accepts a case-variant echo of the requested pubkey', async () => {
-    useNut20();
     server.use(
       http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
         HttpResponse.json({
@@ -1210,17 +1182,8 @@ describe('createLockedMintQuote mutants', () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
 
-    const quote = await wallet.createLockedMintQuote(100, PUBKEY);
-    expect(quote.pubkey.toLowerCase()).toBe(PUBKEY);
-  });
-
-  test('rejects a missing pubkey with a clear error, not a TypeError', async () => {
-    const wallet = new Wallet(mint, { unit });
-    await wallet.loadMint();
-
-    await expect(wallet.createLockedMintQuote(100, undefined as unknown as string)).rejects.toThrow(
-      'A pubkey is required to lock the mint quote',
-    );
+    const quote = await wallet.createMintQuoteBolt11(100, PUBKEY);
+    expect(quote.pubkey!.toLowerCase()).toBe(PUBKEY);
   });
 
   test('rejects a malformed pubkey (e.g. whitespace) before any request', async () => {
@@ -1228,7 +1191,7 @@ describe('createLockedMintQuote mutants', () => {
     await wallet.loadMint();
 
     // normalizeSecpPubkey runs before the NUT-20 support check, so this fails on the pubkey.
-    await expect(wallet.createLockedMintQuote(100, ' ')).rejects.toThrow('Invalid pubkey');
+    await expect(wallet.createMintQuoteBolt11(100, ' ')).rejects.toThrow('Invalid pubkey');
   });
 });
 

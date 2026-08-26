@@ -29,7 +29,7 @@ No migration is needed unless you deliberately created outputs on inactive or le
 
 ## Mint quotes now require a usable active keyset
 
-All mint-quote creation methods (`createMintQuote`, `createMintQuoteBolt11`, `createLockedMintQuote`, `createMintQuoteBolt12`, `createMintQuoteOnchain`) now throw `no active keyset for unit '…' — a paid mint quote could not be redeemed` if the mint has no usable (active, hex-id, keyed) keyset for the wallet's unit. This prevents paying an invoice for a quote that could never be redeemed for proofs — `loadMint` deliberately tolerates keyset-less mints (e.g. a mint unwinding liabilities) by leaving the wallet unbound, so without this check the failure only surfaced after payment, at minting time.
+All mint-quote creation methods (`createMintQuote`, `createMintQuoteBolt11`, `createMintQuoteBolt12`, `createMintQuoteOnchain`) now throw `no active keyset for unit '…' — a paid mint quote could not be redeemed` if the mint has no usable (active, hex-id, keyed) keyset for the wallet's unit. This prevents paying an invoice for a quote that could never be redeemed for proofs — `loadMint` deliberately tolerates keyset-less mints (e.g. a mint unwinding liabilities) by leaving the wallet unbound, so without this check the failure only surfaced after payment, at minting time.
 
 ### Migration
 
@@ -52,6 +52,32 @@ const quote = await new Mint(mintUrl).createMintQuote('bolt11', { amount: 21, un
 ```
 
 The typed methods (`createMintQuoteBolt11` etc.) already required `loadMint()` (they check NUT-04/NUT-06 support), so no call-order change is needed there.
+
+---
+
+## Every new mint quote is locked; `createLockedMintQuote` merged into `createMintQuoteBolt11`
+
+`createMintQuoteBolt11(amount, pubkey, description?)` now requires a pubkey, taking the signature `createLockedMintQuote` had; that method is removed as redundant. This matches `createMintQuoteBolt12` and `createMintQuoteOnchain`, which always required one. Minting onto a v3 keyset requires a locked quote (NUT-04); on pre-v3 keysets the lock is NUT-20. The wallet verifies the mint echoed the lock before returning the quote, so a mint that cannot lock fails the call and nothing is payable. Unlocked quotes were an insecure legacy: anyone who learns a quote id can race you for the funds. For the rare mint without NUT-20, the generic `createMintQuote('bolt11', { amount })` (or the bare `Mint` class) can still create an unlocked legacy quote.
+
+The lock key is yours to hold. The wallet stores nothing and recovers nothing implicitly: minting signs with `config.privkey`, and a locked quote with no key throws.
+As with the other locking methods, ensure you keep the key out of anything that logs or serializes quotes.
+
+Two helpers are public: `createQuoteLockKey()` returns a fresh `{ pubkey, privkey }` (seed-derived and counter-consuming when seeded, random otherwise), and `recoverQuoteLockKey(pubkey)` re-derives a seeded wallet's lost quote key offline by scanning the quote counter.
+
+### Migration
+
+```ts
+// Before
+const quote = await wallet.createMintQuoteBolt11(64, 'coffee');
+const proofs = await wallet.mintProofsBolt11(64, quote);
+
+// After
+const { pubkey, privkey } = await wallet.createQuoteLockKey(); // store privkey!
+const quote = await wallet.createMintQuoteBolt11(64, pubkey, 'coffee');
+const proofs = await wallet.mintProofsBolt11(64, quote, { privkey });
+```
+
+`createLockedMintQuote` callers rename the method and keep their arguments. A seedless wallet that drops the key has lost the quote, the same way it loses a dropped proof; a seeded wallet can call `recoverQuoteLockKey(quote.pubkey)`.
 
 ---
 

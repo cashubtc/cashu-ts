@@ -207,14 +207,6 @@ class Wallet {
    * proofs created this way are spendable for the life of the wallet object only.
    */
   private _randomV3Keys = new Map<string, Uint8Array>();
-  /**
-   * Lock keys for v3 mint quotes this wallet created, by quote id.
-   *
-   * @remarks
-   * A seeded wallet can also recover these from the quote's pubkey (the key is derived like any
-   * other v3 secret), so this only carries a seedless wallet across the pay-then-mint gap.
-   */
-  private _quoteLockKeys = new Map<string, Uint8Array>();
   private _unit = 'sat';
   private _mintInfo: MintInfo | undefined = undefined;
   private _denominationTarget = 3;
@@ -2365,21 +2357,27 @@ class Wallet {
   }
 
   /**
-   * Requests a mint quote from the mint. Response returns a Lightning payment request for the
-   * requested given amount and unit.
+   * Requests a bolt11 mint quote locked to `pubkey`. You hold its private key: minting signs with
+   * it (`config.privkey`), and a lost key means an unredeemable quote.
    *
+   * @remarks
+   * Every new quote is locked: {@link createQuoteLockKey} makes a keypair, and a seeded wallet can
+   * re-derive a lost one ({@link recoverQuoteLockKey}). A mint that cannot lock (no NUT-20) fails
+   * the echo check below, before the quote id is returned, so nothing is payable. For an unlocked
+   * legacy quote, drop to the generic `createMintQuote()`.
    * @param amount Amount requesting for mint.
+   * @param pubkey Public key to lock the quote to.
    * @param description Optional description for the mint quote.
-   * @param pubkey Optional public key to lock the quote to.
-   * @returns The mint will return a mint quote with a Lightning invoice for minting tokens of the
-   *   specified amount and unit.
    */
   async createMintQuoteBolt11(
     amount: AmountLike,
+    pubkey: string,
     description?: string,
   ): Promise<MintQuoteBolt11Response> {
     this.requireSupport('mint', 'bolt11');
     this.requireMintableKeyset('createMintQuoteBolt11');
+    this.failIf(typeof pubkey !== 'string', 'A pubkey is required to lock the mint quote');
+    const normPubkey = normalizeSecpPubkey(pubkey);
     const mintAmount = this.parseAmount(amount, 'createMintQuoteBolt11');
     // Check if mint supports description for bolt11
     if (description) {
@@ -2388,33 +2386,18 @@ class Wallet {
         this.fail('Mint does not support description for bolt11');
       }
     }
-
-    // NUT-10: a mint quote is a transaction input and inputs sign, so minting onto a v3
-    // keyset needs a locked quote. Lock it here rather than making every caller do it.
-    const lock = await this.createV3QuoteLock();
     const mintQuotePayload: MintQuoteBolt11Request = {
       unit: this._unit,
       amount: mintAmount,
       description: description,
-      ...(lock ? { pubkey: lock.pubkey } : {}),
+      pubkey: normPubkey,
     };
     const res = await this.mint.createMintQuoteBolt11(mintQuotePayload);
     this.assertBolt11MintQuoteAmount(res, mintAmount);
-    if (lock) {
-      this.assertQuoteLockedTo(res, lock.pubkey);
-      this._quoteLockKeys.set(res.quote, lock.privkey);
-    }
+    this.assertQuoteLockedTo(res, normPubkey);
     return { ...res, unit: res.unit || this._unit };
   }
 
-  /**
-   * Lock key for a mint quote that will be redeemed on a v3 keyset, or undefined off v3.
-   *
-   * @remarks
-   * Seeded wallets derive it like any other v3 secret and consume the counter, so the key is unique
-   * per quote and recoverable from the quote's pubkey later. Seedless wallets get a random key,
-   * held only for the life of the wallet object.
-   */
   /**
    * Asserts the mint locked a quote to the key it was asked for, and returns the key it echoed.
    *
@@ -2433,79 +2416,46 @@ class Wallet {
     return returned;
   }
 
-  private async createV3QuoteLock(): Promise<{ pubkey: string; privkey: Uint8Array } | undefined> {
-    let keysetId: string;
-    try {
-      keysetId = this.getOutputKeyset().id;
-    } catch {
-      return undefined; // no mintable keyset yet: leave the quote unlocked
-    }
-    if (!isBlsKeyset(keysetId)) return undefined;
-    if (this._seed) {
-      const { start } = await this._counterSource.reserve(QUOTE_COUNTER_KEY, 1);
-      const privkey = deriveQuoteLockKey(this._seed, start);
-      return { pubkey: Bytes.toHex(getPubKeyFromPrivKey(privkey)), privkey };
-    }
-    const privkey = createRandomSecretKey();
-    return { pubkey: Bytes.toHex(getPubKeyFromPrivKey(privkey)), privkey };
-  }
-
   /**
-   * Recovers a quote's lock key from the seed by scanning the quote counter.
+   * Creates a quote lock keypair: seed-derived (consuming the quote counter) when seeded, random
+   * otherwise.
    *
    * @remarks
-   * Targeted, not discovery: it matches against the quote's own `pubkey`, so a sparse counter costs
-   * one HMAC and one point multiply per counter and nothing else. No keyset is involved (NUT-13
-   * type `0x04`), so a rotation between quote and mint cannot strand the key.
+   * Derived keys are recoverable via {@link recoverQuoteLockKey}; random ones exist only in the
+   * returned object, so persist the key with its quote.
    */
-  private async recoverV3QuoteLockKey(
-    quoteId: string,
-    quotePubkey?: string,
-  ): Promise<Uint8Array | undefined> {
-    const stored = this._quoteLockKeys.get(quoteId);
-    if (stored || !this._seed) return stored;
-    const pubkey = quotePubkey ?? (await this.checkMintQuoteBolt11(quoteId)).pubkey;
-    if (!pubkey) return undefined;
-    const normalizedPubkey = pubkey.toLowerCase();
-    const bound = (await this.counters.peekNext(QUOTE_COUNTER_KEY)) + V3_SEED_SCAN_HEADROOM;
-    for (let counter = 0; counter < bound; counter++) {
-      const privkey = deriveQuoteLockKey(this._seed, counter);
-      if (Bytes.toHex(getPubKeyFromPrivKey(privkey)) === normalizedPubkey) return privkey;
-    }
-    return undefined;
+  async createQuoteLockKey(): Promise<{ pubkey: string; privkey: string }> {
+    const privkey = this._seed
+      ? deriveQuoteLockKey(
+          this._seed,
+          (await this._counterSource.reserve(QUOTE_COUNTER_KEY, 1)).start,
+        )
+      : createRandomSecretKey();
+    return { pubkey: Bytes.toHex(getPubKeyFromPrivKey(privkey)), privkey: Bytes.toHex(privkey) };
   }
 
   /**
-   * Requests a mint quote from the mint that is locked to a public key.
+   * Recovers a seed-derived quote lock key from the quote's lock pubkey by scanning the quote
+   * counter. Returns undefined for a pubkey this seed never derived.
    *
-   * @param amount Amount requesting for mint.
-   * @param pubkey Public key to lock the quote to.
-   * @param description Optional description for the mint quote.
-   * @returns The mint will return a mint quote with a Lightning invoice for minting tokens of the
-   *   specified amount and unit. The quote will be locked to the specified `pubkey`.
+   * @remarks
+   * Offline disaster recovery for a lost quote `privkey`; the happy path is persisting the key the
+   * quote response carries. Targeted, not discovery: one HMAC and one point multiply per counter.
+   * No keyset is involved (NUT-13 type `0x04`), so a rotation cannot strand the key.
+   * @throws {@link CTSError} On a seedless wallet, which has nothing to scan.
    */
-  async createLockedMintQuote(
-    amount: AmountLike,
-    pubkey: string,
-    description?: string,
-  ): Promise<MintQuoteBolt11Response & { pubkey: string }> {
-    this.requireSupport('mint', 'bolt11');
-    this.requireMintableKeyset('createLockedMintQuote');
-    this.failIf(typeof pubkey !== 'string', 'A pubkey is required to lock the mint quote');
-    const normPubkey = normalizeSecpPubkey(pubkey);
-    const mintAmount = this.parseAmount(amount, 'createLockedMintQuote');
-    const { supported } = this.getMintInfo().isSupported(20);
-    this.failIf(!supported, 'Mint does not support NUT-20');
-    const mintQuotePayload: MintQuoteBolt11Request = {
-      unit: this._unit,
-      amount: mintAmount,
-      description: description,
-      pubkey: normPubkey,
-    };
-    const res = await this.mint.createMintQuoteBolt11(mintQuotePayload);
-    this.assertBolt11MintQuoteAmount(res, mintAmount);
-    const resPubkey = this.assertQuoteLockedTo(res, normPubkey);
-    return { ...res, pubkey: resPubkey, unit: res.unit || this._unit };
+  async recoverQuoteLockKey(pubkey: string): Promise<string | undefined> {
+    const seed = this._seed;
+    this.failIf(!seed, 'recoverQuoteLockKey requires a seeded wallet');
+    const normalizedPubkey = normalizeSecpPubkey(pubkey);
+    const bound = (await this.counters.peekNext(QUOTE_COUNTER_KEY)) + V3_SEED_SCAN_HEADROOM;
+    for (let counter = 0; counter < bound; counter++) {
+      const privkey = deriveQuoteLockKey(seed as Uint8Array, counter);
+      if (Bytes.toHex(getPubKeyFromPrivKey(privkey)) === normalizedPubkey) {
+        return Bytes.toHex(privkey);
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -2942,7 +2892,7 @@ class Wallet {
     this.validateMintQuoteAvailableAmount(method, quote, requestedAmount);
     outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
     const { keysetId, proofsWeHave, onCountersReserved } = config ?? {};
-    let privkey = config?.privkey;
+    const privkey = config?.privkey;
 
     // Shape output type and denominations for our proofs
     // we are receiving, so no includeFees.
@@ -2979,18 +2929,13 @@ class Wallet {
     // Sign whenever a privkey is provided — quote.pubkey may be absent if only the
     // quote ID was stored, but the caller still needs to produce a NUT-20 signature
     let legacySignature: string | undefined;
-    // A v3 quote this wallet locked signs itself: the key is in the session store, or a seeded
-    // wallet re-derives it from the quote's lock pubkey (it is a v3 secret like any other).
-    if (!privkey && isBlsKeyset(keyset.id)) {
-      const quotePubkey = 'pubkey' in quote ? (quote.pubkey as string | undefined) : undefined;
-      const key =
-        quotePubkey || method === 'bolt11'
-          ? await this.recoverV3QuoteLockKey(quote.quote, quotePubkey)
-          : undefined;
-      if (key) privkey = Bytes.toHex(key);
-    }
+    // The key is caller state, passed in config; nothing is recovered implicitly
+    // (recoverQuoteLockKey is the explicit tool for a seeded wallet that lost it).
     if ('pubkey' in quote && quote.pubkey) {
-      this.failIf(!privkey, 'Can not sign locked quote without private key');
+      this.failIf(
+        !privkey,
+        'Can not sign locked quote without private key (see recoverQuoteLockKey)',
+      );
     }
     if (privkey) {
       const quotePubkey = 'pubkey' in quote ? (quote.pubkey as string | undefined) : undefined;
@@ -3177,20 +3122,16 @@ class Wallet {
     }
 
     const keyset = this.getOutputKeyset(keysetId);
+    // Keys are caller state, passed in config; findSigningKey matches each locked quote's pubkey.
     const signingKeys = privkey ? [privkey].flat() : [];
-    if (isBlsKeyset(keyset.id)) {
-      for (const { quote } of entries) {
-        const quotePubkey = 'pubkey' in quote ? quote.pubkey : undefined;
-        if (!quotePubkey) continue;
-        const key = await this.recoverV3QuoteLockKey(quote.quote, quotePubkey);
-        if (key) signingKeys.push(Bytes.toHex(key));
-      }
-    }
 
     // Check locked quotes: require a privkey and verify it can sign
     const hasLockedQuotes = entries.some((e) => 'pubkey' in e.quote && e.quote.pubkey);
     if (hasLockedQuotes) {
-      this.failIf(signingKeys.length === 0, 'Can not sign locked quotes without private key');
+      this.failIf(
+        signingKeys.length === 0,
+        'Can not sign locked quotes without private key (see recoverQuoteLockKey)',
+      );
     }
 
     // Parse amounts and determine keyset

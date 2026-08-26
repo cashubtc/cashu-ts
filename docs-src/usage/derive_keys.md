@@ -46,7 +46,7 @@ import { deriveKeyPair } from '@cashu/cashu-ts';
 const counter = 0; // your next unused quote-lock counter
 const { pubkey, privkey } = deriveKeyPair(seed, 'QuoteLock', counter);
 
-const quote = await wallet.createLockedMintQuote(64, pubkey);
+const quote = await wallet.createMintQuoteBolt11(64, pubkey);
 // ...pay the quote's BOLT11 invoice...
 const proofs = await wallet.ops.mint(64, quote).privkey(privkey).run();
 ```
