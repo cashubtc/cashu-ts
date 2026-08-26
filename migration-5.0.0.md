@@ -4,6 +4,20 @@
 
 ---
 
+## ⚠️ READ THIS FIRST: two changes that can cost funds ⚠️
+
+**1. v3 proofs carry `spend_info`, and it MUST be persisted with the proof.**
+
+Proofs on v3 keysets gain an optional `spend_info` field (`{ k?, E?, K?, u?, tree? }`): the bearer or receiver key material and the disclosed condition tree. It is local-only (the wallet strips it from every mint payload), so nothing on the wire reminds you it exists, but for a locked proof it is the only thing that can spend it. Storage that serializes a fixed list of proof fields, or a schema that drops unknown keys, silently discards spending power: the proof survives, the ability to spend it does not.
+
+Persist and back up proof objects whole, `spend_info` included, and sweep received tokens promptly (receiving swaps them to your own seed-derived secrets). The full semantics are in [docs: Spending Locked Proofs](./docs-src/wallet_ops/spend_locked.md).
+
+**2. Every new mint quote is locked, and the lock key is yours to hold.**
+
+The wallet stores no quote lock keys and recovers nothing implicitly: a seedless wallet that drops the `privkey` from `createQuoteLockKey()` has lost the quote the way it loses a dropped proof. Persist the key with its quote. Details and migration in [the locked-quotes section](#every-new-mint-quote-is-locked-createlockedmintquote-merged-into-createmintquotebolt11); seeded wallets should also note [the counter-key section](#counter-keys-are-not-always-keyset-ids-operationcounterskeysetid-is-now-counterkey), since the quote cursor now flows through the standard counter persistence.
+
+---
+
 ## What's new: BLS12-381 v3 keysets
 
 v5 introduces support for **v3 keysets**, identified by a `02` prefix on the keyset id. v3 keysets use BLS12-381 instead of secp256k1 for the BDHKE blinding curve, with multiplicative blinding and pairing-based verification replacing DLEQ. Wire-compatible with Nutshell PR #999.
@@ -232,6 +246,24 @@ class MyCounterSource implements CounterSource {
 
 The check and the update must be one atomic step. Reading the cursor and then bumping it in two
 calls reintroduces the window this closes.
+
+---
+
+## Counter keys are not always keyset ids: `OperationCounters.keysetId` is now `counterKey`
+
+Seeded wallets reserve mint quote lock counters (see the locked-quotes section above) under the exported `QUOTE_COUNTER_KEY` (`'mint-quote-lock'`), flowing through the same `CounterSource` and `countersReserved` event as keyset counters. The payload field is renamed to say what it is.
+
+### Migration
+
+```ts
+// Before
+wallet.on.countersReserved(({ keysetId, next }) => saveNextToDb(keysetId, next));
+
+// After
+wallet.on.countersReserved(({ counterKey, next }) => saveNextToDb(counterKey, next));
+```
+
+A custom `CounterSource` that validates its keys as keyset ids, or joins them against a keysets table, must accept `QUOTE_COUNTER_KEY` too: every seeded wallet reserves from it on its first mint quote.
 
 ---
 

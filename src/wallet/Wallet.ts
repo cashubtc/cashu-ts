@@ -885,7 +885,7 @@ class Wallet {
 
     // Fire event after successful reservation (wallet does not await handlers)
     const used: OperationCounters = {
-      keysetId,
+      counterKey: keysetId,
       start: range.start,
       count: range.count,
       next: range.start + range.count,
@@ -2420,12 +2420,21 @@ class Wallet {
    * returned object, so persist the key with its quote.
    */
   async createQuoteLockKey(): Promise<{ pubkey: string; privkey: string }> {
-    const privkey = this._seed
-      ? deriveQuoteLockKey(
-          this._seed,
-          (await this._counterSource.reserve(QUOTE_COUNTER_KEY, 1)).start,
-        )
-      : createRandomSecretKey();
+    let privkey: Uint8Array;
+    if (this._seed) {
+      const range = await this._counterSource.reserve(QUOTE_COUNTER_KEY, 1);
+      // Event-persisted sources must see the quote cursor move too, or a restart
+      // re-derives keys already handed out.
+      this.on._emitCountersReserved({
+        counterKey: QUOTE_COUNTER_KEY,
+        start: range.start,
+        count: range.count,
+        next: range.start + range.count,
+      });
+      privkey = deriveQuoteLockKey(this._seed, range.start);
+    } else {
+      privkey = createRandomSecretKey();
+    }
     return { pubkey: Bytes.toHex(getPubKeyFromPrivKey(privkey)), privkey: Bytes.toHex(privkey) };
   }
 

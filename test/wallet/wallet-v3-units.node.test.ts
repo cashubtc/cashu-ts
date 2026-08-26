@@ -1,7 +1,7 @@
 import { hexToBytes, bytesToHex } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 
-import { Wallet } from '../../src';
+import { Wallet, QUOTE_COUNTER_KEY, type OperationCounters } from '../../src';
 import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import { deriveQuoteLockKey } from '../../src/crypto/NUT13';
 import { Amount } from '../../src/model/Amount';
@@ -56,6 +56,18 @@ describe('Wallet quote lock keys', () => {
     const b = await wallet.createQuoteLockKey();
     expect(a.privkey).not.toBe(b.privkey);
     expect(bytesToHex(getPubKeyFromPrivKey(hexToBytes(a.privkey)))).toBe(a.pubkey);
+  });
+
+  test('createQuoteLockKey emits countersReserved so persistence hooks see the cursor', async () => {
+    const wallet = new Wallet(mintUrl, { unit: 'sat', bip39seed: SEED });
+    const seen: OperationCounters[] = [];
+    wallet.on.countersReserved((p) => seen.push(p));
+    await wallet.createQuoteLockKey();
+    await wallet.createQuoteLockKey();
+    expect(seen).toEqual([
+      { counterKey: QUOTE_COUNTER_KEY, start: 0, count: 1, next: 1 },
+      { counterKey: QUOTE_COUNTER_KEY, start: 1, count: 1, next: 2 },
+    ]);
   });
 
   test('recoverQuoteLockKey scans the seed to the quote pubkey, and misses cleanly', async () => {

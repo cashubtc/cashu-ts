@@ -32,18 +32,27 @@ export class LockBuilder {
   private hashlock?: string;
   private leaves: NutrootLeaf[] = [];
 
+  /**
+   * Adds main-path key(s), 33-byte compressed hex; for an x-only (Nostr) key prepend '02'.
+   */
   addMainPubkey(pk: string | string[]) {
     const arr = Array.isArray(pk) ? pk : [pk];
     this.mainKeys = dedupeP2PKPubkeys([...this.mainKeys, ...arr]);
     return this;
   }
 
+  /**
+   * Adds refund-path key(s), active after the locktime; requires {@link lockUntil}.
+   */
   addRefundPubkey(pk: string | string[]) {
     const arr = Array.isArray(pk) ? pk : [pk];
     this.refundKeys = dedupeP2PKPubkeys([...this.refundKeys, ...arr]);
     return this;
   }
 
+  /**
+   * Sets the locktime: Unix seconds, epoch milliseconds, or a Date.
+   */
   lockUntil(when: Date | number) {
     let seconds: number;
     if (when instanceof Date) {
@@ -57,6 +66,9 @@ export class LockBuilder {
     return this;
   }
 
+  /**
+   * Requires n-of-m signatures from the main keys (default 1).
+   */
   requireMainSignatures(n: number) {
     if (!Number.isInteger(n) || n < 1)
       throw new CTSError(`requiredMainSignatures must be a positive integer, got ${n}`);
@@ -64,6 +76,9 @@ export class LockBuilder {
     return this;
   }
 
+  /**
+   * Requires n-of-m signatures from the refund keys (default 1).
+   */
   requireRefundSignatures(n: number) {
     if (!Number.isInteger(n) || n < 1)
       throw new CTSError(`requiredRefundSignatures must be a positive integer, got ${n}`);
@@ -87,6 +102,9 @@ export class LockBuilder {
     return this;
   }
 
+  /**
+   * Adds multiple NUT-11 tags at once; see {@link addTag}.
+   */
   addTags(tags: P2PKTag[]) {
     for (const [k, ...vals] of tags) this.addTag(k, vals);
     return this;
@@ -100,6 +118,9 @@ export class LockBuilder {
     return this;
   }
 
+  /**
+   * Sets NUT-11 SIG_ALL; on v3 keysets this is the default and only behavior.
+   */
   sigAll() {
     this._sigAll = true;
     return this;
@@ -130,6 +151,9 @@ export class LockBuilder {
     return this;
   }
 
+  /**
+   * Builds the {@link LockOptions}, validating through a real encoder so a bad lock fails here.
+   */
   toOptions(): LockOptions {
     if (this.mainKeys.length === 0 && this.hashlock === undefined && this.leaves.length === 0) {
       throw new CTSError('At least one main pubkey, hashlock, or leaf is required');
@@ -168,6 +192,9 @@ export class LockBuilder {
     return lock;
   }
 
+  /**
+   * Seeds a builder from existing {@link LockOptions}, eg to amend a stored lock.
+   */
   static fromOptions(lock: LockOptions): LockBuilder {
     const b = new LockBuilder();
     if (lock.hashlock !== undefined) b.addHashlock(lock.hashlock);

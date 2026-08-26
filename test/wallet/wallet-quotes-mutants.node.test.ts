@@ -779,7 +779,7 @@ describe('prepareMint mutants', () => {
     await wallet.prepareMint('bolt11', 3, quote, { onCountersReserved });
     // amount 3 -> outputs [1,2]: start 0, count 2, next 2
     expect(onCountersReserved).toHaveBeenCalledWith(
-      expect.objectContaining({ keysetId: KEYSET_ID, start: 0, count: 2, next: 2 }),
+      expect.objectContaining({ counterKey: KEYSET_ID, start: 0, count: 2, next: 2 }),
     );
   });
 
@@ -1007,7 +1007,7 @@ describe('prepareMelt mutants', () => {
     await wallet.prepareMelt('bolt11', meltQuote, proofsToSend, { onCountersReserved });
     // feeReserve 3 -> ceil(log2(3)) = 2 NUT-08 blanks: start 0, count 2, next 2
     expect(onCountersReserved).toHaveBeenCalledWith(
-      expect.objectContaining({ keysetId: KEYSET_ID, start: 0, count: 2, next: 2 }),
+      expect.objectContaining({ counterKey: KEYSET_ID, start: 0, count: 2, next: 2 }),
     );
   });
 
