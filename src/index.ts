@@ -14,6 +14,7 @@ export { KeyChain } from './wallet/KeyChain';
 export { Keyset } from './wallet/Keyset';
 export { LockBuilder } from './wallet/LockBuilder';
 export {
+  auditableLock,
   lockToNutrootOptions,
   lockToP2PKOptions,
   nutrootToLockOptions,

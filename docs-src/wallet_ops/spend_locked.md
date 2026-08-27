@@ -83,3 +83,16 @@ For the common policy (first satisfiable leaf per proof the key path cannot spen
 Plans are keyed by `secret`, not input index: proof selection decides input order. Everything except the signatures is checked when the transaction is prepared, so a plan that cannot be honored (undisclosed leaf, missing preimage, key shortfall with no cosigner) fails before any request is built.
 
 **Cosigning.** A leaf whose other keys live elsewhere takes a `cosign` hook. It runs once the transaction is fixed and its digest known (the digest covers the outputs, so it cannot exist earlier), and returns BIP-340 signature hex over the digest. It is awaited mid-flight: fine for a remote signer measured in seconds, not for approval ceremonies measured in days. Duplicate and non-verifying signatures are trimmed; the leaf still needs `n` valid ones or the spend fails.
+
+## Auditable locks
+
+Nutroot locks are private by default: only the key holder can prove who a receiver-keyed proof belongs to. When a payment wants the opposite (a public tip anyone can attest, eg a nostr Nutzap), lock it **auditable**: NUMS internal key, one threshold leaf of one key.
+
+```ts
+const { send } = await wallet.ops.send(21, proofs).asLocked(auditableLock(pubkey)).run();
+
+// Any third party, no keys, no mint round-trip: who is this locked to?
+const committedKey = auditableLockKey(proof); // pubkey hex, or undefined for any other shape
+```
+
+`auditableLockKey` verifies the full commitment (NUMS offset, recomputed root, tweak against the secret), not just the claimed fields. The leaf has one canonical serialization, so a claimer who knows the expected key can rebuild the spend info from `u` alone if it was mangled in transit. Claim via `planScriptPaths` above.

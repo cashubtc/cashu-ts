@@ -15,7 +15,7 @@ import {
   verifyDLEQProof_reblind,
   verifyUnblindedSignatureBls,
 } from '../crypto';
-import { verifyNutrootSpendInfo } from '../crypto/nutroot';
+import { parseNutrootLeafHex, verifyNutrootSpendInfo } from '../crypto/nutroot';
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { PaymentRequest } from '../model/PaymentRequest';
@@ -693,6 +693,30 @@ export function classifyNutrootKeyPath(proof: Pick<Proof, 'spend_info'>): Nutroo
   if (si?.E) return 'receiver';
   if (si?.K) return si.tree?.length ? 'script-only' : 'aggregated';
   return 'none';
+}
+
+/**
+ * The key an auditable lock (NUT-10) commits to, fully verified; `undefined` for any other shape.
+ *
+ * @remarks
+ * An auditable lock is script-only with a NUMS-proven internal key and exactly one threshold leaf
+ * of one key (`auditableLock` builds it), so anyone holding the proof can verify who it is locked
+ * to. Verifies the commitments (NUMS offset, root, tweak), not just the claimed fields.
+ */
+export function auditableLockKey(
+  proof: Pick<Proof, 'id' | 'secret' | 'spend_info'>,
+): string | undefined {
+  const si = proof.spend_info;
+  if (!isBlsKeyset(proof.id)) return undefined;
+  if (!si || si.k || si.E || !si.K || !si.u || si.tree?.length !== 1) return undefined;
+  try {
+    const leaf = parseNutrootLeafHex(si.tree[0]);
+    if (leaf.type !== 'threshold' || leaf.n !== 1 || leaf.keys.length !== 1) return undefined;
+    verifyNutrootSpendInfo(proof.secret, si);
+    return leaf.keys[0];
+  } catch {
+    return undefined;
+  }
 }
 
 /**

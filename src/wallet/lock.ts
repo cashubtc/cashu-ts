@@ -63,6 +63,19 @@ export type LockOptions = {
 const lc = (k: string) => k.toLowerCase();
 
 /**
+ * A publicly auditable lock to one key: NUMS key path, one threshold leaf (NUT-10 auditable locks).
+ * v3 keysets only.
+ *
+ * @remarks
+ * Unlike the receiver-keyed default, anyone holding the proof can verify who it is locked to
+ * (`auditableLockKey`), at the cost of that visibility. The Nutzap shape.
+ * @throws If the pubkey is not a valid compressed secp256k1 point.
+ */
+export function auditableLock(pubkey: string): LockOptions {
+  return { leaves: [{ type: 'threshold', n: 1, keys: [normalizeSecpPubkey(pubkey)] }] };
+}
+
+/**
  * Encodes a lock for a v3 keyset: receiver key plus tree, in `createNutrootData` form.
  *
  * @remarks
