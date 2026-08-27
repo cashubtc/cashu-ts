@@ -541,6 +541,9 @@ export type GetInfoResponse = {
     description?: string;
     description_long?: string;
     icon_url?: string;
+    urls?: string[];
+    time?: number;
+    tos_url?: string;
     max_array_length?: number;
     contact: MintContactInfo[];
     nuts: {
@@ -1180,6 +1183,8 @@ export class MintInfo {
     get description_long(): string | undefined;
     getMintMeltMethod(op: 'mint' | 'melt', method: string, unit: string): SwapMethod | undefined;
     // (undocumented)
+    get icon_url(): string | undefined;
+    // (undocumented)
     isSupported(num: 4 | 5): {
         disabled: boolean;
         params: SwapMethod[];
@@ -1290,6 +1295,10 @@ export class MintInfo {
     supportsAmountless(method?: string, unit?: string): boolean;
     supportsMintMeltMethod(op: 'mint' | 'melt', method: string, unit: string): boolean;
     supportsNut04Description(method: 'bolt11' | 'bolt12', unit?: string): boolean;
+    get time(): number | undefined;
+    // (undocumented)
+    get tos_url(): string | undefined;
+    get urls(): string[] | undefined;
     // (undocumented)
     get version(): string;
 }
