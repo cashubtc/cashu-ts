@@ -180,7 +180,11 @@ export function selectProofsRGLI(
       const rightIndex = binarySearchIndex(spendableProofs, targetAmountBig + 1n, true);
       endIndex = rightIndex !== null ? rightIndex + 1 : 0;
     } else {
-      const biggerIndex = binarySearchIndex(spendableProofs, targetAmountBig, false);
+      // The same floor-vs-ceil slack as exact match above: a proof with exFee equal to
+      // the target can net a sat under it, so the smallest guaranteed cover is exFee
+      // >= target + 1. Without the slack that proof caps the pool and, when it cannot
+      // cover, selection returns empty despite larger proofs being available.
+      const biggerIndex = binarySearchIndex(spendableProofs, targetAmountBig + 1n, false);
       if (biggerIndex !== null) {
         const nextBiggerExFee = spendableProofs[biggerIndex].exFee;
         const rightIndex = binarySearchIndex(spendableProofs, nextBiggerExFee, true);
