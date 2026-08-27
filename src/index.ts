@@ -12,7 +12,7 @@
 export { Mint } from './mint';
 export { KeyChain } from './wallet/KeyChain';
 export { Keyset } from './wallet/Keyset';
-export { P2PKBuilder } from './wallet/P2PKBuilder';
+export { LockBuilder, P2PKBuilder } from './wallet/P2PKBuilder';
 export { type SelectProofs, selectProofsRGLI, selectProofsRotating } from './wallet/SelectProofs';
 export {
   serializeSwapPreview,

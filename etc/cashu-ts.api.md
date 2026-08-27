@@ -725,6 +725,37 @@ export type KeysetPair = {
     privKeys: RawMintKeys;
 };
 
+// @public
+export class LockBuilder {
+    addHashlock(hashlock: string): this;
+    // @deprecated (undocumented)
+    addLockPubkey(pk: string | string[]): this;
+    // (undocumented)
+    addMainPubkey(pk: string | string[]): this;
+    // (undocumented)
+    addRefundPubkey(pk: string | string[]): this;
+    // (undocumented)
+    addTag(key: string, values?: string[] | string): this;
+    // (undocumented)
+    addTags(tags: P2PKTag[]): this;
+    // (undocumented)
+    blindKeys(): this;
+    // (undocumented)
+    static fromOptions(opts: P2PKOptions): LockBuilder;
+    // (undocumented)
+    lockUntil(when: Date | number): this;
+    // @deprecated (undocumented)
+    requireLockSignatures(n: number): this;
+    // (undocumented)
+    requireMainSignatures(n: number): this;
+    // (undocumented)
+    requireRefundSignatures(n: number): this;
+    // (undocumented)
+    sigAll(): this;
+    // (undocumented)
+    toOptions(): P2PKOptions;
+}
+
 // @public (undocumented)
 export type LockState = 'PERMANENT' | 'ACTIVE' | 'EXPIRED';
 
@@ -759,7 +790,9 @@ export class MeltBuilder<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | '
     asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: AmountLike[]): this;
     asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
-    asP2PK(options: P2PKOptions, denoms?: AmountLike[]): this;
+    asLocked(lock: P2PKOptions | LockBuilder, denoms?: AmountLike[]): this;
+    // @deprecated (undocumented)
+    asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]): this;
     asRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
@@ -987,7 +1020,9 @@ export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M ex
     asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: AmountLike[]): this;
     asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
-    asP2PK(options: P2PKOptions, denoms?: AmountLike[]): this;
+    asLocked(lock: P2PKOptions | LockBuilder, denoms?: AmountLike[]): this;
+    // @deprecated (undocumented)
+    asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]): this;
     asRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
@@ -1463,32 +1498,11 @@ export type OutputType = ({
 // @public
 export const P2BK_DST: Uint8Array<ArrayBufferLike>;
 
-// @public (undocumented)
-export class P2PKBuilder {
-    addHashlock(hashlock: string): this;
-    // (undocumented)
-    addLockPubkey(pk: string | string[]): this;
-    // (undocumented)
-    addRefundPubkey(pk: string | string[]): this;
-    // (undocumented)
-    addTag(key: string, values?: string[] | string): this;
-    // (undocumented)
-    addTags(tags: P2PKTag[]): this;
-    // (undocumented)
-    blindKeys(): this;
-    // (undocumented)
-    static fromOptions(opts: P2PKOptions): P2PKBuilder;
-    // (undocumented)
-    lockUntil(when: Date | number): this;
-    // (undocumented)
-    requireLockSignatures(n: number): this;
-    // (undocumented)
-    requireRefundSignatures(n: number): this;
-    // (undocumented)
-    sigAll(): this;
-    // (undocumented)
-    toOptions(): P2PKOptions;
-}
+// @public @deprecated (undocumented)
+export const P2PKBuilder: typeof LockBuilder;
+
+// @public @deprecated (undocumented)
+export type P2PKBuilder = LockBuilder;
 
 // @public
 export type P2PKOptions = {
@@ -1695,7 +1709,9 @@ export class ReceiveBuilder {
     asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: AmountLike[]): this;
     asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
-    asP2PK(options: P2PKOptions, denoms?: AmountLike[]): this;
+    asLocked(lock: P2PKOptions | LockBuilder, denoms?: AmountLike[]): this;
+    // @deprecated (undocumented)
+    asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]): this;
     asRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
@@ -1796,13 +1812,17 @@ export class SendBuilder {
     asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: AmountLike[]): this;
     asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
-    asP2PK(options: P2PKOptions, denoms?: AmountLike[]): this;
+    asLocked(lock: P2PKOptions | LockBuilder, denoms?: AmountLike[]): this;
+    // @deprecated (undocumented)
+    asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]): this;
     asRandom(denoms?: AmountLike[]): this;
     includeFees(on?: boolean): this;
     keepAsCustom(data: OutputDataLike[]): this;
     keepAsDeterministic(counter?: number, denoms?: AmountLike[]): this;
     keepAsFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
-    keepAsP2PK(options: P2PKOptions, denoms?: AmountLike[]): this;
+    keepAsLocked(lock: P2PKOptions | LockBuilder, denoms?: AmountLike[]): this;
+    // @deprecated (undocumented)
+    keepAsP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]): this;
     keepAsRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     offlineCloseMatch(requireDleq?: boolean): this;
