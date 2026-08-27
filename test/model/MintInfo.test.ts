@@ -838,3 +838,32 @@ describe('MintInfo max_array_length (NUT-06)', () => {
     },
   );
 });
+
+describe('MintInfo NUT-06 informational fields', () => {
+  it('exposes urls, time, tos_url and icon_url and preserves them in cache', () => {
+    const urls = ['https://mint.host', 'http://mint.onion'];
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      icon_url: 'https://mint.host/icon.jpg',
+      urls,
+      time: 1725304480,
+      tos_url: 'https://mint.host/tos',
+    });
+    expect(info.icon_url).toBe('https://mint.host/icon.jpg');
+    expect(info.urls).toEqual(urls);
+    expect(info.urls).not.toBe(urls);
+    expect(info.time).toBe(1725304480);
+    expect(info.tos_url).toBe('https://mint.host/tos');
+    expect(info.cache.urls).toEqual(urls);
+    expect(info.cache.tos_url).toBe('https://mint.host/tos');
+  });
+
+  it('returns undefined when the mint omits them', () => {
+    // The fixture carries a real `time`; strip the optional fields for the omitted case.
+    const { time: _time, urls: _urls, tos_url: _tos, ...rest } = MINTINFORESP;
+    const info = new MintInfo(rest);
+    expect(info.urls).toBeUndefined();
+    expect(info.time).toBeUndefined();
+    expect(info.tos_url).toBeUndefined();
+  });
+});

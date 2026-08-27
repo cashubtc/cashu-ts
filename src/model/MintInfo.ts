@@ -450,6 +450,25 @@ export class MintInfo {
   get motd() {
     return this._mintInfo.motd;
   }
+  get icon_url() {
+    return this._mintInfo.icon_url;
+  }
+  /**
+   * Endpoint URLs the mint advertises for itself. Informational only: whether to trust or switch to
+   * any of them is the consumer's decision.
+   */
+  get urls() {
+    return MintInfo.snapshot(this._mintInfo.urls);
+  }
+  /**
+   * Current server time as a Unix timestamp in seconds.
+   */
+  get time() {
+    return this._mintInfo.time;
+  }
+  get tos_url() {
+    return this._mintInfo.tos_url;
+  }
   /**
    * NUT-06: max length the mint accepts for any array in a request (`inputs`, `outputs`, `Ys`).
    * Always a usable number: the library default when the mint advertises none.
