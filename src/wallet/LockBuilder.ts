@@ -194,6 +194,27 @@ export class LockBuilder {
   }
 
   /**
+   * Lists why this lock will not encode for the target keyset version; empty means it encodes.
+   *
+   * @remarks
+   * Runs the same checks and encoder as a real build, so it cannot drift from what
+   * {@link LockBuilder.toOptions | toOptions} and the wallet refuse. Reports the first refusal.
+   */
+  validate(target: 'v3' | 'pre-v3'): CTSError[] {
+    try {
+      const lock = this.toOptions();
+      if (target === 'v3') {
+        lockToNutrootOptions(lock);
+      } else {
+        void OutputData.createSingleP2PKData(lockToP2PKOptions(lock), 1, 'deedbeef');
+      }
+      return [];
+    } catch (e) {
+      return [e instanceof CTSError ? e : new CTSError(String(e), { cause: e })];
+    }
+  }
+
+  /**
    * Seeds a builder from existing {@link LockOptions}, eg to amend a stored lock.
    */
   static fromOptions(lock: LockOptions): LockBuilder {

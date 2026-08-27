@@ -534,3 +534,44 @@ describe('P2PKBuilder.blindKeys()', () => {
     expect(round.blindKeys).toBe(true);
   });
 });
+
+describe('LockBuilder.validate()', () => {
+  it('returns no issues for a lock both versions encode', () => {
+    const b = new LockBuilder()
+      .addMainPubkey(comp('a', '02'))
+      .lockUntil(4102444800)
+      .addRefundPubkey(comp('b', '02'));
+    expect(b.validate('v3')).toEqual([]);
+    expect(b.validate('pre-v3')).toEqual([]);
+  });
+
+  it('flags anyone-after-locktime on v3 only', () => {
+    const b = new LockBuilder().addMainPubkey(comp('a', '02')).lockUntil(4102444800);
+    expect(b.validate('pre-v3')).toEqual([]);
+    const issues = b.validate('v3');
+    expect(issues).toHaveLength(1);
+    expect(issues[0].message).toMatch(/anyone-after-locktime/i);
+  });
+
+  it('flags leaf locks on pre-v3 only', () => {
+    const b = new LockBuilder().addLeaf({
+      type: 'after',
+      n: 1,
+      time: 4102444800,
+      keys: [comp('a', '02')],
+    });
+    expect(b.validate('v3')).toEqual([]);
+    const issues = b.validate('pre-v3');
+    expect(issues).toHaveLength(1);
+    expect(issues[0].message).toMatch(/need a v3 keyset/i);
+  });
+
+  it('reports builder-level refusals for both targets instead of throwing', () => {
+    const b = new LockBuilder().addMainPubkey(comp('a', '02')).addRefundPubkey(comp('b', '02'));
+    for (const target of ['v3', 'pre-v3'] as const) {
+      const issues = b.validate(target);
+      expect(issues).toHaveLength(1);
+      expect(issues[0].message).toMatch(/refund keys require a locktime/i);
+    }
+  });
+});
