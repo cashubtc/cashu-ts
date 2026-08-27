@@ -169,10 +169,11 @@ export function selectProofsRGLI(
   spendableProofs.sort((a, b) => (a.exFee < b.exFee ? -1 : a.exFee > b.exFee ? 1 : 0));
 
   // Remove proofs too large to be useful and adjust totals
-  // Exact Match: Keep proofs where exFee <= amountToSend + 1. exFee floors the
-  // proof's own fee while the real fee ceils once per selection, so the net can
-  // sit up to a sat below exFee: a 6 sat proof at 500ppk has exFee 6 yet nets
-  // 6 - 1 = 5, an exact match that a bound of exFee <= amountToSend misses
+  // Both bounds sit at amountToSend + 1: exFee floors the proof's own fee while the
+  // real fee ceils once per selection, so the net can sit up to a sat below exFee.
+  // A 6 sat proof at 500ppk has exFee 6 yet nets 5, so it neither matches a target
+  // of 6 exactly nor covers it as the pool's largest candidate
+  // Exact Match: Keep proofs where exFee <= amountToSend + 1
   // Close Match: Keep proofs where exFee <= nextBiggerExFee
   if (spendableProofs.length > 0) {
     let endIndex;
@@ -180,7 +181,7 @@ export function selectProofsRGLI(
       const rightIndex = binarySearchIndex(spendableProofs, targetAmountBig + 1n, true);
       endIndex = rightIndex !== null ? rightIndex + 1 : 0;
     } else {
-      const biggerIndex = binarySearchIndex(spendableProofs, targetAmountBig, false);
+      const biggerIndex = binarySearchIndex(spendableProofs, targetAmountBig + 1n, false);
       if (biggerIndex !== null) {
         const nextBiggerExFee = spendableProofs[biggerIndex].exFee;
         const rightIndex = binarySearchIndex(spendableProofs, nextBiggerExFee, true);
