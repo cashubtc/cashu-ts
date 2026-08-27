@@ -13,6 +13,15 @@ export type GetInfoResponse = {
   description_long?: string;
   icon_url?: string;
   /**
+   * Endpoint URLs where the mint is reachable (eg clearnet and Tor mirrors).
+   */
+  urls?: string[];
+  /**
+   * Current server time as a Unix timestamp in seconds.
+   */
+  time?: number;
+  tos_url?: string;
+  /**
    * Max length the mint accepts for any array in a request (`inputs`, `outputs`, `Ys`).
    */
   max_array_length?: number;
