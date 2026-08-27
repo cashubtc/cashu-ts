@@ -1440,8 +1440,9 @@ class Wallet {
       !sendAmount.isZero() && send.length === 0,
       'Send cannot be completed offline for the requested amount',
     );
-    // Ensure witnesses are serialized, strip DLEQ if not required, keep p2pk_e
-    const sendPrepared = this._prepareInputsForMint(send, requireDleq, true);
+    // Ensure witnesses are serialized, strip DLEQ if not required, keep p2pk_e and
+    // spend_info: these proofs travel to the receiver, not the mint
+    const sendPrepared = this._prepareInputsForMint(send, requireDleq, true, true);
     return { keep, send: sendPrepared };
   }
 
@@ -2028,26 +2029,29 @@ class Wallet {
    * Prepares inputs for a mint operation.
    *
    * @remarks
-   * Internal method; strips DLEQ (NUT-12) and p2pk_e (NUT-28) for privacy and serializes witnesses.
-   * Returns an array of new proof objects - does not mutate the originals.
+   * Internal method; strips DLEQ (NUT-12), p2pk_e (NUT-28) and spend_info for privacy and
+   * serializes witnesses. Returns an array of new proof objects - does not mutate the originals.
    * @param proofs The proofs to prepare.
    * @param keepDleq Optional boolean to keep DLEQ (default: false, strips for privacy).
    * @param keepP2pkE Optional boolean to keep NUT-28 "E" (default: false, strips for privacy).
+   * @param keepSpendInfo Optional boolean to keep spend_info (default: false, never for a mint
+   *   payload; offline sends keep it because those proofs travel to the receiver, and for a v3
+   *   proof spend_info is the only thing that can spend it).
    * @returns Prepared proofs for mint payload.
    */
   private _prepareInputsForMint(
     proofs: Proof[],
     keepDleq: boolean = false,
     keepP2pkE: boolean = false,
+    keepSpendInfo: boolean = false,
   ): Proof[] {
     return proofs.map((p) => {
       const witness = this._normalizeWitness(p);
-      const { dleq, p2pk_e, ...rest } = p; // isolate dleq and p2pk_e
-      // spend_info is local-only: bearer keys and trees never go to the mint
-      delete rest.spend_info;
+      const { dleq, p2pk_e, spend_info, ...rest } = p; // isolate the wallet-side fields
       let newProof: Proof = { ...rest, witness }; // add back normalized witness
       if (keepP2pkE && p2pk_e) newProof = { ...newProof, p2pk_e };
       if (keepDleq && dleq) newProof = { ...newProof, dleq };
+      if (keepSpendInfo && spend_info) newProof = { ...newProof, spend_info };
       return newProof;
     });
   }

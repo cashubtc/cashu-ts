@@ -298,6 +298,23 @@ describe('sendOffline requireDleq', () => {
     expect(send[0].dleq).toBeUndefined();
   });
 
+  test('keeps spend_info on offline-selected send proofs', async () => {
+    // The send proofs travel to the receiver, not the mint: for a v3 proof the
+    // spend_info (bearer key, tree) is the only thing that can spend it.
+    mockV3Keyset();
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const spendInfo = { k: '11'.repeat(32), tree: ['aa'.repeat(40)] };
+    const v3Proofs: Proof[] = [
+      { id: v3Id, amount: Amount.from(1), secret: v3Secret, C: v3C, spend_info: spendInfo },
+    ];
+
+    const { send } = wallet.sendOffline(1, v3Proofs);
+    expect(send).toHaveLength(1);
+    expect(send[0].spend_info).toEqual(spendInfo);
+  });
+
   test('rejects v1/v2 proofs without DLEQ when requireDleq is true', async () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
