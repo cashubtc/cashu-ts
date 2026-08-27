@@ -17,6 +17,7 @@ new LockBuilder()
   .addLeaf(leaf: NutrootLeaf) // explicit tree leaf (eg staged reclaim); v3 only
   .blindKeys(keys?: string | string[]) // blind every key, or exactly the listed keys (list is v3 only)
   .sigAll() // NUT-11 SIG_ALL; on v3 this is the default and only behavior
+  .validate(target: 'v3' | 'pre-v3'): CTSError[] // pre-flight check; empty array = encodes clean
   .toOptions(): LockOptions;
 
 LockBuilder.fromOptions(lock: LockOptions): LockBuilder
@@ -26,18 +27,23 @@ LockBuilder.fromOptions(lock: LockOptions): LockBuilder
 
 Keys must be 33-byte compressed hex and on the secp256k1 curve (NUT-11); a 32-byte x-only key (eg Nostr) throws until you prepend `'02'`, per NIP-61. Keys are de-duplicated, insertion order is preserved, total main plus refund keys must be ≤ 11 for a plain lock or ≤ 10 with a hashlock (the hashlock takes a slot, NUT-28), refund keys will throw if no locktime is set.
 
-Shapes only one encoding can express refuse at encode time, naming the reason: extra tags, anyone-after-locktime, and keyless hashlocks do not fit v3; explicit leaves and partial blind lists do not fit pre-v3. See the [v5 migration guide](../../migration-5.0.0.md) for the full matrix. The spending side (inspecting, receiving, and script-path spends of locked proofs) is covered in [Spending Locked Proofs](./spend_locked.md).
+Shapes only one encoding can express refuse at encode time, naming the reason: extra tags, anyone-after-locktime, and keyless hashlocks do not fit v3; explicit leaves and partial blind lists do not fit pre-v3. See the [v5 migration guide](../../migration-5.0.0.md) for the full matrix. To surface these refusals before building a transaction (eg to gate a form), call `validate(target)`: it runs the same checks and encoder as a real build and returns the refusal as a `CTSError` array, empty when the lock encodes for that keyset version. The spending side (inspecting, receiving, and script-path spends of locked proofs) is covered in [Spending Locked Proofs](./spend_locked.md).
 
 Example usage:
 
 ```ts
 import { LockBuilder } from '@cashu/cashu-ts';
 
-const lock = new LockBuilder()
+const builder = new LockBuilder()
   .addMainPubkey('02abc...')
   .lockUntil(1_712_345_678)
-  .addRefundPubkey('02def...')
-  .toOptions();
+  .addRefundPubkey('02def...');
+
+// optional pre-flight, eg before enabling a form's submit button
+const issues = builder.validate('v3');
+if (issues.length) throw issues[0]; // or show issues[0].message in the UI
+
+const lock = builder.toOptions();
 
 // pass the options (or the builder itself) to `asLocked`:
 await wallet.ops.send(5, proofs).asLocked(lock).run();
