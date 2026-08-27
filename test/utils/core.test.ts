@@ -2093,8 +2093,8 @@ describe('nutroot proof helpers', () => {
     expect(utils.classifyNutrootKeyPath(blsProof({ K, u: '44'.repeat(32), tree }))).toBe(
       'script-only',
     );
-    // a bare aggregated K commits to no script path: nothing spendable travels
-    expect(utils.classifyNutrootKeyPath(blsProof({ K }))).toBe('none');
+    // a bare K with no tree is how an aggregated key arrives
+    expect(utils.classifyNutrootKeyPath(blsProof({ K }))).toBe('aggregated');
     expect(utils.classifyNutrootKeyPath(blsProof({ tree }))).toBe('none');
     expect(utils.classifyNutrootKeyPath(blsProof())).toBe('none');
   });

@@ -20,7 +20,7 @@ type SpendInfo = {
 
 `k` and `E` are mutually exclusive, and the wallet refuses a proof carrying both: that shape leaks the receiver's static key. `spend_info` is local-only, stripped from every mint payload, and **fund-critical**: for a locked proof it belongs in storage and backups, because until the proof is swept it is the only thing that can spend it.
 
-Two stateless helpers dispatch on this without a wallet: `isBlsProof(proof)` gates on the keyset id (nutroot rules apply), and `classifyNutrootKeyPath(proof)` reads `spend_info` to `'bearer' | 'receiver' | 'script-only' | 'none'`, eg to route a pasted token to the right UI before asking for keys. `none` covers both "no spend info" and a bare aggregated `K` with no tree; check `u` yourself when you need "provably no key path" (NUMS) rather than "key held elsewhere".
+Two stateless helpers dispatch on this without a wallet: `isBlsProof(proof)` gates on the keyset id (nutroot rules apply), and `classifyNutrootKeyPath(proof)` reads `spend_info` to `'bearer' | 'receiver' | 'script-only' | 'aggregated' | 'none'`, eg to route a pasted token to the right UI before asking for keys. `aggregated` is a bare `K` with no tree (how an aggregated key arrives: only its holders can spend); check `u` yourself when you need "provably no key path" (NUMS) rather than "key held elsewhere".
 
 ## Inspecting: `wallet.spendOptions()`
 

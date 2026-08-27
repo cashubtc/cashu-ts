@@ -673,7 +673,7 @@ export function isBlsProof(proof: Pick<Proof, 'id'>): boolean {
 /**
  * How a nutroot proof's spending key travels.
  */
-export type NutrootKeyPath = 'bearer' | 'receiver' | 'script-only' | 'none';
+export type NutrootKeyPath = 'bearer' | 'receiver' | 'script-only' | 'aggregated' | 'none';
 
 /**
  * Classifies how a nutroot proof's key path travels, from its spend info.
@@ -681,15 +681,17 @@ export type NutrootKeyPath = 'bearer' | 'receiver' | 'script-only' | 'none';
  * @remarks
  * `bearer`: the private key `k` rides the token, anyone holding it can spend. `receiver`: an
  * ephemeral `E` travels, the receiver's static key derives the spending key. `script-only`: only
- * the disclosed leaves can spend here (`u` marks the key path provably absent, NUMS). `none`:
- * nothing spendable travels (no spend info, or a bare aggregated `K` with no tree). `K` also rides
- * beside `k`/`E` as a consistency check, which the precedence order absorbs.
+ * the disclosed leaves can spend here (`u` marks the key path provably absent, NUMS). `aggregated`:
+ * a bare `K` with no tree, how an aggregated key arrives; only its holders can spend. `none`: no
+ * spend info travels (eg the owner's own proof). `K` also rides beside `k`/`E` as a consistency
+ * check, which the precedence order absorbs. Classifies the claimed shape only:
+ * `verifyNutrootSpendInfo` checks the commitments.
  */
 export function classifyNutrootKeyPath(proof: Pick<Proof, 'spend_info'>): NutrootKeyPath {
   const si = proof.spend_info;
   if (si?.k) return 'bearer';
   if (si?.E) return 'receiver';
-  if (si?.K && si.tree?.length) return 'script-only';
+  if (si?.K) return si.tree?.length ? 'script-only' : 'aggregated';
   return 'none';
 }
 
