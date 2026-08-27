@@ -8,6 +8,7 @@ import { type HTLCWitness, type P2PKWitness, type Proof } from '../model/types';
 import { type NUT10Option } from '../wallet/types/payment-requests';
 
 import { getValidSigners, schnorrSignMessage, schnorrVerifyMessage, type PrivKey } from './core';
+import { isV3PointSecret } from './curve_bls';
 import { normalizeSecpPubkey } from './curve_secp';
 import {
   getTagInt,
@@ -521,6 +522,9 @@ export function signP2PKProofs(
   const toHex = (k: PrivKey): string => (typeof k === 'string' ? k : bytesToHex(k));
   const privateKeyHex = Array.isArray(privateKey) ? privateKey.map(toHex) : toHex(privateKey);
   return proofs.map((proof, index) => {
+    // A v3 point secret carries no NUT-11 conditions and signs the transaction
+    // instead (NUT-10), so parsing it here would only log a failure per proof
+    if (isV3PointSecret(proof.secret)) return proof;
     const privateKeys: string[] = maybeDeriveP2BKPrivateKeys(privateKeyHex, proof);
     let signedProof = proof;
     for (const priv of privateKeys) {

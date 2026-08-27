@@ -95,6 +95,28 @@ const proofs = await wallet.mintProofsBolt11(64, quote, { privkey });
 
 ---
 
+## Minting on a v3 keyset needs the quote object, not the quote id
+
+`mintProofs`/`mintProofsBolt11` and `prepareMint` accept a quote id string for the pre-v3 NUT-20 signature, which covers the id and the outputs. A v3 keyset signs the transaction instead (NUT-10) and its digest commits the quote's face amount, so an id alone cannot be signed: bolt11 mints throw `prepareMint: quote object lacks its amount; pass the full mint quote`, and `prepareBatchMint` names the offending quote.
+
+Wallets that poll a quote and mint from the id are the ones this catches, since the full quote is already in hand at the polling call.
+
+### Migration
+
+```ts
+// Before
+const quote = await wallet.createMintQuoteBolt11(64, pubkey);
+const paid = await wallet.checkMintQuoteBolt11(quote.quote);
+await wallet.mintProofsBolt11(64, quote.quote, { privkey }); // v3: throws
+
+// After: pass the quote object the check returned
+await wallet.mintProofsBolt11(64, paid, { privkey });
+```
+
+Pre-v3 keysets are unaffected, so code that never touches a v3 mint needs no change.
+
+---
+
 ## Keyset rejections now throw `StaleKeysetError`
 
 When the mint rejects an operation with a NUT-00 keyset error (the 12xxx class: `12001` unknown, `12002` inactive, `12003` expired), `completeSwap`, `completeMint`, `completeBatchMint` and `completeMelt` no longer surface the raw `MintOperationError`. The wallet reads the rejection as evidence that its keyset snapshot is stale, refreshes it once, and throws `StaleKeysetError` with the mint's error as `cause`. Every other mint error is untouched.
