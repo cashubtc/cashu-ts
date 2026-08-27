@@ -51,8 +51,10 @@ const newProofs = await wallet.ops
 ```
 
 A seeded wallet that lost the key can re-derive it with
-`wallet.recoverQuoteLockKey(quote.pubkey)`. For an unlocked quote on a pre-v3 keyset, drop to the
-generic `createMintQuote()`.
+`wallet.recoverQuoteLockKey(quote.pubkey)`. For a quote that will never be paid (eg a fee
+estimation), `createQuoteLockKey({ random: true })` forces a random key even on a seeded wallet:
+no counter consumed, nothing for the recovery scan to wade through, unrecoverable by design. For
+an unlocked quote on a pre-v3 keyset, drop to the generic `createMintQuote()`.
 
 ## 5) Two-step BOLT12 mint
 
