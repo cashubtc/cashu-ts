@@ -2400,10 +2400,14 @@ class Wallet {
    *
    * @remarks
    * Derived keys are recoverable via {@link Wallet.recoverQuoteLockKey | recoverQuoteLockKey};
-   * random ones exist only in the returned object, so persist the key with its quote.
+   * random ones exist only in the returned object, so persist the key with its quote. `{ random:
+   * true }` forces a random key on a seeded wallet, consuming no counter: for throwaway quotes (eg
+   * estimation) that must not pollute the recovery scan.
    */
-  async createQuoteLockKey(): Promise<{ pubkey: string; privkey: string }> {
-    return createQuoteLockKeyPair(this._seed, async () => {
+  async createQuoteLockKey(opts?: {
+    random?: boolean;
+  }): Promise<{ pubkey: string; privkey: string }> {
+    return createQuoteLockKeyPair(opts?.random ? undefined : this._seed, async () => {
       const range = await this._counterSource.reserve(QUOTE_COUNTER_KEY, 1);
       // Event-persisted sources must see the quote cursor move too, or a restart
       // re-derives keys already handed out.

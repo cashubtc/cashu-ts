@@ -2065,3 +2065,37 @@ describe('verifyProofsForReceive: v3 spend info cascade', () => {
     ).toThrow(/does not match the proof secret.*keyset 02ab/);
   });
 });
+
+describe('nutroot proof helpers', () => {
+  const blsProof = (spend_info?: Proof['spend_info']): Proof => ({
+    id: `02${'ab'.repeat(32)}`,
+    amount: Amount.from(1),
+    secret: `02${'cd'.repeat(32)}`,
+    C: '00'.repeat(48),
+    ...(spend_info && { spend_info }),
+  });
+
+  test('isBlsProof follows the keyset id', () => {
+    expect(utils.isBlsProof(blsProof())).toBe(true);
+    expect(utils.isBlsProof({ id: `00${'11'.repeat(16)}` })).toBe(false);
+  });
+
+  test('classifyNutrootKeyPath picks bearer, receiver, script-only, none', () => {
+    const k = '11'.repeat(32);
+    const E = `02${'22'.repeat(32)}`;
+    const K = `02${'33'.repeat(32)}`;
+    const tree = ['aa'];
+    expect(utils.classifyNutrootKeyPath(blsProof({ k }))).toBe('bearer');
+    expect(utils.classifyNutrootKeyPath(blsProof({ E }))).toBe('receiver');
+    // K rides beside E as a completeness check; precedence keeps it receiver
+    expect(utils.classifyNutrootKeyPath(blsProof({ E, K, tree }))).toBe('receiver');
+    expect(utils.classifyNutrootKeyPath(blsProof({ K, tree }))).toBe('script-only');
+    expect(utils.classifyNutrootKeyPath(blsProof({ K, u: '44'.repeat(32), tree }))).toBe(
+      'script-only',
+    );
+    // a bare aggregated K commits to no script path: nothing spendable travels
+    expect(utils.classifyNutrootKeyPath(blsProof({ K }))).toBe('none');
+    expect(utils.classifyNutrootKeyPath(blsProof({ tree }))).toBe('none');
+    expect(utils.classifyNutrootKeyPath(blsProof())).toBe('none');
+  });
+});

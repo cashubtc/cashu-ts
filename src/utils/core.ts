@@ -664,6 +664,36 @@ function len32Framed(b: Uint8Array): Uint8Array {
 }
 
 /**
+ * True if the proof lives on a BLS (v3) keyset, so nutroot rules apply.
+ */
+export function isBlsProof(proof: Pick<Proof, 'id'>): boolean {
+  return isBlsKeyset(proof.id);
+}
+
+/**
+ * How a nutroot proof's spending key travels.
+ */
+export type NutrootKeyPath = 'bearer' | 'receiver' | 'script-only' | 'none';
+
+/**
+ * Classifies how a nutroot proof's key path travels, from its spend info.
+ *
+ * @remarks
+ * `bearer`: the private key `k` rides the token, anyone holding it can spend. `receiver`: an
+ * ephemeral `E` travels, the receiver's static key derives the spending key. `script-only`: only
+ * the disclosed leaves can spend here (`u` marks the key path provably absent, NUMS). `none`:
+ * nothing spendable travels (no spend info, or a bare aggregated `K` with no tree). `K` also rides
+ * beside `k`/`E` as a consistency check, which the precedence order absorbs.
+ */
+export function classifyNutrootKeyPath(proof: Pick<Proof, 'spend_info'>): NutrootKeyPath {
+  const si = proof.spend_info;
+  if (si?.k) return 'bearer';
+  if (si?.E) return 'receiver';
+  if (si?.K && si.tree?.length) return 'script-only';
+  return 'none';
+}
+
+/**
  * Returns a copy of `proofs` sorted by keyset id (lexicographic).
  */
 export function sortProofsById(proofs: Proof[]) {

@@ -70,6 +70,19 @@ describe('Wallet quote lock keys', () => {
     ]);
   });
 
+  test('createQuoteLockKey({ random: true }) skips the seed and the quote counter', async () => {
+    const wallet = new Wallet(mintUrl, { unit: 'sat', bip39seed: SEED });
+    const seen: OperationCounters[] = [];
+    wallet.on.countersReserved((p) => seen.push(p));
+    const throwaway = await wallet.createQuoteLockKey({ random: true });
+    expect(throwaway.privkey).not.toBe(bytesToHex(deriveQuoteLockKey(SEED, 0)));
+    expect(bytesToHex(getPubKeyFromPrivKey(hexToBytes(throwaway.privkey)))).toBe(throwaway.pubkey);
+    expect(seen).toEqual([]);
+    // The counter did not move: the next seeded key still derives at 0.
+    const first = await wallet.createQuoteLockKey();
+    expect(bytesToHex(deriveQuoteLockKey(SEED, 0))).toBe(first.privkey);
+  });
+
   test('recoverQuoteLockKey scans the seed to the quote pubkey, and misses cleanly', async () => {
     const wallet = new Wallet(mintUrl, { unit: 'sat', bip39seed: SEED });
     const expected = deriveQuoteLockKey(SEED, 3);

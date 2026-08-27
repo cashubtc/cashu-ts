@@ -76,7 +76,7 @@ The typed methods (`createMintQuoteBolt11` etc.) already required `loadMint()` (
 The lock key is yours to hold. The wallet stores nothing and recovers nothing implicitly: minting signs with `config.privkey`, and a locked quote with no key throws.
 As with the other locking methods, ensure you keep the key out of anything that logs or serializes quotes.
 
-Two helpers are public: `createQuoteLockKey()` returns a fresh `{ pubkey, privkey }` (seed-derived and counter-consuming when seeded, random otherwise), and `recoverQuoteLockKey(pubkey)` re-derives a seeded wallet's lost quote key offline by scanning the quote counter.
+Two helpers are public: `createQuoteLockKey()` returns a fresh `{ pubkey, privkey }` (seed-derived and counter-consuming when seeded, random otherwise), and `recoverQuoteLockKey(pubkey)` re-derives a seeded wallet's lost quote key offline by scanning the quote counter. For a quote that will never be paid (eg a fee estimation), `createQuoteLockKey({ random: true })` forces a random key on a seeded wallet: no counter consumed, nothing for the recovery scan to wade through, unrecoverable by design.
 
 ### Migration
 
