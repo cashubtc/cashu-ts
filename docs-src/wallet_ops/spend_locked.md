@@ -78,6 +78,8 @@ const fresh = await wallet.ops
   .run();
 ```
 
+For the common policy (first satisfiable leaf per proof the key path cannot spend), `wallet.planScriptPaths(proofs, { privkeys })` builds the plans in one call, quietly skipping non-v3 proofs, key path spends, and stuck proofs. Name plans yourself when a later leaf is preferable.
+
 Plans are keyed by `secret`, not input index: proof selection decides input order. Everything except the signatures is checked when the transaction is prepared, so a plan that cannot be honored (undisclosed leaf, missing preimage, key shortfall with no cosigner) fails before any request is built.
 
 **Cosigning.** A leaf whose other keys live elsewhere takes a `cosign` hook. It runs once the transaction is fixed and its digest known (the digest covers the outputs, so it cannot exist earlier), and returns BIP-340 signature hex over the digest. It is awaited mid-flight: fine for a remote signer measured in seconds, not for approval ceremonies measured in days. Duplicate and non-verifying signatures are trimmed; the leaf still needs `n` valid ones or the spend fails.

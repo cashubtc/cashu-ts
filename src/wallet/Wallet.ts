@@ -125,6 +125,7 @@ import {
   type SwapTransaction,
   type MeltProofsResponse,
   type SendResponse,
+  type ScriptPathPlan,
   type SpendOptions,
   type RestoreConfig,
   type BatchRestoreConfig,
@@ -2089,6 +2090,30 @@ class Wallet {
     opts?: { privkeys?: string | string[]; now?: number },
   ): Promise<SpendOptions> {
     return proofSpendOptions(proof, opts, this._nutrootState());
+  }
+
+  /**
+   * Builds script path plans for the v3 proofs the key path cannot spend: first satisfiable leaf
+   * each, for `ReceiveConfig.scriptPath`.
+   *
+   * @remarks
+   * Skips non-v3 proofs, proofs the key path spends, and proofs with no satisfiable leaf; ask
+   * {@link Wallet.spendOptions | spendOptions} why a missing proof is stuck. Leaf choice is policy:
+   * name plans yourself when a later leaf is preferable (eg a cheaper key roster).
+   */
+  async planScriptPaths(
+    proofs: Proof[],
+    opts?: { privkeys?: string | string[]; now?: number },
+  ): Promise<ScriptPathPlan[]> {
+    const plans: ScriptPathPlan[] = [];
+    for (const proof of proofs) {
+      if (!isBlsKeyset(proof.id) || !isV3PointSecret(proof.secret)) continue;
+      const spend = await proofSpendOptions(proof, opts, this._nutrootState());
+      if (spend.keyPath) continue;
+      const leaf = spend.script.find((o) => o.satisfiable);
+      if (leaf) plans.push({ secret: proof.secret, leafIndex: leaf.leafIndex });
+    }
+    return plans;
   }
 
   /**

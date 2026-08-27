@@ -215,3 +215,28 @@ describe('wallet.spendOptions: the script path', () => {
     await expect(wallet().spendOptions(proof, { privkeys: priv(ALICE) })).rejects.toThrow(/type/);
   });
 });
+
+describe('wallet.planScriptPaths', () => {
+  test('plans the first satisfiable leaf per key-path-less proof, skipping the rest', async () => {
+    const threshold = (keys: string[]): NutrootLeaf => ({ type: 'threshold', n: 1, keys });
+    const locked = (leaves: NutrootLeaf[]) => {
+      const { secret, tree } = buildNutrootSecret(pub(BOB), leaves);
+      return v3Proof(secret, { K: pub(BOB), tree });
+    };
+    const plain: Proof = {
+      id: `00${'11'.repeat(16)}`,
+      amount: Amount.from(1),
+      secret: 'plain-secret',
+      C: 'aa'.repeat(33),
+    };
+    const bearer = v3Proof(pub(ALICE), { k: priv(ALICE) });
+    const claimable = locked([threshold([pub(STRANGER)]), threshold([pub(ALICE)])]);
+    const stuck = locked([threshold([pub(STRANGER)])]);
+    const plans = await wallet().planScriptPaths([plain, bearer, claimable, stuck], {
+      privkeys: priv(ALICE),
+    });
+    // plain (not v3) and bearer (key path) are skipped without throwing; the
+    // stuck proof yields no plan; the claimable one names its second leaf.
+    expect(plans).toEqual([{ secret: claimable.secret, leafIndex: 1 }]);
+  });
+});
