@@ -1,5 +1,20 @@
 # Changelog
 
+## [4.10.0](https://github.com/cashubtc/cashu-ts/compare/v4.9.0...v4.10.0) (2026-08-27)
+
+
+### Features
+
+* **model:** expose NUT-06 urls, time and tos_url on MintInfo ([#1004](https://github.com/cashubtc/cashu-ts/issues/1004)) ([ad81703](https://github.com/cashubtc/cashu-ts/commit/ad817034f3957963abed467e4f62a848e6d9992d))
+* **wallet:** add LockBuilder and asLocked as forward-compatible names ([#996](https://github.com/cashubtc/cashu-ts/issues/996)) ([6435c92](https://github.com/cashubtc/cashu-ts/commit/6435c92428872519ca6672b24a32aa2c8566fa0f))
+* **wallet:** add swap preview serialize helpers and persistence docs ([#973](https://github.com/cashubtc/cashu-ts/issues/973)) ([696694f](https://github.com/cashubtc/cashu-ts/commit/696694ff8d2af075022434eb0772b1e727b45587))
+
+
+### Bug Fixes
+
+* **transport:** split request option precedence by option class ([#971](https://github.com/cashubtc/cashu-ts/issues/971)) ([c62073b](https://github.com/cashubtc/cashu-ts/commit/c62073b5041e710630ff8bddd29c4f53c63e2050))
+* **wallet:** keep large proofs in the close-match selection pool ([#1002](https://github.com/cashubtc/cashu-ts/issues/1002)) ([05a9465](https://github.com/cashubtc/cashu-ts/commit/05a9465111e99a7f53115766f6e357ec148fbdac))
+
 ## [4.9.0](https://github.com/cashubtc/cashu-ts/compare/v4.8.0...v4.9.0) (2026-08-16)
 
 
