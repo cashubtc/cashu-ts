@@ -2,7 +2,6 @@ import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
 import { numberToBytesBE } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { hexToBytes, bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
-import { tagSchnorr } from '@scure/btc-signer/utils.js';
 import { describe, test, expect } from 'vitest';
 
 import { deriveP2BKBlindedPubkeyAtSlot } from '../../src/crypto/NUT28';
@@ -54,10 +53,10 @@ const negate = (priv: string) =>
   bytesToHex(numberToBytesBE(secp256k1.Point.Fn.ORDER - BigInt('0x' + priv), 32));
 
 describe('tagged hashes', () => {
-  test('match the @scure/btc-signer oracle for the Cashu tags', () => {
+  test('match the @noble/curves oracle for the Cashu tags', () => {
     const msg = utf8ToBytes('cross-check message');
     for (const tag of [NUTROOT_LEAF_TAG, NUTROOT_BRANCH_TAG, NUTROOT_TWEAK_TAG]) {
-      expect(bytesToHex(taggedHash(tag, msg))).toBe(bytesToHex(tagSchnorr(tag, msg)));
+      expect(bytesToHex(taggedHash(tag, msg))).toBe(bytesToHex(schnorr.utils.taggedHash(tag, msg)));
     }
   });
 
