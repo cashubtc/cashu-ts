@@ -21,3 +21,6 @@ const receiveProofs = await wallet2.receive(token, {privkey});
 
 > Tip: derive `pubkey`/`privkey` deterministically from the wallet seed so the lock key is
 > recoverable without a separate backup. See [Derive Keys](./derive_keys.md).
+
+> Signing with a NIP-07 browser extension instead of a pasted key: see
+> [Browser Signers](./nip07_signers.md).

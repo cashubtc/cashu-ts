@@ -153,6 +153,12 @@ export {
   type SigAllSigningPackage,
 } from './model/SigAll';
 export {
+  CashuNip07,
+  type CashuNip07Api,
+  type Nip07Like,
+  type Nip07SignedHash,
+} from './model/CashuNip07';
+export {
   ScriptPath,
   type ScriptPathApi,
   type ScriptPathSigningPackage,
