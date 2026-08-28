@@ -600,8 +600,8 @@ describe('locked secret construction and spend info cascade', () => {
     // 2.5.1 inserts this step between the bare and tweaked branches, so both the disclosed-key
     // and bearer-scalar forms must reach it: an aggregate has no single holder of the scalar,
     // but a single-party key may use the same form.
-    expect(verifyNutrootSpendInfo(v.secret, { K: v.internal_key })).toBe('aggregated');
-    expect(verifyNutrootSpendInfo(v.secret, { k: v61.carol_priv })).toBe('aggregated');
+    expect(verifyNutrootSpendInfo(v.secret, { K: v.internal_key })).toBe('empty-tweaked');
+    expect(verifyNutrootSpendInfo(v.secret, { k: v61.carol_priv })).toBe('empty-tweaked');
     // The key that signs it is (k + t) mod n, which is the tweak with no root.
     expect(bytesToHex(nutrootTweakSeckey(hexToBytes(v61.carol_priv)))).toBe(v.keypath_priv);
     // A bare key is still bare: the empty tweak is only reached when the plain check fails.

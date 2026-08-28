@@ -671,27 +671,32 @@ export function isBlsProof(proof: Pick<Proof, 'id'>): boolean {
 }
 
 /**
- * How a nutroot proof's spending key travels.
+ * Spend-info shape of a nutroot proof (NUT-10 receive-time check 1).
  */
-export type NutrootKeyPath = 'bearer' | 'receiver' | 'script-only' | 'aggregated' | 'none';
+export type NutrootSpendInfoShape =
+  | 'bearer'
+  | 'script-only'
+  | 'receiver-keyed'
+  | 'disclosed'
+  | 'none';
 
 /**
- * Classifies how a nutroot proof's key path travels, from its spend info.
+ * Classifies a nutroot proof's spend info by shape: which key, if any, travels with it.
  *
  * @remarks
- * `bearer`: the private key `k` rides the token, anyone holding it can spend. `receiver`: an
- * ephemeral `E` travels, the receiver's static key derives the spending key. `script-only`: only
- * the disclosed leaves can spend here (`u` marks the key path provably absent, NUMS). `aggregated`:
- * a bare `K` with no tree, how an aggregated key arrives; only its holders can spend. `none`: no
- * spend info travels (eg the owner's own proof). `K` also rides beside `k`/`E` as a consistency
- * check, which the precedence order absorbs. Classifies the claimed shape only:
+ * `bearer`: the private key `k` rides the token. `script-only`: `u` claims a NUMS internal key, so
+ * no key path exists and only the disclosed leaves spend (an `E` beside it blinds leaf keys only).
+ * `receiver-keyed`: the receiver's static key derives the spending key from `E`. `disclosed`: `K`
+ * alone travels, so the key path is held elsewhere (eg an aggregated key's cosigners). `none`: no
+ * spend info (eg the owner's own proof). Classifies the claimed shape only:
  * `verifyNutrootSpendInfo` checks the commitments.
  */
-export function classifyNutrootKeyPath(proof: Pick<Proof, 'spend_info'>): NutrootKeyPath {
+export function classifyNutrootSpendInfo(proof: Pick<Proof, 'spend_info'>): NutrootSpendInfoShape {
   const si = proof.spend_info;
   if (si?.k) return 'bearer';
-  if (si?.E) return 'receiver';
-  if (si?.K) return si.tree?.length ? 'script-only' : 'aggregated';
+  if (si?.u) return 'script-only';
+  if (si?.E) return 'receiver-keyed';
+  if (si?.K) return 'disclosed';
   return 'none';
 }
 

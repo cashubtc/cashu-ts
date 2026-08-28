@@ -2082,23 +2082,24 @@ describe('nutroot proof helpers', () => {
     expect(utils.isBlsProof({ id: `00${'11'.repeat(16)}` })).toBe(false);
   });
 
-  test('classifyNutrootKeyPath picks bearer, receiver, script-only, none', () => {
+  test('classifyNutrootSpendInfo picks bearer, script-only, receiver-keyed, disclosed, none', () => {
     const k = '11'.repeat(32);
     const E = `02${'22'.repeat(32)}`;
     const K = `02${'33'.repeat(32)}`;
+    const u = '44'.repeat(32);
     const tree = ['aa'];
-    expect(utils.classifyNutrootKeyPath(blsProof({ k }))).toBe('bearer');
-    expect(utils.classifyNutrootKeyPath(blsProof({ E }))).toBe('receiver');
-    // K rides beside E as a completeness check; precedence keeps it receiver
-    expect(utils.classifyNutrootKeyPath(blsProof({ E, K, tree }))).toBe('receiver');
-    expect(utils.classifyNutrootKeyPath(blsProof({ K, tree }))).toBe('script-only');
-    expect(utils.classifyNutrootKeyPath(blsProof({ K, u: '44'.repeat(32), tree }))).toBe(
-      'script-only',
-    );
-    // a bare K with no tree is how an aggregated key arrives
-    expect(utils.classifyNutrootKeyPath(blsProof({ K }))).toBe('aggregated');
-    expect(utils.classifyNutrootKeyPath(blsProof({ tree }))).toBe('none');
-    expect(utils.classifyNutrootKeyPath(blsProof())).toBe('none');
+    expect(utils.classifyNutrootSpendInfo(blsProof({ k }))).toBe('bearer');
+    expect(utils.classifyNutrootSpendInfo(blsProof({ E }))).toBe('receiver-keyed');
+    // K rides beside E as a completeness check; precedence keeps it receiver-keyed
+    expect(utils.classifyNutrootSpendInfo(blsProof({ E, K, tree }))).toBe('receiver-keyed');
+    // u is the NUMS claim; an E beside it only blinds leaf keys (NUT-18)
+    expect(utils.classifyNutrootSpendInfo(blsProof({ K, u, tree }))).toBe('script-only');
+    expect(utils.classifyNutrootSpendInfo(blsProof({ E, K, u, tree }))).toBe('script-only');
+    // K without u: the key path is held elsewhere, tree or not
+    expect(utils.classifyNutrootSpendInfo(blsProof({ K, tree }))).toBe('disclosed');
+    expect(utils.classifyNutrootSpendInfo(blsProof({ K }))).toBe('disclosed');
+    expect(utils.classifyNutrootSpendInfo(blsProof({ tree }))).toBe('none');
+    expect(utils.classifyNutrootSpendInfo(blsProof())).toBe('none');
   });
 });
 

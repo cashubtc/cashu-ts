@@ -684,15 +684,16 @@ export function selectRequiredLeafSignatures(
  * the caller's: trial-match, seed recovery, or cosigning.
  *
  * @remarks
- * Returns 'bare' (k key-path spends the secret directly) or 'tweaked' (the disclosed tree plus
- * internal key reconstructs the secret, so the disclosure is provably complete). Throws on any
- * mismatch, on tree-only spend info without a key source, and on leaves the wallet cannot parse
- * (unknown version/type or unknown constraint fields fail closed).
+ * Returns 'bare' (`k` spends the secret directly), 'empty-tweaked' (the aggregated form, no tree),
+ * 'tweaked' (the disclosed tree plus internal key reconstructs the secret, so the disclosure is
+ * provably complete) or 'receiver-keyed' (reconstruction deferred to trial-match with the static
+ * key). Throws on any mismatch, on tree-only spend info without a key source, and on leaves the
+ * wallet cannot parse (unknown version/type or unknown constraint fields fail closed).
  */
 export function verifyNutrootSpendInfo(
   secretHex: string,
   spendInfo: { k?: string; E?: string; K?: string; tree?: string[]; u?: string },
-): 'bare' | 'tweaked' | 'receiver-keyed' | 'aggregated' {
+): 'bare' | 'empty-tweaked' | 'tweaked' | 'receiver-keyed' {
   const secret = Bytes.fromHex(secretHex);
   try {
     pointFromBytes(secret);
@@ -774,7 +775,7 @@ export function verifyNutrootSpendInfo(
       // The empty-tweak step (NUT-10): an aggregated key commits to having no script path by
       // tweaking with nothing but itself. Checked here rather than only for a disclosed `K`,
       // because a single-party key may use the same form.
-      if (Bytes.equals(nutrootTweakPubkey(derived), secret)) return 'aggregated';
+      if (Bytes.equals(nutrootTweakPubkey(derived), secret)) return 'empty-tweaked';
       throw new CTSError('Spend info key does not match the proof secret');
     }
     internalKey = derived;
@@ -787,7 +788,7 @@ export function verifyNutrootSpendInfo(
   if (internalKey !== undefined && (!spendInfo.tree || spendInfo.tree.length === 0)) {
     // `K` alone is complete when the secret is its empty tweak: nothing else can be committed.
     // This is how an aggregated key arrives, since no single party holds its scalar to send.
-    if (Bytes.equals(nutrootTweakPubkey(internalKey), secret)) return 'aggregated';
+    if (Bytes.equals(nutrootTweakPubkey(internalKey), secret)) return 'empty-tweaked';
     throw new CTSError('Spend info discloses a key that does not commit to the proof secret');
   }
   if (!spendInfo.tree || spendInfo.tree.length === 0 || internalKey === undefined) {
