@@ -154,27 +154,47 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
 }
 
 /**
+ * The bytes every input signs over, before hashing: `domain tag || transcript`.
+ *
+ * @remarks
+ * A signer handed this rather than the digest can hash it itself and refuse anything that does not
+ * carry the tag, so it can never be tricked into signing some other 32 bytes.
+ */
+export function transactionMessage(tx: TransactionShape): Uint8Array {
+  return Bytes.concat(utf8ToBytes(TRANSCRIPT_DOMAIN_TAG), buildTransactionTranscript(tx));
+}
+
+/**
  * The 32-byte digest every input signs: `SHA256(domain tag || transcript)`.
  */
 export function transactionDigest(tx: TransactionShape): Uint8Array {
-  return sha256(Bytes.concat(utf8ToBytes(TRANSCRIPT_DOMAIN_TAG), buildTransactionTranscript(tx)));
+  return sha256(transactionMessage(tx));
 }
+
+type PayloadShape = {
+  inputs?: Array<{ amount: AmountLike; id: string; secret: string; C: string }>;
+  mintQuotes?: Array<{ quoteId: string; amount: AmountLike }>;
+  outputs?: Array<{ amount: AmountLike; id: string; B_: string }>;
+  meltQuote?: { quoteId: string; amount: AmountLike };
+};
 
 /**
  * {@link transactionDigest} over payload wire shapes: proofs, quotes and blinded messages as the
  * request carries them, amounts in any {@link AmountLike} form.
  */
-export function digestForPayload(payload: {
-  inputs?: Array<{ amount: AmountLike; id: string; secret: string; C: string }>;
-  mintQuotes?: Array<{ quoteId: string; amount: AmountLike }>;
-  outputs?: Array<{ amount: AmountLike; id: string; B_: string }>;
-  meltQuote?: { quoteId: string; amount: AmountLike };
-}): Uint8Array {
+export function digestForPayload(payload: PayloadShape): Uint8Array {
+  return sha256(messageForPayload(payload));
+}
+
+/**
+ * {@link transactionMessage} over payload wire shapes; see {@link digestForPayload}.
+ */
+export function messageForPayload(payload: PayloadShape): Uint8Array {
   const quote = (q: { quoteId: string; amount: AmountLike }): TranscriptQuote => ({
     amount: Amount.from(q.amount).toBigInt(),
     quoteId: q.quoteId,
   });
-  return transactionDigest({
+  return transactionMessage({
     ...(payload.inputs && {
       proofInputs: payload.inputs.map((p) => ({
         amount: Amount.from(p.amount).toBigInt(),

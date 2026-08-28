@@ -8,6 +8,7 @@ import {
   serializeNutrootLeaf,
   type NutrootLeaf,
 } from '../../src/crypto/nutroot';
+import { digestForPayload } from '../../src/crypto/transcript';
 import { Amount } from '../../src/model/Amount';
 import { OutputData } from '../../src/model/OutputData';
 import { ScriptPath } from '../../src/model/ScriptPath';
@@ -93,7 +94,7 @@ describe('ScriptPath signing packages', () => {
     expect(
       schnorr.verify(
         hexToBytes(signed.spends[0].signatures[0]),
-        hexToBytes(pkg.digest),
+        digestForPayload({ inputs: pkg.inputs, outputs: pkg.outputs }),
         hexToBytes(pub(3)).subarray(1),
       ),
     ).toBe(true);
@@ -112,7 +113,6 @@ describe('ScriptPath signing packages', () => {
     const encoded = ScriptPath.serializePackage(pkg);
     expect(encoded.startsWith('nutspA')).toBe(true);
     const decoded = ScriptPath.deserializePackage(encoded);
-    expect(decoded.digest).toBe(pkg.digest);
     expect(decoded.spends).toEqual(pkg.spends);
     expect(decoded.type).toBe('swap');
     // A signature added remotely survives the trip back.
@@ -167,14 +167,6 @@ describe('ScriptPath signing packages', () => {
     expect(() =>
       ScriptPath.deserializePackage(reserialize((p) => ({ ...p, spends: 'none' }))),
     ).toThrow(/Malformed/);
-    expect(() =>
-      ScriptPath.deserializePackage(reserialize((p) => ({ ...p, digest: 'abcd' }))),
-    ).toThrow(/32 bytes hex/);
-    // A digest that is well-formed but wrong: the package no longer matches its own contents.
-    const flipped = `${pkg.digest.slice(0, -1)}${pkg.digest.endsWith('0') ? '1' : '0'}`;
-    expect(() =>
-      ScriptPath.deserializePackage(reserialize((p) => ({ ...p, digest: flipped }))),
-    ).toThrow(/does not match its inputs/);
     expect(() =>
       ScriptPath.deserializePackage(
         reserialize((p) => ({ ...p, spends: [p.spends[0], p.spends[0]] })),
@@ -253,7 +245,15 @@ describe('ScriptPath melt packages', () => {
       { secret: proof.secret, leafIndex: 1 },
     ]);
     // Same inputs; the quote container must move the digest (NUT-10 melt transcript).
-    expect(melt.digest).not.toBe(swap.digest);
+    const digestOfPkg = (p: typeof melt) =>
+      bytesToHex(
+        digestForPayload({
+          inputs: p.inputs,
+          outputs: p.outputs,
+          ...(p.quote && { meltQuote: { quoteId: p.quote, amount: p.quoteAmount! } }),
+        }),
+      );
+    expect(digestOfPkg(melt)).not.toBe(digestOfPkg(swap));
   });
 
   test('deserialize rehydrates the melt quote amount as bigint', () => {

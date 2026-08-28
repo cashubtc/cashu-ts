@@ -1334,7 +1334,7 @@ describeV3('M9 script path through the wallet API', () => {
           {
             secret: proof.secret,
             leafIndex: 0,
-            cosign: async (digest, signingLeaf) => {
+            cosign: async ({ digest, leaf: signingLeaf }) => {
               sawDigest = digest;
               expect(signingLeaf.keys).toContain(bobPub);
               return [bytesToHex(schnorr.sign(digest, hexToBytes(bobPriv)))];
@@ -1419,11 +1419,17 @@ describeV3('M9 script path through the wallet API', () => {
       // here rather than by the mint, which would only say the witness was invalid.
       const other = await alice.prepareSwapToReceive([proof]);
       expect(() => ScriptPath.mergeSwapPackage(pkg, other)).toThrow(/does not match/);
-      // And a package whose digest was edited is refused when it is read back.
-      const tampered = { ...pkg, digest: 'ab'.repeat(32) };
-      expect(() => ScriptPath.deserializePackage(ScriptPath.serializePackage(tampered))).toThrow(
-        /digest does not match/,
+      // The package carries no digest to edit: signatures cover whatever inputs and outputs it
+      // shows, so a package whose contents were edited reads back fine and fails at merge.
+      const tampered = ScriptPath.deserializePackage(
+        ScriptPath.serializePackage({
+          ...pkg,
+          outputs: pkg.outputs.map((o, i) =>
+            i === 0 ? { ...o, B_: (o.B_.startsWith('02') ? '03' : '02') + o.B_.slice(2) } : o,
+          ),
+        }),
       );
+      expect(() => ScriptPath.mergeSwapPackage(tampered, preview)).toThrow(/does not match/);
     },
   );
 

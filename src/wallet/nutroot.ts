@@ -1,3 +1,5 @@
+import { sha256 } from '@noble/hashes/sha2.js';
+
 import { assertV3PointSecret, isBlsKeyset, isV3PointSecret, schnorrSignDigest } from '../crypto';
 import {
   createRandomSecretKey,
@@ -16,7 +18,7 @@ import {
   nutrootMerkleRoot,
   nutrootTweakSeckey,
 } from '../crypto/nutroot';
-import { digestForPayload, signTransactionInput } from '../crypto/transcript';
+import { messageForPayload, signTransactionInput } from '../crypto/transcript';
 import { type Logger, fail } from '../logger';
 import { type Amount } from '../model/Amount';
 import { CTSError } from '../model/Errors';
@@ -57,7 +59,7 @@ export type ScriptPathSpend = {
   preimage?: string;
   keys: string[];
   leaf: NutrootLeaf;
-  cosign?: (digest: Uint8Array, leaf: NutrootLeaf) => Promise<string[]>;
+  cosign?: ScriptPathPlan['cosign'];
 };
 
 /**
@@ -114,11 +116,12 @@ export async function attachTransactionWitnesses(
 ): Promise<void> {
   const v3Inputs = payload.inputs.filter((p) => isBlsKeyset(p.id) && isV3PointSecret(p.secret));
   if (v3Inputs.length === 0) return;
-  const digest = digestForPayload({
+  const message = messageForPayload({
     inputs: payload.inputs,
     outputs: payload.outputs ?? [],
     ...(meltQuote && { meltQuote }),
   });
+  const digest = sha256(message);
   // Keys are derived per keyset, and a mixed transaction can carry v3 inputs from more than one,
   // so recover per keyset. Scan bound: that keyset's counter plus headroom for proofs minted
   // before this session.
@@ -149,7 +152,7 @@ export async function attachTransactionWitnesses(
     // The co-signer sees the digest only now, which is why it is a hook and not a signature the
     // caller could have supplied up front: the digest covers the outputs, and those are only
     // fixed (and ordered) once the transaction is built.
-    const theirs = spend.cosign ? await spend.cosign(digest, spend.leaf) : [];
+    const theirs = spend.cosign ? await spend.cosign({ digest, message, leaf: spend.leaf }) : [];
     const signatures = selectRequiredLeafSignatures(spend.leaf, digest, [
       ...mine,
       ...theirs.map((sig: string) => sig.toLowerCase()),

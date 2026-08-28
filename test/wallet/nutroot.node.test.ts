@@ -21,6 +21,7 @@ import {
   prepareScriptPathSpends,
   type NutrootWalletState,
 } from '../../src/wallet/nutroot';
+import type { CosignRequest } from '../../src/wallet/types';
 import vectors from '../vectors/nutroot-v3.json';
 
 const KEYSET = vectors.nut13_v3.keyset_id; // a BLS (v3) keyset id
@@ -421,13 +422,39 @@ describe('attachTransactionWitnesses', () => {
     ).toBe(true);
   });
 
+  test('the cosigner is handed the tagged message the digest was hashed from', async () => {
+    const built = buildNutrootSecret(PUB_A, [{ type: 'threshold', n: 2, keys: [PUB_A, PUB_B] }]);
+    const input = v3Proof(built.secret, { k: PRIV_A, tree: built.tree });
+    let seen: CosignRequest | undefined;
+    const cosign = async (request: CosignRequest) => {
+      seen = request;
+      return [Bytes.toHex(schnorr.sign(request.digest, Bytes.fromHex(PRIV_B)))];
+    };
+    const spends = prepareScriptPathSpends(
+      [input],
+      [{ secret: built.secret, leafIndex: 0, extraKeys: [PRIV_A], cosign }],
+      [],
+    );
+    await attachTransactionWitnesses(
+      { inputs: [input], outputs: [OUTPUT] },
+      undefined,
+      undefined,
+      spends,
+      makeState(undefined),
+    );
+    expect(seen!.leaf.keys).toEqual([PUB_A, PUB_B]);
+    expect(Bytes.toString(seen!.message.subarray(0, 20))).toBe('Cashu_Transaction_v1');
+    expect(Bytes.toHex(sha256(seen!.message))).toBe(Bytes.toHex(seen!.digest));
+    expect(Bytes.toHex(seen!.digest)).toBe(Bytes.toHex(digestOf([input])));
+  });
+
   test('cosigner signatures fill a threshold; invalid or duplicate extras are trimmed', async () => {
     const twoOfTwo: NutrootLeaf[] = [{ type: 'threshold', n: 2, keys: [PUB_A, PUB_B] }];
     const built = buildNutrootSecret(PUB_A, twoOfTwo);
     const makeInput = () => v3Proof(built.secret, { k: PRIV_A, tree: built.tree });
 
     const good = makeInput();
-    const cosign = async (digest: Uint8Array) => [
+    const cosign = async ({ digest }: { digest: Uint8Array }) => [
       Bytes.toHex(schnorr.sign(digest, Bytes.fromHex(PRIV_A))).toUpperCase(), // case-normalized
       '00'.repeat(64), // junk: trimmed, not forwarded
     ];

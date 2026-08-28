@@ -78,10 +78,6 @@ export type ScriptPathSigningPackage = {
    * Melt quote amount, needed to reproduce the digest; melt packages only.
    */
   quoteAmount?: bigint;
-  /**
-   * The transaction digest every signature covers, hex.
-   */
-  digest: string;
   spends: ScriptPathSpendRequest[];
 };
 
@@ -91,6 +87,20 @@ function digestOf(
   meltQuote?: { quoteId: string; amount: bigint },
 ): Uint8Array {
   return digestForPayload({ inputs, outputs, ...(meltQuote && { meltQuote }) });
+}
+
+/**
+ * The digest a package's signatures cover, always rebuilt from its inputs and outputs: the package
+ * carries no digest field, so there is nothing to sign but what it shows.
+ */
+function packageDigest(pkg: ScriptPathSigningPackage): Uint8Array {
+  return digestOf(
+    pkg.inputs,
+    pkg.outputs,
+    pkg.type === 'melt'
+      ? { quoteId: pkg.quote!, amount: Amount.from(pkg.quoteAmount!).toBigInt() }
+      : undefined,
+  );
 }
 
 function buildPackage(
@@ -103,7 +113,6 @@ function buildPackage(
   if (plans.length === 0) {
     throw new CTSError('A script path package needs at least one plan');
   }
-  const digest = digestOf(inputs, outputs, meltQuote);
   const spends = plans.map((plan) => {
     const proof = inputs.find((p) => p.secret === plan.secret);
     if (!proof) {
@@ -138,7 +147,6 @@ function buildPackage(
     ...(meltQuote && { quote: meltQuote.quoteId, quoteAmount: meltQuote.amount }),
     inputs: inputs.map((p) => ({ amount: p.amount, id: p.id, secret: p.secret, C: p.C })),
     outputs,
-    digest: Bytes.toHex(digest),
     spends,
   };
 }
@@ -236,9 +244,6 @@ function assertValidPackage(pkg: ScriptPathSigningPackage): void {
       throw new CTSError(`Signing package output ${i} amount is invalid`, { cause: e });
     }
   }
-  if (!/^[0-9a-f]{64}$/.test(pkg.digest ?? '')) {
-    throw new CTSError('Signing package digest must be 32 bytes hex');
-  }
   if (
     pkg.type === 'melt' &&
     (typeof pkg.quote !== 'string' || pkg.quote.length === 0 || pkg.quoteAmount === undefined)
@@ -251,18 +256,6 @@ function assertValidPackage(pkg: ScriptPathSigningPackage): void {
     } catch (e) {
       throw new CTSError('Signing package quote amount is invalid', { cause: e });
     }
-  }
-  const recomputed = Bytes.toHex(
-    digestOf(
-      pkg.inputs,
-      pkg.outputs,
-      pkg.type === 'melt'
-        ? { quoteId: pkg.quote!, amount: Amount.from(pkg.quoteAmount!).toBigInt() }
-        : undefined,
-    ),
-  );
-  if (recomputed !== pkg.digest) {
-    throw new CTSError('Signing package digest does not match its inputs and outputs');
   }
   const inputSecrets = new Set(pkg.inputs.map((input) => input.secret));
   const spent = new Set<string>();
@@ -296,7 +289,7 @@ function assertValidPackage(pkg: ScriptPathSigningPackage): void {
 
 function signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPathSigningPackage {
   assertValidPackage(pkg);
-  const digest = Bytes.fromHex(pkg.digest);
+  const digest = packageDigest(pkg);
   const pub = Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(privkey)));
   const spends = pkg.spends.map((spend) => {
     const leaf = parseNutrootLeaf(Bytes.fromHex(spend.leaf));
@@ -345,7 +338,7 @@ function mergeMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | '
 }
 
 function assertMatches(pkg: ScriptPathSigningPackage, expected: Uint8Array): void {
-  if (Bytes.toHex(expected) !== pkg.digest) {
+  if (!Bytes.equals(expected, packageDigest(pkg))) {
     throw new CTSError(
       'Signing package does not match this transaction: its inputs, outputs or their order moved since it was extracted',
     );
@@ -353,7 +346,7 @@ function assertMatches(pkg: ScriptPathSigningPackage, expected: Uint8Array): voi
 }
 
 function applyWitnesses(pkg: ScriptPathSigningPackage, inputs: Proof[]): Proof[] {
-  const digest = Bytes.fromHex(pkg.digest);
+  const digest = packageDigest(pkg);
   const bySecret = new Map(pkg.spends.map((s) => [s.secret, s]));
   return inputs.map((proof) => {
     const spend = bySecret.get(proof.secret);

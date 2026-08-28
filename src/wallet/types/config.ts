@@ -180,7 +180,20 @@ export type ScriptPathPlan = {
    * while it runs: use it for ceremonies measured in seconds, not ones needing human approval
    * across days. Returns BIP-340 signature hex over `digest` by the leaf's keys.
    */
-  cosign?: (digest: Uint8Array, leaf: NutrootLeaf) => Promise<string[]>;
+  cosign?: (request: CosignRequest) => Promise<string[]>;
+};
+
+/**
+ * What a {@link ScriptPathPlan.cosign} hook is handed.
+ *
+ * @remarks
+ * `digest` is what gets signed; `message` is its preimage (`digest = SHA256(message)`, tagged
+ * `Cashu_Transaction_v1`) for signers that verify what they sign rather than trust the caller.
+ */
+export type CosignRequest = {
+  digest: Uint8Array;
+  message: Uint8Array;
+  leaf: NutrootLeaf;
 };
 
 /**
