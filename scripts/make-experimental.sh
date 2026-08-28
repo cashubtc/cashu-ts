@@ -104,7 +104,7 @@ echo ">> $BRANCH rebuilt: $BASE + ${PRS[*]}"
 if [[ "${PUBLISH:-}" == "1" ]]; then
   # Version = main's core version + bundle sha, e.g. 5.0.0-experimental.a1b2c3d.
   # The -experimental identifier (matches the dist-tag; beta/rc stay reserved for
-  # real prereleases) + the explicit @experimental tag mean plain `npm i cashu-ts`
+  # real prereleases) + the explicit @experimental tag mean plain `npm i @cashu/cashu-ts`
   # never picks it up (@latest unaffected). Unique per bundle (sha changes with
   # the PRs); re-publishing an identical bundle is a harmless no-op (npm rejects
   # the duplicate version).
@@ -124,7 +124,7 @@ if [[ "${PUBLISH:-}" == "1" ]]; then
 
   # Record what's in this build so testers know what they're testing against.
   # PR numbers (+ titles if `gh` is installed) go into an `experimentalBundle` field that
-  # ships in the package — `npm view cashu-ts@experimental experimentalBundle` — and a
+  # ships in the package — `npm view @cashu/cashu-ts@experimental experimentalBundle` — and a
   # paste-ready summary is printed at the end for your announcement.
   slug=$(git config --get "remote.$REMOTE.url" | sed -E 's#.*github\.com[:/]##; s#\.git$##')
   summary=""
@@ -143,5 +143,5 @@ if [[ "${PUBLISH:-}" == "1" ]]; then
   git commit -aqm "chore(experimental): $expver" --no-verify   # throwaway; skip husky/commitlint
   npm publish --tag experimental
 
-  printf '\n=== announce ===\nnpm i cashu-ts@%s   (tag: experimental)\nbundled on %s@%s:\n%s\n' "$expver" "$BASE" "$BASE_SHA" "$summary"
+  printf '\n=== announce ===\nnpm i @cashu/cashu-ts@%s   (tag: experimental)\nbundled on %s@%s:\n%s\n' "$expver" "$BASE" "$BASE_SHA" "$summary"
 fi
