@@ -29,6 +29,7 @@ If you are building a wallet integration from scratch, read these in order:
 | [Create Token](./create_token.md)                   | Send standard Cashu tokens to another wallet.                                   |
 | [Create P2PK](./create_p2pk.md)                     | Send tokens locked to a public key.                                             |
 | [Derive Keys](./derive_keys.md)                     | Derive recoverable P2PK / NUT-20 keys deterministically from the wallet seed.   |
+| [Browser Signers](./nip07_signers.md)               | Sign NUT-11 and nutroot spends with a NIP-07 extension (`CashuNip07`).          |
 | [Get Token](./get_token.md)                         | Inspect token metadata before wallet creation or decode it after load.          |
 | [Melt Token](./melt_token.md)                       | Pay BOLT11 invoices or other payment methods with wallet proofs.                |
 | [Payment Requests](./payment_requests.md)           | Decode, price (fees), fulfil, and create NUT-18 / NUT-26 payment requests.      |

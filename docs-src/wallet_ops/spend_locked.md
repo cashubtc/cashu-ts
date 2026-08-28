@@ -93,6 +93,10 @@ Plans are keyed by `secret`, not input index: proof selection decides input orde
 
 **Cosigning.** A leaf whose other keys live elsewhere takes a `cosign` hook. It runs once the transaction is fixed and its input digest known (the digest covers the outputs, so it cannot exist earlier), and returns BIP-340 signature hex over `digest`. `message` is the tagged transaction message and `container` the input's own transcript record; `digest = tagged_hash("Cashu_TransactionInput", SHA256(message) || SHA256(container))`, so a signer can recompute what it signs. It is awaited mid-flight: fine for a remote signer measured in seconds, not for approval ceremonies measured in days. Duplicate and non-verifying signatures are trimmed; the leaf still needs `n` valid ones or the spend fails.
 
+## Browser signers
+
+A NIP-07 extension can complete a script path spend where its key appears verbatim in a leaf, and unlock NIP-60 wallet keys for everything else: see [Browser Signers](../usage/nip07_signers.md).
+
 ## Auditable locks
 
 Nutroot locks are private by default: only the key holder can prove who a receiver-keyed proof belongs to. When a payment wants the opposite (a public tip anyone can attest, eg a nostr Nutzap), lock it **auditable**: NUMS internal key, one threshold leaf of one key, with `disclosure` so the spend's witness is published too. Any lock can be disclosed the same way with `LockBuilder.disclose()` or `disclosure: true`. A pre-v3 lock needs no flag: its secret is plaintext and NUT-07 returns its witness, so it is disclosed by nature.
