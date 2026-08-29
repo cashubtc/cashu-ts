@@ -1,15 +1,30 @@
-import { Bytes } from './Bytes';
+import { utf8ToBytes } from '@noble/hashes/utils.js';
+import { base64, base64nopad, base64url, base64urlnopad } from '@scure/base';
+
+import { CTSError } from '../model/Errors';
+
 import { JSONInt } from './JSONInt';
 
-function encodeUint8toBase64(uint8array: Uint8Array): string {
-  return Bytes.toBase64(uint8array);
+/**
+ * Normalizes the presentation of an encoded payload before decoding.
+ *
+ * @remarks
+ * Payloads are pasted from anywhere, so line wrapping is common, and NUT-00 requires padded and
+ * unpadded forms to decode alike. Content is still validated by the codec.
+ */
+function normalizeEncodedInput(str: string): string {
+  return str
+    .trim()
+    .replace(/[\t\n\f\r ]+/g, '')
+    .replace(/={1,2}$/, '');
 }
 
-function encodeUint8toBase64Url(bytes: Uint8Array): string {
-  return Bytes.toBase64(bytes)
-    .replace(/\+/g, '-') // Replace + with -
-    .replace(/\//g, '_') // Replace / with _
-    .replace(/=+$/, ''); // Remove padding characters
+function encodeUint8ToBase64(bytes: Uint8Array): string {
+  return base64.encode(bytes);
+}
+
+function encodeUint8ToBase64Url(bytes: Uint8Array): string {
+  return base64urlnopad.encode(bytes);
 }
 
 /**
@@ -17,29 +32,67 @@ function encodeUint8toBase64Url(bytes: Uint8Array): string {
  *
  * Use this when the receiver requires padded URL-safe base64, e.g. CDK mint's
  * `general_purpose::URL_SAFE` decoder for the `Blind-auth` header (NUT-22). Use
- * `encodeUint8toBase64Url` instead when the spec explicitly forbids padding (e.g. PKCE code
+ * `encodeUint8ToBase64Url` instead when the spec explicitly forbids padding (e.g. PKCE code
  * verifier / challenge per RFC 7636).
  */
-function encodeUint8toBase64UrlPadded(bytes: Uint8Array): string {
-  return Bytes.toBase64(bytes)
-    .replace(/\+/g, '-') // Replace + with -
-    .replace(/\//g, '_'); // Replace / with _  (padding retained)
+function encodeUint8ToBase64UrlPadded(bytes: Uint8Array): string {
+  return base64url.encode(bytes);
 }
 
-function encodeBase64toUint8(base64String: string): Uint8Array {
-  return Bytes.fromBase64(base64String);
+/**
+ * Decodes a `base64_urlsafe` payload, the alphabet NUT-00 mandates for tokens and payment requests.
+ * Padding is optional, matching the spec and CDK's `DecodePaddingMode::Indifferent`.
+ */
+function decodeBase64UrlToUint8(base64String: string): Uint8Array {
+  try {
+    return base64urlnopad.decode(normalizeEncodedInput(base64String));
+  } catch (cause) {
+    throw new CTSError('Invalid base64url string', { cause });
+  }
+}
+
+/**
+ * Decodes a standard-alphabet payload. Current formats are base64url, so this is for the two things
+ * that predate it: deprecated keyset IDs (e.g. `+//wAAAAAAAA`), and payment requests emitted before
+ * this library encoded them url-safe. Use {@link decodeBase64UrlToUint8} otherwise.
+ */
+function decodeBase64ToUint8Legacy(base64String: string): Uint8Array {
+  try {
+    return base64nopad.decode(normalizeEncodedInput(base64String));
+  } catch (cause) {
+    throw new CTSError('Invalid base64 string', { cause });
+  }
+}
+
+/**
+ * Decodes a payload url-safe first, then standard base64.
+ *
+ * @remarks
+ * NUT-00 mandates base64url and v5 decodes tokens strictly, but this line still accepts the
+ * standard alphabet so a payload another implementation encoded that way stays redeemable.
+ */
+function decodeBase64AnyToUint8(base64String: string): Uint8Array {
+  try {
+    return decodeBase64UrlToUint8(base64String);
+  } catch (urlSafeError) {
+    try {
+      return decodeBase64ToUint8Legacy(base64String);
+    } catch {
+      throw urlSafeError;
+    }
+  }
 }
 
 /**
  * Serializes an object to base64url-encoded JSON using {@link JSONInt.stringify}.
  *
  * `bigint` values are emitted as raw JSON number tokens (no quotes, no `n` suffix), which is
- * required for the v3 cashu token wire format. Callers must use {@link encodeBase64ToJson} to
+ * required for the v3 cashu token wire format. Callers must use {@link decodeBase64UrlToJson} to
  * decode, as standard `JSON.parse` will lose precision on integers above `MAX_SAFE_INTEGER`.
  */
-function encodeJsonToBase64(jsonObj: unknown): string {
+function encodeJsonToBase64Url(jsonObj: unknown): string {
   const jsonString = JSONInt.stringify(jsonObj) ?? '';
-  return base64urlFromBase64(Bytes.toBase64(Bytes.fromString(jsonString)));
+  return base64urlnopad.encode(utf8ToBytes(jsonString));
 }
 
 /**
@@ -47,66 +100,41 @@ function encodeJsonToBase64(jsonObj: unknown): string {
  *
  * Integers within `±MAX_SAFE_INTEGER` are returned as `number`; integers outside that range are
  * returned as `bigint`. This preserves precision for large amounts encoded by
- * {@link encodeJsonToBase64}.
+ * {@link encodeJsonToBase64Url}.
  */
-function encodeBase64ToJson<T extends object>(base64String: string): T {
-  const jsonString = Bytes.toString(Bytes.fromBase64(base64urlToBase64(base64String)));
+function decodeBase64UrlToJson<T extends object>(base64String: string): T {
+  const jsonString = new TextDecoder('utf-8').decode(decodeBase64UrlToUint8(base64String));
   return JSONInt.parse(jsonString) as T;
 }
 
-function base64urlToBase64(str: string) {
-  return str.replace(/-/g, '+').replace(/_/g, '/').split('=')[0];
-  // .replace(/./g, '=');
-}
-
-function base64urlFromBase64(str: string) {
-  return str.replace(/\+/g, '-').replace(/\//g, '_').split('=')[0];
-  // .replace(/=/g, '.');
-}
-
+/**
+ * Reports whether a string is a well-formed base64 payload in either alphabet.
+ *
+ * @remarks
+ * Used to spot deprecated keyset IDs, which are standard base64 where current ones are hex. The two
+ * alphabets are checked separately, so a string mixing `-_` with `+/` is rejected rather than
+ * silently decoded.
+ */
 function isBase64String(s: string): boolean {
   if (typeof s !== 'string' || s.length === 0) return false;
-
-  // Accept both base64 and base64url char sets
-  const base64url = /^[A-Za-z0-9\-_]+={0,2}$/;
-  const base64 = /^[A-Za-z0-9+/]+={0,2}$/;
-
-  // Quick character-set check
-  if (!base64url.test(s) && !base64.test(s)) return false;
-
-  // Normalize base64url to standard base64 for decoding
-  const normalized = s.replace(/-/g, '+').replace(/_/g, '/');
-
-  // Padding: length must be multiple of 4. Add '=' padding if needed (but no more than 2)
-  const padLength = (4 - (normalized.length % 4)) % 4;
-  if (padLength > 2) return false; // should never happen but keep safe
-  const padded = normalized + '='.repeat(padLength);
-
+  const normalized = normalizeEncodedInput(s);
+  if (normalized.length === 0) return false;
+  const codec = /[-_]/.test(normalized) ? base64urlnopad : base64nopad;
   try {
-    const decoded = Bytes.fromBase64(padded);
-
-    // Re-encode and compare to the original (allowing either standard or url-safe representation)
-    const reStandard = Bytes.toBase64(decoded);
-    const reUrl = reStandard.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-
-    // Also compare against original normalized-without-padding variant
-    const originalNoPad = normalized.replace(/=+$/, '');
-
-    if (reStandard.replace(/=+$/, '') === originalNoPad) return true;
-    if (reUrl === originalNoPad) return true;
-
-    return false;
+    return codec.encode(codec.decode(normalized)) === normalized;
   } catch {
     return false;
   }
 }
 
 export {
-  encodeUint8toBase64,
-  encodeUint8toBase64Url,
-  encodeUint8toBase64UrlPadded,
-  encodeBase64toUint8,
-  encodeJsonToBase64,
-  encodeBase64ToJson,
+  encodeUint8ToBase64,
+  encodeUint8ToBase64Url,
+  encodeUint8ToBase64UrlPadded,
+  decodeBase64AnyToUint8,
+  decodeBase64UrlToUint8,
+  decodeBase64ToUint8Legacy,
+  encodeJsonToBase64Url,
+  decodeBase64UrlToJson,
   isBase64String,
 };

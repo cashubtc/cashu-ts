@@ -1,4 +1,5 @@
 import { hexToBytes } from '@noble/curves/utils.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect, vi } from 'vitest';
 
@@ -23,7 +24,7 @@ import {
 import { verifyMintQuoteSignature } from '../../src/crypto';
 import { verifyMintQuoteSignatureAmended } from '../../src/crypto/NUT20';
 import request from '../../src/transport';
-import { Bytes, sumProofs } from '../../src/utils';
+import { sumProofs } from '../../src/utils';
 
 import { useTestServer, mint, mintUrl, unit, logger, mintInfoResp, invoice } from './_setup';
 
@@ -616,7 +617,7 @@ describe('requestTokens', () => {
     });
 
     expect(preview.outputData.length).toBeGreaterThan(0);
-    const secrets = preview.outputData.map((p) => Bytes.toHex(p.secret));
+    const secrets = preview.outputData.map((p) => bytesToHex(p.secret));
     expect(new Set(secrets).size).toBe(secrets.length);
     expect(await wallet.counters.peekNext(keysetId)).toBe(preview.outputData.length);
   });

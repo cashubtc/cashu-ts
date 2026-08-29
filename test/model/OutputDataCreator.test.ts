@@ -1,5 +1,7 @@
 import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { bytesToNumberBE } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, concatBytes, hexToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test, vi } from 'vitest';
 
 import { getPubKeyFromPrivKey, P2BK_DST, pointFromHex, type P2PKOptions } from '../../src/crypto';
@@ -8,7 +10,6 @@ import { OutputData, isOutputDataFactory } from '../../src/model/OutputData';
 import type { OutputDataFactory, OutputDataLike } from '../../src/model/OutputData';
 import { DefaultOutputDataCreator } from '../../src/model/OutputDataCreator';
 import type { HasKeysetKeys, SerializedBlindedSignature, Proof } from '../../src/model/types';
-import { Bytes } from '../../src/utils';
 
 describe('DefaultOutputDataCreator', () => {
   test('delegates single deterministic output creation to OutputData', () => {
@@ -39,8 +40,8 @@ describe('DefaultOutputDataCreator', () => {
   });
 
   test('default P2PK batch shares one ephemeral key for a blinded SIG_ALL split', () => {
-    const privkey = Bytes.fromHex('01'.repeat(32));
-    const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
+    const privkey = hexToBytes('01'.repeat(32));
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(privkey));
     const keyset: HasKeysetKeys = {
       id: '009a1f293253e41e',
       keys: { '1': 'unused', '2': 'unused', '4': 'unused' },
@@ -57,8 +58,8 @@ describe('DefaultOutputDataCreator', () => {
   });
 
   test('a subclassed single-output P2PK hook is still called once per split amount', () => {
-    const privkey = Bytes.fromHex('01'.repeat(32));
-    const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
+    const privkey = hexToBytes('01'.repeat(32));
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(privkey));
     const keyset: HasKeysetKeys = {
       id: '009a1f293253e41e',
       keys: { '1': 'unused', '2': 'unused', '4': 'unused' },
@@ -172,8 +173,8 @@ describe('OutputData helpers', () => {
   });
 
   test('preserves ephemeral P2PK blinding data when serializing output data', () => {
-    const privkey = Bytes.fromHex('01'.repeat(32));
-    const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
+    const privkey = hexToBytes('01'.repeat(32));
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(privkey));
     const output = OutputData.createSingleP2PKData(
       {
         pubkey,
@@ -189,8 +190,8 @@ describe('OutputData helpers', () => {
   });
 
   test('HTLC blinding starts lock keys at slot 1 (NUT-28: hashlock occupies slot 0)', () => {
-    const privkey = Bytes.fromHex('01'.repeat(32));
-    const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
+    const privkey = hexToBytes('01'.repeat(32));
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(privkey));
     const output = OutputData.createSingleP2PKData(
       {
         pubkey,
@@ -209,14 +210,14 @@ describe('OutputData helpers', () => {
     // Independent receiver-side NUT-28 math: r1 = sha256(DST || Zx || 0x01), P' = P + r1·G
     const p = secp256k1.Point.Fn.fromBytes(privkey);
     const Zx = secp256k1.Point.fromHex(output.ephemeralE!).multiply(p).toBytes(true).slice(1);
-    const r1 = Bytes.toBigInt(sha256(Bytes.concat(P2BK_DST, Zx, Uint8Array.of(1))));
+    const r1 = bytesToNumberBE(sha256(concatBytes(P2BK_DST, Zx, Uint8Array.of(1))));
     const expected = pointFromHex(pubkey).add(secp256k1.Point.BASE.multiply(r1)).toHex(true);
     expect(blinded).toBe(expected);
   });
 
   test('keeps blinded HTLC lock keys in pubkeys tags', () => {
-    const privkey = Bytes.fromHex('01'.repeat(32));
-    const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
+    const privkey = hexToBytes('01'.repeat(32));
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(privkey));
     const output = OutputData.createSingleP2PKData(
       {
         pubkey,
@@ -241,8 +242,8 @@ describe('OutputData helpers', () => {
   });
 
   test('a blinded SIG_ALL batch shares one ephemeral key across all outputs', () => {
-    const privkey = Bytes.fromHex('01'.repeat(32));
-    const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
+    const privkey = hexToBytes('01'.repeat(32));
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(privkey));
     const keyset: HasKeysetKeys = {
       id: '009a1f293253e41e',
       keys: { '1': 'unused', '2': 'unused', '4': 'unused' },
@@ -274,8 +275,8 @@ describe('OutputData helpers', () => {
   });
 
   test('a blinded SIG_INPUTS batch blinds each output with its own ephemeral key', () => {
-    const privkey = Bytes.fromHex('01'.repeat(32));
-    const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
+    const privkey = hexToBytes('01'.repeat(32));
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(privkey));
     const keyset: HasKeysetKeys = {
       id: '009a1f293253e41e',
       keys: { '1': 'unused', '2': 'unused', '4': 'unused' },

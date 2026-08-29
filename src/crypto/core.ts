@@ -1,11 +1,11 @@
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
-import { randomBytes, bytesToHex, hexToBytes } from '@noble/curves/utils.js';
+import { bytesToHex, bytesToNumberBE, hexToBytes, randomBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { utf8ToBytes } from '@noble/hashes/utils.js';
+import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
-import { Bytes, hexToNumber, encodeBase64toUint8 } from '../utils';
+import { hexToNumber, decodeBase64UrlToUint8 } from '../utils';
 
 /**
  * Private key type - can be hex string or Uint8Array.
@@ -38,14 +38,14 @@ export type UnblindedSignature = {
 const DOMAIN_SEPARATOR = utf8ToBytes('Secp256k1_HashToCurve_Cashu_');
 
 export function hashToCurve(secret: Uint8Array): WeierstrassPoint<bigint> {
-  const msgToHash = sha256(Bytes.concat(DOMAIN_SEPARATOR, secret));
+  const msgToHash = sha256(concatBytes(DOMAIN_SEPARATOR, secret));
   const counter = new Uint32Array(1);
   const maxIterations = 2 ** 16;
   for (let i = 0; i < maxIterations; i++) {
     const counterBytes = new Uint8Array(counter.buffer);
-    const hash = sha256(Bytes.concat(msgToHash, counterBytes));
+    const hash = sha256(concatBytes(msgToHash, counterBytes));
     try {
-      return pointFromHex(bytesToHex(Bytes.concat(new Uint8Array([0x02]), hash)));
+      return pointFromHex(bytesToHex(concatBytes(new Uint8Array([0x02]), hash)));
     } catch {
       counter[0]++;
     }
@@ -73,7 +73,7 @@ export const getKeysetIdInt = (keysetId: string): bigint => {
     keysetIdInt = hexToNumber(keysetId) % BigInt(2 ** 31 - 1);
   } else {
     //legacy keyset compatibility
-    keysetIdInt = Bytes.toBigInt(encodeBase64toUint8(keysetId)) % BigInt(2 ** 31 - 1);
+    keysetIdInt = bytesToNumberBE(decodeBase64UrlToUint8(keysetId)) % BigInt(2 ** 31 - 1);
   }
   return keysetIdInt;
 };

@@ -1,5 +1,6 @@
-import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
+import { hexToBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { type DLEQ, pointFromHex, verifyDLEQProof_reblind } from '../crypto';
 import { Amount, type AmountLike } from '../model/Amount';
@@ -18,8 +19,12 @@ import type {
   HasKeysetKeys,
 } from '../model/types';
 
-import { encodeBase64ToJson, encodeBase64toUint8, encodeUint8toBase64Url } from './base64';
-import { Bytes } from './Bytes';
+import {
+  decodeBase64AnyToUint8,
+  decodeBase64UrlToJson,
+  encodeUint8ToBase64,
+  encodeUint8ToBase64Url,
+} from './base64';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { JSONInt } from './JSONInt';
 import { MAX_SPLIT_OUTPUTS } from './limits';
@@ -253,7 +258,7 @@ function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
   const encodedData = encodeCBOR(tokenTemplate);
   const prefix = 'cashu';
   const version = 'B';
-  const base64Data = encodeUint8toBase64Url(encodedData);
+  const base64Data = encodeUint8ToBase64Url(encodedData);
   return prefix + version + base64Data;
 }
 
@@ -390,7 +395,7 @@ function handleTokens(token: string): Token {
   const version = token.slice(0, 1);
   const encodedToken = token.slice(1);
   if (version === 'A') {
-    const parsedV3Token = encodeBase64ToJson<DeprecatedToken>(encodedToken);
+    const parsedV3Token = decodeBase64UrlToJson<DeprecatedToken>(encodedToken);
     if (parsedV3Token.token.length > 1) {
       throw new CTSError('Multi entry token are not supported');
     }
@@ -409,7 +414,7 @@ function handleTokens(token: string): Token {
     }
     return tokenObj;
   } else if (version === 'B') {
-    const uInt8Token = encodeBase64toUint8(encodedToken);
+    const uInt8Token = decodeBase64AnyToUint8(encodedToken);
     const tokenData = decodeCBOR(uInt8Token) as TokenV4Template;
     return tokenFromTemplate(tokenData);
   }
@@ -448,8 +453,8 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
       .sort(([amountA], [amountB]) => Amount.from(amountA).compareTo(amountB))
       .map(([, pubKey]) => pubKey)
       .reduce((prev: string, curr: string) => prev + curr, '');
-    const hash = sha256(Bytes.fromString(pubkeysConcat));
-    const b64 = Bytes.toBase64(hash);
+    const hash = sha256(utf8ToBytes(pubkeysConcat));
+    const b64 = encodeUint8ToBase64(hash);
     return b64.slice(0, 12);
   }
 
@@ -461,7 +466,7 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
           .map(([, pubKey]) => hexToBytes(pubKey)),
       );
       const hash = sha256(pubkeysConcat);
-      const hashHex = Bytes.toHex(hash).slice(0, 14);
+      const hashHex = bytesToHex(hash).slice(0, 14);
       return '00' + hashHex;
     }
     case 1: {
@@ -480,8 +485,8 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
       if (expiry) {
         preimage += `|final_expiry:${expiry}`;
       }
-      const hash = sha256(Bytes.fromString(preimage));
-      const hashHex = Bytes.toHex(hash);
+      const hash = sha256(utf8ToBytes(preimage));
+      const hashHex = bytesToHex(hash);
       return '01' + hashHex;
     }
     default:

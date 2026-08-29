@@ -1,22 +1,24 @@
 import { test, describe, expect } from 'vitest';
 
 import {
-  encodeBase64ToJson,
-  encodeBase64toUint8,
-  encodeJsonToBase64,
-  encodeUint8toBase64,
+  decodeBase64UrlToJson,
+  decodeBase64UrlToUint8,
+  encodeJsonToBase64Url,
+  encodeUint8ToBase64,
   isBase64String,
+  decodeBase64AnyToUint8,
+  decodeBase64ToUint8Legacy,
 } from '../../src/utils';
 describe('testing uint8 encoding', () => {
   test('uint8 to base64', async () => {
     const message = 'test';
     const enc = new TextEncoder();
     const encoded = enc.encode(message);
-    expect(encodeUint8toBase64(encoded)).toBe('dGVzdA==');
+    expect(encodeUint8ToBase64(encoded)).toBe('dGVzdA==');
   });
   test('base64 to uint8', async () => {
     const dec = new TextDecoder();
-    expect(dec.decode(encodeBase64toUint8('dGVzdA=='))).toBe('test');
+    expect(dec.decode(decodeBase64UrlToUint8('dGVzdA=='))).toBe('test');
   });
   test('Object to base64', () => {
     const obj = [
@@ -39,14 +41,14 @@ describe('testing uint8 encoding', () => {
         secret: 'GI85ytubezCEDgxecriX6eKOZJV9p831BlsMQeBzjvQ=',
       },
     ];
-    expect(encodeJsonToBase64(obj)).toBe(
+    expect(encodeJsonToBase64Url(obj)).toBe(
       'W3siaWQiOiIwTkkzVFVBczFTZnkiLCJhbW91bnQiOjgsIkMiOiIwMzc2OTUwODMyMjZiOWM2MzY0OWQ4MDY4ZWI3ODlhODkxZTYyMWU3N2RmZjRlN2Q3NWFjMDI0NzlmZTcxYzg4NmIiLCJzZWNyZXQiOiJsRmN4YlBPODcwc3JzT0tiNGUrTXZSQW1XQkUyMDZiNkJNaTVuS3JxMXQ0PSJ9LHsiaWQiOiIwTkkzVFVBczFTZnkiLCJhbW91bnQiOjY0LCJDIjoiMDNlNThlMzdmM2FhNTcxOWM1NzQzODExNTExYTZlNjQ1OTI0NWYwMDgyNjliZDgwOWI5Yjg5Y2MyZmQzNjgzMjQxIiwic2VjcmV0IjoiSFY2UzlHWTlmOVlzaVpTWTlWL1Q0dWMyMzlWd3NmcURiVWZxcit2ZDR3MD0ifSx7ImlkIjoiME5JM1RVQXMxU2Z5IiwiYW1vdW50IjoxMjgsIkMiOiIwMzA3MTVhODczMjQyZjU5ZmUzZjY3MTIxZjBhNGFmYjIyYWFhMjRiMTBhOTgzMjkyOWY2MWFiMjhjZGYwZDM2MzAiLCJzZWNyZXQiOiJHSTg1eXR1YmV6Q0VEZ3hlY3JpWDZlS09aSlY5cDgzMUJsc01RZUJ6anZRPSJ9XQ',
     );
   });
   const base64String =
     'W3siaWQiOiIwTkkzVFVBczFTZnkiLCJhbW91bnQiOjgsIkMiOiIwMzc2OTUwODMyMjZiOWM2MzY0OWQ4MDY4ZWI3ODlhODkxZTYyMWU3N2RmZjRlN2Q3NWFjMDI0NzlmZTcxYzg4NmIiLCJzZWNyZXQiOiJsRmN4YlBPODcwc3JzT0tiNGUrTXZSQW1XQkUyMDZiNkJNaTVuS3JxMXQ0PSJ9LHsiaWQiOiIwTkkzVFVBczFTZnkiLCJhbW91bnQiOjY0LCJDIjoiMDNlNThlMzdmM2FhNTcxOWM1NzQzODExNTExYTZlNjQ1OTI0NWYwMDgyNjliZDgwOWI5Yjg5Y2MyZmQzNjgzMjQxIiwic2VjcmV0IjoiSFY2UzlHWTlmOVlzaVpTWTlWL1Q0dWMyMzlWd3NmcURiVWZxcit2ZDR3MD0ifSx7ImlkIjoiME5JM1RVQXMxU2Z5IiwiYW1vdW50IjoxMjgsIkMiOiIwMzA3MTVhODczMjQyZjU5ZmUzZjY3MTIxZjBhNGFmYjIyYWFhMjRiMTBhOTgzMjkyOWY2MWFiMjhjZGYwZDM2MzAiLCJzZWNyZXQiOiJHSTg1eXR1YmV6Q0VEZ3hlY3JpWDZlS09aSlY5cDgzMUJsc01RZUJ6anZRPSJ9XQ';
   test('base64 to object', () => {
-    expect(encodeBase64ToJson(base64String)).toEqual([
+    expect(decodeBase64UrlToJson(base64String)).toEqual([
       {
         id: '0NI3TUAs1Sfy',
         amount: 8,
@@ -77,14 +79,14 @@ describe('testing uint8 encoding', () => {
         secret: 'lFcxbPO870srsOKb4e+MvRAmWBE206b6BMi5nKrq1t4=',
       },
     ];
-    const encoded = encodeJsonToBase64(obj);
-    const decoded = encodeBase64ToJson<typeof obj>(encoded);
+    const encoded = encodeJsonToBase64Url(obj);
+    const decoded = decodeBase64UrlToJson<typeof obj>(encoded);
     expect(decoded[0].amount).toBe(unsafeAmount);
     expect(typeof decoded[0].amount).toBe('bigint');
   });
   test('safe integer amount stays number', () => {
     const obj = [{ amount: 8 }];
-    const decoded = encodeBase64ToJson<typeof obj>(encodeJsonToBase64(obj));
+    const decoded = decodeBase64UrlToJson<typeof obj>(encodeJsonToBase64Url(obj));
     expect(decoded[0].amount).toBe(8);
     expect(typeof decoded[0].amount).toBe('number');
   });
@@ -93,8 +95,8 @@ describe('testing uint8 encoding', () => {
     // const base64 = 'eyJ0ZXN0RGF0YSI6IvCfj7PvuI/wn4+z77iPIn0='
     const obj = { testData: '🏳️🏳️' };
 
-    expect(encodeBase64ToJson(base64url)).toStrictEqual(obj);
-    expect(encodeJsonToBase64(obj)).toStrictEqual(base64url);
+    expect(decodeBase64UrlToJson(base64url)).toStrictEqual(obj);
+    expect(encodeJsonToBase64Url(obj)).toStrictEqual(base64url);
   });
   test('test script secret to from base64', () => {
     const base64url =
@@ -117,8 +119,8 @@ describe('testing uint8 encoding', () => {
       ],
     };
 
-    expect(encodeBase64ToJson(base64url)).toStrictEqual(obj);
-    expect(encodeJsonToBase64(obj)).toStrictEqual(base64url);
+    expect(decodeBase64UrlToJson(base64url)).toStrictEqual(obj);
+    expect(encodeJsonToBase64Url(obj)).toStrictEqual(base64url);
   });
 });
 describe('isBase64String', () => {
@@ -151,5 +153,26 @@ describe('isBase64String', () => {
 
   test('invalid: empty string', () => {
     expect(isBase64String('')).toBe(false);
+  });
+});
+
+describe('v4 keeps decoding permissive', () => {
+  // v5 tightens token decoding to base64url per NUT-00. This branch is the LTS, so a payload
+  // another implementation encoded in the standard alphabet must stay redeemable here.
+  test.each([
+    ['url-safe', 'o2F0gaJhaUgA_9SLj17PgGFw'],
+    ['standard', 'o2F0gaJhaUgA/9SLj17PgGFw'],
+  ])('accepts %s', (_label, payload) => {
+    expect(decodeBase64AnyToUint8(payload)).toBeInstanceOf(Uint8Array);
+  });
+
+  test('the strict decoder underneath still rejects the standard alphabet', () => {
+    expect(() => decodeBase64UrlToUint8('o2F0gaJhaUgA/9SLj17PgGFw')).toThrow();
+  });
+
+  test('decodes a deprecated keyset ID, which is standard base64', () => {
+    expect(decodeBase64ToUint8Legacy('+//wAAAAAAAA')).toEqual(
+      new Uint8Array([251, 255, 240, 0, 0, 0, 0, 0, 0]),
+    );
   });
 });

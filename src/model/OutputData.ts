@@ -1,3 +1,4 @@
+import { bytesToNumberBE } from '@noble/curves/utils.js';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
 
 import {
@@ -14,7 +15,7 @@ import {
   type BlindSignature,
   type P2PKOptions,
 } from '../crypto';
-import { Bytes, numberToHexPadded64, splitAmount } from '../utils';
+import { numberToHexPadded64, splitAmount } from '../utils';
 
 import { Amount, type AmountLike } from './Amount';
 import { BlindedMessage } from './BlindedMessage';
@@ -434,9 +435,9 @@ function createSingleDeterministicDataFromBytes(
   const amountValue = Amount.from(amount);
   const secretBytesAsHex = bytesToHex(derived.secret);
   const utf8SecretBytes = new TextEncoder().encode(secretBytesAsHex);
-  // Note: Bytes.toBigInt is used here so invalid values bubble up as throws
+  // Note: bytesToNumberBE is used here so invalid values bubble up as throws
   // for BIP32-style retry logic (caller increments counter and retries).
-  const deterministicR = Bytes.toBigInt(derived.blindingFactor);
+  const deterministicR = bytesToNumberBE(derived.blindingFactor);
   const { r, B_ } = blindMessage(utf8SecretBytes, deterministicR);
   return new OutputData(
     new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
