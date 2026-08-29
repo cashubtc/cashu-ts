@@ -45,13 +45,7 @@ type SimpleValue = boolean | null | undefined;
 
 export type ResultObject = { [key: string]: ResultValue };
 export type ResultValue =
-  | SimpleValue
-  | number
-  | bigint
-  | string
-  | Uint8Array
-  | ResultValue[]
-  | ResultObject;
+  SimpleValue | number | bigint | string | Uint8Array | ResultValue[] | ResultObject;
 
 type ResultKeyType = Extract<ResultValue, number | bigint | string>;
 export type ValidDecodedType = Extract<ResultValue, ResultObject>;
