@@ -1,16 +1,15 @@
-import { bytesToHex } from '@noble/curves/utils.js';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { HDKey } from '@scure/bip32';
 import { describe, expect, test } from 'vitest';
 
 import { deriveSecretAndBlindingFactor, getKeysetIdInt } from '../../src/crypto';
-import { Bytes } from '../../src/utils';
 
 // The standalone deriveSecret() helper was removed in v5; derive it locally for these tests.
 const deriveSecret = (seed: Uint8Array, keysetId: string, counter: number): Uint8Array =>
   deriveSecretAndBlindingFactor(seed, keysetId, counter).secret;
 
 const seed = Uint8Array.from(
-  Bytes.fromHex(
+  hexToBytes(
     'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
   ),
 );
@@ -28,7 +27,7 @@ describe('testing hdkey from seed', () => {
 
     const seed_expected =
       'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8';
-    const seed_uint8_array_expected = Bytes.fromHex(seed_expected);
+    const seed_uint8_array_expected = hexToBytes(seed_expected);
     expect(seed).toEqual(seed_uint8_array_expected);
   });
 });
@@ -118,7 +117,7 @@ describe('testing deterministic blindedMessage', () => {
 describe('test private key derivation from derivation path -- deprecated', () => {
   const seed =
     'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8';
-  const seed_uint8_array = Bytes.fromHex(seed);
+  const seed_uint8_array = hexToBytes(seed);
   const hdkey = HDKey.fromMasterSeed(seed_uint8_array);
   const expected_privatekey = '9d32fc57e6fa2942d05ee475d28ba6a56839b8cb8a3f174b05ed0ed9d3a420f6';
   const derivation_path = "m/129372'/0'/2004500376'/0'/0";

@@ -1,3 +1,4 @@
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test, vi } from 'vitest';
 
 import { getPubKeyFromPrivKey, type P2PKOptions } from '../../src/crypto';
@@ -6,7 +7,6 @@ import { OutputData, isOutputDataFactory } from '../../src/model/OutputData';
 import type { OutputDataFactory, OutputDataLike } from '../../src/model/OutputData';
 import { DefaultOutputDataCreator } from '../../src/model/OutputDataCreator';
 import type { HasKeysetKeys, SerializedBlindedSignature, Proof } from '../../src/model/types';
-import { Bytes } from '../../src/utils';
 
 describe('DefaultOutputDataCreator', () => {
   test('delegates single deterministic output creation to OutputData', () => {
@@ -37,8 +37,8 @@ describe('DefaultOutputDataCreator', () => {
   });
 
   test('default P2PK batch shares one ephemeral key for a blinded SIG_ALL split', () => {
-    const privkey = Bytes.fromHex('01'.repeat(32));
-    const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
+    const privkey = hexToBytes('01'.repeat(32));
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(privkey));
     const keyset: HasKeysetKeys = {
       id: '009a1f293253e41e',
       keys: { '1': 'unused', '2': 'unused', '4': 'unused' },
@@ -55,8 +55,8 @@ describe('DefaultOutputDataCreator', () => {
   });
 
   test('a subclassed single-output P2PK hook is still called once per split amount', () => {
-    const privkey = Bytes.fromHex('01'.repeat(32));
-    const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
+    const privkey = hexToBytes('01'.repeat(32));
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(privkey));
     const keyset: HasKeysetKeys = {
       id: '009a1f293253e41e',
       keys: { '1': 'unused', '2': 'unused', '4': 'unused' },
@@ -170,8 +170,8 @@ describe('OutputData helpers', () => {
   });
 
   test('preserves ephemeral P2PK blinding data when serializing output data', () => {
-    const privkey = Bytes.fromHex('01'.repeat(32));
-    const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
+    const privkey = hexToBytes('01'.repeat(32));
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(privkey));
     const output = OutputData.createSingleP2PKData(
       {
         kind: 'P2PK',
@@ -188,8 +188,8 @@ describe('OutputData helpers', () => {
   });
 
   test('keeps blinded HTLC lock keys in pubkeys tags', () => {
-    const privkey = Bytes.fromHex('01'.repeat(32));
-    const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
+    const privkey = hexToBytes('01'.repeat(32));
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(privkey));
     const output = OutputData.createSingleP2PKData(
       {
         kind: 'HTLC',
@@ -215,8 +215,8 @@ describe('OutputData helpers', () => {
   });
 
   test('a blinded SIG_ALL batch shares one ephemeral key across all outputs', () => {
-    const privkey = Bytes.fromHex('01'.repeat(32));
-    const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
+    const privkey = hexToBytes('01'.repeat(32));
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(privkey));
     const keyset: HasKeysetKeys = {
       id: '009a1f293253e41e',
       keys: { '1': 'unused', '2': 'unused', '4': 'unused' },
@@ -248,8 +248,8 @@ describe('OutputData helpers', () => {
   });
 
   test('a blinded SIG_INPUTS batch blinds each output with its own ephemeral key', () => {
-    const privkey = Bytes.fromHex('01'.repeat(32));
-    const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
+    const privkey = hexToBytes('01'.repeat(32));
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(privkey));
     const keyset: HasKeysetKeys = {
       id: '009a1f293253e41e',
       keys: { '1': 'unused', '2': 'unused', '4': 'unused' },

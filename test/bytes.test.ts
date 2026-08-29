@@ -1,142 +1,9 @@
+import { hexToBytes } from '@noble/hashes/utils.js';
 import { describe, test, expect } from 'vitest';
 
 import { Bytes } from '../src/utils/Bytes';
 
 describe('Bytes utility class', () => {
-  describe('fromHex', () => {
-    test('should convert valid hex string to Uint8Array', () => {
-      const hex = 'deadbeef';
-      const result = Bytes.fromHex(hex);
-      const expected = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
-      expect(result).toEqual(expected);
-    });
-
-    test('should handle hex string with 0x prefix', () => {
-      const hex = '0xdeadbeef';
-      const result = Bytes.fromHex(hex);
-      const expected = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
-      expect(result).toEqual(expected);
-    });
-
-    test('should handle hex string with 0X prefix', () => {
-      const hex = '0Xdeadbeef';
-      const result = Bytes.fromHex(hex);
-      const expected = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
-      expect(result).toEqual(expected);
-    });
-
-    test('should handle uppercase hex characters', () => {
-      const hex = 'DEADBEEF';
-      const result = Bytes.fromHex(hex);
-      const expected = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
-      expect(result).toEqual(expected);
-    });
-
-    test('should handle mixed case hex characters', () => {
-      const hex = 'DeAdBeEf';
-      const result = Bytes.fromHex(hex);
-      const expected = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
-      expect(result).toEqual(expected);
-    });
-
-    test('should handle empty string', () => {
-      const hex = '';
-      const result = Bytes.fromHex(hex);
-      expect(result).toEqual(new Uint8Array(0));
-    });
-
-    test('should handle whitespace-only string', () => {
-      const hex = '   ';
-      const result = Bytes.fromHex(hex);
-      expect(result).toEqual(new Uint8Array(0));
-    });
-
-    test('should handle hex string with leading/trailing whitespace', () => {
-      const hex = '  deadbeef  ';
-      const result = Bytes.fromHex(hex);
-      const expected = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
-      expect(result).toEqual(expected);
-    });
-
-    test('should handle single byte hex', () => {
-      const hex = 'ff';
-      const result = Bytes.fromHex(hex);
-      const expected = new Uint8Array([0xff]);
-      expect(result).toEqual(expected);
-    });
-
-    test('should handle zero bytes', () => {
-      const hex = '0000';
-      const result = Bytes.fromHex(hex);
-      const expected = new Uint8Array([0x00, 0x00]);
-      expect(result).toEqual(expected);
-    });
-
-    test('should throw error for odd length hex string', () => {
-      const hex = 'deadbee';
-      expect(() => Bytes.fromHex(hex)).toThrow('Invalid hex string: odd length.');
-    });
-
-    test('should throw error for single character', () => {
-      const hex = 'f';
-      expect(() => Bytes.fromHex(hex)).toThrow('Invalid hex string: odd length.');
-    });
-
-    test('should throw error for non-hex characters', () => {
-      const hex = 'deadbeeg';
-      expect(() => Bytes.fromHex(hex)).toThrow('Invalid hex string: contains non-hex characters');
-    });
-
-    test('should throw error for hex with special characters', () => {
-      const hex = 'dead-beef';
-      expect(() => Bytes.fromHex(hex)).toThrow('Invalid hex string: odd length.');
-    });
-
-    test('should throw error for hex with spaces in middle', () => {
-      const hex = 'dead beef';
-      expect(() => Bytes.fromHex(hex)).toThrow('Invalid hex string: odd length.');
-    });
-  });
-
-  describe('toHex', () => {
-    test('should convert Uint8Array to hex string', () => {
-      const bytes = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
-      const result = Bytes.toHex(bytes);
-      expect(result).toBe('deadbeef');
-    });
-
-    test('should handle empty Uint8Array', () => {
-      const bytes = new Uint8Array(0);
-      const result = Bytes.toHex(bytes);
-      expect(result).toBe('');
-    });
-
-    test('should handle single byte', () => {
-      const bytes = new Uint8Array([0xff]);
-      const result = Bytes.toHex(bytes);
-      expect(result).toBe('ff');
-    });
-
-    test('should handle zero bytes', () => {
-      const bytes = new Uint8Array([0x00, 0x00]);
-      const result = Bytes.toHex(bytes);
-      expect(result).toBe('0000');
-    });
-
-    test('should pad single digit hex values', () => {
-      const bytes = new Uint8Array([0x01, 0x0a, 0x10]);
-      const result = Bytes.toHex(bytes);
-      expect(result).toBe('010a10');
-    });
-
-    test('should be consistent with fromHex', () => {
-      const originalHex = 'deadbeef01234567';
-      const bytes = Bytes.fromHex(originalHex);
-      const resultHex = Bytes.toHex(bytes);
-      expect(resultHex).toBe(originalHex);
-    });
-  });
-
   describe('fromString', () => {
     test('should convert string to Uint8Array', () => {
       const str = 'hello';
@@ -258,27 +125,6 @@ describe('Bytes utility class', () => {
       const arr2 = new Uint8Array(0);
       const result = Bytes.concat(arr1, arr2);
       expect(result).toEqual(new Uint8Array(0));
-    });
-  });
-
-  describe('alloc', () => {
-    test('should allocate Uint8Array of specified size', () => {
-      const size = 10;
-      const result = Bytes.alloc(size);
-      expect(result).toBeInstanceOf(Uint8Array);
-      expect(result.length).toBe(size);
-      expect(result).toEqual(new Uint8Array(size));
-    });
-
-    test('should allocate zero-length array', () => {
-      const result = Bytes.alloc(0);
-      expect(result).toEqual(new Uint8Array(0));
-    });
-
-    test('should initialize with zeros', () => {
-      const result = Bytes.alloc(5);
-      const expected = new Uint8Array([0, 0, 0, 0, 0]);
-      expect(result).toEqual(expected);
     });
   });
 
@@ -425,87 +271,7 @@ describe('Bytes utility class', () => {
     });
   });
 
-  describe('compare', () => {
-    test('should return 0 for identical arrays', () => {
-      const a = new Uint8Array([0x01, 0x02, 0x03]);
-      const b = new Uint8Array([0x01, 0x02, 0x03]);
-      expect(Bytes.compare(a, b)).toBe(0);
-    });
-
-    test('should return 0 for empty arrays', () => {
-      const a = new Uint8Array(0);
-      const b = new Uint8Array(0);
-      expect(Bytes.compare(a, b)).toBe(0);
-    });
-
-    test('should return negative for lexicographically smaller first array', () => {
-      const a = new Uint8Array([0x01, 0x02, 0x03]);
-      const b = new Uint8Array([0x01, 0x02, 0x04]);
-      expect(Bytes.compare(a, b)).toBe(-1);
-    });
-
-    test('should return positive for lexicographically larger first array', () => {
-      const a = new Uint8Array([0x01, 0x02, 0x04]);
-      const b = new Uint8Array([0x01, 0x02, 0x03]);
-      expect(Bytes.compare(a, b)).toBe(1);
-    });
-
-    test('should compare by length when one is prefix of another', () => {
-      const a = new Uint8Array([0x01, 0x02]);
-      const b = new Uint8Array([0x01, 0x02, 0x03]);
-      expect(Bytes.compare(a, b)).toBe(-1);
-      expect(Bytes.compare(b, a)).toBe(1);
-    });
-
-    test('should handle empty vs non-empty', () => {
-      const a = new Uint8Array(0);
-      const b = new Uint8Array([0x01]);
-      expect(Bytes.compare(a, b)).toBe(-1);
-      expect(Bytes.compare(b, a)).toBe(1);
-    });
-
-    test('should handle first byte difference', () => {
-      const a = new Uint8Array([0x00, 0xff, 0xff]);
-      const b = new Uint8Array([0x01, 0x00, 0x00]);
-      expect(Bytes.compare(a, b)).toBe(-1);
-    });
-
-    test('should be anti-symmetric', () => {
-      const a = new Uint8Array([0x01, 0x02, 0x03]);
-      const b = new Uint8Array([0x04, 0x05, 0x06]);
-      expect(Bytes.compare(a, b)).toBe(-Bytes.compare(b, a));
-    });
-
-    test('should be transitive', () => {
-      const a = new Uint8Array([0x01]);
-      const b = new Uint8Array([0x02]);
-      const c = new Uint8Array([0x03]);
-      expect(Bytes.compare(a, b)).toBeLessThan(0);
-      expect(Bytes.compare(b, c)).toBeLessThan(0);
-      expect(Bytes.compare(a, c)).toBeLessThan(0);
-    });
-
-    test('should handle single byte arrays', () => {
-      const a = new Uint8Array([0x42]);
-      const b = new Uint8Array([0x43]);
-      expect(Bytes.compare(a, b)).toBe(-1);
-      expect(Bytes.compare(b, a)).toBe(1);
-    });
-  });
-
   describe('integration tests', () => {
-    test('hex roundtrip with various data', () => {
-      const testCases = ['', '00', 'ff', 'deadbeef', '0123456789abcdef', 'a0b1c2d3e4f5'];
-
-      testCases.forEach((hex) => {
-        if (hex.length > 0) {
-          const bytes = Bytes.fromHex(hex);
-          const result = Bytes.toHex(bytes);
-          expect(result).toBe(hex);
-        }
-      });
-    });
-
     test('string roundtrip with various encodings', () => {
       const testCases = [
         '',
@@ -545,7 +311,7 @@ describe('Bytes utility class', () => {
     test('concat and split operations', () => {
       const part1 = Bytes.fromString('Hello, ');
       const part2 = Bytes.fromString('World!');
-      const part3 = Bytes.fromHex('deadbeef');
+      const part3 = hexToBytes('deadbeef');
 
       const combined = Bytes.concat(part1, part2, part3);
 
@@ -557,33 +323,6 @@ describe('Bytes utility class', () => {
       expect(extractedPart1).toEqual(part1);
       expect(extractedPart2).toEqual(part2);
       expect(extractedPart3).toEqual(part3);
-    });
-
-    test('comparison and equality consistency', () => {
-      const arrays = [
-        new Uint8Array([]),
-        new Uint8Array([0x00]),
-        new Uint8Array([0x01]),
-        new Uint8Array([0x00, 0x00]),
-        new Uint8Array([0x00, 0x01]),
-        new Uint8Array([0x01, 0x00]),
-        new Uint8Array([0xff, 0xff]),
-      ];
-
-      for (let i = 0; i < arrays.length; i++) {
-        for (let j = 0; j < arrays.length; j++) {
-          const a = arrays[i];
-          const b = arrays[j];
-          const isEqual = Bytes.equals(a, b);
-          const comparison = Bytes.compare(a, b);
-
-          if (isEqual) {
-            expect(comparison).toBe(0);
-          } else {
-            expect(comparison).not.toBe(0);
-          }
-        }
-      }
     });
   });
 });

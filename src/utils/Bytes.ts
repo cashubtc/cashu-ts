@@ -15,32 +15,6 @@ function getBufferConstructor(): BufferConstructorLike | undefined {
 }
 
 export class Bytes {
-  static fromHex(hex: string): Uint8Array {
-    hex = hex.trim();
-    if (hex.length === 0) {
-      return new Uint8Array(0);
-    }
-    if (hex.length < 2 || hex.length & 1) {
-      throw new CTSError('Invalid hex string: odd length.');
-    }
-    if (hex.startsWith('0x') || hex.startsWith('0X')) {
-      hex = hex.slice(2);
-    }
-    const match = hex.match(/^[0-9a-fA-F]*$/);
-    if (!match) {
-      throw new CTSError('Invalid hex string: contains non-hex characters');
-    }
-    const matches = hex.match(/.{1,2}/g);
-    if (!matches) {
-      throw new CTSError('Invalid hex string');
-    }
-    return new Uint8Array(matches.map((byte) => parseInt(byte, 16)));
-  }
-
-  static toHex(bytes: Uint8Array): string {
-    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-  }
-
   static fromString(str: string): Uint8Array {
     str = str.trim();
     return new TextEncoder().encode(str);
@@ -59,10 +33,6 @@ export class Bytes {
       offset += arr.length;
     }
     return result;
-  }
-
-  static alloc(size: number): Uint8Array {
-    return new Uint8Array(size);
   }
 
   static toBase64(bytes: Uint8Array): string {
@@ -116,44 +86,11 @@ export class Bytes {
     return result === 0;
   }
 
-  static compare(a: Uint8Array, b: Uint8Array): number {
-    const minLength = Math.min(a.length, b.length);
-    for (let i = 0; i < minLength; i++) {
-      if (a[i] < b[i]) return -1;
-      if (a[i] > b[i]) return 1;
-    }
-    return a.length - b.length;
-  }
-
   static toBigInt(bytes: Uint8Array): bigint {
     let result = 0n;
     for (const byte of bytes) {
       result = (result << 8n) | BigInt(byte);
     }
     return result;
-  }
-
-  static fromBigInt(value: bigint): Uint8Array {
-    if (value < 0n) {
-      throw new RangeError('value must be non-negative');
-    }
-    if (value === 0n) {
-      return new Uint8Array([0]);
-    }
-    // Calculate Uint8Array length
-    let temp = value;
-    let length = 0;
-    while (temp > 0n) {
-      length++;
-      temp >>= 8n;
-    }
-    // Fill it from the end (big endian)
-    const out = new Uint8Array(length);
-    temp = value;
-    for (let i = length - 1; i >= 0; i--) {
-      out[i] = Number(temp & 0xffn);
-      temp >>= 8n;
-    }
-    return out;
   }
 }
