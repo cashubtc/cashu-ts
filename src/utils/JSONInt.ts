@@ -373,7 +373,7 @@ function walkReviver(
   key: string,
   reviver: ReviverFn,
 ): unknown {
-  const current = holder[key as keyof typeof holder];
+  const current: unknown = Array.isArray(holder) ? holder[Number(key)] : holder[key];
   if (Array.isArray(current)) {
     for (let i = 0; i < current.length; i += 1) {
       const v = walkReviver(current, String(i), reviver);
