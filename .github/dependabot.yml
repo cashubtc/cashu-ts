@@ -1,8 +1,8 @@
 version: 2
 updates:
-  # npm dependencies. The seven day soak in .npmrc only governs local installs:
-  # Dependabot resolves versions itself and never reads it, so the cooldown here
-  # is what keeps an hours-old release out of an automated PR.
+  # npm dependencies. Dependabot floors these values at min-release-age from
+  # .npmrc, so the seven day soak holds either way and the cooldown mainly buys
+  # the longer window for majors. Security updates bypass both.
   - package-ecosystem: npm
     directory: /
     schedule:
