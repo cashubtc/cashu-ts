@@ -55,9 +55,7 @@ const { keep, send } = await wallet.ops
 ## 5) Fully custom OutputData (prebuilt)
 
 ```ts
-const mySendData: OutputData[] = [
-  /* amounts must sum to 15 */
-];
+const mySendData: OutputData[] = [/* amounts must sum to 15 */];
 
 const { keep, send } = await wallet.ops.send(15, myProofs).asCustom(mySendData).run();
 ```

@@ -282,31 +282,27 @@ function templateFromToken(token: Token): TokenV4Template {
   const tokenTemplate: TokenV4Template = {
     m: mint,
     u: token.unit || 'sat',
-    t: Object.keys(idMap).map(
-      (id: string): V4InnerToken => ({
-        i: hexToBytes(id),
-        p: idMap[id].map(
-          (p: Proof): V4ProofTemplate => ({
-            a: p.amount.toBigInt(),
-            s: p.secret,
-            c: hexToBytes(p.C),
-            ...(p.dleq && {
-              d: {
-                e: hexToBytes(p.dleq.e),
-                s: hexToBytes(p.dleq.s),
-                r: hexToBytes(p.dleq.r ?? '00'),
-              },
-            }),
-            ...(p.p2pk_e && {
-              pe: hexToBytes(p.p2pk_e),
-            }),
-            ...(p.witness && {
-              w: JSON.stringify(p.witness),
-            }),
-          }),
-        ),
-      }),
-    ),
+    t: Object.keys(idMap).map((id: string): V4InnerToken => ({
+      i: hexToBytes(id),
+      p: idMap[id].map((p: Proof): V4ProofTemplate => ({
+        a: p.amount.toBigInt(),
+        s: p.secret,
+        c: hexToBytes(p.C),
+        ...(p.dleq && {
+          d: {
+            e: hexToBytes(p.dleq.e),
+            s: hexToBytes(p.dleq.s),
+            r: hexToBytes(p.dleq.r ?? '00'),
+          },
+        }),
+        ...(p.p2pk_e && {
+          pe: hexToBytes(p.p2pk_e),
+        }),
+        ...(p.witness && {
+          w: JSON.stringify(p.witness),
+        }),
+      })),
+    })),
   } as TokenV4Template;
   if (token.memo) {
     tokenTemplate.d = token.memo;

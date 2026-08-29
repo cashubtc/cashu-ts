@@ -60,8 +60,7 @@ export interface JSONIntApi {
   stringify(
     value: unknown,
     replacer?:
-      | ((this: unknown, key: string, value: unknown) => unknown)
-      | ReadonlyArray<string | number>,
+      ((this: unknown, key: string, value: unknown) => unknown) | ReadonlyArray<string | number>,
     space?: string | number,
   ): string | undefined;
 }

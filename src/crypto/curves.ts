@@ -13,8 +13,7 @@ import { type G1Point, pointFromHexG1 } from './curve_bls';
  * - `blsG1`: BLS12-381 G1 compressed point (48 bytes, 96 hex) — v3 keysets.
  */
 export type CurvePoint =
-  | { kind: 'secp'; pt: WeierstrassPoint<bigint> }
-  | { kind: 'blsG1'; pt: G1Point };
+  { kind: 'secp'; pt: WeierstrassPoint<bigint> } | { kind: 'blsG1'; pt: G1Point };
 
 export function asSecpPoint(pt: WeierstrassPoint<bigint>): CurvePoint {
   return { kind: 'secp', pt };
