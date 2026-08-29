@@ -2,7 +2,13 @@ import { normalizeSecpPubkey } from '../crypto/curve_secp';
 import { getTag, getTagInt, getTagScalar } from '../crypto/NUT10';
 import type { P2PKOptions, P2PKTag } from '../crypto/NUT11';
 import { P2PK_KNOWN_TAG_KEYS, p2pkOptionsToPRNut10, parseP2PKSecret } from '../crypto/NUT11';
-import { encodeBase64toUint8, decodeCBOR, encodeCBOR, Bytes, normalizeMintUrl } from '../utils';
+import {
+  decodeCBOR,
+  encodeBase64toUint8,
+  encodeCBOR,
+  encodeUint8toBase64UrlPadded,
+  normalizeMintUrl,
+} from '../utils';
 import { decodeBech32mToBytes, encodeBech32m } from '../utils/bech32m';
 import { JSONInt } from '../utils/JSONInt';
 import { decodeTLV, encodeTLV } from '../utils/tlv';
@@ -313,7 +319,7 @@ export class PaymentRequest {
   toEncodedRequest(): string {
     const rawRequest: RawPaymentRequest = this.toRawRequest();
     const data = encodeCBOR(rawRequest);
-    const encodedData = Bytes.toBase64(data);
+    const encodedData = encodeUint8toBase64UrlPadded(data);
     return 'creq' + 'A' + encodedData;
   }
 

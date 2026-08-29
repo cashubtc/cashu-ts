@@ -1,3 +1,5 @@
+import { utf8ToBytes } from '@noble/hashes/utils.js';
+
 import { type Logger, NULL_LOGGER } from '../logger';
 import { Amount } from '../model/Amount';
 import { CTSError } from '../model/Errors';
@@ -14,8 +16,8 @@ import request, { type RequestFn } from '../transport';
 import {
   joinUrls,
   verifyProofsForReceive,
-  Bytes,
   encodeUint8toBase64UrlPadded,
+  encodeBase64toUint8,
   normalizeMintKeys,
   normalizeMintKeyset,
   normalizeSafeIntegerMetadata,
@@ -325,7 +327,7 @@ export class AuthManager implements AuthProvider {
     const parts = token.split('.');
     if (parts.length !== 3) return;
     try {
-      const jsonStr = Bytes.toString(Bytes.fromBase64(parts[1]));
+      const jsonStr = new TextDecoder('utf-8').decode(encodeBase64toUint8(parts[1]));
       const obj = JSON.parse(jsonStr) as { exp?: unknown };
       const exp = typeof obj.exp === 'number' ? obj.exp : Number(obj.exp);
       if (Number.isFinite(exp) && exp > 0) return exp;
@@ -481,6 +483,6 @@ export class AuthManager implements AuthProvider {
 function serializeBAT(proof: Proof): string {
   // strip dleq per NUT-22
   const tokenStr = JSON.stringify({ id: proof.id, secret: proof.secret, C: proof.C });
-  const base64url = encodeUint8toBase64UrlPadded(Bytes.fromString(tokenStr));
+  const base64url = encodeUint8toBase64UrlPadded(utf8ToBytes(tokenStr));
   return `authA${base64url}`;
 }

@@ -1,5 +1,5 @@
 import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import {
   type DLEQ,
@@ -29,8 +29,12 @@ import type {
   HasKeysetKeys,
 } from '../model/types';
 
-import { encodeBase64ToJson, encodeBase64toUint8, encodeUint8toBase64Url } from './base64';
-import { Bytes } from './Bytes';
+import {
+  encodeBase64ToJson,
+  encodeBase64toUint8,
+  encodeUint8toBase64,
+  encodeUint8toBase64Url,
+} from './base64';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { JSONInt } from './JSONInt';
 import { MAX_PAYLOAD_DECODE_ATTEMPTS, MAX_PAYLOAD_LENGTH, MAX_SPLIT_OUTPUTS } from './limits';
@@ -536,8 +540,8 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
       .sort(([amountA], [amountB]) => Amount.from(amountA).compareTo(amountB))
       .map(([, pubKey]) => pubKey)
       .reduce((prev: string, curr: string) => prev + curr, '');
-    const hash = sha256(Bytes.fromString(pubkeysConcat));
-    const b64 = Bytes.toBase64(hash);
+    const hash = sha256(utf8ToBytes(pubkeysConcat));
+    const b64 = encodeUint8toBase64(hash);
     return b64.slice(0, 12);
   }
 
@@ -572,7 +576,7 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
       if (expiry) {
         preimage += `|final_expiry:${expiry}`;
       }
-      const hash = sha256(Bytes.fromString(preimage));
+      const hash = sha256(utf8ToBytes(preimage));
       const hashHex = bytesToHex(hash);
       return (versionByte === 2 ? '02' : '01') + hashHex;
     }

@@ -1,10 +1,11 @@
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { bytesToNumberBE, equalBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
-import { Bytes, hexToNumber, numberToHexPadded64 } from '../utils';
+import { hexToNumber, numberToHexPadded64 } from '../utils';
 
 import { pointFromHex } from './curve_secp';
 
@@ -141,7 +142,7 @@ export function deriveP2BKSecretKey(
   // Check x only equality, using constant time compare
   const xP = P.toBytes(true).slice(1);
   const xNaturalPub = naturalPub.slice(1);
-  if (!Bytes.equals(xP, xNaturalPub)) {
+  if (!equalBytes(xP, xNaturalPub)) {
     return null; // this P' is not for this privkey
   }
   // Select by parity, comparing the low bit only
@@ -184,12 +185,12 @@ function deriveP2BKBlindingTweakFromECDH(
   const Zx = point.multiply(scalar).toBytes(true).slice(1);
   const iByte = new Uint8Array([slotIndex & 0xff]);
   // Derive deterministic blinding factor (r):
-  // Note: Bytes.toBigInt is safe here because we explicitly guard against
+  // Note: bytesToNumberBE is safe here because we explicitly guard against
   // out-of-range values below, throwing rather than silently normalizing.
-  let r = Bytes.toBigInt(sha256(Bytes.concat(P2BK_DST, Zx, iByte)));
+  let r = bytesToNumberBE(sha256(concatBytes(P2BK_DST, Zx, iByte)));
   if (r === 0n || r >= secp256k1.Point.CURVE().n) {
     // Very unlikely to get here!
-    r = Bytes.toBigInt(sha256(Bytes.concat(P2BK_DST, Zx, iByte, new Uint8Array([0xff]))));
+    r = bytesToNumberBE(sha256(concatBytes(P2BK_DST, Zx, iByte, new Uint8Array([0xff]))));
     if (r === 0n || r >= secp256k1.Point.CURVE().n) {
       throw new CTSError('P2BK: tweak derivation failed');
     }

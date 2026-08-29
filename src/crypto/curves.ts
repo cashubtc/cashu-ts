@@ -1,8 +1,9 @@
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { bytesToNumberBE } from '@noble/curves/utils.js';
 
 import { CTSError } from '../model/Errors';
-import { Bytes, encodeBase64toUint8, hexToNumber, isValidHex } from '../utils';
+import { encodeBase64toUint8Legacy, hexToNumber, isValidHex } from '../utils';
 
 import { type G1Point, pointFromHexG1 } from './curve_bls';
 
@@ -59,7 +60,7 @@ export const getKeysetIdInt = (keysetId: string): bigint => {
     keysetIdInt = hexToNumber(keysetId) % BigInt(2 ** 31 - 1);
   } else {
     //legacy keyset compatibility
-    keysetIdInt = Bytes.toBigInt(encodeBase64toUint8(keysetId)) % BigInt(2 ** 31 - 1);
+    keysetIdInt = bytesToNumberBE(encodeBase64toUint8Legacy(keysetId)) % BigInt(2 ** 31 - 1);
   }
   return keysetIdInt;
 };
