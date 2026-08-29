@@ -61,6 +61,10 @@ updates:
     groups:
       github-actions:
         patterns: ['*']
+    # Pinned, not inferred: once deps: commits exist in main, inference could
+    # put CI bumps in the consumer-facing Dependencies section.
+    commit-message:
+      prefix: chore(deps)
 
   # The composite action pins its own versions and needs its own entry
   - package-ecosystem: github-actions
@@ -70,3 +74,7 @@ updates:
     groups:
       github-actions:
         patterns: ['*']
+    # Pinned, not inferred: once deps: commits exist in main, inference could
+    # put CI bumps in the consumer-facing Dependencies section.
+    commit-message:
+      prefix: chore(deps)
