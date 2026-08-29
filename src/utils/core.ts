@@ -31,7 +31,7 @@ import type {
 
 import {
   encodeBase64ToJson,
-  encodeBase64toUint8,
+  encodeBase64UrltoUint8,
   encodeUint8toBase64,
   encodeUint8toBase64Url,
 } from './base64';
@@ -501,7 +501,7 @@ function handleTokens(token: string): Token {
     }
     return tokenObj;
   } else if (version === 'B') {
-    const uInt8Token = encodeBase64toUint8(encodedToken);
+    const uInt8Token = encodeBase64UrltoUint8(encodedToken);
     const tokenData = decodeCBOR(uInt8Token) as TokenV4Template;
     return tokenFromTemplate(tokenData);
   }

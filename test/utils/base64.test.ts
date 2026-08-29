@@ -3,7 +3,7 @@ import { test, describe, expect } from 'vitest';
 import { CTSError } from '../../src/model/Errors';
 import {
   encodeBase64ToJson,
-  encodeBase64toUint8,
+  encodeBase64UrltoUint8,
   encodeBase64toUint8Legacy,
   encodeJsonToBase64,
   encodeUint8toBase64,
@@ -18,7 +18,7 @@ describe('testing uint8 encoding', () => {
   });
   test('base64 to uint8', async () => {
     const dec = new TextDecoder();
-    expect(dec.decode(encodeBase64toUint8('dGVzdA=='))).toBe('test');
+    expect(dec.decode(encodeBase64UrltoUint8('dGVzdA=='))).toBe('test');
   });
   test('Object to base64', () => {
     const obj = [
@@ -165,7 +165,7 @@ describe('strict base64 decoding', () => {
     ['excess padding', 'dGVzdA==='],
     ['a length no padding can complete', 'dGVzd'],
   ])('rejects %s', (_label, input) => {
-    expect(() => encodeBase64toUint8(input)).toThrow(/Invalid base64/);
+    expect(() => encodeBase64UrltoUint8(input)).toThrow(/Invalid base64/);
   });
 
   test.each([
@@ -177,7 +177,7 @@ describe('strict base64 decoding', () => {
     ['line-wrapped input', 'dGVz\ndA==\n', 'test'],
     ['edge Unicode whitespace', '\u00a0\ufeffdGVzdA==\u3000', 'test'],
   ])('decodes %s', (_label, input, expected) => {
-    expect(dec.decode(encodeBase64toUint8(input))).toBe(expected);
+    expect(dec.decode(encodeBase64UrltoUint8(input))).toBe(expected);
   });
 });
 

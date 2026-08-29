@@ -4,7 +4,7 @@ import type { P2PKOptions, P2PKTag } from '../crypto/NUT11';
 import { P2PK_KNOWN_TAG_KEYS, p2pkOptionsToPRNut10, parseP2PKSecret } from '../crypto/NUT11';
 import {
   decodeCBOR,
-  encodeBase64toUint8,
+  encodeBase64UrltoUint8,
   encodeCBOR,
   encodeBase64toUint8Legacy,
   encodeUint8toBase64UrlPadded,
@@ -514,7 +514,7 @@ export class PaymentRequest {
     // are standard base64 and still in circulation. CDK falls back the same way, and only here.
     let data: Uint8Array;
     try {
-      data = encodeBase64toUint8(encodedData);
+      data = encodeBase64UrltoUint8(encodedData);
     } catch (urlSafeError) {
       try {
         data = encodeBase64toUint8Legacy(encodedData);

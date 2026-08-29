@@ -43,7 +43,7 @@ function encodeUint8toBase64UrlPadded(bytes: Uint8Array): string {
  * Decodes a `base64_urlsafe` payload, the alphabet NUT-00 mandates for tokens and payment requests.
  * Padding is optional, matching the spec and CDK's `DecodePaddingMode::Indifferent`.
  */
-function encodeBase64toUint8(base64String: string): Uint8Array {
+function encodeBase64UrltoUint8(base64String: string): Uint8Array {
   try {
     return base64urlnopad.decode(normalizeEncodedInput(base64String));
   } catch (cause) {
@@ -54,7 +54,7 @@ function encodeBase64toUint8(base64String: string): Uint8Array {
 /**
  * Decodes a standard-alphabet payload. Current formats are base64url, so this is for the two things
  * that predate it: deprecated keyset IDs (e.g. `+//wAAAAAAAA`), and payment requests emitted before
- * this library encoded them url-safe. Use {@link encodeBase64toUint8} otherwise.
+ * this library encoded them url-safe. Use {@link encodeBase64UrltoUint8} otherwise.
  */
 function encodeBase64toUint8Legacy(base64String: string): Uint8Array {
   try {
@@ -84,7 +84,7 @@ function encodeJsonToBase64(jsonObj: unknown): string {
  * {@link encodeJsonToBase64}.
  */
 function encodeBase64ToJson<T extends object>(base64String: string): T {
-  const jsonString = new TextDecoder('utf-8').decode(encodeBase64toUint8(base64String));
+  const jsonString = new TextDecoder('utf-8').decode(encodeBase64UrltoUint8(base64String));
   return JSONInt.parse(jsonString) as T;
 }
 
@@ -112,7 +112,7 @@ export {
   encodeUint8toBase64,
   encodeUint8toBase64Url,
   encodeUint8toBase64UrlPadded,
-  encodeBase64toUint8,
+  encodeBase64UrltoUint8,
   encodeBase64toUint8Legacy,
   encodeJsonToBase64,
   encodeBase64ToJson,

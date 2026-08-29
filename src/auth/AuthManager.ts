@@ -17,7 +17,7 @@ import {
   joinUrls,
   verifyProofsForReceive,
   encodeUint8toBase64UrlPadded,
-  encodeBase64toUint8,
+  encodeBase64UrltoUint8,
   normalizeMintKeys,
   normalizeMintKeyset,
   normalizeSafeIntegerMetadata,
@@ -327,7 +327,7 @@ export class AuthManager implements AuthProvider {
     const parts = token.split('.');
     if (parts.length !== 3) return;
     try {
-      const jsonStr = new TextDecoder('utf-8').decode(encodeBase64toUint8(parts[1]));
+      const jsonStr = new TextDecoder('utf-8').decode(encodeBase64UrltoUint8(parts[1]));
       const obj = JSON.parse(jsonStr) as { exp?: unknown };
       const exp = typeof obj.exp === 'number' ? obj.exp : Number(obj.exp);
       if (Number.isFinite(exp) && exp > 0) return exp;
