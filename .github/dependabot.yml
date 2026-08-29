@@ -1,8 +1,29 @@
 version: 2
 updates:
+  # npm dependencies. The seven day soak in .npmrc only governs local installs:
+  # Dependabot resolves versions itself and never reads it, so the cooldown here
+  # is what keeps an hours-old release out of an automated PR.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+    groups:
+      # @noble/* and @scure/* pin each other exactly, so they move as one PR
+      noble-scure:
+        patterns: ['@noble/*', '@scure/*']
+      # Dev majors (vitest, typescript, stryker, api-extractor) tend to need
+      # source changes, so they arrive individually rather than in the batch
+      dev-tooling:
+        dependency-type: development
+        update-types: ['minor', 'patch']
+
   # Keeps action pins in .github/workflows current (Node-runtime deprecations,
-  # security fixes). npm deps are managed manually; mint Docker images are
-  # handled by the nightly renovate.yml script.
+  # security fixes). Mint Docker images are handled by the nightly renovate.yml
+  # script.
   - package-ecosystem: github-actions
     directory: /
     schedule:

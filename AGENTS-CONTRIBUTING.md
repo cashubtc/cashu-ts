@@ -15,6 +15,8 @@ npm run test:prepare
 Node requirement: see `package.json` (currently `>=22.4.0`).
 Local installs configure Husky hooks automatically.
 
+`.npmrc` sets `min-release-age=7`, so a fresh resolve will not pull a release published in the last week. It needs npm 11.10 or newer (older npm ignores the setting without saying so), and it applies to `npm install` only: `npm ci` installs the lockfile as written, whatever the age.
+
 ## Repo map
 
 - `src/` core library source
