@@ -52,8 +52,9 @@ function encodeBase64toUint8(base64String: string): Uint8Array {
 }
 
 /**
- * Decodes a standard-alphabet payload, which only deprecated keyset IDs still use (e.g.
- * `+//wAAAAAAAA`). Current formats are base64url; use {@link encodeBase64toUint8} for those.
+ * Decodes a standard-alphabet payload. Current formats are base64url, so this is for the two things
+ * that predate it: deprecated keyset IDs (e.g. `+//wAAAAAAAA`), and payment requests emitted before
+ * this library encoded them url-safe. Use {@link encodeBase64toUint8} otherwise.
  */
 function encodeBase64toUint8Legacy(base64String: string): Uint8Array {
   try {

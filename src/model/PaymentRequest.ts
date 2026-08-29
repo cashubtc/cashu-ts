@@ -6,6 +6,7 @@ import {
   decodeCBOR,
   encodeBase64toUint8,
   encodeCBOR,
+  encodeBase64toUint8Legacy,
   encodeUint8toBase64UrlPadded,
   normalizeMintUrl,
 } from '../utils';
@@ -509,7 +510,18 @@ export class PaymentRequest {
       throw new CTSError('unsupported pr version');
     }
     const encodedData = encodedRequest.slice(5);
-    const data = encodeBase64toUint8(encodedData);
+    // NUT-18 mandates base64url, but requests this library emitted before it encoded that way
+    // are standard base64 and still in circulation. CDK falls back the same way, and only here.
+    let data: Uint8Array;
+    try {
+      data = encodeBase64toUint8(encodedData);
+    } catch (urlSafeError) {
+      try {
+        data = encodeBase64toUint8Legacy(encodedData);
+      } catch {
+        throw urlSafeError;
+      }
+    }
     const decoded = decodeCBOR(data) as RawPaymentRequest;
     return this.fromRawRequest(decoded);
   }

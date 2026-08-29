@@ -1,4 +1,4 @@
-import { test, describe, expect, vi, beforeEach, afterEach } from 'vitest';
+import { test, describe, expect } from 'vitest';
 
 import { CTSError } from '../../src/model/Errors';
 import {
@@ -155,15 +155,9 @@ describe('isBase64String', () => {
     expect(isBase64String('')).toBe(false);
   });
 });
-describe.each(['Buffer', 'atob fallback'])('strict base64 decoding (%s)', (backend) => {
+// One codec now, so there is no Buffer / atob backend split left to parametrize over.
+describe('strict base64 decoding', () => {
   const dec = new TextDecoder();
-
-  beforeEach(() => {
-    if (backend === 'atob fallback') vi.stubGlobal('Buffer', undefined);
-  });
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
 
   test.each([
     ['mid-string padding', 'dGVz=dA=='],
