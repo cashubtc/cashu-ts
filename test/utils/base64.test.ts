@@ -1,8 +1,10 @@
 import { test, describe, expect, vi, beforeEach, afterEach } from 'vitest';
 
+import { CTSError } from '../../src/model/Errors';
 import {
   encodeBase64ToJson,
   encodeBase64toUint8,
+  encodeBase64toUint8Legacy,
   encodeJsonToBase64,
   encodeUint8toBase64,
   isBase64String,
@@ -187,4 +189,29 @@ describe.each(['Buffer', 'atob fallback'])('strict base64 decoding (%s)', (backe
 
 test('v3 token path rejects excess padding', () => {
   expect(() => encodeBase64ToJson('eyJhIjoxfQ===')).toThrow(/Invalid base64/);
+});
+
+describe('alphabet split', () => {
+  test('decodes a deprecated keyset ID, which is standard base64', () => {
+    expect(encodeBase64toUint8Legacy('+//wAAAAAAAA')).toEqual(
+      new Uint8Array([251, 255, 240, 0, 0, 0, 0, 0, 0]),
+    );
+  });
+
+  test('rejects a url-safe payload on the legacy decoder', () => {
+    expect(() => encodeBase64toUint8Legacy('--__AAAAAAAA')).toThrow(CTSError);
+  });
+
+  test('rejects a mixed-alphabet string, as CDK does', () => {
+    expect(isBase64String('a-b+cAAAAAAA')).toBe(false);
+  });
+
+  test('rejects input that normalizes to empty', () => {
+    expect(isBase64String('   ')).toBe(false);
+    expect(isBase64String('==')).toBe(false);
+  });
+
+  test('encodes undefined as an empty payload', () => {
+    expect(encodeJsonToBase64(undefined)).toBe('');
+  });
 });

@@ -188,6 +188,7 @@ function deriveP2BKBlindingTweakFromECDH(
   // Note: bytesToNumberBE is safe here because we explicitly guard against
   // out-of-range values below, throwing rather than silently normalizing.
   let r = bytesToNumberBE(sha256(concatBytes(P2BK_DST, Zx, iByte)));
+  /* c8 ignore next 6 — retry needs sha256 to land outside the curve order (~2^-128). */
   if (r === 0n || r >= secp256k1.Point.CURVE().n) {
     // Very unlikely to get here!
     r = bytesToNumberBE(sha256(concatBytes(P2BK_DST, Zx, iByte, new Uint8Array([0xff]))));
