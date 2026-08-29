@@ -12,15 +12,41 @@ updates:
     # ranges, which would let a noble major claim support for two incompatible
     # majors at once
     versioning-strategy: increase-if-necessary
+    # Runtime deps ship to consumers, so their bumps go in the changelog under
+    # Dependencies (see changelog-sections in release-please-config.json).
+    # Dev bumps keep the chore prefix release-please ignores.
+    commit-message:
+      prefix: deps
+      prefix-development: chore(deps-dev)
     cooldown:
       default-days: 7
       semver-major-days: 14
+    # A dependency joins the FIRST group it matches, so order matters here:
+    # the families come before the dependency-type catch-all.
     groups:
       # @noble/* and @scure/* pin each other exactly, so they move as one PR
       noble-scure:
         patterns: ['@noble/*', '@scure/*']
-      # Dev majors (vitest, typescript, stryker, api-extractor) tend to need
-      # source changes, so they arrive individually rather than in the batch
+      # A prettier bump reformats the tree, so the PR cannot go green until
+      # someone commits `npm run format`. On its own that chore blocks nothing.
+      prettier:
+        patterns: ['prettier', 'prettier-plugin-*']
+      # The eslint family pins itself through peer ranges (@eslint/js 10 will
+      # not install against eslint 9), and a bump here means new rules firing.
+      # Before the vitest group so @vitest/eslint-plugin lands with eslint.
+      eslint:
+        patterns:
+          - 'eslint'
+          - '@eslint/*'
+          - 'eslint-*'
+          - 'typescript-eslint'
+          - '@typescript-eslint/*'
+          - '@vitest/eslint-plugin'
+      # The test stack moves together: the browser providers track both vitest
+      # and the playwright version they drive.
+      vitest:
+        patterns: ['vitest', '@vitest/*', 'playwright', '@stryker-mutator/*']
+      # Everything else dev, minor and patch only, so dev majors arrive alone
       dev-tooling:
         dependency-type: development
         update-types: ['minor', 'patch']
@@ -35,6 +61,10 @@ updates:
     groups:
       github-actions:
         patterns: ['*']
+    # Pinned, not inferred: once deps: commits exist in main, inference could
+    # put CI bumps in the consumer-facing Dependencies section.
+    commit-message:
+      prefix: chore(deps)
 
   # The composite action pins its own versions and needs its own entry
   - package-ecosystem: github-actions
@@ -44,3 +74,7 @@ updates:
     groups:
       github-actions:
         patterns: ['*']
+    # Pinned, not inferred: once deps: commits exist in main, inference could
+    # put CI bumps in the consumer-facing Dependencies section.
+    commit-message:
+      prefix: chore(deps)
