@@ -30,10 +30,10 @@ import type {
 } from '../model/types';
 
 import {
-  encodeBase64UrlToJson,
-  encodeBase64UrltoUint8,
-  encodeUint8toBase64,
-  encodeUint8toBase64Url,
+  decodeBase64UrlToJson,
+  decodeBase64UrlToUint8,
+  encodeUint8ToBase64,
+  encodeUint8ToBase64Url,
 } from './base64';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { JSONInt } from './JSONInt';
@@ -268,7 +268,7 @@ function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
   const encodedData = encodeCBOR(tokenTemplate);
   const prefix = 'cashu';
   const version = 'B';
-  const base64Data = encodeUint8toBase64Url(encodedData);
+  const base64Data = encodeUint8ToBase64Url(encodedData);
   return prefix + version + base64Data;
 }
 
@@ -482,7 +482,7 @@ function handleTokens(token: string): Token {
   const version = token.slice(0, 1);
   const encodedToken = token.slice(1);
   if (version === 'A') {
-    const parsedV3Token = encodeBase64UrlToJson<DeprecatedToken>(encodedToken);
+    const parsedV3Token = decodeBase64UrlToJson<DeprecatedToken>(encodedToken);
     if (parsedV3Token.token.length > 1) {
       throw new CTSError('Multi entry token are not supported');
     }
@@ -501,7 +501,7 @@ function handleTokens(token: string): Token {
     }
     return tokenObj;
   } else if (version === 'B') {
-    const uInt8Token = encodeBase64UrltoUint8(encodedToken);
+    const uInt8Token = decodeBase64UrlToUint8(encodedToken);
     const tokenData = decodeCBOR(uInt8Token) as TokenV4Template;
     return tokenFromTemplate(tokenData);
   }
@@ -541,7 +541,7 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
       .map(([, pubKey]) => pubKey)
       .reduce((prev: string, curr: string) => prev + curr, '');
     const hash = sha256(utf8ToBytes(pubkeysConcat));
-    const b64 = encodeUint8toBase64(hash);
+    const b64 = encodeUint8ToBase64(hash);
     return b64.slice(0, 12);
   }
 

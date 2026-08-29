@@ -16,8 +16,8 @@ import request, { type RequestFn } from '../transport';
 import {
   joinUrls,
   verifyProofsForReceive,
-  encodeUint8toBase64UrlPadded,
-  encodeBase64UrltoUint8,
+  encodeUint8ToBase64UrlPadded,
+  decodeBase64UrlToUint8,
   normalizeMintKeys,
   normalizeMintKeyset,
   normalizeSafeIntegerMetadata,
@@ -327,7 +327,7 @@ export class AuthManager implements AuthProvider {
     const parts = token.split('.');
     if (parts.length !== 3) return;
     try {
-      const jsonStr = new TextDecoder('utf-8').decode(encodeBase64UrltoUint8(parts[1]));
+      const jsonStr = new TextDecoder('utf-8').decode(decodeBase64UrlToUint8(parts[1]));
       const obj = JSON.parse(jsonStr) as { exp?: unknown };
       const exp = typeof obj.exp === 'number' ? obj.exp : Number(obj.exp);
       if (Number.isFinite(exp) && exp > 0) return exp;
@@ -483,6 +483,6 @@ export class AuthManager implements AuthProvider {
 function serializeBAT(proof: Proof): string {
   // strip dleq per NUT-22
   const tokenStr = JSON.stringify({ id: proof.id, secret: proof.secret, C: proof.C });
-  const base64url = encodeUint8toBase64UrlPadded(utf8ToBytes(tokenStr));
+  const base64url = encodeUint8ToBase64UrlPadded(utf8ToBytes(tokenStr));
   return `authA${base64url}`;
 }

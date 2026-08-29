@@ -4,7 +4,7 @@ import { randomBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { type Logger, NULL_LOGGER, safeCallback } from '../logger';
 import { CTSError } from '../model/Errors';
 import { type GetInfoResponse } from '../model/types';
-import { encodeUint8toBase64Url } from '../utils';
+import { encodeUint8ToBase64Url } from '../utils';
 
 export type OIDCConfig = {
   issuer: string;
@@ -162,12 +162,12 @@ export class OIDCAuth {
   generatePKCE(): { verifier: string; challenge: string } {
     // 48 bytes->base64url is typically 64 chars without padding, comfortably >= 43
     const rnd = randomBytes(48);
-    const verifier = encodeUint8toBase64Url(rnd);
+    const verifier = encodeUint8ToBase64Url(rnd);
 
     // RFC 7636, challenge = BASE64URL-ENCODE( SHA256( ASCII(verifier) ) )
     const vBytes = utf8ToBytes(verifier);
     const chBytes = sha256(vBytes);
-    const challenge = encodeUint8toBase64Url(chBytes);
+    const challenge = encodeUint8ToBase64Url(chBytes);
 
     return { verifier, challenge };
   }

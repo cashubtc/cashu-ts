@@ -19,11 +19,11 @@ function normalizeEncodedInput(str: string): string {
     .replace(/={1,2}$/, '');
 }
 
-function encodeUint8toBase64(bytes: Uint8Array): string {
+function encodeUint8ToBase64(bytes: Uint8Array): string {
   return base64.encode(bytes);
 }
 
-function encodeUint8toBase64Url(bytes: Uint8Array): string {
+function encodeUint8ToBase64Url(bytes: Uint8Array): string {
   return base64urlnopad.encode(bytes);
 }
 
@@ -32,10 +32,10 @@ function encodeUint8toBase64Url(bytes: Uint8Array): string {
  *
  * Use this when the receiver requires padded URL-safe base64, e.g. CDK mint's
  * `general_purpose::URL_SAFE` decoder for the `Blind-auth` header (NUT-22). Use
- * `encodeUint8toBase64Url` instead when the spec explicitly forbids padding (e.g. PKCE code
+ * `encodeUint8ToBase64Url` instead when the spec explicitly forbids padding (e.g. PKCE code
  * verifier / challenge per RFC 7636).
  */
-function encodeUint8toBase64UrlPadded(bytes: Uint8Array): string {
+function encodeUint8ToBase64UrlPadded(bytes: Uint8Array): string {
   return base64url.encode(bytes);
 }
 
@@ -43,7 +43,7 @@ function encodeUint8toBase64UrlPadded(bytes: Uint8Array): string {
  * Decodes a `base64_urlsafe` payload, the alphabet NUT-00 mandates for tokens and payment requests.
  * Padding is optional, matching the spec and CDK's `DecodePaddingMode::Indifferent`.
  */
-function encodeBase64UrltoUint8(base64String: string): Uint8Array {
+function decodeBase64UrlToUint8(base64String: string): Uint8Array {
   try {
     return base64urlnopad.decode(normalizeEncodedInput(base64String));
   } catch (cause) {
@@ -54,9 +54,9 @@ function encodeBase64UrltoUint8(base64String: string): Uint8Array {
 /**
  * Decodes a standard-alphabet payload. Current formats are base64url, so this is for the two things
  * that predate it: deprecated keyset IDs (e.g. `+//wAAAAAAAA`), and payment requests emitted before
- * this library encoded them url-safe. Use {@link encodeBase64UrltoUint8} otherwise.
+ * this library encoded them url-safe. Use {@link decodeBase64UrlToUint8} otherwise.
  */
-function encodeBase64toUint8Legacy(base64String: string): Uint8Array {
+function decodeBase64ToUint8Legacy(base64String: string): Uint8Array {
   try {
     return base64nopad.decode(normalizeEncodedInput(base64String));
   } catch (cause) {
@@ -68,7 +68,7 @@ function encodeBase64toUint8Legacy(base64String: string): Uint8Array {
  * Serializes an object to base64url-encoded JSON using {@link JSONInt.stringify}.
  *
  * `bigint` values are emitted as raw JSON number tokens (no quotes, no `n` suffix), which is
- * required for the v3 cashu token wire format. Callers must use {@link encodeBase64UrlToJson} to
+ * required for the v3 cashu token wire format. Callers must use {@link decodeBase64UrlToJson} to
  * decode, as standard `JSON.parse` will lose precision on integers above `MAX_SAFE_INTEGER`.
  */
 function encodeJsonToBase64Url(jsonObj: unknown): string {
@@ -83,8 +83,8 @@ function encodeJsonToBase64Url(jsonObj: unknown): string {
  * returned as `bigint`. This preserves precision for large amounts encoded by
  * {@link encodeJsonToBase64Url}.
  */
-function encodeBase64UrlToJson<T extends object>(base64String: string): T {
-  const jsonString = new TextDecoder('utf-8').decode(encodeBase64UrltoUint8(base64String));
+function decodeBase64UrlToJson<T extends object>(base64String: string): T {
+  const jsonString = new TextDecoder('utf-8').decode(decodeBase64UrlToUint8(base64String));
   return JSONInt.parse(jsonString) as T;
 }
 
@@ -109,12 +109,12 @@ function isBase64String(s: string): boolean {
 }
 
 export {
-  encodeUint8toBase64,
-  encodeUint8toBase64Url,
-  encodeUint8toBase64UrlPadded,
-  encodeBase64UrltoUint8,
-  encodeBase64toUint8Legacy,
+  encodeUint8ToBase64,
+  encodeUint8ToBase64Url,
+  encodeUint8ToBase64UrlPadded,
+  decodeBase64UrlToUint8,
+  decodeBase64ToUint8Legacy,
   encodeJsonToBase64Url,
-  encodeBase64UrlToJson,
+  decodeBase64UrlToJson,
   isBase64String,
 };

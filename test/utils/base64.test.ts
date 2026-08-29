@@ -2,11 +2,11 @@ import { test, describe, expect } from 'vitest';
 
 import { CTSError } from '../../src/model/Errors';
 import {
-  encodeBase64UrlToJson,
-  encodeBase64UrltoUint8,
-  encodeBase64toUint8Legacy,
+  decodeBase64UrlToJson,
+  decodeBase64UrlToUint8,
+  decodeBase64ToUint8Legacy,
   encodeJsonToBase64Url,
-  encodeUint8toBase64,
+  encodeUint8ToBase64,
   isBase64String,
 } from '../../src/utils';
 describe('testing uint8 encoding', () => {
@@ -14,11 +14,11 @@ describe('testing uint8 encoding', () => {
     const message = 'test';
     const enc = new TextEncoder();
     const encoded = enc.encode(message);
-    expect(encodeUint8toBase64(encoded)).toBe('dGVzdA==');
+    expect(encodeUint8ToBase64(encoded)).toBe('dGVzdA==');
   });
   test('base64 to uint8', async () => {
     const dec = new TextDecoder();
-    expect(dec.decode(encodeBase64UrltoUint8('dGVzdA=='))).toBe('test');
+    expect(dec.decode(decodeBase64UrlToUint8('dGVzdA=='))).toBe('test');
   });
   test('Object to base64', () => {
     const obj = [
@@ -48,7 +48,7 @@ describe('testing uint8 encoding', () => {
   const base64String =
     'W3siaWQiOiIwTkkzVFVBczFTZnkiLCJhbW91bnQiOjgsIkMiOiIwMzc2OTUwODMyMjZiOWM2MzY0OWQ4MDY4ZWI3ODlhODkxZTYyMWU3N2RmZjRlN2Q3NWFjMDI0NzlmZTcxYzg4NmIiLCJzZWNyZXQiOiJsRmN4YlBPODcwc3JzT0tiNGUrTXZSQW1XQkUyMDZiNkJNaTVuS3JxMXQ0PSJ9LHsiaWQiOiIwTkkzVFVBczFTZnkiLCJhbW91bnQiOjY0LCJDIjoiMDNlNThlMzdmM2FhNTcxOWM1NzQzODExNTExYTZlNjQ1OTI0NWYwMDgyNjliZDgwOWI5Yjg5Y2MyZmQzNjgzMjQxIiwic2VjcmV0IjoiSFY2UzlHWTlmOVlzaVpTWTlWL1Q0dWMyMzlWd3NmcURiVWZxcit2ZDR3MD0ifSx7ImlkIjoiME5JM1RVQXMxU2Z5IiwiYW1vdW50IjoxMjgsIkMiOiIwMzA3MTVhODczMjQyZjU5ZmUzZjY3MTIxZjBhNGFmYjIyYWFhMjRiMTBhOTgzMjkyOWY2MWFiMjhjZGYwZDM2MzAiLCJzZWNyZXQiOiJHSTg1eXR1YmV6Q0VEZ3hlY3JpWDZlS09aSlY5cDgzMUJsc01RZUJ6anZRPSJ9XQ';
   test('base64 to object', () => {
-    expect(encodeBase64UrlToJson(base64String)).toEqual([
+    expect(decodeBase64UrlToJson(base64String)).toEqual([
       {
         id: '0NI3TUAs1Sfy',
         amount: 8,
@@ -80,13 +80,13 @@ describe('testing uint8 encoding', () => {
       },
     ];
     const encoded = encodeJsonToBase64Url(obj);
-    const decoded = encodeBase64UrlToJson<typeof obj>(encoded);
+    const decoded = decodeBase64UrlToJson<typeof obj>(encoded);
     expect(decoded[0].amount).toBe(unsafeAmount);
     expect(typeof decoded[0].amount).toBe('bigint');
   });
   test('safe integer amount stays number', () => {
     const obj = [{ amount: 8 }];
-    const decoded = encodeBase64UrlToJson<typeof obj>(encodeJsonToBase64Url(obj));
+    const decoded = decodeBase64UrlToJson<typeof obj>(encodeJsonToBase64Url(obj));
     expect(decoded[0].amount).toBe(8);
     expect(typeof decoded[0].amount).toBe('number');
   });
@@ -95,7 +95,7 @@ describe('testing uint8 encoding', () => {
     // const base64 = 'eyJ0ZXN0RGF0YSI6IvCfj7PvuI/wn4+z77iPIn0='
     const obj = { testData: '🏳️🏳️' };
 
-    expect(encodeBase64UrlToJson(base64url)).toStrictEqual(obj);
+    expect(decodeBase64UrlToJson(base64url)).toStrictEqual(obj);
     expect(encodeJsonToBase64Url(obj)).toStrictEqual(base64url);
   });
   test('test script secret to from base64', () => {
@@ -119,7 +119,7 @@ describe('testing uint8 encoding', () => {
       ],
     };
 
-    expect(encodeBase64UrlToJson(base64url)).toStrictEqual(obj);
+    expect(decodeBase64UrlToJson(base64url)).toStrictEqual(obj);
     expect(encodeJsonToBase64Url(obj)).toStrictEqual(base64url);
   });
 });
@@ -165,7 +165,7 @@ describe('strict base64 decoding', () => {
     ['excess padding', 'dGVzdA==='],
     ['a length no padding can complete', 'dGVzd'],
   ])('rejects %s', (_label, input) => {
-    expect(() => encodeBase64UrltoUint8(input)).toThrow(/Invalid base64/);
+    expect(() => decodeBase64UrlToUint8(input)).toThrow(/Invalid base64/);
   });
 
   test.each([
@@ -177,23 +177,23 @@ describe('strict base64 decoding', () => {
     ['line-wrapped input', 'dGVz\ndA==\n', 'test'],
     ['edge Unicode whitespace', '\u00a0\ufeffdGVzdA==\u3000', 'test'],
   ])('decodes %s', (_label, input, expected) => {
-    expect(dec.decode(encodeBase64UrltoUint8(input))).toBe(expected);
+    expect(dec.decode(decodeBase64UrlToUint8(input))).toBe(expected);
   });
 });
 
 test('v3 token path rejects excess padding', () => {
-  expect(() => encodeBase64UrlToJson('eyJhIjoxfQ===')).toThrow(/Invalid base64/);
+  expect(() => decodeBase64UrlToJson('eyJhIjoxfQ===')).toThrow(/Invalid base64/);
 });
 
 describe('alphabet split', () => {
   test('decodes a deprecated keyset ID, which is standard base64', () => {
-    expect(encodeBase64toUint8Legacy('+//wAAAAAAAA')).toEqual(
+    expect(decodeBase64ToUint8Legacy('+//wAAAAAAAA')).toEqual(
       new Uint8Array([251, 255, 240, 0, 0, 0, 0, 0, 0]),
     );
   });
 
   test('rejects a url-safe payload on the legacy decoder', () => {
-    expect(() => encodeBase64toUint8Legacy('--__AAAAAAAA')).toThrow(CTSError);
+    expect(() => decodeBase64ToUint8Legacy('--__AAAAAAAA')).toThrow(CTSError);
   });
 
   test('rejects a mixed-alphabet string, as CDK does', () => {

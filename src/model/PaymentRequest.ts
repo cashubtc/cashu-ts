@@ -4,10 +4,10 @@ import type { P2PKOptions, P2PKTag } from '../crypto/NUT11';
 import { P2PK_KNOWN_TAG_KEYS, p2pkOptionsToPRNut10, parseP2PKSecret } from '../crypto/NUT11';
 import {
   decodeCBOR,
-  encodeBase64UrltoUint8,
+  decodeBase64UrlToUint8,
   encodeCBOR,
-  encodeBase64toUint8Legacy,
-  encodeUint8toBase64UrlPadded,
+  decodeBase64ToUint8Legacy,
+  encodeUint8ToBase64UrlPadded,
   normalizeMintUrl,
 } from '../utils';
 import { decodeBech32mToBytes, encodeBech32m } from '../utils/bech32m';
@@ -320,7 +320,7 @@ export class PaymentRequest {
   toEncodedRequest(): string {
     const rawRequest: RawPaymentRequest = this.toRawRequest();
     const data = encodeCBOR(rawRequest);
-    const encodedData = encodeUint8toBase64UrlPadded(data);
+    const encodedData = encodeUint8ToBase64UrlPadded(data);
     return 'creq' + 'A' + encodedData;
   }
 
@@ -514,10 +514,10 @@ export class PaymentRequest {
     // are standard base64 and still in circulation. CDK falls back the same way, and only here.
     let data: Uint8Array;
     try {
-      data = encodeBase64UrltoUint8(encodedData);
+      data = decodeBase64UrlToUint8(encodedData);
     } catch (urlSafeError) {
       try {
-        data = encodeBase64toUint8Legacy(encodedData);
+        data = decodeBase64ToUint8Legacy(encodedData);
       } catch {
         throw urlSafeError;
       }

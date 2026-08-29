@@ -4,16 +4,16 @@ import { test, describe, expect } from 'vitest';
 import {
   decodeCBOR,
   encodeCBOR,
-  encodeBase64UrltoUint8,
-  encodeUint8toBase64Url,
+  decodeBase64UrlToUint8,
+  encodeUint8ToBase64Url,
 } from '../../src/utils';
 // Note: do NOT import 'fs' or 'path' at top-level — the browser test runner
 // will attempt to import them and Vite externalizes those modules which causes
 // runtime errors. Load them dynamically inside a Node-only guard below.
 
 // Test Polyfills for Node Buffer (which is not properly polyfilled in vite browser tests)
-const base64urlEncode = encodeUint8toBase64Url;
-const base64urlDecode = encodeBase64UrltoUint8;
+const base64urlEncode = encodeUint8ToBase64Url;
+const base64urlDecode = decodeBase64UrlToUint8;
 
 // Basic CBOR scalar/vector coverage is provided by the external test vectors
 // in `test/cbor-test-vectors/appendix_a.json` (the per-vector harness below).
