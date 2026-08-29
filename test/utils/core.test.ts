@@ -27,7 +27,7 @@ import {
   sortProofsById,
   normalizeMintUrl,
 } from '../../src/utils';
-import { encodeJsonToBase64 } from '../../src/utils/base64';
+import { encodeJsonToBase64Url } from '../../src/utils/base64';
 import { MAX_PAYLOAD_DECODE_ATTEMPTS, MAX_PAYLOAD_LENGTH } from '../../src/utils/limits';
 import {
   NUT02_V1_VECTOR1_KEYS,
@@ -480,7 +480,7 @@ describe('findCashuPayload', () => {
 
   test('bounds a single candidate at MAX_PAYLOAD_LENGTH', () => {
     const paddedToken = (memoLength: number) =>
-      `cashuA${encodeJsonToBase64({
+      `cashuA${encodeJsonToBase64Url({
         token: [
           {
             mint: 'http://localhost:3338',

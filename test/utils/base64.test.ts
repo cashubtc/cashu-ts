@@ -2,10 +2,10 @@ import { test, describe, expect } from 'vitest';
 
 import { CTSError } from '../../src/model/Errors';
 import {
-  encodeBase64ToJson,
+  encodeBase64UrlToJson,
   encodeBase64UrltoUint8,
   encodeBase64toUint8Legacy,
-  encodeJsonToBase64,
+  encodeJsonToBase64Url,
   encodeUint8toBase64,
   isBase64String,
 } from '../../src/utils';
@@ -41,14 +41,14 @@ describe('testing uint8 encoding', () => {
         secret: 'GI85ytubezCEDgxecriX6eKOZJV9p831BlsMQeBzjvQ=',
       },
     ];
-    expect(encodeJsonToBase64(obj)).toBe(
+    expect(encodeJsonToBase64Url(obj)).toBe(
       'W3siaWQiOiIwTkkzVFVBczFTZnkiLCJhbW91bnQiOjgsIkMiOiIwMzc2OTUwODMyMjZiOWM2MzY0OWQ4MDY4ZWI3ODlhODkxZTYyMWU3N2RmZjRlN2Q3NWFjMDI0NzlmZTcxYzg4NmIiLCJzZWNyZXQiOiJsRmN4YlBPODcwc3JzT0tiNGUrTXZSQW1XQkUyMDZiNkJNaTVuS3JxMXQ0PSJ9LHsiaWQiOiIwTkkzVFVBczFTZnkiLCJhbW91bnQiOjY0LCJDIjoiMDNlNThlMzdmM2FhNTcxOWM1NzQzODExNTExYTZlNjQ1OTI0NWYwMDgyNjliZDgwOWI5Yjg5Y2MyZmQzNjgzMjQxIiwic2VjcmV0IjoiSFY2UzlHWTlmOVlzaVpTWTlWL1Q0dWMyMzlWd3NmcURiVWZxcit2ZDR3MD0ifSx7ImlkIjoiME5JM1RVQXMxU2Z5IiwiYW1vdW50IjoxMjgsIkMiOiIwMzA3MTVhODczMjQyZjU5ZmUzZjY3MTIxZjBhNGFmYjIyYWFhMjRiMTBhOTgzMjkyOWY2MWFiMjhjZGYwZDM2MzAiLCJzZWNyZXQiOiJHSTg1eXR1YmV6Q0VEZ3hlY3JpWDZlS09aSlY5cDgzMUJsc01RZUJ6anZRPSJ9XQ',
     );
   });
   const base64String =
     'W3siaWQiOiIwTkkzVFVBczFTZnkiLCJhbW91bnQiOjgsIkMiOiIwMzc2OTUwODMyMjZiOWM2MzY0OWQ4MDY4ZWI3ODlhODkxZTYyMWU3N2RmZjRlN2Q3NWFjMDI0NzlmZTcxYzg4NmIiLCJzZWNyZXQiOiJsRmN4YlBPODcwc3JzT0tiNGUrTXZSQW1XQkUyMDZiNkJNaTVuS3JxMXQ0PSJ9LHsiaWQiOiIwTkkzVFVBczFTZnkiLCJhbW91bnQiOjY0LCJDIjoiMDNlNThlMzdmM2FhNTcxOWM1NzQzODExNTExYTZlNjQ1OTI0NWYwMDgyNjliZDgwOWI5Yjg5Y2MyZmQzNjgzMjQxIiwic2VjcmV0IjoiSFY2UzlHWTlmOVlzaVpTWTlWL1Q0dWMyMzlWd3NmcURiVWZxcit2ZDR3MD0ifSx7ImlkIjoiME5JM1RVQXMxU2Z5IiwiYW1vdW50IjoxMjgsIkMiOiIwMzA3MTVhODczMjQyZjU5ZmUzZjY3MTIxZjBhNGFmYjIyYWFhMjRiMTBhOTgzMjkyOWY2MWFiMjhjZGYwZDM2MzAiLCJzZWNyZXQiOiJHSTg1eXR1YmV6Q0VEZ3hlY3JpWDZlS09aSlY5cDgzMUJsc01RZUJ6anZRPSJ9XQ';
   test('base64 to object', () => {
-    expect(encodeBase64ToJson(base64String)).toEqual([
+    expect(encodeBase64UrlToJson(base64String)).toEqual([
       {
         id: '0NI3TUAs1Sfy',
         amount: 8,
@@ -79,14 +79,14 @@ describe('testing uint8 encoding', () => {
         secret: 'lFcxbPO870srsOKb4e+MvRAmWBE206b6BMi5nKrq1t4=',
       },
     ];
-    const encoded = encodeJsonToBase64(obj);
-    const decoded = encodeBase64ToJson<typeof obj>(encoded);
+    const encoded = encodeJsonToBase64Url(obj);
+    const decoded = encodeBase64UrlToJson<typeof obj>(encoded);
     expect(decoded[0].amount).toBe(unsafeAmount);
     expect(typeof decoded[0].amount).toBe('bigint');
   });
   test('safe integer amount stays number', () => {
     const obj = [{ amount: 8 }];
-    const decoded = encodeBase64ToJson<typeof obj>(encodeJsonToBase64(obj));
+    const decoded = encodeBase64UrlToJson<typeof obj>(encodeJsonToBase64Url(obj));
     expect(decoded[0].amount).toBe(8);
     expect(typeof decoded[0].amount).toBe('number');
   });
@@ -95,8 +95,8 @@ describe('testing uint8 encoding', () => {
     // const base64 = 'eyJ0ZXN0RGF0YSI6IvCfj7PvuI/wn4+z77iPIn0='
     const obj = { testData: '🏳️🏳️' };
 
-    expect(encodeBase64ToJson(base64url)).toStrictEqual(obj);
-    expect(encodeJsonToBase64(obj)).toStrictEqual(base64url);
+    expect(encodeBase64UrlToJson(base64url)).toStrictEqual(obj);
+    expect(encodeJsonToBase64Url(obj)).toStrictEqual(base64url);
   });
   test('test script secret to from base64', () => {
     const base64url =
@@ -119,8 +119,8 @@ describe('testing uint8 encoding', () => {
       ],
     };
 
-    expect(encodeBase64ToJson(base64url)).toStrictEqual(obj);
-    expect(encodeJsonToBase64(obj)).toStrictEqual(base64url);
+    expect(encodeBase64UrlToJson(base64url)).toStrictEqual(obj);
+    expect(encodeJsonToBase64Url(obj)).toStrictEqual(base64url);
   });
 });
 describe('isBase64String', () => {
@@ -182,7 +182,7 @@ describe('strict base64 decoding', () => {
 });
 
 test('v3 token path rejects excess padding', () => {
-  expect(() => encodeBase64ToJson('eyJhIjoxfQ===')).toThrow(/Invalid base64/);
+  expect(() => encodeBase64UrlToJson('eyJhIjoxfQ===')).toThrow(/Invalid base64/);
 });
 
 describe('alphabet split', () => {
@@ -206,6 +206,6 @@ describe('alphabet split', () => {
   });
 
   test('encodes undefined as an empty payload', () => {
-    expect(encodeJsonToBase64(undefined)).toBe('');
+    expect(encodeJsonToBase64Url(undefined)).toBe('');
   });
 });

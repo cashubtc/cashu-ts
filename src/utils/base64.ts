@@ -68,10 +68,10 @@ function encodeBase64toUint8Legacy(base64String: string): Uint8Array {
  * Serializes an object to base64url-encoded JSON using {@link JSONInt.stringify}.
  *
  * `bigint` values are emitted as raw JSON number tokens (no quotes, no `n` suffix), which is
- * required for the v3 cashu token wire format. Callers must use {@link encodeBase64ToJson} to
+ * required for the v3 cashu token wire format. Callers must use {@link encodeBase64UrlToJson} to
  * decode, as standard `JSON.parse` will lose precision on integers above `MAX_SAFE_INTEGER`.
  */
-function encodeJsonToBase64(jsonObj: unknown): string {
+function encodeJsonToBase64Url(jsonObj: unknown): string {
   const jsonString = JSONInt.stringify(jsonObj) ?? '';
   return base64urlnopad.encode(utf8ToBytes(jsonString));
 }
@@ -81,9 +81,9 @@ function encodeJsonToBase64(jsonObj: unknown): string {
  *
  * Integers within `±MAX_SAFE_INTEGER` are returned as `number`; integers outside that range are
  * returned as `bigint`. This preserves precision for large amounts encoded by
- * {@link encodeJsonToBase64}.
+ * {@link encodeJsonToBase64Url}.
  */
-function encodeBase64ToJson<T extends object>(base64String: string): T {
+function encodeBase64UrlToJson<T extends object>(base64String: string): T {
   const jsonString = new TextDecoder('utf-8').decode(encodeBase64UrltoUint8(base64String));
   return JSONInt.parse(jsonString) as T;
 }
@@ -114,7 +114,7 @@ export {
   encodeUint8toBase64UrlPadded,
   encodeBase64UrltoUint8,
   encodeBase64toUint8Legacy,
-  encodeJsonToBase64,
-  encodeBase64ToJson,
+  encodeJsonToBase64Url,
+  encodeBase64UrlToJson,
   isBase64String,
 };

@@ -30,7 +30,7 @@ import type {
 } from '../model/types';
 
 import {
-  encodeBase64ToJson,
+  encodeBase64UrlToJson,
   encodeBase64UrltoUint8,
   encodeUint8toBase64,
   encodeUint8toBase64Url,
@@ -482,7 +482,7 @@ function handleTokens(token: string): Token {
   const version = token.slice(0, 1);
   const encodedToken = token.slice(1);
   if (version === 'A') {
-    const parsedV3Token = encodeBase64ToJson<DeprecatedToken>(encodedToken);
+    const parsedV3Token = encodeBase64UrlToJson<DeprecatedToken>(encodedToken);
     if (parsedV3Token.token.length > 1) {
       throw new CTSError('Multi entry token are not supported');
     }
