@@ -9,9 +9,8 @@
      lands in, e.g. [NUT-29](https://github.com/cashubtc/nuts/blob/main/29.md), rather than
      the PR number: PRs get squashed and renumbered, the NUT is the stable home. -->
 
-## TL;DR
-
-<!-- One or two lines, the outcome. What this is, for someone reading nothing else. -->
+<!-- Open with a TL;DR: one or two lines of prose, no heading. The outcome, for
+     someone reading nothing else. -->
 
 ## Why
 
