@@ -8,6 +8,10 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # Keep in-range updates to the lockfile: the default widens a library's
+    # ranges, which would let a noble major claim support for two incompatible
+    # majors at once
+    versioning-strategy: increase-if-necessary
     cooldown:
       default-days: 7
       semver-major-days: 14
