@@ -21,7 +21,7 @@ import type {
 
 import {
   decodeBase64AnyToUint8,
-  decodeBase64UrlToJson,
+  decodeBase64AnyToJson,
   encodeUint8ToBase64,
   encodeUint8ToBase64Url,
 } from './base64';
@@ -395,7 +395,7 @@ function handleTokens(token: string): Token {
   const version = token.slice(0, 1);
   const encodedToken = token.slice(1);
   if (version === 'A') {
-    const parsedV3Token = decodeBase64UrlToJson<DeprecatedToken>(encodedToken);
+    const parsedV3Token = decodeBase64AnyToJson<DeprecatedToken>(encodedToken);
     if (parsedV3Token.token.length > 1) {
       throw new CTSError('Multi entry token are not supported');
     }

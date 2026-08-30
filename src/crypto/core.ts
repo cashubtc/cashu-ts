@@ -5,7 +5,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
-import { hexToNumber, decodeBase64UrlToUint8 } from '../utils';
+import { hexToNumber, decodeBase64AnyToUint8 } from '../utils';
 
 /**
  * Private key type - can be hex string or Uint8Array.
@@ -73,7 +73,7 @@ export const getKeysetIdInt = (keysetId: string): bigint => {
     keysetIdInt = hexToNumber(keysetId) % BigInt(2 ** 31 - 1);
   } else {
     //legacy keyset compatibility
-    keysetIdInt = bytesToNumberBE(decodeBase64UrlToUint8(keysetId)) % BigInt(2 ** 31 - 1);
+    keysetIdInt = bytesToNumberBE(decodeBase64AnyToUint8(keysetId)) % BigInt(2 ** 31 - 1);
   }
   return keysetIdInt;
 };

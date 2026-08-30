@@ -7,6 +7,7 @@ import {
   deriveSecretAndBlindingFactor,
   getKeysetIdInt,
 } from '../../src/crypto';
+import { CTSError } from '../../src/model/Errors';
 
 describe('deriveBlindingFactor', () => {
   test('preserves 32-byte encoding when reduced scalar has leading zeros', () => {
@@ -121,5 +122,11 @@ describe('derivation kind selection', () => {
     expect(() => deriveSecretAndBlindingFactor(seed, '03ff', 0)).toThrow(
       /^Unrecognized keyset ID version 03$/,
     );
+  });
+});
+
+describe('keyset id validation', () => {
+  test('an odd-length hmac keyset id throws CTSError, not a noble RangeError', () => {
+    expect(() => deriveSecretAndBlindingFactor(new Uint8Array(64), '01f', 0)).toThrow(CTSError);
   });
 });

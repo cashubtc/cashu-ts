@@ -108,6 +108,17 @@ function decodeBase64UrlToJson<T extends object>(base64String: string): T {
 }
 
 /**
+ * Deserializes base64-encoded JSON in either alphabet.
+ *
+ * @remarks
+ * The deprecated cashuA format predates the base64url convention, so tokens in the wild use both.
+ */
+function decodeBase64AnyToJson<T extends object>(base64String: string): T {
+  const jsonString = new TextDecoder('utf-8').decode(decodeBase64AnyToUint8(base64String));
+  return JSONInt.parse(jsonString) as T;
+}
+
+/**
  * Reports whether a string is a well-formed base64 payload in either alphabet.
  *
  * @remarks
@@ -131,6 +142,7 @@ export {
   encodeUint8ToBase64,
   encodeUint8ToBase64Url,
   encodeUint8ToBase64UrlPadded,
+  decodeBase64AnyToJson,
   decodeBase64AnyToUint8,
   decodeBase64UrlToUint8,
   decodeBase64ToUint8Legacy,

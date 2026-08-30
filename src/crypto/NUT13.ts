@@ -103,13 +103,17 @@ export function createSecretAndBlindingFactorDeriver(
 
 function getDerivationKind(keysetId: string): DerivationKind {
   const isValidHex = /^[a-fA-F0-9]+$/.test(keysetId);
+  const isHmacHexVersion = keysetId.startsWith('01');
+  if (isValidHex && isHmacHexVersion && keysetId.length % 2 !== 0) {
+    throw new CTSError('Invalid hex string: odd length.');
+  }
   if (!isValidHex && isBase64String(keysetId)) {
     return DerivationKind.DEPRECATED_BIP32;
   }
   if (isValidHex && keysetId.startsWith('00')) {
     return DerivationKind.DEPRECATED_BIP32;
   }
-  if (isValidHex && keysetId.startsWith('01')) {
+  if (isValidHex && isHmacHexVersion) {
     return DerivationKind.HMAC_SHA256;
   }
   throw new CTSError(`Unrecognized keyset ID version ${keysetId.slice(0, 2)}`);

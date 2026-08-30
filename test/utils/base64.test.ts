@@ -1,11 +1,13 @@
 import { test, describe, expect } from 'vitest';
 
+import { getKeysetIdInt } from '../../src/crypto/core';
 import {
   decodeBase64UrlToJson,
   decodeBase64UrlToUint8,
   encodeJsonToBase64Url,
   encodeUint8ToBase64,
   isBase64String,
+  decodeBase64AnyToJson,
   decodeBase64AnyToUint8,
   decodeBase64ToUint8Legacy,
 } from '../../src/utils';
@@ -174,5 +176,25 @@ describe('v4 keeps decoding permissive', () => {
     expect(decodeBase64ToUint8Legacy('+//wAAAAAAAA')).toEqual(
       new Uint8Array([251, 255, 240, 0, 0, 0, 0, 0, 0]),
     );
+  });
+});
+
+describe('v4 compatibility paths', () => {
+  // Legacy keyset IDs and deprecated cashuA tokens both predate base64url, so the alphabet-neutral
+  // fixtures elsewhere in the suite cannot catch a decoder that only accepts one alphabet.
+  test.each([
+    ['legacy keyset ID with +', 'I2yN+iRYfkzT'],
+    ['legacy keyset ID with /', '+//wAAAAAAAA'],
+  ])('getKeysetIdInt accepts a %s', (_label, id) => {
+    expect(typeof getKeysetIdInt(id)).toBe('bigint');
+  });
+
+  test('the deprecated JSON path accepts either alphabet', () => {
+    expect(decodeBase64AnyToJson('eyJhIjoiPz8/PyJ9')).toEqual({ a: '????' });
+    expect(decodeBase64AnyToJson('eyJhIjoiPz8_PyJ9')).toEqual({ a: '????' });
+  });
+
+  test('the strict decoder underneath still rejects the standard alphabet', () => {
+    expect(() => decodeBase64UrlToJson('eyJhIjoiPz8/PyJ9')).toThrow();
   });
 });
