@@ -81,7 +81,7 @@ export * from './crypto';
 // Core Utils
 export * from './utils/core';
 export { JSONInt, type JSONIntApi } from './utils/JSONInt';
-// Export only the strict public codecs; Bytes remains an internal, lenient helper.
+// Public byte conversion is intentionally limited to strict hex codecs.
 export { bytesToHex, hexToBytes } from './utils/hex';
 
 // Payment request facade (tests rely on these at top level)
