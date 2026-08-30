@@ -1,8 +1,14 @@
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
-import { bytesToHex, bytesToNumberBE, hexToBytes, randomBytes } from '@noble/curves/utils.js';
+import { bytesToNumberBE } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
+import {
+  bytesToHex,
+  concatBytes,
+  hexToBytes,
+  randomBytes,
+  utf8ToBytes,
+} from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
 import { hexToNumber, decodeBase64AnyToUint8 } from '../utils';

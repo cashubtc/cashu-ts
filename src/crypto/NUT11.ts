@@ -1,5 +1,5 @@
 import { schnorr } from '@noble/curves/secp256k1.js';
-import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 
 import { type Logger, NULL_LOGGER } from '../logger';
 import { CTSError } from '../model/Errors';

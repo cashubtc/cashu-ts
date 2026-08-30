@@ -1,6 +1,5 @@
-import { hexToBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { type DLEQ, pointFromHex, verifyDLEQProof_reblind } from '../crypto';
 import { Amount, type AmountLike } from '../model/Amount';
