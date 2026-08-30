@@ -7,10 +7,10 @@ import {
   encodeJsonToBase64Url,
   encodeUint8ToBase64,
   isBase64String,
-  decodeBase64AnyToJson,
   decodeBase64AnyToUint8,
   decodeBase64ToUint8Legacy,
 } from '../../src/utils';
+import { getDecodedToken } from '../../src/utils/core';
 describe('testing uint8 encoding', () => {
   test('uint8 to base64', async () => {
     const message = 'test';
@@ -189,9 +189,18 @@ describe('v4 compatibility paths', () => {
     expect(typeof getKeysetIdInt(id)).toBe('bigint');
   });
 
-  test('the deprecated JSON path accepts either alphabet', () => {
-    expect(decodeBase64AnyToJson('eyJhIjoiPz8/PyJ9')).toEqual({ a: '????' });
-    expect(decodeBase64AnyToJson('eyJhIjoiPz8_PyJ9')).toEqual({ a: '????' });
+  // Through getDecodedToken, not the codec, so the caller wiring is pinned too. The `~~~` in the
+  // secret is what makes the two encodings differ: standard gives `fn5+`, url-safe `fn5-`.
+  const v3 =
+    'eyJ0b2tlbiI6W3sibWludCI6Imh0dHA6Ly9sb2NhbGhvc3Q6MzMzOCIsInByb29mcyI6W3siaWQiOiJJMnlOK2lSWWZrelQiLCJhbW91bnQiOjEsInNlY3JldCI6In5+fmFiYyIsIkMiOiIwMjE5NTA4MWU2MjJmOThiZmMxOWEwNWViZTIzNDFkOTU1YzBkMTI1ODhjNTk0OGM4NThkMDdhZGVjMDA3YmMxZTQifV19XX0=';
+
+  test.each([
+    ['standard', `cashuA${v3}`],
+    ['url-safe', `cashuA${v3.replace(/\+/g, '-').replace(/=+$/, '')}`],
+  ])('a deprecated cashuA token decodes in the %s alphabet', (_label, token) => {
+    const decoded = getDecodedToken(token, ['009a1f293253e41e']);
+    expect(decoded.mint).toBe('http://localhost:3338');
+    expect(decoded.proofs[0].secret).toBe('~~~abc');
   });
 
   test('the strict decoder underneath still rejects the standard alphabet', () => {
