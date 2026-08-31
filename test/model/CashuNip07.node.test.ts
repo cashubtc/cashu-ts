@@ -1,5 +1,4 @@
 import { schnorr } from '@noble/curves/secp256k1.js';
-import { sha256 } from '@noble/hashes/sha2.js';
 import { describe, expect, test } from 'vitest';
 
 import {
@@ -10,7 +9,7 @@ import {
 import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import { createP2PKsecret } from '../../src/crypto/NUT11';
 import type { NutrootLeaf } from '../../src/crypto/nutroot';
-import { messageForPayload } from '../../src/crypto/transcript';
+import { inputsForPayload, proofInputContextKey } from '../../src/crypto/transcript';
 import { Amount } from '../../src/model/Amount';
 import { CashuNip07, type Nip07Like } from '../../src/model/CashuNip07';
 import type { Proof } from '../../src/model/types';
@@ -25,16 +24,20 @@ const XONLY = PUB.slice(2);
 const OTHER = Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex('22'.repeat(32))));
 
 const LEAF: NutrootLeaf = { type: 'threshold', n: 1, keys: [PUB] };
-const MESSAGE = messageForPayload({
-  inputs: [{ amount: 1, id: KEYSET, secret: `02${'33'.repeat(32)}`, C: 'aa'.repeat(48) }],
+const SECRET = `02${'33'.repeat(32)}`;
+const inputs = inputsForPayload({
+  inputs: [{ amount: 1, id: KEYSET, secret: SECRET, C: 'aa'.repeat(48) }],
   outputs: [{ amount: 1, id: KEYSET, B_: 'bb'.repeat(48) }],
 });
-const DIGEST = sha256(MESSAGE);
+const MESSAGE = inputs.message;
+const { container: CONTAINER, digest: DIGEST } = inputs.proofs.get(
+  proofInputContextKey({ keysetId: KEYSET, secret: SECRET }),
+)!;
 
 // An extension that implements the safe method through the reference signer.
 const safeSigner: Nip07Like = {
   getPublicKey: async () => XONLY,
-  nip60: { signTransaction: async (m) => CashuNip07.signTransaction(m, PRIV) },
+  nip60: { signTransaction: async (m, c) => CashuNip07.signTransaction(m, c, PRIV) },
 };
 // Alby-style: raw digest signing only.
 const rawSigner: Nip07Like = {
@@ -84,6 +87,7 @@ describe('CashuNip07', () => {
       digest: DIGEST,
       leaf: LEAF,
       message: MESSAGE,
+      container: CONTAINER,
     });
     expect(schnorr.verify(Bytes.fromHex(sig), DIGEST, Bytes.fromHex(XONLY))).toBe(true);
   });
@@ -93,10 +97,11 @@ describe('CashuNip07', () => {
       digest: DIGEST,
       leaf: LEAF,
       message: MESSAGE,
+      container: CONTAINER,
     });
     expect(schnorr.verify(Bytes.fromHex(sig), DIGEST, Bytes.fromHex(XONLY))).toBe(true);
     await expect(
-      CashuNip07.cosign({})({ digest: DIGEST, leaf: LEAF, message: MESSAGE }),
+      CashuNip07.cosign({})({ digest: DIGEST, leaf: LEAF, message: MESSAGE, container: CONTAINER }),
     ).rejects.toThrow('cannot sign');
   });
 
@@ -105,21 +110,38 @@ describe('CashuNip07', () => {
       nip60: { signTransaction: async () => ({ hash: '00'.repeat(32), sig: '', pubkey: XONLY }) },
     };
     await expect(
-      CashuNip07.cosign(liar)({ digest: DIGEST, leaf: LEAF, message: MESSAGE }),
+      CashuNip07.cosign(liar)({
+        digest: DIGEST,
+        leaf: LEAF,
+        message: MESSAGE,
+        container: CONTAINER,
+      }),
     ).rejects.toThrow('different message');
   });
 
-  test('signTransaction refuses anything without the domain tag', () => {
+  test('signTransaction refuses anything without the domain tag or a foreign container', () => {
+    const containerHex = Bytes.toHex(CONTAINER);
     // An event id, or any other 32 bytes, must never come out signed.
-    expect(() => CashuNip07.signTransaction('00'.repeat(32), PRIV)).toThrow(
+    expect(() => CashuNip07.signTransaction('00'.repeat(32), containerHex, PRIV)).toThrow(
       'not a Cashu transaction',
     );
-    expect(() => CashuNip07.signTransaction(Bytes.toHex(MESSAGE.subarray(1)), PRIV)).toThrow();
-    const signed = CashuNip07.signTransaction(Bytes.toHex(MESSAGE), PRIV);
+    expect(() =>
+      CashuNip07.signTransaction(Bytes.toHex(MESSAGE.subarray(1)), containerHex, PRIV),
+    ).toThrow();
+    // A container the message does not carry signs nothing: the derived digest would cover an
+    // input of some other transaction.
+    expect(() => CashuNip07.signTransaction(Bytes.toHex(MESSAGE), '01000411223344', PRIV)).toThrow(
+      'not part of this transaction',
+    );
+    const signed = CashuNip07.signTransaction(Bytes.toHex(MESSAGE), containerHex, PRIV);
     expect(signed.hash).toBe(Bytes.toHex(DIGEST));
     expect(signed.pubkey).toBe(XONLY);
     // A byte key signs the same as its hex form.
-    const bytesKey = CashuNip07.signTransaction(Bytes.toHex(MESSAGE), Bytes.fromHex(PRIV));
+    const bytesKey = CashuNip07.signTransaction(
+      Bytes.toHex(MESSAGE),
+      containerHex,
+      Bytes.fromHex(PRIV),
+    );
     expect(schnorr.verify(Bytes.fromHex(bytesKey.sig), DIGEST, Bytes.fromHex(XONLY))).toBe(true);
   });
 
