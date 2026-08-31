@@ -15,7 +15,9 @@ import {
   recoverReceiverKeyedSecretKey,
   type NutrootLeaf,
   NUTROOT_NUMS_KEY,
+  NUTROOT_MAX_LEAF_BYTES,
   NUTROOT_MAX_LEAF_TIME,
+  NUTROOT_MAX_SLOTS,
   NUTROOT_MAX_TREE_DEPTH,
   verifyNutrootSpendInfo,
   verifyNutrootRequestTree,
@@ -201,7 +203,7 @@ describe('leaf parsing fails closed', () => {
     expect(() => parseNutrootLeaf(leaf)).toThrow(/field/);
   });
 
-  test('the 1024-byte cap applies to the body, excluding the version byte', () => {
+  test('the byte cap applies to the body, excluding the version byte', () => {
     const fields = new Uint8Array([
       ...tlvRecord(0x02, new Uint8Array([1])),
       ...tlvRecord(0x04, hexToBytes(v61.carol_pub)),
@@ -210,9 +212,9 @@ describe('leaf parsing fails closed', () => {
       0x00,
       0x01,
       ...fields,
-      ...tlvRecord(0x0d, new Uint8Array(1024 - 1 - fields.length - 3)),
+      ...tlvRecord(0x0d, new Uint8Array(NUTROOT_MAX_LEAF_BYTES - 1 - fields.length - 3)),
     ]);
-    expect(atLimit).toHaveLength(1025);
+    expect(atLimit).toHaveLength(NUTROOT_MAX_LEAF_BYTES + 1);
     // At the cap the length check passes and parsing reaches the padding field, which rejects as
     // unknown; one byte more and the length check itself fires first.
     expect(() => parseNutrootLeaf(atLimit)).toThrow(/Unknown leaf field/);
@@ -221,7 +223,7 @@ describe('leaf parsing fails closed', () => {
       0x00,
       0x01,
       ...fields,
-      ...tlvRecord(0x0d, new Uint8Array(1024 - fields.length - 3)),
+      ...tlvRecord(0x0d, new Uint8Array(NUTROOT_MAX_LEAF_BYTES - fields.length - 3)),
     ]);
     expect(() => parseNutrootLeaf(overLimit)).toThrow(/body exceeds/);
 
@@ -484,9 +486,12 @@ describe('script-path commitment verification', () => {
 
   test('path deeper than the depth cap throws', () => {
     const filler = sha256(new Uint8Array([9]));
-    expect(() => nutrootRootFromPath(filler, new Array(9).fill(filler) as Uint8Array[])).toThrow(
-      /depth/,
-    );
+    expect(() =>
+      nutrootRootFromPath(
+        filler,
+        new Array(NUTROOT_MAX_TREE_DEPTH + 1).fill(filler) as Uint8Array[],
+      ),
+    ).toThrow(/depth/);
   });
 
   test('path hashes must be exactly 32 bytes', () => {
@@ -645,18 +650,19 @@ describe('locked secret construction and spend info cascade', () => {
     ).toThrow(/type/);
   });
 
-  test('slot cap is enforced when building and receiving a full tree', () => {
-    const leaves: NutrootLeaf[] = Array.from({ length: 256 }, () => ({
-      type: 'threshold',
+  test('an over-large tree is refused when building and when receiving', () => {
+    const leaves: NutrootLeaf[] = Array.from({ length: 2 ** NUTROOT_MAX_TREE_DEPTH + 1 }, () => ({
+      type: 'threshold' as const,
       n: 1,
       keys: [v61.carol_pub],
     }));
-    expect(() => buildNutrootSecret(v61.internal_key, leaves)).toThrow(/slots/);
+    expect(() => buildNutrootSecret(v61.internal_key, leaves)).toThrow(/depth/);
 
+    // A sender who folded the root off-spec is still refused: the cap binds the tree, not a path.
     const tree = leaves.map((leaf) => bytesToHex(serializeNutrootLeaf(leaf)));
-    const root = nutrootMerkleRoot(tree.map((leaf) => nutrootLeafHash(hexToBytes(leaf))));
-    const secret = bytesToHex(nutrootTweakPubkey(hexToBytes(v61.internal_key), root));
-    expect(() => verifyNutrootSpendInfo(secret, { K: v61.internal_key, tree })).toThrow(/slots/);
+    expect(() => verifyNutrootSpendInfo(v61.secret, { K: v61.internal_key, tree })).toThrow(
+      /depth/,
+    );
   });
 
   test('NUMS base: H is lift_x(SHA256(G uncompressed))', () => {
@@ -1046,14 +1052,19 @@ describe('tree caps are enforced on a disclosed tree, not only on a witness path
     expect(() => nutrootMerkleRoot([...hashes, hashes[0]])).toThrow(/depth/);
   });
 
-  test('the slot cap keeps a build inside the depth cap', () => {
-    const leaves: NutrootLeaf[] = Array.from({ length: 256 }, (_, i) => ({
+  test('the depth cap keeps a full build inside the slot cap', () => {
+    // The deepest tree allowed, every leaf at the maximum current key count: the slot cap is unreachable
+    // through a tree a verifier accepts, so an over-large tree is refused on depth alone.
+    const perLeaf = 15;
+    const leaves: NutrootLeaf[] = Array.from({ length: 2 ** NUTROOT_MAX_TREE_DEPTH }, (_, i) => ({
       type: 'threshold' as const,
       n: 1,
-      keys: [key(i + 1)],
+      keys: Array.from({ length: perLeaf }, (_, j) => key(i * perLeaf + j + 1)),
     }));
-    expect(() => buildNutrootSecret(NUTROOT_NUMS_KEY, leaves)).toThrow(/slots/);
-    const ok = buildNutrootSecret(NUTROOT_NUMS_KEY, leaves.slice(0, 255));
+    expect(() => serializeNutrootLeaf(leaves[0])).not.toThrow();
+    expect(enumerateLeafKeySlots(leaves)).toHaveLength(120);
+    expect(enumerateLeafKeySlots(leaves).length + 1).toBeLessThanOrEqual(NUTROOT_MAX_SLOTS);
+    const ok = buildNutrootSecret(NUTROOT_NUMS_KEY, leaves);
     expect(
       nutrootMerklePath(
         ok.tree.map((leaf) => nutrootLeafHash(hexToBytes(leaf))),
@@ -1218,6 +1229,50 @@ describe('verifyNutrootRequestTree (NUT-18 exact match)', () => {
     );
   });
 
+  test('an ambiguous disclosure resolves at the maximum tree size', () => {
+    // Every blind-me key matches any substituted value, so each disclosed leaf fits all but one
+    // requested leaf: this exercises the most ambiguity a valid tree can carry.
+    const n = 2 ** NUTROOT_MAX_TREE_DEPTH;
+    const pub = (i: number) =>
+      bytesToHex(secp256k1.getPublicKey(numberToBytesBE(BigInt(i), 32), true));
+    const leaves: NutrootLeaf[] = Array.from({ length: n }, (_, i) => ({
+      type: 'threshold' as const,
+      n: 1,
+      keys: [pub(i + 2)],
+    }));
+    const ambiguous = {
+      receiverKey: v61.carol_pub,
+      leaves,
+      blindKeys: leaves.map((leaf) => leaf.keys[0]),
+    };
+    const si = (tree: string[]) => ({ E: v61.ephemeral_pub, K: v61.carol_pub, tree });
+
+    // n copies of the first requested leaf, verbatim: it matches every requested leaf but that
+    // one, so there are only n - 1 destinations and no assignment exists.
+    const verbatim = bytesToHex(serializeNutrootLeaf(leaves[0]));
+    expect(() => verifyNutrootRequestTree(ambiguous, si(new Array(n).fill(verbatim)))).toThrow(
+      /does not match/,
+    );
+
+    // The same graph with one substituted key is satisfiable, and must still be accepted.
+    const substituted = leaves.map((_, i) =>
+      bytesToHex(serializeNutrootLeaf({ type: 'threshold', n: 1, keys: [pub(i + n + 2)] })),
+    );
+    expect(() => verifyNutrootRequestTree(ambiguous, si(substituted))).not.toThrow();
+  });
+
+  test('exact-tree verification rejects more than eight leaves', () => {
+    const leaf = { type: 'threshold' as const, n: 1, keys: [v61.carol_pub] };
+    const leaves = new Array(2 ** NUTROOT_MAX_TREE_DEPTH + 1).fill(leaf);
+    const tree = leaves.map((item) => bytesToHex(serializeNutrootLeaf(item)));
+    expect(() =>
+      verifyNutrootRequestTree(
+        { receiverKey: v61.carol_pub, leaves },
+        { E: v61.ephemeral_pub, K: v61.carol_pub, tree },
+      ),
+    ).toThrow(/exceeds 8 leaves/);
+  });
+
   test('bearer and absent spend info reject', () => {
     const out = derive();
     expect(() => verifyNutrootRequestTree(option, undefined)).toThrow(/no spend info/);
@@ -1325,9 +1380,9 @@ describe('validation fails closed (constructor and verifier guards)', () => {
     );
   });
 
-  test('serializeNutrootLeaf enforces the 1024-byte body cap', () => {
-    const keys = Array.from({ length: 31 }, (_, i) => pubOf(i + 1));
-    expect(() => serializeNutrootLeaf({ type: 'threshold', n: 1, keys })).toThrow(/1024 bytes/);
+  test('serializeNutrootLeaf enforces the 512-byte body cap', () => {
+    const keys = Array.from({ length: 16 }, (_, i) => pubOf(i + 1));
+    expect(() => serializeNutrootLeaf({ type: 'threshold', n: 1, keys })).toThrow(/512 bytes/);
   });
 
   test('parseNutrootLeaf rejects structurally broken bodies', () => {

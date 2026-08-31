@@ -430,8 +430,8 @@ export function recoverV3LeafKeys(
  * Recover the internal private keys behind self-owned v3 point secrets by counter scan.
  *
  * @remarks
- * A self-owned plain v3 proof needs no stored spend info: `k` re-derives from the seed (spec
- * 2.5.2). Scans counters `[0, maxCounter)` and trial-matches each derived `K` against the wanted
+ * A self-owned plain v3 proof needs no stored spend info: `k` re-derives from the seed (type
+ * `0x00`). Scans counters `[0, maxCounter)` and trial-matches each derived `K` against the wanted
  * secrets. Returns a map of secret hex to its 32-byte private key; unmatched secrets are absent.
  * @param seed - Wallet seed.
  * @param keysetId - V3 (`02…`) keyset id.

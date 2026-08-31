@@ -50,8 +50,9 @@ const FIELD_HASH = 0x08;
 /**
  * Normative caps from NUT-10. The leaf body excludes the leading version byte.
  */
-export const NUTROOT_MAX_LEAF_BYTES = 1024;
-export const NUTROOT_MAX_TREE_DEPTH = 8;
+export const NUTROOT_MAX_LEAF_BYTES = 512;
+export const NUTROOT_MAX_TREE_DEPTH = 3;
+export const NUTROOT_MAX_TREE_LEAVES = 2 ** NUTROOT_MAX_TREE_DEPTH;
 
 /**
  * Largest unix time an `after` leaf may name (2^53 - 1).
@@ -368,23 +369,21 @@ export function nutrootBranchHash(a: Uint8Array, b: Uint8Array): Uint8Array {
  *
  * @remarks
  * The sort makes the root a function of the leaf set: any transmitted order reconstructs, so a
- * store or codec that does not preserve list order cannot invalidate a proof. Slot assignment (spec
- * 2.7) still walks the transmitted order; receivers match slot keys by value.
+ * store or codec that does not preserve list order cannot invalidate a proof. Slot assignment
+ * (NUT-28) still walks the transmitted order; receivers match slot keys by value.
  *
  * Depth is a property of the tree, not of one leaf, so the cap is checked here and not only on a
- * witness path. A tree of more than `2^8` leaves is deeper than the cap, so its long paths cannot
+ * witness path. A tree of more than `2^3` leaves is deeper than the cap, so its long paths cannot
  * be spent. A few of its leaves still can: the fold promotes an unpaired leaf to the next level,
- * and a leaf promoted often enough keeps a short path (at 300 leaves, 44 are within the cap). So an
+ * and a leaf promoted often enough keeps a short path (at 12 leaves, 4 are within the cap). So an
  * oversized tree is part spendable and part not, and which part is which falls out of the fold
  * rather than out of anything the builder chose. Refuse the whole tree.
- *
- * The slot cap already makes such a tree unbuildable; this states the bound the spec names.
  */
 export function nutrootMerkleRoot(leafHashes: Uint8Array[]): Uint8Array {
   if (leafHashes.length === 0) {
     throw new CTSError('Merkle root of zero leaves');
   }
-  if (leafHashes.length > 2 ** NUTROOT_MAX_TREE_DEPTH) {
+  if (leafHashes.length > NUTROOT_MAX_TREE_LEAVES) {
     throw new CTSError(`Tree exceeds depth ${NUTROOT_MAX_TREE_DEPTH}`);
   }
   let level = [...leafHashes].sort((a, b) => Bytes.compare(a, b));
@@ -550,10 +549,10 @@ export function numsOffsetKey(u: Uint8Array): Uint8Array {
  * Build a locked v3 secret: `P = K + tagged_hash(K || root)*G` over the leaves' tree.
  *
  * @remarks
- * Passing {@link NUTROOT_NUMS_KEY} builds a script-only secret, offsetting it by a fresh `u` (spec
- * 2.3.5) so the internal key is unique per proof while nobody holds its scalar. `u` is returned for
- * disclosure in spend info; there is no way to ask for the base verbatim, because a repeated NUMS
- * key repeats the secret whenever the tree does.
+ * Passing {@link NUTROOT_NUMS_KEY} builds a script-only secret, offsetting it by a fresh `u`
+ * (NUT-10) so the internal key is unique per proof while nobody holds its scalar. `u` is returned
+ * for disclosure in spend info; there is no way to ask for the base verbatim, because a repeated
+ * NUMS key repeats the secret whenever the tree does.
  * @param opts.r - The NUMS offset to use rather than a random one, for a seed-derived proof (NUT-13
  *   type `0x02`). Only meaningful for a NUMS internal key.
  * @returns The 33-byte secret hex, the serialized tree (spend_info order), the internal key `K`,
@@ -960,6 +959,9 @@ export function verifyNutrootRequestTree(
   }
   const disclosed = spendInfo.tree ?? [];
   const requested = option.leaves ?? [];
+  if (disclosed.length > NUTROOT_MAX_TREE_LEAVES || requested.length > NUTROOT_MAX_TREE_LEAVES) {
+    throw new CTSError(`Nutroot request: tree exceeds ${NUTROOT_MAX_TREE_LEAVES} leaves`);
+  }
   if (requested.length === 0) {
     if (disclosed.length > 0) {
       throw new CTSError('Nutroot request: a tree was disclosed but none was requested');
@@ -987,7 +989,7 @@ export function verifyNutrootRequestTree(
     });
     return matches;
   });
-  if (!assignmentExists(candidates, new Array<boolean>(requested.length).fill(false), 0)) {
+  if (!assignmentExists(candidates, requested.length)) {
     throw new CTSError('Nutroot request: disclosed tree does not match the requested leaves');
   }
 }
@@ -1007,18 +1009,27 @@ function leafMatchesRequested(leaf: NutrootLeaf, req: NutrootLeaf, blind: Set<st
 }
 
 /**
- * Backtracking one-to-one assignment of disclosed leaves to requested leaves. Trees are small (a
- * request names a handful of leaves), so exhaustive search is fine.
+ * One-to-one assignment of disclosed leaves to requested leaves, by augmenting path.
+ *
+ * @remarks
+ * A blind-me key matches any substituted value, so one disclosed leaf can fit several requested
+ * ones. Enumerating that ambiguity is factorial in the leaf count and the payer controls the
+ * disclosed side, so the search augments an existing matching instead of backtracking over it.
  */
-function assignmentExists(candidates: number[][], used: boolean[], i: number): boolean {
-  if (i === candidates.length) return true;
-  for (const j of candidates[i]) {
-    if (used[j]) continue;
-    used[j] = true;
-    if (assignmentExists(candidates, used, i + 1)) return true;
-    used[j] = false;
-  }
-  return false;
+function assignmentExists(candidates: number[][], requestedCount: number): boolean {
+  const matched = new Array<number>(requestedCount).fill(-1);
+  const augment = (i: number, seen: boolean[]): boolean => {
+    for (const j of candidates[i]) {
+      if (seen[j]) continue;
+      seen[j] = true;
+      if (matched[j] === -1 || augment(matched[j], seen)) {
+        matched[j] = i;
+        return true;
+      }
+    }
+    return false;
+  };
+  return candidates.every((_, i) => augment(i, new Array<boolean>(requestedCount).fill(false)));
 }
 
 /**

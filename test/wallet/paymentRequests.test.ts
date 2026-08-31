@@ -865,6 +865,16 @@ describe('nutroot (v3) request marking', () => {
     expect(new PaymentRequest({}).toNutrootOptions()).toBeUndefined();
   });
 
+  test('more than eight requested leaves are refused when authored and parsed', () => {
+    const leaves = new Array(9).fill(leafAfter);
+    expect(() =>
+      PaymentRequest.builder().requestNutroot({ receiverKey: carolPub, leaves }),
+    ).toThrow(/exceeds 8 leaves/);
+    expect(() =>
+      new PaymentRequest({ nutroot: { receiverKey: carolPub, leaves } }).toNutrootOptions(),
+    ).toThrow(/exceeds 8 leaves/);
+  });
+
   test('the receiver key is validated and case-canonicalized, both directions', () => {
     const upper = '02' + carolPub.slice(2).toUpperCase();
     expect(

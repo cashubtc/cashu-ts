@@ -6,6 +6,7 @@ import {
   parseNutrootLeaf,
   serializeNutrootLeaf,
   serializeNutrootLeafHex,
+  NUTROOT_MAX_TREE_LEAVES,
   NUTROOT_NUMS_KEY,
   type ParsedNutrootOption,
 } from '../crypto/nutroot';
@@ -478,6 +479,9 @@ export class PaymentRequest {
     if (!nutroot.leaves?.length) {
       return { receiverKey };
     }
+    if (nutroot.leaves.length > NUTROOT_MAX_TREE_LEAVES) {
+      throw new CTSError(`nutroot tree exceeds ${NUTROOT_MAX_TREE_LEAVES} leaves`);
+    }
     const leaves = nutroot.leaves.map((hex, i) => {
       const bytes = Bytes.fromHex(hex);
       const leaf = parseNutrootLeaf(bytes);
@@ -800,6 +804,9 @@ export class PaymentRequestBuilder {
         blindKeys: option.blindKeys.map((k) => normalizeSecpPubkey(k)),
       }),
     };
+    if ((nutroot.leaves?.length ?? 0) > NUTROOT_MAX_TREE_LEAVES) {
+      throw new CTSError(`nutroot tree exceeds ${NUTROOT_MAX_TREE_LEAVES} leaves`);
+    }
     // Validate here rather than at build(): a request nobody can pay is worth catching at the
     // point the payee wrote it, not at the payer.
     const leafKeys = new Set(
