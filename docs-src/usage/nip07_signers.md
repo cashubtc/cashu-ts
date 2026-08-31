@@ -33,7 +33,7 @@ Adds the extension's signature to every `SIG_INPUTS` proof that lists its key an
 
 ## Nutroot proofs (v3 keysets): `completes` and `cosign`
 
-A nutroot witness signs the transaction digest, so the extension can help only where its key appears verbatim in a disclosed leaf: the [auditable lock](../wallet_ops/spend_locked.md#auditable-locks), an unblinded refund or multisig leaf. Blinded leaf keys and the key path (receiver-keyed or tweaked) never match.
+A nutroot witness signs its input's digest, so the extension can help only where its key appears verbatim in a disclosed leaf: the [auditable lock](../wallet_ops/spend_locked.md#auditable-locks), an unblinded refund or multisig leaf. Blinded leaf keys and the key path (receiver-keyed or tweaked) never match.
 
 ```ts
 const { script } = await wallet.spendOptions(proof);
@@ -48,9 +48,9 @@ if (leaf) {
 }
 ```
 
-`cosign` is a [`ScriptPathPlan.cosign`](../wallet_ops/spend_locked.md#script-path-scriptpathplans) hook. It prefers `nip60.signTransaction(messageHex)`: the extension receives the tagged pre-hash message (`"Cashu_Transaction_v1" || transcript`), hashes it itself, and can refuse anything else, so an event id can never pass through it. The reply's `hash` must equal the digest cts computed. Without it, the hook falls back to `signSchnorr` over the digest.
+`cosign` is a [`ScriptPathPlan.cosign`](../wallet_ops/spend_locked.md#script-path-scriptpathplans) hook. It prefers `nip60.signTransaction(messageHex, containerHex)`: the extension receives the tagged pre-hash message (`"Cashu_Transaction_v1" || transcript`) and the input's own container record, derives the input digest itself, and can refuse anything else, so an event id can never pass through it. The reply's `hash` must equal the input digest cts computed. Without it, the hook falls back to `signSchnorr` over the digest.
 
-`CashuNip07.signTransaction(messageHex, secretKey)` is the reference implementation of `nip60.signTransaction`, for the extension side of that contract and for tests: it takes the private key, which the page never has, so a page cannot use it in place of the extension's method. It refuses any message without the domain tag, then hashes, signs BIP-340 and returns `{ hash, sig, pubkey }`, the shape `nip60.signSecret` already uses.
+`CashuNip07.signTransaction(messageHex, containerHex, secretKey)` is the reference implementation of `nip60.signTransaction`, for the extension side of that contract and for tests: it takes the private key, which the page never has, so a page cannot use it in place of the extension's method. It refuses any message without the domain tag and any container the message does not carry, then derives the input digest, signs BIP-340 and returns `{ hash, sig, pubkey }`, the shape `nip60.signSecret` already uses.
 
 ## NIP-60 wallet keys
 

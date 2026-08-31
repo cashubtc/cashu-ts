@@ -10,7 +10,7 @@ import {
   hasP2PKSignedProof,
   parseWitnessData,
 } from '../crypto/NUT11';
-import { TRANSCRIPT_DOMAIN_TAG } from '../crypto/transcript';
+import { inputDigest, TRANSCRIPT_DOMAIN_TAG } from '../crypto/transcript';
 import { Bytes } from '../utils';
 import type { ScriptPathPlan, SpendOption } from '../wallet/types';
 
@@ -46,11 +46,12 @@ export type Nip07Like = {
      */
     signSecret?: (secret: string) => Promise<Nip07SignedHash>;
     /**
-     * Sign a nutroot transaction message (NUT-10): the signer hashes it itself and can refuse
+     * Sign one input of a nutroot transaction (NUT-10): the signer derives the input digest from
+     * the tagged transaction message and the input's own container record, so it can refuse
      * anything not carrying the `Cashu_Transaction_v1` tag. See
      * {@link CashuNip07Api.signTransaction}.
      */
-    signTransaction?: (messageHex: string) => Promise<Nip07SignedHash>;
+    signTransaction?: (messageHex: string, containerHex: string) => Promise<Nip07SignedHash>;
   };
 };
 
@@ -111,7 +112,11 @@ export type CashuNip07Api = {
    * not a substitute for calling the extension. Refuses any message that does not start with the
    * transaction domain tag, so an event id (or anything else) can never pass through it.
    */
-  signTransaction(messageHex: string, secretKey: string | Uint8Array): Nip07SignedHash;
+  signTransaction(
+    messageHex: string,
+    containerHex: string,
+    secretKey: string | Uint8Array,
+  ): Nip07SignedHash;
 };
 
 const DOMAIN_TAG = utf8ToBytes(TRANSCRIPT_DOMAIN_TAG);
@@ -189,10 +194,13 @@ export const CashuNip07: CashuNip07Api = {
   },
 
   cosign(nostr) {
-    return async ({ digest, message }) => {
+    return async ({ digest, message, container }) => {
       const digestHex = Bytes.toHex(digest);
       if (nostr.nip60?.signTransaction) {
-        const signed = await nostr.nip60.signTransaction(Bytes.toHex(message));
+        const signed = await nostr.nip60.signTransaction(
+          Bytes.toHex(message),
+          Bytes.toHex(container),
+        );
         if (signed.hash.toLowerCase() !== digestHex) {
           throw new CTSError('NIP-07 signer signed a different message');
         }
@@ -233,13 +241,19 @@ export const CashuNip07: CashuNip07Api = {
     return { privkeys: values('privkey'), mints: values('mint') };
   },
 
-  signTransaction(messageHex, secretKey) {
+  signTransaction(messageHex, containerHex, secretKey) {
     const message = Bytes.fromHex(messageHex);
     const tagged =
       message.length > DOMAIN_TAG.length &&
       Bytes.equals(message.subarray(0, DOMAIN_TAG.length), DOMAIN_TAG);
     if (!tagged) throw new CTSError('Refusing to sign: not a Cashu transaction message');
-    const hash = sha256(message);
+    // The signed value is the input digest, derived here rather than trusted: the container must
+    // be a record of the transcript this message carries, or the signature covers nothing real.
+    const container = Bytes.fromHex(containerHex);
+    if (Bytes.toHex(message).indexOf(containerHex.toLowerCase(), DOMAIN_TAG.length * 2) < 0) {
+      throw new CTSError('Refusing to sign: input container is not part of this transaction');
+    }
+    const hash = inputDigest(sha256(message), container);
     const key = typeof secretKey === 'string' ? Bytes.fromHex(secretKey) : secretKey;
     return {
       hash: Bytes.toHex(hash),
