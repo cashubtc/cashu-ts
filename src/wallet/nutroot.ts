@@ -1,5 +1,3 @@
-import { sha256 } from '@noble/hashes/sha2.js';
-
 import { assertV3PointSecret, isBlsKeyset, isV3PointSecret, schnorrSignDigest } from '../crypto';
 import {
   createRandomSecretKey,
@@ -18,7 +16,7 @@ import {
   nutrootMerkleRoot,
   nutrootTweakSeckey,
 } from '../crypto/nutroot';
-import { messageForPayload, signTransactionInput } from '../crypto/transcript';
+import { inputsForPayload, proofInputContextKey, signTransactionInput } from '../crypto/transcript';
 import { type Logger, fail } from '../logger';
 import { type Amount } from '../model/Amount';
 import { CTSError } from '../model/Errors';
@@ -50,7 +48,7 @@ export type NutrootWalletState = {
 };
 
 /**
- * One resolved script path spend, awaiting only the transaction digest.
+ * One resolved script path spend, awaiting only its transaction input digest.
  */
 export type ScriptPathSpend = {
   tree: string[];
@@ -116,12 +114,12 @@ export async function attachTransactionWitnesses(
 ): Promise<void> {
   const v3Inputs = payload.inputs.filter((p) => isBlsKeyset(p.id) && isV3PointSecret(p.secret));
   if (v3Inputs.length === 0) return;
-  const message = messageForPayload({
+  // Each input signs its own input digest over the shared transcript (NUT-10).
+  const { message, proofs: inputContexts } = inputsForPayload({
     inputs: payload.inputs,
     outputs: payload.outputs ?? [],
     ...(meltQuote && { meltQuote }),
   });
-  const digest = sha256(message);
   // Keys are derived per keyset, and a mixed transaction can carry v3 inputs from more than one,
   // so recover per keyset. Scan bound: that keyset's counter plus headroom for proofs minted
   // before this session.
@@ -144,15 +142,20 @@ export async function attachTransactionWitnesses(
   // path even where both are available. Everything but the signature was settled before the
   // request was built; only the digest was missing, and now it is not.
   for (const [secret, spend] of scriptSpends ?? []) {
-    const input = payload.inputs.find((p) => p.secret === secret);
+    const input = payload.inputs.find((p) => p.secret === secret && isBlsKeyset(p.id));
     if (!input) {
       fail('Script path plan names a secret not in this transaction', state.logger);
     }
+    const { digest, container } = inputContexts.get(
+      proofInputContextKey({ keysetId: input.id, secret: input.secret }),
+    )!;
     const mine = spend.keys.map((k: string) => schnorrSignDigest(digest, k));
     // The co-signer sees the digest only now, which is why it is a hook and not a signature the
     // caller could have supplied up front: the digest covers the outputs, and those are only
     // fixed (and ordered) once the transaction is built.
-    const theirs = spend.cosign ? await spend.cosign({ digest, message, leaf: spend.leaf }) : [];
+    const theirs = spend.cosign
+      ? await spend.cosign({ digest, message, container, leaf: spend.leaf })
+      : [];
     const signatures = selectRequiredLeafSignatures(spend.leaf, digest, [
       ...mine,
       ...theirs.map((sig: string) => sig.toLowerCase()),
@@ -165,10 +168,13 @@ export async function attachTransactionWitnesses(
       spend.preimage,
     );
   }
-  for (const input of payload.inputs) {
+  for (const input of v3Inputs) {
     if (input.witness) continue; // pre-built witness (e.g. script path): leave it alone
     const secretKey = keys.get(input.secret) ?? extraKeys?.get(input.secret);
-    if (secretKey) input.witness = signTransactionInput(digest, secretKey);
+    const context = inputContexts.get(
+      proofInputContextKey({ keysetId: input.id, secret: input.secret }),
+    );
+    if (secretKey && context) input.witness = signTransactionInput(context.digest, secretKey);
   }
   // Every v3 input signs (NUT-10), so an unsigned one is a request the mint will refuse.
   // Say which proof and why here, rather than letting it come back as a witness error naming

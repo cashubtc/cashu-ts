@@ -187,12 +187,15 @@ export type ScriptPathPlan = {
  * What a {@link ScriptPathPlan.cosign} hook is handed.
  *
  * @remarks
- * `digest` is what gets signed; `message` is its preimage (`digest = SHA256(message)`, tagged
- * `Cashu_Transaction_v1`) for signers that verify what they sign rather than trust the caller.
+ * `digest` is what gets signed: the input digest, `tagged_hash("Cashu_TransactionInput",
+ * SHA256(message) || SHA256(container))`. `message` is the tagged transaction message and
+ * `container` the input's own transcript record, so a signer can recompute the digest and refuse
+ * anything it cannot verify.
  */
 export type CosignRequest = {
   digest: Uint8Array;
   message: Uint8Array;
+  container: Uint8Array;
   leaf: NutrootLeaf;
 };
 
@@ -256,7 +259,7 @@ export type MeltProofsConfig = {
 
 export type CompleteSwapOptions = {
   /**
-   * Script path spends for v3 inputs, evaluated when the transaction digest exists.
+   * Script path spends for v3 inputs, evaluated when each transaction input digest exists.
    */
   scriptPath?: ScriptPathPlan[];
 };
@@ -269,7 +272,7 @@ export type CompleteMeltOptions = {
    */
   extraPayload?: Record<string, unknown>;
   /**
-   * Script path spends for v3 inputs, evaluated when the transaction digest exists.
+   * Script path spends for v3 inputs, evaluated when each transaction input digest exists.
    */
   scriptPath?: ScriptPathPlan[];
 };

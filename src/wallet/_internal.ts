@@ -115,9 +115,9 @@ export function stringifyOutputTypeForLog(ot: OutputType): string {
  *
  * @remarks
  * Exported and shared rather than inlined at the one call site, because anything that needs the
- * transaction digest before the payload is built (a script path signature collected out of band)
- * must order outputs exactly as the payload will. Two implementations would agree until one was
- * edited; one cannot disagree with itself.
+ * input digest before the payload is built (a script path signature collected out of band) must
+ * order outputs exactly as the payload will. Two implementations would agree until one was edited;
+ * one cannot disagree with itself.
  *
  * Ties keep their original order, so equal-amount outputs still leak their keep/send split by
  * position. Fixing that means randomizing within a tie, which is a separate change: it would make

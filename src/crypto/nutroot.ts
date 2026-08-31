@@ -46,6 +46,7 @@ const FIELD_N = 0x02;
 const FIELD_KEYS = 0x04;
 const FIELD_TIME = 0x06;
 const FIELD_HASH = 0x08;
+const FIELD_DISCLOSURE = 0x0a;
 
 /**
  * Normative caps from NUT-10. The leaf body excludes the leading version byte.
@@ -81,6 +82,11 @@ export type NutrootLeaf = {
   keys: string[];
   time?: number;
   hash?: string;
+  /**
+   * Disclosure mode (NUT-10): `1` publishes the exercised witness via NUT-07/NUT-17. Valid on every
+   * leaf type; satisfaction is unaffected.
+   */
+  disclosure?: number;
 };
 
 /**
@@ -226,6 +232,12 @@ export function serializeNutrootLeaf(leaf: NutrootLeaf): Uint8Array {
   } else if (leaf.hash !== undefined) {
     throw new CTSError(`${leaf.type} leaf must not carry a hash field`);
   }
+  if (leaf.disclosure !== undefined) {
+    if (leaf.disclosure !== 0x01) {
+      throw new CTSError('disclosure mode must be 0x01');
+    }
+    fields.push(tlvRecord(FIELD_DISCLOSURE, new Uint8Array([0x01])));
+  }
   const out = Bytes.concat(new Uint8Array([NUTROOT_LEAF_VERSION, typeByte]), ...fields);
   if (out.length - 1 > NUTROOT_MAX_LEAF_BYTES) {
     throw new CTSError(`Leaf body exceeds ${NUTROOT_MAX_LEAF_BYTES} bytes`);
@@ -262,6 +274,7 @@ export function parseNutrootLeaf(bytes: Uint8Array): NutrootLeaf {
   let keys: string[] | undefined;
   let time: number | undefined;
   let hash: string | undefined;
+  let disclosure: number | undefined;
   for (const rec of records) {
     switch (rec.type) {
       case FIELD_N:
@@ -306,6 +319,13 @@ export function parseNutrootLeaf(bytes: Uint8Array): NutrootLeaf {
         }
         hash = Bytes.toHex(rec.value);
         break;
+      case FIELD_DISCLOSURE:
+        // Mode 0x00 and every unallocated mode reject, so a private leaf has one encoding.
+        if (rec.value.length !== 1 || rec.value[0] !== 0x01) {
+          throw new CTSError('disclosure mode must be 0x01');
+        }
+        disclosure = rec.value[0];
+        break;
       default:
         // Odd types are reserved, so an unknown field of either parity rejects.
         throw new CTSError(`Unknown leaf field: ${rec.type}`);
@@ -332,6 +352,7 @@ export function parseNutrootLeaf(bytes: Uint8Array): NutrootLeaf {
   const leaf: NutrootLeaf = { type: typeName, n, keys };
   if (time !== undefined) leaf.time = time;
   if (hash !== undefined) leaf.hash = hash;
+  if (disclosure !== undefined) leaf.disclosure = disclosure;
   return leaf;
 }
 
@@ -589,7 +610,7 @@ export function buildNutrootSecret(
  *
  * @remarks
  * Shape (NUT-10): `{leaf, control: {K, path}, signatures, preimage?}`. Signatures are BIP-340 over
- * the transaction digest by the leaf's keys; `preimage` satisfies a hashlock leaf.
+ * the input digest by the leaf's keys; `preimage` satisfies a hashlock leaf.
  */
 export function buildScriptPathWitness(
   tree: string[],
@@ -1001,6 +1022,7 @@ export function verifyNutrootRequestTree(
 function leafMatchesRequested(leaf: NutrootLeaf, req: NutrootLeaf, blind: Set<string>): boolean {
   if (leaf.type !== req.type || leaf.n !== req.n) return false;
   if (leaf.time !== req.time || leaf.hash?.toLowerCase() !== req.hash?.toLowerCase()) return false;
+  if (leaf.disclosure !== req.disclosure) return false;
   if (leaf.keys.length !== req.keys.length) return false;
   return req.keys.every((reqKey, i) => {
     const rk = reqKey.toLowerCase();

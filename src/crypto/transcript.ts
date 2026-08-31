@@ -7,19 +7,23 @@ import { CTSError } from '../model/Errors';
 import { Bytes, isValidHex } from '../utils';
 
 import { isBlsKeyset } from './curves';
-import { minimalBE, tlvRecord } from './nutroot';
+import { minimalBE, taggedHash, tlvRecord } from './nutroot';
 
 /**
- * Transaction transcript (NUT-10): the one message every input signs.
+ * Transaction transcript (NUT-10): one shared digest, one derived message per input.
  *
  * @remarks
- * `msg = domain tag || TLV stream`; each input carries one BIP-340 signature over `SHA256(msg)`.
- * Containers: 0x01 proof input, 0x02 mint quote input, 0x03 blinded message output, 0x04 melt quote
- * output. Container types ascend (inputs before outputs by construction); elements keep request
- * order within their type; field streams inside are ascending unique (NUT-10).
+ * `transaction_digest = SHA256(domain tag || TLV stream)`; each input carries one BIP-340 signature
+ * over its input digest, `tagged_hash("Cashu_TransactionInput", transaction_digest || SHA256(its
+ * own container record))`. Containers: 0x01 proof input, 0x02 mint quote input, 0x03 blinded
+ * message output, 0x04 melt quote output. Container types ascend (inputs before outputs by
+ * construction); elements keep request order within their type; field streams inside are ascending
+ * unique (NUT-10).
  */
 
 export const TRANSCRIPT_DOMAIN_TAG = 'Cashu_Transaction_v1';
+export const TRANSCRIPT_INPUT_TAG = 'Cashu_TransactionInput';
+export const SPEND_COMMITMENT_TAG = 'Cashu_SpendCommitment';
 
 const CONTAINER_PROOF_INPUT = 0x01;
 const CONTAINER_MINT_QUOTE_INPUT = 0x02;
@@ -61,6 +65,15 @@ export type TransactionShape = {
   blindedOutputs?: TranscriptBlindedOutput[];
   meltQuoteOutputs?: TranscriptQuote[];
 };
+
+/**
+ * Stable lookup key for one proof input's signing context.
+ */
+export function proofInputContextKey(
+  input: Pick<TranscriptProofInput, 'keysetId' | 'secret'>,
+): string {
+  return `${isBlsKeyset(input.keysetId) ? 'v3' : 'legacy'}:${input.secret}`;
+}
 
 function amountRecord(amount: bigint): Uint8Array {
   // Normalize rather than trust the declared type: types are erased at the JS boundary, and an
@@ -145,6 +158,13 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
   if (blinded.length + meltQuotes.length === 0) {
     throw new CTSError('Transaction requires at least one output');
   }
+  // NUT-10: the same proof or quote twice would sign one input digest for two inputs.
+  if (new Set(proofs.map(proofInputContextKey)).size !== proofs.length) {
+    throw new CTSError('Transaction repeats a proof input');
+  }
+  if (new Set(mintQuotes.map((q) => q.quoteId)).size !== mintQuotes.length) {
+    throw new CTSError('Transaction repeats a mint quote input');
+  }
   return Bytes.concat(
     ...proofs.map(proofInputContainer),
     ...mintQuotes.map((q) => quoteContainer(CONTAINER_MINT_QUOTE_INPUT, q)),
@@ -165,10 +185,54 @@ export function transactionMessage(tx: TransactionShape): Uint8Array {
 }
 
 /**
- * The 32-byte digest every input signs: `SHA256(domain tag || transcript)`.
+ * The 32-byte shared transaction digest: `SHA256(domain tag || transcript)`.
  */
 export function transactionDigest(tx: TransactionShape): Uint8Array {
   return sha256(transactionMessage(tx));
+}
+
+/**
+ * The message one input signs: `tagged_hash(input tag, transaction_digest || SHA256(container))`.
+ */
+export function inputDigest(transactionDigest: Uint8Array, container: Uint8Array): Uint8Array {
+  if (transactionDigest.length !== 32) {
+    throw new CTSError('Transaction digest must be 32 bytes');
+  }
+  return taggedHash(TRANSCRIPT_INPUT_TAG, transactionDigest, sha256(container));
+}
+
+/**
+ * One input's signing context: its transcript container record and the digest it signs.
+ */
+export type TransactionInputContext = { container: Uint8Array; digest: Uint8Array };
+
+/**
+ * Every input's signing context, plus the shared message and digest.
+ *
+ * @remarks
+ * `proofs` is keyed by {@link proofInputContextKey} and `quotes` by quote id; the transcript builder
+ * has already refused duplicates, so the keys are unique. The proof key includes its protocol
+ * family because identical text denotes raw point bytes in v3 and UTF-8 bytes in v0-v2.
+ */
+export function transactionInputs(tx: TransactionShape): {
+  message: Uint8Array;
+  transactionDigest: Uint8Array;
+  proofs: Map<string, TransactionInputContext>;
+  quotes: Map<string, TransactionInputContext>;
+} {
+  const message = transactionMessage(tx);
+  const digest = sha256(message);
+  const proofs = new Map<string, TransactionInputContext>();
+  const quotes = new Map<string, TransactionInputContext>();
+  for (const p of tx.proofInputs ?? []) {
+    const container = proofInputContainer(p);
+    proofs.set(proofInputContextKey(p), { container, digest: inputDigest(digest, container) });
+  }
+  for (const q of tx.mintQuoteInputs ?? []) {
+    const container = quoteContainer(CONTAINER_MINT_QUOTE_INPUT, q);
+    quotes.set(q.quoteId, { container, digest: inputDigest(digest, container) });
+  }
+  return { message, transactionDigest: digest, proofs, quotes };
 }
 
 type PayloadShape = {
@@ -187,14 +251,14 @@ export function digestForPayload(payload: PayloadShape): Uint8Array {
 }
 
 /**
- * {@link transactionMessage} over payload wire shapes; see {@link digestForPayload}.
+ * A payload wire shape as a {@link TransactionShape}.
  */
-export function messageForPayload(payload: PayloadShape): Uint8Array {
+function payloadToTransaction(payload: PayloadShape): TransactionShape {
   const quote = (q: { quoteId: string; amount: AmountLike }): TranscriptQuote => ({
     amount: Amount.from(q.amount).toBigInt(),
     quoteId: q.quoteId,
   });
-  return transactionMessage({
+  return {
     ...(payload.inputs && {
       proofInputs: payload.inputs.map((p) => ({
         amount: Amount.from(p.amount).toBigInt(),
@@ -212,7 +276,38 @@ export function messageForPayload(payload: PayloadShape): Uint8Array {
       })),
     }),
     ...(payload.meltQuote && { meltQuoteOutputs: [quote(payload.meltQuote)] }),
-  });
+  };
+}
+
+/**
+ * {@link transactionMessage} over payload wire shapes; see {@link digestForPayload}.
+ */
+export function messageForPayload(payload: PayloadShape): Uint8Array {
+  return transactionMessage(payloadToTransaction(payload));
+}
+
+/**
+ * {@link transactionInputs} over payload wire shapes.
+ */
+export function inputsForPayload(payload: PayloadShape): ReturnType<typeof transactionInputs> {
+  return transactionInputs(payloadToTransaction(payload));
+}
+
+/**
+ * The NUT-07 spend commitment: `tagged_hash(tag, Y || input_digest || SHA256(witness))`.
+ *
+ * @remarks
+ * `witness` is the exact string value as sent; `Y` contributes its raw compressed bytes.
+ */
+export function spendCommitment(YHex: string, inputDigest: Uint8Array, witness: string): string {
+  return Bytes.toHex(
+    taggedHash(
+      SPEND_COMMITMENT_TAG,
+      Bytes.fromHex(YHex),
+      inputDigest,
+      sha256(utf8ToBytes(witness)),
+    ),
+  );
 }
 
 /**
@@ -250,15 +345,16 @@ export function requestDigest(method: string, target: string, body: Uint8Array):
 }
 
 /**
- * Key-path witness for one input: a BIP-340 signature over the transaction digest.
+ * Key-path witness for one input: a BIP-340 signature over its input digest.
  *
  * @remarks
  * Returns the witness JSON string (`{"signatures":[hex]}`, the spec's worked-example shape). The
- * key must be the secret's key: `k` for a bare secret, `p' = k + t` for a tweaked one.
+ * key must be the secret's key: `k` for a bare secret, `p' = k + t` for a tweaked one. NUT-22
+ * request witnesses sign the request digest directly through here.
  */
 export function signTransactionInput(digest: Uint8Array, secretKey: Uint8Array): string {
   if (digest.length !== 32) {
-    throw new CTSError('Transaction digest must be 32 bytes');
+    throw new CTSError('Signing digest must be 32 bytes');
   }
   const signature = schnorr.sign(digest, secretKey);
   return JSON.stringify({ signatures: [Bytes.toHex(signature)] });

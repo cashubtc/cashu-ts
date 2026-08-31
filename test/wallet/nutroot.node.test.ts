@@ -9,7 +9,12 @@ import {
   nutrootTweakPubkey,
   type NutrootLeaf,
 } from '../../src/crypto/nutroot';
-import { transactionDigest, verifyTransactionInputWitness } from '../../src/crypto/transcript';
+import {
+  inputDigest,
+  proofInputContextKey,
+  transactionInputs,
+  verifyTransactionInputWitness,
+} from '../../src/crypto/transcript';
 import { NULL_LOGGER } from '../../src/logger';
 import { Amount } from '../../src/model/Amount';
 import type { Proof, SerializedBlindedMessage } from '../../src/model/types';
@@ -58,8 +63,21 @@ const OUTPUT: SerializedBlindedMessage = {
   B_: 'bb'.repeat(48),
 };
 
-function digestOf(inputs: Proof[], meltQuote?: { quoteId: string; amount: Amount }): Uint8Array {
-  return transactionDigest({
+// The input digest of `inputs[0]` (or `ofSecret`) in the transaction over these inputs: each
+// input signs its own message now (NUT-10), so tests verify against the input's digest.
+function digestOf(
+  inputs: Proof[],
+  meltQuote?: { quoteId: string; amount: Amount },
+  ofSecret?: string,
+): Uint8Array {
+  const proof = inputs.find((input) => input.secret === (ofSecret ?? inputs[0].secret))!;
+  return transactionInputsOf(inputs, meltQuote).proofs.get(
+    proofInputContextKey({ keysetId: proof.id, secret: proof.secret }),
+  )!.digest;
+}
+
+function transactionInputsOf(inputs: Proof[], meltQuote?: { quoteId: string; amount: Amount }) {
+  return transactionInputs({
     proofInputs: inputs.map((p) => ({
       amount: Amount.from(p.amount).toBigInt(),
       keysetId: p.id,
@@ -320,7 +338,7 @@ describe('prepareScriptPathSpends', () => {
  * -------------------------- */
 
 describe('attachTransactionWitnesses', () => {
-  test('signs a seed-derived input; the witness verifies against the transaction digest', async () => {
+  test('signs a seed-derived input; the witness verifies against its input digest', async () => {
     const input = v3Proof(DERIVED[0].secret);
     const payload = { inputs: [input], outputs: [OUTPUT] };
     await attachTransactionWitnesses(payload, undefined, undefined, undefined, makeState(SEED));
@@ -342,9 +360,21 @@ describe('attachTransactionWitnesses', () => {
       ...collectSpendInfoKeys([fromRandom], undefined, NULL_LOGGER),
     ]);
     await attachTransactionWitnesses(payload, undefined, extra, undefined, state);
-    const digest = digestOf([fromExtra, fromRandom]);
-    expect(verifyTransactionInputWitness(digest, PUB_A, fromExtra.witness as string)).toBe(true);
-    expect(verifyTransactionInputWitness(digest, PUB_B, fromRandom.witness as string)).toBe(true);
+    const inputs = [fromExtra, fromRandom];
+    expect(
+      verifyTransactionInputWitness(
+        digestOf(inputs, undefined, fromExtra.secret),
+        PUB_A,
+        fromExtra.witness as string,
+      ),
+    ).toBe(true);
+    expect(
+      verifyTransactionInputWitness(
+        digestOf(inputs, undefined, fromRandom.secret),
+        PUB_B,
+        fromRandom.witness as string,
+      ),
+    ).toBe(true);
   });
 
   test('a melt quote is part of the signed transcript', async () => {
@@ -444,7 +474,11 @@ describe('attachTransactionWitnesses', () => {
     );
     expect(seen!.leaf.keys).toEqual([PUB_A, PUB_B]);
     expect(Bytes.toString(seen!.message.subarray(0, 20))).toBe('Cashu_Transaction_v1');
-    expect(Bytes.toHex(sha256(seen!.message))).toBe(Bytes.toHex(seen!.digest));
+    // digest = tagged_hash(input tag, SHA256(message) || SHA256(container)): recomputable, so a
+    // signer can refuse anything it cannot verify.
+    expect(Bytes.toHex(inputDigest(sha256(seen!.message), seen!.container))).toBe(
+      Bytes.toHex(seen!.digest),
+    );
     expect(Bytes.toHex(seen!.digest)).toBe(Bytes.toHex(digestOf([input])));
   });
 

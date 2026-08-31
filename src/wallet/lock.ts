@@ -72,7 +72,10 @@ const lc = (k: string) => k.toLowerCase();
  * @throws If the pubkey is not a valid compressed secp256k1 point.
  */
 export function auditableLock(pubkey: string): LockOptions {
-  return { leaves: [{ type: 'threshold', n: 1, keys: [normalizeSecpPubkey(pubkey)] }] };
+  // disclosure completes the audit trail: the spend's witness is published too (NUT-07).
+  return {
+    leaves: [{ type: 'threshold', n: 1, keys: [normalizeSecpPubkey(pubkey)], disclosure: 1 }],
+  };
 }
 
 /**

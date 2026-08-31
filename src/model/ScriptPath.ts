@@ -1,5 +1,6 @@
 import { schnorrSignDigest } from '../crypto/core';
 import { getPubKeyFromPrivKey } from '../crypto/curve_secp';
+import { isBlsKeyset } from '../crypto/curves';
 import {
   buildScriptPathWitness,
   NUTROOT_MAX_SLOTS,
@@ -11,7 +12,7 @@ import {
   type NutrootLeaf,
   verifyNutrootCommitment,
 } from '../crypto/nutroot';
-import { digestForPayload } from '../crypto/transcript';
+import { digestForPayload, inputsForPayload, proofInputContextKey } from '../crypto/transcript';
 import { Bytes, JSONInt, encodeUint8toBase64Url } from '../utils';
 import { orderOutputsForPayload } from '../wallet/_internal';
 import type { MeltPreview, ScriptPathPlan, SwapPreview } from '../wallet/types';
@@ -103,6 +104,33 @@ function packageDigest(pkg: ScriptPathSigningPackage): Uint8Array {
   );
 }
 
+/**
+ * Each spend's input digest by its secret, rebuilt the same way (NUT-10: inputs sign per input).
+ */
+function packageInputDigests(pkg: ScriptPathSigningPackage): Map<string, Uint8Array> {
+  const meltQuote =
+    pkg.type === 'melt'
+      ? { quoteId: pkg.quote!, amount: Amount.from(pkg.quoteAmount!).toBigInt() }
+      : undefined;
+  const { proofs } = inputsForPayload({
+    inputs: pkg.inputs,
+    outputs: pkg.outputs,
+    ...(meltQuote && { meltQuote }),
+  });
+  return new Map(
+    pkg.spends.map((spend) => {
+      const proof = pkg.inputs.find(
+        (input) => input.secret === spend.secret && isBlsKeyset(input.id),
+      );
+      if (!proof) throw new CTSError('Signing package spend must name a v3 transaction input');
+      return [
+        spend.secret,
+        proofs.get(proofInputContextKey({ keysetId: proof.id, secret: proof.secret }))!.digest,
+      ];
+    }),
+  );
+}
+
 function buildPackage(
   type: 'swap' | 'melt',
   inputs: Proof[],
@@ -114,7 +142,7 @@ function buildPackage(
     throw new CTSError('A script path package needs at least one plan');
   }
   const spends = plans.map((plan) => {
-    const proof = inputs.find((p) => p.secret === plan.secret);
+    const proof = inputs.find((p) => p.secret === plan.secret && isBlsKeyset(p.id));
     if (!proof) {
       throw new CTSError('Script path plan names a secret not in this transaction');
     }
@@ -289,7 +317,7 @@ function assertValidPackage(pkg: ScriptPathSigningPackage): void {
 
 function signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPathSigningPackage {
   assertValidPackage(pkg);
-  const digest = packageDigest(pkg);
+  const digests = packageInputDigests(pkg);
   const pub = Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(privkey)));
   const spends = pkg.spends.map((spend) => {
     const leaf = parseNutrootLeaf(Bytes.fromHex(spend.leaf));
@@ -307,6 +335,8 @@ function signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPath
       }
     }
     if (keys.length === 0) return spend;
+    const digest = digests.get(spend.secret);
+    if (!digest) return spend; // assertValidPackage already rejected an unmatched spend
     const added = keys.map((k) => schnorrSignDigest(digest, k));
     return { ...spend, signatures: [...new Set([...spend.signatures, ...added])] };
   });
@@ -346,13 +376,17 @@ function assertMatches(pkg: ScriptPathSigningPackage, expected: Uint8Array): voi
 }
 
 function applyWitnesses(pkg: ScriptPathSigningPackage, inputs: Proof[]): Proof[] {
-  const digest = packageDigest(pkg);
+  const digests = packageInputDigests(pkg);
   const bySecret = new Map(pkg.spends.map((s) => [s.secret, s]));
   return inputs.map((proof) => {
     const spend = bySecret.get(proof.secret);
     if (!spend) return proof;
     const leaf = parseNutrootLeaf(Bytes.fromHex(spend.leaf));
-    const signatures = selectRequiredLeafSignatures(leaf, digest, spend.signatures);
+    const signatures = selectRequiredLeafSignatures(
+      leaf,
+      digests.get(proof.secret)!,
+      spend.signatures,
+    );
     return {
       ...proof,
       witness: JSON.stringify({

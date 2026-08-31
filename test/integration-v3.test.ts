@@ -35,7 +35,12 @@ import {
   type NutrootLeaf,
   verifyNutrootSpendInfo,
 } from '../src/crypto/nutroot';
-import { transactionDigest, verifyTransactionInputWitness } from '../src/crypto/transcript';
+import {
+  inputsForPayload,
+  proofInputContextKey,
+  transactionDigest,
+  verifyTransactionInputWitness,
+} from '../src/crypto/transcript';
 
 type LockedQuote = Awaited<ReturnType<Wallet['createMintQuoteBolt11']>> & { privkey: string };
 /**
@@ -108,20 +113,11 @@ describeV3('v3 transaction witnesses', () => {
 
       expect(swapBody).toBeDefined();
       const body = swapBody as SwapBody;
-      const digest = transactionDigest({
-        proofInputs: body.inputs.map((p) => ({
-          amount: BigInt(p.amount),
-          keysetId: p.id,
-          secret: p.secret,
-          C: p.C,
-        })),
-        blindedOutputs: body.outputs.map((o) => ({
-          amount: BigInt(o.amount),
-          keysetId: o.id,
-          B_: o.B_,
-        })),
-      });
+      const contexts = inputsForPayload({ inputs: body.inputs, outputs: body.outputs }).proofs;
       for (const input of body.inputs) {
+        const digest = contexts.get(
+          proofInputContextKey({ keysetId: input.id, secret: input.secret }),
+        )!.digest;
         expect(input.witness).toBeDefined();
         expect(verifyTransactionInputWitness(digest, input.secret, input.witness as string)).toBe(
           true,
@@ -168,21 +164,15 @@ describeV3('v3 transaction witnesses', () => {
 
       expect(meltBody).toBeDefined();
       const body = meltBody as MeltBody;
-      const digest = transactionDigest({
-        proofInputs: body.inputs.map((p) => ({
-          amount: BigInt(p.amount),
-          keysetId: p.id,
-          secret: p.secret,
-          C: p.C,
-        })),
-        blindedOutputs: (body.outputs ?? []).map((o) => ({
-          amount: BigInt(o.amount),
-          keysetId: o.id,
-          B_: o.B_,
-        })),
-        meltQuoteOutputs: [{ amount: meltQuote.amount.toBigInt(), quoteId: body.quote }],
-      });
+      const contexts = inputsForPayload({
+        inputs: body.inputs,
+        outputs: body.outputs ?? [],
+        meltQuote: { amount: meltQuote.amount, quoteId: body.quote },
+      }).proofs;
       for (const input of body.inputs) {
+        const digest = contexts.get(
+          proofInputContextKey({ keysetId: input.id, secret: input.secret }),
+        )!.digest;
         expect(input.witness).toBeDefined();
         expect(verifyTransactionInputWitness(digest, input.secret, input.witness as string)).toBe(
           true,
@@ -236,20 +226,11 @@ describeV3('bearer spend info', () => {
       // MINT_INPUT_FEE_PPK=100: the sweep pays ceil(inputs * 100 / 1000) in fees.
       const fee = Math.ceil((body.inputs.length * 100) / 1000);
       expect(sumProofs(received).toString()).toBe(String(32 - fee));
-      const digest = transactionDigest({
-        proofInputs: body.inputs.map((p) => ({
-          amount: BigInt(p.amount),
-          keysetId: p.id,
-          secret: p.secret,
-          C: p.C,
-        })),
-        blindedOutputs: body.outputs.map((o) => ({
-          amount: BigInt(o.amount),
-          keysetId: o.id,
-          B_: o.B_,
-        })),
-      });
+      const contexts = inputsForPayload({ inputs: body.inputs, outputs: body.outputs }).proofs;
       for (const input of body.inputs) {
+        const digest = contexts.get(
+          proofInputContextKey({ keysetId: input.id, secret: input.secret }),
+        )!.digest;
         expect(input.witness).toBeDefined();
         expect(verifyTransactionInputWitness(digest, input.secret, input.witness as string)).toBe(
           true,
@@ -361,19 +342,9 @@ describeV3('M3 nutroot conditions', () => {
       { amount: locked.amount, id: keysetId, secret: locked.secret, C: locked.C },
     ];
     const payloadOutputs = outputs.map((o) => o.blindedMessage);
-    const digest = transactionDigest({
-      proofInputs: payloadInputs.map((p) => ({
-        amount: p.amount,
-        keysetId: p.id,
-        secret: p.secret,
-        C: p.C,
-      })),
-      blindedOutputs: payloadOutputs.map((o) => ({
-        amount: Amount.from(o.amount).toBigInt(),
-        keysetId: o.id,
-        B_: o.B_,
-      })),
-    });
+    const digest = inputsForPayload({ inputs: payloadInputs, outputs: payloadOutputs }).proofs.get(
+      proofInputContextKey({ keysetId, secret: locked.secret }),
+    )!.digest;
     const witness = buildWitness(digest);
     return mint.swap({
       inputs: [{ ...payloadInputs[0], amount: Amount.from(locked.amount), witness }] as never,
@@ -673,14 +644,10 @@ describeV3('M4 locked quotes', () => {
           keysetId,
         ),
       ];
-      const digestB = transactionDigest({
-        mintQuoteInputs: [{ amount: 32n, quoteId: quoteB.quote }],
-        blindedOutputs: outputsB.map((o) => ({
-          amount: Amount.from(o.blindedMessage.amount).toBigInt(),
-          keysetId: o.blindedMessage.id,
-          B_: o.blindedMessage.B_,
-        })),
-      });
+      const digestB = inputsForPayload({
+        mintQuotes: [{ amount: 32n, quoteId: quoteB.quote }],
+        outputs: outputsB.map((o) => o.blindedMessage),
+      }).quotes.get(quoteB.quote)!.digest;
       const mint = new Mint(mintUrl);
       const response = await mint.mintBolt11({
         quote: quoteB.quote,
@@ -704,14 +671,10 @@ describeV3('M4 locked quotes', () => {
           keysetId,
         ),
       ];
-      const digestC = transactionDigest({
-        mintQuoteInputs: [{ amount: 32n, quoteId: quoteC.quote }],
-        blindedOutputs: outputsC.map((o) => ({
-          amount: Amount.from(o.blindedMessage.amount).toBigInt(),
-          keysetId: o.blindedMessage.id,
-          B_: o.blindedMessage.B_,
-        })),
-      });
+      const digestC = inputsForPayload({
+        mintQuotes: [{ amount: 32n, quoteId: quoteC.quote }],
+        outputs: outputsC.map((o) => o.blindedMessage),
+      }).quotes.get(quoteC.quote)!.digest;
       await expect(
         mint.mintBolt11({
           quote: quoteC.quote,

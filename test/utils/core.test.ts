@@ -2110,7 +2110,7 @@ describe('auditable locks', () => {
 
   test('auditableLock builds the canonical single-leaf lock and validates the key', () => {
     expect(auditableLock(P.toUpperCase())).toEqual({
-      leaves: [{ type: 'threshold', n: 1, keys: [P] }],
+      leaves: [{ type: 'threshold', n: 1, keys: [P], disclosure: 1 }],
     });
     expect(() => auditableLock('nonsense')).toThrow();
   });

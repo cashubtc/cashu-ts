@@ -4,14 +4,20 @@
 export type ProofState = {
   Y: string;
   state: CheckStateEnum;
+  /**
+   * The witness that spent the proof. Pre-v3: present when the spend needed one. v3: only for a
+   * spend through a leaf carrying `disclosure` mode 0x01; private spends return a commitment.
+   */
   witness: string | null;
   /**
-   * Transaction digest the witness's signatures cover, hex (v3 spends only).
-   *
-   * @remarks
-   * A v3 witness signs the transaction digest, not the secret, so it verifies only against this.
+   * Input digest a published v3 witness signs, hex (NUT-10); null unless disclosed.
    */
-  digest?: string | null;
+  input_digest?: string | null;
+  /**
+   * V3 spend commitment, hex: `tagged_hash("Cashu_SpendCommitment", Y || input_digest ||
+   * SHA256(witness))` over the exact witness string. Present for every spent v3 proof.
+   */
+  commitment?: string | null;
 };
 
 /**

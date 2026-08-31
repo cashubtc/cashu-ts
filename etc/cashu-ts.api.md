@@ -346,6 +346,7 @@ export function constructUnblindedSignatureBls(blindSig: BlindSignature, r: bigi
 export type CosignRequest = {
     digest: Uint8Array;
     message: Uint8Array;
+    container: Uint8Array;
     leaf: NutrootLeaf;
 };
 
@@ -1570,6 +1571,7 @@ export type NutrootLeaf = {
     keys: string[];
     time?: number;
     hash?: string;
+    disclosure?: number;
 };
 
 // @public
@@ -1995,7 +1997,8 @@ export type ProofState = {
     Y: string;
     state: CheckStateEnum;
     witness: string | null;
-    digest?: string | null;
+    input_digest?: string | null;
+    commitment?: string | null;
 };
 
 // @public

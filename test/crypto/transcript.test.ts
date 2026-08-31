@@ -1,4 +1,5 @@
 import { schnorr } from '@noble/curves/secp256k1.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { describe, test, expect } from 'vitest';
 
@@ -6,9 +7,12 @@ import { recoverV3SecretKeys } from '../../src/crypto/NUT13';
 import {
   buildRequestTranscript,
   buildTransactionTranscript,
+  proofInputContextKey,
   requestDigest,
   signTransactionInput,
+  spendCommitment,
   transactionDigest,
+  transactionInputs,
   TRANSCRIPT_DOMAIN_TAG,
   verifyTransactionInputWitness,
   type TransactionShape,
@@ -62,17 +66,71 @@ describe('transaction transcript (vectors)', () => {
     },
   );
 
-  test('the swap signature is a key-path witness by the proof secret', () => {
-    const digest = hexToBytes(tv.swap.digest);
-    const secret = hexToBytes(tv.swap.tx.proof_inputs[0].secret);
-    expect(schnorr.verify(hexToBytes(tv.swap.signature), digest, secret.subarray(1))).toBe(true);
+  test('the swap signature is a key-path witness over the input digest by the proof secret', () => {
+    const { proofs, transactionDigest: txDigest } = transactionInputs(fromVectorTx(tv.swap.tx));
+    expect(bytesToHex(txDigest)).toBe(tv.swap.digest);
+    const secret = tv.swap.tx.proof_inputs[0].secret;
+    const context = proofs.get(
+      proofInputContextKey({ keysetId: tv.swap.tx.proof_inputs[0].keyset_id, secret }),
+    )!;
+    expect(bytesToHex(sha256(context.container))).toBe(tv.swap.input_id);
+    expect(bytesToHex(context.digest)).toBe(tv.swap.input_digest);
+    expect(
+      schnorr.verify(hexToBytes(tv.swap.signature), context.digest, hexToBytes(secret).subarray(1)),
+    ).toBe(true);
     // Reproduce deterministically from the vector secret key (aux = 32 zero bytes).
     const sig = schnorr.sign(
-      digest,
+      context.digest,
       hexToBytes(vectors.nut13_v3.outputs[0].secret_key),
       new Uint8Array(32),
     );
     expect(bytesToHex(sig)).toBe(tv.swap.signature);
+    // The transaction never signs its shared digest directly: the swap's witness must not verify
+    // against it, nor against another transaction's input digest for the same proof.
+    expect(
+      schnorr.verify(hexToBytes(tv.swap.signature), txDigest, hexToBytes(secret).subarray(1)),
+    ).toBe(false);
+    expect(hexToBytes(tv.melt.input_id)).toEqual(hexToBytes(tv.swap.input_id));
+    expect(tv.melt.input_digest).not.toBe(tv.swap.input_digest);
+  });
+
+  test('each input in the multi-input vector signs its own digest', () => {
+    const vector = tv.multi_input;
+    const tx = fromVectorTx(vector.tx);
+    const contexts = transactionInputs(tx);
+    expect(bytesToHex(buildTransactionTranscript(tx))).toBe(vector.transcript);
+    expect(bytesToHex(contexts.transactionDigest)).toBe(vector.digest);
+    vector.tx.proof_inputs.forEach((proof, index) => {
+      const context = contexts.proofs.get(
+        proofInputContextKey({ keysetId: proof.keyset_id, secret: proof.secret }),
+      )!;
+      const expected = vector.inputs[index];
+      expect(bytesToHex(sha256(context.container))).toBe(expected.input_id);
+      expect(bytesToHex(context.digest)).toBe(expected.input_digest);
+      expect(
+        schnorr.verify(
+          hexToBytes(expected.signature),
+          context.digest,
+          hexToBytes(proof.secret).subarray(1),
+        ),
+      ).toBe(true);
+    });
+    expect(vector.inputs[0].input_digest).not.toBe(vector.inputs[1].input_digest);
+  });
+
+  test('the disclosed script-path vector uses a complete transaction context', () => {
+    const aud = vectors.auditable_lock;
+    const tx = fromVectorTx(aud.tx);
+    const context = transactionInputs(tx).proofs.get(
+      proofInputContextKey({
+        keysetId: aud.tx.proof_inputs[0].keyset_id,
+        secret: aud.tx.proof_inputs[0].secret,
+      }),
+    )!;
+    expect(bytesToHex(buildTransactionTranscript(tx))).toBe(aud.transcript);
+    expect(bytesToHex(transactionDigest(tx))).toBe(aud.digest);
+    expect(bytesToHex(sha256(context.container))).toBe(aud.input_id);
+    expect(bytesToHex(context.digest)).toBe(aud.input_digest);
   });
 
   test('any field change lands on a different digest', () => {
@@ -104,7 +162,7 @@ describe('transaction transcript (vectors)', () => {
   });
 
   test('signTransactionInput produces a witness the verifier accepts', () => {
-    const digest = hexToBytes(tv.swap.digest);
+    const digest = hexToBytes(tv.swap.input_digest);
     const secretKey = hexToBytes(vectors.nut13_v3.outputs[0].secret_key);
     const secret = tv.swap.tx.proof_inputs[0].secret;
     const witness = signTransactionInput(digest, secretKey);
@@ -122,10 +180,12 @@ describe('transaction transcript (vectors)', () => {
   });
 
   test('witness verification fails closed', () => {
-    const digest = hexToBytes(tv.swap.digest);
+    const digest = hexToBytes(tv.swap.input_digest);
     const secret = tv.swap.tx.proof_inputs[0].secret;
     const good = JSON.stringify({ signatures: [tv.swap.signature] });
-    expect(verifyTransactionInputWitness(hexToBytes(tv.mint.digest), secret, good)).toBe(false);
+    expect(verifyTransactionInputWitness(hexToBytes(tv.mint.input_digest), secret, good)).toBe(
+      false,
+    );
     expect(verifyTransactionInputWitness(digest, secret, 'not-json')).toBe(false);
     expect(verifyTransactionInputWitness(digest, secret, '{"signatures":[]}')).toBe(false);
     expect(verifyTransactionInputWitness(digest, 'aabb', good)).toBe(false);
@@ -134,7 +194,7 @@ describe('transaction transcript (vectors)', () => {
   test('rejects a key-path witness with more than one signature entry', () => {
     // NUT-10: `signatures` MUST contain exactly one entry; a doubled valid
     // signature makes the witness invalid (tests/10-tests.md rejection vector).
-    const digest = hexToBytes(tv.swap.digest);
+    const digest = hexToBytes(tv.swap.input_digest);
     const secret = tv.swap.tx.proof_inputs[0].secret;
     const doubled = JSON.stringify({ signatures: [tv.swap.signature, tv.swap.signature] });
     expect(verifyTransactionInputWitness(digest, secret, doubled)).toBe(false);
@@ -196,6 +256,17 @@ describe('transaction transcript (vectors)', () => {
       ],
     });
     expect(bytesToHex(bytes)).toContain(bytesToHex(new TextEncoder().encode(legacySecret)));
+  });
+
+  test('the same secret text is distinct across legacy and v3 inputs', () => {
+    const swap = fromVectorTx(tv.swap.tx);
+    const v3 = swap.proofInputs![0];
+    const legacy = { ...v3, keysetId: `01${'11'.repeat(32)}` };
+    const { proofs } = transactionInputs({ ...swap, proofInputs: [legacy, v3] });
+    expect(proofs.size).toBe(2);
+    expect(proofs.get(proofInputContextKey(legacy))!.digest).not.toEqual(
+      proofs.get(proofInputContextKey(v3))!.digest,
+    );
   });
 });
 
@@ -404,5 +475,46 @@ describe('transcript input guards', () => {
     expect(() => recoverV3SecretKeys(seed, bls, [], -1)).toThrow(/maxCounter/);
     expect(() => recoverV3SecretKeys(seed, bls, [], 1.5)).toThrow(/maxCounter/);
     expect(() => recoverV3SecretKeys(seed, bls, [], (1 << 20) + 1)).toThrow(/maxCounter/);
+  });
+});
+
+describe('input uniqueness and spend commitments (vectors)', () => {
+  test('a repeated proof or quote input refuses to serialize', () => {
+    const swap = fromVectorTx(tv.swap.tx);
+    expect(() =>
+      buildTransactionTranscript({
+        ...swap,
+        proofInputs: [...swap.proofInputs!, swap.proofInputs![0]],
+      }),
+    ).toThrow(/repeats a proof/);
+    const mint = fromVectorTx(tv.mint.tx);
+    expect(() =>
+      buildTransactionTranscript({
+        ...mint,
+        mintQuoteInputs: [...mint.mintQuoteInputs!, mint.mintQuoteInputs![0]],
+      }),
+    ).toThrow(/repeats a mint quote/);
+  });
+
+  test('the mint quote input derives its digest from its own container', () => {
+    const { quotes } = transactionInputs(fromVectorTx(tv.mint.tx));
+    const context = quotes.get(tv.mint.tx.mint_quote_inputs[0].quote_id)!;
+    expect(bytesToHex(sha256(context.container))).toBe(tv.mint.input_id);
+    expect(bytesToHex(context.digest)).toBe(tv.mint.input_digest);
+  });
+
+  test('spend commitments reproduce the NUT-07 vectors and bind every field', () => {
+    for (const v of Object.values(vectors.nut07_commitments)) {
+      if (typeof v === 'string') continue; // the comment field
+      expect(bytesToHex(sha256(new TextEncoder().encode(v.witness)))).toBe(v.witness_hash);
+      expect(spendCommitment(v.Y, hexToBytes(v.input_digest), v.witness)).toBe(v.commitment);
+      // Any field change lands on a different commitment.
+      expect(spendCommitment(v.Y, hexToBytes(v.input_digest), v.witness + ' ')).not.toBe(
+        v.commitment,
+      );
+      expect(spendCommitment(v.Y, sha256(hexToBytes(v.input_digest)), v.witness)).not.toBe(
+        v.commitment,
+      );
+    }
   });
 });

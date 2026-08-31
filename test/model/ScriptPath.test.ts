@@ -8,7 +8,11 @@ import {
   serializeNutrootLeaf,
   type NutrootLeaf,
 } from '../../src/crypto/nutroot';
-import { digestForPayload } from '../../src/crypto/transcript';
+import {
+  digestForPayload,
+  inputsForPayload,
+  proofInputContextKey,
+} from '../../src/crypto/transcript';
 import { Amount } from '../../src/model/Amount';
 import { OutputData } from '../../src/model/OutputData';
 import { ScriptPath } from '../../src/model/ScriptPath';
@@ -90,11 +94,31 @@ describe('ScriptPath signing packages', () => {
     const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 0 }]);
     const signed = ScriptPath.signPackage(pkg, bytesToHex(sk(3)));
     expect(signed.spends[0].signatures).toHaveLength(1);
-    // The signature is BIP-340 by the leaf key over the package digest.
+    // The signature is BIP-340 by the leaf key over the spend's input digest (NUT-10).
     expect(
       schnorr.verify(
         hexToBytes(signed.spends[0].signatures[0]),
-        digestForPayload({ inputs: pkg.inputs, outputs: pkg.outputs }),
+        inputsForPayload({ inputs: pkg.inputs, outputs: pkg.outputs }).proofs.get(
+          proofInputContextKey({ keysetId: proof.id, secret: proof.secret }),
+        )!.digest,
+        hexToBytes(pub(3)).subarray(1),
+      ),
+    ).toBe(true);
+  });
+
+  test('a point-shaped legacy secret cannot replace the v3 input digest', () => {
+    const { preview, proof } = fixture();
+    const legacy = { ...proof, id: `01${'22'.repeat(32)}` };
+    const mixed = { ...preview, inputs: [proof, legacy] };
+    const pkg = ScriptPath.extractSwapPackage(mixed, [{ secret: proof.secret, leafIndex: 0 }]);
+    const signed = ScriptPath.signPackage(pkg, bytesToHex(sk(3)));
+    const digest = inputsForPayload({ inputs: pkg.inputs, outputs: pkg.outputs }).proofs.get(
+      proofInputContextKey({ keysetId: proof.id, secret: proof.secret }),
+    )!.digest;
+    expect(
+      schnorr.verify(
+        hexToBytes(signed.spends[0].signatures[0]),
+        digest,
         hexToBytes(pub(3)).subarray(1),
       ),
     ).toBe(true);

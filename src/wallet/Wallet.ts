@@ -24,7 +24,7 @@ import {
 import { normalizeSecpPubkey } from '../crypto/curve_secp';
 import { signMintQuoteLegacy } from '../crypto/NUT20';
 import { verifyNutrootRequestTree } from '../crypto/nutroot';
-import { digestForPayload } from '../crypto/transcript';
+import { inputsForPayload } from '../crypto/transcript';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
@@ -2953,7 +2953,7 @@ class Wallet {
       this.failIf(!signingKey, 'prepareMint: privkey is empty or correct privkey not provided');
       if (isBlsKeyset(keyset.id)) {
         // V3 (nutroot secrets): the quote is a transaction input; its lock key signs the
-        // transaction digest (NUT-10). No legacy fallback on v3 keysets.
+        // quote input digest (NUT-10). No legacy fallback on v3 keysets.
         // The transcript commits the quote's face amount, not this draw: the output
         // section already binds the draw (NUT-10). Amountless quotes commit 0;
         // a bolt11 quote always has an amount, so an absent one is a caller omission.
@@ -2962,10 +2962,10 @@ class Wallet {
           quoteAmount === undefined && method === 'bolt11',
           'prepareMint: quote object lacks its amount; pass the full mint quote',
         );
-        const digest = digestForPayload({
+        const digest = inputsForPayload({
           mintQuotes: [{ quoteId: quote.quote, amount: quoteAmount ?? 0 }],
           outputs: blindedMessages,
-        });
+        }).quotes.get(quote.quote)!.digest;
         mintPayload.signature = schnorrSignDigest(digest, signingKey);
       } else {
         // Sign the amended (nuts#375) message by default and keep a legacy signature over the same
@@ -3158,10 +3158,11 @@ class Wallet {
     const signatures: Array<string | null> = [];
     const legacySignatures: Array<string | null> = []; // Temporary legacy message support
     let hasSignatures = false;
-    // V3: the batch is one transaction; every locked quote signs the digest
-    // covering all quote inputs (request order) and all outputs.
-    const v3BatchDigest = isBlsKeyset(keyset.id)
-      ? digestForPayload({
+    // V3: the batch is one transaction; every locked quote signs its own input
+    // digest over the shared transcript covering all quote inputs (request order)
+    // and all outputs (NUT-10).
+    const v3BatchDigests = isBlsKeyset(keyset.id)
+      ? inputsForPayload({
           mintQuotes: entries.map((e, i) => {
             // Face amount, as in prepareMint: the transcript never commits the draw,
             // so a slim bolt11 quote object cannot stand in for it.
@@ -3173,14 +3174,16 @@ class Wallet {
             return { quoteId: e.quote.quote, amount: quoteAmount ?? 0 };
           }),
           outputs: blindedMessages,
-        })
+        }).quotes
       : undefined;
     for (const [i, entry] of entries.entries()) {
       const quotePubkey = 'pubkey' in entry.quote ? entry.quote.pubkey : undefined;
       if (quotePubkey && signingKeys.length > 0) {
         const signingKey = findSigningKey(quotePubkey, signingKeys);
-        if (v3BatchDigest) {
-          signatures.push(schnorrSignDigest(v3BatchDigest, signingKey));
+        if (v3BatchDigests) {
+          signatures.push(
+            schnorrSignDigest(v3BatchDigests.get(entry.quote.quote)!.digest, signingKey),
+          );
           legacySignatures.push(null);
         } else {
           signatures.push(signMintQuote(signingKey, entry.quote.quote, blindedMessages));

@@ -8,7 +8,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 
 import { bls12_381 } from '@noble/curves/bls12-381.js';
-import { schnorr } from '@noble/curves/secp256k1.js';
+import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
@@ -17,13 +17,20 @@ import { deriveSecretAndBlindingFactor } from '../src/crypto';
 import { getPubKeyFromPrivKey } from '../src/crypto/curve_secp';
 import { deriveLeafKey, deriveNumsOffset, deriveQuoteLockKey } from '../src/crypto/NUT13';
 import { BLS_FR_ORDER, hashToCurveBls } from '../src/crypto/curve_bls';
-import { buildTransactionTranscript, transactionDigest } from '../src/crypto/transcript';
+import {
+  buildTransactionTranscript,
+  inputDigest,
+  spendCommitment,
+  transactionDigest,
+} from '../src/crypto/transcript';
 import type { TransactionShape } from '../src/crypto/transcript';
 import { Amount } from '../src/model/Amount';
 import { decodeCBOR, encodeCBOR } from '../src/utils/cbor';
 import {
   buildNutrootSecret,
   parseNutrootLeafHex,
+  serializeNutrootLeaf,
+  taggedHash,
   type NutrootLeaf,
   NUTROOT_NUMS_KEY,
 } from '../src/crypto/nutroot';
@@ -144,7 +151,7 @@ function fromVectorTx(tx: any): TransactionShape {
   };
 }
 
-for (const name of ['swap', 'mint', 'melt'] as const) {
+for (const name of ['swap', 'mint', 'melt', 'melt_with_change'] as const) {
   const example = d.transcript[name];
   for (const fld of ['proof_inputs', 'blinded_outputs'] as const) {
     for (const entry of example.tx[fld] ?? []) {
@@ -160,15 +167,6 @@ for (const name of ['swap', 'mint', 'melt'] as const) {
   const tx = fromVectorTx(example.tx);
   example.transcript = bytesToHex(buildTransactionTranscript(tx));
   example.digest = bytesToHex(transactionDigest(tx));
-  if (example.signature !== undefined) {
-    example.signature = bytesToHex(
-      schnorr.sign(
-        hexToBytes(example.digest),
-        hexToBytes(d.nut13_v3.outputs[0].secret_key),
-        new Uint8Array(32),
-      ),
-    );
-  }
 }
 
 // --- tokens_v4 --------------------------------------------------------------
@@ -249,6 +247,187 @@ for (const [name, shape] of Object.entries<any>(tv.shapes)) {
   shape.token_nutshell = 'cashuB' + b64urlEncode(encodeCBOR(decoded));
   console.log(`token_nutshell repatched: ${name}`);
 }
+
+// --- input digests, disclosure, and NUT-07 commitments ----------------------
+const SecpPoint = secp256k1.Point;
+const AUX0 = new Uint8Array(32);
+const bigTo32 = (x: bigint) => hexToBytes(x.toString(16).padStart(64, '0'));
+
+// Each transcript vector has exactly one input, and containers group in
+// ascending type order, so the input container is the transcript's first record.
+for (const name of ['swap', 'mint', 'melt', 'melt_with_change'] as const) {
+  const example = d.transcript[name];
+  const t = hexToBytes(example.transcript);
+  const digestCheck = bytesToHex(sha256(concatBytes(utf8ToBytes('Cashu_Transaction_v1'), t)));
+  if (digestCheck !== example.digest) throw new Error(`${name}: transcript/digest mismatch`);
+  const container = t.subarray(0, 3 + ((t[1] << 8) | t[2]));
+  example.input_id = bytesToHex(sha256(container));
+  example.input_digest = bytesToHex(
+    taggedHash('Cashu_TransactionInput', hexToBytes(example.digest), hexToBytes(example.input_id)),
+  );
+  if (bytesToHex(inputDigest(hexToBytes(example.digest), container)) !== example.input_digest) {
+    throw new Error(`${name}: implementation inputDigest disagrees with the local recompute`);
+  }
+  if (example.signature !== undefined) {
+    example.signature = bytesToHex(
+      schnorr.sign(
+        hexToBytes(example.input_digest),
+        hexToBytes(d.nut13_v3.outputs[0].secret_key),
+        AUX0,
+      ),
+    );
+  }
+}
+if (d.transcript.swap.input_id !== d.transcript.melt.input_id)
+  throw new Error('swap and melt spend the same proof, so their input ids must match');
+d.transcript.comment =
+  'Transaction transcript (NUT-10). msg = domain_tag utf8 bytes || TLV stream; digest = SHA256(msg). Each input signs tagged_hash("Cashu_TransactionInput", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers: 01 proof input (fields: 01 amount, 02 keyset id, 03 secret P, 04 C), 02 mint quote input (01 amount, 02 quote id utf8), 03 blinded output (01 amount, 02 keyset id, 03 B_), 04 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.';
+
+// Two proof inputs in one transaction pin the distinction between the shared transaction digest
+// and each input's signing digest.
+{
+  const first = d.transcript.swap.tx.proof_inputs[0];
+  const txVector = {
+    proof_inputs: [
+      first,
+      {
+        ...first,
+        amount: 4,
+        secret: d.nut13_v3.outputs[1].secret,
+      },
+    ],
+    blinded_outputs: d.transcript.swap.tx.blinded_outputs.map((output: any, index: number) => ({
+      ...output,
+      amount: index === 0 ? 8 : 4,
+    })),
+  };
+  const tx = fromVectorTx(txVector);
+  const transcript = buildTransactionTranscript(tx);
+  const digest = transactionDigest(tx);
+  const containers: Uint8Array[] = [];
+  for (let offset = 0; offset < transcript.length; ) {
+    const length = (transcript[offset + 1] << 8) | transcript[offset + 2];
+    const record = transcript.subarray(offset, offset + 3 + length);
+    if (record[0] === 0x01) containers.push(record);
+    offset += record.length;
+  }
+  if (containers.length !== 2) throw new Error('multi_input: expected two proof containers');
+  d.transcript.multi_input = {
+    tx: txVector,
+    transcript: bytesToHex(transcript),
+    digest: bytesToHex(digest),
+    inputs: containers.map((container, index) => {
+      const digestForInput = inputDigest(digest, container);
+      return {
+        input_id: bytesToHex(sha256(container)),
+        input_digest: bytesToHex(digestForInput),
+        signature: bytesToHex(
+          schnorr.sign(digestForInput, hexToBytes(d.nut13_v3.outputs[index].secret_key), AUX0),
+        ),
+      };
+    }),
+  };
+}
+
+// Disclosure leaf forms: threshold_1of1 with the 0x0a field, plus its rejection shapes.
+d.leaf_forms.threshold_1of1_disclosure = d.leaf_forms.threshold_1of1 + '0a000101';
+{
+  const parsed = parseNutrootLeafHex(d.leaf_forms.threshold_1of1_disclosure);
+  if (parsed.disclosure !== 0x01) throw new Error('disclosure did not parse');
+  const reserialized = bytesToHex(serializeNutrootLeaf(parsed));
+  if (reserialized !== d.leaf_forms.threshold_1of1_disclosure) {
+    throw new Error('disclosure leaf did not round-trip through the codec');
+  }
+}
+d.leaf_forms.leaf_disclosure_mode0 = d.leaf_forms.threshold_1of1 + '0a000100';
+d.leaf_forms.leaf_disclosure_empty = d.leaf_forms.threshold_1of1 + '0a0000';
+d.leaf_forms.leaf_disclosure_mode2 = d.leaf_forms.threshold_1of1 + '0a000102';
+
+// Auditable lock (NUT-10): NUMS offset u = 7, one threshold leaf to test key 3 carrying
+// disclosure, spent in a complete one-input swap transcript.
+const N_SECP = SECP256K1_N;
+const H_NUMS = SecpPoint.fromBytes(hexToBytes(NUTROOT_NUMS_KEY));
+const K_aud = H_NUMS.add(SecpPoint.BASE.multiply(7n)).toBytes(true);
+const audLeaf = hexToBytes(d.leaf_forms.threshold_1of1_disclosure);
+const audRoot = taggedHash('Cashu_NutrootLeaf', audLeaf);
+const audTweak =
+  BigInt('0x' + bytesToHex(taggedHash('Cashu_NutrootTweak', K_aud, audRoot))) % N_SECP;
+const audSecret = SecpPoint.fromBytes(K_aud).add(SecpPoint.BASE.multiply(audTweak)).toBytes(true);
+const audTxVector = {
+  proof_inputs: [
+    {
+      ...d.transcript.swap.tx.proof_inputs[0],
+      secret: bytesToHex(audSecret),
+    },
+  ],
+  blinded_outputs: d.transcript.swap.tx.blinded_outputs,
+};
+const audTx = fromVectorTx(audTxVector);
+const audTranscript = buildTransactionTranscript(audTx);
+const audTransactionDigest = transactionDigest(audTx);
+const audContainer = audTranscript.subarray(0, 3 + ((audTranscript[1] << 8) | audTranscript[2]));
+const audInputDigest = inputDigest(audTransactionDigest, audContainer);
+const audSig = bytesToHex(schnorr.sign(audInputDigest, bigTo32(3n), AUX0));
+const audWitness = JSON.stringify({
+  leaf: d.leaf_forms.threshold_1of1_disclosure,
+  control: { K: bytesToHex(K_aud), path: [] },
+  signatures: [audSig],
+});
+d.auditable_lock = {
+  comment:
+    'Canonical auditable lock: NUMS offset u = 7, one threshold leaf n = 1 to test key 3 with disclosure mode 0x01, spent in the pinned transaction.',
+  P: bytesToHex(secp256k1.getPublicKey(bigTo32(3n), true)),
+  u: bytesToHex(bigTo32(7n)),
+  K: bytesToHex(K_aud),
+  leaf: d.leaf_forms.threshold_1of1_disclosure,
+  merkle_root: bytesToHex(audRoot),
+  tweak: bytesToHex(bigTo32(audTweak)),
+  secret: bytesToHex(audSecret),
+  Y: hashToCurveBls(audSecret).toHex(true),
+  tx: audTxVector,
+  transcript: bytesToHex(audTranscript),
+  digest: bytesToHex(audTransactionDigest),
+  input_id: bytesToHex(sha256(audContainer)),
+  input_digest: bytesToHex(audInputDigest),
+  witness: audWitness,
+};
+
+// NUT-07 spend commitments: tagged_hash("Cashu_SpendCommitment", Y || input_digest || witness_hash)
+// over the exact compact witness string. One private key-path spend (the swap), one disclosed
+// script-path spend (the auditable lock).
+const commitment = (yHex: string, inputDigestHex: string, witness: string) => {
+  const local = bytesToHex(
+    taggedHash(
+      'Cashu_SpendCommitment',
+      hexToBytes(yHex),
+      hexToBytes(inputDigestHex),
+      sha256(utf8ToBytes(witness)),
+    ),
+  );
+  if (spendCommitment(yHex, hexToBytes(inputDigestHex), witness) !== local) {
+    throw new Error('implementation spendCommitment disagrees with the local recompute');
+  }
+  return local;
+};
+const swapWitness = JSON.stringify({ signatures: [d.transcript.swap.signature] });
+d.nut07_commitments = {
+  comment:
+    'witness_hash = SHA256 over the UTF-8 bytes of the exact witness string value; Y contributes raw compressed bytes.',
+  keypath_private: {
+    Y: d.nut13_v3.outputs[0].Y,
+    input_digest: d.transcript.swap.input_digest,
+    witness: swapWitness,
+    witness_hash: bytesToHex(sha256(utf8ToBytes(swapWitness))),
+    commitment: commitment(d.nut13_v3.outputs[0].Y, d.transcript.swap.input_digest, swapWitness),
+  },
+  disclosed_script_path: {
+    Y: d.auditable_lock.Y,
+    input_digest: d.auditable_lock.input_digest,
+    witness: audWitness,
+    witness_hash: bytesToHex(sha256(utf8ToBytes(audWitness))),
+    commitment: commitment(d.auditable_lock.Y, d.auditable_lock.input_digest, audWitness),
+  },
+};
 
 writeFileSync(PATH, JSON.stringify(d, null, 2) + '\n');
 console.log(
