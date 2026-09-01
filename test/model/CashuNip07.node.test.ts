@@ -126,26 +126,26 @@ describe('CashuNip07', () => {
   });
 
   test('signTransaction refuses anything without the domain tag or a foreign container', () => {
-    const containerHex = Bytes.toHex(CONTAINER);
+    const inputContainerHex = Bytes.toHex(CONTAINER);
     // An event id, or any other 32 bytes, must never come out signed.
-    expect(() => CashuNip07.signTransaction('00'.repeat(32), containerHex, PRIV)).toThrow(
+    expect(() => CashuNip07.signTransaction('00'.repeat(32), inputContainerHex, PRIV)).toThrow(
       'not a Cashu transaction',
     );
     expect(() =>
-      CashuNip07.signTransaction(Bytes.toHex(MESSAGE.subarray(1)), containerHex, PRIV),
+      CashuNip07.signTransaction(Bytes.toHex(MESSAGE.subarray(1)), inputContainerHex, PRIV),
     ).toThrow();
     // A container the message does not carry signs nothing: the derived digest would cover an
     // input of some other transaction.
     expect(() => CashuNip07.signTransaction(Bytes.toHex(MESSAGE), '01000411223344', PRIV)).toThrow(
       'not part of this transaction',
     );
-    const signed = CashuNip07.signTransaction(Bytes.toHex(MESSAGE), containerHex, PRIV);
+    const signed = CashuNip07.signTransaction(Bytes.toHex(MESSAGE), inputContainerHex, PRIV);
     expect(signed.hash).toBe(Bytes.toHex(DIGEST));
     expect(signed.pubkey).toBe(XONLY);
     // A byte key signs the same as its hex form.
     const bytesKey = CashuNip07.signTransaction(
       Bytes.toHex(MESSAGE),
-      containerHex,
+      inputContainerHex,
       Bytes.fromHex(PRIV),
     );
     expect(schnorr.verify(Bytes.fromHex(bytesKey.sig), DIGEST, Bytes.fromHex(XONLY))).toBe(true);
