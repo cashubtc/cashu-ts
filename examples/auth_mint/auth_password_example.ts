@@ -67,10 +67,11 @@ async function main() {
 
   // 6) Mint some proofs and receive them
   console.log('\nObtain a mint quote for 100 sats...');
-  const request = await wallet.createMintQuoteBolt11(100);
+  const { pubkey, privkey } = await wallet.createQuoteLockKey({ random: true });
+  const request = await wallet.createMintQuoteBolt11(100, pubkey);
   await new Promise((res) => setTimeout(res, 3000));
   console.log('\nMint the proofs...');
-  const proofs = await wallet.mintProofsBolt11(100, request);
+  const proofs = await wallet.mintProofsBolt11(100, request, { privkey });
   console.log(
     '\nMinted 100 sats.',
     proofs.map((p) => p.amount.toString()),
