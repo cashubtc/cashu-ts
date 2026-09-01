@@ -305,7 +305,7 @@ d.transcript.comment =
   const transcript = buildTransactionTranscript(tx);
   const digest = transactionDigest(tx);
   const containers: Uint8Array[] = [];
-  for (let offset = 0; offset < transcript.length; ) {
+  for (let offset = 0; offset < transcript.length;) {
     const length = (transcript[offset + 1] << 8) | transcript[offset + 2];
     const record = transcript.subarray(offset, offset + 3 + length);
     if (record[0] === 0x01) containers.push(record);

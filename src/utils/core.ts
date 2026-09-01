@@ -674,11 +674,7 @@ export function isBlsProof(proof: Pick<Proof, 'id'>): boolean {
  * Spend-info shape of a nutroot proof (NUT-10 receive-time check 1).
  */
 export type NutrootSpendInfoShape =
-  | 'bearer'
-  | 'script-only'
-  | 'receiver-keyed'
-  | 'disclosed'
-  | 'none';
+  'bearer' | 'script-only' | 'receiver-keyed' | 'disclosed' | 'none';
 
 /**
  * Classifies a nutroot proof's spend info by shape: which key, if any, travels with it.
