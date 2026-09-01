@@ -218,8 +218,11 @@ function scriptOptions(
   now: number,
 ): SpendOption[] {
   return leaves.map((leaf, leafIndex) => {
-    const keys = hits
-      .filter((h) => h.leafIndex === leafIndex)
+    // One hit per leaf key slot: the same private key supplied twice is still one signer.
+    const byKeyIndex = new Map(
+      hits.filter((h) => h.leafIndex === leafIndex).map((h) => [h.keyIndex, h] as const),
+    );
+    const keys = [...byKeyIndex.values()]
       // Report the on-tree key, never the recovered scalar: this surface is for
       // planning and diagnostics, which apps log and store.
       .map(({ keyIndex, blinded }) => ({ keyIndex, pubkey: leaf.keys[keyIndex], blinded }));

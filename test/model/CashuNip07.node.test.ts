@@ -74,6 +74,12 @@ describe('CashuNip07', () => {
   test('pubkey is the 02-prefixed form leaves list', async () => {
     expect(await CashuNip07.pubkey(safeSigner)).toBe(`02${XONLY}`);
     await expect(CashuNip07.pubkey({})).rejects.toThrow('getPublicKey');
+    await expect(CashuNip07.pubkey({ getPublicKey: async () => 'not-hex' })).rejects.toThrow(
+      /32-byte hex/,
+    );
+    await expect(CashuNip07.pubkey({ getPublicKey: async () => 'ff'.repeat(32) })).rejects.toThrow(
+      /not a valid secp256k1 point/,
+    );
   });
 
   test('canSign needs signTransaction or signSchnorr', () => {

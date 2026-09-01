@@ -3,7 +3,7 @@ import { utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { computeMessageDigest, schnorrSignDigest, schnorrVerifyDigest } from '../crypto/core';
 import { isV3PointSecret } from '../crypto/curve_bls';
-import { getPubKeyFromPrivKey } from '../crypto/curve_secp';
+import { getPubKeyFromPrivKey, normalizeSecpPubkey } from '../crypto/curve_secp';
 import {
   getP2PKExpectedWitnessPubkeys,
   getP2PKSigFlag,
@@ -131,7 +131,11 @@ const xOnly = (pubkey: string): string => pubkey.toLowerCase().slice(-64);
 export const CashuNip07: CashuNip07Api = {
   async pubkey(nostr) {
     if (!nostr.getPublicKey) throw new CTSError('NIP-07 signer has no getPublicKey');
-    return `02${xOnly(await nostr.getPublicKey())}`;
+    const pubkey = await nostr.getPublicKey();
+    if (!/^[0-9a-f]{64}$/i.test(pubkey)) {
+      throw new CTSError('NIP-07 getPublicKey must return a 32-byte hex public key');
+    }
+    return normalizeSecpPubkey(`02${pubkey}`);
   },
 
   canSign(nostr) {

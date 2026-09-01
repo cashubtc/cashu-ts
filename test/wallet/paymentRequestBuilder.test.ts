@@ -218,6 +218,15 @@ describe('PaymentRequestBuilder', () => {
     expect(pr.nutroot).toBeUndefined();
   });
 
+  test('wire P2PKOptions replaces an older nutroot condition', () => {
+    const pr = new PaymentRequestBuilder()
+      .requestNutroot({ receiverKey: PUBKEY })
+      .lock({ kind: 'P2PK', data: PUBKEY2 })
+      .build();
+    expect(pr.nut10?.data).toBe(PUBKEY2);
+    expect(pr.nutroot).toBeUndefined();
+  });
+
   test('requestNutroot() accepts semantic LockOptions and serializes the tree', () => {
     const pr = new PaymentRequestBuilder()
       .requestNutroot({

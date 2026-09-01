@@ -1463,9 +1463,14 @@ class Wallet {
       !sendAmount.isZero() && send.length === 0,
       'Send cannot be completed offline for the requested amount',
     );
-    // Ensure witnesses are serialized, strip DLEQ if not required, keep p2pk_e and
-    // spend_info: these proofs travel to the receiver, not the mint
-    const sendPrepared = this._prepareInputsForMint(send, requireDleq, true, true);
+    // Keep NUT-11 witnesses, but never transfer a NUT-10 transaction witness: it signs only the
+    // sender's old transcript and would prevent the receiver from attaching a current one.
+    const sendPrepared = this._prepareInputsForMint(send, requireDleq, true, true).map((proof) => {
+      if (!isBlsKeyset(proof.id) || !isV3PointSecret(proof.secret)) return proof;
+      const withoutWitness = { ...proof };
+      delete withoutWitness.witness;
+      return withoutWitness;
+    });
     return { keep, send: sendPrepared };
   }
 
