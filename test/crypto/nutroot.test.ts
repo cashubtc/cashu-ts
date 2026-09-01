@@ -4,6 +4,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { hexToBytes, bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { describe, test, expect } from 'vitest';
 
+import { taggedHash } from '../../src/crypto/core';
 import { deriveP2BKBlindedPubkeyAtSlot } from '../../src/crypto/NUT28';
 import {
   buildScriptPathWitness,
@@ -21,7 +22,6 @@ import {
   NUTROOT_MAX_TREE_DEPTH,
   verifyNutrootSpendInfo,
   verifyNutrootRequestTree,
-  taggedHash,
   tlvRecord,
   readTlvRecords,
   minimalBE,

@@ -25,6 +25,8 @@ import {
   schnorrSignDigest,
   schnorrSignMessage,
   schnorrVerifyDigest,
+  sha256 as sha256Export,
+  taggedHash,
 } from '../../src/crypto';
 import { verifyUnblindedSignature } from '../../src/crypto/NUT01';
 import { Bytes } from '../../src/utils';
@@ -277,5 +279,33 @@ describe('getValidSigners / meetsSignerThreshold', () => {
   test('non-string pubkey entries fail closed without throwing', () => {
     const pubkeys = [42 as unknown as string, compressed];
     expect(getValidSigners([signature], message, pubkeys)).toEqual([compressed]);
+  });
+});
+
+describe('hash exports', () => {
+  test("sha256 is noble's byte-level hash, surfaced as-is", () => {
+    expect(sha256Export).toBe(sha256);
+    expect(bytesToHex(sha256Export(new Uint8Array(0)))).toBe(
+      'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    );
+  });
+
+  test('taggedHash matches the BIP340 construction', () => {
+    const tag = 'Cashu_NutrootLeaf';
+    const msg = hexToBytes(
+      '00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9',
+    );
+    const tagHash = sha256(new TextEncoder().encode(tag));
+    expect(bytesToHex(taggedHash(tag, msg))).toBe(
+      bytesToHex(sha256(new Uint8Array([...tagHash, ...tagHash, ...msg]))),
+    );
+  });
+
+  test('taggedHash concatenates multiple messages', () => {
+    const a = hexToBytes('aa'.repeat(32));
+    const b = hexToBytes('bb'.repeat(32));
+    expect(bytesToHex(taggedHash('t', a, b))).toBe(
+      bytesToHex(taggedHash('t', hexToBytes('aa'.repeat(32) + 'bb'.repeat(32)))),
+    );
   });
 });

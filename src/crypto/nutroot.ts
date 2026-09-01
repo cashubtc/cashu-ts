@@ -1,11 +1,10 @@
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
 import { numberToBytesBE } from '@noble/curves/utils.js';
-import { sha256 } from '@noble/hashes/sha2.js';
-import { utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
 import { Bytes } from '../utils';
 
+import { taggedHash } from './core';
 import { getPubKeyFromPrivKey, pointFromBytes, pointFromHex } from './curve_secp';
 import {
   deriveP2BKBlindedPubkeyAtSlot,
@@ -97,14 +96,6 @@ export type ParsedNutrootOption = {
   leaves?: NutrootLeaf[];
   blindKeys?: string[];
 };
-
-/**
- * BIP340-style tagged hash: `SHA256(SHA256(tag) || SHA256(tag) || messages)`.
- */
-export function taggedHash(tag: string, ...messages: Uint8Array[]): Uint8Array {
-  const tagHash = sha256(utf8ToBytes(tag));
-  return sha256(Bytes.concat(tagHash, tagHash, ...messages));
-}
 
 /**
  * Encode one TLV record: type (1 byte) || length (2 bytes BE) || value.

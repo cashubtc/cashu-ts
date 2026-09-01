@@ -2,6 +2,7 @@ import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
+import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
 
@@ -34,12 +35,34 @@ export type UnblindedSignature = {
 };
 
 // ------------------------------
+// Hashing
+// ------------------------------
+
+/**
+ * SHA-256 over raw bytes (re-exported from noble).
+ *
+ * @remarks
+ * For UTF-8 message strings, use `computeMessageDigest`.
+ */
+export { sha256 };
+
+/**
+ * BIP340-style tagged hash: `SHA256(SHA256(tag) || SHA256(tag) || messages)`.
+ */
+export function taggedHash(tag: string, ...messages: Uint8Array[]): Uint8Array {
+  const tagHash = sha256(utf8ToBytes(tag));
+  return sha256(concatBytes(tagHash, tagHash, ...messages));
+}
+
+// ------------------------------
 // Schnorr Signing / Verification
 // ------------------------------
 
 /**
  * Computes the SHA-256 hash of a UTF-8 message string.
  *
+ * @remarks
+ * For raw byte messages, use `sha256`.
  * @param message To hash (UTF-8 encoded before hashing).
  * @param asHex Optional: True returns a hex-encoded hash string; otherwise returns raw bytes.
  * @returns SHA-256 hash as raw bytes or hex string, depending on `asHex`.

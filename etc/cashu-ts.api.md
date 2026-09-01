@@ -5,6 +5,7 @@
 ```ts
 
 import { Fp2 } from '@noble/curves/abstract/tower.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 
 // @public
@@ -2357,6 +2358,8 @@ export function serializeSwapPreview(preview: SwapPreview): SerializedSwapPrevie
 // @public
 export function setGlobalRequestOptions(options: Partial<RequestOptions>): void;
 
+export { sha256 }
+
 // @public
 export interface SharedOutputTypeProps {
     denominations?: AmountLike[];
@@ -2526,6 +2529,9 @@ export type SwapTransaction = {
     keepVector: boolean[];
     sortedIndices: number[];
 };
+
+// @public
+export function taggedHash(tag: string, ...messages: Uint8Array[]): Uint8Array;
 
 // @public
 export type Token = {

@@ -6,8 +6,9 @@ import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { Bytes, isValidHex } from '../utils';
 
+import { taggedHash } from './core';
 import { isBlsKeyset } from './curves';
-import { minimalBE, taggedHash, tlvRecord } from './nutroot';
+import { minimalBE, tlvRecord } from './nutroot';
 
 /**
  * Transaction transcript (NUT-10): one shared digest, one derived message per input.
