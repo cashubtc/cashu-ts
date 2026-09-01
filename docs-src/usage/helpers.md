@@ -43,3 +43,28 @@ if (found?.kind === 'token') {
   const pr = decodePaymentRequest(found.payload);
 }
 ```
+
+## `sha256` and `taggedHash`
+
+The two hash primitives the protocol's byte-level constructions are built on, exported so
+verifiers do not need a hash library of their own. `sha256` is noble's byte-level hash,
+surfaced as-is; for UTF-8 message strings use `computeMessageDigest` instead. `taggedHash`
+is the BIP340 construction, `SHA256(SHA256(tag) || SHA256(tag) || messages)`, the one
+NUT-10 uses for leaf, branch, tweak and input-digest hashing.
+
+The example recomputes a NUT-07 spend commitment from a check-state entry's published
+opening, which is exactly what a third-party verifier of a disclosure spend does:
+
+```ts
+import { computeMessageDigest, hexToBytes, bytesToHex, sha256, taggedHash } from '@cashu/cashu-ts';
+
+const commitment = taggedHash(
+  'Cashu_SpendCommitment',
+  hexToBytes(state.Y),
+  hexToBytes(state.input_digest),
+  computeMessageDigest(state.witness), // SHA256 over the exact witness string
+);
+bytesToHex(commitment) === state.commitment; // true for a valid opening
+
+sha256(new Uint8Array(0)); // raw bytes in, 32 hash bytes out
+```
