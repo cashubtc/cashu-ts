@@ -1344,6 +1344,18 @@ class Wallet {
       proofs = normalizeProofAmounts(decodedToken.proofs);
     }
 
+    // A v3 witness signs one transaction. An incoming proof cannot already carry a witness for
+    // the outputs created below, so discard the sender's transcript. A script-path package for
+    // this swap is merged into the completed preview later and is therefore preserved.
+    proofs = proofs.map((proof) => {
+      if (!isBlsKeyset(proof.id) || !isV3PointSecret(proof.secret) || proof.witness === undefined) {
+        return proof;
+      }
+      const withoutWitness = { ...proof };
+      delete withoutWitness.witness;
+      return withoutWitness;
+    });
+
     // Rotation evidence check: repair the snapshot and load any missing keys before
     // any assertion or fee math relies on it.
     await this._ensureOperableKeysets(
