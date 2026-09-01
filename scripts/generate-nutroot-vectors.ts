@@ -1,5 +1,5 @@
 // Regenerates the keyset-id-dependent parts of test/vectors/nutroot-v3.json in place:
-// nut13_v3 outputs, the swap/mint/melt transcripts and digests, the swap signature, and
+// nut13_v3 outputs, the transcripts and digests with their signatures, and
 // the token_cashu_ts strings. Run from repo root: npx tsx scripts/generate-nutroot-vectors.ts
 //
 // token_nutshell strings are nutshell's encoder output and are NOT touched here; when ids
@@ -324,6 +324,45 @@ d.transcript.comment =
         signature: bytesToHex(
           schnorr.sign(digestForInput, hexToBytes(d.nut13_v3.outputs[index].secret_key), AUX0),
         ),
+      };
+    }),
+  };
+}
+
+// A NUT-29 batch mint is one transaction with every quote as an input. Two locked quotes
+// pin the multi-quote-input case: each signs its own input digest with its quote lock key.
+{
+  const txVector = {
+    mint_quote_inputs: [
+      { amount: 5, quote_id: 'quote-mint-0002' },
+      { amount: 3, quote_id: 'quote-mint-0003' },
+    ],
+    blinded_outputs: d.transcript.mint.tx.blinded_outputs,
+  };
+  const tx = fromVectorTx(txVector);
+  const transcript = buildTransactionTranscript(tx);
+  const digest = transactionDigest(tx);
+  const containers: Uint8Array[] = [];
+  for (let offset = 0; offset < transcript.length;) {
+    const length = (transcript[offset + 1] << 8) | transcript[offset + 2];
+    const record = transcript.subarray(offset, offset + 3 + length);
+    if (record[0] === 0x02) containers.push(record);
+    offset += record.length;
+  }
+  if (containers.length !== 2) throw new Error('batch_mint: expected two quote containers');
+  d.transcript.batch_mint = {
+    tx: txVector,
+    transcript: bytesToHex(transcript),
+    digest: bytesToHex(digest),
+    inputs: containers.map((container, index) => {
+      const digestForInput = inputDigest(digest, container);
+      const lock = d.nut13_v3.quote_locks[index];
+      return {
+        quote_id: txVector.mint_quote_inputs[index].quote_id,
+        lock_pubkey: lock.pubkey,
+        input_id: bytesToHex(sha256(container)),
+        input_digest: bytesToHex(digestForInput),
+        signature: bytesToHex(schnorr.sign(digestForInput, hexToBytes(lock.privkey), AUX0)),
       };
     }),
   };

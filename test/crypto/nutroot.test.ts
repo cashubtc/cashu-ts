@@ -47,8 +47,8 @@ import {
 } from '../../src/crypto/nutroot';
 import vectors from '../vectors/nutroot-v3.json';
 
-const v61 = vectors.example_6_1;
-const v62 = vectors.example_6_2;
+const vRefund = vectors.receiver_keyed_refund;
+const vCovenant = vectors.two_leaf_covenant;
 
 // The scalar an x-only (nostr) import may hold: n - d, whose pubkey is the negated point.
 const negate = (priv: string) =>
@@ -73,12 +73,12 @@ describe('TLV primitives', () => {
   test('record roundtrip and canonical stream rules', () => {
     const stream = new Uint8Array([
       ...tlvRecord(0x02, new Uint8Array([1])),
-      ...tlvRecord(0x04, hexToBytes(v61.carol_pub)),
+      ...tlvRecord(0x04, hexToBytes(vRefund.carol_pub)),
     ]);
     const records = readTlvRecords(stream, true);
     expect(records).toHaveLength(2);
     expect(records[0].type).toBe(0x02);
-    expect(bytesToHex(records[1].value)).toBe(v61.carol_pub);
+    expect(bytesToHex(records[1].value)).toBe(vRefund.carol_pub);
   });
 
   test('rejects descending and duplicate types in unique streams', () => {
@@ -102,8 +102,8 @@ describe('TLV primitives', () => {
 
   test('minimal big-endian integers', () => {
     expect(minimalBE(0n)).toHaveLength(0);
-    expect(bytesToHex(minimalBE(BigInt(v61.refund_time)))).toBe('68a3be80');
-    expect(readMinimalBE(hexToBytes('68a3be80'))).toBe(BigInt(v61.refund_time));
+    expect(bytesToHex(minimalBE(BigInt(vRefund.refund_time)))).toBe('68a3be80');
+    expect(readMinimalBE(hexToBytes('68a3be80'))).toBe(BigInt(vRefund.refund_time));
     expect(() => readMinimalBE(new Uint8Array([0, 1]))).toThrow(/minimal/);
   });
 });
@@ -113,35 +113,35 @@ describe('leaf serialization (vectors 6.1)', () => {
     const leaf = serializeNutrootLeaf({
       type: 'after',
       n: 1,
-      keys: [v61.alice_refund_pub],
-      time: v61.refund_time,
+      keys: [vRefund.alice_refund_pub],
+      time: vRefund.refund_time,
     });
-    expect(bytesToHex(leaf)).toBe(v61.leaf_after);
+    expect(bytesToHex(leaf)).toBe(vRefund.leaf_after);
   });
 
   test('after leaf parses back', () => {
-    const parsed = parseNutrootLeaf(hexToBytes(v61.leaf_after));
+    const parsed = parseNutrootLeaf(hexToBytes(vRefund.leaf_after));
     expect(parsed).toEqual({
       type: 'after',
       n: 1,
-      keys: [v61.alice_refund_pub],
-      time: v61.refund_time,
+      keys: [vRefund.alice_refund_pub],
+      time: vRefund.refund_time,
     });
   });
 
   test('leaf hash matches the vector root (single leaf tree)', () => {
-    expect(bytesToHex(nutrootLeafHash(hexToBytes(v61.leaf_after)))).toBe(v61.merkle_root);
+    expect(bytesToHex(nutrootLeafHash(hexToBytes(vRefund.leaf_after)))).toBe(vRefund.merkle_root);
   });
 
   test('hex wrappers round-trip the wire form', () => {
-    const leaf = parseNutrootLeafHex(v61.leaf_after);
+    const leaf = parseNutrootLeafHex(vRefund.leaf_after);
     expect(leaf).toEqual({
       type: 'after',
       n: 1,
-      keys: [v61.alice_refund_pub],
-      time: v61.refund_time,
+      keys: [vRefund.alice_refund_pub],
+      time: vRefund.refund_time,
     });
-    expect(serializeNutrootLeafHex(leaf)).toBe(v61.leaf_after);
+    expect(serializeNutrootLeafHex(leaf)).toBe(vRefund.leaf_after);
   });
 });
 
@@ -150,34 +150,38 @@ describe('leaf serialization (vectors 6.2)', () => {
     const after = serializeNutrootLeaf({
       type: 'after',
       n: 1,
-      keys: [v62.kid_pub],
-      time: v62.vest_time,
+      keys: [vCovenant.kid_pub],
+      time: vCovenant.vest_time,
     });
-    expect(bytesToHex(after)).toBe(v62.leaf_after);
+    expect(bytesToHex(after)).toBe(vCovenant.leaf_after);
   });
 
   test('leaf hashes match the vectors (melt_to leaf as opaque bytes)', () => {
     // The 6.2 melt_to covenant is a spec extensibility example, not an
     // implemented leaf type; its bytes still pin the tree and tweak math.
-    expect(bytesToHex(nutrootLeafHash(hexToBytes(v62.leaf_melt_to)))).toBe(v62.leaf_hash_melt_to);
-    expect(bytesToHex(nutrootLeafHash(hexToBytes(v62.leaf_after)))).toBe(v62.leaf_hash_after);
+    expect(bytesToHex(nutrootLeafHash(hexToBytes(vCovenant.leaf_melt_to)))).toBe(
+      vCovenant.leaf_hash_melt_to,
+    );
+    expect(bytesToHex(nutrootLeafHash(hexToBytes(vCovenant.leaf_after)))).toBe(
+      vCovenant.leaf_hash_after,
+    );
   });
 
   test('the example melt_to leaf type (0x04) is unknown and fails closed', () => {
-    expect(() => parseNutrootLeaf(hexToBytes(v62.leaf_melt_to))).toThrow(/type/);
+    expect(() => parseNutrootLeaf(hexToBytes(vCovenant.leaf_melt_to))).toThrow(/type/);
   });
 });
 
 describe('leaf parsing fails closed', () => {
   test('unknown leaf version', () => {
-    const bytes = hexToBytes(v61.leaf_after);
+    const bytes = hexToBytes(vRefund.leaf_after);
     const bad = new Uint8Array(bytes);
     bad[0] = 0x01;
     expect(() => parseNutrootLeaf(bad)).toThrow(/version/);
   });
 
   test('unknown leaf type', () => {
-    const bytes = hexToBytes(v61.leaf_after);
+    const bytes = hexToBytes(vRefund.leaf_after);
     const bad = new Uint8Array(bytes);
     bad[1] = 0x7f;
     expect(() => parseNutrootLeaf(bad)).toThrow(/type/);
@@ -186,7 +190,7 @@ describe('leaf parsing fails closed', () => {
   test('unknown even field rejects', () => {
     const body = new Uint8Array([
       ...tlvRecord(0x02, new Uint8Array([1])),
-      ...tlvRecord(0x04, hexToBytes(v61.carol_pub)),
+      ...tlvRecord(0x04, hexToBytes(vRefund.carol_pub)),
       ...tlvRecord(0x0c, new Uint8Array([1])),
     ]);
     const leaf = new Uint8Array([0x00, 0x01, ...body]);
@@ -206,7 +210,7 @@ describe('leaf parsing fails closed', () => {
   test('the byte cap applies to the body, excluding the version byte', () => {
     const fields = new Uint8Array([
       ...tlvRecord(0x02, new Uint8Array([1])),
-      ...tlvRecord(0x04, hexToBytes(v61.carol_pub)),
+      ...tlvRecord(0x04, hexToBytes(vRefund.carol_pub)),
     ]);
     const atLimit = new Uint8Array([
       0x00,
@@ -233,7 +237,7 @@ describe('leaf parsing fails closed', () => {
       0x00,
       0x02,
       ...tlvRecord(0x02, new Uint8Array([1])),
-      ...tlvRecord(0x04, hexToBytes(v61.carol_pub)),
+      ...tlvRecord(0x04, hexToBytes(vRefund.carol_pub)),
       ...tlvRecord(0x06, hexToBytes('0fffffffffffffff')),
     ]);
     expect(() => parseNutrootLeaf(hugeTime)).toThrow(/time out of range/);
@@ -241,7 +245,7 @@ describe('leaf parsing fails closed', () => {
       serializeNutrootLeaf({
         type: 'after',
         n: 1,
-        keys: [v61.carol_pub],
+        keys: [vRefund.carol_pub],
         time: NUTROOT_MAX_LEAF_TIME + 2,
       }),
     ).toThrow(/time out of range/);
@@ -252,7 +256,7 @@ describe('leaf parsing fails closed', () => {
       0x00,
       0x01,
       ...tlvRecord(0x02, new Uint8Array([1])),
-      ...tlvRecord(0x04, hexToBytes(v61.carol_pub)),
+      ...tlvRecord(0x04, hexToBytes(vRefund.carol_pub)),
       ...tlvRecord(0x06, new Uint8Array([1])),
     ]);
     expect(() => parseNutrootLeaf(thresholdWithTime)).toThrow(/must not carry a time/);
@@ -261,7 +265,7 @@ describe('leaf parsing fails closed', () => {
       0x00,
       0x02,
       ...tlvRecord(0x02, new Uint8Array([1])),
-      ...tlvRecord(0x04, hexToBytes(v61.carol_pub)),
+      ...tlvRecord(0x04, hexToBytes(vRefund.carol_pub)),
       ...tlvRecord(0x06, new Uint8Array([1])),
       ...tlvRecord(0x08, new Uint8Array(32)),
     ]);
@@ -270,7 +274,7 @@ describe('leaf parsing fails closed', () => {
       serializeNutrootLeaf({
         type: 'threshold',
         n: 1,
-        keys: [v61.carol_pub],
+        keys: [vRefund.carol_pub],
         time: 1,
       }),
     ).toThrow(/must not carry a time/);
@@ -289,7 +293,7 @@ describe('leaf parsing fails closed', () => {
   test('a key and its parity twin reject: one signature would satisfy both', () => {
     // Signatures verify against the x-only key, so listing both parities of one key would let an
     // n-of-m be satisfied by fewer signatures than it names.
-    const key = v61.carol_pub;
+    const key = vRefund.carol_pub;
     const twin = (key.startsWith('02') ? '03' : '02') + key.slice(2);
     const body = new Uint8Array([
       ...tlvRecord(0x02, new Uint8Array([2])),
@@ -304,7 +308,7 @@ describe('leaf parsing fails closed', () => {
   test('keys length not a multiple of 33 rejects', () => {
     const body = new Uint8Array([
       ...tlvRecord(0x02, new Uint8Array([1])),
-      ...tlvRecord(0x04, hexToBytes(v61.carol_pub).subarray(0, 32)),
+      ...tlvRecord(0x04, hexToBytes(vRefund.carol_pub).subarray(0, 32)),
     ]);
     expect(() => parseNutrootLeaf(new Uint8Array([0x00, 0x01, ...body]))).toThrow(/multiple of 33/);
   });
@@ -312,34 +316,34 @@ describe('leaf parsing fails closed', () => {
   test('threshold cannot exceed the key count', () => {
     const body = new Uint8Array([
       ...tlvRecord(0x02, new Uint8Array([2])),
-      ...tlvRecord(0x04, hexToBytes(v61.carol_pub)),
+      ...tlvRecord(0x04, hexToBytes(vRefund.carol_pub)),
     ]);
     expect(() => parseNutrootLeaf(new Uint8Array([0x00, 0x01, ...body]))).toThrow(/key count/);
-    expect(() => serializeNutrootLeaf({ type: 'threshold', n: 2, keys: [v61.carol_pub] })).toThrow(
-      /key count/,
-    );
+    expect(() =>
+      serializeNutrootLeaf({ type: 'threshold', n: 2, keys: [vRefund.carol_pub] }),
+    ).toThrow(/key count/);
   });
 });
 
 describe('merkle tree (vectors 6.2)', () => {
   test('two-leaf root matches, pair sorted', () => {
-    const hMelt = hexToBytes(v62.leaf_hash_melt_to);
-    const hAfter = hexToBytes(v62.leaf_hash_after);
-    expect(bytesToHex(nutrootBranchHash(hMelt, hAfter))).toBe(v62.merkle_root);
-    expect(bytesToHex(nutrootBranchHash(hAfter, hMelt))).toBe(v62.merkle_root);
-    expect(bytesToHex(nutrootMerkleRoot([hMelt, hAfter]))).toBe(v62.merkle_root);
+    const hMelt = hexToBytes(vCovenant.leaf_hash_melt_to);
+    const hAfter = hexToBytes(vCovenant.leaf_hash_after);
+    expect(bytesToHex(nutrootBranchHash(hMelt, hAfter))).toBe(vCovenant.merkle_root);
+    expect(bytesToHex(nutrootBranchHash(hAfter, hMelt))).toBe(vCovenant.merkle_root);
+    expect(bytesToHex(nutrootMerkleRoot([hMelt, hAfter]))).toBe(vCovenant.merkle_root);
   });
 
   test('merkle paths recompute the root', () => {
-    const hMelt = hexToBytes(v62.leaf_hash_melt_to);
-    const hAfter = hexToBytes(v62.leaf_hash_after);
+    const hMelt = hexToBytes(vCovenant.leaf_hash_melt_to);
+    const hAfter = hexToBytes(vCovenant.leaf_hash_after);
     const leaves = [hMelt, hAfter];
     const pathMelt = nutrootMerklePath(leaves, 0);
-    expect(pathMelt.map(bytesToHex)).toEqual(v62.melt_witness.control.path);
-    expect(bytesToHex(nutrootRootFromPath(hMelt, pathMelt))).toBe(v62.merkle_root);
+    expect(pathMelt.map(bytesToHex)).toEqual(vCovenant.melt_witness.control.path);
+    expect(bytesToHex(nutrootRootFromPath(hMelt, pathMelt))).toBe(vCovenant.merkle_root);
     const pathAfter = nutrootMerklePath(leaves, 1);
-    expect(pathAfter.map(bytesToHex)).toEqual(v62.after_witness_path);
-    expect(bytesToHex(nutrootRootFromPath(hAfter, pathAfter))).toBe(v62.merkle_root);
+    expect(pathAfter.map(bytesToHex)).toEqual(vCovenant.after_witness_path);
+    expect(bytesToHex(nutrootRootFromPath(hAfter, pathAfter))).toBe(vCovenant.merkle_root);
   });
 
   test('four leaves fold as the spec diagram and paths verify', () => {
@@ -396,52 +400,57 @@ describe('merkle tree (vectors 6.2)', () => {
 
 describe('tweak math (vectors)', () => {
   test('6.1 tweak and P', () => {
-    const K = hexToBytes(v61.internal_key);
-    const root = hexToBytes(v61.merkle_root);
-    expect(nutrootTweak(K, root).toString(16).padStart(64, '0')).toBe(v61.tweak);
-    expect(bytesToHex(nutrootTweakPubkey(K, root))).toBe(v61.secret);
+    const K = hexToBytes(vRefund.internal_key);
+    const root = hexToBytes(vRefund.merkle_root);
+    expect(nutrootTweak(K, root).toString(16).padStart(64, '0')).toBe(vRefund.tweak);
+    expect(bytesToHex(nutrootTweakPubkey(K, root))).toBe(vRefund.secret);
   });
 
   test('6.2 tweak and P', () => {
-    const K = hexToBytes(v62.internal_key);
-    const root = hexToBytes(v62.merkle_root);
-    expect(nutrootTweak(K, root).toString(16).padStart(64, '0')).toBe(v62.tweak);
-    expect(bytesToHex(nutrootTweakPubkey(K, root))).toBe(v62.secret);
+    const K = hexToBytes(vCovenant.internal_key);
+    const root = hexToBytes(vCovenant.merkle_root);
+    expect(nutrootTweak(K, root).toString(16).padStart(64, '0')).toBe(vCovenant.tweak);
+    expect(bytesToHex(nutrootTweakPubkey(K, root))).toBe(vCovenant.secret);
   });
 
   test('6.1 tweaked seckey lands on P and signs for it', () => {
     const carolFull =
-      (BigInt('0x' + v61.carol_priv) + BigInt('0x' + v61.p2bk_r)) % secp256k1.Point.Fn.ORDER;
+      (BigInt('0x' + vRefund.carol_priv) + BigInt('0x' + vRefund.p2bk_r)) %
+      secp256k1.Point.Fn.ORDER;
     const internalSeckey = carolFull.toString(16).padStart(64, '0');
-    const pPrime = nutrootTweakSeckey(hexToBytes(internalSeckey), hexToBytes(v61.merkle_root));
-    expect(bytesToHex(pPrime)).toBe(v61.keypath_priv);
-    expect(bytesToHex(secp256k1.getPublicKey(pPrime, true))).toBe(v61.secret);
-    const sig = schnorr.sign(hexToBytes(v61.illustrative_input_digest), pPrime, new Uint8Array(32));
-    expect(bytesToHex(sig)).toBe(v61.keypath_signature);
+    const pPrime = nutrootTweakSeckey(hexToBytes(internalSeckey), hexToBytes(vRefund.merkle_root));
+    expect(bytesToHex(pPrime)).toBe(vRefund.keypath_priv);
+    expect(bytesToHex(secp256k1.getPublicKey(pPrime, true))).toBe(vRefund.secret);
+    const sig = schnorr.sign(
+      hexToBytes(vRefund.illustrative_input_digest),
+      pPrime,
+      new Uint8Array(32),
+    );
+    expect(bytesToHex(sig)).toBe(vRefund.keypath_signature);
     expect(
       schnorr.verify(
         sig,
-        hexToBytes(v61.illustrative_input_digest),
-        hexToBytes(v61.secret).subarray(1),
+        hexToBytes(vRefund.illustrative_input_digest),
+        hexToBytes(vRefund.secret).subarray(1),
       ),
     ).toBe(true);
   });
 
   test('script-path witness signatures verify (vectors)', () => {
-    const sig61 = hexToBytes(v61.scriptpath_witness.signatures[0]);
+    const sig61 = hexToBytes(vRefund.scriptpath_witness.signatures[0]);
     expect(
       schnorr.verify(
         sig61,
-        hexToBytes(v61.illustrative_input_digest),
-        hexToBytes(v61.alice_refund_pub).subarray(1),
+        hexToBytes(vRefund.illustrative_input_digest),
+        hexToBytes(vRefund.alice_refund_pub).subarray(1),
       ),
     ).toBe(true);
-    const sig62 = hexToBytes(v62.melt_witness.signatures[0]);
+    const sig62 = hexToBytes(vCovenant.melt_witness.signatures[0]);
     expect(
       schnorr.verify(
         sig62,
-        hexToBytes(v62.illustrative_input_digest),
-        hexToBytes(v62.kid_pub).subarray(1),
+        hexToBytes(vCovenant.illustrative_input_digest),
+        hexToBytes(vCovenant.kid_pub).subarray(1),
       ),
     ).toBe(true);
   });
@@ -451,10 +460,10 @@ describe('script-path commitment verification', () => {
   test('6.1 single-leaf witness verifies', () => {
     expect(
       verifyNutrootCommitment(
-        hexToBytes(v61.secret),
-        hexToBytes(v61.scriptpath_witness.control.K),
-        hexToBytes(v61.scriptpath_witness.leaf),
-        v61.scriptpath_witness.control.path.map(hexToBytes),
+        hexToBytes(vRefund.secret),
+        hexToBytes(vRefund.scriptpath_witness.control.K),
+        hexToBytes(vRefund.scriptpath_witness.leaf),
+        vRefund.scriptpath_witness.control.path.map(hexToBytes),
       ),
     ).toBe(true);
   });
@@ -462,10 +471,10 @@ describe('script-path commitment verification', () => {
   test('6.2 melt witness verifies', () => {
     expect(
       verifyNutrootCommitment(
-        hexToBytes(v62.secret),
-        hexToBytes(v62.melt_witness.control.K),
-        hexToBytes(v62.melt_witness.leaf),
-        v62.melt_witness.control.path.map(hexToBytes),
+        hexToBytes(vCovenant.secret),
+        hexToBytes(vCovenant.melt_witness.control.K),
+        hexToBytes(vCovenant.melt_witness.leaf),
+        vCovenant.melt_witness.control.path.map(hexToBytes),
       ),
     ).toBe(true);
   });
@@ -473,10 +482,10 @@ describe('script-path commitment verification', () => {
   test('wrong merkle path fails', () => {
     expect(
       verifyNutrootCommitment(
-        hexToBytes(v62.secret),
-        hexToBytes(v62.melt_witness.control.K),
-        hexToBytes(v62.melt_witness.leaf),
-        [hexToBytes(v62.leaf_hash_melt_to)],
+        hexToBytes(vCovenant.secret),
+        hexToBytes(vCovenant.melt_witness.control.K),
+        hexToBytes(vCovenant.melt_witness.leaf),
+        [hexToBytes(vCovenant.leaf_hash_melt_to)],
       ),
     ).toBe(false);
   });
@@ -484,10 +493,10 @@ describe('script-path commitment verification', () => {
   test('wrong internal key fails', () => {
     expect(
       verifyNutrootCommitment(
-        hexToBytes(v62.secret),
-        hexToBytes(v61.internal_key),
-        hexToBytes(v62.melt_witness.leaf),
-        v62.melt_witness.control.path.map(hexToBytes),
+        hexToBytes(vCovenant.secret),
+        hexToBytes(vRefund.internal_key),
+        hexToBytes(vCovenant.melt_witness.leaf),
+        vCovenant.melt_witness.control.path.map(hexToBytes),
       ),
     ).toBe(false);
   });
@@ -507,14 +516,14 @@ describe('script-path commitment verification', () => {
       expect(() => parseNutrootLeafHex(bad)).toThrow(/disclosure mode/);
     }
     expect(() =>
-      serializeNutrootLeaf({ type: 'threshold', n: 1, keys: [v61.carol_pub], disclosure: 2 }),
+      serializeNutrootLeaf({ type: 'threshold', n: 1, keys: [vRefund.carol_pub], disclosure: 2 }),
     ).toThrow(/disclosure mode/);
     // disclosure is valid on every leaf type and does not affect satisfaction fields.
     const after = parseNutrootLeafHex(
       serializeNutrootLeafHex({
         type: 'after',
         n: 1,
-        keys: [v61.carol_pub],
+        keys: [vRefund.carol_pub],
         time: 1755561600,
         disclosure: 1,
       }),
@@ -553,58 +562,58 @@ describe('script-path commitment verification', () => {
 
 describe('bearer contrast (vectors 6.1)', () => {
   test('bare secret is the untweaked pubkey of k', () => {
-    expect(bytesToHex(secp256k1.getPublicKey(hexToBytes(v61.bearer_contrast.k), true))).toBe(
-      v61.bearer_contrast.secret,
+    expect(bytesToHex(secp256k1.getPublicKey(hexToBytes(vRefund.bearer_contrast.k), true))).toBe(
+      vRefund.bearer_contrast.secret,
     );
   });
 });
 
 describe('locked secret construction and spend info cascade', () => {
   test('buildNutrootSecret reproduces the 6.1 locked secret', () => {
-    const internalKey = v61.internal_key;
+    const internalKey = vRefund.internal_key;
     const { secret, tree } = buildNutrootSecret(internalKey, [
-      { type: 'after', n: 1, keys: [v61.alice_refund_pub], time: v61.refund_time },
+      { type: 'after', n: 1, keys: [vRefund.alice_refund_pub], time: vRefund.refund_time },
     ]);
-    expect(secret).toBe(v61.secret);
-    expect(tree).toEqual([v61.leaf_after]);
+    expect(secret).toBe(vRefund.secret);
+    expect(tree).toEqual([vRefund.leaf_after]);
   });
 
   test('buildScriptPathWitness reproduces the 6.1 witness shape', () => {
     const witness = JSON.parse(
       buildScriptPathWitness(
-        [v61.leaf_after],
+        [vRefund.leaf_after],
         0,
-        v61.internal_key,
-        v61.scriptpath_witness.signatures,
+        vRefund.internal_key,
+        vRefund.scriptpath_witness.signatures,
       ),
     ) as { leaf: string; control: { K: string; path: string[] }; signatures: string[] };
-    expect(witness.leaf).toBe(v61.scriptpath_witness.leaf);
-    expect(witness.control).toEqual(v61.scriptpath_witness.control);
-    expect(witness.signatures).toEqual(v61.scriptpath_witness.signatures);
+    expect(witness.leaf).toBe(vRefund.scriptpath_witness.leaf);
+    expect(witness.control).toEqual(vRefund.scriptpath_witness.control);
+    expect(witness.signatures).toEqual(vRefund.scriptpath_witness.signatures);
   });
 
   test('buildScriptPathWitness enforces the NUT-10 witness bounds', () => {
-    const sig = v61.scriptpath_witness.signatures[0];
+    const sig = vRefund.scriptpath_witness.signatures[0];
     // The 6.1 leaf lists one key: more signature entries than keys is a witness
     // every conforming mint rejects, so refuse to emit it.
-    expect(() => buildScriptPathWitness([v61.leaf_after], 0, v61.internal_key, [sig, sig])).toThrow(
-      /signature/,
-    );
+    expect(() =>
+      buildScriptPathWitness([vRefund.leaf_after], 0, vRefund.internal_key, [sig, sig]),
+    ).toThrow(/signature/);
     // A preimage is at most 32 bytes.
     expect(() =>
-      buildScriptPathWitness([v61.leaf_after], 0, v61.internal_key, [sig], 'ab'.repeat(33)),
+      buildScriptPathWitness([vRefund.leaf_after], 0, vRefund.internal_key, [sig], 'ab'.repeat(33)),
     ).toThrow(/preimage/);
   });
 
   test('selectLeafSignatures keeps one valid signature per key, dropping duplicates and extras', () => {
-    const digest = hexToBytes(v61.illustrative_input_digest);
+    const digest = hexToBytes(vRefund.illustrative_input_digest);
     const leaf: NutrootLeaf = {
       type: 'after',
       n: 1,
-      keys: [v61.alice_refund_pub],
-      time: v61.refund_time,
+      keys: [vRefund.alice_refund_pub],
+      time: vRefund.refund_time,
     };
-    const valid = v61.scriptpath_witness.signatures[0];
+    const valid = vRefund.scriptpath_witness.signatures[0];
     const garbage = '00'.repeat(64);
     expect(selectLeafSignatures(leaf, digest, [garbage, valid, valid])).toEqual([valid]);
     expect(selectLeafSignatures(leaf, digest, [garbage])).toEqual([]);
@@ -615,17 +624,20 @@ describe('locked secret construction and spend info cascade', () => {
     expect(verifyNutrootSpendInfo(n13.secret, { k: n13.secret_key })).toBe('bare');
     // 6.1: k = (carol + r) mod n, tree discloses the after leaf.
     const carolFull = (
-      (BigInt('0x' + v61.carol_priv) + BigInt('0x' + v61.p2bk_r)) %
+      (BigInt('0x' + vRefund.carol_priv) + BigInt('0x' + vRefund.p2bk_r)) %
       secp256k1.Point.Fn.ORDER
     )
       .toString(16)
       .padStart(64, '0');
-    expect(verifyNutrootSpendInfo(v61.secret, { k: carolFull, tree: [v61.leaf_after] })).toBe(
-      'tweaked',
-    );
+    expect(
+      verifyNutrootSpendInfo(vRefund.secret, { k: carolFull, tree: [vRefund.leaf_after] }),
+    ).toBe('tweaked');
     // Script-only: explicit K.
     expect(
-      verifyNutrootSpendInfo(v61.secret, { K: v61.internal_key, tree: [v61.leaf_after] }),
+      verifyNutrootSpendInfo(vRefund.secret, {
+        K: vRefund.internal_key,
+        tree: [vRefund.leaf_after],
+      }),
     ).toBe('tweaked');
   });
 
@@ -634,7 +646,7 @@ describe('locked secret construction and spend info cascade', () => {
     // receiver-keyed scalar takes, which hands the receiver's static key back to the sender.
     const n13 = vectors.nut13_v3.outputs[0];
     expect(() =>
-      verifyNutrootSpendInfo(n13.secret, { k: n13.secret_key, E: v61.ephemeral_pub }),
+      verifyNutrootSpendInfo(n13.secret, { k: n13.secret_key, E: vRefund.ephemeral_pub }),
     ).toThrow(/both k and E/);
   });
 
@@ -643,7 +655,7 @@ describe('locked secret construction and spend info cascade', () => {
     expect(() =>
       verifyNutrootSpendInfo(n13.secret, {
         k: n13.secret_key,
-        K: v61.alice_refund_pub,
+        K: vRefund.alice_refund_pub,
       }),
     ).toThrow(/does not match/);
   });
@@ -656,47 +668,50 @@ describe('locked secret construction and spend info cascade', () => {
     // and bearer-scalar forms must reach it: an aggregate has no single holder of the scalar,
     // but a single-party key may use the same form.
     expect(verifyNutrootSpendInfo(v.secret, { K: v.internal_key })).toBe('empty-tweaked');
-    expect(verifyNutrootSpendInfo(v.secret, { k: v61.carol_priv })).toBe('empty-tweaked');
+    expect(verifyNutrootSpendInfo(v.secret, { k: vRefund.carol_priv })).toBe('empty-tweaked');
     // The key that signs it is (k + t) mod n, which is the tweak with no root.
-    expect(bytesToHex(nutrootTweakSeckey(hexToBytes(v61.carol_priv)))).toBe(v.keypath_priv);
+    expect(bytesToHex(nutrootTweakSeckey(hexToBytes(vRefund.carol_priv)))).toBe(v.keypath_priv);
     // A bare key is still bare: the empty tweak is only reached when the plain check fails.
-    expect(verifyNutrootSpendInfo(v61.carol_pub, { k: v61.carol_priv })).toBe('bare');
+    expect(verifyNutrootSpendInfo(vRefund.carol_pub, { k: vRefund.carol_priv })).toBe('bare');
     // And a key that commits to neither is still refused.
-    expect(() => verifyNutrootSpendInfo(v.secret, { K: v61.alice_refund_pub })).toThrow(
+    expect(() => verifyNutrootSpendInfo(v.secret, { K: vRefund.alice_refund_pub })).toThrow(
       /does not commit/,
     );
   });
 
   test('cascade rejects partial disclosure, wrong keys, unknown leaves', () => {
     // Tree-only spend info: no key source.
-    expect(() => verifyNutrootSpendInfo(v61.secret, { tree: [v61.leaf_after] })).toThrow(
+    expect(() => verifyNutrootSpendInfo(vRefund.secret, { tree: [vRefund.leaf_after] })).toThrow(
       /incomplete/,
     );
     // Wrong bearer key.
-    expect(() => verifyNutrootSpendInfo(v61.secret, { k: '11'.repeat(32) })).toThrow(/match/);
+    expect(() => verifyNutrootSpendInfo(vRefund.secret, { k: '11'.repeat(32) })).toThrow(/match/);
     // Partial (empty vs actual tree): K alone would be complete only if the secret were its
     // empty tweak (NUT-10), and this secret is tweaked over a real tree instead.
-    expect(() => verifyNutrootSpendInfo(v61.secret, { K: v61.internal_key, tree: [] })).toThrow(
-      /does not commit/,
-    );
+    expect(() =>
+      verifyNutrootSpendInfo(vRefund.secret, { K: vRefund.internal_key, tree: [] }),
+    ).toThrow(/does not commit/);
     // Wrong tree does not reconstruct.
     expect(() =>
-      verifyNutrootSpendInfo(v61.secret, { K: v61.internal_key, tree: [v62.leaf_after] }),
+      verifyNutrootSpendInfo(vRefund.secret, {
+        K: vRefund.internal_key,
+        tree: [vCovenant.leaf_after],
+      }),
     ).toThrow(/reconstruct/);
     // 6.2 tree contains the unknown melt_to leaf: acceptance policy fails closed.
     expect(() =>
-      verifyNutrootSpendInfo(v62.secret, {
-        K: v62.internal_key,
-        tree: [v62.leaf_melt_to, v62.leaf_after],
+      verifyNutrootSpendInfo(vCovenant.secret, {
+        K: vCovenant.internal_key,
+        tree: [vCovenant.leaf_melt_to, vCovenant.leaf_after],
       }),
     ).toThrow(/type/);
   });
 
   test('receiver-keyed disclosure parses every leaf even without K', () => {
     expect(() =>
-      verifyNutrootSpendInfo(v62.secret, {
-        E: v61.ephemeral_pub,
-        tree: [v62.leaf_melt_to, v62.leaf_after],
+      verifyNutrootSpendInfo(vCovenant.secret, {
+        E: vRefund.ephemeral_pub,
+        tree: [vCovenant.leaf_melt_to, vCovenant.leaf_after],
       }),
     ).toThrow(/type/);
   });
@@ -705,13 +720,13 @@ describe('locked secret construction and spend info cascade', () => {
     const leaves: NutrootLeaf[] = Array.from({ length: 2 ** NUTROOT_MAX_TREE_DEPTH + 1 }, () => ({
       type: 'threshold' as const,
       n: 1,
-      keys: [v61.carol_pub],
+      keys: [vRefund.carol_pub],
     }));
-    expect(() => buildNutrootSecret(v61.internal_key, leaves)).toThrow(/depth/);
+    expect(() => buildNutrootSecret(vRefund.internal_key, leaves)).toThrow(/depth/);
 
     // A sender who folded the root off-spec is still refused: the cap binds the tree, not a path.
     const tree = leaves.map((leaf) => bytesToHex(serializeNutrootLeaf(leaf)));
-    expect(() => verifyNutrootSpendInfo(v61.secret, { K: v61.internal_key, tree })).toThrow(
+    expect(() => verifyNutrootSpendInfo(vRefund.secret, { K: vRefund.internal_key, tree })).toThrow(
       /depth/,
     );
   });
@@ -723,7 +738,7 @@ describe('locked secret construction and spend info cascade', () => {
   });
 
   test('a script-only secret offsets H per proof and discloses r', () => {
-    const leaves: NutrootLeaf[] = [{ type: 'threshold', n: 1, keys: [v61.carol_pub] }];
+    const leaves: NutrootLeaf[] = [{ type: 'threshold', n: 1, keys: [vRefund.carol_pub] }];
     const { secret, tree, K, u } = buildNutrootSecret(NUTROOT_NUMS_KEY, leaves);
     expect(u).toMatch(/^[0-9a-f]{64}$/);
     expect(K).not.toBe(NUTROOT_NUMS_KEY);
@@ -735,25 +750,25 @@ describe('locked secret construction and spend info cascade', () => {
   });
 
   test('a claimed NUMS offset that does not reduce to H is refused', () => {
-    const leaves: NutrootLeaf[] = [{ type: 'threshold', n: 1, keys: [v61.carol_pub] }];
+    const leaves: NutrootLeaf[] = [{ type: 'threshold', n: 1, keys: [vRefund.carol_pub] }];
     const { secret, tree, u } = buildNutrootSecret(NUTROOT_NUMS_KEY, leaves);
     // Same secret, but K claimed as an offset of something else.
-    expect(() => verifyNutrootSpendInfo(secret, { K: v61.internal_key, u, tree })).toThrow(
+    expect(() => verifyNutrootSpendInfo(secret, { K: vRefund.internal_key, u, tree })).toThrow(
       /not the claimed NUMS offset/,
     );
     expect(() => verifyNutrootSpendInfo(secret, { u, tree })).toThrow(/without its internal key/);
-    expect(() => verifyNutrootSpendInfo(secret, { K: v61.internal_key, u: '00', tree })).toThrow(
-      /32-byte scalar/,
-    );
+    expect(() =>
+      verifyNutrootSpendInfo(secret, { K: vRefund.internal_key, u: '00', tree }),
+    ).toThrow(/32-byte scalar/);
   });
 
   test('the NUMS base is not reachable as a verbatim internal key', () => {
-    const leaves: NutrootLeaf[] = [{ type: 'threshold', n: 1, keys: [v61.carol_pub] }];
+    const leaves: NutrootLeaf[] = [{ type: 'threshold', n: 1, keys: [vRefund.carol_pub] }];
     const { K } = buildNutrootSecret(NUTROOT_NUMS_KEY, leaves);
     expect(K).not.toBe(NUTROOT_NUMS_KEY);
     // An offset only applies to the base; asking for one anywhere else is a mistake, not a no-op.
     expect(() =>
-      buildNutrootSecret(v61.internal_key, leaves, { u: new Uint8Array(32).fill(1) }),
+      buildNutrootSecret(vRefund.internal_key, leaves, { u: new Uint8Array(32).fill(1) }),
     ).toThrow(/only to the NUMS base/);
   });
 });
@@ -766,24 +781,26 @@ describe('receiver-keyed derivation (NUT-28, vectors 6.1)', () => {
   })();
 
   test('sender derivation reproduces the 6.1 locked secret, E and tree', () => {
-    const out = deriveReceiverKeyedSecret(v61.carol_pub, {
-      leaves: [{ type: 'after', n: 1, keys: [v61.alice_refund_pub], time: v61.refund_time }],
+    const out = deriveReceiverKeyedSecret(vRefund.carol_pub, {
+      leaves: [
+        { type: 'after', n: 1, keys: [vRefund.alice_refund_pub], time: vRefund.refund_time },
+      ],
       eBytes,
     });
-    expect(out.secret).toBe(v61.secret);
-    expect(out.E).toBe(v61.ephemeral_pub);
-    expect(out.tree).toEqual([v61.leaf_after]);
+    expect(out.secret).toBe(vRefund.secret);
+    expect(out.E).toBe(vRefund.ephemeral_pub);
+    expect(out.tree).toEqual([vRefund.leaf_after]);
   });
 
   test('bare receiver-keyed secret is the internal key K', () => {
-    const out = deriveReceiverKeyedSecret(v61.carol_pub, { eBytes });
-    expect(out.secret).toBe(v61.internal_key);
+    const out = deriveReceiverKeyedSecret(vRefund.carol_pub, { eBytes });
+    expect(out.secret).toBe(vRefund.internal_key);
     expect(out.tree).toBeUndefined();
   });
 
   test('a NUMS receiver key is offset per proof and needs no blinded leaf', () => {
     const leaves: NutrootLeaf[] = [
-      { type: 'after', n: 1, keys: [v61.alice_refund_pub], time: v61.refund_time },
+      { type: 'after', n: 1, keys: [vRefund.alice_refund_pub], time: vRefund.refund_time },
     ];
     // The NUMS base is offset, not ECDH-blinded (NUT-10): nobody holds its scalar for the
     // receiver's half of the DH. Uniqueness comes from u, so the tree travels unchanged, and with
@@ -792,7 +809,7 @@ describe('receiver-keyed derivation (NUT-28, vectors 6.1)', () => {
     expect(out.E).toBeUndefined();
     expect(out.K).not.toBe(NUTROOT_NUMS_KEY);
     expect(bytesToHex(numsOffsetKey(hexToBytes(out.u!)))).toBe(out.K);
-    expect(out.tree).toEqual([v61.leaf_after]);
+    expect(out.tree).toEqual([vRefund.leaf_after]);
     expect(verifyNutrootSpendInfo(out.secret, { K: out.K, u: out.u, tree: out.tree })).toBe(
       'tweaked',
     );
@@ -806,46 +823,65 @@ describe('receiver-keyed derivation (NUT-28, vectors 6.1)', () => {
   });
 
   test('trial-match recovers the pinned key-path key', () => {
-    const hit = recoverReceiverKeyedSecretKey(v61.secret, v61.ephemeral_pub, v61.carol_priv, [
-      v61.leaf_after,
-    ]);
+    const hit = recoverReceiverKeyedSecretKey(
+      vRefund.secret,
+      vRefund.ephemeral_pub,
+      vRefund.carol_priv,
+      [vRefund.leaf_after],
+    );
     expect(hit).toBeDefined();
-    expect(hit?.secretKey).toBe(v61.keypath_priv);
-    expect(hit?.internalKey).toBe(v61.internal_key);
+    expect(hit?.secretKey).toBe(vRefund.keypath_priv);
+    expect(hit?.internalKey).toBe(vRefund.internal_key);
     // Bare form matches too.
-    const bare = recoverReceiverKeyedSecretKey(v61.internal_key, v61.ephemeral_pub, v61.carol_priv);
+    const bare = recoverReceiverKeyedSecretKey(
+      vRefund.internal_key,
+      vRefund.ephemeral_pub,
+      vRefund.carol_priv,
+    );
     expect(bare?.secretKey).toBeDefined();
     expect(bytesToHex(secp256k1.getPublicKey(hexToBytes(bare!.secretKey), true))).toBe(
-      v61.internal_key,
+      vRefund.internal_key,
     );
   });
 
   test('an odd-parity import of the static key still trial-matches (NUT-28)', () => {
-    const negCarol = negate(v61.carol_priv);
+    const negCarol = negate(vRefund.carol_priv);
     expect(
-      recoverReceiverKeyedSecretKey(v61.secret, v61.ephemeral_pub, negCarol, [v61.leaf_after]),
+      recoverReceiverKeyedSecretKey(vRefund.secret, vRefund.ephemeral_pub, negCarol, [
+        vRefund.leaf_after,
+      ]),
     ).toEqual(
-      recoverReceiverKeyedSecretKey(v61.secret, v61.ephemeral_pub, v61.carol_priv, [
-        v61.leaf_after,
+      recoverReceiverKeyedSecretKey(vRefund.secret, vRefund.ephemeral_pub, vRefund.carol_priv, [
+        vRefund.leaf_after,
       ]),
     );
-    const bare = recoverReceiverKeyedSecretKey(v61.internal_key, v61.ephemeral_pub, negCarol);
-    expect(bare?.internalKey).toBe(v61.internal_key);
+    const bare = recoverReceiverKeyedSecretKey(
+      vRefund.internal_key,
+      vRefund.ephemeral_pub,
+      negCarol,
+    );
+    expect(bare?.internalKey).toBe(vRefund.internal_key);
   });
 
   test('trial-match misses for a foreign static key', () => {
     expect(
-      recoverReceiverKeyedSecretKey(v61.secret, v61.ephemeral_pub, v61.alice_refund_priv, [
-        v61.leaf_after,
-      ]),
+      recoverReceiverKeyedSecretKey(
+        vRefund.secret,
+        vRefund.ephemeral_pub,
+        vRefund.alice_refund_priv,
+        [vRefund.leaf_after],
+      ),
     ).toBeUndefined();
   });
 
   test('cascade classifies E-carrying spend info as receiver-keyed', () => {
     expect(
-      verifyNutrootSpendInfo(v61.secret, { E: v61.ephemeral_pub, tree: [v61.leaf_after] }),
+      verifyNutrootSpendInfo(vRefund.secret, {
+        E: vRefund.ephemeral_pub,
+        tree: [vRefund.leaf_after],
+      }),
     ).toBe('receiver-keyed');
-    expect(() => verifyNutrootSpendInfo(v61.secret, { E: 'zz' })).toThrow(/ephemeral/);
+    expect(() => verifyNutrootSpendInfo(vRefund.secret, { E: 'zz' })).toThrow(/ephemeral/);
   });
 });
 
@@ -854,14 +890,14 @@ describe('the leaf forms the worked examples never show', () => {
 
   test('threshold and hashlock leaves serialize to the vector bytes', () => {
     expect(
-      bytesToHex(serializeNutrootLeaf({ type: 'threshold', n: 1, keys: [v61.carol_pub] })),
+      bytesToHex(serializeNutrootLeaf({ type: 'threshold', n: 1, keys: [vRefund.carol_pub] })),
     ).toBe(lf.threshold_1of1);
     expect(
       bytesToHex(
         serializeNutrootLeaf({
           type: 'threshold',
           n: 2,
-          keys: [v61.carol_pub, v61.alice_refund_pub],
+          keys: [vRefund.carol_pub, vRefund.alice_refund_pub],
         }),
       ),
     ).toBe(lf.threshold_2of2);
@@ -870,7 +906,7 @@ describe('the leaf forms the worked examples never show', () => {
         serializeNutrootLeaf({
           type: 'hashlock',
           n: 1,
-          keys: [v61.carol_pub],
+          keys: [vRefund.carol_pub],
           hash: lf.hashlock_hash,
         }),
       ),
@@ -885,7 +921,7 @@ describe('the leaf forms the worked examples never show', () => {
     expect(
       verifyNutrootCommitment(
         hexToBytes(lf.three_leaf_secret),
-        hexToBytes(v61.internal_key),
+        hexToBytes(vRefund.internal_key),
         hexToBytes(lf.three_leaf_tree[2]),
         nutrootMerklePath(hashes, 2),
       ),
@@ -923,15 +959,15 @@ describe('the leaf forms the worked examples never show', () => {
   test('the NUMS key is BIP-341 H, and a blinded slot-1 key matches', () => {
     expect(NUTROOT_NUMS_KEY).toBe(lf.nums_key);
     expect(
-      deriveP2BKBlindedPubkeyAtSlot(lf.blind_slot1_key, hexToBytes(v61.ephemeral_priv), 1),
+      deriveP2BKBlindedPubkeyAtSlot(lf.blind_slot1_key, hexToBytes(vRefund.ephemeral_priv), 1),
     ).toBe(lf.blind_slot1_result);
   });
 });
 
 describe('leaf-key blinding: the positional slot map (NUT-28)', () => {
-  const eBytes = hexToBytes(v61.ephemeral_priv);
-  const carolPub = v61.carol_pub;
-  const alicePub = v61.alice_refund_pub;
+  const eBytes = hexToBytes(vRefund.ephemeral_priv);
+  const carolPub = vRefund.carol_pub;
+  const alicePub = vRefund.alice_refund_pub;
   // A third static key, to sit in a leaf beside the other two.
   const bobPriv = '0000000000000000000000000000000000000000000000000000000000000007';
   const bobPub = bytesToHex(secp256k1.getPublicKey(hexToBytes(bobPriv), true));
@@ -939,7 +975,7 @@ describe('leaf-key blinding: the positional slot map (NUT-28)', () => {
   test('slots number the internal key 0, then leaves in order, keys within a leaf in order', () => {
     const slots = enumerateLeafKeySlots([
       { type: 'threshold', n: 2, keys: [carolPub, alicePub] },
-      { type: 'after', n: 1, keys: [bobPub], time: v61.refund_time },
+      { type: 'after', n: 1, keys: [bobPub], time: vRefund.refund_time },
     ]);
     expect(slots.map((s) => s.slot)).toEqual([1, 2, 3]);
     expect(slots.map((s) => s.key)).toEqual([carolPub, alicePub, bobPub]);
@@ -966,7 +1002,7 @@ describe('leaf-key blinding: the positional slot map (NUT-28)', () => {
   test('sender blinds only the tagged keys, at their own slot', () => {
     const leaves: NutrootLeaf[] = [
       { type: 'threshold', n: 2, keys: [carolPub, alicePub] },
-      { type: 'after', n: 1, keys: [bobPub], time: v61.refund_time },
+      { type: 'after', n: 1, keys: [bobPub], time: vRefund.refund_time },
     ];
     const verbatim = deriveReceiverKeyedSecret(carolPub, { leaves, eBytes });
     const blinded = deriveReceiverKeyedSecret(carolPub, { leaves, eBytes, blindKeys: [bobPub] });
@@ -979,7 +1015,7 @@ describe('leaf-key blinding: the positional slot map (NUT-28)', () => {
     // The blinded key is bob's key at slot 3, and the leaf is otherwise untouched.
     const leaf = parseNutrootLeaf(hexToBytes(blinded.tree![1]));
     expect(leaf.keys).toEqual([deriveP2BKBlindedPubkeyAtSlot(bobPub, eBytes, 3)]);
-    expect(leaf.time).toBe(v61.refund_time);
+    expect(leaf.time).toBe(vRefund.refund_time);
     // The caller's leaves are not mutated.
     expect(leaves[1].keys).toEqual([bobPub]);
   });
@@ -987,7 +1023,7 @@ describe('leaf-key blinding: the positional slot map (NUT-28)', () => {
   test('the same static key at two slots gets distinct tweaks', () => {
     const leaves: NutrootLeaf[] = [
       { type: 'threshold', n: 1, keys: [bobPub] },
-      { type: 'after', n: 1, keys: [bobPub], time: v61.refund_time },
+      { type: 'after', n: 1, keys: [bobPub], time: vRefund.refund_time },
     ];
     const out = deriveReceiverKeyedSecret(carolPub, { leaves, eBytes, blindKeys: [bobPub] });
     const first = parseNutrootLeaf(hexToBytes(out.tree![0])).keys[0];
@@ -1008,7 +1044,7 @@ describe('leaf-key blinding: the positional slot map (NUT-28)', () => {
   test('receiver walk resolves a tree mixing blinded and verbatim keys of two owners', () => {
     const leaves: NutrootLeaf[] = [
       { type: 'threshold', n: 2, keys: [carolPub, alicePub] },
-      { type: 'after', n: 1, keys: [bobPub], time: v61.refund_time },
+      { type: 'after', n: 1, keys: [bobPub], time: vRefund.refund_time },
     ];
     const out = deriveReceiverKeyedSecret(carolPub, {
       leaves,
@@ -1019,16 +1055,19 @@ describe('leaf-key blinding: the positional slot map (NUT-28)', () => {
     expect(recoverLeafKeySecretKeys(out.tree!, out.E, [bobPriv])).toEqual([
       { leafIndex: 1, keyIndex: 0, slot: 3, secretKey: expect.any(String), blinded: true },
     ]);
-    expect(recoverLeafKeySecretKeys(out.tree!, out.E, [v61.alice_refund_priv])).toEqual([
+    expect(recoverLeafKeySecretKeys(out.tree!, out.E, [vRefund.alice_refund_priv])).toEqual([
       { leafIndex: 0, keyIndex: 1, slot: 2, secretKey: expect.any(String), blinded: true },
     ]);
-    expect(recoverLeafKeySecretKeys(out.tree!, out.E, [v61.carol_priv])).toEqual([
-      { leafIndex: 0, keyIndex: 0, slot: 1, secretKey: v61.carol_priv, blinded: false },
+    expect(recoverLeafKeySecretKeys(out.tree!, out.E, [vRefund.carol_priv])).toEqual([
+      { leafIndex: 0, keyIndex: 0, slot: 1, secretKey: vRefund.carol_priv, blinded: false },
     ]);
     // All three at once, in slot order per key held.
     expect(
-      recoverLeafKeySecretKeys(out.tree!, out.E, [v61.carol_priv, v61.alice_refund_priv, bobPriv])
-        .length,
+      recoverLeafKeySecretKeys(out.tree!, out.E, [
+        vRefund.carol_priv,
+        vRefund.alice_refund_priv,
+        bobPriv,
+      ]).length,
     ).toBe(3);
   });
 
@@ -1038,12 +1077,12 @@ describe('leaf-key blinding: the positional slot map (NUT-28)', () => {
     const strangerPriv = bytesToHex(secp256k1.utils.randomSecretKey());
     expect(recoverLeafKeySecretKeys(out.tree!, out.E, [strangerPriv])).toEqual([]);
     // Same key, wrong slot: the tweak is index-bound, so an off-by-one finds nothing.
-    const shifted = buildNutrootSecret(v61.internal_key, [
+    const shifted = buildNutrootSecret(vRefund.internal_key, [
       { type: 'threshold', n: 1, keys: [deriveP2BKBlindedPubkeyAtSlot(bobPub, eBytes, 2)] },
     ]).tree;
     expect(recoverLeafKeySecretKeys(shifted, out.E, [bobPriv])).toEqual([]);
     // Verbatim keys still resolve with no ephemeral in play.
-    const plain = buildNutrootSecret(v61.internal_key, leaves).tree;
+    const plain = buildNutrootSecret(vRefund.internal_key, leaves).tree;
     expect(recoverLeafKeySecretKeys(plain, undefined, [bobPriv, strangerPriv])).toEqual([
       { leafIndex: 0, keyIndex: 0, slot: 1, secretKey: bobPriv, blinded: false },
     ]);
@@ -1052,15 +1091,15 @@ describe('leaf-key blinding: the positional slot map (NUT-28)', () => {
   test('an odd-parity import matches blinded and verbatim leaf keys alike (NUT-28)', () => {
     const leaves: NutrootLeaf[] = [
       { type: 'threshold', n: 2, keys: [carolPub, alicePub] },
-      { type: 'after', n: 1, keys: [bobPub], time: v61.refund_time },
+      { type: 'after', n: 1, keys: [bobPub], time: vRefund.refund_time },
     ];
     const out = deriveReceiverKeyedSecret(carolPub, { leaves, eBytes, blindKeys: [bobPub] });
     // Blinded (bob) and verbatim (carol) keys: the negated import yields the same hits.
     expect(recoverLeafKeySecretKeys(out.tree!, out.E, [negate(bobPriv)])).toEqual(
       recoverLeafKeySecretKeys(out.tree!, out.E, [bobPriv]),
     );
-    expect(recoverLeafKeySecretKeys(out.tree!, out.E, [negate(v61.carol_priv)])).toEqual(
-      recoverLeafKeySecretKeys(out.tree!, out.E, [v61.carol_priv]),
+    expect(recoverLeafKeySecretKeys(out.tree!, out.E, [negate(vRefund.carol_priv)])).toEqual(
+      recoverLeafKeySecretKeys(out.tree!, out.E, [vRefund.carol_priv]),
     );
     // A negated stranger is still a stranger.
     const strangerPriv = bytesToHex(secp256k1.utils.randomSecretKey());
@@ -1079,11 +1118,11 @@ describe('leaf-key blinding: the positional slot map (NUT-28)', () => {
 
   test('a blinded leaf key does not disturb key-path recovery for the internal key', () => {
     const leaves: NutrootLeaf[] = [
-      { type: 'after', n: 1, keys: [alicePub], time: v61.refund_time },
+      { type: 'after', n: 1, keys: [alicePub], time: vRefund.refund_time },
     ];
     const out = deriveReceiverKeyedSecret(carolPub, { leaves, eBytes, blindKeys: [alicePub] });
-    const hit = recoverReceiverKeyedSecretKey(out.secret, out.E!, v61.carol_priv, out.tree);
-    expect(hit?.internalKey).toBe(v61.internal_key);
+    const hit = recoverReceiverKeyedSecretKey(out.secret, out.E!, vRefund.carol_priv, out.tree);
+    expect(hit?.internalKey).toBe(vRefund.internal_key);
     expect(bytesToHex(secp256k1.getPublicKey(hexToBytes(hit!.secretKey), true))).toBe(out.secret);
   });
 });
@@ -1188,14 +1227,18 @@ describe('leaf key recovery does not depend on the transmitted tree order', () =
 describe('verifyNutrootRequestTree (NUT-18 exact match)', () => {
   const eBytes = numberToBytesBE(5n, 32);
   const reqLeaves: NutrootLeaf[] = [
-    { type: 'after', n: 1, keys: [v61.alice_refund_pub], time: v61.refund_time },
-    { type: 'threshold', n: 1, keys: [v61.carol_pub] },
+    { type: 'after', n: 1, keys: [vRefund.alice_refund_pub], time: vRefund.refund_time },
+    { type: 'threshold', n: 1, keys: [vRefund.carol_pub] },
   ];
-  const option = { receiverKey: v61.carol_pub, leaves: reqLeaves, blindKeys: [v61.carol_pub] };
+  const option = {
+    receiverKey: vRefund.carol_pub,
+    leaves: reqLeaves,
+    blindKeys: [vRefund.carol_pub],
+  };
   const derive = () =>
-    deriveReceiverKeyedSecret(v61.carol_pub, {
+    deriveReceiverKeyedSecret(vRefund.carol_pub, {
       leaves: reqLeaves,
-      blindKeys: [v61.carol_pub],
+      blindKeys: [vRefund.carol_pub],
       eBytes,
     });
 
@@ -1252,7 +1295,7 @@ describe('verifyNutrootRequestTree (NUT-18 exact match)', () => {
   test('an appended or missing leaf rejects', () => {
     const out = derive();
     const extra = bytesToHex(
-      serializeNutrootLeaf({ type: 'after', n: 1, keys: [v61.alice_refund_pub], time: 1 }),
+      serializeNutrootLeaf({ type: 'after', n: 1, keys: [vRefund.alice_refund_pub], time: 1 }),
     );
     const tree = out.tree as string[];
     expect(() =>
@@ -1267,14 +1310,14 @@ describe('verifyNutrootRequestTree (NUT-18 exact match)', () => {
     const out = derive();
     expect(() =>
       verifyNutrootRequestTree(
-        { receiverKey: v61.carol_pub },
+        { receiverKey: vRefund.carol_pub },
         { E: out.E, K: out.K, tree: out.tree },
       ),
     ).toThrow(/none was requested/);
   });
 
   test('a verbatim key where blind-me was tagged rejects', () => {
-    const out = deriveReceiverKeyedSecret(v61.carol_pub, { leaves: reqLeaves, eBytes });
+    const out = deriveReceiverKeyedSecret(vRefund.carol_pub, { leaves: reqLeaves, eBytes });
     expect(() => verifyNutrootRequestTree(option, { E: out.E, K: out.K, tree: out.tree })).toThrow(
       /does not match/,
     );
@@ -1292,11 +1335,11 @@ describe('verifyNutrootRequestTree (NUT-18 exact match)', () => {
       keys: [pub(i + 2)],
     }));
     const ambiguous = {
-      receiverKey: v61.carol_pub,
+      receiverKey: vRefund.carol_pub,
       leaves,
       blindKeys: leaves.map((leaf) => leaf.keys[0]),
     };
-    const si = (tree: string[]) => ({ E: v61.ephemeral_pub, K: v61.carol_pub, tree });
+    const si = (tree: string[]) => ({ E: vRefund.ephemeral_pub, K: vRefund.carol_pub, tree });
 
     // n copies of the first requested leaf, verbatim: it matches every requested leaf but that
     // one, so there are only n - 1 destinations and no assignment exists.
@@ -1313,29 +1356,29 @@ describe('verifyNutrootRequestTree (NUT-18 exact match)', () => {
   });
 
   test('exact-tree verification rejects more than eight leaves', () => {
-    const leaf = { type: 'threshold' as const, n: 1, keys: [v61.carol_pub] };
+    const leaf = { type: 'threshold' as const, n: 1, keys: [vRefund.carol_pub] };
     const leaves = new Array(2 ** NUTROOT_MAX_TREE_DEPTH + 1).fill(leaf);
     const tree = leaves.map((item) => bytesToHex(serializeNutrootLeaf(item)));
     expect(() =>
       verifyNutrootRequestTree(
-        { receiverKey: v61.carol_pub, leaves },
-        { E: v61.ephemeral_pub, K: v61.carol_pub, tree },
+        { receiverKey: vRefund.carol_pub, leaves },
+        { E: vRefund.ephemeral_pub, K: vRefund.carol_pub, tree },
       ),
     ).toThrow(/exceeds 8 leaves/);
   });
 
   test('a disclosure mismatch is not the requested tree', () => {
     const withDisc: NutrootLeaf[] = [
-      { type: 'threshold', n: 1, keys: [v61.carol_pub], disclosure: 1 },
+      { type: 'threshold', n: 1, keys: [vRefund.carol_pub], disclosure: 1 },
     ];
-    const opt = { receiverKey: v61.carol_pub, leaves: withDisc };
-    const outDisc = deriveReceiverKeyedSecret(v61.carol_pub, { leaves: withDisc, eBytes });
+    const opt = { receiverKey: vRefund.carol_pub, leaves: withDisc };
+    const outDisc = deriveReceiverKeyedSecret(vRefund.carol_pub, { leaves: withDisc, eBytes });
     expect(() =>
       verifyNutrootRequestTree(opt, { E: outDisc.E, K: outDisc.K, tree: outDisc.tree }),
     ).not.toThrow();
     // The same leaf without the flag ignores the payee's disclosure request and rejects.
     const bare = [
-      bytesToHex(serializeNutrootLeaf({ type: 'threshold', n: 1, keys: [v61.carol_pub] })),
+      bytesToHex(serializeNutrootLeaf({ type: 'threshold', n: 1, keys: [vRefund.carol_pub] })),
     ];
     expect(() => verifyNutrootRequestTree(opt, { E: outDisc.E, K: outDisc.K, tree: bare })).toThrow(
       /does not match/,
@@ -1361,7 +1404,7 @@ describe('verifyNutrootRequestTree (NUT-18 exact match)', () => {
     // An ephemeral that blinded nothing is a signal the payee cannot act on.
     expect(() =>
       verifyNutrootRequestTree(numsOpt, {
-        E: v61.ephemeral_pub,
+        E: vRefund.ephemeral_pub,
         K: out.K,
         u: out.u,
         tree: out.tree,
@@ -1373,7 +1416,7 @@ describe('verifyNutrootRequestTree (NUT-18 exact match)', () => {
     );
     expect(() =>
       verifyNutrootRequestTree(numsOpt, {
-        K: v61.internal_key,
+        K: vRefund.internal_key,
         u: out.u,
         tree: out.tree,
       }),
@@ -1381,7 +1424,7 @@ describe('verifyNutrootRequestTree (NUT-18 exact match)', () => {
     // An offset where the request asked for a receiver-keyed send is a different lock entirely.
     expect(() =>
       verifyNutrootRequestTree(option, {
-        E: v61.ephemeral_pub,
+        E: vRefund.ephemeral_pub,
         K: out.K,
         u: out.u,
         tree: out.tree,
@@ -1393,11 +1436,11 @@ describe('verifyNutrootRequestTree (NUT-18 exact match)', () => {
     const numsOptB = {
       receiverKey: NUTROOT_NUMS_KEY,
       leaves: reqLeaves,
-      blindKeys: [v61.alice_refund_pub],
+      blindKeys: [vRefund.alice_refund_pub],
     };
     const out = deriveReceiverKeyedSecret(NUTROOT_NUMS_KEY, {
       leaves: reqLeaves,
-      blindKeys: [v61.alice_refund_pub],
+      blindKeys: [vRefund.alice_refund_pub],
       eBytes,
     });
     expect(out.E).toBeDefined();

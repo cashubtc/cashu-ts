@@ -118,6 +118,29 @@ describe('transaction transcript (vectors)', () => {
     expect(vector.inputs[0].input_digest).not.toBe(vector.inputs[1].input_digest);
   });
 
+  test('each quote in the batch-mint vector signs its own digest', () => {
+    const vector = tv.batch_mint;
+    const tx = fromVectorTx(vector.tx);
+    const contexts = transactionInputs(tx);
+    expect(bytesToHex(buildTransactionTranscript(tx))).toBe(vector.transcript);
+    expect(bytesToHex(contexts.transactionDigest)).toBe(vector.digest);
+    vector.tx.mint_quote_inputs.forEach((quote, index) => {
+      const expected = vector.inputs[index];
+      expect(expected.quote_id).toBe(quote.quote_id);
+      const context = contexts.quotes.get(quote.quote_id)!;
+      expect(bytesToHex(sha256(context.container))).toBe(expected.input_id);
+      expect(bytesToHex(context.digest)).toBe(expected.input_digest);
+      expect(
+        schnorr.verify(
+          hexToBytes(expected.signature),
+          context.digest,
+          hexToBytes(expected.lock_pubkey).subarray(1),
+        ),
+      ).toBe(true);
+    });
+    expect(vector.inputs[0].input_digest).not.toBe(vector.inputs[1].input_digest);
+  });
+
   test('the disclosed script-path vector uses a complete transaction context', () => {
     const aud = vectors.auditable_lock;
     const tx = fromVectorTx(aud.tx);
