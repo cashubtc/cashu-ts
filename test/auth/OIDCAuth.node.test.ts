@@ -1,10 +1,11 @@
 import { sha256 } from '@noble/hashes/sha2.js';
+import { utf8ToBytes } from '@noble/hashes/utils.js';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { beforeAll, afterAll, beforeEach, afterEach, describe, test, expect, vi } from 'vitest';
 
 import { OIDCAuth, type OIDCConfig, type TokenResponse } from '../../src/auth/OIDCAuth';
-import { Bytes, encodeUint8toBase64Url } from '../../src/utils';
+import { encodeUint8ToBase64Url } from '../../src/utils';
 
 const ISSUER = 'http://idp.local/realms/cashu';
 const OIDC_BASE = 'http://oidc.local';
@@ -95,7 +96,7 @@ describe('OIDCAuth: PKCE + auth code', () => {
     const oidc = new OIDCAuth(DISCOVERY);
     const { verifier, challenge } = oidc.generatePKCE();
     expect(verifier.length).toBeGreaterThanOrEqual(43);
-    const expectedChallenge = encodeUint8toBase64Url(sha256(Bytes.fromString(verifier)));
+    const expectedChallenge = encodeUint8ToBase64Url(sha256(utf8ToBytes(verifier)));
     expect(challenge).toBe(expectedChallenge);
   });
 

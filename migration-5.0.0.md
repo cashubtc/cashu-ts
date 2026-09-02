@@ -201,6 +201,30 @@ try {
 
 ---
 
+## Base64 payloads are decoded strictly per NUT-00
+
+Tokens are now decoded as `base64_urlsafe`, the alphabet NUT-00 mandates, rather than accepting
+standard base64 as well. A `cashuB` token containing `+` or `/` was never conformant and other
+implementations reject it, but v4 decoded it, so a wallet holding one needs to redeem it on v4
+first. Padding stays optional in both directions, as the spec requires, and pasted input is still
+whitespace-normalized.
+
+Payment requests keep a standard-base64 fallback, because this library itself emitted `creqA` in
+that alphabet before v5 fixed the encoder. Deprecated keyset IDs are unaffected: they are standard
+base64 by definition and decode as before.
+
+`toEncodedRequest` now emits `base64_urlsafe`. The output of a given request therefore changes, so
+any stored comparison against a previously encoded string needs regenerating.
+
+### Migration
+
+No code change for most consumers: encoding and decoding both stay on the package entry point and
+the wallet paths are unchanged. If you persisted encoded payment requests and compare them as
+strings, re-encode them. If you accept tokens from a source that emits standard base64, ask it to
+follow NUT-00; those tokens no longer decode here.
+
+---
+
 ## Crypto deep imports were reorganized
 
 The internal crypto module layout changed to separate curve-specific primitives from shared

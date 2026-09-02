@@ -30,7 +30,7 @@ import {
   sortProofsById,
   normalizeMintUrl,
 } from '../../src/utils';
-import { encodeJsonToBase64 } from '../../src/utils/base64';
+import { encodeJsonToBase64Url } from '../../src/utils/base64';
 import { MAX_PAYLOAD_DECODE_ATTEMPTS, MAX_PAYLOAD_LENGTH } from '../../src/utils/limits';
 import { auditableLock, lockToNutrootOptions } from '../../src/wallet/lock';
 import {
@@ -485,7 +485,7 @@ describe('findCashuPayload', () => {
 
   test('bounds a single candidate at MAX_PAYLOAD_LENGTH', () => {
     const paddedToken = (memoLength: number) =>
-      `cashuA${encodeJsonToBase64({
+      `cashuA${encodeJsonToBase64Url({
         token: [
           {
             mint: 'http://localhost:3338',
@@ -1246,6 +1246,15 @@ describe('test raw tokens', () => {
 
     expect(decodedToken).toEqual(token);
   });
+
+  test.each(['__proto__', 'constructor', 'toString', 'zzzz'])(
+    'getEncodedTokenBinary rejects non-hex keyset id %s',
+    (id) => {
+      const badToken = { ...token, proofs: token.proofs.map((p) => ({ ...p, id })) };
+
+      expect(() => utils.getEncodedTokenBinary(badToken)).toThrow(CTSError);
+    },
+  );
 });
 
 describe('test deprecated base64 keyset id derivation', () => {
@@ -1661,7 +1670,7 @@ describe('getDecodedTokenBinary edge cases', () => {
 describe('tokenFromTemplate rejects valid CBOR of wrong shape', () => {
   test('getDecodedToken (cashuB) throws CTSError, not a raw TypeError', () => {
     const body = utils.encodeCBOR({ m: 'http://localhost:3338', u: 'sat' });
-    const token = 'cashuB' + utils.encodeUint8toBase64Url(body);
+    const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
     expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
   });
 
@@ -1676,13 +1685,13 @@ describe('tokenFromTemplate rejects valid CBOR of wrong shape', () => {
 
   test('throws CTSError when a token entry has no proofs array', () => {
     const body = utils.encodeCBOR({ m: 'http://localhost:3338', u: 'sat', t: [{ i: 'nope' }] });
-    const token = 'cashuB' + utils.encodeUint8toBase64Url(body);
+    const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
     expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
   });
 
   test('defaults unit to sat when template omits it', () => {
     const body = utils.encodeCBOR({ m: 'http://localhost:3338', t: [] });
-    const token = 'cashuB' + utils.encodeUint8toBase64Url(body);
+    const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
     const decoded = utils.getDecodedToken(token, []);
     expect(decoded).toEqual({ mint: 'http://localhost:3338', proofs: [], unit: 'sat' });
   });
@@ -1796,7 +1805,7 @@ describe('mapShortKeysetIds full-length pass-through (non-conformant tokens)', (
         },
       ],
     };
-    return 'cashuB' + utils.encodeUint8toBase64Url(utils.encodeCBOR(template));
+    return 'cashuB' + utils.encodeUint8ToBase64Url(utils.encodeCBOR(template));
   }
 
   test('passes full-length v2 ID through unchanged with empty keyset cache', () => {

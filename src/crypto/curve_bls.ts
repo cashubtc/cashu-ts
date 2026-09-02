@@ -1,15 +1,15 @@
 import { type Fp2 } from '@noble/curves/abstract/tower.js';
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { bls12_381 } from '@noble/curves/bls12-381.js';
-import {
-  randomBytes,
-  bytesToHex,
-  bytesToNumberBE,
-  hexToBytes,
-  numberToBytesBE,
-} from '@noble/curves/utils.js';
+import { bytesToNumberBE, numberToBytesBE } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
+import {
+  bytesToHex,
+  concatBytes,
+  hexToBytes,
+  randomBytes,
+  utf8ToBytes,
+} from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
 

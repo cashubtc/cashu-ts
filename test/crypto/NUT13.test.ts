@@ -1,4 +1,4 @@
-import { bytesToHex } from '@noble/hashes/utils.js';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { HDKey } from '@scure/bip32';
 import { describe, expect, test } from 'vitest';
 
@@ -15,6 +15,7 @@ import {
   deriveQuoteLockKey,
   recoverV3LeafKeys,
 } from '../../src/crypto/NUT13';
+import { CTSError } from '../../src/model/Errors';
 import { Bytes } from '../../src/utils';
 import { nut13_v3 as nut13Vectors } from '../vectors/nutroot-v3.json';
 
@@ -181,7 +182,7 @@ describe('v2 derivation spec vectors', () => {
   // Lock-in for nuts/tests/13-tests.md "Version 2: Secret derivation". cashu-ts works in seed
   // space, so the spec's mnemonic ("half depart obvious quality work element tank gorilla view
   // sugar picture humble") is pre-derived to its BIP39 seed here.
-  const seed = Bytes.fromHex(
+  const seed = hexToBytes(
     'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25' +
       '780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
   );
@@ -241,7 +242,7 @@ describe('HMAC counter range', () => {
 
 describe('derivation kind selection', () => {
   // Known BIP-32 seed (NUT-13 spec / NUT-09 fixtures).
-  const seed = Bytes.fromHex(
+  const seed = hexToBytes(
     'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
   );
 
@@ -278,5 +279,9 @@ describe('derivation kind selection', () => {
     expect(() => deriveSecretAndBlindingFactor(seed, '03ff', 0)).toThrow(
       /^Unrecognized keyset ID version 03$/,
     );
+  });
+
+  test('rejects an odd-length known-version keyset id as a CTSError', () => {
+    expect(() => deriveSecretAndBlindingFactor(seed, '01f', 0)).toThrow(CTSError);
   });
 });

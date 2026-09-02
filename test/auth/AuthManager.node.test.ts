@@ -47,7 +47,7 @@ import type { Logger } from '../../src/logger';
 import { OutputData } from '../../src/model/OutputData';
 import type { Proof } from '../../src/model/types';
 import * as utils from '../../src/utils';
-import { encodeBase64toUint8, Bytes } from '../../src/utils';
+import { Bytes, decodeBase64UrlToUint8 } from '../../src/utils';
 import * as wallet from '../../src/wallet';
 
 const mintUrl = 'http://mint.local';
@@ -72,7 +72,7 @@ function getKeyChainMock(): Mock & {
 
 function decodeBAT(batHeader: string): { id: string; secret: string; C: string; witness?: string } {
   const base64url = batHeader.slice('authA'.length);
-  return JSON.parse(Bytes.toString(encodeBase64toUint8(base64url)));
+  return JSON.parse(new TextDecoder('utf-8').decode(decodeBase64UrlToUint8(base64url)));
 }
 
 /**

@@ -18,12 +18,13 @@ import request, { type RequestFn } from '../transport';
 import {
   joinUrls,
   verifyProofsForReceive,
-  Bytes,
-  encodeUint8toBase64UrlPadded,
+  encodeUint8ToBase64UrlPadded,
+  decodeBase64UrlToUint8,
   normalizeMintKeys,
   normalizeMintKeyset,
   normalizeSafeIntegerMetadata,
   ABSOLUTE_MAX_PER_MINT,
+  Bytes,
 } from '../utils';
 import { KeyChain, type Keyset } from '../wallet';
 
@@ -365,7 +366,7 @@ export class AuthManager implements AuthProvider {
     const parts = token.split('.');
     if (parts.length !== 3) return;
     try {
-      const jsonStr = Bytes.toString(Bytes.fromBase64(parts[1]));
+      const jsonStr = new TextDecoder('utf-8').decode(decodeBase64UrlToUint8(parts[1]));
       const obj = JSON.parse(jsonStr) as { exp?: unknown };
       const exp = typeof obj.exp === 'number' ? obj.exp : Number(obj.exp);
       if (Number.isFinite(exp) && exp > 0) return exp;
@@ -526,6 +527,6 @@ function serializeBAT(proof: Proof, witness?: string): string {
     C: proof.C,
     ...(witness !== undefined && { witness }),
   });
-  const base64url = encodeUint8toBase64UrlPadded(Bytes.fromString(tokenStr));
+  const base64url = encodeUint8ToBase64UrlPadded(utf8ToBytes(tokenStr));
   return `authA${base64url}`;
 }

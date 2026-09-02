@@ -68,3 +68,23 @@ if (found?.kind === 'token') {
   const pr = decodePaymentRequest(found.payload);
 }
 ```
+
+## `hexToBytes` and `bytesToHex`
+
+Most of the API speaks hex strings, but the crypto entry points take and return `Uint8Array`:
+`bip39seed`, the `seed` passed to `deriveKeyPair`, and the digests from `computeMessageDigest`.
+These two convert between the forms, so a seed you keep as hex in storage does not need a byte
+library of its own.
+
+Both are strict: input is not trimmed, and prefixes, whitespace, odd lengths and non-hex
+characters all throw `CTSError`. Uppercase hex is accepted and output is always lowercase.
+
+```ts
+import { hexToBytes, bytesToHex, Wallet } from '@cashu/cashu-ts';
+
+const seed = hexToBytes(storedSeedHex); // Uint8Array, ready for the Wallet
+const wallet = new Wallet(mintUrl, { bip39seed: seed });
+
+bytesToHex(seed); // back to lowercase hex for storage
+hexToBytes('0x00'); // throws CTSError: prefixes are not stripped
+```

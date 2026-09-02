@@ -1,3 +1,4 @@
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { test, describe, expect } from 'vitest';
 
 import {
@@ -16,7 +17,6 @@ import {
   type MeltPreview,
   type SwapPreview,
 } from '../../src';
-import { Bytes } from '../../src/utils';
 
 const dummyProof: Proof = {
   id: 'testid',
@@ -666,7 +666,7 @@ describe('SigAll — mergeSignatures edge cases', () => {
 });
 
 describe('SigAll — signing binds to package contents', () => {
-  const signerPubkey = () => Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(dummyPrivkey)));
+  const signerPubkey = () => bytesToHex(getPubKeyFromPrivKey(hexToBytes(dummyPrivkey)));
 
   test('signPackage emits one signature, verifiable over the recomputed v0 digest', () => {
     const pkg = SigAll.extractSwapPackage(makeSwapPreview());

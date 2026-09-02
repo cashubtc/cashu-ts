@@ -7,7 +7,6 @@ import {
   RateLimitError,
 } from '../model/Errors';
 import { type Nut19Policy } from '../model/types';
-import { Bytes } from '../utils/Bytes';
 import { JSONInt } from '../utils/JSONInt';
 
 /**
@@ -163,7 +162,7 @@ export async function readBodyText(
       bytes.set(chunk, offset);
       offset += chunk.byteLength;
     }
-    return Bytes.toString(bytes);
+    return new TextDecoder('utf-8').decode(bytes);
   } finally {
     if (onAbort) signal?.removeEventListener('abort', onAbort);
     reader.cancel().catch(() => undefined); // release the connection; no-op if already closed

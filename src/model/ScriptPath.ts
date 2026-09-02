@@ -13,7 +13,7 @@ import {
   verifyNutrootCommitment,
 } from '../crypto/nutroot';
 import { digestForPayload, inputsForPayload, proofInputContextKey } from '../crypto/transcript';
-import { Bytes, JSONInt, encodeUint8toBase64Url } from '../utils';
+import { Bytes, JSONInt, encodeUint8ToBase64Url } from '../utils';
 import { orderOutputsForPayload } from '../wallet/_internal';
 import type { MeltPreview, ScriptPathPlan, SwapPreview } from '../wallet/types';
 
@@ -211,7 +211,7 @@ function extractMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' |
 
 function serializePackage(pkg: ScriptPathSigningPackage): string {
   const json = JSONInt.stringify(pkg) ?? '{}';
-  return `${SCRIPT_PATH_PREFIX}${encodeUint8toBase64Url(Bytes.fromString(json))}`;
+  return `${SCRIPT_PATH_PREFIX}${encodeUint8ToBase64Url(Bytes.fromString(json))}`;
 }
 
 function deserializePackage(input: string): ScriptPathSigningPackage {

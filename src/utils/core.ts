@@ -1,5 +1,5 @@
-import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import {
   type DLEQ,
@@ -32,7 +32,12 @@ import type {
   HasKeysetKeys,
 } from '../model/types';
 
-import { encodeBase64ToJson, encodeBase64toUint8, encodeUint8toBase64Url } from './base64';
+import {
+  decodeBase64UrlToJson,
+  decodeBase64UrlToUint8,
+  encodeUint8ToBase64,
+  encodeUint8ToBase64Url,
+} from './base64';
 import { Bytes } from './Bytes';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { JSONInt } from './JSONInt';
@@ -267,7 +272,7 @@ function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
   const encodedData = encodeCBOR(tokenTemplate);
   const prefix = 'cashu';
   const version = 'B';
-  const base64Data = encodeUint8toBase64Url(encodedData);
+  const base64Data = encodeUint8ToBase64Url(encodedData);
   return prefix + version + base64Data;
 }
 
@@ -289,7 +294,8 @@ function isV3TransactionWitness(keysetId: string, secret: string): boolean {
 }
 
 function templateFromToken(token: Token): TokenV4Template {
-  const idMap: { [id: string]: Proof[] } = {};
+  // Keyed by token-supplied IDs, so a plain object would resolve `__proto__` etc. to inherited members.
+  const idMap = Object.create(null) as { [id: string]: Proof[] };
   const mint = token.mint;
   for (let i = 0; i < token.proofs.length; i++) {
     const proof = token.proofs[i];
@@ -514,7 +520,7 @@ function handleTokens(token: string): Token {
   const version = token.slice(0, 1);
   const encodedToken = token.slice(1);
   if (version === 'A') {
-    const parsedV3Token = encodeBase64ToJson<DeprecatedToken>(encodedToken);
+    const parsedV3Token = decodeBase64UrlToJson<DeprecatedToken>(encodedToken);
     if (parsedV3Token.token.length > 1) {
       throw new CTSError('Multi entry token are not supported');
     }
@@ -533,7 +539,7 @@ function handleTokens(token: string): Token {
     }
     return tokenObj;
   } else if (version === 'B') {
-    const uInt8Token = encodeBase64toUint8(encodedToken);
+    const uInt8Token = decodeBase64UrlToUint8(encodedToken);
     const tokenData = decodeCBOR(uInt8Token) as TokenV4Template;
     return tokenFromTemplate(tokenData);
   }
@@ -573,8 +579,8 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
       .sort(([amountA], [amountB]) => Amount.from(amountA).compareTo(amountB))
       .map(([, pubKey]) => pubKey)
       .reduce((prev: string, curr: string) => prev + curr, '');
-    const hash = sha256(Bytes.fromString(pubkeysConcat));
-    const b64 = Bytes.toBase64(hash);
+    const hash = sha256(utf8ToBytes(pubkeysConcat));
+    const b64 = encodeUint8ToBase64(hash);
     return b64.slice(0, 12);
   }
 
@@ -586,7 +592,7 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
           .map(([, pubKey]) => hexToBytes(pubKey)),
       );
       const hash = sha256(pubkeysConcat);
-      const hashHex = Bytes.toHex(hash).slice(0, 14);
+      const hashHex = bytesToHex(hash).slice(0, 14);
       return '00' + hashHex;
     }
     case 1: {
@@ -1111,6 +1117,11 @@ export function getEncodedTokenBinary(token: Token): Uint8Array {
   const utf8Encoder = new TextEncoder();
   // Normalize amounts for untyped (JS) callers who may pass JSON.parse'd tokens directly.
   const proofs = normalizeProofAmounts(token.proofs);
+  if (hasNonHexId(proofs)) {
+    throw new CTSError(
+      'Proofs contain a legacy keyset ID and cannot be encoded. Swap them at the mint first.',
+    );
+  }
   const template = templateFromToken({ ...token, proofs });
   const binaryTemplate = encodeCBOR(template);
   const prefix = utf8Encoder.encode('craw');

@@ -10,7 +10,15 @@ import {
   NUTROOT_NUMS_KEY,
   type ParsedNutrootOption,
 } from '../crypto/nutroot';
-import { encodeBase64toUint8, decodeCBOR, encodeCBOR, Bytes, normalizeMintUrl } from '../utils';
+import {
+  Bytes,
+  decodeBase64ToUint8Legacy,
+  decodeBase64UrlToUint8,
+  decodeCBOR,
+  encodeCBOR,
+  encodeUint8ToBase64UrlPadded,
+  normalizeMintUrl,
+} from '../utils';
 import { decodeBech32m, encodeBech32m } from '../utils/bech32m';
 import { JSONInt } from '../utils/JSONInt';
 import { decodeTLV, encodeTLV } from '../utils/tlv';
@@ -333,7 +341,7 @@ export class PaymentRequest {
   toEncodedRequest(): string {
     const rawRequest: RawPaymentRequest = this.toRawRequest();
     const data = encodeCBOR(rawRequest);
-    const encodedData = Bytes.toBase64(data);
+    const encodedData = encodeUint8ToBase64UrlPadded(data);
     return 'creq' + 'A' + encodedData;
   }
 
@@ -545,7 +553,18 @@ export class PaymentRequest {
       throw new CTSError('unsupported pr version');
     }
     const encodedData = encodedRequest.slice(5);
-    const data = encodeBase64toUint8(encodedData);
+    // NUT-18 mandates base64url, but requests this library emitted before it encoded that way
+    // are standard base64 and still in circulation. CDK falls back the same way, and only here.
+    let data: Uint8Array;
+    try {
+      data = decodeBase64UrlToUint8(encodedData);
+    } catch (urlSafeError) {
+      try {
+        data = decodeBase64ToUint8Legacy(encodedData);
+      } catch {
+        throw urlSafeError;
+      }
+    }
     const decoded = decodeCBOR(data) as RawPaymentRequest;
     return this.fromRawRequest(decoded);
   }

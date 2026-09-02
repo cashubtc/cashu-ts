@@ -977,3 +977,27 @@ describe('nutroot (v3) request marking', () => {
     expect(decodePaymentRequest(bare.toEncodedCreqB()).nutroot).toEqual({ receiverKey: carolPub });
   });
 });
+
+describe('creqA alphabet compatibility', () => {
+  // 65535 is what pushes the CBOR into the sextets where the two alphabets differ. The second
+  // form is what this library emitted before it encoded url-safe.
+  const urlSafe = 'creqAomFhGf__YXVjc2F0';
+  const standard = 'creqAomFhGf//YXVjc2F0';
+
+  test('emits url-safe, as NUT-18 requires', () => {
+    expect(new PaymentRequest({ amount: 65535, unit: 'sat' }).toEncodedRequest()).toBe(urlSafe);
+  });
+
+  test.each([
+    ['url-safe', urlSafe],
+    ['standard base64 from older versions', standard],
+  ])('decodes %s', (_label, encoded) => {
+    const pr = PaymentRequest.fromEncodedRequest(encoded);
+    expect(pr.amount?.toNumber()).toBe(65535);
+    expect(pr.unit).toBe('sat');
+  });
+
+  test('still rejects input that is neither', () => {
+    expect(() => PaymentRequest.fromEncodedRequest('creqAnot!valid')).toThrow(/Invalid base64url/);
+  });
+});

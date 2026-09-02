@@ -13,7 +13,7 @@ RATE_LIMIT_PM ?= 200
 # ------------------------
 # Pin versions
 # ------------------------
-CDK_IMAGE_RC ?= cashubtc/mintd:0.18.0-rc.2
+CDK_IMAGE_RC ?= cashubtc/mintd:0.18.0-rc.3
 CDK_IMAGE ?= cashubtc/mintd:0.17.6
 CDK_NAME ?= cashu-dev-cdk
 
@@ -52,7 +52,8 @@ CDK_ENVS = \
 # CDK_MINTD_* env vars no longer configure startup (only `env:` secret refs
 # are read). This document mirrors CDK_ENVS. Exported so the container can
 # write it to disk; older images lack the `config` subcommand and keep using
-# the env vars.
+# the env vars. From 0.18.0-rc.3 `config init` also demands --new-mint (the
+# containers always start on an empty database), hence the un-flagged retry.
 define CDK_CONFIG_TOML
 [info]
 listen_host = "0.0.0.0"
@@ -106,7 +107,7 @@ cdk-up:
 		$(CDK_ENVS) \
 		-e CDK_CONFIG_TOML \
 		$(CDK_IMAGE) \
-		sh -c 'printf "%s\n" "$$CDK_CONFIG_TOML" > /tmp/mintd.toml; cdk-mintd config init --file /tmp/mintd.toml || true; exec cdk-mintd'
+		sh -c 'printf "%s\n" "$$CDK_CONFIG_TOML" > /tmp/mintd.toml; cdk-mintd config init --file /tmp/mintd.toml --new-mint || cdk-mintd config init --file /tmp/mintd.toml || true; exec cdk-mintd'
 
 cdk-down:
 	-$(DOCKER) rm -f -v $(CDK_NAME)

@@ -9,9 +9,9 @@ import { BLS_FR_ORDER, blindMessageBls } from '../../src/crypto';
 // which biases scalars small; this guards against a regression back to that.
 const { randomBytesMock } = vi.hoisted(() => ({ randomBytesMock: vi.fn() }));
 
-vi.mock('@noble/curves/utils.js', async (importActual) => {
+vi.mock('@noble/hashes/utils.js', async (importActual) => {
   // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- vitest importActual generic
-  const actual = await importActual<typeof import('@noble/curves/utils.js')>();
+  const actual = await importActual<typeof import('@noble/hashes/utils.js')>();
   return { ...actual, randomBytes: randomBytesMock };
 });
 

@@ -1,6 +1,8 @@
+import { utf8ToBytes } from '@noble/hashes/utils.js';
+
 import { computeMessageDigest, buildP2PKSigAllMessageV0, schnorrSignDigest } from '../crypto';
 import { parseWitnessData } from '../crypto/NUT11';
-import { Bytes, JSONInt, encodeUint8toBase64Url } from '../utils';
+import { JSONInt, decodeBase64UrlToUint8, encodeUint8ToBase64Url } from '../utils';
 import { orderOutputsForPayload } from '../wallet/_internal';
 import type { MeltPreview, SwapPreview } from '../wallet/types';
 
@@ -85,7 +87,7 @@ function serializePackage(pkg: SigAllSigningPackage): string {
   if (pkg.witness) ordered.witness = pkg.witness;
 
   const json = JSONInt.stringify(ordered) ?? '{}';
-  const base64url = encodeUint8toBase64Url(Bytes.fromString(json));
+  const base64url = encodeUint8ToBase64Url(utf8ToBytes(json));
 
   return `${SIGALL_PREFIX}${base64url}`;
 }
@@ -99,7 +101,7 @@ function deserializePackage(input: string): SigAllSigningPackage {
   let json: string;
 
   try {
-    json = Bytes.toString(Bytes.fromBase64(base64url));
+    json = new TextDecoder('utf-8').decode(decodeBase64UrlToUint8(base64url));
   } catch (e) {
     throw new CTSError(
       `Failed to parse signing package: ${e instanceof Error ? e.message : String(e)}`,

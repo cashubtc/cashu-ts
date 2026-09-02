@@ -1,6 +1,7 @@
-import { bytesToHex, numberToBytesBE } from '@noble/curves/utils.js';
+import { bytesToNumberBE, numberToBytesBE } from '@noble/curves/utils.js';
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, concatBytes, hexToBytes } from '@noble/hashes/utils.js';
 import { HDKey, HARDENED_OFFSET } from '@scure/bip32';
 
 import { CTSError } from '../model/Errors';
@@ -170,6 +171,10 @@ export function createSecretAndBlindingFactorDeriver(
 
 function getDerivationKind(keysetId: string): DerivationKind {
   const isValidHex = /^[a-fA-F0-9]+$/.test(keysetId);
+  const isHmacHexVersion = keysetId.startsWith('01') || keysetId.startsWith('02');
+  if (isValidHex && isHmacHexVersion && keysetId.length % 2 !== 0) {
+    throw new CTSError('Invalid hex string: odd length.');
+  }
   if (!isValidHex && isBase64String(keysetId)) {
     return DerivationKind.DEPRECATED_BIP32;
   }
@@ -177,7 +182,7 @@ function getDerivationKind(keysetId: string): DerivationKind {
     return DerivationKind.DEPRECATED_BIP32;
   }
   // Strict version gate: does not assume future keyset versions are BLS.
-  if (isValidHex && (keysetId.startsWith('01') || keysetId.startsWith('02'))) {
+  if (isValidHex && isHmacHexVersion) {
     return DerivationKind.HMAC_SHA256;
   }
   throw new CTSError(`Unrecognized keyset ID version ${keysetId.slice(0, 2)}`);
@@ -322,8 +327,8 @@ function deriveV3Scalar(
 function computeV2BlindingFactor(seed: Uint8Array, base: Uint8Array): Uint8Array {
   // V2 (secp256k1): single HMAC, single-subtraction modular reduction. SECP256K1_N is ~2^256 so
   // at most one subtraction is needed; bias is ~2^-128 (negligible).
-  const digest = hmac(sha256, seed, Bytes.concat(base, Bytes.fromHex('01')));
-  const x = Bytes.toBigInt(digest);
+  const digest = hmac(sha256, seed, concatBytes(base, hexToBytes('01')));
+  const x = bytesToNumberBE(digest);
   const reduced = x >= SECP256K1_N ? x - SECP256K1_N : x;
   /* c8 ignore next */
   if (reduced === 0n) {
