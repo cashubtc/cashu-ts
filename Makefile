@@ -13,7 +13,7 @@ RATE_LIMIT_PM ?= 200
 # ------------------------
 # Pin versions
 # ------------------------
-CDK_IMAGE_RC ?= cashubtc/mintd:0.18.0-rc.2
+CDK_IMAGE_RC ?= cashubtc/mintd:0.18.0-rc.3
 CDK_IMAGE ?= cashubtc/mintd:0.17.6
 CDK_NAME ?= cashu-dev-cdk
 
