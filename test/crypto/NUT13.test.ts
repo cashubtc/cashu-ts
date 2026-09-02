@@ -1,10 +1,10 @@
+import { bytesToNumberBE } from '@noble/curves/utils.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { HDKey } from '@scure/bip32';
 import { describe, expect, test } from 'vitest';
 
 import { BLS_FR_ORDER, deriveSecretAndBlindingFactor, getKeysetIdInt } from '../../src/crypto';
 import { CTSError } from '../../src/model/Errors';
-import { Bytes } from '../../src/utils';
 
 // The standalone deriveBlindingFactor() helper was removed in v5; derive it locally for these tests.
 const deriveBlindingFactor = (seed: Uint8Array, keysetId: string, counter: number): Uint8Array =>
@@ -31,7 +31,7 @@ describe('v3 (BLS) derivation', () => {
       const { blindingFactor, secret } = deriveSecretAndBlindingFactor(seed, v3KeysetId, counter);
       expect(blindingFactor).toHaveLength(32);
       expect(secret).toHaveLength(32);
-      const r = Bytes.toBigInt(blindingFactor);
+      const r = bytesToNumberBE(blindingFactor);
       expect(r).toBeGreaterThan(0n);
       expect(r).toBeLessThan(BLS_FR_ORDER);
     }

@@ -1,4 +1,4 @@
-import { hexToBytes } from '@noble/curves/utils.js';
+import { bytesToNumberBE, hexToBytes } from '@noble/curves/utils.js';
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect } from 'vitest';
 
@@ -16,7 +16,6 @@ import {
   type ProofLike,
   type OutputConfig,
 } from '../../src';
-import { Bytes } from '../../src/utils';
 
 import { useTestServer, mint, mintUrl, unit, logger, mintInfoResp } from './_setup';
 
@@ -1379,7 +1378,7 @@ describe('deterministic', () => {
       const hexSeed =
         'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8';
 
-      const numberR = Bytes.toBigInt(hexToBytes(r));
+      const numberR = bytesToNumberBE(hexToBytes(r));
       const decoder = new TextDecoder();
 
       const data = OutputData.createSingleDeterministicData(
@@ -1415,7 +1414,7 @@ describe('deterministic', () => {
       const hexSeed =
         'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8';
 
-      const numberR = Bytes.toBigInt(hexToBytes(r));
+      const numberR = bytesToNumberBE(hexToBytes(r));
       const decoder = new TextDecoder();
 
       const data = OutputData.createSingleDeterministicData(

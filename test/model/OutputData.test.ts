@@ -1,6 +1,7 @@
 import { secp256k1 } from '@noble/curves/secp256k1.js';
-import { bytesToHex } from '@noble/curves/utils.js';
+import { bytesToHex, bytesToNumberBE } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
+import { concatBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 
 import {
@@ -17,7 +18,7 @@ import { Amount } from '../../src/model/Amount';
 import { CTSError } from '../../src/model/Errors';
 import { MAX_SECRET_LENGTH, OutputData } from '../../src/model/OutputData';
 import type { HasKeysetKeys, SerializedBlindedSignature } from '../../src/model/types';
-import { Bytes, deriveKeysetId, numberToHexPadded64 } from '../../src/utils';
+import { deriveKeysetId, numberToHexPadded64 } from '../../src/utils';
 
 // secp256k1 (v0/v1) round-trip through OutputData -> simulated mint sign+DLEQ -> toProof.
 // The mint side is simulated with createBlindSignature/createDLEQProof: the curve math matches a
@@ -269,7 +270,7 @@ describe('OutputData.createSingleP2PKData tag construction', () => {
     // Independent receiver-side NUT-28 math: r1 = sha256(DST || Zx || 0x01), P' = P + r1·G
     const p = secp256k1.Point.Fn.fromBytes(lockPriv);
     const Zx = secp256k1.Point.fromHex(out.ephemeralE!).multiply(p).toBytes(true).slice(1);
-    const r1 = Bytes.toBigInt(sha256(Bytes.concat(P2BK_DST, Zx, Uint8Array.of(1))));
+    const r1 = bytesToNumberBE(sha256(concatBytes(P2BK_DST, Zx, Uint8Array.of(1))));
     const expected = pointFromHex(lock1).add(secp256k1.Point.BASE.multiply(r1)).toHex(true);
     expect(blinded).toBe(expected);
   });

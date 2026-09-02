@@ -1,11 +1,11 @@
-import { numberToBytesBE } from '@noble/curves/utils.js';
+import { bytesToNumberBE, numberToBytesBE } from '@noble/curves/utils.js';
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { HDKey, HARDENED_OFFSET } from '@scure/bip32';
 
 import { CTSError } from '../model/Errors';
-import { Bytes, isBase64String } from '../utils';
+import { isBase64String } from '../utils';
 
 import { BLS_FR_ORDER } from './curve_bls';
 import { getPubKeyFromPrivKey } from './curve_secp';
@@ -209,15 +209,15 @@ function deriveHmacSecretAndBlindingFactor(
   if (!Number.isSafeInteger(counter) || counter < 0) {
     throw new CTSError('Counter must be an integer in the range 0 <= counter <= 2^53 - 1');
   }
-  const base = Bytes.concat(
-    Bytes.fromString('Cashu_KDF_HMAC_SHA256'),
+  const base = concatBytes(
+    utf8ToBytes('Cashu_KDF_HMAC_SHA256'),
     hexToBytes(keysetId),
     // numberToBytesBE throws rather than wrapping, so an out-of-range counter can never
     // be silently encoded as a different one even if the guard above is ever moved.
     numberToBytesBE(counter, 8),
   );
   return {
-    secret: hmac(sha256, seed, Bytes.concat(base, hexToBytes('00'))),
+    secret: hmac(sha256, seed, concatBytes(base, hexToBytes('00'))),
     blindingFactor: computeBlindingFactor(seed, base, keysetId),
   };
 }
@@ -229,9 +229,9 @@ function computeBlindingFactor(seed: Uint8Array, base: Uint8Array, keysetId: str
     // BLS_FR_ORDER ~ 0.45·2^256; rejection sampling yields a uniform sample over Fr*. Match the
     // NUT-00 batch-weight pattern. Loop cap is defensive; expected attempts ≈ 2.2.
     for (let attempt = 0; attempt < 1 << 16; attempt++) {
-      const msg = Bytes.concat(base, hexToBytes('01'), numberToBytesBE(attempt, 4));
+      const msg = concatBytes(base, hexToBytes('01'), numberToBytesBE(attempt, 4));
       const digest = hmac(sha256, seed, msg);
-      const x = Bytes.toBigInt(digest);
+      const x = bytesToNumberBE(digest);
       if (x === 0n || x >= BLS_FR_ORDER) continue;
       return digest; // raw 32 bytes; x < 2^256 so the BE encoding matches the digest
     }
@@ -240,8 +240,8 @@ function computeBlindingFactor(seed: Uint8Array, base: Uint8Array, keysetId: str
   }
   // V2 (secp256k1): single HMAC, single-subtraction modular reduction. SECP256K1_N is ~2^256 so
   // at most one subtraction is needed; bias is ~2^-128 (negligible).
-  const digest = hmac(sha256, seed, Bytes.concat(base, hexToBytes('01')));
-  const x = Bytes.toBigInt(digest);
+  const digest = hmac(sha256, seed, concatBytes(base, hexToBytes('01')));
+  const x = bytesToNumberBE(digest);
   const reduced = x >= SECP256K1_N ? x - SECP256K1_N : x;
   /* c8 ignore next */
   if (reduced === 0n) {
