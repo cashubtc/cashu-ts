@@ -21,9 +21,16 @@ import {
   isV3PointSecret,
 } from '../crypto';
 // Internal transitional fallback — not part of crypto/index.ts
-import { normalizeSecpPubkey } from '../crypto/curve_secp';
+import { getPubKeyFromPrivKey, normalizeSecpPubkey } from '../crypto/curve_secp';
+import { p2pkOptionsToPRNut10, type P2PKOptions } from '../crypto/NUT11';
 import { signMintQuoteLegacy } from '../crypto/NUT20';
-import { verifyNutrootRequestTree } from '../crypto/nutroot';
+import {
+  NUTROOT_NUMS_KEY,
+  recoverLeafKeySecretKeys,
+  recoverReceiverKeyedSecretKey,
+  verifyNutrootRequestTree,
+  type ParsedNutrootOption,
+} from '../crypto/nutroot';
 import { inputsForPayload } from '../crypto/transcript';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
@@ -38,7 +45,7 @@ import {
 import { MintInfo } from '../model/MintInfo';
 import { OutputData, type OutputDataLike } from '../model/OutputData';
 import { DefaultOutputDataCreator, type OutputDataCreator } from '../model/OutputDataCreator';
-import type { PaymentRequest } from '../model/PaymentRequest';
+import { nut10ToP2PKOptions, type PaymentRequest } from '../model/PaymentRequest';
 import type {
   GetInfoResponse,
   MeltRequest,
@@ -1870,21 +1877,28 @@ class Wallet {
    *
    * @remarks
    * Verifies `sum(proofs) - inputFees >= amount + mf`, with input fees from this wallet's keysets
-   * and `mf` priced from this mint's NUT-05 melt methods for the wallet unit. For a nutroot
-   * request, each proof's spend info must also be exactly the requested tree. Proof integrity
-   * (pairing/DLEQ) and nut10 locks remain separate checks.
+   * and `mf` priced from this mint's NUT-05 melt methods for the wallet unit. A locked request also
+   * checks that each proof carries the lock that was asked for: exactly the requested tree for a
+   * nutroot request, and exactly the requested condition for a nut10 one. A receiver-keyed nutroot
+   * request needs `opts.privkeys`, because binding a proof to the receiver key is an ECDH
+   * trial-match only that key can do (NUT-28); without it there is nothing to check and the call
+   * throws rather than passing a payment the payee cannot spend. Proof integrity (pairing/DLEQ)
+   * remains a separate check.
    * @param pr - The payment request being settled.
    * @param proofs - The received proofs (from this wallet's mint), with spend info when present.
    * @param expectedAmount - Expected amount for amountless requests; ignored when the request sets
    *   `a`.
+   * @param opts.privkeys - The receiver key(s) the request locks to. Required for a receiver-keyed
+   *   nutroot request, unused otherwise.
    * @throws If no amount is available to check against, the request unit does not match this
-   *   wallet, a proof keyset is unknown, the request is invalid per NUT-18, or a nutroot request's
-   *   proof does not disclose exactly the requested tree.
+   *   wallet, a proof keyset is unknown, the request is invalid per NUT-18, a receiver-keyed
+   *   nutroot request is checked without its key, or a proof does not carry the requested lock.
    */
   isPaymentRequestSatisfied(
     pr: PaymentRequest,
     proofs: Array<Pick<Proof, 'id' | 'amount' | 'secret' | 'spend_info'>>,
     expectedAmount?: AmountLike,
+    opts?: { privkeys?: string | string[] },
   ): boolean {
     const expected =
       pr.amount ?? (expectedAmount !== undefined ? Amount.from(expectedAmount) : undefined);
@@ -1896,14 +1910,28 @@ class Wallet {
     }
     this.assertProofsInWalletUnit(proofs);
     this.assertNoDuplicateProofs(proofs);
-    // A nutroot request is satisfied only by proofs disclosing exactly the requested tree: an
-    // extra leaf is spend power the payee never asked for, eg a payer clawback (NUT-18). When the
-    // request also publishes nut10, a pre-v3 proof settles under that option instead.
+    // A locked request is satisfied only by proofs carrying the lock that was asked for. Spend
+    // power the payee never requested is a payer clawback (NUT-18): an extra nutroot leaf, or the
+    // legacy twin, a `refund`/`locktime` tag. A both-encoded request accepts either family, each
+    // checked against its own option.
     const nutrootOption = pr.toNutrootOptions();
-    if (nutrootOption) {
+    if (nutrootOption || pr.nut10) {
+      const statics = this.receiverKeysFor(nutrootOption, opts?.privkeys);
+      const nut10Lock = pr.nut10 ? pr.toP2PKOptions() : undefined;
+      this.failIf(
+        !!pr.nut10 && !nut10Lock,
+        `cannot check the request's nut10 lock kind '${pr.nut10?.kind}'`,
+      );
       for (const p of proofs) {
-        if (pr.nut10 && !(isBlsKeyset(p.id) && isV3PointSecret(p.secret))) continue;
-        verifyNutrootRequestTree(nutrootOption, p.spend_info);
+        if (isBlsKeyset(p.id) && isV3PointSecret(p.secret)) {
+          this.failIfNullish(nutrootOption, 'v3 proof: the request carries no nutroot option');
+          verifyNutrootRequestTree(nutrootOption, p.spend_info);
+          this.assertKeyedToReceiver(nutrootOption, p, statics);
+          this.assertBlindKeysHonoured(nutrootOption, p, statics);
+          continue;
+        }
+        this.failIfNullish(nut10Lock, 'legacy proof: the request is for v3 proofs only');
+        this.assertNut10Lock(nut10Lock, p.secret);
       }
     }
     // mf applies only when this mint is outside the request's mint list (NUT-18).
@@ -1917,6 +1945,127 @@ class Wallet {
     }
     const needed = expected.add(mf).add(this.getFeesForProofs(proofs));
     return sumProofs(proofs).compareTo(needed) >= 0;
+  }
+
+  /**
+   * The static keys a locked request must be checked against, validated.
+   *
+   * @remarks
+   * Only a receiver-keyed nutroot request needs one: `K = P_receiver + r0*G` is an ECDH trial-match
+   * no observer can do (NUT-28), so without the key there is nothing to check. A NUMS request needs
+   * none, its internal key is pinned by the disclosed offset instead.
+   * @throws If a receiver-keyed request is checked with no key, or a key is not a 32-byte scalar.
+   */
+  private receiverKeysFor(
+    option: ParsedNutrootOption | undefined,
+    privkeys: string | string[] | undefined,
+  ): string[] {
+    if (!option) return [];
+    const keyed = option.receiverKey.toLowerCase() !== NUTROOT_NUMS_KEY;
+    if (!keyed && !option.blindKeys?.length) return [];
+    const statics = privkeys === undefined ? [] : [privkeys].flat();
+    this.failIf(
+      statics.length === 0,
+      `${keyed ? 'receiver-keyed' : 'blind-me'} nutroot request: pass the requested key(s) as opts.privkeys, the proofs cannot be checked without them`,
+    );
+    const bad = statics.find((k) => !/^[0-9a-f]{64}$/i.test(k));
+    this.failIf(bad !== undefined, 'opts.privkeys must be 32-byte hex private keys');
+    return statics;
+  }
+
+  /**
+   * Asserts a v3 proof is receiver-keyed to one of the payee's static keys (NUT-28).
+   *
+   * @remarks
+   * No-op for a NUMS request, which has no receiver key to bind to. Otherwise the proof carries a
+   * key path only the holder of the matching static key can walk; a proof keyed to anyone else, the
+   * payer included, is not a payment the payee can spend.
+   * @throws If no held key reproduces the proof's secret.
+   */
+  private assertKeyedToReceiver(
+    option: ParsedNutrootOption,
+    proof: Pick<Proof, 'secret' | 'spend_info'>,
+    statics: string[],
+  ): void {
+    if (statics.length === 0 || option.receiverKey.toLowerCase() === NUTROOT_NUMS_KEY) return;
+    // `E` is present: verifyNutrootRequestTree rejects a receiver-keyed proof without one.
+    const E = proof.spend_info?.E as string;
+    const tree = proof.spend_info?.tree;
+    this.failIf(
+      !statics.some((priv) => recoverReceiverKeyedSecretKey(proof.secret, E, priv, tree)),
+      'Nutroot request: proof is not keyed to the requested receiver key',
+    );
+  }
+
+  /**
+   * Asserts each blind-me key this wallet owns really was substituted with its own blinding.
+   *
+   * @remarks
+   * `verifyNutrootRequestTree` treats a blind-me position as a wildcard: only the key's owner can
+   * tell its blinding from a stranger's key, and a substituted stranger's key is a leaf the payer
+   * can spend. Counting by value, not position, is the frame the slot map is built in (NUT-28): the
+   * root commits the leaf set, not the transmitted order. A tagged key this wallet does not hold is
+   * its own owner's check, not one that can be made here.
+   * @throws If the disclosed tree does not carry this wallet's blinding at every tagged occurrence.
+   */
+  private assertBlindKeysHonoured(
+    option: ParsedNutrootOption,
+    proof: Pick<Proof, 'spend_info'>,
+    statics: string[],
+  ): void {
+    const tagged = (option.blindKeys ?? []).map((key) => key.toLowerCase());
+    if (tagged.length === 0 || statics.length === 0) return;
+    const owned = new Set<string>();
+    for (const priv of statics) {
+      const pub = Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(priv)));
+      // An x-only import holds n - p, whose point is the same hex under the other parity byte.
+      const flipped = (pub.startsWith('02') ? '03' : '02') + pub.slice(2);
+      for (const key of tagged) {
+        if (key === pub || key === flipped) owned.add(key);
+      }
+    }
+    if (owned.size === 0) return;
+    const wanted = (option.leaves ?? []).reduce(
+      (n, leaf) => n + leaf.keys.filter((key) => owned.has(key.toLowerCase())).length,
+      0,
+    );
+    const disclosed = recoverLeafKeySecretKeys(
+      proof.spend_info?.tree ?? [],
+      proof.spend_info?.E,
+      statics,
+    ).filter((hit) => hit.blinded).length;
+    this.failIf(
+      disclosed !== wanted,
+      `Nutroot request: expected ${wanted} blind-me leaf key(s) of this wallet in the disclosed tree, found ${disclosed}`,
+    );
+  }
+
+  /**
+   * Asserts a legacy proof's secret is exactly the lock the request asked for.
+   *
+   * @remarks
+   * Both sides canonicalise through the same NUT-11 builder, so tag order and pubkey form do not
+   * matter but content does: an unrequested `refund`/`locktime` pair is a payer clawback, and an
+   * unlocked bearer secret is no lock at all.
+   * @throws If the proof is unlocked, or carries a condition other than the requested one.
+   */
+  private assertNut10Lock(requested: P2PKOptions, secret: string): void {
+    let held: P2PKOptions | undefined;
+    try {
+      const [kind, data] = parseSecret(secret);
+      held = nut10ToP2PKOptions({ kind, data: data.data, tags: data.tags });
+    } catch {
+      held = undefined;
+    }
+    this.failIfNullish(
+      held,
+      'nut10 request: proof does not carry a NUT-10 lock of the requested kind',
+    );
+    this.failIf(
+      JSON.stringify(p2pkOptionsToPRNut10(held)) !==
+        JSON.stringify(p2pkOptionsToPRNut10(requested)),
+      'nut10 request: proof lock is not the requested spending condition',
+    );
   }
 
   /**

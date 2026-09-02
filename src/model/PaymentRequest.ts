@@ -405,50 +405,7 @@ export class PaymentRequest {
    *   lock, so invalid lock semantics must not be silently dropped or repaired.
    */
   toP2PKOptions(): P2PKOptions | undefined {
-    const nut10 = this.nut10;
-    const isHTLC = nut10?.kind === 'HTLC';
-    if (!nut10 || (nut10.kind !== 'P2PK' && !isHTLC)) {
-      return undefined;
-    }
-    if (!nut10.data) {
-      throw new CTSError(`NUT-10 ${nut10.kind} option is missing its data field`);
-    }
-
-    // Use parseP2PKSecret (the parser the verifier uses): it rejects malformed
-    // tags, duplicate tag keys and bad sigflags — all of which NUT-11 says make a
-    // proof unspendable — so a bad lock fails loudly instead of silently first-winning.
-    const secret = parseP2PKSecret([
-      nut10.kind,
-      { nonce: '', data: nut10.data, tags: nut10.tags ?? [] },
-    ]);
-    // `data` is the NUT-10 data slot (hashlock for HTLC, primary pubkey for P2PK);
-    // the `pubkeys` tag carries the optional additional / receiver keys for either kind.
-    const taggedPubkeys = (getTag(secret, 'pubkeys') ?? []).map(normalizeSecpPubkey);
-    const options: P2PKOptions = {
-      kind: isHTLC ? 'HTLC' : 'P2PK',
-      data: isHTLC ? nut10.data : normalizeSecpPubkey(nut10.data),
-      ...(taggedPubkeys.length ? { pubkeys: taggedPubkeys } : {}),
-    };
-
-    // Optional fields pass straight through: the accessors return undefined when
-    // absent, and the builder ignores undefined options. getTag never yields [].
-    options.locktime = getTagInt(secret, 'locktime');
-    options.refundKeys = getTag(secret, 'refund')?.map(normalizeSecpPubkey);
-    options.requiredSignatures = getTagInt(secret, 'n_sigs');
-    options.requiredRefundSignatures = getTagInt(secret, 'n_sigs_refund');
-    if (getTagScalar(secret, 'sigflag') === 'SIG_ALL') {
-      options.sigFlag = 'SIG_ALL';
-    }
-
-    // Forward any non-standard tags verbatim.
-    const additionalTags = (nut10.tags ?? []).filter(
-      (t) => t.length > 0 && !P2PK_KNOWN_TAG_KEYS.has(t[0]),
-    ) as P2PKTag[];
-    if (additionalTags.length > 0) {
-      options.additionalTags = additionalTags;
-    }
-
-    return options;
+    return nut10ToP2PKOptions(this.nut10);
   }
 
   /**
@@ -888,4 +845,58 @@ function encodeNutrootRequest(lock: LockOptions): NutrootOption {
     ...(leaves?.length && { leaves: leaves.map((leaf) => serializeNutrootLeafHex(leaf)) }),
     ...(blindKeys?.length && { blindKeys }),
   };
+}
+
+/**
+ * A NUT-10 locking option as wire {@link P2PKOptions}, canonicalising kind, data and tags.
+ *
+ * @remarks
+ * Shared by the payer (build the lock) and the payee (check a proof carries it). Supports `P2PK`
+ * (NUT-11) and `HTLC` (NUT-14) only; returns `undefined` for no option or an unbuildable kind.
+ * @throws If the option is missing `data`, carries malformed tags, or holds a non-compliant pubkey.
+ */
+export function nut10ToP2PKOptions(nut10: NUT10Option | undefined): P2PKOptions | undefined {
+  const isHTLC = nut10?.kind === 'HTLC';
+  if (!nut10 || (nut10.kind !== 'P2PK' && !isHTLC)) {
+    return undefined;
+  }
+  if (!nut10.data) {
+    throw new CTSError(`NUT-10 ${nut10.kind} option is missing its data field`);
+  }
+
+  // Use parseP2PKSecret (the parser the verifier uses): it rejects malformed
+  // tags, duplicate tag keys and bad sigflags — all of which NUT-11 says make a
+  // proof unspendable — so a bad lock fails loudly instead of silently first-winning.
+  const secret = parseP2PKSecret([
+    nut10.kind,
+    { nonce: '', data: nut10.data, tags: nut10.tags ?? [] },
+  ]);
+  // `data` is the NUT-10 data slot (hashlock for HTLC, primary pubkey for P2PK);
+  // the `pubkeys` tag carries the optional additional / receiver keys for either kind.
+  const taggedPubkeys = (getTag(secret, 'pubkeys') ?? []).map(normalizeSecpPubkey);
+  const options: P2PKOptions = {
+    kind: isHTLC ? 'HTLC' : 'P2PK',
+    data: isHTLC ? nut10.data : normalizeSecpPubkey(nut10.data),
+    ...(taggedPubkeys.length ? { pubkeys: taggedPubkeys } : {}),
+  };
+
+  // Optional fields pass straight through: the accessors return undefined when
+  // absent, and the builder ignores undefined options. getTag never yields [].
+  options.locktime = getTagInt(secret, 'locktime');
+  options.refundKeys = getTag(secret, 'refund')?.map(normalizeSecpPubkey);
+  options.requiredSignatures = getTagInt(secret, 'n_sigs');
+  options.requiredRefundSignatures = getTagInt(secret, 'n_sigs_refund');
+  if (getTagScalar(secret, 'sigflag') === 'SIG_ALL') {
+    options.sigFlag = 'SIG_ALL';
+  }
+
+  // Forward any non-standard tags verbatim.
+  const additionalTags = (nut10.tags ?? []).filter(
+    (t) => t.length > 0 && !P2PK_KNOWN_TAG_KEYS.has(t[0]),
+  ) as P2PKTag[];
+  if (additionalTags.length > 0) {
+    options.additionalTags = additionalTags;
+  }
+
+  return options;
 }

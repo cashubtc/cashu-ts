@@ -1,7 +1,16 @@
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect } from 'vitest';
 
 import { Wallet, Amount, CTSError, PaymentRequest, type Proof } from '../../src';
+import { createP2PKsecret } from '../../src/crypto/NUT11';
+import {
+  NUTROOT_NUMS_KEY,
+  deriveReceiverKeyedSecret,
+  serializeNutrootLeafHex,
+  type NutrootLeaf,
+} from '../../src/crypto/nutroot';
 import { deriveKeysetId } from '../../src/utils';
 import { PUBKEYS } from '../consts';
 
@@ -34,6 +43,23 @@ const proofsTotalling = (amounts: number[]): Proof[] =>
     secret: `secret-${i}`,
     C: `C-${i}`,
   }));
+
+const V3_KEYSET = '02' + 'ab'.repeat(32);
+const priv = (seed: number) => bytesToHex(new Uint8Array(32).fill(seed));
+const pub = (seed: number) => bytesToHex(secp256k1.getPublicKey(hexToBytes(priv(seed)), true));
+
+// Legacy proofs all under one lock; the secret carries the condition, so amounts are the only
+// thing that varies.
+const lockedProofs = (amounts: number[], secret: string): Proof[] =>
+  amounts.map((a) => ({ id: '00bd033559de27d0', amount: Amount.from(a), secret, C: 'C' }));
+
+const v3Proof = (
+  amount: number,
+  keyed: { secret: string; E?: string; tree?: string[]; K?: string; u?: string },
+): Proof => {
+  const { secret, ...spend_info } = keyed;
+  return { id: V3_KEYSET, amount: Amount.from(amount), secret, C: 'aa'.repeat(48), spend_info };
+};
 
 describe('wallet.maxSpendableAfterFees', () => {
   test('returns total minus feeReserve when input fees are zero', async () => {
@@ -274,7 +300,7 @@ describe('wallet.isPaymentRequestSatisfied', () => {
     expect(wallet.isPaymentRequestSatisfied(listed, proofsTotalling([100]))).toBe(true);
   });
 
-  test('a both-encoded request settles legacy proofs under the nut10 option', async () => {
+  test('a both-encoded request settles only legacy proofs carrying the requested lock', async () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
     const carol = '02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9';
@@ -286,7 +312,27 @@ describe('wallet.isPaymentRequestSatisfied', () => {
       nut10: { kind: 'P2PK', data: carol },
       nutroot: { receiverKey: carol },
     });
-    expect(wallet.isPaymentRequestSatisfied(both, proofsTotalling([100]))).toBe(true);
+    expect(
+      wallet.isPaymentRequestSatisfied(both, lockedProofs([100], createP2PKsecret(carol)), 100, {
+        privkeys: priv(1),
+      }),
+    ).toBe(true);
+
+    // Plain bearer proofs carry no lock at all.
+    expect(() =>
+      wallet.isPaymentRequestSatisfied(both, proofsTotalling([100]), 100, { privkeys: priv(1) }),
+    ).toThrow(/does not carry a NUT-10 lock/);
+
+    // An expired refund path is the legacy clawback: locked to carol, spendable by the payer.
+    const clawback = createP2PKsecret(carol, [
+      ['locktime', '1'],
+      ['refund', pub(9)],
+    ]);
+    expect(() =>
+      wallet.isPaymentRequestSatisfied(both, lockedProofs([100], clawback), 100, {
+        privkeys: priv(1),
+      }),
+    ).toThrow(/not the requested spending condition/);
 
     // nutroot alone is a request for v3 outputs only: legacy proofs cannot settle it.
     const v3only = new PaymentRequest({
@@ -295,7 +341,112 @@ describe('wallet.isPaymentRequestSatisfied', () => {
       unit: 'sat',
       nutroot: { receiverKey: carol },
     });
-    expect(() => wallet.isPaymentRequestSatisfied(v3only, proofsTotalling([100]))).toThrow();
+    expect(() =>
+      wallet.isPaymentRequestSatisfied(v3only, proofsTotalling([100]), 100, { privkeys: priv(1) }),
+    ).toThrow(/v3 proofs only/);
+  });
+
+  test('a receiver-keyed nutroot request settles only proofs keyed to the payee', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({
+          keysets: [
+            { id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 0 },
+            { id: V3_KEYSET, unit: 'sat', active: true, input_fee_ppk: 0 },
+          ],
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const pr = new PaymentRequest({
+      id: 'v3',
+      amount: 100,
+      unit: 'sat',
+      nutroot: { receiverKey: pub(1) },
+    });
+    const payee = deriveReceiverKeyedSecret(pub(1));
+    const payer = deriveReceiverKeyedSecret(pub(9));
+
+    // Without the receiver key there is nothing to bind the proofs to, so the check refuses.
+    expect(() => wallet.isPaymentRequestSatisfied(pr, [v3Proof(100, payee)])).toThrow(
+      /pass the requested key\(s\)/,
+    );
+    expect(() =>
+      wallet.isPaymentRequestSatisfied(pr, [v3Proof(100, payee)], 100, { privkeys: 'nothex' }),
+    ).toThrow(/32-byte hex/);
+
+    expect(
+      wallet.isPaymentRequestSatisfied(pr, [v3Proof(100, payee)], 100, { privkeys: priv(1) }),
+    ).toBe(true);
+    // The tree matches the (empty) request, but the key path is the payer's.
+    expect(() =>
+      wallet.isPaymentRequestSatisfied(pr, [v3Proof(100, payer)], 100, { privkeys: priv(1) }),
+    ).toThrow(/not keyed to the requested receiver key/);
+  });
+
+  test("a blind-me leaf key must carry the payee's own blinding", async () => {
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({
+          keysets: [{ id: V3_KEYSET, unit: 'sat', active: true, input_fee_ppk: 0 }],
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    // One leaf, its only key the payee's, tagged blind-me so it travels blinded.
+    const leaf: NutrootLeaf = { type: 'threshold', n: 1, keys: [pub(1)] };
+    const nutroot = {
+      receiverKey: pub(1),
+      leaves: [serializeNutrootLeafHex(leaf)],
+      blindKeys: [pub(1)],
+    };
+    const pr = new PaymentRequest({ id: 'blind', amount: 100, unit: 'sat', nutroot });
+    const honest = deriveReceiverKeyedSecret(pub(1), { leaves: [leaf], blindKeys: [pub(1)] });
+    // Same leaf shape, but the blinded key is the payer's: a leaf only they can spend.
+    const swapped = deriveReceiverKeyedSecret(pub(1), {
+      leaves: [{ ...leaf, keys: [pub(9)] }],
+      blindKeys: [pub(9)],
+    });
+
+    expect(
+      wallet.isPaymentRequestSatisfied(pr, [v3Proof(100, honest)], 100, { privkeys: priv(1) }),
+    ).toBe(true);
+    expect(() =>
+      wallet.isPaymentRequestSatisfied(pr, [v3Proof(100, swapped)], 100, { privkeys: priv(1) }),
+    ).toThrow(/blind-me leaf key/);
+
+    // A NUMS request has no key path at all, so a substituted leaf key is the whole payment.
+    const nums = new PaymentRequest({
+      id: 'nums',
+      amount: 100,
+      unit: 'sat',
+      nutroot: { ...nutroot, receiverKey: NUTROOT_NUMS_KEY },
+    });
+    const numsHonest = deriveReceiverKeyedSecret(NUTROOT_NUMS_KEY, {
+      leaves: [leaf],
+      blindKeys: [pub(1)],
+    });
+    const numsSwapped = deriveReceiverKeyedSecret(NUTROOT_NUMS_KEY, {
+      leaves: [{ ...leaf, keys: [pub(9)] }],
+      blindKeys: [pub(9)],
+    });
+    expect(() => wallet.isPaymentRequestSatisfied(nums, [v3Proof(100, numsHonest)])).toThrow(
+      /blind-me nutroot request/,
+    );
+    expect(
+      wallet.isPaymentRequestSatisfied(nums, [v3Proof(100, numsHonest)], 100, {
+        privkeys: priv(1),
+      }),
+    ).toBe(true);
+    expect(() =>
+      wallet.isPaymentRequestSatisfied(nums, [v3Proof(100, numsSwapped)], 100, {
+        privkeys: priv(1),
+      }),
+    ).toThrow(/blind-me leaf key/);
   });
 
   test('rejects unit mismatches and amountless requests without an expectation', async () => {

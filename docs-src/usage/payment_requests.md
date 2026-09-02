@@ -136,7 +136,15 @@ if (!wallet.isPaymentRequestSatisfied(pr, payload.proofs)) {
 }
 ```
 
-For an amountless request, pass the amount you expected as the third argument. The check covers the amount only; mint admissibility (`isMintListStrict` / `includesMint`) and proof integrity (DLEQ, locks) remain separate checks.
+For an amountless request, pass the amount you expected as the third argument.
+
+A **locked** request needs a fourth: the private key it locks to. The check then also confirms each proof carries the lock you asked for. For a nutroot request that means an ECDH trial-match against your static key, `K = P_receiver + r0*G` (NUT-28), which is why the key is needed and why no observer can stand in for it. A nutroot request that keys anything to you, the receiver key or a blind-me leaf key, throws without it:
+
+```typescript
+wallet.isPaymentRequestSatisfied(pr, payload.proofs, undefined, { privkeys: myPrivkey });
+```
+
+The check covers the amount and the requested lock. What it cannot cover is a blind-me leaf key belonging to someone else: only that key's owner can resolve its blinding, so a cosigner checks their own. Mint admissibility (`isMintListStrict` / `includesMint`) and proof integrity (DLEQ) remain separate checks, as does whether a script-path leaf is satisfiable today: ask `wallet.spendOptions(proof, { privkeys })` for that.
 
 ## Manual control
 
