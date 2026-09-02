@@ -4,7 +4,7 @@ import { hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { Amount } from '../model/Amount';
 import { type SerializedBlindedMessage } from '../model/types';
-import { minimalBytesBE } from '../utils';
+import { minimalBytesBE } from '../utils/bytes';
 
 import { schnorrSignDigest, schnorrVerifyDigest } from './core';
 
