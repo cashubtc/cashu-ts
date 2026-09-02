@@ -262,7 +262,8 @@ function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
 }
 
 function templateFromToken(token: Token): TokenV4Template {
-  const idMap: { [id: string]: Proof[] } = {};
+  // Keyed by token-supplied IDs, so a plain object would resolve `__proto__` etc. to inherited members.
+  const idMap = Object.create(null) as { [id: string]: Proof[] };
   const mint = token.mint;
   for (let i = 0; i < token.proofs.length; i++) {
     const proof = token.proofs[i];
@@ -778,6 +779,11 @@ export function getEncodedTokenBinary(token: Token): Uint8Array {
   const utf8Encoder = new TextEncoder();
   // Normalize amounts for untyped (JS) callers who may pass JSON.parse'd tokens directly.
   const proofs = normalizeProofAmounts(token.proofs);
+  if (hasNonHexId(proofs)) {
+    throw new CTSError(
+      'Proofs contain a legacy keyset ID and cannot be encoded. Swap them at the mint first.',
+    );
+  }
   const template = templateFromToken({ ...token, proofs });
   const binaryTemplate = encodeCBOR(template);
   const prefix = utf8Encoder.encode('craw');
