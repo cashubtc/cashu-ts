@@ -1,3 +1,5 @@
+import { equalBytes } from '@noble/curves/utils.js';
+
 import { normalizeSecpPubkey } from '../crypto/curve_secp';
 import { getTag, getTagInt, getTagScalar } from '../crypto/NUT10';
 import type { P2PKOptions, P2PKTag } from '../crypto/NUT11';
@@ -11,10 +13,10 @@ import {
   type ParsedNutrootOption,
 } from '../crypto/nutroot';
 import {
-  Bytes,
   decodeBase64ToUint8Legacy,
   decodeBase64UrlToUint8,
   decodeCBOR,
+  hexToBytes,
   encodeCBOR,
   encodeUint8ToBase64UrlPadded,
   normalizeMintUrl,
@@ -448,10 +450,10 @@ export class PaymentRequest {
       throw new CTSError(`nutroot tree exceeds ${NUTROOT_MAX_TREE_LEAVES} leaves`);
     }
     const leaves = nutroot.leaves.map((hex, i) => {
-      const bytes = Bytes.fromHex(hex);
+      const bytes = hexToBytes(hex);
       const leaf = parseNutrootLeaf(bytes);
       /* v8 ignore next 3 -- backstop: parseNutrootLeaf admits only canonical bytes today */
-      if (!Bytes.equals(serializeNutrootLeaf(leaf), bytes)) {
+      if (!equalBytes(serializeNutrootLeaf(leaf), bytes)) {
         throw new CTSError(`requested leaf ${i} does not round-trip: cannot reproduce its bytes`);
       }
       return leaf;
@@ -786,7 +788,7 @@ export class PaymentRequestBuilder {
     // Validate here rather than at build(): a request nobody can pay is worth catching at the
     // point the payee wrote it, not at the payer.
     const leafKeys = new Set(
-      (nutroot.leaves ?? []).flatMap((hex) => parseNutrootLeaf(Bytes.fromHex(hex)).keys),
+      (nutroot.leaves ?? []).flatMap((hex) => parseNutrootLeaf(hexToBytes(hex)).keys),
     );
     for (const key of nutroot.blindKeys ?? []) {
       if (!leafKeys.has(key)) {

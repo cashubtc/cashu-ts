@@ -1,11 +1,11 @@
 import { bytesToNumberBE, numberToBytesBE } from '@noble/curves/utils.js';
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex, concatBytes, hexToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { HDKey, HARDENED_OFFSET } from '@scure/bip32';
 
 import { CTSError } from '../model/Errors';
-import { Bytes, isBase64String } from '../utils';
+import { isBase64String } from '../utils';
 
 import { BLS_FR_ORDER } from './curve_bls';
 import { getPubKeyFromPrivKey } from './curve_secp';
@@ -232,7 +232,7 @@ function deriveHmacSecretAndBlindingFactor(
   // secret, and a wallet restoring from seed would find nothing rather than error.
   const base = v2BaseMessage(keysetId, counter);
   return {
-    secret: hmac(sha256, seed, Bytes.concat(base, Bytes.fromHex('00'))),
+    secret: hmac(sha256, seed, concatBytes(base, hexToBytes('00'))),
     blindingFactor: computeV2BlindingFactor(seed, base),
   };
 }
@@ -273,9 +273,9 @@ function assertCounter(counter: number): void {
 }
 
 function v2BaseMessage(keysetId: string, counter: number): Uint8Array {
-  return Bytes.concat(
-    Bytes.fromString('Cashu_KDF_HMAC_SHA256'),
-    Bytes.fromHex(keysetId),
+  return concatBytes(
+    utf8ToBytes('Cashu_KDF_HMAC_SHA256'),
+    hexToBytes(keysetId),
     // numberToBytesBE throws rather than wrapping, so an out-of-range counter can never
     // be silently encoded as a different one even if the guard above is ever moved.
     numberToBytesBE(counter, 8),
@@ -305,18 +305,18 @@ function deriveV3Scalar(
   order: bigint = SECP256K1_N,
 ): Uint8Array {
   assertCounter(counter);
-  const keysetIdBytes = keysetId === undefined ? new Uint8Array(0) : Bytes.fromHex(keysetId);
-  const base = Bytes.concat(
-    Bytes.fromString('Cashu_KDF_HMAC_SHA256'),
+  const keysetIdBytes = keysetId === undefined ? new Uint8Array(0) : hexToBytes(keysetId);
+  const base = concatBytes(
+    utf8ToBytes('Cashu_KDF_HMAC_SHA256'),
     numberToBytesBE(keysetIdBytes.length, 4),
     keysetIdBytes,
     numberToBytesBE(counter, 8),
     Uint8Array.of(type),
   );
   for (let attempt = 0; attempt < 1 << 16; attempt++) {
-    const msg = Bytes.concat(base, numberToBytesBE(attempt, 4), suffix ?? new Uint8Array(0));
+    const msg = concatBytes(base, numberToBytesBE(attempt, 4), suffix ?? new Uint8Array(0));
     const digest = hmac(sha256, seed, msg);
-    const x = Bytes.toBigInt(digest);
+    const x = bytesToNumberBE(digest);
     if (x === 0n || x >= order) continue;
     return digest; // raw 32 bytes; x < order < 2^256 so the BE encoding matches the digest
   }

@@ -1,3 +1,4 @@
+import { bytesToNumberBE } from '@noble/curves/utils.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { HDKey } from '@scure/bip32';
 import { describe, expect, test } from 'vitest';
@@ -16,7 +17,6 @@ import {
   recoverV3LeafKeys,
 } from '../../src/crypto/NUT13';
 import { CTSError } from '../../src/model/Errors';
-import { Bytes } from '../../src/utils';
 import { nut13_v3 as nut13Vectors } from '../vectors/nutroot-v3.json';
 
 // The standalone deriveBlindingFactor() helper was removed in v5; derive it locally for these tests.
@@ -52,7 +52,7 @@ describe('v3 (BLS) derivation', () => {
       expect([0x02, 0x03]).toContain(secret[0]);
       expect(secretKey).toBeDefined();
       expect(bytesToHex(getPubKeyFromPrivKey(secretKey as Uint8Array))).toBe(bytesToHex(secret));
-      const r = Bytes.toBigInt(blindingFactor);
+      const r = bytesToNumberBE(blindingFactor);
       expect(r).toBeGreaterThan(0n);
       expect(r).toBeLessThan(BLS_FR_ORDER);
     }
@@ -77,7 +77,7 @@ describe('v3 (BLS) derivation', () => {
     // The utf8 hex string and the raw 33 bytes must land on the same Y: JSON carries hex, the
     // hash input is binary (nutroot secrets), and legacy non-point secrets still hash as utf8.
     const yFromString = hashToCurveBls(new TextEncoder().encode(output.secret));
-    const yFromRaw = hashToCurveBls(Bytes.fromHex(output.secret));
+    const yFromRaw = hashToCurveBls(hexToBytes(output.secret));
     expect(yFromString.toHex(true)).toBe(output.Y);
     expect(yFromRaw.toHex(true)).toBe(output.Y);
   });

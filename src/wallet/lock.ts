@@ -13,7 +13,7 @@ import {
   type ParsedNutrootOption,
 } from '../crypto/nutroot';
 import { CTSError } from '../model/Errors';
-import { Bytes } from '../utils';
+import { hexToBytes } from '../utils';
 
 /**
  * Semantic spending conditions for locked outputs, independent of keyset version.
@@ -232,7 +232,7 @@ export function nutrootToLockOptions(options: {
   blindKeys?: string[];
 }): LockOptions {
   const leaves = (options.leaves ?? []).map((leaf) => {
-    if (typeof leaf === 'string') return parseNutrootLeaf(Bytes.fromHex(leaf));
+    if (typeof leaf === 'string') return parseNutrootLeaf(hexToBytes(leaf));
     serializeNutrootLeaf(leaf); // validate the parsed form the same way addLeaf does
     return leaf;
   });

@@ -22,7 +22,7 @@ import { type Amount } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { type MeltRequest } from '../model/types';
 import type { Proof } from '../model/types/proof';
-import { Bytes } from '../utils';
+import { bytesToHex, hexToBytes } from '../utils';
 
 import { QUOTE_COUNTER_KEY } from './CounterSource';
 import type { ScriptPathPlan, SpendOption, SpendOptions } from './types';
@@ -91,7 +91,7 @@ export async function attachBearerSpendInfo(
     );
     for (const proof of proofs) {
       const k = keys.get(proof.secret);
-      if (k) proof.spend_info = { k: Bytes.toHex(k) };
+      if (k) proof.spend_info = { k: bytesToHex(k) };
     }
   }
 }
@@ -212,7 +212,7 @@ export async function proofSpendOptions(
   if (!tree || tree.length === 0) return { keyPath, script: [] };
 
   // Parses every leaf, so an unknown one throws here rather than being reported as spendable.
-  const leaves = tree.map((leaf) => parseNutrootLeaf(Bytes.fromHex(leaf)));
+  const leaves = tree.map((leaf) => parseNutrootLeaf(hexToBytes(leaf)));
   const hits = recoverLeafKeySecretKeys(tree, proof.spend_info?.E, privkeys);
   const script = leaves.map((leaf, leafIndex) => {
     const keys = hits
@@ -264,7 +264,7 @@ export function prepareScriptPathSpends(
     if (!tree || plan.leafIndex < 0 || plan.leafIndex >= tree.length) {
       throw new CTSError(`Script path plan names leaf ${plan.leafIndex}, which is not disclosed`);
     }
-    const leaf = parseNutrootLeaf(Bytes.fromHex(tree[plan.leafIndex]));
+    const leaf = parseNutrootLeaf(hexToBytes(tree[plan.leafIndex]));
     if (leaf.type === 'hashlock' && plan.preimage === undefined) {
       throw new CTSError('Script path plan for a hashlock leaf needs a preimage');
     }
@@ -308,7 +308,7 @@ function internalKeyOf(proof: Proof, privkeys: string[]): string | undefined {
   if (!info) return undefined;
   if (info.k && /^[0-9a-f]{64}$/.test(info.k)) {
     try {
-      return Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(info.k)));
+      return bytesToHex(getPubKeyFromPrivKey(hexToBytes(info.k)));
     } catch {
       return undefined;
     }
@@ -358,7 +358,7 @@ export function collectSpendInfoKeys(
       for (const priv of statics) {
         const hit = recoverReceiverKeyedSecretKey(proof.secret, E, priv, proof.spend_info?.tree);
         if (hit) {
-          keys.set(proof.secret, Bytes.fromHex(hit.secretKey));
+          keys.set(proof.secret, hexToBytes(hit.secretKey));
           break;
         }
       }
@@ -366,17 +366,17 @@ export function collectSpendInfoKeys(
     const k = proof.spend_info?.k;
     if (!k || !/^[0-9a-f]{64}$/.test(k)) continue;
     try {
-      const kBytes = Bytes.fromHex(k);
-      if (Bytes.toHex(getPubKeyFromPrivKey(kBytes)) === proof.secret) {
+      const kBytes = hexToBytes(k);
+      if (bytesToHex(getPubKeyFromPrivKey(kBytes)) === proof.secret) {
         keys.set(proof.secret, kBytes);
         continue;
       }
       // Locked proof: the key path signs with p' = k + t over the disclosed tree.
       const tree = proof.spend_info?.tree;
       if (tree && tree.length > 0) {
-        const root = nutrootMerkleRoot(tree.map((leaf) => nutrootLeafHash(Bytes.fromHex(leaf))));
+        const root = nutrootMerkleRoot(tree.map((leaf) => nutrootLeafHash(hexToBytes(leaf))));
         const tweaked = nutrootTweakSeckey(kBytes, root);
-        if (Bytes.toHex(getPubKeyFromPrivKey(tweaked)) === proof.secret) {
+        if (bytesToHex(getPubKeyFromPrivKey(tweaked)) === proof.secret) {
           keys.set(proof.secret, tweaked);
         }
         continue;
@@ -384,7 +384,7 @@ export function collectSpendInfoKeys(
       // Empty tweak, no tree (NUT-10): p' = k + tagged_hash(tag, K). A true aggregate has no
       // single holder of `k`, so this reaches only a single-party key using the same form.
       const empty = nutrootTweakSeckey(kBytes);
-      if (Bytes.toHex(getPubKeyFromPrivKey(empty)) === proof.secret) {
+      if (bytesToHex(getPubKeyFromPrivKey(empty)) === proof.secret) {
         keys.set(proof.secret, empty);
       }
     } catch {
@@ -408,7 +408,7 @@ export async function createQuoteLockKeyPair(
   const privkey = seed
     ? deriveQuoteLockKey(seed, await reserveQuoteCounter())
     : createRandomSecretKey();
-  return { pubkey: Bytes.toHex(getPubKeyFromPrivKey(privkey)), privkey: Bytes.toHex(privkey) };
+  return { pubkey: bytesToHex(getPubKeyFromPrivKey(privkey)), privkey: bytesToHex(privkey) };
 }
 
 /**
@@ -425,8 +425,8 @@ export async function scanQuoteLockKey(
   const bound = (await state.counters.peekNext(QUOTE_COUNTER_KEY)) + V3_SEED_SCAN_HEADROOM;
   for (let counter = 0; counter < bound; counter++) {
     const privkey = deriveQuoteLockKey(seed, counter);
-    if (Bytes.toHex(getPubKeyFromPrivKey(privkey)) === normalizedPubkey) {
-      return Bytes.toHex(privkey);
+    if (bytesToHex(getPubKeyFromPrivKey(privkey)) === normalizedPubkey) {
+      return bytesToHex(privkey);
     }
   }
   return undefined;

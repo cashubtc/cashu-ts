@@ -47,7 +47,7 @@ import type { Logger } from '../../src/logger';
 import { OutputData } from '../../src/model/OutputData';
 import type { Proof } from '../../src/model/types';
 import * as utils from '../../src/utils';
-import { Bytes, decodeBase64UrlToUint8 } from '../../src/utils';
+import { bytesToHex, decodeBase64UrlToUint8, hexToBytes } from '../../src/utils';
 import * as wallet from '../../src/wallet';
 
 const mintUrl = 'http://mint.local';
@@ -641,7 +641,7 @@ describe('getBlindAuthToken coverage', () => {
     } as any;
 
     const k = '11'.repeat(32);
-    const secret = Bytes.toHex(secp256k1.getPublicKey(Bytes.fromHex(k), true));
+    const secret = bytesToHex(secp256k1.getPublicKey(hexToBytes(k), true));
     am['pool'] = [
       { id: '02aabbccddeeff00', C: 'C', secret, amount: Amount.from(1), spend_info: { k } },
     ];
@@ -666,7 +666,7 @@ describe('getBlindAuthToken coverage', () => {
     } as any;
 
     const k = '11'.repeat(32);
-    const secret = Bytes.toHex(secp256k1.getPublicKey(Bytes.fromHex(k), true));
+    const secret = bytesToHex(secp256k1.getPublicKey(hexToBytes(k), true));
     const keyed = { id: '02aabbccddeeff00', C: 'C', secret, amount: 1, spend_info: { k } } as any;
     const keyless = { id: '02aabbccddeeff00', C: 'C2', secret: '02aa', amount: 1 } as any;
     // keyless sits on top of the pool: it must be skimmed off, not served or wedged on

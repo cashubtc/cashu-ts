@@ -1,10 +1,10 @@
 import { schnorr } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { utf8ToBytes } from '@noble/hashes/utils.js';
+import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
-import { Bytes, isValidHex } from '../utils';
+import { bytesToHex, hexToBytes, isValidHex } from '../utils';
 
 import { taggedHash } from './core';
 import { isBlsKeyset } from './curves';
@@ -102,24 +102,24 @@ function keysetIdBytes(keysetId: string): Uint8Array {
   if (keysetId.length === 0) {
     throw new CTSError('Transcript keyset id must be non-empty');
   }
-  return isValidHex(keysetId) ? Bytes.fromHex(keysetId) : utf8ToBytes(keysetId);
+  return isValidHex(keysetId) ? hexToBytes(keysetId) : utf8ToBytes(keysetId);
 }
 
 function proofInputContainer(input: TranscriptProofInput): Uint8Array {
   // A v3 secret contributes its raw 33 bytes; a v0-v2 secret its utf8 bytes.
   const secret = isBlsKeyset(input.keysetId)
-    ? Bytes.fromHex(input.secret)
+    ? hexToBytes(input.secret)
     : new TextEncoder().encode(input.secret);
   if (secret.length === 0) {
     throw new CTSError('Transcript proof secret must be non-empty');
   }
   return tlvRecord(
     CONTAINER_PROOF_INPUT,
-    Bytes.concat(
+    concatBytes(
       amountRecord(input.amount),
       tlvRecord(0x02, keysetIdBytes(input.keysetId)),
       tlvRecord(0x03, secret),
-      tlvRecord(0x04, Bytes.fromHex(input.C)),
+      tlvRecord(0x04, hexToBytes(input.C)),
     ),
   );
 }
@@ -130,17 +130,17 @@ function quoteContainer(containerType: number, quote: TranscriptQuote): Uint8Arr
   }
   return tlvRecord(
     containerType,
-    Bytes.concat(amountRecord(quote.amount), tlvRecord(0x02, utf8ToBytes(quote.quoteId))),
+    concatBytes(amountRecord(quote.amount), tlvRecord(0x02, utf8ToBytes(quote.quoteId))),
   );
 }
 
 function blindedOutputContainer(output: TranscriptBlindedOutput): Uint8Array {
   return tlvRecord(
     CONTAINER_BLINDED_OUTPUT,
-    Bytes.concat(
+    concatBytes(
       amountRecord(output.amount),
       tlvRecord(0x02, keysetIdBytes(output.keysetId)),
-      tlvRecord(0x03, Bytes.fromHex(output.B_)),
+      tlvRecord(0x03, hexToBytes(output.B_)),
     ),
   );
 }
@@ -166,7 +166,7 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
   if (new Set(mintQuotes.map((q) => q.quoteId)).size !== mintQuotes.length) {
     throw new CTSError('Transaction repeats a mint quote input');
   }
-  return Bytes.concat(
+  return concatBytes(
     ...proofs.map(proofInputContainer),
     ...mintQuotes.map((q) => quoteContainer(CONTAINER_MINT_QUOTE_INPUT, q)),
     ...blinded.map(blindedOutputContainer),
@@ -182,7 +182,7 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
  * carry the tag, so it can never be tricked into signing some other 32 bytes.
  */
 export function transactionMessage(tx: TransactionShape): Uint8Array {
-  return Bytes.concat(utf8ToBytes(TRANSCRIPT_DOMAIN_TAG), buildTransactionTranscript(tx));
+  return concatBytes(utf8ToBytes(TRANSCRIPT_DOMAIN_TAG), buildTransactionTranscript(tx));
 }
 
 /**
@@ -301,13 +301,8 @@ export function inputsForPayload(payload: PayloadShape): ReturnType<typeof trans
  * `witness` is the exact string value as sent; `Y` contributes its raw compressed bytes.
  */
 export function spendCommitment(YHex: string, inputDigest: Uint8Array, witness: string): string {
-  return Bytes.toHex(
-    taggedHash(
-      SPEND_COMMITMENT_TAG,
-      Bytes.fromHex(YHex),
-      inputDigest,
-      sha256(utf8ToBytes(witness)),
-    ),
+  return bytesToHex(
+    taggedHash(SPEND_COMMITMENT_TAG, hexToBytes(YHex), inputDigest, sha256(utf8ToBytes(witness))),
   );
 }
 
@@ -328,7 +323,7 @@ export function buildRequestTranscript(
   }
   return tlvRecord(
     CONTAINER_AUTHORIZED_REQUEST,
-    Bytes.concat(
+    concatBytes(
       tlvRecord(0x01, utf8ToBytes(method.toUpperCase())),
       tlvRecord(0x02, utf8ToBytes(target)),
       tlvRecord(0x03, sha256(body)),
@@ -341,7 +336,7 @@ export function buildRequestTranscript(
  */
 export function requestDigest(method: string, target: string, body: Uint8Array): Uint8Array {
   return sha256(
-    Bytes.concat(utf8ToBytes(TRANSCRIPT_DOMAIN_TAG), buildRequestTranscript(method, target, body)),
+    concatBytes(utf8ToBytes(TRANSCRIPT_DOMAIN_TAG), buildRequestTranscript(method, target, body)),
   );
 }
 
@@ -358,7 +353,7 @@ export function signTransactionInput(digest: Uint8Array, secretKey: Uint8Array):
     throw new CTSError('Signing digest must be 32 bytes');
   }
   const signature = schnorr.sign(digest, secretKey);
-  return JSON.stringify({ signatures: [Bytes.toHex(signature)] });
+  return JSON.stringify({ signatures: [bytesToHex(signature)] });
 }
 
 /**
@@ -369,7 +364,7 @@ export function verifyTransactionInputWitness(
   secretHex: string,
   witnessJson: string,
 ): boolean {
-  const secret = Bytes.fromHex(secretHex);
+  const secret = hexToBytes(secretHex);
   if (secret.length !== 33) return false;
   let signatures: unknown;
   try {
@@ -382,7 +377,7 @@ export function verifyTransactionInputWitness(
   const sig: unknown = signatures[0];
   if (typeof sig !== 'string' || !/^[0-9a-f]{128}$/.test(sig)) return false;
   try {
-    return schnorr.verify(Bytes.fromHex(sig), digest, secret.subarray(1));
+    return schnorr.verify(hexToBytes(sig), digest, secret.subarray(1));
   } catch {
     return false;
   }

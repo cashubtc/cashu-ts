@@ -76,18 +76,19 @@ import type { Token } from '../model/types/token';
 import { BATCH_POOL_SIZE, runPool } from '../transport';
 import type { RequestFetch, RequestFn } from '../transport';
 import {
+  ABSOLUTE_MAX_BATCH_SIZE,
   bolt11AmountMsat,
-  Bytes,
+  bytesToHex,
+  DEFAULT_MAX_ARRAY_LENGTH,
   getDecodedToken,
+  hexToBytes,
   invoiceHasAmountInHRP,
   normalizeMintUrl,
   normalizeProofAmounts,
+  REPAIR_COOLDOWN_MS,
   splitAmount,
   sumProofs,
   verifyProofsForReceive,
-  ABSOLUTE_MAX_BATCH_SIZE,
-  DEFAULT_MAX_ARRAY_LENGTH,
-  REPAIR_COOLDOWN_MS,
 } from '../utils';
 
 import {
@@ -1208,7 +1209,7 @@ class Wallet {
     for (const output of outputData) {
       const data = output as { secretKey?: Uint8Array; spendInfo?: SpendInfo };
       if (data.secretKey && !data.spendInfo) {
-        data.spendInfo = { k: Bytes.toHex(data.secretKey) };
+        data.spendInfo = { k: bytesToHex(data.secretKey) };
       }
     }
     return outputData;
@@ -2017,7 +2018,7 @@ class Wallet {
     if (tagged.length === 0 || statics.length === 0) return;
     const owned = new Set<string>();
     for (const priv of statics) {
-      const pub = Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(priv)));
+      const pub = bytesToHex(getPubKeyFromPrivKey(hexToBytes(priv)));
       // An x-only import holds n - p, whose point is the same hex under the other parity byte.
       const flipped = (pub.startsWith('02') ? '03' : '02') + pub.slice(2);
       for (const key of tagged) {

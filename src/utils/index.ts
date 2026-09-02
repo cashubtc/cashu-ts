@@ -1,4 +1,5 @@
-export * from './Bytes';
+export * from './bytes';
+export * from './hex';
 export * from './base64';
 export * from './bech32m';
 export * from './cbor';

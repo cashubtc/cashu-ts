@@ -38,7 +38,7 @@ import {
   encodeUint8ToBase64,
   encodeUint8ToBase64Url,
 } from './base64';
-import { Bytes } from './Bytes';
+import { minimalBytesBE } from './bytes';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { JSONInt } from './JSONInt';
 import { MAX_PAYLOAD_DECODE_ATTEMPTS, MAX_PAYLOAD_LENGTH, MAX_SPLIT_OUTPUTS } from './limits';
@@ -614,8 +614,8 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
       if (expiry) {
         preimage += `|final_expiry:${expiry}`;
       }
-      const hash = sha256(Bytes.fromString(preimage));
-      const hashHex = Bytes.toHex(hash);
+      const hash = sha256(utf8ToBytes(preimage));
+      const hashHex = bytesToHex(hash);
       return '01' + hashHex;
     }
     case 2: {
@@ -632,16 +632,16 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
       );
       const keysBytes = mergeUInt8Arrays(
         ...sortedEntries.flatMap(([amount, pubkey]) => [
-          len32Framed(Bytes.minimalBE(BigInt(amount))),
+          len32Framed(minimalBytesBE(BigInt(amount))),
           len32Framed(hexToBytes(pubkey.toLowerCase())),
         ]),
       );
       const preimage = mergeUInt8Arrays(
         len32Framed(keysBytes),
-        len32Framed(Bytes.fromString(unit)),
-        len32Framed(Bytes.minimalBE(BigInt(input_fee_ppk ?? 0))),
+        len32Framed(utf8ToBytes(unit)),
+        len32Framed(minimalBytesBE(BigInt(input_fee_ppk ?? 0))),
       );
-      return '02' + Bytes.toHex(sha256(preimage));
+      return '02' + bytesToHex(sha256(preimage));
     }
     default:
       throw new CTSError(`Unrecognized keyset ID version: ${versionByte}`);

@@ -4,7 +4,7 @@ import { CTSError } from '../model/Errors';
 import { PaymentRequestTransportType } from '../wallet/types/payment-requests';
 import type { PaymentRequestTransport, NutrootOption } from '../wallet/types/payment-requests';
 
-import { Bytes } from './Bytes';
+import { bytesToHex, hexToBytes } from './hex';
 
 /**
  * NUT-10 Spending Condition structure.
@@ -454,16 +454,16 @@ function parseNutrootOption(value: Uint8Array): NutrootOption {
         if (part.value.length !== 33) {
           throw new CTSError('nutroot receiver_key must be 33 bytes');
         }
-        receiverKey = Bytes.toHex(part.value);
+        receiverKey = bytesToHex(part.value);
         break;
       case NUTROOT_TAG_LEAF:
-        leaves.push(Bytes.toHex(part.value));
+        leaves.push(bytesToHex(part.value));
         break;
       case NUTROOT_TAG_BLIND_KEY:
         if (part.value.length !== 33) {
           throw new CTSError('nutroot blind_key must be 33 bytes');
         }
-        blindKeys.push(Bytes.toHex(part.value));
+        blindKeys.push(bytesToHex(part.value));
         break;
     }
   }
@@ -778,16 +778,16 @@ function encodeSupportedMethod(method: { method: string; fee?: bigint }): Uint8A
  * @returns Encoded nutroot sub-TLV; leaves keep request order.
  */
 function encodeNutrootOption(nutroot: NutrootOption): Uint8Array {
-  const receiverKey = Bytes.fromHex(nutroot.receiverKey);
+  const receiverKey = hexToBytes(nutroot.receiverKey);
   if (receiverKey.length !== 33) {
     throw new CTSError('nutroot receiver_key must be 33 bytes');
   }
   const parts: Uint8Array[] = [encodeTLVPart(NUTROOT_TAG_RECEIVER_KEY, receiverKey)];
   for (const leaf of nutroot.leaves ?? []) {
-    parts.push(encodeTLVPart(NUTROOT_TAG_LEAF, Bytes.fromHex(leaf)));
+    parts.push(encodeTLVPart(NUTROOT_TAG_LEAF, hexToBytes(leaf)));
   }
   for (const key of nutroot.blindKeys ?? []) {
-    const keyBytes = Bytes.fromHex(key);
+    const keyBytes = hexToBytes(key);
     if (keyBytes.length !== 33) {
       throw new CTSError('nutroot blind_key must be 33 bytes');
     }

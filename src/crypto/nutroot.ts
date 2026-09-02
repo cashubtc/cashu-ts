@@ -1,8 +1,9 @@
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
-import { numberToBytesBE } from '@noble/curves/utils.js';
+import { bytesToNumberBE, numberToBytesBE, equalBytes } from '@noble/curves/utils.js';
+import { concatBytes } from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
-import { Bytes } from '../utils';
+import { bytesToHex, compareBytes, hexToBytes, minimalBytesBE } from '../utils';
 
 import { taggedHash } from './core';
 import { getPubKeyFromPrivKey, pointFromBytes, pointFromHex } from './curve_secp';
@@ -154,7 +155,7 @@ export function readTlvRecords(
  * Minimal big-endian encoding of a non-negative integer. Zero encodes to zero bytes.
  */
 export function minimalBE(value: bigint): Uint8Array {
-  return Bytes.minimalBE(value);
+  return minimalBytesBE(value);
 }
 
 /**
@@ -165,7 +166,7 @@ export function readMinimalBE(bytes: Uint8Array): bigint {
     throw new CTSError('Non-minimal integer encoding');
   }
   if (bytes.length === 0) return 0n;
-  return Bytes.toBigInt(bytes);
+  return bytesToNumberBE(bytes);
 }
 
 /**
@@ -186,14 +187,14 @@ export function serializeNutrootLeaf(leaf: NutrootLeaf): Uint8Array {
     throw new CTSError('Leaf requires at least one key');
   }
   const keyBytes = leaf.keys.map((k) => {
-    const b = Bytes.fromHex(k);
+    const b = hexToBytes(k);
     if (b.length !== 33) {
       throw new CTSError(`Leaf key must be 33 bytes, got ${b.length}`);
     }
     pointFromBytes(b);
     return b;
   });
-  if (new Set(keyBytes.map((key) => Bytes.toHex(key).slice(2))).size !== keyBytes.length) {
+  if (new Set(keyBytes.map((key) => bytesToHex(key).slice(2))).size !== keyBytes.length) {
     throw new CTSError('Leaf must list distinct keys');
   }
   if (leaf.n > keyBytes.length) {
@@ -201,7 +202,7 @@ export function serializeNutrootLeaf(leaf: NutrootLeaf): Uint8Array {
   }
   const fields: Uint8Array[] = [
     tlvRecord(FIELD_N, new Uint8Array([leaf.n])),
-    tlvRecord(FIELD_KEYS, Bytes.concat(...keyBytes)),
+    tlvRecord(FIELD_KEYS, concatBytes(...keyBytes)),
   ];
   if (leaf.type === 'after') {
     if (!Number.isInteger(leaf.time) || (leaf.time as number) < 0) {
@@ -215,7 +216,7 @@ export function serializeNutrootLeaf(leaf: NutrootLeaf): Uint8Array {
     throw new CTSError(`${leaf.type} leaf must not carry a time field`);
   }
   if (leaf.type === 'hashlock') {
-    const h = Bytes.fromHex(leaf.hash ?? '');
+    const h = hexToBytes(leaf.hash ?? '');
     if (h.length !== 32) {
       throw new CTSError('hashlock leaf requires a 32-byte hash');
     }
@@ -229,7 +230,7 @@ export function serializeNutrootLeaf(leaf: NutrootLeaf): Uint8Array {
     }
     fields.push(tlvRecord(FIELD_DISCLOSURE, new Uint8Array([0x01])));
   }
-  const out = Bytes.concat(new Uint8Array([NUTROOT_LEAF_VERSION, typeByte]), ...fields);
+  const out = concatBytes(new Uint8Array([NUTROOT_LEAF_VERSION, typeByte]), ...fields);
   if (out.length - 1 > NUTROOT_MAX_LEAF_BYTES) {
     throw new CTSError(`Leaf body exceeds ${NUTROOT_MAX_LEAF_BYTES} bytes`);
   }
@@ -286,7 +287,7 @@ export function parseNutrootLeaf(bytes: Uint8Array): NutrootLeaf {
           } catch {
             throw new CTSError('Leaf key must be a valid compressed secp256k1 point');
           }
-          keys.push(Bytes.toHex(key));
+          keys.push(bytesToHex(key));
         }
         // Signatures verify against the x-only key, so two entries sharing an x coordinate are one
         // signer wearing two hats: a threshold counting them separately would be satisfied by
@@ -308,7 +309,7 @@ export function parseNutrootLeaf(bytes: Uint8Array): NutrootLeaf {
         if (rec.value.length !== 32) {
           throw new CTSError('hash field must be 32 bytes');
         }
-        hash = Bytes.toHex(rec.value);
+        hash = bytesToHex(rec.value);
         break;
       case FIELD_DISCLOSURE:
         // Mode 0x00 and every unallocated mode reject, so a private leaf has one encoding.
@@ -351,14 +352,14 @@ export function parseNutrootLeaf(bytes: Uint8Array): NutrootLeaf {
  * Parse a hex-serialized leaf to its declarative form.
  */
 export function parseNutrootLeafHex(leafHex: string): NutrootLeaf {
-  return parseNutrootLeaf(Bytes.fromHex(leafHex));
+  return parseNutrootLeaf(hexToBytes(leafHex));
 }
 
 /**
  * Serialize a leaf to its hex wire form, the shape spend info and payment requests carry.
  */
 export function serializeNutrootLeafHex(leaf: NutrootLeaf): string {
-  return Bytes.toHex(serializeNutrootLeaf(leaf));
+  return bytesToHex(serializeNutrootLeaf(leaf));
 }
 
 /**
@@ -372,7 +373,7 @@ export function nutrootLeafHash(serializedLeaf: Uint8Array): Uint8Array {
  * Hash a branch of two child hashes, sorted pair, no left/right flags.
  */
 export function nutrootBranchHash(a: Uint8Array, b: Uint8Array): Uint8Array {
-  const sorted = Bytes.compare(a, b) <= 0 ? [a, b] : [b, a];
+  const sorted = compareBytes(a, b) <= 0 ? [a, b] : [b, a];
   return taggedHash(NUTROOT_BRANCH_TAG, sorted[0], sorted[1]);
 }
 
@@ -398,7 +399,7 @@ export function nutrootMerkleRoot(leafHashes: Uint8Array[]): Uint8Array {
   if (leafHashes.length > NUTROOT_MAX_TREE_LEAVES) {
     throw new CTSError(`Tree exceeds depth ${NUTROOT_MAX_TREE_DEPTH}`);
   }
-  let level = [...leafHashes].sort((a, b) => Bytes.compare(a, b));
+  let level = [...leafHashes].sort((a, b) => compareBytes(a, b));
   while (level.length > 1) {
     const next: Uint8Array[] = [];
     for (let i = 0; i + 1 < level.length; i += 2) {
@@ -421,9 +422,9 @@ export function nutrootMerklePath(leafHashes: Uint8Array[], index: number): Uint
     throw new CTSError(`Leaf index out of range: ${index}`);
   }
   const path: Uint8Array[] = [];
-  let level = [...leafHashes].sort((a, b) => Bytes.compare(a, b));
+  let level = [...leafHashes].sort((a, b) => compareBytes(a, b));
   // Equal hashes are interchangeable under sorted-pair hashing, so first match is enough.
-  let pos = level.findIndex((h) => Bytes.equals(h, leafHashes[index]));
+  let pos = level.findIndex((h) => equalBytes(h, leafHashes[index]));
   while (level.length > 1) {
     const next: Uint8Array[] = [];
     for (let i = 0; i + 1 < level.length; i += 2) {
@@ -471,7 +472,7 @@ export function nutrootTweak(internalKey: Uint8Array, merkleRoot?: Uint8Array): 
   const digest = merkleRoot
     ? taggedHash(NUTROOT_TWEAK_TAG, internalKey, merkleRoot)
     : taggedHash(NUTROOT_TWEAK_TAG, internalKey);
-  return Bytes.toBigInt(digest) % secp256k1.Point.Fn.ORDER;
+  return bytesToNumberBE(digest) % secp256k1.Point.Fn.ORDER;
 }
 
 /**
@@ -494,7 +495,7 @@ export function nutrootTweakSeckey(seckey: Uint8Array, merkleRoot?: Uint8Array):
   if (seckey.length !== 32) {
     throw new CTSError('Secret key must be 32 bytes');
   }
-  const k = Bytes.toBigInt(seckey);
+  const k = bytesToNumberBE(seckey);
   const order = secp256k1.Point.Fn.ORDER;
   if (k === 0n || k >= order) {
     throw new CTSError('Invalid secret key');
@@ -525,7 +526,7 @@ export function verifyNutrootCommitment(
     throw new CTSError('Secret must be 33 bytes');
   }
   const root = nutrootRootFromPath(nutrootLeafHash(serializedLeaf), merklePath);
-  return Bytes.equals(nutrootTweakPubkey(internalKey, root), secret);
+  return equalBytes(nutrootTweakPubkey(internalKey, root), secret);
 }
 
 /**
@@ -550,7 +551,7 @@ export function numsOffsetKey(u: Uint8Array): Uint8Array {
   if (u.length !== 32) {
     throw new CTSError('NUMS offset must be 32 bytes');
   }
-  const x = Bytes.toBigInt(u);
+  const x = bytesToNumberBE(u);
   if (x === 0n || x >= secp256k1.Point.Fn.ORDER) {
     throw new CTSError('NUMS offset is not a valid scalar');
   }
@@ -583,16 +584,16 @@ export function buildNutrootSecret(
     throw new CTSError('A NUMS offset applies only to the NUMS base key');
   }
   const u = isNums ? (opts?.u ?? secp256k1.utils.randomSecretKey()) : undefined;
-  const internalKey = u ? numsOffsetKey(u) : Bytes.fromHex(internalKeyHex);
+  const internalKey = u ? numsOffsetKey(u) : hexToBytes(internalKeyHex);
   enumerateLeafKeySlots(leaves);
   const tree = leaves.map((leaf) => serializeNutrootLeaf(leaf));
   const root = nutrootMerkleRoot(tree.map(nutrootLeafHash));
   const secret = nutrootTweakPubkey(internalKey, root);
   return {
-    secret: Bytes.toHex(secret),
-    tree: tree.map((leaf) => Bytes.toHex(leaf)),
-    K: Bytes.toHex(internalKey),
-    ...(u && { u: Bytes.toHex(u) }),
+    secret: bytesToHex(secret),
+    tree: tree.map((leaf) => bytesToHex(leaf)),
+    K: bytesToHex(internalKey),
+    ...(u && { u: bytesToHex(u) }),
   };
 }
 
@@ -612,18 +613,18 @@ export function buildScriptPathWitness(
 ): string {
   // NUT-10 witness bounds: no more signature entries than the leaf lists keys,
   // and a preimage of at most 32 bytes. A mint rejects either, so never emit them.
-  const leaf = parseNutrootLeaf(Bytes.fromHex(tree[leafIndex] ?? ''));
+  const leaf = parseNutrootLeaf(hexToBytes(tree[leafIndex] ?? ''));
   if (signatures.length > leaf.keys.length) {
     throw new CTSError('Witness holds more signatures than the leaf lists keys');
   }
-  if (preimage !== undefined && Bytes.fromHex(preimage).length > 32) {
+  if (preimage !== undefined && hexToBytes(preimage).length > 32) {
     throw new CTSError('Witness preimage exceeds 32 bytes');
   }
-  const leafHashes = tree.map((leaf) => nutrootLeafHash(Bytes.fromHex(leaf)));
+  const leafHashes = tree.map((leaf) => nutrootLeafHash(hexToBytes(leaf)));
   const path = nutrootMerklePath(leafHashes, leafIndex);
   return JSON.stringify({
     leaf: tree[leafIndex],
-    control: { K: internalKeyHex, path: path.map((h) => Bytes.toHex(h)) },
+    control: { K: internalKeyHex, path: path.map((h) => bytesToHex(h)) },
     signatures,
     ...(preimage !== undefined && { preimage }),
   });
@@ -658,7 +659,7 @@ export function selectLeafSignatures(
   for (const key of leaf.keys) {
     const match = signatures.find((signature) => {
       try {
-        return schnorr.verify(Bytes.fromHex(signature), digest, Bytes.fromHex(key).subarray(1));
+        return schnorr.verify(hexToBytes(signature), digest, hexToBytes(key).subarray(1));
       } catch {
         return false;
       }
@@ -705,7 +706,7 @@ export function verifyNutrootSpendInfo(
   secretHex: string,
   spendInfo: { k?: string; E?: string; K?: string; tree?: string[]; u?: string },
 ): 'bare' | 'empty-tweaked' | 'tweaked' | 'receiver-keyed' {
-  const secret = Bytes.fromHex(secretHex);
+  const secret = hexToBytes(secretHex);
   try {
     pointFromBytes(secret);
   } catch {
@@ -726,11 +727,11 @@ export function verifyNutrootSpendInfo(
     }
     let offsetKey: Uint8Array;
     try {
-      offsetKey = numsOffsetKey(Bytes.fromHex(spendInfo.u));
+      offsetKey = numsOffsetKey(hexToBytes(spendInfo.u));
     } catch {
       throw new CTSError('Spend info NUMS offset must be a 32-byte scalar');
     }
-    if (!Bytes.equals(offsetKey, Bytes.fromHex(spendInfo.K))) {
+    if (!equalBytes(offsetKey, hexToBytes(spendInfo.K))) {
       throw new CTSError('Spend info internal key is not the claimed NUMS offset');
     }
   }
@@ -738,25 +739,25 @@ export function verifyNutrootSpendInfo(
   // the derivation pins the secret to the receiver, which a sender cannot have pre-tweaked (NUT-28).
   if (spendInfo.E !== undefined && spendInfo.k === undefined) {
     try {
-      pointFromBytes(Bytes.fromHex(spendInfo.E));
+      pointFromBytes(hexToBytes(spendInfo.E));
     } catch {
       throw new CTSError('Spend info ephemeral must be a 33-byte point');
     }
     const leaves =
       spendInfo.tree && spendInfo.tree.length > 0
-        ? spendInfo.tree.map((leaf) => parseNutrootLeaf(Bytes.fromHex(leaf)))
+        ? spendInfo.tree.map((leaf) => parseNutrootLeaf(hexToBytes(leaf)))
         : undefined;
     if (leaves) enumerateLeafKeySlots(leaves);
     // With K disclosed beside the tree (NUT-10), completeness is checkable here rather than only at
     // trial-match, and by any holder rather than only the receiver.
     if (spendInfo.K !== undefined && leaves) {
-      const internalKey = Bytes.fromHex(spendInfo.K);
+      const internalKey = hexToBytes(spendInfo.K);
       if (internalKey.length !== 33) {
         throw new CTSError('Spend info internal key must be 33 bytes');
       }
-      const treeBytes = spendInfo.tree!.map((leaf) => Bytes.fromHex(leaf));
+      const treeBytes = spendInfo.tree!.map((leaf) => hexToBytes(leaf));
       const root = nutrootMerkleRoot(treeBytes.map(nutrootLeafHash));
-      if (!Bytes.equals(nutrootTweakPubkey(internalKey, root), secret)) {
+      if (!equalBytes(nutrootTweakPubkey(internalKey, root), secret)) {
         throw new CTSError('Disclosed tree does not reconstruct the proof secret');
       }
     }
@@ -766,32 +767,32 @@ export function verifyNutrootSpendInfo(
   if (spendInfo.k !== undefined) {
     let derived: Uint8Array;
     try {
-      derived = getPubKeyFromPrivKey(Bytes.fromHex(spendInfo.k));
+      derived = getPubKeyFromPrivKey(hexToBytes(spendInfo.k));
     } catch {
       throw new CTSError('Spend info key is not a valid private key');
     }
     if (spendInfo.K !== undefined) {
       let disclosed: Uint8Array;
       try {
-        disclosed = pointFromBytes(Bytes.fromHex(spendInfo.K)).toBytes(true);
+        disclosed = pointFromBytes(hexToBytes(spendInfo.K)).toBytes(true);
       } catch {
         throw new CTSError('Spend info internal key must be a 33-byte point');
       }
-      if (!Bytes.equals(disclosed, derived)) {
+      if (!equalBytes(disclosed, derived)) {
         throw new CTSError('Spend info internal key does not match its private key');
       }
     }
     if (!spendInfo.tree || spendInfo.tree.length === 0) {
-      if (Bytes.equals(derived, secret)) return 'bare';
+      if (equalBytes(derived, secret)) return 'bare';
       // The empty-tweak step (NUT-10): an aggregated key commits to having no script path by
       // tweaking with nothing but itself. Checked here rather than only for a disclosed `K`,
       // because a single-party key may use the same form.
-      if (Bytes.equals(nutrootTweakPubkey(derived), secret)) return 'empty-tweaked';
+      if (equalBytes(nutrootTweakPubkey(derived), secret)) return 'empty-tweaked';
       throw new CTSError('Spend info key does not match the proof secret');
     }
     internalKey = derived;
   } else if (spendInfo.K !== undefined) {
-    internalKey = Bytes.fromHex(spendInfo.K);
+    internalKey = hexToBytes(spendInfo.K);
     if (internalKey.length !== 33) {
       throw new CTSError('Spend info internal key must be 33 bytes');
     }
@@ -799,18 +800,18 @@ export function verifyNutrootSpendInfo(
   if (internalKey !== undefined && (!spendInfo.tree || spendInfo.tree.length === 0)) {
     // `K` alone is complete when the secret is its empty tweak: nothing else can be committed.
     // This is how an aggregated key arrives, since no single party holds its scalar to send.
-    if (Bytes.equals(nutrootTweakPubkey(internalKey), secret)) return 'empty-tweaked';
+    if (equalBytes(nutrootTweakPubkey(internalKey), secret)) return 'empty-tweaked';
     throw new CTSError('Spend info discloses a key that does not commit to the proof secret');
   }
   if (!spendInfo.tree || spendInfo.tree.length === 0 || internalKey === undefined) {
     throw new CTSError('Spend info is incomplete: tree and a key source are required');
   }
-  const treeBytes = spendInfo.tree.map((leaf) => Bytes.fromHex(leaf));
+  const treeBytes = spendInfo.tree.map((leaf) => hexToBytes(leaf));
   // Acceptance policy: every disclosed leaf must be one the wallet can reason about.
   const leaves = treeBytes.map(parseNutrootLeaf);
   enumerateLeafKeySlots(leaves);
   const root = nutrootMerkleRoot(treeBytes.map(nutrootLeafHash));
-  if (!Bytes.equals(nutrootTweakPubkey(internalKey, root), secret)) {
+  if (!equalBytes(nutrootTweakPubkey(internalKey, root), secret)) {
     throw new CTSError('Disclosed tree does not reconstruct the proof secret');
   }
   return 'tweaked';
@@ -869,7 +870,7 @@ export function deriveReceiverKeyedSecret(
     const eBytes = opts.eBytes ?? secp256k1.utils.randomSecretKey();
     const leaves = blindTaggedLeafKeys(opts.leaves, eBytes, opts.blindKeys);
     const { secret, tree, K, u } = buildNutrootSecret(NUTROOT_NUMS_KEY, leaves);
-    return { secret, E: Bytes.toHex(getPubKeyFromPrivKey(eBytes)), tree, K, u };
+    return { secret, E: bytesToHex(getPubKeyFromPrivKey(eBytes)), tree, K, u };
   }
   const eBytes = opts?.eBytes ?? secp256k1.utils.randomSecretKey();
   const { blinded, Ehex } = deriveP2BKBlindedPubkeys([receiverPubHex], eBytes, true);
@@ -942,7 +943,7 @@ export function verifyNutrootRequestTree(
       throw new CTSError('Nutroot request: spend info is missing the ephemeral E');
     }
     try {
-      pointFromBytes(Bytes.fromHex(spendInfo.E));
+      pointFromBytes(hexToBytes(spendInfo.E));
     } catch {
       throw new CTSError('Nutroot request: spend info ephemeral must be a 33-byte point');
     }
@@ -959,11 +960,11 @@ export function verifyNutrootRequestTree(
     }
     let offsetKey: Uint8Array;
     try {
-      offsetKey = numsOffsetKey(Bytes.fromHex(spendInfo.u));
+      offsetKey = numsOffsetKey(hexToBytes(spendInfo.u));
     } catch {
       throw new CTSError('Nutroot request: NUMS offset must be a 32-byte scalar');
     }
-    if (!Bytes.equals(offsetKey, Bytes.fromHex(spendInfo.K))) {
+    if (!equalBytes(offsetKey, hexToBytes(spendInfo.K))) {
       throw new CTSError('Nutroot request: internal key is not the claimed NUMS offset');
     }
   } else if (spendInfo.u !== undefined) {
@@ -987,12 +988,12 @@ export function verifyNutrootRequestTree(
   }
   const blind = new Set((option.blindKeys ?? []).map((key) => key.toLowerCase()));
   const candidates = disclosed.map((hex) => {
-    const bytes = Bytes.fromHex(hex);
+    const bytes = hexToBytes(hex);
     const leaf = parseNutrootLeaf(bytes);
     // Round-trip pins canonical bytes: an annotation or non-minimal field is not what the payee
     // asked for, even when inert.
     /* v8 ignore next 3 -- backstop: parseNutrootLeaf admits only canonical bytes today */
-    if (!Bytes.equals(serializeNutrootLeaf(leaf), bytes)) {
+    if (!equalBytes(serializeNutrootLeaf(leaf), bytes)) {
       throw new CTSError('Nutroot request: disclosed leaf is not in requested canonical form');
     }
     const matches: number[] = [];
@@ -1074,7 +1075,7 @@ export function slotKeysByBlindedPubkey(
     /* v8 ignore stop */
     // Both parity candidates: an x-only import may hold n - p for the published point (NUT-28).
     for (const secretKey of candidates) {
-      bySlot.set(Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(secretKey))), { slot, secretKey });
+      bySlot.set(bytesToHex(getPubKeyFromPrivKey(hexToBytes(secretKey))), { slot, secretKey });
     }
   }
   return bySlot;
@@ -1103,10 +1104,10 @@ export function recoverLeafKeySecretKeys(
   secretKey: string;
   blinded: boolean;
 }> {
-  const slots = enumerateLeafKeySlots(tree.map((leaf) => parseNutrootLeaf(Bytes.fromHex(leaf))));
+  const slots = enumerateLeafKeySlots(tree.map((leaf) => parseNutrootLeaf(hexToBytes(leaf))));
   const hits = [];
   for (const privHex of privkeysHex) {
-    const pub = Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(privHex)));
+    const pub = bytesToHex(getPubKeyFromPrivKey(hexToBytes(privHex)));
     const blindedKeys =
       EHex === undefined
         ? new Map<string, { slot: number; secretKey: string }>()
@@ -1157,17 +1158,17 @@ export function recoverReceiverKeyedSecretKey(
   }
   const root =
     tree && tree.length > 0
-      ? nutrootMerkleRoot(tree.map((leaf) => nutrootLeafHash(Bytes.fromHex(leaf))))
+      ? nutrootMerkleRoot(tree.map((leaf) => nutrootLeafHash(hexToBytes(leaf))))
       : undefined;
   for (const internalSeckey of candidates) {
-    const internalKey = Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(internalSeckey)));
+    const internalKey = bytesToHex(getPubKeyFromPrivKey(hexToBytes(internalSeckey)));
     if (root === undefined) {
       if (internalKey === secretHex) return { secretKey: internalSeckey, internalKey };
       continue;
     }
-    const tweaked = nutrootTweakSeckey(Bytes.fromHex(internalSeckey), root);
-    if (Bytes.toHex(getPubKeyFromPrivKey(tweaked)) === secretHex) {
-      return { secretKey: Bytes.toHex(tweaked), internalKey };
+    const tweaked = nutrootTweakSeckey(hexToBytes(internalSeckey), root);
+    if (bytesToHex(getPubKeyFromPrivKey(tweaked)) === secretHex) {
+      return { secretKey: bytesToHex(tweaked), internalKey };
     }
   }
   return undefined;
@@ -1177,5 +1178,5 @@ export function recoverReceiverKeyedSecretKey(
  * The other parity's scalar for the same x coordinate: `n - p` (NUT-28 x-only imports).
  */
 function negateScalarHex(privHex: string): string {
-  return Bytes.toHex(numberToBytesBE(secp256k1.Point.Fn.ORDER - BigInt('0x' + privHex), 32));
+  return bytesToHex(numberToBytesBE(secp256k1.Point.Fn.ORDER - BigInt('0x' + privHex), 32));
 }

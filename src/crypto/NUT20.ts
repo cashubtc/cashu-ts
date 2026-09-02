@@ -4,7 +4,7 @@ import { hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { Amount } from '../model/Amount';
 import { type SerializedBlindedMessage } from '../model/types';
-import { Bytes } from '../utils/Bytes';
+import { minimalBytesBE } from '../utils';
 
 import { schnorrSignDigest, schnorrVerifyDigest } from './core';
 
@@ -25,7 +25,7 @@ function constructMessage(quote: string, blindedMessages: SerializedBlindedMessa
   transcript.update(quoteBytes);
   for (const blindedMessage of blindedMessages) {
     // Amount.from defensively normalizes a raw JSON number/string (Amount passes through).
-    const amountBytes = Bytes.minimalBE(Amount.from(blindedMessage.amount).toBigInt());
+    const amountBytes = minimalBytesBE(Amount.from(blindedMessage.amount).toBigInt());
     transcript.update(numberToBytesBE(amountBytes.length, 4));
     transcript.update(amountBytes);
     const pointBytes = hexToBytes(blindedMessage.B_);

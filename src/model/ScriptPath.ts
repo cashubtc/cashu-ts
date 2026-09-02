@@ -1,3 +1,6 @@
+import { equalBytes } from '@noble/curves/utils.js';
+import { utf8ToBytes } from '@noble/hashes/utils.js';
+
 import { schnorrSignDigest } from '../crypto/core';
 import { getPubKeyFromPrivKey } from '../crypto/curve_secp';
 import { isBlsKeyset } from '../crypto/curves';
@@ -13,7 +16,14 @@ import {
   verifyNutrootCommitment,
 } from '../crypto/nutroot';
 import { digestForPayload, inputsForPayload, proofInputContextKey } from '../crypto/transcript';
-import { Bytes, JSONInt, encodeUint8ToBase64Url } from '../utils';
+import {
+  bytesToHex,
+  bytesToUtf8,
+  decodeBase64UrlToUint8,
+  hexToBytes,
+  JSONInt,
+  encodeUint8ToBase64Url,
+} from '../utils';
 import { orderOutputsForPayload } from '../wallet/_internal';
 import type { MeltPreview, ScriptPathPlan, SwapPreview } from '../wallet/types';
 
@@ -156,13 +166,13 @@ function buildPackage(
       // can build a control block.
       throw new CTSError('Script path package needs the internal key from the proof spend info');
     }
-    const leafHashes = tree.map((leaf) => nutrootLeafHash(Bytes.fromHex(leaf)));
+    const leafHashes = tree.map((leaf) => nutrootLeafHash(hexToBytes(leaf)));
     return {
       secret: plan.secret,
       leaf: tree[plan.leafIndex],
       control: {
         K,
-        path: nutrootMerklePath(leafHashes, plan.leafIndex).map((h) => Bytes.toHex(h)),
+        path: nutrootMerklePath(leafHashes, plan.leafIndex).map((h) => bytesToHex(h)),
       },
       ...(proof.spend_info?.E && { E: proof.spend_info.E }),
       ...(plan.preimage !== undefined && { preimage: plan.preimage }),
@@ -211,7 +221,7 @@ function extractMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' |
 
 function serializePackage(pkg: ScriptPathSigningPackage): string {
   const json = JSONInt.stringify(pkg) ?? '{}';
-  return `${SCRIPT_PATH_PREFIX}${encodeUint8ToBase64Url(Bytes.fromString(json))}`;
+  return `${SCRIPT_PATH_PREFIX}${encodeUint8ToBase64Url(utf8ToBytes(json))}`;
 }
 
 function deserializePackage(input: string): ScriptPathSigningPackage {
@@ -220,7 +230,9 @@ function deserializePackage(input: string): ScriptPathSigningPackage {
   }
   let data: unknown;
   try {
-    data = JSONInt.parse(Bytes.toString(Bytes.fromBase64(input.slice(SCRIPT_PATH_PREFIX.length))));
+    data = JSONInt.parse(
+      bytesToUtf8(decodeBase64UrlToUint8(input.slice(SCRIPT_PATH_PREFIX.length))),
+    );
   } catch (e) {
     throw new CTSError('Failed to parse signing package', { cause: e });
   }
@@ -293,15 +305,15 @@ function assertValidPackage(pkg: ScriptPathSigningPackage): void {
     }
     spent.add(spend.secret);
     try {
-      parseNutrootLeaf(Bytes.fromHex(spend.leaf));
+      parseNutrootLeaf(hexToBytes(spend.leaf));
       if (
         !spend.control ||
         !Array.isArray(spend.control.path) ||
         !verifyNutrootCommitment(
-          Bytes.fromHex(spend.secret),
-          Bytes.fromHex(spend.control.K),
-          Bytes.fromHex(spend.leaf),
-          spend.control.path.map((hash) => Bytes.fromHex(hash)),
+          hexToBytes(spend.secret),
+          hexToBytes(spend.control.K),
+          hexToBytes(spend.leaf),
+          spend.control.path.map((hash) => hexToBytes(hash)),
         )
       ) {
         throw new Error('commitment mismatch');
@@ -318,9 +330,9 @@ function assertValidPackage(pkg: ScriptPathSigningPackage): void {
 function signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPathSigningPackage {
   assertValidPackage(pkg);
   const digests = packageInputDigests(pkg);
-  const pub = Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(privkey)));
+  const pub = bytesToHex(getPubKeyFromPrivKey(hexToBytes(privkey)));
   const spends = pkg.spends.map((spend) => {
-    const leaf = parseNutrootLeaf(Bytes.fromHex(spend.leaf));
+    const leaf = parseNutrootLeaf(hexToBytes(spend.leaf));
     const keys: string[] = [];
     if (leaf.keys.includes(pub)) keys.push(privkey.toLowerCase());
     if (spend.E !== undefined) {
@@ -368,7 +380,7 @@ function mergeMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | '
 }
 
 function assertMatches(pkg: ScriptPathSigningPackage, expected: Uint8Array): void {
-  if (!Bytes.equals(expected, packageDigest(pkg))) {
+  if (!equalBytes(expected, packageDigest(pkg))) {
     throw new CTSError(
       'Signing package does not match this transaction: its inputs, outputs or their order moved since it was extracted',
     );
@@ -381,7 +393,7 @@ function applyWitnesses(pkg: ScriptPathSigningPackage, inputs: Proof[]): Proof[]
   return inputs.map((proof) => {
     const spend = bySecret.get(proof.secret);
     if (!spend) return proof;
-    const leaf = parseNutrootLeaf(Bytes.fromHex(spend.leaf));
+    const leaf = parseNutrootLeaf(hexToBytes(spend.leaf));
     const signatures = selectRequiredLeafSignatures(
       leaf,
       digests.get(proof.secret)!,

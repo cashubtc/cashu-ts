@@ -18,7 +18,7 @@ import {
 import { NULL_LOGGER } from '../../src/logger';
 import { Amount } from '../../src/model/Amount';
 import type { Proof, SerializedBlindedMessage } from '../../src/model/types';
-import { Bytes } from '../../src/utils';
+import { bytesToHex, bytesToUtf8, hexToBytes } from '../../src/utils';
 import {
   attachBearerSpendInfo,
   attachTransactionWitnesses,
@@ -36,8 +36,8 @@ const DERIVED = vectors.nut13_v3.outputs; // {counter, secret, secret_key, ...}
 // Deterministic key material, independent of any seed derivation.
 const PRIV_A = '11'.repeat(32);
 const PRIV_B = '22'.repeat(32);
-const PUB_A = Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(PRIV_A)));
-const PUB_B = Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(PRIV_B)));
+const PUB_A = bytesToHex(getPubKeyFromPrivKey(hexToBytes(PRIV_A)));
+const PUB_B = bytesToHex(getPubKeyFromPrivKey(hexToBytes(PRIV_B)));
 
 function makeState(seed?: Uint8Array): NutrootWalletState {
   return {
@@ -102,9 +102,7 @@ describe('attachBearerSpendInfo', () => {
     for (const [i, proof] of proofs.entries()) {
       // The receiver's contract: k*G reconstructs the secret (NUT-10 bearer key path).
       expect(proof.spend_info?.k).toBe(DERIVED[i].secret_key);
-      expect(Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(proof.spend_info!.k!)))).toBe(
-        proof.secret,
-      );
+      expect(bytesToHex(getPubKeyFromPrivKey(hexToBytes(proof.spend_info!.k!)))).toBe(proof.secret);
     }
   });
 
@@ -135,7 +133,7 @@ describe('collectSpendInfoKeys', () => {
     // A valid scalar that reconstructs neither the bare secret nor any tweak of it.
     const wrong = v3Proof(PUB_A, { k: PRIV_B });
     const keys = collectSpendInfoKeys([good, wrong], undefined, NULL_LOGGER);
-    expect(Bytes.toHex(keys.get(PUB_A)!)).toBe(PRIV_A);
+    expect(bytesToHex(keys.get(PUB_A)!)).toBe(PRIV_A);
     expect(keys.size).toBe(1);
   });
 
@@ -147,14 +145,14 @@ describe('collectSpendInfoKeys', () => {
     const recovered = keys.get(secret);
     // What the mint verifies: the key path signature must be by the secret itself.
     expect(recovered).toBeDefined();
-    expect(Bytes.toHex(getPubKeyFromPrivKey(recovered!))).toBe(secret);
+    expect(bytesToHex(getPubKeyFromPrivKey(recovered!))).toBe(secret);
   });
 
   test('empty tweak: recovers p` = k + tagged_hash(K) when no tree is disclosed', () => {
-    const secret = Bytes.toHex(nutrootTweakPubkey(Bytes.fromHex(PUB_A)));
+    const secret = bytesToHex(nutrootTweakPubkey(hexToBytes(PUB_A)));
     const proof = v3Proof(secret, { k: PRIV_A });
     const keys = collectSpendInfoKeys([proof], undefined, NULL_LOGGER);
-    expect(Bytes.toHex(getPubKeyFromPrivKey(keys.get(secret)!))).toBe(secret);
+    expect(bytesToHex(getPubKeyFromPrivKey(keys.get(secret)!))).toBe(secret);
   });
 
   test('refuses spend info carrying both k and E', () => {
@@ -170,8 +168,8 @@ describe('collectSpendInfoKeys', () => {
     });
     const lockedProof = v3Proof(locked.secret, { E: locked.E, tree: locked.tree });
     const keys = collectSpendInfoKeys([bareProof, lockedProof], PRIV_A, NULL_LOGGER);
-    expect(Bytes.toHex(getPubKeyFromPrivKey(keys.get(bare.secret)!))).toBe(bare.secret);
-    expect(Bytes.toHex(getPubKeyFromPrivKey(keys.get(locked.secret)!))).toBe(locked.secret);
+    expect(bytesToHex(getPubKeyFromPrivKey(keys.get(bare.secret)!))).toBe(bare.secret);
+    expect(bytesToHex(getPubKeyFromPrivKey(keys.get(locked.secret)!))).toBe(locked.secret);
     // The wrong static key matches nothing.
     const misses = collectSpendInfoKeys([bareProof, lockedProof], PRIV_B, NULL_LOGGER);
     expect(misses.size).toBe(0);
@@ -232,7 +230,7 @@ describe('prepareScriptPathSpends', () => {
 
   test('a hashlock plan requires its preimage and carries it through', () => {
     const preimage = '11'.repeat(32);
-    const hash = Bytes.toHex(sha256(Bytes.fromHex(preimage)));
+    const hash = bytesToHex(sha256(hexToBytes(preimage)));
     const hashLeaves: NutrootLeaf[] = [{ type: 'hashlock', n: 1, keys: [PUB_B], hash }];
     const b = buildNutrootSecret(PUB_A, hashLeaves);
     const proof = v3Proof(b.secret, { k: PRIV_A, tree: b.tree });
@@ -356,7 +354,7 @@ describe('attachTransactionWitnesses', () => {
     const state = makeState(undefined);
     const payload = { inputs: [fromExtra, fromRandom], outputs: [OUTPUT] };
     const extra = new Map([
-      [PUB_A, Bytes.fromHex(PRIV_A)],
+      [PUB_A, hexToBytes(PRIV_A)],
       ...collectSpendInfoKeys([fromRandom], undefined, NULL_LOGGER),
     ]);
     await attachTransactionWitnesses(payload, undefined, extra, undefined, state);
@@ -380,7 +378,7 @@ describe('attachTransactionWitnesses', () => {
   test('a melt quote is part of the signed transcript', async () => {
     const input = v3Proof(PUB_A);
     const meltQuote = { quoteId: 'q1', amount: Amount.from(5) };
-    const extra = new Map([[PUB_A, Bytes.fromHex(PRIV_A)]]);
+    const extra = new Map([[PUB_A, hexToBytes(PRIV_A)]]);
     await attachTransactionWitnesses(
       { inputs: [input], outputs: [OUTPUT] },
       meltQuote,
@@ -416,7 +414,7 @@ describe('attachTransactionWitnesses', () => {
     await attachTransactionWitnesses(
       { inputs: [input], outputs: [OUTPUT] },
       undefined,
-      new Map([[PUB_A, Bytes.fromHex(PRIV_A)]]),
+      new Map([[PUB_A, hexToBytes(PRIV_A)]]),
       undefined,
       makeState(undefined),
     );
@@ -445,9 +443,9 @@ describe('attachTransactionWitnesses', () => {
     // The signature is by the leaf key over this transaction's digest (NUT-10 script path).
     expect(
       schnorr.verify(
-        Bytes.fromHex(witness.signatures[0]),
+        hexToBytes(witness.signatures[0]),
         digestOf([input]),
-        Bytes.fromHex(PUB_B).subarray(1),
+        hexToBytes(PUB_B).subarray(1),
       ),
     ).toBe(true);
   });
@@ -458,7 +456,7 @@ describe('attachTransactionWitnesses', () => {
     let seen: CosignRequest | undefined;
     const cosign = async (request: CosignRequest) => {
       seen = request;
-      return [Bytes.toHex(schnorr.sign(request.digest, Bytes.fromHex(PRIV_B)))];
+      return [bytesToHex(schnorr.sign(request.digest, hexToBytes(PRIV_B)))];
     };
     const spends = prepareScriptPathSpends(
       [input],
@@ -473,13 +471,13 @@ describe('attachTransactionWitnesses', () => {
       makeState(undefined),
     );
     expect(seen!.leaf.keys).toEqual([PUB_A, PUB_B]);
-    expect(Bytes.toString(seen!.message.subarray(0, 20))).toBe('Cashu_Transaction_v1');
+    expect(bytesToUtf8(seen!.message.subarray(0, 20))).toBe('Cashu_Transaction_v1');
     // digest = tagged_hash(input tag, SHA256(message) || SHA256(container)): recomputable, so a
     // signer can refuse anything it cannot verify.
-    expect(Bytes.toHex(inputDigest(sha256(seen!.message), seen!.container))).toBe(
-      Bytes.toHex(seen!.digest),
+    expect(bytesToHex(inputDigest(sha256(seen!.message), seen!.container))).toBe(
+      bytesToHex(seen!.digest),
     );
-    expect(Bytes.toHex(seen!.digest)).toBe(Bytes.toHex(digestOf([input])));
+    expect(bytesToHex(seen!.digest)).toBe(bytesToHex(digestOf([input])));
   });
 
   test('cosigner signatures fill a threshold; invalid or duplicate extras are trimmed', async () => {
@@ -489,7 +487,7 @@ describe('attachTransactionWitnesses', () => {
 
     const good = makeInput();
     const cosign = async ({ digest }: { digest: Uint8Array }) => [
-      Bytes.toHex(schnorr.sign(digest, Bytes.fromHex(PRIV_A))).toUpperCase(), // case-normalized
+      bytesToHex(schnorr.sign(digest, hexToBytes(PRIV_A))).toUpperCase(), // case-normalized
       '00'.repeat(64), // junk: trimmed, not forwarded
     ];
     const spends = prepareScriptPathSpends(
@@ -539,7 +537,7 @@ describe('attachTransactionWitnesses', () => {
       attachTransactionWitnesses(
         { inputs: [other], outputs: [OUTPUT] },
         undefined,
-        new Map([[PUB_A, Bytes.fromHex(PRIV_A)]]),
+        new Map([[PUB_A, hexToBytes(PRIV_A)]]),
         spends,
         makeState(undefined),
       ),

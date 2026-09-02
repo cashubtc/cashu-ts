@@ -5,7 +5,7 @@ import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import { NUTROOT_NUMS_KEY, parseNutrootLeaf, serializeNutrootLeaf } from '../../src/crypto/nutroot';
 import { Amount } from '../../src/model/Amount';
 import type { OutputData } from '../../src/model/OutputData';
-import { Bytes } from '../../src/utils';
+import { bytesToHex, hexToBytes } from '../../src/utils';
 import {
   lockToNutrootOptions,
   lockToP2PKOptions,
@@ -15,10 +15,10 @@ import {
 } from '../../src/wallet/lock';
 import type { OutputType } from '../../src/wallet/types';
 
-const PUB_A = Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex('11'.repeat(32))));
-const PUB_B = Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex('22'.repeat(32))));
-const PUB_C = Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex('33'.repeat(32))));
-const PUB_R = Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex('44'.repeat(32))));
+const PUB_A = bytesToHex(getPubKeyFromPrivKey(hexToBytes('11'.repeat(32))));
+const PUB_B = bytesToHex(getPubKeyFromPrivKey(hexToBytes('22'.repeat(32))));
+const PUB_C = bytesToHex(getPubKeyFromPrivKey(hexToBytes('33'.repeat(32))));
+const PUB_R = bytesToHex(getPubKeyFromPrivKey(hexToBytes('44'.repeat(32))));
 const HASH = 'ab'.repeat(32);
 const TIME = 1_800_000_000;
 
@@ -357,7 +357,7 @@ describe('nutrootToLockOptions (readable conditions)', () => {
 
   test('reads serialized leaf TLVs, the wire form a proof discloses', () => {
     const tree = [
-      Bytes.toHex(serializeNutrootLeaf({ type: 'after', n: 1, time: TIME, keys: [PUB_R] })),
+      bytesToHex(serializeNutrootLeaf({ type: 'after', n: 1, time: TIME, keys: [PUB_R] })),
     ];
     expect(nutrootToLockOptions({ receiverKey: PUB_A, leaves: tree })).toEqual({
       mainKeys: [PUB_A],
@@ -408,7 +408,7 @@ describe('Wallet.createOutputData lock chokepoint', () => {
     });
     const tree = out.spendInfo?.tree;
     expect(tree).toHaveLength(1);
-    expect(parseNutrootLeaf(Bytes.fromHex(tree![0]))).toEqual({
+    expect(parseNutrootLeaf(hexToBytes(tree![0]))).toEqual({
       type: 'after',
       n: 1,
       time: TIME,

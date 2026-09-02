@@ -16,15 +16,15 @@ import type {
 } from '../model/types';
 import request, { type RequestFn } from '../transport';
 import {
-  joinUrls,
-  verifyProofsForReceive,
-  encodeUint8ToBase64UrlPadded,
+  ABSOLUTE_MAX_PER_MINT,
   decodeBase64UrlToUint8,
+  hexToBytes,
+  joinUrls,
+  encodeUint8ToBase64UrlPadded,
   normalizeMintKeys,
   normalizeMintKeyset,
   normalizeSafeIntegerMetadata,
-  ABSOLUTE_MAX_PER_MINT,
-  Bytes,
+  verifyProofsForReceive,
 } from '../utils';
 import { KeyChain, type Keyset } from '../wallet';
 
@@ -311,7 +311,7 @@ export class AuthManager implements AuthProvider {
         }
         const url = new URL(joinUrls(this.mintUrl, path));
         const digest = requestDigest(method, url.pathname + url.search, utf8ToBytes(body ?? ''));
-        witness = signTransactionInput(digest, Bytes.fromHex(k));
+        witness = signTransactionInput(digest, hexToBytes(k));
       }
       this.pool.pop();
       this.logger.debug('AuthManager: BAT requested', {
