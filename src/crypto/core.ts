@@ -1,7 +1,7 @@
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
-import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
 

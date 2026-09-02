@@ -1,6 +1,7 @@
-import { bytesToHex, numberToBytesBE } from '@noble/curves/utils.js';
+import { numberToBytesBE } from '@noble/curves/utils.js';
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { HDKey, HARDENED_OFFSET } from '@scure/bip32';
 
 import { CTSError } from '../model/Errors';
@@ -162,6 +163,10 @@ export function createSecretAndBlindingFactorDeriver(
 
 function getDerivationKind(keysetId: string): DerivationKind {
   const isValidHex = /^[a-fA-F0-9]+$/.test(keysetId);
+  const isHmacHexVersion = keysetId.startsWith('01') || keysetId.startsWith('02');
+  if (isValidHex && isHmacHexVersion && keysetId.length % 2 !== 0) {
+    throw new CTSError('Invalid hex string: odd length.');
+  }
   if (!isValidHex && isBase64String(keysetId)) {
     return DerivationKind.DEPRECATED_BIP32;
   }
@@ -169,7 +174,7 @@ function getDerivationKind(keysetId: string): DerivationKind {
     return DerivationKind.DEPRECATED_BIP32;
   }
   // Strict version gate: does not assume future keyset versions are BLS.
-  if (isValidHex && (keysetId.startsWith('01') || keysetId.startsWith('02'))) {
+  if (isValidHex && isHmacHexVersion) {
     return DerivationKind.HMAC_SHA256;
   }
   throw new CTSError(`Unrecognized keyset ID version ${keysetId.slice(0, 2)}`);
@@ -206,13 +211,13 @@ function deriveHmacSecretAndBlindingFactor(
   }
   const base = Bytes.concat(
     Bytes.fromString('Cashu_KDF_HMAC_SHA256'),
-    Bytes.fromHex(keysetId),
+    hexToBytes(keysetId),
     // numberToBytesBE throws rather than wrapping, so an out-of-range counter can never
     // be silently encoded as a different one even if the guard above is ever moved.
     numberToBytesBE(counter, 8),
   );
   return {
-    secret: hmac(sha256, seed, Bytes.concat(base, Bytes.fromHex('00'))),
+    secret: hmac(sha256, seed, Bytes.concat(base, hexToBytes('00'))),
     blindingFactor: computeBlindingFactor(seed, base, keysetId),
   };
 }
@@ -224,7 +229,7 @@ function computeBlindingFactor(seed: Uint8Array, base: Uint8Array, keysetId: str
     // BLS_FR_ORDER ~ 0.45·2^256; rejection sampling yields a uniform sample over Fr*. Match the
     // NUT-00 batch-weight pattern. Loop cap is defensive; expected attempts ≈ 2.2.
     for (let attempt = 0; attempt < 1 << 16; attempt++) {
-      const msg = Bytes.concat(base, Bytes.fromHex('01'), numberToBytesBE(attempt, 4));
+      const msg = Bytes.concat(base, hexToBytes('01'), numberToBytesBE(attempt, 4));
       const digest = hmac(sha256, seed, msg);
       const x = Bytes.toBigInt(digest);
       if (x === 0n || x >= BLS_FR_ORDER) continue;
@@ -235,7 +240,7 @@ function computeBlindingFactor(seed: Uint8Array, base: Uint8Array, keysetId: str
   }
   // V2 (secp256k1): single HMAC, single-subtraction modular reduction. SECP256K1_N is ~2^256 so
   // at most one subtraction is needed; bias is ~2^-128 (negligible).
-  const digest = hmac(sha256, seed, Bytes.concat(base, Bytes.fromHex('01')));
+  const digest = hmac(sha256, seed, Bytes.concat(base, hexToBytes('01')));
   const x = Bytes.toBigInt(digest);
   const reduced = x >= SECP256K1_N ? x - SECP256K1_N : x;
   /* c8 ignore next */

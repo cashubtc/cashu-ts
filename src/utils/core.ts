@@ -1,5 +1,5 @@
-import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 
 import {
   type DLEQ,
@@ -545,7 +545,7 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
           .map(([, pubKey]) => hexToBytes(pubKey)),
       );
       const hash = sha256(pubkeysConcat);
-      const hashHex = Bytes.toHex(hash).slice(0, 14);
+      const hashHex = bytesToHex(hash).slice(0, 14);
       return '00' + hashHex;
     }
     case 1:
@@ -569,7 +569,7 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
         preimage += `|final_expiry:${expiry}`;
       }
       const hash = sha256(Bytes.fromString(preimage));
-      const hashHex = Bytes.toHex(hash);
+      const hashHex = bytesToHex(hash);
       return (versionByte === 2 ? '02' : '01') + hashHex;
     }
     default:

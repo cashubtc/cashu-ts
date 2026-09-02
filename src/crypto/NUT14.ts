@@ -1,5 +1,5 @@
-import { bytesToHex, hexToBytes, randomBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
 
 import { type Logger, NULL_LOGGER } from '../logger';
 import { CTSError } from '../model/Errors';

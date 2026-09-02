@@ -1,8 +1,8 @@
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
-import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { HDKey } from '@scure/bip32';
 
 import { CTSError } from '../model/Errors';
