@@ -1221,6 +1221,15 @@ describe('test raw tokens', () => {
 
     expect(decodedToken).toEqual(token);
   });
+
+  test.each(['__proto__', 'constructor', 'toString', 'zzzz'])(
+    'getEncodedTokenBinary rejects non-hex keyset id %s',
+    (id) => {
+      const badToken = { ...token, proofs: token.proofs.map((p) => ({ ...p, id })) };
+
+      expect(() => utils.getEncodedTokenBinary(badToken)).toThrow(CTSError);
+    },
+  );
 });
 
 describe('test deprecated base64 keyset id derivation', () => {
