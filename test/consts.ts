@@ -325,7 +325,7 @@ export const NUT02_V2_VECTOR3_KEYSET: MintKeyset = {
 // NUT-02 V3 (BLS12-381) keyset test vectors. Mirror of nuts/tests/02-tests.md "Version 3".
 // Public keys are arbitrary distinct G2 points; only the keyset ID derivation is exercised.
 export const NUT02_V3_VECTOR1_KEYS: MintKeys = {
-  id: '02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd',
+  id: '02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6',
   unit: 'sat',
   keys: {
     '1': '8d0273f6bf31ed37c3b8d68083ec3d8e20b5f2cc170fa24b9b5be35b34ed013f9a921f1cad1644d4bdb14674247234c8049cd1dbb2d2c3581e54c088135fef36505a6823d61b859437bfc79b617030dc8b40e32bad1fa85b9c0f368af6d38d3c',
@@ -334,7 +334,7 @@ export const NUT02_V3_VECTOR1_KEYS: MintKeys = {
 };
 
 export const NUT02_V3_VECTOR2_KEYS: MintKeys = {
-  id: '020c5210bbb16757130c7e26061df3ea3f97a47046d2cebb54a21b3b4c370f42d8',
+  id: '027f0dcd008156363a8418b88f38ddd5155a38c46a3f27c15c7eb40ec5f04cb4b3',
   unit: 'sat',
   input_fee_ppk: 100,
   final_expiry: 2000000000,

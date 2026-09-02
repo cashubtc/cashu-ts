@@ -1,3 +1,4 @@
+export * from './bytes';
 export * from './base64';
 export * from './bech32m';
 export * from './cbor';
