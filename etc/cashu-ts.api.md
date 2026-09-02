@@ -258,6 +258,9 @@ export const BLS_HASH_TO_CURVE_DST = "CASHU_BLS12_381_G1_XMD:SHA-256_SSWU_RO_";
 // @public
 export function buildMintBackupPayload(mints: string[], timestamp: number): string;
 
+// @public
+export function bytesToHex(bytes: Uint8Array): string;
+
 // @public (undocumented)
 export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
 
@@ -697,6 +700,9 @@ export function hasTag(secret: Secret | string, key: string): boolean;
 export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys, opts?: {
     require?: boolean;
 }): boolean;
+
+// @public
+export function hexToBytes(hex: string): Uint8Array;
 
 // @public
 export type HTLCWitness = {
