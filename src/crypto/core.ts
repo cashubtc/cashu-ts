@@ -1,7 +1,7 @@
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
-import { sha256 } from '@noble/hashes/sha2.js';
+import { sha256 as nobleSha256 } from '@noble/hashes/sha2.js';
 import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
@@ -39,12 +39,14 @@ export type UnblindedSignature = {
 // ------------------------------
 
 /**
- * SHA-256 over raw bytes (re-exported from noble).
+ * SHA-256 over raw bytes.
  *
  * @remarks
  * For UTF-8 message strings, use `computeMessageDigest`.
  */
-export { sha256 };
+export function sha256(message: Uint8Array): Uint8Array {
+  return nobleSha256(message);
+}
 
 /**
  * BIP340-style tagged hash: `SHA256(SHA256(tag) || SHA256(tag) || messages)`.

@@ -283,11 +283,12 @@ describe('getValidSigners / meetsSignerThreshold', () => {
 });
 
 describe('hash exports', () => {
-  test("sha256 is noble's byte-level hash, surfaced as-is", () => {
-    expect(sha256Export).toBe(sha256);
+  test('sha256 hashes raw bytes', () => {
     expect(bytesToHex(sha256Export(new Uint8Array(0)))).toBe(
       'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
     );
+    const msg = new TextEncoder().encode('cashu');
+    expect(bytesToHex(sha256Export(msg))).toBe(bytesToHex(sha256(msg)));
   });
 
   test('taggedHash matches the BIP340 construction', () => {

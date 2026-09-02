@@ -5,7 +5,6 @@
 ```ts
 
 import { Fp2 } from '@noble/curves/abstract/tower.js';
-import { sha256 } from '@noble/hashes/sha2.js';
 import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 
 // @public
@@ -2358,7 +2357,8 @@ export function serializeSwapPreview(preview: SwapPreview): SerializedSwapPrevie
 // @public
 export function setGlobalRequestOptions(options: Partial<RequestOptions>): void;
 
-export { sha256 }
+// @public
+export function sha256(message: Uint8Array): Uint8Array;
 
 // @public
 export interface SharedOutputTypeProps {
