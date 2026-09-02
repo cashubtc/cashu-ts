@@ -170,7 +170,7 @@ function buildPackage(
     let K = info?.K;
     if (info?.k) {
       try {
-        K = Bytes.toHex(getPubKeyFromPrivKey(Bytes.fromHex(info.k)));
+        K = bytesToHex(getPubKeyFromPrivKey(hexToBytes(info.k)));
       } catch {
         throw new CTSError('Script path package bearer key is not a valid private key');
       }

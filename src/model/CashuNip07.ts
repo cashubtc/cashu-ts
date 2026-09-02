@@ -1,3 +1,4 @@
+import { equalBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
 
@@ -11,7 +12,7 @@ import {
   parseWitnessData,
 } from '../crypto/NUT11';
 import { inputDigest, TRANSCRIPT_DOMAIN_TAG } from '../crypto/transcript';
-import { Bytes } from '../utils';
+import { bytesToHex, hexToBytes } from '../utils';
 import type { ScriptPathPlan, SpendOption } from '../wallet/types';
 
 import { CTSError } from './Errors';
@@ -199,11 +200,11 @@ export const CashuNip07: CashuNip07Api = {
 
   cosign(nostr) {
     return async ({ digest, message, container }) => {
-      const digestHex = Bytes.toHex(digest);
+      const digestHex = bytesToHex(digest);
       if (nostr.nip60?.signTransaction) {
         const signed = await nostr.nip60.signTransaction(
-          Bytes.toHex(message),
-          Bytes.toHex(container),
+          bytesToHex(message),
+          bytesToHex(container),
         );
         if (signed.hash.toLowerCase() !== digestHex) {
           throw new CTSError('NIP-07 signer signed a different message');
@@ -246,23 +247,23 @@ export const CashuNip07: CashuNip07Api = {
   },
 
   signTransaction(messageHex, inputContainerHex, secretKey) {
-    const message = Bytes.fromHex(messageHex);
+    const message = hexToBytes(messageHex);
     const tagged =
       message.length > DOMAIN_TAG.length &&
-      Bytes.equals(message.subarray(0, DOMAIN_TAG.length), DOMAIN_TAG);
+      equalBytes(message.subarray(0, DOMAIN_TAG.length), DOMAIN_TAG);
     if (!tagged) throw new CTSError('Refusing to sign: not a Cashu transaction message');
     // The signed value is the input digest, derived here rather than trusted: the container must
     // be a record of the transcript this message carries, or the signature covers nothing real.
-    const container = Bytes.fromHex(inputContainerHex);
-    if (Bytes.toHex(message).indexOf(inputContainerHex.toLowerCase(), DOMAIN_TAG.length * 2) < 0) {
+    const container = hexToBytes(inputContainerHex);
+    if (bytesToHex(message).indexOf(inputContainerHex.toLowerCase(), DOMAIN_TAG.length * 2) < 0) {
       throw new CTSError('Refusing to sign: input container is not part of this transaction');
     }
     const hash = inputDigest(sha256(message), container);
-    const key = typeof secretKey === 'string' ? Bytes.fromHex(secretKey) : secretKey;
+    const key = typeof secretKey === 'string' ? hexToBytes(secretKey) : secretKey;
     return {
-      hash: Bytes.toHex(hash),
+      hash: bytesToHex(hash),
       sig: schnorrSignDigest(hash, key),
-      pubkey: Bytes.toHex(getPubKeyFromPrivKey(key).subarray(1)),
+      pubkey: bytesToHex(getPubKeyFromPrivKey(key).subarray(1)),
     };
   },
 };
