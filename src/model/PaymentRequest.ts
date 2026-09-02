@@ -1,7 +1,12 @@
 import { getTag, getTagInt, getTagScalar } from '../crypto/NUT10';
 import type { P2PKOptions, P2PKTag } from '../crypto/NUT11';
 import { P2PK_KNOWN_TAG_KEYS, parseP2PKSecret } from '../crypto/NUT11';
-import { encodeBase64toUint8, decodeCBOR, encodeCBOR, Bytes } from '../utils';
+import {
+  decodeBase64AnyToUint8,
+  decodeCBOR,
+  encodeCBOR,
+  encodeUint8ToBase64UrlPadded,
+} from '../utils';
 import { decodeBech32mToBytes, encodeBech32m } from '../utils/bech32m';
 import { decodeTLV, encodeTLV } from '../utils/tlv';
 import type { DecodedTLVPaymentRequest } from '../utils/tlv';
@@ -72,7 +77,7 @@ export class PaymentRequest {
   toEncodedRequest(): string {
     const rawRequest: RawPaymentRequest = this.toRawRequest();
     const data = encodeCBOR(rawRequest);
-    const encodedData = Bytes.toBase64(data);
+    const encodedData = encodeUint8ToBase64UrlPadded(data);
     return 'creq' + 'A' + encodedData;
   }
 
@@ -241,7 +246,7 @@ export class PaymentRequest {
       throw new CTSError('unsupported pr version');
     }
     const encodedData = encodedRequest.slice(5);
-    const data = encodeBase64toUint8(encodedData);
+    const data = decodeBase64AnyToUint8(encodedData);
     const decoded = decodeCBOR(data) as RawPaymentRequest;
     return this.fromRawRequest(decoded);
   }

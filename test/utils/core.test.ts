@@ -1196,7 +1196,7 @@ describe('getDecodedTokenBinary edge cases', () => {
 describe('tokenFromTemplate rejects valid CBOR of wrong shape', () => {
   test('getDecodedToken (cashuB) throws CTSError, not a raw TypeError', () => {
     const body = utils.encodeCBOR({ m: 'http://localhost:3338', u: 'sat' });
-    const token = 'cashuB' + utils.encodeUint8toBase64Url(body);
+    const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
     expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
   });
 
@@ -1211,13 +1211,13 @@ describe('tokenFromTemplate rejects valid CBOR of wrong shape', () => {
 
   test('throws CTSError when a token entry has no proofs array', () => {
     const body = utils.encodeCBOR({ m: 'http://localhost:3338', u: 'sat', t: [{ i: 'nope' }] });
-    const token = 'cashuB' + utils.encodeUint8toBase64Url(body);
+    const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
     expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
   });
 
   test('defaults unit to sat when template omits it', () => {
     const body = utils.encodeCBOR({ m: 'http://localhost:3338', t: [] });
-    const token = 'cashuB' + utils.encodeUint8toBase64Url(body);
+    const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
     const decoded = utils.getDecodedToken(token, []);
     expect(decoded).toEqual({ mint: 'http://localhost:3338', proofs: [], unit: 'sat' });
   });

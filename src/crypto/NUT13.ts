@@ -1,10 +1,11 @@
-import { numberToBytesBE } from '@noble/curves/utils.js';
+import { bytesToNumberBE, numberToBytesBE } from '@noble/curves/utils.js';
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
+import { concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { HDKey, HARDENED_OFFSET } from '@scure/bip32';
 
 import { CTSError } from '../model/Errors';
-import { Bytes, isBase64String } from '../utils';
+import { isBase64String } from '../utils';
 
 import { getKeysetIdInt } from './core';
 
@@ -102,13 +103,17 @@ export function createSecretAndBlindingFactorDeriver(
 
 function getDerivationKind(keysetId: string): DerivationKind {
   const isValidHex = /^[a-fA-F0-9]+$/.test(keysetId);
+  const isHmacHexVersion = keysetId.startsWith('01');
+  if (isValidHex && isHmacHexVersion && keysetId.length % 2 !== 0) {
+    throw new CTSError('Invalid hex string: odd length.');
+  }
   if (!isValidHex && isBase64String(keysetId)) {
     return DerivationKind.DEPRECATED_BIP32;
   }
   if (isValidHex && keysetId.startsWith('00')) {
     return DerivationKind.DEPRECATED_BIP32;
   }
-  if (isValidHex && keysetId.startsWith('01')) {
+  if (isValidHex && isHmacHexVersion) {
     return DerivationKind.HMAC_SHA256;
   }
   throw new CTSError(`Unrecognized keyset ID version ${keysetId.slice(0, 2)}`);
@@ -155,9 +160,9 @@ function deriveHmac(
   counter: number,
   secretOrBlinding: DerivationType,
 ): Uint8Array {
-  let message = Bytes.concat(
-    Bytes.fromString('Cashu_KDF_HMAC_SHA256'),
-    Bytes.fromHex(keysetId),
+  let message = concatBytes(
+    utf8ToBytes('Cashu_KDF_HMAC_SHA256'),
+    hexToBytes(keysetId),
     // numberToBytesBE throws rather than wrapping, so an out-of-range counter can never
     // be silently encoded as a different one even if the caller's guard is ever moved.
     numberToBytesBE(counter, 8),
@@ -165,16 +170,16 @@ function deriveHmac(
 
   switch (secretOrBlinding) {
     case DerivationType.SECRET:
-      message = Bytes.concat(message, Bytes.fromHex('00'));
+      message = concatBytes(message, hexToBytes('00'));
       break;
     case DerivationType.BLINDING_FACTOR:
-      message = Bytes.concat(message, Bytes.fromHex('01'));
+      message = concatBytes(message, hexToBytes('01'));
   }
 
   const hmacDigest = hmac(sha256, seed, message);
 
   if (secretOrBlinding === DerivationType.BLINDING_FACTOR) {
-    const x = Bytes.toBigInt(hmacDigest);
+    const x = bytesToNumberBE(hmacDigest);
     // Reduce modulo curve order. Single subtraction suffices since HMAC output
     // is 256 bits and SECP256K1_N is ~2^256, so x can exceed N by at most once.
     const reduced = x >= SECP256K1_N ? x - SECP256K1_N : x;

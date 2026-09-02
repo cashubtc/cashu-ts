@@ -1,4 +1,4 @@
-import { bytesToHex, randomBytes } from '@noble/curves/utils.js';
+import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
 

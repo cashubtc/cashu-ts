@@ -1,12 +1,11 @@
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
-import { bytesToNumberBE, numberToBytesBE } from '@noble/curves/utils.js';
+import { bytesToNumberBE, equalBytes, numberToBytesBE } from '@noble/curves/utils.js';
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
-import { Bytes } from '../utils';
 
 import { type DLEQ, hash_e, hashToCurve } from './core';
 
@@ -45,7 +44,7 @@ export const verifyDLEQProof = (
   const R_1 = sG.subtract(eA); // R1 = sG - eA
   const R_2 = sB_.subtract(eC_); // R2 = sB' - eC'
   const hash = hash_e([R_1, R_2, A, C_]); // e == hash(R1, R2, A, C')
-  return Bytes.equals(hash, dleq.e);
+  return equalBytes(hash, dleq.e);
 };
 
 export const verifyDLEQProof_reblind = (

@@ -1,4 +1,5 @@
 import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { bytesToNumberBE } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { hexToBytes, bytesToHex } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
@@ -21,7 +22,6 @@ import {
   pointFromBytes,
 } from '../../src/crypto';
 import { verifyUnblindedSignature } from '../../src/crypto/NUT01';
-import { Bytes } from '../../src/utils';
 
 const SECRET_MESSAGE = 'test_message';
 
@@ -72,7 +72,7 @@ describe('test blinding message', () => {
     const secretUInt8 = enc.encode(SECRET_MESSAGE);
     const { B_ } = blindMessage(
       secretUInt8,
-      Bytes.toBigInt(
+      bytesToNumberBE(
         hexToBytes('0000000000000000000000000000000000000000000000000000000000000001'),
       ),
     );
@@ -97,7 +97,7 @@ describe('test blinding message', () => {
 describe('test unblinding signature', () => {
   test('testing string 0000....01', async () => {
     const C_ = pointFromHex('02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2');
-    const r = Bytes.toBigInt(
+    const r = bytesToNumberBE(
       hexToBytes('0000000000000000000000000000000000000000000000000000000000000001'),
     );
     const A = pointFromHex('020000000000000000000000000000000000000000000000000000000000000001');

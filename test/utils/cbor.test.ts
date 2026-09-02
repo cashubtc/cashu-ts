@@ -1,7 +1,12 @@
 import { hexToBytes } from '@noble/curves/utils.js';
 import { test, describe, expect } from 'vitest';
 
-import { decodeCBOR, encodeCBOR, Bytes } from '../../src/utils';
+import {
+  decodeCBOR,
+  encodeCBOR,
+  decodeBase64UrlToUint8,
+  encodeUint8ToBase64Url,
+} from '../../src/utils';
 // Note: do NOT import 'fs' or 'path' at top-level — the browser test runner
 // will attempt to import them and Vite externalizes those modules which causes
 // runtime errors. Load them dynamically inside a Node-only guard below.
@@ -9,13 +14,11 @@ import { decodeCBOR, encodeCBOR, Bytes } from '../../src/utils';
 // Test Polyfills for Node Buffer (which is not properly polyfilled in vite browser tests)
 // Instead of Buffer.from(encoded).toString('base64url')
 function base64urlEncode(buffer: Uint8Array): string {
-  return Bytes.toBase64(buffer).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return encodeUint8ToBase64Url(buffer);
 }
 // Instead of Buffer.from(..., 'base64url')
 function base64urlDecode(str: string): Uint8Array {
-  str = str.replace(/-/g, '+').replace(/_/g, '/');
-  while (str.length % 4) str += '=';
-  return Bytes.fromBase64(str);
+  return decodeBase64UrlToUint8(str);
 }
 
 // Basic CBOR scalar/vector coverage is provided by the external test vectors
