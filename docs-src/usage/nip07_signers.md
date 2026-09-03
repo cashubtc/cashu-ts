@@ -36,7 +36,7 @@ Adds the extension's signature to every `SIG_INPUTS` proof that lists its key an
 A nutroot witness signs its input's digest, so the extension can help only where its key appears verbatim in a disclosed leaf: the [auditable lock](../wallet_ops/spend_locked.md#auditable-locks), an unblinded refund or multisig leaf. Blinded leaf keys and the key path (receiver-keyed or tweaked) never match.
 
 ```ts
-const { script } = await wallet.spendOptions(proof);
+const { script } = wallet.spendOptions(proof);
 const leaf = script.find((o) => CashuNip07.completes(o, pubkey)); // one more signature satisfies it
 if (leaf) {
   await wallet.ops
