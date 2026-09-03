@@ -29,8 +29,8 @@ const inputs = inputsForPayload({
   inputs: [{ amount: 1, id: KEYSET, secret: SECRET, C: 'aa'.repeat(48) }],
   outputs: [{ amount: 1, id: KEYSET, B_: 'bb'.repeat(48) }],
 });
-const MESSAGE = inputs.message;
-const { container: CONTAINER, digest: DIGEST } = inputs.proofs.get(
+const MESSAGE = inputs.transactionMessage;
+const { inputContainer: CONTAINER, digest: DIGEST } = inputs.proofs.get(
   proofInputContextKey({ keysetId: KEYSET, secret: SECRET }),
 )!;
 
@@ -92,8 +92,8 @@ describe('CashuNip07', () => {
     const [sig] = await CashuNip07.cosign(safeSigner)({
       digest: DIGEST,
       leaf: LEAF,
-      message: MESSAGE,
-      container: CONTAINER,
+      transactionMessage: MESSAGE,
+      inputContainer: CONTAINER,
     });
     expect(schnorr.verify(hexToBytes(sig), DIGEST, hexToBytes(XONLY))).toBe(true);
   });
@@ -102,12 +102,17 @@ describe('CashuNip07', () => {
     const [sig] = await CashuNip07.cosign(rawSigner)({
       digest: DIGEST,
       leaf: LEAF,
-      message: MESSAGE,
-      container: CONTAINER,
+      transactionMessage: MESSAGE,
+      inputContainer: CONTAINER,
     });
     expect(schnorr.verify(hexToBytes(sig), DIGEST, hexToBytes(XONLY))).toBe(true);
     await expect(
-      CashuNip07.cosign({})({ digest: DIGEST, leaf: LEAF, message: MESSAGE, container: CONTAINER }),
+      CashuNip07.cosign({})({
+        digest: DIGEST,
+        leaf: LEAF,
+        transactionMessage: MESSAGE,
+        inputContainer: CONTAINER,
+      }),
     ).rejects.toThrow('cannot sign');
   });
 
@@ -119,10 +124,68 @@ describe('CashuNip07', () => {
       CashuNip07.cosign(liar)({
         digest: DIGEST,
         leaf: LEAF,
-        message: MESSAGE,
-        container: CONTAINER,
+        transactionMessage: MESSAGE,
+        inputContainer: CONTAINER,
       }),
     ).rejects.toThrow('different message');
+  });
+
+  test('signQuote signs a v3 quote through signTransaction and a legacy one through signSchnorr', async () => {
+    const quote = inputsForPayload({
+      mintQuotes: [{ quoteId: 'q1', amount: 1 }],
+      outputs: [{ amount: 1, id: KEYSET, B_: 'bb'.repeat(48) }],
+    });
+    const { digest, inputContainer } = quote.quotes.get('q1')!;
+    const v3 = {
+      digest,
+      quoteId: 'q1',
+      outputs: [],
+      transactionMessage: quote.transactionMessage,
+      inputContainer,
+    };
+    const sig = await CashuNip07.signQuote(safeSigner)(v3);
+    expect(schnorr.verify(hexToBytes(sig), digest, hexToBytes(XONLY))).toBe(true);
+    // A legacy quote carries no transcript, so only a raw digest signer can help.
+    const legacy = { digest: hexToBytes('cc'.repeat(32)), quoteId: 'q2', outputs: [] };
+    expect(
+      schnorr.verify(
+        hexToBytes(await CashuNip07.signQuote(rawSigner)(legacy)),
+        legacy.digest,
+        hexToBytes(XONLY),
+      ),
+    ).toBe(true);
+    await expect(CashuNip07.signQuote(safeSigner)(legacy)).rejects.toThrow(
+      /cannot sign a mint quote/,
+    );
+    await expect(CashuNip07.signQuote(secretSigner)(v3)).rejects.toThrow(
+      /cannot sign a mint quote/,
+    );
+  });
+
+  test('signQuote rejects a signer that hashed something else', async () => {
+    const quote = inputsForPayload({
+      mintQuotes: [{ quoteId: 'q1', amount: 1 }],
+      outputs: [{ amount: 1, id: KEYSET, B_: 'bb'.repeat(48) }],
+    });
+    const { digest, inputContainer } = quote.quotes.get('q1')!;
+    const liar: Nip07Like = {
+      nip60: {
+        signTransaction: async () => ({
+          hash: '00'.repeat(32),
+          sig: '00'.repeat(64),
+          pubkey: XONLY,
+        }),
+      },
+    };
+    await expect(
+      CashuNip07.signQuote(liar)({
+        digest,
+        quoteId: 'q1',
+        outputs: [],
+        transactionMessage: quote.transactionMessage,
+        inputContainer,
+      }),
+    ).rejects.toThrow(/different message/);
   });
 
   test('signTransaction refuses anything without the domain tag or a foreign container', () => {

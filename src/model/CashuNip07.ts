@@ -13,7 +13,7 @@ import {
 } from '../crypto/NUT11';
 import { inputDigest, TRANSCRIPT_DOMAIN_TAG } from '../crypto/transcript';
 import { bytesToHex, hexToBytes } from '../utils';
-import type { ScriptPathPlan, SpendOption } from '../wallet/types';
+import type { MintProofsConfig, ScriptPathPlan, SpendOption } from '../wallet/types';
 
 import { CTSError } from './Errors';
 import type { Proof } from './types';
@@ -89,6 +89,15 @@ export type CashuNip07Api = {
    */
   cosign(nostr: Nip07Like): NonNullable<ScriptPathPlan['cosign']>;
   /**
+   * A {@link MintProofsConfig.sign} callback that signs a locked mint quote through the extension.
+   *
+   * @remarks
+   * Same preference as `cosign`: `nip60.signTransaction` when the quote is a v3 transaction input
+   * (the request carries the transaction message and input container), else `signSchnorr` over the
+   * digest. The extension can only sign for a quote locked to its own key.
+   */
+  signQuote(nostr: Nip07Like): NonNullable<MintProofsConfig['sign']>;
+  /**
    * Whether one signature from `pubkey` turns this leaf satisfiable: the leaf lists the key
    * verbatim (matched by x-coordinate; a blinded slot never matches), it is not already held, and
    * one more signature meets `n`.
@@ -125,6 +134,33 @@ const DOMAIN_TAG = utf8ToBytes(TRANSCRIPT_DOMAIN_TAG);
 // BIP-340 verifies on x alone, and a leaf may list the key with either parity, so matching is
 // by x-coordinate; NIP-07 hands out x-only keys, presented with the conventional 02 prefix.
 const xOnly = (pubkey: string): string => pubkey.toLowerCase().slice(-64);
+
+/**
+ * One input digest through the extension: `nip60.signTransaction` when the tagged transaction
+ * message and input container are known (the signer derives and checks the digest itself), else
+ * `signSchnorr`.
+ */
+async function signDigest(
+  nostr: Nip07Like,
+  digest: Uint8Array,
+  transactionMessage: Uint8Array | undefined,
+  inputContainer: Uint8Array | undefined,
+  what: string,
+): Promise<string> {
+  const digestHex = bytesToHex(digest);
+  if (transactionMessage && inputContainer && nostr.nip60?.signTransaction) {
+    const signed = await nostr.nip60.signTransaction(
+      bytesToHex(transactionMessage),
+      bytesToHex(inputContainer),
+    );
+    if (signed.hash.toLowerCase() !== digestHex) {
+      throw new CTSError('NIP-07 signer signed a different message');
+    }
+    return signed.sig;
+  }
+  if (nostr.signSchnorr) return nostr.signSchnorr(digestHex);
+  throw new CTSError(`NIP-07 signer cannot sign ${what}`);
+}
 
 /**
  * Adapts a NIP-07 browser signer to nutroot spending: no relays, no events, only `window.nostr`.
@@ -199,21 +235,14 @@ export const CashuNip07: CashuNip07Api = {
   },
 
   cosign(nostr) {
-    return async ({ digest, message, container }) => {
-      const digestHex = bytesToHex(digest);
-      if (nostr.nip60?.signTransaction) {
-        const signed = await nostr.nip60.signTransaction(
-          bytesToHex(message),
-          bytesToHex(container),
-        );
-        if (signed.hash.toLowerCase() !== digestHex) {
-          throw new CTSError('NIP-07 signer signed a different message');
-        }
-        return [signed.sig];
-      }
-      if (nostr.signSchnorr) return [await nostr.signSchnorr(digestHex)];
-      throw new CTSError('NIP-07 signer cannot sign a nutroot transaction');
-    };
+    return async ({ digest, transactionMessage, inputContainer }) => [
+      await signDigest(nostr, digest, transactionMessage, inputContainer, 'a nutroot transaction'),
+    ];
+  },
+
+  signQuote(nostr) {
+    return ({ digest, transactionMessage, inputContainer }) =>
+      signDigest(nostr, digest, transactionMessage, inputContainer, 'a mint quote');
   },
 
   completes(option, pubkey) {
