@@ -19,11 +19,8 @@ import {
   schnorrSignDigest,
   schnorrSignMessage,
   schnorrVerifyDigest,
-<<<<<<< HEAD
   pointFromBytes,
-=======
   findSigningKey,
->>>>>>> 0f4d025 (fix(nut20): match quote lock keys by x coordinate (#1044))
 } from '../../src/crypto';
 import { verifyUnblindedSignature } from '../../src/crypto/NUT01';
 
