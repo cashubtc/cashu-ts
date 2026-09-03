@@ -81,6 +81,9 @@ const { keep } = await wallet.completeSwap(preview);
 const { keep: recovered } = await wallet.completeSwap(deserializeSwapPreview(JSON.parse(stored)));
 ```
 
+> The serialized preview contains `inputs` in the clear, so it is spendable bearer material.
+> Store it with the same protection as the proof database, and delete it once the swap settles.
+
 The replay window has bounds:
 
 - The mint must advertise `/v1/swap` in its NUT-19 `cached_endpoints`, and the replay must
