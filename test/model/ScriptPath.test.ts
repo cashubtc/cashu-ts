@@ -55,7 +55,9 @@ function fixture() {
   return { alice, leaves, preview, proof };
 }
 
-describe('ScriptPath signing packages', () => {
+// signPackage trial-derives every blinded slot for the signer's key (NUTROOT_MAX_SLOTS), by design:
+// ~0.5s per call locally, several seconds on a shared CI runner, over vitest's 5s node default.
+describe('ScriptPath signing packages', { timeout: 30_000 }, () => {
   test('signs a blinded key at its absolute slot in a later leaf', () => {
     const { alice, preview, proof } = fixture();
     const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]);
