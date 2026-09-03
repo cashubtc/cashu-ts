@@ -19,7 +19,11 @@ import {
   schnorrSignDigest,
   schnorrSignMessage,
   schnorrVerifyDigest,
+<<<<<<< HEAD
   pointFromBytes,
+=======
+  findSigningKey,
+>>>>>>> 0f4d025 (fix(nut20): match quote lock keys by x coordinate (#1044))
 } from '../../src/crypto';
 import { verifyUnblindedSignature } from '../../src/crypto/NUT01';
 
@@ -192,5 +196,33 @@ describe('getValidSigners / meetsSignerThreshold', () => {
   test('non-string pubkey entries fail closed without throwing', () => {
     const pubkeys = [42 as unknown as string, compressed];
     expect(getValidSigners([signature], message, pubkeys)).toEqual([compressed]);
+  });
+});
+
+describe('findSigningKey', () => {
+  const priv = (n: number) => n.toString(16).padStart(64, '0');
+  const pub = (key: string) => bytesToHex(secp256k1.getPublicKey(hexToBytes(key), true));
+  const flip = (pubkey: string) => (pubkey.startsWith('02') ? '03' : '02') + pubkey.slice(2);
+
+  test('returns the candidate that derives the pubkey, case-insensitively', () => {
+    expect(findSigningKey(pub(priv(2)), [priv(1), priv(2)])).toBe(priv(2));
+    expect(findSigningKey(pub(priv(2)).toUpperCase(), priv(2))).toBe(priv(2));
+  });
+
+  test('an x-only import signs for the published parity through the negated scalar', () => {
+    // A nostr key is published as 02||x whatever its y; the wallet may hold the scalar of the
+    // other twin. The returned key must derive exactly the pubkey the quote names.
+    for (const key of [priv(1), priv(2), priv(3), priv(0x1234)]) {
+      const twin = flip(pub(key));
+      const signing = findSigningKey(twin, key);
+      expect(signing).not.toBe(key);
+      expect(pub(signing)).toBe(twin);
+    }
+  });
+
+  test('throws when no candidate matches on x', () => {
+    expect(() => findSigningKey(pub(priv(9)), [priv(1), priv(2)])).toThrow(
+      /No private key matches/,
+    );
   });
 });
