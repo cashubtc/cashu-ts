@@ -8,6 +8,7 @@
 import { type AuthProvider } from '../auth/AuthProvider';
 import {
   schnorrSignDigest,
+  schnorrVerifyDigest,
   signMintQuote,
   findSigningKey,
   signP2PKProofs as cryptoSignP2PKProofs,
@@ -24,7 +25,7 @@ import {
 import { getPubKeyFromPrivKey, normalizeSecpPubkey } from '../crypto/curve_secp';
 import { p2pkOptionsToPRNut10, type P2PKOptions } from '../crypto/NUT11';
 import { verifyHTLCHash } from '../crypto/NUT14';
-import { signMintQuoteLegacy } from '../crypto/NUT20';
+import { mintQuoteDigest, signMintQuoteLegacy } from '../crypto/NUT20';
 import {
   NUTROOT_NUMS_KEY,
   recoverLeafKeySecretKeys,
@@ -136,6 +137,7 @@ import {
   type SpendReceipt,
   type ScriptPathPlan,
   type SpendOptions,
+  type MintQuoteSignRequest,
   type RestoreConfig,
   type BatchRestoreConfig,
   type RestoreAllConfig,
@@ -3118,29 +3120,38 @@ class Wallet {
       quote: quote.quote,
     };
 
-    // Sign whenever a privkey is provided — quote.pubkey may be absent if only the
-    // quote ID was stored, but the caller still needs to produce a NUT-20 signature
+    // Sign whenever a privkey or sign callback is provided — quote.pubkey may be absent if only
+    // the quote ID was stored, but the caller still needs to produce a NUT-20 signature
     let legacySignature: string | undefined;
     // The key is caller state, passed in config; nothing is recovered implicitly
     // (recoverQuoteLockKey is the explicit tool for a seeded wallet that lost it).
-    if ('pubkey' in quote && quote.pubkey) {
+    const sign = privkey ? undefined : config?.sign;
+    const quotePubkey = 'pubkey' in quote ? (quote.pubkey as string | undefined) : undefined;
+    if (quotePubkey) {
       this.failIf(
-        !privkey,
-        'Can not sign locked quote without private key (see recoverQuoteLockKey)',
+        !privkey && !sign,
+        'Can not sign locked quote without private key or sign callback (see recoverQuoteLockKey)',
       );
     }
-    if (privkey) {
-      const quotePubkey = 'pubkey' in quote ? (quote.pubkey as string | undefined) : undefined;
-      this.failIf(
-        !quotePubkey && Array.isArray(privkey),
-        `prepareMint: multiple privkeys supplied for a quote without pubkey`,
-      );
-      const signingKey = quotePubkey
-        ? findSigningKey(quotePubkey, privkey)
-        : Array.isArray(privkey)
-          ? privkey[0]
-          : privkey;
-      this.failIf(!signingKey, 'prepareMint: privkey is empty or correct privkey not provided');
+    if (privkey || sign) {
+      let signingKey: string | undefined;
+      if (privkey) {
+        this.failIf(
+          !quotePubkey && Array.isArray(privkey),
+          `prepareMint: multiple privkeys supplied for a quote without pubkey`,
+        );
+        signingKey = quotePubkey
+          ? findSigningKey(quotePubkey, privkey)
+          : Array.isArray(privkey)
+            ? privkey[0]
+            : privkey;
+        this.failIf(!signingKey, 'prepareMint: privkey is empty or correct privkey not provided');
+      }
+      const request: MintQuoteSignRequest = {
+        digest: new Uint8Array(),
+        quoteId: quote.quote,
+        outputs: blindedMessages,
+      };
       if (isBlsKeyset(keyset.id)) {
         // V3 (nutroot secrets): the quote is a transaction input; its lock key signs the
         // quote input digest (NUT-10). No legacy fallback on v3 keysets.
@@ -3152,16 +3163,35 @@ class Wallet {
           quoteAmount === undefined && method === 'bolt11',
           'prepareMint: quote object lacks its amount; pass the full mint quote',
         );
-        const digest = inputsForPayload({
+        const tx = inputsForPayload({
           mintQuotes: [{ quoteId: quote.quote, amount: quoteAmount ?? 0 }],
           outputs: blindedMessages,
-        }).quotes.get(quote.quote)!.digest;
-        mintPayload.signature = schnorrSignDigest(digest, signingKey);
+        });
+        const { digest, inputContainer } = tx.quotes.get(quote.quote)!;
+        Object.assign(request, {
+          digest,
+          transactionMessage: tx.transactionMessage,
+          inputContainer,
+        });
       } else {
-        // Sign the amended (nuts#375) message by default and keep a legacy signature over the same
-        // outputs as a fallback for not-yet-upgraded mints — see completeMint().
-        mintPayload.signature = signMintQuote(signingKey, quote.quote, blindedMessages);
-        legacySignature = signMintQuoteLegacy(signingKey, quote.quote, blindedMessages);
+        request.digest = mintQuoteDigest(quote.quote, blindedMessages);
+      }
+      if (signingKey) {
+        mintPayload.signature = schnorrSignDigest(request.digest, signingKey);
+        // Keep a legacy (pre nuts#375) signature over the same outputs as a fallback for
+        // not-yet-upgraded mints — see completeMint(). Never on v3 keysets.
+        if (!isBlsKeyset(keyset.id)) {
+          legacySignature = signMintQuoteLegacy(signingKey, quote.quote, blindedMessages);
+        }
+      } else {
+        const signature = await sign!(request);
+        // A wrong signer fails here, not at the mint; without a quote pubkey there is nothing
+        // to check against, as with a bare privkey.
+        this.failIf(
+          !!quotePubkey && !schnorrVerifyDigest(signature, request.digest, quotePubkey),
+          'prepareMint: the sign callback returned a signature the quote pubkey does not verify',
+        );
+        mintPayload.signature = signature;
       }
     }
 

@@ -50,6 +50,12 @@ const newProofs = await wallet.ops
   .run();
 ```
 
+When the key lives elsewhere (a NIP-07 extension, a hardware signer), pass `.sign(fn)` instead:
+`fn` receives `{ digest, quoteId, outputs }` (plus `transactionMessage` and `inputContainer` for a
+v3 quote) and returns BIP-340 signature hex over `digest`. The wallet checks it against the quote's
+pubkey before sending. No legacy NUT-20 fallback signature is produced this way. See
+[Browser Signers](../usage/nip07_signers.md#locked-mint-quotes-signquote) for the extension case.
+
 A seeded wallet that lost the key can re-derive it with
 `wallet.recoverQuoteLockKey(quote.pubkey)`. For a quote that will never be paid (eg a fee
 estimation), `createQuoteLockKey({ random: true })` forces a random key even on a seeded wallet:

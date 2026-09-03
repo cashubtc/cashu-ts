@@ -52,6 +52,19 @@ if (leaf) {
 
 `CashuNip07.signTransaction(messageHex, containerHex, secretKey)` is the reference implementation of `nip60.signTransaction`, for the extension side of that contract and for tests: it takes the private key, which the page never has, so a page cannot use it in place of the extension's method. It refuses any message without the domain tag and any container the message does not carry, then derives the input digest, signs BIP-340 and returns `{ hash, sig, pubkey }`, the shape `nip60.signSecret` already uses.
 
+## Locked mint quotes: `signQuote`
+
+A mint quote locked to the extension's key (eg a [Cashu Gift](../wallet_ops/mint.md#4-locked-bolt11-quote-signing) to someone's nostr identity) can be claimed without the key ever entering the page:
+
+```ts
+const proofs = await wallet.ops
+  .mintBolt11(quote.amount, quote)
+  .sign(CashuNip07.signQuote(nostr))
+  .run();
+```
+
+`signQuote` is a [`MintProofsConfig.sign`](../wallet_ops/mint.md#4-locked-bolt11-quote-signing) callback with the same preference as `cosign`: on a v3 keyset the quote is a transaction input, so the extension gets the tagged transaction message and the quote's input container through `nip60.signTransaction` and derives the digest itself; on a pre-v3 keyset there is no transcript, only the NUT-20 digest, so only `signSchnorr` can help. The extension can sign only for a quote locked to its own key: compare `quote.pubkey` with `CashuNip07.pubkey(nostr)` (by x-coordinate) before offering the button, and fall back to the [NIP-60 wallet keys](#nip-60-wallet-keys) for a quote locked to a nutzap key.
+
 ## NIP-60 wallet keys
 
 ```ts

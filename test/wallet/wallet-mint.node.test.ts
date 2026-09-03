@@ -14,16 +14,20 @@ import {
   MeltQuoteState,
   MintQuoteState,
   type MintQuoteBolt11Response,
+  type MintQuoteSignRequest,
   Amount,
   type AmountLike,
   Mint,
   MintOperationError,
   type RequestFn,
 } from '../../src';
-import { verifyMintQuoteSignature } from '../../src/crypto';
+import { schnorrSignDigest, verifyMintQuoteSignature } from '../../src/crypto';
+import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import { verifyMintQuoteSignatureLegacy } from '../../src/crypto/NUT20';
+import { inputsForPayload } from '../../src/crypto/transcript';
 import request from '../../src/transport';
 import { sumProofs } from '../../src/utils';
+import { NUT02_V3_VECTOR1_KEYS, NUT02_V3_VECTOR1_KEYSET } from '../consts';
 
 import { useTestServer, mint, mintUrl, unit, logger, mintInfoResp, invoice } from './_setup';
 
@@ -555,6 +559,105 @@ describe('requestTokens', () => {
     // Should still produce a signature using the provided privkey
     expect(preview.payload.signature).toBeDefined();
     expect(typeof preview.payload.signature).toBe('string');
+  });
+
+  describe('prepareMint signs a locked quote through a sign callback', () => {
+    const privkey = '0000000000000000000000000000000000000000000000000000000000000002';
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(hexToBytes(privkey)));
+    const lockedQuote = (): MintQuoteBolt11Response => ({
+      quote: 'callback-quote',
+      request: 'lnbc...',
+      amount: Amount.from(1),
+      unit: 'sat',
+      method: 'bolt11',
+      state: MintQuoteState.PAID,
+      amount_paid: Amount.from(1),
+      amount_issued: Amount.from(0),
+      updated_at: null,
+      expiry: null,
+      pubkey,
+    });
+
+    test('the callback signs the amended NUT-20 digest, with no legacy fallback', async () => {
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+      const seen: MintQuoteSignRequest[] = [];
+      const sign = async (request: MintQuoteSignRequest) => {
+        seen.push(request);
+        return schnorrSignDigest(request.digest, privkey);
+      };
+      const preview = await wallet.prepareMint('bolt11', 1, lockedQuote(), { sign });
+      expect(seen).toHaveLength(1);
+      expect(seen[0].quoteId).toBe('callback-quote');
+      expect(seen[0].outputs).toEqual(preview.payload.outputs);
+      // A pre-v3 quote has no transaction transcript to hand a signer.
+      expect(seen[0].transactionMessage).toBeUndefined();
+      expect(
+        verifyMintQuoteSignature(
+          pubkey,
+          'callback-quote',
+          preview.payload.outputs,
+          preview.payload.signature!,
+        ),
+      ).toBe(true);
+      expect(preview.legacySignature).toBeUndefined();
+    });
+
+    test('a signature the quote pubkey does not verify is refused before the mint sees it', async () => {
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+      const other = '0000000000000000000000000000000000000000000000000000000000000003';
+      const sign = async ({ digest }: MintQuoteSignRequest) => schnorrSignDigest(digest, other);
+      await expect(wallet.prepareMint('bolt11', 1, lockedQuote(), { sign })).rejects.toThrow(
+        /does not verify/,
+      );
+    });
+
+    test('privkey takes precedence, and a locked quote needs one or the other', async () => {
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+      const sign = vi.fn(async ({ digest }: MintQuoteSignRequest) =>
+        schnorrSignDigest(digest, privkey),
+      );
+      const preview = await wallet.prepareMint('bolt11', 1, lockedQuote(), { privkey, sign });
+      expect(sign).not.toHaveBeenCalled();
+      expect(preview.legacySignature).toBeDefined();
+      await expect(wallet.prepareMint('bolt11', 1, lockedQuote())).rejects.toThrow(
+        /without private key or sign callback/,
+      );
+    });
+
+    test('a v3 quote hands the signer the tagged message and its container', async () => {
+      // A v3 keyset whose id verifies against its keys, else the keychain drops it.
+      const v3Keyset = NUT02_V3_VECTOR1_KEYSET;
+      const v3Keys = NUT02_V3_VECTOR1_KEYS;
+      server.use(
+        http.get(mintUrl + '/v1/keysets', () => HttpResponse.json({ keysets: [v3Keyset] })),
+        http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [v3Keys] })),
+        http.get(mintUrl + '/v1/keys/' + v3Keyset.id, () =>
+          HttpResponse.json({ keysets: [v3Keys] }),
+        ),
+      );
+      const wallet = new Wallet(mintUrl, { unit });
+      await wallet.loadMint();
+      let seen: MintQuoteSignRequest | undefined;
+      const sign = async (request: MintQuoteSignRequest) => {
+        seen = request;
+        return schnorrSignDigest(request.digest, privkey);
+      };
+      const preview = await wallet.prepareMint('bolt11', 1, lockedQuote(), { sign });
+      expect(seen?.transactionMessage).toBeDefined();
+      expect(seen?.inputContainer).toBeDefined();
+      // The digest is the quote's input digest under the transaction transcript (NUT-10), so the
+      // signer can recompute it from transaction message and input container alone.
+      const tx = inputsForPayload({
+        mintQuotes: [{ quoteId: 'callback-quote', amount: 1 }],
+        outputs: preview.payload.outputs,
+      });
+      expect(bytesToHex(seen!.digest)).toBe(bytesToHex(tx.quotes.get('callback-quote')!.digest));
+      expect(bytesToHex(seen!.transactionMessage!)).toBe(bytesToHex(tx.transactionMessage));
+      expect(preview.legacySignature).toBeUndefined();
+    });
   });
 
   test('prepareMint fails when multiple privkeys and no quote pubkey', async () => {

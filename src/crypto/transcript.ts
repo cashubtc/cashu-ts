@@ -208,7 +208,7 @@ export function inputDigest(transactionDigest: Uint8Array, container: Uint8Array
 /**
  * One input's signing context: its transcript container record and the digest it signs.
  */
-export type TransactionInputContext = { container: Uint8Array; digest: Uint8Array };
+export type TransactionInputContext = { inputContainer: Uint8Array; digest: Uint8Array };
 
 /**
  * Every input's signing context, plus the shared message and digest.
@@ -219,7 +219,7 @@ export type TransactionInputContext = { container: Uint8Array; digest: Uint8Arra
  * family because identical text denotes raw point bytes in v3 and UTF-8 bytes in v0-v2.
  */
 export function transactionInputs(tx: TransactionShape): {
-  message: Uint8Array;
+  transactionMessage: Uint8Array;
   transactionDigest: Uint8Array;
   proofs: Map<string, TransactionInputContext>;
   quotes: Map<string, TransactionInputContext>;
@@ -229,14 +229,17 @@ export function transactionInputs(tx: TransactionShape): {
   const proofs = new Map<string, TransactionInputContext>();
   const quotes = new Map<string, TransactionInputContext>();
   for (const p of tx.proofInputs ?? []) {
-    const container = proofInputContainer(p);
-    proofs.set(proofInputContextKey(p), { container, digest: inputDigest(digest, container) });
+    const inputContainer = proofInputContainer(p);
+    proofs.set(proofInputContextKey(p), {
+      inputContainer,
+      digest: inputDigest(digest, inputContainer),
+    });
   }
   for (const q of tx.mintQuoteInputs ?? []) {
-    const container = quoteContainer(CONTAINER_MINT_QUOTE_INPUT, q);
-    quotes.set(q.quoteId, { container, digest: inputDigest(digest, container) });
+    const inputContainer = quoteContainer(CONTAINER_MINT_QUOTE_INPUT, q);
+    quotes.set(q.quoteId, { inputContainer, digest: inputDigest(digest, inputContainer) });
   }
-  return { message, transactionDigest: digest, proofs, quotes };
+  return { transactionMessage: message, transactionDigest: digest, proofs, quotes };
 }
 
 type PayloadShape = {

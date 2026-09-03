@@ -564,10 +564,10 @@ describe('attachTransactionWitnesses', () => {
       makeState(undefined),
     );
     expect(seen!.leaf.keys).toEqual([PUB_A, PUB_B]);
-    expect(bytesToUtf8(seen!.message.subarray(0, 20))).toBe('Cashu_Transaction_v1');
+    expect(bytesToUtf8(seen!.transactionMessage.subarray(0, 20))).toBe('Cashu_Transaction_v1');
     // digest = tagged_hash(input tag, SHA256(message) || SHA256(container)): recomputable, so a
     // signer can refuse anything it cannot verify.
-    expect(bytesToHex(inputDigest(sha256(seen!.message), seen!.container))).toBe(
+    expect(bytesToHex(inputDigest(sha256(seen!.transactionMessage), seen!.inputContainer))).toBe(
       bytesToHex(seen!.digest),
     );
     expect(bytesToHex(seen!.digest)).toBe(bytesToHex(digestOf([input])));
