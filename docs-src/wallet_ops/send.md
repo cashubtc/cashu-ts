@@ -101,7 +101,8 @@ import { deserializeSwapPreview, serializeSwapPreview } from '@cashu/cashu-ts';
 
 const preview = await wallet.ops.send(21, myProofs).prepare();
 
-// Unselected proofs can go back to storage now; they are not part of the replay.
+// Unselected proofs are not part of the replay and are not serialized: return them to
+// storage yourself, and add them back to `keep` after a replayed completeSwap.
 const backToStorage = preview.unselectedProofs ?? [];
 
 // Persist before completing. Previews contain Amount, bigint and Uint8Array values,
@@ -115,6 +116,9 @@ const { keep: change, send: recovered } = await wallet.completeSwap(
   deserializeSwapPreview(JSON.parse(stored)),
 );
 ```
+
+> The serialized preview contains `inputs` in the clear, so it is spendable bearer material.
+> Store it with the same protection as the proof database, and delete it once the swap settles.
 
 The replay window has bounds:
 
