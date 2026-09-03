@@ -21,7 +21,6 @@ export type SerializedSwapPreview = {
   inputs: SerializedProof[];
   sendOutputs?: SerializedOutputData[];
   keepOutputs?: SerializedOutputData[];
-  unselectedProofs?: SerializedProof[];
 };
 
 function serializeProof(proof: Proof): SerializedProof {
@@ -34,6 +33,10 @@ function serializeProof(proof: Proof): SerializedProof {
  * @remarks
  * Persist the result before `completeSwap` to support NUT-19 replay safety: a preview rehydrated
  * with {@link deserializeSwapPreview} replays a byte-identical swap request.
+ *
+ * The result holds `inputs` in the clear, so it is spendable bearer material: store it as carefully
+ * as the proof database. `unselectedProofs` take no part in the replay and are not included; return
+ * them to storage separately.
  */
 export function serializeSwapPreview(preview: SwapPreview): SerializedSwapPreview {
   return {
@@ -46,9 +49,6 @@ export function serializeSwapPreview(preview: SwapPreview): SerializedSwapPrevie
     }),
     ...(preview.keepOutputs && {
       keepOutputs: preview.keepOutputs.map((o) => OutputData.serialize(o)),
-    }),
-    ...(preview.unselectedProofs && {
-      unselectedProofs: preview.unselectedProofs.map(serializeProof),
     }),
   };
 }
@@ -71,9 +71,6 @@ export function deserializeSwapPreview(serialized: SerializedSwapPreview): SwapP
       }),
       ...(serialized.keepOutputs && {
         keepOutputs: serialized.keepOutputs.map((s) => OutputData.deserialize(s)),
-      }),
-      ...(serialized.unselectedProofs && {
-        unselectedProofs: normalizeProofAmounts(serialized.unselectedProofs),
       }),
     };
   } catch (e) {
