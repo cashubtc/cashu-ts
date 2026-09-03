@@ -273,15 +273,9 @@ let requestLogger = NULL_LOGGER;
  *
  * @remarks
  * `RequestInit` fields (`cache`, `credentials`, `mode` etc) override the per-call value: they are
-<<<<<<< HEAD
  * process-wide transport policy. Library options (`requestTimeout`, NUT-19 policy) are defaults a
- * per-call value overrides. `headers` merge, per-call wins per key; `redirect` is always `error` on
-=======
- * process-wide transport policy. Library options (`requestTimeout`, `fetch`, `maxResponseBytes`,
- * `idempotent`, NUT-19 policy) are defaults a per-call value overrides. `headers` merge, per-call
- * wins per key; `redirect` defaults to `error` on requests with a body, and is forced to `error` on
->>>>>>> 8bc3383 (fix(transport): fail rather than follow redirects on requests with a body (#1039))
- * requests carrying auth headers.
+ * per-call value overrides. `headers` merge, per-call wins per key; `redirect` defaults to `error`
+ * on requests with a body, and is forced to `error` on requests carrying auth headers.
  * @param options See possible options here:
  *   https://developer.mozilla.org/en-US/docs/Web/API/fetch#options.
  */

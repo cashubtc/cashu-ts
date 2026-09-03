@@ -160,37 +160,37 @@ describe('requests', { timeout: 7500 }, () => {
   });
 
   test('redirect defaults to error on requests carrying a body, and stays overridable', async () => {
-    let init: Parameters<RequestFetch>[1];
-    const captureFetch = (async (
-      _input: Parameters<RequestFetch>[0],
-      requestInit?: Parameters<RequestFetch>[1],
-    ) => {
+    let init: RequestInit | undefined;
+    const captureFetch: typeof fetch = async (_input, requestInit) => {
       init = requestInit;
       return new Response(JSON.stringify({ ok: true }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
-    }) as RequestFetch;
+    };
+    vi.stubGlobal('fetch', captureFetch);
 
-    await request({
-      endpoint: `${mintUrl}/v1/swap`,
-      method: 'POST',
-      requestBody: { inputs: [] },
-      fetch: captureFetch,
-    });
-    expect(init?.redirect).toBe('error');
+    try {
+      await request({
+        endpoint: `${mintUrl}/v1/swap`,
+        method: 'POST',
+        requestBody: { inputs: [] },
+      });
+      expect(init?.redirect).toBe('error');
 
-    await request({
-      endpoint: `${mintUrl}/v1/swap`,
-      method: 'POST',
-      requestBody: { inputs: [] },
-      redirect: 'follow',
-      fetch: captureFetch,
-    });
-    expect(init?.redirect).toBe('follow');
+      await request({
+        endpoint: `${mintUrl}/v1/swap`,
+        method: 'POST',
+        requestBody: { inputs: [] },
+        redirect: 'follow',
+      });
+      expect(init?.redirect).toBe('follow');
 
-    await request({ endpoint: `${mintUrl}/v1/info`, fetch: captureFetch });
-    expect(init?.redirect).toBeUndefined();
+      await request({ endpoint: `${mintUrl}/v1/info` });
+      expect(init?.redirect).toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   test('per-request library options override the global default', async () => {
