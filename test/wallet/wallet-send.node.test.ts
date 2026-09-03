@@ -402,6 +402,19 @@ describe('send', () => {
     expect(first.send[0].secret).toBe(replayed.send[0].secret);
   });
 
+  test('serializeSwapPreview omits unselected proofs', () => {
+    const serialized = serializeSwapPreview({
+      amount: Amount.from(1),
+      fees: Amount.from(0),
+      keysetId: '00bd033559de27d0',
+      inputs: [proofs[0]],
+      unselectedProofs: [{ ...proofs[0], secret: 'not-part-of-the-replay' }],
+    });
+
+    expect(serialized).not.toHaveProperty('unselectedProofs');
+    expect(JSON.stringify(serialized)).not.toContain('not-part-of-the-replay');
+  });
+
   test('deserializeSwapPreview rejects malformed output data', () => {
     const bad: SerializedSwapPreview = {
       amount: '1',

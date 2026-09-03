@@ -1182,8 +1182,9 @@ class Mint {
       endpoint: joinUrls(this._mintUrl, path),
       method,
       headers,
-      // A CAT/BAT must never be replayed to a redirect target: fail rather than follow.
-      ...(bat || cat ? { redirect: 'error' as const } : {}),
+      // A redirect target must never receive a replay of the request: bodies carry
+      // proofs and headers carry CAT/BAT tokens. Fail rather than follow.
+      ...(bat || cat || init.requestBody ? { redirect: 'error' as const } : {}),
       ...(nut19?.supported && nut19.params ? nut19.params : {}),
       onResponseMeta: this._captureResponseMetadata,
     });
