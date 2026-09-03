@@ -2140,7 +2140,6 @@ export type SerializedSwapPreview = {
     inputs: SerializedProof[];
     sendOutputs?: SerializedOutputData[];
     keepOutputs?: SerializedOutputData[];
-    unselectedProofs?: SerializedProof[];
 };
 
 // @public (undocumented)

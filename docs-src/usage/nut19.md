@@ -149,7 +149,8 @@ const receivePreview = await wallet.prepareSwapToReceive(token);
 const sendPreview = await wallet.prepareSwapToSend(21, proofs, { includeFees: true });
 
 // Swap previews have a serialize helper: persist the JSON-safe form, then
-// rehydrate it with deserializeSwapPreview to replay after a restart.
+// rehydrate it with deserializeSwapPreview to replay after a restart. The blob carries
+// spendable proofs, so protect it like the proof database.
 const stored = JSON.stringify(serializeSwapPreview(receivePreview));
 const { keep } = await wallet.completeSwap(deserializeSwapPreview(JSON.parse(stored)));
 ```
