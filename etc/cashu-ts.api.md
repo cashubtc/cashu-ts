@@ -2734,7 +2734,7 @@ export class Wallet {
     planScriptPaths(proofs: Proof[], opts?: {
         privkeys?: string | string[];
         now?: number;
-    }): Promise<ScriptPathPlan[]>;
+    }): ScriptPathPlan[];
     prepareBatchMint<TQuote extends Pick<MintQuoteBaseResponse, 'quote' | 'pubkey'>>(method: string, entries: Array<{
         amount: AmountLike;
         quote: TQuote;
@@ -2760,7 +2760,7 @@ export class Wallet {
     spendOptions(proof: Proof, opts?: {
         privkeys?: string | string[];
         now?: number;
-    }): Promise<SpendOptions>;
+    }): SpendOptions;
     get unit(): string;
     withKeyset(id: string, opts?: {
         counterSource?: CounterSource;

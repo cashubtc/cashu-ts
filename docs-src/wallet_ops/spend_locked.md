@@ -18,7 +18,7 @@ type SpendInfo = {
 };
 ```
 
-`k` and `E` are mutually exclusive, and the wallet refuses a proof carrying both: that shape leaks the receiver's static key. `spend_info` is local-only, stripped from every mint payload, and **fund-critical**: for a locked proof it belongs in storage and backups, because until the proof is swept it is the only thing that can spend it.
+`k` and `E` are mutually exclusive, and the wallet refuses a proof carrying both: that shape leaks the receiver's static key. `spend_info` is local-only, stripped from every mint payload, and **fund-critical**: for a locked proof it belongs in storage and backups, because until the proof is swept it is the only thing that can spend it. Nothing scans the seed for a missing key at spend time: every v3 output the wallet makes keeps its key in `spend_info`, and a proof that lost it is recovered with a NUT-09 restore, which re-derives it.
 
 Two stateless helpers dispatch on this without a wallet: `isBlsProof(proof)` gates on the keyset id (nutroot rules apply), and `classifyNutrootSpendInfo(proof)` reads `spend_info` to `'bearer' | 'script-only' | 'receiver-keyed' | 'disclosed' | 'none'`, eg to route a pasted token to the right UI before asking for keys. `script-only` is a NUMS claim (`u` present): only the leaves spend. `disclosed` is `K` without a key for you: the key path is held elsewhere (eg an aggregated key's cosigners), so treat it as theirs to sweep unless a leaf is yours.
 
@@ -27,14 +27,14 @@ Two stateless helpers dispatch on this without a wallet: `isBlsProof(proof)` gat
 Reports what this wallet can do with a proof. Offline (apart from a counter lookup) and changes nothing; use it to triage received proofs, pick a leaf for a script path plan, or show a user why a proof is stuck. Safely handles legacy P2PK/HTLC proofs too.
 
 ```ts
-const { spendable, blockedBy, keyPath, script } = await wallet.spendOptions(proof, {
+const { spendable, blockedBy, keyPath, script } = wallet.spendOptions(proof, {
   privkeys: myStaticPrivkey, // optional: trial-matched against E, blinded keys and leaf keys
   now: 1_712_345_678, // optional: unix seconds for locktime checks, defaults to now
 });
 
 // spendable: the key path or some leaf spends it from what this wallet holds
 // blockedBy: when not, why: 'not-keyed-to-you' | 'locktime' (see availableAt) | 'threshold' | 'preimage'
-// keyPath: true when a key-path key is recoverable (bearer k, matched E, or own seed)
+// keyPath: true when a key-path key is recoverable (bearer k or matched E)
 // script: one entry per disclosed leaf, in tree order:
 //   { leafIndex, leaf, keys, satisfiable, blockedBy?, availableAt? }
 ```
@@ -78,7 +78,7 @@ type ScriptPathPlan = {
 
 ```ts
 // A refund leaf after its locktime:
-const { script } = await wallet.spendOptions(proof, { privkeys: refundPrivkey });
+const { script } = wallet.spendOptions(proof, { privkeys: refundPrivkey });
 const leafIndex = script.findIndex((o) => o.satisfiable);
 const fresh = await wallet.ops
   .receive([proof])

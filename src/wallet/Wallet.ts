@@ -110,7 +110,6 @@ import { lockToNutrootOptions, lockToP2PKOptions } from './lock';
 import {
   type NutrootWalletState,
   assertQuoteLockedTo,
-  attachBearerSpendInfo,
   attachTransactionWitnesses,
   collectSpendInfoKeys,
   createQuoteLockKeyPair,
@@ -1770,7 +1769,6 @@ class Wallet {
         sendProofs.push(p);
       }
     });
-    await attachBearerSpendInfo(sendProofs, this._nutrootState());
     this._logger.debug('SEND COMPLETED', {
       unselectedProofs: unselectedProofs.map((p) => p.amount.toString()),
       keepProofs: keepProofs.map((p) => p.amount.toString()),
@@ -2234,9 +2232,9 @@ class Wallet {
    * Reports what this wallet can do with a proof, it's available spending options.
    *
    * @remarks
-   * Offline apart from the seed scan's counter lookup, and it changes nothing. Use it to triage
-   * received proofs of either lock family, decide which leaf a script path plan should name, or
-   * show a user why a proof is stuck: `spendable` is the one-line answer and `blockedBy` the why.
+   * Offline, and it changes nothing. Use it to triage received proofs of either lock family, decide
+   * which leaf a script path plan should name, or show a user why a proof is stuck: `spendable` is
+   * the one-line answer and `blockedBy` the why.
    *
    * A legacy NUT-11 lock is read into the same leaf shape (main path, then the refund path as an
    * `after` leaf), matched across key parity and through `p2pk_e` for blinded keys; an unlocked
@@ -2252,10 +2250,7 @@ class Wallet {
    *   cannot spend, or a disclosed tree holds a leaf it cannot parse (unknown version, type or
    *   constraint field): the same fail-closed rule the receive cascade applies.
    */
-  async spendOptions(
-    proof: Proof,
-    opts?: { privkeys?: string | string[]; now?: number },
-  ): Promise<SpendOptions> {
+  spendOptions(proof: Proof, opts?: { privkeys?: string | string[]; now?: number }): SpendOptions {
     return proofSpendOptions(proof, opts, this._nutrootState());
   }
 
@@ -2269,14 +2264,14 @@ class Wallet {
    * stuck. Leaf choice is policy: name plans yourself when a later leaf is preferable (eg a cheaper
    * key roster).
    */
-  async planScriptPaths(
+  planScriptPaths(
     proofs: Proof[],
     opts?: { privkeys?: string | string[]; now?: number },
-  ): Promise<ScriptPathPlan[]> {
+  ): ScriptPathPlan[] {
     const plans: ScriptPathPlan[] = [];
     for (const proof of proofs) {
       if (!isBlsKeyset(proof.id) || !isV3PointSecret(proof.secret)) continue;
-      const spend = await proofSpendOptions(proof, opts, this._nutrootState());
+      const spend = proofSpendOptions(proof, opts, this._nutrootState());
       if (spend.keyPath) continue;
       const leaf = spend.script.find((o) => o.satisfiable);
       if (leaf) plans.push({ secret: proof.secret, leafIndex: leaf.leafIndex });

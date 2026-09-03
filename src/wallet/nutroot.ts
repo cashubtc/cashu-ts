@@ -6,7 +6,7 @@ import {
 } from '../crypto/curve_secp';
 import { parseSecret } from '../crypto/NUT10';
 import { maybeDeriveP2BKPrivateKeys, p2pkSpendLeaves } from '../crypto/NUT11';
-import { deriveQuoteLockKey, recoverV3SecretKeys } from '../crypto/NUT13';
+import { deriveQuoteLockKey } from '../crypto/NUT13';
 import {
   buildScriptPathWitness,
   parseNutrootLeaf,
@@ -35,12 +35,6 @@ import type { ScriptPathPlan, SpendOption, SpendOptions } from './types';
  */
 
 /**
- * Headroom over the local counter when scanning seed derivations for nutroot secrets, covering
- * proofs derived by another session or a restore since the counter was last persisted.
- */
-export const V3_SEED_SCAN_HEADROOM = 128;
-
-/**
  * The slice of wallet state the nutroot signing rules read.
  */
 export type NutrootWalletState = {
@@ -63,49 +57,13 @@ export type ScriptPathSpend = {
 };
 
 /**
- * Attaches bearer spend info (`k`) to freshly swapped v3 send proofs (NUT-10).
- *
- * @remarks
- * The bearer key is what lets the receiver run the 2.5.1 cascade and sign the sweep's transaction
- * witness. Only bare seed-derived secrets qualify; proofs whose key cannot be recovered are left
- * untouched. Mutates the passed proofs.
- */
-export async function attachBearerSpendInfo(
-  sendProofs: Proof[],
-  state: NutrootWalletState,
-): Promise<void> {
-  if (!state.seed || sendProofs.length === 0) return;
-  const v3Proofs = sendProofs.filter(
-    (p) => isBlsKeyset(p.id) && isV3PointSecret(p.secret) && !p.spend_info,
-  );
-  if (v3Proofs.length === 0) return;
-  const byKeyset = new Map<string, Proof[]>();
-  for (const proof of v3Proofs) {
-    byKeyset.set(proof.id, [...(byKeyset.get(proof.id) ?? []), proof]);
-  }
-  for (const [keysetId, proofs] of byKeyset) {
-    const next = await state.counters.peekNext(keysetId);
-    const keys = recoverV3SecretKeys(
-      state.seed,
-      keysetId,
-      proofs.map((p) => p.secret),
-      next + V3_SEED_SCAN_HEADROOM,
-    );
-    for (const proof of proofs) {
-      const k = keys.get(proof.secret);
-      if (k) proof.spend_info = { k: bytesToHex(k) };
-    }
-  }
-}
-
-/**
  * Attaches nutroot transaction witnesses to v3 point-secret inputs (NUT-10).
  *
  * @remarks
  * Builds the transcript from the request's own inputs and outputs, then signs its digest with each
- * input's recovered internal key (seed counter scan, NUT-13). Signing is per input, so a mixed
- * transaction signs its v3 inputs and leaves v0-v2 inputs to their own rules (NUT-10). Inputs whose
- * key is not recoverable are left unsigned and the mint rejects them.
+ * input's spend-info key, delivered in `extraKeys`. Signing is per input, so a mixed transaction
+ * signs its v3 inputs and leaves v0-v2 inputs to their own rules (NUT-10). Inputs whose key is not
+ * recoverable are left unsigned and the mint rejects them.
  */
 export async function attachTransactionWitnesses(
   payload: Pick<MeltRequest, 'inputs' | 'outputs'>,
@@ -122,24 +80,6 @@ export async function attachTransactionWitnesses(
     outputs: payload.outputs ?? [],
     ...(meltQuote && { meltQuote }),
   });
-  // Keys are derived per keyset, and a mixed transaction can carry v3 inputs from more than one,
-  // so recover per keyset. Scan bound: that keyset's counter plus headroom for proofs minted
-  // before this session.
-  const keys = new Map<string, Uint8Array>();
-  if (state.seed) {
-    const byKeyset = new Map<string, string[]>();
-    for (const p of v3Inputs) {
-      const secrets = byKeyset.get(p.id) ?? [];
-      secrets.push(p.secret);
-      byKeyset.set(p.id, secrets);
-    }
-    for (const [id, secrets] of byKeyset) {
-      const bound = (await state.counters.peekNext(id)) + V3_SEED_SCAN_HEADROOM;
-      for (const [secret, key] of recoverV3SecretKeys(state.seed, id, secrets, bound)) {
-        keys.set(secret, key);
-      }
-    }
-  }
   // Script path spends first: they name their own leaf, so they take precedence over the key
   // path even where both are available. Everything but the signature was settled before the
   // request was built; only the digest was missing, and now it is not.
@@ -172,7 +112,7 @@ export async function attachTransactionWitnesses(
   }
   for (const input of v3Inputs) {
     if (input.witness) continue; // pre-built witness (e.g. script path): leave it alone
-    const secretKey = keys.get(input.secret) ?? extraKeys?.get(input.secret);
+    const secretKey = extraKeys?.get(input.secret);
     const context = inputContexts.get(
       proofInputContextKey({ keysetId: input.id, secret: input.secret }),
     );
@@ -184,7 +124,7 @@ export async function attachTransactionWitnesses(
   const unsigned = v3Inputs.find((p) => !p.witness);
   if (unsigned) {
     fail(
-      'No key to sign a v3 input: its spend info holds neither a bearer key nor an ephemeral this wallet can derive from, and it is not seed-derived',
+      'No key to sign a v3 input: its spend info holds neither a bearer key nor an ephemeral this wallet can derive from; a proof that lost its spend info is recovered with a NUT-09 restore',
       state.logger,
       { id: unsigned.id, amount: unsigned.amount.toString() },
     );
@@ -194,22 +134,19 @@ export async function attachTransactionWitnesses(
 /**
  * What a proof can be spent through; the full contract is documented on `Wallet.spendOptions`.
  */
-export async function proofSpendOptions(
+export function proofSpendOptions(
   proof: Proof,
   opts: { privkeys?: string | string[]; now?: number } | undefined,
   state: NutrootWalletState,
-): Promise<SpendOptions> {
+): SpendOptions {
   const privkeys = opts?.privkeys === undefined ? [] : [opts.privkeys].flat();
   const now = opts?.now ?? Math.floor(Date.now() / 1000);
   if (!isBlsKeyset(proof.id)) return legacySpendOptions(proof, privkeys, now);
   assertV3PointSecret(proof.secret);
 
-  // Key path: spend info first (bearer or receiver-keyed), then this wallet's own seed.
-  let keyPath = collectSpendInfoKeys([proof], privkeys, state.logger).has(proof.secret);
-  if (!keyPath && state.seed) {
-    const bound = (await state.counters.peekNext(proof.id)) + V3_SEED_SCAN_HEADROOM;
-    keyPath = recoverV3SecretKeys(state.seed, proof.id, [proof.secret], bound).has(proof.secret);
-  }
+  // Key path: the spend-info key, bearer or receiver-keyed. Nothing scans the seed: every v3
+  // output this wallet makes keeps its key in spend info, and a lost one is a NUT-09 restore.
+  const keyPath = collectSpendInfoKeys([proof], privkeys, state.logger).has(proof.secret);
 
   const tree = proof.spend_info?.tree;
   if (!tree || tree.length === 0) return withVerdict(keyPath, []);
@@ -469,6 +406,12 @@ export async function createQuoteLockKeyPair(
 }
 
 /**
+ * Headroom over the quote counter when recovering a quote lock key, covering quotes created by
+ * another session since the counter was last persisted.
+ */
+const QUOTE_SCAN_HEADROOM = 128;
+
+/**
  * Scans the quote counter for the key behind a quote lock pubkey; the full contract is documented
  * on `Wallet.recoverQuoteLockKey`. Returns undefined for a pubkey the seed never derived.
  */
@@ -479,7 +422,7 @@ export async function scanQuoteLockKey(
   if (!state.seed) fail('recoverQuoteLockKey requires a seeded wallet', state.logger);
   const seed = state.seed;
   const normalizedPubkey = normalizeSecpPubkey(pubkey);
-  const bound = (await state.counters.peekNext(QUOTE_COUNTER_KEY)) + V3_SEED_SCAN_HEADROOM;
+  const bound = (await state.counters.peekNext(QUOTE_COUNTER_KEY)) + QUOTE_SCAN_HEADROOM;
   for (let counter = 0; counter < bound; counter++) {
     const privkey = deriveQuoteLockKey(seed, counter);
     if (bytesToHex(getPubKeyFromPrivKey(privkey)) === normalizedPubkey) {

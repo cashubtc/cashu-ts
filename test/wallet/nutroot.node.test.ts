@@ -20,7 +20,6 @@ import { Amount } from '../../src/model/Amount';
 import type { Proof, SerializedBlindedMessage } from '../../src/model/types';
 import { bytesToHex, bytesToUtf8, hexToBytes } from '../../src/utils';
 import {
-  attachBearerSpendInfo,
   attachTransactionWitnesses,
   collectSpendInfoKeys,
   prepareScriptPathSpends,
@@ -30,8 +29,6 @@ import type { CosignRequest } from '../../src/wallet/types';
 import vectors from '../vectors/nutroot-v3.json';
 
 const KEYSET = vectors.nut13_v3.keyset_id; // a BLS (v3) keyset id
-const SEED = new TextEncoder().encode(vectors.nut13_v3.seed_utf8);
-const DERIVED = vectors.nut13_v3.outputs; // {counter, secret, secret_key, ...}
 
 // Deterministic key material, independent of any seed derivation.
 const PRIV_A = '11'.repeat(32);
@@ -90,38 +87,6 @@ function transactionInputsOf(inputs: Proof[], meltQuote?: { quoteId: string; amo
       : undefined,
   });
 }
-
-/* --------------------------
- * attachBearerSpendInfo
- * -------------------------- */
-
-describe('attachBearerSpendInfo', () => {
-  test('attaches the bearer key to bare seed-derived v3 proofs', async () => {
-    const proofs = [v3Proof(DERIVED[0].secret), v3Proof(DERIVED[1].secret)];
-    await attachBearerSpendInfo(proofs, makeState(SEED));
-    for (const [i, proof] of proofs.entries()) {
-      // The receiver's contract: k*G reconstructs the secret (NUT-10 bearer key path).
-      expect(proof.spend_info?.k).toBe(DERIVED[i].secret_key);
-      expect(bytesToHex(getPubKeyFromPrivKey(hexToBytes(proof.spend_info!.k!)))).toBe(proof.secret);
-    }
-  });
-
-  test('leaves non-v3, already-annotated, and underivable proofs untouched', async () => {
-    const legacy: Proof = { ...v3Proof(DERIVED[0].secret), id: `00${'11'.repeat(16)}` };
-    const annotated = v3Proof(DERIVED[0].secret, { E: PUB_A });
-    const foreign = v3Proof(PUB_B); // a point secret this seed never derived
-    await attachBearerSpendInfo([legacy, annotated, foreign], makeState(SEED));
-    expect(legacy.spend_info).toBeUndefined();
-    expect(annotated.spend_info).toEqual({ E: PUB_A });
-    expect(foreign.spend_info).toBeUndefined();
-  });
-
-  test('is a no-op without a seed', async () => {
-    const proof = v3Proof(DERIVED[0].secret);
-    await attachBearerSpendInfo([proof], makeState(undefined));
-    expect(proof.spend_info).toBeUndefined();
-  });
-});
 
 /* --------------------------
  * collectSpendInfoKeys
@@ -336,16 +301,6 @@ describe('prepareScriptPathSpends', () => {
  * -------------------------- */
 
 describe('attachTransactionWitnesses', () => {
-  test('signs a seed-derived input; the witness verifies against its input digest', async () => {
-    const input = v3Proof(DERIVED[0].secret);
-    const payload = { inputs: [input], outputs: [OUTPUT] };
-    await attachTransactionWitnesses(payload, undefined, undefined, undefined, makeState(SEED));
-    expect(input.witness).toBeDefined();
-    expect(
-      verifyTransactionInputWitness(digestOf([input]), input.secret, input.witness as string),
-    ).toBe(true);
-  });
-
   test('falls back to extraKeys, which carry the keys proofs hold in spend info', async () => {
     const fromExtra = v3Proof(PUB_A);
     // A random v3 output's key rides on the proof (spend_info.k), not in wallet state; callers

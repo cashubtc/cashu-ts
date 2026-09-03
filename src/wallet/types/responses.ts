@@ -76,9 +76,9 @@ export type SpendOption = {
  */
 export type SpendOptions = {
   /**
-   * True when the wallet can recover a key-path key: a bearer `k`, a receiver-keyed `E` matched
-   * against a supplied private key, or its own seed derivation. Also true for an unlocked legacy
-   * proof, which spends with no witness at all.
+   * True when the wallet can recover a key-path key: a bearer `k`, or a receiver-keyed `E` matched
+   * against a supplied private key. Also true for an unlocked legacy proof, which spends with no
+   * witness at all.
    */
   keyPath: boolean;
   /**
