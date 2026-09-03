@@ -51,6 +51,11 @@ export type SendResponse = {
  */
 export type SpendOption = {
   leafIndex: number;
+  /**
+   * The disclosed leaf. For a legacy NUT-11 lock this is the same shape read off the secret: the
+   * main path at index 0, the refund path (if any) as an `after` leaf at index 1; `n: 0` with no
+   * keys is NUT-11's anyone-after-expiry, which no nutroot tree can encode, so never serialize it.
+   */
   leaf: NutrootLeaf;
   keys: Array<{ keyIndex: number; pubkey: string; blinded: boolean }>;
   satisfiable: boolean;
@@ -72,11 +77,26 @@ export type SpendOption = {
 export type SpendOptions = {
   /**
    * True when the wallet can recover a key-path key: a bearer `k`, a receiver-keyed `E` matched
-   * against a supplied private key, or its own seed derivation.
+   * against a supplied private key, or its own seed derivation. Also true for an unlocked legacy
+   * proof, which spends with no witness at all.
    */
   keyPath: boolean;
   /**
    * One entry per disclosed leaf, in tree order. Empty when the proof discloses no tree.
    */
   script: SpendOption[];
+  /**
+   * The key path or some leaf spends it from what this wallet holds.
+   */
+  spendable: boolean;
+  /**
+   * Why nothing spends it, when `spendable` is false: `locktime` when a leaf this wallet covers is
+   * only waiting (see `availableAt`), then `preimage`, then `threshold` when it holds some but not
+   * enough keys, else `not-keyed-to-you`, meaning none of its keys are held.
+   */
+  blockedBy?: 'not-keyed-to-you' | 'locktime' | 'threshold' | 'preimage';
+  /**
+   * Unix seconds the earliest waiting leaf unlocks, with `blockedBy: 'locktime'`.
+   */
+  availableAt?: number;
 };

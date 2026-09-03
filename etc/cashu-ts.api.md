@@ -2458,6 +2458,9 @@ export type SpendOption = {
 export type SpendOptions = {
     keyPath: boolean;
     script: SpendOption[];
+    spendable: boolean;
+    blockedBy?: 'not-keyed-to-you' | 'locktime' | 'threshold' | 'preimage';
+    availableAt?: number;
 };
 
 // @public

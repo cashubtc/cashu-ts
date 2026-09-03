@@ -2,8 +2,9 @@ import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { test, describe, expect } from 'vitest';
 
-import { Amount, Wallet } from '../../src';
+import { Amount, Wallet, createHTLCsecret, createP2PKsecret } from '../../src';
 import { deriveSecretAndBlindingFactor } from '../../src/crypto/NUT13';
+import { deriveP2BKBlindedPubkeys } from '../../src/crypto/NUT28';
 import {
   buildNutrootSecret,
   deriveReceiverKeyedSecret,
@@ -41,6 +42,7 @@ const wallet = () => new Wallet(mint);
 
 describe('wallet.spendOptions: the key path', () => {
   test('rejects anything that is not a v3 point secret', async () => {
+    // On a v3 keyset the secret must be a point: anything else is not a proof this mint issued.
     await expect(wallet().spendOptions(v3Proof('deadbeef'))).rejects.toThrow(/point secrets/);
     await expect(
       wallet().spendOptions(v3Proof(JSON.stringify(['P2PK', { nonce: '', data: pub(1) }]))),
@@ -53,16 +55,24 @@ describe('wallet.spendOptions: the key path', () => {
   test('finds a bearer key, and reports none when the spend info is empty', async () => {
     const k = priv(ALICE);
     const bare = v3Proof(pub(ALICE), { k });
-    expect(await wallet().spendOptions(bare)).toEqual({ keyPath: true, script: [] });
+    expect(await wallet().spendOptions(bare)).toEqual({
+      keyPath: true,
+      script: [],
+      spendable: true,
+    });
     // Same proof with no spend info at all, and no seed to derive from: nothing to spend with.
     expect(await wallet().spendOptions(v3Proof(pub(ALICE)))).toEqual({
       keyPath: false,
       script: [],
+      spendable: false,
+      blockedBy: 'not-keyed-to-you',
     });
     // A bearer key that does not match the secret is not a key path.
     expect(await wallet().spendOptions(v3Proof(pub(BOB), { k }))).toEqual({
       keyPath: false,
       script: [],
+      spendable: false,
+      blockedBy: 'not-keyed-to-you',
     });
   });
 
@@ -213,6 +223,194 @@ describe('wallet.spendOptions: the script path', () => {
     unknown[1] = 0x7f;
     const proof = v3Proof(pub(BOB), { K: pub(BOB), tree: [bytesToHex(unknown)] });
     await expect(wallet().spendOptions(proof, { privkeys: priv(ALICE) })).rejects.toThrow(/type/);
+  });
+});
+
+describe('wallet.spendOptions: the verdict', () => {
+  const threshold = (keys: string[], n = 1): NutrootLeaf => ({ type: 'threshold', n, keys });
+  const after = (time: number, keys: string[]): NutrootLeaf => ({
+    type: 'after',
+    n: 1,
+    keys,
+    time,
+  });
+  const locked = (leaves: NutrootLeaf[]) => {
+    const { secret, tree } = buildNutrootSecret(pub(BOB), leaves);
+    return v3Proof(secret, { K: pub(BOB), tree });
+  };
+  const unlockAt = 4102444800;
+
+  test('a proof keyed to someone else is not-keyed-to-you, whatever its tree says', async () => {
+    // The payer-clawback shape: derived to the payer's own key, presented as a payment.
+    const out = deriveReceiverKeyedSecret(pub(STRANGER));
+    const theirs = v3Proof(out.secret, { E: out.E });
+    expect(await wallet().spendOptions(theirs, { privkeys: priv(ALICE) })).toMatchObject({
+      spendable: false,
+      blockedBy: 'not-keyed-to-you',
+    });
+    // A stranger's refund leaf is not "unlocks later" for a wallet holding none of its keys.
+    const refundable = locked([threshold([pub(STRANGER)]), after(unlockAt, [pub(STRANGER)])]);
+    const v = await wallet().spendOptions(refundable, { privkeys: priv(ALICE), now: unlockAt - 1 });
+    expect(v).toMatchObject({ spendable: false, blockedBy: 'not-keyed-to-you' });
+    expect(v.availableAt).toBeUndefined();
+  });
+
+  test('a covered leaf waiting on its locktime reports when', async () => {
+    const proof = locked([threshold([pub(STRANGER)]), after(unlockAt, [pub(ALICE)])]);
+    const before = await wallet().spendOptions(proof, { privkeys: priv(ALICE), now: unlockAt - 1 });
+    expect(before).toMatchObject({
+      spendable: false,
+      blockedBy: 'locktime',
+      availableAt: unlockAt,
+    });
+    const at = await wallet().spendOptions(proof, { privkeys: priv(ALICE), now: unlockAt });
+    expect(at).toMatchObject({ spendable: true });
+    expect(at.blockedBy).toBeUndefined();
+  });
+
+  test('a key shortfall is threshold, a covered hashlock is preimage', async () => {
+    const short = locked([threshold([pub(ALICE), pub(STRANGER)], 2)]);
+    expect(await wallet().spendOptions(short, { privkeys: priv(ALICE) })).toMatchObject({
+      spendable: false,
+      blockedBy: 'threshold',
+    });
+    const htlc = locked([{ type: 'hashlock', n: 1, keys: [pub(ALICE)], hash: 'bb'.repeat(32) }]);
+    expect(await wallet().spendOptions(htlc, { privkeys: priv(ALICE) })).toMatchObject({
+      spendable: false,
+      blockedBy: 'preimage',
+    });
+  });
+});
+
+describe('wallet.spendOptions: legacy and bearer proofs', () => {
+  const LEGACY_KEYSET = `00${'11'.repeat(16)}`;
+  const legacy = (secret: string, extra?: Partial<Proof>): Proof => ({
+    id: LEGACY_KEYSET,
+    amount: Amount.from(8),
+    secret,
+    C: 'aa'.repeat(33),
+    ...extra,
+  });
+  const unlockAt = 4102444800;
+
+  test('an unlocked bearer proof spends as it stands', async () => {
+    expect(await wallet().spendOptions(legacy('plain-secret'))).toEqual({
+      keyPath: true,
+      script: [],
+      spendable: true,
+    });
+    // A legacy secret that happens to look like a point is still a plain secret.
+    expect((await wallet().spendOptions(legacy(pub(STRANGER)))).spendable).toBe(true);
+  });
+
+  test('an unknown NUT-10 kind throws rather than being reported as spendable', async () => {
+    const secret = JSON.stringify(['FOO', { nonce: 'ab', data: 'cd' }]);
+    await expect(wallet().spendOptions(legacy(secret))).rejects.toThrow(/kind/i);
+  });
+
+  test('a P2PK lock is one threshold leaf, matched across parity', async () => {
+    const proof = legacy(createP2PKsecret(pub(ALICE)));
+    const mine = await wallet().spendOptions(proof, { privkeys: priv(ALICE) });
+    expect(mine).toMatchObject({ keyPath: false, spendable: true });
+    expect(mine.script).toEqual([
+      {
+        leafIndex: 0,
+        leaf: { type: 'threshold', n: 1, keys: [pub(ALICE)] },
+        keys: [{ keyIndex: 0, pubkey: pub(ALICE), blinded: false }],
+        satisfiable: true,
+      },
+    ]);
+    expect(await wallet().spendOptions(proof, { privkeys: priv(STRANGER) })).toMatchObject({
+      spendable: false,
+      blockedBy: 'not-keyed-to-you',
+    });
+    // An x-only import (any nostr key) may hold the other parity's scalar for the published point.
+    const flipped = (pub(ALICE).startsWith('02') ? '03' : '02') + pub(ALICE).slice(2);
+    const twin = await wallet().spendOptions(legacy(createP2PKsecret(flipped)), {
+      privkeys: priv(ALICE),
+    });
+    expect(twin.spendable).toBe(true);
+    expect(twin.script[0].keys[0].pubkey).toBe(flipped);
+  });
+
+  test('a locktime with refund keys is an after leaf at index 1', async () => {
+    const secret = createP2PKsecret(pub(ALICE), [
+      ['locktime', String(unlockAt)],
+      ['refund', pub(BOB)],
+    ]);
+    const proof = legacy(secret);
+    const bob = await wallet().spendOptions(proof, { privkeys: priv(BOB), now: unlockAt - 1 });
+    expect(bob.script.map((o) => o.leaf)).toEqual([
+      { type: 'threshold', n: 1, keys: [pub(ALICE)] },
+      { type: 'after', n: 1, keys: [pub(BOB)], time: unlockAt },
+    ]);
+    expect(bob).toMatchObject({ spendable: false, blockedBy: 'locktime', availableAt: unlockAt });
+    expect(
+      (await wallet().spendOptions(proof, { privkeys: priv(BOB), now: unlockAt })).spendable,
+    ).toBe(true);
+    // Alice's main path is live on both sides of the locktime.
+    expect(
+      (await wallet().spendOptions(proof, { privkeys: priv(ALICE), now: unlockAt })).spendable,
+    ).toBe(true);
+  });
+
+  test('a locktime with no refund keys unlocks for anyone', async () => {
+    const proof = legacy(createP2PKsecret(pub(ALICE), [['locktime', String(unlockAt)]]));
+    const before = await wallet().spendOptions(proof, {
+      privkeys: priv(STRANGER),
+      now: unlockAt - 1,
+    });
+    expect(before).toMatchObject({
+      spendable: false,
+      blockedBy: 'locktime',
+      availableAt: unlockAt,
+    });
+    expect(before.script[1].leaf).toEqual({ type: 'after', n: 0, keys: [], time: unlockAt });
+    const after = await wallet().spendOptions(proof, { now: unlockAt });
+    expect(after).toMatchObject({ spendable: true });
+    expect(after.script[1].satisfiable).toBe(true);
+  });
+
+  test('a multisig short on keys is threshold', async () => {
+    const secret = createP2PKsecret(pub(ALICE), [
+      ['pubkeys', pub(BOB)],
+      ['n_sigs', '2'],
+    ]);
+    expect(await wallet().spendOptions(legacy(secret), { privkeys: priv(ALICE) })).toMatchObject({
+      spendable: false,
+      blockedBy: 'threshold',
+    });
+    const both = await wallet().spendOptions(legacy(secret), {
+      privkeys: [priv(ALICE), priv(BOB)],
+    });
+    expect(both.spendable).toBe(true);
+    expect(both.script[0].keys.map((k) => k.keyIndex)).toEqual([0, 1]);
+  });
+
+  test('an HTLC is a hashlock leaf, keyed or not', async () => {
+    const hash = 'cd'.repeat(32);
+    const keyed = legacy(createHTLCsecret(hash, [['pubkeys', pub(ALICE)]]));
+    const mine = await wallet().spendOptions(keyed, { privkeys: priv(ALICE) });
+    expect(mine.script[0].leaf).toEqual({ type: 'hashlock', n: 1, keys: [pub(ALICE)], hash });
+    expect(mine).toMatchObject({ spendable: false, blockedBy: 'preimage' });
+    expect(await wallet().spendOptions(keyed, { privkeys: priv(STRANGER) })).toMatchObject({
+      blockedBy: 'not-keyed-to-you',
+    });
+    // Keyless: the preimage alone spends it.
+    const keyless = await wallet().spendOptions(legacy(createHTLCsecret(hash)));
+    expect(keyless.script[0].leaf).toEqual({ type: 'hashlock', n: 0, keys: [], hash });
+    expect(keyless).toMatchObject({ spendable: false, blockedBy: 'preimage' });
+  });
+
+  test('a blinded (P2BK) key is recovered through p2pk_e and reported as blinded', async () => {
+    const { blinded, Ehex } = deriveP2BKBlindedPubkeys([pub(ALICE)], new Uint8Array(32).fill(5));
+    const proof = legacy(createP2PKsecret(blinded[0]), { p2pk_e: Ehex });
+    const mine = await wallet().spendOptions(proof, { privkeys: priv(ALICE) });
+    expect(mine.spendable).toBe(true);
+    expect(mine.script[0].keys).toEqual([{ keyIndex: 0, pubkey: blinded[0], blinded: true }]);
+    expect(await wallet().spendOptions(proof, { privkeys: priv(STRANGER) })).toMatchObject({
+      blockedBy: 'not-keyed-to-you',
+    });
   });
 });
 

@@ -24,20 +24,24 @@ Two stateless helpers dispatch on this without a wallet: `isBlsProof(proof)` gat
 
 ## Inspecting: `wallet.spendOptions()`
 
-Reports what this wallet can do with a v3 proof. Offline (apart from a counter lookup) and changes nothing; use it to pick a leaf for a script path plan, or to show a user why a proof is stuck.
+Reports what this wallet can do with a proof. Offline (apart from a counter lookup) and changes nothing; use it to triage received proofs, pick a leaf for a script path plan, or show a user why a proof is stuck. Safely handles legacy P2PK/HTLC proofs too.
 
 ```ts
-const { keyPath, script } = await wallet.spendOptions(proof, {
-  privkeys: myStaticPrivkey, // optional: trial-matched against E and blinded leaf keys
+const { spendable, blockedBy, keyPath, script } = await wallet.spendOptions(proof, {
+  privkeys: myStaticPrivkey, // optional: trial-matched against E, blinded keys and leaf keys
   now: 1_712_345_678, // optional: unix seconds for locktime checks, defaults to now
 });
 
+// spendable: the key path or some leaf spends it from what this wallet holds
+// blockedBy: when not, why: 'not-keyed-to-you' | 'locktime' (see availableAt) | 'threshold' | 'preimage'
 // keyPath: true when a key-path key is recoverable (bearer k, matched E, or own seed)
 // script: one entry per disclosed leaf, in tree order:
 //   { leafIndex, leaf, keys, satisfiable, blockedBy?, availableAt? }
 ```
 
-`satisfiable` is this wallet's own assessment from what it holds. `blockedBy` names the first obstacle: `'locktime'` (see `availableAt`), `'threshold'` (key shortfall), or `'preimage'` (a hashlock leaf whose keys are covered; the preimage comes from the caller, so a hashlock leaf is never satisfiable from the wallet alone). The mint judges an `after` leaf against its own clock, so a leaf that unlocked seconds ago may still be refused. A leaf the wallet cannot parse throws rather than reporting as spendable, the same fail-closed rule the receive cascade applies.
+`spendable` and `blockedBy` are the one-line answer, worded for the caller to phrase: `'locktime'` only when a leaf this wallet covers is merely waiting (a stranger's refund leaf is `'not-keyed-to-you'`), `'threshold'` when it holds some but not enough keys, `'not-keyed-to-you'` when none. Per leaf, `satisfiable` is this wallet's own assessment from what it holds and `blockedBy` names the first obstacle: `'locktime'` (see `availableAt`), `'threshold'` (key shortfall), or `'preimage'` (a hashlock leaf whose keys are covered; the preimage comes from the caller, so a hashlock leaf is never satisfiable from the wallet alone). The mint judges an `after` leaf against its own clock, so a leaf that unlocked seconds ago may still be refused. A leaf the wallet cannot parse throws rather than reporting as spendable, the same fail-closed rule the receive cascade applies.
+
+A legacy proof reports in the same shape. A NUT-11 P2PK or HTLC lock reads as a main leaf (`threshold` or `hashlock`) and, given a locktime, its refund path as an `after` leaf at index 1; keys match across parity, so an x-only import (any nostr key) is found under either prefix, and a blinded (P2BK) key through `p2pk_e`. An unlocked bearer proof is `keyPath: true` with no leaves. An unknown NUT-10 kind throws. So a wallet receiving mixed proofs asks one question of each, with no `isBlsKeyset` branch of its own.
 
 ## Key path: receiving is the sweep
 

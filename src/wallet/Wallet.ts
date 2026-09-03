@@ -2231,21 +2231,26 @@ class Wallet {
   }
 
   /**
-   * What a v3 proof can be spent through: the key path, the script path, or neither.
+   * Reports what this wallet can do with a proof, it's available spending options.
    *
    * @remarks
-   * Offline apart from the seed scan's counter lookup, and it changes nothing. Use it to decide
-   * which leaf a script path plan should name, or to show a user why a proof is stuck.
+   * Offline apart from the seed scan's counter lookup, and it changes nothing. Use it to triage
+   * received proofs of either lock family, decide which leaf a script path plan should name, or
+   * show a user why a proof is stuck: `spendable` is the one-line answer and `blockedBy` the why.
+   *
+   * A legacy NUT-11 lock is read into the same leaf shape (main path, then the refund path as an
+   * `after` leaf), matched across key parity and through `p2pk_e` for blinded keys; an unlocked
+   * legacy proof reports `keyPath: true`, since it spends with no witness at all.
    *
    * `satisfiable` is this wallet's own assessment from what it holds. The mint compares an `after`
    * leaf against its own clock, so a leaf that unlocked seconds ago may still be refused, and a
    * hashlock leaf is never satisfiable from the wallet alone: its preimage comes from the caller.
-   * @param proof A v3 (point secret) proof.
+   * @param proof Any proof, with its spend info when it has one.
    * @param opts.privkeys Static keys to trial-match, for receiver-keyed proofs and leaf keys.
    * @param opts.now Unix seconds to judge locktimes against. Defaults to the current time.
-   * @throws If the proof is not a v3 point secret, or its disclosed tree holds a leaf this wallet
-   *   cannot parse (unknown version, type or constraint field: the same fail-closed rule the
-   *   receive cascade applies).
+   * @throws If a v3 keyset proof is not a point secret, a NUT-10 secret is of a kind this wallet
+   *   cannot spend, or a disclosed tree holds a leaf it cannot parse (unknown version, type or
+   *   constraint field): the same fail-closed rule the receive cascade applies.
    */
   async spendOptions(
     proof: Proof,
@@ -2259,9 +2264,10 @@ class Wallet {
    * each, for `ReceiveConfig.scriptPath`.
    *
    * @remarks
-   * Skips non-v3 proofs, proofs the key path spends, and proofs with no satisfiable leaf; ask
-   * {@link Wallet.spendOptions | spendOptions} why a missing proof is stuck. Leaf choice is policy:
-   * name plans yourself when a later leaf is preferable (eg a cheaper key roster).
+   * Skips non-v3 proofs (they sign in receive, not by plan), proofs the key path spends, and proofs
+   * with no satisfiable leaf; ask {@link Wallet.spendOptions | spendOptions} why a missing proof is
+   * stuck. Leaf choice is policy: name plans yourself when a later leaf is preferable (eg a cheaper
+   * key roster).
    */
   async planScriptPaths(
     proofs: Proof[],

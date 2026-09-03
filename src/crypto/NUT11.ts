@@ -23,6 +23,7 @@ import {
   getSecretKind,
 } from './NUT10';
 import { deriveP2BKSecretKeys } from './NUT28';
+import type { NutrootLeaf } from './nutroot';
 
 export const SigFlags = {
   SIG_INPUTS: 'SIG_INPUTS',
@@ -732,6 +733,42 @@ export function verifyP2PKSpendingConditions(
   const result = { ...resultBase, success: true, path: 'UNLOCKED' as const };
   logger.debug('No refund pubkeys, anyone can spend.', { result });
   return result;
+}
+
+/**
+ * Reads a P2PK or HTLC secret as nutroot-shaped leaves: the main path at index 0 and, given a
+ * locktime, the refund path as an `after` leaf at index 1.
+ *
+ * @remarks
+ * Diagnostic shape for `Wallet.spendOptions`. A keyless `after` leaf (`n: 0`) is NUT-11's
+ * anyone-after-expiry, which no nutroot tree can encode: never serialize these leaves.
+ * @throws If the secret is not P2PK/HTLC or its tags break the NUT-11 rules.
+ * @internal
+ */
+export function p2pkSpendLeaves(secretStr: string | Secret): NutrootLeaf[] {
+  const secret = parseP2PKSecret(secretStr);
+  const mainKeys = getP2PKWitnessPubkeys(secret);
+  const refundKeys = getP2PKWitnessRefundkeys(secret);
+  const locktime = getLocktime(secret);
+  assertSpendingConditionRules({
+    mainKeyCount: mainKeys.length,
+    refundKeyCount: refundKeys.length,
+    nSigs: getTagInt(secret, 'n_sigs'),
+    nSigsRefund: getTagInt(secret, 'n_sigs_refund'),
+    hasLocktime: Number.isFinite(locktime),
+  });
+  // A path with no keys needs no signatures (keyless HTLC, or expiry with no refund keys).
+  const n = (tag: string, keys: string[]) =>
+    keys.length ? Math.max(getTagInt(secret, tag) ?? 1, 1) : 0;
+  const main: NutrootLeaf =
+    getSecretKind(secret) === 'HTLC'
+      ? { type: 'hashlock', n: n('n_sigs', mainKeys), keys: mainKeys, hash: getDataField(secret) }
+      : { type: 'threshold', n: n('n_sigs', mainKeys), keys: mainKeys };
+  if (!Number.isFinite(locktime)) return [main];
+  return [
+    main,
+    { type: 'after', n: n('n_sigs_refund', refundKeys), keys: refundKeys, time: locktime },
+  ];
 }
 
 /**

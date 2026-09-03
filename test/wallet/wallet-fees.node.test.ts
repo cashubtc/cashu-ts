@@ -384,6 +384,10 @@ describe('wallet.isPaymentRequestSatisfied', () => {
     expect(() =>
       wallet.isPaymentRequestSatisfied(pr, [v3Proof(100, payer)], 100, { privkeys: priv(1) }),
     ).toThrow(/not keyed to the requested receiver key/);
+    // Keyed to the payee, so perfectly spendable, but short: spendability alone cannot catch this.
+    expect(
+      wallet.isPaymentRequestSatisfied(pr, [v3Proof(8, payee)], 100, { privkeys: priv(1) }),
+    ).toBe(false);
   });
 
   test("a blind-me leaf key must carry the payee's own blinding", async () => {

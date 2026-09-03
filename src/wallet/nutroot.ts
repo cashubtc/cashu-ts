@@ -4,6 +4,8 @@ import {
   getPubKeyFromPrivKey,
   normalizeSecpPubkey,
 } from '../crypto/curve_secp';
+import { parseSecret } from '../crypto/NUT10';
+import { maybeDeriveP2BKPrivateKeys, p2pkSpendLeaves } from '../crypto/NUT11';
 import { deriveQuoteLockKey, recoverV3SecretKeys } from '../crypto/NUT13';
 import {
   buildScriptPathWitness,
@@ -190,16 +192,17 @@ export async function attachTransactionWitnesses(
 }
 
 /**
- * What a v3 proof can be spent through; the full contract is documented on `Wallet.spendOptions`.
+ * What a proof can be spent through; the full contract is documented on `Wallet.spendOptions`.
  */
 export async function proofSpendOptions(
   proof: Proof,
   opts: { privkeys?: string | string[]; now?: number } | undefined,
   state: NutrootWalletState,
 ): Promise<SpendOptions> {
-  assertV3PointSecret(proof.secret);
   const privkeys = opts?.privkeys === undefined ? [] : [opts.privkeys].flat();
   const now = opts?.now ?? Math.floor(Date.now() / 1000);
+  if (!isBlsKeyset(proof.id)) return legacySpendOptions(proof, privkeys, now);
+  assertV3PointSecret(proof.secret);
 
   // Key path: spend info first (bearer or receiver-keyed), then this wallet's own seed.
   let keyPath = collectSpendInfoKeys([proof], privkeys, state.logger).has(proof.secret);
@@ -209,12 +212,49 @@ export async function proofSpendOptions(
   }
 
   const tree = proof.spend_info?.tree;
-  if (!tree || tree.length === 0) return { keyPath, script: [] };
+  if (!tree || tree.length === 0) return withVerdict(keyPath, []);
 
   // Parses every leaf, so an unknown one throws here rather than being reported as spendable.
   const leaves = tree.map((leaf) => parseNutrootLeaf(hexToBytes(leaf)));
   const hits = recoverLeafKeySecretKeys(tree, proof.spend_info?.E, privkeys);
-  const script = leaves.map((leaf, leafIndex) => {
+  return withVerdict(keyPath, scriptOptions(leaves, hits, now));
+}
+
+/**
+ * Spend options for a pre-v3 proof: an unlocked secret spends as it stands, a NUT-11 lock reads as
+ * leaves, and an unknown NUT-10 kind throws.
+ */
+function legacySpendOptions(proof: Proof, privkeys: string[], now: number): SpendOptions {
+  try {
+    parseSecret(proof.secret);
+  } catch {
+    return withVerdict(true, []); // not a NUT-10 secret: a bearer proof anyone can spend
+  }
+  const leaves = p2pkSpendLeaves(proof.secret);
+  // Held keys by x coordinate, so an x-only import matches either parity (NUT-11 signatures are
+  // x-only). A P2BK proof's keys are blinded, so the held keys are their derivations (NUT-28).
+  const blinded = proof.p2pk_e !== undefined;
+  const scalars = blinded ? maybeDeriveP2BKPrivateKeys(privkeys, proof) : privkeys;
+  const held = new Set(
+    scalars.map((k) => bytesToHex(getPubKeyFromPrivKey(hexToBytes(k))).slice(2)),
+  );
+  const hits = leaves.flatMap((leaf, leafIndex) =>
+    leaf.keys.flatMap((key, keyIndex) =>
+      held.has(key.slice(2)) ? [{ leafIndex, keyIndex, blinded }] : [],
+    ),
+  );
+  return withVerdict(false, scriptOptions(leaves, hits, now));
+}
+
+/**
+ * Judges each leaf from the key hits against it, at `now`.
+ */
+function scriptOptions(
+  leaves: NutrootLeaf[],
+  hits: Array<{ leafIndex: number; keyIndex: number; blinded: boolean }>,
+  now: number,
+): SpendOption[] {
+  return leaves.map((leaf, leafIndex) => {
     const keys = hits
       .filter((h) => h.leafIndex === leafIndex)
       // Report the on-tree key, never the recovered scalar: this surface is for
@@ -235,7 +275,24 @@ export async function proofSpendOptions(
     }
     return option;
   });
-  return { keyPath, script };
+}
+
+/**
+ * The one-line answer over the key path and every leaf; see `SpendOptions.blockedBy`.
+ */
+function withVerdict(keyPath: boolean, script: SpendOption[]): SpendOptions {
+  if (keyPath || script.some((o) => o.satisfiable)) return { keyPath, script, spendable: true };
+  const stuck = { keyPath, script, spendable: false };
+  // A locktime counts only on a leaf this wallet otherwise covers: a stranger's refund leaf is
+  // not "unlocks later".
+  const waiting = script.filter((o) => o.blockedBy === 'locktime' && o.keys.length >= o.leaf.n);
+  if (waiting.length) {
+    const availableAt = Math.min(...waiting.map((o) => o.availableAt as number));
+    return { ...stuck, blockedBy: 'locktime', availableAt };
+  }
+  if (script.some((o) => o.blockedBy === 'preimage')) return { ...stuck, blockedBy: 'preimage' };
+  if (script.some((o) => o.keys.length > 0)) return { ...stuck, blockedBy: 'threshold' };
+  return { ...stuck, blockedBy: 'not-keyed-to-you' };
 }
 
 /**
