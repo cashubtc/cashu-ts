@@ -85,17 +85,28 @@ BASE_SHA=$(git rev-parse --short HEAD)   # the $BASE commit this build sits on
 for pr in "${PRS[@]}"; do
   echo ">> merging PR #$pr"
   git fetch "$REMOTE" "pull/$pr/head:pr-$pr" --force
-  if ! git merge --no-edit "pr-$pr"; then
-    if [[ -n "$(git ls-files --unmerged)" ]]; then
-      echo "" >&2
-      echo "!! unresolved conflict merging PR #$pr — fix the files, then:" >&2
-      echo "     git add -A && git commit --no-edit --no-verify" >&2
-      echo "   then re-run; rerere replays the fix automatically next time." >&2
-      exit 1
-    fi
-    # rerere replayed a known resolution and staged it — just conclude the merge
-    git commit --no-edit --no-verify
+  # Captured, not streamed, because whether the merge hit a conflict is the only
+  # way to tell a replayed resolution from a hook that refused the auto-commit.
+  if merge_log=$(git merge --no-edit "pr-$pr" 2>&1); then
+    printf '%s\n' "$merge_log"
+    continue
+  fi
+  printf '%s\n' "$merge_log"
+  if [[ -n "$(git ls-files --unmerged)" ]]; then
+    echo "" >&2
+    echo "!! unresolved conflict merging PR #$pr — fix the files, then:" >&2
+    echo "     git add -A && git commit --no-edit --no-verify" >&2
+    echo "   then re-run; rerere replays the fix automatically next time." >&2
+    exit 1
+  fi
+  # Nothing left unmerged, so the tree is right and only the commit is missing.
+  git commit --no-edit --no-verify
+  if grep -q '^CONFLICT' <<<"$merge_log"; then
     echo ">> rerere auto-resolved PR #$pr"
+  else
+    # No conflict at all: a hook rejected the merge commit. Committed anyway,
+    # since this branch is throwaway, but a failing hook is worth knowing about.
+    echo "!! PR #$pr merged clean; a git hook blocked the commit (see above), committed with --no-verify" >&2
   fi
 done
 
