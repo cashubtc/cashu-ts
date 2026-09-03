@@ -119,13 +119,18 @@ if [[ "${PUBLISH:-}" == "1" ]]; then
   # never picks it up (@latest unaffected). Unique per bundle (sha changes with
   # the PRs); re-publishing an identical bundle is a harmless no-op (npm rejects
   # the duplicate version).
-  # compile (nothing else triggers it on publish) + unit tests on the MERGED
-  # tree — each PR passed CI alone, but this catches breakage from combining
-  # them, which is the whole point of the experimental build. Not full `prtasks`: lint/format/
-  # api-report are repo hygiene that don't affect the published lib/, and
-  # api:update mutates files mid-publish. Skip tests with SKIP_TEST=1 to iterate.
-  echo ">> building + testing merged tree"
+  # compile + types + unit tests on the MERGED tree — each PR passed CI alone,
+  # but this catches breakage from combining them, which is the whole point of
+  # the experimental build. Not full `prtasks`: lint/format/api-report are repo
+  # hygiene that don't affect the published lib/, and api:update mutates files
+  # mid-publish. Skip tests with SKIP_TEST=1 to iterate.
+  echo ">> building + type-checking + testing merged tree"
   npm run compile
+  # Types get their own step because nothing else here checks them: esbuild
+  # (compile) and vitest both strip types without checking. A rerere replay that
+  # has gone stale against a moved base can produce a type-only break that
+  # compiles and passes tests, and would otherwise publish clean.
+  npm run check-types
   # node project only: fast, no Playwright browser dep, no coverage report —
   # enough to catch breakage from combining the PRs. SKIP_TEST=1 to skip.
   [[ "${SKIP_TEST:-}" == "1" ]] || npx vitest run --project node
