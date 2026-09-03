@@ -152,16 +152,25 @@ function toXOnlyPubkey(pubkey: string): string {
 /**
  * Find the private key that can sign for a given compressed public key.
  *
+ * @remarks
+ * Matches on the x coordinate: a key imported from an x-only context (any nostr key) is published
+ * as `02 || x` but its scalar derives the odd-y twin half the time. That twin is `n - d`, and it is
+ * what gets returned, so the caller signs for the point the quote actually names.
  * @param pubkey Compressed SEC1 public key (33 bytes, hex-encoded) to match against.
  * @param privkeys One or more candidate private keys (hex-encoded).
- * @returns The matching private key hex string.
+ * @returns The private key hex string that signs for `pubkey`.
  * @throws If no candidate key derives to the expected pubkey.
  */
 export function findSigningKey(pubkey: string, privkeys: string | string[]): string {
   const keys = Array.isArray(privkeys) ? privkeys : [privkeys];
+  const wanted = pubkey.toLowerCase();
   for (const key of keys) {
     const derived = bytesToHex(secp256k1.getPublicKey(hexToBytes(key), true));
-    if (derived.toLowerCase() === pubkey.toLowerCase()) return key;
+    if (derived === wanted) return key;
+    if (derived.slice(2) === wanted.slice(2)) {
+      const d = secp256k1.Point.Fn.fromBytes(hexToBytes(key));
+      return bytesToHex(secp256k1.Point.Fn.toBytes(secp256k1.Point.Fn.neg(d)));
+    }
   }
   throw new CTSError(`No private key matches quote pubkey ${pubkey}`);
 }
