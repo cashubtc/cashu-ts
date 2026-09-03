@@ -274,8 +274,8 @@ let requestLogger = NULL_LOGGER;
  * @remarks
  * `RequestInit` fields (`cache`, `credentials`, `mode` etc) override the per-call value: they are
  * process-wide transport policy. Library options (`requestTimeout`, NUT-19 policy) are defaults a
- * per-call value overrides. `headers` merge, per-call wins per key; `redirect` is always `error` on
- * requests carrying auth headers.
+ * per-call value overrides. `headers` merge, per-call wins per key; `redirect` defaults to `error`
+ * on requests with a body, and is forced to `error` on requests carrying auth headers.
  * @param options See possible options here:
  *   https://developer.mozilla.org/en-US/docs/Web/API/fetch#options.
  */
@@ -514,6 +514,9 @@ async function _request(options: RequestOptions): Promise<unknown> {
         credentials: 'omit', // prevent cookie-based tracking
         referrer: '', // prevent leaking the embedding page URL
         referrerPolicy: 'no-referrer', // belt-and-braces for referrer across all contexts
+        // A 307/308 re-sends the body to the redirect target, so any request carrying one fails
+        // rather than follows. Overridable for deployments that legitimately redirect.
+        ...(body !== undefined ? { redirect: 'error' as const } : undefined),
         ...fetchOptions, // allows override of above options
         ...(carriesAuth ? { redirect: 'error' as const } : undefined), // not overridable on auth requests
         signal, // not overridable (includes caller signal)

@@ -159,6 +159,40 @@ describe('requests', { timeout: 7500 }, () => {
     }
   });
 
+  test('redirect defaults to error on requests carrying a body, and stays overridable', async () => {
+    let init: RequestInit | undefined;
+    const captureFetch: typeof fetch = async (_input, requestInit) => {
+      init = requestInit;
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+    vi.stubGlobal('fetch', captureFetch);
+
+    try {
+      await request({
+        endpoint: `${mintUrl}/v1/swap`,
+        method: 'POST',
+        requestBody: { inputs: [] },
+      });
+      expect(init?.redirect).toBe('error');
+
+      await request({
+        endpoint: `${mintUrl}/v1/swap`,
+        method: 'POST',
+        requestBody: { inputs: [] },
+        redirect: 'follow',
+      });
+      expect(init?.redirect).toBe('follow');
+
+      await request({ endpoint: `${mintUrl}/v1/info` });
+      expect(init?.redirect).toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   test('per-request library options override the global default', async () => {
     const endpoint = mintUrl + '/v1/keys';
     server.use(
