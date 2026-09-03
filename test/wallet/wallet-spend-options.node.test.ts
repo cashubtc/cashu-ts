@@ -133,7 +133,7 @@ describe('wallet.spendOptions: the script path', () => {
 
   test('duplicate copies of one private key count as one threshold signer', async () => {
     const proof = locked([threshold([pub(ALICE), pub(BOB)], 2)]);
-    const { script } = await wallet().spendOptions(proof, {
+    const { script } = wallet().spendOptions(proof, {
       privkeys: [priv(ALICE), priv(ALICE)],
     });
     expect(script[0]).toMatchObject({ satisfiable: false, blockedBy: 'threshold' });
