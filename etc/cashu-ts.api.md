@@ -276,6 +276,24 @@ export function bytesToHex(bytes: Uint8Array): string;
 export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
 
 // @public
+export const CashuNip07: CashuNip07Api;
+
+// @public (undocumented)
+export type CashuNip07Api = {
+    pubkey(nostr: Nip07Like): Promise<string>;
+    canSign(nostr: Nip07Like): boolean;
+    canSignP2PK(nostr: Nip07Like): boolean;
+    signP2PK(nostr: Nip07Like, proofs: Proof[]): Promise<Proof[]>;
+    cosign(nostr: Nip07Like): NonNullable<ScriptPathPlan['cosign']>;
+    completes(option: SpendOption, pubkey: string): boolean;
+    nip60Keys(nostr: Nip07Like, pubkey: string, content: string): Promise<{
+        privkeys: string[];
+        mints: string[];
+    }>;
+    signTransaction(messageHex: string, inputContainerHex: string, secretKey: string | Uint8Array): Nip07SignedHash;
+};
+
+// @public
 export type CashuPayloadKind = 'token' | 'paymentRequest';
 
 // @public
@@ -1534,6 +1552,27 @@ export class NetworkError extends CTSError {
         cause?: unknown;
     });
 }
+
+// @public
+export type Nip07Like = {
+    getPublicKey?: () => Promise<string>;
+    signSchnorr?: (digestHex: string) => Promise<string>;
+    signString?: (secret: string) => Promise<Nip07SignedHash>;
+    nip44?: {
+        decrypt: (pubkey: string, ciphertext: string) => Promise<string>;
+    };
+    nip60?: {
+        signSecret?: (secret: string) => Promise<Nip07SignedHash>;
+        signTransaction?: (messageHex: string, inputContainerHex: string) => Promise<Nip07SignedHash>;
+    };
+};
+
+// @public
+export type Nip07SignedHash = {
+    hash: string;
+    sig: string;
+    pubkey: string;
+};
 
 // @public
 export function normalizeMintUrl(url: string): string;
