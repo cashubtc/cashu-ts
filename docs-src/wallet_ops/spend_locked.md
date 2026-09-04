@@ -87,7 +87,7 @@ const fresh = await wallet.ops
   .run();
 ```
 
-For the common policy (first satisfiable leaf per proof the key path cannot spend), `wallet.planScriptPaths(proofs, { privkeys })` builds the plans in one call, quietly skipping non-v3 proofs, key path spends, and stuck proofs. Name plans yourself when a later leaf is preferable.
+For the common policy (first satisfiable leaf per proof the key path cannot spend), `wallet.planScriptPaths(proofs, { privkeys })` builds the plans in one call, quietly skipping non-v3 proofs, key path spends, and stuck proofs. Add `preimage` to also plan the hashlock leaf it opens, where the leaf's keys are held. Name plans yourself when a later leaf is preferable.
 
 Plans are keyed by `secret`, not input index: proof selection decides input order. Everything except the signatures is checked when the transaction is prepared, so a plan that cannot be honored (undisclosed leaf, missing preimage, key shortfall with no cosigner) fails before any request is built.
 

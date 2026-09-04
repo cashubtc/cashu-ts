@@ -2,7 +2,7 @@ import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { test, describe, expect } from 'vitest';
 
-import { Amount, Wallet, createHTLCsecret, createP2PKsecret } from '../../src';
+import { Amount, Wallet, createHTLCHash, createHTLCsecret, createP2PKsecret } from '../../src';
 import { deriveP2BKBlindedPubkeys } from '../../src/crypto/NUT28';
 import {
   buildNutrootSecret,
@@ -418,5 +418,35 @@ describe('wallet.planScriptPaths', () => {
     // plain (not v3) and bearer (key path) are skipped without throwing; the
     // stuck proof yields no plan; the claimable one names its second leaf.
     expect(plans).toEqual([{ secret: claimable.secret, leafIndex: 1 }]);
+  });
+
+  test('a preimage plans the hashlock leaf it opens, after any satisfiable leaf', async () => {
+    const { hash, preimage } = createHTLCHash();
+    const threshold = (keys: string[]): NutrootLeaf => ({ type: 'threshold', n: 1, keys });
+    const hashlock = (keys: string[], h = hash): NutrootLeaf => ({
+      type: 'hashlock',
+      n: 1,
+      keys,
+      hash: h,
+    });
+    const locked = (leaves: NutrootLeaf[]) => {
+      const { secret, tree } = buildNutrootSecret(pub(BOB), leaves);
+      return v3Proof(secret, { K: pub(BOB), tree });
+    };
+    const opens = locked([hashlock([pub(ALICE)])]);
+    const otherHash = locked([hashlock([pub(ALICE)], 'cc'.repeat(32))]);
+    const alsoOpen = locked([hashlock([pub(ALICE)]), threshold([pub(ALICE)])]);
+    const unkeyed = locked([hashlock([pub(STRANGER)])]);
+    const proofs = [opens, otherHash, alsoOpen, unkeyed];
+    // The satisfiable leaf wins without revealing anything; the preimage only
+    // plans a hashlock it opens whose keys are held.
+    expect(wallet().planScriptPaths(proofs, { privkeys: priv(ALICE), preimage })).toEqual([
+      { secret: opens.secret, leafIndex: 0, preimage },
+      { secret: alsoOpen.secret, leafIndex: 1 },
+    ]);
+    expect(wallet().planScriptPaths([opens], { privkeys: priv(ALICE) })).toEqual([]);
+    expect(() =>
+      wallet().planScriptPaths([opens], { privkeys: priv(ALICE), preimage: 'not-hex' }),
+    ).toThrow(/64 hex/);
   });
 });

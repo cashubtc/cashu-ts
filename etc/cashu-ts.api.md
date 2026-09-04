@@ -2778,6 +2778,7 @@ export class Wallet {
     planScriptPaths(proofs: Proof[], opts?: {
         privkeys?: string | string[];
         now?: number;
+        preimage?: string;
     }): ScriptPathPlan[];
     prepareBatchMint<TQuote extends Pick<MintQuoteBaseResponse, 'quote' | 'pubkey'>>(method: string, entries: Array<{
         amount: AmountLike;

@@ -23,6 +23,7 @@ import {
 // Internal transitional fallback — not part of crypto/index.ts
 import { getPubKeyFromPrivKey, normalizeSecpPubkey } from '../crypto/curve_secp';
 import { p2pkOptionsToPRNut10, type P2PKOptions } from '../crypto/NUT11';
+import { verifyHTLCHash } from '../crypto/NUT14';
 import { signMintQuoteLegacy } from '../crypto/NUT20';
 import {
   NUTROOT_NUMS_KEY,
@@ -2259,25 +2260,43 @@ class Wallet {
 
   /**
    * Builds script path plans for the v3 proofs the key path cannot spend: first satisfiable leaf
-   * each, for `ReceiveConfig.scriptPath`.
+   * each, else the hashlock leaf a supplied preimage opens, for `ReceiveConfig.scriptPath`.
    *
    * @remarks
    * Skips non-v3 proofs (they sign in receive, not by plan), proofs the key path spends, and proofs
-   * with no satisfiable leaf; ask {@link Wallet.spendOptions | spendOptions} why a missing proof is
-   * stuck. Leaf choice is policy: name plans yourself when a later leaf is preferable (eg a cheaper
-   * key roster).
+   * with no plannable leaf; ask {@link Wallet.spendOptions | spendOptions} why a missing proof is
+   * stuck. A hashlock leaf is never satisfiable on its own: with `opts.preimage` it is planned when
+   * its keys are covered and the preimage opens its hash. Leaf choice is policy: name plans
+   * yourself when a later leaf is preferable (eg a cheaper key roster).
+   * @throws If `opts.preimage` is not 64 hex characters.
    */
   planScriptPaths(
     proofs: Proof[],
-    opts?: { privkeys?: string | string[]; now?: number },
+    opts?: { privkeys?: string | string[]; now?: number; preimage?: string },
   ): ScriptPathPlan[] {
+    const preimage = opts?.preimage;
+    this.failIf(
+      preimage !== undefined && !/^[0-9a-f]{64}$/i.test(preimage),
+      'planScriptPaths: preimage must be 64 hex characters',
+    );
     const plans: ScriptPathPlan[] = [];
     for (const proof of proofs) {
       if (!isBlsKeyset(proof.id) || !isV3PointSecret(proof.secret)) continue;
       const spend = proofSpendOptions(proof, opts, this._nutrootState());
       if (spend.keyPath) continue;
-      const leaf = spend.script.find((o) => o.satisfiable);
-      if (leaf) plans.push({ secret: proof.secret, leafIndex: leaf.leafIndex });
+      const open = spend.script.find((o) => o.satisfiable);
+      if (open) {
+        plans.push({ secret: proof.secret, leafIndex: open.leafIndex });
+        continue;
+      }
+      if (preimage === undefined) continue;
+      const hashlock = spend.script.find(
+        (o) =>
+          o.blockedBy === 'preimage' &&
+          o.leaf.hash !== undefined &&
+          verifyHTLCHash(preimage, o.leaf.hash),
+      );
+      if (hashlock) plans.push({ secret: proof.secret, leafIndex: hashlock.leafIndex, preimage });
     }
     return plans;
   }
