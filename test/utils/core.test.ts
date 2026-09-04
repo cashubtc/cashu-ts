@@ -2117,8 +2117,10 @@ describe('auditable locks', () => {
     bytesToHex(secp256k1.getPublicKey(new Uint8Array(32).fill(fill), true));
   const P = keyFor(0x44);
 
-  test('auditableLock builds the canonical single-leaf lock and validates the key', () => {
-    expect(auditableLock(P.toUpperCase())).toEqual({
+  test('auditableLock is a disclosed single-key lock and validates the key', () => {
+    expect(auditableLock(P.toUpperCase())).toEqual({ mainKeys: [P], disclosure: true });
+    expect(lockToNutrootOptions(auditableLock(P))).toEqual({
+      receiverKey: NUTROOT_NUMS_KEY,
       leaves: [{ type: 'threshold', n: 1, keys: [P], disclosure: 1 }],
     });
     expect(() => auditableLock('nonsense')).toThrow();

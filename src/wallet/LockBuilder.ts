@@ -29,6 +29,7 @@ export class LockBuilder {
   private extraTags: P2PKTag[] = [];
   private _blindKeys?: boolean | string[];
   private _sigAll?: boolean;
+  private _disclosure?: boolean;
   private hashlock?: string;
   private leaves: NutrootLeaf[] = [];
 
@@ -120,6 +121,16 @@ export class LockBuilder {
   }
 
   /**
+   * Publishes the exercised witness (NUT-10 `disclosure`) on every leaf this builder generates. On
+   * v3 a lone main key gives up its key path so the spend is always public; pre-v3 locks are
+   * disclosed by nature, so nothing changes there.
+   */
+  disclose() {
+    this._disclosure = true;
+    return this;
+  }
+
+  /**
    * Sets NUT-11 SIG_ALL; on v3 keysets this is the default and only behavior.
    */
   sigAll() {
@@ -179,6 +190,7 @@ export class LockBuilder {
         : {}),
       ...(this.leaves.length > 0 && { leaves: this.leaves.map((l) => ({ ...l })) }),
       ...(this._blindKeys !== undefined && { blindKeys: this._blindKeys }),
+      ...(this._disclosure && { disclosure: true }),
       ...(this.extraTags.length > 0 && { additionalTags: this.extraTags.slice() }),
       ...(this._sigAll && { sigAll: true }),
     };
@@ -233,6 +245,7 @@ export class LockBuilder {
     if (lock.blindKeys !== undefined && lock.blindKeys !== false) {
       b.blindKeys(lock.blindKeys === true ? undefined : lock.blindKeys);
     }
+    if (lock.disclosure) b.disclose();
     if (lock.additionalTags?.length) b.addTags(lock.additionalTags);
     if (lock.sigAll) b.sigAll();
     return b;

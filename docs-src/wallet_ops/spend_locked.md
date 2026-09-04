@@ -95,7 +95,7 @@ Plans are keyed by `secret`, not input index: proof selection decides input orde
 
 ## Auditable locks
 
-Nutroot locks are private by default: only the key holder can prove who a receiver-keyed proof belongs to. When a payment wants the opposite (a public tip anyone can attest, eg a nostr Nutzap), lock it **auditable**: NUMS internal key, one threshold leaf of one key.
+Nutroot locks are private by default: only the key holder can prove who a receiver-keyed proof belongs to. When a payment wants the opposite (a public tip anyone can attest, eg a nostr Nutzap), lock it **auditable**: NUMS internal key, one threshold leaf of one key, with `disclosure` so the spend's witness is published too. Any lock can be disclosed the same way with `LockBuilder.disclose()` or `disclosure: true`. A pre-v3 lock needs no flag: its secret is plaintext and NUT-07 returns its witness, so it is disclosed by nature.
 
 ```ts
 const { send } = await wallet.ops.send(21, proofs).asLocked(auditableLock(pubkey)).run();

@@ -51,6 +51,13 @@ export type LockOptions = {
    */
   blindKeys?: boolean | string[];
   /**
+   * Publish the exercised witness (NUT-10 `disclosure`) on every leaf built from the fields above;
+   * explicit `leaves` keep their own flag. A lone main key gives up its key path for a leaf, so the
+   * spend is always public. Pre-v3 locks are disclosed by nature (plaintext secret, NUT-07
+   * witness), so the flag changes nothing there.
+   */
+  disclosure?: boolean;
+  /**
    * Extra NUT-11 secret tags. Pre-v3 only: v3 secrets carry no tags.
    */
   additionalTags?: P2PKTag[];
@@ -73,9 +80,7 @@ const lc = (k: string) => k.toLowerCase();
  */
 export function auditableLock(pubkey: string): LockOptions {
   // disclosure completes the audit trail: the spend's witness is published too (NUT-07).
-  return {
-    leaves: [{ type: 'threshold', n: 1, keys: [normalizeSecpPubkey(pubkey)], disclosure: 1 }],
-  };
+  return { mainKeys: [normalizeSecpPubkey(pubkey)], disclosure: true };
 }
 
 /**
@@ -106,11 +111,14 @@ export function lockToNutrootOptions(lock: LockOptions): ParsedNutrootOption {
     throw new CTSError(`Threshold ${n} exceeds the ${mainKeys.length} main keys`);
   }
   const leaves: NutrootLeaf[] = [];
-  const keyPath = lock.hashlock === undefined && mainKeys.length === 1 && n === 1;
+  const mode = lock.disclosure ? { disclosure: 1 } : {};
+  // A key-path spend has no leaf to disclose, so a disclosed single key becomes a leaf under NUMS.
+  const keyPath =
+    lock.hashlock === undefined && mainKeys.length === 1 && n === 1 && !lock.disclosure;
   if (lock.hashlock !== undefined) {
-    leaves.push({ type: 'hashlock', n, hash: lc(lock.hashlock), keys: mainKeys });
+    leaves.push({ type: 'hashlock', n, hash: lc(lock.hashlock), keys: mainKeys, ...mode });
   } else if (!keyPath && mainKeys.length > 0) {
-    leaves.push({ type: 'threshold', n, keys: mainKeys });
+    leaves.push({ type: 'threshold', n, keys: mainKeys, ...mode });
   }
   // Refund keys without a locktime are inert under NUT-11 too (the refund path never activates),
   // so dropping them preserves the semantics exactly.
@@ -127,7 +135,7 @@ export function lockToNutrootOptions(lock: LockOptions): ParsedNutrootOption {
         `Refund threshold ${nRefund} exceeds the ${refundKeys.length} refund keys`,
       );
     }
-    leaves.push({ type: 'after', n: nRefund, time: lock.locktime, keys: refundKeys });
+    leaves.push({ type: 'after', n: nRefund, time: lock.locktime, keys: refundKeys, ...mode });
   }
   leaves.push(...explicit);
   // sigAll is absorbed: every v3 input signs the whole transaction (NUT-10).

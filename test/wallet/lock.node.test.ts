@@ -49,6 +49,29 @@ describe('lockToNutrootOptions (v3 encoder)', () => {
     });
   });
 
+  test('disclosure stamps every generated leaf and closes the key path', () => {
+    expect(
+      lockToNutrootOptions({
+        mainKeys: [PUB_A],
+        locktime: TIME,
+        refundKeys: [PUB_R],
+        disclosure: true,
+        leaves: [{ type: 'threshold', n: 1, keys: [PUB_B] }],
+      }),
+    ).toEqual({
+      receiverKey: NUTROOT_NUMS_KEY,
+      leaves: [
+        { type: 'threshold', n: 1, keys: [PUB_A], disclosure: 1 },
+        { type: 'after', n: 1, time: TIME, keys: [PUB_R], disclosure: 1 },
+        { type: 'threshold', n: 1, keys: [PUB_B] }, // explicit leaves keep their own flag
+      ],
+    });
+    expect(lockToNutrootOptions({ mainKeys: [PUB_A], hashlock: HASH, disclosure: true })).toEqual({
+      receiverKey: NUTROOT_NUMS_KEY,
+      leaves: [{ type: 'hashlock', n: 1, hash: HASH, keys: [PUB_A], disclosure: 1 }],
+    });
+  });
+
   test('locktime with refund keys: key path plus after leaf', () => {
     expect(
       lockToNutrootOptions({ mainKeys: [PUB_A], locktime: TIME, refundKeys: [PUB_R] }),
@@ -197,6 +220,12 @@ describe('lockToNutrootOptions (v3 encoder)', () => {
 });
 
 describe('lockToP2PKOptions (v2 encoder)', () => {
+  test('disclosure is a no-op: a NUT-11 lock is disclosed by nature', () => {
+    expect(lockToP2PKOptions({ mainKeys: [PUB_A], disclosure: true })).toEqual(
+      lockToP2PKOptions({ mainKeys: [PUB_A] }),
+    );
+  });
+
   test('single main key: data slot only', () => {
     expect(lockToP2PKOptions({ mainKeys: [PUB_A] })).toEqual({ kind: 'P2PK', data: PUB_A });
   });

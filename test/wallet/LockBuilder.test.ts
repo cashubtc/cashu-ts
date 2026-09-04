@@ -524,6 +524,16 @@ describe('P2PKBuilder addTag and addTags', () => {
   });
 });
 
+describe('LockBuilder.disclose()', () => {
+  it('sets disclosure, round-trips via fromOptions, and encodes for both versions', () => {
+    const b = new LockBuilder().addMainPubkey(comp('a', '02')).disclose();
+    expect(b.toOptions().disclosure).toBe(true);
+    expect(LockBuilder.fromOptions(b.toOptions()).toOptions().disclosure).toBe(true);
+    expect(b.validate('v3')).toEqual([]);
+    expect(b.validate('pre-v3')).toEqual([]);
+  });
+});
+
 describe('P2PKBuilder.blindKeys()', () => {
   it('sets blindKeys flag and round-trips via fromOptions', () => {
     const k = comp('a', '02');

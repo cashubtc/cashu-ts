@@ -906,6 +906,7 @@ export class LockBuilder {
     addTag(key: string, values?: string[] | string): this;
     addTags(tags: P2PKTag[]): this;
     blindKeys(keys?: string | string[]): this;
+    disclose(): this;
     static fromOptions(lock: LockOptions_2): LockBuilder;
     lockUntil(when: Date | number): this;
     requireMainSignatures(n: number): this;
@@ -937,6 +938,7 @@ type LockOptions_2 = {
     requiredRefundSignatures?: number;
     leaves?: NutrootLeaf[];
     blindKeys?: boolean | string[];
+    disclosure?: boolean;
     additionalTags?: P2PKTag[];
     sigAll?: boolean;
 };
