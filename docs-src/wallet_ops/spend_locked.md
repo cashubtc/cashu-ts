@@ -105,3 +105,14 @@ const committedKey = auditableLockKey(proof); // pubkey hex, or undefined for an
 ```
 
 `auditableLockKey` verifies the full commitment (NUMS offset, recomputed root, tweak against the secret), not just the claimed fields. The leaf has one canonical serialization, so a claimer who knows the expected key can rebuild the spend info from `u` alone if it was mangled in transit. Claim via `planScriptPaths` above.
+
+## Spend receipts
+
+A mint commits to every v3 spend (NUT-07): a state check on a spent proof returns `tagged_hash("Cashu_SpendCommitment", Y || input_digest || SHA256(witness))`, and the witness itself only for a leaf carrying `disclosure`. For a private spend the spender alone holds what the commitment was built from, so a send or melt of v3 inputs returns `receipts`, one per input:
+
+```ts
+const { send, receipts } = await wallet.send(21, proofs);
+// receipts[i]: { Y, keysetId, inputDigest, witness, commitment, transcript }
+```
+
+Show a receipt to whoever holds the proof and doubts the spend: `witness` and `inputDigest` open the `commitment` the mint returns for `Y`, the witness verifies against the proof's own key, and `transcript` (the TLV message) lets them recompute `inputDigest` from the proof they hold, so the witness is tied to that transaction and not just to a digest. A receipt reveals the transaction's inputs and outputs, so it is the spender's to keep or show.

@@ -132,6 +132,7 @@ import {
   type SwapTransaction,
   type MeltProofsResponse,
   type SendResponse,
+  type SpendReceipt,
   type ScriptPathPlan,
   type SpendOptions,
   type RestoreConfig,
@@ -525,7 +526,8 @@ class Wallet {
 
   /**
    * NUT-06: the mint's advertised cap on the length of any array in a request, used to size the
-   * checkstate and restore batches. Falls back to the library default until mint info is loaded.
+   * NUT-07 state check and NUT-09 restore batches. Falls back to the library default until mint
+   * info is loaded.
    */
   private get maxArrayLength(): number {
     return this._mintInfo?.maxArrayLength ?? DEFAULT_MAX_ARRAY_LENGTH;
@@ -1732,7 +1734,7 @@ class Wallet {
 
     // Execute swap and validate result
     const privkeys = privkey === undefined ? [] : [privkey].flat();
-    await attachTransactionWitnesses(
+    const receipts = await attachTransactionWitnesses(
       swapTransaction.payload,
       undefined,
       collectSpendInfoKeys(swapPreview.inputs, privkey, this._logger),
@@ -1777,6 +1779,7 @@ class Wallet {
     return {
       keep: [...keepProofs, ...unselectedProofs],
       send: sendProofs,
+      ...(receipts.length > 0 && { receipts }),
     };
   }
 
@@ -4029,8 +4032,9 @@ class Wallet {
         inputs.some((p) => isBlsKeyset(p.id) && isV3PointSecret(p.secret)),
       'melting v3 inputs needs the melt quote amount; pass the full quote object',
     );
+    let receipts: SpendReceipt[] = [];
     if (quoteAmount !== undefined) {
-      await attachTransactionWitnesses(
+      receipts = await attachTransactionWitnesses(
         meltPayload,
         { quoteId: quote, amount: Amount.from(quoteAmount) },
         collectSpendInfoKeys(meltPreview.inputs, privkey, this._logger),
@@ -4082,6 +4086,7 @@ class Wallet {
       quote: mergedQuote,
       change,
       outputData: change.length > 0 ? [] : meltPreview.outputData,
+      ...(receipts.length > 0 && { receipts }),
     };
   }
 

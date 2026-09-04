@@ -2,6 +2,7 @@ import { schnorr } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { describe, expect, test, vi } from 'vitest';
 
+import { hashToCurveBls } from '../../src/crypto/curve_bls';
 import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import {
   buildNutrootSecret,
@@ -12,6 +13,7 @@ import {
 import {
   inputDigest,
   proofInputContextKey,
+  spendCommitment,
   transactionInputs,
   verifyTransactionInputWitness,
 } from '../../src/crypto/transcript';
@@ -328,6 +330,35 @@ describe('attachTransactionWitnesses', () => {
         fromRandom.witness as string,
       ),
     ).toBe(true);
+  });
+
+  test('returns a receipt per v3 input that opens the NUT-07 commitment', async () => {
+    const legacy = { ...v3Proof(PUB_A), id: '00' + 'ab'.repeat(32), secret: 'plain', witness: 'w' };
+    const input = v3Proof(PUB_B, { k: PRIV_B });
+    const inputs = [legacy, input];
+    const receipts = await attachTransactionWitnesses(
+      { inputs, outputs: [OUTPUT] },
+      undefined,
+      collectSpendInfoKeys([input], undefined, NULL_LOGGER),
+      undefined,
+      makeState(undefined),
+    );
+    expect(receipts).toHaveLength(1); // the legacy input has no commitment to open
+    const [r] = receipts;
+    const enc = new TextEncoder();
+    expect(r.Y).toBe(hashToCurveBls(enc.encode(input.secret)).toHex(true));
+    expect(r.keysetId).toBe(input.id);
+    expect(r.witness).toBe(input.witness);
+    expect(r.inputDigest).toBe(bytesToHex(digestOf(inputs, undefined, input.secret)));
+    expect(r.commitment).toBe(spendCommitment(r.Y, hexToBytes(r.inputDigest), r.witness));
+    // A holder of the proof rebuilds the input digest from the transcript alone (NUT-07).
+    const { container } = transactionInputsOf(inputs).proofs.get(
+      proofInputContextKey({ keysetId: input.id, secret: input.secret }),
+    )!;
+    expect(bytesToHex(inputDigest(sha256(hexToBytes(r.transcript)), container))).toBe(
+      r.inputDigest,
+    );
+    expect(verifyTransactionInputWitness(hexToBytes(r.inputDigest), PUB_B, r.witness)).toBe(true);
   });
 
   test('a melt quote is part of the signed transcript', async () => {

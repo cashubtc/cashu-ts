@@ -26,8 +26,8 @@ message strings use `computeMessageDigest` instead. `taggedHash` is the BIP340
 construction, `SHA256(SHA256(tag) || SHA256(tag) || messages)`, the one NUT-10 uses for
 leaf, branch, tweak and input-digest hashing.
 
-The example recomputes a NUT-07 spend commitment from a check-state entry's published
-opening, which is exactly what a third-party verifier of a disclosure spend does:
+The example recomputes a NUT-07 spend commitment from the witness and input digest a
+proof state publishes, which is exactly what a third-party verifier of a disclosure spend does:
 
 ```ts
 import { computeMessageDigest, hexToBytes, bytesToHex, sha256, taggedHash } from '@cashu/cashu-ts';

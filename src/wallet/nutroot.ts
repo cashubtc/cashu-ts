@@ -1,4 +1,5 @@
 import { assertV3PointSecret, isBlsKeyset, isV3PointSecret, schnorrSignDigest } from '../crypto';
+import { hashToCurveBls } from '../crypto/curve_bls';
 import {
   createRandomSecretKey,
   getPubKeyFromPrivKey,
@@ -18,7 +19,12 @@ import {
   nutrootMerkleRoot,
   nutrootTweakSeckey,
 } from '../crypto/nutroot';
-import { inputsForPayload, proofInputContextKey, signTransactionInput } from '../crypto/transcript';
+import {
+  inputsForPayload,
+  proofInputContextKey,
+  signTransactionInput,
+  spendCommitment,
+} from '../crypto/transcript';
 import { type Logger, fail } from '../logger';
 import { type Amount } from '../model/Amount';
 import { CTSError } from '../model/Errors';
@@ -27,7 +33,7 @@ import type { Proof } from '../model/types/proof';
 import { bytesToHex, hexToBytes } from '../utils';
 
 import { QUOTE_COUNTER_KEY } from './CounterSource';
-import type { ScriptPathPlan, SpendOption, SpendOptions } from './types';
+import type { ScriptPathPlan, SpendOption, SpendOptions, SpendReceipt } from './types';
 
 /**
  * Wallet-side nutroot secrets logic: witness attachment, spend info key recovery, and script path
@@ -64,6 +70,7 @@ export type ScriptPathSpend = {
  * input's spend-info key, delivered in `extraKeys`. Signing is per input, so a mixed transaction
  * signs its v3 inputs and leaves v0-v2 inputs to their own rules (NUT-10). Inputs whose key is not
  * recoverable are left unsigned and the mint rejects them.
+ * @returns A spend receipt per v3 input: the opening of the NUT-07 commitment the mint will hold.
  */
 export async function attachTransactionWitnesses(
   payload: Pick<MeltRequest, 'inputs' | 'outputs'>,
@@ -71,9 +78,9 @@ export async function attachTransactionWitnesses(
   extraKeys: Map<string, Uint8Array> | undefined,
   scriptSpends: Map<string, ScriptPathSpend> | undefined,
   state: NutrootWalletState,
-): Promise<void> {
+): Promise<SpendReceipt[]> {
   const v3Inputs = payload.inputs.filter((p) => isBlsKeyset(p.id) && isV3PointSecret(p.secret));
-  if (v3Inputs.length === 0) return;
+  if (v3Inputs.length === 0) return [];
   // Each input signs its own input digest over the shared transcript (NUT-10).
   const { message, proofs: inputContexts } = inputsForPayload({
     inputs: payload.inputs,
@@ -129,6 +136,25 @@ export async function attachTransactionWitnesses(
       { id: unsigned.id, amount: unsigned.amount.toString() },
     );
   }
+  // The receipt is the spender's copy of what NUT-07 commits to: nothing here is secret to the
+  // wallet, and nothing but the wallet ever holds all of it together.
+  const transcript = bytesToHex(message);
+  const enc = new TextEncoder();
+  return v3Inputs.map((input) => {
+    const { digest } = inputContexts.get(
+      proofInputContextKey({ keysetId: input.id, secret: input.secret }),
+    )!;
+    const Y = hashToCurveBls(enc.encode(input.secret)).toHex(true);
+    const witness = input.witness as string;
+    return {
+      Y,
+      keysetId: input.id,
+      inputDigest: bytesToHex(digest),
+      witness,
+      commitment: spendCommitment(Y, digest, witness),
+      transcript,
+    };
+  });
 }
 
 /**

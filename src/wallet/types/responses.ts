@@ -3,6 +3,24 @@ import type { OutputDataLike } from '../../model/OutputData';
 import type { MeltQuoteBaseResponse, Proof } from '../../model/types';
 
 /**
+ * Evidence that this wallet spent one v3 input: the data behind the mint's NUT-07 spend commitment.
+ *
+ * @remarks
+ * The mint returns `commitment` for every spent v3 proof and, for a private spend, nothing else.
+ * `witness` and `inputDigest` reproduce it. `transcript` is the TLV message (hex) from which a
+ * holder of the proof recomputes `inputDigest`, tying the witness to the transaction (NUT-07).
+ * Showing a receipt reveals that transaction's inputs and outputs.
+ */
+export type SpendReceipt = {
+  Y: string;
+  keysetId: string;
+  inputDigest: string;
+  witness: string;
+  commitment: string;
+  transcript: string;
+};
+
+/**
  * Response after melting proofs.
  */
 export type MeltProofsResponse<
@@ -23,6 +41,10 @@ export type MeltProofsResponse<
    * `change` via `wallet.createMeltChangeProofs()`.
    */
   outputData: OutputDataLike[];
+  /**
+   * One per v3 input spent, so the spender can later prove the spend (NUT-07).
+   */
+  receipts?: SpendReceipt[];
 };
 
 /**
@@ -38,6 +60,10 @@ export type SendResponse = {
    */
   send: Proof[];
   serialized?: Array<{ proof: Proof; keep: boolean }>;
+  /**
+   * One per v3 input spent, so the spender can later prove the spend (NUT-07).
+   */
+  receipts?: SpendReceipt[];
 };
 
 /**

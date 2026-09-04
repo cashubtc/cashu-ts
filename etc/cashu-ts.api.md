@@ -1037,6 +1037,7 @@ export type MeltProofsResponse<TQuote extends Pick<MeltQuoteBaseResponse, 'quote
     quote: TQuote;
     change: Proof[];
     outputData: OutputDataLike[];
+    receipts?: SpendReceipt[];
 };
 
 // @public
@@ -2294,6 +2295,7 @@ export type SendResponse = {
         proof: Proof;
         keep: boolean;
     }>;
+    receipts?: SpendReceipt[];
 };
 
 // @public
@@ -2467,6 +2469,16 @@ export type SpendOptions = {
     spendable: boolean;
     blockedBy?: 'not-keyed-to-you' | 'locktime' | 'threshold' | 'preimage';
     availableAt?: number;
+};
+
+// @public
+export type SpendReceipt = {
+    Y: string;
+    keysetId: string;
+    inputDigest: string;
+    witness: string;
+    commitment: string;
+    transcript: string;
 };
 
 // @public
