@@ -1870,6 +1870,15 @@ export type ProofState = {
 };
 
 // @public
+export type ProofStatesStreamOpts<P extends ProofLike = Proof> = WatchOpts & {
+    maxBuffer?: number;
+    drop?: 'oldest' | 'newest';
+    onDrop?: (payload: ProofState & {
+        proof: P;
+    }) => void;
+};
+
+// @public
 export class RateLimitError extends HttpResponseError {
     constructor(message: string, retryAfterMs?: number | undefined);
     // (undocumented)
@@ -2527,39 +2536,29 @@ export class WalletEvents {
     keychainUpdated(cb: (payload: {
         cache: KeyChainCache;
     }) => void, opts?: SubscribeOpts): SubscriptionCanceller;
-    meltQuotePaid(id: string, cb: (p: MeltQuoteBolt11Response) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
-    meltQuoteUpdates(ids: string[], cb: (p: MeltQuoteBolt11Response) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
-    mintQuotePaid(id: string, cb: (p: MintQuoteBolt11Response) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
-    mintQuoteUpdates(ids: string[], cb: (p: MintQuoteBolt11Response) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
-    onceAnyMintPaid(ids: string[], opts?: {
-        signal?: AbortSignal;
+    meltQuotePaid(id: string, cb: (p: MeltQuoteBolt11Response) => void, err: (e: Error) => void, opts?: WatchOpts): Promise<SubscriptionCanceller>;
+    meltQuoteUpdates(ids: string[], cb: (p: MeltQuoteBolt11Response) => void, err: (e: Error) => void, opts?: WatchOpts): Promise<SubscriptionCanceller>;
+    mintQuotePaid(id: string, cb: (p: MintQuoteBolt11Response) => void, err: (e: Error) => void, opts?: WatchOpts): Promise<SubscriptionCanceller>;
+    mintQuoteUpdates(ids: string[], cb: (p: MintQuoteBolt11Response) => void, err: (e: Error) => void, opts?: WatchOpts): Promise<SubscriptionCanceller>;
+    onceAnyMintPaid(ids: string[], opts?: WatchOpts & {
         timeoutMs?: number;
         failOnError?: boolean;
     }): Promise<{
         id: string;
         quote: MintQuoteBolt11Response;
     }>;
-    onceMeltPaid(id: string, opts?: {
-        signal?: AbortSignal;
+    onceMeltPaid(id: string, opts?: WatchOpts & {
         timeoutMs?: number;
     }): Promise<MeltQuoteBolt11Response>;
-    onceMintPaid(id: string, opts?: {
-        signal?: AbortSignal;
+    onceMintPaid(id: string, opts?: WatchOpts & {
         timeoutMs?: number;
     }): Promise<MintQuoteBolt11Response>;
-    proofStatesStream<P extends ProofLike = Proof>(proofs: P[], opts?: {
-        signal?: AbortSignal;
-        maxBuffer?: number;
-        drop?: 'oldest' | 'newest';
-        onDrop?: (payload: ProofState & {
-            proof: P;
-        }) => void;
-    }): AsyncIterable<ProofState & {
+    proofStatesStream<P extends ProofLike = Proof>(proofs: P[], opts?: ProofStatesStreamOpts<P>): AsyncIterable<ProofState & {
         proof: P;
     }>;
     proofStateUpdates<T extends ProofLike = Proof>(proofs: T[], cb: (payload: ProofState & {
         proof: T;
-    }) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
+    }) => void, err: (e: Error) => void, opts?: WatchOpts): Promise<SubscriptionCanceller>;
 }
 
 // @public
@@ -2581,6 +2580,13 @@ export class WalletOps {
     send(amount: AmountLike, proofs: ProofLike[]): SendBuilder;
     sendToRequest(pr: PaymentRequest_2, proofs: ProofLike[], amount?: AmountLike): SendBuilder;
 }
+
+// @public
+export type WatchOpts = SubscribeOpts & {
+    pollMs?: number;
+    replayTimeoutMs?: number;
+    onMode?: (mode: 'websocket' | 'polling') => void;
+};
 
 // @public
 export type WebSocketSupport = {
