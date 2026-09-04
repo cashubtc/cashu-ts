@@ -126,10 +126,10 @@
     "ws": "^8.20.0"
   },
   "dependencies": {
-    "@noble/curves": "^2.2.0",
-    "@noble/hashes": "^2.2.0",
-    "@scure/base": "^2.2.0",
-    "@scure/bip32": "^2.2.0"
+    "@noble/curves": "^2.4.0",
+    "@noble/hashes": "^2.4.0",
+    "@scure/base": "^2.4.0",
+    "@scure/bip32": "^2.4.0"
   },
   "overrides": {
     "qs": "^6.15.3"
