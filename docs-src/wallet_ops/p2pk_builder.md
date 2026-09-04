@@ -33,11 +33,3 @@ const p2pk = new P2PKBuilder().addLockPubkey('02abc...').lockUntil(1_712_345_678
 // `p2pk` already carries its `kind`, so pass it to `asP2PK`:
 await wallet.ops.send(5, proofs).asP2PK(p2pk).run();
 ```
-
-## Spending an HTLC
-
-An HTLC input needs the preimage as well as any signatures. Pass it in the receive, send or melt config, or through `.preimage()` on the builders: it goes on the witness of every input whose hashlock it opens, before signing, and `attachHTLCPreimage(proofs, preimage)` does the same for proofs you handle yourself.
-
-```ts
-const proofs = await wallet.receive(token, { privkey, preimage });
-```
