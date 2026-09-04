@@ -1,5 +1,29 @@
 # Changelog
 
+## [5.0.0-rc.9](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.8...v5.0.0-rc.9) (2026-09-04)
+
+
+### Features
+
+* **nut02:** length-frame the v3 keyset id preimage ([#949](https://github.com/cashubtc/cashu-ts/issues/949)) ([8714d40](https://github.com/cashubtc/cashu-ts/commit/8714d407a81252fd4fcc1dc60a12dd73df81847e))
+* **utils:** export strict hex byte codecs ([#1027](https://github.com/cashubtc/cashu-ts/issues/1027)) ([a1e92ca](https://github.com/cashubtc/cashu-ts/commit/a1e92ca36c09cdabc853f86e2b95275ca449fec4))
+
+
+### Bug Fixes
+
+* **deps:** move noble and scure to 2.4.0 ([#1068](https://github.com/cashubtc/cashu-ts/issues/1068)) ([3be76eb](https://github.com/cashubtc/cashu-ts/commit/3be76eb6600e44a2e85c434e216cd1ded3487270))
+* **nut18:** encode payment requests url-safe ([#1029](https://github.com/cashubtc/cashu-ts/issues/1029)) ([ee7966d](https://github.com/cashubtc/cashu-ts/commit/ee7966d2124348e7e4f3c3e397cc94951764cb4f))
+* **nut20:** match quote lock keys by x coordinate ([#1044](https://github.com/cashubtc/cashu-ts/issues/1044)) ([0f4d025](https://github.com/cashubtc/cashu-ts/commit/0f4d0253ef23953cb5a2211510538df850f6b5f3))
+* **transport:** fail rather than follow redirects on requests with a body ([#1039](https://github.com/cashubtc/cashu-ts/issues/1039)) ([8bc3383](https://github.com/cashubtc/cashu-ts/commit/8bc33833e5235b15686f5664e81edee924be6121))
+* **utils:** harden keyset ID handling in the binary token encoder ([#1036](https://github.com/cashubtc/cashu-ts/issues/1036)) ([ab95ce0](https://github.com/cashubtc/cashu-ts/commit/ab95ce0ebb68869079cb110f0ee6305ddf78201a))
+* **utils:** index the reviver holder by its actual shape ([#1024](https://github.com/cashubtc/cashu-ts/issues/1024)) ([5c6883f](https://github.com/cashubtc/cashu-ts/commit/5c6883f822b21759ad64bfaa5610464f769483fc))
+* **wallet:** omit unselected proofs from serialized swap previews ([#1040](https://github.com/cashubtc/cashu-ts/issues/1040)) ([45c22cc](https://github.com/cashubtc/cashu-ts/commit/45c22cc75d4931cc7399f849f5a13e698fa5cd26))
+
+
+### Miscellaneous Chores
+
+* **scripts:** use the scoped package name in make-experimental ([#1008](https://github.com/cashubtc/cashu-ts/issues/1008)) ([97d42ea](https://github.com/cashubtc/cashu-ts/commit/97d42eaad53d19885c4bf9442ba12fed3574ad34))
+
 ## [5.0.0-rc.8](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.7...v5.0.0-rc.8) (2026-08-27)
 
 
