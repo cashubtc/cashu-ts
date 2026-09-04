@@ -479,7 +479,9 @@ export class WalletEvents {
     const fetch = async () => {
       if (batch) {
         try {
-          return await this.wallet.checkMintQuoteBatch<TRes>(method, uniq);
+          // A best-effort batch (NUT-29) may also list quotes the mint does not know; they carry
+          // nothing to report and drop out on the next known state
+          return (await this.wallet.checkMintQuoteBatch<TRes>(method, uniq)) as TRes[];
         } catch (e) {
           // Only a missing endpoint means the mint cannot batch; anything else is the poll failing
           if (!(e instanceof HttpResponseError) || e.status !== 404) throw e;
