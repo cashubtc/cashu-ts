@@ -113,7 +113,7 @@
     "playwright": "^1.59.1",
     "prettier": "^3.8.3",
     "prettier-plugin-jsdoc": "^1.8.0",
-    "replace-in-file": "^8.4.0",
+    "replace-in-file": "^9.0.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "typedoc": "^0.28.19",
