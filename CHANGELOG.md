@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.7.2](https://github.com/cashubtc/cashu-ts/compare/v3.7.1...v3.7.2) (2026-09-04)
+
+
+### Bug Fixes
+
+* **deps:** move noble and scure to 2.4.0 ([#1070](https://github.com/cashubtc/cashu-ts/issues/1070)) ([c9e7e77](https://github.com/cashubtc/cashu-ts/commit/c9e7e77ac9efb1828f8872427e0920a908799ec1))
+
 ## [3.7.1](https://github.com/cashubtc/cashu-ts/compare/v3.7.0...v3.7.1) (2026-07-08)
 
 
