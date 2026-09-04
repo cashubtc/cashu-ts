@@ -143,7 +143,7 @@ export async function attachTransactionWitnesses(
   }
   // The receipt is the spender's copy of what NUT-07 commits to: nothing here is secret to the
   // wallet, and nothing but the wallet ever holds all of it together.
-  const transcript = bytesToHex(message);
+  const transcript = bytesToHex(transactionMessage);
   const enc = new TextEncoder();
   return v3Inputs.map((input) => {
     const { digest } = inputContexts.get(
