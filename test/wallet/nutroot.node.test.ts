@@ -1,5 +1,6 @@
 import { schnorr } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
+import { utf8ToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test, vi } from 'vitest';
 
 import { hashToCurveBls } from '../../src/crypto/curve_bls';
@@ -20,7 +21,15 @@ import {
 import { NULL_LOGGER } from '../../src/logger';
 import { Amount } from '../../src/model/Amount';
 import type { Proof, SerializedBlindedMessage } from '../../src/model/types';
-import { bytesToHex, bytesToUtf8, hexToBytes, verifySpendReceipt } from '../../src/utils';
+import {
+  bytesToHex,
+  bytesToUtf8,
+  decodeSpendReceipt,
+  encodeSpendReceipt,
+  encodeUint8ToBase64Url,
+  hexToBytes,
+  verifySpendReceipt,
+} from '../../src/utils';
 import {
   attachTransactionWitnesses,
   collectSpendInfoKeys,
@@ -402,6 +411,36 @@ describe('attachTransactionWitnesses', () => {
     expect(verifySpendReceipt({ ...rScript, witness: '{bad' }, scriptPath).witness).toBe(false);
     const unsigned = JSON.stringify({ ...JSON.parse(rScript.witness), signatures: undefined });
     expect(verifySpendReceipt({ ...rScript, witness: unsigned }, scriptPath).witness).toBe(false);
+  });
+
+  test('a receipt bundle round-trips through the nutrcA transport string', async () => {
+    const input = v3Proof(PUB_B, { k: PRIV_B });
+    const receipts = await attachTransactionWitnesses(
+      { inputs: [input], outputs: [OUTPUT] },
+      undefined,
+      collectSpendInfoKeys([input], undefined, NULL_LOGGER),
+      undefined,
+      makeState(undefined),
+    );
+    const encoded = encodeSpendReceipt({ token: 'cashuBtest', receipts });
+    expect(encoded.startsWith('nutrcA')).toBe(true);
+    const decoded = decodeSpendReceipt(encoded);
+    expect(decoded).toEqual({ token: 'cashuBtest', receipts });
+    expect(verifySpendReceipt(decoded.receipts[0], input).ok).toBe(true);
+    expect(() => decodeSpendReceipt('cashuBtest')).toThrow(/must start with/);
+    expect(() => decodeSpendReceipt('nutrcA!!!')).toThrow(/parse/);
+    const tamper = (mangle: (b: { token: string; receipts: unknown[] }) => unknown) =>
+      'nutrcA' +
+      encodeUint8ToBase64Url(
+        utf8ToBytes(JSON.stringify(mangle({ token: 'cashuBtest', receipts: [...receipts] }))),
+      );
+    expect(() => decodeSpendReceipt(tamper((b) => ({ ...b, receipts: [] })))).toThrow(/Malformed/);
+    expect(() =>
+      decodeSpendReceipt(
+        tamper((b) => ({ ...b, receipts: [{ ...receipts[0], commitment: 'zz' }] })),
+      ),
+    ).toThrow(/Malformed/);
+    expect(() => decodeSpendReceipt(tamper((b) => ({ ...b, token: 1 })))).toThrow(/Malformed/);
   });
 
   test('verifySpendReceipt follows a hashlock leaf with a merkle path and its preimage', async () => {

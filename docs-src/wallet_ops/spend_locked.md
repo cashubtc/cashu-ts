@@ -123,4 +123,4 @@ const [state] = await wallet.checkProofsStates([proof]);
 const spent = verdict.ok && state.commitment === receipt.commitment;
 ```
 
-A receipt reveals the transaction's inputs and outputs, so it is the spender's to keep or show. Receipts are a payer's evidence: a receiver's is the proofs they now hold, so `receive()` returns those alone.
+To hand a receipt around, bundle it with the spent proofs as a token and encode it: `encodeSpendReceipt({ token, receipts })` gives one `nutrcA...` string, `decodeSpendReceipt` reads it back (shape-checked; verify each receipt as above). A receipt reveals the transaction's inputs and outputs, so it is the spender's to keep or show. Receipts are a payer's evidence: a receiver's is the proofs they now hold, so `receive()` returns those alone.

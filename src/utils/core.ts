@@ -819,6 +819,68 @@ export function verifySpendReceipt(
   return verdict;
 }
 
+/**
+ * A spend receipt as handed around: the spent proofs as a token plus their receipts.
+ */
+export type SpendReceiptBundle = {
+  token: string;
+  receipts: SpendReceipt[];
+};
+
+const SPEND_RECEIPT_PREFIX = 'nutrcA';
+const HEX = /^[0-9a-f]+$/i;
+
+/**
+ * Serialize a spend receipt bundle to its `nutrcA` transport string (NUT-10).
+ *
+ * @remarks
+ * `nutrcA` followed by base64url of the JSON `{ token, receipts }`, so a receipt travels as one
+ * recognisable blob the way a token or a signing package does.
+ */
+export function encodeSpendReceipt(bundle: SpendReceiptBundle): string {
+  return `${SPEND_RECEIPT_PREFIX}${encodeUint8ToBase64Url(utf8ToBytes(JSON.stringify(bundle)))}`;
+}
+
+/**
+ * Parse a `nutrcA` transport string back to its bundle, checking shape but not validity.
+ *
+ * @throws If the prefix, encoding, or shape is wrong; verify each receipt with
+ *   {@link verifySpendReceipt} afterwards.
+ */
+export function decodeSpendReceipt(input: string): SpendReceiptBundle {
+  if (!input.startsWith(SPEND_RECEIPT_PREFIX)) {
+    throw new CTSError(`Invalid spend receipt: must start with "${SPEND_RECEIPT_PREFIX}"`);
+  }
+  let data: unknown;
+  try {
+    data = JSON.parse(
+      new TextDecoder().decode(decodeBase64UrlToUint8(input.slice(SPEND_RECEIPT_PREFIX.length))),
+    );
+  } catch (e) {
+    throw new CTSError('Failed to parse spend receipt', { cause: e });
+  }
+  const bundle = data as SpendReceiptBundle;
+  const isHex = (v: unknown, len?: number) =>
+    typeof v === 'string' && HEX.test(v) && (len === undefined || v.length === len);
+  const wellFormed =
+    isObj(bundle) &&
+    typeof bundle.token === 'string' &&
+    Array.isArray(bundle.receipts) &&
+    bundle.receipts.length > 0 &&
+    bundle.receipts.every(
+      (r) =>
+        isObj(r) &&
+        isHex(r.Y) &&
+        isHex(r.keysetId) &&
+        isHex(r.inputDigest, 64) &&
+        typeof r.witness === 'string' &&
+        isHex(r.commitment, 64) &&
+        isHex(r.transcript),
+    );
+  if (!wellFormed) throw new CTSError('Malformed spend receipt');
+  return bundle;
+}
+
 function scriptPathWitnessSpends(digest: Uint8Array, secretHex: string, witness: string): boolean {
   try {
     const w = JSON.parse(witness) as {

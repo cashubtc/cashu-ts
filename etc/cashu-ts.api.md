@@ -456,6 +456,9 @@ export type CurvePoint = {
 export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
 
 // @public
+export function decodeSpendReceipt(input: string): SpendReceiptBundle;
+
+// @public
 export const DERIVATION_TYPE: {
     readonly secretKey: 0;
     readonly blindingFactor: 1;
@@ -553,6 +556,9 @@ export type DLEQ = {
     e: Uint8Array;
     r?: bigint;
 };
+
+// @public
+export function encodeSpendReceipt(bundle: SpendReceiptBundle): string;
 
 // @public (undocumented)
 export type Enumerate<N extends number, Acc extends number[] = []> = Acc['length'] extends N ? Acc[number] : Enumerate<N, [...Acc, Acc['length']]>;
@@ -2479,6 +2485,12 @@ export type SpendReceipt = {
     witness: string;
     commitment: string;
     transcript: string;
+};
+
+// @public
+export type SpendReceiptBundle = {
+    token: string;
+    receipts: SpendReceipt[];
 };
 
 // @public
