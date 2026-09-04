@@ -1,4 +1,4 @@
-import { hexToBytes } from '@noble/curves/utils.js';
+import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect } from 'vitest';
 
@@ -11,6 +11,9 @@ import {
   type AmountLike,
   type HasKeysetKeys,
   type ProofLike,
+  createHTLCHash,
+  createHTLCsecret,
+  getPubKeyFromPrivKey,
 } from '../../src';
 import { PUBKEYS } from '../consts';
 
@@ -695,6 +698,41 @@ describe('receive', () => {
     ]);
     expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
+  });
+
+  test('test receive preimage stamps the HTLC witness before signing', async () => {
+    let inputs: Array<{ witness?: string }> = [];
+    server.use(
+      http.post(mintUrl + '/v1/swap', async ({ request }) => {
+        ({ inputs } = (await request.json()) as { inputs: Array<{ witness?: string }> });
+        return HttpResponse.json({
+          signatures: [
+            {
+              id: '00bd033559de27d0',
+              amount: 1,
+              C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+            },
+          ],
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const privkey = bytesToHex(new Uint8Array(32).fill(7));
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(hexToBytes(privkey)));
+    const { hash, preimage } = createHTLCHash();
+    const locked = {
+      id: '00bd033559de27d0',
+      amount: 1,
+      secret: createHTLCsecret(hash, [['pubkeys', pubkey]]),
+      C: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+    };
+
+    const proofs = await wallet.receive([locked], { privkey, preimage });
+    expect(proofs).toHaveLength(1);
+    const witness = JSON.parse(inputs[0].witness!);
+    expect(witness.preimage).toBe(preimage);
+    expect(witness.signatures).toHaveLength(1);
   });
 
   test('test receive keysetId', async () => {
