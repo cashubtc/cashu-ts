@@ -770,7 +770,7 @@ export type SpendReceiptVerdict = {
  * Verify a spend receipt against the proof it claims to have spent; every check is client-side.
  *
  * @remarks
- * What a holder of the proof can establish without the mint: the receipt is about this proof, its
+ * What anyone given the spent proof can establish without the mint: it is about that proof, its
  * digest was built from the transcript it shows, and the witness satisfies the secret. `ok` is all
  * four. An `after` leaf's time is not checked, since nothing here says when the spend happened.
  * Whether the spend happened at all is the mint's `commitment` for `Y` (NUT-07): compare it to the

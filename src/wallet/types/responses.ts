@@ -7,8 +7,8 @@ import type { MeltQuoteBaseResponse, Proof } from '../../model/types';
  *
  * @remarks
  * The mint returns `commitment` for every spent v3 proof and, for a private spend, nothing else.
- * `witness` and `inputDigest` reproduce it. `transcript` is the TLV message (hex) from which a
- * holder of the proof recomputes `inputDigest`, tying the witness to the transaction (NUT-07).
+ * `witness` and `inputDigest` reproduce it. `transcript` is the TLV message (hex) from which anyone
+ * given the spent proof recomputes `inputDigest`, tying the witness to the transaction (NUT-07).
  * Showing a receipt reveals that transaction's inputs and outputs.
  */
 export type SpendReceipt = {

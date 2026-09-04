@@ -115,7 +115,7 @@ const { send, receipts } = await wallet.send(21, proofs);
 // receipts[i]: { Y, keysetId, inputDigest, witness, commitment, transcript }
 ```
 
-Show a receipt to whoever holds the proof and doubts the spend. `verifySpendReceipt(receipt, proof)` does the client-side part: the receipt is about this proof (`Y` and keyset), `inputDigest` recomputes from `transcript` and the proof, `commitment` recomputes from those and `witness`, and the witness spends the secret (key path, or a script-path leaf it commits to). Compare `receipt.commitment` to the mint's for that `Y` (`checkProofsStates`) to tie it to a real spend:
+Hand a receipt, with the spent proof, to whoever doubts the payment. `verifySpendReceipt(receipt, proof)` does the client-side part: the receipt is about this proof (`Y` and keyset), `inputDigest` recomputes from `transcript` and the proof, `commitment` recomputes from those and `witness`, and the witness spends the secret (key path, or a script-path leaf it commits to). Compare `receipt.commitment` to the mint's for that `Y` (`checkProofsStates`) to tie it to a real spend:
 
 ```ts
 const verdict = verifySpendReceipt(receipt, proof); // { proof, inputDigest, commitment, witness, path, ok }
@@ -123,4 +123,4 @@ const [state] = await wallet.checkProofsStates([proof]);
 const spent = verdict.ok && state.commitment === receipt.commitment;
 ```
 
-A receipt reveals the transaction's inputs and outputs, so it is the spender's to keep or show.
+A receipt reveals the transaction's inputs and outputs, so it is the spender's to keep or show. Receipts are a payer's evidence: a receiver's is the proofs they now hold, so `receive()` returns those alone.
