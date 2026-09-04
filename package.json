@@ -92,8 +92,6 @@
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/vitest-runner": "^10.0.0",
     "@types/node": "^26.2.0",
-    "@types/node-fetch": "^2.6.4",
-    "@types/ws": "^8.5.10",
     "@vitest/browser": "^4.1.9",
     "@vitest/browser-playwright": "^4.1.9",
     "@vitest/coverage-v8": "^4.1.9",
@@ -117,13 +115,11 @@
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "typedoc": "^0.28.19",
-    "typedoc-plugin-pages": "^1.1.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.59.1",
     "vite": "^8.0.10",
     "vite-plugin-dts": "^4.5.4",
-    "vitest": "^4.1.9",
-    "ws": "^8.20.0"
+    "vitest": "^4.1.9"
   },
   "dependencies": {
     "@noble/curves": "^2.4.0",
