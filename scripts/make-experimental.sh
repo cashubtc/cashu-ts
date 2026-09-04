@@ -154,10 +154,22 @@ if [[ "${PUBLISH:-}" == "1" ]]; then
   prs_csv=$(IFS=,; echo "${PRS[*]}")
   node -e "const fs=require('fs'),p=require('./package.json');p.experimentalBundle={base:'$BASE@$BASE_SHA',prs:[$prs_csv]};fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
 
+  # Read before publishing, since publish moves the tag.
+  pkg=$(node -p "require('./package.json').name")
+  prev=$(npm view "$pkg@experimental" version 2>/dev/null || true)
+
   echo ">> publishing $expver @experimental"
   npm version "$expver" --no-git-tag-version --allow-same-version
   git commit -aqm "chore(experimental): $expver" --no-verify   # throwaway; skip husky/commitlint
   npm publish --tag experimental
+
+  # Snapshots are throwaway, so nudge anyone pinned to the one this replaces.
+  # Never fail the publish over it: npm deprecate exits non-zero on a 422 it
+  # actually applied.
+  if [[ -n "$prev" && "$prev" != "$expver" ]]; then
+    echo ">> deprecating superseded $prev"
+    npm deprecate "$pkg@$prev" "Superseded snapshot build. Use @cashu/cashu-ts@experimental or @next." || true
+  fi
 
   printf '\n=== announce ===\nnpm i @cashu/cashu-ts@%s   (tag: experimental)\nbundled on %s@%s:\n%s\n' "$expver" "$BASE" "$BASE_SHA" "$summary"
 fi
