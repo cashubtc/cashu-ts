@@ -117,15 +117,16 @@ class MockMint {
  */
 class MockWallet {
   public mint = new MockMint();
+  public unit = 'sat';
   public getMintInfo = vi.fn((): { isSupported: (n: number) => any } => {
     throw new Error('Mint info not initialized');
   });
   public checkProofsStates = vi.fn(async (): Promise<any[]> => []);
-  public checkMintQuoteBolt11 = vi.fn(async (quote: string): Promise<any> => ({ quote }));
-  public checkMintQuoteBatchBolt11 = vi.fn(async (quotes: string[]): Promise<any[]> =>
+  public checkMintQuote = vi.fn(async (_m: string, quote: string): Promise<any> => ({ quote }));
+  public checkMintQuoteBatch = vi.fn(async (_m: string, quotes: string[]): Promise<any[]> =>
     quotes.map((quote) => ({ quote })),
   );
-  public checkMeltQuoteBolt11 = vi.fn(async (quote: string): Promise<any> => ({ quote }));
+  public checkMeltQuote = vi.fn(async (_m: string, quote: string): Promise<any> => ({ quote }));
 }
 
 /**
@@ -816,7 +817,7 @@ describe('WalletEvents', () => {
     it('onceMintPaid polls until PAID when the mint cannot push quotes', async () => {
       vi.useFakeTimers();
       mock.getMintInfo.mockReturnValue(nut17(['proof_state']));
-      mock.checkMintQuoteBolt11
+      mock.checkMintQuote
         .mockResolvedValueOnce({ quote: 'q', state: 'UNPAID' })
         .mockResolvedValue({ quote: 'q', state: 'PAID' });
       const modes: string[] = [];
@@ -827,7 +828,7 @@ describe('WalletEvents', () => {
       expect(mock.mint.connectWebSocket).not.toHaveBeenCalled();
       // resolution cancels the watch: no further polls
       await vi.advanceTimersByTimeAsync(50);
-      expect(mock.checkMintQuoteBolt11).toHaveBeenCalledTimes(2);
+      expect(mock.checkMintQuote).toHaveBeenCalledTimes(2);
       vi.useRealTimers();
     });
 
@@ -835,7 +836,7 @@ describe('WalletEvents', () => {
       const cb = vi.fn();
       const err = vi.fn();
       const modes: string[] = [];
-      mock.checkMintQuoteBolt11.mockResolvedValue({ quote: 'a', state: 'PAID' });
+      mock.checkMintQuote.mockResolvedValue({ quote: 'a', state: 'PAID' });
       const cancel = await events.mintQuoteUpdates(['a'], cb, err, {
         pollMs: 1000,
         onMode: (m) => modes.push(m),
@@ -856,7 +857,7 @@ describe('WalletEvents', () => {
     it('meltQuotePaid polls each quote and reports changes only', async () => {
       vi.useFakeTimers();
       mock.getMintInfo.mockReturnValue(nut17([]));
-      mock.checkMeltQuoteBolt11
+      mock.checkMeltQuote
         .mockResolvedValueOnce({ quote: 'm', state: 'PENDING' })
         .mockResolvedValueOnce({ quote: 'm', state: 'PENDING' })
         .mockResolvedValue({ quote: 'm', state: 'PAID' });
@@ -867,25 +868,48 @@ describe('WalletEvents', () => {
       await vi.advanceTimersByTimeAsync(25);
       expect(cb).toHaveBeenCalledTimes(1);
       expect(cb).toHaveBeenCalledWith(expect.objectContaining({ state: 'PAID' }));
-      expect(mock.checkMeltQuoteBolt11).toHaveBeenCalledTimes(3);
+      expect(mock.checkMeltQuote).toHaveBeenCalledTimes(3);
       ac.abort();
       await vi.advanceTimersByTimeAsync(50);
-      expect(mock.checkMeltQuoteBolt11).toHaveBeenCalledTimes(3);
+      expect(mock.checkMeltQuote).toHaveBeenCalledTimes(3);
       expect(err).not.toHaveBeenCalled();
+      vi.useRealTimers();
+    });
+
+    it('another method names its own kind and check endpoint', async () => {
+      vi.useFakeTimers();
+      mock.getMintInfo.mockReturnValue(nut17(['bolt11_mint_quote']));
+      const zero = { amount_paid: Amount.from(0), amount_issued: Amount.from(0), updated_at: null };
+      mock.checkMintQuote
+        .mockResolvedValueOnce({ quote: 'b12', ...zero })
+        .mockResolvedValue({ quote: 'b12', ...zero, amount_paid: Amount.from(5) });
+      // bolt12 is not listed, so this polls; paid is read off the amounts, there is no state
+      const p = events.onceMintPaid('b12', { method: 'bolt12', pollMs: 10 });
+      await vi.advanceTimersByTimeAsync(15);
+      await expect(p).resolves.toMatchObject({ quote: 'b12' });
+      expect(mock.checkMintQuote).toHaveBeenCalledWith('bolt12', 'b12');
+      expect(mock.mint.connectWebSocket).not.toHaveBeenCalled();
+
+      // listed, so the socket is used under its own kind
+      mock.getMintInfo.mockReturnValue(nut17(['bolt12_melt_quote']));
+      const cb = vi.fn();
+      await events.meltQuotePaid('m12', cb, vi.fn(), { method: 'bolt12', pollMs: 10 });
+      const ws = mock.mint.webSocketConnection!;
+      expect(ws.firstFilters('bolt12_melt_quote')).toEqual(['m12']);
       vi.useRealTimers();
     });
 
     it('polling failures back off, then reach the error callback after the limit', async () => {
       vi.useFakeTimers();
       mock.getMintInfo.mockReturnValue(nut17([]));
-      mock.checkMintQuoteBolt11.mockRejectedValue(new Error('429'));
+      mock.checkMintQuote.mockRejectedValue(new Error('429'));
       const err = vi.fn();
       await events.mintQuoteUpdates(['a'], vi.fn(), err, { pollMs: 10 });
       // polls at 0, 20 and 60 ms: each failure doubles the wait
       await vi.advanceTimersByTimeAsync(35);
-      expect(mock.checkMintQuoteBolt11).toHaveBeenCalledTimes(2);
+      expect(mock.checkMintQuote).toHaveBeenCalledTimes(2);
       await vi.advanceTimersByTimeAsync(30);
-      expect(mock.checkMintQuoteBolt11).toHaveBeenCalledTimes(3);
+      expect(mock.checkMintQuote).toHaveBeenCalledTimes(3);
       expect(err).toHaveBeenCalledWith(expect.objectContaining({ message: '429' }));
       vi.useRealTimers();
     });
@@ -893,7 +917,7 @@ describe('WalletEvents', () => {
     it('several mint quotes poll through the batch check', async () => {
       vi.useFakeTimers();
       mock.getMintInfo.mockReturnValue(nut17([]));
-      mock.checkMintQuoteBatchBolt11.mockResolvedValue([
+      mock.checkMintQuoteBatch.mockResolvedValue([
         { quote: 'a', state: 'UNPAID' },
         { quote: 'b', state: 'PAID' },
       ]);
@@ -905,8 +929,8 @@ describe('WalletEvents', () => {
       });
       await vi.advanceTimersByTimeAsync(15);
       ac.abort();
-      expect(mock.checkMintQuoteBatchBolt11).toHaveBeenCalledWith(['a', 'b']);
-      expect(mock.checkMintQuoteBolt11).not.toHaveBeenCalled();
+      expect(mock.checkMintQuoteBatch).toHaveBeenCalledWith('bolt11', ['a', 'b']);
+      expect(mock.checkMintQuote).not.toHaveBeenCalled();
       expect(cb).toHaveBeenCalledTimes(2);
       vi.useRealTimers();
     });
@@ -914,8 +938,8 @@ describe('WalletEvents', () => {
     it('a mint without the batch check drops to one request per quote', async () => {
       vi.useFakeTimers();
       mock.getMintInfo.mockReturnValue(nut17([]));
-      mock.checkMintQuoteBatchBolt11.mockRejectedValue(new HttpResponseError('not found', 404));
-      mock.checkMintQuoteBolt11.mockImplementation(async (quote: string) => ({
+      mock.checkMintQuoteBatch.mockRejectedValue(new HttpResponseError('not found', 404));
+      mock.checkMintQuote.mockImplementation(async (_m: string, quote: string) => ({
         quote,
         state: 'UNPAID',
       }));
@@ -925,8 +949,8 @@ describe('WalletEvents', () => {
       await events.mintQuoteUpdates(['a', 'b'], cb, err, { pollMs: 10, signal: ac.signal });
       await vi.advanceTimersByTimeAsync(15);
       ac.abort();
-      expect(mock.checkMintQuoteBatchBolt11).toHaveBeenCalledTimes(1);
-      expect(mock.checkMintQuoteBolt11).toHaveBeenCalledTimes(4); // two quotes, two polls
+      expect(mock.checkMintQuoteBatch).toHaveBeenCalledTimes(1);
+      expect(mock.checkMintQuote).toHaveBeenCalledTimes(4); // two quotes, two polls
       expect(cb).toHaveBeenCalledTimes(2);
       expect(err).not.toHaveBeenCalled();
       vi.useRealTimers();

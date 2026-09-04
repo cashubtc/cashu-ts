@@ -2001,7 +2001,7 @@ export type RestoreConfig = {
 };
 
 // @public (undocumented)
-export type RpcSubKinds = 'bolt11_mint_quote' | 'bolt11_melt_quote' | 'proof_state';
+export type RpcSubKinds = 'proof_state' | `${string}_mint_quote` | `${string}_melt_quote`;
 
 // @public
 export const schnorrSignDigest: (digest: DigestInput, privateKey: PrivKey) => string;
@@ -2536,23 +2536,23 @@ export class WalletEvents {
     keychainUpdated(cb: (payload: {
         cache: KeyChainCache;
     }) => void, opts?: SubscribeOpts): SubscriptionCanceller;
-    meltQuotePaid(id: string, cb: (p: MeltQuoteBolt11Response) => void, err: (e: Error) => void, opts?: WatchOpts): Promise<SubscriptionCanceller>;
-    meltQuoteUpdates(ids: string[], cb: (p: MeltQuoteBolt11Response) => void, err: (e: Error) => void, opts?: WatchOpts): Promise<SubscriptionCanceller>;
-    mintQuotePaid(id: string, cb: (p: MintQuoteBolt11Response) => void, err: (e: Error) => void, opts?: WatchOpts): Promise<SubscriptionCanceller>;
-    mintQuoteUpdates(ids: string[], cb: (p: MintQuoteBolt11Response) => void, err: (e: Error) => void, opts?: WatchOpts): Promise<SubscriptionCanceller>;
-    onceAnyMintPaid(ids: string[], opts?: WatchOpts & {
+    meltQuotePaid<TRes extends MeltQuoteBaseResponse = MeltQuoteBolt11Response>(id: string, cb: (p: TRes) => void, err: (e: Error) => void, opts?: WatchOpts): Promise<SubscriptionCanceller>;
+    meltQuoteUpdates<TRes extends MeltQuoteBaseResponse = MeltQuoteBolt11Response>(ids: string[], cb: (p: TRes) => void, err: (e: Error) => void, opts?: WatchOpts): Promise<SubscriptionCanceller>;
+    mintQuotePaid<TRes extends MintQuoteBaseResponse = MintQuoteBolt11Response>(id: string, cb: (p: TRes) => void, err: (e: Error) => void, opts?: WatchOpts): Promise<SubscriptionCanceller>;
+    mintQuoteUpdates<TRes extends MintQuoteBaseResponse = MintQuoteBolt11Response>(ids: string[], cb: (p: TRes) => void, err: (e: Error) => void, opts?: WatchOpts): Promise<SubscriptionCanceller>;
+    onceAnyMintPaid<TRes extends MintQuoteBaseResponse = MintQuoteBolt11Response>(ids: string[], opts?: WatchOpts & {
         timeoutMs?: number;
         failOnError?: boolean;
     }): Promise<{
         id: string;
-        quote: MintQuoteBolt11Response;
+        quote: TRes;
     }>;
-    onceMeltPaid(id: string, opts?: WatchOpts & {
+    onceMeltPaid<TRes extends MeltQuoteBaseResponse = MeltQuoteBolt11Response>(id: string, opts?: WatchOpts & {
         timeoutMs?: number;
-    }): Promise<MeltQuoteBolt11Response>;
-    onceMintPaid(id: string, opts?: WatchOpts & {
+    }): Promise<TRes>;
+    onceMintPaid<TRes extends MintQuoteBaseResponse = MintQuoteBolt11Response>(id: string, opts?: WatchOpts & {
         timeoutMs?: number;
-    }): Promise<MintQuoteBolt11Response>;
+    }): Promise<TRes>;
     proofStatesStream<P extends ProofLike = Proof>(proofs: P[], opts?: ProofStatesStreamOpts<P>): AsyncIterable<ProofState & {
         proof: P;
     }>;
@@ -2586,6 +2586,7 @@ export type WatchOpts = SubscribeOpts & {
     pollMs?: number;
     replayTimeoutMs?: number;
     onMode?: (mode: 'websocket' | 'polling') => void;
+    method?: string;
 };
 
 // @public

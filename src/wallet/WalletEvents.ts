@@ -6,7 +6,9 @@ import type {
   Proof,
   ProofLike,
   ProofState,
+  MeltQuoteBaseResponse,
   MeltQuoteBolt11Response,
+  MintQuoteBaseResponse,
   MintQuoteBolt11Response,
   RpcSubKinds,
 } from '../model/types';
@@ -40,6 +42,11 @@ export type WatchOpts = SubscribeOpts & {
    * Reports the transport in use, once per switch.
    */
   onMode?: (mode: 'websocket' | 'polling') => void;
+  /**
+   * Quote subscriptions only: the payment method, which names the NUT-17 kind and the check
+   * endpoint polled. Default 'bolt11'.
+   */
+  method?: string;
 };
 
 /**
@@ -140,6 +147,20 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
+// PAID as NUT-04 now defines it, paid beyond what is issued; a response still carrying the legacy
+// `state` says so itself
+function isMintQuotePaid(q: MintQuoteBaseResponse): boolean {
+  const state = (q as { state?: string }).state;
+  if (state !== undefined) return state === MintQuoteState.PAID;
+  return q.amount_paid.greaterThan(q.amount_issued);
+}
+
+// Everything a mint quote poll may see move, tolerant of a mint leaving fields out
+function mintQuoteState(q: MintQuoteBaseResponse): string {
+  const { state } = q as { state?: string };
+  return JSON.stringify([q.amount_paid, q.amount_issued, q.updated_at, state]);
+}
+
 // NUT-17 replays the current state on subscribe; this long without it and the socket counts as dead
 const REPLAY_GRACE_MS = 10_000;
 // Consecutive failed polls before a watch gives up, each waited out twice as long as the last
@@ -192,11 +213,13 @@ export class WalletEvents {
     );
   }
 
-  // Whether the mint says it pushes `kind`. Unknown until mint info is loaded; then the socket decides
+  // Whether the mint says it pushes `kind` for this wallet's unit. Unknown until mint info is
+  // loaded; then the socket decides
   private _pushes(kind: RpcSubKinds): boolean {
     try {
       const nut17 = this.wallet.getMintInfo().isSupported(17);
-      return nut17.params?.some((p) => p.commands.includes(kind)) ?? false;
+      const unit = this.wallet.unit;
+      return nut17.params?.some((p) => p.unit === unit && p.commands.includes(kind)) ?? false;
     } catch {
       return true;
     }
@@ -434,38 +457,40 @@ export class WalletEvents {
    * Register a callback to be called whenever a mint quote's state changes.
    *
    * @remarks
-   * With `opts.pollMs` the subscription falls back to polling: one batched check per poll for
-   * several quotes, dropping to one request per quote only on a mint without the batch endpoint;
-   * see {@link WatchOpts}.
+   * `opts.method` picks the payment method (default bolt11) and with it the NUT-17 kind and the
+   * response type. With `opts.pollMs` the subscription falls back to polling: one batched check per
+   * poll for several quotes, dropping to one request per quote only on a mint without the batch
+   * endpoint; see {@link WatchOpts}.
    * @param ids List of mint quote IDs that should be subscribed to.
    * @param cb Callback function that will be called whenever a mint quote state changes.
    * @param err Called when the subscription fails, or when polling keeps failing.
-   * @param opts Abort signal and polling fallback.
+   * @param opts Abort signal, payment method and polling fallback.
    * @returns A function that cancels the subscription.
    */
-  async mintQuoteUpdates(
+  async mintQuoteUpdates<TRes extends MintQuoteBaseResponse = MintQuoteBolt11Response>(
     ids: string[],
-    cb: (p: MintQuoteBolt11Response) => void,
+    cb: (p: TRes) => void,
     err: (e: Error) => void,
     opts?: WatchOpts,
   ): Promise<SubscriptionCanceller> {
+    const method = opts?.method ?? 'bolt11';
     const uniq = Array.from(new Set(ids));
     let batch = uniq.length > 1;
     const fetch = async () => {
       if (batch) {
         try {
-          return await this.wallet.checkMintQuoteBatchBolt11(uniq);
+          return await this.wallet.checkMintQuoteBatch<TRes>(method, uniq);
         } catch (e) {
           // Only a missing endpoint means the mint cannot batch; anything else is the poll failing
           if (!(e instanceof HttpResponseError) || e.status !== 404) throw e;
           batch = false;
         }
       }
-      return this._eachQuote(uniq, (id) => this.wallet.checkMintQuoteBolt11(id));
+      return this._eachQuote(uniq, (id) => this.wallet.checkMintQuote<TRes>(method, id));
     };
-    return this._watch<MintQuoteBolt11Response>(
-      { kind: 'bolt11_mint_quote', filters: uniq, decode: (q) => q },
-      { fetch, key: (q) => q.quote, state: (q) => q.state },
+    return this._watch<TRes>(
+      { kind: `${method}_mint_quote`, filters: uniq, decode: (q) => q },
+      { fetch, key: (q) => q.quote, state: mintQuoteState },
       cb,
       err,
       opts,
@@ -480,16 +505,16 @@ export class WalletEvents {
    * @param errorCallback
    * @returns
    */
-  async mintQuotePaid(
+  async mintQuotePaid<TRes extends MintQuoteBaseResponse = MintQuoteBolt11Response>(
     id: string,
-    cb: (p: MintQuoteBolt11Response) => void,
+    cb: (p: TRes) => void,
     err: (e: Error) => void,
     opts?: WatchOpts,
   ): Promise<SubscriptionCanceller> {
-    return this.mintQuoteUpdates(
+    return this.mintQuoteUpdates<TRes>(
       [id],
       (p) => {
-        if (p.state === MintQuoteState.PAID) cb(p);
+        if (isMintQuotePaid(p)) cb(p);
       },
       err,
       opts,
@@ -500,26 +525,28 @@ export class WalletEvents {
    * Register a callback to be called whenever a melt quote's state changes.
    *
    * @remarks
-   * With `opts.pollMs` the subscription falls back to polling `checkMeltQuoteBolt11`. There is no
-   * batched melt check, so that is one request per quote per poll: size `pollMs` to the number
-   * watched; see {@link WatchOpts}.
+   * `opts.method` picks the payment method (default bolt11) and with it the NUT-17 kind and the
+   * response type. With `opts.pollMs` the subscription falls back to polling. There is no batched
+   * melt check, so that is one request per quote per poll: size `pollMs` to the number watched; see
+   * {@link WatchOpts}.
    * @param ids List of melt quote IDs that should be subscribed to.
    * @param cb Callback function that will be called whenever a melt quote state changes.
    * @param err Called when the subscription fails, or when polling keeps failing.
-   * @param opts Abort signal and polling fallback.
+   * @param opts Abort signal, payment method and polling fallback.
    * @returns A function that cancels the subscription.
    */
-  async meltQuoteUpdates(
+  async meltQuoteUpdates<TRes extends MeltQuoteBaseResponse = MeltQuoteBolt11Response>(
     ids: string[],
-    cb: (p: MeltQuoteBolt11Response) => void,
+    cb: (p: TRes) => void,
     err: (e: Error) => void,
     opts?: WatchOpts,
   ): Promise<SubscriptionCanceller> {
+    const method = opts?.method ?? 'bolt11';
     const uniq = Array.from(new Set(ids));
-    return this._watch<MeltQuoteBolt11Response>(
-      { kind: 'bolt11_melt_quote', filters: uniq, decode: (q) => q },
+    return this._watch<TRes>(
+      { kind: `${method}_melt_quote`, filters: uniq, decode: (q) => q },
       {
-        fetch: () => this._eachQuote(uniq, (id) => this.wallet.checkMeltQuoteBolt11(id)),
+        fetch: () => this._eachQuote(uniq, (id) => this.wallet.checkMeltQuote<TRes>(method, id)),
         key: (q) => q.quote,
         state: (q) => q.state,
       },
@@ -537,13 +564,13 @@ export class WalletEvents {
    * @param errorCallback
    * @returns
    */
-  async meltQuotePaid(
+  async meltQuotePaid<TRes extends MeltQuoteBaseResponse = MeltQuoteBolt11Response>(
     id: string,
-    cb: (p: MeltQuoteBolt11Response) => void,
+    cb: (p: TRes) => void,
     err: (e: Error) => void,
     opts?: WatchOpts,
   ): Promise<SubscriptionCanceller> {
-    return this.meltQuoteUpdates(
+    return this.meltQuoteUpdates<TRes>(
       [id],
       (p) => {
         if (p.state === MeltQuoteState.PAID) cb(p);
@@ -648,14 +675,15 @@ export class WalletEvents {
    * @param opts.signal AbortSignal to cancel the wait early.
    * @param opts.timeoutMs Milliseconds to wait before rejecting with a timeout error.
    * @param opts.pollMs Polling fallback interval, see {@link WatchOpts}.
-   * @returns A promise that resolves with the latest `MintQuoteBolt11Response` once PAID.
+   * @param opts.method Payment method, default bolt11; pass the matching response type.
+   * @returns A promise that resolves with the latest quote once PAID.
    */
-  onceMintPaid(
+  onceMintPaid<TRes extends MintQuoteBaseResponse = MintQuoteBolt11Response>(
     id: string,
     opts?: WatchOpts & { timeoutMs?: number },
-  ): Promise<MintQuoteBolt11Response> {
-    return this.waitUntilPaid<MintQuoteBolt11Response>(
-      this.mintQuotePaid.bind(this),
+  ): Promise<TRes> {
+    return this.waitUntilPaid<TRes>(
+      (quoteId, cb, err, o) => this.mintQuotePaid<TRes>(quoteId, cb, err, o),
       id,
       opts,
       'Timeout waiting for mint paid',
@@ -689,12 +717,13 @@ export class WalletEvents {
    * @param opts.failOnError When true, reject on first error. Default false.
    * @param opts.pollMs Polling fallback interval, see {@link WatchOpts}; `onMode` then reports per
    *   quote.
-   * @returns A promise resolving to the id that won and its `MintQuoteBolt11Response`.
+   * @param opts.method Payment method, default bolt11; pass the matching response type.
+   * @returns A promise resolving to the id that won and its quote.
    */
-  onceAnyMintPaid(
+  onceAnyMintPaid<TRes extends MintQuoteBaseResponse = MintQuoteBolt11Response>(
     ids: string[],
     opts?: WatchOpts & { timeoutMs?: number; failOnError?: boolean },
-  ): Promise<{ id: string; quote: MintQuoteBolt11Response }> {
+  ): Promise<{ id: string; quote: TRes }> {
     return new Promise((resolve, reject) => {
       const unique = Array.from(new Set(ids));
       const cancels: Map<string, CancellerLike> = new Map();
@@ -744,16 +773,16 @@ export class WalletEvents {
           cleanup(lastError ?? new CTSError('No subscriptions remaining'));
         }
       };
-      const { pollMs, replayTimeoutMs, onMode } = opts ?? {};
+      const { pollMs, replayTimeoutMs, onMode, method } = opts ?? {};
       for (const quoteId of unique) {
-        const c = this.mintQuotePaid(
+        const c = this.mintQuotePaid<TRes>(
           quoteId,
           (p) => {
             cleanup();
             resolve({ id: quoteId, quote: p });
           },
           (e) => drop(quoteId, e),
-          { pollMs, replayTimeoutMs, onMode },
+          { pollMs, replayTimeoutMs, onMode, method },
         );
         cancels.set(quoteId, c);
         void c.catch((e) => drop(quoteId, e)); // errors setting up
@@ -785,14 +814,15 @@ export class WalletEvents {
    * @param opts.signal AbortSignal to cancel the wait early.
    * @param opts.timeoutMs Milliseconds to wait before rejecting with a timeout error.
    * @param opts.pollMs Polling fallback interval, see {@link WatchOpts}.
-   * @returns A promise that resolves with the `MeltQuoteBolt11Response` once PAID.
+   * @param opts.method Payment method, default bolt11; pass the matching response type.
+   * @returns A promise that resolves with the quote once PAID.
    */
-  onceMeltPaid(
+  onceMeltPaid<TRes extends MeltQuoteBaseResponse = MeltQuoteBolt11Response>(
     id: string,
     opts?: WatchOpts & { timeoutMs?: number },
-  ): Promise<MeltQuoteBolt11Response> {
-    return this.waitUntilPaid<MeltQuoteBolt11Response>(
-      this.meltQuotePaid.bind(this),
+  ): Promise<TRes> {
+    return this.waitUntilPaid<TRes>(
+      (quoteId, cb, err, o) => this.meltQuotePaid<TRes>(quoteId, cb, err, o),
       id,
       opts,
       'Timeout waiting for melt paid',
