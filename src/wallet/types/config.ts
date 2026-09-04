@@ -207,6 +207,10 @@ export type SendConfig = {
   keysetId?: string;
   privkey?: string | string[];
   scriptPath?: ScriptPathPlan[];
+  /**
+   * NUT-14: placed on the witness of every HTLC input whose hashlock it opens, before signing.
+   */
+  preimage?: string;
   includeFees?: boolean;
   proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
   onCountersReserved?: OnCountersReserved;
@@ -228,6 +232,10 @@ export type ReceiveConfig = {
   keysetId?: string;
   privkey?: string | string[];
   scriptPath?: ScriptPathPlan[];
+  /**
+   * NUT-14: placed on the witness of every HTLC input whose hashlock it opens, before signing.
+   */
+  preimage?: string;
   requireDleq?: boolean;
   proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
   onCountersReserved?: OnCountersReserved;
@@ -273,6 +281,10 @@ export type MeltProofsConfig = {
   keysetId?: string;
   privkey?: string | string[];
   scriptPath?: ScriptPathPlan[];
+  /**
+   * NUT-14: placed on the witness of every HTLC input whose hashlock it opens, before signing.
+   */
+  preimage?: string;
   onCountersReserved?: OnCountersReserved;
   /**
    * Request NUT-08 blank outputs so the mint can return unspent fee reserve. Defaults to true. Set

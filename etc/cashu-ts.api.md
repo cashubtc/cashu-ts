@@ -148,6 +148,9 @@ export function assertSecretKind(allowed: SecretKind | SecretKind[], secret: Sec
 export function assertV3PointSecret(secret: Uint8Array | string): void;
 
 // @public
+export function attachHTLCPreimage<T extends ProofLike>(proofs: T[], preimage: string): T[];
+
+// @public
 export function auditableLock(pubkey: string): LockOptions_2;
 
 // @public
@@ -1013,6 +1016,7 @@ export class MeltBuilder<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | '
     asRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
+    preimage(preimage: string): this;
     prepare(): Promise<MeltPreview<TQuote>>;
     privkey(k: string | string[]): this;
     run(): Promise<MeltProofsResponse<TQuote>>;
@@ -1033,6 +1037,7 @@ export class MeltOnchainBuilder {
     constructor(wallet: Wallet, quote: MeltQuoteOnchainResponse, proofs: ProofLike[]);
     feeIndex(index: number): this;
     keyset(id: string): this;
+    preimage(preimage: string): this;
     privkey(k: string | string[]): this;
     run(): Promise<MeltProofsResponse<MeltQuoteOnchainResponse>>;
     scriptPath(plans: ScriptPathPlan[]): this;
@@ -1053,6 +1058,7 @@ export type MeltProofsConfig = {
     keysetId?: string;
     privkey?: string | string[];
     scriptPath?: ScriptPathPlan[];
+    preimage?: string;
     onCountersReserved?: OnCountersReserved;
     nut08Change?: boolean;
 };
@@ -2145,6 +2151,7 @@ export class ReceiveBuilder {
     asRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
+    preimage(preimage: string): this;
     prepare(): Promise<SwapPreview>;
     privkey(k: string | string[]): this;
     proofsWeHave(p: Array<Pick<ProofLike, 'amount'>>): this;
@@ -2158,6 +2165,7 @@ export type ReceiveConfig = {
     keysetId?: string;
     privkey?: string | string[];
     scriptPath?: ScriptPathPlan[];
+    preimage?: string;
     requireDleq?: boolean;
     proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
     onCountersReserved?: OnCountersReserved;
@@ -2320,6 +2328,7 @@ export class SendBuilder {
     offlineCloseMatch(requireDleq?: boolean): this;
     offlineExactOnly(requireDleq?: boolean): this;
     onCountersReserved(cb: OnCountersReserved): this;
+    preimage(preimage: string): this;
     prepare(): Promise<SwapPreview>;
     privkey(k: string | string[]): this;
     proofsWeHave(p: Array<Pick<ProofLike, 'amount'>>): this;
@@ -2332,6 +2341,7 @@ export type SendConfig = {
     keysetId?: string;
     privkey?: string | string[];
     scriptPath?: ScriptPathPlan[];
+    preimage?: string;
     includeFees?: boolean;
     proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
     onCountersReserved?: OnCountersReserved;

@@ -4,6 +4,7 @@ import { describe, expect, test, vi } from 'vitest';
 
 import { Amount, type Logger, type Proof } from '../../src';
 import {
+  attachHTLCPreimage,
   createHTLCHash,
   createHTLCsecret,
   getHTLCWitnessPreimage,
@@ -298,5 +299,43 @@ describe('HTLC refund (sender) pathway', () => {
   test('unsigned refund proof does not spend', () => {
     // No refund signature and no preimage: nothing authorises the spend.
     expect(isHTLCSpendAuthorised(keyedRefundProof())).toBe(false);
+  });
+});
+
+describe('attachHTLCPreimage', () => {
+  const { hash, preimage } = createHTLCHash();
+  const proof = (secret: string, witness?: Proof['witness']): Proof => ({
+    id: '00bd033559de27d0',
+    amount: Amount.from(1),
+    secret,
+    C: '02' + 'ab'.repeat(32),
+    ...(witness !== undefined && { witness }),
+  });
+
+  test('stamps the HTLC proofs it opens and leaves the rest alone', () => {
+    const opens = proof(createHTLCsecret(hash));
+    const other = proof(createHTLCsecret(createHTLCHash().hash));
+    const p2pk = proof(JSON.stringify(['P2PK', { nonce: '00', data: PUBKEY }]));
+    const plain = proof('plain-secret');
+    const out = attachHTLCPreimage([opens, other, p2pk, plain], preimage.toUpperCase());
+    expect(out[0].witness).toEqual({ preimage });
+    expect(out.slice(1)).toEqual([other, p2pk, plain]);
+  });
+
+  test('keeps existing signatures, and signing keeps the preimage', () => {
+    const locked = proof(createHTLCsecret(hash, [['pubkeys', PUBKEY]]));
+    const signedFirst = attachHTLCPreimage(signP2PKProofs([locked], bytesToHex(PRIVKEY)), preimage);
+    const stampedFirst = signP2PKProofs(
+      attachHTLCPreimage([locked], preimage),
+      bytesToHex(PRIVKEY),
+    );
+    for (const [p] of [signedFirst, stampedFirst]) {
+      expect(getHTLCWitnessPreimage(p.witness)).toBe(preimage);
+      expect(verifyHTLCSpendingConditions(p).success).toBe(true);
+    }
+  });
+
+  test('rejects a malformed preimage', () => {
+    expect(() => attachHTLCPreimage([], 'nope')).toThrow(/64 character/);
   });
 });
