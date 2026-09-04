@@ -105,7 +105,10 @@ function keysetIdBytes(keysetId: string): Uint8Array {
   return isValidHex(keysetId) ? hexToBytes(keysetId) : utf8ToBytes(keysetId);
 }
 
-function proofInputContainer(input: TranscriptProofInput): Uint8Array {
+/**
+ * One proof input's transcript container record (NUT-10), the bytes `inputDigest` hashes.
+ */
+export function proofInputContainer(input: TranscriptProofInput): Uint8Array {
   // A v3 secret contributes its raw 33 bytes; a v0-v2 secret its utf8 bytes.
   const secret = isBlsKeyset(input.keysetId)
     ? hexToBytes(input.secret)

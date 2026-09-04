@@ -115,4 +115,12 @@ const { send, receipts } = await wallet.send(21, proofs);
 // receipts[i]: { Y, keysetId, inputDigest, witness, commitment, transcript }
 ```
 
-Show a receipt to whoever holds the proof and doubts the spend: `witness` and `inputDigest` open the `commitment` the mint returns for `Y`, the witness verifies against the proof's own key, and `transcript` (the TLV message) lets them recompute `inputDigest` from the proof they hold, so the witness is tied to that transaction and not just to a digest. A receipt reveals the transaction's inputs and outputs, so it is the spender's to keep or show.
+Show a receipt to whoever holds the proof and doubts the spend. `verifySpendReceipt(receipt, proof)` does the client-side part: the receipt is about this proof (`Y` and keyset), `inputDigest` recomputes from `transcript` and the proof, `commitment` recomputes from those and `witness`, and the witness spends the secret (key path, or a script-path leaf it commits to). Compare `receipt.commitment` to the mint's for that `Y` (`checkProofsStates`) to tie it to a real spend:
+
+```ts
+const verdict = verifySpendReceipt(receipt, proof); // { proof, inputDigest, commitment, witness, path, ok }
+const [state] = await wallet.checkProofsStates([proof]);
+const spent = verdict.ok && state.commitment === receipt.commitment;
+```
+
+A receipt reveals the transaction's inputs and outputs, so it is the spender's to keep or show.

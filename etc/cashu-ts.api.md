@@ -2482,6 +2482,16 @@ export type SpendReceipt = {
 };
 
 // @public
+export type SpendReceiptVerdict = {
+    proof: boolean;
+    inputDigest: boolean;
+    commitment: boolean;
+    witness: boolean;
+    path?: 'key' | 'script';
+    ok: boolean;
+};
+
+// @public
 export function splitAmount(value: AmountLike, keyset: Keys, split?: AmountLike[], order?: 'desc' | 'asc'): Amount[];
 
 // @public
@@ -2636,6 +2646,9 @@ export function verifyP2PKSpendingConditions(proof: Proof, logger?: Logger, mess
 export function verifyProofsForReceive(proofs: ProofLike[], getKeyset: (id: string) => HasKeysetKeys, opts?: {
     requireDleq?: boolean;
 }): void;
+
+// @public
+export function verifySpendReceipt(receipt: SpendReceipt, proof: Pick<Proof, 'id' | 'secret' | 'amount' | 'C'>): SpendReceiptVerdict;
 
 // @public
 export function verifyUnblindedSignature(proof: UnblindedSignature, privKey: Uint8Array): boolean;

@@ -20,7 +20,7 @@ import {
 import { NULL_LOGGER } from '../../src/logger';
 import { Amount } from '../../src/model/Amount';
 import type { Proof, SerializedBlindedMessage } from '../../src/model/types';
-import { bytesToHex, bytesToUtf8, hexToBytes } from '../../src/utils';
+import { bytesToHex, bytesToUtf8, hexToBytes, verifySpendReceipt } from '../../src/utils';
 import {
   attachTransactionWitnesses,
   collectSpendInfoKeys,
@@ -359,6 +359,74 @@ describe('attachTransactionWitnesses', () => {
       r.inputDigest,
     );
     expect(verifyTransactionInputWitness(hexToBytes(r.inputDigest), PUB_B, r.witness)).toBe(true);
+  });
+
+  test('verifySpendReceipt checks a receipt against the proof, key path and script path', async () => {
+    const keyPath = v3Proof(PUB_B, { k: PRIV_B });
+    const tree = buildNutrootSecret(PUB_A, [{ type: 'threshold', n: 1, keys: [PUB_B] }]);
+    const scriptPath = v3Proof(tree.secret, { k: PRIV_A, tree: tree.tree });
+    const inputs = [keyPath, scriptPath];
+    const [rKey, rScript] = await attachTransactionWitnesses(
+      { inputs, outputs: [OUTPUT] },
+      undefined,
+      collectSpendInfoKeys([keyPath], undefined, NULL_LOGGER),
+      prepareScriptPathSpends(
+        [scriptPath],
+        [{ secret: tree.secret, leafIndex: 0, extraKeys: [PRIV_B] }],
+        [],
+      ),
+      makeState(undefined),
+    );
+    expect(verifySpendReceipt(rKey, keyPath)).toEqual({
+      proof: true,
+      inputDigest: true,
+      commitment: true,
+      witness: true,
+      path: 'key',
+      ok: true,
+    });
+    expect(verifySpendReceipt(rScript, scriptPath)).toMatchObject({ path: 'script', ok: true });
+    // Each claim fails on its own: another proof, a doctored transcript, a swapped witness.
+    expect(verifySpendReceipt(rKey, scriptPath)).toMatchObject({ proof: false, witness: false });
+    const doctored = {
+      ...rKey,
+      transcript: rKey.transcript.replace(/.$/, (c) => (c === '0' ? '1' : '0')),
+    };
+    expect(verifySpendReceipt(doctored, keyPath)).toMatchObject({ inputDigest: false, ok: false });
+    expect(verifySpendReceipt({ ...rKey, witness: rScript.witness }, keyPath)).toMatchObject({
+      commitment: false,
+      witness: false,
+    });
+    expect(verifySpendReceipt(rKey, { ...keyPath, id: '00' + 'ab'.repeat(32) }).ok).toBe(false);
+    expect(verifySpendReceipt({ ...rKey, transcript: 'zz' }, keyPath).ok).toBe(false);
+    expect(verifySpendReceipt({ ...rScript, witness: '{bad' }, scriptPath).witness).toBe(false);
+    const unsigned = JSON.stringify({ ...JSON.parse(rScript.witness), signatures: undefined });
+    expect(verifySpendReceipt({ ...rScript, witness: unsigned }, scriptPath).witness).toBe(false);
+  });
+
+  test('verifySpendReceipt follows a hashlock leaf with a merkle path and its preimage', async () => {
+    const preimage = 'cd'.repeat(32);
+    const hash = bytesToHex(sha256(hexToBytes(preimage)));
+    const tree = buildNutrootSecret(PUB_A, [
+      { type: 'threshold', n: 1, keys: [PUB_A] },
+      { type: 'hashlock', n: 1, hash, keys: [PUB_B] },
+    ]);
+    const proof = v3Proof(tree.secret, { k: PRIV_A, tree: tree.tree });
+    const [r] = await attachTransactionWitnesses(
+      { inputs: [proof], outputs: [OUTPUT] },
+      undefined,
+      undefined,
+      prepareScriptPathSpends(
+        [proof],
+        [{ secret: tree.secret, leafIndex: 1, extraKeys: [PRIV_B], preimage }],
+        [],
+      ),
+      makeState(undefined),
+    );
+    expect(verifySpendReceipt(r, proof)).toMatchObject({ path: 'script', ok: true });
+    const w = JSON.parse(r.witness) as { preimage: string };
+    const stripped = JSON.stringify({ ...w, preimage: undefined });
+    expect(verifySpendReceipt({ ...r, witness: stripped }, proof).witness).toBe(false);
   });
 
   test('a melt quote is part of the signed transcript', async () => {
