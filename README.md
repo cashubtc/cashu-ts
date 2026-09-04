@@ -53,7 +53,7 @@ We provide comprehensive examples categorized by use case:
 - **[Basic Guide](./docs-src/usage/usage_index.md)**: Getting Started, and basic token operations.
 - **[Create Wallet](./docs-src/usage/create_wallet.md)**: Initialize a wallet from a mint URL or cached mint state.
 - **[WalletOps](./docs-src/wallet_ops/wallet_ops.md)**: Translation Builder Usage Recipes.
-- **[WalletEvents](./docs-src/wallet_events/wallet_events.md)**: Event Subscriptions
+- **[WalletEvents](./docs-src/wallet_events/wallet_events.md)**: Event Subscriptions, with a built-in polling fallback (opt-in).
 - **[Deterministic Counters](./docs-src/deterministic_counters.md)**: Deterministic counters (persist, inspect, bump).
 - **[Derive Keys](./docs-src/usage/derive_keys.md)**: Derive recoverable P2PK / NUT-20 keys from the wallet seed.
 
