@@ -361,10 +361,10 @@ describe('attachTransactionWitnesses', () => {
     expect(r.inputDigest).toBe(bytesToHex(digestOf(inputs, undefined, input.secret)));
     expect(r.commitment).toBe(spendCommitment(r.Y, hexToBytes(r.inputDigest), r.witness));
     // A holder of the proof rebuilds the input digest from the transcript alone (NUT-07).
-    const { container } = transactionInputsOf(inputs).proofs.get(
+    const { inputContainer } = transactionInputsOf(inputs).proofs.get(
       proofInputContextKey({ keysetId: input.id, secret: input.secret }),
     )!;
-    expect(bytesToHex(inputDigest(sha256(hexToBytes(r.transcript)), container))).toBe(
+    expect(bytesToHex(inputDigest(sha256(hexToBytes(r.transcript)), inputContainer))).toBe(
       r.inputDigest,
     );
     expect(verifyTransactionInputWitness(hexToBytes(r.inputDigest), PUB_B, r.witness)).toBe(true);
