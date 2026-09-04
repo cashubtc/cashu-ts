@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 
-import { LockBuilder } from '../../src';
+import { LockBuilder, createHTLCHash, createHTLCsecret } from '../../src';
 import { Amount, type AmountLike } from '../../src/model/Amount';
 import type { OutputData, OutputDataLike } from '../../src/model/OutputData';
 import { PaymentRequest } from '../../src/model/PaymentRequest';
@@ -640,6 +640,32 @@ describe('WalletOps builders', () => {
       expect(wallet.signP2PKProofs).toHaveBeenCalledWith(proofs, 'sk');
     });
 
+    it('passes the preimage in the config', async () => {
+      await ops.send(5, proofs).preimage('aa'.repeat(32)).run();
+      const [, , config] = wallet.send.mock.calls[0];
+      expect(config).toEqual({ preimage: 'aa'.repeat(32) });
+    });
+
+    it('offlineExactOnly stamps HTLC proofs with the preimage before signing', async () => {
+      const { hash, preimage } = createHTLCHash();
+      const locked: Proof[] = [{ ...proofs[0], secret: createHTLCsecret(hash) }, proofs[1]];
+      await ops.send(5, locked).offlineExactOnly().preimage(preimage).privkey('sk').run();
+
+      const [stamped] = wallet.signP2PKProofs.mock.calls[0];
+      expect(stamped[0].witness).toEqual({ preimage });
+      expect(stamped[1]).toBe(proofs[1]);
+    });
+
+    it('offlineCloseMatch stamps HTLC proofs with the preimage', async () => {
+      const { hash, preimage } = createHTLCHash();
+      const locked: Proof[] = [{ ...proofs[0], secret: createHTLCsecret(hash) }];
+      await ops.send(5, locked).offlineCloseMatch().preimage(preimage).run();
+
+      const [, sent] = wallet.sendOffline.mock.calls[0];
+      expect(sent[0].witness).toEqual({ preimage });
+      expect(wallet.signP2PKProofs).not.toHaveBeenCalled();
+    });
+
     it('offlineExactOnly does not sign when no privkey is set', async () => {
       await ops.send(5, proofs).offlineExactOnly().run();
 
@@ -663,6 +689,12 @@ describe('WalletOps builders', () => {
   // --------------------------- ReceiveBuilder --------------------------------
 
   describe('ReceiveBuilder', () => {
+    it('passes the preimage in the config', async () => {
+      await ops.receive(token).preimage('cc'.repeat(32)).run();
+      const [, config] = wallet.receive.mock.calls[0];
+      expect(config).toMatchObject({ preimage: 'cc'.repeat(32) });
+    });
+
     it('calls wallet.receive with config only when no OutputType was set', async () => {
       await ops.receive(token).requireDleq(true).keyset('kid').run();
 
@@ -1093,6 +1125,12 @@ describe('WalletOps builders', () => {
   // --------------------------- MeltBuilder -----------------------------------
 
   describe('MeltBuilder', () => {
+    it('passes the preimage in the config', async () => {
+      await ops.meltBolt11(melt11, proofs).preimage('bb'.repeat(32)).prepare();
+      const [, , , cfg] = wallet.prepareMelt.mock.calls[0];
+      expect(cfg).toMatchObject({ preimage: 'bb'.repeat(32) });
+    });
+
     it('supports wallet.prepareMelt', async () => {
       const cb = vi.fn();
       await ops
@@ -1247,6 +1285,12 @@ describe('WalletOps builders', () => {
   // --------------------------- MeltOnchainBuilder ----------------------------
 
   describe('MeltOnchainBuilder', () => {
+    it('passes the preimage in the config', async () => {
+      await ops.meltOnchain(meltOnchainSingle, proofs).preimage('dd'.repeat(32)).run();
+      const [, , , cfg] = wallet.meltProofsOnchain.mock.calls[0];
+      expect(cfg).toMatchObject({ preimage: 'dd'.repeat(32) });
+    });
+
     it('auto-selects the only fee option when no feeIndex is set', async () => {
       await ops.meltOnchain(meltOnchainSingle, proofs).privkey('sk').run();
 
