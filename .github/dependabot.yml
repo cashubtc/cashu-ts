@@ -42,10 +42,15 @@ updates:
           - 'typescript-eslint'
           - '@typescript-eslint/*'
           - '@vitest/eslint-plugin'
+      # cli and config-conventional share @commitlint/types, so bumping one
+      # alone nests the other major inside the tree.
+      commitlint:
+        patterns: ['@commitlint/*']
       # The test stack moves together: the browser providers track both vitest
-      # and the playwright version they drive.
+      # and the playwright version they drive, and vitest both depends on and
+      # peers on vite, so a vite major on its own cannot install.
       vitest:
-        patterns: ['vitest', '@vitest/*', 'playwright', '@stryker-mutator/*']
+        patterns: ['vitest', '@vitest/*', 'playwright', '@stryker-mutator/*', 'vite']
       # Everything else dev, minor and patch only, so dev majors arrive alone
       dev-tooling:
         dependency-type: development
