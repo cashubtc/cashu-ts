@@ -85,7 +85,7 @@
   "author": "gandlaf21",
   "license": "MIT OR Apache-2.0",
   "devDependencies": {
-    "@commitlint/cli": "^20.5.3",
+    "@commitlint/cli": "^21.2.2",
     "@commitlint/config-conventional": "^20.5.3",
     "@eslint/js": "^9.39.4",
     "@microsoft/api-extractor": "^7.58.7",
