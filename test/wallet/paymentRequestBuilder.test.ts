@@ -183,6 +183,22 @@ describe('PaymentRequestBuilder', () => {
     ).toThrow(/no permitted request encoding/i);
   });
 
+  test('omitted names why an encoding was dropped, and clears on the next lock()', () => {
+    const b = new PaymentRequestBuilder();
+    expect(b.omitted).toEqual({});
+    b.lock({ mainKeys: [PUBKEY], blindKeys: true });
+    expect(b.build().nutroot?.receiverKey).toBe(PUBKEY);
+    expect(b.build().nut10).toBeUndefined();
+    expect(b.omitted.nut10).toMatch(/P2BK/);
+    expect(b.omitted.nutroot).toBeUndefined();
+    b.lock({ mainKeys: [PUBKEY] });
+    expect(b.omitted).toEqual({});
+    // A NUT-11 lock is disclosed by nature, so disclosure keeps the legacy encoding.
+    b.lock({ mainKeys: [PUBKEY], disclosure: true });
+    expect(b.build().nut10?.data).toBe(PUBKEY);
+    expect(b.omitted).toEqual({});
+  });
+
   test('legacy: false generates the current spec alone', () => {
     const pr = new PaymentRequestBuilder().lock({ mainKeys: [PUBKEY] }, { legacy: false }).build();
     expect(pr.nutroot?.receiverKey).toBe(PUBKEY);

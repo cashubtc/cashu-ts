@@ -1903,6 +1903,10 @@ export class PaymentRequestBuilder {
     }): this;
     mintsPreferred(preferred?: boolean): this;
     nut10(option: NUT10Option): this;
+    get omitted(): Readonly<{
+        nut10?: string;
+        nutroot?: string;
+    }>;
     requestNutroot(lock: NutrootOption | LockOptions_2 | LockBuilder): this;
     // (undocumented)
     singleUse(single?: boolean): this;

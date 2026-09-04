@@ -591,6 +591,18 @@ export class PaymentRequestBuilder {
   private _transports: PaymentRequestTransport[] = [];
   private _nut10?: NUT10Option;
   private _nutroot?: NutrootOption;
+  private _omitted: { nut10?: string; nutroot?: string } = {};
+
+  /**
+   * Why the last `lock()` left an encoding out, per encoding; empty when nothing was dropped.
+   *
+   * @remarks
+   * Lets a caller tell a deliberate omission (eg no `nut10` for blinded keys or disclosure) from a
+   * bug, and show the reason. Reset by the next `lock()`.
+   */
+  get omitted(): Readonly<{ nut10?: string; nutroot?: string }> {
+    return { ...this._omitted };
+  }
   private _methods: Array<{ method: string; fee?: AmountLike }> = [];
 
   /**
@@ -724,27 +736,31 @@ export class PaymentRequestBuilder {
    */
   lock(lock: LockOptions | LockBuilder | P2PKOptions, opts?: { legacy?: boolean }): this {
     const semantic = asLockOptions(lock);
+    this._omitted = {};
     if (!semantic) {
       this._nut10 = p2pkOptionsToPRNut10(lock as P2PKOptions);
       return this;
     }
-    const reasons: string[] = [];
-    const tryEncode = <T>(encode: () => T): T | undefined => {
+    const omitted: { nut10?: string; nutroot?: string } = {};
+    const tryEncode = <T>(key: keyof typeof omitted, encode: () => T): T | undefined => {
       try {
         return encode();
       } catch (e) {
-        reasons.push(e instanceof Error ? e.message : String(e));
+        omitted[key] = e instanceof Error ? e.message : String(e);
         return undefined;
       }
     };
     const nut10 =
       opts?.legacy === false
         ? undefined
-        : tryEncode(() => p2pkOptionsToPRNut10(lockToP2PKOptions(semantic)));
-    const nutroot = tryEncode(() => encodeNutrootRequest(semantic));
+        : tryEncode('nut10', () => p2pkOptionsToPRNut10(lockToP2PKOptions(semantic)));
+    const nutroot = tryEncode('nutroot', () => encodeNutrootRequest(semantic));
     if (!nut10 && !nutroot) {
-      throw new CTSError(`lock fits no permitted request encoding: ${reasons.join('; ')}`);
+      throw new CTSError(
+        `lock fits no permitted request encoding: ${Object.values(omitted).join('; ')}`,
+      );
     }
+    this._omitted = omitted;
     this._nut10 = nut10;
     this._nutroot = undefined;
     if (nutroot) this.requestNutroot(nutroot);
