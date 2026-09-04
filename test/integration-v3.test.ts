@@ -285,6 +285,11 @@ describeV3('M2 roundtrip', () => {
       const restoredProofs = restored.proofs;
       expect(restoredProofs.length).toBeGreaterThan(0);
       expect(restoredProofs.every((p) => /^0[23][0-9a-f]{64}$/.test(p.secret))).toBe(true);
+      // Restore re-derives each key: the proofs are spendable without their original spend info.
+      for (const p of restoredProofs) {
+        expect(p.spend_info?.k).toMatch(/^[0-9a-f]{64}$/);
+        expect(restoreWallet.spendOptions(p).spendable).toBe(true);
+      }
       // Every keep-side proof is recovered from seed and still unspent (the melt may leave
       // send-side proofs pending under the fakewallet's delayed external payment).
       const restoredSecrets = new Set(restoredProofs.map((p) => p.secret));

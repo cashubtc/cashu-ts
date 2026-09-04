@@ -30,6 +30,7 @@ import {
   type G1Point,
   type G2Point,
   type P2PKOptions,
+  type DerivedSecretAndBlindingFactor,
 } from '../crypto';
 import { deriveReceiverKeyedSecret, type ParsedNutrootOption } from '../crypto/nutroot';
 import { numberToHexPadded64, splitAmount } from '../utils';
@@ -114,10 +115,9 @@ export class OutputData implements OutputDataLike {
    * Key behind a randomly generated v3 point secret.
    *
    * @remarks
-   * Only set by {@link OutputData.createSingleRandomData} on v3 keysets, where the secret is a
-   * pubkey and its key signs the spend witness. The key travels to the proof as `spendInfo.k`
-   * (mirrored by the wallet when a custom factory sets only this field); seeded wallets re-derive
-   * instead (NUT-13).
+   * Set on v3 keysets by random and deterministic creation alike: the secret is a pubkey and its
+   * key signs the spend witness. The key travels to the proof as `spendInfo.k` (mirrored by the
+   * wallet when a custom factory sets only this field).
    */
   secretKey?: Uint8Array;
   /**
@@ -573,7 +573,7 @@ export class OutputData implements OutputDataLike {
 function createSingleDeterministicDataFromBytes(
   amount: AmountLike,
   keysetId: string,
-  derived: { blindingFactor: Uint8Array; secret: Uint8Array },
+  derived: DerivedSecretAndBlindingFactor,
 ): OutputData {
   const amountValue = Amount.from(amount);
   const secretBytesAsHex = bytesToHex(derived.secret);
@@ -582,10 +582,15 @@ function createSingleDeterministicDataFromBytes(
   // for BIP32-style retry logic (caller increments counter and retries).
   const deterministicR = bytesToNumberBE(derived.blindingFactor);
   const { r, B_ } = blindMessageForKeyset(utf8SecretBytes, keysetId, deterministicR);
+  // A v3 secret is a pubkey; its key travels with the proof so a spend can sign (NUT-10).
+  const secretKey = derived.secretKey;
   return new OutputData(
     new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
     r,
     utf8SecretBytes,
+    undefined,
+    secretKey,
+    secretKey && { k: bytesToHex(secretKey) },
   );
 }
 

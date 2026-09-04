@@ -7,6 +7,7 @@ import { describe, expect, test } from 'vitest';
 import {
   blindMessageBls,
   createBlindSignatureBls,
+  deriveSecretAndBlindingFactor,
   pointFromHexG1,
   verifyUnblindedSignatureBls,
 } from '../../src/crypto';
@@ -151,6 +152,28 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
     const C = pointFromHexG1(proof.C);
     const secret = new TextEncoder().encode(proof.secret);
     expect(verifyUnblindedSignatureBls(G2PubKeys['4'], C, secret)).toBe(true);
+  });
+
+  test('deterministic v3 outputs carry their derived key as spend info', () => {
+    const seed = hexToBytes('22'.repeat(32));
+    const outputs = OutputData.createDeterministicData(7, seed, 5, keyset);
+    expect(outputs).toHaveLength(3);
+    outputs.forEach((out, i) => {
+      const derived = deriveSecretAndBlindingFactor(seed, keyset.id, 5 + i);
+      const secretHex = new TextDecoder().decode(out.secret);
+      expect(out.secretKey).toEqual(derived.secretKey);
+      expect(bytesToHex(secp256k1.getPublicKey(out.secretKey as Uint8Array, true))).toBe(secretHex);
+      expect(out.spendInfo).toEqual({ k: bytesToHex(derived.secretKey as Uint8Array) });
+      const proof = out.toProof(signWithMint(out, privKeys, keyset.id), keyset);
+      expect(proof.spend_info).toEqual(out.spendInfo);
+    });
+  });
+
+  test('deterministic secp outputs carry no key or spend info', () => {
+    const seed = hexToBytes('22'.repeat(32));
+    const out = OutputData.createSingleDeterministicData(1, seed, 0, `01${'ab'.repeat(32)}`);
+    expect(out.secretKey).toBeUndefined();
+    expect(out.spendInfo).toBeUndefined();
   });
 
   test('toProof rejects a forged C_ via inline pairing check', () => {
