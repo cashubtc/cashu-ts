@@ -91,7 +91,7 @@
     "@microsoft/api-extractor": "^7.58.7",
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/vitest-runner": "^10.0.0",
-    "@types/node": "^25.6.0",
+    "@types/node": "^26.2.0",
     "@types/node-fetch": "^2.6.4",
     "@types/ws": "^8.5.10",
     "@vitest/browser": "^4.1.9",
