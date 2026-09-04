@@ -55,13 +55,25 @@ function fixture() {
   return { alice, leaves, preview, proof };
 }
 
-// signPackage trial-derives every blinded slot for the signer's key (NUTROOT_MAX_SLOTS), by design:
-// ~0.5s per call locally, several seconds on a shared CI runner, over vitest's 5s node default.
-describe('ScriptPath signing packages', { timeout: 30_000 }, () => {
-  test('signs a blinded key at its absolute slot in a later leaf', () => {
+// Without a usable slot hint, signPackage trial-derives every blinded slot for the signer's key
+// (NUTROOT_MAX_SLOTS): tenths of a second locally, seconds on a shared CI runner. Tests that take
+// that path get room beyond vitest's 5s default.
+const SCAN_TIMEOUT = 30_000;
+
+describe('ScriptPath signing packages', () => {
+  test('signs a blinded key at its hinted absolute slot in a later leaf', () => {
     const { alice, preview, proof } = fixture();
     const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]);
+    // Leaf 0 holds slot 1, so leaf 1's single key sits at slot 2.
+    expect(pkg.spends[0].slots).toEqual([2]);
     expect(ScriptPath.signPackage(pkg, alice).spends[0].signatures).toHaveLength(1);
+  });
+
+  test('a wrong slot hint still signs through the full scan', { timeout: SCAN_TIMEOUT }, () => {
+    const { alice, preview, proof } = fixture();
+    const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]);
+    const misled = { ...pkg, spends: [{ ...pkg.spends[0], slots: [7] }] };
+    expect(ScriptPath.signPackage(misled, alice).spends[0].signatures).toHaveLength(1);
   });
 
   test('refuses to sign a leaf that is not committed by the input secret', () => {
@@ -126,7 +138,7 @@ describe('ScriptPath signing packages', { timeout: 30_000 }, () => {
     ).toBe(true);
   });
 
-  test('signing with a key the tree does not name adds nothing', () => {
+  test('signing with a key the tree does not name adds nothing', { timeout: SCAN_TIMEOUT }, () => {
     const { preview, proof } = fixture();
     const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 0 }]);
     // Leaf 0 names pub(3) verbatim; sk(9) appears nowhere in the tree.
@@ -203,6 +215,13 @@ describe('ScriptPath signing packages', { timeout: 30_000 }, () => {
         reserialize((p) => ({ ...p, spends: [{ ...p.spends[0], signatures: 'sig' }] })),
       ),
     ).toThrow(/signatures must be an array/);
+    for (const slots of [[], [1, 2], [0], [121], [1.5], 'x']) {
+      expect(() =>
+        ScriptPath.deserializePackage(
+          reserialize((p) => ({ ...p, spends: [{ ...p.spends[0], slots }] })),
+        ),
+      ).toThrow(/slot hints/);
+    }
   });
 
   test('merge refuses a package whose transaction moved, and the wrong package type', () => {

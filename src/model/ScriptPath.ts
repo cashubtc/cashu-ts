@@ -6,6 +6,7 @@ import { getPubKeyFromPrivKey } from '../crypto/curve_secp';
 import { isBlsKeyset } from '../crypto/curves';
 import {
   buildScriptPathWitness,
+  enumerateLeafKeySlots,
   NUTROOT_MAX_SLOTS,
   parseNutrootLeaf,
   selectRequiredLeafSignatures,
@@ -57,6 +58,11 @@ export type ScriptPathSpendRequest = {
    * derive it. Absent for bearer and script-only proofs, whose leaf keys are verbatim.
    */
   E?: string;
+  /**
+   * Absolute blinding slot of each leaf key, aligned with the leaf's `keys` (NUT-28). A hint only:
+   * the signer derives these first and falls back to the full slot scan if none match.
+   */
+  slots?: number[];
   /**
    * Preimage for a hashlock leaf, hex.
    */
@@ -167,6 +173,13 @@ function buildPackage(
       throw new CTSError('Script path package needs the internal key from the proof spend info');
     }
     const leafHashes = tree.map((leaf) => nutrootLeafHash(hexToBytes(leaf)));
+    const E = proof.spend_info?.E;
+    // The package carries one leaf, so only the builder, holding the whole tree, knows the slots.
+    const slots = E
+      ? enumerateLeafKeySlots(tree.map((leaf) => parseNutrootLeaf(hexToBytes(leaf))))
+          .filter((s) => s.leafIndex === plan.leafIndex)
+          .map((s) => s.slot)
+      : undefined;
     return {
       secret: plan.secret,
       leaf: tree[plan.leafIndex],
@@ -174,7 +187,7 @@ function buildPackage(
         K,
         path: nutrootMerklePath(leafHashes, plan.leafIndex).map((h) => bytesToHex(h)),
       },
-      ...(proof.spend_info?.E && { E: proof.spend_info.E }),
+      ...(E && { E, slots }),
       ...(plan.preimage !== undefined && { preimage: plan.preimage }),
       signatures: [],
     };
@@ -304,8 +317,9 @@ function assertValidPackage(pkg: ScriptPathSigningPackage): void {
       throw new CTSError('Signing package spend must name one unique transaction input');
     }
     spent.add(spend.secret);
+    let leaf;
     try {
-      parseNutrootLeaf(hexToBytes(spend.leaf));
+      leaf = parseNutrootLeaf(hexToBytes(spend.leaf));
       if (
         !spend.control ||
         !Array.isArray(spend.control.path) ||
@@ -324,6 +338,17 @@ function assertValidPackage(pkg: ScriptPathSigningPackage): void {
     if (!Array.isArray(spend.signatures)) {
       throw new CTSError('Signing package signatures must be an array');
     }
+    if (spend.slots !== undefined) {
+      const isSlot = (s: unknown) =>
+        Number.isInteger(s) && (s as number) >= 1 && (s as number) < NUTROOT_MAX_SLOTS;
+      const oneSlotPerKey =
+        Array.isArray(spend.slots) &&
+        spend.slots.length === leaf.keys.length &&
+        spend.slots.every(isSlot);
+      if (!oneSlotPerKey) {
+        throw new CTSError('Signing package slot hints must name one valid slot per leaf key');
+      }
+    }
   }
 }
 
@@ -336,15 +361,14 @@ function signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPath
     const keys: string[] = [];
     if (leaf.keys.includes(pub)) keys.push(privkey.toLowerCase());
     if (spend.E !== undefined) {
-      // Match by value over the whole slot space: the true slot count is not recoverable from a
-      // single spend (the package carries one leaf, not the tree), and the transmitted leaf order
-      // is not committed by the root, so any narrower, position-derived search could decline a
-      // leaf this signer can in fact satisfy.
-      const blinded = slotKeysByBlindedPubkey(spend.E, privkey, NUTROOT_MAX_SLOTS - 1);
-      for (const key of leaf.keys) {
-        const candidate = blinded.get(key);
-        if (candidate) keys.push(candidate.secretKey);
-      }
+      // The slot hint is trust-free: a wrong slot simply fails to match, and the fallback matches
+      // by value over the whole slot space, which no leaf order or tree shape can defeat.
+      const matches = (slots: number | number[]) => {
+        const blinded = slotKeysByBlindedPubkey(spend.E!, privkey, slots);
+        return leaf.keys.flatMap((key) => blinded.get(key)?.secretKey ?? []);
+      };
+      const hinted = spend.slots ? matches(spend.slots) : [];
+      keys.push(...(hinted.length > 0 ? hinted : matches(NUTROOT_MAX_SLOTS - 1)));
     }
     if (keys.length === 0) return spend;
     const digest = digests.get(spend.secret);

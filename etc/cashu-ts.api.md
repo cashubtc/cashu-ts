@@ -2205,6 +2205,7 @@ export type ScriptPathSpendRequest = {
         path: string[];
     };
     E?: string;
+    slots?: number[];
     preimage?: string;
     signatures: string[];
 };

@@ -66,9 +66,10 @@ export const NUTROOT_MAX_TREE_LEAVES = 2 ** NUTROOT_MAX_TREE_DEPTH;
 export const NUTROOT_MAX_LEAF_TIME = Number.MAX_SAFE_INTEGER;
 
 /**
- * Enumerated blinding slots per secret (NUT-28): exactly one index byte.
+ * Occupied blinding slots per secret: slot 0 plus NUT-10's 120 leaf-key cap (8 leaves of 15 keys),
+ * well inside NUT-28's one index byte. Bounds every receiver-side slot scan.
  */
-export const NUTROOT_MAX_SLOTS = 256;
+export const NUTROOT_MAX_SLOTS = 121;
 
 /**
  * A parsed declarative leaf (version 0x00).
@@ -1056,15 +1057,17 @@ function assignmentExists(candidates: number[][], requestedCount: number): boole
  * sits off the slot its owner expected. What reordering cannot change is which slots are in use,
  * since that is just the count of key occurrences. Matching by value against the whole slot space
  * is therefore order-independent, and costs the same as checking one slot per position: one
- * derivation per slot either way.
+ * derivation per slot either way. `slots` is a count (1..n) or an explicit slot list.
  */
 export function slotKeysByBlindedPubkey(
   EHex: string,
   privHex: string,
-  slotCount: number,
+  slots: number | Iterable<number>,
 ): Map<string, { slot: number; secretKey: string }> {
   const bySlot = new Map<string, { slot: number; secretKey: string }>();
-  for (let slot = 1; slot <= slotCount; slot++) {
+  const candidatesSlots =
+    typeof slots === 'number' ? Array.from({ length: slots }, (_, i) => i + 1) : slots;
+  for (const slot of candidatesSlots) {
     let candidates: [string, string];
     try {
       candidates = deriveP2BKSlotSecretKeyCandidates(EHex, privHex, slot);

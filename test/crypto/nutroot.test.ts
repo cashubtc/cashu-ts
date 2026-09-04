@@ -986,17 +986,17 @@ describe('leaf-key blinding: the positional slot map (NUT-28)', () => {
     ]);
   });
 
-  test('slot cap keeps the index inside one byte', () => {
-    const keys = Array.from({ length: 255 }, (_, i) =>
+  test('slot cap is NUT-10 tree capacity plus the internal key', () => {
+    const keys = Array.from({ length: 120 }, (_, i) =>
       bytesToHex(secp256k1.getPublicKey(numberToBytesBE(BigInt(i + 2), 32), true)),
     );
-    expect(enumerateLeafKeySlots([{ type: 'threshold', n: 1, keys }])).toHaveLength(255);
+    expect(enumerateLeafKeySlots([{ type: 'threshold', n: 1, keys }])).toHaveLength(120);
     expect(() =>
       enumerateLeafKeySlots([
         { type: 'threshold', n: 1, keys },
         { type: 'threshold', n: 1, keys: [carolPub] },
       ]),
-    ).toThrow(/256 slots/);
+    ).toThrow(/121 slots/);
   });
 
   test('sender blinds only the tagged keys, at their own slot', () => {
