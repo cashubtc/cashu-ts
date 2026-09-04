@@ -1,5 +1,18 @@
 # Changelog
 
+## [4.10.1](https://github.com/cashubtc/cashu-ts/compare/v4.10.0...v4.10.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* **deps:** move noble and scure to 2.4.0 ([#1069](https://github.com/cashubtc/cashu-ts/issues/1069)) ([115a650](https://github.com/cashubtc/cashu-ts/commit/115a650b7e9fb951b1c27a0fedcf787dece20160))
+* **nut18:** encode payment requests url-safe ([#1031](https://github.com/cashubtc/cashu-ts/issues/1031)) ([ab5c9df](https://github.com/cashubtc/cashu-ts/commit/ab5c9df550f92bb456e685074ba612068ae2fc2d))
+* **nut20:** match quote lock keys by x coordinate ([#1045](https://github.com/cashubtc/cashu-ts/issues/1045)) ([4946ea9](https://github.com/cashubtc/cashu-ts/commit/4946ea9624d77b8109b4fbccde9ed68b2f5cd835))
+* **transport:** fail rather than follow redirects on requests with a body ([#1041](https://github.com/cashubtc/cashu-ts/issues/1041)) ([40b974c](https://github.com/cashubtc/cashu-ts/commit/40b974c56b8e3f57d76ce98498e679d5e4350863))
+* **utils:** harden keyset ID handling in the binary token encoder ([#1037](https://github.com/cashubtc/cashu-ts/issues/1037)) ([cf37b49](https://github.com/cashubtc/cashu-ts/commit/cf37b49ca777c821ef2a5c7d93f47553f310f71e))
+* **utils:** index the reviver holder by its actual shape ([#1025](https://github.com/cashubtc/cashu-ts/issues/1025)) ([b7a13b4](https://github.com/cashubtc/cashu-ts/commit/b7a13b4841315baf85fadf06bdbca208c9dea34a))
+* **wallet:** omit unselected proofs from serialized swap previews ([#1043](https://github.com/cashubtc/cashu-ts/issues/1043)) ([698f0f0](https://github.com/cashubtc/cashu-ts/commit/698f0f0051e295a7a4b5582ef899f7ad07542a74))
+
 ## [4.10.0](https://github.com/cashubtc/cashu-ts/compare/v4.9.0...v4.10.0) (2026-08-27)
 
 
