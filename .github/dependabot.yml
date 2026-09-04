@@ -12,12 +12,12 @@ updates:
     # ranges, which would let a noble major claim support for two incompatible
     # majors at once
     versioning-strategy: increase-if-necessary
-    # Runtime deps ship to consumers, so their bumps go in the changelog under
-    # Dependencies (see changelog-sections in release-please-config.json).
-    # Dev bumps keep the chore prefix release-please ignores.
+    # Runtime deps ship to consumers, so a bump changes the published package
+    # and earns a patch. fix is the type release-please acts on; dev bumps keep
+    # the chore prefix it ignores.
     commit-message:
-      prefix: deps
-      prefix-development: chore(deps-dev)
+      prefix: fix(deps)
+      prefix-development: chore(deps)
     cooldown:
       default-days: 7
       semver-major-days: 14
@@ -61,8 +61,8 @@ updates:
     groups:
       github-actions:
         patterns: ['*']
-    # Pinned, not inferred: once deps: commits exist in main, inference could
-    # put CI bumps in the consumer-facing Dependencies section.
+    # Pinned, not inferred: inference could promote a CI bump into a releasable
+    # fix(deps) commit.
     commit-message:
       prefix: chore(deps)
 
@@ -74,7 +74,7 @@ updates:
     groups:
       github-actions:
         patterns: ['*']
-    # Pinned, not inferred: once deps: commits exist in main, inference could
-    # put CI bumps in the consumer-facing Dependencies section.
+    # Pinned, not inferred: inference could promote a CI bump into a releasable
+    # fix(deps) commit.
     commit-message:
       prefix: chore(deps)
