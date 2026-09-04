@@ -182,3 +182,46 @@ export function isMintOperationError(e: unknown): e is MintOperationError {
     (e instanceof Error && e.name === 'MintOperationError' && 'code' in e)
   );
 }
+
+/**
+ * A JSON-RPC error frame received over the NUT-17 WebSocket.
+ *
+ * @remarks
+ * Carries the protocol error code, which the subscription callbacks cannot receive otherwise: they
+ * are typed `(e: Error) => void`. Relevant codes are 30001 (clear auth required), 30002 (clear auth
+ * failed), 31001 (blind auth required) and 31002 (blind auth failed). A 31001 on a subscribe means
+ * the connection was never authenticated. See [error
+ * codes](https://github.com/cashubtc/nuts/blob/main/error_codes.md).
+ */
+export class WsRpcError extends CTSError {
+  readonly code: number;
+
+  constructor(code: number, message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.code = code;
+    this.name = 'WsRpcError';
+    Object.setPrototypeOf(this, WsRpcError.prototype);
+  }
+}
+
+/**
+ * Thrown when authenticating a NUT-17 WebSocket connection fails.
+ *
+ * @remarks
+ * `terminal` means this connection has failed to authenticate too many times in a row and will no
+ * longer try: further `ensureAuthenticated()` calls reject immediately without spending another
+ * token. That bound exists because a blind auth token is spent the moment it leaves the pool, so an
+ * unbounded reconnect loop would drain the pool. Recovery requires a new connection.
+ */
+export class WsAuthError extends CTSError {
+  readonly code?: number;
+  readonly terminal: boolean;
+
+  constructor(message: string, options?: { code?: number; terminal?: boolean; cause?: unknown }) {
+    super(message, options);
+    this.code = options?.code;
+    this.terminal = options?.terminal ?? false;
+    this.name = 'WsAuthError';
+    Object.setPrototypeOf(this, WsAuthError.prototype);
+  }
+}

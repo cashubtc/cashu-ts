@@ -1,5 +1,5 @@
 import { type Logger, NULL_LOGGER } from '../logger';
-import { CTSError } from '../model/Errors';
+import { CTSError, WsAuthError, WsRpcError } from '../model/Errors';
 import { type JsonRpcMessage, type JsonRpcReqParams, type RpcSubId } from '../model/types';
 import { generateUuidV7 } from '../utils/uuid.js';
 
@@ -45,12 +45,21 @@ export class MessageQueue {
 
 // Internal interface for RPC listeners
 interface RpcListener {
-  callback: () => void;
+  callback: (result: unknown) => void;
   errorCallback: (e: Error) => void;
 }
 
 type OnOpenSuccess = () => void;
 type OnOpenError = (err: Error) => void;
+
+/**
+ * Consecutive failed `authenticate` attempts tolerated before a connection stops trying.
+ *
+ * @remarks
+ * A blind auth token is spent the moment it leaves the pool, so a mint that keeps rejecting would
+ * drain the wallet one reconnect at a time without this bound.
+ */
+const MAX_CONSECUTIVE_AUTH_FAILURES = 3;
 
 export class WSConnection {
   public readonly url: URL;
@@ -64,12 +73,33 @@ export class WSConnection {
   private rpcId = 0;
   private _logger: Logger;
   private onCloseCallbacks: Array<(e: CloseEvent) => void> = [];
+  private readonly getAuthToken?: () => Promise<string | undefined>;
+  /**
+   * Keyed on the socket so a reconnect re-authenticates with no teardown bookkeeping: a new socket
+   * is a different object, so the cache misses.
+   */
+  private authState?: { socket: WebSocket; promise: Promise<void> };
+  private consecutiveAuthFailures = 0;
+  /**
+   * Fails an in-flight `authenticate` when the socket closes.
+   *
+   * @remarks
+   * A clean close clears the pending RPC listeners without failing them, so without this the
+   * attempt would wait out its whole timeout instead of failing at once.
+   */
+  private abortPendingAuth?: (e: Error) => void;
 
-  constructor(url: string, logger?: Logger) {
+  /**
+   * @param getAuthToken Supplies the NUT-21/22 token for the in-band `authenticate` command. It
+   *   must return `undefined` when the mint does not protect `/v1/ws`, decided from mint info
+   *   without consuming a token, so a connection that never subscribes spends nothing.
+   */
+  constructor(url: string, logger?: Logger, getAuthToken?: () => Promise<string | undefined>) {
     this._WS = getWebSocketImpl();
     this.url = new URL(url);
     this.messageQueue = new MessageQueue();
     this._logger = logger ?? NULL_LOGGER;
+    this.getAuthToken = getAuthToken;
   }
 
   setLogger(logger: Logger) {
@@ -186,6 +216,10 @@ export class WSConnection {
           this.rpcListeners = {};
         }
 
+        this.abortPendingAuth?.(
+          new CTSError(`WebSocket closed while authenticating (code ${code}${reason})`),
+        );
+
         this.onCloseCallbacks.forEach((cb) => cb(e));
       };
     });
@@ -239,8 +273,8 @@ export class WSConnection {
   }
 
   private sendRpcMessage(
-    method: 'subscribe' | 'unsubscribe',
-    params: Partial<JsonRpcReqParams>,
+    method: 'subscribe' | 'unsubscribe' | 'authenticate',
+    params: Partial<JsonRpcReqParams> | { token: string },
     id: number,
   ): void {
     if (this.ws?.readyState !== this._WS.OPEN) {
@@ -272,7 +306,7 @@ export class WSConnection {
   }
 
   private addRpcListener(
-    callback: () => void,
+    callback: (result: unknown) => void,
     errorCallback: (e: Error) => void,
     id: Exclude<RpcSubId, null>,
   ) {
@@ -302,6 +336,133 @@ export class WSConnection {
     }
   }
 
+  /**
+   * Authenticates this connection in-band (NUT-22) when the mint protects `/v1/ws`, once per
+   * socket.
+   *
+   * @remarks
+   * Call after {@link WSConnection.ensureConnection} and before the first subscription: the mint
+   * answers a subscribe on an unauthenticated connection with error 31001, and this waits for the
+   * mint's reply so a rejected token fails here rather than later, once it is already spent.
+   * Concurrent callers share one attempt, and a rejection stays cached for the socket, so a single
+   * token covers the connection for its lifetime. A no-op when no token supplier was given.
+   * @param timeoutMs How long to wait for the mint's reply.
+   */
+  async ensureAuthenticated(timeoutMs = 10_000): Promise<void> {
+    if (!this.getAuthToken) return;
+
+    const timeout = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 10_000;
+
+    const socket = this.ws;
+    if (socket?.readyState !== this._WS.OPEN) {
+      this._logger.error('Attempted ensureAuthenticated, but socket was not open');
+      throw new CTSError('Socket not open');
+    }
+
+    if (this.authState?.socket === socket) return this.authState.promise;
+
+    const promise = this.authenticate(timeout);
+    this.authState = { socket, promise };
+    return promise;
+  }
+
+  /**
+   * Fetches a token and authenticates, counting the attempt against the failure bound.
+   *
+   * @remarks
+   * A supplier failure is not counted: it throws before a token leaves the pool, so nothing was
+   * spent and retrying cannot drain it. Everything after that is counted once, in a single place,
+   * because `sendRpcMessage` already fails pending RPCs before rethrowing and a narrower catch
+   * would count a send failure twice.
+   */
+  private async authenticate(timeoutMs: number): Promise<void> {
+    if (this.consecutiveAuthFailures >= MAX_CONSECUTIVE_AUTH_FAILURES) {
+      throw new WsAuthError(
+        `WebSocket authentication gave up after ${MAX_CONSECUTIVE_AUTH_FAILURES} consecutive failures`,
+        { terminal: true },
+      );
+    }
+
+    let token: string | undefined;
+    try {
+      token = await this.getAuthToken!();
+    } catch (e) {
+      throw new WsAuthError('Could not obtain a WebSocket auth token', { cause: e });
+    }
+
+    if (!token) return;
+
+    try {
+      await this.sendAuthenticate(token, timeoutMs);
+    } catch (e) {
+      this.consecutiveAuthFailures++;
+      throw new WsAuthError('WebSocket authentication failed', {
+        code: e instanceof WsRpcError ? e.code : undefined,
+        terminal: this.consecutiveAuthFailures >= MAX_CONSECUTIVE_AUTH_FAILURES,
+        cause: e,
+      });
+    }
+
+    this.consecutiveAuthFailures = 0;
+    this._logger.debug('WebSocket connection authenticated');
+  }
+
+  /**
+   * Sends the `authenticate` command and resolves on the mint's answer.
+   *
+   * @remarks
+   * The timeout is required for correctness, not just latency: a clean close mid-authenticate
+   * clears the pending RPCs without failing them, which would leave this pending forever.
+   */
+  private sendAuthenticate(token: string, timeoutMs: number): Promise<void> {
+    const id = this.rpcId;
+    this.rpcId++;
+
+    return new Promise<void>((resolve, reject) => {
+      let settled = false;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+
+      const settle = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
+        this.abortPendingAuth = undefined;
+        fn();
+      };
+
+      timer = setTimeout(() => {
+        this.removeRpcListener(id);
+        settle(() => reject(new CTSError(`WebSocket authenticate timeout after ${timeoutMs}ms`)));
+      }, timeoutMs);
+
+      this.abortPendingAuth = (e: Error) => {
+        this.removeRpcListener(id);
+        settle(() => reject(e));
+      };
+
+      this.addRpcListener(
+        (result) => {
+          if (isAuthenticateResult(result)) {
+            settle(resolve);
+            return;
+          }
+          settle(() =>
+            reject(new CTSError('Mint answered authenticate with an unexpected result')),
+          );
+        },
+        (e: Error) => settle(() => reject(e)),
+        id,
+      );
+
+      try {
+        this.sendRpcMessage('authenticate', { token }, id);
+      } catch (e) {
+        this.removeRpcListener(id);
+        settle(() => reject(e instanceof Error ? e : new CTSError(String(e), { cause: e })));
+      }
+    });
+  }
+
   private handleNextMessage() {
     if (this.messageQueue.size === 0) {
       if (this.handlingInterval) {
@@ -318,12 +479,14 @@ export class WSConnection {
 
       if ('result' in parsed && parsed.id != undefined) {
         if (this.rpcListeners[parsed.id]) {
-          this.rpcListeners[parsed.id].callback();
+          this.rpcListeners[parsed.id].callback(parsed.result);
           this.removeRpcListener(parsed.id);
         }
       } else if ('error' in parsed && parsed.id != undefined) {
         if (this.rpcListeners[parsed.id]) {
-          this.rpcListeners[parsed.id].errorCallback(new CTSError(parsed.error.message));
+          this.rpcListeners[parsed.id].errorCallback(
+            new WsRpcError(parsed.error.code, parsed.error.message),
+          );
           this.removeRpcListener(parsed.id);
         }
       } else if ('method' in parsed) {
@@ -440,4 +603,17 @@ export class WSConnection {
   onClose(callback: (e: CloseEvent) => void) {
     this.onCloseCallbacks.push(callback);
   }
+}
+
+/**
+ * True for a NUT-22 `authenticate` result.
+ *
+ * @remarks
+ * A subscribe result also carries `status: "OK"`, so the absence of `subId` is what tells the two
+ * apart. Seeing one on an authenticate id means the mint answered the wrong request.
+ */
+function isAuthenticateResult(result: unknown): boolean {
+  if (typeof result !== 'object' || result === null) return false;
+  if ('subId' in result) return false;
+  return (result as { status?: unknown }).status === 'OK';
 }

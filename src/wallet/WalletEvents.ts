@@ -10,6 +10,7 @@ import type {
   MintQuoteBolt11Response,
 } from '../model/types';
 import type { KeyChainCache } from '../model/types/keyset';
+import type { WSConnection } from '../transport';
 
 import { type OperationCounters } from './CounterSource';
 import type { Wallet } from './Wallet';
@@ -71,6 +72,21 @@ export class WalletEvents {
 
   // Callbacks registered for Keychain Updated events
   private keychainUpdatedHandlers = new Set<(payload: { cache: KeyChainCache }) => void>();
+
+  /**
+   * Returns the mint's WebSocket, connected and authenticated, ready to subscribe on.
+   *
+   * @remarks
+   * Authentication is awaited here rather than at connect time so a connection that never
+   * subscribes does not spend a blind auth token.
+   */
+  private async connectedSocket(): Promise<WSConnection> {
+    await this.wallet.mint.connectWebSocket();
+    const ws = this.wallet.mint.webSocketConnection;
+    if (!ws) throw new CTSError('Failed to establish WebSocket connection.');
+    await ws.ensureAuthenticated();
+    return ws;
+  }
 
   // Binds an abort signal to each subscription canceller
   private withAbort(
@@ -240,9 +256,7 @@ export class WalletEvents {
     err: (e: Error) => void,
     opts?: SubscribeOpts,
   ): Promise<SubscriptionCanceller> {
-    await this.wallet.mint.connectWebSocket();
-    const ws = this.wallet.mint.webSocketConnection;
-    if (!ws) throw new CTSError('Failed to establish WebSocket connection.');
+    const ws = await this.connectedSocket();
 
     const uniq = Array.from(new Set(ids));
     const subId = ws.createSubscription({ kind: 'bolt11_mint_quote', filters: uniq }, cb, err);
@@ -288,9 +302,7 @@ export class WalletEvents {
     err: (e: Error) => void,
     opts?: SubscribeOpts,
   ): Promise<SubscriptionCanceller> {
-    await this.wallet.mint.connectWebSocket();
-    const ws = this.wallet.mint.webSocketConnection;
-    if (!ws) throw new CTSError('Failed to establish WebSocket connection.');
+    const ws = await this.connectedSocket();
 
     const uniq = Array.from(new Set(ids));
     const subId = ws.createSubscription({ kind: 'bolt11_melt_quote', filters: uniq }, cb, err);
@@ -341,9 +353,7 @@ export class WalletEvents {
     err: (e: Error) => void,
     opts?: SubscribeOpts,
   ): Promise<SubscriptionCanceller> {
-    await this.wallet.mint.connectWebSocket();
-    const ws = this.wallet.mint.webSocketConnection;
-    if (!ws) throw new CTSError('Failed to establish WebSocket connection.');
+    const ws = await this.connectedSocket();
 
     const enc = new TextEncoder();
     // Object.create(null) avoids prototype-key collisions: a mint sending

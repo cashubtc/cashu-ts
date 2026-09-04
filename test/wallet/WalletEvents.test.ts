@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { Amount } from '../../src';
+import { Amount, WsAuthError } from '../../src';
 import { hashToCurve, hashToCurveBls } from '../../src/crypto';
 import type { Proof } from '../../src/model/types';
 import type { KeyChainCache } from '../../src/model/types/keyset';
@@ -16,6 +16,8 @@ const flushMicrotasks = async (n = 2) => {
  * Mock WS that WalletEvents talks to.
  */
 class MockWS {
+  public ensureAuthenticated = vi.fn(async () => {});
+
   public createSubscription = vi.fn(
     (
       { kind, filters }: { kind: string; filters: string[] },
@@ -133,6 +135,47 @@ describe('WalletEvents', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
+  });
+
+  describe('websocket authentication', () => {
+    const subscribers = [
+      ['mintQuoteUpdates', () => events.mintQuoteUpdates(['a'], vi.fn(), vi.fn())],
+      ['meltQuoteUpdates', () => events.meltQuoteUpdates(['m1'], vi.fn(), vi.fn())],
+      [
+        'proofStateUpdates',
+        () =>
+          events.proofStateUpdates(
+            [{ amount: Amount.from(2), id: '00bd033559de27d0', secret: 's1', C: 'test' }],
+            vi.fn(),
+            vi.fn(),
+          ),
+      ],
+    ] as const;
+
+    it.each(subscribers)('%s authenticates before subscribing', async (_name, subscribe) => {
+      await subscribe();
+
+      const ws = mock.mint.webSocketConnection!;
+      expect(ws.ensureAuthenticated).toHaveBeenCalled();
+      expect(ws.ensureAuthenticated.mock.invocationCallOrder[0]).toBeLessThan(
+        ws.createSubscription.mock.invocationCallOrder[0],
+      );
+    });
+
+    it.each(subscribers)(
+      '%s surfaces an auth failure and creates no subscription',
+      async (_name, subscribe) => {
+        await events.mintQuoteUpdates(['seed'], vi.fn(), vi.fn());
+        const ws = mock.mint.webSocketConnection!;
+        const before = ws.createSubscription.mock.calls.length;
+        ws.ensureAuthenticated.mockRejectedValueOnce(
+          new WsAuthError('WebSocket authentication failed', { code: 31002 }),
+        );
+
+        await expect(subscribe()).rejects.toThrow(WsAuthError);
+        expect(ws.createSubscription.mock.calls.length).toBe(before);
+      },
+    );
   });
 
   describe('basic subscriptions', () => {
@@ -855,6 +898,7 @@ describe('WalletEvents', () => {
       subs.delete(id);
     });
     const ws = {
+      ensureAuthenticated: vi.fn(async () => {}),
       createSubscription,
       cancelSubscription,
       emitPaid: (quote: string) => {

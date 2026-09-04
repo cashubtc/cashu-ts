@@ -1,7 +1,7 @@
 import { type Client, Server, WebSocket } from 'mock-socket';
-import { vi, test, describe, expect, afterAll } from 'vitest';
+import { vi, test, describe, expect, afterAll, beforeEach, afterEach } from 'vitest';
 
-import { WSConnection, injectWebSocketImpl } from '../../src';
+import { WSConnection, injectWebSocketImpl, WsAuthError, WsRpcError } from '../../src';
 import type { Logger } from '../../src';
 
 injectWebSocketImpl(WebSocket);
@@ -1062,5 +1062,381 @@ describe('WSConnection – listener management', () => {
     } finally {
       injectWebSocketImpl(WebSocket);
     }
+  });
+});
+
+/**
+ * Deterministic socket for the authentication tests: nothing is sent over a real transport, so a
+ * test drives the mint's side frame by frame.
+ */
+class ScriptedWebSocket {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSING = 2;
+  static readonly CLOSED = 3;
+  static readonly instances: ScriptedWebSocket[] = [];
+  static failSend = false;
+
+  readyState = ScriptedWebSocket.CONNECTING;
+  onopen: (() => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  onclose: ((event: CloseEvent) => void) | null = null;
+  readonly sent: string[] = [];
+
+  constructor() {
+    ScriptedWebSocket.instances.push(this);
+  }
+
+  open() {
+    this.readyState = ScriptedWebSocket.OPEN;
+    this.onopen?.();
+  }
+
+  send(message: string) {
+    if (ScriptedWebSocket.failSend) throw new Error('send boom');
+    this.sent.push(message);
+  }
+
+  close() {
+    this.readyState = ScriptedWebSocket.CLOSING;
+  }
+
+  emitMessage(message: string) {
+    this.onmessage?.({ data: message } as MessageEvent);
+  }
+
+  emitClose(code = 1000, wasClean = true) {
+    this.readyState = ScriptedWebSocket.CLOSED;
+    this.onclose?.({ code, reason: '', wasClean } as CloseEvent);
+  }
+
+  get frames(): Array<{ method?: string; params?: Record<string, unknown>; id: number }> {
+    return this.sent.map((m) => JSON.parse(m));
+  }
+
+  /**
+   * Answers the pending request with a NUT-22 authenticate ack.
+   */
+  ackAuth(index = 0) {
+    this.emitMessage(
+      JSON.stringify({ jsonrpc: '2.0', result: { status: 'OK' }, id: this.frames[index].id }),
+    );
+  }
+
+  rejectAuth(code = 31002, message = 'Blind authentication failed', index = 0) {
+    this.emitMessage(
+      JSON.stringify({ jsonrpc: '2.0', error: { code, message }, id: this.frames[index].id }),
+    );
+  }
+}
+
+/**
+ * Opens a connection on a scripted socket, ready to authenticate.
+ */
+async function openScripted(getAuthToken?: () => Promise<string | undefined>) {
+  const conn = new WSConnection(fakeUrl, undefined, getAuthToken);
+  const connecting = conn.connect();
+  const socket = ScriptedWebSocket.instances[ScriptedWebSocket.instances.length - 1];
+  socket.open();
+  await connecting;
+  return { conn, socket };
+}
+
+// The message pump runs on a zero-delay interval, so a macrotask hop lets a queued frame land.
+const drain = () => new Promise((resolve) => setTimeout(resolve, 5));
+
+describe('WSConnection – in-band authentication', () => {
+  beforeEach(() => {
+    ScriptedWebSocket.instances.length = 0;
+    ScriptedWebSocket.failSend = false;
+    injectWebSocketImpl(ScriptedWebSocket as unknown as typeof WebSocket);
+  });
+
+  afterEach(() => {
+    injectWebSocketImpl(WebSocket);
+  });
+
+  test('sends the NUT-22 authenticate frame and resolves on the mint ack', async () => {
+    const { conn, socket } = await openScripted(async () => 'authAtoken');
+
+    const authenticated = conn.ensureAuthenticated();
+    await drain();
+
+    expect(socket.frames[0]).toEqual({
+      jsonrpc: '2.0',
+      method: 'authenticate',
+      params: { token: 'authAtoken' },
+      id: 0,
+    });
+
+    socket.ackAuth();
+    await expect(authenticated).resolves.toBeUndefined();
+
+    conn.createSubscription({ kind: 'bolt11_mint_quote', filters: [] }, vi.fn(), vi.fn());
+    expect(socket.frames[1].id).toBe(1);
+  });
+
+  test('is a no-op when no token supplier was given', async () => {
+    const { conn, socket } = await openScripted();
+
+    await expect(conn.ensureAuthenticated()).resolves.toBeUndefined();
+    expect(socket.sent).toHaveLength(0);
+  });
+
+  test('sends nothing when the mint does not protect the endpoint', async () => {
+    const getAuthToken = vi.fn(async () => undefined);
+    const { conn, socket } = await openScripted(getAuthToken);
+
+    await expect(conn.ensureAuthenticated()).resolves.toBeUndefined();
+    expect(socket.sent).toHaveLength(0);
+    expect(getAuthToken).toHaveBeenCalledTimes(1);
+  });
+
+  test('throws when the socket is not open', async () => {
+    const conn = new WSConnection(fakeUrl, undefined, async () => 'authAtoken');
+
+    await expect(conn.ensureAuthenticated()).rejects.toThrow('Socket not open');
+  });
+
+  test('rejects with the mint error code when the token is refused', async () => {
+    const { conn, socket } = await openScripted(async () => 'authAtoken');
+
+    const authenticated = conn.ensureAuthenticated();
+    await drain();
+    socket.rejectAuth();
+
+    const err = await authenticated.catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(WsAuthError);
+    expect(err).toMatchObject({ code: 31002, terminal: false });
+  });
+
+  test('rejects when the mint never answers', async () => {
+    const { conn } = await openScripted(async () => 'authAtoken');
+
+    const err = await conn.ensureAuthenticated(20).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(WsAuthError);
+    expect((err as WsAuthError).cause).toMatchObject({
+      message: 'WebSocket authenticate timeout after 20ms',
+    });
+  });
+
+  test('concurrent callers share one attempt and spend one token', async () => {
+    const getAuthToken = vi.fn(async () => 'authAtoken');
+    const { conn, socket } = await openScripted(getAuthToken);
+
+    const both = Promise.all([conn.ensureAuthenticated(), conn.ensureAuthenticated()]);
+    await drain();
+    socket.ackAuth();
+
+    await expect(both).resolves.toEqual([undefined, undefined]);
+    expect(getAuthToken).toHaveBeenCalledTimes(1);
+    expect(socket.sent).toHaveLength(1);
+  });
+
+  test('a rejection is cached for the socket, so a retry spends no second token', async () => {
+    const getAuthToken = vi.fn(async () => 'authAtoken');
+    const { conn, socket } = await openScripted(getAuthToken);
+
+    const first = conn.ensureAuthenticated();
+    await drain();
+    socket.rejectAuth();
+    await expect(first).rejects.toThrow(WsAuthError);
+
+    await expect(conn.ensureAuthenticated()).rejects.toThrow(WsAuthError);
+    expect(getAuthToken).toHaveBeenCalledTimes(1);
+    expect(socket.sent).toHaveLength(1);
+  });
+
+  test('gives up after three consecutive failures instead of draining the pool', async () => {
+    const getAuthToken = vi.fn(async () => 'authAtoken');
+    const conn = new WSConnection(fakeUrl, undefined, getAuthToken);
+
+    const attempt = async () => {
+      const connecting = conn.connect();
+      const socket = ScriptedWebSocket.instances[ScriptedWebSocket.instances.length - 1];
+      socket.open();
+      await connecting;
+      const authenticated = conn.ensureAuthenticated();
+      await drain();
+      socket.rejectAuth();
+      const err = await authenticated.catch((e: unknown) => e);
+      conn.close();
+      return err as WsAuthError;
+    };
+
+    expect((await attempt()).terminal).toBe(false);
+    expect((await attempt()).terminal).toBe(false);
+    expect((await attempt()).terminal).toBe(true);
+    expect(getAuthToken).toHaveBeenCalledTimes(3);
+
+    const connecting = conn.connect();
+    const socket = ScriptedWebSocket.instances[ScriptedWebSocket.instances.length - 1];
+    socket.open();
+    await connecting;
+
+    const err = await conn.ensureAuthenticated().catch((e: unknown) => e);
+    expect(err).toMatchObject({ terminal: true });
+    expect(getAuthToken).toHaveBeenCalledTimes(3);
+    expect(socket.sent).toHaveLength(0);
+  });
+
+  test('a success resets the failure count', async () => {
+    const conn = new WSConnection(fakeUrl, undefined, async () => 'authAtoken');
+
+    const attempt = async (ack: boolean) => {
+      const connecting = conn.connect();
+      const socket = ScriptedWebSocket.instances[ScriptedWebSocket.instances.length - 1];
+      socket.open();
+      await connecting;
+      const authenticated = conn.ensureAuthenticated();
+      await drain();
+      if (ack) socket.ackAuth();
+      else socket.rejectAuth();
+      const outcome = await authenticated.then(
+        () => null,
+        (e: unknown) => e as WsAuthError,
+      );
+      conn.close();
+      return outcome;
+    };
+
+    await attempt(false);
+    await attempt(false);
+    expect(await attempt(true)).toBeNull();
+
+    expect((await attempt(false))?.terminal).toBe(false);
+  });
+
+  test('a reconnect authenticates the new socket', async () => {
+    const getAuthToken = vi.fn(async () => 'authAtoken');
+    const conn = new WSConnection(fakeUrl, undefined, getAuthToken);
+
+    const first = conn.connect();
+    const firstSocket = ScriptedWebSocket.instances[0];
+    firstSocket.open();
+    await first;
+    const firstAuth = conn.ensureAuthenticated();
+    await drain();
+    firstSocket.ackAuth();
+    await firstAuth;
+
+    conn.close();
+
+    const second = conn.connect();
+    const secondSocket = ScriptedWebSocket.instances[1];
+    secondSocket.open();
+    await second;
+    const secondAuth = conn.ensureAuthenticated();
+    await drain();
+    secondSocket.ackAuth();
+    await secondAuth;
+
+    expect(getAuthToken).toHaveBeenCalledTimes(2);
+    expect(firstSocket.sent).toHaveLength(1);
+    expect(secondSocket.sent).toHaveLength(1);
+  });
+
+  test('counts a send failure exactly once', async () => {
+    const getAuthToken = vi.fn(async () => 'authAtoken');
+    const { conn } = await openScripted(getAuthToken);
+    ScriptedWebSocket.failSend = true;
+
+    const err = await conn.ensureAuthenticated().catch((e: unknown) => e);
+    expect(err).toMatchObject({ terminal: false });
+  });
+
+  test('rejects when an abnormal close interrupts authenticating', async () => {
+    const { conn, socket } = await openScripted(async () => 'authAtoken');
+
+    const authenticated = conn.ensureAuthenticated(50);
+    await drain();
+    socket.emitClose(1008, false);
+
+    await expect(authenticated).rejects.toThrow(WsAuthError);
+  });
+
+  test('rejects at once when a clean close interrupts authenticating', async () => {
+    const { conn, socket } = await openScripted(async () => 'authAtoken');
+
+    const authenticated = conn.ensureAuthenticated(30_000);
+    await drain();
+    socket.emitClose(1000, true);
+
+    const err = await authenticated.catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(WsAuthError);
+    expect((err as WsAuthError).cause).toMatchObject({
+      message: expect.stringContaining('closed while authenticating'),
+    });
+  });
+
+  test('a clean close while authenticating counts toward the bound', async () => {
+    const getAuthToken = vi.fn(async () => 'authAtoken');
+    const conn = new WSConnection(fakeUrl, undefined, getAuthToken);
+
+    const attempt = async () => {
+      const connecting = conn.connect();
+      const socket = ScriptedWebSocket.instances[ScriptedWebSocket.instances.length - 1];
+      socket.open();
+      await connecting;
+      const authenticated = conn.ensureAuthenticated(30_000);
+      await drain();
+      socket.emitClose(1000, true);
+      return (await authenticated.catch((e: unknown) => e)) as WsAuthError;
+    };
+
+    expect((await attempt()).terminal).toBe(false);
+    expect((await attempt()).terminal).toBe(false);
+    expect((await attempt()).terminal).toBe(true);
+    expect(getAuthToken).toHaveBeenCalledTimes(3);
+  });
+
+  test('does not accept a subscription result as an authenticate ack', async () => {
+    const { conn, socket } = await openScripted(async () => 'authAtoken');
+
+    const authenticated = conn.ensureAuthenticated();
+    await drain();
+    socket.emitMessage(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        result: { status: 'OK', subId: 'sub-1' },
+        id: socket.frames[0].id,
+      }),
+    );
+
+    const err = await authenticated.catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(WsAuthError);
+    expect((err as WsAuthError).cause).toMatchObject({
+      message: 'Mint answered authenticate with an unexpected result',
+    });
+  });
+
+  test('does not count a token supplier failure against the bound', async () => {
+    const { conn } = await openScripted(async () => {
+      throw new Error('pool empty');
+    });
+
+    const err = await conn.ensureAuthenticated().catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(WsAuthError);
+    expect(err).toMatchObject({ terminal: false });
+    expect((err as WsAuthError).cause).toMatchObject({ message: 'pool empty' });
+  });
+
+  test('surfaces the mint error code when a subscribe is refused as unauthenticated', async () => {
+    const { conn, socket } = await openScripted();
+
+    const errorCallback = vi.fn();
+    conn.createSubscription({ kind: 'bolt11_mint_quote', filters: [] }, vi.fn(), errorCallback);
+    socket.emitMessage(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        error: { code: 31001, message: 'Endpoint requires blind auth' },
+        id: socket.frames[0].id,
+      }),
+    );
+    await drain();
+
+    expect(errorCallback).toHaveBeenCalledWith(expect.any(WsRpcError));
+    expect(errorCallback.mock.calls[0][0]).toMatchObject({ code: 31001 });
   });
 });
