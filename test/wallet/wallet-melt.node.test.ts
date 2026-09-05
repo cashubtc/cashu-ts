@@ -16,6 +16,8 @@ import {
   type AuthProvider,
   type OutputType,
   Amount,
+  createHTLCHash,
+  createHTLCsecret,
 } from '../../src';
 
 import { useTestServer, mint, mintUrl, unit, invoice, logger, mintInfoResp } from './_setup';
@@ -91,6 +93,47 @@ describe('melt proofs', () => {
     expect(response.change[1]).toMatchObject({ amount: Amount.from(2), id: '00bd033559de27d0' });
     expect(/[0-9a-f]{64}/.test(response.change[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(response.change[0].secret)).toBe(true);
+  });
+
+  test('melt with a preimage stamps the HTLC inputs', async () => {
+    let inputs: Array<{ witness?: string }> = [];
+    server.use(
+      http.post(mintUrl + '/v1/melt/bolt11', async ({ request }) => {
+        ({ inputs } = (await request.json()) as { inputs: Array<{ witness?: string }> });
+        return HttpResponse.json({
+          quote: 'test_melt_quote',
+          amount: 10,
+          unit: 'sat',
+          fee_reserve: 3,
+          state: MeltQuoteState.PAID,
+          expiry: 1234567890,
+          payment_preimage: 'preimage',
+          request: 'bolt11request',
+          change: [],
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit, logger });
+    await wallet.loadMint();
+    const { hash, preimage } = createHTLCHash();
+    const meltQuote: MeltQuoteBolt11Response = {
+      quote: 'test_melt_quote',
+      amount: Amount.from(10),
+      fee_reserve: Amount.from(3),
+      request: 'bolt11request',
+      state: MeltQuoteState.UNPAID,
+      expiry: 1234567890,
+      payment_preimage: null,
+      unit: 'sat',
+      method: 'bolt11',
+    };
+    const locked: Proof[] = [
+      { id: '00bd033559de27d0', amount: Amount.from(13), secret: createHTLCsecret(hash), C: 'C1' },
+    ];
+    const response = await wallet.meltProofsBolt11(meltQuote, locked, { preimage });
+
+    expect(response.quote.state).toBe(MeltQuoteState.PAID);
+    expect(JSON.parse(inputs[0].witness!)).toEqual({ preimage });
   });
 
   test('test melt proofs no change', async () => {

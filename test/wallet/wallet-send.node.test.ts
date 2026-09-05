@@ -15,6 +15,8 @@ import {
   type Proof,
   type ProofLike,
   type OutputConfig,
+  createHTLCHash,
+  createHTLCsecret,
 } from '../../src';
 
 import { useTestServer, mint, mintUrl, unit, logger, mintInfoResp } from './_setup';
@@ -347,6 +349,45 @@ describe('send', () => {
     expect(result.send[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
     expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
+  });
+
+  test('send with a preimage stamps the HTLC inputs it swaps', async () => {
+    let inputs: Array<{ witness?: string }> = [];
+    server.use(
+      http.post(mintUrl + '/v1/swap', async ({ request }) => {
+        ({ inputs } = (await request.json()) as { inputs: Array<{ witness?: string }> });
+        return HttpResponse.json({
+          signatures: [
+            {
+              id: '00bd033559de27d0',
+              amount: 1,
+              C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+            },
+            {
+              id: '00bd033559de27d0',
+              amount: 1,
+              C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+            },
+          ],
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const { hash, preimage } = createHTLCHash();
+    const locked: Proof[] = [
+      {
+        id: '00bd033559de27d0',
+        amount: Amount.from(2),
+        secret: createHTLCsecret(hash),
+        C: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+      },
+    ];
+
+    // 1 of 2 sat cannot match offline, so the proof goes to the mint stamped
+    const result = await wallet.send(1, locked, { preimage });
+    expect(result.send).toHaveLength(1);
+    expect(JSON.parse(inputs[0].witness!)).toEqual({ preimage });
   });
 
   test('swap preview round trips through serialize/deserialize and replays identically', async () => {

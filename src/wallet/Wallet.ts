@@ -17,6 +17,7 @@ import {
   buildP2PKSigAllMessageV0,
   assertSigAllInputs,
   parseSecret,
+  attachHTLCPreimage,
 } from '../crypto';
 // Internal transitional fallback — not part of crypto/index.ts
 import { normalizeSecpPubkey } from '../crypto/curve_secp';
@@ -1262,7 +1263,7 @@ class Wallet {
     config?: ReceiveConfig,
     outputType?: OutputType,
   ): Promise<SwapPreview> {
-    const { keysetId, requireDleq, proofsWeHave, onCountersReserved } = config || {};
+    const { keysetId, requireDleq, proofsWeHave, onCountersReserved, preimage } = config || {};
     outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 
     // Extract proofs — either directly or by decoding the token
@@ -1335,7 +1336,7 @@ class Wallet {
       amount: receiveAmount,
       fees: swapFee,
       keysetId: keyset.id,
-      inputs: proofs,
+      inputs: preimage === undefined ? proofs : attachHTLCPreimage(proofs, preimage),
       keepOutputs: outputs,
     };
   }
@@ -1506,7 +1507,7 @@ class Wallet {
   ): Promise<SwapPreview> {
     const sendAmountTarget = this.parseAmount(amount, 'prepareSwapToSend');
     const normalizedProofs = normalizeProofAmounts(proofs);
-    const { keysetId, includeFees = false, onCountersReserved } = config || {};
+    const { keysetId, includeFees = false, onCountersReserved, preimage } = config || {};
 
     // Rotation evidence check: repair the snapshot before any assertion or fee math
     // relies on it. Inputs are priced from keyset metadata, so keys are not fetched.
@@ -1592,7 +1593,8 @@ class Wallet {
       amount: sendAmountTarget,
       fees: swapFee,
       keysetId: keyset.id,
-      inputs: selectedProofs,
+      inputs:
+        preimage === undefined ? selectedProofs : attachHTLCPreimage(selectedProofs, preimage),
       sendOutputs,
       keepOutputs,
       unselectedProofs,
@@ -3476,7 +3478,7 @@ class Wallet {
   ): Promise<MeltPreview<TQuote>> {
     this.validateMeltQuote(meltQuote);
     outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
-    const { keysetId, onCountersReserved, nut08Change = true } = config || {};
+    const { keysetId, onCountersReserved, nut08Change = true, preimage } = config || {};
 
     // Rotation evidence check: repair the snapshot so the output binding is current.
     // bolt11/bolt12 melts never consult the input keyset (no keys, no fee metadata), so an
@@ -3562,7 +3564,8 @@ class Wallet {
     // Create melt preview
     const meltPreview: MeltPreview<TQuote> = {
       method,
-      inputs: normalizedProofs,
+      inputs:
+        preimage === undefined ? normalizedProofs : attachHTLCPreimage(normalizedProofs, preimage),
       outputData,
       keysetId: keyset.id,
       quote: meltQuote,

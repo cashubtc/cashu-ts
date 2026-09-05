@@ -145,6 +145,9 @@ export function asSecpPoint(pt: WeierstrassPoint<bigint>): CurvePoint;
 export function assertSecretKind(allowed: SecretKind | SecretKind[], secret: Secret | string): Secret;
 
 // @public
+export function attachHTLCPreimage<T extends ProofLike>(proofs: T[], preimage: string): T[];
+
+// @public
 export class AuthManager implements AuthProvider {
     constructor(mintUrl: string, opts?: AuthManagerOptions);
     // (undocumented)
@@ -915,6 +918,7 @@ export class MeltBuilder<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | '
     asRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
+    preimage(preimage: string): this;
     prepare(): Promise<MeltPreview<TQuote>>;
     privkey(k: string | string[]): this;
     run(): Promise<MeltProofsResponse<TQuote>>;
@@ -934,6 +938,7 @@ export class MeltOnchainBuilder {
     constructor(wallet: Wallet, quote: MeltQuoteOnchainResponse, proofs: ProofLike[]);
     feeIndex(index: number): this;
     keyset(id: string): this;
+    preimage(preimage: string): this;
     privkey(k: string | string[]): this;
     run(): Promise<MeltProofsResponse<MeltQuoteOnchainResponse>>;
 }
@@ -952,6 +957,7 @@ export interface MeltPreview<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'>
 export type MeltProofsConfig = {
     keysetId?: string;
     privkey?: string | string[];
+    preimage?: string;
     onCountersReserved?: OnCountersReserved;
     nut08Change?: boolean;
 };
@@ -1934,6 +1940,7 @@ export class ReceiveBuilder {
     asRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
+    preimage(preimage: string): this;
     prepare(): Promise<SwapPreview>;
     privkey(k: string | string[]): this;
     proofsWeHave(p: Array<Pick<ProofLike, 'amount'>>): this;
@@ -1945,6 +1952,7 @@ export class ReceiveBuilder {
 export type ReceiveConfig = {
     keysetId?: string;
     privkey?: string | string[];
+    preimage?: string;
     requireDleq?: boolean;
     proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
     onCountersReserved?: OnCountersReserved;
@@ -2056,6 +2064,7 @@ export class SendBuilder {
     offlineCloseMatch(requireDleq?: boolean): this;
     offlineExactOnly(requireDleq?: boolean): this;
     onCountersReserved(cb: OnCountersReserved): this;
+    preimage(preimage: string): this;
     prepare(): Promise<SwapPreview>;
     privkey(k: string | string[]): this;
     proofsWeHave(p: Array<Pick<ProofLike, 'amount'>>): this;
@@ -2066,6 +2075,7 @@ export class SendBuilder {
 export type SendConfig = {
     keysetId?: string;
     privkey?: string | string[];
+    preimage?: string;
     includeFees?: boolean;
     proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
     onCountersReserved?: OnCountersReserved;

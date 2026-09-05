@@ -3,7 +3,7 @@ import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
 
 import { type Logger, NULL_LOGGER } from '../logger';
 import { CTSError } from '../model/Errors';
-import { type HTLCWitness, type Proof } from '../model/types';
+import { type HTLCWitness, type Proof, type ProofLike } from '../model/types';
 
 import {
   assertSecretKind,
@@ -13,7 +13,11 @@ import {
   parseSecret,
   getSecretKind,
 } from './NUT10';
-import { type P2PKVerificationResult, verifyP2PKSpendingConditions } from './NUT11';
+import {
+  type P2PKVerificationResult,
+  parseWitnessData,
+  verifyP2PKSpendingConditions,
+} from './NUT11';
 
 // ------------------------------
 // NUT-14 Secrets
@@ -197,4 +201,35 @@ export function getHTLCWitnessPreimage(witness: Proof['witness']): string | unde
   // Check preimage is a non-empty string
   const preimage = parsed.preimage;
   return typeof preimage === 'string' && preimage.length > 0 ? preimage : undefined;
+}
+
+/**
+ * Puts `preimage` on the witness of every HTLC proof whose hashlock it opens.
+ *
+ * @remarks
+ * Other proofs pass through untouched. Existing signatures are kept, and signing keeps the
+ * preimage, so this composes with {@link signP2PKProofs} in either order.
+ * @param proofs Proofs to stamp.
+ * @param preimage 64 hex characters.
+ * @throws If `preimage` is malformed.
+ */
+export function attachHTLCPreimage<T extends ProofLike>(proofs: T[], preimage: string): T[] {
+  if (!/^[0-9a-f]{64}$/i.test(preimage)) {
+    throw new CTSError('Preimage must be a 64 character hexadecimal string (32 bytes).');
+  }
+  const hex = preimage.toLowerCase();
+  return proofs.map((proof) => {
+    let secret: Secret;
+    try {
+      secret = parseSecret(proof.secret);
+    } catch {
+      return proof;
+    }
+    if (getSecretKind(secret) !== 'HTLC' || !verifyHTLCHash(hex, getDataField(secret))) {
+      return proof;
+    }
+    const signatures = parseWitnessData(proof.witness)?.signatures ?? [];
+    const witness: HTLCWitness = { preimage: hex, ...(signatures.length && { signatures }) };
+    return { ...proof, witness };
+  });
 }

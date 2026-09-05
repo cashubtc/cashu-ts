@@ -1,4 +1,4 @@
-import { type P2PKOptions } from '../crypto';
+import { type P2PKOptions, attachHTLCPreimage } from '../crypto';
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { type OutputDataLike, type OutputDataFactory } from '../model/OutputData';
@@ -331,6 +331,16 @@ export class SendBuilder {
   }
 
   /**
+   * NUT-14: preimage for HTLC inputs, placed on their witness before signing.
+   *
+   * @param preimage 64 hex characters.
+   */
+  preimage(preimage: string) {
+    this.config.preimage = preimage;
+    return this;
+  }
+
+  /**
    * Provide existing proofs to help optimise denomination selection.
    *
    * @remarks
@@ -407,7 +417,10 @@ export class SendBuilder {
 
     // Strict offline, exact match only
     if (this.offlineExact) {
-      // Sign if needed
+      // Stamp and sign if needed
+      if (this.config.preimage !== undefined) {
+        this.proofs = attachHTLCPreimage(this.proofs, this.config.preimage);
+      }
       if (this.config.privkey) {
         this.proofs = this.wallet.signP2PKProofs(this.proofs, this.config.privkey);
       }
@@ -420,7 +433,10 @@ export class SendBuilder {
 
     // Offline close match, may overshoot
     if (this.offlineClose) {
-      // Sign if needed
+      // Stamp and sign if needed
+      if (this.config.preimage !== undefined) {
+        this.proofs = attachHTLCPreimage(this.proofs, this.config.preimage);
+      }
       if (this.config.privkey) {
         this.proofs = this.wallet.signP2PKProofs(this.proofs, this.config.privkey);
       }
@@ -559,6 +575,16 @@ export class ReceiveBuilder {
    */
   privkey(k: string | string[]) {
     this.config.privkey = k;
+    return this;
+  }
+
+  /**
+   * NUT-14: preimage for HTLC inputs, placed on their witness before signing.
+   *
+   * @param preimage 64 hex characters.
+   */
+  preimage(preimage: string) {
+    this.config.preimage = preimage;
     return this;
   }
 
@@ -962,6 +988,16 @@ export class MeltBuilder<
   }
 
   /**
+   * NUT-14: preimage for HTLC inputs, placed on their witness before signing.
+   *
+   * @param preimage 64 hex characters.
+   */
+  preimage(preimage: string) {
+    this.config.preimage = preimage;
+    return this;
+  }
+
+  /**
    * Receive a callback once counters are atomically reserved for deterministic outputs.
    *
    * @param cb Called with OperationCounters when counters are reserved.
@@ -1059,6 +1095,16 @@ export class MeltOnchainBuilder {
    */
   privkey(k: string | string[]) {
     this.config.privkey = k;
+    return this;
+  }
+
+  /**
+   * NUT-14: preimage for HTLC inputs, placed on their witness before signing.
+   *
+   * @param preimage 64 hex characters.
+   */
+  preimage(preimage: string) {
+    this.config.preimage = preimage;
     return this;
   }
 
