@@ -362,6 +362,12 @@ function tokenFromTemplate(template: TokenV4Template): Token {
  * @returns Cashu token object.
  */
 export function getDecodedToken(tokenString: string, keysetIds: readonly string[]): Token {
+  // Plain JS callers on the pre-v4 signature otherwise fail deep inside on keysetIds.map
+  if (!Array.isArray(keysetIds)) {
+    throw new CTSError(
+      'getDecodedToken requires keysetIds (the wallet keyset id list) as its second argument; see the v4 migration guide, or use wallet.decodeToken()',
+    );
+  }
   const tokenStr = removePrefix(tokenString);
   const token: Token = handleTokens(tokenStr);
   token.proofs = mapShortKeysetIds(token.proofs, keysetIds);
