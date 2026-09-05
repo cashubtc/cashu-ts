@@ -119,6 +119,13 @@ export class WalletOps {
     if (nutroot && !lock) {
       throw new CTSError("the request's nutroot lock needs a v3 keyset this wallet does not use");
     }
+    // nut10 alone is the pre-v3 encoding (NUT-18): a payee that published no nutroot option has
+    // not said it can read v3 proofs, so a v3 payer refuses rather than translating the lock.
+    if (lock && isBlsKeyset(wallet.keysetId)) {
+      throw new CTSError(
+        "the request's nut10 lock is pre-v3 only; this wallet's v3 keyset needs a nutroot option",
+      );
+    }
     return lock ? builder.asLocked(p2pkToLockOptions(lock)) : builder;
   }
   receive(token: Token | string | ProofLike[]) {

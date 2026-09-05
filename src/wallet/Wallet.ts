@@ -1198,14 +1198,7 @@ class Wallet {
     // The mint cannot catch this for us: outputs are blinded, and the same secret under different
     // blinding factors gives different `B_`, so both get signed. It surfaces only when the first
     // spend burns the shared `Y`, mint-wide and permanently (NUT-10).
-    const decoder = new TextDecoder();
-    const secrets = outputData.map((d) => decoder.decode(d.secret));
-    const seenSecrets = new Set<string>();
-    for (const [i, secret] of secrets.entries()) {
-      // Report the position, never the secret: it is the spending material.
-      this.failIf(seenSecrets.has(secret), `Duplicate output secret at index ${i}`, { index: i });
-      seenSecrets.add(secret);
-    }
+    this.assertUniqueOutputSecrets(outputData);
     // A random v3 output's key rides to the proof as spend info; mirror it for a custom
     // factory that set only secretKey, so the proof still carries its own key.
     for (const output of outputData) {
@@ -1226,11 +1219,24 @@ class Wallet {
    * @param sendOutputs Outputs to send (optional, default empty for receive/mint).
    * @returns Swap transaction with payload and metadata for processing signatures.
    */
+  private assertUniqueOutputSecrets(outputData: OutputDataLike[]): void {
+    const decoder = new TextDecoder();
+    const seenSecrets = new Set<string>();
+    for (const [i, d] of outputData.entries()) {
+      const secret = decoder.decode(d.secret);
+      // Report the position, never the secret: it is the spending material.
+      this.failIf(seenSecrets.has(secret), `Duplicate output secret at index ${i}`, { index: i });
+      seenSecrets.add(secret);
+    }
+  }
+
   private createSwapTransaction(
     inputs: Proof[],
     keepOutputs: OutputDataLike[],
     sendOutputs: OutputDataLike[] = [],
   ): SwapTransaction {
+    // Keep and send are generated separately; the duplicate-secret guard has to see them together.
+    this.assertUniqueOutputSecrets([...keepOutputs, ...sendOutputs]);
     // Prepare inputs for mint
     inputs = this._prepareInputsForMint(inputs);
 
@@ -2971,10 +2977,12 @@ class Wallet {
   ): Promise<Proof[]> {
     this.requireSupport('mint', 'bolt11');
     if (typeof quote === 'string') {
-      // Skip checkMintQuoteBolt11 to avoid an extra round-trip. This method returns Proof[]
-      // so the quote object is never exposed to the caller — a stub is sufficient and
-      // an invalid quote will be exposed in the minting step.
-      const quoteObj = { quote };
+      // A v3 quote is a signed transaction input whose transcript commits its face amount and
+      // whose lock key must be known (NUT-04), so the stub only serves a pre-v3 keyset. The
+      // legacy path skips the round-trip: an invalid quote surfaces in the minting step.
+      const quoteObj = isBlsKeyset(this.getOutputKeyset(config?.keysetId).id)
+        ? await this.checkMintQuoteBolt11(quote)
+        : { quote };
       const preview = await this.prepareMint('bolt11', amount, quoteObj, config, outputType);
       return this.completeMint(preview);
     }
@@ -3346,6 +3354,15 @@ class Wallet {
     // V3: the batch is one transaction; every locked quote signs its own input
     // digest over the shared transcript covering all quote inputs (request order)
     // and all outputs (NUT-10).
+    // Every quote in a v3 batch is a signing input, so an unlocked one has no witness and the
+    // mint must reject the batch (NUT-29). Fail here, before any request is built.
+    if (isBlsKeyset(keyset.id)) {
+      const unlocked = entries.findIndex((e) => !('pubkey' in e.quote && e.quote.pubkey));
+      this.failIf(
+        unlocked >= 0,
+        `prepareBatchMint: quote #${unlocked + 1} is unlocked; every quote minting onto a v3 keyset must be locked`,
+      );
+    }
     const v3BatchDigests = isBlsKeyset(keyset.id)
       ? inputsForPayload({
           mintQuotes: entries.map((e, i) => {

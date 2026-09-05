@@ -273,7 +273,9 @@ export function prepareScriptPathSpends(
 ): Map<string, ScriptPathSpend> {
   const out = new Map<string, ScriptPathSpend>();
   for (const plan of plans) {
-    const proof = inputs.find((p) => p.secret === plan.secret);
+    // Same-text legacy and v3 secrets are different proofs (NUT-10): only a v3 input can carry
+    // the plan's tree.
+    const proof = inputs.find((p) => p.secret === plan.secret && isBlsKeyset(p.id));
     if (!proof) {
       throw new CTSError(`Script path plan names a secret not in this transaction`);
     }

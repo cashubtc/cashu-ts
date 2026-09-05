@@ -1481,4 +1481,27 @@ describe('output secret uniqueness (NUT-10)', () => {
       ),
     ).toThrow(/Duplicate output secret/);
   });
+
+  test('rejects a secret shared between a send output and a keep output', async () => {
+    // Send and keep are generated separately; the guard has to see them together, or the
+    // collision reaches the mint, gets signed twice, and burns one output on the first spend.
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const keyset = wallet.keyChain.getKeyset(wallet.keysetId);
+    const fixedSecret = new TextEncoder().encode('one-secret-for-send-and-keep');
+    const output = () =>
+      new OutputData(
+        { amount: Amount.from(1), B_: '02'.padEnd(66, 'a'), id: keyset.id },
+        1n,
+        fixedSecret,
+      );
+    const inputs = [
+      { id: keyset.id, amount: Amount.from(2), secret: 'x', C: '02'.padEnd(66, 'b') },
+    ];
+    expect(() =>
+      (
+        wallet as unknown as { createSwapTransaction: (...a: unknown[]) => unknown }
+      ).createSwapTransaction(inputs, [output()], [output()]),
+    ).toThrow(/Duplicate output secret/);
+  });
 });

@@ -232,6 +232,12 @@ describe('prepareScriptPathSpends', () => {
       /not in this transaction/,
     );
     expect(() => prepareScriptPathSpends([proof], [plan, plan], [])).toThrow(/twice/);
+    // A legacy proof with the same text is a different proof (NUT-10) and never carries the tree:
+    // the plan must skip it even when it is ordered first.
+    const legacyTwin: Proof = { ...proof, id: `00${'11'.repeat(16)}`, spend_info: undefined };
+    expect(
+      prepareScriptPathSpends([legacyTwin, proof], [plan], []).get(built.secret)?.tree,
+    ).toEqual(built.tree);
     expect(() => prepareScriptPathSpends([proof], [{ ...plan, leafIndex: 1 }], [])).toThrow(
       /not disclosed/,
     );

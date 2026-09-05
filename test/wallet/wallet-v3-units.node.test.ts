@@ -1,5 +1,5 @@
 import { hexToBytes, bytesToHex } from '@noble/hashes/utils.js';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 
 import { Wallet, QUOTE_COUNTER_KEY, type OperationCounters } from '../../src';
 import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
@@ -99,6 +99,52 @@ describe('Wallet quote lock keys', () => {
     const wallet = new Wallet(mintUrl, { unit: 'sat' });
     await expect(wallet.recoverQuoteLockKey(POINT)).rejects.toThrow(
       'recoverQuoteLockKey requires a seeded wallet',
+    );
+  });
+});
+
+describe('Wallet v3 mint preparation', () => {
+  const v3Keyset = { id: BLS_ID, hasHexId: true, active: true, keys: { 1: 'aa'.repeat(48) } };
+  const withV3Keyset = () => {
+    const wallet = new Wallet(mintUrl, { unit: 'sat' });
+    vi.spyOn(
+      wallet as unknown as { getOutputKeyset: () => unknown },
+      'getOutputKeyset',
+    ).mockReturnValue(v3Keyset);
+    vi.spyOn(
+      wallet as unknown as { requireSupport: () => void },
+      'requireSupport',
+    ).mockImplementation(() => undefined);
+    return wallet;
+  };
+
+  test('mintProofsBolt11 with a bare quote ID fetches the quote on a v3 keyset', async () => {
+    // The transcript commits the quote's face amount and the lock key must be known (NUT-04):
+    // the pre-v3 `{ quote }` stub cannot mint here, so the full quote is fetched first.
+    const wallet = withV3Keyset();
+    const full = { quote: 'q1', amount: 1, unit: 'sat', pubkey: '02'.padEnd(66, 'c') };
+    const check = vi.spyOn(wallet, 'checkMintQuoteBolt11').mockResolvedValue(full as never);
+    const prepare = vi.spyOn(wallet, 'prepareMint').mockResolvedValue({} as never);
+    vi.spyOn(wallet, 'completeMint').mockResolvedValue([]);
+    await wallet.mintProofsBolt11(1, 'q1');
+    expect(check).toHaveBeenCalledWith('q1');
+    expect(prepare.mock.calls[0][2]).toBe(full);
+  });
+
+  test('prepareBatchMint refuses an unlocked quote on a v3 keyset before any request', async () => {
+    // Every quote in a v3 batch is a signing input; the mint must reject an unlocked one (NUT-29).
+    const wallet = withV3Keyset();
+    const locked = { quote: 'a', amount: 1, pubkey: '02'.padEnd(66, 'c') };
+    const unlocked = { quote: 'b', amount: 1 };
+    const entries = [
+      { amount: 1, quote: locked },
+      { amount: 1, quote: unlocked },
+    ] as never;
+    await expect(
+      wallet.prepareBatchMint('bolt11', entries, { privkey: '11'.repeat(32) }),
+    ).rejects.toThrow(/quote #2 is unlocked/);
+    await expect(wallet.prepareBatchMint('bolt11', [entries[1]] as never)).rejects.toThrow(
+      /quote #1 is unlocked/,
     );
   });
 });

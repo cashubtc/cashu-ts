@@ -394,6 +394,12 @@ describe('WalletOps builders', () => {
         nut10: { kind: 'FROST', data: 'xyz' },
       });
       expect(() => ops.sendToRequest(exotic, proofs)).toThrow(/nut10 lock/);
+
+      // nut10 alone is the pre-v3 encoding: a v3 payer refuses instead of translating it into
+      // nutroot proofs the payee never asked for (NUT-18).
+      wallet.keysetId = `02${'ab'.repeat(32)}`;
+      expect(() => ops.sendToRequest(locked, proofs)).toThrow(/pre-v3 only/);
+      wallet.keysetId = '00ad268c4d1f5826';
     });
 
     it('honours a nutroot option, and follows the wallet keyset when both are published', async () => {
