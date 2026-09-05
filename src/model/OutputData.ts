@@ -386,7 +386,8 @@ export class OutputData implements OutputDataLike {
    * const restored = (JSON.parse(stored) as SerializedOutputData[]).map((s) =>
    *   OutputData.deserialize(s),
    * );
-   * const sigs = (paidQuote.change ?? []).filter((s) => !s.amount.isZero());
+   * // zero-value entries carry no ecash (NUT-08); Amount.from also covers a quote rehydrated from JSON
+   * const sigs = (paidQuote.change ?? []).filter((s) => !Amount.from(s.amount).isZero());
    * await wallet.ensureOperableKeysets(sigs.map((s) => s.id)); // change may be on a rotated-in keyset
    * const change = wallet.createMeltChangeProofs(restored, sigs);
    * ```

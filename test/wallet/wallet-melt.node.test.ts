@@ -910,6 +910,31 @@ describe('async melt preference body', () => {
     expect(wallet.createMeltChangeProofs([blank], [zeroSig])).toEqual([]);
   });
 
+  test('createMeltChangeProofs accepts raw JSON amounts from a stored or WebSocket quote', async () => {
+    const wallet = new Wallet(mint, { unit, logger });
+    await wallet.loadMint();
+
+    const blanks = [0, 0].map((a) => OutputData.createSingleRandomData(a, '00bd033559de27d0'));
+    // what JSON.parse yields: plain numbers where the type says Amount
+    const raw = [
+      {
+        id: '00bd033559de27d0',
+        amount: 0,
+        C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+      },
+      {
+        id: '00bd033559de27d0',
+        amount: 2,
+        C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+      },
+    ] as unknown as SerializedBlindedSignature[];
+
+    const change = wallet.createMeltChangeProofs(blanks, raw);
+    expect(change).toHaveLength(1);
+    expect(change[0].amount).toBeInstanceOf(Amount);
+    expect(change[0].amount.equals(Amount.from(2))).toBe(true);
+  });
+
   test('createMeltChangeProofs pairs by index and drops zero-value signatures', async () => {
     const wallet = new Wallet(mint, { unit, logger });
     await wallet.loadMint();
