@@ -123,18 +123,23 @@ export class OutputData implements OutputDataLike {
         `Mint response is missing a signature for one of the outputs. ${RECOVERY_HINT}`,
       );
     }
-    if (sig.id !== this.blindedMessage.id) {
+    // The keys must be the keyset the mint signed under: DLEQ/pairing verify against them, and
+    // unblinding with any other keyset yields an unspendable proof.
+    if (sig.id !== keyset.id) {
+      throw new CTSError(`Mint signature keyset id ${sig.id} does not match keys for ${keyset.id}`);
+    }
+
+    // Blanks (amount=0, e.g. NUT-08 fee change, NUT-09 restore) declare neither amount nor
+    // keyset up front; the mint's choice is authoritative for both, including one rotated in
+    // meanwhile. Any other output must come back on the keyset and at the amount it asked for:
+    // a malicious mint can otherwise sign a smaller denomination and return it as `sig.amount`,
+    // which verifies under K2/A of the downgraded amount, or move the output to a worse keyset.
+    const requested = this.blindedMessage.amount;
+    if (!requested.isZero() && sig.id !== this.blindedMessage.id) {
       throw new CTSError(
         `Mint signature keyset id ${sig.id} does not match output ${this.blindedMessage.id}`,
       );
     }
-
-    // Amount binding: a malicious mint can sign a smaller denomination and return it as
-    // `sig.amount`; that signature verifies under K2/A of the downgraded amount and the
-    // wallet would store a downgraded proof. Reject here, before key lookup.
-    // Blanks (amount=0, e.g. NUT-08 fee change, NUT-09 restore) declare no specific amount
-    // up front; the mint's amount is authoritative in that case.
-    const requested = this.blindedMessage.amount;
     if (!requested.isZero() && !sig.amount.equals(requested)) {
       throw new CTSError(
         `Mint signature amount ${sig.amount.toString()} does not match requested amount ${requested.toString()}. ${RECOVERY_HINT}`,
@@ -413,7 +418,10 @@ export class OutputData implements OutputDataLike {
    * const restored = (JSON.parse(stored) as SerializedOutputData[]).map((s) =>
    *   OutputData.deserialize(s),
    * );
-   * const change = wallet.createMeltChangeProofs(restored, paidQuote.change ?? []);
+   * // zero-value entries carry no ecash (NUT-08); Amount.from also covers a quote rehydrated from JSON
+   * const sigs = (paidQuote.change ?? []).filter((s) => !Amount.from(s.amount).isZero());
+   * await wallet.ensureOperableKeysets(sigs.map((s) => s.id)); // change may be on a rotated-in keyset
+   * const change = wallet.createMeltChangeProofs(restored, sigs);
    * ```
    */
   static serialize(output: OutputDataLike): SerializedOutputData {
