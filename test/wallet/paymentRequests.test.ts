@@ -538,6 +538,21 @@ describe('payment requests', () => {
       expect(decoded.singleUse).toBeUndefined();
     });
 
+    test('rejects a bech32m string whose HRP is not exactly creqb', () => {
+      // NUT-26: valid bech32m with HRP `creqb`; a longer HRP sharing the prefix is not it.
+      const tlv = encodeTLV({ id: 'hrp', unit: 'sat', mints: ['https://mint.example.com'] });
+      const wrongHrp = encodeBech32m('creqbx', tlv);
+      expect(() => PaymentRequest.fromEncodedRequest(wrongHrp)).toThrow(/prefix/);
+    });
+
+    test('creqA prefix detection is case-insensitive', () => {
+      // NUT-26: the creqA check SHOULD be case-insensitive; the base64 payload keeps its case.
+      const encoded = new PaymentRequest({ amount: 10, unit: 'sat' }).toEncodedRequest();
+      const shouted = `CREQA${encoded.slice(5)}`;
+      const decoded = PaymentRequest.fromEncodedRequest(shouted);
+      expect(decoded.amount?.equals(10)).toBeTruthy();
+    });
+
     test('roundtrip from creqB test vector', () => {
       // Use an existing test vector
       const originalEncoded =
@@ -810,6 +825,156 @@ describe('NUT-18 payment payloads', () => {
       obj.proofs[0].amount = 1.5;
       expect(() => PaymentRequest.decodePayload(JSON.stringify(obj))).toThrow();
     });
+  });
+});
+
+describe('nutroot (v3) request marking', () => {
+  const carolPub = '02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9';
+  const alicePub = '02e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13';
+  // The 6.1 after leaf: n=1, keys=[alicePub], time=1755561600.
+  const leafAfter =
+    '00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80';
+
+  test('round-trips through creqA, tags and all', () => {
+    const pr = PaymentRequest.builder()
+      .amount(8, 'sat')
+      .requestNutroot({ receiverKey: carolPub, leaves: [leafAfter], blindKeys: [alicePub] })
+      .build();
+    const decoded = decodePaymentRequest(pr.toEncodedRequest());
+    expect(decoded.nutroot).toEqual({
+      receiverKey: carolPub,
+      leaves: [leafAfter],
+      blindKeys: [alicePub],
+    });
+    // A request with no tree is the bare receiver-keyed case, and stays that way.
+    const bare = PaymentRequest.builder().requestNutroot({ receiverKey: carolPub }).build();
+    expect(decodePaymentRequest(bare.toEncodedRequest()).nutroot).toEqual({
+      receiverKey: carolPub,
+    });
+  });
+
+  test('the option converts to sender-side derivation arguments', () => {
+    const pr = PaymentRequest.builder()
+      .requestNutroot({ receiverKey: carolPub, leaves: [leafAfter], blindKeys: [alicePub] })
+      .build();
+    expect(pr.toNutrootOptions()).toEqual({
+      receiverKey: carolPub,
+      leaves: [{ type: 'after', n: 1, keys: [alicePub], time: 1755561600 }],
+      blindKeys: [alicePub],
+    });
+    expect(new PaymentRequest({}).toNutrootOptions()).toBeUndefined();
+  });
+
+  test('more than eight requested leaves are refused when authored and parsed', () => {
+    const leaves = new Array(9).fill(leafAfter);
+    expect(() =>
+      PaymentRequest.builder().requestNutroot({ receiverKey: carolPub, leaves }),
+    ).toThrow(/exceeds 8 leaves/);
+    expect(() =>
+      new PaymentRequest({ nutroot: { receiverKey: carolPub, leaves } }).toNutrootOptions(),
+    ).toThrow(/exceeds 8 leaves/);
+  });
+
+  test('the receiver key is validated and case-canonicalized, both directions', () => {
+    const upper = '02' + carolPub.slice(2).toUpperCase();
+    expect(
+      PaymentRequest.builder().requestNutroot({ receiverKey: upper }).build().nutroot?.receiverKey,
+    ).toBe(carolPub);
+    // A foreign request carrying the upper-case form canonicalizes on the way out.
+    expect(
+      new PaymentRequest({ nutroot: { receiverKey: upper } }).toNutrootOptions()?.receiverKey,
+    ).toBe(carolPub);
+    // x-only is rejected here as everywhere: the prepend-02 convention is the caller's to apply.
+    expect(() =>
+      PaymentRequest.builder().requestNutroot({ receiverKey: carolPub.slice(2) }),
+    ).toThrow(/x-only/);
+    expect(() => new PaymentRequest({ nutroot: { receiverKey: '' } }).toNutrootOptions()).toThrow(
+      /missing its receiver key/,
+    );
+  });
+
+  test('a blind-me key outside the requested tree is refused when authored', () => {
+    expect(() =>
+      PaymentRequest.builder().requestNutroot({
+        receiverKey: carolPub,
+        leaves: [leafAfter],
+        blindKeys: [carolPub],
+      }),
+    ).toThrow(/not in the requested tree/);
+  });
+
+  test('a leaf the payer cannot reproduce byte for byte is refused', () => {
+    // Same leaf plus an unknown odd field: odd types are reserved, so the leaf no longer even
+    // parses, failing before the canonical-form round-trip gets a say.
+    const annotated = leafAfter + '0d0005' + '6c6162656c'; // odd field 0x0d, "label"
+    expect(() =>
+      new PaymentRequest({
+        nutroot: { receiverKey: carolPub, leaves: [annotated] },
+      }).toNutrootOptions(),
+    ).toThrow(/field/);
+    // An unknown leaf type fails closed the same way it does in spend info.
+    expect(() =>
+      new PaymentRequest({
+        nutroot: { receiverKey: carolPub, leaves: ['0004' + '02000101'] },
+      }).toNutrootOptions(),
+    ).toThrow(/type/);
+  });
+
+  test('a NUMS receiver key must come with leaves, but needs no blind-me key', () => {
+    const numsKey = '0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0';
+    // Authoring: refused without leaves, since nothing else could spend a proof with no key path.
+    expect(() => PaymentRequest.builder().requestNutroot({ receiverKey: numsKey })).toThrow(
+      /requires leaves/,
+    );
+    // The payer's per-output offset supplies uniqueness, so no blind-me tag is needed.
+    const pr = PaymentRequest.builder()
+      .requestNutroot({ receiverKey: numsKey, leaves: [leafAfter] })
+      .build();
+    expect(decodePaymentRequest(pr.toEncodedRequest()).toNutrootOptions()?.receiverKey).toBe(
+      numsKey,
+    );
+    // A foreign request that skipped authoring validation is refused by the payer.
+    expect(() =>
+      new PaymentRequest({ nutroot: { receiverKey: numsKey } }).toNutrootOptions(),
+    ).toThrow(/requires leaves/);
+  });
+
+  test('creqA carries the option under the nutroot key, pinned to the spec vector', () => {
+    // The NUT-18 vectors' NUMS request, byte for byte: a=8, u=sat, nutroot {k, l, b}.
+    const specVector =
+      'creqAo2FhCGF1Y3NhdGdudXRyb290o2FreEIwMjUwOTI5Yjc0YzFhMDQ5NTRiNzhiNGI2MDM1ZTk3YTVlMDc4YTVhMGYyOGVjOTZkNTQ3YmZlZTlhY2U4MDNhYzBhbIF4YjAwMDIwMjAwMDEwMTA0MDAyMTAyZTQ5M2RiZjFjMTBkODBmMzU4MWU0OTA0OTMwYjE0MDRjYzZjMTM5MDBlZTA3NTg0NzRmYTk0YWJlOGM0Y2QxMzA2MDAwNDY4YTNiZTgwYWKBeEIwMmU0OTNkYmYxYzEwZDgwZjM1ODFlNDkwNDkzMGIxNDA0Y2M2YzEzOTAwZWUwNzU4NDc0ZmE5NGFiZThjNGNkMTM=';
+    const numsKey = '0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0';
+    const pr = PaymentRequest.builder()
+      .amount(8, 'sat')
+      .requestNutroot({ receiverKey: numsKey, leaves: [leafAfter], blindKeys: [alicePub] })
+      .build();
+    expect(pr.toEncodedRequest()).toBe(specVector);
+    const decoded = decodePaymentRequest(specVector);
+    expect(decoded.nutroot).toEqual({
+      receiverKey: numsKey,
+      leaves: [leafAfter],
+      blindKeys: [alicePub],
+    });
+  });
+
+  test('creqB round-trips the option under NUT-26 tag 0x0b', () => {
+    const pr = PaymentRequest.builder()
+      .amount(8, 'sat')
+      .requestNutroot({ receiverKey: carolPub, leaves: [leafAfter], blindKeys: [alicePub] })
+      .build();
+    const encoded = pr.toEncodedCreqB();
+    expect(encoded.startsWith('CREQB1')).toBe(true);
+    const decoded = decodePaymentRequest(encoded);
+    expect(decoded.nutroot).toEqual({
+      receiverKey: carolPub,
+      leaves: [leafAfter],
+      blindKeys: [alicePub],
+    });
+    expect(decoded.amount?.toNumber()).toBe(8);
+    expect(decoded.unit).toBe('sat');
+    // The bare receiver-keyed request survives too, with no leaves or blind keys materializing.
+    const bare = PaymentRequest.builder().requestNutroot({ receiverKey: carolPub }).build();
+    expect(decodePaymentRequest(bare.toEncodedCreqB()).nutroot).toEqual({ receiverKey: carolPub });
   });
 });
 

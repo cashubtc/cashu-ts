@@ -10,6 +10,7 @@ import { isBase64String } from '../utils';
 import { BLS_FR_ORDER } from './curve_bls';
 import { getPubKeyFromPrivKey } from './curve_secp';
 import { getKeysetIdInt, isBlsKeyset } from './curves';
+import { NUTROOT_MAX_SLOTS } from './nutroot';
 
 const STANDARD_DERIVATION_PATH = `m/129372'/0'`;
 
@@ -37,7 +38,14 @@ enum DerivationKind {
   HMAC_SHA256,
 }
 
-type DerivedSecretAndBlindingFactor = { blindingFactor: Uint8Array; secret: Uint8Array };
+export type DerivedSecretAndBlindingFactor = {
+  blindingFactor: Uint8Array;
+  secret: Uint8Array;
+  /**
+   * V3 (`02…`) keysets only: the internal private key `k` behind the pubkey secret `K = k*G`.
+   */
+  secretKey?: Uint8Array;
+};
 type SecretAndBlindingFactorDeriver = (counter: number) => DerivedSecretAndBlindingFactor;
 
 /**
@@ -62,7 +70,7 @@ export function deriveSecretAndBlindingFactor(
   seed: Uint8Array,
   keysetId: string,
   counter: number,
-): { blindingFactor: Uint8Array; secret: Uint8Array } {
+): DerivedSecretAndBlindingFactor {
   const derive = createSecretAndBlindingFactorDeriver(seed, keysetId);
   return derive(counter);
 }
@@ -204,40 +212,119 @@ function deriveHmacSecretAndBlindingFactor(
   keysetId: string,
   counter: number,
 ): DerivedSecretAndBlindingFactor {
+  assertCounter(counter);
+  if (isBlsKeyset(keysetId)) {
+    const secretKey = deriveV3Scalar(seed, keysetId, counter, DERIVATION_TYPE.secretKey);
+    return {
+      secret: getPubKeyFromPrivKey(secretKey),
+      secretKey,
+      blindingFactor: deriveV3Scalar(
+        seed,
+        keysetId,
+        counter,
+        DERIVATION_TYPE.blindingFactor,
+        undefined,
+        BLS_FR_ORDER,
+      ),
+    };
+  }
+  // V2 stays byte-for-byte as deployed: reframing it would silently re-derive every existing
+  // secret, and a wallet restoring from seed would find nothing rather than error.
+  const base = v2BaseMessage(keysetId, counter);
+  return {
+    secret: hmac(sha256, seed, concatBytes(base, hexToBytes('00'))),
+    blindingFactor: computeV2BlindingFactor(seed, base),
+  };
+}
+
+/**
+ * NUT-13 derivation types. `0x00`-`0x03` are components of one proof allocation and share the
+ * keyset's proof counter; `0x04` has its own quote counter.
+ */
+export const DERIVATION_TYPE = {
+  /**
+   * Internal private key `k`; the secret is `K = k*G`.
+   */
+  secretKey: 0x00,
+  /**
+   * Blinding factor `r`.
+   */
+  blindingFactor: 0x01,
+  /**
+   * NUMS offset `u` for a script-only secret.
+   */
+  numsOffset: 0x02,
+  /**
+   * Self-owned leaf key at index `i`; the message carries `u32_BE(i)`.
+   */
+  leafKey: 0x03,
+  /**
+   * Mint quote lock key; counted on the quote counter, not the proof counter.
+   */
+  quoteLock: 0x04,
+} as const;
+
+function assertCounter(counter: number): void {
   // NUT-13 encodes the counter as u64, but cap at MAX_SAFE_INTEGER: past it
   // `counter + 1 === counter`, so a batch would derive one counter twice.
   if (!Number.isSafeInteger(counter) || counter < 0) {
     throw new CTSError('Counter must be an integer in the range 0 <= counter <= 2^53 - 1');
   }
-  const base = concatBytes(
+}
+
+function v2BaseMessage(keysetId: string, counter: number): Uint8Array {
+  return concatBytes(
     utf8ToBytes('Cashu_KDF_HMAC_SHA256'),
     hexToBytes(keysetId),
     // numberToBytesBE throws rather than wrapping, so an out-of-range counter can never
     // be silently encoded as a different one even if the guard above is ever moved.
     numberToBytesBE(counter, 8),
   );
-  return {
-    secret: hmac(sha256, seed, concatBytes(base, hexToBytes('00'))),
-    blindingFactor: computeBlindingFactor(seed, base, keysetId),
-  };
 }
 
-function computeBlindingFactor(seed: Uint8Array, base: Uint8Array, keysetId: string): Uint8Array {
-  if (isBlsKeyset(keysetId)) {
-    // V3 (BLS12-381): rejection sampling. Append u32_BE(attempt) to the HMAC input and accept the
-    // first digest with 0 < x < BLS_FR_ORDER. Modular reduction would bias ~7.5% because
-    // BLS_FR_ORDER ~ 0.45·2^256; rejection sampling yields a uniform sample over Fr*. Match the
-    // NUT-00 batch-weight pattern. Loop cap is defensive; expected attempts ≈ 2.2.
-    for (let attempt = 0; attempt < 1 << 16; attempt++) {
-      const msg = concatBytes(base, hexToBytes('01'), numberToBytesBE(attempt, 4));
-      const digest = hmac(sha256, seed, msg);
-      const x = bytesToNumberBE(digest);
-      if (x === 0n || x >= BLS_FR_ORDER) continue;
-      return digest; // raw 32 bytes; x < 2^256 so the BE encoding matches the digest
-    }
-    /* c8 ignore next */
-    throw new CTSError('V3 blinding factor derivation failed');
+/**
+ * Derive one V3 scalar by rejection sampling (NUT-13 V3 message).
+ *
+ * @remarks
+ * `DST || u32_BE(len(keyset_id)) || keyset_id || u64_BE(counter) || type || u32_BE(attempt) ||
+ * suffix`. The keyset id is length-framed because it is the one variable-length field and a type
+ * may append its own suffix; `attempt` sits ahead of the suffix because every type samples.
+ * Rejection against `SECP256K1_N` is a ~2^-128 event, so the loop is on one pattern with the
+ * blinding factor's `BLS_FR_ORDER` rather than a separate shape.
+ *
+ * An absent `keysetId` frames an empty field, which is what type `0x04` uses: a quote exists before
+ * any keyset is chosen. The framing is what makes an empty field unambiguous.
+ * @internal
+ */
+function deriveV3Scalar(
+  seed: Uint8Array,
+  keysetId: string | undefined,
+  counter: number,
+  type: number,
+  suffix?: Uint8Array,
+  order: bigint = SECP256K1_N,
+): Uint8Array {
+  assertCounter(counter);
+  const keysetIdBytes = keysetId === undefined ? new Uint8Array(0) : hexToBytes(keysetId);
+  const base = concatBytes(
+    utf8ToBytes('Cashu_KDF_HMAC_SHA256'),
+    numberToBytesBE(keysetIdBytes.length, 4),
+    keysetIdBytes,
+    numberToBytesBE(counter, 8),
+    Uint8Array.of(type),
+  );
+  for (let attempt = 0; attempt < 1 << 16; attempt++) {
+    const msg = concatBytes(base, numberToBytesBE(attempt, 4), suffix ?? new Uint8Array(0));
+    const digest = hmac(sha256, seed, msg);
+    const x = bytesToNumberBE(digest);
+    if (x === 0n || x >= order) continue;
+    return digest; // raw 32 bytes; x < order < 2^256 so the BE encoding matches the digest
   }
+  /* c8 ignore next */
+  throw new CTSError(`V3 derivation failed for type ${type}`);
+}
+
+function computeV2BlindingFactor(seed: Uint8Array, base: Uint8Array): Uint8Array {
   // V2 (secp256k1): single HMAC, single-subtraction modular reduction. SECP256K1_N is ~2^256 so
   // at most one subtraction is needed; bias is ~2^-128 (negligible).
   const digest = hmac(sha256, seed, concatBytes(base, hexToBytes('01')));
@@ -248,4 +335,134 @@ function computeBlindingFactor(seed: Uint8Array, base: Uint8Array, keysetId: str
     throw new CTSError('Derived invalid blinding scalar r == 0');
   }
   return numberToBytesBE(reduced, 32);
+}
+
+/**
+ * The NUMS offset `u` for a self-owned script-only secret (NUT-13 type `0x02`).
+ *
+ * @remarks
+ * Shares the proof's counter with the secret key and blinding factor, so reusing a counter repeats
+ * `B_` and the mint refuses it. `u` is disclosed in spend info regardless: deriving it rather than
+ * randomising it buys uniqueness, not secrecy.
+ */
+export function deriveNumsOffset(seed: Uint8Array, keysetId: string, counter: number): Uint8Array {
+  assertV3Keyset(keysetId, 'NUMS offset');
+  return deriveV3Scalar(seed, keysetId, counter, DERIVATION_TYPE.numsOffset);
+}
+
+/**
+ * A self-owned leaf key at index `i` (NUT-13 type `0x03`).
+ *
+ * @remarks
+ * `i` has no canonical meaning and **must not** be read from a leaf's position: transmitted leaf
+ * order is not committed. Recover by deriving candidates and matching the tree's keys by value
+ * ({@link recoverV3LeafKeys}).
+ */
+export function deriveLeafKey(
+  seed: Uint8Array,
+  keysetId: string,
+  counter: number,
+  index: number,
+): Uint8Array {
+  assertV3Keyset(keysetId, 'Leaf key');
+  if (!Number.isInteger(index) || index < 0 || index > 0xffffffff) {
+    throw new CTSError('Leaf key index must be an integer in [0, 2^32)');
+  }
+  return deriveV3Scalar(
+    seed,
+    keysetId,
+    counter,
+    DERIVATION_TYPE.leafKey,
+    numberToBytesBE(index, 4),
+  );
+}
+
+/**
+ * A mint quote lock key (NUT-13 message type `0x04`, defined in NUT-20).
+ *
+ * @remarks
+ * No keyset: a mint quote is requested before any keyset is chosen (the outputs of the later mint
+ * request fix it), so binding the key to one would leave a wallet unable to sign for its own paid
+ * quote after a rotation. The message frames an empty keyset id instead, and the counter is the
+ * wallet's single quote counter, so the key is recoverable from the seed and the quote's pubkey
+ * alone.
+ *
+ * Its own counter, never the proof counter: a quote may mint nothing, and a lock key may be handed
+ * over for delegated minting, so it must never collide with a key that has to stay secret. Nothing
+ * detects a reused quote counter the way a repeated `B_` detects a reused proof counter, so advance
+ * it on every quote request.
+ */
+export function deriveQuoteLockKey(seed: Uint8Array, counter: number): Uint8Array {
+  return deriveV3Scalar(seed, undefined, counter, DERIVATION_TYPE.quoteLock);
+}
+
+function assertV3Keyset(keysetId: string, what: string): void {
+  if (!isBlsKeyset(keysetId)) {
+    throw new CTSError(`${what} derivation is a v3 keyset operation`);
+  }
+}
+
+/**
+ * Recover a proof's own leaf keys (NUT-13 type `0x03`) by matching derived candidates by value.
+ *
+ * @remarks
+ * Leaf order is not committed and `i` has no canonical meaning, so position tells you nothing:
+ * derive `i = 0, 1, 2…` and match the tree's keys by value, as NUT-28 does for slots. The scan is
+ * bounded by the 255-leaf-key slot cap, and stops early once every key is accounted for.
+ * @param counter - The proof's counter, ie the one its secret key was derived at.
+ * @param keysHex - The tree's leaf keys (33-byte compressed hex); foreign keys simply never match.
+ * @returns A map of leaf key hex to its 32-byte private key; keys the wallet does not own are
+ *   absent.
+ */
+export function recoverV3LeafKeys(
+  seed: Uint8Array,
+  keysetId: string,
+  counter: number,
+  keysHex: string[],
+): Map<string, Uint8Array> {
+  assertV3Keyset(keysetId, 'Leaf key');
+  const wanted = new Set(keysHex.map((key) => key.toLowerCase()));
+  const found = new Map<string, Uint8Array>();
+  for (let index = 0; index < NUTROOT_MAX_SLOTS - 1 && found.size < wanted.size; index++) {
+    const secretKey = deriveLeafKey(seed, keysetId, counter, index);
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(secretKey));
+    if (wanted.has(pubkey)) found.set(pubkey, secretKey);
+  }
+  return found;
+}
+
+/**
+ * Recover the internal private keys behind self-owned v3 point secrets by counter scan.
+ *
+ * @remarks
+ * A self-owned plain v3 proof needs no stored spend info: `k` re-derives from the seed (type
+ * `0x00`). Scans counters `[0, maxCounter)` and trial-matches each derived `K` against the wanted
+ * secrets. Returns a map of secret hex to its 32-byte private key; unmatched secrets are absent.
+ * @param seed - Wallet seed.
+ * @param keysetId - V3 (`02…`) keyset id.
+ * @param secretsHex - The 66-char hex secrets to resolve.
+ * @param maxCounter - Exclusive scan bound; use the wallet's current counter for the keyset.
+ */
+export function recoverV3SecretKeys(
+  seed: Uint8Array,
+  keysetId: string,
+  secretsHex: string[],
+  maxCounter: number,
+): Map<string, Uint8Array> {
+  if (!isBlsKeyset(keysetId)) {
+    throw new CTSError('Secret key recovery is a v3 keyset operation');
+  }
+  if (!Number.isInteger(maxCounter) || maxCounter < 0 || maxCounter > 1 << 20) {
+    throw new CTSError('maxCounter must be an integer in [0, 2^20]');
+  }
+  const wanted = new Set(secretsHex);
+  const found = new Map<string, Uint8Array>();
+  for (let counter = 0; counter < maxCounter && found.size < wanted.size; counter++) {
+    const { secret, secretKey } = deriveSecretAndBlindingFactor(seed, keysetId, counter);
+    const secretHex = bytesToHex(secret);
+    if (wanted.has(secretHex) && secretKey) {
+      found.set(secretHex, secretKey);
+    }
+  }
+  return found;
 }

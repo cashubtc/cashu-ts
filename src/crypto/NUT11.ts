@@ -8,6 +8,7 @@ import { type HTLCWitness, type P2PKWitness, type Proof } from '../model/types';
 import { type NUT10Option } from '../wallet/types/payment-requests';
 
 import { getValidSigners, schnorrSignMessage, schnorrVerifyMessage, type PrivKey } from './core';
+import { isV3PointSecret } from './curve_bls';
 import { normalizeSecpPubkey } from './curve_secp';
 import {
   getTagInt,
@@ -22,6 +23,7 @@ import {
   getSecretKind,
 } from './NUT10';
 import { deriveP2BKSecretKeys } from './NUT28';
+import type { NutrootLeaf } from './nutroot';
 
 export const SigFlags = {
   SIG_INPUTS: 'SIG_INPUTS',
@@ -237,8 +239,8 @@ export function dedupeP2PKPubkeys(keys: string[]): string[] {
  * Validate and normalize a {@link P2PKOptions} into a canonical, deduplicated copy (not mutated).
  *
  * @remarks
- * Dedupes keys, defaults the signature threshold, and rejects unsatisfiable thresholds. External
- * callers use `P2PKBuilder.fromOptions(p2pk).toOptions()`.
+ * Dedupes keys, defaults the signature threshold, and rejects unsatisfiable thresholds.
+ * `LockBuilder` and `PaymentRequest.toP2PKOptions()` call this internally.
  * @internal
  */
 export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
@@ -521,6 +523,9 @@ export function signP2PKProofs(
   const toHex = (k: PrivKey): string => (typeof k === 'string' ? k : bytesToHex(k));
   const privateKeyHex = Array.isArray(privateKey) ? privateKey.map(toHex) : toHex(privateKey);
   return proofs.map((proof, index) => {
+    // A v3 point secret carries no NUT-11 conditions and signs the transaction
+    // instead (NUT-10), so parsing it here would only log a failure per proof
+    if (isV3PointSecret(proof.secret)) return proof;
     const privateKeys: string[] = maybeDeriveP2BKPrivateKeys(privateKeyHex, proof);
     let signedProof = proof;
     for (const priv of privateKeys) {
@@ -728,6 +733,42 @@ export function verifyP2PKSpendingConditions(
   const result = { ...resultBase, success: true, path: 'UNLOCKED' as const };
   logger.debug('No refund pubkeys, anyone can spend.', { result });
   return result;
+}
+
+/**
+ * Reads a P2PK or HTLC secret as nutroot-shaped leaves: the main path at index 0 and, given a
+ * locktime, the refund path as an `after` leaf at index 1.
+ *
+ * @remarks
+ * Diagnostic shape for `Wallet.spendOptions`. A keyless `after` leaf (`n: 0`) is NUT-11's
+ * anyone-after-expiry, which no nutroot tree can encode: never serialize these leaves.
+ * @throws If the secret is not P2PK/HTLC or its tags break the NUT-11 rules.
+ * @internal
+ */
+export function p2pkSpendLeaves(secretStr: string | Secret): NutrootLeaf[] {
+  const secret = parseP2PKSecret(secretStr);
+  const mainKeys = getP2PKWitnessPubkeys(secret);
+  const refundKeys = getP2PKWitnessRefundkeys(secret);
+  const locktime = getLocktime(secret);
+  assertSpendingConditionRules({
+    mainKeyCount: mainKeys.length,
+    refundKeyCount: refundKeys.length,
+    nSigs: getTagInt(secret, 'n_sigs'),
+    nSigsRefund: getTagInt(secret, 'n_sigs_refund'),
+    hasLocktime: Number.isFinite(locktime),
+  });
+  // A path with no keys needs no signatures (keyless HTLC, or expiry with no refund keys).
+  const n = (tag: string, keys: string[]) =>
+    keys.length ? Math.max(getTagInt(secret, tag) ?? 1, 1) : 0;
+  const main: NutrootLeaf =
+    getSecretKind(secret) === 'HTLC'
+      ? { type: 'hashlock', n: n('n_sigs', mainKeys), keys: mainKeys, hash: getDataField(secret) }
+      : { type: 'threshold', n: n('n_sigs', mainKeys), keys: mainKeys };
+  if (!Number.isFinite(locktime)) return [main];
+  return [
+    main,
+    { type: 'after', n: n('n_sigs_refund', refundKeys), keys: refundKeys, time: locktime },
+  ];
 }
 
 /**

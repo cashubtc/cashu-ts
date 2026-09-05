@@ -1,8 +1,9 @@
-import { type P2PKOptions } from '../../crypto';
+import { type NutrootLeaf } from '../../crypto/nutroot';
 import { type AmountLike } from '../../model/Amount';
 import { type OutputDataFactory, type OutputDataLike } from '../../model/OutputData';
 import type { ProofLike } from '../../model/types/proof';
 import { type OperationCounters } from '../CounterSource';
+import { type LockOptions } from '../lock';
 
 export type SecretsPolicy = 'auto' | 'deterministic' | 'random';
 
@@ -94,12 +95,13 @@ export type OutputType =
     } & SharedOutputTypeProps)
   | ({
       /**
-       * P2PK (NUT-11) or HTLC (NUT-14) locked outputs.
+       * Locked outputs: semantic spending conditions the wallet encodes for the active keyset
+       * (NUT-11/14 tags on pre-v3, a nutroot tree on v3).
        *
-       * @see P2PKOptions
+       * @see LockOptions
        */
-      type: 'p2pk';
-      options: P2PKOptions;
+      type: 'lock';
+      options: LockOptions;
     } & SharedOutputTypeProps)
   | ({
       /**
@@ -145,11 +147,65 @@ export interface OutputConfig {
 export type OnCountersReserved = (info: OperationCounters) => void;
 
 /**
+ * A caller's choice to spend one v3 input through one leaf of its disclosed tree (NUT-10).
+ *
+ * @remarks
+ * Keyed by `secret`, not by input index: selection decides the input order and the caller does not
+ * see it before the transaction is built. The wallet supplies the slot keys it holds for the leaf;
+ * `extraKeys` and `preimage` are what only the caller can provide.
+ */
+export type ScriptPathPlan = {
+  /**
+   * The input to spend this way, by its 33-byte point secret hex.
+   */
+  secret: string;
+  /**
+   * Which leaf of the proof's disclosed tree, by its index in that list.
+   */
+  leafIndex: number;
+  /**
+   * Preimage for a hashlock leaf, hex.
+   */
+  preimage?: string;
+  /**
+   * Keys to sign with beyond those the wallet recovers itself, hex.
+   */
+  extraKeys?: string[];
+  /**
+   * Co-signer hook for a leaf whose other keys live elsewhere, called once the transaction is fixed
+   * and its digest known.
+   *
+   * @remarks
+   * Awaited inside the send, so it may reach a remote signer, but the transaction is in flight
+   * while it runs: use it for ceremonies measured in seconds, not ones needing human approval
+   * across days. Returns BIP-340 signature hex over `digest` by the leaf's keys.
+   */
+  cosign?: (request: CosignRequest) => Promise<string[]>;
+};
+
+/**
+ * What a {@link ScriptPathPlan.cosign} hook is handed.
+ *
+ * @remarks
+ * `digest` is what gets signed: the input digest, `tagged_hash("Cashu_TransactionInput",
+ * SHA256(message) || SHA256(container))`. `message` is the tagged transaction message and
+ * `container` the input's own transcript record, so a signer can recompute the digest and refuse
+ * anything it cannot verify.
+ */
+export type CosignRequest = {
+  digest: Uint8Array;
+  message: Uint8Array;
+  container: Uint8Array;
+  leaf: NutrootLeaf;
+};
+
+/**
  * Configuration for send operations.
  */
 export type SendConfig = {
   keysetId?: string;
   privkey?: string | string[];
+  scriptPath?: ScriptPathPlan[];
   includeFees?: boolean;
   proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
   onCountersReserved?: OnCountersReserved;
@@ -170,6 +226,7 @@ export type SendOfflineConfig = {
 export type ReceiveConfig = {
   keysetId?: string;
   privkey?: string | string[];
+  scriptPath?: ScriptPathPlan[];
   requireDleq?: boolean;
   proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
   onCountersReserved?: OnCountersReserved;
@@ -191,12 +248,20 @@ export type MintProofsConfig = {
 export type MeltProofsConfig = {
   keysetId?: string;
   privkey?: string | string[];
+  scriptPath?: ScriptPathPlan[];
   onCountersReserved?: OnCountersReserved;
   /**
    * Request NUT-08 blank outputs so the mint can return unspent fee reserve. Defaults to true. Set
    * false to forfeit the change, which also permits melting on an inactive keyset.
    */
   nut08Change?: boolean;
+};
+
+export type CompleteSwapOptions = {
+  /**
+   * Script path spends for v3 inputs, evaluated when each transaction input digest exists.
+   */
+  scriptPath?: ScriptPathPlan[];
 };
 
 export type CompleteMeltOptions = {
@@ -206,4 +271,8 @@ export type CompleteMeltOptions = {
    * request (`quote`, `inputs`, `outputs`, `prefer_async`) are rejected.
    */
   extraPayload?: Record<string, unknown>;
+  /**
+   * Script path spends for v3 inputs, evaluated when each transaction input digest exists.
+   */
+  scriptPath?: ScriptPathPlan[];
 };

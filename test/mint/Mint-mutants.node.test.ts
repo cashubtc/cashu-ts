@@ -3,6 +3,7 @@ import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   Amount,
+  JSONInt,
   MeltQuoteState,
   Mint,
   WSConnection,
@@ -22,6 +23,9 @@ type ReqArgs = {
 };
 
 const mintUrl = 'https://localhost:3338';
+
+// Mint serializes the body before the transport; parse it back to assert on the wire form.
+const sentBody = (body: unknown): unknown => JSONInt.parse(body as string);
 
 const makeRequest = <T>(payload: T): RequestFn => {
   return (async (options: ReqArgs): Promise<T> => {
@@ -153,7 +157,7 @@ describe('Mint mutation coverage', () => {
       const requestSpy = vi.fn(async (options: ReqArgs) => {
         expect(options.endpoint).toBe(mintUrl + '/v1/mint/quote/custom-pay');
         expect(options.method).toBe('POST');
-        expect(options.requestBody).toEqual({ unit: 'sat' });
+        expect(sentBody(options.requestBody)).toEqual({ unit: 'sat' });
         return { quote: 'q1', request: 'pay-req', unit: 'sat', state: 'UNPAID', expiry: 1 };
       }) as RequestFn;
       const mint = new Mint(mintUrl, { customRequest: requestSpy });
@@ -321,7 +325,10 @@ describe('Mint mutation coverage', () => {
     it('mintBatch serializes quote_amounts as bigints', async () => {
       const requestSpy = vi.fn(async (options: ReqArgs) => {
         expect(options.endpoint).toBe(mintUrl + '/v1/mint/custom-pay/batch');
-        expect((options.requestBody as { quote_amounts: unknown }).quote_amounts).toEqual([1n, 2n]);
+        // JSON number tokens on the wire (a stringified Amount would parse back as '1')
+        expect((sentBody(options.requestBody) as { quote_amounts: unknown }).quote_amounts).toEqual(
+          [1, 2],
+        );
         return { signatures: [] };
       }) as RequestFn;
       const mint = new Mint(mintUrl, { customRequest: requestSpy });
@@ -339,7 +346,7 @@ describe('Mint mutation coverage', () => {
       const requestSpy = vi.fn(async (options: ReqArgs) => {
         expect(options.endpoint).toBe(mintUrl + '/v1/checkstate');
         expect(options.method).toBe('POST');
-        expect(options.requestBody).toEqual({ Ys: ['02y'] });
+        expect(sentBody(options.requestBody)).toEqual({ Ys: ['02y'] });
         return { states: [{ Y: '02y', state: 'UNSPENT' }] };
       }) as RequestFn;
       const mint = new Mint(mintUrl, { customRequest: requestSpy });
@@ -351,8 +358,8 @@ describe('Mint mutation coverage', () => {
 
     it('forwards unknown melt quote option fields untouched', async () => {
       const requestSpy = vi.fn(async (options: ReqArgs) => {
-        const body = options.requestBody as { options: Record<string, unknown> };
-        expect(body.options.amountless).toEqual({ amount_msat: 1000n });
+        const body = sentBody(options.requestBody) as { options: Record<string, unknown> };
+        expect(body.options.amountless).toEqual({ amount_msat: 1000 });
         expect(body.options.custom_hint).toBe('keep-me');
         return meltBoltResp;
       }) as RequestFn;
@@ -369,8 +376,8 @@ describe('Mint mutation coverage', () => {
 
     it('normalizes mpp amounts to bigints in melt quote requests', async () => {
       const requestSpy = vi.fn(async (options: ReqArgs) => {
-        const body = options.requestBody as { options: { mpp: unknown } };
-        expect(body.options.mpp).toEqual({ amount: 5000n });
+        const body = sentBody(options.requestBody) as { options: { mpp: unknown } };
+        expect(body.options.mpp).toEqual({ amount: 5000 });
         return meltBoltResp;
       }) as RequestFn;
       const mint = new Mint(mintUrl, { customRequest: requestSpy });
@@ -386,7 +393,7 @@ describe('Mint mutation coverage', () => {
 
     it('tolerates an explicitly undefined mpp option', async () => {
       const requestSpy = vi.fn(async (options: ReqArgs) => {
-        const body = options.requestBody as { options: { mpp?: unknown } };
+        const body = sentBody(options.requestBody) as { options: { mpp?: unknown } };
         expect(body.options.mpp).toBeUndefined();
         return meltBoltResp;
       }) as RequestFn;

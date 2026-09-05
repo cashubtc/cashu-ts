@@ -1,4 +1,4 @@
-import { hexToBytes } from '@noble/curves/utils.js';
+import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect } from 'vitest';
 
@@ -12,6 +12,8 @@ import {
   type HasKeysetKeys,
   type ProofLike,
 } from '../../src';
+import { getG2PubKeyFromPrivKey, hashToCurveBls } from '../../src/crypto/curve_bls';
+import { deriveKeysetId } from '../../src/utils';
 import { PUBKEYS } from '../consts';
 
 import { mint, unit, token3sat, mintUrl, logger, useTestServer } from './_setup';
@@ -82,6 +84,48 @@ describe('receive', () => {
     const proofs = await wallet.receive(storedProofs);
     expect(proofs).toHaveLength(1);
     expect(proofs[0].id).toBe('00bd033559de27d0');
+  });
+
+  test.each([
+    JSON.stringify({ signatures: ['00'.repeat(64)] }),
+    JSON.stringify({
+      leaf: '00',
+      control: { K: `02${'00'.repeat(32)}`, path: [] },
+      signatures: ['00'.repeat(64)],
+    }),
+  ])('drops an incoming v3 witness before building the receive swap', async (witness) => {
+    const secret = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+    const mintKey = hexToBytes('00'.repeat(31) + '02');
+    const keys = { '1': bytesToHex(getG2PubKeyFromPrivKey(mintKey)) };
+    const id = deriveKeysetId(keys, { versionByte: 2, unit, input_fee_ppk: 0 });
+    const keyset = {
+      id,
+      unit,
+      active: true,
+      input_fee_ppk: 0,
+      final_expiry: null,
+      keys,
+    };
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () => HttpResponse.json({ keysets: [keyset] })),
+      http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [keyset] })),
+      http.get(mintUrl + '/v1/keys/' + id, () => HttpResponse.json({ keysets: [keyset] })),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const proof = {
+      id,
+      amount: Amount.from(1),
+      secret,
+      C: hashToCurveBls(new TextEncoder().encode(secret)).multiply(2n).toHex(true),
+      witness,
+      spend_info: { k: '00'.repeat(31) + '01' },
+    };
+
+    const preview = await wallet.prepareSwapToReceive([proof]);
+
+    expect(preview.inputs[0].witness).toBeUndefined();
+    expect(proof.witness).toBe(witness);
   });
 
   test('receive Proof[] - unknown keyset ID throws', async () => {
@@ -452,10 +496,9 @@ describe('receive', () => {
       token3sat,
       {},
       {
-        type: 'p2pk',
+        type: 'lock',
         options: {
-          kind: 'P2PK',
-          data: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+          mainKeys: ['0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798'],
         },
       },
     );

@@ -1,12 +1,14 @@
-import { hexToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 
 import {
+  BLS_FR_ORDER,
   blindMessage,
   createBlindSignature,
   createNewMintKeys,
   serializeMintKeys,
   deserializeMintKeys,
+  verifyUnblindedSignature,
   type SerializedMintKeys,
 } from '../../src/crypto';
 import { hexToNumber } from '../../src/utils';
@@ -61,7 +63,7 @@ describe('serialize mint keys', () => {
 
 describe('v3 (BLS) mint keys', () => {
   test('versionByte=2 produces 96-byte G2 pubkeys and a 02-prefixed id', () => {
-    const { pubKeys, keysetId } = createNewMintKeys(
+    const { pubKeys, privKeys, keysetId } = createNewMintKeys(
       4,
       new TextEncoder().encode('TEST_PRIVATE_KEY'),
       { versionByte: 2 },
@@ -70,6 +72,16 @@ describe('v3 (BLS) mint keys', () => {
     for (const amount of Object.keys(pubKeys)) {
       // G2 compressed = 96 bytes
       expect(pubKeys[amount].length).toBe(96);
+      const scalar = BigInt(`0x${bytesToHex(privKeys[amount])}`);
+      expect(scalar > 0n && scalar < BLS_FR_ORDER).toBe(true);
+    }
+  });
+
+  test('random v3 mint keys rejection-sample into Fr', () => {
+    const { privKeys } = createNewMintKeys(8, undefined, { versionByte: 2 });
+    for (const key of Object.values(privKeys)) {
+      const scalar = BigInt(`0x${bytesToHex(key)}`);
+      expect(scalar > 0n && scalar < BLS_FR_ORDER).toBe(true);
     }
   });
 
@@ -83,24 +95,38 @@ describe('v3 (BLS) mint keys', () => {
       { versionByte: 2, unit: 'sat' },
     );
 
-    expect(keysetId).toBe('02d86946ba2070151dc52e953df7458e8e9fe43192dee1c4b8c89fcd0b3573eab7');
+    expect(keysetId).toBe('022e079d1620ca63ba9d659907716f5feb941715ad29bd4616f89f71ac00070547');
 
     const expected: Record<string, string> = {
       '1':
-        '88e1aa1182ccb440c6ff6ba3faa5a3da0d0093a463a119b23d739b6b22488b318262da951f23fd6d4a11e4fc0515d53f' +
-        '0ee3d76f8f952e0c5f7475a57e633edb2233d77ef10378379a354c5004bd9155664d090a0f52e0f6b5a1ecaecd144ee6',
+        'b8df0ca950067cb9c29002aa9d6a2218660f774dd36728bae916400b63d8d24bca8abe24c66581adc4a849ab8c4b2fe5' +
+        '12334c6beeca1d05548d1663e7e04f6ed6c845eb3017030292e9779a9ee43bcb587b511afd0329a0faa927f50ec74ac4',
       '2':
-        'ab6276b680267e379cf2f715a76fa80a871bdcb11e92d384d3842f9ed8ad326d0c1c8c13d7a40928fdc648b3bece85d6' +
-        '0c1874376d7d45887637b4e46c7b27ec248a0e04eb26bb3e11606e8d3fd90c82f2a9f87f17b696e4161d27c72f57d694',
+        '82cf4f6979ae88f9d43e4fa8e62555bfff649266aab51dd912b70fede20058f005e210c84e89ae3fe0c456934698e7dc' +
+        '05d40c2967535b4bc2a1a97149becbcb7ae33789d15ff1022d1821b3674988e72f1262e53d99211f9de6f33917df05c2',
       '4':
-        'a1af6bd271971d71d56d244b9dd2849eac47c9edc3fa82bf8f388961efc928f10d1b417f5db2fc2f3c6a809e28a111c7' +
-        '0f23bb08231897ba74e44ef33c9e0f9e579bf8cbe3594bee5ad3372e9640047c52f3bd54db86f1c5289e34255dd15d06',
+        '80f99027461b75d15a498628557919bd927a0db22455b586c429080c19dba400a982a30516393146d803d4234dd2763b0' +
+        '8f82ae93acba168dd62a42def6117e2589bd2d6c206cd6f01943f070abc3371fdb04d054a2baefa93dd484471454362',
       '8':
-        '8b69dd1aaeb16c2417e8f7977c1d53f812a771fd24d0d5e30e93298f677056f4c0229d1899fc2338224d956738b3485e' +
-        '0627a92a264615a710a6666c75f30e221254deb6c1d0c81b87fd617d383ff0c8cfd50d8bcdb7a7b809dab3e3df35fbe8',
+        'a1640f644c494ce7988efb342b3a0efa7e63cda47c9fb6ceafb6c292e499289762468c444f6815e525dd637527db3779' +
+        '0d1964339cba94375d46f80409a9c6203c8d9b891f5e18bd02c47706a6c2878282846095f3b1c36199fca9e77ed523db',
     };
 
     const serialized = serializeMintKeys(pubKeys);
     expect(serialized).toEqual(expected);
+  });
+});
+
+describe('verifyUnblindedSignature: BLS scalar guards', () => {
+  test('rejects a mint scalar outside Fr*', () => {
+    const proof = {
+      id: `02${'ab'.repeat(32)}`,
+      secret: `02${'cd'.repeat(32)}`,
+      C: null,
+    } as any;
+    // Wrong width, zero, and >= the Fr order are all outside the scalar field.
+    expect(() => verifyUnblindedSignature(proof, new Uint8Array(31))).toThrow(/Fr\*/);
+    expect(() => verifyUnblindedSignature(proof, new Uint8Array(32))).toThrow(/Fr\*/);
+    expect(() => verifyUnblindedSignature(proof, new Uint8Array(32).fill(0xff))).toThrow(/Fr\*/);
   });
 });

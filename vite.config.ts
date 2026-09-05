@@ -109,7 +109,7 @@ export default defineConfig(({ command }) => {
             environment: 'node',
             include: ['test/**/*.test.ts'],
             exclude: [
-              'test/{auth,integration}.test.ts',
+              'test/{auth,integration,integration-v3}.test.ts',
               'test/**.browser.test.ts',
               'test/consumer/**/*.test.ts',
               ...configDefaults.exclude,
@@ -136,7 +136,7 @@ export default defineConfig(({ command }) => {
             },
             include: ['test/**/*.test.ts'],
             exclude: [
-              'test/{auth,integration}.test.ts',
+              'test/{auth,integration,integration-v3}.test.ts',
               'test/consumer/**/*.test.ts',
               'test/**/**.node.test.ts',
               ...configDefaults.exclude,
@@ -148,7 +148,7 @@ export default defineConfig(({ command }) => {
             name: 'integration',
             globals: true,
             environment: 'node',
-            include: ['test/integration.test.ts'],
+            include: ['test/integration.test.ts', 'test/integration-v3.test.ts'],
             exclude: [...configDefaults.exclude],
           },
         },

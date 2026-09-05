@@ -7,6 +7,7 @@
 
 import { type AuthProvider } from '../auth/AuthProvider';
 import {
+  schnorrSignDigest,
   signMintQuote,
   findSigningKey,
   signP2PKProofs as cryptoSignP2PKProofs,
@@ -17,10 +18,21 @@ import {
   buildP2PKSigAllMessageV0,
   assertSigAllInputs,
   parseSecret,
+  isV3PointSecret,
 } from '../crypto';
 // Internal transitional fallback — not part of crypto/index.ts
-import { normalizeSecpPubkey } from '../crypto/curve_secp';
+import { getPubKeyFromPrivKey, normalizeSecpPubkey } from '../crypto/curve_secp';
+import { p2pkOptionsToPRNut10, type P2PKOptions } from '../crypto/NUT11';
+import { verifyHTLCHash } from '../crypto/NUT14';
 import { signMintQuoteLegacy } from '../crypto/NUT20';
+import {
+  NUTROOT_NUMS_KEY,
+  recoverLeafKeySecretKeys,
+  recoverReceiverKeyedSecretKey,
+  verifyNutrootRequestTree,
+  type ParsedNutrootOption,
+} from '../crypto/nutroot';
+import { inputsForPayload } from '../crypto/transcript';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
@@ -34,7 +46,7 @@ import {
 import { MintInfo } from '../model/MintInfo';
 import { OutputData, type OutputDataLike } from '../model/OutputData';
 import { DefaultOutputDataCreator, type OutputDataCreator } from '../model/OutputDataCreator';
-import type { PaymentRequest } from '../model/PaymentRequest';
+import { nut10ToP2PKOptions, type PaymentRequest } from '../model/PaymentRequest';
 import type {
   GetInfoResponse,
   MeltRequest,
@@ -53,6 +65,7 @@ import type {
   MintQuoteOnchainResponse,
   MintQuoteBolt11Request,
   MintQuoteBolt12Request,
+  SpendInfo,
   SwapRequest,
 } from '../model/types';
 import type { SerializedBlindedSignature } from '../model/types/blinded';
@@ -64,28 +77,47 @@ import type { Token } from '../model/types/token';
 import { BATCH_POOL_SIZE, runPool } from '../transport';
 import type { RequestFetch, RequestFn } from '../transport';
 import {
+  ABSOLUTE_MAX_BATCH_SIZE,
   bolt11AmountMsat,
+  bytesToHex,
+  DEFAULT_MAX_ARRAY_LENGTH,
   getDecodedToken,
+  hexToBytes,
   invoiceHasAmountInHRP,
   normalizeMintUrl,
   normalizeProofAmounts,
+  REPAIR_COOLDOWN_MS,
   splitAmount,
   sumProofs,
   verifyProofsForReceive,
-  ABSOLUTE_MAX_BATCH_SIZE,
-  DEFAULT_MAX_ARRAY_LENGTH,
-  REPAIR_COOLDOWN_MS,
 } from '../utils';
 
-import { ceilLog2, getKeepAmounts, stringifyOutputTypeForLog } from './_internal';
+import {
+  ceilLog2,
+  getKeepAmounts,
+  orderOutputsForPayload,
+  stringifyOutputTypeForLog,
+} from './_internal';
 import {
   type CounterSource,
   EphemeralCounterSource,
   type OperationCounters,
   type CounterRange,
+  QUOTE_COUNTER_KEY,
 } from './CounterSource';
 import { KeyChain } from './KeyChain';
 import { type Keyset } from './Keyset';
+import { lockToNutrootOptions, lockToP2PKOptions } from './lock';
+import {
+  type NutrootWalletState,
+  assertQuoteLockedTo,
+  attachTransactionWitnesses,
+  collectSpendInfoKeys,
+  createQuoteLockKeyPair,
+  prepareScriptPathSpends,
+  proofSpendOptions,
+  scanQuoteLockKey,
+} from './nutroot';
 import { selectProofsRotating, type SelectProofs } from './SelectProofs';
 import {
   type MeltPreview,
@@ -97,9 +129,13 @@ import {
   type MintProofsConfig,
   type MeltProofsConfig,
   type CompleteMeltOptions,
+  type CompleteSwapOptions,
   type SwapTransaction,
   type MeltProofsResponse,
   type SendResponse,
+  type SpendReceipt,
+  type ScriptPathPlan,
+  type SpendOptions,
   type RestoreConfig,
   type BatchRestoreConfig,
   type RestoreAllConfig,
@@ -491,7 +527,8 @@ class Wallet {
 
   /**
    * NUT-06: the mint's advertised cap on the length of any array in a request, used to size the
-   * checkstate and restore batches. Falls back to the library default until mint info is loaded.
+   * NUT-07 state check and NUT-09 restore batches. Falls back to the library default until mint
+   * info is loaded.
    */
   private get maxArrayLength(): number {
     return this._mintInfo?.maxArrayLength ?? DEFAULT_MAX_ARRAY_LENGTH;
@@ -855,7 +892,7 @@ class Wallet {
 
     // Fire event after successful reservation (wallet does not await handlers)
     const used: OperationCounters = {
-      keysetId,
+      counterKey: keysetId,
       start: range.start,
       count: range.count,
       next: range.start + range.count,
@@ -1115,13 +1152,22 @@ class Wallet {
           outputType.denominations,
         );
         break;
-      case 'p2pk':
-        outputData = this._outputDataCreator.createP2PKData(
-          outputType.options,
-          outputAmount,
-          keyset,
-          outputType.denominations,
-        );
+      case 'lock':
+        // The one place the keyset version is known: semantic lock options encode here, so
+        // consumers never pick an encoding. Inexpressible shapes refuse naming the reason.
+        outputData = isBlsKeyset(keyset.id)
+          ? OutputData.createNutrootData(
+              lockToNutrootOptions(outputType.options),
+              outputAmount,
+              keyset,
+              outputType.denominations,
+            )
+          : this._outputDataCreator.createP2PKData(
+              lockToP2PKOptions(outputType.options),
+              outputAmount,
+              keyset,
+              outputType.denominations,
+            );
         break;
       case 'factory': {
         const factorySplit = splitAmount(outputAmount, keyset.keys, outputType.denominations);
@@ -1146,6 +1192,28 @@ class Wallet {
         this.fail('Invalid OutputType');
       }
     }
+    // A key backs at most one secret, ever (NUT-10). Two outputs of the same amount sharing a
+    // secret unblind to the same C, so the second is the first again and its value is gone
+    // silently. Catches a factory handing every output one secret, or a reused ephemeral.
+    // The mint cannot catch this for us: outputs are blinded, and the same secret under different
+    // blinding factors gives different `B_`, so both get signed. It surfaces only when the first
+    // spend burns the shared `Y`, mint-wide and permanently (NUT-10).
+    const decoder = new TextDecoder();
+    const secrets = outputData.map((d) => decoder.decode(d.secret));
+    const seenSecrets = new Set<string>();
+    for (const [i, secret] of secrets.entries()) {
+      // Report the position, never the secret: it is the spending material.
+      this.failIf(seenSecrets.has(secret), `Duplicate output secret at index ${i}`, { index: i });
+      seenSecrets.add(secret);
+    }
+    // A random v3 output's key rides to the proof as spend info; mirror it for a custom
+    // factory that set only secretKey, so the proof still carries its own key.
+    for (const output of outputData) {
+      const data = output as { secretKey?: Uint8Array; spendInfo?: SpendInfo };
+      if (data.secretKey && !data.spendInfo) {
+        data.spendInfo = { k: bytesToHex(data.secretKey) };
+      }
+    }
     return outputData;
   }
 
@@ -1166,23 +1234,13 @@ class Wallet {
     // Prepare inputs for mint
     inputs = this._prepareInputsForMint(inputs);
 
-    // Sort ASC by amount for privacy, but keep indices to return order afterwards
-    // But ONLY if the transaction is NOT SIG_ALL (as order is fixed for signing)
-    const mergedBlindingData = [...keepOutputs, ...sendOutputs];
-    const indices = mergedBlindingData.map((_, i) => i);
-    if (!isP2PKSigAll(inputs)) {
-      indices.sort((a, b) => {
-        return mergedBlindingData[a].blindedMessage.amount.compareTo(
-          mergedBlindingData[b].blindedMessage.amount,
-        );
-      });
-    }
-    const keepVector: boolean[] = [
-      ...Array.from({ length: keepOutputs.length }, () => true),
-      ...Array.from({ length: sendOutputs.length }, () => false),
-    ];
-    const sortedOutputData: OutputDataLike[] = indices.map((i) => mergedBlindingData[i]);
-    const sortedKeepVector: boolean[] = indices.map((i) => keepVector[i]);
+    // Sort ASC by amount for privacy, SIG_ALL included: its message is built from this same
+    // ordering, so there is nothing left to fix in place.
+    const {
+      outputData: sortedOutputData,
+      keepVector: sortedKeepVector,
+      indices,
+    } = orderOutputsForPayload(keepOutputs, sendOutputs);
     const outputs = sortedOutputData.map((d) => d.blindedMessage);
     // this._logger.debug('createSwapTransaction:', {
     //   indices,
@@ -1208,6 +1266,14 @@ class Wallet {
   /**
    * Receive a token (swaps with mint for new proofs)
    *
+   * @remarks
+   * The swap is the sweep (NUT-10): received proofs become the wallet's own seed-derived secrets,
+   * which matters whatever the spend info says. A bearer `k` leaves the sender holding the same
+   * scalar, and a bearer scalar can conceal a tweaked tree. A receiver-keyed `E` is wallet data and
+   * not seed-derivable, so the proof is unrecoverable from the seed alone until swept. A disclosed
+   * tree with neither leaves the key-path holder able to spend at any time, unless `K` is a NUMS
+   * offset. Spending a locked proof needs its key: pass `config.privkey` for a receiver-keyed
+   * proof, or `config.scriptPath` to take a leaf.
    * @example
    *
    * ```typescript
@@ -1230,7 +1296,11 @@ class Wallet {
   ): Promise<Proof[]> {
     // Prepare and complete the send
     const txn = await this.prepareSwapToReceive(token, config, outputType);
-    const { keep } = await this.completeSwap(txn, config?.privkey);
+    const { keep } = await this.completeSwap(
+      txn,
+      config?.privkey,
+      config?.scriptPath?.length ? { scriptPath: config.scriptPath } : undefined,
+    );
     return keep;
   }
 
@@ -1283,6 +1353,18 @@ class Wallet {
       // Token object may come from JSON.parse/localStorage and need runtime rehydration.
       proofs = normalizeProofAmounts(decodedToken.proofs);
     }
+
+    // A v3 witness signs one transaction. An incoming proof cannot already carry a witness for
+    // the outputs created below, so discard the sender's transcript. A script-path package for
+    // this swap is merged into the completed preview later and is therefore preserved.
+    proofs = proofs.map((proof) => {
+      if (!isBlsKeyset(proof.id) || !isV3PointSecret(proof.secret) || proof.witness === undefined) {
+        return proof;
+      }
+      const withoutWitness = { ...proof };
+      delete withoutWitness.witness;
+      return withoutWitness;
+    });
 
     // Rotation evidence check: repair the snapshot and load any missing keys before
     // any assertion or fee math relies on it.
@@ -1381,8 +1463,9 @@ class Wallet {
       !sendAmount.isZero() && send.length === 0,
       'Send cannot be completed offline for the requested amount',
     );
-    // Ensure witnesses are serialized, strip DLEQ if not required, keep p2pk_e
-    const sendPrepared = this._prepareInputsForMint(send, requireDleq, true);
+    // Ensure witnesses are serialized, strip DLEQ if not required, keep p2pk_e and
+    // spend_info: these proofs travel to the receiver, not the mint
+    const sendPrepared = this._prepareInputsForMint(send, requireDleq, true, true);
     return { keep, send: sendPrepared };
   }
 
@@ -1471,7 +1554,11 @@ class Wallet {
 
     // Prepare and complete the send
     const txn = await this.prepareSwapToSend(sendAmount, proofs, config, outputConfig);
-    return await this.completeSwap(txn, config?.privkey);
+    return await this.completeSwap(
+      txn,
+      config?.privkey,
+      config?.scriptPath?.length ? { scriptPath: config.scriptPath } : undefined,
+    );
   }
 
   /**
@@ -1617,19 +1704,26 @@ class Wallet {
    * @returns SendResponse with keep/send proofs.
    * @throws {@link StaleKeysetError} If the mint rejects the outputs' keyset.
    */
-  async completeSwap(swapPreview: SwapPreview, privkey?: string | string[]): Promise<SendResponse> {
+  async completeSwap(
+    swapPreview: SwapPreview,
+    privkey?: string | string[],
+    options?: CompleteSwapOptions,
+  ): Promise<SendResponse> {
+    const scriptPath = options?.scriptPath;
     const keepOutputs: OutputDataLike[] = swapPreview?.keepOutputs ? swapPreview.keepOutputs : [];
     const sendOutputs: OutputDataLike[] = swapPreview.sendOutputs ? swapPreview.sendOutputs : [];
     const unselectedProofs: Proof[] = swapPreview.unselectedProofs
       ? swapPreview.unselectedProofs
       : [];
 
-    // Sign proofs if needed
+    // Sign proofs if needed. SIG_ALL covers the outputs, so it must see them in the order the
+    // payload will carry, which is what orderOutputsForPayload decides for both.
     if (privkey) {
-      swapPreview.inputs = this.signP2PKProofs(swapPreview.inputs, privkey, [
-        ...keepOutputs,
-        ...sendOutputs,
-      ]);
+      swapPreview.inputs = this.signP2PKProofs(
+        swapPreview.inputs,
+        privkey,
+        orderOutputsForPayload(keepOutputs, sendOutputs).outputData,
+      );
     }
 
     // Create swap transaction
@@ -1640,6 +1734,16 @@ class Wallet {
     );
 
     // Execute swap and validate result
+    const privkeys = privkey === undefined ? [] : [privkey].flat();
+    const receipts = await attachTransactionWitnesses(
+      swapTransaction.payload,
+      undefined,
+      collectSpendInfoKeys(swapPreview.inputs, privkey, this._logger),
+      scriptPath?.length
+        ? prepareScriptPathSpends(swapPreview.inputs, scriptPath, privkeys)
+        : undefined,
+      this._nutrootState(),
+    );
     const { signatures } = await this.withStaleKeysetRepair(() =>
       this.mint.swap(swapTransaction.payload),
     );
@@ -1676,6 +1780,7 @@ class Wallet {
     return {
       keep: [...keepProofs, ...unselectedProofs],
       send: sendProofs,
+      ...(receipts.length > 0 && { receipts }),
     };
   }
 
@@ -1775,19 +1880,28 @@ class Wallet {
    *
    * @remarks
    * Verifies `sum(proofs) - inputFees >= amount + mf`, with input fees from this wallet's keysets
-   * and `mf` priced from this mint's NUT-05 melt methods for the wallet unit. Checks the amount
-   * only; proof integrity (DLEQ, locks) remains a separate check.
+   * and `mf` priced from this mint's NUT-05 melt methods for the wallet unit. A locked request also
+   * checks that each proof carries the lock that was asked for: exactly the requested tree for a
+   * nutroot request, and exactly the requested condition for a nut10 one. A receiver-keyed nutroot
+   * request needs `opts.privkeys`, because binding a proof to the receiver key is an ECDH
+   * trial-match only that key can do (NUT-28); without it there is nothing to check and the call
+   * throws rather than passing a payment the payee cannot spend. Proof integrity (pairing/DLEQ)
+   * remains a separate check.
    * @param pr - The payment request being settled.
-   * @param proofs - The received proofs (from this wallet's mint).
+   * @param proofs - The received proofs (from this wallet's mint), with spend info when present.
    * @param expectedAmount - Expected amount for amountless requests; ignored when the request sets
    *   `a`.
+   * @param opts.privkeys - The receiver key(s) the request locks to. Required for a receiver-keyed
+   *   nutroot request, unused otherwise.
    * @throws If no amount is available to check against, the request unit does not match this
-   *   wallet, a proof keyset is unknown, or the request is invalid per NUT-18.
+   *   wallet, a proof keyset is unknown, the request is invalid per NUT-18, a receiver-keyed
+   *   nutroot request is checked without its key, or a proof does not carry the requested lock.
    */
   isPaymentRequestSatisfied(
     pr: PaymentRequest,
-    proofs: Array<Pick<Proof, 'id' | 'amount' | 'secret'>>,
+    proofs: Array<Pick<Proof, 'id' | 'amount' | 'secret' | 'spend_info'>>,
     expectedAmount?: AmountLike,
+    opts?: { privkeys?: string | string[] },
   ): boolean {
     const expected =
       pr.amount ?? (expectedAmount !== undefined ? Amount.from(expectedAmount) : undefined);
@@ -1799,6 +1913,30 @@ class Wallet {
     }
     this.assertProofsInWalletUnit(proofs);
     this.assertNoDuplicateProofs(proofs);
+    // A locked request is satisfied only by proofs carrying the lock that was asked for. Spend
+    // power the payee never requested is a payer clawback (NUT-18): an extra nutroot leaf, or the
+    // legacy twin, a `refund`/`locktime` tag. A both-encoded request accepts either family, each
+    // checked against its own option.
+    const nutrootOption = pr.toNutrootOptions();
+    if (nutrootOption || pr.nut10) {
+      const statics = this.receiverKeysFor(nutrootOption, opts?.privkeys);
+      const nut10Lock = pr.nut10 ? pr.toP2PKOptions() : undefined;
+      this.failIf(
+        !!pr.nut10 && !nut10Lock,
+        `cannot check the request's nut10 lock kind '${pr.nut10?.kind}'`,
+      );
+      for (const p of proofs) {
+        if (isBlsKeyset(p.id) && isV3PointSecret(p.secret)) {
+          this.failIfNullish(nutrootOption, 'v3 proof: the request carries no nutroot option');
+          verifyNutrootRequestTree(nutrootOption, p.spend_info);
+          this.assertKeyedToReceiver(nutrootOption, p, statics);
+          this.assertBlindKeysHonoured(nutrootOption, p, statics);
+          continue;
+        }
+        this.failIfNullish(nut10Lock, 'legacy proof: the request is for v3 proofs only');
+        this.assertNut10Lock(nut10Lock, p.secret);
+      }
+    }
     // mf applies only when this mint is outside the request's mint list (NUT-18).
     let mf = Amount.zero();
     if (pr.supportedMethods?.length && !pr.includesMint(this.mint.mintUrl)) {
@@ -1810,6 +1948,127 @@ class Wallet {
     }
     const needed = expected.add(mf).add(this.getFeesForProofs(proofs));
     return sumProofs(proofs).compareTo(needed) >= 0;
+  }
+
+  /**
+   * The static keys a locked request must be checked against, validated.
+   *
+   * @remarks
+   * Only a receiver-keyed nutroot request needs one: `K = P_receiver + r0*G` is an ECDH trial-match
+   * no observer can do (NUT-28), so without the key there is nothing to check. A NUMS request needs
+   * none, its internal key is pinned by the disclosed offset instead.
+   * @throws If a receiver-keyed request is checked with no key, or a key is not a 32-byte scalar.
+   */
+  private receiverKeysFor(
+    option: ParsedNutrootOption | undefined,
+    privkeys: string | string[] | undefined,
+  ): string[] {
+    if (!option) return [];
+    const keyed = option.receiverKey.toLowerCase() !== NUTROOT_NUMS_KEY;
+    if (!keyed && !option.blindKeys?.length) return [];
+    const statics = privkeys === undefined ? [] : [privkeys].flat();
+    this.failIf(
+      statics.length === 0,
+      `${keyed ? 'receiver-keyed' : 'blind-me'} nutroot request: pass the requested key(s) as opts.privkeys, the proofs cannot be checked without them`,
+    );
+    const bad = statics.find((k) => !/^[0-9a-f]{64}$/i.test(k));
+    this.failIf(bad !== undefined, 'opts.privkeys must be 32-byte hex private keys');
+    return statics;
+  }
+
+  /**
+   * Asserts a v3 proof is receiver-keyed to one of the payee's static keys (NUT-28).
+   *
+   * @remarks
+   * No-op for a NUMS request, which has no receiver key to bind to. Otherwise the proof carries a
+   * key path only the holder of the matching static key can walk; a proof keyed to anyone else, the
+   * payer included, is not a payment the payee can spend.
+   * @throws If no held key reproduces the proof's secret.
+   */
+  private assertKeyedToReceiver(
+    option: ParsedNutrootOption,
+    proof: Pick<Proof, 'secret' | 'spend_info'>,
+    statics: string[],
+  ): void {
+    if (statics.length === 0 || option.receiverKey.toLowerCase() === NUTROOT_NUMS_KEY) return;
+    // `E` is present: verifyNutrootRequestTree rejects a receiver-keyed proof without one.
+    const E = proof.spend_info?.E as string;
+    const tree = proof.spend_info?.tree;
+    this.failIf(
+      !statics.some((priv) => recoverReceiverKeyedSecretKey(proof.secret, E, priv, tree)),
+      'Nutroot request: proof is not keyed to the requested receiver key',
+    );
+  }
+
+  /**
+   * Asserts each blind-me key this wallet owns really was substituted with its own blinding.
+   *
+   * @remarks
+   * `verifyNutrootRequestTree` treats a blind-me position as a wildcard: only the key's owner can
+   * tell its blinding from a stranger's key, and a substituted stranger's key is a leaf the payer
+   * can spend. Counting by value, not position, is the frame the slot map is built in (NUT-28): the
+   * root commits the leaf set, not the transmitted order. A tagged key this wallet does not hold is
+   * its own owner's check, not one that can be made here.
+   * @throws If the disclosed tree does not carry this wallet's blinding at every tagged occurrence.
+   */
+  private assertBlindKeysHonoured(
+    option: ParsedNutrootOption,
+    proof: Pick<Proof, 'spend_info'>,
+    statics: string[],
+  ): void {
+    const tagged = (option.blindKeys ?? []).map((key) => key.toLowerCase());
+    if (tagged.length === 0 || statics.length === 0) return;
+    const owned = new Set<string>();
+    for (const priv of statics) {
+      const pub = bytesToHex(getPubKeyFromPrivKey(hexToBytes(priv)));
+      // An x-only import holds n - p, whose point is the same hex under the other parity byte.
+      const flipped = (pub.startsWith('02') ? '03' : '02') + pub.slice(2);
+      for (const key of tagged) {
+        if (key === pub || key === flipped) owned.add(key);
+      }
+    }
+    if (owned.size === 0) return;
+    const wanted = (option.leaves ?? []).reduce(
+      (n, leaf) => n + leaf.keys.filter((key) => owned.has(key.toLowerCase())).length,
+      0,
+    );
+    const disclosed = recoverLeafKeySecretKeys(
+      proof.spend_info?.tree ?? [],
+      proof.spend_info?.E,
+      statics,
+    ).filter((hit) => hit.blinded).length;
+    this.failIf(
+      disclosed !== wanted,
+      `Nutroot request: expected ${wanted} blind-me leaf key(s) of this wallet in the disclosed tree, found ${disclosed}`,
+    );
+  }
+
+  /**
+   * Asserts a legacy proof's secret is exactly the lock the request asked for.
+   *
+   * @remarks
+   * Both sides canonicalise through the same NUT-11 builder, so tag order and pubkey form do not
+   * matter but content does: an unrequested `refund`/`locktime` pair is a payer clawback, and an
+   * unlocked bearer secret is no lock at all.
+   * @throws If the proof is unlocked, or carries a condition other than the requested one.
+   */
+  private assertNut10Lock(requested: P2PKOptions, secret: string): void {
+    let held: P2PKOptions | undefined;
+    try {
+      const [kind, data] = parseSecret(secret);
+      held = nut10ToP2PKOptions({ kind, data: data.data, tags: data.tags });
+    } catch {
+      held = undefined;
+    }
+    this.failIfNullish(
+      held,
+      'nut10 request: proof does not carry a NUT-10 lock of the requested kind',
+    );
+    this.failIf(
+      JSON.stringify(p2pkOptionsToPRNut10(held)) !==
+        JSON.stringify(p2pkOptionsToPRNut10(requested)),
+      'nut10 request: proof lock is not the requested spending condition',
+    );
   }
 
   /**
@@ -1935,26 +2194,111 @@ class Wallet {
    * Prepares inputs for a mint operation.
    *
    * @remarks
-   * Internal method; strips DLEQ (NUT-12) and p2pk_e (NUT-28) for privacy and serializes witnesses.
-   * Returns an array of new proof objects - does not mutate the originals.
+   * Internal method; strips DLEQ (NUT-12), p2pk_e (NUT-28) and spend_info for privacy and
+   * serializes witnesses. Returns an array of new proof objects - does not mutate the originals.
    * @param proofs The proofs to prepare.
    * @param keepDleq Optional boolean to keep DLEQ (default: false, strips for privacy).
    * @param keepP2pkE Optional boolean to keep NUT-28 "E" (default: false, strips for privacy).
+   * @param keepSpendInfo Optional boolean to keep spend_info (default: false, never for a mint
+   *   payload; offline sends keep it because those proofs travel to the receiver, and for a v3
+   *   proof spend_info is the only thing that can spend it).
    * @returns Prepared proofs for mint payload.
    */
   private _prepareInputsForMint(
     proofs: Proof[],
     keepDleq: boolean = false,
     keepP2pkE: boolean = false,
+    keepSpendInfo: boolean = false,
   ): Proof[] {
     return proofs.map((p) => {
       const witness = this._normalizeWitness(p);
-      const { dleq, p2pk_e, ...rest } = p; // isolate dleq and p2pk_e
+      const { dleq, p2pk_e, spend_info, ...rest } = p; // isolate the wallet-side fields
       let newProof: Proof = { ...rest, witness }; // add back normalized witness
       if (keepP2pkE && p2pk_e) newProof = { ...newProof, p2pk_e };
       if (keepDleq && dleq) newProof = { ...newProof, dleq };
+      if (keepSpendInfo && spend_info) newProof = { ...newProof, spend_info };
       return newProof;
     });
+  }
+
+  /**
+   * The wallet state slice the nutroot signing rules in `wallet/nutroot.ts` read.
+   */
+  private _nutrootState(): NutrootWalletState {
+    return {
+      seed: this._seed,
+      counters: this.counters,
+      logger: this._logger,
+    };
+  }
+
+  /**
+   * Reports what this wallet can do with a proof, it's available spending options.
+   *
+   * @remarks
+   * Offline, and it changes nothing. Use it to triage received proofs of either lock family, decide
+   * which leaf a script path plan should name, or show a user why a proof is stuck: `spendable` is
+   * the one-line answer and `blockedBy` the why.
+   *
+   * A legacy NUT-11 lock is read into the same leaf shape (main path, then the refund path as an
+   * `after` leaf), matched across key parity and through `p2pk_e` for blinded keys; an unlocked
+   * legacy proof reports `keyPath: true`, since it spends with no witness at all.
+   *
+   * `satisfiable` is this wallet's own assessment from what it holds. The mint compares an `after`
+   * leaf against its own clock, so a leaf that unlocked seconds ago may still be refused, and a
+   * hashlock leaf is never satisfiable from the wallet alone: its preimage comes from the caller.
+   * @param proof Any proof, with its spend info when it has one.
+   * @param opts.privkeys Static keys to trial-match, for receiver-keyed proofs and leaf keys.
+   * @param opts.now Unix seconds to judge locktimes against. Defaults to the current time.
+   * @throws If a v3 keyset proof is not a point secret, a NUT-10 secret is of a kind this wallet
+   *   cannot spend, or a disclosed tree holds a leaf it cannot parse (unknown version, type or
+   *   constraint field): the same fail-closed rule the receive cascade applies.
+   */
+  spendOptions(proof: Proof, opts?: { privkeys?: string | string[]; now?: number }): SpendOptions {
+    return proofSpendOptions(proof, opts, this._nutrootState());
+  }
+
+  /**
+   * Builds script path plans for the v3 proofs the key path cannot spend: first satisfiable leaf
+   * each, else the hashlock leaf a supplied preimage opens, for `ReceiveConfig.scriptPath`.
+   *
+   * @remarks
+   * Skips non-v3 proofs (they sign in receive, not by plan), proofs the key path spends, and proofs
+   * with no plannable leaf; ask {@link Wallet.spendOptions | spendOptions} why a missing proof is
+   * stuck. A hashlock leaf is never satisfiable on its own: with `opts.preimage` it is planned when
+   * its keys are covered and the preimage opens its hash. Leaf choice is policy: name plans
+   * yourself when a later leaf is preferable (eg a cheaper key roster).
+   * @throws If `opts.preimage` is not 64 hex characters.
+   */
+  planScriptPaths(
+    proofs: Proof[],
+    opts?: { privkeys?: string | string[]; now?: number; preimage?: string },
+  ): ScriptPathPlan[] {
+    const preimage = opts?.preimage;
+    this.failIf(
+      preimage !== undefined && !/^[0-9a-f]{64}$/i.test(preimage),
+      'planScriptPaths: preimage must be 64 hex characters',
+    );
+    const plans: ScriptPathPlan[] = [];
+    for (const proof of proofs) {
+      if (!isBlsKeyset(proof.id) || !isV3PointSecret(proof.secret)) continue;
+      const spend = proofSpendOptions(proof, opts, this._nutrootState());
+      if (spend.keyPath) continue;
+      const open = spend.script.find((o) => o.satisfiable);
+      if (open) {
+        plans.push({ secret: proof.secret, leafIndex: open.leafIndex });
+        continue;
+      }
+      if (preimage === undefined) continue;
+      const hashlock = spend.script.find(
+        (o) =>
+          o.blockedBy === 'preimage' &&
+          o.leaf.hash !== undefined &&
+          verifyHTLCHash(preimage, o.leaf.hash),
+      );
+      if (hashlock) plans.push({ secret: proof.secret, leafIndex: hashlock.leafIndex, preimage });
+    }
+    return plans;
   }
 
   /**
@@ -1965,6 +2309,10 @@ class Wallet {
    */
   private _normalizeWitness(proof: Proof): string | undefined {
     if (!proof.witness) return undefined;
+    // Nutroot (v3) point secrets carry transaction witnesses (key or script path): keep them.
+    if (isBlsKeyset(proof.id) && isV3PointSecret(proof.secret)) {
+      return typeof proof.witness !== 'string' ? JSON.stringify(proof.witness) : proof.witness;
+    }
     try {
       parseSecret(proof.secret);
     } catch {
@@ -2181,11 +2529,7 @@ class Wallet {
       normalize: options?.normalize,
     });
     if (normPubkey) {
-      this.failIf(typeof res.pubkey !== 'string', 'Mint returned unlocked mint quote');
-      this.failIf(
-        res.pubkey!.toLowerCase() !== normPubkey,
-        'Mint quote is not locked to the requested pubkey',
-      );
+      assertQuoteLockedTo(res, normPubkey, this._logger);
     }
     return { ...res, unit: res.unit || this._unit };
   }
@@ -2218,21 +2562,28 @@ class Wallet {
   }
 
   /**
-   * Requests a mint quote from the mint. Response returns a Lightning payment request for the
-   * requested given amount and unit.
+   * Requests a bolt11 mint quote locked to `pubkey`. You hold its private key: minting signs with
+   * it (`config.privkey`), and a lost key means an unredeemable quote.
    *
+   * @remarks
+   * Every new quote is locked: {@link Wallet.createQuoteLockKey | createQuoteLockKey} makes a
+   * keypair, and a seeded wallet can re-derive a lost one
+   * ({@link Wallet.recoverQuoteLockKey | recoverQuoteLockKey}). A mint that cannot lock (no NUT-20)
+   * fails the echo check below, before the quote id is returned, so nothing is payable. For an
+   * unlocked legacy quote, drop to the generic `createMintQuote()`.
    * @param amount Amount requesting for mint.
+   * @param pubkey Public key to lock the quote to.
    * @param description Optional description for the mint quote.
-   * @param pubkey Optional public key to lock the quote to.
-   * @returns The mint will return a mint quote with a Lightning invoice for minting tokens of the
-   *   specified amount and unit.
    */
   async createMintQuoteBolt11(
     amount: AmountLike,
+    pubkey: string,
     description?: string,
   ): Promise<MintQuoteBolt11Response> {
     this.requireSupport('mint', 'bolt11');
     this.requireMintableKeyset('createMintQuoteBolt11');
+    this.failIf(typeof pubkey !== 'string', 'A pubkey is required to lock the mint quote');
+    const normPubkey = normalizeSecpPubkey(pubkey);
     const mintAmount = this.parseAmount(amount, 'createMintQuoteBolt11');
     // Check if mint supports description for bolt11
     if (description) {
@@ -2241,38 +2592,6 @@ class Wallet {
         this.fail('Mint does not support description for bolt11');
       }
     }
-
-    const mintQuotePayload: MintQuoteBolt11Request = {
-      unit: this._unit,
-      amount: mintAmount,
-      description: description,
-    };
-    const res = await this.mint.createMintQuoteBolt11(mintQuotePayload);
-    this.assertBolt11MintQuoteAmount(res, mintAmount);
-    return { ...res, unit: res.unit || this._unit };
-  }
-
-  /**
-   * Requests a mint quote from the mint that is locked to a public key.
-   *
-   * @param amount Amount requesting for mint.
-   * @param pubkey Public key to lock the quote to.
-   * @param description Optional description for the mint quote.
-   * @returns The mint will return a mint quote with a Lightning invoice for minting tokens of the
-   *   specified amount and unit. The quote will be locked to the specified `pubkey`.
-   */
-  async createLockedMintQuote(
-    amount: AmountLike,
-    pubkey: string,
-    description?: string,
-  ): Promise<MintQuoteBolt11Response & { pubkey: string }> {
-    this.requireSupport('mint', 'bolt11');
-    this.requireMintableKeyset('createLockedMintQuote');
-    this.failIf(typeof pubkey !== 'string', 'A pubkey is required to lock the mint quote');
-    const normPubkey = normalizeSecpPubkey(pubkey);
-    const mintAmount = this.parseAmount(amount, 'createLockedMintQuote');
-    const { supported } = this.getMintInfo().isSupported(20);
-    this.failIf(!supported, 'Mint does not support NUT-20');
     const mintQuotePayload: MintQuoteBolt11Request = {
       unit: this._unit,
       amount: mintAmount,
@@ -2281,13 +2600,49 @@ class Wallet {
     };
     const res = await this.mint.createMintQuoteBolt11(mintQuotePayload);
     this.assertBolt11MintQuoteAmount(res, mintAmount);
-    this.failIf(typeof res.pubkey !== 'string', 'Mint returned unlocked mint quote');
-    const resPubkey = res.pubkey!;
-    this.failIf(
-      resPubkey.toLowerCase() !== normPubkey,
-      'Mint quote is not locked to the requested pubkey',
-    );
-    return { ...res, pubkey: resPubkey, unit: res.unit || this._unit };
+    assertQuoteLockedTo(res, normPubkey, this._logger);
+    return { ...res, unit: res.unit || this._unit };
+  }
+
+  /**
+   * Creates a quote lock keypair: seed-derived (consuming the quote counter) when seeded, random
+   * otherwise.
+   *
+   * @remarks
+   * Derived keys are recoverable via {@link Wallet.recoverQuoteLockKey | recoverQuoteLockKey};
+   * random ones exist only in the returned object, so persist the key with its quote. `{ random:
+   * true }` forces a random key on a seeded wallet, consuming no counter: for throwaway quotes (eg
+   * estimation) that must not pollute the recovery scan.
+   */
+  async createQuoteLockKey(opts?: {
+    random?: boolean;
+  }): Promise<{ pubkey: string; privkey: string }> {
+    return createQuoteLockKeyPair(opts?.random ? undefined : this._seed, async () => {
+      const range = await this._counterSource.reserve(QUOTE_COUNTER_KEY, 1);
+      // Event-persisted sources must see the quote cursor move too, or a restart
+      // re-derives keys already handed out.
+      this.on._emitCountersReserved({
+        counterKey: QUOTE_COUNTER_KEY,
+        start: range.start,
+        count: range.count,
+        next: range.start + range.count,
+      });
+      return range.start;
+    });
+  }
+
+  /**
+   * Recovers a seed-derived quote lock key from the quote's lock pubkey by scanning the quote
+   * counter. Returns undefined for a pubkey this seed never derived.
+   *
+   * @remarks
+   * Offline disaster recovery for a lost quote `privkey`; the happy path is persisting the key the
+   * quote response carries. Targeted, not discovery: one HMAC and one point multiply per counter.
+   * No keyset is involved (NUT-13 type `0x04`), so a rotation cannot strand the key.
+   * @throws {@link CTSError} On a seedless wallet, which has nothing to scan.
+   */
+  async recoverQuoteLockKey(pubkey: string): Promise<string | undefined> {
+    return scanQuoteLockKey(pubkey, this._nutrootState());
   }
 
   /**
@@ -2331,10 +2686,7 @@ class Wallet {
     };
 
     const res = await this.mint.createMintQuoteBolt12(mintQuotePayload);
-    this.failIf(
-      typeof res.pubkey !== 'string' || res.pubkey.toLowerCase() !== normPubkey,
-      'Mint quote is not locked to the requested pubkey',
-    );
+    assertQuoteLockedTo(res, normPubkey, this._logger);
     return res;
   }
 
@@ -2352,10 +2704,7 @@ class Wallet {
     this.failIf(typeof pubkey !== 'string', 'A pubkey is required to lock the mint quote');
     const normPubkey = normalizeSecpPubkey(pubkey);
     const res = await this.mint.createMintQuoteOnchain({ unit: this._unit, pubkey: normPubkey });
-    this.failIf(
-      typeof res.pubkey !== 'string' || res.pubkey.toLowerCase() !== normPubkey,
-      'Mint quote is not locked to the requested pubkey',
-    );
+    assertQuoteLockedTo(res, normPubkey, this._logger);
     return { ...res, unit: res.unit || this._unit };
   }
 
@@ -2729,7 +3078,8 @@ class Wallet {
     const requestedAmount = this.parseAmount(amount, `prepareMint: ${method}`);
     this.validateMintQuoteAvailableAmount(method, quote, requestedAmount);
     outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
-    const { privkey, keysetId, proofsWeHave, onCountersReserved } = config ?? {};
+    const { keysetId, proofsWeHave, onCountersReserved } = config ?? {};
+    const privkey = config?.privkey;
 
     // Shape output type and denominations for our proofs
     // we are receiving, so no includeFees.
@@ -2763,13 +3113,17 @@ class Wallet {
       quote: quote.quote,
     };
 
-    // Require a privkey when the quote is known to be locked
-    if ('pubkey' in quote && quote.pubkey) {
-      this.failIf(!privkey, 'Can not sign locked quote without private key');
-    }
     // Sign whenever a privkey is provided — quote.pubkey may be absent if only the
     // quote ID was stored, but the caller still needs to produce a NUT-20 signature
     let legacySignature: string | undefined;
+    // The key is caller state, passed in config; nothing is recovered implicitly
+    // (recoverQuoteLockKey is the explicit tool for a seeded wallet that lost it).
+    if ('pubkey' in quote && quote.pubkey) {
+      this.failIf(
+        !privkey,
+        'Can not sign locked quote without private key (see recoverQuoteLockKey)',
+      );
+    }
     if (privkey) {
       const quotePubkey = 'pubkey' in quote ? (quote.pubkey as string | undefined) : undefined;
       this.failIf(
@@ -2782,10 +3136,28 @@ class Wallet {
           ? privkey[0]
           : privkey;
       this.failIf(!signingKey, 'prepareMint: privkey is empty or correct privkey not provided');
-      // Sign the amended (nuts#375) message by default and keep a legacy signature over the same
-      // outputs as a fallback for not-yet-upgraded mints — see completeMint().
-      mintPayload.signature = signMintQuote(signingKey, quote.quote, blindedMessages);
-      legacySignature = signMintQuoteLegacy(signingKey, quote.quote, blindedMessages);
+      if (isBlsKeyset(keyset.id)) {
+        // V3 (nutroot secrets): the quote is a transaction input; its lock key signs the
+        // quote input digest (NUT-10). No legacy fallback on v3 keysets.
+        // The transcript commits the quote's face amount, not this draw: the output
+        // section already binds the draw (NUT-10). Amountless quotes commit 0;
+        // a bolt11 quote always has an amount, so an absent one is a caller omission.
+        const quoteAmount = 'amount' in quote ? (quote.amount as AmountLike) : undefined;
+        this.failIf(
+          quoteAmount === undefined && method === 'bolt11',
+          'prepareMint: quote object lacks its amount; pass the full mint quote',
+        );
+        const digest = inputsForPayload({
+          mintQuotes: [{ quoteId: quote.quote, amount: quoteAmount ?? 0 }],
+          outputs: blindedMessages,
+        }).quotes.get(quote.quote)!.digest;
+        mintPayload.signature = schnorrSignDigest(digest, signingKey);
+      } else {
+        // Sign the amended (nuts#375) message by default and keep a legacy signature over the same
+        // outputs as a fallback for not-yet-upgraded mints — see completeMint().
+        mintPayload.signature = signMintQuote(signingKey, quote.quote, blindedMessages);
+        legacySignature = signMintQuoteLegacy(signingKey, quote.quote, blindedMessages);
+      }
     }
 
     return {
@@ -2927,14 +3299,20 @@ class Wallet {
       this.validateMintQuote(entry.quote);
     }
 
+    const keyset = this.getOutputKeyset(keysetId);
+    // Keys are caller state, passed in config; findSigningKey matches each locked quote's pubkey.
+    const signingKeys = privkey ? [privkey].flat() : [];
+
     // Check locked quotes: require a privkey and verify it can sign
     const hasLockedQuotes = entries.some((e) => 'pubkey' in e.quote && e.quote.pubkey);
     if (hasLockedQuotes) {
-      this.failIf(!privkey, 'Can not sign locked quotes without private key');
+      this.failIf(
+        signingKeys.length === 0,
+        'Can not sign locked quotes without private key (see recoverQuoteLockKey)',
+      );
     }
 
     // Parse amounts and determine keyset
-    const keyset = this.getOutputKeyset(keysetId);
     const amounts = entries.map((e) => this.parseAmount(e.amount, `prepareBatchMint: ${method}`));
     const totalAmount = Amount.sum(amounts);
 
@@ -2965,12 +3343,39 @@ class Wallet {
     const signatures: Array<string | null> = [];
     const legacySignatures: Array<string | null> = []; // Temporary legacy message support
     let hasSignatures = false;
+    // V3: the batch is one transaction; every locked quote signs its own input
+    // digest over the shared transcript covering all quote inputs (request order)
+    // and all outputs (NUT-10).
+    const v3BatchDigests = isBlsKeyset(keyset.id)
+      ? inputsForPayload({
+          mintQuotes: entries.map((e, i) => {
+            // Face amount, as in prepareMint: the transcript never commits the draw,
+            // so a slim bolt11 quote object cannot stand in for it.
+            const quoteAmount = 'amount' in e.quote ? (e.quote.amount as AmountLike) : undefined;
+            this.failIf(
+              quoteAmount === undefined && method === 'bolt11',
+              `prepareBatchMint: quote #${i + 1} lacks its amount; pass the full mint quote`,
+            );
+            return { quoteId: e.quote.quote, amount: quoteAmount ?? 0 };
+          }),
+          outputs: blindedMessages,
+        }).quotes
+      : undefined;
     for (const [i, entry] of entries.entries()) {
       const quotePubkey = 'pubkey' in entry.quote ? entry.quote.pubkey : undefined;
-      if (quotePubkey && privkey) {
-        const signingKey = findSigningKey(quotePubkey, privkey);
-        signatures.push(signMintQuote(signingKey, entry.quote.quote, blindedMessages));
-        legacySignatures.push(signMintQuoteLegacy(signingKey, entry.quote.quote, blindedMessages));
+      if (quotePubkey && signingKeys.length > 0) {
+        const signingKey = findSigningKey(quotePubkey, signingKeys);
+        if (v3BatchDigests) {
+          signatures.push(
+            schnorrSignDigest(v3BatchDigests.get(entry.quote.quote)!.digest, signingKey),
+          );
+          legacySignatures.push(null);
+        } else {
+          signatures.push(signMintQuote(signingKey, entry.quote.quote, blindedMessages));
+          legacySignatures.push(
+            signMintQuoteLegacy(signingKey, entry.quote.quote, blindedMessages),
+          );
+        }
         hasSignatures = true;
       } else {
         if (privkey && !quotePubkey) {
@@ -3340,7 +3745,11 @@ class Wallet {
     outputType?: OutputType,
   ): Promise<MeltProofsResponse<TQuote>> {
     const meltTxn = await this.prepareMelt(method, meltQuote, proofsToSend, config, outputType);
-    return this.completeMelt<TQuote>(meltTxn, config?.privkey);
+    return this.completeMelt<TQuote>(
+      meltTxn,
+      config?.privkey,
+      config?.scriptPath?.length ? { scriptPath: config.scriptPath } : undefined,
+    );
   }
 
   /**
@@ -3363,7 +3772,11 @@ class Wallet {
   ): Promise<MeltProofsResponse<MeltQuoteBolt11Response>> {
     this.requireSupport('melt', 'bolt11');
     const meltTxn = await this.prepareMelt('bolt11', meltQuote, proofsToSend, config, outputType);
-    return this.completeMelt<MeltQuoteBolt11Response>(meltTxn, config?.privkey);
+    return this.completeMelt<MeltQuoteBolt11Response>(
+      meltTxn,
+      config?.privkey,
+      config?.scriptPath?.length ? { scriptPath: config.scriptPath } : undefined,
+    );
   }
 
   /**
@@ -3386,7 +3799,11 @@ class Wallet {
   ): Promise<MeltProofsResponse<MeltQuoteBolt12Response>> {
     this.requireSupport('melt', 'bolt12');
     const meltTxn = await this.prepareMelt('bolt12', meltQuote, proofsToSend, config, outputType);
-    return this.completeMelt<MeltQuoteBolt12Response>(meltTxn, config?.privkey);
+    return this.completeMelt<MeltQuoteBolt12Response>(
+      meltTxn,
+      config?.privkey,
+      config?.scriptPath?.length ? { scriptPath: config.scriptPath } : undefined,
+    );
   }
 
   /**
@@ -3446,6 +3863,7 @@ class Wallet {
     const meltTxn = await this.prepareMelt('onchain', meltQuote, normalizedProofs, config);
     const response = await this.completeMelt<MeltQuoteOnchainResponse>(meltTxn, config?.privkey, {
       extraPayload: { fee_index: feeIndex },
+      ...(config?.scriptPath?.length && { scriptPath: config.scriptPath }),
     });
     return response;
   }
@@ -3455,8 +3873,8 @@ class Wallet {
    *
    * @remarks
    * Allows you to preview fees for a melt, get concrete outputs for P2PK SIG_ALL melts, and do any
-   * pre-melt tasks (such as marking proofs in-flight etc). Creates NUT-08 blanks (1-sat) for melt
-   * change and returns a MeltPreview, which you can melt using completeMelt.
+   * pre-melt tasks (such as marking proofs in-flight etc). Creates NUT-08 blanks (amount 0) for
+   * melt change and returns a MeltPreview, which you can melt using completeMelt.
    * @param method Payment method of the quote.
    * @param meltQuote The melt quote. Only `quote` (ID) and `amount` are required — a full
    *   `MeltQuoteBolt11Response` works, but `{ quote: string, amount: Amount }` is sufficient.
@@ -3624,6 +4042,32 @@ class Wallet {
       ...extra,
     };
 
+    // Attach nutroot transaction witnesses (v3 keysets). The digest binds the quote amount,
+    // so a slim quote object cannot sign v3 inputs: fail fast rather than send them unsigned.
+    const quoteAmount =
+      'amount' in meltPreview.quote ? (meltPreview.quote.amount as AmountLike) : undefined;
+    this.failIf(
+      quoteAmount === undefined &&
+        inputs.some((p) => isBlsKeyset(p.id) && isV3PointSecret(p.secret)),
+      'melting v3 inputs needs the melt quote amount; pass the full quote object',
+    );
+    let receipts: SpendReceipt[] = [];
+    if (quoteAmount !== undefined) {
+      receipts = await attachTransactionWitnesses(
+        meltPayload,
+        { quoteId: quote, amount: Amount.from(quoteAmount) },
+        collectSpendInfoKeys(meltPreview.inputs, privkey, this._logger),
+        completeOptions.scriptPath?.length
+          ? prepareScriptPathSpends(
+              meltPreview.inputs,
+              completeOptions.scriptPath,
+              privkey === undefined ? [] : [privkey].flat(),
+            )
+          : undefined,
+        this._nutrootState(),
+      );
+    }
+
     // Execute melt and validate result
     const meltResponse: MeltQuoteBaseResponse = await this.withStaleKeysetRepair(() =>
       this.mint.melt<TQuote>(meltPreview.method, meltPayload),
@@ -3661,6 +4105,7 @@ class Wallet {
       quote: mergedQuote,
       change,
       outputData: change.length > 0 ? [] : meltPreview.outputData,
+      ...(receipts.length > 0 && { receipts }),
     };
   }
 

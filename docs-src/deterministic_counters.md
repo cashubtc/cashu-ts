@@ -2,7 +2,7 @@
 
 # Deterministic counters (persist, inspect, bump)
 
-Deterministic outputs use per-keyset counters. The wallet reserves them atomically and emits a single event you can use to persist the "next" value in your storage.
+Deterministic outputs use per-keyset counters. The wallet reserves them atomically and emits a single event you can use to persist the "next" value in your storage. A seeded wallet keeps one extra cursor for mint quote lock keys under the exported `QUOTE_COUNTER_KEY` (`'mint-quote-lock'`): it flows through the same `CounterSource` and `countersReserved` event, so persist it like any keyset counter and do not assume every counter key is a keyset id.
 
 API at a glance:
 
@@ -31,9 +31,9 @@ await wallet.loadMint();
 await wallet.counters.advanceToAtLeast('0111111', 128);
 
 // 2) Subscribe once, persist future reservations
-wallet.on.countersReserved(({ keysetId, start, count, next }) => {
+wallet.on.countersReserved(({ counterKey, start, count, next }) => {
   // next is start + count (i.e: next available)
-  saveNextToDb(keysetId, next); // do an atomic upsert per keysetId
+  saveNextToDb(counterKey, next); // do an atomic upsert per counter key
 });
 
 // 3) Inspect current state, what will be reserved next
@@ -98,8 +98,8 @@ The ephemeral source is memory-only — counters do not survive page reloads. Us
 
 ```ts
 function wireCounterPersistence(wallet: Wallet) {
-  wallet.on.countersReserved(({ keysetId, next }) => {
-    saveNextToDb(keysetId, next); // your atomic save function
+  wallet.on.countersReserved(({ counterKey, next }) => {
+    saveNextToDb(counterKey, next); // your atomic save function
   });
 }
 
@@ -126,13 +126,13 @@ Implement `CounterSource` yourself when the cursor must live in your storage: wh
 import type { CounterSource, CounterRange } from '@cashu/cashu-ts';
 
 class IndexedDbCounterSource implements CounterSource {
-  async reserve(keysetId: string, n: number): Promise<CounterRange> {
+  async reserve(counterKey: string, n: number): Promise<CounterRange> {
     // atomic read-and-increment in your DB
   }
-  async reserveAt(keysetId: string, start: number, count: number): Promise<CounterRange> {
+  async reserveAt(counterKey: string, start: number, count: number): Promise<CounterRange> {
     // one transaction: throw if start < next, else SET next = start + count
   }
-  async advanceToAtLeast(keysetId: string, minNext: number): Promise<void> {
+  async advanceToAtLeast(counterKey: string, minNext: number): Promise<void> {
     // conditional update: SET next = max(next, minNext)
   }
   // Optional: snapshot(), setNext()

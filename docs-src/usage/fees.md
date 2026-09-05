@@ -16,14 +16,14 @@ outputs yourself.
 
 ## Which helper, when
 
-| Question                                                       | Helper                                                  |
-| :------------------------------------------------------------- | :------------------------------------------------------ |
-| What does it cost to spend these exact proofs?                 | `Wallet.getFeesForProofs(proofs)`                       |
-| What would N inputs of a keyset cost?                          | `Wallet.getFeesForKeyset(nInputs, keysetId)`            |
-| Receiver must net `amount`: what does the sender add on top?   | `Wallet.getFeesToInclude(amount, opts?)`                |
-| What is the most this proof set can send or melt, after fees?  | `Wallet.maxSpendableAfterFees(proofs, feeReserve?)`     |
-| Payee: do these received proofs net a NUT-18 request?          | `Wallet.isPaymentRequestSatisfied(pr, proofs, amount?)` |
-| Payer: what do I owe on a NUT-18 request, method fee included? | `PaymentRequest.amountToSend(mintUrl, methods)`         |
+| Question                                                       | Helper                                                         |
+| :------------------------------------------------------------- | :------------------------------------------------------------- |
+| What does it cost to spend these exact proofs?                 | `Wallet.getFeesForProofs(proofs)`                              |
+| What would N inputs of a keyset cost?                          | `Wallet.getFeesForKeyset(nInputs, keysetId)`                   |
+| Receiver must net `amount`: what does the sender add on top?   | `Wallet.getFeesToInclude(amount, opts?)`                       |
+| What is the most this proof set can send or melt, after fees?  | `Wallet.maxSpendableAfterFees(proofs, feeReserve?)`            |
+| Payee: do these received proofs net a NUT-18 request?          | `Wallet.isPaymentRequestSatisfied(pr, proofs, amount?, opts?)` |
+| Payer: what do I owe on a NUT-18 request, method fee included? | `PaymentRequest.amountToSend(mintUrl, methods)`                |
 
 ## Exact-target: the receiver nets a fixed amount
 

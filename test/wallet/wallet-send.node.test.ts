@@ -297,6 +297,23 @@ describe('sendOffline requireDleq', () => {
     expect(send[0].dleq).toBeUndefined();
   });
 
+  test('keeps spend_info on offline-selected send proofs', async () => {
+    // The send proofs travel to the receiver, not the mint: for a v3 proof the
+    // spend_info (bearer key, tree) is the only thing that can spend it.
+    mockV3Keyset();
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const spendInfo = { k: '11'.repeat(32), tree: ['aa'.repeat(40)] };
+    const v3Proofs: Proof[] = [
+      { id: v3Id, amount: Amount.from(1), secret: v3Secret, C: v3C, spend_info: spendInfo },
+    ];
+
+    const { send } = wallet.sendOffline(1, v3Proofs);
+    expect(send).toHaveLength(1);
+    expect(send[0].spend_info).toEqual(spendInfo);
+  });
+
   test('rejects v1/v2 proofs without DLEQ when requireDleq is true', async () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
@@ -588,7 +605,7 @@ describe('send', () => {
         // p2pk: { pubkey: 'pk' }
       },
       {
-        send: { type: 'p2pk', options: { kind: 'P2PK', data: '02' + 'aa'.repeat(32) } },
+        send: { type: 'lock', options: { mainKeys: ['02' + 'aa'.repeat(32)] } },
       },
     );
 
@@ -1440,4 +1457,28 @@ describe('deterministic', () => {
       expect(data.blindingFactor).toBe(numberR);
     },
   );
+});
+
+describe('output secret uniqueness (NUT-10)', () => {
+  test('rejects a factory that hands every output the same secret', async () => {
+    // A key backs at most one secret: two outputs of the same amount sharing one unblind to the
+    // same C, so the second is the first again and its value is gone with no error anywhere.
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const keyset = wallet.keyChain.getKeyset(wallet.keysetId);
+    const fixedSecret = new TextEncoder().encode('one-secret-for-every-output');
+    const factory = () =>
+      new OutputData(
+        { amount: Amount.from(1), B_: '02'.padEnd(66, 'a'), id: keyset.id },
+        1n,
+        fixedSecret,
+      );
+    expect(() =>
+      (wallet as unknown as { createOutputData: (...a: unknown[]) => unknown }).createOutputData(
+        Amount.from(2),
+        keyset,
+        { type: 'custom', data: [factory(), factory()] },
+      ),
+    ).toThrow(/Duplicate output secret/);
+  });
 });

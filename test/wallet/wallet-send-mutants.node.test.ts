@@ -282,7 +282,7 @@ describe('onCountersReserved reservation callbacks', () => {
     );
 
     expect(used).toBeDefined();
-    expect(used).toMatchObject({ keysetId, start: 0, count: 1, next: 1 });
+    expect(used).toMatchObject({ counterKey: keysetId, start: 0, count: 1, next: 1 });
   });
 
   test('prepareSwapToSend fires onCountersReserved for deterministic outputs', async () => {
@@ -303,7 +303,7 @@ describe('onCountersReserved reservation callbacks', () => {
 
     expect(used).toBeDefined();
     // send 3 from [2,2]: send split [1,2] (2 counters) + keep [1] (1 counter) = 3
-    expect(used).toMatchObject({ keysetId, start: 0, count: 3 });
+    expect(used).toMatchObject({ counterKey: keysetId, start: 0, count: 3 });
     expect(used!.next).toBe(used!.start + used!.count);
   });
 });

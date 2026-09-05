@@ -12,7 +12,15 @@
 export { Mint } from './mint';
 export { KeyChain } from './wallet/KeyChain';
 export { Keyset } from './wallet/Keyset';
-export { LockBuilder, P2PKBuilder } from './wallet/P2PKBuilder';
+export { LockBuilder } from './wallet/LockBuilder';
+export {
+  auditableLock,
+  lockToNutrootOptions,
+  lockToP2PKOptions,
+  nutrootToLockOptions,
+  p2pkToLockOptions,
+  type LockOptions,
+} from './wallet/lock';
 export { type SelectProofs, selectProofsRGLI, selectProofsRotating } from './wallet/SelectProofs';
 export {
   serializeSwapPreview,
@@ -50,7 +58,7 @@ export {
 
 // Wallet/Mint types used in the public API surface
 export type { CounterRange, CounterSource, OperationCounters } from './wallet/CounterSource';
-export { createEphemeralCounterSource } from './wallet/CounterSource';
+export { createEphemeralCounterSource, QUOTE_COUNTER_KEY } from './wallet/CounterSource';
 export type { SubscribeOpts, CancellerLike, SubscriptionCanceller } from './wallet/WalletEvents';
 export type * from './wallet/types/config';
 export type * from './wallet/types/payloads';
@@ -100,6 +108,8 @@ export type {
   RawTransport,
   NUT10Option,
   RawNUT10Option,
+  NutrootOption,
+  RawNutrootOption,
 } from './wallet/types';
 
 // Logging & errors
@@ -142,3 +152,19 @@ export {
   type SigAllDigests,
   type SigAllSigningPackage,
 } from './model/SigAll';
+export {
+  ScriptPath,
+  type ScriptPathApi,
+  type ScriptPathSigningPackage,
+  type ScriptPathSpendRequest,
+} from './model/ScriptPath';
+export {
+  parseNutrootLeaf,
+  parseNutrootLeafHex,
+  serializeNutrootLeaf,
+  serializeNutrootLeafHex,
+  NUTROOT_LEAF_TYPE,
+  NUTROOT_NUMS_KEY,
+  type NutrootLeaf,
+  type ParsedNutrootOption,
+} from './crypto/nutroot';

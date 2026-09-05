@@ -1,8 +1,13 @@
 import { test, describe, expect } from 'vitest';
 
 import { Amount, type Keys, type Proof, type OutputType } from '../../src';
-import { OutputData } from '../../src/model/OutputData';
-import { ceilLog2, getKeepAmounts, stringifyOutputTypeForLog } from '../../src/wallet/_internal';
+import { OutputData, type OutputDataLike } from '../../src/model/OutputData';
+import {
+  ceilLog2,
+  getKeepAmounts,
+  orderOutputsForPayload,
+  stringifyOutputTypeForLog,
+} from '../../src/wallet/_internal';
 import { PUBKEYS } from '../consts';
 
 describe('ceilLog2', () => {
@@ -94,38 +99,44 @@ describe('stringifyOutputTypeForLog', () => {
     expect(result).toBe(JSON.stringify({ type: 'factory', denominations: ['1', '2'] }));
   });
 
-  test('formats p2pk denominations as strings', () => {
+  test('formats lock denominations as strings', () => {
     const result = stringifyOutputTypeForLog({
-      type: 'p2pk',
-      options: { kind: 'P2PK', data: '02'.padEnd(66, '1') },
+      type: 'lock',
+      options: { mainKeys: ['02'.padEnd(66, '1')] },
       denominations: [1, Amount.from(2)],
     });
-    expect(result).toBe(
-      JSON.stringify({
-        type: 'p2pk',
-        options: { kind: 'P2PK', data: '02'.padEnd(66, '1') },
-        denominations: ['1', '2'],
-      }),
-    );
+    expect(JSON.parse(result)).toEqual({
+      type: 'lock',
+      mainKeys: 1,
+      refundKeys: 0,
+      denominations: ['1', '2'],
+    });
   });
 
-  test('logs placeholders for the natural keys when blindKeys is enabled', () => {
+  test('logs the key counts, never the key material', () => {
     const lockKey = '02'.padEnd(66, 'a');
     const additionalKey = '02'.padEnd(66, 'b');
     const refundKey = '02'.padEnd(66, 'c');
     const result = stringifyOutputTypeForLog({
-      type: 'p2pk',
+      type: 'lock',
       options: {
-        kind: 'P2PK',
-        data: lockKey,
-        pubkeys: [additionalKey],
+        mainKeys: [lockKey, additionalKey],
+        locktime: 123,
         refundKeys: [refundKey],
         blindKeys: true,
       },
     });
-    expect(result).not.toContain(lockKey);
-    expect(result).not.toContain(additionalKey);
-    expect(result).not.toContain(refundKey);
+    expect(JSON.parse(result)).toEqual({
+      type: 'lock',
+      mainKeys: 2,
+      refundKeys: 1,
+      locktime: 123,
+      blindKeys: true,
+      denominations: [],
+    });
+    for (const key of [lockKey, additionalKey, refundKey]) {
+      expect(result).not.toContain(key);
+    }
     expect(result).toContain('blindKeys');
   });
 
@@ -160,17 +171,13 @@ describe('stringifyOutputTypeForLog', () => {
     ).toBe(JSON.stringify({ type: 'factory', denominations: [] }));
 
     expect(
-      stringifyOutputTypeForLog({
-        type: 'p2pk',
-        options: { kind: 'P2PK', data: '02'.padEnd(66, '1') },
-      }),
-    ).toBe(
-      JSON.stringify({
-        type: 'p2pk',
-        options: { kind: 'P2PK', data: '02'.padEnd(66, '1') },
-        denominations: [],
-      }),
-    );
+      JSON.parse(
+        stringifyOutputTypeForLog({
+          type: 'lock',
+          options: { mainKeys: ['02'.padEnd(66, '1')] },
+        }),
+      ),
+    ).toEqual({ type: 'lock', mainKeys: 1, refundKeys: 0, denominations: [] });
   });
 
   test('returns unknown for unknown type', () => {
@@ -180,5 +187,62 @@ describe('stringifyOutputTypeForLog', () => {
       data,
     } as unknown as OutputType);
     expect(result).toBe('Unknown');
+  });
+});
+
+describe('orderOutputsForPayload', () => {
+  const out = (amount: number) =>
+    ({ blindedMessage: { amount: Amount.from(amount), B_: '', id: '' } }) as OutputDataLike;
+
+  test('interleaves keeps and sends by amount, and says which is which', () => {
+    // The case that matters: keeps are larger than sends, so construction order and payload
+    // order differ. Reading the split off position is exactly what the sort prevents.
+    const { outputData, keepVector, indices } = orderOutputsForPayload([out(16), out(8)], [out(4)]);
+    expect(outputData.map((d) => Number(d.blindedMessage.amount.toBigInt()))).toEqual([4, 8, 16]);
+    expect(keepVector).toEqual([false, true, true]);
+    expect(indices).toEqual([2, 1, 0]);
+  });
+
+  test('leaves construction order alone when asked', () => {
+    const { outputData, keepVector } = orderOutputsForPayload([out(16), out(8)], [out(4)], false);
+    expect(outputData.map((d) => Number(d.blindedMessage.amount.toBigInt()))).toEqual([16, 8, 4]);
+    expect(keepVector).toEqual([true, true, false]);
+  });
+
+  test('ties keep construction order, which still leaks their split', () => {
+    // Documented rather than fixed: randomizing within a tie makes the order unreproducible
+    // from a preview unless the choice travels with it.
+    const { keepVector } = orderOutputsForPayload([out(8)], [out(8)]);
+    expect(keepVector).toEqual([true, false]);
+  });
+});
+
+describe('stringifyOutputTypeForLog: lock with leaves', () => {
+  test('logs the tree shape, never the key material', () => {
+    const mainKey = `02${'ab'.repeat(32)}`;
+    const leafKey = `02${'cd'.repeat(32)}`;
+    const ot: OutputType = {
+      type: 'lock',
+      options: {
+        mainKeys: [mainKey],
+        leaves: [
+          { type: 'threshold', n: 1, keys: [leafKey] },
+          { type: 'threshold', n: 1, keys: [leafKey] },
+        ],
+        blindKeys: [leafKey],
+      },
+      denominations: [1, 2],
+    };
+    const s = stringifyOutputTypeForLog(ot);
+    expect(JSON.parse(s)).toEqual({
+      type: 'lock',
+      mainKeys: 1,
+      refundKeys: 0,
+      leaves: 2,
+      blindKeys: true,
+      denominations: ['1', '2'],
+    });
+    expect(s).not.toContain(mainKey);
+    expect(s).not.toContain(leafKey);
   });
 });
