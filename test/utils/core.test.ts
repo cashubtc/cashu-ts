@@ -194,6 +194,11 @@ test('exact custom split preserves order', () => {
 });
 
 describe('test decode token', () => {
+  test('rejects a missing keysetIds argument with a pointer to the new signature', () => {
+    const decode = utils.getDecodedToken as unknown as (t: string) => Token;
+    expect(() => decode(V3_TOKEN)).toThrow(/requires keysetIds/);
+  });
+
   test('testing v3 Token', async () => {
     const obj = {
       proofs: [
