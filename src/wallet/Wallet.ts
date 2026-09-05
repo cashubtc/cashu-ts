@@ -3706,9 +3706,12 @@ class Wallet {
       changeSigs.length > outputData.length,
       `Mint returned ${changeSigs.length} signatures, but only ${outputData.length} blanks were provided. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
     );
-    this.validateReturnedSignatures(changeSigs, outputData);
+    // A paid quote from a WebSocket update or rehydrated from storage carries raw JSON amounts,
+    // so normalise here rather than trust the type at this public boundary.
+    const sigs = changeSigs.map((s) => (s ? { ...s, amount: Amount.from(s.amount) } : s));
+    this.validateReturnedSignatures(sigs, outputData);
     const change: Proof[] = [];
-    changeSigs.forEach((s, i) => {
+    sigs.forEach((s, i) => {
       // NUT-08 pairs signatures to blanks by index; a zero-value one carries no ecash.
       if (s.amount.isZero()) return;
       change.push(outputData[i].toProof(s, this.keysetForSignature(s.id)));
