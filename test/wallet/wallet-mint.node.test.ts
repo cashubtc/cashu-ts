@@ -519,6 +519,28 @@ describe('requestTokens', () => {
     );
   });
 
+  test('prepareBatchMint rejects a quote with an insufficient mintable amount', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const quote: MintQuoteBolt11Response = {
+      quote: 'fully-issued',
+      request: 'lnbc...',
+      method: 'bolt11',
+      amount: Amount.from(1),
+      unit: 'sat',
+      state: MintQuoteState.ISSUED,
+      amount_paid: Amount.from(1),
+      amount_issued: Amount.from(1),
+      updated_at: null,
+      expiry: null,
+    };
+
+    await expect(wallet.prepareBatchMint('bolt11', [{ amount: 1, quote }])).rejects.toThrow(
+      /available to mint/,
+    );
+  });
+
   test('prepareMint signs with privkey even when quote has no pubkey', async () => {
     server.use(
       http.post(mintUrl + '/v1/mint/bolt11', () => {
@@ -1050,6 +1072,26 @@ describe('NUT-29 max_batch_size enforcement', () => {
     expect(spyLogger.warn).not.toHaveBeenCalled();
   });
 
+  test('checkMintQuoteBatchBolt11 enforces max_batch_size before requesting the mint', async () => {
+    overrideMintInfo({ max_batch_size: 2 });
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.checkMintQuoteBatchBolt11(['q1', 'q2', 'q3'])).rejects.toThrow(
+      /batch size 3.*limit of 2/,
+    );
+  });
+
+  test('generic checkMintQuoteBatch enforces max_batch_size before requesting the mint', async () => {
+    overrideMintInfo({ max_batch_size: 2 });
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.checkMintQuoteBatch('bolt11', ['q1', 'q2', 'q3'])).rejects.toThrow(
+      /batch size 3.*limit of 2/,
+    );
+  });
+
   test('throws when entries exceed ABSOLUTE_MAX_BATCH_SIZE even without NUT-29 info', async () => {
     // Default mint info has no nuts['29'] key — absolute cap still applies
     const wallet = new Wallet(mintUrl, { unit });
@@ -1336,6 +1378,32 @@ describe('generic mint/melt methods', () => {
       ).rejects.toThrow(/invoice amount/i);
     });
 
+    test('checkMintQuoteBatchBolt11 passes unknown entries through, skipping their invoice check', async () => {
+      server.use(
+        http.post(mintUrl + '/v1/mint/quote/bolt11/check', () =>
+          HttpResponse.json([
+            {
+              quote: 'bolt11-batch-ok',
+              request: invoice, // 2,000 sat fixture invoice
+              unit: 'sat',
+              amount: 2000,
+              state: MintQuoteState.UNPAID,
+              expiry: 3600,
+            },
+            { quote: 'missing', unknown: true },
+          ]),
+        ),
+      );
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+
+      const res = await wallet.checkMintQuoteBatchBolt11(['bolt11-batch-ok', 'missing']);
+
+      expect(res).toHaveLength(2);
+      expect(res[0]).toMatchObject({ quote: 'bolt11-batch-ok' });
+      expect(res[1]).toEqual({ quote: 'missing', unknown: true });
+    });
+
     test('checkMintQuoteBolt11 does not merge caller fields over mint response', async () => {
       server.use(
         http.get(mintUrl + '/v1/mint/quote/bolt11/bolt11-quote-merge', () =>
@@ -1451,7 +1519,7 @@ describe('generic mint/melt methods', () => {
       const wallet = new Wallet(mint, { unit });
       await wallet.loadMint();
 
-      const quotes = await wallet.checkMintQuoteBatchBolt11([
+      const quotes = (await wallet.checkMintQuoteBatchBolt11([
         'bolt11-batch-1',
         {
           quote: 'bolt11-batch-2',
@@ -1465,7 +1533,7 @@ describe('generic mint/melt methods', () => {
           updated_at: null,
           expiry: null,
         },
-      ]);
+      ])) as MintQuoteBolt11Response[];
 
       expect(quotes.map((quote) => quote.quote)).toEqual(['bolt11-batch-1', 'bolt11-batch-2']);
       expect(quotes[0].amount).toBeInstanceOf(Amount);
@@ -1508,7 +1576,7 @@ describe('generic mint/melt methods', () => {
       await wallet.loadMint();
 
       // Mix a quote object and a bare id to cover both id-extraction branches
-      const quotes = await wallet.checkMintQuoteBatchBolt12([
+      const quotes = (await wallet.checkMintQuoteBatchBolt12([
         {
           quote: 'bolt12-batch-1',
           request: 'lno...',
@@ -1522,7 +1590,7 @@ describe('generic mint/melt methods', () => {
           pubkey: '02a1',
         },
         'bolt12-batch-2',
-      ]);
+      ])) as MintQuoteBolt12Response[];
 
       expect(quotes.map((quote) => quote.quote)).toEqual(['bolt12-batch-1', 'bolt12-batch-2']);
       expect(quotes[0].amount).toBeNull();
@@ -1568,7 +1636,7 @@ describe('generic mint/melt methods', () => {
         state: MintQuoteState;
       };
 
-      const quotes = await wallet.checkMintQuoteBatch<BacsMintQuoteRes>(
+      const quotes = (await wallet.checkMintQuoteBatch<BacsMintQuoteRes>(
         'bacs',
         ['bacs-batch-1', { quote: 'bacs-batch-2' }],
         {
@@ -1577,7 +1645,7 @@ describe('generic mint/melt methods', () => {
             amount: Amount.from(raw.amount as AmountLike),
           }),
         },
-      );
+      )) as BacsMintQuoteRes[];
 
       expect(quotes[0].reference).toBe('REF-1');
       expect(quotes[0].amount.toBigInt()).toBe(5000n);
