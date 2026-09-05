@@ -281,7 +281,7 @@ If you were already passing the proofs you received (the normal case — `proofs
 
 - Batches are fetched through a bounded request pool (4 in flight), cutting restore wall-clock to roughly a quarter; the request count is nearly unchanged.
 - `batchSize` now defaults to the mint's advertised `max_array_length` (NUT-06), or 500 when it advertises none (was a fixed 300). `checkProofsStates` sizes its batches the same way.
-- Spent proofs are dropped by default via a NUT-07 state check before returning; pending proofs are kept. Pass `filterSpent: false` for the old raw output. `lastCounterWithSignature` always reflects all found signatures, so counter advancement is unaffected by filtering.
+- Spent proofs are dropped by default via a NUT-07 state check before returning; pending proofs are kept. The raw NUT-09 replay of a range is `restore(start, count)`. `lastCounterWithSignature` always reflects all found signatures, so counter advancement is unaffected by filtering.
 - `gapLimit` is now a floor rather than an exact ceiling: batches already in flight when the gap closes are still processed, so proofs sitting shortly past the gap limit may still be recovered.
 - New `maxCounter` option: an inclusive scan ceiling, nothing above it is probed. Combine with `gapLimit: Infinity` to fetch a known counter range wall to wall.
 

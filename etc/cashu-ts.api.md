@@ -221,7 +221,6 @@ export type BatchRestoreConfig = {
     batchSize?: number;
     counter?: number;
     keysetId?: string;
-    filterSpent?: boolean;
 };
 
 // @public

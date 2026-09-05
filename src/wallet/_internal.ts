@@ -1,11 +1,49 @@
 /**
  * Internal wallet utilities — not part of the public API.
  */
+import { isBlsKeyset } from '../crypto/curves';
 import { Amount, type AmountLike } from '../model/Amount';
-import type { Keys, Proof } from '../model/types';
+import { type OutputDataLike } from '../model/OutputData';
+import type {
+  HasKeysetKeys,
+  Keys,
+  Proof,
+  SerializedBlindedMessage,
+  SerializedBlindedSignature,
+} from '../model/types';
+import { BATCH_POOL_SIZE } from '../transport';
 import { splitAmount } from '../utils/core';
 
 import { type OutputType } from './types';
+
+/**
+ * Turns a NUT-09 restore response into proofs.
+ *
+ * @remarks
+ * The mint replies only for outputs it has signed, so results are matched back by `B_` rather than
+ * by position. `lastIndex` is the highest index in `outputData` that came back signed, or -1 for
+ * none; callers map that to a counter, because probed counters need not be contiguous.
+ */
+export function proofsFromRestoreResponse(
+  outputData: OutputDataLike[],
+  response: { outputs: SerializedBlindedMessage[]; signatures: SerializedBlindedSignature[] },
+  keyset: HasKeysetKeys,
+): { proofs: Proof[]; lastIndex: number } {
+  const signatureByB_: { [b: string]: SerializedBlindedSignature } = {};
+  response.outputs.forEach((o, i) => (signatureByB_[o.B_] = response.signatures[i]));
+
+  const proofs: Proof[] = [];
+  let lastIndex = -1;
+  outputData.forEach((data, i) => {
+    const signature = signatureByB_[data.blindedMessage.B_];
+    if (!signature) return; // counter was never issued into
+    lastIndex = i;
+    // restore outputs are blanks (amount 0), so the mint's amount is authoritative
+    data.blindedMessage.amount = signature.amount;
+    proofs.push(data.toProof(signature, keyset));
+  });
+  return { proofs, lastIndex };
+}
 
 /**
  * Exact `ceil(log2(n))` for n >= 1, computed on bigint so u64-scale inputs never lose precision.
@@ -109,4 +147,21 @@ export function stringifyOutputTypeForLog(ot: OutputType): string {
     default:
       return 'Unknown';
   }
+}
+
+/**
+ * Scan geometry for a keyset kind: counters per restore batch and batches in flight.
+ *
+ * @remarks
+ * Every scanned counter costs a derivation, a `Y` and, past the frontier, a blinded message, all on
+ * the JS thread: about 0.1ms for HMAC (v1), 0.7ms for BIP32 (v0) and 1.1ms for BLS (v3). A batch is
+ * sized to roughly one round trip of that work. Width only hides latency, and on the dear kinds two
+ * batches already saturate it; wider waves just deepen the overshoot past the frontier.
+ * @internal
+ */
+export function scanProfile(keysetId: string): { batchSize: number; poolSize: number } {
+  if (isBlsKeyset(keysetId)) return { batchSize: 100, poolSize: 2 };
+  // BIP32 (v0) keysets: base64 ids, or hex ids with a 00 version byte
+  const bip32 = keysetId.startsWith('00') || !/^[0-9a-f]+$/i.test(keysetId);
+  return bip32 ? { batchSize: 200, poolSize: 2 } : { batchSize: 500, poolSize: BATCH_POOL_SIZE };
 }
