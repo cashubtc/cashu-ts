@@ -73,7 +73,10 @@ await wallet.completeMelt(preview, undefined, { preferAsync: true });
 const restored = (JSON.parse(stored) as SerializedOutputData[]).map((s) =>
   OutputData.deserialize(s),
 );
-const change = wallet.createMeltChangeProofs(restored, paidQuote.change ?? []);
+const sigs = paidQuote.change ?? [];
+// the change may sit on a keyset rotated in while the melt was pending
+await wallet.ensureOperableKeysets(sigs.map((s) => s.id));
+const change = wallet.createMeltChangeProofs(restored, sigs);
 ```
 
 - `OutputData.serialize` / `OutputData.deserialize` are the JSON-safe round-trip primitives
