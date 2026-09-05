@@ -1951,14 +1951,17 @@ class Wallet {
   ): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
     const size = batchSize ?? this.maxArrayLength;
     const requiredEmptyBatches = Math.ceil(gapLimit / size);
+    // Pin the scan: a keychain repair mid-scan can rebind an auto-bound wallet
+    const scanKeyset = keysetId ?? this.keysetId;
     const restoredProofs: Proof[] = [];
 
     let lastCounterWithSignature: undefined | number;
     let emptyBatchesFound = 0;
 
     while (emptyBatchesFound < requiredEmptyBatches) {
-      const restoreRes = await this.restore(counter, size, { keysetId });
-      if (restoreRes.proofs.length > 0) {
+      const restoreRes = await this.restore(counter, size, { keysetId: scanKeyset });
+      // A batch of zero-value signatures yields no proofs but its counters are used
+      if (restoreRes.proofs.length > 0 || restoreRes.lastCounterWithSignature !== undefined) {
         emptyBatchesFound = 0;
         restoredProofs.push(...restoreRes.proofs);
         lastCounterWithSignature = restoreRes.lastCounterWithSignature;
@@ -1987,10 +1990,12 @@ class Wallet {
 
     // Ensure we have keys - wallet only loads active keysets by default.
     // Under strictCachedKeysets, skip the fetch: getKeyset below reports a keyless keyset.
+    // Resolve once: an auto-bound wallet can rebind during the awaits below
+    const scanId = keysetId ?? this.keysetId;
     if (!this._strictCachedKeysets) {
-      await this._keyChain.ensureKeysetKeys(keysetId ?? this.keysetId);
+      await this._keyChain.ensureKeysetKeys(scanId);
     }
-    const keyset = this.getKeyset(keysetId); // specified or wallet keyset
+    const keyset = this.getKeyset(scanId);
 
     // create deterministic blank outputs for unknown restore amounts
     // Note: zero amount + zero denomination passes splitAmount validation
@@ -2006,6 +2011,12 @@ class Wallet {
     const { outputs, signatures } = await this.mint.restore({
       outputs: outputData.map((d) => d.blindedMessage),
     });
+    // NUT-09: each signature names the keyset to unblind with, which need not be the scanned
+    // one. Zero-value entries are dropped below and need no keys.
+    await this._ensureOperableKeysets(
+      signatures.map((s) => (s?.amount.isZero() ? undefined : s?.id)),
+      { implicit: true },
+    );
 
     const signatureMap: { [sig: string]: SerializedBlindedSignature } = {};
     outputs.forEach((o, i) => (signatureMap[o.B_] = signatures[i]));
@@ -2015,11 +2026,14 @@ class Wallet {
 
     for (let i = 0; i < outputData.length; i++) {
       const matchingSig = signatureMap[outputData[i].blindedMessage.B_];
-      if (matchingSig) {
-        lastCounterWithSignature = start + i;
-        outputData[i].blindedMessage.amount = matchingSig.amount;
-        restoredProofs.push(outputData[i].toProof(matchingSig, keyset));
-      }
+      if (!matchingSig) continue; // counter was never issued into
+      lastCounterWithSignature = start + i;
+      // Signed at zero (a NUT-08 blank the mint did not omit): used counter, but no ecash
+      if (matchingSig.amount.isZero()) continue;
+      // The output stays a blank: toProof takes the amount and keyset from the signature
+      restoredProofs.push(
+        outputData[i].toProof(matchingSig, this.keysetForSignature(matchingSig.id)),
+      );
     }
 
     return {
@@ -2380,25 +2394,30 @@ class Wallet {
   private validateReturnedSignatures(
     signatures: SerializedBlindedSignature[],
     outputData: OutputDataLike[],
-    options?: { checkAmounts?: boolean },
   ): void {
     // With DLEQ we can verify the returned blinded signature is paired to the original B_.
     // Without DLEQ, equal-denomination reordering is a protocol trust assumption.
     const requiresDleq =
       this._requireSigDleq && (this._mintInfo?.isSupported(12).supported ?? false);
-    const checkAmounts = options?.checkAmounts ?? true;
 
     for (let i = 0; i < signatures.length; i++) {
       this.failIf(
         signatures[i] == undefined,
         `Mint response is missing a signature at index ${i}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
       );
+      // amount=0 marks a blank (NUT-08 fee change, NUT-09 restore): the mint chooses the amount
+      // and, after a rotation, the keyset. Otherwise the mint must return exactly what was asked,
+      // or it's a downgrade attack.
+      const blank = outputData[i].blindedMessage.amount.isZero();
+      // A zero-value signature on a blank carries no ecash and is dropped by the caller (NUT-08),
+      // so nothing here applies to it, the DLEQ requirement included.
+      if (blank && signatures[i].amount.isZero()) continue;
       this.failIf(
-        signatures[i].id !== outputData[i].blindedMessage.id,
+        !blank && signatures[i].id !== outputData[i].blindedMessage.id,
         `Mint signature keyset id at index ${i} does not match output: expected ${outputData[i].blindedMessage.id}, got ${signatures[i].id}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
       );
       this.failIf(
-        checkAmounts && !signatures[i].amount.equals(outputData[i].blindedMessage.amount),
+        !blank && !signatures[i].amount.equals(outputData[i].blindedMessage.amount),
         `Mint returned signature with wrong amount at index ${i}: expected ${outputData[i].blindedMessage.amount.toString()}, got ${signatures[i].amount.toString()}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
       );
       this.failIf(
@@ -3522,15 +3541,15 @@ class Wallet {
     // Merge preview quote with response to protect against incomplete response.
     const mergedQuote = { ...meltPreview.quote, ...meltResponse };
 
-    // Create any change Proofs. Change may arrive on a rotated-out keyset, and a
-    // permissive mint may sign change on a keyset other than the blanks' (NUT-08).
-    // The inputs are spent by now, so a failure here must hand back what recovery needs.
+    // Create any change Proofs. The spec is silent on which keyset settles change after a
+    // rotation, so take the keyset each signature names. The inputs are spent by now, so a
+    // failure here must hand back what recovery needs.
     const changeSigs = meltResponse.change ?? [];
     let change: Proof[];
     try {
       if (changeSigs.length > 0) {
         await this._ensureOperableKeysets(
-          changeSigs.map((s) => s.id),
+          changeSigs.filter((s) => !s.amount.isZero()).map((s) => s.id),
           { implicit: true },
         );
       }
@@ -3560,12 +3579,13 @@ class Wallet {
    * @remarks
    * Synchronous by design and called internally by `completeMelt` (which ensures keys first);
    * direct callers deferring change construction (NUT-06 async melts, crash recovery) should `await
-   * wallet.keyChain.ensureKeysetKeys(id)` per signature keyset first.
+   * wallet.ensureOperableKeysets(ids)` first for the ids of the value-bearing signatures, which
+   * also picks up a keyset rotated in while the melt was pending.
    * @param outputData Outputs from `prepareMelt()`, or deserialised persisted OutputData.
    * @param changeSigs The optional `change` signatures from the melt response or paid quote.
    * @returns Spendable change proofs (possibly empty).
-   * @throws {@link CTSError} If signature count exceeds output count, any signature's keyset id
-   *   does not match its paired output, or signatures cannot be verified.
+   * @throws {@link CTSError} If signature count exceeds output count, a signature names a keyset
+   *   that is not loaded or not in the wallet's unit, or signatures cannot be verified.
    * @see {@link OutputData.serialize} for the persist/restore lifecycle example.
    */
   createMeltChangeProofs(
@@ -3577,21 +3597,35 @@ class Wallet {
       changeSigs.length > outputData.length,
       `Mint returned ${changeSigs.length} signatures, but only ${outputData.length} blanks were provided. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
     );
-    this.validateReturnedSignatures(changeSigs, outputData, {
-      checkAmounts: false, // change outputs are blank
+    // A paid quote from a WebSocket update or rehydrated from storage carries raw JSON amounts,
+    // so normalise here rather than trust the type at this public boundary.
+    const sigs = changeSigs.map((s) => (s ? { ...s, amount: Amount.from(s.amount) } : s));
+    this.validateReturnedSignatures(sigs, outputData);
+    const change: Proof[] = [];
+    sigs.forEach((s, i) => {
+      // NUT-08 pairs signatures to blanks by index; a zero-value one carries no ecash.
+      if (s.amount.isZero()) return;
+      change.push(outputData[i].toProof(s, this.keysetForSignature(s.id)));
     });
-    return changeSigs.map((s, i) => {
-      let keyset: Keyset;
-      try {
-        keyset = this.getKeyset(s.id);
-      } catch (e) {
-        throw new CTSError(
-          `Cannot reconstruct melt change: keyset ${s.id} is not loaded in this wallet (may be inactive after rotation). If the wallet is seeded, try restoring (NUT-09) to recover.`,
-          { cause: e },
-        );
-      }
-      return outputData[i].toProof(s, keyset);
-    });
+    return change;
+  }
+
+  /**
+   * Keyset a blank's signature was issued under, for unblinding.
+   *
+   * @remarks
+   * Must already be loaded (see `_ensureOperableKeysets`); `getKeyset` also rejects a keyset from
+   * another unit, which a blank cannot vouch for itself.
+   */
+  private keysetForSignature(id: string): Keyset {
+    try {
+      return this.getKeyset(id);
+    } catch (e) {
+      throw new CTSError(
+        `Cannot reconstruct proof: keyset ${id} is not loaded in this wallet (may be inactive after rotation). If the wallet is seeded, try restoring (NUT-09) to recover.`,
+        { cause: e },
+      );
+    }
   }
 
   // -----------------------------------------------------------------
