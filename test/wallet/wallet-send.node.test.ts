@@ -106,6 +106,24 @@ describe('sendOffline witness normalization', () => {
     expect(send[0].witness).toBe(JSON.stringify(witnessObj));
   });
 
+  test('strips a stale v3 transaction witness from an offline send', async () => {
+    const v3Id = `02${'11'.repeat(32)}`;
+    const v3Keyset = { id: v3Id, unit, active: true, input_fee_ppk: 0, final_expiry: null };
+    server.use(http.get(mintUrl + '/v1/keysets', () => HttpResponse.json({ keysets: [v3Keyset] })));
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const proof: Proof = {
+      id: v3Id,
+      amount: Amount.from(1),
+      secret: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+      C: '11'.repeat(48),
+      witness: JSON.stringify({ signatures: ['00'.repeat(64)] }),
+      spend_info: { k: '00'.repeat(31) + '01' },
+    };
+
+    expect(wallet.sendOffline(1, [proof]).send[0].witness).toBeUndefined();
+  });
+
   test('no-change when proof has no witness', async () => {
     const wallet = new Wallet(mint, { unit, requireSigDleq: true });
     await wallet.loadMint();

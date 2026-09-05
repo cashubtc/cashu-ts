@@ -82,7 +82,7 @@ export async function attachTransactionWitnesses(
   const v3Inputs = payload.inputs.filter((p) => isBlsKeyset(p.id) && isV3PointSecret(p.secret));
   if (v3Inputs.length === 0) return [];
   // Each input signs its own input digest over the shared transcript (NUT-10).
-  const { message, proofs: inputContexts } = inputsForPayload({
+  const { transactionMessage, proofs: inputContexts } = inputsForPayload({
     inputs: payload.inputs,
     outputs: payload.outputs ?? [],
     ...(meltQuote && { meltQuote }),
@@ -95,7 +95,7 @@ export async function attachTransactionWitnesses(
     if (!input) {
       fail('Script path plan names a secret not in this transaction', state.logger);
     }
-    const { digest, container } = inputContexts.get(
+    const { digest, inputContainer } = inputContexts.get(
       proofInputContextKey({ keysetId: input.id, secret: input.secret }),
     )!;
     const mine = spend.keys.map((k: string) => schnorrSignDigest(digest, k));
@@ -103,7 +103,12 @@ export async function attachTransactionWitnesses(
     // caller could have supplied up front: the digest covers the outputs, and those are only
     // fixed (and ordered) once the transaction is built.
     const theirs = spend.cosign
-      ? await spend.cosign({ digest, message, container, leaf: spend.leaf })
+      ? await spend.cosign({
+          digest,
+          transactionMessage,
+          inputContainer,
+          leaf: spend.leaf,
+        })
       : [];
     const signatures = selectRequiredLeafSignatures(spend.leaf, digest, [
       ...mine,
@@ -138,7 +143,7 @@ export async function attachTransactionWitnesses(
   }
   // The receipt is the spender's copy of what NUT-07 commits to: nothing here is secret to the
   // wallet, and nothing but the wallet ever holds all of it together.
-  const transcript = bytesToHex(message);
+  const transcript = bytesToHex(transactionMessage);
   const enc = new TextEncoder();
   return v3Inputs.map((input) => {
     const { digest } = inputContexts.get(
@@ -218,8 +223,11 @@ function scriptOptions(
   now: number,
 ): SpendOption[] {
   return leaves.map((leaf, leafIndex) => {
-    const keys = hits
-      .filter((h) => h.leafIndex === leafIndex)
+    // One hit per leaf key slot: the same private key supplied twice is still one signer.
+    const byKeyIndex = new Map(
+      hits.filter((h) => h.leafIndex === leafIndex).map((h) => [h.keyIndex, h] as const),
+    );
+    const keys = [...byKeyIndex.values()]
       // Report the on-tree key, never the recovered scalar: this surface is for
       // planning and diagnostics, which apps log and store.
       .map(({ keyIndex, blinded }) => ({ keyIndex, pubkey: leaf.keys[keyIndex], blinded }));

@@ -148,6 +148,8 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
     const sig = signWithMint(out, privKeys, keyset.id);
     const proof = out.toProof(sig, keyset);
     expect(proof.dleq).toBeUndefined();
+    expect(proof.spend_info?.k).toBe(bytesToHex(out.secretKey!));
+    expect(bytesToHex(secp256k1.getPublicKey(out.secretKey!, true))).toBe(proof.secret);
 
     const C = pointFromHexG1(proof.C);
     const secret = new TextEncoder().encode(proof.secret);

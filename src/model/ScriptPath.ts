@@ -166,7 +166,15 @@ function buildPackage(
     if (!tree || plan.leafIndex < 0 || plan.leafIndex >= tree.length) {
       throw new CTSError(`Script path plan names leaf ${plan.leafIndex}, which is not disclosed`);
     }
-    const K = proof.spend_info?.K;
+    const info = proof.spend_info;
+    let K = info?.K;
+    if (info?.k) {
+      try {
+        K = bytesToHex(getPubKeyFromPrivKey(hexToBytes(info.k)));
+      } catch {
+        throw new CTSError('Script path package bearer key is not a valid private key');
+      }
+    }
     if (!K) {
       // NUT-10: K travels with a disclosed tree precisely so a signer who is not the receiver
       // can build a control block.
@@ -359,7 +367,9 @@ function signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPath
   const spends = pkg.spends.map((spend) => {
     const leaf = parseNutrootLeaf(hexToBytes(spend.leaf));
     const keys: string[] = [];
-    if (leaf.keys.includes(pub)) keys.push(privkey.toLowerCase());
+    if (leaf.keys.some((key) => key.slice(-64) === pub.slice(-64))) {
+      keys.push(privkey.toLowerCase());
+    }
     if (spend.E !== undefined) {
       // The slot hint is trust-free: a wrong slot simply fails to match, and the fallback matches
       // by value over the whole slot space, which no leaf order or tree shape can defeat.

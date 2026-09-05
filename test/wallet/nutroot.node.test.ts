@@ -361,10 +361,10 @@ describe('attachTransactionWitnesses', () => {
     expect(r.inputDigest).toBe(bytesToHex(digestOf(inputs, undefined, input.secret)));
     expect(r.commitment).toBe(spendCommitment(r.Y, hexToBytes(r.inputDigest), r.witness));
     // A holder of the proof rebuilds the input digest from the transcript alone (NUT-07).
-    const { container } = transactionInputsOf(inputs).proofs.get(
+    const { inputContainer } = transactionInputsOf(inputs).proofs.get(
       proofInputContextKey({ keysetId: input.id, secret: input.secret }),
     )!;
-    expect(bytesToHex(inputDigest(sha256(hexToBytes(r.transcript)), container))).toBe(
+    expect(bytesToHex(inputDigest(sha256(hexToBytes(r.transcript)), inputContainer))).toBe(
       r.inputDigest,
     );
     expect(verifyTransactionInputWitness(hexToBytes(r.inputDigest), PUB_B, r.witness)).toBe(true);
@@ -564,10 +564,10 @@ describe('attachTransactionWitnesses', () => {
       makeState(undefined),
     );
     expect(seen!.leaf.keys).toEqual([PUB_A, PUB_B]);
-    expect(bytesToUtf8(seen!.message.subarray(0, 20))).toBe('Cashu_Transaction_v1');
+    expect(bytesToUtf8(seen!.transactionMessage.subarray(0, 20))).toBe('Cashu_Transaction_v1');
     // digest = tagged_hash(input tag, SHA256(message) || SHA256(container)): recomputable, so a
     // signer can refuse anything it cannot verify.
-    expect(bytesToHex(inputDigest(sha256(seen!.message), seen!.container))).toBe(
+    expect(bytesToHex(inputDigest(sha256(seen!.transactionMessage), seen!.inputContainer))).toBe(
       bytesToHex(seen!.digest),
     );
     expect(bytesToHex(seen!.digest)).toBe(bytesToHex(digestOf([input])));

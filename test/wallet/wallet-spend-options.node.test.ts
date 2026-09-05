@@ -131,6 +131,15 @@ describe('wallet.spendOptions: the script path', () => {
     expect(both.script[0].satisfiable).toBe(true);
   });
 
+  test('duplicate copies of one private key count as one threshold signer', async () => {
+    const proof = locked([threshold([pub(ALICE), pub(BOB)], 2)]);
+    const { script } = wallet().spendOptions(proof, {
+      privkeys: [priv(ALICE), priv(ALICE)],
+    });
+    expect(script[0]).toMatchObject({ satisfiable: false, blockedBy: 'threshold' });
+    expect(script[0].keys).toEqual([{ keyIndex: 0, pubkey: pub(ALICE), blinded: false }]);
+  });
+
   test('a locktime blocks until it passes, and reports when that is', async () => {
     const unlockAt = 4102444800; // 2100-01-01
     const proof = locked([after(unlockAt, [pub(ALICE)])]);

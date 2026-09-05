@@ -1,6 +1,7 @@
 import { type NutrootLeaf } from '../../crypto/nutroot';
 import { type AmountLike } from '../../model/Amount';
 import { type OutputDataFactory, type OutputDataLike } from '../../model/OutputData';
+import type { SerializedBlindedMessage } from '../../model/types/blinded';
 import type { ProofLike } from '../../model/types/proof';
 import { type OperationCounters } from '../CounterSource';
 import { type LockOptions } from '../lock';
@@ -188,14 +189,14 @@ export type ScriptPathPlan = {
  *
  * @remarks
  * `digest` is what gets signed: the input digest, `tagged_hash("Cashu_TransactionInput",
- * SHA256(message) || SHA256(container))`. `message` is the tagged transaction message and
- * `container` the input's own transcript record, so a signer can recompute the digest and refuse
- * anything it cannot verify.
+ * SHA256(transactionMessage) || SHA256(inputContainer))` (NUT-10). `transactionMessage` is the
+ * tagged pre-hash transcript and `inputContainer` the input's own TLV container record, so a signer
+ * can recompute the digest and refuse anything it cannot verify.
  */
 export type CosignRequest = {
   digest: Uint8Array;
-  message: Uint8Array;
-  container: Uint8Array;
+  transactionMessage: Uint8Array;
+  inputContainer: Uint8Array;
   leaf: NutrootLeaf;
 };
 
@@ -233,11 +234,34 @@ export type ReceiveConfig = {
 };
 
 /**
+ * What a {@link MintProofsConfig.sign} callback receives: the digest to sign and what it covers.
+ *
+ * @remarks
+ * A v3 quote also carries the tagged `transactionMessage` and the quote's `inputContainer` (as
+ * {@link CosignRequest}), so a NIP-60 `signTransaction` signer can derive the digest itself and
+ * refuse anything else.
+ */
+export type MintQuoteSignRequest = {
+  digest: Uint8Array;
+  quoteId: string;
+  outputs: SerializedBlindedMessage[];
+  transactionMessage?: Uint8Array;
+  inputContainer?: Uint8Array;
+};
+
+/**
  * Configuration for minting operations.
  */
 export type MintProofsConfig = {
   keysetId?: string;
   privkey?: string | string[];
+  /**
+   * Signs a locked quote whose key is not in the page (eg a NIP-07 extension): BIP-340 signature
+   * hex over `request.digest`. Ignored when `privkey` is given. The quote's single signer, unlike a
+   * script path `cosign`, which adds signatures beside the wallet's own. No legacy NUT-20 fallback
+   * signature is produced this way, so the mint must accept the amended message.
+   */
+  sign?: (request: MintQuoteSignRequest) => Promise<string>;
   proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
   onCountersReserved?: OnCountersReserved;
 };

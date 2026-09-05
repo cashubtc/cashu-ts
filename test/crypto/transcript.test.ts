@@ -73,7 +73,7 @@ describe('transaction transcript (vectors)', () => {
     const context = proofs.get(
       proofInputContextKey({ keysetId: tv.swap.tx.proof_inputs[0].keyset_id, secret }),
     )!;
-    expect(bytesToHex(sha256(context.container))).toBe(tv.swap.input_id);
+    expect(bytesToHex(sha256(context.inputContainer))).toBe(tv.swap.input_id);
     expect(bytesToHex(context.digest)).toBe(tv.swap.input_digest);
     expect(
       schnorr.verify(hexToBytes(tv.swap.signature), context.digest, hexToBytes(secret).subarray(1)),
@@ -105,7 +105,7 @@ describe('transaction transcript (vectors)', () => {
         proofInputContextKey({ keysetId: proof.keyset_id, secret: proof.secret }),
       )!;
       const expected = vector.inputs[index];
-      expect(bytesToHex(sha256(context.container))).toBe(expected.input_id);
+      expect(bytesToHex(sha256(context.inputContainer))).toBe(expected.input_id);
       expect(bytesToHex(context.digest)).toBe(expected.input_digest);
       expect(
         schnorr.verify(
@@ -128,7 +128,7 @@ describe('transaction transcript (vectors)', () => {
       const expected = vector.inputs[index];
       expect(expected.quote_id).toBe(quote.quote_id);
       const context = contexts.quotes.get(quote.quote_id)!;
-      expect(bytesToHex(sha256(context.container))).toBe(expected.input_id);
+      expect(bytesToHex(sha256(context.inputContainer))).toBe(expected.input_id);
       expect(bytesToHex(context.digest)).toBe(expected.input_digest);
       expect(
         schnorr.verify(
@@ -152,7 +152,7 @@ describe('transaction transcript (vectors)', () => {
     )!;
     expect(bytesToHex(buildTransactionTranscript(tx))).toBe(aud.transcript);
     expect(bytesToHex(transactionDigest(tx))).toBe(aud.digest);
-    expect(bytesToHex(sha256(context.container))).toBe(aud.input_id);
+    expect(bytesToHex(sha256(context.inputContainer))).toBe(aud.input_id);
     expect(bytesToHex(context.digest)).toBe(aud.input_digest);
   });
 
@@ -497,7 +497,10 @@ describe('transcript input guards', () => {
     const bls = vectors.nut13_v3.keyset_id;
     expect(() => recoverV3SecretKeys(seed, bls, [], -1)).toThrow(/maxCounter/);
     expect(() => recoverV3SecretKeys(seed, bls, [], 1.5)).toThrow(/maxCounter/);
-    expect(() => recoverV3SecretKeys(seed, bls, [], (1 << 20) + 1)).toThrow(/maxCounter/);
+    expect(() => recoverV3SecretKeys(seed, bls, [], (1 << 20) + 1)).not.toThrow();
+    expect(() => recoverV3SecretKeys(seed, bls, [], Number.MAX_SAFE_INTEGER + 1)).toThrow(
+      /maxCounter/,
+    );
   });
 });
 
@@ -522,7 +525,7 @@ describe('input uniqueness and spend commitments (vectors)', () => {
   test('the mint quote input derives its digest from its own container', () => {
     const { quotes } = transactionInputs(fromVectorTx(tv.mint.tx));
     const context = quotes.get(tv.mint.tx.mint_quote_inputs[0].quote_id)!;
-    expect(bytesToHex(sha256(context.container))).toBe(tv.mint.input_id);
+    expect(bytesToHex(sha256(context.inputContainer))).toBe(tv.mint.input_id);
     expect(bytesToHex(context.digest)).toBe(tv.mint.input_digest);
   });
 

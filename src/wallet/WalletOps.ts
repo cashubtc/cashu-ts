@@ -732,6 +732,16 @@ export class MintBuilder<
   }
 
   /**
+   * Sign a locked mint quote through a callback that holds the key, eg a NIP-07 extension.
+   *
+   * @param fn See {@link MintProofsConfig.sign}; ignored when `.privkey()` is also set.
+   */
+  sign(fn: NonNullable<MintProofsConfig['sign']>): MintBuilder<M, true> {
+    this.config.sign = fn;
+    return this as MintBuilder<M, true>;
+  }
+
+  /**
    * Provide existing proofs to help optimise denomination selection.
    *
    * @remarks

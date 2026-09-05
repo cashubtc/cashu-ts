@@ -1,9 +1,42 @@
-import { assertValidTagKey, dedupeP2PKPubkeys, normalizeHashlock, type P2PKTag } from '../crypto';
+import {
+  assertValidTagKey,
+  buildP2PKTags,
+  dedupeP2PKPubkeys,
+  normalizeHashlock,
+  normalizeP2PKOptions,
+  type P2PKTag,
+} from '../crypto';
 import { serializeNutrootLeaf, type NutrootLeaf } from '../crypto/nutroot';
 import { CTSError } from '../model/Errors';
-import { OutputData } from '../model/OutputData';
+import { MAX_SECRET_LENGTH } from '../model/OutputData';
 
 import { lockToNutrootOptions, lockToP2PKOptions, type LockOptions } from './lock';
+
+/**
+ * Runs the real encoder's normalization, tag encoding, and secret-length checks, without its key
+ * generation, blinding, or discarded allocations.
+ */
+function assertP2PKLockEncodes(lock: LockOptions): void {
+  const p2pk = normalizeP2PKOptions(lockToP2PKOptions(lock));
+  const tags = buildP2PKTags({
+    locktime: p2pk.locktime,
+    pubkeys: p2pk.pubkeys ?? [],
+    refundKeys: p2pk.refundKeys ?? [],
+    requiredSignatures: p2pk.requiredSignatures ?? 1,
+    requiredRefundSignatures: p2pk.requiredRefundSignatures ?? 1,
+    sigFlag: p2pk.sigFlag,
+    additionalTags: p2pk.additionalTags,
+  });
+  // Blinding swaps keys for same-length points and the nonce is always 64 hex chars, so this
+  // layout has the real secret's length.
+  const secret = JSON.stringify([p2pk.kind, { nonce: '0'.repeat(64), data: p2pk.data, tags }]);
+  const charCount = [...secret].length;
+  if (charCount > MAX_SECRET_LENGTH) {
+    throw new CTSError(
+      `Secret too long (${charCount} characters), maximum is ${MAX_SECRET_LENGTH}`,
+    );
+  }
+}
 
 function assertUnixSeconds(seconds: number): number {
   if (!Number.isFinite(seconds) || seconds < 0) {
@@ -194,13 +227,11 @@ export class LockBuilder {
       ...(this.extraTags.length > 0 && { additionalTags: this.extraTags.slice() }),
       ...(this._sigAll && { sigAll: true }),
     };
-    // Smoke-test through an encoder so a bad lock fails here, not at send time. v3-only shapes
-    // validate structurally; everything else builds a real NUT-11 secret.
+    // Smoke-test through the encoder checks so a bad lock fails here, not at send time.
     if (lock.leaves || Array.isArray(lock.blindKeys)) {
       lockToNutrootOptions(lock);
     } else {
-      const smokeTest = OutputData.createSingleP2PKData(lockToP2PKOptions(lock), 1, 'deedbeef');
-      void smokeTest; // intentionally unused
+      assertP2PKLockEncodes(lock);
     }
     return lock;
   }
@@ -218,7 +249,7 @@ export class LockBuilder {
       if (target === 'v3') {
         lockToNutrootOptions(lock);
       } else {
-        void OutputData.createSingleP2PKData(lockToP2PKOptions(lock), 1, 'deedbeef');
+        assertP2PKLockEncodes(lock);
       }
       return [];
     } catch (e) {

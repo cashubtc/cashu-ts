@@ -903,6 +903,24 @@ describe('nutroot (v3) request marking', () => {
     ).toThrow(/not in the requested tree/);
   });
 
+  test('foreign blind-me keys require a tree and must belong to it', () => {
+    expect(() =>
+      new PaymentRequest({
+        nutroot: { receiverKey: carolPub, blindKeys: [alicePub] },
+      }).toNutrootOptions(),
+    ).toThrow(/require a tree/);
+    expect(() =>
+      new PaymentRequest({
+        nutroot: { receiverKey: carolPub, leaves: [leafAfter], blindKeys: [carolPub] },
+      }).toNutrootOptions(),
+    ).toThrow(/not in the requested tree/);
+    expect(() =>
+      new PaymentRequest({
+        nutroot: { receiverKey: carolPub, leaves: [leafAfter], blindKeys: ['not-a-point'] },
+      }).toNutrootOptions(),
+    ).toThrow(/Invalid pubkey/);
+  });
+
   test('a leaf the payer cannot reproduce byte for byte is refused', () => {
     // Same leaf plus an unknown odd field: odd types are reserved, so the leaf no longer even
     // parses, failing before the canonical-form round-trip gets a say.
