@@ -194,6 +194,15 @@ test('exact custom split preserves order', () => {
 });
 
 describe('test decode token', () => {
+  test('rejects a missing keysetIds argument with a pointer to the new signature', () => {
+    const decode = utils.getDecodedToken as unknown as (t: string) => Token;
+    expect(() =>
+      decode(
+        'cashuAeyJ0b2tlbiI6W3sibWludCI6Imh0dHA6Ly9sb2NhbGhvc3Q6MzMzOCIsInByb29mcyI6W3siaWQiOiJJMnlOK2lSWWZrelQiLCJhbW91bnQiOjEsInNlY3JldCI6Ijk3emZtbWFHZjVrOE1nMGdhanBuYm1wZXJ2VHRFZUU4d3dLcmk3cldwVXM9IiwiQyI6IjAyMTk1MDgxZTYyMmY5OGJmYzE5YTA1ZWJlMjM0MWQ5NTVjMGQxMjU4OGM1OTQ4Yzg1OGQwN2FkZWMwMDdiYzFlNCJ9XX1dfQ',
+      ),
+    ).toThrow(/requires keysetIds/);
+  });
+
   test('testing v3 Token', async () => {
     const obj = {
       proofs: [
