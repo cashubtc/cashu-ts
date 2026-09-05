@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.10.2](https://github.com/cashubtc/cashu-ts/compare/v4.10.1...v4.10.2) (2026-09-05)
+
+
+### Bug Fixes
+
+* **utils:** guard the keysetIds argument of getDecodedToken ([#1085](https://github.com/cashubtc/cashu-ts/issues/1085)) ([847812f](https://github.com/cashubtc/cashu-ts/commit/847812f690ebfbb9d7d5b095b619889189627465))
+
 ## [4.10.1](https://github.com/cashubtc/cashu-ts/compare/v4.10.0...v4.10.1) (2026-09-04)
 
 
