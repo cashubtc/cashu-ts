@@ -895,6 +895,21 @@ describe('async melt preference body', () => {
     });
   });
 
+  test('createMeltChangeProofs drops a zero-value signature before the DLEQ requirement applies', async () => {
+    server.use(http.get(mintUrl + '/v1/info', () => HttpResponse.json(mintInfoRespWithNut12)));
+    const wallet = new Wallet(mint, { unit, requireSigDleq: true, logger });
+    await wallet.loadMint();
+
+    const blank = OutputData.createSingleRandomData(0, '00bd033559de27d0');
+    const zeroSig: SerializedBlindedSignature = {
+      id: '00bd033559de27d0',
+      amount: Amount.from(0),
+      C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+    };
+
+    expect(wallet.createMeltChangeProofs([blank], [zeroSig])).toEqual([]);
+  });
+
   test('createMeltChangeProofs pairs by index and drops zero-value signatures', async () => {
     const wallet = new Wallet(mint, { unit, logger });
     await wallet.loadMint();
