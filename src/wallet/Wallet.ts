@@ -2022,6 +2022,8 @@ class Wallet {
     let counter = config?.counter ?? 0;
     const bound = config?.maxCounter ?? Number.MAX_SAFE_INTEGER;
     const requiredEmptyBatches = Math.ceil(gapLimit / batchSize);
+    // Pin the scan: a keychain repair mid-scan can rebind an auto-bound wallet
+    const scanKeyset = keysetId ?? this.keysetId;
     let restoredProofs: Proof[] = [];
 
     let lastCounterWithSignature: undefined | number;
@@ -2037,10 +2039,11 @@ class Wallet {
         (_, i) => counter + i * batchSize,
       ).filter((s) => s <= bound);
       const wave = await runPool(starts, BATCH_POOL_SIZE, (start) =>
-        this.restore(start, Math.min(batchSize, bound - start + 1), { keysetId }),
+        this.restore(start, Math.min(batchSize, bound - start + 1), { keysetId: scanKeyset }),
       );
       for (const restoreRes of wave) {
-        if (restoreRes.proofs.length > 0) {
+        // A batch of zero-value signatures yields no proofs but its counters are used
+        if (restoreRes.proofs.length > 0 || restoreRes.lastCounterWithSignature !== undefined) {
           emptyBatchesFound = 0;
           restoredProofs.push(...restoreRes.proofs);
           lastCounterWithSignature = restoreRes.lastCounterWithSignature;
@@ -2121,9 +2124,10 @@ class Wallet {
     const { outputs, signatures } = await this.mint.restore({
       outputs: outputData.map((d) => d.blindedMessage),
     });
-    // NUT-09: each signature names the keyset to unblind with, which need not be the scanned one
+    // NUT-09: each signature names the keyset to unblind with, which need not be the scanned
+    // one. Zero-value entries are dropped below and need no keys.
     await this._ensureOperableKeysets(
-      signatures.map((s) => s?.id),
+      signatures.map((s) => (s?.amount.isZero() ? undefined : s?.id)),
       { implicit: true },
     );
 
@@ -3696,14 +3700,16 @@ class Wallet {
       changeSigs.length > outputData.length,
       `Mint returned ${changeSigs.length} signatures, but only ${outputData.length} blanks were provided. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
     );
-    this.validateReturnedSignatures(changeSigs, outputData);
-    const change: Proof[] = [];
-    changeSigs.forEach((s, i) => {
-      // NUT-08 pairs signatures to blanks by index; a zero-value one carries no ecash.
-      if (s.amount.isZero()) return;
-      change.push(outputData[i].toProof(s, this.keysetForSignature(s.id)));
-    });
-    return change;
+    // NUT-08 pairs signatures to blanks by index. A zero-value one carries no ecash and is
+    // dropped before validation, so a junk entry cannot fail the DLEQ or key checks.
+    const pairs = changeSigs
+      .map((sig, i) => ({ sig, blank: outputData[i] }))
+      .filter(({ sig }) => !sig?.amount.isZero());
+    this.validateReturnedSignatures(
+      pairs.map((p) => p.sig),
+      pairs.map((p) => p.blank),
+    );
+    return pairs.map(({ sig, blank }) => blank.toProof(sig, this.keysetForSignature(sig.id)));
   }
 
   /**

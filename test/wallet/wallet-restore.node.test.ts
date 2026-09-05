@@ -21,6 +21,42 @@ const allUnspent = (n: number): ProofState[] =>
   Array(n).fill({ state: CheckStateEnum.UNSPENT }) as ProofState[];
 
 describe('Restoring deterministic proofs', () => {
+  test('Batch restore treats a batch of zero-value signatures as occupied', async () => {
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+    const mockRestore = vi
+      .spyOn(wallet, 'restore')
+      .mockImplementation(
+        async (start): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> => {
+          // first batch: signed, but every signature is zero-value
+          if (start === 0) return { proofs: [], lastCounterWithSignature: 5 };
+          if (start === 50)
+            return { proofs: Array(3).fill(1) as Proof[], lastCounterWithSignature: 52 };
+          return { proofs: [] };
+        },
+      );
+    vi.spyOn(wallet, 'checkProofsStates').mockResolvedValue(allUnspent(3));
+    const res = await wallet.batchRestore({ gapLimit: 100, batchSize: 50 });
+    expect(res.proofs).toHaveLength(3);
+    expect(res.lastCounterWithSignature).toBe(52);
+    mockRestore.mockClear();
+  });
+
+  test('Batch restore keeps scanning the keyset it started on', async () => {
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+    const bound = wallet.keysetId;
+    const mockRestore = vi.spyOn(wallet, 'restore').mockImplementation(async () => {
+      // a keychain repair inside restore() can rebind an auto-bound wallet mid-scan
+      (wallet as unknown as { _boundKeysetId: string })._boundKeysetId = '009a1f293253e41e';
+      return { proofs: [] };
+    });
+    await wallet.batchRestore({ gapLimit: 100, batchSize: 50 });
+    expect(mockRestore.mock.calls.length).toBeGreaterThan(1);
+    expect(mockRestore.mock.calls.every((c) => c[2]?.keysetId === bound)).toBe(true);
+    mockRestore.mockClear();
+  });
+
   test('Batch restore', async () => {
     const wallet = new Wallet(mint);
     await wallet.loadMint();
@@ -255,11 +291,12 @@ describe('restore', () => {
       ),
       http.post(mintUrl + '/v1/restore', async ({ request }) => {
         const body = (await request.json()) as { outputs: unknown[] };
-        // counter 0 on the scanned keyset, counter 1 signed at zero, counter 2 on keyset B
+        // counter 0 on the scanned keyset, counter 1 signed at zero under a keyset the wallet
+        // has never heard of (no keys are needed for it), counter 2 on keyset B
         return HttpResponse.json({
           outputs: body.outputs,
           signatures: body.outputs.map((_, i) => ({
-            id: i === 2 ? keysetB.id : dummyKeysResp.keysets[0].id,
+            id: i === 2 ? keysetB.id : i === 1 ? 'aaaaaaaaaaaaaaaa' : dummyKeysResp.keysets[0].id,
             amount: i === 1 ? 0 : 1,
             C_: VALID_POINT,
           })),
