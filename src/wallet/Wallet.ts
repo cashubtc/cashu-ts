@@ -2030,7 +2030,7 @@ class Wallet {
       lastCounterWithSignature = start + i;
       // Signed at zero (a NUT-08 blank the mint did not omit): used counter, but no ecash
       if (matchingSig.amount.isZero()) continue;
-      outputData[i].blindedMessage.amount = matchingSig.amount;
+      // The output stays a blank: toProof takes the amount and keyset from the signature
       restoredProofs.push(
         outputData[i].toProof(matchingSig, this.keysetForSignature(matchingSig.id)),
       );

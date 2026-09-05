@@ -302,6 +302,14 @@ describe('OutputData helpers', () => {
 });
 
 describe('OutputData.toProof across a keyset rotation', () => {
+  test('a non-blank output rejects a signature from another keyset even with matching keys', () => {
+    const G = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+    const output = OutputData.createSingleRandomData(1, '009a1f293253e41e');
+    const keysetB: HasKeysetKeys = { id: '00ad268c4d1f5826', keys: { 1: G } };
+    const sig: SerializedBlindedSignature = { id: keysetB.id, amount: Amount.from(1), C_: G };
+    expect(() => output.toProof(sig, keysetB)).toThrow(/does not match output/);
+  });
+
   test('a real signature under another keyset unblinds to a proof the mint would accept', () => {
     // Mint side: the blank names keyset A, but the mint signs it with keyset B's key for amount 1
     const mintPrivKey = secp256k1.utils.randomSecretKey();
