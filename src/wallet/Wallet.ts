@@ -12,8 +12,7 @@ import {
   signMintQuote,
   findSigningKey,
   signP2PKProofs as cryptoSignP2PKProofs,
-  hashToCurve,
-  hashToCurveBls,
+  hashToCurveHex,
   isBlsKeyset,
   isP2PKSigAll,
   buildP2PKSigAllMessageV0,
@@ -198,6 +197,10 @@ class Wallet {
   private _explicitBind: boolean = false;
   private _selectProofs: SelectProofs;
   private _outputDataCreator: OutputDataCreator;
+  /**
+   * @internal
+   */
+  readonly computeY: (secret: string, keysetId: string) => string;
   private _requireSigDleq = false;
   private _strictCachedKeysets: boolean = false;
   private _logger: Logger;
@@ -235,6 +238,11 @@ class Wallet {
    *   maintained implementation is the default Noble Curves based behavior exposed by
    *   `OutputData.create*()`. Custom creators are an escape hatch for runtime-specific needs, and
    *   compatibility and maintenance are the integrator's responsibility.
+   * @param options.hashToCurve Custom `Y = hash_to_curve(secret)` returning compressed hex; hash
+   *   the secret string as UTF-8, as `hashToCurveHex` does. The keyset id selects the curve (v3
+   *   `02…` ids are BLS12-381 G1, all others secp256k1). Use it to plug a WASM or native
+   *   implementation: a restore scan hashes every counter it visits, and the pure JS BLS hash
+   *   dominates that cost. Same support terms as `outputDataCreator`.
    * @param options.requireSigDleq Fail mint/swap/melt responses when the mint advertises NUT-12
    *   support but omits DLEQ proofs on returned blinded signatures. This is a fail-fast consistency
    *   check, not protection against a malicious mint already consuming inputs or payments.
@@ -263,6 +271,7 @@ class Wallet {
       denominationTarget?: number;
       selectProofs?: SelectProofs; // optional override
       outputDataCreator?: OutputDataCreator;
+      hashToCurve?: (secret: string, keysetId: string) => string;
       requireSigDleq?: boolean;
       strictCachedKeysets?: boolean;
       customRequest?: RequestFn;
@@ -275,6 +284,7 @@ class Wallet {
     this._logger = options?.logger ?? NULL_LOGGER; // init early (seed can throw)
     this._selectProofs = options?.selectProofs ?? selectProofsRotating; // vital
     this._outputDataCreator = options?.outputDataCreator ?? new DefaultOutputDataCreator();
+    this.computeY = options?.hashToCurve ?? hashToCurveHex;
     this.mint =
       typeof mint === 'string'
         ? new Mint(mint, {
@@ -3795,12 +3805,7 @@ class Wallet {
    * @returns NUT-07 state for each proof, in same order.
    */
   async checkProofsStates(proofs: Array<Pick<ProofLike, 'secret' | 'id'>>): Promise<ProofState[]> {
-    const enc = new TextEncoder();
-    const Ys = proofs.map((p) =>
-      isBlsKeyset(p.id)
-        ? hashToCurveBls(enc.encode(p.secret)).toHex(true)
-        : hashToCurve(enc.encode(p.secret)).toHex(true),
-    );
+    const Ys = proofs.map((p) => this.computeY(p.secret, p.id));
     // Shuffle the wire order to reduce linkability with B_'s (eg when coupled with a restore scan).
     // Indices travel with the request, so callers still get their original order back.
     const order = Ys.map((_, i) => i);

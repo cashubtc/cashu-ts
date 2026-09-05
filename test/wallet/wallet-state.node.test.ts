@@ -40,6 +40,33 @@ describe('checkProofsStates', () => {
     });
   });
 
+  test('checkProofsStates uses a custom hashToCurve for Y', async () => {
+    const fakeY = '02' + 'ab'.repeat(32);
+    const seen: string[][] = [];
+    server.use(
+      http.post(mintUrl + '/v1/checkstate', async ({ request }) => {
+        const body = (await request.json()) as { Ys: string[] };
+        seen.push(body.Ys);
+        return HttpResponse.json({
+          states: body.Ys.map((Y) => ({ Y, state: 'SPENT', witness: null })),
+        });
+      }),
+    );
+    const calls: Array<[string, string]> = [];
+    const wallet = new Wallet(mint, {
+      unit,
+      hashToCurve: (secret, keysetId) => {
+        calls.push([secret, keysetId]);
+        return fakeY;
+      },
+    });
+    await wallet.loadMint();
+
+    const result = await wallet.checkProofsStates(proofs);
+    expect(calls).toEqual([[proofs[0].secret, proofs[0].id]]);
+    expect(seen).toEqual([[fakeY]]);
+    expect(result[0].state).toEqual(CheckStateEnum.SPENT);
+  });
   test('checkProofsStates with omitted witness coerces undefined → null', async () => {
     server.use(
       http.post(mintUrl + '/v1/checkstate', () => {

@@ -679,6 +679,9 @@ export function hashToCurve(secret: Uint8Array): WeierstrassPoint<bigint>;
 export function hashToCurveBls(secret: Uint8Array): G1Point;
 
 // @public
+export function hashToCurveHex(secret: string, keysetId: string): string;
+
+// @public
 export type HasKeysetId = {
     id: string;
 };
@@ -2390,6 +2393,7 @@ export class Wallet {
         denominationTarget?: number;
         selectProofs?: SelectProofs;
         outputDataCreator?: OutputDataCreator;
+        hashToCurve?: (secret: string, keysetId: string) => string;
         requireSigDleq?: boolean;
         strictCachedKeysets?: boolean;
         customRequest?: RequestFn;

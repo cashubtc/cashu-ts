@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { Amount } from '../../src';
-import { hashToCurve, hashToCurveBls } from '../../src/crypto';
+import { hashToCurve, hashToCurveBls, hashToCurveHex } from '../../src/crypto';
 import type { Proof } from '../../src/model/types';
 import type { KeyChainCache } from '../../src/model/types/keyset';
 import { type OperationCounters } from '../../src/wallet';
@@ -112,11 +112,15 @@ class MockMint {
   });
 }
 
+// Wallet.computeY stand-in: the default hash, since no test overrides the hook here.
+const computeY = hashToCurveHex;
+
 /**
  * Only what WalletEvents touches.
  */
 class MockWallet {
   public mint = new MockMint();
+  public computeY = computeY;
 }
 
 describe('WalletEvents', () => {
@@ -865,7 +869,10 @@ describe('WalletEvents', () => {
         for (const s of subs.values()) if (s.filters.includes(quote)) s.err(error);
       },
     };
-    const wallet = { mint: { connectWebSocket: vi.fn(async () => {}), webSocketConnection: ws } };
+    const wallet = {
+      mint: { connectWebSocket: vi.fn(async () => {}), webSocketConnection: ws },
+      computeY,
+    };
     return { wallet, ws };
   };
 
