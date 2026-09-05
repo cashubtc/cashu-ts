@@ -1990,10 +1990,12 @@ class Wallet {
 
     // Ensure we have keys - wallet only loads active keysets by default.
     // Under strictCachedKeysets, skip the fetch: getKeyset below reports a keyless keyset.
+    // Resolve once: an auto-bound wallet can rebind during the awaits below
+    const scanId = keysetId ?? this.keysetId;
     if (!this._strictCachedKeysets) {
-      await this._keyChain.ensureKeysetKeys(keysetId ?? this.keysetId);
+      await this._keyChain.ensureKeysetKeys(scanId);
     }
-    const keyset = this.getKeyset(keysetId); // specified or wallet keyset
+    const keyset = this.getKeyset(scanId);
 
     // create deterministic blank outputs for unknown restore amounts
     // Note: zero amount + zero denomination passes splitAmount validation
@@ -2407,6 +2409,9 @@ class Wallet {
       // and, after a rotation, the keyset. Otherwise the mint must return exactly what was asked,
       // or it's a downgrade attack.
       const blank = outputData[i].blindedMessage.amount.isZero();
+      // A zero-value signature on a blank carries no ecash and is dropped by the caller (NUT-08),
+      // so nothing here applies to it, the DLEQ requirement included.
+      if (blank && signatures[i].amount.isZero()) continue;
       this.failIf(
         !blank && signatures[i].id !== outputData[i].blindedMessage.id,
         `Mint signature keyset id at index ${i} does not match output: expected ${outputData[i].blindedMessage.id}, got ${signatures[i].id}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
@@ -3574,7 +3579,8 @@ class Wallet {
    * @remarks
    * Synchronous by design and called internally by `completeMelt` (which ensures keys first);
    * direct callers deferring change construction (NUT-06 async melts, crash recovery) should `await
-   * wallet.keyChain.ensureKeysetKeys(id)` per signature keyset first.
+   * wallet.ensureOperableKeysets(changeSigs.map((s) => s.id))` first, which also picks up a keyset
+   * rotated in while the melt was pending.
    * @param outputData Outputs from `prepareMelt()`, or deserialised persisted OutputData.
    * @param changeSigs The optional `change` signatures from the melt response or paid quote.
    * @returns Spendable change proofs (possibly empty).
@@ -3591,16 +3597,14 @@ class Wallet {
       changeSigs.length > outputData.length,
       `Mint returned ${changeSigs.length} signatures, but only ${outputData.length} blanks were provided. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
     );
-    // NUT-08 pairs signatures to blanks by index. A zero-value one carries no ecash and is
-    // dropped before validation, so a junk entry cannot fail the DLEQ or key checks.
-    const pairs = changeSigs
-      .map((sig, i) => ({ sig, blank: outputData[i] }))
-      .filter(({ sig }) => !sig?.amount.isZero());
-    this.validateReturnedSignatures(
-      pairs.map((p) => p.sig),
-      pairs.map((p) => p.blank),
-    );
-    return pairs.map(({ sig, blank }) => blank.toProof(sig, this.keysetForSignature(sig.id)));
+    this.validateReturnedSignatures(changeSigs, outputData);
+    const change: Proof[] = [];
+    changeSigs.forEach((s, i) => {
+      // NUT-08 pairs signatures to blanks by index; a zero-value one carries no ecash.
+      if (s.amount.isZero()) return;
+      change.push(outputData[i].toProof(s, this.keysetForSignature(s.id)));
+    });
+    return change;
   }
 
   /**
