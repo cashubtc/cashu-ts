@@ -1,5 +1,6 @@
 import { hashToCurve, hashToCurveBls, isBlsKeyset } from '../crypto';
 import { safeCallback } from '../logger';
+import { Amount } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { MintQuoteState, MeltQuoteState } from '../model/types';
 import type {
@@ -33,6 +34,25 @@ function safeStringify(obj: unknown): string {
   } catch {
     return Object.prototype.toString.call(obj);
   }
+}
+
+// NUT-17 payloads are raw JSON, so give callbacks the Amount fields the HTTP responses carry.
+function normalizeMintQuoteUpdate(p: MintQuoteBolt11Response): MintQuoteBolt11Response {
+  return {
+    ...p,
+    ...(p.amount != null && { amount: Amount.from(p.amount) }),
+    ...(p.amount_paid != null && { amount_paid: Amount.from(p.amount_paid) }),
+    ...(p.amount_issued != null && { amount_issued: Amount.from(p.amount_issued) }),
+  };
+}
+
+function normalizeMeltQuoteUpdate(p: MeltQuoteBolt11Response): MeltQuoteBolt11Response {
+  return {
+    ...p,
+    ...(p.amount != null && { amount: Amount.from(p.amount) }),
+    ...(p.fee_reserve != null && { fee_reserve: Amount.from(p.fee_reserve) }),
+    ...(p.change && { change: p.change.map((s) => ({ ...s, amount: Amount.from(s.amount) })) }),
+  };
 }
 
 function normalizeError(err: unknown): Error {
@@ -245,8 +265,19 @@ export class WalletEvents {
     if (!ws) throw new CTSError('Failed to establish WebSocket connection.');
 
     const uniq = Array.from(new Set(ids));
-    const subId = ws.createSubscription({ kind: 'bolt11_mint_quote', filters: uniq }, cb, err);
-    const cancel = () => ws.cancelSubscription(subId, cb);
+    // A malformed payload reports through err rather than reaching cb with the wrong types
+    const handler = (p: MintQuoteBolt11Response) => {
+      let quote: MintQuoteBolt11Response;
+      try {
+        quote = normalizeMintQuoteUpdate(p);
+      } catch (e) {
+        err(normalizeError(e));
+        return;
+      }
+      cb(quote);
+    };
+    const subId = ws.createSubscription({ kind: 'bolt11_mint_quote', filters: uniq }, handler, err);
+    const cancel = () => ws.cancelSubscription(subId, handler);
     return this.withAbort(opts?.signal, cancel);
   }
 
@@ -293,8 +324,18 @@ export class WalletEvents {
     if (!ws) throw new CTSError('Failed to establish WebSocket connection.');
 
     const uniq = Array.from(new Set(ids));
-    const subId = ws.createSubscription({ kind: 'bolt11_melt_quote', filters: uniq }, cb, err);
-    const cancel = () => ws.cancelSubscription(subId, cb);
+    const handler = (p: MeltQuoteBolt11Response) => {
+      let quote: MeltQuoteBolt11Response;
+      try {
+        quote = normalizeMeltQuoteUpdate(p);
+      } catch (e) {
+        err(normalizeError(e));
+        return;
+      }
+      cb(quote);
+    };
+    const subId = ws.createSubscription({ kind: 'bolt11_melt_quote', filters: uniq }, handler, err);
+    const cancel = () => ws.cancelSubscription(subId, handler);
     return this.withAbort(opts?.signal, cancel);
   }
 
