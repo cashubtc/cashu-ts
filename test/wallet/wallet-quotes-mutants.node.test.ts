@@ -1322,25 +1322,21 @@ describe('batchRestore mutants', () => {
       secret: 's',
       C: 'C',
     } as unknown as Proof;
+    // the scan step is private; stub it by name to pin the counters it is handed
     const restoreSpy = vi
-      .spyOn(wallet, 'restore')
-      .mockResolvedValueOnce({ proofs: [fakeProof], lastCounterWithSignature: 0 })
-      .mockResolvedValueOnce({ proofs: [fakeProof], lastCounterWithSignature: 1 })
-      .mockResolvedValueOnce({ proofs: [fakeProof], lastCounterWithSignature: 2 })
-      .mockResolvedValueOnce({ proofs: [fakeProof], lastCounterWithSignature: 3 })
-      .mockResolvedValue({ proofs: [] });
+      .spyOn(wallet as unknown as { restoreUnspent: () => unknown }, 'restoreUnspent')
+      .mockResolvedValueOnce({ proofs: [fakeProof], lastCounterWithSignature: 0, used: true })
+      .mockResolvedValueOnce({ proofs: [fakeProof], lastCounterWithSignature: 1, used: true })
+      .mockResolvedValueOnce({ proofs: [fakeProof], lastCounterWithSignature: 2, used: true })
+      .mockResolvedValueOnce({ proofs: [fakeProof], lastCounterWithSignature: 3, used: true })
+      .mockResolvedValue({ proofs: [], used: false });
 
-    await wallet.batchRestore({
-      gapLimit: 1,
-      batchSize: 1,
-      keysetId: KEYSET_ID,
-      filterSpent: false,
-    });
+    await wallet.batchRestore({ gapLimit: 1, batchSize: 1, keysetId: KEYSET_ID });
 
-    // Wave 1 probes counters 0-3 in order (a `-` mutant in the start math would probe -1).
-    expect(restoreSpy).toHaveBeenNthCalledWith(1, 0, 1, { keysetId: KEYSET_ID });
-    expect(restoreSpy).toHaveBeenNthCalledWith(2, 1, 1, { keysetId: KEYSET_ID });
-    // Wave 1 was all non-empty, so wave 2 must start at counter 4 (a `-=` advance mutant goes negative).
-    expect(restoreSpy).toHaveBeenNthCalledWith(5, 4, 1, { keysetId: KEYSET_ID });
+    // Counters 0-3 are handed out in order (a `-` mutant in the start math would probe -1).
+    expect(restoreSpy).toHaveBeenNthCalledWith(1, 0, 1, KEYSET_ID);
+    expect(restoreSpy).toHaveBeenNthCalledWith(2, 1, 1, KEYSET_ID);
+    // Every batch so far was used, so the fifth must start at counter 4 (a `-=` advance mutant goes negative).
+    expect(restoreSpy).toHaveBeenNthCalledWith(5, 4, 1, KEYSET_ID);
   });
 });

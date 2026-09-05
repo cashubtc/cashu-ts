@@ -5,9 +5,13 @@
  * and one sent token nobody claims), then fresh wallets with the same seed recover from it three
  * ways:
  *
- * - `filterSpent: false` — restore every issued counter, drop the spent ones afterwards.
- * - `filterSpent: true` (the default) — state check each batch, restore only what is live.
+ * - The pre-v5 scan (`restoreEverything` below): restore every issued counter, drop the spent ones
+ *   afterwards.
+ * - The default: state check each batch, restore only what is live.
  * - The default again at a smaller `batchSize`, which shrinks how far the scan overshoots.
+ *
+ * `SCENARIO=` picks a wallet shape to churn (see `SCENARIOS` in main), each with a note on what
+ * dominates its recovery and how to tune for it.
  *
  * A never-used seed then recovers from the same mint both ways. That is the shape of most keysets a
  * multi-mint recovery scans (nothing issued, everything reports UNSPENT and is restored anyway),
@@ -20,8 +24,8 @@
  * weaker evidence. Revealing both for the same counter ties an issuance to its spend, which
  * blinding otherwise prevents.
  *
- * Env knobs: CHURN_ROUNDS, SPEND_FRAC, PIN_MID, BATCH (see main); RESTORE_MS, CHECK_MS (see
- * countingFetch).
+ * Env knobs: SCENARIO, CHURN_ROUNDS, SPEND_FRAC, PIN_MID, BATCH (see main); RESTORE_MS, CHECK_MS
+ * (see countingFetch).
  */
 import dns from 'node:dns';
 
@@ -211,9 +215,38 @@ function liveWindow(walletSeed: Uint8Array, keysetId: string, found: Proof[], T:
   return `${counters.length} live at counters ${oldest}..${counters[counters.length - 1]}, so the oldest sits ${T - oldest} below T`;
 }
 
+/**
+ * The scan before v5, kept here for the comparison: replay every counter in batches until the gap
+ * closes, and sort the spent ones out afterwards.
+ */
+async function restoreEverything(wallet: Wallet, batchSize = 500, gapLimit = 300) {
+  const proofs: Proof[] = [];
+  const lastCounters: Record<string, number> = {};
+  const keysetIds = wallet.keyChain
+    .getAllKeysetIds()
+    .filter((id) => wallet.keyChain.getKeyset(id).unit === wallet.unit);
+  for (const keysetId of keysetIds) {
+    let start = 0;
+    let emptyRun = 0;
+    while (emptyRun < gapLimit) {
+      const res = await wallet.restore(start, batchSize, { keysetId });
+      const last = res.lastCounterWithSignature;
+      if (last === undefined) {
+        emptyRun += batchSize;
+      } else {
+        proofs.push(...res.proofs);
+        lastCounters[keysetId] = last;
+        emptyRun = start + batchSize - 1 - last;
+      }
+      start += batchSize;
+    }
+  }
+  return { proofs, lastCounters };
+}
+
 async function recover(
   label: string,
-  filterSpent: boolean,
+  legacy: boolean,
   expected: ReturnType<typeof sumProofs>,
   batchSize?: number,
   walletSeed: Uint8Array = seed,
@@ -222,9 +255,11 @@ async function recover(
   const wallet = new Wallet(mintUrl, { bip39seed: walletSeed, requestFetch: counted.wrapped });
   await wallet.loadMint();
   const start = performance.now();
-  const { proofs: all, lastCounters } = await wallet.restoreAll({ filterSpent, batchSize });
-  // filterSpent: false returns every issued proof, so filter locally for a like-for-like total
-  const found = filterSpent ? all : (await wallet.groupProofsByState(all)).unspent;
+  const { proofs: all, lastCounters } = legacy
+    ? await restoreEverything(wallet, batchSize)
+    : await wallet.restoreAll({ batchSize });
+  // the legacy scan returns every issued proof, so filter locally for a like-for-like total
+  const found = legacy ? (await wallet.groupProofsByState(all)).unspent : all;
   const ms = performance.now() - start;
   const recovered = sumProofs(found);
   console.log(`\n${label}: recovered ${recovered} sats (T=${JSON.stringify(lastCounters)})`);
@@ -237,11 +272,29 @@ async function recover(
   }
 }
 
+// Wallet shapes worth measuring, with what dominates each recovery and how to tune for it.
+// Explicit env knobs override a preset.
+const SCENARIOS: Record<string, Record<string, string>> = {
+  // Aged, mostly spent: history batches come back SPENT and skip their restore, so the cost is
+  // one Y per counter and one checkstate per batch. On a slow mint, raise batchSize towards the
+  // mint's cap to cut round trips; on a fast one the default is already right.
+  'aged-spent': { CHURN_ROUNDS: '200', SPEND_FRAC: '0.9' },
+  // Aged, sparsely spent (lump-funded, everyday payments): live proofs sit throughout the history,
+  // so most batches restore something and unblinding the live set is the floor. Keep the defaults.
+  'aged-sparse': { CHURN_ROUNDS: '200', SPEND_FRAC: '0.2', PIN_MID: '1' },
+  // Newer, mostly unspent: the history is short, so the overshoot past the last counter is most of
+  // the work. A smaller batchSize (the @100 leg) trims it for a couple of extra requests.
+  'fresh-live': { CHURN_ROUNDS: '2', SPEND_FRAC: '0.3' },
+  // Many keysets the seed never used (a multi-mint recovery) are the never-used-seed leg below:
+  // the gap-width probe is the whole scan, two requests per keyset, so nothing to tune.
+};
+
 async function main() {
   const wallet = new Wallet(mintUrl, { bip39seed: seed });
   await wallet.loadMint();
   console.log(`Churning a wallet on ${mintUrl} (${wallet.keysetId})\n`);
 
+  //   SCENARIO=name   preset for the knobs below (see SCENARIOS); explicit knobs still win
   //   CHURN_ROUNDS=n  swap rounds per churn block (default 4)
   //   SPEND_FRAC=f    max spend as a fraction of balance; small values model a lump-funded
   //                   wallet making everyday payments, which leaves old proofs live (default 0.9)
@@ -249,9 +302,11 @@ async function main() {
   //   BATCH=n         batchSize for every leg except the @100 one (default: the mint's
   //                   advertised cap); the client does one derivation, Y and blinded message
   //                   per counter in a batch, so this also sweeps the crypto cost per wave
-  const churnRounds = Number(process.env.CHURN_ROUNDS ?? 4);
-  const spendFrac = Number(process.env.SPEND_FRAC ?? 0.9);
-  const pinMid = process.env.PIN_MID === '1';
+  const preset = SCENARIOS[process.env.SCENARIO ?? ''] ?? {};
+  const knob = (name: string, fallback: string) => process.env[name] ?? preset[name] ?? fallback;
+  const churnRounds = Number(knob('CHURN_ROUNDS', '4'));
+  const spendFrac = Number(knob('SPEND_FRAC', '0.9'));
+  const pinMid = knob('PIN_MID', '') === '1';
   const batchSize = process.env.BATCH ? Number(process.env.BATCH) : undefined;
   const churn = async (rounds: number) => {
     for (let i = 0; i < rounds; i++) {
@@ -298,16 +353,16 @@ async function main() {
   );
 
   console.log('\n--- Device lost! Recovering from seed on a fresh wallet ---');
-  await recover('filterSpent off     ', false, expected, batchSize);
-  await recover('filterSpent on      ', true, expected, batchSize);
-  await recover('filterSpent on @100 ', true, expected, 100);
+  await recover('restore everything  ', true, expected, batchSize);
+  await recover('state check first   ', false, expected, batchSize);
+  await recover('state check @100    ', false, expected, 100);
 
   // The empty-scan leg: a seed this mint has never signed for. Every counter reports UNSPENT and
   // is restored regardless, so the state check can skip nothing and its cost shows undiluted.
   console.log('\n--- Never-used seed: scanning a mint with nothing to find ---');
   const freshSeed = randomBytes(64);
-  await recover('fresh seed, off     ', false, sumProofs([]), batchSize, freshSeed);
-  await recover('fresh seed, on      ', true, sumProofs([]), batchSize, freshSeed);
+  await recover('fresh seed, legacy  ', true, sumProofs([]), batchSize, freshSeed);
+  await recover('fresh seed, default ', false, sumProofs([]), batchSize, freshSeed);
 
   console.log(
     `\nSuccess: both recovered ${expected} sats = ${balance} live + ${pending} unclaimed`,

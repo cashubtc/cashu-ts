@@ -84,6 +84,7 @@ import {
   ceilLog2,
   getKeepAmounts,
   proofsFromRestoreResponse,
+  scanProfile,
   stringifyOutputTypeForLog,
 } from './_internal';
 import {
@@ -126,6 +127,14 @@ const PENDING_KEYSET_ID = '__PENDING__';
 
 // NUT-20 "Signature for mint request invalid"
 const MINT_QUOTE_SIGNATURE_INVALID_CODE = 20008;
+
+/**
+ * One scanned counter range. `used` is proven by a SPENT state or a returned signature, and a used
+ * range always names the last such counter.
+ */
+type ScanResult =
+  | { proofs: Proof[]; used: false }
+  | { proofs: Proof[]; lastCounterWithSignature: number; used: true };
 
 /**
  * Class that represents a Cashu wallet.
@@ -2000,93 +2009,73 @@ class Wallet {
   // -----------------------------------------------------------------
 
   /**
-   * Restores batches of deterministic proofs until no more signatures are returned from the mint.
+   * Restores a keyset's deterministic proofs, scanning counters until the gap limit closes.
    *
    * @remarks
-   * Batches are fetched through a bounded request pool. The scan opens at the width the gap rule
-   * needs, so a keyset the seed never used is settled by a single wave; once anything is found it
-   * widens to the full pool, and from then on every batch in flight is processed, so the scan can
-   * probe (and recover proofs) up to `(BATCH_POOL_SIZE - 1) * batchSize` counters past the gap
-   * limit before it stops. `lastCounterWithSignature` always reflects all signatures found,
-   * including those of proofs removed by `filterSpent`.
-   *
-   * `filterSpent` also picks the mechanism. When set (the default) each batch is state checked and
-   * only the counters that are not spent are restored, so signatures are fetched and unblinded for
-   * live proofs alone, and a spent proof's `B_` never reaches the mint alongside its `Y`. On a long
-   * history that is far cheaper. When false, it has to restore every issued counter to return
-   * them.
-   * @param [config.gapLimit=300] Consecutive empty counters that end the scan. A floor, not an
-   *   exact ceiling: batches already in flight past it are still processed. `Infinity` disables the
-   *   gap rule (use with `maxCounter`). Default is `300`
-   * @param [config.maxCounter] Inclusive scan ceiling; no counter above it is probed. Default is
-   *   unbounded.
-   * @param [config.batchSize] Counters per restore request. Defaults to the mint's advertised
-   *   `max_array_length` (NUT-06) capped at `500`: the scan pays a derivation, `Y` and blinded
-   *   message per counter and keeps `BATCH_POOL_SIZE` batches in flight, so a large advertised cap
-   *   would multiply client work per wave. Set it explicitly to trade that for round trips.
-   * @param [config.counter=0] Starting counter. Default is `0`
-   * @param [config.keysetId] Keyset to restore; defaults to the wallet's.
-   * @param [config.filterSpent=true] Drop spent proofs (NUT-07) before returning, and skip
-   *   restoring them at all. Default is `true`
+   * Each batch is state checked first and only unspent counters are restored, so spent proofs are
+   * dropped without ever being blinded; pending ones are kept. `lastCounterWithSignature` covers
+   * every issued counter found, spent included. For a raw NUT-09 replay use {@link Wallet.restore}.
    */
   async batchRestore(
     config?: BatchRestoreConfig,
   ): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
-    const {
-      gapLimit = 300,
-      // capped: the pool holds BATCH_POOL_SIZE batches in flight and every scanned counter costs
-      // client-side crypto, so the scan does not follow a large advertised cap the way the
-      // Y-only checkstate slices do
-      batchSize = Math.min(this.maxArrayLength, DEFAULT_MAX_ARRAY_LENGTH),
-      keysetId,
-      filterSpent = true,
-    } = config ?? {};
+    const keysetId = config?.keysetId ?? this.keysetId;
+    const profile = scanProfile(keysetId);
+    const { gapLimit = 300, batchSize = Math.min(this.maxArrayLength, profile.batchSize) } =
+      config ?? {};
     let counter = config?.counter ?? 0;
     const bound = config?.maxCounter ?? Number.MAX_SAFE_INTEGER;
-    const requiredEmptyBatches = Math.ceil(gapLimit / batchSize);
+    const probeSize = Math.min(gapLimit, this.maxArrayLength);
     const restoredProofs: Proof[] = [];
 
+    let probe = Number.isFinite(gapLimit);
     let lastCounterWithSignature: undefined | number;
-    let emptyBatchesFound = 0;
+    let gapCount = 0; // consecutive never-used counters since the last used one
+    let ramp = 1; // batches per wave: doubles while batches keep coming back used, up to the pool
 
-    // Batch positions are fixed, so each wave speculatively fetches the next waveWidth batches
-    // concurrently; only the stop decision is data-dependent. Results are consumed in counter
-    // order, and a non-empty batch past the gap limit resets the gap count: the reveal is
-    // already spent at request time, so proofs in flight are recovered rather than dropped.
-    //
-    // The scan opens at the width the gap rule needs and widens to the full pool once the keyset
-    // shows usage. Most keysets a multi-mint recovery walks were never used by the seed, and for
-    // those the opening wave is the whole scan, so speculating wider only adds requests that
-    // cannot find anything the gap rule keeps.
-    let waveWidth = Math.min(requiredEmptyBatches, BATCH_POOL_SIZE);
-    while (emptyBatchesFound < requiredEmptyBatches && counter <= bound) {
-      // positions only increase, so the first one past the bound ends the wave
-      const starts: number[] = [];
-      for (let i = 0; i < waveWidth; i++) {
-        const start = counter + i * batchSize;
-        if (start > bound) break;
-        starts.push(start);
-      }
-      const wave = await runPool(starts, BATCH_POOL_SIZE, async (start) => {
-        const count = Math.min(batchSize, bound - start + 1);
-        if (filterSpent) return this.restoreUnspent(start, count, keysetId);
-        const res = await this.restore(start, count, { keysetId });
-        return { ...res, used: res.proofs.length > 0 };
-      });
-      counter += batchSize * waveWidth;
-      for (const restoreRes of wave) {
-        if (restoreRes.used) {
-          emptyBatchesFound = 0;
-          waveWidth = BATCH_POOL_SIZE;
-          // push singly: a caller-set batchSize can exceed V8's ~65k spread-argument limit
-          for (const p of restoreRes.proofs) {
-            restoredProofs.push(p);
-          }
-          lastCounterWithSignature = restoreRes.lastCounterWithSignature;
-        } else {
-          emptyBatchesFound++;
+    // Build restore batches in counter order
+    while (gapCount < gapLimit && counter <= bound) {
+      const batches: Array<{ start: number; count: number }> = [];
+      // The one-time probe covers the gapLimit in one request (within the mint's array cap)
+      // to save doing a full pool wave scan on unused keysets.
+      if (probe) {
+        probe = false;
+        batches.push({ start: counter, count: Math.min(probeSize, bound - counter + 1) });
+      } else {
+        // Add enough batches to close the gapLimit from here, or the ramp's speculation if wider
+        const needed = Math.ceil((gapLimit - gapCount) / batchSize);
+        const width = Math.min(profile.poolSize, Math.max(needed, ramp));
+        for (let i = 0; i < width; i++) {
+          const start = counter + i * batchSize;
+          if (start > bound) break;
+          batches.push({ start, count: Math.min(batchSize, bound - start + 1) });
         }
       }
+      // Restore the batches via a pool, keeping results in counter order
+      const wave = await runPool(batches, profile.poolSize, ({ start, count }) =>
+        this.restoreUnspent(start, count, keysetId),
+      );
+      const last = batches[batches.length - 1];
+      counter = last.start + last.count;
+      // Walk the results in counter order. A fully ramped up wave will likely overshoot
+      // a valid gap, but the mint has seen those batches regardless, so check all batches
+      // and reset the gapCount if we found anything after the gap.
+      wave.forEach((res, i) => {
+        const { start, count } = batches[i];
+        // Unused batch: adds to gapCount
+        if (!res.used) {
+          gapCount += count;
+          return;
+        }
+        // Used batch: the gap restarts after its last issued counter
+        gapCount = start + count - 1 - res.lastCounterWithSignature;
+        ramp = Math.min(ramp * 2, profile.poolSize);
+        // push singly: a caller-set batchSize can exceed V8's ~65k spread-argument limit
+        for (const p of res.proofs) {
+          restoredProofs.push(p);
+        }
+        lastCounterWithSignature = res.lastCounterWithSignature;
+      });
     }
 
     return { proofs: restoredProofs, lastCounterWithSignature };
@@ -2180,44 +2169,45 @@ class Wallet {
     start: number,
     count: number,
     keysetId?: string,
-  ): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number; used: boolean }> {
+  ): Promise<ScanResult> {
     this.failIfNullish(this._seed, 'Cashu Wallet must be initialized with a seed to use restore');
+    const seed = this._seed;
     await this._keyChain.ensureKeysetKeys(keysetId ?? this.keysetId);
     const keyset = this.getKeyset(keysetId);
-    const derive = createSecretAndBlindingFactorDeriver(this._seed, keyset.id);
+    const derive = createSecretAndBlindingFactorDeriver(seed, keyset.id);
 
-    // Derive the whole range up front: secret and blinding factor come back together, and for
-    // BIP-32 keysets that shares one path walk. The state check needs only the secret, so no
-    // output is blinded until the spent counters have dropped out below. A counter whose
-    // derivation is invalid was skipped at issuance too, so it can hold no signature.
+    // NUT-07 state check: needs only the secrets, so nothing is blinded until the spent counters have
+    // dropped out below. A counter whose derivation is invalid was skipped at issuance too, so it
+    // can hold no signature.
     const counters: number[] = [];
-    const derived: Array<{ blindingFactor: Uint8Array; secret: Uint8Array }> = [];
+    const secrets: string[] = [];
     for (let c = start; c < start + count; c++) {
       try {
-        const d = derive(c);
+        secrets.push(bytesToHex(derive(c).secret));
         counters.push(c);
-        derived.push(d);
       } catch {
         continue;
       }
     }
     if (counters.length === 0) return { proofs: [], used: false };
-
     const states = await this.checkProofsStates(
-      derived.map((d) => ({ secret: bytesToHex(d.secret), id: keyset.id })),
+      secrets.map((secret) => ({ secret, id: keyset.id })),
     );
 
     // Spent counters drop out here, so their B_ is never built or sent and the mint never sees
-    // the pair that would tie an issuance to its spend.
+    // the pair that would tie an issuance to its spend. The rest are blinded through the output
+    // creator, so a custom crypto backend is honoured here as it is in a swap.
     let lastIssued = -1;
-    const outputs: OutputData[] = [];
+    const outputs: OutputDataLike[] = [];
     const outputCounters: number[] = [];
     states.forEach((state, i) => {
       if (state.state === CheckStateEnum.SPENT) {
         lastIssued = Math.max(lastIssued, counters[i]);
         return;
       }
-      outputs.push(OutputData.fromDerivedBytes(0, keyset.id, derived[i]));
+      outputs.push(
+        this._outputDataCreator.createSingleDeterministicData(0, seed, counters[i], keyset.id),
+      );
       outputCounters.push(counters[i]);
     });
     // Every counter spent: the range is used but holds nothing, so skip the restore entirely.
@@ -2230,11 +2220,8 @@ class Wallet {
     const { proofs, lastIndex } = proofsFromRestoreResponse(outputs, response, keyset);
     if (lastIndex >= 0) lastIssued = Math.max(lastIssued, outputCounters[lastIndex]);
 
-    return {
-      proofs,
-      lastCounterWithSignature: lastIssued < 0 ? undefined : lastIssued,
-      used: lastIssued >= 0,
-    };
+    if (lastIssued < 0) return { proofs, used: false };
+    return { proofs, lastCounterWithSignature: lastIssued, used: true };
   }
 
   // -----------------------------------------------------------------

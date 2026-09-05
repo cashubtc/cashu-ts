@@ -27,8 +27,8 @@ export type BatchRestoreConfig = {
    */
   maxCounter?: number;
   /**
-   * Counters per restore request. Defaults to the mint's advertised `max_array_length` (NUT-06), or
-   * `500` when it advertises none.
+   * Counters per restore request after the opening probe. Defaults by keyset kind (500 for HMAC,
+   * 200 for BIP32, 100 for BLS), capped at the mint's advertised `max_array_length` (NUT-06).
    */
   batchSize?: number;
   /**
@@ -39,12 +39,6 @@ export type BatchRestoreConfig = {
    * Keyset to restore; defaults to the wallet's.
    */
   keysetId?: string;
-  /**
-   * Drop spent proofs (NUT-07) before returning. Also selects how the scan runs: when set, each
-   * batch is state checked and only the counters that are not spent are restored. Turning it off
-   * returns every issued proof, which requires restoring them all. Default is `true`
-   */
-  filterSpent?: boolean;
 };
 
 /**

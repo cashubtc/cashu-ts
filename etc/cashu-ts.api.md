@@ -221,7 +221,6 @@ export type BatchRestoreConfig = {
     batchSize?: number;
     counter?: number;
     keysetId?: string;
-    filterSpent?: boolean;
 };
 
 // @public
@@ -1591,10 +1590,6 @@ export class OutputData implements OutputDataLike {
     static deserialize(serialized: SerializedOutputData): OutputData;
     // (undocumented)
     ephemeralE?: string;
-    static fromDerivedBytes(amount: AmountLike, keysetId: string, derived: {
-        blindingFactor: Uint8Array;
-        secret: Uint8Array;
-    }): OutputData;
     // (undocumented)
     secret: Uint8Array;
     static serialize(output: OutputDataLike): SerializedOutputData;

@@ -2,7 +2,12 @@ import { test, describe, expect } from 'vitest';
 
 import { Amount, type Keys, type Proof, type OutputType } from '../../src';
 import { OutputData } from '../../src/model/OutputData';
-import { ceilLog2, getKeepAmounts, stringifyOutputTypeForLog } from '../../src/wallet/_internal';
+import {
+  ceilLog2,
+  getKeepAmounts,
+  scanProfile,
+  stringifyOutputTypeForLog,
+} from '../../src/wallet/_internal';
 import { PUBKEYS } from '../consts';
 
 describe('ceilLog2', () => {
@@ -180,5 +185,17 @@ describe('stringifyOutputTypeForLog', () => {
       data,
     } as unknown as OutputType);
     expect(result).toBe('Unknown');
+  });
+});
+
+describe('scanProfile', () => {
+  test('sizes the scan by keyset kind: cheap kinds get wide batches, dear kinds narrow ones', () => {
+    // v1 (HMAC): a counter costs ~0.1ms, so big batches and the full pool
+    expect(scanProfile(`01${'ab'.repeat(32)}`)).toEqual({ batchSize: 500, poolSize: 4 });
+    // v0 (BIP32) as hex or base64: ~0.7ms per counter
+    expect(scanProfile('00bd033559de27d0')).toEqual({ batchSize: 200, poolSize: 2 });
+    expect(scanProfile('I2yN+iRYfkzT')).toEqual({ batchSize: 200, poolSize: 2 });
+    // v3 (BLS): ~1.1ms per counter, and the pool stops paying off past two
+    expect(scanProfile(`02${'ab'.repeat(32)}`)).toEqual({ batchSize: 100, poolSize: 2 });
   });
 });
