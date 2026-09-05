@@ -184,6 +184,49 @@ describe('WalletEvents', () => {
       expect(cb).toHaveBeenCalledWith(expect.objectContaining({ quote: 'm2' }));
     });
 
+    it('mintQuoteUpdates normalises amounts the way the HTTP path does', async () => {
+      const cb = vi.fn();
+      await events.mintQuoteUpdates(['n1'], cb, vi.fn());
+      mock.mint.webSocketConnection!.emit('bolt11_mint_quote', {
+        quote: 'n1',
+        state: 'PAID',
+        amount: 5,
+        amount_paid: 5,
+        amount_issued: 0,
+      });
+      const p = cb.mock.calls[0][0];
+      expect(p.amount).toBeInstanceOf(Amount);
+      expect(p.amount_paid.equals(Amount.from(5))).toBe(true);
+      expect(p.amount_issued.isZero()).toBe(true);
+    });
+
+    it('meltQuoteUpdates normalises amount, fee reserve and change signatures', async () => {
+      const cb = vi.fn();
+      await events.meltQuoteUpdates(['n2'], cb, vi.fn());
+      mock.mint.webSocketConnection!.emit('bolt11_melt_quote', {
+        quote: 'n2',
+        state: 'PAID',
+        amount: 10,
+        fee_reserve: 2,
+        change: [{ id: '00bd033559de27d0', amount: 1, C_: '02' + 'ab'.repeat(32) }],
+      });
+      const p = cb.mock.calls[0][0];
+      expect(p.amount.equals(Amount.from(10))).toBe(true);
+      expect(p.fee_reserve.equals(Amount.from(2))).toBe(true);
+      expect(p.change[0].amount).toBeInstanceOf(Amount);
+      expect(p.change[0].amount.isZero()).toBe(false);
+    });
+
+    it('a quote update with a malformed amount goes to the error callback', async () => {
+      const cb = vi.fn();
+      const err = vi.fn();
+      await events.meltQuoteUpdates(['n3'], cb, err);
+      mock.mint.webSocketConnection!.emit('bolt11_melt_quote', { quote: 'n3', amount: 'ten' });
+      expect(cb).not.toHaveBeenCalled();
+      expect(err).toHaveBeenCalledTimes(1);
+      expect(err.mock.calls[0][0]).toBeInstanceOf(Error);
+    });
+
     it('proofStateUpdates subscribes and forwards payloads with proof attached', async () => {
       const cb = vi.fn();
       const err = vi.fn();
@@ -279,7 +322,7 @@ describe('WalletEvents', () => {
       const ws = mock.mint.webSocketConnection!;
       ws.emit('bolt11_mint_quote', { quote: 'q1', state: 'PAID', amount: 123 });
       const res = await p;
-      expect(res).toMatchObject({ quote: 'q1', amount: 123 });
+      expect(res).toMatchObject({ quote: 'q1', amount: Amount.from(123) });
       await flushMicrotasks();
       expect(ws.cancelSubscription).toHaveBeenCalled();
     });
@@ -323,7 +366,10 @@ describe('WalletEvents', () => {
       const ws = mock.mint.webSocketConnection!;
       ws.emit('bolt11_mint_quote', { quote: 'b', state: 'PAID', amount: 42 });
       const res = await p;
-      expect(res).toMatchObject({ id: 'b', quote: expect.objectContaining({ amount: 42 }) });
+      expect(res).toMatchObject({
+        id: 'b',
+        quote: expect.objectContaining({ amount: Amount.from(42) }),
+      });
       await flushMicrotasks();
       expect(ws.cancelSubscription.mock.calls.length).toBeGreaterThanOrEqual(3);
     });
@@ -414,7 +460,7 @@ describe('WalletEvents', () => {
       const ws = mock.mint.webSocketConnection!;
       ws.emit('bolt11_melt_quote', { quote: 'm1', state: 'PAID', amount: 7 });
       const res = await p;
-      expect(res).toMatchObject({ quote: 'm1', amount: 7 });
+      expect(res).toMatchObject({ quote: 'm1', amount: Amount.from(7) });
       await flushMicrotasks();
       expect(ws.cancelSubscription).toHaveBeenCalled();
     });
