@@ -5,7 +5,8 @@ import { bytesToNumberBE } from '@noble/curves/utils.js';
 import { CTSError } from '../model/Errors';
 import { decodeBase64ToUint8Legacy, hexToNumber, isValidHex } from '../utils';
 
-import { type G1Point, pointFromHexG1 } from './curve_bls';
+import { type G1Point, hashToCurveBls, pointFromHexG1 } from './curve_bls';
+import { hashToCurve } from './curve_secp';
 
 /**
  * Tagged-union point covering both keyset curves on the wallet output / proof path.
@@ -51,6 +52,17 @@ export function isBlsKeyset(keysetId: string): boolean {
   if (keysetId.length !== 16 && keysetId.length !== 66) return false;
   if (!isValidHex(keysetId)) return false;
   return keysetId.startsWith('02');
+}
+
+/**
+ * `Y = hash_to_curve(secret)` as compressed hex, on the curve the keyset id selects.
+ *
+ * @remarks
+ * The secret string is hashed as UTF-8, hex secrets included.
+ */
+export function hashToCurveHex(secret: string, keysetId: string): string {
+  const msg = new TextEncoder().encode(secret);
+  return (isBlsKeyset(keysetId) ? hashToCurveBls(msg) : hashToCurve(msg)).toHex(true);
 }
 
 export const getKeysetIdInt = (keysetId: string): bigint => {
