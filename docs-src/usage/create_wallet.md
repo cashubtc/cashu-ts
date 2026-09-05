@@ -125,3 +125,19 @@ const wallet = new Wallet('http://localhost:3338', {
 });
 await wallet.loadMint();
 ```
+
+The `hashToCurve` option is the same escape hatch for `Y = hash_to_curve(secret)`, used by
+`checkProofsStates` and NUT-17 subscriptions. A restore scan hashes every counter it visits, and on
+BLS keysets the pure JS hash dominates that cost, so a WASM or native implementation is worth
+plugging in there. The keyset id selects the curve: v3 (`02...`) ids are BLS12-381 G1, all others
+secp256k1. Hash the secret string as UTF-8 and return the compressed point as hex; `hashToCurveHex`
+is the default and can serve the curve you are not replacing.
+
+```typescript
+const wallet = new Wallet('http://localhost:3338', {
+  hashToCurve: (secret, keysetId) =>
+    isBlsKeyset(keysetId)
+      ? fastBlsHashToCurveHex(new TextEncoder().encode(secret))
+      : hashToCurveHex(secret, keysetId),
+});
+```
