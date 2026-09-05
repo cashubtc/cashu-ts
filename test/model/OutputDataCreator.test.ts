@@ -271,7 +271,7 @@ describe('OutputData helpers', () => {
 });
 
 describe('OutputData.toProof', () => {
-  test('rejects a signature whose keyset id does not match the output', () => {
+  test('rejects a signature whose keyset id does not match the keys', () => {
     const outputKeysetId = '009a1f293253e41e';
     const wrongKeysetId = '00ad268c4d1f5826';
     const output = OutputData.createSingleRandomData(1, outputKeysetId);
@@ -282,8 +282,23 @@ describe('OutputData.toProof', () => {
       C_: '03' + '00'.repeat(32),
     };
     expect(() => output.toProof(sig, keyset)).toThrow(
-      /Mint signature keyset id .* does not match output/,
+      /Mint signature keyset id .* does not match keys for/,
     );
+  });
+
+  test("unblinds a blank with the keyset the signature names, not the blank's", () => {
+    const G = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+    const output = OutputData.createSingleRandomData(0, '009a1f293253e41e');
+    const keyset: HasKeysetKeys = { id: '00ad268c4d1f5826', keys: { 1: G } };
+    const sig: SerializedBlindedSignature = {
+      id: '00ad268c4d1f5826',
+      amount: Amount.from(1),
+      C_: G,
+    };
+    expect(output.toProof(sig, keyset)).toMatchObject({
+      id: '00ad268c4d1f5826',
+      amount: Amount.from(1),
+    });
   });
 
   test('maps malformed secp C_ to a CTSError with NUT-09 hint', () => {

@@ -123,10 +123,11 @@ export class OutputData implements OutputDataLike {
         `Mint response is missing a signature for one of the outputs. ${RECOVERY_HINT}`,
       );
     }
-    if (sig.id !== this.blindedMessage.id) {
-      throw new CTSError(
-        `Mint signature keyset id ${sig.id} does not match output ${this.blindedMessage.id}`,
-      );
+    // The keys must be the keyset the mint signed under: DLEQ/pairing verify against them, and
+    // unblinding with any other keyset yields an unspendable proof. The blank's own id is only a
+    // hint (NUT-08 change and NUT-09 restore may settle on another keyset).
+    if (sig.id !== keyset.id) {
+      throw new CTSError(`Mint signature keyset id ${sig.id} does not match keys for ${keyset.id}`);
     }
 
     // Amount binding: a malicious mint can sign a smaller denomination and return it as

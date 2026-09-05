@@ -3,8 +3,17 @@ import { HttpResponse, http } from 'msw';
 import { test, describe, expect, vi } from 'vitest';
 
 import { Wallet, Amount, CheckStateEnum, type Proof, type ProofState } from '../../src';
+import { PUBKEYS } from '../consts';
 
-import { useTestServer, mint, unit, dummyKeysResp, mintUrl, logger } from './_setup';
+import {
+  useTestServer,
+  mint,
+  unit,
+  dummyKeysResp,
+  dummyKeysetResp,
+  mintUrl,
+  logger,
+} from './_setup';
 
 const server = useTestServer();
 
@@ -232,5 +241,37 @@ describe('restore', () => {
     expect(res.proofs.length).toBeGreaterThan(0);
     // proofs should be of amount 1 because we overprinted 1 in the signatures
     expect(res.proofs.every((p) => p.amount.equals(Amount.from(1)))).toBe(true);
+  });
+
+  test('unblinds restore signatures with the keyset they name and skips zero-value ones', async () => {
+    const VALID_POINT = '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422';
+    const keysetB = { id: '009a1f293253e41e', unit: 'sat', active: true, input_fee_ppk: 0 };
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({ keysets: [...dummyKeysetResp.keysets, keysetB] }),
+      ),
+      http.get(mintUrl + '/v1/keys/009a1f293253e41e', () =>
+        HttpResponse.json({ keysets: [{ ...keysetB, keys: PUBKEYS }] }),
+      ),
+      http.post(mintUrl + '/v1/restore', async ({ request }) => {
+        const body = (await request.json()) as { outputs: unknown[] };
+        // counter 0 on the scanned keyset, counter 1 signed at zero, counter 2 on keyset B
+        return HttpResponse.json({
+          outputs: body.outputs,
+          signatures: body.outputs.map((_, i) => ({
+            id: i === 2 ? keysetB.id : dummyKeysResp.keysets[0].id,
+            amount: i === 1 ? 0 : 1,
+            C_: VALID_POINT,
+          })),
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(32), logger });
+    await wallet.loadMint();
+
+    const res = await wallet.restore(0, 3);
+
+    expect(res.proofs.map((p) => p.id)).toEqual([dummyKeysResp.keysets[0].id, keysetB.id]);
+    expect(res.lastCounterWithSignature).toBe(2);
   });
 });
