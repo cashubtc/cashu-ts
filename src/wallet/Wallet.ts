@@ -2145,7 +2145,7 @@ class Wallet {
       lastCounterWithSignature = start + i;
       // Signed at zero (a NUT-08 blank the mint did not omit): used counter, but no ecash
       if (matchingSig.amount.isZero()) continue;
-      outputData[i].blindedMessage.amount = matchingSig.amount;
+      // The output stays a blank: toProof takes the amount and keyset from the signature
       restoredProofs.push(
         outputData[i].toProof(matchingSig, this.keysetForSignature(matchingSig.id)),
       );
@@ -3688,8 +3688,8 @@ class Wallet {
    * @remarks
    * Synchronous by design and called internally by `completeMelt` (which ensures keys first);
    * direct callers deferring change construction (NUT-06 async melts, crash recovery) should `await
-   * wallet.ensureOperableKeysets(changeSigs.map((s) => s.id))` first, which also picks up a keyset
-   * rotated in while the melt was pending.
+   * wallet.ensureOperableKeysets(ids)` first for the ids of the value-bearing signatures, which
+   * also picks up a keyset rotated in while the melt was pending.
    * @param outputData Outputs from `prepareMelt()`, or deserialised persisted OutputData.
    * @param changeSigs The optional `change` signatures from the melt response or paid quote.
    * @returns Spendable change proofs (possibly empty).

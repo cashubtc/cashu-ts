@@ -73,8 +73,8 @@ await wallet.completeMelt(preview, undefined, { preferAsync: true });
 const restored = (JSON.parse(stored) as SerializedOutputData[]).map((s) =>
   OutputData.deserialize(s),
 );
-const sigs = paidQuote.change ?? [];
-// the change may sit on a keyset rotated in while the melt was pending
+// zero-value entries carry no ecash (NUT-08); the rest may sit on a keyset rotated in meanwhile
+const sigs = (paidQuote.change ?? []).filter((s) => !s.amount.isZero());
 await wallet.ensureOperableKeysets(sigs.map((s) => s.id));
 const change = wallet.createMeltChangeProofs(restored, sigs);
 ```
