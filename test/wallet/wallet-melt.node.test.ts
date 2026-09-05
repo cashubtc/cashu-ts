@@ -15,8 +15,10 @@ import {
   type MeltQuoteBolt12Response,
   type AuthProvider,
   type OutputType,
+  type MintKeyset,
   Amount,
 } from '../../src';
+import { DUMMY_TEST_KEYSET, MINTCACHE, PUBKEYS } from '../consts';
 
 import { useTestServer, mint, mintUrl, unit, invoice, logger, mintInfoResp } from './_setup';
 
@@ -832,20 +834,90 @@ describe('async melt preference body', () => {
     expect(/[0-9a-f]{64}/.test(change[0].secret)).toBe(true);
   });
 
-  test('createMeltChangeProofs rejects signature/output keyset id mismatch', async () => {
+  // Mint rotated while the melt was pending: A inactive, B (sat) and a usd keyset active.
+  const keysetB: MintKeyset = {
+    id: '009a1f293253e41e',
+    unit: 'sat',
+    active: true,
+    input_fee_ppk: 0,
+  };
+  const keysetUsd = MINTCACHE.keysets[1];
+  function useRotatedKeysets() {
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({
+          keysets: [{ ...DUMMY_TEST_KEYSET, active: false }, keysetB, keysetUsd],
+        }),
+      ),
+      http.get(mintUrl + '/v1/keys', () =>
+        HttpResponse.json({ keysets: [{ ...keysetB, keys: PUBKEYS }, MINTCACHE.keys[1]] }),
+      ),
+    );
+  }
+
+  test('createMeltChangeProofs unblinds change with the keyset the signature names', async () => {
+    useRotatedKeysets();
     const wallet = new Wallet(mint, { unit, logger });
     await wallet.loadMint();
 
-    const output = OutputData.createSingleRandomData(0, '00bd033559de27d0');
-    const mismatchedSig: SerializedBlindedSignature = {
-      id: '009a1f293253e41e', // different keyset id from the output
+    const blank = OutputData.createSingleRandomData(0, '00bd033559de27d0');
+    const sig: SerializedBlindedSignature = {
+      id: '009a1f293253e41e', // signed under the new keyset, not the blank's
       amount: Amount.from(1),
       C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
     };
 
-    expect(() => wallet.createMeltChangeProofs([output], [mismatchedSig])).toThrow(
-      /signature keyset id at index 0 does not match output/i,
-    );
+    const [proof] = wallet.createMeltChangeProofs([blank], [sig]);
+    expect(proof).toMatchObject({ id: '009a1f293253e41e', amount: Amount.from(1) });
+  });
+
+  test('createMeltChangeProofs rejects change signed under a keyset of another unit', () => {
+    // Keys for every unit are loaded here (a cache restore), so only the unit check stands in the way
+    const wallet = new Wallet(mint, { unit, logger });
+    wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+
+    const blank = OutputData.createSingleRandomData(0, '00bd033559de27d0');
+    const sig: SerializedBlindedSignature = {
+      id: keysetUsd.id,
+      amount: Amount.from(1),
+      C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+    };
+
+    let err: unknown;
+    try {
+      wallet.createMeltChangeProofs([blank], [sig]);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      message: expect.stringMatching(/is not loaded in this wallet/),
+      cause: { message: expect.stringMatching(/unit does not match/) },
+    });
+  });
+
+  test('createMeltChangeProofs pairs by index and drops zero-value signatures', async () => {
+    const wallet = new Wallet(mint, { unit, logger });
+    await wallet.loadMint();
+
+    const blanks = [0, 0].map((a) => OutputData.createSingleRandomData(a, '00bd033559de27d0'));
+    const sigs: SerializedBlindedSignature[] = [
+      {
+        id: '00bd033559de27d0',
+        amount: Amount.from(0),
+        C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+      },
+      {
+        id: '00bd033559de27d0',
+        amount: Amount.from(2),
+        C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+      },
+    ];
+
+    const change = wallet.createMeltChangeProofs(blanks, sigs);
+    expect(change).toHaveLength(1);
+    expect(change[0]).toMatchObject({ amount: Amount.from(2) });
+    // the surviving signature was paired with the second blank, not compacted onto the first
+    expect(change[0].secret).toBe(new TextDecoder().decode(blanks[1].secret));
   });
 
   test('createMeltChangeProofs surfaces NUT-09 recovery hint when keyset is unknown', async () => {
