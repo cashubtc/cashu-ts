@@ -218,13 +218,17 @@ describe('WalletEvents', () => {
     });
 
     it('a quote update with a malformed amount goes to the error callback', async () => {
-      const cb = vi.fn();
-      const err = vi.fn();
-      await events.meltQuoteUpdates(['n3'], cb, err);
-      mock.mint.webSocketConnection!.emit('bolt11_melt_quote', { quote: 'n3', amount: 'ten' });
-      expect(cb).not.toHaveBeenCalled();
-      expect(err).toHaveBeenCalledTimes(1);
-      expect(err.mock.calls[0][0]).toBeInstanceOf(Error);
+      for (const kind of ['bolt11_mint_quote', 'bolt11_melt_quote'] as const) {
+        const cb = vi.fn();
+        const err = vi.fn();
+        const subscribe =
+          kind === 'bolt11_mint_quote' ? events.mintQuoteUpdates : events.meltQuoteUpdates;
+        await subscribe.call(events, ['n3'], cb, err);
+        mock.mint.webSocketConnection!.emit(kind, { quote: 'n3', amount: 'ten' });
+        expect(cb).not.toHaveBeenCalled();
+        expect(err).toHaveBeenCalledTimes(1);
+        expect(err.mock.calls[0][0]).toBeInstanceOf(Error);
+      }
     });
 
     it('proofStateUpdates subscribes and forwards payloads with proof attached', async () => {
