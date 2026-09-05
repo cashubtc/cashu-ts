@@ -197,10 +197,7 @@ class Wallet {
   private _explicitBind: boolean = false;
   private _selectProofs: SelectProofs;
   private _outputDataCreator: OutputDataCreator;
-  /**
-   * @internal
-   */
-  readonly computeY: (secret: string, keysetId: string) => string;
+  private _hashToCurve: (secret: string, keysetId: string) => string;
   private _requireSigDleq = false;
   private _strictCachedKeysets: boolean = false;
   private _logger: Logger;
@@ -284,7 +281,7 @@ class Wallet {
     this._logger = options?.logger ?? NULL_LOGGER; // init early (seed can throw)
     this._selectProofs = options?.selectProofs ?? selectProofsRotating; // vital
     this._outputDataCreator = options?.outputDataCreator ?? new DefaultOutputDataCreator();
-    this.computeY = options?.hashToCurve ?? hashToCurveHex;
+    this._hashToCurve = options?.hashToCurve ?? hashToCurveHex;
     this.mint =
       typeof mint === 'string'
         ? new Mint(mint, {
@@ -2643,6 +2640,13 @@ class Wallet {
         requestedAmount: requestedAmount.toString(),
       },
     );
+  }
+
+  /**
+   * @internal
+   */
+  computeY(secret: string, keysetId: string): string {
+    return this._hashToCurve(secret, keysetId);
   }
 
   /**
