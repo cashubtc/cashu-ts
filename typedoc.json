@@ -25,6 +25,7 @@
     "docs-src/usage/logging.md",
     "docs-src/usage/fees.md",
     "docs-src/usage/helpers.md",
+    "docs-src/usage/nip07_signers.md",
     "docs-src/wallet_ops/wallet_ops.md",
     "docs-src/wallet_ops/send.md",
     "docs-src/wallet_ops/receive.md",

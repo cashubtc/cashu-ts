@@ -276,6 +276,25 @@ export function bytesToHex(bytes: Uint8Array): string;
 export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
 
 // @public
+export const CashuNip07: CashuNip07Api;
+
+// @public (undocumented)
+export type CashuNip07Api = {
+    pubkey(nostr: Nip07Like): Promise<string>;
+    canSign(nostr: Nip07Like): boolean;
+    canSignP2PK(nostr: Nip07Like): boolean;
+    signP2PK(nostr: Nip07Like, proofs: Proof[]): Promise<Proof[]>;
+    cosign(nostr: Nip07Like): NonNullable<ScriptPathPlan['cosign']>;
+    signQuote(nostr: Nip07Like): NonNullable<MintProofsConfig['sign']>;
+    completes(option: SpendOption, pubkey: string): boolean;
+    nip60Keys(nostr: Nip07Like, pubkey: string, content: string): Promise<{
+        privkeys: string[];
+        mints: string[];
+    }>;
+    signTransaction(messageHex: string, inputContainerHex: string, secretKey: string | Uint8Array): Nip07SignedHash;
+};
+
+// @public
 export type CashuPayloadKind = 'token' | 'paymentRequest';
 
 // @public
@@ -348,8 +367,8 @@ export function constructUnblindedSignatureBls(blindSig: BlindSignature, r: bigi
 // @public
 export type CosignRequest = {
     digest: Uint8Array;
-    message: Uint8Array;
-    container: Uint8Array;
+    transactionMessage: Uint8Array;
+    inputContainer: Uint8Array;
     leaf: NutrootLeaf;
 };
 
@@ -1250,6 +1269,7 @@ export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M ex
     privkey(k: string): MintBuilder<M, true>;
     proofsWeHave(p: Array<Pick<ProofLike, 'amount'>>): this;
     run(this: MintBuilder<M, true>): Promise<Proof[]>;
+    sign(fn: NonNullable<MintProofsConfig['sign']>): MintBuilder<M, true>;
 }
 
 // @public (undocumented)
@@ -1435,6 +1455,7 @@ export interface MintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>
 export type MintProofsConfig = {
     keysetId?: string;
     privkey?: string | string[];
+    sign?: (request: MintQuoteSignRequest) => Promise<string>;
     proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
     onCountersReserved?: OnCountersReserved;
 };
@@ -1500,6 +1521,15 @@ export type MintQuoteOnchainResponse = MintQuoteBaseResponse & {
     pubkey: string;
 };
 
+// @public
+export type MintQuoteSignRequest = {
+    digest: Uint8Array;
+    quoteId: string;
+    outputs: SerializedBlindedMessage[];
+    transactionMessage?: Uint8Array;
+    inputContainer?: Uint8Array;
+};
+
 // @public (undocumented)
 export const MintQuoteState: {
     readonly UNPAID: "UNPAID";
@@ -1534,6 +1564,27 @@ export class NetworkError extends CTSError {
         cause?: unknown;
     });
 }
+
+// @public
+export type Nip07Like = {
+    getPublicKey?: () => Promise<string>;
+    signSchnorr?: (digestHex: string) => Promise<string>;
+    signString?: (secret: string) => Promise<Nip07SignedHash>;
+    nip44?: {
+        decrypt: (pubkey: string, ciphertext: string) => Promise<string>;
+    };
+    nip60?: {
+        signSecret?: (secret: string) => Promise<Nip07SignedHash>;
+        signTransaction?: (messageHex: string, inputContainerHex: string) => Promise<Nip07SignedHash>;
+    };
+};
+
+// @public
+export type Nip07SignedHash = {
+    hash: string;
+    sig: string;
+    pubkey: string;
+};
 
 // @public
 export function normalizeMintUrl(url: string): string;

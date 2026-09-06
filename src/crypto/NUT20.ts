@@ -55,6 +55,16 @@ function isCompressedPubkey(pubkey: string): boolean {
   return pubkey.length === 66;
 }
 
+/**
+ * The NUT-20 digest a locked quote's key signs, for signers that hold the key elsewhere.
+ */
+export function mintQuoteDigest(
+  quote: string,
+  blindedMessages: SerializedBlindedMessage[],
+): Uint8Array {
+  return constructMessage(quote, blindedMessages);
+}
+
 export function signMintQuote(
   privkey: string,
   quote: string,
