@@ -3,8 +3,17 @@ import { HttpResponse, http } from 'msw';
 import { test, describe, expect, vi } from 'vitest';
 
 import { Wallet, Amount, CheckStateEnum, type Proof, type ProofState } from '../../src';
+import { PUBKEYS } from '../consts';
 
-import { useTestServer, mint, unit, dummyKeysResp, mintUrl, logger } from './_setup';
+import {
+  useTestServer,
+  mint,
+  unit,
+  dummyKeysResp,
+  dummyKeysetResp,
+  mintUrl,
+  logger,
+} from './_setup';
 
 const server = useTestServer();
 
@@ -12,6 +21,42 @@ const allUnspent = (n: number): ProofState[] =>
   Array(n).fill({ state: CheckStateEnum.UNSPENT }) as ProofState[];
 
 describe('Restoring deterministic proofs', () => {
+  test('Batch restore treats a batch of zero-value signatures as occupied', async () => {
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+    const mockRestore = vi
+      .spyOn(wallet, 'restore')
+      .mockImplementation(
+        async (start): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> => {
+          // first batch: signed, but every signature is zero-value
+          if (start === 0) return { proofs: [], lastCounterWithSignature: 5 };
+          if (start === 50)
+            return { proofs: Array(3).fill(1) as Proof[], lastCounterWithSignature: 52 };
+          return { proofs: [] };
+        },
+      );
+    vi.spyOn(wallet, 'checkProofsStates').mockResolvedValue(allUnspent(3));
+    const res = await wallet.batchRestore({ gapLimit: 100, batchSize: 50 });
+    expect(res.proofs).toHaveLength(3);
+    expect(res.lastCounterWithSignature).toBe(52);
+    mockRestore.mockClear();
+  });
+
+  test('Batch restore keeps scanning the keyset it started on', async () => {
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+    const bound = wallet.keysetId;
+    const mockRestore = vi.spyOn(wallet, 'restore').mockImplementation(async () => {
+      // a keychain repair inside restore() can rebind an auto-bound wallet mid-scan
+      (wallet as unknown as { _boundKeysetId: string })._boundKeysetId = '009a1f293253e41e';
+      return { proofs: [] };
+    });
+    await wallet.batchRestore({ gapLimit: 100, batchSize: 50 });
+    expect(mockRestore.mock.calls.length).toBeGreaterThan(1);
+    expect(mockRestore.mock.calls.every((c) => c[2]?.keysetId === bound)).toBe(true);
+    mockRestore.mockClear();
+  });
+
   test('Batch restore', async () => {
     const wallet = new Wallet(mint);
     await wallet.loadMint();
@@ -232,5 +277,38 @@ describe('restore', () => {
     expect(res.proofs.length).toBeGreaterThan(0);
     // proofs should be of amount 1 because we overprinted 1 in the signatures
     expect(res.proofs.every((p) => p.amount.equals(Amount.from(1)))).toBe(true);
+  });
+
+  test('unblinds restore signatures with the keyset they name and skips zero-value ones', async () => {
+    const VALID_POINT = '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422';
+    const keysetB = { id: '009a1f293253e41e', unit: 'sat', active: true, input_fee_ppk: 0 };
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({ keysets: [...dummyKeysetResp.keysets, keysetB] }),
+      ),
+      http.get(mintUrl + '/v1/keys/009a1f293253e41e', () =>
+        HttpResponse.json({ keysets: [{ ...keysetB, keys: PUBKEYS }] }),
+      ),
+      http.post(mintUrl + '/v1/restore', async ({ request }) => {
+        const body = (await request.json()) as { outputs: unknown[] };
+        // counter 0 on the scanned keyset, counter 1 signed at zero under a keyset the wallet
+        // has never heard of (no keys are needed for it), counter 2 on keyset B
+        return HttpResponse.json({
+          outputs: body.outputs,
+          signatures: body.outputs.map((_, i) => ({
+            id: i === 2 ? keysetB.id : i === 1 ? 'aaaaaaaaaaaaaaaa' : dummyKeysResp.keysets[0].id,
+            amount: i === 1 ? 0 : 1,
+            C_: VALID_POINT,
+          })),
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(32), logger });
+    await wallet.loadMint();
+
+    const res = await wallet.restore(0, 3);
+
+    expect(res.proofs.map((p) => p.id)).toEqual([dummyKeysResp.keysets[0].id, keysetB.id]);
+    expect(res.lastCounterWithSignature).toBe(2);
   });
 });
