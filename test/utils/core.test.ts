@@ -12,6 +12,9 @@ import {
   getPubKeyFromPrivKey,
   getG2PubKeyFromPrivKey,
   hashToCurveBls,
+  blindMessageBls,
+  createBlindSignatureBls,
+  unblindSignatureBls,
 } from '../../src/crypto';
 import { buildNutrootSecret, NUTROOT_NUMS_KEY } from '../../src/crypto/nutroot';
 import { CTSError } from '../../src/model/Errors';
@@ -1082,16 +1085,15 @@ describe('test zero-knowledge utilities', () => {
         expect(() => utils.verifyProofsForReceive([v3Proof], () => v3Keyset)).not.toThrow();
       });
 
-      test('mixed-denomination v3 batch verifies in one pairing', async () => {
-        const bls = await import('../../src/crypto');
+      test('mixed-denomination v3 batch verifies in one pairing', () => {
         // Same mint key (a=2), different secrets + amounts → realistic mixed-denomination receive.
         const aBytes = hexToBytes('0'.repeat(63) + '2');
         const K2hex = bytesToHex(getG2PubKeyFromPrivKey(aBytes));
         const makeProof = (amount: bigint, secret: string, r: bigint): Proof => {
           const s = new TextEncoder().encode(secret);
-          const { B_ } = bls.blindMessageBls(s, r);
-          const { C_ } = bls.createBlindSignatureBls(B_, aBytes, v3Id);
-          const C = bls.unblindSignatureBls(C_, r);
+          const { B_ } = blindMessageBls(s, r);
+          const { C_ } = createBlindSignatureBls(B_, aBytes, v3Id);
+          const C = unblindSignatureBls(C_, r);
           return {
             amount: Amount.from(amount),
             id: v3Id,
@@ -1114,15 +1116,14 @@ describe('test zero-knowledge utilities', () => {
         expect(() => utils.verifyProofsForReceive(proofs, () => keyset)).not.toThrow();
       });
 
-      test('tampered C in a 5-proof v3 batch is rejected and offender named', async () => {
-        const bls = await import('../../src/crypto');
+      test('tampered C in a 5-proof v3 batch is rejected and offender named', () => {
         const aBytes = hexToBytes('0'.repeat(63) + '2');
         const K2hex = bytesToHex(getG2PubKeyFromPrivKey(aBytes));
         const makeProof = (amount: bigint, secret: string, r: bigint): Proof => {
           const s = new TextEncoder().encode(secret);
-          const { B_ } = bls.blindMessageBls(s, r);
-          const { C_ } = bls.createBlindSignatureBls(B_, aBytes, v3Id);
-          const C = bls.unblindSignatureBls(C_, r);
+          const { B_ } = blindMessageBls(s, r);
+          const { C_ } = createBlindSignatureBls(B_, aBytes, v3Id);
+          const C = unblindSignatureBls(C_, r);
           return {
             amount: Amount.from(amount),
             id: v3Id,
