@@ -133,6 +133,13 @@ export class OutputData implements OutputDataLike {
         'Mint response is missing a signature for one of the outputs. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.',
       );
     }
+    // Blanks (amount=0: NUT-08 change, NUT-09 restore) leave the keyset to the mint, which may
+    // have rotated meanwhile. Any other output must come back on the keyset it asked for.
+    if (!this.blindedMessage.amount.isZero() && sig.id !== this.blindedMessage.id) {
+      throw new CTSError(
+        `Mint signature keyset id ${sig.id} does not match output ${this.blindedMessage.id}`,
+      );
+    }
     let dleq: DLEQ | undefined;
     if (sig.dleq) {
       dleq = {
@@ -379,7 +386,10 @@ export class OutputData implements OutputDataLike {
    * const restored = (JSON.parse(stored) as SerializedOutputData[]).map((s) =>
    *   OutputData.deserialize(s),
    * );
-   * const change = wallet.createMeltChangeProofs(restored, paidQuote.change ?? []);
+   * // zero-value entries carry no ecash (NUT-08); Amount.from also covers a quote rehydrated from JSON
+   * const sigs = (paidQuote.change ?? []).filter((s) => !Amount.from(s.amount).isZero());
+   * await wallet.ensureOperableKeysets(sigs.map((s) => s.id)); // change may be on a rotated-in keyset
+   * const change = wallet.createMeltChangeProofs(restored, sigs);
    * ```
    */
   static serialize(output: OutputDataLike): SerializedOutputData {

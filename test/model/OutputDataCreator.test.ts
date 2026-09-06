@@ -4,7 +4,15 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, concatBytes, hexToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test, vi } from 'vitest';
 
-import { getPubKeyFromPrivKey, P2BK_DST, pointFromHex, type P2PKOptions } from '../../src/crypto';
+import {
+  createBlindSignature,
+  createDLEQProof,
+  getPubKeyFromPrivKey,
+  hashToCurve,
+  P2BK_DST,
+  pointFromHex,
+  type P2PKOptions,
+} from '../../src/crypto';
 import { Amount, type AmountLike } from '../../src/model/Amount';
 import { OutputData, isOutputDataFactory } from '../../src/model/OutputData';
 import type { OutputDataFactory, OutputDataLike } from '../../src/model/OutputData';
@@ -290,5 +298,42 @@ describe('OutputData helpers', () => {
     );
     expect(new Set(data).size).toBe(outputs.length);
     expect(new Set(outputs.map((o) => o.ephemeralE)).size).toBe(outputs.length);
+  });
+});
+
+describe('OutputData.toProof across a keyset rotation', () => {
+  test('a non-blank output rejects a signature from another keyset even with matching keys', () => {
+    const G = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+    const output = OutputData.createSingleRandomData(1, '009a1f293253e41e');
+    const keysetB: HasKeysetKeys = { id: '00ad268c4d1f5826', keys: { 1: G } };
+    const sig: SerializedBlindedSignature = { id: keysetB.id, amount: Amount.from(1), C_: G };
+    expect(() => output.toProof(sig, keysetB)).toThrow(/does not match output/);
+  });
+
+  test('a real signature under another keyset unblinds to a proof the mint would accept', () => {
+    // Mint side: the blank names keyset A, but the mint signs it with keyset B's key for amount 1
+    const mintPrivKey = secp256k1.utils.randomSecretKey();
+    const keysetB: HasKeysetKeys = {
+      id: '00ad268c4d1f5826',
+      keys: { '1': bytesToHex(getPubKeyFromPrivKey(mintPrivKey)) },
+    };
+    const output = OutputData.createSingleRandomData(0, '009a1f293253e41e');
+    const B_ = pointFromHex(output.blindedMessage.B_);
+    const blindSig = createBlindSignature(B_, mintPrivKey, keysetB.id);
+    const dleq = createDLEQProof(B_, mintPrivKey);
+    const sig: SerializedBlindedSignature = {
+      id: keysetB.id,
+      amount: Amount.from(1),
+      C_: blindSig.C_.toHex(true),
+      dleq: { s: bytesToHex(dleq.s), e: bytesToHex(dleq.e) },
+    };
+
+    // toProof verifies the DLEQ against keyset B; a mismatched key would throw here
+    const proof = output.toProof(sig, keysetB);
+    expect(proof.id).toBe(keysetB.id);
+    // and the unblinded C is k * hash_to_curve(secret), which is what the mint checks on redeem
+    const Y = hashToCurve(new TextEncoder().encode(proof.secret));
+    const expectedC = Y.multiply(secp256k1.Point.Fn.fromBytes(mintPrivKey));
+    expect(pointFromHex(proof.C).equals(expectedC)).toBe(true);
   });
 });
