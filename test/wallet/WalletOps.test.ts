@@ -406,6 +406,10 @@ describe('WalletOps builders', () => {
         /family/,
       );
       expect(() => ops.sendToRequest(locked, proofs).keyset('00bd033559de27d0')).not.toThrow();
+      const unlocked = new PaymentRequest({ amount: 100, unit: 'sat' });
+      expect(() =>
+        ops.sendToRequest(unlocked, proofs).keyset(`02${'ab'.repeat(32)}`),
+      ).not.toThrow();
     });
 
     it('honours a nutroot option, and follows the wallet keyset when both are published', async () => {

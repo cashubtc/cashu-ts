@@ -111,12 +111,9 @@ export class WalletOps {
     const nutroot = pr.toNutrootOptions();
     // Net of input fees (NUT-18): the payee must net the requested amount after swapping.
     const v3 = isBlsKeyset(wallet.keysetId);
-    const builder = new SendBuilder(
-      wallet,
-      base.add(fee),
-      proofs,
-      v3 ? 'v3' : 'legacy',
-    ).includeFees(true);
+    // Only a locked request negotiates an encoding; an unlocked one may use any keyset.
+    const family = lock || nutroot ? (v3 ? 'v3' : 'legacy') : undefined;
+    const builder = new SendBuilder(wallet, base.add(fee), proofs, family).includeFees(true);
     if (nutroot && v3) {
       return builder.asLocked(nutrootToLockOptions(nutroot));
     }
