@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { Wallet } from '../../src';
+import { LockBuilder, Wallet } from '../../src';
 import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import { NUTROOT_NUMS_KEY, parseNutrootLeaf, serializeNutrootLeaf } from '../../src/crypto/nutroot';
 import { Amount } from '../../src/model/Amount';
@@ -471,8 +471,7 @@ describe('Wallet.createOutputData lock chokepoint', () => {
 });
 
 describe('LockBuilder', () => {
-  test('emits semantic LockOptions', async () => {
-    const { LockBuilder } = await import('../../src');
+  test('emits semantic LockOptions', () => {
     const options = new LockBuilder()
       .addMainPubkey([PUB_A, PUB_B])
       .requireMainSignatures(2)
@@ -487,8 +486,7 @@ describe('LockBuilder', () => {
     });
   });
 
-  test('addLeaf makes trees NUT-11 cannot express', async () => {
-    const { LockBuilder } = await import('../../src');
+  test('addLeaf makes trees NUT-11 cannot express', () => {
     const options = new LockBuilder()
       .addMainPubkey(PUB_A)
       .addLeaf({ type: 'after', n: 1, time: TIME, keys: [PUB_R] })
@@ -499,8 +497,7 @@ describe('LockBuilder', () => {
     expect(lockToNutrootOptions(options).leaves).toHaveLength(2);
   });
 
-  test('round-trips through fromOptions', async () => {
-    const { LockBuilder } = await import('../../src');
+  test('round-trips through fromOptions', () => {
     const options = new LockBuilder()
       .addHashlock(HASH)
       .addMainPubkey(PUB_A)
