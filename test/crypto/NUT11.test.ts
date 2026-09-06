@@ -169,6 +169,33 @@ describe('test create p2pk secret', () => {
     expect(verify1).toBe(true);
   });
 
+  test('leaves v3 point secrets untouched and unlogged', async () => {
+    // Mixed inputs reach this pass whenever a melt or send carries a privkey.
+    // The v3 proof signs the transaction elsewhere, so it must not be parsed here.
+    const warn = vi.fn();
+    const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
+    const p2pkProof: Proof = {
+      amount: Amount.from(1),
+      C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+      id: '00000000000',
+      secret: secretStr,
+    };
+    const v3Proof: Proof = {
+      amount: Amount.from(1),
+      C: 'b7a4881059133fd91a8753600d9a5e524c65d6224f6fe2d5aef9e59f1507fdad90b3b4d48ee46da5c8dfaa0b88e28b69',
+      id: '02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d',
+      secret: '02' + 'ab'.repeat(32),
+    };
+
+    const signedProofs = signP2PKProofs([p2pkProof, v3Proof], bytesToHex(PRIVKEY), {
+      warn,
+    } as never);
+
+    expect(isP2PKSpendAuthorised(signedProofs[0])).toBe(true);
+    expect(signedProofs[1]).toBe(v3Proof); // untouched, no witness added
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   test('sign and verify proofs, different keys', async () => {
     const PRIVKEY2 = schnorr.utils.randomSecretKey();
     const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));

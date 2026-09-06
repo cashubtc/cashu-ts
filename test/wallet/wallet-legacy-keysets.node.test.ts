@@ -147,7 +147,12 @@ describe('Legacy (pre-v1) keyset output gating', () => {
     const wallet = new Wallet(mint);
     await wallet.loadMint();
 
-    await expect(wallet.createMintQuoteBolt11(1000)).rejects.toThrow(/no active keyset/i);
+    await expect(
+      wallet.createMintQuoteBolt11(
+        1000,
+        '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+      ),
+    ).rejects.toThrow(/no active keyset/i);
     await expect(wallet.createMintQuote('bolt11', { amount: 1000 })).rejects.toThrow(
       /no active keyset/i,
     );
@@ -175,13 +180,17 @@ describe('Legacy (pre-v1) keyset output gating', () => {
           amount: 1000,
           state: 'UNPAID',
           expiry: 3600,
+          pubkey: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
         }),
       ),
     );
     const wallet = new Wallet(mint);
     await wallet.loadMint();
 
-    const quote = await wallet.createMintQuoteBolt11(1000);
+    const quote = await wallet.createMintQuoteBolt11(
+      1000,
+      '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+    );
     expect(quote.quote).toBe('bolt11-quote-1');
   });
 

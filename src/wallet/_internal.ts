@@ -2,6 +2,7 @@
  * Internal wallet utilities — not part of the public API.
  */
 import { Amount, type AmountLike } from '../model/Amount';
+import { type OutputDataLike } from '../model/OutputData';
 import type { Keys, Proof } from '../model/types';
 import { splitAmount } from '../utils/core';
 
@@ -84,20 +85,17 @@ export function stringifyOutputTypeForLog(ot: OutputType): string {
         counter: ot.counter,
         denominations: (ot.denominations ?? []).map((d) => Amount.from(d).toString()),
       });
-    case 'p2pk': {
-      // P2BK: the natural keys are only blinded later, so log placeholders instead
+    case 'lock': {
+      // Keys and hashes identify the parties: log the shape, not the material.
       const opts = ot.options;
-      const options = opts.blindKeys
-        ? {
-            ...opts,
-            data: opts.kind === 'P2PK' ? '[redacted]' : opts.data,
-            pubkeys: opts.pubkeys?.map(() => '[redacted]'),
-            refundKeys: opts.refundKeys?.map(() => '[redacted]'),
-          }
-        : opts;
       return JSON.stringify({
-        type: 'p2pk',
-        options,
+        type: 'lock',
+        mainKeys: opts.mainKeys?.length ?? 0,
+        refundKeys: opts.refundKeys?.length ?? 0,
+        ...(opts.hashlock && { hashlock: true }),
+        ...(opts.locktime !== undefined && { locktime: opts.locktime }),
+        ...(opts.leaves?.length && { leaves: opts.leaves.length }),
+        ...(opts.blindKeys && { blindKeys: true }),
         denominations: (ot.denominations ?? []).map((d) => Amount.from(d).toString()),
       });
     }
@@ -109,4 +107,46 @@ export function stringifyOutputTypeForLog(ot: OutputType): string {
     default:
       return 'Unknown';
   }
+}
+
+/**
+ * The order outputs take in a swap payload: ascending by amount, so the mint cannot read the
+ * keep/send split off their position.
+ *
+ * @remarks
+ * Exported and shared rather than inlined at the one call site, because anything that needs the
+ * input digest before the payload is built (a script path signature collected out of band) must
+ * order outputs exactly as the payload will. Two implementations would agree until one was edited;
+ * one cannot disagree with itself.
+ *
+ * Ties keep their original order, so equal-amount outputs still leak their keep/send split by
+ * position. Fixing that means randomizing within a tie, which is a separate change: it would make
+ * the order unreproducible from the preview unless the choice is carried with it.
+ * @param keepOutputs Outputs the wallet keeps.
+ * @param sendOutputs Outputs being sent.
+ * @param sorted Set false to leave construction order alone (SIG_ALL fixes order for signing).
+ * @returns The ordered output data, a parallel vector marking which are keeps, and the source
+ *   indices so callers can map results back to construction order.
+ */
+export function orderOutputsForPayload(
+  keepOutputs: OutputDataLike[],
+  sendOutputs: OutputDataLike[] = [],
+  sorted = true,
+): { outputData: OutputDataLike[]; keepVector: boolean[]; indices: number[] } {
+  const merged = [...keepOutputs, ...sendOutputs];
+  const indices = merged.map((_, i) => i);
+  if (sorted) {
+    indices.sort((a, b) =>
+      merged[a].blindedMessage.amount.compareTo(merged[b].blindedMessage.amount),
+    );
+  }
+  const keeps: boolean[] = [
+    ...Array.from({ length: keepOutputs.length }, () => true),
+    ...Array.from({ length: sendOutputs.length }, () => false),
+  ];
+  return {
+    outputData: indices.map((i) => merged[i]),
+    keepVector: indices.map((i) => keeps[i]),
+    indices,
+  };
 }

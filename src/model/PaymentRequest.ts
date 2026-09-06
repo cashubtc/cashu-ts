@@ -1,20 +1,32 @@
+import { equalBytes } from '@noble/curves/utils.js';
+
 import { normalizeSecpPubkey } from '../crypto/curve_secp';
 import { getTag, getTagInt, getTagScalar } from '../crypto/NUT10';
 import type { P2PKOptions, P2PKTag } from '../crypto/NUT11';
 import { P2PK_KNOWN_TAG_KEYS, p2pkOptionsToPRNut10, parseP2PKSecret } from '../crypto/NUT11';
 import {
-  decodeCBOR,
-  decodeBase64UrlToUint8,
-  encodeCBOR,
+  parseNutrootLeaf,
+  serializeNutrootLeaf,
+  serializeNutrootLeafHex,
+  NUTROOT_MAX_TREE_LEAVES,
+  NUTROOT_NUMS_KEY,
+  type ParsedNutrootOption,
+} from '../crypto/nutroot';
+import {
   decodeBase64ToUint8Legacy,
+  decodeBase64UrlToUint8,
+  decodeCBOR,
+  hexToBytes,
+  encodeCBOR,
   encodeUint8ToBase64UrlPadded,
   normalizeMintUrl,
 } from '../utils';
-import { decodeBech32mToBytes, encodeBech32m } from '../utils/bech32m';
+import { decodeBech32m, encodeBech32m } from '../utils/bech32m';
 import { JSONInt } from '../utils/JSONInt';
 import { decodeTLV, encodeTLV } from '../utils/tlv';
 import type { DecodedTLVPaymentRequest } from '../utils/tlv';
-import type { LockBuilder } from '../wallet/P2PKBuilder';
+import { lockToNutrootOptions, lockToP2PKOptions, type LockOptions } from '../wallet/lock';
+import type { LockBuilder } from '../wallet/LockBuilder';
 import { PaymentRequestTransportType } from '../wallet/types';
 import type {
   RawPaymentRequest,
@@ -23,6 +35,7 @@ import type {
   PaymentRequestPayload,
   PaymentRequestTransport,
   SupportedMethod,
+  NutrootOption,
 } from '../wallet/types';
 
 import { Amount, type AmountLike } from './Amount';
@@ -44,6 +57,7 @@ export type PaymentRequestOptions = {
   nut10?: NUT10Option;
   mintsPreferred?: boolean;
   supportedMethods?: Array<{ method: string; fee?: AmountLike }>;
+  nutroot?: NutrootOption;
 };
 
 export class PaymentRequest {
@@ -57,9 +71,11 @@ export class PaymentRequest {
   public nut10?: NUT10Option;
   public mintsPreferred?: boolean;
   public supportedMethods?: SupportedMethod[];
+  public nutroot?: NutrootOption;
 
   constructor(options: PaymentRequestOptions = {}) {
     this.id = options.id;
+    this.nutroot = options.nutroot;
     this.unit = options.unit;
     this.mints = options.mints;
     this.description = options.description;
@@ -314,6 +330,13 @@ export class PaymentRequest {
         t: this.nut10.tags,
       };
     }
+    if (this.nutroot) {
+      rawRequest.nutroot = {
+        k: this.nutroot.receiverKey,
+        ...(this.nutroot.leaves?.length && { l: this.nutroot.leaves }),
+        ...(this.nutroot.blindKeys?.length && { b: this.nutroot.blindKeys }),
+      };
+    }
     return rawRequest;
   }
 
@@ -361,6 +384,7 @@ export class PaymentRequest {
             tags: this.nut10.tags,
           }
         : undefined,
+      nutroot: this.nutroot,
     };
 
     const tlvBytes = encodeTLV(tlvRequest);
@@ -379,8 +403,9 @@ export class PaymentRequest {
   }
 
   /**
-   * Converts this request's `nut10` locking option into a {@link P2PKOptions} for the wallet's
-   * `.asP2PK()` gate, so a payer can lock proofs to exactly the condition the payee requested.
+   * Converts this request's `nut10` locking option into a wire {@link P2PKOptions}; decode with
+   * `p2pkToLockOptions()` for `.asLocked()`, so a payer locks proofs to exactly the requested
+   * condition.
    *
    * @remarks
    * Supports `P2PK` (NUT-11) and `HTLC` (NUT-14) only; returns `undefined` for no `nut10` or an
@@ -390,50 +415,56 @@ export class PaymentRequest {
    *   lock, so invalid lock semantics must not be silently dropped or repaired.
    */
   toP2PKOptions(): P2PKOptions | undefined {
-    const nut10 = this.nut10;
-    const isHTLC = nut10?.kind === 'HTLC';
-    if (!nut10 || (nut10.kind !== 'P2PK' && !isHTLC)) {
-      return undefined;
-    }
-    if (!nut10.data) {
-      throw new CTSError(`NUT-10 ${nut10.kind} option is missing its data field`);
-    }
+    return nut10ToP2PKOptions(this.nut10);
+  }
 
-    // Use parseP2PKSecret (the parser the verifier uses): it rejects malformed
-    // tags, duplicate tag keys and bad sigflags — all of which NUT-11 says make a
-    // proof unspendable — so a bad lock fails loudly instead of silently first-winning.
-    const secret = parseP2PKSecret([
-      nut10.kind,
-      { nonce: '', data: nut10.data, tags: nut10.tags ?? [] },
-    ]);
-    // `data` is the NUT-10 data slot (hashlock for HTLC, primary pubkey for P2PK);
-    // the `pubkeys` tag carries the optional additional / receiver keys for either kind.
-    const taggedPubkeys = (getTag(secret, 'pubkeys') ?? []).map(normalizeSecpPubkey);
-    const options: P2PKOptions = {
-      kind: isHTLC ? 'HTLC' : 'P2PK',
-      data: isHTLC ? nut10.data : normalizeSecpPubkey(nut10.data),
-      ...(taggedPubkeys.length ? { pubkeys: taggedPubkeys } : {}),
+  /**
+   * Converts this request's `nutroot` option into the arguments for a receiver-keyed nutroot send
+   * (NUT-28), so a payer can derive outputs to the payee's static key under the tree they asked
+   * for, honouring their blind-me tags.
+   *
+   * @remarks
+   * `undefined` when the request carries no nutroot option. Leaves must round-trip byte for byte: a
+   * payer that cannot reproduce the payee's exact leaf bytes would build a different tree, hence a
+   * different secret, so it refuses rather than paying to something the payee did not ask for.
+   * @throws If the receiver key is not a valid point, or a requested leaf is unparsable or would
+   *   not re-serialize to the bytes the payee sent.
+   */
+  toNutrootOptions(): ParsedNutrootOption | undefined {
+    const nutroot = this.nutroot;
+    if (!nutroot) return undefined;
+    if (!nutroot.receiverKey) {
+      throw new CTSError('nutroot option is missing its receiver key');
+    }
+    const receiverKey = normalizeSecpPubkey(nutroot.receiverKey);
+    // NUT-10: the payer offsets the NUMS base per output, so uniqueness no longer depends on
+    // the tree and the requested leaves are reproduced unchanged. Leaves are still required:
+    // nothing else could spend a proof with no key path.
+    if (receiverKey === NUTROOT_NUMS_KEY && !nutroot.leaves?.length) {
+      throw new CTSError('malformed request: a NUMS receiver key requires leaves');
+    }
+    if (!nutroot.leaves?.length) {
+      return { receiverKey };
+    }
+    if (nutroot.leaves.length > NUTROOT_MAX_TREE_LEAVES) {
+      throw new CTSError(`nutroot tree exceeds ${NUTROOT_MAX_TREE_LEAVES} leaves`);
+    }
+    const leaves = nutroot.leaves.map((hex, i) => {
+      const bytes = hexToBytes(hex);
+      const leaf = parseNutrootLeaf(bytes);
+      /* v8 ignore next 3 -- backstop: parseNutrootLeaf admits only canonical bytes today */
+      if (!equalBytes(serializeNutrootLeaf(leaf), bytes)) {
+        throw new CTSError(`requested leaf ${i} does not round-trip: cannot reproduce its bytes`);
+      }
+      return leaf;
+    });
+    return {
+      receiverKey,
+      leaves,
+      ...(nutroot.blindKeys?.length && {
+        blindKeys: nutroot.blindKeys.map((k) => k.toLowerCase()),
+      }),
     };
-
-    // Optional fields pass straight through: the accessors return undefined when
-    // absent, and the builder ignores undefined options. getTag never yields [].
-    options.locktime = getTagInt(secret, 'locktime');
-    options.refundKeys = getTag(secret, 'refund')?.map(normalizeSecpPubkey);
-    options.requiredSignatures = getTagInt(secret, 'n_sigs');
-    options.requiredRefundSignatures = getTagInt(secret, 'n_sigs_refund');
-    if (getTagScalar(secret, 'sigflag') === 'SIG_ALL') {
-      options.sigFlag = 'SIG_ALL';
-    }
-
-    // Forward any non-standard tags verbatim.
-    const additionalTags = (nut10.tags ?? []).filter(
-      (t) => t.length > 0 && !P2PK_KNOWN_TAG_KEYS.has(t[0]),
-    ) as P2PKTag[];
-    if (additionalTags.length > 0) {
-      options.additionalTags = additionalTags;
-    }
-
-    return options;
   }
 
   /**
@@ -459,7 +490,15 @@ export class PaymentRequest {
         }
       : undefined;
     const supportedMethods = rawPaymentRequest.sm?.map((m) => ({ method: m.mn, fee: m.mf }));
+    const nutroot = rawPaymentRequest.nutroot
+      ? {
+          receiverKey: rawPaymentRequest.nutroot.k,
+          leaves: rawPaymentRequest.nutroot.l,
+          blindKeys: rawPaymentRequest.nutroot.b,
+        }
+      : undefined;
     return new PaymentRequest({
+      nutroot,
       transport: transports,
       id: rawPaymentRequest.i,
       amount: rawPaymentRequest.a,
@@ -478,7 +517,11 @@ export class PaymentRequest {
 
     // Version B: bech32m + TLV encoding (creqb...)
     if (lowerRequest.startsWith('creqb')) {
-      const data = decodeBech32mToBytes(lowerRequest);
+      // The HRP must be exactly `creqb` (NUT-26); a longer HRP shares the prefix but is not it.
+      const { hrp, data } = decodeBech32m(lowerRequest);
+      if (hrp !== 'creqb') {
+        throw new CTSError('unsupported pr: invalid prefix');
+      }
       const decoded = decodeTLV(data);
       const nut10 = decoded.nut10
         ? {
@@ -498,15 +541,17 @@ export class PaymentRequest {
         nut10,
         mintsPreferred: decoded.mintsPreferred,
         supportedMethods: decoded.supportedMethods,
+        nutroot: decoded.nutroot,
       });
     }
 
-    // Version A: CBOR encoding (creqA...)
-    if (!encodedRequest.startsWith('creq')) {
+    // Version A: CBOR encoding (creqA...). The prefix check is case-insensitive (NUT-26);
+    // the base64 payload keeps its case.
+    if (!lowerRequest.startsWith('creq')) {
       throw new CTSError('unsupported pr: invalid prefix');
     }
-    const version = encodedRequest[4];
-    if (version !== 'A') {
+    const version = lowerRequest[4];
+    if (version !== 'a') {
       throw new CTSError('unsupported pr version');
     }
     const encodedData = encodedRequest.slice(5);
@@ -545,6 +590,19 @@ export class PaymentRequestBuilder {
   private _singleUse?: boolean;
   private _transports: PaymentRequestTransport[] = [];
   private _nut10?: NUT10Option;
+  private _nutroot?: NutrootOption;
+  private _omitted: { nut10?: string; nutroot?: string } = {};
+
+  /**
+   * Why the last `lock()` left an encoding out, per encoding; empty when nothing was dropped.
+   *
+   * @remarks
+   * Lets a caller tell a deliberate omission (eg no `nut10` for blinded keys or disclosure) from a
+   * bug, and show the reason. Reset by the next `lock()`.
+   */
+  get omitted(): Readonly<{ nut10?: string; nutroot?: string }> {
+    return { ...this._omitted };
+  }
   private _methods: Array<{ method: string; fee?: AmountLike }> = [];
 
   /**
@@ -667,17 +725,45 @@ export class PaymentRequestBuilder {
   }
 
   /**
-   * Sets the `nut10` locking condition from a {@link LockBuilder} or complete P2PK/HTLC
-   * {@link P2PKOptions}. Last call here or via `nut10()` wins.
+   * Sets the locking condition from semantic {@link LockOptions}, a {@link LockBuilder}, or wire
+   * {@link P2PKOptions}. Replaces any condition set earlier.
    *
-   * @throws If the lock is invalid or uses `blindKeys` (not expressible in a request).
+   * @remarks
+   * Semantic input is encoded as `nutroot` (the current spec) and, while `legacy` is not `false`,
+   * also as `nut10` so payers that predate v3 can pay: a NUT-18 transition measure. Wire
+   * `P2PKOptions` target `nut10` alone; `requestNutroot()` makes a deliberately v3-only request.
+   * @throws If no permitted encoding can express the lock, or a wire lock is invalid.
    */
-  lock(lock: P2PKOptions | LockBuilder): this {
-    const p2pk =
-      typeof (lock as LockBuilder).toOptions === 'function'
-        ? (lock as LockBuilder).toOptions()
-        : (lock as P2PKOptions);
-    this._nut10 = p2pkOptionsToPRNut10(p2pk);
+  lock(lock: LockOptions | LockBuilder | P2PKOptions, opts?: { legacy?: boolean }): this {
+    const semantic = asLockOptions(lock);
+    this._omitted = {};
+    if (!semantic) {
+      this._nut10 = p2pkOptionsToPRNut10(lock as P2PKOptions);
+      return this;
+    }
+    const omitted: { nut10?: string; nutroot?: string } = {};
+    const tryEncode = <T>(key: keyof typeof omitted, encode: () => T): T | undefined => {
+      try {
+        return encode();
+      } catch (e) {
+        omitted[key] = e instanceof Error ? e.message : String(e);
+        return undefined;
+      }
+    };
+    const nut10 =
+      opts?.legacy === false
+        ? undefined
+        : tryEncode('nut10', () => p2pkOptionsToPRNut10(lockToP2PKOptions(semantic)));
+    const nutroot = tryEncode('nutroot', () => encodeNutrootRequest(semantic));
+    if (!nut10 && !nutroot) {
+      throw new CTSError(
+        `lock fits no permitted request encoding: ${Object.values(omitted).join('; ')}`,
+      );
+    }
+    this._omitted = omitted;
+    this._nut10 = nut10;
+    this._nutroot = undefined;
+    if (nutroot) this.requestNutroot(nutroot);
     return this;
   }
 
@@ -686,6 +772,49 @@ export class PaymentRequestBuilder {
    */
   nut10(option: NUT10Option): this {
     this._nut10 = option;
+    return this;
+  }
+
+  /**
+   * Requests nutroot (v3 keyset) outputs derived to `receiverKey`, optionally under a tree.
+   *
+   * @remarks
+   * NUT-28: the receiver key is blinded at slot 0 by the payer, so one request can be reused
+   * without linking payments. The payer assigns slots in transmitted leaf order; the receiver
+   * derives every occupied slot and matches keys by value. `blindKeys` names the leaf keys to
+   * blind.
+   * @throws If the receiver key is not a valid point, a leaf is unparsable, or a blind-me key is
+   *   not one of the leaves' keys.
+   */
+  requestNutroot(lock: NutrootOption | LockOptions | LockBuilder): this {
+    const semantic = asLockOptions(lock);
+    const option: NutrootOption = semantic
+      ? encodeNutrootRequest(semantic)
+      : (lock as NutrootOption);
+    const nutroot: NutrootOption = {
+      receiverKey: normalizeSecpPubkey(option.receiverKey),
+      ...(option.leaves?.length && { leaves: [...option.leaves] }),
+      ...(option.blindKeys?.length && {
+        blindKeys: option.blindKeys.map((k) => normalizeSecpPubkey(k)),
+      }),
+    };
+    if ((nutroot.leaves?.length ?? 0) > NUTROOT_MAX_TREE_LEAVES) {
+      throw new CTSError(`nutroot tree exceeds ${NUTROOT_MAX_TREE_LEAVES} leaves`);
+    }
+    // Validate here rather than at build(): a request nobody can pay is worth catching at the
+    // point the payee wrote it, not at the payer.
+    const leafKeys = new Set(
+      (nutroot.leaves ?? []).flatMap((hex) => parseNutrootLeaf(hexToBytes(hex)).keys),
+    );
+    for (const key of nutroot.blindKeys ?? []) {
+      if (!leafKeys.has(key)) {
+        throw new CTSError(`blind-me key is not in the requested tree: ${key}`);
+      }
+    }
+    if (nutroot.receiverKey === NUTROOT_NUMS_KEY && !nutroot.leaves?.length) {
+      throw new CTSError('A NUMS receiver key requires leaves');
+    }
+    this._nutroot = nutroot;
     return this;
   }
 
@@ -724,6 +853,87 @@ export class PaymentRequestBuilder {
       nut10: this._nut10,
       mintsPreferred: this._mintsPreferred,
       supportedMethods: this._methods.length ? this._methods : undefined,
+      nutroot: this._nutroot,
     });
   }
+}
+
+/**
+ * Reads semantic lock input; undefined for a wire shape (`P2PKOptions` carries `kind`, a
+ * `NutrootOption` carries `receiverKey`).
+ */
+function asLockOptions(
+  lock: LockOptions | LockBuilder | P2PKOptions | NutrootOption,
+): LockOptions | undefined {
+  if (typeof (lock as LockBuilder).toOptions === 'function') {
+    return (lock as LockBuilder).toOptions();
+  }
+  if ('kind' in lock || 'receiverKey' in lock) return undefined;
+  return lock as LockOptions;
+}
+
+/**
+ * Encodes semantic lock options as a wire nutroot request.
+ */
+function encodeNutrootRequest(lock: LockOptions): NutrootOption {
+  const { receiverKey, leaves, blindKeys } = lockToNutrootOptions(lock);
+  return {
+    receiverKey,
+    ...(leaves?.length && { leaves: leaves.map((leaf) => serializeNutrootLeafHex(leaf)) }),
+    ...(blindKeys?.length && { blindKeys }),
+  };
+}
+
+/**
+ * A NUT-10 locking option as wire {@link P2PKOptions}, canonicalising kind, data and tags.
+ *
+ * @remarks
+ * Shared by the payer (build the lock) and the payee (check a proof carries it). Supports `P2PK`
+ * (NUT-11) and `HTLC` (NUT-14) only; returns `undefined` for no option or an unbuildable kind.
+ * @throws If the option is missing `data`, carries malformed tags, or holds a non-compliant pubkey.
+ */
+export function nut10ToP2PKOptions(nut10: NUT10Option | undefined): P2PKOptions | undefined {
+  const isHTLC = nut10?.kind === 'HTLC';
+  if (!nut10 || (nut10.kind !== 'P2PK' && !isHTLC)) {
+    return undefined;
+  }
+  if (!nut10.data) {
+    throw new CTSError(`NUT-10 ${nut10.kind} option is missing its data field`);
+  }
+
+  // Use parseP2PKSecret (the parser the verifier uses): it rejects malformed
+  // tags, duplicate tag keys and bad sigflags — all of which NUT-11 says make a
+  // proof unspendable — so a bad lock fails loudly instead of silently first-winning.
+  const secret = parseP2PKSecret([
+    nut10.kind,
+    { nonce: '', data: nut10.data, tags: nut10.tags ?? [] },
+  ]);
+  // `data` is the NUT-10 data slot (hashlock for HTLC, primary pubkey for P2PK);
+  // the `pubkeys` tag carries the optional additional / receiver keys for either kind.
+  const taggedPubkeys = (getTag(secret, 'pubkeys') ?? []).map(normalizeSecpPubkey);
+  const options: P2PKOptions = {
+    kind: isHTLC ? 'HTLC' : 'P2PK',
+    data: isHTLC ? nut10.data : normalizeSecpPubkey(nut10.data),
+    ...(taggedPubkeys.length ? { pubkeys: taggedPubkeys } : {}),
+  };
+
+  // Optional fields pass straight through: the accessors return undefined when
+  // absent, and the builder ignores undefined options. getTag never yields [].
+  options.locktime = getTagInt(secret, 'locktime');
+  options.refundKeys = getTag(secret, 'refund')?.map(normalizeSecpPubkey);
+  options.requiredSignatures = getTagInt(secret, 'n_sigs');
+  options.requiredRefundSignatures = getTagInt(secret, 'n_sigs_refund');
+  if (getTagScalar(secret, 'sigflag') === 'SIG_ALL') {
+    options.sigFlag = 'SIG_ALL';
+  }
+
+  // Forward any non-standard tags verbatim.
+  const additionalTags = (nut10.tags ?? []).filter(
+    (t) => t.length > 0 && !P2PK_KNOWN_TAG_KEYS.has(t[0]),
+  ) as P2PKTag[];
+  if (additionalTags.length > 0) {
+    options.additionalTags = additionalTags;
+  }
+
+  return options;
 }

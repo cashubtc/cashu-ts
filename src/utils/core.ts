@@ -5,14 +5,30 @@ import {
   type DLEQ,
   type G1Point,
   type G2Point,
+  assertV3PointSecret,
   batchVerifyUnblindedSignatureBls,
   isBlsKeyset,
+  isV3PointSecret,
   pointFromHex,
   pointFromHexG1,
   pointFromHexG2,
   verifyDLEQProof_reblind,
   verifyUnblindedSignatureBls,
 } from '../crypto';
+import { hashToCurveBls } from '../crypto/curve_bls';
+import { verifyHTLCHash } from '../crypto/NUT14';
+import {
+  countLeafSigners,
+  parseNutrootLeafHex,
+  verifyNutrootCommitment,
+  verifyNutrootSpendInfo,
+} from '../crypto/nutroot';
+import {
+  inputDigest,
+  proofInputContainer,
+  spendCommitment,
+  verifyTransactionInputWitness,
+} from '../crypto/transcript';
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { PaymentRequest } from '../model/PaymentRequest';
@@ -28,6 +44,7 @@ import type {
   V4ProofTemplate,
   HasKeysetKeys,
 } from '../model/types';
+import type { SpendReceipt } from '../wallet/types/responses';
 
 import {
   decodeBase64UrlToJson,
@@ -273,6 +290,23 @@ function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
   return prefix + version + base64Data;
 }
 
+/**
+ * True when a token entry's witness is a v3 transaction witness, so it must not travel.
+ *
+ * @remarks
+ * A v3 witness signs one transaction's digest, so it means nothing outside that transaction and a
+ * token carries no transaction. Tokens drop it in both directions: emitting one hands the next
+ * owner a witness that can never verify, and keeping one on receive leaves it in place of the
+ * signature the new owner must produce, so their sweep is refused for a witness a stranger chose.
+ *
+ * Dispatch is on the keyset, not on the secret's shape. A pre-v3 secret is an arbitrary string and
+ * may happen to look like a compressed point, and that proof's witness is a NUT-11 witness which
+ * does travel. Which rules apply follows the keyset (NUT-10), the same rule the transcript uses.
+ */
+function isV3TransactionWitness(keysetId: string, secret: string): boolean {
+  return isBlsKeyset(keysetId) && isV3PointSecret(secret);
+}
+
 function templateFromToken(token: Token): TokenV4Template {
   // Keyed by token-supplied IDs, so a plain object would resolve `__proto__` etc. to inherited members.
   const idMap = Object.create(null) as { [id: string]: Proof[] };
@@ -304,8 +338,18 @@ function templateFromToken(token: Token): TokenV4Template {
         ...(p.p2pk_e && {
           pe: hexToBytes(p.p2pk_e),
         }),
-        ...(p.witness && {
-          w: JSON.stringify(p.witness),
+        ...(p.witness &&
+          !isV3TransactionWitness(id, p.secret) && {
+            w: JSON.stringify(p.witness),
+          }),
+        ...(p.spend_info && {
+          si: {
+            ...(p.spend_info.k && { k: hexToBytes(p.spend_info.k) }),
+            ...(p.spend_info.E && { e: hexToBytes(p.spend_info.E) }),
+            ...(p.spend_info.K && { i: hexToBytes(p.spend_info.K) }),
+            ...(p.spend_info.u && { u: hexToBytes(p.spend_info.u) }),
+            ...(p.spend_info.tree && { t: p.spend_info.tree.map(hexToBytes) }),
+          },
         }),
       })),
     })),
@@ -341,8 +385,18 @@ function tokenFromTemplate(template: TokenV4Template): Token {
         ...(p.pe && {
           p2pk_e: bytesToHex(p.pe),
         }),
-        ...(p.w && {
-          witness: p.w,
+        ...(p.w &&
+          !isV3TransactionWitness(bytesToHex(t.i), p.s) && {
+            witness: p.w,
+          }),
+        ...(p.si && {
+          spend_info: {
+            ...(p.si.k && { k: bytesToHex(p.si.k) }),
+            ...(p.si.e && { E: bytesToHex(p.si.e) }),
+            ...(p.si.i && { K: bytesToHex(p.si.i) }),
+            ...(p.si.u && { u: bytesToHex(p.si.u) }),
+            ...(p.si.t && { tree: p.si.t.map(bytesToHex) }),
+          },
         }),
       });
     });
@@ -636,6 +690,229 @@ function len32Framed(b: Uint8Array): Uint8Array {
 }
 
 /**
+ * True if the proof lives on a BLS (v3) keyset, so nutroot rules apply.
+ */
+export function isBlsProof(proof: Pick<Proof, 'id'>): boolean {
+  return isBlsKeyset(proof.id);
+}
+
+/**
+ * Spend-info shape of a nutroot proof (NUT-10 receive-time check 1).
+ */
+export type NutrootSpendInfoShape =
+  'bearer' | 'script-only' | 'receiver-keyed' | 'disclosed' | 'none';
+
+/**
+ * Classifies a nutroot proof's spend info by shape: which key, if any, travels with it.
+ *
+ * @remarks
+ * `bearer`: the private key `k` rides the token. `script-only`: `u` claims a NUMS internal key, so
+ * no key path exists and only the disclosed leaves spend (an `E` beside it blinds leaf keys only).
+ * `receiver-keyed`: the receiver's static key derives the spending key from `E`. `disclosed`: `K`
+ * alone travels, so the key path is held elsewhere (eg an aggregated key's cosigners). `none`: no
+ * spend info (eg the owner's own proof). Classifies the claimed shape only:
+ * `verifyNutrootSpendInfo` checks the commitments.
+ */
+export function classifyNutrootSpendInfo(proof: Pick<Proof, 'spend_info'>): NutrootSpendInfoShape {
+  const si = proof.spend_info;
+  if (si?.k) return 'bearer';
+  if (si?.u) return 'script-only';
+  if (si?.E) return 'receiver-keyed';
+  if (si?.K) return 'disclosed';
+  return 'none';
+}
+
+/**
+ * The key an auditable lock (NUT-10) commits to, fully verified; `undefined` for any other shape.
+ *
+ * @remarks
+ * An auditable lock is script-only with a NUMS-proven internal key and exactly one threshold leaf
+ * of one key (`auditableLock` builds it), so anyone holding the proof can verify who it is locked
+ * to. Verifies the commitments (NUMS offset, root, tweak), not just the claimed fields.
+ */
+export function auditableLockKey(
+  proof: Pick<Proof, 'id' | 'secret' | 'spend_info'>,
+): string | undefined {
+  const si = proof.spend_info;
+  if (!isBlsKeyset(proof.id)) return undefined;
+  if (!si || si.k || si.E || !si.K || !si.u || si.tree?.length !== 1) return undefined;
+  try {
+    const leaf = parseNutrootLeafHex(si.tree[0]);
+    if (leaf.type !== 'threshold' || leaf.n !== 1 || leaf.keys.length !== 1) return undefined;
+    verifyNutrootSpendInfo(proof.secret, si);
+    return leaf.keys[0];
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * What {@link verifySpendReceipt} checked, one flag per claim the receipt makes.
+ */
+export type SpendReceiptVerdict = {
+  /**
+   * The receipt is about this proof: its `Y` and keyset match.
+   */
+  proof: boolean;
+  /**
+   * `inputDigest` recomputes from `transcript` and this proof's own container (NUT-10).
+   */
+  inputDigest: boolean;
+  /**
+   * `commitment` recomputes from `Y`, `inputDigest` and `witness` (NUT-07). Compare it to the
+   * mint's for the same `Y` to tie the receipt to a real spend.
+   */
+  commitment: boolean;
+  /**
+   * `witness` spends this proof over `inputDigest`: a key-path signature by the secret, or a
+   * script-path leaf the secret commits to, with its signatures and any preimage.
+   */
+  witness: boolean;
+  path?: 'key' | 'script';
+  ok: boolean;
+};
+
+/**
+ * Verify a spend receipt against the proof it claims to have spent; every check is client-side.
+ *
+ * @remarks
+ * What anyone given the spent proof can establish without the mint: it is about that proof, its
+ * digest was built from the transcript it shows, and the witness satisfies the secret. `ok` is all
+ * four. An `after` leaf's time is not checked, since nothing here says when the spend happened.
+ * Whether the spend happened at all is the mint's `commitment` for `Y` (NUT-07): compare it to the
+ * receipt's yourself.
+ */
+export function verifySpendReceipt(
+  receipt: SpendReceipt,
+  proof: Pick<Proof, 'id' | 'secret' | 'amount' | 'C'>,
+): SpendReceiptVerdict {
+  // Invalid until proven otherwise
+  const verdict: SpendReceiptVerdict = {
+    proof: false,
+    inputDigest: false,
+    commitment: false,
+    witness: false,
+    ok: false,
+  };
+  if (!isBlsKeyset(proof.id) || receipt.keysetId !== proof.id) return verdict;
+  let Y: string;
+  let digest: Uint8Array;
+  try {
+    Y = hashToCurveBls(utf8ToBytes(proof.secret)).toHex(true);
+    verdict.proof = receipt.Y.toLowerCase() === Y;
+    digest = hexToBytes(receipt.inputDigest);
+    const container = proofInputContainer({
+      amount: Amount.from(proof.amount).toBigInt(),
+      keysetId: proof.id,
+      secret: proof.secret,
+      C: proof.C,
+    });
+    const recomputed = inputDigest(sha256(hexToBytes(receipt.transcript)), container);
+    verdict.inputDigest = bytesToHex(recomputed) === bytesToHex(digest);
+    verdict.commitment =
+      spendCommitment(Y, digest, receipt.witness) === receipt.commitment.toLowerCase();
+  } catch {
+    return verdict;
+  }
+  if (verifyTransactionInputWitness(digest, proof.secret, receipt.witness)) {
+    verdict.path = 'key';
+    verdict.witness = true;
+  } else {
+    verdict.path = 'script';
+    verdict.witness = scriptPathWitnessSpends(digest, proof.secret, receipt.witness);
+  }
+  verdict.ok = verdict.proof && verdict.inputDigest && verdict.commitment && verdict.witness;
+  return verdict;
+}
+
+/**
+ * A spend receipt as handed around: the spent proofs as a token plus their receipts.
+ */
+export type SpendReceiptBundle = {
+  token: string;
+  receipts: SpendReceipt[];
+};
+
+const SPEND_RECEIPT_PREFIX = 'nutrcA';
+const HEX = /^[0-9a-f]+$/i;
+
+/**
+ * Serialize a spend receipt bundle to its `nutrcA` transport string (NUT-10).
+ *
+ * @remarks
+ * `nutrcA` followed by base64url of the JSON `{ token, receipts }`, so a receipt travels as one
+ * recognisable blob the way a token or a signing package does.
+ */
+export function encodeSpendReceipt(bundle: SpendReceiptBundle): string {
+  return `${SPEND_RECEIPT_PREFIX}${encodeUint8ToBase64Url(utf8ToBytes(JSON.stringify(bundle)))}`;
+}
+
+/**
+ * Parse a `nutrcA` transport string back to its bundle, checking shape but not validity.
+ *
+ * @throws If the prefix, encoding, or shape is wrong; verify each receipt with
+ *   {@link verifySpendReceipt} afterwards.
+ */
+export function decodeSpendReceipt(input: string): SpendReceiptBundle {
+  if (!input.startsWith(SPEND_RECEIPT_PREFIX)) {
+    throw new CTSError(`Invalid spend receipt: must start with "${SPEND_RECEIPT_PREFIX}"`);
+  }
+  let data: unknown;
+  try {
+    data = JSON.parse(
+      new TextDecoder().decode(decodeBase64UrlToUint8(input.slice(SPEND_RECEIPT_PREFIX.length))),
+    );
+  } catch (e) {
+    throw new CTSError('Failed to parse spend receipt', { cause: e });
+  }
+  const bundle = data as SpendReceiptBundle;
+  const isHex = (v: unknown, len?: number) =>
+    typeof v === 'string' && HEX.test(v) && (len === undefined || v.length === len);
+  const wellFormed =
+    isObj(bundle) &&
+    typeof bundle.token === 'string' &&
+    Array.isArray(bundle.receipts) &&
+    bundle.receipts.length > 0 &&
+    bundle.receipts.every(
+      (r) =>
+        isObj(r) &&
+        isHex(r.Y) &&
+        isHex(r.keysetId) &&
+        isHex(r.inputDigest, 64) &&
+        typeof r.witness === 'string' &&
+        isHex(r.commitment, 64) &&
+        isHex(r.transcript),
+    );
+  if (!wellFormed) throw new CTSError('Malformed spend receipt');
+  return bundle;
+}
+
+function scriptPathWitnessSpends(digest: Uint8Array, secretHex: string, witness: string): boolean {
+  try {
+    const w = JSON.parse(witness) as {
+      leaf?: string;
+      control?: { K?: string; path?: string[] };
+      signatures?: string[];
+      preimage?: string;
+    };
+    if (!w.leaf || !w.control?.K || !Array.isArray(w.control.path)) return false;
+    const leaf = parseNutrootLeafHex(w.leaf);
+    const committed = verifyNutrootCommitment(
+      hexToBytes(secretHex),
+      hexToBytes(w.control.K),
+      hexToBytes(w.leaf),
+      w.control.path.map((h) => hexToBytes(h)),
+    );
+    const signed = countLeafSigners(leaf, digest, w.signatures ?? []) >= leaf.n;
+    const unlocked =
+      leaf.hash === undefined || (!!w.preimage && verifyHTLCHash(w.preimage, leaf.hash));
+    return committed && signed && unlocked;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Returns a copy of `proofs` sorted by keyset id (lexicographic).
  */
 export function sortProofsById(proofs: Proof[]) {
@@ -886,6 +1163,7 @@ export function hasValidDleq(
 
   if (isBlsKeyset(proof.id)) {
     try {
+      assertV3PointSecret(proof.secret);
       const K2 = pointFromHexG2(keyset.keys[proof.amount.toString()]);
       return verifyUnblindedSignatureBls(
         K2,
@@ -963,6 +1241,19 @@ export function verifyProofsForReceive(
 
   if (blsProofs.length === 0) return;
 
+  // Receive-time verification cascade (nutroot secrets 2.5.1): spend info must reconstruct the
+  // secret (bare key, or complete disclosed tree). Anything partial or mismatched rejects.
+  for (const p of blsProofs) {
+    if (!p.spend_info) continue;
+    try {
+      verifyNutrootSpendInfo(p.secret, p.spend_info);
+    } catch (e) {
+      throw new CTSError(
+        `${e instanceof Error ? e.message : 'Invalid spend info'}${offenderSuffix(p)}`,
+      );
+    }
+  }
+
   // Batch path bypasses hasValidDleq, so the amount-in-keyset check is repeated here.
   const items = blsProofs.map((p) => {
     const ks = getKeyset(p.id);
@@ -974,6 +1265,7 @@ export function verifyProofsForReceive(
     let K2: G2Point;
     let C: G1Point;
     try {
+      assertV3PointSecret(p.secret);
       K2 = pointFromHexG2(ks.keys[p.amount.toString()]);
       C = pointFromHexG1(p.C);
     } catch {

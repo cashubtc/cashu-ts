@@ -165,17 +165,17 @@ export class WalletEvents {
    * persisting `start + count` to storage), make sure to handle errors inside it to avoid unhandled
    * rejections.
    *
-   * Typical use: persist `start + count` for the `keysetId` so counters survive restarts.
+   * Typical use: persist `start + count` for the `counterKey` so counters survive restarts.
    *
    * @example
    *
    * ```ts
-   * wallet.on.countersReserved(({ keysetId, start, count, next }) => {
-   *   saveNextToDb(keysetId, start + count); // handle async errors inside saveNextToDb
+   * wallet.on.countersReserved(({ counterKey, start, count, next }) => {
+   *   saveNextToDb(counterKey, start + count); // handle async errors inside saveNextToDb
    * });
    * ```
    *
-   * @param cb Handler called with { keysetId, start, count }.
+   * @param cb Handler called with { counterKey, start, count }.
    * @returns A function that unsubscribes the handler.
    */
   public countersReserved(

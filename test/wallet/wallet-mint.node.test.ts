@@ -1208,6 +1208,7 @@ describe('generic mint/melt methods', () => {
         http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
           HttpResponse.json({
             quote: 'bolt11-quote-1',
+            pubkey: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
             request: 'lnbc10u1pfake', // HRP encodes the quoted 1,000 sat
             unit: 'sat',
             amount: 1000,
@@ -1219,7 +1220,10 @@ describe('generic mint/melt methods', () => {
       const wallet = new Wallet(mint, { unit });
       await wallet.loadMint();
 
-      const quote = await wallet.createMintQuoteBolt11(1000);
+      const quote = await wallet.createMintQuoteBolt11(
+        1000,
+        '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+      );
 
       expect(quote.quote).toBe('bolt11-quote-1');
       expect(quote.amount).toBeInstanceOf(Amount);
@@ -1242,7 +1246,12 @@ describe('generic mint/melt methods', () => {
       const wallet = new Wallet(mint, { unit });
       await wallet.loadMint();
 
-      await expect(wallet.createMintQuoteBolt11(1)).rejects.toThrow(/invoice amount/i);
+      await expect(
+        wallet.createMintQuoteBolt11(
+          1,
+          '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+        ),
+      ).rejects.toThrow(/invoice amount/i);
     });
 
     test('rejects a mint quote whose amount differs from the request', async () => {
@@ -1261,7 +1270,12 @@ describe('generic mint/melt methods', () => {
       const wallet = new Wallet(mint, { unit });
       await wallet.loadMint();
 
-      await expect(wallet.createMintQuoteBolt11(1)).rejects.toThrow(/amount/i);
+      await expect(
+        wallet.createMintQuoteBolt11(
+          1,
+          '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+        ),
+      ).rejects.toThrow(/amount/i);
     });
 
     test('accepts a mint quote whose invoice matches the requested sat amount', async () => {
@@ -1269,6 +1283,7 @@ describe('generic mint/melt methods', () => {
         http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
           HttpResponse.json({
             quote: 'bolt11-amount-match',
+            pubkey: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
             request: invoice, // 2,000 sat fixture invoice
             unit: 'sat',
             amount: 2000,
@@ -1280,7 +1295,10 @@ describe('generic mint/melt methods', () => {
       const wallet = new Wallet(mint, { unit });
       await wallet.loadMint();
 
-      const quote = await wallet.createMintQuoteBolt11(2000);
+      const quote = await wallet.createMintQuoteBolt11(
+        2000,
+        '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+      );
       expect(quote.quote).toBe('bolt11-amount-match');
     });
 
@@ -1669,9 +1687,12 @@ describe('generic mint/melt methods', () => {
       const wallet = new Wallet(mint, { unit: 'sat' });
       await wallet.loadMint();
 
-      await expect(wallet.createMintQuoteBolt11(10)).rejects.toThrow(
-        "Mint does not support bolt11 mint for unit 'sat'",
-      );
+      await expect(
+        wallet.createMintQuoteBolt11(
+          10,
+          '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+        ),
+      ).rejects.toThrow("Mint does not support bolt11 mint for unit 'sat'");
     });
 
     test('checkMintQuoteOnchain returns normalized onchain quote', async () => {
