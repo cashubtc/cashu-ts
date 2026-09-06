@@ -129,6 +129,7 @@ export {
   HttpResponseError,
   RateLimitError,
   StaleKeysetError,
+  InvalidScalarError,
   UnknownKeysetError,
 } from './model/Errors';
 

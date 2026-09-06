@@ -812,6 +812,13 @@ export function injectWebSocketImpl(ws: typeof WebSocket): void;
 export type IntRange<F extends number, T extends number> = Exclude<Enumerate<T>, Enumerate<F>>;
 
 // @public
+export class InvalidScalarError extends CTSError {
+    constructor(counter: number, options?: {
+        cause?: unknown;
+    });
+}
+
+// @public
 export function isBlsKeyset(keysetId: string): boolean;
 
 // @public

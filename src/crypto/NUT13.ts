@@ -4,7 +4,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { HDKey, HARDENED_OFFSET } from '@scure/bip32';
 
-import { CTSError } from '../model/Errors';
+import { CTSError, InvalidScalarError } from '../model/Errors';
 import { isBase64String } from '../utils';
 
 import { BLS_FR_ORDER } from './curve_bls';
@@ -197,14 +197,18 @@ function deriveBip32SecretAndBlindingFactor(
   if (!Number.isInteger(counter) || counter < 0 || counter >= 0x80000000) {
     throw new CTSError('Counter must be an integer in the range 0 <= counter < 2^31');
   }
-  const baseKey = parentKey.deriveChild(HARDENED_OFFSET + counter);
-  const secret = baseKey.deriveChild(0).privateKey;
-  const blindingFactor = baseKey.deriveChild(1).privateKey;
-  /* c8 ignore next */
-  if (secret === null || blindingFactor === null) {
-    throw new CTSError('Could not derive private key');
+  // After the range check, the only way a child derivation fails is an invalid scalar (BIP-32).
+  try {
+    const baseKey = parentKey.deriveChild(HARDENED_OFFSET + counter);
+    const secret = baseKey.deriveChild(0).privateKey;
+    const blindingFactor = baseKey.deriveChild(1).privateKey;
+    /* c8 ignore next */
+    if (secret === null || blindingFactor === null) throw new Error('Could not derive private key');
+    return { secret, blindingFactor };
+    /* c8 ignore next 3 */
+  } catch (e) {
+    throw new InvalidScalarError(counter, { cause: e });
   }
-  return { secret, blindingFactor };
 }
 
 function deriveHmacSecretAndBlindingFactor(
@@ -233,7 +237,7 @@ function deriveHmacSecretAndBlindingFactor(
   const base = v2BaseMessage(keysetId, counter);
   return {
     secret: hmac(sha256, seed, concatBytes(base, hexToBytes('00'))),
-    blindingFactor: computeV2BlindingFactor(seed, base),
+    blindingFactor: computeV2BlindingFactor(seed, base, counter),
   };
 }
 
@@ -321,19 +325,17 @@ function deriveV3Scalar(
     return digest; // raw 32 bytes; x < order < 2^256 so the BE encoding matches the digest
   }
   /* c8 ignore next */
-  throw new CTSError(`V3 derivation failed for type ${type}`);
+  throw new InvalidScalarError(counter);
 }
 
-function computeV2BlindingFactor(seed: Uint8Array, base: Uint8Array): Uint8Array {
+function computeV2BlindingFactor(seed: Uint8Array, base: Uint8Array, counter: number): Uint8Array {
   // V2 (secp256k1): single HMAC, single-subtraction modular reduction. SECP256K1_N is ~2^256 so
   // at most one subtraction is needed; bias is ~2^-128 (negligible).
   const digest = hmac(sha256, seed, concatBytes(base, hexToBytes('01')));
   const x = bytesToNumberBE(digest);
   const reduced = x >= SECP256K1_N ? x - SECP256K1_N : x;
   /* c8 ignore next */
-  if (reduced === 0n) {
-    throw new CTSError('Derived invalid blinding scalar r == 0');
-  }
+  if (reduced === 0n) throw new InvalidScalarError(counter);
   return numberToBytesBE(reduced, 32);
 }
 

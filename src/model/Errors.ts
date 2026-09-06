@@ -139,6 +139,21 @@ export class StaleKeysetError extends CTSError {
 }
 
 /**
+ * A counter's NUT-13 derivation produced an invalid scalar, so it can hold no proof.
+ *
+ * @remarks
+ * Around 2^-128 per counter. Issuance fails and the caller moves on to fresh counters, so a restore
+ * scan skips the counter instead of aborting.
+ */
+export class InvalidScalarError extends CTSError {
+  constructor(counter: number, options?: { cause?: unknown }) {
+    super(`Derivation for counter ${counter} produced an invalid scalar`, options);
+    this.name = 'InvalidScalarError';
+    Object.setPrototypeOf(this, InvalidScalarError.prototype);
+  }
+}
+
+/**
  * This error is thrown when the server responds with 429 Too Many Requests. `retryAfterMs` is the
  * parsed `Retry-After` header in milliseconds, or `undefined` when the header is absent or
  * unparseable.

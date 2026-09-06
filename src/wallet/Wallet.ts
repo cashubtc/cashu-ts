@@ -41,6 +41,7 @@ import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
 import {
   CTSError,
+  InvalidScalarError,
   MeltChangeError,
   StaleKeysetError,
   UnknownKeysetError,
@@ -2349,6 +2350,15 @@ class Wallet {
       config ?? {};
     let counter = config?.counter ?? 0;
     const bound = config?.maxCounter ?? Number.MAX_SAFE_INTEGER;
+    this.failIf(
+      !Number.isSafeInteger(counter) || counter < 0 || !Number.isSafeInteger(bound) || bound < 0,
+      'counter and maxCounter must be non-negative safe integers',
+    );
+    // A zero batch would never advance the counter; gapLimit may be Infinity for a bounded scan.
+    this.failIf(
+      !Number.isSafeInteger(batchSize) || batchSize < 1 || !(gapLimit >= 1),
+      'batchSize must be a positive integer and gapLimit at least 1',
+    );
     const probeSize = Math.min(gapLimit, this.maxArrayLength);
     const restoredProofs: Proof[] = [];
 
@@ -2503,21 +2513,23 @@ class Wallet {
     const seed = this._seed;
     // Resolve once: an auto-bound wallet can rebind during the awaits below
     const scanId = keysetId ?? this.keysetId;
-    await this._keyChain.ensureKeysetKeys(scanId);
+    // Under strictCachedKeysets, skip the fetch: getKeyset below reports a keyless keyset.
+    if (!this._strictCachedKeysets) {
+      await this._keyChain.ensureKeysetKeys(scanId);
+    }
     const keyset = this.getKeyset(scanId);
     const derive = createSecretAndBlindingFactorDeriver(seed, keyset.id);
 
     // NUT-07 state check: needs only the secrets, so nothing is blinded until the spent counters have
-    // dropped out below. A counter whose derivation is invalid was skipped at issuance too, so it
-    // can hold no signature.
+    // dropped out below. An invalid-scalar counter failed at issuance too, so it holds nothing.
     const counters: number[] = [];
     const secrets: string[] = [];
     for (let c = start; c < start + count; c++) {
       try {
         secrets.push(bytesToHex(derive(c).secret));
         counters.push(c);
-      } catch {
-        continue;
+      } catch (e) {
+        if (!(e instanceof InvalidScalarError)) throw e;
       }
     }
     if (counters.length === 0) return { proofs: [], used: false };

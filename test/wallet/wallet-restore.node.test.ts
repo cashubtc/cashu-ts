@@ -10,8 +10,10 @@ import {
   OutputData,
   createSecretAndBlindingFactorDeriver,
   hashToCurve,
+  InvalidScalarError,
   type Proof,
 } from '../../src';
+import * as NUT13 from '../../src/crypto/NUT13';
 import { PUBKEYS } from '../consts';
 
 import {
@@ -387,5 +389,70 @@ describe('restore', () => {
       (b) => (counterByB_.get(b) ?? Infinity) <= SPENT_THROUGH,
     );
     expect(spentRevealed).toEqual([]);
+  });
+
+  test('skips an invalid-scalar counter and recovers proofs past it', async () => {
+    const seed = randomBytes(32);
+    const keysetId = dummyKeysResp.keysets[0].id;
+    const VALID_POINT = '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422';
+    const counterByB_ = new Map<string, number>();
+    for (const c of [0, 2]) {
+      counterByB_.set(
+        OutputData.createSingleDeterministicData(0, seed, c, keysetId).blindedMessage.B_,
+        c,
+      );
+    }
+    server.use(
+      http.post(mintUrl + '/v1/checkstate', async ({ request }) => {
+        const { Ys } = (await request.json()) as { Ys: string[] };
+        return HttpResponse.json({
+          states: Ys.map((Y) => ({ Y, state: CheckStateEnum.UNSPENT, witness: null })),
+        });
+      }),
+      http.post(mintUrl + '/v1/restore', async ({ request }) => {
+        const body = (await request.json()) as { outputs: Array<{ B_: string }> };
+        const issued = body.outputs.filter((o) => counterByB_.has(o.B_));
+        return HttpResponse.json({
+          outputs: issued,
+          signatures: issued.map(() => ({ id: keysetId, amount: 1, C_: VALID_POINT })),
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit, bip39seed: seed, logger });
+    await wallet.loadMint();
+    // Invalid scalars are ~2^-128 per counter, so force one at counter 1
+    const original = NUT13.createSecretAndBlindingFactorDeriver;
+    const spy = vi
+      .spyOn(NUT13, 'createSecretAndBlindingFactorDeriver')
+      .mockImplementation((seed, id) => {
+        const derive = original(seed, id);
+        return (counter) => {
+          if (counter === 1) throw new InvalidScalarError(counter);
+          return derive(counter);
+        };
+      });
+    try {
+      // batchSize 1 puts the bad counter in a batch of its own, so the all-invalid path runs too
+      const { proofs, lastCounterWithSignature } = await wallet.batchRestore({
+        batchSize: 1,
+        gapLimit: 1,
+      });
+      expect(proofs).toHaveLength(2);
+      expect(lastCounterWithSignature).toBe(2);
+      expect(spy).toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test('an invalid counter rejects rather than reporting an empty scan', async () => {
+    const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(32) });
+    await wallet.loadMint();
+    await expect(wallet.batchRestore({ counter: 0.5, gapLimit: 3 })).rejects.toThrow(
+      /non-negative safe integers/,
+    );
+    // a zero batch never advances the counter, so the scan would loop forever
+    await expect(wallet.batchRestore({ batchSize: 0 })).rejects.toThrow(/batchSize must be/);
+    await expect(wallet.batchRestore({ gapLimit: 0 })).rejects.toThrow(/gapLimit at least 1/);
   });
 });
