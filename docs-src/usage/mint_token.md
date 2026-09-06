@@ -142,18 +142,21 @@ Mints that support NUT-29 can check and mint multiple quotes in single requests.
 ```ts
 const checked = await wallet.checkMintQuoteBatchBolt11(['quote-1', 'quote-2']);
 
-// prepareBatchMint() fails if any quote is unpaid, so batch the paid ones only
-const paid = checked.filter((quote) => quote.state === MintQuoteState.PAID);
+// Quote IDs the mint holds no record of come back as `{ quote, unknown: true }`
+// entries. prepareBatchMint() fails if any quote has nothing mintable, so batch
+// the mintable ones only. isMintableQuote() drops unknown entries and quotes
+// with nothing mintable (`amount_paid - amount_issued`), and narrows the type.
+const mintable = checked.filter(isMintableQuote);
 
 const preview = await wallet.prepareBatchMint(
   'bolt11',
-  paid.map((quote) => ({ amount: quote.amount, quote })),
+  mintable.map((quote) => ({ amount: quote.amount, quote })),
 );
 
 const newProofs = await wallet.completeBatchMint(preview);
 ```
 
-- `checkMintQuoteBatch*()` returns quote objects in the same order as the request.
+- `checkMintQuoteBatch*()` returns one entry per requested quote ID, in request order.
 - Custom methods use `wallet.checkMintQuoteBatch(method, quotes)` with the same `normalize`
   callback as `checkMintQuote()` (see section 4).
 - Mints that predate the batch check endpoint return an error; fall back to the per-quote

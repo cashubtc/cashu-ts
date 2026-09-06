@@ -58,7 +58,7 @@ import type {
 import type { SerializedBlindedSignature } from '../model/types/blinded';
 import type { KeyChainCache } from '../model/types/keyset';
 import { CheckStateEnum, type ProofState } from '../model/types/NUT07';
-import { type BatchMintRequest } from '../model/types/NUT29';
+import { type BatchMintRequest, isUnknownQuote, type UnknownQuote } from '../model/types/NUT29';
 import type { Proof, ProofLike } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 import { BATCH_POOL_SIZE, runPool } from '../transport';
@@ -2433,19 +2433,23 @@ class Wallet {
    * be used to coerce method-specific response fields. Mints that predate this endpoint return an
    * error; callers can fall back to `checkMintQuote()` per quote id when needed.
    *
+   * Quote IDs the mint holds no record of come back as `{ quote, unknown: true }` entries in place;
+   * narrow with `isUnknownQuote()`.
+   *
    * For first-class methods, prefer the typed helpers: `checkMintQuoteBatchBolt11()`,
    * `checkMintQuoteBatchBolt12()`.
    * @param method The payment method (e.g., 'bolt11', 'bolt12', 'bacs', 'swift').
    * @param quotes Quote IDs or quote objects (each object must have a `quote` field).
    * @param options.normalize Optional callback to normalize method-specific response fields.
-   * @returns Mint quote responses in request order.
+   * @returns Mint quote responses or unknown entries, in request order.
    * @experimental only supported by CDK mint >= 0.16.0
    */
   async checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(
     method: string,
     quotes: Array<string | Pick<TRes, 'quote'>>,
     options?: { normalize?: (raw: Record<string, unknown>) => TRes },
-  ): Promise<TRes[]> {
+  ): Promise<Array<TRes | UnknownQuote>> {
+    this.enforceBatchSizeLimit(quotes.length, 'checkMintQuoteBatch');
     const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
     return this.mint.checkMintQuoteBatch<TRes>(method, quoteIds, {
       normalize: options?.normalize,
@@ -2457,17 +2461,21 @@ class Wallet {
    *
    * @remarks
    * Mints that predate this endpoint return an error; callers can fall back to
-   * `checkMintQuoteBolt11()` per quote id when needed.
+   * `checkMintQuoteBolt11()` per quote id when needed. Quote IDs the mint holds no record of come
+   * back as `{ quote, unknown: true }` entries in place; narrow with `isUnknownQuote()`.
    * @param quotes Quote IDs or quote objects.
-   * @returns Updated BOLT11 mint quotes in request order.
+   * @returns Updated BOLT11 mint quotes or unknown entries, in request order.
    * @experimental only supported by CDK mint >= 0.16.0
    */
   async checkMintQuoteBatchBolt11(
     quotes: Array<string | MintQuoteBolt11Response>,
-  ): Promise<MintQuoteBolt11Response[]> {
+  ): Promise<Array<MintQuoteBolt11Response | UnknownQuote>> {
+    this.enforceBatchSizeLimit(quotes.length, 'checkMintQuoteBatchBolt11');
     const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
     const res = await this.mint.checkMintQuoteBatchBolt11(quoteIds);
-    for (const quote of res) this.assertBolt11MintQuoteAmount(quote, quote.amount);
+    for (const quote of res) {
+      if (!isUnknownQuote(quote)) this.assertBolt11MintQuoteAmount(quote, quote.amount);
+    }
     return res;
   }
 
@@ -2476,14 +2484,16 @@ class Wallet {
    *
    * @remarks
    * Mints that predate this endpoint return an error; callers can fall back to
-   * `checkMintQuoteBolt12()` per quote id when needed.
+   * `checkMintQuoteBolt12()` per quote id when needed. Quote IDs the mint holds no record of come
+   * back as `{ quote, unknown: true }` entries in place; narrow with `isUnknownQuote()`.
    * @param quotes Quote IDs or quote objects.
-   * @returns Updated BOLT12 mint quotes in request order.
+   * @returns Updated BOLT12 mint quotes or unknown entries, in request order.
    * @experimental only supported by CDK mint >= 0.16.0
    */
   async checkMintQuoteBatchBolt12(
     quotes: Array<string | MintQuoteBolt12Response>,
-  ): Promise<MintQuoteBolt12Response[]> {
+  ): Promise<Array<MintQuoteBolt12Response | UnknownQuote>> {
+    this.enforceBatchSizeLimit(quotes.length, 'checkMintQuoteBatchBolt12');
     const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
     return this.mint.checkMintQuoteBatchBolt12(quoteIds);
   }
@@ -2523,6 +2533,17 @@ class Wallet {
         requiresDleq && !isV3 && !signatures[i].dleq,
         `Mint supports NUT-12, but returned a signature without DLEQ proof at index ${i}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
       );
+    }
+  }
+
+  private enforceBatchSizeLimit(size: number, op: string): void {
+    const nut29 = this._mintInfo?.isSupported(29);
+    const nut29Params = nut29?.supported ? nut29.params : undefined;
+    const effectiveLimit = nut29Params?.max_batch_size ?? ABSOLUTE_MAX_BATCH_SIZE;
+    if (size > effectiveLimit) {
+      const limitSource =
+        nut29Params?.max_batch_size != null ? `mint's advertised limit` : `cashu-ts internal cap`;
+      this.failIf(true, `${op}: batch size ${size} exceeds ${limitSource} of ${effectiveLimit}`);
     }
   }
 
@@ -2870,7 +2891,8 @@ class Wallet {
    * NOTE:
    *
    * - Any quote without a pubkey is considered unlocked. Pass `pubkey` for locked quotes.
-   * - Check all quotes are in the PAID state. If any quote is unpaid, the entire batch with fail.
+   * - Quotes must have a positive mintable amount (`amount_paid - amount_issued`). If any quote has
+   *   nothing mintable, the entire batch fails.
    *
    * @param method Payment method identifier (e.g., 'bolt11', 'bolt12').
    * @param entries Array of per-quote parameters: `{ amount, quote }`.
@@ -2889,25 +2911,11 @@ class Wallet {
     outputType?: OutputType,
   ): Promise<BatchMintPreview<TQuote>> {
     this.failIf(entries.length === 0, 'prepareBatchMint: no entries provided');
-
-    // Enforce NUT-29 batch-size limit advertised by the mint, clamped to our absolute cap.
-    // If the mint does not advertise NUT-29 info, the absolute cap still applies.
-    const nut29 = this._mintInfo?.isSupported(29);
-    const nut29Params = nut29?.supported ? nut29.params : undefined;
-
-    const effectiveLimit = nut29Params?.max_batch_size ?? ABSOLUTE_MAX_BATCH_SIZE;
-
-    if (entries.length > effectiveLimit) {
-      const limitSource =
-        nut29Params?.max_batch_size != null ? `mint's advertised limit` : `cashu-ts internal cap`;
-      this.failIf(
-        true,
-        `prepareBatchMint: batch size ${entries.length} exceeds ` +
-          `${limitSource} of ${effectiveLimit}`,
-      );
-    }
+    this.enforceBatchSizeLimit(entries.length, 'prepareBatchMint');
 
     // Warn if the requested method is not in the mint's NUT-29 supported methods
+    const nut29 = this._mintInfo?.isSupported(29);
+    const nut29Params = nut29?.supported ? nut29.params : undefined;
     if (nut29Params?.methods?.length) {
       if (!nut29Params.methods.includes(method)) {
         this._logger.warn(
@@ -2936,6 +2944,9 @@ class Wallet {
     // Parse amounts and determine keyset
     const keyset = this.getOutputKeyset(keysetId);
     const amounts = entries.map((e) => this.parseAmount(e.amount, `prepareBatchMint: ${method}`));
+    amounts.forEach((amount, i) =>
+      this.validateMintQuoteAvailableAmount(method, entries[i].quote, amount),
+    );
     const totalAmount = Amount.sum(amounts);
 
     // Shape consolidated outputs over the total amount
