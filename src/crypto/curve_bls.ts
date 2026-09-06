@@ -309,8 +309,9 @@ export function deriveBatchWeights(
   for (const it of items) {
     transcript.update(it.C.toBytes(true));
     transcript.update(it.K2.toBytes(true));
-    transcript.update(numberToBytesBE(it.secret.length, 4));
-    transcript.update(it.secret);
+    const secret = nutrootSecretHashInput(it.secret);
+    transcript.update(numberToBytesBE(secret.length, 4));
+    transcript.update(secret);
   }
   // 32-byte challenge collapses the transcript so per-item derivation below is O(1), not O(n).
   const challenge = transcript.digest();

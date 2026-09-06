@@ -436,8 +436,9 @@ export function recoverV3LeafKeys(
  *
  * @remarks
  * A self-owned plain v3 proof needs no stored spend info: `k` re-derives from the seed (type
- * `0x00`). Scans counters `[0, maxCounter)` and trial-matches each derived `K` against the wanted
- * secrets. Returns a map of secret hex to its 32-byte private key; unmatched secrets are absent.
+ * `0x00`). Legacy proofs without their bearer key require scanning counters `[0, maxCounter)` and
+ * trial-matching each derived `K` against the wanted secrets. Returns a map of secret hex to its
+ * 32-byte private key; unmatched secrets are absent.
  * @param seed - Wallet seed.
  * @param keysetId - V3 (`02…`) keyset id.
  * @param secretsHex - The 66-char hex secrets to resolve.
@@ -452,15 +453,15 @@ export function recoverV3SecretKeys(
   if (!isBlsKeyset(keysetId)) {
     throw new CTSError('Secret key recovery is a v3 keyset operation');
   }
-  if (!Number.isInteger(maxCounter) || maxCounter < 0 || maxCounter > 1 << 20) {
-    throw new CTSError('maxCounter must be an integer in [0, 2^20]');
+  if (!Number.isSafeInteger(maxCounter) || maxCounter < 0) {
+    throw new CTSError('maxCounter must be an integer in [0, 2^53 - 1]');
   }
   const wanted = new Set(secretsHex);
   const found = new Map<string, Uint8Array>();
   for (let counter = 0; counter < maxCounter && found.size < wanted.size; counter++) {
-    const { secret, secretKey } = deriveSecretAndBlindingFactor(seed, keysetId, counter);
-    const secretHex = bytesToHex(secret);
-    if (wanted.has(secretHex) && secretKey) {
+    const secretKey = deriveV3Scalar(seed, keysetId, counter, DERIVATION_TYPE.secretKey);
+    const secretHex = bytesToHex(getPubKeyFromPrivKey(secretKey));
+    if (wanted.has(secretHex)) {
       found.set(secretHex, secretKey);
     }
   }

@@ -114,6 +114,7 @@ export class WalletOps {
     // Only a locked request negotiates an encoding; an unlocked one may use any keyset.
     const family = lock || nutroot ? (v3 ? 'v3' : 'legacy') : undefined;
     const builder = new SendBuilder(wallet, base.add(fee), proofs, family).includeFees(true);
+    if (family) builder.keyset(wallet.keysetId);
     if (nutroot && v3) {
       return builder.asLocked(nutrootToLockOptions(nutroot));
     }
@@ -426,6 +427,12 @@ export class SendBuilder {
     if ((this.offlineExact || this.offlineClose) && (this.sendOT || this.keepOT)) {
       throw new CTSError(
         'Offline selection cannot be combined with custom output types. Remove send/keep output configuration, or use an online swap.',
+      );
+    }
+
+    if ((this.offlineExact || this.offlineClose) && this.config.scriptPath?.length) {
+      throw new CTSError(
+        'Offline selection cannot execute a script-path spend; use an online swap.',
       );
     }
 

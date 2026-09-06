@@ -112,7 +112,7 @@ export class OutputData implements OutputDataLike {
   secret: Uint8Array;
   ephemeralE?: string;
   /**
-   * Key behind a randomly generated v3 point secret.
+   * Key behind a v3 point secret.
    *
    * @remarks
    * Set on v3 keysets by random and deterministic creation alike: the secret is a pubkey and its

@@ -444,6 +444,9 @@ export class PaymentRequest {
       throw new CTSError('malformed request: a NUMS receiver key requires leaves');
     }
     if (!nutroot.leaves?.length) {
+      if (nutroot.blindKeys?.length) {
+        throw new CTSError('malformed request: blind-me keys require a tree');
+      }
       return { receiverKey };
     }
     if (nutroot.leaves.length > NUTROOT_MAX_TREE_LEAVES) {
@@ -458,12 +461,17 @@ export class PaymentRequest {
       }
       return leaf;
     });
+    const blindKeys = (nutroot.blindKeys ?? []).map((key) => normalizeSecpPubkey(key));
+    const leafKeys = new Set(leaves.flatMap((leaf) => leaf.keys));
+    for (const key of blindKeys) {
+      if (!leafKeys.has(key)) {
+        throw new CTSError(`blind-me key is not in the requested tree: ${key}`);
+      }
+    }
     return {
       receiverKey,
       leaves,
-      ...(nutroot.blindKeys?.length && {
-        blindKeys: nutroot.blindKeys.map((k) => k.toLowerCase()),
-      }),
+      ...(blindKeys.length && { blindKeys }),
     };
   }
 
@@ -739,6 +747,7 @@ export class PaymentRequestBuilder {
     this._omitted = {};
     if (!semantic) {
       this._nut10 = p2pkOptionsToPRNut10(lock as P2PKOptions);
+      this._nutroot = undefined;
       return this;
     }
     const omitted: { nut10?: string; nutroot?: string } = {};

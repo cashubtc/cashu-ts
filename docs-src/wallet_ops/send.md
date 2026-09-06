@@ -60,7 +60,11 @@ const mySendData: OutputData[] = [/* amounts must sum to 15 */];
 const { keep, send } = await wallet.ops.send(15, myProofs).asCustom(mySendData).run();
 ```
 
+Normal sends swap v3 proofs that lack transferable bearer keys, even when the amounts match exactly. Supplying a script-path plan also forces a swap.
+
 ## 6) Force pure offline (no mint calls)
+
+Explicit offline modes forward existing proofs without unlocking them. They reject script-path plans because v3 transaction signatures require an online swap.
 
 **Exact match only (throws on no exact match):**
 

@@ -384,6 +384,18 @@ describe('deriveBatchWeights (Fiat-Shamir transcript)', () => {
 
   const itemsA = () => [makeItem('s1', 3n, 5n), makeItem('s2', 4n, 5n), makeItem('s3', 7n, 11n)];
 
+  test('point-secret batch weights use the decoded hash-to-curve bytes', () => {
+    const pointSecret = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+    const item = makeItem(pointSecret, 3n, 5n);
+    const raw = { ...item, secret: hexToBytes(pointSecret) };
+    expect(hashToCurveBls(item.secret).equals(hashToCurveBls(raw.secret))).toBe(true);
+    expect(deriveBatchWeights([item])).toEqual(deriveBatchWeights([raw]));
+    // NUT-00 transcript with len32(secret) = 33 and the decoded generator point.
+    expect(deriveBatchWeights([item])).toEqual([
+      14026328119170788921001778864430853500424360158249457134663022601936006138898n,
+    ]);
+  });
+
   test('same inputs → identical weights (deterministic, no CSPRNG dependency)', () => {
     const ws1 = deriveBatchWeights(itemsA());
     const ws2 = deriveBatchWeights(itemsA());
