@@ -1,5 +1,7 @@
 import { utf8ToBytes } from '@noble/hashes/utils.js';
 
+import { isBlsKeyset } from '../crypto/curves';
+import { requestDigest, signTransactionInput } from '../crypto/transcript';
 import { type Logger, NULL_LOGGER } from '../logger';
 import { Amount } from '../model/Amount';
 import { CTSError } from '../model/Errors';
@@ -14,14 +16,15 @@ import type {
 } from '../model/types';
 import request, { type RequestFn } from '../transport';
 import {
-  joinUrls,
-  verifyProofsForReceive,
-  encodeUint8ToBase64UrlPadded,
+  ABSOLUTE_MAX_PER_MINT,
   decodeBase64UrlToUint8,
+  hexToBytes,
+  joinUrls,
+  encodeUint8ToBase64UrlPadded,
   normalizeMintKeys,
   normalizeMintKeyset,
   normalizeSafeIntegerMetadata,
-  ABSOLUTE_MAX_PER_MINT,
+  verifyProofsForReceive,
 } from '../utils';
 import { KeyChain, type Keyset } from '../wallet';
 
@@ -263,9 +266,11 @@ export class AuthManager implements AuthProvider {
   async getBlindAuthToken({
     method,
     path,
+    body,
   }: {
     method: 'GET' | 'POST';
     path: string;
+    body?: string;
   }): Promise<string> {
     if (this.info && !this.info.requiresBlindAuthToken(method, path)) {
       this.logger.warn('Endpoint is not marked as protected by NUT-22; still issuing BAT', {
@@ -275,19 +280,46 @@ export class AuthManager implements AuthProvider {
     }
 
     return this.withLock(async () => {
+      // A version 02 BAT without its signing key can never be presented (eg a
+      // serializer stripped spend_info): purge before counting, so one bad
+      // proof neither drains the pool one throw at a time nor wedges it.
+      const unusable = this.pool.filter((p) => isBlsKeyset(p.id) && !p.spend_info?.k);
+      if (unusable.length > 0) {
+        this.logger.warn('AuthManager: discarding version 02 BATs missing their signing key', {
+          count: unusable.length,
+        });
+        this.pool = this.pool.filter((p) => !unusable.includes(p));
+      }
       await this.ensure(1);
       if (this.pool.length === 0) {
         throw new CTSError('AuthManager: no BATs available and minting failed');
       }
-      // Pop one BAT and serialize without DLEQ for the header. Per NUT-22, wallets
-      // SHOULD delete BAT even on error, so no need to track it in-flight.
-      const proof = this.pool.pop()!;
+      // Peek, sign, then pop: a proof that cannot produce its witness must not
+      // drain the pool. Once popped, per NUT-22 wallets SHOULD delete the BAT
+      // even on error, so no in-flight tracking is needed.
+      const proof = this.pool[this.pool.length - 1];
+      // A version 02 BAT signs the request it authorizes (NUT-22): the key rides
+      // on the pooled proof's spend info from mint time. The target must be the
+      // origin-form request-target as sent, so a mint served under a URL subpath
+      // signs its full path.
+      let witness: string | undefined;
+      if (isBlsKeyset(proof.id)) {
+        const k = proof.spend_info?.k;
+        /* v8 ignore next 3 -- unreachable: the purge above removed keyless BATs */
+        if (!k) {
+          throw new CTSError('AuthManager: version 02 BAT is missing its signing key');
+        }
+        const url = new URL(joinUrls(this.mintUrl, path));
+        const digest = requestDigest(method, url.pathname + url.search, utf8ToBytes(body ?? ''));
+        witness = signTransactionInput(digest, hexToBytes(k));
+      }
+      this.pool.pop();
       this.logger.debug('AuthManager: BAT requested', {
         method,
         path,
         remaining: this.pool.length,
       });
-      return serializeBAT(proof);
+      return serializeBAT(proof, witness);
     });
   }
 
@@ -301,6 +333,9 @@ export class AuthManager implements AuthProvider {
     const seen = new Map(this.pool.map((p) => [p.secret, p]));
     for (const p of proofs) {
       if (!p || !p.secret || !p.C || !p.id) continue; // shape check
+      // A version 02 BAT without its signing key can never be presented (eg a
+      // serializer stripped spend_info): importing it just schedules an error.
+      if (isBlsKeyset(p.id) && !p.spend_info?.k) continue;
       if (!seen.has(p.secret)) {
         this.pool.push(p);
         seen.set(p.secret, p);
@@ -312,7 +347,11 @@ export class AuthManager implements AuthProvider {
    * Return a deep-copied snapshot of the current BAT pool (full Proofs, including dleq).
    */
   exportPool(): Proof[] {
-    return this.pool.map((p) => ({ ...p, dleq: p.dleq ? { ...p.dleq } : undefined }));
+    return this.pool.map((p) => ({
+      ...p,
+      dleq: p.dleq ? { ...p.dleq } : undefined,
+      spend_info: p.spend_info ? { ...p.spend_info } : undefined,
+    }));
   }
 
   // ------------------------------
@@ -480,9 +519,14 @@ export class AuthManager implements AuthProvider {
  * Uses URL-safe base64 _with_ padding (`=`) as required by CDK (`general_purpose::URL_SAFE`).
  * Stripping the padding causes a decode error on the mint side with keysets v2.
  */
-function serializeBAT(proof: Proof): string {
-  // strip dleq per NUT-22
-  const tokenStr = JSON.stringify({ id: proof.id, secret: proof.secret, C: proof.C });
+function serializeBAT(proof: Proof, witness?: string): string {
+  // strip dleq per NUT-22; a version 02 BAT carries its request witness
+  const tokenStr = JSON.stringify({
+    id: proof.id,
+    secret: proof.secret,
+    C: proof.C,
+    ...(witness !== undefined && { witness }),
+  });
   const base64url = encodeUint8ToBase64UrlPadded(utf8ToBytes(tokenStr));
   return `authA${base64url}`;
 }

@@ -273,3 +273,48 @@ describe('reviver behavior', () => {
     expect(1 in out).toBe(false);
   });
 });
+
+describe('JSON conformance: native JSON is the oracle', () => {
+  test('escape sequences parse exactly as native JSON.parse', () => {
+    const input = '"a\\b\\f\\n\\r\\t\\u0041\\\\\\"\\/z"';
+    expect(JSONInt.parse(input)).toBe(JSON.parse(input));
+  });
+
+  test('invalid escapes and raw control characters reject', () => {
+    expect(() => JSONInt.parse('"\\uZZZZ"')).toThrow(/unicode escape/i);
+    expect(() => JSONInt.parse('"a\x01b"')).toThrow(/control character/i);
+    expect(() => JSON.parse('"a\x01b"')).toThrow(); // native agrees both are invalid
+    expect(() => JSON.parse('"\\uZZZZ"')).toThrow();
+  });
+
+  test('unterminated containers reject', () => {
+    expect(() => JSONInt.parse('{"a":1')).toThrow(/Expected/);
+    expect(() => JSONInt.parse('[1,2')).toThrow(/Expected/);
+    expect(() => JSONInt.parse('{"a":1,')).toThrow(/Unterminated object/);
+    expect(() => JSONInt.parse('[1,')).toThrow(/Unterminated array/);
+    for (const input of ['{"a":1', '[1,2', '{"a":1,', '[1,']) {
+      expect(() => JSON.parse(input)).toThrow(); // native agrees all four are invalid
+    }
+  });
+
+  test('stringify honours space exactly as native, including the 10-char clamp', () => {
+    const obj = { a: [1, { b: 'x' }], c: null };
+    for (const space of [2, 10, 20, '\t', '--'] as const) {
+      expect(JSONInt.stringify(obj, undefined, space)).toBe(JSON.stringify(obj, undefined, space));
+    }
+  });
+
+  test('functions and symbols drop exactly as native', () => {
+    expect(JSONInt.stringify(() => 1)).toBe(undefined);
+    expect(JSONInt.stringify(Symbol('s'))).toBe(undefined);
+    const mixed = { f: () => 1, s: Symbol('s'), keep: 1 };
+    expect(JSONInt.stringify(mixed)).toBe(JSON.stringify(mixed));
+  });
+
+  test('a non-function, non-array replacer throws instead of being silently ignored', () => {
+    // Deliberately stricter than native (which ignores it): a bad replacer is a caller bug.
+    expect(() =>
+      JSONInt.stringify({ a: 1 }, 42 as unknown as (k: string, v: unknown) => unknown),
+    ).toThrow(/replacer/);
+  });
+});

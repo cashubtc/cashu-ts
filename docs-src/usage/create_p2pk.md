@@ -8,7 +8,7 @@ import { getEncodedToken } from '@cashu/cashu-ts';
 // or you fetched existing proofs from your app database
 const proofs = [...]; // array of proofs
 const pubkey = '02...'; // Your public key
-const { keep, send } = await wallet.ops.send(32, proofs).asP2PK({ kind: 'P2PK', data: pubkey }).run();
+const { keep, send } = await wallet.ops.send(32, proofs).asLocked({ mainKeys: [pubkey] }).run();
 const token = getEncodedToken({ mint: mintUrl, proofs: send });
 console.log(token);
 
@@ -21,3 +21,6 @@ const receiveProofs = await wallet2.receive(token, {privkey});
 
 > Tip: derive `pubkey`/`privkey` deterministically from the wallet seed so the lock key is
 > recoverable without a separate backup. See [Derive Keys](./derive_keys.md).
+
+> Signing with a NIP-07 browser extension instead of a pasted key: see
+> [Browser Signers](./nip07_signers.md).

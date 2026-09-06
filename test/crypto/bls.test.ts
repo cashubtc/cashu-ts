@@ -5,6 +5,7 @@ import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 
 import {
+  assertV3PointSecret,
   BLS_FR_ORDER,
   BLS_HASH_TO_CURVE_DST,
   hashToCurveBls,
@@ -172,6 +173,7 @@ describe('BLS deterministic round-trip (Nutshell test_deterministic_bls_steps)',
     // Match the CTSError message, not just "throws": without the guard, Y.multiply(0n) throws
     // noble's 'invalid scalar' error instead, which would still satisfy a bare toThrow().
     expect(() => blindMessageBls(secret, 0n)).toThrow(/Blinding factor/);
+    expect(() => blindMessageBls(secret, BLS_FR_ORDER)).toThrow(/in Fr/);
   });
 
   test('unblindSignatureBls rejects r=0', () => {
@@ -179,6 +181,7 @@ describe('BLS deterministic round-trip (Nutshell test_deterministic_bls_steps)',
     // "non-zero"), so pin the 'Blinding factor' wording to prove our guard fired first.
     const Y = hashToCurveBls(secret);
     expect(() => unblindSignatureBls(Y, 0n)).toThrow(/Blinding factor/);
+    expect(() => unblindSignatureBls(Y, BLS_FR_ORDER)).toThrow(/in Fr/);
   });
 
   test('createBlindSignatureBls rejects an all-zero mint scalar', () => {
@@ -186,7 +189,7 @@ describe('BLS deterministic round-trip (Nutshell test_deterministic_bls_steps)',
     // 'invalid scalar' error, so pin the CTSError wording.
     const { B_ } = blindMessageBls(secret, 3n);
     expect(() => createBlindSignatureBls(B_, new Uint8Array(32), 'test')).toThrow(
-      /Mint scalar must be non-zero/,
+      /Mint scalar must be 32 bytes in Fr/,
     );
   });
 
@@ -210,8 +213,15 @@ describe('BLS deterministic round-trip (Nutshell test_deterministic_bls_steps)',
   test('getG2PubKeyFromPrivKey rejects an all-zero private key', () => {
     // a=0 -> BLS_G2_GENERATOR.multiply(0n) would throw noble's 'invalid scalar'; pin our wording.
     expect(() => getG2PubKeyFromPrivKey(new Uint8Array(32))).toThrow(
-      /Mint scalar must be non-zero/,
+      /Mint scalar must be 32 bytes in Fr/,
     );
+  });
+
+  test('mint scalar helpers reject modular-reduction aliases', () => {
+    const outsideFr = new Uint8Array(32).fill(0xff);
+    const { B_ } = blindMessageBls(secret, 3n);
+    expect(() => createBlindSignatureBls(B_, outsideFr, 'test')).toThrow(/in Fr/);
+    expect(() => getG2PubKeyFromPrivKey(outsideFr)).toThrow(/in Fr/);
   });
 });
 
@@ -374,6 +384,18 @@ describe('deriveBatchWeights (Fiat-Shamir transcript)', () => {
 
   const itemsA = () => [makeItem('s1', 3n, 5n), makeItem('s2', 4n, 5n), makeItem('s3', 7n, 11n)];
 
+  test('point-secret batch weights use the decoded hash-to-curve bytes', () => {
+    const pointSecret = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+    const item = makeItem(pointSecret, 3n, 5n);
+    const raw = { ...item, secret: hexToBytes(pointSecret) };
+    expect(hashToCurveBls(item.secret).equals(hashToCurveBls(raw.secret))).toBe(true);
+    expect(deriveBatchWeights([item])).toEqual(deriveBatchWeights([raw]));
+    // NUT-00 transcript with len32(secret) = 33 and the decoded generator point.
+    expect(deriveBatchWeights([item])).toEqual([
+      14026328119170788921001778864430853500424360158249457134663022601936006138898n,
+    ]);
+  });
+
   test('same inputs → identical weights (deterministic, no CSPRNG dependency)', () => {
     const ws1 = deriveBatchWeights(itemsA());
     const ws2 = deriveBatchWeights(itemsA());
@@ -502,4 +524,41 @@ describe('deriveBatchWeights (Fiat-Shamir transcript)', () => {
     // ~700ms of pairings in isolation; headroom for wall-clock dilation under the
     // parallel multi-project run with coverage instrumentation.
   }, 10000);
+});
+
+describe('assertV3PointSecret', () => {
+  const secret = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+
+  test('accepts a lowercase point secret', () => {
+    expect(() => assertV3PointSecret(secret)).not.toThrow();
+  });
+
+  test('rejects upper-case hex: one spelling per secret', () => {
+    // Upper-case names the same point, but this side hashes it differently from the mint, so the
+    // proof would look valid to its owner while behaving as a different proof on the wire.
+    expect(() => assertV3PointSecret(secret.toUpperCase())).toThrow(/lowercase/);
+  });
+
+  test('rejects a well-shaped value that is not on the curve', () => {
+    expect(() => assertV3PointSecret('02' + 'cd'.repeat(32))).toThrow(/point secrets only/);
+  });
+});
+
+describe('hashToCurveBls binary-secret dispatch', () => {
+  test('a point-hex secret and its raw 33 bytes land on the same point', () => {
+    const point = `02${'ab'.repeat(32)}`;
+    const asHexUtf8 = hashToCurveBls(utf8ToBytes(point));
+    const asRawBytes = hashToCurveBls(hexToBytes(point));
+    expect(asHexUtf8.equals(asRawBytes)).toBe(true);
+  });
+
+  test('66 chars that are not lowercase point hex hash as given', () => {
+    const point = `02${'ab'.repeat(32)}`;
+    // Same length, but uppercase hex and a non-point prefix are both "just a string".
+    const upper = hashToCurveBls(utf8ToBytes(point.toUpperCase()));
+    const nonPoint = hashToCurveBls(utf8ToBytes(`04${'ab'.repeat(32)}`));
+    const canonical = hashToCurveBls(utf8ToBytes(point));
+    expect(upper.equals(canonical)).toBe(false);
+    expect(nonPoint.equals(canonical)).toBe(false);
+  });
 });

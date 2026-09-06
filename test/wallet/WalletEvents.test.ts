@@ -797,7 +797,7 @@ describe('WalletEvents', () => {
     it('invokes handler with payload and supports unsubscribe', () => {
       const we = new WalletEvents({} as any);
 
-      const payload: OperationCounters = { keysetId: 'K', start: 10, count: 3, next: 13 };
+      const payload: OperationCounters = { counterKey: 'K', start: 10, count: 3, next: 13 };
       let seen: OperationCounters | null = null;
 
       const cancel = we.countersReserved((p) => {

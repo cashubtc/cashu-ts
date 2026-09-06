@@ -495,19 +495,29 @@ describe('test info', () => {
           amount: 1000,
           state: MintQuoteState.UNPAID,
           expiry: null,
+          pubkey: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
         }),
       ),
     );
-    await expect(wallet.createMintQuoteBolt11(1000, 'sat description')).resolves.toHaveProperty(
-      'quote',
-      'sat-quote',
-    );
+    await expect(
+      wallet.createMintQuoteBolt11(
+        1000,
+        '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+        'sat description',
+      ),
+    ).resolves.toHaveProperty('quote', 'sat-quote');
 
     const usdWallet = new Wallet(mint, { unit: 'usd' });
     const usdKeychainCache = { ...MINTCACHE.keychainCache, unit: 'usd' };
     usdWallet.loadMintFromCache(MINTCACHE.mintInfo, usdKeychainCache);
     // console.log('usdWallet', usdWallet.keyChain.cache);
-    await expect(usdWallet.createMintQuoteBolt11(1000, 'usd description')).resolves.toBeDefined();
+    await expect(
+      usdWallet.createMintQuoteBolt11(
+        1000,
+        '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+        'usd description',
+      ),
+    ).resolves.toBeDefined();
   });
   test('supportsAmountless() correctly detects amountless option in melt methods', async () => {
     const info = new MintInfo({

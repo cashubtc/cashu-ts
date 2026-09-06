@@ -9,17 +9,40 @@ export interface CounterRange {
   count: number;
 }
 
+/**
+ * The counter key for mint quote lock keys (NUT-13 derivation type `0x04`).
+ *
+ * @remarks
+ * One cursor per wallet, not per keyset: a mint quote is requested before any keyset is chosen, so
+ * its lock key derives without one. It is a counter of its own because a quote may mint nothing,
+ * and because a lock key may be handed over for delegated minting and so must never collide with a
+ * proof secret key. A `CounterSource` sees it as just another key to persist, so nothing
+ * implementing the interface needs to know about purposes; do not assume every key is a keyset id.
+ */
+export const QUOTE_COUNTER_KEY = 'mint-quote-lock';
+
 // CounterSource.ts
+/**
+ * Persistence for deterministic derivation counters.
+ *
+ * @remarks
+ * A counter value describes one allocation completely, so an implementation that ever replays a
+ * value silently mints duplicate proofs: the same counter re-derives the same secret **and** the
+ * same blinding factor, and every proof after the first spend of that secret is refused as already
+ * spent, mint-wide and permanently. Reserve and persist atomically, and never roll a cursor back.
+ * Quote locks (see `QUOTE_COUNTER_KEY`) have no equivalent detector at all, since nothing blinds
+ * them, so their cursor must advance on every quote request.
+ */
 export interface CounterSource {
   /**
-   * Reserve n counters for a keyset.
+   * Reserve n counters for a counter key (a keyset id, or QUOTE_COUNTER_KEY).
    *
    * N may be 0. In that case the call MUST NOT mutate state and MUST return { start: currentNext,
    * count: 0 }, effectively a read only peek of the cursor.
    */
-  reserve(keysetId: string, n: number): Promise<CounterRange>;
+  reserve(counterKey: string, n: number): Promise<CounterRange>;
   /**
-   * Reserve a caller-chosen range `[start, start+count)` for a keyset.
+   * Reserve a caller-chosen range `[start, start+count)` for a counter key.
    *
    * @remarks
    * Use for manual deterministic counters, where the caller picks the range rather than taking the
@@ -28,7 +51,7 @@ export interface CounterSource {
    * `start` are burned, matching `advanceToAtLeast`.
    * @throws If `start` is below the cursor, i.e. the range was already handed out.
    */
-  reserveAt(keysetId: string, start: number, count: number): Promise<CounterRange>;
+  reserveAt(counterKey: string, start: number, count: number): Promise<CounterRange>;
   /**
    * Monotonic bump, ensure the next counter is at least minNext.
    *
@@ -36,7 +59,7 @@ export interface CounterSource {
    * Unconditional: a cursor already past `minNext` is left alone. To take a specific range and find
    * out whether it was already issued, use `reserveAt()`.
    */
-  advanceToAtLeast(keysetId: string, minNext: number): Promise<void>;
+  advanceToAtLeast(counterKey: string, minNext: number): Promise<void>;
   /**
    * Optional introspection.
    */
@@ -44,13 +67,13 @@ export interface CounterSource {
   /**
    * Optional hard set, useful for tests or migrations.
    */
-  setNext?(keysetId: string, next: number): Promise<void>;
+  setNext?(counterKey: string, next: number): Promise<void>;
 }
 
 /**
  * Counter summary for an operation.
  *
- * - `keysetId` - of the transaction.
+ * - `counterKey` - the keyset id, or {@link QUOTE_COUNTER_KEY} for the quote-lock cursor.
  * - `start` - beginning of reservation.
  * - `count` - number of reservations.
  * - `next` - counter available after reservation.
@@ -58,7 +81,7 @@ export interface CounterSource {
  * @example // Start: 5, Count: 3 => 5,6,7. Next: 8.
  */
 export type OperationCounters = {
-  keysetId: string;
+  counterKey: string;
   start: number;
   count: number;
   next: number;
@@ -94,43 +117,43 @@ export class EphemeralCounterSource implements CounterSource {
     }
   }
 
-  async reserve(keysetId: string, n: number): Promise<CounterRange> {
+  async reserve(counterKey: string, n: number): Promise<CounterRange> {
     if (n < 0) throw new CTSError('reserve called with negative count');
-    return this.withLock(keysetId, () => {
-      const cur = this.next.get(keysetId) ?? 0;
+    return this.withLock(counterKey, () => {
+      const cur = this.next.get(counterKey) ?? 0;
       if (n === 0) return { start: cur, count: 0 }; // report current, do not move
-      this.next.set(keysetId, cur + n);
+      this.next.set(counterKey, cur + n);
       return { start: cur, count: n };
     });
   }
 
-  async reserveAt(keysetId: string, start: number, count: number): Promise<CounterRange> {
+  async reserveAt(counterKey: string, start: number, count: number): Promise<CounterRange> {
     if (start < 0 || count < 0) {
       throw new CTSError('reserveAt called with a negative start or count');
     }
-    return this.withLock(keysetId, () => {
-      const cur = this.next.get(keysetId) ?? 0;
+    return this.withLock(counterKey, () => {
+      const cur = this.next.get(counterKey) ?? 0;
       if (start < cur) {
         throw new CTSError(
-          `Counter ${start} for keyset ${keysetId} was already issued (next is ${cur})`,
+          `Counter ${start} for counter key ${counterKey} was already issued (next is ${cur})`,
         );
       }
-      this.next.set(keysetId, start + count);
+      this.next.set(counterKey, start + count);
       return { start, count };
     });
   }
 
-  async advanceToAtLeast(keysetId: string, minNext: number): Promise<void> {
-    await this.withLock(keysetId, () => {
-      const cur = this.next.get(keysetId) ?? 0;
-      if (minNext > cur) this.next.set(keysetId, minNext);
+  async advanceToAtLeast(counterKey: string, minNext: number): Promise<void> {
+    await this.withLock(counterKey, () => {
+      const cur = this.next.get(counterKey) ?? 0;
+      if (minNext > cur) this.next.set(counterKey, minNext);
     });
   }
 
-  async setNext(keysetId: string, next: number): Promise<void> {
-    await this.withLock(keysetId, () => {
+  async setNext(counterKey: string, next: number): Promise<void> {
+    await this.withLock(counterKey, () => {
       if (next < 0) throw new CTSError('setNext: negative next not allowed');
-      this.next.set(keysetId, next);
+      this.next.set(counterKey, next);
     });
   }
 
@@ -150,7 +173,7 @@ export class EphemeralCounterSource implements CounterSource {
  * {@link WalletEvents.countersReserved | wallet.on.countersReserved} to persist counter state to
  * your own storage.
  *
- * @param initial - Optional seed values (`{ [keysetId]: nextCounter }`).
+ * @param initial - Optional seed values (`{ [counterKey]: nextCounter }`).
  */
 export function createEphemeralCounterSource(initial?: Record<string, number>): CounterSource {
   return new EphemeralCounterSource(initial);

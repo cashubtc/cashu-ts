@@ -2,9 +2,7 @@
   "realm": "cashu",
   "enabled": true,
   "sslRequired": "none",
-
   "defaultRoles": ["offline_access", "uma_authorization"],
-
   "clients": [
     {
       "clientId": "cashu-client",
@@ -23,6 +21,7 @@
         "oauth2.device.authorization.grant.enabled": "true"
       },
       "defaultClientScopes": [
+        "basic",
         "web-origins",
         "role_list",
         "profile",
@@ -59,7 +58,6 @@
       "publicClient": true
     }
   ],
-
   "users": [
     {
       "username": "test@test.com",
@@ -72,7 +70,13 @@
       "clientRoles": {
         "account": ["manage-account", "view-profile"]
       },
-      "credentials": [{ "type": "password", "value": "testtest", "temporary": false }]
+      "credentials": [
+        {
+          "type": "password",
+          "value": "testtest",
+          "temporary": false
+        }
+      ]
     }
   ]
 }

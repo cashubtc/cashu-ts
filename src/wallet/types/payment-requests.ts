@@ -13,6 +13,12 @@ export type RawNUT10Option = {
   t?: string[][]; // tags (optional per NUT-18)
 };
 
+export type RawNutrootOption = {
+  k: string; // static receiver key, 33-byte compressed hex
+  l?: string[]; // requested tree: serialized leaves (NUT-10 wire form), hex
+  b?: string[]; // keys in `l` the payee wants blinded; every other key is verbatim
+};
+
 export type RawSupportedMethod = {
   mn: string; // method name (e.g. "bolt11", "bolt12", "onchain")
   mf?: number | bigint; // per-method fee, in request unit; omitted = 0
@@ -29,6 +35,24 @@ export type RawPaymentRequest = {
   d?: string; // description
   t?: RawTransport[]; // transports
   nut10?: RawNUT10Option;
+  nutroot?: RawNutrootOption; // nutroot secrets: static receiver key, optional requested tree
+};
+
+/**
+ * A payee's nutroot (v3 keyset) locking option: the static key outputs are derived to, and an
+ * optional tree the payer must build over it.
+ *
+ * @remarks
+ * Spec: NUT-18 and NUT-28. `receiverKey` is blinded at slot 0, always, so a request is reusable
+ * without linking payments. `leaves` are serialized leaf bytes (NUT-10 wire form) hex. The payer
+ * assigns slots in transmitted order and the receiver matches derived keys by value. `blindKeys`
+ * are the leaf keys their owner tagged blind-me; every other leaf key travels verbatim. The tag
+ * lives here, on the key's delivery channel, and never in proof data.
+ */
+export type NutrootOption = {
+  receiverKey: string;
+  leaves?: string[];
+  blindKeys?: string[];
 };
 
 /**

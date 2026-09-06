@@ -2,7 +2,7 @@ export * from './types';
 export * from './CounterSource';
 export * from './KeyChain';
 export * from './Keyset';
-export * from './P2PKBuilder';
+export * from './LockBuilder';
 export * from './SelectProofs';
 export * from './SwapPreview';
 export * from './Wallet';

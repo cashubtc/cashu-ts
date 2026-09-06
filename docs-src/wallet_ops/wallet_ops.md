@@ -17,7 +17,8 @@ You can access `WalletOps` from inside a wallet instance using: `wallet.ops` or 
 | [Receive](./receive.md)                       |
 | [Mint](./mint.md)                             |
 | [Melt](./melt.md)                             |
-| [P2PKBuilder](./p2pk_builder.md)              |
+| [LockBuilder](./lock_builder.md)              |
+| [Spending Locked Proofs](./spend_locked.md)   |
 | [Error Handling Pattern](./error_handling.md) |
 
 ## Notes
@@ -38,4 +39,4 @@ You can access `WalletOps` from inside a wallet instance using: `wallet.ops` or 
   `.keyset(id)` pins all fee lookups to that keyset. If you don’t specify it, the wallet uses its policy default keyset (either supplied at init or cheapest).
 
 - **P2PK**
-  You can pass `P2PKOptions` or build them fluently using the `P2PKBuilder` API.
+  You can pass `LockOptions` or build them fluently using the `LockBuilder` API.

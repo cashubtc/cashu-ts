@@ -91,7 +91,7 @@ describe('deterministic counter reservation', () => {
       { type: 'deterministic', counter: 0 },
     );
 
-    expect(used).toEqual({ keysetId, start: 0, count: 2, next: 2 });
+    expect(used).toEqual({ counterKey: keysetId, start: 0, count: 2, next: 2 });
     expect(Amount.sum(kept.map((p) => p.amount)).toBigInt()).toBe(3n);
     expect(kept.map((p) => Number(p.amount.toBigInt())).sort()).toEqual([1, 2]);
     // Secrets are derived at counters 0 and 1 (auto counter 0 == reserved start 0).
@@ -135,7 +135,7 @@ describe('deterministic counter reservation', () => {
       cfg,
     );
 
-    expect(used).toEqual({ keysetId, start: 12, count: 1, next: 13 });
+    expect(used).toEqual({ counterKey: keysetId, start: 12, count: 1, next: 13 });
     // Send outputs use the manual counters 10,11; the auto keep uses the advanced counter 12.
     expect(proofSecrets(result.send)).toEqual(detSecrets(wallet, 3, 10));
     expect(proofSecrets(result.keep)).toEqual(detSecrets(wallet, 1, 12));
@@ -161,7 +161,7 @@ describe('deterministic counter reservation', () => {
       cfg,
     );
 
-    expect(used).toEqual({ keysetId, start: 0, count: 2, next: 2 });
+    expect(used).toEqual({ counterKey: keysetId, start: 0, count: 2, next: 2 });
     expect(result.keep).toHaveLength(0);
     expect(proofSecrets(result.send)).toEqual(detSecrets(wallet, 4, 0));
   });

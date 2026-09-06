@@ -11,6 +11,7 @@ import {
   injectWebSocketImpl,
   RateLimitError,
   Amount,
+  JSONInt,
 } from '../../src';
 import type { AuthProvider, Logger, MintQuoteBaseResponse, RequestFn } from '../../src';
 import { MINTINFORESP } from '../consts';
@@ -24,6 +25,9 @@ type ReqArgs = {
 
 const mintUrl = 'https://localhost:3338';
 const fakeWsUrl = 'wss://mint.example/cashu/v1/ws';
+
+// Mint serializes the body before the transport; parse it back to assert on the wire form.
+const sentBody = (body: unknown): unknown => JSONInt.parse(body as string);
 
 const makeRequest = <T>(payload: T): RequestFn => {
   return (async (options: ReqArgs): Promise<T> => {
@@ -304,6 +308,7 @@ describe('Mint normalization', () => {
     expect(authProvider.getBlindAuthToken).toHaveBeenCalledWith({
       method: 'POST',
       path: '/v1/swap',
+      body: '{"inputs":[],"outputs":[]}',
     });
     expect(response.signatures[0].amount.toBigInt()).toBe(1n);
   });
@@ -345,8 +350,8 @@ describe('Mint normalization', () => {
     const requestSpy = vi.fn(async (options: ReqArgs) => {
       expect(options.endpoint).toBe(mintUrl + '/v1/mint/quote/bolt11');
       expect(options.method).toBe('POST');
-      expect(options.requestBody).toMatchObject({
-        amount: 21n,
+      expect(sentBody(options.requestBody)).toMatchObject({
+        amount: 21,
         unit: 'sat',
         description: 'mint me',
       });
@@ -375,7 +380,11 @@ describe('Mint normalization', () => {
     const requestSpy = vi.fn(async (options: ReqArgs) => {
       expect(options.endpoint).toBe(mintUrl + '/v1/mint/quote/bolt12');
       expect(options.method).toBe('POST');
-      expect(options.requestBody).toEqual({ unit: 'sat', pubkey: '02abcd', description: 'offer' });
+      expect(sentBody(options.requestBody)).toEqual({
+        unit: 'sat',
+        pubkey: '02abcd',
+        description: 'offer',
+      });
       return {
         quote: 'q1',
         request: 'lno1...',
@@ -499,7 +508,7 @@ describe('Mint normalization', () => {
     const requestSpy = vi.fn(async (options: ReqArgs) => {
       expect(options.endpoint).toBe(mintUrl + '/v1/mint/quote/bolt11/check');
       expect(options.method).toBe('POST');
-      expect(options.requestBody).toEqual({ quotes: ['q1', 'q2'] });
+      expect(sentBody(options.requestBody)).toEqual({ quotes: ['q1', 'q2'] });
       return [
         {
           quote: 'q1',
@@ -534,7 +543,7 @@ describe('Mint normalization', () => {
     const requestSpy = vi.fn(async (options: ReqArgs) => {
       expect(options.endpoint).toBe(mintUrl + '/v1/mint/quote/bolt12/check');
       expect(options.method).toBe('POST');
-      expect(options.requestBody).toEqual({ quotes: ['q1'] });
+      expect(sentBody(options.requestBody)).toEqual({ quotes: ['q1'] });
       return [
         {
           quote: 'q1',
@@ -1078,11 +1087,11 @@ describe('Mint normalization', () => {
 
   it('normalizes melt quote request options for amountless and mpp values', async () => {
     const requestSpy = vi.fn(async (options: ReqArgs) => {
-      expect(options.requestBody).toMatchObject({
+      expect(sentBody(options.requestBody)).toMatchObject({
         request: 'ln-offer',
         unit: 'sat',
         options: {
-          amountless: { amount_msat: 5000n },
+          amountless: { amount_msat: 5000 },
         },
       });
       return {
