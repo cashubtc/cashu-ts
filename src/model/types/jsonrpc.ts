@@ -1,4 +1,5 @@
-export type RpcSubKinds = 'bolt11_mint_quote' | 'bolt11_melt_quote' | 'proof_state';
+// NUT-17 names a quote kind per payment method (`bolt11_mint_quote`, `bolt12_melt_quote`, ...)
+export type RpcSubKinds = 'proof_state' | `${string}_mint_quote` | `${string}_melt_quote`;
 export type RpcSubId = string | number | null;
 
 export type JsonRpcParams = {
