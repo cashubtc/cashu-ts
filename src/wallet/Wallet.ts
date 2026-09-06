@@ -2354,10 +2354,14 @@ class Wallet {
       !Number.isSafeInteger(counter) || counter < 0 || !Number.isSafeInteger(bound) || bound < 0,
       'counter and maxCounter must be non-negative safe integers',
     );
-    // A zero batch would never advance the counter; gapLimit may be Infinity for a bounded scan.
+    // A zero batch would never advance the counter; gapLimit may be Infinity for a bounded scan,
+    // but a fractional one would leave the probe width and gap count fractional.
     this.failIf(
-      !Number.isSafeInteger(batchSize) || batchSize < 1 || !(gapLimit >= 1),
-      'batchSize must be a positive integer and gapLimit at least 1',
+      !Number.isSafeInteger(batchSize) ||
+        batchSize < 1 ||
+        !(Number.isSafeInteger(gapLimit) || gapLimit === Infinity) ||
+        gapLimit < 1,
+      'batchSize must be a positive integer and gapLimit a positive integer or Infinity',
     );
     const probeSize = Math.min(gapLimit, this.maxArrayLength);
     const restoredProofs: Proof[] = [];

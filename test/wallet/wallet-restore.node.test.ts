@@ -453,6 +453,8 @@ describe('restore', () => {
     );
     // a zero batch never advances the counter, so the scan would loop forever
     await expect(wallet.batchRestore({ batchSize: 0 })).rejects.toThrow(/batchSize must be/);
-    await expect(wallet.batchRestore({ gapLimit: 0 })).rejects.toThrow(/gapLimit at least 1/);
+    await expect(wallet.batchRestore({ gapLimit: 0 })).rejects.toThrow(/gapLimit/);
+    // a fractional gap would leave the probe width and gap count fractional
+    await expect(wallet.batchRestore({ gapLimit: 2.5 })).rejects.toThrow(/gapLimit/);
   });
 });
