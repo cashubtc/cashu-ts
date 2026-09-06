@@ -1,4 +1,3 @@
-import { hashToCurve, hashToCurveBls, isBlsKeyset } from '../crypto';
 import { safeCallback } from '../logger';
 import { Amount } from '../model/Amount';
 import { CTSError, HttpResponseError } from '../model/Errors';
@@ -659,15 +658,12 @@ export class WalletEvents {
     err: (e: Error) => void,
     opts?: WatchOpts,
   ): Promise<SubscriptionCanceller> {
-    const enc = new TextEncoder();
     // Object.create(null) avoids prototype-key collisions: a mint sending
     // payload.Y === '__proto__' (or 'constructor', etc.) would otherwise
     // resolve to an inherited property and bypass the unknown-Y guard below.
     const proofMap = Object.create(null) as Record<string, T>;
     for (const p of proofs) {
-      const y = isBlsKeyset(p.id)
-        ? hashToCurveBls(enc.encode(p.secret)).toHex(true)
-        : hashToCurve(enc.encode(p.secret)).toHex(true);
+      const y = this.wallet.computeY(p.secret, p.id);
       if (proofMap[y]) {
         throw new CTSError('Duplicate proof secret in proofStateUpdates input');
       }
