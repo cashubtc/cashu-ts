@@ -847,6 +847,21 @@ describe('strictCachedKeysets', () => {
     expect(counts().keysARequests).toBe(0); // strict mode never backfills keys
   });
 
+  test('keyless batchRestore throws legibly, zero fetches', async () => {
+    const { counts } = useRotatedMint(server);
+    const wallet = new Wallet(mint, {
+      unit,
+      bip39seed: randomBytes(32),
+      strictCachedKeysets: true,
+    });
+    await wallet.loadMint(); // single load against rotated handlers: A known-but-keyless
+
+    await expect(wallet.batchRestore({ keysetId: '00bd033559de27d0' })).rejects.toThrow(
+      /Keyset has no keys loaded/,
+    );
+    expect(counts().keysARequests).toBe(0); // strict mode never backfills keys
+  });
+
   test('withKeyset derivative inherits strictCachedKeysets', async () => {
     const wallet = new Wallet(mint, { unit, strictCachedKeysets: true });
     await wallet.loadMint(); // pre-rotation defaults: A active with keys

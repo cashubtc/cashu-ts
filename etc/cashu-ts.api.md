@@ -235,7 +235,6 @@ export type BatchRestoreConfig = {
     batchSize?: number;
     counter?: number;
     keysetId?: string;
-    filterSpent?: boolean;
 };
 
 // @public
@@ -811,6 +810,13 @@ export function injectWebSocketImpl(ws: typeof WebSocket): void;
 
 // @public (undocumented)
 export type IntRange<F extends number, T extends number> = Exclude<Enumerate<T>, Enumerate<F>>;
+
+// @public
+export class InvalidScalarError extends CTSError {
+    constructor(counter: number, options?: {
+        cause?: unknown;
+    });
+}
 
 // @public
 export function isBlsKeyset(keysetId: string): boolean;
