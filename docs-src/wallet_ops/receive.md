@@ -94,3 +94,11 @@ The replay window has bounds:
   preview is what covers a process restart.
 - A preview and a seed protect different windows: the preview covers a restart inside the
   TTL; deterministic secrets plus NUT-09 restore cover loss after it.
+
+## Spending an HTLC
+
+An HTLC input needs the preimage as well as any signatures. Pass it in the receive, send or melt config, or through `.preimage()` on the builders: it goes on the witness of every input whose hashlock it opens, before signing, and `attachHTLCPreimage(proofs, preimage)` does the same for proofs you handle yourself. A `send` with a preimage always swaps, so the receiver gets plain proofs rather than the locked one. A v3 hashlock is a leaf: plan it with `planScriptPaths(proofs, { privkeys, preimage })` and pass the plans as `scriptPath` (see [spending locked proofs](spend_locked.md)).
+
+```ts
+const proofs = await wallet.receive(token, { privkey, preimage });
+```
