@@ -1245,6 +1245,32 @@ describe('idempotent single retry (non-cached endpoints)', () => {
     expect(requestCount).toBe(2);
   });
 
+  test('a request carrying a Blind-auth header is never retried', async () => {
+    // The BAT is single-use: a replay would fail auth and hide the first attempt's outcome.
+    const endpoint = mintUrl + '/v1/keys';
+    let requestCount = 0;
+    server.use(
+      http.get(endpoint, () => {
+        requestCount++;
+        return Response.error();
+      }),
+    );
+    await expect(request({ endpoint, headers: { 'Blind-auth': 'batoken' } })).rejects.toThrow(
+      NetworkError,
+    );
+    expect(requestCount).toBe(1);
+    // The NUT-19 backoff loop is skipped the same way.
+    await expect(
+      request({
+        endpoint,
+        headers: { 'blind-auth': 'batoken' },
+        ttl: 1000,
+        cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+      }),
+    ).rejects.toThrow(NetworkError);
+    expect(requestCount).toBe(2);
+  });
+
   test('HTTP errors are not retried, even when idempotent', async () => {
     const endpoint = mintUrl + '/v1/keys';
     let requestCount = 0;
