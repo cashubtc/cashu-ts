@@ -3,6 +3,7 @@ import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { describe, expect, test } from 'vitest';
 
 import {
+  buildNutrootSecret,
   deriveReceiverKeyedSecret,
   parseNutrootLeaf,
   serializeNutrootLeaf,
@@ -118,6 +119,63 @@ describe('ScriptPath signing packages', () => {
         hexToBytes(pub(3)).subarray(1),
       ),
     ).toBe(true);
+  });
+
+  test('signs a verbatim leaf key written with the opposite parity', () => {
+    const opposite = bytesToHex(secp256k1.Point.fromHex(pub(3)).negate().toBytes(true));
+    const built = deriveReceiverKeyedSecret(pub(4), {
+      leaves: [{ type: 'threshold', n: 1, keys: [opposite] }],
+      eBytes: sk(5),
+    });
+    const proof: Proof = {
+      id: keysetId,
+      amount: Amount.from(1),
+      secret: built.secret,
+      C: '11'.repeat(48),
+      spend_info: { E: built.E, K: built.K, tree: built.tree },
+    };
+    const preview: SwapPreview = {
+      amount: Amount.from(1),
+      fees: Amount.from(0),
+      keysetId,
+      inputs: [proof],
+      keepOutputs: [OutputData.createSingleRandomData(1, keysetId)],
+    };
+    const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 0 }]);
+    const signed = ScriptPath.signPackage(pkg, bytesToHex(sk(3)));
+    expect(signed.spends[0].signatures).toHaveLength(1);
+    // BIP-340 is x-only, so the signature must verify against the leaf key as written.
+    expect(
+      schnorr.verify(
+        hexToBytes(signed.spends[0].signatures[0]),
+        inputsForPayload({ inputs: pkg.inputs, outputs: pkg.outputs }).proofs.get(
+          proofInputContextKey({ keysetId: proof.id, secret: proof.secret }),
+        )!.digest,
+        hexToBytes(opposite).subarray(1),
+      ),
+    ).toBe(true);
+  });
+
+  test('extracts a package when bearer k is the internal-key source', () => {
+    const built = buildNutrootSecret(pub(4), [{ type: 'threshold', n: 1, keys: [pub(3)] }]);
+    const proof: Proof = {
+      id: keysetId,
+      amount: Amount.from(1),
+      secret: built.secret,
+      C: '11'.repeat(48),
+      spend_info: { k: bytesToHex(sk(4)), tree: built.tree },
+    };
+    const preview: SwapPreview = {
+      amount: Amount.from(1),
+      fees: Amount.from(0),
+      keysetId,
+      inputs: [proof],
+      keepOutputs: [OutputData.createSingleRandomData(1, keysetId)],
+    };
+    const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 0 }]);
+    expect(pkg.spends[0].control.K).toBe(pub(4));
+    // The derived key is the real control-block key: the committed leaf verifies and signs.
+    expect(ScriptPath.signPackage(pkg, bytesToHex(sk(3))).spends[0].signatures).toHaveLength(1);
   });
 
   test('a point-shaped legacy secret cannot replace the v3 input digest', () => {

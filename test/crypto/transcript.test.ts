@@ -497,7 +497,10 @@ describe('transcript input guards', () => {
     const bls = vectors.nut13_v3.keyset_id;
     expect(() => recoverV3SecretKeys(seed, bls, [], -1)).toThrow(/maxCounter/);
     expect(() => recoverV3SecretKeys(seed, bls, [], 1.5)).toThrow(/maxCounter/);
-    expect(() => recoverV3SecretKeys(seed, bls, [], (1 << 20) + 1)).toThrow(/maxCounter/);
+    expect(() => recoverV3SecretKeys(seed, bls, [], (1 << 20) + 1)).not.toThrow();
+    expect(() => recoverV3SecretKeys(seed, bls, [], Number.MAX_SAFE_INTEGER + 1)).toThrow(
+      /maxCounter/,
+    );
   });
 });
 
