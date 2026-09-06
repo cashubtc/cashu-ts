@@ -18,6 +18,7 @@ import {
   nutrootLeafHash,
   nutrootMerkleRoot,
   nutrootTweakSeckey,
+  verifyNutrootSpendInfo,
 } from '../crypto/nutroot';
 import {
   inputsForPayload,
@@ -181,6 +182,10 @@ export function proofSpendOptions(
 
   const tree = proof.spend_info?.tree;
   if (!tree || tree.length === 0) return withVerdict(keyPath, []);
+
+  const K = proof.spend_info?.K ?? internalKeyOf(proof, privkeys);
+  if (!K) throw new CTSError('Disclosed tree needs an internal key to verify the proof secret');
+  verifyNutrootSpendInfo(proof.secret, { ...proof.spend_info, K });
 
   // Parses every leaf, so an unknown one throws here rather than being reported as spendable.
   const leaves = tree.map((leaf) => parseNutrootLeaf(hexToBytes(leaf)));

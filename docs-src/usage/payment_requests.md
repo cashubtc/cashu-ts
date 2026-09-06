@@ -38,7 +38,7 @@ const { keep, send } = await wallet.ops.sendToRequest(pr, proofs).run();
 const result = await wallet.ops.sendToRequest(pr, proofs, 100).run();
 ```
 
-It returns the normal send builder, so further options (deterministic outputs, keyset, offline modes) chain as usual. [Manual control](#manual-control) below unpacks the individual rules.
+It returns the normal send builder, so further options (deterministic outputs, keyset, offline modes) chain as usual. Locked requests pin the negotiated output keyset so a later mint refresh cannot change the lock encoding; an explicit keyset override must use the same family. [Manual control](#manual-control) below unpacks the individual rules.
 
 ### 3. Deliver the payload
 

@@ -921,12 +921,13 @@ function blindTaggedLeafKeys(
  * One-to-one and order-insensitive: each disclosed leaf byte-identical to a distinct requested
  * leaf, except blind-me keys substituted in place. An extra or missing leaf rejects: an appended
  * leaf is spend power the payee never requested. Whether a substituted point is the tagged key's
- * actual blinding is its owner's trial-match, not checked here.
+ * actual blinding is checked in the same leaf match when its owner supplies a private key.
  * @throws If the spend info does not satisfy the request.
  */
 export function verifyNutrootRequestTree(
   option: ParsedNutrootOption,
   spendInfo: { k?: string; E?: string; K?: string; tree?: string[]; u?: string } | undefined,
+  privkeys: string[] = [],
 ): void {
   if (!spendInfo) {
     throw new CTSError('Nutroot request: proof carries no spend info');
@@ -988,6 +989,19 @@ export function verifyNutrootRequestTree(
     );
   }
   const blind = new Set((option.blindKeys ?? []).map((key) => key.toLowerCase()));
+  // Bind each owned blind-me key to its requested condition in the same leaf assignment.
+  // Slot candidates cover the whole tree because its transmitted order is not committed.
+  const owned = new Map<string, Set<string>>();
+  const slots = enumerateLeafKeySlots(requested).length;
+  for (const priv of new Set(privkeys.map((key) => key.toLowerCase()))) {
+    const pub = bytesToHex(getPubKeyFromPrivKey(hexToBytes(priv)));
+    const flipped = (pub.startsWith('02') ? '03' : '02') + pub.slice(2);
+    const tagged = [pub, flipped].filter((key) => blind.has(key));
+    if (tagged.length && spendInfo.E !== undefined) {
+      const keys = new Set(slotKeysByBlindedPubkey(spendInfo.E, priv, slots).keys());
+      for (const key of tagged) owned.set(key, keys);
+    }
+  }
   const candidates = disclosed.map((hex) => {
     const bytes = hexToBytes(hex);
     const leaf = parseNutrootLeaf(bytes);
@@ -999,12 +1013,14 @@ export function verifyNutrootRequestTree(
     }
     const matches: number[] = [];
     requested.forEach((req, j) => {
-      if (leafMatchesRequested(leaf, req, blind)) matches.push(j);
+      if (leafMatchesRequested(leaf, req, blind, owned)) matches.push(j);
     });
     return matches;
   });
   if (!assignmentExists(candidates, requested.length)) {
-    throw new CTSError('Nutroot request: disclosed tree does not match the requested leaves');
+    throw new CTSError(
+      'Nutroot request: disclosed tree does not match the requested leaves or owned blind-me leaf keys',
+    );
   }
 }
 
@@ -1012,14 +1028,20 @@ export function verifyNutrootRequestTree(
  * One disclosed leaf against one requested leaf: byte-equal fields, keys equal in place, except a
  * blind-me key, which must have been substituted (a verbatim value there ignores the owner's tag).
  */
-function leafMatchesRequested(leaf: NutrootLeaf, req: NutrootLeaf, blind: Set<string>): boolean {
+function leafMatchesRequested(
+  leaf: NutrootLeaf,
+  req: NutrootLeaf,
+  blind: Set<string>,
+  owned: Map<string, Set<string>>,
+): boolean {
   if (leaf.type !== req.type || leaf.n !== req.n) return false;
   if (leaf.time !== req.time || leaf.hash?.toLowerCase() !== req.hash?.toLowerCase()) return false;
   if (leaf.disclosure !== req.disclosure) return false;
   if (leaf.keys.length !== req.keys.length) return false;
   return req.keys.every((reqKey, i) => {
     const rk = reqKey.toLowerCase();
-    return blind.has(rk) ? leaf.keys[i] !== rk : leaf.keys[i] === rk;
+    if (!blind.has(rk)) return leaf.keys[i] === rk;
+    return leaf.keys[i] !== rk && (!owned.has(rk) || owned.get(rk)!.has(leaf.keys[i]));
   });
 }
 

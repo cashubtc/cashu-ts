@@ -22,15 +22,15 @@ import {
   isV3PointSecret,
 } from '../crypto';
 // Internal transitional fallback — not part of crypto/index.ts
-import { getPubKeyFromPrivKey, normalizeSecpPubkey } from '../crypto/curve_secp';
+import { normalizeSecpPubkey } from '../crypto/curve_secp';
 import { p2pkOptionsToPRNut10, type P2PKOptions } from '../crypto/NUT11';
 import { verifyHTLCHash } from '../crypto/NUT14';
 import { mintQuoteDigest, signMintQuoteLegacy } from '../crypto/NUT20';
 import {
   NUTROOT_NUMS_KEY,
-  recoverLeafKeySecretKeys,
   recoverReceiverKeyedSecretKey,
   verifyNutrootRequestTree,
+  verifyNutrootSpendInfo,
   type ParsedNutrootOption,
 } from '../crypto/nutroot';
 import { inputsForPayload } from '../crypto/transcript';
@@ -83,7 +83,6 @@ import {
   bytesToHex,
   DEFAULT_MAX_ARRAY_LENGTH,
   getDecodedToken,
-  hexToBytes,
   invoiceHasAmountInHRP,
   normalizeMintUrl,
   normalizeProofAmounts,
@@ -1533,6 +1532,7 @@ class Wallet {
 
       if (
         keysetId ||
+        config?.scriptPath?.length ||
         wantsDeterministicByPolicy ||
         !isPlainRandom(outputConfig.send) ||
         (outputConfig.keep && !isPlainRandom(outputConfig.keep))
@@ -1540,6 +1540,7 @@ class Wallet {
         // Explain why we must fall back to swap
         const reasons: string[] = [];
         if (keysetId) reasons.push('keysetId override');
+        if (config?.scriptPath?.length) reasons.push('script-path spend');
         if (wantsDeterministicByPolicy) reasons.push('wallet default is deterministic');
         if (!isPlainRandom(outputConfig.send)) reasons.push('non-default send output type');
         if (outputConfig.keep && !isPlainRandom(outputConfig.keep))
@@ -1554,6 +1555,13 @@ class Wallet {
         exactMatch: true,
         requireDleq: false, // safety
       });
+      // Only bearer material can be forwarded to a new holder without a v3 swap.
+      const v3 = send.filter((p) => isBlsKeyset(p.id));
+      const bearerKeys = collectSpendInfoKeys(v3, undefined, this._logger);
+      for (const proof of v3) {
+        this.failIf(!bearerKeys.has(proof.secret), 'A non-bearer v3 proof requires a swap');
+        verifyNutrootSpendInfo(proof.secret, proof.spend_info!);
+      }
       const expectedFee = includeFees ? this.getFeesForProofs(send) : Amount.zero();
 
       if (sumProofs(send).equals(sendAmount.add(expectedFee))) {
@@ -1941,9 +1949,9 @@ class Wallet {
       for (const p of proofs) {
         if (isBlsKeyset(p.id) && isV3PointSecret(p.secret)) {
           this.failIfNullish(nutrootOption, 'v3 proof: the request carries no nutroot option');
-          verifyNutrootRequestTree(nutrootOption, p.spend_info);
+          verifyNutrootRequestTree(nutrootOption, p.spend_info, statics);
+          verifyNutrootSpendInfo(p.secret, p.spend_info!);
           this.assertKeyedToReceiver(nutrootOption, p, statics);
-          this.assertBlindKeysHonoured(nutrootOption, p, statics);
           continue;
         }
         this.failIfNullish(nut10Lock, 'legacy proof: the request is for v3 proofs only');
@@ -2010,49 +2018,6 @@ class Wallet {
     this.failIf(
       !statics.some((priv) => recoverReceiverKeyedSecretKey(proof.secret, E, priv, tree)),
       'Nutroot request: proof is not keyed to the requested receiver key',
-    );
-  }
-
-  /**
-   * Asserts each blind-me key this wallet owns really was substituted with its own blinding.
-   *
-   * @remarks
-   * `verifyNutrootRequestTree` treats a blind-me position as a wildcard: only the key's owner can
-   * tell its blinding from a stranger's key, and a substituted stranger's key is a leaf the payer
-   * can spend. Counting by value, not position, is the frame the slot map is built in (NUT-28): the
-   * root commits the leaf set, not the transmitted order. A tagged key this wallet does not hold is
-   * its own owner's check, not one that can be made here.
-   * @throws If the disclosed tree does not carry this wallet's blinding at every tagged occurrence.
-   */
-  private assertBlindKeysHonoured(
-    option: ParsedNutrootOption,
-    proof: Pick<Proof, 'spend_info'>,
-    statics: string[],
-  ): void {
-    const tagged = (option.blindKeys ?? []).map((key) => key.toLowerCase());
-    if (tagged.length === 0 || statics.length === 0) return;
-    const owned = new Set<string>();
-    for (const priv of statics) {
-      const pub = bytesToHex(getPubKeyFromPrivKey(hexToBytes(priv)));
-      // An x-only import holds n - p, whose point is the same hex under the other parity byte.
-      const flipped = (pub.startsWith('02') ? '03' : '02') + pub.slice(2);
-      for (const key of tagged) {
-        if (key === pub || key === flipped) owned.add(key);
-      }
-    }
-    if (owned.size === 0) return;
-    const wanted = (option.leaves ?? []).reduce(
-      (n, leaf) => n + leaf.keys.filter((key) => owned.has(key.toLowerCase())).length,
-      0,
-    );
-    const disclosed = recoverLeafKeySecretKeys(
-      proof.spend_info?.tree ?? [],
-      proof.spend_info?.E,
-      statics,
-    ).filter((hit) => hit.blinded).length;
-    this.failIf(
-      disclosed !== wanted,
-      `Nutroot request: expected ${wanted} blind-me leaf key(s) of this wallet in the disclosed tree, found ${disclosed}`,
     );
   }
 
@@ -4062,6 +4027,8 @@ class Wallet {
     options?: CompleteMeltOptions,
   ): Promise<MeltProofsResponse<TQuote>> {
     const completeOptions: CompleteMeltOptions = options ?? {};
+
+    this.assertUniqueOutputSecrets(meltPreview.outputData);
 
     // Extract vars from MeltPreview
     let inputs = meltPreview.inputs;
