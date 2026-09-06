@@ -1,6 +1,7 @@
 import { type Logger, NULL_LOGGER } from '../logger';
 import { CTSError } from '../model/Errors';
 import { type JsonRpcMessage, type JsonRpcReqParams, type RpcSubId } from '../model/types';
+import { JSONInt } from '../utils/JSONInt';
 import { generateUuidV7 } from '../utils/uuid.js';
 
 import { getWebSocketImpl } from './ws';
@@ -314,7 +315,8 @@ export class WSConnection {
     const message = this.messageQueue.dequeue() as string;
 
     try {
-      const parsed = JSON.parse(message) as JsonRpcMessage;
+      // Same bigint-safe parse as the HTTP transport, so a u64 amount is not rounded on the way in
+      const parsed = JSONInt.parse(message) as JsonRpcMessage;
 
       if ('result' in parsed && parsed.id != undefined) {
         if (this.rpcListeners[parsed.id]) {

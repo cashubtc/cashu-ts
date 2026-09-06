@@ -159,6 +159,38 @@ describe('testing WSConnection', () => {
     });
     expect(payload).toMatchObject({ quote: '123', request: '456', paid: true, expiry: 123 });
   });
+  test('a notification carrying a u64 amount arrives without rounding', async () => {
+    server.on('connection', (socket) => {
+      socket.on('message', (m) => {
+        try {
+          const parsed = JSON.parse(m.toString());
+          if (parsed.method === 'subscribe') {
+            socket.send(
+              `{"jsonrpc": "2.0", "result": {"status": "OK", "subId": "${parsed.params.subId}"}, "id": ${parsed.id}}`,
+            );
+            setTimeout(() => {
+              socket.send(
+                `{"jsonrpc": "2.0", "method": "subscribe", "params": {"subId": "${parsed.params.subId}", "payload": {"quote": "u64", "amount": 18446744073709551615}}}`,
+              );
+            }, 100);
+          }
+        } catch {
+          console.log('Server parsing failed...');
+        }
+      });
+    });
+    const conn = new WSConnection(fakeUrl);
+    await conn.connect();
+
+    const payload = await new Promise<{ amount: unknown }>((res) => {
+      conn.createSubscription(
+        { kind: 'bolt11_mint_quote', filters: ['u64'] },
+        (p: { amount: unknown }) => res(p),
+        vi.fn(),
+      );
+    });
+    expect(payload.amount).toBe(18446744073709551615n);
+  });
 });
 
 describe('WSConnection – socket-not-open paths', () => {
