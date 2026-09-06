@@ -553,6 +553,27 @@ describe('requests', { timeout: 7500 }, () => {
       expect(requestCount).toBeGreaterThan(1); // should retry multiple times (exponential backoff)
     }, 10000);
 
+    test('a cached request carrying a Blind-auth header is never retried', async () => {
+      // The BAT is single-use (NUT-22): a replay would fail auth and hide the first outcome.
+      const endpoint = mintUrl + '/v1/keys';
+      let requestCount = 0;
+      server.use(
+        http.get(endpoint, () => {
+          requestCount++;
+          return Response.error();
+        }),
+      );
+      await expect(
+        request({
+          endpoint,
+          headers: { 'blind-auth': 'batoken' },
+          ttl: 10000,
+          cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+        }),
+      ).rejects.toThrow(NetworkError);
+      expect(requestCount).toBe(1);
+    });
+
     test('includes concrete delay value in retry log message', async () => {
       const endpoint = mintUrl + '/v1/keys';
       const retryPolicy: Nut19Policy = {

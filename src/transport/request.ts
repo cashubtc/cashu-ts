@@ -381,6 +381,14 @@ function endpointPathMatchesCachedPath(endpointPath: string, cachedPath: string)
  */
 async function requestWithRetry(options: RequestOptions): Promise<unknown> {
   const { ttl, cached_endpoints, endpoint } = options;
+  // A BAT is single-use (NUT-22): if the first attempt reached the mint, a retry replays a spent
+  // token and fails auth, hiding the original result. The auth layer issues a fresh one per call.
+  const carriesBat = Object.keys(options.headers ?? {}).some(
+    (name) => name.toLowerCase() === 'blind-auth',
+  );
+  if (carriesBat) {
+    return await _request(options);
+  }
   const endpointPathname = getEndpointPathnameSafe(endpoint);
   const requestMethod = options.method?.toUpperCase() ?? 'GET';
 
