@@ -2968,8 +2968,7 @@ export class WSConnection {
     createSubscription<TPayload = unknown>(params: Omit<JsonRpcReqParams, 'subId'>, callback: (payload: TPayload) => void, errorCallback: (e: Error) => void): string;
     // (undocumented)
     ensureConnection(timeoutMs?: number): Promise<void>;
-    // (undocumented)
-    onClose(callback: (e: CloseEvent) => void): void;
+    onClose(callback: (e: CloseEvent) => void): () => void;
     // (undocumented)
     sendRequest(method: 'subscribe', params: JsonRpcReqParams): void;
     // (undocumented)

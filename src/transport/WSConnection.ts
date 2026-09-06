@@ -48,6 +48,7 @@ export class MessageQueue {
 interface RpcListener {
   callback: () => void;
   errorCallback: (e: Error) => void;
+  subId?: string;
 }
 
 type OnOpenSuccess = () => void;
@@ -276,8 +277,9 @@ export class WSConnection {
     callback: () => void,
     errorCallback: (e: Error) => void,
     id: Exclude<RpcSubId, null>,
+    subId?: string,
   ) {
-    this.rpcListeners[id] = { callback, errorCallback };
+    this.rpcListeners[id] = { callback, errorCallback, subId };
   }
 
   private removeRpcListener(id: Exclude<RpcSubId, null>) {
@@ -372,6 +374,7 @@ export class WSConnection {
       },
       errorCallback,
       rpcId,
+      subId,
     );
 
     try {
@@ -396,6 +399,10 @@ export class WSConnection {
     callback: (payload: TPayload) => void,
     errorCallback?: (e: Error) => void,
   ) {
+    // A late subscribe acknowledgement must not reinstall a cancelled listener.
+    for (const [id, listener] of Object.entries(this.rpcListeners)) {
+      if (listener.subId === subId) this.removeRpcListener(id);
+    }
     this.removeListener(subId, callback);
 
     if (this.ws?.readyState !== this._WS.OPEN) {
@@ -439,7 +446,13 @@ export class WSConnection {
     this.stopMessageHandling();
   }
 
+  /**
+   * Registers a socket-close callback and returns a function that removes it.
+   */
   onClose(callback: (e: CloseEvent) => void) {
     this.onCloseCallbacks.push(callback);
+    return () => {
+      this.onCloseCallbacks = this.onCloseCallbacks.filter((cb) => cb !== callback);
+    };
   }
 }

@@ -236,14 +236,19 @@ export class WalletEvents {
     cb: (wire: W) => void,
     err: (e: Error) => void,
     signal?: AbortSignal,
+    onClose?: () => void,
   ): Promise<SubscriptionCanceller> {
     await this.wallet.mint.connectWebSocket();
     const ws = this.wallet.mint.webSocketConnection;
     if (!ws) throw new CTSError('Failed to establish WebSocket connection.');
     const subId = ws.createSubscription<W>({ kind, filters }, cb, err);
+    const removeClose = onClose ? ws.onClose(onClose) : undefined;
     return this.withAbort(
       signal,
-      once(() => ws.cancelSubscription(subId, cb)),
+      once(() => {
+        removeClose?.();
+        ws.cancelSubscription(subId, cb);
+      }),
     );
   }
 
@@ -289,8 +294,15 @@ export class WalletEvents {
 
     const all = new AbortController(); // everything this watch owns
     const sub = new AbortController(); // the subscription alone, so polling can outlive it
-    all.signal.addEventListener('abort', () => sub.abort(), { once: true });
     let grace: ReturnType<typeof setTimeout> | undefined;
+    all.signal.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(grace);
+        sub.abort();
+      },
+      { once: true },
+    );
     const startPolling = once(() => {
       clearTimeout(grace);
       sub.abort();
@@ -309,7 +321,9 @@ export class WalletEvents {
         live();
         deliver(wire);
       };
-      this._subscribe(kind, filters, onWire, startPolling, sub.signal).catch(startPolling);
+      this._subscribe(kind, filters, onWire, startPolling, sub.signal, startPolling).catch(
+        startPolling,
+      );
     } else {
       startPolling();
     }

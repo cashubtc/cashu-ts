@@ -16,6 +16,7 @@ const flushMicrotasks = async (n = 2) => {
  * Mock WS that WalletEvents talks to.
  */
 class MockWS {
+  public onClose = vi.fn(() => vi.fn());
   public createSubscription = vi.fn(
     (
       { kind, filters }: { kind: string; filters: string[] },
