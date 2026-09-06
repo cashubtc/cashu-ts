@@ -936,7 +936,11 @@ describe('async melt preference body', () => {
   });
 
   test('createMeltChangeProofs pairs by index and drops zero-value signatures', async () => {
-    const wallet = new Wallet(mint, { unit, logger });
+    const warn = vi.fn();
+    const wallet = new Wallet(mint, {
+      unit,
+      logger: { error: vi.fn(), warn, info: vi.fn(), debug: vi.fn(), trace: vi.fn(), log: vi.fn() },
+    });
     await wallet.loadMint();
 
     const blanks = [0, 0].map((a) => OutputData.createSingleRandomData(a, '00bd033559de27d0'));
@@ -958,6 +962,11 @@ describe('async melt preference body', () => {
     expect(change[0]).toMatchObject({ amount: Amount.from(2) });
     // the surviving signature was paired with the second blank, not compacted onto the first
     expect(change[0].secret).toBe(new TextDecoder().decode(blanks[1].secret));
+    // tolerated, but the mint's NUT-08 slip is reported
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('NUT-08'),
+      expect.objectContaining({ count: 1 }),
+    );
   });
 
   test('createMeltChangeProofs surfaces NUT-09 recovery hint when keyset is unknown', async () => {

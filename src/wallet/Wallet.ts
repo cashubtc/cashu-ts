@@ -3601,9 +3601,21 @@ class Wallet {
     // so normalise here rather than trust the type at this public boundary.
     const sigs = changeSigs.map((s) => (s ? { ...s, amount: Amount.from(s.amount) } : s));
     this.validateReturnedSignatures(sigs, outputData);
+    // NUT-08 requires the mint to omit zero-value signatures; they carry no ecash, so drop them
+    // rather than fail a settled melt, but make the conformance slip visible.
+    const zeroSigs = sigs.filter((s) => s.amount.isZero()).length;
+    if (zeroSigs > 0) {
+      this._logger.warn(
+        'Mint returned zero-value change signatures, which NUT-08 requires it to omit',
+        {
+          mintUrl: this.mint.mintUrl,
+          count: zeroSigs,
+        },
+      );
+    }
     const change: Proof[] = [];
     sigs.forEach((s, i) => {
-      // NUT-08 pairs signatures to blanks by index; a zero-value one carries no ecash.
+      // NUT-08 pairs signatures to blanks by index
       if (s.amount.isZero()) return;
       change.push(outputData[i].toProof(s, this.keysetForSignature(s.id)));
     });
