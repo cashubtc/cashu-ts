@@ -1534,6 +1534,7 @@ class Wallet {
       if (
         keysetId ||
         config?.scriptPath?.length ||
+        config?.preimage !== undefined ||
         wantsDeterministicByPolicy ||
         !isPlainRandom(outputConfig.send) ||
         (outputConfig.keep && !isPlainRandom(outputConfig.keep))
@@ -1542,6 +1543,7 @@ class Wallet {
         const reasons: string[] = [];
         if (keysetId) reasons.push('keysetId override');
         if (config?.scriptPath?.length) reasons.push('script-path spend');
+        if (config?.preimage !== undefined) reasons.push('HTLC preimage');
         if (wantsDeterministicByPolicy) reasons.push('wallet default is deterministic');
         if (!isPlainRandom(outputConfig.send)) reasons.push('non-default send output type');
         if (outputConfig.keep && !isPlainRandom(outputConfig.keep))

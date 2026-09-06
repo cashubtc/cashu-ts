@@ -425,6 +425,43 @@ describe('send', () => {
     expect(JSON.parse(inputs[0].witness!)).toEqual({ preimage });
   });
 
+  test('send with a preimage swaps an exact offline match instead of forwarding it locked', async () => {
+    let inputs: Array<{ witness?: string }> = [];
+    server.use(
+      http.post(mintUrl + '/v1/swap', async ({ request }) => {
+        ({ inputs } = (await request.json()) as { inputs: Array<{ witness?: string }> });
+        return HttpResponse.json({
+          signatures: [
+            {
+              id: '00bd033559de27d0',
+              amount: 1,
+              C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+            },
+          ],
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const { hash, preimage } = createHTLCHash();
+    const secret = createHTLCsecret(hash);
+    const locked: Proof[] = [
+      {
+        id: '00bd033559de27d0',
+        amount: Amount.from(1),
+        secret,
+        C: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+      },
+    ];
+
+    // 1 of 1 sat matches offline, but the preimage means the sender is redeeming the HTLC
+    const result = await wallet.send(1, locked, { preimage });
+    expect(inputs).toHaveLength(1);
+    expect(JSON.parse(inputs[0].witness!)).toEqual({ preimage });
+    expect(result.send).toHaveLength(1);
+    expect(result.send[0].secret).not.toBe(secret);
+  });
+
   test('swap preview round trips through serialize/deserialize and replays identically', async () => {
     const bodies: string[] = [];
     server.use(
