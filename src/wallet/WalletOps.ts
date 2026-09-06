@@ -110,8 +110,14 @@ export class WalletOps {
     // keyset takes, preferring nutroot on a v3 keyset.
     const nutroot = pr.toNutrootOptions();
     // Net of input fees (NUT-18): the payee must net the requested amount after swapping.
-    const builder = new SendBuilder(wallet, base.add(fee), proofs).includeFees(true);
-    if (nutroot && isBlsKeyset(wallet.keysetId)) {
+    const v3 = isBlsKeyset(wallet.keysetId);
+    const builder = new SendBuilder(
+      wallet,
+      base.add(fee),
+      proofs,
+      v3 ? 'v3' : 'legacy',
+    ).includeFees(true);
+    if (nutroot && v3) {
       return builder.asLocked(nutrootToLockOptions(nutroot));
     }
     // Nutroot alone asks for v3 outputs only (NUT-18): a payer that cannot
@@ -121,7 +127,7 @@ export class WalletOps {
     }
     // nut10 alone is the pre-v3 encoding (NUT-18): a payee that published no nutroot option has
     // not said it can read v3 proofs, so a v3 payer refuses rather than translating the lock.
-    if (lock && isBlsKeyset(wallet.keysetId)) {
+    if (lock && v3) {
       throw new CTSError(
         "the request's nut10 lock is pre-v3 only; this wallet's v3 keyset needs a nutroot option",
       );
@@ -185,10 +191,15 @@ export class SendBuilder {
   private offlineClose?: { requireDleq: boolean };
   private amount: Amount;
 
+  /**
+   * @param lockFamily Set by `sendToRequest`: the keyset family the request was negotiated for
+   *   (NUT-18). `keyset()` then refuses an id from the other family.
+   */
   constructor(
     private wallet: Wallet,
     amount: AmountLike,
     private proofs: ProofLike[],
+    private lockFamily?: 'v3' | 'legacy',
   ) {
     this.amount = Amount.from(amount);
   }
@@ -318,6 +329,12 @@ export class SendBuilder {
    * @param id Keyset id to use for mint keys and fee lookup.
    */
   keyset(id: string) {
+    // The lock encoding was negotiated for one family (NUT-18); the other would re-encode it.
+    if (this.lockFamily && (isBlsKeyset(id) ? 'v3' : 'legacy') !== this.lockFamily) {
+      throw new CTSError(
+        `keyset ${id} is not in the family this payment request was negotiated for`,
+      );
+    }
     this.config.keysetId = id;
     return this;
   }

@@ -400,6 +400,12 @@ describe('WalletOps builders', () => {
       wallet.keysetId = `02${'ab'.repeat(32)}`;
       expect(() => ops.sendToRequest(locked, proofs)).toThrow(/pre-v3 only/);
       wallet.keysetId = '00ad268c4d1f5826';
+      // The builder cannot cross families after the negotiation either: the lock is encoded
+      // against the final keyset, so a v3 override would recreate the translation.
+      expect(() => ops.sendToRequest(locked, proofs).keyset(`02${'ab'.repeat(32)}`)).toThrow(
+        /family/,
+      );
+      expect(() => ops.sendToRequest(locked, proofs).keyset('00bd033559de27d0')).not.toThrow();
     });
 
     it('honours a nutroot option, and follows the wallet keyset when both are published', async () => {
@@ -415,6 +421,9 @@ describe('WalletOps builders', () => {
       expect(() => ops.sendToRequest(nutrootPr, proofs)).toThrow(/v3/);
 
       wallet.keysetId = `02${'ab'.repeat(32)}`;
+      expect(() => ops.sendToRequest(nutrootPr, proofs).keyset('00ad268c4d1f5826')).toThrow(
+        /family/,
+      );
       await ops.sendToRequest(nutrootPr, proofs).run();
       const outputConfig = wallet.send.mock.calls[0][3];
       expect(outputConfig?.send.type).toBe('lock');
