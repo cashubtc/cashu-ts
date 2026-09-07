@@ -17,7 +17,6 @@ export type SerializedProof = Omit<Proof, 'amount'> & { amount: string };
 export type SerializedSwapPreview = {
   amount: string;
   fees: string;
-  keysetId: string;
   inputs: SerializedProof[];
   sendOutputs?: SerializedOutputData[];
   keepOutputs?: SerializedOutputData[];
@@ -42,7 +41,6 @@ export function serializeSwapPreview(preview: SwapPreview): SerializedSwapPrevie
   return {
     amount: preview.amount.toString(),
     fees: preview.fees.toString(),
-    keysetId: preview.keysetId,
     inputs: preview.inputs.map(serializeProof),
     ...(preview.sendOutputs && {
       sendOutputs: preview.sendOutputs.map((o) => OutputData.serialize(o)),
@@ -64,7 +62,6 @@ export function deserializeSwapPreview(serialized: SerializedSwapPreview): SwapP
     return {
       amount: Amount.from(serialized.amount),
       fees: Amount.from(serialized.fees),
-      keysetId: serialized.keysetId,
       inputs: normalizeProofAmounts(serialized.inputs),
       ...(serialized.sendOutputs && {
         sendOutputs: serialized.sendOutputs.map((s) => OutputData.deserialize(s)),

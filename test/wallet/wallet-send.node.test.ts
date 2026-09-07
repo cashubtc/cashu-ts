@@ -502,7 +502,6 @@ describe('send', () => {
     const serialized = serializeSwapPreview({
       amount: Amount.from(1),
       fees: Amount.from(0),
-      keysetId: '00bd033559de27d0',
       inputs: [proofs[0]],
       unselectedProofs: [{ ...proofs[0], secret: 'not-part-of-the-replay' }],
     });
@@ -515,7 +514,6 @@ describe('send', () => {
     const bad: SerializedSwapPreview = {
       amount: '1',
       fees: '0',
-      keysetId: '00bd033559de27d0',
       inputs: [],
       sendOutputs: [
         {
@@ -532,7 +530,6 @@ describe('send', () => {
     const bad: SerializedSwapPreview = {
       amount: '1',
       fees: '0',
-      keysetId: '00bd033559de27d0',
       get inputs(): SerializedProof[] {
         // eslint-disable-next-line @typescript-eslint/only-throw-error -- exercising the non-Error path
         throw 'not-an-error';

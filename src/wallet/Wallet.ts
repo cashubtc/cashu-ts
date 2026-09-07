@@ -1463,7 +1463,6 @@ class Wallet {
     return {
       amount: receiveAmount,
       fees: swapFee,
-      keysetId: keyset.id,
       inputs: preimage === undefined ? proofs : attachHTLCPreimage(proofs, preimage),
       keepOutputs: outputs,
     };
@@ -1741,7 +1740,6 @@ class Wallet {
     return {
       amount: sendAmountTarget,
       fees: swapFee,
-      keysetId: keyset.id,
       inputs:
         preimage === undefined ? selectedProofs : attachHTLCPreimage(selectedProofs, preimage),
       sendOutputs,
@@ -3318,7 +3316,6 @@ class Wallet {
       method,
       payload: mintPayload,
       outputData: outputs,
-      keysetId: keyset.id,
       quote,
       legacySignature,
     };
@@ -3565,7 +3562,6 @@ class Wallet {
       method,
       payload: batchPayload,
       outputData: outputs,
-      keysetId: keyset.id,
       quotes: entries.map((e) => e.quote),
       ...(hasSignatures ? { legacySignatures } : {}),
     };
@@ -4149,7 +4145,6 @@ class Wallet {
       inputs:
         preimage === undefined ? normalizedProofs : attachHTLCPreimage(normalizedProofs, preimage),
       outputData,
-      keysetId: keyset.id,
       quote: meltQuote,
     };
 

@@ -41,6 +41,20 @@ No migration is needed unless you deliberately created outputs on inactive or le
 
 ---
 
+## `keysetId` removed from the preview types
+
+`SwapPreview`, `MintPreview`, `BatchMintPreview` and `MeltPreview` no longer carry `keysetId`. It
+named the wallet's keyset at prepare time, but custom output data names its own keyset per output
+and the wallet now unblinds each output with the keyset the mint signed under. Read the id from the
+outputs instead; a persisted `SerializedSwapPreview` that still has the field deserializes fine.
+
+```ts
+// Before
+const id = preview.keysetId;
+// After
+const id = preview.outputData[0].blindedMessage.id; // or sendOutputs / keepOutputs for a SwapPreview
+```
+
 ## Mint quotes now require a usable active keyset
 
 All mint-quote creation methods (`createMintQuote`, `createMintQuoteBolt11`, `createMintQuoteBolt12`, `createMintQuoteOnchain`) now throw `no active keyset for unit '…' — a paid mint quote could not be redeemed` if the mint has no usable (active, hex-id, keyed) keyset for the wallet's unit. This prevents paying an invoice for a quote that could never be redeemed for proofs — `loadMint` deliberately tolerates keyset-less mints (e.g. a mint unwinding liabilities) by leaving the wallet unbound, so without this check the failure only surfaced after payment, at minting time.

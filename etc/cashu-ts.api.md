@@ -210,7 +210,6 @@ export interface AuthProvider {
 
 // @public
 export interface BatchMintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'quote' | 'pubkey'> = MintQuoteBaseResponse> {
-    keysetId: string;
     // @deprecated (undocumented)
     legacySignatures?: Array<string | null>;
     // (undocumented)
@@ -1055,7 +1054,6 @@ export class MeltOnchainBuilder {
 // @public
 export interface MeltPreview<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse> {
     inputs: Proof[];
-    keysetId: string;
     // (undocumented)
     method: string;
     outputData: OutputDataLike[];
@@ -1456,7 +1454,6 @@ export class MintOperationError extends HttpResponseError {
 
 // @public
 export interface MintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'quote'> = MintQuoteBaseResponse> {
-    keysetId: string;
     // @deprecated (undocumented)
     legacySignature?: string;
     // (undocumented)
@@ -2432,7 +2429,6 @@ export type SerializedProof = Omit<Proof, 'amount'> & {
 export type SerializedSwapPreview = {
     amount: string;
     fees: string;
-    keysetId: string;
     inputs: SerializedProof[];
     sendOutputs?: SerializedOutputData[];
     keepOutputs?: SerializedOutputData[];
@@ -2632,7 +2628,6 @@ export type SwapMethod = {
 export type SwapPreview = {
     amount: Amount;
     fees: Amount;
-    keysetId: string;
     inputs: Proof[];
     sendOutputs?: OutputDataLike[];
     keepOutputs?: OutputDataLike[];
