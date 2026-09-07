@@ -171,6 +171,22 @@ describe('custom outputs on a keyset other than the wallet default', () => {
     expect(new Set(proofs.map((p) => p.id))).toEqual(new Set([dear.keysetId]));
   });
 
+  test('batch mint unblinds custom outputs with the keyset that signed them', async () => {
+    const { wallet } = makeWallet();
+    const data = OutputData.createDeterministicData(Amount.from(16), seed, 0, keysFor(dear));
+
+    const preview = await wallet.prepareBatchMint(
+      'bolt11',
+      [{ amount: 16, quote: { quote: 'quote-id' } }],
+      undefined,
+      { type: 'custom', data },
+    );
+    const proofs = await wallet.completeBatchMint(preview);
+
+    expect(proofs.every(proofIsValid)).toBe(true);
+    expect(new Set(proofs.map((p) => p.id))).toEqual(new Set([dear.keysetId]));
+  });
+
   test.each([
     ['unknown', unknown, /Keyset '/],
     ['inactive', retired, /Inactive keyset/],

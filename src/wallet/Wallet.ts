@@ -71,7 +71,7 @@ import type {
   SpendInfo,
   SwapRequest,
 } from '../model/types';
-import type { SerializedBlindedSignature } from '../model/types/blinded';
+import type { SerializedBlindedMessage, SerializedBlindedSignature } from '../model/types/blinded';
 import type { KeyChainCache } from '../model/types/keyset';
 import { CheckStateEnum, type ProofState } from '../model/types/NUT07';
 import { type BatchMintRequest } from '../model/types/NUT29';
@@ -618,6 +618,22 @@ class Wallet {
       keyset: keyset.id,
     });
     return keyset;
+  }
+
+  /**
+   * Whether a mint request's outputs sit on a v3 keyset, which selects the quote signing rule.
+   *
+   * @remarks
+   * Chosen from the outputs, not the wallet keyset: custom data may name another. NUT-04 requires
+   * every output of a v3 mint request to share one keyset.
+   */
+  private mintsOntoV3(outputs: SerializedBlindedMessage[]): boolean {
+    const v3 = outputs.some((o) => isBlsKeyset(o.id));
+    this.failIf(
+      v3 && new Set(outputs.map((o) => o.id)).size > 1,
+      'Outputs on a v3 keyset must all share that keyset (NUT-04)',
+    );
+    return v3;
   }
 
   /**
@@ -3217,6 +3233,7 @@ class Wallet {
     // Create outputs and mint payload
     const outputs = this.createOutputData(mintAmount, keyset, mintOT);
     const blindedMessages = outputs.map((d) => d.blindedMessage);
+    const v3 = this.mintsOntoV3(blindedMessages);
     const mintPayload: MintRequest = {
       outputs: blindedMessages,
       quote: quote.quote,
@@ -3254,7 +3271,7 @@ class Wallet {
         quoteId: quote.quote,
         outputs: blindedMessages,
       };
-      if (isBlsKeyset(keyset.id)) {
+      if (v3) {
         // V3 (nutroot secrets): the quote is a transaction input; its lock key signs the
         // quote input digest (NUT-10). No legacy fallback on v3 keysets.
         // The transcript commits the quote's face amount, not this draw: the output
@@ -3282,7 +3299,7 @@ class Wallet {
         mintPayload.signature = schnorrSignDigest(request.digest, signingKey);
         // Keep a legacy (pre nuts#375) signature over the same outputs as a fallback for
         // not-yet-upgraded mints — see completeMint(). Never on v3 keysets.
-        if (!isBlsKeyset(keyset.id)) {
+        if (!v3) {
           legacySignature = signMintQuoteLegacy(signingKey, quote.quote, blindedMessages);
         }
       } else {
@@ -3475,6 +3492,7 @@ class Wallet {
     // Create consolidated output data
     const outputs = this.createOutputData(totalAmount, keyset, mintOT);
     const blindedMessages = outputs.map((d) => d.blindedMessage);
+    const v3 = this.mintsOntoV3(blindedMessages);
 
     // Sign each locked quote over ALL blinded messages (NUT-29).
     // Unlocked quotes get null. If no quotes are locked, omit signatures entirely.
@@ -3487,14 +3505,14 @@ class Wallet {
     // and all outputs (NUT-10).
     // Every quote in a v3 batch is a signing input, so an unlocked one has no witness and the
     // mint must reject the batch (NUT-29). Fail here, before any request is built.
-    if (isBlsKeyset(keyset.id)) {
+    if (v3) {
       const unlocked = entries.findIndex((e) => !('pubkey' in e.quote && e.quote.pubkey));
       this.failIf(
         unlocked >= 0,
         `prepareBatchMint: quote #${unlocked + 1} is unlocked; every quote minting onto a v3 keyset must be locked`,
       );
     }
-    const v3BatchDigests = isBlsKeyset(keyset.id)
+    const v3BatchDigests = v3
       ? inputsForPayload({
           mintQuotes: entries.map((e, i) => {
             // Face amount, as in prepareMint: the transcript never commits the draw,
