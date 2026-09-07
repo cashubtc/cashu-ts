@@ -28,7 +28,8 @@ export interface MintPreview<
    */
   outputData: OutputDataLike[];
   /**
-   * Keyset ID used to prepare the outputs.
+   * Keyset the wallet prepared generated outputs under. Custom outputs name their own keyset per
+   * output.
    */
   keysetId: string;
   /**
@@ -60,7 +61,8 @@ export interface BatchMintPreview<
    */
   outputData: OutputDataLike[];
   /**
-   * Keyset ID used to prepare the outputs.
+   * Keyset the wallet prepared generated outputs under. Custom outputs name their own keyset per
+   * output.
    */
   keysetId: string;
   /**
@@ -92,7 +94,8 @@ export interface MeltPreview<
    */
   outputData: OutputDataLike[];
   /**
-   * Keyset ID used to prepare the outputs.
+   * Keyset the wallet prepared generated outputs under. Custom outputs name their own keyset per
+   * output.
    */
   keysetId: string;
   /**
@@ -143,7 +146,8 @@ export type SwapPreview = {
    */
   fees: Amount;
   /**
-   * Keyset ID used to prepare the outputs.
+   * Keyset the wallet prepared generated outputs under. Custom outputs name their own keyset per
+   * output.
    */
   keysetId: string;
   /**
