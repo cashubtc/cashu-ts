@@ -52,7 +52,7 @@ import {
   encodeUint8ToBase64,
   encodeUint8ToBase64Url,
 } from './base64';
-import { minimalBytesBE } from './bytes';
+import { decodeUtf8Document, minimalBytesBE } from './bytes';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { JSONInt } from './JSONInt';
 import { MAX_PAYLOAD_DECODE_ATTEMPTS, MAX_PAYLOAD_LENGTH, MAX_SPLIT_OUTPUTS } from './limits';
@@ -860,7 +860,7 @@ export function decodeSpendReceipt(input: string): SpendReceiptBundle {
   let data: unknown;
   try {
     data = JSON.parse(
-      new TextDecoder().decode(decodeBase64UrlToUint8(input.slice(SPEND_RECEIPT_PREFIX.length))),
+      decodeUtf8Document(decodeBase64UrlToUint8(input.slice(SPEND_RECEIPT_PREFIX.length))),
     );
   } catch (e) {
     throw new CTSError('Failed to parse spend receipt', { cause: e });

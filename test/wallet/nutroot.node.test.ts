@@ -447,6 +447,10 @@ describe('attachTransactionWitnesses', () => {
       ),
     ).toThrow(/Malformed/);
     expect(() => decodeSpendReceipt(tamper((b) => ({ ...b, token: 1 })))).toThrow(/Malformed/);
+    // A bad byte inside the JSON document must not be replaced with U+FFFD and accepted.
+    const raw = utf8ToBytes(JSON.stringify({ token: 'cashuBtestX', receipts }));
+    raw[raw.indexOf(0x58)] = 0xff;
+    expect(() => decodeSpendReceipt('nutrcA' + encodeUint8ToBase64Url(raw))).toThrow(/parse/);
   });
 
   test('verifySpendReceipt follows a hashlock leaf with a merkle path and its preimage', async () => {
