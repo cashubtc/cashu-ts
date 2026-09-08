@@ -189,6 +189,7 @@ export interface AuthProvider {
 
 // @public
 export interface BatchMintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'quote' | 'pubkey'> = MintQuoteBaseResponse> {
+    // @deprecated
     keysetId: string;
     // @deprecated (undocumented)
     legacySignatures?: Array<string | null>;
@@ -825,6 +826,7 @@ export class MeltOnchainBuilder {
 // @public
 export interface MeltPreview<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse> {
     inputs: Proof[];
+    // @deprecated
     keysetId: string;
     // (undocumented)
     method: string;
@@ -1202,6 +1204,7 @@ export class MintOperationError extends HttpResponseError {
 
 // @public
 export interface MintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'quote'> = MintQuoteBaseResponse> {
+    // @deprecated
     keysetId: string;
     // @deprecated (undocumented)
     legacySignature?: string;

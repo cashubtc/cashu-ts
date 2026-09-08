@@ -482,6 +482,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
     wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
     const ks = makeKeysetFromCache(MINTCACHE.keys[0]);
     vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValue(ks);
+    vi.spyOn(wallet.keyChain, 'hasKeyset').mockReturnValue(true);
     vi.spyOn(wallet as any, 'createOutputData').mockReturnValue([]);
     const meltQuote = {
       quote: 'm1',
@@ -521,6 +522,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
     wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
     const ks = makeKeysetFromCache(MINTCACHE.keys[0]);
     vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValue(ks);
+    vi.spyOn(wallet.keyChain, 'hasKeyset').mockReturnValue(true);
     vi.spyOn(wallet as any, 'createOutputData').mockReturnValue([
       {
         blindedMessage: { amount: Amount.from(16), B_: 'B1', id: '009a1f293253e41e' },
@@ -581,6 +583,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
     wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
     const ks = makeKeysetFromCache(MINTCACHE.keys[0]);
     vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValue(ks);
+    vi.spyOn(wallet.keyChain, 'hasKeyset').mockReturnValue(true);
     vi.spyOn(wallet as any, 'createOutputData').mockReturnValue([
       {
         blindedMessage: { amount: Amount.from(16), B_: 'B1', id: '009a1f293253e41e' },

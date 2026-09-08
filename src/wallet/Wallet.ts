@@ -995,6 +995,10 @@ class Wallet {
         !customTotal.equals(newAmount),
         `Custom output data total (${customTotal.toString()}) does not match amount (${newAmount.toString()})`,
       );
+      // Custom data names its own keyset per output; check each is usable before anything is spent.
+      for (const d of outputType.data) {
+        this.getOutputKeyset(d.blindedMessage.id);
+      }
       return outputType;
     }
 
@@ -1653,9 +1657,12 @@ class Wallet {
     );
     this.validateReturnedSignatures(signatures, swapTransaction.outputData);
 
-    // Construct proofs
-    const keyset = this.getKeyset(swapPreview.keysetId);
-    const swapProofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keyset));
+    // Construct proofs. Each signature names the keyset it was made under, which custom outputs
+    // may have chosen per output; unblinding must use that one.
+    await this._ensureKeysetsForSignatures(signatures);
+    const swapProofs = swapTransaction.outputData.map((d, i) =>
+      d.toProof(signatures[i], this.keysetForSignature(signatures[i].id)),
+    );
     const reorderedProofs = Array(swapProofs.length);
     const reorderedKeepVector = Array(swapTransaction.keepVector.length);
     swapTransaction.sortedIndices.forEach((s, i) => {
@@ -2011,12 +2018,7 @@ class Wallet {
     const { outputs, signatures } = await this.mint.restore({
       outputs: outputData.map((d) => d.blindedMessage),
     });
-    // NUT-09: each signature names the keyset to unblind with, which need not be the scanned
-    // one. Zero-value entries are dropped below and need no keys.
-    await this._ensureOperableKeysets(
-      signatures.map((s) => (s?.amount.isZero() ? undefined : s?.id)),
-      { implicit: true },
-    );
+    await this._ensureKeysetsForSignatures(signatures);
 
     const signatureMap: { [sig: string]: SerializedBlindedSignature } = {};
     outputs.forEach((o, i) => (signatureMap[o.B_] = signatures[i]));
@@ -2737,7 +2739,7 @@ class Wallet {
   async completeMint(
     mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>,
   ): Promise<Proof[]> {
-    const { payload, outputData, keysetId, method, legacySignature } = mintPreview;
+    const { payload, outputData, method, legacySignature } = mintPreview;
     // TODO: Remove legacy message support
     const { signatures } = await this.withStaleKeysetRepair(() =>
       this.withLegacyQuoteSigFallback(
@@ -2752,11 +2754,14 @@ class Wallet {
     );
     this.validateReturnedSignatures(signatures, outputData);
 
-    const keyset = this.getKeyset(keysetId);
+    // Unblind under the keyset each signature names, as custom outputs may pick their own.
+    await this._ensureKeysetsForSignatures(signatures);
     this._logger.debug('MINT COMPLETED', {
       amounts: outputData.map((o) => o.blindedMessage.amount.toString()),
     });
-    return outputData.map((d, i) => d.toProof(signatures[i], keyset));
+    return outputData.map((d, i) =>
+      d.toProof(signatures[i], this.keysetForSignature(signatures[i].id)),
+    );
   }
 
   /**
@@ -2911,7 +2916,7 @@ class Wallet {
   async completeBatchMint(
     batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>,
   ): Promise<Proof[]> {
-    const { method, payload, outputData, keysetId, legacySignatures } = batchPreview;
+    const { method, payload, outputData, legacySignatures } = batchPreview;
     // TODO: Remove legacy message support
     const { signatures: sigs } = await this.withStaleKeysetRepair(() =>
       this.withLegacyQuoteSigFallback(
@@ -2926,12 +2931,13 @@ class Wallet {
     );
     this.validateReturnedSignatures(sigs, outputData);
 
-    const keyset = this.getKeyset(keysetId);
+    // Unblind under the keyset each signature names, as custom outputs may pick their own.
+    await this._ensureKeysetsForSignatures(sigs);
     this._logger.debug('BATCH MINT COMPLETED', {
       quotes: payload.quotes.length,
       amounts: outputData.map((o) => o.blindedMessage.amount.toString()),
     });
-    return outputData.map((d, i) => d.toProof(sigs[i], keyset));
+    return outputData.map((d, i) => d.toProof(sigs[i], this.keysetForSignature(sigs[i].id)));
   }
 
   // -----------------------------------------------------------------
@@ -3623,11 +3629,25 @@ class Wallet {
   }
 
   /**
-   * Keyset a blank's signature was issued under, for unblinding.
+   * Loads the keysets a mint response was signed under.
+   *
+   * @remarks
+   * Each signature names its own keyset, which need not be the one the preview or scan used.
+   * Zero-value entries are dropped by the caller and need no keys.
+   */
+  private _ensureKeysetsForSignatures(signatures: SerializedBlindedSignature[]): Promise<void> {
+    return this._ensureOperableKeysets(
+      signatures.map((s) => (s?.amount.isZero() ? undefined : s?.id)),
+      { implicit: true },
+    );
+  }
+
+  /**
+   * Keyset a signature was issued under, for unblinding.
    *
    * @remarks
    * Must already be loaded (see `_ensureOperableKeysets`); `getKeyset` also rejects a keyset from
-   * another unit, which a blank cannot vouch for itself.
+   * another unit, which the signature cannot vouch for itself.
    */
   private keysetForSignature(id: string): Keyset {
     try {
