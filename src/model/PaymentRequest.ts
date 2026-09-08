@@ -43,6 +43,21 @@ import { CTSError } from './Errors';
 import type { Proof } from './types/proof';
 
 /**
+ * Normalizes a wire boolean flag, admitting true/false, the numeric 0/1 form, and null.
+ *
+ * @remarks
+ * `null` is treated the same as an absent key: some encoders (eg cdk) serialize an unset optional
+ * field as CBOR null rather than omitting it.
+ * @throws If `value` is present, non-null, and not one of those four values.
+ */
+function normalizePaymentRequestFlag(value: unknown, field: 's' | 'mp'): boolean | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (value === true || value === 1) return true;
+  if (value === false || value === 0) return false;
+  throw new CTSError(`invalid payment request: ${field} must be a boolean (or 0/1)`);
+}
+
+/**
  * Constructor options for {@link PaymentRequest}. Keys mirror the class properties; `amount` and
  * method `fee` values accept flexible input and are normalized on construction.
  */
@@ -86,12 +101,8 @@ export class PaymentRequest {
       method: m.method,
       fee: m.fee !== undefined ? Amount.from(m.fee) : undefined,
     }));
-    // Coerce the optional flags to real booleans (preserving `undefined` for the
-    // absent/tri-state case) so an untyped CBOR value (`0`/`1`/`null`) can't leak a
-    // non-boolean into the getter or get re-serialized verbatim over the wire.
-    this.singleUse = options.singleUse === undefined ? undefined : Boolean(options.singleUse);
-    this.mintsPreferred =
-      options.mintsPreferred === undefined ? undefined : Boolean(options.mintsPreferred);
+    this.singleUse = normalizePaymentRequestFlag(options.singleUse, 's');
+    this.mintsPreferred = normalizePaymentRequestFlag(options.mintsPreferred, 'mp');
   }
 
   /**
