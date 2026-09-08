@@ -5,6 +5,7 @@ import { type Logger, NULL_LOGGER } from '../logger';
 import { CTSError } from '../model/Errors';
 import { type OutputDataLike } from '../model/OutputData';
 import { type HTLCWitness, type P2PKWitness, type Proof } from '../model/types';
+import { MAX_P2PK_PUBKEYS, MAX_P2PK_SIGNATURES } from '../utils/limits';
 
 import { getValidSigners, schnorrSignMessage, schnorrVerifyMessage, type PrivKey } from './core';
 import {
@@ -26,14 +27,6 @@ export const SigFlags = {
 } as const;
 export type SigFlag = (typeof SigFlags)[keyof typeof SigFlags];
 const VALID_SIG_FLAGS: ReadonlySet<SigFlag> = new Set(Object.values(SigFlags));
-
-// Upper bounds on untrusted P2PK/HTLC secret and witness sizes, applied on the verify/sign path so
-// per-key and per-signature work stays bounded rather than scaling with input. NUT-28 caps a lock
-// at 11 slots (data + pubkeys + refund); SIG_ALL adds a signature per message variant per signer,
-// so signatures need more headroom than keys. These are work bounds, not the exact NUT-28 rule
-// (still enforced at build).
-const MAX_P2PK_PUBKEYS = 16;
-const MAX_P2PK_SIGNATURES = 64;
 
 export type LockState = 'PERMANENT' | 'ACTIVE' | 'EXPIRED';
 
@@ -830,11 +823,11 @@ function getP2PKWitnessRefundkeys(secret: Secret): string[] {
 }
 
 function getLocktime(secret: Secret): number {
-  const ts = getTagInt(secret, 'locktime');
-  if (ts === undefined || !Number.isFinite(ts) || ts <= 0) {
-    return Infinity;
-  }
-  return ts;
+  // NUT-11: a locktime that is not a valid unix time makes the lock permanent, so a malformed
+  // value is passed through for the mint to judge rather than rejected here. Arity still throws.
+  const v = getTagScalar(secret, 'locktime');
+  const ts = v !== undefined && /^\d+$/.test(v) ? Number(v) : NaN;
+  return Number.isSafeInteger(ts) && ts > 0 ? ts : Infinity;
 }
 
 function deriveLockState(

@@ -1716,6 +1716,59 @@ describe('verifyP2PKSpendingConditions — semantic validation', () => {
     );
   });
 
+  test('rejects a malformed n_sigs instead of applying the default threshold', () => {
+    // A present but unparseable threshold must not read as an absent tag.
+    for (const bad of ['2oops', '2 ', '9007199254740992']) {
+      const proof = makeProof(
+        [
+          ['n_sigs', bad],
+          ['pubkeys', pk2],
+        ],
+        PUBKEY,
+      );
+      const signedProof = signP2PKProof(proof, bytesToHex(PRIVKEY));
+      expect(() => verifyP2PKSpendingConditions(signedProof)).toThrow(
+        /tag "n_sigs": must be an integer/,
+      );
+    }
+  });
+
+  test('rejects a malformed n_sigs_refund instead of ignoring it', () => {
+    const badRefund = makeProof([
+      ['locktime', '1'],
+      ['refund', pk2],
+      ['n_sigs_refund', '1.0'],
+    ]);
+    expect(() => verifyP2PKSpendingConditions(badRefund)).toThrow(
+      /tag "n_sigs_refund": must be an integer/,
+    );
+  });
+
+  test('a malformed locktime reads as a permanent lock, not a rejection', () => {
+    // NUT-11: a locktime that is not a valid unix time makes the lock permanent, so the refund
+    // path never opens and only the main key can sign; the mint makes the final call.
+    const proof = makeProof([
+      ['locktime', 'never'],
+      ['refund', pk2],
+    ]);
+    expect(() => verifyP2PKSpendingConditions(proof)).not.toThrow(/must be an integer/);
+    expect(getP2PKExpectedWitnessPubkeys(proof.secret)).toEqual([pk1]);
+  });
+
+  test('rejects a scalar tag carrying more than one value', () => {
+    const nSigs = makeProof([
+      ['n_sigs', '1', '2'],
+      ['pubkeys', pk2],
+    ]);
+    expect(() => verifyP2PKSpendingConditions(nSigs)).toThrow(
+      /tag "n_sigs": must carry a single value/,
+    );
+    const sigflag = makeProof([['sigflag', 'SIG_INPUTS', 'SIG_ALL']]);
+    expect(() => parseP2PKSecret(sigflag.secret)).toThrow(
+      /tag "sigflag": must carry a single value/,
+    );
+  });
+
   test('rejects impossible n_sigs threshold (n_sigs > available keys)', () => {
     // 1 key in data, none in pubkeys, but n_sigs=3
     const proof = makeProof([['n_sigs', '3']]);
