@@ -103,22 +103,30 @@ describe('NUT10 module core functions', () => {
 
   test('getTagInt finds tags', () => {
     expect(getTagInt(proof.secret, 'locktime')).toEqual(1);
-    expect(getTagInt(proof.secret, 'not_exists')).toBeFalsy();
-    expect(getTagInt(proof.secret, 'sigflag')).toBeFalsy();
+    expect(getTagInt(proof.secret, 'not_exists')).toBeUndefined();
+    expect(() => getTagInt(proof.secret, 'sigflag')).toThrow(/tag "sigflag": must be an integer/);
   });
 
   test('getTagInt rejects non-integer tag values instead of partial-parsing', () => {
     // Number.parseInt would accept these; a spending-condition integer must not
-    // be inferred from a partial or non-decimal value (eg a locktime).
-    for (const bad of ['1700000000abc', '2 of 3', '0x1f', '1e3', '12.5', '  9']) {
+    // be inferred from a partial or non-decimal value (eg a locktime). A present
+    // but unparseable value is an error, not an absent tag.
+    for (const bad of ['1700000000abc', '2 of 3', '0x1f', '1e3', '12.5', '  9', '2 ', 'SIG_ALL']) {
       const secret = createSecret('P2PK', DATA, [['locktime', bad]]);
-      expect(getTagInt(secret, 'locktime')).toBeUndefined();
+      expect(() => getTagInt(secret, 'locktime')).toThrow(/tag "locktime": must be an integer/);
     }
   });
 
   test('getTagInt rejects an integer beyond safe range', () => {
-    const secret = createSecret('P2PK', DATA, [['locktime', '99999999999999999999']]);
-    expect(getTagInt(secret, 'locktime')).toBeUndefined();
+    for (const bad of ['99999999999999999999', '9007199254740992', '-9007199254740992']) {
+      const secret = createSecret('P2PK', DATA, [['locktime', bad]]);
+      expect(() => getTagInt(secret, 'locktime')).toThrow(/tag "locktime": must be an integer/);
+    }
+  });
+
+  test('getTagInt rejects a tag carrying more than one value', () => {
+    const secret = createSecret('P2PK', DATA, [['n_sigs', '1', '2']]);
+    expect(() => getTagInt(secret, 'n_sigs')).toThrow(/tag "n_sigs": must carry a single value/);
   });
 });
 
@@ -297,5 +305,11 @@ describe('NUT10 tag accessors', () => {
 
   test('getTagScalar returns undefined for a missing key', () => {
     expect(getTagScalar(proof.secret, 'not_exists')).toBeUndefined();
+  });
+
+  test('getTagScalar rejects a tag carrying more than one value', () => {
+    expect(() => getTagScalar(proof.secret, 'refund')).toThrow(
+      /tag "refund": must carry a single value/,
+    );
   });
 });

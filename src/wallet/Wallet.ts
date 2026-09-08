@@ -2272,7 +2272,8 @@ class Wallet {
    * @param opts.privkeys Static keys to trial-match, for receiver-keyed proofs and leaf keys.
    * @param opts.now Unix seconds to judge locktimes against. Defaults to the current time.
    * @throws If a v3 keyset proof is not a point secret, a NUT-10 secret is of a kind this wallet
-   *   cannot spend, or a disclosed tree holds a leaf it cannot parse (unknown version, type or
+   *   cannot spend, a NUT-11 tag is malformed (a non-integer `n_sigs`, or a scalar tag with more
+   *   than one value), or a disclosed tree holds a leaf it cannot parse (unknown version, type or
    *   constraint field): the same fail-closed rule the receive cascade applies.
    */
   spendOptions(proof: Proof, opts?: { privkeys?: string | string[]; now?: number }): SpendOptions {

@@ -1,3 +1,5 @@
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
 import { test, describe, expect } from 'vitest';
 
 import {
@@ -759,6 +761,52 @@ describe('payment requests', () => {
       expect(() => prWithNut10(nut10).toP2PKOptions()).toThrow(/Duplicate P2PK tag "locktime"/);
     });
 
+    test('rejects a malformed threshold instead of defaulting to one signature', () => {
+      // A present but unparseable integer is an error, not an absent tag.
+      const nut10: NUT10Option = {
+        kind: 'P2PK',
+        data: PUBKEY,
+        tags: [
+          ['pubkeys', PUBKEY_2],
+          ['n_sigs', '2 '],
+        ],
+      };
+      expect(() => prWithNut10(nut10).toP2PKOptions()).toThrow(/tag "n_sigs": must be an integer/);
+    });
+
+    test('rejects a scalar tag carrying more than one value', () => {
+      const nut10: NUT10Option = {
+        kind: 'P2PK',
+        data: PUBKEY,
+        tags: [
+          ['pubkeys', PUBKEY_2],
+          ['n_sigs', '1', '2'],
+        ],
+      };
+      expect(() => prWithNut10(nut10).toP2PKOptions()).toThrow(
+        /tag "n_sigs": must carry a single value/,
+      );
+    });
+
+    test('bounds the pubkeys and refund lists before validating each key', () => {
+      const keys = Array.from({ length: 17 }, (_, i) => {
+        const secret = new Uint8Array(32);
+        secret[31] = i + 1;
+        return bytesToHex(secp256k1.getPublicKey(secret, true));
+      });
+      const pubkeys: NUT10Option = { kind: 'P2PK', data: PUBKEY, tags: [['pubkeys', ...keys]] };
+      expect(() => prWithNut10(pubkeys).toP2PKOptions()).toThrow(/Too many pubkeys: 17/);
+      const refund: NUT10Option = {
+        kind: 'P2PK',
+        data: PUBKEY,
+        tags: [
+          ['locktime', '1'],
+          ['refund', ...keys],
+        ],
+      };
+      expect(() => prWithNut10(refund).toP2PKOptions()).toThrow(/Too many refund pubkeys: 17/);
+    });
+
     test('maps an HTLC option to a hashlock with signing keys', () => {
       const nut10: NUT10Option = {
         kind: 'HTLC',
@@ -1011,6 +1059,25 @@ describe('nutroot (v3) request marking', () => {
         nutroot: { receiverKey: carolPub, leaves: [leafAfter], blindKeys: ['not-a-point'] },
       }).toNutrootOptions(),
     ).toThrow(/Invalid pubkey/);
+  });
+
+  test('bounds the blind-me list before validating each key', () => {
+    const keys = Array.from({ length: 17 }, (_, i) => {
+      const secret = new Uint8Array(32);
+      secret[31] = i + 1;
+      return bytesToHex(secp256k1.getPublicKey(secret, true));
+    });
+    expect(() =>
+      new PaymentRequest({
+        nutroot: { receiverKey: carolPub, leaves: [leafAfter], blindKeys: keys },
+      }).toNutrootOptions(),
+    ).toThrow(/Too many blind-me keys: 17/);
+    // The bound is the tree's own key count; within it the keys are still checked against the tree.
+    expect(() =>
+      new PaymentRequest({
+        nutroot: { receiverKey: carolPub, leaves: [leafAfter], blindKeys: keys.slice(0, 1) },
+      }).toNutrootOptions(),
+    ).toThrow(/not in the requested tree/);
   });
 
   test('a leaf the payer cannot reproduce byte for byte is refused', () => {

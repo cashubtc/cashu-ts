@@ -23,6 +23,7 @@ import {
 } from '../utils';
 import { decodeBech32m, encodeBech32m } from '../utils/bech32m';
 import { JSONInt } from '../utils/JSONInt';
+import { MAX_P2PK_PUBKEYS } from '../utils/limits';
 import { decodeTLV, encodeTLV } from '../utils/tlv';
 import type { DecodedTLVPaymentRequest } from '../utils/tlv';
 import { lockToNutrootOptions, lockToP2PKOptions, type LockOptions } from '../wallet/lock';
@@ -472,8 +473,14 @@ export class PaymentRequest {
       }
       return leaf;
     });
-    const blindKeys = (nutroot.blindKeys ?? []).map((key) => normalizeSecpPubkey(key));
+    // Every blind-me key must be a leaf key, so the tree's own key count (at most
+    // NUTROOT_MAX_SLOTS) bounds the list before any EC decompression.
     const leafKeys = new Set(leaves.flatMap((leaf) => leaf.keys));
+    const requestedBlindKeys = nutroot.blindKeys ?? [];
+    if (requestedBlindKeys.length > leafKeys.size) {
+      throw new CTSError(`Too many blind-me keys: ${requestedBlindKeys.length}`);
+    }
+    const blindKeys = requestedBlindKeys.map((key) => normalizeSecpPubkey(key));
     for (const key of blindKeys) {
       if (!leafKeys.has(key)) {
         throw new CTSError(`blind-me key is not in the requested tree: ${key}`);
@@ -928,19 +935,30 @@ export function nut10ToP2PKOptions(nut10: NUT10Option | undefined): P2PKOptions 
     nut10.kind,
     { nonce: '', data: nut10.data, tags: nut10.tags ?? [] },
   ]);
+  // Bound EC decompression before mapping over the request's keys; the exact NUT-28 slot
+  // rule is enforced by the builder.
+  const pubkeys = getTag(secret, 'pubkeys') ?? [];
+  if (pubkeys.length > MAX_P2PK_PUBKEYS) {
+    throw new CTSError(`Too many pubkeys: ${pubkeys.length}`);
+  }
+  const refundKeys = getTag(secret, 'refund') ?? [];
+  if (refundKeys.length > MAX_P2PK_PUBKEYS) {
+    throw new CTSError(`Too many refund pubkeys: ${refundKeys.length}`);
+  }
   // `data` is the NUT-10 data slot (hashlock for HTLC, primary pubkey for P2PK);
   // the `pubkeys` tag carries the optional additional / receiver keys for either kind.
-  const taggedPubkeys = (getTag(secret, 'pubkeys') ?? []).map(normalizeSecpPubkey);
+  const taggedPubkeys = pubkeys.map(normalizeSecpPubkey);
   const options: P2PKOptions = {
     kind: isHTLC ? 'HTLC' : 'P2PK',
     data: isHTLC ? nut10.data : normalizeSecpPubkey(nut10.data),
     ...(taggedPubkeys.length ? { pubkeys: taggedPubkeys } : {}),
   };
 
-  // Optional fields pass straight through: the accessors return undefined when
-  // absent, and the builder ignores undefined options. getTag never yields [].
+  // Optional fields pass straight through: the accessors return undefined when absent
+  // and throw when malformed, and the builder ignores undefined options.
   options.locktime = getTagInt(secret, 'locktime');
-  options.refundKeys = getTag(secret, 'refund')?.map(normalizeSecpPubkey);
+  // `getTag` yields undefined, never [], so a key-only tag reads as absent.
+  options.refundKeys = refundKeys.length ? refundKeys.map(normalizeSecpPubkey) : undefined;
   options.requiredSignatures = getTagInt(secret, 'n_sigs');
   options.requiredRefundSignatures = getTagInt(secret, 'n_sigs_refund');
   if (getTagScalar(secret, 'sigflag') === 'SIG_ALL') {
