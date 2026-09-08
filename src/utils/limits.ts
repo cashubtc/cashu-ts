@@ -72,3 +72,17 @@ export const U64_MAX = 2n ** 64n - 1n;
  * 90,000; this leaves headroom above that on top of the usual one-allocation-per-input-byte bound.
  */
 export const MAX_CBOR_NODES = 262_144;
+
+/**
+ * NUT-11: Upper bound on the keys in one `pubkeys` or `refund` tag, applied before any per-key
+ * curve work. NUT-28 caps a lock at 11 slots (data + pubkeys + refund), enforced at build; this is
+ * a work bound with headroom, not the exact slot rule.
+ */
+export const MAX_P2PK_PUBKEYS = 16;
+
+/**
+ * NUT-11: Upper bound on untrusted witness size, applied on the verify path so per-signature work
+ * stays bounded rather than scaling with input. SIG_ALL adds a signature per message variant per
+ * signer, so signatures need more headroom than keys ({@link MAX_P2PK_PUBKEYS}).
+ */
+export const MAX_P2PK_SIGNATURES = 64;
