@@ -211,32 +211,42 @@ export function getTag(secret: Secret | string, key: string): string[] | undefin
 }
 
 /**
- * Get the first scalar value of a tag as a string, or undefined if missing.
+ * Get the single value of a scalar tag as a string, or undefined if missing.
  *
  * @param secret - The Proof secret.
  * @param key - Tag key to lookup.
  * @returns - Tag value or undefined if not present.
+ * @throws If the tag carries more than one value.
  */
 export function getTagScalar(secret: Secret | string, key: string): string | undefined {
   const vals = getTag(secret, key);
-  return vals && vals.length > 0 ? vals[0] : undefined;
+  if (vals === undefined) return undefined;
+  if (vals.length !== 1) {
+    throw new CTSError(`Invalid NUT-10 tag "${key}": must carry a single value`);
+  }
+  return vals[0];
 }
 
 /**
- * Get the first scalar value of a tag parsed as a base-10 integer, or undefined.
+ * Get the single value of a scalar tag parsed as a base-10 integer, or undefined if missing.
  *
+ * @remarks
+ * A present value that is not a safe base-10 integer throws rather than reading as absent, so a
+ * caller's default never replaces a malformed condition.
  * @param secret - The Proof secret.
  * @param key - Tag key to lookup.
- * @returns - Tag value as an integer, undefined if not present or invalid.
+ * @returns - Tag value as an integer, undefined if not present.
+ * @throws If the tag carries more than one value, or a value that is not a safe integer.
  */
 export function getTagInt(secret: Secret | string, key: string): number | undefined {
   const v = getTagScalar(secret, key);
   if (v === undefined) return undefined;
   // Strict integer parse: reject the partial parses ("1700000000abc" -> 1700000000)
   // and hex/exponent/float forms Number.parseInt would accept. The sign is kept so a
-  // caller's semantic check (assertPositiveInteger, getLocktime's `<= 0`) still fails
-  // closed on an out-of-range value instead of it being silently dropped to undefined.
-  if (!/^-?\d+$/.test(v)) return undefined;
-  const n = Number(v);
-  return Number.isSafeInteger(n) ? n : undefined;
+  // caller's semantic check (assertPositiveInteger, getLocktime's `<= 0`) applies.
+  const n = /^-?\d+$/.test(v) ? Number(v) : NaN;
+  if (!Number.isSafeInteger(n)) {
+    throw new CTSError(`Invalid NUT-10 tag "${key}": must be an integer`);
+  }
+  return n;
 }
