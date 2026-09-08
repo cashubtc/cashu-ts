@@ -681,6 +681,32 @@ describe('requestTokens', () => {
       );
     }
 
+    test.each([
+      [DUMMY_TEST_KEYSET.id, NUT02_V3_VECTOR1_KEYSET.id],
+      [NUT02_V3_VECTOR1_KEYSET.id, DUMMY_TEST_KEYSET.id],
+    ] as const)(
+      'fetches string quote IDs for custom outputs: wallet %s, output %s',
+      async (keysetId, outputId) => {
+        serveBothKeysets();
+        const wallet = new Wallet(mintUrl, { unit, keysetId });
+        await wallet.loadMint();
+        const quote = lockedQuote();
+        const fetchQuote = vi.spyOn(wallet, 'checkMintQuoteBolt11').mockResolvedValue(quote);
+        vi.spyOn(wallet, 'completeMint').mockResolvedValue([]);
+        const data = [OutputData.createSingleRandomData(1, outputId)];
+
+        await expect(
+          wallet.mintProofsBolt11(1, quote, { privkey }, { type: 'custom', data }),
+        ).resolves.toEqual([]);
+        expect(fetchQuote).not.toHaveBeenCalled();
+
+        await expect(
+          wallet.mintProofsBolt11(1, quote.quote, { privkey }, { type: 'custom', data }),
+        ).resolves.toEqual([]);
+        expect(fetchQuote).toHaveBeenCalledExactlyOnceWith(quote.quote);
+      },
+    );
+
     test('custom outputs on a v3 keyset sign the transaction digest whatever keyset the wallet holds', async () => {
       serveBothKeysets();
       const wallet = new Wallet(mintUrl, { unit });
@@ -803,6 +829,9 @@ describe('requestTokens', () => {
 
   test('test requestTokens bad response', async () => {
     server.use(
+      http.get(mintUrl + '/v1/mint/quote/bolt11/badquote', () => {
+        return HttpResponse.json({});
+      }),
       http.post(mintUrl + '/v1/mint/bolt11', () => {
         return HttpResponse.json({});
       }),

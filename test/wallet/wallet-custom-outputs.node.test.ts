@@ -162,7 +162,7 @@ describe('custom outputs on a keyset other than the wallet default', () => {
     const { wallet } = makeWallet();
     const data = OutputData.createDeterministicData(Amount.from(16), seed, 0, keysFor(dear));
 
-    const proofs = await wallet.mintProofsBolt11(16, 'quote-id', undefined, {
+    const proofs = await wallet.mintProofs('bolt11', 16, { quote: 'quote-id' }, undefined, {
       type: 'custom',
       data,
     });

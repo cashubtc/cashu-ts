@@ -3077,7 +3077,8 @@ class Wallet {
    * @remarks
    * Convenience helper for the common BOLT11 flow. Internally this uses `prepareMint('bolt11',…)`
    * followed by `completeMint()`. Use `prepareMint()` directly when you need the generic method
-   * based API or want to persist a replay-safe preview before completion.
+   * based API or want to persist a replay-safe preview before completion. A quote ID is fetched
+   * before minting; pass a full quote object to avoid that request.
    * @param amount Amount to mint.
    * @param quote Mint quote ID or object (bolt11).
    * @param config Optional parameters (e.g. privkey for locked quotes).
@@ -3092,14 +3093,7 @@ class Wallet {
   ): Promise<Proof[]> {
     this.requireSupport('mint', 'bolt11');
     if (typeof quote === 'string') {
-      // A v3 quote is a signed transaction input whose transcript commits its face amount and
-      // whose lock key must be known (NUT-04), so the stub only serves a pre-v3 keyset. The
-      // legacy path skips the round-trip: an invalid quote surfaces in the minting step.
-      const quoteObj = isBlsKeyset(this.getOutputKeyset(config?.keysetId).id)
-        ? await this.checkMintQuoteBolt11(quote)
-        : { quote };
-      const preview = await this.prepareMint('bolt11', amount, quoteObj, config, outputType);
-      return this.completeMint(preview);
+      quote = await this.checkMintQuoteBolt11(quote);
     }
     this.validateMintQuote(quote);
     const preview = await this.prepareMint('bolt11', amount, quote, config, outputType);
