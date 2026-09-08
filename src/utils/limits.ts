@@ -62,3 +62,13 @@ export const MAX_MINT_INFO_LIST = 1_024;
  * only construct the divided-down result.
  */
 export const U64_MAX = 2n ** 64n - 1n;
+
+/**
+ * Total array items + map entries `decodeCBOR` accepts from one payload.
+ *
+ * @remarks
+ * A v4 proof with both a DLEQ and a witness costs about 9 nodes (1 array slot, the 5-entry proof
+ * map, the 3-entry nested DLEQ map), so `ABSOLUTE_MAX_ARRAY_LENGTH` proofs of that shape need about
+ * 90,000; this leaves headroom above that on top of the usual one-allocation-per-input-byte bound.
+ */
+export const MAX_CBOR_NODES = 262_144;

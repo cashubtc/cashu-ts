@@ -6,6 +6,7 @@ import {
   encodeCBOR,
   decodeBase64UrlToUint8,
   encodeUint8ToBase64Url,
+  MAX_CBOR_NODES,
 } from '../../src/utils';
 // Note: do NOT import 'fs' or 'path' at top-level — the browser test runner
 // will attempt to import them and Vite externalizes those modules which causes
@@ -86,10 +87,100 @@ describe('cbor decoder', () => {
   // per-vector harness further below. Keep focused decoder unit tests here.
 
   test('decode simple value in next byte (additionalInfo 24) returns next byte', () => {
-    // 0xf8 <next byte> -> simple/extended simple
-    const buf = new Uint8Array([0xf8, 0x10]);
+    // 0xf8 <next byte>, byte >= 32 -> unassigned simple value, decoded as a plain number
+    const buf = new Uint8Array([0xf8, 0x20]);
     const v = decodeCBOR(buf) as number;
-    expect(v).toBe(0x10);
+    expect(v).toBe(0x20);
+  });
+
+  test('rejects an extended simple value below 32 instead of decoding it as a number', () => {
+    // 0xf8 0x14 is a non-minimal encoding of simple value 20 (false). Treating it as the
+    // number 20 lets a boolean consumer read a false-carrying byte as truthy.
+    const extendedFalse = new Uint8Array([0xf8, 0x14]);
+    expect(() => decodeCBOR(extendedFalse)).toThrow(/simple/i);
+  });
+
+  test('preserves a leading U+FEFF in a decoded map key instead of stripping it as a BOM', () => {
+    // CBOR map { "<BOM>a": 1000 }. The three UTF-8 BOM bytes are part of the declared
+    // four-byte text key and must not be consumed as framing.
+    const buf = new Uint8Array([0xa1, 0x64, 0xef, 0xbb, 0xbf, 0x61, 0x19, 0x03, 0xe8]);
+    const result = decodeCBOR(buf) as Record<string, unknown>;
+    const key = '﻿a';
+
+    expect(Object.prototype.hasOwnProperty.call(result, 'a')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(result, key)).toBe(true);
+    expect(result[key]).toBe(1000);
+  });
+
+  test('rejects a map key that is not valid UTF-8', () => {
+    // 0x61 0xff: a one-byte text string whose sole byte is not valid UTF-8.
+    const buf = new Uint8Array([0xa1, 0x61, 0xff, 0x01]);
+    expect(() => decodeCBOR(buf)).toThrow();
+  });
+
+  test('rejects a map containing a duplicate key', () => {
+    // CBOR map { a: 1, a: 1000 }. Last-wins would silently pick 1000.
+    const buf = new Uint8Array([0xa2, 0x61, 0x61, 0x01, 0x61, 0x61, 0x19, 0x03, 0xe8]);
+    expect(() => decodeCBOR(buf)).toThrow(/duplicate/i);
+  });
+
+  test('rejects arrays large enough to amplify per-item allocation cost', () => {
+    // The encoder itself never emits an array this long. Hand-written CBOR can still declare
+    // the count and encode each empty map in one byte, forcing the decoder to allocate an
+    // object and array slot per byte of input.
+    const itemCount = MAX_CBOR_NODES + 40_000;
+    const buf = new Uint8Array(5 + itemCount);
+    buf[0] = 0x9a;
+    buf[1] = (itemCount >>> 24) & 0xff;
+    buf[2] = (itemCount >>> 16) & 0xff;
+    buf[3] = (itemCount >>> 8) & 0xff;
+    buf[4] = itemCount & 0xff;
+    buf.fill(0xa0, 5);
+
+    expect(() => decodeCBOR(buf)).toThrow(/budget|too many|limit/i);
+  });
+
+  test('rejects maps large enough to amplify per-entry allocation cost', () => {
+    const entryCount = MAX_CBOR_NODES + 40_000;
+    // Definite-length map followed by unique uint32 keys and null values.
+    const encoded: number[] = [
+      0xba,
+      (entryCount >>> 24) & 0xff,
+      (entryCount >>> 16) & 0xff,
+      (entryCount >>> 8) & 0xff,
+      entryCount & 0xff,
+    ];
+    for (let i = 0; i < entryCount; i++) {
+      encoded.push(0x1a, (i >>> 24) & 0xff, (i >>> 16) & 0xff, (i >>> 8) & 0xff, i & 0xff, 0xf6);
+    }
+
+    expect(() => decodeCBOR(Uint8Array.from(encoded))).toThrow(/budget|too many|limit/i);
+  });
+
+  test('accepts an array right at the node budget', () => {
+    const itemCount = MAX_CBOR_NODES;
+    const buf = new Uint8Array(5 + itemCount);
+    buf[0] = 0x9a;
+    buf[1] = (itemCount >>> 24) & 0xff;
+    buf[2] = (itemCount >>> 16) & 0xff;
+    buf[3] = (itemCount >>> 8) & 0xff;
+    buf[4] = itemCount & 0xff;
+    // The rest of the buffer is left zeroed: each 0x00 byte is a valid one-byte item (unsigned 0).
+
+    const result = decodeCBOR(buf) as number[];
+    expect(result.length).toBe(itemCount);
+  });
+
+  test('rejects an array one item past the node budget', () => {
+    const itemCount = MAX_CBOR_NODES + 1;
+    const buf = new Uint8Array(5 + itemCount);
+    buf[0] = 0x9a;
+    buf[1] = (itemCount >>> 24) & 0xff;
+    buf[2] = (itemCount >>> 16) & 0xff;
+    buf[3] = (itemCount >>> 8) & 0xff;
+    buf[4] = itemCount & 0xff;
+
+    expect(() => decodeCBOR(buf)).toThrow(/budget|too many|limit/i);
   });
 
   test('decodeMap does not let a __proto__ key reparent or pollute the result', () => {
@@ -705,6 +796,11 @@ describe('CBOR Test Vectors', () => {
       // skip the entire vector to avoid a decode-time throw.
       if (majorType === 7) {
         if (additionalInfo < 24 && !(additionalInfo >= 20 && additionalInfo <= 23)) {
+          return;
+        }
+        // Extended simple values below 32 (eg "f818" simple(24)) are reserved: our decoder
+        // rejects them rather than aliasing them with the boolean/null/undefined domain.
+        if (additionalInfo === 24 && parseInt((hex as string).slice(2, 4), 16) < 32) {
           return;
         }
         // For float16/32/64 (additionalInfo 25,26,27) and the 1-byte simple

@@ -1,6 +1,7 @@
 import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
+import { hasLoneSurrogate } from '../utils/bytes';
 
 export type SecretKind = 'P2PK' | 'HTLC' | (string & {}); // union with any string
 
@@ -44,6 +45,10 @@ export function createSecret(kind: SecretKind, data: string, tags?: string[][]):
  */
 export function parseSecret(secret: string | Secret): Secret {
   let parsed: unknown;
+  // Ill-formed UTF-16 would alias this secret with the one spelling its U+FFFD replacement.
+  if (typeof secret === 'string' && hasLoneSurrogate(secret)) {
+    throw new CTSError('Invalid NUT-10 secret Unicode');
+  }
   try {
     if (typeof secret === 'string') {
       parsed = JSON.parse(secret) as Secret;

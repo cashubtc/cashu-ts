@@ -197,6 +197,15 @@ describe('NUT10 parseSecret shape validation', () => {
     expect(() => parseSecret(`["P2PK",{"nonce":"${NONCE}","data":123}]`)).toThrow(/nonce \/ data/);
   });
 
+  test('rejects lone surrogates that alias another secret under UTF-8', () => {
+    const illFormed = `["P2PK",{"nonce":"\ud800","data":"${DATA}"}]`;
+    const replacement = `["P2PK",{"nonce":"\uFFFD","data":"${DATA}"}]`;
+
+    expect(illFormed).not.toBe(replacement);
+    expect(new TextEncoder().encode(illFormed)).toEqual(new TextEncoder().encode(replacement));
+    expect(() => parseSecret(illFormed)).toThrow(/unicode|surrogate/i);
+  });
+
   test('rejects a falsy non-array tags value', () => {
     // A truthiness check let 0/false/"" slip past array validation and surface a
     // raw TypeError in downstream tag readers; they must be rejected here instead.

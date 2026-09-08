@@ -12,6 +12,7 @@ import {
 
 import { CTSError } from '../model/Errors';
 import { hexToNumber, decodeBase64AnyToUint8 } from '../utils';
+import { hasLoneSurrogate } from '../utils/bytes';
 
 /**
  * Private key type - can be hex string or Uint8Array.
@@ -165,6 +166,10 @@ export function computeMessageDigest(message: string): Uint8Array;
 export function computeMessageDigest(message: string, asHex: false): Uint8Array;
 export function computeMessageDigest(message: string, asHex: true): string;
 export function computeMessageDigest(message: string, asHex = false): string | Uint8Array {
+  // Ill-formed UTF-16 would hash as its U+FFFD replacement, aliasing distinct messages.
+  if (hasLoneSurrogate(message)) {
+    throw new CTSError('Message must be well-formed UTF-16');
+  }
   const hashBytes = sha256(new TextEncoder().encode(message));
   return asHex ? bytesToHex(hashBytes) : hashBytes;
 }
@@ -220,7 +225,14 @@ export const schnorrVerifyMessage = (
   pubkey: string,
   throws: boolean = false,
 ): boolean => {
-  return schnorrVerifyDigest(signature, computeMessageDigest(message), pubkey, throws);
+  try {
+    return schnorrVerifyDigest(signature, computeMessageDigest(message), pubkey, throws);
+  } catch (e) {
+    if (throws) {
+      throw e;
+    }
+  }
+  return false;
 };
 
 /**

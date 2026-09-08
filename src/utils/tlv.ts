@@ -4,6 +4,8 @@ import { CTSError } from '../model/Errors';
 import { PaymentRequestTransportType } from '../wallet/types/payment-requests';
 import type { PaymentRequestTransport } from '../wallet/types/payment-requests';
 
+import { decodeUtf8Field } from './bytes';
+
 /**
  * NUT-10 Spending Condition structure.
  */
@@ -192,7 +194,7 @@ function decodeNextPart(data: Uint8Array): TLVPart {
 }
 
 function parseString(value: Uint8Array): string {
-  return new TextDecoder().decode(value);
+  return decodeUtf8Field(value);
 }
 
 function parseU64(value: Uint8Array): bigint {
@@ -666,7 +668,7 @@ export function decodeNprofile(nprofile: string): { pubkey: Uint8Array; relays: 
       pubkey = value;
     } else if (tag === 0x01) {
       // Relay URL
-      relays.push(new TextDecoder().decode(value));
+      relays.push(decodeUtf8Field(value));
     }
     // Ignore unknown tags
   }

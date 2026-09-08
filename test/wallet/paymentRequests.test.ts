@@ -7,6 +7,7 @@ import {
   PaymentRequestTransportType,
   type NUT10Option,
 } from '../../src/index';
+import { encodeUint8ToBase64Url } from '../../src/utils/base64';
 import { encodeBech32m } from '../../src/utils/bech32m';
 import { encodeTLV } from '../../src/utils/tlv';
 
@@ -111,6 +112,17 @@ describe('payment requests', () => {
       'unsupported pr: invalid prefix',
     );
     expect(() => decodePaymentRequest(prWithInvalidVersion)).toThrow('unsupported pr version');
+  });
+
+  test('rejects a creqA request containing duplicate amount keys', () => {
+    // CBOR map: { a: 1, a: 1000, u: 'sat' }. A first-wins display and a last-wins decoder
+    // would otherwise disagree about the amount the wallet sends.
+    const ambiguous = new Uint8Array([
+      0xa3, 0x61, 0x61, 0x01, 0x61, 0x61, 0x19, 0x03, 0xe8, 0x61, 0x75, 0x63, 0x73, 0x61, 0x74,
+    ]);
+    const encoded = 'creqA' + encodeUint8ToBase64Url(ambiguous);
+
+    expect(() => decodePaymentRequest(encoded)).toThrow(/duplicate/i);
   });
 
   describe('toRawRequest', () => {
@@ -399,6 +411,20 @@ describe('payment requests', () => {
       // would produce a lock weaker than the payee requested, so it must throw.
       const nut10: NUT10Option = { kind: 'P2PK', data: PUBKEY, tags: [['locktime', '']] };
       expect(() => prWithNut10(nut10).toP2PKOptions()).toThrow(/Invalid NUT-10 tag/);
+    });
+
+    test('does not promote a BOM-prefixed extension tag into an authorised signer', () => {
+      // A leading U+FEFF makes 'pubkeys' an unrecognised extension tag key; round-tripping
+      // through the wire encoding must not let TextDecoder's BOM handling turn it into the
+      // real 'pubkeys' tag.
+      const tag = '\uFEFFpubkeys';
+      const request = prWithNut10({ kind: 'P2PK', data: PUBKEY, tags: [[tag, PUBKEY_2]] });
+      const decoded = PaymentRequest.fromEncodedRequest(request.toEncodedCreqB());
+
+      expect(decoded.toP2PKOptions()).toEqual({
+        pubkey: PUBKEY,
+        additionalTags: [[tag, PUBKEY_2]],
+      });
     });
 
     test('rejects duplicate tag keys (NUT-11 unspendable lock)', () => {
