@@ -103,12 +103,23 @@ export function decodeTLV(data: Uint8Array): DecodedTLVPaymentRequest {
   for (const part of parts) {
     switch (part.tag) {
       case TAG_ID:
+        // Singular tags reject a repeat (as the sub-TLV parsers do) rather than
+        // let the last value silently win.
+        if (result.id !== undefined) {
+          throw new CTSError('invalid pr: multiple id fields');
+        }
         result.id = parseString(part.value);
         break;
       case TAG_AMOUNT:
+        if (result.amount !== undefined) {
+          throw new CTSError('invalid pr: multiple amount fields');
+        }
         result.amount = parseU64(part.value);
         break;
       case TAG_UNIT:
+        if (result.unit !== undefined) {
+          throw new CTSError('invalid pr: multiple unit fields');
+        }
         if (part.value.length === 1 && part.value[0] === 0) {
           result.unit = 'sat';
         } else {
@@ -116,6 +127,9 @@ export function decodeTLV(data: Uint8Array): DecodedTLVPaymentRequest {
         }
         break;
       case TAG_SINGLE_USE:
+        if (result.singleUse !== undefined) {
+          throw new CTSError('invalid pr: multiple single_use fields');
+        }
         result.singleUse = parseU8(part.value) === 1;
         break;
       case TAG_MINT:
@@ -125,6 +139,9 @@ export function decodeTLV(data: Uint8Array): DecodedTLVPaymentRequest {
         result.mints.push(parseString(part.value));
         break;
       case TAG_DESCRIPTION:
+        if (result.description !== undefined) {
+          throw new CTSError('invalid pr: multiple description fields');
+        }
         result.description = parseString(part.value);
         break;
       case TAG_TRANSPORT:
@@ -243,9 +260,16 @@ function parseTransport(value: Uint8Array): PaymentRequestTransport {
   for (const part of parts) {
     switch (part.tag) {
       case TRANSPORT_TAG_KIND:
+        // kind/target are singular; a repeat makes the destination ambiguous.
+        if (kind !== undefined) {
+          throw new CTSError('invalid pr: multiple transport kind fields');
+        }
         kind = parseU8(part.value);
         break;
       case TRANSPORT_TAG_TARGET:
+        if (targetBytes !== undefined) {
+          throw new CTSError('invalid pr: multiple transport target fields');
+        }
         targetBytes = part.value;
         break;
       case TRANSPORT_TAG_TAG_TUPLE:
@@ -401,7 +425,12 @@ export function encodeTLV(request: DecodedTLVPaymentRequest): Uint8Array {
     if (request.unit === 'sat') {
       parts.push(encodeTLVPart(TAG_UNIT, new Uint8Array([0x00])));
     } else {
-      parts.push(encodeTLVPart(TAG_UNIT, encodeString(request.unit)));
+      // The single byte 0x00 is the wire form of 'sat', so no other unit may encode to it.
+      const encodedUnit = encodeString(request.unit);
+      if (encodedUnit.length === 1 && encodedUnit[0] === 0) {
+        throw new CTSError('invalid pr: unit encoding is reserved for sat');
+      }
+      parts.push(encodeTLVPart(TAG_UNIT, encodedUnit));
     }
   }
 
@@ -661,7 +690,10 @@ export function decodeNprofile(nprofile: string): { pubkey: Uint8Array; relays: 
     offset += length;
 
     if (tag === 0x00) {
-      // Pubkey
+      // Pubkey: exactly one per nprofile (relays are the repeatable record).
+      if (pubkey !== undefined) {
+        throw new CTSError('Nprofile contains multiple pubkeys');
+      }
       if (value.length !== 32) {
         throw new CTSError(`Invalid pubkey length: expected 32 bytes, got ${value.length}`);
       }
