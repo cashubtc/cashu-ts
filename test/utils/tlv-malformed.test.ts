@@ -38,6 +38,27 @@ describe('decodeTLV fails closed on malformed streams', () => {
     expect(decoded.id).toBe('id1');
   });
 
+  test('singular top-level tags reject a repeat', () => {
+    const u64 = (n: number): number[] => [0, 0, 0, 0, 0, 0, 0, n];
+    expect(() => decodeTLV(bytes(rec(0x01, utf8('a')), rec(0x01, utf8('b'))))).toThrow(
+      /multiple id/,
+    );
+    expect(() => decodeTLV(bytes(rec(0x02, u64(1)), rec(0x02, u64(9))))).toThrow(/multiple amount/);
+    expect(() => decodeTLV(bytes(rec(0x03, [0]), rec(0x03, utf8('usd'))))).toThrow(/multiple unit/);
+    expect(() => decodeTLV(bytes(rec(0x04, [0]), rec(0x04, [1])))).toThrow(/multiple single_use/);
+    expect(() => decodeTLV(bytes(rec(0x06, utf8('a')), rec(0x06, utf8('b'))))).toThrow(
+      /multiple description/,
+    );
+    expect(() => decodeTLV(bytes(rec(0x09, [0]), rec(0x09, [1])))).toThrow(
+      /multiple mint_preferred/,
+    );
+    // Repeatable tags still accumulate.
+    const mints = decodeTLV(
+      bytes(rec(0x05, utf8('https://a')), rec(0x05, utf8('https://b'))),
+    ).mints;
+    expect(mints).toEqual(['https://a', 'https://b']);
+  });
+
   test('transport structural violations', () => {
     const target = rec(0x02, utf8('https://x'));
     expect(() => decodeTLV(bytes(rec(0x07, [...rec(0x01, [2]), ...target])))).toThrow(
@@ -45,6 +66,14 @@ describe('decodeTLV fails closed on malformed streams', () => {
     );
     expect(() => decodeTLV(bytes(rec(0x07, target)))).toThrow(/missing required kind/);
     expect(() => decodeTLV(bytes(rec(0x07, rec(0x01, [1]))))).toThrow(/missing required target/);
+    // kind and target are singular within one transport.
+    const kind = rec(0x01, [1]);
+    expect(() => decodeTLV(bytes(rec(0x07, [...kind, ...kind, ...target])))).toThrow(
+      /multiple transport kind/,
+    );
+    expect(() => decodeTLV(bytes(rec(0x07, [...kind, ...target, ...target])))).toThrow(
+      /multiple transport target/,
+    );
     // A nostr target is a raw 32-byte pubkey; anything else cannot become an nprofile.
     expect(() => decodeTLV(bytes(rec(0x07, [...rec(0x01, [0]), ...rec(0x02, [0xaa])])))).toThrow(
       /expected 32 bytes/,
@@ -108,6 +137,13 @@ describe('encodeTLV refuses unencodable requests', () => {
     );
   });
 
+  test('a unit whose encoding is the sat sentinel byte', () => {
+    expect(() => encodeTLV({ unit: '\0' })).toThrow(/unit/);
+    // sat itself and ordinary units still encode.
+    expect(decodeTLV(encodeTLV({ unit: 'sat' })).unit).toBe('sat');
+    expect(decodeTLV(encodeTLV({ unit: 'usd' })).unit).toBe('usd');
+  });
+
   test('nutroot keys must be 33-byte points', () => {
     expect(() => encodeTLV({ nutroot: { receiverKey: 'aabb' } })).toThrow(/33 bytes/);
     expect(() =>
@@ -139,6 +175,10 @@ describe('encodeTLV refuses unencodable requests', () => {
     expect(() =>
       encodeTLV(nostr(nprofile([0x00, 0x20, ...new Array(32).fill(0xaa), 0x01, 0x01, 0xff]))),
     ).toThrow(/Malformed UTF-8/);
+    const key = (fill: number): number[] => [0x00, 0x20, ...Array.from({ length: 32 }, () => fill)];
+    expect(() => encodeTLV(nostr(nprofile([...key(0x11), ...key(0x22)])))).toThrow(
+      /multiple pubkeys/,
+    );
   });
 
   test('a leading BOM in a string field is kept as content, not stripped as framing', () => {

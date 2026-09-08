@@ -8,6 +8,7 @@ import {
   PaymentRequestTransportType,
   type NUT10Option,
 } from '../../src/index';
+import { encodeCBOR, encodeUint8ToBase64UrlPadded } from '../../src/utils';
 import { encodeUint8ToBase64Url } from '../../src/utils/base64';
 import { encodeBech32m } from '../../src/utils/bech32m';
 import { encodeTLV } from '../../src/utils/tlv';
@@ -300,12 +301,9 @@ describe('payment requests', () => {
       expect(fromWire.isMintListStrict).toBe(true);
     });
 
-    test('non-boolean truthy mp is coerced (no cross-format type confusion)', () => {
-      // An untyped CBOR producer might emit `mp: 1` to mean "preferred".
-      // Coercion must normalize it to a genuine boolean so the getter
-      // (`mintsPreferred !== true`) and TLV serialization agree rather than
-      // diverging — a raw `1` would read strict via the getter yet serialize
-      // preferred over TLV.
+    test('mp accepts the numeric 0/1 form', () => {
+      // An untyped CBOR producer might emit `mp: 1` to mean "preferred"; it must read as a
+      // genuine boolean so the getter and the TLV encoding agree.
       const fromOne = PaymentRequest.fromRawRequest({
         i: 'one',
         a: 100,
@@ -328,6 +326,73 @@ describe('payment requests', () => {
       });
       expect(fromZero.mintsPreferred).toBe(false);
       expect(fromZero.isMintListStrict).toBe(true);
+    });
+
+    test('rejects a policy flag that is not a boolean or 0/1', () => {
+      // A whitelist keeps a truthy string from reading as `mp: true`.
+      expect(() =>
+        PaymentRequest.fromRawRequest({
+          i: 'bad_mp',
+          a: 100,
+          u: 'sat',
+          m: ['https://mint.example.com'],
+          mp: 'false' as unknown as boolean,
+        }),
+      ).toThrow(/mp/);
+      expect(
+        () =>
+          new PaymentRequest({
+            id: 'bad_s',
+            singleUse: 'true' as unknown as boolean,
+          }),
+      ).toThrow(/s/);
+    });
+
+    test('rejects a string-valued mp flag encoded over creqA', () => {
+      const data = encodeCBOR({
+        a: 100,
+        u: 'sat',
+        m: ['https://listed.example'],
+        mp: 'false',
+      });
+      const encoded = 'creqA' + encodeUint8ToBase64UrlPadded(data);
+      expect(() => decodePaymentRequest(encoded)).toThrow(/mp/);
+    });
+
+    test('decodes a creqA with s/mp explicitly null as absent', () => {
+      // Some encoders serialize an unset Option field as CBOR null rather than omitting
+      // the key; treat null the same as absent instead of rejecting it.
+      const data = encodeCBOR({
+        i: 'null_flags',
+        a: 100,
+        u: 'sat',
+        s: null,
+        m: ['https://listed.example'],
+        mp: null,
+      });
+      const encoded = 'creqA' + encodeUint8ToBase64UrlPadded(data);
+      const decoded = decodePaymentRequest(encoded);
+      expect(decoded.singleUse).toBeUndefined();
+      expect(decoded.mintsPreferred).toBeUndefined();
+      expect(decoded.isMintListStrict).toBe(true);
+    });
+
+    test('decodes the cdk canonical NUT-18 vector', () => {
+      // cdk's own round-trip vector (crates/cashu/src/nuts/nut18/payment_request.rs): its
+      // Option fields serialize unset as CBOR null, so `s` and `d` arrive as null here.
+      const CDK_VECTOR =
+        'creqAp2FpaGI3YTkwMTc2YWEKYXVjc2F0YXP2YW2BeCJodHRwczovL25vZmVlcy50ZXN0bnV0LmNhc2h1LnNwYWNlYWT2YXSBo2F0ZW5vc3RyYWF4qW5wcm9maWxlMXFxc2dtNnFmYTNjOGR0ejJmdnpodmZxZWFjbXdtMGU1MHBlM2s1dGZtdnBqam1uMHZqN20ydGdwejNtaHh1ZTY5dWhoeWV0dnY5dWp1ZXJwZDQ2aHh0bmZkdXEzd2Ftbnd2YXo3dG1qdjRreHo3Znc4cWVueHZld3dkY3h6Y205OXVxczZhbW53dmF6N3Rtd2RhZWp1bXIwZHM0bGpoN25hZ4GCYW5iMTc=';
+      const decoded = decodePaymentRequest(CDK_VECTOR);
+      expect(decoded.id).toBe('b7a90176');
+      expect(decoded.amount?.toString()).toBe('10');
+      expect(decoded.unit).toBe('sat');
+      expect(decoded.singleUse).toBeUndefined();
+      expect(decoded.mints).toEqual(['https://nofees.testnut.cashu.space']);
+      expect(decoded.isMintListStrict).toBe(true);
+      expect(decoded.transport?.[0]?.type).toBe(PaymentRequestTransportType.NOSTR);
+      expect(decoded.transport?.[0]?.tags).toEqual([['n', '17']]);
+      // The nprofile target carries relays, so this also exercises the creqB nprofile path.
+      expect(decodePaymentRequest(decoded.toEncodedCreqB()).id).toBe('b7a90176');
     });
 
     test('mp/sm absent by default (no serialization, no defaults injected)', () => {
