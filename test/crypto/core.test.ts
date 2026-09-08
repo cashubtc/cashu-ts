@@ -9,6 +9,7 @@ import {
   pointFromHex,
   blindMessage,
   unblindSignature,
+  computeMessageDigest,
   createBlindSignature,
   constructUnblindedSignature,
   createRandomRawBlindedMessage,
@@ -19,6 +20,7 @@ import {
   schnorrSignDigest,
   schnorrSignMessage,
   schnorrVerifyDigest,
+  schnorrVerifyMessage,
   pointFromBytes,
   findSigningKey,
 } from '../../src/crypto';
@@ -166,6 +168,28 @@ describe('schnorrVerifyDigest', () => {
 
   test('rejects a 33-byte pubkey with a non-02/03 prefix', () => {
     expect(schnorrVerifyDigest(signature, digest, 'ff' + pubkey.slice(2))).toBe(false);
+  });
+});
+
+describe('computeMessageDigest', () => {
+  test('rejects unpaired UTF-16 surrogates instead of hashing colliding strings', () => {
+    // Both strings encode to the same U+FFFD replacement bytes under a lenient TextEncoder.
+    expect(() => computeMessageDigest('\ud800')).toThrow();
+    expect(() => computeMessageDigest('\ud801')).toThrow();
+  });
+
+  test('still digests well-formed strings, surrogate pairs included', () => {
+    expect(() => computeMessageDigest('hello')).not.toThrow();
+    expect(() => computeMessageDigest('\u{1F95C}')).not.toThrow(); // a valid surrogate pair
+  });
+});
+
+describe('schnorrVerifyMessage', () => {
+  test('fails closed rather than throwing when the message is ill-formed', () => {
+    const privkey = '0000000000000000000000000000000000000000000000000000000000000001';
+    const pubkey = bytesToHex(secp256k1.getPublicKey(hexToBytes(privkey), true));
+    expect(schnorrVerifyMessage('00'.repeat(64), '\ud800', pubkey)).toBe(false);
+    expect(() => schnorrVerifyMessage('00'.repeat(64), '\ud800', pubkey, true)).toThrow();
   });
 });
 

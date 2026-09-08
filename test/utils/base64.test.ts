@@ -6,7 +6,9 @@ import {
   decodeBase64UrlToUint8,
   encodeJsonToBase64Url,
   encodeUint8ToBase64,
+  encodeUint8ToBase64Url,
   isBase64String,
+  decodeBase64AnyToJson,
   decodeBase64AnyToUint8,
   decodeBase64ToUint8Legacy,
 } from '../../src/utils';
@@ -125,6 +127,33 @@ describe('testing uint8 encoding', () => {
     expect(encodeJsonToBase64Url(obj)).toStrictEqual(base64url);
   });
 });
+describe('base64 JSON decoders and UTF-8', () => {
+  const malformedJson = new Uint8Array([
+    ...new TextEncoder().encode('{"secret":"'),
+    0xff,
+    ...new TextEncoder().encode('"}'),
+  ]);
+  const bomJson = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode('{"a":1}')]);
+
+  test('base64url JSON rejects malformed UTF-8 instead of replacing bytes', () => {
+    expect(() => decodeBase64UrlToJson(encodeUint8ToBase64Url(malformedJson))).toThrow();
+  });
+
+  test('base64url JSON still decodes a document with a leading BOM', () => {
+    // A v3 token authored or re-saved by an editor that adds a BOM must still round-trip: the
+    // BOM is envelope framing here, not JSON content, unlike a length-framed CBOR/TLV field.
+    expect(decodeBase64UrlToJson(encodeUint8ToBase64Url(bomJson))).toEqual({ a: 1 });
+  });
+
+  test('the deprecated cashuA path rejects malformed UTF-8 too', () => {
+    expect(() => decodeBase64AnyToJson(encodeUint8ToBase64(malformedJson))).toThrow();
+  });
+
+  test('the deprecated cashuA path still decodes a document with a leading BOM', () => {
+    expect(decodeBase64AnyToJson(encodeUint8ToBase64(bomJson))).toEqual({ a: 1 });
+  });
+});
+
 describe('isBase64String', () => {
   // standard base64 with padding
   test('valid: standard base64 with padding', () => {
