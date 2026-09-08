@@ -135,5 +135,19 @@ describe('encodeTLV refuses unencodable requests', () => {
       /Invalid pubkey length/,
     );
     expect(() => encodeTLV(nostr(nprofile([0x01, 0x01, 0x77])))).toThrow(/missing required pubkey/);
+    // A relay URL is a length-framed string field: same UTF-8 rules as every other one.
+    expect(() =>
+      encodeTLV(nostr(nprofile([0x00, 0x20, ...new Array(32).fill(0xaa), 0x01, 0x01, 0xff]))),
+    ).toThrow(/Malformed UTF-8/);
+  });
+
+  test('a leading BOM in a string field is kept as content, not stripped as framing', () => {
+    // 'ef bb bf 61 62' is the UTF-8 BOM followed by 'ab'; the TLV length already frames it.
+    const decoded = decodeTLV(bytes(rec(0x01, [0xef, 0xbb, 0xbf, 0x61, 0x62])));
+    expect(decoded.id).toBe('﻿ab');
+  });
+
+  test('a string field that is not valid UTF-8 is rejected', () => {
+    expect(() => decodeTLV(bytes(rec(0x01, [0xff])))).toThrow();
   });
 });

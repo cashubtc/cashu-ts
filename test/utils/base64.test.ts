@@ -7,6 +7,7 @@ import {
   decodeBase64ToUint8Legacy,
   encodeJsonToBase64Url,
   encodeUint8ToBase64,
+  encodeUint8ToBase64Url,
   isBase64String,
 } from '../../src/utils';
 describe('testing uint8 encoding', () => {
@@ -183,6 +184,26 @@ describe('strict base64 decoding', () => {
 
 test('v3 token path rejects excess padding', () => {
   expect(() => decodeBase64UrlToJson('eyJhIjoxfQ===')).toThrow(/Invalid base64/);
+});
+
+test('base64url JSON rejects malformed UTF-8 instead of replacing bytes', () => {
+  const malformedJson = new Uint8Array([
+    ...new TextEncoder().encode('{"secret":"'),
+    0xff,
+    ...new TextEncoder().encode('"}'),
+  ]);
+  const encoded = encodeUint8ToBase64Url(malformedJson);
+
+  expect(() => decodeBase64UrlToJson(encoded)).toThrow();
+});
+
+test('base64url JSON still decodes a document with a leading BOM', () => {
+  // A v3 token authored or re-saved by an editor that adds a BOM must still round-trip: the
+  // BOM is envelope framing here, not JSON content, unlike a length-framed CBOR/TLV field.
+  const withBom = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode('{"a":1}')]);
+  const encoded = encodeUint8ToBase64Url(withBom);
+
+  expect(decodeBase64UrlToJson(encoded)).toEqual({ a: 1 });
 });
 
 describe('alphabet split', () => {

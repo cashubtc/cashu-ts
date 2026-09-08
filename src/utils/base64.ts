@@ -3,6 +3,7 @@ import { base64, base64nopad, base64url, base64urlnopad } from '@scure/base';
 
 import { CTSError } from '../model/Errors';
 
+import { decodeUtf8Document } from './bytes';
 import { JSONInt } from './JSONInt';
 
 /**
@@ -84,7 +85,7 @@ function encodeJsonToBase64Url(jsonObj: unknown): string {
  * {@link encodeJsonToBase64Url}.
  */
 function decodeBase64UrlToJson<T extends object>(base64String: string): T {
-  const jsonString = new TextDecoder('utf-8').decode(decodeBase64UrlToUint8(base64String));
+  const jsonString = decodeUtf8Document(decodeBase64UrlToUint8(base64String));
   return JSONInt.parse(jsonString) as T;
 }
 

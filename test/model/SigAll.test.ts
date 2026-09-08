@@ -17,6 +17,7 @@ import {
   type MeltPreview,
   type SwapPreview,
 } from '../../src';
+import { encodeUint8ToBase64Url } from '../../src/utils/base64';
 
 const dummyProof: Proof = {
   id: 'testid',
@@ -237,6 +238,36 @@ describe('SigAll — serializePackage / deserializePackage', () => {
 
   test('throws on invalid JSON', () => {
     const encoded = 'sigallA' + btoa('{not valid json}').replace(/=+$/, '');
+    expect(() => SigAll.deserializePackage(encoded)).toThrow('Failed to parse signing package');
+  });
+
+  test('tolerates a leading BOM in the JSON document', () => {
+    // An editor-saved package can pick up a BOM; it is envelope framing, not JSON content.
+    const json = JSON.stringify({
+      version: 'sigallA',
+      type: 'swap',
+      inputs: [{ secret: 'testsecret', C: '02' + '1'.repeat(64) }],
+      outputs: [{ amount: 32, id: 'bm1', B_: 'dummyB' }],
+    });
+    const bytes = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode(json)]);
+    const encoded = 'sigallA' + encodeUint8ToBase64Url(bytes);
+
+    const parsed = SigAll.deserializePackage(encoded);
+    expect(parsed.type).toBe('swap');
+  });
+
+  test('rejects a package whose secret bytes are not valid UTF-8, rather than replacing them', () => {
+    // The malformed byte sits inside an otherwise well-formed string field: a lenient decoder
+    // would replace it with U+FFFD and parse this as valid JSON with a different secret.
+    const prefix = new TextEncoder().encode(
+      '{"version":"sigallA","type":"swap","inputs":[{"secret":"',
+    );
+    const suffix = new TextEncoder().encode(
+      `","C":"02${'1'.repeat(64)}"}],"outputs":[{"amount":32,"id":"bm1","B_":"dummyB"}]}`,
+    );
+    const bytes = new Uint8Array([...prefix, 0xff, ...suffix]);
+    const encoded = 'sigallA' + encodeUint8ToBase64Url(bytes);
+
     expect(() => SigAll.deserializePackage(encoded)).toThrow('Failed to parse signing package');
   });
 

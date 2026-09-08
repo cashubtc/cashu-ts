@@ -1,4 +1,7 @@
 import { CTSError } from '../model/Errors';
+
+import { decodeUtf8Field } from './bytes';
+import { MAX_CBOR_NODES } from './limits';
 /*
  * Lightweight CBOR encoder/decoder (purpose and limitations)
  *
@@ -316,7 +319,16 @@ export function decodeCBOR(data: Uint8Array): ResultValue {
 // overflowing the stack. Real tokens and payment requests nest only a few levels.
 const MAX_CBOR_DEPTH = 64;
 
-function decodeItem(view: DataView, offset: number, depth = 0): DecodeResult<ResultValue> {
+// Running total of array items + map entries across one recursive decode, so a wide (not deep)
+// payload is bounded like a deep one.
+type DecodeBudget = { nodes: number };
+
+function decodeItem(
+  view: DataView,
+  offset: number,
+  depth = 0,
+  budget: DecodeBudget = { nodes: 0 },
+): DecodeResult<ResultValue> {
   if (depth > MAX_CBOR_DEPTH) {
     throw new CTSError('CBOR nesting exceeds the maximum depth');
   }
@@ -337,9 +349,9 @@ function decodeItem(view: DataView, offset: number, depth = 0): DecodeResult<Res
     case 3:
       return decodeString(view, offset, additionalInfo);
     case 4:
-      return decodeArray(view, offset, additionalInfo, depth);
+      return decodeArray(view, offset, additionalInfo, depth, budget);
     case 5:
-      return decodeMap(view, offset, additionalInfo, depth);
+      return decodeMap(view, offset, additionalInfo, depth, budget);
     case 7:
       return decodeSimpleAndFloat(view, offset, additionalInfo);
     default:
@@ -439,8 +451,15 @@ function decodeString(
     throw new CTSError('String length exceeds data length');
   }
   const bytes = new Uint8Array(view.buffer, view.byteOffset + newOffset, len);
-  const value = new TextDecoder().decode(bytes);
+  const value = decodeUtf8Field(bytes);
   return { value, offset: newOffset + len };
+}
+
+function checkNodeBudget(budget: DecodeBudget) {
+  budget.nodes++;
+  if (budget.nodes > MAX_CBOR_NODES) {
+    throw new CTSError('CBOR payload exceeds the maximum item/entry budget');
+  }
 }
 
 function decodeArray(
@@ -448,13 +467,15 @@ function decodeArray(
   offset: number,
   additionalInfo: number,
   depth: number,
+  budget: DecodeBudget,
 ): DecodeResult<ResultValue[]> {
   const { value: length, offset: newOffset } = decodeLength(view, offset, additionalInfo);
   const len = Number(length);
   const array = [];
   let currentOffset = newOffset;
   for (let i = 0; i < len; i++) {
-    const result = decodeItem(view, currentOffset, depth + 1);
+    checkNodeBudget(budget);
+    const result = decodeItem(view, currentOffset, depth + 1, budget);
     array.push(result.value);
     currentOffset = result.offset;
   }
@@ -466,20 +487,26 @@ function decodeMap(
   offset: number,
   additionalInfo: number,
   depth: number,
+  budget: DecodeBudget,
 ): DecodeResult<Record<string, ResultValue>> {
   const { value: length, offset: newOffset } = decodeLength(view, offset, additionalInfo);
   const len = Number(length);
   const map: { [key: string]: ResultValue } = {};
   let currentOffset = newOffset;
   for (let i = 0; i < len; i++) {
-    const keyResult = decodeItem(view, currentOffset, depth + 1);
+    checkNodeBudget(budget);
+    const keyResult = decodeItem(view, currentOffset, depth + 1, budget);
     if (!isResultKeyType(keyResult.value)) {
       throw new CTSError('Invalid key type');
     }
-    const valueResult = decodeItem(view, keyResult.offset, depth + 1);
+    const key = String(keyResult.value);
+    if (Object.prototype.hasOwnProperty.call(map, key)) {
+      throw new CTSError(`Duplicate map key "${key}"`);
+    }
+    const valueResult = decodeItem(view, keyResult.offset, depth + 1, budget);
     // Define explicitly so a "__proto__" key becomes an own data property instead of
     // hitting the prototype setter and reparenting the decoded map (see JSONInt.parseObject).
-    Object.defineProperty(map, String(keyResult.value), {
+    Object.defineProperty(map, key, {
       value: valueResult.value,
       writable: true,
       enumerable: true,
@@ -524,7 +551,13 @@ function decodeSimpleAndFloat(
   }
   if (additionalInfo === 24) {
     ensureAvailable(view, offset, 1);
-    return { value: view.getUint8(offset++), offset };
+    const simpleValue = view.getUint8(offset++);
+    // Values below 32 have a short-form encoding (20-23 are false/true/null/undefined), so the
+    // extended form is non-minimal and would decode them as plain numbers.
+    if (simpleValue < 32) {
+      throw new CTSError(`Invalid extended simple value: ${simpleValue}`);
+    }
+    return { value: simpleValue, offset };
   }
   if (additionalInfo === 25) {
     ensureAvailable(view, offset, 2);

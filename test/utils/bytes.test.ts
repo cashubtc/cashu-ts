@@ -2,13 +2,43 @@ import { numberToVarBytesBE } from '@noble/curves/utils.js';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 
-import { bytesToUtf8, compareBytes, minimalBytesBE } from '../../src/utils/bytes';
+import {
+  bytesToUtf8,
+  compareBytes,
+  decodeUtf8Document,
+  decodeUtf8Field,
+  minimalBytesBE,
+} from '../../src/utils/bytes';
 
 describe('bytesToUtf8', () => {
   test('round-trips through utf8ToBytes, multi-byte included', () => {
     for (const s of ['', 'sat', 'ünïcode ✓', '🥜']) {
       expect(bytesToUtf8(utf8ToBytes(s))).toBe(s);
     }
+  });
+});
+
+describe('decodeUtf8Field', () => {
+  test('keeps a leading BOM as content instead of stripping it', () => {
+    // ef bb bf is the UTF-8 BOM, followed by 'a'.
+    const bytes = Uint8Array.of(0xef, 0xbb, 0xbf, 0x61);
+    expect(decodeUtf8Field(bytes)).toBe('﻿a');
+  });
+
+  test('rejects a byte sequence that is not valid UTF-8', () => {
+    expect(() => decodeUtf8Field(Uint8Array.of(0xff))).toThrow();
+  });
+});
+
+describe('decodeUtf8Document', () => {
+  test('strips a leading BOM instead of keeping it as content', () => {
+    // ef bb bf is the UTF-8 BOM, followed by '{"a":1}'.
+    const bytes = Uint8Array.of(0xef, 0xbb, 0xbf, ...new TextEncoder().encode('{"a":1}'));
+    expect(decodeUtf8Document(bytes)).toBe('{"a":1}');
+  });
+
+  test('rejects a byte sequence that is not valid UTF-8', () => {
+    expect(() => decodeUtf8Document(Uint8Array.of(0xff))).toThrow();
   });
 });
 
