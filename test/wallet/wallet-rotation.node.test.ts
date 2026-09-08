@@ -151,7 +151,7 @@ describe('receive across a rotation', () => {
     expect(counts().keysARequests).toBe(0); // baseline: loadMint alone doesn't fetch A's keys
 
     const preview = await wallet.prepareSwapToReceive([proofOnA]);
-    expect(preview.keysetId).toBe('009a1f293253e41e'); // outputs on the active keyset
+    expect(preview.keepOutputs?.[0].blindedMessage.id).toBe('009a1f293253e41e'); // outputs on the active keyset
     expect(counts().keysARequests).toBe(1); // one /v1/keys/A fetch, then cached
 
     await wallet.prepareSwapToReceive([proofOnA]);
@@ -167,7 +167,7 @@ describe('receive across a rotation', () => {
     wallet.on.keychainUpdated(({ cache }) => updates.push(cache));
 
     const preview = await wallet.prepareSwapToReceive([proofOnB]);
-    expect(preview.keysetId).toBe('009a1f293253e41e');
+    expect(preview.keepOutputs?.[0].blindedMessage.id).toBe('009a1f293253e41e');
     expect(counts().keysetsRequests).toBe(1); // exactly one repair refresh
     expect(updates).toHaveLength(1);
     expect(updates[0].keysets.map((k) => k.id)).toContain('009a1f293253e41e');
@@ -828,7 +828,7 @@ describe('strictCachedKeysets', () => {
     expect(counts().keysARequests).toBe(1);
 
     const preview = await wallet.prepareSwapToReceive([proofOnA]);
-    expect(preview.keysetId).toBe('009a1f293253e41e');
+    expect(preview.keepOutputs?.[0].blindedMessage.id).toBe('009a1f293253e41e');
     expect(counts().keysARequests).toBe(1); // no extra fetch from the op itself
   });
 
@@ -905,7 +905,7 @@ describe('send and melt inputs across a rotation', () => {
 
     const preview = await wallet.prepareSwapToSend(1, [proofOnB]);
     expect(preview.inputs[0].id).toBe('009a1f293253e41e');
-    expect(preview.keysetId).toBe('009a1f293253e41e'); // outputs on the repaired binding
+    expect(preview.sendOutputs?.[0].blindedMessage.id).toBe('009a1f293253e41e'); // outputs on the repaired binding
     expect(counts().keysetsRequests).toBe(1); // exactly one repair refresh
   });
 
@@ -928,7 +928,7 @@ describe('send and melt inputs across a rotation', () => {
 
     const preview = await wallet.prepareMelt('bolt11', meltQuote, meltProofsOn(keysetB.id));
     expect(preview.inputs).toHaveLength(2);
-    expect(preview.keysetId).toBe('009a1f293253e41e'); // NUT-08 blanks on the repaired binding
+    expect(preview.outputData[0].blindedMessage.id).toBe('009a1f293253e41e'); // NUT-08 blanks on the repaired binding
     expect(counts().keysetsRequests).toBe(1);
   });
 
@@ -945,7 +945,7 @@ describe('send and melt inputs across a rotation', () => {
     const warn = vi.spyOn(wallet.logger, 'warn');
     const preview = await wallet.prepareMelt('bolt11', meltQuote, meltProofsOn(proofOnA.id));
     expect(preview.inputs).toHaveLength(2);
-    expect(preview.keysetId).toBe('009a1f293253e41e'); // change blanks on the active keyset
+    expect(preview.outputData[0].blindedMessage.id).toBe('009a1f293253e41e'); // change blanks on the active keyset
     expect(warn).toHaveBeenCalledWith(
       'Melt input keyset is not listed by the mint; proceeding anyway',
       { keyset: proofOnA.id },
@@ -1018,10 +1018,10 @@ describe('send and melt inputs across a rotation', () => {
     await wallet.loadMint(); // A known-but-keyless, bound to B
 
     const sendPreview = await wallet.prepareSwapToSend(1, [proofOnA]);
-    expect(sendPreview.keysetId).toBe('009a1f293253e41e');
+    expect(sendPreview.sendOutputs?.[0].blindedMessage.id).toBe('009a1f293253e41e');
 
     const meltPreview = await wallet.prepareMelt('bolt11', meltQuote, meltProofsOn(proofOnA.id));
-    expect(meltPreview.keysetId).toBe('009a1f293253e41e');
+    expect(meltPreview.outputData[0].blindedMessage.id).toBe('009a1f293253e41e');
 
     expect(counts().keysARequests).toBe(0); // never attempted
   });

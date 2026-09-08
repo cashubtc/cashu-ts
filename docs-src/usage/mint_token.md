@@ -4,6 +4,9 @@
 
 ## 1) One-step BOLT11 mint
 
+`mintProofsBolt11()` fetches the full quote when passed a quote ID, regardless of the output keyset.
+Pass a full quote response instead to avoid that extra request.
+
 ```ts
 import { Wallet, MintQuoteState } from '@cashu/cashu-ts';
 

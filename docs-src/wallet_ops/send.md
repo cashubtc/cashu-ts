@@ -60,6 +60,8 @@ const mySendData: OutputData[] = [/* amounts must sum to 15 */];
 const { keep, send } = await wallet.ops.send(15, myProofs).asCustom(mySendData).run();
 ```
 
+Custom data may name any active keyset of the wallet unit, per output. The wallet checks each keyset before the swap and unblinds every output with the keyset the mint signed under.
+
 Normal sends swap v3 proofs that lack transferable bearer keys, even when the amounts match exactly. Supplying a script-path plan also forces a swap.
 
 ## 6) Force pure offline (no mint calls)

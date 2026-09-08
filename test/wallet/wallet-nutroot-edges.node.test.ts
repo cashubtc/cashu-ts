@@ -220,13 +220,18 @@ describe('nutroot edge cases', () => {
       expect(w.keysetId).toBe(id);
       if (mode === 'prepare') {
         const preview = await builder.prepare();
-        expect(preview.keysetId).toBe(legacyId);
         expect(preview.sendOutputs?.[0].blindedMessage.id).toBe(legacyId);
       } else {
         const complete = vi.spyOn(w, 'completeSwap').mockResolvedValue({ send: [], keep: [] });
         await builder.run();
         expect(complete).toHaveBeenCalledWith(
-          expect.objectContaining({ keysetId: legacyId }),
+          expect.objectContaining({
+            sendOutputs: [
+              expect.objectContaining({
+                blindedMessage: expect.objectContaining({ id: legacyId }),
+              }),
+            ],
+          }),
           undefined,
           undefined,
         );

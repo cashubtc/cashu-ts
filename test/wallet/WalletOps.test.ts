@@ -958,7 +958,6 @@ describe('WalletOps builders', () => {
         method: 'bolt11',
         payload: { quote, outputs: [] },
         outputData: [],
-        keysetId: '123',
         quote: {
           quote,
           method: 'bolt11',
@@ -1027,7 +1026,6 @@ describe('WalletOps builders', () => {
         method: 'bolt12',
         payload: { quote: mint12.quote, outputs: [] },
         outputData: [],
-        keysetId: '123',
         quote: {
           quote: mint12.quote,
           method: 'bolt12',
@@ -1136,7 +1134,6 @@ describe('WalletOps builders', () => {
         method: 'onchain',
         payload: { quote: mintOnchain.quote, outputs: [] },
         outputData: [],
-        keysetId: '123',
         quote: mintOnchain,
       };
       wallet.prepareMint.mockResolvedValueOnce(preview);

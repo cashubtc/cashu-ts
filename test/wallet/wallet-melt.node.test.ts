@@ -1061,7 +1061,6 @@ describe('async melt preference body', () => {
         },
       ],
       outputData: [],
-      keysetId: v3KeysetId,
       quote: { quote: 'q-slim' },
     };
     await expect(wallet.completeMelt(preview)).rejects.toThrow(/quote amount/);

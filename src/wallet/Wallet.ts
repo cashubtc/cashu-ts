@@ -71,7 +71,7 @@ import type {
   SpendInfo,
   SwapRequest,
 } from '../model/types';
-import type { SerializedBlindedSignature } from '../model/types/blinded';
+import type { SerializedBlindedMessage, SerializedBlindedSignature } from '../model/types/blinded';
 import type { KeyChainCache } from '../model/types/keyset';
 import { CheckStateEnum, type ProofState } from '../model/types/NUT07';
 import { type BatchMintRequest } from '../model/types/NUT29';
@@ -621,6 +621,22 @@ class Wallet {
   }
 
   /**
+   * Whether a mint request's outputs sit on a v3 keyset, which selects the quote signing rule.
+   *
+   * @remarks
+   * Chosen from the outputs, not the wallet keyset: custom data may name another. NUT-04 requires
+   * every output of a v3 mint request to share one keyset.
+   */
+  private mintsOntoV3(outputs: SerializedBlindedMessage[]): boolean {
+    const v3 = outputs.some((o) => isBlsKeyset(o.id));
+    this.failIf(
+      v3 && new Set(outputs.map((o) => o.id)).size > 1,
+      'Outputs on a v3 keyset must all share that keyset (NUT-04)',
+    );
+    return v3;
+  }
+
+  /**
    * Make the snapshot usable for these keyset ids, without running an operation.
    *
    * @remarks
@@ -1050,6 +1066,10 @@ class Wallet {
         !customTotal.equals(newAmount),
         `Custom output data total (${customTotal.toString()}) does not match amount (${newAmount.toString()})`,
       );
+      // Custom data names its own keyset per output; check each is usable before anything is spent.
+      for (const d of outputType.data) {
+        this.getOutputKeyset(d.blindedMessage.id);
+      }
       return outputType;
     }
 
@@ -1443,7 +1463,6 @@ class Wallet {
     return {
       amount: receiveAmount,
       fees: swapFee,
-      keysetId: keyset.id,
       inputs: preimage === undefined ? proofs : attachHTLCPreimage(proofs, preimage),
       keepOutputs: outputs,
     };
@@ -1721,7 +1740,6 @@ class Wallet {
     return {
       amount: sendAmountTarget,
       fees: swapFee,
-      keysetId: keyset.id,
       inputs:
         preimage === undefined ? selectedProofs : attachHTLCPreimage(selectedProofs, preimage),
       sendOutputs,
@@ -1797,10 +1815,12 @@ class Wallet {
     );
     this.validateReturnedSignatures(signatures, swapTransaction.outputData);
 
-    // Construct proofs
-    // Plain getKeyset: the mint has already signed
-    const keyset = this.getKeyset(swapPreview.keysetId);
-    const swapProofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keyset));
+    // Construct proofs. Each signature names the keyset it was made under, which custom outputs
+    // may have chosen per output; unblinding must use that one.
+    await this._ensureKeysetsForSignatures(signatures);
+    const swapProofs = swapTransaction.outputData.map((d, i) =>
+      d.toProof(signatures[i], this.keysetForSignature(signatures[i].id)),
+    );
     const reorderedProofs = Array(swapProofs.length);
     const reorderedKeepVector = Array(swapTransaction.keepVector.length);
     swapTransaction.sortedIndices.forEach((s, i) => {
@@ -3057,7 +3077,8 @@ class Wallet {
    * @remarks
    * Convenience helper for the common BOLT11 flow. Internally this uses `prepareMint('bolt11',…)`
    * followed by `completeMint()`. Use `prepareMint()` directly when you need the generic method
-   * based API or want to persist a replay-safe preview before completion.
+   * based API or want to persist a replay-safe preview before completion. A quote ID is fetched
+   * before minting; pass a full quote object to avoid that request.
    * @param amount Amount to mint.
    * @param quote Mint quote ID or object (bolt11).
    * @param config Optional parameters (e.g. privkey for locked quotes).
@@ -3072,14 +3093,7 @@ class Wallet {
   ): Promise<Proof[]> {
     this.requireSupport('mint', 'bolt11');
     if (typeof quote === 'string') {
-      // A v3 quote is a signed transaction input whose transcript commits its face amount and
-      // whose lock key must be known (NUT-04), so the stub only serves a pre-v3 keyset. The
-      // legacy path skips the round-trip: an invalid quote surfaces in the minting step.
-      const quoteObj = isBlsKeyset(this.getOutputKeyset(config?.keysetId).id)
-        ? await this.checkMintQuoteBolt11(quote)
-        : { quote };
-      const preview = await this.prepareMint('bolt11', amount, quoteObj, config, outputType);
-      return this.completeMint(preview);
+      quote = await this.checkMintQuoteBolt11(quote);
     }
     this.validateMintQuote(quote);
     const preview = await this.prepareMint('bolt11', amount, quote, config, outputType);
@@ -3211,6 +3225,7 @@ class Wallet {
     // Create outputs and mint payload
     const outputs = this.createOutputData(mintAmount, keyset, mintOT);
     const blindedMessages = outputs.map((d) => d.blindedMessage);
+    const v3 = this.mintsOntoV3(blindedMessages);
     const mintPayload: MintRequest = {
       outputs: blindedMessages,
       quote: quote.quote,
@@ -3248,7 +3263,7 @@ class Wallet {
         quoteId: quote.quote,
         outputs: blindedMessages,
       };
-      if (isBlsKeyset(keyset.id)) {
+      if (v3) {
         // V3 (nutroot secrets): the quote is a transaction input; its lock key signs the
         // quote input digest (NUT-10). No legacy fallback on v3 keysets.
         // The transcript commits the quote's face amount, not this draw: the output
@@ -3276,7 +3291,7 @@ class Wallet {
         mintPayload.signature = schnorrSignDigest(request.digest, signingKey);
         // Keep a legacy (pre nuts#375) signature over the same outputs as a fallback for
         // not-yet-upgraded mints — see completeMint(). Never on v3 keysets.
-        if (!isBlsKeyset(keyset.id)) {
+        if (!v3) {
           legacySignature = signMintQuoteLegacy(signingKey, quote.quote, blindedMessages);
         }
       } else {
@@ -3295,7 +3310,6 @@ class Wallet {
       method,
       payload: mintPayload,
       outputData: outputs,
-      keysetId: keyset.id,
       quote,
       legacySignature,
     };
@@ -3341,7 +3355,7 @@ class Wallet {
   async completeMint(
     mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>,
   ): Promise<Proof[]> {
-    const { payload, outputData, keysetId, method, legacySignature } = mintPreview;
+    const { payload, outputData, method, legacySignature } = mintPreview;
     // TODO: Remove legacy message support
     const { signatures } = await this.withStaleKeysetRepair(() =>
       this.withLegacyQuoteSigFallback(
@@ -3356,12 +3370,14 @@ class Wallet {
     );
     this.validateReturnedSignatures(signatures, outputData);
 
-    // Plain getKeyset: the mint has already signed
-    const keyset = this.getKeyset(keysetId);
+    // Unblind under the keyset each signature names, as custom outputs may pick their own.
+    await this._ensureKeysetsForSignatures(signatures);
     this._logger.debug('MINT COMPLETED', {
       amounts: outputData.map((o) => o.blindedMessage.amount.toString()),
     });
-    return outputData.map((d, i) => d.toProof(signatures[i], keyset));
+    return outputData.map((d, i) =>
+      d.toProof(signatures[i], this.keysetForSignature(signatures[i].id)),
+    );
   }
 
   /**
@@ -3467,6 +3483,7 @@ class Wallet {
     // Create consolidated output data
     const outputs = this.createOutputData(totalAmount, keyset, mintOT);
     const blindedMessages = outputs.map((d) => d.blindedMessage);
+    const v3 = this.mintsOntoV3(blindedMessages);
 
     // Sign each locked quote over ALL blinded messages (NUT-29).
     // Unlocked quotes get null. If no quotes are locked, omit signatures entirely.
@@ -3479,14 +3496,14 @@ class Wallet {
     // and all outputs (NUT-10).
     // Every quote in a v3 batch is a signing input, so an unlocked one has no witness and the
     // mint must reject the batch (NUT-29). Fail here, before any request is built.
-    if (isBlsKeyset(keyset.id)) {
+    if (v3) {
       const unlocked = entries.findIndex((e) => !('pubkey' in e.quote && e.quote.pubkey));
       this.failIf(
         unlocked >= 0,
         `prepareBatchMint: quote #${unlocked + 1} is unlocked; every quote minting onto a v3 keyset must be locked`,
       );
     }
-    const v3BatchDigests = isBlsKeyset(keyset.id)
+    const v3BatchDigests = v3
       ? inputsForPayload({
           mintQuotes: entries.map((e, i) => {
             // Face amount, as in prepareMint: the transcript never commits the draw,
@@ -3539,7 +3556,6 @@ class Wallet {
       method,
       payload: batchPayload,
       outputData: outputs,
-      keysetId: keyset.id,
       quotes: entries.map((e) => e.quote),
       ...(hasSignatures ? { legacySignatures } : {}),
     };
@@ -3558,7 +3574,7 @@ class Wallet {
   async completeBatchMint(
     batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>,
   ): Promise<Proof[]> {
-    const { method, payload, outputData, keysetId, legacySignatures } = batchPreview;
+    const { method, payload, outputData, legacySignatures } = batchPreview;
     // TODO: Remove legacy message support
     const { signatures: sigs } = await this.withStaleKeysetRepair(() =>
       this.withLegacyQuoteSigFallback(
@@ -3573,13 +3589,13 @@ class Wallet {
     );
     this.validateReturnedSignatures(sigs, outputData);
 
-    // Plain getKeyset: the mint has already signed
-    const keyset = this.getKeyset(keysetId);
+    // Unblind under the keyset each signature names, as custom outputs may pick their own.
+    await this._ensureKeysetsForSignatures(sigs);
     this._logger.debug('BATCH MINT COMPLETED', {
       quotes: payload.quotes.length,
       amounts: outputData.map((o) => o.blindedMessage.amount.toString()),
     });
-    return outputData.map((d, i) => d.toProof(sigs[i], keyset));
+    return outputData.map((d, i) => d.toProof(sigs[i], this.keysetForSignature(sigs[i].id)));
   }
 
   // -----------------------------------------------------------------
@@ -4123,7 +4139,6 @@ class Wallet {
       inputs:
         preimage === undefined ? normalizedProofs : attachHTLCPreimage(normalizedProofs, preimage),
       outputData,
-      keysetId: keyset.id,
       quote: meltQuote,
     };
 
@@ -4302,18 +4317,11 @@ class Wallet {
   }
 
   /**
-   * Keyset a blank's signature was issued under, for unblinding.
+   * Loads the keysets a mint response was signed under.
    *
    * @remarks
-   * Must already be loaded (see `_ensureOperableKeysets`); `getKeyset` also rejects a keyset from
-   * another unit, which a blank cannot vouch for itself.
-   */
-  /**
-   * Loads the keysets a NUT-09 restore response was signed under.
-   *
-   * @remarks
-   * Each signature names its own keyset, which need not be the scanned one. Zero-value entries are
-   * dropped by the caller and need no keys.
+   * Each signature names its own keyset, which need not be the one the preview or scan used.
+   * Zero-value entries are dropped by the caller and need no keys.
    */
   private _ensureKeysetsForSignatures(signatures: SerializedBlindedSignature[]): Promise<void> {
     return this._ensureOperableKeysets(
@@ -4322,6 +4330,13 @@ class Wallet {
     );
   }
 
+  /**
+   * Keyset a signature was issued under, for unblinding.
+   *
+   * @remarks
+   * Must already be loaded (see `_ensureOperableKeysets`); `getKeyset` also rejects a keyset from
+   * another unit, which the signature cannot vouch for itself.
+   */
   private keysetForSignature(id: string): Keyset {
     try {
       return this.getKeyset(id);

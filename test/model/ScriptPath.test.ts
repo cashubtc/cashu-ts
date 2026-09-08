@@ -49,7 +49,6 @@ function fixture() {
   const preview: SwapPreview = {
     amount: Amount.from(1),
     fees: Amount.from(0),
-    keysetId,
     inputs: [proof],
     keepOutputs: [OutputData.createSingleRandomData(1, keysetId)],
   };
@@ -137,7 +136,6 @@ describe('ScriptPath signing packages', () => {
     const preview: SwapPreview = {
       amount: Amount.from(1),
       fees: Amount.from(0),
-      keysetId,
       inputs: [proof],
       keepOutputs: [OutputData.createSingleRandomData(1, keysetId)],
     };
@@ -168,7 +166,6 @@ describe('ScriptPath signing packages', () => {
     const preview: SwapPreview = {
       amount: Amount.from(1),
       fees: Amount.from(0),
-      keysetId,
       inputs: [proof],
       keepOutputs: [OutputData.createSingleRandomData(1, keysetId)],
     };
@@ -298,7 +295,6 @@ describe('ScriptPath signing packages', () => {
         method: 'bolt11',
         inputs: preview.inputs,
         outputData: [],
-        keysetId,
         quote: { quote: 'q1', amount: Amount.from(1) },
       }),
     ).toThrow(/Cannot merge a swap package into a melt/);
@@ -331,7 +327,6 @@ describe('ScriptPath melt packages', () => {
       method: 'bolt11',
       inputs: preview.inputs,
       outputData: [OutputData.createSingleRandomData(1, keysetId)],
-      keysetId,
       quote: { quote: 'quote-1', amount: Amount.from(1) },
     };
     return { alice, meltPreview, proof, swapPreview: preview };

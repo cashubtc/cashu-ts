@@ -87,7 +87,7 @@ describe('Legacy (pre-v1) keyset output gating', () => {
     await wallet.loadMint();
 
     const preview = await wallet.prepareMint('bolt11', 3, { quote: 'test-quote' });
-    expect(preview.keysetId).toBe(DUMMY_TEST_KEYSET.id);
+    expect(preview.outputData[0].blindedMessage.id).toBe(DUMMY_TEST_KEYSET.id);
   });
 
   test('prepareMint refuses to create proofs on an inactive keyset', async () => {

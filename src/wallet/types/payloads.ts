@@ -28,10 +28,6 @@ export interface MintPreview<
    */
   outputData: OutputDataLike[];
   /**
-   * Keyset ID used to prepare the outputs.
-   */
-  keysetId: string;
-  /**
    * Mint Quote object.
    */
   quote: TQuote;
@@ -60,10 +56,6 @@ export interface BatchMintPreview<
    */
   outputData: OutputDataLike[];
   /**
-   * Keyset ID used to prepare the outputs.
-   */
-  keysetId: string;
-  /**
    * Mint Quote objects included in this batch.
    */
   quotes: TQuote[];
@@ -91,10 +83,6 @@ export interface MeltPreview<
    * Outputs (blinded messages) that can be filled by the mint to return overpaid fees.
    */
   outputData: OutputDataLike[];
-  /**
-   * Keyset ID used to prepare the outputs.
-   */
-  keysetId: string;
   /**
    * Melt Quote object.
    */
@@ -142,10 +130,6 @@ export type SwapPreview = {
    * Total fees for the swap (inc receiver's fees if applicable)
    */
   fees: Amount;
-  /**
-   * Keyset ID used to prepare the outputs.
-   */
-  keysetId: string;
   /**
    * Input Proofs for this transaction.
    */

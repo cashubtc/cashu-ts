@@ -18,16 +18,22 @@ import {
   Amount,
   type AmountLike,
   Mint,
+  OutputData,
   MintOperationError,
   type RequestFn,
 } from '../../src';
-import { schnorrSignDigest, verifyMintQuoteSignature } from '../../src/crypto';
+import { schnorrSignDigest, schnorrVerifyDigest, verifyMintQuoteSignature } from '../../src/crypto';
 import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import { verifyMintQuoteSignatureLegacy } from '../../src/crypto/NUT20';
 import { inputsForPayload } from '../../src/crypto/transcript';
 import request from '../../src/transport';
 import { sumProofs } from '../../src/utils';
-import { NUT02_V3_VECTOR1_KEYS, NUT02_V3_VECTOR1_KEYSET } from '../consts';
+import {
+  DUMMY_TEST_KEYS,
+  DUMMY_TEST_KEYSET,
+  NUT02_V3_VECTOR1_KEYS,
+  NUT02_V3_VECTOR1_KEYSET,
+} from '../consts';
 
 import { useTestServer, mint, mintUrl, unit, logger, mintInfoResp, invoice } from './_setup';
 
@@ -658,6 +664,116 @@ describe('requestTokens', () => {
       expect(bytesToHex(seen!.transactionMessage!)).toBe(bytesToHex(tx.transactionMessage));
       expect(preview.legacySignature).toBeUndefined();
     });
+
+    // A pre-v3 keyset beside the v3 one, so custom outputs can name a keyset the wallet did not
+    // pick.
+    function serveBothKeysets() {
+      server.use(
+        http.get(mintUrl + '/v1/keysets', () =>
+          HttpResponse.json({ keysets: [DUMMY_TEST_KEYSET, NUT02_V3_VECTOR1_KEYSET] }),
+        ),
+        http.get(mintUrl + '/v1/keys', () =>
+          HttpResponse.json({ keysets: [DUMMY_TEST_KEYS, NUT02_V3_VECTOR1_KEYS] }),
+        ),
+        http.get(mintUrl + '/v1/keys/' + NUT02_V3_VECTOR1_KEYSET.id, () =>
+          HttpResponse.json({ keysets: [NUT02_V3_VECTOR1_KEYS] }),
+        ),
+      );
+    }
+
+    test.each([
+      [DUMMY_TEST_KEYSET.id, NUT02_V3_VECTOR1_KEYSET.id],
+      [NUT02_V3_VECTOR1_KEYSET.id, DUMMY_TEST_KEYSET.id],
+    ] as const)(
+      'fetches string quote IDs for custom outputs: wallet %s, output %s',
+      async (keysetId, outputId) => {
+        serveBothKeysets();
+        const wallet = new Wallet(mintUrl, { unit, keysetId });
+        await wallet.loadMint();
+        const quote = lockedQuote();
+        const fetchQuote = vi.spyOn(wallet, 'checkMintQuoteBolt11').mockResolvedValue(quote);
+        vi.spyOn(wallet, 'completeMint').mockResolvedValue([]);
+        const data = [OutputData.createSingleRandomData(1, outputId)];
+
+        await expect(
+          wallet.mintProofsBolt11(1, quote, { privkey }, { type: 'custom', data }),
+        ).resolves.toEqual([]);
+        expect(fetchQuote).not.toHaveBeenCalled();
+
+        await expect(
+          wallet.mintProofsBolt11(1, quote.quote, { privkey }, { type: 'custom', data }),
+        ).resolves.toEqual([]);
+        expect(fetchQuote).toHaveBeenCalledExactlyOnceWith(quote.quote);
+      },
+    );
+
+    test('custom outputs on a v3 keyset sign the transaction digest whatever keyset the wallet holds', async () => {
+      serveBothKeysets();
+      const wallet = new Wallet(mintUrl, { unit });
+      await wallet.loadMint();
+      const data = [OutputData.createSingleRandomData(1, NUT02_V3_VECTOR1_KEYSET.id)];
+      const preview = await wallet.prepareMint(
+        'bolt11',
+        1,
+        lockedQuote(),
+        { privkey, keysetId: DUMMY_TEST_KEYSET.id },
+        { type: 'custom', data },
+      );
+      const tx = inputsForPayload({
+        mintQuotes: [{ quoteId: 'callback-quote', amount: 1 }],
+        outputs: preview.payload.outputs,
+      });
+      expect(
+        schnorrVerifyDigest(
+          preview.payload.signature!,
+          tx.quotes.get('callback-quote')!.digest,
+          pubkey,
+        ),
+      ).toBe(true);
+      expect(preview.legacySignature).toBeUndefined();
+    });
+
+    test('a mint plan mixing a v3 output with another keyset is rejected before the request is built', async () => {
+      serveBothKeysets();
+      const wallet = new Wallet(mintUrl, { unit });
+      await wallet.loadMint();
+      const quote = { ...lockedQuote(), amount: Amount.from(2), amount_paid: Amount.from(2) };
+      const data = [
+        OutputData.createSingleRandomData(1, NUT02_V3_VECTOR1_KEYSET.id),
+        OutputData.createSingleRandomData(1, DUMMY_TEST_KEYSET.id),
+      ];
+      await expect(
+        wallet.prepareMint('bolt11', 2, quote, { privkey }, { type: 'custom', data }),
+      ).rejects.toThrow(/share that keyset/);
+    });
+
+    test('a batch onto custom v3 outputs signs every quote over the transaction digest', async () => {
+      serveBothKeysets();
+      const wallet = new Wallet(mintUrl, { unit });
+      await wallet.loadMint();
+      const quotes = ['batch-a', 'batch-b'].map((q) => ({ ...lockedQuote(), quote: q }));
+      const data = [OutputData.createSingleRandomData(2, NUT02_V3_VECTOR1_KEYSET.id)];
+      const preview = await wallet.prepareBatchMint(
+        'bolt11',
+        quotes.map((quote) => ({ amount: 1, quote })),
+        { privkey, keysetId: DUMMY_TEST_KEYSET.id },
+        { type: 'custom', data },
+      );
+      const tx = inputsForPayload({
+        mintQuotes: quotes.map((q) => ({ quoteId: q.quote, amount: 1 })),
+        outputs: preview.payload.outputs,
+      });
+      quotes.forEach((q, i) => {
+        expect(
+          schnorrVerifyDigest(
+            preview.payload.signatures![i]!,
+            tx.quotes.get(q.quote)!.digest,
+            pubkey,
+          ),
+        ).toBe(true);
+      });
+      expect(preview.legacySignatures).toEqual([null, null]);
+    });
   });
 
   test('prepareMint fails when multiple privkeys and no quote pubkey', async () => {
@@ -713,6 +829,9 @@ describe('requestTokens', () => {
 
   test('test requestTokens bad response', async () => {
     server.use(
+      http.get(mintUrl + '/v1/mint/quote/bolt11/badquote', () => {
+        return HttpResponse.json({});
+      }),
       http.post(mintUrl + '/v1/mint/bolt11', () => {
         return HttpResponse.json({});
       }),
