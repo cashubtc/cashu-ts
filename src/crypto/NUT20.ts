@@ -50,9 +50,10 @@ function constructLegacyMessage(
   return sha256(utf8ToBytes(message));
 }
 
-// NUT-20 quote pubkeys are compressed 33-byte SEC1 (66 hex chars).
+// NUT-20 quote pubkeys are compressed 33-byte SEC1 (66 hex chars). Types are erased for JS
+// callers, so a value from JSON must fail closed rather than throw on the length read.
 function isCompressedPubkey(pubkey: string): boolean {
-  return pubkey.length === 66;
+  return typeof pubkey === 'string' && pubkey.length === 66;
 }
 
 /**

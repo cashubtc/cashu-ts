@@ -32,6 +32,7 @@ import {
   findSigningKey,
 } from '../../src/crypto';
 import { verifyUnblindedSignature } from '../../src/crypto/NUT01';
+import { decodeBase64ToUint8Legacy } from '../../src/utils';
 
 const SECRET_MESSAGE = 'test_message';
 
@@ -235,6 +236,23 @@ describe('getKeysetIdInt', () => {
     const expected = BigInt(0x010203) % MOD;
     expect(getKeysetIdInt(b64Id)).toBe(expected);
   });
+
+  test('a 12-character id is legacy base64 even when every character is a hex digit', () => {
+    // Same rule as getDerivationKind: length decides, since the base64 alphabet overlaps hex.
+    const MOD = BigInt(2 ** 31 - 1);
+    const id = 'abcdef012345';
+    const expected = bytesToNumberBE(decodeBase64ToUint8Legacy(id)) % MOD;
+    expect(getKeysetIdInt(id)).toBe(expected);
+    expect(getKeysetIdInt(id)).not.toBe(BigInt('0x' + id) % MOD);
+  });
+
+  test('a URL-safe spelling of a legacy id derives the same path', () => {
+    expect(getKeysetIdInt('22aBcD-_eFgH')).toBe(getKeysetIdInt('22aBcD+/eFgH'));
+  });
+
+  test('rejects an id that is neither hex nor base64', () => {
+    expect(() => getKeysetIdInt('not-a-keyset!')).toThrow(/Invalid keyset id/);
+  });
 });
 
 describe('schnorrVerifyDigest', () => {
@@ -298,6 +316,13 @@ describe('getValidSigners / meetsSignerThreshold', () => {
 
   test('one signature cannot meet a 2-of-2 threshold across 02/03 encodings', () => {
     expect(meetsSignerThreshold([signature], message, [compressed, '03' + xOnly], 2)).toBe(false);
+  });
+
+  test('a threshold below one is rejected instead of passing on no signatures', () => {
+    expect(meetsSignerThreshold([], message, [compressed], 0)).toBe(false);
+    expect(meetsSignerThreshold([], message, [compressed], -1)).toBe(false);
+    expect(meetsSignerThreshold([signature], message, [compressed], 1.5)).toBe(false);
+    expect(meetsSignerThreshold([signature], message, [compressed], 1)).toBe(true);
   });
 
   test('non-string pubkey entries fail closed without throwing', () => {

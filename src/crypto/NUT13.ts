@@ -6,11 +6,11 @@ import { HDKey, HARDENED_OFFSET } from '@scure/bip32';
 
 import { CTSError, InvalidScalarError } from '../model/Errors';
 import { isBase64String } from '../utils';
+import { MAX_SEED_BYTES, MIN_SEED_BYTES, NUTROOT_MAX_SLOTS } from '../utils/limits';
 
 import { BLS_FR_ORDER } from './curve_bls';
 import { getPubKeyFromPrivKey } from './curve_secp';
-import { getKeysetIdInt, isBlsKeyset } from './curves';
-import { NUTROOT_MAX_SLOTS } from './nutroot';
+import { getKeysetIdInt, isBlsKeyset, LEGACY_KEYSET_ID_LENGTH } from './curves';
 
 const STANDARD_DERIVATION_PATH = `m/129372'/0'`;
 
@@ -63,8 +63,8 @@ type SecretAndBlindingFactorDeriver = (counter: number) => DerivedSecretAndBlind
  * @param keysetId - Mint keyset ID that selects the derivation method.
  * @param counter - Deterministic counter for the output.
  * @returns The derived secret bytes and blinding factor bytes.
- * @throws {@link CTSError} If the keyset ID version is unsupported or if derivation produces an
- *   invalid private key.
+ * @throws {@link CTSError} If the seed is not 16 to 64 bytes, the keyset ID version is unsupported,
+ *   or derivation produces an invalid private key.
  */
 export function deriveSecretAndBlindingFactor(
   seed: Uint8Array,
@@ -91,8 +91,8 @@ export function deriveSecretAndBlindingFactor(
  * @param purpose - Key purpose (`'P2PK'` or `'QuoteLock'`), which selects the path's purpose index.
  * @param counter - Non-hardened BIP-32 child index.
  * @returns The derived keypair, both hex-encoded: compressed (02/03) `pubkey` and `privkey`.
- * @throws {@link CTSError} If the counter is not a non-hardened index (integer below 2^31) or
- *   derivation produces an invalid private key.
+ * @throws {@link CTSError} If the seed is not 16 to 64 bytes, the counter is not a non-hardened
+ *   index (integer below 2^31), or derivation produces an invalid private key.
  */
 export function deriveKeyPair(
   seed: Uint8Array,
@@ -118,11 +118,13 @@ export function deriveKeyPair(
  * @param seed - Wallet seed used for deterministic derivation.
  * @param purpose - Key purpose, which selects the path's purpose index.
  * @returns A function mapping a non-hardened counter to its hex keypair.
+ * @throws {@link CTSError} If the seed is not 16 to 64 bytes.
  */
 export function createKeyPairDeriver(
   seed: Uint8Array,
   purpose: Bip32KeyPurpose,
 ): (counter: number) => { pubkey: string; privkey: string } {
+  assertSeed(seed);
   const index = PURPOSE_INDEX[purpose];
   const parentKey = HDKey.fromMasterSeed(seed).derive(`m/129373'/${index}'/0'/0'`);
   return (counter: number) => {
@@ -156,6 +158,7 @@ export function createSecretAndBlindingFactorDeriver(
   seed: Uint8Array,
   keysetId: string,
 ): SecretAndBlindingFactorDeriver {
+  assertSeed(seed);
   switch (getDerivationKind(keysetId)) {
     case DerivationKind.DEPRECATED_BIP32: {
       const keysetIdInt = getKeysetIdInt(keysetId);
@@ -170,6 +173,11 @@ export function createSecretAndBlindingFactorDeriver(
 }
 
 function getDerivationKind(keysetId: string): DerivationKind {
+  // Legacy ids are 12-character base64 and predate the version byte, so length tells them from a
+  // modern id: their alphabet overlaps hex.
+  if (keysetId.length === LEGACY_KEYSET_ID_LENGTH && isBase64String(keysetId)) {
+    return DerivationKind.DEPRECATED_BIP32;
+  }
   const isValidHex = /^[a-fA-F0-9]+$/.test(keysetId);
   const isHmacHexVersion = keysetId.startsWith('01') || keysetId.startsWith('02');
   if (isValidHex && isHmacHexVersion && keysetId.length % 2 !== 0) {
@@ -268,6 +276,18 @@ export const DERIVATION_TYPE = {
   quoteLock: 0x04,
 } as const;
 
+function assertSeed(seed: Uint8Array): void {
+  // Every secret, blinding factor and key derived here inherits the seed's strength, and types
+  // are erased for JS callers.
+  if (
+    !(seed instanceof Uint8Array) ||
+    seed.length < MIN_SEED_BYTES ||
+    seed.length > MAX_SEED_BYTES
+  ) {
+    throw new CTSError(`seed must be a ${MIN_SEED_BYTES} to ${MAX_SEED_BYTES} byte Uint8Array`);
+  }
+}
+
 function assertCounter(counter: number): void {
   // NUT-13 encodes the counter as u64, but cap at MAX_SAFE_INTEGER: past it
   // `counter + 1 === counter`, so a batch would derive one counter twice.
@@ -308,6 +328,7 @@ function deriveV3Scalar(
   suffix?: Uint8Array,
   order: bigint = SECP256K1_N,
 ): Uint8Array {
+  assertSeed(seed);
   assertCounter(counter);
   const keysetIdBytes = keysetId === undefined ? new Uint8Array(0) : hexToBytes(keysetId);
   const base = concatBytes(

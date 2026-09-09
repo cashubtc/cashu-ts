@@ -78,4 +78,9 @@ describe('minimalBytesBE', () => {
   test('refuses a negative value', () => {
     expect(() => minimalBytesBE(-1n)).toThrow(RangeError);
   });
+
+  test('encodes the largest amount but refuses anything above it', () => {
+    expect(minimalBytesBE(2n ** 64n - 1n)).toEqual(new Uint8Array(8).fill(0xff));
+    expect(() => minimalBytesBE(2n ** 64n)).toThrow(RangeError);
+  });
 });

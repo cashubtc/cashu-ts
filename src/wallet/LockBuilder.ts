@@ -262,6 +262,15 @@ export class LockBuilder {
    */
   static fromOptions(lock: LockOptions): LockBuilder {
     const b = new LockBuilder();
+    // The setters take a key or a list; stored options are lists, so a bare string here is
+    // malformed input rather than a shorthand. `blindKeys` doubles as a flag, so it also takes a
+    // boolean.
+    for (const field of ['mainKeys', 'refundKeys', 'blindKeys'] as const) {
+      const value = lock[field];
+      if (value === undefined || Array.isArray(value)) continue;
+      if (field === 'blindKeys' && typeof value === 'boolean') continue;
+      throw new CTSError(`${field} must be an array of pubkeys`);
+    }
     if (lock.hashlock !== undefined) b.addHashlock(lock.hashlock);
     if (lock.mainKeys?.length) b.addMainPubkey(lock.mainKeys);
     // lock.locktime is already canonical Unix seconds; assign directly so lockUntil's

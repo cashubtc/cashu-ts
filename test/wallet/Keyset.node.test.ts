@@ -50,6 +50,19 @@ describe('Keyset.verifyKeysetId', () => {
     expect(Keyset.verifyKeysetId(mk)).toBe(false);
   });
 
+  test('returns false when one key serves two denominations, id notwithstanding', () => {
+    // A keyset id selects one key per amount, so a key repeated across denominations is malformed.
+    const shared = (PUBKEYS as Keys)[1];
+    const duplicated: Keys = { 1: shared, 2: shared };
+    const mk: MintKeys = {
+      id: deriveKeysetId(duplicated, { versionByte: 1, unit: 'sat' }),
+      unit: 'sat',
+      active: true,
+      keys: duplicated,
+    };
+    expect(Keyset.verifyKeysetId(mk)).toBe(false);
+  });
+
   test('returns false when derived id does not match a tampered key', () => {
     const tampered: Keys = { ...(PUBKEYS as Keys), 1: (PUBKEYS as Keys)[2] };
     const mk: MintKeys = { id: GENUINE_ID, unit: 'sat', active: true, keys: tampered };

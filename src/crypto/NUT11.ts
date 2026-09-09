@@ -6,6 +6,7 @@ import { CTSError } from '../model/Errors';
 import { type OutputDataLike } from '../model/OutputData';
 import { type HTLCWitness, type P2PKWitness, type Proof } from '../model/types';
 import {
+  MAX_P2BK_SLOTS,
   MAX_P2PK_PUBKEYS,
   MAX_P2PK_SIGNATURES,
   MAX_SECRET_LENGTH,
@@ -144,13 +145,9 @@ type WitnessData = {
   signatures: string[];
 };
 
-/**
- * NUT-11 tag keys that map onto structured {@link LockConditions} fields, rather than being carried
- * as free-form `additionalTags`, and are therefore reserved (not settable as additional tags).
- *
- * @internal
- */
-export const P2PK_KNOWN_TAG_KEYS = new Set([
+// Parsing reads this set, so the exported one is a detached copy: an exported Set stays
+// mutable whatever its declared type.
+const KNOWN_TAG_KEYS = new Set([
   'locktime',
   'pubkeys',
   'n_sigs',
@@ -158,6 +155,23 @@ export const P2PK_KNOWN_TAG_KEYS = new Set([
   'n_sigs_refund',
   'sigflag',
 ]);
+
+/**
+ * NUT-11 tag keys that map onto structured {@link LockConditions} fields, rather than being carried
+ * as free-form `additionalTags`, and are therefore reserved (not settable as additional tags).
+ *
+ * @internal
+ */
+export const P2PK_KNOWN_TAG_KEYS: ReadonlySet<string> = new Set(KNOWN_TAG_KEYS);
+
+/**
+ * True if a tag key is one NUT-11 reserves.
+ *
+ * @internal
+ */
+export function isP2PKKnownTagKey(key: string): boolean {
+  return KNOWN_TAG_KEYS.has(key);
+}
 
 // ------------------------------
 // NUT-11 Secrets
@@ -281,12 +295,12 @@ export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
 
   // Signers: P2PK - data key + pubkeys; HTLC - data is a hash, so only pubkeys.
   const signerCount = (kind === 'P2PK' ? 1 : 0) + pubkeys.length;
-  // NUT-28: up to 11 locking slots in [data, ...pubkeys, ...refund] (i_byte 0x00..0x0A). `data`
-  // always fills slot 0 (a pubkey for P2PK, a hashlock for HTLC), so HTLC allows one fewer key.
+  // NUT-28 slot map: [data, ...pubkeys, ...refund]. `data` always fills slot 0 (a pubkey for
+  // P2PK, a hashlock for HTLC), so HTLC allows one fewer key.
   const slotCount = 1 + pubkeys.length + refundKeys.length;
-  if (slotCount > 11) {
+  if (slotCount > MAX_P2BK_SLOTS) {
     throw new CTSError(
-      `Too many pubkeys, ${slotCount} slots provided, maximum allowed is 11 in total`,
+      `Too many pubkeys, ${slotCount} slots provided, maximum allowed is ${MAX_P2BK_SLOTS} in total`,
     );
   }
   if (p2pk.sigFlag !== undefined) assertSigFlag(p2pk.sigFlag);
@@ -336,7 +350,7 @@ export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
  */
 export function assertValidTagKey(key: string) {
   if (!key || typeof key !== 'string') throw new CTSError('tag key must be a non empty string');
-  if (P2PK_KNOWN_TAG_KEYS.has(key)) {
+  if (isP2PKKnownTagKey(key)) {
     throw new CTSError(`additionalTags must not use reserved key "${key}"`);
   }
 }
@@ -951,7 +965,7 @@ function assertNoDuplicateP2PKTags(tags: string[][]): void {
   const seen = new Set<string>();
   for (const tag of tags) {
     const key = tag[0];
-    if (!P2PK_KNOWN_TAG_KEYS.has(key)) continue;
+    if (!isP2PKKnownTagKey(key)) continue;
     if (seen.has(key)) {
       throw new CTSError(`Duplicate P2PK tag "${key}"`);
     }

@@ -6,13 +6,17 @@ import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/
 
 import { CTSError } from '../model/Errors';
 import { hexToNumber, numberToHexPadded64 } from '../utils';
+import { MAX_P2BK_SLOTS, NUTROOT_MAX_SLOTS } from '../utils/limits';
 
 import { pointFromHex } from './curve_secp';
+
+// Derivation reads this copy, so the exported one is inert: a Uint8Array cannot be frozen.
+const P2BK_DST_BYTES = utf8ToBytes('Cashu_P2BK_v1');
 
 /**
  * BIP340-style domain separation tag (DST) for P2BK.
  */
-export const P2BK_DST: Uint8Array<ArrayBufferLike> = utf8ToBytes('Cashu_P2BK_v1');
+export const P2BK_DST: Uint8Array<ArrayBufferLike> = P2BK_DST_BYTES.slice();
 
 /**
  * Blind a sequence of public keys using ECDH derived tweaks, one tweak per slot.
@@ -27,7 +31,7 @@ export const P2BK_DST: Uint8Array<ArrayBufferLike> = utf8ToBytes('Cashu_P2BK_v1'
  * @param dataIsPubkey Optional. False when slot 0 holds non-key data (eg an HTLC hashlock), so the
  *   first pubkey takes slot 1.
  * @returns Blinded pubkeys in the same order, and Ehex as SEC1 compressed hex, 33 bytes.
- * @throws If a blinded key is at infinity.
+ * @throws If there are more keys than slots, or a blinded key is at infinity.
  */
 export function deriveP2BKBlindedPubkeys(
   pubkeys: string[],
@@ -35,6 +39,12 @@ export function deriveP2BKBlindedPubkeys(
   dataIsPubkey = true,
 ): { blinded: string[]; Ehex: string } {
   const slotOffset = dataIsPubkey ? 0 : 1;
+  const slotCount = pubkeys.length + slotOffset;
+  if (slotCount > MAX_P2BK_SLOTS) {
+    throw new CTSError(
+      `Too many pubkeys, ${slotCount} slots provided, maximum allowed is ${MAX_P2BK_SLOTS} in total`,
+    );
+  }
   if (!pubkeys.length) return { blinded: [], Ehex: '' };
   // Create fresh ephemeral secret (e) if not supplied, and calculate pubkey (E)
   const secret = eBytes ?? secp256k1.utils.randomSecretKey(); // 32 bytes
@@ -189,26 +199,30 @@ export function deriveP2BKSecretKey(
  * Both yield the same Z and therefore the same r thanks to the magic of ECDH!
  * @param point Ephemeral public key (E) or recipient public key (P)
  * @param scalar Private scalar (p) or ephemeral scalar (e) in [1, n − 1]
- * @param slotIndex Zero based slot index, only lowest 8 bits (0–255) are used.
+ * @param slotIndex Zero based slot index, below {@link NUTROOT_MAX_SLOTS}.
  * @returns Tweak (r) in [1, n − 1]
- * @throws If r reduces to zero after the retry.
+ * @throws If the slot index is out of range, or r reduces to zero after the retry.
  */
 function deriveP2BKBlindingTweakFromECDH(
   point: WeierstrassPoint<bigint>, // E or P
   scalar: bigint, // p or e
   slotIndex: number, // i
 ): bigint {
+  // The index byte is masked, so an out-of-range slot would silently alias onto another one.
+  if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= NUTROOT_MAX_SLOTS) {
+    throw new CTSError(`P2BK: slot index must be an integer in [0, ${NUTROOT_MAX_SLOTS - 1}]`);
+  }
   // Calculate x-only ECDH shared point (Zx)
   const Zx = point.multiply(scalar).toBytes(true).slice(1);
   const iByte = new Uint8Array([slotIndex & 0xff]);
   // Derive deterministic blinding factor (r):
   // Note: bytesToNumberBE is safe here because we explicitly guard against
   // out-of-range values below, throwing rather than silently normalizing.
-  let r = bytesToNumberBE(sha256(concatBytes(P2BK_DST, Zx, iByte)));
+  let r = bytesToNumberBE(sha256(concatBytes(P2BK_DST_BYTES, Zx, iByte)));
   /* c8 ignore next 6 — retry needs sha256 to land outside the curve order (~2^-128). */
   if (r === 0n || r >= secp256k1.Point.CURVE().n) {
     // Very unlikely to get here!
-    r = bytesToNumberBE(sha256(concatBytes(P2BK_DST, Zx, iByte, new Uint8Array([0xff]))));
+    r = bytesToNumberBE(sha256(concatBytes(P2BK_DST_BYTES, Zx, iByte, new Uint8Array([0xff]))));
     if (r === 0n || r >= secp256k1.Point.CURVE().n) {
       throw new CTSError('P2BK: tweak derivation failed');
     }

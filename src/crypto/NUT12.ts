@@ -8,7 +8,7 @@ import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { CTSError } from '../model/Errors';
 
 import { type DLEQ } from './core';
-import { hash_e, hashToCurve } from './curve_secp';
+import { assertSecpPoint, hash_e, hashToCurve } from './curve_secp';
 
 const DST_R = utf8ToBytes('Cashu_DLEQ_R_v1');
 
@@ -69,12 +69,13 @@ export const verifyDLEQProof_reblind = (
  * https://en.wikipedia.org/wiki/Timing_attack for information about timing attacks.
  */
 export const createDLEQProof = (B_: WeierstrassPoint<bigint>, a: Uint8Array): DLEQ => {
+  const B = assertSecpPoint(B_);
   const scalar_a = secp256k1.Point.Fn.fromBytes(a);
   const A = secp256k1.Point.BASE.multiply(scalar_a); // A  = aG
-  const C_ = B_.multiply(scalar_a); // C_ = aB_
-  const r = deriveDLEQNonce(a, A, B_, C_);
+  const C_ = B.multiply(scalar_a); // C_ = aB_
+  const r = deriveDLEQNonce(a, A, B, C_);
   const R_1 = secp256k1.Point.BASE.multiply(r); // R1 = rG
-  const R_2 = B_.multiply(r); // R2 = rB_
+  const R_2 = B.multiply(r); // R2 = rB_
   const e = hash_e([R_1, R_2, A, C_]); // e = hash(R1, R2, A, C_)
   const scalar_e = secp256k1.Point.Fn.fromBytes(e);
   // Use field operations for constant-time addition and multiplication

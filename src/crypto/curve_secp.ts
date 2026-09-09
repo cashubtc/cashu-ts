@@ -40,6 +40,23 @@ export function pointFromHex(hex: string) {
   return secp256k1.Point.fromHex(hex);
 }
 
+/**
+ * Reparses a point as secp256k1, for entry points that take the structural point type.
+ *
+ * @remarks
+ * `WeierstrassPoint<bigint>` is shared with the other curves and scalar multiplication does not
+ * check membership, so a point that never went through a secp parser has to be sent through one.
+ * @throws {@link CTSError} If the point is not a secp256k1 point.
+ * @internal
+ */
+export function assertSecpPoint(point: WeierstrassPoint<bigint>): WeierstrassPoint<bigint> {
+  try {
+    return pointFromHex(point.toHex(true));
+  } catch (e) {
+    throw new CTSError('Invalid point: not a valid secp256k1 point', { cause: e });
+  }
+}
+
 // Decompression-validated keys; callers typically share keys, so repeat parses are common. Naive
 // clear-on-full, swap for LRU if churn ever matters.
 const VALIDATED_PUBKEYS = new Set<string>();
@@ -119,7 +136,7 @@ export function createBlindSignature(
   id: string,
 ): BlindSignature {
   const a = secp256k1.Point.Fn.fromBytes(privateKey);
-  const C_: WeierstrassPoint<bigint> = B_.multiply(a);
+  const C_: WeierstrassPoint<bigint> = assertSecpPoint(B_).multiply(a);
   return { C_, id };
 }
 
