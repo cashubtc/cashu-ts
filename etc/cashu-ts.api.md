@@ -2479,6 +2479,7 @@ export type SigAllApi = {
 // @public
 export type SigAllDigests = {
     v0: string;
+    v1: string;
 };
 
 // @public

@@ -1,10 +1,13 @@
 import { schnorr } from '@noble/curves/secp256k1.js';
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+import { numberToBytesBE } from '@noble/curves/utils.js';
+import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { type Logger, NULL_LOGGER } from '../logger';
+import { Amount } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { type OutputDataLike } from '../model/OutputData';
 import { type HTLCWitness, type P2PKWitness, type Proof } from '../model/types';
+import { minimalBytesBE } from '../utils/bytes';
 import {
   MAX_P2PK_PUBKEYS,
   MAX_P2PK_SIGNATURES,
@@ -19,6 +22,7 @@ import {
   getValidSigners,
   schnorrSignDigest,
   schnorrVerifyDigest,
+  taggedHash,
   type PrivKey,
 } from './core';
 import { isV3PointSecret } from './curve_bls';
@@ -923,6 +927,59 @@ export function buildP2PKSigAllMessageV0(
     parts.push(quoteId);
   }
   return parts.join('');
+}
+
+/**
+ * Message aggregation for SIG_ALL (spec v1): the length-framed `message` bytes.
+ *
+ * NOTE: Use `assertSigAllInputs()` to ensure valid message inputs.
+ *
+ * @remarks
+ * Melt transactions MUST include the quoteId; swaps commit an empty quote field. The value that is
+ * signed is `hashP2PKSigAllMessageV1(message)`, not a plain SHA-256 of these bytes.
+ * @param inputs Array of Proofs (only `secret` and `C` fields required).
+ * @param outputs Array of OutputDataLike objects (OutputData, Factory etc).
+ * @param quoteId Optional. Quote id for Melt transactions.
+ * @internal
+ */
+export function buildP2PKSigAllMessageV1(
+  inputs: Array<Pick<Proof, 'secret' | 'C'>>,
+  outputs: Array<Pick<OutputDataLike, 'blindedMessage'>>,
+  quoteId?: string,
+): Uint8Array {
+  const parts: Uint8Array[] = [];
+  const pushFramed = (bytes: Uint8Array): void => {
+    parts.push(numberToBytesBE(bytes.length, 4), bytes);
+  };
+  pushFramed(utf8ToBytes(quoteId ?? ''));
+  for (const p of inputs) {
+    pushFramed(utf8ToBytes(p.secret));
+    pushFramed(hexToBytes(p.C));
+  }
+  for (const o of outputs) {
+    pushFramed(minimalBytesBE(Amount.from(o.blindedMessage.amount).toBigInt()));
+    pushFramed(hexToBytes(o.blindedMessage.B_));
+  }
+  // Manual copy rather than concatBytes(...parts): spreading per-field chunks
+  // would hit V8's argument-count limit on large transactions.
+  const message = new Uint8Array(parts.reduce((n, part) => n + part.length, 0));
+  let offset = 0;
+  for (const part of parts) {
+    message.set(part, offset);
+    offset += part.length;
+  }
+  return message;
+}
+
+/**
+ * The 32-byte value signed for SIG_ALL v1: the BIP-340 tagged hash of the framed message.
+ *
+ * @remarks
+ * Shared by P2PK and HTLC. Pass it as the `digest` of the P2PK sign and verify functions.
+ * @internal
+ */
+export function hashP2PKSigAllMessageV1(message: Uint8Array): Uint8Array {
+  return taggedHash('Cashu_SigAllSig_v1', message);
 }
 
 /**

@@ -16,7 +16,9 @@ import {
   isBlsKeyset,
   isP2PKSigAll,
   buildP2PKSigAllMessageV0,
+  buildP2PKSigAllMessageV1,
   computeMessageDigest,
+  hashP2PKSigAllMessageV1,
   assertSigAllInputs,
   parseSecret,
   attachHTLCPreimage,
@@ -1920,6 +1922,7 @@ class Wallet {
     const [first, ...rest] = normalizedProofs;
     let signedFirst = first;
     const digests = [
+      hashP2PKSigAllMessageV1(buildP2PKSigAllMessageV1(normalizedProofs, outputData, quoteId)),
       computeMessageDigest(buildP2PKSigAllMessageV0(normalizedProofs, outputData, quoteId)),
     ];
     for (const digest of digests) {
