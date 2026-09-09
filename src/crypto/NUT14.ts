@@ -5,16 +5,11 @@ import { type Logger, NULL_LOGGER } from '../logger';
 import { CTSError } from '../model/Errors';
 import { type HTLCWitness, type Proof, type ProofLike } from '../model/types';
 
+import { assertSecretKind, createSecret, type Secret, getDataField, getSecretKind } from './NUT10';
 import {
-  assertSecretKind,
-  createSecret,
-  type Secret,
-  getDataField,
-  parseSecret,
-  getSecretKind,
-} from './NUT10';
-import {
+  normalizeHashlock,
   type P2PKVerificationResult,
+  parseP2PKSecret,
   parseWitnessData,
   verifyP2PKSpendingConditions,
 } from './NUT11';
@@ -28,22 +23,23 @@ import {
  *
  * @remarks
  * Use `createHTLCHash()` for hash creation.
- * @param hash - The HTLC hash to add to Secret.data.
+ * @param hash - The HTLC hash to add to Secret.data (64 hex characters, stored lowercase).
  * @param tags - Optional. Additional P2PK tags.
+ * @throws If the hash is not a 64-character hex string.
  */
 export function createHTLCsecret(hash: string, tags?: string[][]): string {
-  return createSecret('HTLC', hash, tags);
+  return createSecret('HTLC', normalizeHashlock(hash), tags);
 }
 
 /**
- * Parse an HTLC Secret and validate NUT-10 shape.
+ * Parse an HTLC Secret and validate NUT-10 shape and NUT-11 tag-level constraints.
  *
  * @param secret - The Proof secret.
  * @returns Secret object.
- * @throws If the JSON is invalid or NUT-10 secret is malformed.
+ * @throws If the secret is oversized or malformed, or is not an HTLC.
  */
 export function parseHTLCSecret(secret: string | Secret): Secret {
-  return assertSecretKind('HTLC', secret);
+  return assertSecretKind('HTLC', parseP2PKSecret(secret));
 }
 
 // ------------------------------
@@ -101,9 +97,9 @@ export function verifyHTLCHash(preimage: string, hash: string): boolean {
  * result, use isP2PKSpendAuthorised().
  * @param proof - The Proof to check.
  * @param logger - Optional logger (default: NULL_LOGGER)
- * @param message - Optional. The message to sign (for SIG_ALL)
+ * @param message - Optional. The message to sign (SIG_ALL only; ignored otherwise)
  * @returns A P2PKVerificationResult describing the spending outcome.
- * @throws If verification is impossible.
+ * @throws If the hashlock is malformed or verification is impossible.
  */
 export function verifyHTLCSpendingConditions(
   proof: Proof,
@@ -112,14 +108,16 @@ export function verifyHTLCSpendingConditions(
 ): P2PKVerificationResult {
   // Init
   let result: P2PKVerificationResult;
-  message = message ?? proof.secret; // default message is proof secret
 
-  // Verify the underlying P2PK conditions first. Only the hashlock (receiver)
+  const secret = parseP2PKSecret(proof.secret);
+  const isHTLC = getSecretKind(secret) === 'HTLC';
+  const hash = isHTLC ? getDataField(secret) : '';
+
+  // Verify the underlying P2PK conditions. Only the hashlock (receiver)
   // pathway is HTLC-specific; the refund and unlocked outcomes are plain P2PK
   // verdicts and pass straight through.
-  const secret = parseSecret(proof.secret); // no assert
   const p2pkResult = verifyP2PKSpendingConditions(proof, logger, message);
-  if (getSecretKind(secret) !== 'HTLC') {
+  if (!isHTLC) {
     return p2pkResult; // not an HTLC proof
   }
 
@@ -140,21 +138,28 @@ export function verifyHTLCSpendingConditions(
     return p2pkResult;
   }
 
-  // From here, the spend depends solely on a valid preimage.
+  // From here, the receiver pathway depends solely on a valid preimage.
   const preimage = getHTLCWitnessPreimage(proof.witness);
-  if (!preimage) {
-    result = { ...p2pkResult, success: false, path: 'FAILED' };
-    logger.debug('Hashlock spend failed, no preimage found', { result });
-    return result;
-  }
-
-  // Confirm the preimage hashes to the lock in Secret.data.
-  const hash = getDataField(secret);
-  if (verifyHTLCHash(preimage, hash)) {
+  if (preimage && verifyHTLCHash(preimage, hash)) {
     // Authorised via the receiver pathway. A keyless HTLC carries a FAILED P2PK
     // verdict (no keys to meet a threshold), so stamp the successful MAIN result.
     result = { ...p2pkResult, success: true, path: 'MAIN' };
     logger.debug('Spending condition satisfied via hashlock (receiver) pathway', { result });
+    return result;
+  }
+
+  // P2PK reports MAIN when a key sits on both paths, so an expired refund
+  // threshold met by that same signature is honoured here instead.
+  const { refund } = p2pkResult;
+  if (refund.requiredSigners > 0 && refund.receivedSigners.length >= refund.requiredSigners) {
+    result = { ...p2pkResult, success: true, path: 'REFUND' };
+    logger.debug('Spending condition satisfied via refund pubkeys', { result });
+    return result;
+  }
+
+  if (!preimage) {
+    result = { ...p2pkResult, success: false, path: 'FAILED' };
+    logger.debug('Hashlock spend failed, no preimage found', { result });
     return result;
   }
 
@@ -186,21 +191,10 @@ export function isHTLCSpendAuthorised(
  *
  * @param witness From a Proof.
  * @returns Preimage if present.
+ * @throws If a serialized witness is oversized.
  */
 export function getHTLCWitnessPreimage(witness: Proof['witness']): string | undefined {
-  if (!witness) return undefined;
-  let parsed: Partial<HTLCWitness>;
-  try {
-    parsed = typeof witness === 'string' ? (JSON.parse(witness) as Partial<HTLCWitness>) : witness;
-  } catch (e) {
-    console.error('Failed to parse HTLC witness string:', e);
-    return undefined;
-  }
-  // A parsed primitive (eg "null", "1", "true") is not a witness; treat it as absent.
-  if (!parsed || typeof parsed !== 'object') return undefined;
-  // Check preimage is a non-empty string
-  const preimage = parsed.preimage;
-  return typeof preimage === 'string' && preimage.length > 0 ? preimage : undefined;
+  return parseWitnessData(witness)?.preimage;
 }
 
 /**
@@ -221,7 +215,7 @@ export function attachHTLCPreimage<T extends ProofLike>(proofs: T[], preimage: s
   return proofs.map((proof) => {
     let secret: Secret;
     try {
-      secret = parseSecret(proof.secret);
+      secret = parseP2PKSecret(proof.secret);
     } catch {
       return proof;
     }

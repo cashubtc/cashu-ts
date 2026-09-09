@@ -16,9 +16,10 @@ import {
 import { verifyUnblindedSignature } from '../../src/crypto/NUT01';
 import { Amount } from '../../src/model/Amount';
 import { CTSError } from '../../src/model/Errors';
-import { MAX_SECRET_LENGTH, OutputData } from '../../src/model/OutputData';
+import { OutputData } from '../../src/model/OutputData';
 import type { HasKeysetKeys, SerializedBlindedSignature } from '../../src/model/types';
 import { deriveKeysetId, numberToHexPadded64 } from '../../src/utils';
+import { MAX_SECRET_LENGTH } from '../../src/utils/limits';
 
 // secp256k1 (v0/v1) round-trip through OutputData -> simulated mint sign+DLEQ -> toProof.
 // The mint side is simulated with createBlindSignature/createDLEQProof: the curve math matches a

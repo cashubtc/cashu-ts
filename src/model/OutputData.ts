@@ -34,6 +34,7 @@ import {
 } from '../crypto';
 import { deriveReceiverKeyedSecret, type ParsedNutrootOption } from '../crypto/nutroot';
 import { numberToHexPadded64, splitAmount } from '../utils';
+import { MAX_SECRET_LENGTH } from '../utils/limits';
 
 import { Amount, type AmountLike } from './Amount';
 import { BlindedMessage } from './BlindedMessage';
@@ -45,15 +46,6 @@ import {
   type SerializedBlindedSignature,
   type SpendInfo,
 } from './types';
-
-/**
- * Maximum secret length.
- *
- * @remarks
- * Based on the Nutshell default mint_max_secret_length.
- * @internal
- */
-export const MAX_SECRET_LENGTH = 1024;
 
 const RECOVERY_HINT =
   'Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.';
