@@ -8,7 +8,7 @@ import {
 } from '../crypto';
 import { serializeNutrootLeaf, type NutrootLeaf } from '../crypto/nutroot';
 import { CTSError } from '../model/Errors';
-import { MAX_SECRET_LENGTH } from '../model/OutputData';
+import { MAX_SECRET_LENGTH } from '../utils/limits';
 
 import { lockToNutrootOptions, lockToP2PKOptions, type LockOptions } from './lock';
 
