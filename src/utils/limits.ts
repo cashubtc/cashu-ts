@@ -108,6 +108,8 @@ export const MAX_PAYLOAD_DECODE_ATTEMPTS = 16;
  * candidates are tried; this bounds what each one costs. 1 MiB holds several thousand proofs, well
  * past the largest token a wallet would hand a user, and it cannot go much higher: V8 matches a
  * bounded quantifier recursively, so a match of a few million characters overflows the stack.
+ * `SigAll.deserializePackage` applies the same cap to a signing package before decoding it: about
+ * 2,000 plain P2PK inputs, or 700 under a maximal 11-slot lock (data plus ten keys).
  */
 export const MAX_PAYLOAD_LENGTH = 1_048_576;
 

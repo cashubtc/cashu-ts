@@ -7,6 +7,7 @@ import {
   MeltQuoteState,
   Amount,
   computeMessageDigest,
+  createP2PKsecret,
   CTSError,
   getPubKeyFromPrivKey,
   schnorrVerifyDigest,
@@ -18,18 +19,49 @@ import {
   type SwapPreview,
 } from '../../src';
 import { encodeUint8ToBase64Url } from '../../src/utils/base64';
+import { MAX_PAYLOAD_LENGTH } from '../../src/utils/limits';
+
+const dummyPrivkey = '1'.repeat(64);
+const otherPrivkey = '2'.repeat(64);
+
+function pubkeyOf(privkey: string): string {
+  return bytesToHex(getPubKeyFromPrivKey(hexToBytes(privkey)));
+}
+
+const dummyPubkey = pubkeyOf(dummyPrivkey);
+const otherPubkey = pubkeyOf(otherPrivkey);
+// Any valid compressed points will do for C and B_; derive them so they decompress.
+const dummyC = pubkeyOf('3'.repeat(64));
+const dummyB = pubkeyOf('4'.repeat(64));
+
+const sigAllSecret = createP2PKsecret(dummyPubkey, [['sigflag', 'SIG_ALL']]);
+
+// A v3 keyset carries BLS12-381 G1 outputs: 96 hex chars, not 66.
+const v3KeysetId = '02' + '00'.repeat(32);
+const v3B =
+  '8e88c5f6a93f653784a66b033a00e52128499e18b095c2a56f080d1c2a937ffc9ef4600804a48d087bbd1f662f6b068f';
+
+function makeMeltPackage(quote: string): SigAllSigningPackage {
+  return {
+    version: 'sigallA',
+    type: 'melt',
+    quote,
+    inputs: [{ secret: sigAllSecret, C: dummyC }],
+    outputs: [dummyBlindedMessage],
+  };
+}
 
 const dummyProof: Proof = {
   id: 'testid',
   amount: Amount.from(32),
-  secret: 'dummysecret',
-  C: '02' + '1'.repeat(64),
+  secret: sigAllSecret,
+  C: dummyC,
 };
 
 const dummyBlindedMessage: SerializedBlindedMessage = {
   amount: Amount.from(32),
   id: 'bm1',
-  B_: 'dummyB',
+  B_: dummyB,
 };
 
 const dummyOutput: OutputDataLike = {
@@ -38,8 +70,6 @@ const dummyOutput: OutputDataLike = {
   secret: new Uint8Array(),
   toProof: () => dummyProof,
 };
-
-const dummyPrivkey = '1'.repeat(64);
 
 function makeSwapPreview() {
   return {
@@ -57,7 +87,7 @@ function makeMeltPreview() {
     inputs: [dummyProof],
     outputData: [dummyOutput],
     quote: {
-      quote: 'dummyquote',
+      quote: '019218a3-7c4e-7f2b-9a1d-3e5f6a7b8c9d',
       amount: Amount.from(32),
       unit: 'sat',
       state: MeltQuoteState.PENDING,
@@ -85,7 +115,11 @@ function decodeRawJson(input: string): string {
 
 describe('SigAll — computeDigests', () => {
   test('produces hex strings of correct length', () => {
-    const digests = SigAll.computeDigests([dummyProof], [dummyBlindedMessage], 'dummyquote');
+    const digests = SigAll.computeDigests(
+      [dummyProof],
+      [dummyBlindedMessage],
+      '019218a3-7c4e-7f2b-9a1d-3e5f6a7b8c9d',
+    );
     expect(typeof digests.v0).toBe('string');
     expect(digests.v0.length).toBe(64);
   });
@@ -132,14 +166,14 @@ describe('SigAll — extractMeltPackage', () => {
     const pkg = SigAll.extractMeltPackage(makeMeltPreview());
     expect(pkg.version).toBe('sigallA');
     expect(pkg.type).toBe('melt');
-    expect(pkg.quote).toBe('dummyquote');
+    expect(pkg.quote).toBe('019218a3-7c4e-7f2b-9a1d-3e5f6a7b8c9d');
     expect(pkg.inputs.length).toBe(1);
     expect(pkg.outputs.length).toBe(1);
   });
 
   test('includes quote id', () => {
     const pkg = SigAll.extractMeltPackage(makeMeltPreview());
-    expect(pkg.quote).toBe('dummyquote');
+    expect(pkg.quote).toBe('019218a3-7c4e-7f2b-9a1d-3e5f6a7b8c9d');
   });
 });
 
@@ -169,7 +203,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
   test('round-trip preserves melt quote', () => {
     const pkg = SigAll.extractMeltPackage(makeMeltPreview());
     const parsed = SigAll.deserializePackage(SigAll.serializePackage(pkg));
-    expect(parsed.quote).toBe('dummyquote');
+    expect(parsed.quote).toBe('019218a3-7c4e-7f2b-9a1d-3e5f6a7b8c9d');
     expect(parsed.type).toBe('melt');
   });
 
@@ -223,6 +257,17 @@ describe('SigAll — serializePackage / deserializePackage', () => {
     expect(() => SigAll.deserializePackage('notasigallstring')).toThrow(
       'must start with "sigallA"',
     );
+  });
+
+  test('rejects an oversized package before decoding it', () => {
+    const oversized = encodeRaw({
+      version: 'sigallA',
+      type: 'swap',
+      inputs: [{ secret: 'x'.repeat(MAX_PAYLOAD_LENGTH), C: dummyC }],
+      outputs: [],
+    });
+    expect(oversized.length).toBeGreaterThan(MAX_PAYLOAD_LENGTH);
+    expect(() => SigAll.deserializePackage(oversized)).toThrow(/exceeds/);
   });
 
   test('throws on invalid base64', () => {
@@ -427,6 +472,123 @@ describe('SigAll — signPackage', () => {
     const pkg = SigAll.extractSwapPackage(makeSwapPreview());
     SigAll.signPackage(pkg, dummyPrivkey);
     expect(pkg.witness).toBeUndefined();
+  });
+
+  test('rejects a package with no inputs', () => {
+    const pkg: SigAllSigningPackage = { version: 'sigallA', type: 'swap', inputs: [], outputs: [] };
+    expect(() => SigAll.signPackage(pkg, dummyPrivkey)).toThrow(CTSError);
+  });
+
+  test('rejects an input whose secret is not a NUT-10 P2PK secret', () => {
+    const pkg: SigAllSigningPackage = {
+      version: 'sigallA',
+      type: 'swap',
+      inputs: [{ secret: 'plain-text-secret', C: '' }],
+      outputs: [],
+    };
+    const received = SigAll.deserializePackage(SigAll.serializePackage(pkg));
+    expect(() => SigAll.signPackage(received, dummyPrivkey)).toThrow(CTSError);
+  });
+
+  test('rejects inputs locked with SIG_INPUTS', () => {
+    const pkg: SigAllSigningPackage = {
+      version: 'sigallA',
+      type: 'swap',
+      inputs: [{ secret: createP2PKsecret(dummyPubkey), C: dummyC }],
+      outputs: [dummyBlindedMessage],
+    };
+    expect(() => SigAll.signPackage(pkg, dummyPrivkey)).toThrow(/SIG_ALL/);
+  });
+
+  test('rejects an input C that is not a compressed secp256k1 point', () => {
+    const pkg: SigAllSigningPackage = {
+      version: 'sigallA',
+      type: 'swap',
+      inputs: [{ secret: sigAllSecret, C: '02' + 'c'.repeat(64) }],
+      outputs: [dummyBlindedMessage],
+    };
+    expect(() => SigAll.signPackage(pkg, dummyPrivkey)).toThrow(/Input 0: C/);
+  });
+
+  test('rejects an output B_ whose length matches no keyset curve', () => {
+    const pkg: SigAllSigningPackage = {
+      version: 'sigallA',
+      type: 'swap',
+      inputs: [{ secret: sigAllSecret, C: dummyC }],
+      outputs: [{ amount: Amount.from(1), id: 'bm1', B_: dummyB + '32' }],
+    };
+    const received = SigAll.deserializePackage(SigAll.serializePackage(pkg));
+    expect(() => SigAll.signPackage(received, dummyPrivkey)).toThrow(/Output 0: B_/);
+  });
+
+  test('signs outputs on a v3 keyset', () => {
+    const pkg: SigAllSigningPackage = {
+      version: 'sigallA',
+      type: 'swap',
+      inputs: [{ secret: sigAllSecret, C: dummyC }],
+      outputs: [{ amount: Amount.from(1), id: v3KeysetId, B_: v3B }],
+    };
+    const signed = SigAll.signPackage(pkg, dummyPrivkey);
+    const digest = SigAll.computeDigests(pkg.inputs, pkg.outputs).v0;
+    expect(schnorrVerifyDigest(signed.witness!.signatures[0], digest, dummyPubkey)).toBe(true);
+  });
+
+  test('rejects a v3-length output B_ that is not on the curve', () => {
+    const pkg: SigAllSigningPackage = {
+      version: 'sigallA',
+      type: 'swap',
+      inputs: [{ secret: sigAllSecret, C: dummyC }],
+      outputs: [{ amount: Amount.from(1), id: v3KeysetId, B_: '8' + 'f'.repeat(95) }],
+    };
+    expect(() => SigAll.signPackage(pkg, dummyPrivkey)).toThrow(/Output 0: B_/);
+  });
+
+  test('signs a melt package with a UUID quote id', () => {
+    const pkg = makeMeltPackage('019218a3-7c4e-7f2b-9a1d-3e5f6a7b8c9d');
+    expect(SigAll.signPackage(pkg, dummyPrivkey).witness!.signatures.length).toBe(1);
+  });
+
+  test('rejects a melt quote id that is not a UUID', () => {
+    // The v0 transcript appends the quote unframed, so only the hyphenated UUID shape is signed.
+    for (const quote of ['12' + dummyB, '5' + v3B, '1234' + 'ab'.repeat(62), 'melt-quote-x']) {
+      expect(() => SigAll.signPackage(makeMeltPackage(quote), dummyPrivkey)).toThrow(/UUID/);
+    }
+  });
+
+  test('rejects a private key that is not 64 hex characters', () => {
+    const pkg = makeMeltPackage('019218a3-7c4e-7f2b-9a1d-3e5f6a7b8c9d');
+    expect(() => SigAll.signPackage(pkg, 'abc')).toThrow(CTSError);
+    expect(() => SigAll.signPackage(pkg, 'zz'.repeat(32))).toThrow(/64 hex/);
+  });
+
+  test('refuses to add a signature to a witness already at the limit', () => {
+    const pkg = {
+      ...makeMeltPackage('019218a3-7c4e-7f2b-9a1d-3e5f6a7b8c9d'),
+      witness: { signatures: Array.from({ length: 64 }, () => 'ab'.repeat(64)) },
+    };
+    expect(() => SigAll.signPackage(pkg, dummyPrivkey)).toThrow(/signature limit/);
+  });
+
+  test('rejects a key the lock does not name', () => {
+    const pkg = SigAll.extractSwapPackage(makeSwapPreview());
+    expect(() => SigAll.signPackage(pkg, otherPrivkey)).toThrow(/Signature not required/);
+  });
+
+  test('accepts a refund key once the locktime has passed', () => {
+    const refundSecret = createP2PKsecret(dummyPubkey, [
+      ['sigflag', 'SIG_ALL'],
+      ['locktime', '1'],
+      ['refund', otherPubkey],
+    ]);
+    const pkg: SigAllSigningPackage = {
+      version: 'sigallA',
+      type: 'swap',
+      inputs: [{ secret: refundSecret, C: dummyC }],
+      outputs: [dummyBlindedMessage],
+    };
+    const signed = SigAll.signPackage(pkg, otherPrivkey);
+    const digest = SigAll.computeDigests(pkg.inputs, pkg.outputs).v0;
+    expect(schnorrVerifyDigest(signed.witness!.signatures[0], digest, otherPubkey)).toBe(true);
   });
 });
 
