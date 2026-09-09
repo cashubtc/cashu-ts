@@ -13,6 +13,9 @@ import {
   hashToCurve,
   isP2PKSigAll,
   buildP2PKSigAllMessageV0,
+  buildP2PKSigAllMessageV1,
+  hashP2PKSigAllMessageV1,
+  type MessageInput,
   assertSigAllInputs,
   parseSecret,
 } from '../crypto';
@@ -1759,7 +1762,14 @@ class Wallet {
     // supported message format...
     const [first, ...rest] = normalizedProofs;
     let signedFirst = first;
-    const messages = [buildP2PKSigAllMessageV0(normalizedProofs, outputData, quoteId)];
+    const messages: MessageInput[] = [
+      {
+        digest: hashP2PKSigAllMessageV1(
+          buildP2PKSigAllMessageV1(normalizedProofs, outputData, quoteId),
+        ),
+      },
+      buildP2PKSigAllMessageV0(normalizedProofs, outputData, quoteId),
+    ];
     for (const msg of messages) {
       signedFirst = cryptoSignP2PKProofs([signedFirst], privkey, this._logger, msg)[0];
     }
