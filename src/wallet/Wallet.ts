@@ -17,13 +17,13 @@ import {
   isP2PKSigAll,
   buildP2PKSigAllMessageV0,
   buildP2PKSigAllMessageV1,
+  computeMessageDigest,
   hashP2PKSigAllMessageV1,
   assertSigAllInputs,
   parseSecret,
   attachHTLCPreimage,
   createSecretAndBlindingFactorDeriver,
   isV3PointSecret,
-  type MessageInput,
 } from '../crypto';
 // Internal transitional fallback — not part of crypto/index.ts
 import { normalizeSecpPubkey } from '../crypto/curve_secp';
@@ -1921,16 +1921,12 @@ class Wallet {
     // supported message format...
     const [first, ...rest] = normalizedProofs;
     let signedFirst = first;
-    const messages: MessageInput[] = [
-      {
-        digest: hashP2PKSigAllMessageV1(
-          buildP2PKSigAllMessageV1(normalizedProofs, outputData, quoteId),
-        ),
-      },
-      buildP2PKSigAllMessageV0(normalizedProofs, outputData, quoteId),
+    const digests = [
+      hashP2PKSigAllMessageV1(buildP2PKSigAllMessageV1(normalizedProofs, outputData, quoteId)),
+      computeMessageDigest(buildP2PKSigAllMessageV0(normalizedProofs, outputData, quoteId)),
     ];
-    for (const msg of messages) {
-      signedFirst = cryptoSignP2PKProofs([signedFirst], privkey, this._logger, msg)[0];
+    for (const digest of digests) {
+      signedFirst = cryptoSignP2PKProofs([signedFirst], privkey, this._logger, digest)[0];
     }
 
     // Return the proofs in same order as before

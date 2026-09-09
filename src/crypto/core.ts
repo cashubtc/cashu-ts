@@ -11,8 +11,6 @@ import { hasLoneSurrogate } from '../utils/bytes';
  */
 export type PrivKey = Uint8Array | string;
 export type DigestInput = Uint8Array | string; // hex string or bytes
-// A UTF-8 string to hash, or the 32-byte digest BIP-340 signs (eg a tagged hash).
-export type MessageInput = string | { digest: Uint8Array };
 export type BlindSignature = {
   C_: WeierstrassPoint<bigint>;
   id: string;
@@ -63,21 +61,18 @@ export function taggedHash(tag: string, ...messages: Uint8Array[]): Uint8Array {
 // ------------------------------
 
 /**
- * Computes the SHA-256 hash of a message.
+ * Computes the SHA-256 hash of a UTF-8 message string.
  *
  * @remarks
- * For raw byte messages, use `sha256`. A `{ digest }` input is returned unchanged.
- * @param message To hash (UTF-8 encoded before hashing), or a prehashed digest.
+ * For raw byte messages, use `sha256`.
+ * @param message To hash (UTF-8 encoded before hashing).
  * @param asHex Optional: True returns a hex-encoded hash string; otherwise returns raw bytes.
  * @returns SHA-256 hash as raw bytes or hex string, depending on `asHex`.
  */
-export function computeMessageDigest(message: MessageInput): Uint8Array;
-export function computeMessageDigest(message: MessageInput, asHex: false): Uint8Array;
-export function computeMessageDigest(message: MessageInput, asHex: true): string;
-export function computeMessageDigest(message: MessageInput, asHex = false): string | Uint8Array {
-  if (typeof message !== 'string') {
-    return asHex ? bytesToHex(message.digest) : message.digest;
-  }
+export function computeMessageDigest(message: string): Uint8Array;
+export function computeMessageDigest(message: string, asHex: false): Uint8Array;
+export function computeMessageDigest(message: string, asHex: true): string;
+export function computeMessageDigest(message: string, asHex = false): string | Uint8Array {
   // Ill-formed UTF-16 would hash as its U+FFFD replacement, aliasing distinct messages.
   if (hasLoneSurrogate(message)) {
     throw new CTSError('Message must be well-formed UTF-16');
@@ -104,16 +99,16 @@ export const schnorrSignDigest = (digest: DigestInput, privateKey: PrivKey): str
 };
 
 /**
- * Signs a message using Schnorr.
+ * Signs a message string using Schnorr.
  *
  * @remarks
  * Signatures are non-deterministic because schnorr.sign() generates a new random auxiliary value
  * (auxRand) each time it is called.
- * @param message - The message to sign (UTF-8 string or prehashed digest).
+ * @param message - The message to sign.
  * @param privateKey - The private key to sign with (hex string or Uint8Array).
  * @returns The signature in hex format.
  */
-export const schnorrSignMessage = (message: MessageInput, privateKey: PrivKey): string => {
+export const schnorrSignMessage = (message: string, privateKey: PrivKey): string => {
   const msghash = computeMessageDigest(message);
   return schnorrSignDigest(msghash, privateKey);
 };
@@ -125,7 +120,7 @@ export const schnorrSignMessage = (message: MessageInput, privateKey: PrivKey): 
  * This function swallows Schnorr verification errors (eg invalid signature / pubkey format) and
  * treats them as false. If you want to throw such errors, use the throws param.
  * @param signature - The Schnorr signature (hex-encoded).
- * @param message - The message to verify (UTF-8 string or prehashed digest).
+ * @param message - The message to verify.
  * @param pubkey - The Cashu P2PK public key (hex-encoded, X-only or with 02/03 prefix).
  * @param throws - True: throws on error, False: swallows errors and returns false.
  * @returns True if the signature is valid, false otherwise.
@@ -133,7 +128,7 @@ export const schnorrSignMessage = (message: MessageInput, privateKey: PrivKey): 
  */
 export const schnorrVerifyMessage = (
   signature: string,
-  message: MessageInput,
+  message: string,
   pubkey: string,
   throws: boolean = false,
 ): boolean => {
@@ -221,7 +216,7 @@ export function findSigningKey(pubkey: string, privkeys: string | string[]): str
  * message.
  *
  * @param signatures - The Schnorr signature(s) (hex-encoded).
- * @param message - The message to verify.
+ * @param digest - The 32-byte digest that was signed (hex string or bytes).
  * @param pubkeys - The Cashu P2PK public key(s) (hex-encoded, X-only or with 02/03 prefix) to
  *   check.
  * @returns Array of public keys who validly signed, duplicates removed. The same key in different
@@ -229,7 +224,7 @@ export function findSigningKey(pubkey: string, privkeys: string | string[]): str
  */
 export function getValidSigners(
   signatures: string[],
-  message: MessageInput,
+  digest: DigestInput,
   pubkeys: string[],
 ): string[] {
   // Dedupe by x-only identity: BIP-340 ignores the parity prefix, so 02|X, 03|X
@@ -240,7 +235,7 @@ export function getValidSigners(
     if (!uniquePubs.has(xOnly)) uniquePubs.set(xOnly, pubkey);
   }
   return Array.from(uniquePubs.values()).filter((pubkey) =>
-    signatures.some((sig) => schnorrVerifyMessage(sig, message, pubkey)),
+    signatures.some((sig) => schnorrVerifyDigest(sig, digest, pubkey)),
   );
 }
 
@@ -248,7 +243,7 @@ export function getValidSigners(
  * Checks enough unique pubkeys have signed a message.
  *
  * @param signatures - The Schnorr signature(s) (hex-encoded).
- * @param message - The message to verify.
+ * @param digest - The 32-byte digest that was signed (hex string or bytes).
  * @param pubkeys - The Cashu P2PK public key(s) (hex-encoded, X-only or with 02/03 prefix) to
  *   check.
  * @param threshold - The minimum number of unique witnesses required.
@@ -256,10 +251,10 @@ export function getValidSigners(
  */
 export const meetsSignerThreshold = (
   signatures: string[],
-  message: MessageInput,
+  digest: DigestInput,
   pubkeys: string[],
   threshold: number = 1,
 ): boolean => {
-  const validSigners = getValidSigners(signatures, message, pubkeys);
+  const validSigners = getValidSigners(signatures, digest, pubkeys);
   return validSigners.length >= threshold;
 };

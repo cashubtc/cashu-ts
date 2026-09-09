@@ -17,11 +17,12 @@ import {
 import { type NUT10Option } from '../wallet/types/payment-requests';
 
 import {
+  computeMessageDigest,
+  type DigestInput,
   getValidSigners,
-  schnorrSignMessage,
-  schnorrVerifyMessage,
+  schnorrSignDigest,
+  schnorrVerifyDigest,
   taggedHash,
-  type MessageInput,
   type PrivKey,
 } from './core';
 import { isV3PointSecret } from './curve_bls';
@@ -530,7 +531,7 @@ export function parseWitnessData(witness: Proof['witness']): WitnessData | undef
  * @param proofs - An array of proofs to sign.
  * @param privateKey - A single private key or array of private keys (hex string or Uint8Array).
  * @param logger - Optional logger (default: NULL_LOGGER)
- * @param message - Optional. The message to sign (for SIG_ALL)
+ * @param digest - Optional. The 32-byte digest to sign (SIG_ALL only).
  * @returns Signed proofs.
  * @throws On general errors.
  */
@@ -538,7 +539,7 @@ export function signP2PKProofs(
   proofs: Proof[],
   privateKey: PrivKey | PrivKey[],
   logger: Logger = NULL_LOGGER,
-  message?: MessageInput,
+  digest?: DigestInput,
 ): Proof[] {
   // Convert to hex strings for maybeDeriveP2BKPrivateKeys
   const toHex = (k: PrivKey): string => (typeof k === 'string' ? k : bytesToHex(k));
@@ -551,7 +552,7 @@ export function signP2PKProofs(
     let signedProof = proof;
     for (const priv of privateKeys) {
       try {
-        signedProof = signP2PKProof(signedProof, priv, message);
+        signedProof = signP2PKProof(signedProof, priv, digest);
       } catch (error: unknown) {
         // Log signature failures only - these are not fatal, just informational
         // as not all keys will be needed for some proofs (eg P2BK, NIP60 etc)
@@ -592,29 +593,30 @@ export function assertSignerAuthorised(secretStr: string | Secret, privateKey: P
  * Will only sign if the proof requires a signature from the key.
  * @param proof - A proof to sign.
  * @param privateKey - A single private key (hex string or Uint8Array).
- * @param message - Required for SIG_ALL proofs; not accepted for SIG_INPUTS proofs.
+ * @param digest - The 32-byte digest to sign. Required for SIG_ALL proofs; not accepted for
+ *   SIG_INPUTS proofs, which sign the secret.
  * @returns Signed proofs.
- * @throws Error if signature is not required, proof is already signed, a message is missing for a
+ * @throws Error if signature is not required, proof is already signed, a digest is missing for a
  *   SIG_ALL proof, or given for a SIG_INPUTS proof.
  */
-export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: MessageInput): Proof {
+export function signP2PKProof(proof: Proof, privateKey: PrivKey, digest?: DigestInput): Proof {
   const secret: Secret = parseP2PKSecret(proof.secret);
-  // SIG_INPUTS signs the secret and nothing else; only SIG_ALL takes a transaction message.
+  // SIG_INPUTS signs the secret and nothing else; only SIG_ALL takes a transaction digest.
   const sigAll = getP2PKSigFlag(secret) === 'SIG_ALL';
-  if (sigAll && message === undefined) {
-    throw new CTSError('Cannot sign a SIG_ALL proof without the message to sign');
+  if (sigAll && digest === undefined) {
+    throw new CTSError('Cannot sign a SIG_ALL proof without the digest to sign');
   }
-  if (!sigAll && message !== undefined) {
-    throw new CTSError('A message override is only valid for SIG_ALL proofs');
+  if (!sigAll && digest !== undefined) {
+    throw new CTSError('A digest override is only valid for SIG_ALL proofs');
   }
-  message = message ?? proof.secret; // default message is secret
+  digest = digest ?? computeMessageDigest(proof.secret); // SIG_INPUTS signs the secret
 
   const pubkey = assertSignerAuthorised(secret, privateKey);
 
   // Check if the public key has already signed
   const signatures = getP2PKWitnessSignatures(proof.witness);
   const alreadySigned = signatures.some((sig) => {
-    return schnorrVerifyMessage(sig, message, pubkey);
+    return schnorrVerifyDigest(sig, digest, pubkey);
   });
 
   if (alreadySigned) {
@@ -630,7 +632,7 @@ export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: Messa
   }
 
   // Add new signature
-  const signature = schnorrSignMessage(message, privateKey);
+  const signature = schnorrSignDigest(digest, privateKey);
   const witness = parseWitnessData(proof.witness);
   const newWitness: WitnessData = {
     ...(witness && witness.preimage !== undefined ? { preimage: witness.preimage } : {}),
@@ -644,25 +646,25 @@ export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: Messa
  *
  * @param pubkey - The Cashu P2PK public key (hex-encoded, X-only or with 02/03 prefix).
  * @param proof - A Cashu proof.
- * @param message - Optional. The message that was signed (SIG_ALL only; ignored otherwise)
+ * @param digest - Optional. The 32-byte digest that was signed (SIG_ALL only; ignored otherwise)
  * @returns True if one of the signatures is theirs, false otherwise.
  */
-export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: MessageInput): boolean {
+export function hasP2PKSignedProof(pubkey: string, proof: Proof, digest?: DigestInput): boolean {
   if (!proof.witness) {
     return false;
   }
-  // SIG_INPUTS signatures are over the secret; only SIG_ALL verifies against the given message.
+  // SIG_INPUTS signatures are over the secret; only SIG_ALL verifies against the given digest.
   if (!isP2PKSigAll([proof])) {
-    message = proof.secret;
-  } else if (!message) {
-    throw new CTSError('Cannot verify a SIG_ALL proof without the message to sign');
+    digest = computeMessageDigest(proof.secret);
+  } else if (!digest) {
+    throw new CTSError('Cannot verify a SIG_ALL proof without the digest to sign');
   }
 
   const signatures = getP2PKWitnessSignatures(proof.witness);
   // See if any of the signatures belong to this pubkey. We need to do this
   // as Schnorr signatures are non-deterministic (see: signMessage)
   return signatures.some((sig) => {
-    return schnorrVerifyMessage(sig, message, pubkey);
+    return schnorrVerifyDigest(sig, digest, pubkey);
   });
 }
 
@@ -690,21 +692,21 @@ export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: Messa
  * isP2PKSpendAuthorised().
  * @param proof - The Proof to check.
  * @param logger - Optional logger (default: NULL_LOGGER)
- * @param message - Optional. The message to sign (SIG_ALL only; ignored otherwise)
+ * @param digest - Optional. The 32-byte digest to verify (SIG_ALL only; ignored otherwise)
  * @returns A P2PKVerificationResult describing the spending outcome.
  * @throws If spending conditions are malformed, or verification is impossible.
  */
 export function verifyP2PKSpendingConditions(
   proof: Proof,
   logger: Logger = NULL_LOGGER,
-  message?: MessageInput,
+  digest?: DigestInput,
 ): P2PKVerificationResult {
-  // SIG_INPUTS signatures are over the secret; only SIG_ALL verifies against the given message.
+  // SIG_INPUTS signatures are over the secret; only SIG_ALL verifies against the given digest.
   if (!isP2PKSigAll([proof])) {
-    message = proof.secret;
-  } else if (!message) {
-    logger.error('Cannot verify a SIG_ALL proof without the message to sign');
-    throw new CTSError('Cannot verify a SIG_ALL proof without the message to sign');
+    digest = computeMessageDigest(proof.secret);
+  } else if (!digest) {
+    logger.error('Cannot verify a SIG_ALL proof without the digest to sign');
+    throw new CTSError('Cannot verify a SIG_ALL proof without the digest to sign');
   }
 
   // Parse once — all tag reads below use the pre-parsed Secret (no re-parsing)
@@ -731,8 +733,8 @@ export function verifyP2PKSpendingConditions(
   const nSigsRefund = resolveNSigsRefund(secret, lockState, refundKeys);
 
   // Verify signatures against both key sets
-  const mainSigners = getValidSigners(signatures, message, mainKeys);
-  const refundSigners = refundKeys.length ? getValidSigners(signatures, message, refundKeys) : [];
+  const mainSigners = getValidSigners(signatures, digest, mainKeys);
+  const refundSigners = refundKeys.length ? getValidSigners(signatures, digest, refundKeys) : [];
 
   // Build path info (always fully populated)
   const main: P2PKPathInfo = {
@@ -822,16 +824,16 @@ export function p2pkSpendLeaves(secretStr: string | Secret): NutrootLeaf[] {
  *
  * @param proof - The Proof to check.
  * @param logger - Optional logger (default: NULL_LOGGER)
- * @param message - Optional. The message to sign (for SIG_ALL)
+ * @param digest - Optional. The 32-byte digest to sign (SIG_ALL only).
  * @returns True if the witness threshold was reached, false otherwise.
  * @throws If verification is impossible.
  */
 export function isP2PKSpendAuthorised(
   proof: Proof,
   logger: Logger = NULL_LOGGER,
-  message?: MessageInput,
+  digest?: DigestInput,
 ): boolean {
-  return verifyP2PKSpendingConditions(proof, logger, message).success;
+  return verifyP2PKSpendingConditions(proof, logger, digest).success;
 }
 
 // ------------------------------
@@ -973,8 +975,7 @@ export function buildP2PKSigAllMessageV1(
  * The 32-byte value signed for SIG_ALL v1: the BIP-340 tagged hash of the framed message.
  *
  * @remarks
- * Shared by P2PK and HTLC. Sign and verify it as a prehashed digest (`{ digest }`), never as a
- * string message.
+ * Shared by P2PK and HTLC. Pass it as the `digest` of the P2PK sign and verify functions.
  * @internal
  */
 export function hashP2PKSigAllMessageV1(message: Uint8Array): Uint8Array {

@@ -334,13 +334,13 @@ export type CompleteSwapOptions = {
 };
 
 // @public
-export function computeMessageDigest(message: MessageInput): Uint8Array;
+export function computeMessageDigest(message: string): Uint8Array;
 
 // @public (undocumented)
-export function computeMessageDigest(message: MessageInput, asHex: false): Uint8Array;
+export function computeMessageDigest(message: string, asHex: false): Uint8Array;
 
 // @public (undocumented)
-export function computeMessageDigest(message: MessageInput, asHex: true): string;
+export function computeMessageDigest(message: string, asHex: true): string;
 
 // @public
 export class ConsoleLogger implements Logger {
@@ -750,7 +750,7 @@ export function getTagScalar(secret: Secret | string, key: string): string | und
 export function getTokenMetadata(token: string): TokenMetadata;
 
 // @public
-export function getValidSigners(signatures: string[], message: MessageInput, pubkeys: string[]): string[];
+export function getValidSigners(signatures: string[], digest: DigestInput, pubkeys: string[]): string[];
 
 // @public
 export function hasCorrespondingKey(amount: AmountLike, keyset: Keys): boolean;
@@ -779,7 +779,7 @@ export type HasKeysetKeys = {
 };
 
 // @public
-export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: MessageInput): boolean;
+export function hasP2PKSignedProof(pubkey: string, proof: Proof, digest?: DigestInput): boolean;
 
 // @public
 export function hasTag(secret: Secret | string, key: string): boolean;
@@ -827,13 +827,13 @@ export function isBlsKeyset(keysetId: string): boolean;
 export function isBlsProof(proof: Pick<Proof, 'id'>): boolean;
 
 // @public
-export function isHTLCSpendAuthorised(proof: Proof, logger?: Logger, message?: MessageInput): boolean;
+export function isHTLCSpendAuthorised(proof: Proof, logger?: Logger, digest?: DigestInput): boolean;
 
 // @public
 export function isMintOperationError(e: unknown): e is MintOperationError;
 
 // @public
-export function isP2PKSpendAuthorised(proof: Proof, logger?: Logger, message?: MessageInput): boolean;
+export function isP2PKSpendAuthorised(proof: Proof, logger?: Logger, digest?: DigestInput): boolean;
 
 // @public
 export function isV3PointSecret(secret: string): boolean;
@@ -1012,7 +1012,7 @@ export type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'trace';
 export function maybeDeriveP2BKPrivateKeys(privateKey: string | string[], proof: Proof): string[];
 
 // @public
-export const meetsSignerThreshold: (signatures: string[], message: MessageInput, pubkeys: string[], threshold?: number) => boolean;
+export const meetsSignerThreshold: (signatures: string[], digest: DigestInput, pubkeys: string[], threshold?: number) => boolean;
 
 // @public
 export class MeltBuilder<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'> = MeltQuoteBolt11Response> {
@@ -1167,11 +1167,6 @@ export type MeltRequest = {
     outputs?: SerializedBlindedMessage[];
     prefer_async?: boolean;
 } & Record<string, unknown>;
-
-// @public (undocumented)
-export type MessageInput = string | {
-    digest: Uint8Array;
-};
 
 // @public
 export class Mint {
@@ -2245,13 +2240,13 @@ export type RpcSubKinds = 'proof_state' | `${string}_mint_quote` | `${string}_me
 export const schnorrSignDigest: (digest: DigestInput, privateKey: PrivKey) => string;
 
 // @public
-export const schnorrSignMessage: (message: MessageInput, privateKey: PrivKey) => string;
+export const schnorrSignMessage: (message: string, privateKey: PrivKey) => string;
 
 // @public
 export const schnorrVerifyDigest: (signature: string, digest: DigestInput, pubkey: string, throws?: boolean) => boolean;
 
 // @public
-export const schnorrVerifyMessage: (signature: string, message: MessageInput, pubkey: string, throws?: boolean) => boolean;
+export const schnorrVerifyMessage: (signature: string, message: string, pubkey: string, throws?: boolean) => boolean;
 
 // @public
 export const ScriptPath: ScriptPathApi;
@@ -2512,10 +2507,10 @@ export const SigFlags: {
 export function signMintQuote(privkey: string, quote: string, blindedMessages: SerializedBlindedMessage[]): string;
 
 // @public
-export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: MessageInput): Proof;
+export function signP2PKProof(proof: Proof, privateKey: PrivKey, digest?: DigestInput): Proof;
 
 // @public
-export function signP2PKProofs(proofs: Proof[], privateKey: PrivKey | PrivKey[], logger?: Logger, message?: MessageInput): Proof[];
+export function signP2PKProofs(proofs: Proof[], privateKey: PrivKey | PrivKey[], logger?: Logger, digest?: DigestInput): Proof[];
 
 // @public
 export function sortProofsById(proofs: Proof[]): Proof[];
@@ -2726,13 +2721,13 @@ A: WeierstrassPoint<bigint>) => boolean;
 export function verifyHTLCHash(preimage: string, hash: string): boolean;
 
 // @public
-export function verifyHTLCSpendingConditions(proof: Proof, logger?: Logger, message?: MessageInput): P2PKVerificationResult;
+export function verifyHTLCSpendingConditions(proof: Proof, logger?: Logger, digest?: DigestInput): P2PKVerificationResult;
 
 // @public (undocumented)
 export function verifyMintQuoteSignature(pubkey: string, quote: string, blindedMessages: SerializedBlindedMessage[], signature: string): boolean;
 
 // @public
-export function verifyP2PKSpendingConditions(proof: Proof, logger?: Logger, message?: MessageInput): P2PKVerificationResult;
+export function verifyP2PKSpendingConditions(proof: Proof, logger?: Logger, digest?: DigestInput): P2PKVerificationResult;
 
 // @public
 export function verifyProofsForReceive(proofs: ProofLike[], getKeyset: (id: string) => HasKeysetKeys, opts?: {

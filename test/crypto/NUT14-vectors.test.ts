@@ -82,6 +82,6 @@ describe('NUT-14 spec vectors', () => {
       '0eb7eda21bdfc7ffbe74868d32db3981727cfaedc61ef3256681c33fb92512d1',
     );
     expect(schnorrVerifyDigest(sigAllSig, digest, PUB)).toBe(true);
-    expect(isHTLCSpendAuthorised(proof, undefined, { digest })).toBe(true);
+    expect(isHTLCSpendAuthorised(proof, undefined, digest)).toBe(true);
   });
 });

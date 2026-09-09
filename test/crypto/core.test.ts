@@ -25,7 +25,6 @@ import {
   meetsSignerThreshold,
   pointFromBytes,
   schnorrSignDigest,
-  schnorrSignMessage,
   schnorrVerifyDigest,
   schnorrVerifyMessage,
   sha256 as sha256Export,
@@ -269,12 +268,6 @@ describe('computeMessageDigest', () => {
     expect(() => computeMessageDigest('hello')).not.toThrow();
     expect(() => computeMessageDigest('🥜')).not.toThrow(); // U+1F95C, a valid pair
   });
-
-  test('returns a prehashed digest unchanged, as bytes or hex', () => {
-    const digest = sha256(new TextEncoder().encode('hello'));
-    expect(computeMessageDigest({ digest })).toEqual(digest);
-    expect(computeMessageDigest({ digest }, true)).toBe(bytesToHex(digest));
-  });
 });
 
 describe('schnorrVerifyMessage', () => {
@@ -290,8 +283,8 @@ describe('getValidSigners / meetsSignerThreshold', () => {
   const privkey = '0000000000000000000000000000000000000000000000000000000000000001';
   const compressed = bytesToHex(secp256k1.getPublicKey(hexToBytes(privkey), true)); // 02-prefixed
   const xOnly = compressed.slice(2);
-  const message = 'authorize-spend';
-  const signature = schnorrSignMessage(message, privkey);
+  const message = computeMessageDigest('authorize-spend');
+  const signature = schnorrSignDigest(message, privkey);
 
   test('one key listed under multiple encodings counts as a single signer', () => {
     const signers = getValidSigners([signature], message, [
