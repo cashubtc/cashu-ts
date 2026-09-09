@@ -2404,6 +2404,20 @@ describe('SIG_ALL edge cases', () => {
     expect(() => hasP2PKSignedProof(PUBKEY, proof)).toThrow(/Cannot verify a SIG_ALL proof/);
   });
 
+  test('hasP2PKSignedProof verifies a SIG_ALL proof against the supplied digest', () => {
+    const proof: Proof = {
+      amount: Amount.from(1),
+      id: '00000000000',
+      C: '03'.padEnd(66, '0'),
+      secret: createP2PKsecret(PUBKEY, [['sigflag', 'SIG_ALL']]),
+    };
+    const digest = computeMessageDigest('sig-all transaction');
+    const signed = signP2PKProof(proof, bytesToHex(PRIVKEY), digest);
+    expect(hasP2PKSignedProof(PUBKEY, signed, digest)).toBe(true);
+    // The witness signs the digest, not the secret, so another digest does not match.
+    expect(hasP2PKSignedProof(PUBKEY, signed, computeMessageDigest('other'))).toBe(false);
+  });
+
   test('hasP2PKSignedProof returns false for a witness-less SIG_ALL proof (no early throw)', () => {
     // The no-witness guard must short-circuit before the SIG_ALL/message check: a SIG_ALL
     // proof with no witness reports "not signed" rather than throwing for a missing message.
