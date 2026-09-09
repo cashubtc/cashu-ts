@@ -1,8 +1,21 @@
 import { utf8ToBytes } from '@noble/hashes/utils.js';
 
-import { computeMessageDigest, buildP2PKSigAllMessageV0, schnorrSignDigest } from '../crypto';
+import {
+  assertSigAllInputs,
+  assertSignerAuthorised,
+  buildP2PKSigAllMessageV0,
+  computeMessageDigest,
+  pointFromHex,
+  schnorrSignDigest,
+} from '../crypto';
 import { parseWitnessData } from '../crypto/NUT11';
-import { JSONInt, decodeBase64UrlToUint8, encodeUint8ToBase64Url } from '../utils';
+import {
+  JSONInt,
+  MAX_P2PK_SIGNATURES,
+  MAX_SIGNING_PACKAGE_LENGTH,
+  decodeBase64UrlToUint8,
+  encodeUint8ToBase64Url,
+} from '../utils';
 import { decodeUtf8Document } from '../utils/bytes';
 import type { MeltPreview, SwapPreview } from '../wallet/types';
 
@@ -95,6 +108,10 @@ function serializePackage(pkg: SigAllSigningPackage): string {
 function deserializePackage(input: string): SigAllSigningPackage {
   if (!input.startsWith(SIGALL_PREFIX)) {
     throw new CTSError(`Invalid signing package: must start with "${SIGALL_PREFIX}"`);
+  }
+
+  if (input.length - SIGALL_PREFIX.length > MAX_SIGNING_PACKAGE_LENGTH) {
+    throw new CTSError(`Signing package exceeds ${MAX_SIGNING_PACKAGE_LENGTH} characters`);
   }
 
   const base64url = input.slice(SIGALL_PREFIX.length);
@@ -200,7 +217,56 @@ function deserializePackage(input: string): SigAllSigningPackage {
   };
 }
 
+// NUT-04/05 quote ids are UUIDs, and every current mint issues UUIDv7 ids.
+const UUID_QUOTE_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const PRIVKEY_HEX_RE = /^[0-9a-f]{64}$/i;
+const COMPRESSED_POINT_RE = /^0[23][0-9a-f]{64}$/i;
+
+// pointFromHex also decodes uncompressed points; the transcript carries the compressed form.
+function isCompressedSecpPoint(hex: string): boolean {
+  if (!COMPRESSED_POINT_RE.test(hex)) return false;
+  try {
+    pointFromHex(hex);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Refuses to sign anything but a well-formed SIG_ALL transaction the key is a party to.
+ *
+ * @remarks
+ * C, B_ and the quote are hashed into the transcript, so each must be a real point and the quote a
+ * UUID. The witness is bounded before another signature is added to it.
+ */
+function assertSignable(pkg: SigAllSigningPackage, privkey: string): void {
+  if (!PRIVKEY_HEX_RE.test(privkey)) {
+    throw new CTSError('Private key must be 64 hex characters');
+  }
+  if ((pkg.witness?.signatures.length ?? 0) >= MAX_P2PK_SIGNATURES) {
+    throw new CTSError(`Witness already at the ${MAX_P2PK_SIGNATURES}-signature limit`);
+  }
+  assertSigAllInputs(pkg.inputs);
+  pkg.inputs.forEach((input, i) => {
+    if (!isCompressedSecpPoint(input.C)) {
+      throw new CTSError(`Input ${i}: C must be a compressed secp256k1 point`);
+    }
+  });
+  pkg.outputs.forEach((output, i) => {
+    if (!isCompressedSecpPoint(output.B_)) {
+      throw new CTSError(`Output ${i}: B_ must be a compressed secp256k1 point`);
+    }
+  });
+  if (pkg.quote !== undefined && !UUID_QUOTE_RE.test(pkg.quote)) {
+    throw new CTSError('Melt quote id must be a UUID');
+  }
+  // SIG_ALL inputs share one lock, so the first secret names every expected signer.
+  assertSignerAuthorised(pkg.inputs[0].secret, privkey);
+}
+
 function signPackage(pkg: SigAllSigningPackage, privkey: string): SigAllSigningPackage {
+  assertSignable(pkg, privkey);
   // Sign transcripts recomputed from the package contents; a signer only ever
   // signs what the package shows, never a digest chosen elsewhere.
   const digests = computeDigests(pkg.inputs, pkg.outputs, pkg.quote);
@@ -358,6 +424,11 @@ export type SigAllApi = {
    * @param pkg The signing package (from extract*SigningPackage or another signer)
    * @param privkey Private key to sign with.
    * @returns Package with signatures appended to witness field.
+   * @throws {@link CTSError} If the inputs are not a valid SIG_ALL set, a C or B_ is not a
+   *   compressed point, the melt quote id is not a UUID, the private key is not 64 hex characters,
+   *   the witness is already at its signature limit, or the lock does not currently name the
+   *   signing key. That last case includes an expired lock with no refund keys (nothing to sign)
+   *   and a P2BK lock, whose keys are blinded: derive the blinded key before signing.
    * @experimental
    */
   signPackage: (pkg: SigAllSigningPackage, privkey: string) => SigAllSigningPackage;
