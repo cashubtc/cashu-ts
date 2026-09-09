@@ -33,8 +33,19 @@ const makeLogger = (): Logger => ({
 
 describe('NUT14 module core functions', () => {
   test('createHTLCsecret creates a valid secret', () => {
-    const result = createHTLCsecret('deadbeef');
+    const { hash } = createHTLCHash();
+    const result = createHTLCsecret(hash);
     expect(result).toContain('HTLC');
+    expect(parseHTLCSecret(result)[1].data).toBe(hash);
+  });
+
+  test('createHTLCsecret lowercases the hashlock', () => {
+    const { hash } = createHTLCHash();
+    expect(parseHTLCSecret(createHTLCsecret(hash.toUpperCase()))[1].data).toBe(hash);
+  });
+
+  test('createHTLCsecret rejects a hashlock that is not 64 hex characters', () => {
+    expect(() => createHTLCsecret('deadbeef')).toThrow(/64-character hex/);
   });
 
   test('parseHTLCSecret throws for non-HTLC type', () => {
@@ -132,6 +143,38 @@ describe('verifyHTLCSpendingConditions and isHTLCSpendAuthorised', () => {
     };
     const signedProof = signP2PKProof(proof, bytesToHex(PRIVKEY));
     expect(isHTLCSpendAuthorised(signedProof)).toBe(false);
+  });
+  test('a malformed hashlock is judged by its pathways, as the mint does', () => {
+    // The hash shape is enforced on creation only. On verify a garbage hash simply never matches
+    // a preimage, while the other pathways are judged as the mint judges them: an expired keyless
+    // HTLC is anyone-can-spend without the hash ever being inspected.
+    const proof: Proof = {
+      amount: Amount.from(2),
+      id: '00bfa73302d12ffd',
+      secret: '["HTLC",{"nonce":"n","data":"deadbeef","tags":[["locktime","1"]]}]',
+      C: '03ff6567e2e6c31db5cb7189dab2b5121930086791c93899e4eff3dda61cb57273',
+    };
+    const result = verifyHTLCSpendingConditions(proof);
+    expect(result.success).toBe(true);
+    expect(result.path).toBe('UNLOCKED');
+    const locked: Proof = {
+      ...proof,
+      secret: '["HTLC",{"nonce":"n","data":"deadbeef","tags":[]}]',
+      witness: JSON.stringify({ preimage: 'ab'.repeat(32) }),
+    };
+    expect(isHTLCSpendAuthorised(locked)).toBe(false);
+  });
+  test('a SIG_ALL HTLC cannot be verified without the message', () => {
+    const proof: Proof = {
+      amount: Amount.from(2),
+      id: '00bfa73302d12ffd',
+      secret: createHTLCsecret(createHTLCHash().hash, [
+        ['pubkeys', PUBKEY],
+        ['sigflag', 'SIG_ALL'],
+      ]),
+      C: '03ff6567e2e6c31db5cb7189dab2b5121930086791c93899e4eff3dda61cb57273',
+    };
+    expect(() => verifyHTLCSpendingConditions(proof)).toThrow(/SIG_ALL/);
   });
 });
 
@@ -254,11 +297,25 @@ describe('getHTLCWitnessPreimage', () => {
     expect(getHTLCWitnessPreimage(JSON.stringify({ preimage: '' }))).toBeUndefined();
   });
 
-  test('returns undefined and logs error when JSON parse fails', () => {
+  test('returns undefined without console output when JSON parse fails', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    expect(getHTLCWitnessPreimage('{invalid')).toBeUndefined();
-    expect(spy).toHaveBeenCalledWith('Failed to parse HTLC witness string:', expect.anything());
-    spy.mockRestore();
+    try {
+      expect(getHTLCWitnessPreimage('{invalid')).toBeUndefined();
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test('rejects an oversized serialized witness before parsing it', () => {
+    const witness = `{"padding":"${'a'.repeat(65_536)}"}`;
+    const parseSpy = vi.spyOn(JSON, 'parse');
+    try {
+      expect(() => getHTLCWitnessPreimage(witness)).toThrow(/Witness too long/);
+      expect(parseSpy).not.toHaveBeenCalled();
+    } finally {
+      parseSpy.mockRestore();
+    }
   });
 
   test('returns undefined for a parsed primitive witness (no throw)', () => {
@@ -298,5 +355,31 @@ describe('HTLC refund (sender) pathway', () => {
   test('unsigned refund proof does not spend', () => {
     // No refund signature and no preimage: nothing authorises the spend.
     expect(isHTLCSpendAuthorised(keyedRefundProof())).toBe(false);
+  });
+
+  describe('a key present in both pubkeys and refund', () => {
+    const overlapProof = (): Proof => ({
+      ...keyedRefundProof(),
+      secret: createHTLCsecret(HASH, [
+        ['pubkeys', PUBKEY],
+        ['locktime', '1'],
+        ['refund', PUBKEY],
+      ]),
+    });
+
+    test('refunds after expiry without a preimage', () => {
+      // NUT-11 allows the same key on both paths; once expired its signature
+      // satisfies the refund threshold on its own.
+      const [signed] = signP2PKProofs([overlapProof()], [bytesToHex(PRIVKEY)]);
+      const result = verifyHTLCSpendingConditions(signed);
+      expect(result.success).toBe(true);
+      expect(result.path).toBe('REFUND');
+    });
+
+    test('still needs a signature to refund', () => {
+      const result = verifyHTLCSpendingConditions(overlapProof());
+      expect(result.success).toBe(false);
+      expect(result.path).toBe('FAILED');
+    });
   });
 });

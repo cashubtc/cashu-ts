@@ -57,6 +57,19 @@ export const REPAIR_COOLDOWN_MS = 60_000;
 export const MAX_MINT_INFO_LIST = 1_024;
 
 /**
+ * NUT-10: Cap on a serialized secret, applied when creating outputs and before parsing a received
+ * proof's secret. Matches the Nutshell default `mint_max_secret_length`. Creation counts code
+ * points (as the mint does); the parse-side check counts UTF-16 units, which is never fewer.
+ */
+export const MAX_SECRET_LENGTH = 1024;
+
+/**
+ * NUT-11/14: Cap on a serialized witness, checked before parsing. The 64-signature cap on the
+ * verify path keeps a full witness under 9 KiB, so 16 KiB leaves ample headroom.
+ */
+export const MAX_WITNESS_LENGTH = 16_384;
+
+/**
  * Max u64 (2^64 - 1): the ceiling every Amount is held to. Enforced in the Amount constructor, so
  * arithmetic results are bounded too; muldiv helpers keep their wide intermediate in bigint and
  * only construct the divided-down result.
@@ -76,7 +89,9 @@ export const MAX_CBOR_NODES = 262_144;
 /**
  * NUT-11: Upper bound on the keys in one `pubkeys` or `refund` tag, applied before any per-key
  * curve work. NUT-28 caps a lock at 11 slots (data + pubkeys + refund), enforced at build; this is
- * a work bound with headroom, not the exact slot rule.
+ * a work bound with headroom, not the exact slot rule. A string secret past
+ * {@link MAX_SECRET_LENGTH} is rejected before it is parsed, so this only gates a pre-parsed
+ * secret.
  */
 export const MAX_P2PK_PUBKEYS = 16;
 
