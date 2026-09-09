@@ -1169,7 +1169,9 @@ export type MeltRequest = {
 } & Record<string, unknown>;
 
 // @public (undocumented)
-export type MessageInput = string | PrehashedMessage;
+export type MessageInput = string | {
+    digest: Uint8Array;
+};
 
 // @public
 export class Mint {
@@ -2055,11 +2057,6 @@ export type PostRestorePayload = {
 export type PostRestoreResponse = {
     outputs: SerializedBlindedMessage[];
     signatures: SerializedBlindedSignature[];
-};
-
-// @public
-export type PrehashedMessage = {
-    digest: DigestInput;
 };
 
 // @public

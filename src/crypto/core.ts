@@ -11,11 +11,8 @@ import { hasLoneSurrogate } from '../utils/bytes';
  */
 export type PrivKey = Uint8Array | string;
 export type DigestInput = Uint8Array | string; // hex string or bytes
-/**
- * A message already reduced to the 32-byte value BIP-340 signs (eg a tagged hash).
- */
-export type PrehashedMessage = { digest: DigestInput };
-export type MessageInput = string | PrehashedMessage; // UTF-8 string, or a prehashed digest
+// A UTF-8 string to hash, or the 32-byte digest BIP-340 signs (eg a tagged hash).
+export type MessageInput = string | { digest: Uint8Array };
 export type BlindSignature = {
   C_: WeierstrassPoint<bigint>;
   id: string;
@@ -69,7 +66,7 @@ export function taggedHash(tag: string, ...messages: Uint8Array[]): Uint8Array {
  * Computes the SHA-256 hash of a message.
  *
  * @remarks
- * For raw byte messages, use `sha256`. A `PrehashedMessage` is returned as its digest, unchanged.
+ * For raw byte messages, use `sha256`. A `{ digest }` input is returned unchanged.
  * @param message To hash (UTF-8 encoded before hashing), or a prehashed digest.
  * @param asHex Optional: True returns a hex-encoded hash string; otherwise returns raw bytes.
  * @returns SHA-256 hash as raw bytes or hex string, depending on `asHex`.
@@ -79,8 +76,7 @@ export function computeMessageDigest(message: MessageInput, asHex: false): Uint8
 export function computeMessageDigest(message: MessageInput, asHex: true): string;
 export function computeMessageDigest(message: MessageInput, asHex = false): string | Uint8Array {
   if (typeof message !== 'string') {
-    const digest = typeof message.digest === 'string' ? hexToBytes(message.digest) : message.digest;
-    return asHex ? bytesToHex(digest) : digest;
+    return asHex ? bytesToHex(message.digest) : message.digest;
   }
   // Ill-formed UTF-16 would hash as its U+FFFD replacement, aliasing distinct messages.
   if (hasLoneSurrogate(message)) {

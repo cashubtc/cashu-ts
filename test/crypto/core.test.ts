@@ -272,11 +272,8 @@ describe('computeMessageDigest', () => {
 
   test('returns a prehashed digest unchanged, as bytes or hex', () => {
     const digest = sha256(new TextEncoder().encode('hello'));
-    const hex = bytesToHex(digest);
     expect(computeMessageDigest({ digest })).toEqual(digest);
-    expect(computeMessageDigest({ digest: hex })).toEqual(digest);
-    expect(computeMessageDigest({ digest }, true)).toBe(hex);
-    expect(computeMessageDigest({ digest: hex }, true)).toBe(hex);
+    expect(computeMessageDigest({ digest }, true)).toBe(bytesToHex(digest));
   });
 });
 
