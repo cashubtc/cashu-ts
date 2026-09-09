@@ -18,6 +18,9 @@ import {
   createRandomSecretKey,
   hasP2PKSignedProof,
   schnorrSignMessage,
+  computeMessageDigest,
+  schnorrVerifyDigest,
+  schnorrSignDigest,
   schnorrVerifyMessage,
   deriveP2BKBlindedPubkeys,
   P2BK_DST,
@@ -92,13 +95,13 @@ describe('test create p2pk secret', () => {
 
   test('SIG_INPUTS signatures are always checked against the proof secret', () => {
     const secret = createP2PKsecret(PUBKEY);
-    const other = 'some other message';
+    const other = computeMessageDigest('some other message');
     const proof: Proof = {
       amount: Amount.from(1),
       C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       id: '00000000000',
       secret,
-      witness: { signatures: [schnorrSignMessage(other, bytesToHex(PRIVKEY))] },
+      witness: { signatures: [schnorrSignDigest(other, bytesToHex(PRIVKEY))] },
     };
     // A signature over anything but the secret never authorises a SIG_INPUTS spend,
     // whatever message the caller passes along.
@@ -610,14 +613,15 @@ describe('test signP2PKProof', () => {
       secret: createP2PKsecret(PUBKEY),
     };
     // SIG_INPUTS signs the secret and nothing else.
-    expect(() => signP2PKProof(proof, bytesToHex(PRIVKEY), 'other message')).toThrow(/SIG_ALL/);
+    const other = computeMessageDigest('other message');
+    expect(() => signP2PKProof(proof, bytesToHex(PRIVKEY), other)).toThrow(/SIG_ALL/);
     // The batch signer logs and leaves the proof unsigned rather than throwing.
     const logger: Logger = { ...NULL_LOGGER, warn: vi.fn() };
-    const [unsigned] = signP2PKProofs([proof], bytesToHex(PRIVKEY), logger, 'other message');
+    const [unsigned] = signP2PKProofs([proof], bytesToHex(PRIVKEY), logger, other);
     expect(unsigned.witness).toBeUndefined();
     expect(logger.warn).toHaveBeenCalledWith(expect.stringMatching(/SIG_ALL/));
   });
-  test('refuses to sign a SIG_ALL proof without the message to sign', () => {
+  test('refuses to sign a SIG_ALL proof without the digest to sign', () => {
     const proof: Proof = {
       amount: Amount.from(1),
       C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
@@ -625,12 +629,12 @@ describe('test signP2PKProof', () => {
       secret: createP2PKsecret(PUBKEY, [['sigflag', 'SIG_ALL']]),
     };
     // A SIG_ALL witness must sign the transaction message, never the bare secret.
-    expect(() => signP2PKProof(proof, bytesToHex(PRIVKEY))).toThrow(/message to sign/);
+    expect(() => signP2PKProof(proof, bytesToHex(PRIVKEY))).toThrow(/digest to sign/);
     // The batch signer logs and leaves the proof unsigned rather than throwing.
     const logger: Logger = { ...NULL_LOGGER, warn: vi.fn() };
     const [unsigned] = signP2PKProofs([proof], bytesToHex(PRIVKEY), logger);
     expect(unsigned.witness).toBeUndefined();
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringMatching(/message to sign/));
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringMatching(/digest to sign/));
   });
   test('sign with 02-prepended Nostr key', async () => {
     const PRIVKEY2 = '622320785910d6aac0d5406ce1b6ef1640ab97c2acdea6a246eb6859decd6230'; // produces an Odd Y-parity pubkey
@@ -1208,7 +1212,7 @@ describe('SIG_ALL, the supported message format is actually signed', () => {
     const quoteId = 'quote-xyz';
 
     // 4. Build the SIG_ALL messages the wallet is supposed to sign
-    const messages = [buildP2PKSigAllMessageV0(proofs, outputs, quoteId)];
+    const messages = [computeMessageDigest(buildP2PKSigAllMessageV0(proofs, outputs, quoteId))];
 
     // 5. Mimic the wallet SIG_ALL path: start from the first proof, then sign it
     //    once per message, threading the witness through on each call.
@@ -1226,7 +1230,7 @@ describe('SIG_ALL, the supported message format is actually signed', () => {
     // 6. For each message variant, there must be at least one signature that verifies
     //    against that specific message and this pubkey.
     for (const msg of messages) {
-      const hasValid = sigs.some((sig) => schnorrVerifyMessage(sig, msg, pubCompressed));
+      const hasValid = sigs.some((sig) => schnorrVerifyDigest(sig, msg, pubCompressed));
       expect(hasValid).toBe(true);
     }
 
@@ -1383,7 +1387,7 @@ describe('NUT-11 test vectors', () => {
       '038ec853d65ae1b79b5cdbc2774150b2cb288d6d26e12958a16fb33c32d9a86c39',
     );
     expect(() => assertSigAllInputs([proof])).not.toThrow();
-    const mts = buildP2PKSigAllMessageV0([proof], [outputs]);
+    const mts = computeMessageDigest(buildP2PKSigAllMessageV0([proof], [outputs]));
     expect(isP2PKSpendAuthorised(proof, NULL_LOGGER, mts)).toBe(true);
   });
 
@@ -1413,7 +1417,7 @@ describe('NUT-11 test vectors', () => {
     ];
     // The assert catches the error. The signature would otherwise be valid
     expect(() => assertSigAllInputs(proofs)).toThrow(/must share identical Secret\.tags/);
-    const mts = buildP2PKSigAllMessageV0(proofs, outputs);
+    const mts = computeMessageDigest(buildP2PKSigAllMessageV0(proofs, outputs));
     expect(isP2PKSpendAuthorised(proofs[0], NULL_LOGGER, mts)).toBe(true);
   });
 
@@ -1434,7 +1438,7 @@ describe('NUT-11 test vectors', () => {
     ];
     // The assert catches the error. The signature would otherwise be valid
     expect(() => assertSigAllInputs(proofs)).not.toThrow();
-    const mts = buildP2PKSigAllMessageV0(proofs, outputs);
+    const mts = computeMessageDigest(buildP2PKSigAllMessageV0(proofs, outputs));
     expect(isP2PKSpendAuthorised(proofs[0], NULL_LOGGER, mts)).toBe(true);
   });
 
@@ -1454,7 +1458,7 @@ describe('NUT-11 test vectors', () => {
       mkOutput(2, '038ec853d65ae1b79b5cdbc2774150b2cb288d6d26e12958a16fb33c32d9a86c39'),
     ];
     expect(() => assertSigAllInputs(proofs)).not.toThrow();
-    const mts = buildP2PKSigAllMessageV0(proofs, outputs);
+    const mts = computeMessageDigest(buildP2PKSigAllMessageV0(proofs, outputs));
     expect(isP2PKSpendAuthorised(proofs[0], NULL_LOGGER, mts)).toBe(true);
   });
 
@@ -1474,7 +1478,7 @@ describe('NUT-11 test vectors', () => {
       mkOutput(2, '038ec853d65ae1b79b5cdbc2774150b2cb288d6d26e12958a16fb33c32d9a86c39'),
     ];
     expect(() => assertSigAllInputs(proofs)).not.toThrow();
-    const mts = buildP2PKSigAllMessageV0(proofs, outputs);
+    const mts = computeMessageDigest(buildP2PKSigAllMessageV0(proofs, outputs));
     expect(isHTLCSpendAuthorised(proofs[0], NULL_LOGGER, mts)).toBe(true);
   });
 
@@ -1495,7 +1499,7 @@ describe('NUT-11 test vectors', () => {
       mkOutput(1, '03afe7c87e32d436f0957f1d70a2bca025822a84a8623e3a33aed0a167016e0ca5'),
     ];
     expect(() => assertSigAllInputs(proofs)).not.toThrow();
-    const mts = buildP2PKSigAllMessageV0(proofs, outputs);
+    const mts = computeMessageDigest(buildP2PKSigAllMessageV0(proofs, outputs));
     expect(isHTLCSpendAuthorised(proofs[0], NULL_LOGGER, mts)).toBe(false);
   });
 
@@ -1515,7 +1519,7 @@ describe('NUT-11 test vectors', () => {
       mkOutput(2, '038ec853d65ae1b79b5cdbc2774150b2cb288d6d26e12958a16fb33c32d9a86c39'),
     ];
     expect(() => assertSigAllInputs(proofs)).not.toThrow();
-    const mts = buildP2PKSigAllMessageV0(proofs, outputs);
+    const mts = computeMessageDigest(buildP2PKSigAllMessageV0(proofs, outputs));
     expect(isHTLCSpendAuthorised(proofs[0], NULL_LOGGER, mts)).toBe(true);
   });
 
@@ -1561,7 +1565,7 @@ describe('NUT-11 test vectors', () => {
     ];
     const quote = 'cF8911fzT88aEi1d-6boZZkq5lYxbUSVs-HbJxK0';
     expect(() => assertSigAllInputs(proofs)).not.toThrow();
-    const mts = buildP2PKSigAllMessageV0(proofs, outputs, quote);
+    const mts = computeMessageDigest(buildP2PKSigAllMessageV0(proofs, outputs, quote));
     expect(isHTLCSpendAuthorised(proofs[0], NULL_LOGGER, mts)).toBe(true);
   });
 
@@ -1582,7 +1586,7 @@ describe('NUT-11 test vectors', () => {
     ];
     const quote = 'Db3qEMVwFN2tf_1JxbZp29aL5cVXpSMIwpYfyOVF';
     expect(() => assertSigAllInputs(proofs)).not.toThrow();
-    const mts = buildP2PKSigAllMessageV0(proofs, outputs, quote);
+    const mts = computeMessageDigest(buildP2PKSigAllMessageV0(proofs, outputs, quote));
     expect(isHTLCSpendAuthorised(proofs[0], NULL_LOGGER, mts)).toBe(true);
   });
 });
@@ -2398,6 +2402,20 @@ describe('SIG_ALL edge cases', () => {
       witness: { signatures: [] },
     };
     expect(() => hasP2PKSignedProof(PUBKEY, proof)).toThrow(/Cannot verify a SIG_ALL proof/);
+  });
+
+  test('hasP2PKSignedProof verifies a SIG_ALL proof against the supplied digest', () => {
+    const proof: Proof = {
+      amount: Amount.from(1),
+      id: '00000000000',
+      C: '03'.padEnd(66, '0'),
+      secret: createP2PKsecret(PUBKEY, [['sigflag', 'SIG_ALL']]),
+    };
+    const digest = computeMessageDigest('sig-all transaction');
+    const signed = signP2PKProof(proof, bytesToHex(PRIVKEY), digest);
+    expect(hasP2PKSignedProof(PUBKEY, signed, digest)).toBe(true);
+    // The witness signs the digest, not the secret, so another digest does not match.
+    expect(hasP2PKSignedProof(PUBKEY, signed, computeMessageDigest('other'))).toBe(false);
   });
 
   test('hasP2PKSignedProof returns false for a witness-less SIG_ALL proof (no early throw)', () => {

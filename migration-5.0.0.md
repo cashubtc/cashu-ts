@@ -260,6 +260,28 @@ If you were relying on a symbol that is not exported by the package entry point 
 
 ---
 
+## P2PK and HTLC signing functions take a digest, not a message string
+
+`signP2PKProofs`, `signP2PKProof`, `hasP2PKSignedProof`, `verifyP2PKSpendingConditions`, `isP2PKSpendAuthorised`, `verifyHTLCSpendingConditions`, `isHTLCSpendAuthorised`, `getValidSigners` and `meetsSignerThreshold` now take the 32-byte digest that is signed (`DigestInput`, hex or bytes) where they previously took a message string.
+
+SIG_INPUTS callers are unaffected: with no digest the functions still hash the proof secret. SIG_ALL callers hash the aggregated message themselves. Every SIG_ALL format ends in a 32-byte BIP-340 input, and the framed NUT-11 format signs a tagged hash rather than a plain SHA-256, so message construction now lives in the format helper and the signing functions only see the digest, as `signMintQuote` already does.
+
+### Migration
+
+```ts
+// Before
+const message = buildP2PKSigAllMessageV0(inputs, outputs, quoteId);
+signP2PKProofs(proofs, privkey, logger, message);
+isP2PKSpendAuthorised(proof, logger, message);
+
+// After
+const digest = computeMessageDigest(buildP2PKSigAllMessageV0(inputs, outputs, quoteId));
+signP2PKProofs(proofs, privkey, logger, digest);
+isP2PKSpendAuthorised(proof, logger, digest);
+```
+
+---
+
 ## `signMintQuote` / `verifyMintQuoteSignature` now use the amended NUT-20 message
 
 These functions now produce and verify the hardened mint-quote signature message introduced by cashubtc/nuts#375. Legacy signing is supported as an internal transitional fallback and is not exported.

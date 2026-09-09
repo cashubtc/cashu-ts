@@ -2,7 +2,12 @@ import { schnorr } from '@noble/curves/secp256k1.js';
 import { bytesToHex } from '@noble/curves/utils.js';
 import { test, describe, expect } from 'vitest';
 
-import { Wallet, OutputData } from '../../src';
+import { Amount, Wallet, OutputData, type OutputDataLike, type Proof } from '../../src';
+import {
+  buildP2PKSigAllMessageV0,
+  computeMessageDigest,
+  hasP2PKSignedProof,
+} from '../../src/crypto';
 
 import { mint, useTestServer } from './_setup';
 
@@ -241,5 +246,36 @@ describe('P2PK BlindingData', () => {
       expect(s[1].tags).toContainEqual(['n_sigs', '2']);
       expect(s[1].tags).not.toContainEqual(['n_sigs_refund', '1']); // 1 is default
     });
+  });
+});
+
+describe('Wallet.signP2PKProofs with SIG_ALL', () => {
+  const privkey = bytesToHex(new Uint8Array(32).fill(1));
+  const mkProof = (nonce: string): Proof => ({
+    amount: Amount.from(8),
+    id: '009a1f293253e41e',
+    secret: `["P2PK",{"nonce":"${nonce}","data":"${PK1}","tags":[["sigflag","SIG_ALL"]]}]`,
+    C: PK2,
+  });
+  const outputs = [
+    { blindedMessage: { amount: Amount.from(8), id: '009a1f293253e41e', B_: PK3 } },
+  ] as unknown as OutputDataLike[];
+
+  test('signs the first proof over the aggregated transaction digest', () => {
+    const wallet = new Wallet(mint);
+    const proofs = [mkProof('01'), mkProof('02')];
+    const signed = wallet.signP2PKProofs(proofs, privkey, outputs, 'quote-1');
+
+    const digest = computeMessageDigest(buildP2PKSigAllMessageV0(proofs, outputs, 'quote-1'));
+    expect(hasP2PKSignedProof(PK1, signed[0], digest)).toBe(true);
+    // Only the first input carries the witness; the digest binds the quote id.
+    expect(signed[1].witness).toBeUndefined();
+    const other = computeMessageDigest(buildP2PKSigAllMessageV0(proofs, outputs, 'quote-2'));
+    expect(hasP2PKSignedProof(PK1, signed[0], other)).toBe(false);
+  });
+
+  test('refuses to sign SIG_ALL proofs without outputs', () => {
+    const wallet = new Wallet(mint);
+    expect(() => wallet.signP2PKProofs([mkProof('01')], privkey)).toThrow(/OutputData/);
   });
 });
