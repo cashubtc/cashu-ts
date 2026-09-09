@@ -554,6 +554,28 @@ export function signP2PKProofs(
 }
 
 /**
+ * Asserts the lock currently expects a signature from `privateKey`.
+ *
+ * @remarks
+ * Compared x-only, since Schnorr verification ignores parity. Nostr pubkeys prepend 02 by
+ * convention, ignoring actual Y-parity.
+ * @param secretStr - The NUT-11 P2PK secret.
+ * @param privateKey - A single private key (hex string or Uint8Array).
+ * @returns The signer's x-only pubkey.
+ * @throws If the secret is malformed or does not name the key.
+ * @internal
+ */
+export function assertSignerAuthorised(secretStr: string | Secret, privateKey: PrivKey): string {
+  const privKeyBytes = typeof privateKey === 'string' ? hexToBytes(privateKey) : privateKey;
+  const pubkey = bytesToHex(schnorr.getPublicKey(privKeyBytes)); // x-only
+  const witnesses = getP2PKExpectedWitnessPubkeys(secretStr);
+  if (!witnesses.some((w) => w.slice(2) === pubkey)) {
+    throw new CTSError(`Signature not required from [02|03]${pubkey}`);
+  }
+  return pubkey;
+}
+
+/**
  * Signs a single proof with the provided private key if required.
  *
  * @remarks
@@ -577,15 +599,7 @@ export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: strin
   }
   message = message ?? proof.secret; // default message is secret
 
-  // Check if the private key is required to sign by checking its
-  // X-only pubkey (no 02/03 prefix) against the expected witness pubkeys
-  // NB: Nostr pubkeys prepend 02 by convention, ignoring actual Y-parity
-  const privKeyBytes = typeof privateKey === 'string' ? hexToBytes(privateKey) : privateKey;
-  const pubkey = bytesToHex(schnorr.getPublicKey(privKeyBytes)); // x-only
-  const witnesses = getP2PKExpectedWitnessPubkeys(secret);
-  if (!witnesses.length || !witnesses.some((w) => w.includes(pubkey))) {
-    throw new CTSError(`Signature not required from [02|03]${pubkey}`);
-  }
+  const pubkey = assertSignerAuthorised(secret, privateKey);
 
   // Check if the public key has already signed
   const signatures = getP2PKWitnessSignatures(proof.witness);
@@ -848,11 +862,11 @@ export function maybeDeriveP2BKPrivateKeys(privateKey: string | string[], proof:
 /**
  * Validates SIG_ALL inputs have matching secrets and tags.
  *
- * @param inputs Array of Proofs.
+ * @param inputs Array of Proofs (only `secret` is required).
  * @throws If proofs are not valid for SIG_ALL.
  * @internal
  */
-export function assertSigAllInputs(inputs: Proof[]): void {
+export function assertSigAllInputs(inputs: Array<Pick<Proof, 'secret'>>): void {
   if (inputs.length === 0) throw new CTSError('No proofs');
   // Check first proof
   const first = parseP2PKSecret(inputs[0].secret);
