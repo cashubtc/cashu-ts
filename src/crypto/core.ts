@@ -216,7 +216,7 @@ export function findSigningKey(pubkey: string, privkeys: string | string[]): str
  * message.
  *
  * @param signatures - The Schnorr signature(s) (hex-encoded).
- * @param message - The message to verify.
+ * @param digest - The 32-byte digest that was signed (hex string or bytes).
  * @param pubkeys - The Cashu P2PK public key(s) (hex-encoded, X-only or with 02/03 prefix) to
  *   check.
  * @returns Array of public keys who validly signed, duplicates removed. The same key in different
@@ -224,7 +224,7 @@ export function findSigningKey(pubkey: string, privkeys: string | string[]): str
  */
 export function getValidSigners(
   signatures: string[],
-  message: string,
+  digest: DigestInput,
   pubkeys: string[],
 ): string[] {
   // Dedupe by x-only identity: BIP-340 ignores the parity prefix, so 02|X, 03|X
@@ -235,7 +235,7 @@ export function getValidSigners(
     if (!uniquePubs.has(xOnly)) uniquePubs.set(xOnly, pubkey);
   }
   return Array.from(uniquePubs.values()).filter((pubkey) =>
-    signatures.some((sig) => schnorrVerifyMessage(sig, message, pubkey)),
+    signatures.some((sig) => schnorrVerifyDigest(sig, digest, pubkey)),
   );
 }
 
@@ -243,7 +243,7 @@ export function getValidSigners(
  * Checks enough unique pubkeys have signed a message.
  *
  * @param signatures - The Schnorr signature(s) (hex-encoded).
- * @param message - The message to verify.
+ * @param digest - The 32-byte digest that was signed (hex string or bytes).
  * @param pubkeys - The Cashu P2PK public key(s) (hex-encoded, X-only or with 02/03 prefix) to
  *   check.
  * @param threshold - The minimum number of unique witnesses required.
@@ -251,10 +251,10 @@ export function getValidSigners(
  */
 export const meetsSignerThreshold = (
   signatures: string[],
-  message: string,
+  digest: DigestInput,
   pubkeys: string[],
   threshold: number = 1,
 ): boolean => {
-  const validSigners = getValidSigners(signatures, message, pubkeys);
+  const validSigners = getValidSigners(signatures, digest, pubkeys);
   return validSigners.length >= threshold;
 };

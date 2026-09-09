@@ -16,6 +16,7 @@ import {
   isBlsKeyset,
   isP2PKSigAll,
   buildP2PKSigAllMessageV0,
+  computeMessageDigest,
   assertSigAllInputs,
   parseSecret,
   attachHTLCPreimage,
@@ -1918,9 +1919,11 @@ class Wallet {
     // supported message format...
     const [first, ...rest] = normalizedProofs;
     let signedFirst = first;
-    const messages = [buildP2PKSigAllMessageV0(normalizedProofs, outputData, quoteId)];
-    for (const msg of messages) {
-      signedFirst = cryptoSignP2PKProofs([signedFirst], privkey, this._logger, msg)[0];
+    const digests = [
+      computeMessageDigest(buildP2PKSigAllMessageV0(normalizedProofs, outputData, quoteId)),
+    ];
+    for (const digest of digests) {
+      signedFirst = cryptoSignP2PKProofs([signedFirst], privkey, this._logger, digest)[0];
     }
 
     // Return the proofs in same order as before

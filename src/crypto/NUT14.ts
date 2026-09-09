@@ -5,6 +5,7 @@ import { type Logger, NULL_LOGGER } from '../logger';
 import { CTSError } from '../model/Errors';
 import { type HTLCWitness, type Proof, type ProofLike } from '../model/types';
 
+import { type DigestInput } from './core';
 import { assertSecretKind, createSecret, type Secret, getDataField, getSecretKind } from './NUT10';
 import {
   normalizeHashlock,
@@ -97,14 +98,14 @@ export function verifyHTLCHash(preimage: string, hash: string): boolean {
  * result, use isP2PKSpendAuthorised().
  * @param proof - The Proof to check.
  * @param logger - Optional logger (default: NULL_LOGGER)
- * @param message - Optional. The message to sign (SIG_ALL only; ignored otherwise)
+ * @param digest - Optional. The 32-byte digest to verify (SIG_ALL only; ignored otherwise)
  * @returns A P2PKVerificationResult describing the spending outcome.
  * @throws If the hashlock is malformed or verification is impossible.
  */
 export function verifyHTLCSpendingConditions(
   proof: Proof,
   logger: Logger = NULL_LOGGER,
-  message?: string,
+  digest?: DigestInput,
 ): P2PKVerificationResult {
   // Init
   let result: P2PKVerificationResult;
@@ -116,7 +117,7 @@ export function verifyHTLCSpendingConditions(
   // Verify the underlying P2PK conditions. Only the hashlock (receiver)
   // pathway is HTLC-specific; the refund and unlocked outcomes are plain P2PK
   // verdicts and pass straight through.
-  const p2pkResult = verifyP2PKSpendingConditions(proof, logger, message);
+  const p2pkResult = verifyP2PKSpendingConditions(proof, logger, digest);
   if (!isHTLC) {
     return p2pkResult; // not an HTLC proof
   }
@@ -174,16 +175,16 @@ export function verifyHTLCSpendingConditions(
  *
  * @param proof - The Proof to check.
  * @param logger - Optional logger (default: NULL_LOGGER)
- * @param message - Optional. The message to sign (for SIG_ALL)
+ * @param digest - Optional. The 32-byte digest to verify (for SIG_ALL)
  * @returns True if spending conditions are satisfied, false otherwise.
  * @throws If verification is impossible.
  */
 export function isHTLCSpendAuthorised(
   proof: Proof,
   logger: Logger = NULL_LOGGER,
-  message?: string,
+  digest?: DigestInput,
 ): boolean {
-  return verifyHTLCSpendingConditions(proof, logger, message).success;
+  return verifyHTLCSpendingConditions(proof, logger, digest).success;
 }
 
 /**
