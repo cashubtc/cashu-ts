@@ -16,6 +16,7 @@ import {
   type P2PKOptions,
 } from '../crypto';
 import { numberToHexPadded64, splitAmount } from '../utils';
+import { MAX_SECRET_LENGTH } from '../utils/limits';
 
 import { Amount, type AmountLike } from './Amount';
 import { BlindedMessage } from './BlindedMessage';
@@ -26,15 +27,6 @@ import {
   type SerializedBlindedMessage,
   type SerializedBlindedSignature,
 } from './types';
-
-/**
- * Maximum secret length.
- *
- * @remarks
- * Based on the Nutshell default mint_max_secret_length.
- * @internal
- */
-export const MAX_SECRET_LENGTH = 1024;
 
 /**
  * Minimum interface for an output data object. OutputData helpers only require keyset `id` and

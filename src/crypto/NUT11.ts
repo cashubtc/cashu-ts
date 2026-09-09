@@ -5,7 +5,12 @@ import { type Logger, NULL_LOGGER } from '../logger';
 import { CTSError } from '../model/Errors';
 import { type OutputDataLike } from '../model/OutputData';
 import { type HTLCWitness, type P2PKWitness, type Proof } from '../model/types';
-import { MAX_P2PK_PUBKEYS, MAX_P2PK_SIGNATURES } from '../utils/limits';
+import {
+  MAX_P2PK_PUBKEYS,
+  MAX_P2PK_SIGNATURES,
+  MAX_SECRET_LENGTH,
+  MAX_WITNESS_LENGTH,
+} from '../utils/limits';
 
 import { getValidSigners, schnorrSignMessage, schnorrVerifyMessage, type PrivKey } from './core';
 import {
@@ -155,9 +160,16 @@ export function createP2PKsecret(pubkey: string, tags?: string[][]): string {
  * {@link verifyP2PKSpendingConditions} for full semantic validation.
  * @param secret - The Proof secret.
  * @returns Secret object.
- * @throws If the NUT-10 secret is malformed, tags are duplicated, or sigflag is unrecognised.
+ * @throws If the NUT-10 secret is oversized or malformed, tags are duplicated, or sigflag is
+ *   unrecognised.
  */
 export function parseP2PKSecret(secret: string | Secret): Secret {
+  // Bound the parse work up front; the mint caps secrets at this length too.
+  if (typeof secret === 'string' && secret.length > MAX_SECRET_LENGTH) {
+    throw new CTSError(
+      `Secret too long (${secret.length} characters), maximum is ${MAX_SECRET_LENGTH}`,
+    );
+  }
   // HTLC extends P2PK, so we include it in our expected list.
   const parsed = assertSecretKind(['P2PK', 'HTLC'], secret);
   assertNoDuplicateP2PKTags(getTags(parsed));
@@ -333,18 +345,24 @@ export function getP2PKWitnessSignatures(witness: Proof['witness']): string[] {
  *
  * @param witness From Proof.
  * @returns WitnessData object or undefined.
+ * @throws If a serialized witness is oversized.
  * @internal
  */
 export function parseWitnessData(witness: Proof['witness']): WitnessData | undefined {
   if (!witness) return undefined;
+  if (typeof witness === 'string' && witness.length > MAX_WITNESS_LENGTH) {
+    throw new CTSError(
+      `Witness too long (${witness.length} characters), maximum is ${MAX_WITNESS_LENGTH}`,
+    );
+  }
   let parsed: Partial<HTLCWitness & P2PKWitness>;
   try {
     parsed =
       typeof witness === 'string'
         ? (JSON.parse(witness) as Partial<HTLCWitness & P2PKWitness>)
         : witness;
-  } catch (e) {
-    console.error('Failed to parse witness string:', e);
+  } catch {
+    // Unparseable JSON is treated as no witness; the verdict reports the missing signatures.
     return undefined;
   }
   // A parsed primitive (eg "null", "1", "true") is not a witness; treat it as absent.
@@ -410,12 +428,21 @@ export function signP2PKProofs(
  * Will only sign if the proof requires a signature from the key.
  * @param proof - A proof to sign.
  * @param privateKey - A single private key (hex string or Uint8Array).
- * @param message - Optional. The message to sign (for SIG_ALL)
+ * @param message - Required for SIG_ALL proofs; not accepted for SIG_INPUTS proofs.
  * @returns Signed proofs.
- * @throws Error if signature is not required or proof is already signed.
+ * @throws Error if signature is not required, proof is already signed, a message is missing for a
+ *   SIG_ALL proof, or given for a SIG_INPUTS proof.
  */
 export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: string): Proof {
   const secret: Secret = parseP2PKSecret(proof.secret);
+  // SIG_INPUTS signs the secret and nothing else; only SIG_ALL takes a transaction message.
+  const sigAll = getP2PKSigFlag(secret) === 'SIG_ALL';
+  if (sigAll && message === undefined) {
+    throw new CTSError('Cannot sign a SIG_ALL proof without the message to sign');
+  }
+  if (!sigAll && message !== undefined) {
+    throw new CTSError('A message override is only valid for SIG_ALL proofs');
+  }
   message = message ?? proof.secret; // default message is secret
 
   // Check if the private key is required to sign by checking its
@@ -461,18 +488,19 @@ export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: strin
  *
  * @param pubkey - The Cashu P2PK public key (hex-encoded, X-only or with 02/03 prefix).
  * @param proof - A Cashu proof.
- * @param message - Optional. The message that was signed (for SIG_ALL)
+ * @param message - Optional. The message that was signed (SIG_ALL only; ignored otherwise)
  * @returns True if one of the signatures is theirs, false otherwise.
  */
 export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: string): boolean {
   if (!proof.witness) {
     return false;
   }
-  // Check if message is needed
-  if (isP2PKSigAll([proof]) && !message) {
+  // SIG_INPUTS signatures are over the secret; only SIG_ALL verifies against the given message.
+  if (!isP2PKSigAll([proof])) {
+    message = proof.secret;
+  } else if (!message) {
     throw new CTSError('Cannot verify a SIG_ALL proof without the message to sign');
   }
-  message = message ?? proof.secret; // default message is secret
 
   const signatures = getP2PKWitnessSignatures(proof.witness);
   // See if any of the signatures belong to this pubkey. We need to do this
@@ -506,7 +534,7 @@ export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: strin
  * isP2PKSpendAuthorised().
  * @param proof - The Proof to check.
  * @param logger - Optional logger (default: NULL_LOGGER)
- * @param message - Optional. The message to sign (for SIG_ALL)
+ * @param message - Optional. The message to sign (SIG_ALL only; ignored otherwise)
  * @returns A P2PKVerificationResult describing the spending outcome.
  * @throws If spending conditions are malformed, or verification is impossible.
  */
@@ -515,14 +543,15 @@ export function verifyP2PKSpendingConditions(
   logger: Logger = NULL_LOGGER,
   message?: string,
 ): P2PKVerificationResult {
-  // Check if message is needed
-  if (isP2PKSigAll([proof]) && !message) {
+  // SIG_INPUTS signatures are over the secret; only SIG_ALL verifies against the given message.
+  if (!isP2PKSigAll([proof])) {
+    message = proof.secret;
+  } else if (!message) {
     logger.error('Cannot verify a SIG_ALL proof without the message to sign');
     throw new CTSError('Cannot verify a SIG_ALL proof without the message to sign');
   }
 
   // Parse once — all tag reads below use the pre-parsed Secret (no re-parsing)
-  message = message ?? proof.secret;
   const secret: Secret = parseP2PKSecret(proof.secret);
 
   // Extract keys and validate cross-tag semantics
