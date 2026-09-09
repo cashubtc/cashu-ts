@@ -1,20 +1,30 @@
 import { schnorr } from '@noble/curves/secp256k1.js';
-import { bytesToHex, hexToBytes, numberToBytesBE } from '@noble/curves/utils.js';
-import { utf8ToBytes } from '@noble/hashes/utils.js';
+import { numberToBytesBE } from '@noble/curves/utils.js';
+import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { type Logger, NULL_LOGGER } from '../logger';
+import { Amount } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { type OutputDataLike } from '../model/OutputData';
 import { type HTLCWitness, type P2PKWitness, type Proof } from '../model/types';
+import { minimalBytesBE } from '../utils/bytes';
+import {
+  MAX_P2PK_PUBKEYS,
+  MAX_P2PK_SIGNATURES,
+  MAX_SECRET_LENGTH,
+  MAX_WITNESS_LENGTH,
+} from '../utils/limits';
 import { type NUT10Option } from '../wallet/types/payment-requests';
 
 import {
   getValidSigners,
   schnorrSignMessage,
   schnorrVerifyMessage,
+  taggedHash,
   type MessageInput,
   type PrivKey,
 } from './core';
+import { isV3PointSecret } from './curve_bls';
 import { normalizeSecpPubkey } from './curve_secp';
 import {
   getTagInt,
@@ -28,8 +38,8 @@ import {
   type SpendingConditionsBase,
   getSecretKind,
 } from './NUT10';
-import { amountToMinimalBytes } from './NUT20';
 import { deriveP2BKSecretKeys } from './NUT28';
+import type { NutrootLeaf } from './nutroot';
 
 export const SigFlags = {
   SIG_INPUTS: 'SIG_INPUTS',
@@ -37,14 +47,6 @@ export const SigFlags = {
 } as const;
 export type SigFlag = (typeof SigFlags)[keyof typeof SigFlags];
 const VALID_SIG_FLAGS: ReadonlySet<SigFlag> = new Set(Object.values(SigFlags));
-
-// Upper bounds on untrusted P2PK/HTLC secret and witness sizes, applied on the verify/sign path so
-// per-key and per-signature work stays bounded rather than scaling with input. NUT-28 caps a lock
-// at 11 slots (data + pubkeys + refund); SIG_ALL adds a signature per message variant per signer,
-// so signatures need more headroom than keys. These are work bounds, not the exact NUT-28 rule
-// (still enforced at build).
-const MAX_P2PK_PUBKEYS = 16;
-const MAX_P2PK_SIGNATURES = 64;
 
 export type LockState = 'PERMANENT' | 'ACTIVE' | 'EXPIRED';
 
@@ -186,9 +188,16 @@ export function createP2PKsecret(pubkey: string, tags?: string[][]): string {
  * {@link verifyP2PKSpendingConditions} for full semantic validation.
  * @param secret - The Proof secret.
  * @returns Secret object.
- * @throws If the NUT-10 secret is malformed, tags are duplicated, or sigflag is unrecognised.
+ * @throws If the NUT-10 secret is oversized or malformed, tags are duplicated, or sigflag is
+ *   unrecognised.
  */
 export function parseP2PKSecret(secret: string | Secret): Secret {
+  // Bound the parse work up front; the mint caps secrets at this length too.
+  if (typeof secret === 'string' && secret.length > MAX_SECRET_LENGTH) {
+    throw new CTSError(
+      `Secret too long (${secret.length} characters), maximum is ${MAX_SECRET_LENGTH}`,
+    );
+  }
   // HTLC extends P2PK, so we include it in our expected list.
   const parsed = assertSecretKind(['P2PK', 'HTLC'], secret);
   assertNoDuplicateP2PKTags(getTags(parsed));
@@ -245,8 +254,8 @@ export function dedupeP2PKPubkeys(keys: string[]): string[] {
  * Validate and normalize a {@link P2PKOptions} into a canonical, deduplicated copy (not mutated).
  *
  * @remarks
- * Dedupes keys, defaults the signature threshold, and rejects unsatisfiable thresholds. External
- * callers use `P2PKBuilder.fromOptions(p2pk).toOptions()`.
+ * Dedupes keys, defaults the signature threshold, and rejects unsatisfiable thresholds.
+ * `LockBuilder` and `PaymentRequest.toP2PKOptions()` call this internally.
  * @internal
  */
 export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
@@ -475,18 +484,24 @@ export function getP2PKWitnessSignatures(witness: Proof['witness']): string[] {
  *
  * @param witness From Proof.
  * @returns WitnessData object or undefined.
+ * @throws If a serialized witness is oversized.
  * @internal
  */
 export function parseWitnessData(witness: Proof['witness']): WitnessData | undefined {
   if (!witness) return undefined;
+  if (typeof witness === 'string' && witness.length > MAX_WITNESS_LENGTH) {
+    throw new CTSError(
+      `Witness too long (${witness.length} characters), maximum is ${MAX_WITNESS_LENGTH}`,
+    );
+  }
   let parsed: Partial<HTLCWitness & P2PKWitness>;
   try {
     parsed =
       typeof witness === 'string'
         ? (JSON.parse(witness) as Partial<HTLCWitness & P2PKWitness>)
         : witness;
-  } catch (e) {
-    console.error('Failed to parse witness string:', e);
+  } catch {
+    // Unparseable JSON is treated as no witness; the verdict reports the missing signatures.
     return undefined;
   }
   // A parsed primitive (eg "null", "1", "true") is not a witness; treat it as absent.
@@ -529,6 +544,9 @@ export function signP2PKProofs(
   const toHex = (k: PrivKey): string => (typeof k === 'string' ? k : bytesToHex(k));
   const privateKeyHex = Array.isArray(privateKey) ? privateKey.map(toHex) : toHex(privateKey);
   return proofs.map((proof, index) => {
+    // A v3 point secret carries no NUT-11 conditions and signs the transaction
+    // instead (NUT-10), so parsing it here would only log a failure per proof
+    if (isV3PointSecret(proof.secret)) return proof;
     const privateKeys: string[] = maybeDeriveP2BKPrivateKeys(privateKeyHex, proof);
     let signedProof = proof;
     for (const priv of privateKeys) {
@@ -546,29 +564,52 @@ export function signP2PKProofs(
 }
 
 /**
+ * Asserts the lock currently expects a signature from `privateKey`.
+ *
+ * @remarks
+ * Compared x-only, since Schnorr verification ignores parity. Nostr pubkeys prepend 02 by
+ * convention, ignoring actual Y-parity.
+ * @param secretStr - The NUT-11 P2PK secret.
+ * @param privateKey - A single private key (hex string or Uint8Array).
+ * @returns The signer's x-only pubkey.
+ * @throws If the secret is malformed or does not name the key.
+ * @internal
+ */
+export function assertSignerAuthorised(secretStr: string | Secret, privateKey: PrivKey): string {
+  const privKeyBytes = typeof privateKey === 'string' ? hexToBytes(privateKey) : privateKey;
+  const pubkey = bytesToHex(schnorr.getPublicKey(privKeyBytes)); // x-only
+  const witnesses = getP2PKExpectedWitnessPubkeys(secretStr);
+  if (!witnesses.some((w) => w.slice(2) === pubkey)) {
+    throw new CTSError(`Signature not required from [02|03]${pubkey}`);
+  }
+  return pubkey;
+}
+
+/**
  * Signs a single proof with the provided private key if required.
  *
  * @remarks
  * Will only sign if the proof requires a signature from the key.
  * @param proof - A proof to sign.
  * @param privateKey - A single private key (hex string or Uint8Array).
- * @param message - Optional. The message to sign (for SIG_ALL)
+ * @param message - Required for SIG_ALL proofs; not accepted for SIG_INPUTS proofs.
  * @returns Signed proofs.
- * @throws Error if signature is not required or proof is already signed.
+ * @throws Error if signature is not required, proof is already signed, a message is missing for a
+ *   SIG_ALL proof, or given for a SIG_INPUTS proof.
  */
 export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: MessageInput): Proof {
   const secret: Secret = parseP2PKSecret(proof.secret);
+  // SIG_INPUTS signs the secret and nothing else; only SIG_ALL takes a transaction message.
+  const sigAll = getP2PKSigFlag(secret) === 'SIG_ALL';
+  if (sigAll && message === undefined) {
+    throw new CTSError('Cannot sign a SIG_ALL proof without the message to sign');
+  }
+  if (!sigAll && message !== undefined) {
+    throw new CTSError('A message override is only valid for SIG_ALL proofs');
+  }
   message = message ?? proof.secret; // default message is secret
 
-  // Check if the private key is required to sign by checking its
-  // X-only pubkey (no 02/03 prefix) against the expected witness pubkeys
-  // NB: Nostr pubkeys prepend 02 by convention, ignoring actual Y-parity
-  const privKeyBytes = typeof privateKey === 'string' ? hexToBytes(privateKey) : privateKey;
-  const pubkey = bytesToHex(schnorr.getPublicKey(privKeyBytes)); // x-only
-  const witnesses = getP2PKExpectedWitnessPubkeys(secret);
-  if (!witnesses.length || !witnesses.some((w) => w.includes(pubkey))) {
-    throw new CTSError(`Signature not required from [02|03]${pubkey}`);
-  }
+  const pubkey = assertSignerAuthorised(secret, privateKey);
 
   // Check if the public key has already signed
   const signatures = getP2PKWitnessSignatures(proof.witness);
@@ -603,18 +644,19 @@ export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: Messa
  *
  * @param pubkey - The Cashu P2PK public key (hex-encoded, X-only or with 02/03 prefix).
  * @param proof - A Cashu proof.
- * @param message - Optional. The message that was signed (for SIG_ALL)
+ * @param message - Optional. The message that was signed (SIG_ALL only; ignored otherwise)
  * @returns True if one of the signatures is theirs, false otherwise.
  */
 export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: MessageInput): boolean {
   if (!proof.witness) {
     return false;
   }
-  // Check if message is needed
-  if (isP2PKSigAll([proof]) && !message) {
+  // SIG_INPUTS signatures are over the secret; only SIG_ALL verifies against the given message.
+  if (!isP2PKSigAll([proof])) {
+    message = proof.secret;
+  } else if (!message) {
     throw new CTSError('Cannot verify a SIG_ALL proof without the message to sign');
   }
-  message = message ?? proof.secret; // default message is secret
 
   const signatures = getP2PKWitnessSignatures(proof.witness);
   // See if any of the signatures belong to this pubkey. We need to do this
@@ -648,7 +690,7 @@ export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: Messa
  * isP2PKSpendAuthorised().
  * @param proof - The Proof to check.
  * @param logger - Optional logger (default: NULL_LOGGER)
- * @param message - Optional. The message to sign (for SIG_ALL)
+ * @param message - Optional. The message to sign (SIG_ALL only; ignored otherwise)
  * @returns A P2PKVerificationResult describing the spending outcome.
  * @throws If spending conditions are malformed, or verification is impossible.
  */
@@ -657,14 +699,15 @@ export function verifyP2PKSpendingConditions(
   logger: Logger = NULL_LOGGER,
   message?: MessageInput,
 ): P2PKVerificationResult {
-  // Check if message is needed
-  if (isP2PKSigAll([proof]) && !message) {
+  // SIG_INPUTS signatures are over the secret; only SIG_ALL verifies against the given message.
+  if (!isP2PKSigAll([proof])) {
+    message = proof.secret;
+  } else if (!message) {
     logger.error('Cannot verify a SIG_ALL proof without the message to sign');
     throw new CTSError('Cannot verify a SIG_ALL proof without the message to sign');
   }
 
   // Parse once — all tag reads below use the pre-parsed Secret (no re-parsing)
-  message = message ?? proof.secret;
   const secret: Secret = parseP2PKSecret(proof.secret);
 
   // Extract keys and validate cross-tag semantics
@@ -739,6 +782,42 @@ export function verifyP2PKSpendingConditions(
 }
 
 /**
+ * Reads a P2PK or HTLC secret as nutroot-shaped leaves: the main path at index 0 and, given a
+ * locktime, the refund path as an `after` leaf at index 1.
+ *
+ * @remarks
+ * Diagnostic shape for `Wallet.spendOptions`. A keyless `after` leaf (`n: 0`) is NUT-11's
+ * anyone-after-expiry, which no nutroot tree can encode: never serialize these leaves.
+ * @throws If the secret is not P2PK/HTLC or its tags break the NUT-11 rules.
+ * @internal
+ */
+export function p2pkSpendLeaves(secretStr: string | Secret): NutrootLeaf[] {
+  const secret = parseP2PKSecret(secretStr);
+  const mainKeys = getP2PKWitnessPubkeys(secret);
+  const refundKeys = getP2PKWitnessRefundkeys(secret);
+  const locktime = getLocktime(secret);
+  assertSpendingConditionRules({
+    mainKeyCount: mainKeys.length,
+    refundKeyCount: refundKeys.length,
+    nSigs: getTagInt(secret, 'n_sigs'),
+    nSigsRefund: getTagInt(secret, 'n_sigs_refund'),
+    hasLocktime: Number.isFinite(locktime),
+  });
+  // A path with no keys needs no signatures (keyless HTLC, or expiry with no refund keys).
+  const n = (tag: string, keys: string[]) =>
+    keys.length ? Math.max(getTagInt(secret, tag) ?? 1, 1) : 0;
+  const main: NutrootLeaf =
+    getSecretKind(secret) === 'HTLC'
+      ? { type: 'hashlock', n: n('n_sigs', mainKeys), keys: mainKeys, hash: getDataField(secret) }
+      : { type: 'threshold', n: n('n_sigs', mainKeys), keys: mainKeys };
+  if (!Number.isFinite(locktime)) return [main];
+  return [
+    main,
+    { type: 'after', n: n('n_sigs_refund', refundKeys), keys: refundKeys, time: locktime },
+  ];
+}
+
+/**
  * Verify P2PK spending conditions for a single input.
  *
  * @param proof - The Proof to check.
@@ -793,11 +872,11 @@ export function maybeDeriveP2BKPrivateKeys(privateKey: string | string[], proof:
 /**
  * Validates SIG_ALL inputs have matching secrets and tags.
  *
- * @param inputs Array of Proofs.
+ * @param inputs Array of Proofs (only `secret` is required).
  * @throws If proofs are not valid for SIG_ALL.
  * @internal
  */
-export function assertSigAllInputs(inputs: Proof[]): void {
+export function assertSigAllInputs(inputs: Array<Pick<Proof, 'secret'>>): void {
   if (inputs.length === 0) throw new CTSError('No proofs');
   // Check first proof
   const first = parseP2PKSecret(inputs[0].secret);
@@ -814,9 +893,6 @@ export function assertSigAllInputs(inputs: Proof[]): void {
       throw new CTSError('SIG_ALL inputs must share identical Secret.tags');
   }
 }
-
-// Domain-separation tag for the length-framed SIG_ALL message (shared by P2PK and HTLC).
-const SIG_ALL_DST = utf8ToBytes('Cashu_SigAllSig_v1');
 
 /**
  * Message aggregation for SIG_ALL (v0, unframed concatenation).
@@ -852,12 +928,13 @@ export function buildP2PKSigAllMessageV0(
 }
 
 /**
- * Message aggregation for SIG_ALL (spec v1): domain-separated, length-framed bytes.
+ * Message aggregation for SIG_ALL (spec v1): the length-framed `message` bytes.
  *
  * NOTE: Use `assertSigAllInputs()` to ensure valid message inputs.
  *
  * @remarks
- * Melt transactions MUST include the quoteId; swaps commit an empty quote field.
+ * Melt transactions MUST include the quoteId; swaps commit an empty quote field. The value that is
+ * signed is `hashP2PKSigAllMessageV1(message)`, not a plain SHA-256 of these bytes.
  * @param inputs Array of Proofs (only `secret` and `C` fields required).
  * @param outputs Array of OutputDataLike objects (OutputData, Factory etc).
  * @param quoteId Optional. Quote id for Melt transactions.
@@ -868,7 +945,7 @@ export function buildP2PKSigAllMessageV1(
   outputs: Array<Pick<OutputDataLike, 'blindedMessage'>>,
   quoteId?: string,
 ): Uint8Array {
-  const parts: Uint8Array[] = [SIG_ALL_DST];
+  const parts: Uint8Array[] = [];
   const pushFramed = (bytes: Uint8Array): void => {
     parts.push(numberToBytesBE(bytes.length, 4), bytes);
   };
@@ -878,7 +955,7 @@ export function buildP2PKSigAllMessageV1(
     pushFramed(hexToBytes(p.C));
   }
   for (const o of outputs) {
-    pushFramed(amountToMinimalBytes(o.blindedMessage));
+    pushFramed(minimalBytesBE(Amount.from(o.blindedMessage.amount).toBigInt()));
     pushFramed(hexToBytes(o.blindedMessage.B_));
   }
   // Manual copy rather than concatBytes(...parts): spreading per-field chunks
@@ -890,6 +967,18 @@ export function buildP2PKSigAllMessageV1(
     offset += part.length;
   }
   return message;
+}
+
+/**
+ * The 32-byte value signed for SIG_ALL v1: the BIP-340 tagged hash of the framed message.
+ *
+ * @remarks
+ * Shared by P2PK and HTLC. Sign and verify it as a prehashed digest (`{ digest }`), never as a
+ * string message.
+ * @internal
+ */
+export function hashP2PKSigAllMessageV1(message: Uint8Array): Uint8Array {
+  return taggedHash('Cashu_SigAllSig_v1', message);
 }
 
 /**
@@ -1009,11 +1098,11 @@ function getP2PKWitnessRefundkeys(secret: Secret): string[] {
 }
 
 function getLocktime(secret: Secret): number {
-  const ts = getTagInt(secret, 'locktime');
-  if (ts === undefined || !Number.isFinite(ts) || ts <= 0) {
-    return Infinity;
-  }
-  return ts;
+  // NUT-11: a locktime that is not a valid unix time makes the lock permanent, so a malformed
+  // value is passed through for the mint to judge rather than rejected here. Arity still throws.
+  const v = getTagScalar(secret, 'locktime');
+  const ts = v !== undefined && /^\d+$/.test(v) ? Number(v) : NaN;
+  return Number.isSafeInteger(ts) && ts > 0 ? ts : Infinity;
 }
 
 function deriveLockState(

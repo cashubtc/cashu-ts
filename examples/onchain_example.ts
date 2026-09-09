@@ -115,8 +115,7 @@ const runOnchainExample = async () => {
 
   // Last quote that fit (used as fallback if a later pass drifts over budget).
   let fitMelt:
-    | { amount: typeof meltAmount; quote: typeof meltQuote; chosen: typeof chosen }
-    | undefined;
+    { amount: typeof meltAmount; quote: typeof meltQuote; chosen: typeof chosen } | undefined;
 
   for (let pass = 2; pass <= 3; pass++) {
     const fitted = wallet.maxSpendableAfterFees(proofs, chosen.fee_reserve);

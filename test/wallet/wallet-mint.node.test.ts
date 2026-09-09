@@ -1,4 +1,4 @@
-import { hexToBytes } from '@noble/curves/utils.js';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect, vi } from 'vitest';
 
@@ -14,16 +14,26 @@ import {
   MeltQuoteState,
   MintQuoteState,
   type MintQuoteBolt11Response,
+  type MintQuoteSignRequest,
   Amount,
   type AmountLike,
   Mint,
+  OutputData,
   MintOperationError,
   type RequestFn,
 } from '../../src';
-import { verifyMintQuoteSignature } from '../../src/crypto';
+import { schnorrSignDigest, schnorrVerifyDigest, verifyMintQuoteSignature } from '../../src/crypto';
+import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import { verifyMintQuoteSignatureLegacy } from '../../src/crypto/NUT20';
+import { inputsForPayload } from '../../src/crypto/transcript';
 import request from '../../src/transport';
-import { Bytes, sumProofs } from '../../src/utils';
+import { sumProofs } from '../../src/utils';
+import {
+  DUMMY_TEST_KEYS,
+  DUMMY_TEST_KEYSET,
+  NUT02_V3_VECTOR1_KEYS,
+  NUT02_V3_VECTOR1_KEYSET,
+} from '../consts';
 
 import { useTestServer, mint, mintUrl, unit, logger, mintInfoResp, invoice } from './_setup';
 
@@ -83,7 +93,11 @@ describe('requestTokens', () => {
       request: 'lnbc...',
       amount: Amount.from(1),
       unit: 'sat',
+      method: 'bolt11',
       state: MintQuoteState.UNPAID,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      updated_at: null,
       expiry: null,
     };
     const proofs = await wallet.mintProofsBolt11(1, mintQuote);
@@ -118,7 +132,11 @@ describe('requestTokens', () => {
       request: 'lnbc...',
       amount: Amount.from(1),
       unit: 'sat',
+      method: 'bolt11',
       state: MintQuoteState.UNPAID,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      updated_at: null,
       expiry: null,
     };
     const preview = await wallet.prepareMint('bolt11', 1, mintQuote);
@@ -231,7 +249,11 @@ describe('requestTokens', () => {
       request: 'lnbc...',
       amount: Amount.from(5),
       unit: 'sat',
+      method: 'bolt11',
       state: MintQuoteState.UNPAID,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      updated_at: null,
       expiry: null,
       pubkey: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
     };
@@ -240,7 +262,11 @@ describe('requestTokens', () => {
       request: 'lnbc...',
       amount: Amount.from(3),
       unit: 'sat',
+      method: 'bolt11',
       state: MintQuoteState.UNPAID,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      updated_at: null,
       expiry: null,
     };
 
@@ -304,7 +330,11 @@ describe('requestTokens', () => {
       request: 'lnbc...',
       amount: Amount.from(3),
       unit: 'sat',
+      method: 'bolt11',
       state: MintQuoteState.UNPAID,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      updated_at: null,
       expiry: null,
       pubkey: pubkeyA,
     };
@@ -313,7 +343,11 @@ describe('requestTokens', () => {
       request: 'lnbc...',
       amount: Amount.from(2),
       unit: 'sat',
+      method: 'bolt11',
       state: MintQuoteState.UNPAID,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      updated_at: null,
       expiry: null,
       pubkey: pubkeyB,
     };
@@ -401,7 +435,11 @@ describe('requestTokens', () => {
       request: 'lnbc...',
       amount: Amount.from(2),
       unit: 'sat',
+      method: 'bolt11',
       state: MintQuoteState.UNPAID,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      updated_at: null,
       expiry: null,
     };
     const quoteB: MintQuoteBolt11Response = {
@@ -409,7 +447,11 @@ describe('requestTokens', () => {
       request: 'lnbc...',
       amount: Amount.from(3),
       unit: 'sat',
+      method: 'bolt11',
       state: MintQuoteState.UNPAID,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      updated_at: null,
       expiry: null,
     };
 
@@ -473,7 +515,11 @@ describe('requestTokens', () => {
       request: 'lnbc...',
       amount: Amount.from(1),
       unit: 'sat',
+      method: 'bolt11',
       state: MintQuoteState.UNPAID,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      updated_at: null,
       expiry: null,
       pubkey: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
     };
@@ -505,7 +551,11 @@ describe('requestTokens', () => {
       request: 'lnbc...',
       amount: Amount.from(1),
       unit: 'sat',
+      method: 'bolt11',
       state: MintQuoteState.UNPAID,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      updated_at: null,
       expiry: null,
     };
 
@@ -517,6 +567,215 @@ describe('requestTokens', () => {
     expect(typeof preview.payload.signature).toBe('string');
   });
 
+  describe('prepareMint signs a locked quote through a sign callback', () => {
+    const privkey = '0000000000000000000000000000000000000000000000000000000000000002';
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(hexToBytes(privkey)));
+    const lockedQuote = (): MintQuoteBolt11Response => ({
+      quote: 'callback-quote',
+      request: 'lnbc...',
+      amount: Amount.from(1),
+      unit: 'sat',
+      method: 'bolt11',
+      state: MintQuoteState.PAID,
+      amount_paid: Amount.from(1),
+      amount_issued: Amount.from(0),
+      updated_at: null,
+      expiry: null,
+      pubkey,
+    });
+
+    test('the callback signs the amended NUT-20 digest, with no legacy fallback', async () => {
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+      const seen: MintQuoteSignRequest[] = [];
+      const sign = async (request: MintQuoteSignRequest) => {
+        seen.push(request);
+        return schnorrSignDigest(request.digest, privkey);
+      };
+      const preview = await wallet.prepareMint('bolt11', 1, lockedQuote(), { sign });
+      expect(seen).toHaveLength(1);
+      expect(seen[0].quoteId).toBe('callback-quote');
+      expect(seen[0].outputs).toEqual(preview.payload.outputs);
+      // A pre-v3 quote has no transaction transcript to hand a signer.
+      expect(seen[0].transactionMessage).toBeUndefined();
+      expect(
+        verifyMintQuoteSignature(
+          pubkey,
+          'callback-quote',
+          preview.payload.outputs,
+          preview.payload.signature!,
+        ),
+      ).toBe(true);
+      expect(preview.legacySignature).toBeUndefined();
+    });
+
+    test('a signature the quote pubkey does not verify is refused before the mint sees it', async () => {
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+      const other = '0000000000000000000000000000000000000000000000000000000000000003';
+      const sign = async ({ digest }: MintQuoteSignRequest) => schnorrSignDigest(digest, other);
+      await expect(wallet.prepareMint('bolt11', 1, lockedQuote(), { sign })).rejects.toThrow(
+        /does not verify/,
+      );
+    });
+
+    test('privkey takes precedence, and a locked quote needs one or the other', async () => {
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+      const sign = vi.fn(async ({ digest }: MintQuoteSignRequest) =>
+        schnorrSignDigest(digest, privkey),
+      );
+      const preview = await wallet.prepareMint('bolt11', 1, lockedQuote(), { privkey, sign });
+      expect(sign).not.toHaveBeenCalled();
+      expect(preview.legacySignature).toBeDefined();
+      await expect(wallet.prepareMint('bolt11', 1, lockedQuote())).rejects.toThrow(
+        /without private key or sign callback/,
+      );
+    });
+
+    test('a v3 quote hands the signer the tagged message and its container', async () => {
+      // A v3 keyset whose id verifies against its keys, else the keychain drops it.
+      const v3Keyset = NUT02_V3_VECTOR1_KEYSET;
+      const v3Keys = NUT02_V3_VECTOR1_KEYS;
+      server.use(
+        http.get(mintUrl + '/v1/keysets', () => HttpResponse.json({ keysets: [v3Keyset] })),
+        http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [v3Keys] })),
+        http.get(mintUrl + '/v1/keys/' + v3Keyset.id, () =>
+          HttpResponse.json({ keysets: [v3Keys] }),
+        ),
+      );
+      const wallet = new Wallet(mintUrl, { unit });
+      await wallet.loadMint();
+      let seen: MintQuoteSignRequest | undefined;
+      const sign = async (request: MintQuoteSignRequest) => {
+        seen = request;
+        return schnorrSignDigest(request.digest, privkey);
+      };
+      const preview = await wallet.prepareMint('bolt11', 1, lockedQuote(), { sign });
+      expect(seen?.transactionMessage).toBeDefined();
+      expect(seen?.inputContainer).toBeDefined();
+      // The digest is the quote's input digest under the transaction transcript (NUT-10), so the
+      // signer can recompute it from transaction message and input container alone.
+      const tx = inputsForPayload({
+        mintQuotes: [{ quoteId: 'callback-quote', amount: 1 }],
+        outputs: preview.payload.outputs,
+      });
+      expect(bytesToHex(seen!.digest)).toBe(bytesToHex(tx.quotes.get('callback-quote')!.digest));
+      expect(bytesToHex(seen!.transactionMessage!)).toBe(bytesToHex(tx.transactionMessage));
+      expect(preview.legacySignature).toBeUndefined();
+    });
+
+    // A pre-v3 keyset beside the v3 one, so custom outputs can name a keyset the wallet did not
+    // pick.
+    function serveBothKeysets() {
+      server.use(
+        http.get(mintUrl + '/v1/keysets', () =>
+          HttpResponse.json({ keysets: [DUMMY_TEST_KEYSET, NUT02_V3_VECTOR1_KEYSET] }),
+        ),
+        http.get(mintUrl + '/v1/keys', () =>
+          HttpResponse.json({ keysets: [DUMMY_TEST_KEYS, NUT02_V3_VECTOR1_KEYS] }),
+        ),
+        http.get(mintUrl + '/v1/keys/' + NUT02_V3_VECTOR1_KEYSET.id, () =>
+          HttpResponse.json({ keysets: [NUT02_V3_VECTOR1_KEYS] }),
+        ),
+      );
+    }
+
+    test.each([
+      [DUMMY_TEST_KEYSET.id, NUT02_V3_VECTOR1_KEYSET.id],
+      [NUT02_V3_VECTOR1_KEYSET.id, DUMMY_TEST_KEYSET.id],
+    ] as const)(
+      'fetches string quote IDs for custom outputs: wallet %s, output %s',
+      async (keysetId, outputId) => {
+        serveBothKeysets();
+        const wallet = new Wallet(mintUrl, { unit, keysetId });
+        await wallet.loadMint();
+        const quote = lockedQuote();
+        const fetchQuote = vi.spyOn(wallet, 'checkMintQuoteBolt11').mockResolvedValue(quote);
+        vi.spyOn(wallet, 'completeMint').mockResolvedValue([]);
+        const data = [OutputData.createSingleRandomData(1, outputId)];
+
+        await expect(
+          wallet.mintProofsBolt11(1, quote, { privkey }, { type: 'custom', data }),
+        ).resolves.toEqual([]);
+        expect(fetchQuote).not.toHaveBeenCalled();
+
+        await expect(
+          wallet.mintProofsBolt11(1, quote.quote, { privkey }, { type: 'custom', data }),
+        ).resolves.toEqual([]);
+        expect(fetchQuote).toHaveBeenCalledExactlyOnceWith(quote.quote);
+      },
+    );
+
+    test('custom outputs on a v3 keyset sign the transaction digest whatever keyset the wallet holds', async () => {
+      serveBothKeysets();
+      const wallet = new Wallet(mintUrl, { unit });
+      await wallet.loadMint();
+      const data = [OutputData.createSingleRandomData(1, NUT02_V3_VECTOR1_KEYSET.id)];
+      const preview = await wallet.prepareMint(
+        'bolt11',
+        1,
+        lockedQuote(),
+        { privkey, keysetId: DUMMY_TEST_KEYSET.id },
+        { type: 'custom', data },
+      );
+      const tx = inputsForPayload({
+        mintQuotes: [{ quoteId: 'callback-quote', amount: 1 }],
+        outputs: preview.payload.outputs,
+      });
+      expect(
+        schnorrVerifyDigest(
+          preview.payload.signature!,
+          tx.quotes.get('callback-quote')!.digest,
+          pubkey,
+        ),
+      ).toBe(true);
+      expect(preview.legacySignature).toBeUndefined();
+    });
+
+    test('a mint plan mixing a v3 output with another keyset is rejected before the request is built', async () => {
+      serveBothKeysets();
+      const wallet = new Wallet(mintUrl, { unit });
+      await wallet.loadMint();
+      const quote = { ...lockedQuote(), amount: Amount.from(2), amount_paid: Amount.from(2) };
+      const data = [
+        OutputData.createSingleRandomData(1, NUT02_V3_VECTOR1_KEYSET.id),
+        OutputData.createSingleRandomData(1, DUMMY_TEST_KEYSET.id),
+      ];
+      await expect(
+        wallet.prepareMint('bolt11', 2, quote, { privkey }, { type: 'custom', data }),
+      ).rejects.toThrow(/share that keyset/);
+    });
+
+    test('a batch onto custom v3 outputs signs every quote over the transaction digest', async () => {
+      serveBothKeysets();
+      const wallet = new Wallet(mintUrl, { unit });
+      await wallet.loadMint();
+      const quotes = ['batch-a', 'batch-b'].map((q) => ({ ...lockedQuote(), quote: q }));
+      const data = [OutputData.createSingleRandomData(2, NUT02_V3_VECTOR1_KEYSET.id)];
+      const preview = await wallet.prepareBatchMint(
+        'bolt11',
+        quotes.map((quote) => ({ amount: 1, quote })),
+        { privkey, keysetId: DUMMY_TEST_KEYSET.id },
+        { type: 'custom', data },
+      );
+      const tx = inputsForPayload({
+        mintQuotes: quotes.map((q) => ({ quoteId: q.quote, amount: 1 })),
+        outputs: preview.payload.outputs,
+      });
+      quotes.forEach((q, i) => {
+        expect(
+          schnorrVerifyDigest(
+            preview.payload.signatures![i]!,
+            tx.quotes.get(q.quote)!.digest,
+            pubkey,
+          ),
+        ).toBe(true);
+      });
+      expect(preview.legacySignatures).toEqual([null, null]);
+    });
+  });
+
   test('prepareMint fails when multiple privkeys and no quote pubkey', async () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
@@ -526,7 +785,11 @@ describe('requestTokens', () => {
       request: 'lnbc...',
       amount: Amount.from(1),
       unit: 'sat',
+      method: 'bolt11',
       state: MintQuoteState.UNPAID,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      updated_at: null,
       expiry: null,
     };
 
@@ -548,7 +811,11 @@ describe('requestTokens', () => {
       request: 'lnbc...',
       amount: Amount.from(1),
       unit: 'sat',
+      method: 'bolt11',
       state: MintQuoteState.UNPAID,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      updated_at: null,
       expiry: null,
       pubkey: '02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5',
     };
@@ -562,6 +829,9 @@ describe('requestTokens', () => {
 
   test('test requestTokens bad response', async () => {
     server.use(
+      http.get(mintUrl + '/v1/mint/quote/bolt11/badquote', () => {
+        return HttpResponse.json({});
+      }),
       http.post(mintUrl + '/v1/mint/bolt11', () => {
         return HttpResponse.json({});
       }),
@@ -574,7 +844,11 @@ describe('requestTokens', () => {
       request: 'lnbc...',
       amount: Amount.from(1),
       unit: 'sat',
+      method: 'bolt11',
       state: MintQuoteState.UNPAID,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      updated_at: null,
       expiry: null,
     };
     await expect(wallet.mintProofsBolt11(1, mintQuote)).rejects.toThrow(
@@ -606,7 +880,11 @@ describe('requestTokens', () => {
       request: 'lnbc...',
       amount: Amount.from(1),
       unit: 'sat',
+      method: 'bolt11',
       state: MintQuoteState.UNPAID,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      updated_at: null,
       expiry: null,
     };
 
@@ -616,7 +894,7 @@ describe('requestTokens', () => {
     });
 
     expect(preview.outputData.length).toBeGreaterThan(0);
-    const secrets = preview.outputData.map((p) => Bytes.toHex(p.secret));
+    const secrets = preview.outputData.map((p) => bytesToHex(p.secret));
     expect(new Set(secrets).size).toBe(secrets.length);
     expect(await wallet.counters.peekNext(keysetId)).toBe(preview.outputData.length);
   });
@@ -649,7 +927,11 @@ describe('mint quote signature legacy fallback', () => {
       request: 'lnbc...',
       amount: Amount.from(amount),
       unit: 'sat',
+      method: 'bolt11',
       state: MintQuoteState.PAID,
+      amount_paid: Amount.from(amount),
+      amount_issued: Amount.from(0),
+      updated_at: null,
       expiry: null,
       pubkey,
     };
@@ -1148,6 +1430,7 @@ describe('generic mint/melt methods', () => {
         http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
           HttpResponse.json({
             quote: 'bolt11-quote-1',
+            pubkey: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
             request: 'lnbc10u1pfake', // HRP encodes the quoted 1,000 sat
             unit: 'sat',
             amount: 1000,
@@ -1159,7 +1442,10 @@ describe('generic mint/melt methods', () => {
       const wallet = new Wallet(mint, { unit });
       await wallet.loadMint();
 
-      const quote = await wallet.createMintQuoteBolt11(1000);
+      const quote = await wallet.createMintQuoteBolt11(
+        1000,
+        '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+      );
 
       expect(quote.quote).toBe('bolt11-quote-1');
       expect(quote.amount).toBeInstanceOf(Amount);
@@ -1182,7 +1468,12 @@ describe('generic mint/melt methods', () => {
       const wallet = new Wallet(mint, { unit });
       await wallet.loadMint();
 
-      await expect(wallet.createMintQuoteBolt11(1)).rejects.toThrow(/invoice amount/i);
+      await expect(
+        wallet.createMintQuoteBolt11(
+          1,
+          '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+        ),
+      ).rejects.toThrow(/invoice amount/i);
     });
 
     test('rejects a mint quote whose amount differs from the request', async () => {
@@ -1201,7 +1492,12 @@ describe('generic mint/melt methods', () => {
       const wallet = new Wallet(mint, { unit });
       await wallet.loadMint();
 
-      await expect(wallet.createMintQuoteBolt11(1)).rejects.toThrow(/amount/i);
+      await expect(
+        wallet.createMintQuoteBolt11(
+          1,
+          '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+        ),
+      ).rejects.toThrow(/amount/i);
     });
 
     test('accepts a mint quote whose invoice matches the requested sat amount', async () => {
@@ -1209,6 +1505,7 @@ describe('generic mint/melt methods', () => {
         http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
           HttpResponse.json({
             quote: 'bolt11-amount-match',
+            pubkey: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
             request: invoice, // 2,000 sat fixture invoice
             unit: 'sat',
             amount: 2000,
@@ -1220,7 +1517,10 @@ describe('generic mint/melt methods', () => {
       const wallet = new Wallet(mint, { unit });
       await wallet.loadMint();
 
-      const quote = await wallet.createMintQuoteBolt11(2000);
+      const quote = await wallet.createMintQuoteBolt11(
+        2000,
+        '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+      );
       expect(quote.quote).toBe('bolt11-amount-match');
     });
 
@@ -1296,8 +1596,12 @@ describe('generic mint/melt methods', () => {
         quote: 'bolt11-quote-merge',
         request: 'lnbc-local',
         unit: 'usd',
+        method: 'bolt11',
         amount: Amount.from(1),
         state: MintQuoteState.UNPAID,
+        amount_paid: Amount.from(0),
+        amount_issued: Amount.from(0),
+        updated_at: null,
         expiry: null,
       });
 
@@ -1393,8 +1697,12 @@ describe('generic mint/melt methods', () => {
           quote: 'bolt11-batch-2',
           request: 'local-request',
           unit: 'sat',
+          method: 'bolt11',
           amount: Amount.from(1),
           state: MintQuoteState.UNPAID,
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
+          updated_at: null,
           expiry: null,
         },
       ]);
@@ -1445,10 +1753,11 @@ describe('generic mint/melt methods', () => {
           quote: 'bolt12-batch-1',
           request: 'lno...',
           unit: 'sat',
+          method: 'bolt12',
           amount: null,
           amount_paid: Amount.from(0),
           amount_issued: Amount.from(0),
-          state: MintQuoteState.UNPAID,
+          updated_at: null,
           expiry: null,
           pubkey: '02a1',
         },
@@ -1600,9 +1909,12 @@ describe('generic mint/melt methods', () => {
       const wallet = new Wallet(mint, { unit: 'sat' });
       await wallet.loadMint();
 
-      await expect(wallet.createMintQuoteBolt11(10)).rejects.toThrow(
-        "Mint does not support bolt11 mint for unit 'sat'",
-      );
+      await expect(
+        wallet.createMintQuoteBolt11(
+          10,
+          '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+        ),
+      ).rejects.toThrow("Mint does not support bolt11 mint for unit 'sat'");
     });
 
     test('checkMintQuoteOnchain returns normalized onchain quote', async () => {
@@ -1704,9 +2016,10 @@ describe('generic mint/melt methods', () => {
         quote: 'bolt12-partial',
         request: 'lno1...',
         unit: 'sat',
+        method: 'bolt12',
         amount: Amount.from(5),
         pubkey: '02f01fd65b16d80f7eff6ef2e0b3c5a8028b745796bbdc06cb503022262b2ebb51',
-        state: MintQuoteState.PAID,
+        updated_at: null,
         expiry: null,
         amount_paid: Amount.from(5),
         amount_issued: Amount.from(3),
@@ -1777,7 +2090,9 @@ describe('generic mint/melt methods', () => {
         quote: 'onchain-partial',
         request: 'bc1qdeposit',
         unit: 'sat',
+        method: 'onchain',
         pubkey: '02f01fd65b16d80f7eff6ef2e0b3c5a8028b745796bbdc06cb503022262b2ebb51',
+        updated_at: null,
         expiry: null,
         amount_paid: Amount.from(5),
         amount_issued: Amount.from(3),
@@ -1823,7 +2138,9 @@ describe('generic mint/melt methods', () => {
         quote: 'onchain-mint-paid',
         request: 'bc1qdeposit',
         unit: 'sat',
+        method: 'onchain',
         pubkey,
+        updated_at: null,
         expiry: null,
         amount_paid: Amount.from(1),
         amount_issued: Amount.from(0),
@@ -1958,6 +2275,7 @@ describe('generic mint/melt methods', () => {
         quote: 'bolt11-melt-merge',
         amount: Amount.from(1),
         unit: 'usd',
+        method: 'bolt11',
         state: MeltQuoteState.UNPAID,
         expiry: 1,
         fee_reserve: Amount.from(1),
@@ -2154,6 +2472,7 @@ describe('generic mint/melt methods', () => {
         request: 'bc1qrecipient',
         amount: Amount.from(10),
         unit: 'sat',
+        method: 'onchain',
         fee_options: [
           { fee_index: 0, fee_reserve: Amount.from(5), estimated_blocks: 1 },
           { fee_index: 1, fee_reserve: Amount.from(2), estimated_blocks: 6 },
@@ -2187,6 +2506,7 @@ describe('generic mint/melt methods', () => {
         request: 'bc1qrecipient',
         amount: Amount.from(10),
         unit: 'sat',
+        method: 'onchain',
         fee_options: [{ fee_index: 0, fee_reserve: Amount.from(2), estimated_blocks: 6 }],
         selected_fee_index: null,
         state: MeltQuoteState.UNPAID,
@@ -2210,6 +2530,7 @@ describe('generic mint/melt methods', () => {
         request: 'bc1qrecipient',
         amount: Amount.from(10),
         unit: 'sat',
+        method: 'onchain',
         fee_options: [{ fee_index: 0, fee_reserve: Amount.from(2), estimated_blocks: 6 }],
         selected_fee_index: null,
         state: MeltQuoteState.UNPAID,
@@ -2259,6 +2580,7 @@ describe('generic mint/melt methods', () => {
         request: 'bc1qrecipient',
         amount: Amount.from(10),
         unit: 'sat',
+        method: 'onchain',
         fee_options: [{ fee_index: 0, fee_reserve: Amount.from(2), estimated_blocks: 6 }],
         selected_fee_index: null,
         state: MeltQuoteState.UNPAID,
@@ -2309,6 +2631,7 @@ describe('generic mint/melt methods', () => {
         request: 'bc1qrecipient',
         amount: Amount.from(10),
         unit: 'sat',
+        method: 'onchain',
         fee_options: [{ fee_index: 0, fee_reserve: Amount.from(2), estimated_blocks: 6 }],
         selected_fee_index: null,
         state: MeltQuoteState.UNPAID,

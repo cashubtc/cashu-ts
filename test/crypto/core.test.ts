@@ -1,5 +1,6 @@
 import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { bytesToNumberBE } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { hexToBytes, bytesToHex } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
@@ -13,6 +14,7 @@ import {
   pointToHex,
   blindMessage,
   unblindSignature,
+  computeMessageDigest,
   createBlindSignature,
   constructUnblindedSignature,
   createRandomRawBlindedMessage,
@@ -25,9 +27,12 @@ import {
   schnorrSignDigest,
   schnorrSignMessage,
   schnorrVerifyDigest,
+  schnorrVerifyMessage,
+  sha256 as sha256Export,
+  taggedHash,
+  findSigningKey,
 } from '../../src/crypto';
 import { verifyUnblindedSignature } from '../../src/crypto/NUT01';
-import { Bytes } from '../../src/utils';
 
 const SECRET_MESSAGE = 'test_message';
 
@@ -78,7 +83,7 @@ describe('test blinding message', () => {
     const secretUInt8 = enc.encode(SECRET_MESSAGE);
     const { B_ } = blindMessage(
       secretUInt8,
-      Bytes.toBigInt(
+      bytesToNumberBE(
         hexToBytes('0000000000000000000000000000000000000000000000000000000000000001'),
       ),
     );
@@ -103,7 +108,7 @@ describe('test blinding message', () => {
 describe('test unblinding signature', () => {
   test('testing string 0000....01', async () => {
     const C_ = pointFromHex('02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2');
-    const r = Bytes.toBigInt(
+    const r = bytesToNumberBE(
       hexToBytes('0000000000000000000000000000000000000000000000000000000000000001'),
     );
     const A = pointFromHex('020000000000000000000000000000000000000000000000000000000000000001');
@@ -253,6 +258,28 @@ describe('schnorrVerifyDigest', () => {
   });
 });
 
+describe('computeMessageDigest', () => {
+  test('rejects unpaired UTF-16 surrogates instead of hashing colliding strings', () => {
+    // Both strings encode to the same U+FFFD replacement bytes under a lenient TextEncoder.
+    expect(() => computeMessageDigest('\ud800')).toThrow();
+    expect(() => computeMessageDigest('\ud801')).toThrow();
+  });
+
+  test('still digests well-formed strings, surrogate pairs included', () => {
+    expect(() => computeMessageDigest('hello')).not.toThrow();
+    expect(() => computeMessageDigest('🥜')).not.toThrow(); // U+1F95C, a valid pair
+  });
+});
+
+describe('schnorrVerifyMessage', () => {
+  test('fails closed rather than throwing when the message is ill-formed', () => {
+    const privkey = '0000000000000000000000000000000000000000000000000000000000000001';
+    const pubkey = bytesToHex(secp256k1.getPublicKey(hexToBytes(privkey), true));
+    expect(schnorrVerifyMessage('00'.repeat(64), '\ud800', pubkey)).toBe(false);
+    expect(() => schnorrVerifyMessage('00'.repeat(64), '\ud800', pubkey, true)).toThrow();
+  });
+});
+
 describe('getValidSigners / meetsSignerThreshold', () => {
   const privkey = '0000000000000000000000000000000000000000000000000000000000000001';
   const compressed = bytesToHex(secp256k1.getPublicKey(hexToBytes(privkey), true)); // 02-prefixed
@@ -277,5 +304,62 @@ describe('getValidSigners / meetsSignerThreshold', () => {
   test('non-string pubkey entries fail closed without throwing', () => {
     const pubkeys = [42 as unknown as string, compressed];
     expect(getValidSigners([signature], message, pubkeys)).toEqual([compressed]);
+  });
+});
+
+describe('hash exports', () => {
+  test('sha256 hashes raw bytes', () => {
+    expect(bytesToHex(sha256Export(new Uint8Array(0)))).toBe(
+      'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    );
+    const msg = new TextEncoder().encode('cashu');
+    expect(bytesToHex(sha256Export(msg))).toBe(bytesToHex(sha256(msg)));
+  });
+
+  test('taggedHash matches the BIP340 construction', () => {
+    const tag = 'Cashu_NutrootLeaf';
+    const msg = hexToBytes(
+      '00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9',
+    );
+    const tagHash = sha256(new TextEncoder().encode(tag));
+    expect(bytesToHex(taggedHash(tag, msg))).toBe(
+      bytesToHex(sha256(new Uint8Array([...tagHash, ...tagHash, ...msg]))),
+    );
+  });
+
+  test('taggedHash concatenates multiple messages', () => {
+    const a = hexToBytes('aa'.repeat(32));
+    const b = hexToBytes('bb'.repeat(32));
+    expect(bytesToHex(taggedHash('t', a, b))).toBe(
+      bytesToHex(taggedHash('t', hexToBytes('aa'.repeat(32) + 'bb'.repeat(32)))),
+    );
+  });
+});
+
+describe('findSigningKey', () => {
+  const priv = (n: number) => n.toString(16).padStart(64, '0');
+  const pub = (key: string) => bytesToHex(secp256k1.getPublicKey(hexToBytes(key), true));
+  const flip = (pubkey: string) => (pubkey.startsWith('02') ? '03' : '02') + pubkey.slice(2);
+
+  test('returns the candidate that derives the pubkey, case-insensitively', () => {
+    expect(findSigningKey(pub(priv(2)), [priv(1), priv(2)])).toBe(priv(2));
+    expect(findSigningKey(pub(priv(2)).toUpperCase(), priv(2))).toBe(priv(2));
+  });
+
+  test('an x-only import signs for the published parity through the negated scalar', () => {
+    // A nostr key is published as 02||x whatever its y; the wallet may hold the scalar of the
+    // other twin. The returned key must derive exactly the pubkey the quote names.
+    for (const key of [priv(1), priv(2), priv(3), priv(0x1234)]) {
+      const twin = flip(pub(key));
+      const signing = findSigningKey(twin, key);
+      expect(signing).not.toBe(key);
+      expect(pub(signing)).toBe(twin);
+    }
+  });
+
+  test('throws when no candidate matches on x', () => {
+    expect(() => findSigningKey(pub(priv(9)), [priv(1), priv(2)])).toThrow(
+      /No private key matches/,
+    );
   });
 });

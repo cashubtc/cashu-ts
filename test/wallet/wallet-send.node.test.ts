@@ -1,4 +1,4 @@
-import { hexToBytes } from '@noble/curves/utils.js';
+import { bytesToNumberBE, hexToBytes } from '@noble/curves/utils.js';
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect } from 'vitest';
 
@@ -8,11 +8,16 @@ import {
   CTSError,
   OutputData,
   createEphemeralCounterSource,
+  serializeSwapPreview,
+  deserializeSwapPreview,
+  type SerializedProof,
+  type SerializedSwapPreview,
   type Proof,
   type ProofLike,
   type OutputConfig,
+  createHTLCHash,
+  createHTLCsecret,
 } from '../../src';
-import { Bytes } from '../../src/utils';
 
 import { useTestServer, mint, mintUrl, unit, logger, mintInfoResp } from './_setup';
 
@@ -101,6 +106,24 @@ describe('sendOffline witness normalization', () => {
     const { send } = wallet.sendOffline(1, proofs);
     expect(send).toHaveLength(1);
     expect(send[0].witness).toBe(JSON.stringify(witnessObj));
+  });
+
+  test('strips a stale v3 transaction witness from an offline send', async () => {
+    const v3Id = `02${'11'.repeat(32)}`;
+    const v3Keyset = { id: v3Id, unit, active: true, input_fee_ppk: 0, final_expiry: null };
+    server.use(http.get(mintUrl + '/v1/keysets', () => HttpResponse.json({ keysets: [v3Keyset] })));
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const proof: Proof = {
+      id: v3Id,
+      amount: Amount.from(1),
+      secret: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+      C: '11'.repeat(48),
+      witness: JSON.stringify({ signatures: ['00'.repeat(64)] }),
+      spend_info: { k: '00'.repeat(31) + '01' },
+    };
+
+    expect(wallet.sendOffline(1, [proof]).send[0].witness).toBeUndefined();
   });
 
   test('no-change when proof has no witness', async () => {
@@ -294,6 +317,23 @@ describe('sendOffline requireDleq', () => {
     expect(send[0].dleq).toBeUndefined();
   });
 
+  test('keeps spend_info on offline-selected send proofs', async () => {
+    // The send proofs travel to the receiver, not the mint: for a v3 proof the
+    // spend_info (bearer key, tree) is the only thing that can spend it.
+    mockV3Keyset();
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const spendInfo = { k: '11'.repeat(32), tree: ['aa'.repeat(40)] };
+    const v3Proofs: Proof[] = [
+      { id: v3Id, amount: Amount.from(1), secret: v3Secret, C: v3C, spend_info: spendInfo },
+    ];
+
+    const { send } = wallet.sendOffline(1, v3Proofs);
+    expect(send).toHaveLength(1);
+    expect(send[0].spend_info).toEqual(spendInfo);
+  });
+
   test('rejects v1/v2 proofs without DLEQ when requireDleq is true', async () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
@@ -344,6 +384,160 @@ describe('send', () => {
     expect(result.send[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
     expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
+  });
+
+  test('send with a preimage stamps the HTLC inputs it swaps', async () => {
+    let inputs: Array<{ witness?: string }> = [];
+    server.use(
+      http.post(mintUrl + '/v1/swap', async ({ request }) => {
+        ({ inputs } = (await request.json()) as { inputs: Array<{ witness?: string }> });
+        return HttpResponse.json({
+          signatures: [
+            {
+              id: '00bd033559de27d0',
+              amount: 1,
+              C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+            },
+            {
+              id: '00bd033559de27d0',
+              amount: 1,
+              C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+            },
+          ],
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const { hash, preimage } = createHTLCHash();
+    const locked: Proof[] = [
+      {
+        id: '00bd033559de27d0',
+        amount: Amount.from(2),
+        secret: createHTLCsecret(hash),
+        C: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+      },
+    ];
+
+    // 1 of 2 sat cannot match offline, so the proof goes to the mint stamped
+    const result = await wallet.send(1, locked, { preimage });
+    expect(result.send).toHaveLength(1);
+    expect(JSON.parse(inputs[0].witness!)).toEqual({ preimage });
+  });
+
+  test('send with a preimage swaps an exact offline match instead of forwarding it locked', async () => {
+    let inputs: Array<{ witness?: string }> = [];
+    server.use(
+      http.post(mintUrl + '/v1/swap', async ({ request }) => {
+        ({ inputs } = (await request.json()) as { inputs: Array<{ witness?: string }> });
+        return HttpResponse.json({
+          signatures: [
+            {
+              id: '00bd033559de27d0',
+              amount: 1,
+              C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+            },
+          ],
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const { hash, preimage } = createHTLCHash();
+    const secret = createHTLCsecret(hash);
+    const locked: Proof[] = [
+      {
+        id: '00bd033559de27d0',
+        amount: Amount.from(1),
+        secret,
+        C: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+      },
+    ];
+
+    // 1 of 1 sat matches offline, but the preimage means the sender is redeeming the HTLC
+    const result = await wallet.send(1, locked, { preimage });
+    expect(inputs).toHaveLength(1);
+    expect(JSON.parse(inputs[0].witness!)).toEqual({ preimage });
+    expect(result.send).toHaveLength(1);
+    expect(result.send[0].secret).not.toBe(secret);
+  });
+
+  test('swap preview round trips through serialize/deserialize and replays identically', async () => {
+    const bodies: string[] = [];
+    server.use(
+      http.post(mintUrl + '/v1/swap', async ({ request }) => {
+        const body = await request.text();
+        bodies.push(body);
+        const { outputs } = JSON.parse(body) as { outputs: Array<{ id: string; amount: number }> };
+        return HttpResponse.json({
+          signatures: outputs.map((o) => ({
+            id: o.id,
+            amount: o.amount,
+            C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+          })),
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    // A 3-sat input sending 1 produces change, so keepOutputs round trips too.
+    const threeSat: Proof[] = [{ ...proofs[0], amount: Amount.from(3) }];
+    const preview = await wallet.prepareSwapToSend(1, threeSat);
+    expect(preview.keepOutputs?.length).toBeGreaterThan(0);
+    const stored = JSON.stringify(serializeSwapPreview(preview));
+    const revived = deserializeSwapPreview(JSON.parse(stored) as SerializedSwapPreview);
+
+    const first = await wallet.completeSwap(preview);
+    const replayed = await wallet.completeSwap(revived);
+
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1]).toBe(bodies[0]);
+    expect(replayed.send).toHaveLength(1);
+    expect(replayed.send[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
+    expect(first.send[0].secret).toBe(replayed.send[0].secret);
+  });
+
+  test('serializeSwapPreview omits unselected proofs', () => {
+    const serialized = serializeSwapPreview({
+      amount: Amount.from(1),
+      fees: Amount.from(0),
+      inputs: [proofs[0]],
+      unselectedProofs: [{ ...proofs[0], secret: 'not-part-of-the-replay' }],
+    });
+
+    expect(serialized).not.toHaveProperty('unselectedProofs');
+    expect(JSON.stringify(serialized)).not.toContain('not-part-of-the-replay');
+  });
+
+  test('deserializeSwapPreview rejects malformed output data', () => {
+    const bad: SerializedSwapPreview = {
+      amount: '1',
+      fees: '0',
+      inputs: [],
+      sendOutputs: [
+        {
+          blindedMessage: { amount: '1', B_: '02beef', id: '00bd033559de27d0' },
+          blindingFactor: 'not-a-number',
+          secret: 'abcd',
+        },
+      ],
+    };
+    expect(() => deserializeSwapPreview(bad)).toThrow(CTSError);
+  });
+
+  test('deserializeSwapPreview wraps non-Error throws', () => {
+    const bad: SerializedSwapPreview = {
+      amount: '1',
+      fees: '0',
+      get inputs(): SerializedProof[] {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- exercising the non-Error path
+        throw 'not-an-error';
+      },
+    };
+    expect(() => deserializeSwapPreview(bad)).toThrow(
+      'Invalid SerializedSwapPreview: not-an-error',
+    );
   });
 
   test('rejects missing DLEQ on swap when mint advertises NUT-12', async () => {
@@ -504,7 +698,7 @@ describe('send', () => {
         // p2pk: { pubkey: 'pk' }
       },
       {
-        send: { type: 'p2pk', options: { kind: 'P2PK', data: '02' + 'aa'.repeat(32) } },
+        send: { type: 'lock', options: { mainKeys: ['02' + 'aa'.repeat(32)] } },
       },
     );
 
@@ -1307,7 +1501,7 @@ describe('deterministic', () => {
       const hexSeed =
         'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8';
 
-      const numberR = Bytes.toBigInt(hexToBytes(r));
+      const numberR = bytesToNumberBE(hexToBytes(r));
       const decoder = new TextDecoder();
 
       const data = OutputData.createSingleDeterministicData(
@@ -1343,7 +1537,7 @@ describe('deterministic', () => {
       const hexSeed =
         'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8';
 
-      const numberR = Bytes.toBigInt(hexToBytes(r));
+      const numberR = bytesToNumberBE(hexToBytes(r));
       const decoder = new TextDecoder();
 
       const data = OutputData.createSingleDeterministicData(
@@ -1356,4 +1550,51 @@ describe('deterministic', () => {
       expect(data.blindingFactor).toBe(numberR);
     },
   );
+});
+
+describe('output secret uniqueness (NUT-10)', () => {
+  test('rejects a factory that hands every output the same secret', async () => {
+    // A key backs at most one secret: two outputs of the same amount sharing one unblind to the
+    // same C, so the second is the first again and its value is gone with no error anywhere.
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const keyset = wallet.keyChain.getKeyset(wallet.keysetId);
+    const fixedSecret = new TextEncoder().encode('one-secret-for-every-output');
+    const factory = () =>
+      new OutputData(
+        { amount: Amount.from(1), B_: '02'.padEnd(66, 'a'), id: keyset.id },
+        1n,
+        fixedSecret,
+      );
+    expect(() =>
+      (wallet as unknown as { createOutputData: (...a: unknown[]) => unknown }).createOutputData(
+        Amount.from(2),
+        keyset,
+        { type: 'custom', data: [factory(), factory()] },
+      ),
+    ).toThrow(/Duplicate output secret/);
+  });
+
+  test('rejects a secret shared between a send output and a keep output', async () => {
+    // Send and keep are generated separately; the guard has to see them together, or the
+    // collision reaches the mint, gets signed twice, and burns one output on the first spend.
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const keyset = wallet.keyChain.getKeyset(wallet.keysetId);
+    const fixedSecret = new TextEncoder().encode('one-secret-for-send-and-keep');
+    const output = () =>
+      new OutputData(
+        { amount: Amount.from(1), B_: '02'.padEnd(66, 'a'), id: keyset.id },
+        1n,
+        fixedSecret,
+      );
+    const inputs = [
+      { id: keyset.id, amount: Amount.from(2), secret: 'x', C: '02'.padEnd(66, 'b') },
+    ];
+    expect(() =>
+      (
+        wallet as unknown as { createSwapTransaction: (...a: unknown[]) => unknown }
+      ).createSwapTransaction(inputs, [output()], [output()]),
+    ).toThrow(/Duplicate output secret/);
+  });
 });

@@ -1,12 +1,20 @@
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test, vi } from 'vitest';
 
-import { getPubKeyFromPrivKey, type P2PKOptions } from '../../src/crypto';
+import {
+  createBlindSignature,
+  createDLEQProof,
+  getPubKeyFromPrivKey,
+  hashToCurve,
+  pointFromHex,
+  type P2PKOptions,
+} from '../../src/crypto';
 import { Amount, type AmountLike } from '../../src/model/Amount';
 import { OutputData, isOutputDataFactory } from '../../src/model/OutputData';
 import type { OutputDataFactory, OutputDataLike } from '../../src/model/OutputData';
 import { DefaultOutputDataCreator } from '../../src/model/OutputDataCreator';
 import type { HasKeysetKeys, SerializedBlindedSignature, Proof } from '../../src/model/types';
-import { Bytes } from '../../src/utils';
 
 describe('DefaultOutputDataCreator', () => {
   test('delegates single deterministic output creation to OutputData', () => {
@@ -37,8 +45,8 @@ describe('DefaultOutputDataCreator', () => {
   });
 
   test('default P2PK batch shares one ephemeral key for a blinded SIG_ALL split', () => {
-    const privkey = Bytes.fromHex('01'.repeat(32));
-    const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
+    const privkey = hexToBytes('01'.repeat(32));
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(privkey));
     const keyset: HasKeysetKeys = {
       id: '009a1f293253e41e',
       keys: { '1': 'unused', '2': 'unused', '4': 'unused' },
@@ -55,8 +63,8 @@ describe('DefaultOutputDataCreator', () => {
   });
 
   test('a subclassed single-output P2PK hook is still called once per split amount', () => {
-    const privkey = Bytes.fromHex('01'.repeat(32));
-    const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
+    const privkey = hexToBytes('01'.repeat(32));
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(privkey));
     const keyset: HasKeysetKeys = {
       id: '009a1f293253e41e',
       keys: { '1': 'unused', '2': 'unused', '4': 'unused' },
@@ -170,8 +178,8 @@ describe('OutputData helpers', () => {
   });
 
   test('preserves ephemeral P2PK blinding data when serializing output data', () => {
-    const privkey = Bytes.fromHex('01'.repeat(32));
-    const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
+    const privkey = hexToBytes('01'.repeat(32));
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(privkey));
     const output = OutputData.createSingleP2PKData(
       {
         kind: 'P2PK',
@@ -188,8 +196,8 @@ describe('OutputData helpers', () => {
   });
 
   test('keeps blinded HTLC lock keys in pubkeys tags', () => {
-    const privkey = Bytes.fromHex('01'.repeat(32));
-    const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
+    const privkey = hexToBytes('01'.repeat(32));
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(privkey));
     const output = OutputData.createSingleP2PKData(
       {
         kind: 'HTLC',
@@ -215,8 +223,8 @@ describe('OutputData helpers', () => {
   });
 
   test('a blinded SIG_ALL batch shares one ephemeral key across all outputs', () => {
-    const privkey = Bytes.fromHex('01'.repeat(32));
-    const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
+    const privkey = hexToBytes('01'.repeat(32));
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(privkey));
     const keyset: HasKeysetKeys = {
       id: '009a1f293253e41e',
       keys: { '1': 'unused', '2': 'unused', '4': 'unused' },
@@ -248,8 +256,8 @@ describe('OutputData helpers', () => {
   });
 
   test('a blinded SIG_INPUTS batch blinds each output with its own ephemeral key', () => {
-    const privkey = Bytes.fromHex('01'.repeat(32));
-    const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
+    const privkey = hexToBytes('01'.repeat(32));
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(privkey));
     const keyset: HasKeysetKeys = {
       id: '009a1f293253e41e',
       keys: { '1': 'unused', '2': 'unused', '4': 'unused' },
@@ -271,7 +279,7 @@ describe('OutputData helpers', () => {
 });
 
 describe('OutputData.toProof', () => {
-  test('rejects a signature whose keyset id does not match the output', () => {
+  test('rejects a signature whose keyset id does not match the keys', () => {
     const outputKeysetId = '009a1f293253e41e';
     const wrongKeysetId = '00ad268c4d1f5826';
     const output = OutputData.createSingleRandomData(1, outputKeysetId);
@@ -282,8 +290,23 @@ describe('OutputData.toProof', () => {
       C_: '03' + '00'.repeat(32),
     };
     expect(() => output.toProof(sig, keyset)).toThrow(
-      /Mint signature keyset id .* does not match output/,
+      /Mint signature keyset id .* does not match keys for/,
     );
+  });
+
+  test("unblinds a blank with the keyset the signature names, not the blank's", () => {
+    const G = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+    const output = OutputData.createSingleRandomData(0, '009a1f293253e41e');
+    const keyset: HasKeysetKeys = { id: '00ad268c4d1f5826', keys: { 1: G } };
+    const sig: SerializedBlindedSignature = {
+      id: '00ad268c4d1f5826',
+      amount: Amount.from(1),
+      C_: G,
+    };
+    expect(output.toProof(sig, keyset)).toMatchObject({
+      id: '00ad268c4d1f5826',
+      amount: Amount.from(1),
+    });
   });
 
   test('maps malformed secp C_ to a CTSError with NUT-09 hint', () => {
@@ -326,5 +349,42 @@ describe('OutputData.toProof', () => {
     expect(() => blank.toProof(sig, keyset)).toThrow(
       /Mint returned invalid signature or amount\. .*NUT-09/,
     );
+  });
+});
+
+describe('OutputData.toProof across a keyset rotation', () => {
+  test('a non-blank output rejects a signature from another keyset even with matching keys', () => {
+    const G = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+    const output = OutputData.createSingleRandomData(1, '009a1f293253e41e');
+    const keysetB: HasKeysetKeys = { id: '00ad268c4d1f5826', keys: { 1: G } };
+    const sig: SerializedBlindedSignature = { id: keysetB.id, amount: Amount.from(1), C_: G };
+    expect(() => output.toProof(sig, keysetB)).toThrow(/does not match output/);
+  });
+
+  test('a real signature under another keyset unblinds to a proof the mint would accept', () => {
+    // Mint side: the blank names keyset A, but the mint signs it with keyset B's key for amount 1
+    const mintPrivKey = secp256k1.utils.randomSecretKey();
+    const keysetB: HasKeysetKeys = {
+      id: '00ad268c4d1f5826',
+      keys: { '1': bytesToHex(getPubKeyFromPrivKey(mintPrivKey)) },
+    };
+    const output = OutputData.createSingleRandomData(0, '009a1f293253e41e');
+    const B_ = pointFromHex(output.blindedMessage.B_);
+    const blindSig = createBlindSignature(B_, mintPrivKey, keysetB.id);
+    const dleq = createDLEQProof(B_, mintPrivKey);
+    const sig: SerializedBlindedSignature = {
+      id: keysetB.id,
+      amount: Amount.from(1),
+      C_: blindSig.C_.toHex(true),
+      dleq: { s: bytesToHex(dleq.s), e: bytesToHex(dleq.e) },
+    };
+
+    // toProof verifies the DLEQ against keyset B; a mismatched key would throw here
+    const proof = output.toProof(sig, keysetB);
+    expect(proof.id).toBe(keysetB.id);
+    // and the unblinded C is k * hash_to_curve(secret), which is what the mint checks on redeem
+    const Y = hashToCurve(new TextEncoder().encode(proof.secret));
+    const expectedC = Y.multiply(secp256k1.Point.Fn.fromBytes(mintPrivKey));
+    expect(pointFromHex(proof.C).equals(expectedC)).toBe(true);
   });
 });

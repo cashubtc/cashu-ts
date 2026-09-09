@@ -1,6 +1,11 @@
 export interface AuthProvider {
-  // Blind-auth, NUT-22
-  getBlindAuthToken(input: { method: 'GET' | 'POST'; path: string }): Promise<string>;
+  // Blind-auth, NUT-22. `body` is the exact serialized request body, if any: a version 02 BAT
+  // signs the request transcript (method, target, body hash), so the bytes must be the sent bytes.
+  getBlindAuthToken(input: {
+    method: 'GET' | 'POST';
+    path: string;
+    body?: string;
+  }): Promise<string>;
   ensure?(minTokens: number): Promise<void>;
 
   // Clear-auth, NUT-21

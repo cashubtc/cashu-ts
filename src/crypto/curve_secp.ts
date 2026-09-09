@@ -1,25 +1,24 @@
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
-import { randomBytes, bytesToHex } from '@noble/curves/utils.js';
+import { bytesToNumberBE, numberToBytesBE } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { utf8ToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, concatBytes, randomBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
-import { Bytes } from '../utils';
 
 import type { BlindSignature, RawBlindedMessage, UnblindedSignature } from './core';
 
 const DOMAIN_SEPARATOR = utf8ToBytes('Secp256k1_HashToCurve_Cashu_');
 
 export function hashToCurve(secret: Uint8Array): WeierstrassPoint<bigint> {
-  const msgToHash = sha256(Bytes.concat(DOMAIN_SEPARATOR, secret));
+  const msgToHash = sha256(concatBytes(DOMAIN_SEPARATOR, secret));
   const counter = new Uint32Array(1);
   const maxIterations = 2 ** 16;
   for (let i = 0; i < maxIterations; i++) {
     const counterBytes = new Uint8Array(counter.buffer);
-    const hash = sha256(Bytes.concat(msgToHash, counterBytes));
+    const hash = sha256(concatBytes(msgToHash, counterBytes));
     try {
-      return pointFromHex(bytesToHex(Bytes.concat(new Uint8Array([0x02]), hash)));
+      return pointFromHex(bytesToHex(concatBytes(new Uint8Array([0x02]), hash)));
     } catch {
       counter[0]++;
     }
@@ -59,7 +58,7 @@ export function normalizeSecpPubkey(pk: string): string {
   if (typeof pk !== 'string' || pk.length !== 66 || !(pk.startsWith('02') || pk.startsWith('03'))) {
     const got = typeof pk === 'string' ? `length ${pk.length}` : typeof pk;
     throw new CTSError(
-      `Invalid pubkey: expected 33-byte compressed hex (66 chars); for an x-only (nostr) key, prepend '02', got ${got}`,
+      `Invalid pubkey: expected 33-byte compressed hex (66 chars); for an x-only (nostr) key, prepend '02' and normalize its secret key with normalizeXOnlySecretKey, got ${got}`,
     );
   }
   const hex = pk.toLowerCase();
@@ -90,6 +89,24 @@ export function isValidSecpPubkey(pk: string): boolean {
 
 export function getPubKeyFromPrivKey(privKey: Uint8Array): Uint8Array<ArrayBufferLike> {
   return secp256k1.getPublicKey(privKey, true);
+}
+
+/**
+ * Normalize a secret key to the even-Y convention used by x-only (nostr) keys.
+ *
+ * @remarks
+ * An x-only public key names a point without its parity, and the convention reads it as even-Y.
+ * Import a key that way and the stored scalar may be the odd-Y one, whose point is the negation of
+ * what counterparties see; derivations that add tweaks to it (receiver-keyed sends) then land on
+ * the wrong point and silently fail to match. Call this when importing a key whose public half was
+ * x-only. Keys imported as full 33-byte pubkeys are already unambiguous: do not normalize those.
+ * @param privKey 32-byte secret key.
+ * @returns The scalar whose public key has even Y: `privKey`, or `n - privKey`.
+ */
+export function normalizeXOnlySecretKey(privKey: Uint8Array): Uint8Array<ArrayBufferLike> {
+  if (getPubKeyFromPrivKey(privKey)[0] === 0x02) return Uint8Array.from(privKey);
+  const d = bytesToNumberBE(privKey);
+  return numberToBytesBE(secp256k1.Point.Fn.ORDER - d, 32);
 }
 
 export function createRandomSecretKey(): Uint8Array<ArrayBufferLike> {

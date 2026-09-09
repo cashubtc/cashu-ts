@@ -1,10 +1,11 @@
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { bytesToNumberBE, equalBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
-import { Bytes, hexToNumber, numberToHexPadded64 } from '../utils';
+import { hexToNumber, numberToHexPadded64 } from '../utils';
 
 import { pointFromHex } from './curve_secp';
 
@@ -36,18 +37,35 @@ export function deriveP2BKBlindedPubkeys(
   const slotOffset = dataIsPubkey ? 0 : 1;
   if (!pubkeys.length) return { blinded: [], Ehex: '' };
   // Create fresh ephemeral secret (e) if not supplied, and calculate pubkey (E)
-  eBytes = eBytes ?? secp256k1.utils.randomSecretKey(); // 32 bytes
-  const e = secp256k1.Point.Fn.fromBytes(eBytes); // bigint in [1..n-1]
-  const E = secp256k1.getPublicKey(eBytes, true); // SEC1 compressed (bytes)
+  const secret = eBytes ?? secp256k1.utils.randomSecretKey(); // 32 bytes
+  const E = secp256k1.getPublicKey(secret, true); // SEC1 compressed (bytes)
   // Blind each pubkey in turn
-  const blinded = pubkeys.map((pubkey, i) => {
-    const P = pointFromHex(pubkey);
-    const r = deriveP2BKBlindingTweakFromECDH(P, e, i + slotOffset);
-    const P_ = P.add(secp256k1.Point.BASE.multiply(r));
-    if (P_.equals(secp256k1.Point.ZERO)) throw new CTSError('Blinded key at infinity');
-    return P_.toHex(true);
-  });
+  const blinded = pubkeys.map((pubkey, i) =>
+    deriveP2BKBlindedPubkeyAtSlot(pubkey, secret, i + slotOffset),
+  );
   return { blinded, Ehex: bytesToHex(E) };
+}
+
+/**
+ * Blind one public key at one slot: `P' = P + r_i*G`.
+ *
+ * @remarks
+ * Sender side, for the positional slot map of nutroot secrets (NUT-28): the same static key at two
+ * slots gets distinct tweaks from the distinct index. `eBytes` must be the ephemeral secret whose
+ * `E` travels with the proof.
+ * @throws If the blinded key is at infinity.
+ */
+export function deriveP2BKBlindedPubkeyAtSlot(
+  pubkeyHex: string,
+  eBytes: Uint8Array,
+  slotIndex: number,
+): string {
+  const e = secp256k1.Point.Fn.fromBytes(eBytes); // bigint in [1..n-1]
+  const P = pointFromHex(pubkeyHex);
+  const r = deriveP2BKBlindingTweakFromECDH(P, e, slotIndex);
+  const P_ = P.add(secp256k1.Point.BASE.multiply(r));
+  if (P_.equals(secp256k1.Point.ZERO)) throw new CTSError('Blinded key at infinity');
+  return P_.toHex(true);
 }
 
 /**
@@ -141,7 +159,7 @@ export function deriveP2BKSecretKey(
   // Check x only equality, using constant time compare
   const xP = P.toBytes(true).slice(1);
   const xNaturalPub = naturalPub.slice(1);
-  if (!Bytes.equals(xP, xNaturalPub)) {
+  if (!equalBytes(xP, xNaturalPub)) {
     return null; // this P' is not for this privkey
   }
   // Select by parity, comparing the low bit only
@@ -184,15 +202,42 @@ function deriveP2BKBlindingTweakFromECDH(
   const Zx = point.multiply(scalar).toBytes(true).slice(1);
   const iByte = new Uint8Array([slotIndex & 0xff]);
   // Derive deterministic blinding factor (r):
-  // Note: Bytes.toBigInt is safe here because we explicitly guard against
+  // Note: bytesToNumberBE is safe here because we explicitly guard against
   // out-of-range values below, throwing rather than silently normalizing.
-  let r = Bytes.toBigInt(sha256(Bytes.concat(P2BK_DST, Zx, iByte)));
+  let r = bytesToNumberBE(sha256(concatBytes(P2BK_DST, Zx, iByte)));
+  /* c8 ignore next 6 — retry needs sha256 to land outside the curve order (~2^-128). */
   if (r === 0n || r >= secp256k1.Point.CURVE().n) {
     // Very unlikely to get here!
-    r = Bytes.toBigInt(sha256(Bytes.concat(P2BK_DST, Zx, iByte, new Uint8Array([0xff]))));
+    r = bytesToNumberBE(sha256(concatBytes(P2BK_DST, Zx, iByte, new Uint8Array([0xff]))));
     if (r === 0n || r >= secp256k1.Point.CURVE().n) {
       throw new CTSError('P2BK: tweak derivation failed');
     }
   }
   return r;
+}
+
+/**
+ * Both parity candidates for a receiver-side slot key: `(p + r_i) mod n` and `(n - p + r_i) mod n`.
+ *
+ * @remarks
+ * Nutroot receiver flow (NUT-28): the caller verifies each candidate against the proof secret (bare
+ * `K = k*G`, or tweaked via the disclosed tree), so no blinded-key comparison happens here. A
+ * scalar imported from an x-only context may be `n - d` for the published point; `Zx` is
+ * parity-independent, so both candidates share one ECDH.
+ */
+export function deriveP2BKSlotSecretKeyCandidates(
+  Ehex: string,
+  privkeyHex: string,
+  slotIndex = 0,
+): [string, string] {
+  const E = pointFromHex(Ehex);
+  const p = hexToNumber(privkeyHex);
+  const n = secp256k1.Point.CURVE().n;
+  if (p <= 0n || p >= n) throw new CTSError('Invalid private key');
+  const r = deriveP2BKBlindingTweakFromECDH(E, p, slotIndex);
+  const std = (p + r) % n;
+  const neg = (n - p + r) % n;
+  /* c8 ignore next — zero requires r = n - p or r = p, rejection-sampled away. */
+  if (std === 0n || neg === 0n) throw new CTSError('P2BK: derived slot key is zero');
+  return [numberToHexPadded64(std), numberToHexPadded64(neg)];
 }

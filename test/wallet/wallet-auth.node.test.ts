@@ -100,7 +100,7 @@ describe('Auth header redirect handling', () => {
     };
   }
 
-  test('protected requests refuse redirects; unprotected requests are unchanged', async () => {
+  test('requests carrying a token or a body refuse redirects; bodiless ones are unchanged', async () => {
     server.use(http.get(mintUrl + '/v1/info', () => HttpResponse.json(protectedSwapInfo)));
 
     const authedSpy = vi.fn((args: { endpoint: string }) =>
@@ -111,9 +111,18 @@ describe('Auth header redirect handling', () => {
     const authedArgs = authedSpy.mock.calls.find((c) => c[0].endpoint.includes('/v1/swap'))![0];
     expect(authedArgs).toMatchObject({ redirect: 'error' });
 
+    // No auth token, but the body carries proofs.
     const plainSpy = vi.fn().mockResolvedValue({ signatures: [] });
     const plainMint = new Mint(mintUrl);
     await plainMint.swap({ inputs: [], outputs: [] }, plainSpy);
-    expect(plainSpy.mock.calls[0][0]).not.toHaveProperty('redirect');
+    expect(plainSpy.mock.calls[0][0]).toMatchObject({ redirect: 'error' });
+
+    const getSpy = vi
+      .fn()
+      .mockResolvedValue({ quote: 'q', request: 'lnbc', unit: 'sat', amount: 1, state: 'UNPAID' });
+    await plainMint.checkMintQuote('bolt11', 'q', {
+      customRequest: getSpy as unknown as RequestFn,
+    });
+    expect(getSpy.mock.calls[0][0]).not.toHaveProperty('redirect');
   });
 });

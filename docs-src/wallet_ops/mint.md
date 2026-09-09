@@ -35,17 +35,32 @@ const newProofs = await wallet.ops
 
 ## 4) Locked BOLT11 quote signing
 
+Every new quote is locked to a pubkey you supply, and minting signs with its private key. The
+wallet never stores the key: keep it safe until the quote is redeemed.
+
 ```ts
-// Create a locked mint quote
-const pubkey = '02...'; // Your public key
-const quote = await wallet.createLockedMintQuote(64, pubkey);
+// Make a lock keypair (seed-derived on a seeded wallet, random otherwise)
+const { pubkey, privkey } = await wallet.createQuoteLockKey();
+const quote = await wallet.createMintQuoteBolt11(64, pubkey);
 
 // Sign and mint
 const newProofs = await wallet.ops
   .mintBolt11(50, quote)
-  .privkey('user-secret-key') // sign locked mint quote
+  .privkey(privkey) // sign locked mint quote
   .run();
 ```
+
+When the key lives elsewhere (a NIP-07 extension, a hardware signer), pass `.sign(fn)` instead:
+`fn` receives `{ digest, quoteId, outputs }` (plus `transactionMessage` and `inputContainer` for a
+v3 quote) and returns BIP-340 signature hex over `digest`. The wallet checks it against the quote's
+pubkey before sending. No legacy NUT-20 fallback signature is produced this way. See
+[Browser Signers](../usage/nip07_signers.md#locked-mint-quotes-signquote) for the extension case.
+
+A seeded wallet that lost the key can re-derive it with
+`wallet.recoverQuoteLockKey(quote.pubkey)`. For a quote that will never be paid (eg a fee
+estimation), `createQuoteLockKey({ random: true })` forces a random key even on a seeded wallet:
+no counter consumed, nothing for the recovery scan to wade through, unrecoverable by design. For
+an unlocked quote on a pre-v3 keyset, drop to the generic `createMintQuote()`.
 
 ## 5) Two-step BOLT12 mint
 

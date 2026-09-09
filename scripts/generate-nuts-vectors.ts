@@ -225,8 +225,9 @@ function nut13V3Derive(seed: Uint8Array, keysetIdHex: string, counter: number) {
 
 function nut13V3Vector() {
   // Probe counters under a fixed seed/keyset until we find one where attempt=0 is rejected.
+  // The keyset id is the NUT-02 V3 vector-1 id, so this stays in sync with the derivation.
   const seed = utf8ToBytes('nut13 v3 test seed');
-  const keysetIdHex = '02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd';
+  const keysetIdHex = nut02V3Keyset([1, 2], 'sat').id;
   for (let counter = 0; counter < 200; counter++) {
     const out = nut13V3Derive(seed, keysetIdHex, counter);
     if (out.attempt > 0) {

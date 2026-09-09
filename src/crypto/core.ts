@@ -1,16 +1,21 @@
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
-import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
-import { sha256 } from '@noble/hashes/sha2.js';
+import { sha256 as nobleSha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
+import { hasLoneSurrogate } from '../utils/bytes';
 
 /**
  * Private key type - can be hex string or Uint8Array.
  */
 export type PrivKey = Uint8Array | string;
 export type DigestInput = Uint8Array | string; // hex string or bytes
-export type MessageInput = Uint8Array | string; // raw message bytes or UTF-8 string
+/**
+ * A message already reduced to the 32-byte value BIP-340 signs (eg a tagged hash).
+ */
+export type PrehashedMessage = { digest: DigestInput };
+export type MessageInput = string | PrehashedMessage; // UTF-8 string, or a prehashed digest
 export type BlindSignature = {
   C_: WeierstrassPoint<bigint>;
   id: string;
@@ -35,13 +40,37 @@ export type UnblindedSignature = {
 };
 
 // ------------------------------
+// Hashing
+// ------------------------------
+
+/**
+ * SHA-256 over raw bytes.
+ *
+ * @remarks
+ * For UTF-8 message strings, use `computeMessageDigest`.
+ */
+export function sha256(message: Uint8Array): Uint8Array {
+  return nobleSha256(message);
+}
+
+/**
+ * BIP340-style tagged hash: `SHA256(SHA256(tag) || SHA256(tag) || messages)`.
+ */
+export function taggedHash(tag: string, ...messages: Uint8Array[]): Uint8Array {
+  const tagHash = sha256(utf8ToBytes(tag));
+  return sha256(concatBytes(tagHash, tagHash, ...messages));
+}
+
+// ------------------------------
 // Schnorr Signing / Verification
 // ------------------------------
 
 /**
  * Computes the SHA-256 hash of a message.
  *
- * @param message To hash (a UTF-8 string, encoded before hashing, or raw message bytes).
+ * @remarks
+ * For raw byte messages, use `sha256`. A `PrehashedMessage` is returned as its digest, unchanged.
+ * @param message To hash (UTF-8 encoded before hashing), or a prehashed digest.
  * @param asHex Optional: True returns a hex-encoded hash string; otherwise returns raw bytes.
  * @returns SHA-256 hash as raw bytes or hex string, depending on `asHex`.
  */
@@ -49,8 +78,15 @@ export function computeMessageDigest(message: MessageInput): Uint8Array;
 export function computeMessageDigest(message: MessageInput, asHex: false): Uint8Array;
 export function computeMessageDigest(message: MessageInput, asHex: true): string;
 export function computeMessageDigest(message: MessageInput, asHex = false): string | Uint8Array {
-  const messageBytes = typeof message === 'string' ? new TextEncoder().encode(message) : message;
-  const hashBytes = sha256(messageBytes);
+  if (typeof message !== 'string') {
+    const digest = typeof message.digest === 'string' ? hexToBytes(message.digest) : message.digest;
+    return asHex ? bytesToHex(digest) : digest;
+  }
+  // Ill-formed UTF-16 would hash as its U+FFFD replacement, aliasing distinct messages.
+  if (hasLoneSurrogate(message)) {
+    throw new CTSError('Message must be well-formed UTF-16');
+  }
+  const hashBytes = sha256(new TextEncoder().encode(message));
   return asHex ? bytesToHex(hashBytes) : hashBytes;
 }
 
@@ -77,7 +113,7 @@ export const schnorrSignDigest = (digest: DigestInput, privateKey: PrivKey): str
  * @remarks
  * Signatures are non-deterministic because schnorr.sign() generates a new random auxiliary value
  * (auxRand) each time it is called.
- * @param message - The message to sign (UTF-8 string or raw bytes).
+ * @param message - The message to sign (UTF-8 string or prehashed digest).
  * @param privateKey - The private key to sign with (hex string or Uint8Array).
  * @returns The signature in hex format.
  */
@@ -93,7 +129,7 @@ export const schnorrSignMessage = (message: MessageInput, privateKey: PrivKey): 
  * This function swallows Schnorr verification errors (eg invalid signature / pubkey format) and
  * treats them as false. If you want to throw such errors, use the throws param.
  * @param signature - The Schnorr signature (hex-encoded).
- * @param message - The message to verify (UTF-8 string or raw bytes).
+ * @param message - The message to verify (UTF-8 string or prehashed digest).
  * @param pubkey - The Cashu P2PK public key (hex-encoded, X-only or with 02/03 prefix).
  * @param throws - True: throws on error, False: swallows errors and returns false.
  * @returns True if the signature is valid, false otherwise.
@@ -105,7 +141,14 @@ export const schnorrVerifyMessage = (
   pubkey: string,
   throws: boolean = false,
 ): boolean => {
-  return schnorrVerifyDigest(signature, computeMessageDigest(message), pubkey, throws);
+  try {
+    return schnorrVerifyDigest(signature, computeMessageDigest(message), pubkey, throws);
+  } catch (e) {
+    if (throws) {
+      throw e;
+    }
+  }
+  return false;
 };
 
 /**
@@ -154,16 +197,25 @@ function toXOnlyPubkey(pubkey: string): string {
 /**
  * Find the private key that can sign for a given compressed public key.
  *
+ * @remarks
+ * Matches on the x coordinate: a key imported from an x-only context (any nostr key) is published
+ * as `02 || x` but its scalar derives the odd-y twin half the time. That twin is `n - d`, and it is
+ * what gets returned, so the caller signs for the point the quote actually names.
  * @param pubkey Compressed SEC1 public key (33 bytes, hex-encoded) to match against.
  * @param privkeys One or more candidate private keys (hex-encoded).
- * @returns The matching private key hex string.
+ * @returns The private key hex string that signs for `pubkey`.
  * @throws If no candidate key derives to the expected pubkey.
  */
 export function findSigningKey(pubkey: string, privkeys: string | string[]): string {
   const keys = Array.isArray(privkeys) ? privkeys : [privkeys];
+  const wanted = pubkey.toLowerCase();
   for (const key of keys) {
     const derived = bytesToHex(secp256k1.getPublicKey(hexToBytes(key), true));
-    if (derived.toLowerCase() === pubkey.toLowerCase()) return key;
+    if (derived === wanted) return key;
+    if (derived.slice(2) === wanted.slice(2)) {
+      const d = secp256k1.Point.Fn.fromBytes(hexToBytes(key));
+      return bytesToHex(secp256k1.Point.Fn.toBytes(secp256k1.Point.Fn.neg(d)));
+    }
   }
   throw new CTSError(`No private key matches quote pubkey ${pubkey}`);
 }

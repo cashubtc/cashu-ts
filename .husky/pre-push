@@ -1,13 +1,13 @@
 #!/usr/bin/env sh
 
-echo "Running pre-push: lint + format checks"
+echo "Running pre-push: lint + format + type checks"
 
 if ! command -v npm >/dev/null 2>&1; then
 	echo "npm not found in PATH. Install Node.js/npm before pushing." >&2
 	exit 1
 fi
 
-if ! npm run check-lint && npm run check-format; then
+if ! npm run check-lint || ! npm run check-format || ! npm run check-types; then
 	echo "Pre-push checks failed. Push aborted." >&2
 	exit 1
 fi

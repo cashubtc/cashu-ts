@@ -1,18 +1,34 @@
-import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import {
   type DLEQ,
   type G1Point,
   type G2Point,
+  assertV3PointSecret,
   batchVerifyUnblindedSignatureBls,
   isBlsKeyset,
+  isV3PointSecret,
   pointFromHex,
   pointFromHexG1,
   pointFromHexG2,
   verifyDLEQProof_reblind,
   verifyUnblindedSignatureBls,
 } from '../crypto';
+import { hashToCurveBls } from '../crypto/curve_bls';
+import { verifyHTLCHash } from '../crypto/NUT14';
+import {
+  countLeafSigners,
+  parseNutrootLeafHex,
+  verifyNutrootCommitment,
+  verifyNutrootSpendInfo,
+} from '../crypto/nutroot';
+import {
+  inputDigest,
+  proofInputContainer,
+  spendCommitment,
+  verifyTransactionInputWitness,
+} from '../crypto/transcript';
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { PaymentRequest } from '../model/PaymentRequest';
@@ -28,12 +44,18 @@ import type {
   V4ProofTemplate,
   HasKeysetKeys,
 } from '../model/types';
+import type { SpendReceipt } from '../wallet/types/responses';
 
-import { encodeBase64ToJson, encodeBase64toUint8, encodeUint8toBase64Url } from './base64';
-import { Bytes } from './Bytes';
+import {
+  decodeBase64UrlToJson,
+  decodeBase64UrlToUint8,
+  encodeUint8ToBase64,
+  encodeUint8ToBase64Url,
+} from './base64';
+import { decodeUtf8Document, minimalBytesBE } from './bytes';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { JSONInt } from './JSONInt';
-import { MAX_SPLIT_OUTPUTS } from './limits';
+import { MAX_PAYLOAD_DECODE_ATTEMPTS, MAX_PAYLOAD_LENGTH, MAX_SPLIT_OUTPUTS } from './limits';
 
 /**
  * Splits the amount into denominations of the provided keyset.
@@ -264,12 +286,30 @@ function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
   const encodedData = encodeCBOR(tokenTemplate);
   const prefix = 'cashu';
   const version = 'B';
-  const base64Data = encodeUint8toBase64Url(encodedData);
+  const base64Data = encodeUint8ToBase64Url(encodedData);
   return prefix + version + base64Data;
 }
 
+/**
+ * True when a token entry's witness is a v3 transaction witness, so it must not travel.
+ *
+ * @remarks
+ * A v3 witness signs one transaction's digest, so it means nothing outside that transaction and a
+ * token carries no transaction. Tokens drop it in both directions: emitting one hands the next
+ * owner a witness that can never verify, and keeping one on receive leaves it in place of the
+ * signature the new owner must produce, so their sweep is refused for a witness a stranger chose.
+ *
+ * Dispatch is on the keyset, not on the secret's shape. A pre-v3 secret is an arbitrary string and
+ * may happen to look like a compressed point, and that proof's witness is a NUT-11 witness which
+ * does travel. Which rules apply follows the keyset (NUT-10), the same rule the transcript uses.
+ */
+function isV3TransactionWitness(keysetId: string, secret: string): boolean {
+  return isBlsKeyset(keysetId) && isV3PointSecret(secret);
+}
+
 function templateFromToken(token: Token): TokenV4Template {
-  const idMap: { [id: string]: Proof[] } = {};
+  // Keyed by token-supplied IDs, so a plain object would resolve `__proto__` etc. to inherited members.
+  const idMap = Object.create(null) as { [id: string]: Proof[] };
   const mint = token.mint;
   for (let i = 0; i < token.proofs.length; i++) {
     const proof = token.proofs[i];
@@ -282,31 +322,37 @@ function templateFromToken(token: Token): TokenV4Template {
   const tokenTemplate: TokenV4Template = {
     m: mint,
     u: token.unit || 'sat',
-    t: Object.keys(idMap).map(
-      (id: string): V4InnerToken => ({
-        i: hexToBytes(id),
-        p: idMap[id].map(
-          (p: Proof): V4ProofTemplate => ({
-            a: p.amount.toBigInt(),
-            s: p.secret,
-            c: hexToBytes(p.C),
-            ...(p.dleq && {
-              d: {
-                e: hexToBytes(p.dleq.e),
-                s: hexToBytes(p.dleq.s),
-                r: hexToBytes(p.dleq.r ?? '00'),
-              },
-            }),
-            ...(p.p2pk_e && {
-              pe: hexToBytes(p.p2pk_e),
-            }),
-            ...(p.witness && {
-              w: JSON.stringify(p.witness),
-            }),
+    t: Object.keys(idMap).map((id: string): V4InnerToken => ({
+      i: hexToBytes(id),
+      p: idMap[id].map((p: Proof): V4ProofTemplate => ({
+        a: p.amount.toBigInt(),
+        s: p.secret,
+        c: hexToBytes(p.C),
+        ...(p.dleq && {
+          d: {
+            e: hexToBytes(p.dleq.e),
+            s: hexToBytes(p.dleq.s),
+            r: hexToBytes(p.dleq.r ?? '00'),
+          },
+        }),
+        ...(p.p2pk_e && {
+          pe: hexToBytes(p.p2pk_e),
+        }),
+        ...(p.witness &&
+          !isV3TransactionWitness(id, p.secret) && {
+            w: JSON.stringify(p.witness),
           }),
-        ),
-      }),
-    ),
+        ...(p.spend_info && {
+          si: {
+            ...(p.spend_info.k && { k: hexToBytes(p.spend_info.k) }),
+            ...(p.spend_info.E && { e: hexToBytes(p.spend_info.E) }),
+            ...(p.spend_info.K && { i: hexToBytes(p.spend_info.K) }),
+            ...(p.spend_info.u && { u: hexToBytes(p.spend_info.u) }),
+            ...(p.spend_info.tree && { t: p.spend_info.tree.map(hexToBytes) }),
+          },
+        }),
+      })),
+    })),
   } as TokenV4Template;
   if (token.memo) {
     tokenTemplate.d = token.memo;
@@ -339,8 +385,18 @@ function tokenFromTemplate(template: TokenV4Template): Token {
         ...(p.pe && {
           p2pk_e: bytesToHex(p.pe),
         }),
-        ...(p.w && {
-          witness: p.w,
+        ...(p.w &&
+          !isV3TransactionWitness(bytesToHex(t.i), p.s) && {
+            witness: p.w,
+          }),
+        ...(p.si && {
+          spend_info: {
+            ...(p.si.k && { k: bytesToHex(p.si.k) }),
+            ...(p.si.e && { E: bytesToHex(p.si.e) }),
+            ...(p.si.i && { K: bytesToHex(p.si.i) }),
+            ...(p.si.u && { u: bytesToHex(p.si.u) }),
+            ...(p.si.t && { tree: p.si.t.map(bytesToHex) }),
+          },
         }),
       });
     });
@@ -360,6 +416,12 @@ function tokenFromTemplate(template: TokenV4Template): Token {
  * @returns Cashu token object.
  */
 export function getDecodedToken(tokenString: string, keysetIds: readonly string[]): Token {
+  // Plain JS callers on the pre-v4 signature otherwise fail deep inside on keysetIds.map
+  if (!Array.isArray(keysetIds)) {
+    throw new CTSError(
+      'getDecodedToken requires keysetIds (the wallet keyset id list) as its second argument; see the v4 migration guide, or use wallet.decodeToken()',
+    );
+  }
   const tokenStr = removePrefix(tokenString);
   const token: Token = handleTokens(tokenStr);
   token.proofs = mapShortKeysetIds(token.proofs, keysetIds);
@@ -385,6 +447,88 @@ export function getTokenMetadata(token: string): TokenMetadata {
 }
 
 /**
+ * What {@link findCashuPayload} located: a cashu token, or a NUT-18 / NUT-26 payment request.
+ */
+export type CashuPayloadKind = 'token' | 'paymentRequest';
+
+/**
+ * One scanner per payload prefix: a literal prefix plus a single character class, so matching
+ * cannot backtrack catastrophically, capped by {@link MAX_PAYLOAD_LENGTH}. Tokens and `creqA` use
+ * base64url, the alphabet NUT-00 mandates for these payloads. The two characters that separate it
+ * from standard base64 are delimiters in the places people paste tokens, `/` in URL paths and `+`
+ * as a space in query strings, so stopping at them keeps an embedded payload findable instead of
+ * swallowing its surroundings. `creqb1` (NUT-26) uses bech32m, matched case-insensitively because
+ * QR alphanumeric mode uppercases it.
+ */
+const PAYLOAD_SCANNERS: ReadonlyArray<{ regExp: RegExp; kind: CashuPayloadKind }> = [
+  { regExp: new RegExp(`cashu[AB][A-Za-z0-9=_-]{1,${MAX_PAYLOAD_LENGTH}}`, 'g'), kind: 'token' },
+  {
+    regExp: new RegExp(`creqA[A-Za-z0-9=_-]{1,${MAX_PAYLOAD_LENGTH}}`, 'g'),
+    kind: 'paymentRequest',
+  },
+  {
+    regExp: new RegExp(`creqb1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{1,${MAX_PAYLOAD_LENGTH}}`, 'gi'),
+    kind: 'paymentRequest',
+  },
+];
+
+/**
+ * Finds the first token or payment request out of a block of text, wherever it sits. Covers v3 and
+ * v4 tokens and both request encodings (`creqA` per NUT-18, `creqb1` / `CREQB1` per NUT-26).
+ * Matches are found by prefix and then decoded to check them, so a prefix that is not really a
+ * payload gets skipped. What it finds comes back as it appeared, except for bech32m requests, which
+ * are lowercased to their canonical form. Feed it to {@link getDecodedToken} or
+ * `PaymentRequest.fromEncodedRequest`.
+ *
+ * @example
+ *
+ *     findCashuPayload('paying you back cashuBo2Ft… thanks!');
+ *     // { kind: 'token', payload: 'cashuBo2Ft…' }
+ *
+ * @returns The first valid payload by position or `null` if the text carries none, a valid payload
+ *   sits beyond `MAX_PAYLOAD_DECODE_ATTEMPTS` failed candidates, or the only candidate is a
+ *   multi-entry v3 token (unsupported).
+ */
+export function findCashuPayload(text: string): { kind: CashuPayloadKind; payload: string } | null {
+  if (typeof text !== 'string') {
+    throw new CTSError('text must be a string');
+  }
+  let searchFrom = 0;
+  for (let attempts = 0; attempts < MAX_PAYLOAD_DECODE_ATTEMPTS; attempts++) {
+    let earliestMatch: { index: number; text: string; kind: CashuPayloadKind } | null = null;
+    for (const scanner of PAYLOAD_SCANNERS) {
+      // Global regexes resume from lastIndex, so point each one at the current search position.
+      scanner.regExp.lastIndex = searchFrom;
+      const match = scanner.regExp.exec(text);
+      if (match && (earliestMatch === null || match.index < earliestMatch.index)) {
+        earliestMatch = {
+          index: match.index,
+          // A case-insensitive scanner emits canonical lowercase (bech32m case carries no data).
+          text: scanner.regExp.flags.includes('i') ? match[0].toLowerCase() : match[0],
+          kind: scanner.kind,
+        };
+      }
+    }
+    if (earliestMatch === null) {
+      return null;
+    }
+    try {
+      if (earliestMatch.kind === 'token') {
+        handleTokens(removePrefix(earliestMatch.text));
+      } else {
+        PaymentRequest.fromEncodedRequest(earliestMatch.text);
+      }
+      return { kind: earliestMatch.kind, payload: earliestMatch.text };
+    } catch {
+      // Resume one character into the failed match because another valid
+      // payload may begin inside the same regex match.
+      searchFrom = earliestMatch.index + 1;
+    }
+  }
+  return null;
+}
+
+/**
  * Private helper function to decode different versions of cashu tokens into an object.
  *
  * @remarks
@@ -396,7 +540,7 @@ function handleTokens(token: string): Token {
   const version = token.slice(0, 1);
   const encodedToken = token.slice(1);
   if (version === 'A') {
-    const parsedV3Token = encodeBase64ToJson<DeprecatedToken>(encodedToken);
+    const parsedV3Token = decodeBase64UrlToJson<DeprecatedToken>(encodedToken);
     if (parsedV3Token.token.length > 1) {
       throw new CTSError('Multi entry token are not supported');
     }
@@ -415,7 +559,7 @@ function handleTokens(token: string): Token {
     }
     return tokenObj;
   } else if (version === 'B') {
-    const uInt8Token = encodeBase64toUint8(encodedToken);
+    const uInt8Token = decodeBase64UrlToUint8(encodedToken);
     const tokenData = decodeCBOR(uInt8Token) as TokenV4Template;
     return tokenFromTemplate(tokenData);
   }
@@ -434,7 +578,8 @@ export type DeriveKeysetIdOptions = {
  * Returns the keyset id of a set of keys.
  *
  * @param keys Keys object to derive keyset id from.
- * @param options.expiry (optional) expiry of the keyset.
+ * @param options.expiry (optional) expiry of the keyset (V2 only; V3 does not commit expiry to the
+ *   id).
  * @param options.input_fee_ppk (optional) Input fee for keyset (in ppk)
  * @param options.unit (optional) the unit of the keyset. Default: sat.
  * @param options.versionByte (optional) version of the keyset ID. Default: 1.
@@ -454,8 +599,8 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
       .sort(([amountA], [amountB]) => Amount.from(amountA).compareTo(amountB))
       .map(([, pubKey]) => pubKey)
       .reduce((prev: string, curr: string) => prev + curr, '');
-    const hash = sha256(Bytes.fromString(pubkeysConcat));
-    const b64 = Bytes.toBase64(hash);
+    const hash = sha256(utf8ToBytes(pubkeysConcat));
+    const b64 = encodeUint8ToBase64(hash);
     return b64.slice(0, 12);
   }
 
@@ -467,15 +612,14 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
           .map(([, pubKey]) => hexToBytes(pubKey)),
       );
       const hash = sha256(pubkeysConcat);
-      const hashHex = Bytes.toHex(hash).slice(0, 14);
+      const hashHex = bytesToHex(hash).slice(0, 14);
       return '00' + hashHex;
     }
-    case 1:
-    case 2: {
+    case 1: {
       if (!unit) {
-        throw new CTSError(`Cannot compute keyset ID version 0${versionByte}: unit is required.`);
+        throw new CTSError(`Cannot compute keyset ID version 01: unit is required.`);
       }
-      // Per NUT-02 V2/V3: pubkey hex and unit string MUST be lowercased in the preimage.
+      // Per NUT-02 V2: pubkey hex and unit string MUST be lowercased in the preimage.
       const sortedEntries = Object.entries(keys).sort(([amountA], [amountB]) =>
         Amount.from(amountA).compareTo(amountB),
       );
@@ -490,9 +634,34 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
       if (expiry) {
         preimage += `|final_expiry:${expiry}`;
       }
-      const hash = sha256(Bytes.fromString(preimage));
-      const hashHex = Bytes.toHex(hash);
-      return (versionByte === 2 ? '02' : '01') + hashHex;
+      const hash = sha256(utf8ToBytes(preimage));
+      const hashHex = bytesToHex(hash);
+      return '01' + hashHex;
+    }
+    case 2: {
+      if (!unit) {
+        throw new CTSError(`Cannot compute keyset ID version 02: unit is required.`);
+      }
+      // Per NUT-02 V3: length-framed preimage over raw bytes; unit MUST match
+      // [a-z0-9_-]+ and final_expiry is not committed to the id.
+      if (!/^[a-z0-9_-]+$/.test(unit)) {
+        throw new CTSError(`Invalid keyset unit: ${unit}`);
+      }
+      const sortedEntries = Object.entries(keys).sort(([amountA], [amountB]) =>
+        Amount.from(amountA).compareTo(amountB),
+      );
+      const keysBytes = mergeUInt8Arrays(
+        ...sortedEntries.flatMap(([amount, pubkey]) => [
+          len32Framed(minimalBytesBE(BigInt(amount))),
+          len32Framed(hexToBytes(pubkey.toLowerCase())),
+        ]),
+      );
+      const preimage = mergeUInt8Arrays(
+        len32Framed(keysBytes),
+        len32Framed(utf8ToBytes(unit)),
+        len32Framed(minimalBytesBE(BigInt(input_fee_ppk ?? 0))),
+      );
+      return '02' + bytesToHex(sha256(preimage));
     }
     default:
       throw new CTSError(`Unrecognized keyset ID version: ${versionByte}`);
@@ -508,6 +677,239 @@ function mergeUInt8Arrays(...arrays: Uint8Array[]): Uint8Array {
     offset += arr.length;
   }
   return merged;
+}
+
+/**
+ * NUT-02 V3 len32 framing: 4-byte big-endian length prefix.
+ */
+function len32Framed(b: Uint8Array): Uint8Array {
+  const out = new Uint8Array(4 + b.length);
+  new DataView(out.buffer).setUint32(0, b.length, false);
+  out.set(b, 4);
+  return out;
+}
+
+/**
+ * True if the proof lives on a BLS (v3) keyset, so nutroot rules apply.
+ */
+export function isBlsProof(proof: Pick<Proof, 'id'>): boolean {
+  return isBlsKeyset(proof.id);
+}
+
+/**
+ * Spend-info shape of a nutroot proof (NUT-10 receive-time check 1).
+ */
+export type NutrootSpendInfoShape =
+  'bearer' | 'script-only' | 'receiver-keyed' | 'disclosed' | 'none';
+
+/**
+ * Classifies a nutroot proof's spend info by shape: which key, if any, travels with it.
+ *
+ * @remarks
+ * `bearer`: the private key `k` rides the token. `script-only`: `u` claims a NUMS internal key, so
+ * no key path exists and only the disclosed leaves spend (an `E` beside it blinds leaf keys only).
+ * `receiver-keyed`: the receiver's static key derives the spending key from `E`. `disclosed`: `K`
+ * alone travels, so the key path is held elsewhere (eg an aggregated key's cosigners). `none`: no
+ * spend info (eg the owner's own proof). Classifies the claimed shape only:
+ * `verifyNutrootSpendInfo` checks the commitments.
+ */
+export function classifyNutrootSpendInfo(proof: Pick<Proof, 'spend_info'>): NutrootSpendInfoShape {
+  const si = proof.spend_info;
+  if (si?.k) return 'bearer';
+  if (si?.u) return 'script-only';
+  if (si?.E) return 'receiver-keyed';
+  if (si?.K) return 'disclosed';
+  return 'none';
+}
+
+/**
+ * The key an auditable lock (NUT-10) commits to, fully verified; `undefined` for any other shape.
+ *
+ * @remarks
+ * An auditable lock is script-only with a NUMS-proven internal key and exactly one threshold leaf
+ * of one key (`auditableLock` builds it), so anyone holding the proof can verify who it is locked
+ * to. Verifies the commitments (NUMS offset, root, tweak), not just the claimed fields.
+ */
+export function auditableLockKey(
+  proof: Pick<Proof, 'id' | 'secret' | 'spend_info'>,
+): string | undefined {
+  const si = proof.spend_info;
+  if (!isBlsKeyset(proof.id)) return undefined;
+  if (!si || si.k || si.E || !si.K || !si.u || si.tree?.length !== 1) return undefined;
+  try {
+    const leaf = parseNutrootLeafHex(si.tree[0]);
+    if (leaf.type !== 'threshold' || leaf.n !== 1 || leaf.keys.length !== 1) return undefined;
+    verifyNutrootSpendInfo(proof.secret, si);
+    return leaf.keys[0];
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * What {@link verifySpendReceipt} checked, one flag per claim the receipt makes.
+ */
+export type SpendReceiptVerdict = {
+  /**
+   * The receipt is about this proof: its `Y` and keyset match.
+   */
+  proof: boolean;
+  /**
+   * `inputDigest` recomputes from `transcript` and this proof's own container (NUT-10).
+   */
+  inputDigest: boolean;
+  /**
+   * `commitment` recomputes from `Y`, `inputDigest` and `witness` (NUT-07). Compare it to the
+   * mint's for the same `Y` to tie the receipt to a real spend.
+   */
+  commitment: boolean;
+  /**
+   * `witness` spends this proof over `inputDigest`: a key-path signature by the secret, or a
+   * script-path leaf the secret commits to, with its signatures and any preimage.
+   */
+  witness: boolean;
+  path?: 'key' | 'script';
+  ok: boolean;
+};
+
+/**
+ * Verify a spend receipt against the proof it claims to have spent; every check is client-side.
+ *
+ * @remarks
+ * What anyone given the spent proof can establish without the mint: it is about that proof, its
+ * digest was built from the transcript it shows, and the witness satisfies the secret. `ok` is all
+ * four. An `after` leaf's time is not checked, since nothing here says when the spend happened.
+ * Whether the spend happened at all is the mint's `commitment` for `Y` (NUT-07): compare it to the
+ * receipt's yourself.
+ */
+export function verifySpendReceipt(
+  receipt: SpendReceipt,
+  proof: Pick<Proof, 'id' | 'secret' | 'amount' | 'C'>,
+): SpendReceiptVerdict {
+  // Invalid until proven otherwise
+  const verdict: SpendReceiptVerdict = {
+    proof: false,
+    inputDigest: false,
+    commitment: false,
+    witness: false,
+    ok: false,
+  };
+  if (!isBlsKeyset(proof.id) || receipt.keysetId !== proof.id) return verdict;
+  let Y: string;
+  let digest: Uint8Array;
+  try {
+    Y = hashToCurveBls(utf8ToBytes(proof.secret)).toHex(true);
+    verdict.proof = receipt.Y.toLowerCase() === Y;
+    digest = hexToBytes(receipt.inputDigest);
+    const container = proofInputContainer({
+      amount: Amount.from(proof.amount).toBigInt(),
+      keysetId: proof.id,
+      secret: proof.secret,
+      C: proof.C,
+    });
+    const recomputed = inputDigest(sha256(hexToBytes(receipt.transcript)), container);
+    verdict.inputDigest = bytesToHex(recomputed) === bytesToHex(digest);
+    verdict.commitment =
+      spendCommitment(Y, digest, receipt.witness) === receipt.commitment.toLowerCase();
+  } catch {
+    return verdict;
+  }
+  if (verifyTransactionInputWitness(digest, proof.secret, receipt.witness)) {
+    verdict.path = 'key';
+    verdict.witness = true;
+  } else {
+    verdict.path = 'script';
+    verdict.witness = scriptPathWitnessSpends(digest, proof.secret, receipt.witness);
+  }
+  verdict.ok = verdict.proof && verdict.inputDigest && verdict.commitment && verdict.witness;
+  return verdict;
+}
+
+/**
+ * A spend receipt as handed around: the spent proofs as a token plus their receipts.
+ */
+export type SpendReceiptBundle = {
+  token: string;
+  receipts: SpendReceipt[];
+};
+
+const SPEND_RECEIPT_PREFIX = 'nutrcA';
+const HEX = /^[0-9a-f]+$/i;
+
+/**
+ * Serialize a spend receipt bundle to its `nutrcA` transport string (NUT-10).
+ *
+ * @remarks
+ * `nutrcA` followed by base64url of the JSON `{ token, receipts }`, so a receipt travels as one
+ * recognisable blob the way a token or a signing package does.
+ */
+export function encodeSpendReceipt(bundle: SpendReceiptBundle): string {
+  return `${SPEND_RECEIPT_PREFIX}${encodeUint8ToBase64Url(utf8ToBytes(JSON.stringify(bundle)))}`;
+}
+
+/**
+ * Parse a `nutrcA` transport string back to its bundle, checking shape but not validity.
+ *
+ * @throws If the prefix, encoding, or shape is wrong; verify each receipt with
+ *   {@link verifySpendReceipt} afterwards.
+ */
+export function decodeSpendReceipt(input: string): SpendReceiptBundle {
+  if (!input.startsWith(SPEND_RECEIPT_PREFIX)) {
+    throw new CTSError(`Invalid spend receipt: must start with "${SPEND_RECEIPT_PREFIX}"`);
+  }
+  let data: unknown;
+  try {
+    data = JSON.parse(
+      decodeUtf8Document(decodeBase64UrlToUint8(input.slice(SPEND_RECEIPT_PREFIX.length))),
+    );
+  } catch (e) {
+    throw new CTSError('Failed to parse spend receipt', { cause: e });
+  }
+  const bundle = data as SpendReceiptBundle;
+  const isHex = (v: unknown, len?: number) =>
+    typeof v === 'string' && HEX.test(v) && (len === undefined || v.length === len);
+  const wellFormed =
+    isObj(bundle) &&
+    typeof bundle.token === 'string' &&
+    Array.isArray(bundle.receipts) &&
+    bundle.receipts.length > 0 &&
+    bundle.receipts.every(
+      (r) =>
+        isObj(r) &&
+        isHex(r.Y) &&
+        isHex(r.keysetId) &&
+        isHex(r.inputDigest, 64) &&
+        typeof r.witness === 'string' &&
+        isHex(r.commitment, 64) &&
+        isHex(r.transcript),
+    );
+  if (!wellFormed) throw new CTSError('Malformed spend receipt');
+  return bundle;
+}
+
+function scriptPathWitnessSpends(digest: Uint8Array, secretHex: string, witness: string): boolean {
+  try {
+    const w = JSON.parse(witness) as {
+      leaf?: string;
+      control?: { K?: string; path?: string[] };
+      signatures?: string[];
+      preimage?: string;
+    };
+    if (!w.leaf || !w.control?.K || !Array.isArray(w.control.path)) return false;
+    const leaf = parseNutrootLeafHex(w.leaf);
+    const committed = verifyNutrootCommitment(
+      hexToBytes(secretHex),
+      hexToBytes(w.control.K),
+      hexToBytes(w.leaf),
+      w.control.path.map((h) => hexToBytes(h)),
+    );
+    const signed = countLeafSigners(leaf, digest, w.signatures ?? []) >= leaf.n;
+    const unlocked =
+      leaf.hash === undefined || (!!w.preimage && verifyHTLCHash(w.preimage, leaf.hash));
+    return committed && signed && unlocked;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -750,13 +1152,18 @@ export function hasValidDleq(
   // e(C, G2) == e(Y, K2). This is "valid signature" in v3 terms — equivalent guarantee
   // to a verifying DLEQ on v0/v1/v2 proofs.
   if (!hasCorrespondingKey(proof.amount, keyset.keys)) {
-    throw new CTSError(
-      `Undefined key for amount ${proof.amount.toString()} in keyset ${keyset.id}`,
-    );
+    // An empty keyset means keys were never loaded (eg rotated-out keyset per NUT-01),
+    // not that the denomination is missing. Say so: the two failures have different fixes.
+    const message =
+      Object.keys(keyset.keys).length === 0
+        ? `No keys loaded for keyset ${keyset.id}`
+        : `Undefined key for amount ${proof.amount.toString()} in keyset ${keyset.id}`;
+    throw new CTSError(message);
   }
 
   if (isBlsKeyset(proof.id)) {
     try {
+      assertV3PointSecret(proof.secret);
       const K2 = pointFromHexG2(keyset.keys[proof.amount.toString()]);
       return verifyUnblindedSignatureBls(
         K2,
@@ -771,11 +1178,6 @@ export function hasValidDleq(
 
   if (proof?.dleq == undefined) {
     return !require;
-  }
-  if (!hasCorrespondingKey(proof.amount, keyset.keys)) {
-    throw new CTSError(
-      `Undefined key for amount ${proof.amount.toString()} in keyset ${keyset.id}`,
-    );
   }
 
   const key = keyset.keys[proof.amount.toString()];
@@ -839,6 +1241,19 @@ export function verifyProofsForReceive(
 
   if (blsProofs.length === 0) return;
 
+  // Receive-time verification cascade (nutroot secrets 2.5.1): spend info must reconstruct the
+  // secret (bare key, or complete disclosed tree). Anything partial or mismatched rejects.
+  for (const p of blsProofs) {
+    if (!p.spend_info) continue;
+    try {
+      verifyNutrootSpendInfo(p.secret, p.spend_info);
+    } catch (e) {
+      throw new CTSError(
+        `${e instanceof Error ? e.message : 'Invalid spend info'}${offenderSuffix(p)}`,
+      );
+    }
+  }
+
   // Batch path bypasses hasValidDleq, so the amount-in-keyset check is repeated here.
   const items = blsProofs.map((p) => {
     const ks = getKeyset(p.id);
@@ -850,6 +1265,7 @@ export function verifyProofsForReceive(
     let K2: G2Point;
     let C: G1Point;
     try {
+      assertV3PointSecret(p.secret);
       K2 = pointFromHexG2(ks.keys[p.amount.toString()]);
       C = pointFromHexG1(p.C);
     } catch {
@@ -887,6 +1303,11 @@ export function getEncodedTokenBinary(token: Token): Uint8Array {
   const utf8Encoder = new TextEncoder();
   // Normalize amounts for untyped (JS) callers who may pass JSON.parse'd tokens directly.
   const proofs = normalizeProofAmounts(token.proofs);
+  if (hasNonHexId(proofs)) {
+    throw new CTSError(
+      'Proofs contain a legacy keyset ID and cannot be encoded. Swap them at the mint first.',
+    );
+  }
   const template = templateFromToken({ ...token, proofs });
   const binaryTemplate = encodeCBOR(template);
   const prefix = utf8Encoder.encode('craw');

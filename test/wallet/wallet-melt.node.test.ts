@@ -4,6 +4,7 @@ import { test, describe, expect, vi } from 'vitest';
 
 import {
   Wallet,
+  MeltChangeError,
   type Proof,
   type ProofLike,
   type MeltQuoteBolt11Response,
@@ -14,8 +15,13 @@ import {
   type MeltQuoteBolt12Response,
   type AuthProvider,
   type OutputType,
+  type MintKeyset,
+  type MeltPreview,
   Amount,
+  createHTLCHash,
+  createHTLCsecret,
 } from '../../src';
+import { DUMMY_TEST_KEYSET, MINTCACHE, PUBKEYS } from '../consts';
 
 import { useTestServer, mint, mintUrl, unit, invoice, logger, mintInfoResp } from './_setup';
 
@@ -65,6 +71,7 @@ describe('melt proofs', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const proofsToSend: Proof[] = [
       {
@@ -89,6 +96,47 @@ describe('melt proofs', () => {
     expect(response.change[1]).toMatchObject({ amount: Amount.from(2), id: '00bd033559de27d0' });
     expect(/[0-9a-f]{64}/.test(response.change[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(response.change[0].secret)).toBe(true);
+  });
+
+  test('melt with a preimage stamps the HTLC inputs', async () => {
+    let inputs: Array<{ witness?: string }> = [];
+    server.use(
+      http.post(mintUrl + '/v1/melt/bolt11', async ({ request }) => {
+        ({ inputs } = (await request.json()) as { inputs: Array<{ witness?: string }> });
+        return HttpResponse.json({
+          quote: 'test_melt_quote',
+          amount: 10,
+          unit: 'sat',
+          fee_reserve: 3,
+          state: MeltQuoteState.PAID,
+          expiry: 1234567890,
+          payment_preimage: 'preimage',
+          request: 'bolt11request',
+          change: [],
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit, logger });
+    await wallet.loadMint();
+    const { hash, preimage } = createHTLCHash();
+    const meltQuote: MeltQuoteBolt11Response = {
+      quote: 'test_melt_quote',
+      amount: Amount.from(10),
+      fee_reserve: Amount.from(3),
+      request: 'bolt11request',
+      state: MeltQuoteState.UNPAID,
+      expiry: 1234567890,
+      payment_preimage: null,
+      unit: 'sat',
+      method: 'bolt11',
+    };
+    const locked: Proof[] = [
+      { id: '00bd033559de27d0', amount: Amount.from(13), secret: createHTLCsecret(hash), C: 'C1' },
+    ];
+    const response = await wallet.meltProofsBolt11(meltQuote, locked, { preimage });
+
+    expect(response.quote.state).toBe(MeltQuoteState.PAID);
+    expect(JSON.parse(inputs[0].witness!)).toEqual({ preimage });
   });
 
   test('test melt proofs no change', async () => {
@@ -119,6 +167,7 @@ describe('melt proofs', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const proofsToSend: Proof[] = [
       {
@@ -176,6 +225,7 @@ describe('melt proofs', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const proofsToSend: Proof[] = [
       {
@@ -192,7 +242,10 @@ describe('melt proofs', () => {
       },
     ];
 
-    await expect(wallet.meltProofsBolt11(meltQuote, proofsToSend)).rejects.toThrow(
+    // The melt itself went through, so the failure arrives wrapped with the recovery data
+    const err = await wallet.meltProofsBolt11(meltQuote, proofsToSend).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(MeltChangeError);
+    expect(((err as MeltChangeError).cause as Error).message).toContain(
       'Mint supports NUT-12, but returned a signature without DLEQ proof',
     );
   });
@@ -225,6 +278,7 @@ describe('melt proofs', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const storedProofs = JSON.parse(
       JSON.stringify([
@@ -276,6 +330,7 @@ describe('melt proofs', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const proofsToSend: Proof[] = [
       {
@@ -345,6 +400,7 @@ describe('melt proofs', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
 
     const proofsToSend: Proof[] = [
@@ -388,6 +444,7 @@ describe('melt proofs', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const proofsToSend: Proof[] = [
       {
@@ -429,6 +486,7 @@ describe('melt proofs', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const proofsToSend: Proof[] = [
       { id: '00bd033559de27d0', amount: Amount.from(8), secret: 'secret1', C: 'C1' },
@@ -460,6 +518,7 @@ describe('melt proofs', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const proofsToSend: Proof[] = [
       {
@@ -489,6 +548,7 @@ describe('melt proofs', () => {
         expiry: 1234567890,
         payment_preimage: null,
         unit,
+        method: 'bolt11',
       };
       const proofsToSend: Proof[] = [
         {
@@ -556,6 +616,7 @@ describe('melt proofs', () => {
         expiry: 1234567890,
         payment_preimage: null,
         unit: 'sat',
+        method: 'bolt12',
       };
       const proofsToSend: Proof[] = [
         {
@@ -653,6 +714,7 @@ describe('melt proofs', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt12',
     };
     const proofsToSend: Proof[] = [
       {
@@ -741,6 +803,7 @@ describe('melt proofs', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const proofsToSend: Proof[] = [
       {
@@ -758,7 +821,12 @@ describe('melt proofs', () => {
     ];
     const result = await wallet.meltProofsBolt11(meltQuote, proofsToSend).catch((e) => e);
 
-    expect(result.message).toContain('Mint returned 3 signatures, but only 1 blanks were provided');
+    expect(result).toBeInstanceOf(MeltChangeError);
+    expect((result.cause as Error).message).toContain(
+      'Mint returned 3 signatures, but only 1 blanks were provided',
+    );
+    // Carried whatever the cause: this one needs a NUT-09 restore, not a rebuild
+    expect(result.outputData.length).toBeGreaterThan(0);
   });
 });
 
@@ -776,6 +844,7 @@ describe('async melt preference body', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const proofsToSend: Proof[] = [
       {
@@ -824,19 +893,138 @@ describe('async melt preference body', () => {
     expect(/[0-9a-f]{64}/.test(change[0].secret)).toBe(true);
   });
 
-  test('createMeltChangeProofs rejects signature/output keyset id mismatch', async () => {
+  // Mint rotated while the melt was pending: A inactive, B (sat) and a usd keyset active.
+  const keysetB: MintKeyset = {
+    id: '009a1f293253e41e',
+    unit: 'sat',
+    active: true,
+    input_fee_ppk: 0,
+  };
+  const keysetUsd = MINTCACHE.keysets[1];
+  function useRotatedKeysets() {
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({
+          keysets: [{ ...DUMMY_TEST_KEYSET, active: false }, keysetB, keysetUsd],
+        }),
+      ),
+      http.get(mintUrl + '/v1/keys', () =>
+        HttpResponse.json({ keysets: [{ ...keysetB, keys: PUBKEYS }, MINTCACHE.keys[1]] }),
+      ),
+    );
+  }
+
+  test('createMeltChangeProofs unblinds change with the keyset the signature names', async () => {
+    useRotatedKeysets();
     const wallet = new Wallet(mint, { unit, logger });
     await wallet.loadMint();
 
-    const output = OutputData.createSingleRandomData(0, '00bd033559de27d0');
-    const mismatchedSig: SerializedBlindedSignature = {
-      id: '009a1f293253e41e', // different keyset id from the output
+    const blank = OutputData.createSingleRandomData(0, '00bd033559de27d0');
+    const sig: SerializedBlindedSignature = {
+      id: '009a1f293253e41e', // signed under the new keyset, not the blank's
       amount: Amount.from(1),
       C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
     };
 
-    expect(() => wallet.createMeltChangeProofs([output], [mismatchedSig])).toThrow(
-      /signature keyset id at index 0 does not match output/i,
+    const [proof] = wallet.createMeltChangeProofs([blank], [sig]);
+    expect(proof).toMatchObject({ id: '009a1f293253e41e', amount: Amount.from(1) });
+  });
+
+  test('createMeltChangeProofs rejects change signed under a keyset of another unit', () => {
+    // Keys for every unit are loaded here (a cache restore), so only the unit check stands in the way
+    const wallet = new Wallet(mint, { unit, logger });
+    wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+
+    const blank = OutputData.createSingleRandomData(0, '00bd033559de27d0');
+    const sig: SerializedBlindedSignature = {
+      id: keysetUsd.id,
+      amount: Amount.from(1),
+      C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+    };
+
+    let err: unknown;
+    try {
+      wallet.createMeltChangeProofs([blank], [sig]);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({
+      message: expect.stringMatching(/is not loaded in this wallet/),
+      cause: { message: expect.stringMatching(/unit does not match/) },
+    });
+  });
+
+  test('createMeltChangeProofs drops a zero-value signature before the DLEQ requirement applies', async () => {
+    server.use(http.get(mintUrl + '/v1/info', () => HttpResponse.json(mintInfoRespWithNut12)));
+    const wallet = new Wallet(mint, { unit, requireSigDleq: true, logger });
+    await wallet.loadMint();
+
+    const blank = OutputData.createSingleRandomData(0, '00bd033559de27d0');
+    const zeroSig: SerializedBlindedSignature = {
+      id: '00bd033559de27d0',
+      amount: Amount.from(0),
+      C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+    };
+
+    expect(wallet.createMeltChangeProofs([blank], [zeroSig])).toEqual([]);
+  });
+
+  test('createMeltChangeProofs accepts raw JSON amounts from a stored or WebSocket quote', async () => {
+    const wallet = new Wallet(mint, { unit, logger });
+    await wallet.loadMint();
+
+    const blanks = [0, 0].map((a) => OutputData.createSingleRandomData(a, '00bd033559de27d0'));
+    // what JSON.parse yields: plain numbers where the type says Amount
+    const raw = [
+      {
+        id: '00bd033559de27d0',
+        amount: 0,
+        C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+      },
+      {
+        id: '00bd033559de27d0',
+        amount: 2,
+        C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+      },
+    ] as unknown as SerializedBlindedSignature[];
+
+    const change = wallet.createMeltChangeProofs(blanks, raw);
+    expect(change).toHaveLength(1);
+    expect(change[0].amount).toBeInstanceOf(Amount);
+    expect(change[0].amount.equals(Amount.from(2))).toBe(true);
+  });
+
+  test('createMeltChangeProofs pairs by index and drops zero-value signatures', async () => {
+    const warn = vi.fn();
+    const wallet = new Wallet(mint, {
+      unit,
+      logger: { error: vi.fn(), warn, info: vi.fn(), debug: vi.fn(), trace: vi.fn(), log: vi.fn() },
+    });
+    await wallet.loadMint();
+
+    const blanks = [0, 0].map((a) => OutputData.createSingleRandomData(a, '00bd033559de27d0'));
+    const sigs: SerializedBlindedSignature[] = [
+      {
+        id: '00bd033559de27d0',
+        amount: Amount.from(0),
+        C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+      },
+      {
+        id: '00bd033559de27d0',
+        amount: Amount.from(2),
+        C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+      },
+    ];
+
+    const change = wallet.createMeltChangeProofs(blanks, sigs);
+    expect(change).toHaveLength(1);
+    expect(change[0]).toMatchObject({ amount: Amount.from(2) });
+    // the surviving signature was paired with the second blank, not compacted onto the first
+    expect(change[0].secret).toBe(new TextDecoder().decode(blanks[1].secret));
+    // tolerated, but the mint's NUT-08 slip is reported
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('NUT-08'),
+      expect.objectContaining({ count: 1 }),
     );
   });
 
@@ -856,6 +1044,28 @@ describe('async melt preference body', () => {
       /is not loaded in this wallet.*restoring \(NUT-09\)/is,
     );
   });
+  test('completeMelt refuses v3 inputs when the quote amount is unknown', async () => {
+    // A v3 input must sign the transcript, which binds the quote amount; a slim
+    // quote object cannot produce that digest, so fail fast rather than send unsigned.
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const v3KeysetId = `02${'cd'.repeat(32)}`;
+    const preview: MeltPreview<Pick<MeltQuoteBolt11Response, 'quote'>> = {
+      method: 'bolt11',
+      inputs: [
+        {
+          id: v3KeysetId,
+          amount: Amount.from(1),
+          secret: `02${'ab'.repeat(32)}`,
+          C: '84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327',
+        },
+      ],
+      outputData: [],
+      quote: { quote: 'q-slim' },
+    };
+    await expect(wallet.completeMelt(preview)).rejects.toThrow(/quote amount/);
+  });
+
   test('completeMelt sends prefer_async when { preferAsync: true } is passed', async () => {
     const meltQuote = {
       quote: 'q-async-boolean',
@@ -895,7 +1105,7 @@ describe('async melt preference body', () => {
     const debug = vi.fn();
     const wallet = new Wallet(mint, {
       unit,
-      logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug, trace: vi.fn() },
+      logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug, trace: vi.fn(), log: vi.fn() },
     });
     await wallet.loadMint();
     const meltTxn = await wallet.prepareMelt('bolt11', meltQuote, proofs);

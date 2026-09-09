@@ -1,4 +1,4 @@
-import { hexToBytes } from '@noble/curves/utils.js';
+import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect } from 'vitest';
 
@@ -7,10 +7,17 @@ import {
   getDecodedToken,
   OutputData,
   Amount,
+  UnknownKeysetError,
   type AmountLike,
   type HasKeysetKeys,
   type ProofLike,
+  createHTLCHash,
+  createHTLCsecret,
+  getPubKeyFromPrivKey,
 } from '../../src';
+import { getG2PubKeyFromPrivKey, hashToCurveBls } from '../../src/crypto/curve_bls';
+import { deriveKeysetId } from '../../src/utils';
+import { PUBKEYS } from '../consts';
 
 import { mint, unit, token3sat, mintUrl, logger, useTestServer } from './_setup';
 
@@ -82,10 +89,55 @@ describe('receive', () => {
     expect(proofs[0].id).toBe('00bd033559de27d0');
   });
 
+  test.each([
+    JSON.stringify({ signatures: ['00'.repeat(64)] }),
+    JSON.stringify({
+      leaf: '00',
+      control: { K: `02${'00'.repeat(32)}`, path: [] },
+      signatures: ['00'.repeat(64)],
+    }),
+  ])('drops an incoming v3 witness before building the receive swap', async (witness) => {
+    const secret = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+    const mintKey = hexToBytes('00'.repeat(31) + '02');
+    const keys = { '1': bytesToHex(getG2PubKeyFromPrivKey(mintKey)) };
+    const id = deriveKeysetId(keys, { versionByte: 2, unit, input_fee_ppk: 0 });
+    const keyset = {
+      id,
+      unit,
+      active: true,
+      input_fee_ppk: 0,
+      final_expiry: null,
+      keys,
+    };
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () => HttpResponse.json({ keysets: [keyset] })),
+      http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [keyset] })),
+      http.get(mintUrl + '/v1/keys/' + id, () => HttpResponse.json({ keysets: [keyset] })),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const proof = {
+      id,
+      amount: Amount.from(1),
+      secret,
+      C: hashToCurveBls(new TextEncoder().encode(secret)).multiply(2n).toHex(true),
+      witness,
+      spend_info: { k: '00'.repeat(31) + '01' },
+    };
+
+    const preview = await wallet.prepareSwapToReceive([proof]);
+
+    expect(preview.inputs[0].witness).toBeUndefined();
+    expect(proof.witness).toBe(witness);
+  });
+
   test('receive Proof[] - unknown keyset ID throws', async () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
 
+    // Fully unknown keyset id: ensureOperableKeysets repairs the snapshot (still unmocked
+    // beyond the default handlers) and reports it as an UnknownKeysetError, not a plain
+    // unit-mismatch rejection.
     await expect(
       wallet.receive([
         {
@@ -95,11 +147,14 @@ describe('receive', () => {
           C: '02bc9097997d81afb2cc7346b5e4345a9346bd2a506eb7958598a72f0cf85163ea',
         },
       ]),
-    ).rejects.toThrow('Proof has unrecognised keyset');
+    ).rejects.toThrow(UnknownKeysetError);
   });
 
   test('receive Proof[] - wrong-unit keyset ID throws', async () => {
-    const usdKeysetId = '009a1f293253e41f';
+    // Known but keyless usd keyset: ensureOperableKeysets must not spend a /v1/keys/{id} request
+    // resolving a foreign-unit id before the unit check gets a chance to reject it.
+    const usdKeysetId = '009a1f293253e41e';
+    let usdKeysRequests = 0;
     server.use(
       http.get(mintUrl + '/v1/keysets', () =>
         HttpResponse.json({
@@ -109,6 +164,10 @@ describe('receive', () => {
           ],
         }),
       ),
+      http.get(mintUrl + '/v1/keys/' + usdKeysetId, () => {
+        usdKeysRequests++;
+        return HttpResponse.json({ keysets: [{ id: usdKeysetId, unit: 'usd', keys: PUBKEYS }] });
+      }),
     );
     const wallet = new Wallet(mint, { unit }); // sat wallet
     await wallet.loadMint();
@@ -123,7 +182,8 @@ describe('receive', () => {
           C: '02bc9097997d81afb2cc7346b5e4345a9346bd2a506eb7958598a72f0cf85163ea',
         },
       ]),
-    ).rejects.toThrow('Proof has unrecognised keyset');
+    ).rejects.toThrow('is not a sat keyset from this mint');
+    expect(usdKeysRequests).toBe(0); // foreign-unit keyless id: no key fetch attempted
   });
 
   test('test receive token from wrong mint', async () => {
@@ -439,10 +499,9 @@ describe('receive', () => {
       token3sat,
       {},
       {
-        type: 'p2pk',
+        type: 'lock',
         options: {
-          kind: 'P2PK',
-          data: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+          mainKeys: ['0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798'],
         },
       },
     );
@@ -682,6 +741,41 @@ describe('receive', () => {
     ]);
     expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
+  });
+
+  test('test receive preimage stamps the HTLC witness before signing', async () => {
+    let inputs: Array<{ witness?: string }> = [];
+    server.use(
+      http.post(mintUrl + '/v1/swap', async ({ request }) => {
+        ({ inputs } = (await request.json()) as { inputs: Array<{ witness?: string }> });
+        return HttpResponse.json({
+          signatures: [
+            {
+              id: '00bd033559de27d0',
+              amount: 1,
+              C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+            },
+          ],
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const privkey = bytesToHex(new Uint8Array(32).fill(7));
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(hexToBytes(privkey)));
+    const { hash, preimage } = createHTLCHash();
+    const locked = {
+      id: '00bd033559de27d0',
+      amount: 1,
+      secret: createHTLCsecret(hash, [['pubkeys', pubkey]]),
+      C: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+    };
+
+    const proofs = await wallet.receive([locked], { privkey, preimage });
+    expect(proofs).toHaveLength(1);
+    const witness = JSON.parse(inputs[0].witness!);
+    expect(witness.preimage).toBe(preimage);
+    expect(witness.signatures).toHaveLength(1);
   });
 
   test('test receive keysetId', async () => {

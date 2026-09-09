@@ -1,6 +1,12 @@
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils.js';
+import {
+  concatBytes,
+  hexToBytes,
+  bytesToHex,
+  randomBytes,
+  utf8ToBytes,
+} from '@noble/hashes/utils.js';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import { Amount, type OutputDataLike } from '../../src';
@@ -18,13 +24,14 @@ import {
   createRandomSecretKey,
   hasP2PKSignedProof,
   schnorrSignMessage,
+  schnorrVerifyDigest,
   schnorrVerifyMessage,
   deriveP2BKBlindedPubkeys,
   P2BK_DST,
   buildP2PKSigAllMessageV0,
   buildP2PKSigAllMessageV1,
+  hashP2PKSigAllMessageV1,
   assertSigAllInputs,
-  computeMessageDigest,
   createSecret,
   dedupeP2PKPubkeys,
   isHTLCSpendAuthorised,
@@ -67,6 +74,50 @@ describe('test create p2pk secret', () => {
     const signedProof = signP2PKProof(proof, bytesToHex(PRIVKEY));
     const verify = isP2PKSpendAuthorised(signedProof);
     expect(verify).toBe(true);
+  });
+
+  test('rejects an oversized serialized secret before parsing it', () => {
+    const padding = 'a'.repeat(2048);
+    const oversized = `["P2PK",{"nonce":"a","data":"${PUBKEY}","tags":[["padding","${padding}"]]}]`;
+    const parseSpy = vi.spyOn(JSON, 'parse');
+    try {
+      expect(() => parseP2PKSecret(oversized)).toThrow(/Secret too long/);
+      expect(parseSpy).not.toHaveBeenCalled();
+    } finally {
+      parseSpy.mockRestore();
+    }
+  });
+
+  test('rejects an oversized serialized witness before parsing it', () => {
+    const oversized = `{"padding":"${'a'.repeat(65_536)}","signatures":[]}`;
+    const parseSpy = vi.spyOn(JSON, 'parse');
+    try {
+      expect(() => getP2PKWitnessSignatures(oversized)).toThrow(/Witness too long/);
+      expect(parseSpy).not.toHaveBeenCalled();
+    } finally {
+      parseSpy.mockRestore();
+    }
+  });
+
+  test('SIG_INPUTS signatures are always checked against the proof secret', () => {
+    const secret = createP2PKsecret(PUBKEY);
+    const other = 'some other message';
+    const proof: Proof = {
+      amount: Amount.from(1),
+      C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+      id: '00000000000',
+      secret,
+      witness: { signatures: [schnorrSignMessage(other, bytesToHex(PRIVKEY))] },
+    };
+    // A signature over anything but the secret never authorises a SIG_INPUTS spend,
+    // whatever message the caller passes along.
+    expect(isP2PKSpendAuthorised(proof)).toBe(false);
+    expect(isP2PKSpendAuthorised(proof, NULL_LOGGER, other)).toBe(false);
+    expect(hasP2PKSignedProof(PUBKEY, proof, other)).toBe(false);
+    // ...and a signature over the secret still verifies when a message is passed.
+    const signed = signP2PKProof({ ...proof, witness: undefined }, bytesToHex(PRIVKEY));
+    expect(isP2PKSpendAuthorised(signed, NULL_LOGGER, other)).toBe(true);
+    expect(hasP2PKSignedProof(PUBKEY, signed, other)).toBe(true);
   });
 
   test('non-array witness signatures verify as false, not a thrown TypeError', () => {
@@ -124,18 +175,23 @@ describe('test create p2pk secret', () => {
   });
 
   test('a secret with too many pubkeys is rejected before per-key work', () => {
-    const tag = Array.from({ length: 65 }, () => `"${PUBKEY}"`).join(',');
+    const keys = Array.from({ length: 65 }, () => PUBKEY);
+    const tag = keys.map((k) => `"${k}"`).join(',');
     const proof: Proof = {
       amount: Amount.from(1),
       C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       id: '00000000000',
       secret: `["P2PK",{"nonce":"a","data":"${PUBKEY}","tags":[["pubkeys",${tag}]]}]`,
     };
-    expect(() => verifyP2PKSpendingConditions(proof)).toThrow(/Too many pubkeys/);
+    // As a string the secret trips the length cap first; a pre-parsed Secret reaches the key cap.
+    expect(() => verifyP2PKSpendingConditions(proof)).toThrow(/Secret too long/);
+    const secret: Secret = ['P2PK', { nonce: 'a', data: PUBKEY, tags: [['pubkeys', ...keys]] }];
+    expect(() => getP2PKExpectedWitnessPubkeys(secret)).toThrow(/Too many pubkeys/);
   });
 
   test('a secret with too many refund pubkeys is rejected before per-key work', () => {
-    const tag = Array.from({ length: 65 }, () => `"${PUBKEY}"`).join(',');
+    const keys = Array.from({ length: 65 }, () => PUBKEY);
+    const tag = keys.map((k) => `"${k}"`).join(',');
     const proof: Proof = {
       amount: Amount.from(1),
       C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
@@ -143,7 +199,19 @@ describe('test create p2pk secret', () => {
       // A normal main key passes its cap; the oversized refund tag trips the refund cap.
       secret: `["P2PK",{"nonce":"a","data":"${PUBKEY}","tags":[["refund",${tag}]]}]`,
     };
-    expect(() => verifyP2PKSpendingConditions(proof)).toThrow(/Too many refund pubkeys/);
+    expect(() => verifyP2PKSpendingConditions(proof)).toThrow(/Secret too long/);
+    const secret: Secret = [
+      'P2PK',
+      {
+        nonce: 'a',
+        data: PUBKEY,
+        tags: [
+          ['locktime', '1'],
+          ['refund', ...keys],
+        ],
+      },
+    ];
+    expect(() => getP2PKExpectedWitnessPubkeys(secret)).toThrow(/Too many refund pubkeys/);
   });
 
   test('sign and verify proofs', async () => {
@@ -169,6 +237,33 @@ describe('test create p2pk secret', () => {
     const verify1 = isP2PKSpendAuthorised(signedProofs[1]);
     expect(verify0).toBe(true);
     expect(verify1).toBe(true);
+  });
+
+  test('leaves v3 point secrets untouched and unlogged', async () => {
+    // Mixed inputs reach this pass whenever a melt or send carries a privkey.
+    // The v3 proof signs the transaction elsewhere, so it must not be parsed here.
+    const warn = vi.fn();
+    const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
+    const p2pkProof: Proof = {
+      amount: Amount.from(1),
+      C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+      id: '00000000000',
+      secret: secretStr,
+    };
+    const v3Proof: Proof = {
+      amount: Amount.from(1),
+      C: 'b7a4881059133fd91a8753600d9a5e524c65d6224f6fe2d5aef9e59f1507fdad90b3b4d48ee46da5c8dfaa0b88e28b69',
+      id: '02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d',
+      secret: '02' + 'ab'.repeat(32),
+    };
+
+    const signedProofs = signP2PKProofs([p2pkProof, v3Proof], bytesToHex(PRIVKEY), {
+      warn,
+    } as never);
+
+    expect(isP2PKSpendAuthorised(signedProofs[0])).toBe(true);
+    expect(signedProofs[1]).toBe(v3Proof); // untouched, no witness added
+    expect(warn).not.toHaveBeenCalled();
   });
 
   test('sign and verify proofs, different keys', async () => {
@@ -516,6 +611,36 @@ describe('test signP2PKProof', () => {
       `Signature not required from [02|03]${PUBKEY2.slice(2)}`,
     );
   });
+  test('refuses a message override on a SIG_INPUTS proof', () => {
+    const proof: Proof = {
+      amount: Amount.from(1),
+      C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+      id: '00000000000',
+      secret: createP2PKsecret(PUBKEY),
+    };
+    // SIG_INPUTS signs the secret and nothing else.
+    expect(() => signP2PKProof(proof, bytesToHex(PRIVKEY), 'other message')).toThrow(/SIG_ALL/);
+    // The batch signer logs and leaves the proof unsigned rather than throwing.
+    const logger: Logger = { ...NULL_LOGGER, warn: vi.fn() };
+    const [unsigned] = signP2PKProofs([proof], bytesToHex(PRIVKEY), logger, 'other message');
+    expect(unsigned.witness).toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringMatching(/SIG_ALL/));
+  });
+  test('refuses to sign a SIG_ALL proof without the message to sign', () => {
+    const proof: Proof = {
+      amount: Amount.from(1),
+      C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+      id: '00000000000',
+      secret: createP2PKsecret(PUBKEY, [['sigflag', 'SIG_ALL']]),
+    };
+    // A SIG_ALL witness must sign the transaction message, never the bare secret.
+    expect(() => signP2PKProof(proof, bytesToHex(PRIVKEY))).toThrow(/message to sign/);
+    // The batch signer logs and leaves the proof unsigned rather than throwing.
+    const logger: Logger = { ...NULL_LOGGER, warn: vi.fn() };
+    const [unsigned] = signP2PKProofs([proof], bytesToHex(PRIVKEY), logger);
+    expect(unsigned.witness).toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringMatching(/message to sign/));
+  });
   test('sign with 02-prepended Nostr key', async () => {
     const PRIVKEY2 = '622320785910d6aac0d5406ce1b6ef1640ab97c2acdea6a246eb6859decd6230'; // produces an Odd Y-parity pubkey
     const PUBKEY2 = '02' + bytesToHex(schnorr.getPublicKey(hexToBytes(PRIVKEY2))); // Prepended x-only pubkey
@@ -543,16 +668,11 @@ describe('test getP2PKWitnessSignatures', () => {
     const result = getP2PKWitnessSignatures(witness);
     expect(result).toStrictEqual([]);
   });
-  test('malformed witness', async () => {
-    // Spy on console.error and mock its implementation to do nothing
+  test('malformed witness is treated as absent without console output', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const witness = 'malformed';
-    const result = getP2PKWitnessSignatures(witness);
+    const result = getP2PKWitnessSignatures('malformed');
     expect(result).toStrictEqual([]);
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Failed to parse witness string:',
-      expect.any(Error),
-    ); // Verify console.error was called
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
   test('string witness', async () => {
     const witness =
@@ -953,10 +1073,8 @@ describe('buildP2PKSigAllMessageV1, length-framed SIG_ALL aggregation', () => {
   const mkProof = (secret: string, C: string) => ({ secret, C }) as any;
   const mkOutput = (amount: number, B_: string) => ({ blindedMessage: { amount, B_ } }) as any;
 
-  const TAG_HEX = '43617368755f536967416c6c5369675f7631'; // "Cashu_SigAllSig_v1"
-
-  // Canonical vectors from nuts tests/11-test.md ("SIG_ALL v1 Message Vectors"),
-  // pinned byte-for-byte in the nutshell and cdk suites too.
+  // Canonical vectors from nuts tests/11-test.md ("SIG_ALL Test Vectors"), pinned
+  // byte-for-byte in the nutshell and cdk suites too.
   const VECTOR_PUB = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
   const vectorInputs = [
     mkProof(
@@ -976,44 +1094,55 @@ describe('buildP2PKSigAllMessageV1, length-framed SIG_ALL aggregation', () => {
 
   test('matches the canonical cross-implementation vector', () => {
     const swapMsg = buildP2PKSigAllMessageV1(vectorInputs, vectorOutputs);
-    expect(swapMsg.length).toBe(572);
-    expect(computeMessageDigest(swapMsg, true)).toBe(
-      '3fd05c896ff0d5a058f9180e577dced83539ea885f9bf6adf71f7ed084590dc2',
+    expect(swapMsg.length).toBe(554);
+    const swapHash = hashP2PKSigAllMessageV1(swapMsg);
+    expect(bytesToHex(swapHash)).toBe(
+      'b2a0a8ee2d8911585d97adce15c8d7e664c712baa31c0f3d8a6e32b909fdda2b',
     );
     // Pinned signature by the well-known test key (privkey 0x...01)
     expect(
-      schnorrVerifyMessage(
-        'b2b821f819f12ab61d261971187d19772aaad11422f9d5f3ffda6f97de03349e0e44976b5d44e3c850a99b621045167915caf3ef5b102abe69439e36b68f89d5',
-        swapMsg,
+      schnorrVerifyDigest(
+        '55c4e0d72598a64af2a04d1d348af7beb97b35fe1af91711e205414a24c869ba047b5bd298b87c7b58b439833e244b5498136fd4cccdf9d41b0fe72db8279722',
+        swapHash,
         VECTOR_PUB,
       ),
     ).toBe(true);
 
     const meltMsg = buildP2PKSigAllMessageV1(vectorInputs, vectorOutputs, vectorQuote);
-    expect(meltMsg.length).toBe(608);
-    expect(computeMessageDigest(meltMsg, true)).toBe(
-      '0ebae3a8dbe1107a7b6392a53b6fb3dfc18b38c4ab02b4b9a460ad8829e20ce1',
+    expect(meltMsg.length).toBe(590);
+    const meltHash = hashP2PKSigAllMessageV1(meltMsg);
+    expect(bytesToHex(meltHash)).toBe(
+      '2cdffe8a0eed5d22da07adc0f149d49e0ddca5cdafa6d872630d0c52e167e548',
     );
     expect(
-      schnorrVerifyMessage(
-        '1493200b3f52cd67bdda888f67d80cf8862b4e7bd48a800828f5482218305c367f17dc3409cf89e6c795741605ccce2501f5e2b0f0e3ec54edcc7001a5863e3d',
-        meltMsg,
+      schnorrVerifyDigest(
+        'b22645e507c51a37070402ccc36b5b41cc33fe5bdc2ff3f3ee12d0b7340f9742dfaf64c49e9b1243e7a71b31329a63d9c174fd82f133491b16723f8dcd3f7693',
+        meltHash,
         VECTOR_PUB,
       ),
     ).toBe(true);
   });
 
-  test('starts with the domain tag, swaps commit an empty quote frame', () => {
+  test('swaps commit an empty quote frame first', () => {
     const msg = buildP2PKSigAllMessageV1(vectorInputs, vectorOutputs);
-    expect(bytesToHex(msg.slice(0, 22))).toBe(TAG_HEX + '00000000');
+    expect(bytesToHex(msg.slice(0, 4))).toBe('00000000');
+  });
+
+  test('the signed value is the BIP-340 tagged hash of the message', () => {
+    const msg = buildP2PKSigAllMessageV1(vectorInputs, vectorOutputs);
+    const tagHash = sha256(utf8ToBytes('Cashu_SigAllSig_v1'));
+    expect(bytesToHex(tagHash)).toBe(
+      'c83c413c874b6f3da4c6310558d0d174c56f1a0a034023ae225ab3648e9626b3',
+    );
+    expect(hashP2PKSigAllMessageV1(msg)).toEqual(sha256(concatBytes(tagHash, tagHash, msg)));
   });
 
   test('amounts commit as canonical minimal big-endian bytes', () => {
     const zero = buildP2PKSigAllMessageV1([], [mkOutput(0, 'b1')]);
-    expect(bytesToHex(zero)).toBe(TAG_HEX + '00000000' + '00000000' + '00000001' + 'b1');
+    expect(bytesToHex(zero)).toBe('00000000' + '00000000' + '00000001' + 'b1');
 
     const big = buildP2PKSigAllMessageV1([], [mkOutput(256, 'b1')]);
-    expect(bytesToHex(big)).toBe(TAG_HEX + '00000000' + '00000002' + '0100' + '00000001' + 'b1');
+    expect(bytesToHex(big)).toBe('00000000' + '00000002' + '0100' + '00000001' + 'b1');
   });
 
   test('length framing prevents boundary-shift collisions', () => {
@@ -1028,7 +1157,7 @@ describe('buildP2PKSigAllMessageV1, length-framed SIG_ALL aggregation', () => {
     // ...the framed format can.
     const mA = buildP2PKSigAllMessageV1(shiftedA, outputs);
     const mB = buildP2PKSigAllMessageV1(shiftedB, outputs);
-    expect(computeMessageDigest(mA, true)).not.toBe(computeMessageDigest(mB, true));
+    expect(hashP2PKSigAllMessageV1(mA)).not.toEqual(hashP2PKSigAllMessageV1(mB));
   });
 });
 
@@ -1871,6 +2000,59 @@ describe('verifyP2PKSpendingConditions — semantic validation', () => {
     ]);
     expect(() => verifyP2PKSpendingConditions(proof)).toThrow(
       /n_sigs\) must be a positive integer/,
+    );
+  });
+
+  test('rejects a malformed n_sigs instead of applying the default threshold', () => {
+    // A present but unparseable threshold must not read as an absent tag.
+    for (const bad of ['2oops', '2 ', '9007199254740992']) {
+      const proof = makeProof(
+        [
+          ['n_sigs', bad],
+          ['pubkeys', pk2],
+        ],
+        PUBKEY,
+      );
+      const signedProof = signP2PKProof(proof, bytesToHex(PRIVKEY));
+      expect(() => verifyP2PKSpendingConditions(signedProof)).toThrow(
+        /tag "n_sigs": must be an integer/,
+      );
+    }
+  });
+
+  test('rejects a malformed n_sigs_refund instead of ignoring it', () => {
+    const badRefund = makeProof([
+      ['locktime', '1'],
+      ['refund', pk2],
+      ['n_sigs_refund', '1.0'],
+    ]);
+    expect(() => verifyP2PKSpendingConditions(badRefund)).toThrow(
+      /tag "n_sigs_refund": must be an integer/,
+    );
+  });
+
+  test('a malformed locktime reads as a permanent lock, not a rejection', () => {
+    // NUT-11: a locktime that is not a valid unix time makes the lock permanent, so the refund
+    // path never opens and only the main key can sign; the mint makes the final call.
+    const proof = makeProof([
+      ['locktime', 'never'],
+      ['refund', pk2],
+    ]);
+    expect(() => verifyP2PKSpendingConditions(proof)).not.toThrow(/must be an integer/);
+    expect(getP2PKExpectedWitnessPubkeys(proof.secret)).toEqual([pk1]);
+  });
+
+  test('rejects a scalar tag carrying more than one value', () => {
+    const nSigs = makeProof([
+      ['n_sigs', '1', '2'],
+      ['pubkeys', pk2],
+    ]);
+    expect(() => verifyP2PKSpendingConditions(nSigs)).toThrow(
+      /tag "n_sigs": must carry a single value/,
+    );
+    const sigflag = makeProof([['sigflag', 'SIG_INPUTS', 'SIG_ALL']]);
+    expect(() => parseP2PKSecret(sigflag.secret)).toThrow(
+      /tag "sigflag": must carry a single value/,
     );
   });
 

@@ -33,7 +33,7 @@ const { keep, send } = await wallet.ops
 ```ts
 const { keep, send } = await wallet.ops
   .send(10, myProofs)
-  .asP2PK({ kind: 'P2PK', data: pubkey, locktime: 1712345678 })
+  .asLocked({ mainKeys: [pubkey], locktime: 1712345678, refundKeys: [myPubkey] })
   .includeFees(true) // sender covers receiver’s future spend fee
   .run();
 ```
@@ -55,14 +55,18 @@ const { keep, send } = await wallet.ops
 ## 5) Fully custom OutputData (prebuilt)
 
 ```ts
-const mySendData: OutputData[] = [
-  /* amounts must sum to 15 */
-];
+const mySendData: OutputData[] = [/* amounts must sum to 15 */];
 
 const { keep, send } = await wallet.ops.send(15, myProofs).asCustom(mySendData).run();
 ```
 
+Custom data may name any active keyset of the wallet unit, per output. The wallet checks each keyset before the swap and unblinds every output with the keyset the mint signed under.
+
+Normal sends swap v3 proofs that lack transferable bearer keys, even when the amounts match exactly. Supplying a script-path plan also forces a swap.
+
 ## 6) Force pure offline (no mint calls)
+
+Explicit offline modes forward existing proofs without unlocking them. They reject script-path plans because v3 transaction signatures require an online swap.
 
 **Exact match only (throws on no exact match):**
 
@@ -87,3 +91,44 @@ const { keep, send } = await wallet.ops
 > Offline modes **cannot** be combined with custom output types (`asXXXX/keepAsXXXX`).
 > The builder will throw:
 > `Offline selection cannot be combined with custom output types. Remove send/keep output configuration, or use an online swap.`
+
+## 7) Crash-safe send: persist the preview
+
+A one-shot `run()` that dies between the mint's reply and your storage write has spent the
+inputs without you ever seeing the new proofs. Persisting the preview closes that window:
+`completeSwap` builds its request purely from the preview, so replaying a persisted preview
+posts a byte-identical `/v1/swap` body, and a mint that caches the endpoint (NUT-19) returns
+the original signatures.
+
+```ts
+import { deserializeSwapPreview, serializeSwapPreview } from '@cashu/cashu-ts';
+
+const preview = await wallet.ops.send(21, myProofs).prepare();
+
+// Unselected proofs are not part of the replay and are not serialized: return them to
+// storage yourself, and add them back to `keep` after a replayed completeSwap.
+const backToStorage = preview.unselectedProofs ?? [];
+
+// Persist before completing. Previews contain Amount, bigint and Uint8Array values,
+// so use the helper rather than calling JSON.stringify(preview) directly.
+const stored = JSON.stringify(serializeSwapPreview(preview));
+
+const { keep, send } = await wallet.completeSwap(preview);
+
+// ... after a restart: load the mint again, then replay the same preview ...
+const { keep: change, send: recovered } = await wallet.completeSwap(
+  deserializeSwapPreview(JSON.parse(stored)),
+);
+```
+
+> The serialized preview contains `inputs` in the clear, so it is spendable bearer material.
+> Store it with the same protection as the proof database, and delete it once the swap settles.
+
+The replay window has bounds:
+
+- The mint must advertise `/v1/swap` in its NUT-19 `cached_endpoints`, and the replay must
+  happen inside the advertised TTL. See [NUT-19 Cached Responses](../usage/nut19.md).
+- Automatic NUT-19 retries only cover failures inside a running process. The persisted
+  preview is what covers a process restart.
+- A preview and a seed protect different windows: the preview covers a restart inside the
+  TTL; deterministic secrets plus NUT-09 restore cover loss after it.

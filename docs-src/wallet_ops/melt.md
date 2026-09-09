@@ -59,7 +59,11 @@ await wallet.completeMelt(preview, undefined, { preferAsync: true });
 const restored = (JSON.parse(stored) as SerializedOutputData[]).map((s) =>
   OutputData.deserialize(s),
 );
-const change = wallet.createMeltChangeProofs(restored, paidQuote.change ?? []);
+// zero-value entries carry no ecash (NUT-08); the rest may sit on a keyset rotated in meanwhile.
+// Amount.from also covers a paid quote that arrived over WebSocket or was rehydrated from JSON.
+const sigs = (paidQuote.change ?? []).filter((s) => !Amount.from(s.amount).isZero());
+await wallet.ensureOperableKeysets(sigs.map((s) => s.id));
+const change = wallet.createMeltChangeProofs(restored, sigs);
 ```
 
 - See [Melt Token § 3 — Async melt with later change recovery](../usage/melt_token.md) for the

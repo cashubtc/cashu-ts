@@ -4,6 +4,20 @@
 
 ---
 
+## ⚠️ READ THIS FIRST: two changes that can cost funds ⚠️
+
+**1. v3 proofs carry `spend_info`, and it MUST be persisted with the proof.**
+
+Proofs on v3 keysets gain an optional `spend_info` field (`{ k?, E?, K?, u?, tree? }`): the bearer or receiver key material and the disclosed condition tree. It is local-only (the wallet strips it from every mint payload), so nothing on the wire reminds you it exists, but for a locked proof it is the only thing that can spend it. Storage that serializes a fixed list of proof fields, or a schema that drops unknown keys, silently discards spending power: the proof survives, the ability to spend it does not.
+
+Persist and back up proof objects whole, `spend_info` included, and sweep received tokens promptly (receiving swaps them to your own seed-derived secrets). The full semantics are in [docs: Spending Locked Proofs](./docs-src/wallet_ops/spend_locked.md).
+
+**2. Every new mint quote is locked, and the lock key is yours to hold.**
+
+The wallet stores no quote lock keys and recovers nothing implicitly: a seedless wallet that drops the `privkey` from `createQuoteLockKey()` has lost the quote the way it loses a dropped proof. Persist the key with its quote. Details and migration in [the locked-quotes section](#every-new-mint-quote-is-locked-createlockedmintquote-merged-into-createmintquotebolt11); seeded wallets should also note [the counter-key section](#counter-keys-are-not-always-keyset-ids-operationcounterskeysetid-is-now-counterkey), since the quote cursor now flows through the standard counter persistence.
+
+---
+
 ## What's new: BLS12-381 v3 keysets
 
 v5 introduces support for **v3 keysets**, identified by a `02` prefix on the keyset id. v3 keysets use BLS12-381 instead of secp256k1 for the BDHKE blinding curve, with multiplicative blinding and pairing-based verification replacing DLEQ. Wire-compatible with Nutshell PR #999.
@@ -27,9 +41,23 @@ No migration is needed unless you deliberately created outputs on inactive or le
 
 ---
 
+## `keysetId` removed from the preview types
+
+`SwapPreview`, `MintPreview`, `BatchMintPreview` and `MeltPreview` no longer carry `keysetId`. It
+named the wallet's keyset at prepare time, but custom output data names its own keyset per output
+and the wallet now unblinds each output with the keyset the mint signed under. Read the id from the
+outputs instead; a persisted `SerializedSwapPreview` that still has the field deserializes fine.
+
+```ts
+// Before
+const id = preview.keysetId;
+// After
+const id = preview.outputData[0].blindedMessage.id; // or sendOutputs / keepOutputs for a SwapPreview
+```
+
 ## Mint quotes now require a usable active keyset
 
-All mint-quote creation methods (`createMintQuote`, `createMintQuoteBolt11`, `createLockedMintQuote`, `createMintQuoteBolt12`, `createMintQuoteOnchain`) now throw `no active keyset for unit '…' — a paid mint quote could not be redeemed` if the mint has no usable (active, hex-id, keyed) keyset for the wallet's unit. This prevents paying an invoice for a quote that could never be redeemed for proofs — `loadMint` deliberately tolerates keyset-less mints (e.g. a mint unwinding liabilities) by leaving the wallet unbound, so without this check the failure only surfaced after payment, at minting time.
+All mint-quote creation methods (`createMintQuote`, `createMintQuoteBolt11`, `createMintQuoteBolt12`, `createMintQuoteOnchain`) now throw `no active keyset for unit '…' — a paid mint quote could not be redeemed` if the mint has no usable (active, hex-id, keyed) keyset for the wallet's unit. This prevents paying an invoice for a quote that could never be redeemed for proofs — `loadMint` deliberately tolerates keyset-less mints (e.g. a mint unwinding liabilities) by leaving the wallet unbound, so without this check the failure only surfaced after payment, at minting time.
 
 ### Migration
 
@@ -52,6 +80,162 @@ const quote = await new Mint(mintUrl).createMintQuote('bolt11', { amount: 21, un
 ```
 
 The typed methods (`createMintQuoteBolt11` etc.) already required `loadMint()` (they check NUT-04/NUT-06 support), so no call-order change is needed there.
+
+---
+
+## Every new mint quote is locked; `createLockedMintQuote` merged into `createMintQuoteBolt11`
+
+`createMintQuoteBolt11(amount, pubkey, description?)` now requires a pubkey, taking the signature `createLockedMintQuote` had; that method is removed as redundant. This matches `createMintQuoteBolt12` and `createMintQuoteOnchain`, which always required one. Minting onto a v3 keyset requires a locked quote (NUT-04); on pre-v3 keysets the lock is NUT-20. The wallet verifies the mint echoed the lock before returning the quote, so a mint that cannot lock fails the call and nothing is payable. Unlocked quotes were an insecure legacy: anyone who learns a quote id can race you for the funds. For the rare mint without NUT-20, the generic `createMintQuote('bolt11', { amount })` (or the bare `Mint` class) can still create an unlocked legacy quote.
+
+The lock key is yours to hold. The wallet stores nothing and recovers nothing implicitly: minting signs with `config.privkey`, and a locked quote with no key throws.
+As with the other locking methods, ensure you keep the key out of anything that logs or serializes quotes.
+
+Two helpers are public: `createQuoteLockKey()` returns a fresh `{ pubkey, privkey }` (seed-derived and counter-consuming when seeded, random otherwise), and `recoverQuoteLockKey(pubkey)` re-derives a seeded wallet's lost quote key offline by scanning the quote counter. For a quote that will never be paid (eg a fee estimation), `createQuoteLockKey({ random: true })` forces a random key on a seeded wallet: no counter consumed, nothing for the recovery scan to wade through, unrecoverable by design.
+
+### Migration
+
+```ts
+// Before
+const quote = await wallet.createMintQuoteBolt11(64, 'coffee');
+const proofs = await wallet.mintProofsBolt11(64, quote);
+
+// After
+const { pubkey, privkey } = await wallet.createQuoteLockKey(); // store privkey!
+const quote = await wallet.createMintQuoteBolt11(64, pubkey, 'coffee');
+const proofs = await wallet.mintProofsBolt11(64, quote, { privkey });
+```
+
+`createLockedMintQuote` callers rename the method and keep their arguments. A seedless wallet that drops the key has lost the quote, the same way it loses a dropped proof; a seeded wallet can call `recoverQuoteLockKey(quote.pubkey)`.
+
+---
+
+## Minting on a v3 keyset needs the quote object, not the quote id
+
+`mintProofs`/`mintProofsBolt11` and `prepareMint` accept a quote id string for the pre-v3 NUT-20 signature, which covers the id and the outputs. A v3 keyset signs the transaction instead (NUT-10) and its digest commits the quote's face amount, so an id alone cannot be signed: bolt11 mints throw `prepareMint: quote object lacks its amount; pass the full mint quote`, and `prepareBatchMint` names the offending quote.
+
+Wallets that poll a quote and mint from the id are the ones this catches, since the full quote is already in hand at the polling call.
+
+### Migration
+
+```ts
+// Before
+const quote = await wallet.createMintQuoteBolt11(64, pubkey);
+const paid = await wallet.checkMintQuoteBolt11(quote.quote);
+await wallet.mintProofsBolt11(64, quote.quote, { privkey }); // v3: throws
+
+// After: pass the quote object the check returned
+await wallet.mintProofsBolt11(64, paid, { privkey });
+```
+
+Pre-v3 keysets are unaffected, so code that never touches a v3 mint needs no change.
+
+---
+
+## Keyset rejections now throw `StaleKeysetError`
+
+When the mint rejects an operation with a NUT-00 keyset error (the 12xxx class: `12001` unknown, `12002` inactive, `12003` expired), `completeSwap`, `completeMint`, `completeBatchMint` and `completeMelt` no longer surface the raw `MintOperationError`. The wallet reads the rejection as evidence that its keyset snapshot is stale, refreshes it once, and throws `StaleKeysetError` with the mint's error as `cause`. Every other mint error is untouched.
+
+The class hierarchy changes with it. `MintOperationError` extends `HttpResponseError` and carries a `status`, while `StaleKeysetError` extends `CTSError` directly. A handler that caught `HttpResponseError` around these four ops, or read `.status` off the error, sees neither now: reach them through `e.cause`, which still holds the original `MintOperationError`.
+
+`repaired: true` means the refresh ran and the snapshot is current again, so running your call a second time should succeed. `repaired: false` means nothing changed (`strictCachedKeysets`, a failed refresh, or the internal repair rate limit) and recovery is yours to decide. Nothing retries for you: the rejected outputs were built on the stale keyset, so only a fresh prepare can fix them.
+
+### Migration
+
+Catch the new type where you handled the 12xxx codes:
+
+```ts
+// Before: a raw protocol error, and no snapshot repair
+try {
+  return await wallet.receive(token);
+} catch (e) {
+  if (isMintOperationError(e) && e.code === 12002) {
+    await wallet.loadMint(true); // your own refresh
+    return wallet.receive(token);
+  }
+  throw e;
+}
+
+// After: the wallet has already refreshed
+try {
+  return await wallet.receive(token);
+} catch (e) {
+  if (!(e instanceof StaleKeysetError) || !e.repaired) throw e;
+  return wallet.receive(token);
+}
+```
+
+Code that never branched on those codes needs no change beyond expecting `StaleKeysetError` instead of `MintOperationError`; the original is still available as `e.cause`.
+
+---
+
+## Melt inputs are checked against the snapshot
+
+`prepareMelt` (and the `meltProofs*` wrappers) never looked up the keyset of an input proof, so proofs on an id the wallet did not hold were melted anyway. v5 resolves those ids first, exactly as `receive` does: unknown ids trigger one `loadMint(true)`.
+
+What happens next depends on the method. `meltProofsOnchain`, which prices its inputs from the keyset's `input_fee_ppk`, throws `UnknownKeysetError` for an id the mint does not know. The bolt11 and bolt12 paths never consult the input keyset (no keys, no fee metadata), so an id still unknown after the refresh proceeds with a warning instead of refusing: the mint is the judge of whether it honors proofs on a keyset it no longer lists.
+
+### Migration
+
+Melting proofs from an external or restored source, on a wallet whose snapshot may predate them, needs no change: the refresh finds the rotated-in keyset and the melt proceeds.
+
+If the mint has pruned the keyset, no refresh resolves it and none of this helps. Bolt11 and bolt12 melts go through anyway, logging a warning. An onchain melt of those proofs cannot be priced, so it throws `UnknownKeysetError` and keeps throwing; melt them over bolt11 or bolt12 instead if you need them out.
+
+Under `strictCachedKeysets` nothing is fetched for you, so resolve the ids yourself before melting. The same call is useful outside strict mode when you want to choose the moment the network call happens:
+
+```ts
+// Resolve just the ids you are about to spend, or loadMint(true) for the lot
+await wallet.ensureOperableKeysets(proofs.map((p) => p.id));
+await wallet.meltProofsBolt11(quote, proofs);
+```
+
+---
+
+## Melt change failures now throw `MeltChangeError`
+
+`completeMelt` builds NUT-08 change after the mint has spent the inputs. When that step fails (the change keyset's keys will not load, or the signatures do not check out), v4 threw the underlying error and the caller was left with nothing to rebuild from, since the convenience melts never expose the `MeltPreview`. v5 throws `MeltChangeError` instead, carrying the blank `outputData`, the merged `quote`, and the original failure as `cause`.
+
+### Migration
+
+Catch it where a melt can fail, and recover once the keys are reachable. The `cause` says whether that is possible: a keyset that will load rebuilds, while an invalid DLEQ or a signature count mismatch needs a NUT-09 restore.
+
+```ts
+// Before: the melt is paid, and the change is gone
+await wallet.meltProofsBolt11(quote, proofs);
+
+// After: the change is rebuildable
+try {
+  await wallet.meltProofsBolt11(quote, proofs);
+} catch (e) {
+  if (!(e instanceof MeltChangeError)) throw e;
+  const sigs = e.quote.change ?? [];
+  await wallet.ensureOperableKeysets(sigs.map((s) => s.id)); // change may span keysets
+  const change = wallet.createMeltChangeProofs(e.outputData, sigs);
+}
+```
+
+---
+
+## Base64 payloads are decoded strictly per NUT-00
+
+Tokens are now decoded as `base64_urlsafe`, the alphabet NUT-00 mandates, rather than accepting
+standard base64 as well. A `cashuB` token containing `+` or `/` was never conformant and other
+implementations reject it, but v4 decoded it, so a wallet holding one needs to redeem it on v4
+first. Padding stays optional in both directions, as the spec requires, and pasted input is still
+whitespace-normalized.
+
+Payment requests keep a standard-base64 fallback, because this library itself emitted `creqA` in
+that alphabet before v5 fixed the encoder. Deprecated keyset IDs are unaffected: they are standard
+base64 by definition and decode as before.
+
+`toEncodedRequest` now emits `base64_urlsafe`. The output of a given request therefore changes, so
+any stored comparison against a previously encoded string needs regenerating.
+
+### Migration
+
+No code change for most consumers: encoding and decoding both stay on the package entry point and
+the wallet paths are unchanged. If you persisted encoded payment requests and compare them as
+strings, re-encode them. If you accept tokens from a source that emits standard base64, ask it to
+follow NUT-00; those tokens no longer decode here.
 
 ---
 
@@ -125,6 +309,24 @@ calls reintroduces the window this closes.
 
 ---
 
+## Counter keys are not always keyset ids: `OperationCounters.keysetId` is now `counterKey`
+
+Seeded wallets reserve mint quote lock counters (see the locked-quotes section above) under the exported `QUOTE_COUNTER_KEY` (`'mint-quote-lock'`), flowing through the same `CounterSource` and `countersReserved` event as keyset counters. The payload field is renamed to say what it is.
+
+### Migration
+
+```ts
+// Before
+wallet.on.countersReserved(({ keysetId, next }) => saveNextToDb(keysetId, next));
+
+// After
+wallet.on.countersReserved(({ counterKey, next }) => saveNextToDb(counterKey, next));
+```
+
+A custom `CounterSource` that validates its keys as keyset ids, or joins them against a keysets table, must accept `QUOTE_COUNTER_KEY` too: every seeded wallet reserves from it on its first mint quote.
+
+---
+
 ## `checkProofsStates` now requires `id` on every proof
 
 `Wallet.checkProofsStates` previously accepted `Array<Pick<Proof, 'secret'>>` — only `secret` was required. v5 requires both `id` and `secret`: `Array<Pick<Proof, 'secret' | 'id'>>`.
@@ -145,13 +347,35 @@ If you were already passing full `Proof` objects (the normal case — `wallet.ch
 
 ---
 
+## `isPaymentRequestSatisfied` now requires `secret` on every proof
+
+`Wallet.isPaymentRequestSatisfied` previously accepted `Array<Pick<Proof, 'id' | 'amount'>>`. v5 also requires `secret`: `Array<Pick<Proof, 'id' | 'amount' | 'secret'>>`.
+
+A proof is bearer value redeemable once, and the mint keys spent state on `Y = hash_to_curve(secret)` (NUT-07), so two copies sharing a secret are one proof rather than two. The check now rejects duplicates before totalling, which it cannot do without the secret. Otherwise the same proof passed twice would count twice and a request could look settled on half the value.
+
+### Migration
+
+```ts
+// Before
+wallet.isPaymentRequestSatisfied(pr, [{ id: '00bd033559de27d0', amount: Amount.from(4) }]);
+
+// After
+wallet.isPaymentRequestSatisfied(pr, [
+  { id: '00bd033559de27d0', amount: Amount.from(4), secret: '…' },
+]);
+```
+
+If you were already passing the proofs you received (the normal case — `proofs: Proof[]`), no change is required.
+
+---
+
 ## `batchRestore` takes an options object and filters spent proofs
 
 `Wallet.batchRestore(gapLimit?, batchSize?, counter?, keysetId?)` is now `batchRestore(config?: BatchRestoreConfig)`. Behavior changes ride along:
 
 - Batches are fetched through a bounded request pool (4 in flight), cutting restore wall-clock to roughly a quarter; the request count is nearly unchanged.
-- `batchSize` defaults to 500 (was 300), matching the request size `checkProofsStates` already uses against reference mint caps.
-- Spent proofs are dropped by default via a NUT-07 state check before returning; pending proofs are kept. Pass `filterSpent: false` for the old raw output. `lastCounterWithSignature` always reflects all found signatures, so counter advancement is unaffected by filtering.
+- `batchSize` now defaults to the mint's advertised `max_array_length` (NUT-06), or 500 when it advertises none (was a fixed 300). `checkProofsStates` sizes its batches the same way.
+- Spent proofs are dropped by default via a NUT-07 state check before returning; pending proofs are kept. The raw NUT-09 replay of a range is `restore(start, count)`. `lastCounterWithSignature` always reflects all found signatures, so counter advancement is unaffected by filtering.
 - `gapLimit` is now a floor rather than an exact ceiling: batches already in flight when the gap closes are still processed, so proofs sitting shortly past the gap limit may still be recovered.
 - New `maxCounter` option: an inclusive scan ceiling, nothing above it is probed. Combine with `gapLimit: Infinity` to fetch a known counter range wall to wall.
 
@@ -309,6 +533,48 @@ Calls that already pass a `CompleteMeltOptions` object (or omit the third argume
 
 ---
 
+## `PrepareMeltConfig` removed; `nut08Change` moved to `MeltProofsConfig`
+
+`PrepareMeltConfig` is removed. Its only distinction was `nut08Change`, which now lives on `MeltProofsConfig`, so every melt method takes the same config type. This also fixes the option being unusable through `meltProofs`, `meltProofsBolt11`, `meltProofsBolt12` and `meltProofsOnchain`: they forward their config to `prepareMelt`, so `nut08Change` worked at runtime but did not type check. In v4 the type remains as a deprecated alias of `MeltProofsConfig`.
+
+### Migration
+
+```ts
+// Before
+import { type PrepareMeltConfig } from '@cashu/cashu-ts';
+const config: PrepareMeltConfig = { nut08Change: false };
+
+// After
+import { type MeltProofsConfig } from '@cashu/cashu-ts';
+const config: MeltProofsConfig = { nut08Change: false };
+```
+
+Only the type name changes; the object shape is identical, so untyped call sites need no change.
+
+---
+
+## `NUT10Option.tags` is optional
+
+`NUT10Option.tags` and `RawNUT10Option.t` are now optional, matching NUT-10 and NUT-18, which both describe tags as optional. Constructing a payment request lock no longer needs a placeholder `tags: []`. Code that reads the field must handle `undefined`, which was already possible at runtime: decoding a request that omits tags produced one.
+
+### Migration
+
+```ts
+// Before
+if (request.nut10.tags.length > 0) {
+  /* … */
+}
+
+// After
+if (request.nut10.tags?.length) {
+  /* … */
+}
+```
+
+Absent and empty are equivalent, and neither is encoded.
+
+---
+
 ## `P2PKOptions` is now a `kind` + `data` spending condition
 
 `P2PKOptions` drops `pubkey: string | string[]` and `hashlock?`. It is now the NUT-10 envelope (`kind` + `data`) plus the shared NUT-11 `LockConditions` tags:
@@ -317,31 +583,71 @@ Calls that already pass a `CompleteMeltOptions` object (or omit the third argume
 type P2PKOptions = SpendingConditionsBase & LockConditions & { kind: 'P2PK' | 'HTLC' };
 ```
 
-`data` is the lock pubkey (`'P2PK'`) or the hashlock (`'HTLC'`); extra signers move from the old `pubkey` array to the `pubkeys` tag. This affects every place a lock is built: `asP2PK()`, `OutputData.createP2PKData()`, and `{ type: 'p2pk', options }` output configs. `P2PKBuilder` (`addLockPubkey`/`addHashlock`) is unchanged.
+`data` is the lock pubkey (`'P2PK'`) or the hashlock (`'HTLC'`); extra signers move from the old `pubkey` array to the `pubkeys` tag. In v5 `P2PKOptions` is a wire-level type: it appears where NUT-11 is the actual format (`PaymentRequestBuilder.lock()`, `PaymentRequest.toP2PKOptions()`, `OutputData.createP2PKData()`, proof verification). Locks themselves are authored as `LockOptions` (next section); convert stored or wire `P2PKOptions` with `p2pkToLockOptions()`.
+
+---
+
+## Locks are semantic: `LockBuilder`, `LockOptions`, `asLocked()`
+
+v5 serves two keyset generations, and each has its own lock encoding: NUT-11/14 tag secrets on pre-v3 keysets, nutroot trees on v3 (BLS) keysets. In v5 you no longer author an encoding. You state the spending conditions as `LockOptions`, and the wallet encodes them for whichever keyset is active. A lock built for a mint that later rotates to v3 keeps working; shapes an encoding cannot express refuse loudly at build time, naming the reason, instead of failing at the mint.
+
+```ts
+type LockOptions = {
+  mainKeys?: string[]; // main-path keys; requiredMainSignatures of them must sign (default 1)
+  requiredMainSignatures?: number;
+  hashlock?: string; // SHA-256; a preimage is then required alongside signatures
+  locktime?: number; // unix seconds; activates the refund path, the main path never expires
+  refundKeys?: string[];
+  requiredRefundSignatures?: number;
+  leaves?: NutrootLeaf[]; // explicit tree leaves (eg staged reclaim windows); v3 only
+  blindKeys?: boolean | string[]; // true = every key; a list = exactly those keys (v3 only)
+  additionalTags?: P2PKTag[]; // extra NUT-11 secret tags; pre-v3 only
+  sigAll?: boolean; // NUT-11 SIG_ALL; on v3 this is the default and only behavior
+};
+```
+
+### Renames
+
+| v4 / early rc                             | v5                                        |
+| ----------------------------------------- | ----------------------------------------- |
+| `P2PKBuilder`                             | `LockBuilder`                             |
+| `.addLockPubkey()`                        | `.addMainPubkey()`                        |
+| `.requireLockSignatures()`                | `.requireMainSignatures()`                |
+| `.toOptions(): P2PKOptions`               | `.toOptions(): LockOptions`               |
+| `.asP2PK(p2pk)` / `.keepAsP2PK(p2pk)`     | `.asLocked(lock)` / `.keepAsLocked(lock)` |
+| `{ type: 'p2pk', options }` output config | `{ type: 'lock', options }`               |
+
+`asLocked()` accepts `LockOptions` or a `LockBuilder` directly. Refund and hashlock methods keep their names (`addRefundPubkey`, `requireRefundSignatures`, `addHashlock`, `lockUntil`, `sigAll`); main/refund is now the one vocabulary across the builder, the type, and verification results.
 
 ### Migration
 
 ```ts
 // Before
-asP2PK({ pubkey: pk });
-asP2PK({ pubkey: [a, b], requiredSignatures: 2 });
-asP2PK({ hashlock: h });
-asP2PK({ hashlock: h, pubkey: [a] });
+const p2pk = new P2PKBuilder().addLockPubkey([a, b]).requireLockSignatures(2).toOptions();
+await wallet.ops.send(64, proofs).asP2PK(p2pk).run();
 
 // After
-asP2PK({ kind: 'P2PK', data: pk });
-asP2PK({ kind: 'P2PK', data: a, pubkeys: [b], requiredSignatures: 2 });
-asP2PK({ kind: 'HTLC', data: h });
-asP2PK({ kind: 'HTLC', data: h, pubkeys: [a] });
+const lock = new LockBuilder().addMainPubkey([a, b]).requireMainSignatures(2).toOptions();
+await wallet.ops.send(64, proofs).asLocked(lock).run();
 ```
 
-`PaymentRequest.toP2PKOptions()` already returns the new shape, so pass its result straight to `asP2PK()`.
+### What each keyset version refuses
+
+Pre-v3 keysets refuse `leaves` and a `blindKeys` list (NUT-11 blinds all keys or none). v3 keysets refuse `additionalTags` (v3 secrets carry no tags), a locktime with no refund keys, and a hashlock with no keys (v3 transactions must be signed); lock the timeout to your own refund key instead. `sigAll` is absorbed on v3: every v3 input signs the whole transaction.
+
+### Payment requests carry both encodings
+
+`PaymentRequestBuilder.lock()` accepts the same semantic forms (`LockOptions` or a `LockBuilder`; wire `P2PKOptions` still target `nut10` alone) and emits `nutroot` plus, by default, the legacy `nut10` option so payers that predate v3 can pay; `lock(x, { legacy: false })` emits the current spec alone. `sendToRequest` follows the option the wallet's keyset takes instead of refusing a request that carries both, and `isPaymentRequestSatisfied` settles legacy proofs under `nut10` when both were published. `requestNutroot()` (which also accepts the semantic forms) remains the way to make a deliberately v3-only request.
+
+### New in the semantic surface
+
+`LockBuilder.addLeaf()` adds explicit tree leaves beyond the NUT-11 vocabulary (eg multiple `after` leaves for staged reclaim), and `blindKeys(['02…'])` blinds a chosen subset of keys; both are v3-only shapes and refuse on a pre-v3 keyset. Converters bridge the boundaries: `p2pkToLockOptions()` for stored or wire `P2PKOptions`, `lockToP2PKOptions()` where NUT-11 is the required format, and `nutrootToLockOptions()` to read a proof's disclosed tree back as lock conditions.
 
 ---
 
 ## P2PK lock pubkeys must be 33-byte compressed and on-curve
 
-Authoring a lock (`P2PKBuilder.addLockPubkey`/`addRefundPubkey`, or raw `P2PKOptions` passed to `asP2PK()` and friends) now requires 33-byte compressed hex keys (66 chars, `02`/`03` prefix) that decompress to a valid secp256k1 point, per NUT-11. v4 accepted 32-byte x-only input and silently prefixed `02`; because a SHA-256 hashlock is also 64-hex, that leniency could turn a misplaced hashlock (or corrupt key) into a lock nobody can spend. With the strict rule, 64-hex input is only ever a hashlock and pubkey mistakes fail fast.
+Authoring a lock (`LockBuilder.addMainPubkey`/`addRefundPubkey`, or raw key material passed to `asLocked()` and friends) now requires 33-byte compressed hex keys (66 chars, `02`/`03` prefix) that decompress to a valid secp256k1 point, per NUT-11. v4 accepted 32-byte x-only input and silently prefixed `02`; because a SHA-256 hashlock is also 64-hex, that leniency could turn a misplaced hashlock (or corrupt key) into a lock nobody can spend. With the strict rule, 64-hex input is only ever a hashlock and pubkey mistakes fail fast.
 
 The rule applies everywhere a P2PK pubkey is read, including parsing foreign input: `PaymentRequest.toP2PKOptions()` and proof verification (`verifyP2PKSpendingConditions` and friends) throw on a non-compliant key instead of repairing it. Paying a request creates new outputs under its lock, so a lifted key risks burning the payer's funds; and a proof already locked with such a key is rejected by spec-conformant mints anyway (CDK refuses the swap), so failing at parse names the broken proof rather than submitting a doomed spend. If you know such a key is a genuine x-only pubkey, prepend `'02'` and build the `P2PKOptions` yourself.
 
@@ -352,7 +658,7 @@ The rule applies everywhere a P2PK pubkey is read, including parsing foreign inp
 new P2PKBuilder().addLockPubkey(nostrPubkeyHex);
 
 // After: prepend the even-y prefix (the same rule NIP-61 nutzaps use)
-new P2PKBuilder().addLockPubkey('02' + nostrPubkeyHex);
+new LockBuilder().addMainPubkey('02' + nostrPubkeyHex);
 ```
 
 ---
@@ -501,3 +807,52 @@ const wallet = new Wallet(meta.mint, { unit: meta.unit });
 await wallet.loadMint();
 const { proofs } = wallet.decodeToken(token);
 ```
+
+---
+
+## SIG_ALL signing packages no longer carry digests
+
+`SigAll` is `@experimental`, so this changes without a deprecation cycle.
+
+The signing package no longer transports the digests to be signed. `SigAllSigningPackage.digests` is removed, and `signPackage` recomputes them from the package's own `inputs`, `outputs` and `quote`, so a signer only ever signs what the package shows. `deserializePackage` therefore drops its options argument: with nothing carried, there is nothing to validate against, and `validateDigest` has no meaning.
+
+`SigAllDigests` changes shape at the same time, from a `legacy`/`current` pair to a single `v0` field naming the transcript version it belongs to (the unframed concatenation format, CDK >= 0.14.0 and Nutshell > 0.20.2).
+
+### Migration
+
+```ts
+// Before
+const pkg = SigAll.deserializePackage(input, { validateDigest: true });
+const digest = pkg.digests.current;
+
+// After
+const pkg = SigAll.deserializePackage(input);
+const digest = SigAll.computeDigests(pkg.inputs, pkg.outputs, pkg.quote).v0;
+```
+
+Callers that only round-trip packages through `serializePackage`/`deserializePackage` and sign with `signPackage` need no change: digests were an implementation detail of the transport and are now derived where they are used.
+
+---
+
+## Custom `RequestFn`: string bodies must be sent verbatim
+
+`RequestArgs.requestBody` widens from `Record<string, unknown>` to `Record<string, unknown> | string`. `Mint` now serializes each request body once and hands the transport the string, because blind auth (NUT-22) signs the exact bytes sent: a transport that re-serializes breaks the witness.
+
+The default request pipeline (including the `requestFetch` option) handles both shapes; only a custom `RequestFn` passed via `customRequest` needs a change.
+
+### Migration
+
+```ts
+// Before: always an object, serialize it yourself
+const customRequest: RequestFn = async ({ endpoint, requestBody, ...rest }) => {
+  return myTransport(endpoint, { body: JSON.stringify(requestBody), ...rest });
+};
+
+// After: send a string body byte-verbatim, serialize only objects
+const customRequest: RequestFn = async ({ endpoint, requestBody, ...rest }) => {
+  const body = typeof requestBody === 'string' ? requestBody : JSONInt.stringify(requestBody);
+  return myTransport(endpoint, { body, ...rest });
+};
+```
+
+A transport that re-serializes the string sends quoted JSON and fails at the mint, so a missed migration surfaces as a hard request error, not a silent auth failure. Prefer `JSONInt.stringify` over `JSON.stringify` for object bodies: it emits bigint amounts as plain JSON numbers.

@@ -1,11 +1,12 @@
+import { bytesToHex } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 
 import { Amount } from '../../src';
 import {
   buildP2PKSigAllMessageV1,
-  computeMessageDigest,
+  hashP2PKSigAllMessageV1,
   isHTLCSpendAuthorised,
-  schnorrVerifyMessage,
+  schnorrVerifyDigest,
 } from '../../src/crypto';
 import { type Proof } from '../../src/model/types';
 
@@ -55,7 +56,7 @@ describe('NUT-14 spec vectors', () => {
   test('SIG_ALL swap vector: message, digest, signature and spend', () => {
     const sigAllSecret = `["HTLC",{"nonce":"da62796403af76c80cd6ce9153ed3746","data":"${HASHLOCK}","tags":[["pubkeys","${PUB}"],["sigflag","SIG_ALL"]]}]`;
     const sigAllSig =
-      '5df34ba9ea8097b5c89c475d24e2feb5dd816c7486ad1a4f2f3afeef808f82a469859bc9075ab1bc1735e47b87f600301172f4ed5ba3feca80e13771d6f6fe6f';
+      '8971f1c3f1de7aa2e401b75eee841a60c61ab4833c2b3ba2e0fde7911893a481d264f858e64dc9bfe614d785ef7ce0a487942850e78839eebdf260046c241d79';
     const proof = mkProof(sigAllSecret, `{"preimage":"${PREIMAGE}","signatures":["${sigAllSig}"]}`);
     const outputs = [
       {
@@ -75,11 +76,12 @@ describe('NUT-14 spec vectors', () => {
     ];
 
     const msg = buildP2PKSigAllMessageV1([proof], outputs);
-    expect(msg.length).toBe(386);
-    expect(computeMessageDigest(msg, true)).toBe(
-      'cd1a10eadc41f679104b542aee828ba22390fff80ac29747504c51a118792a58',
+    expect(msg.length).toBe(368);
+    const digest = hashP2PKSigAllMessageV1(msg);
+    expect(bytesToHex(digest)).toBe(
+      '0eb7eda21bdfc7ffbe74868d32db3981727cfaedc61ef3256681c33fb92512d1',
     );
-    expect(schnorrVerifyMessage(sigAllSig, msg, PUB)).toBe(true);
-    expect(isHTLCSpendAuthorised(proof, undefined, msg)).toBe(true);
+    expect(schnorrVerifyDigest(sigAllSig, digest, PUB)).toBe(true);
+    expect(isHTLCSpendAuthorised(proof, undefined, { digest })).toBe(true);
   });
 });

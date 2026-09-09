@@ -2,7 +2,10 @@ import { bech32 } from '@scure/base';
 
 import { CTSError } from '../model/Errors';
 import { PaymentRequestTransportType } from '../wallet/types/payment-requests';
-import type { PaymentRequestTransport } from '../wallet/types/payment-requests';
+import type { PaymentRequestTransport, NutrootOption } from '../wallet/types/payment-requests';
+
+import { decodeUtf8Field } from './bytes';
+import { bytesToHex, hexToBytes } from './hex';
 
 /**
  * NUT-10 Spending Condition structure.
@@ -27,6 +30,7 @@ export type DecodedTLVPaymentRequest = {
   description?: string;
   transports?: PaymentRequestTransport[];
   nut10?: Nut10SpendingCondition;
+  nutroot?: NutrootOption;
 };
 
 /**
@@ -44,6 +48,7 @@ export type DecodedTLVPaymentRequest = {
  * | 0x08 | nut10            | sub-TLV   | NUT-10 spending conditions (not yet implemented)                              |
  * | 0x09 | mint_preferred   | u8        | Mint list strictness flag: 0=false, 1=true; if absent, defaults to 0 (strict) |
  * | 0x0a | supported_method | sub-TLV   | Supported payment method with an optional per-method fee (repeatable)         |
+ * | 0x0b | nutroot          | sub-TLV   | Nutroot locking option (NUT-18 `nutroot`)                                     |
  */
 const TAG_ID = 0x01;
 const TAG_AMOUNT = 0x02;
@@ -55,6 +60,7 @@ const TAG_TRANSPORT = 0x07;
 const TAG_NUT10 = 0x08;
 const TAG_MINT_PREFERRED = 0x09;
 const TAG_SUPPORTED_METHODS = 0x0a;
+const TAG_NUTROOT = 0x0b;
 
 /**
  * Transport Sub-TLV Tag definitions.
@@ -99,6 +105,19 @@ const NUT10_KIND_HTLC = 1;
 const SUPPORTED_METHOD_TAG_METHOD = 0x01;
 const SUPPORTED_METHOD_TAG_FEE = 0x02;
 
+/**
+ * Nutroot Sub-TLV Tag definitions (NUT-26 tag 0x0b). Values are raw bytes, hex in JSON.
+ *
+ * | Sub-Tag | Field        | Type  | Description                                           |
+ * | ------- | ------------ | ----- | ----------------------------------------------------- |
+ * | 0x01    | receiver_key | bytes | Static receiver key, 33-byte compressed point         |
+ * | 0x02    | leaf         | bytes | Serialized condition leaf (repeatable, request order) |
+ * | 0x03    | blind_key    | bytes | Leaf key tagged blind-me, 33 bytes (repeatable)       |
+ */
+const NUTROOT_TAG_RECEIVER_KEY = 0x01;
+const NUTROOT_TAG_LEAF = 0x02;
+const NUTROOT_TAG_BLIND_KEY = 0x03;
+
 type TLVPart = {
   tag: number;
   length: number;
@@ -118,12 +137,23 @@ export function decodeTLV(data: Uint8Array): DecodedTLVPaymentRequest {
   for (const part of parts) {
     switch (part.tag) {
       case TAG_ID:
+        // Singular tags reject a repeat (as the sub-TLV parsers do) rather than
+        // let the last value silently win.
+        if (result.id !== undefined) {
+          throw new CTSError('invalid pr: multiple id fields');
+        }
         result.id = parseString(part.value);
         break;
       case TAG_AMOUNT:
+        if (result.amount !== undefined) {
+          throw new CTSError('invalid pr: multiple amount fields');
+        }
         result.amount = parseU64(part.value);
         break;
       case TAG_UNIT:
+        if (result.unit !== undefined) {
+          throw new CTSError('invalid pr: multiple unit fields');
+        }
         if (part.value.length === 1 && part.value[0] === 0) {
           result.unit = 'sat';
         } else {
@@ -131,6 +161,9 @@ export function decodeTLV(data: Uint8Array): DecodedTLVPaymentRequest {
         }
         break;
       case TAG_SINGLE_USE:
+        if (result.singleUse !== undefined) {
+          throw new CTSError('invalid pr: multiple single_use fields');
+        }
         result.singleUse = parseU8(part.value) === 1;
         break;
       case TAG_MINT:
@@ -140,6 +173,9 @@ export function decodeTLV(data: Uint8Array): DecodedTLVPaymentRequest {
         result.mints.push(parseString(part.value));
         break;
       case TAG_DESCRIPTION:
+        if (result.description !== undefined) {
+          throw new CTSError('invalid pr: multiple description fields');
+        }
         result.description = parseString(part.value);
         break;
       case TAG_TRANSPORT:
@@ -157,7 +193,17 @@ export function decodeTLV(data: Uint8Array): DecodedTLVPaymentRequest {
         result.nut10 = parseNut10(part.value);
         break;
       case TAG_MINT_PREFERRED:
+        if (result.mintsPreferred !== undefined) {
+          throw new CTSError('invalid pr: multiple mint_preferred fields');
+        }
         result.mintsPreferred = parseU8(part.value) === 1;
+        break;
+      case TAG_NUTROOT:
+        // Not repeatable: a second nutroot option makes the requested lock ambiguous.
+        if (result.nutroot) {
+          throw new CTSError('invalid pr: multiple nutroot options');
+        }
+        result.nutroot = parseNutrootOption(part.value);
         break;
       case TAG_SUPPORTED_METHODS:
         if (!result.supportedMethods) {
@@ -218,7 +264,7 @@ function decodeNextPart(data: Uint8Array): TLVPart {
 }
 
 function parseString(value: Uint8Array): string {
-  return new TextDecoder().decode(value);
+  return decodeUtf8Field(value);
 }
 
 function parseU64(value: Uint8Array): bigint {
@@ -253,7 +299,9 @@ function nut10KindToType(kind: number): string {
     case NUT10_KIND_HTLC:
       return 'HTLC';
     default:
-      throw new CTSError(`Unsupported NUT-10 kind: ${kind}`);
+      // Unknown kinds decode to their decimal string and re-encode byte-faithfully (NUT-26);
+      // validation refuses them downstream (toP2PKOptions -> sendToRequest's guard).
+      return String(kind);
   }
 }
 
@@ -267,9 +315,16 @@ function parseTransport(value: Uint8Array): PaymentRequestTransport {
   for (const part of parts) {
     switch (part.tag) {
       case TRANSPORT_TAG_KIND:
+        // kind/target are singular; a repeat makes the destination ambiguous.
+        if (kind !== undefined) {
+          throw new CTSError('invalid pr: multiple transport kind fields');
+        }
         kind = parseU8(part.value);
         break;
       case TRANSPORT_TAG_TARGET:
+        if (targetBytes !== undefined) {
+          throw new CTSError('invalid pr: multiple transport target fields');
+        }
         targetBytes = part.value;
         break;
       case TRANSPORT_TAG_TAG_TUPLE:
@@ -405,6 +460,54 @@ function parseSupportedMethod(value: Uint8Array): { method: string; fee?: bigint
 }
 
 /**
+ * Parses a nutroot locking option (NUT-26 tag 0x0b) from its sub-TLV value.
+ *
+ * @param value - The nutroot sub-TLV value bytes.
+ * @returns Parsed option with hex-encoded keys and leaves, request order preserved.
+ */
+function parseNutrootOption(value: Uint8Array): NutrootOption {
+  const parts = decodeAllParts(value);
+
+  let receiverKey: string | undefined;
+  const leaves: string[] = [];
+  const blindKeys: string[] = [];
+
+  for (const part of parts) {
+    switch (part.tag) {
+      case NUTROOT_TAG_RECEIVER_KEY:
+        // Singular: a duplicate makes the receiver ambiguous.
+        if (receiverKey !== undefined) {
+          throw new CTSError('invalid pr: multiple nutroot receiver keys');
+        }
+        if (part.value.length !== 33) {
+          throw new CTSError('nutroot receiver_key must be 33 bytes');
+        }
+        receiverKey = bytesToHex(part.value);
+        break;
+      case NUTROOT_TAG_LEAF:
+        leaves.push(bytesToHex(part.value));
+        break;
+      case NUTROOT_TAG_BLIND_KEY:
+        if (part.value.length !== 33) {
+          throw new CTSError('nutroot blind_key must be 33 bytes');
+        }
+        blindKeys.push(bytesToHex(part.value));
+        break;
+    }
+  }
+
+  if (receiverKey === undefined) {
+    throw new CTSError('nutroot option missing required receiver_key field');
+  }
+
+  return {
+    receiverKey,
+    ...(leaves.length > 0 && { leaves }),
+    ...(blindKeys.length > 0 && { blindKeys }),
+  };
+}
+
+/**
  * Parses a tag tuple from its TLV value.
  *
  * Tag tuple encoding:
@@ -463,7 +566,12 @@ export function encodeTLV(request: DecodedTLVPaymentRequest): Uint8Array {
     if (request.unit === 'sat') {
       parts.push(encodeTLVPart(TAG_UNIT, new Uint8Array([0x00])));
     } else {
-      parts.push(encodeTLVPart(TAG_UNIT, encodeString(request.unit)));
+      // The single byte 0x00 is the wire form of 'sat', so no other unit may encode to it.
+      const encodedUnit = encodeString(request.unit);
+      if (encodedUnit.length === 1 && encodedUnit[0] === 0) {
+        throw new CTSError('invalid pr: unit encoding is reserved for sat');
+      }
+      parts.push(encodeTLVPart(TAG_UNIT, encodedUnit));
     }
   }
 
@@ -503,6 +611,11 @@ export function encodeTLV(request: DecodedTLVPaymentRequest): Uint8Array {
     for (const method of request.supportedMethods) {
       parts.push(encodeTLVPart(TAG_SUPPORTED_METHODS, encodeSupportedMethod(method)));
     }
+  }
+
+  // Not repeatable: single nutroot locking option (NUT-26 tag 0x0b)
+  if (request.nutroot) {
+    parts.push(encodeTLVPart(TAG_NUTROOT, encodeNutrootOption(request.nutroot)));
   }
 
   // Concatenate all parts
@@ -572,8 +685,12 @@ function nut10TypeToKind(type: string): number {
       return NUT10_KIND_P2PK;
     case 'HTLC':
       return NUT10_KIND_HTLC;
-    default:
+    default: {
+      // A preserved unknown kind: its decimal string maps back to the wire byte (NUT-26).
+      const kind = /^\d{1,3}$/.test(type) ? Number(type) : NaN;
+      if (Number.isInteger(kind) && kind <= 0xff) return kind;
       throw new CTSError(`Unsupported NUT-10 type: ${type}`);
+    }
   }
 }
 
@@ -688,6 +805,41 @@ function encodeSupportedMethod(method: { method: string; fee?: bigint }): Uint8A
 }
 
 /**
+ * Encodes a nutroot locking option into its TLV sub-structure (NUT-26 tag 0x0b).
+ *
+ * @param nutroot - The option with hex-encoded keys and leaves.
+ * @returns Encoded nutroot sub-TLV; leaves keep request order.
+ */
+function encodeNutrootOption(nutroot: NutrootOption): Uint8Array {
+  const receiverKey = hexToBytes(nutroot.receiverKey);
+  if (receiverKey.length !== 33) {
+    throw new CTSError('nutroot receiver_key must be 33 bytes');
+  }
+  const parts: Uint8Array[] = [encodeTLVPart(NUTROOT_TAG_RECEIVER_KEY, receiverKey)];
+  for (const leaf of nutroot.leaves ?? []) {
+    parts.push(encodeTLVPart(NUTROOT_TAG_LEAF, hexToBytes(leaf)));
+  }
+  for (const key of nutroot.blindKeys ?? []) {
+    const keyBytes = hexToBytes(key);
+    if (keyBytes.length !== 33) {
+      throw new CTSError('nutroot blind_key must be 33 bytes');
+    }
+    parts.push(encodeTLVPart(NUTROOT_TAG_BLIND_KEY, keyBytes));
+  }
+
+  // Concatenate all sub-parts
+  const totalLength = parts.reduce((sum, part) => sum + part.length, 0);
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const part of parts) {
+    result.set(part, offset);
+    offset += part.length;
+  }
+
+  return result;
+}
+
+/**
  * Encodes a tag tuple into its TLV value format.
  *
  * @param tuple - Array of strings [key, value1, value2, ...].
@@ -759,14 +911,17 @@ export function decodeNprofile(nprofile: string): { pubkey: Uint8Array; relays: 
     offset += length;
 
     if (tag === 0x00) {
-      // Pubkey
+      // Pubkey: exactly one per nprofile (relays are the repeatable record).
+      if (pubkey !== undefined) {
+        throw new CTSError('Nprofile contains multiple pubkeys');
+      }
       if (value.length !== 32) {
         throw new CTSError(`Invalid pubkey length: expected 32 bytes, got ${value.length}`);
       }
       pubkey = value;
     } else if (tag === 0x01) {
       // Relay URL
-      relays.push(new TextDecoder().decode(value));
+      relays.push(decodeUtf8Field(value));
     }
     // Ignore unknown tags
   }

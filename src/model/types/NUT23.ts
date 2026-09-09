@@ -30,8 +30,12 @@ export type MintQuoteBolt11Response = MintQuoteBaseResponse & {
    */
   amount: Amount;
   /**
-   * State of the mint quote. Deprecated in NUT-04 in favour of the accounting fields; cashu-ts
-   * always populates it for bolt11.
+   * State of the mint quote. cashu-ts always populates it for bolt11, deriving it from the
+   * accounting fields when the mint omits it.
+   *
+   * @deprecated Deprecated in NUT-04 in favour of `amount_paid` / `amount_issued`; the mintable
+   *   amount is `amount_paid - amount_issued`. Retained for backwards compatibility and slated for
+   *   removal in a future major.
    */
   state: MintQuoteState;
 };

@@ -50,6 +50,8 @@ await wallet.loadMint();
 
 Use `setGlobalRequestOptions({ fetch })` when your whole app uses the same mint transport policy.
 
+Precedence depends on the option. Global values for fetch's own `RequestInit` (`cache`, `credentials`, `redirect` etc) are a process-wide transport policy and override the per-request value. Global values for library options (`requestTimeout`, `fetch`, `maxResponseBytes`, `idempotent`, NUT-19 policy) are defaults that a per-request value overrides. Global and per-request `headers` merge, with the per-request value winning per key. The exception is `redirect`, which is always `error` on a request carrying a NUT-21/22 auth header.
+
 Use `customRequest` when you need to replace the entire request pipeline instead of only the fetch-compatible transport.
 
 `requestFetch` only applies to Cashu mint HTTP requests. OIDC discovery and token requests use `oidc.fetch` because they target the identity provider and use OAuth/OIDC request and error semantics.
@@ -122,4 +124,20 @@ const wallet = new Wallet('http://localhost:3338', {
   outputDataCreator: new CustomOutputDataCreator(),
 });
 await wallet.loadMint();
+```
+
+The `hashToCurve` option is the same escape hatch for `Y = hash_to_curve(secret)`, used by
+`checkProofsStates` and NUT-17 subscriptions. A restore scan hashes every counter it visits, and on
+BLS keysets the pure JS hash dominates that cost, so a WASM or native implementation is worth
+plugging in there. The keyset id selects the curve: v3 (`02...`) ids are BLS12-381 G1, all others
+secp256k1. Hash the secret string as UTF-8 and return the compressed point as hex; `hashToCurveHex`
+is the default and can serve the curve you are not replacing.
+
+```typescript
+const wallet = new Wallet('http://localhost:3338', {
+  hashToCurve: (secret, keysetId) =>
+    isBlsKeyset(keysetId)
+      ? fastBlsHashToCurveHex(new TextEncoder().encode(secret))
+      : hashToCurveHex(secret, keysetId),
+});
 ```

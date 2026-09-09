@@ -1,4 +1,4 @@
-import { type P2PKOptions } from '../crypto';
+import { attachHTLCPreimage, isBlsKeyset } from '../crypto';
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { type OutputDataLike, type OutputDataFactory } from '../model/OutputData';
@@ -15,6 +15,8 @@ import {
 import type { ProofLike } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 
+import { nutrootToLockOptions, p2pkToLockOptions, type LockOptions } from './lock';
+import { LockBuilder } from './LockBuilder';
 import {
   type OutputType,
   type OutputConfig,
@@ -24,6 +26,7 @@ import {
   type OnCountersReserved,
   type MeltProofsConfig,
   type MeltProofsResponse,
+  type ScriptPathPlan,
   type MeltPreview,
   type MintPreview,
 } from './types';
@@ -103,9 +106,31 @@ export class WalletOps {
     if (pr.nut10 && !lock) {
       throw new CTSError(`cannot honour the request's nut10 lock kind '${pr.nut10.kind}'`);
     }
+    // Both options are one condition in two encodings (NUT-18): follow the one this wallet's
+    // keyset takes, preferring nutroot on a v3 keyset.
+    const nutroot = pr.toNutrootOptions();
     // Net of input fees (NUT-18): the payee must net the requested amount after swapping.
-    const builder = new SendBuilder(wallet, base.add(fee), proofs).includeFees(true);
-    return lock ? builder.asP2PK(lock) : builder;
+    const v3 = isBlsKeyset(wallet.keysetId);
+    // Only a locked request negotiates an encoding; an unlocked one may use any keyset.
+    const family = lock || nutroot ? (v3 ? 'v3' : 'legacy') : undefined;
+    const builder = new SendBuilder(wallet, base.add(fee), proofs, family).includeFees(true);
+    if (family) builder.keyset(wallet.keysetId);
+    if (nutroot && v3) {
+      return builder.asLocked(nutrootToLockOptions(nutroot));
+    }
+    // Nutroot alone asks for v3 outputs only (NUT-18): a payer that cannot
+    // produce them must refuse, never lock to the key verbatim.
+    if (nutroot && !lock) {
+      throw new CTSError("the request's nutroot lock needs a v3 keyset this wallet does not use");
+    }
+    // nut10 alone is the pre-v3 encoding (NUT-18): a payee that published no nutroot option has
+    // not said it can read v3 proofs, so a v3 payer refuses rather than translating the lock.
+    if (lock && v3) {
+      throw new CTSError(
+        "the request's nut10 lock is pre-v3 only; this wallet's v3 keyset needs a nutroot option",
+      );
+    }
+    return lock ? builder.asLocked(p2pkToLockOptions(lock)) : builder;
   }
   receive(token: Token | string | ProofLike[]) {
     return new ReceiveBuilder(this.wallet, token);
@@ -164,10 +189,15 @@ export class SendBuilder {
   private offlineClose?: { requireDleq: boolean };
   private amount: Amount;
 
+  /**
+   * @param lockFamily Set by `sendToRequest`: the keyset family the request was negotiated for
+   *   (NUT-18). `keyset()` then refuses an id from the other family.
+   */
   constructor(
     private wallet: Wallet,
     amount: AmountLike,
     private proofs: ProofLike[],
+    private lockFamily?: 'v3' | 'legacy',
   ) {
     this.amount = Amount.from(amount);
   }
@@ -194,14 +224,14 @@ export class SendBuilder {
   }
 
   /**
-   * Lock the sent proofs to a NUT-11 P2PK / NUT-14 HTLC spending condition.
+   * Lock the sent proofs to spending conditions; the wallet encodes them for the active keyset.
    *
-   * @param p2pk A complete {@link P2PKOptions} (e.g. from {@link P2PKBuilder} or
-   *   {@link PaymentRequest.toP2PKOptions}); its `kind` selects P2PK vs HTLC.
+   * @param lock Semantic {@link LockOptions}, or a {@link LockBuilder} to take them from.
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
-  asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]) {
-    this.sendOT = { type: 'p2pk', options: p2pk, denominations: denoms };
+  asLocked(lock: LockOptions | LockBuilder, denoms?: AmountLike[]) {
+    const options = lock instanceof LockBuilder ? lock.toOptions() : lock;
+    this.sendOT = { type: 'lock', options, denominations: denoms };
     return this;
   }
 
@@ -249,13 +279,14 @@ export class SendBuilder {
   }
 
   /**
-   * Lock the change to a NUT-11 P2PK / NUT-14 HTLC spending condition.
+   * Lock the change to spending conditions; the wallet encodes them for the active keyset.
    *
-   * @param p2pk A complete {@link P2PKOptions} whose `kind` selects P2PK vs HTLC.
+   * @param lock Semantic {@link LockOptions}, or a {@link LockBuilder} to take them from.
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
-  keepAsP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]) {
-    this.keepOT = { type: 'p2pk', options: p2pk, denominations: denoms };
+  keepAsLocked(lock: LockOptions | LockBuilder, denoms?: AmountLike[]) {
+    const options = lock instanceof LockBuilder ? lock.toOptions() : lock;
+    this.keepOT = { type: 'lock', options, denominations: denoms };
     return this;
   }
 
@@ -296,6 +327,12 @@ export class SendBuilder {
    * @param id Keyset id to use for mint keys and fee lookup.
    */
   keyset(id: string) {
+    // The lock encoding was negotiated for one family (NUT-18); the other would re-encode it.
+    if (this.lockFamily && (isBlsKeyset(id) ? 'v3' : 'legacy') !== this.lockFamily) {
+      throw new CTSError(
+        `keyset ${id} is not in the family this payment request was negotiated for`,
+      );
+    }
     this.config.keysetId = id;
     return this;
   }
@@ -307,6 +344,24 @@ export class SendBuilder {
    */
   privkey(k: string | string[]) {
     this.config.privkey = k;
+    return this;
+  }
+
+  /**
+   * Script-path spend plans for v3 locked inputs (NUT-10).
+   */
+  scriptPath(plans: ScriptPathPlan[]) {
+    this.config.scriptPath = plans;
+    return this;
+  }
+
+  /**
+   * NUT-14: preimage for HTLC inputs, placed on their witness before signing.
+   *
+   * @param preimage 64 hex characters.
+   */
+  preimage(preimage: string) {
+    this.config.preimage = preimage;
     return this;
   }
 
@@ -385,9 +440,18 @@ export class SendBuilder {
       );
     }
 
+    if ((this.offlineExact || this.offlineClose) && this.config.scriptPath?.length) {
+      throw new CTSError(
+        'Offline selection cannot execute a script-path spend; use an online swap.',
+      );
+    }
+
     // Strict offline, exact match only
     if (this.offlineExact) {
-      // Sign if needed
+      // Stamp and sign if needed
+      if (this.config.preimage !== undefined) {
+        this.proofs = attachHTLCPreimage(this.proofs, this.config.preimage);
+      }
       if (this.config.privkey) {
         this.proofs = this.wallet.signP2PKProofs(this.proofs, this.config.privkey);
       }
@@ -400,7 +464,10 @@ export class SendBuilder {
 
     // Offline close match, may overshoot
     if (this.offlineClose) {
-      // Sign if needed
+      // Stamp and sign if needed
+      if (this.config.preimage !== undefined) {
+        this.proofs = attachHTLCPreimage(this.proofs, this.config.preimage);
+      }
       if (this.config.privkey) {
         this.proofs = this.wallet.signP2PKProofs(this.proofs, this.config.privkey);
       }
@@ -468,16 +535,16 @@ export class ReceiveBuilder {
   }
 
   /**
-   * Lock the received proofs to a NUT-11 P2PK / NUT-14 HTLC spending condition.
+   * Lock the received proofs to spending conditions; the wallet encodes them for the active keyset.
    *
    * @remarks
    * If `denoms` is specified, `proofsWeHave()` has no effect.
-   * @param p2pk A complete {@link P2PKOptions} (e.g. from {@link P2PKBuilder} or
-   *   {@link PaymentRequest.toP2PKOptions}); its `kind` selects P2PK vs HTLC.
+   * @param lock Semantic {@link LockOptions}, or a {@link LockBuilder} to take them from.
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
-  asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]) {
-    this.outputType = { type: 'p2pk', options: p2pk, denominations: denoms };
+  asLocked(lock: LockOptions | LockBuilder, denoms?: AmountLike[]) {
+    const options = lock instanceof LockBuilder ? lock.toOptions() : lock;
+    this.outputType = { type: 'lock', options, denominations: denoms };
     return this;
   }
 
@@ -535,6 +602,24 @@ export class ReceiveBuilder {
   }
 
   /**
+   * Script-path spend plans for v3 locked inputs (NUT-10).
+   */
+  scriptPath(plans: ScriptPathPlan[]) {
+    this.config.scriptPath = plans;
+    return this;
+  }
+
+  /**
+   * NUT-14: preimage for HTLC inputs, placed on their witness before signing.
+   *
+   * @param preimage 64 hex characters.
+   */
+  preimage(preimage: string) {
+    this.config.preimage = preimage;
+    return this;
+  }
+
+  /**
    * Provide existing proofs to help optimise denomination selection.
    *
    * @remarks
@@ -581,8 +666,8 @@ export class ReceiveBuilder {
  * Builder for minting proofs from a quote.
  *
  * @remarks
- * Bolt12 requires privkey by default, bolt11 only for locked quotes. The compiler will throw an
- * error if bolt12 and privkey() is omitted: MintBuilder<"bolt12", false>' is not assignable...
+ * Bolt12 requires privkey by default. The compiler will throw an error if bolt12 and privkey() is
+ * omitted: MintBuilder<"bolt12", false>' is not assignable...
  *
  * Use this builder for the typed, first-class mint methods. For arbitrary or future mint methods,
  * use the generic `wallet.prepareMint(method, …)` / `wallet.completeMint()` flow.
@@ -642,16 +727,16 @@ export class MintBuilder<
   }
 
   /**
-   * Lock the minted proofs to a NUT-11 P2PK / NUT-14 HTLC spending condition.
+   * Lock the minted proofs to spending conditions; the wallet encodes them for the active keyset.
    *
    * @remarks
    * If `denoms` is specified, `proofsWeHave()` has no effect.
-   * @param p2pk A complete {@link P2PKOptions} (e.g. from {@link P2PKBuilder} or
-   *   {@link PaymentRequest.toP2PKOptions}); its `kind` selects P2PK vs HTLC.
+   * @param lock Semantic {@link LockOptions}, or a {@link LockBuilder} to take them from.
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
-  asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]) {
-    this.outputType = { type: 'p2pk', options: p2pk, denominations: denoms };
+  asLocked(lock: LockOptions | LockBuilder, denoms?: AmountLike[]) {
+    const options = lock instanceof LockBuilder ? lock.toOptions() : lock;
+    this.outputType = { type: 'lock', options, denominations: denoms };
     return this;
   }
 
@@ -697,6 +782,16 @@ export class MintBuilder<
     // For bolt11 - privkey is sent in the config
     // For bolt12 - privkey is sent positionally in run()
     this.config.privkey = k;
+    return this as MintBuilder<M, true>;
+  }
+
+  /**
+   * Sign a locked mint quote through a callback that holds the key, eg a NIP-07 extension.
+   *
+   * @param fn See {@link MintProofsConfig.sign}; ignored when `.privkey()` is also set.
+   */
+  sign(fn: NonNullable<MintProofsConfig['sign']>): MintBuilder<M, true> {
+    this.config.sign = fn;
     return this as MintBuilder<M, true>;
   }
 
@@ -750,10 +845,6 @@ export class MintBuilder<
       const raw = this.quote as string | MintQuoteBolt11Response;
       const quote = typeof raw === 'string' ? await this.wallet.checkMintQuoteBolt11(raw) : raw;
       this.wallet.validateMintQuote(quote);
-      // Enforce privkey when the quote is locked
-      if (quote.pubkey && !this.config.privkey) {
-        throw new CTSError('privkey is required for locked BOLT11 mint quotes');
-      }
       return this.wallet.prepareMint(
         this.method,
         this.amount,
@@ -799,7 +890,8 @@ export class MintBuilder<
    *
    * @remarks
    * This is equivalent to `const preview = await prepare(); await wallet.completeMint(preview)`.
-   * This method can only be called for bolt12 quotes when `.privkey()` is set.
+   * This method can only be called for bolt12 quotes when `.privkey()` is set. Builders are single
+   * use: run a fresh one after a `StaleKeysetError` with `repaired` true.
    * @returns The newly minted proofs.
    */
   async run(this: MintBuilder<M, true>) {
@@ -863,14 +955,14 @@ export class MeltBuilder<
   }
 
   /**
-   * Lock the change to a NUT-11 P2PK / NUT-14 HTLC spending condition.
+   * Lock the change to spending conditions; the wallet encodes them for the active keyset.
    *
-   * @param p2pk A complete {@link P2PKOptions} (e.g. from {@link P2PKBuilder} or
-   *   {@link PaymentRequest.toP2PKOptions}); its `kind` selects P2PK vs HTLC.
+   * @param lock Semantic {@link LockOptions}, or a {@link LockBuilder} to take them from.
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
-  asP2PK(p2pk: P2PKOptions, denoms?: AmountLike[]) {
-    this.outputType = { type: 'p2pk', options: p2pk, denominations: denoms };
+  asLocked(lock: LockOptions | LockBuilder, denoms?: AmountLike[]) {
+    const options = lock instanceof LockBuilder ? lock.toOptions() : lock;
+    this.outputType = { type: 'lock', options, denominations: denoms };
     return this;
   }
 
@@ -916,6 +1008,24 @@ export class MeltBuilder<
   }
 
   /**
+   * Script-path spend plans for v3 locked inputs (NUT-10).
+   */
+  scriptPath(plans: ScriptPathPlan[]) {
+    this.config.scriptPath = plans;
+    return this;
+  }
+
+  /**
+   * NUT-14: preimage for HTLC inputs, placed on their witness before signing.
+   *
+   * @param preimage 64 hex characters.
+   */
+  preimage(preimage: string) {
+    this.config.preimage = preimage;
+    return this;
+  }
+
+  /**
    * Receive a callback once counters are atomically reserved for deterministic outputs.
    *
    * @param cb Called with OperationCounters when counters are reserved.
@@ -945,6 +1055,8 @@ export class MeltBuilder<
   /**
    * Execute the melt against the quote.
    *
+   * @remarks
+   * Builders are single use: run a fresh one after a `StaleKeysetError` with `repaired` true.
    * @returns The melt result: `{ quote, change, outputData }`.
    */
   async run(): Promise<MeltProofsResponse<TQuote>> {
@@ -958,7 +1070,9 @@ export class MeltBuilder<
     );
 
     // Step 2, sign if needed and complete the melt
-    return this.wallet.completeMelt(preview, this.config.privkey);
+    return this.wallet.completeMelt(preview, this.config.privkey, {
+      ...(this.config.scriptPath && { scriptPath: this.config.scriptPath }),
+    });
   }
 }
 
@@ -1011,6 +1125,24 @@ export class MeltOnchainBuilder {
    */
   privkey(k: string | string[]) {
     this.config.privkey = k;
+    return this;
+  }
+
+  /**
+   * Script-path spend plans for v3 locked inputs (NUT-10).
+   */
+  scriptPath(plans: ScriptPathPlan[]) {
+    this.config.scriptPath = plans;
+    return this;
+  }
+
+  /**
+   * NUT-14: preimage for HTLC inputs, placed on their witness before signing.
+   *
+   * @param preimage 64 hex characters.
+   */
+  preimage(preimage: string) {
+    this.config.preimage = preimage;
     return this;
   }
 

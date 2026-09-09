@@ -1,8 +1,64 @@
 version: 2
 updates:
+  # npm dependencies. Dependabot floors these values at min-release-age from
+  # .npmrc, so the seven day soak holds either way and the cooldown mainly buys
+  # the longer window for majors. Security updates bypass both.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    # Keep in-range updates to the lockfile: the default widens a library's
+    # ranges, which would let a noble major claim support for two incompatible
+    # majors at once
+    versioning-strategy: increase-if-necessary
+    # Runtime deps ship to consumers, so a bump changes the published package
+    # and earns a patch. fix is the type release-please acts on; dev bumps keep
+    # the chore prefix it ignores.
+    commit-message:
+      prefix: fix(deps)
+      prefix-development: chore(deps)
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+    # A dependency joins the FIRST group it matches, so order matters here:
+    # the families come before the dependency-type catch-all.
+    groups:
+      # @noble/* and @scure/* pin each other exactly, so they move as one PR
+      noble-scure:
+        patterns: ['@noble/*', '@scure/*']
+      # A prettier bump reformats the tree, so the PR cannot go green until
+      # someone commits `npm run format`. On its own that chore blocks nothing.
+      prettier:
+        patterns: ['prettier', 'prettier-plugin-*']
+      # The eslint family pins itself through peer ranges (@eslint/js 10 will
+      # not install against eslint 9), and a bump here means new rules firing.
+      # Before the vitest group so @vitest/eslint-plugin lands with eslint.
+      eslint:
+        patterns:
+          - 'eslint'
+          - '@eslint/*'
+          - 'eslint-*'
+          - 'typescript-eslint'
+          - '@typescript-eslint/*'
+          - '@vitest/eslint-plugin'
+      # cli and config-conventional share @commitlint/types, so bumping one
+      # alone nests the other major inside the tree.
+      commitlint:
+        patterns: ['@commitlint/*']
+      # The test stack moves together: the browser providers track both vitest
+      # and the playwright version they drive, and vitest both depends on and
+      # peers on vite, so a vite major on its own cannot install.
+      vitest:
+        patterns: ['vitest', '@vitest/*', 'playwright', '@stryker-mutator/*', 'vite']
+      # Everything else dev, minor and patch only, so dev majors arrive alone
+      dev-tooling:
+        dependency-type: development
+        update-types: ['minor', 'patch']
+
   # Keeps action pins in .github/workflows current (Node-runtime deprecations,
-  # security fixes). npm deps are managed manually; mint Docker images are
-  # handled by the nightly renovate.yml script.
+  # security fixes). Mint Docker images are handled by the nightly renovate.yml
+  # script.
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -10,6 +66,10 @@ updates:
     groups:
       github-actions:
         patterns: ['*']
+    # Pinned, not inferred: inference could promote a CI bump into a releasable
+    # fix(deps) commit.
+    commit-message:
+      prefix: chore(deps)
 
   # The composite action pins its own versions and needs its own entry
   - package-ecosystem: github-actions
@@ -19,3 +79,7 @@ updates:
     groups:
       github-actions:
         patterns: ['*']
+    # Pinned, not inferred: inference could promote a CI bump into a releasable
+    # fix(deps) commit.
+    commit-message:
+      prefix: chore(deps)

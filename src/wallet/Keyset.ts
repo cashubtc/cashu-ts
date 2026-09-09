@@ -1,4 +1,4 @@
-import { hexToBytes } from '@noble/curves/utils.js';
+import { hexToBytes } from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
 import { type MintKeyset, type MintKeys } from '../model/types';

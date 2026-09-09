@@ -68,7 +68,8 @@ export type MintQuoteBaseResponse = {
    */
   updated_at: number | null;
   /**
-   * Timestamp of when the quote expires. `null` when the mint does not set an expiry.
+   * Timestamp until which the payment request can be paid. `null` when the mint does not set an
+   * expiry.
    */
   expiry: number | null;
   /**

@@ -85,17 +85,28 @@ BASE_SHA=$(git rev-parse --short HEAD)   # the $BASE commit this build sits on
 for pr in "${PRS[@]}"; do
   echo ">> merging PR #$pr"
   git fetch "$REMOTE" "pull/$pr/head:pr-$pr" --force
-  if ! git merge --no-edit "pr-$pr"; then
-    if [[ -n "$(git ls-files --unmerged)" ]]; then
-      echo "" >&2
-      echo "!! unresolved conflict merging PR #$pr — fix the files, then:" >&2
-      echo "     git add -A && git commit --no-edit --no-verify" >&2
-      echo "   then re-run; rerere replays the fix automatically next time." >&2
-      exit 1
-    fi
-    # rerere replayed a known resolution and staged it — just conclude the merge
-    git commit --no-edit --no-verify
+  # Captured, not streamed, because whether the merge hit a conflict is the only
+  # way to tell a replayed resolution from a hook that refused the auto-commit.
+  if merge_log=$(git merge --no-edit "pr-$pr" 2>&1); then
+    printf '%s\n' "$merge_log"
+    continue
+  fi
+  printf '%s\n' "$merge_log"
+  if [[ -n "$(git ls-files --unmerged)" ]]; then
+    echo "" >&2
+    echo "!! unresolved conflict merging PR #$pr — fix the files, then:" >&2
+    echo "     git add -A && git commit --no-edit --no-verify" >&2
+    echo "   then re-run; rerere replays the fix automatically next time." >&2
+    exit 1
+  fi
+  # Nothing left unmerged, so the tree is right and only the commit is missing.
+  git commit --no-edit --no-verify
+  if grep -q '^CONFLICT' <<<"$merge_log"; then
     echo ">> rerere auto-resolved PR #$pr"
+  else
+    # No conflict at all: a hook rejected the merge commit. Committed anyway,
+    # since this branch is throwaway, but a failing hook is worth knowing about.
+    echo "!! PR #$pr merged clean; a git hook blocked the commit (see above), committed with --no-verify" >&2
   fi
 done
 
@@ -104,17 +115,22 @@ echo ">> $BRANCH rebuilt: $BASE + ${PRS[*]}"
 if [[ "${PUBLISH:-}" == "1" ]]; then
   # Version = main's core version + bundle sha, e.g. 5.0.0-experimental.a1b2c3d.
   # The -experimental identifier (matches the dist-tag; beta/rc stay reserved for
-  # real prereleases) + the explicit @experimental tag mean plain `npm i cashu-ts`
+  # real prereleases) + the explicit @experimental tag mean plain `npm i @cashu/cashu-ts`
   # never picks it up (@latest unaffected). Unique per bundle (sha changes with
   # the PRs); re-publishing an identical bundle is a harmless no-op (npm rejects
   # the duplicate version).
-  # compile (nothing else triggers it on publish) + unit tests on the MERGED
-  # tree — each PR passed CI alone, but this catches breakage from combining
-  # them, which is the whole point of the experimental build. Not full `prtasks`: lint/format/
-  # api-report are repo hygiene that don't affect the published lib/, and
-  # api:update mutates files mid-publish. Skip tests with SKIP_TEST=1 to iterate.
-  echo ">> building + testing merged tree"
+  # compile + types + unit tests on the MERGED tree — each PR passed CI alone,
+  # but this catches breakage from combining them, which is the whole point of
+  # the experimental build. Not full `prtasks`: lint/format/api-report are repo
+  # hygiene that don't affect the published lib/, and api:update mutates files
+  # mid-publish. Skip tests with SKIP_TEST=1 to iterate.
+  echo ">> building + type-checking + testing merged tree"
   npm run compile
+  # Types get their own step because nothing else here checks them: esbuild
+  # (compile) and vitest both strip types without checking. A rerere replay that
+  # has gone stale against a moved base can produce a type-only break that
+  # compiles and passes tests, and would otherwise publish clean.
+  npm run check-types
   # node project only: fast, no Playwright browser dep, no coverage report —
   # enough to catch breakage from combining the PRs. SKIP_TEST=1 to skip.
   [[ "${SKIP_TEST:-}" == "1" ]] || npx vitest run --project node
@@ -124,7 +140,7 @@ if [[ "${PUBLISH:-}" == "1" ]]; then
 
   # Record what's in this build so testers know what they're testing against.
   # PR numbers (+ titles if `gh` is installed) go into an `experimentalBundle` field that
-  # ships in the package — `npm view cashu-ts@experimental experimentalBundle` — and a
+  # ships in the package — `npm view @cashu/cashu-ts@experimental experimentalBundle` — and a
   # paste-ready summary is printed at the end for your announcement.
   slug=$(git config --get "remote.$REMOTE.url" | sed -E 's#.*github\.com[:/]##; s#\.git$##')
   summary=""
@@ -138,10 +154,22 @@ if [[ "${PUBLISH:-}" == "1" ]]; then
   prs_csv=$(IFS=,; echo "${PRS[*]}")
   node -e "const fs=require('fs'),p=require('./package.json');p.experimentalBundle={base:'$BASE@$BASE_SHA',prs:[$prs_csv]};fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
 
+  # Read before publishing, since publish moves the tag.
+  pkg=$(node -p "require('./package.json').name")
+  prev=$(npm view "$pkg@experimental" version 2>/dev/null || true)
+
   echo ">> publishing $expver @experimental"
   npm version "$expver" --no-git-tag-version --allow-same-version
   git commit -aqm "chore(experimental): $expver" --no-verify   # throwaway; skip husky/commitlint
   npm publish --tag experimental
 
-  printf '\n=== announce ===\nnpm i cashu-ts@%s   (tag: experimental)\nbundled on %s@%s:\n%s\n' "$expver" "$BASE" "$BASE_SHA" "$summary"
+  # Snapshots are throwaway, so nudge anyone pinned to the one this replaces.
+  # Never fail the publish over it: npm deprecate exits non-zero on a 422 it
+  # actually applied.
+  if [[ -n "$prev" && "$prev" != "$expver" ]]; then
+    echo ">> deprecating superseded $prev"
+    npm deprecate "$pkg@$prev" "Superseded snapshot build. Use @cashu/cashu-ts@experimental or @next." || true
+  fi
+
+  printf '\n=== announce ===\nnpm i @cashu/cashu-ts@%s   (tag: experimental)\nbundled on %s@%s:\n%s\n' "$expver" "$BASE" "$BASE_SHA" "$summary"
 fi

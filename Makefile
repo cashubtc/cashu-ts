@@ -13,8 +13,8 @@ RATE_LIMIT_PM ?= 200
 # ------------------------
 # Pin versions
 # ------------------------
-CDK_IMAGE_RC ?= cashubtc/mintd:0.17.3-rc.0
-CDK_IMAGE ?= cashubtc/mintd:0.17.3
+CDK_IMAGE_RC ?= cashubtc/mintd:0.18.0-rc.3
+CDK_IMAGE ?= cashubtc/mintd:0.18.0
 CDK_NAME ?= cashu-dev-cdk
 
 NUT_IMAGE_RC ?= cashubtc/nutshell:0.18.2
@@ -23,11 +23,17 @@ NUT_NAME ?= cashu-dev-nutshell
 
 # BLS (v3) Nutshell: no published image yet — build from a local checkout that
 # carries v3 support. Default path assumes the worktree sibling layout used
-# during the BLS bring-up (../nutshell on feature/bls12-381-v3-keyset, ≥0.21.0
-# which emits v3 keysets by default; see cashu/core/base.py).
+# during the BLS bring-up (../nutshell on rnd/taproot-v3-rebased, ≥0.21.0
+# which emits v3 keysets by default; see cashu/core/base.py). That branch stacks
+# the nutroot work on PR #999 (feature/bls12-381-v3-keyset); the build uses
+# whatever ../nutshell has checked out, so switch branches there to compare.
 NUT_BLS_PATH ?= ../nutshell
 NUT_BLS_IMAGE ?= cashu-dev-nutshell-bls:local
 NUT_BLS_NAME ?= cashu-dev-nutshell-bls
+# Data volume shared by the seed (stable) and BLS mint runs, so the BLS mint
+# comes up as a mint upgraded into v3: legacy keysets from the database, which
+# serve NUT-10 and plain text secrets, plus its own fresh v3 keyset.
+NUT_BLS_VOLUME ?= cashu-dev-nutshell-bls-data
 
 # ------------------------
 # Docker envs per dependency
@@ -41,6 +47,32 @@ CDK_ENVS = \
 	-e CDK_MINTD_FAKE_WALLET_MIN_DELAY=$(FAKE_DELAY) \
 	-e CDK_MINTD_FAKE_WALLET_MAX_DELAY=$(FAKE_DELAY) \
 	-e CDK_MINTD_MNEMONIC='abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'
+
+# mintd >= 0.18 boots from a config document seeded once with `config init`;
+# CDK_MINTD_* env vars no longer configure startup (only `env:` secret refs
+# are read). This document mirrors CDK_ENVS. Exported so the container can
+# write it to disk; older images lack the `config` subcommand and keep using
+# the env vars. From 0.18.0-rc.3 `config init` also demands --new-mint (the
+# containers always start on an empty database), hence the un-flagged retry.
+define CDK_CONFIG_TOML
+[info]
+listen_host = "0.0.0.0"
+listen_port = 3338
+mnemonic = "env:CDK_MINTD_MNEMONIC"
+input_fee_ppk = $(INPUT_FEE_PPK)
+
+[database]
+engine = "sqlite"
+
+[payment_backend]
+backend = "fakewallet"
+unit = "sat"
+
+[fake_wallet]
+min_delay_time = $(FAKE_DELAY)
+max_delay_time = $(FAKE_DELAY)
+endef
+export CDK_CONFIG_TOML
 
 NUT_ENVS = \
 	-e MINT_LIGHTNING_BACKEND=FakeWallet \
@@ -73,7 +105,9 @@ cdk-up:
 	$(DOCKER) run --pull=always -d --name $(CDK_NAME) $(PLATFORM_FLAG) \
 		-p $(BIND_ADDR):$(PORT):3338 \
 		$(CDK_ENVS) \
-		$(CDK_IMAGE)
+		-e CDK_CONFIG_TOML \
+		$(CDK_IMAGE) \
+		sh -c 'printf "%s\n" "$$CDK_CONFIG_TOML" > /tmp/mintd.toml; cdk-mintd config init --file /tmp/mintd.toml --new-mint || cdk-mintd config init --file /tmp/mintd.toml || true; exec cdk-mintd'
 
 cdk-down:
 	-$(DOCKER) rm -f -v $(CDK_NAME)
@@ -134,12 +168,24 @@ nutshell-rc-down:
 nutshell-bls-build:
 	$(DOCKER) build -t $(NUT_BLS_IMAGE) $(NUT_BLS_PATH)
 
+# A fresh mint on the BLS branch generates v3 keysets only, so the legacy
+# keysets come from the upgrade path instead: seed the volume by running the
+# stable mint once, then start the BLS mint on the same database. One mint
+# then serves both generations, which the mixed-transaction tests need.
 nutshell-bls-up: nutshell-bls-build
 	-$(DOCKER) rm -f -v $(NUT_BLS_NAME) >/dev/null 2>&1 || true
+	-$(DOCKER) volume rm $(NUT_BLS_VOLUME) >/dev/null 2>&1 || true
+	-$(DOCKER) run --rm --name $(NUT_BLS_NAME)-seed \
+		-v $(NUT_BLS_VOLUME):/app/data \
+		$(NUT_ENVS) \
+		--entrypoint sh $(NUT_IMAGE) -c "timeout 15 poetry run mint; true"
 	$(DOCKER) run -d --name $(NUT_BLS_NAME) \
 		-p $(BIND_ADDR):$(PORT):3338 \
+		-v $(NUT_BLS_VOLUME):/app/data \
 		$(NUT_ENVS) \
+		-e MINT_DERIVATION_PATH="m/0'/0'/1'" \
 		$(NUT_BLS_IMAGE) poetry run mint
 
 nutshell-bls-down:
 	-$(DOCKER) rm -f -v $(NUT_BLS_NAME)
+	-$(DOCKER) volume rm $(NUT_BLS_VOLUME)

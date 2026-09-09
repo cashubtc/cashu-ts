@@ -1,10 +1,12 @@
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { bytesToNumberBE } from '@noble/curves/utils.js';
 
 import { CTSError } from '../model/Errors';
-import { Bytes, encodeBase64toUint8, hexToNumber, isValidHex } from '../utils';
+import { decodeBase64ToUint8Legacy, hexToNumber, isValidHex } from '../utils';
 
-import { type G1Point, pointFromHexG1 } from './curve_bls';
+import { type G1Point, hashToCurveBls, pointFromHexG1 } from './curve_bls';
+import { hashToCurve } from './curve_secp';
 
 /**
  * Tagged-union point covering both keyset curves on the wallet output / proof path.
@@ -13,8 +15,7 @@ import { type G1Point, pointFromHexG1 } from './curve_bls';
  * - `blsG1`: BLS12-381 G1 compressed point (48 bytes, 96 hex) — v3 keysets.
  */
 export type CurvePoint =
-  | { kind: 'secp'; pt: WeierstrassPoint<bigint> }
-  | { kind: 'blsG1'; pt: G1Point };
+  { kind: 'secp'; pt: WeierstrassPoint<bigint> } | { kind: 'blsG1'; pt: G1Point };
 
 export function asSecpPoint(pt: WeierstrassPoint<bigint>): CurvePoint {
   return { kind: 'secp', pt };
@@ -53,13 +54,24 @@ export function isBlsKeyset(keysetId: string): boolean {
   return keysetId.startsWith('02');
 }
 
+/**
+ * `Y = hash_to_curve(secret)` as compressed hex, on the curve the keyset id selects.
+ *
+ * @remarks
+ * The secret string is hashed as UTF-8, hex secrets included.
+ */
+export function hashToCurveHex(secret: string, keysetId: string): string {
+  const msg = new TextEncoder().encode(secret);
+  return (isBlsKeyset(keysetId) ? hashToCurveBls(msg) : hashToCurve(msg)).toHex(true);
+}
+
 export const getKeysetIdInt = (keysetId: string): bigint => {
   let keysetIdInt: bigint;
   if (/^[a-fA-F0-9]+$/.test(keysetId)) {
     keysetIdInt = hexToNumber(keysetId) % BigInt(2 ** 31 - 1);
   } else {
     //legacy keyset compatibility
-    keysetIdInt = Bytes.toBigInt(encodeBase64toUint8(keysetId)) % BigInt(2 ** 31 - 1);
+    keysetIdInt = bytesToNumberBE(decodeBase64ToUint8Legacy(keysetId)) % BigInt(2 ** 31 - 1);
   }
   return keysetIdInt;
 };

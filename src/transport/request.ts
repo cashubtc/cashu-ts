@@ -7,7 +7,6 @@ import {
   RateLimitError,
 } from '../model/Errors';
 import { type Nut19Policy } from '../model/types';
-import { Bytes } from '../utils/Bytes';
 import { JSONInt } from '../utils/JSONInt';
 
 /**
@@ -17,9 +16,10 @@ import { JSONInt } from '../utils/JSONInt';
  * Error contract: on a mint protocol error (JSON body with `code`/`detail`), implementations must
  * throw an error `isMintOperationError` accepts, preferably this package's
  * {@link MintOperationError}, with the NUT error code preserved. Wallet behavior that branches on
- * mint error codes (eg the NUT-20 legacy signature retry) will not engage otherwise. If you only
- * need a custom transport, prefer the `requestFetch` option ({@link RequestFetch}): the default
- * pipeline then keeps this contract for you.
+ * mint error codes (eg the NUT-20 legacy signature retry) will not engage otherwise. A string
+ * `requestBody` must be transmitted byte-verbatim: blind auth (NUT-22) signs those exact bytes, so
+ * re-serializing breaks the witness. If you only need a custom transport, prefer the `requestFetch`
+ * option ({@link RequestFetch}): the default pipeline then keeps this contract for you.
  */
 export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
 
@@ -162,7 +162,7 @@ export async function readBodyText(
       bytes.set(chunk, offset);
       offset += chunk.byteLength;
     }
-    return Bytes.toString(bytes);
+    return new TextDecoder('utf-8').decode(bytes);
   } finally {
     if (onAbort) signal?.removeEventListener('abort', onAbort);
     reader.cancel().catch(() => undefined); // release the connection; no-op if already closed
@@ -221,7 +221,11 @@ function abortError(
 
 export type RequestArgs = {
   endpoint: string;
-  requestBody?: Record<string, unknown>;
+  /**
+   * A string is sent byte-verbatim (it is what blind auth signed); an object is JSON-serialized by
+   * the transport.
+   */
+  requestBody?: Record<string, unknown> | string;
   headers?: Record<string, string>;
   logger?: Logger;
 };
@@ -341,12 +345,42 @@ export function parseRetryAfter(header: string | null): number | undefined {
   return undefined;
 }
 
+/**
+ * The options that are library semantics rather than fetch transport config.
+ *
+ * @remarks
+ * Precedence differs by class: a global value for these is only a default and the per-call value
+ * wins, while `RequestInit` fields go the other way (global is an embedder override). Adding an
+ * option to {@link RequestOptions} outside `RequestInit` will not compile until it is listed below.
+ * @internal
+ */
+type PerCallOption = Exclude<keyof RequestOptions, keyof RequestInit>;
+
+const PER_CALL_OPTIONS = {
+  endpoint: true,
+  requestBody: true,
+  logger: true,
+  ttl: true,
+  cached_endpoints: true,
+  requestTimeout: true,
+  maxResponseBytes: true,
+  idempotent: true,
+  onResponseMeta: true,
+  fetch: true,
+} satisfies Record<PerCallOption, true>;
+
 let globalRequestOptions: Partial<RequestOptions> = {};
 let requestLogger = NULL_LOGGER;
 
 /**
- * An object containing any custom settings that you want to apply to the global fetch method.
+ * An object containing any custom settings that you want to apply to every mint request.
  *
+ * @remarks
+ * `RequestInit` fields (`cache`, `credentials`, `mode` etc) override the per-call value: they are
+ * process-wide transport policy. Library options (`requestTimeout`, `fetch`, `maxResponseBytes`,
+ * `idempotent`, NUT-19 policy) are defaults a per-call value overrides. `headers` merge, per-call
+ * wins per key; `redirect` defaults to `error` on requests with a body, and is forced to `error` on
+ * requests carrying auth headers.
  * @param options See possible options here:
  *   https://developer.mozilla.org/en-US/docs/Web/API/fetch#options.
  */
@@ -367,6 +401,7 @@ const MAX_CACHED_RETRIES = 9; // 10 requests total
 const MAX_DELAY = 1000; // 1 sec
 const BASE_DELAY = 100; // 100 ms
 const DEFAULT_MAX_RESPONSE_BYTES = 8_388_608; // 8 MiB; >10x any realistic mint response
+const AUTH_HEADERS = ['blind-auth', 'clear-auth']; // NUT-21/22 tokens, lowercased for comparison
 
 class CallerAbortError extends NetworkError {
   constructor(message: string) {
@@ -452,6 +487,14 @@ function endpointPathMatchesCachedPath(endpointPath: string, cachedPath: string)
  */
 async function requestWithRetry(options: RequestOptions): Promise<unknown> {
   const { ttl, cached_endpoints, endpoint } = options;
+  // A BAT is single-use (NUT-22): if the first attempt reached the mint, a retry replays a spent
+  // token and fails auth, hiding the original result. The auth layer issues a fresh one per call.
+  const carriesBat = Object.keys(options.headers ?? {}).some(
+    (name) => name.toLowerCase() === 'blind-auth',
+  );
+  if (carriesBat) {
+    return await _request(options);
+  }
   const endpointPathname = getEndpointPathnameSafe(endpoint);
   const requestMethod = options.method?.toUpperCase() ?? 'GET';
 
@@ -569,8 +612,16 @@ async function _request(options: RequestOptions): Promise<unknown> {
   const responseByteCap = maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
 
   const requestFetch = fetchImpl ?? fetch;
-  const body = requestBody ? JSONInt.stringify(requestBody) : undefined;
+  const body =
+    typeof requestBody === 'string'
+      ? requestBody
+      : requestBody
+        ? JSONInt.stringify(requestBody)
+        : undefined;
   const headers = buildRequestHeaders(body, requestHeaders);
+  const carriesAuth = Object.keys(headers).some((name) =>
+    AUTH_HEADERS.includes(name.toLowerCase()),
+  );
   const callerSignal = options.signal ?? undefined;
   if (callerSignal?.aborted) {
     throw new CallerAbortError('Request aborted by caller');
@@ -613,7 +664,11 @@ async function _request(options: RequestOptions): Promise<unknown> {
         credentials: 'omit', // prevent cookie-based tracking
         referrer: '', // prevent leaking the embedding page URL
         referrerPolicy: 'no-referrer', // belt-and-braces for referrer across all contexts
+        // A 307/308 re-sends the body to the redirect target, so any request carrying one fails
+        // rather than follows. Overridable for deployments that legitimately redirect.
+        ...(body !== undefined ? { redirect: 'error' as const } : undefined),
         ...fetchOptions, // allows override of above options
+        ...(carriesAuth ? { redirect: 'error' as const } : undefined), // not overridable on auth requests
         signal, // not overridable (includes caller signal)
       });
     } catch (err) {
@@ -753,12 +808,11 @@ export default async function request<T>(options: RequestOptions): Promise<T> {
   const perRequest = options.onResponseMeta;
   const globalMeta = globalRequestOptions.onResponseMeta;
   const merged: RequestOptions = { ...options, ...globalRequestOptions };
-
-  // Scoped transports should override the process-wide default.
-  if (options.fetch) merged.fetch = options.fetch;
-
-  // Default: per-request callback only
-  if (perRequest) merged.onResponseMeta = perRequest;
+  for (const key of Object.keys(PER_CALL_OPTIONS) as PerCallOption[]) {
+    if (options[key] !== undefined) (merged as Record<string, unknown>)[key] = options[key];
+  }
+  // Neither side owns the header bag: a global adds app-wide headers, per-call carries auth.
+  merged.headers = { ...globalRequestOptions.headers, ...options.headers };
 
   // Both set: wrap in safeCallback so a throw in one doesn't prevent the other from firing.
   if (perRequest && globalMeta && perRequest !== globalMeta) {

@@ -179,6 +179,143 @@ describe('requests', { timeout: 7500 }, () => {
     }
   });
 
+  test('global RequestInit overrides the per-request value', async () => {
+    let init: Parameters<RequestFetch>[1];
+    const captureFetch = (async (
+      _input: Parameters<RequestFetch>[0],
+      requestInit?: Parameters<RequestFetch>[1],
+    ) => {
+      init = requestInit;
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as RequestFetch;
+
+    setGlobalRequestOptions({ redirect: 'follow', cache: 'default' });
+
+    await request({ endpoint: `${mintUrl}/v1/info`, redirect: 'error', fetch: captureFetch });
+
+    expect(init?.redirect).toBe('follow');
+    expect(init?.cache).toBe('default');
+  });
+
+  test('redirect is error on requests carrying auth headers', async () => {
+    let init: Parameters<RequestFetch>[1];
+    const captureFetch = (async (
+      _input: Parameters<RequestFetch>[0],
+      requestInit?: Parameters<RequestFetch>[1],
+    ) => {
+      init = requestInit;
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as RequestFetch;
+
+    setGlobalRequestOptions({ redirect: 'follow' });
+
+    await request({
+      endpoint: `${mintUrl}/v1/info`,
+      headers: { 'Blind-auth': 'authABC' },
+      redirect: 'follow',
+      fetch: captureFetch,
+    });
+
+    expect(init?.redirect).toBe('error');
+  });
+
+  test('redirect defaults to error on requests carrying a body, and stays overridable', async () => {
+    let init: Parameters<RequestFetch>[1];
+    const captureFetch = (async (
+      _input: Parameters<RequestFetch>[0],
+      requestInit?: Parameters<RequestFetch>[1],
+    ) => {
+      init = requestInit;
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as RequestFetch;
+
+    await request({
+      endpoint: `${mintUrl}/v1/swap`,
+      method: 'POST',
+      requestBody: { inputs: [] },
+      fetch: captureFetch,
+    });
+    expect(init?.redirect).toBe('error');
+
+    await request({
+      endpoint: `${mintUrl}/v1/swap`,
+      method: 'POST',
+      requestBody: { inputs: [] },
+      redirect: 'follow',
+      fetch: captureFetch,
+    });
+    expect(init?.redirect).toBe('follow');
+
+    await request({ endpoint: `${mintUrl}/v1/info`, fetch: captureFetch });
+    expect(init?.redirect).toBeUndefined();
+  });
+
+  test('per-request library options override the global default', async () => {
+    const endpoint = mintUrl + '/v1/keys';
+    server.use(
+      http.get(endpoint, async () => {
+        await delay(3000);
+        return HttpResponse.json({ keysets: [] });
+      }),
+    );
+
+    setGlobalRequestOptions({ requestTimeout: 2000 });
+
+    const thrown = await request({ endpoint, requestTimeout: 20, idempotent: false }).catch(
+      (e) => e,
+    );
+
+    expect(thrown).toBeInstanceOf(NetworkError);
+    expect((thrown as Error).message).toContain('Request timed out after 20ms');
+  });
+
+  test('global library options apply when the request does not set them', async () => {
+    const endpoint = mintUrl + '/v1/keys';
+    server.use(
+      http.get(endpoint, async () => {
+        await delay(3000);
+        return HttpResponse.json({ keysets: [] });
+      }),
+    );
+
+    setGlobalRequestOptions({ requestTimeout: 20 });
+
+    const thrown = await request({ endpoint, idempotent: false }).catch((e) => e);
+
+    expect(thrown).toBeInstanceOf(NetworkError);
+    expect((thrown as Error).message).toContain('Request timed out after 20ms');
+  });
+
+  test('global and per-request headers merge, per-request winning', async () => {
+    let headers: Headers;
+    server.use(
+      http.get(mintUrl + '/v1/keys', ({ request }) => {
+        headers = request.headers;
+        return HttpResponse.json({ keysets: [] });
+      }),
+    );
+
+    setGlobalRequestOptions({ headers: { 'x-app': 'global', 'x-both': 'global' } });
+
+    await request({
+      endpoint: mintUrl + '/v1/keys',
+      headers: { 'x-call': 'per-request', 'x-both': 'per-request' },
+    });
+
+    expect(headers!.get('x-app')).toBe('global');
+    expect(headers!.get('x-call')).toBe('per-request');
+    expect(headers!.get('x-both')).toBe('per-request');
+  });
+
   test('handles HttpResponseError on non-200 response', async () => {
     server.use(
       http.get(mintUrl + '/v1/melt/quote/bolt11/test', () => {
@@ -279,7 +416,7 @@ describe('requests', { timeout: 7500 }, () => {
     const thrown = await request({ endpoint }).catch((e) => e);
     expect(thrown).toBeInstanceOf(HttpResponseError);
     expect(thrown).toMatchObject({ message: 'bad response', status: 200 });
-    expect(thrown.cause).toMatchObject({ message: 'Empty response body' });
+    expect((thrown as HttpResponseError).cause).toMatchObject({ message: 'Empty response body' });
   });
 
   test('maps malformed success JSON to bad response and logs parsing failure', async () => {
@@ -304,7 +441,7 @@ describe('requests', { timeout: 7500 }, () => {
       const thrown = await request({ endpoint }).catch((e) => e);
       expect(thrown).toBeInstanceOf(HttpResponseError);
       expect(thrown).toMatchObject({ message: 'bad response' });
-      expect(thrown.cause).toBeInstanceOf(Error);
+      expect((thrown as HttpResponseError).cause).toBeInstanceOf(Error);
       expect(logger.error).toHaveBeenCalledWith(
         'Failed to parse HTTP response',
         expect.objectContaining({ err: expect.any(Error) }),
@@ -326,7 +463,7 @@ describe('requests', { timeout: 7500 }, () => {
       const thrown = await request({ endpoint }).catch((e) => e);
       expect(thrown).toBeInstanceOf(NetworkError);
       expect(thrown).toMatchObject({ message: 'aborted by runtime' });
-      expect(thrown.cause).toBe(abortError);
+      expect((thrown as NetworkError).cause).toBe(abortError);
     } finally {
       fetchMock.mockRestore();
     }
@@ -348,7 +485,7 @@ describe('requests', { timeout: 7500 }, () => {
       const thrown = await request({ endpoint }).catch((e) => e);
       expect(thrown).toBeInstanceOf(HttpResponseError);
       expect(thrown).toMatchObject({ message: 'bad response', status: 503 });
-      expect(thrown.cause).toBe(bodyReadError);
+      expect((thrown as HttpResponseError).cause).toBe(bodyReadError);
     } finally {
       fetchMock.mockRestore();
     }
@@ -1105,6 +1242,32 @@ describe('idempotent single retry (non-cached endpoints)', () => {
       idempotent: true,
     });
     expect(data.ok).toBe(true);
+    expect(requestCount).toBe(2);
+  });
+
+  test('a request carrying a Blind-auth header is never retried', async () => {
+    // The BAT is single-use: a replay would fail auth and hide the first attempt's outcome.
+    const endpoint = mintUrl + '/v1/keys';
+    let requestCount = 0;
+    server.use(
+      http.get(endpoint, () => {
+        requestCount++;
+        return Response.error();
+      }),
+    );
+    await expect(request({ endpoint, headers: { 'Blind-auth': 'batoken' } })).rejects.toThrow(
+      NetworkError,
+    );
+    expect(requestCount).toBe(1);
+    // The NUT-19 backoff loop is skipped the same way.
+    await expect(
+      request({
+        endpoint,
+        headers: { 'blind-auth': 'batoken' },
+        ttl: 1000,
+        cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+      }),
+    ).rejects.toThrow(NetworkError);
     expect(requestCount).toBe(2);
   });
 

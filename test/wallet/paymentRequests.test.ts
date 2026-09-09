@@ -1,12 +1,17 @@
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
 import { test, describe, expect } from 'vitest';
 
 import {
+  Amount,
   decodePaymentRequest,
   OutputData,
   PaymentRequest,
   PaymentRequestTransportType,
   type NUT10Option,
 } from '../../src/index';
+import { encodeCBOR, encodeUint8ToBase64UrlPadded } from '../../src/utils';
+import { encodeUint8ToBase64Url } from '../../src/utils/base64';
 import { encodeBech32m } from '../../src/utils/bech32m';
 import { encodeTLV } from '../../src/utils/tlv';
 
@@ -111,6 +116,17 @@ describe('payment requests', () => {
       'unsupported pr: invalid prefix',
     );
     expect(() => decodePaymentRequest(prWithInvalidVersion)).toThrow('unsupported pr version');
+  });
+
+  test('rejects a creqA request containing duplicate amount keys', () => {
+    // CBOR map: { a: 1, a: 1000, u: 'sat' }. A first-wins display and a last-wins decoder
+    // would otherwise disagree about the amount the wallet sends.
+    const ambiguous = new Uint8Array([
+      0xa3, 0x61, 0x61, 0x01, 0x61, 0x61, 0x19, 0x03, 0xe8, 0x61, 0x75, 0x63, 0x73, 0x61, 0x74,
+    ]);
+    const encoded = 'creqA' + encodeUint8ToBase64Url(ambiguous);
+
+    expect(() => decodePaymentRequest(encoded)).toThrow(/duplicate/i);
   });
 
   describe('mint preferences (mp, sm)', () => {
@@ -287,12 +303,9 @@ describe('payment requests', () => {
       expect(fromWire.isMintListStrict).toBe(true);
     });
 
-    test('non-boolean truthy mp is coerced (no cross-format type confusion)', () => {
-      // An untyped CBOR producer might emit `mp: 1` to mean "preferred".
-      // Coercion must normalize it to a genuine boolean so the getter
-      // (`mintsPreferred !== true`) and TLV serialization agree rather than
-      // diverging — a raw `1` would read strict via the getter yet serialize
-      // preferred over TLV.
+    test('mp accepts the numeric 0/1 form', () => {
+      // An untyped CBOR producer might emit `mp: 1` to mean "preferred"; it must read as a
+      // genuine boolean so the getter and the TLV encoding agree.
       const fromOne = PaymentRequest.fromRawRequest({
         i: 'one',
         a: 100,
@@ -315,6 +328,73 @@ describe('payment requests', () => {
       });
       expect(fromZero.mintsPreferred).toBe(false);
       expect(fromZero.isMintListStrict).toBe(true);
+    });
+
+    test('rejects a policy flag that is not a boolean or 0/1', () => {
+      // A whitelist keeps a truthy string from reading as `mp: true`.
+      expect(() =>
+        PaymentRequest.fromRawRequest({
+          i: 'bad_mp',
+          a: 100,
+          u: 'sat',
+          m: ['https://mint.example.com'],
+          mp: 'false' as unknown as boolean,
+        }),
+      ).toThrow(/mp/);
+      expect(
+        () =>
+          new PaymentRequest({
+            id: 'bad_s',
+            singleUse: 'true' as unknown as boolean,
+          }),
+      ).toThrow(/s/);
+    });
+
+    test('rejects a string-valued mp flag encoded over creqA', () => {
+      const data = encodeCBOR({
+        a: 100,
+        u: 'sat',
+        m: ['https://listed.example'],
+        mp: 'false',
+      });
+      const encoded = 'creqA' + encodeUint8ToBase64UrlPadded(data);
+      expect(() => decodePaymentRequest(encoded)).toThrow(/mp/);
+    });
+
+    test('decodes a creqA with s/mp explicitly null as absent', () => {
+      // Some encoders serialize an unset Option field as CBOR null rather than omitting
+      // the key; treat null the same as absent instead of rejecting it.
+      const data = encodeCBOR({
+        i: 'null_flags',
+        a: 100,
+        u: 'sat',
+        s: null,
+        m: ['https://listed.example'],
+        mp: null,
+      });
+      const encoded = 'creqA' + encodeUint8ToBase64UrlPadded(data);
+      const decoded = decodePaymentRequest(encoded);
+      expect(decoded.singleUse).toBeUndefined();
+      expect(decoded.mintsPreferred).toBeUndefined();
+      expect(decoded.isMintListStrict).toBe(true);
+    });
+
+    test('decodes the cdk canonical NUT-18 vector', () => {
+      // cdk's own round-trip vector (crates/cashu/src/nuts/nut18/payment_request.rs): its
+      // Option fields serialize unset as CBOR null, so `s` and `d` arrive as null here.
+      const CDK_VECTOR =
+        'creqAp2FpaGI3YTkwMTc2YWEKYXVjc2F0YXP2YW2BeCJodHRwczovL25vZmVlcy50ZXN0bnV0LmNhc2h1LnNwYWNlYWT2YXSBo2F0ZW5vc3RyYWF4qW5wcm9maWxlMXFxc2dtNnFmYTNjOGR0ejJmdnpodmZxZWFjbXdtMGU1MHBlM2s1dGZtdnBqam1uMHZqN20ydGdwejNtaHh1ZTY5dWhoeWV0dnY5dWp1ZXJwZDQ2aHh0bmZkdXEzd2Ftbnd2YXo3dG1qdjRreHo3Znc4cWVueHZld3dkY3h6Y205OXVxczZhbW53dmF6N3Rtd2RhZWp1bXIwZHM0bGpoN25hZ4GCYW5iMTc=';
+      const decoded = decodePaymentRequest(CDK_VECTOR);
+      expect(decoded.id).toBe('b7a90176');
+      expect(decoded.amount?.toString()).toBe('10');
+      expect(decoded.unit).toBe('sat');
+      expect(decoded.singleUse).toBeUndefined();
+      expect(decoded.mints).toEqual(['https://nofees.testnut.cashu.space']);
+      expect(decoded.isMintListStrict).toBe(true);
+      expect(decoded.transport?.[0]?.type).toBe(PaymentRequestTransportType.NOSTR);
+      expect(decoded.transport?.[0]?.tags).toEqual([['n', '17']]);
+      // The nprofile target carries relays, so this also exercises the creqB nprofile path.
+      expect(decodePaymentRequest(decoded.toEncodedCreqB()).id).toBe('b7a90176');
     });
 
     test('mp/sm absent by default (no serialization, no defaults injected)', () => {
@@ -537,6 +617,21 @@ describe('payment requests', () => {
       expect(decoded.singleUse).toBeUndefined();
     });
 
+    test('rejects a bech32m string whose HRP is not exactly creqb', () => {
+      // NUT-26: valid bech32m with HRP `creqb`; a longer HRP sharing the prefix is not it.
+      const tlv = encodeTLV({ id: 'hrp', unit: 'sat', mints: ['https://mint.example.com'] });
+      const wrongHrp = encodeBech32m('creqbx', tlv);
+      expect(() => PaymentRequest.fromEncodedRequest(wrongHrp)).toThrow(/prefix/);
+    });
+
+    test('creqA prefix detection is case-insensitive', () => {
+      // NUT-26: the creqA check SHOULD be case-insensitive; the base64 payload keeps its case.
+      const encoded = new PaymentRequest({ amount: 10, unit: 'sat' }).toEncodedRequest();
+      const shouted = `CREQA${encoded.slice(5)}`;
+      const decoded = PaymentRequest.fromEncodedRequest(shouted);
+      expect(decoded.amount?.equals(10)).toBeTruthy();
+    });
+
     test('roundtrip from creqB test vector', () => {
       // Use an existing test vector
       const originalEncoded =
@@ -637,6 +732,21 @@ describe('payment requests', () => {
       expect(() => prWithNut10(nut10).toP2PKOptions()).toThrow(/Invalid NUT-10 tag/);
     });
 
+    test('does not promote a BOM-prefixed extension tag into an authorised signer', () => {
+      // A leading U+FEFF makes 'pubkeys' an unrecognised extension tag key; round-tripping
+      // through the wire encoding must not let TextDecoder's BOM handling turn it into the
+      // real 'pubkeys' tag.
+      const tag = '﻿pubkeys';
+      const request = prWithNut10({ kind: 'P2PK', data: PUBKEY, tags: [[tag, PUBKEY_2]] });
+      const decoded = PaymentRequest.fromEncodedRequest(request.toEncodedCreqB());
+
+      expect(decoded.toP2PKOptions()).toEqual({
+        kind: 'P2PK',
+        data: PUBKEY,
+        additionalTags: [[tag, PUBKEY_2]],
+      });
+    });
+
     test('rejects duplicate tag keys (NUT-11 unspendable lock)', () => {
       // A repeated tag key makes the proof unspendable per NUT-11, so building
       // the lock must fail rather than silently first-winning one value.
@@ -649,6 +759,52 @@ describe('payment requests', () => {
         ],
       };
       expect(() => prWithNut10(nut10).toP2PKOptions()).toThrow(/Duplicate P2PK tag "locktime"/);
+    });
+
+    test('rejects a malformed threshold instead of defaulting to one signature', () => {
+      // A present but unparseable integer is an error, not an absent tag.
+      const nut10: NUT10Option = {
+        kind: 'P2PK',
+        data: PUBKEY,
+        tags: [
+          ['pubkeys', PUBKEY_2],
+          ['n_sigs', '2 '],
+        ],
+      };
+      expect(() => prWithNut10(nut10).toP2PKOptions()).toThrow(/tag "n_sigs": must be an integer/);
+    });
+
+    test('rejects a scalar tag carrying more than one value', () => {
+      const nut10: NUT10Option = {
+        kind: 'P2PK',
+        data: PUBKEY,
+        tags: [
+          ['pubkeys', PUBKEY_2],
+          ['n_sigs', '1', '2'],
+        ],
+      };
+      expect(() => prWithNut10(nut10).toP2PKOptions()).toThrow(
+        /tag "n_sigs": must carry a single value/,
+      );
+    });
+
+    test('bounds the pubkeys and refund lists before validating each key', () => {
+      const keys = Array.from({ length: 17 }, (_, i) => {
+        const secret = new Uint8Array(32);
+        secret[31] = i + 1;
+        return bytesToHex(secp256k1.getPublicKey(secret, true));
+      });
+      const pubkeys: NUT10Option = { kind: 'P2PK', data: PUBKEY, tags: [['pubkeys', ...keys]] };
+      expect(() => prWithNut10(pubkeys).toP2PKOptions()).toThrow(/Too many pubkeys: 17/);
+      const refund: NUT10Option = {
+        kind: 'P2PK',
+        data: PUBKEY,
+        tags: [
+          ['locktime', '1'],
+          ['refund', ...keys],
+        ],
+      };
+      expect(() => prWithNut10(refund).toP2PKOptions()).toThrow(/Too many refund pubkeys: 17/);
     });
 
     test('maps an HTLC option to a hashlock with signing keys', () => {
@@ -713,7 +869,7 @@ describe('NUT-18 payment payloads', () => {
   const MINT = 'https://mint.example';
   const makeProof = (amount: bigint) => ({
     id: '009a1f293253e41e',
-    amount,
+    amount: Amount.from(amount),
     secret: 'secret-string',
     C: '02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2',
   });
@@ -730,7 +886,7 @@ describe('NUT-18 payment payloads', () => {
       expect(payload.mint).toBe(MINT);
       expect(payload.memo).toBe('hi');
       // BigInt-safe: an amount beyond 2^53 survives exactly.
-      expect(payload.proofs[0].amount).toBe(9007199254740993n);
+      expect(payload.proofs[0].amount.toBigInt()).toBe(9007199254740993n);
     });
 
     test('omits id and memo when absent and defaults the unit', () => {
@@ -769,9 +925,10 @@ describe('NUT-18 payment payloads', () => {
       proofs: [{ id: '009a1f293253e41e', amount: 2, secret: 's', C: '02ff' }],
     });
 
-    test('normalizes small JSON number amounts to bigint', () => {
+    test('normalizes small JSON number amounts to Amount', () => {
       const payload = PaymentRequest.decodePayload(JSON.stringify(valid()));
-      expect(payload.proofs[0].amount).toBe(2n);
+      expect(payload.proofs[0].amount).toBeInstanceOf(Amount);
+      expect(payload.proofs[0].amount.toBigInt()).toBe(2n);
     });
 
     test('preserves unknown proof fields (witness, dleq)', () => {
@@ -808,5 +965,216 @@ describe('NUT-18 payment payloads', () => {
       obj.proofs[0].amount = 1.5;
       expect(() => PaymentRequest.decodePayload(JSON.stringify(obj))).toThrow();
     });
+  });
+});
+
+describe('nutroot (v3) request marking', () => {
+  const carolPub = '02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9';
+  const alicePub = '02e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13';
+  // The 6.1 after leaf: n=1, keys=[alicePub], time=1755561600.
+  const leafAfter =
+    '00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80';
+
+  test('round-trips through creqA, tags and all', () => {
+    const pr = PaymentRequest.builder()
+      .amount(8, 'sat')
+      .requestNutroot({ receiverKey: carolPub, leaves: [leafAfter], blindKeys: [alicePub] })
+      .build();
+    const decoded = decodePaymentRequest(pr.toEncodedRequest());
+    expect(decoded.nutroot).toEqual({
+      receiverKey: carolPub,
+      leaves: [leafAfter],
+      blindKeys: [alicePub],
+    });
+    // A request with no tree is the bare receiver-keyed case, and stays that way.
+    const bare = PaymentRequest.builder().requestNutroot({ receiverKey: carolPub }).build();
+    expect(decodePaymentRequest(bare.toEncodedRequest()).nutroot).toEqual({
+      receiverKey: carolPub,
+    });
+  });
+
+  test('the option converts to sender-side derivation arguments', () => {
+    const pr = PaymentRequest.builder()
+      .requestNutroot({ receiverKey: carolPub, leaves: [leafAfter], blindKeys: [alicePub] })
+      .build();
+    expect(pr.toNutrootOptions()).toEqual({
+      receiverKey: carolPub,
+      leaves: [{ type: 'after', n: 1, keys: [alicePub], time: 1755561600 }],
+      blindKeys: [alicePub],
+    });
+    expect(new PaymentRequest({}).toNutrootOptions()).toBeUndefined();
+  });
+
+  test('more than eight requested leaves are refused when authored and parsed', () => {
+    const leaves = new Array(9).fill(leafAfter);
+    expect(() =>
+      PaymentRequest.builder().requestNutroot({ receiverKey: carolPub, leaves }),
+    ).toThrow(/exceeds 8 leaves/);
+    expect(() =>
+      new PaymentRequest({ nutroot: { receiverKey: carolPub, leaves } }).toNutrootOptions(),
+    ).toThrow(/exceeds 8 leaves/);
+  });
+
+  test('the receiver key is validated and case-canonicalized, both directions', () => {
+    const upper = '02' + carolPub.slice(2).toUpperCase();
+    expect(
+      PaymentRequest.builder().requestNutroot({ receiverKey: upper }).build().nutroot?.receiverKey,
+    ).toBe(carolPub);
+    // A foreign request carrying the upper-case form canonicalizes on the way out.
+    expect(
+      new PaymentRequest({ nutroot: { receiverKey: upper } }).toNutrootOptions()?.receiverKey,
+    ).toBe(carolPub);
+    // x-only is rejected here as everywhere: the prepend-02 convention is the caller's to apply.
+    expect(() =>
+      PaymentRequest.builder().requestNutroot({ receiverKey: carolPub.slice(2) }),
+    ).toThrow(/x-only/);
+    expect(() => new PaymentRequest({ nutroot: { receiverKey: '' } }).toNutrootOptions()).toThrow(
+      /missing its receiver key/,
+    );
+  });
+
+  test('a blind-me key outside the requested tree is refused when authored', () => {
+    expect(() =>
+      PaymentRequest.builder().requestNutroot({
+        receiverKey: carolPub,
+        leaves: [leafAfter],
+        blindKeys: [carolPub],
+      }),
+    ).toThrow(/not in the requested tree/);
+  });
+
+  test('foreign blind-me keys require a tree and must belong to it', () => {
+    expect(() =>
+      new PaymentRequest({
+        nutroot: { receiverKey: carolPub, blindKeys: [alicePub] },
+      }).toNutrootOptions(),
+    ).toThrow(/require a tree/);
+    expect(() =>
+      new PaymentRequest({
+        nutroot: { receiverKey: carolPub, leaves: [leafAfter], blindKeys: [carolPub] },
+      }).toNutrootOptions(),
+    ).toThrow(/not in the requested tree/);
+    expect(() =>
+      new PaymentRequest({
+        nutroot: { receiverKey: carolPub, leaves: [leafAfter], blindKeys: ['not-a-point'] },
+      }).toNutrootOptions(),
+    ).toThrow(/Invalid pubkey/);
+  });
+
+  test('bounds the blind-me list before validating each key', () => {
+    const keys = Array.from({ length: 17 }, (_, i) => {
+      const secret = new Uint8Array(32);
+      secret[31] = i + 1;
+      return bytesToHex(secp256k1.getPublicKey(secret, true));
+    });
+    expect(() =>
+      new PaymentRequest({
+        nutroot: { receiverKey: carolPub, leaves: [leafAfter], blindKeys: keys },
+      }).toNutrootOptions(),
+    ).toThrow(/Too many blind-me keys: 17/);
+    // The bound is the tree's own key count; within it the keys are still checked against the tree.
+    expect(() =>
+      new PaymentRequest({
+        nutroot: { receiverKey: carolPub, leaves: [leafAfter], blindKeys: keys.slice(0, 1) },
+      }).toNutrootOptions(),
+    ).toThrow(/not in the requested tree/);
+  });
+
+  test('a leaf the payer cannot reproduce byte for byte is refused', () => {
+    // Same leaf plus an unknown odd field: odd types are reserved, so the leaf no longer even
+    // parses, failing before the canonical-form round-trip gets a say.
+    const annotated = leafAfter + '0d0005' + '6c6162656c'; // odd field 0x0d, "label"
+    expect(() =>
+      new PaymentRequest({
+        nutroot: { receiverKey: carolPub, leaves: [annotated] },
+      }).toNutrootOptions(),
+    ).toThrow(/field/);
+    // An unknown leaf type fails closed the same way it does in spend info.
+    expect(() =>
+      new PaymentRequest({
+        nutroot: { receiverKey: carolPub, leaves: ['0004' + '02000101'] },
+      }).toNutrootOptions(),
+    ).toThrow(/type/);
+  });
+
+  test('a NUMS receiver key must come with leaves, but needs no blind-me key', () => {
+    const numsKey = '0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0';
+    // Authoring: refused without leaves, since nothing else could spend a proof with no key path.
+    expect(() => PaymentRequest.builder().requestNutroot({ receiverKey: numsKey })).toThrow(
+      /requires leaves/,
+    );
+    // The payer's per-output offset supplies uniqueness, so no blind-me tag is needed.
+    const pr = PaymentRequest.builder()
+      .requestNutroot({ receiverKey: numsKey, leaves: [leafAfter] })
+      .build();
+    expect(decodePaymentRequest(pr.toEncodedRequest()).toNutrootOptions()?.receiverKey).toBe(
+      numsKey,
+    );
+    // A foreign request that skipped authoring validation is refused by the payer.
+    expect(() =>
+      new PaymentRequest({ nutroot: { receiverKey: numsKey } }).toNutrootOptions(),
+    ).toThrow(/requires leaves/);
+  });
+
+  test('creqA carries the option under the nutroot key, pinned to the spec vector', () => {
+    // The NUT-18 vectors' NUMS request, byte for byte: a=8, u=sat, nutroot {k, l, b}.
+    const specVector =
+      'creqAo2FhCGF1Y3NhdGdudXRyb290o2FreEIwMjUwOTI5Yjc0YzFhMDQ5NTRiNzhiNGI2MDM1ZTk3YTVlMDc4YTVhMGYyOGVjOTZkNTQ3YmZlZTlhY2U4MDNhYzBhbIF4YjAwMDIwMjAwMDEwMTA0MDAyMTAyZTQ5M2RiZjFjMTBkODBmMzU4MWU0OTA0OTMwYjE0MDRjYzZjMTM5MDBlZTA3NTg0NzRmYTk0YWJlOGM0Y2QxMzA2MDAwNDY4YTNiZTgwYWKBeEIwMmU0OTNkYmYxYzEwZDgwZjM1ODFlNDkwNDkzMGIxNDA0Y2M2YzEzOTAwZWUwNzU4NDc0ZmE5NGFiZThjNGNkMTM=';
+    const numsKey = '0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0';
+    const pr = PaymentRequest.builder()
+      .amount(8, 'sat')
+      .requestNutroot({ receiverKey: numsKey, leaves: [leafAfter], blindKeys: [alicePub] })
+      .build();
+    expect(pr.toEncodedRequest()).toBe(specVector);
+    const decoded = decodePaymentRequest(specVector);
+    expect(decoded.nutroot).toEqual({
+      receiverKey: numsKey,
+      leaves: [leafAfter],
+      blindKeys: [alicePub],
+    });
+  });
+
+  test('creqB round-trips the option under NUT-26 tag 0x0b', () => {
+    const pr = PaymentRequest.builder()
+      .amount(8, 'sat')
+      .requestNutroot({ receiverKey: carolPub, leaves: [leafAfter], blindKeys: [alicePub] })
+      .build();
+    const encoded = pr.toEncodedCreqB();
+    expect(encoded.startsWith('CREQB1')).toBe(true);
+    const decoded = decodePaymentRequest(encoded);
+    expect(decoded.nutroot).toEqual({
+      receiverKey: carolPub,
+      leaves: [leafAfter],
+      blindKeys: [alicePub],
+    });
+    expect(decoded.amount?.toNumber()).toBe(8);
+    expect(decoded.unit).toBe('sat');
+    // The bare receiver-keyed request survives too, with no leaves or blind keys materializing.
+    const bare = PaymentRequest.builder().requestNutroot({ receiverKey: carolPub }).build();
+    expect(decodePaymentRequest(bare.toEncodedCreqB()).nutroot).toEqual({ receiverKey: carolPub });
+  });
+});
+
+describe('creqA alphabet compatibility', () => {
+  // 65535 is what pushes the CBOR into the sextets where the two alphabets differ. The second
+  // form is what this library emitted before it encoded url-safe.
+  const urlSafe = 'creqAomFhGf__YXVjc2F0';
+  const standard = 'creqAomFhGf//YXVjc2F0';
+
+  test('emits url-safe, as NUT-18 requires', () => {
+    expect(new PaymentRequest({ amount: 65535, unit: 'sat' }).toEncodedRequest()).toBe(urlSafe);
+  });
+
+  test.each([
+    ['url-safe', urlSafe],
+    ['standard base64 from older versions', standard],
+  ])('decodes %s', (_label, encoded) => {
+    const pr = PaymentRequest.fromEncodedRequest(encoded);
+    expect(pr.amount?.toNumber()).toBe(65535);
+    expect(pr.unit).toBe('sat');
+  });
+
+  test('still rejects input that is neither', () => {
+    expect(() => PaymentRequest.fromEncodedRequest('creqAnot!valid')).toThrow(/Invalid base64url/);
   });
 });

@@ -73,6 +73,19 @@ describe('selectProofsRGLI, focused unit tests', () => {
     expect(res.send.length).toBeGreaterThan(0);
   });
 
+  test('close match, a proof matching the target gross cannot cap the pool when fees make it net short', () => {
+    // With 100ppk fees an 8 sat proof has exFee 8 but nets 7, so it cannot cover a
+    // target of 8 alone; the 32 sat proof must stay in the pool and be selected.
+    const proofs: Proof[] = [
+      { id: 'A', amount: Amount.from(32), secret: 's1', C: 'C1' },
+      { id: 'A', amount: Amount.from(8), secret: 's2', C: 'C2' },
+    ];
+    const kc = keychainStub({ A: 100 });
+    const res = selectProofsRGLI(proofs, 8, kc, true, false);
+    expect(res.send.length).toBeGreaterThan(0);
+    expect(sumProofs(res.send).toNumber()).toBeGreaterThanOrEqual(9); // 8 + 1 sat fee
+  });
+
   test('accepts AmountLike target amount', () => {
     const proofs: Proof[] = [
       { id: 'A', amount: Amount.from(3), secret: 's1', C: 'C1' },

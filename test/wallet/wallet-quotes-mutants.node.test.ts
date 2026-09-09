@@ -17,6 +17,7 @@ import {
   type MeltQuoteBolt11Response,
   type MintQuoteBaseResponse,
 } from '../../src';
+import { NUT02_V3_VECTOR1_KEYS, NUT02_V3_VECTOR1_KEYSET } from '../consts';
 
 import {
   useTestServer,
@@ -66,7 +67,14 @@ describe('constructor mutants', () => {
     // failIf logs its context before throwing, so the value must not appear there.
     const mnemonic = 'abandon abandon abandon abandon about';
     const error = vi.fn();
-    const logger = { error, warn: vi.fn(), info: vi.fn(), debug: vi.fn(), trace: vi.fn() };
+    const logger = {
+      error,
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+      log: vi.fn(),
+    };
 
     expect(() => new Wallet(mint, { unit, logger, bip39seed: mnemonic as never })).toThrow();
 
@@ -118,6 +126,23 @@ describe('finishInit / getKeyset mutants', () => {
 });
 
 describe('_prepareInputsForMint mutants', () => {
+  test('does not dispatch a point-shaped legacy secret as v3', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const proof = {
+      id: KEYSET_ID,
+      amount: Amount.from(1),
+      secret: LOCK_PUBKEY,
+      C: SIG_C,
+      witness: '{"signatures":["stale"]}',
+    } as Proof;
+
+    const [prepared] = (
+      wallet as unknown as { _prepareInputsForMint(proofs: Proof[]): Proof[] }
+    )._prepareInputsForMint([proof]);
+    expect(prepared.witness).toBeUndefined();
+  });
+
   test('completeMelt strips dleq and p2pk_e from the inputs sent to the mint', async () => {
     let sentInputs: Array<Record<string, unknown>> = [];
     server.use(
@@ -149,6 +174,7 @@ describe('_prepareInputsForMint mutants', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const proofsToSend = [
       {
@@ -212,6 +238,116 @@ describe('restore mutants', () => {
 });
 
 describe('createMintQuoteBolt11 mutants', () => {
+  function useV3Keyset() {
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({ keysets: [NUT02_V3_VECTOR1_KEYSET] }),
+      ),
+      http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [NUT02_V3_VECTOR1_KEYS] })),
+    );
+  }
+
+  // Echoes the requested lock pubkey, as an honest mint does.
+  function useEchoQuote(id: string, amount = 1, transform?: (pubkey: string) => string) {
+    server.use(
+      http.post(mintUrl + '/v1/mint/quote/bolt11', async ({ request }) => {
+        const body = (await request.json()) as { pubkey: string };
+        return HttpResponse.json({
+          quote: id,
+          request: amount === 2 ? 'lnbc20n1pfake' : 'lnbc10n1pfake', // HRP encodes the amount
+          unit: 'sat',
+          amount,
+          state: MintQuoteState.PAID,
+          expiry: null,
+          pubkey: transform ? transform(body.pubkey) : body.pubkey,
+        });
+      }),
+    );
+  }
+
+  test('rejects substitution of the requested quote lock', async () => {
+    useV3Keyset();
+    useEchoQuote('q-substituted', 1, (pk) => (pk.startsWith('02') ? '03' : '02') + pk.slice(2));
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const { pubkey } = await wallet.createQuoteLockKey();
+    await expect(wallet.createMintQuoteBolt11(1, pubkey)).rejects.toThrow(
+      'Mint quote is not locked to the requested pubkey',
+    );
+  });
+
+  test('batch mint signs each locked quote from the config keys', async () => {
+    useV3Keyset();
+    let n = 0;
+    server.use(
+      http.post(mintUrl + '/v1/mint/quote/bolt11', async ({ request }) => {
+        const body = (await request.json()) as { pubkey: string };
+        return HttpResponse.json({
+          quote: `q-batch-${++n}`,
+          request: 'lnbc10n1pfake', // HRP encodes the quoted 1 sat
+          unit: 'sat',
+          amount: 1,
+          state: MintQuoteState.PAID,
+          expiry: null,
+          pubkey: body.pubkey,
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const lockA = await wallet.createQuoteLockKey();
+    const lockB = await wallet.createQuoteLockKey();
+    const quotes = await Promise.all([
+      wallet.createMintQuoteBolt11(1, lockA.pubkey),
+      wallet.createMintQuoteBolt11(1, lockB.pubkey),
+    ]);
+
+    const preview = await wallet.prepareBatchMint(
+      'bolt11',
+      quotes.map((quote) => ({ amount: 1, quote })),
+      { privkey: [lockA.privkey, lockB.privkey] },
+    );
+    expect(preview.payload.signatures).toHaveLength(2);
+    expect(preview.payload.signatures?.every((signature) => typeof signature === 'string')).toBe(
+      true,
+    );
+  });
+
+  test('batch mint refuses a locked quote object missing its face amount', async () => {
+    useV3Keyset();
+    useEchoQuote('q-slim-batch', 2);
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const lock = await wallet.createQuoteLockKey();
+    const quote = await wallet.createMintQuoteBolt11(2, lock.pubkey);
+    // A partial draw against a slim quote: the transcript commits the face
+    // amount (NUT-10), which the slim object cannot supply.
+    const slim = { quote: quote.quote, unit: quote.unit, pubkey: quote.pubkey };
+    await expect(
+      wallet.prepareBatchMint('bolt11', [{ amount: 1, quote: slim }], { privkey: lock.privkey }),
+    ).rejects.toThrow(/amount/);
+  });
+
+  test('a locked quote without its key fails fast, and recoverQuoteLockKey repairs it', async () => {
+    useV3Keyset();
+    // Uppercase echo: recovery and signing must be case-insensitive on the pubkey.
+    useEchoQuote('q-lost-key', 1, (pk) => pk.toUpperCase());
+    const first = new Wallet(mint, { unit, bip39seed: SEED });
+    await first.loadMint();
+    const { pubkey } = await first.createQuoteLockKey();
+    const stored = await first.createMintQuoteBolt11(1, pubkey);
+
+    // The stored quote's key was lost: nothing is recovered implicitly.
+    const restarted = new Wallet(mint, { unit, bip39seed: SEED });
+    await restarted.loadMint();
+    await expect(restarted.prepareMint('bolt11', 1, stored)).rejects.toThrow(/recoverQuoteLockKey/);
+    // The explicit repair: scan the seed to the quote's pubkey, pass the key in config.
+    const privkey = await restarted.recoverQuoteLockKey(stored.pubkey!);
+    expect(privkey).toMatch(/^[0-9a-f]{64}$/);
+    const preview = await restarted.prepareMint('bolt11', 1, stored, { privkey });
+    expect(preview.payload.signature).toMatch(/^[0-9a-f]{128}$/);
+  });
+
   test('forwards the description and fills the wallet unit when the mint omits it', async () => {
     let body: Record<string, unknown> = {};
     server.use(
@@ -224,13 +360,14 @@ describe('createMintQuoteBolt11 mutants', () => {
           amount: 1000,
           state: MintQuoteState.UNPAID,
           expiry: null,
+          pubkey: body.pubkey,
         });
       }),
     );
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
 
-    const quote = await wallet.createMintQuoteBolt11(1000, 'a description');
+    const quote = await wallet.createMintQuoteBolt11(1000, LOCK_PUBKEY, 'a description');
     expect(body.description).toBe('a description');
     expect(quote.unit).toBe('sat');
   });
@@ -246,25 +383,30 @@ describe('createMintQuoteBolt11 mutants', () => {
           },
         }),
       ),
-      http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
-        HttpResponse.json({
+      http.post(mintUrl + '/v1/mint/quote/bolt11', async ({ request }) => {
+        const body = (await request.json()) as { pubkey: string };
+        return HttpResponse.json({
           quote: 'q-nodesc',
           request: 'lnbc10u1pfake',
           unit: 'sat',
           amount: 1000,
           state: MintQuoteState.UNPAID,
           expiry: null,
-        }),
-      ),
+          pubkey: body.pubkey,
+        });
+      }),
     );
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
 
-    await expect(wallet.createMintQuoteBolt11(1000, 'desc')).rejects.toThrow(
+    await expect(wallet.createMintQuoteBolt11(1000, LOCK_PUBKEY, 'desc')).rejects.toThrow(
       'Mint does not support description for bolt11',
     );
     // No description → the support check must be skipped, so this succeeds.
-    await expect(wallet.createMintQuoteBolt11(1000)).resolves.toHaveProperty('quote', 'q-nodesc');
+    await expect(wallet.createMintQuoteBolt11(1000, LOCK_PUBKEY)).resolves.toHaveProperty(
+      'quote',
+      'q-nodesc',
+    );
   });
 });
 
@@ -423,17 +565,26 @@ describe('validateMintQuote mutants', () => {
     ).not.toThrow();
   });
 
-  test('expiry handling: past throws, zero and future are treated as valid', async () => {
+  test('expiry does not prevent minting an available quote balance', async () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
-    const nowSec = Math.floor(Date.now() / 1000);
+    const quote: MintQuoteBolt11Response = {
+      quote: 'expired-paid-quote',
+      request: 'lnbc...',
+      amount: Amount.from(42),
+      unit: 'sat',
+      method: 'bolt11',
+      state: MintQuoteState.PAID,
+      expiry: 1,
+      amount_paid: Amount.from(42),
+      amount_issued: Amount.from(0),
+      updated_at: null,
+    };
 
-    expect(() => wallet.validateMintQuote({ quote: 'q', expiry: nowSec - 100 })).toThrow(
-      'Mint quote has expired',
+    await expect(wallet.prepareMint('bolt11', 42, quote)).resolves.toBeDefined();
+    await expect(wallet.prepareMint('bolt11', 43, quote)).rejects.toThrow(
+      'has only 42 available to mint; requested 43',
     );
-    // 0 means "no expiry" (CDK quirk); a future expiry is still valid.
-    expect(() => wallet.validateMintQuote({ quote: 'q', expiry: 0 })).not.toThrow();
-    expect(() => wallet.validateMintQuote({ quote: 'q', expiry: nowSec + 3600 })).not.toThrow();
   });
 });
 
@@ -596,8 +747,12 @@ describe('prepareMint mutants', () => {
       request: 'lnbc...',
       amount: Amount.from(8),
       unit: 'sat',
+      method: 'bolt11',
       state: MintQuoteState.UNPAID,
       expiry: null,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      updated_at: null,
     };
     const preview = await wallet.prepareMint('bolt11', 8, quote);
     const total = Amount.sum(preview.outputData.map((o) => o.blindedMessage.amount));
@@ -614,13 +769,17 @@ describe('prepareMint mutants', () => {
       request: 'lnbc...',
       amount: Amount.from(3),
       unit: 'sat',
+      method: 'bolt11',
       state: MintQuoteState.UNPAID,
       expiry: null,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      updated_at: null,
     };
     await wallet.prepareMint('bolt11', 3, quote, { onCountersReserved });
     // amount 3 -> outputs [1,2]: start 0, count 2, next 2
     expect(onCountersReserved).toHaveBeenCalledWith(
-      expect.objectContaining({ keysetId: KEYSET_ID, start: 0, count: 2, next: 2 }),
+      expect.objectContaining({ counterKey: KEYSET_ID, start: 0, count: 2, next: 2 }),
     );
   });
 
@@ -656,8 +815,12 @@ describe('completeMint mutants', () => {
       request: 'lnbc...',
       amount: Amount.from(3),
       unit: 'sat',
+      method: 'bolt11',
       state: MintQuoteState.UNPAID,
       expiry: null,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      updated_at: null,
     };
     // amount 3 → outputs [1,2]; the mint returns only 1 signature.
     const preview = await wallet.prepareMint('bolt11', 3, quote);
@@ -778,6 +941,7 @@ describe('prepareMelt mutants', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const proofsToSend: Proof[] = [
       { id: KEYSET_ID, amount: Amount.from(5), secret: 's1', C: 'C1' },
@@ -804,6 +968,7 @@ describe('prepareMelt mutants', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     // sum 11, feeReserve 1 → the non-custom path would create a single blank.
     const proofsToSend: Proof[] = [
@@ -833,6 +998,7 @@ describe('prepareMelt mutants', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const proofsToSend: Proof[] = [
       { id: KEYSET_ID, amount: Amount.from(8), secret: 's1', C: 'C1' },
@@ -841,7 +1007,7 @@ describe('prepareMelt mutants', () => {
     await wallet.prepareMelt('bolt11', meltQuote, proofsToSend, { onCountersReserved });
     // feeReserve 3 -> ceil(log2(3)) = 2 NUT-08 blanks: start 0, count 2, next 2
     expect(onCountersReserved).toHaveBeenCalledWith(
-      expect.objectContaining({ keysetId: KEYSET_ID, start: 0, count: 2, next: 2 }),
+      expect.objectContaining({ counterKey: KEYSET_ID, start: 0, count: 2, next: 2 }),
     );
   });
 
@@ -860,6 +1026,7 @@ describe('prepareMelt mutants', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
+      method: 'bolt11',
     };
     const proofsToSend: Proof[] = [
       { id: KEYSET_ID, amount: Amount.from(13), secret: 's1', C: 'C1' },
@@ -923,31 +1090,10 @@ describe('createMintQuote (generic) mutants', () => {
   });
 });
 
-describe('createLockedMintQuote mutants', () => {
+describe('caller-locked createMintQuoteBolt11 mutants', () => {
   const PUBKEY = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
 
-  function useNut20() {
-    server.use(
-      http.get(mintUrl + '/v1/info', () =>
-        HttpResponse.json({
-          ...mintInfoResp,
-          nuts: { ...mintInfoResp.nuts, 20: { supported: true } },
-        }),
-      ),
-    );
-  }
-
-  test('rejects when the mint does not advertise NUT-20', async () => {
-    // Default fixture omits NUT-20.
-    const wallet = new Wallet(mint, { unit });
-    await wallet.loadMint();
-    await expect(wallet.createLockedMintQuote(100, PUBKEY)).rejects.toThrow(
-      'Mint does not support NUT-20',
-    );
-  });
-
   test('sends the pubkey, amount, description and unit, and fills a missing response unit', async () => {
-    useNut20();
     let body: Record<string, unknown> = {};
     server.use(
       http.post(mintUrl + '/v1/mint/quote/bolt11', async ({ request }) => {
@@ -966,7 +1112,7 @@ describe('createLockedMintQuote mutants', () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
 
-    const quote = await wallet.createLockedMintQuote(100, PUBKEY, 'a description');
+    const quote = await wallet.createMintQuoteBolt11(100, PUBKEY, 'a description');
     expect(body.pubkey).toBe(PUBKEY);
     expect(body.amount).toBe(100);
     expect(body.unit).toBe('sat');
@@ -976,7 +1122,6 @@ describe('createLockedMintQuote mutants', () => {
   });
 
   test('rejects when the mint returns an unlocked quote (no pubkey)', async () => {
-    useNut20();
     server.use(
       http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
         HttpResponse.json({
@@ -993,13 +1138,12 @@ describe('createLockedMintQuote mutants', () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
 
-    await expect(wallet.createLockedMintQuote(100, PUBKEY)).rejects.toThrow(
+    await expect(wallet.createMintQuoteBolt11(100, PUBKEY)).rejects.toThrow(
       'Mint returned unlocked mint quote',
     );
   });
 
   test('rejects when the mint returns a quote locked to a different pubkey', async () => {
-    useNut20();
     server.use(
       http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
         HttpResponse.json({
@@ -1016,13 +1160,12 @@ describe('createLockedMintQuote mutants', () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
 
-    await expect(wallet.createLockedMintQuote(100, PUBKEY)).rejects.toThrow(
+    await expect(wallet.createMintQuoteBolt11(100, PUBKEY)).rejects.toThrow(
       'Mint quote is not locked to the requested pubkey',
     );
   });
 
   test('accepts a case-variant echo of the requested pubkey', async () => {
-    useNut20();
     server.use(
       http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
         HttpResponse.json({
@@ -1039,17 +1182,8 @@ describe('createLockedMintQuote mutants', () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
 
-    const quote = await wallet.createLockedMintQuote(100, PUBKEY);
-    expect(quote.pubkey.toLowerCase()).toBe(PUBKEY);
-  });
-
-  test('rejects a missing pubkey with a clear error, not a TypeError', async () => {
-    const wallet = new Wallet(mint, { unit });
-    await wallet.loadMint();
-
-    await expect(wallet.createLockedMintQuote(100, undefined as unknown as string)).rejects.toThrow(
-      'A pubkey is required to lock the mint quote',
-    );
+    const quote = await wallet.createMintQuoteBolt11(100, PUBKEY);
+    expect(quote.pubkey!.toLowerCase()).toBe(PUBKEY);
   });
 
   test('rejects a malformed pubkey (e.g. whitespace) before any request', async () => {
@@ -1057,7 +1191,7 @@ describe('createLockedMintQuote mutants', () => {
     await wallet.loadMint();
 
     // normalizeSecpPubkey runs before the NUT-20 support check, so this fails on the pubkey.
-    await expect(wallet.createLockedMintQuote(100, ' ')).rejects.toThrow('Invalid pubkey');
+    await expect(wallet.createMintQuoteBolt11(100, ' ')).rejects.toThrow('Invalid pubkey');
   });
 });
 
@@ -1086,29 +1220,6 @@ describe('checkMintQuoteBolt11 mutants', () => {
   });
 });
 
-describe('validateMintQuote expiry boundary mutants', () => {
-  test('an expiry equal to the current second is not expired', () => {
-    const wallet = new Wallet(mint, { unit });
-    const FIXED_MS = 1_700_000_000_000;
-    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(FIXED_MS);
-    try {
-      const nowSec = Math.floor(FIXED_MS / 1000);
-      // Spec: expired means strictly in the past. Equal-to-now must pass (a `<=` mutant throws).
-      expect(() => wallet.validateMintQuote({ quote: 'q', expiry: nowSec })).not.toThrow();
-    } finally {
-      nowSpy.mockRestore();
-    }
-  });
-
-  test('a non-number expiry is ignored even if it looks past', () => {
-    const wallet = new Wallet(mint, { unit });
-    // A stringified past expiry must be ignored (a `typeof === 'number'` -> true mutant throws).
-    expect(() =>
-      wallet.validateMintQuote({ quote: 'q', expiry: '100' as unknown as number }),
-    ).not.toThrow();
-  });
-});
-
 describe('prepareMint signing / policy mutants', () => {
   test('signs a locked quote using an array privkey selected by pubkey', async () => {
     const PUBKEY = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
@@ -1134,8 +1245,12 @@ describe('prepareMint signing / policy mutants', () => {
       request: 'lnbc...',
       amount: Amount.from(3),
       unit: 'sat',
+      method: 'bolt11',
       state: MintQuoteState.UNPAID,
       expiry: null,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      updated_at: null,
     };
     await wallet.prepareMint('bolt11', 3, quote, { onCountersReserved });
     expect(onCountersReserved).not.toHaveBeenCalled();
@@ -1149,7 +1264,7 @@ describe('mintProofsBolt11 mutants', () => {
     // A wrong-unit quote object must be rejected by validateMintQuote. A mutant that always
     // takes the string-id branch would skip validation and fail later with a different error.
     await expect(
-      wallet.mintProofsBolt11(1, { quote: 'x', unit: 'usd' } as MintQuoteBolt11Response, []),
+      wallet.mintProofsBolt11(1, { quote: 'x', unit: 'usd' } as MintQuoteBolt11Response),
     ).rejects.toThrow("Quote unit 'usd' does not match wallet unit 'sat'");
   });
 });
@@ -1308,25 +1423,21 @@ describe('batchRestore mutants', () => {
       secret: 's',
       C: 'C',
     } as unknown as Proof;
+    // the scan step is private; stub it by name to pin the counters it is handed
     const restoreSpy = vi
-      .spyOn(wallet, 'restore')
-      .mockResolvedValueOnce({ proofs: [fakeProof], lastCounterWithSignature: 0 })
-      .mockResolvedValueOnce({ proofs: [fakeProof], lastCounterWithSignature: 1 })
-      .mockResolvedValueOnce({ proofs: [fakeProof], lastCounterWithSignature: 2 })
-      .mockResolvedValueOnce({ proofs: [fakeProof], lastCounterWithSignature: 3 })
-      .mockResolvedValue({ proofs: [] });
+      .spyOn(wallet as unknown as { restoreUnspent: () => unknown }, 'restoreUnspent')
+      .mockResolvedValueOnce({ proofs: [fakeProof], lastCounterWithSignature: 0, used: true })
+      .mockResolvedValueOnce({ proofs: [fakeProof], lastCounterWithSignature: 1, used: true })
+      .mockResolvedValueOnce({ proofs: [fakeProof], lastCounterWithSignature: 2, used: true })
+      .mockResolvedValueOnce({ proofs: [fakeProof], lastCounterWithSignature: 3, used: true })
+      .mockResolvedValue({ proofs: [], used: false });
 
-    await wallet.batchRestore({
-      gapLimit: 1,
-      batchSize: 1,
-      keysetId: KEYSET_ID,
-      filterSpent: false,
-    });
+    await wallet.batchRestore({ gapLimit: 1, batchSize: 1, keysetId: KEYSET_ID });
 
-    // Wave 1 probes counters 0-3 in order (a `-` mutant in the start math would probe -1).
-    expect(restoreSpy).toHaveBeenNthCalledWith(1, 0, 1, { keysetId: KEYSET_ID });
-    expect(restoreSpy).toHaveBeenNthCalledWith(2, 1, 1, { keysetId: KEYSET_ID });
-    // Wave 1 was all non-empty, so wave 2 must start at counter 4 (a `-=` advance mutant goes negative).
-    expect(restoreSpy).toHaveBeenNthCalledWith(5, 4, 1, { keysetId: KEYSET_ID });
+    // Counters 0-3 are handed out in order (a `-` mutant in the start math would probe -1).
+    expect(restoreSpy).toHaveBeenNthCalledWith(1, 0, 1, KEYSET_ID);
+    expect(restoreSpy).toHaveBeenNthCalledWith(2, 1, 1, KEYSET_ID);
+    // Every batch so far was used, so the fifth must start at counter 4 (a `-=` advance mutant goes negative).
+    expect(restoreSpy).toHaveBeenNthCalledWith(5, 4, 1, KEYSET_ID);
   });
 });

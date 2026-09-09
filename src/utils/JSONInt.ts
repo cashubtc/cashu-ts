@@ -60,8 +60,7 @@ export interface JSONIntApi {
   stringify(
     value: unknown,
     replacer?:
-      | ((this: unknown, key: string, value: unknown) => unknown)
-      | ReadonlyArray<string | number>,
+      ((this: unknown, key: string, value: unknown) => unknown) | ReadonlyArray<string | number>,
     space?: string | number,
   ): string | undefined;
 }
@@ -382,7 +381,7 @@ function walkReviver(
   key: string,
   reviver: ReviverFn,
 ): unknown {
-  const current = holder[key as keyof typeof holder];
+  const current: unknown = Array.isArray(holder) ? holder[Number(key)] : holder[key];
   if (Array.isArray(current)) {
     for (let i = 0; i < current.length; i += 1) {
       const v = walkReviver(current, String(i), reviver);
@@ -505,6 +504,7 @@ function stringify(
         try {
           if (Array.isArray(val)) {
             const parts: string[] = [];
+            // eslint-disable-next-line no-restricted-syntax -- array-as-record view for the shared index walk
             const arrayHolder = val as unknown as Record<string, unknown>;
             for (let i = 0; i < val.length; i += 1) {
               const item = serialize(arrayHolder, String(i));

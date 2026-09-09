@@ -12,8 +12,22 @@
 export { Mint } from './mint';
 export { KeyChain } from './wallet/KeyChain';
 export { Keyset } from './wallet/Keyset';
-export { P2PKBuilder } from './wallet/P2PKBuilder';
+export { LockBuilder } from './wallet/LockBuilder';
+export {
+  auditableLock,
+  lockToNutrootOptions,
+  lockToP2PKOptions,
+  nutrootToLockOptions,
+  p2pkToLockOptions,
+  type LockOptions,
+} from './wallet/lock';
 export { type SelectProofs, selectProofsRGLI, selectProofsRotating } from './wallet/SelectProofs';
+export {
+  serializeSwapPreview,
+  deserializeSwapPreview,
+  type SerializedProof,
+  type SerializedSwapPreview,
+} from './wallet/SwapPreview';
 export { Wallet } from './wallet/Wallet';
 export { WalletCounters } from './wallet/WalletCounters';
 export { WalletEvents } from './wallet/WalletEvents';
@@ -44,8 +58,14 @@ export {
 
 // Wallet/Mint types used in the public API surface
 export type { CounterRange, CounterSource, OperationCounters } from './wallet/CounterSource';
-export { createEphemeralCounterSource } from './wallet/CounterSource';
-export type { SubscribeOpts, CancellerLike, SubscriptionCanceller } from './wallet/WalletEvents';
+export { createEphemeralCounterSource, QUOTE_COUNTER_KEY } from './wallet/CounterSource';
+export type {
+  SubscribeOpts,
+  CancellerLike,
+  SubscriptionCanceller,
+  WatchOpts,
+  ProofStatesStreamOpts,
+} from './wallet/WalletEvents';
 export type * from './wallet/types/config';
 export type * from './wallet/types/payloads';
 export type * from './wallet/types/responses';
@@ -75,6 +95,8 @@ export * from './crypto';
 // Core Utils
 export * from './utils/core';
 export { JSONInt, type JSONIntApi } from './utils/JSONInt';
+// Public byte conversion is intentionally limited to strict hex codecs.
+export { bytesToHex, hexToBytes } from './utils/hex';
 
 // Payment request facade (tests rely on these at top level)
 export {
@@ -92,6 +114,8 @@ export type {
   RawTransport,
   NUT10Option,
   RawNUT10Option,
+  NutrootOption,
+  RawNutrootOption,
 } from './wallet/types';
 
 // Logging & errors
@@ -99,10 +123,14 @@ export { type LogLevel, ConsoleLogger, type Logger } from './logger';
 export {
   CTSError,
   isMintOperationError,
+  MeltChangeError,
   MintOperationError,
   NetworkError,
   HttpResponseError,
   RateLimitError,
+  StaleKeysetError,
+  InvalidScalarError,
+  UnknownKeysetError,
 } from './model/Errors';
 
 // Low-level helpers/types that appear in public surfaces
@@ -131,3 +159,25 @@ export {
   type SigAllDigests,
   type SigAllSigningPackage,
 } from './model/SigAll';
+export {
+  CashuNip07,
+  type CashuNip07Api,
+  type Nip07Like,
+  type Nip07SignedHash,
+} from './model/CashuNip07';
+export {
+  ScriptPath,
+  type ScriptPathApi,
+  type ScriptPathSigningPackage,
+  type ScriptPathSpendRequest,
+} from './model/ScriptPath';
+export {
+  parseNutrootLeaf,
+  parseNutrootLeafHex,
+  serializeNutrootLeaf,
+  serializeNutrootLeafHex,
+  NUTROOT_LEAF_TYPE,
+  NUTROOT_NUMS_KEY,
+  type NutrootLeaf,
+  type ParsedNutrootOption,
+} from './crypto/nutroot';

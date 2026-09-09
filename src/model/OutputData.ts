@@ -1,8 +1,10 @@
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
+import { bytesToNumberBE } from '@noble/curves/utils.js';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
 
 import {
   asBlsG1Point,
+  assertV3PointSecret,
   asSecpPoint,
   blindMessage,
   blindMessageBls,
@@ -13,6 +15,7 @@ import {
   createRandomSecretKey,
   deriveP2BKBlindedPubkeys,
   deriveSecretAndBlindingFactor,
+  getPubKeyFromPrivKey,
   isBlsKeyset,
   normalizeP2PKOptions,
   pointFromHex,
@@ -27,8 +30,11 @@ import {
   type G1Point,
   type G2Point,
   type P2PKOptions,
+  type DerivedSecretAndBlindingFactor,
 } from '../crypto';
-import { Bytes, numberToHexPadded64, splitAmount } from '../utils';
+import { deriveReceiverKeyedSecret, type ParsedNutrootOption } from '../crypto/nutroot';
+import { numberToHexPadded64, splitAmount } from '../utils';
+import { MAX_SECRET_LENGTH } from '../utils/limits';
 
 import { Amount, type AmountLike } from './Amount';
 import { BlindedMessage } from './BlindedMessage';
@@ -38,16 +44,8 @@ import {
   type Proof,
   type SerializedBlindedMessage,
   type SerializedBlindedSignature,
+  type SpendInfo,
 } from './types';
-
-/**
- * Maximum secret length.
- *
- * @remarks
- * Based on the Nutshell default mint_max_secret_length.
- * @internal
- */
-export const MAX_SECRET_LENGTH = 1024;
 
 const RECOVERY_HINT =
   'Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.';
@@ -61,6 +59,7 @@ export interface OutputDataLike {
   blindingFactor: bigint;
   secret: Uint8Array;
   ephemeralE?: string;
+  spendInfo?: SpendInfo;
 
   toProof: (signature: SerializedBlindedSignature, keyset: HasKeysetKeys) => Proof;
 }
@@ -90,6 +89,7 @@ export type SerializedOutputData = {
   blindingFactor: string;
   secret: string;
   ephemeralE?: string;
+  spendInfo?: SpendInfo;
 };
 
 export function isOutputDataFactory(
@@ -103,17 +103,38 @@ export class OutputData implements OutputDataLike {
   blindingFactor: bigint;
   secret: Uint8Array;
   ephemeralE?: string;
+  /**
+   * Key behind a v3 point secret.
+   *
+   * @remarks
+   * Set on v3 keysets by random and deterministic creation alike: the secret is a pubkey and its
+   * key signs the spend witness. The key travels to the proof as `spendInfo.k` (mirrored by the
+   * wallet when a custom factory sets only this field).
+   */
+  secretKey?: Uint8Array;
+  /**
+   * Spend info to travel with the resulting proof (NUT-10).
+   *
+   * @remarks
+   * Set for receiver-keyed nutroot outputs, where the ephemeral `E` and the disclosed tree are the
+   * only way the receiver can derive its key. Lost spend info means a proof nobody can spend.
+   */
+  spendInfo?: SpendInfo;
 
   constructor(
     blindedMessage: SerializedBlindedMessage,
     blindingFactor: bigint,
     secret: Uint8Array,
     ephemeralE?: string,
+    secretKey?: Uint8Array,
+    spendInfo?: SpendInfo,
   ) {
     this.secret = secret;
     this.blindingFactor = blindingFactor;
     this.blindedMessage = blindedMessage;
     this.ephemeralE = ephemeralE;
+    this.secretKey = secretKey;
+    this.spendInfo = spendInfo;
   }
 
   toProof(sig: SerializedBlindedSignature, keyset: HasKeysetKeys) {
@@ -122,18 +143,23 @@ export class OutputData implements OutputDataLike {
         `Mint response is missing a signature for one of the outputs. ${RECOVERY_HINT}`,
       );
     }
-    if (sig.id !== this.blindedMessage.id) {
+    // The keys must be the keyset the mint signed under: DLEQ/pairing verify against them, and
+    // unblinding with any other keyset yields an unspendable proof.
+    if (sig.id !== keyset.id) {
+      throw new CTSError(`Mint signature keyset id ${sig.id} does not match keys for ${keyset.id}`);
+    }
+
+    // Blanks (amount=0, e.g. NUT-08 fee change, NUT-09 restore) declare neither amount nor
+    // keyset up front; the mint's choice is authoritative for both, including one rotated in
+    // meanwhile. Any other output must come back on the keyset and at the amount it asked for:
+    // a malicious mint can otherwise sign a smaller denomination and return it as `sig.amount`,
+    // which verifies under K2/A of the downgraded amount, or move the output to a worse keyset.
+    const requested = this.blindedMessage.amount;
+    if (!requested.isZero() && sig.id !== this.blindedMessage.id) {
       throw new CTSError(
         `Mint signature keyset id ${sig.id} does not match output ${this.blindedMessage.id}`,
       );
     }
-
-    // Amount binding: a malicious mint can sign a smaller denomination and return it as
-    // `sig.amount`; that signature verifies under K2/A of the downgraded amount and the
-    // wallet would store a downgraded proof. Reject here, before key lookup.
-    // Blanks (amount=0, e.g. NUT-08 fee change, NUT-09 restore) declare no specific amount
-    // up front; the mint's amount is authoritative in that case.
-    const requested = this.blindedMessage.amount;
     if (!requested.isZero() && !sig.amount.equals(requested)) {
       throw new CTSError(
         `Mint signature amount ${sig.amount.toString()} does not match requested amount ${requested.toString()}. ${RECOVERY_HINT}`,
@@ -172,6 +198,7 @@ export class OutputData implements OutputDataLike {
         secret: new TextDecoder().decode(unblinded.secret),
       };
       if (this.ephemeralE) proof.p2pk_e = this.ephemeralE;
+      if (this.spendInfo) proof.spend_info = this.spendInfo;
       return proof;
     }
 
@@ -227,6 +254,7 @@ export class OutputData implements OutputDataLike {
 
     // Add P2BK (Pay to Blinded Key) blinding factors if needed
     if (this.ephemeralE) proof.p2pk_e = this.ephemeralE;
+    if (this.spendInfo) proof.spend_info = this.spendInfo;
 
     return proof;
   }
@@ -339,6 +367,23 @@ export class OutputData implements OutputDataLike {
   }
 
   static createSingleRandomData(amount: AmountLike, keysetId: string): OutputData {
+    if (isBlsKeyset(keysetId)) {
+      // v3 secrets are points, so a random secret is a random keypair: the key
+      // rides on the OutputData because it signs the spend witness later.
+      const amountValue = Amount.from(amount);
+      const privKey = createRandomSecretKey();
+      const secretBytes = new TextEncoder().encode(bytesToHex(getPubKeyFromPrivKey(privKey)));
+      const { r, B_ } = blindMessageForKeyset(secretBytes, keysetId);
+      const data = new OutputData(
+        new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
+        r,
+        secretBytes,
+        undefined,
+        privKey,
+      );
+      data.spendInfo = { k: bytesToHex(privKey) };
+      return data;
+    }
     const amountValue = Amount.from(amount);
     const randomHex = bytesToHex(randomBytes(32));
     const secretBytes = new TextEncoder().encode(randomHex);
@@ -348,6 +393,65 @@ export class OutputData implements OutputDataLike {
       r,
       secretBytes,
     );
+  }
+
+  /**
+   * Output data for a nutroot (v3) secret chosen by the caller: a bare `K` or a tweaked `P`.
+   *
+   * @remarks
+   * Pair with `buildNutrootSecret` for locked outputs; the caller keeps the tree (spend_info) and
+   * any keys. The secret travels as its 66-char hex; hashing uses the raw 33 bytes.
+   */
+  static createSingleNutrootData(
+    secretHex: string,
+    amount: AmountLike,
+    keysetId: string,
+  ): OutputData {
+    if (!isBlsKeyset(keysetId)) {
+      throw new CTSError('Nutroot outputs require a v3 keyset');
+    }
+    assertV3PointSecret(secretHex);
+    const amountValue = Amount.from(amount);
+    const secretBytes = new TextEncoder().encode(secretHex);
+    const { r, B_ } = blindMessageForKeyset(secretBytes, keysetId);
+    return new OutputData(
+      new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
+      r,
+      secretBytes,
+    );
+  }
+
+  /**
+   * Output data for a receiver-keyed nutroot send (NUT-28): one output per denomination, each
+   * derived to the payee's static key under its own fresh ephemeral.
+   *
+   * @remarks
+   * Fresh `e` per output is the rule, not an optimisation: a shared ephemeral would reproduce `K`,
+   * hence the secret, hence the colliding `C` of 2.4. Each output carries its own spend info so the
+   * payee can derive its key; `leaves` build a tree over the internal key, and `blindKeys` are the
+   * leaf keys their owner tagged blind-me. A NUMS output with no blind-me keys blinds nothing and
+   * carries no ephemeral at all (NUT-18).
+   * @throws If the keyset is not v3: point secrets are keyset-gated, and a pre-v3 mint would read
+   *   this as a plain text secret.
+   */
+  static createNutrootData(
+    options: ParsedNutrootOption,
+    amount: AmountLike,
+    keyset: HasKeysetKeys,
+    customSplit?: AmountLike[],
+  ): OutputData[] {
+    if (!isBlsKeyset(keyset.id)) {
+      throw new CTSError('Nutroot outputs require a v3 keyset');
+    }
+    return splitAmount(amount, keyset.keys, customSplit).map((a) => {
+      const { secret, E, tree, K, u } = deriveReceiverKeyedSecret(options.receiverKey, {
+        leaves: options.leaves,
+        blindKeys: options.blindKeys,
+      });
+      const data = OutputData.createSingleNutrootData(secret, a, keyset.id);
+      data.spendInfo = { ...(E && { E }), ...(tree && { tree, K }), ...(u && { u }) };
+      return data;
+    });
   }
 
   static createDeterministicData(
@@ -412,7 +516,10 @@ export class OutputData implements OutputDataLike {
    * const restored = (JSON.parse(stored) as SerializedOutputData[]).map((s) =>
    *   OutputData.deserialize(s),
    * );
-   * const change = wallet.createMeltChangeProofs(restored, paidQuote.change ?? []);
+   * // zero-value entries carry no ecash (NUT-08); Amount.from also covers a quote rehydrated from JSON
+   * const sigs = (paidQuote.change ?? []).filter((s) => !Amount.from(s.amount).isZero());
+   * await wallet.ensureOperableKeysets(sigs.map((s) => s.id)); // change may be on a rotated-in keyset
+   * const change = wallet.createMeltChangeProofs(restored, sigs);
    * ```
    */
   static serialize(output: OutputDataLike): SerializedOutputData {
@@ -425,6 +532,7 @@ export class OutputData implements OutputDataLike {
       blindingFactor: output.blindingFactor.toString(),
       secret: bytesToHex(output.secret),
       ...(output.ephemeralE && { ephemeralE: output.ephemeralE }),
+      ...(output.spendInfo && { spendInfo: output.spendInfo }),
     };
   }
 
@@ -449,6 +557,8 @@ export class OutputData implements OutputDataLike {
         BigInt(serialized.blindingFactor),
         hexToBytes(serialized.secret),
         serialized.ephemeralE,
+        undefined,
+        serialized.spendInfo,
       );
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -463,19 +573,24 @@ export class OutputData implements OutputDataLike {
 function createSingleDeterministicDataFromBytes(
   amount: AmountLike,
   keysetId: string,
-  derived: { blindingFactor: Uint8Array; secret: Uint8Array },
+  derived: DerivedSecretAndBlindingFactor,
 ): OutputData {
   const amountValue = Amount.from(amount);
   const secretBytesAsHex = bytesToHex(derived.secret);
   const utf8SecretBytes = new TextEncoder().encode(secretBytesAsHex);
-  // Note: Bytes.toBigInt is used here so invalid values bubble up as throws
+  // Note: bytesToNumberBE is used here so invalid values bubble up as throws
   // for BIP32-style retry logic (caller increments counter and retries).
-  const deterministicR = Bytes.toBigInt(derived.blindingFactor);
+  const deterministicR = bytesToNumberBE(derived.blindingFactor);
   const { r, B_ } = blindMessageForKeyset(utf8SecretBytes, keysetId, deterministicR);
+  // A v3 secret is a pubkey; its key travels with the proof so a spend can sign (NUT-10).
+  const secretKey = derived.secretKey;
   return new OutputData(
     new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
     r,
     utf8SecretBytes,
+    undefined,
+    secretKey,
+    secretKey && { k: bytesToHex(secretKey) },
   );
 }
 
@@ -489,6 +604,7 @@ function blindMessageForKeyset(
   r?: bigint,
 ): { r: bigint; B_: CurvePoint } {
   if (isBlsKeyset(keysetId)) {
+    assertV3PointSecret(secret);
     const out = blindMessageBls(secret, r);
     return { r: out.r, B_: asBlsG1Point(out.B_) };
   }

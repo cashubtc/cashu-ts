@@ -4,21 +4,12 @@ import { hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { Amount } from '../model/Amount';
 import { type SerializedBlindedMessage } from '../model/types';
+import { minimalBytesBE } from '../utils/bytes';
 
 import { schnorrSignDigest, schnorrVerifyDigest } from './core';
 
 // Domain-separation tag.
 const MINT_QUOTE_SIG_DST = utf8ToBytes('Cashu_MintQuoteSig_v1');
-
-// Canonical minimal BE bytes of a non-negative amount (0 → empty, 1 → 0x01, 256 → 0x0100).
-// Amount.from defensively normalizes a raw JSON number/string (Amount passes through).
-// Shared with the NUT-11 SIG_ALL v1 message builder.
-export function amountToMinimalBytes(blindedMessage: SerializedBlindedMessage): Uint8Array {
-  const value = Amount.from(blindedMessage.amount).toBigInt();
-  if (value === 0n) return new Uint8Array(0);
-  const hex = value.toString(16);
-  return hexToBytes(hex.length % 2 === 1 ? '0' + hex : hex);
-}
 
 /**
  * Mint-quote signature message per the amended NUT-20 (cashubtc/nuts#375): domain-separated and
@@ -33,7 +24,8 @@ function constructMessage(quote: string, blindedMessages: SerializedBlindedMessa
   transcript.update(numberToBytesBE(quoteBytes.length, 4));
   transcript.update(quoteBytes);
   for (const blindedMessage of blindedMessages) {
-    const amountBytes = amountToMinimalBytes(blindedMessage);
+    // Amount.from defensively normalizes a raw JSON number/string (Amount passes through).
+    const amountBytes = minimalBytesBE(Amount.from(blindedMessage.amount).toBigInt());
     transcript.update(numberToBytesBE(amountBytes.length, 4));
     transcript.update(amountBytes);
     const pointBytes = hexToBytes(blindedMessage.B_);
@@ -61,6 +53,16 @@ function constructLegacyMessage(
 // NUT-20 quote pubkeys are compressed 33-byte SEC1 (66 hex chars).
 function isCompressedPubkey(pubkey: string): boolean {
   return pubkey.length === 66;
+}
+
+/**
+ * The NUT-20 digest a locked quote's key signs, for signers that hold the key elsewhere.
+ */
+export function mintQuoteDigest(
+  quote: string,
+  blindedMessages: SerializedBlindedMessage[],
+): Uint8Array {
+  return constructMessage(quote, blindedMessages);
 }
 
 export function signMintQuote(

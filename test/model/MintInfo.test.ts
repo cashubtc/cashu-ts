@@ -2,7 +2,12 @@ import { describe, it, expect, vi } from 'vitest';
 
 import { Amount } from '../../src/model/Amount';
 import { MintInfo } from '../../src/model/MintInfo';
-import { MAX_METHOD_LENGTH, MAX_MINT_INFO_LIST } from '../../src/utils/limits';
+import {
+  ABSOLUTE_MAX_ARRAY_LENGTH,
+  DEFAULT_MAX_ARRAY_LENGTH,
+  MAX_METHOD_LENGTH,
+  MAX_MINT_INFO_LIST,
+} from '../../src/utils/limits';
 import { MINTINFORESP } from '../consts';
 
 describe('MintInfo protected endpoint matching', () => {
@@ -860,7 +865,14 @@ describe('MintInfo snapshot accessors', () => {
 
 describe('MintInfo list caps', () => {
   function spyLogger() {
-    return { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn(), trace: vi.fn() };
+    return {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+      log: vi.fn(),
+    };
   }
 
   it('truncates an oversized NUT-04 method list and warns', () => {
@@ -920,5 +932,95 @@ describe('MintInfo list caps', () => {
     const info = new MintInfo(MINTINFORESP, logger);
     expect(info.nuts[4]?.methods?.length).toBeGreaterThan(0);
     expect(logger.warn).not.toHaveBeenCalled();
+  });
+});
+
+describe('MintInfo max_array_length (NUT-06)', () => {
+  function mockLogger() {
+    return {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+      log: vi.fn(),
+    };
+  }
+
+  it('defaults to the library default when the mint advertises none', () => {
+    const logger = mockLogger();
+    const info = new MintInfo(MINTINFORESP, logger);
+    expect(info.maxArrayLength).toBe(DEFAULT_MAX_ARRAY_LENGTH);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('uses an advertised value inside the allowed range', () => {
+    const info = new MintInfo({ ...MINTINFORESP, max_array_length: 1000 });
+    expect(info.maxArrayLength).toBe(1000);
+  });
+
+  it('clamps an advertised value above the internal cap', () => {
+    const logger = mockLogger();
+    const info = new MintInfo(
+      { ...MINTINFORESP, max_array_length: ABSOLUTE_MAX_ARRAY_LENGTH + 1 },
+      logger,
+    );
+    expect(info.maxArrayLength).toBe(ABSOLUTE_MAX_ARRAY_LENGTH);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('clamped'),
+      expect.objectContaining({ clampedTo: ABSOLUTE_MAX_ARRAY_LENGTH }),
+    );
+  });
+
+  it('raises a zero to 1 so batching still makes progress', () => {
+    const logger = mockLogger();
+    const info = new MintInfo({ ...MINTINFORESP, max_array_length: 0 }, logger);
+    expect(info.maxArrayLength).toBe(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('clamped'),
+      expect.objectContaining({ advertised: 0, clampedTo: 1 }),
+    );
+  });
+
+  it.each([-1, 2.5, NaN, 'lots' as unknown as number])(
+    'falls back to the default for a malformed value (%s)',
+    (value) => {
+      const logger = mockLogger();
+      const info = new MintInfo({ ...MINTINFORESP, max_array_length: value }, logger);
+      expect(info.maxArrayLength).toBe(DEFAULT_MAX_ARRAY_LENGTH);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('malformed'),
+        expect.objectContaining({ value }),
+      );
+    },
+  );
+});
+
+describe('MintInfo NUT-06 informational fields', () => {
+  it('exposes urls, time, tos_url and icon_url and preserves them in cache', () => {
+    const urls = ['https://mint.host', 'http://mint.onion'];
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      icon_url: 'https://mint.host/icon.jpg',
+      urls,
+      time: 1725304480,
+      tos_url: 'https://mint.host/tos',
+    });
+    expect(info.icon_url).toBe('https://mint.host/icon.jpg');
+    expect(info.urls).toEqual(urls);
+    expect(info.urls).not.toBe(urls);
+    expect(info.time).toBe(1725304480);
+    expect(info.tos_url).toBe('https://mint.host/tos');
+    expect(info.cache.urls).toEqual(urls);
+    expect(info.cache.tos_url).toBe('https://mint.host/tos');
+  });
+
+  it('returns undefined when the mint omits them', () => {
+    // The fixture carries a real `time`; strip the optional fields for the omitted case.
+    const { time: _time, urls: _urls, tos_url: _tos, ...rest } = MINTINFORESP;
+    const info = new MintInfo(rest);
+    expect(info.urls).toBeUndefined();
+    expect(info.time).toBeUndefined();
+    expect(info.tos_url).toBeUndefined();
   });
 });

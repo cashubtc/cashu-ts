@@ -1,3 +1,4 @@
+import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { test, describe, expect } from 'vitest';
 
@@ -10,11 +11,17 @@ import {
   createBlindSignature,
   getPubKeyFromPrivKey,
   getG2PubKeyFromPrivKey,
+  hashToCurveBls,
+  blindMessageBls,
+  createBlindSignatureBls,
+  unblindSignatureBls,
 } from '../../src/crypto';
+import { buildNutrootSecret, NUTROOT_NUMS_KEY } from '../../src/crypto/nutroot';
 import { CTSError } from '../../src/model/Errors';
 import * as utils from '../../src/utils';
 import {
   bigIntStringify,
+  findCashuPayload,
   getKeysetAmounts,
   hasValidDleq,
   hexToNumber,
@@ -26,6 +33,9 @@ import {
   sortProofsById,
   normalizeMintUrl,
 } from '../../src/utils';
+import { encodeJsonToBase64Url } from '../../src/utils/base64';
+import { MAX_PAYLOAD_DECODE_ATTEMPTS, MAX_PAYLOAD_LENGTH } from '../../src/utils/limits';
+import { auditableLock, lockToNutrootOptions } from '../../src/wallet/lock';
 import {
   NUT02_V1_VECTOR1_KEYS,
   NUT02_V1_VECTOR2_KEYS,
@@ -36,6 +46,12 @@ import {
   NUT02_V3_VECTOR2_KEYS,
   PUBKEYS,
 } from '../consts';
+import vectors from '../vectors/nutroot-v3.json';
+
+const V3_TOKEN =
+  'cashuAeyJ0b2tlbiI6W3sibWludCI6Imh0dHA6Ly9sb2NhbGhvc3Q6MzMzOCIsInByb29mcyI6W3siaWQiOiJJMnlOK2lSWWZrelQiLCJhbW91bnQiOjEsInNlY3JldCI6Ijk3emZtbWFHZjVrOE1nMGdhanBuYm1wZXJ2VHRFZUU4d3dLcmk3cldwVXM9IiwiQyI6IjAyMTk1MDgxZTYyMmY5OGJmYzE5YTA1ZWJlMjM0MWQ5NTVjMGQxMjU4OGM1OTQ4Yzg1OGQwN2FkZWMwMDdiYzFlNCJ9XX1dfQ';
+const V4_TOKEN =
+  'cashuBpGF0gaJhaUgArSaMTR9YJmFwgaNhYQFhc3hAOWE2ZGJiODQ3YmQyMzJiYTc2ZGIwZGYxOTcyMTZiMjlkM2I4Y2MxNDU1M2NkMjc4MjdmYzFjYzk0MmZlZGI0ZWFjWCEDhhhUP_trhpXfStS6vN6So0qWvc2X3O4NfM-Y1HISZ5JhZGlUaGFuayB5b3VhbXVodHRwOi8vbG9jYWxob3N0OjMzMzhhdWNzYXQ=';
 
 const keys: Keys = {};
 for (let i = 1; i <= 2048; i *= 2) {
@@ -196,6 +212,11 @@ test('exact custom split preserves order', () => {
 });
 
 describe('test decode token', () => {
+  test('rejects a missing keysetIds argument with a pointer to the new signature', () => {
+    const decode = utils.getDecodedToken as unknown as (t: string) => Token;
+    expect(() => decode(V3_TOKEN)).toThrow(/requires keysetIds/);
+  });
+
   test('testing v3 Token', async () => {
     const obj = {
       proofs: [
@@ -211,9 +232,7 @@ describe('test decode token', () => {
     };
     const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:'];
     uriPrefixes.forEach((prefix) => {
-      const token =
-        prefix +
-        'cashuAeyJ0b2tlbiI6W3sibWludCI6Imh0dHA6Ly9sb2NhbGhvc3Q6MzMzOCIsInByb29mcyI6W3siaWQiOiJJMnlOK2lSWWZrelQiLCJhbW91bnQiOjEsInNlY3JldCI6Ijk3emZtbWFHZjVrOE1nMGdhanBuYm1wZXJ2VHRFZUU4d3dLcmk3cldwVXM9IiwiQyI6IjAyMTk1MDgxZTYyMmY5OGJmYzE5YTA1ZWJlMjM0MWQ5NTVjMGQxMjU4OGM1OTQ4Yzg1OGQwN2FkZWMwMDdiYzFlNCJ9XX1dfQ';
+      const token = prefix + V3_TOKEN;
 
       const result = utils.getDecodedToken(token, ['009a1f293253e41e']);
       expect(result).toStrictEqual(obj);
@@ -253,8 +272,7 @@ describe('test decode token', () => {
       ],
     };
 
-    const token =
-      'cashuBpGF0gaJhaUgArSaMTR9YJmFwgaNhYQFhc3hAOWE2ZGJiODQ3YmQyMzJiYTc2ZGIwZGYxOTcyMTZiMjlkM2I4Y2MxNDU1M2NkMjc4MjdmYzFjYzk0MmZlZGI0ZWFjWCEDhhhUP_trhpXfStS6vN6So0qWvc2X3O4NfM-Y1HISZ5JhZGlUaGFuayB5b3VhbXVodHRwOi8vbG9jYWxob3N0OjMzMzhhdWNzYXQ=';
+    const token = V4_TOKEN;
 
     const result = utils.getDecodedToken(token, ['009a1f293253e41e']);
     expect(result).toStrictEqual(v3Token);
@@ -371,6 +389,149 @@ describe('test getTokenMetadata', () => {
   });
 });
 
+describe('findCashuPayload', () => {
+  // Payment request fixtures copied from paymentRequests.test.ts.
+  const CREQ_A =
+    'creqApGF0gaNhdGVub3N0cmFheKlucHJvZmlsZTFxeTI4d3VtbjhnaGo3dW45ZDNzaGp0bnl2OWtoMnVld2Q5aHN6OW1od2RlbjV0ZTB3ZmprY2N0ZTljdXJ4dmVuOWVlaHFjdHJ2NWhzenJ0aHdkZW41dGUwZGVoaHh0bnZkYWtxcWd5bWRleDNndmZzZnVqcDN4eW43ZTdxcnM4eXlxOWQ4enN1MnpxdWp4dXhjYXBmcXZ6YzhncnFka3RzYWeBgmFuYjE3YWloNDg0MGY1MWVhdWNzYXRhbYFwaHR0cHM6Ly9taW50LmNvbQ==';
+  const CREQ_B_UPPER =
+    'CREQB1QYQQSC3HVYUNQVFHXCPQQZQQQQQQQQQQQQ9QXQQPQQZSQ9MGW368QUE69UHNSVENXVH8XURPVDJN5VENXVUQWQREQYQQZQQZQQSGM6QFA3C8DTZ2FVZHVFQEACMWM0E50PE3K5TFMVPJJMN0VJ7M2TGRQQZSZMSZXYMSXQQHQ9EPGAMNWVAZ7TMJV4KXZ7FWV3SK6ATN9E5K7QCQRGQHY9MHWDEN5TE0WFJKCCTE9CURXVEN9EEHQCTRV5HSXQQSQ9EQ6AMNWVAZ7TMWDAEJUMR0DSRYDPGF';
+  const CREQ_B_LOWER = CREQ_B_UPPER.toLowerCase();
+  // Never decodes; burns one attempt.
+  const DECOY = 'cashuAzz';
+
+  test('finds a bare token', () => {
+    expect(findCashuPayload(V4_TOKEN)).toStrictEqual({ kind: 'token', payload: V4_TOKEN });
+  });
+
+  test('finds a token in prose, excluding trailing punctuation', () => {
+    const found = findCashuPayload(`here you go: ${V4_TOKEN}. thanks!`);
+    expect(found).toStrictEqual({ kind: 'token', payload: V4_TOKEN });
+  });
+
+  test('finds a token in a URL fragment', () => {
+    const found = findCashuPayload(`https://wallet.example/#token=${V4_TOKEN}`);
+    expect(found?.payload).toBe(V4_TOKEN);
+  });
+
+  test('finds a token in a query parameter', () => {
+    const found = findCashuPayload(`https://wallet.example/?token=${V4_TOKEN}&x=1`);
+    expect(found?.payload).toBe(V4_TOKEN);
+  });
+
+  test('finds a token behind a URI scheme', () => {
+    // The wrapper's own "cashu" is followed by ':', not [AB], so it cannot false-anchor.
+    const found = findCashuPayload(`web+cashu://${V4_TOKEN}`);
+    expect(found?.payload).toBe(V4_TOKEN);
+  });
+
+  test('finds a v3 token in prose', () => {
+    const found = findCashuPayload(`old wallet backup ${V3_TOKEN} from 2023`);
+    expect(found).toStrictEqual({ kind: 'token', payload: V3_TOKEN });
+  });
+
+  test('finds a creqA payment request in a bitcoin: URI parameter', () => {
+    const found = findCashuPayload(`bitcoin:bc1qexample?amount=0.001&cashu=${CREQ_A}`);
+    expect(found).toStrictEqual({ kind: 'paymentRequest', payload: CREQ_A });
+  });
+
+  test('finds a lowercase creqb1 payment request', () => {
+    expect(findCashuPayload(`pay me: ${CREQ_B_LOWER}`)).toStrictEqual({
+      kind: 'paymentRequest',
+      payload: CREQ_B_LOWER,
+    });
+  });
+
+  test('canonicalises an uppercase CREQB1 payment request to lowercase', () => {
+    // QR alphanumeric mode uppercases; bech32m carries no case, and mixed case is spec-invalid,
+    // so a case-insensitive match is emitted lowercase rather than as it was found.
+    const found = findCashuPayload(`scanned: ${CREQ_B_UPPER}`);
+    expect(found).toStrictEqual({ kind: 'paymentRequest', payload: CREQ_B_LOWER });
+  });
+
+  test('canonicalises a mixed-case creqb1 payment request to lowercase', () => {
+    const mixed = `Creqb1${CREQ_B_LOWER.slice('creqb1'.length)}`;
+    expect(findCashuPayload(`from a phone: ${mixed}`)?.payload).toBe(CREQ_B_LOWER);
+  });
+
+  test('re-enters the scan to find a payload swallowed by a failed candidate', () => {
+    // One unbroken charset run: the greedy cashuA candidate eats it all and fails, so the scan
+    // must resume inside that span rather than past it.
+    const found = findCashuPayload(`cashuAzzzz${V4_TOKEN}`);
+    expect(found).toStrictEqual({ kind: 'token', payload: V4_TOKEN });
+  });
+
+  test('returns the first valid payload by position', () => {
+    expect(findCashuPayload(`${V4_TOKEN} or ${CREQ_A}`)?.payload).toBe(V4_TOKEN);
+    expect(findCashuPayload(`${CREQ_A} or ${V4_TOKEN}`)?.payload).toBe(CREQ_A);
+  });
+
+  test('gives up once the decode attempt cap is exhausted', () => {
+    const decoys = Array(MAX_PAYLOAD_DECODE_ATTEMPTS).fill(DECOY).join(' ');
+    expect(findCashuPayload(`${decoys} ${V4_TOKEN}`)).toBeNull();
+  });
+
+  test('finds a payload on the last attempt within the cap', () => {
+    const decoys = Array(MAX_PAYLOAD_DECODE_ATTEMPTS - 1)
+      .fill(DECOY)
+      .join(' ');
+    expect(findCashuPayload(`${decoys} ${V4_TOKEN}`)?.payload).toBe(V4_TOKEN);
+  });
+
+  test('rejects a non-string argument', () => {
+    // Plain-JS callers reach this; exec would otherwise coerce and scan "null".
+    expect(() => findCashuPayload(null as unknown as string)).toThrow(CTSError);
+  });
+
+  test('returns null when there is no payload', () => {
+    expect(findCashuPayload('')).toBeNull();
+    expect(findCashuPayload('just a normal sentence about cashu wallets')).toBeNull();
+  });
+
+  test('does not match an uppercased token prefix', () => {
+    expect(findCashuPayload(`CASHUB${V4_TOKEN.slice('cashuB'.length)}`)).toBeNull();
+  });
+
+  test('bounds a single candidate at MAX_PAYLOAD_LENGTH', () => {
+    const paddedToken = (memoLength: number) =>
+      `cashuA${encodeJsonToBase64Url({
+        token: [
+          {
+            mint: 'http://localhost:3338',
+            proofs: [{ id: 'I2yN+iRYfkzT', amount: 1, secret: 'x', C: '02' }],
+          },
+        ],
+        unit: 'sat',
+        memo: 'm'.repeat(memoLength),
+      })}`;
+
+    const over = paddedToken(MAX_PAYLOAD_LENGTH);
+    expect(over.length).toBeGreaterThan(MAX_PAYLOAD_LENGTH);
+    expect(findCashuPayload(over)).toBeNull();
+
+    const under = paddedToken(MAX_PAYLOAD_LENGTH / 2);
+    expect(under.length).toBeLessThan(MAX_PAYLOAD_LENGTH);
+    expect(findCashuPayload(under)).toStrictEqual({ kind: 'token', payload: under });
+  });
+
+  test('rejects a candidate carrying a junk suffix', () => {
+    // the decoders reject the trailing bytes rather than
+    // decode the valid prefix and hand back the junk attached.
+    expect(findCashuPayload(`${V4_TOKEN}abc`)).toBeNull();
+    expect(findCashuPayload(`${V3_TOKEN}abc`)).toBeNull();
+    expect(findCashuPayload(`${CREQ_A}abc`)).toBeNull();
+  });
+
+  test('finds a token in a URL path without swallowing the next segment', () => {
+    // Regression: with `/` in the charset the match ran on into `/more`, and the decoders accept
+    // the trailing junk instead of rejecting it, so the payload came back corrupted rather than
+    // null. Adding `+` or `/` back must fail here.
+    const found = findCashuPayload(`https://wallet.example/${V4_TOKEN}/more`);
+    expect(found).toStrictEqual({ kind: 'token', payload: V4_TOKEN });
+    expect(findCashuPayload(`https://wallet.example/${V3_TOKEN}/more`)?.payload).toBe(V3_TOKEN);
+    expect(findCashuPayload(`https://wallet.example/${CREQ_A}/more`)?.payload).toBe(CREQ_A);
+  });
+});
+
 describe('test keyset derivation', () => {
   test('derive v0', () => {
     const keys = PUBKEYS;
@@ -430,17 +591,16 @@ describe('test keyset derivation', () => {
       expiry: NUT02_V3_VECTOR2_KEYS.final_expiry,
     });
     expect(keysetId).toBe(NUT02_V3_VECTOR2_KEYS.id);
+    // final_expiry is keyset metadata; it does not change the id.
+    const noExpiryId = utils.deriveKeysetId(NUT02_V3_VECTOR2_KEYS.keys, {
+      versionByte: 2,
+      unit: NUT02_V3_VECTOR2_KEYS.unit,
+      input_fee_ppk: NUT02_V3_VECTOR2_KEYS.input_fee_ppk,
+    });
+    expect(noExpiryId).toBe(keysetId);
   });
 
-  test('NUT-02 V3 derivation is case-insensitive in unit and pubkey hex', () => {
-    const upperUnitId = utils.deriveKeysetId(NUT02_V3_VECTOR2_KEYS.keys, {
-      versionByte: 2,
-      unit: NUT02_V3_VECTOR2_KEYS.unit.toUpperCase(),
-      input_fee_ppk: NUT02_V3_VECTOR2_KEYS.input_fee_ppk,
-      expiry: NUT02_V3_VECTOR2_KEYS.final_expiry,
-    });
-    expect(upperUnitId).toBe(NUT02_V3_VECTOR2_KEYS.id);
-
+  test('NUT-02 V3 derivation is case-insensitive in pubkey hex and rejects an invalid unit', () => {
     const upperKeys = Object.fromEntries(
       Object.entries(NUT02_V3_VECTOR2_KEYS.keys).map(([k, v]) => [k, v.toUpperCase()]),
     );
@@ -448,13 +608,21 @@ describe('test keyset derivation', () => {
       versionByte: 2,
       unit: NUT02_V3_VECTOR2_KEYS.unit,
       input_fee_ppk: NUT02_V3_VECTOR2_KEYS.input_fee_ppk,
-      expiry: NUT02_V3_VECTOR2_KEYS.final_expiry,
     });
     expect(upperKeysId).toBe(NUT02_V3_VECTOR2_KEYS.id);
+
+    // V3 units must match [a-z0-9_-]+; they are rejected, not normalized.
+    expect(() =>
+      utils.deriveKeysetId(NUT02_V3_VECTOR2_KEYS.keys, {
+        versionByte: 2,
+        unit: NUT02_V3_VECTOR2_KEYS.unit.toUpperCase(),
+        input_fee_ppk: NUT02_V3_VECTOR2_KEYS.input_fee_ppk,
+      }),
+    ).toThrow(/unit/i);
   });
 
-  // Mirror of the V3 case-insensitivity test on the V2 (secp256k1) path. The two share the same
-  // preimage code path; this lock-in catches a future regression that lowercases for v3 only.
+  // The V2 (secp256k1) ASCII preimage still normalizes case; lock that in so the V3
+  // strict-unit rule does not leak into V2, whose ids are live.
   test('NUT-02 V2 derivation is case-insensitive in unit and pubkey hex', () => {
     const upperUnitId = utils.deriveKeysetId(NUT02_V2_VECTOR1_KEYS.keys, {
       versionByte: 1,
@@ -479,8 +647,7 @@ describe('test keyset derivation', () => {
 
 describe('test v4 encoding', () => {
   test('standard token', async () => {
-    const encodedV4 =
-      'cashuBpGF0gaJhaUgArSaMTR9YJmFwgaNhYQFhc3hAOWE2ZGJiODQ3YmQyMzJiYTc2ZGIwZGYxOTcyMTZiMjlkM2I4Y2MxNDU1M2NkMjc4MjdmYzFjYzk0MmZlZGI0ZWFjWCEDhhhUP_trhpXfStS6vN6So0qWvc2X3O4NfM-Y1HISZ5JhZGlUaGFuayB5b3VhbXVodHRwOi8vbG9jYWxob3N0OjMzMzhhdWNzYXQ=';
+    const encodedV4 = V4_TOKEN;
     const v3Token = {
       memo: 'Thank you',
       mint: 'http://localhost:3338',
@@ -737,14 +904,20 @@ describe('test zero-knowledge utilities', () => {
     };
     expect(() => hasValidDleq(serializedProof, keyset)).toThrow(/Undefined key for amount/);
   });
+  test('hasValidDleq names key loading when the keyset is keyless', () => {
+    const keylessKeyset = { id: '00bd033559de27d0', unit: 'sat', keys: {} };
+    expect(() => hasValidDleq(serializedProof, keylessKeyset)).toThrow(
+      'No keys loaded for keyset 00bd033559de27d0',
+    );
+  });
   describe('v3 (BLS) proof signature verification via hasValidDleq', () => {
-    // Locked Nutshell vector: secret="test_message", r=3, a=2 → C
+    // v3 proofs carry point secrets, so C is signed over the point's own Y. The
+    // primitive's Nutshell vector is pinned in the curve_bls tests instead.
     const v3Id = '02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d';
-    const v3Secret = 'test_message';
-    const v3C =
-      'b7a4881059133fd91a8753600d9a5e524c65d6224f6fe2d5aef9e59f1507fdad90b3b4d48ee46da5c8dfaa0b88e28b69';
-    // K2 = a * G2 with a=2 (compressed G2, 192 hex)
+    const v3Secret = bytesToHex(secp256k1.getPublicKey(hexToBytes('11'.repeat(32)), true));
+    // K2 = a * G2 with a=2 (compressed G2, 192 hex); C = a * Y
     const aBytes = hexToBytes('0'.repeat(63) + '2');
+    const v3C = hashToCurveBls(new TextEncoder().encode(v3Secret)).multiply(2n).toHex(true);
     const v3K2 = bytesToHex(getG2PubKeyFromPrivKey(aBytes));
 
     test('returns true for a v3 proof whose pairing equality holds', () => {
@@ -893,11 +1066,12 @@ describe('test zero-knowledge utilities', () => {
     });
 
     describe('v3 BLS batches', () => {
-      // Locked Nutshell vector reused for the single-proof v3 happy path.
+      // Point secret with C = a * Y, the only shape a v3 keyset accepts.
       const v3Id = '02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d';
-      const v3Secret = 'test_message';
-      const v3C =
-        'b7a4881059133fd91a8753600d9a5e524c65d6224f6fe2d5aef9e59f1507fdad90b3b4d48ee46da5c8dfaa0b88e28b69';
+      const pointSecret = (n: number) =>
+        bytesToHex(secp256k1.getPublicKey(hexToBytes(n.toString(16).padStart(64, '0')), true));
+      const v3Secret = pointSecret(17);
+      const v3C = hashToCurveBls(new TextEncoder().encode(v3Secret)).multiply(2n).toHex(true);
       const v3K2 = bytesToHex(getG2PubKeyFromPrivKey(hexToBytes('0'.repeat(63) + '2')));
       const v3Proof: Proof = {
         amount: Amount.from(1),
@@ -911,16 +1085,15 @@ describe('test zero-knowledge utilities', () => {
         expect(() => utils.verifyProofsForReceive([v3Proof], () => v3Keyset)).not.toThrow();
       });
 
-      test('mixed-denomination v3 batch verifies in one pairing', async () => {
-        const bls = await import('../../src/crypto');
+      test('mixed-denomination v3 batch verifies in one pairing', () => {
         // Same mint key (a=2), different secrets + amounts → realistic mixed-denomination receive.
         const aBytes = hexToBytes('0'.repeat(63) + '2');
         const K2hex = bytesToHex(getG2PubKeyFromPrivKey(aBytes));
         const makeProof = (amount: bigint, secret: string, r: bigint): Proof => {
           const s = new TextEncoder().encode(secret);
-          const { B_ } = bls.blindMessageBls(s, r);
-          const { C_ } = bls.createBlindSignatureBls(B_, aBytes, v3Id);
-          const C = bls.unblindSignatureBls(C_, r);
+          const { B_ } = blindMessageBls(s, r);
+          const { C_ } = createBlindSignatureBls(B_, aBytes, v3Id);
+          const C = unblindSignatureBls(C_, r);
           return {
             amount: Amount.from(amount),
             id: v3Id,
@@ -934,24 +1107,23 @@ describe('test zero-knowledge utilities', () => {
           keys: { [1]: K2hex, [2]: K2hex, [4]: K2hex, [8]: K2hex, [16]: K2hex },
         };
         const proofs = [
-          makeProof(1n, 's1', 7n),
-          makeProof(2n, 's2', 11n),
-          makeProof(4n, 's3', 13n),
-          makeProof(8n, 's4', 17n),
-          makeProof(16n, 's5', 19n),
+          makeProof(1n, pointSecret(1), 7n),
+          makeProof(2n, pointSecret(2), 11n),
+          makeProof(4n, pointSecret(3), 13n),
+          makeProof(8n, pointSecret(4), 17n),
+          makeProof(16n, pointSecret(5), 19n),
         ];
         expect(() => utils.verifyProofsForReceive(proofs, () => keyset)).not.toThrow();
       });
 
-      test('tampered C in a 5-proof v3 batch is rejected and offender named', async () => {
-        const bls = await import('../../src/crypto');
+      test('tampered C in a 5-proof v3 batch is rejected and offender named', () => {
         const aBytes = hexToBytes('0'.repeat(63) + '2');
         const K2hex = bytesToHex(getG2PubKeyFromPrivKey(aBytes));
         const makeProof = (amount: bigint, secret: string, r: bigint): Proof => {
           const s = new TextEncoder().encode(secret);
-          const { B_ } = bls.blindMessageBls(s, r);
-          const { C_ } = bls.createBlindSignatureBls(B_, aBytes, v3Id);
-          const C = bls.unblindSignatureBls(C_, r);
+          const { B_ } = blindMessageBls(s, r);
+          const { C_ } = createBlindSignatureBls(B_, aBytes, v3Id);
+          const C = unblindSignatureBls(C_, r);
           return {
             amount: Amount.from(amount),
             id: v3Id,
@@ -965,11 +1137,11 @@ describe('test zero-knowledge utilities', () => {
           keys: { [1]: K2hex, [2]: K2hex, [4]: K2hex, [8]: K2hex, [16]: K2hex },
         };
         const good = [
-          makeProof(1n, 's1', 7n),
-          makeProof(2n, 's2', 11n),
-          makeProof(4n, 's3', 13n),
-          makeProof(8n, 's4', 17n),
-          makeProof(16n, 's5', 19n),
+          makeProof(1n, pointSecret(1), 7n),
+          makeProof(2n, pointSecret(2), 11n),
+          makeProof(4n, pointSecret(3), 13n),
+          makeProof(8n, pointSecret(4), 17n),
+          makeProof(16n, pointSecret(5), 19n),
         ];
         // Replace the C on the third proof with the first proof's C — keeps it on-curve
         // (so parseHex doesn't throw) but breaks pairing equality for that secret.
@@ -988,6 +1160,18 @@ describe('test zero-knowledge utilities', () => {
 
       test('v3 proof with malformed C surfaces offender id in error', () => {
         const bad: Proof = { ...v3Proof, C: 'gg'.repeat(48) };
+        expect(() => utils.verifyProofsForReceive([bad], () => v3Keyset)).toThrow(
+          new RegExp(`invalid DLEQ.*keyset ${v3Id}`),
+        );
+      });
+
+      test('v3 receive rejects a signature-valid secret that is not a secp point', () => {
+        const secret = `02${'ff'.repeat(32)}`;
+        const bad: Proof = {
+          ...v3Proof,
+          secret,
+          C: hashToCurveBls(new TextEncoder().encode(secret)).multiply(2n).toHex(true),
+        };
         expect(() => utils.verifyProofsForReceive([bad], () => v3Keyset)).toThrow(
           new RegExp(`invalid DLEQ.*keyset ${v3Id}`),
         );
@@ -1068,6 +1252,15 @@ describe('test raw tokens', () => {
 
     expect(decodedToken).toEqual(token);
   });
+
+  test.each(['__proto__', 'constructor', 'toString', 'zzzz'])(
+    'getEncodedTokenBinary rejects non-hex keyset id %s',
+    (id) => {
+      const badToken = { ...token, proofs: token.proofs.map((p) => ({ ...p, id })) };
+
+      expect(() => utils.getEncodedTokenBinary(badToken)).toThrow(CTSError);
+    },
+  );
 });
 
 describe('test deprecated base64 keyset id derivation', () => {
@@ -1483,7 +1676,7 @@ describe('getDecodedTokenBinary edge cases', () => {
 describe('tokenFromTemplate rejects valid CBOR of wrong shape', () => {
   test('getDecodedToken (cashuB) throws CTSError, not a raw TypeError', () => {
     const body = utils.encodeCBOR({ m: 'http://localhost:3338', u: 'sat' });
-    const token = 'cashuB' + utils.encodeUint8toBase64Url(body);
+    const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
     expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
   });
 
@@ -1498,13 +1691,13 @@ describe('tokenFromTemplate rejects valid CBOR of wrong shape', () => {
 
   test('throws CTSError when a token entry has no proofs array', () => {
     const body = utils.encodeCBOR({ m: 'http://localhost:3338', u: 'sat', t: [{ i: 'nope' }] });
-    const token = 'cashuB' + utils.encodeUint8toBase64Url(body);
+    const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
     expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
   });
 
   test('defaults unit to sat when template omits it', () => {
     const body = utils.encodeCBOR({ m: 'http://localhost:3338', t: [] });
-    const token = 'cashuB' + utils.encodeUint8toBase64Url(body);
+    const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
     const decoded = utils.getDecodedToken(token, []);
     expect(decoded).toEqual({ mint: 'http://localhost:3338', proofs: [], unit: 'sat' });
   });
@@ -1618,7 +1811,7 @@ describe('mapShortKeysetIds full-length pass-through (non-conformant tokens)', (
         },
       ],
     };
-    return 'cashuB' + utils.encodeUint8toBase64Url(utils.encodeCBOR(template));
+    return 'cashuB' + utils.encodeUint8ToBase64Url(utils.encodeCBOR(template));
   }
 
   test('passes full-length v2 ID through unchanged with empty keyset cache', () => {
@@ -1714,5 +1907,277 @@ describe('normalizeMintUrl', () => {
   });
   test('lowercases hostname', () => {
     expect(normalizeMintUrl('https://Mint.Example.COM')).toBe('https://mint.example.com');
+  });
+});
+
+describe('nutroot spend_info token serialization', () => {
+  test('spend_info roundtrips through V4 CBOR', () => {
+    const proof: Proof = {
+      id: '02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd',
+      amount: Amount.from(8),
+      secret: '02595a333ef377a29f6756365bd46bf3b5e571dd7a44081822f3bd0bf03b358075',
+      C: '84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327',
+      spend_info: {
+        k: '38b91aa1635556d47ce92d99c1a92a2ffb82e57bc292c039d1d7b84c13bd75c6',
+        tree: [
+          '00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80',
+        ],
+      },
+    };
+    const token: Token = { mint: 'https://mint.test', proofs: [proof], unit: 'sat' };
+    const encoded = utils.getEncodedToken(token);
+    const decoded = utils.getDecodedToken(encoded, [proof.id]);
+    expect(decoded.proofs).toHaveLength(1);
+    expect(decoded.proofs[0].spend_info).toEqual(proof.spend_info);
+  });
+
+  test('every spend_info shape survives the V4 round-trip', () => {
+    // NUT-10 spend info shapes: bearer `k`, receiver-keyed `E`, explicit `K` for a script-only proof,
+    // each with and without a disclosed tree. All four CBOR fields must come back as they went in.
+    const leaf =
+      '00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80';
+    const blindedLeaf =
+      '0002020001010400210320b1a1272e7eaa44830375ecadf11b09a8ec5d1a4155253a897f31c8b27c974c06000101';
+    const shapes: Array<Record<string, unknown>> = [
+      { k: '38b91aa1635556d47ce92d99c1a92a2ffb82e57bc292c039d1d7b84c13bd75c6' },
+      { E: '022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4' },
+      {
+        E: '022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4',
+        tree: [blindedLeaf],
+      },
+      {
+        K: '0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0',
+        tree: [leaf, blindedLeaf],
+      },
+    ];
+    for (const spend_info of shapes) {
+      const proof: Proof = {
+        id: '02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd',
+        amount: Amount.from(8),
+        secret: '02595a333ef377a29f6756365bd46bf3b5e571dd7a44081822f3bd0bf03b358075',
+        C: '84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327',
+        spend_info,
+      };
+      const token: Token = { mint: 'https://mint.test', proofs: [proof], unit: 'sat' };
+      const decoded = utils.getDecodedToken(utils.getEncodedToken(token), [proof.id]);
+      expect(decoded.proofs[0].spend_info, JSON.stringify(spend_info)).toEqual(spend_info);
+    }
+  });
+
+  test('the shared token vectors: same spend_info from either encoder', () => {
+    // Cross-implementation pin. The two encoders differ on what NUT-00 leaves free (this one
+    // writes the short keyset id, nutshell the full one), so what must agree is the spend_info:
+    // both strings decode to the same fields here and in nutshell's mirror of this test.
+    const v = vectors.tokens_v4;
+    const fullId = vectors.nut13_v3.keyset_id;
+    for (const [name, shape] of Object.entries(v.shapes)) {
+      const proof: Proof = {
+        id: fullId,
+        amount: Amount.from(v.amount),
+        secret: shape.secret,
+        C: v.C,
+        spend_info: shape.spend_info,
+      };
+      const token: Token = { mint: v.mint, proofs: [proof], unit: v.unit };
+      // Our own encoding is pinned, so a change to this encoder is visible, not silent.
+      expect(utils.getEncodedToken(token), name).toBe(shape.token_cashu_ts);
+      for (const encoded of [shape.token_cashu_ts, shape.token_nutshell]) {
+        const decoded = utils.getDecodedToken(encoded, [fullId]);
+        expect(decoded.proofs[0].spend_info, name).toEqual(shape.spend_info);
+        expect(decoded.proofs[0].secret, name).toBe(shape.secret);
+        expect(decoded.proofs[0].id, name).toBe(fullId);
+      }
+    }
+  });
+
+  test('proofs without spend_info stay without it', () => {
+    const proof: Proof = {
+      id: '02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd',
+      amount: Amount.from(8),
+      secret: '02595a333ef377a29f6756365bd46bf3b5e571dd7a44081822f3bd0bf03b358075',
+      C: '84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327',
+    };
+    const token: Token = { mint: 'https://mint.test', proofs: [proof], unit: 'sat' };
+    const decoded = utils.getDecodedToken(utils.getEncodedToken(token), [proof.id]);
+    expect(decoded.proofs[0].spend_info).toBeUndefined();
+  });
+});
+
+describe('v3 transaction witnesses do not travel in tokens', () => {
+  const v3Proof = {
+    amount: 8,
+    id: '0288553333aabbcc',
+    secret: '025cbdf0646e5db4eaa398f365f2ea7a0e3d419b7e0330e39ce92bddedcac4f9bc',
+    C: 'aa'.repeat(48),
+    witness: JSON.stringify({ signatures: ['00'.repeat(64)] }),
+    spend_info: { k: '00'.repeat(31) + '07' },
+  };
+
+  test('a witness is dropped on encode and on decode, spend info is kept', () => {
+    // A v3 witness signs one transaction's digest, so it can never verify against another. Kept on
+    // receive it would sit where the new owner's own signature has to go, and their sweep would be
+    // refused for a witness a stranger chose.
+    const encoded = utils.getEncodedToken({
+      mint: 'https://m.example',
+      unit: 'sat',
+      proofs: [v3Proof],
+    } as never);
+    const decoded = utils.getDecodedToken(encoded, ['0288553333aabbcc']);
+    expect(decoded.proofs[0].witness).toBeUndefined();
+    expect(decoded.proofs[0].spend_info).toEqual({ k: '00'.repeat(31) + '07' });
+  });
+
+  test('a pre-v3 witness still travels', () => {
+    const legacy = {
+      amount: 8,
+      id: '0088553333aabbcc',
+      secret: '["P2PK",{"nonce":"a","data":"b"}]',
+      C: '02' + 'aa'.repeat(32),
+      witness: JSON.stringify({ signatures: ['00'.repeat(64)] }),
+    };
+    const decoded = utils.getDecodedToken(
+      utils.getEncodedToken({ mint: 'https://m.example', unit: 'sat', proofs: [legacy] } as never),
+      ['0088553333aabbcc'],
+    );
+    expect(decoded.proofs[0].witness).toBeDefined();
+  });
+
+  test('a pre-v3 witness travels even when its secret looks like a point', () => {
+    // A pre-v3 secret is an arbitrary string and may happen to be 33 point-shaped bytes of hex.
+    // Its witness is a NUT-11 witness, which does travel, so the rule has to follow the keyset
+    // (NUT-10) and not the secret's shape.
+    const lookalike = {
+      amount: 8,
+      id: '0088553333aabbcc', // v1 keyset: pre-v3 rules apply to it
+      secret: '025cbdf0646e5db4eaa398f365f2ea7a0e3d419b7e0330e39ce92bddedcac4f9bc',
+      C: '02' + 'aa'.repeat(32),
+      witness: JSON.stringify({ signatures: ['00'.repeat(64)] }),
+    };
+    const decoded = utils.getDecodedToken(
+      utils.getEncodedToken({
+        mint: 'https://m.example',
+        unit: 'sat',
+        proofs: [lookalike],
+      } as never),
+      ['0088553333aabbcc'],
+    );
+    expect(decoded.proofs[0].witness).toBeDefined();
+  });
+});
+
+describe('verifyProofsForReceive: v3 spend info cascade', () => {
+  test('an invalid spend info rejects and names the offending proof', () => {
+    const secret = bytesToHex(secp256k1.getPublicKey(hexToBytes('11'.repeat(32)), true));
+    const proof: Proof = {
+      id: `02${'ab'.repeat(32)}`,
+      amount: Amount.from(1),
+      secret,
+      C: '00'.repeat(48),
+      spend_info: { k: '22'.repeat(32) }, // a scalar that does not reconstruct the secret
+    };
+    expect(() =>
+      utils.verifyProofsForReceive([proof], () => {
+        throw new Error('keyset lookup must not be reached');
+      }),
+    ).toThrow(/does not match the proof secret.*keyset 02ab/);
+  });
+});
+
+describe('nutroot proof helpers', () => {
+  const blsProof = (spend_info?: Proof['spend_info']): Proof => ({
+    id: `02${'ab'.repeat(32)}`,
+    amount: Amount.from(1),
+    secret: `02${'cd'.repeat(32)}`,
+    C: '00'.repeat(48),
+    ...(spend_info && { spend_info }),
+  });
+
+  test('isBlsProof follows the keyset id', () => {
+    expect(utils.isBlsProof(blsProof())).toBe(true);
+    expect(utils.isBlsProof({ id: `00${'11'.repeat(16)}` })).toBe(false);
+  });
+
+  test('classifyNutrootSpendInfo picks bearer, script-only, receiver-keyed, disclosed, none', () => {
+    const k = '11'.repeat(32);
+    const E = `02${'22'.repeat(32)}`;
+    const K = `02${'33'.repeat(32)}`;
+    const u = '44'.repeat(32);
+    const tree = ['aa'];
+    expect(utils.classifyNutrootSpendInfo(blsProof({ k }))).toBe('bearer');
+    expect(utils.classifyNutrootSpendInfo(blsProof({ E }))).toBe('receiver-keyed');
+    // K rides beside E as a completeness check; precedence keeps it receiver-keyed
+    expect(utils.classifyNutrootSpendInfo(blsProof({ E, K, tree }))).toBe('receiver-keyed');
+    // u is the NUMS claim; an E beside it only blinds leaf keys (NUT-18)
+    expect(utils.classifyNutrootSpendInfo(blsProof({ K, u, tree }))).toBe('script-only');
+    expect(utils.classifyNutrootSpendInfo(blsProof({ E, K, u, tree }))).toBe('script-only');
+    // K without u: the key path is held elsewhere, tree or not
+    expect(utils.classifyNutrootSpendInfo(blsProof({ K, tree }))).toBe('disclosed');
+    expect(utils.classifyNutrootSpendInfo(blsProof({ K }))).toBe('disclosed');
+    expect(utils.classifyNutrootSpendInfo(blsProof({ tree }))).toBe('none');
+    expect(utils.classifyNutrootSpendInfo(blsProof())).toBe('none');
+  });
+});
+
+describe('auditable locks', () => {
+  const keyFor = (fill: number) =>
+    bytesToHex(secp256k1.getPublicKey(new Uint8Array(32).fill(fill), true));
+  const P = keyFor(0x44);
+
+  test('auditableLock is a disclosed single-key lock and validates the key', () => {
+    expect(auditableLock(P.toUpperCase())).toEqual({ mainKeys: [P], disclosure: true });
+    expect(lockToNutrootOptions(auditableLock(P))).toEqual({
+      receiverKey: NUTROOT_NUMS_KEY,
+      leaves: [{ type: 'threshold', n: 1, keys: [P], disclosure: 1 }],
+    });
+    expect(() => auditableLock('nonsense')).toThrow();
+  });
+
+  test('auditableLockKey verifies the full commitment round-trip and returns the key', () => {
+    // The real encode path: lock options -> nutroot options -> script-only secret
+    const options = lockToNutrootOptions(auditableLock(P));
+    const built = buildNutrootSecret(options.receiverKey, options.leaves!);
+    const proof: Proof = {
+      id: `02${'ab'.repeat(32)}`,
+      amount: Amount.from(8),
+      secret: built.secret,
+      C: 'aa'.repeat(48),
+      spend_info: { K: built.K, u: built.u, tree: built.tree },
+    };
+    expect(utils.auditableLockKey(proof)).toBe(P);
+    // Tampering with the disclosed leaf breaks the commitment, not just the shape
+    const other = buildNutrootSecret(options.receiverKey, [
+      { type: 'threshold', n: 1, keys: [keyFor(0x55)] },
+    ]);
+    expect(
+      utils.auditableLockKey({ ...proof, spend_info: { ...proof.spend_info, tree: other.tree } }),
+    ).toBeUndefined();
+  });
+
+  test('auditableLockKey refuses every non-auditable shape', () => {
+    const base = (spend_info?: Proof['spend_info']): Proof => ({
+      id: `02${'ab'.repeat(32)}`,
+      amount: Amount.from(8),
+      secret: `02${'cd'.repeat(32)}`,
+      C: 'aa'.repeat(48),
+      ...(spend_info && { spend_info }),
+    });
+    const twoKeys = buildNutrootSecret(NUTROOT_NUMS_KEY, [
+      { type: 'threshold', n: 1, keys: [P, keyFor(0x55)] },
+    ]);
+    const afterLeaf = buildNutrootSecret(NUTROOT_NUMS_KEY, [
+      { type: 'after', n: 1, time: 4102444800, keys: [P] },
+    ]);
+    const twoLeaves = buildNutrootSecret(NUTROOT_NUMS_KEY, [
+      { type: 'threshold', n: 1, keys: [P] },
+      { type: 'after', n: 1, time: 4102444800, keys: [P] },
+    ]);
+    for (const b of [twoKeys, afterLeaf, twoLeaves]) {
+      const p = base({ K: b.K, u: b.u, tree: b.tree });
+      expect(utils.auditableLockKey({ ...p, secret: b.secret })).toBeUndefined();
+    }
+    expect(utils.auditableLockKey(base())).toBeUndefined(); // no spend info
+    expect(utils.auditableLockKey(base({ k: '11'.repeat(32) }))).toBeUndefined(); // bearer
+    expect(utils.auditableLockKey(base({ E: P, tree: ['aa'] }))).toBeUndefined(); // receiver
+    expect(utils.auditableLockKey({ ...base(), id: `00${'11'.repeat(16)}` })).toBeUndefined(); // not v3
   });
 });

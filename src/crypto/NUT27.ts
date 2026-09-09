@@ -1,9 +1,8 @@
 import { schnorr } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
-import { Bytes } from '../utils';
 
 /**
  * NIP-78 addressable event kind used for the mint-list backup (NUT-27).
@@ -49,7 +48,7 @@ export function deriveMintBackupKeys(seed: Uint8Array): { privkey: string; pubke
       'seed must be a 64-byte BIP-39 seed (Uint8Array), e.g. mnemonicToSeedSync()',
     );
   }
-  const privkey = sha256(Bytes.concat(seed, BACKUP_DOMAIN_SEPARATOR));
+  const privkey = sha256(concatBytes(seed, BACKUP_DOMAIN_SEPARATOR));
   const pubkey = schnorr.getPublicKey(privkey); // 32-byte x-only
   return { privkey: bytesToHex(privkey), pubkey: bytesToHex(pubkey) };
 }

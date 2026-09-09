@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 
-import { Amount, Mint, Wallet, type MintKeys, Keyset, type Proof } from '../../src';
+import { Amount, JSONInt, Mint, Wallet, type MintKeys, Keyset, type Proof } from '../../src';
 import { MINTCACHE } from '../consts';
 
 type ReqArgs = {
@@ -19,7 +19,11 @@ const makeRequestSpy = <T>(payload: T) => {
     calls.push({
       endpoint: options.endpoint,
       method: options.method,
-      requestBody: options.requestBody,
+      // Mint serializes the body before the transport; capture the wire form parsed back.
+      requestBody:
+        typeof options.requestBody === 'string'
+          ? JSONInt.parse(options.requestBody)
+          : options.requestBody,
       headers: options.headers,
     });
     return payload as any;
@@ -104,7 +108,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
     const c = calls[0];
     expect(c.endpoint).toMatch(/^https:\/\/localhost:3338\/v1\/mint\/quote\/bolt12$/);
     expect(c.method?.toUpperCase()).toBe('POST');
-    expect(c.requestBody).toEqual({ ...payload, amount: 42n });
+    expect(c.requestBody).toEqual(payload);
   });
 
   it('normalizes wire amounts (including bigint) to Amount objects', async () => {
@@ -412,7 +416,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
     expect(calls[0].requestBody).toEqual({
       pubkey: pk,
       unit: 'sat',
-      amount: 21n,
+      amount: 21,
       description: 'desc',
     });
   });
@@ -462,7 +466,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
       request: 'lno1offer...',
       options: {
         amountless: {
-          amount_msat: 100_000n,
+          amount_msat: 100_000,
         },
       },
     });
@@ -485,6 +489,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
     wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
     const ks = makeKeysetFromCache(MINTCACHE.keys[0]);
     vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValue(ks);
+    vi.spyOn(wallet.keyChain, 'hasKeyset').mockReturnValue(true);
     vi.spyOn(wallet as any, 'createOutputData').mockReturnValue([]);
     const meltQuote = {
       quote: 'm1',
@@ -492,14 +497,20 @@ describe('Wallet (BOLT12) – wrappers', () => {
       unit: 'sat',
       request: 'lno1offer...',
     };
-    const proof: Proof = { amount: Amount.from(128), secret: 'secret1', C: 'C1', id: 'foo' };
+    // A real cached keyset id: melt makes its input ids operable before anything else.
+    const proof: Proof = {
+      amount: Amount.from(128),
+      secret: 'secret1',
+      C: 'C1',
+      id: '00bd033559de27d0',
+    };
     const res = await wallet.meltProofsBolt12(meltQuote as any, [proof]);
     expect(res.quote.quote).toEqual('m1');
     expect(res.change).toEqual([]);
     expect(calls).toHaveLength(1);
     expect(calls[0].requestBody).toMatchObject({
       quote: 'm1',
-      inputs: [proof],
+      inputs: JSONInt.parse(JSONInt.stringify([proof])!),
       outputs: [],
     });
   });
@@ -518,6 +529,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
     wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
     const ks = makeKeysetFromCache(MINTCACHE.keys[0]);
     vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValue(ks);
+    vi.spyOn(wallet.keyChain, 'hasKeyset').mockReturnValue(true);
     vi.spyOn(wallet as any, 'createOutputData').mockReturnValue([
       {
         blindedMessage: { amount: Amount.from(16), B_: 'B1', id: '009a1f293253e41e' },
@@ -578,6 +590,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
     wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
     const ks = makeKeysetFromCache(MINTCACHE.keys[0]);
     vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValue(ks);
+    vi.spyOn(wallet.keyChain, 'hasKeyset').mockReturnValue(true);
     vi.spyOn(wallet as any, 'createOutputData').mockReturnValue([
       {
         blindedMessage: { amount: Amount.from(16), B_: 'B1', id: '009a1f293253e41e' },
@@ -617,6 +630,6 @@ describe('Wallet (BOLT12) – wrappers', () => {
     expect(proofs).toHaveLength(3);
     expect(calls).toHaveLength(1);
     expect(calls[0].endpoint).toMatch(/^https:\/\/localhost:3338\/v1\/mint\/bolt12$/);
-    expect(calls[0].requestBody).toEqual(preview.payload);
+    expect(calls[0].requestBody).toEqual(JSONInt.parse(JSONInt.stringify(preview.payload)!));
   });
 });
