@@ -101,3 +101,9 @@ export const MAX_P2PK_PUBKEYS = 16;
  * signer, so signatures need more headroom than keys ({@link MAX_P2PK_PUBKEYS}).
  */
 export const MAX_P2PK_SIGNATURES = 64;
+
+/**
+ * Cap on a serialized SIG_ALL signing package, checked before it is decoded. 1 MiB admits about
+ * 2,000 plain P2PK inputs, or 700 under a maximal 11-slot lock (data plus ten keys).
+ */
+export const MAX_SIGNING_PACKAGE_LENGTH = 1_048_576;
