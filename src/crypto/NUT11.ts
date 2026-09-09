@@ -1,5 +1,6 @@
 import { schnorr } from '@noble/curves/secp256k1.js';
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+import { numberToBytesBE } from '@noble/curves/utils.js';
+import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { type Logger, NULL_LOGGER } from '../logger';
 import { CTSError } from '../model/Errors';
@@ -12,7 +13,14 @@ import {
   MAX_WITNESS_LENGTH,
 } from '../utils/limits';
 
-import { getValidSigners, schnorrSignMessage, schnorrVerifyMessage, type PrivKey } from './core';
+import {
+  getValidSigners,
+  schnorrSignMessage,
+  schnorrVerifyMessage,
+  taggedHash,
+  type MessageInput,
+  type PrivKey,
+} from './core';
 import {
   getTagInt,
   getTagScalar,
@@ -24,6 +32,7 @@ import {
   type Secret,
   getSecretKind,
 } from './NUT10';
+import { amountToMinimalBytes } from './NUT20';
 import { deriveP2BKSecretKeys } from './NUT28';
 
 export const SigFlags = {
@@ -391,7 +400,7 @@ export function parseWitnessData(witness: Proof['witness']): WitnessData | undef
  * @param proofs - An array of proofs to sign.
  * @param privateKey - A single private key or array of private keys (hex string or Uint8Array).
  * @param logger - Optional logger (default: NULL_LOGGER)
- * @param message - Optional. The message to sign (for SIG_ALL)
+ * @param message - Optional. The message to sign (SIG_ALL only): a string, or `{ digest }`.
  * @returns Signed proofs.
  * @throws On general errors.
  */
@@ -399,7 +408,7 @@ export function signP2PKProofs(
   proofs: Proof[],
   privateKey: PrivKey | PrivKey[],
   logger: Logger = NULL_LOGGER,
-  message?: string,
+  message?: MessageInput,
 ): Proof[] {
   // Convert to hex strings for maybeDeriveP2BKPrivateKeys
   const toHex = (k: PrivKey): string => (typeof k === 'string' ? k : bytesToHex(k));
@@ -455,7 +464,7 @@ export function assertSignerAuthorised(secretStr: string | Secret, privateKey: P
  * @throws Error if signature is not required, proof is already signed, a message is missing for a
  *   SIG_ALL proof, or given for a SIG_INPUTS proof.
  */
-export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: string): Proof {
+export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: MessageInput): Proof {
   const secret: Secret = parseP2PKSecret(proof.secret);
   // SIG_INPUTS signs the secret and nothing else; only SIG_ALL takes a transaction message.
   const sigAll = getP2PKSigFlag(secret) === 'SIG_ALL';
@@ -505,7 +514,7 @@ export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: strin
  * @param message - Optional. The message that was signed (SIG_ALL only; ignored otherwise)
  * @returns True if one of the signatures is theirs, false otherwise.
  */
-export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: string): boolean {
+export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: MessageInput): boolean {
   if (!proof.witness) {
     return false;
   }
@@ -555,7 +564,7 @@ export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: strin
 export function verifyP2PKSpendingConditions(
   proof: Proof,
   logger: Logger = NULL_LOGGER,
-  message?: string,
+  message?: MessageInput,
 ): P2PKVerificationResult {
   // SIG_INPUTS signatures are over the secret; only SIG_ALL verifies against the given message.
   if (!isP2PKSigAll([proof])) {
@@ -644,14 +653,14 @@ export function verifyP2PKSpendingConditions(
  *
  * @param proof - The Proof to check.
  * @param logger - Optional logger (default: NULL_LOGGER)
- * @param message - Optional. The message to sign (for SIG_ALL)
+ * @param message - Optional. The message to sign (SIG_ALL only): a string, or `{ digest }`.
  * @returns True if the witness threshold was reached, false otherwise.
  * @throws If verification is impossible.
  */
 export function isP2PKSpendAuthorised(
   proof: Proof,
   logger: Logger = NULL_LOGGER,
-  message?: string,
+  message?: MessageInput,
 ): boolean {
   return verifyP2PKSpendingConditions(proof, logger, message).success;
 }
@@ -747,6 +756,59 @@ export function buildP2PKSigAllMessageV0(
     parts.push(quoteId);
   }
   return parts.join('');
+}
+
+/**
+ * Message aggregation for SIG_ALL (spec v1): the length-framed `message` bytes.
+ *
+ * NOTE: Use `assertSigAllInputs()` to ensure valid message inputs.
+ *
+ * @remarks
+ * Melt transactions MUST include the quoteId; swaps commit an empty quote field. The value that is
+ * signed is `hashP2PKSigAllMessageV1(message)`, not a plain SHA-256 of these bytes.
+ * @param inputs Array of Proofs (only `secret` and `C` fields required).
+ * @param outputs Array of OutputDataLike objects (OutputData, Factory etc).
+ * @param quoteId Optional. Quote id for Melt transactions.
+ * @internal
+ */
+export function buildP2PKSigAllMessageV1(
+  inputs: Array<Pick<Proof, 'secret' | 'C'>>,
+  outputs: Array<Pick<OutputDataLike, 'blindedMessage'>>,
+  quoteId?: string,
+): Uint8Array {
+  const parts: Uint8Array[] = [];
+  const pushFramed = (bytes: Uint8Array): void => {
+    parts.push(numberToBytesBE(bytes.length, 4), bytes);
+  };
+  pushFramed(utf8ToBytes(quoteId ?? ''));
+  for (const p of inputs) {
+    pushFramed(utf8ToBytes(p.secret));
+    pushFramed(hexToBytes(p.C));
+  }
+  for (const o of outputs) {
+    pushFramed(amountToMinimalBytes(o.blindedMessage));
+    pushFramed(hexToBytes(o.blindedMessage.B_));
+  }
+  // Manual copy rather than concatBytes(...parts): spreading per-field chunks
+  // would hit V8's argument-count limit on large transactions.
+  const message = new Uint8Array(parts.reduce((n, part) => n + part.length, 0));
+  let offset = 0;
+  for (const part of parts) {
+    message.set(part, offset);
+    offset += part.length;
+  }
+  return message;
+}
+
+/**
+ * The 32-byte value signed for SIG_ALL v1: the BIP-340 tagged hash of the framed message.
+ *
+ * @remarks
+ * Shared by P2PK and HTLC. Pass it to the P2PK sign and verify functions as `{ digest }`.
+ * @internal
+ */
+export function hashP2PKSigAllMessageV1(message: Uint8Array): Uint8Array {
+  return taggedHash('Cashu_SigAllSig_v1', message);
 }
 
 /**

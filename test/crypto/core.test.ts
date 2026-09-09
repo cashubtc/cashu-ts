@@ -247,3 +247,11 @@ describe('findSigningKey', () => {
     );
   });
 });
+
+describe('computeMessageDigest with a prehashed digest', () => {
+  test('returns the digest unchanged, as bytes or hex', () => {
+    const digest = sha256(new TextEncoder().encode('hello'));
+    expect(computeMessageDigest({ digest })).toEqual(digest);
+    expect(computeMessageDigest({ digest }, true)).toBe(bytesToHex(digest));
+  });
+});

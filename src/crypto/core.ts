@@ -19,6 +19,8 @@ import { hasLoneSurrogate } from '../utils/bytes';
  */
 export type PrivKey = Uint8Array | string;
 export type DigestInput = Uint8Array | string; // hex string or bytes
+// A UTF-8 string to hash, or the 32-byte digest BIP-340 signs (eg a tagged hash).
+export type MessageInput = string | { digest: Uint8Array };
 export type BlindSignature = {
   C_: WeierstrassPoint<bigint>;
   id: string;
@@ -156,16 +158,29 @@ export function constructUnblindedSignature(
 // ------------------------------
 
 /**
+ * BIP340-style tagged hash: `SHA256(SHA256(tag) || SHA256(tag) || messages)`.
+ */
+export function taggedHash(tag: string, ...messages: Uint8Array[]): Uint8Array {
+  const tagHash = sha256(utf8ToBytes(tag));
+  return sha256(concatBytes(tagHash, tagHash, ...messages));
+}
+
+/**
  * Computes the SHA-256 hash of a UTF-8 message string.
  *
- * @param message To hash (UTF-8 encoded before hashing).
+ * @remarks
+ * A `{ digest }` input is returned unchanged, for callers that sign a prehashed value.
+ * @param message To hash (UTF-8 encoded before hashing), or a prehashed digest.
  * @param asHex Optional: True returns a hex-encoded hash string; otherwise returns raw bytes.
  * @returns SHA-256 hash as raw bytes or hex string, depending on `asHex`.
  */
-export function computeMessageDigest(message: string): Uint8Array;
-export function computeMessageDigest(message: string, asHex: false): Uint8Array;
-export function computeMessageDigest(message: string, asHex: true): string;
-export function computeMessageDigest(message: string, asHex = false): string | Uint8Array {
+export function computeMessageDigest(message: MessageInput): Uint8Array;
+export function computeMessageDigest(message: MessageInput, asHex: false): Uint8Array;
+export function computeMessageDigest(message: MessageInput, asHex: true): string;
+export function computeMessageDigest(message: MessageInput, asHex = false): string | Uint8Array {
+  if (typeof message !== 'string') {
+    return asHex ? bytesToHex(message.digest) : message.digest;
+  }
   // Ill-formed UTF-16 would hash as its U+FFFD replacement, aliasing distinct messages.
   if (hasLoneSurrogate(message)) {
     throw new CTSError('Message must be well-formed UTF-16');
@@ -201,7 +216,7 @@ export const schnorrSignDigest = (digest: DigestInput, privateKey: PrivKey): str
  * @param privateKey - The private key to sign with (hex string or Uint8Array).
  * @returns The signature in hex format.
  */
-export const schnorrSignMessage = (message: string, privateKey: PrivKey): string => {
+export const schnorrSignMessage = (message: MessageInput, privateKey: PrivKey): string => {
   const msghash = computeMessageDigest(message);
   return schnorrSignDigest(msghash, privateKey);
 };
@@ -221,7 +236,7 @@ export const schnorrSignMessage = (message: string, privateKey: PrivKey): string
  */
 export const schnorrVerifyMessage = (
   signature: string,
-  message: string,
+  message: MessageInput,
   pubkey: string,
   throws: boolean = false,
 ): boolean => {
@@ -317,7 +332,7 @@ export function findSigningKey(pubkey: string, privkeys: string | string[]): str
  */
 export function getValidSigners(
   signatures: string[],
-  message: string,
+  message: MessageInput,
   pubkeys: string[],
 ): string[] {
   // Dedupe by x-only identity: BIP-340 ignores the parity prefix, so 02|X, 03|X
@@ -344,7 +359,7 @@ export function getValidSigners(
  */
 export const meetsSignerThreshold = (
   signatures: string[],
-  message: string,
+  message: MessageInput,
   pubkeys: string[],
   threshold: number = 1,
 ): boolean => {
