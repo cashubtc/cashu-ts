@@ -947,6 +947,18 @@ export function isObj(v: unknown): v is object {
 }
 
 /**
+ * Type guard: returns `true` if `v` is a record, i.e. a non-null object that is not an array.
+ *
+ * @remarks
+ * Use this over {@link isObj} on anything off the wire: JSON admits an array or a string where a
+ * record is declared, and spreading one of those materializes a property per element/character.
+ * @internal
+ */
+export function isRecord(v: unknown): v is Record<string, unknown> {
+  return isObj(v) && !Array.isArray(v);
+}
+
+/**
  * In-place: set listed keys to `null` if currently `undefined`. Used when normalizing mint
  * responses where the spec defines a nullable wire field but the mint omits it (Postel-style).
  * Pairs with TS types declared as `T | null`.

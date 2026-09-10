@@ -110,6 +110,21 @@ export const MIN_SEED_BYTES = 16;
 export const MAX_SEED_BYTES = 64;
 
 /**
+ * Upper bound on entries we process from a mint's keyset lists. `/v1/keysets` is historical: it
+ * grows with every rotation and never shrinks, so this sits far above any plausible mint rather
+ * than at the mint-info list cap. It only bounds the per-entry normalization work; the transport
+ * byte cap still applies.
+ */
+export const MAX_KEYSET_LIST = 10_000;
+
+/**
+ * Upper bound on how deeply mint-advertised metadata may nest before a snapshot of it is refused.
+ * Real `/v1/info` metadata nests a handful of levels; the recursive copy overflows the call stack
+ * well before this is a limitation. Mirrors the parser depth caps in JSONInt and cbor.
+ */
+export const MAX_MINT_INFO_DEPTH = 64;
+
+/**
  * Max u64 (2^64 - 1): the ceiling every Amount is held to. Enforced in the Amount constructor, so
  * arithmetic results are bounded too; muldiv helpers keep their wide intermediate in bigint and
  * only construct the divided-down result.
