@@ -2398,9 +2398,10 @@ class Wallet {
     this.failIf(
       !Number.isSafeInteger(batchSize) ||
         batchSize < 1 ||
+        batchSize > this.maxArrayLength ||
         !(Number.isSafeInteger(gapLimit) || gapLimit === Infinity) ||
         gapLimit < 1,
-      'batchSize must be a positive integer and gapLimit a positive integer or Infinity',
+      `batchSize must be a positive integer up to ${this.maxArrayLength} and gapLimit a positive integer or Infinity`,
     );
     const probeSize = Math.min(gapLimit, this.maxArrayLength);
     const restoredProofs: Proof[] = [];

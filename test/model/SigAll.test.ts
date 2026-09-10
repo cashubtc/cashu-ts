@@ -316,6 +316,12 @@ describe('SigAll — serializePackage / deserializePackage', () => {
     expect(() => SigAll.deserializePackage(encoded)).toThrow('Failed to parse signing package');
   });
 
+  test('rejects a duplicate JSON key rather than taking the last value', () => {
+    const encoded =
+      'sigallA' + btoa('{"version":"sigallA","type":"swap","type":"melt"}').replace(/=+$/, '');
+    expect(() => SigAll.deserializePackage(encoded)).toThrow('Failed to parse signing package');
+  });
+
   test('throws on invalid version', () => {
     expect(() =>
       SigAll.deserializePackage(

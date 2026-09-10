@@ -137,6 +137,20 @@ describe('DefaultOutputDataCreator', () => {
       { amount: '2', counter: 8, keysetId: keyset.id },
     ]);
   });
+
+  test('rejects an exact custom split above the output cap before generating any output', () => {
+    const keyset: HasKeysetKeys = {
+      id: '012e23479a0029432eaad0d2040c09be53bab592d5cbf1d55e0dd26c9495951b30',
+      keys: { '1': 'unused' },
+    };
+    const creator = new DefaultOutputDataCreator();
+    const singleSpy = vi.spyOn(OutputData, 'createSingleRandomData');
+    const oversizedSplit = Array.from({ length: 8_193 }, () => 1);
+
+    expect(() => creator.createRandomData(8_193, keyset, oversizedSplit)).toThrow(/output/i);
+    expect(singleSpy).not.toHaveBeenCalled();
+    singleSpy.mockRestore();
+  });
 });
 
 describe('OutputData helpers', () => {

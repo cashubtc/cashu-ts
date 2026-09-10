@@ -127,6 +127,14 @@ export const U64_MAX = 2n ** 64n - 1n;
 export const MAX_CBOR_NODES = 262_144;
 
 /**
+ * Upper bound on a BOLT11 invoice's human-readable prefix, checked before the amount digits reach
+ * `BigInt`.
+ *
+ * Real invoices need a handful of characters here; this clears them with headroom.
+ */
+export const MAX_BOLT11_HRP_LENGTH = 100;
+
+/**
  * Maximum number of candidate payloads `findCashuPayload` will attempt to decode in one scan.
  * Prevents pathological input from causing excessive parsing work. Real pastes carry one payload
  * and a few near-misses, so 16 clears them; scans that exhaust the budget return null.

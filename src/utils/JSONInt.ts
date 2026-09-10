@@ -376,6 +376,25 @@ class Parser {
   }
 }
 
+/**
+ * Writes a reviver's returned value back as an own data property, not an assignment.
+ *
+ * Uses Reflect, not Object: a reviver can leave a key non-configurable mid-walk, and native
+ * JSON.parse silently keeps the existing value there rather than throwing.
+ */
+function defineReviverResult(
+  target: Record<string, unknown> | unknown[],
+  key: string,
+  value: unknown,
+): void {
+  Reflect.defineProperty(target, key, {
+    value,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  });
+}
+
 function walkReviver(
   holder: Record<string, unknown> | unknown[],
   key: string,
@@ -385,14 +404,20 @@ function walkReviver(
   if (Array.isArray(current)) {
     for (let i = 0; i < current.length; i += 1) {
       const v = walkReviver(current, String(i), reviver);
-      if (v === undefined) Reflect.deleteProperty(current, i);
-      else current[i] = v;
+      if (v === undefined) {
+        Reflect.deleteProperty(current, i);
+      } else {
+        defineReviverResult(current, String(i), v);
+      }
     }
   } else if (isRecord(current)) {
     for (const k of Object.keys(current)) {
       const v = walkReviver(current, k, reviver);
-      if (v === undefined) delete current[k];
-      else current[k] = v;
+      if (v === undefined) {
+        delete current[k];
+      } else {
+        defineReviverResult(current, k, v);
+      }
     }
   }
   return reviver.call(holder, key, current);
@@ -448,14 +473,23 @@ function stringify(
   if (typeof space === 'number') {
     indent = ' '.repeat(Math.min(10, Math.max(0, Math.floor(space))));
   } else if (typeof space === 'string') {
-    indent = space;
+    indent = space.slice(0, 10);
   }
 
   if (replacer && typeof replacer !== 'function' && !Array.isArray(replacer)) {
     throw new CTSError('stringify: replacer must be a function or array');
   }
 
-  const propertyList = Array.isArray(replacer) ? replacer.map((k) => String(k)) : undefined;
+  // Native keeps only string and number entries, then drops repeats
+  const propertyList = Array.isArray(replacer)
+    ? Array.from(
+        new Set(
+          replacer
+            .filter((k) => typeof k === 'string' || typeof k === 'number')
+            .map((k) => String(k)),
+        ),
+      )
+    : undefined;
 
   const serialize = (holder: Record<string, unknown>, key: string): string | undefined => {
     let val: unknown = holder[key];
