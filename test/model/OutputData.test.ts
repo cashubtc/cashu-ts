@@ -11,7 +11,6 @@ import {
   getPubKeyFromPrivKey,
   pointFromHex,
   P2BK_DST,
-  P2PK_KNOWN_TAG_KEYS,
 } from '../../src/crypto';
 import { verifyUnblindedSignature } from '../../src/crypto/NUT01';
 import { Amount } from '../../src/model/Amount';
@@ -166,7 +165,8 @@ describe('OutputData secp round-trip (secp256k1 + NUT-12 DLEQ)', () => {
 
 describe('OutputData.assertValidTagKey and reserved tags', () => {
   test('rejects every reserved P2PK tag key', () => {
-    for (const key of P2PK_KNOWN_TAG_KEYS) {
+    const reserved = ['pubkeys', 'locktime', 'refund', 'n_sigs', 'n_sigs_refund', 'sigflag'];
+    for (const key of reserved) {
       expect(() => assertValidTagKey(key)).toThrowError(/reserved key/);
     }
     // Explicit check for the last reserved entry, guarding against a dropped set member.

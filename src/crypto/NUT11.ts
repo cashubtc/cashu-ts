@@ -157,14 +157,6 @@ const KNOWN_TAG_KEYS = new Set([
 ]);
 
 /**
- * NUT-11 tag keys that map onto structured {@link LockConditions} fields, rather than being carried
- * as free-form `additionalTags`, and are therefore reserved (not settable as additional tags).
- *
- * @internal
- */
-export const P2PK_KNOWN_TAG_KEYS: ReadonlySet<string> = new Set(KNOWN_TAG_KEYS);
-
-/**
  * True if a tag key is one NUT-11 reserves.
  *
  * @internal
