@@ -56,6 +56,28 @@ describe('EphemeralCounterSource', () => {
     expect(used.size).toBe(4);
   });
 
+  it('keeps the higher cursor when a seed lists two spellings of one key', async () => {
+    const lower = '00bd033559de27d0';
+    const upper = lower.toUpperCase();
+    expect(await new EphemeralCounterSource({ [upper]: 100, [lower]: 5 }).snapshot()).toEqual({
+      [lower]: 100,
+    });
+    expect(await new EphemeralCounterSource({ [lower]: 5, [upper]: 100 }).snapshot()).toEqual({
+      [lower]: 100,
+    });
+  });
+
+  it('refuses an unsafe cursor at every entry point', async () => {
+    const unsafe = Number.MAX_SAFE_INTEGER + 2;
+    expect(() => new EphemeralCounterSource({ k: unsafe })).toThrow(/safe integer/i);
+    const src = new EphemeralCounterSource();
+    await expect(src.setNext('k', unsafe)).rejects.toThrow(/safe integer/i);
+    await expect(src.setNext('k', 1.5)).rejects.toThrow(/safe integer/i);
+    await expect(src.advanceToAtLeast('k', unsafe)).rejects.toThrow(/safe integer/i);
+    // Nothing above moved the cursor.
+    await expect(src.reserve('k', 0)).resolves.toEqual({ start: 0, count: 0 });
+  });
+
   it('gives two spellings of one hex counter key the same cursor', async () => {
     const lower = '00bd033559de27d0';
     const upper = lower.toUpperCase();
@@ -80,7 +102,7 @@ describe('EphemeralCounterSource', () => {
     await expect(src.reserveAt('k', Number.MAX_SAFE_INTEGER, 2)).rejects.toThrow(/safe integer/i);
     // A rejected reservation leaves the cursor where it was.
     expect((await src.snapshot()).k).toBe(Number.MAX_SAFE_INTEGER);
-    // The last usable counter is still reservable.
+    // A cursor sitting at the last usable counter is still reported.
     await expect(src.reserve('k', 0)).resolves.toEqual({
       start: Number.MAX_SAFE_INTEGER,
       count: 0,
