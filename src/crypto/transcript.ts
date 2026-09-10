@@ -193,8 +193,8 @@ export function transactionMessage(tx: TransactionShape): Uint8Array {
  * Split a transcript into its top-level container records, byte for byte.
  *
  * @remarks
- * Throws unless the bytes are exactly a run of well-formed, non-empty NUT-10 containers (types 0x01
- * to 0x05); an event id or other opaque 32 bytes never passes.
+ * Throws unless the bytes are exactly a run of well-formed, non-empty NUT-10 containers (proof
+ * input through authorized request); an event id or other opaque 32 bytes never passes.
  */
 export function transcriptContainers(transcript: Uint8Array): Uint8Array[] {
   const records: Uint8Array[] = [];
@@ -202,7 +202,12 @@ export function transcriptContainers(transcript: Uint8Array): Uint8Array[] {
     const type = transcript[at];
     const length = (transcript[at + 1] << 8) | transcript[at + 2];
     const end = at + 3 + length;
-    if (type < 0x01 || type > 0x05 || length === 0 || end > transcript.length) {
+    if (
+      type < CONTAINER_PROOF_INPUT ||
+      type > CONTAINER_AUTHORIZED_REQUEST ||
+      length === 0 ||
+      end > transcript.length
+    ) {
       throw new CTSError('Malformed transaction transcript');
     }
     records.push(transcript.subarray(at, end));

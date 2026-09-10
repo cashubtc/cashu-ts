@@ -12,6 +12,7 @@ import {
   signTransactionInput,
   spendCommitment,
   transactionDigest,
+  transcriptContainers,
   transactionInputs,
   verifyTransactionInputWitness,
   type TransactionShape,
@@ -356,6 +357,26 @@ describe('keyset ids in the transcript', () => {
     expect(() =>
       transactionDigest({ proofInputs: [{ ...v3Input, keysetId: '' }], blindedOutputs: [out] }),
     ).toThrow(/keyset id/);
+  });
+});
+
+describe('transcriptContainers', () => {
+  const swap = hexToBytes(tv.swap.transcript);
+
+  test('splits a transcript into its container records byte for byte', () => {
+    const records = transcriptContainers(swap);
+    expect(records.map(bytesToHex).join('')).toBe(tv.swap.transcript);
+    expect(bytesToHex(sha256(records[0]))).toBe(tv.swap.input_id);
+  });
+
+  test.each([
+    ['empty', ''],
+    ['an opaque 32 bytes', '00'.repeat(32)],
+    ['a type above the authorized request', '06000101'],
+    ['a zero-length record', '010000'],
+    ['a truncated record', tv.swap.transcript.slice(0, -2)],
+  ])('rejects %s', (_, hex) => {
+    expect(() => transcriptContainers(hexToBytes(hex))).toThrow('Malformed');
   });
 });
 
