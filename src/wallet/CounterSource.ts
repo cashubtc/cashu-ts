@@ -1,4 +1,6 @@
+import { LEGACY_KEYSET_ID_LENGTH } from '../crypto/core';
 import { CTSError } from '../model/Errors';
+import { isValidHex } from '../utils';
 /**
  * Usable counters in range is [start, start+count-1]
  *
@@ -61,6 +63,27 @@ export type OperationCounters = {
 };
 
 /**
+ * Hex keyset ids are byte identifiers, so two spellings of one id must share a cursor. Anything
+ * else (the quote-lock key, legacy base64 ids) is case-sensitive and kept verbatim.
+ */
+function normalizeCounterKey(counterKey: string): string {
+  // A legacy base64 id is case-sensitive and its alphabet overlaps hex, so it is left alone.
+  if (counterKey.length === LEGACY_KEYSET_ID_LENGTH) return counterKey;
+  return isValidHex(counterKey) ? counterKey.toLowerCase() : counterKey;
+}
+
+/**
+ * A cursor past 2^53 stops advancing, so equal reservations would repeat (NUT-13).
+ */
+function assertSafeCounter(counterKey: string, next: number): void {
+  if (!Number.isSafeInteger(next)) {
+    throw new CTSError(
+      `Reservation for counter key ${counterKey} would take the cursor to ${next}, outside the safe integer range`,
+    );
+  }
+}
+
+/**
  * In memory implementation with per keyset locks for atomic counters.
  */
 export class EphemeralCounterSource implements CounterSource {
@@ -69,11 +92,17 @@ export class EphemeralCounterSource implements CounterSource {
 
   constructor(initial?: Record<string, number>) {
     if (initial) {
-      for (const [k, v] of Object.entries(initial)) this.next.set(k, v);
+      // Two spellings of one id keep the higher cursor, whatever order the seed lists them in.
+      for (const [key, v] of Object.entries(initial)) {
+        const k = normalizeCounterKey(key);
+        assertSafeCounter(k, v);
+        this.next.set(k, Math.max(this.next.get(k) ?? 0, v));
+      }
     }
   }
 
-  private async withLock<T>(k: string, fn: () => T | Promise<T>): Promise<T> {
+  private async withLock<T>(counterKey: string, fn: (k: string) => T | Promise<T>): Promise<T> {
+    const k = normalizeCounterKey(counterKey);
     const prev = this.locks.get(k) ?? Promise.resolve();
     let release!: () => void;
     const p = new Promise<void>((resolve) => (release = resolve));
@@ -81,7 +110,7 @@ export class EphemeralCounterSource implements CounterSource {
     this.locks.set(k, chain);
     try {
       await prev;
-      return await fn();
+      return await fn(k);
     } finally {
       release();
       if (this.locks.get(k) === chain) {
@@ -90,43 +119,49 @@ export class EphemeralCounterSource implements CounterSource {
     }
   }
 
-  async reserve(keysetId: string, n: number): Promise<CounterRange> {
+  async reserve(counterKey: string, n: number): Promise<CounterRange> {
     if (n < 0) throw new CTSError('reserve called with negative count');
-    return this.withLock(keysetId, () => {
-      const cur = this.next.get(keysetId) ?? 0;
+    return this.withLock(counterKey, (k) => {
+      const cur = this.next.get(k) ?? 0;
       if (n === 0) return { start: cur, count: 0 }; // report current, do not move
-      this.next.set(keysetId, cur + n);
+      assertSafeCounter(k, cur + n);
+      this.next.set(k, cur + n);
       return { start: cur, count: n };
     });
   }
 
-  async reserveAt(keysetId: string, start: number, count: number): Promise<CounterRange> {
+  async reserveAt(counterKey: string, start: number, count: number): Promise<CounterRange> {
     if (start < 0 || count < 0) {
       throw new CTSError('reserveAt called with a negative start or count');
     }
-    return this.withLock(keysetId, () => {
-      const cur = this.next.get(keysetId) ?? 0;
+    return this.withLock(counterKey, (k) => {
+      const cur = this.next.get(k) ?? 0;
       if (start < cur) {
         throw new CTSError(
-          `Counter ${start} for keyset ${keysetId} was already issued (next is ${cur})`,
+          `Counter ${start} for counter key ${k} was already issued (next is ${cur})`,
         );
       }
-      this.next.set(keysetId, start + count);
+      assertSafeCounter(k, start + count);
+      this.next.set(k, start + count);
       return { start, count };
     });
   }
 
-  async advanceToAtLeast(keysetId: string, minNext: number): Promise<void> {
-    await this.withLock(keysetId, () => {
-      const cur = this.next.get(keysetId) ?? 0;
-      if (minNext > cur) this.next.set(keysetId, minNext);
+  async advanceToAtLeast(counterKey: string, minNext: number): Promise<void> {
+    await this.withLock(counterKey, (k) => {
+      const cur = this.next.get(k) ?? 0;
+      if (minNext > cur) {
+        assertSafeCounter(k, minNext);
+        this.next.set(k, minNext);
+      }
     });
   }
 
-  async setNext(keysetId: string, next: number): Promise<void> {
-    await this.withLock(keysetId, () => {
+  async setNext(counterKey: string, next: number): Promise<void> {
+    await this.withLock(counterKey, (k) => {
       if (next < 0) throw new CTSError('setNext: negative next not allowed');
-      this.next.set(keysetId, next);
+      assertSafeCounter(k, next);
+      this.next.set(k, next);
     });
   }
 

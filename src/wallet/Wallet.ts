@@ -2749,12 +2749,15 @@ class Wallet {
     mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>,
   ): Promise<Proof[]> {
     const { payload, outputData, method, legacySignature } = mintPreview;
+    // Ask the mint to sign the outputs this preview can unblind, rather than a field that a
+    // persisted preview may no longer agree with.
+    const request: MintRequest = { ...payload, outputs: outputData.map((d) => d.blindedMessage) };
     // TODO: Remove legacy message support
     const { signatures } = await this.withStaleKeysetRepair(() =>
       this.withLegacyQuoteSigFallback(
         legacySignature !== undefined,
-        () => this.mint.mint(method, payload),
-        () => this.mint.mint(method, { ...payload, signature: legacySignature }),
+        () => this.mint.mint(method, request),
+        () => this.mint.mint(method, { ...request, signature: legacySignature }),
       ),
     );
     this.failIf(
@@ -2926,12 +2929,18 @@ class Wallet {
     batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>,
   ): Promise<Proof[]> {
     const { method, payload, outputData, legacySignatures } = batchPreview;
+    // Ask the mint to sign the outputs this preview can unblind, rather than a field that a
+    // persisted preview may no longer agree with.
+    const request: BatchMintRequest = {
+      ...payload,
+      outputs: outputData.map((d) => d.blindedMessage),
+    };
     // TODO: Remove legacy message support
     const { signatures: sigs } = await this.withStaleKeysetRepair(() =>
       this.withLegacyQuoteSigFallback(
         legacySignatures !== undefined,
-        () => this.mint.mintBatch(method, payload),
-        () => this.mint.mintBatch(method, { ...payload, signatures: legacySignatures! }),
+        () => this.mint.mintBatch(method, request),
+        () => this.mint.mintBatch(method, { ...request, signatures: legacySignatures! }),
       ),
     );
     this.failIf(
