@@ -73,6 +73,10 @@ export type ProofStatesStreamOpts<P extends ProofLike = Proof> = WatchOpts & {
  */
 type Poller<T> = { fetch: () => Promise<T[]>; key: (p: T) => string; state: (p: T) => string };
 
+function noop(): void {
+  /* noop */
+}
+
 function safeStringify(obj: unknown): string {
   const seen = new WeakSet<object>();
   try {
@@ -216,9 +220,7 @@ export class WalletEvents {
     if (!signal) return cancel;
     if (signal.aborted) {
       cancel();
-      return () => {
-        /* noop */
-      };
+      return noop;
     }
     const onAbort = () => cancel();
     signal.addEventListener('abort', onAbort, { once: true });
@@ -237,7 +239,11 @@ export class WalletEvents {
     signal?: AbortSignal,
     onClose?: () => void,
   ): Promise<SubscriptionCanceller> {
+    // Filters (eg proof Ys) must never reach the wire for a subscription already cancelled, so an
+    // abort is checked both before the connect and again once it settles.
+    if (signal?.aborted) return noop;
     await this.wallet.mint.connectWebSocket();
+    if (signal?.aborted) return noop;
     const ws = this.wallet.mint.webSocketConnection;
     if (!ws) throw new CTSError('Failed to establish WebSocket connection.');
     const subId = ws.createSubscription<W>({ kind, filters }, cb, err);
@@ -283,7 +289,9 @@ export class WalletEvents {
     const { kind, filters, decode } = socket;
     const deliver = (wire: W) => {
       const p = decode(wire);
-      if (p !== undefined) cb(p);
+      // cb may be an async consumer callback; a rejection must not escape uncontained, matching
+      // WSConnection's own containment (which never sees it, since this wrapper doesn't return it).
+      if (p !== undefined) safeCallback(cb, p, this.wallet.logger, { event: kind });
     };
     const pollMs = opts?.pollMs;
     if (pollMs === undefined) return this._subscribe(kind, filters, deliver, err, opts?.signal);
@@ -360,7 +368,7 @@ export class WalletEvents {
         if (++failures >= POLL_FAILURE_LIMIT) throw normalizeError(e);
       }
       if (signal.aborted) return;
-      for (const item of changed) cb(item);
+      for (const item of changed) safeCallback(cb, item, this.wallet.logger);
       // A failed poll is often a rate limit, so back off before the next one
       await sleep(pollMs * 2 ** failures, signal);
     }
