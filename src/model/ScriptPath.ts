@@ -253,6 +253,8 @@ function deserializePackage(input: string): ScriptPathSigningPackage {
   try {
     data = JSONInt.parse(
       bytesToUtf8(decodeBase64UrlToUint8(input.slice(SCRIPT_PATH_PREFIX.length))),
+      undefined,
+      { strict: true },
     );
   } catch (e) {
     throw new CTSError('Failed to parse signing package', { cause: e });

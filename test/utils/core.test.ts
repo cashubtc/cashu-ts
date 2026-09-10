@@ -145,6 +145,34 @@ describe('splitAmount output bound', () => {
     // One more output must be rejected, not allocated.
     expect(() => utils.splitAmount(8_193, onlyOnes)).toThrow(/would exceed .* outputs/);
   });
+
+  test('rejects an exact custom split above the output cap', () => {
+    // An exact caller-supplied split (sums to the requested value) returns before the fill
+    // logic's own budget check; it needs the same cap.
+    const oversizedSplit = Array.from({ length: 8_193 }, () => 1);
+    expect(() => utils.splitAmount(8_193, onlyOnes, oversizedSplit)).toThrow(
+      /would exceed .* outputs/,
+    );
+  });
+
+  test('allows an exact custom split at exactly the cap', () => {
+    const split = Array.from({ length: 8_192 }, () => 1);
+    expect(utils.splitAmount(8_192, onlyOnes, split)).toHaveLength(8_192);
+  });
+
+  test('rejects a zero-total custom split above the output cap', () => {
+    // Zero value and zero-total split (restore/NUT-08 blanks) returns before the fill logic's
+    // own budget check too; it needs the same cap as the exact-positive-split path.
+    const oversizedZeroSplit = Array.from({ length: 8_193 }, () => 0);
+    expect(() => utils.splitAmount(0, onlyOnes, oversizedZeroSplit)).toThrow(
+      /would exceed .* outputs/,
+    );
+  });
+
+  test('allows a zero-total custom split at exactly the cap', () => {
+    const zeroSplit = Array.from({ length: 8_192 }, () => 0);
+    expect(utils.splitAmount(0, onlyOnes, zeroSplit)).toHaveLength(8_192);
+  });
 });
 
 describe('test split different key amount', () => {

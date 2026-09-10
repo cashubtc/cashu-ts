@@ -503,6 +503,37 @@ describe('WSConnection – message handling', () => {
     srv.close();
   });
 
+  test('a response with a duplicate JSON key is dropped rather than taking the last value', async () => {
+    const url = 'ws://localhost:3346/v1/ws';
+    const srv = new Server(url, { mock: false });
+
+    srv.on('connection', (socket) => {
+      socket.on('message', (m) => {
+        const parsed = JSON.parse(m.toString());
+        if (parsed.method === 'subscribe') {
+          socket.send(
+            `{"jsonrpc":"2.0","error":{"message":"first"},"id":${parsed.id},"error":{"message":"second"}}`,
+          );
+          socket.send(`{"jsonrpc":"2.0","error":{"message":"after"},"id":${parsed.id}}`);
+        }
+      });
+    });
+
+    const conn = new WSConnection(url);
+    await conn.connect();
+
+    const errorCb = vi.fn();
+    await new Promise<void>((res) => {
+      conn.createSubscription({ kind: 'bolt11_mint_quote', filters: [] }, vi.fn(), errorCb);
+      setTimeout(res, 100);
+    });
+
+    // The malformed frame is dropped and the connection keeps serving the same id.
+    expect(errorCb).toHaveBeenCalledTimes(1);
+    expect(errorCb.mock.calls[0][0]).toMatchObject({ message: 'after' });
+    srv.close();
+  });
+
   test('notification without subId is silently ignored', async () => {
     const url = 'ws://localhost:3343/v1/ws';
     const srv = new Server(url, { mock: false });

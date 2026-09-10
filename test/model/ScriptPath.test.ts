@@ -1,5 +1,6 @@
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
+import { utf8ToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 
 import {
@@ -18,6 +19,7 @@ import { Amount } from '../../src/model/Amount';
 import { OutputData } from '../../src/model/OutputData';
 import { ScriptPath } from '../../src/model/ScriptPath';
 import type { Proof } from '../../src/model/types';
+import { encodeUint8ToBase64Url } from '../../src/utils';
 import type { MeltPreview, SwapPreview } from '../../src/wallet/types';
 
 const keysetId = `02${'11'.repeat(32)}`;
@@ -246,6 +248,9 @@ describe('ScriptPath signing packages', () => {
     const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]);
     expect(() => ScriptPath.deserializePackage('cashuA0000')).toThrow(/must start with/);
     expect(() => ScriptPath.deserializePackage('nutspA!!!not-base64!!!')).toThrow(/parse/);
+    const dupKeyPackage =
+      'nutspA' + encodeUint8ToBase64Url(utf8ToBytes('{"type":"swap","type":"melt"}'));
+    expect(() => ScriptPath.deserializePackage(dupKeyPackage)).toThrow(/parse/);
     // Shallow clone: structuredClone would strip the Amount prototypes off the inputs.
     const reserialize = (mangle: (p: typeof pkg) => unknown) =>
       ScriptPath.serializePackage(

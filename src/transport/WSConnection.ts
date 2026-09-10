@@ -317,8 +317,9 @@ export class WSConnection {
     const message = this.messageQueue.dequeue() as string;
 
     try {
-      // Same bigint-safe parse as the HTTP transport, so a u64 amount is not rounded on the way in
-      const parsed = JSONInt.parse(message) as JsonRpcMessage;
+      // Same bigint-safe, strict parse as the HTTP transport, so a u64 amount is not rounded and
+      // a duplicate key cannot pick a different result than an earlier check saw.
+      const parsed = JSONInt.parse(message, undefined, { strict: true }) as JsonRpcMessage;
 
       if ('result' in parsed && parsed.id != undefined) {
         if (this.rpcListeners[parsed.id]) {
