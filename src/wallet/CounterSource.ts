@@ -92,7 +92,12 @@ export class EphemeralCounterSource implements CounterSource {
 
   constructor(initial?: Record<string, number>) {
     if (initial) {
-      for (const [k, v] of Object.entries(initial)) this.next.set(normalizeCounterKey(k), v);
+      // Two spellings of one id keep the higher cursor, whatever order the seed lists them in.
+      for (const [key, v] of Object.entries(initial)) {
+        const k = normalizeCounterKey(key);
+        assertSafeCounter(k, v);
+        this.next.set(k, Math.max(this.next.get(k) ?? 0, v));
+      }
     }
   }
 
@@ -118,9 +123,8 @@ export class EphemeralCounterSource implements CounterSource {
     if (n < 0) throw new CTSError('reserve called with negative count');
     return this.withLock(counterKey, (k) => {
       const cur = this.next.get(k) ?? 0;
-      // A seeded or setNext cursor is accepted verbatim, so even a read-only report is checked.
-      assertSafeCounter(k, cur + n);
       if (n === 0) return { start: cur, count: 0 }; // report current, do not move
+      assertSafeCounter(k, cur + n);
       this.next.set(k, cur + n);
       return { start: cur, count: n };
     });
@@ -146,13 +150,17 @@ export class EphemeralCounterSource implements CounterSource {
   async advanceToAtLeast(counterKey: string, minNext: number): Promise<void> {
     await this.withLock(counterKey, (k) => {
       const cur = this.next.get(k) ?? 0;
-      if (minNext > cur) this.next.set(k, minNext);
+      if (minNext > cur) {
+        assertSafeCounter(k, minNext);
+        this.next.set(k, minNext);
+      }
     });
   }
 
   async setNext(counterKey: string, next: number): Promise<void> {
     await this.withLock(counterKey, (k) => {
       if (next < 0) throw new CTSError('setNext: negative next not allowed');
+      assertSafeCounter(k, next);
       this.next.set(k, next);
     });
   }
