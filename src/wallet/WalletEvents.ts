@@ -21,6 +21,10 @@ export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCancelle
 
 export type SubscribeOpts = { signal?: AbortSignal };
 
+function noop(): void {
+  /* noop */
+}
+
 function safeStringify(obj: unknown): string {
   const seen = new WeakSet<object>();
   try {
@@ -100,9 +104,7 @@ export class WalletEvents {
     if (!signal) return cancel;
     if (signal.aborted) {
       cancel();
-      return () => {
-        /* noop */
-      };
+      return noop;
     }
     const onAbort = () => cancel();
     signal.addEventListener('abort', onAbort, { once: true });
@@ -260,7 +262,11 @@ export class WalletEvents {
     err: (e: Error) => void,
     opts?: SubscribeOpts,
   ): Promise<SubscriptionCanceller> {
+    // Filters must never reach the wire for a subscription already cancelled, so an abort is
+    // checked both before the connect and again once it settles.
+    if (opts?.signal?.aborted) return noop;
     await this.wallet.mint.connectWebSocket();
+    if (opts?.signal?.aborted) return noop;
     const ws = this.wallet.mint.webSocketConnection;
     if (!ws) throw new CTSError('Failed to establish WebSocket connection.');
 
@@ -274,7 +280,8 @@ export class WalletEvents {
         err(normalizeError(e));
         return;
       }
-      cb(quote);
+      // cb may be an async consumer callback; a rejection must not escape uncontained.
+      safeCallback(cb, quote, this.wallet.logger, { event: 'bolt11_mint_quote' });
     };
     const subId = ws.createSubscription({ kind: 'bolt11_mint_quote', filters: uniq }, handler, err);
     const cancel = () => ws.cancelSubscription(subId, handler);
@@ -319,7 +326,11 @@ export class WalletEvents {
     err: (e: Error) => void,
     opts?: SubscribeOpts,
   ): Promise<SubscriptionCanceller> {
+    // Filters must never reach the wire for a subscription already cancelled, so an abort is
+    // checked both before the connect and again once it settles.
+    if (opts?.signal?.aborted) return noop;
     await this.wallet.mint.connectWebSocket();
+    if (opts?.signal?.aborted) return noop;
     const ws = this.wallet.mint.webSocketConnection;
     if (!ws) throw new CTSError('Failed to establish WebSocket connection.');
 
@@ -332,7 +343,7 @@ export class WalletEvents {
         err(normalizeError(e));
         return;
       }
-      cb(quote);
+      safeCallback(cb, quote, this.wallet.logger, { event: 'bolt11_melt_quote' });
     };
     const subId = ws.createSubscription({ kind: 'bolt11_melt_quote', filters: uniq }, handler, err);
     const cancel = () => ws.cancelSubscription(subId, handler);
@@ -382,7 +393,11 @@ export class WalletEvents {
     err: (e: Error) => void,
     opts?: SubscribeOpts,
   ): Promise<SubscriptionCanceller> {
+    // Filters must never reach the wire for a subscription already cancelled, so an abort is
+    // checked both before the connect and again once it settles.
+    if (opts?.signal?.aborted) return noop;
     await this.wallet.mint.connectWebSocket();
+    if (opts?.signal?.aborted) return noop;
     const ws = this.wallet.mint.webSocketConnection;
     if (!ws) throw new CTSError('Failed to establish WebSocket connection.');
 
@@ -403,7 +418,7 @@ export class WalletEvents {
     const handler = (payload: ProofState) => {
       const proof = proofMap[payload.Y];
       if (!proof) return; // ignore unsolicited Y from a misbehaving mint
-      cb({ ...payload, proof });
+      safeCallback(cb, { ...payload, proof }, this.wallet.logger, { event: 'proof_state' });
     };
     const subId = ws.createSubscription({ kind: 'proof_state', filters: ys }, handler, err);
     const cancel = () => ws.cancelSubscription(subId, handler);

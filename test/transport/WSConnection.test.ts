@@ -262,6 +262,51 @@ describe('WSConnection – close and lifecycle', () => {
     }
   });
 
+  test('close() during a pending connect settles it and drops the timer', async () => {
+    class NeverOpenWebSocket {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      readyState = NeverOpenWebSocket.CONNECTING;
+      onopen: (() => void) | null = null;
+      onerror: ((ev: Event) => void) | null = null;
+      onmessage: ((e: MessageEvent) => void) | null = null;
+      onclose: ((e: CloseEvent) => void) | null = null;
+      close() {
+        this.readyState = 3;
+      }
+      send() {}
+    }
+
+    injectWebSocketImpl(NeverOpenWebSocket as unknown as typeof WebSocket);
+    vi.useFakeTimers();
+    try {
+      const conn = new WSConnection(fakeUrl);
+      const pending = conn.connect(10_000);
+      conn.close();
+      await expect(pending).rejects.toThrow('WebSocket closed');
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+      injectWebSocketImpl(WebSocket);
+    }
+  });
+
+  test('close() fails a subscription still waiting for its acknowledgement', async () => {
+    const conn = new WSConnection(fakeUrl);
+    await conn.connect();
+    const errorCallback = vi.fn();
+    conn.createSubscription(
+      { kind: 'bolt11_mint_quote', filters: ['unacked'] },
+      vi.fn(),
+      errorCallback,
+    );
+
+    conn.close();
+
+    expect(errorCallback).toHaveBeenCalledTimes(1);
+    expect(errorCallback.mock.calls[0][0]).toMatchObject({ message: 'WebSocket closed' });
+  });
+
   test('connect rejects when socket errors before opening', async () => {
     class ErrorBeforeOpenWebSocket {
       static readonly CONNECTING = 0;
@@ -324,6 +369,60 @@ describe('WSConnection – close and lifecycle', () => {
       await expect(conn.connect()).rejects.toThrow(
         'WebSocket closed before open (code 4003, rejected)',
       );
+    } finally {
+      injectWebSocketImpl(WebSocket);
+    }
+  });
+
+  test('close() settles an abandoned connect and leaves the replacement socket alone', async () => {
+    class TimeoutWebSocket {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSING = 2;
+      static readonly instances: TimeoutWebSocket[] = [];
+
+      readyState = TimeoutWebSocket.CONNECTING;
+      onopen: (() => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onclose: ((event: CloseEvent) => void) | null = null;
+
+      constructor() {
+        TimeoutWebSocket.instances.push(this);
+      }
+
+      open() {
+        this.readyState = TimeoutWebSocket.OPEN;
+        this.onopen?.();
+      }
+
+      send() {}
+
+      close() {
+        this.readyState = TimeoutWebSocket.CLOSING;
+      }
+    }
+
+    injectWebSocketImpl(TimeoutWebSocket as unknown as typeof WebSocket);
+
+    try {
+      const conn = new WSConnection(fakeUrl);
+      const abandonedConnect = conn.connect(20);
+      const abandoned = abandonedConnect.catch((e: unknown) => e);
+
+      conn.close();
+
+      const replacementConnect = conn.connect(200);
+      const replacementSocket = TimeoutWebSocket.instances[1];
+      replacementSocket.open();
+      await replacementConnect;
+
+      const abandonedResult = await abandoned;
+
+      expect(abandonedResult).toBeInstanceOf(Error);
+      expect((abandonedResult as Error).message).toBe('WebSocket closed');
+      expect(replacementSocket.readyState).toBe(TimeoutWebSocket.OPEN);
+      conn.close();
     } finally {
       injectWebSocketImpl(WebSocket);
     }
@@ -673,6 +772,106 @@ describe('WSConnection – message handling', () => {
     });
     srv.close();
   });
+
+  test('a rejecting async subscription callback is contained and logged', async () => {
+    const url = 'ws://localhost:3363/v1/ws';
+    const srv = new Server(url, { mock: false });
+    const logger = createLogger();
+
+    srv.on('connection', (socket) => {
+      socket.on('message', (m) => {
+        const parsed = JSON.parse(m.toString());
+        if (parsed.method === 'subscribe') {
+          socket.send(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              result: { status: 'OK', subId: parsed.params.subId },
+              id: parsed.id,
+            }),
+          );
+          setTimeout(() => {
+            socket.send(
+              JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'subscribe',
+                params: { subId: parsed.params.subId, payload: { paid: true } },
+              }),
+            );
+          }, 0);
+        }
+      });
+    });
+
+    const conn = new WSConnection(url, logger);
+    await conn.connect();
+
+    await new Promise<void>((res) => {
+      conn.createSubscription(
+        { kind: 'bolt11_mint_quote', filters: [] },
+        // eslint-disable-next-line @typescript-eslint/no-misused-promises -- async-callback tolerance is what's under test
+        async () => {
+          throw new Error('async listener boom');
+        },
+        vi.fn(),
+      );
+      setTimeout(res, 100);
+    });
+
+    expect(logger.error).toHaveBeenCalledWith('Subscription handler threw', {
+      e: expect.objectContaining({ message: 'async listener boom' }),
+    });
+    srv.close();
+  });
+
+  test('a rejecting non-native thenable is contained and logged', async () => {
+    const url = 'ws://localhost:3365/v1/ws';
+    const srv = new Server(url, { mock: false });
+    const logger = createLogger();
+
+    srv.on('connection', (socket) => {
+      socket.on('message', (m) => {
+        const parsed = JSON.parse(m.toString());
+        if (parsed.method === 'subscribe') {
+          socket.send(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              result: { status: 'OK', subId: parsed.params.subId },
+              id: parsed.id,
+            }),
+          );
+          setTimeout(() => {
+            socket.send(
+              JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'subscribe',
+                params: { subId: parsed.params.subId, payload: { paid: true } },
+              }),
+            );
+          }, 0);
+        }
+      });
+    });
+
+    const conn = new WSConnection(url, logger);
+    await conn.connect();
+
+    await new Promise<void>((res) => {
+      conn.createSubscription(
+        { kind: 'bolt11_mint_quote', filters: [] },
+        // Not a native Promise: instanceof Promise would miss this, unlike a duck-typed then check.
+        () => ({
+          then: (_res: unknown, rej: (e: unknown) => void) => rej(new Error('thenable boom')),
+        }),
+        vi.fn(),
+      );
+      setTimeout(res, 100);
+    });
+
+    expect(logger.error).toHaveBeenCalledWith('Subscription handler threw', {
+      e: expect.objectContaining({ message: 'thenable boom' }),
+    });
+    srv.close();
+  });
 });
 
 describe('WSConnection – listener management', () => {
@@ -689,6 +888,117 @@ describe('WSConnection – listener management', () => {
     conn.close();
 
     expect(internals.messageQueue.size).toBe(0);
+  });
+
+  test('close discards callbacks from subscriptions made on the old socket', async () => {
+    const url = 'ws://localhost:3362/v1/ws';
+    const srv = new Server(url, { mock: false });
+    const sockets: Client[] = [];
+
+    srv.on('connection', (socket) => {
+      sockets.push(socket);
+      socket.on('message', (message) => {
+        const parsed = JSON.parse(message.toString());
+        if (parsed.method === 'subscribe') {
+          socket.send(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              result: { status: 'OK', subId: parsed.params.subId },
+              id: parsed.id,
+            }),
+          );
+        }
+      });
+    });
+
+    const conn = new WSConnection(url);
+
+    try {
+      await conn.connect();
+      const callback = vi.fn();
+      const subId = conn.createSubscription(
+        { kind: 'bolt11_mint_quote', filters: ['old-quote'] },
+        callback,
+        vi.fn(),
+      );
+      await waitForSubscription(conn, subId);
+
+      conn.close();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      await conn.connect();
+
+      sockets[1].send(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'subscribe',
+          params: { subId, payload: { quote: 'old-quote', state: 'PAID' } },
+        }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(callback).not.toHaveBeenCalled();
+      expect(conn.activeSubscriptions).not.toContain(subId);
+    } finally {
+      conn.close();
+      srv.close();
+    }
+  });
+
+  test('a remote close discards callbacks from subscriptions made on the old socket', async () => {
+    const url = 'ws://localhost:3364/v1/ws';
+    const srv = new Server(url, { mock: false });
+    const sockets: Client[] = [];
+
+    srv.on('connection', (socket) => {
+      sockets.push(socket);
+      socket.on('message', (message) => {
+        const parsed = JSON.parse(message.toString());
+        if (parsed.method === 'subscribe') {
+          socket.send(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              result: { status: 'OK', subId: parsed.params.subId },
+              id: parsed.id,
+            }),
+          );
+        }
+      });
+    });
+
+    const conn = new WSConnection(url);
+
+    try {
+      await conn.connect();
+      const callback = vi.fn();
+      const subId = conn.createSubscription(
+        { kind: 'bolt11_mint_quote', filters: ['old-quote'] },
+        callback,
+        vi.fn(),
+      );
+      await waitForSubscription(conn, subId);
+
+      // The mint drops the connection: an abnormal remote close, not an app-driven conn.close().
+      sockets[0].close({ wasClean: false, code: 1006, reason: 'dropped' });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      // Mint.ts reuses the same WSConnection instance on the next connectWebSocket() call.
+      await conn.connect();
+
+      sockets[1].send(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'subscribe',
+          params: { subId, payload: { quote: 'old-quote', state: 'PAID' } },
+        }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(callback).not.toHaveBeenCalled();
+      expect(conn.activeSubscriptions).not.toContain(subId);
+    } finally {
+      conn.close();
+      srv.close();
+    }
   });
 
   test('activeSubscriptions returns all registered subIds', async () => {
@@ -710,11 +1020,11 @@ describe('WSConnection – listener management', () => {
     const cb2 = vi.fn();
     conn.addSubListener('multi-sub', cb1);
     conn.addSubListener('multi-sub', cb2);
-    conn.close();
 
     conn.cancelSubscription('multi-sub', cb1);
 
     expect(conn.activeSubscriptions).toContain('multi-sub'); // cb2 still registered
+    conn.close();
   });
 
   test('cancelSubscription when socket is closed removes listener without throwing', async () => {
@@ -1121,6 +1431,256 @@ describe('WSConnection – listener management', () => {
       expect(conn.activeSubscriptions).toContain(subId);
       // The stale frame must not have reached the replacement's subscriber.
       expect(payloads).not.toContain('stale');
+      conn.close();
+    } finally {
+      injectWebSocketImpl(WebSocket);
+    }
+  });
+
+  test('closes the connection instead of buffering an unbounded message burst', async () => {
+    class BurstWebSocket {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSING = 2;
+      static readonly CLOSED = 3;
+      static readonly instances: BurstWebSocket[] = [];
+
+      readyState = BurstWebSocket.CONNECTING;
+      onopen: (() => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onclose: ((event: CloseEvent) => void) | null = null;
+
+      constructor() {
+        BurstWebSocket.instances.push(this);
+      }
+
+      open() {
+        this.readyState = BurstWebSocket.OPEN;
+        this.onopen?.();
+      }
+
+      send() {}
+
+      close() {
+        this.readyState = BurstWebSocket.CLOSING;
+      }
+
+      emitMessage(message: string) {
+        this.onmessage?.({ data: message } as MessageEvent);
+      }
+    }
+
+    injectWebSocketImpl(BurstWebSocket as unknown as typeof WebSocket);
+
+    try {
+      const conn = new WSConnection(fakeUrl);
+      const connecting = conn.connect();
+      const socket = BurstWebSocket.instances[0];
+      socket.open();
+      await connecting;
+
+      const notification = JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'subscribe',
+        params: { subId: 'sender', payload: null },
+      });
+      const burstSize = 20_000; // comfortably over MAX_WS_QUEUED_MESSAGES
+      for (let i = 0; i < burstSize; i++) socket.emitMessage(notification);
+
+      const messageQueue = (conn as unknown as { messageQueue: { size: number } }).messageQueue;
+      expect(messageQueue.size).toBe(0); // torn down and drained, not merely capped
+      expect(socket.readyState).not.toBe(BurstWebSocket.OPEN);
+
+      // The connection is gone: a further frame from the superseded socket must not requeue.
+      socket.emitMessage(notification);
+      expect(messageQueue.size).toBe(0);
+
+      conn.close();
+    } finally {
+      injectWebSocketImpl(WebSocket);
+    }
+  });
+
+  test('an overflow close notifies onClose and rejects a pending RPC', async () => {
+    class BurstWebSocket {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSING = 2;
+      static readonly CLOSED = 3;
+      static readonly instances: BurstWebSocket[] = [];
+
+      readyState = BurstWebSocket.CONNECTING;
+      onopen: (() => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onclose: ((event: CloseEvent) => void) | null = null;
+
+      constructor() {
+        BurstWebSocket.instances.push(this);
+      }
+
+      open() {
+        this.readyState = BurstWebSocket.OPEN;
+        this.onopen?.();
+      }
+
+      // Never acknowledged, so the subscribe RPC listener registered below stays pending.
+      send() {}
+
+      close() {
+        this.readyState = BurstWebSocket.CLOSING;
+      }
+
+      emitMessage(message: string) {
+        this.onmessage?.({ data: message } as MessageEvent);
+      }
+    }
+
+    injectWebSocketImpl(BurstWebSocket as unknown as typeof WebSocket);
+
+    try {
+      const conn = new WSConnection(fakeUrl);
+      const connecting = conn.connect();
+      const socket = BurstWebSocket.instances[0];
+      socket.open();
+      await connecting;
+
+      const closeCb = vi.fn();
+      conn.onClose(closeCb);
+
+      const rpcErrorCb = vi.fn();
+      conn.createSubscription(
+        { kind: 'bolt11_mint_quote', filters: ['pending'] },
+        vi.fn(),
+        rpcErrorCb,
+      );
+
+      const notification = JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'subscribe',
+        params: { subId: 'sender', payload: null },
+      });
+      const burstSize = 20_000; // comfortably over MAX_WS_QUEUED_MESSAGES
+      for (let i = 0; i < burstSize; i++) socket.emitMessage(notification);
+
+      expect(closeCb).toHaveBeenCalledTimes(1);
+      expect(rpcErrorCb).toHaveBeenCalledWith(expect.any(Error));
+      conn.close();
+    } finally {
+      injectWebSocketImpl(WebSocket);
+    }
+  });
+
+  test('a message burst that stays within the queue bound is buffered normally', async () => {
+    class SmallBurstWebSocket {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly instances: SmallBurstWebSocket[] = [];
+
+      readyState = SmallBurstWebSocket.CONNECTING;
+      onopen: (() => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onclose: ((event: CloseEvent) => void) | null = null;
+
+      constructor() {
+        SmallBurstWebSocket.instances.push(this);
+      }
+
+      open() {
+        this.readyState = SmallBurstWebSocket.OPEN;
+        this.onopen?.();
+      }
+
+      send() {}
+
+      close() {
+        this.readyState = 3;
+      }
+
+      emitMessage(message: string) {
+        this.onmessage?.({ data: message } as MessageEvent);
+      }
+    }
+
+    injectWebSocketImpl(SmallBurstWebSocket as unknown as typeof WebSocket);
+
+    try {
+      const conn = new WSConnection(fakeUrl);
+      const connecting = conn.connect();
+      const socket = SmallBurstWebSocket.instances[0];
+      socket.open();
+      await connecting;
+
+      const notification = JSON.stringify({ jsonrpc: '2.0', method: 'subscribe', params: {} });
+      for (let i = 0; i < 5; i++) socket.emitMessage(notification);
+
+      expect(socket.readyState).toBe(SmallBurstWebSocket.OPEN);
+      conn.close();
+    } finally {
+      injectWebSocketImpl(WebSocket);
+    }
+  });
+
+  test('a burst under the queue cap is fully delivered after a single tick', async () => {
+    class SmallBurstWebSocket {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly instances: SmallBurstWebSocket[] = [];
+
+      readyState = SmallBurstWebSocket.CONNECTING;
+      onopen: (() => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onclose: ((event: CloseEvent) => void) | null = null;
+
+      constructor() {
+        SmallBurstWebSocket.instances.push(this);
+      }
+
+      open() {
+        this.readyState = SmallBurstWebSocket.OPEN;
+        this.onopen?.();
+      }
+
+      send() {}
+
+      close() {
+        this.readyState = 3;
+      }
+
+      emitMessage(message: string) {
+        this.onmessage?.({ data: message } as MessageEvent);
+      }
+    }
+
+    injectWebSocketImpl(SmallBurstWebSocket as unknown as typeof WebSocket);
+
+    try {
+      const conn = new WSConnection(fakeUrl);
+      const connecting = conn.connect();
+      const socket = SmallBurstWebSocket.instances[0];
+      socket.open();
+      await connecting;
+
+      const callback = vi.fn();
+      conn.addSubListener('burst-sub', callback);
+
+      const burstSize = 500; // well under MAX_WS_QUEUED_MESSAGES, well above one-frame-per-tick
+      const notification = JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'subscribe',
+        params: { subId: 'burst-sub', payload: {} },
+      });
+      for (let i = 0; i < burstSize; i++) socket.emitMessage(notification);
+
+      // A single macrotask turn is enough for a whole-queue drain to clear the burst; a
+      // one-frame-per-tick drain would still be far short of burstSize here.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(callback).toHaveBeenCalledTimes(burstSize);
+      expect(socket.readyState).toBe(SmallBurstWebSocket.OPEN);
       conn.close();
     } finally {
       injectWebSocketImpl(WebSocket);
