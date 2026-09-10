@@ -10,7 +10,7 @@ export type V4DLEQTemplate = {
   /**
    * Blinding factor.
    */
-  r: Uint8Array;
+  r?: Uint8Array;
 };
 
 /**

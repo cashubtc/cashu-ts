@@ -377,7 +377,7 @@ function tokenFromTemplate(template: TokenV4Template): Token {
         id: bytesToHex(t.i),
         ...(p.d && {
           dleq: {
-            r: bytesToHex(p.d.r),
+            r: bytesToHex(p.d.r ?? new Uint8Array([0])),
             s: bytesToHex(p.d.s),
             e: bytesToHex(p.d.e),
           },
