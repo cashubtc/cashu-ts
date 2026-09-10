@@ -21,6 +21,7 @@ import {
   schnorrVerifyMessage,
   deriveP2BKBlindedPubkeys,
   P2BK_DST,
+  P2PK_KNOWN_TAG_KEYS,
   buildP2PKSigAllMessageV0,
   assertSigAllInputs,
   createSecret,
@@ -1669,6 +1670,21 @@ describe('parseP2PKSecret — duplicate tag rejection', () => {
   function makeSecret(tags: string[][]): string {
     return JSON.stringify(['P2PK', { nonce: bytesToHex(randomBytes(32)), data: pk1, tags }]);
   }
+
+  test('editing the exported reserved-key set leaves duplicate rejection alone', () => {
+    const exported = P2PK_KNOWN_TAG_KEYS as Set<string>;
+    exported.delete('n_sigs');
+    try {
+      const secret = makeSecret([
+        ['pubkeys', pk2],
+        ['n_sigs', '1'],
+        ['n_sigs', '2'],
+      ]);
+      expect(() => parseP2PKSecret(secret)).toThrow(/Duplicate P2PK tag "n_sigs"/);
+    } finally {
+      exported.add('n_sigs');
+    }
+  });
 
   test('rejects duplicate locktime tags', () => {
     const secret = makeSecret([

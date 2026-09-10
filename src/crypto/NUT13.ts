@@ -6,8 +6,9 @@ import { HDKey, HARDENED_OFFSET } from '@scure/bip32';
 
 import { CTSError } from '../model/Errors';
 import { isBase64String } from '../utils';
+import { MAX_SEED_BYTES, MIN_SEED_BYTES } from '../utils/limits';
 
-import { getKeysetIdInt } from './core';
+import { getKeysetIdInt, LEGACY_KEYSET_ID_LENGTH } from './core';
 
 const STANDARD_DERIVATION_PATH = `m/129372'/0'`;
 
@@ -59,8 +60,8 @@ export const deriveBlindingFactor = (
  * @param keysetId - Mint keyset ID that selects the derivation method.
  * @param counter - Deterministic counter for the output.
  * @returns The derived secret bytes and blinding factor bytes.
- * @throws {@link CTSError} If the keyset ID version is unsupported or if derivation produces an
- *   invalid private key.
+ * @throws {@link CTSError} If the seed is not 16 to 64 bytes, the keyset ID version is unsupported,
+ *   or derivation produces an invalid private key.
  */
 export function deriveSecretAndBlindingFactor(
   seed: Uint8Array,
@@ -82,12 +83,14 @@ export function deriveSecretAndBlindingFactor(
  * For deprecated BIP-32 derivation this caches the shared keyset parent node once, so each counter
  * costs three child derivations instead of a full path walk from the master. Constructing an HDKey
  * node computes its public key, so fewer nodes means fewer EC multiplications.
+ * @throws {@link CTSError} If the seed is not 16 to 64 bytes.
  * @internal
  */
 export function createSecretAndBlindingFactorDeriver(
   seed: Uint8Array,
   keysetId: string,
 ): SecretAndBlindingFactorDeriver {
+  assertSeed(seed);
   switch (getDerivationKind(keysetId)) {
     case DerivationKind.DEPRECATED_BIP32: {
       const keysetIdInt = getKeysetIdInt(keysetId);
@@ -102,6 +105,11 @@ export function createSecretAndBlindingFactorDeriver(
 }
 
 function getDerivationKind(keysetId: string): DerivationKind {
+  // Legacy ids are 12-character base64 and predate the version byte, so length tells them from a
+  // modern id: their alphabet overlaps hex.
+  if (keysetId.length === LEGACY_KEYSET_ID_LENGTH && isBase64String(keysetId)) {
+    return DerivationKind.DEPRECATED_BIP32;
+  }
   const isValidHex = /^[a-fA-F0-9]+$/.test(keysetId);
   const isHmacHexVersion = keysetId.startsWith('01');
   if (isValidHex && isHmacHexVersion && keysetId.length % 2 !== 0) {
@@ -117,6 +125,18 @@ function getDerivationKind(keysetId: string): DerivationKind {
     return DerivationKind.HMAC_SHA256;
   }
   throw new CTSError(`Unrecognized keyset ID version ${keysetId.slice(0, 2)}`);
+}
+
+function assertSeed(seed: Uint8Array): void {
+  // Every secret and blinding factor derived here inherits the seed's strength, and types are
+  // erased for JS callers.
+  if (
+    !(seed instanceof Uint8Array) ||
+    seed.length < MIN_SEED_BYTES ||
+    seed.length > MAX_SEED_BYTES
+  ) {
+    throw new CTSError(`seed must be a ${MIN_SEED_BYTES} to ${MAX_SEED_BYTES} byte Uint8Array`);
+  }
 }
 
 function deriveBip32SecretAndBlindingFactor(

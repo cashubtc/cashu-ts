@@ -144,6 +144,14 @@ export class LockBuilder {
 
   static fromOptions(opts: P2PKOptions): LockBuilder {
     const b = new LockBuilder();
+    // The refund setter takes a key or a list; stored options are lists, so a bare string here is
+    // malformed input rather than a shorthand. `blindKeys` is a flag, so it takes a boolean only.
+    if (opts.refundKeys !== undefined && !Array.isArray(opts.refundKeys)) {
+      throw new CTSError('refundKeys must be an array of pubkeys');
+    }
+    if (opts.blindKeys !== undefined && typeof opts.blindKeys !== 'boolean') {
+      throw new CTSError('blindKeys must be a boolean');
+    }
     const locks = Array.isArray(opts.pubkey) ? opts.pubkey : [opts.pubkey];
     b.addMainPubkey(locks);
     if (opts.locktime !== undefined) b.lockUntil(opts.locktime);
