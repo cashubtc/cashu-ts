@@ -84,7 +84,8 @@ export class UnknownKeysetError extends CTSError {
  * @remarks
  * The inputs are spent and the payment stands. Load the change keyset's keys (see
  * `keyChain.ensureKeysetKeys`), then pass `outputData` and the quote's `change` signatures to
- * `wallet.createMeltChangeProofs()` to recover the proofs.
+ * `wallet.createMeltChangeProofs()` to recover the proofs. Persist `outputData` and `quote`
+ * directly rather than a serialised copy of the error.
  */
 export class MeltChangeError extends CTSError {
   /**
