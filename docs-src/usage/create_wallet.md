@@ -52,8 +52,9 @@ class CustomOutputDataCreator implements OutputDataCreator {
   }
 
   createSingleP2PKData(...args: Parameters<OutputDataCreator['createSingleP2PKData']>) {
-    const [p2pk, amount, keysetId] = args;
-    return OutputData.createSingleP2PKData(p2pk, amount, keysetId);
+    const [p2pk, amount, keysetId, eBytes] = args;
+    // Forward eBytes as-is: a SIG_ALL batch relies on every output sharing this key.
+    return OutputData.createSingleP2PKData(p2pk, amount, keysetId, eBytes);
   }
 
   createRandomData(...args: Parameters<OutputDataCreator['createRandomData']>) {

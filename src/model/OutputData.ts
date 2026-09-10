@@ -16,6 +16,7 @@ import {
   type P2PKOptions,
 } from '../crypto';
 import { numberToHexPadded64, splitAmount } from '../utils';
+import { decodeUtf8Field } from '../utils/bytes';
 import { MAX_SECRET_LENGTH } from '../utils/limits';
 
 import { Amount, type AmountLike } from './Amount';
@@ -158,7 +159,7 @@ export class OutputData implements OutputDataLike {
       id: sig.id,
       amount: sig.amount,
       C: unblinded.C.toHex(true),
-      secret: new TextDecoder().decode(unblinded.secret),
+      secret: decodeUtf8Field(unblinded.secret),
       ...(dleq && {
         dleq: {
           s: bytesToHex(dleq.s),
@@ -400,14 +401,25 @@ export class OutputData implements OutputDataLike {
   /**
    * Reconstructs concrete {@link OutputData} from its JSON-safe representation.
    *
-   * @throws {@link CTSError} If any field fails validation (non-canonical blindingFactor, malformed
-   *   hex secret/ephemeralE, or an Amount that cannot be parsed).
+   * @throws {@link CTSError} If any field fails validation: non-canonical or zero blindingFactor,
+   *   malformed hex secret/ephemeralE, a secret that is not valid UTF-8, a B_ that does not match
+   *   the secret and blindingFactor, or an Amount that cannot be parsed.
    * @see {@link OutputData.serialize} for the persist/restore lifecycle example.
    */
   static deserialize(serialized: SerializedOutputData): OutputData {
     try {
       if (!/^(0|[1-9]\d*)$/.test(serialized.blindingFactor)) {
-        throw new Error('blindingFactor must be a canonical decimal integer');
+        throw new CTSError('blindingFactor must be a canonical decimal integer');
+      }
+      // Validate
+      const secret = hexToBytes(serialized.secret);
+      decodeUtf8Field(secret); // asserts round trip
+      const blindingFactor = BigInt(serialized.blindingFactor);
+      const { B_ } = blindMessage(secret, blindingFactor); // asserts valid `r`
+      if (B_.toHex(true) !== serialized.blindedMessage.B_.toLowerCase()) {
+        throw new CTSError(
+          'stored output does not match its secret. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.',
+        );
       }
       return new OutputData(
         {
@@ -415,9 +427,9 @@ export class OutputData implements OutputDataLike {
           B_: serialized.blindedMessage.B_,
           id: serialized.blindedMessage.id,
         },
-        BigInt(serialized.blindingFactor),
-        hexToBytes(serialized.secret),
-        serialized.ephemeralE,
+        blindingFactor,
+        secret,
+        serialized.ephemeralE ? pointFromHex(serialized.ephemeralE).toHex(true) : undefined,
       );
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);

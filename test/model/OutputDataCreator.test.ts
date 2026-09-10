@@ -86,6 +86,77 @@ describe('DefaultOutputDataCreator', () => {
     expect(seen).toHaveLength(3);
   });
 
+  test('a subclassed single-output P2PK hook shares one ephemeral key for a SIG_ALL split', () => {
+    const privkey = hexToBytes('01'.repeat(32));
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(privkey));
+    const keyset: HasKeysetKeys = {
+      id: '009a1f293253e41e',
+      keys: { '1': 'unused', '2': 'unused', '4': 'unused' },
+    };
+
+    class CustomCreator extends DefaultOutputDataCreator {
+      override createSingleP2PKData(
+        p2pk: P2PKOptions,
+        amount: AmountLike,
+        keysetId: string,
+        eBytes?: Uint8Array,
+      ): OutputData {
+        return OutputData.createSingleP2PKData(p2pk, amount, keysetId, eBytes);
+      }
+    }
+
+    const outputs = new CustomCreator().createP2PKData(
+      { pubkey, blindKeys: true, sigFlag: 'SIG_ALL' },
+      7,
+      keyset,
+    );
+
+    expect(outputs).toHaveLength(3);
+    expect(new Set(outputs.map((o) => o.ephemeralE)).size).toBe(1);
+  });
+
+  test('the default single-output P2PK hook forwards eBytes to OutputData', () => {
+    const privkey = hexToBytes('01'.repeat(32));
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(privkey));
+    const eBytes = hexToBytes('02'.repeat(32));
+    const expectedE = bytesToHex(getPubKeyFromPrivKey(eBytes));
+
+    const output = new DefaultOutputDataCreator().createSingleP2PKData(
+      { pubkey, blindKeys: true, sigFlag: 'SIG_ALL' },
+      1,
+      '009a1f293253e41e',
+      eBytes,
+    );
+    expect(output.ephemeralE).toBe(expectedE);
+  });
+
+  test('a subclassed single-output P2PK hook that drops eBytes is rejected for a SIG_ALL split', () => {
+    const privkey = hexToBytes('01'.repeat(32));
+    const pubkey = bytesToHex(getPubKeyFromPrivKey(privkey));
+    const keyset: HasKeysetKeys = {
+      id: '009a1f293253e41e',
+      keys: { '1': 'unused', '2': 'unused', '4': 'unused' },
+    };
+
+    class ForgetfulCreator extends DefaultOutputDataCreator {
+      override createSingleP2PKData(
+        p2pk: P2PKOptions,
+        amount: AmountLike,
+        keysetId: string,
+      ): OutputData {
+        return OutputData.createSingleP2PKData(p2pk, amount, keysetId);
+      }
+    }
+
+    expect(() =>
+      new ForgetfulCreator().createP2PKData(
+        { pubkey, blindKeys: true, sigFlag: 'SIG_ALL' },
+        7,
+        keyset,
+      ),
+    ).toThrow(/shared eBytes/);
+  });
+
   test('a batch whose counters run past the safe range is rejected, not silently aliased', () => {
     const keyset: HasKeysetKeys = {
       id: '012e23479a0029432eaad0d2040c09be53bab592d5cbf1d55e0dd26c9495951b30',
@@ -99,6 +170,90 @@ describe('DefaultOutputDataCreator', () => {
     expect(() =>
       creator.createDeterministicData(3, seed, Number.MAX_SAFE_INTEGER, keyset, [1, 2]),
     ).toThrow(/counter/i);
+  });
+
+  test('a subclassed single-output hook also rejects counter ranges that would alias', () => {
+    const keyset: HasKeysetKeys = {
+      id: '012e23479a0029432eaad0d2040c09be53bab592d5cbf1d55e0dd26c9495951b30',
+      keys: { '1': 'unused', '2': 'unused' },
+    };
+    const seen: number[] = [];
+
+    class CustomOutputDataCreator extends DefaultOutputDataCreator {
+      override createSingleDeterministicData(
+        _amount: AmountLike,
+        _seed: Uint8Array,
+        counter: number,
+        _keysetId: string,
+      ): OutputDataLike {
+        seen.push(counter);
+        throw new Error('not used');
+      }
+    }
+
+    const creator = new CustomOutputDataCreator();
+
+    expect(() =>
+      creator.createDeterministicData(
+        3,
+        new Uint8Array(64).fill(1),
+        Number.MAX_SAFE_INTEGER,
+        keyset,
+        [1, 2],
+      ),
+    ).toThrow(/counter/i);
+    // Rejected before the hook is ever called, so no aliased counter is derived.
+    expect(seen).toEqual([]);
+
+    for (const counter of [-1, 1.5]) {
+      expect(() =>
+        creator.createDeterministicData(3, new Uint8Array(64).fill(1), counter, keyset, [1, 2]),
+      ).toThrow(/counter/i);
+    }
+    expect(seen).toEqual([]);
+
+    // An empty split has no counter range to check and calls nothing.
+    expect(
+      creator.createDeterministicData(
+        0,
+        new Uint8Array(64).fill(1),
+        Number.MAX_SAFE_INTEGER,
+        keyset,
+      ),
+    ).toEqual([]);
+    expect(seen).toEqual([]);
+  });
+
+  test('a subclassed single-output hook is called once per counter within a safe range', () => {
+    const keyset: HasKeysetKeys = {
+      id: '012e23479a0029432eaad0d2040c09be53bab592d5cbf1d55e0dd26c9495951b30',
+      keys: { '1': 'unused', '2': 'unused' },
+    };
+    const seen: number[] = [];
+
+    class CustomOutputDataCreator extends DefaultOutputDataCreator {
+      override createSingleDeterministicData(
+        amount: AmountLike,
+        seed: Uint8Array,
+        counter: number,
+        keysetId: string,
+      ): OutputDataLike {
+        seen.push(counter);
+        return OutputData.createSingleDeterministicData(amount, seed, counter, keysetId);
+      }
+    }
+
+    const creator = new CustomOutputDataCreator();
+    const outputs = creator.createDeterministicData(
+      3,
+      new Uint8Array(64).fill(1),
+      7,
+      keyset,
+      [1, 2],
+    );
+
+    expect(outputs).toHaveLength(2);
+    expect(seen).toEqual([7, 8]);
   });
 
   test('delegates deterministic batch creation to subclassed single-output override', () => {
@@ -132,7 +287,13 @@ describe('DefaultOutputDataCreator', () => {
     }
 
     const creator = new CustomOutputDataCreator();
-    const outputs = creator.createDeterministicData(3, new Uint8Array([1]), 7, keyset, [1, 2]);
+    const outputs = creator.createDeterministicData(
+      3,
+      new Uint8Array(64).fill(1),
+      7,
+      keyset,
+      [1, 2],
+    );
 
     expect(outputs.map((output) => output.blindedMessage.B_)).toEqual(['blind-7', 'blind-8']);
     expect(calls).toEqual([
