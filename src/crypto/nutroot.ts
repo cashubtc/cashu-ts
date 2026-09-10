@@ -66,8 +66,6 @@ export const NUTROOT_MAX_TREE_LEAVES = 2 ** NUTROOT_MAX_TREE_DEPTH;
  */
 export const NUTROOT_MAX_LEAF_TIME = Number.MAX_SAFE_INTEGER;
 
-export { NUTROOT_MAX_SLOTS };
-
 /**
  * A parsed declarative leaf (version 0x00).
  *
