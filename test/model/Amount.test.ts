@@ -30,6 +30,16 @@ describe('Amount.from validation', () => {
     expect(() => Amount.from({} as unknown as Amount)).toThrow('Unsupported amount input type');
   });
 
+  it('rejects a negative value passed directly to the exported constructor', () => {
+    expect(() => Reflect.construct(Amount, [-1n])).toThrow('Amount must be >= 0');
+  });
+
+  it('rejects an object forged with Amount.prototype without running the constructor', () => {
+    const forged = Object.create(Amount.prototype) as Amount;
+    Object.defineProperty(forged, 'value', { value: -7n });
+    expect(() => Amount.from(forged)).toThrow(AmountError);
+  });
+
   it('accepts the u64 max at the boundary', () => {
     const u64Max = 2n ** 64n - 1n;
     expect(Amount.from(u64Max).toBigInt()).toBe(u64Max);
@@ -119,6 +129,11 @@ describe('Amount.floorPercent', () => {
     expect(() => Amount.from(100).floorPercent(2, 0)).toThrow('floorPercent');
     expect(() => Amount.from(100).floorPercent(-1)).toThrow('floorPercent');
   });
+  it('rejects unsafe integer ratio operands', () => {
+    const unsafe = Number.MAX_SAFE_INTEGER + 1;
+    expect(() => Amount.from(100).floorPercent(unsafe)).toThrow('floorPercent');
+    expect(() => Amount.from(100).floorPercent(1, unsafe)).toThrow('floorPercent');
+  });
   it('works with large (unsafe integer) amounts', () => {
     const large = Amount.from(BigInt(Number.MAX_SAFE_INTEGER) + 1000n);
     const result = large.floorPercent(2);
@@ -149,6 +164,11 @@ describe('Amount.ceilPercent', () => {
     expect(Amount.from(100).ceilPercent(0).toBigInt()).toBe(0n);
     expect(() => Amount.from(100).ceilPercent(2, 0)).toThrow('ceilPercent');
     expect(() => Amount.from(100).ceilPercent(-1)).toThrow('ceilPercent');
+  });
+  it('rejects unsafe integer ratio operands', () => {
+    const unsafe = Number.MAX_SAFE_INTEGER + 1;
+    expect(() => Amount.from(100).ceilPercent(unsafe)).toThrow('ceilPercent');
+    expect(() => Amount.from(100).ceilPercent(1, unsafe)).toThrow('ceilPercent');
   });
 });
 
@@ -324,10 +344,13 @@ describe('AmountError metadata', () => {
   });
 });
 
-describe('Amount.scaledBy zero-numerator short-circuit', () => {
-  it('returns zero for scaledBy(0, 0) without reaching the divisor guard', () => {
-    // numerator zero short-circuits to zero before the denominator-zero check throws
-    expect(Amount.from(500).scaledBy(0, 0).toBigInt()).toBe(0n);
+describe('Amount.scaledBy denominator validation', () => {
+  it('rejects a 0/0 ratio instead of returning zero', () => {
+    expect(() => Amount.from(500).scaledBy(0, 0)).toThrow('denominator must be > 0');
+  });
+
+  it('still short-circuits a zero numerator once the denominator is valid', () => {
+    expect(Amount.from(500).scaledBy(0, 100).toBigInt()).toBe(0n);
   });
 });
 

@@ -26,7 +26,7 @@ import {
 } from './base64';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { JSONInt } from './JSONInt';
-import { MAX_SPLIT_OUTPUTS } from './limits';
+import { MAX_BOLT11_HRP_LENGTH, MAX_SPLIT_OUTPUTS } from './limits';
 
 /**
  * Splits the amount into denominations of the provided keyset.
@@ -52,6 +52,9 @@ export function splitAmount(
   let normalizedSplit = split?.map((amt) => toAmount(amt, 'splitAmount.split', true));
 
   if (normalizedSplit) {
+    if (normalizedSplit.length > MAX_SPLIT_OUTPUTS) {
+      throw new CTSError(`Cannot split amount: split would exceed ${MAX_SPLIT_OUTPUTS} outputs`);
+    }
     const totalSplitAmount = Amount.sum(normalizedSplit);
 
     // Special case: explicit "zero-total" outputs (restore or NUT-08 blanks)
@@ -875,7 +878,12 @@ export function bolt11AmountMsat(pr: string): bigint | null {
   const lower = pr.toLowerCase();
   // The bech32 charset excludes '1', so the last '1' is the HRP separator.
   const sep = lower.lastIndexOf('1');
-  if (!lower.startsWith('ln') || sep < 3 || sep === lower.length - 1) {
+  if (
+    !lower.startsWith('ln') ||
+    sep < 3 ||
+    sep > MAX_BOLT11_HRP_LENGTH ||
+    sep === lower.length - 1
+  ) {
     throw new CTSError('Invalid BOLT11 invoice');
   }
   const match = /^ln[a-z]+?(\d*)([munp]?)$/.exec(lower.slice(0, sep));
