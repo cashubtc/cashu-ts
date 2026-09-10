@@ -1798,7 +1798,7 @@ export interface OutputDataCreator {
     // (undocumented)
     createSingleDeterministicData(amount: AmountLike, seed: Uint8Array, counter: number, keysetId: string): OutputDataLike;
     // (undocumented)
-    createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string): OutputDataLike;
+    createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string, eBytes?: Uint8Array): OutputDataLike;
     // (undocumented)
     createSingleRandomData(amount: AmountLike, keysetId: string): OutputDataLike;
 }

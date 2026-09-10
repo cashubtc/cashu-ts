@@ -12,15 +12,19 @@ const DOMAIN_SEPARATOR = utf8ToBytes('Secp256k1_HashToCurve_Cashu_');
 
 export function hashToCurve(secret: Uint8Array): WeierstrassPoint<bigint> {
   const msgToHash = sha256(concatBytes(DOMAIN_SEPARATOR, secret));
-  const counter = new Uint32Array(1);
+  // NUT-00 fixes the counter as little-endian; a typed array's backing bytes follow host
+  // endianness instead, so DataView pins the encoding explicitly.
+  let counter = 0;
+  const counterBytes = new Uint8Array(4);
+  const counterView = new DataView(counterBytes.buffer);
   const maxIterations = 2 ** 16;
   for (let i = 0; i < maxIterations; i++) {
-    const counterBytes = new Uint8Array(counter.buffer);
+    counterView.setUint32(0, counter, true);
     const hash = sha256(concatBytes(msgToHash, counterBytes));
     try {
       return pointFromHex(bytesToHex(concatBytes(new Uint8Array([0x02]), hash)));
     } catch {
-      counter[0]++;
+      counter++;
     }
   }
   throw new CTSError('No valid point found');

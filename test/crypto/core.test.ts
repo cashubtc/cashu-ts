@@ -3,7 +3,7 @@ import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToNumberBE } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { hexToBytes, bytesToHex } from '@noble/hashes/utils.js';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 
 import {
   asBlsG1Point,
@@ -74,6 +74,41 @@ describe('testing hash to curve', () => {
     const Y = hashToCurve(secret);
     const hexY = Y.toHex(true);
     expect(hexY).toBe('022e7158e11c9506f1aa4248bf531298daa7febd6194f003edcd9b93ade6253acf');
+  });
+
+  test('produces the same point regardless of host byte order', () => {
+    const NativeUint32Array = globalThis.Uint32Array;
+    // Simulates a big-endian host's typed-array backing store, so the counter encoding
+    // must be pinned explicitly rather than following whatever the host happens to use.
+    const BigEndianTypedArrays = new Proxy(NativeUint32Array, {
+      construct(Target, args) {
+        if (args.length !== 1 || args[0] !== 1) {
+          return Reflect.construct(Target, args);
+        }
+        const buffer = new ArrayBuffer(4);
+        const view = new DataView(buffer);
+        return {
+          buffer,
+          get 0() {
+            return view.getUint32(0, false);
+          },
+          set 0(value: number) {
+            view.setUint32(0, value, false);
+          },
+        };
+      },
+    });
+
+    vi.stubGlobal('Uint32Array', BigEndianTypedArrays);
+    try {
+      // This vector reaches counter 3 before finding a valid point.
+      const secret = hexToBytes('0000000000000000000000000000000000000000000000000000000000000001');
+      expect(hashToCurve(secret).toHex(true)).toBe(
+        '022e7158e11c9506f1aa4248bf531298daa7febd6194f003edcd9b93ade6253acf',
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

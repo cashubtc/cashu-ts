@@ -112,6 +112,23 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
     expect(proof.spend_info?.k).toBe(out.spendInfo?.k);
   });
 
+  test('deserialize round-trips a v3 output, including its spend info', () => {
+    const out = OutputData.createSingleRandomData(1, keyset.id);
+    const restored = OutputData.deserialize(OutputData.serialize(out));
+    expect(restored.blindedMessage.B_).toBe(out.blindedMessage.B_);
+    expect(restored.spendInfo).toEqual(out.spendInfo);
+  });
+
+  test('deserialize rejects a v3 payload whose secret is not a point', () => {
+    const serialized = OutputData.serialize(OutputData.createSingleRandomData(1, keyset.id));
+    expect(() =>
+      OutputData.deserialize({
+        ...serialized,
+        secret: bytesToHex(new TextEncoder().encode('not-a-point')),
+      }),
+    ).toThrow(/point secret/i);
+  });
+
   // ~21 BLS pairings (7 amounts × 3 verifications each). Locally ~700ms, but under the
   // 4-environment parallel run (node + chromium + firefox + webkit), CPU contention can
   // push this past the 5s default. Bumped to absorb that noise.
@@ -347,12 +364,9 @@ describe('OutputData v3 — Nutshell PR #999 deterministic test vector', () => {
     expect(bytesToHex(B_.toBytes(true))).toBe(NUTSHELL_B_HEX);
 
     const id = '02' + '00'.repeat(32); // arbitrary v3-shaped id — toProof dispatches on prefix only
-    // Build an OutputData by hand so we can lock r=3 exactly.
-    const od = OutputData.deserialize({
-      blindedMessage: { amount: '1', B_: B_.toHex(true), id },
-      blindingFactor: r.toString(),
-      secret: bytesToHex(secretBytes),
-    });
+    // Construct the OutputData directly (not via deserialize, which requires a v3 point secret)
+    // so we can lock r=3 exactly against this plain-text cross-implementation vector.
+    const od = new OutputData({ amount: Amount.from(1), B_: B_.toHex(true), id }, r, secretBytes);
 
     const aBytes = hexToBytes('0'.repeat(63) + '2'); // mint scalar a=2
     const { C_ } = createBlindSignatureBls(B_, aBytes, id);
