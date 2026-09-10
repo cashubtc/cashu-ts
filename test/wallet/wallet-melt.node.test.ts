@@ -1119,6 +1119,65 @@ describe('async melt preference body', () => {
     });
   });
 
+  test('keeps the prepared quote and blanks when a melt response omits the quote fields', async () => {
+    const asyncMethod = 'bank';
+    server.use(
+      http.get(mintUrl + '/v1/info', () =>
+        HttpResponse.json({
+          ...mintInfoResp,
+          nuts: {
+            ...mintInfoResp.nuts,
+            5: {
+              ...mintInfoResp.nuts[5],
+              methods: [...mintInfoResp.nuts[5].methods, { method: asyncMethod, unit: 'sat' }],
+            },
+          },
+        }),
+      ),
+      http.post(mintUrl + '/v1/melt/' + asyncMethod, () =>
+        // NUT-05 lets an async melt answer with the settled fields only
+        HttpResponse.json({
+          quote: 'q-async-partial',
+          amount: 1,
+          unit: 'sat',
+          method: asyncMethod,
+          state: MeltQuoteState.PENDING,
+          expiry: 1234567890,
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const meltQuote = {
+      quote: 'q-async-partial',
+      request: 'bank-account',
+      amount: Amount.from(1),
+      fee_reserve: Amount.from(1),
+      unit: 'sat',
+      method: asyncMethod,
+      state: MeltQuoteState.UNPAID,
+      expiry: 1234567890,
+    };
+    const proofs: Proof[] = [
+      {
+        id: '00bd033559de27d0',
+        amount: Amount.from(2),
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+      },
+    ];
+
+    const result = await wallet.meltProofs(asyncMethod, meltQuote, proofs);
+
+    expect(result.quote).toMatchObject({
+      quote: meltQuote.quote,
+      request: meltQuote.request,
+      fee_reserve: meltQuote.fee_reserve,
+      state: MeltQuoteState.PENDING,
+    });
+    expect(result.outputData.length).toBeGreaterThan(0);
+  });
+
   test('completeMelt rejects extraPayload keys that collide with the prepared request', async () => {
     const meltQuote = {
       quote: 'q-reserved',
@@ -1421,6 +1480,33 @@ describe('bolt11 melt quote amount validation', () => {
     state: 'UNPAID',
     expiry: 1673972705,
     payment_preimage: null,
+  });
+
+  test('createMeltQuoteBolt11 rejects a quote naming a different invoice', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/melt/quote/bolt11', () =>
+        HttpResponse.json(meltQuoteJson(2000, 'lnbc20u1elsewhere')),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createMeltQuoteBolt11(invoice)).rejects.toThrow(
+      /different payment request/i,
+    );
+  });
+
+  test('createMeltQuoteBolt11 accepts a quote echoing the invoice in upper case', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/melt/quote/bolt11', () =>
+        HttpResponse.json(meltQuoteJson(2000, invoice.toUpperCase())),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const quote = await wallet.createMeltQuoteBolt11(invoice);
+    expect(quote.amount.toBigInt()).toBe(2000n);
   });
 
   test('createMeltQuoteBolt11 rejects a quote charging more than the invoice', async () => {
