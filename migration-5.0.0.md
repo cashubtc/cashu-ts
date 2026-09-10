@@ -516,7 +516,7 @@ try {
 
 ## The seed is exactly 64 bytes
 
-`new Wallet(mint, { bip39seed })` now requires a 64-byte seed, the output of a BIP-39 derivation (`mnemonicToSeedSync(mnemonic)`), and throws a `CTSError` for any other length; v4 accepts 16 to 64 bytes. The NUT-13 derivation helpers called directly (`deriveSecretAndBlindingFactor`, `deriveKeyPair`, `deriveQuoteLockKey` and the v3 helpers) still accept 16 to 64 bytes. Wallets that already pass the BIP-39 seed, which is every known one, are unaffected; a wallet passing raw entropy of another length must derive the BIP-39 seed from it instead, or its existing proofs will not restore.
+`new Wallet(mint, { bip39seed })` now requires a 64-byte seed, the output of a BIP-39 derivation (`mnemonicToSeedSync(mnemonic)`), and throws a `CTSError` for any other length; v4 accepts 16 to 64 bytes. The NUT-13 derivation helpers called directly (`deriveSecretAndBlindingFactor`, `deriveKeyPair`, `deriveQuoteLockKey` and the v3 helpers) still accept 16 to 64 bytes. Wallets that already pass the BIP-39 seed, which is every known one, are unaffected. A wallet that had been passing raw entropy of another length cannot convert it: no 64-byte seed derives the same secrets, so its existing proofs are reachable only through the derivation helpers with the old bytes. Restore them that way (NUT-09), sweep them into a wallet built on a BIP-39 seed, and retire the old bytes.
 
 ---
 
