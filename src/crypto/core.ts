@@ -246,8 +246,9 @@ export function getValidSigners(
  * @param digest - The 32-byte digest that was signed (hex string or bytes).
  * @param pubkeys - The Cashu P2PK public key(s) (hex-encoded, X-only or with 02/03 prefix) to
  *   check.
- * @param threshold - The minimum number of unique witnesses required.
- * @returns True if the witness threshold was reached, false otherwise.
+ * @param threshold - The minimum number of unique witnesses required; at least 1.
+ * @returns True if the witness threshold was reached, false otherwise (a threshold below 1
+ *   included, which no set of witnesses can satisfy).
  */
 export const meetsSignerThreshold = (
   signatures: string[],
@@ -255,6 +256,7 @@ export const meetsSignerThreshold = (
   pubkeys: string[],
   threshold: number = 1,
 ): boolean => {
+  if (!Number.isInteger(threshold) || threshold < 1) return false;
   const validSigners = getValidSigners(signatures, digest, pubkeys);
   return validSigners.length >= threshold;
 };

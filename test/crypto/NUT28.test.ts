@@ -6,6 +6,7 @@ import { Amount } from '../../src';
 import {
   pointFromHex,
   deriveP2BKSecretKey,
+  deriveP2BKBlindedPubkeyAtSlot,
   deriveP2BKBlindedPubkeys,
   deriveP2BKSecretKeys,
   maybeDeriveP2BKPrivateKeys,
@@ -279,6 +280,29 @@ describe('NUT28 uncovered branches and guards', () => {
 
   test('deriveP2BKBlindedPubkeys returns empty result for empty input', () => {
     expect(deriveP2BKBlindedPubkeys([])).toEqual({ blinded: [], Ehex: '' });
+  });
+
+  test('deriveP2BKBlindedPubkeys fills every slot up to the cap and refuses more', () => {
+    const key = bytesToHex(secp256k1.getPublicKey(secp256k1.utils.randomSecretKey(), true));
+    const eBytes = secp256k1.utils.randomSecretKey();
+    expect(deriveP2BKBlindedPubkeys(Array(11).fill(key), eBytes).blinded).toHaveLength(11);
+    expect(() => deriveP2BKBlindedPubkeys(Array(12).fill(key), eBytes)).toThrow(
+      /maximum allowed is 11/,
+    );
+    // Slot 0 is taken by the hashlock, so an HTLC lock has one fewer to give away.
+    expect(deriveP2BKBlindedPubkeys(Array(10).fill(key), eBytes, false).blinded).toHaveLength(10);
+    expect(() => deriveP2BKBlindedPubkeys(Array(11).fill(key), eBytes, false)).toThrow(
+      /maximum allowed is 11/,
+    );
+  });
+
+  test('deriveP2BKBlindedPubkeyAtSlot refuses a slot index outside the cap', () => {
+    const key = bytesToHex(secp256k1.getPublicKey(secp256k1.utils.randomSecretKey(), true));
+    const eBytes = secp256k1.utils.randomSecretKey();
+    expect(deriveP2BKBlindedPubkeyAtSlot(key, eBytes, 120)).toHaveLength(66);
+    for (const slot of [-1, 121, 1.5]) {
+      expect(() => deriveP2BKBlindedPubkeyAtSlot(key, eBytes, slot)).toThrow(/slot/i);
+    }
   });
 
   test('deriveP2BKSecretKeys accepts a single (non-array) blinded pubkey', () => {

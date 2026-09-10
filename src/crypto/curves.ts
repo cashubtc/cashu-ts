@@ -3,7 +3,7 @@ import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToNumberBE } from '@noble/curves/utils.js';
 
 import { CTSError } from '../model/Errors';
-import { decodeBase64ToUint8Legacy, hexToNumber, isValidHex } from '../utils';
+import { decodeBase64ToUint8Legacy, hexToNumber, isBase64String, isValidHex } from '../utils';
 
 import { type G1Point, hashToCurveBls, pointFromHexG1 } from './curve_bls';
 import { hashToCurve } from './curve_secp';
@@ -65,13 +65,28 @@ export function hashToCurveHex(secret: string, keysetId: string): string {
   return (isBlsKeyset(keysetId) ? hashToCurveBls(msg) : hashToCurve(msg)).toHex(true);
 }
 
+/**
+ * Length of a legacy (pre-2024) base64 keyset id, which has no version byte.
+ *
+ * @internal
+ */
+export const LEGACY_KEYSET_ID_LENGTH = 12;
+
 export const getKeysetIdInt = (keysetId: string): bigint => {
   let keysetIdInt: bigint;
-  if (/^[a-fA-F0-9]+$/.test(keysetId)) {
+  // Length and alphabet separate the two encodings, the same rule getDerivationKind applies.
+  // Legacy ids travelled URL-safe in `GET /keys/{id}`; fold that spelling back to the standard one.
+  const legacy = (id: string): bigint =>
+    bytesToNumberBE(decodeBase64ToUint8Legacy(id.replace(/-/g, '+').replace(/_/g, '/'))) %
+    BigInt(2 ** 31 - 1);
+  if (keysetId.length === LEGACY_KEYSET_ID_LENGTH && isBase64String(keysetId)) {
+    keysetIdInt = legacy(keysetId);
+  } else if (isValidHex(keysetId)) {
     keysetIdInt = hexToNumber(keysetId) % BigInt(2 ** 31 - 1);
+  } else if (isBase64String(keysetId)) {
+    keysetIdInt = legacy(keysetId);
   } else {
-    //legacy keyset compatibility
-    keysetIdInt = bytesToNumberBE(decodeBase64ToUint8Legacy(keysetId)) % BigInt(2 ** 31 - 1);
+    throw new CTSError('Invalid keyset id: neither hex nor base64');
   }
   return keysetIdInt;
 };

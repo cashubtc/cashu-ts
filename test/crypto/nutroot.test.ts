@@ -18,7 +18,6 @@ import {
   NUTROOT_NUMS_KEY,
   NUTROOT_MAX_LEAF_BYTES,
   NUTROOT_MAX_LEAF_TIME,
-  NUTROOT_MAX_SLOTS,
   NUTROOT_MAX_TREE_DEPTH,
   verifyNutrootSpendInfo,
   verifyNutrootRequestTree,
@@ -45,6 +44,7 @@ import {
   NUTROOT_BRANCH_TAG,
   NUTROOT_TWEAK_TAG,
 } from '../../src/crypto/nutroot';
+import { NUTROOT_MAX_SLOTS } from '../../src/utils/limits';
 import vectors from '../vectors/nutroot-v3.json';
 
 const vRefund = vectors.receiver_keyed_refund;

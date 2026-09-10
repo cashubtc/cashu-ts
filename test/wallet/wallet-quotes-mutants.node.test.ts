@@ -63,6 +63,17 @@ describe('constructor mutants', () => {
     );
   });
 
+  test('rejects a bip39seed outside the accepted length range', () => {
+    for (const length of [1, 15, 65]) {
+      expect(() => new Wallet(mint, { unit, bip39seed: new Uint8Array(length) })).toThrow(
+        /bip39seed must be 16 to 64 bytes/,
+      );
+    }
+    for (const length of [16, 32, 64]) {
+      expect(() => new Wallet(mint, { unit, bip39seed: new Uint8Array(length) })).not.toThrow();
+    }
+  });
+
   test('never logs the rejected seed value', () => {
     // failIf logs its context before throwing, so the value must not appear there.
     const mnemonic = 'abandon abandon abandon abandon about';

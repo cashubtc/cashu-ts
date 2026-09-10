@@ -506,6 +506,25 @@ describe('LockBuilder', () => {
     expect(LockBuilder.fromOptions(options).toOptions()).toEqual(options);
   });
 
+  test('fromOptions takes key lists as arrays only', () => {
+    const scalar = (field: 'mainKeys' | 'refundKeys' | 'blindKeys') =>
+      ({ mainKeys: [PUB_A], [field]: PUB_A, locktime: 4102444800 }) as unknown as LockOptions;
+    for (const field of ['mainKeys', 'refundKeys', 'blindKeys'] as const) {
+      expect(() => LockBuilder.fromOptions(scalar(field))).toThrow(
+        new RegExp(`${field} must be an array`),
+      );
+    }
+    const options = { mainKeys: [PUB_A], refundKeys: [PUB_B], locktime: 4102444800 };
+    expect(LockBuilder.fromOptions(options).toOptions()).toEqual(options);
+    // blindKeys doubles as a flag: a boolean and a key list are both accepted.
+    expect(LockBuilder.fromOptions({ ...options, blindKeys: true }).toOptions().blindKeys).toBe(
+      true,
+    );
+    expect(
+      LockBuilder.fromOptions({ ...options, blindKeys: [PUB_A] }).toOptions().blindKeys,
+    ).toEqual([PUB_A]);
+  });
+
   test('P2PKBuilder is gone: the v5 break is clean', async () => {
     const api = (await import('../../src')) as Record<string, unknown>;
     expect(api.P2PKBuilder).toBeUndefined();

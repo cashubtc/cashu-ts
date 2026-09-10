@@ -34,6 +34,12 @@ export const DEFAULT_MAX_ARRAY_LENGTH = 500;
 export const ABSOLUTE_MAX_ARRAY_LENGTH = 10_000;
 
 /**
+ * Upper bound on the proofs one receive-side verification will check. Every proof costs curve work,
+ * so the batch is bounded before any of it; far above any real token or blind-auth batch.
+ */
+export const MAX_RECEIVE_PROOFS = 10_000;
+
+/**
  * NUT-02: Hard ceiling on the number of denominations a mint-supplied keyset may carry, checked
  * before any per-key work (id derivation hashes every pubkey). Real keysets carry ~64 keys (powers
  * of two to 2^63), so 256 is ample headroom. Oversized keysets fail id verification.
@@ -76,6 +82,26 @@ export const MAX_SECRET_LENGTH = 1024;
  * verify path keeps a full witness under 9 KiB, so 16 KiB leaves ample headroom.
  */
 export const MAX_WITNESS_LENGTH = 16_384;
+
+/**
+ * Occupied blinding slots per secret: slot 0 plus NUT-10's 120 leaf-key cap (8 leaves of 15 keys),
+ * well inside NUT-28's one index byte. Bounds every receiver-side slot scan.
+ */
+export const NUTROOT_MAX_SLOTS = 121;
+
+/**
+ * NUT-28: locking slots in a P2BK lock, `[data, ...pubkeys, ...refund]` at index bytes
+ * `0x00..0x0A`. `data` always fills slot 0, so an HTLC lock has one fewer key to give away.
+ */
+export const MAX_P2BK_SLOTS = 11;
+
+/**
+ * NUT-13: accepted length range for a deterministic-secrets seed. BIP-32's 16-byte floor at the
+ * bottom, the 64 bytes a BIP-39 mnemonic produces at the top; every derived secret and blinding
+ * factor inherits the seed's strength.
+ */
+export const MIN_SEED_BYTES = 16;
+export const MAX_SEED_BYTES = 64;
 
 /**
  * Max u64 (2^64 - 1): the ceiling every Amount is held to. Enforced in the Amount constructor, so

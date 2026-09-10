@@ -1,3 +1,4 @@
+import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { describe, test, expect, vi } from 'vitest';
@@ -7,6 +8,8 @@ import {
   isValidSecpPubkey,
   normalizeXOnlySecretKey,
   getPubKeyFromPrivKey,
+  createBlindSignature,
+  pointFromHex,
 } from '../../src';
 
 // A valid compressed secp256k1 point (the generator).
@@ -87,5 +90,22 @@ describe('normalizeXOnlySecretKey', () => {
     expect(bytesToHex(getPubKeyFromPrivKey(normalized)).slice(2)).toBe(
       bytesToHex(getPubKeyFromPrivKey(oddBytes)).slice(2),
     );
+  });
+});
+
+describe('createBlindSignature', () => {
+  const a = hexToBytes('0'.repeat(63) + '2');
+
+  test('signs a secp256k1 blinded message', () => {
+    const B_ = pointFromHex(VALID);
+    const sig = createBlindSignature(B_, a, 'keyset-id');
+    expect(sig.id).toBe('keyset-id');
+    expect(sig.C_.toHex(true)).toBe(B_.multiply(2n).toHex(true));
+  });
+
+  test('rejects a blinded message from another curve', () => {
+    // The point type is structural, so a BLS12-381 G1 point satisfies it at compile time.
+    const foreign = bls12_381.G1.Point.fromAffine({ x: 0n, y: 2n });
+    expect(() => createBlindSignature(foreign, a, 'keyset-id')).toThrow(/secp256k1 point/);
   });
 });
