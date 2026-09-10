@@ -325,6 +325,20 @@ describe('requests', { timeout: 7500 }, () => {
     await expect(wallet.checkMeltQuoteBolt11('test')).rejects.toThrow('primitive failure');
   });
 
+  test('falls back to raw text for an error body with a duplicate JSON key', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/melt/quote/bolt11/test', () => {
+        return new HttpResponse('{"detail":"trusted","detail":"attacker"}', { status: 404 });
+      }),
+    );
+
+    const wallet = new Wallet(mintUrl);
+    wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+    await expect(wallet.checkMeltQuoteBolt11('test')).rejects.toThrow(
+      '{"detail":"trusted","detail":"attacker"}',
+    );
+  });
+
   test('maps empty error response body to bad response', async () => {
     server.use(
       http.get(mintUrl + '/v1/melt/quote/bolt11/test', () => {
@@ -349,6 +363,19 @@ describe('requests', { timeout: 7500 }, () => {
     expect(thrown).toBeInstanceOf(HttpResponseError);
     expect(thrown).toMatchObject({ message: 'bad response', status: 200 });
     expect((thrown as HttpResponseError).cause).toMatchObject({ message: 'Empty response body' });
+  });
+
+  test('rejects a response body with a duplicate JSON key instead of taking the last value', async () => {
+    const endpoint = mintUrl + '/v1/keys';
+    server.use(
+      http.get(endpoint, () => {
+        return new HttpResponse('{"id":"trusted","id":"attacker"}', { status: 200 });
+      }),
+    );
+
+    const thrown = await request({ endpoint }).catch((e) => e);
+    expect(thrown).toBeInstanceOf(HttpResponseError);
+    expect(thrown).toMatchObject({ message: 'bad response', status: 200 });
   });
 
   test('maps malformed success JSON to bad response and logs parsing failure', async () => {

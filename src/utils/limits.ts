@@ -101,6 +101,14 @@ export const U64_MAX = 2n ** 64n - 1n;
 export const MAX_CBOR_NODES = 262_144;
 
 /**
+ * Upper bound on a BOLT11 invoice's human-readable prefix, checked before the amount digits reach
+ * `BigInt`.
+ *
+ * Real invoices need a handful of characters here; this clears them with headroom.
+ */
+export const MAX_BOLT11_HRP_LENGTH = 100;
+
+/**
  * NUT-11: Upper bound on the keys in one `pubkeys` or `refund` tag, applied before any per-key
  * curve work. NUT-28 caps a lock at 11 slots (data + pubkeys + refund), enforced at build; this is
  * a work bound with headroom, not the exact slot rule. A string secret past

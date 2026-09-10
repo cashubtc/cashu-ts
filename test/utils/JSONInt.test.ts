@@ -82,6 +82,28 @@ describe('native BigInt support: stringify', () => {
     expect(output).toBe('{\n  "b": 2,\n  "c": 3\n}');
   });
 
+  test('deduplicates repeated replacer keys like native JSON.stringify', () => {
+    const payload = 'x'.repeat(2_048);
+    const repeatedKeys = Array.from({ length: 64 }, () => 'payload');
+    expect(JSONInt.stringify({ payload }, repeatedKeys)).toBe(
+      JSON.stringify({ payload }, repeatedKeys),
+    );
+  });
+
+  test('skips replacer entries that are not strings or numbers like native JSON.stringify', () => {
+    const value = { a: 1, null: 2, '[object Object]': 3, true: 4, 5: 6 };
+    const replacer = ['a', null, {}, true, 5] as unknown as string[];
+    expect(JSONInt.stringify(value, replacer)).toBe(JSON.stringify(value, replacer));
+  });
+
+  test('caps a string space argument to 10 characters like native JSON.stringify', () => {
+    const value = { outer: { value: 1 }, sibling: 2 };
+    const longSpace = ' '.repeat(1_000);
+    expect(JSONInt.stringify(value, undefined, longSpace)).toBe(
+      JSON.stringify(value, undefined, longSpace),
+    );
+  });
+
   test('supports replacer function for filtering', () => {
     const output = JSONInt.stringify({ a: 1, b: 2 }, (key, value) =>
       key === 'b' ? undefined : value,
@@ -193,6 +215,37 @@ describe('__proto__ and constructor assignment', () => {
       admin?: boolean;
     };
     expect(obj2.admin).not.toBe(true);
+  });
+
+  test('reviver write-back keeps __proto__ as an own data property', () => {
+    const parsed = JSONInt.parse('{"__proto__":{"admin":true}}', function (key, value) {
+      if (key === '__proto__') {
+        Reflect.deleteProperty(this as object, key);
+      }
+      return value;
+    }) as { admin?: boolean };
+
+    expect(Object.getPrototypeOf(parsed)).toBe(Object.prototype);
+    expect(Object.prototype.hasOwnProperty.call(parsed, '__proto__')).toBe(true);
+    expect(parsed.admin).toBeUndefined();
+  });
+
+  test('reviver write-back keeps the earlier value when a key was made non-configurable mid-walk', () => {
+    // Matches native JSON.parse: CreateDataProperty ignores a failed define instead of throwing.
+    const parsed = JSONInt.parse('{"a":1}', function (key, value) {
+      if (key === 'a') {
+        Object.defineProperty(this as object, key, {
+          value: 99,
+          writable: false,
+          enumerable: true,
+          configurable: false,
+        });
+        return 2;
+      }
+      return value;
+    }) as { a: number };
+
+    expect(parsed.a).toBe(99);
   });
 });
 

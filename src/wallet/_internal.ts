@@ -2,8 +2,10 @@
  * Internal wallet utilities — not part of the public API.
  */
 import { Amount, type AmountLike } from '../model/Amount';
+import { CTSError } from '../model/Errors';
 import type { Keys, Proof } from '../model/types';
 import { splitAmount } from '../utils/core';
+import { MAX_SPLIT_OUTPUTS } from '../utils/limits';
 
 import { type OutputType } from './types';
 
@@ -19,6 +21,14 @@ function getKeysetAmountsAsc(keys: Keys): Amount[] {
   const amounts = Object.keys(keys).map((k) => Amount.from(k));
   amounts.sort((a, b) => a.compareTo(b));
   return amounts;
+}
+
+function assertSplitBudget(count: number): void {
+  if (count > MAX_SPLIT_OUTPUTS) {
+    throw new CTSError(
+      `Cannot split amount: optimized split would exceed ${MAX_SPLIT_OUTPUTS} outputs`,
+    );
+  }
 }
 
 /**
@@ -48,13 +58,16 @@ export function getKeepAmounts(
       if (nextTotal.greaterThan(normalizedAmountToKeep)) {
         break;
       }
+      assertSplitBudget(amountsWeWant.length + 1);
       amountsWeWant.push(amt);
       runningTotal = nextTotal;
     }
   }
   const amountDiff = normalizedAmountToKeep.subtract(runningTotal);
   if (!amountDiff.isZero()) {
-    for (const amt of splitAmount(amountDiff, keys)) {
+    const fillAmounts = splitAmount(amountDiff, keys);
+    assertSplitBudget(amountsWeWant.length + fillAmounts.length);
+    for (const amt of fillAmounts) {
       amountsWeWant.push(amt);
       runningTotal = runningTotal.add(amt);
     }

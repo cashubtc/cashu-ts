@@ -622,7 +622,7 @@ async function _request(options: RequestOptions): Promise<unknown> {
       if (!responseText) {
         throw new CTSError('Empty response body');
       }
-      return JSONInt.parse(responseText);
+      return JSONInt.parse(responseText, undefined, { strict: true });
     } catch (err) {
       requestLogger.error('Failed to parse HTTP response', { err });
       throw new HttpResponseError('bad response', response.status, { cause: err });
@@ -640,7 +640,7 @@ function parseErrorBody(errorText: string): ApiError {
   if (!errorText) return { detail: 'bad response' };
   let parsed: unknown;
   try {
-    parsed = JSONInt.parse(errorText);
+    parsed = JSONInt.parse(errorText, undefined, { strict: true });
   } catch {
     return { detail: errorText };
   }

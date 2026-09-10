@@ -101,11 +101,12 @@ function encodeJsonToBase64Url(jsonObj: unknown): string {
  *
  * Integers within `±MAX_SAFE_INTEGER` are returned as `number`; integers outside that range are
  * returned as `bigint`. This preserves precision for large amounts encoded by
- * {@link encodeJsonToBase64Url}.
+ * {@link encodeJsonToBase64Url}. Parses strictly: a duplicate object key throws rather than silently
+ * taking the last value, since this decodes wire payloads.
  */
 function decodeBase64UrlToJson<T extends object>(base64String: string): T {
   const jsonString = decodeUtf8Document(decodeBase64UrlToUint8(base64String));
-  return JSONInt.parse(jsonString) as T;
+  return JSONInt.parse(jsonString, undefined, { strict: true }) as T;
 }
 
 /**
@@ -113,10 +114,11 @@ function decodeBase64UrlToJson<T extends object>(base64String: string): T {
  *
  * @remarks
  * The deprecated cashuA format predates the base64url convention, so tokens in the wild use both.
+ * Parses strictly, as {@link decodeBase64UrlToJson} does: this is the v3 token path.
  */
 function decodeBase64AnyToJson<T extends object>(base64String: string): T {
   const jsonString = decodeUtf8Document(decodeBase64AnyToUint8(base64String));
-  return JSONInt.parse(jsonString) as T;
+  return JSONInt.parse(jsonString, undefined, { strict: true }) as T;
 }
 
 /**
