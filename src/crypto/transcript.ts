@@ -14,15 +14,15 @@ import { minimalBE, tlvRecord } from './nutroot';
  * Transaction transcript (NUT-10): one shared digest, one derived message per input.
  *
  * @remarks
- * `transaction_digest = SHA256(domain tag || TLV stream)`; each input carries one BIP-340 signature
- * over its input digest, `tagged_hash("Cashu_TransactionInput", transaction_digest || SHA256(its
- * own container record))`. Containers: 0x01 proof input, 0x02 mint quote input, 0x03 blinded
- * message output, 0x04 melt quote output. Container types ascend (inputs before outputs by
- * construction); elements keep request order within their type; field streams inside are ascending
- * unique (NUT-10).
+ * `transaction_digest = SHA256(TLV stream)`; each input carries one BIP-340 signature over its
+ * input digest, `tagged_hash("Cashu_TransactionInput", transaction_digest || SHA256(its own
+ * container record))`. Containers: 0x01 proof input, 0x02 mint quote input, 0x03 blinded message
+ * output, 0x04 melt quote output. Container types ascend (inputs before outputs by construction);
+ * elements keep request order within their type; field streams inside are ascending unique
+ * (NUT-10).
  */
 
-export const TRANSCRIPT_DOMAIN_TAG = 'Cashu_Transaction_v1';
+export const TRANSCRIPT_REQUEST_TAG = 'Cashu_AuthorizedRequest';
 export const TRANSCRIPT_INPUT_TAG = 'Cashu_TransactionInput';
 export const SPEND_COMMITMENT_TAG = 'Cashu_SpendCommitment';
 
@@ -178,18 +178,42 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
 }
 
 /**
- * The bytes every input signs over, before hashing: `domain tag || transcript`.
+ * The bytes the transaction digest hashes: the TLV transcript itself.
  *
  * @remarks
- * A signer handed this rather than the digest can hash it itself and refuse anything that does not
- * carry the tag, so it can never be tricked into signing some other 32 bytes.
+ * A signer handed this rather than the digest can hash it itself and check the container it is
+ * asked to sign for is one of the transcript's records ({@link transcriptContainers}), so it can
+ * never be tricked into signing some other 32 bytes.
  */
 export function transactionMessage(tx: TransactionShape): Uint8Array {
-  return concatBytes(utf8ToBytes(TRANSCRIPT_DOMAIN_TAG), buildTransactionTranscript(tx));
+  return buildTransactionTranscript(tx);
 }
 
 /**
- * The 32-byte shared transaction digest: `SHA256(domain tag || transcript)`.
+ * Split a transcript into its top-level container records, byte for byte.
+ *
+ * @remarks
+ * Throws unless the bytes are exactly a run of well-formed, non-empty NUT-10 containers (types 0x01
+ * to 0x05); an event id or other opaque 32 bytes never passes.
+ */
+export function transcriptContainers(transcript: Uint8Array): Uint8Array[] {
+  const records: Uint8Array[] = [];
+  for (let at = 0; at < transcript.length;) {
+    const type = transcript[at];
+    const length = (transcript[at + 1] << 8) | transcript[at + 2];
+    const end = at + 3 + length;
+    if (type < 0x01 || type > 0x05 || length === 0 || end > transcript.length) {
+      throw new CTSError('Malformed transaction transcript');
+    }
+    records.push(transcript.subarray(at, end));
+    at = end;
+  }
+  if (records.length === 0) throw new CTSError('Malformed transaction transcript');
+  return records;
+}
+
+/**
+ * The 32-byte shared transaction digest: `SHA256(transcript)`.
  */
 export function transactionDigest(tx: TransactionShape): Uint8Array {
   return sha256(transactionMessage(tx));
@@ -338,12 +362,11 @@ export function buildRequestTranscript(
 }
 
 /**
- * The 32-byte digest a version 02 BAT witness signs (NUT-22).
+ * The 32-byte message a version 02 BAT witness signs (NUT-22):
+ * `tagged_hash("Cashu_AuthorizedRequest", SHA256(request transcript))`.
  */
 export function requestDigest(method: string, target: string, body: Uint8Array): Uint8Array {
-  return sha256(
-    concatBytes(utf8ToBytes(TRANSCRIPT_DOMAIN_TAG), buildRequestTranscript(method, target, body)),
-  );
+  return taggedHash(TRANSCRIPT_REQUEST_TAG, sha256(buildRequestTranscript(method, target, body)));
 }
 
 /**

@@ -188,7 +188,7 @@ describe('CashuNip07', () => {
     ).rejects.toThrow(/different message/);
   });
 
-  test('signTransaction refuses anything without the domain tag or a foreign container', () => {
+  test('signTransaction refuses anything that is not a transcript, or a foreign container', () => {
     const inputContainerHex = bytesToHex(CONTAINER);
     // An event id, or any other 32 bytes, must never come out signed.
     expect(() => CashuNip07.signTransaction('00'.repeat(32), inputContainerHex, PRIV)).toThrow(

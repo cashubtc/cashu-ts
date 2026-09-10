@@ -30,11 +30,11 @@ import {
   buildNutrootSecret,
   parseNutrootLeafHex,
   serializeNutrootLeaf,
-  taggedHash,
   type NutrootLeaf,
   NUTROOT_NUMS_KEY,
 } from '../src/crypto/nutroot';
 import { deriveKeysetId, getEncodedToken } from '../src/utils/core';
+import { taggedHash } from '../src/crypto/core';
 
 const PATH = 'test/vectors/nutroot-v3.json';
 const SECP256K1_N = BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141');
@@ -258,7 +258,7 @@ const bigTo32 = (x: bigint) => hexToBytes(x.toString(16).padStart(64, '0'));
 for (const name of ['swap', 'mint', 'melt', 'melt_with_change'] as const) {
   const example = d.transcript[name];
   const t = hexToBytes(example.transcript);
-  const digestCheck = bytesToHex(sha256(concatBytes(utf8ToBytes('Cashu_Transaction_v1'), t)));
+  const digestCheck = bytesToHex(sha256(t));
   if (digestCheck !== example.digest) throw new Error(`${name}: transcript/digest mismatch`);
   const container = t.subarray(0, 3 + ((t[1] << 8) | t[2]));
   example.input_id = bytesToHex(sha256(container));
@@ -281,7 +281,7 @@ for (const name of ['swap', 'mint', 'melt', 'melt_with_change'] as const) {
 if (d.transcript.swap.input_id !== d.transcript.melt.input_id)
   throw new Error('swap and melt spend the same proof, so their input ids must match');
 d.transcript.comment =
-  'Transaction transcript (NUT-10). msg = domain_tag utf8 bytes || TLV stream; digest = SHA256(msg). Each input signs tagged_hash("Cashu_TransactionInput", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers: 01 proof input (fields: 01 amount, 02 keyset id, 03 secret P, 04 C), 02 mint quote input (01 amount, 02 quote id utf8), 03 blinded output (01 amount, 02 keyset id, 03 B_), 04 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.';
+  'Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash("Cashu_TransactionInput", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers: 01 proof input (fields: 01 amount, 02 keyset id, 03 secret P, 04 C), 02 mint quote input (01 amount, 02 quote id utf8), 03 blinded output (01 amount, 02 keyset id, 03 B_), 04 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.';
 
 // Two proof inputs in one transaction pin the distinction between the shared transaction digest
 // and each input's signing digest.

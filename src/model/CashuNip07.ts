@@ -1,6 +1,5 @@
 import { equalBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { computeMessageDigest, schnorrSignDigest, schnorrVerifyDigest } from '../crypto/core';
 import { isV3PointSecret } from '../crypto/curve_bls';
@@ -11,7 +10,7 @@ import {
   hasP2PKSignedProof,
   parseWitnessData,
 } from '../crypto/NUT11';
-import { inputDigest, TRANSCRIPT_DOMAIN_TAG } from '../crypto/transcript';
+import { inputDigest, transcriptContainers } from '../crypto/transcript';
 import { bytesToHex, hexToBytes } from '../utils';
 import type { MintProofsConfig, ScriptPathPlan, SpendOption } from '../wallet/types';
 
@@ -48,9 +47,8 @@ export type Nip07Like = {
     signSecret?: (secret: string) => Promise<Nip07SignedHash>;
     /**
      * Sign one input of a nutroot transaction (NUT-10): the signer derives the input digest from
-     * the tagged transaction message and the input's own container record, so it can refuse
-     * anything not carrying the `Cashu_Transaction_v1` tag. See
-     * {@link CashuNip07Api.signTransaction}.
+     * the TLV transcript and the input's own container record, so it can refuse anything that is
+     * not a transcript carrying that container. See {@link CashuNip07Api.signTransaction}.
      */
     signTransaction?: (messageHex: string, inputContainerHex: string) => Promise<Nip07SignedHash>;
   };
@@ -119,8 +117,9 @@ export type CashuNip07Api = {
    *
    * @remarks
    * Takes the private key, which a page never has: this is the extension's side of the contract,
-   * not a substitute for calling the extension. Refuses any message that does not start with the
-   * transaction domain tag, so an event id (or anything else) can never pass through it.
+   * not a substitute for calling the extension. Refuses any message that is not a well-formed
+   * transcript carrying the container, so an event id (or anything else) can never pass through
+   * it.
    */
   signTransaction(
     messageHex: string,
@@ -129,16 +128,13 @@ export type CashuNip07Api = {
   ): Nip07SignedHash;
 };
 
-const DOMAIN_TAG = utf8ToBytes(TRANSCRIPT_DOMAIN_TAG);
-
 // BIP-340 verifies on x alone, and a leaf may list the key with either parity, so matching is
 // by x-coordinate; NIP-07 hands out x-only keys, presented with the conventional 02 prefix.
 const xOnly = (pubkey: string): string => pubkey.toLowerCase().slice(-64);
 
 /**
- * One input digest through the extension: `nip60.signTransaction` when the tagged transaction
- * message and input container are known (the signer derives and checks the digest itself), else
- * `signSchnorr`.
+ * One input digest through the extension: `nip60.signTransaction` when the transcript and input
+ * container are known (the signer derives and checks the digest itself), else `signSchnorr`.
  */
 async function signDigest(
   nostr: Nip07Like,
@@ -277,14 +273,16 @@ export const CashuNip07: CashuNip07Api = {
 
   signTransaction(messageHex, inputContainerHex, secretKey) {
     const message = hexToBytes(messageHex);
-    const tagged =
-      message.length > DOMAIN_TAG.length &&
-      equalBytes(message.subarray(0, DOMAIN_TAG.length), DOMAIN_TAG);
-    if (!tagged) throw new CTSError('Refusing to sign: not a Cashu transaction message');
+    let records: Uint8Array[];
+    try {
+      records = transcriptContainers(message);
+    } catch {
+      throw new CTSError('Refusing to sign: not a Cashu transaction message');
+    }
     // The signed value is the input digest, derived here rather than trusted: the container must
     // be a record of the transcript this message carries, or the signature covers nothing real.
     const container = hexToBytes(inputContainerHex);
-    if (bytesToHex(message).indexOf(inputContainerHex.toLowerCase(), DOMAIN_TAG.length * 2) < 0) {
+    if (!records.some((record) => equalBytes(record, container))) {
       throw new CTSError('Refusing to sign: input container is not part of this transaction');
     }
     const hash = inputDigest(sha256(message), container);
