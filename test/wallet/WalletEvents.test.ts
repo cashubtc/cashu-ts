@@ -338,7 +338,8 @@ describe('WalletEvents', () => {
       await expect(p).rejects.toMatchObject({ name: 'AbortError' });
       const ws = mock.mint.webSocketConnection!;
       await flushMicrotasks();
-      expect(ws.cancelSubscription).toHaveBeenCalled();
+      // Aborted before the connect settled, so the filters were never sent.
+      expect(ws.createSubscription).not.toHaveBeenCalled();
     });
 
     it('rejects on timeout and unsubscribes', async () => {
@@ -479,7 +480,8 @@ describe('WalletEvents', () => {
       await expect(p).rejects.toMatchObject({ name: 'AbortError' });
       const ws = mock.mint.webSocketConnection!;
       await flushMicrotasks();
-      expect(ws.cancelSubscription).toHaveBeenCalled();
+      // Aborted before the connect settled, so the filters were never sent.
+      expect(ws.createSubscription).not.toHaveBeenCalled();
       expect(rmSpy).toHaveBeenCalled();
     });
 
@@ -759,9 +761,9 @@ describe('WalletEvents', () => {
       for await (const x of iter) out.push(x);
 
       expect(out).toEqual([]);
-      const ws = mock.mint.webSocketConnection!;
       await flushMicrotasks();
-      expect(ws.cancelSubscription).toHaveBeenCalled();
+      // Already aborted before the stream started, so the WebSocket connect was never attempted.
+      expect(mock.mint.connectWebSocket).not.toHaveBeenCalled();
     });
   });
 
@@ -965,13 +967,13 @@ describe('WalletEvents', () => {
       expect(ws.cancelSubscription).toHaveBeenCalled();
     });
 
-    it('an already-aborted signal cancels the subscription immediately', async () => {
+    it('an already-aborted signal skips the subscription setup entirely', async () => {
       const ac = new AbortController();
       ac.abort();
       await events.mintQuoteUpdates(['a'], vi.fn(), vi.fn(), { signal: ac.signal });
-      const ws = mock.mint.webSocketConnection!;
       await flushMicrotasks();
-      expect(ws.cancelSubscription).toHaveBeenCalled();
+      expect(mock.mint.connectWebSocket).not.toHaveBeenCalled();
+      expect(mock.mint.webSocketConnection).toBeUndefined();
     });
 
     it('the returned canceller detaches the abort listener (no double cancel on later abort)', async () => {
@@ -983,6 +985,32 @@ describe('WalletEvents', () => {
       ac.abort();
       await flushMicrotasks();
       expect(ws.cancelSubscription).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not send proof filters when aborted while the WebSocket connects', async () => {
+      let finishConnect!: () => void;
+      const connecting = new Promise<void>((resolve) => {
+        finishConnect = resolve;
+      });
+      const ws = new MockWS();
+      const wallet = {
+        mint: {
+          connectWebSocket: vi.fn(() => connecting),
+          webSocketConnection: ws,
+        },
+      };
+      const ev = new WalletEvents(wallet as any);
+      const ac = new AbortController();
+      const proofs: Proof[] = [
+        { amount: Amount.from(1), id: '00bd033559de27d0', secret: 'private-secret', C: 'c' },
+      ];
+
+      const pending = ev.proofStateUpdates(proofs, vi.fn(), vi.fn(), { signal: ac.signal });
+      ac.abort();
+      finishConnect();
+      await pending;
+
+      expect(ws.createSubscription).not.toHaveBeenCalled();
     });
   });
 
@@ -1340,6 +1368,46 @@ describe('WalletEvents', () => {
       };
       const ev = new WalletEvents(wallet as any);
       await expect(ev.onceAnyMintPaid(['a', 'b'])).rejects.toThrow('No subscriptions remaining');
+    });
+  });
+
+  describe('async consumer callback containment', () => {
+    // A rejecting async consumer callback must not escape as an unhandled rejection; safeCallback
+    // is the local pattern already used for onMode/countersReserved/keychainUpdated.
+    it('contains and logs a rejecting websocket delivery callback', async () => {
+      const logger = {
+        warn: vi.fn(),
+        error: vi.fn(),
+        info: vi.fn(),
+        debug: vi.fn(),
+        trace: vi.fn(),
+        log: vi.fn(),
+      };
+      const ws = new MockWS();
+      const wallet = {
+        mint: { connectWebSocket: vi.fn(async () => {}), webSocketConnection: ws },
+        logger,
+      };
+      const ev = new WalletEvents(wallet as any);
+
+      await ev.mintQuoteUpdates(
+        ['q1'],
+        // eslint-disable-next-line @typescript-eslint/no-misused-promises -- async-callback tolerance is what's under test
+        async () => {
+          throw new Error('deliver boom');
+        },
+        vi.fn(),
+      );
+      ws.emit('bolt11_mint_quote', { quote: 'q1', state: 'PAID' });
+      await flushMicrotasks(4);
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        'callback failed',
+        expect.objectContaining({
+          event: 'bolt11_mint_quote',
+          error: expect.objectContaining({ message: 'deliver boom' }),
+        }),
+      );
     });
   });
 
