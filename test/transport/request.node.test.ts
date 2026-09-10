@@ -316,6 +316,31 @@ describe('requests', { timeout: 7500 }, () => {
     expect(headers!.get('x-both')).toBe('per-request');
   });
 
+  test('a per-request header overrides a global one differing only in case', async () => {
+    let observed: Headers | undefined;
+    const captureFetch = (async (
+      _input: Parameters<RequestFetch>[0],
+      init?: Parameters<RequestFetch>[1],
+    ) => {
+      observed = new Headers(init?.headers);
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as RequestFetch;
+
+    setGlobalRequestOptions({ headers: { Authorization: 'Bearer global' } });
+    await request({
+      endpoint: `${mintUrl}/v1/info`,
+      headers: { authorization: 'Bearer per-request' },
+      fetch: captureFetch,
+    });
+
+    // A combined value ("Bearer global, Bearer per-request") means both headers were sent;
+    // Headers itself joins duplicates this way, so an exact match proves only one survived.
+    expect(observed?.get('authorization')).toBe('Bearer per-request');
+  });
+
   test('handles HttpResponseError on non-200 response', async () => {
     server.use(
       http.get(mintUrl + '/v1/melt/quote/bolt11/test', () => {
@@ -1395,6 +1420,32 @@ describe('response body size cap', () => {
     expect(text).toHaveLength(chunks.length);
   });
 
+  test('reads a chunk before the transport reuses its buffer for the next one', async () => {
+    const source = enc('abc');
+    const scratch = new Uint8Array(1);
+    let index = 0;
+    const cancel = () => Promise.resolve();
+    const reader = {
+      read: async () => {
+        if (index === source.length) return { done: true, value: undefined };
+        // A transport may hand back the same view on the next call; the reader must not
+        // keep this reference around expecting it to still hold this chunk's bytes.
+        scratch[0] = source[index++];
+        return { done: false, value: scratch };
+      },
+      cancel,
+    };
+    const response = {
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      body: { getReader: () => reader, cancel },
+      text: async () => '',
+    } as unknown as Response;
+
+    await expect(readBodyText(response, source.length)).resolves.toBe('abc');
+  });
+
   test('rejects an oversized error body but still surfaces an HttpResponseError', async () => {
     const chunk = enc('z'.repeat(600));
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
@@ -1414,6 +1465,40 @@ describe('response body size cap', () => {
     await expect(request({ endpoint, maxResponseBytes: 0 })).rejects.toThrow(
       'maxResponseBytes must be a positive integer',
     );
+  });
+
+  test('does not retry a 429 response whose body stalls', async () => {
+    let fetchCount = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      fetchCount++;
+      return streamResponse([enc('{"error":')], { status: 429, hangAfter: true });
+    });
+
+    const thrown = await request({
+      endpoint,
+      requestTimeout: 50,
+      ttl: 60_000,
+      cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+    }).catch((e) => e);
+
+    expect(thrown).toBeInstanceOf(RateLimitError);
+    // The status is already known; a stalled optional body must not turn it into a retryable error.
+    expect(fetchCount).toBe(1);
+  });
+
+  test('surfaces RateLimitError for a 429 whose body has no cancel method', async () => {
+    const response = {
+      ok: false,
+      status: 429,
+      headers: new Headers(),
+      body: { getReader: () => ({ read: async () => ({ done: true, value: undefined }) }) },
+      text: async () => '',
+    } as unknown as Response;
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
+
+    const thrown = await request({ endpoint }).catch((e) => e);
+
+    expect(thrown).toBeInstanceOf(RateLimitError);
   });
 
   test('timeout during a hung body read maps to NetworkError', async () => {
@@ -1680,6 +1765,12 @@ describe('buildRequestHeaders', () => {
   test('caller-supplied User-Agent always wins', () => {
     expect(buildRequestHeaders(undefined, { 'User-Agent': 'X' }, false)['User-Agent']).toBe('X');
     expect(buildRequestHeaders(undefined, { 'User-Agent': 'X' }, true)['User-Agent']).toBe('X');
+  });
+
+  test('caller-supplied header replaces a default differing only in case', () => {
+    const headers = buildRequestHeaders(undefined, { 'user-agent': 'X' }, false);
+    expect(headers['user-agent']).toBe('X');
+    expect(Object.keys(headers).filter((k) => k.toLowerCase() === 'user-agent')).toHaveLength(1);
   });
 
   test('Content-Type is added only when body is present', () => {

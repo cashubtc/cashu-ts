@@ -191,3 +191,9 @@ export const MAX_P2PK_PUBKEYS = 16;
  * signer, so signatures need more headroom than keys ({@link MAX_P2PK_PUBKEYS}).
  */
 export const MAX_P2PK_SIGNATURES = 64;
+
+/**
+ * How deep `ConsoleLogger` recurses into structured log context to sanitize nested strings. Bounds
+ * the recursion over a nested mint response object.
+ */
+export const MAX_LOG_CONTEXT_DEPTH = 8;
