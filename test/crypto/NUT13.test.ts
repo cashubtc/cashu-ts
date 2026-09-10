@@ -11,12 +11,16 @@ import {
 } from '../../src/crypto';
 import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import {
+  createKeyPairDeriver,
+  createSecretAndBlindingFactorDeriver,
+  deriveKeyPair,
   deriveLeafKey,
   deriveNumsOffset,
   deriveQuoteLockKey,
   recoverV3LeafKeys,
 } from '../../src/crypto/NUT13';
 import { CTSError } from '../../src/model/Errors';
+import { decodeBase64ToUint8Legacy } from '../../src/utils';
 import { nut13_v3 as nut13Vectors } from '../vectors/nutroot-v3.json';
 
 // The standalone deriveBlindingFactor() helper was removed in v5; derive it locally for these tests.
@@ -240,6 +244,39 @@ describe('HMAC counter range', () => {
   });
 });
 
+describe('seed length', () => {
+  const v2KeysetId = '01abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567';
+  const v3KeysetId = '02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6';
+  const bad = /seed must be a 16 to 64 byte Uint8Array/;
+
+  test('every seeded derivation takes 16 to 64 bytes and nothing else', () => {
+    for (const length of [16, 32, 64]) {
+      const seed = new Uint8Array(length).fill(7);
+      expect(() => deriveSecretAndBlindingFactor(seed, v2KeysetId, 0)).not.toThrow();
+      expect(() => deriveKeyPair(seed, 'P2PK', 0)).not.toThrow();
+      expect(() => deriveQuoteLockKey(seed, 0)).not.toThrow();
+    }
+    for (const length of [0, 15, 65]) {
+      const seed = new Uint8Array(length);
+      expect(() => deriveSecretAndBlindingFactor(seed, v2KeysetId, 0)).toThrow(bad);
+      expect(() => createSecretAndBlindingFactorDeriver(seed, v2KeysetId)).toThrow(bad);
+      expect(() => deriveKeyPair(seed, 'P2PK', 0)).toThrow(bad);
+      expect(() => createKeyPairDeriver(seed, 'QuoteLock')).toThrow(bad);
+      expect(() => deriveQuoteLockKey(seed, 0)).toThrow(bad);
+      expect(() => deriveNumsOffset(seed, v3KeysetId, 0)).toThrow(bad);
+      expect(() => deriveLeafKey(seed, v3KeysetId, 0, 0)).toThrow(bad);
+      expect(() => recoverV3LeafKeys(seed, v3KeysetId, 0, ['02'.padEnd(66, 'a')])).toThrow(bad);
+    }
+  });
+
+  test('a seed that is not a Uint8Array is rejected the same way', () => {
+    const notBytes = 'dd44ee516b0647e80b488e8dcc56d736' as unknown as Uint8Array;
+    expect(() => deriveSecretAndBlindingFactor(notBytes, v2KeysetId, 0)).toThrow(bad);
+    expect(() => deriveKeyPair(notBytes, 'P2PK', 0)).toThrow(bad);
+    expect(() => deriveQuoteLockKey(notBytes, 0)).toThrow(bad);
+  });
+});
+
 describe('derivation kind selection', () => {
   // Known BIP-32 seed (NUT-13 spec / NUT-09 fixtures).
   const seed = hexToBytes(
@@ -262,6 +299,31 @@ describe('derivation kind selection', () => {
     const { secret, blindingFactor } = deriveSecretAndBlindingFactor(seed, base64KeysetId, counter);
     expect(bytesToHex(secret)).toBe(bytesToHex(expectedSecret as Uint8Array));
     expect(bytesToHex(blindingFactor)).toBe(bytesToHex(expectedR as Uint8Array));
+  });
+
+  test('a 12-character all-hex keyset id still takes the deprecated BIP-32 path', () => {
+    // Legacy ids predate the version byte and their base64 alphabet overlaps hex, so length
+    // is what separates them from a modern id.
+    const legacyKeysetId = 'd9f0F7F2875b';
+    const counter = 2;
+    const keysetIdInt =
+      bytesToNumberBE(decodeBase64ToUint8Legacy(legacyKeysetId)) % BigInt(2 ** 31 - 1);
+    expect(getKeysetIdInt(legacyKeysetId)).toBe(keysetIdInt);
+
+    const hdkey = HDKey.fromMasterSeed(seed);
+    const path = `m/129372'/0'/${keysetIdInt}'/${counter}'`;
+    const expectedSecret = hdkey.derive(`${path}/0`).privateKey;
+    const expectedR = hdkey.derive(`${path}/1`).privateKey;
+    expect(expectedSecret).not.toBeNull();
+
+    const { secret, blindingFactor } = deriveSecretAndBlindingFactor(seed, legacyKeysetId, counter);
+    expect(bytesToHex(secret)).toBe(bytesToHex(expectedSecret as Uint8Array));
+    expect(bytesToHex(blindingFactor)).toBe(bytesToHex(expectedR as Uint8Array));
+
+    // Length alone is not enough: a 12-character id outside both alphabets is still rejected.
+    expect(() => deriveSecretAndBlindingFactor(seed, '!'.repeat(12), 0)).toThrow(
+      /Unrecognized keyset ID version/,
+    );
   });
 
   test('rejects a negative counter on the deprecated BIP-32 path', () => {

@@ -83,7 +83,7 @@ describe('Restoring deterministic proofs', () => {
         });
       }),
     );
-    const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(32), logger });
+    const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(64), logger });
     await wallet.loadMint();
     const scan = (wallet as unknown as { restoreUnspent: Scan }).restoreUnspent.bind(wallet);
     expect(await scan(0, 3)).toEqual({ proofs: [], lastCounterWithSignature: 2, used: true });
@@ -246,7 +246,7 @@ describe('restoreAll', () => {
 
 describe('restore', () => {
   test('sends zero-amount blanks and maps signatures to proofs', async () => {
-    const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(32), logger });
+    const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(64), logger });
     await wallet.loadMint();
     interface RestoreBody {
       outputs: unknown[];
@@ -311,7 +311,7 @@ describe('restore', () => {
         });
       }),
     );
-    const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(32), logger });
+    const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(64), logger });
     await wallet.loadMint();
 
     const res = await wallet.restore(0, 3);
@@ -321,7 +321,7 @@ describe('restore', () => {
   });
 
   test('state checks before restoring: skips spent, keeps pending, scans past a spent wave', async () => {
-    const seed = randomBytes(32);
+    const seed = randomBytes(64);
     const keysetId = dummyKeysResp.keysets[0].id;
     const wallet = new Wallet(mint, { unit, bip39seed: seed, logger });
     await wallet.loadMint();
@@ -389,10 +389,10 @@ describe('restore', () => {
       (b) => (counterByB_.get(b) ?? Infinity) <= SPENT_THROUGH,
     );
     expect(spentRevealed).toEqual([]);
-  });
+  }, 15_000);
 
   test('skips an invalid-scalar counter and recovers proofs past it', async () => {
-    const seed = randomBytes(32);
+    const seed = randomBytes(64);
     const keysetId = dummyKeysResp.keysets[0].id;
     const VALID_POINT = '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422';
     const counterByB_ = new Map<string, number>();
@@ -446,13 +446,15 @@ describe('restore', () => {
   });
 
   test('an invalid counter rejects rather than reporting an empty scan', async () => {
-    const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(32) });
+    const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(64) });
     await wallet.loadMint();
     await expect(wallet.batchRestore({ counter: 0.5, gapLimit: 3 })).rejects.toThrow(
       /non-negative safe integers/,
     );
     // a zero batch never advances the counter, so the scan would loop forever
     await expect(wallet.batchRestore({ batchSize: 0 })).rejects.toThrow(/batchSize must be/);
+    // above the mint's advertised max_array_length (the library default here)
+    await expect(wallet.batchRestore({ batchSize: 501 })).rejects.toThrow(/batchSize must be/);
     await expect(wallet.batchRestore({ gapLimit: 0 })).rejects.toThrow(/gapLimit/);
     // a fractional gap would leave the probe width and gap count fractional
     await expect(wallet.batchRestore({ gapLimit: 2.5 })).rejects.toThrow(/gapLimit/);

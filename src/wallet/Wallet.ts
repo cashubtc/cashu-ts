@@ -87,6 +87,7 @@ import {
   DEFAULT_MAX_ARRAY_LENGTH,
   getDecodedToken,
   invoiceHasAmountInHRP,
+  SEED_BYTES,
   normalizeMintUrl,
   normalizeProofAmounts,
   REPAIR_COOLDOWN_MS,
@@ -257,7 +258,7 @@ class Wallet {
    * @param options Optional settings.
    * @param options.unit Wallet unit, default 'sat'.
    * @param options.keysetId Bind to this keyset id, else bind on `loadMint`.
-   * @param options.bip39seed BIP39 seed for deterministic secrets.
+   * @param options.bip39seed BIP39 seed for deterministic secrets, 64 bytes.
    * @param options.secretsPolicy Secrets policy, default 'auto'.
    * @param options.counterSource Counter source for deterministic outputs. If provided, this takes
    *   precedence over counterInit. Use when you need persistence across processes or devices.
@@ -334,6 +335,13 @@ class Wallet {
         !(options.bip39seed instanceof Uint8Array),
         'bip39seed must be a valid Uint8Array',
         { received: typeof options.bip39seed },
+      );
+      // Fail here rather than at the first derivation: a wallet on a seed NUT-13 will refuse is
+      // broken, and the deriver's own guard would surface it mid-operation.
+      this.failIf(
+        options.bip39seed.length !== SEED_BYTES,
+        `bip39seed must be ${SEED_BYTES} bytes`,
+        { length: options.bip39seed.length },
       );
       this._seed = options.bip39seed;
     }
@@ -2390,9 +2398,10 @@ class Wallet {
     this.failIf(
       !Number.isSafeInteger(batchSize) ||
         batchSize < 1 ||
+        batchSize > this.maxArrayLength ||
         !(Number.isSafeInteger(gapLimit) || gapLimit === Infinity) ||
         gapLimit < 1,
-      'batchSize must be a positive integer and gapLimit a positive integer or Infinity',
+      `batchSize must be a positive integer up to ${this.maxArrayLength} and gapLimit a positive integer or Infinity`,
     );
     const probeSize = Math.min(gapLimit, this.maxArrayLength);
     const restoredProofs: Proof[] = [];

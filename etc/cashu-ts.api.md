@@ -1840,9 +1840,6 @@ export type OutputType = ({
 };
 
 // @public
-export const P2BK_DST: Uint8Array<ArrayBufferLike>;
-
-// @public
 export type P2PKOptions = SpendingConditionsBase & LockConditions & {
     kind: 'P2PK' | 'HTLC';
 };

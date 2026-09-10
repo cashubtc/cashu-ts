@@ -55,7 +55,13 @@ import {
 import { decodeUtf8Document, minimalBytesBE } from './bytes';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { JSONInt } from './JSONInt';
-import { MAX_PAYLOAD_DECODE_ATTEMPTS, MAX_PAYLOAD_LENGTH, MAX_SPLIT_OUTPUTS } from './limits';
+import {
+  ABSOLUTE_MAX_ARRAY_LENGTH,
+  MAX_BOLT11_HRP_LENGTH,
+  MAX_PAYLOAD_DECODE_ATTEMPTS,
+  MAX_PAYLOAD_LENGTH,
+  MAX_SPLIT_OUTPUTS,
+} from './limits';
 
 /**
  * Splits the amount into denominations of the provided keyset.
@@ -81,6 +87,9 @@ export function splitAmount(
   let normalizedSplit = split?.map((amt) => toAmount(amt, 'splitAmount.split', true));
 
   if (normalizedSplit) {
+    if (normalizedSplit.length > MAX_SPLIT_OUTPUTS) {
+      throw new CTSError(`Cannot split amount: split would exceed ${MAX_SPLIT_OUTPUTS} outputs`);
+    }
     const totalSplitAmount = Amount.sum(normalizedSplit);
 
     // Special case: explicit "zero-total" outputs (restore or NUT-08 blanks)
@@ -176,7 +185,10 @@ function getKeysetAmountsAsAmount(keyset: Keys, order: 'asc' | 'desc'): Amount[]
  * @returns True if the amount is in the keyset, false otherwise.
  */
 export function hasCorrespondingKey(amount: AmountLike, keyset: Keys): boolean {
-  return toAmount(amount, 'hasCorrespondingKey.amount', true).toString() in keyset;
+  // Own denominations only: a `Keys` object inherits from Object.prototype, and only the keys
+  // the keyset id commits to count.
+  const denomination = toAmount(amount, 'hasCorrespondingKey.amount', true).toString();
+  return Object.prototype.hasOwnProperty.call(keyset, denomination);
 }
 
 function toAmount(amount: AmountLike, op: string, allowZero = false): Amount {
@@ -588,6 +600,12 @@ export type DeriveKeysetIdOptions = {
  * @throws If keyset versionByte is not valid.
  */
 export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): string {
+  // A u64 denomination is at most 20 digits; bound every key before any amount is parsed.
+  for (const amount of Object.keys(keys)) {
+    if (amount.length > 20) {
+      throw new CTSError('Invalid keyset denomination: exceeds 20 digits');
+    }
+  }
   const unit = options?.unit ?? 'sat'; // default: sat
   const expiry = options?.expiry;
   const versionByte = options?.versionByte ?? 1; // default: 1
@@ -929,6 +947,18 @@ export function isObj(v: unknown): v is object {
 }
 
 /**
+ * Type guard: returns `true` if `v` is a record, i.e. a non-null object that is not an array.
+ *
+ * @remarks
+ * Use this over {@link isObj} on anything off the wire: JSON admits an array or a string where a
+ * record is declared, and spreading one of those materializes a property per element/character.
+ * @internal
+ */
+export function isRecord(v: unknown): v is Record<string, unknown> {
+  return isObj(v) && !Array.isArray(v);
+}
+
+/**
  * In-place: set listed keys to `null` if currently `undefined`. Used when normalizing mint
  * responses where the spec defines a nullable wire field but the mint omits it (Postel-style).
  * Pairs with TS types declared as `T | null`.
@@ -1212,13 +1242,21 @@ export function hasValidDleq(
  * @param getKeyset Lookup callback (e.g. `(id) => keyChain.getKeyset(id)`).
  * @param opts.requireDleq Forwarded to {@link hasValidDleq} as `require` for v0/v1/v2 proofs;
  *   ignored for v3.
- * @throws CTSError if any proof's amount is not in its keyset, or DLEQ/pairing verification fails.
+ * @throws CTSError if the batch is over the proof-count cap, if any proof's amount is not in its
+ *   keyset, or if DLEQ/pairing verification fails.
  */
 export function verifyProofsForReceive(
   proofs: ProofLike[],
   getKeyset: (id: string) => HasKeysetKeys,
   opts?: { requireDleq?: boolean },
 ): void {
+  // Every proof costs curve work, so bound the batch before any of it: a token is untrusted
+  // input and the cap is far above any real one.
+  if (proofs.length > ABSOLUTE_MAX_ARRAY_LENGTH) {
+    throw new CTSError(
+      `Token contains too many proofs: ${proofs.length}, maximum is ${ABSOLUTE_MAX_ARRAY_LENGTH}`,
+    );
+  }
   const normalized = normalizeProofAmounts(proofs);
   const requireDleq = opts?.requireDleq ?? false;
   const failMsg = requireDleq
@@ -1384,7 +1422,12 @@ export function bolt11AmountMsat(pr: string): bigint | null {
   const lower = pr.toLowerCase();
   // The bech32 charset excludes '1', so the last '1' is the HRP separator.
   const sep = lower.lastIndexOf('1');
-  if (!lower.startsWith('ln') || sep < 3 || sep === lower.length - 1) {
+  if (
+    !lower.startsWith('ln') ||
+    sep < 3 ||
+    sep > MAX_BOLT11_HRP_LENGTH ||
+    sep === lower.length - 1
+  ) {
     throw new CTSError('Invalid BOLT11 invoice');
   }
   const match = /^ln[a-z]+?(\d*)([munp]?)$/.exec(lower.slice(0, sep));

@@ -200,7 +200,7 @@ describe('Legacy (pre-v1) keyset output gating', () => {
       http.post(mintUrl + '/v1/restore', () => HttpResponse.json({ outputs: [], signatures: [] })),
     );
 
-    const wallet = new Wallet(mint, { bip39seed: randomBytes(32) });
+    const wallet = new Wallet(mint, { bip39seed: randomBytes(64) });
     await wallet.loadMint();
 
     const res = await wallet.restore(0, 2, { keysetId: legacyId });

@@ -131,7 +131,7 @@ function deserializePackage(input: string): SigAllSigningPackage {
   let data: unknown;
 
   try {
-    data = JSONInt.parse(json);
+    data = JSONInt.parse(json, undefined, { strict: true });
   } catch (e) {
     throw new CTSError(
       `Failed to parse signing package JSON: ${e instanceof Error ? e.message : String(e)}`,

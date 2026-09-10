@@ -145,6 +145,34 @@ describe('splitAmount output bound', () => {
     // One more output must be rejected, not allocated.
     expect(() => utils.splitAmount(8_193, onlyOnes)).toThrow(/would exceed .* outputs/);
   });
+
+  test('rejects an exact custom split above the output cap', () => {
+    // An exact caller-supplied split (sums to the requested value) returns before the fill
+    // logic's own budget check; it needs the same cap.
+    const oversizedSplit = Array.from({ length: 8_193 }, () => 1);
+    expect(() => utils.splitAmount(8_193, onlyOnes, oversizedSplit)).toThrow(
+      /would exceed .* outputs/,
+    );
+  });
+
+  test('allows an exact custom split at exactly the cap', () => {
+    const split = Array.from({ length: 8_192 }, () => 1);
+    expect(utils.splitAmount(8_192, onlyOnes, split)).toHaveLength(8_192);
+  });
+
+  test('rejects a zero-total custom split above the output cap', () => {
+    // Zero value and zero-total split (restore/NUT-08 blanks) returns before the fill logic's
+    // own budget check too; it needs the same cap as the exact-positive-split path.
+    const oversizedZeroSplit = Array.from({ length: 8_193 }, () => 0);
+    expect(() => utils.splitAmount(0, onlyOnes, oversizedZeroSplit)).toThrow(
+      /would exceed .* outputs/,
+    );
+  });
+
+  test('allows a zero-total custom split at exactly the cap', () => {
+    const zeroSplit = Array.from({ length: 8_192 }, () => 0);
+    expect(utils.splitAmount(0, onlyOnes, zeroSplit)).toHaveLength(8_192);
+  });
 });
 
 describe('test split different key amount', () => {
@@ -856,6 +884,16 @@ describe('test output selection', () => {
     expect(utils.hasCorrespondingKey('8', keys)).toBe(true);
     expect(utils.hasCorrespondingKey(Amount.from(3), keys)).toBe(false);
   });
+
+  test('hasCorrespondingKey counts own denominations only', () => {
+    Object.defineProperty(Object.prototype, '3', { value: 'inherited', configurable: true });
+    try {
+      expect(utils.hasCorrespondingKey(3, keys)).toBe(false);
+      expect(utils.hasCorrespondingKey(8, keys)).toBe(true);
+    } finally {
+      Reflect.deleteProperty(Object.prototype, '3');
+    }
+  });
 });
 describe('test zero-knowledge utilities', () => {
   // create private public key pair
@@ -1062,6 +1100,17 @@ describe('test zero-knowledge utilities', () => {
       const getKeyset = () => secpKeyset;
       expect(() => utils.verifyProofsForReceive([tampered], getKeyset)).toThrow(
         /Undefined key for amount 3 in keyset 00/,
+      );
+    });
+
+    test('verifies a batch at the proof-count cap but refuses one above it', () => {
+      const { dleq, ...noDleq } = serializedProof;
+      void dleq;
+      const getKeyset = () => secpKeyset;
+      const capacity = Array.from({ length: 10_000 }, () => noDleq);
+      expect(() => utils.verifyProofsForReceive(capacity, getKeyset)).not.toThrow();
+      expect(() => utils.verifyProofsForReceive([...capacity, noDleq], getKeyset)).toThrow(
+        /too many proofs/i,
       );
     });
 
@@ -1708,6 +1757,17 @@ describe('deriveKeysetId edge cases', () => {
     expect(() => utils.deriveKeysetId(keys, { versionByte: 99 })).toThrow(
       /Unrecognized keyset ID version/,
     );
+  });
+
+  test('rejects a denomination key over 20 digits before parsing it', () => {
+    const oversized = { ...keys, ['1'.repeat(21)]: Object.values(keys)[0] };
+    expect(() => utils.deriveKeysetId(oversized, { versionByte: 2 })).toThrow(/exceeds 20 digits/);
+    expect(
+      utils.deriveKeysetId(
+        { ...keys, ['1'.repeat(20)]: Object.values(keys)[0] },
+        { versionByte: 2 },
+      ),
+    ).toMatch(/^02[0-9a-f]{64}$/);
   });
 });
 

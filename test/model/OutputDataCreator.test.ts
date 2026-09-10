@@ -19,7 +19,7 @@ import type { HasKeysetKeys, SerializedBlindedSignature, Proof } from '../../src
 describe('DefaultOutputDataCreator', () => {
   test('delegates single deterministic output creation to OutputData', () => {
     const creator = new DefaultOutputDataCreator();
-    const seed = new Uint8Array([1]);
+    const seed = new Uint8Array(64).fill(1);
     const keysetId = '012e23479a0029432eaad0d2040c09be53bab592d5cbf1d55e0dd26c9495951b30';
 
     expect(creator.createSingleDeterministicData(1, seed, 7, keysetId)).toEqual(
@@ -32,7 +32,7 @@ describe('DefaultOutputDataCreator', () => {
       id: '012e23479a0029432eaad0d2040c09be53bab592d5cbf1d55e0dd26c9495951b30',
       keys: { '1': 'unused', '2': 'unused' },
     };
-    const seed = new Uint8Array([1]);
+    const seed = new Uint8Array(64).fill(1);
     const creator = new DefaultOutputDataCreator();
     const batchSpy = vi.spyOn(OutputData, 'createDeterministicData');
 
@@ -89,7 +89,7 @@ describe('DefaultOutputDataCreator', () => {
       keys: { '1': 'unused', '2': 'unused' },
     };
     const creator = new DefaultOutputDataCreator();
-    const seed = new Uint8Array([1]);
+    const seed = new Uint8Array(64).fill(1);
 
     // The first output is fine; the second lands on 2^53, where counter + 1 stops
     // producing a distinct value, so a batch would derive one counter twice.
@@ -136,6 +136,20 @@ describe('DefaultOutputDataCreator', () => {
       { amount: '1', counter: 7, keysetId: keyset.id },
       { amount: '2', counter: 8, keysetId: keyset.id },
     ]);
+  });
+
+  test('rejects an exact custom split above the output cap before generating any output', () => {
+    const keyset: HasKeysetKeys = {
+      id: '012e23479a0029432eaad0d2040c09be53bab592d5cbf1d55e0dd26c9495951b30',
+      keys: { '1': 'unused' },
+    };
+    const creator = new DefaultOutputDataCreator();
+    const singleSpy = vi.spyOn(OutputData, 'createSingleRandomData');
+    const oversizedSplit = Array.from({ length: 8_193 }, () => 1);
+
+    expect(() => creator.createRandomData(8_193, keyset, oversizedSplit)).toThrow(/output/i);
+    expect(singleSpy).not.toHaveBeenCalled();
+    singleSpy.mockRestore();
   });
 });
 

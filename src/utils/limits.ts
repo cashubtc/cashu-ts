@@ -34,6 +34,12 @@ export const DEFAULT_MAX_ARRAY_LENGTH = 500;
 export const ABSOLUTE_MAX_ARRAY_LENGTH = 10_000;
 
 /**
+ * Upper bound on the proofs one receive-side verification will check. Every proof costs curve work,
+ * so the batch is bounded before any of it; far above any real token or blind-auth batch.
+ */
+export const MAX_RECEIVE_PROOFS = 10_000;
+
+/**
  * NUT-02: Hard ceiling on the number of denominations a mint-supplied keyset may carry, checked
  * before any per-key work (id derivation hashes every pubkey). Real keysets carry ~64 keys (powers
  * of two to 2^63), so 256 is ample headroom. Oversized keysets fail id verification.
@@ -78,6 +84,47 @@ export const MAX_SECRET_LENGTH = 1024;
 export const MAX_WITNESS_LENGTH = 16_384;
 
 /**
+ * Occupied blinding slots per secret: slot 0 plus NUT-10's 120 leaf-key cap (8 leaves of 15 keys),
+ * well inside NUT-28's one index byte. Bounds every receiver-side slot scan.
+ */
+export const NUTROOT_MAX_SLOTS = 121;
+
+/**
+ * NUT-28: locking slots in a P2BK lock, `[data, ...pubkeys, ...refund]` at index bytes
+ * `0x00..0x0A`. `data` always fills slot 0, so an HTLC lock has one fewer key to give away.
+ */
+export const MAX_P2BK_SLOTS = 11;
+
+/**
+ * NUT-13: the seed a wallet is built on is a BIP-39 derivation, 64 bytes, which is what every
+ * wallet and mint implementation hands over. Enforced by the Wallet constructor.
+ */
+export const SEED_BYTES = 64;
+
+/**
+ * NUT-13: accepted length range for a seed passed straight to a derivation helper. BIP-32's 16-byte
+ * floor at the bottom, the 64 bytes a BIP-39 mnemonic produces at the top; the helpers stay usable
+ * on the spec's own vectors.
+ */
+export const MIN_SEED_BYTES = 16;
+export const MAX_SEED_BYTES = 64;
+
+/**
+ * Upper bound on entries we process from a mint's keyset lists. `/v1/keysets` is historical: it
+ * grows with every rotation and never shrinks, so this sits far above any plausible mint rather
+ * than at the mint-info list cap. It only bounds the per-entry normalization work; the transport
+ * byte cap still applies.
+ */
+export const MAX_KEYSET_LIST = 10_000;
+
+/**
+ * Upper bound on how deeply mint-advertised metadata may nest before a snapshot of it is refused.
+ * Real `/v1/info` metadata nests a handful of levels; the recursive copy overflows the call stack
+ * well before this is a limitation. Mirrors the parser depth caps in JSONInt and cbor.
+ */
+export const MAX_MINT_INFO_DEPTH = 64;
+
+/**
  * Max u64 (2^64 - 1): the ceiling every Amount is held to. Enforced in the Amount constructor, so
  * arithmetic results are bounded too; muldiv helpers keep their wide intermediate in bigint and
  * only construct the divided-down result.
@@ -93,6 +140,22 @@ export const U64_MAX = 2n ** 64n - 1n;
  * 90,000; this leaves headroom above that on top of the usual one-allocation-per-input-byte bound.
  */
 export const MAX_CBOR_NODES = 262_144;
+
+/**
+ * Upper bound on a BOLT11 invoice's human-readable prefix, checked before the amount digits reach
+ * `BigInt`.
+ *
+ * Real invoices need a handful of characters here; this clears them with headroom.
+ */
+export const MAX_BOLT11_HRP_LENGTH = 100;
+
+/**
+ * Cap on frames `WSConnection` will buffer between two drain ticks: each tick empties the whole
+ * queue, so this bounds arrivals within a single tick, not messages held overall. Matches
+ * {@link ABSOLUTE_MAX_ARRAY_LENGTH}, since a NUT-17 replay sends one frame per subscribed filter and
+ * a full-size batch must fit in one burst without tripping the cap.
+ */
+export const MAX_WS_QUEUED_MESSAGES = ABSOLUTE_MAX_ARRAY_LENGTH;
 
 /**
  * Maximum number of candidate payloads `findCashuPayload` will attempt to decode in one scan.

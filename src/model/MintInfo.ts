@@ -1,11 +1,12 @@
 import { type Logger, NULL_LOGGER } from '../logger';
-import { nullIfUndefined } from '../utils/core';
+import { isRecord, nullIfUndefined } from '../utils/core';
 import {
   ABSOLUTE_MAX_ARRAY_LENGTH,
   ABSOLUTE_MAX_BATCH_SIZE,
   ABSOLUTE_MAX_PER_MINT,
   DEFAULT_MAX_ARRAY_LENGTH,
   MAX_METHOD_LENGTH,
+  MAX_MINT_INFO_DEPTH,
   MAX_MINT_INFO_LIST,
 } from '../utils/limits';
 import { normalizeSafeIntegerMetadata } from '../utils/normalizeNumbers';
@@ -71,31 +72,58 @@ export class MintInfo {
   }
 
   static normalizeInfo(info: GetInfoResponse, logger: Logger = NULL_LOGGER): GetInfoResponse {
+    // The response is untrusted JSON: check the shape before any spread copies it.
+    if (!isRecord(info) || !isRecord(info.nuts)) {
+      logger.error('MintInfo: malformed info response', { op: 'normalizeInfo' });
+      throw new CTSError('Invalid response from mint');
+    }
     return {
       ...info,
+      ...(Array.isArray(info.contact)
+        ? { contact: MintInfo.capList(info.contact, 'contact', logger) }
+        : {}),
+      ...(Array.isArray(info.urls) ? { urls: MintInfo.capList(info.urls, 'urls', logger) } : {}),
       nuts: {
         ...info.nuts,
         ...(info.nuts['4']
-          ? {
-              '4': {
-                ...info.nuts['4'],
-                methods: MintInfo.normalizeSwapMethods(info.nuts['4'].methods, logger),
-              },
-            }
+          ? { '4': MintInfo.normalizeSwapSection(info.nuts['4'], 'nuts.4', logger) }
           : {}),
         ...(info.nuts['5']
-          ? {
-              '5': {
-                ...info.nuts['5'],
-                methods: MintInfo.normalizeSwapMethods(info.nuts['5'].methods, logger),
-              },
-            }
+          ? { '5': MintInfo.normalizeSwapSection(info.nuts['5'], 'nuts.5', logger) }
           : {}),
-        ...(info.nuts['19'] ? { '19': MintInfo.normalizeNut19(info.nuts['19']) } : {}),
+        ...(info.nuts['15'] ? { '15': MintInfo.normalizeNut15(info.nuts['15'], logger) } : {}),
+        ...(info.nuts['17'] ? { '17': MintInfo.normalizeNut17(info.nuts['17'], logger) } : {}),
+        ...(info.nuts['19'] ? { '19': MintInfo.normalizeNut19(info.nuts['19'], logger) } : {}),
+        ...(info.nuts['21'] ? { '21': MintInfo.normalizeNut21(info.nuts['21'], logger) } : {}),
         ...(info.nuts['22'] ? { '22': MintInfo.normalizeNut22(info.nuts['22'], logger) } : {}),
         ...(info.nuts['29'] ? { '29': MintInfo.normalizeNut29(info.nuts['29'], logger) } : {}),
       },
     };
+  }
+
+  /**
+   * Warns that a malformed optional section was dropped. Sections arrive as untrusted JSON, so one
+   * that is not a record is omitted rather than spread.
+   */
+  private static dropSection(label: string, logger: Logger): undefined {
+    logger.warn(`MintInfo: ${label} is malformed and was omitted`);
+    return undefined;
+  }
+
+  /**
+   * NUT-04/05 are mandatory sections, so a malformed one fails the whole response rather than
+   * leaving the wallet to guess what the mint supports.
+   */
+  private static normalizeSwapSection(
+    section: GetInfoResponse['nuts']['4'],
+    label: string,
+    logger: Logger,
+  ): GetInfoResponse['nuts']['4'] {
+    if (!isRecord(section)) {
+      logger.error('MintInfo: malformed info response', { op: label });
+      throw new CTSError('Invalid response from mint');
+    }
+    return { ...section, methods: MintInfo.normalizeSwapMethods(section.methods, logger) };
   }
 
   // Per NUT-04/05/25/XX, `min_amount` and `max_amount` are `<x|null>`. Mints that omit them entirely
@@ -103,7 +131,14 @@ export class MintInfo {
   // is spec-valid and matches the declared types. `method_name` is `<str|null>` but per NUT-04/05 a
   // null/omitted name is derived deterministically from `method`, so we populate it here instead.
   private static normalizeSwapMethods(methods: SwapMethod[], logger: Logger): SwapMethod[] {
-    const bounded = MintInfo.capList(methods, 'nuts.4/5.methods', logger);
+    if (!Array.isArray(methods)) {
+      logger.warn('MintInfo: nuts.4/5.methods is malformed and was omitted');
+      return [];
+    }
+    // Entries are untrusted JSON; drop any that is not a record before spreading it.
+    const bounded = MintInfo.capList(methods, 'nuts.4/5.methods', logger).filter((m) =>
+      isRecord(m),
+    );
     return bounded.map((m) => {
       const next = { ...m } as Record<string, unknown>;
       nullIfUndefined(next, 'min_amount', 'max_amount');
@@ -144,14 +179,61 @@ export class MintInfo {
     return max;
   }
 
+  private static normalizeNut15(
+    nut15: GetInfoResponse['nuts']['15'],
+    logger: Logger,
+  ): GetInfoResponse['nuts']['15'] {
+    if (!isRecord(nut15)) return MintInfo.dropSection('nuts.15', logger);
+    if (!Array.isArray(nut15.methods)) return nut15;
+
+    return { ...nut15, methods: MintInfo.capList(nut15.methods, 'nuts.15.methods', logger) };
+  }
+
+  private static normalizeNut17(
+    nut17: GetInfoResponse['nuts']['17'],
+    logger: Logger,
+  ): GetInfoResponse['nuts']['17'] {
+    if (!isRecord(nut17)) return MintInfo.dropSection('nuts.17', logger);
+    if (!Array.isArray(nut17.supported)) return nut17;
+
+    return { ...nut17, supported: MintInfo.capList(nut17.supported, 'nuts.17.supported', logger) };
+  }
+
   private static normalizeNut19(
     nut19: GetInfoResponse['nuts']['19'],
+    logger: Logger,
   ): GetInfoResponse['nuts']['19'] {
-    if (!nut19) return nut19;
+    if (!isRecord(nut19)) return MintInfo.dropSection('nuts.19', logger);
 
     return {
       ...nut19,
+      ...(Array.isArray(nut19.cached_endpoints)
+        ? {
+            cached_endpoints: MintInfo.capList(
+              nut19.cached_endpoints,
+              'nuts.19.cached_endpoints',
+              logger,
+            ),
+          }
+        : {}),
       ttl: normalizeSafeIntegerMetadata(nut19.ttl, 'nuts.19.ttl', null),
+    };
+  }
+
+  private static normalizeNut21(
+    nut21: GetInfoResponse['nuts']['21'],
+    logger: Logger,
+  ): GetInfoResponse['nuts']['21'] {
+    if (!isRecord(nut21)) return MintInfo.dropSection('nuts.21', logger);
+    if (!Array.isArray(nut21.protected_endpoints)) return nut21;
+
+    return {
+      ...nut21,
+      protected_endpoints: MintInfo.capList(
+        nut21.protected_endpoints,
+        'nuts.21.protected_endpoints',
+        logger,
+      ),
     };
   }
 
@@ -159,7 +241,7 @@ export class MintInfo {
     nut22: GetInfoResponse['nuts']['22'],
     logger: Logger,
   ): GetInfoResponse['nuts']['22'] {
-    if (!nut22) return nut22;
+    if (!isRecord(nut22)) return MintInfo.dropSection('nuts.22', logger);
 
     let bat_max_mint = ABSOLUTE_MAX_PER_MINT;
     try {
@@ -185,6 +267,15 @@ export class MintInfo {
 
     return {
       ...nut22,
+      ...(Array.isArray(nut22.protected_endpoints)
+        ? {
+            protected_endpoints: MintInfo.capList(
+              nut22.protected_endpoints,
+              'nuts.22.protected_endpoints',
+              logger,
+            ),
+          }
+        : {}),
       bat_max_mint,
     };
   }
@@ -193,7 +284,7 @@ export class MintInfo {
     nut29: GetInfoResponse['nuts']['29'],
     logger: Logger,
   ): GetInfoResponse['nuts']['29'] {
-    if (!nut29) return nut29;
+    if (!isRecord(nut29)) return MintInfo.dropSection('nuts.29', logger);
 
     let max_batch_size = ABSOLUTE_MAX_BATCH_SIZE;
     try {
@@ -220,7 +311,9 @@ export class MintInfo {
     // Explicit reconstruction — do not spread ...nut29 here.
     // A spread would reintroduce a malformed max_batch_size from the original object.
     return {
-      methods: nut29.methods,
+      methods: Array.isArray(nut29.methods)
+        ? MintInfo.capList(nut29.methods, 'nuts.29.methods', logger)
+        : nut29.methods,
       max_batch_size,
     };
   }
@@ -423,16 +516,20 @@ export class MintInfo {
    * Preserves bigints (AmountLike fields may hold them; JSON round-trips would not) and Amount
    * instances (which AmountLike also admits): Amount is frozen and immutable, so sharing the
    * reference is safe and structural copying would strip its prototype into a bare `{value}`.
+   * Nesting past MAX_MINT_INFO_DEPTH throws rather than running the stack out.
    */
-  private static snapshot<T>(value: T): T {
+  private static snapshot<T>(value: T, depth = 0): T {
     if (value === null || typeof value !== 'object') return value;
     if (value instanceof Amount) return value;
+    if (depth > MAX_MINT_INFO_DEPTH) {
+      throw new CTSError(`Mint info nesting exceeds ${MAX_MINT_INFO_DEPTH} levels`);
+    }
     if (Array.isArray(value)) {
-      return (value as unknown[]).map((v) => MintInfo.snapshot(v)) as T;
+      return (value as unknown[]).map((v) => MintInfo.snapshot(v, depth + 1)) as T;
     }
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      out[k] = MintInfo.snapshot(v);
+      out[k] = MintInfo.snapshot(v, depth + 1);
     }
     return out as T;
   }

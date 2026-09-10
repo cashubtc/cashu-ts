@@ -7,7 +7,6 @@ import { isBlsKeyset } from '../crypto/curves';
 import {
   buildScriptPathWitness,
   enumerateLeafKeySlots,
-  NUTROOT_MAX_SLOTS,
   parseNutrootLeaf,
   selectRequiredLeafSignatures,
   slotKeysByBlindedPubkey,
@@ -25,6 +24,7 @@ import {
   JSONInt,
   encodeUint8ToBase64Url,
 } from '../utils';
+import { NUTROOT_MAX_SLOTS } from '../utils/limits';
 import { orderOutputsForPayload } from '../wallet/_internal';
 import type { MeltPreview, ScriptPathPlan, SwapPreview } from '../wallet/types';
 
@@ -253,6 +253,8 @@ function deserializePackage(input: string): ScriptPathSigningPackage {
   try {
     data = JSONInt.parse(
       bytesToUtf8(decodeBase64UrlToUint8(input.slice(SCRIPT_PATH_PREFIX.length))),
+      undefined,
+      { strict: true },
     );
   } catch (e) {
     throw new CTSError('Failed to parse signing package', { cause: e });

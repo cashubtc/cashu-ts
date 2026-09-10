@@ -1,7 +1,7 @@
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, bytesToNumberBE } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { concatBytes } from '@noble/hashes/utils.js';
+import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 
 import {
@@ -10,8 +10,6 @@ import {
   createDLEQProof,
   getPubKeyFromPrivKey,
   pointFromHex,
-  P2BK_DST,
-  P2PK_KNOWN_TAG_KEYS,
 } from '../../src/crypto';
 import { verifyUnblindedSignature } from '../../src/crypto/NUT01';
 import { Amount } from '../../src/model/Amount';
@@ -166,7 +164,8 @@ describe('OutputData secp round-trip (secp256k1 + NUT-12 DLEQ)', () => {
 
 describe('OutputData.assertValidTagKey and reserved tags', () => {
   test('rejects every reserved P2PK tag key', () => {
-    for (const key of P2PK_KNOWN_TAG_KEYS) {
+    const reserved = ['pubkeys', 'locktime', 'refund', 'n_sigs', 'n_sigs_refund', 'sigflag'];
+    for (const key of reserved) {
       expect(() => assertValidTagKey(key)).toThrowError(/reserved key/);
     }
     // Explicit check for the last reserved entry, guarding against a dropped set member.
@@ -271,7 +270,9 @@ describe('OutputData.createSingleP2PKData tag construction', () => {
     // Independent receiver-side NUT-28 math: r1 = sha256(DST || Zx || 0x01), P' = P + r1·G
     const p = secp256k1.Point.Fn.fromBytes(lockPriv);
     const Zx = secp256k1.Point.fromHex(out.ephemeralE!).multiply(p).toBytes(true).slice(1);
-    const r1 = bytesToNumberBE(sha256(concatBytes(P2BK_DST, Zx, Uint8Array.of(1))));
+    const r1 = bytesToNumberBE(
+      sha256(concatBytes(utf8ToBytes('Cashu_P2BK_v1'), Zx, Uint8Array.of(1))),
+    );
     const expected = pointFromHex(lock1).add(secp256k1.Point.BASE.multiply(r1)).toHex(true);
     expect(blinded).toBe(expected);
   });

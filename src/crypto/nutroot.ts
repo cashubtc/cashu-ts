@@ -4,6 +4,7 @@ import { concatBytes } from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
 import { bytesToHex, compareBytes, hexToBytes, minimalBytesBE } from '../utils';
+import { NUTROOT_MAX_SLOTS } from '../utils/limits';
 
 import { taggedHash } from './core';
 import { getPubKeyFromPrivKey, pointFromBytes, pointFromHex } from './curve_secp';
@@ -64,12 +65,6 @@ export const NUTROOT_MAX_TREE_LEAVES = 2 ** NUTROOT_MAX_TREE_DEPTH;
  * a wallet, which strands the proof with its holder.
  */
 export const NUTROOT_MAX_LEAF_TIME = Number.MAX_SAFE_INTEGER;
-
-/**
- * Occupied blinding slots per secret: slot 0 plus NUT-10's 120 leaf-key cap (8 leaves of 15 keys),
- * well inside NUT-28's one index byte. Bounds every receiver-side slot scan.
- */
-export const NUTROOT_MAX_SLOTS = 121;
 
 /**
  * A parsed declarative leaf (version 0x00).
