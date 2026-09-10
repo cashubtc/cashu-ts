@@ -373,6 +373,13 @@ describe('WalletOps builders', () => {
       );
     });
 
+    it('refuses to prepare an online swap in an offline mode', async () => {
+      await expect(ops.send(5, proofs).offlineExactOnly().prepare()).rejects.toThrow(/offline/i);
+      await expect(ops.send(5, proofs).offlineCloseMatch().prepare()).rejects.toThrow(/offline/i);
+      expect(wallet.prepareSwapToSend).not.toHaveBeenCalled();
+      expect(wallet.sendOffline).not.toHaveBeenCalled();
+    });
+
     it('asLocked accepts a LockBuilder directly and matches asP2PK', async () => {
       const pk = '02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2';
       const builder = new LockBuilder().addMainPubkey(pk);
