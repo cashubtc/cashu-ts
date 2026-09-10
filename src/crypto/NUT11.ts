@@ -132,14 +132,6 @@ const KNOWN_TAG_KEYS = new Set([
 ]);
 
 /**
- * NUT-11 tag keys that map onto structured {@link P2PKOptions} fields, rather than being carried as
- * free-form `additionalTags`.
- *
- * @internal
- */
-export const P2PK_KNOWN_TAG_KEYS: ReadonlySet<string> = new Set(KNOWN_TAG_KEYS);
-
-/**
  * True if a tag key is one NUT-11 reserves.
  *
  * @internal
