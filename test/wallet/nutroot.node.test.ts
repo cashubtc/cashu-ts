@@ -23,7 +23,6 @@ import { Amount } from '../../src/model/Amount';
 import type { Proof, SerializedBlindedMessage } from '../../src/model/types';
 import {
   bytesToHex,
-  bytesToUtf8,
   decodeSpendReceipt,
   encodeSpendReceipt,
   encodeUint8ToBase64Url,
@@ -553,7 +552,7 @@ describe('attachTransactionWitnesses', () => {
     ).toBe(true);
   });
 
-  test('the cosigner is handed the tagged message the digest was hashed from', async () => {
+  test('the cosigner is handed the transcript the digest was hashed from', async () => {
     const built = buildNutrootSecret(PUB_A, [{ type: 'threshold', n: 2, keys: [PUB_A, PUB_B] }]);
     const input = v3Proof(built.secret, { k: PRIV_A, tree: built.tree });
     let seen: CosignRequest | undefined;
@@ -574,7 +573,7 @@ describe('attachTransactionWitnesses', () => {
       makeState(undefined),
     );
     expect(seen!.leaf.keys).toEqual([PUB_A, PUB_B]);
-    expect(bytesToUtf8(seen!.transactionMessage.subarray(0, 20))).toBe('Cashu_Transaction_v1');
+    expect(bytesToHex(seen!.transactionMessage)).toContain(bytesToHex(seen!.inputContainer));
     // digest = tagged_hash(input tag, SHA256(message) || SHA256(container)): recomputable, so a
     // signer can refuse anything it cannot verify.
     expect(bytesToHex(inputDigest(sha256(seen!.transactionMessage), seen!.inputContainer))).toBe(

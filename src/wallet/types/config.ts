@@ -185,9 +185,9 @@ export type ScriptPathPlan = {
  *
  * @remarks
  * `digest` is what gets signed: the input digest, `tagged_hash("Cashu_TransactionInput",
- * SHA256(transactionMessage) || SHA256(inputContainer))` (NUT-10). `transactionMessage` is the
- * tagged pre-hash transcript and `inputContainer` the input's own TLV container record, so a signer
- * can recompute the digest and refuse anything it cannot verify.
+ * SHA256(transactionMessage) || SHA256(inputContainer))` (NUT-10). `transactionMessage` is the TLV
+ * transcript and `inputContainer` the input's own TLV container record, so a signer can recompute
+ * the digest and refuse anything it cannot verify.
  */
 export type CosignRequest = {
   digest: Uint8Array;
@@ -241,7 +241,7 @@ export type ReceiveConfig = {
  * What a {@link MintProofsConfig.sign} callback receives: the digest to sign and what it covers.
  *
  * @remarks
- * A v3 quote also carries the tagged `transactionMessage` and the quote's `inputContainer` (as
+ * A v3 quote also carries the TLV `transactionMessage` and the quote's `inputContainer` (as
  * {@link CosignRequest}), so a NIP-60 `signTransaction` signer can derive the digest itself and
  * refuse anything else.
  */
