@@ -836,7 +836,7 @@ describe('strictCachedKeysets', () => {
     const { counts } = useRotatedMint(server);
     const wallet = new Wallet(mint, {
       unit,
-      bip39seed: randomBytes(32),
+      bip39seed: randomBytes(64),
       strictCachedKeysets: true,
     });
     await wallet.loadMint(); // single load against rotated handlers: A known-but-keyless
@@ -851,7 +851,7 @@ describe('strictCachedKeysets', () => {
     const { counts } = useRotatedMint(server);
     const wallet = new Wallet(mint, {
       unit,
-      bip39seed: randomBytes(32),
+      bip39seed: randomBytes(64),
       strictCachedKeysets: true,
     });
     await wallet.loadMint(); // single load against rotated handlers: A known-but-keyless

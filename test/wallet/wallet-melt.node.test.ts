@@ -537,7 +537,7 @@ describe('melt proofs', () => {
 
   describe('melt, NUT-08 blanks', () => {
     test('includes zero-amount blanks covering fee reserve (bolt11)', async () => {
-      const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(32) });
+      const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(64) });
       await wallet.loadMint();
       const meltQuote: MeltQuoteBolt11Response = {
         quote: 'test_melt_quote',
@@ -605,7 +605,7 @@ describe('melt proofs', () => {
     });
 
     test('includes zero-amount blanks covering fee reserve (bolt12)', async () => {
-      const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(32) });
+      const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(64) });
       await wallet.loadMint();
       const meltQuote: MeltQuoteBolt12Response = {
         quote: 'test_melt_quote',
