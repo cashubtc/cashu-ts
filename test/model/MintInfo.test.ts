@@ -867,3 +867,262 @@ describe('MintInfo NUT-06 informational fields', () => {
     expect(info.tos_url).toBeUndefined();
   });
 });
+
+describe('MintInfo malformed sections', () => {
+  function spyLogger() {
+    return {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+      log: vi.fn(),
+    };
+  }
+
+  it.each([
+    ['an array response', [] as unknown],
+    ['a string response', 'x'.repeat(64)],
+    ['a response without nuts', { name: 'mint' }],
+    ['a response whose nuts is an array', { name: 'mint', nuts: [] }],
+  ])('rejects %s without enumerating it', (_label, response) => {
+    expect(() => new MintInfo(response as never)).toThrow('Invalid response from mint');
+  });
+
+  it('does not enumerate the properties of a non-record response', () => {
+    let enumerated = false;
+    const malformed = new Proxy([] as unknown[], {
+      ownKeys(target) {
+        enumerated = true;
+        return Reflect.ownKeys(target);
+      },
+    });
+
+    expect(() => new MintInfo(malformed as never)).toThrow('Invalid response from mint');
+    expect(enumerated).toBe(false);
+  });
+
+  it('rejects a NUT-04 section that is not a record', () => {
+    expect(
+      () => new MintInfo({ ...MINTINFORESP, nuts: { ...MINTINFORESP.nuts, 4: ['methods'] } }),
+    ).toThrow('Invalid response from mint');
+  });
+
+  it('rejects a NUT-05 section that is not a record', () => {
+    expect(
+      () => new MintInfo({ ...MINTINFORESP, nuts: { ...MINTINFORESP.nuts, 5: 'x'.repeat(64) } }),
+    ).toThrow('Invalid response from mint');
+  });
+
+  it('treats a NUT-04 section without a methods array as advertising none', () => {
+    const logger = spyLogger();
+    const info = new MintInfo(
+      { ...MINTINFORESP, nuts: { ...MINTINFORESP.nuts, 4: { disabled: false, methods: 'all' } } },
+      logger,
+    );
+
+    expect(info.nuts[4]?.methods).toEqual([]);
+    expect(info.isSupported(4).disabled).toBe(true);
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringMatching(/methods/i));
+  });
+
+  it('drops method entries that are not records', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        ...MINTINFORESP.nuts,
+        4: {
+          disabled: false,
+          methods: ['x'.repeat(1_024), { method: 'bolt11', unit: 'sat' }],
+        },
+      },
+    });
+
+    const methods = info.nuts[4]?.methods;
+    expect(methods).toHaveLength(1);
+    expect(methods?.[0].method).toBe('bolt11');
+  });
+
+  it.each([15, 17, 19, 21, 22, 29])('omits a NUT-%s section that is not a record', (nut) => {
+    const logger = spyLogger();
+    const info = new MintInfo(
+      { ...MINTINFORESP, nuts: { ...MINTINFORESP.nuts, [nut]: 'x'.repeat(1_024) } },
+      logger,
+    );
+
+    expect(info.nuts[nut as 19]).toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringMatching(new RegExp(`nuts.${nut}`)));
+  });
+});
+
+describe('MintInfo retained list caps', () => {
+  function spyLogger() {
+    return {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+      log: vi.fn(),
+    };
+  }
+
+  const oversized = <T>(entry: () => T) =>
+    Array.from({ length: MAX_MINT_INFO_LIST + 5 }, () => entry());
+
+  it('caps the contact list', () => {
+    const logger = spyLogger();
+    const info = new MintInfo(
+      { ...MINTINFORESP, contact: oversized(() => ({ method: 'email', info: 'a@b.c' })) },
+      logger,
+    );
+
+    expect(info.contact).toHaveLength(MAX_MINT_INFO_LIST);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringMatching(/contact/i),
+      expect.objectContaining({ advertised: MAX_MINT_INFO_LIST + 5 }),
+    );
+  });
+
+  it('caps the urls list', () => {
+    const logger = spyLogger();
+    const info = new MintInfo(
+      { ...MINTINFORESP, urls: oversized(() => 'https://mint.example') },
+      logger,
+    );
+
+    expect(info.urls).toHaveLength(MAX_MINT_INFO_LIST);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringMatching(/urls/i),
+      expect.objectContaining({ advertised: MAX_MINT_INFO_LIST + 5 }),
+    );
+  });
+
+  it('accepts info without a contact list', () => {
+    const { contact: _contact, ...rest } = MINTINFORESP;
+    const info = new MintInfo(rest);
+    expect(info.contact).toBeUndefined();
+  });
+
+  it('caps the NUT-15 method list', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        ...MINTINFORESP.nuts,
+        15: { methods: oversized(() => ({ method: 'bolt11', unit: 'sat' })) },
+      },
+    });
+
+    expect(info.nuts[15]?.methods).toHaveLength(MAX_MINT_INFO_LIST);
+    expect(info.isSupported(15).params).toHaveLength(MAX_MINT_INFO_LIST);
+  });
+
+  it('caps the NUT-17 support list', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        ...MINTINFORESP.nuts,
+        17: { supported: oversized(() => ({ method: 'bolt11', unit: 'sat', commands: [] })) },
+      },
+    });
+
+    expect(info.nuts[17]?.supported).toHaveLength(MAX_MINT_INFO_LIST);
+    expect(info.isSupported(17).params).toHaveLength(MAX_MINT_INFO_LIST);
+  });
+
+  it('caps the NUT-19 cached endpoint list', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        ...MINTINFORESP.nuts,
+        19: { ttl: 60, cached_endpoints: oversized(() => ({ method: 'POST', path: '/v1/swap' })) },
+      },
+    });
+
+    expect(info.nuts[19]?.cached_endpoints).toHaveLength(MAX_MINT_INFO_LIST);
+    expect(info.isSupported(19).params?.cached_endpoints).toHaveLength(MAX_MINT_INFO_LIST);
+  });
+
+  it('caps the retained NUT-21 and NUT-22 endpoint lists', () => {
+    const endpoints = oversized(() => ({ method: 'POST', path: '/v1/swap' }));
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        ...MINTINFORESP.nuts,
+        21: {
+          openid_discovery: 'https://mint.host',
+          client_id: 'cashu',
+          protected_endpoints: endpoints,
+        },
+        22: { bat_max_mint: 100, protected_endpoints: endpoints },
+      },
+    });
+
+    expect(info.nuts[21]?.protected_endpoints).toHaveLength(MAX_MINT_INFO_LIST);
+    expect(info.nuts[22]?.protected_endpoints).toHaveLength(MAX_MINT_INFO_LIST);
+  });
+
+  it('leaves NUT-21 and NUT-22 sections without endpoint lists alone', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        ...MINTINFORESP.nuts,
+        21: { openid_discovery: 'https://mint.host', client_id: 'cashu' },
+        22: { bat_max_mint: 100 },
+      },
+    });
+
+    expect(info.nuts[21]?.protected_endpoints).toBeUndefined();
+    expect(info.nuts[22]?.bat_max_mint).toBe(100);
+  });
+
+  it('leaves sections without their advertised lists alone', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        ...MINTINFORESP.nuts,
+        15: {},
+        17: {},
+        19: { ttl: 60 },
+      },
+    });
+
+    expect(info.nuts[15]?.methods).toBeUndefined();
+    expect(info.nuts[17]?.supported).toBeUndefined();
+    expect(info.nuts[19]?.cached_endpoints).toBeUndefined();
+    expect(info.nuts[19]?.ttl).toBe(60);
+  });
+
+  it('caps the NUT-29 method list', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        ...MINTINFORESP.nuts,
+        29: { max_batch_size: 10, methods: oversized(() => 'bolt11') },
+      },
+    });
+
+    expect(info.nuts[29]?.methods).toHaveLength(MAX_MINT_INFO_LIST);
+  });
+
+  it('leaves a NUT-29 section without a method list alone', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: { ...MINTINFORESP.nuts, 29: { max_batch_size: 10 } },
+    });
+
+    expect(info.nuts[29]?.methods).toBeUndefined();
+  });
+
+  it('rejects metadata nested past the snapshot depth limit', () => {
+    let nested: Record<string, unknown> = { end: true };
+    for (let i = 0; i < 128; i++) nested = { nested };
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: { ...MINTINFORESP.nuts, 7: { supported: true, extra: nested } },
+    });
+
+    expect(() => info.nuts).toThrow('nesting');
+    expect(() => info.cache).toThrow('nesting');
+  });
+});
