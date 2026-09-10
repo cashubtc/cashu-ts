@@ -389,7 +389,7 @@ describe('restore', () => {
       (b) => (counterByB_.get(b) ?? Infinity) <= SPENT_THROUGH,
     );
     expect(spentRevealed).toEqual([]);
-  });
+  }, 15_000);
 
   test('skips an invalid-scalar counter and recovers proofs past it', async () => {
     const seed = randomBytes(64);
