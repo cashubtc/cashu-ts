@@ -1752,6 +1752,32 @@ describe('tokenFromTemplate rejects valid CBOR of wrong shape', () => {
   });
 });
 
+describe('legacy cashuA token shape validation', () => {
+  test('rejects an empty token array with CTSError instead of a raw TypeError', () => {
+    const body = encodeJsonToBase64Url({ token: [], unit: 'sat' });
+    const token = 'cashuA' + body;
+
+    expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
+  });
+
+  test('rejects a token whose root is not the expected object shape', () => {
+    const body = encodeJsonToBase64Url(['not', 'an', 'object']);
+    const token = 'cashuA' + body;
+
+    expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
+  });
+
+  test('rejects a token entry missing its proofs array', () => {
+    const body = encodeJsonToBase64Url({
+      token: [{ mint: 'http://localhost:3338' }],
+      unit: 'sat',
+    });
+    const token = 'cashuA' + body;
+
+    expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
+  });
+});
+
 describe('deriveKeysetId edge cases', () => {
   test('throws for unknown version byte', () => {
     expect(() => utils.deriveKeysetId(keys, { versionByte: 99 })).toThrow(

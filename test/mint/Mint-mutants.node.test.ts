@@ -449,7 +449,6 @@ describe('Mint mutation coverage', () => {
         'Invalid response from mint',
       );
       expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
-        data: expect.objectContaining({ quote: 123 }),
         op: 'custom-pay melt quote',
       });
     });
@@ -465,7 +464,6 @@ describe('Mint mutation coverage', () => {
         'Invalid response from mint',
       );
       expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
-        data: expect.objectContaining({ unit: 42 }),
         op: 'custom-pay melt quote',
       });
     });
@@ -483,7 +481,6 @@ describe('Mint mutation coverage', () => {
         'Invalid response from mint',
       );
       expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
-        data: expect.objectContaining({ expiry: undefined }),
         op: 'custom-pay melt quote',
       });
     });

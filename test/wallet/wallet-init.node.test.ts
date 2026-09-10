@@ -711,7 +711,7 @@ describe('multi mint', async () => {
         mintUrl + '/v1/melt/quote/bolt11',
         async ({ request }) => {
           const body = await request.json();
-          if (!body?.options.mpp) {
+          if (!body?.options?.mpp) {
             return new HttpResponse('No MPP', { status: 400 });
           }
           return HttpResponse.json({

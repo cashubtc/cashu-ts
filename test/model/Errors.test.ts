@@ -1,15 +1,19 @@
 import { describe, expect, test } from 'vitest';
 
+import { Amount } from '../../src/model/Amount';
 import {
   CTSError,
   HttpResponseError,
   isMintOperationError,
+  MeltChangeError,
   MintOperationError,
   NetworkError,
   RateLimitError,
   StaleKeysetError,
   UnknownKeysetError,
 } from '../../src/model/Errors';
+import type { OutputDataLike } from '../../src/model/OutputData';
+import type { MeltQuoteBaseResponse } from '../../src/model/types';
 
 describe('CTSError', () => {
   test('sets name and message', () => {
@@ -54,6 +58,40 @@ describe('CTSError', () => {
     const err = new CTSError('boom', { cause: new Error('first') });
     expect(() => Object.defineProperty(err, 'cause', { value: 'redefined' })).not.toThrow();
     expect(err.cause).toBe('redefined');
+  });
+});
+
+describe('MeltChangeError', () => {
+  const outputData: OutputDataLike[] = [
+    {
+      blindedMessage: { amount: Amount.zero(), B_: '02' + '11'.repeat(32), id: '00deadbeefdeadbe' },
+      blindingFactor: 123456789n,
+      secret: Uint8Array.from([0xde, 0xad, 0xbe, 0xef]),
+      toProof: () => {
+        throw new Error('unused');
+      },
+    },
+  ];
+  const quote: MeltQuoteBaseResponse = {
+    quote: 'quote-id',
+    request: 'lnbc-payment-request',
+    amount: Amount.from(1),
+    method: 'bolt11',
+    unit: 'sat',
+    state: 'PAID',
+    expiry: 0,
+  };
+
+  test('exposes outputData and quote directly but not enumerably', () => {
+    const err = new MeltChangeError(outputData, quote);
+    expect(err.outputData).toBe(outputData);
+    expect(err.quote).toBe(quote);
+
+    // Non-enumerable: a spread/JSON.stringify of the error must not carry the recovery material.
+    expect(Object.keys(err)).not.toContain('outputData');
+    expect(Object.keys(err)).not.toContain('quote');
+    expect({ ...err }).not.toHaveProperty('outputData');
+    expect({ ...err }).not.toHaveProperty('quote');
   });
 });
 

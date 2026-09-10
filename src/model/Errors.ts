@@ -85,17 +85,19 @@ export class UnknownKeysetError extends CTSError {
  * The inputs are spent and the payment stands. `cause` says which recovery applies: a keyset that
  * can be loaded (see `keyChain.ensureKeysetKeys`) rebuilds from `outputData` and the quote's
  * `change` signatures via `wallet.createMeltChangeProofs()`. Anything else, eg invalid DLEQ or a
- * signature count mismatch, needs a NUT-09 restore on a seeded wallet.
+ * signature count mismatch, needs a NUT-09 restore on a seeded wallet. `outputData` and `quote` are
+ * non-enumerable, so read them directly; a spread or `JSON.stringify` of the error will not carry
+ * them.
  */
 export class MeltChangeError extends CTSError {
   /**
    * The melt's blank outputs, the input to change recovery.
    */
-  readonly outputData: OutputDataLike[];
+  readonly outputData!: OutputDataLike[];
   /**
    * The melt quote, merged from the preview and the mint's response.
    */
-  readonly quote: MeltQuoteBaseResponse;
+  readonly quote!: MeltQuoteBaseResponse;
   constructor(
     outputData: OutputDataLike[],
     quote: MeltQuoteBaseResponse,
@@ -105,8 +107,20 @@ export class MeltChangeError extends CTSError {
       'Melt completed but its change could not be reconstructed; see cause: a keyset that will load rebuilds via createMeltChangeProofs(), anything else needs a NUT-09 restore',
       options,
     );
-    this.outputData = outputData;
-    this.quote = quote;
+    // Non-enumerable like cause: read outputData/quote directly, not via a spread or
+    // JSON.stringify of the error.
+    Object.defineProperty(this, 'outputData', {
+      configurable: true,
+      enumerable: false,
+      value: outputData,
+      writable: true,
+    });
+    Object.defineProperty(this, 'quote', {
+      configurable: true,
+      enumerable: false,
+      value: quote,
+      writable: true,
+    });
     this.name = 'MeltChangeError';
     Object.setPrototypeOf(this, MeltChangeError.prototype);
   }

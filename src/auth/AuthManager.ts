@@ -405,6 +405,7 @@ export class AuthManager implements AuthProvider {
       const info = await this.req<GetInfoResponse>({
         endpoint: joinUrls(this.mintUrl, '/v1/info'),
         method: 'GET',
+        logger: this.logger,
       });
       this.info = new MintInfo(info, this.logger);
     }
@@ -414,10 +415,12 @@ export class AuthManager implements AuthProvider {
         this.req<GetKeysetsResponse>({
           endpoint: joinUrls(this.mintUrl, '/v1/auth/blind/keysets'),
           method: 'GET',
+          logger: this.logger,
         }),
         this.req<GetKeysResponse>({
           endpoint: joinUrls(this.mintUrl, '/v1/auth/blind/keys'),
           method: 'GET',
+          logger: this.logger,
         }),
       ]);
       const normalizedKeysets = allKeysets.keysets.map((keyset) => normalizeMintKeyset(keyset));
@@ -481,6 +484,7 @@ export class AuthManager implements AuthProvider {
       // A CAT must never be replayed to a redirect target: fail rather than follow.
       ...(cat ? { redirect: 'error' as const } : {}),
       requestBody: payload,
+      logger: this.logger,
     });
     if (!Array.isArray(res?.signatures) || res.signatures.length !== outputs.length) {
       throw new CTSError('AuthManager: bad BAT mint response');

@@ -553,10 +553,16 @@ function handleTokens(token: string): Token {
   const encodedToken = token.slice(1);
   if (version === 'A') {
     const parsedV3Token = decodeBase64UrlToJson<DeprecatedToken>(encodedToken);
+    if (!parsedV3Token || !Array.isArray(parsedV3Token.token)) {
+      throw new CTSError('Invalid token');
+    }
     if (parsedV3Token.token.length > 1) {
       throw new CTSError('Multi entry token are not supported');
     }
     const entry = parsedV3Token.token[0];
+    if (!entry || !Array.isArray(entry.proofs)) {
+      throw new CTSError('Invalid token');
+    }
     const proofs = entry.proofs.map((p) => ({
       ...p,
       amount: Amount.from(p.amount as AmountLike),

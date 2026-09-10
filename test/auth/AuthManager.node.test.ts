@@ -461,6 +461,27 @@ describe('AuthManager: BAT pool minting/topUp/ensure', () => {
     expect(am.poolSize).toBe(3);
     expect(outputsSpy).toHaveBeenCalledWith(3, expect.any(Object));
   });
+
+  test('topUp threads the configured logger into the BAT mint request', async () => {
+    const logger: Logger = {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+      log: vi.fn(),
+    };
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn, logger });
+    am['info'] = fakeInfo({ batMax: 3 });
+    seedKeychain(am);
+    stubOutputs(3);
+    reqSpy.mockResolvedValueOnce({ signatures: [fakeSig, fakeSig, fakeSig] });
+
+    await am.ensure(3);
+
+    expect(reqSpy).toHaveBeenCalledTimes(1);
+    expect((reqSpy.mock.calls[0][0] as { logger?: Logger }).logger).toBe(logger);
+  });
 });
 
 /* --------------------------
@@ -499,6 +520,39 @@ describe('AuthManager: init fetches info then builds KeyChain via wallet mock', 
     expect(KeyChainMock.fromCache).toHaveBeenCalledWith(mintUrl, 'auth', expect.any(Object));
 
     expect(am.activeAuthKeysetId).toBe('00authkeyset0001');
+  });
+
+  test('threads the configured logger into every init request, not the process-global', async () => {
+    const logger: Logger = {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+      log: vi.fn(),
+    };
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn, logger });
+
+    reqSpy
+      .mockResolvedValueOnce({
+        name: 'mint',
+        version: 'x',
+        methods: {},
+        nuts: { '22': { bat_max_mint: 7 }, '21': { client_id: 'cashu-client' } },
+      })
+      .mockResolvedValueOnce({
+        keysets: [{ id: '00k', unit: 'auth', active: true, input_fee_ppk: 0 }],
+      })
+      .mockResolvedValueOnce({
+        keysets: [{ id: '00k', unit: 'auth', keys: { 1: '02aa' } }],
+      });
+
+    await am['init']();
+
+    expect(reqSpy).toHaveBeenCalledTimes(3);
+    for (const call of reqSpy.mock.calls) {
+      expect((call[0] as { logger?: Logger }).logger).toBe(logger);
+    }
   });
 });
 

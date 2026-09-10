@@ -14,6 +14,8 @@ import {
   JSONInt,
 } from '../../src';
 import type { AuthProvider, Logger, MintQuoteBaseResponse, Proof, RequestFn } from '../../src';
+import { NULL_LOGGER } from '../../src/logger';
+import { setRequestLogger } from '../../src/transport/request';
 import { MAX_KEYSET_LIST, MAX_MINT_INFO_LIST } from '../../src/utils/limits';
 import { MINTINFORESP } from '../consts';
 
@@ -103,6 +105,30 @@ describe('Mint normalization', () => {
   it('exposes the sanitized mintUrl', () => {
     const mint = new Mint('https://localhost:3338');
     expect(mint.mintUrl).toBe('https://localhost:3338');
+  });
+
+  it('keeps transport retry logs on the originating Mint logger', async () => {
+    const victimLogger = createLogger();
+    const otherLogger = createLogger();
+    const failingFetch = vi.fn(async () => {
+      throw new Error('transport detail');
+    }) as typeof fetch;
+    const victim = new Mint(mintUrl, {
+      requestFetch: failingFetch,
+      logger: victimLogger,
+    });
+
+    // Constructing an unrelated Mint afterwards must not redirect the victim's transport logs.
+    new Mint('https://other.example', { logger: otherLogger });
+    try {
+      await expect(victim.getInfo()).rejects.toThrow();
+
+      expect(otherLogger.info).not.toHaveBeenCalled();
+      expect(victimLogger.info).toHaveBeenCalled();
+    } finally {
+      // The constructor above installed otherLogger process-wide; do not leak it into later tests.
+      setRequestLogger(NULL_LOGGER);
+    }
   });
 
   it('oidcAuth throws when the mint does not advertise NUT-21 discovery metadata', async () => {
@@ -634,7 +660,8 @@ describe('Mint normalization', () => {
       'Invalid response from mint',
     );
     expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
-      data: { quotes: [] },
+      expectedCount: 1,
+      actualCount: undefined,
       op: 'checkMintQuoteBatch.bolt11',
     });
   });
@@ -722,6 +749,36 @@ describe('Mint normalization', () => {
     await expect(mint.checkMintQuoteBatchBolt11(['q1', 'q2'])).rejects.toThrow(
       'Invalid response from mint',
     );
+  });
+
+  it('does not log quote ids from an out-of-order batch response', async () => {
+    const logger = createLogger();
+    const bearerQuote = 'unlocked-quote-id';
+    const mint = new Mint(mintUrl, {
+      customRequest: makeRequest([
+        {
+          quote: 'q2',
+          request: 'lnbc50...',
+          unit: 'sat',
+          amount: 50,
+          state: 'PAID',
+          expiry: 123,
+        },
+        {
+          quote: bearerQuote,
+          request: 'lnbc100...',
+          unit: 'sat',
+          amount: 100,
+          state: 'PAID',
+          expiry: 123,
+        },
+      ]),
+      logger,
+    });
+
+    await expect(mint.checkMintQuoteBatchBolt11([bearerQuote, 'q2'])).rejects.toThrow();
+
+    expect(JSON.stringify(vi.mocked(logger.error).mock.calls)).not.toContain(bearerQuote);
   });
 
   it('throws for invalid custom method strings', async () => {
@@ -946,6 +1003,21 @@ describe('Mint normalization', () => {
         'Invalid response from mint',
       );
       expect(logger.error).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not log the quote id when the reported method disagrees with the endpoint', async () => {
+      const logger = createLogger();
+      const bearerQuote = 'unlocked-quote-id';
+      const wrongMint = new Mint(mintUrl, {
+        customRequest: makeRequest({ ...mintQuote, quote: bearerQuote, method: 'bolt12' }),
+        logger,
+      });
+
+      await expect(wrongMint.checkMintQuoteBolt11(bearerQuote)).rejects.toThrow(
+        'Invalid response from mint',
+      );
+
+      expect(JSON.stringify(vi.mocked(logger.error).mock.calls)).not.toContain(bearerQuote);
     });
   });
 
@@ -1357,7 +1429,8 @@ describe('Mint normalization', () => {
       'Invalid response from mint',
     );
     expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
-      data: { not_quotes: true },
+      expectedCount: 1,
+      actualCount: undefined,
       op: 'checkMintQuoteBatch.bolt11',
     });
   });
@@ -1465,7 +1538,6 @@ describe('Mint normalization', () => {
 
     await expect(mint.checkMeltQuoteBolt12('q1')).rejects.toThrow('Invalid response from mint');
     expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
-      data: expect.objectContaining({ quote: 'q1', state: 'BROKEN' }),
       op: 'bolt12 melt quote',
     });
   });
@@ -1486,7 +1558,6 @@ describe('Mint normalization', () => {
 
     await expect(mint.checkMeltQuoteBolt12('q1')).rejects.toThrow('Invalid response from mint');
     expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
-      data: expect.objectContaining({ quote: 'q1' }),
       op: 'bolt12 melt quote',
     });
   });
@@ -1565,7 +1636,6 @@ describe('Mint normalization', () => {
 
       await expect(mint.checkMeltQuoteOnchain('q1')).rejects.toThrow('Invalid response from mint');
       expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
-        data: expect.objectContaining({ quote: 'q1' }),
         op: 'onchain melt quote',
       });
     });
@@ -1579,7 +1649,6 @@ describe('Mint normalization', () => {
 
       await expect(mint.checkMeltQuoteOnchain('q1')).rejects.toThrow('Invalid response from mint');
       expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
-        data: expect.objectContaining({ quote: 'q1' }),
         op: 'onchain melt quote',
       });
     });
@@ -1601,7 +1670,6 @@ describe('Mint normalization', () => {
 
       await expect(mint.checkMeltQuoteOnchain('q1')).rejects.toThrow('Invalid response from mint');
       expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
-        data: expect.objectContaining({ quote: 'q1' }),
         op: 'onchain melt quote',
       });
     });
@@ -1618,8 +1686,8 @@ describe('Mint normalization', () => {
       });
 
       await expect(mint.checkMeltQuoteOnchain('q1')).rejects.toThrow('Invalid response from mint');
+      // The request-string check lives in the shared base-field normalizer, not the onchain one.
       expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
-        data: expect.objectContaining({ quote: 'q1' }),
         op: 'onchain melt quote',
       });
     });
@@ -1637,7 +1705,6 @@ describe('Mint normalization', () => {
 
       await expect(mint.checkMeltQuoteOnchain('q1')).rejects.toThrow('Invalid response from mint');
       expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
-        data: expect.objectContaining({ quote: 'q1' }),
         op: 'onchain melt quote',
       });
     });
@@ -1655,7 +1722,6 @@ describe('Mint normalization', () => {
 
       await expect(mint.checkMeltQuoteOnchain('q1')).rejects.toThrow('Invalid response from mint');
       expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
-        data: expect.objectContaining({ quote: 'q1' }),
         op: 'onchain melt quote',
       });
     });
