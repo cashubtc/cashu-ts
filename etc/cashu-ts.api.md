@@ -2324,7 +2324,7 @@ export function selectProofsRotating(proofs: ProofLike[], amountToSelect: Amount
 
 // @public
 export class SendBuilder {
-    constructor(wallet: Wallet, amount: AmountLike, proofs: ProofLike[], lockFamily?: "v3" | "legacy" | undefined);
+    constructor(wallet: Wallet, amount: AmountLike, proofs: ProofLike[], lockFamily?: "v3" | "legacy" | undefined, fromRequest?: boolean);
     asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: AmountLike[]): this;
     asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;

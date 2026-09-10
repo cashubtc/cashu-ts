@@ -152,7 +152,7 @@ export class PaymentRequest {
   feesFor(mint: string, meltMethods?: string[]): Amount {
     this.assertUnitRule();
     // Fees compensate the payee for melting out: payments from a listed mint carry none.
-    if (!this.supportedMethods?.length || this.mints?.includes(mint)) {
+    if (!this.supportedMethods?.length || this.includesMint(mint)) {
       return Amount.zero();
     }
     const applicable = this.supportedMethods

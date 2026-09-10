@@ -1955,22 +1955,24 @@ class Wallet {
    *
    * @remarks
    * Verifies `sum(proofs) - inputFees >= amount + mf`, with input fees from this wallet's keysets
-   * and `mf` priced from this mint's NUT-05 melt methods for the wallet unit. A locked request also
-   * checks that each proof carries the lock that was asked for: exactly the requested tree for a
-   * nutroot request, and exactly the requested condition for a nut10 one. A receiver-keyed nutroot
-   * request needs `opts.privkeys`, because binding a proof to the receiver key is an ECDH
-   * trial-match only that key can do (NUT-28); without it there is nothing to check and the call
-   * throws rather than passing a payment the payee cannot spend. Proof integrity (pairing/DLEQ)
-   * remains a separate check.
+   * and `mf` priced from this mint's NUT-05 melt methods for the wallet unit. This mint must also
+   * be admissible: inside a strict mint list, and able to melt via a method the request accepts. A
+   * locked request also checks that each proof carries the lock that was asked for: exactly the
+   * requested tree for a nutroot request, and exactly the requested condition for a nut10 one. A
+   * receiver-keyed nutroot request needs `opts.privkeys`, because binding a proof to the receiver
+   * key is an ECDH trial-match only that key can do (NUT-28); without it there is nothing to check
+   * and the call throws rather than passing a payment the payee cannot spend. Proof integrity
+   * (pairing/DLEQ) remains a separate check.
    * @param pr - The payment request being settled.
    * @param proofs - The received proofs (from this wallet's mint), with spend info when present.
    * @param expectedAmount - Expected amount for amountless requests; ignored when the request sets
    *   `a`.
    * @param opts.privkeys - The receiver key(s) the request locks to. Required for a receiver-keyed
    *   nutroot request, unused otherwise.
-   * @throws If no amount is available to check against, the request unit does not match this
-   *   wallet, a proof keyset is unknown, the request is invalid per NUT-18, a receiver-keyed
-   *   nutroot request is checked without its key, or a proof does not carry the requested lock.
+   * @throws If no amount is available to check against, this wallet's mint is not admissible for
+   *   the request (unit, strict mint list, or no accepted melt method), a proof keyset is unknown,
+   *   the request is invalid per NUT-18, a receiver-keyed nutroot request is checked without its
+   *   key, or a proof does not carry the requested lock.
    */
   isPaymentRequestSatisfied(
     pr: PaymentRequest,
@@ -2012,14 +2014,25 @@ class Wallet {
         this.assertNut10Lock(nut10Lock, p.secret);
       }
     }
+    // Admissibility, as the payer side checks it (NUT-18): a strict list binds the issuer, and the
+    // proofs must be redeemable through a method the request accepts.
+    const listed = pr.includesMint(this.mint.mintUrl);
+    this.failIf(
+      pr.isMintListStrict === true && !listed,
+      "this wallet's mint is not in the request's strict mint list",
+    );
     // mf applies only when this mint is outside the request's mint list (NUT-18).
     let mf = Amount.zero();
-    if (pr.supportedMethods?.length && !pr.includesMint(this.mint.mintUrl)) {
+    if (pr.supportedMethods?.length) {
       const meltMethods = this.getMintInfo()
         .supportedMethods('melt')
         .filter((m) => m.unit === this._unit)
         .map((m) => m.method);
-      mf = pr.feesFor(this.mint.mintUrl, meltMethods);
+      this.failIf(
+        !pr.supportedMethods.some((m) => meltMethods.includes(m.method)),
+        `mint cannot melt ${this._unit} via any method the request accepts`,
+      );
+      mf = listed ? Amount.zero() : pr.feesFor(this.mint.mintUrl, meltMethods);
     }
     const needed = expected.add(mf).add(this.getFeesForProofs(proofs));
     return sumProofs(proofs).compareTo(needed) >= 0;
@@ -3369,12 +3382,15 @@ class Wallet {
     mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>,
   ): Promise<Proof[]> {
     const { payload, outputData, method, legacySignature } = mintPreview;
+    // Ask the mint to sign the outputs this preview can unblind, rather than a field that a
+    // persisted preview may no longer agree with.
+    const request: MintRequest = { ...payload, outputs: outputData.map((d) => d.blindedMessage) };
     // TODO: Remove legacy message support
     const { signatures } = await this.withStaleKeysetRepair(() =>
       this.withLegacyQuoteSigFallback(
         legacySignature !== undefined,
-        () => this.mint.mint(method, payload),
-        () => this.mint.mint(method, { ...payload, signature: legacySignature }),
+        () => this.mint.mint(method, request),
+        () => this.mint.mint(method, { ...request, signature: legacySignature }),
       ),
     );
     this.failIf(
@@ -3588,12 +3604,18 @@ class Wallet {
     batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>,
   ): Promise<Proof[]> {
     const { method, payload, outputData, legacySignatures } = batchPreview;
+    // Ask the mint to sign the outputs this preview can unblind, rather than a field that a
+    // persisted preview may no longer agree with.
+    const request: BatchMintRequest = {
+      ...payload,
+      outputs: outputData.map((d) => d.blindedMessage),
+    };
     // TODO: Remove legacy message support
     const { signatures: sigs } = await this.withStaleKeysetRepair(() =>
       this.withLegacyQuoteSigFallback(
         legacySignatures !== undefined,
-        () => this.mint.mintBatch(method, payload),
-        () => this.mint.mintBatch(method, { ...payload, signatures: legacySignatures! }),
+        () => this.mint.mintBatch(method, request),
+        () => this.mint.mintBatch(method, { ...request, signatures: legacySignatures! }),
       ),
     );
     this.failIf(
