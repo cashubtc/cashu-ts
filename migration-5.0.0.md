@@ -198,6 +198,8 @@ await wallet.meltProofsBolt11(quote, proofs);
 
 Catch it where a melt can fail, and recover once the keys are reachable. The `cause` says whether that is possible: a keyset that will load rebuilds, while an invalid DLEQ or a signature count mismatch needs a NUT-09 restore.
 
+`outputData` and `quote` are non-enumerable, like `cause`. Read them directly and persist those values; a spread or `JSON.stringify` of the error will not carry them.
+
 ```ts
 // Before: the melt is paid, and the change is gone
 await wallet.meltProofsBolt11(quote, proofs);
