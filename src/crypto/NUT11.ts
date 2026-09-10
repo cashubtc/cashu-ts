@@ -122,7 +122,7 @@ type WitnessData = {
 
 // Parsing reads this set, so the exported one is a detached copy: an exported Set stays
 // mutable whatever its declared type.
-const KNOWN_TAG_KEYS = new Set([
+const P2PK_KNOWN_TAG_KEYS = new Set([
   'locktime',
   'pubkeys',
   'n_sigs',
@@ -137,7 +137,7 @@ const KNOWN_TAG_KEYS = new Set([
  * @internal
  */
 export function isP2PKKnownTagKey(key: string): boolean {
-  return KNOWN_TAG_KEYS.has(key);
+  return P2PK_KNOWN_TAG_KEYS.has(key);
 }
 
 // ------------------------------
