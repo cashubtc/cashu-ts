@@ -152,3 +152,9 @@ export const MAX_P2PK_SIGNATURES = 64;
  * 2,000 plain P2PK inputs, or 700 under a maximal 11-slot lock (data plus ten keys).
  */
 export const MAX_SIGNING_PACKAGE_LENGTH = 1_048_576;
+
+/**
+ * How deep `ConsoleLogger` recurses into structured log context to sanitize nested strings. Bounds
+ * the recursion over a nested mint response object.
+ */
+export const MAX_LOG_CONTEXT_DEPTH = 8;

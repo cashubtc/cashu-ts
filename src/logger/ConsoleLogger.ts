@@ -1,3 +1,5 @@
+import { MAX_LOG_CONTEXT_DEPTH } from '../utils/limits';
+
 import { type Logger, type LogLevel } from './Logger';
 
 const LEVEL_ORDER: Record<LogLevel, number> = {
@@ -8,19 +10,55 @@ const LEVEL_ORDER: Record<LogLevel, number> = {
   trace: 4,
 };
 
-const CONTROL_ESCAPES: Record<string, string> = { '\n': '\\n', '\r': '\\r', '\t': '\\t' };
+const CONTROL_ESCAPES: Record<string, string> = {
+  '\n': '\\n',
+  '\r': '\\r',
+  '\t': '\\t',
+  '\u2028': '\\u2028',
+  '\u2029': '\\u2029',
+};
 // eslint-disable-next-line no-control-regex -- matching control chars is the point
-const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/g;
+const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g;
 
 /**
- * Escapes C0/C1 control characters so one message renders as one log line and cannot carry terminal
- * escape sequences.
+ * Escapes C0/C1 control characters and Unicode line/paragraph separators so one message renders as
+ * one log line and cannot carry terminal escape sequences.
  */
 function escapeControlChars(message: string): string {
   return String(message).replace(
     CONTROL_CHARS,
     (ch) => CONTROL_ESCAPES[ch] ?? '\\x' + ch.charCodeAt(0).toString(16).padStart(2, '0'),
   );
+}
+
+/**
+ * Recursively sanitizes context values: escapes string leaves (including an `Error`'s `message` and
+ * `stack`, since `stack` restates the message) and rebuilds plain objects through `defineProperty`
+ * so an own `__proto__` key becomes a data property instead of hitting the setter. Depth-bounded so
+ * a deeply nested payload cannot exhaust the stack.
+ */
+function sanitizeContextValue(value: unknown, depth: number): unknown {
+  if (typeof value === 'string') return escapeControlChars(value);
+  if (value instanceof Error) {
+    return {
+      message: escapeControlChars(value.message),
+      stack: value.stack === undefined ? undefined : escapeControlChars(value.stack),
+    };
+  }
+  if (depth >= MAX_LOG_CONTEXT_DEPTH || value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map((entry) => sanitizeContextValue(entry, depth + 1));
+  const proto: unknown = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return value;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value)) {
+    Object.defineProperty(out, k, {
+      value: sanitizeContextValue(v, depth + 1),
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  }
+  return out;
 }
 
 /**
@@ -64,12 +102,7 @@ export class ConsoleLogger implements Logger {
     return `[${level.toUpperCase()}] ${escapeControlChars(message)}`;
   }
   private flattenContext(ctx?: Record<string, unknown>): Record<string, unknown> | undefined {
-    if (!ctx) return undefined;
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(ctx)) {
-      out[k] = v instanceof Error ? { message: v.message, stack: v.stack } : v;
-    }
-    return out;
+    return ctx ? (sanitizeContextValue(ctx, 0) as Record<string, unknown>) : undefined;
   }
   private emit(level: LogLevel, message: string, context?: Record<string, unknown>) {
     if (!this.should(level)) return;

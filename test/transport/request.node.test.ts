@@ -248,6 +248,31 @@ describe('requests', { timeout: 7500 }, () => {
     expect(headers!.get('x-both')).toBe('per-request');
   });
 
+  test('a per-request header overrides a global one differing only in case', async () => {
+    let observed: Headers | undefined;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      observed = new Headers(init?.headers);
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+
+    setGlobalRequestOptions({ headers: { Authorization: 'Bearer global' } });
+    try {
+      await request({
+        endpoint: `${mintUrl}/v1/info`,
+        headers: { authorization: 'Bearer per-request' },
+      });
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    // A combined value ("Bearer global, Bearer per-request") means both headers were sent;
+    // Headers itself joins duplicates this way, so an exact match proves only one survived.
+    expect(observed?.get('authorization')).toBe('Bearer per-request');
+  });
+
   test('handles HttpResponseError on non-200 response', async () => {
     server.use(
       http.get(mintUrl + '/v1/melt/quote/bolt11/test', () => {
@@ -1176,6 +1201,36 @@ describe('response body read timeout', () => {
       } as unknown as Response),
     );
 
+  test('does not retry a 429 response whose body stalls', async () => {
+    const fetchSpy = hungBody(429);
+
+    const thrown = await request({
+      endpoint,
+      requestTimeout: 50,
+      ttl: 60_000,
+      cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+    }).catch((e) => e);
+
+    expect(thrown).toBeInstanceOf(RateLimitError);
+    // The status is already known; a stalled optional body must not turn it into a retryable error.
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('surfaces RateLimitError for a 429 whose body has no cancel method', async () => {
+    const response = {
+      ok: false,
+      status: 429,
+      headers: new Headers(),
+      body: { getReader: () => ({ read: async () => ({ done: true, value: undefined }) }) },
+      text: async () => '',
+    } as unknown as Response;
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
+
+    const thrown = await request({ endpoint }).catch((e) => e);
+
+    expect(thrown).toBeInstanceOf(RateLimitError);
+  });
+
   test('requestTimeout covers a hung success body that ignores the signal', async () => {
     hungBody(200);
     const thrown = await request({ endpoint, requestTimeout: 100 }).catch((e) => e);
@@ -1352,6 +1407,12 @@ describe('buildRequestHeaders', () => {
   test('caller-supplied User-Agent always wins', () => {
     expect(buildRequestHeaders(undefined, { 'User-Agent': 'X' }, false)['User-Agent']).toBe('X');
     expect(buildRequestHeaders(undefined, { 'User-Agent': 'X' }, true)['User-Agent']).toBe('X');
+  });
+
+  test('caller-supplied header replaces a default differing only in case', () => {
+    const headers = buildRequestHeaders(undefined, { 'user-agent': 'X' }, false);
+    expect(headers['user-agent']).toBe('X');
+    expect(Object.keys(headers).filter((k) => k.toLowerCase() === 'user-agent')).toHaveLength(1);
   });
 
   test('Content-Type is added only when body is present', () => {

@@ -168,6 +168,7 @@ class Mint {
     const response = await requestInstance<GetInfoResponse>({
       endpoint: joinUrls(this._mintUrl, '/v1/info'),
       onResponseMeta: this._captureResponseMetadata,
+      logger: this._logger,
     });
     return MintInfo.normalizeInfo(response, this._logger);
   }
@@ -439,8 +440,10 @@ class Mint {
     );
 
     if (!Array.isArray(data) || data.length !== quotes.length) {
+      // Log the counts, not the response: quote ids do not belong in a shared log sink.
       this._logger.error('Invalid response from mint...', {
-        data,
+        expectedCount: quotes.length,
+        actualCount: Array.isArray(data) ? data.length : undefined,
         op: `checkMintQuoteBatch.${method}`,
       });
       throw new CTSError('Invalid response from mint');
@@ -449,7 +452,7 @@ class Mint {
     return data.map((response, index) => {
       if (response.quote !== quotes[index]) {
         this._logger.error('Invalid response from mint...', {
-          data,
+          index,
           op: `checkMintQuoteBatch.${method}`,
         });
         throw new CTSError('Invalid response from mint');
@@ -1047,6 +1050,7 @@ class Mint {
         ? joinUrls(targetUrl, '/v1/keys', keysetId)
         : joinUrls(targetUrl, '/v1/keys'),
       onResponseMeta: this._captureResponseMetadata,
+      logger: this._logger,
     });
 
     if (!isObj(data) || !Array.isArray(data.keysets)) {
@@ -1072,6 +1076,7 @@ class Mint {
     const data = await requestInstance<GetKeysetsResponse>({
       endpoint: joinUrls(this._mintUrl, '/v1/keysets'),
       onResponseMeta: this._captureResponseMetadata,
+      logger: this._logger,
     });
     if (!isObj(data) || !Array.isArray(data.keysets)) {
       this._logger.error('Invalid response from mint...', { data, op: 'getKeySets' });
@@ -1101,6 +1106,7 @@ class Mint {
       method: 'POST',
       requestBody: restorePayload,
       onResponseMeta: this._captureResponseMetadata,
+      logger: this._logger,
     });
 
     // Per NUT-09 the mint returns paired outputs and signatures, one pair per requested output.
@@ -1247,6 +1253,7 @@ class Mint {
       ...(bat || cat || init.requestBody ? { redirect: 'error' as const } : {}),
       ...(nut19?.supported && nut19.params ? nut19.params : {}),
       onResponseMeta: this._captureResponseMetadata,
+      logger: init.logger ?? this._logger,
     });
   }
 
@@ -1541,7 +1548,9 @@ class Mint {
       typeof data.expiry !== 'number' ||
       !Object.values(MeltQuoteState).includes(data.state as MeltQuoteState)
     ) {
-      this._logger.error('Invalid response from mint...', { data, op });
+      // Log the reason, not the response: it carries the quote id, payment request, and any
+      // change signatures.
+      this._logger.error('Invalid response from mint...', { op });
       throw new CTSError('Invalid response from mint');
     }
   }
@@ -1564,7 +1573,7 @@ class Mint {
       (typeof data.request !== 'string' && !omitted('request')) ||
       (!(data.fee_reserve instanceof Amount) && !omitted('fee_reserve'))
     ) {
-      this._logger.error('Invalid response from mint...', { data, op });
+      this._logger.error('Invalid response from mint...', { op });
       throw new CTSError('Invalid response from mint');
     }
     // Per NUT-23, payment_preimage is `<str | null>`. Some mints may omit it
@@ -1587,14 +1596,14 @@ class Mint {
       data.fee_options.length === 0 ||
       data.fee_options.length > MAX_MINT_INFO_LIST
     ) {
-      this._logger.error('Invalid response from mint...', { data, op: 'onchain melt quote' });
+      this._logger.error('Invalid response from mint...', { op: 'onchain melt quote' });
       throw new CTSError('Invalid response from mint');
     }
     data.fee_options = data.fee_options.map((raw) => {
       const opt = raw as Record<string, unknown>;
       // fee_index is the load-bearing selector for the melt request
       if (!Number.isSafeInteger(opt.fee_index)) {
-        this._logger.error('Invalid response from mint...', { data, op: 'onchain melt quote' });
+        this._logger.error('Invalid response from mint...', { op: 'onchain melt quote' });
         throw new CTSError('Invalid response from mint');
       }
       return {
@@ -1610,7 +1619,7 @@ class Mint {
       (data.selected_fee_index !== null && !Number.isSafeInteger(data.selected_fee_index)) ||
       (data.outpoint !== null && typeof data.outpoint !== 'string')
     ) {
-      this._logger.error('Invalid response from mint...', { data, op: 'onchain melt quote' });
+      this._logger.error('Invalid response from mint...', { op: 'onchain melt quote' });
       throw new CTSError('Invalid response from mint');
     }
   }

@@ -26,6 +26,7 @@ import {
   normalizeMintUrl,
   verifyDleqIfPresent,
 } from '../../src/utils';
+import { encodeJsonToBase64Url } from '../../src/utils/base64';
 import {
   NUT02_V1_VECTOR1_KEYS,
   NUT02_V1_VECTOR2_KEYS,
@@ -1276,6 +1277,32 @@ describe('tokenFromTemplate rejects valid CBOR of wrong shape', () => {
     const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
     const decoded = utils.getDecodedToken(token, []);
     expect(decoded).toEqual({ mint: 'http://localhost:3338', proofs: [], unit: 'sat' });
+  });
+});
+
+describe('legacy cashuA token shape validation', () => {
+  test('rejects an empty token array with CTSError instead of a raw TypeError', () => {
+    const body = encodeJsonToBase64Url({ token: [], unit: 'sat' });
+    const token = 'cashuA' + body;
+
+    expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
+  });
+
+  test('rejects a token whose root is not the expected object shape', () => {
+    const body = encodeJsonToBase64Url(['not', 'an', 'object']);
+    const token = 'cashuA' + body;
+
+    expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
+  });
+
+  test('rejects a token entry missing its proofs array', () => {
+    const body = encodeJsonToBase64Url({
+      token: [{ mint: 'http://localhost:3338' }],
+      unit: 'sat',
+    });
+    const token = 'cashuA' + body;
+
+    expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
   });
 });
 
