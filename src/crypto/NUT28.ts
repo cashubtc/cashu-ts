@@ -15,6 +15,8 @@ const P2BK_DST_BYTES = utf8ToBytes('Cashu_P2BK_v1');
 
 /**
  * BIP340-style domain separation tag (DST) for P2BK.
+ *
+ * @internal
  */
 export const P2BK_DST: Uint8Array<ArrayBufferLike> = P2BK_DST_BYTES.slice();
 
