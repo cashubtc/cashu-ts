@@ -33,6 +33,7 @@ import {
   type MintQuoteOnchainResponse,
   type MeltQuoteOnchainRequest,
   type MeltQuoteOnchainResponse,
+  type Proof,
   type SwapRequest,
   type SerializedBlindedMessage,
   type SerializedBlindedSignature,
@@ -204,10 +205,16 @@ class Mint {
    * @returns Signed outputs.
    */
   async swap(swapPayload: SwapRequest, customRequest?: RequestFn): Promise<SwapResponse> {
+    failIf(
+      !Array.isArray(swapPayload?.inputs),
+      'swap: inputs must be an array of proofs',
+      this._logger,
+    );
+    // `dleq` and `p2pk_e` are wallet-side data: keep them off the wire.
     const data = await this.requestWithAuth<SwapResponse>(
       'POST',
       '/v1/swap',
-      { requestBody: swapPayload },
+      { requestBody: { ...swapPayload, inputs: this.stripWalletFields(swapPayload.inputs) } },
       customRequest,
     );
 
@@ -692,11 +699,20 @@ class Mint {
     meltQuotePayload: MeltQuoteBolt11Request,
     customRequest?: RequestFn,
   ): Promise<MeltQuoteBolt11Response> {
-    return this.createMeltQuote<MeltQuoteBolt11Response>(
+    const response = await this.createMeltQuote<MeltQuoteBolt11Response>(
       'bolt11',
       this.normalizeMeltQuoteRequestOptions(meltQuotePayload),
       { customRequest },
     );
+    // The quote must be for the invoice that was asked for. Bech32 is case insensitive, and an
+    // empty request means the mint echoed nothing back for the caller to compare.
+    failIf(
+      response.request !== '' &&
+        response.request.toLowerCase() !== meltQuotePayload.request.toLowerCase(),
+      'Melt quote is for a different payment request',
+      this._logger,
+    );
+    return response;
   }
 
   /**
@@ -772,7 +788,15 @@ class Mint {
       {},
       options?.customRequest,
     );
-    return this.normalizeMeltQuoteResponse(method, response, options?.normalize);
+    const normalized = this.normalizeMeltQuoteResponse(method, response, options?.normalize);
+    if (normalized.quote !== quote) {
+      this._logger.error('Invalid response from mint...', {
+        data: normalized,
+        op: `checkMeltQuote.${method}`,
+      });
+      throw new CTSError('Melt quote response is for a different quote');
+    }
+    return normalized;
   }
 
   /**
@@ -837,7 +861,8 @@ class Mint {
    * constructs the endpoint as `/v1/melt/{method}` and POSTs the payload. The response must contain
    * the common fields: quote, amount, state, expiry. Method-specific fields (e.g. `fee_reserve` for
    * bolt11/bolt12) are normalized when present. Custom methods can supply an optional `normalize`
-   * callback for their own fields.
+   * callback for their own fields. The response may omit quote fields such as `request` and
+   * `fee_reserve` (NUT-05 asynchronous shape): merge it over the quote you already hold.
    * @example
    *
    * ```ts
@@ -860,13 +885,37 @@ class Mint {
     },
   ): Promise<MeltQuoteBaseResponse & TRes> {
     failIf(!this.isValidMethodString(method), `Invalid melt method: ${method}`, this._logger);
+    failIf(
+      !Array.isArray(meltPayload?.inputs),
+      'melt: inputs must be an array of proofs',
+      this._logger,
+    );
+    // `dleq` and `p2pk_e` are wallet-side data: keep them off the wire.
     const response = await this.requestWithAuth<MeltQuoteBaseResponse & TRes>(
       'POST',
       `/v1/melt/${method}`,
-      { requestBody: meltPayload },
+      { requestBody: { ...meltPayload, inputs: this.stripWalletFields(meltPayload.inputs) } },
       options?.customRequest,
     );
-    return this.normalizeMeltQuoteResponse(method, response, options?.normalize);
+    // The proofs are spent by now, so the response is normalized as an execution result.
+    const execution = true;
+    const normalized = this.normalizeMeltQuoteResponse(
+      method,
+      response,
+      options?.normalize,
+      execution,
+    );
+    // The inputs are spent by now, so a mismatched id must not cost the caller the response it
+    // needs to recover its change: keep the id that was asked for and say so.
+    if (normalized.quote !== meltPayload.quote) {
+      this._logger.warn('Melt response reports a different quote id', {
+        op: `melt.${method}`,
+        expected: meltPayload.quote,
+        received: normalized.quote,
+      });
+      normalized.quote = meltPayload.quote;
+    }
+    return normalized;
   }
 
   /**
@@ -875,7 +924,8 @@ class Mint {
    * also contain blank outputs in order to receive back overpaid Lightning fees.
    *
    * @remarks
-   * Thin wrapper around melt('bolt11', ...).
+   * Thin wrapper around melt('bolt11', ...). The response may omit `request` and `fee_reserve`
+   * (NUT-05 asynchronous shape): merge it over the quote you already hold.
    * @param meltPayload The melt payload containing inputs and optional outputs.
    * @param options.customRequest Optional override for the request function.
    * @returns The melt response.
@@ -1261,6 +1311,18 @@ class Mint {
   }
 
   /**
+   * Drops the wallet-side proof fields (`dleq`, `p2pk_e`) before a request goes out.
+   */
+  private stripWalletFields(proofs: Proof[]): Array<Omit<Proof, 'dleq' | 'p2pk_e'>> {
+    return proofs.map((p) => {
+      const { dleq, p2pk_e, ...rest } = p;
+      void dleq;
+      void p2pk_e;
+      return rest;
+    });
+  }
+
+  /**
    * Rejects list entries that are not records, before any spread copies them. A response element is
    * whatever the JSON held, and spreading a string or an array expands it into indexed properties.
    */
@@ -1416,11 +1478,17 @@ class Mint {
    * Stacks normalizers for melt quote responses: base normalization (amount, expiry, change) is
    * always applied, then first-class bolt normalization for known methods, then any custom
    * normalize callback.
+   *
+   * @remarks
+   * `execution` marks the response to `POST /v1/melt/{method}`, which NUT-05 lets the mint answer
+   * with the settled fields only. Absent quote fields are dropped there so the caller keeps the
+   * values it already holds; the quote endpoint stays strict.
    */
   private normalizeMeltQuoteResponse<TRes extends MeltQuoteBaseResponse>(
     method: string,
     response: TRes,
     normalize?: (raw: Record<string, unknown>) => TRes,
+    execution: boolean = false,
   ): TRes {
     const op = `${method} melt quote`;
     if (!isRecord(response)) {
@@ -1428,11 +1496,17 @@ class Mint {
       throw new CTSError('Invalid response from mint');
     }
     const data: Record<string, unknown> = { ...response };
+    if (execution) {
+      // An empty request is a mint that echoed nothing back, same as an absent one. A zero
+      // fee reserve is a real value, so only a nullish one goes.
+      if (data.request == null || data.request === '') delete data.request;
+      if (data.fee_reserve == null) delete data.fee_reserve;
+    }
     this.normalizeMeltBaseFields(data, op);
     if (method === 'bolt11' || method === 'bolt12') {
-      this.normalizeMeltBoltFields(data, op);
+      this.normalizeMeltBoltFields(data, op, execution);
     } else if (method === 'onchain') {
-      this.normalizeMeltOnchainFields(data);
+      this.normalizeMeltOnchainFields(data, execution);
     }
     return normalize ? normalize(data) : (data as TRes);
   }
@@ -1475,9 +1549,21 @@ class Mint {
   /**
    * Mutates `data` in place, normalizing bolt11/bolt12-specific melt fields.
    */
-  private normalizeMeltBoltFields(data: Record<string, unknown>, op: string): void {
-    data.fee_reserve = Amount.from(data.fee_reserve as AmountLike);
-    if (typeof data.request !== 'string' || !(data.fee_reserve instanceof Amount)) {
+  private normalizeMeltBoltFields(
+    data: Record<string, unknown>,
+    op: string,
+    execution: boolean,
+  ): void {
+    // An execution response may omit request and fee_reserve (NUT-05 asynchronous shape); a quote
+    // may not. A zero fee reserve is a real value and still coerces.
+    const omitted = (key: string): boolean => execution && data[key] === undefined;
+    if (!omitted('fee_reserve') && data.fee_reserve != null) {
+      data.fee_reserve = Amount.from(data.fee_reserve as AmountLike);
+    }
+    if (
+      (typeof data.request !== 'string' && !omitted('request')) ||
+      (!(data.fee_reserve instanceof Amount) && !omitted('fee_reserve'))
+    ) {
       this._logger.error('Invalid response from mint...', { data, op });
       throw new CTSError('Invalid response from mint');
     }
@@ -1490,7 +1576,12 @@ class Mint {
   /**
    * Mutates `data` in place, normalizing onchain-specific melt fields.
    */
-  private normalizeMeltOnchainFields(data: Record<string, unknown>): void {
+  private normalizeMeltOnchainFields(data: Record<string, unknown>, execution: boolean): void {
+    // An execution response may carry only the settled fields; the quote endpoint requires them.
+    if (execution && data.fee_options === undefined) {
+      nullIfUndefined(data, 'selected_fee_index', 'outpoint');
+      return;
+    }
     if (
       !Array.isArray(data.fee_options) ||
       data.fee_options.length === 0 ||
