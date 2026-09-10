@@ -230,6 +230,23 @@ describe('payment requests', () => {
       expect(mp.feesFor('https://out.example.com', ['bolt12']).equals(5)).toBeTruthy();
     });
 
+    test('feesFor treats an equivalent spelling of a listed mint as listed', () => {
+      const pr = new PaymentRequest({
+        id: 'norm',
+        amount: 100,
+        unit: 'sat',
+        mints: ['https://mint.example.com/'],
+        mintsPreferred: true,
+        supportedMethods: [{ method: 'bolt12', fee: 50 }],
+      });
+
+      expect(pr.includesMint('https://mint.example.com')).toBe(true);
+      expect(pr.feesFor('https://mint.example.com', ['bolt12']).equals(0)).toBeTruthy();
+      expect(pr.amountToSend('https://mint.example.com', ['bolt12']).equals(100)).toBeTruthy();
+      // A mint that really is outside the list still owes the fee.
+      expect(pr.feesFor('https://other.example.com', ['bolt12']).equals(50)).toBeTruthy();
+    });
+
     test('unit rule: a or sm without u fails on encode and pricing, decode stays lenient', () => {
       // NUT-18: u MUST be set if a or sm is set (mf is denominated in the request unit).
       const smNoUnit = new PaymentRequest({

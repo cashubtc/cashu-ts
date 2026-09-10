@@ -27,6 +27,8 @@ export class KeyChain {
   // would slip past the not-found guard in getKeyset).
   private keysets: { [id: string]: Keyset } = Object.create(null) as { [id: string]: Keyset };
   private pendingKeyFetches: Map<string, Promise<Keyset>> = new Map();
+  // When this chain's data was fetched or, for restored data, when the cache it came from was.
+  private savedAt?: number;
 
   private assertInitialized(): void {
     if (Object.keys(this.keysets).length === 0) {
@@ -144,6 +146,7 @@ export class KeyChain {
       await Promise.all([this.mint.getKeySets(), this.mint.getKeys()]);
 
     this.buildKeychain(allKeysetsResponse.keysets, allKeysResponse.keysets);
+    this.savedAt = Date.now();
   }
 
   /**
@@ -157,6 +160,7 @@ export class KeyChain {
   loadFromCache(cache: KeyChainCache): void {
     const { keysets, keys } = KeyChain.cacheToMintDTO(cache);
     this.buildKeychain(keysets, keys);
+    this.savedAt = cache.savedAt;
   }
 
   /**
@@ -371,6 +375,9 @@ export class KeyChain {
     const keysList: MintKeys[] = allKeysets
       .map((k) => k.toMintKeys())
       .filter((mk): mk is MintKeys => mk !== null);
-    return KeyChain.mintToCacheDTO(this.mint.mintUrl, metaList, keysList);
+    const cache = KeyChain.mintToCacheDTO(this.mint.mintUrl, metaList, keysList);
+    // Reserializing restored data does not make it fresh: keep the provenance it came with.
+    cache.savedAt = this.savedAt;
+    return cache;
   }
 }

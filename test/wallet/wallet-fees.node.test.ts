@@ -300,6 +300,43 @@ describe('wallet.isPaymentRequestSatisfied', () => {
     expect(wallet.isPaymentRequestSatisfied(listed, proofsTotalling([100]))).toBe(true);
   });
 
+  test('does not settle a request this mint is not admissible for', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    // Strict list (mp absent) naming another mint.
+    const strict = new PaymentRequest({
+      id: 'strict',
+      amount: 100,
+      unit: 'sat',
+      mints: ['https://other.mint'],
+    });
+    expect(() => wallet.isPaymentRequestSatisfied(strict, proofsTotalling([100]))).toThrow(
+      /strict mint list/,
+    );
+
+    // The fixture mint melts sat via bolt11 only, so a swift-only request is unsettleable here.
+    const unsupported = new PaymentRequest({
+      id: 'method',
+      amount: 100,
+      unit: 'sat',
+      supportedMethods: [{ method: 'swift' }],
+    });
+    expect(() => wallet.isPaymentRequestSatisfied(unsupported, proofsTotalling([100]))).toThrow(
+      /cannot melt/,
+    );
+
+    // A listed mint that melts an accepted method still settles.
+    const ok = new PaymentRequest({
+      id: 'ok',
+      amount: 100,
+      unit: 'sat',
+      mints: [mintUrl],
+      supportedMethods: [{ method: 'bolt11', fee: 5 }],
+    });
+    expect(wallet.isPaymentRequestSatisfied(ok, proofsTotalling([100]))).toBe(true);
+  });
+
   test('a both-encoded request settles only legacy proofs carrying the requested lock', async () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();

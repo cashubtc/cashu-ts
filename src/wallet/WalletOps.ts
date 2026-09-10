@@ -63,7 +63,8 @@ export class WalletOps {
    * @param proofs - Proofs to select from.
    * @param amount - Payer-chosen amount for amountless requests; forbidden when the request sets
    *   `a`.
-   * @returns A preconfigured {@link SendBuilder}; chain further options and `.run()`.
+   * @returns A preconfigured {@link SendBuilder}; chain further options and `.run()`. The terms the
+   *   request set are fixed: chaining cannot replace its lock or disable `includeFees`.
    * @throws If the wallet's mint, unit, or melt methods are unacceptable to the request, the
    *   request's lock cannot be honoured, or the request is invalid per NUT-18.
    */
@@ -76,8 +77,11 @@ export class WalletOps {
     if (!base) {
       throw new CTSError('amountless payment request: pass the chosen amount');
     }
-    if (pr.amount && !pr.unit) {
-      throw new CTSError('invalid payment request: amount (a) without unit (u)');
+    // NUT-18: u MUST be set if a or sm is set, since mf is denominated in the request unit.
+    if (!pr.unit && (pr.amount !== undefined || pr.supportedMethods?.length)) {
+      throw new CTSError(
+        'invalid payment request: unit (u) is required when an amount (a) or supported methods (sm) are set',
+      );
     }
     if (pr.unit && pr.unit !== wallet.unit) {
       throw new CTSError(`request unit '${pr.unit}' does not match wallet unit '${wallet.unit}'`);
@@ -113,7 +117,7 @@ export class WalletOps {
     const v3 = isBlsKeyset(wallet.keysetId);
     // Only a locked request negotiates an encoding; an unlocked one may use any keyset.
     const family = lock || nutroot ? (v3 ? 'v3' : 'legacy') : undefined;
-    const builder = new SendBuilder(wallet, base.add(fee), proofs, family).includeFees(true);
+    const builder = new SendBuilder(wallet, base.add(fee), proofs, family, true).includeFees(true);
     if (family) builder.keyset(wallet.keysetId);
     if (nutroot && v3) {
       return builder.asLocked(nutrootToLockOptions(nutroot));
@@ -192,14 +196,28 @@ export class SendBuilder {
   /**
    * @param lockFamily Set by `sendToRequest`: the keyset family the request was negotiated for
    *   (NUT-18). `keyset()` then refuses an id from the other family.
+   * @param fromRequest Set by `sendToRequest`: the request's own terms (its lock, and selection net
+   *   of input fees) are then fixed, and chaining cannot replace them.
    */
   constructor(
     private wallet: Wallet,
     amount: AmountLike,
     private proofs: ProofLike[],
     private lockFamily?: 'v3' | 'legacy',
+    private fromRequest = false,
   ) {
     this.amount = Amount.from(amount);
+  }
+
+  /**
+   * Guards a send output the payment request itself asked for (NUT-18).
+   */
+  private assertSendOutputMutable(): void {
+    if (this.fromRequest && this.sendOT) {
+      throw new CTSError(
+        'the payment request mandates this send output; it cannot be replaced by chaining',
+      );
+    }
   }
 
   /**
@@ -208,6 +226,7 @@ export class SendBuilder {
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
   asRandom(denoms?: AmountLike[]) {
+    this.assertSendOutputMutable();
     this.sendOT = { type: 'random', denominations: denoms };
     return this;
   }
@@ -219,6 +238,7 @@ export class SendBuilder {
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
   asDeterministic(counter = 0, denoms?: AmountLike[]) {
+    this.assertSendOutputMutable();
     this.sendOT = { type: 'deterministic', counter, denominations: denoms };
     return this;
   }
@@ -230,6 +250,7 @@ export class SendBuilder {
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
   asLocked(lock: LockOptions | LockBuilder, denoms?: AmountLike[]) {
+    this.assertSendOutputMutable();
     const options = lock instanceof LockBuilder ? lock.toOptions() : lock;
     this.sendOT = { type: 'lock', options, denominations: denoms };
     return this;
@@ -242,6 +263,7 @@ export class SendBuilder {
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
   asFactory(factory: OutputDataFactory, denoms?: AmountLike[]) {
+    this.assertSendOutputMutable();
     this.sendOT = { type: 'factory', factory, denominations: denoms };
     return this;
   }
@@ -253,6 +275,7 @@ export class SendBuilder {
    *   wallet will throw.
    */
   asCustom(data: OutputDataLike[]) {
+    this.assertSendOutputMutable();
     this.sendOT = { type: 'custom', data };
     return this;
   }
@@ -317,6 +340,12 @@ export class SendBuilder {
    * @param on When true, include fees in the sent amount. Default true if called.
    */
   includeFees(on = true) {
+    // A payment request is settled net of input fees (NUT-18), so the payee nets the amount asked.
+    if (this.fromRequest && !on) {
+      throw new CTSError(
+        'a payment request is sent net of input fees; includeFees cannot be disabled',
+      );
+    }
     this.config.includeFees = on;
     return this;
   }
@@ -416,8 +445,17 @@ export class SendBuilder {
    * @remarks
    * Call `wallet.completeSwap(SwapPreview)` to complete the send.
    * @returns A SwapPreview containing inputs, outputs, amount, fee and unselectedProofs.
+   * @throws If an offline mode is set: an offline selection has no swap to complete.
    */
   async prepare() {
+    // An offline selection reuses existing proofs and never reaches the mint, so there is no
+    // preview to hand to completeSwap.
+    if (this.offlineExact || this.offlineClose) {
+      throw new CTSError(
+        'Offline selection has nothing to prepare; call run() instead, or drop the offline mode for an online swap.',
+      );
+    }
+
     // Construct an OutputConfig using default send if no customizations
     const outputConfig: OutputConfig = {
       send: this.sendOT ?? this.wallet.defaultOutputType(),

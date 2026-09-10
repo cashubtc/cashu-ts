@@ -131,8 +131,13 @@ if (!request.includesMint(payload.mint)) return;
 The requested amount is what the payee must **net**, so check incoming proofs against the input fees they will cost to swap, plus any per-method fee the payer owed, before treating the payment as settled. A wallet on the payload's mint has everything needed:
 
 ```typescript
-if (!wallet.isPaymentRequestSatisfied(pr, payload.proofs)) {
-  // Underpaid: sum(proofs) - inputFees < amount + mf. Ignore or refund.
+try {
+  if (!wallet.isPaymentRequestSatisfied(pr, payload.proofs)) {
+    // Underpaid: sum(proofs) - inputFees < amount + mf. Ignore or refund.
+  }
+} catch {
+  // This mint cannot settle the request (wrong unit, outside a strict mint
+  // list, or no melt method the request accepts). Ignore or refund.
 }
 ```
 
@@ -144,7 +149,7 @@ A **locked** request needs a fourth: the private key it locks to. The check then
 wallet.isPaymentRequestSatisfied(pr, payload.proofs, undefined, { privkeys: myPrivkey });
 ```
 
-The check covers the amount and the requested lock. What it cannot cover is a blind-me leaf key belonging to someone else: only that key's owner can resolve its blinding, so a cosigner checks their own. Mint admissibility (`isMintListStrict` / `includesMint`) and proof integrity (DLEQ) remain separate checks, as does whether a script-path leaf is satisfiable today: ask `wallet.spendOptions(proof, { privkeys })` for that.
+The check covers the amount, the requested lock, and this mint's admissibility: it throws when the mint is outside a strict mint list, or cannot melt the request unit via any method the request accepts. What it cannot cover is a blind-me leaf key belonging to someone else: only that key's owner can resolve its blinding, so a cosigner checks their own. Proof integrity (DLEQ) remains a separate check, as does whether a script-path leaf is satisfiable today: ask `wallet.spendOptions(proof, { privkeys })` for that.
 
 ## Manual control
 

@@ -152,6 +152,52 @@ describe('requestTokens', () => {
     expect(proofs[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
   });
 
+  test('mints the outputs it can unblind, whatever the payload field says', async () => {
+    let sent: Array<{ B_: string; id: string }> = [];
+    server.use(
+      http.post(mintUrl + '/v1/mint/bolt11', async ({ request }) => {
+        sent = ((await request.json()) as { outputs: Array<{ B_: string; id: string }> }).outputs;
+        return HttpResponse.json({
+          signatures: [
+            {
+              id: '00bd033559de27d0',
+              amount: 1,
+              C_: '0361a2725cfd88f60ded718378e8049a4a6cee32e214a9870b44c3ffea2dc9e625',
+            },
+          ],
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const preview = await wallet.prepareMint('bolt11', 1, {
+      quote: 'restored-quote-id',
+      request: 'lnbc...',
+      amount: Amount.from(1),
+      unit: 'sat',
+      method: 'bolt11',
+      state: MintQuoteState.PAID,
+      amount_paid: Amount.from(1),
+      amount_issued: Amount.from(0),
+      updated_at: null,
+      expiry: null,
+    });
+    const prepared = preview.outputData[0].blindedMessage.B_;
+
+    // The payload field is replay metadata a restored preview may no longer agree with: the
+    // outputs that can be unblinded are the ones that count.
+    preview.payload.outputs[0] = {
+      ...preview.payload.outputs[0],
+      B_: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+    };
+
+    const proofs = await wallet.completeMint(preview);
+
+    expect(sent[0].B_).toBe(prepared);
+    expect(proofs[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
+  });
+
   test('prepareMint accepts expiry: 0 as "no expiry" (CDK quirk)', async () => {
     // Spec says expiry is <int|null> with null meaning "no expiry". CDK emits 0
     // for the same meaning. Treat 0 as null rather than "expired in 1970".
@@ -215,6 +261,51 @@ describe('requestTokens', () => {
     await expect(wallet.completeMint(preview)).rejects.toThrow(
       'Mint supports NUT-12, but returned a signature without DLEQ proof',
     );
+  });
+
+  test('batch-mints the outputs it can unblind, whatever the payload field says', async () => {
+    let sent: Array<{ B_: string }> = [];
+    server.use(
+      http.post(mintUrl + '/v1/mint/bolt11/batch', async ({ request }) => {
+        const body = (await request.json()) as { outputs: Array<{ B_: string; amount: unknown }> };
+        sent = body.outputs;
+        return HttpResponse.json({
+          signatures: body.outputs.map((o) => ({
+            id: '00bd033559de27d0',
+            amount: o.amount,
+            C_: '0361a2725cfd88f60ded718378e8049a4a6cee32e214a9870b44c3ffea2dc9e625',
+          })),
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const quote: MintQuoteBolt11Response = {
+      quote: 'restored-batch-quote',
+      request: 'lnbc...',
+      amount: Amount.from(1),
+      unit: 'sat',
+      method: 'bolt11',
+      state: MintQuoteState.PAID,
+      amount_paid: Amount.from(1),
+      amount_issued: Amount.from(0),
+      updated_at: null,
+      expiry: null,
+    };
+    const preview = await wallet.prepareBatchMint('bolt11', [{ amount: 1, quote }]);
+    const prepared = preview.outputData[0].blindedMessage.B_;
+
+    // Same rule as completeMint: the payload field is replay metadata, outputData is what counts.
+    preview.payload.outputs[0] = {
+      ...preview.payload.outputs[0],
+      B_: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+    };
+
+    const proofs = await wallet.completeBatchMint(preview);
+
+    expect(sent[0].B_).toBe(prepared);
+    expect(proofs[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
   });
 
   test('prepareBatchMint consolidates outputs and completeBatchMint sends batch request', async () => {

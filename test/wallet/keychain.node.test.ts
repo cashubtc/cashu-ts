@@ -322,6 +322,25 @@ describe('KeyChain initialization', () => {
     expect(newCache.mintUrl).toEqual(originalCache.mintUrl);
   });
 
+  test('carries the loaded savedAt through a reserialization, and stamps a fetch', async () => {
+    const originalChain = new KeyChain(mint, unit);
+    await originalChain.init();
+    const fetchedAt = originalChain.cache.savedAt;
+    expect(fetchedAt).toBeGreaterThan(0);
+
+    const savedAt = 1_600_000_000_000;
+    const restored = KeyChain.fromCache(mint, unit, { ...originalChain.cache, savedAt });
+    expect(restored.cache.savedAt).toBe(savedAt);
+
+    // A cache saved without the timestamp cannot invent one for the data it carries.
+    const undated = KeyChain.fromCache(mint, unit, { ...originalChain.cache, savedAt: undefined });
+    expect(undated.cache.savedAt).toBeUndefined();
+
+    // A refresh from the mint is fresh data, so it takes the current time.
+    await restored.init(true);
+    expect(restored.cache.savedAt).toBeGreaterThan(savedAt);
+  });
+
   test('loading a sat cache into a usd KeyChain still loads data; getKeysets throws for missing unit', async () => {
     const originalChain = new KeyChain(mint, unit); // 'sat'
     await originalChain.init();
