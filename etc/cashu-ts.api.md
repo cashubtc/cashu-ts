@@ -1507,9 +1507,6 @@ export type OutputType = ({
     data: OutputDataLike[];
 };
 
-// @public
-export const P2BK_DST: Uint8Array<ArrayBufferLike>;
-
 // @public @deprecated (undocumented)
 export const P2PKBuilder: typeof LockBuilder;
 

@@ -656,6 +656,16 @@ describe('test output selection', () => {
     expect(utils.hasCorrespondingKey('8', keys)).toBe(true);
     expect(utils.hasCorrespondingKey(Amount.from(3), keys)).toBe(false);
   });
+
+  test('hasCorrespondingKey counts own denominations only', () => {
+    Object.defineProperty(Object.prototype, '3', { value: 'inherited', configurable: true });
+    try {
+      expect(utils.hasCorrespondingKey(3, keys)).toBe(false);
+      expect(utils.hasCorrespondingKey(8, keys)).toBe(true);
+    } finally {
+      Reflect.deleteProperty(Object.prototype, '3');
+    }
+  });
 });
 describe('test zero-knowledge utilities', () => {
   // create private public key pair
@@ -1246,6 +1256,17 @@ describe('deriveKeysetId edge cases', () => {
     expect(() => utils.deriveKeysetId(keys, { versionByte: 99 })).toThrow(
       /Unrecognized keyset ID version/,
     );
+  });
+
+  test('rejects a denomination key over 20 digits before parsing it', () => {
+    const oversized = { ...keys, ['1'.repeat(21)]: Object.values(keys)[0] };
+    expect(() => utils.deriveKeysetId(oversized, { versionByte: 1 })).toThrow(/exceeds 20 digits/);
+    expect(
+      utils.deriveKeysetId(
+        { ...keys, ['1'.repeat(20)]: Object.values(keys)[0] },
+        { versionByte: 1 },
+      ),
+    ).toMatch(/^01[0-9a-f]{64}$/);
   });
 });
 

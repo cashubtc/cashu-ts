@@ -147,7 +147,10 @@ function getKeysetAmountsAsAmount(keyset: Keys, order: 'asc' | 'desc'): Amount[]
  * @returns True if the amount is in the keyset, false otherwise.
  */
 export function hasCorrespondingKey(amount: AmountLike, keyset: Keys): boolean {
-  return toAmount(amount, 'hasCorrespondingKey.amount', true).toString() in keyset;
+  // Own denominations only: a `Keys` object inherits from Object.prototype, and only the keys
+  // the keyset id commits to count.
+  const denomination = toAmount(amount, 'hasCorrespondingKey.amount', true).toString();
+  return Object.prototype.hasOwnProperty.call(keyset, denomination);
 }
 
 function toAmount(amount: AmountLike, op: string, allowZero = false): Amount {
@@ -445,9 +448,15 @@ export type DeriveKeysetIdOptions = {
  * @param options.versionByte (optional) version of the keyset ID. Default: 1.
  * @param options.isDeprecatedBase64 (optional) version of the keyset ID. Default: false.
  * @returns Keyset id of the keys.
- * @throws If keyset versionByte is not valid.
+ * @throws If keyset versionByte is not valid, or a denomination key is over 20 digits.
  */
 export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): string {
+  // A u64 denomination is at most 20 digits; bound every key before any amount is parsed.
+  for (const amount of Object.keys(keys)) {
+    if (amount.length > 20) {
+      throw new CTSError('Invalid keyset denomination: exceeds 20 digits');
+    }
+  }
   const unit = options?.unit ?? 'sat'; // default: sat
   const expiry = options?.expiry;
   const versionByte = options?.versionByte ?? 1; // default: 1

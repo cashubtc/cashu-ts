@@ -70,6 +70,20 @@ export const MAX_SECRET_LENGTH = 1024;
 export const MAX_WITNESS_LENGTH = 16_384;
 
 /**
+ * NUT-28: locking slots in a P2BK lock, `[data, ...pubkeys, ...refund]` at index bytes
+ * `0x00..0x0A`. `data` always fills slot 0, so an HTLC lock has one fewer key to give away.
+ */
+export const MAX_P2BK_SLOTS = 11;
+
+/**
+ * NUT-13: accepted length range for a deterministic-secrets seed. BIP-32's 16-byte floor at the
+ * bottom, the 64 bytes a BIP-39 mnemonic produces at the top; every derived secret and blinding
+ * factor inherits the seed's strength.
+ */
+export const MIN_SEED_BYTES = 16;
+export const MAX_SEED_BYTES = 64;
+
+/**
  * Max u64 (2^64 - 1): the ceiling every Amount is held to. Enforced in the Amount constructor, so
  * arithmetic results are bounded too; muldiv helpers keep their wide intermediate in bigint and
  * only construct the divided-down result.
