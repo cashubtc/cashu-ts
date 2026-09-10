@@ -150,6 +150,14 @@ export const MAX_CBOR_NODES = 262_144;
 export const MAX_BOLT11_HRP_LENGTH = 100;
 
 /**
+ * Cap on frames `WSConnection` will buffer between two drain ticks: each tick empties the whole
+ * queue, so this bounds arrivals within a single tick, not messages held overall. Matches
+ * {@link ABSOLUTE_MAX_ARRAY_LENGTH}, since a NUT-17 replay sends one frame per subscribed filter and
+ * a full-size batch must fit in one burst without tripping the cap.
+ */
+export const MAX_WS_QUEUED_MESSAGES = ABSOLUTE_MAX_ARRAY_LENGTH;
+
+/**
  * Maximum number of candidate payloads `findCashuPayload` will attempt to decode in one scan.
  * Prevents pathological input from causing excessive parsing work. Real pastes carry one payload
  * and a few near-misses, so 16 clears them; scans that exhaust the budget return null.
