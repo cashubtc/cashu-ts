@@ -87,8 +87,7 @@ import {
   DEFAULT_MAX_ARRAY_LENGTH,
   getDecodedToken,
   invoiceHasAmountInHRP,
-  MAX_SEED_BYTES,
-  MIN_SEED_BYTES,
+  SEED_BYTES,
   normalizeMintUrl,
   normalizeProofAmounts,
   REPAIR_COOLDOWN_MS,
@@ -259,7 +258,7 @@ class Wallet {
    * @param options Optional settings.
    * @param options.unit Wallet unit, default 'sat'.
    * @param options.keysetId Bind to this keyset id, else bind on `loadMint`.
-   * @param options.bip39seed BIP39 seed for deterministic secrets, 16 to 64 bytes.
+   * @param options.bip39seed BIP39 seed for deterministic secrets, 64 bytes.
    * @param options.secretsPolicy Secrets policy, default 'auto'.
    * @param options.counterSource Counter source for deterministic outputs. If provided, this takes
    *   precedence over counterInit. Use when you need persistence across processes or devices.
@@ -340,8 +339,8 @@ class Wallet {
       // Fail here rather than at the first derivation: a wallet on a seed NUT-13 will refuse is
       // broken, and the deriver's own guard would surface it mid-operation.
       this.failIf(
-        options.bip39seed.length < MIN_SEED_BYTES || options.bip39seed.length > MAX_SEED_BYTES,
-        `bip39seed must be ${MIN_SEED_BYTES} to ${MAX_SEED_BYTES} bytes`,
+        options.bip39seed.length !== SEED_BYTES,
+        `bip39seed must be ${SEED_BYTES} bytes`,
         { length: options.bip39seed.length },
       );
       this._seed = options.bip39seed;

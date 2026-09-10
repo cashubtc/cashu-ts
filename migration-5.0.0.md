@@ -514,6 +514,12 @@ try {
 
 ---
 
+## The seed is exactly 64 bytes
+
+`new Wallet(mint, { bip39seed })` now requires a 64-byte seed, the output of a BIP-39 derivation (`mnemonicToSeedSync(mnemonic)`), and throws a `CTSError` for any other length; v4 accepts 16 to 64 bytes. The NUT-13 derivation helpers called directly (`deriveSecretAndBlindingFactor`, `deriveKeyPair`, `deriveQuoteLockKey` and the v3 helpers) still accept 16 to 64 bytes. Wallets that already pass the BIP-39 seed, which is every known one, are unaffected; a wallet passing raw entropy of another length must derive the BIP-39 seed from it instead, or its existing proofs will not restore.
+
+---
+
 ## `deriveSecret` and `deriveBlindingFactor` removed
 
 The single-value NUT-13 derivation helpers `deriveSecret` and `deriveBlindingFactor` are removed. Use `deriveSecretAndBlindingFactor`, which derives both values for a counter in one call (and, for legacy BIP-32 keysets, avoids repeating the shared path derivation).

@@ -63,15 +63,13 @@ describe('constructor mutants', () => {
     );
   });
 
-  test('rejects a bip39seed outside the accepted length range', () => {
-    for (const length of [1, 15, 65]) {
+  test('rejects a bip39seed that is not 64 bytes', () => {
+    for (const length of [1, 32, 63, 65]) {
       expect(() => new Wallet(mint, { unit, bip39seed: new Uint8Array(length) })).toThrow(
-        /bip39seed must be 16 to 64 bytes/,
+        /bip39seed must be 64 bytes/,
       );
     }
-    for (const length of [16, 32, 64]) {
-      expect(() => new Wallet(mint, { unit, bip39seed: new Uint8Array(length) })).not.toThrow();
-    }
+    expect(() => new Wallet(mint, { unit, bip39seed: new Uint8Array(64) })).not.toThrow();
   });
 
   test('never logs the rejected seed value', () => {

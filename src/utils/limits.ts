@@ -96,9 +96,15 @@ export const NUTROOT_MAX_SLOTS = 121;
 export const MAX_P2BK_SLOTS = 11;
 
 /**
- * NUT-13: accepted length range for a deterministic-secrets seed. BIP-32's 16-byte floor at the
- * bottom, the 64 bytes a BIP-39 mnemonic produces at the top; every derived secret and blinding
- * factor inherits the seed's strength.
+ * NUT-13: the seed a wallet is built on is a BIP-39 derivation, 64 bytes, which is what every
+ * wallet and mint implementation hands over. Enforced by the Wallet constructor.
+ */
+export const SEED_BYTES = 64;
+
+/**
+ * NUT-13: accepted length range for a seed passed straight to a derivation helper. BIP-32's 16-byte
+ * floor at the bottom, the 64 bytes a BIP-39 mnemonic produces at the top; the helpers stay usable
+ * on the spec's own vectors.
  */
 export const MIN_SEED_BYTES = 16;
 export const MAX_SEED_BYTES = 64;
