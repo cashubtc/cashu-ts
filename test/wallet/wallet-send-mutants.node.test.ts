@@ -216,7 +216,23 @@ describe('validateReturnedSignatures', () => {
     );
   });
 
-  test('completeSwap rejects a signature count that differs from outputs', async () => {
+  test('completeSwap rejects fewer signatures than outputs', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/swap', () =>
+        // one output requested, none returned
+        HttpResponse.json({ signatures: [] }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.receive([makeProof(1)])).rejects.toThrow(
+      'Mint returned 0 signatures, expected 1',
+    );
+  });
+
+  // The upper bound belongs to the Mint layer, which carries the same recovery route.
+  test('completeSwap rejects more signatures than outputs', async () => {
     server.use(
       http.post(mintUrl + '/v1/swap', () =>
         HttpResponse.json({
@@ -232,7 +248,7 @@ describe('validateReturnedSignatures', () => {
     await wallet.loadMint();
 
     await expect(wallet.receive([makeProof(1)])).rejects.toThrow(
-      'Mint returned 2 signatures, expected 1',
+      /2 signatures, expected 1\..*NUT-09/,
     );
   });
 });

@@ -14,6 +14,7 @@ import {
   JSONInt,
 } from '../../src';
 import type { AuthProvider, Logger, MintQuoteBaseResponse, RequestFn } from '../../src';
+import { MAX_KEYSET_LIST, MAX_MINT_INFO_LIST } from '../../src/utils/limits';
 import { MINTINFORESP } from '../consts';
 
 type ReqArgs = {
@@ -35,6 +36,10 @@ const makeRequest = <T>(payload: T): RequestFn => {
     return payload;
   }) as RequestFn;
 };
+
+// Minimal wire-shaped fixtures: Mint checks response counts against the request.
+const blankOutput = (amount = 1) => ({ amount: Amount.from(amount), id: '00', B_: '02blank' });
+const blindSignature = (amount = 1) => ({ amount, C_: '02sig', id: '00' });
 
 function createLogger(): Logger {
   return {
@@ -301,14 +306,14 @@ describe('Mint normalization', () => {
       },
     });
 
-    const response = await mint.swap({ inputs: [], outputs: [] });
+    const response = await mint.swap({ inputs: [], outputs: [blankOutput()] });
 
     expect(authProvider.ensureCAT).toHaveBeenCalled();
     expect(authProvider.getCAT).not.toHaveBeenCalled();
     expect(authProvider.getBlindAuthToken).toHaveBeenCalledWith({
       method: 'POST',
       path: '/v1/swap',
-      body: '{"inputs":[],"outputs":[]}',
+      body: '{"inputs":[],"outputs":[{"amount":1,"id":"00","B_":"02blank"}]}',
     });
     expect(response.signatures[0].amount.toBigInt()).toBe(1n);
   });
@@ -341,7 +346,7 @@ describe('Mint normalization', () => {
       },
     });
 
-    await mint.swap({ inputs: [], outputs: [] });
+    await mint.swap({ inputs: [], outputs: [blankOutput()] });
 
     expect(authProvider.getCAT).toHaveBeenCalled();
   });
@@ -440,9 +445,31 @@ describe('Mint normalization', () => {
     }) as RequestFn;
     const mint = new Mint(mintUrl, { customRequest: requestSpy });
 
-    const response = await mint.mintBolt11({ quote: 'q1', outputs: [] });
+    const response = await mint.mintBolt11({ quote: 'q1', outputs: [blankOutput()] });
 
     expect(response.signatures[0].amount.toBigInt()).toBe(2n);
+  });
+
+  it.each([
+    ['not an array', { amount: 3, C_: '02change', id: '00' }],
+    [
+      'oversized',
+      Array.from({ length: MAX_MINT_INFO_LIST + 1 }, () => ({ amount: 1, C_: '02c', id: '00' })),
+    ],
+  ])('checkMeltQuoteBolt11 rejects a change list that is %s', async (_label, change) => {
+    const requestSpy = vi.fn(async () => ({
+      quote: 'q1',
+      amount: 12,
+      unit: 'sat',
+      state: MeltQuoteState.PAID,
+      expiry: 123,
+      request: 'lnbc1...',
+      fee_reserve: 1,
+      change,
+    })) as RequestFn;
+    const mint = new Mint(mintUrl, { customRequest: requestSpy });
+
+    await expect(mint.checkMeltQuoteBolt11('q1')).rejects.toThrow('Invalid response from mint');
   });
 
   it('checkMeltQuoteBolt11 normalizes amount, fee reserve, and change signatures', async () => {
@@ -1337,7 +1364,7 @@ describe('Mint normalization', () => {
     }) as RequestFn;
     const mint = new Mint(mintUrl, { customRequest: requestSpy });
 
-    const response = await mint.mintOnchain({ quote: 'q1', outputs: [] });
+    const response = await mint.mintOnchain({ quote: 'q1', outputs: [blankOutput()] });
 
     expect(response.signatures).toHaveLength(1);
     expect(response.signatures[0].amount.toBigInt()).toBe(4n);
@@ -1385,7 +1412,7 @@ describe('Mint normalization', () => {
     const response = await mint.mintBatchBolt11({
       quotes: ['q1', 'q2'],
       quote_amounts: [Amount.from(1), Amount.from(2)],
-      outputs: [],
+      outputs: [blankOutput(1), blankOutput(2)],
     });
 
     expect(response.signatures).toHaveLength(2);
@@ -1406,7 +1433,7 @@ describe('Mint normalization', () => {
     const response = await mint.mintBatchBolt12({
       quotes: ['q1'],
       quote_amounts: [Amount.from(4)],
-      outputs: [],
+      outputs: [blankOutput(4)],
     });
 
     expect(response.signatures).toHaveLength(1);
@@ -1657,5 +1684,215 @@ describe('Mint.lastResponseMetadata', () => {
 
     expect(mint1.lastResponseMetadata!.rateLimit).toBe('limit=100, remaining=99, reset=60');
     expect(mint2.lastResponseMetadata!.rateLimit).toBe('limit=50, remaining=10, reset=30');
+  });
+});
+
+describe('Mint response shape and cardinality', () => {
+  // A response element the transport hands back may be any JSON value; a Proxy makes it observable
+  // whether it is copied before the shape is checked.
+  const watchedArray = (seen: { enumerated: boolean }) =>
+    new Proxy([] as unknown[], {
+      ownKeys(target) {
+        seen.enumerated = true;
+        return Reflect.ownKeys(target);
+      },
+    });
+
+  it('rejects a mint quote response that is not a record', async () => {
+    const seen = { enumerated: false };
+    const mint = new Mint(mintUrl, { customRequest: makeRequest(watchedArray(seen)) });
+
+    await expect(mint.checkMintQuote('bolt11', 'q1')).rejects.toThrow('Invalid response from mint');
+    expect(seen.enumerated).toBe(false);
+  });
+
+  it('rejects a scalar mint quote response', async () => {
+    const mint = new Mint(mintUrl, { customRequest: makeRequest('x'.repeat(64)) });
+
+    await expect(mint.checkMintQuote('bolt11', 'q1')).rejects.toThrow('Invalid response from mint');
+  });
+
+  it('rejects a melt quote response that is not a record', async () => {
+    const seen = { enumerated: false };
+    const mint = new Mint(mintUrl, { customRequest: makeRequest(watchedArray(seen)) });
+
+    await expect(mint.checkMeltQuote('bolt11', 'q1')).rejects.toThrow('Invalid response from mint');
+    expect(seen.enumerated).toBe(false);
+  });
+
+  it('rejects a signature entry that is not a record', async () => {
+    const seen = { enumerated: false };
+    const mint = new Mint(mintUrl, {
+      customRequest: makeRequest({ signatures: [watchedArray(seen)] }),
+    });
+
+    await expect(mint.mintBolt11({ quote: 'q1', outputs: [blankOutput(1)] })).rejects.toThrow(
+      'Invalid response from mint',
+    );
+    expect(seen.enumerated).toBe(false);
+  });
+
+  it('rejects a restored output entry that is not a record', async () => {
+    const mint = new Mint(mintUrl, {
+      customRequest: makeRequest({ outputs: ['not-an-output'], signatures: [blindSignature(1)] }),
+    });
+
+    await expect(mint.restore({ outputs: [blankOutput(1)] })).rejects.toThrow(
+      'Invalid response from mint',
+    );
+  });
+
+  it('rejects a keyset entry that is not a record in getKeys', async () => {
+    const seen = { enumerated: false };
+    const mint = new Mint(mintUrl, {
+      customRequest: makeRequest({ keysets: [watchedArray(seen)] }),
+    });
+
+    await expect(mint.getKeys()).rejects.toThrow('Invalid response from mint');
+    expect(seen.enumerated).toBe(false);
+  });
+
+  it('rejects a keyset entry that is not a record in getKeySets', async () => {
+    const mint = new Mint(mintUrl, { customRequest: makeRequest({ keysets: ['00'] }) });
+
+    await expect(mint.getKeySets()).rejects.toThrow('Invalid response from mint');
+  });
+
+  it.each([
+    ['getKeys', (mint: Mint) => mint.getKeys()],
+    ['getKeySets', (mint: Mint) => mint.getKeySets()],
+  ])('rejects an oversized keyset list in %s', async (_label, call) => {
+    const keysets = Array.from({ length: MAX_KEYSET_LIST + 1 }, () => ({
+      id: '00',
+      unit: 'sat',
+      active: true,
+    }));
+    const mint = new Mint(mintUrl, { customRequest: makeRequest({ keysets }) });
+
+    await expect(call(mint)).rejects.toThrow('Invalid response from mint');
+  });
+
+  it('accepts a keyset list far larger than the mint info list cap', async () => {
+    const keysets = Array.from({ length: MAX_MINT_INFO_LIST + 1 }, (_, i) => ({
+      id: `00${i}`,
+      unit: 'sat',
+      active: false,
+    }));
+    const mint = new Mint(mintUrl, { customRequest: makeRequest({ keysets }) });
+
+    const response = await mint.getKeySets();
+
+    expect(response.keysets).toHaveLength(MAX_MINT_INFO_LIST + 1);
+  });
+
+  it('rejects an oversized onchain fee option list', async () => {
+    const fee_options = Array.from({ length: MAX_MINT_INFO_LIST + 1 }, (_, i) => ({
+      fee_index: i,
+      fee_reserve: 2,
+      estimated_blocks: 6,
+    }));
+    const mint = new Mint(mintUrl, {
+      customRequest: makeRequest({
+        quote: 'q1',
+        amount: 10,
+        unit: 'sat',
+        state: MeltQuoteState.UNPAID,
+        expiry: 123,
+        request: 'bc1qrecipient',
+        fee_options,
+      }),
+    });
+
+    await expect(mint.checkMeltQuoteOnchain('q1')).rejects.toThrow('Invalid response from mint');
+  });
+
+  it('rejects more swap signatures than outputs and points at recovery', async () => {
+    const mint = new Mint(mintUrl, {
+      customRequest: makeRequest({ signatures: [blindSignature(1), blindSignature(2)] }),
+    });
+
+    await expect(mint.swap({ inputs: [], outputs: [blankOutput(1)] })).rejects.toThrow(
+      /Invalid response from mint: 2 signatures, expected 1\..*NUT-09/,
+    );
+  });
+
+  it('rejects more mint signatures than outputs', async () => {
+    const mint = new Mint(mintUrl, {
+      customRequest: makeRequest({ signatures: [blindSignature(1), blindSignature(2)] }),
+    });
+
+    await expect(mint.mintBolt11({ quote: 'q1', outputs: [blankOutput(1)] })).rejects.toThrow(
+      'Invalid response from mint',
+    );
+  });
+
+  it('rejects more batch mint signatures than outputs', async () => {
+    const mint = new Mint(mintUrl, {
+      customRequest: makeRequest({ signatures: [blindSignature(1), blindSignature(2)] }),
+    });
+
+    await expect(
+      mint.mintBatchBolt11({
+        quotes: ['q1'],
+        quote_amounts: [Amount.from(1)],
+        outputs: [blankOutput(1)],
+      }),
+    ).rejects.toThrow('Invalid response from mint');
+  });
+
+  it('returns restored outputs paired with their signatures', async () => {
+    const mint = new Mint(mintUrl, {
+      customRequest: makeRequest({ outputs: [blankOutput(1)], signatures: [blindSignature(1)] }),
+    });
+
+    const response = await mint.restore({ outputs: [blankOutput(1), blankOutput(2)] });
+
+    expect(response.outputs).toHaveLength(1);
+    expect(response.signatures[0].amount.toBigInt()).toBe(1n);
+  });
+
+  it('rejects a restore response whose outputs and signatures do not pair up', async () => {
+    const mint = new Mint(mintUrl, {
+      customRequest: makeRequest({ outputs: [blankOutput(1)], signatures: [] }),
+    });
+
+    await expect(mint.restore({ outputs: [blankOutput(1)] })).rejects.toThrow(
+      'Invalid response from mint',
+    );
+  });
+
+  it('rejects a restore response with more entries than were requested', async () => {
+    const mint = new Mint(mintUrl, {
+      customRequest: makeRequest({
+        outputs: [blankOutput(1), blankOutput(2)],
+        signatures: [blindSignature(1), blindSignature(2)],
+      }),
+    });
+
+    await expect(mint.restore({ outputs: [blankOutput(1)] })).rejects.toThrow(
+      'Invalid response from mint',
+    );
+  });
+
+  it('rejects a proof state entry that is not a record', async () => {
+    const mint = new Mint(mintUrl, { customRequest: makeRequest({ states: ['UNSPENT'] }) });
+
+    await expect(mint.check({ Ys: ['02y'] })).rejects.toThrow('Invalid response from mint');
+  });
+
+  it('rejects more proof states than identifiers checked', async () => {
+    const mint = new Mint(mintUrl, {
+      customRequest: makeRequest({ states: [{ Y: '02y', state: 'UNSPENT' }] }),
+    });
+
+    await expect(mint.check({ Ys: [] })).rejects.toThrow('Invalid response from mint');
+  });
+
+  it('accepts fewer proof states than identifiers checked', async () => {
+    const mint = new Mint(mintUrl, { customRequest: makeRequest({ states: [] }) });
+
+    const response = await mint.check({ Ys: ['02y'] });
+
+    expect(response.states).toHaveLength(0);
   });
 });

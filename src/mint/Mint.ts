@@ -51,8 +51,11 @@ import request, {
 } from '../transport';
 import {
   isObj,
+  isRecord,
   joinUrls,
   JSONInt,
+  MAX_KEYSET_LIST,
+  MAX_MINT_INFO_LIST,
   normalizeMintKeys,
   normalizeMintKeyset,
   normalizeMintUrl,
@@ -66,6 +69,14 @@ import type {
   CheckStatePayload,
   PostRestorePayload,
 } from './types';
+
+/**
+ * Names the shape of a refused response for logs, without handing the value itself to a
+ * consumer-supplied logger that would enumerate it.
+ */
+function describeShape(value: unknown): string {
+  return Array.isArray(value) ? 'array' : typeof value;
+}
 
 /**
  * Class represents Cashu Mint API.
@@ -172,7 +183,7 @@ class Mint {
       endpoint: joinUrls(this._mintUrl, '/v1/info'),
       onResponseMeta: this._captureResponseMetadata,
     });
-    return MintInfo.normalizeInfo(response);
+    return MintInfo.normalizeInfo(response, this._logger);
   }
 
   /**
@@ -219,6 +230,7 @@ class Mint {
       this._logger.error('Invalid response from mint...', { data, op: 'swap' });
       throw new CTSError('Invalid response from mint');
     }
+    this.assertSignatureCount(data.signatures, swapPayload.outputs, 'swap');
     data.signatures = this.normalizeSignatureAmounts(data.signatures);
 
     return data;
@@ -568,6 +580,7 @@ class Mint {
       this._logger.error('Invalid response from mint...', { data, op: `mint.${method}` });
       throw new CTSError('Invalid response from mint');
     }
+    this.assertSignatureCount(data.signatures, mintPayload.outputs, `mint.${method}`);
     data.signatures = this.normalizeSignatureAmounts(data.signatures);
     return options?.normalize ? options.normalize(data) : data;
   }
@@ -643,6 +656,7 @@ class Mint {
       this._logger.error('Invalid response from mint...', { data, op: `mintBatch.${method}` });
       throw new CTSError('Invalid response from mint');
     }
+    this.assertSignatureCount(data.signatures, mintPayload.outputs, `mintBatch.${method}`);
     data.signatures = this.normalizeSignatureAmounts(data.signatures);
     return options?.normalize ? options.normalize(data) : data;
   }
@@ -950,10 +964,17 @@ class Mint {
       customRequest,
     );
 
-    if (!isObj(data) || !Array.isArray(data?.states)) {
+    // Per NUT-07 the mint returns one state per requested Y, so the request bounds the response.
+    if (
+      !isObj(data) ||
+      !Array.isArray(data?.states) ||
+      data.states.length > checkPayload.Ys.length
+    ) {
       this._logger.error('Invalid response from mint...', { data, op: 'check' });
       throw new CTSError('Invalid response from mint');
     }
+
+    this.assertRecordEntries(data.states, 'check');
 
     // Per NUT-07, ProofState.witness is `<str | null>`. Some mints may omit the
     // field instead of sending null; coerce undefined → null so consumers
@@ -997,6 +1018,7 @@ class Mint {
       this._logger.error('Invalid response from mint...', { data, op: 'getKeys' });
       throw new CTSError('Invalid response from mint');
     }
+    this.assertKeysetList(data.keysets, 'getKeys');
 
     return {
       ...data,
@@ -1020,6 +1042,7 @@ class Mint {
       this._logger.error('Invalid response from mint...', { data, op: 'getKeySets' });
       throw new CTSError('Invalid response from mint');
     }
+    this.assertKeysetList(data.keysets, 'getKeySets');
     return {
       ...data,
       keysets: data.keysets.map((keyset) => normalizeMintKeyset(keyset)),
@@ -1046,7 +1069,14 @@ class Mint {
       onResponseMeta: this._captureResponseMetadata,
     });
 
-    if (!isObj(data) || !Array.isArray(data?.outputs) || !Array.isArray(data?.signatures)) {
+    // Per NUT-09 the mint returns paired outputs and signatures, one pair per requested output.
+    if (
+      !isObj(data) ||
+      !Array.isArray(data?.outputs) ||
+      !Array.isArray(data?.signatures) ||
+      data.outputs.length !== data.signatures.length ||
+      data.outputs.length > restorePayload.outputs.length
+    ) {
       this._logger.error('Invalid response from mint...', { data, op: 'restore' });
       throw new CTSError('Invalid response from mint');
     }
@@ -1233,6 +1263,7 @@ class Mint {
   private normalizeSignatureAmounts(
     signatures: SerializedBlindedSignature[],
   ): SerializedBlindedSignature[] {
+    this.assertRecordEntries(signatures, 'signatures');
     return signatures.map((signature) => ({
       ...signature,
       amount: Amount.from(signature.amount),
@@ -1242,10 +1273,52 @@ class Mint {
   private normalizeMessageAmounts(
     messages: SerializedBlindedMessage[],
   ): SerializedBlindedMessage[] {
+    this.assertRecordEntries(messages, 'outputs');
     return messages.map((message) => ({
       ...message,
       amount: Amount.from(message.amount),
     }));
+  }
+
+  /**
+   * Rejects list entries that are not records, before any spread copies them. A response element is
+   * whatever the JSON held, and spreading a string or an array expands it into indexed properties.
+   */
+  private assertRecordEntries(entries: unknown[], op: string): void {
+    if (entries.every((entry) => isRecord(entry))) return;
+    this._logger.error('Invalid response from mint...', { entries: entries.length, op });
+    throw new CTSError('Invalid response from mint');
+  }
+
+  /**
+   * Rejects a response carrying more signatures than the request had outputs. The mint signs the
+   * outputs it was sent, so the request bounds the per-entry work a response can cause.
+   */
+  private assertSignatureCount(signatures: unknown[], outputs: unknown[], op: string): void {
+    if (signatures.length <= outputs.length) return;
+    this._logger.error('Invalid response from mint...', {
+      signatures: signatures.length,
+      outputs: outputs.length,
+      op,
+    });
+    // Only used on paths where the mint has already settled, so carry the same recovery route the
+    // wallet gives for a short response.
+    throw new CTSError(
+      `Invalid response from mint: ${signatures.length} signatures, expected ${outputs.length}. ` +
+        'The operation may already have been applied; if the wallet is seeded, try restoring ' +
+        '(NUT-09) to recover.',
+    );
+  }
+
+  /**
+   * Bounds a mint-supplied keyset list before normalization copies every entry.
+   */
+  private assertKeysetList(keysets: unknown[], op: string): void {
+    if (keysets.length > MAX_KEYSET_LIST) {
+      this._logger.error('Invalid response from mint...', { keysets: keysets.length, op });
+      throw new CTSError('Invalid response from mint');
+    }
+    this.assertRecordEntries(keysets, op);
   }
 
   /**
@@ -1260,6 +1333,10 @@ class Mint {
     normalize?: (raw: Record<string, unknown>) => TRes,
   ): TRes {
     const op = `${method} mint quote`;
+    if (!isRecord(response)) {
+      this._logger.error('Invalid response from mint...', { type: describeShape(response), op });
+      throw new CTSError('Invalid response from mint');
+    }
     const data: Record<string, unknown> = { ...response };
     this.normalizeMintBaseFields(data, method, op);
     if (method === 'bolt11') {
@@ -1390,6 +1467,10 @@ class Mint {
     normalize?: (raw: Record<string, unknown>) => TRes,
   ): TRes {
     const op = `${method} melt quote`;
+    if (!isRecord(response)) {
+      this._logger.error('Invalid response from mint...', { type: describeShape(response), op });
+      throw new CTSError('Invalid response from mint');
+    }
     const data: Record<string, unknown> = { ...response };
     this.normalizeMeltBaseFields(data, method, op);
     if (method === 'bolt11' || method === 'bolt12') {
@@ -1416,6 +1497,14 @@ class Mint {
       data.fee_reserve = Amount.from(data.fee_reserve as AmountLike);
     }
     if (data.change) {
+      // Bounded before any per-entry work; the wallet still owns the blanks-vs-change comparison.
+      if (!Array.isArray(data.change) || data.change.length > MAX_MINT_INFO_LIST) {
+        this._logger.error('Invalid response from mint...', {
+          type: describeShape(data.change),
+          op,
+        });
+        throw new CTSError('Invalid response from mint');
+      }
       data.change = this.normalizeSignatureAmounts(data.change as SerializedBlindedSignature[]);
     }
     if (
@@ -1452,16 +1541,20 @@ class Mint {
    * Mutates `data` in place, normalizing onchain-specific melt fields.
    */
   private normalizeMeltOnchainFields(data: Record<string, unknown>): void {
-    if (!Array.isArray(data.fee_options) || data.fee_options.length === 0) {
+    if (
+      !Array.isArray(data.fee_options) ||
+      data.fee_options.length === 0 ||
+      data.fee_options.length > MAX_MINT_INFO_LIST
+    ) {
       this._logger.error('Invalid response from mint...', { data, op: 'onchain melt quote' });
-      throw new Error('Invalid response from mint');
+      throw new CTSError('Invalid response from mint');
     }
     data.fee_options = data.fee_options.map((raw) => {
       const opt = raw as Record<string, unknown>;
       // fee_index is the load-bearing selector for the melt request
       if (!Number.isSafeInteger(opt.fee_index)) {
         this._logger.error('Invalid response from mint...', { data, op: 'onchain melt quote' });
-        throw new Error('Invalid response from mint');
+        throw new CTSError('Invalid response from mint');
       }
       return {
         ...opt,
@@ -1476,7 +1569,7 @@ class Mint {
       (data.outpoint !== null && typeof data.outpoint !== 'string')
     ) {
       this._logger.error('Invalid response from mint...', { data, op: 'onchain melt quote' });
-      throw new Error('Invalid response from mint');
+      throw new CTSError('Invalid response from mint');
     }
   }
 }
