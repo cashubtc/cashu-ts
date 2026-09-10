@@ -120,8 +120,7 @@ type WitnessData = {
   signatures: string[];
 };
 
-// Parsing reads this set, so the exported one is a detached copy: an exported Set stays
-// mutable whatever its declared type.
+// NUT-11 tag keys that map onto structured lock fields, so they are reserved as additional tags.
 const P2PK_KNOWN_TAG_KEYS = new Set([
   'locktime',
   'pubkeys',
