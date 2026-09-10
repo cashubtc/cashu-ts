@@ -411,11 +411,11 @@ export class OutputData implements OutputDataLike {
       if (!/^(0|[1-9]\d*)$/.test(serialized.blindingFactor)) {
         throw new CTSError('blindingFactor must be a canonical decimal integer');
       }
+      // Validate
       const secret = hexToBytes(serialized.secret);
-      decodeUtf8Field(secret);
+      decodeUtf8Field(secret); // asserts round trip
       const blindingFactor = BigInt(serialized.blindingFactor);
-      // r == 0 is rejected inside blindMessage.
-      const { B_ } = blindMessage(secret, blindingFactor);
+      const { B_ } = blindMessage(secret, blindingFactor); // asserts valid `r`
       if (B_.toHex(true) !== serialized.blindedMessage.B_.toLowerCase()) {
         throw new CTSError(
           'stored output does not match its secret. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.',
