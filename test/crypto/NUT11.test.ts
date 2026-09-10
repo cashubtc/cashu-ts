@@ -1,6 +1,6 @@
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils.js';
+import { hexToBytes, bytesToHex, randomBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import { Amount, type OutputDataLike } from '../../src';
@@ -23,7 +23,6 @@ import {
   schnorrSignDigest,
   schnorrVerifyMessage,
   deriveP2BKBlindedPubkeys,
-  P2BK_DST,
   buildP2PKSigAllMessageV0,
   assertSigAllInputs,
   createSecret,
@@ -729,7 +728,9 @@ describe('P2BK fixed-vector ECDH tweak', () => {
     const Z = E.multiply(pBig);
     const Zx = Z.toBytes(false).slice(1, 33); // 32B X from uncompressed SEC1
     const i0 = new Uint8Array([0x00]);
-    const r = secp256k1.Point.Fn.fromBytes(sha256(new Uint8Array([...P2BK_DST, ...Zx, ...i0])));
+    const r = secp256k1.Point.Fn.fromBytes(
+      sha256(new Uint8Array([...utf8ToBytes('Cashu_P2BK_v1'), ...Zx, ...i0])),
+    );
 
     // Check blinded point matches P + r·G
     const expectPprime = P.add(secp256k1.Point.BASE.multiply(r));

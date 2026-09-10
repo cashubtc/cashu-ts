@@ -4,7 +4,6 @@ import { describe, expect, test } from 'vitest';
 
 import { Amount } from '../../src';
 import {
-  P2BK_DST,
   pointFromHex,
   deriveP2BKSecretKey,
   deriveP2BKBlindedPubkeyAtSlot,
@@ -303,16 +302,6 @@ describe('NUT28 uncovered branches and guards', () => {
     expect(deriveP2BKBlindedPubkeyAtSlot(key, eBytes, 120)).toHaveLength(66);
     for (const slot of [-1, 121, 1.5]) {
       expect(() => deriveP2BKBlindedPubkeyAtSlot(key, eBytes, slot)).toThrow(/slot/i);
-    }
-  });
-
-  test('mutating the exported domain separator leaves derivation alone', () => {
-    const before = deriveP2BKBlindedPubkeys([slot0Blinded], hexToBytes('11'.repeat(32)));
-    P2BK_DST[0] ^= 0xff;
-    try {
-      expect(deriveP2BKBlindedPubkeys([slot0Blinded], hexToBytes('11'.repeat(32)))).toEqual(before);
-    } finally {
-      P2BK_DST[0] ^= 0xff;
     }
   });
 

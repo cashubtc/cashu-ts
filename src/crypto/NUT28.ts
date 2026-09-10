@@ -10,13 +10,8 @@ import { MAX_P2BK_SLOTS, NUTROOT_MAX_SLOTS } from '../utils/limits';
 
 import { pointFromHex } from './curve_secp';
 
-// Derivation reads this copy, so the exported one is inert: a Uint8Array cannot be frozen.
-const P2BK_DST_BYTES = utf8ToBytes('Cashu_P2BK_v1');
-
-/**
- * BIP340-style domain separation tag (DST) for P2BK.
- */
-export const P2BK_DST: Uint8Array<ArrayBufferLike> = P2BK_DST_BYTES.slice();
+// BIP340-style domain separation tag (DST) for P2BK.
+const P2BK_DST = utf8ToBytes('Cashu_P2BK_v1');
 
 /**
  * Blind a sequence of public keys using ECDH derived tweaks, one tweak per slot.
@@ -218,11 +213,11 @@ function deriveP2BKBlindingTweakFromECDH(
   // Derive deterministic blinding factor (r):
   // Note: bytesToNumberBE is safe here because we explicitly guard against
   // out-of-range values below, throwing rather than silently normalizing.
-  let r = bytesToNumberBE(sha256(concatBytes(P2BK_DST_BYTES, Zx, iByte)));
+  let r = bytesToNumberBE(sha256(concatBytes(P2BK_DST, Zx, iByte)));
   /* c8 ignore next 6 — retry needs sha256 to land outside the curve order (~2^-128). */
   if (r === 0n || r >= secp256k1.Point.CURVE().n) {
     // Very unlikely to get here!
-    r = bytesToNumberBE(sha256(concatBytes(P2BK_DST_BYTES, Zx, iByte, new Uint8Array([0xff]))));
+    r = bytesToNumberBE(sha256(concatBytes(P2BK_DST, Zx, iByte, new Uint8Array([0xff]))));
     if (r === 0n || r >= secp256k1.Point.CURVE().n) {
       throw new CTSError('P2BK: tweak derivation failed');
     }
