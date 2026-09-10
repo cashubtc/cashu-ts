@@ -58,7 +58,7 @@ describe('requests', { timeout: 7500 }, () => {
       http.get(mintUrl + '/v1/melt/quote/bolt11/test', ({ request }) => {
         headers = request.headers;
         return HttpResponse.json({
-          quote: 'test_melt_quote_id',
+          quote: 'test',
           amount: 2000,
           fee_reserve: 20,
           payment_preimage: null,
@@ -84,7 +84,7 @@ describe('requests', { timeout: 7500 }, () => {
       http.get(mintUrl + '/v1/melt/quote/bolt11/test', ({ request }) => {
         headers = request.headers;
         return HttpResponse.json({
-          quote: 'test_melt_quote_id',
+          quote: 'test',
           amount: 2000,
           fee_reserve: 20,
           payment_preimage: null,

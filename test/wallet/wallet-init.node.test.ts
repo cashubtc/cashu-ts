@@ -498,7 +498,7 @@ describe('test fees', () => {
     server.use(
       http.get(mintUrl + '/v1/melt/quote/bolt11/test', () => {
         return HttpResponse.json({
-          quote: 'test_melt_quote_id',
+          quote: 'test',
           amount: Amount.from(2000),
           unit: 'sat',
           request: 'lnbc20u1pfake', // HRP encodes the quoted 2,000 sat
