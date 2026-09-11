@@ -7,7 +7,7 @@ import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
 
-import { type DLEQ } from './core';
+import { type ProofDLEQ, type DLEQ } from './core';
 import { assertSecpPoint, hash_e, hashToCurve } from './curve_secp';
 
 const DST_R = utf8ToBytes('Cashu_DLEQ_R_v1');
@@ -50,10 +50,11 @@ export const verifyDLEQProof = (
 
 export const verifyDLEQProof_reblind = (
   secret: Uint8Array, // secret
-  dleq: DLEQ,
+  dleq: ProofDLEQ,
   C: WeierstrassPoint<bigint>, // unblinded e-cash signature point
   A: WeierstrassPoint<bigint>, // mint public key point
 ) => {
+  // Exported, so a plain-JS caller can still omit `r` whatever the type says.
   if (dleq.r === undefined)
     throw new CTSError('verifyDLEQProof_reblind: Undefined blinding factor');
   const Y = hashToCurve(secret);

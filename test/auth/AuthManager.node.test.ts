@@ -741,14 +741,14 @@ test('importPool dedupes by secret and exportPool deep-copies and preserves miss
     id: 'k',
     C: 'C1',
     secret: 'S',
-    dleq: { e: 'e1', s: 's1' },
+    dleq: { e: 'e1', s: 's1', r: 'r1' },
     amount: Amount.from(1),
   };
   const b: Proof = {
     id: 'k',
     C: 'C2',
     secret: 'S',
-    dleq: { e: 'e2', s: 's2' },
+    dleq: { e: 'e2', s: 's2', r: 'r2' },
     amount: Amount.from(1),
   }; // dup secret
   const c: Proof = { id: 'k', C: 'C3', secret: 'T', amount: 1 } as any; // no dleq
