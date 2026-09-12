@@ -1,5 +1,30 @@
 # Changelog
 
+## [4.10.2](https://github.com/cashubtc/cashu-ts/compare/v4.10.1...v4.10.2) (2026-09-12)
+
+
+### Bug Fixes
+
+* **core:** reject incomplete DLEQ proofs on encode and decode  ([#1136](https://github.com/cashubtc/cashu-ts/issues/1136)) ([bb09af5](https://github.com/cashubtc/cashu-ts/commit/bb09af5a94135f20a108882df6ab29ae7d5f2265))
+* **crypto:** validate helper inputs at the boundary ([#1112](https://github.com/cashubtc/cashu-ts/issues/1112)) ([c0a0b06](https://github.com/cashubtc/cashu-ts/commit/c0a0b06542ec33e6a453f8ba4691958c6435abfa))
+* **mint:** strip wallet fields from inputs and bind melt responses ([#1119](https://github.com/cashubtc/cashu-ts/issues/1119)) ([ac1ccc3](https://github.com/cashubtc/cashu-ts/commit/ac1ccc3a1aa02b4c6ef033d69028551499ea4479))
+* **mint:** validate and bound mint response shapes ([#1117](https://github.com/cashubtc/cashu-ts/issues/1117)) ([9e482c8](https://github.com/cashubtc/cashu-ts/commit/9e482c829ae4ae24530ac8915b94d05ea034602c))
+* **model:** tighten Amount construction and strict wire JSON parsing ([#1115](https://github.com/cashubtc/cashu-ts/issues/1115)) ([6b2a1a6](https://github.com/cashubtc/cashu-ts/commit/6b2a1a6d4ac211bb976dc432e79540bd5e31788b))
+* **model:** validate persisted outputs and pin the hash-to-curve counter ([#1124](https://github.com/cashubtc/cashu-ts/issues/1124)) ([39239e3](https://github.com/cashubtc/cashu-ts/commit/39239e36403a09859b02f32db98339a26a0221f7))
+* **nut11:** bind SIG_INPUTS signatures to the secret and honour overlapping HTLC refunds ([#1105](https://github.com/cashubtc/cashu-ts/issues/1105)) ([01025dc](https://github.com/cashubtc/cashu-ts/commit/01025dc8233dd02b204320eced44c07dcc381647))
+* **nut11:** reject malformed P2PK tag values and bound key lists ([#1102](https://github.com/cashubtc/cashu-ts/issues/1102)) ([64382fb](https://github.com/cashubtc/cashu-ts/commit/64382fb7b73e2022658ed8a1149dadadbebfee25))
+* **nut11:** validate a SIG_ALL signing package before signing it ([#1107](https://github.com/cashubtc/cashu-ts/issues/1107)) ([ce72d16](https://github.com/cashubtc/cashu-ts/commit/ce72d162e076ecafe7f5722c0f76b3614ab32f59))
+* **nut26:** reject repeated singular TLV tags and untyped policy flags ([#1100](https://github.com/cashubtc/cashu-ts/issues/1100)) ([f97d0c5](https://github.com/cashubtc/cashu-ts/commit/f97d0c5e687d3e775a77ed56232b5f9c3552bfe2))
+* **transport:** bound the WebSocket queue and tear down cleanly ([#1122](https://github.com/cashubtc/cashu-ts/issues/1122)) ([903f168](https://github.com/cashubtc/cashu-ts/commit/903f1687a2f6a27a876aa531718726570f9484bd))
+* **transport:** never retry a request carrying a Blind-auth header ([#1091](https://github.com/cashubtc/cashu-ts/issues/1091)) ([f35d219](https://github.com/cashubtc/cashu-ts/commit/f35d219f953107eb8544338dfa5204192500f20a))
+* **transport:** scope request logs, merge headers case-insensitively, sanitize log context ([#1126](https://github.com/cashubtc/cashu-ts/issues/1126)) ([95c88f4](https://github.com/cashubtc/cashu-ts/commit/95c88f4ad4cc9b3b288f637362eb20a8b832f53a))
+* **utils:** guard the keysetIds argument of getDecodedToken ([#1085](https://github.com/cashubtc/cashu-ts/issues/1085)) ([847812f](https://github.com/cashubtc/cashu-ts/commit/847812f690ebfbb9d7d5b095b619889189627465))
+* **utils:** tighten UTF-8, CBOR and TLV decoding ([#1098](https://github.com/cashubtc/cashu-ts/issues/1098)) ([fec4760](https://github.com/cashubtc/cashu-ts/commit/fec47608c0d55913a6f2b4b20f14903352303e5d))
+* **wallet:** guard counters, mint previews and cache age ([#1128](https://github.com/cashubtc/cashu-ts/issues/1128)) ([0e74be0](https://github.com/cashubtc/cashu-ts/commit/0e74be012c1a0e5e86bb4ec9d2104fd0752afa58))
+* **wallet:** normalise quote amounts in WebSocket updates ([#1089](https://github.com/cashubtc/cashu-ts/issues/1089)) ([4b9b025](https://github.com/cashubtc/cashu-ts/commit/4b9b02555fff357b26a0350cefc7957981998e78))
+* **wallet:** unblind melt change and restore with the keyset the mint signed under ([#1083](https://github.com/cashubtc/cashu-ts/issues/1083)) ([38459e0](https://github.com/cashubtc/cashu-ts/commit/38459e0603006c307f730a6b41b4c7bc7f55ed0b))
+* **wallet:** unblind swap and mint outputs with the keyset the mint signed under ([#1096](https://github.com/cashubtc/cashu-ts/issues/1096)) ([03dff11](https://github.com/cashubtc/cashu-ts/commit/03dff11168ba7f650de90dcb290c6da982070204))
+
 ## [4.10.1](https://github.com/cashubtc/cashu-ts/compare/v4.10.0...v4.10.1) (2026-09-04)
 
 
