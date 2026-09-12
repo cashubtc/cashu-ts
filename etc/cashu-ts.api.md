@@ -570,11 +570,10 @@ export type DeviceStartResponse = {
 // @public (undocumented)
 export type DigestInput = Uint8Array | string;
 
-// @public (undocumented)
+// @public
 export type DLEQ = {
-    s: Uint8Array;
     e: Uint8Array;
-    r?: bigint;
+    s: Uint8Array;
 };
 
 // @public
@@ -2060,10 +2059,15 @@ export type Proof = {
     amount: Amount;
     secret: string;
     C: string;
-    dleq?: SerializedDLEQ;
+    dleq?: SerializedProofDLEQ;
     p2pk_e?: string;
     witness?: string | P2PKWitness | HTLCWitness;
     spend_info?: SpendInfo;
+};
+
+// @public
+export type ProofDLEQ = DLEQ & {
+    r: bigint;
 };
 
 // @public
@@ -2392,11 +2396,10 @@ export type SerializedBlindedSignature = {
     dleq?: SerializedDLEQ;
 };
 
-// @public (undocumented)
+// @public
 export type SerializedDLEQ = {
     s: string;
     e: string;
-    r?: string;
 };
 
 // @public (undocumented)
@@ -2420,6 +2423,11 @@ export type SerializedOutputData = {
 // @public
 export type SerializedProof = Omit<Proof, 'amount'> & {
     amount: string;
+};
+
+// @public
+export type SerializedProofDLEQ = SerializedDLEQ & {
+    r: string;
 };
 
 // @public
@@ -2710,7 +2718,7 @@ export const verifyDLEQProof: (dleq: DLEQ, B_: WeierstrassPoint<bigint>, C_: Wei
 
 // @public (undocumented)
 export const verifyDLEQProof_reblind: (secret: Uint8Array, // secret
-dleq: DLEQ, C: WeierstrassPoint<bigint>, // unblinded e-cash signature point
+dleq: ProofDLEQ, C: WeierstrassPoint<bigint>, // unblinded e-cash signature point
 A: WeierstrassPoint<bigint>) => boolean;
 
 // @public

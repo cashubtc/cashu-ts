@@ -455,6 +455,37 @@ If you were calling `hasValidDleq(proof, keyset)` and relying on the previous st
 
 ---
 
+## `Proof.dleq` requires `r`; `DLEQ` split from `ProofDLEQ`
+
+The DLEQ types did two jobs. `DLEQ` and `SerializedDLEQ` both carried an optional blinding factor, so they described the mint's proof and the wallet's completed one at once, and nothing in the type said which you held.
+
+NUT-12 splits the work: the mint issues `{e, s}`, because it never sees the blinding factor, and the wallet adds the `r` it blinded with when it builds the `Proof`. v5 splits the types to match.
+
+- `DLEQ` and `SerializedDLEQ` are now the mint's pair, with no `r`. They type `SerializedBlindedSignature.dleq`, which is what the mint returns.
+- `ProofDLEQ` and `SerializedProofDLEQ` add a required `r`. `Proof.dleq` takes the serialized one, and `verifyDLEQProof_reblind` takes the other.
+
+So a `Proof` either has no DLEQ at all, or has a complete one. A two-field DLEQ on a proof is no longer representable, because it can never be verified by the next holder and costs its owner privacy.
+
+Encoding a proof whose DLEQ has no `r` throws, for binary tokens as well as `cashuB`. Decoding a token that carries one drops the block rather than crashing, leaving the verify-if-present behavior above. `hasValidDleq` reports one as invalid instead of verifying against a zero blinding factor.
+
+### Migration
+
+```ts
+// Before
+const dleq: SerializedDLEQ = { e, s };
+const proof: Proof = { id, amount, secret, C, dleq };
+
+// After
+const dleq: SerializedProofDLEQ = { e, s, r };
+const proof: Proof = { id, amount, secret, C, dleq };
+```
+
+Reading is unaffected and gains a guarantee: `proof.dleq.r` is a `string` wherever `proof.dleq` is set, so the `?? '00'` and `!` workarounds around it can go.
+
+You only need to act if your own code builds proofs, which normally means a custom `OutputDataLike`. Proofs from `wallet.receive`, `getDecodedToken` or any mint operation already satisfy this. If you hold a mint's blind signature rather than a proof, keep `SerializedDLEQ`.
+
+---
+
 ## `proofStatesStream` errors now throw
 
 `wallet.on.proofStatesStream` previously treated a WebSocket failure or mint-side RPC error as a graceful end of the iterator — the `for await` loop would exit normally and the consumer was responsible for inferring a problem via timeout. v5 throws the error from the iterator instead, matching the Node `AsyncIterable` convention (`Readable`, async generators, etc.).

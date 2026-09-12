@@ -22,10 +22,27 @@ export type RawBlindedMessage = {
   secret: Uint8Array;
 };
 
+/**
+ * DLEQ proof as the mint issues it (NUT-12).
+ *
+ * @remarks
+ * The mint never sees the wallet's blinding factor, so its proof is `{e, s}` alone. Verifying it
+ * against a `Proof` needs {@link ProofDLEQ}.
+ */
 export type DLEQ = {
-  s: Uint8Array; // signature
   e: Uint8Array; // challenge
-  r?: bigint; // optional: blinding factor
+  s: Uint8Array; // response
+};
+
+/**
+ * A mint's DLEQ proof completed by the wallet with its own blinding factor.
+ *
+ * @remarks
+ * The shape that travels on a `Proof`. NUT-12 requires the wallet to add `r`; without it the proof
+ * cannot be re-blinded and so cannot be verified by anyone downstream.
+ */
+export type ProofDLEQ = DLEQ & {
+  r: bigint; // blinding factor
 };
 
 export type UnblindedSignature = {

@@ -13,6 +13,7 @@ import {
   verifyDLEQProof_reblind,
   constructUnblindedSignature,
   createRandomRawBlindedMessage,
+  type ProofDLEQ,
 } from '../../src/crypto';
 import { Amount } from '../../src/model/Amount';
 import { OutputData } from '../../src/model/OutputData';
@@ -75,10 +76,11 @@ describe('test DLEQ scheme', () => {
       blindMessage.secret,
       mintPubKey,
     );
-    dleqProof.r = blindMessage.r;
+    // Wallet(Alice) completes the mint's proof with the blinding factor she used
+    const completed = { ...dleqProof, r: blindMessage.r };
 
     // Wallet(Carol)
-    const isValid = verifyDLEQProof_reblind(blindMessage.secret, dleqProof, proof.C, mintPubKey);
+    const isValid = verifyDLEQProof_reblind(blindMessage.secret, completed, proof.C, mintPubKey);
     expect(isValid).toBe(true);
   });
 });
@@ -142,8 +144,10 @@ describe('verifyDLEQProof_reblind blinding factor guard', () => {
     const blindSig = createBlindSignature(blindMsg.B_, mintPrivKey, '');
     const proof = constructUnblindedSignature(blindSig, blindMsg.r, blindMsg.secret, mintPubKey);
     const dleq = createDLEQProof(blindMsg.B_, mintPrivKey);
-    expect(dleq.r).toBeUndefined();
-    expect(() => verifyDLEQProof_reblind(blindMsg.secret, dleq, proof.C, mintPubKey)).toThrow(
+    expect('r' in dleq).toBe(false);
+    // Deliberately malformed: the type forbids this, a plain-JS caller does not.
+    const incomplete = dleq as ProofDLEQ;
+    expect(() => verifyDLEQProof_reblind(blindMsg.secret, incomplete, proof.C, mintPubKey)).toThrow(
       'verifyDLEQProof_reblind: Undefined blinding factor',
     );
   });
@@ -155,8 +159,9 @@ describe('verifyDLEQProof_reblind blinding factor guard', () => {
     const blindSig = createBlindSignature(blindMsg.B_, mintPrivKey, '');
     const proof = constructUnblindedSignature(blindSig, blindMsg.r, blindMsg.secret, mintPubKey);
     const dleq = createDLEQProof(blindMsg.B_, mintPrivKey);
-    dleq.r = createRandomRawBlindedMessage().r; // a blinding factor from an unrelated message
-    expect(verifyDLEQProof_reblind(blindMsg.secret, dleq, proof.C, mintPubKey)).toBe(false);
+    // completed with a blinding factor from an unrelated message
+    const wrong = { ...dleq, r: createRandomRawBlindedMessage().r };
+    expect(verifyDLEQProof_reblind(blindMsg.secret, wrong, proof.C, mintPubKey)).toBe(false);
   });
 });
 

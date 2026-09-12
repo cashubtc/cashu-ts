@@ -46,12 +46,24 @@ export type SerializedBlindedSignature = {
   dleq?: SerializedDLEQ;
 };
 
-/*
- * Zero-Knowledge that BlindedSignature
- * was generated using a specific public key
+/**
+ * Zero-knowledge proof that a BlindSignature was generated using a specific public key (NUT-12).
+ *
+ * @remarks
+ * The mint's half of the proof. The wallet completes it into a {@link SerializedProofDLEQ}.
  */
 export type SerializedDLEQ = {
   s: string;
   e: string;
-  r?: string;
+};
+
+/**
+ * A mint's DLEQ proof completed by the wallet with its own blinding factor, as carried on a Proof.
+ *
+ * @remarks
+ * NUT-12 splits the work: the mint issues `{e, s}`, the wallet adds the `r` it blinded with. A
+ * Proof carrying only `{e, s}` cannot be verified by the next holder and is not valid.
+ */
+export type SerializedProofDLEQ = SerializedDLEQ & {
+  r: string;
 };

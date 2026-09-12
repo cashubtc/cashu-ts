@@ -2,7 +2,6 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import {
-  type DLEQ,
   type G1Point,
   type G2Point,
   assertV3PointSecret,
@@ -38,8 +37,10 @@ import type {
   Keys,
   Proof,
   ProofLike,
+  SerializedProofDLEQ,
   Token,
   TokenV4Template,
+  V4DLEQTemplate,
   V4InnerToken,
   V4ProofTemplate,
   HasKeysetKeys,
@@ -280,12 +281,6 @@ function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
   if (removeDleq) {
     proofs = stripDleq(proofs);
   }
-  // Make sure each DLEQ has its blinding factor
-  proofs.forEach((p) => {
-    if (p.dleq && p.dleq.r == undefined) {
-      throw new CTSError('Missing blinding factor in included DLEQ proof');
-    }
-  });
   const nonHex = hasNonHexId(proofs);
   if (nonHex) {
     throw new CTSError('can not encode to v4 token if proofs contain non-hex keyset id');
@@ -293,7 +288,7 @@ function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
   // Map keyset IDs to short IDs
   proofs = convertToShortKeysetId(proofs);
 
-  const tokenTemplate = templateFromToken({ ...token, proofs });
+  const tokenTemplate = toV4CborTemplate({ ...token, proofs });
 
   const encodedData = encodeCBOR(tokenTemplate);
   const prefix = 'cashu';
@@ -319,7 +314,22 @@ function isV3TransactionWitness(keysetId: string, secret: string): boolean {
   return isBlsKeyset(keysetId) && isV3PointSecret(secret);
 }
 
-function templateFromToken(token: Token): TokenV4Template {
+/**
+ * Encodes a proof's DLEQ for the v4 wire format.
+ *
+ * @remarks
+ * Per NUT-12 the wallet adds its own blinding factor `r` to the mint's `{e, s}`. A DLEQ without it
+ * is unverifiable by the next holder and costs its owner privacy, so refuse rather than pad `r`: a
+ * zero blinding factor would also assert the message was never blinded.
+ */
+function toV4CborDleq(dleq: SerializedProofDLEQ): V4DLEQTemplate {
+  if (dleq.r == undefined) {
+    throw new CTSError('Missing blinding factor in included DLEQ proof');
+  }
+  return { e: hexToBytes(dleq.e), s: hexToBytes(dleq.s), r: hexToBytes(dleq.r) };
+}
+
+function toV4CborTemplate(token: Token): TokenV4Template {
   // Keyed by token-supplied IDs, so a plain object would resolve `__proto__` etc. to inherited members.
   const idMap = Object.create(null) as { [id: string]: Proof[] };
   const mint = token.mint;
@@ -341,11 +351,7 @@ function templateFromToken(token: Token): TokenV4Template {
         s: p.secret,
         c: hexToBytes(p.C),
         ...(p.dleq && {
-          d: {
-            e: hexToBytes(p.dleq.e),
-            s: hexToBytes(p.dleq.s),
-            r: hexToBytes(p.dleq.r ?? '00'),
-          },
+          d: toV4CborDleq(p.dleq),
         }),
         ...(p.p2pk_e && {
           pe: hexToBytes(p.p2pk_e),
@@ -372,42 +378,72 @@ function templateFromToken(token: Token): TokenV4Template {
   return tokenTemplate;
 }
 
-function tokenFromTemplate(template: TokenV4Template): Token {
+/**
+ * Hex-encodes a byte string read from a decoded token template.
+ *
+ * @remarks
+ * The template types describe what this library emits, but a decoded token holds whatever the
+ * sender put on the wire and any field may carry any CBOR type. Without this, a wrong-typed field
+ * surfaces as a raw `TypeError` from the hex encoder rather than a token error naming the field.
+ */
+function templateHex(value: unknown, field: string): string {
+  if (!(value instanceof Uint8Array) || value.length === 0) {
+    throw new CTSError(`Invalid token: ${field} must be a non-empty byte string`);
+  }
+  return bytesToHex(value);
+}
+
+/**
+ * True when a decoded v4 DLEQ block carries all three of `e`, `s` and `r`.
+ *
+ * @remarks
+ * A block missing any of them is dropped on decode: without `r` it can never verify, and carrying a
+ * partial one costs the holder privacy (NUT-12). Absent is tolerated, present-but-malformed is not,
+ * so the fields themselves are still read through {@link templateHex}.
+ */
+function isCompleteDleq(d: V4DLEQTemplate | undefined): d is V4DLEQTemplate {
+  return d != undefined && d.e != undefined && d.s != undefined && d.r != undefined;
+}
+
+function fromV4CborTemplate(template: TokenV4Template): Token {
   if (!template || !Array.isArray(template.t)) {
-    throw new CTSError('Invalid token template');
+    throw new CTSError('Invalid token');
   }
   const proofs: Proof[] = [];
   template.t.forEach((t) => {
     if (!t || !Array.isArray(t.p)) {
-      throw new CTSError('Invalid token template');
+      throw new CTSError('Invalid token');
     }
     t.p.forEach((p) => {
+      const id = templateHex(t.i, 'keyset id');
       proofs.push({
         secret: p.s,
-        C: bytesToHex(p.c),
+        C: templateHex(p.c, 'proof C'),
         amount: Amount.from(p.a),
-        id: bytesToHex(t.i),
-        ...(p.d && {
+        id,
+        ...(isCompleteDleq(p.d) && {
           dleq: {
-            r: bytesToHex(p.d.r),
-            s: bytesToHex(p.d.s),
-            e: bytesToHex(p.d.e),
+            r: templateHex(p.d.r, 'dleq r'),
+            s: templateHex(p.d.s, 'dleq s'),
+            e: templateHex(p.d.e, 'dleq e'),
           },
         }),
         ...(p.pe && {
-          p2pk_e: bytesToHex(p.pe),
+          p2pk_e: templateHex(p.pe, 'p2pk_e'),
         }),
         ...(p.w &&
-          !isV3TransactionWitness(bytesToHex(t.i), p.s) && {
+          !isV3TransactionWitness(id, p.s) && {
             witness: p.w,
           }),
         ...(p.si && {
           spend_info: {
-            ...(p.si.k && { k: bytesToHex(p.si.k) }),
-            ...(p.si.e && { E: bytesToHex(p.si.e) }),
-            ...(p.si.i && { K: bytesToHex(p.si.i) }),
-            ...(p.si.u && { u: bytesToHex(p.si.u) }),
-            ...(p.si.t && { tree: p.si.t.map(bytesToHex) }),
+            ...(p.si.k && { k: templateHex(p.si.k, 'spend_info k') }),
+            ...(p.si.e && { E: templateHex(p.si.e, 'spend_info E') }),
+            ...(p.si.i && { K: templateHex(p.si.i, 'spend_info K') }),
+            ...(p.si.u && { u: templateHex(p.si.u, 'spend_info u') }),
+            ...(p.si.t && {
+              tree: p.si.t.map((leaf) => templateHex(leaf, 'spend_info tree leaf')),
+            }),
           },
         }),
       });
@@ -563,10 +599,15 @@ function handleTokens(token: string): Token {
     if (!entry || !Array.isArray(entry.proofs)) {
       throw new CTSError('Invalid token');
     }
-    const proofs = entry.proofs.map((p) => ({
-      ...p,
-      amount: Amount.from(p.amount as AmountLike),
-    }));
+    const proofs = entry.proofs.map((p) => {
+      const { dleq, ...rest } = p;
+      return {
+        ...rest,
+        amount: Amount.from(p.amount),
+        // Same rule as the v4 path: an incomplete DLEQ is useless and leaky, so it does not travel.
+        ...(dleq?.r && dleq.s && dleq.e && { dleq }),
+      };
+    });
     const tokenObj: Token = {
       mint: entry.mint,
       proofs,
@@ -579,7 +620,7 @@ function handleTokens(token: string): Token {
   } else if (version === 'B') {
     const uInt8Token = decodeBase64UrlToUint8(encodedToken);
     const tokenData = decodeCBOR(uInt8Token) as TokenV4Template;
-    return tokenFromTemplate(tokenData);
+    return fromV4CborTemplate(tokenData);
   }
   throw new CTSError('Token version is not supported');
 }
@@ -1183,7 +1224,7 @@ export function hasValidDleq(
   keyset: HasKeysetKeys,
   opts?: { require?: boolean },
 ): boolean {
-  const require = opts?.require ?? false;
+  const required = opts?.require ?? false;
   // v3 (BLS) proofs carry no DLEQ; pairing verification stands in. Returns true iff
   // e(C, G2) == e(Y, K2). This is "valid signature" in v3 terms — equivalent guarantee
   // to a verifying DLEQ on v0/v1/v2 proofs.
@@ -1213,7 +1254,12 @@ export function hasValidDleq(
   }
 
   if (proof?.dleq == undefined) {
-    return !require;
+    return !required;
+  }
+  // A DLEQ the wallet never completed with its own `r` is malformed, not absent: it cannot be
+  // re-blinded, and a zero blinding factor would assert the message was never blinded at all.
+  if (proof.dleq.r == undefined) {
+    return false;
   }
 
   const key = keyset.keys[proof.amount.toString()];
@@ -1221,8 +1267,8 @@ export function hasValidDleq(
     const dleq = {
       e: hexToBytes(proof.dleq.e),
       s: hexToBytes(proof.dleq.s),
-      r: hexToNumber(proof.dleq.r ?? '00'),
-    } as DLEQ;
+      r: hexToNumber(proof.dleq.r),
+    };
     return verifyDLEQProof_reblind(
       new TextEncoder().encode(proof.secret),
       dleq,
@@ -1352,7 +1398,7 @@ export function getEncodedTokenBinary(token: Token): Uint8Array {
       'Proofs contain a legacy keyset ID and cannot be encoded. Swap them at the mint first.',
     );
   }
-  const template = templateFromToken({ ...token, proofs });
+  const template = toV4CborTemplate({ ...token, proofs });
   const binaryTemplate = encodeCBOR(template);
   const prefix = utf8Encoder.encode('craw');
   const version = utf8Encoder.encode('B');
@@ -1371,7 +1417,7 @@ export function getDecodedTokenBinary(bytes: Uint8Array): Token {
   }
   const binaryToken = bytes.slice(5);
   const decoded = decodeCBOR(binaryToken) as TokenV4Template;
-  return tokenFromTemplate(decoded);
+  return fromV4CborTemplate(decoded);
 }
 
 function removePrefix(token: string): string {

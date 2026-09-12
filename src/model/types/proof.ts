@@ -1,6 +1,6 @@
 import { type Amount, type AmountLike } from '../Amount';
 
-import { type SerializedDLEQ } from './blinded';
+import { type SerializedProofDLEQ } from './blinded';
 
 /**
  * A proof-shaped object whose `amount` field has not yet been normalized to `Amount`.
@@ -38,9 +38,13 @@ export type Proof = {
    */
   C: string;
   /**
-   * DLEQ proof.
+   * DLEQ proof, complete with the blinding factor the wallet used (NUT-12).
+   *
+   * @remarks
+   * Optional as a whole. Present means all three fields are present: a proof carrying only the
+   * mint's `{e, s}` cannot be verified and must not be built or forwarded.
    */
-  dleq?: SerializedDLEQ;
+  dleq?: SerializedProofDLEQ;
   /**
    * The P2BK ephemeral pubkey "E" (SEC1-compressed 33-byte hex).
    */

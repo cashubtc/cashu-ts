@@ -27,7 +27,7 @@ import {
   verifyDLEQProof,
   verifyUnblindedSignatureBls,
   type CurvePoint,
-  type DLEQ,
+  type ProofDLEQ,
   type BlindSignature,
   type G1Point,
   type G2Point,
@@ -132,6 +132,17 @@ export class OutputData implements OutputDataLike {
     secretKey?: Uint8Array,
     spendInfo?: SpendInfo,
   ) {
+    // Cheap JS runtime guards, as this runs per output on the send and receive path
+    // c.f: `deserialize` re-blinds the secret and compares when hydrating stored data.
+    if (typeof blindingFactor !== 'bigint' || blindingFactor <= 0n) {
+      throw new CTSError('OutputData: blindingFactor must be a positive bigint');
+    }
+    if (!(secret instanceof Uint8Array) || secret.length === 0) {
+      throw new CTSError('OutputData: secret must be a non-empty Uint8Array');
+    }
+    if (blindedMessage == undefined) {
+      throw new CTSError('OutputData: blindedMessage is required');
+    }
     this.secret = secret;
     this.blindingFactor = blindingFactor;
     this.blindedMessage = blindedMessage;
@@ -220,7 +231,8 @@ export class OutputData implements OutputDataLike {
       });
     }
 
-    let dleq: DLEQ | undefined;
+    // NUT-12: the mint issues `{e, s}`, the wallet completes it with the `r` it blinded with.
+    let dleq: ProofDLEQ | undefined;
     if (sig.dleq) {
       dleq = {
         s: hexToBytes(sig.dleq.s),
@@ -250,7 +262,7 @@ export class OutputData implements OutputDataLike {
         dleq: {
           s: bytesToHex(dleq.s),
           e: bytesToHex(dleq.e),
-          r: numberToHexPadded64(dleq.r ?? BigInt(0)),
+          r: numberToHexPadded64(dleq.r),
         },
       }),
     };
