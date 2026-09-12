@@ -143,6 +143,8 @@ export class AuthManager implements AuthProvider {
     if (this.oidc && this.oidcListener) {
       this.oidc.removeTokenListener(this.oidcListener);
     }
+    // Credentials from a replaced provider must never be sent to its replacement.
+    if (this.oidc && this.oidc !== oidc) this.tokens = {};
     // A refresh still running on the old provider must not install its result either.
     this.tokenGeneration++;
     this.sessionGeneration++;
