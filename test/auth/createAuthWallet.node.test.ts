@@ -244,6 +244,22 @@ describe('createAuthWallet wiring', () => {
     },
   );
 
+  test('restoring a non-rotating refresh token keeps it usable and observable', async () => {
+    const onTokens = vi.fn();
+    const { auth, oidc } = await createAuthWallet(mintUrl, { oidc: { onTokens } });
+    server.use(
+      http.post(tokenEndpoint, () =>
+        HttpResponse.json({ access_token: 'restored', expires_in: 300 }),
+      ),
+    );
+    const refresh = vi.spyOn(oidc, 'refresh');
+    const tokens = await oidc.refresh('saved-refresh');
+    expect(tokens.refresh_token).toBe('saved-refresh');
+    expect(onTokens).toHaveBeenCalledWith(tokens, 'refresh');
+    await expect(auth.ensureCAT(9999)).resolves.toBe('restored');
+    expect(refresh).toHaveBeenNthCalledWith(2, 'saved-refresh');
+  });
+
   test.each(['manager', 'public'] as const)(
     '%s refresh retains the account selected while its request was pending',
     async (driver) => {

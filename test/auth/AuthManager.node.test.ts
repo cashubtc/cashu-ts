@@ -305,14 +305,18 @@ describe('AuthManager: CAT lifecycle', () => {
     const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
     am['tokens'] = { accessToken: 'old-cat', refreshToken: 'rrr', expiresAt: Date.now() - 1 };
     am.attachOIDC(first as any);
+    am.attachOIDC(first as any); // Reattaching the same provider retains its credentials.
+    expect(am.getCAT()).toBe('old-cat');
 
     const pending = am.ensureCAT(30);
     am.attachOIDC(second as any);
+    await expect(am.ensureCAT(30)).resolves.toBeUndefined();
+    expect(second.refresh).not.toHaveBeenCalled();
     finishOldRefresh({ access_token: 'p1-cat', refresh_token: 'p1-refresh', expires_in: 300 });
 
     expect(await pending).toBeUndefined();
-    expect(am.getCAT()).toBe('old-cat');
-    expect(am['tokens'].refreshToken).toBe('rrr');
+    expect(am.getCAT()).toBeUndefined();
+    expect(am['tokens']).toEqual({});
   });
 
   test('attachOIDC detaches the previous provider so its late token cannot install state', () => {

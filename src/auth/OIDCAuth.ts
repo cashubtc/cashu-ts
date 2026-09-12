@@ -384,6 +384,8 @@ export class OIDCAuth {
         client_id: clientId,
       });
       const tok = await this.postFormStrict<TokenResponse>(cfg.token_endpoint, form);
+      // Providers may keep the refresh token instead of rotating it.
+      tok.refresh_token ||= refresh_token;
       this.handleTokens(tok, 'refresh', listeners);
       return tok;
     })();
