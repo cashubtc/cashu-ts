@@ -917,3 +917,51 @@ const customRequest: RequestFn = async ({ endpoint, requestBody, ...rest }) => {
 ```
 
 A transport that re-serializes the string sends quoted JSON and fails at the mint, so a missed migration surfaces as a hard request error, not a silent auth failure. Prefer `JSONInt.stringify` over `JSON.stringify` for object bodies: it emits bigint amounts as plain JSON numbers.
+
+---
+
+## `AuthManager.setCAT` replaces the whole token record
+
+`setCAT(cat)` now clears `refreshToken` and `expiresAt` as well as setting the access token; previously they were only cleared when the CAT was unset. A CAT set by hand carries no refresh token and no expiry the caller can state, so the manager treats it as "unknown expiry, the mint decides" rather than inheriting the previous token's refresh state.
+
+Let `attachOIDC` install the provider's token record, including refresh token and expiry when supplied. An `onTokens` callback that calls `setCAT` must not be combined with `attachOIDC`, since both install the CAT and only the provider path carries the refresh state.
+
+---
+
+## `createAuthWallet` honours a caller-supplied `oidc.onTokens`
+
+`createAuthWallet` used to overwrite `options.oidc.onTokens` with its own CAT-setting callback; it now passes the caller's callback through and relies on `attachOIDC` alone to install the CAT and refresh state. Code that passed `onTokens` and saw it ignored will now see it called on every token update.
+
+---
+
+## `OIDCAuth.devicePoll` removed; use `startDeviceAuth`
+
+`devicePoll(device_code)` is gone. It was a second, parallel implementation of the device-code poll loop that shipped alongside `startDeviceAuth()` and never gained the cancellation, abort and interval handling the latter has: it loops until the provider answers and offers no way to stop it.
+
+```ts
+// Before
+const start = await oidc.deviceStart();
+const tokens = await oidc.devicePoll(start.device_code);
+
+// After
+const start = await oidc.startDeviceAuth();
+// show start.verification_uri and start.user_code, then
+const tokens = await start.poll();
+// and, to abandon the sign-in, start.cancel();
+```
+
+`deviceStart()` is unchanged and still available if you want the start fields on their own.
+
+---
+
+## OIDC refreshes belong to the session that started them
+
+`AuthManager` ignores refresh results after `setCAT`, `attachOIDC`, a sign-in, or another token update replaces the state they started with. Both `ensureCAT()` and direct `oidc.refresh()` calls use this rule. A new session can refresh while an older session request is still pending. A refresh explicitly started on an empty manager can restore a saved refresh token, including after an earlier `setCAT(undefined)`.
+
+Refreshes notify the listeners registered when they started, excluding listeners removed before the response is dispatched. Listeners added during a refresh receive subsequent updates. Concurrent `oidc.refresh()` calls with the same refresh token, client ID, and listener registrations share one request and one callback delivery, including calls from `ensureCAT()`. Changing client ID or registrations starts a separate request, even when the refresh token is unchanged.
+
+Token listeners and `oidc.onTokens` now receive `(tokens, origin)`, where `origin` is `'signin'` or `'refresh'`; existing one-argument listeners continue to work. Sign-ins replace the token record, while refreshes retain the current refresh token when the provider omits a replacement. The caller's `onTokens` callback and other listeners still receive provider results, including ones a manager declines; persistence callbacks must apply their own account-lifecycle rules.
+
+CAT-protected BAT minting rejects with `CTSError: AuthManager: session changed while obtaining BATs` if the session changes during CAT acquisition or minting; any resulting batch is discarded. Ordinary CAT refreshes keep the session and its outstanding BAT batch. Already pooled or imported BATs remain available until consumed or explicitly replaced with `importPool([], 'replace')`.
+
+`startDeviceAuth().cancel()` now settles all active polls promptly, clears their delay timers, and aborts token requests. Results from a custom fetch that ignores the abort signal are still ignored.
