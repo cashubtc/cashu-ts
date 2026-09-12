@@ -28,6 +28,16 @@ wallet2.loadMintFromCache(mintInfoCache, keychainCache);
 
 > ⚠️ **Server-side usage:** If you construct a `Wallet` (or `Mint`) using a URL from untrusted input (e.g. a received token), validate the mint URL against your own trusted-mint allowlist **before** passing it in. The library validates URL structure but cannot know which mints your application trusts.
 
+## Auth state and application sessions
+
+`createAuthWallet` connects one `AuthManager` and `OIDCAuth` to a mint and wallet. The manager owns the CAT record and BAT pool; your app owns account selection, login flow lifetime, and persistence. Keep separate managers and persisted BAT pools for separate application accounts.
+
+Use the attached OIDC client for sign-in or call `oidc.refresh(savedRefreshToken)` to restore a session. Its listener installs the complete token state. `auth.setCAT(cat)` is manual replacement: it clears the previous refresh token and expiry. A provider refresh keeps the refresh token if the response omits a replacement; a new sign-in does not inherit it.
+
+When ending an application session, cancel any device flow with its `cancel()` helper and clear the CAT with `auth.setCAT(undefined)`. Existing BATs remain available; use `auth.importPool([], 'replace')` if they should also be discarded. Clearing the CAT does not cancel an independently started sign-in.
+
+`oidc.onTokens(tokens, origin)` observes provider responses (`origin` is `'signin'` or `'refresh'`), including refresh results the manager may decline after an account change. Persistence callbacks must follow your app's account lifetime; do not use them to call `setCAT` alongside the attached manager.
+
 ## Custom output generation
 
 Pass `outputDataCreator` when you need to replace the default output generation logic, for
