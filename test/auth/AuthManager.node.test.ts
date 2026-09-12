@@ -38,7 +38,7 @@ vi.mock('../../src/wallet', () => {
 });
 
 // 2) Now import everything else
-import { Amount, type RequestFn } from '../../src';
+import { Amount, CTSError, type RequestFn } from '../../src';
 import { AuthManager } from '../../src/auth/AuthManager';
 import type { Logger } from '../../src/logger';
 import { OutputData } from '../../src/model/OutputData';
@@ -109,6 +109,24 @@ function fakeInfo({
   } as any;
 }
 
+// Minimal provider fixture; real OIDC callback ordering is covered by createAuthWallet tests.
+function providerStub(refresh: () => Promise<unknown> = vi.fn()) {
+  type Listener = (t: unknown, origin: 'signin' | 'refresh') => void;
+  const listeners: Listener[] = [];
+  return {
+    listeners,
+    addTokenListener: (fn: Listener) => listeners.push(fn),
+    removeTokenListener: (fn: Listener) => {
+      const i = listeners.indexOf(fn);
+      if (i >= 0) listeners.splice(i, 1);
+    },
+    refresh,
+    // Simulate a delayed authorization/device-flow completion.
+    fire: (t: unknown, origin: 'signin' | 'refresh' = 'signin') =>
+      [...listeners].forEach((l) => l(t, origin)),
+  };
+}
+
 /* --------------------------
  * Per-test state
  * -------------------------- */
@@ -162,7 +180,7 @@ describe('AuthManager: CAT lifecycle', () => {
       refresh_token: 'new-refresh',
       expires_in: 300,
     });
-    am['oidc'] = { refresh } as any;
+    am['oidc'] = providerStub(refresh) as any;
 
     const cat = await am.ensureCAT(30);
     expect(refresh).toHaveBeenCalledWith('rrr');
@@ -191,7 +209,7 @@ describe('AuthManager: CAT lifecycle', () => {
           resolveRefresh = resolve;
         }),
     );
-    am['oidc'] = { refresh } as any;
+    am['oidc'] = providerStub(refresh) as any;
 
     // Launch the refresh, then clear the session while it is still in flight.
     const pending = am.ensureCAT(30);
@@ -206,27 +224,108 @@ describe('AuthManager: CAT lifecycle', () => {
     expect(am['tokens'].refreshToken).toBeUndefined();
   });
 
-  test('attachOIDC detaches the previous provider so its late token cannot install state', () => {
-    function providerStub() {
-      const listeners: Array<(t: unknown) => void> = [];
-      return {
-        listeners,
-        addTokenListener: (fn: (t: unknown) => void) => listeners.push(fn),
-        removeTokenListener: (fn: (t: unknown) => void) => {
-          const i = listeners.indexOf(fn);
-          if (i >= 0) listeners.splice(i, 1);
-        },
-        refresh: vi.fn(),
-        // Simulate a delayed authorization/device-flow completion.
-        fire: (t: unknown) => listeners.forEach((l) => l(t)),
-      };
-    }
+  test('setCAT with a new token drops the refresh state of the previous token', async () => {
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+    am['tokens'] = {
+      accessToken: 'first-cat',
+      refreshToken: 'first-refresh',
+      expiresAt: Date.now() - 1,
+    };
+    const refresh = vi.fn().mockResolvedValue({
+      access_token: 'refreshed-first-cat',
+      refresh_token: 'refreshed-first-refresh',
+      expires_in: 300,
+    });
+    am['oidc'] = providerStub(refresh) as any;
 
+    am.setCAT('second-cat');
+    expect(am['tokens'].refreshToken).toBeUndefined();
+    expect(am['tokens'].expiresAt).toBeUndefined();
+
+    // The stale expiry and refresh token must not drive a refresh of the previous session.
+    const cat = await am.ensureCAT(30);
+    expect(refresh).not.toHaveBeenCalled();
+    expect(cat).toBe('second-cat');
+  });
+
+  test('a sign-in after logout installs even while the old refresh is still running', async () => {
+    let finishRefresh!: (tokens: unknown) => void;
+    const provider = providerStub(
+      () =>
+        new Promise((resolve) => {
+          finishRefresh = resolve;
+        }),
+    );
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+    am['tokens'] = { accessToken: 'old-cat', refreshToken: 'rrr', expiresAt: Date.now() - 1 };
+    am.attachOIDC(provider as any);
+
+    const pending = am.ensureCAT(30);
+    am.setCAT(undefined);
+    // The user signs in again before the old refresh answers.
+    provider.fire({ access_token: 'login-cat', refresh_token: 'login-r', expires_in: 300 });
+    finishRefresh({ access_token: 'new-cat', refresh_token: 'new-r', expires_in: 300 });
+
+    // The sign-in stands; the refresh that started before the logout is discarded.
+    expect(await pending).toBe('login-cat');
+    expect(am.getCAT()).toBe('login-cat');
+    expect(am['tokens'].refreshToken).toBe('login-r');
+  });
+
+  test('a login on the attached provider is kept over a refresh that started before it', async () => {
+    let finishRefresh!: (tokens: unknown) => void;
+    const provider = providerStub(
+      () =>
+        new Promise((resolve) => {
+          finishRefresh = resolve;
+        }),
+    );
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+    am['tokens'] = { accessToken: 'old-cat', refreshToken: 'rrr', expiresAt: Date.now() - 1 };
+    am.attachOIDC(provider as any);
+
+    const pending = am.ensureCAT(30);
+    // A fresh login completes while the refresh is still in flight.
+    provider.fire({ access_token: 'login-cat', refresh_token: 'login-r', expires_in: 300 });
+    finishRefresh({ access_token: 'refreshed-cat', refresh_token: 'refreshed-r', expires_in: 300 });
+
+    expect(await pending).toBe('login-cat');
+    expect(am['tokens'].refreshToken).toBe('login-r');
+  });
+
+  test('replacing the provider discards a refresh still running on the previous one', async () => {
+    let finishOldRefresh!: (tokens: unknown) => void;
+    const first = providerStub(
+      () =>
+        new Promise((resolve) => {
+          finishOldRefresh = resolve;
+        }),
+    );
+    const second = providerStub();
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+    am['tokens'] = { accessToken: 'old-cat', refreshToken: 'rrr', expiresAt: Date.now() - 1 };
+    am.attachOIDC(first as any);
+    am.attachOIDC(first as any); // Reattaching the same provider retains its credentials.
+    expect(am.getCAT()).toBe('old-cat');
+
+    const pending = am.ensureCAT(30);
+    am.attachOIDC(second as any);
+    await expect(am.ensureCAT(30)).resolves.toBeUndefined();
+    expect(second.refresh).not.toHaveBeenCalled();
+    finishOldRefresh({ access_token: 'p1-cat', refresh_token: 'p1-refresh', expires_in: 300 });
+
+    expect(await pending).toBeUndefined();
+    expect(am.getCAT()).toBeUndefined();
+    expect(am['tokens']).toEqual({});
+  });
+
+  test('attachOIDC detaches the previous provider so its late token cannot install state', () => {
     const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
     const first = providerStub();
     const second = providerStub();
 
     am.attachOIDC(first as any);
+    const [queuedListener] = first.listeners;
     am.attachOIDC(second as any);
 
     // The replaced provider must no longer hold a listener into this manager.
@@ -234,12 +333,68 @@ describe('AuthManager: CAT lifecycle', () => {
 
     // A delayed token from the detached provider must not install its credentials.
     first.fire({ access_token: 'p1-cat', refresh_token: 'p1-refresh', expires_in: 300 });
+    queuedListener({ access_token: 'queued-cat' }, 'signin');
     expect(am.getCAT()).toBeUndefined();
     expect(am['tokens'].refreshToken).toBeUndefined();
 
     // The current provider still updates state.
     second.fire({ access_token: 'p2-cat', refresh_token: 'p2-refresh', expires_in: 300 });
     expect(am.getCAT()).toBe('p2-cat');
+  });
+
+  test('an app-driven refresh does not revive a session the caller cleared', async () => {
+    const provider = providerStub();
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+    am.attachOIDC(provider as any);
+    am['tokens'] = { accessToken: 'cat', refreshToken: 'r', expiresAt: Date.now() + 60_000 };
+
+    const [listener] = provider.listeners;
+    am.setCAT(undefined);
+    listener({ access_token: 'late-cat', refresh_token: 'late-r', expires_in: 300 }, 'refresh');
+
+    expect(am.getCAT()).toBeUndefined();
+    // A sign-in is the caller's intent and still installs.
+    provider.fire({ access_token: 'login-cat', refresh_token: 'login-r', expires_in: 300 });
+    expect(am.getCAT()).toBe('login-cat');
+  });
+
+  test('a reissue of the same access token still rotates the refresh token and expiry', async () => {
+    const provider = providerStub();
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+    am.attachOIDC(provider as never);
+    am['tokens'] = { accessToken: 'cat', refreshToken: 'r1', expiresAt: Date.now() - 1 };
+    provider.refresh = vi.fn(async () => ({
+      access_token: 'cat',
+      refresh_token: 'r2',
+      expires_in: 300,
+    }));
+
+    await expect(am.ensureCAT(30)).resolves.toBe('cat');
+    expect(am['tokens'].refreshToken).toBe('r2');
+    expect(am['tokens'].expiresAt).toBeGreaterThan(Date.now());
+  });
+
+  test('an ordinary refresh does not report a session change', async () => {
+    const logger: Logger = {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+      log: vi.fn(),
+    };
+    const provider = providerStub();
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn, logger });
+    am.attachOIDC(provider as never);
+    am['tokens'] = { accessToken: 'old', refreshToken: 'r1', expiresAt: Date.now() - 1 };
+    provider.refresh = vi.fn(async () => ({
+      access_token: 'fresh',
+      refresh_token: 'r2',
+      expires_in: 300,
+    }));
+
+    await expect(am.ensureCAT(30)).resolves.toBe('fresh');
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 });
 
@@ -270,7 +425,8 @@ describe('AuthManager: constructor limits', () => {
 test('ensureCAT warns when refresh throws', async () => {
   const am = new AuthManager('http://mint', { request: vi.fn(), logger: console });
   am['tokens'] = { accessToken: 'old', refreshToken: 'rr', expiresAt: Date.now() - 1 };
-  am['oidc'] = { refresh: vi.fn().mockRejectedValue(new Error('nope')) } as any;
+  const failing = vi.fn().mockRejectedValue(new CTSError('nope'));
+  am['oidc'] = providerStub(failing) as any;
   const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
   const cat = await am.ensureCAT(30);
   expect(cat).toBeUndefined();
@@ -286,7 +442,7 @@ test('ensureCAT sets expiresAt from JWT exp when expires_in is missing', async (
   const payload = Buffer.from(JSON.stringify({ exp: expSec })).toString('base64');
   const jwt = `${header}.${payload}.sig`;
   const refresh = vi.fn().mockResolvedValue({ access_token: jwt });
-  am['oidc'] = { refresh } as any;
+  am['oidc'] = providerStub(refresh) as any;
 
   const cat = await am.ensureCAT(30);
   expect(cat).toBe(jwt);
@@ -303,7 +459,7 @@ test('ensureCAT treats token with unknown expiry as valid', async () => {
 test('updateFromOIDC leaves expiresAt undefined on malformed JWT', () => {
   const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
   const bad = 'hdr.bad-base64.sig';
-  am['updateFromOIDC']({ access_token: bad });
+  am['updateFromOIDC']({ access_token: bad }, 'signin');
   expect(am['tokens'].expiresAt).toBeUndefined();
 });
 
@@ -341,6 +497,107 @@ describe('AuthManager: BAT pool minting/topUp/ensure', () => {
         redirect: 'error',
       }),
     );
+  });
+
+  test('a BAT mint that completes after setCAT(undefined) does not fill the pool', async () => {
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn, desiredPoolSize: 1 });
+    am['info'] = fakeInfo({ batMax: 1, needCATForMint: true });
+    am.setCAT('cat-token');
+    seedKeychain(am);
+    stubOutputs(1);
+
+    let finishMint!: (value: { signatures: Array<typeof fakeSig> }) => void;
+    reqSpy.mockReturnValueOnce(
+      new Promise<{ signatures: Array<typeof fakeSig> }>((resolve) => {
+        finishMint = resolve;
+      }),
+    );
+
+    const pending = am.ensure(1);
+    await vi.waitFor(() => expect(reqSpy).toHaveBeenCalledOnce());
+    am.setCAT(undefined);
+    finishMint({ signatures: [fakeSig] });
+    await expect(pending).rejects.toThrow('session changed while obtaining BATs');
+
+    expect(am.poolSize).toBe(0);
+  });
+
+  test.each([true, false])(
+    'CAT acquisition observes a session change (protected: %s)',
+    async (needsCAT) => {
+      const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn, desiredPoolSize: 1 });
+      am['info'] = fakeInfo({ batMax: 1, needCATForMint: needsCAT });
+      am.setCAT('old-cat');
+      seedKeychain(am);
+      stubOutputs(1);
+      reqSpy.mockResolvedValueOnce({ signatures: [fakeSig] });
+
+      const pending = am.ensure(1);
+      queueMicrotask(() => am.setCAT(undefined));
+      if (needsCAT) await expect(pending).rejects.toThrow('session changed while obtaining BATs');
+      else await pending;
+
+      expect(am.getCAT()).toBeUndefined();
+      expect(reqSpy).toHaveBeenCalledTimes(needsCAT ? 0 : 1);
+      expect(am.poolSize).toBe(needsCAT ? 0 : 1);
+    },
+  );
+
+  test('a BAT mint that spans a CAT refresh still fills the pool', async () => {
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn, desiredPoolSize: 1 });
+    am['info'] = fakeInfo({ batMax: 1, needCATForMint: true });
+    const provider = providerStub();
+    am.attachOIDC(provider as any);
+    am.setCAT('cat-token');
+    seedKeychain(am);
+    stubOutputs(1);
+
+    let finishMint!: (value: { signatures: Array<typeof fakeSig> }) => void;
+    reqSpy.mockReturnValueOnce(
+      new Promise<{ signatures: Array<typeof fakeSig> }>((resolve) => {
+        finishMint = resolve;
+      }),
+    );
+
+    const pending = am.ensure(1);
+    await vi.waitFor(() => expect(reqSpy).toHaveBeenCalledOnce());
+    // A refreshed CAT for the same account arrives while the mint is outstanding.
+    provider.fire(
+      { access_token: 'refreshed-cat', refresh_token: 'refreshed-r', expires_in: 300 },
+      'refresh',
+    );
+    finishMint({ signatures: [fakeSig] });
+    await pending;
+
+    expect(am.getCAT()).toBe('refreshed-cat');
+    expect(am.poolSize).toBe(1);
+  });
+
+  test('a BAT mint that spans a sign-in as another account does not fill the pool', async () => {
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn, desiredPoolSize: 1 });
+    am['info'] = fakeInfo({ batMax: 1, needCATForMint: true });
+    const provider = providerStub();
+    am.attachOIDC(provider as any);
+    am.setCAT('cat-token');
+    seedKeychain(am);
+    stubOutputs(1);
+
+    let finishMint!: (value: { signatures: Array<typeof fakeSig> }) => void;
+    reqSpy.mockReturnValueOnce(
+      new Promise<{ signatures: Array<typeof fakeSig> }>((resolve) => {
+        finishMint = resolve;
+      }),
+    );
+
+    const pending = am.ensure(1);
+    await vi.waitFor(() => expect(reqSpy).toHaveBeenCalledOnce());
+    // A sign-in is a different account, so tokens minted under the old one are not this user's.
+    provider.fire({ access_token: 'other-cat', refresh_token: 'other-r', expires_in: 300 });
+    finishMint({ signatures: [fakeSig] });
+    await expect(pending).rejects.toThrow('session changed while obtaining BATs');
+
+    expect(am.getCAT()).toBe('other-cat');
+    expect(am.poolSize).toBe(0);
   });
 
   test('ensure() mints up to desired target but not beyond bat_max_mint', async () => {
@@ -586,7 +843,7 @@ test('ensureCAT returns undefined when no CAT and no OIDC, hitting validForAtLea
 test('updateFromOIDC early-returns when access_token missing', () => {
   const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
   am['tokens'] = { accessToken: 'keep-me', refreshToken: 'r', expiresAt: 123 };
-  am['updateFromOIDC']({});
+  am['updateFromOIDC']({}, 'signin');
   expect(am.getCAT()).toBe('keep-me');
   expect(am['tokens'].refreshToken).toBe('r');
   expect(am['tokens'].expiresAt).toBe(123);

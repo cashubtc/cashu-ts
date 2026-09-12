@@ -42,6 +42,7 @@ export {
   type AuthProvider,
   type AuthManagerOptions,
   type TokenResponse,
+  type TokenOrigin,
   type DeviceStartResponse,
   type OIDCConfig,
   type OIDCAuthOptions,
