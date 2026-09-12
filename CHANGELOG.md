@@ -1,5 +1,46 @@
 # Changelog
 
+## [5.0.0-rc.10](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.9...v5.0.0-rc.10) (2026-09-12)
+
+
+### Features
+
+* **events:** polling fallback behind every NUT-17 subscription ([#1072](https://github.com/cashubtc/cashu-ts/issues/1072)) ([5b28d02](https://github.com/cashubtc/cashu-ts/commit/5b28d02b7d79cf96756e572f23f48703d0c1abb6))
+* **nut14:** preimage option for spending HTLC inputs ([#1071](https://github.com/cashubtc/cashu-ts/issues/1071)) ([22b29b9](https://github.com/cashubtc/cashu-ts/commit/22b29b9ad2ec1b79904dc54899e763ee9c4644cc))
+* **nutroot:** adapt NIP-07 browser signers to both lock families ([#1005](https://github.com/cashubtc/cashu-ts/issues/1005)) ([799154b](https://github.com/cashubtc/cashu-ts/commit/799154b7071866318c96e36994ce166696e92ce4))
+* **nutroot:** nutroot secrets for v3 keysets (NUT-10) ([#950](https://github.com/cashubtc/cashu-ts/issues/950)) ([929efa1](https://github.com/cashubtc/cashu-ts/commit/929efa14deb252c81e5de656662f21e2a34bfa9a))
+* **wallet:** accept a custom hash-to-curve for proof state checks ([#1080](https://github.com/cashubtc/cashu-ts/issues/1080)) ([1c8aa36](https://github.com/cashubtc/cashu-ts/commit/1c8aa368fa88785618f1973ad923c794d31ec58d))
+
+
+### Bug Fixes
+
+* **core:** reject incomplete DLEQ proofs on encode and decode ([#1135](https://github.com/cashubtc/cashu-ts/issues/1135)) ([01948ce](https://github.com/cashubtc/cashu-ts/commit/01948ce8202d93ab876eb6c82ffa8edbc0e625f6))
+* **crypto:** validate helper inputs at the boundary ([#1111](https://github.com/cashubtc/cashu-ts/issues/1111)) ([6619bc5](https://github.com/cashubtc/cashu-ts/commit/6619bc5326dcd6d462171aef37f2efb516a5f1cd))
+* **mint:** strip wallet fields from inputs and bind melt responses ([#1118](https://github.com/cashubtc/cashu-ts/issues/1118)) ([4ee810e](https://github.com/cashubtc/cashu-ts/commit/4ee810ec867ed02b9a90edba8bff309580fa65e6))
+* **mint:** validate and bound mint response shapes ([#1116](https://github.com/cashubtc/cashu-ts/issues/1116)) ([444e5e7](https://github.com/cashubtc/cashu-ts/commit/444e5e7f2fc837d9204b02f66f10b0bd09c52085))
+* **model:** tighten Amount construction and strict wire JSON parsing ([#1114](https://github.com/cashubtc/cashu-ts/issues/1114)) ([3fff012](https://github.com/cashubtc/cashu-ts/commit/3fff012688935845cbc680ff462c7a604411483a))
+* **model:** validate persisted outputs and pin the hash-to-curve counter ([#1123](https://github.com/cashubtc/cashu-ts/issues/1123)) ([0196ed4](https://github.com/cashubtc/cashu-ts/commit/0196ed45340703555737a3c28dc041db53a91d82))
+* **nut11:** bind SIG_INPUTS signatures to the secret and honour overlapping HTLC refunds ([#1104](https://github.com/cashubtc/cashu-ts/issues/1104)) ([52fc6c2](https://github.com/cashubtc/cashu-ts/commit/52fc6c2628ab42f78e798a134894f0121ebddd96))
+* **nut11:** reject malformed P2PK tag values and bound key lists ([#1101](https://github.com/cashubtc/cashu-ts/issues/1101)) ([f088921](https://github.com/cashubtc/cashu-ts/commit/f088921bccbe27fd50605fe66c9a11d27403e34a))
+* **nut11:** validate a SIG_ALL signing package before signing it ([#1106](https://github.com/cashubtc/cashu-ts/issues/1106)) ([2cb7b33](https://github.com/cashubtc/cashu-ts/commit/2cb7b33fe54a9ef755daf1146f8b0b5adf863638))
+* **nut26:** reject repeated singular TLV tags and untyped policy flags ([#1099](https://github.com/cashubtc/cashu-ts/issues/1099)) ([1fa657e](https://github.com/cashubtc/cashu-ts/commit/1fa657ea0214fe9256b4a91e3964255749042868))
+* **nutroot:** tighten v3 spending, requests and melt outputs ([#1092](https://github.com/cashubtc/cashu-ts/issues/1092)) ([f8e7710](https://github.com/cashubtc/cashu-ts/commit/f8e7710a4e6ad00b4c48fb6e91cd24eff6b4a18c))
+* **transport:** bound the WebSocket queue and tear down cleanly ([#1121](https://github.com/cashubtc/cashu-ts/issues/1121)) ([42276f4](https://github.com/cashubtc/cashu-ts/commit/42276f458b952ad0e79eca6b8561b3d4a5be3997))
+* **transport:** never retry a request carrying a Blind-auth header ([#1090](https://github.com/cashubtc/cashu-ts/issues/1090)) ([4476660](https://github.com/cashubtc/cashu-ts/commit/447666076ab558a5ef84a7aa6edb386debd3ac7c))
+* **transport:** scope request logs, merge headers case-insensitively, sanitize log context ([#1125](https://github.com/cashubtc/cashu-ts/issues/1125)) ([1fc0344](https://github.com/cashubtc/cashu-ts/commit/1fc034430561657fc8dbb071b454f85b77bd9d5e))
+* **utils:** guard the keysetIds argument of getDecodedToken ([#1084](https://github.com/cashubtc/cashu-ts/issues/1084)) ([ef78a58](https://github.com/cashubtc/cashu-ts/commit/ef78a5859345c8910084d25b34cb971e032936cd))
+* **utils:** tighten UTF-8, CBOR and TLV decoding ([#1097](https://github.com/cashubtc/cashu-ts/issues/1097)) ([8b0d9ea](https://github.com/cashubtc/cashu-ts/commit/8b0d9ea995689003fd67bdd46917ac97807800e3))
+* **wallet:** enforce payment-request terms and guard counters, previews and cache age ([#1127](https://github.com/cashubtc/cashu-ts/issues/1127)) ([dab2fbe](https://github.com/cashubtc/cashu-ts/commit/dab2fbeb332e2443894fa0bfcd982d94bfdf15f4))
+* **wallet:** normalise quote amounts in WebSocket updates ([#1088](https://github.com/cashubtc/cashu-ts/issues/1088)) ([87f0131](https://github.com/cashubtc/cashu-ts/commit/87f0131ba2ad3417b008fad06d26ff1b30f30ed6))
+* **wallet:** require a 64-byte seed at construction ([#1113](https://github.com/cashubtc/cashu-ts/issues/1113)) ([d13d973](https://github.com/cashubtc/cashu-ts/commit/d13d973bcd1ab8177e57ef4872558c12bcac3e02))
+* **wallet:** unblind melt change and restore with the keyset the mint signed under ([#1081](https://github.com/cashubtc/cashu-ts/issues/1081)) ([554697a](https://github.com/cashubtc/cashu-ts/commit/554697a9538ed02c651c1d98b16fa34a921a86cb))
+* **wallet:** unblind swap and mint outputs with the keyset the mint signed under ([#1095](https://github.com/cashubtc/cashu-ts/issues/1095)) ([aecac16](https://github.com/cashubtc/cashu-ts/commit/aecac16fc531a1d9aaad8b63f4a3aed893fc426d))
+
+
+### Performance Improvements
+
+* **wallet:** restore only the counters a scan needs ([#964](https://github.com/cashubtc/cashu-ts/issues/964)) ([30bb0a7](https://github.com/cashubtc/cashu-ts/commit/30bb0a74cd3d85da9b55178a0649ec18490a975c))
+
 ## [5.0.0-rc.9](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.8...v5.0.0-rc.9) (2026-09-04)
 
 
