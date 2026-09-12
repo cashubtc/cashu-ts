@@ -1,4 +1,5 @@
 import { bytesToHex } from '@noble/curves/utils.js';
+import { utf8ToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 
 import {
@@ -121,6 +122,43 @@ describe('OutputData secp round-trip (secp256k1 + NUT-12 DLEQ)', () => {
     const badE = (sig.dleq?.e ?? '').replace(/^./, (c) => (c === 'a' ? 'b' : 'a'));
     const tampered: SerializedBlindedSignature = { ...sig, dleq: { s: sig.dleq!.s, e: badE } };
     expect(() => out.toProof(tampered, keyset)).toThrowError(/DLEQ verification failed/);
+  });
+
+  describe('constructor guards (types are erased for plain-JS callers)', () => {
+    const bm = { amount: Amount.from(1), B_: '02'.repeat(33), id: '009a1f293253e41e' };
+    const secretBytes = utf8ToBytes('s');
+
+    test.each([
+      ['undefined', undefined],
+      ['null', null],
+      ['a number', 1],
+      ['a decimal string', '123'],
+      ['zero', 0n],
+      ['negative', -1n],
+    ])('rejects a blindingFactor that is %s', (_label, bad) => {
+      expect(() => new OutputData(bm, bad as bigint, secretBytes)).toThrow(
+        'blindingFactor must be a positive bigint',
+      );
+    });
+
+    test('rejects a secret that is not a non-empty Uint8Array', () => {
+      expect(() => new OutputData(bm, 1n, 's' as unknown as Uint8Array)).toThrow(
+        'secret must be a non-empty Uint8Array',
+      );
+      expect(() => new OutputData(bm, 1n, new Uint8Array())).toThrow(
+        'secret must be a non-empty Uint8Array',
+      );
+    });
+
+    test('rejects a missing blindedMessage', () => {
+      expect(() => new OutputData(undefined as unknown as typeof bm, 1n, secretBytes)).toThrow(
+        'blindedMessage is required',
+      );
+    });
+
+    test('accepts a well-formed set', () => {
+      expect(() => new OutputData(bm, 1n, secretBytes)).not.toThrow();
+    });
   });
 
   test('rejects a mint response that unblinds to a non-UTF-8 secret', () => {

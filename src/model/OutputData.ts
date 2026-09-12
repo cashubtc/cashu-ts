@@ -114,6 +114,17 @@ export class OutputData implements OutputDataLike {
     secret: Uint8Array,
     ephemeralE?: string,
   ) {
+    // Cheap JS runtime guards, as this runs per output on the send and receive path
+    // c.f: `deserialize` re-blinds the secret and compares when hydrating stored data.
+    if (typeof blindingFactor !== 'bigint' || blindingFactor <= 0n) {
+      throw new CTSError('OutputData: blindingFactor must be a positive bigint');
+    }
+    if (!(secret instanceof Uint8Array) || secret.length === 0) {
+      throw new CTSError('OutputData: secret must be a non-empty Uint8Array');
+    }
+    if (blindedMessage == undefined) {
+      throw new CTSError('OutputData: blindedMessage is required');
+    }
     this.secret = secret;
     this.blindingFactor = blindingFactor;
     this.blindedMessage = blindedMessage;
@@ -164,7 +175,7 @@ export class OutputData implements OutputDataLike {
         dleq: {
           s: bytesToHex(dleq.s),
           e: bytesToHex(dleq.e),
-          r: numberToHexPadded64(dleq.r ?? BigInt(0)),
+          r: numberToHexPadded64(this.blindingFactor),
         },
       }),
     };

@@ -26,7 +26,8 @@ import {
   normalizeMintUrl,
   verifyDleqIfPresent,
 } from '../../src/utils';
-import { encodeJsonToBase64Url } from '../../src/utils/base64';
+import { encodeJsonToBase64Url, encodeUint8ToBase64Url } from '../../src/utils/base64';
+import { encodeCBOR } from '../../src/utils/cbor';
 import {
   NUT02_V1_VECTOR1_KEYS,
   NUT02_V1_VECTOR2_KEYS,
@@ -680,6 +681,84 @@ describe('test v4 encoding', () => {
   });
 });
 
+describe('incomplete DLEQ proofs', () => {
+  const MINT = 'https://nofees.testnut.cashu.space';
+  const ID = '00b4cd27d8861a44';
+  const SECRET = '10216467bb33f6f079ae92349ba54fa34df99ba24572645b8b813688c74b582d';
+  const C = '03ff2e729416437f9ea8d022c501ff5b309d607f98c9ab53d51cd24185b4d3e42b';
+  const E = '8269767ac3f6ac368ad9ea8c05b13724ea8a58469677925aa948435685107b0d';
+  const S = '26f44e265699d95ae2171db58257aeffe03d325e0f69da4bc95b9749358380fc';
+  const R = '40ce4dbe14a1f65ae74328b5f81d83cdb3977595d78ddf01665d9aca6d450233';
+
+  const proofWithPartialDleq = (): Proof => ({
+    amount: Amount.from(1),
+    id: ID,
+    secret: SECRET,
+    C,
+    dleq: { e: E, s: S },
+  });
+
+  // A mint-signed DLEQ that a buggy wallet passed on without adding its own blinding factor.
+  const encodeV4WithPartialDleq = (dleq: object): string =>
+    'cashuB' +
+    encodeUint8ToBase64Url(
+      encodeCBOR({
+        m: MINT,
+        u: 'sat',
+        t: [{ i: hexToBytes(ID), p: [{ a: 1n, s: SECRET, c: hexToBytes(C), d: dleq }] }],
+      }),
+    );
+
+  test('v4 decode drops the DLEQ instead of throwing', () => {
+    const encoded = encodeV4WithPartialDleq({ e: hexToBytes(E), s: hexToBytes(S) });
+    const decoded = utils.getDecodedToken(encoded, [ID]);
+    expect(decoded.proofs[0].C).toBe(C);
+    expect(decoded.proofs[0].dleq).toBeUndefined();
+  });
+
+  test('v4 decode keeps a complete DLEQ', () => {
+    const encoded = utils.getEncodedToken({
+      mint: MINT,
+      proofs: [{ ...proofWithPartialDleq(), dleq: { e: E, s: S, r: R } }],
+    });
+    expect(utils.getDecodedToken(encoded, [ID]).proofs[0].dleq).toEqual({ e: E, s: S, r: R });
+  });
+
+  test('decode reports a wrong-typed byte field instead of a raw TypeError', () => {
+    // Same crash class as an omitted `r`: any CBOR type can land in any field.
+    const encoded = encodeV4WithPartialDleq({ e: hexToBytes(E), s: hexToBytes(S), r: 42n });
+    expect(() => utils.getDecodedToken(encoded, [ID])).toThrow(CTSError);
+    expect(() => utils.getDecodedToken(encoded, [ID])).toThrow(
+      'dleq r must be a non-empty byte string',
+    );
+  });
+
+  test('v3 decode drops the DLEQ', () => {
+    const encoded =
+      'cashuA' +
+      encodeJsonToBase64Url({
+        token: [
+          { mint: MINT, proofs: [{ amount: 1, id: ID, secret: SECRET, C, dleq: { e: E, s: S } }] },
+        ],
+        unit: 'sat',
+      });
+    const decoded = utils.getDecodedToken(encoded, [ID]);
+    expect(decoded.proofs[0].C).toBe(C);
+    expect(decoded.proofs[0].dleq).toBeUndefined();
+  });
+
+  test('encoding refuses to emit a DLEQ without its blinding factor', () => {
+    const token: Token = { mint: MINT, proofs: [proofWithPartialDleq()] };
+    expect(() => utils.getEncodedToken(token)).toThrow('Missing blinding factor');
+    expect(() => utils.getEncodedTokenBinary(token)).toThrow('Missing blinding factor');
+  });
+
+  test('stripping the DLEQ makes an otherwise unencodable token encodable', () => {
+    const token: Token = { mint: MINT, proofs: [proofWithPartialDleq()] };
+    expect(() => utils.getEncodedToken(token, { removeDleq: true })).not.toThrow();
+  });
+});
+
 describe('test output selection', () => {
   test('hasCorrespondingKey accepts AmountLike', () => {
     expect(utils.hasCorrespondingKey('8', keys)).toBe(true);
@@ -765,6 +844,14 @@ describe('test zero-knowledge utilities', () => {
 
     test('returns true for a valid DLEQ', () => {
       expect(verifyDleqIfPresent(serializedProof, keyset)).toBe(true);
+    });
+
+    test('returns false for a DLEQ that carries no blinding factor', () => {
+      const { r, ...partial } = serializedProof.dleq!;
+      void r;
+      const proof: Proof = { ...serializedProof, dleq: partial };
+      expect(verifyDleqIfPresent(proof, keyset)).toBe(false);
+      expect(hasValidDleq(proof, keyset)).toBe(false);
     });
 
     test('returns false for a tampered DLEQ', () => {
