@@ -159,7 +159,6 @@ export class AuthManager implements AuthProvider {
     get poolSize(): number;
     // (undocumented)
     get poolTarget(): number;
-    // (undocumented)
     setCAT(cat: string | undefined): void;
 }
 
@@ -1350,7 +1349,7 @@ export type Nut29Info = {
 // @public (undocumented)
 export class OIDCAuth {
     constructor(discoveryUrl: string, opts?: OIDCAuthOptions);
-    addTokenListener(fn: (t: TokenResponse) => void | Promise<void>): void;
+    addTokenListener(fn: (t: TokenResponse, origin: TokenOrigin) => void | Promise<void>): void;
     buildAuthCodeUrl(input: {
         redirectUri: string;
         codeChallenge: string;
@@ -1358,7 +1357,7 @@ export class OIDCAuth {
         state?: string;
         scope?: string;
     }): Promise<string>;
-    // (undocumented)
+    // @deprecated
     devicePoll(device_code: string, intervalSec?: number): Promise<TokenResponse>;
     // (undocumented)
     deviceStart(): Promise<DeviceStartResponse>;
@@ -1379,9 +1378,8 @@ export class OIDCAuth {
     loadConfig(): Promise<OIDCConfig>;
     // (undocumented)
     passwordGrant(username: string, password: string): Promise<TokenResponse>;
-    // (undocumented)
     refresh(refresh_token: string): Promise<TokenResponse>;
-    removeTokenListener(fn: (t: TokenResponse) => void | Promise<void>): void;
+    removeTokenListener(fn: (t: TokenResponse, origin: TokenOrigin) => void | Promise<void>): void;
     // (undocumented)
     setClient(id: string): void;
     // (undocumented)
@@ -1397,7 +1395,7 @@ export type OIDCAuthOptions = {
     clientId?: string;
     scope?: string;
     logger?: Logger;
-    onTokens?: (t: TokenResponse) => void | Promise<void>;
+    onTokens?: (t: TokenResponse, origin: TokenOrigin) => void | Promise<void>;
 };
 
 // @public (undocumented)
@@ -2080,6 +2078,9 @@ export type TokenMetadata = {
     incompleteProofs: Array<Omit<Proof, 'id'>>;
     proofAmounts: Amount[];
 };
+
+// @public
+export type TokenOrigin = 'signin' | 'refresh';
 
 // @public (undocumented)
 export type TokenResponse = {

@@ -136,13 +136,17 @@ class Mint {
   /**
    * Create an OIDC client using this mint’s NUT-21 metadata.
    *
+   * @remarks
+   * Do not combine an `onTokens` callback that calls `setCAT` with `attachOIDC`. Both install the
+   * CAT, and `setCAT` replaces the whole token record, so the refresh token would be dropped.
    * @example
    *
    * ```ts
-   * const oidc = await mint.oidcAuth({ onTokens: (t) => authMgr.setCAT(t.access_token!) });
-   * const start = await oidc.deviceStart();
+   * const oidc = await mint.oidcAuth();
+   * authMgr.attachOIDC(oidc); // keeps the CAT and its refresh state up to date
+   * const start = await oidc.startDeviceAuth();
    * // show start.user_code / start.verification_uri to the user
-   * const token = await oidc.devicePoll(start.device_code, start.interval ?? 5);
+   * const token = await start.poll(); // call start.cancel() if the user dismisses the flow
    * // token.access_token is your CAT
    * ```
    */
