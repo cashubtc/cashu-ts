@@ -16,7 +16,7 @@ services:
           - keycloak.localtest.me
 
   mint:
-    image: cashubtc/mintd:0.18.0
+    image: ${MINT_IMAGE:-cashubtc/mintd:0.18.0}
     platform: linux/amd64
     container_name: cdk_auth_mint
     depends_on:
