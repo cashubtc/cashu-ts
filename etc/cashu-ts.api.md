@@ -179,7 +179,6 @@ export class AuthManager implements AuthProvider {
     get poolSize(): number;
     // (undocumented)
     get poolTarget(): number;
-    // (undocumented)
     setCAT(cat: string | undefined): void;
 }
 
@@ -1671,7 +1670,7 @@ export function nutrootToLockOptions(options: {
 // @public (undocumented)
 export class OIDCAuth {
     constructor(discoveryUrl: string, opts?: OIDCAuthOptions);
-    addTokenListener(fn: (t: TokenResponse) => void | Promise<void>): void;
+    addTokenListener(fn: (t: TokenResponse, origin: TokenOrigin) => void | Promise<void>): void;
     buildAuthCodeUrl(input: {
         redirectUri: string;
         codeChallenge: string;
@@ -1679,8 +1678,6 @@ export class OIDCAuth {
         state?: string;
         scope?: string;
     }): Promise<string>;
-    // (undocumented)
-    devicePoll(device_code: string, intervalSec?: number): Promise<TokenResponse>;
     // (undocumented)
     deviceStart(): Promise<DeviceStartResponse>;
     exchangeAuthCode(input: {
@@ -1700,9 +1697,8 @@ export class OIDCAuth {
     loadConfig(): Promise<OIDCConfig>;
     // (undocumented)
     passwordGrant(username: string, password: string): Promise<TokenResponse>;
-    // (undocumented)
     refresh(refresh_token: string): Promise<TokenResponse>;
-    removeTokenListener(fn: (t: TokenResponse) => void | Promise<void>): void;
+    removeTokenListener(fn: (t: TokenResponse, origin: TokenOrigin) => void | Promise<void>): void;
     // (undocumented)
     setClient(id: string): void;
     // (undocumented)
@@ -1719,7 +1715,7 @@ export type OIDCAuthOptions = {
     scope?: string;
     logger?: Logger;
     fetch?: OIDCFetch;
-    onTokens?: (t: TokenResponse) => void | Promise<void>;
+    onTokens?: (t: TokenResponse, origin: TokenOrigin) => void | Promise<void>;
 };
 
 // @public (undocumented)
@@ -2677,6 +2673,9 @@ export type TokenMetadata = {
     amount: Amount;
     proofAmounts: Amount[];
 };
+
+// @public
+export type TokenOrigin = 'signin' | 'refresh';
 
 // @public (undocumented)
 export type TokenResponse = {

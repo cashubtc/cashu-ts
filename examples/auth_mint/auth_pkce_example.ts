@@ -15,7 +15,7 @@ import * as crypto from 'node:crypto';
 import * as readline from 'node:readline';
 
 import { ConsoleLogger, createAuthWallet } from '../../src';
-import { Bytes, getEncodedToken } from '../../src/utils';
+import { getEncodedToken } from '../../src/utils';
 
 const MINT_URL = 'http://localhost:3338';
 const DESIRED_BATS = 3;
@@ -140,12 +140,6 @@ function prompt(q: string): Promise<string> {
       resolve(ans);
     }),
   );
-}
-
-function decodeJwtPayload(token: string) {
-  const base64Url = token.split('.')[1];
-  const json = Bytes.toString(Bytes.fromBase64(base64Url));
-  return JSON.parse(json);
 }
 
 main().catch((err) => {
