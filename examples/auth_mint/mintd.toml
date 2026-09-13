@@ -1,0 +1,35 @@
+# mintd >= 0.18 boots from a config document seeded once by `config init`, so
+# CDK_MINTD_* env vars no longer configure startup (only `env:` secret refs).
+
+[info]
+url = "http://localhost:3338"
+listen_host = "0.0.0.0"
+listen_port = 3338
+mnemonic = "env:CDK_MINTD_MNEMONIC"
+
+[database]
+engine = "sqlite"
+
+[payment_backend]
+backend = "fakewallet"
+unit = "sat"
+
+[fake_wallet]
+min_delay_time = 1
+max_delay_time = 1
+
+# Endpoint auth: blind, clear, or none (disabled).
+[auth]
+auth_enabled = true
+openid_discovery = "http://keycloak.localtest.me:8080/realms/cashu/.well-known/openid-configuration"
+openid_client_id = "cashu-client"
+mint_max_bat = 10
+mint = "blind"
+get_mint_quote = "blind"
+check_mint_quote = "blind"
+melt = "blind"
+get_melt_quote = "blind"
+check_melt_quote = "blind"
+swap = "blind"
+restore = "blind"
+check_proof_state = "blind"

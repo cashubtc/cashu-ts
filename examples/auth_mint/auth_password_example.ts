@@ -15,7 +15,7 @@ import dns from 'node:dns';
 dns.setDefaultResultOrder('ipv4first');
 
 import { ConsoleLogger, createAuthWallet } from '../../src';
-import { Bytes, getEncodedToken } from '../../src/utils';
+import { decodeBase64UrlToJson, getEncodedToken } from '../../src/utils';
 const MINT_URL = 'http://localhost:3338';
 const DESIRED_BATS = 3;
 
@@ -41,7 +41,8 @@ async function main() {
   console.log('Logging in via password grant…');
   const tokens = await oidc.passwordGrant(USERNAME, PASSWORD);
   console.log('Received access token (truncated):', (tokens.access_token ?? '').slice(0, 24), '…');
-  console.log('Decoded access token payload:', decodeJwtPayload(tokens.access_token!));
+  const [, payload] = tokens.access_token!.split('.');
+  console.log('Decoded access token payload:', decodeBase64UrlToJson(payload));
 
   // 3) Mint BATs up to desired pool size
   console.log(`\nEnsuring min ${DESIRED_BATS} BATS...`);
@@ -91,12 +92,6 @@ async function main() {
   console.log(`\nMinted BATs in pool: ${auth.exportPool().length}`);
 
   console.log('\nDone.');
-}
-
-function decodeJwtPayload(token: string) {
-  const base64Url = token.split('.')[1];
-  const json = Bytes.toString(Bytes.fromBase64(base64Url));
-  return JSON.parse(json);
 }
 
 main().catch((err) => {
