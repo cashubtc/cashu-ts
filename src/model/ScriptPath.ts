@@ -340,7 +340,7 @@ function assertValidPackage(pkg: ScriptPathSigningPackage): void {
           spend.control.path.map((hash) => hexToBytes(hash)),
         )
       ) {
-        throw new Error('commitment mismatch');
+        throw new CTSError('commitment mismatch');
       }
     } catch (e) {
       throw new CTSError('Signing package leaf does not commit to its input secret', { cause: e });

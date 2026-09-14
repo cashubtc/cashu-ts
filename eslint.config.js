@@ -91,6 +91,10 @@ export default tseslint.config(
           message:
             'No double assertion through unknown/any. Type the value honestly, or eslint-disable with a reason.',
         },
+        {
+          selector: 'ThrowStatement > NewExpression[callee.name="Error"]',
+          message: 'Throw a CTSError (or a subclass) so callers can tell library errors apart.',
+        },
       ],
       // Keep imports grouped and alphabetized within groups
       'import/order': [
