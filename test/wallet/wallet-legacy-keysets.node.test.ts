@@ -3,6 +3,7 @@ import { HttpResponse, http } from 'msw';
 import { test, describe, expect } from 'vitest';
 
 import { Wallet, type MintKeys, type MintKeyset } from '../../src';
+import { Amount } from '../../src/model/Amount';
 import { deriveKeysetId, isValidHex, isBase64String } from '../../src/utils';
 import { DUMMY_TEST_KEYS, DUMMY_TEST_KEYSET, PUBKEYS } from '../consts';
 
@@ -67,7 +68,17 @@ describe('Legacy (pre-v1) keyset output gating', () => {
     await wallet.loadMint();
 
     await expect(
-      wallet.prepareMint('bolt11', 3, { quote: 'test-quote' }, { keysetId: legacyId }),
+      wallet.prepareMint(
+        'bolt11',
+        3,
+        {
+          quote: 'test-quote',
+          unit: 'sat',
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
+        },
+        { keysetId: legacyId },
+      ),
     ).rejects.toThrow(/legacy keyset/i);
   });
 
@@ -86,7 +97,12 @@ describe('Legacy (pre-v1) keyset output gating', () => {
     const wallet = new Wallet(mint);
     await wallet.loadMint();
 
-    const preview = await wallet.prepareMint('bolt11', 3, { quote: 'test-quote' });
+    const preview = await wallet.prepareMint('bolt11', 3, {
+      quote: 'test-quote',
+      unit: 'sat',
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+    });
     expect(preview.outputData[0].blindedMessage.id).toBe(DUMMY_TEST_KEYSET.id);
   });
 
@@ -102,7 +118,17 @@ describe('Legacy (pre-v1) keyset output gating', () => {
     expect(keyset.isActive).toBe(false);
 
     await expect(
-      wallet.prepareMint('bolt11', 3, { quote: 'test-quote' }, { keysetId: inactiveId }),
+      wallet.prepareMint(
+        'bolt11',
+        3,
+        {
+          quote: 'test-quote',
+          unit: 'sat',
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
+        },
+        { keysetId: inactiveId },
+      ),
     ).rejects.toThrow(/inactive keyset/i);
   });
 
@@ -110,7 +136,12 @@ describe('Legacy (pre-v1) keyset output gating', () => {
     const wallet = new Wallet(mint);
     await wallet.loadMint();
 
-    const preview = await wallet.prepareMint('bolt11', 3, { quote: 'test-quote' });
+    const preview = await wallet.prepareMint('bolt11', 3, {
+      quote: 'test-quote',
+      unit: 'sat',
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+    });
 
     // Keyset rotates to inactive between prepare and complete. The mint has
     // already signed; refusing to construct proofs would strand the ecash.

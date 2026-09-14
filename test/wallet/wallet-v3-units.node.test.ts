@@ -122,7 +122,14 @@ describe('Wallet v3 mint preparation', () => {
     // The transcript commits the quote's face amount and the lock key must be known (NUT-04):
     // the pre-v3 `{ quote }` stub cannot mint here, so the full quote is fetched first.
     const wallet = withV3Keyset();
-    const full = { quote: 'q1', amount: 1, unit: 'sat', pubkey: '02'.padEnd(66, 'c') };
+    const full = {
+      quote: 'q1',
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      amount: 1,
+      unit: 'sat',
+      pubkey: '02'.padEnd(66, 'c'),
+    };
     const check = vi.spyOn(wallet, 'checkMintQuoteBolt11').mockResolvedValue(full as never);
     const prepare = vi.spyOn(wallet, 'prepareMint').mockResolvedValue({} as never);
     vi.spyOn(wallet, 'completeMint').mockResolvedValue([]);
@@ -134,8 +141,21 @@ describe('Wallet v3 mint preparation', () => {
   test('prepareBatchMint refuses an unlocked quote on a v3 keyset before any request', async () => {
     // Every quote in a v3 batch is a signing input; the mint must reject an unlocked one (NUT-29).
     const wallet = withV3Keyset();
-    const locked = { quote: 'a', amount: 1, pubkey: '02'.padEnd(66, 'c') };
-    const unlocked = { quote: 'b', amount: 1 };
+    const locked = {
+      quote: 'a',
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      unit: 'sat',
+      amount: 1,
+      pubkey: '02'.padEnd(66, 'c'),
+    };
+    const unlocked = {
+      quote: 'b',
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      unit: 'sat',
+      amount: 1,
+    };
     const entries = [
       { amount: 1, quote: locked },
       { amount: 1, quote: unlocked },

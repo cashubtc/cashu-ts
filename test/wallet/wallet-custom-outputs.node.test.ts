@@ -162,10 +162,21 @@ describe('custom outputs on a keyset other than the wallet default', () => {
     const { wallet } = makeWallet();
     const data = OutputData.createDeterministicData(Amount.from(16), seed, 0, keysFor(dear));
 
-    const proofs = await wallet.mintProofs('bolt11', 16, { quote: 'quote-id' }, undefined, {
-      type: 'custom',
-      data,
-    });
+    const proofs = await wallet.mintProofs(
+      'bolt11',
+      16,
+      {
+        quote: 'quote-id',
+        unit: 'sat',
+        amount_paid: Amount.from(0),
+        amount_issued: Amount.from(0),
+      },
+      undefined,
+      {
+        type: 'custom',
+        data,
+      },
+    );
 
     expect(proofs.every(proofIsValid)).toBe(true);
     expect(new Set(proofs.map((p) => p.id))).toEqual(new Set([dear.keysetId]));
@@ -177,7 +188,17 @@ describe('custom outputs on a keyset other than the wallet default', () => {
 
     const preview = await wallet.prepareBatchMint(
       'bolt11',
-      [{ amount: 16, quote: { quote: 'quote-id' } }],
+      [
+        {
+          amount: 16,
+          quote: {
+            quote: 'quote-id',
+            unit: 'sat',
+            amount_paid: Amount.from(0),
+            amount_issued: Amount.from(0),
+          },
+        },
+      ],
       undefined,
       { type: 'custom', data },
     );

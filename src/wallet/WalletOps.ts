@@ -15,6 +15,7 @@ import {
 import type { ProofLike } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 
+import { assertQuoteUnit } from './_internal';
 import { nutrootToLockOptions, p2pkToLockOptions, type LockOptions } from './lock';
 import { LockBuilder } from './LockBuilder';
 import {
@@ -882,7 +883,7 @@ export class MintBuilder<
     if (this.method === 'bolt11') {
       const raw = this.quote as string | MintQuoteBolt11Response;
       const quote = typeof raw === 'string' ? await this.wallet.checkMintQuoteBolt11(raw) : raw;
-      this.wallet.validateMintQuote(quote);
+      assertQuoteUnit(quote, this.wallet.unit, this.wallet.logger);
       return this.wallet.prepareMint(
         this.method,
         this.amount,
@@ -895,7 +896,7 @@ export class MintBuilder<
     // BOLT 12
     if (this.method === 'bolt12') {
       const bolt12 = this.quote as MintQuoteBolt12Response;
-      this.wallet.validateMintQuote(bolt12);
+      assertQuoteUnit(bolt12, this.wallet.unit, this.wallet.logger);
       if (!this.config.privkey) {
         throw new Error('privkey is required for BOLT12 mint quotes');
       }
@@ -910,7 +911,7 @@ export class MintBuilder<
 
     // Onchain
     const onchain = this.quote as MintQuoteOnchainResponse;
-    this.wallet.validateMintQuote(onchain);
+    assertQuoteUnit(onchain, this.wallet.unit, this.wallet.logger);
     if (!this.config.privkey) {
       throw new CTSError('privkey is required for onchain mint quotes');
     }
