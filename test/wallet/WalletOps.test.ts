@@ -80,7 +80,6 @@ type MintBolt12Fn = (
 ) => Promise<{ proofs: Proof[] }>;
 
 type CheckMintQuoteBolt11Fn = (quote: string) => Promise<MintQuoteBolt11Response>;
-type ValidateMintQuoteFn = (quote: MintQuoteBolt11Response) => void;
 
 type PrepareMintFn = (
   method: string,
@@ -167,13 +166,12 @@ class MockWallet {
       expiry: 0,
       request: '',
       amount: Amount.from(0),
-      unit: '',
+      unit: 'sat',
       amount_paid: Amount.from(0),
       amount_issued: Amount.from(0),
       updated_at: null,
     }),
   );
-  validateMintQuote: Mock<ValidateMintQuoteFn> = vi.fn<ValidateMintQuoteFn>();
   prepareMint: Mock<PrepareMintFn> = vi.fn<PrepareMintFn>(async (m, _a, q, _c, _o) => {
     return {
       method: m,

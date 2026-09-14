@@ -15,8 +15,8 @@ import {
   type MintQuoteBolt11Response,
   type MintQuoteBolt12Response,
   type MeltQuoteBolt11Response,
-  type MintQuoteBaseResponse,
 } from '../../src';
+import { assertQuoteUnit } from '../../src/wallet/_internal';
 import { NUT02_V3_VECTOR1_KEYS, NUT02_V3_VECTOR1_KEYSET } from '../consts';
 
 import {
@@ -332,9 +332,16 @@ describe('createMintQuoteBolt11 mutants', () => {
     // A partial draw against a slim quote: the transcript commits the face
     // amount (NUT-10), which the slim object cannot supply.
     const slim = { quote: quote.quote, unit: quote.unit, pubkey: quote.pubkey };
-    await expect(
-      wallet.prepareBatchMint('bolt11', [{ amount: 1, quote: slim }], { privkey: lock.privkey }),
-    ).rejects.toThrow(/amount/);
+    server.use(
+      http.post(mintUrl + '/v1/mint/quote/bolt11/check', () => HttpResponse.json([quote])),
+    );
+
+    // The mint's copy supplies the face amount the transcript commits to, so a slim object works.
+    const preview = await wallet.prepareBatchMint('bolt11', [{ amount: 1, quote: slim }], {
+      privkey: lock.privkey,
+    });
+    expect(preview.payload.quotes).toEqual([quote.quote]);
+    expect(preview.payload.signatures).toHaveLength(1);
   });
 
   test('a locked quote without its key fails fast, and recoverQuoteLockKey repairs it', async () => {
@@ -357,15 +364,17 @@ describe('createMintQuoteBolt11 mutants', () => {
     expect(preview.payload.signature).toMatch(/^[0-9a-f]{128}$/);
   });
 
-  test('forwards the description and fills the wallet unit when the mint omits it', async () => {
+  test('forwards the description and keeps the quoted unit', async () => {
     let body: Record<string, unknown> = {};
     server.use(
       http.post(mintUrl + '/v1/mint/quote/bolt11', async ({ request }) => {
         body = (await request.json()) as Record<string, unknown>;
         return HttpResponse.json({
           quote: 'q-desc',
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
           request: 'lnbc10u1pfake', // HRP encodes the quoted 1,000 sat
-          unit: '', // empty → wallet must substitute its own unit
+          unit,
           amount: 1000,
           state: MintQuoteState.UNPAID,
           expiry: null,
@@ -379,6 +388,198 @@ describe('createMintQuoteBolt11 mutants', () => {
     const quote = await wallet.createMintQuoteBolt11(1000, LOCK_PUBKEY, 'a description');
     expect(body.description).toBe('a description');
     expect(quote.unit).toBe('sat');
+  });
+
+  test('looks up a quote supplied as an id alone and rejects a foreign unit', async () => {
+    let lookups = 0;
+    server.use(
+      http.get(mintUrl + '/v1/mint/quote/bolt11/stored-id', () => {
+        lookups += 1;
+        return HttpResponse.json({
+          quote: 'stored-id',
+          request: 'lnbc10u1pfake',
+          unit: 'usd',
+          amount: 1000,
+          state: MintQuoteState.PAID,
+          amount_paid: 1000,
+          amount_issued: 0,
+          expiry: null,
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    // A bare id carries no unit, state or accounting, so the mint is asked rather than assumed.
+    await expect(wallet.prepareMint('bolt11', 1000, { quote: 'stored-id' })).rejects.toThrow(
+      "Quote unit 'usd' does not match wallet unit 'sat'",
+    );
+    expect(lookups).toBe(1);
+  });
+
+  test('a quote supplied as an id alone has its accounting checked against the mint', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/mint/quote/bolt11/stored-capped', () =>
+        HttpResponse.json({
+          quote: 'stored-capped',
+          request: 'lnbc10u1pfake',
+          unit,
+          amount: 1000,
+          state: MintQuoteState.PAID,
+          amount_paid: 1,
+          amount_issued: 0,
+          expiry: null,
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.prepareMint('bolt11', 100, { quote: 'stored-capped' })).rejects.toThrow(
+      'has only 1 available to mint; requested 100',
+    );
+  });
+
+  test('batch mint looks up id-only entries and rejects a foreign unit', async () => {
+    let checks = 0;
+    server.use(
+      http.post(mintUrl + '/v1/mint/quote/bolt11/check', async ({ request }) => {
+        checks += 1;
+        const body = (await request.json()) as { quotes: string[] };
+        return HttpResponse.json(
+          body.quotes.map((q) => ({
+            quote: q,
+            request: 'lnbc10u1pfake',
+            unit: 'usd',
+            amount: 1,
+            state: MintQuoteState.PAID,
+            amount_paid: 1,
+            amount_issued: 0,
+            expiry: null,
+          })),
+        );
+      }),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    // The entry that states its unit passes; the id-only one is read from the mint.
+    await expect(
+      wallet.prepareBatchMint('bolt11', [
+        {
+          amount: 1,
+          quote: {
+            quote: 'stated',
+            unit,
+            amount_paid: Amount.from(0),
+            amount_issued: Amount.from(0),
+          },
+        },
+        { amount: 1, quote: { quote: 'bare' } },
+      ]),
+    ).rejects.toThrow("Quote unit 'usd' does not match wallet unit 'sat'");
+    // One batched request covers every id-only entry.
+    expect(checks).toBe(1);
+  });
+
+  test('prepareMelt looks up an id-only quote and rejects a foreign unit', async () => {
+    let checks = 0;
+    server.use(
+      http.get(mintUrl + '/v1/melt/quote/bolt11/bare-melt', () => {
+        checks += 1;
+        return HttpResponse.json({
+          quote: 'bare-melt',
+          method: 'bolt11',
+          request: invoice,
+          unit: 'usd',
+          amount: 1,
+          fee_reserve: 0,
+          state: MeltQuoteState.UNPAID,
+          expiry: 0,
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    // Enough proofs to cover the melt, so the unit is the only thing that can fail.
+    const proofs = [
+      { id: KEYSET_ID, amount: Amount.from(4), secret: 's4', C: 'C4' },
+    ] as unknown as Proof[];
+
+    await expect(
+      wallet.prepareMelt('bolt11', { quote: 'bare-melt', amount: Amount.from(1) }, proofs),
+    ).rejects.toThrow("Quote unit 'usd' does not match wallet unit 'sat'");
+    expect(checks).toBe(1);
+  });
+
+  test('rejects a melt quote response whose unit is an empty string', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/melt/quote/bolt11/empty-unit', () =>
+        HttpResponse.json({
+          quote: 'empty-unit',
+          method: 'bolt11',
+          request: invoice,
+          unit: '',
+          amount: 1,
+          fee_reserve: 0,
+          state: MeltQuoteState.UNPAID,
+          expiry: 0,
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.checkMeltQuoteBolt11('empty-unit')).rejects.toThrow(
+      /Invalid response from mint/i,
+    );
+  });
+
+  test('rejects a quote response whose unit is an empty string', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
+        HttpResponse.json({
+          quote: 'q-emptyunit',
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
+          request: 'lnbc10u1pfake',
+          unit: '',
+          amount: 1000,
+          state: MintQuoteState.UNPAID,
+          expiry: null,
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createMintQuoteBolt11(1000, LOCK_PUBKEY)).rejects.toThrow(
+      /Invalid response from mint/i,
+    );
+  });
+
+  test('rejects a quote response the mint sent with no usable unit', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
+        HttpResponse.json({
+          quote: 'q-nounit',
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
+          request: 'lnbc10u1pfake',
+          amount: 1000,
+          state: MintQuoteState.UNPAID,
+          expiry: null,
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    // NUT-04 requires unit on the response, so Mint refuses it before the wallet compares.
+    await expect(wallet.createMintQuoteBolt11(1000, LOCK_PUBKEY)).rejects.toThrow(
+      /Invalid response from mint/i,
+    );
   });
 
   test('rejects a description when the mint does not advertise bolt11 description support', async () => {
@@ -396,6 +597,8 @@ describe('createMintQuoteBolt11 mutants', () => {
         const body = (await request.json()) as { pubkey: string };
         return HttpResponse.json({
           quote: 'q-nodesc',
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
           request: 'lnbc10u1pfake',
           unit: 'sat',
           amount: 1000,
@@ -415,6 +618,29 @@ describe('createMintQuoteBolt11 mutants', () => {
     await expect(wallet.createMintQuoteBolt11(1000, LOCK_PUBKEY)).resolves.toHaveProperty(
       'quote',
       'q-nodesc',
+    );
+  });
+  test('rejects a quote denominated in a different unit', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
+        HttpResponse.json({
+          quote: 'q-wrong-unit',
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
+          request: invoice, // fixture invoice encodes 2,000 sat
+          unit: 'usd',
+          amount: 2000,
+          state: MintQuoteState.UNPAID,
+          expiry: null,
+          pubkey: LOCK_PUBKEY,
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createMintQuoteBolt11(2000, LOCK_PUBKEY)).rejects.toThrow(
+      "Quote unit 'usd' does not match wallet unit 'sat'",
     );
   });
 });
@@ -441,8 +667,8 @@ describe('createMintQuoteBolt12 mutants', () => {
           pubkey: LOCK_PUBKEY,
           state: MintQuoteState.UNPAID,
           expiry: null,
-          amount_paid: 0,
-          amount_issued: 0,
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
         });
       }),
     );
@@ -456,6 +682,102 @@ describe('createMintQuoteBolt12 mutants', () => {
     expect(body.description).toBeUndefined();
   });
 
+  function bolt12MintQuoteJson(amount: number | null, unitStr = 'sat') {
+    return {
+      quote: 'q-bolt12-amount',
+      request: 'lno1offer...',
+      amount,
+      unit: unitStr,
+      pubkey: LOCK_PUBKEY,
+      state: MintQuoteState.UNPAID,
+      expiry: null,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+    };
+  }
+
+  test('accepts a quote for exactly the requested amount', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/mint/quote/bolt12', () =>
+        HttpResponse.json(bolt12MintQuoteJson(21)),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const quote = await wallet.createMintQuoteBolt12(LOCK_PUBKEY, { amount: 21 });
+    expect(quote.amount?.toString()).toBe('21');
+  });
+
+  test('rejects a quoted amount that differs from the requested amount', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/mint/quote/bolt12', () =>
+        HttpResponse.json(bolt12MintQuoteJson(22)),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createMintQuoteBolt12(LOCK_PUBKEY, { amount: 21 })).rejects.toThrow(
+      'Mint quote amount does not match',
+    );
+  });
+
+  test('rejects an amountless quote when an amount was requested', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/mint/quote/bolt12', () =>
+        HttpResponse.json(bolt12MintQuoteJson(null)),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createMintQuoteBolt12(LOCK_PUBKEY, { amount: 21 })).rejects.toThrow(
+      'Mint quote amount does not match',
+    );
+  });
+
+  test('accepts an amountless quote when no amount was requested', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/mint/quote/bolt12', () =>
+        HttpResponse.json(bolt12MintQuoteJson(null)),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const quote = await wallet.createMintQuoteBolt12(LOCK_PUBKEY);
+    expect(quote.amount).toBeNull();
+  });
+
+  test('rejects a quoted amount when no amount was requested', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/mint/quote/bolt12', () =>
+        HttpResponse.json(bolt12MintQuoteJson(21)),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createMintQuoteBolt12(LOCK_PUBKEY)).rejects.toThrow(
+      'Mint quote amount does not match',
+    );
+  });
+
+  test('rejects a quote denominated in a different unit', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/mint/quote/bolt12', () =>
+        HttpResponse.json(bolt12MintQuoteJson(21, 'usd')),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createMintQuoteBolt12(LOCK_PUBKEY, { amount: 21 })).rejects.toThrow(
+      "Quote unit 'usd' does not match wallet unit 'sat'",
+    );
+  });
+
   test('rejects when the mint returns a quote locked to a different pubkey', async () => {
     server.use(
       http.post(mintUrl + '/v1/mint/quote/bolt12', () =>
@@ -466,8 +788,8 @@ describe('createMintQuoteBolt12 mutants', () => {
           pubkey: '02dcba',
           state: MintQuoteState.UNPAID,
           expiry: null,
-          amount_paid: 0,
-          amount_issued: 0,
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
         }),
       ),
     );
@@ -498,18 +820,18 @@ describe('createMintQuoteBolt12 mutants', () => {
 });
 
 describe('createMintQuoteOnchain mutants', () => {
-  test('fills the wallet unit when the mint response omits it', async () => {
+  test('keeps the unit the mint quoted', async () => {
     server.use(
       http.post(mintUrl + '/v1/mint/quote/onchain', () =>
         HttpResponse.json({
           quote: 'onchain-q',
           request: 'bc1qdeposit',
-          unit: '', // empty → wallet fills its unit
+          unit,
           pubkey: LOCK_PUBKEY,
           state: MintQuoteState.UNPAID,
           expiry: null,
-          amount_paid: 0,
-          amount_issued: 0,
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
         }),
       ),
     );
@@ -518,6 +840,29 @@ describe('createMintQuoteOnchain mutants', () => {
 
     const quote = await wallet.createMintQuoteOnchain(LOCK_PUBKEY);
     expect(quote.unit).toBe('sat');
+  });
+
+  test('rejects a quote denominated in a different unit', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/mint/quote/onchain', () =>
+        HttpResponse.json({
+          quote: 'onchain-q-unit',
+          request: 'bc1qdeposit',
+          unit: 'usd',
+          pubkey: LOCK_PUBKEY,
+          state: MintQuoteState.UNPAID,
+          expiry: null,
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createMintQuoteOnchain(LOCK_PUBKEY)).rejects.toThrow(
+      "Quote unit 'usd' does not match wallet unit 'sat'",
+    );
   });
 
   test('rejects when the mint returns a quote locked to a different pubkey', async () => {
@@ -530,8 +875,8 @@ describe('createMintQuoteOnchain mutants', () => {
           pubkey: '02dcba',
           state: MintQuoteState.UNPAID,
           expiry: null,
-          amount_paid: 0,
-          amount_issued: 0,
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
         }),
       ),
     );
@@ -560,18 +905,16 @@ describe('createMintQuoteOnchain mutants', () => {
   });
 });
 
-describe('validateMintQuote mutants', () => {
-  test('unit handling: mismatched string throws, non-string is ignored', async () => {
-    const wallet = new Wallet(mint, { unit });
-    await wallet.loadMint();
-
-    expect(() => wallet.validateMintQuote({ quote: 'q', unit: 'usd' })).toThrow(
+describe('assertQuoteUnit mutants', () => {
+  test('unit handling: anything but the wallet unit throws', () => {
+    expect(() => assertQuoteUnit({ unit: 'usd' }, 'sat')).toThrow(
       "Quote unit 'usd' does not match wallet unit 'sat'",
     );
-    // A non-string unit must be ignored (an `||` mutant would wrongly throw).
-    expect(() =>
-      wallet.validateMintQuote({ quote: 'q', unit: 5 } as unknown as MintQuoteBaseResponse),
-    ).not.toThrow();
+    expect(() => assertQuoteUnit({ unit: 5 } as unknown as { unit?: string }, 'sat')).toThrow(
+      /does not match wallet unit/,
+    );
+    expect(() => assertQuoteUnit({}, 'sat')).toThrow(/does not match wallet unit/);
+    expect(() => assertQuoteUnit({ unit: 'sat' }, 'sat')).not.toThrow();
   });
 
   test('expiry does not prevent minting an available quote balance', async () => {
@@ -604,8 +947,9 @@ describe('validateMintQuoteAvailableAmount mutants', () => {
     // Accounting applies to every method: a non-zero snapshot caps what can be minted.
     const quote = {
       quote: 'q-bolt11-capped',
-      amount_paid: 1,
-      amount_issued: 0,
+      unit: 'sat',
+      amount_paid: Amount.from(1),
+      amount_issued: Amount.from(0),
     } as unknown as MintQuoteBolt11Response;
     await expect(wallet.prepareMint('bolt11', 100, quote)).rejects.toThrow(
       'has only 1 available to mint; requested 100',
@@ -613,8 +957,9 @@ describe('validateMintQuoteAvailableAmount mutants', () => {
     // A 0/0 snapshot is indistinguishable from a stale pre-payment quote: defer to the mint.
     const staleQuote = {
       quote: 'q-bolt11-stale',
-      amount_paid: 0,
-      amount_issued: 0,
+      unit: 'sat',
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
     } as unknown as MintQuoteBolt11Response;
     await expect(wallet.prepareMint('bolt11', 100, staleQuote)).resolves.toBeDefined();
   });
@@ -622,11 +967,26 @@ describe('validateMintQuoteAvailableAmount mutants', () => {
   test('bolt12 with amount_paid but no amount_issued returns early', async () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
-    // Only one of the two fields present → the guard must return before doing arithmetic.
+    // Half-filled accounting marks the object as caller-built, so the mint's copy replaces it.
     const quote = {
       quote: 'q-bolt12-partial',
-      amount_paid: 5,
+      unit: 'sat',
+      amount_paid: Amount.from(5),
     } as unknown as MintQuoteBolt12Response;
+    server.use(
+      http.get(mintUrl + '/v1/mint/quote/bolt12/q-bolt12-partial', () =>
+        HttpResponse.json({
+          quote: 'q-bolt12-partial',
+          request: 'lno1offer',
+          unit,
+          amount: 3,
+          state: MintQuoteState.PAID,
+          amount_paid: 3,
+          amount_issued: 0,
+          expiry: null,
+        }),
+      ),
+    );
     // The real signal is that prepareMint resolves (the guard early-returns); .method is
     // just the echoed argument.
     await expect(wallet.prepareMint('bolt12', 3, quote)).resolves.toBeDefined();
@@ -636,7 +996,7 @@ describe('validateMintQuoteAvailableAmount mutants', () => {
 });
 
 describe('createMeltQuoteBolt11 mutants', () => {
-  test('sends no amountless options and fills unit and request from the wallet/invoice', async () => {
+  test('sends no amountless options and returns the request the mint stated', async () => {
     let body: Record<string, unknown> = {};
     server.use(
       http.post(mintUrl + '/v1/melt/quote/bolt11', async ({ request }) => {
@@ -644,12 +1004,12 @@ describe('createMeltQuoteBolt11 mutants', () => {
         return HttpResponse.json({
           quote: 'melt-basic',
           amount: 10,
-          unit: '', // empty → wallet fills its unit
+          unit,
           fee_reserve: 1,
           state: MeltQuoteState.UNPAID,
           expiry: 3600,
           payment_preimage: null,
-          request: '', // empty → wallet echoes the invoice
+          request: 'lnbc-plain',
         });
       }),
     );
@@ -662,6 +1022,29 @@ describe('createMeltQuoteBolt11 mutants', () => {
     expect(body.options).toBeUndefined();
     expect(quote.unit).toBe('sat');
     expect(quote.request).toBe('lnbc-plain');
+  });
+
+  test('rejects a quote denominated in a different unit', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/melt/quote/bolt11', () =>
+        HttpResponse.json({
+          quote: 'melt-unit',
+          amount: 10,
+          unit: 'usd',
+          fee_reserve: 1,
+          state: MeltQuoteState.UNPAID,
+          expiry: 3600,
+          payment_preimage: null,
+          request: 'lnbc-plain',
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createMeltQuoteBolt11('lnbc-plain')).rejects.toThrow(
+      "Quote unit 'usd' does not match wallet unit 'sat'",
+    );
   });
 
   test('rejects amountMsat when the invoice already encodes an amount', async () => {
@@ -743,7 +1126,7 @@ describe('prepareMint mutants', () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
     await expect(
-      wallet.prepareMint('bolt11', 1, 'just-an-id' as unknown as { quote: string }),
+      wallet.prepareMint('bolt11', 1, 'just-an-id' as unknown as { quote: string; unit: string }),
     ).rejects.toThrow('expected a quote object, not a string ID');
   });
 
@@ -792,12 +1175,126 @@ describe('prepareMint mutants', () => {
     );
   });
 
+  test('rejects a melt quote that states no request', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/melt/quote/bolt11', () =>
+        HttpResponse.json({
+          quote: 'melt-no-request',
+          amount: 10,
+          unit,
+          fee_reserve: 1,
+          state: MeltQuoteState.UNPAID,
+          expiry: 3600,
+          request: '',
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    // NUT-05 puts `request` on the quote; the wallet no longer substitutes the invoice it sent.
+    await expect(wallet.createMeltQuoteBolt11('lnbc-plain')).rejects.toThrow(
+      /Invalid response from mint/i,
+    );
+  });
+
+  test('rejects a lookup that answers for a different quote', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/mint/quote/bolt11/asked-for', () =>
+        HttpResponse.json({
+          quote: 'substituted',
+          request: 'lnbc10u1pfake',
+          unit,
+          amount: 1000,
+          state: MintQuoteState.PAID,
+          amount_paid: 1000,
+          amount_issued: 0,
+          expiry: null,
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.prepareMint('bolt11', 1000, { quote: 'asked-for' })).rejects.toThrow(
+      /different quote/i,
+    );
+  });
+
+  test('resolves a quote whose accounting fields are null rather than refusing it', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/mint/quote/bolt11/nulled', () =>
+        HttpResponse.json({
+          quote: 'nulled',
+          request: 'lnbc10u1pfake',
+          unit,
+          amount: 1000,
+          state: MintQuoteState.PAID,
+          amount_paid: 1000,
+          amount_issued: 0,
+          expiry: null,
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    // A replayed wire body can carry nulls; that is as good as absent, so read the quote.
+    const preview = await wallet.prepareMint('bolt11', 1000, {
+      quote: 'nulled',
+      unit,
+      amount_paid: null,
+      amount_issued: null,
+    } as unknown as { quote: string });
+    expect(preview.payload.quote).toBe('nulled');
+  });
+
+  test("a resolved quote keeps the caller's own fields and takes the mint's values", async () => {
+    server.use(
+      http.get(mintUrl + '/v1/mint/quote/bolt11/kept', () =>
+        HttpResponse.json({
+          quote: 'kept',
+          request: 'lnbc10u1pfake',
+          unit,
+          amount: 1000,
+          state: MintQuoteState.PAID,
+          amount_paid: 1000,
+          amount_issued: 0,
+          expiry: null,
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const preview = await wallet.prepareMint('bolt11', 1000, {
+      quote: 'kept',
+      localRef: 'app-state',
+    } as unknown as { quote: string });
+
+    // The app's own field survives; the mint supplies everything it sent.
+    const resolved = preview.quote as unknown as { localRef: string; amount_paid: Amount };
+    expect(resolved.localRef).toBe('app-state');
+    expect(resolved.amount_paid.equals(1000)).toBe(true);
+  });
+
+  test('rejects an entry whose quote object carries no id', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(
+      wallet.prepareBatchMint('bolt11', [{ amount: 1, quote: {} as unknown as { quote: string } }]),
+    ).rejects.toThrow(/needs its id/i);
+  });
+
   test('an empty pubkey field does not force a locked-quote signature', async () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
     // 'pubkey' is present but falsy → the quote is unlocked; no privkey should be required.
     const quote = {
       quote: 'q-empty-pubkey',
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
       request: 'lnbc...',
       amount: Amount.from(1),
       unit: 'sat',
@@ -851,7 +1348,7 @@ describe('prepareBatchMint / completeBatchMint mutants', () => {
     await wallet.loadMint();
     await expect(
       wallet.prepareBatchMint('bolt11', [
-        { amount: 1, quote: 'string-id' as unknown as { quote: string } },
+        { amount: 1, quote: 'string-id' as unknown as { quote: string; unit: string } },
       ]),
     ).rejects.toThrow('expected a quote object, not a string ID');
   });
@@ -863,7 +1360,12 @@ describe('prepareBatchMint / completeBatchMint mutants', () => {
       wallet.prepareBatchMint('bolt11', [
         {
           amount: 1,
-          quote: { quote: 'wrong-unit', unit: 'usd' } as unknown as { quote: string },
+          quote: {
+            quote: 'wrong-unit',
+            unit: 'usd',
+            amount_paid: Amount.from(0),
+            amount_issued: Amount.from(0),
+          },
         },
       ]),
     ).rejects.toThrow("Quote unit 'usd' does not match wallet unit 'sat'");
@@ -874,9 +1376,21 @@ describe('prepareBatchMint / completeBatchMint mutants', () => {
     await wallet.loadMint();
     const locked = {
       quote: 'locked',
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      unit: 'sat',
       pubkey: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
-    } as unknown as { quote: string; pubkey?: string };
-    const unlocked = { quote: 'unlocked' } as unknown as { quote: string; pubkey?: string };
+    } as unknown as { quote: string; unit: string; pubkey?: string };
+    const unlocked = {
+      quote: 'unlocked',
+      unit: 'sat',
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+    } as unknown as {
+      quote: string;
+      unit: string;
+      pubkey?: string;
+    };
     await expect(
       wallet.prepareBatchMint('bolt11', [
         { amount: 1, quote: locked },
@@ -890,8 +1404,11 @@ describe('prepareBatchMint / completeBatchMint mutants', () => {
     await wallet.loadMint();
     const quote = {
       quote: 'locked-signed',
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      unit: 'sat',
       pubkey: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
-    } as unknown as { quote: string; pubkey?: string };
+    } as unknown as { quote: string; unit: string; pubkey?: string };
     const privkey = '0000000000000000000000000000000000000000000000000000000000000001';
     const preview = await wallet.prepareBatchMint('bolt11', [{ amount: 1, quote }], { privkey });
     expect(preview.payload.signatures).toHaveLength(1);
@@ -902,8 +1419,24 @@ describe('prepareBatchMint / completeBatchMint mutants', () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
     const preview = await wallet.prepareBatchMint('bolt11', [
-      { amount: 2, quote: { quote: 'qa' } },
-      { amount: 3, quote: { quote: 'qb' } },
+      {
+        amount: 2,
+        quote: {
+          quote: 'qa',
+          unit: 'sat',
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
+        },
+      },
+      {
+        amount: 3,
+        quote: {
+          quote: 'qb',
+          unit: 'sat',
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
+        },
+      },
     ]);
     expect(preview.quotes.map((q) => q.quote)).toEqual(['qa', 'qb']);
   });
@@ -913,7 +1446,15 @@ describe('prepareBatchMint / completeBatchMint mutants', () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
     const preview = await wallet.prepareBatchMint('bolt11', [
-      { amount: 8, quote: { quote: 'q8' } },
+      {
+        amount: 8,
+        quote: {
+          quote: 'q8',
+          unit: 'sat',
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
+        },
+      },
     ]);
     const total = Amount.sum(preview.outputData.map((o) => o.blindedMessage.amount));
     expect(total.equals(8)).toBe(true);
@@ -929,7 +1470,15 @@ describe('prepareBatchMint / completeBatchMint mutants', () => {
     await wallet.loadMint();
     // amount 3 → outputs [1,2]; the mint returns only 1 signature.
     const preview = await wallet.prepareBatchMint('bolt11', [
-      { amount: 3, quote: { quote: 'qb3' } },
+      {
+        amount: 3,
+        quote: {
+          quote: 'qb3',
+          unit: 'sat',
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
+        },
+      },
     ]);
     await expect(wallet.completeBatchMint(preview)).rejects.toThrow(
       'Mint returned 1 signatures, expected 2',
@@ -1074,15 +1623,17 @@ describe('withKeyset mutants', () => {
 });
 
 describe('createMintQuote (generic) mutants', () => {
-  test('posts the payload plus wallet unit and fills a missing response unit', async () => {
+  test('posts the payload plus wallet unit and keeps the quoted unit', async () => {
     let body: Record<string, unknown> = {};
     server.use(
       http.post(mintUrl + '/v1/mint/quote/bolt11', async ({ request }) => {
         body = (await request.json()) as Record<string, unknown>;
         return HttpResponse.json({
           quote: 'gen-mint',
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
           request: 'lnbc...',
-          unit: '', // empty → wallet substitutes its own unit
+          unit,
           amount: 1000,
           state: MintQuoteState.UNPAID,
           expiry: null,
@@ -1097,20 +1648,75 @@ describe('createMintQuote (generic) mutants', () => {
     expect(body.unit).toBe('sat');
     expect(quote.unit).toBe('sat');
   });
+
+  test.each([{ pubkey: '' }, { pubkey: null }, { pubkey: 2 }])(
+    'rejects a malformed pubkey (%j) rather than requesting an unlocked quote',
+    async ({ pubkey }) => {
+      let requested = false;
+      server.use(
+        http.post(mintUrl + '/v1/mint/quote/bolt11', () => {
+          requested = true;
+          return HttpResponse.json({
+            quote: 'generic-malformed-pubkey',
+            amount_paid: Amount.from(0),
+            amount_issued: Amount.from(0),
+            request: 'lnbc...',
+            unit: 'sat',
+            amount: 1000,
+            state: MintQuoteState.UNPAID,
+            expiry: null,
+            pubkey: '',
+          });
+        }),
+      );
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+
+      await expect(wallet.createMintQuote('bolt11', { amount: 1000, pubkey })).rejects.toThrow(
+        'Invalid pubkey',
+      );
+      expect(requested).toBe(false);
+    },
+  );
+
+  test('rejects a quote denominated in a different unit', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
+        HttpResponse.json({
+          quote: 'gen-mint-unit',
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
+          request: 'lnbc...',
+          unit: 'usd',
+          amount: 1000,
+          state: MintQuoteState.UNPAID,
+          expiry: null,
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createMintQuote('bolt11', { amount: 1000 })).rejects.toThrow(
+      "Quote unit 'usd' does not match wallet unit 'sat'",
+    );
+  });
 });
 
 describe('caller-locked createMintQuoteBolt11 mutants', () => {
   const PUBKEY = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
 
-  test('sends the pubkey, amount, description and unit, and fills a missing response unit', async () => {
+  test('sends the pubkey, amount, description and unit, and keeps the quoted unit', async () => {
     let body: Record<string, unknown> = {};
     server.use(
       http.post(mintUrl + '/v1/mint/quote/bolt11', async ({ request }) => {
         body = (await request.json()) as Record<string, unknown>;
         return HttpResponse.json({
           quote: 'locked-q',
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
           request: 'lnbc1u1pfake', // HRP encodes the quoted 100 sat
-          unit: '', // empty → wallet substitutes its own unit
+          unit,
           amount: 100,
           state: MintQuoteState.UNPAID,
           expiry: null,
@@ -1135,6 +1741,8 @@ describe('caller-locked createMintQuoteBolt11 mutants', () => {
       http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
         HttpResponse.json({
           quote: 'locked-but-unlocked',
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
           request: 'lnbc1u1pfake', // HRP encodes the quoted 100 sat
           unit: 'sat',
           amount: 100,
@@ -1157,6 +1765,8 @@ describe('caller-locked createMintQuoteBolt11 mutants', () => {
       http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
         HttpResponse.json({
           quote: 'locked-elsewhere',
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
           request: 'lnbc1u1pfake', // HRP encodes the quoted 100 sat
           unit: 'sat',
           amount: 100,
@@ -1179,6 +1789,8 @@ describe('caller-locked createMintQuoteBolt11 mutants', () => {
       http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
         HttpResponse.json({
           quote: 'locked-upper',
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
           request: 'lnbc1u1pfake', // HRP encodes the quoted 100 sat
           unit: 'sat',
           amount: 100,
@@ -1224,7 +1836,12 @@ describe('checkMintQuoteBolt11 mutants', () => {
     await wallet.loadMint();
 
     await wallet.checkMintQuoteBolt11('str-id');
-    await wallet.checkMintQuoteBolt11({ quote: 'obj-id' } as MintQuoteBolt11Response);
+    await wallet.checkMintQuoteBolt11({
+      quote: 'obj-id',
+      unit: 'sat',
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+    } as MintQuoteBolt11Response);
     expect(seen).toEqual(['str-id', 'obj-id']);
   });
 });
@@ -1237,6 +1854,9 @@ describe('prepareMint signing / policy mutants', () => {
     await wallet.loadMint();
     const quote = {
       quote: 'locked-mint',
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+      unit: 'sat',
       pubkey: PUBKEY,
     } as unknown as MintQuoteBolt11Response;
     // pubkey drives findSigningKey over the array. A `'pubkey'` -> `''` mutant drops the
@@ -1270,16 +1890,21 @@ describe('mintProofsBolt11 mutants', () => {
   test('validates a quote object rather than treating it as a string id', async () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
-    // A wrong-unit quote object must be rejected by validateMintQuote. A mutant that always
+    // A wrong-unit quote object must be rejected by assertQuoteUnit. A mutant that always
     // takes the string-id branch would skip validation and fail later with a different error.
     await expect(
-      wallet.mintProofsBolt11(1, { quote: 'x', unit: 'usd' } as MintQuoteBolt11Response),
+      wallet.mintProofsBolt11(1, {
+        quote: 'x',
+        unit: 'usd',
+        amount_paid: Amount.from(0),
+        amount_issued: Amount.from(0),
+      } as MintQuoteBolt11Response),
     ).rejects.toThrow("Quote unit 'usd' does not match wallet unit 'sat'");
   });
 });
 
 describe('createMeltQuote (generic) mutants', () => {
-  test('posts the wallet unit and fills a missing response unit', async () => {
+  test('posts the wallet unit and keeps the quoted unit', async () => {
     let body: Record<string, unknown> = {};
     server.use(
       http.post(mintUrl + '/v1/melt/quote/bolt11', async ({ request }) => {
@@ -1287,7 +1912,7 @@ describe('createMeltQuote (generic) mutants', () => {
         return HttpResponse.json({
           quote: 'gen-melt',
           amount: 10,
-          unit: '', // empty → wallet substitutes its own unit
+          unit,
           fee_reserve: 1,
           state: MeltQuoteState.UNPAID,
           expiry: 3600,
@@ -1302,6 +1927,29 @@ describe('createMeltQuote (generic) mutants', () => {
     const quote = await wallet.createMeltQuote('bolt11', { request: 'lnbc-x' });
     expect(body.unit).toBe('sat');
     expect(quote.unit).toBe('sat');
+  });
+
+  test('rejects a quote denominated in a different unit', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/melt/quote/bolt11', () =>
+        HttpResponse.json({
+          quote: 'gen-melt-unit',
+          amount: 10,
+          unit: 'usd',
+          fee_reserve: 1,
+          state: MeltQuoteState.UNPAID,
+          expiry: 3600,
+          payment_preimage: null,
+          request: 'lnbc-x',
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createMeltQuote('bolt11', { request: 'lnbc-x' })).rejects.toThrow(
+      "Quote unit 'usd' does not match wallet unit 'sat'",
+    );
   });
 });
 
@@ -1356,17 +2004,73 @@ describe('createMeltQuoteBolt12 mutants', () => {
     expect(quote.quote).toBe('melt-bolt12');
     expect(body.options).toBeUndefined();
   });
+
+  function bolt12MeltQuoteJson(amount: number, unitStr = 'sat') {
+    return {
+      quote: 'melt-bolt12-amount',
+      amount,
+      unit: unitStr,
+      fee_reserve: 2,
+      state: MeltQuoteState.UNPAID,
+      expiry: 9999999999,
+      payment_preimage: null,
+      request: 'lno1amountless-offer',
+    };
+  }
+
+  test('accepts a quote that rounds an explicit offer amount up to the next sat', async () => {
+    server.use(
+      http.post(
+        mintUrl + '/v1/melt/quote/bolt12',
+        () => HttpResponse.json(bolt12MeltQuoteJson(2)), // ceil(1,500 msat / 1,000)
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const quote = await wallet.createMeltQuoteBolt12('lno1amountless-offer', 1500);
+    expect(quote.amount.toString()).toBe('2');
+  });
+
+  test('rejects a quote above the explicit offer amount', async () => {
+    server.use(
+      http.post(
+        mintUrl + '/v1/melt/quote/bolt12',
+        () => HttpResponse.json(bolt12MeltQuoteJson(100)), // 1,000 msat asked
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createMeltQuoteBolt12('lno1amountless-offer', 1000)).rejects.toThrow(
+      /exceeds the requested amount/i,
+    );
+  });
+
+  test('rejects a quote denominated in a different unit', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/melt/quote/bolt12', () =>
+        HttpResponse.json(bolt12MeltQuoteJson(1, 'usd')),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createMeltQuoteBolt12('lno1amountless-offer', 1000)).rejects.toThrow(
+      "Quote unit 'usd' does not match wallet unit 'sat'",
+    );
+  });
 });
 
 describe('createMeltQuoteOnchain mutants', () => {
-  test('fills a missing response unit from the wallet', async () => {
+  test('keeps the unit the mint quoted', async () => {
     server.use(
       http.post(mintUrl + '/v1/melt/quote/onchain', () =>
         HttpResponse.json({
           quote: 'onchain-melt',
           request: 'bc1qrecipient',
           amount: 10,
-          unit: '', // empty → wallet substitutes its own unit
+          unit,
           fee_options: [{ fee_index: 0, fee_reserve: 2, estimated_blocks: 6 }],
           state: MeltQuoteState.UNPAID,
           expiry: 3600,
@@ -1380,6 +2084,48 @@ describe('createMeltQuoteOnchain mutants', () => {
 
     const quote = await wallet.createMeltQuoteOnchain('bc1qrecipient', 10);
     expect(quote.unit).toBe('sat');
+  });
+
+  function onchainMeltQuoteJson(amount: number, unitStr = 'sat') {
+    return {
+      quote: 'onchain-melt-amount',
+      request: 'bc1qrecipient',
+      amount,
+      unit: unitStr,
+      fee_options: [{ fee_index: 0, fee_reserve: 2, estimated_blocks: 6 }],
+      state: MeltQuoteState.UNPAID,
+      expiry: 3600,
+      selected_fee_index: null,
+      outpoint: null,
+    };
+  }
+
+  test('rejects a quoted amount that differs from the requested amount', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/melt/quote/onchain', () =>
+        HttpResponse.json(onchainMeltQuoteJson(100)),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createMeltQuoteOnchain('bc1qrecipient', 10)).rejects.toThrow(
+      'Melt quote amount does not match',
+    );
+  });
+
+  test('rejects a quote denominated in a different unit', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/melt/quote/onchain', () =>
+        HttpResponse.json(onchainMeltQuoteJson(10, 'usd')),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createMeltQuoteOnchain('bc1qrecipient', 10)).rejects.toThrow(
+      "Quote unit 'usd' does not match wallet unit 'sat'",
+    );
   });
 });
 
@@ -1419,6 +2165,35 @@ describe('createMultiPathMeltQuote mutants', () => {
     // because the usd entry does not match.
     const quote = await wallet.createMultiPathMeltQuote(invoice, 5000);
     expect(quote.quote).toBe('mpp-quote');
+  });
+
+  test('rejects a quote denominated in a different unit', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/info', () =>
+        HttpResponse.json({
+          ...mintInfoResp,
+          nuts: { ...mintInfoResp.nuts, 15: { methods: [{ method: 'bolt11', unit: 'sat' }] } },
+        }),
+      ),
+      http.post(mintUrl + '/v1/melt/quote/bolt11', () =>
+        HttpResponse.json({
+          quote: 'mpp-quote-unit',
+          amount: 5,
+          unit: 'usd',
+          fee_reserve: 1,
+          state: MeltQuoteState.UNPAID,
+          expiry: 3600,
+          payment_preimage: null,
+          request: invoice,
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.createMultiPathMeltQuote(invoice, 5000)).rejects.toThrow(
+      "Quote unit 'usd' does not match wallet unit 'sat'",
+    );
   });
 });
 

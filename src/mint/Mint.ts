@@ -372,7 +372,12 @@ class Mint {
       {},
       options?.customRequest,
     );
-    return this.normalizeMintQuoteResponse(method, response, options?.normalize);
+    const normalized = this.normalizeMintQuoteResponse(method, response, options?.normalize);
+    if (normalized.quote !== quote) {
+      this._logger.error('Invalid response from mint...', { op: `checkMintQuote.${method}` });
+      throw new CTSError('Mint quote response is for a different quote');
+    }
+    return normalized;
   }
 
   /**
@@ -1451,7 +1456,8 @@ class Mint {
     if (
       typeof data.quote !== 'string' ||
       typeof data.request !== 'string' ||
-      typeof data.unit !== 'string'
+      typeof data.unit !== 'string' ||
+      data.unit === ''
     ) {
       this._logger.error('Invalid response from mint...', { op });
       throw new CTSError('Invalid response from mint');
@@ -1599,14 +1605,17 @@ class Mint {
       }
       data.change = this.normalizeSignatureAmounts(data.change as SerializedBlindedSignature[]);
     }
+    // A quote must state its request (NUT-05); only an execution response may omit it.
     const hasRequest =
-      typeof data.request === 'string' || (execution && data.request === undefined);
+      (typeof data.request === 'string' && data.request !== '') ||
+      (execution && data.request === undefined);
     if (
       !isObj(data) ||
       typeof data.quote !== 'string' ||
       !hasRequest ||
       !(data.amount instanceof Amount) ||
       typeof data.unit !== 'string' ||
+      data.unit === '' ||
       typeof data.state !== 'string' ||
       typeof data.expiry !== 'number' ||
       !Object.values(MeltQuoteState).includes(data.state as MeltQuoteState)

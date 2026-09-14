@@ -1050,7 +1050,7 @@ describe('async melt preference body', () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
     const v3KeysetId = `02${'cd'.repeat(32)}`;
-    const preview: MeltPreview<Pick<MeltQuoteBolt11Response, 'quote'>> = {
+    const preview: MeltPreview<Pick<MeltQuoteBolt11Response, 'quote' | 'unit'>> = {
       method: 'bolt11',
       inputs: [
         {
@@ -1061,7 +1061,7 @@ describe('async melt preference body', () => {
         },
       ],
       outputData: [],
-      quote: { quote: 'q-slim' },
+      quote: { quote: 'q-slim', unit: 'sat' },
     };
     await expect(wallet.completeMelt(preview)).rejects.toThrow(/quote amount/);
   });
@@ -1069,8 +1069,8 @@ describe('async melt preference body', () => {
   test('completeMelt sends prefer_async when { preferAsync: true } is passed', async () => {
     const meltQuote = {
       quote: 'q-async-boolean',
-      amount: Amount.from(1),
       unit: 'sat',
+      amount: Amount.from(1),
       request: invoice,
       state: 'UNPAID',
       fee_reserve: Amount.from(0),
@@ -1301,6 +1301,7 @@ describe('async melt preference body', () => {
   test('bolt12: does not send prefer_async when preferAsync is not set', async () => {
     const meltQuote = {
       quote: 'q-async-12b',
+      state: MeltQuoteState.UNPAID,
       amount: Amount.from(1),
       fee_reserve: Amount.from(0),
       unit: 'sat',
@@ -1454,6 +1455,7 @@ describe('async melt preference body', () => {
       quote: 'q-auth-12',
       amount: Amount.from(1),
       unit: 'sat',
+      state: MeltQuoteState.UNPAID,
       request: 'lno1offer...',
     } as any;
     const proofs = [
@@ -1519,7 +1521,9 @@ describe('bolt11 melt quote amount validation', () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
 
-    await expect(wallet.createMeltQuoteBolt11(invoice)).rejects.toThrow(/exceeds the invoice/i);
+    await expect(wallet.createMeltQuoteBolt11(invoice)).rejects.toThrow(
+      /exceeds the requested amount/i,
+    );
   });
 
   test('createMeltQuoteBolt11 accepts a quote matching the invoice', async () => {
@@ -1558,7 +1562,9 @@ describe('bolt11 melt quote amount validation', () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
 
-    await expect(wallet.createMeltQuoteBolt11(subSat)).rejects.toThrow(/exceeds the invoice/i);
+    await expect(wallet.createMeltQuoteBolt11(subSat)).rejects.toThrow(
+      /exceeds the requested amount/i,
+    );
   });
 
   test('createMeltQuoteBolt11 bounds an amountless invoice by the caller millisat amount', async () => {
@@ -1573,7 +1579,7 @@ describe('bolt11 melt quote amount validation', () => {
     await wallet.loadMint();
 
     await expect(wallet.createMeltQuoteBolt11(amountless, 5000)).rejects.toThrow(
-      /exceeds the invoice/i,
+      /exceeds the requested amount/i,
     );
   });
 
@@ -1594,7 +1600,7 @@ describe('bolt11 melt quote amount validation', () => {
     await wallet.loadMint();
 
     await expect(wallet.createMultiPathMeltQuote(invoice, 1000)).rejects.toThrow(
-      /exceeds the invoice/i,
+      /exceeds the requested amount/i,
     );
   });
 
@@ -1608,7 +1614,7 @@ describe('bolt11 melt quote amount validation', () => {
     await wallet.loadMint();
 
     await expect(wallet.checkMeltQuoteBolt11('melt-check-over')).rejects.toThrow(
-      /exceeds the invoice/i,
+      /exceeds the requested amount/i,
     );
   });
 

@@ -168,6 +168,28 @@ Code that never branched on those codes needs no change beyond expecting `StaleK
 
 ---
 
+## A quote given as an id alone is read from the mint
+
+`prepareMint`, `prepareBatchMint` and `prepareMelt` accept a quote object carrying only its id, as they always have. v5 now reads that quote from the mint before using it, rather than assuming it belongs to this wallet.
+
+A quote is treated as the mint's own when it carries the fields a mint response always has: `amount_paid` and `amount_issued` for a mint quote, `state` for a melt quote. Anything else is read from the mint and merged over the object you passed, so your own fields survive while every value the mint sent wins. A response you already hold therefore costs no extra request.
+
+That makes two previously silent cases fail. A quote denominated in another unit is rejected instead of being minted or melted as though it were the wallet's, and a mint quote's `amount_paid`/`amount_issued` are checked against what the mint reports rather than skipped for want of the fields. Quote ids passed as strings to `mintProofsBolt11()` and the `check*` helpers were already looked up and are unaffected.
+
+```ts
+// Read from the mint, then merged over what you passed
+await wallet.prepareMint('bolt11', 1000, { quote: savedId });
+
+// Used as given: it already carries the mint's accounting
+await wallet.prepareMint('bolt11', 1000, quoteFromCreateOrCheck);
+```
+
+## New quote checks at creation
+
+Every quote creator now rejects a response denominated in a unit other than the wallet's, rather than letting it fail later. A melt quote must also state its `request`: the wallet used to substitute the invoice it had sent when the mint echoed an empty one, and now returns the mint's response unchanged. A bolt12 mint quote must answer with the amount requested, or with no amount when none was requested; a bolt12 melt quote is held to the same one-sided rounding bound as bolt11; an onchain melt quote must match the requested amount exactly. A mint quote lookup must answer for the quote that was asked for.
+
+---
+
 ## Melt inputs are checked against the snapshot
 
 `prepareMelt` (and the `meltProofs*` wrappers) never looked up the keyset of an input proof, so proofs on an id the wallet did not hold were melted anyway. v5 resolves those ids first, exactly as `receive` does: unknown ids trigger one `loadMint(true)`.

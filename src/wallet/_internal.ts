@@ -2,6 +2,7 @@
  * Internal wallet utilities — not part of the public API.
  */
 import { isBlsKeyset } from '../crypto/curves';
+import { failIf, type Logger } from '../logger';
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { type OutputDataLike } from '../model/OutputData';
@@ -219,4 +220,31 @@ export function scanProfile(keysetId: string): { batchSize: number; poolSize: nu
   // BIP32 (v0) keysets: base64 ids, or hex ids with a 00 version byte
   const bip32 = keysetId.startsWith('00') || !/^[0-9a-f]+$/i.test(keysetId);
   return bip32 ? { batchSize: 200, poolSize: 2 } : { batchSize: 500, poolSize: BATCH_POOL_SIZE };
+}
+
+/**
+ * Throws unless a quote is denominated in the given unit.
+ *
+ * @remarks
+ * A quote given as an id alone states no unit; callers resolve it against the mint first.
+ */
+export function assertQuoteUnit(
+  quote: { unit?: string },
+  walletUnit: string,
+  logger?: Logger,
+): void {
+  failIf(
+    quote.unit !== walletUnit,
+    `Quote unit '${quote.unit}' does not match wallet unit '${walletUnit}'`,
+    logger,
+  );
+}
+
+/**
+ * Copies the fields a source actually reported, so a merge cannot erase the target's own values.
+ */
+export function definedOnly<T extends object>(source: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(source).filter(([, value]) => value != null),
+  ) as Partial<T>;
 }

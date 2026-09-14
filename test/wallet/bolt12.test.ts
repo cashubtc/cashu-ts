@@ -1,6 +1,15 @@
 import { describe, it, expect, vi } from 'vitest';
 
-import { Amount, JSONInt, Mint, Wallet, type MintKeys, Keyset, type Proof } from '../../src';
+import {
+  MeltQuoteState,
+  Amount,
+  JSONInt,
+  Mint,
+  Wallet,
+  type MintKeys,
+  Keyset,
+  type Proof,
+} from '../../src';
 import { MINTCACHE } from '../consts';
 
 type ReqArgs = {
@@ -51,8 +60,8 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
         amount: 21,
         unit: 'sat',
         pubkey: '02abcd',
-        amount_paid: 0,
-        amount_issued: 0,
+        amount_paid: Amount.from(0),
+        amount_issued: Amount.from(0),
       } as any;
     };
 
@@ -92,8 +101,8 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
       unit: 'sat',
       expiry: 123456,
       pubkey: '02abcd',
-      amount_paid: 0,
-      amount_issued: 0,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
     };
     const { req, calls } = makeRequestSpy(response);
     const mint = new Mint(mintUrl, { customRequest: req });
@@ -145,8 +154,8 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
       unit: 'sat',
       expiry: 9007199254740999n,
       pubkey: '02abcd',
-      amount_paid: 0,
-      amount_issued: 0,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
     };
     const { req } = makeRequestSpy(response);
     const mint = new Mint(mintUrl, { customRequest: req });
@@ -262,6 +271,8 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
   it('rejects out-of-range bigint melt quote expiry', async () => {
     const response = {
       quote: 'm123',
+      state: MeltQuoteState.UNPAID,
+      unit: 'sat',
       amount: 100,
       fee_reserve: 2,
       expiry: 9007199254740997n,
@@ -332,8 +343,8 @@ describe('Mint (BOLT12) – instance methods', () => {
       unit: 'sat',
       expiry: null,
       pubkey: '02abcd',
-      amount_paid: 0,
-      amount_issued: 0,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
     };
     const mint = new Mint(mintUrl);
     const spy = vi.spyOn(mint, 'createMintQuoteBolt12').mockResolvedValue(response as any);
@@ -349,8 +360,20 @@ describe('Mint (BOLT12) – instance methods', () => {
   it('instance methods for melt/mint/check variants', async () => {
     const mint = new Mint(mintUrl);
     const responses = {
-      createMeltQuoteBolt12: { quote: 'm1', amount: 100, fee_reserve: 2, request: 'lno1offer...' },
-      checkMintQuoteBolt12: { quote: 'q1', state: 'PAID', amount_issued: 42 },
+      createMeltQuoteBolt12: {
+        quote: 'm1',
+        state: MeltQuoteState.UNPAID,
+        unit: 'sat',
+        amount: 100,
+        fee_reserve: 2,
+        request: 'lno1offer...',
+      },
+      checkMintQuoteBolt12: {
+        quote: 'q1',
+        state: 'PAID',
+        amount_paid: 42,
+        amount_issued: 42,
+      },
       checkMeltQuoteBolt12: { quote: 'm1', state: 'UNPAID' },
       mintBolt12: { signatures: [] },
       meltBolt12: { quote: 'm1', change: [] },
@@ -400,8 +423,8 @@ describe('Wallet (BOLT12) – wrappers', () => {
       unit: 'sat',
       expiry: null,
       pubkey: pk,
-      amount_paid: 0,
-      amount_issued: 0,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
     };
     const { req, calls } = makeRequestSpy(response);
     const mint = new Mint(mintUrl, { customRequest: req });
@@ -493,6 +516,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
     vi.spyOn(wallet as any, 'createOutputData').mockReturnValue([]);
     const meltQuote = {
       quote: 'm1',
+      state: MeltQuoteState.UNPAID,
       amount: Amount.from(100),
       unit: 'sat',
       request: 'lno1offer...',
@@ -550,6 +574,9 @@ describe('Wallet (BOLT12) – wrappers', () => {
         21,
         {
           quote: 'q1',
+          unit: 'sat',
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
           request: 'lno1offer...',
           pubkey: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
         } as any,
@@ -562,6 +589,9 @@ describe('Wallet (BOLT12) – wrappers', () => {
       21,
       {
         quote: 'q1',
+        unit: 'sat',
+        amount_paid: Amount.from(0),
+        amount_issued: Amount.from(0),
         request: 'lno1offer...',
         pubkey: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
       } as any,
@@ -612,6 +642,9 @@ describe('Wallet (BOLT12) – wrappers', () => {
       21,
       {
         quote: 'q1',
+        unit: 'sat',
+        amount_paid: Amount.from(0),
+        amount_issued: Amount.from(0),
         request: 'lno1offer...',
         pubkey: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
       } as any,

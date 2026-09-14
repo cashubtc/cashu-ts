@@ -510,7 +510,19 @@ describe('test info', () => {
     const usdWallet = new Wallet(mint, { unit: 'usd' });
     const usdKeychainCache = { ...MINTCACHE.keychainCache, unit: 'usd' };
     usdWallet.loadMintFromCache(MINTCACHE.mintInfo, usdKeychainCache);
-    // console.log('usdWallet', usdWallet.keyChain.cache);
+    server.use(
+      http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
+        HttpResponse.json({
+          quote: 'usd-quote',
+          request: 'lnbc10u1pfake',
+          unit: 'usd',
+          amount: 1000,
+          state: MintQuoteState.UNPAID,
+          expiry: null,
+          pubkey: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+        }),
+      ),
+    );
     await expect(
       usdWallet.createMintQuoteBolt11(
         1000,

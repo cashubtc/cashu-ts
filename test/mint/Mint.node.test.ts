@@ -1393,12 +1393,13 @@ describe('Mint normalization', () => {
       expect(response.quote).toBe('q1');
     });
 
-    it('accepts a quote that echoes no invoice', async () => {
+    it('rejects a quote that echoes no invoice', async () => {
       const mint = new Mint(mintUrl, { customRequest: makeRequest(quoteResponse('')) });
 
-      const response = await mint.createMeltQuoteBolt11({ request: 'lnbc1mine', unit: 'sat' });
-
-      expect(response.request).toBe('');
+      // NUT-05 puts `request` on the quote response; only an execution response may omit it.
+      await expect(
+        mint.createMeltQuoteBolt11({ request: 'lnbc1mine', unit: 'sat' }),
+      ).rejects.toThrow(/Invalid response from mint/i);
     });
   });
 

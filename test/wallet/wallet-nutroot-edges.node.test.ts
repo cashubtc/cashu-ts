@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 
-import { Amount, OutputData, PaymentRequest, Wallet, type Proof } from '../../src';
+import { Amount, OutputData, PaymentRequest, Wallet, type Proof, MeltQuoteState } from '../../src';
 import { BLS_G2_GENERATOR, hashToCurveBls } from '../../src/crypto/curve_bls';
 import { blindMessage, getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import {
@@ -192,7 +192,12 @@ describe('nutroot edge cases', () => {
       const input: Proof = { id: legacyId, amount: Amount.from(4), secret: 'input', C: pub(5) };
       const preview = await w.prepareMelt(
         'bolt11',
-        { quote: 'test', amount: Amount.from(1) },
+        {
+          quote: 'test',
+          amount: Amount.from(1),
+          unit: 'sat',
+          state: MeltQuoteState.UNPAID,
+        },
         [input],
         { keysetId: family === 'v3' ? id : legacyId },
         { type: 'custom', data: outputs },
