@@ -754,7 +754,7 @@ export class MintBuilder<
       const bolt12 = this.quote as MintQuoteBolt12Response;
       this.wallet.validateMintQuote(bolt12);
       if (!this.config.privkey) {
-        throw new Error('privkey is required for BOLT12 mint quotes');
+        throw new CTSError('privkey is required for BOLT12 mint quotes');
       }
       return this.wallet.prepareMint(
         this.method,
@@ -1035,7 +1035,9 @@ export class MeltOnchainBuilder {
     }
 
     if (this.selectedFeeIndex === undefined) {
-      throw new Error('feeIndex is required when an onchain melt quote has multiple fee options');
+      throw new CTSError(
+        'feeIndex is required when an onchain melt quote has multiple fee options',
+      );
     }
 
     return this.wallet.meltProofsOnchain(
