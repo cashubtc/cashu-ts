@@ -227,10 +227,12 @@ describe('KeyChain initialization', () => {
       }),
     );
 
-    const keyChain = new KeyChain(mint, unit);
+    const warn = vi.fn();
+    const keyChain = new KeyChain(mint, unit, { ...NULL_LOGGER, warn });
     await keyChain.init();
     expect(keyChain.getKeyset('00bd033559de27d1').id).toEqual('00bd033559de27d1');
     expect(keyChain.getKeyset('00bd033559de27d1').keys).toEqual({});
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/do not derive/), { id: newId });
   });
 
   test('should not throw on init with empty keysets; queries throw instead', async () => {
@@ -315,14 +317,15 @@ describe('KeyChain initialization', () => {
       http.get(mintUrl + '/v1/keysets', () => HttpResponse.json({ keysets: [original.meta] })),
       http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [original.keys] })),
     );
-    const keyChain = new KeyChain(mint, unit);
+    const warn = vi.fn();
+    const keyChain = new KeyChain(mint, unit, { ...NULL_LOGGER, warn });
     await keyChain.init();
     expect(keyChain.getKeyset(original.meta.id).verify()).toBe(true);
 
-    // A v1 id commits to the unit, so the same keys under a relabelled unit no longer derive it.
+    // A v1 id commits to the fee, so the same keys under a changed fee no longer derive it.
     server.use(
       http.get(mintUrl + '/v1/keysets', () =>
-        HttpResponse.json({ keysets: [{ ...original.meta, unit: 'usd' }] }),
+        HttpResponse.json({ keysets: [{ ...original.meta, input_fee_ppk: 8 }] }),
       ),
       http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [] })),
     );
@@ -331,6 +334,9 @@ describe('KeyChain initialization', () => {
     const changed = keyChain.getKeyset(original.meta.id);
     expect(changed.hasKeys).toBe(false);
     expect(changed.verify()).toBe(false);
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/carried keys/), {
+      id: original.meta.id,
+    });
   });
 
   test('init(true) carries forward keys for a v0 id when the unit is unchanged', async () => {
@@ -381,7 +387,8 @@ describe('KeyChain initialization', () => {
   });
 
   test('an older overlapping refresh does not replace the newer keychain', async () => {
-    const keyChain = new KeyChain(mint, unit);
+    const debug = vi.fn();
+    const keyChain = new KeyChain(mint, unit, { ...NULL_LOGGER, debug });
     await keyChain.init();
 
     let releaseOldMeta!: (value: { keysets: MintKeyset[] }) => void;
@@ -410,6 +417,7 @@ describe('KeyChain initialization', () => {
 
     expect(keyChain.hasKeyset(keysetA.id)).toBe(false);
     expect(keyChain.hasKeyset(keysetB.id)).toBe(true);
+    expect(debug).toHaveBeenCalledWith(expect.stringMatching(/superseded/), { seq: 2 });
   });
 
   test('the newer overlapping refresh wins even when it returns last', async () => {

@@ -162,6 +162,7 @@ export class KeyChain {
 
     // A refresh started later than this one, so leave the snapshot to it.
     if (seq !== this.refreshSeq) {
+      this._logger.debug('Discarding keychain refresh superseded by a later one', { seq });
       return;
     }
     this.buildKeychain(allKeysetsResponse.keysets, allKeysResponse.keysets);
@@ -217,6 +218,11 @@ export class KeyChain {
 
       // Discard unverified keys
       if (!keyset.verify()) {
+        if (keyset.hasKeys) {
+          this._logger.warn('Discarding keys that do not derive their keyset id', {
+            id: keyset.id,
+          });
+        }
         keyset.keys = {};
       }
 
@@ -227,6 +233,12 @@ export class KeyChain {
         keyset.keys = { ...prior.keys };
         // A v1+ id also commits to fee and expiry, so changed metadata voids carried keys.
         if (!keyset.verify()) {
+          this._logger.warn(
+            'Dropping carried keys: fresh metadata no longer derives the keyset id',
+            {
+              id: keyset.id,
+            },
+          );
           keyset.keys = {};
         }
       }
@@ -326,6 +338,9 @@ export class KeyChain {
       // A newer snapshot replaced ours while fetching, so its entry wins: the rebuilt one carries
       // the metadata captured before the refresh.
       if (this.generation !== startedGeneration) {
+        this._logger.debug('Keychain refreshed during key fetch; returning the live keyset', {
+          id,
+        });
         const current = this.keysets[id];
         if (!current) {
           throw new CTSError(`Keyset '${id}' not found`);
