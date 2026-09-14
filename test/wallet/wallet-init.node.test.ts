@@ -569,7 +569,7 @@ describe('bindKeyset & withKeyset', () => {
     expect(w2).not.toBe(wallet); // new instance
     expect(w2.keysetId).toBe(current);
     expect(w2.getMintInfo()).toStrictEqual(wallet.getMintInfo()); // same mintinfo
-    expect(w2.keyChain).toStrictEqual(wallet.keyChain); // same keychain data
+    expect(w2.keyChain.cache).toStrictEqual(wallet.keyChain.cache); // same keychain data
     expect(() => {
       w2.keyChain.getCheapestKeyset();
     }).not.toThrow(); // smoke test
