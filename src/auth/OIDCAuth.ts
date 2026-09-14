@@ -4,7 +4,8 @@ import { randomBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { type Logger, NULL_LOGGER, safeCallback } from '../logger';
 import { CTSError } from '../model/Errors';
 import { type GetInfoResponse } from '../model/types';
-import { encodeUint8ToBase64Url } from '../utils';
+import { readBodyText } from '../transport/request';
+import { DEFAULT_MAX_RESPONSE_BYTES, MAX_TIMER_DELAY_MS, encodeUint8ToBase64Url } from '../utils';
 
 export type OIDCConfig = {
   issuer: string;
@@ -149,7 +150,7 @@ export class OIDCAuth {
       method: 'GET',
       headers: { Accept: 'application/json' },
     });
-    const text = await res.text();
+    const text = await this.readBody(res);
     let json: unknown;
     let parseError: unknown;
     try {
@@ -196,18 +197,23 @@ export class OIDCAuth {
   async buildAuthCodeUrl(input: {
     redirectUri: string;
     codeChallenge: string;
-    codeChallengeMethod?: 'S256' | 'plain'; // default S256
+    codeChallengeMethod?: 'S256'; // default S256
     state?: string; // optional state to pass back to redirectUrl
     scope?: string; // default this.scope
   }): Promise<string> {
     const cfg = await this.loadConfig();
     const scope = input.scope ?? this.scope;
+    // Plain JS callers can pass any string; the flow supports S256 only.
+    const method: unknown = input.codeChallengeMethod;
+    if (method !== undefined && method !== 'S256') {
+      throw new CTSError('OIDCAuth: only the S256 PKCE method is supported');
+    }
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: this.clientId,
       redirect_uri: input.redirectUri,
       scope,
-      code_challenge_method: input.codeChallengeMethod ?? 'S256',
+      code_challenge_method: 'S256',
       code_challenge: input.codeChallenge,
     });
     if (input.state) params.set('state', input.state);
@@ -273,7 +279,10 @@ export class OIDCAuth {
     const providerInterval = Number(start.interval);
     const safeProviderInterval =
       Number.isFinite(providerInterval) && providerInterval > 0 ? providerInterval : 1;
-    const interval = Math.max(safeProviderInterval, intervalSec);
+    // The caller's interval is coerced the same way as the provider's.
+    const requested = Number(intervalSec);
+    const safeRequested = Number.isFinite(requested) ? requested : 5;
+    const interval = Math.max(safeProviderInterval, safeRequested);
     const controller = new AbortController();
     let settleCancellation!: () => void;
     const cancelled = new Promise<void>((resolve) => {
@@ -448,8 +457,9 @@ export class OIDCAuth {
           Accept: 'application/json',
         },
         body: formBody,
+        redirect: 'error', // never follow a redirect with a form body
       });
-      const text = await res.text();
+      const text = await this.readBody(res);
       let json: unknown;
       let parseError: unknown;
       try {
@@ -487,8 +497,9 @@ export class OIDCAuth {
           Accept: 'application/json',
         },
         body: formBody,
+        redirect: 'error', // never follow a redirect with a form body
       });
-      const text = await res.text();
+      const text = await this.readBody(res);
       let json: unknown;
       try {
         json = text ? JSON.parse(text) : undefined;
@@ -504,11 +515,26 @@ export class OIDCAuth {
   }
 
   /**
+   * Reads a response body under the shared size cap. Any read failure surfaces as a CTSError
+   * prefixed like every other error out of this class.
+   */
+  private async readBody(res: Response): Promise<string> {
+    try {
+      return await readBodyText(res, DEFAULT_MAX_RESPONSE_BYTES);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new CTSError(`OIDCAuth: ${message}`, { cause: err });
+    }
+  }
+
+  /**
    * Waits ms. `onEnd` receives a callback that ends the wait early and clears the timer.
    */
   private sleep(ms: number, onEnd?: (end: () => void) => void): Promise<void> {
+    // Clamp to the range setTimeout honours.
+    const delay = Math.min(ms, MAX_TIMER_DELAY_MS);
     return new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, ms);
+      const timer = setTimeout(resolve, delay);
       onEnd?.(() => {
         clearTimeout(timer);
         resolve();

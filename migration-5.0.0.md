@@ -988,3 +988,9 @@ Token listeners and `oidc.onTokens` now receive `(tokens, origin)`, where `origi
 CAT-protected BAT minting rejects with `CTSError: AuthManager: session changed while obtaining BATs` if the session changes during CAT acquisition or minting; any resulting batch is discarded. Ordinary CAT refreshes keep the session and its outstanding BAT batch. Already pooled or imported BATs remain available until consumed or explicitly replaced with `importPool([], 'replace')`.
 
 `startDeviceAuth().cancel()` now settles all active polls promptly, clears their delay timers, and aborts token requests. Results from a custom fetch that ignores the abort signal are still ignored.
+
+---
+
+## `OIDCAuth.buildAuthCodeUrl` accepts only `codeChallengeMethod: 'S256'`
+
+`codeChallengeMethod` narrows from `'S256' | 'plain'` to `'S256'`. The parameter can be omitted (S256 is already the default), and `generatePKCE()` always produces an S256 challenge, so no caller following the built-in flow needs to change. A TS caller passing `'plain'` fails to compile; a plain-JS caller gets a thrown `OIDCAuth: only the S256 PKCE method is supported`.

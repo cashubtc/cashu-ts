@@ -943,3 +943,184 @@ test('postFormStrict throws HTTP <status> when non 2xx and no JSON', async () =>
   await o.loadConfig();
   await expect(o['postFormStrict'](TOKEN, 'grant_type=x')).rejects.toThrow('OIDCAuth: HTTP 502');
 });
+
+// ---------- request policy ----------
+describe('OIDCAuth: request policy', () => {
+  afterEach(() => vi.restoreAllMocks());
+  const DISC = 'http://oidc/.well-known/openid-configuration';
+  const TOKEN = 'http://oidc/token';
+  const OVERSIZED = String(8_388_608 + 1);
+
+  /**
+   * Fetch stub that records each request init and answers with the given body per endpoint.
+   */
+  function captureFetch(
+    bodies: Record<string, string>,
+    headers: Record<string, string> = {},
+  ): { fetch: typeof fetch; inits: Array<RequestInit | undefined> } {
+    const inits: Array<RequestInit | undefined> = [];
+    const stub = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      inits.push(init);
+      return new Response(bodies[String(input)], {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', ...headers },
+      });
+    }) as typeof fetch;
+    return { fetch: stub, inits };
+  }
+
+  test('token endpoint requests fail rather than follow a redirect', async () => {
+    const DEVICE = 'http://oidc/device';
+    const { fetch, inits } = captureFetch({
+      [DISC]: JSON.stringify({ token_endpoint: TOKEN, device_authorization_endpoint: DEVICE }),
+      [DEVICE]: JSON.stringify({
+        device_code: 'dev',
+        user_code: 'U',
+        verification_uri: 'http://oidc/verify',
+      }),
+      [TOKEN]: JSON.stringify({ access_token: 'ok' }),
+    });
+    const oidc = new OIDCAuth(DISC, { fetch });
+    vi.spyOn(oidc as unknown as { sleep: () => Promise<void> }, 'sleep').mockResolvedValue();
+
+    await oidc.passwordGrant('user', 'pass'); // strict path
+    await (await oidc.startDeviceAuth(0)).poll(); // strict start, loose poll
+
+    const posts = inits.filter((i) => i?.method === 'POST');
+    expect(posts).toHaveLength(3);
+    for (const init of posts) expect(init?.redirect).toBe('error');
+  });
+
+  test('loadConfig rejects a discovery response larger than the body cap', async () => {
+    const { fetch } = captureFetch(
+      { [DISC]: JSON.stringify({ token_endpoint: TOKEN }) },
+      { 'Content-Length': OVERSIZED },
+    );
+    const oidc = new OIDCAuth(DISC, { fetch });
+    await expect(oidc.loadConfig()).rejects.toThrow('OIDCAuth: response body exceeds');
+  });
+
+  test.each([
+    ['an Error', new Error('socket closed')],
+    ['a non-Error value', 'socket closed'],
+  ])('a body read that throws %s surfaces as a prefixed CTSError', async (_name, thrownByRead) => {
+    const fetch = (async () => {
+      const res = new Response('{}', { status: 200 });
+      Object.defineProperty(res, 'body', {
+        get() {
+          // eslint-disable-next-line @typescript-eslint/only-throw-error -- the non-Error arm is the case under test
+          throw thrownByRead;
+        },
+      });
+      return res;
+    }) as typeof globalThis.fetch;
+    const oidc = new OIDCAuth(DISC, { fetch });
+    const thrown = await oidc.loadConfig().catch((e: unknown) => e);
+    expect(thrown).toBeInstanceOf(CTSError);
+    expect((thrown as Error).message).toBe('OIDCAuth: socket closed');
+  });
+
+  test('postFormStrict rejects a token response larger than the body cap', async () => {
+    const { fetch } = captureFetch(
+      { [TOKEN]: JSON.stringify({ access_token: 'ok' }) },
+      { 'Content-Length': OVERSIZED },
+    );
+    const oidc = new OIDCAuth(DISC, { fetch });
+    await expect(oidc['postFormStrict'](TOKEN, 'grant_type=x')).rejects.toThrow(
+      'OIDCAuth: response body exceeds',
+    );
+  });
+
+  test('postFormLoose reports a response larger than the body cap as a network error', async () => {
+    const { fetch } = captureFetch(
+      { [TOKEN]: JSON.stringify({ access_token: 'ok' }) },
+      { 'Content-Length': OVERSIZED },
+    );
+    const oidc = new OIDCAuth(DISC, { fetch });
+    const res = await oidc['postFormLoose'](TOKEN, 'grant_type=x');
+    expect(res).toMatchObject({ error: 'network_error' });
+  });
+
+  test('sleep keeps the scheduled delay within the timer range', async () => {
+    const delays: number[] = [];
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((cb: () => void, ms?: number) => {
+      delays.push(ms ?? 0);
+      cb();
+      return 0;
+    }) as unknown as typeof setTimeout);
+    const oidc = new OIDCAuth(DISC);
+
+    await oidc['sleep'](2_147_484 * 1000);
+    await oidc['sleep'](1000);
+
+    expect(delays).toEqual([2_147_483_647, 1000]);
+  });
+
+  test('startDeviceAuth keeps an oversized provider interval within the timer range', async () => {
+    const DEVICE = 'http://oidc/device';
+    const { fetch } = captureFetch({
+      [DISC]: JSON.stringify({ token_endpoint: TOKEN, device_authorization_endpoint: DEVICE }),
+      [DEVICE]: JSON.stringify({
+        device_code: 'dev',
+        user_code: 'UCODE',
+        verification_uri: 'http://oidc/verify',
+        interval: 2_147_484,
+      }),
+      [TOKEN]: JSON.stringify({ access_token: 'ok' }),
+    });
+    const delays: number[] = [];
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((cb: () => void, ms?: number) => {
+      delays.push(ms ?? 0);
+      cb();
+      return 0;
+    }) as unknown as typeof setTimeout);
+    const oidc = new OIDCAuth(DISC, { fetch });
+
+    const start = await oidc.startDeviceAuth();
+    await start.poll();
+
+    expect(delays.length).toBeGreaterThan(0);
+    for (const ms of delays) expect(ms).toBeLessThanOrEqual(2_147_483_647);
+  });
+
+  test.each([
+    ['a non-numeric caller interval falls back to the default', 'abc' as unknown as number, 5000],
+    ['a huge caller interval stays within the timer range', 2_147_484, 2_147_483_647],
+  ])('startDeviceAuth: %s', async (_name, intervalSec, expectedMs) => {
+    const DEVICE = 'http://oidc/device';
+    const { fetch } = captureFetch({
+      [DISC]: JSON.stringify({ token_endpoint: TOKEN, device_authorization_endpoint: DEVICE }),
+      [DEVICE]: JSON.stringify({
+        device_code: 'dev',
+        user_code: 'U',
+        verification_uri: 'http://oidc/verify',
+      }),
+      [TOKEN]: JSON.stringify({ access_token: 'ok' }),
+    });
+    const delays: number[] = [];
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((cb: () => void, ms?: number) => {
+      delays.push(ms ?? 0);
+      cb();
+      return 0;
+    }) as unknown as typeof setTimeout);
+    const oidc = new OIDCAuth(DISC, { fetch });
+
+    await (await oidc.startDeviceAuth(intervalSec)).poll();
+
+    expect(delays).toEqual([expectedMs]);
+  });
+
+  test('buildAuthCodeUrl rejects a PKCE method other than S256', async () => {
+    const { fetch } = captureFetch({
+      [DISC]: JSON.stringify({ token_endpoint: TOKEN, authorization_endpoint: 'http://oidc/auth' }),
+    });
+    const oidc = new OIDCAuth(DISC, { fetch });
+    await expect(
+      oidc.buildAuthCodeUrl({
+        redirectUri: 'http://localhost/cb',
+        codeChallenge: 'challenge',
+        codeChallengeMethod: 'plain' as unknown as 'S256',
+      }),
+    ).rejects.toThrow('OIDCAuth: only the S256 PKCE method is supported');
+  });
+});
