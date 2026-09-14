@@ -254,7 +254,7 @@ export class OIDCAuth {
    */
   async devicePoll(device_code: string, intervalSec = 5): Promise<TokenResponse> {
     const cfg = await this.loadConfig();
-    // A non-numeric interval must not become a hot loop; sleep's clamp bounds the top of the range.
+    // Coerce the interval as startDeviceAuth does; sleep bounds the top of the range.
     const requested = Number(intervalSec);
     let delay = Number.isFinite(requested) ? Math.max(1, requested) : 5;
     while (true) {
@@ -300,7 +300,7 @@ export class OIDCAuth {
     const providerInterval = Number(start.interval);
     const safeProviderInterval =
       Number.isFinite(providerInterval) && providerInterval > 0 ? providerInterval : 1;
-    // The caller's interval gets the same treatment: a non-numeric value must not become a hot loop.
+    // The caller's interval is coerced the same way as the provider's.
     const requested = Number(intervalSec);
     const safeRequested = Number.isFinite(requested) ? requested : 5;
     const interval = Math.max(safeProviderInterval, safeRequested);
