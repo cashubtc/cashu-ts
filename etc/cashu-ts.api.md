@@ -657,14 +657,14 @@ export type JsonRpcReqParams = {
 
 // @public
 export class KeyChain {
-    constructor(mint: string | Mint, unit: string);
+    constructor(mint: string | Mint, unit: string, logger?: Logger);
     get cache(): KeyChainCache;
     static cacheToMintDTO(cache: KeyChainCache): {
         keysets: MintKeyset[];
         keys: MintKeys[];
     };
     ensureKeysetKeys(id: string): Promise<Keyset>;
-    static fromCache(mint: string | Mint, unit: string, cache: KeyChainCache): KeyChain;
+    static fromCache(mint: string | Mint, unit: string, cache: KeyChainCache, logger?: Logger): KeyChain;
     getAllKeys(): MintKeys[];
     getAllKeysetIds(): string[];
     getCheapestKeyset(): Keyset;
