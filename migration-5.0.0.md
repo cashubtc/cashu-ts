@@ -55,6 +55,34 @@ const id = preview.keysetId;
 const id = preview.outputData[0].blindedMessage.id; // or sendOutputs / keepOutputs for a SwapPreview
 ```
 
+## Mint previews no longer carry a wire `payload`
+
+`MintPreview` and `BatchMintPreview` are what the wallet decided, not the request it will send.
+`completeMint` and `completeBatchMint` build the request from the preview's `quote`/`quotes` and
+`outputData`, so the `payload` copy of the quote ids and blinded messages is gone. The NUT-20
+signature moves up a level: `signature` on `MintPreview`, `signatures` on `BatchMintPreview`, which
+also gains `amounts` (the draw per quote, in `quotes` order).
+
+```ts
+// Before
+preview.payload.quote; // MintPreview
+preview.payload.signature;
+batch.payload.quotes; // BatchMintPreview
+batch.payload.quote_amounts;
+batch.payload.signatures;
+// After
+preview.quote.quote;
+preview.signature;
+batch.quotes.map((q) => q.quote);
+batch.amounts;
+batch.signatures;
+```
+
+The blinded messages are `preview.outputData.map((d) => d.blindedMessage)` in both.
+
+`SwapTransaction` is removed from the public types. It was exported by mistake in v2.2.0: no public
+method ever returned or accepted one, so nothing can depend on it.
+
 ## Mint quotes now require a usable active keyset
 
 All mint-quote creation methods (`createMintQuote`, `createMintQuoteBolt11`, `createMintQuoteBolt12`, `createMintQuoteOnchain`) now throw `no active keyset for unit '…' — a paid mint quote could not be redeemed` if the mint has no usable (active, hex-id, keyed) keyset for the wallet's unit. This prevents paying an invoice for a quote that could never be redeemed for proofs — `loadMint` deliberately tolerates keyset-less mints (e.g. a mint unwinding liabilities) by leaving the wallet unbound, so without this check the failure only surfaced after payment, at minting time.

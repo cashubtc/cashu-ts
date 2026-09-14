@@ -19,7 +19,7 @@ const preview = await wallet.ops.mintBolt11(100, quote).asDeterministic(0).prepa
 const newProofs = await wallet.completeMint(preview);
 ```
 
-- `prepare()` builds the exact mint payload without calling the mint yet.
+- `prepare()` builds the outputs and signs the quote without calling the mint yet.
 - `run()` is equivalent to `const preview = await prepare(); await wallet.completeMint(preview)`.
 
 ## 3) Deterministic mint with keyset + callback

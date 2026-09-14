@@ -209,13 +209,14 @@ export interface AuthProvider {
 
 // @public
 export interface BatchMintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'quote' | 'pubkey'> = MintQuoteBaseResponse> {
+    amounts: Amount[];
     // @deprecated (undocumented)
     legacySignatures?: Array<string | null>;
     // (undocumented)
     method: string;
     outputData: OutputDataLike[];
-    payload: BatchMintRequest;
     quotes: TQuote[];
+    signatures?: Array<string | null>;
 }
 
 // @public
@@ -1457,8 +1458,8 @@ export interface MintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>
     // (undocumented)
     method: string;
     outputData: OutputDataLike[];
-    payload: MintRequest;
     quote: TQuote;
+    signature?: string;
 }
 
 // @public
@@ -2644,14 +2645,6 @@ export type SwapRequest = {
 // @public
 export type SwapResponse = {
     signatures: SerializedBlindedSignature[];
-};
-
-// @public
-export type SwapTransaction = {
-    payload: SwapRequest;
-    outputData: OutputDataLike[];
-    keepVector: boolean[];
-    sortedIndices: number[];
 };
 
 // @public

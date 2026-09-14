@@ -995,7 +995,6 @@ describe('WalletOps builders', () => {
     it('run uses wallet.prepareMint and wallet.completeMint', async () => {
       const preview: MintPreview = {
         method: 'bolt11',
-        payload: { quote, outputs: [] },
         outputData: [],
         quote: {
           quote,
@@ -1063,7 +1062,6 @@ describe('WalletOps builders', () => {
     it('bolt12 run uses wallet.prepareMint and wallet.completeMint', async () => {
       const preview: MintPreview = {
         method: 'bolt12',
-        payload: { quote: mint12.quote, outputs: [] },
         outputData: [],
         quote: {
           quote: mint12.quote,
@@ -1171,7 +1169,6 @@ describe('WalletOps builders', () => {
     it('onchain run uses wallet.prepareMint and wallet.completeMint', async () => {
       const preview: MintPreview = {
         method: 'onchain',
-        payload: { quote: mintOnchain.quote, outputs: [] },
         outputData: [],
         quote: mintOnchain,
       };
