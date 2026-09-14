@@ -457,7 +457,7 @@ export class OIDCAuth {
           Accept: 'application/json',
         },
         body: formBody,
-        redirect: 'error', // a 307/308 re-sends the body to the redirect target: fail, not follow
+        redirect: 'error', // never follow a redirect with a form body
       });
       const text = await this.readBody(res);
       let json: unknown;
@@ -497,7 +497,7 @@ export class OIDCAuth {
           Accept: 'application/json',
         },
         body: formBody,
-        redirect: 'error', // a 307/308 re-sends the body to the redirect target: fail, not follow
+        redirect: 'error', // never follow a redirect with a form body
       });
       const text = await this.readBody(res);
       let json: unknown;
@@ -531,7 +531,7 @@ export class OIDCAuth {
    * Waits ms. `onEnd` receives a callback that ends the wait early and clears the timer.
    */
   private sleep(ms: number, onEnd?: (end: () => void) => void): Promise<void> {
-    // setTimeout wraps a delay past its range to 1 ms; clamp so a long poll stays long.
+    // Clamp to the range setTimeout honours.
     const delay = Math.min(ms, MAX_TIMER_DELAY_MS);
     return new Promise<void>((resolve) => {
       const timer = setTimeout(resolve, delay);

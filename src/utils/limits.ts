@@ -131,8 +131,8 @@ export const MAX_MINT_INFO_DEPTH = 64;
 export const DEFAULT_MAX_RESPONSE_BYTES = 8_388_608;
 
 /**
- * Longest delay `setTimeout` honours (2^31 - 1 ms, about 24.8 days). Runtimes wrap a larger value
- * to 1 ms, so a provider-driven delay is clamped to this before scheduling.
+ * Longest delay `setTimeout` honours (2^31 - 1 ms, about 24.8 days). Provider-driven delays are
+ * clamped to this before scheduling.
  */
 export const MAX_TIMER_DELAY_MS = 2_147_483_647;
 
