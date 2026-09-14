@@ -168,6 +168,14 @@ Code that never branched on those codes needs no change beyond expecting `StaleK
 
 ---
 
+## `getKeyset` looks up any explicit id as given
+
+`KeyChain.getKeyset(id)` used to treat any falsy id as "no id" and return the cheapest active keyset, so an empty string (or `null` from plain JS) silently selected the default. v5 looks up every explicit value and throws `Keyset '' not found` for one it does not hold. Only `undefined`, or calling with no argument, selects the default.
+
+`Wallet.getKeyset(id)` passes an explicit id straight through, so it follows the same rule; without an id it still returns the wallet's bound keyset.
+
+---
+
 ## A quote given as an id alone is read from the mint
 
 `prepareMint` and `prepareBatchMint` still accept a quote object carrying only its id. `prepareMelt` still requires both `quote` and `amount`. v5 reads incomplete quotes from the mint before using them, rather than assuming they belong to this wallet.
