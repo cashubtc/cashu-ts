@@ -25,7 +25,7 @@ import {
 import { MINTCACHE } from '../consts';
 
 // Setup mint cache for loadMint()
-const mintUrl = 'https://localhost:3338';
+const mintUrl = MINTCACHE.mintUrl;
 const server = setupServer();
 
 beforeAll(() => {

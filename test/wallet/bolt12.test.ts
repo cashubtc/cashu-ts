@@ -40,7 +40,7 @@ const makeRequestSpy = <T>(payload: T) => {
   return { req, calls };
 };
 
-const mintUrl = 'https://localhost:3338';
+const mintUrl = MINTCACHE.mintUrl;
 
 function makeKeysetFromCache(k: MintKeys, active = true) {
   const ks = new Keyset(k.id, k.unit, active, 0, undefined);
@@ -115,7 +115,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
     expect(res.expiry).toBe(response.expiry);
     expect(calls).toHaveLength(1);
     const c = calls[0];
-    expect(c.endpoint).toMatch(/^https:\/\/localhost:3338\/v1\/mint\/quote\/bolt12$/);
+    expect(c.endpoint).toBe(mintUrl + '/v1/mint/quote/bolt12');
     expect(c.method?.toUpperCase()).toBe('POST');
     expect(c.requestBody).toEqual(payload);
   });
@@ -190,7 +190,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
     expect(res.amount_issued).toEqual(Amount.from(response.amount_issued));
     expect(calls).toHaveLength(1);
     const c = calls[0];
-    expect(c.endpoint).toMatch(/^https:\/\/localhost:3338\/v1\/mint\/quote\/bolt12\/q123$/);
+    expect(c.endpoint).toBe(mintUrl + '/v1/mint/quote/bolt12/q123');
   });
 
   it('mintBolt12 posts to /v1/mint/bolt12', async () => {
@@ -201,7 +201,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
     const res = await mint.mintBolt12(mintPayload as any);
     expect(res.signatures[0].amount).toEqual(Amount.from(response.signatures[0].amount));
     const c = calls[0];
-    expect(c.endpoint).toMatch(/^https:\/\/localhost:3338\/v1\/mint\/bolt12$/);
+    expect(c.endpoint).toBe(mintUrl + '/v1/mint/bolt12');
     expect(c.method?.toUpperCase()).toBe('POST');
     expect(c.requestBody).toEqual(mintPayload);
   });
@@ -239,7 +239,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
     expect(res.amount).toEqual(Amount.from(response.amount));
     expect(res.fee_reserve).toEqual(Amount.from(response.fee_reserve));
     const c = calls[0];
-    expect(c.endpoint).toMatch(/^https:\/\/localhost:3338\/v1\/melt\/quote\/bolt12$/);
+    expect(c.endpoint).toBe(mintUrl + '/v1/melt/quote/bolt12');
     expect(c.method?.toUpperCase()).toBe('POST');
     expect(c.requestBody).toEqual(meltQuotePayload);
   });
@@ -307,7 +307,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
     expect(res.amount).toEqual(Amount.from(response.amount));
     expect(res.fee_reserve).toEqual(Amount.from(response.fee_reserve));
     const c = calls[0];
-    expect(c.endpoint).toMatch(/^https:\/\/localhost:3338\/v1\/melt\/quote\/bolt12\/m123$/);
+    expect(c.endpoint).toBe(mintUrl + '/v1/melt/quote/bolt12/m123');
   });
 
   it('meltBolt12 posts to /v1/melt/bolt12', async () => {
@@ -328,7 +328,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
     expect(res.quote).toBe(response.quote);
     expect(res.amount).toEqual(Amount.from(response.amount));
     const c = calls[0];
-    expect(c.endpoint).toMatch(/^https:\/\/localhost:3338\/v1\/melt\/bolt12$/);
+    expect(c.endpoint).toBe(mintUrl + '/v1/melt/bolt12');
     expect(c.method?.toUpperCase()).toBe('POST');
     expect(c.requestBody).toEqual(meltPayload);
   });
@@ -662,7 +662,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
 
     expect(proofs).toHaveLength(3);
     expect(calls).toHaveLength(1);
-    expect(calls[0].endpoint).toMatch(/^https:\/\/localhost:3338\/v1\/mint\/bolt12$/);
+    expect(calls[0].endpoint).toBe(mintUrl + '/v1/mint/bolt12');
     expect(calls[0].requestBody).toEqual(JSONInt.parse(JSONInt.stringify(preview.payload)!));
   });
 });
