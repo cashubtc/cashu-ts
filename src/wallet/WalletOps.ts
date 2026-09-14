@@ -862,7 +862,8 @@ export class MintBuilder<
    * @remarks
    * Call `wallet.completeMint(MintPreview)` to complete the mint. This method can only be called
    * for bolt12 quotes when `.privkey()` is set.
-   * @returns A MintPreview containing the payload and output data needed to complete the mint.
+   * @returns A MintPreview containing the quote, output data and signature needed to complete the
+   *   mint.
    */
   async prepare(
     this: MintBuilder<M, true>,

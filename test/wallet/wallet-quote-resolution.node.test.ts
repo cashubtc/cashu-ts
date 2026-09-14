@@ -52,7 +52,7 @@ test('an explicit null clears a stale pubkey and expiry while caller-only fields
     localRef: 'keep',
   });
   expect(preview.quote).toMatchObject({ pubkey: null, expiry: null, localRef: 'keep' });
-  expect(preview.payload.signature).toBeUndefined();
+  expect(preview.signature).toBeUndefined();
 });
 
 test.each(['single', 'batch'])(
@@ -75,16 +75,11 @@ test.each(['single', 'batch'])(
         : await wallet.prepareBatchMint('bolt12', [{ amount: 1, quote: stale }], { privkey });
     const resolved = 'quote' in preview ? preview.quote : preview.quotes[0];
     expect(resolved).toMatchObject({ amount: null, localRef: 'keep' });
-    const signature =
-      'signature' in preview.payload
-        ? preview.payload.signature
-        : 'signatures' in preview.payload
-          ? preview.payload.signatures?.[0]
-          : undefined;
+    const signature = 'quote' in preview ? preview.signature : preview.signatures?.[0];
     expect(signature).toBeTruthy();
     const tx = inputsForPayload({
       mintQuotes: [{ quoteId: 'stored', amount: 0 }],
-      outputs: preview.payload.outputs,
+      outputs: preview.outputData.map((d) => d.blindedMessage),
     });
     expect(schnorrVerifyDigest(signature!, tx.quotes.get('stored')!.digest, pubkey)).toBe(true);
   },
@@ -155,13 +150,13 @@ test.each([1, 1n, '1'])(
     const stored = { ...quote, amount_paid: paid };
     vi.spyOn(wallet, 'completeMint').mockResolvedValue([]);
     await expect(wallet.prepareMint('bolt11', 1, stored)).resolves.toHaveProperty(
-      'payload.quote',
+      'quote.quote',
       'stored',
     );
     await expect(wallet.mintProofs('bolt11', 1, stored)).resolves.toEqual([]);
     await expect(
       wallet.prepareBatchMint('bolt11', [{ amount: 1, quote: stored }]),
-    ).resolves.toHaveProperty('payload.quotes', ['stored']);
+    ).resolves.toHaveProperty('quotes.0.quote', 'stored');
   },
 );
 

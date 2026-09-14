@@ -138,7 +138,6 @@ import {
   type MeltProofsConfig,
   type CompleteMeltOptions,
   type CompleteSwapOptions,
-  type SwapTransaction,
   type MeltProofsResponse,
   type SendResponse,
   type SpendReceipt,
@@ -1288,7 +1287,12 @@ class Wallet {
     inputs: Proof[],
     keepOutputs: OutputDataLike[],
     sendOutputs: OutputDataLike[] = [],
-  ): SwapTransaction {
+  ): {
+    payload: SwapRequest;
+    outputData: OutputDataLike[];
+    keepVector: boolean[];
+    sortedIndices: number[];
+  } {
     // Keep and send are generated separately; the duplicate-secret guard has to see them together.
     this.assertUniqueOutputSecrets([...keepOutputs, ...sendOutputs]);
     // Prepare inputs for mint
@@ -3192,8 +3196,8 @@ class Wallet {
    * built-in methods, prefer `mintProofsBolt11()`, `mintProofsBolt12()`, or
    * `wallet.ops.mintBolt11()/mintBolt12()`.
    *
-   * Returns a `MintPreview` that contains the exact mint payload and output data needed to
-   * construct proofs. Persist this preview to support NUT-19 replay safety.
+   * Returns a `MintPreview` with the quote, output data and NUT-20 signature that `completeMint`
+   * sends. Persist this preview to support NUT-19 replay safety.
    * @param quote The mint quote for this method. A mint response is used as given; anything short
    *   of one, such as `{ quote: string }`, is read from the mint and merged over what you passed,
    *   so the unit and accounting checks run against the mint's values. Pass `config.privkey` to
@@ -3219,7 +3223,7 @@ class Wallet {
     let resolvedQuote: TQuote & Partial<MintQuoteBaseResponse> = quote;
     // Mint fills the unit and accounting on every response; fetch any missing fields first.
     // Merge rather than swap: the mint's values win on every field it sends, and anything the
-    // caller carries on its own quote type survives into the payload, transcript and preview.
+    // caller carries on its own quote type survives into the request, transcript and preview.
     if (
       resolvedQuote.unit == null ||
       resolvedQuote.amount_paid == null ||
@@ -3267,17 +3271,13 @@ class Wallet {
       mintOT: stringifyOutputTypeForLog(mintOT),
     });
 
-    // Create outputs and mint payload
     const outputs = this.createOutputData(mintAmount, keyset, mintOT);
     const blindedMessages = outputs.map((d) => d.blindedMessage);
     const v3 = this.mintsOntoV3(blindedMessages);
-    const mintPayload: MintRequest = {
-      outputs: blindedMessages,
-      quote: resolvedQuote.quote,
-    };
 
     // Sign whenever a privkey or sign callback is provided — quote.pubkey may be absent if only
     // the quote ID was stored, but the caller still needs to produce a NUT-20 signature
+    let signature: string | undefined;
     let legacySignature: string | undefined;
     // The key is caller state, passed in config; nothing is recovered implicitly
     // (recoverQuoteLockKey is the explicit tool for a seeded wallet that lost it).
@@ -3334,31 +3334,24 @@ class Wallet {
         request.digest = mintQuoteDigest(resolvedQuote.quote, blindedMessages);
       }
       if (signingKey) {
-        mintPayload.signature = schnorrSignDigest(request.digest, signingKey);
+        signature = schnorrSignDigest(request.digest, signingKey);
         // Keep a legacy (pre nuts#375) signature over the same outputs as a fallback for
         // not-yet-upgraded mints — see completeMint(). Never on v3 keysets.
         if (!v3) {
           legacySignature = signMintQuoteLegacy(signingKey, resolvedQuote.quote, blindedMessages);
         }
       } else {
-        const signature = await sign!(request);
+        signature = await sign!(request);
         // A wrong signer fails here, not at the mint; without a quote pubkey there is nothing
         // to check against, as with a bare privkey.
         this.failIf(
           !!quotePubkey && !schnorrVerifyDigest(signature, request.digest, quotePubkey),
           'prepareMint: the sign callback returned a signature the quote pubkey does not verify',
         );
-        mintPayload.signature = signature;
       }
     }
 
-    return {
-      method,
-      payload: mintPayload,
-      outputData: outputs,
-      quote: resolvedQuote,
-      legacySignature,
-    };
+    return { method, quote: resolvedQuote, outputData: outputs, signature, legacySignature };
   }
 
   /**
@@ -3401,10 +3394,12 @@ class Wallet {
   async completeMint(
     mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>,
   ): Promise<Proof[]> {
-    const { payload, outputData, method, legacySignature } = mintPreview;
-    // Ask the mint to sign the outputs this preview can unblind, rather than a field that a
-    // persisted preview may no longer agree with.
-    const request: MintRequest = { ...payload, outputs: outputData.map((d) => d.blindedMessage) };
+    const { quote, outputData, method, signature, legacySignature } = mintPreview;
+    const request: MintRequest = {
+      quote: quote.quote,
+      outputs: outputData.map((d) => d.blindedMessage),
+      ...(signature !== undefined ? { signature } : {}),
+    };
     // TODO: Remove legacy message support
     const { signatures } = await this.withStaleKeysetRepair(() =>
       this.withLegacyQuoteSigFallback(
@@ -3641,19 +3636,12 @@ class Wallet {
       }
     }
 
-    const batchPayload: BatchMintRequest = {
-      quotes: resolvedEntries.map((e) => e.quote.quote),
-      quote_amounts: amounts,
-      outputs: blindedMessages,
-      ...(hasSignatures ? { signatures } : {}),
-    };
-
     return {
       method,
-      payload: batchPayload,
-      outputData: outputs,
       quotes: resolvedEntries.map((e) => e.quote),
-      ...(hasSignatures ? { legacySignatures } : {}),
+      amounts,
+      outputData: outputs,
+      ...(hasSignatures ? { signatures, legacySignatures } : {}),
     };
   }
 
@@ -3670,12 +3658,12 @@ class Wallet {
   async completeBatchMint(
     batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>,
   ): Promise<Proof[]> {
-    const { method, payload, outputData, legacySignatures } = batchPreview;
-    // Ask the mint to sign the outputs this preview can unblind, rather than a field that a
-    // persisted preview may no longer agree with.
+    const { method, quotes, amounts, outputData, signatures, legacySignatures } = batchPreview;
     const request: BatchMintRequest = {
-      ...payload,
+      quotes: quotes.map((q) => q.quote),
+      quote_amounts: amounts,
       outputs: outputData.map((d) => d.blindedMessage),
+      ...(signatures ? { signatures } : {}),
     };
     // TODO: Remove legacy message support
     const { signatures: sigs } = await this.withStaleKeysetRepair(() =>
@@ -3694,7 +3682,7 @@ class Wallet {
     // Unblind under the keyset each signature names, as custom outputs may pick their own.
     await this._ensureKeysetsForSignatures(sigs);
     this._logger.debug('BATCH MINT COMPLETED', {
-      quotes: payload.quotes.length,
+      quotes: quotes.length,
       amounts: outputData.map((o) => o.blindedMessage.amount.toString()),
     });
     return outputData.map((d, i) => d.toProof(sigs[i], this.keysetForSignature(sigs[i].id)));

@@ -316,10 +316,8 @@ describe('createMintQuoteBolt11 mutants', () => {
       quotes.map((quote) => ({ amount: 1, quote })),
       { privkey: [lockA.privkey, lockB.privkey] },
     );
-    expect(preview.payload.signatures).toHaveLength(2);
-    expect(preview.payload.signatures?.every((signature) => typeof signature === 'string')).toBe(
-      true,
-    );
+    expect(preview.signatures).toHaveLength(2);
+    expect(preview.signatures?.every((signature) => typeof signature === 'string')).toBe(true);
   });
 
   test('batch mint refuses a locked quote object missing its face amount', async () => {
@@ -340,8 +338,8 @@ describe('createMintQuoteBolt11 mutants', () => {
     const preview = await wallet.prepareBatchMint('bolt11', [{ amount: 1, quote: slim }], {
       privkey: lock.privkey,
     });
-    expect(preview.payload.quotes).toEqual([quote.quote]);
-    expect(preview.payload.signatures).toHaveLength(1);
+    expect(preview.quotes.map((q) => q.quote)).toEqual([quote.quote]);
+    expect(preview.signatures).toHaveLength(1);
   });
 
   test('a locked quote without its key fails fast, and recoverQuoteLockKey repairs it', async () => {
@@ -361,7 +359,7 @@ describe('createMintQuoteBolt11 mutants', () => {
     const privkey = await restarted.recoverQuoteLockKey(stored.pubkey!);
     expect(privkey).toMatch(/^[0-9a-f]{64}$/);
     const preview = await restarted.prepareMint('bolt11', 1, stored, { privkey });
-    expect(preview.payload.signature).toMatch(/^[0-9a-f]{128}$/);
+    expect(preview.signature).toMatch(/^[0-9a-f]{128}$/);
   });
 
   test('forwards the description and keeps the quoted unit', async () => {
@@ -1246,7 +1244,7 @@ describe('prepareMint mutants', () => {
       amount_paid: null,
       amount_issued: null,
     } as unknown as { quote: string });
-    expect(preview.payload.quote).toBe('nulled');
+    expect(preview.quote.quote).toBe('nulled');
   });
 
   test("a resolved quote keeps the caller's own fields and takes the mint's values", async () => {
@@ -1303,7 +1301,7 @@ describe('prepareMint mutants', () => {
       pubkey: '',
     } as unknown as MintQuoteBolt11Response;
     const preview = await wallet.prepareMint('bolt11', 1, quote);
-    expect(preview.payload.signature).toBeUndefined();
+    expect(preview.signature).toBeUndefined();
   });
 });
 
@@ -1411,8 +1409,8 @@ describe('prepareBatchMint / completeBatchMint mutants', () => {
     } as unknown as { quote: string; unit: string; pubkey?: string };
     const privkey = '0000000000000000000000000000000000000000000000000000000000000001';
     const preview = await wallet.prepareBatchMint('bolt11', [{ amount: 1, quote }], { privkey });
-    expect(preview.payload.signatures).toHaveLength(1);
-    expect(typeof preview.payload.signatures![0]).toBe('string');
+    expect(preview.signatures).toHaveLength(1);
+    expect(typeof preview.signatures![0]).toBe('string');
   });
 
   test('preview.quotes returns the entry quote objects', async () => {
@@ -1862,7 +1860,7 @@ describe('prepareMint signing / policy mutants', () => {
     // pubkey drives findSigningKey over the array. A `'pubkey'` -> `''` mutant drops the
     // pubkey, hits the "multiple privkeys without pubkey" guard, and throws instead.
     const preview = await wallet.prepareMint('bolt11', 1, quote, { privkey: [PRIVKEY] });
-    expect(typeof preview.payload.signature).toBe('string');
+    expect(typeof preview.signature).toBe('string');
   });
 
   test('random-policy prepareMint does not fire onCountersReserved', async () => {

@@ -652,9 +652,9 @@ describe('Wallet (BOLT12) – wrappers', () => {
     );
 
     expect(calls).toHaveLength(0);
-    expect(preview.payload).toMatchObject({
-      quote: 'q1',
-      outputs: expect.any(Array),
+    expect(preview).toMatchObject({
+      quote: { quote: 'q1' },
+      outputData: expect.any(Array),
       signature: expect.any(String),
     });
 
@@ -663,6 +663,14 @@ describe('Wallet (BOLT12) – wrappers', () => {
     expect(proofs).toHaveLength(3);
     expect(calls).toHaveLength(1);
     expect(calls[0].endpoint).toBe(mintUrl + '/v1/mint/bolt12');
-    expect(calls[0].requestBody).toEqual(JSONInt.parse(JSONInt.stringify(preview.payload)!));
+    expect(calls[0].requestBody).toEqual(
+      JSONInt.parse(
+        JSONInt.stringify({
+          quote: 'q1',
+          outputs: preview.outputData.map((d) => d.blindedMessage),
+          signature: preview.signature,
+        })!,
+      ),
+    );
   });
 });

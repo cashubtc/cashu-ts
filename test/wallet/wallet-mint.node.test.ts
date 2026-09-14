@@ -142,7 +142,7 @@ describe('requestTokens', () => {
     const preview = await wallet.prepareMint('bolt11', 1, mintQuote);
     expect(mintCalls).toBe(0);
     expect(preview.method).toBe('bolt11');
-    expect(preview.payload.quote).toBe('deferred-quote-id');
+    expect(preview.quote.quote).toBe('deferred-quote-id');
     expect(preview.outputData).toHaveLength(1);
 
     const proofs = await wallet.completeMint(preview);
@@ -152,7 +152,7 @@ describe('requestTokens', () => {
     expect(proofs[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
   });
 
-  test('mints the outputs it can unblind, whatever the payload field says', async () => {
+  test('mints the blinded messages in outputData; the preview carries no wire copy', async () => {
     let sent: Array<{ B_: string; id: string }> = [];
     server.use(
       http.post(mintUrl + '/v1/mint/bolt11', async ({ request }) => {
@@ -184,13 +184,7 @@ describe('requestTokens', () => {
       expiry: null,
     });
     const prepared = preview.outputData[0].blindedMessage.B_;
-
-    // The payload field is replay metadata a restored preview may no longer agree with: the
-    // outputs that can be unblinded are the ones that count.
-    preview.payload.outputs[0] = {
-      ...preview.payload.outputs[0],
-      B_: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
-    };
+    expect(preview).not.toHaveProperty('payload');
 
     const proofs = await wallet.completeMint(preview);
 
@@ -267,7 +261,7 @@ describe('requestTokens', () => {
     );
   });
 
-  test('batch-mints the outputs it can unblind, whatever the payload field says', async () => {
+  test('batch-mints the blinded messages in outputData; the preview carries no wire copy', async () => {
     let sent: Array<{ B_: string }> = [];
     server.use(
       http.post(mintUrl + '/v1/mint/bolt11/batch', async ({ request }) => {
@@ -299,12 +293,7 @@ describe('requestTokens', () => {
     };
     const preview = await wallet.prepareBatchMint('bolt11', [{ amount: 1, quote }]);
     const prepared = preview.outputData[0].blindedMessage.B_;
-
-    // Same rule as completeMint: the payload field is replay metadata, outputData is what counts.
-    preview.payload.outputs[0] = {
-      ...preview.payload.outputs[0],
-      B_: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
-    };
+    expect(preview).not.toHaveProperty('payload');
 
     const proofs = await wallet.completeBatchMint(preview);
 
@@ -457,7 +446,7 @@ describe('requestTokens', () => {
     );
 
     // Both quotes are locked, so both should have signatures
-    const sentSigs = batchPreview.payload.signatures;
+    const sentSigs = batchPreview.signatures;
     expect(sentSigs).toBeDefined();
     expect(sentSigs).toHaveLength(2);
     expect(typeof sentSigs![0]).toBe('string');
@@ -558,7 +547,7 @@ describe('requestTokens', () => {
     ]);
 
     // No signatures field when all quotes are unlocked
-    expect(batchPreview.payload.signatures).toBeUndefined();
+    expect(batchPreview.signatures).toBeUndefined();
 
     const proofs = await wallet.completeBatchMint(batchPreview);
     expect(sumProofs(proofs).equals(5)).toBe(true);
@@ -606,7 +595,7 @@ describe('requestTokens', () => {
       { privkey },
     );
 
-    expect(batchPreview.payload.signatures).toBeUndefined();
+    expect(batchPreview.signatures).toBeUndefined();
 
     const proofs = await wallet.completeBatchMint(batchPreview);
     expect(sumProofs(proofs).equals(5)).toBe(true);
@@ -670,8 +659,8 @@ describe('requestTokens', () => {
     const preview = await wallet.prepareMint('bolt11', 1, quote, { privkey });
 
     // Should still produce a signature using the provided privkey
-    expect(preview.payload.signature).toBeDefined();
-    expect(typeof preview.payload.signature).toBe('string');
+    expect(preview.signature).toBeDefined();
+    expect(typeof preview.signature).toBe('string');
   });
 
   describe('prepareMint signs a locked quote through a sign callback', () => {
@@ -702,15 +691,15 @@ describe('requestTokens', () => {
       const preview = await wallet.prepareMint('bolt11', 1, lockedQuote(), { sign });
       expect(seen).toHaveLength(1);
       expect(seen[0].quoteId).toBe('callback-quote');
-      expect(seen[0].outputs).toEqual(preview.payload.outputs);
+      expect(seen[0].outputs).toEqual(preview.outputData.map((d) => d.blindedMessage));
       // A pre-v3 quote has no transaction transcript to hand a signer.
       expect(seen[0].transactionMessage).toBeUndefined();
       expect(
         verifyMintQuoteSignature(
           pubkey,
           'callback-quote',
-          preview.payload.outputs,
-          preview.payload.signature!,
+          preview.outputData.map((d) => d.blindedMessage),
+          preview.signature!,
         ),
       ).toBe(true);
       expect(preview.legacySignature).toBeUndefined();
@@ -765,7 +754,7 @@ describe('requestTokens', () => {
       // signer can recompute it from transaction message and input container alone.
       const tx = inputsForPayload({
         mintQuotes: [{ quoteId: 'callback-quote', amount: 1 }],
-        outputs: preview.payload.outputs,
+        outputs: preview.outputData.map((d) => d.blindedMessage),
       });
       expect(bytesToHex(seen!.digest)).toBe(bytesToHex(tx.quotes.get('callback-quote')!.digest));
       expect(bytesToHex(seen!.transactionMessage!)).toBe(bytesToHex(tx.transactionMessage));
@@ -828,14 +817,10 @@ describe('requestTokens', () => {
       );
       const tx = inputsForPayload({
         mintQuotes: [{ quoteId: 'callback-quote', amount: 1 }],
-        outputs: preview.payload.outputs,
+        outputs: preview.outputData.map((d) => d.blindedMessage),
       });
       expect(
-        schnorrVerifyDigest(
-          preview.payload.signature!,
-          tx.quotes.get('callback-quote')!.digest,
-          pubkey,
-        ),
+        schnorrVerifyDigest(preview.signature!, tx.quotes.get('callback-quote')!.digest, pubkey),
       ).toBe(true);
       expect(preview.legacySignature).toBeUndefined();
     });
@@ -868,15 +853,11 @@ describe('requestTokens', () => {
       );
       const tx = inputsForPayload({
         mintQuotes: quotes.map((q) => ({ quoteId: q.quote, amount: 1 })),
-        outputs: preview.payload.outputs,
+        outputs: preview.outputData.map((d) => d.blindedMessage),
       });
       quotes.forEach((q, i) => {
         expect(
-          schnorrVerifyDigest(
-            preview.payload.signatures![i]!,
-            tx.quotes.get(q.quote)!.digest,
-            pubkey,
-          ),
+          schnorrVerifyDigest(preview.signatures![i]!, tx.quotes.get(q.quote)!.digest, pubkey),
         ).toBe(true);
       });
       expect(preview.legacySignatures).toEqual([null, null]);
@@ -1048,7 +1029,8 @@ describe('mint quote signature legacy fallback', () => {
     test('prepareMint', async () => {
       const wallet = await makeWallet();
       const preview = await wallet.prepareMint('bolt11', 3, makeLockedQuote(), { privkey });
-      const { outputs, signature } = preview.payload;
+      const outputs = preview.outputData.map((d) => d.blindedMessage);
+      const { signature } = preview;
       const legacy = preview.legacySignature!;
 
       // Wire signature is the amended message; the fallback is the legacy message. Each verifies
@@ -1068,7 +1050,8 @@ describe('mint quote signature legacy fallback', () => {
         [{ amount: 3, quote: makeLockedQuote() }],
         { privkey },
       );
-      const { outputs, signatures } = preview.payload;
+      const outputs = preview.outputData.map((d) => d.blindedMessage);
+      const { signatures } = preview;
       const legacy = preview.legacySignatures![0]!;
 
       expect(verifyMintQuoteSignature(pubkey, 'locked-quote', outputs, signatures![0]!)).toBe(true);
@@ -1083,7 +1066,7 @@ describe('mint quote signature legacy fallback', () => {
         amount_paid: Amount.from(0),
         amount_issued: Amount.from(0),
       });
-      expect(preview.payload.signature).toBeUndefined();
+      expect(preview.signature).toBeUndefined();
       expect(preview.legacySignature).toBeUndefined();
     });
   });
@@ -1327,7 +1310,7 @@ describe('NUT-29 max_batch_size enforcement', () => {
     await wallet.loadMint();
 
     const preview = await wallet.prepareBatchMint('bolt11', makeQuotes(3));
-    expect(preview.payload.quotes).toHaveLength(3);
+    expect(preview.quotes).toHaveLength(3);
   });
 
   test('does not throw when entries.length is below max_batch_size', async () => {
@@ -1337,7 +1320,7 @@ describe('NUT-29 max_batch_size enforcement', () => {
     await wallet.loadMint();
 
     const preview = await wallet.prepareBatchMint('bolt11', makeQuotes(2));
-    expect(preview.payload.quotes).toHaveLength(2);
+    expect(preview.quotes).toHaveLength(2);
   });
 
   test('does not throw when mint does not advertise NUT-29 info', async () => {
@@ -1347,7 +1330,7 @@ describe('NUT-29 max_batch_size enforcement', () => {
     await wallet.loadMint();
 
     const preview = await wallet.prepareBatchMint('bolt11', makeQuotes(10));
-    expect(preview.payload.quotes).toHaveLength(10);
+    expect(preview.quotes).toHaveLength(10);
   });
 
   function mockLogger() {
@@ -2218,7 +2201,7 @@ describe('generic mint/melt methods', () => {
         amount_issued: Amount.from(0),
       });
 
-      expect(preview.payload.quote).toBe('stale-unpaid');
+      expect(preview.quote.quote).toBe('stale-unpaid');
     });
 
     test('prepareMint keeps string-only quote support without available amount fields', async () => {
@@ -2240,7 +2223,7 @@ describe('generic mint/melt methods', () => {
       );
 
       expect(preview.method).toBe('bolt12');
-      expect(preview.payload.quote).toBe('stored-bolt12');
+      expect(preview.quote.quote).toBe('stored-bolt12');
     });
 
     test('mintProofsOnchain rejects amounts above paid minus issued amount', async () => {
