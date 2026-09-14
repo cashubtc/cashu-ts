@@ -14,6 +14,7 @@ import type {
 } from '../model/types';
 import request, { type RequestFn } from '../transport';
 import {
+  MAX_KEYSET_LIST,
   joinUrls,
   hasValidDleq,
   decodeBase64UrlToUint8,
@@ -417,6 +418,12 @@ export class AuthManager implements AuthProvider {
           logger: this.logger,
         }),
       ]);
+      if (!Array.isArray(allKeysets.keysets) || !Array.isArray(allKeys.keysets)) {
+        throw new CTSError('AuthManager: mint returned malformed auth keysets');
+      }
+      if (allKeysets.keysets.length > MAX_KEYSET_LIST || allKeys.keysets.length > MAX_KEYSET_LIST) {
+        throw new CTSError('AuthManager: mint returned more auth keysets than can be processed');
+      }
       const normalizedKeysets = allKeysets.keysets.map((keyset) => normalizeMintKeyset(keyset));
       const normalizedKeys = allKeys.keysets.map((keyset) => normalizeMintKeys(keyset));
       // build a KeyChain preloaded with caches, unit 'auth'

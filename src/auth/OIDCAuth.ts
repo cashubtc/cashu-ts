@@ -4,7 +4,7 @@ import { randomBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { type Logger, NULL_LOGGER, safeCallback } from '../logger';
 import { CTSError } from '../model/Errors';
 import { type GetInfoResponse } from '../model/types';
-import { encodeUint8ToBase64Url } from '../utils';
+import { MAX_TIMER_DELAY_MS, encodeUint8ToBase64Url } from '../utils';
 
 export type OIDCConfig = {
   issuer: string;
@@ -188,6 +188,13 @@ export class OIDCAuth {
   }): Promise<string> {
     const cfg = await this.loadConfig();
     const scope = input.scope ?? this.scope;
+    // v5 supports S256 only; anything else still goes to the provider on this line, with notice.
+    const method: unknown = input.codeChallengeMethod;
+    if (method !== undefined && method !== 'S256') {
+      this.logger.warn(
+        `OIDCAuth: codeChallengeMethod '${typeof method === 'string' ? method : typeof method}' is not supported by cashu-ts v5, which accepts S256 only.`,
+      );
+    }
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: this.clientId,
@@ -247,8 +254,9 @@ export class OIDCAuth {
    */
   async devicePoll(device_code: string, intervalSec = 5): Promise<TokenResponse> {
     const cfg = await this.loadConfig();
-    // Clamp to a sensible minimum to avoid hot loops
-    let delay = Math.max(1, intervalSec);
+    // Coerce the interval as startDeviceAuth does; sleep bounds the top of the range.
+    const requested = Number(intervalSec);
+    let delay = Number.isFinite(requested) ? Math.max(1, requested) : 5;
     while (true) {
       await this.sleep(delay * 1000);
       const form = this.toForm({
@@ -292,7 +300,10 @@ export class OIDCAuth {
     const providerInterval = Number(start.interval);
     const safeProviderInterval =
       Number.isFinite(providerInterval) && providerInterval > 0 ? providerInterval : 1;
-    const interval = Math.max(safeProviderInterval, intervalSec);
+    // The caller's interval is coerced the same way as the provider's.
+    const requested = Number(intervalSec);
+    const safeRequested = Number.isFinite(requested) ? requested : 5;
+    const interval = Math.max(safeProviderInterval, safeRequested);
     const controller = new AbortController();
     let settleCancellation!: () => void;
     const cancelled = new Promise<void>((resolve) => {
@@ -467,6 +478,7 @@ export class OIDCAuth {
           Accept: 'application/json',
         },
         body: formBody,
+        redirect: 'error', // never follow a redirect with a form body
       });
       const text = await res.text();
       let json: unknown;
@@ -506,6 +518,7 @@ export class OIDCAuth {
           Accept: 'application/json',
         },
         body: formBody,
+        redirect: 'error', // never follow a redirect with a form body
       });
       const text = await res.text();
       let json: unknown;
@@ -526,8 +539,10 @@ export class OIDCAuth {
    * Waits ms. `onEnd` receives a callback that ends the wait early and clears the timer.
    */
   private sleep(ms: number, onEnd?: (end: () => void) => void): Promise<void> {
+    // Clamp to the range setTimeout honours.
+    const delay = Math.min(ms, MAX_TIMER_DELAY_MS);
     return new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, ms);
+      const timer = setTimeout(resolve, delay);
       onEnd?.(() => {
         clearTimeout(timer);
         resolve();

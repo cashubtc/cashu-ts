@@ -5,6 +5,7 @@ import { setupServer } from 'msw/node';
 import { beforeAll, afterAll, beforeEach, afterEach, describe, test, expect, vi } from 'vitest';
 
 import { OIDCAuth, type OIDCConfig, type TokenResponse } from '../../src/auth/OIDCAuth';
+import { NULL_LOGGER } from '../../src/logger';
 import { CTSError } from '../../src/model/Errors';
 import { encodeUint8ToBase64Url } from '../../src/utils';
 
@@ -989,4 +990,134 @@ test('postFormStrict throws HTTP <status> when non 2xx and no JSON', async () =>
   const o = new OIDCAuth(DISC);
   await o.loadConfig();
   await expect(o['postFormStrict'](TOKEN, 'grant_type=x')).rejects.toThrow('OIDCAuth: HTTP 502');
+});
+
+// ---------- request policy ----------
+describe('OIDCAuth: request policy', () => {
+  afterEach(() => vi.restoreAllMocks());
+  const DISC = 'http://oidc/.well-known/openid-configuration';
+  const TOKEN = 'http://oidc/token';
+  const DEVICE = 'http://oidc/device';
+  const AUTHZ = 'http://oidc/auth';
+  const deviceStart = {
+    device_code: 'dev',
+    user_code: 'U',
+    verification_uri: 'http://oidc/verify',
+  };
+
+  /**
+   * Serves a minimal provider and records the redirect mode of every POST.
+   */
+  function useProvider(): string[] {
+    const redirects: string[] = [];
+    server.use(
+      http.get(DISC, () =>
+        HttpResponse.json({
+          token_endpoint: TOKEN,
+          device_authorization_endpoint: DEVICE,
+          authorization_endpoint: AUTHZ,
+        }),
+      ),
+      http.post(DEVICE, ({ request }) => {
+        redirects.push(request.redirect);
+        return HttpResponse.json(deviceStart);
+      }),
+      http.post(TOKEN, ({ request }) => {
+        redirects.push(request.redirect);
+        return HttpResponse.json({ access_token: 'ok' });
+      }),
+    );
+    return redirects;
+  }
+
+  /**
+   * Records every setTimeout delay and fires the callback at once.
+   */
+  function recordTimeouts(): number[] {
+    const delays: number[] = [];
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((cb: () => void, ms?: number) => {
+      delays.push(ms ?? 0);
+      cb();
+      return 0;
+    }) as unknown as typeof setTimeout);
+    return delays;
+  }
+
+  test('token endpoint requests fail rather than follow a redirect', async () => {
+    const redirects = useProvider();
+    const oidc = new OIDCAuth(DISC);
+    vi.spyOn(oidc as unknown as { sleep: () => Promise<void> }, 'sleep').mockResolvedValue();
+
+    await oidc.passwordGrant('user', 'pass'); // strict path
+    await oidc.devicePoll('dev', 0); // loose path
+
+    expect(redirects).toEqual(['error', 'error']);
+  });
+
+  test('sleep keeps the scheduled delay within the timer range', async () => {
+    const delays = recordTimeouts();
+    const oidc = new OIDCAuth(DISC);
+
+    await oidc['sleep'](2_147_484 * 1000);
+    await oidc['sleep'](1000);
+
+    expect(delays).toEqual([2_147_483_647, 1000]);
+  });
+
+  test('startDeviceAuth keeps an oversized provider interval within the timer range', async () => {
+    useProvider();
+    server.use(http.post(DEVICE, () => HttpResponse.json({ ...deviceStart, interval: 2_147_484 })));
+    const delays = recordTimeouts();
+    const oidc = new OIDCAuth(DISC);
+
+    const start = await oidc.startDeviceAuth();
+    await start.poll();
+
+    expect(delays.length).toBeGreaterThan(0);
+    for (const ms of delays) expect(ms).toBeLessThanOrEqual(2_147_483_647);
+  });
+
+  test.each([
+    ['a non-numeric caller interval falls back to the default', 'abc' as unknown as number, 5000],
+    ['a huge caller interval stays within the timer range', 2_147_484, 2_147_483_647],
+  ])('startDeviceAuth: %s', async (_name, intervalSec, expectedMs) => {
+    useProvider();
+    const delays = recordTimeouts();
+    const oidc = new OIDCAuth(DISC);
+
+    await (await oidc.startDeviceAuth(intervalSec)).poll();
+
+    expect(delays).toEqual([expectedMs]);
+  });
+
+  test.each([
+    ['a non-numeric interval falls back to the default', 'abc' as unknown as number, 5000],
+    ['a huge interval stays within the timer range', 2_147_484, 2_147_483_647],
+  ])('devicePoll: %s', async (_name, intervalSec, expectedMs) => {
+    useProvider();
+    const delays = recordTimeouts();
+    const oidc = new OIDCAuth(DISC);
+
+    await oidc.devicePoll('dev', intervalSec);
+
+    expect(delays).toEqual([expectedMs]);
+  });
+
+  test('buildAuthCodeUrl warns about a PKCE method other than S256 and still sends it', async () => {
+    useProvider();
+    const warn = vi.fn();
+    const oidc = new OIDCAuth(DISC, { logger: { ...NULL_LOGGER, warn } });
+
+    const url = await oidc.buildAuthCodeUrl({
+      redirectUri: 'http://app/cb',
+      codeChallenge: 'challenge',
+      codeChallengeMethod: 'plain',
+    });
+
+    expect(new URL(url).searchParams.get('code_challenge_method')).toBe('plain');
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/'plain'.*S256/));
+    warn.mockClear();
+    await oidc.buildAuthCodeUrl({ redirectUri: 'http://app/cb', codeChallenge: 'challenge' });
+    expect(warn).not.toHaveBeenCalled();
+  });
 });

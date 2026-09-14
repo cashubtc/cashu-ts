@@ -44,7 +44,7 @@ import type { Logger } from '../../src/logger';
 import { OutputData } from '../../src/model/OutputData';
 import type { Proof } from '../../src/model/types';
 import * as utils from '../../src/utils';
-import { decodeBase64UrlToUint8 } from '../../src/utils';
+import { decodeBase64UrlToUint8, MAX_KEYSET_LIST } from '../../src/utils';
 import * as wallet from '../../src/wallet';
 
 const mintUrl = 'http://mint.local';
@@ -805,6 +805,48 @@ describe('AuthManager: init fetches info then builds KeyChain via wallet mock', 
     for (const call of reqSpy.mock.calls) {
       expect((call[0] as { logger?: Logger }).logger).toBe(logger);
     }
+  });
+
+  const oversized = Array.from({ length: MAX_KEYSET_LIST + 1 }, (_, i) => ({
+    id: `00auth${i}`,
+    unit: 'auth',
+    active: true,
+    input_fee_ppk: 0,
+    keys: { 1: '02aa' },
+  }));
+  const single = [{ id: '00k', unit: 'auth', active: true, input_fee_ppk: 0, keys: { 1: '02aa' } }];
+
+  test.each([
+    ['keysets', {}, { keysets: single }],
+    ['keys', { keysets: single }, {}],
+  ])('init rejects a %s response that is not a list', async (_name, keysetsBody, keysBody) => {
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+    reqSpy
+      .mockResolvedValueOnce({ name: 'mint', version: 'x', nuts: {} })
+      .mockResolvedValueOnce(keysetsBody)
+      .mockResolvedValueOnce(keysBody);
+
+    await expect(am['init']()).rejects.toThrow('malformed auth keysets');
+  });
+
+  test('init rejects a keyset list longer than the cap', async () => {
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+    reqSpy
+      .mockResolvedValueOnce({ name: 'mint', version: 'x', nuts: {} })
+      .mockResolvedValueOnce({ keysets: oversized })
+      .mockResolvedValueOnce({ keysets: single });
+
+    await expect(am['init']()).rejects.toThrow('mint returned more auth keysets');
+  });
+
+  test('init rejects a keys list longer than the cap', async () => {
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+    reqSpy
+      .mockResolvedValueOnce({ name: 'mint', version: 'x', nuts: {} })
+      .mockResolvedValueOnce({ keysets: single })
+      .mockResolvedValueOnce({ keysets: oversized });
+
+    await expect(am['init']()).rejects.toThrow('mint returned more auth keysets');
   });
 });
 
