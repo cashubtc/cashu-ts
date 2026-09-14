@@ -1,3 +1,4 @@
+import { type Logger, NULL_LOGGER } from '../logger';
 import { Mint } from '../mint';
 import { CTSError } from '../model/Errors';
 import type {
@@ -34,6 +35,7 @@ export class KeyChain {
   private generation = 0;
   // Bumped when a refresh starts so the last-started refresh wins, whatever order they return in.
   private refreshSeq = 0;
+  private _logger: Logger;
 
   private assertInitialized(): void {
     if (Object.keys(this.keysets).length === 0) {
@@ -41,9 +43,10 @@ export class KeyChain {
     }
   }
 
-  constructor(mint: string | Mint, unit: string) {
+  constructor(mint: string | Mint, unit: string, logger: Logger = NULL_LOGGER) {
     this.mint = typeof mint === 'string' ? new Mint(mint) : mint;
     this.unit = unit;
+    this._logger = logger;
   }
 
   // ---------------------------------------------------------------------
@@ -58,9 +61,15 @@ export class KeyChain {
    * @param mint Mint URL or Mint instance.
    * @param unit The unit this KeyChain should filter queries by (e.g. 'sat').
    * @param cache Cache produced by `keyChain.cache` or `KeyChain.mintToCacheDTO`.
+   * @param logger Optional logger for warnings.
    */
-  static fromCache(mint: string | Mint, unit: string, cache: KeyChainCache): KeyChain {
-    const chain = new KeyChain(mint, unit);
+  static fromCache(
+    mint: string | Mint,
+    unit: string,
+    cache: KeyChainCache,
+    logger?: Logger,
+  ): KeyChain {
+    const chain = new KeyChain(mint, unit, logger);
     chain.loadFromCache(cache);
     return chain;
   }
@@ -153,6 +162,7 @@ export class KeyChain {
 
     // A refresh started later than this one, so leave the snapshot to it.
     if (seq !== this.refreshSeq) {
+      this._logger.debug('Discarding keychain refresh superseded by a later one', { seq });
       return;
     }
     this.buildKeychain(allKeysetsResponse.keysets, allKeysResponse.keysets);
@@ -204,6 +214,11 @@ export class KeyChain {
 
       // Discard unverified keys
       if (!keyset.verify()) {
+        if (keyset.hasKeys) {
+          this._logger.warn('Discarding keys that do not derive their keyset id', {
+            id: keyset.id,
+          });
+        }
         keyset.keys = {};
       }
 
@@ -214,6 +229,12 @@ export class KeyChain {
         keyset.keys = { ...prior.keys };
         // A v1+ id also commits to fee and expiry, so changed metadata voids carried keys.
         if (!keyset.verify()) {
+          this._logger.warn(
+            'Dropping carried keys: fresh metadata no longer derives the keyset id',
+            {
+              id: keyset.id,
+            },
+          );
           keyset.keys = {};
         }
       }
@@ -314,6 +335,9 @@ export class KeyChain {
       // A newer snapshot replaced ours while fetching, so its entry wins: the rebuilt one carries
       // the metadata captured before the refresh.
       if (this.generation !== startedGeneration) {
+        this._logger.debug('Keychain refreshed during key fetch; returning the live keyset', {
+          id,
+        });
         const current = this.keysets[id];
         if (!current) {
           throw new CTSError(`Keyset '${id}' not found`);
