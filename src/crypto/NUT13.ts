@@ -211,7 +211,8 @@ function deriveBip32SecretAndBlindingFactor(
     const secret = baseKey.deriveChild(0).privateKey;
     const blindingFactor = baseKey.deriveChild(1).privateKey;
     /* c8 ignore next */
-    if (secret === null || blindingFactor === null) throw new Error('Could not derive private key');
+    if (secret === null || blindingFactor === null)
+      throw new CTSError('Could not derive private key');
     return { secret, blindingFactor };
     /* c8 ignore next 3 */
   } catch (e) {
