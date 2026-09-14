@@ -170,11 +170,11 @@ Code that never branched on those codes needs no change beyond expecting `StaleK
 
 ## A quote given as an id alone is read from the mint
 
-`prepareMint`, `prepareBatchMint` and `prepareMelt` accept a quote object carrying only its id, as they always have. v5 now reads that quote from the mint before using it, rather than assuming it belongs to this wallet.
+`prepareMint` and `prepareBatchMint` still accept a quote object carrying only its id. `prepareMelt` still requires both `quote` and `amount`. v5 reads incomplete quotes from the mint before using them, rather than assuming they belong to this wallet.
 
-A quote is treated as the mint's own when it carries the fields a mint response always has: `amount_paid` and `amount_issued` for a mint quote, `state` for a melt quote. Anything else is read from the mint and merged over the object you passed, so your own fields survive while every value the mint sent wins. A response you already hold therefore costs no extra request.
+A quote is used as given when it carries a `unit` plus `amount_paid` and `amount_issued` for a mint quote, or a `unit` plus `state` for a melt quote. Missing or null fields trigger a lookup; unresolved batch entries use one batched request. The response is merged over the object you passed, so caller-only fields survive while the mint's values win, including explicit nulls that clear stale fields. A complete response you already hold costs no extra request.
 
-That makes two previously silent cases fail. A quote denominated in another unit is rejected instead of being minted or melted as though it were the wallet's, and a mint quote's `amount_paid`/`amount_issued` are checked against what the mint reports rather than skipped for want of the fields. Quote ids passed as strings to `mintProofsBolt11()` and the `check*` helpers were already looked up and are unaffected.
+That makes two previously silent cases fail. A quote denominated in another unit is rejected instead of being minted or melted as though it were the wallet's, and mint draws, including each batch entry, are checked against the available balance. A fetched lock pubkey also requires the corresponding signing key. For an incomplete melt quote, the fetched amount replaces the caller's amount before proof coverage and change are calculated. Quote ids passed as strings to `mintProofsBolt11()` and the `check*` helpers were already looked up and are unaffected.
 
 ```ts
 // Read from the mint, then merged over what you passed
@@ -186,7 +186,11 @@ await wallet.prepareMint('bolt11', 1000, quoteFromCreateOrCheck);
 
 ## New quote checks at creation
 
-Every quote creator now rejects a response denominated in a unit other than the wallet's, rather than letting it fail later. A melt quote must also state its `request`: the wallet used to substitute the invoice it had sent when the mint echoed an empty one, and now returns the mint's response unchanged. A bolt12 mint quote must answer with the amount requested, or with no amount when none was requested; a bolt12 melt quote is held to the same one-sided rounding bound as bolt11; an onchain melt quote must match the requested amount exactly. A mint quote lookup must answer for the quote that was asked for.
+Every quote creator now rejects a response denominated in a unit other than the wallet's, rather than letting it fail later. `Mint` also rejects empty units in mint quotes, melt quotes and melt execution responses; missing units were already rejected. Melt quote creation and lookup require a non-empty `request`: the wallet no longer substitutes its own payment request for an empty response. Melt execution responses may still omit `request`.
+
+A bolt12 mint quote must answer with the amount requested, or with no amount when none was requested. A bolt12 melt quote with an explicit `amountMsat` is bounded by that amount: sat quotes may round up to the next sat, and msat quotes must not exceed the explicit millisatoshi amount. Offers passed without an explicit amount remain opaque to the wallet and have no local amount bound. An onchain melt quote must match the requested amount exactly, rejecting both overquotes and underquotes. A mint quote lookup must answer for the quote that was asked for.
+
+The generic `createMintQuote` now rejects any supplied invalid pubkey, including `''`, `null` and non-string values, before sending a request. Omit `pubkey` or pass `undefined` to request an unlocked quote; invalid values no longer silently produce bearer quotes.
 
 ---
 
@@ -796,7 +800,7 @@ Generic mint quote responses (custom payment methods) are now base-validated lik
 
 ## Bolt11 mint quotes are checked against the requested amount
 
-`createMintQuoteBolt11` and `createLockedMintQuote` now throw when the mint's response does not carry the amount that was asked for. For `sat` quotes the BOLT11 invoice's HRP amount must also equal the quoted amount; amountless or unreadable invoices fail the same check. The `checkMintQuoteBolt11` and `checkMintQuoteBatchBolt11` lookups apply the invoice check against each returned quote's own amount. Other units are not directly comparable to an invoice, so only the quoted amount is verified there.
+`createMintQuoteBolt11` and `createLockedMintQuote` now throw when the mint's response does not carry the amount that was asked for. For `sat` and `msat` quotes the BOLT11 invoice's HRP amount must also equal the quoted amount (converted to millisatoshis for sat quotes); amountless or unreadable invoices fail the same check. The `checkMintQuoteBolt11` and `checkMintQuoteBatchBolt11` lookups apply the invoice check against each returned quote's own amount. Other units are not directly comparable to an invoice, so only the quoted amount is verified there.
 
 Apps talking to conforming mints need no change. Tests that stub bolt11 mint quote responses must give the invoice an HRP that matches the quoted amount, e.g. `request: 'lnbc10u1pfake'` for a 1,000 sat quote; the raw `createMintQuote('bolt11', …)` escape hatch remains unvalidated.
 
@@ -804,7 +808,7 @@ Apps talking to conforming mints need no change. Tests that stub bolt11 mint quo
 
 ## Bolt11 melt quotes must not charge more than the invoice
 
-For `sat` quotes, `createMeltQuoteBolt11` now throws when the quote's `amount` exceeds the invoice's encoded amount (a sub-sat invoice may round up to the next sat). Amountless invoices are bounded by the caller's `amountMsat` when given, and `createMultiPathMeltQuote` is bounded by the requested partial amount. `checkMeltQuoteBolt11` applies the same bound against the quote's own `request`, and rejects a response whose `request` is not readable as a BOLT11 invoice. Undercharging is not rejected, and other units are not directly comparable to the invoice, so they are unchecked; the raw `createMeltQuote`/`checkMeltQuote` escape hatches also remain unvalidated.
+For `sat` and `msat` quotes, `createMeltQuoteBolt11` now throws when the quote's `amount` exceeds the invoice's encoded amount (a sub-sat invoice may round up to the next sat; msat quotes use the exact millisatoshi ceiling). Amountless invoices are bounded by the caller's `amountMsat` when given, and `createMultiPathMeltQuote` is bounded by the requested partial amount. `checkMeltQuoteBolt11` applies the same bound against the quote's own `request`, and rejects a response whose `request` is not readable as a BOLT11 invoice. Undercharging is not rejected, and other units are not directly comparable to the invoice, so they are unchecked; the raw `createMeltQuote`/`checkMeltQuote` escape hatches also remain unvalidated.
 
 Test stubs follow the same HRP rule as mint quotes above.
 
@@ -824,10 +828,7 @@ bolt11, bolt12 and onchain flows are unaffected: those responses already require
 
 `prepareMint`/`mintProofs` previously rejected requests above `amount_paid − amount_issued` only for bolt12 and onchain quotes. v5 applies the check to any quote object that carries accounting fields, regardless of method.
 
-Two escape hatches keep stored-quote flows working:
-
-- Quote objects without accounting fields (e.g. minimal `{ quote: '…' }` references) skip the check, as before.
-- Quotes reporting `0/0` defer to the mint — a zero snapshot may simply have been fetched before the payment was made, so the create → pay externally → mint flow is unaffected.
+Quote objects without accounting fields (e.g. minimal `{ quote: '…' }` references) are now read from the mint before checking the balance. `prepareBatchMint` also checks each entry against its available balance. Quotes reporting `0/0` still defer to the mint — a zero snapshot may simply have been fetched before payment, so the create → pay externally → mint flow is unaffected.
 
 The practical change from v4: attempting to re-mint a quote object whose snapshot shows it fully issued (`amount_paid === amount_issued > 0`) now fails fast client-side instead of round-tripping to the mint for a rejection.
 

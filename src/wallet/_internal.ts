@@ -241,10 +241,10 @@ export function assertQuoteUnit(
 }
 
 /**
- * Copies the fields a source actually reported, so a merge cannot erase the target's own values.
+ * Copies defined fields, including explicit nulls that clear the target's stale values.
  */
 export function definedOnly<T extends object>(source: T): Partial<T> {
   return Object.fromEntries(
-    Object.entries(source).filter(([, value]) => value != null),
+    Object.entries(source).filter(([, value]) => value !== undefined),
   ) as Partial<T>;
 }

@@ -2100,19 +2100,22 @@ describe('createMeltQuoteOnchain mutants', () => {
     };
   }
 
-  test('rejects a quoted amount that differs from the requested amount', async () => {
-    server.use(
-      http.post(mintUrl + '/v1/melt/quote/onchain', () =>
-        HttpResponse.json(onchainMeltQuoteJson(100)),
-      ),
-    );
-    const wallet = new Wallet(mint, { unit });
-    await wallet.loadMint();
+  test.each([9, 100])(
+    'rejects a quoted amount (%s) that differs from the requested amount',
+    async (amount) => {
+      server.use(
+        http.post(mintUrl + '/v1/melt/quote/onchain', () =>
+          HttpResponse.json(onchainMeltQuoteJson(amount)),
+        ),
+      );
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
 
-    await expect(wallet.createMeltQuoteOnchain('bc1qrecipient', 10)).rejects.toThrow(
-      'Melt quote amount does not match',
-    );
-  });
+      await expect(wallet.createMeltQuoteOnchain('bc1qrecipient', 10)).rejects.toThrow(
+        'Melt quote amount does not match',
+      );
+    },
+  );
 
   test('rejects a quote denominated in a different unit', async () => {
     server.use(
