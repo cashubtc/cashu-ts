@@ -357,7 +357,12 @@ class Mint {
       {},
       options?.customRequest,
     );
-    return this.normalizeMintQuoteResponse(method, response, options?.normalize);
+    const normalized = this.normalizeMintQuoteResponse(method, response, options?.normalize);
+    if (normalized.quote !== quote) {
+      this._logger.error('Invalid response from mint...', { op: `checkMintQuote.${method}` });
+      throw new CTSError('Mint quote response is for a different quote');
+    }
+    return normalized;
   }
 
   /**
