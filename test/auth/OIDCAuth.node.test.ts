@@ -1000,6 +1000,22 @@ describe('OIDCAuth: request policy', () => {
     await expect(oidc.loadConfig()).rejects.toThrow('OIDCAuth: response body exceeds');
   });
 
+  test('a body read that fails for any other reason surfaces as a prefixed CTSError', async () => {
+    const fetch = (async () => {
+      const res = new Response('{}', { status: 200 });
+      Object.defineProperty(res, 'body', {
+        get() {
+          throw new Error('socket closed');
+        },
+      });
+      return res;
+    }) as typeof globalThis.fetch;
+    const oidc = new OIDCAuth(DISC, { fetch });
+    const thrown = await oidc.loadConfig().catch((e: unknown) => e);
+    expect(thrown).toBeInstanceOf(CTSError);
+    expect((thrown as Error).message).toBe('OIDCAuth: socket closed');
+  });
+
   test('postFormStrict rejects a token response larger than the body cap', async () => {
     const { fetch } = captureFetch(
       { [TOKEN]: JSON.stringify({ access_token: 'ok' }) },

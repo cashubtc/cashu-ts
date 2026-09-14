@@ -281,7 +281,7 @@ export class OIDCAuth {
       Number.isFinite(providerInterval) && providerInterval > 0 ? providerInterval : 1;
     // The caller's interval gets the same treatment: a non-numeric value must not become a hot loop.
     const requested = Number(intervalSec);
-    const safeRequested = Number.isFinite(requested) && requested > 0 ? requested : 5;
+    const safeRequested = Number.isFinite(requested) ? requested : 5;
     const interval = Math.max(safeProviderInterval, safeRequested);
     const controller = new AbortController();
     let settleCancellation!: () => void;
@@ -515,17 +515,15 @@ export class OIDCAuth {
   }
 
   /**
-   * Reads a response body under the shared size cap, prefixing an oversized-body error like every
-   * other error out of this class.
+   * Reads a response body under the shared size cap. Any read failure surfaces as a CTSError
+   * prefixed like every other error out of this class.
    */
   private async readBody(res: Response): Promise<string> {
     try {
       return await readBodyText(res, DEFAULT_MAX_RESPONSE_BYTES);
     } catch (err) {
-      if (err instanceof CTSError) {
-        throw new CTSError(`OIDCAuth: ${err.message}`, { cause: err.cause });
-      }
-      throw err;
+      const message = err instanceof Error ? err.message : String(err);
+      throw new CTSError(`OIDCAuth: ${message}`, { cause: err });
     }
   }
 
