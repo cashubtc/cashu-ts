@@ -1000,12 +1000,16 @@ describe('OIDCAuth: request policy', () => {
     await expect(oidc.loadConfig()).rejects.toThrow('OIDCAuth: response body exceeds');
   });
 
-  test('a body read that fails for any other reason surfaces as a prefixed CTSError', async () => {
+  test.each([
+    ['an Error', new Error('socket closed')],
+    ['a non-Error value', 'socket closed'],
+  ])('a body read that throws %s surfaces as a prefixed CTSError', async (_name, thrownByRead) => {
     const fetch = (async () => {
       const res = new Response('{}', { status: 200 });
       Object.defineProperty(res, 'body', {
         get() {
-          throw new Error('socket closed');
+          // eslint-disable-next-line @typescript-eslint/only-throw-error -- the non-Error arm is the case under test
+          throw thrownByRead;
         },
       });
       return res;
