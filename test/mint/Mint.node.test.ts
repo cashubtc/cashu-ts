@@ -1682,6 +1682,47 @@ describe('Mint normalization', () => {
     });
   });
 
+  describe('mint quote responses (NUT-04 quote binding)', () => {
+    it('throws when a checked mint quote reports a different quote id', async () => {
+      const logger = createLogger();
+      const mint = new Mint(mintUrl, {
+        customRequest: makeRequest({
+          quote: 'other-quote',
+          request: 'lnbc1...',
+          amount: 21,
+          unit: 'sat',
+          state: MintQuoteState.UNPAID,
+          expiry: 123,
+          amount_paid: 0,
+          amount_issued: 0,
+        }),
+        logger,
+      });
+
+      await expect(mint.checkMintQuoteBolt11('my-quote')).rejects.toThrow(/different quote/);
+      expect(logger.error).toHaveBeenCalled();
+    });
+
+    it('returns the quote when the id matches', async () => {
+      const mint = new Mint(mintUrl, {
+        customRequest: makeRequest({
+          quote: 'my-quote',
+          request: 'lnbc1...',
+          amount: 21,
+          unit: 'sat',
+          state: MintQuoteState.UNPAID,
+          expiry: 123,
+          amount_paid: 0,
+          amount_issued: 0,
+        }),
+      });
+
+      const response = await mint.checkMintQuoteBolt11('my-quote');
+
+      expect(response.quote).toBe('my-quote');
+    });
+  });
+
   describe('createMeltQuoteBolt11 invoice binding', () => {
     const quoteResponse = (request: string) => ({
       quote: 'q1',
