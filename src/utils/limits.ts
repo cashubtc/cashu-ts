@@ -125,6 +125,18 @@ export const MAX_KEYSET_LIST = 10_000;
 export const MAX_MINT_INFO_DEPTH = 64;
 
 /**
+ * Default cap on a response body read from a mint or auth provider, in bytes (8 MiB, >10x any
+ * realistic response). Bodies over the cap fail the read rather than buffer.
+ */
+export const DEFAULT_MAX_RESPONSE_BYTES = 8_388_608;
+
+/**
+ * Longest delay `setTimeout` honours (2^31 - 1 ms, about 24.8 days). Runtimes wrap a larger value
+ * to 1 ms, so a provider-driven delay is clamped to this before scheduling.
+ */
+export const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
+/**
  * Max u64 (2^64 - 1): the ceiling every Amount is held to. Enforced in the Amount constructor, so
  * arithmetic results are bounded too; muldiv helpers keep their wide intermediate in bigint and
  * only construct the divided-down result.

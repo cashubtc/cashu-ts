@@ -8,6 +8,7 @@ import {
 } from '../model/Errors';
 import { type Nut19Policy } from '../model/types';
 import { JSONInt } from '../utils/JSONInt';
+import { DEFAULT_MAX_RESPONSE_BYTES } from '../utils/limits';
 
 /**
  * Pluggable request function used for all mint HTTP calls.
@@ -408,7 +409,6 @@ export function setRequestLogger(logger: Logger): void {
 const MAX_CACHED_RETRIES = 9; // 10 requests total
 const MAX_DELAY = 1000; // 1 sec
 const BASE_DELAY = 100; // 100 ms
-const DEFAULT_MAX_RESPONSE_BYTES = 8_388_608; // 8 MiB; >10x any realistic mint response
 const AUTH_HEADERS = ['blind-auth', 'clear-auth']; // NUT-21/22 tokens, lowercased for comparison
 
 class CallerAbortError extends NetworkError {

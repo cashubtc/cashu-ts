@@ -1674,7 +1674,7 @@ export class OIDCAuth {
     buildAuthCodeUrl(input: {
         redirectUri: string;
         codeChallenge: string;
-        codeChallengeMethod?: 'S256' | 'plain';
+        codeChallengeMethod?: 'S256';
         state?: string;
         scope?: string;
     }): Promise<string>;
