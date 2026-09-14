@@ -279,7 +279,7 @@ export class OIDCAuth {
     const providerInterval = Number(start.interval);
     const safeProviderInterval =
       Number.isFinite(providerInterval) && providerInterval > 0 ? providerInterval : 1;
-    // The caller's interval gets the same treatment: a non-numeric value must not become a hot loop.
+    // The caller's interval is coerced the same way as the provider's.
     const requested = Number(intervalSec);
     const safeRequested = Number.isFinite(requested) ? requested : 5;
     const interval = Math.max(safeProviderInterval, safeRequested);
