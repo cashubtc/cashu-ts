@@ -26,6 +26,8 @@ import { MINTCACHE } from '../consts';
 
 // Setup mint cache for loadMint()
 const mintUrl = 'https://localhost:3338';
+// The shared fixture was recorded for http://; a cache must name the mint it is loaded into.
+const keychainCache = { ...MINTCACHE.keychainCache, mintUrl };
 const server = setupServer();
 
 beforeAll(() => {
@@ -72,7 +74,7 @@ describe('requests', { timeout: 7500 }, () => {
       }),
     );
     const wallet = new Wallet(mintUrl);
-    wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+    wallet.loadMintFromCache(MINTCACHE.mintInfo, keychainCache);
     await wallet.checkMeltQuoteBolt11('test');
 
     expect(headers!).toBeDefined();
@@ -100,7 +102,7 @@ describe('requests', { timeout: 7500 }, () => {
 
     try {
       const wallet = new Wallet(mintUrl);
-      wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+      wallet.loadMintFromCache(MINTCACHE.mintInfo, keychainCache);
       setGlobalRequestOptions({ headers: { 'x-cashu': 'xyz-123-abc' } });
 
       await wallet.checkMeltQuoteBolt11('test');
@@ -136,7 +138,7 @@ describe('requests', { timeout: 7500 }, () => {
 
     try {
       const wallet = new Wallet(mintUrl);
-      wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+      wallet.loadMintFromCache(MINTCACHE.mintInfo, keychainCache);
       setGlobalRequestOptions({ fetch: customFetch });
 
       await wallet.checkMeltQuoteBolt11('test');
@@ -349,7 +351,7 @@ describe('requests', { timeout: 7500 }, () => {
     );
 
     const wallet = new Wallet(mintUrl);
-    wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+    wallet.loadMintFromCache(MINTCACHE.mintInfo, keychainCache);
     await expect(wallet.checkMeltQuoteBolt11('test')).rejects.toThrow(HttpResponseError);
   });
   test('handles NetworkError on network failure', async () => {
@@ -361,7 +363,7 @@ describe('requests', { timeout: 7500 }, () => {
     );
 
     const wallet = new Wallet(mintUrl);
-    wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+    wallet.loadMintFromCache(MINTCACHE.mintInfo, keychainCache);
     await expect(wallet.checkMeltQuoteBolt11('test')).rejects.toThrow(NetworkError);
   });
 
@@ -375,7 +377,7 @@ describe('requests', { timeout: 7500 }, () => {
     );
 
     const wallet = new Wallet(mintUrl);
-    wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+    wallet.loadMintFromCache(MINTCACHE.mintInfo, keychainCache);
     const promise = wallet.checkMeltQuoteBolt11('test');
     await expect(promise).rejects.toThrow(MintOperationError);
     // assert that the error message is set correctly by the code
@@ -390,7 +392,7 @@ describe('requests', { timeout: 7500 }, () => {
     );
 
     const wallet = new Wallet(mintUrl);
-    wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+    wallet.loadMintFromCache(MINTCACHE.mintInfo, keychainCache);
     await expect(wallet.checkMeltQuoteBolt11('test')).rejects.toThrow('plain text failure');
   });
 
@@ -402,7 +404,7 @@ describe('requests', { timeout: 7500 }, () => {
     );
 
     const wallet = new Wallet(mintUrl);
-    wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+    wallet.loadMintFromCache(MINTCACHE.mintInfo, keychainCache);
     await expect(wallet.checkMeltQuoteBolt11('test')).rejects.toThrow('mint detail error');
   });
 
@@ -414,7 +416,7 @@ describe('requests', { timeout: 7500 }, () => {
     );
 
     const wallet = new Wallet(mintUrl);
-    wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+    wallet.loadMintFromCache(MINTCACHE.mintInfo, keychainCache);
     await expect(wallet.checkMeltQuoteBolt11('test')).rejects.toThrow('primitive failure');
   });
 
@@ -426,7 +428,7 @@ describe('requests', { timeout: 7500 }, () => {
     );
 
     const wallet = new Wallet(mintUrl);
-    wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+    wallet.loadMintFromCache(MINTCACHE.mintInfo, keychainCache);
     await expect(wallet.checkMeltQuoteBolt11('test')).rejects.toThrow(
       '{"detail":"trusted","detail":"attacker"}',
     );
@@ -440,7 +442,7 @@ describe('requests', { timeout: 7500 }, () => {
     );
 
     const wallet = new Wallet(mintUrl);
-    wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+    wallet.loadMintFromCache(MINTCACHE.mintInfo, keychainCache);
     await expect(wallet.checkMeltQuoteBolt11('test')).rejects.toThrow('bad response');
   });
 

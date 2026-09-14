@@ -41,6 +41,8 @@ const makeRequestSpy = <T>(payload: T) => {
 };
 
 const mintUrl = 'https://localhost:3338';
+// The shared fixture was recorded for http://; a cache must name the mint it is loaded into.
+const keychainCache = { ...MINTCACHE.keychainCache, mintUrl };
 
 function makeKeysetFromCache(k: MintKeys, active = true) {
   const ks = new Keyset(k.id, k.unit, active, 0, undefined);
@@ -429,7 +431,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
     const { req, calls } = makeRequestSpy(response);
     const mint = new Mint(mintUrl, { customRequest: req });
     const wallet = new Wallet(mint);
-    wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+    wallet.loadMintFromCache(MINTCACHE.mintInfo, keychainCache);
     const res = await wallet.createMintQuoteBolt12(pk, { amount: 21, description: 'desc' });
     expect(res.quote).toBe(response.quote);
     expect(res.amount).toEqual(Amount.from(response.amount));
@@ -456,7 +458,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
     const { req, calls } = makeRequestSpy(response);
     const mint = new Mint(mintUrl, { customRequest: req });
     const wallet = new Wallet(mint);
-    wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+    wallet.loadMintFromCache(MINTCACHE.mintInfo, keychainCache);
     const res = await wallet.checkMintQuoteBolt12('q1');
     expect(res.quote).toBe(response.quote);
     expect(res.amount_paid).toEqual(Amount.from(response.amount_paid));
@@ -478,7 +480,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
     const { req, calls } = makeRequestSpy(response);
     const mint = new Mint(mintUrl, { customRequest: req });
     const wallet = new Wallet(mint);
-    wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+    wallet.loadMintFromCache(MINTCACHE.mintInfo, keychainCache);
     const res = await wallet.createMeltQuoteBolt12('lno1offer...', 100_000); // 100k msat
     expect(res.quote).toBe(response.quote);
     expect(res.amount).toEqual(Amount.from(response.amount));
@@ -509,7 +511,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
     const { req, calls } = makeRequestSpy(response);
     const mint = new Mint(mintUrl, { customRequest: req });
     const wallet = new Wallet(mint);
-    wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+    wallet.loadMintFromCache(MINTCACHE.mintInfo, keychainCache);
     const ks = makeKeysetFromCache(MINTCACHE.keys[0]);
     vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValue(ks);
     vi.spyOn(wallet.keyChain, 'hasKeyset').mockReturnValue(true);
@@ -550,7 +552,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
     const { req, calls } = makeRequestSpy(response);
     const mint = new Mint(mintUrl, { customRequest: req });
     const wallet = new Wallet(mint);
-    wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+    wallet.loadMintFromCache(MINTCACHE.mintInfo, keychainCache);
     const ks = makeKeysetFromCache(MINTCACHE.keys[0]);
     vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValue(ks);
     vi.spyOn(wallet.keyChain, 'hasKeyset').mockReturnValue(true);
@@ -617,7 +619,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
     const { req, calls } = makeRequestSpy(response);
     const mint = new Mint(mintUrl, { customRequest: req });
     const wallet = new Wallet(mint);
-    wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+    wallet.loadMintFromCache(MINTCACHE.mintInfo, keychainCache);
     const ks = makeKeysetFromCache(MINTCACHE.keys[0]);
     vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValue(ks);
     vi.spyOn(wallet.keyChain, 'hasKeyset').mockReturnValue(true);

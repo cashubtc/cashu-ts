@@ -453,9 +453,11 @@ class Wallet {
    * The `cache` argument should usually come from `wallet.keyChain.cache`.
    */
   loadMintFromCache(mintInfo: GetInfoResponse, cache: KeyChainCache): void {
+    // The keychain load is the step that can reject the cache, so it goes first and a rejected
+    // cache leaves the wallet untouched.
+    this._keyChain.loadFromCache(cache);
     this._mintInfo = new MintInfo(mintInfo, this._logger);
     this.mint.setMintInfo(this._mintInfo);
-    this._keyChain.loadFromCache(cache);
     this.finishInit();
   }
 

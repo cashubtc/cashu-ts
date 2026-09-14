@@ -8,6 +8,7 @@ import type {
   KeyChainCache,
   KeysetCache,
 } from '../model/types/keyset';
+import { normalizeMintUrl } from '../utils';
 
 import { Keyset } from './Keyset';
 
@@ -29,6 +30,10 @@ export class KeyChain {
   private pendingKeyFetches: Map<string, Promise<Keyset>> = new Map();
   // When this chain's data was fetched or, for restored data, when the cache it came from was.
   private savedAt?: number;
+  // Bumped on every rebuild so a slower key fetch cannot commit over a newer snapshot.
+  private generation = 0;
+  // Bumped when a refresh starts so the last-started refresh wins, whatever order they return in.
+  private refreshSeq = 0;
 
   private assertInitialized(): void {
     if (Object.keys(this.keysets).length === 0) {
@@ -80,7 +85,7 @@ export class KeyChain {
       const maybeKeys = keysById.get(meta.id);
       const kc: KeysetCache = { ...meta };
       if (maybeKeys) {
-        kc.keys = maybeKeys.keys;
+        kc.keys = { ...maybeKeys.keys };
       }
       return kc;
     });
@@ -117,7 +122,7 @@ export class KeyChain {
         active: k.active,
         input_fee_ppk: k.input_fee_ppk,
         final_expiry: k.final_expiry,
-        keys: k.keys,
+        keys: { ...k.keys },
       }));
 
     return { keysets, keys };
@@ -142,9 +147,14 @@ export class KeyChain {
     }
 
     // Fetch keys and keysets in parallel
+    const seq = ++this.refreshSeq;
     const [allKeysetsResponse, allKeysResponse]: [GetKeysetsResponse, GetKeysResponse] =
       await Promise.all([this.mint.getKeySets(), this.mint.getKeys()]);
 
+    // A refresh started later than this one, so leave the snapshot to it.
+    if (seq !== this.refreshSeq) {
+      return;
+    }
     this.buildKeychain(allKeysetsResponse.keysets, allKeysResponse.keysets);
     this.savedAt = Date.now();
   }
@@ -158,6 +168,15 @@ export class KeyChain {
    * `this.unit`.
    */
   loadFromCache(cache: KeyChainCache): void {
+    if (typeof cache.mintUrl !== 'string') {
+      throw new CTSError('KeyChain cache is missing its mint URL');
+    }
+    const cacheMintUrl = normalizeMintUrl(cache.mintUrl);
+    if (cacheMintUrl !== this.mint.mintUrl) {
+      throw new CTSError(
+        `KeyChain cache is for a different mint: ${cacheMintUrl} (expected ${this.mint.mintUrl})`,
+      );
+    }
     const { keysets, keys } = KeyChain.cacheToMintDTO(cache);
     this.buildKeychain(keysets, keys);
     this.savedAt = cache.savedAt;
@@ -172,10 +191,10 @@ export class KeyChain {
   private buildKeychain(allKeysets: MintKeyset[], allKeys: MintKeys[]): void {
     // Keep a reference to the outgoing snapshot so verified keys survive a refresh.
     // NUT-01 only serves keys for active keysets, so a rebuild would otherwise blank
-    // every keyset that has rotated out. Keys are immutable per id (id commits to
-    // the key hash), so carrying them forward cannot go stale.
+    // every keyset that has rotated out. The new map is built in full and swapped in
+    // at the end, so a rejected entry leaves the outgoing snapshot untouched.
     const previous = this.keysets;
-    this.keysets = Object.create(null) as { [id: string]: Keyset };
+    const next = Object.create(null) as { [id: string]: Keyset };
 
     const keysMap = new Map<string, MintKeys>(allKeys.map((k) => [k.id, k]));
 
@@ -188,14 +207,22 @@ export class KeyChain {
         keyset.keys = {};
       }
 
-      // Carry forward previously verified keys for a keyset the mint no longer serves
+      // Carry forward previously verified keys for a keyset the mint no longer serves. A v0 id
+      // hashes the keys alone, so the unit is compared against the prior one as well.
       const prior = previous[meta.id];
-      if (!keyset.hasKeys && prior?.hasKeys) {
-        keyset.keys = prior.keys;
+      if (!keyset.hasKeys && prior?.hasKeys && prior.unit === keyset.unit) {
+        keyset.keys = { ...prior.keys };
+        // A v1+ id also commits to fee and expiry, so changed metadata voids carried keys.
+        if (!keyset.verify()) {
+          keyset.keys = {};
+        }
       }
 
-      this.keysets[keyset.id] = keyset;
+      next[keyset.id] = keyset;
     }
+
+    this.keysets = next;
+    this.generation++;
   }
 
   // ---------------------------------------------------------------------
@@ -205,12 +232,13 @@ export class KeyChain {
   /**
    * Get a keyset by ID, or the cheapest modern keyset if no ID is provided.
    *
-   * @param id Optional keyset ID.
+   * @param id Optional keyset ID. Any explicit value, including '', is looked up as given.
    * @returns Keyset with keys.
-   * @throws If keyset not found or uninitialized.
+   * @throws If the id is unknown (including '' and any other non-undefined value), or the chain is
+   *   uninitialized.
    */
   getKeyset(id?: string): Keyset {
-    const keyset = id ? this.keysets[id] : this.getCheapestKeyset();
+    const keyset = id !== undefined ? this.keysets[id] : this.getCheapestKeyset();
     if (!keyset) {
       throw new CTSError(`Keyset '${id}' not found`);
     }
@@ -269,6 +297,7 @@ export class KeyChain {
 
     const promise = (async () => {
       // Get keys for id
+      const startedGeneration = this.generation;
       const res = await this.mint.getKeys(id);
       const mk = res.keysets.find((k) => k.id === id);
       if (!mk || !mk.keys || Object.keys(mk.keys).length === 0) {
@@ -282,7 +311,15 @@ export class KeyChain {
         throw new CTSError(`Keyset verification failed for ID ${id}`);
       }
 
-      // Replace keyset with rebuilt one
+      // A newer snapshot replaced ours while fetching, so its entry wins: the rebuilt one carries
+      // the metadata captured before the refresh.
+      if (this.generation !== startedGeneration) {
+        const current = this.keysets[id];
+        if (!current) {
+          throw new CTSError(`Keyset '${id}' not found`);
+        }
+        return current;
+      }
       this.keysets[id] = rebuilt;
       return rebuilt;
     })();
