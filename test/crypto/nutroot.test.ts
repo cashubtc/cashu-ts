@@ -43,6 +43,8 @@ import {
   NUTROOT_LEAF_TAG,
   NUTROOT_BRANCH_TAG,
   NUTROOT_TWEAK_TAG,
+  type NutrootConditionLeaf,
+  selectRequiredLeafSignatures,
 } from '../../src/crypto/nutroot';
 import { NUTROOT_MAX_SLOTS } from '../../src/utils/limits';
 import vectors from '../vectors/nutroot-v3.json';
@@ -167,8 +169,50 @@ describe('leaf serialization (vectors 6.2)', () => {
     );
   });
 
-  test('the example melt_to leaf type (0x04) is unknown and fails closed', () => {
+  test('the example melt_to leaf type (0x05) is unknown and fails closed', () => {
     expect(() => parseNutrootLeaf(hexToBytes(vCovenant.leaf_melt_to))).toThrow(/type/);
+  });
+});
+
+describe('commit leaf (vectors)', () => {
+  const v = vectors.commit_leaf;
+
+  test('serializes, parses and hashes to the vector', () => {
+    expect(serializeNutrootLeafHex({ type: 'commit', hash: v.hash })).toBe(v.leaf_commit);
+    expect(parseNutrootLeafHex(v.leaf_commit)).toEqual({ type: 'commit', hash: v.hash });
+    expect(bytesToHex(nutrootLeafHash(hexToBytes(v.leaf_commit)))).toBe(v.leaf_hash_commit);
+  });
+
+  test('the tree reconstructs the secret and the commit leaf is one sibling hash', () => {
+    const tree = [v.leaf_threshold, v.leaf_commit];
+    const built = buildNutrootSecret(NUTROOT_NUMS_KEY, tree.map(parseNutrootLeafHex), {
+      u: hexToBytes(v.u),
+    });
+    expect(built.secret).toBe(v.secret);
+    expect(built.K).toBe(v.K);
+    expect(verifyNutrootSpendInfo(v.secret, { K: v.K, u: v.u, tree })).toBe('tweaked');
+    const hashes = tree.map((leaf) => nutrootLeafHash(hexToBytes(leaf)));
+    expect(bytesToHex(nutrootMerkleRoot(hashes))).toBe(v.merkle_root);
+    expect(nutrootMerklePath(hashes, 0).map(bytesToHex)).toEqual([v.leaf_hash_commit]);
+  });
+
+  test('is never a spend path', () => {
+    const tree = [v.leaf_threshold, v.leaf_commit];
+    expect(() => buildScriptPathWitness(tree, 1, v.K, [])).toThrow(/not a spend path/);
+    expect(() =>
+      selectRequiredLeafSignatures({ type: 'commit', hash: v.hash }, new Uint8Array(32), []),
+    ).toThrow(/not a spend path/);
+    expect(enumerateLeafKeySlots(tree.map(parseNutrootLeafHex))).toHaveLength(1);
+  });
+
+  test('carries exactly the hash', () => {
+    expect(() => parseNutrootLeafHex('0004')).toThrow(/exactly a 32-byte hash/);
+    expect(() => parseNutrootLeafHex('0004' + '08001f' + 'aa'.repeat(31))).toThrow(/exactly/);
+    expect(() => parseNutrootLeafHex(v.leaf_commit + '0a000101')).toThrow(/exactly/);
+    expect(() => parseNutrootLeafHex('0004' + '02000101' + v.leaf_commit.slice(4))).toThrow(
+      /exactly/,
+    );
+    expect(() => serializeNutrootLeaf({ type: 'commit', hash: 'ab' })).toThrow(/32-byte hash/);
   });
 });
 
@@ -503,7 +547,7 @@ describe('script-path commitment verification', () => {
 
   test('disclosure parses at mode 0x01 and fails closed on every other value (vectors)', () => {
     const lf = vectors.leaf_forms;
-    const parsed = parseNutrootLeafHex(lf.threshold_1of1_disclosure);
+    const parsed = parseNutrootLeafHex(lf.threshold_1of1_disclosure) as NutrootConditionLeaf;
     expect(parsed.disclosure).toBe(0x01);
     expect(serializeNutrootLeafHex(parsed)).toBe(lf.threshold_1of1_disclosure);
     // Mode 0x00, an empty value, and an unallocated mode are each malformed: a private leaf has
@@ -528,7 +572,7 @@ describe('script-path commitment verification', () => {
         disclosure: 1,
       }),
     );
-    expect(after.disclosure).toBe(0x01);
+    expect((after as NutrootConditionLeaf).disclosure).toBe(0x01);
   });
 
   test('the auditable lock vector reconstructs through the standard build (vectors)', () => {
@@ -1013,11 +1057,11 @@ describe('leaf-key blinding: the positional slot map (NUT-28)', () => {
     expect(blinded.tree?.[1]).not.toBe(verbatim.tree?.[1]);
     expect(blinded.secret).not.toBe(verbatim.secret);
     // The blinded key is bob's key at slot 3, and the leaf is otherwise untouched.
-    const leaf = parseNutrootLeaf(hexToBytes(blinded.tree![1]));
+    const leaf = parseNutrootLeaf(hexToBytes(blinded.tree![1])) as NutrootConditionLeaf;
     expect(leaf.keys).toEqual([deriveP2BKBlindedPubkeyAtSlot(bobPub, eBytes, 3)]);
     expect(leaf.time).toBe(vRefund.refund_time);
     // The caller's leaves are not mutated.
-    expect(leaves[1].keys).toEqual([bobPub]);
+    expect((leaves[1] as NutrootConditionLeaf).keys).toEqual([bobPub]);
   });
 
   test('the same static key at two slots gets distinct tweaks', () => {
@@ -1026,8 +1070,9 @@ describe('leaf-key blinding: the positional slot map (NUT-28)', () => {
       { type: 'after', n: 1, keys: [bobPub], time: vRefund.refund_time },
     ];
     const out = deriveReceiverKeyedSecret(carolPub, { leaves, eBytes, blindKeys: [bobPub] });
-    const first = parseNutrootLeaf(hexToBytes(out.tree![0])).keys[0];
-    const second = parseNutrootLeaf(hexToBytes(out.tree![1])).keys[0];
+    const cond = (hex: string) => parseNutrootLeaf(hexToBytes(hex)) as NutrootConditionLeaf;
+    const first = cond(out.tree![0]).keys[0];
+    const second = cond(out.tree![1]).keys[0];
     expect(first).not.toBe(second);
     expect(first).not.toBe(bobPub);
     // Both are recovered, one per occurrence, each with its own key.
@@ -1036,7 +1081,7 @@ describe('leaf-key blinding: the positional slot map (NUT-28)', () => {
     expect(hits[0].secretKey).not.toBe(hits[1].secretKey);
     for (const hit of hits) {
       expect(hit.blinded).toBe(true);
-      const leafKey = parseNutrootLeaf(hexToBytes(out.tree![hit.leafIndex])).keys[hit.keyIndex];
+      const leafKey = cond(out.tree![hit.leafIndex]).keys[hit.keyIndex];
       expect(bytesToHex(secp256k1.getPublicKey(hexToBytes(hit.secretKey), true))).toBe(leafKey);
     }
   });
@@ -1206,7 +1251,7 @@ describe('leaf key recovery does not depend on the transmitted tree order', () =
         // The recovered key is the one the leaf actually names, wherever it sits.
         const leaf = parseNutrootLeaf(hexToBytes(order[hits[0].leafIndex]));
         expect(bytesToHex(secp256k1.getPublicKey(hexToBytes(hits[0].secretKey), true))).toBe(
-          leaf.keys[hits[0].keyIndex],
+          (leaf as NutrootConditionLeaf).keys[hits[0].keyIndex],
         );
       }
     }
@@ -1337,7 +1382,7 @@ describe('verifyNutrootRequestTree (NUT-18 exact match)', () => {
     const ambiguous = {
       receiverKey: vRefund.carol_pub,
       leaves,
-      blindKeys: leaves.map((leaf) => leaf.keys[0]),
+      blindKeys: leaves.map((leaf) => (leaf as NutrootConditionLeaf).keys[0]),
     };
     const si = (tree: string[]) => ({ E: vRefund.ephemeral_pub, K: vRefund.carol_pub, tree });
 
@@ -1468,10 +1513,10 @@ describe('validation fails closed (constructor and verifier guards)', () => {
   });
 
   test('serializeNutrootLeaf rejects malformed leaves', () => {
-    const base: NutrootLeaf = { type: 'threshold', n: 1, keys: [P1] };
-    expect(() => serializeNutrootLeaf({ ...base, type: 'weird' as NutrootLeaf['type'] })).toThrow(
-      /Unknown leaf type/,
-    );
+    const base: NutrootConditionLeaf = { type: 'threshold', n: 1, keys: [P1] };
+    expect(() =>
+      serializeNutrootLeaf({ ...base, type: 'weird' as NutrootConditionLeaf['type'] }),
+    ).toThrow(/Unknown leaf type/);
     expect(() => serializeNutrootLeaf({ ...base, n: 0 })).toThrow(/Invalid threshold/);
     expect(() => serializeNutrootLeaf({ ...base, n: 1.5 })).toThrow(/Invalid threshold/);
     expect(() => serializeNutrootLeaf({ ...base, n: 256 })).toThrow(/Invalid threshold/);

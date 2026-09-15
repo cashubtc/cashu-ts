@@ -1,12 +1,14 @@
 import { normalizeSecpPubkey } from '../crypto/curve_secp';
 import {
   dedupeP2PKPubkeys,
+  normalizeHashlock,
   normalizeP2PKOptions,
   type P2PKOptions,
   type P2PKTag,
 } from '../crypto/NUT11';
 import {
   NUTROOT_NUMS_KEY,
+  isConditionLeaf,
   parseNutrootLeaf,
   serializeNutrootLeaf,
   type NutrootLeaf,
@@ -75,12 +77,19 @@ const lc = (k: string) => k.toLowerCase();
  *
  * @remarks
  * Unlike the receiver-keyed default, anyone holding the proof can verify who it is locked to
- * (`auditableLockKey`), at the cost of that visibility. The Nutzap shape.
- * @throws If the pubkey is not a valid compressed secp256k1 point.
+ * (`auditableLockInfo`), at the cost of that visibility. The Nutzap shape. `commit` adds a commit
+ * leaf binding the proof to 32 bytes of outside context (eg Nostr event ID).
+ * @throws If the pubkey is not a valid compressed secp256k1 point, or `commit` is not 32 bytes hex.
  */
-export function auditableLock(pubkey: string): LockOptions {
+export function auditableLock(pubkey: string, opts?: { commit?: string }): LockOptions {
   // disclosure completes the audit trail: the spend's witness is published too (NUT-07).
-  return { mainKeys: [normalizeSecpPubkey(pubkey)], disclosure: true };
+  return {
+    mainKeys: [normalizeSecpPubkey(pubkey)],
+    disclosure: true,
+    ...(opts?.commit !== undefined && {
+      leaves: [{ type: 'commit', hash: normalizeHashlock(opts.commit) }],
+    }),
+  };
 }
 
 /**
@@ -97,7 +106,9 @@ export function lockToNutrootOptions(lock: LockOptions): ParsedNutrootOption {
     throw new CTSError('Extra tags do not fit a v3 lock: v3 secrets carry no tags');
   }
   const mainKeys = (lock.mainKeys ?? []).map(lc);
-  const explicit = (lock.leaves ?? []).map((leaf) => ({ ...leaf, keys: leaf.keys.map(lc) }));
+  const explicit = (lock.leaves ?? []).map((leaf) =>
+    leaf.type === 'commit' ? leaf : { ...leaf, keys: leaf.keys.map(lc) },
+  );
   if (mainKeys.length === 0 && lock.hashlock === undefined && explicit.length === 0) {
     throw new CTSError('A lock needs at least one main key, hashlock, or leaf');
   }
@@ -138,10 +149,14 @@ export function lockToNutrootOptions(lock: LockOptions): ParsedNutrootOption {
     leaves.push({ type: 'after', n: nRefund, time: lock.locktime, keys: refundKeys, ...mode });
   }
   leaves.push(...explicit);
+  // A commit leaf is never a spend path, so a lock made only of them is a burn.
+  if (!keyPath && !leaves.some((leaf) => leaf.type !== 'commit')) {
+    throw new CTSError('A lock needs a spend path: a commit leaf alone is unspendable');
+  }
   // sigAll is absorbed: every v3 input signs the whole transaction (NUT-10).
   const blindKeys =
     lock.blindKeys === true
-      ? [...new Set(leaves.flatMap((leaf) => leaf.keys))]
+      ? [...new Set(leaves.filter(isConditionLeaf).flatMap((leaf) => leaf.keys))]
       : (Array.isArray(lock.blindKeys) ? lock.blindKeys : []).map(lc);
   return {
     receiverKey: keyPath ? mainKeys[0] : NUTROOT_NUMS_KEY,

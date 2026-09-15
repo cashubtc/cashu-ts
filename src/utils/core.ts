@@ -788,27 +788,44 @@ export function classifyNutrootSpendInfo(proof: Pick<Proof, 'spend_info'>): Nutr
 }
 
 /**
- * The key an auditable lock (NUT-10) commits to, fully verified; `undefined` for any other shape.
+ * What an auditable lock (NUT-10) commits to, fully verified; `undefined` for any other shape.
  *
  * @remarks
  * An auditable lock is script-only with a NUMS-proven internal key and exactly one threshold leaf
- * of one key (`auditableLock` builds it), so anyone holding the proof can verify who it is locked
- * to. Verifies the commitments (NUMS offset, root, tweak), not just the claimed fields.
+ * of one key, optionally beside one commit leaf (`auditableLock` builds it), so anyone holding the
+ * proof can verify who it is locked to and what context it is bound to. Verifies the commitments
+ * (NUMS offset, root, tweak), not just the claimed fields.
+ */
+export function auditableLockInfo(
+  proof: Pick<Proof, 'id' | 'secret' | 'spend_info'>,
+): { pubkey: string; commit?: string } | undefined {
+  const si = proof.spend_info;
+  if (!isBlsKeyset(proof.id)) return undefined;
+  if (!si || si.k || si.E || !si.K || !si.u || !si.tree?.length || si.tree.length > 2) {
+    return undefined;
+  }
+  try {
+    const leaves = si.tree.map(parseNutrootLeafHex);
+    const locks = leaves.filter((leaf) => leaf.type !== 'commit');
+    const commits = leaves.filter((leaf) => leaf.type === 'commit');
+    const [leaf] = locks;
+    if (locks.length !== 1 || leaf.type !== 'threshold' || leaf.n !== 1) return undefined;
+    if (leaf.keys.length !== 1) return undefined;
+    verifyNutrootSpendInfo(proof.secret, si);
+    const [commit] = commits;
+    return { pubkey: leaf.keys[0], ...(commit && { commit: commit.hash }) };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The key an auditable lock (NUT-10) commits to; see {@link auditableLockInfo}.
  */
 export function auditableLockKey(
   proof: Pick<Proof, 'id' | 'secret' | 'spend_info'>,
 ): string | undefined {
-  const si = proof.spend_info;
-  if (!isBlsKeyset(proof.id)) return undefined;
-  if (!si || si.k || si.E || !si.K || !si.u || si.tree?.length !== 1) return undefined;
-  try {
-    const leaf = parseNutrootLeafHex(si.tree[0]);
-    if (leaf.type !== 'threshold' || leaf.n !== 1 || leaf.keys.length !== 1) return undefined;
-    verifyNutrootSpendInfo(proof.secret, si);
-    return leaf.keys[0];
-  } catch {
-    return undefined;
-  }
+  return auditableLockInfo(proof)?.pubkey;
 }
 
 /**
@@ -962,6 +979,7 @@ function scriptPathWitnessSpends(digest: Uint8Array, secretHex: string, witness:
     };
     if (!w.leaf || !w.control?.K || !Array.isArray(w.control.path)) return false;
     const leaf = parseNutrootLeafHex(w.leaf);
+    if (leaf.type === 'commit') return false;
     const committed = verifyNutrootCommitment(
       hexToBytes(secretHex),
       hexToBytes(w.control.K),

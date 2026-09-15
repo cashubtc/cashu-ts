@@ -9,6 +9,7 @@ import {
   parseNutrootLeaf,
   serializeNutrootLeaf,
   type NutrootLeaf,
+  type NutrootConditionLeaf,
 } from '../../src/crypto/nutroot';
 import {
   digestForPayload,
@@ -86,7 +87,9 @@ describe('ScriptPath signing packages', () => {
       spends: [
         {
           ...pkg.spends[0],
-          leaf: bytesToHex(serializeNutrootLeaf({ ...leaves[1], keys: [pub(6)] })),
+          leaf: bytesToHex(
+            serializeNutrootLeaf({ ...(leaves[1] as NutrootConditionLeaf), keys: [pub(6)] }),
+          ),
         },
       ],
     };
@@ -320,7 +323,7 @@ describe('ScriptPath signing packages', () => {
     };
     expect(witness.leaf).toBe(pkg.spends[0].leaf);
     expect(witness.control).toEqual(pkg.spends[0].control);
-    const leaf = parseNutrootLeaf(hexToBytes(witness.leaf));
+    const leaf = parseNutrootLeaf(hexToBytes(witness.leaf)) as NutrootConditionLeaf;
     expect(witness.signatures).toHaveLength(leaf.n);
   });
 });

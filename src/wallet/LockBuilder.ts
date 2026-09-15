@@ -192,8 +192,18 @@ export class LockBuilder {
    */
   addLeaf(leaf: NutrootLeaf) {
     serializeNutrootLeaf(leaf); // validate at the setter, like the other inputs
-    this.leaves.push({ ...leaf, keys: [...leaf.keys] });
+    this.leaves.push(leaf.type === 'commit' ? { ...leaf } : { ...leaf, keys: [...leaf.keys] });
     return this;
+  }
+
+  /**
+   * Binds the lock to 32 bytes of outside data (a NUT-10 `commit` leaf), eg the event a Nutzap pays
+   * for, so the proof cannot be reused for another. Never a spend path. v3 keysets only.
+   *
+   * @throws If the hash is not a 64-character hex string.
+   */
+  addCommitment(hash: string) {
+    return this.addLeaf({ type: 'commit', hash: normalizeHashlock(hash) });
   }
 
   /**

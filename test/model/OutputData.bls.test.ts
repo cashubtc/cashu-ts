@@ -17,6 +17,7 @@ import {
   recoverLeafKeySecretKeys,
   recoverReceiverKeyedSecretKey,
   type NutrootLeaf,
+  type NutrootConditionLeaf,
 } from '../../src/crypto/nutroot';
 import { Amount } from '../../src/model/Amount';
 import { CTSError } from '../../src/model/Errors';
@@ -422,7 +423,9 @@ describe('OutputData.createNutrootData (receiver-keyed, NUT-28)', () => {
     const tree = proof.spend_info!.tree!;
     expect(tree).toHaveLength(1);
     // The leaf key is not Alice's key verbatim, but Alice still finds it at slot 1.
-    expect(parseNutrootLeaf(hexToBytes(tree[0])).keys[0]).not.toBe(alicePub);
+    expect((parseNutrootLeaf(hexToBytes(tree[0])) as NutrootConditionLeaf).keys[0]).not.toBe(
+      alicePub,
+    );
     expect(recoverLeafKeySecretKeys(tree, proof.spend_info!.E, [alicePriv])).toEqual([
       { leafIndex: 0, keyIndex: 0, slot: 1, secretKey: expect.any(String), blinded: true },
     ]);

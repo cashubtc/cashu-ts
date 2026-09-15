@@ -7,6 +7,7 @@ import { isBlsKeyset } from '../crypto/curves';
 import {
   buildScriptPathWitness,
   enumerateLeafKeySlots,
+  isConditionLeaf,
   parseNutrootLeaf,
   selectRequiredLeafSignatures,
   slotKeysByBlindedPubkey,
@@ -345,6 +346,9 @@ function assertValidPackage(pkg: ScriptPathSigningPackage): void {
     } catch (e) {
       throw new CTSError('Signing package leaf does not commit to its input secret', { cause: e });
     }
+    if (leaf.type === 'commit') {
+      throw new CTSError('Signing package names a commit leaf, which is not a spend path');
+    }
     if (!Array.isArray(spend.signatures)) {
       throw new CTSError('Signing package signatures must be an array');
     }
@@ -368,6 +372,7 @@ function signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPath
   const pub = bytesToHex(getPubKeyFromPrivKey(hexToBytes(privkey)));
   const spends = pkg.spends.map((spend) => {
     const leaf = parseNutrootLeaf(hexToBytes(spend.leaf));
+    if (!isConditionLeaf(leaf)) return spend; // assertValidPackage refused it above
     const keys: string[] = [];
     if (leaf.keys.some((key) => key.slice(-64) === pub.slice(-64))) {
       keys.push(privkey.toLowerCase());

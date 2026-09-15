@@ -1109,7 +1109,7 @@ describe('nutroot (v3) request marking', () => {
     // An unknown leaf type fails closed the same way it does in spend info.
     expect(() =>
       new PaymentRequest({
-        nutroot: { receiverKey: carolPub, leaves: ['0004' + '02000101'] },
+        nutroot: { receiverKey: carolPub, leaves: ['0005' + '02000101'] },
       }).toNutrootOptions(),
     ).toThrow(/type/);
   });

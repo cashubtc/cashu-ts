@@ -178,7 +178,10 @@ export {
   serializeNutrootLeaf,
   serializeNutrootLeafHex,
   NUTROOT_LEAF_TYPE,
+  isConditionLeaf,
   NUTROOT_NUMS_KEY,
   type NutrootLeaf,
+  type NutrootConditionLeaf,
+  type NutrootCommitLeaf,
   type ParsedNutrootOption,
 } from './crypto/nutroot';

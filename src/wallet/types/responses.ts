@@ -88,9 +88,9 @@ export type SpendOption = {
   /**
    * Why the leaf is not satisfiable from what this wallet holds: an unexpired locktime, then a key
    * shortfall, then `preimage`, meaning a hashlock leaf whose keys are covered and which only needs
-   * the caller-supplied preimage.
+   * the caller-supplied preimage. `commit` is a commitment leaf, which no one can spend through.
    */
-  blockedBy?: 'threshold' | 'locktime' | 'preimage';
+  blockedBy?: 'threshold' | 'locktime' | 'preimage' | 'commit';
   /**
    * Unix seconds an `after` leaf unlocks.
    */
