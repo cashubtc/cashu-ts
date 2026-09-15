@@ -205,8 +205,35 @@ describe('commit leaf (vectors)', () => {
     expect(enumerateLeafKeySlots(tree.map(parseNutrootLeafHex))).toHaveLength(1);
   });
 
+  test('is inert wherever keys are walked', () => {
+    const commit: NutrootLeaf = { type: 'commit', hash: v.hash };
+    expect(countLeafSigners(commit, new Uint8Array(32), ['00'.repeat(64)])).toBe(0);
+    // Blinding walks past it: the commit leaf travels verbatim and occupies no slot.
+    const eBytes = hexToBytes(vRefund.ephemeral_priv);
+    const carolPub = vRefund.carol_pub;
+    const bobPriv = '0000000000000000000000000000000000000000000000000000000000000007';
+    const bobPub = bytesToHex(secp256k1.getPublicKey(hexToBytes(bobPriv), true));
+    const leaves: NutrootLeaf[] = [commit, { type: 'threshold', n: 1, keys: [bobPub] }];
+    const out = deriveReceiverKeyedSecret(carolPub, { leaves, eBytes, blindKeys: [bobPub] });
+    expect(out.tree![0]).toBe(v.leaf_commit);
+    expect(recoverLeafKeySecretKeys(out.tree!, out.E, [bobPriv]).map((h) => h.slot)).toEqual([1]);
+    // A payee's request naming a commit leaf is matched on the digest.
+    const option = { receiverKey: carolPub, leaves, blindKeys: [bobPub] };
+    const si = { E: out.E, K: out.K, tree: out.tree };
+    expect(() => verifyNutrootRequestTree(option, si)).not.toThrow();
+    const other = deriveReceiverKeyedSecret(carolPub, {
+      leaves: [{ type: 'commit', hash: 'ee'.repeat(32) }, leaves[1]],
+      eBytes,
+      blindKeys: [bobPub],
+    });
+    expect(() =>
+      verifyNutrootRequestTree(option, { E: other.E, K: other.K, tree: other.tree }),
+    ).toThrow();
+  });
+
   test('carries exactly the hash', () => {
     expect(() => parseNutrootLeafHex('0004')).toThrow(/exactly a 32-byte hash/);
+    expect(() => parseNutrootLeafHex('0004' + '0a000101')).toThrow(/exactly/);
     expect(() => parseNutrootLeafHex('0004' + '08001f' + 'aa'.repeat(31))).toThrow(/exactly/);
     expect(() => parseNutrootLeafHex(v.leaf_commit + '0a000101')).toThrow(/exactly/);
     expect(() => parseNutrootLeafHex('0004' + '02000101' + v.leaf_commit.slice(4))).toThrow(

@@ -428,6 +428,12 @@ describe('attachTransactionWitnesses', () => {
     expect(verifySpendReceipt({ ...rScript, witness: '{bad' }, scriptPath).witness).toBe(false);
     const unsigned = JSON.stringify({ ...JSON.parse(rScript.witness), signatures: undefined });
     expect(verifySpendReceipt({ ...rScript, witness: unsigned }, scriptPath).witness).toBe(false);
+    // A witness revealing a commit leaf never spends, whatever else it carries.
+    const commitLeaf = JSON.stringify({
+      ...JSON.parse(rScript.witness),
+      leaf: '0004' + '080020' + '77'.repeat(32),
+    });
+    expect(verifySpendReceipt({ ...rScript, witness: commitLeaf }, scriptPath).witness).toBe(false);
   });
 
   test('a receipt bundle round-trips through the nutrcA transport string', async () => {
