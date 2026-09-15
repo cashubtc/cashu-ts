@@ -9,6 +9,9 @@ import {
   parseNutrootLeaf,
   serializeNutrootLeaf,
   type NutrootLeaf,
+  type NutrootConditionLeaf,
+  nutrootLeafHash,
+  nutrootMerklePath,
 } from '../../src/crypto/nutroot';
 import {
   digestForPayload,
@@ -78,6 +81,46 @@ describe('ScriptPath signing packages', () => {
     expect(ScriptPath.signPackage(misled, alice).spends[0].signatures).toHaveLength(1);
   });
 
+  test('refuses a spend that reveals a commit leaf, even one that commits correctly', () => {
+    const leaves: NutrootLeaf[] = [
+      { type: 'threshold', n: 1, keys: [pub(3)] },
+      { type: 'threshold', n: 1, keys: [pub(2)] },
+      { type: 'commit', hash: '77'.repeat(32) },
+    ];
+    const locked = deriveReceiverKeyedSecret(pub(4), {
+      leaves,
+      blindKeys: [pub(2)],
+      eBytes: sk(5),
+    });
+    const proof: Proof = {
+      id: keysetId,
+      amount: Amount.from(1),
+      secret: locked.secret,
+      C: '11'.repeat(48),
+      spend_info: { E: locked.E, K: locked.K, tree: locked.tree },
+    };
+    const preview: SwapPreview = {
+      amount: Amount.from(1),
+      fees: Amount.from(0),
+      inputs: [proof],
+      keepOutputs: [OutputData.createSingleRandomData(1, keysetId)],
+    };
+    const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]);
+    const hashes = locked.tree!.map((leaf) => nutrootLeafHash(hexToBytes(leaf)));
+    const revealed = {
+      ...pkg,
+      spends: [
+        {
+          ...pkg.spends[0],
+          leaf: locked.tree![2],
+          control: { K: locked.K!, path: nutrootMerklePath(hashes, 2).map(bytesToHex) },
+          slots: undefined,
+        },
+      ],
+    };
+    expect(() => ScriptPath.signPackage(revealed, bytesToHex(sk(2)))).toThrow(/not a spend path/);
+  });
+
   test('refuses to sign a leaf that is not committed by the input secret', () => {
     const { alice, leaves, preview, proof } = fixture();
     const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]);
@@ -86,7 +129,9 @@ describe('ScriptPath signing packages', () => {
       spends: [
         {
           ...pkg.spends[0],
-          leaf: bytesToHex(serializeNutrootLeaf({ ...leaves[1], keys: [pub(6)] })),
+          leaf: bytesToHex(
+            serializeNutrootLeaf({ ...(leaves[1] as NutrootConditionLeaf), keys: [pub(6)] }),
+          ),
         },
       ],
     };
@@ -320,7 +365,7 @@ describe('ScriptPath signing packages', () => {
     };
     expect(witness.leaf).toBe(pkg.spends[0].leaf);
     expect(witness.control).toEqual(pkg.spends[0].control);
-    const leaf = parseNutrootLeaf(hexToBytes(witness.leaf));
+    const leaf = parseNutrootLeaf(hexToBytes(witness.leaf)) as NutrootConditionLeaf;
     expect(witness.signatures).toHaveLength(leaf.n);
   });
 });

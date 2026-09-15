@@ -243,12 +243,12 @@ export const CashuNip07: CashuNip07Api = {
 
   completes(option, pubkey) {
     const x = xOnly(pubkey);
-    const keyIndex = option.leaf.keys.findIndex((k) => xOnly(k) === x);
+    const leaf = option.leaf;
+    if (leaf.type === 'commit') return false;
+    const keyIndex = leaf.keys.findIndex((k) => xOnly(k) === x);
     if (keyIndex < 0 || option.keys.some((k) => k.keyIndex === keyIndex)) return false;
     return (
-      !option.satisfiable &&
-      option.blockedBy === 'threshold' &&
-      option.keys.length + 1 >= option.leaf.n
+      !option.satisfiable && option.blockedBy === 'threshold' && option.keys.length + 1 >= leaf.n
     );
   },
 

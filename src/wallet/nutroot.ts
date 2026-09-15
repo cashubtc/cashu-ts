@@ -228,6 +228,9 @@ function scriptOptions(
   now: number,
 ): SpendOption[] {
   return leaves.map((leaf, leafIndex) => {
+    if (leaf.type === 'commit') {
+      return { leafIndex, leaf, keys: [], satisfiable: false, blockedBy: 'commit' };
+    }
     // One hit per leaf key slot: the same private key supplied twice is still one signer.
     const byKeyIndex = new Map(
       hits.filter((h) => h.leafIndex === leafIndex).map((h) => [h.keyIndex, h] as const),
@@ -261,7 +264,9 @@ function withVerdict(keyPath: boolean, script: SpendOption[]): SpendOptions {
   const stuck = { keyPath, script, spendable: false };
   // A locktime counts only on a leaf this wallet otherwise covers: a stranger's refund leaf is
   // not "unlocks later".
-  const waiting = script.filter((o) => o.blockedBy === 'locktime' && o.keys.length >= o.leaf.n);
+  const waiting = script.filter(
+    (o) => o.blockedBy === 'locktime' && o.leaf.type !== 'commit' && o.keys.length >= o.leaf.n,
+  );
   if (waiting.length) {
     const availableAt = Math.min(...waiting.map((o) => o.availableAt as number));
     return { ...stuck, blockedBy: 'locktime', availableAt };
@@ -300,6 +305,9 @@ export function prepareScriptPathSpends(
       throw new CTSError(`Script path plan names leaf ${plan.leafIndex}, which is not disclosed`);
     }
     const leaf = parseNutrootLeaf(hexToBytes(tree[plan.leafIndex]));
+    if (leaf.type === 'commit') {
+      throw new CTSError('Script path plan names a commit leaf, which is not a spend path');
+    }
     if (leaf.type === 'hashlock' && plan.preimage === undefined) {
       throw new CTSError('Script path plan for a hashlock leaf needs a preimage');
     }

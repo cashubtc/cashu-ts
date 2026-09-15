@@ -38,6 +38,7 @@ export const NUTROOT_LEAF_TYPE = {
   threshold: 0x01,
   after: 0x02,
   hashlock: 0x03,
+  commit: 0x04,
 } as const;
 
 /**
@@ -67,13 +68,13 @@ export const NUTROOT_MAX_TREE_LEAVES = 2 ** NUTROOT_MAX_TREE_DEPTH;
 export const NUTROOT_MAX_LEAF_TIME = Number.MAX_SAFE_INTEGER;
 
 /**
- * A parsed declarative leaf (version 0x00).
+ * A parsed condition leaf (version 0x00): a spend path.
  *
  * @remarks
  * `keys` are 33-byte compressed SEC1 hex. `time` is unix seconds. `hash` is 32 bytes hex.
  */
-export type NutrootLeaf = {
-  type: keyof typeof NUTROOT_LEAF_TYPE;
+export type NutrootConditionLeaf = {
+  type: Exclude<keyof typeof NUTROOT_LEAF_TYPE, 'commit'>;
   n: number;
   keys: string[];
   time?: number;
@@ -84,6 +85,30 @@ export type NutrootLeaf = {
    */
   disclosure?: number;
 };
+
+/**
+ * A commit leaf (NUT-10 `commit`): 32 bytes the application defines, bound into the tree.
+ *
+ * @remarks
+ * Never a spend path: the mint sees it only as a sibling hash, and revealing it rejects.
+ */
+export type NutrootCommitLeaf = {
+  type: 'commit';
+  hash: string;
+};
+
+/**
+ * A parsed declarative leaf (version 0x00).
+ */
+export type NutrootLeaf = NutrootConditionLeaf | NutrootCommitLeaf;
+
+/**
+ * True for a leaf that can be exercised: every spend path names at least one signer (NUT-10), so a
+ * keyless leaf is inert by definition.
+ */
+export function isConditionLeaf(leaf: NutrootLeaf): leaf is NutrootConditionLeaf {
+  return leaf.type !== 'commit';
+}
 
 /**
  * The parsed working form of a wire `NutrootOption`: same option, leaves parsed.
@@ -176,6 +201,13 @@ export function serializeNutrootLeaf(leaf: NutrootLeaf): Uint8Array {
   if (typeByte === undefined) {
     throw new CTSError(`Unknown leaf type: ${leaf.type}`);
   }
+  if (leaf.type === 'commit') {
+    const h = hexToBytes(leaf.hash);
+    if (h.length !== 32) {
+      throw new CTSError('commit leaf requires a 32-byte hash');
+    }
+    return concatBytes(new Uint8Array([NUTROOT_LEAF_VERSION, typeByte]), tlvRecord(FIELD_HASH, h));
+  }
   if (!Number.isInteger(leaf.n) || leaf.n < 1 || leaf.n > 0xff) {
     throw new CTSError(`Invalid threshold n: ${leaf.n}`);
   }
@@ -238,7 +270,8 @@ export function serializeNutrootLeaf(leaf: NutrootLeaf): Uint8Array {
  *
  * @remarks
  * Fails closed: unknown leaf version, type or field, missing required fields, and non-canonical
- * streams all throw. Odd field types are reserved, so unknown rejects regardless of parity.
+ * streams all throw. Odd field types are reserved, so unknown rejects regardless of parity. A
+ * `commit` leaf parses to its hash alone.
  */
 export function parseNutrootLeaf(bytes: Uint8Array): NutrootLeaf {
   if (bytes.length < 2) {
@@ -258,6 +291,13 @@ export function parseNutrootLeaf(bytes: Uint8Array): NutrootLeaf {
     throw new CTSError(`Unknown leaf type: ${typeByte}`);
   }
   const records = readTlvRecords(bytes.subarray(2), true);
+  if (typeName === 'commit') {
+    // Digest only: keys or disclosure on a commit leaf are malformed (NUT-10).
+    if (records.length !== 1 || records[0].type !== FIELD_HASH || records[0].value.length !== 32) {
+      throw new CTSError('commit leaf must carry exactly a 32-byte hash field');
+    }
+    return { type: 'commit', hash: bytesToHex(records[0].value) };
+  }
   let n: number | undefined;
   let keys: string[] | undefined;
   let time: number | undefined;
@@ -337,7 +377,7 @@ export function parseNutrootLeaf(bytes: Uint8Array): NutrootLeaf {
   if (typeName !== 'hashlock' && hash !== undefined) {
     throw new CTSError(`${typeName} leaf must not carry a hash field`);
   }
-  const leaf: NutrootLeaf = { type: typeName, n, keys };
+  const leaf: NutrootConditionLeaf = { type: typeName, n, keys };
   if (time !== undefined) leaf.time = time;
   if (hash !== undefined) leaf.hash = hash;
   if (disclosure !== undefined) leaf.disclosure = disclosure;
@@ -610,6 +650,9 @@ export function buildScriptPathWitness(
   // NUT-10 witness bounds: no more signature entries than the leaf lists keys,
   // and a preimage of at most 32 bytes. A mint rejects either, so never emit them.
   const leaf = parseNutrootLeaf(hexToBytes(tree[leafIndex] ?? ''));
+  if (leaf.type === 'commit') {
+    throw new CTSError('A commit leaf is not a spend path');
+  }
   if (signatures.length > leaf.keys.length) {
     throw new CTSError('Witness holds more signatures than the leaf lists keys');
   }
@@ -651,6 +694,7 @@ export function selectLeafSignatures(
   digest: Uint8Array,
   signatures: string[],
 ): string[] {
+  if (!isConditionLeaf(leaf)) return []; // inert: nobody signs for it
   const selected: string[] = [];
   for (const key of leaf.keys) {
     const match = signatures.find((signature) => {
@@ -678,6 +722,9 @@ export function selectRequiredLeafSignatures(
   digest: Uint8Array,
   signatures: string[],
 ): string[] {
+  if (leaf.type === 'commit') {
+    throw new CTSError('A commit leaf is not a spend path');
+  }
   const selected = selectLeafSignatures(leaf, digest, signatures);
   if (selected.length < leaf.n) {
     throw new CTSError(
@@ -827,6 +874,7 @@ export function enumerateLeafKeySlots(
 ): Array<{ leafIndex: number; keyIndex: number; slot: number; key: string }> {
   const slots: Array<{ leafIndex: number; keyIndex: number; slot: number; key: string }> = [];
   leaves.forEach((leaf, leafIndex) => {
+    if (!isConditionLeaf(leaf)) return; // inert: occupies no slots
     leaf.keys.forEach((key, keyIndex) => {
       slots.push({ leafIndex, keyIndex, slot: slots.length + 1, key: key.toLowerCase() });
     });
@@ -896,12 +944,16 @@ function blindTaggedLeafKeys(
   const slots = enumerateLeafKeySlots(leaves); // also enforces the slot cap
   if (!blindKeys || blindKeys.length === 0) return leaves;
   const tagged = new Set(blindKeys.map((k) => k.toLowerCase()));
-  const out = leaves.map((leaf) => ({ ...leaf, keys: [...leaf.keys] }));
+  const out = leaves.map((leaf) =>
+    leaf.type === 'commit' ? leaf : { ...leaf, keys: [...leaf.keys] },
+  );
   const hit = new Set<string>();
   for (const { leafIndex, keyIndex, slot, key } of slots) {
     if (!tagged.has(key)) continue;
     hit.add(key);
-    out[leafIndex].keys[keyIndex] = deriveP2BKBlindedPubkeyAtSlot(key, eBytes, slot);
+    // Slots enumerate condition-leaf keys only, so the target is never a commit leaf.
+    const target = out[leafIndex] as NutrootConditionLeaf;
+    target.keys[keyIndex] = deriveP2BKBlindedPubkeyAtSlot(key, eBytes, slot);
   }
   for (const key of tagged) {
     if (!hit.has(key)) throw new CTSError(`Blind-me key is not in the tree: ${key}`);
@@ -1029,7 +1081,11 @@ function leafMatchesRequested(
   blind: Set<string>,
   owned: Map<string, Set<string>>,
 ): boolean {
-  if (leaf.type !== req.type || leaf.n !== req.n) return false;
+  if (leaf.type !== req.type) return false;
+  if (leaf.type === 'commit' || req.type === 'commit') {
+    return leaf.hash?.toLowerCase() === req.hash?.toLowerCase();
+  }
+  if (leaf.n !== req.n) return false;
   if (leaf.time !== req.time || leaf.hash?.toLowerCase() !== req.hash?.toLowerCase()) return false;
   if (leaf.disclosure !== req.disclosure) return false;
   if (leaf.keys.length !== req.keys.length) return false;

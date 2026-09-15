@@ -34,6 +34,7 @@ import {
   nutrootTweakSeckey,
   type NutrootLeaf,
   verifyNutrootSpendInfo,
+  type NutrootConditionLeaf,
 } from '../src/crypto/nutroot';
 import {
   inputsForPayload,
@@ -808,14 +809,16 @@ describeV3('M6 leaf-key blinding through the wallet', () => {
         const tree = proof.spend_info?.tree;
         expect(tree).toHaveLength(1);
         // The leaf carries a blinded key, not Alice's key verbatim.
-        expect(parseNutrootLeaf(hexToBytes(tree![0])).keys[0]).not.toBe(alicePub);
+        expect((parseNutrootLeaf(hexToBytes(tree![0])) as NutrootConditionLeaf).keys[0]).not.toBe(
+          alicePub,
+        );
 
         // Alice recognises her own key at slot 1; a stranger's key matches nothing.
         const mine = recoverLeafKeySecretKeys(tree!, proof.spend_info?.E, [alicePriv]);
         expect(mine).toHaveLength(1);
         expect(mine[0]).toMatchObject({ leafIndex: 0, keyIndex: 0, slot: 1, blinded: true });
         expect(bytesToHex(secp256k1.getPublicKey(hexToBytes(mine[0].secretKey), true))).toBe(
-          parseNutrootLeaf(hexToBytes(tree![0])).keys[0],
+          (parseNutrootLeaf(hexToBytes(tree![0])) as NutrootConditionLeaf).keys[0],
         );
         expect(recoverLeafKeySecretKeys(tree!, proof.spend_info?.E, [strangerPriv])).toEqual([]);
       }
@@ -1304,7 +1307,7 @@ describeV3('M9 script path through the wallet API', () => {
             leafIndex: 0,
             cosign: async ({ digest, leaf: signingLeaf }) => {
               sawDigest = digest;
-              expect(signingLeaf.keys).toContain(bobPub);
+              expect((signingLeaf as NutrootConditionLeaf).keys).toContain(bobPub);
               return [bytesToHex(schnorr.sign(digest, hexToBytes(bobPriv)))];
             },
           },
@@ -1353,7 +1356,9 @@ describeV3('M9 script path through the wallet API', () => {
       );
       expect(carried.spends[0].signatures).toHaveLength(2);
       // Alice's key was blinded into the leaf, so a verbatim signature would not have counted.
-      expect(parseNutrootLeaf(hexToBytes(carried.spends[0].leaf)).keys).not.toContain(alicePub);
+      expect(
+        (parseNutrootLeaf(hexToBytes(carried.spends[0].leaf)) as NutrootConditionLeaf).keys,
+      ).not.toContain(alicePub);
 
       const signed = ScriptPath.mergeSwapPackage(carried, preview);
       const { keep } = await alice.completeSwap(signed);

@@ -206,6 +206,24 @@ describe('wallet.spendOptions: the script path', () => {
     expect(script[0].keys[0].pubkey).not.toBe(pub(ALICE));
   });
 
+  test('a commit leaf is reported as commit, satisfiable by no one', async () => {
+    const commit: NutrootLeaf = { type: 'commit', hash: 'cc'.repeat(32) };
+    const proof = locked([threshold([pub(ALICE)]), commit]);
+    const alice = wallet().spendOptions(proof, { privkeys: priv(ALICE) });
+    expect(alice.spendable).toBe(true);
+    expect(alice.script[1]).toEqual({
+      leafIndex: 1,
+      leaf: commit,
+      keys: [],
+      satisfiable: false,
+      blockedBy: 'commit',
+    });
+    expect(wallet().spendOptions(proof, { privkeys: priv(STRANGER) })).toMatchObject({
+      spendable: false,
+      blockedBy: 'not-keyed-to-you',
+    });
+  });
+
   test('an unparseable leaf throws rather than being reported as spendable', async () => {
     // Leaf type 0x7f is not in the registry: the receive cascade fails closed on it, so this must
     // not quietly report a tree it cannot reason about.

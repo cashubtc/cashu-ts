@@ -219,6 +219,8 @@ describe('CashuNip07', () => {
     expect(CashuNip07.completes(option({}), XONLY)).toBe(true); // x-only accepted
     expect(CashuNip07.completes(option({}), `02${XONLY}`)).toBe(true); // either parity prefix
     expect(CashuNip07.completes(option({}), OTHER)).toBe(false); // not listed
+    const inert = { ...option({}), leaf: { type: 'commit' as const, hash: '00'.repeat(32) } };
+    expect(CashuNip07.completes(inert, PUB)).toBe(false); // a commit leaf has no signers
     expect(CashuNip07.completes(option({ satisfiable: true, blockedBy: undefined }), PUB)).toBe(
       false,
     );
