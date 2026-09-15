@@ -633,8 +633,8 @@ export type GetInfoResponse = {
     tos_url?: string;
     max_array_length?: number;
     contact: MintContactInfo[];
-    time?: number;
     signature?: string;
+    request_nonce?: string;
     nuts: {
         '4': {
             methods: SwapMethod[];
@@ -1294,7 +1294,9 @@ export type MintContactInfo = {
 
 // @public
 export class MintInfo {
-    constructor(info: GetInfoResponse, logger?: Logger);
+    constructor(info: GetInfoResponse, logger?: Logger, options?: {
+        requestNonce?: string;
+    });
     get cache(): GetInfoResponse;
     // (undocumented)
     get contact(): MintContactInfo[];

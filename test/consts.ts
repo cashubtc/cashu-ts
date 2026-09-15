@@ -1,4 +1,4 @@
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import {
   KeyChain,
@@ -7,7 +7,7 @@ import {
   type MintKeys,
   type MintKeyset,
 } from '../src';
-import { schnorrSignMessage } from '../src/crypto/core';
+import { schnorrSignDigest, taggedHash } from '../src/crypto/core';
 import { getPubKeyFromPrivKey } from '../src/crypto/curve_secp';
 import { canonicalizeJson } from '../src/utils/canonicalJson';
 
@@ -393,22 +393,17 @@ export const DUMMY_TEST_KEYS: MintKeys = {
 export const MINT_IDENTITY_PRIVKEY = '00'.repeat(31) + '05';
 
 /**
- * Returns a copy of `info` signed as the mint would sign it (NUT-06).
+ * Returns a copy of `info` signed as the mint would sign it (NUT-06): `time` and any
+ * `request_nonce` stay in the payload, so set them before signing.
  */
 export function signMintInfo(
   info: GetInfoResponse,
   privkey: string = MINT_IDENTITY_PRIVKEY,
 ): GetInfoResponse {
   const privkeyBytes = hexToBytes(privkey);
-  const { signature, time, ...payload } = info;
+  const { signature, ...payload } = info;
   void signature;
-  void time; // not signed
-  const signed = { ...info, pubkey: bytesToHex(getPubKeyFromPrivKey(privkeyBytes)) };
-  return {
-    ...signed,
-    signature: schnorrSignMessage(
-      canonicalizeJson({ ...payload, pubkey: signed.pubkey }),
-      privkeyBytes,
-    ),
-  };
+  const signed = { ...payload, pubkey: bytesToHex(getPubKeyFromPrivKey(privkeyBytes)) };
+  const digest = taggedHash('Cashu_MintInfo_v1', utf8ToBytes(canonicalizeJson(signed)));
+  return { ...signed, signature: schnorrSignDigest(digest, privkeyBytes) };
 }

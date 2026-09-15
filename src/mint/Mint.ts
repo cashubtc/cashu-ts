@@ -5,6 +5,8 @@
  * You should ordinarily not need to instantiate a Mint, as it will be auto-instantiated by the
  * Wallet class when you pass in the mint url.
  */
+import { bytesToHex, randomBytes } from '@noble/curves/utils.js';
+
 import type { AuthProvider } from '../auth/AuthProvider';
 import { OIDCAuth, type OIDCAuthOptions } from '../auth/OIDCAuth';
 import { type Logger, NULL_LOGGER, failIf } from '../logger';
@@ -181,17 +183,27 @@ class Mint {
    *
    * @remarks
    * No normalization: only an unmodified response canonicalizes to the bytes the mint signed, so
-   * `new MintInfo(info)` can verify it. `MintInfo` normalizes on construction.
+   * `new MintInfo(info)` can verify it. The request carries a fresh NUT-06 `request_nonce`;
+   * `getLazyMintInfo` checks the echo, `setMintInfo(raw)` cannot.
    * @param customRequest Optional override for the request function.
    * @returns The mint's information response.
    */
   async getInfo(customRequest?: RequestFn): Promise<GetInfoResponse> {
+    return (await this.fetchInfo(customRequest)).info;
+  }
+
+  private async fetchInfo(
+    customRequest?: RequestFn,
+  ): Promise<{ info: GetInfoResponse; requestNonce: string }> {
     const requestInstance = customRequest ?? this._request;
-    return requestInstance<GetInfoResponse>({
-      endpoint: joinUrls(this._mintUrl, '/v1/info'),
+    // Mints that predate NUT-06 signing ignore the query parameter.
+    const requestNonce = bytesToHex(randomBytes(32));
+    const info = await requestInstance<GetInfoResponse>({
+      endpoint: `${joinUrls(this._mintUrl, '/v1/info')}?request_nonce=${requestNonce}`,
       onResponseMeta: this._captureResponseMetadata,
       logger: this._logger,
     });
+    return { info, requestNonce };
   }
 
   /**
@@ -203,8 +215,8 @@ class Mint {
     if (this._mintInfo) {
       return this._mintInfo;
     }
-    const data = await this.getInfo(customRequest);
-    this._mintInfo = new MintInfo(data, this._logger);
+    const { info, requestNonce } = await this.fetchInfo(customRequest);
+    this._mintInfo = new MintInfo(info, this._logger, { requestNonce });
     return this._mintInfo;
   }
 

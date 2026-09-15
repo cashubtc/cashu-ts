@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 import { Amount } from '../../src/model/Amount';
 import { MintInfo } from '../../src/model/MintInfo';
@@ -1285,6 +1285,13 @@ describe('MintInfo retained list caps', () => {
 });
 
 describe('MintInfo signature (NUT-06)', () => {
+  const NONCE = 'ab'.repeat(32);
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(MINTINFORESP.time * 1000);
+  });
+  afterEach(() => vi.useRealTimers());
+
   it('reports unsigned for a mint that does not sign its info', () => {
     expect(new MintInfo(MINTINFORESP).signatureState).toBe('unsigned');
   });
@@ -1292,6 +1299,22 @@ describe('MintInfo signature (NUT-06)', () => {
   it('verifies the response as received', () => {
     const info = new MintInfo(signMintInfo(MINTINFORESP));
     expect(info.signatureState).toBe('valid');
+  });
+
+  it('requires the echoed request nonce when one was sent', () => {
+    const echoed = signMintInfo({ ...MINTINFORESP, request_nonce: NONCE });
+    expect(new MintInfo(echoed, undefined, { requestNonce: NONCE }).signatureState).toBe('valid');
+    expect(new MintInfo(echoed, undefined, { requestNonce: 'cd'.repeat(32) }).signatureState).toBe(
+      'invalid',
+    );
+    expect(
+      new MintInfo(signMintInfo(MINTINFORESP), undefined, { requestNonce: NONCE }).signatureState,
+    ).toBe('invalid');
+  });
+
+  it('reports invalid when the signed time is stale', () => {
+    vi.setSystemTime((MINTINFORESP.time + 3601) * 1000);
+    expect(new MintInfo(signMintInfo(MINTINFORESP)).signatureState).toBe('invalid');
   });
 
   it('warns and reports invalid when the response was altered in flight', () => {
@@ -1308,9 +1331,10 @@ describe('MintInfo signature (NUT-06)', () => {
     expect(logger.warn).toHaveBeenCalled();
   });
 
-  it('reports unsigned once normalized: cache does not carry the signature', () => {
-    const info = new MintInfo(signMintInfo(MINTINFORESP));
+  it('reports unsigned once normalized: cache carries neither signature nor nonce', () => {
+    const info = new MintInfo(signMintInfo({ ...MINTINFORESP, request_nonce: NONCE }));
     expect(info.cache.signature).toBeUndefined();
+    expect(info.cache.request_nonce).toBeUndefined();
     expect(new MintInfo(info.cache).signatureState).toBe('unsigned');
   });
 });

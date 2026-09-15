@@ -1039,7 +1039,7 @@ CAT-protected BAT minting rejects with `CTSError: AuthManager: session changed w
 
 Normalization is unchanged for everything built on `MintInfo`, which normalizes on construction: `Wallet`, `Mint.getLazyMintInfo()`, and `MintInfo.cache` all return the same values as before.
 
-The reason for the change is the mint info signature: a normalized response no longer matches the bytes the mint signed, so verification needs the response as received. `MintInfo` verifies during construction and reports the verdict as `signatureState` (`'unsigned' | 'valid' | 'invalid'`); the library never rejects a mint over it, policy is yours.
+The reason for the change is the NUT-06 mint info signature: a normalized response no longer matches the bytes the mint signed, so verification needs the response as received. `getInfo()` also sends a fresh `request_nonce` query parameter, which a signing mint echoes into the signed payload. `MintInfo` verifies during construction and reports the verdict as `signatureState` (`'unsigned' | 'valid' | 'invalid'`): `'invalid'` covers a bad signature, a signed `time` more than an hour from the local clock, and (via `getLazyMintInfo()`) a missing or mismatched nonce echo. The library never rejects a mint over it, policy is yours.
 
 ### Migration
 

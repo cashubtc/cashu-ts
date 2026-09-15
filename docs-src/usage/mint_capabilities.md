@@ -56,8 +56,7 @@ if (info.supportsMintMeltMethod('melt', 'bolt11', 'sat')) {
 }
 ```
 
-When you also need the amount limits, `getMintMeltMethod` returns the matched `SwapMethod`
-directly (`undefined` means the pair is unsupported or the operation is disabled):
+When you also need the amount limits, `getMintMeltMethod` returns the matched `SwapMethod` directly (`undefined` means the pair is unsupported or the operation is disabled):
 
 ```ts
 const melt = info.getMintMeltMethod('melt', 'bolt11', 'sat');
@@ -66,11 +65,24 @@ if (melt) {
 }
 ```
 
+## Check the mint's signature
+
+A mint that implements signed mint info (NUT-06) signs each `/v1/info` response with its identity key. The wallet sends a fresh request nonce with every request, and the mint echoes it inside the signed payload along with its current time, so a response cannot be replayed later or served in answer to a different request.
+
+`MintInfo` verifies the signature when it is constructed and reports the outcome as `signatureState`. A state of `valid` means the response was signed by `info.pubkey`, is less than an hour old, and echoes the nonce this wallet sent. A state of `unsigned` means the mint sent no signature at all, which is the case for mints that predate NUT-06 signing and for any `MintInfo` rehydrated from a stored `cache`. A state of `invalid` means a signature was present but did not verify, was stale, or echoed the wrong nonce, and the information should be treated as unverified.
+
+The library never refuses to talk to a mint over this. The signature is self-certifying, so a valid one only tells you something once you know which key to expect. A reasonable policy is to pin `info.pubkey` the first time you add a mint and warn the user if it later changes.
+
+```ts
+const info = await wallet.mint.getLazyMintInfo();
+if (info.signatureState === 'invalid') {
+  console.warn('mint info failed signature verification');
+}
+```
+
 ## Work offline from a stored response
 
-`MintInfo` does not need a live connection: its constructor accepts any persisted
-`GetInfoResponse`. Store `info.cache` while online (as in the first example above), and rehydrate
-later to answer capability questions before (or without) contacting the mint.
+`MintInfo` does not need a live connection: its constructor accepts any persisted `GetInfoResponse`. Store `info.cache` while online (as in the first example above), and rehydrate later to answer capability questions before (or without) contacting the mint.
 
 ```ts
 import { MintInfo } from '@cashu/cashu-ts';
@@ -81,8 +93,7 @@ const offline = new MintInfo(stored);
 offline.getMintMeltMethod('melt', 'bolt11', 'sat'); // no network round-trip
 ```
 
-To seed a whole wallet from persisted data (mint info plus keysets) so it starts without any
-network calls, use [`wallet.loadMintFromCache(storedInfo, keyChainCache)`](./create_wallet.md).
+To seed a whole wallet from persisted data (mint info plus keysets) so it starts without any network calls, use [`wallet.loadMintFromCache(storedInfo, keyChainCache)`](./create_wallet.md).
 
 ## Inspect raw NUT support
 

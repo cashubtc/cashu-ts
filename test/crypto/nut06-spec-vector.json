@@ -1,7 +1,8 @@
 {
   "name": "Bob's Cashu mint",
   "pubkey": "0338596797cef0627f653cd6568387361b00314add55d9f1ea9c94f46ae421e3da",
-  "signature": "d1ae4c576e3ffa667df795b06655a5400e590653ae1f60f2a256c01e794a70328fee6fc8f4139c86458d12c0d4f04781581a5890a9ee83b9f7c72c78a641add0",
+  "signature": "a7e3a3bd6a1c4d6be9311f26c54617e51da8d8bc22fdbe78a61c6c824dec06845bd4d7fc9ee0db8e94837029913b9fbd034afd1f0a668d1e9f032af20c213004",
+  "request_nonce": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
   "version": "Nutshell/0.15.0",
   "description": "The short mint description",
   "description_long": "A description that can be a long piece of text.",

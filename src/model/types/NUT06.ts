@@ -17,7 +17,8 @@ export type GetInfoResponse = {
    */
   urls?: string[];
   /**
-   * Current server time as a Unix timestamp in seconds.
+   * Current server time as a Unix timestamp in seconds. Signed under NUT-06, so a response goes
+   * stale.
    */
   time?: number;
   tos_url?: string;
@@ -27,14 +28,14 @@ export type GetInfoResponse = {
   max_array_length?: number;
   contact: MintContactInfo[];
   /**
-   * Unix timestamp of the response. Excluded from the signed payload, so a signature stays valid
-   * across responses.
-   */
-  time?: number;
-  /**
    * Mint's BIP-340 signature over the response (NUT-06). See `MintInfo.signatureState`.
    */
   signature?: string;
+  /**
+   * Echo of the wallet's `request_nonce` query parameter (NUT-06). Signed; absent when the request
+   * carried none.
+   */
+  request_nonce?: string;
   nuts: {
     '4': {
       // Minting
