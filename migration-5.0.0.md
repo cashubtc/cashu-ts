@@ -1030,3 +1030,29 @@ CAT-protected BAT minting rejects with `CTSError: AuthManager: session changed w
 ## `OIDCAuth.buildAuthCodeUrl` accepts only `codeChallengeMethod: 'S256'`
 
 `codeChallengeMethod` narrows from `'S256' | 'plain'` to `'S256'`. The parameter can be omitted (S256 is already the default), and `generatePKCE()` always produces an S256 challenge, so no caller following the built-in flow needs to change. A TS caller passing `'plain'` fails to compile; a plain-JS caller gets a thrown `OIDCAuth: only the S256 PKCE method is supported`.
+
+---
+
+## `Mint.getInfo()` returns the wire response
+
+`Mint.getInfo()` used to normalize the `/v1/info` response before returning it: `method_name` was derived when the mint sent none, and omitted `min_amount`/`max_amount` were coerced to `null`. It now returns the response exactly as the mint sent it, so those fields can be `null` or absent. `SwapMethod` declares all three optional now, matching the wire; code that read them without a null check no longer compiles.
+
+Normalization is unchanged for everything built on `MintInfo`, which normalizes on construction: `Wallet`, `Mint.getLazyMintInfo()`, and `MintInfo.cache` all return the same values as before.
+
+The reason for the change is the NUT-06 mint info signature: a normalized response no longer matches the bytes the mint signed, so verification needs the response as received. `getInfo()` also sends a fresh `request_nonce` query parameter, which a signing mint echoes into the signed payload. `MintInfo` verifies during construction and reports the verdict as `signatureState` (`'unsigned' | 'valid' | 'invalid'`): `'invalid'` covers a bad signature, a signed `time` more than an hour from the local clock, and (via `getLazyMintInfo()`) a missing or mismatched nonce echo. The library never rejects a mint over it, policy is yours.
+
+### Migration
+
+Code reading `method_name` or amount bounds off a raw `getInfo()` result should construct a `MintInfo` instead:
+
+```ts
+// Before
+const info = await mint.getInfo();
+show(info.nuts['4'].methods[0].method_name); // was derived for you
+
+// After
+const info = await mint.getLazyMintInfo();
+show(info.supportedMethods('mint')[0].method_name); // derived here instead
+```
+
+Code that already null-checks those fields, or persists the response for `new MintInfo(...)` later, needs no change.

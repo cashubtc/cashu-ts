@@ -1,3 +1,4 @@
+import { verifyMintInfoSignature } from '../crypto/NUT06';
 import { type Logger, NULL_LOGGER } from '../logger';
 import { isRecord, nullIfUndefined } from '../utils/core';
 import {
@@ -58,9 +59,20 @@ export class MintInfo {
   private readonly _protected21?: ProtectedIndex;
   // NUT-06, resolved request array cap
   private readonly _maxArrayLength: number;
+  // NUT-06, verdict on the mint's signature over the response as received
+  private readonly _signatureState: 'unsigned' | 'valid' | 'invalid';
 
-  constructor(info: GetInfoResponse, logger?: Logger) {
+  /**
+   * @param options `requestNonce`: the NUT-06 nonce sent with the request, which a signed response
+   *   must echo. Omit for a stored response.
+   */
+  constructor(info: GetInfoResponse, logger?: Logger, options: { requestNonce?: string } = {}) {
     const log = logger ?? NULL_LOGGER;
+    // Verify before normalizing: normalization rewrites members the signature covers.
+    this._signatureState = verifyMintInfoSignature(info, options);
+    if (this._signatureState === 'invalid') {
+      log.warn('MintInfo: mint info signature did not verify against the advertised pubkey');
+    }
     this._mintInfo = MintInfo.normalizeInfo(info, log);
     this._maxArrayLength = MintInfo.resolveMaxArrayLength(info.max_array_length, log);
 
@@ -71,14 +83,25 @@ export class MintInfo {
     this._protected21 = this.buildIndex(pe21);
   }
 
+  /**
+   * Fills in derived members and bounds hostile ones.
+   *
+   * @remarks
+   * Drops `signature` and `request_nonce`: the normalized response no longer canonicalizes to the
+   * bytes the mint signed, so keeping them would invite a later re-check to read as tampering.
+   * Verify first (see {@link MintInfo.signatureState}).
+   */
   static normalizeInfo(info: GetInfoResponse, logger: Logger = NULL_LOGGER): GetInfoResponse {
     // The response is untrusted JSON: check the shape before any spread copies it.
     if (!isRecord(info) || !isRecord(info.nuts)) {
       logger.error('MintInfo: malformed info response', { op: 'normalizeInfo' });
       throw new CTSError('Invalid response from mint');
     }
+    const { signature, request_nonce, ...rest } = info;
+    void signature; // not used
+    void request_nonce; // not used
     return {
-      ...info,
+      ...rest,
       ...(Array.isArray(info.contact)
         ? { contact: MintInfo.capList(info.contact, 'contact', logger) }
         : {}),
@@ -554,6 +577,21 @@ export class MintInfo {
   }
   get pubkey() {
     return this._mintInfo.pubkey;
+  }
+  /**
+   * Whether the mint signed this response, and whether that signature verified (NUT-06).
+   *
+   * @remarks
+   * `'unsigned'` covers every mint that predates the signature and every copy that has been
+   * normalized or persisted: `cache` does not carry the signature, so a rehydrated `MintInfo`
+   * reports `'unsigned'` rather than false tampering. `'invalid'` also covers a signed `time` more
+   * than 3600s from this clock and a missing or mismatched request nonce. Signatures are
+   * self-certifying, so a `'valid'` verdict only means something against a `pubkey` you pinned
+   * earlier or know out of band. Policy is the application's: this library does not refuse to talk
+   * to a mint over it.
+   */
+  get signatureState(): 'unsigned' | 'valid' | 'invalid' {
+    return this._signatureState;
   }
   get nuts() {
     return MintInfo.snapshot(this._mintInfo.nuts);

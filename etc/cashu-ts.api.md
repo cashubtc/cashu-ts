@@ -633,6 +633,8 @@ export type GetInfoResponse = {
     tos_url?: string;
     max_array_length?: number;
     contact: MintContactInfo[];
+    signature?: string;
+    request_nonce?: string;
     nuts: {
         '4': {
             methods: SwapMethod[];
@@ -1292,7 +1294,9 @@ export type MintContactInfo = {
 
 // @public
 export class MintInfo {
-    constructor(info: GetInfoResponse, logger?: Logger);
+    constructor(info: GetInfoResponse, logger?: Logger, options?: {
+        requestNonce?: string;
+    });
     get cache(): GetInfoResponse;
     // (undocumented)
     get contact(): MintContactInfo[];
@@ -1337,7 +1341,6 @@ export class MintInfo {
     get motd(): string | undefined;
     // (undocumented)
     get name(): string;
-    // (undocumented)
     static normalizeInfo(info: GetInfoResponse, logger?: Logger): GetInfoResponse;
     // (undocumented)
     get nuts(): {
@@ -1409,6 +1412,7 @@ export class MintInfo {
     requiresBlindAuthToken(method: 'GET' | 'POST', path: string): boolean;
     // (undocumented)
     requiresClearAuthToken(method: 'GET' | 'POST', path: string): boolean;
+    get signatureState(): 'unsigned' | 'valid' | 'invalid';
     supportedMethods(op: 'mint' | 'melt'): SwapMethod[];
     // (undocumented)
     supportsAmountless(method?: string, unit?: string): boolean;
@@ -2615,9 +2619,9 @@ export type SupportedMethod = {
 export type SwapMethod = {
     method: string;
     unit: string;
-    method_name: string | null;
-    min_amount: AmountLike | null;
-    max_amount: AmountLike | null;
+    method_name?: string | null;
+    min_amount?: AmountLike | null;
+    max_amount?: AmountLike | null;
     description?: boolean;
     options?: {
         description?: boolean;
