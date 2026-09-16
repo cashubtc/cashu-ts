@@ -927,6 +927,58 @@ describe('test raw tokens', () => {
   );
 });
 
+describe('getDecodedTokenBinary short keyset ID resolution', () => {
+  const fullV2Id = NUT02_V2_VECTOR1_KEYS.id;
+  const cBytes = hexToBytes('02' + '00'.repeat(32));
+
+  function encodeRawBinaryToken(idBytes: Uint8Array): Uint8Array {
+    const template = {
+      m: 'http://localhost:3338',
+      u: 'sat',
+      t: [{ i: idBytes, p: [{ a: 1n, s: 'abc', c: cBytes }] }],
+    };
+    const prefix = new TextEncoder().encode('crawB');
+    return new Uint8Array([...prefix, ...utils.encodeCBOR(template)]);
+  }
+
+  test('resolves an 8-byte short keyset ID to the full ID when keysetIds are given', () => {
+    const bytes = encodeRawBinaryToken(hexToBytes(fullV2Id.slice(0, 16)));
+    const decoded = utils.getDecodedTokenBinary(bytes, [fullV2Id]);
+    expect(decoded.proofs[0].id).toBe(fullV2Id);
+  });
+
+  test('throws when a short keyset ID has no keysets to map to', () => {
+    const bytes = encodeRawBinaryToken(hexToBytes(fullV2Id.slice(0, 16)));
+    expect(() => utils.getDecodedTokenBinary(bytes, [])).toThrow(
+      /short keyset ID v2 was encountered, but got no keysets/,
+    );
+  });
+
+  test('leaves the short keyset ID untouched when keysetIds are omitted', () => {
+    const shortId = fullV2Id.slice(0, 16);
+    const bytes = encodeRawBinaryToken(hexToBytes(shortId));
+    const decoded = utils.getDecodedTokenBinary(bytes);
+    expect(decoded.proofs[0].id).toBe(shortId);
+  });
+
+  test('throws when a short keyset ID is ambiguous', () => {
+    const bytes = encodeRawBinaryToken(hexToBytes(fullV2Id.slice(0, 16)));
+    const ambiguous = fullV2Id + 'aa';
+    expect(() => utils.getDecodedTokenBinary(bytes, [fullV2Id, ambiguous])).toThrow(/ambiguous/);
+  });
+
+  test('round-trips a full keyset ID through getEncodedTokenBinary unchanged', () => {
+    const token: Token = {
+      mint: 'http://localhost:3338',
+      unit: 'sat',
+      proofs: [{ id: fullV2Id, amount: Amount.from(1), secret: 'abc', C: '02' + '00'.repeat(32) }],
+    };
+    const bytes = utils.getEncodedTokenBinary(token);
+    const decoded = utils.getDecodedTokenBinary(bytes, [fullV2Id]);
+    expect(decoded.proofs[0].id).toBe(fullV2Id);
+  });
+});
+
 describe('test deprecated base64 keyset id derivation', () => {
   test('derives expected MiniBits base64 keyset id from known keys', () => {
     // Reference from https://mint.minibits.cash/Bitcoin/v1/keys/9mlfd5vCzgGl

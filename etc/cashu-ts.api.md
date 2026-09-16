@@ -431,7 +431,7 @@ export function getDataField(secret: Secret | string): string;
 export function getDecodedToken(tokenString: string, keysetIds: readonly string[]): Token;
 
 // @public
-export function getDecodedTokenBinary(bytes: Uint8Array): Token;
+export function getDecodedTokenBinary(bytes: Uint8Array, keysetIds?: readonly string[]): Token;
 
 // @public
 export function getEncodedToken(token: Token, opts?: {
