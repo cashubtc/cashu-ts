@@ -1562,3 +1562,16 @@ export function bolt11PaymentHash(pr: string): string {
   }
   throw new CTSError('BOLT11 invoice has no payment hash');
 }
+
+/**
+ * Whether a hex preimage hashes to a BOLT11 invoice's payment hash.
+ *
+ * @throws If the invoice cannot be parsed; a malformed preimage is simply false.
+ * @internal
+ */
+export function bolt11PreimageMatches(pr: string, preimage: string): boolean {
+  const paymentHash = bolt11PaymentHash(pr);
+  return (
+    /^[0-9a-fA-F]{64}$/.test(preimage) && bytesToHex(sha256(hexToBytes(preimage))) === paymentHash
+  );
+}

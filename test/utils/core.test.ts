@@ -1,3 +1,4 @@
+import { sha256 } from '@noble/hashes/sha2.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { bech32 } from '@scure/base';
@@ -2496,6 +2497,22 @@ describe('bolt11PaymentHash', () => {
     expect(utils.bolt11PaymentHash(VECTOR.toUpperCase())).toBe(
       '0001020304050607080900010203040506070809000102030405060708090102',
     );
+  });
+
+  test('bolt11PreimageMatches compares sha256(preimage) with the payment hash', () => {
+    const preimage = 'ab'.repeat(32);
+    const hash = bytesToHex(sha256(hexToBytes(preimage)));
+    const invoice = bech32.encode(
+      'lnbc',
+      [...new Array<number>(7).fill(0), 1, 1, 20, ...bech32.toWords(hexToBytes(hash))].concat(
+        new Array<number>(104).fill(0),
+      ),
+      false,
+    );
+    expect(utils.bolt11PreimageMatches(invoice, preimage)).toBe(true);
+    expect(utils.bolt11PreimageMatches(invoice, preimage.toUpperCase())).toBe(true);
+    expect(utils.bolt11PreimageMatches(invoice, 'cd'.repeat(32))).toBe(false);
+    expect(utils.bolt11PreimageMatches(invoice, 'not-hex')).toBe(false);
   });
 
   test('rejects strings that are not invoices or carry no payment hash', () => {

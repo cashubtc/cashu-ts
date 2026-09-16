@@ -5,9 +5,6 @@
  * You should ordinarily not need to instantiate a Mint, as it will be auto-instantiated by the
  * Wallet class when you pass in the mint url.
  */
-import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
-
 import type { AuthProvider } from '../auth/AuthProvider';
 import { OIDCAuth, type OIDCAuthOptions } from '../auth/OIDCAuth';
 import { type Logger, NULL_LOGGER, failIf } from '../logger';
@@ -54,7 +51,7 @@ import request, {
   type ResponseMeta,
 } from '../transport';
 import {
-  bolt11PaymentHash,
+  bolt11PreimageMatches,
   isObj,
   isRecord,
   joinUrls,
@@ -1669,16 +1666,13 @@ class Mint {
    */
   private verifiedPreimage(request: string, preimage: string, op: string): string | null {
     if (/^0{64}$/.test(preimage)) return null;
-    let paymentHash: string;
+    let valid: boolean;
     try {
-      paymentHash = bolt11PaymentHash(request);
+      valid = bolt11PreimageMatches(request, preimage);
     } catch (err) {
       this._logger.debug('Melt quote request is not a parseable BOLT11 invoice', { op, err });
       return preimage;
     }
-    const valid =
-      /^[0-9a-fA-F]{64}$/.test(preimage) &&
-      bytesToHex(sha256(hexToBytes(preimage))) === paymentHash;
     if (valid) return preimage;
     this._logger.warn('Mint returned a payment_preimage that does not match the invoice', { op });
     return null;
