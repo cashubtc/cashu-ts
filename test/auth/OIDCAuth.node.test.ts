@@ -1124,3 +1124,79 @@ describe('OIDCAuth: request policy', () => {
     ).rejects.toThrow('OIDCAuth: only the S256 PKCE method is supported');
   });
 });
+
+// ---------- endpoint schemes ----------
+describe('OIDCAuth: endpoint schemes', () => {
+  const SECURE_BASE = 'https://oidc.local';
+  const SECURE_DISCOVERY = `${SECURE_BASE}/.well-known/openid-configuration`;
+  const secureDiscovery: OIDCConfig = {
+    issuer: ISSUER,
+    token_endpoint: `${SECURE_BASE}/token`,
+    device_authorization_endpoint: `${SECURE_BASE}/device`,
+    authorization_endpoint: `${SECURE_BASE}/auth`,
+  };
+
+  test('loadConfig rejects a token_endpoint that is not http(s)', async () => {
+    server.use(
+      http.get(DISCOVERY, () =>
+        HttpResponse.json({ ...goodDiscovery, token_endpoint: 'javascript:alert(1)' }),
+      ),
+    );
+    await expect(new OIDCAuth(DISCOVERY).loadConfig()).rejects.toThrow(
+      'OIDCAuth: token_endpoint must be an http(s) URL',
+    );
+  });
+
+  test('an https discovery document must not name an http token_endpoint', async () => {
+    server.use(
+      http.get(SECURE_DISCOVERY, () =>
+        HttpResponse.json({ ...secureDiscovery, token_endpoint: TOKEN_EP }),
+      ),
+    );
+    await expect(new OIDCAuth(SECURE_DISCOVERY).loadConfig()).rejects.toThrow(
+      'OIDCAuth: token_endpoint must be https when discovery is https',
+    );
+  });
+
+  test('an https discovery document with https endpoints loads', async () => {
+    server.use(http.get(SECURE_DISCOVERY, () => HttpResponse.json(secureDiscovery)));
+    const cfg = await new OIDCAuth(SECURE_DISCOVERY).loadConfig();
+    expect(cfg.token_endpoint).toBe(`${SECURE_BASE}/token`);
+  });
+
+  test('deviceStart refuses an http device endpoint named by https discovery', async () => {
+    server.use(
+      http.get(SECURE_DISCOVERY, () =>
+        HttpResponse.json({ ...secureDiscovery, device_authorization_endpoint: DEVICE_EP }),
+      ),
+    );
+    const oidc = new OIDCAuth(SECURE_DISCOVERY, { clientId: 'cashu-client' });
+    await expect(oidc.deviceStart()).rejects.toThrow(
+      'OIDCAuth: device_authorization_endpoint must be https when discovery is https',
+    );
+  });
+
+  test('deviceStart refuses a device endpoint that is not http(s)', async () => {
+    server.use(
+      http.get(DISCOVERY, () =>
+        HttpResponse.json({ ...goodDiscovery, device_authorization_endpoint: 'ftp://x' }),
+      ),
+    );
+    const oidc = new OIDCAuth(DISCOVERY, { clientId: 'cashu-client' });
+    await expect(oidc.deviceStart()).rejects.toThrow(
+      'OIDCAuth: device_authorization_endpoint must be an http(s) URL',
+    );
+  });
+
+  test('buildAuthCodeUrl refuses an http authorization endpoint named by https discovery', async () => {
+    server.use(
+      http.get(SECURE_DISCOVERY, () =>
+        HttpResponse.json({ ...secureDiscovery, authorization_endpoint: AUTH_EP }),
+      ),
+    );
+    const oidc = new OIDCAuth(SECURE_DISCOVERY, { clientId: 'cashu-client' });
+    await expect(
+      oidc.buildAuthCodeUrl({ redirectUri: 'http://localhost/cb', codeChallenge: 'c' }),
+    ).rejects.toThrow('OIDCAuth: authorization_endpoint must be https when discovery is https');
+  });
+});
