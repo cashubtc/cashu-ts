@@ -508,6 +508,19 @@ describe('test keyset derivation', () => {
     });
     expect(keysetId).toBe(NUT02_V2_VECTOR3_KEYS.id);
   });
+  test('rejects a version 2 unit outside the keyset unit alphabet', () => {
+    // A delimiter in the unit would otherwise read as a metadata field in the id preimage.
+    expect(() =>
+      utils.deriveKeysetId(NUT02_V2_VECTOR1_KEYS.keys, {
+        versionByte: 1,
+        unit: 'sat|input_fee_ppk:100',
+      }),
+    ).toThrow('Invalid keyset unit');
+    // Case is folded before the check, so it is not a rejection.
+    expect(() =>
+      utils.deriveKeysetId(NUT02_V2_VECTOR1_KEYS.keys, { versionByte: 1, unit: 'SAT' }),
+    ).not.toThrow();
+  });
   test('verifies NUT-02 version 2 vector DTOs', () => {
     expect(Keyset.verifyKeysetId(NUT02_V2_VECTOR1_KEYS)).toBe(true);
     expect(Keyset.verifyKeysetId(NUT02_V2_VECTOR2_KEYS)).toBe(true);

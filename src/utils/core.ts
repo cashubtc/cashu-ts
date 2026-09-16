@@ -487,6 +487,8 @@ export type DeriveKeysetIdOptions = {
   isDeprecatedBase64?: boolean;
 };
 
+const KEYSET_UNIT_RE = /^[a-z0-9_-]+$/;
+
 /**
  * Returns the keyset id of a set of keys.
  *
@@ -536,6 +538,11 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
     case 1: {
       if (!unit) {
         throw new CTSError('Cannot compute keyset ID version 01: unit is required.');
+      }
+      // Per NUT-02 V2 the unit is restricted to [a-z0-9_-] (case folded here), so it cannot
+      // collide with the metadata fields that follow it in the preimage.
+      if (!KEYSET_UNIT_RE.test(unit.toLowerCase())) {
+        throw new CTSError(`Invalid keyset unit: ${unit}`);
       }
       const sortedEntries = Object.entries(keys).sort(([amountA], [amountB]) =>
         Amount.from(amountA).compareTo(amountB),
