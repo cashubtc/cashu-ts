@@ -151,7 +151,15 @@ export function assertV3PointSecret(secret: Uint8Array | string): void;
 export function attachHTLCPreimage<T extends ProofLike>(proofs: T[], preimage: string): T[];
 
 // @public
-export function auditableLock(pubkey: string): LockOptions_2;
+export function auditableLock(pubkey: string, opts?: {
+    commit?: string;
+}): LockOptions_2;
+
+// @public
+export function auditableLockInfo(proof: Pick<Proof, 'id' | 'secret' | 'spend_info'>): {
+    pubkey: string;
+    commit?: string;
+} | undefined;
 
 // @public
 export function auditableLockKey(proof: Pick<Proof, 'id' | 'secret' | 'spend_info'>): string | undefined;
@@ -826,6 +834,9 @@ export function isBlsKeyset(keysetId: string): boolean;
 export function isBlsProof(proof: Pick<Proof, 'id'>): boolean;
 
 // @public
+export function isConditionLeaf(leaf: NutrootLeaf): leaf is NutrootConditionLeaf;
+
+// @public
 export function isHTLCSpendAuthorised(proof: Proof, logger?: Logger, digest?: DigestInput): boolean;
 
 // @public
@@ -934,6 +945,7 @@ export type KeysetPair = {
 
 // @public
 export class LockBuilder {
+    addCommitment(hash: string): this;
     addHashlock(hashlock: string): this;
     addLeaf(leaf: NutrootLeaf): this;
     addMainPubkey(pk: string | string[]): this;
@@ -1636,20 +1648,30 @@ export const NUTROOT_LEAF_TYPE: {
     readonly threshold: 1;
     readonly after: 2;
     readonly hashlock: 3;
+    readonly commit: 4;
 };
 
 // @public
 export const NUTROOT_NUMS_KEY = "0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0";
 
 // @public
-export type NutrootLeaf = {
-    type: keyof typeof NUTROOT_LEAF_TYPE;
+export type NutrootCommitLeaf = {
+    type: 'commit';
+    hash: string;
+};
+
+// @public
+export type NutrootConditionLeaf = {
+    type: Exclude<keyof typeof NUTROOT_LEAF_TYPE, 'commit'>;
     n: number;
     keys: string[];
     time?: number;
     hash?: string;
     disclosure?: number;
 };
+
+// @public
+export type NutrootLeaf = NutrootConditionLeaf | NutrootCommitLeaf;
 
 // @public
 export type NutrootOption = {
@@ -2541,7 +2563,7 @@ export type SpendOption = {
         blinded: boolean;
     }>;
     satisfiable: boolean;
-    blockedBy?: 'threshold' | 'locktime' | 'preimage';
+    blockedBy?: 'threshold' | 'locktime' | 'preimage' | 'commit';
     availableAt?: number;
 };
 

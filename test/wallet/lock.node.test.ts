@@ -212,6 +212,26 @@ describe('lockToNutrootOptions (v3 encoder)', () => {
     expect(() => lockToNutrootOptions({})).toThrow(/key|leaf/i);
   });
 
+  test('a commit leaf rides along, and a disclosed single key still closes the key path', () => {
+    const commit = { type: 'commit' as const, hash: HASH };
+    expect(lockToNutrootOptions({ mainKeys: [PUB_A], disclosure: true, leaves: [commit] })).toEqual(
+      {
+        receiverKey: NUTROOT_NUMS_KEY,
+        leaves: [{ type: 'threshold', n: 1, keys: [PUB_A], disclosure: 1 }, commit],
+      },
+    );
+    expect(lockToNutrootOptions({ mainKeys: [PUB_A], leaves: [commit] })).toEqual({
+      receiverKey: PUB_A,
+      leaves: [commit],
+    });
+  });
+
+  test('refuses a lock made only of commit leaves: nobody could spend it', () => {
+    expect(() => lockToNutrootOptions({ leaves: [{ type: 'commit', hash: HASH }] })).toThrow(
+      /spend path/,
+    );
+  });
+
   test('refuses a threshold above the key count', () => {
     expect(() =>
       lockToNutrootOptions({ mainKeys: [PUB_A, PUB_B], requiredMainSignatures: 3 }),
@@ -484,6 +504,15 @@ describe('LockBuilder', () => {
       locktime: TIME,
       refundKeys: [PUB_R],
     });
+  });
+
+  test('addCommitment binds the lock to outside data', () => {
+    const lock = new LockBuilder()
+      .addMainPubkey(PUB_A)
+      .disclose()
+      .addCommitment(HASH.toUpperCase());
+    expect(lock.toOptions().leaves).toEqual([{ type: 'commit', hash: HASH }]);
+    expect(() => new LockBuilder().addCommitment('abcd')).toThrow(/64-character hex/);
   });
 
   test('addLeaf makes trees NUT-11 cannot express', () => {

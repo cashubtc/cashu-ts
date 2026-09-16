@@ -37,7 +37,7 @@ import {
   getSecretKind,
 } from './NUT10';
 import { deriveP2BKSecretKeys } from './NUT28';
-import type { NutrootLeaf } from './nutroot';
+import type { NutrootConditionLeaf } from './nutroot';
 
 export const SigFlags = {
   SIG_INPUTS: 'SIG_INPUTS',
@@ -794,7 +794,7 @@ export function verifyP2PKSpendingConditions(
  * @throws If the secret is not P2PK/HTLC or its tags break the NUT-11 rules.
  * @internal
  */
-export function p2pkSpendLeaves(secretStr: string | Secret): NutrootLeaf[] {
+export function p2pkSpendLeaves(secretStr: string | Secret): NutrootConditionLeaf[] {
   const secret = parseP2PKSecret(secretStr);
   const mainKeys = getP2PKWitnessPubkeys(secret);
   const refundKeys = getP2PKWitnessRefundkeys(secret);
@@ -809,7 +809,7 @@ export function p2pkSpendLeaves(secretStr: string | Secret): NutrootLeaf[] {
   // A path with no keys needs no signatures (keyless HTLC, or expiry with no refund keys).
   const n = (tag: string, keys: string[]) =>
     keys.length ? Math.max(getTagInt(secret, tag) ?? 1, 1) : 0;
-  const main: NutrootLeaf =
+  const main: NutrootConditionLeaf =
     getSecretKind(secret) === 'HTLC'
       ? { type: 'hashlock', n: n('n_sigs', mainKeys), keys: mainKeys, hash: getDataField(secret) }
       : { type: 'threshold', n: n('n_sigs', mainKeys), keys: mainKeys };

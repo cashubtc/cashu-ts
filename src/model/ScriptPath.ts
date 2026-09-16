@@ -12,6 +12,7 @@ import {
   slotKeysByBlindedPubkey,
   nutrootLeafHash,
   nutrootMerklePath,
+  type NutrootConditionLeaf,
   type NutrootLeaf,
   verifyNutrootCommitment,
 } from '../crypto/nutroot';
@@ -264,7 +265,7 @@ function deserializePackage(input: string): ScriptPathSigningPackage {
   return pkg;
 }
 
-function assertValidPackage(pkg: ScriptPathSigningPackage): void {
+function assertValidPackage(pkg: ScriptPathSigningPackage): NutrootConditionLeaf[] {
   if (!pkg || typeof pkg !== 'object' || pkg.version !== SCRIPT_PATH_PREFIX) {
     throw new CTSError('Invalid signing package version');
   }
@@ -322,6 +323,7 @@ function assertValidPackage(pkg: ScriptPathSigningPackage): void {
   }
   const inputSecrets = new Set(pkg.inputs.map((input) => input.secret));
   const spent = new Set<string>();
+  const leaves: NutrootConditionLeaf[] = [];
   for (const spend of pkg.spends) {
     if (!inputSecrets.has(spend.secret) || spent.has(spend.secret)) {
       throw new CTSError('Signing package spend must name one unique transaction input');
@@ -345,6 +347,9 @@ function assertValidPackage(pkg: ScriptPathSigningPackage): void {
     } catch (e) {
       throw new CTSError('Signing package leaf does not commit to its input secret', { cause: e });
     }
+    if (leaf.type === 'commit') {
+      throw new CTSError('Signing package names a commit leaf, which is not a spend path');
+    }
     if (!Array.isArray(spend.signatures)) {
       throw new CTSError('Signing package signatures must be an array');
     }
@@ -359,15 +364,17 @@ function assertValidPackage(pkg: ScriptPathSigningPackage): void {
         throw new CTSError('Signing package slot hints must name one valid slot per leaf key');
       }
     }
+    leaves.push(leaf);
   }
+  return leaves;
 }
 
 function signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPathSigningPackage {
-  assertValidPackage(pkg);
+  const leaves = assertValidPackage(pkg);
   const digests = packageInputDigests(pkg);
   const pub = bytesToHex(getPubKeyFromPrivKey(hexToBytes(privkey)));
-  const spends = pkg.spends.map((spend) => {
-    const leaf = parseNutrootLeaf(hexToBytes(spend.leaf));
+  const spends = pkg.spends.map((spend, i) => {
+    const leaf = leaves[i];
     const keys: string[] = [];
     if (leaf.keys.some((key) => key.slice(-64) === pub.slice(-64))) {
       keys.push(privkey.toLowerCase());

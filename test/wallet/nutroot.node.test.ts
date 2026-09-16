@@ -10,6 +10,7 @@ import {
   deriveReceiverKeyedSecret,
   nutrootTweakPubkey,
   type NutrootLeaf,
+  type NutrootConditionLeaf,
 } from '../../src/crypto/nutroot';
 import {
   inputDigest,
@@ -180,6 +181,17 @@ describe('prepareScriptPathSpends', () => {
     expect(spend.keys).toEqual([PRIV_B]);
     expect(spend.leaf.type).toBe('threshold');
     expect(spend.tree).toEqual(built.tree);
+  });
+
+  test('refuses a plan naming a commit leaf', () => {
+    const withCommit = buildNutrootSecret(PUB_A, [
+      ...leaves,
+      { type: 'commit', hash: 'cc'.repeat(32) },
+    ]);
+    const proof = v3Proof(withCommit.secret, { k: PRIV_A, tree: withCommit.tree });
+    expect(() =>
+      prepareScriptPathSpends([proof], [{ secret: withCommit.secret, leafIndex: 1 }], []),
+    ).toThrow(/not a spend path/);
   });
 
   test('takes the internal key from explicit spend_info.K when no scalar is present', () => {
@@ -416,6 +428,12 @@ describe('attachTransactionWitnesses', () => {
     expect(verifySpendReceipt({ ...rScript, witness: '{bad' }, scriptPath).witness).toBe(false);
     const unsigned = JSON.stringify({ ...JSON.parse(rScript.witness), signatures: undefined });
     expect(verifySpendReceipt({ ...rScript, witness: unsigned }, scriptPath).witness).toBe(false);
+    // A witness revealing a commit leaf never spends, whatever else it carries.
+    const commitLeaf = JSON.stringify({
+      ...JSON.parse(rScript.witness),
+      leaf: '0004' + '080020' + '77'.repeat(32),
+    });
+    expect(verifySpendReceipt({ ...rScript, witness: commitLeaf }, scriptPath).witness).toBe(false);
   });
 
   test('a receipt bundle round-trips through the nutrcA transport string', async () => {
@@ -572,7 +590,7 @@ describe('attachTransactionWitnesses', () => {
       spends,
       makeState(undefined),
     );
-    expect(seen!.leaf.keys).toEqual([PUB_A, PUB_B]);
+    expect((seen!.leaf as NutrootConditionLeaf).keys).toEqual([PUB_A, PUB_B]);
     expect(bytesToHex(seen!.transactionMessage)).toContain(bytesToHex(seen!.inputContainer));
     // digest = tagged_hash(input tag, SHA256(message) || SHA256(container)): recomputable, so a
     // signer can refuse anything it cannot verify.

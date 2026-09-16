@@ -2390,6 +2390,48 @@ describe('auditable locks', () => {
     expect(() => auditableLock('nonsense')).toThrow();
   });
 
+  test('auditableLock with a commit binds the proof to outside context', () => {
+    const commit = 'cd'.repeat(32);
+    const options = lockToNutrootOptions(auditableLock(P, { commit: commit.toUpperCase() }));
+    expect(options.leaves).toEqual([
+      { type: 'threshold', n: 1, keys: [P], disclosure: 1 },
+      { type: 'commit', hash: commit },
+    ]);
+    expect(() => auditableLock(P, { commit: 'abcd' })).toThrow(/64-character hex/);
+    const built = buildNutrootSecret(options.receiverKey, options.leaves!);
+    const proof: Proof = {
+      id: `02${'ab'.repeat(32)}`,
+      amount: Amount.from(8),
+      secret: built.secret,
+      C: 'aa'.repeat(48),
+      spend_info: { K: built.K, u: built.u, tree: built.tree },
+    };
+    expect(utils.auditableLockInfo(proof)).toEqual({ pubkey: P, commit });
+    expect(utils.auditableLockKey(proof)).toBe(P);
+    // The commitment is bound: a different digest is a different secret.
+    const other = buildNutrootSecret(options.receiverKey, [
+      options.leaves![0],
+      { type: 'commit', hash: 'ef'.repeat(32) },
+    ]);
+    expect(
+      utils.auditableLockInfo({ ...proof, spend_info: { ...proof.spend_info, tree: other.tree } }),
+    ).toBeUndefined();
+    // Two commit leaves, or a commit leaf alone, is not the auditable shape.
+    for (const leaves of [
+      [options.leaves![0], options.leaves![1], { type: 'commit' as const, hash: 'ef'.repeat(32) }],
+      [options.leaves![1]],
+    ]) {
+      const b = buildNutrootSecret(options.receiverKey, leaves);
+      expect(
+        utils.auditableLockInfo({
+          ...proof,
+          secret: b.secret,
+          spend_info: { K: b.K, u: b.u, tree: b.tree },
+        }),
+      ).toBeUndefined();
+    }
+  });
+
   test('auditableLockKey verifies the full commitment round-trip and returns the key', () => {
     // The real encode path: lock options -> nutroot options -> script-only secret
     const options = lockToNutrootOptions(auditableLock(P));
@@ -2402,6 +2444,7 @@ describe('auditable locks', () => {
       spend_info: { K: built.K, u: built.u, tree: built.tree },
     };
     expect(utils.auditableLockKey(proof)).toBe(P);
+    expect(utils.auditableLockInfo(proof)).toEqual({ pubkey: P });
     // Tampering with the disclosed leaf breaks the commitment, not just the shape
     const other = buildNutrootSecret(options.receiverKey, [
       { type: 'threshold', n: 1, keys: [keyFor(0x55)] },
