@@ -1275,7 +1275,7 @@ class Wallet {
   private assertUniqueOutputSecrets(outputData: OutputDataLike[]): void {
     const seenSecrets = new Set<string>();
     for (const [i, d] of outputData.entries()) {
-      // The bytes are the identity; a lossy decode would merge distinct invalid sequences.
+      // Hex is a one-to-one key for the bytes; decoding is not, it merges invalid sequences.
       const secret = bytesToHex(d.secret);
       // Report the position, never the secret: it is the spending material.
       this.failIf(seenSecrets.has(secret), `Duplicate output secret at index ${i}`, { index: i });
