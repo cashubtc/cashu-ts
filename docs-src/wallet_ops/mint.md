@@ -15,7 +15,7 @@ const newProofs = await wallet.ops
 ```ts
 const preview = await wallet.ops.mintBolt11(100, quote).asDeterministic(0).prepare();
 
-// Persist `preview` if you want to retry safely later.
+// Persist serializeMintPreview(preview) if you want to retry safely later.
 const newProofs = await wallet.completeMint(preview);
 ```
 

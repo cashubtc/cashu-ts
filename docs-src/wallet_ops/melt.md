@@ -34,7 +34,7 @@ const { quote, change } = await wallet.ops
 ```ts
 const preview = await wallet.ops.meltBolt11(meltQuote, myProofs).asDeterministic().prepare();
 
-// Persist `preview` if you want to retry safely later.
+// Persist serializeMeltPreview(preview) if you want to retry safely later.
 const { quote, change } = await wallet.completeMelt(preview);
 ```
 

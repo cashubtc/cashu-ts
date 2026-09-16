@@ -556,8 +556,24 @@ export function deriveQuoteLockKey(seed: Uint8Array, counter: number): Uint8Arra
 // @public
 export function deriveSecretAndBlindingFactor(seed: Uint8Array, keysetId: string, counter: number): DerivedSecretAndBlindingFactor;
 
+// @public
+export function deserializeBatchMintPreview(serialized: SerializedBatchMintPreview): BatchMintPreview<{
+    quote: string;
+}>;
+
+// @public
+export function deserializeMeltPreview(serialized: SerializedMeltPreview): MeltPreview<{
+    quote: string;
+    amount?: Amount;
+}>;
+
 // @public (undocumented)
 export function deserializeMintKeys(serializedMintKeys: SerializedMintKeys): RawMintKeys;
+
+// @public
+export function deserializeMintPreview(serialized: SerializedMintPreview): MintPreview<{
+    quote: string;
+}>;
 
 // @public
 export function deserializeProofs(json: string | string[] | ProofLike[]): Proof[];
@@ -2401,6 +2417,21 @@ export type SendResponse = {
 };
 
 // @public
+export function serializeBatchMintPreview(preview: BatchMintPreview<{
+    quote: string;
+}>): SerializedBatchMintPreview;
+
+// @public
+export type SerializedBatchMintPreview = {
+    method: string;
+    quotes: string[];
+    amounts: string[];
+    outputData: SerializedOutputData[];
+    signatures?: Array<string | null>;
+    legacySignatures?: Array<string | null>;
+};
+
+// @public
 export type SerializedBlindedMessage = {
     amount: Amount;
     B_: string;
@@ -2421,9 +2452,27 @@ export type SerializedDLEQ = {
     e: string;
 };
 
+// @public
+export type SerializedMeltPreview = {
+    method: string;
+    quote: string;
+    amount?: string;
+    inputs: SerializedProof[];
+    outputData: SerializedOutputData[];
+};
+
 // @public (undocumented)
 export type SerializedMintKeys = {
     [k: string]: string;
+};
+
+// @public
+export type SerializedMintPreview = {
+    method: string;
+    quote: string;
+    outputData: SerializedOutputData[];
+    signature?: string;
+    legacySignature?: string;
 };
 
 // @public
@@ -2458,8 +2507,19 @@ export type SerializedSwapPreview = {
     keepOutputs?: SerializedOutputData[];
 };
 
+// @public
+export function serializeMeltPreview(preview: MeltPreview<{
+    quote: string;
+    amount?: Amount;
+}>): SerializedMeltPreview;
+
 // @public (undocumented)
 export function serializeMintKeys(mintKeys: RawMintKeys): SerializedMintKeys;
+
+// @public
+export function serializeMintPreview(preview: MintPreview<{
+    quote: string;
+}>): SerializedMintPreview;
 
 // @public
 export function serializeNutrootLeaf(leaf: NutrootLeaf): Uint8Array;
