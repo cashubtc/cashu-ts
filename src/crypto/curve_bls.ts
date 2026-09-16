@@ -12,6 +12,7 @@ import {
 } from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
+import { bytesToUtf8 } from '../utils/bytes';
 
 import type { BlindSignature, RawBlindedMessage, UnblindedSignature } from './core';
 import { normalizeSecpPubkey } from './curve_secp';
@@ -111,8 +112,8 @@ export function isV3PointSecret(secret: string): boolean {
  * @throws {CTSError} If the secret is not a 33-byte compressed point.
  */
 export function assertV3PointSecret(secret: Uint8Array | string): void {
-  const hex =
-    typeof secret === 'string' ? secret : new TextDecoder('utf-8', { fatal: false }).decode(secret);
+  // Lossy on purpose: a U+FFFD from bad bytes fails the hex check below like any other non-hex.
+  const hex = typeof secret === 'string' ? secret : bytesToUtf8(secret);
   // Lowercase is the canonical wire form. Upper-case hex would name the same point while hashing
   // to a different `Y` here than at the mint, so the proof would look valid and behave as if it
   // were a different one. One spelling per secret, checked before the point itself.

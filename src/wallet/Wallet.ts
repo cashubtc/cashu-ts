@@ -1273,10 +1273,10 @@ class Wallet {
    * @returns Swap transaction with payload and metadata for processing signatures.
    */
   private assertUniqueOutputSecrets(outputData: OutputDataLike[]): void {
-    const decoder = new TextDecoder();
     const seenSecrets = new Set<string>();
     for (const [i, d] of outputData.entries()) {
-      const secret = decoder.decode(d.secret);
+      // Hex is a one-to-one key for the bytes; decoding is not, it merges invalid sequences.
+      const secret = bytesToHex(d.secret);
       // Report the position, never the secret: it is the spending material.
       this.failIf(seenSecrets.has(secret), `Duplicate output secret at index ${i}`, { index: i });
       seenSecrets.add(secret);
