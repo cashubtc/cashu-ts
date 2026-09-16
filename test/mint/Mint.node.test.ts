@@ -1296,6 +1296,19 @@ describe('Mint normalization', () => {
       expect(logger.warn).not.toHaveBeenCalled();
     });
 
+    it('warns once, for the mismatch, when a guaranteeing mint sends a wrong preimage', async () => {
+      const other = bytesToHex(sha256(hexToBytes('00'.repeat(31) + '01')));
+      const { mint, logger } = mintFor(paidResponse(invoiceFor(other), preimage));
+      mint.setMintInfo(guaranteeing('sat'));
+      const res = await mint.checkMeltQuoteBolt11('my-quote');
+      expect(res.payment_preimage).toBeNull();
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Mint returned a payment_preimage that does not match the invoice',
+        { op: 'bolt11 melt quote' },
+      );
+    });
+
     it('stays quiet when the guaranteed preimage is present', async () => {
       const { mint, logger } = mintFor(paidResponse(invoiceFor(paymentHash), preimage));
       mint.setMintInfo(guaranteeing('sat'));
