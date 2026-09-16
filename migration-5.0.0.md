@@ -1027,6 +1027,17 @@ CAT-protected BAT minting rejects with `CTSError: AuthManager: session changed w
 
 ---
 
+## OIDC endpoints must match the discovery scheme
+
+Every endpoint a discovery document names must be an http(s) URL, and once the discovery document
+itself has come over https, so must the endpoints it names. Previously only `authorization_endpoint`
+was checked; `token_endpoint` and `device_authorization_endpoint` were taken as given.
+
+A provider whose https discovery document points at an http endpoint now fails with
+`OIDCAuth: <endpoint> must be https when discovery is https`, at `loadConfig` for the token endpoint
+and at `deviceStart` or `buildAuthCodeUrl` for the others. Nothing changes for an http discovery
+URL, which is how local development setups run.
+
 ## `OIDCAuth.buildAuthCodeUrl` accepts only `codeChallengeMethod: 'S256'`
 
 `codeChallengeMethod` narrows from `'S256' | 'plain'` to `'S256'`. The parameter can be omitted (S256 is already the default), and `generatePKCE()` always produces an S256 challenge, so no caller following the built-in flow needs to change. A TS caller passing `'plain'` fails to compile; a plain-JS caller gets a thrown `OIDCAuth: only the S256 PKCE method is supported`.
