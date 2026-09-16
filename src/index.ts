@@ -25,9 +25,18 @@ export { type SelectProofs, selectProofsRGLI, selectProofsRotating } from './wal
 export {
   serializeSwapPreview,
   deserializeSwapPreview,
+  serializeMintPreview,
+  deserializeMintPreview,
+  serializeBatchMintPreview,
+  deserializeBatchMintPreview,
+  serializeMeltPreview,
+  deserializeMeltPreview,
   type SerializedProof,
   type SerializedSwapPreview,
-} from './wallet/SwapPreview';
+  type SerializedMintPreview,
+  type SerializedBatchMintPreview,
+  type SerializedMeltPreview,
+} from './wallet/previews';
 export { Wallet } from './wallet/Wallet';
 export { WalletCounters } from './wallet/WalletCounters';
 export { WalletEvents } from './wallet/WalletEvents';

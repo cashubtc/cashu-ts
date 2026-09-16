@@ -47,8 +47,7 @@ const preview = await wallet.prepareMint('bolt11', 64, mintQuoteChecked, undefin
   counter: 0,
 });
 
-// Persist an app-defined snapshot here if you want to retry safely later.
-// Do not call JSON.stringify(preview) directly; preview objects contain non-JSON-safe values.
+// Persist serializeMintPreview(preview) if you want to retry safely later; see the NUT-19 page.
 const proofs = await wallet.completeMint(preview);
 ```
 

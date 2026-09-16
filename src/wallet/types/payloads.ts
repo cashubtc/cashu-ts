@@ -7,7 +7,8 @@ import { type Proof } from '../../model/types/proof';
  * Preview of a mint transaction created by prepareMint.
  *
  * @remarks
- * Contains JSON-unsafe values (`bigint`, `Uint8Array`). Not intended for direct serialization.
+ * Contains JSON-unsafe values (`bigint`, `Uint8Array`); persist via `serializeMintPreview` and
+ * rehydrate with `deserializeMintPreview`.
  */
 export interface MintPreview<
   TQuote extends Pick<MintQuoteBaseResponse, 'quote'> = MintQuoteBaseResponse,
@@ -35,7 +36,8 @@ export interface MintPreview<
  * Preview of a batched mint transaction created by prepareBatchMint.
  *
  * @remarks
- * Contains JSON-unsafe values (`bigint`, `Uint8Array`). Not intended for direct serialization.
+ * Contains JSON-unsafe values (`bigint`, `Uint8Array`); persist via `serializeBatchMintPreview` and
+ * rehydrate with `deserializeBatchMintPreview`.
  */
 export interface BatchMintPreview<
   TQuote extends Pick<MintQuoteBaseResponse, 'quote' | 'pubkey'> = MintQuoteBaseResponse,
@@ -67,7 +69,8 @@ export interface BatchMintPreview<
  * Preview of a Melt transaction created by prepareMelt.
  *
  * @remarks
- * Contains JSON-unsafe values (`bigint`, `Uint8Array`). Not intended for direct serialization.
+ * Contains JSON-unsafe values (`bigint`, `Uint8Array`); persist via `serializeMeltPreview` and
+ * rehydrate with `deserializeMeltPreview`.
  */
 export interface MeltPreview<
   TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse,
