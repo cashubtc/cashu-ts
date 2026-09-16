@@ -1605,6 +1605,16 @@ class Mint {
       throw new CTSError('Invalid response from mint');
     }
     normalizeMeltPreimage(data, method, this._logger, op);
+    if (
+      method === 'bolt11' &&
+      data.state === 'PAID' &&
+      data.payment_preimage === null &&
+      this._mintInfo?.guaranteesPreimage('bolt11', data.unit as string)
+    ) {
+      this._logger.warn('Mint advertises preimage_guaranteed but returned no payment_preimage', {
+        op,
+      });
+    }
   }
 
   /**
