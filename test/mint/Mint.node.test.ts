@@ -1,3 +1,6 @@
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+import { bech32 } from '@scure/base';
 import { type Client, Server, WebSocket } from 'mock-socket';
 import { HttpResponse, http } from 'msw';
 import { setupServer } from 'msw/node';
@@ -1195,6 +1198,81 @@ describe('Mint normalization', () => {
       await expect(
         mint.melt('bolt11', undefined as unknown as Parameters<Mint['melt']>[1]),
       ).rejects.toThrow('melt: inputs must be an array of proofs');
+    });
+  });
+
+  describe('melt responses (bolt11 payment preimage)', () => {
+    const preimage = 'ab'.repeat(32);
+    const paymentHash = bytesToHex(sha256(hexToBytes(preimage)));
+    // Timestamp, one tagged field (p = payment hash, 52 words), and an unchecked signature.
+    const invoiceFor = (hashHex: string) =>
+      bech32.encode(
+        'lnbc',
+        [...new Array<number>(7).fill(0), 1, 1, 20, ...bech32.toWords(hexToBytes(hashHex))].concat(
+          new Array<number>(104).fill(0),
+        ),
+        false,
+      );
+    const paidResponse = (request: string, payment_preimage: string | null) => ({
+      quote: 'my-quote',
+      amount: 12,
+      unit: 'sat',
+      state: MeltQuoteState.PAID,
+      expiry: 123,
+      request,
+      fee_reserve: 1,
+      payment_preimage,
+    });
+    const mintFor = (payload: unknown) => {
+      const logger = createLogger();
+      return { logger, mint: new Mint(mintUrl, { customRequest: makeRequest(payload), logger }) };
+    };
+
+    it('keeps a preimage that hashes to the invoice payment hash', async () => {
+      const { mint, logger } = mintFor(paidResponse(invoiceFor(paymentHash), preimage));
+      const res = await mint.checkMeltQuoteBolt11('my-quote');
+      expect(res.payment_preimage).toBe(preimage);
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+
+    it('nulls a preimage that does not match the invoice and warns', async () => {
+      const other = '00'.repeat(31) + '01';
+      const { mint, logger } = mintFor(
+        paidResponse(invoiceFor(bytesToHex(sha256(hexToBytes(other)))), preimage),
+      );
+      const res = await mint.checkMeltQuoteBolt11('my-quote');
+      expect(res.payment_preimage).toBeNull();
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Mint returned a payment_preimage that does not match the invoice',
+        { op: 'bolt11 melt quote' },
+      );
+    });
+
+    it('leaves the preimage alone when the invoice cannot be parsed', async () => {
+      const { mint, logger } = mintFor(paidResponse('lnbc1notaninvoice', preimage));
+      const res = await mint.checkMeltQuoteBolt11('my-quote');
+      expect(res.payment_preimage).toBe(preimage);
+      expect(logger.warn).not.toHaveBeenCalled();
+      expect(logger.debug).toHaveBeenCalledWith(
+        'Melt quote request is not a parseable BOLT11 invoice',
+        expect.objectContaining({ op: 'bolt11 melt quote' }),
+      );
+    });
+
+    it('does not check bolt12 quotes, whose request is an offer', async () => {
+      const { mint, logger } = mintFor({
+        ...paidResponse('lno1offer', preimage),
+        request: 'lno1offer',
+      });
+      const res = await mint.checkMeltQuoteBolt12('my-quote');
+      expect(res.payment_preimage).toBe(preimage);
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+
+    it('leaves the preimage alone when an execution response omits the request', async () => {
+      const { mint } = mintFor({ ...paidResponse('', preimage), request: undefined });
+      const res = await mint.meltBolt11({ quote: 'my-quote', inputs: [], outputs: [] });
+      expect(res.payment_preimage).toBe(preimage);
     });
   });
 

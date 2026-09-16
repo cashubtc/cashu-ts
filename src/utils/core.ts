@@ -1,5 +1,6 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
+import { bech32 } from '@scure/base';
 
 import {
   type G1Point,
@@ -1524,4 +1525,53 @@ export function bolt11AmountMsat(pr: string): bigint | null {
     return n / 10n;
   }
   return n * MULTIPLIER_MSAT[multiplier];
+}
+
+/**
+ * Reads the payment hash from a BOLT11 invoice's tagged fields, as lowercase hex.
+ *
+ * @remarks
+ * Bech32 checksum only, no signature check: that is the payer's job.
+ * @throws If the string is not a BOLT11 invoice or carries no payment hash.
+ * @internal
+ */
+export function bolt11PaymentHash(pr: string): string {
+  if (typeof pr !== 'string') throw new CTSError('BOLT11 invoice must be a string');
+  let words: number[];
+  try {
+    ({ words } = bech32.decode(pr.toLowerCase(), false));
+  } catch (e) {
+    throw new CTSError('Invalid BOLT11 invoice', { cause: e });
+  }
+  // BOLT 11: a 7-word timestamp, then tagged fields (type, 10-bit length, data), then a
+  // 104-word signature. The payment hash is type 1, 52 words.
+  const end = words.length - 104;
+  for (let i = 7; i + 3 <= end;) {
+    const type = words[i];
+    const len = (words[i + 1] << 5) | words[i + 2];
+    const next = i + 3 + len;
+    if (next > end) break;
+    if (type === 1 && len === 52) {
+      try {
+        return bytesToHex(bech32.fromWords(words.slice(i + 3, next)));
+      } catch (e) {
+        throw new CTSError('Invalid BOLT11 payment hash', { cause: e });
+      }
+    }
+    i = next;
+  }
+  throw new CTSError('BOLT11 invoice has no payment hash');
+}
+
+/**
+ * Whether a hex preimage hashes to a BOLT11 invoice's payment hash.
+ *
+ * @throws If the invoice cannot be parsed; a malformed preimage is simply false.
+ * @internal
+ */
+export function bolt11PreimageMatches(pr: string, preimage: string): boolean {
+  const paymentHash = bolt11PaymentHash(pr);
+  return (
+    /^[0-9a-fA-F]{64}$/.test(preimage) && bytesToHex(sha256(hexToBytes(preimage))) === paymentHash
+  );
 }
