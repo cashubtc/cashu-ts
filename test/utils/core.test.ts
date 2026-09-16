@@ -950,7 +950,7 @@ describe('getDecodedTokenBinary short keyset ID resolution', () => {
   test('throws when a short keyset ID has no keysets to map to', () => {
     const bytes = encodeRawBinaryToken(hexToBytes(fullV2Id.slice(0, 16)));
     expect(() => utils.getDecodedTokenBinary(bytes, [])).toThrow(
-      /Short keyset ID .* cannot be resolved/,
+      /short keyset ID v2 was encountered, but got no keysets/,
     );
   });
 
