@@ -28,6 +28,30 @@ wallet2.loadMintFromCache(mintInfoCache, keychainCache);
 
 > ⚠️ **Server-side usage:** If you construct a `Wallet` (or `Mint`) using a URL from untrusted input (e.g. a received token), validate the mint URL against your own trusted-mint allowlist **before** passing it in. The library validates URL structure but cannot know which mints your application trusts.
 
+## Transport policy
+
+cashu-ts does not enforce a transport policy. It accepts `http:` mint and identity-provider URLs,
+follows redirects on bodiless GETs, and does not know which networks are private, because Tor, LAN
+and local-development mints are legitimate. A server-side consumer that needs such a policy applies
+it itself, at the seams 4.x offers:
+
+- Require `https:` and an allowlisted host when validating the mint URL, before constructing the
+  `Wallet` (see the warning above). A NUT-21 `openid_discovery` URL deserves the same check.
+- Set `redirect: 'error'` process-wide with `setGlobalRequestOptions`; the library already forces
+  it on requests that carry a body or an auth header.
+- For egress control, replace the request pipeline with `customRequest`, or apply the rule at the
+  socket layer (for example undici's `connect` hook), where the resolved address is known and a
+  hostname check is not fooled by DNS.
+
+```typescript
+import { setGlobalRequestOptions } from '@cashu/cashu-ts';
+
+setGlobalRequestOptions({ redirect: 'error' });
+```
+
+Retries after a 5xx on NUT-19 cached endpoints are deliberate, see
+[NUT-19 Cached Responses](./nut19.md): they replay an idempotent request, never a fresh one.
+
 ## Auth state and application sessions
 
 `createAuthWallet` connects one `AuthManager` and `OIDCAuth` to a mint and wallet. The manager owns the CAT record and BAT pool; your app owns account selection, login flow lifetime, and persistence. Keep separate managers and persisted BAT pools for separate application accounts.
