@@ -1575,6 +1575,26 @@ describe('output secret uniqueness (NUT-10)', () => {
     ).toThrow(/Duplicate output secret/);
   });
 
+  test('tells apart binary secrets that decode to the same lossy string', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const keyset = wallet.keyChain.getKeyset(wallet.keysetId);
+    // Both are invalid UTF-8 and read as U+FFFD U+FFFD; only the bytes tell them apart.
+    const output = (secret: number[]) =>
+      new OutputData(
+        { amount: Amount.from(1), B_: '02'.padEnd(66, 'a'), id: keyset.id },
+        1n,
+        new Uint8Array(secret),
+      );
+    expect(() =>
+      (wallet as unknown as { createOutputData: (...a: unknown[]) => unknown }).createOutputData(
+        Amount.from(2),
+        keyset,
+        { type: 'custom', data: [output([0xc0, 0x80]), output([0xc1, 0x80])] },
+      ),
+    ).not.toThrow();
+  });
+
   test('rejects a secret shared between a send output and a keep output', async () => {
     // Send and keep are generated separately; the guard has to see them together, or the
     // collision reaches the mint, gets signed twice, and burns one output on the first spend.

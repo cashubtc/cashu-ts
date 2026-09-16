@@ -169,6 +169,7 @@ export async function readBodyText(
       bytes.set(result.value, received);
       received = nextReceived;
     }
+    // eslint-disable-next-line no-restricted-syntax -- body text doubles as error text; JSON is parsed strictly later
     return new TextDecoder('utf-8').decode(bytes.subarray(0, received));
   } finally {
     if (onAbort) signal?.removeEventListener('abort', onAbort);

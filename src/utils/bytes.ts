@@ -4,6 +4,7 @@ import { CTSError } from '../model/Errors';
 
 import { U64_MAX } from './limits';
 
+// eslint-disable-next-line no-restricted-syntax -- this module owns the decoders
 const utf8Decoder = new TextDecoder('utf-8');
 
 /**
@@ -18,6 +19,7 @@ export function bytesToUtf8(bytes: Uint8Array): string {
   return utf8Decoder.decode(bytes);
 }
 
+// eslint-disable-next-line no-restricted-syntax -- this module owns the decoders
 const fieldUtf8Decoder = new TextDecoder('utf-8', { ignoreBOM: true, fatal: true });
 
 /**
@@ -36,6 +38,7 @@ export function decodeUtf8Field(bytes: Uint8Array): string {
   }
 }
 
+// eslint-disable-next-line no-restricted-syntax -- this module owns the decoders
 const documentUtf8Decoder = new TextDecoder('utf-8', { fatal: true });
 
 /**

@@ -95,6 +95,11 @@ export default tseslint.config(
           selector: 'ThrowStatement > NewExpression[callee.name="Error"]',
           message: 'Throw a CTSError (or a subclass) so callers can tell library errors apart.',
         },
+        {
+          selector: 'NewExpression[callee.name="TextDecoder"]',
+          message:
+            'Use decodeUtf8Field or decodeUtf8Document from utils/bytes, or eslint-disable with a reason.',
+        },
       ],
       // Keep imports grouped and alphabetized within groups
       'import/order': [

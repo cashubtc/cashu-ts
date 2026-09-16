@@ -112,6 +112,7 @@ export function isV3PointSecret(secret: string): boolean {
  */
 export function assertV3PointSecret(secret: Uint8Array | string): void {
   const hex =
+    // eslint-disable-next-line no-restricted-syntax -- lossy on purpose: the hex check below rejects any U+FFFD
     typeof secret === 'string' ? secret : new TextDecoder('utf-8', { fatal: false }).decode(secret);
   // Lowercase is the canonical wire form. Upper-case hex would name the same point while hashing
   // to a different `Y` here than at the mint, so the proof would look valid and behave as if it

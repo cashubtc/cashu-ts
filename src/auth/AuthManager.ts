@@ -27,6 +27,7 @@ import {
   normalizeSafeIntegerMetadata,
   verifyProofsForReceive,
 } from '../utils';
+import { decodeUtf8Document } from '../utils/bytes';
 import { KeyChain, type Keyset } from '../wallet';
 
 import type { AuthProvider } from './AuthProvider';
@@ -400,7 +401,7 @@ export class AuthManager implements AuthProvider {
     const parts = token.split('.');
     if (parts.length !== 3) return;
     try {
-      const jsonStr = new TextDecoder('utf-8').decode(decodeBase64UrlToUint8(parts[1]));
+      const jsonStr = decodeUtf8Document(decodeBase64UrlToUint8(parts[1]));
       const obj = JSON.parse(jsonStr) as { exp?: unknown };
       const exp = typeof obj.exp === 'number' ? obj.exp : Number(obj.exp);
       if (Number.isFinite(exp) && exp > 0) return exp;
