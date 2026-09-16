@@ -889,10 +889,9 @@ export function getEncodedTokenBinary(token: Token): Uint8Array {
  * @returns Cashu token object.
  */
 export function getDecodedTokenBinary(bytes: Uint8Array, keysetIds?: readonly string[]): Token {
-  const utfDecoder = new TextDecoder();
-  const prefix = utfDecoder.decode(bytes.slice(0, 4));
-  const version = utfDecoder.decode(new Uint8Array([bytes[4]]));
-  if (prefix !== 'craw' || version !== 'B') {
+  // 'craw' + 'B' as bytes; no decoding needed for a fixed ASCII magic.
+  const magic = [0x63, 0x72, 0x61, 0x77, 0x42];
+  if (bytes.length < 5 || magic.some((b, i) => bytes[i] !== b)) {
     throw new CTSError('not a valid binary token');
   }
   const binaryToken = bytes.slice(5);
