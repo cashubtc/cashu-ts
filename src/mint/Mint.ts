@@ -48,6 +48,7 @@ import request, {
   type ResponseMeta,
 } from '../transport';
 import {
+  bolt11PreimageMatches,
   isObj,
   isRecord,
   joinUrls,
@@ -1520,7 +1521,7 @@ class Mint {
     }
     this.normalizeMeltBaseFields(data, op);
     if (method === 'bolt11' || method === 'bolt12') {
-      this.normalizeMeltBoltFields(data, op, execution);
+      this.normalizeMeltBoltFields(data, method, op, execution);
     } else if (method === 'onchain') {
       this.normalizeMeltOnchainFields(data, execution);
     }
@@ -1569,6 +1570,7 @@ class Mint {
    */
   private normalizeMeltBoltFields(
     data: Record<string, unknown>,
+    method: string,
     op: string,
     execution: boolean,
   ): void {
@@ -1589,6 +1591,32 @@ class Mint {
     // until the invoice is paid; coerce undefined → null so consumers can
     // rely on `payment_preimage === null` checks.
     nullIfUndefined(data, 'payment_preimage');
+    if (
+      method === 'bolt11' &&
+      typeof data.payment_preimage === 'string' &&
+      typeof data.request === 'string'
+    ) {
+      data.payment_preimage = this.verifiedPreimage(data.request, data.payment_preimage, op);
+    }
+  }
+
+  /**
+   * Keeps a supplied bolt11 preimage only if it hashes to the invoice's payment hash.
+   *
+   * @remarks
+   * An invoice that cannot be parsed leaves the preimage as supplied.
+   */
+  private verifiedPreimage(request: string, preimage: string, op: string): string | null {
+    let valid: boolean;
+    try {
+      valid = bolt11PreimageMatches(request, preimage);
+    } catch (err) {
+      this._logger.debug('Melt quote request is not a parseable BOLT11 invoice', { op, err });
+      return preimage;
+    }
+    if (valid) return preimage;
+    this._logger.warn('Mint returned a payment_preimage that does not match the invoice', { op });
+    return null;
   }
 
   /**
