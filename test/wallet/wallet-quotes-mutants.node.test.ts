@@ -1226,9 +1226,9 @@ describe('prepareMint mutants', () => {
           quote: 'nulled',
           request: 'lnbc10u1pfake',
           unit,
-          amount: 1000,
+          amount: 8,
           state: MintQuoteState.PAID,
-          amount_paid: 1000,
+          amount_paid: 8,
           amount_issued: 0,
           expiry: null,
         }),
@@ -1238,7 +1238,7 @@ describe('prepareMint mutants', () => {
     await wallet.loadMint();
 
     // A replayed wire body can carry nulls; that is as good as absent, so read the quote.
-    const preview = await wallet.prepareMint('bolt11', 1000, {
+    const preview = await wallet.prepareMint('bolt11', 8, {
       quote: 'nulled',
       unit,
       amount_paid: null,
@@ -1254,9 +1254,9 @@ describe('prepareMint mutants', () => {
           quote: 'kept',
           request: 'lnbc10u1pfake',
           unit,
-          amount: 1000,
+          amount: 8,
           state: MintQuoteState.PAID,
-          amount_paid: 1000,
+          amount_paid: 8,
           amount_issued: 0,
           expiry: null,
         }),
@@ -1265,7 +1265,7 @@ describe('prepareMint mutants', () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
 
-    const preview = await wallet.prepareMint('bolt11', 1000, {
+    const preview = await wallet.prepareMint('bolt11', 8, {
       quote: 'kept',
       localRef: 'app-state',
     } as unknown as { quote: string });
@@ -1273,7 +1273,7 @@ describe('prepareMint mutants', () => {
     // The app's own field survives; the mint supplies everything it sent.
     const resolved = preview.quote as unknown as { localRef: string; amount_paid: Amount };
     expect(resolved.localRef).toBe('app-state');
-    expect(resolved.amount_paid.equals(1000)).toBe(true);
+    expect(resolved.amount_paid.equals(8)).toBe(true);
   });
 
   test('rejects an entry whose quote object carries no id', async () => {
