@@ -5,6 +5,9 @@
  * You should ordinarily not need to instantiate a Mint, as it will be auto-instantiated by the
  * Wallet class when you pass in the mint url.
  */
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+
 import type { AuthProvider } from '../auth/AuthProvider';
 import { OIDCAuth, type OIDCAuthOptions } from '../auth/OIDCAuth';
 import { type Logger, NULL_LOGGER, failIf } from '../logger';
@@ -51,6 +54,7 @@ import request, {
   type ResponseMeta,
 } from '../transport';
 import {
+  bolt11PaymentHash,
   isObj,
   isRecord,
   joinUrls,
@@ -1567,7 +1571,7 @@ class Mint {
     }
     this.normalizeMeltBaseFields(data, method, op, execution);
     if (method === 'bolt11' || method === 'bolt12') {
-      this.normalizeMeltBoltFields(data, op, execution);
+      this.normalizeMeltBoltFields(data, method, op, execution);
     } else if (method === 'onchain') {
       this.normalizeMeltOnchainFields(data, execution);
     }
@@ -1632,6 +1636,7 @@ class Mint {
    */
   private normalizeMeltBoltFields(
     data: Record<string, unknown>,
+    method: string,
     op: string,
     execution: boolean,
   ): void {
@@ -1646,6 +1651,37 @@ class Mint {
     // until the invoice is paid; coerce undefined → null so consumers can
     // rely on `payment_preimage === null` checks.
     nullIfUndefined(data, 'payment_preimage');
+    if (
+      method === 'bolt11' &&
+      typeof data.payment_preimage === 'string' &&
+      typeof data.request === 'string'
+    ) {
+      data.payment_preimage = this.verifiedPreimage(data.request, data.payment_preimage, op);
+    }
+  }
+
+  /**
+   * Keeps a supplied bolt11 preimage only if it hashes to the invoice's payment hash.
+   *
+   * @remarks
+   * An all-zero preimage is a backend placeholder, not a preimage, and becomes null quietly. An
+   * invoice that cannot be parsed leaves the preimage as supplied.
+   */
+  private verifiedPreimage(request: string, preimage: string, op: string): string | null {
+    if (/^0{64}$/.test(preimage)) return null;
+    let paymentHash: string;
+    try {
+      paymentHash = bolt11PaymentHash(request);
+    } catch (err) {
+      this._logger.debug('Melt quote request is not a parseable BOLT11 invoice', { op, err });
+      return preimage;
+    }
+    const valid =
+      /^[0-9a-fA-F]{64}$/.test(preimage) &&
+      bytesToHex(sha256(hexToBytes(preimage))) === paymentHash;
+    if (valid) return preimage;
+    this._logger.warn('Mint returned a payment_preimage that does not match the invoice', { op });
+    return null;
   }
 
   /**
