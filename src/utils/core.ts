@@ -634,6 +634,8 @@ export type DeriveKeysetIdOptions = {
   isDeprecatedBase64?: boolean;
 };
 
+const KEYSET_UNIT_RE = /^[a-z0-9_-]+$/;
+
 /**
  * Returns the keyset id of a set of keys.
  *
@@ -685,7 +687,11 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
       if (!unit) {
         throw new CTSError(`Cannot compute keyset ID version 01: unit is required.`);
       }
-      // Per NUT-02 V2: pubkey hex and unit string MUST be lowercased in the preimage.
+      // Per NUT-02 V2: pubkey hex and unit string MUST be lowercased in the preimage, and the
+      // unit shares V3's alphabet so it cannot collide with the metadata fields that follow it.
+      if (!KEYSET_UNIT_RE.test(unit.toLowerCase())) {
+        throw new CTSError(`Invalid keyset unit: ${unit}`);
+      }
       const sortedEntries = Object.entries(keys).sort(([amountA], [amountB]) =>
         Amount.from(amountA).compareTo(amountB),
       );
@@ -710,7 +716,7 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
       }
       // Per NUT-02 V3: length-framed preimage over raw bytes; unit MUST match
       // [a-z0-9_-]+ and final_expiry is not committed to the id.
-      if (!/^[a-z0-9_-]+$/.test(unit)) {
+      if (!KEYSET_UNIT_RE.test(unit)) {
         throw new CTSError(`Invalid keyset unit: ${unit}`);
       }
       const sortedEntries = Object.entries(keys).sort(([amountA], [amountB]) =>
