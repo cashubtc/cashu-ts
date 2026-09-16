@@ -7,6 +7,7 @@ import {
   RateLimitError,
 } from '../model/Errors';
 import { type Nut19Policy } from '../model/types';
+import { bytesToUtf8 } from '../utils/bytes';
 import { JSONInt } from '../utils/JSONInt';
 import { DEFAULT_MAX_RESPONSE_BYTES } from '../utils/limits';
 
@@ -169,8 +170,8 @@ export async function readBodyText(
       bytes.set(result.value, received);
       received = nextReceived;
     }
-    // eslint-disable-next-line no-restricted-syntax -- body text doubles as error text; JSON is parsed strictly later
-    return new TextDecoder('utf-8').decode(bytes.subarray(0, received));
+    // Lossy like response.text() above: the body doubles as error text, and JSON is parsed strictly later.
+    return bytesToUtf8(bytes.subarray(0, received));
   } finally {
     if (onAbort) signal?.removeEventListener('abort', onAbort);
     reader.cancel().catch(() => undefined); // release the connection; no-op if already closed
