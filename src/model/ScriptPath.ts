@@ -16,7 +16,12 @@ import {
   type NutrootLeaf,
   verifyNutrootCommitment,
 } from '../crypto/nutroot';
-import { digestForPayload, inputsForPayload, proofInputContextKey } from '../crypto/transcript';
+import {
+  digestForPayload,
+  inputsForPayload,
+  proofInputContextKey,
+  meltOutputAmount,
+} from '../crypto/transcript';
 import {
   bytesToHex,
   bytesToUtf8,
@@ -93,7 +98,8 @@ export type ScriptPathSigningPackage = {
   inputs: Array<Pick<Proof, 'amount' | 'id' | 'secret' | 'C'>>;
   outputs: SerializedBlindedMessage[];
   /**
-   * Melt quote amount, needed to reproduce the digest; melt packages only.
+   * The melt output's amount, quote amount plus the selected fee reserve (NUT-10); needed to
+   * reproduce the digest. Melt packages only.
    */
   quoteAmount?: bigint;
   spends: ScriptPathSpendRequest[];
@@ -231,13 +237,14 @@ function extractSwapPackage(
 function extractMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'amount'>>(
   preview: MeltPreview<TQuote>,
   plans: ScriptPathPlan[],
+  feeIndex?: number,
 ): ScriptPathSigningPackage {
   return buildPackage(
     'melt',
     preview.inputs,
     preview.outputData.map((d) => d.blindedMessage),
     plans,
-    { quoteId: preview.quote.quote, amount: Amount.from(preview.quote.amount).toBigInt() },
+    { quoteId: preview.quote.quote, amount: meltOutputAmount(preview.quote, feeIndex).toBigInt() },
   );
 }
 
@@ -468,6 +475,7 @@ export type ScriptPathApi = {
   extractMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'amount'>>(
     preview: MeltPreview<TQuote>,
     plans: ScriptPathPlan[],
+    feeIndex?: number,
   ): ScriptPathSigningPackage;
   /**
    * Serializes a package to its `nutspA...` transport string.

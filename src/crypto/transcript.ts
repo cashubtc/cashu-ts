@@ -279,6 +279,32 @@ type PayloadShape = {
 };
 
 /**
+ * The melt quote output's amount (NUT-10): the quote's `amount` plus the fee reserve the request
+ * selects.
+ *
+ * @remarks
+ * A quote offering `fee_options` (NUT-30) needs the request's `feeIndex`; any other quote carries
+ * one reserve, or none. The mint derives the same value from its own quote state.
+ */
+export function meltOutputAmount(quote: MeltOutputAmountSource, feeIndex?: number): Amount {
+  const amount = Amount.from(quote.amount);
+  if (quote.fee_options?.length) {
+    const option = quote.fee_options.find((o) => o.fee_index === feeIndex);
+    if (!option) {
+      throw new CTSError('A melt quote with fee options needs the selected feeIndex');
+    }
+    return amount.add(Amount.from(option.fee_reserve));
+  }
+  return amount.add(Amount.from(quote.fee_reserve ?? 0));
+}
+
+type MeltOutputAmountSource = {
+  amount: AmountLike;
+  fee_reserve?: AmountLike;
+  fee_options?: Array<{ fee_index: number; fee_reserve: AmountLike }>;
+};
+
+/**
  * {@link transactionDigest} over payload wire shapes: proofs, quotes and blinded messages as the
  * request carries them, amounts in any {@link AmountLike} form.
  */

@@ -16,6 +16,7 @@ import {
   transactionInputs,
   verifyTransactionInputWitness,
   type TransactionShape,
+  meltOutputAmount,
 } from '../../src/crypto/transcript';
 import { Amount } from '../../src/model/Amount';
 import vectors from '../vectors/nutroot-v3.json';
@@ -286,6 +287,24 @@ describe('transaction transcript (vectors)', () => {
     expect(proofs.get(proofInputContextKey(legacy))!.digest).not.toEqual(
       proofs.get(proofInputContextKey(v3))!.digest,
     );
+  });
+});
+
+describe('meltOutputAmount', () => {
+  test('is the amount plus the fee reserve the request selects', () => {
+    expect(meltOutputAmount({ amount: 10, fee_reserve: 2 }).toBigInt()).toBe(12n);
+    expect(meltOutputAmount({ amount: 10 }).toBigInt()).toBe(10n);
+    const onchain = {
+      amount: 10,
+      fee_options: [
+        { fee_index: 0, fee_reserve: 2 },
+        { fee_index: 1, fee_reserve: 50 },
+      ],
+    };
+    expect(meltOutputAmount(onchain, 0).toBigInt()).toBe(12n);
+    expect(meltOutputAmount(onchain, 1).toBigInt()).toBe(60n);
+    expect(() => meltOutputAmount(onchain)).toThrow(/feeIndex/);
+    expect(() => meltOutputAmount(onchain, 2)).toThrow(/feeIndex/);
   });
 });
 
