@@ -1248,13 +1248,6 @@ describe('Mint normalization', () => {
       );
     });
 
-    it('nulls an all-zero placeholder preimage without warning', async () => {
-      const { mint, logger } = mintFor(paidResponse(invoiceFor(paymentHash), '0'.repeat(64)));
-      const res = await mint.checkMeltQuoteBolt11('my-quote');
-      expect(res.payment_preimage).toBeNull();
-      expect(logger.warn).not.toHaveBeenCalled();
-    });
-
     it('leaves the preimage alone when the invoice cannot be parsed', async () => {
       const { mint, logger } = mintFor(paidResponse('lnbc1notaninvoice', preimage));
       const res = await mint.checkMeltQuoteBolt11('my-quote');

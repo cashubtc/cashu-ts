@@ -1661,11 +1661,9 @@ class Mint {
    * Keeps a supplied bolt11 preimage only if it hashes to the invoice's payment hash.
    *
    * @remarks
-   * An all-zero preimage is a backend placeholder, not a preimage, and becomes null quietly. An
-   * invoice that cannot be parsed leaves the preimage as supplied.
+   * An invoice that cannot be parsed leaves the preimage as supplied.
    */
   private verifiedPreimage(request: string, preimage: string, op: string): string | null {
-    if (/^0{64}$/.test(preimage)) return null;
     let valid: boolean;
     try {
       valid = bolt11PreimageMatches(request, preimage);
