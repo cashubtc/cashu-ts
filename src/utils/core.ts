@@ -1407,8 +1407,13 @@ export function getEncodedTokenBinary(token: Token): Uint8Array {
 
 /**
  * Decodes a raw binary token (`craw` + `B` + CBOR) into a {@link Token}.
+ *
+ * @param bytes The encoded binary token.
+ * @param keysetIds Array of full keyset ID strings, eg: from `KeyChain.getAllKeysetIds()`. When
+ *   provided, short keyset IDs are mapped to their full form like {@link getDecodedToken} does.
+ * @returns Cashu token object.
  */
-export function getDecodedTokenBinary(bytes: Uint8Array): Token {
+export function getDecodedTokenBinary(bytes: Uint8Array, keysetIds?: readonly string[]): Token {
   const utfDecoder = new TextDecoder();
   const prefix = utfDecoder.decode(bytes.slice(0, 4));
   const version = utfDecoder.decode(new Uint8Array([bytes[4]]));
@@ -1417,7 +1422,11 @@ export function getDecodedTokenBinary(bytes: Uint8Array): Token {
   }
   const binaryToken = bytes.slice(5);
   const decoded = decodeCBOR(binaryToken) as TokenV4Template;
-  return fromV4CborTemplate(decoded);
+  const token = fromV4CborTemplate(decoded);
+  if (Array.isArray(keysetIds)) {
+    token.proofs = mapShortKeysetIds(token.proofs, keysetIds);
+  }
+  return token;
 }
 
 function removePrefix(token: string): string {
