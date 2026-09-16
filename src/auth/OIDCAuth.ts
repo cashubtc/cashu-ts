@@ -54,7 +54,7 @@ export type OIDCAuthOptions = {
  * @remarks
  * Guards against a `javascript:`/`data:` endpoint that the client would navigate to or open.
  */
-function assertHttpUrl(url: string, label: string): void {
+function assertHttpUrl(url: string, label: string): string {
   let protocol: string;
   try {
     protocol = new URL(url).protocol;
@@ -64,10 +64,12 @@ function assertHttpUrl(url: string, label: string): void {
   if (protocol !== 'https:' && protocol !== 'http:') {
     throw new CTSError(`OIDCAuth: ${label} must be an http(s) URL`);
   }
+  return protocol;
 }
 
 export class OIDCAuth {
   private readonly discoveryUrl: string;
+  private readonly secureDiscovery: boolean;
   private readonly logger: Logger;
 
   private clientId: string;
@@ -99,6 +101,7 @@ export class OIDCAuth {
 
   constructor(discoveryUrl: string, opts?: OIDCAuthOptions) {
     this.discoveryUrl = discoveryUrl;
+    this.secureDiscovery = discoveryUrl.startsWith('https:');
     this.logger = opts?.logger ?? NULL_LOGGER;
     this.clientId = opts?.clientId ?? 'cashu-client';
     this.scope = opts?.scope ?? 'openid';
@@ -151,8 +154,24 @@ export class OIDCAuth {
     if (typeof cfg.token_endpoint !== 'string' || cfg.token_endpoint.length === 0) {
       throw new CTSError('OIDCAuth: invalid discovery document, missing token_endpoint');
     }
+    this.assertEndpoint(cfg.token_endpoint, 'token_endpoint');
     this.config = cfg;
     return cfg;
+  }
+
+  /**
+   * Assert a discovery endpoint is http(s); warn when discovery was https and the endpoint is not.
+   *
+   * @remarks
+   * Cashu-ts v5 rejects the https-to-http case instead of warning.
+   */
+  private assertEndpoint(url: string, label: string): void {
+    const protocol = assertHttpUrl(url, label);
+    if (this.secureDiscovery && protocol !== 'https:') {
+      this.logger.warn(`OIDCAuth: ${label} is not https although discovery is; v5 rejects this`, {
+        label,
+      });
+    }
   }
 
   // --- Authorization Code with PKCE ---
@@ -208,7 +227,7 @@ export class OIDCAuth {
     if (!cfg.authorization_endpoint) {
       throw new CTSError('OIDCAuth: discovery lacks authorization_endpoint');
     }
-    assertHttpUrl(cfg.authorization_endpoint, 'authorization_endpoint');
+    this.assertEndpoint(cfg.authorization_endpoint, 'authorization_endpoint');
     return `${cfg.authorization_endpoint}?${params.toString()}`;
   }
 
@@ -235,6 +254,7 @@ export class OIDCAuth {
     const cfg = await this.loadConfig();
     const ep = cfg.device_authorization_endpoint;
     if (!ep) throw new CTSError('OIDCAuth: provider lacks device_authorization_endpoint');
+    this.assertEndpoint(ep, 'device_authorization_endpoint');
 
     const form = this.toForm({ client_id: this.clientId, scope: this.scope });
     const res = await this.postFormStrict<DeviceStartResponse>(ep, form);

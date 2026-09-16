@@ -1121,3 +1121,91 @@ describe('OIDCAuth: request policy', () => {
     expect(warn).not.toHaveBeenCalled();
   });
 });
+
+// ---------- endpoint schemes ----------
+describe('OIDCAuth: endpoint schemes', () => {
+  const SECURE_BASE = 'https://oidc.local';
+  const SECURE_DISCOVERY = `${SECURE_BASE}/.well-known/openid-configuration`;
+  const secureDiscovery: OIDCConfig = {
+    issuer: ISSUER,
+    token_endpoint: `${SECURE_BASE}/token`,
+    device_authorization_endpoint: `${SECURE_BASE}/device`,
+    authorization_endpoint: `${SECURE_BASE}/auth`,
+  };
+  const spyLogger = () => ({ ...NULL_LOGGER, warn: vi.fn() });
+
+  test('loadConfig rejects a token_endpoint that is not http(s)', async () => {
+    server.use(
+      http.get(DISCOVERY, () =>
+        HttpResponse.json({ ...goodDiscovery, token_endpoint: 'javascript:alert(1)' }),
+      ),
+    );
+    await expect(new OIDCAuth(DISCOVERY).loadConfig()).rejects.toThrow(
+      'OIDCAuth: token_endpoint must be an http(s) URL',
+    );
+  });
+
+  test('deviceStart refuses a device endpoint that is not http(s)', async () => {
+    server.use(
+      http.get(DISCOVERY, () =>
+        HttpResponse.json({ ...goodDiscovery, device_authorization_endpoint: 'ftp://x' }),
+      ),
+    );
+    const oidc = new OIDCAuth(DISCOVERY, { clientId: 'cashu-client' });
+    await expect(oidc.deviceStart()).rejects.toThrow(
+      'OIDCAuth: device_authorization_endpoint must be an http(s) URL',
+    );
+  });
+
+  test('an https discovery document naming an http token_endpoint loads with a warning', async () => {
+    server.use(
+      http.get(SECURE_DISCOVERY, () =>
+        HttpResponse.json({ ...secureDiscovery, token_endpoint: TOKEN_EP }),
+      ),
+    );
+    const logger = spyLogger();
+    const cfg = await new OIDCAuth(SECURE_DISCOVERY, { logger }).loadConfig();
+    expect(cfg.token_endpoint).toBe(TOKEN_EP);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'OIDCAuth: token_endpoint is not https although discovery is; v5 rejects this',
+      { label: 'token_endpoint' },
+    );
+  });
+
+  test('an https discovery document with https endpoints loads quietly', async () => {
+    server.use(http.get(SECURE_DISCOVERY, () => HttpResponse.json(secureDiscovery)));
+    const logger = spyLogger();
+    const cfg = await new OIDCAuth(SECURE_DISCOVERY, { logger }).loadConfig();
+    expect(cfg.token_endpoint).toBe(`${SECURE_BASE}/token`);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  test('deviceStart and buildAuthCodeUrl warn on an http endpoint named by https discovery', async () => {
+    server.use(
+      http.get(SECURE_DISCOVERY, () =>
+        HttpResponse.json({
+          ...secureDiscovery,
+          device_authorization_endpoint: DEVICE_EP,
+          authorization_endpoint: AUTH_EP,
+        }),
+      ),
+      http.post(DEVICE_EP, () =>
+        HttpResponse.json({
+          device_code: 'dev-123',
+          user_code: 'UCODE-123',
+          verification_uri: `${ISSUER}/device`,
+          interval: 2,
+          expires_in: 600,
+        }),
+      ),
+    );
+    const logger = spyLogger();
+    const oidc = new OIDCAuth(SECURE_DISCOVERY, { clientId: 'cashu-client', logger });
+    await oidc.deviceStart();
+    await oidc.buildAuthCodeUrl({ redirectUri: 'http://localhost/cb', codeChallenge: 'c' });
+    expect(logger.warn.mock.calls.map((c) => c[1])).toEqual([
+      { label: 'device_authorization_endpoint' },
+      { label: 'authorization_endpoint' },
+    ]);
+  });
+});
