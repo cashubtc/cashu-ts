@@ -67,6 +67,32 @@ const { wallet, oidc } = await createAuthWallet('http://localhost:3338', {
 });
 ```
 
+### Transport policy
+
+cashu-ts does not enforce a transport policy. It accepts `http:` mint and identity-provider URLs,
+follows redirects on bodiless GETs, and does not know which networks are private, because Tor, LAN
+and local-development mints are legitimate. A server-side consumer that needs such a policy applies
+it in the fetch it passes in, once, and hands the same fetch to every entry point.
+
+```typescript
+import { createAuthWallet, setGlobalRequestOptions, type RequestFetch } from '@cashu/cashu-ts';
+
+const policyFetch: RequestFetch = (input, init) => {
+  const url = new URL(typeof input === 'string' ? input : input.url);
+  if (url.protocol !== 'https:') throw new Error(`refusing ${url.protocol} transport`);
+  if (isPrivateHost(url.hostname)) throw new Error(`refusing private target ${url.hostname}`);
+  return fetch(input, { ...init, redirect: 'error' });
+};
+
+setGlobalRequestOptions({ fetch: policyFetch });
+const { wallet } = await createAuthWallet(mintUrl, { oidc: { fetch: policyFetch } });
+```
+
+`isPrivateHost` is yours to define. A hostname check cannot see what DNS resolves to, so a strict
+egress policy belongs at the socket layer (for example undici's `connect` hook), where the resolved
+address is known. Retries after a 5xx on NUT-19 cached endpoints are deliberate, see
+[NUT-19 Cached Responses](./nut19.md): they replay an idempotent request, never a fresh one.
+
 ## Auth state and application sessions
 
 `createAuthWallet` connects one `AuthManager` and `OIDCAuth` to a mint and wallet. The manager owns the CAT record and BAT pool; your app owns account selection, login flow lifetime, and persistence. Keep separate managers and persisted BAT pools for separate application accounts.
