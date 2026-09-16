@@ -1,4 +1,6 @@
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bech32 } from '@scure/base';
 import { test, describe, expect } from 'vitest';
 
 import { Amount, type MintKeys, type Keys, type Proof, type Token, Keyset } from '../../src';
@@ -1598,5 +1600,62 @@ describe('normalizeMintUrl', () => {
   });
   test('lowercases hostname', () => {
     expect(normalizeMintUrl('https://Mint.Example.COM')).toBe('https://mint.example.com');
+  });
+});
+
+describe('bolt11PaymentHash', () => {
+  // BOLT 11 test vector: "Please consider supporting this project", payment hash 0001..0102.
+  const VECTOR =
+    'lnbc1pvjluezsp5zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygspp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqdpl2pkx2ctnv5sxxmmwwd5kgetjypeh2ursdae8g6twvus8g6rfwvs8qun0dfjkxaq9qrsgq357wnc5r2ueh7ck6q93dj32dlqnls087fxdwk8qakdyafkq3yap9us6v52vjjsrvywa6rt52cm9r9zqt8r2t7mlcwspyetp5h2tztugp9lfyql';
+
+  test('reads the payment hash from the spec vector', () => {
+    expect(utils.bolt11PaymentHash(VECTOR)).toBe(
+      '0001020304050607080900010203040506070809000102030405060708090102',
+    );
+    expect(utils.bolt11PaymentHash(VECTOR.toUpperCase())).toBe(
+      '0001020304050607080900010203040506070809000102030405060708090102',
+    );
+  });
+
+  test('bolt11PreimageMatches compares sha256(preimage) with the payment hash', () => {
+    const preimage = 'ab'.repeat(32);
+    const hash = bytesToHex(sha256(hexToBytes(preimage)));
+    const invoice = bech32.encode(
+      'lnbc',
+      [...new Array<number>(7).fill(0), 1, 1, 20, ...bech32.toWords(hexToBytes(hash))].concat(
+        new Array<number>(104).fill(0),
+      ),
+      false,
+    );
+    expect(utils.bolt11PreimageMatches(invoice, preimage)).toBe(true);
+    expect(utils.bolt11PreimageMatches(invoice, preimage.toUpperCase())).toBe(true);
+    expect(utils.bolt11PreimageMatches(invoice, 'cd'.repeat(32))).toBe(false);
+    expect(utils.bolt11PreimageMatches(invoice, 'not-hex')).toBe(false);
+  });
+
+  test('rejects strings that are not invoices or carry no payment hash', () => {
+    expect(() => utils.bolt11PaymentHash('lnbc1notbech32')).toThrow('Invalid BOLT11 invoice');
+    expect(() => utils.bolt11PaymentHash(42 as unknown as string)).toThrow(
+      'BOLT11 invoice must be a string',
+    );
+    // Timestamp and signature only: nothing tagged.
+    const bare = bech32.encode('lnbc', new Array(7 + 104).fill(0), false);
+    expect(() => utils.bolt11PaymentHash(bare)).toThrow('BOLT11 invoice has no payment hash');
+    // A tagged field whose declared length runs into the signature.
+    const truncated = bech32.encode(
+      'lnbc',
+      [...new Array<number>(7).fill(0), 1, 1, 20, ...new Array<number>(10 + 104).fill(0)],
+      false,
+    );
+    expect(() => utils.bolt11PaymentHash(truncated)).toThrow('BOLT11 invoice has no payment hash');
+    // 52 words carry 260 bits; the trailing four must be zero.
+    const padded = bech32.encode(
+      'lnbc',
+      [...new Array<number>(7).fill(0), 1, 1, 20, ...new Array<number>(51).fill(0), 31].concat(
+        new Array<number>(104).fill(0),
+      ),
+      false,
+    );
+    expect(() => utils.bolt11PaymentHash(padded)).toThrow('Invalid BOLT11 payment hash');
   });
 });
