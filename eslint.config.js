@@ -97,8 +97,7 @@ export default tseslint.config(
         },
         {
           selector: 'NewExpression[callee.name="TextDecoder"]',
-          message:
-            'Use decodeUtf8Field or decodeUtf8Document from utils/bytes, or eslint-disable with a reason.',
+          message: 'Use bytesToUtf8, decodeUtf8Field or decodeUtf8Document from utils/bytes.',
         },
       ],
       // Keep imports grouped and alphabetized within groups
