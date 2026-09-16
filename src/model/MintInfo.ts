@@ -636,12 +636,28 @@ export class MintInfo {
   }
 
   supportsAmountless(method: string = 'bolt11', unit: string = 'sat'): boolean {
+    return this.hasMeltOption(method, unit, 'amountless');
+  }
+
+  /**
+   * Whether the mint promises a `payment_preimage` on every `PAID` melt for this method and unit.
+   *
+   * @remarks
+   * NUT-23 `preimage_guaranteed`. Absent or false means best-effort: a null preimage is normal.
+   */
+  guaranteesPreimage(method: string = 'bolt11', unit: string = 'sat'): boolean {
+    return this.hasMeltOption(method, unit, 'preimage_guaranteed');
+  }
+
+  private hasMeltOption(
+    method: string,
+    unit: string,
+    option: 'amountless' | 'preimage_guaranteed',
+  ) {
+    // normalizeInfo has already reduced a malformed methods list to an array.
     const meltMethods = this._mintInfo?.nuts?.[5]?.methods ?? [];
-
-    if (!Array.isArray(meltMethods)) return false;
-
     return meltMethods.some(
-      (met) => met.method === method && met.unit === unit && met.options?.amountless === true,
+      (met) => met.method === method && met.unit === unit && met.options?.[option] === true,
     );
   }
 }

@@ -1259,6 +1259,50 @@ describe('Mint normalization', () => {
       );
     });
 
+    const guaranteeing = (unit: string) => ({
+      ...MINTINFORESP,
+      nuts: {
+        ...MINTINFORESP.nuts,
+        5: {
+          disabled: false,
+          methods: [
+            {
+              method: 'bolt11',
+              unit,
+              min_amount: null,
+              max_amount: null,
+              options: { preimage_guaranteed: true },
+            },
+          ],
+        },
+      },
+    });
+
+    it('warns when a mint that guarantees the preimage returns none on a PAID quote', async () => {
+      const { mint, logger } = mintFor(paidResponse(invoiceFor(paymentHash), null));
+      mint.setMintInfo(guaranteeing('sat'));
+      const res = await mint.checkMeltQuoteBolt11('my-quote');
+      expect(res.payment_preimage).toBeNull();
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Mint advertises preimage_guaranteed but returned no payment_preimage',
+        { op: 'bolt11 melt quote' },
+      );
+    });
+
+    it('stays quiet about a missing preimage when the guarantee is for another unit', async () => {
+      const { mint, logger } = mintFor(paidResponse(invoiceFor(paymentHash), null));
+      mint.setMintInfo(guaranteeing('usd'));
+      await mint.checkMeltQuoteBolt11('my-quote');
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+
+    it('stays quiet when the guaranteed preimage is present', async () => {
+      const { mint, logger } = mintFor(paidResponse(invoiceFor(paymentHash), preimage));
+      mint.setMintInfo(guaranteeing('sat'));
+      await mint.checkMeltQuoteBolt11('my-quote');
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+
     it('does not check bolt12 quotes, whose request is an offer', async () => {
       const { mint, logger } = mintFor({
         ...paidResponse('lno1offer', preimage),

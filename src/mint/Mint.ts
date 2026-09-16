@@ -1655,6 +1655,16 @@ class Mint {
     ) {
       data.payment_preimage = this.verifiedPreimage(data.request, data.payment_preimage, op);
     }
+    if (
+      method === 'bolt11' &&
+      data.state === 'PAID' &&
+      data.payment_preimage === null &&
+      this._mintInfo?.guaranteesPreimage('bolt11', data.unit as string)
+    ) {
+      this._logger.warn('Mint advertises preimage_guaranteed but returned no payment_preimage', {
+        op,
+      });
+    }
   }
 
   /**
