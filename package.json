@@ -94,7 +94,7 @@
     "@types/node": "^26.2.0",
     "@vitest/browser": "^4.1.9",
     "@vitest/browser-playwright": "^4.1.9",
-    "@vitest/coverage-v8": "^4.1.9",
+    "@vitest/coverage-v8": "^5.0.0",
     "@vitest/eslint-plugin": "^1.6.20",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",
