@@ -359,7 +359,9 @@ function toV4CborTemplate(token: Token): TokenV4Template {
         }),
         ...(p.witness &&
           !isV3TransactionWitness(id, p.secret) && {
-            w: JSON.stringify(p.witness),
+            // A decoded token's witness is already the wire string; stringifying it again
+            // would nest it, and the mint cannot parse what comes back.
+            w: typeof p.witness === 'string' ? p.witness : JSON.stringify(p.witness),
           }),
         ...(p.spend_info && {
           si: {
