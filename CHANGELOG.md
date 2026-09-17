@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.10.3](https://github.com/cashubtc/cashu-ts/compare/v4.10.2...v4.10.3) (2026-09-17)
+
+
+### Bug Fixes
+
+* **auth:** check OIDC endpoint schemes against the discovery document ([#1167](https://github.com/cashubtc/cashu-ts/issues/1167)) ([2ae444d](https://github.com/cashubtc/cashu-ts/commit/2ae444ddb330d7838c6fa1783375c9e3bd867b47))
+* **core:** keep a token's witness verbatim when re-encoding ([#1181](https://github.com/cashubtc/cashu-ts/issues/1181)) ([fb5b6a9](https://github.com/cashubtc/cashu-ts/commit/fb5b6a99ef7a532a7b6463da283bf9b311c953f6))
+* **mint:** check a bolt11 melt preimage against the invoice payment hash ([#1165](https://github.com/cashubtc/cashu-ts/issues/1165)) ([61a2749](https://github.com/cashubtc/cashu-ts/commit/61a27492bb19eb4b55160cd6b65473ea1ed01042))
+* **model:** require boolean true for advertised NUT support ([#1177](https://github.com/cashubtc/cashu-ts/issues/1177)) ([969adbf](https://github.com/cashubtc/cashu-ts/commit/969adbf96604e32db739885c3e90ad64f7e5e9f3))
+* **utils:** apply the keyset unit alphabet to version 01 ids too ([#1166](https://github.com/cashubtc/cashu-ts/issues/1166)) ([6891c1c](https://github.com/cashubtc/cashu-ts/commit/6891c1cad3091c63bdceafd77d74ad6164f69cc5))
+* **utils:** resolve short keyset IDs in getDecodedTokenBinary ([#1154](https://github.com/cashubtc/cashu-ts/issues/1154)) ([ca89f63](https://github.com/cashubtc/cashu-ts/commit/ca89f63d339ac476f15a6572da447c25643aaf78))
+
 ## [4.10.2](https://github.com/cashubtc/cashu-ts/compare/v4.10.1...v4.10.2) (2026-09-14)
 
 
