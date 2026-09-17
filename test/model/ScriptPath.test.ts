@@ -278,6 +278,40 @@ describe('ScriptPath signing packages', () => {
     expect(ScriptPath.mergeSwapPackage(signed, mixed).inputs[1]).toEqual(companion);
   });
 
+  test('a hashlock preimage stays with the coordinator and is added at merge', () => {
+    const preimage = `${'00'.repeat(31)}01`;
+    const built = buildNutrootSecret(pub(4), [
+      { type: 'hashlock', n: 1, keys: [pub(3)], hash: bytesToHex(sha256(hexToBytes(preimage))) },
+    ]);
+    const proof: Proof = {
+      id: keysetId,
+      amount: Amount.from(1),
+      secret: built.secret,
+      C: '11'.repeat(48),
+      spend_info: { k: bytesToHex(sk(4)), tree: built.tree },
+    };
+    const preview: SwapPreview = {
+      amount: Amount.from(1),
+      fees: Amount.from(0),
+      inputs: [proof],
+      keepOutputs: [OutputData.createSingleRandomData(1, keysetId)],
+    };
+    const plans = [{ secret: proof.secret, leafIndex: 0, preimage }];
+    const pkg = ScriptPath.extractSwapPackage(preview, plans);
+    expect(pkg.spends[0]).not.toHaveProperty('preimage');
+    expect(ScriptPath.serializePackage(pkg)).not.toContain(
+      encodeUint8ToBase64Url(utf8ToBytes(preimage)),
+    );
+    const signed = ScriptPath.signPackage(pkg, bytesToHex(sk(3)));
+    expect(() => ScriptPath.mergeSwapPackage(signed, preview)).toThrow(/preimage/);
+    const merged = ScriptPath.mergeSwapPackage(signed, preview, plans);
+    const witness = JSON.parse(merged.inputs[0].witness as string) as { preimage?: string };
+    expect(witness.preimage).toBe(preimage);
+    expect(JSON.parse(ScriptPath.witnessFor(signed.spends[0], built.tree, 0, preimage))).toEqual(
+      witness,
+    );
+  });
+
   test('signing with a key the tree does not name adds nothing', { timeout: SCAN_TIMEOUT }, () => {
     const { preview, proof } = fixture();
     const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 0 }]);

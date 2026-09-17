@@ -72,10 +72,6 @@ export type ScriptPathSpendRequest = {
    */
   slots?: number[];
   /**
-   * Preimage for a hashlock leaf, hex.
-   */
-  preimage?: string;
-  /**
    * Signatures collected so far, hex. Grows as signers add theirs.
    */
   signatures: string[];
@@ -85,10 +81,11 @@ export type ScriptPathSpendRequest = {
  * Everything a signer needs to satisfy one or more script path spends, and nothing else.
  *
  * @remarks
- * Carries no secrets and no blinding factors: inputs are named by `Y`, as in the transcript.
- * Serialize it, send it wherever the keys are, sign, and merge the result back into the preview it
- * came from. Unlike a co-signer hook, the transaction is not in flight meanwhile, so a ceremony can
- * outlive the process that started it, which is the normal case on a phone.
+ * Carries no secrets, no preimages and no blinding factors: inputs are named by `Y`, as in the
+ * transcript, and a hashlock preimage stays with the coordinator until merge. Serialize it, send it
+ * wherever the keys are, sign, and merge the result back into the preview it came from. Unlike a
+ * co-signer hook, the transaction is not in flight meanwhile, so a ceremony can outlive the process
+ * that started it, which is the normal case on a phone.
  */
 export type ScriptPathSigningPackage = {
   version: 'nutspA';
@@ -215,7 +212,6 @@ function buildPackage(
         path: nutrootMerklePath(leafHashes, plan.leafIndex).map((h) => bytesToHex(h)),
       },
       ...(E && { E, slots }),
-      ...(plan.preimage !== undefined && { preimage: plan.preimage }),
       signatures: [],
     };
   });
@@ -428,16 +424,21 @@ function signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPath
   return { ...pkg, spends };
 }
 
-function mergeSwapPackage(pkg: ScriptPathSigningPackage, preview: SwapPreview): SwapPreview {
+function mergeSwapPackage(
+  pkg: ScriptPathSigningPackage,
+  preview: SwapPreview,
+  plans?: ScriptPathPlan[],
+): SwapPreview {
   if (pkg.type !== 'swap') throw new CTSError('Cannot merge a melt package into a swap');
   assertValidPackage(pkg);
   assertMatches(pkg, digestOf(preview.inputs, orderedOutputs(preview)));
-  return { ...preview, inputs: applyWitnesses(pkg, preview.inputs) };
+  return { ...preview, inputs: applyWitnesses(pkg, preview.inputs, plans) };
 }
 
 function mergeMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'amount'>>(
   pkg: ScriptPathSigningPackage,
   preview: MeltPreview<TQuote>,
+  plans?: ScriptPathPlan[],
 ): MeltPreview<TQuote> {
   if (pkg.type !== 'melt') throw new CTSError('Cannot merge a swap package into a melt');
   assertValidPackage(pkg);
@@ -449,7 +450,7 @@ function mergeMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | '
       { quoteId: preview.quote.quote, amount: Amount.from(preview.quote.amount).toBigInt() },
     ),
   );
-  return { ...preview, inputs: applyWitnesses(pkg, preview.inputs) };
+  return { ...preview, inputs: applyWitnesses(pkg, preview.inputs, plans) };
 }
 
 function assertMatches(pkg: ScriptPathSigningPackage, expected: Uint8Array): void {
@@ -460,14 +461,24 @@ function assertMatches(pkg: ScriptPathSigningPackage, expected: Uint8Array): voi
   }
 }
 
-function applyWitnesses(pkg: ScriptPathSigningPackage, inputs: Proof[]): Proof[] {
+function applyWitnesses(
+  pkg: ScriptPathSigningPackage,
+  inputs: Proof[],
+  plans: ScriptPathPlan[] = [],
+): Proof[] {
   const digests = packageInputDigests(pkg);
   const bySecret = new Map(pkg.spends.map((s) => [s.secret, s]));
+  const preimages = new Map(plans.map((p) => [p.secret, p.preimage]));
   return inputs.map((proof) => {
     const spend = bySecret.get(proof.secret);
     if (!spend || !isBlsKeyset(proof.id)) return proof;
     const leaf = parseNutrootLeaf(hexToBytes(spend.leaf));
-    const preimage = spend.preimage;
+    const preimage = preimages.get(proof.secret);
+    if (leaf.type === 'hashlock' && preimage === undefined) {
+      throw new CTSError(
+        'A hashlock spend needs its preimage at merge: pass the plans the package was extracted with',
+      );
+    }
     const signatures = selectRequiredLeafSignatures(
       leaf,
       digests.get(proof.secret)!,
@@ -523,22 +534,34 @@ export type ScriptPathApi = {
    *
    * @remarks
    * Recomputes the digest from the preview and refuses if it moved: a package signed against one
-   * set of outputs cannot be spent against another, and output order is part of that.
-   * @throws If the package does not belong to this preview, or a spend is short of its leaf's
-   *   signature threshold.
+   * set of outputs cannot be spent against another, and output order is part of that. `plans` are
+   * the ones the package was extracted with: a hashlock leaf takes its preimage from there, since
+   * the package never carries it.
+   * @throws If the package does not belong to this preview, a spend is short of its leaf's
+   *   signature threshold, or a hashlock spend has no preimage in `plans`.
    */
-  mergeSwapPackage(pkg: ScriptPathSigningPackage, preview: SwapPreview): SwapPreview;
+  mergeSwapPackage(
+    pkg: ScriptPathSigningPackage,
+    preview: SwapPreview,
+    plans?: ScriptPathPlan[],
+  ): SwapPreview;
   /**
    * Melt counterpart of {@link ScriptPathApi.mergeSwapPackage}.
    */
   mergeMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'amount'>>(
     pkg: ScriptPathSigningPackage,
     preview: MeltPreview<TQuote>,
+    plans?: ScriptPathPlan[],
   ): MeltPreview<TQuote>;
   /**
    * The witness a spend would produce, without a preview. Useful for inspection.
    */
-  witnessFor(spend: ScriptPathSpendRequest, tree: string[], leafIndex: number): string;
+  witnessFor(
+    spend: ScriptPathSpendRequest,
+    tree: string[],
+    leafIndex: number,
+    preimage?: string,
+  ): string;
 };
 
 /**
@@ -559,8 +582,8 @@ export const ScriptPath: ScriptPathApi = {
   signPackage,
   mergeSwapPackage,
   mergeMeltPackage,
-  witnessFor: (spend, tree, leafIndex) =>
-    buildScriptPathWitness(tree, leafIndex, spend.control.K, spend.signatures, spend.preimage),
+  witnessFor: (spend, tree, leafIndex, preimage) =>
+    buildScriptPathWitness(tree, leafIndex, spend.control.K, spend.signatures, preimage),
 };
 
 export type { NutrootLeaf };

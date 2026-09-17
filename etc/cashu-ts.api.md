@@ -2294,9 +2294,9 @@ export type ScriptPathApi = {
     serializePackage(pkg: ScriptPathSigningPackage): string;
     deserializePackage(input: string): ScriptPathSigningPackage;
     signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPathSigningPackage;
-    mergeSwapPackage(pkg: ScriptPathSigningPackage, preview: SwapPreview): SwapPreview;
-    mergeMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'amount'>>(pkg: ScriptPathSigningPackage, preview: MeltPreview<TQuote>): MeltPreview<TQuote>;
-    witnessFor(spend: ScriptPathSpendRequest, tree: string[], leafIndex: number): string;
+    mergeSwapPackage(pkg: ScriptPathSigningPackage, preview: SwapPreview, plans?: ScriptPathPlan[]): SwapPreview;
+    mergeMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'amount'>>(pkg: ScriptPathSigningPackage, preview: MeltPreview<TQuote>, plans?: ScriptPathPlan[]): MeltPreview<TQuote>;
+    witnessFor(spend: ScriptPathSpendRequest, tree: string[], leafIndex: number, preimage?: string): string;
 };
 
 // @public
@@ -2331,7 +2331,6 @@ export type ScriptPathSpendRequest = {
     };
     E?: string;
     slots?: number[];
-    preimage?: string;
     signatures: string[];
 };
 
