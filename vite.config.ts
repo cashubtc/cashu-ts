@@ -125,11 +125,11 @@ export default defineConfig(({ command }) => {
             name: 'browser',
             globals: true,
             testTimeout,
+            api: {
+              host: '127.0.0.1',
+            },
             browser: {
               provider: playwright(),
-              api: {
-                host: '127.0.0.1',
-              },
               enabled: true,
               headless: true,
               instances: [
@@ -163,11 +163,11 @@ export default defineConfig(({ command }) => {
             name: 'integration-browser',
             globals: true,
             testTimeout,
+            api: {
+              host: '127.0.0.1',
+            },
             browser: {
               provider: playwright(),
-              api: {
-                host: '127.0.0.1',
-              },
               enabled: true,
               headless: true,
               instances: [

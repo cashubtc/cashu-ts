@@ -38,7 +38,7 @@
     "test:prepare:ci:chromium": "npx playwright install chromium",
     "test:prepare:ci:firefox": "npx playwright install firefox",
     "test:prepare:ci:webkit": "npx playwright install webkit --with-deps",
-    "test": "vitest run --coverage --project node --project browser",
+    "test": "vitest run --coverage --project node && vitest run --project browser --outputFile.junit=test-results/junit-browser.xml",
     "test-integration": "vitest run --coverage --project integration",
     "test-integration:browser": "vitest run --coverage --project integration-browser",
     "test-integration:browser:chromium": "INTEGRATION_BROWSER=chromium npm run test-integration:browser",
@@ -92,9 +92,9 @@
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/vitest-runner": "^10.0.0",
     "@types/node": "^26.2.0",
-    "@vitest/browser": "^4.1.9",
-    "@vitest/browser-playwright": "^4.1.9",
-    "@vitest/coverage-v8": "^4.1.9",
+    "@vitest/browser": "^5.0.0",
+    "@vitest/browser-playwright": "^5.0.0",
+    "@vitest/coverage-v8": "^5.0.0",
     "@vitest/eslint-plugin": "^1.6.20",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",
@@ -119,7 +119,7 @@
     "typescript-eslint": "^8.59.1",
     "vite": "^8.0.10",
     "vite-plugin-dts": "^4.5.4",
-    "vitest": "^4.1.9"
+    "vitest": "^5.0.0"
   },
   "dependencies": {
     "@noble/curves": "^2.4.0",
