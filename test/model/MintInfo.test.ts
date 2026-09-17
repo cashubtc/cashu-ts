@@ -560,6 +560,30 @@ describe('MintInfo snapshot accessors', () => {
 });
 
 describe('MintInfo isSupported branches', () => {
+  it.each<[unknown, boolean]>([
+    [true, true],
+    [false, false],
+    ['true', false],
+    ['false', false],
+    [1, false],
+    [0, false],
+    [{}, false],
+    [[], false],
+    [null, false],
+    [undefined, false],
+  ])('requires boolean true for generic NUT support (%j)', (supported, expected) => {
+    for (const nut of [7, 8, 9, 10, 11, 12, 14, 20] as const) {
+      const info = new MintInfo({
+        ...MINTINFORESP,
+        nuts: {
+          ...MINTINFORESP.nuts,
+          [nut]: { supported: supported as boolean },
+        },
+      });
+      expect(info.isSupported(nut)).toEqual({ supported: expected });
+    }
+  });
+
   it('reports generic nuts as unsupported when absent', () => {
     const info = new MintInfo({ ...MINTINFORESP, nuts: {} });
     expect(info.isSupported(7)).toEqual({ supported: false });
