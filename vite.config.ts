@@ -125,18 +125,14 @@ export default defineConfig(({ command }) => {
             name: 'browser',
             globals: true,
             testTimeout,
+            api: {
+              host: '127.0.0.1',
+            },
             browser: {
               provider: playwright(),
-              api: {
-                host: '127.0.0.1',
-              },
               enabled: true,
               headless: true,
-              instances: [
-                { browser: 'chromium' },
-                { browser: 'firefox', coverage: { enabled: false } },
-                { browser: 'webkit', coverage: { enabled: false } },
-              ],
+              instances: [{ browser: 'chromium' }, { browser: 'firefox' }, { browser: 'webkit' }],
               screenshotFailures: false,
             },
             include: ['test/**/*.test.ts'],
@@ -163,18 +159,14 @@ export default defineConfig(({ command }) => {
             name: 'integration-browser',
             globals: true,
             testTimeout,
+            api: {
+              host: '127.0.0.1',
+            },
             browser: {
               provider: playwright(),
-              api: {
-                host: '127.0.0.1',
-              },
               enabled: true,
               headless: true,
-              instances: [
-                integrationBrowser === 'chromium'
-                  ? { browser: integrationBrowser }
-                  : { browser: integrationBrowser, coverage: { enabled: false } },
-              ],
+              instances: [{ browser: integrationBrowser }],
               screenshotFailures: false,
             },
             include: ['test/integration.test.ts'],
