@@ -132,11 +132,7 @@ export default defineConfig(({ command }) => {
               provider: playwright(),
               enabled: true,
               headless: true,
-              instances: [
-                { browser: 'chromium' },
-                { browser: 'firefox', coverage: { enabled: false } },
-                { browser: 'webkit', coverage: { enabled: false } },
-              ],
+              instances: [{ browser: 'chromium' }, { browser: 'firefox' }, { browser: 'webkit' }],
               screenshotFailures: false,
             },
             include: ['test/**/*.test.ts'],
@@ -170,11 +166,7 @@ export default defineConfig(({ command }) => {
               provider: playwright(),
               enabled: true,
               headless: true,
-              instances: [
-                integrationBrowser === 'chromium'
-                  ? { browser: integrationBrowser }
-                  : { browser: integrationBrowser, coverage: { enabled: false } },
-              ],
+              instances: [{ browser: integrationBrowser }],
               screenshotFailures: false,
             },
             include: ['test/integration.test.ts'],
