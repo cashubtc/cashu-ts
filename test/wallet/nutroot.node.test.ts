@@ -90,7 +90,7 @@ function transactionInputsOf(inputs: Proof[], meltQuote?: { quoteId: string; amo
     proofInputs: inputs.map((p) => ({
       amount: Amount.from(p.amount).toBigInt(),
       keysetId: p.id,
-      secret: p.secret,
+      Y: hashToCurveHex(p.secret, p.id),
       C: p.C,
     })),
     blindedOutputs: [{ amount: OUTPUT.amount.toBigInt(), keysetId: OUTPUT.id, B_: OUTPUT.B_ }],

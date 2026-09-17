@@ -83,7 +83,7 @@ export async function attachTransactionWitnesses(
   const { transactionMessage, proofs: inputContexts } = inputsForPayload({
     inputs: payload.inputs.map((p) => {
       const Y = Ys.get(p.secret);
-      return Y !== undefined && isBlsKeyset(p.id) ? { ...p, Y } : p;
+      return Y !== undefined && isBlsKeyset(p.id) ? { amount: p.amount, id: p.id, C: p.C, Y } : p;
     }),
     outputs: payload.outputs ?? [],
     ...(meltQuote && { meltQuote }),

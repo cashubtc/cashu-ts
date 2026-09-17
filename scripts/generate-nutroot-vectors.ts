@@ -17,6 +17,7 @@ import { deriveSecretAndBlindingFactor } from '../src/crypto';
 import { getPubKeyFromPrivKey } from '../src/crypto/curve_secp';
 import { deriveLeafKey, deriveNumsOffset, deriveQuoteLockKey } from '../src/crypto/NUT13';
 import { BLS_FR_ORDER, hashToCurveBls } from '../src/crypto/curve_bls';
+import { hashToCurveHex } from '../src/crypto/curves';
 import {
   buildTransactionTranscript,
   inputDigest,
@@ -132,7 +133,7 @@ function fromVectorTx(tx: any): TransactionShape {
     proofInputs: tx.proof_inputs?.map((p: any) => ({
       amount: BigInt(p.amount),
       keysetId: p.keyset_id,
-      secret: p.secret,
+      Y: hashToCurveHex(p.secret, p.keyset_id),
       C: p.C,
     })),
     mintQuoteInputs: tx.mint_quote_inputs?.map((q: any) => ({

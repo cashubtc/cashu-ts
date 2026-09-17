@@ -20,6 +20,7 @@ import {
   isBlsKeyset,
   sumProofs,
 } from '../src';
+import { hashToCurveHex } from '../src/crypto/curves';
 import {
   buildScriptPathWitness,
   buildNutrootSecret,
@@ -541,7 +542,7 @@ describeV3('M3 nutroot conditions', () => {
       proofInputs: inputs.map((p) => ({
         amount: Amount.from(p.amount).toBigInt(),
         keysetId: p.id,
-        secret: p.secret,
+        Y: hashToCurveHex(p.secret, p.id),
         C: p.C,
       })),
       blindedOutputs: outputs.map((o) => ({
