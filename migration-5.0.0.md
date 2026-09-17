@@ -279,6 +279,27 @@ try {
 
 ---
 
+## `getDecodedTokenBinary` requires the keyset ID list
+
+`getDecodedTokenBinary(bytes, keysetIds)` now takes the same keyset ID list as `getDecodedToken` and resolves short keyset IDs against it, as NUT-00 requires of receivers. Calling it without the list, or with a single ID instead of an array, throws a `CTSError`. Passing the function directly as a callback (eg `chunks.map(getDecodedTokenBinary)`) no longer compiles, since the index would land in the second argument.
+
+`wallet.decodeToken` accepts a `Uint8Array` as well as a string, so a wallet can decode either encoding with its own keysets.
+
+### Migration
+
+```typescript
+// Before
+const token = getDecodedTokenBinary(bytes);
+
+// After: let the wallet supply its keysets
+const token = wallet.decodeToken(bytes);
+
+// or, outside a wallet instance
+const token = getDecodedTokenBinary(bytes, myKeyChain.getAllKeysetIds());
+```
+
+---
+
 ## Base64 payloads are decoded strictly per NUT-00
 
 Tokens are now decoded as `base64_urlsafe`, the alphabet NUT-00 mandates, rather than accepting

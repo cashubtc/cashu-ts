@@ -86,6 +86,7 @@ import {
   bytesToHex,
   DEFAULT_MAX_ARRAY_LENGTH,
   getDecodedToken,
+  getDecodedTokenBinary,
   invoiceHasAmountInHRP,
   SEED_BYTES,
   normalizeMintUrl,
@@ -2376,17 +2377,19 @@ class Wallet {
   }
 
   /**
-   * Decodes a string token.
+   * Decodes a string (`cashuB...`) or raw binary (`craw` + `B`) token.
    *
    * @remarks
    * Rehydrates a token from the space-saving CBOR format, including mapping short keyset ids to
    * their full representation.
-   * @param token The token in string format (cashuB...)
+   * @param token The token as a string or as binary bytes.
    * @returns Token object.
    */
-  public decodeToken(token: string): Token {
+  public decodeToken(token: string | Uint8Array): Token {
     const keysetIds = this._keyChain.getAllKeysetIds();
-    return getDecodedToken(token, keysetIds);
+    return typeof token === 'string'
+      ? getDecodedToken(token, keysetIds)
+      : getDecodedTokenBinary(token, keysetIds);
   }
 
   // -----------------------------------------------------------------

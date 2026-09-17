@@ -628,7 +628,7 @@ export function getDataField(secret: Secret | string): string;
 export function getDecodedToken(tokenString: string, keysetIds: readonly string[]): Token;
 
 // @public
-export function getDecodedTokenBinary(bytes: Uint8Array, keysetIds?: readonly string[]): Token;
+export function getDecodedTokenBinary(bytes: Uint8Array, keysetIds: readonly string[]): Token;
 
 // @public
 export function getEncodedToken(token: Token, opts?: {
@@ -2893,7 +2893,7 @@ export class Wallet {
         pubkey: string;
         privkey: string;
     }>;
-    decodeToken(token: string): Token;
+    decodeToken(token: string | Uint8Array): Token;
     defaultOutputType(): OutputType;
     ensureOperableKeysets(ids: Array<string | undefined>): Promise<void>;
     getFeesForKeyset(nInputs: number, keysetId: string): Amount;

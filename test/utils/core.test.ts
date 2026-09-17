@@ -1418,13 +1418,13 @@ describe('test raw tokens', () => {
       '6372617742a4617481a261694800ad268c4d1f5826617081a3616101617378403961366462623834376264323332626137366462306466313937323136623239643362386363313435353363643237383237666331636339343266656462346561635821038618543ffb6b8695df4ad4babcde92a34a96bdcd97dcee0d7ccf98d4721267926164695468616e6b20796f75616d75687474703a2f2f6c6f63616c686f73743a33333338617563736174',
     );
 
-    const decodedToken = utils.getDecodedTokenBinary(expectedBytes);
+    const decodedToken = utils.getDecodedTokenBinary(expectedBytes, []);
     expect(decodedToken).toEqual(token);
   });
 
   test('token to bytes', () => {
     const bytes = utils.getEncodedTokenBinary(token);
-    const decodedToken = utils.getDecodedTokenBinary(bytes);
+    const decodedToken = utils.getDecodedTokenBinary(bytes, []);
     expect(decodedToken).toEqual(token);
   });
 
@@ -1432,7 +1432,7 @@ describe('test raw tokens', () => {
     const parsedToken = JSON.parse(JSON.stringify(token)) as Token;
 
     const bytes = utils.getEncodedTokenBinary(parsedToken);
-    const decodedToken = utils.getDecodedTokenBinary(bytes);
+    const decodedToken = utils.getDecodedTokenBinary(bytes, []);
 
     expect(decodedToken).toEqual(token);
   });
@@ -1449,52 +1449,51 @@ describe('test raw tokens', () => {
 
 describe('getDecodedTokenBinary short keyset ID resolution', () => {
   const fullV2Id = NUT02_V2_VECTOR1_KEYS.id;
-  const cBytes = hexToBytes('02' + '00'.repeat(32));
+  const shortId = fullV2Id.slice(0, 16);
 
-  function encodeRawBinaryToken(idBytes: Uint8Array): Uint8Array {
-    const template = {
-      m: 'http://localhost:3338',
-      u: 'sat',
-      t: [{ i: idBytes, p: [{ a: 1n, s: 'abc', c: cBytes }] }],
-    };
-    const prefix = new TextEncoder().encode('crawB');
-    return new Uint8Array([...prefix, ...utils.encodeCBOR(template)]);
+  // The binary encoder writes the id as given, so a 16-char id yields a short-form token.
+  function encodeBinaryToken(id: string): Uint8Array {
+    return utils.getEncodedTokenBinary({
+      mint: 'http://localhost:3338',
+      unit: 'sat',
+      proofs: [{ id, amount: Amount.from(1), secret: 'abc', C: '02' + '00'.repeat(32) }],
+    });
   }
 
-  test('resolves an 8-byte short keyset ID to the full ID when keysetIds are given', () => {
-    const bytes = encodeRawBinaryToken(hexToBytes(fullV2Id.slice(0, 16)));
-    const decoded = utils.getDecodedTokenBinary(bytes, [fullV2Id]);
+  test('resolves an 8-byte short keyset ID to the full ID', () => {
+    const decoded = utils.getDecodedTokenBinary(encodeBinaryToken(shortId), [fullV2Id]);
     expect(decoded.proofs[0].id).toBe(fullV2Id);
   });
 
   test('throws when a short keyset ID has no keysets to map to', () => {
-    const bytes = encodeRawBinaryToken(hexToBytes(fullV2Id.slice(0, 16)));
-    expect(() => utils.getDecodedTokenBinary(bytes, [])).toThrow(
+    expect(() => utils.getDecodedTokenBinary(encodeBinaryToken(shortId), [])).toThrow(
       /Short keyset ID .* cannot be resolved/,
     );
   });
 
-  test('leaves the short keyset ID untouched when keysetIds are omitted', () => {
-    const shortId = fullV2Id.slice(0, 16);
-    const bytes = encodeRawBinaryToken(hexToBytes(shortId));
-    const decoded = utils.getDecodedTokenBinary(bytes);
-    expect(decoded.proofs[0].id).toBe(shortId);
+  test('throws when a short keyset ID is ambiguous', () => {
+    const sibling = shortId + 'ff'.repeat(25);
+    expect(() =>
+      utils.getDecodedTokenBinary(encodeBinaryToken(shortId), [fullV2Id, sibling]),
+    ).toThrow(/ambiguous/);
   });
 
-  test('throws when a short keyset ID is ambiguous', () => {
-    const bytes = encodeRawBinaryToken(hexToBytes(fullV2Id.slice(0, 16)));
-    const ambiguous = fullV2Id + 'aa';
-    expect(() => utils.getDecodedTokenBinary(bytes, [fullV2Id, ambiguous])).toThrow(/ambiguous/);
+  test('throws a CTSError when keysetIds is missing or not an array', () => {
+    const bytes = encodeBinaryToken(shortId);
+    // @ts-expect-error pre-v5 single-argument call
+    expect(() => utils.getDecodedTokenBinary(bytes)).toThrow(/requires keysetIds/);
+    // @ts-expect-error a single id instead of a list
+    expect(() => utils.getDecodedTokenBinary(bytes, fullV2Id)).toThrow(/requires keysetIds/);
+  });
+
+  test('passes a v0 (8-byte full-form) keyset ID through unchanged', () => {
+    const v0Id = '00' + 'ab'.repeat(7);
+    const decoded = utils.getDecodedTokenBinary(encodeBinaryToken(v0Id), [fullV2Id]);
+    expect(decoded.proofs[0].id).toBe(v0Id);
   });
 
   test('round-trips a full keyset ID through getEncodedTokenBinary unchanged', () => {
-    const token: Token = {
-      mint: 'http://localhost:3338',
-      unit: 'sat',
-      proofs: [{ id: fullV2Id, amount: Amount.from(1), secret: 'abc', C: '02' + '00'.repeat(32) }],
-    };
-    const bytes = utils.getEncodedTokenBinary(token);
-    const decoded = utils.getDecodedTokenBinary(bytes, [fullV2Id]);
+    const decoded = utils.getDecodedTokenBinary(encodeBinaryToken(fullV2Id), [fullV2Id]);
     expect(decoded.proofs[0].id).toBe(fullV2Id);
   });
 });
@@ -1905,7 +1904,7 @@ describe('isValidHex', () => {
 describe('getDecodedTokenBinary edge cases', () => {
   test('throws for invalid binary prefix', () => {
     const bad = new TextEncoder().encode('junkBdata');
-    expect(() => utils.getDecodedTokenBinary(bad)).toThrow(/not a valid binary token/);
+    expect(() => utils.getDecodedTokenBinary(bad, [])).toThrow(/not a valid binary token/);
   });
 });
 
@@ -1922,13 +1921,29 @@ describe('fromV4CborTemplate rejects valid CBOR of wrong shape', () => {
     const bytes = new Uint8Array(prefix.length + body.length);
     bytes.set(prefix, 0);
     bytes.set(body, prefix.length);
-    expect(() => utils.getDecodedTokenBinary(bytes)).toThrow(CTSError);
+    expect(() => utils.getDecodedTokenBinary(bytes, [])).toThrow(CTSError);
   });
 
   test('throws CTSError when a token entry has no proofs array', () => {
     const body = utils.encodeCBOR({ m: 'http://localhost:3338', u: 'sat', t: [{ i: 'nope' }] });
     const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
     expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
+  });
+
+  test('throws CTSError when a proof entry is not an object', () => {
+    const id = hexToBytes('00' + 'ab'.repeat(7));
+    const body = utils.encodeCBOR({ m: 'http://localhost:3338', t: [{ i: id, p: [null] }] });
+    const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
+    expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
+  });
+
+  test('throws CTSError when spend_info tree is not an array', () => {
+    const id = hexToBytes('00' + 'ab'.repeat(7));
+    const c = hexToBytes('02' + '00'.repeat(32));
+    const proof = { a: 1n, s: 'abc', c, si: { t: 5 } };
+    const body = utils.encodeCBOR({ m: 'http://localhost:3338', t: [{ i: id, p: [proof] }] });
+    const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
+    expect(() => utils.getDecodedToken(token, [])).toThrow(/spend_info tree/);
   });
 
   test('defaults unit to sat when template omits it', () => {
