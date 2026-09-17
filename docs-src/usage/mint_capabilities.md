@@ -88,6 +88,10 @@ network calls, use [`wallet.loadMintFromCache(storedInfo, keyChainCache)`](./cre
 
 `isSupported(num)` reports the mint's advertised support for a given NUT.
 
+For NUTs 7, 8, 9, 10, 11, 12, 14, and 20, support requires the boolean `true`.
+Missing flags and non-boolean values, including the strings `"true"` and `"false"`,
+are treated as unsupported.
+
 For NUT-4 (mint) and NUT-5 (melt) it returns the `disabled` flag and the raw method list:
 
 ```ts

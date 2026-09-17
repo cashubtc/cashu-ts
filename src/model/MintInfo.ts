@@ -386,7 +386,7 @@ export class MintInfo {
   }
 
   private checkGenericNut(num: 7 | 8 | 9 | 10 | 11 | 12 | 14 | 20) {
-    return this._mintInfo.nuts[num]?.supported ? { supported: true } : { supported: false };
+    return { supported: this._mintInfo.nuts[num]?.supported === true };
   }
 
   private checkMintMelt(num: 4 | 5) {
