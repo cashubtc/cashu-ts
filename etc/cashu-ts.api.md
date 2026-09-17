@@ -2290,7 +2290,7 @@ export const ScriptPath: ScriptPathApi;
 // @public
 export type ScriptPathApi = {
     extractSwapPackage(preview: SwapPreview, plans: ScriptPathPlan[]): ScriptPathSigningPackage;
-    extractMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'amount'>>(preview: MeltPreview<TQuote>, plans: ScriptPathPlan[]): ScriptPathSigningPackage;
+    extractMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'amount'>>(preview: MeltPreview<TQuote>, plans: ScriptPathPlan[], feeIndex?: number): ScriptPathSigningPackage;
     serializePackage(pkg: ScriptPathSigningPackage): string;
     deserializePackage(input: string): ScriptPathSigningPackage;
     signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPathSigningPackage;

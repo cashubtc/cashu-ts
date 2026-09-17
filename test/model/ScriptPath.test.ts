@@ -404,6 +404,25 @@ describe('ScriptPath melt packages', () => {
     expect(digestOfPkg(melt)).not.toBe(digestOfPkg(swap));
   });
 
+  test('the package carries the melt output amount: quote amount plus the selected fee reserve', () => {
+    const { meltPreview, proof } = meltFixture();
+    const plans = [{ secret: proof.secret, leafIndex: 1 }];
+    const bolt11 = { ...meltPreview, quote: { ...meltPreview.quote, fee_reserve: Amount.from(2) } };
+    expect(ScriptPath.extractMeltPackage(bolt11, plans).quoteAmount).toBe(3n);
+    const onchain = {
+      ...meltPreview,
+      quote: {
+        ...meltPreview.quote,
+        fee_options: [
+          { fee_index: 0, fee_reserve: Amount.from(2) },
+          { fee_index: 1, fee_reserve: Amount.from(50) },
+        ],
+      },
+    };
+    expect(ScriptPath.extractMeltPackage(onchain, plans, 1).quoteAmount).toBe(51n);
+    expect(() => ScriptPath.extractMeltPackage(onchain, plans)).toThrow(/feeIndex/);
+  });
+
   test('deserialize rehydrates the melt quote amount as bigint', () => {
     const { meltPreview, proof } = meltFixture();
     const pkg = ScriptPath.extractMeltPackage(meltPreview, [

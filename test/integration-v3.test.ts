@@ -41,6 +41,7 @@ import {
   proofInputContextKey,
   transactionDigest,
   verifyTransactionInputWitness,
+  meltOutputAmount,
 } from '../src/crypto/transcript';
 
 type LockedQuote = Awaited<ReturnType<Wallet['createMintQuoteBolt11']>> & { privkey: string };
@@ -168,7 +169,7 @@ describeV3('v3 transaction witnesses', () => {
       const contexts = inputsForPayload({
         inputs: body.inputs,
         outputs: body.outputs ?? [],
-        meltQuote: { amount: meltQuote.amount, quoteId: body.quote },
+        meltQuote: { amount: meltOutputAmount(meltQuote), quoteId: body.quote },
       }).proofs;
       for (const input of body.inputs) {
         const digest = contexts.get(
