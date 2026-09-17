@@ -1930,6 +1930,22 @@ describe('fromV4CborTemplate rejects valid CBOR of wrong shape', () => {
     expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
   });
 
+  test('throws CTSError when a proof entry is not an object', () => {
+    const id = hexToBytes('00' + 'ab'.repeat(7));
+    const body = utils.encodeCBOR({ m: 'http://localhost:3338', t: [{ i: id, p: [null] }] });
+    const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
+    expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
+  });
+
+  test('throws CTSError when spend_info tree is not an array', () => {
+    const id = hexToBytes('00' + 'ab'.repeat(7));
+    const c = hexToBytes('02' + '00'.repeat(32));
+    const proof = { a: 1n, s: 'abc', c, si: { t: 5 } };
+    const body = utils.encodeCBOR({ m: 'http://localhost:3338', t: [{ i: id, p: [proof] }] });
+    const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
+    expect(() => utils.getDecodedToken(token, [])).toThrow(/spend_info tree/);
+  });
+
   test('defaults unit to sat when template omits it', () => {
     const body = utils.encodeCBOR({ m: 'http://localhost:3338', t: [] });
     const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);

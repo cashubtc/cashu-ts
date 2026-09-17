@@ -416,6 +416,12 @@ function fromV4CborTemplate(template: TokenV4Template): Token {
       throw new CTSError('Invalid token');
     }
     t.p.forEach((p) => {
+      if (!p || typeof p !== 'object') {
+        throw new CTSError('Invalid token');
+      }
+      if (p.si?.t != undefined && !Array.isArray(p.si.t)) {
+        throw new CTSError('Invalid token: spend_info tree must be an array');
+      }
       const id = templateHex(t.i, 'keyset id');
       proofs.push({
         secret: p.s,
