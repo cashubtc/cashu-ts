@@ -1,8 +1,10 @@
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 
+import { hashToCurveHex } from '../../src/crypto/curves';
 import {
   buildNutrootSecret,
   deriveReceiverKeyedSecret,
@@ -22,7 +24,7 @@ import { Amount } from '../../src/model/Amount';
 import { OutputData } from '../../src/model/OutputData';
 import { ScriptPath } from '../../src/model/ScriptPath';
 import type { Proof } from '../../src/model/types';
-import { encodeUint8ToBase64Url } from '../../src/utils';
+import { bytesToUtf8, decodeBase64UrlToUint8, encodeUint8ToBase64Url } from '../../src/utils';
 import type { MeltPreview, SwapPreview } from '../../src/wallet/types';
 
 const keysetId = `02${'11'.repeat(32)}`;
@@ -238,6 +240,42 @@ describe('ScriptPath signing packages', () => {
         hexToBytes(pub(3)).subarray(1),
       ),
     ).toBe(true);
+  });
+
+  test('the package lists every input by Y and carries no secret', () => {
+    const { preview, proof } = fixture();
+    const companion: Proof = {
+      id: `00${'22'.repeat(7)}`,
+      amount: Amount.from(1),
+      secret: 'companion-proof-secret',
+      C: pub(8),
+    };
+    const mixed: SwapPreview = { ...preview, inputs: [proof, companion] };
+    const pkg = ScriptPath.extractSwapPackage(mixed, [{ secret: proof.secret, leafIndex: 0 }]);
+    expect(pkg.inputs.map((i) => Object.keys(i).sort())).toEqual([
+      ['C', 'Y', 'amount', 'id'],
+      ['C', 'Y', 'amount', 'id'],
+    ]);
+    expect(pkg.inputs[1].Y).toBe(hashToCurveHex(companion.secret, companion.id));
+    const encoded = ScriptPath.serializePackage(pkg);
+    expect(bytesToUtf8(decodeBase64UrlToUint8(encoded.slice(6)))).not.toContain(companion.secret);
+    // The signer still finds its own input by hashing the spend's secret, and its signature
+    // verifies over that input's digest in the mixed transaction.
+    const signed = ScriptPath.signPackage(
+      ScriptPath.deserializePackage(encoded),
+      bytesToHex(sk(3)),
+    );
+    const digest = inputsForPayload({ inputs: mixed.inputs, outputs: pkg.outputs }).proofs.get(
+      proofInputContextKey({ keysetId: proof.id, secret: proof.secret }),
+    )!.digest;
+    expect(
+      schnorr.verify(
+        hexToBytes(signed.spends[0].signatures[0]),
+        digest,
+        hexToBytes(pub(3)).subarray(1),
+      ),
+    ).toBe(true);
+    expect(ScriptPath.mergeSwapPackage(signed, mixed).inputs[1]).toEqual(companion);
   });
 
   test('signing with a key the tree does not name adds nothing', { timeout: SCAN_TIMEOUT }, () => {

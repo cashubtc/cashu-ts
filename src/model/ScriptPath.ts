@@ -2,8 +2,9 @@ import { equalBytes } from '@noble/curves/utils.js';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { schnorrSignDigest } from '../crypto/core';
+import { hashToCurveBls } from '../crypto/curve_bls';
 import { getPubKeyFromPrivKey } from '../crypto/curve_secp';
-import { isBlsKeyset } from '../crypto/curves';
+import { hashToCurveHex, isBlsKeyset } from '../crypto/curves';
 import {
   buildScriptPathWitness,
   enumerateLeafKeySlots,
@@ -19,14 +20,15 @@ import {
 import {
   digestForPayload,
   inputsForPayload,
-  proofInputContextKey,
   meltOutputAmount,
+  type PayloadProofInput,
 } from '../crypto/transcript';
 import {
   bytesToHex,
   bytesToUtf8,
   decodeBase64UrlToUint8,
   hexToBytes,
+  isValidHex,
   JSONInt,
   encodeUint8ToBase64Url,
 } from '../utils';
@@ -83,10 +85,10 @@ export type ScriptPathSpendRequest = {
  * Everything a signer needs to satisfy one or more script path spends, and nothing else.
  *
  * @remarks
- * Carries no secrets and no blinding factors: inputs contribute only what the transcript commits
- * to. Serialize it, send it wherever the keys are, sign, and merge the result back into the preview
- * it came from. Unlike a co-signer hook, the transaction is not in flight meanwhile, so a ceremony
- * can outlive the process that started it, which is the normal case on a phone.
+ * Carries no secrets and no blinding factors: inputs are named by `Y`, as in the transcript.
+ * Serialize it, send it wherever the keys are, sign, and merge the result back into the preview it
+ * came from. Unlike a co-signer hook, the transaction is not in flight meanwhile, so a ceremony can
+ * outlive the process that started it, which is the normal case on a phone.
  */
 export type ScriptPathSigningPackage = {
   version: 'nutspA';
@@ -95,7 +97,10 @@ export type ScriptPathSigningPackage = {
    * Melt quote id; melt packages only.
    */
   quote?: string;
-  inputs: Array<Pick<Proof, 'amount' | 'id' | 'secret' | 'C'>>;
+  /**
+   * Every transaction input, named by `Y` rather than by secret (NUT-10).
+   */
+  inputs: Array<Pick<Proof, 'amount' | 'id' | 'C'> & { Y: string }>;
   outputs: SerializedBlindedMessage[];
   /**
    * The melt output's amount, quote amount plus the selected fee reserve (NUT-10); needed to
@@ -106,7 +111,7 @@ export type ScriptPathSigningPackage = {
 };
 
 function digestOf(
-  inputs: Array<Pick<Proof, 'amount' | 'id' | 'secret' | 'C'>>,
+  inputs: PayloadProofInput[],
   outputs: SerializedBlindedMessage[],
   meltQuote?: { quoteId: string; amount: bigint },
 ): Uint8Array {
@@ -129,6 +134,10 @@ function packageDigest(pkg: ScriptPathSigningPackage): Uint8Array {
 
 /**
  * Each spend's input digest by its secret, rebuilt the same way (NUT-10: inputs sign per input).
+ *
+ * @remarks
+ * Package inputs are named by `Y`, so a spend finds its input by hashing its own secret: one hash
+ * per spend, on the BLS curve every v3 keyset uses.
  */
 function packageInputDigests(pkg: ScriptPathSigningPackage): Map<string, Uint8Array> {
   const meltQuote =
@@ -142,16 +151,19 @@ function packageInputDigests(pkg: ScriptPathSigningPackage): Map<string, Uint8Ar
   });
   return new Map(
     pkg.spends.map((spend) => {
-      const proof = pkg.inputs.find(
-        (input) => input.secret === spend.secret && isBlsKeyset(input.id),
-      );
+      const Y = spendY(spend);
+      const proof = pkg.inputs.find((input) => input.Y === Y && isBlsKeyset(input.id));
       if (!proof) throw new CTSError('Signing package spend must name a v3 transaction input');
-      return [
-        spend.secret,
-        proofs.get(proofInputContextKey({ keysetId: proof.id, secret: proof.secret }))!.digest,
-      ];
+      return [spend.secret, proofs.get(Y)!.digest];
     }),
   );
+}
+
+/**
+ * The `Y` of a spend's v3 point secret, hashed as every BLS keyset does.
+ */
+function spendY(spend: Pick<ScriptPathSpendRequest, 'secret'>): string {
+  return hashToCurveBls(utf8ToBytes(spend.secret)).toHex(true);
 }
 
 function buildPackage(
@@ -211,7 +223,12 @@ function buildPackage(
     version: SCRIPT_PATH_PREFIX,
     type,
     ...(meltQuote && { quote: meltQuote.quoteId, quoteAmount: meltQuote.amount }),
-    inputs: inputs.map((p) => ({ amount: p.amount, id: p.id, secret: p.secret, C: p.C })),
+    inputs: inputs.map((p) => ({
+      amount: p.amount,
+      id: p.id,
+      Y: hashToCurveHex(p.secret, p.id),
+      C: p.C,
+    })),
     outputs,
     spends,
   };
@@ -288,7 +305,7 @@ function assertValidPackage(pkg: ScriptPathSigningPackage): NutrootConditionLeaf
     if (
       !input ||
       typeof input !== 'object' ||
-      typeof input.secret !== 'string' ||
+      typeof input.Y !== 'string' ||
       typeof input.id !== 'string' ||
       typeof input.C !== 'string'
     ) {
@@ -328,11 +345,17 @@ function assertValidPackage(pkg: ScriptPathSigningPackage): NutrootConditionLeaf
       throw new CTSError('Signing package quote amount is invalid', { cause: e });
     }
   }
-  const inputSecrets = new Set(pkg.inputs.map((input) => input.secret));
+  const inputYs = new Set(pkg.inputs.filter((input) => isBlsKeyset(input.id)).map((i) => i.Y));
   const spent = new Set<string>();
   const leaves: NutrootConditionLeaf[] = [];
   for (const spend of pkg.spends) {
-    if (!inputSecrets.has(spend.secret) || spent.has(spend.secret)) {
+    if (
+      typeof spend?.secret !== 'string' ||
+      !isValidHex(spend.secret) ||
+      spend.secret.length !== 66 ||
+      !inputYs.has(spendY(spend)) ||
+      spent.has(spend.secret)
+    ) {
       throw new CTSError('Signing package spend must name one unique transaction input');
     }
     spent.add(spend.secret);
@@ -442,8 +465,9 @@ function applyWitnesses(pkg: ScriptPathSigningPackage, inputs: Proof[]): Proof[]
   const bySecret = new Map(pkg.spends.map((s) => [s.secret, s]));
   return inputs.map((proof) => {
     const spend = bySecret.get(proof.secret);
-    if (!spend) return proof;
+    if (!spend || !isBlsKeyset(proof.id)) return proof;
     const leaf = parseNutrootLeaf(hexToBytes(spend.leaf));
+    const preimage = spend.preimage;
     const signatures = selectRequiredLeafSignatures(
       leaf,
       digests.get(proof.secret)!,
@@ -455,7 +479,7 @@ function applyWitnesses(pkg: ScriptPathSigningPackage, inputs: Proof[]): Proof[]
         leaf: spend.leaf,
         control: spend.control,
         signatures,
-        ...(spend.preimage !== undefined && { preimage: spend.preimage }),
+        ...(preimage !== undefined && { preimage }),
       }),
     };
   });

@@ -2313,7 +2313,9 @@ export type ScriptPathSigningPackage = {
     version: 'nutspA';
     type: 'swap' | 'melt';
     quote?: string;
-    inputs: Array<Pick<Proof, 'amount' | 'id' | 'secret' | 'C'>>;
+    inputs: Array<Pick<Proof, 'amount' | 'id' | 'C'> & {
+        Y: string;
+    }>;
     outputs: SerializedBlindedMessage[];
     quoteAmount?: bigint;
     spends: ScriptPathSpendRequest[];

@@ -7,7 +7,7 @@ import { CTSError } from '../model/Errors';
 import { bytesToHex, hexToBytes, isValidHex } from '../utils';
 
 import { taggedHash } from './core';
-import { isBlsKeyset } from './curves';
+import { hashToCurveHex, isBlsKeyset } from './curves';
 import { minimalBE, tlvRecord } from './nutroot';
 
 /**
@@ -36,10 +36,14 @@ export type TranscriptProofInput = {
   amount: bigint;
   keysetId: string;
   /**
-   * The proof's secret: a v3 point `P` as 33-byte compressed SEC1 hex, or a v0-v2 secret verbatim,
-   * which a mixed transaction carries alongside v3 inputs (NUT-10).
+   * `Y = hash_to_curve(secret)` hex on the keyset's curve, the value the container carries
+   * (NUT-10). Derived from `secret` when absent; supply it to skip the hash.
    */
-  secret: string;
+  Y?: string;
+  /**
+   * The proof's secret, hashed to `Y` when `Y` is not supplied. Never enters the transcript.
+   */
+  secret?: string;
   /**
    * The mint signature `C` hex (BLS G1 under v3 keysets).
    */
@@ -71,9 +75,22 @@ export type TransactionShape = {
  * Stable lookup key for one proof input's signing context.
  */
 export function proofInputContextKey(
-  input: Pick<TranscriptProofInput, 'keysetId' | 'secret'>,
+  input: Pick<TranscriptProofInput, 'keysetId' | 'secret' | 'Y'>,
 ): string {
-  return `${isBlsKeyset(input.keysetId) ? 'v3' : 'legacy'}:${input.secret}`;
+  return proofInputY(input);
+}
+
+/**
+ * A proof input's `Y` hex: as supplied, else the keyset's hash_to_curve of its secret.
+ */
+export function proofInputY(
+  input: Pick<TranscriptProofInput, 'keysetId' | 'secret' | 'Y'>,
+): string {
+  if (input.Y !== undefined) return input.Y;
+  if (input.secret === undefined || input.secret.length === 0) {
+    throw new CTSError('Transcript proof input needs a secret or its Y');
+  }
+  return hashToCurveHex(input.secret, input.keysetId);
 }
 
 function amountRecord(amount: bigint): Uint8Array {
@@ -109,19 +126,18 @@ function keysetIdBytes(keysetId: string): Uint8Array {
  * One proof input's transcript container record (NUT-10), the bytes `inputDigest` hashes.
  */
 export function proofInputContainer(input: TranscriptProofInput): Uint8Array {
-  // A v3 secret contributes its raw 33 bytes; a v0-v2 secret its utf8 bytes.
-  const secret = isBlsKeyset(input.keysetId)
-    ? hexToBytes(input.secret)
-    : new TextEncoder().encode(input.secret);
-  if (secret.length === 0) {
-    throw new CTSError('Transcript proof secret must be non-empty');
+  const Y = proofInputY(input);
+  // A supplied Y is checked for shape only: 48-byte G1 under a BLS keyset, 33-byte secp otherwise.
+  const expected = isBlsKeyset(input.keysetId) ? 48 : 33;
+  if (!isValidHex(Y) || Y.length !== expected * 2) {
+    throw new CTSError(`Transcript proof Y must be a ${expected}-byte compressed point`);
   }
   return tlvRecord(
     CONTAINER_PROOF_INPUT,
     concatBytes(
       amountRecord(input.amount),
       tlvRecord(0x02, keysetIdBytes(input.keysetId)),
-      tlvRecord(0x03, secret),
+      tlvRecord(0x03, hexToBytes(Y)),
       tlvRecord(0x04, hexToBytes(input.C)),
     ),
   );
@@ -149,9 +165,18 @@ function blindedOutputContainer(output: TranscriptBlindedOutput): Uint8Array {
 }
 
 /**
+ * The transaction with every proof input's `Y` resolved, so a secret is hashed once per build.
+ */
+function resolveProofYs(tx: TransactionShape): TransactionShape {
+  if (!tx.proofInputs || tx.proofInputs.every((p) => p.Y !== undefined)) return tx;
+  return { ...tx, proofInputs: tx.proofInputs.map((p) => ({ ...p, Y: proofInputY(p) })) };
+}
+
+/**
  * Serialize a transaction to its TLV transcript (without the domain tag).
  */
-export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
+export function buildTransactionTranscript(input: TransactionShape): Uint8Array {
+  const tx = resolveProofYs(input);
   const proofs = tx.proofInputs ?? [];
   const mintQuotes = tx.mintQuoteInputs ?? [];
   const blinded = tx.blindedOutputs ?? [];
@@ -243,16 +268,16 @@ export type TransactionInputContext = { inputContainer: Uint8Array; digest: Uint
  * Every input's signing context, plus the shared message and digest.
  *
  * @remarks
- * `proofs` is keyed by {@link proofInputContextKey} and `quotes` by quote id; the transcript builder
- * has already refused duplicates, so the keys are unique. The proof key includes its protocol
- * family because identical text denotes raw point bytes in v3 and UTF-8 bytes in v0-v2.
+ * `proofs` is keyed by {@link proofInputContextKey} (the input's `Y`) and `quotes` by quote id; the
+ * transcript builder has already refused duplicates, so the keys are unique.
  */
-export function transactionInputs(tx: TransactionShape): {
+export function transactionInputs(input: TransactionShape): {
   transactionMessage: Uint8Array;
   transactionDigest: Uint8Array;
   proofs: Map<string, TransactionInputContext>;
   quotes: Map<string, TransactionInputContext>;
 } {
+  const tx = resolveProofYs(input);
   const message = transactionMessage(tx);
   const digest = sha256(message);
   const proofs = new Map<string, TransactionInputContext>();
@@ -271,8 +296,19 @@ export function transactionInputs(tx: TransactionShape): {
   return { transactionMessage: message, transactionDigest: digest, proofs, quotes };
 }
 
+/**
+ * A proof input as a payload names it: by `secret`, or by `Y` when the secret is not at hand.
+ */
+export type PayloadProofInput = {
+  amount: AmountLike;
+  id: string;
+  secret?: string;
+  Y?: string;
+  C: string;
+};
+
 type PayloadShape = {
-  inputs?: Array<{ amount: AmountLike; id: string; secret: string; C: string }>;
+  inputs?: PayloadProofInput[];
   mintQuotes?: Array<{ quoteId: string; amount: AmountLike }>;
   outputs?: Array<{ amount: AmountLike; id: string; B_: string }>;
   meltQuote?: { quoteId: string; amount: AmountLike };
@@ -325,7 +361,8 @@ function payloadToTransaction(payload: PayloadShape): TransactionShape {
       proofInputs: payload.inputs.map((p) => ({
         amount: Amount.from(p.amount).toBigInt(),
         keysetId: p.id,
-        secret: p.secret,
+        ...(p.secret !== undefined && { secret: p.secret }),
+        ...(p.Y !== undefined && { Y: p.Y }),
         C: p.C,
       })),
     }),
