@@ -2312,7 +2312,29 @@ describe('v3 transaction witnesses do not travel in tokens', () => {
       utils.getEncodedToken({ mint: 'https://m.example', unit: 'sat', proofs: [legacy] } as never),
       ['0088553333aabbcc'],
     );
-    expect(decoded.proofs[0].witness).toBeDefined();
+    // Verbatim, not nested: re-encoding a decoded token must not stringify the witness again,
+    // or the mint gets a JSON string where it expects the witness object.
+    expect(decoded.proofs[0].witness).toBe(legacy.witness);
+  });
+
+  test('a pre-v3 witness survives any number of decode/encode round trips', () => {
+    const legacy = {
+      amount: 8,
+      id: '0088553333aabbcc',
+      secret: '["P2PK",{"nonce":"a","data":"b"}]',
+      C: '02' + 'aa'.repeat(32),
+      witness: JSON.stringify({ signatures: ['11'.repeat(64)] }),
+    };
+    let token = utils.getEncodedToken({
+      mint: 'https://m.example',
+      unit: 'sat',
+      proofs: [legacy],
+    } as never);
+    for (let i = 0; i < 3; i++) {
+      const decoded = utils.getDecodedToken(token, ['0088553333aabbcc']);
+      expect(decoded.proofs[0].witness).toBe(legacy.witness);
+      token = utils.getEncodedToken(decoded);
+    }
   });
 
   test('a pre-v3 witness travels even when its secret looks like a point', () => {
