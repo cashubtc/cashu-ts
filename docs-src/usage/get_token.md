@@ -43,6 +43,8 @@ const token = wallet.decodeToken(tokenString);
 // token.mint, token.unit, token.memo
 ```
 
+`wallet.decodeToken` also accepts the raw binary form (`craw` + `B` + CBOR, eg from an NFC tap) as a `Uint8Array`, with the same keyset ID resolution.
+
 ## Advanced: `getDecodedToken`
 
 `getDecodedToken(tokenString, keysetIds)` is for advanced flows where you manage your own keyset cache and want to decode outside a wallet instance. The second argument must be the full list of keyset IDs the token might reference:
@@ -55,3 +57,5 @@ const token = getDecodedToken(tokenString, myKeyChain.getAllKeysetIds());
 ```
 
 > ⚠️ Will throw if the token contains v2 short keyset IDs that do not match a full keyset ID.
+
+`getDecodedTokenBinary(bytes, keysetIds)` is the same advanced path for raw binary tokens and takes the same keyset ID list.

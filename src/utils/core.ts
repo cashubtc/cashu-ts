@@ -1434,11 +1434,17 @@ export function getEncodedTokenBinary(token: Token): Uint8Array {
  * Decodes a raw binary token (`craw` + `B` + CBOR) into a {@link Token}.
  *
  * @param bytes The encoded binary token.
- * @param keysetIds Array of full keyset ID strings, eg: from `KeyChain.getAllKeysetIds()`. When
- *   provided, short keyset IDs are mapped to their full form like {@link getDecodedToken} does.
+ * @param keysetIds Array of full keyset ID strings, eg: from `KeyChain.getAllKeysetIds()`. Short
+ *   keyset IDs are mapped to their full form like {@link getDecodedToken} does.
  * @returns Cashu token object.
  */
-export function getDecodedTokenBinary(bytes: Uint8Array, keysetIds?: readonly string[]): Token {
+export function getDecodedTokenBinary(bytes: Uint8Array, keysetIds: readonly string[]): Token {
+  // Plain JS callers on the pre-v5 signature otherwise decode short IDs unresolved
+  if (!Array.isArray(keysetIds)) {
+    throw new CTSError(
+      'getDecodedTokenBinary requires keysetIds (the wallet keyset id list) as its second argument; see the v5 migration guide, or use wallet.decodeToken()',
+    );
+  }
   // 'craw' + 'B' as bytes; no decoding needed for a fixed ASCII magic.
   const magic = [0x63, 0x72, 0x61, 0x77, 0x42];
   if (bytes.length < 5 || magic.some((b, i) => bytes[i] !== b)) {
@@ -1447,9 +1453,7 @@ export function getDecodedTokenBinary(bytes: Uint8Array, keysetIds?: readonly st
   const binaryToken = bytes.slice(5);
   const decoded = decodeCBOR(binaryToken) as TokenV4Template;
   const token = fromV4CborTemplate(decoded);
-  if (Array.isArray(keysetIds)) {
-    token.proofs = mapShortKeysetIds(token.proofs, keysetIds);
-  }
+  token.proofs = mapShortKeysetIds(token.proofs, keysetIds);
   return token;
 }
 

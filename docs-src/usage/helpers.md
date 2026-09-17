@@ -62,7 +62,8 @@ const found = findCashuPayload(pastedText);
 if (found?.kind === 'token') {
   const meta = getTokenMetadata(found.payload); // mint, unit and amount, no keysets needed
   // getDecodedToken resolves short keyset IDs against the keysets you pass it, so it throws for a
-  // mint you have not loaded, which is the common case for a stranger's paste.
+  // mint you have not loaded, which is the common case for a stranger's paste. Raw binary tokens
+  // go through getDecodedTokenBinary(bytes, keysetIds) with the same list.
   const token = getDecodedToken(found.payload, myKeyChain.getAllKeysetIds());
 } else if (found?.kind === 'paymentRequest') {
   const pr = decodePaymentRequest(found.payload);
