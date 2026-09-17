@@ -1603,6 +1603,34 @@ describe('normalizeMintUrl', () => {
   });
 });
 
+describe('token witnesses survive re-encoding', () => {
+  const mint = 'https://m.example';
+  const locked: Proof = {
+    amount: Amount.from(8),
+    id: '0088553333aabbcc',
+    secret: '["P2PK",{"nonce":"a","data":"b"}]',
+    C: '02' + 'aa'.repeat(32),
+    witness: JSON.stringify({ signatures: ['11'.repeat(64)] }),
+  };
+
+  test('a witness comes back verbatim, not nested', () => {
+    // Re-encoding a decoded token must not stringify the witness again, or the mint gets a JSON
+    // string where it expects the witness object.
+    const encoded = utils.getEncodedToken({ mint, unit: 'sat', proofs: [locked] });
+    const decoded = utils.getDecodedToken(encoded, [locked.id]);
+    expect(decoded.proofs[0].witness).toBe(locked.witness);
+  });
+
+  test('a witness survives any number of decode/encode round trips', () => {
+    let token = utils.getEncodedToken({ mint, unit: 'sat', proofs: [locked] });
+    for (let i = 0; i < 3; i++) {
+      const decoded = utils.getDecodedToken(token, [locked.id]);
+      expect(decoded.proofs[0].witness).toBe(locked.witness);
+      token = utils.getEncodedToken(decoded);
+    }
+  });
+});
+
 describe('bolt11PaymentHash', () => {
   // BOLT 11 test vector: "Please consider supporting this project", payment hash 0001..0102.
   const VECTOR =
