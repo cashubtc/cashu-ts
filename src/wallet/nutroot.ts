@@ -1,10 +1,10 @@
 import { assertV3PointSecret, isBlsKeyset, isV3PointSecret, schnorrSignDigest } from '../crypto';
-import { hashToCurveBls } from '../crypto/curve_bls';
 import {
   createRandomSecretKey,
   getPubKeyFromPrivKey,
   normalizeSecpPubkey,
 } from '../crypto/curve_secp';
+import { hashToCurveHex } from '../crypto/curves';
 import { parseSecret } from '../crypto/NUT10';
 import { maybeDeriveP2BKPrivateKeys, p2pkSpendLeaves } from '../crypto/NUT11';
 import { deriveQuoteLockKey } from '../crypto/NUT13';
@@ -20,12 +20,7 @@ import {
   nutrootTweakSeckey,
   verifyNutrootSpendInfo,
 } from '../crypto/nutroot';
-import {
-  inputsForPayload,
-  proofInputContextKey,
-  signTransactionInput,
-  spendCommitment,
-} from '../crypto/transcript';
+import { inputsForPayload, signTransactionInput, spendCommitment } from '../crypto/transcript';
 import { type Logger, fail } from '../logger';
 import { type Amount } from '../model/Amount';
 import { CTSError } from '../model/Errors';
@@ -82,9 +77,14 @@ export async function attachTransactionWitnesses(
 ): Promise<SpendReceipt[]> {
   const v3Inputs = payload.inputs.filter((p) => isBlsKeyset(p.id) && isV3PointSecret(p.secret));
   if (v3Inputs.length === 0) return [];
-  // Each input signs its own input digest over the shared transcript (NUT-10).
+  // Each input signs its own input digest over the shared transcript (NUT-10). The transcript
+  // names inputs by Y, which the receipts need too, so hash each v3 secret once here.
+  const Ys = new Map(v3Inputs.map((p) => [p.secret, hashToCurveHex(p.secret, p.id)]));
   const { transactionMessage, proofs: inputContexts } = inputsForPayload({
-    inputs: payload.inputs,
+    inputs: payload.inputs.map((p) => {
+      const Y = Ys.get(p.secret);
+      return Y !== undefined && isBlsKeyset(p.id) ? { amount: p.amount, id: p.id, C: p.C, Y } : p;
+    }),
     outputs: payload.outputs ?? [],
     ...(meltQuote && { meltQuote }),
   });
@@ -96,9 +96,7 @@ export async function attachTransactionWitnesses(
     if (!input) {
       fail('Script path plan names a secret not in this transaction', state.logger);
     }
-    const { digest, inputContainer } = inputContexts.get(
-      proofInputContextKey({ keysetId: input.id, secret: input.secret }),
-    )!;
+    const { digest, inputContainer } = inputContexts.get(Ys.get(input.secret)!)!;
     const mine = spend.keys.map((k: string) => schnorrSignDigest(digest, k));
     // The co-signer sees the digest only now, which is why it is a hook and not a signature the
     // caller could have supplied up front: the digest covers the outputs, and those are only
@@ -126,9 +124,7 @@ export async function attachTransactionWitnesses(
   for (const input of v3Inputs) {
     if (input.witness) continue; // pre-built witness (e.g. script path): leave it alone
     const secretKey = extraKeys?.get(input.secret);
-    const context = inputContexts.get(
-      proofInputContextKey({ keysetId: input.id, secret: input.secret }),
-    );
+    const context = inputContexts.get(Ys.get(input.secret)!);
     if (secretKey && context) input.witness = signTransactionInput(context.digest, secretKey);
   }
   // Every v3 input signs (NUT-10), so an unsigned one is a request the mint will refuse.
@@ -145,12 +141,9 @@ export async function attachTransactionWitnesses(
   // The receipt is the spender's copy of what NUT-07 commits to: nothing here is secret to the
   // wallet, and nothing but the wallet ever holds all of it together.
   const transcript = bytesToHex(transactionMessage);
-  const enc = new TextEncoder();
   return v3Inputs.map((input) => {
-    const { digest } = inputContexts.get(
-      proofInputContextKey({ keysetId: input.id, secret: input.secret }),
-    )!;
-    const Y = hashToCurveBls(enc.encode(input.secret)).toHex(true);
+    const Y = Ys.get(input.secret)!;
+    const { digest } = inputContexts.get(Y)!;
     const witness = input.witness as string;
     return {
       Y,

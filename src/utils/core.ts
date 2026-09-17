@@ -893,7 +893,7 @@ export function verifySpendReceipt(
     const container = proofInputContainer({
       amount: Amount.from(proof.amount).toBigInt(),
       keysetId: proof.id,
-      secret: proof.secret,
+      Y,
       C: proof.C,
     });
     const recomputed = inputDigest(sha256(hexToBytes(receipt.transcript)), container);

@@ -2,8 +2,9 @@ import { equalBytes } from '@noble/curves/utils.js';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { schnorrSignDigest } from '../crypto/core';
+import { hashToCurveBls } from '../crypto/curve_bls';
 import { getPubKeyFromPrivKey } from '../crypto/curve_secp';
-import { isBlsKeyset } from '../crypto/curves';
+import { hashToCurveHex, isBlsKeyset } from '../crypto/curves';
 import {
   buildScriptPathWitness,
   enumerateLeafKeySlots,
@@ -19,14 +20,15 @@ import {
 import {
   digestForPayload,
   inputsForPayload,
-  proofInputContextKey,
   meltOutputAmount,
+  type PayloadProofInput,
 } from '../crypto/transcript';
 import {
   bytesToHex,
   bytesToUtf8,
   decodeBase64UrlToUint8,
   hexToBytes,
+  isValidHex,
   JSONInt,
   encodeUint8ToBase64Url,
 } from '../utils';
@@ -70,10 +72,6 @@ export type ScriptPathSpendRequest = {
    */
   slots?: number[];
   /**
-   * Preimage for a hashlock leaf, hex.
-   */
-  preimage?: string;
-  /**
    * Signatures collected so far, hex. Grows as signers add theirs.
    */
   signatures: string[];
@@ -83,10 +81,11 @@ export type ScriptPathSpendRequest = {
  * Everything a signer needs to satisfy one or more script path spends, and nothing else.
  *
  * @remarks
- * Carries no secrets and no blinding factors: inputs contribute only what the transcript commits
- * to. Serialize it, send it wherever the keys are, sign, and merge the result back into the preview
- * it came from. Unlike a co-signer hook, the transaction is not in flight meanwhile, so a ceremony
- * can outlive the process that started it, which is the normal case on a phone.
+ * Carries no secrets, no preimages and no blinding factors: inputs are named by `Y`, as in the
+ * transcript, and a hashlock preimage stays with the coordinator until merge. Serialize it, send it
+ * wherever the keys are, sign, and merge the result back into the preview it came from. Unlike a
+ * co-signer hook, the transaction is not in flight meanwhile, so a ceremony can outlive the process
+ * that started it, which is the normal case on a phone.
  */
 export type ScriptPathSigningPackage = {
   version: 'nutspA';
@@ -95,7 +94,10 @@ export type ScriptPathSigningPackage = {
    * Melt quote id; melt packages only.
    */
   quote?: string;
-  inputs: Array<Pick<Proof, 'amount' | 'id' | 'secret' | 'C'>>;
+  /**
+   * Every transaction input, named by `Y` rather than by secret (NUT-10).
+   */
+  inputs: Array<Pick<Proof, 'amount' | 'id' | 'C'> & { Y: string }>;
   outputs: SerializedBlindedMessage[];
   /**
    * The melt output's amount, quote amount plus the selected fee reserve (NUT-10); needed to
@@ -106,7 +108,7 @@ export type ScriptPathSigningPackage = {
 };
 
 function digestOf(
-  inputs: Array<Pick<Proof, 'amount' | 'id' | 'secret' | 'C'>>,
+  inputs: PayloadProofInput[],
   outputs: SerializedBlindedMessage[],
   meltQuote?: { quoteId: string; amount: bigint },
 ): Uint8Array {
@@ -129,6 +131,10 @@ function packageDigest(pkg: ScriptPathSigningPackage): Uint8Array {
 
 /**
  * Each spend's input digest by its secret, rebuilt the same way (NUT-10: inputs sign per input).
+ *
+ * @remarks
+ * Package inputs are named by `Y`, so a spend finds its input by hashing its own secret: one hash
+ * per spend, on the BLS curve every v3 keyset uses.
  */
 function packageInputDigests(pkg: ScriptPathSigningPackage): Map<string, Uint8Array> {
   const meltQuote =
@@ -142,16 +148,19 @@ function packageInputDigests(pkg: ScriptPathSigningPackage): Map<string, Uint8Ar
   });
   return new Map(
     pkg.spends.map((spend) => {
-      const proof = pkg.inputs.find(
-        (input) => input.secret === spend.secret && isBlsKeyset(input.id),
-      );
+      const Y = spendY(spend);
+      const proof = pkg.inputs.find((input) => input.Y === Y && isBlsKeyset(input.id));
       if (!proof) throw new CTSError('Signing package spend must name a v3 transaction input');
-      return [
-        spend.secret,
-        proofs.get(proofInputContextKey({ keysetId: proof.id, secret: proof.secret }))!.digest,
-      ];
+      return [spend.secret, proofs.get(Y)!.digest];
     }),
   );
+}
+
+/**
+ * The `Y` of a spend's v3 point secret, hashed as every BLS keyset does.
+ */
+function spendY(spend: Pick<ScriptPathSpendRequest, 'secret'>): string {
+  return hashToCurveBls(utf8ToBytes(spend.secret)).toHex(true);
 }
 
 function buildPackage(
@@ -203,7 +212,6 @@ function buildPackage(
         path: nutrootMerklePath(leafHashes, plan.leafIndex).map((h) => bytesToHex(h)),
       },
       ...(E && { E, slots }),
-      ...(plan.preimage !== undefined && { preimage: plan.preimage }),
       signatures: [],
     };
   });
@@ -211,7 +219,12 @@ function buildPackage(
     version: SCRIPT_PATH_PREFIX,
     type,
     ...(meltQuote && { quote: meltQuote.quoteId, quoteAmount: meltQuote.amount }),
-    inputs: inputs.map((p) => ({ amount: p.amount, id: p.id, secret: p.secret, C: p.C })),
+    inputs: inputs.map((p) => ({
+      amount: p.amount,
+      id: p.id,
+      Y: hashToCurveHex(p.secret, p.id),
+      C: p.C,
+    })),
     outputs,
     spends,
   };
@@ -288,7 +301,7 @@ function assertValidPackage(pkg: ScriptPathSigningPackage): NutrootConditionLeaf
     if (
       !input ||
       typeof input !== 'object' ||
-      typeof input.secret !== 'string' ||
+      typeof input.Y !== 'string' ||
       typeof input.id !== 'string' ||
       typeof input.C !== 'string'
     ) {
@@ -328,11 +341,17 @@ function assertValidPackage(pkg: ScriptPathSigningPackage): NutrootConditionLeaf
       throw new CTSError('Signing package quote amount is invalid', { cause: e });
     }
   }
-  const inputSecrets = new Set(pkg.inputs.map((input) => input.secret));
+  const inputYs = new Set(pkg.inputs.filter((input) => isBlsKeyset(input.id)).map((i) => i.Y));
   const spent = new Set<string>();
   const leaves: NutrootConditionLeaf[] = [];
   for (const spend of pkg.spends) {
-    if (!inputSecrets.has(spend.secret) || spent.has(spend.secret)) {
+    if (
+      typeof spend?.secret !== 'string' ||
+      !isValidHex(spend.secret) ||
+      spend.secret.length !== 66 ||
+      !inputYs.has(spendY(spend)) ||
+      spent.has(spend.secret)
+    ) {
       throw new CTSError('Signing package spend must name one unique transaction input');
     }
     spent.add(spend.secret);
@@ -405,16 +424,21 @@ function signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPath
   return { ...pkg, spends };
 }
 
-function mergeSwapPackage(pkg: ScriptPathSigningPackage, preview: SwapPreview): SwapPreview {
+function mergeSwapPackage(
+  pkg: ScriptPathSigningPackage,
+  preview: SwapPreview,
+  plans?: ScriptPathPlan[],
+): SwapPreview {
   if (pkg.type !== 'swap') throw new CTSError('Cannot merge a melt package into a swap');
   assertValidPackage(pkg);
   assertMatches(pkg, digestOf(preview.inputs, orderedOutputs(preview)));
-  return { ...preview, inputs: applyWitnesses(pkg, preview.inputs) };
+  return { ...preview, inputs: applyWitnesses(pkg, preview.inputs, plans) };
 }
 
 function mergeMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'amount'>>(
   pkg: ScriptPathSigningPackage,
   preview: MeltPreview<TQuote>,
+  plans?: ScriptPathPlan[],
 ): MeltPreview<TQuote> {
   if (pkg.type !== 'melt') throw new CTSError('Cannot merge a swap package into a melt');
   assertValidPackage(pkg);
@@ -426,7 +450,7 @@ function mergeMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | '
       { quoteId: preview.quote.quote, amount: Amount.from(preview.quote.amount).toBigInt() },
     ),
   );
-  return { ...preview, inputs: applyWitnesses(pkg, preview.inputs) };
+  return { ...preview, inputs: applyWitnesses(pkg, preview.inputs, plans) };
 }
 
 function assertMatches(pkg: ScriptPathSigningPackage, expected: Uint8Array): void {
@@ -437,13 +461,24 @@ function assertMatches(pkg: ScriptPathSigningPackage, expected: Uint8Array): voi
   }
 }
 
-function applyWitnesses(pkg: ScriptPathSigningPackage, inputs: Proof[]): Proof[] {
+function applyWitnesses(
+  pkg: ScriptPathSigningPackage,
+  inputs: Proof[],
+  plans: ScriptPathPlan[] = [],
+): Proof[] {
   const digests = packageInputDigests(pkg);
   const bySecret = new Map(pkg.spends.map((s) => [s.secret, s]));
+  const preimages = new Map(plans.map((p) => [p.secret, p.preimage]));
   return inputs.map((proof) => {
     const spend = bySecret.get(proof.secret);
-    if (!spend) return proof;
+    if (!spend || !isBlsKeyset(proof.id)) return proof;
     const leaf = parseNutrootLeaf(hexToBytes(spend.leaf));
+    const preimage = preimages.get(proof.secret);
+    if (leaf.type === 'hashlock' && preimage === undefined) {
+      throw new CTSError(
+        'A hashlock spend needs its preimage at merge: pass the plans the package was extracted with',
+      );
+    }
     const signatures = selectRequiredLeafSignatures(
       leaf,
       digests.get(proof.secret)!,
@@ -455,7 +490,7 @@ function applyWitnesses(pkg: ScriptPathSigningPackage, inputs: Proof[]): Proof[]
         leaf: spend.leaf,
         control: spend.control,
         signatures,
-        ...(spend.preimage !== undefined && { preimage: spend.preimage }),
+        ...(preimage !== undefined && { preimage }),
       }),
     };
   });
@@ -499,22 +534,34 @@ export type ScriptPathApi = {
    *
    * @remarks
    * Recomputes the digest from the preview and refuses if it moved: a package signed against one
-   * set of outputs cannot be spent against another, and output order is part of that.
-   * @throws If the package does not belong to this preview, or a spend is short of its leaf's
-   *   signature threshold.
+   * set of outputs cannot be spent against another, and output order is part of that. `plans` are
+   * the ones the package was extracted with: a hashlock leaf takes its preimage from there, since
+   * the package never carries it.
+   * @throws If the package does not belong to this preview, a spend is short of its leaf's
+   *   signature threshold, or a hashlock spend has no preimage in `plans`.
    */
-  mergeSwapPackage(pkg: ScriptPathSigningPackage, preview: SwapPreview): SwapPreview;
+  mergeSwapPackage(
+    pkg: ScriptPathSigningPackage,
+    preview: SwapPreview,
+    plans?: ScriptPathPlan[],
+  ): SwapPreview;
   /**
    * Melt counterpart of {@link ScriptPathApi.mergeSwapPackage}.
    */
   mergeMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'amount'>>(
     pkg: ScriptPathSigningPackage,
     preview: MeltPreview<TQuote>,
+    plans?: ScriptPathPlan[],
   ): MeltPreview<TQuote>;
   /**
    * The witness a spend would produce, without a preview. Useful for inspection.
    */
-  witnessFor(spend: ScriptPathSpendRequest, tree: string[], leafIndex: number): string;
+  witnessFor(
+    spend: ScriptPathSpendRequest,
+    tree: string[],
+    leafIndex: number,
+    preimage?: string,
+  ): string;
 };
 
 /**
@@ -535,8 +582,8 @@ export const ScriptPath: ScriptPathApi = {
   signPackage,
   mergeSwapPackage,
   mergeMeltPackage,
-  witnessFor: (spend, tree, leafIndex) =>
-    buildScriptPathWitness(tree, leafIndex, spend.control.K, spend.signatures, spend.preimage),
+  witnessFor: (spend, tree, leafIndex, preimage) =>
+    buildScriptPathWitness(tree, leafIndex, spend.control.K, spend.signatures, preimage),
 };
 
 export type { NutrootLeaf };

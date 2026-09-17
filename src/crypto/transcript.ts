@@ -7,7 +7,7 @@ import { CTSError } from '../model/Errors';
 import { bytesToHex, hexToBytes, isValidHex } from '../utils';
 
 import { taggedHash } from './core';
-import { isBlsKeyset } from './curves';
+import { hashToCurveHex, isBlsKeyset } from './curves';
 import { minimalBE, tlvRecord } from './nutroot';
 
 /**
@@ -36,15 +36,20 @@ export type TranscriptProofInput = {
   amount: bigint;
   keysetId: string;
   /**
-   * The proof's secret: a v3 point `P` as 33-byte compressed SEC1 hex, or a v0-v2 secret verbatim,
-   * which a mixed transaction carries alongside v3 inputs (NUT-10).
+   * `Y = hash_to_curve(secret)` hex on the keyset's curve, the value the container carries
+   * (NUT-10); see {@link proofInputY}. A secret never enters a transcript.
    */
-  secret: string;
+  Y: string;
   /**
    * The mint signature `C` hex (BLS G1 under v3 keysets).
    */
   C: string;
 };
+
+/**
+ * How a caller names a proof input: by its secret, or by `Y` when that is what it holds.
+ */
+export type ProofInputName = { secret: string; Y?: undefined } | { Y: string; secret?: undefined };
 
 export type TranscriptQuote = {
   amount: bigint;
@@ -70,10 +75,19 @@ export type TransactionShape = {
 /**
  * Stable lookup key for one proof input's signing context.
  */
-export function proofInputContextKey(
-  input: Pick<TranscriptProofInput, 'keysetId' | 'secret'>,
-): string {
-  return `${isBlsKeyset(input.keysetId) ? 'v3' : 'legacy'}:${input.secret}`;
+export function proofInputContextKey(input: { keysetId: string } & ProofInputName): string {
+  return input.Y ?? proofInputY({ id: input.keysetId, secret: input.secret });
+}
+
+/**
+ * A proof input's `Y` hex: as supplied, else the keyset's hash_to_curve of its secret.
+ */
+export function proofInputY(input: { id: string } & ProofInputName): string {
+  if (input.Y !== undefined) return input.Y;
+  if (input.secret.length === 0) {
+    throw new CTSError('Transcript proof input needs a secret or its Y');
+  }
+  return hashToCurveHex(input.secret, input.id);
 }
 
 function amountRecord(amount: bigint): Uint8Array {
@@ -109,19 +123,19 @@ function keysetIdBytes(keysetId: string): Uint8Array {
  * One proof input's transcript container record (NUT-10), the bytes `inputDigest` hashes.
  */
 export function proofInputContainer(input: TranscriptProofInput): Uint8Array {
-  // A v3 secret contributes its raw 33 bytes; a v0-v2 secret its utf8 bytes.
-  const secret = isBlsKeyset(input.keysetId)
-    ? hexToBytes(input.secret)
-    : new TextEncoder().encode(input.secret);
-  if (secret.length === 0) {
-    throw new CTSError('Transcript proof secret must be non-empty');
+  const { Y } = input;
+  const keysetId = keysetIdBytes(input.keysetId);
+  // Shape only: a 48-byte G1 point under a BLS keyset, a 33-byte secp256k1 point otherwise.
+  const expected = isBlsKeyset(input.keysetId) ? 48 : 33;
+  if (!isValidHex(Y) || Y.length !== expected * 2) {
+    throw new CTSError(`Transcript proof Y must be a ${expected}-byte compressed point`);
   }
   return tlvRecord(
     CONTAINER_PROOF_INPUT,
     concatBytes(
       amountRecord(input.amount),
-      tlvRecord(0x02, keysetIdBytes(input.keysetId)),
-      tlvRecord(0x03, secret),
+      tlvRecord(0x02, keysetId),
+      tlvRecord(0x03, hexToBytes(Y)),
       tlvRecord(0x04, hexToBytes(input.C)),
     ),
   );
@@ -163,7 +177,7 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
     throw new CTSError('Transaction requires at least one output');
   }
   // NUT-10: the same proof or quote twice would sign one input digest for two inputs.
-  if (new Set(proofs.map(proofInputContextKey)).size !== proofs.length) {
+  if (new Set(proofs.map((p) => p.Y)).size !== proofs.length) {
     throw new CTSError('Transaction repeats a proof input');
   }
   if (new Set(mintQuotes.map((q) => q.quoteId)).size !== mintQuotes.length) {
@@ -243,9 +257,8 @@ export type TransactionInputContext = { inputContainer: Uint8Array; digest: Uint
  * Every input's signing context, plus the shared message and digest.
  *
  * @remarks
- * `proofs` is keyed by {@link proofInputContextKey} and `quotes` by quote id; the transcript builder
- * has already refused duplicates, so the keys are unique. The proof key includes its protocol
- * family because identical text denotes raw point bytes in v3 and UTF-8 bytes in v0-v2.
+ * `proofs` is keyed by the input's `Y` and `quotes` by quote id; the transcript builder has already
+ * refused duplicates, so the keys are unique.
  */
 export function transactionInputs(tx: TransactionShape): {
   transactionMessage: Uint8Array;
@@ -259,7 +272,7 @@ export function transactionInputs(tx: TransactionShape): {
   const quotes = new Map<string, TransactionInputContext>();
   for (const p of tx.proofInputs ?? []) {
     const inputContainer = proofInputContainer(p);
-    proofs.set(proofInputContextKey(p), {
+    proofs.set(p.Y, {
       inputContainer,
       digest: inputDigest(digest, inputContainer),
     });
@@ -271,8 +284,13 @@ export function transactionInputs(tx: TransactionShape): {
   return { transactionMessage: message, transactionDigest: digest, proofs, quotes };
 }
 
+/**
+ * A proof input as a payload carries it, named by secret or by `Y` ({@link ProofInputName}).
+ */
+export type PayloadProofInput = { amount: AmountLike; id: string; C: string } & ProofInputName;
+
 type PayloadShape = {
-  inputs?: Array<{ amount: AmountLike; id: string; secret: string; C: string }>;
+  inputs?: PayloadProofInput[];
   mintQuotes?: Array<{ quoteId: string; amount: AmountLike }>;
   outputs?: Array<{ amount: AmountLike; id: string; B_: string }>;
   meltQuote?: { quoteId: string; amount: AmountLike };
@@ -325,7 +343,7 @@ function payloadToTransaction(payload: PayloadShape): TransactionShape {
       proofInputs: payload.inputs.map((p) => ({
         amount: Amount.from(p.amount).toBigInt(),
         keysetId: p.id,
-        secret: p.secret,
+        Y: proofInputY(p),
         C: p.C,
       })),
     }),

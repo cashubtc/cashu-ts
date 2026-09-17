@@ -5,6 +5,7 @@ import { describe, expect, test, vi } from 'vitest';
 
 import { hashToCurveBls } from '../../src/crypto/curve_bls';
 import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
+import { hashToCurveHex } from '../../src/crypto/curves';
 import {
   buildNutrootSecret,
   deriveReceiverKeyedSecret,
@@ -89,7 +90,7 @@ function transactionInputsOf(inputs: Proof[], meltQuote?: { quoteId: string; amo
     proofInputs: inputs.map((p) => ({
       amount: Amount.from(p.amount).toBigInt(),
       keysetId: p.id,
-      secret: p.secret,
+      Y: hashToCurveHex(p.secret, p.id),
       C: p.C,
     })),
     blindedOutputs: [{ amount: OUTPUT.amount.toBigInt(), keysetId: OUTPUT.id, B_: OUTPUT.B_ }],
@@ -598,6 +599,41 @@ describe('attachTransactionWitnesses', () => {
       bytesToHex(seen!.digest),
     );
     expect(bytesToHex(seen!.digest)).toBe(bytesToHex(digestOf([input])));
+  });
+
+  test('the transcript a cosigner sees names companion inputs by Y, never by secret', async () => {
+    const built = buildNutrootSecret(PUB_A, [{ type: 'threshold', n: 2, keys: [PUB_A, PUB_B] }]);
+    const locked = v3Proof(built.secret, { k: PRIV_A, tree: built.tree });
+    const companion: Proof = {
+      id: `00${'33'.repeat(7)}`,
+      amount: Amount.from(1),
+      secret: 'companion-proof-secret',
+      C: PUB_A,
+    };
+    let seen: CosignRequest | undefined;
+    const cosign = async (request: CosignRequest) => {
+      seen = request;
+      return [bytesToHex(schnorr.sign(request.digest, hexToBytes(PRIV_B)))];
+    };
+    const spends = prepareScriptPathSpends(
+      [locked, companion],
+      [{ secret: locked.secret, leafIndex: 0, extraKeys: [PRIV_A], cosign }],
+      [],
+    );
+    const receipts = await attachTransactionWitnesses(
+      { inputs: [locked, companion], outputs: [OUTPUT] },
+      undefined,
+      undefined,
+      spends,
+      makeState(undefined),
+    );
+    const message = bytesToHex(seen!.transactionMessage);
+    expect(message).not.toContain(bytesToHex(utf8ToBytes(companion.secret)));
+    expect(message).toContain(hashToCurveHex(companion.secret, companion.id));
+    expect(message).not.toContain(locked.secret);
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0].Y).toBe(hashToCurveHex(locked.secret, locked.id));
+    expect(locked.witness).toBeDefined();
   });
 
   test('cosigner signatures fill a threshold; invalid or duplicate extras are trimmed', async () => {
