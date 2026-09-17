@@ -93,7 +93,7 @@
     "@stryker-mutator/vitest-runner": "^10.0.0",
     "@types/node": "^26.2.0",
     "@vitest/browser": "^4.1.9",
-    "@vitest/browser-playwright": "^4.1.9",
+    "@vitest/browser-playwright": "^5.0.0",
     "@vitest/coverage-v8": "^4.1.9",
     "@vitest/eslint-plugin": "^1.6.20",
     "eslint": "^9.39.4",
