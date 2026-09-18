@@ -815,6 +815,31 @@ describe('MintInfo method/unit capability checks', () => {
     expect(info.supportsAmountless('bolt12')).toBe(false);
   });
 
+  it('guaranteesPreimage reads the NUT-23 option per method and unit', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        5: {
+          disabled: false,
+          methods: [
+            {
+              method: 'bolt11',
+              unit: 'sat',
+              min_amount: null,
+              max_amount: null,
+              options: { preimage_guaranteed: true },
+            },
+            { method: 'bolt11', unit: 'usd', min_amount: null, max_amount: null },
+          ],
+        },
+      },
+    });
+    expect(info.guaranteesPreimage()).toBe(true);
+    expect(info.guaranteesPreimage('bolt11', 'usd')).toBe(false);
+    expect(info.guaranteesPreimage('bolt12')).toBe(false);
+    expect(new MintInfo({ ...MINTINFORESP, nuts: {} }).guaranteesPreimage()).toBe(false);
+  });
+
   it('supportsAmountless returns false when NUT-5 info is absent', () => {
     const info = new MintInfo({ ...MINTINFORESP, nuts: {} });
     expect(info.supportsAmountless()).toBe(false);
