@@ -13,6 +13,10 @@ import { normalizeMintUrl } from '../utils';
 
 import { Keyset } from './Keyset';
 
+// NUT-02 obliges a mint to keep at least one keyset per unit active for this long, so it is the
+// default horizon a keyset must survive to be worth minting onto.
+const ACTIVE_WINDOW_SECONDS = 30 * 24 * 60 * 60;
+
 /**
  * Manages all keysets for a Mint. Queries filter by the wallet's unit.
  *
@@ -120,6 +124,8 @@ export class KeyChain {
       unit: k.unit,
       active: k.active,
       input_fee_ppk: k.input_fee_ppk,
+      active_from: k.active_from,
+      active_until: k.active_until,
       final_expiry: k.final_expiry,
     }));
 
@@ -130,6 +136,8 @@ export class KeyChain {
         unit: k.unit,
         active: k.active,
         input_fee_ppk: k.input_fee_ppk,
+        active_from: k.active_from,
+        active_until: k.active_until,
         final_expiry: k.final_expiry,
         keys: { ...k.keys },
       }));
@@ -267,27 +275,59 @@ export class KeyChain {
   }
 
   /**
-   * Get the cheapest modern active keyset.
+   * Get the cheapest usable active keyset.
    *
    * @remarks
-   * Prefers the highest keyset ID version, then the lowest fee, then the latest `final_expiry` (no
-   * expiry sorts as never expiring).
+   * Selection narrows before it ranks. Superseded keyset ID versions are dropped, so only the
+   * newest version the mint offers is ever chosen. What remains is filtered to keysets that stay
+   * usable until `usableUntil`, then ranked by lowest fee, latest `active_until`, latest
+   * `final_expiry`. An absent timestamp counts as never, since NUT-02 forbids a mint inactivating a
+   * keyset it has not announced an `active_until` for.
+   *
+   * With no argument the horizon is 30 days out, the window NUT-02 obliges a mint to keep at least
+   * one keyset per unit active for. If the mint offers nothing that long-lived the horizon is
+   * dropped rather than failing, so a misbehaving mint degrades instead of stalling the wallet. An
+   * explicit `usableUntil` is a requirement rather than a preference, and throws when unmet.
+   * @param usableUntil Optional unix time (seconds) the keyset must still be usable at. Use it for
+   *   outputs that must stay spendable for a known period, such as a spending condition with a
+   *   future locktime.
    * @returns Active Keyset.
-   * @throws If none found or uninitialized.
+   * @throws If none found, uninitialized, or nothing meets an explicit `usableUntil`.
    */
-  getCheapestKeyset(): Keyset {
+  getCheapestKeyset(usableUntil?: number): Keyset {
     if (Object.keys(this.keysets).length === 0) {
       throw new CTSError('KeyChain not initialized');
     }
-    const activeKeysets = Object.values(this.keysets).filter(
+    if (usableUntil !== undefined && (!Number.isSafeInteger(usableUntil) || usableUntil < 0)) {
+      throw new CTSError('Invalid usableUntil: expected a non-negative safe integer unix time');
+    }
+    const candidates = Object.values(this.keysets).filter(
       (k) => k.unit === this.unit && k.isActive && k.hasHexId && k.hasKeys,
     );
-    if (activeKeysets.length === 0) {
+    if (candidates.length === 0) {
       throw new CTSError(`No active keyset found for unit: ${this.unit}`);
     }
+
+    // Never mint onto a superseded keyset version, whatever it costs.
+    const newest = candidates.reduce((max, k) => (k.version > max ? k.version : max), -1);
+    const current = candidates.filter((k) => k.version === newest);
+
     const never = Number.MAX_SAFE_INTEGER;
-    return activeKeysets.sort(
-      (a, b) => b.version - a.version || a.fee - b.fee || (b.expiry ?? never) - (a.expiry ?? never),
+    const horizon = usableUntil ?? Math.floor(Date.now() / 1000) + ACTIVE_WINDOW_SECONDS;
+    const longLived = current.filter(
+      (k) => (k.activeUntil ?? never) >= horizon && (k.expiry ?? never) >= horizon,
+    );
+    if (longLived.length === 0 && usableUntil !== undefined) {
+      throw new CTSError(
+        `No active keyset for unit ${this.unit} stays usable until ${usableUntil}`,
+      );
+    }
+
+    return (longLived.length > 0 ? longLived : current).sort(
+      (a, b) =>
+        a.fee - b.fee ||
+        (b.activeUntil ?? never) - (a.activeUntil ?? never) ||
+        (b.expiry ?? never) - (a.expiry ?? never),
     )[0];
   }
 
