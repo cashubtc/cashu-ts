@@ -17,7 +17,8 @@ export type GetInfoResponse = {
    */
   urls?: string[];
   /**
-   * Current server time as a Unix timestamp in seconds.
+   * Current server time as a Unix timestamp in seconds. Signed under NUT-06, so a response goes
+   * stale.
    */
   time?: number;
   tos_url?: string;
@@ -26,6 +27,15 @@ export type GetInfoResponse = {
    */
   max_array_length?: number;
   contact: MintContactInfo[];
+  /**
+   * Mint's BIP-340 signature over the response (NUT-06). See `MintInfo.signatureState`.
+   */
+  signature?: string;
+  /**
+   * Echo of the wallet's `request_nonce` query parameter (NUT-06). Signed; absent when the request
+   * carried none.
+   */
+  request_nonce?: string;
   nuts: {
     '4': {
       // Minting
@@ -107,15 +117,17 @@ export type MintContactInfo = {
  *
  * @remarks
  * `min_amount` and `max_amount` are `<int|null>` per NUT-04/05/25/XX — null when the mint
- * advertises no lower/upper bound. Consumers should use null-safe checks (`?? 0`, `!= null`,
- * truthy) before passing to `Amount.from(...)`.
+ * advertises no lower/upper bound, and possibly absent on the wire (older Nutshell omits them).
+ * `MintInfo` normalization fills `method_name` and coerces absent bounds to null; a raw
+ * `Mint.getInfo()` response does not. Use null-safe checks (`?? 0`, `!= null`, truthy) before
+ * passing to `Amount.from(...)`.
  */
 export type SwapMethod = {
   method: string;
   unit: string;
-  method_name: string | null;
-  min_amount: AmountLike | null;
-  max_amount: AmountLike | null;
+  method_name?: string | null;
+  min_amount?: AmountLike | null;
+  max_amount?: AmountLike | null;
   description?: boolean; //added this for Nutshell =>0.16.4 compatibility, see https://github.com/cashubtc/nutshell/pull/783
   options?: {
     description?: boolean;

@@ -22,7 +22,7 @@ type ReqArgs = {
 const makeRequestSpy = <T>(payload: T) => {
   const calls: ReqArgs[] = [];
   const req = async (options: ReqArgs) => {
-    if (options.endpoint.endsWith('/v1/info')) {
+    if (options.endpoint.includes('/v1/info?request_nonce=')) {
       return MINTCACHE.mintInfo;
     }
     calls.push({
@@ -80,7 +80,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
     const calls: string[] = [];
     const customRequest = async (options: ReqArgs) => {
       calls.push(options.endpoint);
-      if (options.endpoint.endsWith('/v1/info')) {
+      if (options.endpoint.includes('/v1/info?request_nonce=')) {
         return MINTCACHE.mintInfo;
       }
       throw new Error('unexpected endpoint');
@@ -90,7 +90,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
 
     expect(info.name).toBe(MINTCACHE.mintInfo.name);
     expect(calls).toHaveLength(1);
-    expect(calls[0]).toMatch(/\/v1\/info$/);
+    expect(calls[0]).toMatch(/\/v1\/info\?request_nonce=[0-9a-f]{64}$/);
   });
 
   it('createMintQuoteBolt12 posts to /v1/mint/quote/bolt12 with payload incl. pubkey', async () => {
