@@ -867,6 +867,18 @@ describe('KeyChain.getCheapestKeyset prefers the newest keyset version', () => {
     expect(chain.getCheapestKeyset().id).toBe(forever.meta.id);
   });
 
+  // Both outlive the horizon, so neither is filtered out and the tiebreak is what decides.
+  test('same version and fee: no expiry beats a distant expiry, either order', async () => {
+    const expiringLate = makeKeyset(1, 1, FAR_FUTURE);
+    const forever = makeKeyset(1, 1);
+
+    const foreverFirst = await initChainWith([forever.keys, expiringLate.keys]);
+    expect(foreverFirst.getCheapestKeyset().id).toBe(forever.meta.id);
+
+    const expiringFirst = await initChainWith([expiringLate.keys, forever.keys]);
+    expect(expiringFirst.getCheapestKeyset().id).toBe(forever.meta.id);
+  });
+
   // active_until is the horizon for minting new outputs, so it outranks final_expiry.
   test('same version and fee: a later active_until beats a later final_expiry', async () => {
     const goesInactiveFirst = makeKeyset(1, 1, 9000, 1000);
