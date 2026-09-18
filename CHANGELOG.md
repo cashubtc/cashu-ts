@@ -1,5 +1,25 @@
 # Changelog
 
+## [5.0.0-rc.11](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.10...v5.0.0-rc.11) (2026-09-18)
+
+
+### Features
+
+* **nutroot:** melt output amount is the quote amount plus its fee reserve ([#1172](https://github.com/cashubtc/cashu-ts/issues/1172)) ([e1026d6](https://github.com/cashubtc/cashu-ts/commit/e1026d6285c2042381a9b756b1426538c4574ffd))
+* **nutroot:** name transcript proof inputs by Y ([#1175](https://github.com/cashubtc/cashu-ts/issues/1175)) ([620bf9f](https://github.com/cashubtc/cashu-ts/commit/620bf9f0e1582ce775554bce4b68ca518dd48b6b))
+* **nutroot:** the commit leaf (NUT-10 type 0x04) ([#1151](https://github.com/cashubtc/cashu-ts/issues/1151)) ([972a050](https://github.com/cashubtc/cashu-ts/commit/972a050ad88b6388db24bc1ff0a1f467bb7006b9))
+* **wallet:** add serialize helpers for mint, batch mint and melt previews ([#1159](https://github.com/cashubtc/cashu-ts/issues/1159)) ([aec387b](https://github.com/cashubtc/cashu-ts/commit/aec387b2055d72618a40e2314e05144dac9e21c6))
+
+
+### Bug Fixes
+
+* **auth:** check OIDC endpoint schemes against the discovery document ([#1160](https://github.com/cashubtc/cashu-ts/issues/1160)) ([13d7eb1](https://github.com/cashubtc/cashu-ts/commit/13d7eb131bca1653ea9665248d3f4debee0b3dce))
+* **core:** keep a token's witness verbatim when re-encoding ([#1179](https://github.com/cashubtc/cashu-ts/issues/1179)) ([356efa0](https://github.com/cashubtc/cashu-ts/commit/356efa0b23d0e9dcc346357efcaf96211071750e))
+* **mint:** check a bolt11 melt preimage against the invoice payment hash ([#1161](https://github.com/cashubtc/cashu-ts/issues/1161)) ([f9e74b1](https://github.com/cashubtc/cashu-ts/commit/f9e74b116dff7068d49e4d516f51929921336661))
+* **model:** require boolean true for advertised NUT support ([#1176](https://github.com/cashubtc/cashu-ts/issues/1176)) ([6758dc2](https://github.com/cashubtc/cashu-ts/commit/6758dc266462b8df21d71830931df84a68238343))
+* **utils:** apply the keyset unit alphabet to version 01 ids too ([#1162](https://github.com/cashubtc/cashu-ts/issues/1162)) ([f02c4bf](https://github.com/cashubtc/cashu-ts/commit/f02c4bf514631c2b33831061124fa9147121da8e))
+* **utils:** resolve short keyset IDs in getDecodedTokenBinary ([#1153](https://github.com/cashubtc/cashu-ts/issues/1153)) ([168a22c](https://github.com/cashubtc/cashu-ts/commit/168a22ca27211abcbc2d9384e68a0c84f0c20309))
+
 ## [5.0.0-rc.10](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.9...v5.0.0-rc.10) (2026-09-14)
 
 
