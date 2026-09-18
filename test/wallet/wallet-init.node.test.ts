@@ -89,7 +89,7 @@ describe('test wallet init', () => {
       unit: 'sat',
       active: true,
       input_fee_ppk: 0,
-      final_expiry: 1754296607,
+      final_expiry: 2059210353,
     });
 
     // Verify keys
@@ -290,7 +290,7 @@ describe('test wallet init', () => {
       unit: 'sat',
       active: true,
       input_fee_ppk: 0,
-      final_expiry: 1754296607,
+      final_expiry: 2059210353,
     });
 
     // Verify keys

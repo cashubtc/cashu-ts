@@ -12,6 +12,8 @@ export class Keyset {
   private _keys: Record<number, string> = {};
   private _input_fee_ppk?: number;
   private _final_expiry?: number;
+  private _active_from?: number;
+  private _active_until?: number;
 
   constructor(
     id: string,
@@ -19,12 +21,16 @@ export class Keyset {
     active: boolean,
     input_fee_ppk?: number,
     final_expiry?: number,
+    active_from?: number,
+    active_until?: number,
   ) {
     this._id = id;
     this._unit = unit;
     this._active = active;
     this._input_fee_ppk = input_fee_ppk;
     this._final_expiry = final_expiry;
+    this._active_from = active_from;
+    this._active_until = active_until;
   }
 
   get id(): string {
@@ -45,6 +51,21 @@ export class Keyset {
 
   get expiry(): number | undefined {
     return this._final_expiry;
+  }
+
+  /**
+   * Unix time from which the mint reports this keyset as active.
+   */
+  get activeFrom(): number | undefined {
+    return this._active_from;
+  }
+
+  /**
+   * Unix time from which the mint may inactivate this keyset, or undefined if it has announced no
+   * inactivation.
+   */
+  get activeUntil(): number | undefined {
+    return this._active_until;
   }
 
   get hasKeys(): boolean {
@@ -84,6 +105,8 @@ export class Keyset {
       unit: this._unit,
       active: this._active,
       input_fee_ppk: this._input_fee_ppk,
+      active_from: this._active_from,
+      active_until: this._active_until,
       final_expiry: this._final_expiry,
     };
   }
@@ -102,6 +125,8 @@ export class Keyset {
       unit: this._unit,
       active: this._active,
       input_fee_ppk: this._input_fee_ppk,
+      active_from: this._active_from,
+      active_until: this._active_until,
       final_expiry: this._final_expiry,
       keys: this._keys,
     };
@@ -166,6 +191,8 @@ export class Keyset {
       nMeta.active,
       nMeta.input_fee_ppk,
       nMeta.final_expiry,
+      nMeta.active_from,
+      nMeta.active_until,
     );
 
     // Sanity checks
