@@ -29,6 +29,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Stryker's vitest runner runs zero tests per mutant on vitest 5, so every
+      # mutant survives: stryker-mutator/stryker-js#6210. Drop this once it is fixed.
+      - name: Pin vitest 4 for the mutation run
+        run: npm i --no-save --legacy-peer-deps vitest@^4.1.11
+
       - name: Run Stryker
         run: npm run test:mutation
 
