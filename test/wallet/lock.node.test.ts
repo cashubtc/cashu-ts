@@ -430,7 +430,27 @@ describe('nutrootToLockOptions (readable conditions)', () => {
 });
 
 describe('Wallet.createOutputData lock chokepoint', () => {
-  const wallet = new Wallet('http://localhost:3338', { unit: 'sat' });
+  const mintUrl = 'http://localhost:3338';
+  // Pre-v3 locks are refused unless the mint advertises the NUT that enforces them.
+  const walletFor = (nuts: Record<string, { supported: boolean }>) => {
+    const w = new Wallet(mintUrl, { unit: 'sat' });
+    w.loadMintFromCache(
+      {
+        name: 'lock mint',
+        pubkey: PUB_B,
+        version: 'test/1',
+        contact: [],
+        nuts: {
+          '4': { methods: [], disabled: false },
+          '5': { methods: [], disabled: false },
+          ...nuts,
+        },
+      },
+      { mintUrl, savedAt: Date.now(), keysets: [] },
+    );
+    return w;
+  };
+  let wallet = walletFor({ '11': { supported: true }, '14': { supported: true } });
   const V3_KEYSET = { id: `02${'ab'.repeat(32)}`, keys: { '1': 'x', '2': 'x' } };
   const LEGACY_KEYSET = { id: `00${'cd'.repeat(16)}`, keys: { '1': 'x', '2': 'x' } };
   const create = (keyset: { id: string; keys: Record<string, string> }, ot: OutputType) =>
@@ -487,6 +507,23 @@ describe('Wallet.createOutputData lock chokepoint', () => {
         options: { mainKeys: [PUB_A], leaves: [{ type: 'threshold', n: 1, keys: [PUB_B] }] },
       }),
     ).toThrow(/v3/i);
+  });
+
+  test('a pre-v3 lock refuses when the mint does not enforce it', () => {
+    const lock: OutputType = { type: 'lock', options: { mainKeys: [PUB_A] } };
+    const htlc: OutputType = { type: 'lock', options: { mainKeys: [PUB_A], hashlock: HASH } };
+    wallet = walletFor({ '10': { supported: true } });
+    expect(() => create(LEGACY_KEYSET, lock)).toThrow(/NUT-11/);
+    wallet = walletFor({ '11': { supported: true } });
+    expect(() => create(LEGACY_KEYSET, lock)).not.toThrow();
+    expect(() => create(LEGACY_KEYSET, htlc)).toThrow(/NUT-14/);
+  });
+
+  test('a v3 lock needs no info flag: the keyset version enforces it', () => {
+    wallet = walletFor({});
+    expect(() =>
+      create(V3_KEYSET, { type: 'lock', options: { mainKeys: [PUB_A], hashlock: HASH } }),
+    ).not.toThrow();
   });
 });
 
