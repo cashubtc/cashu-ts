@@ -492,7 +492,7 @@ class Wallet {
       });
     } else {
       // Auto-bound: re-apply keyset selection so the binding tracks mint truth.
-      // getCheapestKeyset prefers the newest version, then lowest fee, then latest expiry.
+      // getCheapestKeyset keeps to the newest keyset version and the default 30 day horizon.
       const current = this._keyChain.hasKeyset(this._boundKeysetId)
         ? this._keyChain.getKeyset(this._boundKeysetId)
         : undefined;

@@ -898,7 +898,7 @@ export class KeyChain {
     static fromCache(mint: string | Mint, unit: string, cache: KeyChainCache, logger?: Logger): KeyChain;
     getAllKeys(): MintKeys[];
     getAllKeysetIds(): string[];
-    getCheapestKeyset(): Keyset;
+    getCheapestKeyset(usableUntil?: number): Keyset;
     getKeyset(id?: string): Keyset;
     getKeysets(): Keyset[];
     hasKeyset(id?: string): boolean;
@@ -922,7 +922,9 @@ export type Keys = {
 
 // @public (undocumented)
 export class Keyset {
-    constructor(id: string, unit: string, active: boolean, input_fee_ppk?: number, final_expiry?: number);
+    constructor(id: string, unit: string, active: boolean, input_fee_ppk?: number, final_expiry?: number, active_from?: number, active_until?: number);
+    get activeFrom(): number | undefined;
+    get activeUntil(): number | undefined;
     // (undocumented)
     get expiry(): number | undefined;
     // (undocumented)
@@ -1456,6 +1458,8 @@ export type MintKeys = {
     unit: string;
     active?: boolean;
     input_fee_ppk?: number;
+    active_from?: number;
+    active_until?: number;
     final_expiry?: number;
     keys: Keys;
 };
@@ -1466,6 +1470,8 @@ export type MintKeyset = {
     unit: string;
     active: boolean;
     input_fee_ppk?: number;
+    active_from?: number;
+    active_until?: number;
     final_expiry?: number;
 };
 

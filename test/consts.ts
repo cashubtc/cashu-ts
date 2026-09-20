@@ -367,7 +367,7 @@ export const DUMMY_TEST_KEYSET: MintKeyset = {
   unit: 'sat',
   active: true,
   input_fee_ppk: 0,
-  final_expiry: 1754296607,
+  final_expiry: 2059210353,
 };
 
 export const DUMMY_TEST_KEYS: MintKeys = {
