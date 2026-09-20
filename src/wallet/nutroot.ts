@@ -188,12 +188,15 @@ export function proofSpendOptions(
 
 /**
  * Spend options for a pre-v3 proof: an unlocked secret spends as it stands, a NUT-11 lock reads as
- * leaves, and an unknown NUT-10 kind throws.
+ * leaves, and an unknown NUT-10 kind or a malformed NUT-10 secret throws.
  */
 function legacySpendOptions(proof: Proof, privkeys: string[], now: number): SpendOptions {
   try {
     parseSecret(proof.secret);
-  } catch {
+  } catch (e) {
+    // A JSON array this wallet cannot read is not a bearer secret: a mint with a laxer parser may
+    // still enforce it as a lock, so it fails closed like any other condition it cannot judge.
+    if (typeof proof.secret !== 'string' || proof.secret.trimStart().startsWith('[')) throw e;
     return withVerdict(true, []); // not a NUT-10 secret: a bearer proof anyone can spend
   }
   const leaves = p2pkSpendLeaves(proof.secret);

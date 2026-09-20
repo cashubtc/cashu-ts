@@ -1998,18 +1998,21 @@ class Wallet {
    * requested tree for a nutroot request, and exactly the requested condition for a nut10 one. A
    * receiver-keyed nutroot request needs `opts.privkeys`, because binding a proof to the receiver
    * key is an ECDH trial-match only that key can do (NUT-28); without it there is nothing to check
-   * and the call throws rather than passing a payment the payee cannot spend. Proof integrity
-   * (pairing/DLEQ) remains a separate check.
+   * and the call throws rather than passing a payment the payee cannot spend. An unlocked request
+   * takes only proofs the payee can spend, bearer or locked to one of `opts.privkeys`, so a payer
+   * cannot settle it with proofs locked to themselves. Proof integrity (pairing/DLEQ) remains a
+   * separate check.
    * @param pr - The payment request being settled.
    * @param proofs - The received proofs (from this wallet's mint), with spend info when present.
    * @param expectedAmount - Expected amount for amountless requests; ignored when the request sets
    *   `a`.
-   * @param opts.privkeys - The receiver key(s) the request locks to. Required for a receiver-keyed
-   *   nutroot request, unused otherwise.
+   * @param opts.privkeys - The payee's key(s). Required for a receiver-keyed nutroot request; on an
+   *   unlocked request, proofs locked to one of them still count.
    * @throws If no amount is available to check against, this wallet's mint is not admissible for
    *   the request (unit, strict mint list, or no accepted melt method), a proof keyset is unknown,
    *   the request is invalid per NUT-18, a receiver-keyed nutroot request is checked without its
-   *   key, or a proof does not carry the requested lock.
+   *   key, a proof does not carry the requested lock, or an unlocked request is paid with a proof
+   *   the payee cannot spend or `spendOptions` cannot read.
    */
   isPaymentRequestSatisfied(
     pr: PaymentRequest,
@@ -2049,6 +2052,14 @@ class Wallet {
         }
         this.failIfNullish(nut10Lock, 'legacy proof: the request is for v3 proofs only');
         this.assertNut10Lock(nut10Lock, p.secret);
+      }
+    } else {
+      // An unlocked request asks only for value the payee can spend: proofs locked to the payer sum
+      // to the amount and transfer nothing, while proofs locked to a key the payee holds still pay.
+      for (const p of proofs) {
+        // Reads only what the Pick carries, plus `p2pk_e` when a caller's proof has it.
+        const { spendable, blockedBy } = this.spendOptions(p as Proof, opts);
+        this.failIf(!spendable, `unlocked request: the payee cannot spend a proof (${blockedBy})`);
       }
     }
     // Admissibility, as the payer side checks it (NUT-18): a strict list binds the issuer, and the
@@ -2332,10 +2343,10 @@ class Wallet {
    * @param proof Any proof, with its spend info when it has one.
    * @param opts.privkeys Static keys to trial-match, for receiver-keyed proofs and leaf keys.
    * @param opts.now Unix seconds to judge locktimes against. Defaults to the current time.
-   * @throws If a v3 keyset proof is not a point secret, a NUT-10 secret is of a kind this wallet
-   *   cannot spend, a NUT-11 tag is malformed (a non-integer `n_sigs`, or a scalar tag with more
-   *   than one value), or a disclosed tree holds a leaf it cannot parse (unknown version, type or
-   *   constraint field): the same fail-closed rule the receive cascade applies.
+   * @throws If a v3 keyset proof is not a point secret, a NUT-10 secret is malformed or of a kind
+   *   this wallet cannot spend, a NUT-11 tag is malformed (a non-integer `n_sigs`, or a scalar tag
+   *   with more than one value), or a disclosed tree holds a leaf it cannot parse (unknown version,
+   *   type or constraint field): the same fail-closed rule the receive cascade applies.
    */
   spendOptions(proof: Proof, opts?: { privkeys?: string | string[]; now?: number }): SpendOptions {
     return proofSpendOptions(proof, opts, this._nutrootState());
