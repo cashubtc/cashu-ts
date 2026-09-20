@@ -1132,6 +1132,19 @@ class Wallet {
         );
         break;
       case 'p2pk':
+        // A mint signs a lock blind and reads it only at spend time, so a kind it does not
+        // support spends as a bearer proof (NUT-10).
+        {
+          const info = this.getMintInfo();
+          this.failIf(
+            !info.isSupported(11).supported,
+            'Mint does not support NUT-11: the lock would be spendable by anyone',
+          );
+          this.failIf(
+            outputType.options.hashlock !== undefined && !info.isSupported(14).supported,
+            'Mint does not support NUT-14: the hashlock would be spendable by anyone',
+          );
+        }
         outputData = this._outputDataCreator.createP2PKData(
           outputType.options,
           outputAmount,

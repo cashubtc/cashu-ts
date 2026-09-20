@@ -1,8 +1,8 @@
 import { test, describe, expect } from 'vitest';
 
-import { Wallet, OutputData } from '../../src';
+import { Amount, Wallet, OutputData, type P2PKOptions } from '../../src';
 
-import { mint, useTestServer } from './_setup';
+import { mint, mintUrl, useTestServer } from './_setup';
 
 useTestServer();
 
@@ -224,5 +224,51 @@ describe('P2PK BlindingData', () => {
       expect(s[1].tags).toContainEqual(['n_sigs', '2']);
       expect(s[1].tags).not.toContainEqual(['n_sigs_refund', '1']); // 1 is default
     });
+  });
+});
+
+describe('Wallet.createOutputData p2pk chokepoint', () => {
+  // A mint signs a lock blind and reads it only at spend time, so a kind it does not
+  // support spends as a bearer proof (NUT-10).
+  const walletFor = (nuts: Record<string, { supported: boolean }>) => {
+    const w = new Wallet(mintUrl, { unit: 'sat' });
+    w.loadMintFromCache(
+      {
+        name: 'lock mint',
+        pubkey: PK2,
+        version: 'test/1',
+        contact: [],
+        nuts: {
+          '4': { methods: [], disabled: false },
+          '5': { methods: [], disabled: false },
+          ...nuts,
+        },
+      },
+      { mintUrl, savedAt: Date.now(), keysets: [] },
+    );
+    return w;
+  };
+  const KEYSET = { id: `00${'cd'.repeat(8)}`, keys: { '1': 'x', '2': 'x' } };
+  const create = (wallet: Wallet, options: P2PKOptions) =>
+    (
+      wallet as unknown as {
+        createOutputData(
+          a: Amount,
+          k: typeof KEYSET,
+          ot: { type: 'p2pk'; options: P2PKOptions },
+        ): OutputData[];
+      }
+    ).createOutputData(Amount.from(3), KEYSET, { type: 'p2pk', options });
+
+  test('refuses when the mint does not advertise NUT-11', () => {
+    expect(() => create(walletFor({ '10': { supported: true } }), { pubkey: PK1 })).toThrow(
+      /NUT-11/,
+    );
+  });
+
+  test('refuses a hashlock when the mint does not advertise NUT-14', () => {
+    const wallet = walletFor({ '11': { supported: true } });
+    expect(() => create(wallet, { pubkey: PK1 })).not.toThrow();
+    expect(() => create(wallet, { pubkey: PK1, hashlock: 'ab'.repeat(32) })).toThrow(/NUT-14/);
   });
 });

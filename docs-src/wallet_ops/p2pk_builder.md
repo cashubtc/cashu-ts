@@ -23,6 +23,8 @@ P2PKBuilder.fromOptions(opts: P2PKOptions): P2PKBuilder
 
 Keys are normalized and de-duplicated, insertion order is preserved, total lock plus refund keys must be ≤ 10, refund keys will throw if no locktime is set.
 
+A lock also refuses unless the mint advertises NUT-11 (and NUT-14 for a hashlock). A mint signs a lock blind and reads it only at spend time, so a kind it does not support would spend as a bearer proof.
+
 Example usage:
 
 ```ts
