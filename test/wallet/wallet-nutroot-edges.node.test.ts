@@ -19,7 +19,12 @@ const mintInfo = {
   pubkey: pub(5),
   version: 'test/1',
   contact: [],
-  nuts: { '4': { methods: [], disabled: false }, '5': { methods: [], disabled: false } },
+  nuts: {
+    '4': { methods: [], disabled: false },
+    '5': { methods: [], disabled: false },
+    // The legacy-keyset locks below need the mint to enforce P2PK.
+    '11': { supported: true },
+  },
 };
 const keys = { '1': BLS_G2_GENERATOR.multiply(5n).toHex(true) };
 const id = deriveKeysetId(keys, { versionByte: 2, unit: 'sat', input_fee_ppk: 0 });

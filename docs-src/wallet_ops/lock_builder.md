@@ -30,6 +30,8 @@ Keys must be 33-byte compressed hex and on the secp256k1 curve (NUT-11); a 32-by
 
 Shapes only one encoding can express refuse at encode time, naming the reason: extra tags, anyone-after-locktime, and keyless hashlocks do not fit v3; explicit leaves and partial blind lists do not fit pre-v3. `disclose()` closes the v3 key path: a lone main key becomes a leaf under the NUMS key so every spend is a public script path (`auditableLock(pubkey)` is exactly that shape). A pre-v3 lock is disclosed by nature (plaintext secret, witness returned by NUT-07), so the flag changes nothing there. See the [v5 migration guide](../../migration-5.0.0.md) for the full matrix.
 
+On a pre-v3 keyset a lock also refuses unless the mint advertises NUT-11 (and NUT-14 for a hashlock). A mint signs a lock blind and reads it only at spend time, so a kind it does not support would spend as a bearer proof. v3 keysets enforce locks by construction and need no flag.
+
 To surface these refusals before building a transaction (eg to gate a form), call `validate(target)`: it runs the same checks and encoder as a real build and returns the refusal as a `CTSError` array, empty when the lock encodes for that keyset version. The spending side (inspecting, receiving, and script-path spends of locked proofs) is covered in [Spending Locked Proofs](./spend_locked.md).
 
 Example usage:
