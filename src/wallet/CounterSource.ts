@@ -1,3 +1,4 @@
+import { normalizeSecpPubkey } from '../crypto/curve_secp';
 import { LEGACY_KEYSET_ID_LENGTH } from '../crypto/curves';
 import { CTSError } from '../model/Errors';
 import { isValidHex } from '../utils';
@@ -24,7 +25,7 @@ export interface CounterRange {
  * not assume every key is a keyset id.
  */
 export function quoteCounterKey(mintPubkey: string): string {
-  return `mint-quote-lock:${mintPubkey}`;
+  return `mint-quote-lock:${normalizeSecpPubkey(mintPubkey)}`;
 }
 
 // CounterSource.ts

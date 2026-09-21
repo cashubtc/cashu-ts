@@ -72,6 +72,7 @@ describe('Wallet quote lock keys', () => {
     await wallet.createQuoteLockKey();
     await wallet.createQuoteLockKey();
     const counterKey = quoteCounterKey(MINT_PUBKEY);
+    expect(quoteCounterKey(MINT_PUBKEY.toUpperCase())).toBe(counterKey);
     expect(seen).toEqual([
       { counterKey, start: 0, count: 1, next: 1 },
       { counterKey, start: 1, count: 1, next: 2 },
