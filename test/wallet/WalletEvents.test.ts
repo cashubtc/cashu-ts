@@ -272,6 +272,21 @@ describe('WalletEvents', () => {
       expect(typeof seen[0].proof.amount).toBe('number');
     });
 
+    const proofStateUpdatesCall = (proofs: Proof[]) =>
+      events.proofStateUpdates(proofs, vi.fn(), vi.fn());
+
+    it('proofStateUpdates refuses a keyset version this build cannot read', async () => {
+      // Y is computed on secp, so a v3 (BLS) proof would be watched under the wrong point and
+      // silently never report a state change.
+      const proofs: Proof[] = [
+        { amount: Amount.from(2), id: '02' + '11'.repeat(32), secret: 's1', C: 'test' },
+      ];
+      await expect(proofStateUpdatesCall(proofs)).rejects.toThrow(/Upgrade/);
+      // Rejected before any I/O: no socket opened, so no subscription either.
+      expect(mock.mint.connectWebSocket).not.toHaveBeenCalled();
+      expect(mock.mint.webSocketConnection).toBeUndefined();
+    });
+
     it('proofStateUpdates throws on duplicate proof secrets', async () => {
       const proofs: Proof[] = [
         { amount: Amount.from(2), id: '00bd033559de27d0', secret: 'same', C: 'a' },

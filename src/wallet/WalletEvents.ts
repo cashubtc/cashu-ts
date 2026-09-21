@@ -11,6 +11,7 @@ import type {
   MintQuoteBolt11Response,
 } from '../model/types';
 import type { KeyChainCache } from '../model/types/keyset';
+import { assertSpendableVersion } from '../utils';
 
 import { type OperationCounters } from './CounterSource';
 import type { Wallet } from './Wallet';
@@ -396,6 +397,10 @@ export class WalletEvents {
     // Filters must never reach the wire for a subscription already cancelled, so an abort is
     // checked both before the connect and again once it settles.
     if (opts?.signal?.aborted) return noop;
+    // Y is computed on secp below, so a keyset whose curve this build does not know would be
+    // watched under the wrong point and never see the proof's real state changes. Checked before
+    // the connect: no socket should be opened for a subscription that cannot work.
+    for (const p of proofs) assertSpendableVersion(p.id, this.wallet.logger);
     await this.wallet.mint.connectWebSocket();
     if (opts?.signal?.aborted) return noop;
     const ws = this.wallet.mint.webSocketConnection;
