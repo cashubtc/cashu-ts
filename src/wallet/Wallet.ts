@@ -2016,7 +2016,7 @@ class Wallet {
    */
   isPaymentRequestSatisfied(
     pr: PaymentRequest,
-    proofs: Array<Pick<Proof, 'id' | 'amount' | 'secret' | 'spend_info'>>,
+    proofs: Array<Pick<Proof, 'id' | 'amount' | 'secret' | 'spend_info' | 'p2pk_e'>>,
     expectedAmount?: AmountLike,
     opts?: { privkeys?: string | string[] },
   ): boolean {
@@ -2057,7 +2057,7 @@ class Wallet {
       // An unlocked request asks only for value the payee can spend: proofs locked to the payer sum
       // to the amount and transfer nothing, while proofs locked to a key the payee holds still pay.
       for (const p of proofs) {
-        // Reads only what the Pick carries, plus `p2pk_e` when a caller's proof has it.
+        // `spendOptions` reads only the fields the Pick carries; the cast keeps its signature.
         const { spendable, blockedBy } = this.spendOptions(p as Proof, opts);
         this.failIf(!spendable, `unlocked request: the payee cannot spend a proof (${blockedBy})`);
       }

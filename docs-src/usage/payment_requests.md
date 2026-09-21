@@ -137,7 +137,8 @@ try {
   }
 } catch {
   // This mint cannot settle the request (wrong unit, outside a strict mint
-  // list, or no melt method the request accepts). Ignore or refund.
+  // list, or no melt method the request accepts), or a proof does not carry
+  // the requested lock, or you cannot spend it. Ignore or refund.
 }
 ```
 

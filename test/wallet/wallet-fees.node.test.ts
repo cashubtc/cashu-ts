@@ -5,6 +5,7 @@ import { test, describe, expect } from 'vitest';
 
 import { Wallet, Amount, CTSError, PaymentRequest, type Proof } from '../../src';
 import { createP2PKsecret } from '../../src/crypto/NUT11';
+import { deriveP2BKBlindedPubkeys } from '../../src/crypto/NUT28';
 import {
   NUTROOT_NUMS_KEY,
   deriveReceiverKeyedSecret,
@@ -427,6 +428,17 @@ describe('wallet.isPaymentRequestSatisfied', () => {
     expect(wallet.isPaymentRequestSatisfied(pr, toPayee, undefined, { privkeys: priv(1) })).toBe(
       true,
     );
+
+    // Blinded to the payee (NUT-28): the held key matches only through the proof's `p2pk_e`.
+    const { blinded, Ehex } = deriveP2BKBlindedPubkeys([pub(1)]);
+    const [toBlindedPayee] = lockedProofs([100], createP2PKsecret(blinded[0]));
+    const blindedProof = { ...toBlindedPayee, p2pk_e: Ehex };
+    expect(() => wallet.isPaymentRequestSatisfied(pr, [blindedProof])).toThrow(
+      /the payee cannot spend/,
+    );
+    expect(
+      wallet.isPaymentRequestSatisfied(pr, [blindedProof], undefined, { privkeys: priv(1) }),
+    ).toBe(true);
 
     // The v3 twins: a bearer proof hands over its key, a keyed one spends only for its receiver.
     const keyedTo = (seed: number) => [v3Proof(100, deriveReceiverKeyedSecret(pub(seed)))];
