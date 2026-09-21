@@ -513,7 +513,7 @@ describe('Mint mutation coverage', () => {
         },
       };
       const requestSpy = vi.fn(async (options: ReqArgs) => {
-        if (options.endpoint.endsWith('/v1/info')) return infoResp;
+        if (options.endpoint.includes('/v1/info?request_nonce=')) return infoResp;
         expect(options.endpoint).toBe(mintUrl + '/v1/swap');
         // MintInfo maps NUT-19 TTL seconds to request-layer milliseconds.
         expect(options.ttl).toBe(12_000);
