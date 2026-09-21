@@ -14,8 +14,8 @@ compile, it is not current.
 
 Work through the `migration-*.md` guides in order, starting from the major you are
 on and ending at the current one. For each step, apply its changes and resolve its
-deprecations before moving to the next. The v4 step also ships a deeper
-`migration-4.0.0.SKILL.md`.
+deprecations before moving to the next. Some majors also ship a deeper
+`migration-<version>.SKILL.md`.
 
 ## Where to look (all shipped in this package)
 
