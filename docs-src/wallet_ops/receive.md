@@ -17,7 +17,7 @@ const { keep } = await wallet.completeSwap(preview);
 You can also receive an array of raw proofs directly:
 
 ```ts
-const oldProofs: Proof[] = [proof1, proof2, proof3, ...];
+const oldProofs: Proof[] = [proof1, proof2, proof3];
 const freshProofs = await wallet.ops.receive(oldProofs).run();
 ```
 

@@ -78,7 +78,7 @@ it in the fetch it passes in, once, and hands the same fetch to every entry poin
 import { createAuthWallet, setGlobalRequestOptions, type RequestFetch } from '@cashu/cashu-ts';
 
 const policyFetch: RequestFetch = (input, init) => {
-  const url = new URL(typeof input === 'string' ? input : input.url);
+  const url = new URL(input instanceof Request ? input.url : input);
   if (url.protocol !== 'https:') throw new Error(`refusing ${url.protocol} transport`);
   if (isPrivateHost(url.hostname)) throw new Error(`refusing private target ${url.hostname}`);
   return fetch(input, { ...init, redirect: 'error' });

@@ -48,7 +48,7 @@ const { pubkey, privkey } = deriveKeyPair(seed, 'QuoteLock', counter);
 
 const quote = await wallet.createMintQuoteBolt11(64, pubkey);
 // ...pay the quote's BOLT11 invoice...
-const proofs = await wallet.ops.mint(64, quote).privkey(privkey).run();
+const proofs = await wallet.ops.mintBolt11(64, quote).privkey(privkey).run();
 ```
 
 ## Counters

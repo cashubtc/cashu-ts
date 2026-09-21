@@ -16,7 +16,7 @@ The shortest path is three calls: `decodePaymentRequest` → `wallet.ops.sendToR
 ### 1. Decode it
 
 ```typescript
-import { decodePaymentRequest } from '@cashu/cashu-ts';
+import { decodePaymentRequest, PaymentRequestTransportType } from '@cashu/cashu-ts';
 
 const pr = decodePaymentRequest(scanned); // accepts creqA… or CREQB1…
 
@@ -24,7 +24,7 @@ pr.amount; // requested Amount (undefined = payer chooses the amount)
 pr.unit; // e.g. 'sat'
 pr.description; // human-readable, show to the user
 pr.mints; // mints the payee accepts (string[] | undefined)
-pr.getTransport('nostr'); // the transport of a given type, if present
+pr.getTransport(PaymentRequestTransportType.NOSTR); // the transport of a given type, if present
 ```
 
 ### 2. Pay it

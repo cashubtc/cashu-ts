@@ -4,7 +4,7 @@
 
 Small helper that shapes a semantic `LockOptions` lock, it does not create secrets. The wallet encodes the result for whichever keyset is active: NUT-11/14 tags on pre-v3 keysets, a nutroot tree on v3.
 
-```ts
+```text
 new LockBuilder()
   .addMainPubkey(k: string | string[])    // 02|03 compressed only; for an x-only (Nostr) key prepend '02'
   .addRefundPubkey(k: string | string[])  // requires lockUntil(...) to be set
