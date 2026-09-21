@@ -32,11 +32,16 @@ Amount.from(500).clamp(100, 1000); // 500 (already in range, unchanged)
 Amount.from(500).clamp(100, 400); // 400 (clamped down to max)
 Amount.from(500).inRange(100, 1000); // true
 
-// Display coerces to the decimal string. Arithmetic and comparison operators coerce to a
-// number with a one-time deprecation warning; cashu-ts v5 throws AmountError instead, so
-// use the methods above, or .toBigInt() / .toNumber() if you really mean it.
-`${a}`; // '100'
-// a + 1; a < b; Number(a); a == 100;
+// Display: string coercion gives the decimal form
+`balance: ${a}`; // 'balance: 100'
+String(a); // '100'
+
+// Operators are not overloaded. Numeric coercion gives the number and logs a one-time
+// deprecation warning; cashu-ts v5 throws AmountError instead. Use the methods above,
+// or .toBigInt() / .toNumber() when you need a primitive.
+a.add(1); // Amount 101
+Number(a); // 100, with a warning
+// a + 1, a - 1, a < b, a == 100: each coerces with the same warning
 ```
 
 ## Working with `AmountWithUnit`
