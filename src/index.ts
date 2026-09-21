@@ -107,6 +107,7 @@ export {
   StaleKeysetError,
   UnknownKeysetError,
 } from './model/Errors';
+export { CallerAbortError, UncancellableReadError } from './transport/request';
 
 // Low-level helpers/types that appear in public surfaces
 export {

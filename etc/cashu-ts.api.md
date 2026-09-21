@@ -217,6 +217,11 @@ export type BlindSignature = {
 };
 
 // @public (undocumented)
+export class CallerAbortError extends NetworkError {
+    constructor(message: string);
+}
+
+// @public (undocumented)
 export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
 
 // @public
@@ -2103,6 +2108,13 @@ export type UnblindedSignature = {
 
 // @public (undocumented)
 export function unblindSignature(C_: WeierstrassPoint<bigint>, r: bigint, A: WeierstrassPoint<bigint>): WeierstrassPoint<bigint>;
+
+// @public
+export class UncancellableReadError extends NetworkError {
+    constructor(message: string, options?: {
+        cause?: unknown;
+    });
+}
 
 // @public
 export class UnknownKeysetError extends CTSError {
