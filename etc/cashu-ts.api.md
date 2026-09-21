@@ -282,6 +282,11 @@ export function buildMintBackupPayload(mints: string[], timestamp: number): stri
 export function bytesToHex(bytes: Uint8Array): string;
 
 // @public (undocumented)
+export class CallerAbortError extends NetworkError {
+    constructor(message: string);
+}
+
+// @public (undocumented)
 export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
 
 // @public
@@ -2777,6 +2782,13 @@ export function unblindSignature(C_: WeierstrassPoint<bigint>, r: bigint, A: Wei
 
 // @public
 export function unblindSignatureBls(C_: G1Point, r: bigint): G1Point;
+
+// @public
+export class UncancellableReadError extends NetworkError {
+    constructor(message: string, options?: {
+        cause?: unknown;
+    });
+}
 
 // @public
 export class UnknownKeysetError extends CTSError {
