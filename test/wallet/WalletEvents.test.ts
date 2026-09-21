@@ -1105,6 +1105,49 @@ describe('WalletEvents', () => {
       vi.useRealTimers();
     });
 
+    it('a mint refusing the batch endpoint (405) drops to one request per quote', async () => {
+      vi.useFakeTimers();
+      mock.getMintInfo.mockReturnValue(nut17([]));
+      mock.checkMintQuoteBatch.mockRejectedValue(new HttpResponseError('method not allowed', 405));
+      mock.checkMintQuote.mockImplementation(async (_m: string, quote: string) => ({
+        quote,
+        state: 'UNPAID',
+      }));
+      const err = vi.fn();
+      const ac = new AbortController();
+      await events.mintQuoteUpdates(['a', 'b'], vi.fn(), err, { pollMs: 10, signal: ac.signal });
+      await vi.advanceTimersByTimeAsync(15);
+      ac.abort();
+      expect(mock.checkMintQuoteBatch).toHaveBeenCalledTimes(1);
+      expect(mock.checkMintQuote).toHaveBeenCalledTimes(4);
+      expect(err).not.toHaveBeenCalled();
+      vi.useRealTimers();
+    });
+
+    it('a mint that does not advertise NUT-29 is never asked to batch', async () => {
+      vi.useFakeTimers();
+      mock.getMintInfo.mockReturnValue({
+        isSupported: (n: number) => ({
+          supported: n !== 29,
+          params: [{ method: 'bolt11', unit: 'sat', commands: [] }],
+        }),
+      });
+      mock.checkMintQuote.mockImplementation(async (_m: string, quote: string) => ({
+        quote,
+        state: 'UNPAID',
+      }));
+      const ac = new AbortController();
+      await events.mintQuoteUpdates(['a', 'b'], vi.fn(), vi.fn(), {
+        pollMs: 10,
+        signal: ac.signal,
+      });
+      await vi.advanceTimersByTimeAsync(15);
+      ac.abort();
+      expect(mock.checkMintQuoteBatch).not.toHaveBeenCalled();
+      expect(mock.checkMintQuote).toHaveBeenCalledTimes(4);
+      vi.useRealTimers();
+    });
+
     it('a mint without the batch check drops to one request per quote', async () => {
       vi.useFakeTimers();
       mock.getMintInfo.mockReturnValue(nut17([]));
