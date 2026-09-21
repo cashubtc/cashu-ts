@@ -12,7 +12,7 @@ import {
   type KeyChainCache,
 } from '../../src';
 import { NULL_LOGGER } from '../../src/logger';
-import { deriveKeysetId, isValidHex } from '../../src/utils';
+import { deriveKeysetId, isValidHex, MAX_SUPPORTED_KEYSET_VERSION_BYTE } from '../../src/utils';
 import { DUMMY_TEST_KEYS, DUMMY_TEST_KEYSET, PUBKEYS } from '../consts';
 
 const mintUrl = 'http://localhost:3338';
@@ -833,6 +833,57 @@ describe('KeyChain.getCheapestKeyset picks the lowest fee regardless of order', 
     const active = chain.getCheapestKeyset();
     expect(active.id).toBe(cheap.meta.id);
     expect(active.fee).toBe(1);
+  });
+});
+
+describe('KeyChain refuses keyset id version bytes this build cannot spend', () => {
+  const unsupportedVersion = MAX_SUPPORTED_KEYSET_VERSION_BYTE + 1;
+  const versionName = (byte: number) => `v${byte + 1}`;
+
+  // Byte 0x02 is the v3 (BLS) keyset generation, which this line cannot read: its id derivation
+  // is v5-only. The id cannot be derived here either, so stamp the version byte onto a derived
+  // one; its keys then fail to verify and are blanked, exactly as they would be in the field.
+  function makeFutureKeyset(fee: number): { meta: MintKeyset; keys: MintKeys } {
+    const derived = makeKeyset(fee, MAX_SUPPORTED_KEYSET_VERSION_BYTE);
+    const id =
+      unsupportedVersion.toString(16).padStart(2, '0') + derived.meta.id.slice(2).toLowerCase();
+    const meta: MintKeyset = { ...derived.meta, id };
+    return { meta, keys: { ...meta, keys: PUBKEYS } };
+  }
+
+  test('auto-selection skips it in favour of a supported keyset', async () => {
+    const supported = makeKeyset(100, MAX_SUPPORTED_KEYSET_VERSION_BYTE);
+    const future = makeFutureKeyset(1);
+    // Newest-version-wins would otherwise pick `future`, and it is the cheaper one too.
+    const chain = await initChainWith([supported.keys, future.keys]);
+    expect(chain.getCheapestKeyset().id).toBe(supported.meta.id);
+  });
+
+  test('auto-selection names the version gap when every active keyset is too new', async () => {
+    const chain = await initChainWith([makeFutureKeyset(1).keys]);
+    // Without this the caller only sees "No active keyset found", which reads as a mint problem.
+    expect(() => chain.getCheapestKeyset()).toThrow(/No supported keyset for unit: sat/);
+    expect(() => chain.getCheapestKeyset()).toThrow(
+      new RegExp(`supports up to ${versionName(MAX_SUPPORTED_KEYSET_VERSION_BYTE)}`),
+    );
+  });
+
+  test('getKeyset stays a plain lookup, so filters and fee sums do not throw', async () => {
+    const supported = makeKeyset(1, MAX_SUPPORTED_KEYSET_VERSION_BYTE);
+    const future = makeFutureKeyset(1);
+    const chain = await initChainWith([supported.keys, future.keys]);
+    // Callers filter over every keyset id the mint lists; throwing here would abort the whole
+    // operation over one keyset the caller never asked for.
+    expect(() => chain.getAllKeysetIds().map((id) => chain.getKeyset(id).unit)).not.toThrow();
+    expect(chain.getKeyset(future.meta.id).version).toBe(unsupportedVersion);
+  });
+
+  test('ensureKeysetKeys refuses it instead of reporting a verification failure', async () => {
+    const future = makeFutureKeyset(1);
+    const chain = await initChainWith([future.keys]);
+    await expect(chain.ensureKeysetKeys(future.meta.id)).rejects.toThrow(
+      new RegExp(`is a ${versionName(unsupportedVersion)} keyset`),
+    );
   });
 });
 

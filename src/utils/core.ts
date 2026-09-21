@@ -3,6 +3,7 @@ import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { bech32 } from '@scure/base';
 
 import { pointFromHex, verifyDLEQProof_reblind } from '../crypto';
+import { failIf, type Logger } from '../logger';
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { PaymentRequest } from '../model/PaymentRequest';
@@ -491,6 +492,46 @@ export type DeriveKeysetIdOptions = {
 };
 
 const KEYSET_UNIT_RE = /^[a-z0-9_-]+$/;
+
+/**
+ * Highest keyset id version byte this build can spend: 0x01, the v2 keysets.
+ *
+ * @remarks
+ * `deriveKeysetId` below is the authority on which versions exist, so bump this only alongside a
+ * new case there. Named for the byte, not the keyset generation: the docs call byte 0x01 a "v2"
+ * keyset, so an unqualified number here would be read one generation out.
+ * @internal
+ */
+export const MAX_SUPPORTED_KEYSET_VERSION_BYTE = 0x01;
+
+/**
+ * Name a keyset id version byte the way the docs do.
+ *
+ * @remarks
+ * Version bytes are zero-indexed and the names are not: byte 0x01 is a "v2" keyset, and a legacy
+ * base64 id (byte -1) is v0.
+ * @internal
+ */
+export const versionName = (versionByte: number): string => `v${versionByte + 1}`;
+
+/**
+ * Refuse unsupported keyset versions, including paths that never load keys.
+ *
+ * @remarks
+ * Takes the id rather than a `Keyset` so callers holding only a proof can use it. The parse mirrors
+ * `Keyset.version`, which reads the same byte off a loaded keyset.
+ * @internal
+ */
+export function assertSpendableVersion(keysetId: string, logger?: Logger): void {
+  const version = isValidHex(keysetId) ? Number.parseInt(keysetId.slice(0, 2), 16) : -1;
+  failIf(
+    version > MAX_SUPPORTED_KEYSET_VERSION_BYTE,
+    `Keyset '${keysetId}' is a ${versionName(version)} keyset; this build of cashu-ts supports ` +
+      `up to ${versionName(MAX_SUPPORTED_KEYSET_VERSION_BYTE)}. Upgrade to use this keyset.`,
+    logger,
+    { keysetId, versionByte: version, supported: MAX_SUPPORTED_KEYSET_VERSION_BYTE },
+  );
+}
 
 /**
  * Returns the keyset id of a set of keys.

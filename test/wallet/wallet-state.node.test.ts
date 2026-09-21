@@ -1,7 +1,7 @@
 import { HttpResponse, http } from 'msw';
-import { test, describe, expect } from 'vitest';
+import { test, describe, expect, vi } from 'vitest';
 
-import { Wallet, CheckStateEnum, Amount } from '../../src';
+import { Wallet, Mint, CheckStateEnum, Amount } from '../../src';
 import { hashToCurve } from '../../src/crypto';
 
 import { mint, unit, mintUrl, mintInfoResp, useTestServer } from './_setup';
@@ -231,5 +231,30 @@ describe('groupProofsByState', () => {
     expect(result.spent[1].amount.equals(128n)).toBeTruthy();
     expect(result.spent[2].amount.equals(16n)).toBeTruthy();
     expect(result.pending[0].amount.equals(1n)).toBeTruthy();
+  });
+});
+
+describe('unsupported proof state versions', () => {
+  // Y is computed on secp for every proof here, so an id whose curve this build does not know
+  // would be asked about under the wrong point and come back UNSPENT.
+  test('refuses a future keyset id before reaching the mint', async () => {
+    const isolated = new Mint(mintUrl);
+    const check = vi.spyOn(isolated, 'check');
+    const wallet = new Wallet(isolated);
+    await expect(
+      wallet.checkProofsStates([{ id: '02' + '11'.repeat(32), secret: 'test' }]),
+    ).rejects.toThrow(/Upgrade/);
+    expect(check).not.toHaveBeenCalled();
+  });
+
+  test('still accepts every keyset version this build supports', async () => {
+    const isolated = new Mint(mintUrl);
+    vi.spyOn(isolated, 'check').mockImplementation(async ({ Ys }) => ({
+      states: Ys.map((Y) => ({ Y, state: CheckStateEnum.UNSPENT, witness: null })),
+    }));
+    const wallet = new Wallet(isolated);
+    for (const id of ['I2yN+iRYfkzT', '00bd033559de27d0', '01' + '11'.repeat(32)]) {
+      await expect(wallet.checkProofsStates([{ id, secret: 'test' }])).resolves.toBeDefined();
+    }
   });
 });

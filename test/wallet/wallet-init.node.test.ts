@@ -636,3 +636,25 @@ describe('multi mint', async () => {
     await expect(wallet.createMeltQuoteBolt11(invoice)).rejects.toThrow();
   });
 });
+
+describe('unsupported keyset diagnostics', () => {
+  // Byte 0x02 is the v3 (BLS) generation, which this line cannot read.
+  const future = { ...dummyKeysetResp.keysets[0], id: '02' + '11'.repeat(32) };
+
+  test('an unbound wallet surfaces the upgrade diagnosis instead of "no bound keyset"', () => {
+    const wallet = new Wallet(mint);
+    wallet.loadMintFromCache(mintInfoResp, KeyChain.mintToCacheDTO(mintUrl, [future], []));
+    expect(() => wallet.keysetId).toThrow(/Upgrade/);
+  });
+
+  test('wallet lookup diagnoses future versions, keychain lookup stays a plain lookup', () => {
+    const wallet = new Wallet(mint);
+    wallet.loadMintFromCache(
+      mintInfoResp,
+      KeyChain.mintToCacheDTO(mintUrl, [...dummyKeysetResp.keysets, future], dummyKeysResp.keysets),
+    );
+    // The plain lookup must keep working: callers filter over every id the mint lists.
+    expect(wallet.keyChain.getKeyset(future.id).version).toBe(2);
+    expect(() => wallet.getKeyset(future.id)).toThrow(/Upgrade/);
+  });
+});
