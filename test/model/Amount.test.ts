@@ -87,6 +87,30 @@ describe('Amount conversions', () => {
   });
 });
 
+describe('Amount implicit coercion is safe', () => {
+  const a = Amount.from(21);
+
+  it('string coercion yields the decimal form', () => {
+    /* eslint-disable @typescript-eslint/restrict-template-expressions -- template coercion is the tested behavior */
+    expect(`${a}`).toBe('21');
+    /* eslint-enable @typescript-eslint/restrict-template-expressions */
+    expect(String(a)).toBe('21');
+  });
+
+  it('numeric and default coercion throw instead of concatenating or comparing strings', () => {
+    const n = a as unknown as number;
+    expect(() => n + 1).toThrow(AmountError);
+    expect(() => n - 1).toThrow(/numeric coercion of Amount is unsafe/);
+    expect(() => Number(a)).toThrow(AmountError);
+    expect(
+      () => (Amount.from(9) as unknown as number) < (Amount.from(10) as unknown as number),
+    ).toThrow(AmountError);
+    expect(() =>
+      [Amount.from(1), Amount.from(2)].reduce((x, y) => x + (y as unknown as number), 0),
+    ).toThrow(AmountError);
+  });
+});
+
 describe('Amount.isSafeNumber', () => {
   it('returns true up to MAX_SAFE_INTEGER', () => {
     const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);

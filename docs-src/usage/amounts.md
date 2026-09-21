@@ -31,6 +31,17 @@ Amount.from(1000).scaledBy(3, 4); // 750
 Amount.from(500).clamp(100, 1000); // 500 (already in range, unchanged)
 Amount.from(500).clamp(100, 400); // 400 (clamped down to max)
 Amount.from(500).inRange(100, 1000); // true
+
+// Display: string coercion gives the decimal form
+`balance: ${a}`; // 'balance: 100'
+String(a); // '100'
+
+// Operators are not overloaded, so numeric coercion throws AmountError rather than
+// concatenating (`a + 1` would be '1001') or comparing strings (`a < b` would be false).
+// Use the methods above, or .toBigInt() / .toNumber() when you need a primitive.
+a.add(1); // Amount 101
+Number(a); // throws AmountError
+// a + 1, a - 1, a < b, a == 100: each throws AmountError
 ```
 
 ## Working with `AmountWithUnit`

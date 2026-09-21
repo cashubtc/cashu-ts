@@ -159,6 +159,19 @@ export class Amount {
     return this.toString();
   }
 
+  /**
+   * Coercion hook: returns the decimal string for `"string"` hints (`String(x)`, template
+   * literals), throws otherwise. Without it `+` concatenates and `<` compares strings.
+   *
+   * @internal
+   */
+  [Symbol.toPrimitive](hint: 'number' | 'string' | 'default'): string {
+    if (hint === 'string') return this.toString();
+    throw new AmountError(
+      `Implicit ${hint === 'number' ? 'numeric' : 'default'} coercion of Amount is unsafe; use .add()/.subtract()/.compareTo(), .toBigInt() or .toNumber(), or .toString() for display.`,
+    );
+  }
+
   // -----------------------------------------------------------------
   // Section: Arithmetic
   // -----------------------------------------------------------------
