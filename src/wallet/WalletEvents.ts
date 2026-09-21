@@ -300,6 +300,15 @@ export class WalletEvents {
 
   // Whether the mint says it pushes `kind` for this wallet's unit. Unknown until mint info is
   // loaded; then the socket decides
+  // The batched check is only tried where the mint advertises NUT-29; unknown info tries it once
+  private _batches(): boolean {
+    try {
+      return this.wallet.getMintInfo().isSupported(29).supported;
+    } catch {
+      return true;
+    }
+  }
+
   private _pushes(kind: RpcSubKinds): boolean {
     try {
       const nut17 = this.wallet.getMintInfo().isSupported(17);
@@ -579,14 +588,14 @@ export class WalletEvents {
   ): Promise<SubscriptionCanceller> {
     const method = opts?.method ?? 'bolt11';
     const uniq = Array.from(new Set(ids));
-    let batch = uniq.length > 1;
+    let batch = uniq.length > 1 && this._batches();
     const fetch = async () => {
       if (batch) {
         try {
           return await this.wallet.checkMintQuoteBatch<TRes>(method, uniq);
         } catch (e) {
-          // Only a missing endpoint means the mint cannot batch; anything else is the poll failing
-          if (!(e instanceof HttpResponseError) || e.status !== 404) throw e;
+          // A missing or refused endpoint means the mint cannot batch; anything else is the poll failing
+          if (!(e instanceof HttpResponseError) || (e.status !== 404 && e.status !== 405)) throw e;
           batch = false;
         }
       }
