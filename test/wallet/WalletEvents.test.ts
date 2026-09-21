@@ -173,6 +173,16 @@ describe('WalletEvents', () => {
       expect(typeof canceller).toBe('function');
     });
 
+    it('reports the websocket mode on the first frame when pollMs is unset', async () => {
+      const modes: string[] = [];
+      await events.mintQuoteUpdates(['a'], vi.fn(), vi.fn(), { onMode: (m) => modes.push(m) });
+      const ws = mock.mint.webSocketConnection!;
+      expect(modes).toEqual([]);
+      ws.emit('bolt11_mint_quote', { quote: 'a', state: 'PAID', amount: 1 });
+      ws.emit('bolt11_mint_quote', { quote: 'a', state: 'ISSUED', amount: 1 });
+      expect(modes).toEqual(['websocket']);
+    });
+
     it('mintQuotePaid only forwards PAID', async () => {
       const cb = vi.fn();
       const err = vi.fn();

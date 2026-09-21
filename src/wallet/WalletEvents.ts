@@ -303,10 +303,18 @@ export class WalletEvents {
       if (p !== undefined) safeCallback(cb, p, this.wallet.logger, { event: kind });
     };
     const pollMs = opts?.pollMs;
-    if (pollMs === undefined) return this._subscribe(kind, filters, deliver, err, opts?.signal);
-    if (!(pollMs > 0)) throw new CTSError('pollMs must be a positive number');
     const mode = (m: 'websocket' | 'polling') =>
       safeCallback(opts?.onMode, m, this.wallet.logger, { event: kind });
+    if (pollMs === undefined) {
+      // Websocket only: still report the transport, on the first frame as the fallback path does
+      const live = once(() => mode('websocket'));
+      const onWire = (wire: W) => {
+        live();
+        deliver(wire);
+      };
+      return this._subscribe(kind, filters, onWire, err, opts?.signal);
+    }
+    if (!(pollMs > 0)) throw new CTSError('pollMs must be a positive number');
 
     const all = new AbortController(); // everything this watch owns
     const sub = new AbortController(); // the subscription alone, so polling can outlive it
