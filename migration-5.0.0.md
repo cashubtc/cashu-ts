@@ -1062,3 +1062,22 @@ URL, which is how local development setups run.
 ## `OIDCAuth.buildAuthCodeUrl` accepts only `codeChallengeMethod: 'S256'`
 
 `codeChallengeMethod` narrows from `'S256' | 'plain'` to `'S256'`. The parameter can be omitted (S256 is already the default), and `generatePKCE()` always produces an S256 challenge, so no caller following the built-in flow needs to change. A TS caller passing `'plain'` fails to compile; a plain-JS caller gets a thrown `OIDCAuth: only the S256 PKCE method is supported`.
+
+---
+
+## `Amount` refuses implicit numeric coercion
+
+`Amount` now defines `Symbol.toPrimitive` the way `AmountWithUnit` already did. String contexts (`String(a)`, template literals) still give the decimal string. Arithmetic, comparison and equality operators, unary `+` and `Number(a)` now throw `AmountError` instead of falling through to `toString()`, where `a + 1` concatenated to `"211"` and `a < b` compared strings. v4 logs a warning and returns the number in these cases; v5 throws.
+
+TypeScript already rejected these operators on `Amount`, so this reaches plain JavaScript callers and `any`-typed boundaries such as a JSON round trip or a reduce over a list.
+
+```ts
+// Before (JavaScript)
+const total = proofs.reduce((sum, p) => sum + p.amount, 0); // "0" + ... concatenates
+if (a < b) { ... } // string comparison
+
+// After
+const total = sumProofs(proofs); // or proofs.reduce((sum, p) => sum.add(p.amount), Amount.zero())
+if (a.lessThan(b)) { ... } // or a.compareTo(b) < 0
+const n = a.toNumber(); // explicit, throws above MAX_SAFE_INTEGER; a.toBigInt() never does
+```

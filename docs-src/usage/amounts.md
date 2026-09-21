@@ -31,6 +31,11 @@ Amount.from(1000).scaledBy(3, 4); // 750
 Amount.from(500).clamp(100, 1000); // 500 (already in range, unchanged)
 Amount.from(500).clamp(100, 400); // 400 (clamped down to max)
 Amount.from(500).inRange(100, 1000); // true
+
+// Display coerces to the decimal string; arithmetic and comparison operators throw
+// AmountError (use the methods above, or .toBigInt() / .toNumber() if you really mean it)
+`${a}`; // '100'
+// a + 1; a < b; Number(a); a == 100;
 ```
 
 ## Working with `AmountWithUnit`
