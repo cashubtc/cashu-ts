@@ -78,7 +78,7 @@ import {
   type OperationCounters,
   type CounterRange,
 } from './CounterSource';
-import { KeyChain } from './KeyChain';
+import { assertSpendableVersion, KeyChain } from './KeyChain';
 import { type Keyset } from './Keyset';
 import { selectProofsRotating, type SelectProofs } from './SelectProofs';
 import {
@@ -406,6 +406,7 @@ class Wallet {
         unit: k.unit,
         walletUnit: this._unit,
       });
+      assertSpendableVersion(k, this._logger);
     } else {
       // Auto-bound: re-apply keyset selection so the binding tracks mint truth.
       // getCheapestKeyset prefers the newest version, then lowest fee, then latest expiry.
@@ -899,6 +900,9 @@ class Wallet {
       unit: ks.unit,
       walletUnit: this._unit,
     });
+    // Before the keys check: a keyset this build cannot spend has no keys either, and "no keys
+    // loaded" reads as a mint problem rather than a version gap.
+    assertSpendableVersion(ks, this._logger);
     this.failIf(!ks.hasKeys, 'Keyset has no keys loaded', { keyset: ks.id });
     this._boundKeysetId = ks.id;
     this._explicitBind = true;

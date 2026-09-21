@@ -493,6 +493,17 @@ export type DeriveKeysetIdOptions = {
 const KEYSET_UNIT_RE = /^[a-z0-9_-]+$/;
 
 /**
+ * Highest keyset id version byte this build can spend: 0x01, the v2 keysets.
+ *
+ * @remarks
+ * `deriveKeysetId` below is the authority on which versions exist, so bump this only alongside a
+ * new case there. Named for the byte, not the keyset generation: the docs call byte 0x01 a "v2"
+ * keyset, so an unqualified number here would be read one generation out.
+ * @internal
+ */
+export const MAX_SUPPORTED_KEYSET_VERSION_BYTE = 0x01;
+
+/**
  * Returns the keyset id of a set of keys.
  *
  * @param keys Keys object to derive keyset id from.

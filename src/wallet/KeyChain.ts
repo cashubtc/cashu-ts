@@ -1,6 +1,5 @@
-import { type Logger, NULL_LOGGER } from '../logger';
+import { fail, failIf, failIfNullish, type Logger, NULL_LOGGER } from '../logger';
 import { Mint } from '../mint';
-import { CTSError } from '../model/Errors';
 import type {
   MintKeyset,
   MintKeys,
@@ -9,9 +8,40 @@ import type {
   KeyChainCache,
   KeysetCache,
 } from '../model/types/keyset';
-import { normalizeMintUrl } from '../utils';
+import { MAX_SUPPORTED_KEYSET_VERSION_BYTE, normalizeMintUrl } from '../utils';
 
 import { Keyset } from './Keyset';
+
+// Keyset id version bytes are zero-indexed, the names in the docs are not: byte 0x01 is a "v2"
+// keyset, and a legacy base64 id (byte -1) is v0.
+const versionName = (versionByte: number): string => `v${versionByte + 1}`;
+
+/**
+ * Refuse a keyset whose id version this build cannot spend.
+ *
+ * @remarks
+ * Guards the points that commit a wallet to a keyset (binding, and fetching its keys), not
+ * `getKeyset`, which is a plain lookup used inside filters and fee sums where throwing would
+ * rewrite control flow.
+ * @internal
+ */
+export function assertSpendableVersion(keyset: Keyset, logger?: Logger): void {
+  // `fail` inside the guard, not `failIf`: the latter builds its message eagerly, and these
+  // fields are only meaningful on the failing branch.
+  if (keyset.version > MAX_SUPPORTED_KEYSET_VERSION_BYTE) {
+    fail(
+      `Keyset '${keyset.id}' is a ${versionName(keyset.version)} keyset; this build of cashu-ts ` +
+        `supports up to ${versionName(MAX_SUPPORTED_KEYSET_VERSION_BYTE)}. ` +
+        `Upgrade to use this keyset.`,
+      logger,
+      {
+        keysetId: keyset.id,
+        versionByte: keyset.version,
+        supported: MAX_SUPPORTED_KEYSET_VERSION_BYTE,
+      },
+    );
+  }
+}
 
 /**
  * Manages all keysets for a Mint. Queries filter by the wallet's unit.
@@ -38,9 +68,7 @@ export class KeyChain {
   private _logger: Logger;
 
   private assertInitialized(): void {
-    if (Object.keys(this.keysets).length === 0) {
-      throw new CTSError('KeyChain not initialized');
-    }
+    failIf(Object.keys(this.keysets).length === 0, 'KeyChain not initialized', this._logger);
   }
 
   constructor(mint: string | Mint, unit: string, logger: Logger = NULL_LOGGER) {
@@ -263,9 +291,7 @@ export class KeyChain {
    */
   getKeyset(id?: string): Keyset {
     const keyset = id ? this.keysets[id] : this.getCheapestKeyset();
-    if (!keyset) {
-      throw new CTSError(`Keyset '${id}' not found`);
-    }
+    failIfNullish(keyset, `Keyset '${id}' not found`, this._logger, { keysetId: id });
     return keyset;
   }
 
@@ -279,14 +305,33 @@ export class KeyChain {
    * @throws If none found or uninitialized.
    */
   getCheapestKeyset(): Keyset {
-    if (Object.keys(this.keysets).length === 0) {
-      throw new CTSError('KeyChain not initialized');
-    }
-    const activeKeysets = Object.values(this.keysets).filter(
-      (k) => k.unit === this.unit && k.isActive && k.hasHexId && k.hasKeys,
+    this.assertInitialized();
+    const unitActive = Object.values(this.keysets).filter(
+      (k) => k.unit === this.unit && k.isActive && k.hasHexId,
+    );
+    // Newest version wins below, so a keyset this build cannot spend must not be a candidate. Its
+    // keys are already blanked (the id derivation that `verify()` runs rejects the version), so
+    // this is belt and braces; the branch that matters is the diagnosis below.
+    const activeKeysets = unitActive.filter(
+      (k) => k.hasKeys && k.version <= MAX_SUPPORTED_KEYSET_VERSION_BYTE,
     );
     if (activeKeysets.length === 0) {
-      throw new CTSError(`No active keyset found for unit: ${this.unit}`);
+      const tooNew = unitActive.filter((k) => k.version > MAX_SUPPORTED_KEYSET_VERSION_BYTE);
+      if (tooNew.length > 0) {
+        const lowest = Math.min(...tooNew.map((k) => k.version));
+        fail(
+          `No supported keyset for unit: ${this.unit}. The mint's active keysets are ` +
+            `${versionName(lowest)} or later; this build of cashu-ts supports up to ` +
+            `${versionName(MAX_SUPPORTED_KEYSET_VERSION_BYTE)}. Upgrade to spend on this mint.`,
+          this._logger,
+          {
+            unit: this.unit,
+            lowestVersionByte: lowest,
+            supported: MAX_SUPPORTED_KEYSET_VERSION_BYTE,
+          },
+        );
+      }
+      fail(`No active keyset found for unit: ${this.unit}`, this._logger, { unit: this.unit });
     }
     const never = Number.MAX_SAFE_INTEGER;
     return activeKeysets.sort(
@@ -304,9 +349,8 @@ export class KeyChain {
   async ensureKeysetKeys(id: string): Promise<Keyset> {
     // Check keyset exists
     const existing = this.keysets[id];
-    if (!existing) {
-      throw new CTSError(`Keyset '${id}' not found`);
-    }
+    failIfNullish(existing, `Keyset '${id}' not found`, this._logger, { keysetId: id });
+    assertSpendableVersion(existing, this._logger);
 
     // Already usable
     if (existing.hasKeys) {
@@ -324,16 +368,19 @@ export class KeyChain {
       const startedGeneration = this.generation;
       const res = await this.mint.getKeys(id);
       const mk = res.keysets.find((k) => k.id === id);
-      if (!mk || !mk.keys || Object.keys(mk.keys).length === 0) {
-        throw new CTSError(`Mint returned no keys for keyset '${id}'`);
-      }
+      failIf(
+        !mk || !mk.keys || Object.keys(mk.keys).length === 0,
+        `Mint returned no keys for keyset '${id}'`,
+        this._logger,
+        { keysetId: id },
+      );
 
       // Rebuild from existing meta plus fetched keys
       const meta = existing.toMintKeyset();
       const rebuilt = Keyset.fromMintApi(meta, mk);
-      if (!rebuilt.verify()) {
-        throw new CTSError(`Keyset verification failed for ID ${id}`);
-      }
+      failIf(!rebuilt.verify(), `Keyset verification failed for ID ${id}`, this._logger, {
+        keysetId: id,
+      });
 
       // A newer snapshot replaced ours while fetching, so its entry wins: the rebuilt one carries
       // the metadata captured before the refresh.
@@ -342,9 +389,7 @@ export class KeyChain {
           id,
         });
         const current = this.keysets[id];
-        if (!current) {
-          throw new CTSError(`Keyset '${id}' not found`);
-        }
+        failIfNullish(current, `Keyset '${id}' not found`, this._logger, { keysetId: id });
         return current;
       }
       this.keysets[id] = rebuilt;
@@ -369,9 +414,9 @@ export class KeyChain {
   getKeysets(): Keyset[] {
     this.assertInitialized();
     const unitKeysets = Object.values(this.keysets).filter((k) => k.unit === this.unit);
-    if (unitKeysets.length === 0) {
-      throw new CTSError(`No keysets found for unit: ${this.unit}`);
-    }
+    failIf(unitKeysets.length === 0, `No keysets found for unit: ${this.unit}`, this._logger, {
+      unit: this.unit,
+    });
     return unitKeysets;
   }
 
