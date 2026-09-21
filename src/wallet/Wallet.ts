@@ -57,6 +57,7 @@ import type { Token } from '../model/types/token';
 import {
   bolt11AmountMsat,
   getDecodedToken,
+  assertSpendableVersion,
   hasValidDleq,
   invoiceHasAmountInHRP,
   MAX_SEED_BYTES,
@@ -78,7 +79,7 @@ import {
   type OperationCounters,
   type CounterRange,
 } from './CounterSource';
-import { assertSpendableVersion, KeyChain } from './KeyChain';
+import { KeyChain } from './KeyChain';
 import { type Keyset } from './Keyset';
 import { selectProofsRotating, type SelectProofs } from './SelectProofs';
 import {
@@ -406,7 +407,7 @@ class Wallet {
         unit: k.unit,
         walletUnit: this._unit,
       });
-      assertSpendableVersion(k, this._logger);
+      assertSpendableVersion(k.id, this._logger);
     } else {
       // Auto-bound: re-apply keyset selection so the binding tracks mint truth.
       // getCheapestKeyset prefers the newest version, then lowest fee, then latest expiry.
@@ -488,6 +489,14 @@ class Wallet {
    * The keyset ID bound to this wallet instance.
    */
   get keysetId(): string {
+    // Initialization permits an unbound wallet for restore; surface the selection error on use.
+    if (this._boundKeysetId === PENDING_KEYSET_ID && this._mintInfo) {
+      try {
+        this._keyChain.getCheapestKeyset();
+      } catch (e) {
+        this.fail(`Wallet has no bound keyset: ${(e as Error).message}`);
+      }
+    }
     this.failIf(
       this._boundKeysetId === PENDING_KEYSET_ID,
       'Wallet has no bound keyset. The mint may have no active keysets, or wallet was not initialized via loadMint or loadMintFromCache',
@@ -519,6 +528,7 @@ class Wallet {
       unit: keyset.unit,
       walletUnit: this._unit,
     });
+    assertSpendableVersion(keyset.id, this._logger);
     this.failIf(!keyset.hasKeys, 'Keyset has no keys loaded', { keyset: keyset.id });
     return keyset;
   }
@@ -755,7 +765,7 @@ class Wallet {
       this._keyChain.getCheapestKeyset();
     } catch (e) {
       this.fail(
-        `${op}: no active keyset for unit '${this._unit}' — a paid mint quote could not be redeemed`,
+        `${op}: no active keyset for unit '${this._unit}' — a paid mint quote could not be redeemed. ${(e as Error).message}`,
         { reason: (e as Error).message },
       );
     }
@@ -902,7 +912,7 @@ class Wallet {
     });
     // Before the keys check: a keyset this build cannot spend has no keys either, and "no keys
     // loaded" reads as a mint problem rather than a version gap.
-    assertSpendableVersion(ks, this._logger);
+    assertSpendableVersion(ks.id, this._logger);
     this.failIf(!ks.hasKeys, 'Keyset has no keys loaded', { keyset: ks.id });
     this._boundKeysetId = ks.id;
     this._explicitBind = true;
@@ -3784,9 +3794,13 @@ class Wallet {
   async checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]>;
   async checkProofsStates(proofs: Array<Pick<ProofLike, 'secret'>>): Promise<ProofState[]> {
     const enc = new TextEncoder();
-    const Ys = proofs.map((p: Pick<Proof, 'secret'>) =>
-      hashToCurve(enc.encode(p.secret)).toHex(true),
-    );
+    const Ys = proofs.map((p: Pick<ProofLike, 'secret'> & { id?: string }) => {
+      // Y is computed on secp here, so a keyset whose curve this build does not know would be
+      // asked about under the wrong point and come back UNSPENT. The id is optional on the
+      // deprecated overload, so only check it when given.
+      if (p.id !== undefined) assertSpendableVersion(p.id, this._logger);
+      return hashToCurve(enc.encode(p.secret)).toHex(true);
+    });
     const batchSize = this.maxArrayLength;
     const states: ProofState[] = [];
     for (let i = 0; i < Ys.length; i += batchSize) {
