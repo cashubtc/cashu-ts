@@ -446,7 +446,8 @@ export class WSConnection {
       () => {
         this._logger.info('Unsubscribed {subId}', { subId });
       },
-      errorCallback || ((e: Error) => this._logger.error('Unsubscribe failed', { e })),
+      // Not actionable: the subscription is gone either way, and a close() races these RPCs
+      errorCallback || ((e: Error) => this._logger.info('Unsubscribe failed', { e })),
       id,
     );
 
