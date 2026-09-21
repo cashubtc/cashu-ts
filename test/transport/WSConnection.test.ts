@@ -1228,7 +1228,7 @@ describe('WSConnection – listener management', () => {
       setTimeout(res, 50);
     });
 
-    expect(logger.error).toHaveBeenCalledWith('Unsubscribe failed', {
+    expect(logger.info).toHaveBeenCalledWith('Unsubscribe failed', {
       e: expect.objectContaining({ message: 'default unsubscribe failure' }),
     });
     srv.close();
