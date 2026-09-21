@@ -5,6 +5,7 @@ import { test, describe, expect } from 'vitest';
 
 import { Wallet, Amount, CTSError, PaymentRequest, type Proof } from '../../src';
 import { createP2PKsecret } from '../../src/crypto/NUT11';
+import { deriveP2BKBlindedPubkeys } from '../../src/crypto/NUT28';
 import {
   NUTROOT_NUMS_KEY,
   deriveReceiverKeyedSecret,
@@ -55,7 +56,7 @@ const lockedProofs = (amounts: number[], secret: string): Proof[] =>
 
 const v3Proof = (
   amount: number,
-  keyed: { secret: string; E?: string; tree?: string[]; K?: string; u?: string },
+  keyed: { secret: string; k?: string; E?: string; tree?: string[]; K?: string; u?: string },
 ): Proof => {
   const { secret, ...spend_info } = keyed;
   return { id: V3_KEYSET, amount: Amount.from(amount), secret, C: 'aa'.repeat(48), spend_info };
@@ -381,6 +382,75 @@ describe('wallet.isPaymentRequestSatisfied', () => {
     expect(() =>
       wallet.isPaymentRequestSatisfied(v3only, proofsTotalling([100]), 100, { privkeys: priv(1) }),
     ).toThrow(/v3 proofs only/);
+  });
+
+  test('an unlocked request settles only proofs the payee can spend', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({
+          keysets: [
+            { id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 0 },
+            { id: V3_KEYSET, unit: 'sat', active: true, input_fee_ppk: 0 },
+          ],
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const pr = new PaymentRequest({ id: 'open', amount: 100, unit: 'sat' });
+    const [bearer] = proofsTotalling([100]);
+
+    expect(wallet.isPaymentRequestSatisfied(pr, [bearer])).toBe(true);
+
+    // Locked to the payer's own key: sums to the amount, transfers nothing.
+    const toPayer = lockedProofs([100], createP2PKsecret(pub(9)));
+    expect(() => wallet.isPaymentRequestSatisfied(pr, toPayer)).toThrow(
+      /unlocked request: the payee cannot spend a proof \(not-keyed-to-you\)/,
+    );
+
+    // One unspendable proof sinks the payment, however much the rest covers.
+    expect(() => wallet.isPaymentRequestSatisfied(pr, [bearer, ...toPayer])).toThrow(
+      /the payee cannot spend/,
+    );
+
+    // A lock this wallet cannot read is not a bearer secret: a laxer mint may still enforce it.
+    const unreadable = JSON.stringify([
+      'P2PK',
+      { nonce: 'ab', data: pub(9), tags: [['memo', '']] },
+    ]);
+    expect(() => wallet.isPaymentRequestSatisfied(pr, lockedProofs([100], unreadable))).toThrow(
+      /Invalid NUT-10 tag/,
+    );
+
+    // Locked to the payee is still a payment, once the payee says which key is theirs.
+    const toPayee = lockedProofs([100], createP2PKsecret(pub(1)));
+    expect(() => wallet.isPaymentRequestSatisfied(pr, toPayee)).toThrow(/the payee cannot spend/);
+    expect(wallet.isPaymentRequestSatisfied(pr, toPayee, undefined, { privkeys: priv(1) })).toBe(
+      true,
+    );
+
+    // Blinded to the payee (NUT-28): the held key matches only through the proof's `p2pk_e`.
+    const { blinded, Ehex } = deriveP2BKBlindedPubkeys([pub(1)]);
+    const [toBlindedPayee] = lockedProofs([100], createP2PKsecret(blinded[0]));
+    const blindedProof = { ...toBlindedPayee, p2pk_e: Ehex };
+    expect(() => wallet.isPaymentRequestSatisfied(pr, [blindedProof])).toThrow(
+      /the payee cannot spend/,
+    );
+    expect(
+      wallet.isPaymentRequestSatisfied(pr, [blindedProof], undefined, { privkeys: priv(1) }),
+    ).toBe(true);
+
+    // The v3 twins: a bearer proof hands over its key, a keyed one spends only for its receiver.
+    const keyedTo = (seed: number) => [v3Proof(100, deriveReceiverKeyedSecret(pub(seed)))];
+    expect(
+      wallet.isPaymentRequestSatisfied(pr, [v3Proof(100, { secret: pub(4), k: priv(4) })]),
+    ).toBe(true);
+    expect(() =>
+      wallet.isPaymentRequestSatisfied(pr, keyedTo(9), undefined, { privkeys: priv(1) }),
+    ).toThrow(/the payee cannot spend/);
+    expect(wallet.isPaymentRequestSatisfied(pr, keyedTo(1), undefined, { privkeys: priv(1) })).toBe(
+      true,
+    );
   });
 
   test('a receiver-keyed nutroot request settles only proofs keyed to the payee', async () => {

@@ -137,7 +137,8 @@ try {
   }
 } catch {
   // This mint cannot settle the request (wrong unit, outside a strict mint
-  // list, or no melt method the request accepts). Ignore or refund.
+  // list, or no melt method the request accepts), or a proof does not carry
+  // the requested lock, or you cannot spend it. Ignore or refund.
 }
 ```
 
@@ -149,7 +150,7 @@ A **locked** request needs a fourth: the private key it locks to. The check then
 wallet.isPaymentRequestSatisfied(pr, payload.proofs, undefined, { privkeys: myPrivkey });
 ```
 
-The check covers the amount, the requested lock, and this mint's admissibility: it throws when the mint is outside a strict mint list, or cannot melt the request unit via any method the request accepts. What it cannot cover is a blind-me leaf key belonging to someone else: only that key's owner can resolve its blinding, so a cosigner checks their own. Proof integrity (DLEQ) remains a separate check, as does whether a script-path leaf is satisfiable today: ask `wallet.spendOptions(proof, { privkeys })` for that.
+The check covers the amount, the requested lock, and this mint's admissibility: it throws when the mint is outside a strict mint list, or cannot melt the request unit via any method the request accepts. An unlocked request takes only proofs you can spend, bearer or locked to a key you pass as `privkeys`, so it also throws on proofs the payer locked to themselves. What it cannot cover is a blind-me leaf key belonging to someone else: only that key's owner can resolve its blinding, so a cosigner checks their own. Proof integrity (DLEQ) remains a separate check, as does, for a locked request, whether a script-path leaf is satisfiable today: ask `wallet.spendOptions(proof, { privkeys })` for that.
 
 ## Manual control
 
