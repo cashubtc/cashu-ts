@@ -26,21 +26,18 @@ const versionName = (versionByte: number): string => `v${versionByte + 1}`;
  * @internal
  */
 export function assertSpendableVersion(keyset: Keyset, logger?: Logger): void {
-  // `fail` inside the guard, not `failIf`: the latter builds its message eagerly, and these
-  // fields are only meaningful on the failing branch.
-  if (keyset.version > MAX_SUPPORTED_KEYSET_VERSION_BYTE) {
-    fail(
-      `Keyset '${keyset.id}' is a ${versionName(keyset.version)} keyset; this build of cashu-ts ` +
-        `supports up to ${versionName(MAX_SUPPORTED_KEYSET_VERSION_BYTE)}. ` +
-        `Upgrade to use this keyset.`,
-      logger,
-      {
-        keysetId: keyset.id,
-        versionByte: keyset.version,
-        supported: MAX_SUPPORTED_KEYSET_VERSION_BYTE,
-      },
-    );
-  }
+  failIf(
+    keyset.version > MAX_SUPPORTED_KEYSET_VERSION_BYTE,
+    `Keyset '${keyset.id}' is a ${versionName(keyset.version)} keyset; this build of cashu-ts ` +
+      `supports up to ${versionName(MAX_SUPPORTED_KEYSET_VERSION_BYTE)}. ` +
+      `Upgrade to use this keyset.`,
+    logger,
+    {
+      keysetId: keyset.id,
+      versionByte: keyset.version,
+      supported: MAX_SUPPORTED_KEYSET_VERSION_BYTE,
+    },
+  );
 }
 
 /**
