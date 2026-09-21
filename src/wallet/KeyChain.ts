@@ -13,7 +13,9 @@ import { normalizeMintUrl } from '../utils';
 
 import { Keyset } from './Keyset';
 
-const asHexByte = (v: number): string => `0x${v.toString(16).padStart(2, '0')}`;
+// Keyset id version bytes are zero-indexed, the names in the docs are not: byte 0x02 is a "v3"
+// keyset, and a legacy base64 id (byte -1) is v0.
+const versionName = (versionByte: number): string => `v${versionByte + 1}`;
 
 /**
  * Refuse a keyset whose id version this build cannot spend.
@@ -29,9 +31,9 @@ export function assertSpendableVersion(keyset: Keyset, logger?: Logger): void {
   // fields are only meaningful on the failing branch.
   if (keyset.version > MAX_SUPPORTED_KEYSET_VERSION_BYTE) {
     fail(
-      `Keyset '${keyset.id}' has id version byte ${asHexByte(keyset.version)}, which this build ` +
-        `of cashu-ts does not support (highest known: ` +
-        `${asHexByte(MAX_SUPPORTED_KEYSET_VERSION_BYTE)}). Upgrade to use this keyset.`,
+      `Keyset '${keyset.id}' is a ${versionName(keyset.version)} keyset; this build of cashu-ts ` +
+        `supports up to ${versionName(MAX_SUPPORTED_KEYSET_VERSION_BYTE)}. ` +
+        `Upgrade to use this keyset.`,
       logger,
       {
         keysetId: keyset.id,
@@ -319,9 +321,9 @@ export class KeyChain {
       if (tooNew.length > 0) {
         const lowest = Math.min(...tooNew.map((k) => k.version));
         fail(
-          `No supported keyset for unit: ${this.unit}. The mint's active keysets have id version ` +
-            `byte ${asHexByte(lowest)} or later; this build of cashu-ts supports up to ` +
-            `${asHexByte(MAX_SUPPORTED_KEYSET_VERSION_BYTE)}. Upgrade to spend on this mint.`,
+          `No supported keyset for unit: ${this.unit}. The mint's active keysets are ` +
+            `${versionName(lowest)} or later; this build of cashu-ts supports up to ` +
+            `${versionName(MAX_SUPPORTED_KEYSET_VERSION_BYTE)}. Upgrade to spend on this mint.`,
           this._logger,
           {
             unit: this.unit,

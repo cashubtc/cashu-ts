@@ -827,7 +827,7 @@ describe('KeyChain.getCheapestKeyset picks the lowest fee regardless of order', 
 
 describe('KeyChain refuses keyset id version bytes this build cannot spend', () => {
   const unsupportedVersion = MAX_SUPPORTED_KEYSET_VERSION_BYTE + 1;
-  const asHexByte = (v: number) => `0x${v.toString(16).padStart(2, '0')}`;
+  const versionName = (byte: number) => `v${byte + 1}`;
 
   // What a mint one keyset version ahead of this build looks like on the wire. The id cannot be
   // derived (deriveKeysetId whitelists versions), so stamp the version byte onto a derived id:
@@ -853,7 +853,7 @@ describe('KeyChain refuses keyset id version bytes this build cannot spend', () 
     // Without this the caller only sees "No active keyset found", which reads as a mint problem.
     expect(() => chain.getCheapestKeyset()).toThrow(/No supported keyset for unit: sat/);
     expect(() => chain.getCheapestKeyset()).toThrow(
-      new RegExp(`supports up to ${asHexByte(MAX_SUPPORTED_KEYSET_VERSION_BYTE)}`),
+      new RegExp(`supports up to ${versionName(MAX_SUPPORTED_KEYSET_VERSION_BYTE)}`),
     );
   });
 
@@ -871,7 +871,7 @@ describe('KeyChain refuses keyset id version bytes this build cannot spend', () 
     const future = makeFutureKeyset(1);
     const chain = await initChainWith([future.keys]);
     await expect(chain.ensureKeysetKeys(future.meta.id)).rejects.toThrow(
-      new RegExp(`has id version byte ${asHexByte(unsupportedVersion)}`),
+      new RegExp(`is a ${versionName(unsupportedVersion)} keyset`),
     );
   });
 });
