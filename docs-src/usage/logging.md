@@ -5,9 +5,10 @@
 By default, cashu-ts does not log to the console. If you want to enable logging for debugging purposes, you can set the `logger` option when creating a wallet or mint. A `ConsoleLogger` is provided, or you can wrap your existing logger to conform to the `Logger` interface:
 
 ```typescript
-import { Mint, Wallet, ConsoleLogger } from '@cashu/cashu-ts';
+import { Mint, Wallet, ConsoleLogger, type LogLevel } from '@cashu/cashu-ts';
 const mintUrl = 'http://localhost:3338';
-const mintLogger = new ConsoleLogger('error');
+const mintLevel: LogLevel = 'error'; // 'error' | 'warn' | 'info' | 'debug' | 'trace'
+const mintLogger = new ConsoleLogger(mintLevel);
 const mint = new Mint(mintUrl, { logger: mintLogger }); // Enable logging for the mint
 const walletLogger = new ConsoleLogger('debug');
 const wallet = new Wallet(mint, { logger: walletLogger }); // Enable logging for the wallet
