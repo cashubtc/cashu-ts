@@ -4,4 +4,5 @@ export * from './cbor';
 export * from './limits';
 export * from './core';
 export * from './JSONInt';
+export * from './meltPreimage';
 export * from './normalizeNumbers';

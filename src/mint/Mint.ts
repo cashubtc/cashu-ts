@@ -48,7 +48,6 @@ import request, {
   type ResponseMeta,
 } from '../transport';
 import {
-  bolt11PreimageMatches,
   isObj,
   isRecord,
   joinUrls,
@@ -59,6 +58,7 @@ import {
   normalizeMintUrl,
   normalizeSafeIntegerMetadata,
   nullIfUndefined,
+  verifiedPreimage,
 } from '../utils';
 
 import type {
@@ -1596,27 +1596,13 @@ class Mint {
       typeof data.payment_preimage === 'string' &&
       typeof data.request === 'string'
     ) {
-      data.payment_preimage = this.verifiedPreimage(data.request, data.payment_preimage, op);
+      data.payment_preimage = verifiedPreimage(
+        data.request,
+        data.payment_preimage,
+        this._logger,
+        op,
+      );
     }
-  }
-
-  /**
-   * Keeps a supplied bolt11 preimage only if it hashes to the invoice's payment hash.
-   *
-   * @remarks
-   * An invoice that cannot be parsed leaves the preimage as supplied.
-   */
-  private verifiedPreimage(request: string, preimage: string, op: string): string | null {
-    let valid: boolean;
-    try {
-      valid = bolt11PreimageMatches(request, preimage);
-    } catch (err) {
-      this._logger.debug('Melt quote request is not a parseable BOLT11 invoice', { op, err });
-      return preimage;
-    }
-    if (valid) return preimage;
-    this._logger.warn('Mint returned a payment_preimage that does not match the invoice', { op });
-    return null;
   }
 
   /**
