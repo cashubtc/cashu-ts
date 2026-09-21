@@ -3,10 +3,10 @@
 # Create a token and receive it
 
 ```typescript
-import { getEncodedToken } from '@cashu/cashu-ts';
+import { getEncodedToken, type Proof } from '@cashu/cashu-ts';
 // we assume that `wallet` already minted `proofs`, as above
 // or you fetched existing proofs from your app database
-const proofs = [...]; // array of proofs
+const proofs: Proof[] = [];
 const { keep, send } = await wallet.send(32, proofs);
 const token = getEncodedToken({ mint: mintUrl, proofs: send });
 console.log(token);

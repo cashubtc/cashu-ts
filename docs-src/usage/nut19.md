@@ -27,8 +27,8 @@ const nut19 = wallet.getMintInfo().isSupported(19);
 if (!nut19.supported) {
   console.log('This mint does not advertise NUT-19 cached endpoints');
 } else {
-  console.log('TTL (ms):', nut19.params.ttl);
-  console.log('Cached endpoints:', nut19.params.cached_endpoints);
+  console.log('TTL (ms):', nut19.params?.ttl);
+  console.log('Cached endpoints:', nut19.params?.cached_endpoints);
 }
 ```
 
@@ -75,7 +75,7 @@ const wallet = new Wallet('http://localhost:3338');
 await wallet.loadMint();
 
 try {
-  const pending = wallet.checkProofsStates([{ secret: 'my-proof-secret' }]);
+  const pending = wallet.checkProofsStates([{ id: '00bd033559de27d0', secret: 'my-proof-secret' }]);
 
   cancelButton.onclick = () => {
     ac.abort();
@@ -129,9 +129,7 @@ with `wallet.createMeltChangeProofs` once the quote is paid:
 ```ts
 import { OutputData } from '@cashu/cashu-ts';
 
-const meltPreview = await wallet.prepareMelt('bolt11', meltQuote, proofsToSend, {
-  includeFees: true,
-});
+const meltPreview = await wallet.prepareMelt('bolt11', meltQuote, proofsToSend);
 
 // Persist before completing.
 const stored = JSON.stringify({

@@ -7,8 +7,8 @@ Subscriptions should be cancelled when no longer needed to avoid leaks and keep 
 The simplest way to cancel a subscription is to call its cancel handle.
 
 ```ts
-const cancelSub = wallet.on.countersReserved(({ keysetId, next }) => {
-  void saveNextToDb(keysetId, next).catch(console.error);
+const cancelSub = wallet.on.countersReserved(({ counterKey, next }) => {
+  void saveNextToDb(counterKey, next).catch(console.error);
 });
 
 // later
@@ -23,8 +23,8 @@ const ac = new AbortController();
 
 // Setup subscriptions to use abort signal
 wallet.on.countersReserved(
-  ({ keysetId, next }) => {
-    void saveNextToDb(keysetId, next).catch(console.error);
+  ({ counterKey, next }) => {
+    void saveNextToDb(counterKey, next).catch(console.error);
   },
   { signal: ac.signal }, // abort controller
 );

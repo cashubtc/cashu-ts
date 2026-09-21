@@ -3,19 +3,22 @@
 # Create a P2PK locked token and receive it
 
 ```typescript
-import { getEncodedToken } from '@cashu/cashu-ts';
+import { getEncodedToken, type Proof } from '@cashu/cashu-ts';
 // we assume that `wallet` already minted `proofs`, as above
 // or you fetched existing proofs from your app database
-const proofs = [...]; // array of proofs
+const proofs: Proof[] = [];
 const pubkey = '02...'; // Your public key
-const { keep, send } = await wallet.ops.send(32, proofs).asLocked({ mainKeys: [pubkey] }).run();
+const { keep, send } = await wallet.ops
+  .send(32, proofs)
+  .asLocked({ mainKeys: [pubkey] })
+  .run();
 const token = getEncodedToken({ mint: mintUrl, proofs: send });
 console.log(token);
 
 const wallet2 = new Wallet(mintUrl); // receiving wallet
 await wallet2.loadMint(); // wallet2 is now ready to use
 const privkey = '5d...'; // private key for pubkey
-const receiveProofs = await wallet2.receive(token, {privkey});
+const receiveProofs = await wallet2.receive(token, { privkey });
 // store receiveProofs in your app ..
 ```
 

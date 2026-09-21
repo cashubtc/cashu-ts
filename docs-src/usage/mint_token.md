@@ -14,11 +14,13 @@ const mintUrl = 'http://localhost:3338';
 const wallet = new Wallet(mintUrl);
 await wallet.loadMint(); // wallet is now ready to use
 
-const mintQuote = await wallet.createMintQuoteBolt11(64);
+// Every v5 mint quote is NUT-20 locked, so it needs a lock key
+const { pubkey, privkey } = await wallet.createQuoteLockKey();
+const mintQuote = await wallet.createMintQuoteBolt11(64, pubkey);
 // pay the invoice here before you continue...
 const mintQuoteChecked = await wallet.checkMintQuoteBolt11(mintQuote.quote);
 if (mintQuoteChecked.state === MintQuoteState.PAID) {
-  const proofs = await wallet.mintProofsBolt11(64, mintQuote.quote);
+  const proofs = await wallet.mintProofsBolt11(64, mintQuote.quote, { privkey });
 }
 // store proofs in your app ..
 ```
@@ -34,7 +36,8 @@ import { Wallet, MintQuoteState } from '@cashu/cashu-ts';
 const wallet = new Wallet('http://localhost:3338');
 await wallet.loadMint();
 
-const mintQuote = await wallet.createMintQuoteBolt11(64);
+const { pubkey, privkey } = await wallet.createQuoteLockKey();
+const mintQuote = await wallet.createMintQuoteBolt11(64, pubkey);
 // pay the invoice here before continuing...
 
 const mintQuoteChecked = await wallet.checkMintQuoteBolt11(mintQuote.quote);
@@ -42,10 +45,16 @@ if (mintQuoteChecked.state !== MintQuoteState.PAID) {
   throw new Error('Mint quote is not paid yet');
 }
 
-const preview = await wallet.prepareMint('bolt11', 64, mintQuoteChecked, undefined, {
-  type: 'deterministic',
-  counter: 0,
-});
+const preview = await wallet.prepareMint(
+  'bolt11',
+  64,
+  mintQuoteChecked,
+  { privkey },
+  {
+    type: 'deterministic',
+    counter: 0,
+  },
+);
 
 // Persist serializeMintPreview(preview) if you want to retry safely later; see the NUT-19 page.
 const proofs = await wallet.completeMint(preview);
