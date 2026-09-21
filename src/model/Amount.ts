@@ -2,6 +2,9 @@ import { U64_MAX } from '../utils/limits';
 
 import { CTSError } from './Errors';
 
+// ponytail: one warning per process, so a reduce over amounts does not spam the console
+let warnedImplicitCoercion = false;
+
 export class AmountError extends CTSError {
   constructor(message: string) {
     super(message);
@@ -157,6 +160,24 @@ export class Amount {
    */
   toJSON(): string {
     return this.toString();
+  }
+
+  /**
+   * Coercion hook: returns the decimal string for `"string"` hints (`String(x)`, template
+   * literals); numeric and default hints warn once and return the number. cashu-ts v5 throws here
+   * instead, since without it `+` concatenated and `<` compared strings.
+   *
+   * @internal
+   */
+  [Symbol.toPrimitive](hint: 'number' | 'string' | 'default'): string | number {
+    if (hint === 'string') return this.toString();
+    if (!warnedImplicitCoercion) {
+      warnedImplicitCoercion = true;
+      console.warn(
+        'Implicit numeric coercion of Amount is deprecated and throws in cashu-ts v5; use .add()/.subtract()/.compareTo(), .toBigInt() or .toNumber(), or .toString() for display.',
+      );
+    }
+    return this.toNumberUnsafe();
   }
 
   // -----------------------------------------------------------------

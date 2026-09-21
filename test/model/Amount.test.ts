@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 import { Amount, AmountError, AmountWithUnit, AmountWithUnitError } from '../../src/model/Amount';
 
@@ -84,6 +84,29 @@ describe('Amount conversions', () => {
     const large = Amount.from(BigInt(Number.MAX_SAFE_INTEGER) + 10n);
     expect(large.toNumberUnsafe()).toBe(Number(large.toBigInt()));
     expect(large.toJSON()).toBe(String(large.toBigInt()));
+  });
+});
+
+describe('Amount implicit coercion', () => {
+  it('string coercion yields the decimal form', () => {
+    const a = Amount.from(21);
+    /* eslint-disable @typescript-eslint/restrict-template-expressions -- template coercion is the tested behavior */
+    expect(`${a}`).toBe('21');
+    /* eslint-enable @typescript-eslint/restrict-template-expressions */
+    expect(String(a)).toBe('21');
+  });
+
+  it('numeric and default coercion warn once and use the number, not the string', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const n = Amount.from(21) as unknown as number;
+    expect(n + 1).toBe(22);
+    expect(n - 1).toBe(20);
+    expect((Amount.from(9) as unknown as number) < (Amount.from(10) as unknown as number)).toBe(
+      true,
+    );
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toMatch(/throws in cashu-ts v5/);
+    warn.mockRestore();
   });
 });
 
