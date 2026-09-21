@@ -228,6 +228,13 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
 
       expect(finalDecoded.description).toBe(decoded.description);
     });
+
+    test('refuses a description with a lone surrogate rather than writing U+FFFD', () => {
+      const decoded = decodeTLV(decodeBech32mToBytes(encoded.toLowerCase()));
+      expect(() => encodeTLV({ ...decoded, description: 'bad\uD800end' })).toThrow(
+        'TLV text must be well-formed UTF-16',
+      );
+    });
   });
 
   describe('Single-Use Field (true)', () => {
