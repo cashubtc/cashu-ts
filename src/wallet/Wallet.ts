@@ -14,6 +14,7 @@ import {
   signP2PKProofs as cryptoSignP2PKProofs,
   hashToCurveHex,
   isBlsKeyset,
+  MAX_SUPPORTED_KEYSET_VERSION,
   isP2PKSigAll,
   buildP2PKSigAllMessageV0,
   computeMessageDigest,
@@ -114,7 +115,7 @@ import {
   type CounterRange,
   QUOTE_COUNTER_KEY,
 } from './CounterSource';
-import { KeyChain } from './KeyChain';
+import { assertSpendableVersion, KeyChain } from './KeyChain';
 import { type Keyset } from './Keyset';
 import { lockToNutrootOptions, lockToP2PKOptions } from './lock';
 import {
@@ -490,6 +491,7 @@ class Wallet {
         unit: k.unit,
         walletUnit: this._unit,
       });
+      assertSpendableVersion(k);
     } else {
       // Auto-bound: re-apply keyset selection so the binding tracks mint truth.
       // getCheapestKeyset prefers the newest version, then lowest fee, then latest expiry.
@@ -974,6 +976,9 @@ class Wallet {
       unit: ks.unit,
       walletUnit: this._unit,
     });
+    // Before the keys check: a keyset this build cannot spend has no keys either, and "no keys
+    // loaded" reads as a mint problem rather than a version gap.
+    assertSpendableVersion(ks);
     this.failIf(!ks.hasKeys, 'Keyset has no keys loaded', { keyset: ks.id });
     this._boundKeysetId = ks.id;
     this._explicitBind = true;
@@ -2506,9 +2511,21 @@ class Wallet {
   async restoreAll(
     config?: RestoreAllConfig,
   ): Promise<{ proofs: Proof[]; lastCounters: Record<string, number> }> {
-    const keysetIds = this._keyChain
-      .getAllKeysetIds()
-      .filter((id) => this._keyChain.getKeyset(id).unit === this.unit);
+    const keysetIds = this._keyChain.getAllKeysetIds().filter((id) => {
+      const ks = this._keyChain.getKeyset(id);
+      if (ks.unit !== this.unit) return false;
+      // Recover everything this build can read. One keyset from a newer mint must not cost the
+      // caller the proofs held on every older one.
+      if (ks.version > MAX_SUPPORTED_KEYSET_VERSION) {
+        this._logger.warn('Skipping keyset during restore: id version is newer than this build', {
+          keysetId: id,
+          version: ks.version,
+          supported: MAX_SUPPORTED_KEYSET_VERSION,
+        });
+        return false;
+      }
+      return true;
+    });
     let proofs: Proof[] = [];
     const lastCounters: Record<string, number> = {};
     for (const keysetId of keysetIds) {

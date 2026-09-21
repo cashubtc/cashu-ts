@@ -43,6 +43,18 @@ export function pointToHex(p: CurvePoint): string {
 }
 
 /**
+ * Highest keyset id version byte this build can spend.
+ *
+ * @remarks
+ * `isBlsKeyset` gates on an exact version byte, so an unrecognised one would fall through to the
+ * secp branch and compute `Y` on the wrong curve. Keysets above this are refused on the way in (see
+ * `KeyChain`) rather than mis-dispatched. Bump it only with the curve and derivation dispatch a new
+ * version needs.
+ * @internal
+ */
+export const MAX_SUPPORTED_KEYSET_VERSION = 2;
+
+/**
  * True if `keysetId` is a v3 BLS12-381 keyset id (modern hex, version byte 0x02).
  *
  * @remarks

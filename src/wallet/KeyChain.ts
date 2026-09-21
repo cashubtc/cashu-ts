@@ -1,3 +1,4 @@
+import { MAX_SUPPORTED_KEYSET_VERSION } from '../crypto/curves';
 import { type Logger, NULL_LOGGER } from '../logger';
 import { Mint } from '../mint';
 import { CTSError } from '../model/Errors';
@@ -12,6 +13,24 @@ import type {
 import { normalizeMintUrl } from '../utils';
 
 import { Keyset } from './Keyset';
+
+/**
+ * Refuse a keyset whose id version this build cannot spend.
+ *
+ * @remarks
+ * Guards the points that commit a wallet to a keyset (binding, and fetching its keys), not
+ * `getKeyset`, which is a plain lookup used inside filters and fee sums where throwing would
+ * rewrite control flow. Restore deliberately skips such keysets instead of failing.
+ * @internal
+ */
+export function assertSpendableVersion(keyset: Keyset): void {
+  if (keyset.version > MAX_SUPPORTED_KEYSET_VERSION) {
+    throw new CTSError(
+      `Keyset '${keyset.id}' uses id version ${keyset.version}; this version of cashu-ts ` +
+        `supports up to ${MAX_SUPPORTED_KEYSET_VERSION}. Upgrade to use this keyset.`,
+    );
+  }
+}
 
 /**
  * Manages all keysets for a Mint. Queries filter by the wallet's unit.
@@ -279,10 +298,24 @@ export class KeyChain {
     if (Object.keys(this.keysets).length === 0) {
       throw new CTSError('KeyChain not initialized');
     }
-    const activeKeysets = Object.values(this.keysets).filter(
-      (k) => k.unit === this.unit && k.isActive && k.hasHexId && k.hasKeys,
+    const unitActive = Object.values(this.keysets).filter(
+      (k) => k.unit === this.unit && k.isActive && k.hasHexId,
+    );
+    // Newest version wins below, so a keyset this build cannot spend must not be a candidate. Its
+    // keys are already blanked (the id derivation that `verify()` runs rejects the version), so
+    // this is belt and braces; the branch that matters is the diagnosis below.
+    const activeKeysets = unitActive.filter(
+      (k) => k.hasKeys && k.version <= MAX_SUPPORTED_KEYSET_VERSION,
     );
     if (activeKeysets.length === 0) {
+      const tooNew = unitActive.filter((k) => k.version > MAX_SUPPORTED_KEYSET_VERSION);
+      if (tooNew.length > 0) {
+        throw new CTSError(
+          `No supported keyset for unit: ${this.unit}. The mint's active keysets use id version ` +
+            `${Math.min(...tooNew.map((k) => k.version))} or later; this build of cashu-ts ` +
+            `supports up to ${MAX_SUPPORTED_KEYSET_VERSION}. Upgrade to spend on this mint.`,
+        );
+      }
       throw new CTSError(`No active keyset found for unit: ${this.unit}`);
     }
     const never = Number.MAX_SAFE_INTEGER;
@@ -304,6 +337,7 @@ export class KeyChain {
     if (!existing) {
       throw new CTSError(`Keyset '${id}' not found`);
     }
+    assertSpendableVersion(existing);
 
     // Already usable
     if (existing.hasKeys) {
