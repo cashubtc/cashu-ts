@@ -1,5 +1,5 @@
 import { safeCallback } from '../logger';
-import { Amount } from '../model/Amount';
+import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError, HttpResponseError } from '../model/Errors';
 import { MintQuoteState, MeltQuoteState } from '../model/types';
 import type {
@@ -13,6 +13,7 @@ import type {
   RpcSubKinds,
 } from '../model/types';
 import type { KeyChainCache } from '../model/types/keyset';
+import { deriveMintQuoteAccounting, normalizeSafeIntegerMetadata } from '../utils';
 
 import { type OperationCounters } from './CounterSource';
 import type { Wallet } from './Wallet';
@@ -92,16 +93,24 @@ function safeStringify(obj: unknown): string {
   }
 }
 
-// NUT-17 payloads are raw JSON, so give callbacks the Amount fields the HTTP responses carry.
-function normalizeMintQuoteUpdate<T extends MintQuoteBaseResponse & { amount?: Amount | null }>(
-  p: T,
-): T {
-  return {
-    ...p,
-    ...(p.amount != null && { amount: Amount.from(p.amount) }),
-    ...(p.amount_paid != null && { amount_paid: Amount.from(p.amount_paid) }),
-    ...(p.amount_issued != null && { amount_issued: Amount.from(p.amount_issued) }),
-  };
+// NUT-17 frames are raw JSON and mints leave out the NUT-04 base fields, so fill them the way
+// the HTTP path does; an underivable frame is dropped through `guarded`.
+function normalizeMintQuoteUpdate<T extends MintQuoteBaseResponse>(p: T, method: string): T {
+  const data: Record<string, unknown> = { ...p };
+  if (data.method === undefined) data.method = method;
+  if (data.amount != null) data.amount = Amount.from(data.amount as AmountLike);
+  const accounting =
+    data.amount_paid != null && data.amount_issued != null
+      ? [Amount.from(data.amount_paid as AmountLike), Amount.from(data.amount_issued as AmountLike)]
+      : deriveMintQuoteAccounting(data);
+  if (!accounting) throw new CTSError('Invalid mint quote update');
+  [data.amount_paid, data.amount_issued] = accounting;
+  data.updated_at = normalizeSafeIntegerMetadata(
+    data.updated_at as number | undefined,
+    'mintQuote.updated_at',
+    null,
+  );
+  return data as T;
 }
 
 function normalizeMeltQuoteUpdate<T extends MeltQuoteBaseResponse>(p: T): T {
@@ -547,7 +556,7 @@ export class WalletEvents {
       {
         kind: `${method}_mint_quote`,
         filters: uniq,
-        decode: guarded<TRes>(normalizeMintQuoteUpdate, err),
+        decode: guarded<TRes>((p) => normalizeMintQuoteUpdate(p, method), err),
       },
       { fetch, key: (q) => q.quote, state: mintQuoteState },
       cb,

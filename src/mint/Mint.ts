@@ -52,6 +52,7 @@ import request, {
 } from '../transport';
 import {
   bolt11PreimageMatches,
+  deriveMintQuoteAccounting,
   isObj,
   isRecord,
   joinUrls,
@@ -1440,7 +1441,7 @@ class Mint {
       data.amount_paid = Amount.from(data.amount_paid as AmountLike);
       data.amount_issued = Amount.from(data.amount_issued as AmountLike);
     } else {
-      const derived = this.deriveMintQuoteAccounting(data);
+      const derived = deriveMintQuoteAccounting(data);
       if (!derived) {
         // Log the reason, not the response: it carries the quote id.
         this._logger.error('Invalid response from mint...', { op });
@@ -1476,29 +1477,6 @@ class Mint {
       this._logger.error('Invalid response from mint...', { op });
       throw new CTSError('Invalid response from mint');
     }
-  }
-
-  /**
-   * Derives `[amount_paid, amount_issued]` from the legacy single-use `state` and quote `amount`,
-   * or returns null when underivable.
-   */
-  private deriveMintQuoteAccounting(data: Record<string, unknown>): [Amount, Amount] | null {
-    if (
-      typeof data.state !== 'string' ||
-      !Object.values(MintQuoteState).includes(data.state as MintQuoteState)
-    ) {
-      return null;
-    }
-    if (data.state === MintQuoteState.UNPAID) {
-      return [Amount.from(0), Amount.from(0)];
-    }
-    let amount: Amount;
-    try {
-      amount = Amount.from(data.amount as AmountLike);
-    } catch {
-      return null;
-    }
-    return data.state === MintQuoteState.PAID ? [amount, Amount.from(0)] : [amount, amount];
   }
 
   /**
