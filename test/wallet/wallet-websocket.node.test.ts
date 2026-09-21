@@ -26,7 +26,7 @@ describe('WebSocket Updates', () => {
             const message = `{"jsonrpc": "2.0", "result": {"status": "OK", "subId": "${parsed.params.subId}"}, "id": ${parsed.id}}`;
             socket.send(message);
             setTimeout(() => {
-              const message = `{"jsonrpc": "2.0", "method": "subscribe", "params": {"subId": "${parsed.params.subId}", "payload": {"quote": "123", "request": "456", "state": "PAID", "paid": true, "expiry": 123}}}`;
+              const message = `{"jsonrpc": "2.0", "method": "subscribe", "params": {"subId": "${parsed.params.subId}", "payload": {"quote": "123", "request": "456", "amount": 1, "state": "PAID", "paid": true, "expiry": 123}}}`;
               socket.send(message);
             }, 500);
           }
