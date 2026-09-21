@@ -14,6 +14,8 @@
 
 > **Note:** For the 'Updates' subscriptions, the first call auto-establishes a mint WebSocket and errors surface via the onErr callback.
 
+**Teardown:** cancelling a subscription only stops its callbacks. The socket the first subscription opened stays up and keeps a Node or Deno process alive, so on shutdown cancel every subscription, then call `wallet.mint.disconnectWebSocket()`. Cancellers can be grouped (below) so this is two calls.
+
 **One-shot helpers:**
 
 - `wallet.on.onceMintPaid(id, { signal, timeoutMs })` – resolve once quote paid

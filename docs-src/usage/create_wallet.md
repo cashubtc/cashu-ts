@@ -42,6 +42,9 @@ it itself, at the seams 4.x offers:
 - For egress control, replace the request pipeline with `customRequest`, or apply the rule at the
   socket layer (for example undici's `connect` hook), where the resolved address is known and a
   hostname check is not fooled by DNS.
+- NUT-17 subscriptions have the same seam for the socket: `injectWebSocketImpl(ws)` replaces the
+  `WebSocket` class the library captured when it loaded, for a proxy, a polyfill or a runtime
+  without a global `WebSocket`. Call it before the first subscription.
 
 ```typescript
 import { setGlobalRequestOptions } from '@cashu/cashu-ts';
