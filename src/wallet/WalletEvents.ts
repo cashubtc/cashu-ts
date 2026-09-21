@@ -1,5 +1,5 @@
 import { hashToCurve } from '../crypto';
-import { safeCallback } from '../logger';
+import { type Logger, safeCallback } from '../logger';
 import { Amount } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { MintQuoteState, MeltQuoteState } from '../model/types';
@@ -11,7 +11,7 @@ import type {
   MintQuoteBolt11Response,
 } from '../model/types';
 import type { KeyChainCache } from '../model/types/keyset';
-import { assertSpendableVersion } from '../utils';
+import { assertSpendableVersion, nullIfUndefined, verifiedPreimage } from '../utils';
 
 import { type OperationCounters } from './CounterSource';
 import type { Wallet } from './Wallet';
@@ -51,13 +51,27 @@ function normalizeMintQuoteUpdate(p: MintQuoteBolt11Response): MintQuoteBolt11Re
   };
 }
 
-function normalizeMeltQuoteUpdate(p: MeltQuoteBolt11Response): MeltQuoteBolt11Response {
-  return {
+// NUT-17 frames are raw JSON; give callbacks the preimage handling the HTTP melt responses get
+function normalizeMeltQuoteUpdate(
+  p: MeltQuoteBolt11Response,
+  logger: Logger,
+): MeltQuoteBolt11Response {
+  const data: Record<string, unknown> = {
     ...p,
     ...(p.amount != null && { amount: Amount.from(p.amount) }),
     ...(p.fee_reserve != null && { fee_reserve: Amount.from(p.fee_reserve) }),
     ...(p.change && { change: p.change.map((s) => ({ ...s, amount: Amount.from(s.amount) })) }),
   };
+  nullIfUndefined(data, 'payment_preimage');
+  if (typeof data.payment_preimage === 'string' && typeof data.request === 'string') {
+    data.payment_preimage = verifiedPreimage(
+      data.request,
+      data.payment_preimage,
+      logger,
+      'bolt11 melt quote update',
+    );
+  }
+  return data as MeltQuoteBolt11Response;
 }
 
 function normalizeError(err: unknown): Error {
@@ -339,7 +353,7 @@ export class WalletEvents {
     const handler = (p: MeltQuoteBolt11Response) => {
       let quote: MeltQuoteBolt11Response;
       try {
-        quote = normalizeMeltQuoteUpdate(p);
+        quote = normalizeMeltQuoteUpdate(p, this.wallet.logger);
       } catch (e) {
         err(normalizeError(e));
         return;
