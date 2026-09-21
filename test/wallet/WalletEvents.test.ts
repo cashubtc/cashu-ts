@@ -1,3 +1,6 @@
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+import { bech32 } from '@scure/base';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { Amount, CheckStateEnum, HttpResponseError } from '../../src';
@@ -251,6 +254,76 @@ describe('WalletEvents', () => {
       expect(cb).toHaveBeenCalledTimes(1);
       expect(err).toHaveBeenCalledWith(
         expect.objectContaining({ message: 'Invalid mint quote update' }),
+      );
+    });
+
+    it('meltQuoteUpdates fills method, nulls an absent preimage and drops a mismatched one', async () => {
+      const logger = {
+        warn: vi.fn(),
+        error: vi.fn(),
+        info: vi.fn(),
+        debug: vi.fn(),
+        trace: vi.fn(),
+        log: vi.fn(),
+      };
+      const ws = new MockWS();
+      const wallet = {
+        mint: { connectWebSocket: vi.fn(async () => {}), webSocketConnection: ws },
+        computeY,
+        logger,
+      };
+      const ev = new WalletEvents(wallet as any);
+      const cb = vi.fn();
+      await ev.meltQuoteUpdates(['n4'], cb, vi.fn());
+
+      ws.emit('bolt11_melt_quote', {
+        quote: 'n4',
+        state: 'UNPAID',
+        amount: 10,
+        fee_reserve: 1,
+        expiry: 5,
+      });
+      expect(cb.mock.calls[0][0]).toMatchObject({
+        method: 'bolt11',
+        payment_preimage: null,
+        expiry: 5,
+      });
+
+      const preimage = 'ab'.repeat(32);
+      const invoiceFor = (hashHex: string) =>
+        bech32.encode(
+          'lnbc',
+          [
+            ...new Array<number>(7).fill(0),
+            1,
+            1,
+            20,
+            ...bech32.toWords(hexToBytes(hashHex)),
+          ].concat(new Array<number>(104).fill(0)),
+          false,
+        );
+      const good = invoiceFor(bytesToHex(sha256(hexToBytes(preimage))));
+      ws.emit('bolt11_melt_quote', {
+        quote: 'n4',
+        state: 'PAID',
+        amount: 10,
+        request: good,
+        payment_preimage: preimage,
+      });
+      expect(cb.mock.calls[1][0].payment_preimage).toBe(preimage);
+
+      const other = invoiceFor(bytesToHex(sha256(hexToBytes('00'.repeat(31) + '01'))));
+      ws.emit('bolt11_melt_quote', {
+        quote: 'n4',
+        state: 'PAID',
+        amount: 10,
+        request: other,
+        payment_preimage: preimage,
+      });
+      expect(cb.mock.calls[2][0].payment_preimage).toBeNull();
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Mint returned a payment_preimage that does not match the invoice',
+        { op: 'bolt11 melt quote update' },
       );
     });
 

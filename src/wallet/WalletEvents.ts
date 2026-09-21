@@ -1,4 +1,4 @@
-import { safeCallback } from '../logger';
+import { type Logger, safeCallback } from '../logger';
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError, HttpResponseError } from '../model/Errors';
 import { MintQuoteState, MeltQuoteState } from '../model/types';
@@ -13,7 +13,12 @@ import type {
   RpcSubKinds,
 } from '../model/types';
 import type { KeyChainCache } from '../model/types/keyset';
-import { deriveMintQuoteAccounting, normalizeSafeIntegerMetadata } from '../utils';
+import {
+  deriveMintQuoteAccounting,
+  normalizeSafeIntegerMetadata,
+  nullIfUndefined,
+  verifiedPreimage,
+} from '../utils';
 
 import { type OperationCounters } from './CounterSource';
 import type { Wallet } from './Wallet';
@@ -113,13 +118,40 @@ function normalizeMintQuoteUpdate<T extends MintQuoteBaseResponse>(p: T, method:
   return data as T;
 }
 
-function normalizeMeltQuoteUpdate<T extends MeltQuoteBaseResponse>(p: T): T {
-  return {
+// NUT-17 frames are raw JSON; give callbacks the shape and checks the HTTP melt responses get
+function normalizeMeltQuoteUpdate<T extends MeltQuoteBaseResponse>(
+  p: T,
+  method: string,
+  logger: Logger,
+): T {
+  const data: Record<string, unknown> = {
     ...p,
     ...(p.amount != null && { amount: Amount.from(p.amount) }),
     ...(p.fee_reserve != null && { fee_reserve: Amount.from(p.fee_reserve) }),
     ...(p.change && { change: p.change.map((s) => ({ ...s, amount: Amount.from(s.amount) })) }),
   };
+  if (data.method === undefined) data.method = method;
+  data.expiry = normalizeSafeIntegerMetadata(
+    data.expiry as number | undefined,
+    'meltQuote.expiry',
+    undefined,
+  );
+  if (method === 'bolt11' || method === 'bolt12') {
+    nullIfUndefined(data, 'payment_preimage');
+    if (
+      method === 'bolt11' &&
+      typeof data.payment_preimage === 'string' &&
+      typeof data.request === 'string'
+    ) {
+      data.payment_preimage = verifiedPreimage(
+        data.request,
+        data.payment_preimage,
+        logger,
+        `${method} melt quote update`,
+      );
+    }
+  }
+  return data as T;
 }
 
 function normalizeError(err: unknown): Error {
@@ -623,7 +655,7 @@ export class WalletEvents {
       {
         kind: `${method}_melt_quote`,
         filters: uniq,
-        decode: guarded<TRes>(normalizeMeltQuoteUpdate, err),
+        decode: guarded<TRes>((p) => normalizeMeltQuoteUpdate(p, method, this.wallet.logger), err),
       },
       {
         fetch: () => this._eachQuote(uniq, (id) => this.wallet.checkMeltQuote<TRes>(method, id)),
