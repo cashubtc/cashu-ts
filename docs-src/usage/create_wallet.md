@@ -54,6 +54,8 @@ Precedence depends on the option. Global values for fetch's own `RequestInit` (`
 
 Use `customRequest` when you need to replace the entire request pipeline instead of only the fetch-compatible transport.
 
+NUT-17 subscriptions have the same hook for the socket: `injectWebSocketImpl(ws)` replaces the `WebSocket` class the library captured when it loaded, for a proxy, a polyfill or a runtime without a global `WebSocket`. Call it before the first subscription.
+
 `requestFetch` only applies to Cashu mint HTTP requests. OIDC discovery and token requests use `oidc.fetch` because they target the identity provider and use OAuth/OIDC request and error semantics.
 
 ```typescript
