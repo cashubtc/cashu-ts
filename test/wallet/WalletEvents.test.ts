@@ -297,6 +297,17 @@ describe('WalletEvents', () => {
       expect(typeof seen[0].proof.amount).toBe('number');
     });
 
+    it('proofStateUpdates refuses a keyset version this build cannot read', async () => {
+      // computeY gates the curve, so a subscription that could only ever watch the wrong Y must
+      // be refused before any socket is opened.
+      const proofs: Proof[] = [
+        { amount: Amount.from(2), id: '03' + '11'.repeat(32), secret: 's1', C: 'test' },
+      ];
+      await expect(events.proofStateUpdates(proofs, vi.fn(), vi.fn())).rejects.toThrow(/Upgrade/);
+      expect(mock.mint.connectWebSocket).not.toHaveBeenCalled();
+      expect(mock.mint.webSocketConnection).toBeUndefined();
+    });
+
     it('proofStateUpdates throws on duplicate proof secrets', async () => {
       const proofs: Proof[] = [
         { amount: Amount.from(2), id: '00bd033559de27d0', secret: 'same', C: 'a' },
