@@ -2,6 +2,7 @@ import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToNumberBE } from '@noble/curves/utils.js';
 
+import { failIf, type Logger } from '../logger';
 import { CTSError } from '../model/Errors';
 import { decodeBase64ToUint8Legacy, hexToNumber, isBase64String, isValidHex } from '../utils';
 
@@ -46,13 +47,40 @@ export function pointToHex(p: CurvePoint): string {
  * Highest keyset id version byte this build can spend: 0x02, the v3 BLS keysets.
  *
  * @remarks
- * `isBlsKeyset` gates on an exact version byte, so an unrecognised one would fall through to the
- * secp branch and compute `Y` on the wrong curve. Keysets above this are refused on the way in (see
- * `KeyChain`) rather than mis-dispatched. Bump it only with the curve and derivation dispatch a new
- * version needs.
+ * Keysets above this are refused before binding, loading keys, or computing `Y`. Bump it only with
+ * the curve and derivation dispatch a new version needs.
  * @internal
  */
 export const MAX_SUPPORTED_KEYSET_VERSION_BYTE = 0x02;
+
+/**
+ * Name a keyset id version byte the way the docs do.
+ *
+ * @remarks
+ * Version bytes are zero-indexed and the names are not: byte 0x02 is a "v3" keyset, and a legacy
+ * base64 id (byte -1) is v0.
+ * @internal
+ */
+export const versionName = (versionByte: number): string => `v${versionByte + 1}`;
+
+/**
+ * Refuse unsupported keyset versions, including paths that do not load keys.
+ *
+ * @remarks
+ * Takes the id rather than a `Keyset` so the curve dispatch below can use it: crypto cannot import
+ * from wallet. The parse mirrors `Keyset.version`, which reads the same byte off a loaded keyset.
+ * @internal
+ */
+export function assertSpendableVersion(keysetId: string, logger?: Logger): void {
+  const version = isValidHex(keysetId) ? Number.parseInt(keysetId.slice(0, 2), 16) : -1;
+  failIf(
+    version > MAX_SUPPORTED_KEYSET_VERSION_BYTE,
+    `Keyset '${keysetId}' is a ${versionName(version)} keyset; this build of cashu-ts supports ` +
+      `up to ${versionName(MAX_SUPPORTED_KEYSET_VERSION_BYTE)}. Upgrade to use this keyset.`,
+    logger,
+    { keysetId, versionByte: version, supported: MAX_SUPPORTED_KEYSET_VERSION_BYTE },
+  );
+}
 
 /**
  * True if `keysetId` is a v3 BLS12-381 keyset id (modern hex, version byte 0x02).
@@ -73,6 +101,7 @@ export function isBlsKeyset(keysetId: string): boolean {
  * The secret string is hashed as UTF-8, hex secrets included.
  */
 export function hashToCurveHex(secret: string, keysetId: string): string {
+  assertSpendableVersion(keysetId);
   const msg = new TextEncoder().encode(secret);
   return (isBlsKeyset(keysetId) ? hashToCurveBls(msg) : hashToCurve(msg)).toHex(true);
 }

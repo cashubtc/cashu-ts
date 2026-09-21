@@ -1,4 +1,8 @@
-import { MAX_SUPPORTED_KEYSET_VERSION_BYTE } from '../crypto/curves';
+import {
+  assertSpendableVersion,
+  MAX_SUPPORTED_KEYSET_VERSION_BYTE,
+  versionName,
+} from '../crypto/curves';
 import { fail, failIf, failIfNullish, type Logger, NULL_LOGGER } from '../logger';
 import { Mint } from '../mint';
 import type {
@@ -12,34 +16,6 @@ import type {
 import { normalizeMintUrl } from '../utils';
 
 import { Keyset } from './Keyset';
-
-// Keyset id version bytes are zero-indexed, the names in the docs are not: byte 0x02 is a "v3"
-// keyset, and a legacy base64 id (byte -1) is v0.
-const versionName = (versionByte: number): string => `v${versionByte + 1}`;
-
-/**
- * Refuse a keyset whose id version this build cannot spend.
- *
- * @remarks
- * Guards the points that commit a wallet to a keyset (binding, and fetching its keys), not
- * `getKeyset`, which is a plain lookup used inside filters and fee sums where throwing would
- * rewrite control flow. Restore deliberately skips such keysets instead of failing.
- * @internal
- */
-export function assertSpendableVersion(keyset: Keyset, logger?: Logger): void {
-  failIf(
-    keyset.version > MAX_SUPPORTED_KEYSET_VERSION_BYTE,
-    `Keyset '${keyset.id}' is a ${versionName(keyset.version)} keyset; this build of cashu-ts ` +
-      `supports up to ${versionName(MAX_SUPPORTED_KEYSET_VERSION_BYTE)}. ` +
-      `Upgrade to use this keyset.`,
-    logger,
-    {
-      keysetId: keyset.id,
-      versionByte: keyset.version,
-      supported: MAX_SUPPORTED_KEYSET_VERSION_BYTE,
-    },
-  );
-}
 
 /**
  * Manages all keysets for a Mint. Queries filter by the wallet's unit.
@@ -348,7 +324,7 @@ export class KeyChain {
     // Check keyset exists
     const existing = this.keysets[id];
     failIfNullish(existing, `Keyset '${id}' not found`, this._logger, { keysetId: id });
-    assertSpendableVersion(existing, this._logger);
+    assertSpendableVersion(existing.id, this._logger);
 
     // Already usable
     if (existing.hasKeys) {
