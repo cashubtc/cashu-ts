@@ -413,7 +413,7 @@ const MAX_DELAY = 1000; // 1 sec
 const BASE_DELAY = 100; // 100 ms
 const AUTH_HEADERS = ['blind-auth', 'clear-auth']; // NUT-21/22 tokens, lowercased for comparison
 
-class CallerAbortError extends NetworkError {
+export class CallerAbortError extends NetworkError {
   constructor(message: string) {
     super(message);
     this.name = 'CallerAbortError';
@@ -426,7 +426,7 @@ class CallerAbortError extends NetworkError {
  * fallback). The underlying read may still be consuming the body, so this is NOT retried: another
  * attempt would start a second uncancellable read against the same (possibly unbounded) body.
  */
-class UncancellableReadError extends NetworkError {
+export class UncancellableReadError extends NetworkError {
   constructor(message: string, options?: { cause?: unknown }) {
     super(message, options);
     this.name = 'UncancellableReadError';

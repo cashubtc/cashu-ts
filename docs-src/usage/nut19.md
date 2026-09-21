@@ -60,7 +60,7 @@ Use `requestTimeout` for app-wide timeout policy. Use `AbortController` only whe
 cancel one specific low-level request.
 
 - `requestTimeout` turns a hung request into a retryable network error on NUT-19 cached endpoints
-- `signal.abort()` is treated as a caller cancel and stops retries immediately
+- `signal.abort()` is treated as a caller cancel and stops retries immediately; the call rejects with `CallerAbortError`
 
 ```ts
 import { Wallet, setGlobalRequestOptions } from '@cashu/cashu-ts';
