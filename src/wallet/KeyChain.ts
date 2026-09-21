@@ -1,7 +1,6 @@
-import { MAX_SUPPORTED_KEYSET_VERSION } from '../crypto/curves';
-import { fail, failIf, type Logger, NULL_LOGGER } from '../logger';
+import { MAX_SUPPORTED_KEYSET_VERSION_BYTE } from '../crypto/curves';
+import { fail, failIf, failIfNullish, type Logger, NULL_LOGGER } from '../logger';
 import { Mint } from '../mint';
-import { CTSError } from '../model/Errors';
 import type {
   MintKeyset,
   MintKeys,
@@ -14,6 +13,8 @@ import { normalizeMintUrl } from '../utils';
 
 import { Keyset } from './Keyset';
 
+const asHexByte = (v: number): string => `0x${v.toString(16).padStart(2, '0')}`;
+
 /**
  * Refuse a keyset whose id version this build cannot spend.
  *
@@ -24,13 +25,21 @@ import { Keyset } from './Keyset';
  * @internal
  */
 export function assertSpendableVersion(keyset: Keyset, logger?: Logger): void {
-  failIf(
-    keyset.version > MAX_SUPPORTED_KEYSET_VERSION,
-    `Keyset '${keyset.id}' uses id version ${keyset.version}; this build of cashu-ts supports ` +
-      `up to ${MAX_SUPPORTED_KEYSET_VERSION}. Upgrade to use this keyset.`,
-    logger,
-    { keysetId: keyset.id, version: keyset.version, supported: MAX_SUPPORTED_KEYSET_VERSION },
-  );
+  // `fail` inside the guard, not `failIf`: the latter builds its message eagerly, and these
+  // fields are only meaningful on the failing branch.
+  if (keyset.version > MAX_SUPPORTED_KEYSET_VERSION_BYTE) {
+    fail(
+      `Keyset '${keyset.id}' has id version byte ${asHexByte(keyset.version)}, which this build ` +
+        `of cashu-ts does not support (highest known: ` +
+        `${asHexByte(MAX_SUPPORTED_KEYSET_VERSION_BYTE)}). Upgrade to use this keyset.`,
+      logger,
+      {
+        keysetId: keyset.id,
+        versionByte: keyset.version,
+        supported: MAX_SUPPORTED_KEYSET_VERSION_BYTE,
+      },
+    );
+  }
 }
 
 /**
@@ -58,9 +67,7 @@ export class KeyChain {
   private _logger: Logger;
 
   private assertInitialized(): void {
-    if (Object.keys(this.keysets).length === 0) {
-      throw new CTSError('KeyChain not initialized');
-    }
+    failIf(Object.keys(this.keysets).length === 0, 'KeyChain not initialized', this._logger);
   }
 
   constructor(mint: string | Mint, unit: string, logger: Logger = NULL_LOGGER) {
@@ -198,15 +205,18 @@ export class KeyChain {
    * `this.unit`.
    */
   loadFromCache(cache: KeyChainCache): void {
-    if (typeof cache.mintUrl !== 'string') {
-      throw new CTSError('KeyChain cache is missing its mint URL');
-    }
+    failIf(
+      typeof cache.mintUrl !== 'string',
+      'KeyChain cache is missing its mint URL',
+      this._logger,
+    );
     const cacheMintUrl = normalizeMintUrl(cache.mintUrl);
-    if (cacheMintUrl !== this.mint.mintUrl) {
-      throw new CTSError(
-        `KeyChain cache is for a different mint: ${cacheMintUrl} (expected ${this.mint.mintUrl})`,
-      );
-    }
+    failIf(
+      cacheMintUrl !== this.mint.mintUrl,
+      `KeyChain cache is for a different mint: ${cacheMintUrl} (expected ${this.mint.mintUrl})`,
+      this._logger,
+      { cacheMintUrl, mintUrl: this.mint.mintUrl },
+    );
     const { keysets, keys } = KeyChain.cacheToMintDTO(cache);
     this.buildKeychain(keysets, keys);
     this.savedAt = cache.savedAt;
@@ -280,9 +290,7 @@ export class KeyChain {
    */
   getKeyset(id?: string): Keyset {
     const keyset = id !== undefined ? this.keysets[id] : this.getCheapestKeyset();
-    if (!keyset) {
-      throw new CTSError(`Keyset '${id}' not found`);
-    }
+    failIfNullish(keyset, `Keyset '${id}' not found`, this._logger, { keysetId: id });
     return keyset;
   }
 
@@ -296,9 +304,7 @@ export class KeyChain {
    * @throws If none found or uninitialized.
    */
   getCheapestKeyset(): Keyset {
-    if (Object.keys(this.keysets).length === 0) {
-      throw new CTSError('KeyChain not initialized');
-    }
+    this.assertInitialized();
     const unitActive = Object.values(this.keysets).filter(
       (k) => k.unit === this.unit && k.isActive && k.hasHexId,
     );
@@ -306,21 +312,25 @@ export class KeyChain {
     // keys are already blanked (the id derivation that `verify()` runs rejects the version), so
     // this is belt and braces; the branch that matters is the diagnosis below.
     const activeKeysets = unitActive.filter(
-      (k) => k.hasKeys && k.version <= MAX_SUPPORTED_KEYSET_VERSION,
+      (k) => k.hasKeys && k.version <= MAX_SUPPORTED_KEYSET_VERSION_BYTE,
     );
     if (activeKeysets.length === 0) {
-      const tooNew = unitActive.filter((k) => k.version > MAX_SUPPORTED_KEYSET_VERSION);
+      const tooNew = unitActive.filter((k) => k.version > MAX_SUPPORTED_KEYSET_VERSION_BYTE);
       if (tooNew.length > 0) {
         const lowest = Math.min(...tooNew.map((k) => k.version));
         fail(
-          `No supported keyset for unit: ${this.unit}. The mint's active keysets use id version ` +
-            `${lowest} or later; this build of cashu-ts supports up to ` +
-            `${MAX_SUPPORTED_KEYSET_VERSION}. Upgrade to spend on this mint.`,
+          `No supported keyset for unit: ${this.unit}. The mint's active keysets have id version ` +
+            `byte ${asHexByte(lowest)} or later; this build of cashu-ts supports up to ` +
+            `${asHexByte(MAX_SUPPORTED_KEYSET_VERSION_BYTE)}. Upgrade to spend on this mint.`,
           this._logger,
-          { unit: this.unit, lowestVersion: lowest, supported: MAX_SUPPORTED_KEYSET_VERSION },
+          {
+            unit: this.unit,
+            lowestVersionByte: lowest,
+            supported: MAX_SUPPORTED_KEYSET_VERSION_BYTE,
+          },
         );
       }
-      throw new CTSError(`No active keyset found for unit: ${this.unit}`);
+      fail(`No active keyset found for unit: ${this.unit}`, this._logger, { unit: this.unit });
     }
     const never = Number.MAX_SAFE_INTEGER;
     return activeKeysets.sort(
@@ -338,9 +348,7 @@ export class KeyChain {
   async ensureKeysetKeys(id: string): Promise<Keyset> {
     // Check keyset exists
     const existing = this.keysets[id];
-    if (!existing) {
-      throw new CTSError(`Keyset '${id}' not found`);
-    }
+    failIfNullish(existing, `Keyset '${id}' not found`, this._logger, { keysetId: id });
     assertSpendableVersion(existing, this._logger);
 
     // Already usable
@@ -359,16 +367,19 @@ export class KeyChain {
       const startedGeneration = this.generation;
       const res = await this.mint.getKeys(id);
       const mk = res.keysets.find((k) => k.id === id);
-      if (!mk || !mk.keys || Object.keys(mk.keys).length === 0) {
-        throw new CTSError(`Mint returned no keys for keyset '${id}'`);
-      }
+      failIf(
+        !mk || !mk.keys || Object.keys(mk.keys).length === 0,
+        `Mint returned no keys for keyset '${id}'`,
+        this._logger,
+        { keysetId: id },
+      );
 
       // Rebuild from existing meta plus fetched keys
       const meta = existing.toMintKeyset();
       const rebuilt = Keyset.fromMintApi(meta, mk);
-      if (!rebuilt.verify()) {
-        throw new CTSError(`Keyset verification failed for ID ${id}`);
-      }
+      failIf(!rebuilt.verify(), `Keyset verification failed for ID ${id}`, this._logger, {
+        keysetId: id,
+      });
 
       // A newer snapshot replaced ours while fetching, so its entry wins: the rebuilt one carries
       // the metadata captured before the refresh.
@@ -377,9 +388,7 @@ export class KeyChain {
           id,
         });
         const current = this.keysets[id];
-        if (!current) {
-          throw new CTSError(`Keyset '${id}' not found`);
-        }
+        failIfNullish(current, `Keyset '${id}' not found`, this._logger, { keysetId: id });
         return current;
       }
       this.keysets[id] = rebuilt;
@@ -404,9 +413,9 @@ export class KeyChain {
   getKeysets(): Keyset[] {
     this.assertInitialized();
     const unitKeysets = Object.values(this.keysets).filter((k) => k.unit === this.unit);
-    if (unitKeysets.length === 0) {
-      throw new CTSError(`No keysets found for unit: ${this.unit}`);
-    }
+    failIf(unitKeysets.length === 0, `No keysets found for unit: ${this.unit}`, this._logger, {
+      unit: this.unit,
+    });
     return unitKeysets;
   }
 

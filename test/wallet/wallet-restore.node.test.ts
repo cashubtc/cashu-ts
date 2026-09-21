@@ -13,7 +13,7 @@ import {
   InvalidScalarError,
   type Proof,
 } from '../../src';
-import { MAX_SUPPORTED_KEYSET_VERSION } from '../../src/crypto/curves';
+import { MAX_SUPPORTED_KEYSET_VERSION_BYTE } from '../../src/crypto/curves';
 import * as NUT13 from '../../src/crypto/NUT13';
 import { PUBKEYS } from '../consts';
 
@@ -238,8 +238,8 @@ describe('restoreAll', () => {
     vi.spyOn(wallet.keyChain, 'getAllKeysetIds').mockReturnValue(['old', 'future']);
     vi.spyOn(wallet.keyChain, 'getKeyset').mockImplementation((id) =>
       id === 'future'
-        ? ({ unit: 'sat', version: MAX_SUPPORTED_KEYSET_VERSION + 1 } as never)
-        : ({ unit: 'sat', version: MAX_SUPPORTED_KEYSET_VERSION } as never),
+        ? ({ unit: 'sat', version: MAX_SUPPORTED_KEYSET_VERSION_BYTE + 1 } as never)
+        : ({ unit: 'sat', version: MAX_SUPPORTED_KEYSET_VERSION_BYTE } as never),
     );
     const batchSpy = vi
       .spyOn(wallet, 'batchRestore')

@@ -14,7 +14,7 @@ import {
   signP2PKProofs as cryptoSignP2PKProofs,
   hashToCurveHex,
   isBlsKeyset,
-  MAX_SUPPORTED_KEYSET_VERSION,
+  MAX_SUPPORTED_KEYSET_VERSION_BYTE,
   isP2PKSigAll,
   buildP2PKSigAllMessageV0,
   computeMessageDigest,
@@ -2516,12 +2516,15 @@ class Wallet {
       if (ks.unit !== this.unit) return false;
       // Recover everything this build can read. One keyset from a newer mint must not cost the
       // caller the proofs held on every older one.
-      if (ks.version > MAX_SUPPORTED_KEYSET_VERSION) {
-        this._logger.warn('Skipping keyset during restore: id version is newer than this build', {
-          keysetId: id,
-          version: ks.version,
-          supported: MAX_SUPPORTED_KEYSET_VERSION,
-        });
+      if (ks.version > MAX_SUPPORTED_KEYSET_VERSION_BYTE) {
+        this._logger.warn(
+          'Skipping keyset during restore: id version byte is newer than this build',
+          {
+            keysetId: id,
+            versionByte: ks.version,
+            supported: MAX_SUPPORTED_KEYSET_VERSION_BYTE,
+          },
+        );
         return false;
       }
       return true;
