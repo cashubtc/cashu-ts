@@ -418,7 +418,7 @@ calls reintroduces the window this closes.
 
 ## Counter keys are not always keyset ids: `OperationCounters.keysetId` is now `counterKey`
 
-Seeded wallets reserve mint quote lock counters (see the locked-quotes section above) under the exported `QUOTE_COUNTER_KEY` (`'mint-quote-lock'`), flowing through the same `CounterSource` and `countersReserved` event as keyset counters. The payload field is renamed to say what it is.
+Seeded wallets reserve mint quote lock counters (see the locked-quotes section above) under one key per mint, `quoteCounterKey(mintPubkey)` (`'mint-quote-lock:<NUT-06 pubkey>'`), flowing through the same `CounterSource` and `countersReserved` event as keyset counters. The payload field is renamed to say what it is.
 
 ### Migration
 
@@ -430,7 +430,7 @@ wallet.on.countersReserved(({ keysetId, next }) => saveNextToDb(keysetId, next))
 wallet.on.countersReserved(({ counterKey, next }) => saveNextToDb(counterKey, next));
 ```
 
-A custom `CounterSource` that validates its keys as keyset ids, or joins them against a keysets table, must accept `QUOTE_COUNTER_KEY` too: every seeded wallet reserves from it on its first mint quote.
+A custom `CounterSource` that validates its keys as keyset ids, or joins them against a keysets table, must accept these `mint-quote-lock:` keys too: every seeded wallet reserves from one on its first mint quote at a mint. Quote lock keys are scoped to the mint's NUT-06 `pubkey`, so a seeded wallet at a mint that publishes none must pass `{ random: true }` to `createQuoteLockKey`.
 
 ---
 

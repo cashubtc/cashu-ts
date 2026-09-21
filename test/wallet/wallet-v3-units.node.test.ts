@@ -1,13 +1,18 @@
 import { hexToBytes, bytesToHex } from '@noble/hashes/utils.js';
+import { HttpResponse, http } from 'msw';
 import { describe, expect, test, vi } from 'vitest';
 
-import { Wallet, QUOTE_COUNTER_KEY, type OperationCounters } from '../../src';
+import { Wallet, quoteCounterKey, type OperationCounters } from '../../src';
 import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import { deriveQuoteLockKey } from '../../src/crypto/NUT13';
 import { Amount } from '../../src/model/Amount';
 import type { Proof } from '../../src/model/types';
 
+import { mintInfoResp, useTestServer } from './_setup';
+
+const server = useTestServer();
 const mintUrl = 'http://localhost:3338';
+const MINT_PUBKEY: string = mintInfoResp.pubkey;
 const BLS_ID = `02${'ab'.repeat(32)}`;
 const POINT = `02${'cd'.repeat(32)}`;
 
@@ -40,14 +45,15 @@ describe('Wallet._normalizeWitness', () => {
 describe('Wallet quote lock keys', () => {
   const SEED = hexToBytes('11'.repeat(64));
 
-  test('createQuoteLockKey derives from the seed and consumes the quote counter', async () => {
+  test('createQuoteLockKey derives from the seed under the mint identity and consumes its quote counter', async () => {
     const wallet = new Wallet(mintUrl, { unit: 'sat', bip39seed: SEED });
+    await wallet.loadMint();
     const first = await wallet.createQuoteLockKey();
-    expect(bytesToHex(deriveQuoteLockKey(SEED, 0))).toBe(first.privkey);
+    expect(bytesToHex(deriveQuoteLockKey(SEED, MINT_PUBKEY, 0))).toBe(first.privkey);
     expect(bytesToHex(getPubKeyFromPrivKey(hexToBytes(first.privkey)))).toBe(first.pubkey);
     // The counter moved: the next key is a different derivation.
     const second = await wallet.createQuoteLockKey();
-    expect(bytesToHex(deriveQuoteLockKey(SEED, 1))).toBe(second.privkey);
+    expect(bytesToHex(deriveQuoteLockKey(SEED, MINT_PUBKEY, 1))).toBe(second.privkey);
   });
 
   test('createQuoteLockKey is random without a seed', async () => {
@@ -58,34 +64,50 @@ describe('Wallet quote lock keys', () => {
     expect(bytesToHex(getPubKeyFromPrivKey(hexToBytes(a.privkey)))).toBe(a.pubkey);
   });
 
-  test('createQuoteLockKey emits countersReserved so persistence hooks see the cursor', async () => {
+  test('createQuoteLockKey emits countersReserved under the per-mint key', async () => {
     const wallet = new Wallet(mintUrl, { unit: 'sat', bip39seed: SEED });
+    await wallet.loadMint();
     const seen: OperationCounters[] = [];
     wallet.on.countersReserved((p) => seen.push(p));
     await wallet.createQuoteLockKey();
     await wallet.createQuoteLockKey();
+    const counterKey = quoteCounterKey(MINT_PUBKEY);
+    expect(quoteCounterKey(MINT_PUBKEY.toUpperCase())).toBe(counterKey);
     expect(seen).toEqual([
-      { counterKey: QUOTE_COUNTER_KEY, start: 0, count: 1, next: 1 },
-      { counterKey: QUOTE_COUNTER_KEY, start: 1, count: 1, next: 2 },
+      { counterKey, start: 0, count: 1, next: 1 },
+      { counterKey, start: 1, count: 1, next: 2 },
     ]);
   });
 
   test('createQuoteLockKey({ random: true }) skips the seed and the quote counter', async () => {
     const wallet = new Wallet(mintUrl, { unit: 'sat', bip39seed: SEED });
+    await wallet.loadMint();
     const seen: OperationCounters[] = [];
     wallet.on.countersReserved((p) => seen.push(p));
     const throwaway = await wallet.createQuoteLockKey({ random: true });
-    expect(throwaway.privkey).not.toBe(bytesToHex(deriveQuoteLockKey(SEED, 0)));
+    expect(throwaway.privkey).not.toBe(bytesToHex(deriveQuoteLockKey(SEED, MINT_PUBKEY, 0)));
     expect(bytesToHex(getPubKeyFromPrivKey(hexToBytes(throwaway.privkey)))).toBe(throwaway.pubkey);
     expect(seen).toEqual([]);
     // The counter did not move: the next seeded key still derives at 0.
     const first = await wallet.createQuoteLockKey();
-    expect(bytesToHex(deriveQuoteLockKey(SEED, 0))).toBe(first.privkey);
+    expect(bytesToHex(deriveQuoteLockKey(SEED, MINT_PUBKEY, 0))).toBe(first.privkey);
+  });
+
+  test('a seeded wallet refuses to derive at a mint with no NUT-06 pubkey unless random', async () => {
+    const { pubkey: _dropped, ...unidentified } = mintInfoResp;
+    server.use(http.get(mintUrl + '/v1/info', () => HttpResponse.json(unidentified)));
+    const wallet = new Wallet(mintUrl, { unit: 'sat', bip39seed: SEED });
+    await wallet.loadMint();
+    await expect(wallet.createQuoteLockKey()).rejects.toThrow(/publishes no NUT-06 pubkey/);
+    await expect(wallet.recoverQuoteLockKey(POINT)).rejects.toThrow(/publishes no NUT-06 pubkey/);
+    const { pubkey, privkey } = await wallet.createQuoteLockKey({ random: true });
+    expect(bytesToHex(getPubKeyFromPrivKey(hexToBytes(privkey)))).toBe(pubkey);
   });
 
   test('recoverQuoteLockKey scans the seed to the quote pubkey, and misses cleanly', async () => {
     const wallet = new Wallet(mintUrl, { unit: 'sat', bip39seed: SEED });
-    const expected = deriveQuoteLockKey(SEED, 3);
+    await wallet.loadMint();
+    const expected = deriveQuoteLockKey(SEED, MINT_PUBKEY, 3);
     const pubkey = bytesToHex(getPubKeyFromPrivKey(expected));
     await expect(wallet.recoverQuoteLockKey(pubkey.toUpperCase())).resolves.toBe(
       bytesToHex(expected),

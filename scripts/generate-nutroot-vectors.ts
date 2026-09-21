@@ -47,6 +47,8 @@ const VEC1_KEYS = {
   '2': bytesToHex(G2.multiply(13n).toBytes(true)),
 };
 const KEYSET_ID = deriveKeysetId(VEC1_KEYS, { versionByte: 2, unit: 'sat' });
+// NUT-06 example identity (seed: UTF-8 of 'NUT-06 example mint seed'); scopes the 0x04 quote lock keys.
+const MINT_IDENTITY = '0338596797cef0627f653cd6568387361b00314add55d9f1ea9c94f46ae421e3da';
 
 const d = JSON.parse(readFileSync(PATH, 'utf8'));
 const OLD_ID = d.nut13_v3.keyset_id;
@@ -85,8 +87,9 @@ d.nut13_v3.leaf_keys = [0, 1, 2].map((index) => {
     pubkey: bytesToHex(getPubKeyFromPrivKey(privkey)),
   };
 });
+d.nut13_v3.mint_identity = MINT_IDENTITY;
 d.nut13_v3.quote_locks = [0, 1].map((counter) => {
-  const privkey = deriveQuoteLockKey(seed, counter);
+  const privkey = deriveQuoteLockKey(seed, MINT_IDENTITY, counter);
   return {
     counter,
     privkey: bytesToHex(privkey),

@@ -114,7 +114,7 @@ import {
   EphemeralCounterSource,
   type OperationCounters,
   type CounterRange,
-  QUOTE_COUNTER_KEY,
+  quoteCounterKey,
 } from './CounterSource';
 import { KeyChain } from './KeyChain';
 import { type Keyset } from './Keyset';
@@ -2807,24 +2807,29 @@ class Wallet {
   }
 
   /**
-   * Creates a quote lock keypair: seed-derived (consuming the quote counter) when seeded, random
-   * otherwise.
+   * Creates a quote lock keypair: seed-derived under the mint identity (consuming this mint's quote
+   * counter) when seeded, random otherwise.
    *
    * @remarks
    * Derived keys are recoverable via {@link Wallet.recoverQuoteLockKey | recoverQuoteLockKey};
    * random ones exist only in the returned object, so persist the key with its quote. `{ random:
    * true }` forces a random key on a seeded wallet, consuming no counter: for throwaway quotes (eg
-   * estimation) that must not pollute the recovery scan.
+   * estimation) that must not pollute the recovery scan, or for a mint that publishes no NUT-06
+   * `pubkey` to scope the derivation to.
+   * @throws {@link CTSError} On a seeded wallet whose mint publishes no `pubkey`, unless `random`.
    */
   async createQuoteLockKey(opts?: {
     random?: boolean;
   }): Promise<{ pubkey: string; privkey: string }> {
-    return createQuoteLockKeyPair(opts?.random ? undefined : this._seed, async () => {
-      const range = await this._counterSource.reserve(QUOTE_COUNTER_KEY, 1);
+    const seed = opts?.random ? undefined : this._seed;
+    const mintPubkey = seed ? this.requireMintIdentity('createQuoteLockKey') : undefined;
+    return createQuoteLockKeyPair(seed, mintPubkey, async () => {
+      const counterKey = quoteCounterKey(mintPubkey!);
+      const range = await this._counterSource.reserve(counterKey, 1);
       // Event-persisted sources must see the quote cursor move too, or a restart
       // re-derives keys already handed out.
       this.on._emitCountersReserved({
-        counterKey: QUOTE_COUNTER_KEY,
+        counterKey,
         start: range.start,
         count: range.count,
         next: range.start + range.count,
@@ -2840,11 +2845,28 @@ class Wallet {
    * @remarks
    * Offline disaster recovery for a lost quote `privkey`; the happy path is persisting the key the
    * quote response carries. Targeted, not discovery: one HMAC and one point multiply per counter.
-   * No keyset is involved (NUT-13 type `0x04`), so a rotation cannot strand the key.
-   * @throws {@link CTSError} On a seedless wallet, which has nothing to scan.
+   * Keys are scoped to the mint identity, not a keyset (NUT-13 type `0x04`), so a rotation cannot
+   * strand the key but only this mint's quotes are found.
+   * @throws {@link CTSError} On a seedless wallet, which has nothing to scan, or a mint with no
+   *   NUT-06 `pubkey`.
    */
   async recoverQuoteLockKey(pubkey: string): Promise<string | undefined> {
-    return scanQuoteLockKey(pubkey, this._nutrootState());
+    this.failIf(!this._seed, 'recoverQuoteLockKey requires a seeded wallet');
+    const mintPubkey = this.requireMintIdentity('recoverQuoteLockKey');
+    return scanQuoteLockKey(pubkey, mintPubkey, this._nutrootState());
+  }
+
+  /**
+   * The mint's NUT-06 identity `pubkey`, which scopes quote lock derivation.
+   */
+  private requireMintIdentity(what: string): string {
+    // The pubkey is taken as published until mint info signatures are verified.
+    const pubkey = this.getMintInfo().pubkey;
+    this.failIf(
+      !pubkey,
+      `${what}: the mint publishes no NUT-06 pubkey to scope quote lock keys to`,
+    );
+    return normalizeSecpPubkey(pubkey);
   }
 
   /**

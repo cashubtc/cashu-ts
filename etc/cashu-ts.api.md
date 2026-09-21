@@ -551,7 +551,7 @@ export function deriveP2BKSecretKeys(Ehex: string, privateKey: string | string[]
 export function deriveP2BKSlotSecretKeyCandidates(Ehex: string, privkeyHex: string, slotIndex?: number): [string, string];
 
 // @public
-export function deriveQuoteLockKey(seed: Uint8Array, counter: number): Uint8Array;
+export function deriveQuoteLockKey(seed: Uint8Array, mintPubkey: string, counter: number): Uint8Array;
 
 // @public
 export function deriveSecretAndBlindingFactor(seed: Uint8Array, keysetId: string, counter: number): DerivedSecretAndBlindingFactor;
@@ -2129,7 +2129,7 @@ export type ProofStatesStreamOpts<P extends ProofLike = Proof> = WatchOpts & {
 };
 
 // @public
-export const QUOTE_COUNTER_KEY = "mint-quote-lock";
+export function quoteCounterKey(mintPubkey: string): string;
 
 // @public
 export class RateLimitError extends HttpResponseError {
