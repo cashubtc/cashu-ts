@@ -1,5 +1,5 @@
 import { MAX_SUPPORTED_KEYSET_VERSION } from '../crypto/curves';
-import { type Logger, NULL_LOGGER } from '../logger';
+import { fail, failIf, type Logger, NULL_LOGGER } from '../logger';
 import { Mint } from '../mint';
 import { CTSError } from '../model/Errors';
 import type {
@@ -23,13 +23,14 @@ import { Keyset } from './Keyset';
  * rewrite control flow. Restore deliberately skips such keysets instead of failing.
  * @internal
  */
-export function assertSpendableVersion(keyset: Keyset): void {
-  if (keyset.version > MAX_SUPPORTED_KEYSET_VERSION) {
-    throw new CTSError(
-      `Keyset '${keyset.id}' uses id version ${keyset.version}; this version of cashu-ts ` +
-        `supports up to ${MAX_SUPPORTED_KEYSET_VERSION}. Upgrade to use this keyset.`,
-    );
-  }
+export function assertSpendableVersion(keyset: Keyset, logger?: Logger): void {
+  failIf(
+    keyset.version > MAX_SUPPORTED_KEYSET_VERSION,
+    `Keyset '${keyset.id}' uses id version ${keyset.version}; this build of cashu-ts supports ` +
+      `up to ${MAX_SUPPORTED_KEYSET_VERSION}. Upgrade to use this keyset.`,
+    logger,
+    { keysetId: keyset.id, version: keyset.version, supported: MAX_SUPPORTED_KEYSET_VERSION },
+  );
 }
 
 /**
@@ -310,10 +311,13 @@ export class KeyChain {
     if (activeKeysets.length === 0) {
       const tooNew = unitActive.filter((k) => k.version > MAX_SUPPORTED_KEYSET_VERSION);
       if (tooNew.length > 0) {
-        throw new CTSError(
+        const lowest = Math.min(...tooNew.map((k) => k.version));
+        fail(
           `No supported keyset for unit: ${this.unit}. The mint's active keysets use id version ` +
-            `${Math.min(...tooNew.map((k) => k.version))} or later; this build of cashu-ts ` +
-            `supports up to ${MAX_SUPPORTED_KEYSET_VERSION}. Upgrade to spend on this mint.`,
+            `${lowest} or later; this build of cashu-ts supports up to ` +
+            `${MAX_SUPPORTED_KEYSET_VERSION}. Upgrade to spend on this mint.`,
+          this._logger,
+          { unit: this.unit, lowestVersion: lowest, supported: MAX_SUPPORTED_KEYSET_VERSION },
         );
       }
       throw new CTSError(`No active keyset found for unit: ${this.unit}`);
@@ -337,7 +341,7 @@ export class KeyChain {
     if (!existing) {
       throw new CTSError(`Keyset '${id}' not found`);
     }
-    assertSpendableVersion(existing);
+    assertSpendableVersion(existing, this._logger);
 
     // Already usable
     if (existing.hasKeys) {
