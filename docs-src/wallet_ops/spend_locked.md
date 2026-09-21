@@ -55,7 +55,7 @@ const proofs = await wallet.ops.receive(token).run();
 const proofs = await wallet.ops.receive(token).privkey(myStaticPrivkey).run();
 ```
 
-The same `.privkey(...)` serves send and melt when spending a still-locked proof directly. Every v3 input signs the whole transaction (NUT-10); an input the wallet holds no key for fails the call before the mint sees it.
+The same `.privkey(...)` serves send and melt when spending a still-locked proof directly. Every v3 input signs the whole transaction (NUT-10); a v3 input the wallet holds no key for fails the call before the mint sees it. A legacy lock is only rejected by the mint, so check `spendOptions` first.
 
 ## Script path: `.scriptPath(plans)`
 

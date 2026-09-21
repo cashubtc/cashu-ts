@@ -7,7 +7,7 @@ A **payment request** lets a payee describe a payment they want to be paid, enco
 Two encodings are supported and both decode through the same API:
 
 - `creqA…`: CBOR + base64url ([NUT-18][nut18])
-- `CREQB1…`: TLV + Bech32m, more compact and QR-friendly ([NUT-26][nut26])
+- `CREQB1…`: TLV + Bech32m, QR-friendly (uppercase alphanumeric, so QR encoders use the dense alphanumeric mode) ([NUT-26][nut26])
 
 The shortest path is three calls: `decodePaymentRequest` → `wallet.ops.sendToRequest` on the payer side, and `wallet.isPaymentRequestSatisfied` on the payee side. Everything else on this page is either request authoring or [manual control](#manual-control) for when you need to unpack the rules yourself.
 
