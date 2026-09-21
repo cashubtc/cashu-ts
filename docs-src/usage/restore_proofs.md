@@ -22,6 +22,8 @@ for (const [keysetId, last] of Object.entries(lastCounters)) {
 
 `lastCounters` maps each keyset id to the highest counter that returned a signature. Keysets with no signatures are absent. Counter advancement uses all found signatures, including any whose proofs were filtered out as spent, so it is always safe to resume from `last + 1`.
 
+Restore recovers keyset counters only. Quote lock keys (NUT-13 type `0x04`) live on a per-mint cursor the mint has no record of, so a seed-only restore cannot rebuild it; `recoverQuoteLockKey` scans for a known quote pubkey instead.
+
 ## Single keyset and options
 
 `batchRestore` scans one keyset. Both it and `restoreAll` accept the same scan options (`restoreAll` forwards them to every keyset):

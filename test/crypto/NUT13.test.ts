@@ -23,6 +23,9 @@ import { CTSError } from '../../src/model/Errors';
 import { decodeBase64ToUint8Legacy } from '../../src/utils';
 import { nut13_v3 as nut13Vectors } from '../vectors/nutroot-v3.json';
 
+// NUT-06 example identity: the scope of every 0x04 quote lock key below.
+const MINT_PUBKEY = '0338596797cef0627f653cd6568387361b00314add55d9f1ea9c94f46ae421e3da';
+
 // The standalone deriveBlindingFactor() helper was removed in v5; derive it locally for these tests.
 const deriveBlindingFactor = (seed: Uint8Array, keysetId: string, counter: number): Uint8Array =>
   deriveSecretAndBlindingFactor(seed, keysetId, counter).blindingFactor;
@@ -126,7 +129,7 @@ describe('v3 (BLS) derivation', () => {
       expect(bytesToHex(getPubKeyFromPrivKey(key))).toBe(leaf.pubkey);
     }
     for (const lock of nut13Vectors.quote_locks) {
-      const key = deriveQuoteLockKey(vseed, lock.counter);
+      const key = deriveQuoteLockKey(vseed, nut13Vectors.mint_identity, lock.counter);
       expect(bytesToHex(key)).toBe(lock.privkey);
       expect(bytesToHex(getPubKeyFromPrivKey(key))).toBe(lock.pubkey);
     }
@@ -140,7 +143,7 @@ describe('v3 (BLS) derivation', () => {
       deriveSecretAndBlindingFactor(seed, v3KeysetId, 4).blindingFactor,
       deriveNumsOffset(seed, v3KeysetId, 4),
       deriveLeafKey(seed, v3KeysetId, 4, 0),
-      deriveQuoteLockKey(seed, 4),
+      deriveQuoteLockKey(seed, MINT_PUBKEY, 4),
     ].map(bytesToHex);
     expect(new Set(derived).size).toBe(derived.length);
     // The leaf index is in the message, not just the caller's bookkeeping.
@@ -254,7 +257,7 @@ describe('seed length', () => {
       const seed = new Uint8Array(length).fill(7);
       expect(() => deriveSecretAndBlindingFactor(seed, v2KeysetId, 0)).not.toThrow();
       expect(() => deriveKeyPair(seed, 'P2PK', 0)).not.toThrow();
-      expect(() => deriveQuoteLockKey(seed, 0)).not.toThrow();
+      expect(() => deriveQuoteLockKey(seed, MINT_PUBKEY, 0)).not.toThrow();
     }
     for (const length of [0, 15, 65]) {
       const seed = new Uint8Array(length);
@@ -262,7 +265,7 @@ describe('seed length', () => {
       expect(() => createSecretAndBlindingFactorDeriver(seed, v2KeysetId)).toThrow(bad);
       expect(() => deriveKeyPair(seed, 'P2PK', 0)).toThrow(bad);
       expect(() => createKeyPairDeriver(seed, 'QuoteLock')).toThrow(bad);
-      expect(() => deriveQuoteLockKey(seed, 0)).toThrow(bad);
+      expect(() => deriveQuoteLockKey(seed, MINT_PUBKEY, 0)).toThrow(bad);
       expect(() => deriveNumsOffset(seed, v3KeysetId, 0)).toThrow(bad);
       expect(() => deriveLeafKey(seed, v3KeysetId, 0, 0)).toThrow(bad);
       expect(() => recoverV3LeafKeys(seed, v3KeysetId, 0, ['02'.padEnd(66, 'a')])).toThrow(bad);
@@ -273,7 +276,7 @@ describe('seed length', () => {
     const notBytes = 'dd44ee516b0647e80b488e8dcc56d736' as unknown as Uint8Array;
     expect(() => deriveSecretAndBlindingFactor(notBytes, v2KeysetId, 0)).toThrow(bad);
     expect(() => deriveKeyPair(notBytes, 'P2PK', 0)).toThrow(bad);
-    expect(() => deriveQuoteLockKey(notBytes, 0)).toThrow(bad);
+    expect(() => deriveQuoteLockKey(notBytes, MINT_PUBKEY, 0)).toThrow(bad);
   });
 });
 

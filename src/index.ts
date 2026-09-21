@@ -68,7 +68,7 @@ export {
 
 // Wallet/Mint types used in the public API surface
 export type { CounterRange, CounterSource, OperationCounters } from './wallet/CounterSource';
-export { createEphemeralCounterSource, QUOTE_COUNTER_KEY } from './wallet/CounterSource';
+export { createEphemeralCounterSource, quoteCounterKey } from './wallet/CounterSource';
 export type {
   SubscribeOpts,
   CancellerLike,

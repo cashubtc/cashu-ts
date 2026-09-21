@@ -9,7 +9,7 @@ import { isBase64String } from '../utils';
 import { MAX_SEED_BYTES, MIN_SEED_BYTES, NUTROOT_MAX_SLOTS } from '../utils/limits';
 
 import { BLS_FR_ORDER } from './curve_bls';
-import { getPubKeyFromPrivKey } from './curve_secp';
+import { getPubKeyFromPrivKey, normalizeSecpPubkey } from './curve_secp';
 import { getKeysetIdInt, isBlsKeyset, LEGACY_KEYSET_ID_LENGTH } from './curves';
 
 const STANDARD_DERIVATION_PATH = `m/129372'/0'`;
@@ -272,7 +272,7 @@ export const DERIVATION_TYPE = {
    */
   leafKey: 0x03,
   /**
-   * Mint quote lock key; counted on the quote counter, not the proof counter.
+   * Mint quote lock key; scoped to the mint identity and counted per mint, not on a proof counter.
    */
   quoteLock: 0x04,
 } as const;
@@ -311,19 +311,16 @@ function v2BaseMessage(keysetId: string, counter: number): Uint8Array {
  * Derive one V3 scalar by rejection sampling (NUT-13 V3 message).
  *
  * @remarks
- * `DST || u32_BE(len(keyset_id)) || keyset_id || u64_BE(counter) || type || u32_BE(attempt) ||
- * suffix`. The keyset id is length-framed because it is the one variable-length field and a type
- * may append its own suffix; `attempt` sits ahead of the suffix because every type samples.
- * Rejection against `SECP256K1_N` is a ~2^-128 event, so the loop is on one pattern with the
- * blinding factor's `BLS_FR_ORDER` rather than a separate shape.
- *
- * An absent `keysetId` frames an empty field, which is what type `0x04` uses: a quote exists before
- * any keyset is chosen. The framing is what makes an empty field unambiguous.
+ * `DST || u32_BE(len(scope)) || scope || u64_BE(counter) || type || u32_BE(attempt) || suffix`. The
+ * scope (a keyset id, or the mint identity for `0x04`) is length-framed because it is the one
+ * variable-length field and a type may append its own suffix; `attempt` sits ahead of the suffix
+ * because every type samples. Rejection against `SECP256K1_N` is a ~2^-128 event, so the loop is on
+ * one pattern with the blinding factor's `BLS_FR_ORDER` rather than a separate shape.
  * @internal
  */
 function deriveV3Scalar(
   seed: Uint8Array,
-  keysetId: string | undefined,
+  scope: string,
   counter: number,
   type: number,
   suffix?: Uint8Array,
@@ -331,11 +328,11 @@ function deriveV3Scalar(
 ): Uint8Array {
   assertSeed(seed);
   assertCounter(counter);
-  const keysetIdBytes = keysetId === undefined ? new Uint8Array(0) : hexToBytes(keysetId);
+  const scopeBytes = hexToBytes(scope);
   const base = concatBytes(
     utf8ToBytes('Cashu_KDF_HMAC_SHA256'),
-    numberToBytesBE(keysetIdBytes.length, 4),
-    keysetIdBytes,
+    numberToBytesBE(scopeBytes.length, 4),
+    scopeBytes,
     numberToBytesBE(counter, 8),
     Uint8Array.of(type),
   );
@@ -402,22 +399,20 @@ export function deriveLeafKey(
 }
 
 /**
- * A mint quote lock key (NUT-13 message type `0x04`, defined in NUT-20).
+ * A mint quote lock key (NUT-13 message type `0x04`), scoped to the mint's NUT-06 identity pubkey.
  *
  * @remarks
- * No keyset: a mint quote is requested before any keyset is chosen (the outputs of the later mint
- * request fix it), so binding the key to one would leave a wallet unable to sign for its own paid
- * quote after a rotation. The message frames an empty keyset id instead, and the counter is the
- * wallet's single quote counter, so the key is recoverable from the seed and the quote's pubkey
- * alone.
- *
- * Its own counter, never the proof counter: a quote may mint nothing, and a lock key may be handed
- * over for delegated minting, so it must never collide with a key that has to stay secret. Nothing
- * detects a reused quote counter the way a repeated `B_` detects a reused proof counter, so advance
- * it on every quote request.
+ * The scope is the mint identity pubkey to ensure one seed and counter never yield the same key at
+ * two mints. The counter is per mint and not recoverable from the seed alone; recover a key by
+ * scanning candidates against the quote's pubkey.
+ * @param mintPubkey - The mint's NUT-06 `pubkey` (33-byte compressed, hex).
  */
-export function deriveQuoteLockKey(seed: Uint8Array, counter: number): Uint8Array {
-  return deriveV3Scalar(seed, undefined, counter, DERIVATION_TYPE.quoteLock);
+export function deriveQuoteLockKey(
+  seed: Uint8Array,
+  mintPubkey: string,
+  counter: number,
+): Uint8Array {
+  return deriveV3Scalar(seed, normalizeSecpPubkey(mintPubkey), counter, DERIVATION_TYPE.quoteLock);
 }
 
 function assertV3Keyset(keysetId: string, what: string): void {

@@ -12,16 +12,20 @@ export interface CounterRange {
 }
 
 /**
- * The counter key for mint quote lock keys (NUT-13 derivation type `0x04`).
+ * The counter key for mint quote lock keys (NUT-13 derivation type `0x04`) at one mint:
+ * `mint-quote-lock:<NUT-06 pubkey>`.
  *
  * @remarks
- * One cursor per wallet, not per keyset: a mint quote is requested before any keyset is chosen, so
- * its lock key derives without one. It is a counter of its own because a quote may mint nothing,
- * and because a lock key may be handed over for delegated minting and so must never collide with a
- * proof secret key. A `CounterSource` sees it as just another key to persist, so nothing
- * implementing the interface needs to know about purposes; do not assume every key is a keyset id.
+ * One cursor per mint identity, not per keyset: a mint quote is requested before any keyset is
+ * chosen, so its lock key derives under the mint's NUT-06 pubkey instead. It is a counter of its
+ * own because a quote may mint nothing, and because a lock key may be handed over for delegated
+ * minting and so must never collide with a proof secret key. A `CounterSource` sees it as just
+ * another key to persist, so nothing implementing the interface needs to know about purposes; do
+ * not assume every key is a keyset id.
  */
-export const QUOTE_COUNTER_KEY = 'mint-quote-lock';
+export function quoteCounterKey(mintPubkey: string): string {
+  return `mint-quote-lock:${mintPubkey}`;
+}
 
 // CounterSource.ts
 /**
@@ -32,12 +36,12 @@ export const QUOTE_COUNTER_KEY = 'mint-quote-lock';
  * value silently mints duplicate proofs: the same counter re-derives the same secret **and** the
  * same blinding factor, and every proof after the first spend of that secret is refused as already
  * spent, mint-wide and permanently. Reserve and persist atomically, and never roll a cursor back.
- * Quote locks (see `QUOTE_COUNTER_KEY`) have no equivalent detector at all, since nothing blinds
+ * Quote locks (see `quoteCounterKey`) have no equivalent detector at all, since nothing blinds
  * them, so their cursor must advance on every quote request.
  */
 export interface CounterSource {
   /**
-   * Reserve n counters for a counter key (a keyset id, or QUOTE_COUNTER_KEY).
+   * Reserve n counters for a counter key (a keyset id, or a `quoteCounterKey`).
    *
    * N may be 0. In that case the call MUST NOT mutate state and MUST return { start: currentNext,
    * count: 0 }, effectively a read only peek of the cursor.
@@ -75,7 +79,7 @@ export interface CounterSource {
 /**
  * Counter summary for an operation.
  *
- * - `counterKey` - the keyset id, or {@link QUOTE_COUNTER_KEY} for the quote-lock cursor.
+ * - `counterKey` - the keyset id, or a {@link quoteCounterKey} for a mint's quote-lock cursor.
  * - `start` - beginning of reservation.
  * - `count` - number of reservations.
  * - `next` - counter available after reservation.
