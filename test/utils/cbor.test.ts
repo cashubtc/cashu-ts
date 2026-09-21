@@ -308,6 +308,12 @@ describe('cbor decoder', () => {
 });
 
 describe('cbor encoder', () => {
+  test('refuses text with a lone surrogate rather than writing U+FFFD', () => {
+    expect(() => encodeCBOR('bad\uD800end')).toThrow('CBOR text must be well-formed UTF-16');
+    expect(() => encodeCBOR({ d: 'bad\uDC00' })).toThrow('CBOR text must be well-formed UTF-16');
+    expect(() => encodeCBOR('ok\u{1F600}end')).not.toThrow();
+  });
+
   // Basic encoding coverage is provided by the external appendix_a.json
   // per-vector harness further below. Keep focused encoder unit tests here.
 
