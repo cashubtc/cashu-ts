@@ -762,3 +762,25 @@ describe('multi mint', async () => {
     await expect(wallet.createMeltQuoteBolt11(invoice)).rejects.toThrow();
   });
 });
+
+describe('unsupported keyset diagnostics', () => {
+  const future = { ...dummyKeysetResp.keysets[0], id: '03' + '11'.repeat(32) };
+
+  test('an unbound wallet preserves the upgrade diagnosis and remains available for restore', async () => {
+    const wallet = new Wallet(mint);
+    wallet.loadMintFromCache(mintInfoResp, KeyChain.mintToCacheDTO(mintUrl, [future], []));
+    expect(() => wallet.keysetId).toThrow(/Upgrade/);
+    await expect(wallet.createMintQuoteBolt11(1, mintInfoResp.pubkey)).rejects.toThrow(/Upgrade/);
+    await expect(wallet.restoreAll()).resolves.toEqual({ proofs: [], lastCounters: {} });
+  });
+
+  test('wallet lookup diagnoses future versions but keychain lookup remains available', () => {
+    const wallet = new Wallet(mint, { strictCachedKeysets: true });
+    wallet.loadMintFromCache(
+      mintInfoResp,
+      KeyChain.mintToCacheDTO(mintUrl, [...dummyKeysetResp.keysets, future], dummyKeysResp.keysets),
+    );
+    expect(wallet.keyChain.getKeyset(future.id).version).toBe(3);
+    expect(() => wallet.getKeyset(future.id)).toThrow(/Upgrade/);
+  });
+});

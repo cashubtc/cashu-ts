@@ -13,7 +13,9 @@ import {
   findSigningKey,
   signP2PKProofs as cryptoSignP2PKProofs,
   hashToCurveHex,
+  assertSpendableVersion,
   isBlsKeyset,
+  MAX_SUPPORTED_KEYSET_VERSION_BYTE,
   isP2PKSigAll,
   buildP2PKSigAllMessageV0,
   computeMessageDigest,
@@ -490,6 +492,7 @@ class Wallet {
         unit: k.unit,
         walletUnit: this._unit,
       });
+      assertSpendableVersion(k.id, this._logger);
     } else {
       // Auto-bound: re-apply keyset selection so the binding tracks mint truth.
       // getCheapestKeyset prefers the newest version, then lowest fee, then latest expiry.
@@ -572,6 +575,14 @@ class Wallet {
    * The keyset ID bound to this wallet instance.
    */
   get keysetId(): string {
+    // Initialization permits an unbound wallet for restore; surface the selection error on use.
+    if (this._boundKeysetId === PENDING_KEYSET_ID && this._mintInfo) {
+      try {
+        this._keyChain.getCheapestKeyset();
+      } catch (e) {
+        this.fail(`Wallet has no bound keyset: ${(e as Error).message}`);
+      }
+    }
     this.failIf(
       this._boundKeysetId === PENDING_KEYSET_ID,
       'Wallet has no bound keyset. The mint may have no active keysets, or wallet was not initialized via loadMint or loadMintFromCache',
@@ -603,6 +614,7 @@ class Wallet {
       unit: keyset.unit,
       walletUnit: this._unit,
     });
+    assertSpendableVersion(keyset.id, this._logger);
     this.failIf(!keyset.hasKeys, 'Keyset has no keys loaded', { keyset: keyset.id });
     return keyset;
   }
@@ -613,8 +625,8 @@ class Wallet {
    * @remarks
    * Legacy (pre-v1, base64-id) keysets may be spent and restored, but never used to create new
    * proofs. Inactive keysets are rejected per NUT-02, the mint would refuse to sign outputs on
-   * them, so fail fast here. Unknown hex versions are already excluded upstream: their keys fail
-   * verification and `getKeyset` rejects keysets without keys.
+   * them, so fail fast here. Unknown hex versions are rejected by `getKeyset` before checking
+   * whether keys are loaded.
    *
    * Only the prepare-side ops use this gate. The `complete*` ops use plain `getKeyset` as the mint
    * will have signed.
@@ -855,7 +867,7 @@ class Wallet {
       this._keyChain.getCheapestKeyset();
     } catch (e) {
       this.fail(
-        `${op}: no active keyset for unit '${this._unit}' — a paid mint quote could not be redeemed`,
+        `${op}: no active keyset for unit '${this._unit}' — a paid mint quote could not be redeemed. ${(e as Error).message}`,
         { reason: (e as Error).message },
       );
     }
@@ -974,6 +986,9 @@ class Wallet {
       unit: ks.unit,
       walletUnit: this._unit,
     });
+    // Before the keys check: a keyset this build cannot spend has no keys either, and "no keys
+    // loaded" reads as a mint problem rather than a version gap.
+    assertSpendableVersion(ks.id, this._logger);
     this.failIf(!ks.hasKeys, 'Keyset has no keys loaded', { keyset: ks.id });
     this._boundKeysetId = ks.id;
     this._explicitBind = true;
@@ -2506,9 +2521,24 @@ class Wallet {
   async restoreAll(
     config?: RestoreAllConfig,
   ): Promise<{ proofs: Proof[]; lastCounters: Record<string, number> }> {
-    const keysetIds = this._keyChain
-      .getAllKeysetIds()
-      .filter((id) => this._keyChain.getKeyset(id).unit === this.unit);
+    const keysetIds = this._keyChain.getAllKeysetIds().filter((id) => {
+      const ks = this._keyChain.getKeyset(id);
+      if (ks.unit !== this.unit) return false;
+      // Recover everything this build can read. One keyset from a newer mint must not cost the
+      // caller the proofs held on every older one.
+      if (ks.version > MAX_SUPPORTED_KEYSET_VERSION_BYTE) {
+        this._logger.warn(
+          'Skipping keyset during restore: id version byte is newer than this build',
+          {
+            keysetId: id,
+            versionByte: ks.version,
+            supported: MAX_SUPPORTED_KEYSET_VERSION_BYTE,
+          },
+        );
+        return false;
+      }
+      return true;
+    });
     let proofs: Proof[] = [];
     const lastCounters: Record<string, number> = {};
     for (const keysetId of keysetIds) {
@@ -3079,6 +3109,7 @@ class Wallet {
    * @internal
    */
   computeY(secret: string, keysetId: string): string {
+    assertSpendableVersion(keysetId, this._logger);
     return this._hashToCurve(secret, keysetId);
   }
 

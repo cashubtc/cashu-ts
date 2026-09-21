@@ -13,6 +13,7 @@ import {
   InvalidScalarError,
   type Proof,
 } from '../../src';
+import { MAX_SUPPORTED_KEYSET_VERSION_BYTE } from '../../src/crypto/curves';
 import * as NUT13 from '../../src/crypto/NUT13';
 import { PUBKEYS } from '../consts';
 
@@ -229,6 +230,28 @@ describe('restoreAll', () => {
     expect(batchSpy).toHaveBeenCalledTimes(2);
     expect(batchSpy).toHaveBeenCalledWith({ keysetId: 'A' });
     expect(batchSpy).toHaveBeenCalledWith({ keysetId: 'B' });
+  });
+
+  test('skips a keyset newer than this build and still restores the rest', async () => {
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+    vi.spyOn(wallet.keyChain, 'getAllKeysetIds').mockReturnValue(['old', 'future']);
+    vi.spyOn(wallet.keyChain, 'getKeyset').mockImplementation((id) =>
+      id === 'future'
+        ? ({ unit: 'sat', version: MAX_SUPPORTED_KEYSET_VERSION_BYTE + 1 } as never)
+        : ({ unit: 'sat', version: MAX_SUPPORTED_KEYSET_VERSION_BYTE } as never),
+    );
+    const batchSpy = vi
+      .spyOn(wallet, 'batchRestore')
+      .mockResolvedValue({ proofs: [{ secret: 'o1' }] as Proof[], lastCounterWithSignature: 3 });
+
+    const { proofs, lastCounters } = await wallet.restoreAll();
+
+    // A mint that has moved on must not cost the caller the proofs on every older keyset.
+    expect(batchSpy).toHaveBeenCalledTimes(1);
+    expect(batchSpy).toHaveBeenCalledWith({ keysetId: 'old' });
+    expect(proofs.map((p) => p.secret)).toEqual(['o1']);
+    expect(lastCounters).toEqual({ old: 3 });
   });
 
   test('forwards scan options to every keyset', async () => {
