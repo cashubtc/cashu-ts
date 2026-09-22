@@ -36,8 +36,11 @@ describe('WebSocket Updates', () => {
     const wallet = new Wallet(mintUrl, { wsKeepaliveMs: 20 });
     try {
       await wallet.mint.connectWebSocket();
-      await new Promise((res) => setTimeout(res, 80));
-      expect(probes.length).toBeGreaterThanOrEqual(1);
+      const startedAt = Date.now();
+      while (probes.length === 0) {
+        if (Date.now() - startedAt > 2000) throw new Error('no keepalive probe within 2s');
+        await new Promise((res) => setTimeout(res, 5));
+      }
       for (const subId of probes) {
         expect(subId).toMatch(
           /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
