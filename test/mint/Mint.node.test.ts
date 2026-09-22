@@ -8,6 +8,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 
 import {
   Mint,
+  CallerAbortError,
   MintInfo,
   MeltQuoteState,
   WSConnection,
@@ -2367,4 +2368,28 @@ describe('Mint response shape and cardinality', () => {
 
     expect(response.states).toHaveLength(0);
   });
+});
+
+describe('Mint per-call cancellation through the default transport', () => {
+  it.each(['raw', 'authenticated'] as const)(
+    '%s path rejects before fetch and in flight without retrying',
+    async (path) => {
+      for (const preAborted of [true, false]) {
+        const ac = new AbortController();
+        const requestFetch = vi.fn<typeof fetch>(async (_input, init) => {
+          ac.abort();
+          init?.signal?.throwIfAborted();
+          throw new Error('fetch should have been aborted');
+        });
+        const mint = new Mint(mintUrl, { requestFetch });
+        if (preAborted) ac.abort();
+        const pending =
+          path === 'raw'
+            ? mint.getKeySets({ signal: ac.signal })
+            : mint.swap({ inputs: [], outputs: [] }, { signal: ac.signal });
+        await expect(pending).rejects.toBeInstanceOf(CallerAbortError);
+        expect(requestFetch).toHaveBeenCalledTimes(preAborted ? 0 : 1);
+      }
+    },
+  );
 });

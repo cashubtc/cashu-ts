@@ -10,6 +10,10 @@ export type SecretsPolicy = 'auto' | 'deterministic' | 'random';
 
 export type RestoreConfig = {
   keysetId?: string;
+  /**
+   * Aborts the requests this call makes; the call rejects with `CallerAbortError`.
+   */
+  signal?: AbortSignal;
 };
 
 /**
@@ -41,6 +45,10 @@ export type BatchRestoreConfig = {
    * Keyset to restore; defaults to the wallet's.
    */
   keysetId?: string;
+  /**
+   * Aborts the requests this call makes; the call rejects with `CallerAbortError`.
+   */
+  signal?: AbortSignal;
 };
 
 /**
@@ -210,6 +218,12 @@ export type SendConfig = {
   includeFees?: boolean;
   proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
   onCountersReserved?: OnCountersReserved;
+  /**
+   * Aborts the requests this call makes; the call rejects with `CallerAbortError`. A one-shot
+   * operation honours it only until preparation finishes; to cancel a commit, prepare first and
+   * pass the signal to the complete step, where the preview makes a retry safe.
+   */
+  signal?: AbortSignal;
 };
 
 /**
@@ -235,6 +249,12 @@ export type ReceiveConfig = {
   requireDleq?: boolean;
   proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
   onCountersReserved?: OnCountersReserved;
+  /**
+   * Aborts the requests this call makes; the call rejects with `CallerAbortError`. A one-shot
+   * operation honours it only until preparation finishes; to cancel a commit, prepare first and
+   * pass the signal to the complete step, where the preview makes a retry safe.
+   */
+  signal?: AbortSignal;
 };
 
 /**
@@ -268,6 +288,12 @@ export type MintProofsConfig = {
   sign?: (request: MintQuoteSignRequest) => Promise<string>;
   proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
   onCountersReserved?: OnCountersReserved;
+  /**
+   * Aborts the requests this call makes; the call rejects with `CallerAbortError`. A one-shot
+   * operation honours it only until preparation finishes; to cancel a commit, prepare first and
+   * pass the signal to the complete step, where the preview makes a retry safe.
+   */
+  signal?: AbortSignal;
 };
 
 /**
@@ -287,6 +313,12 @@ export type MeltProofsConfig = {
    * false to forfeit the change, which also permits melting on an inactive keyset.
    */
   nut08Change?: boolean;
+  /**
+   * Aborts the requests this call makes; the call rejects with `CallerAbortError`. A one-shot
+   * operation honours it only until preparation finishes; to cancel a commit, prepare first and
+   * pass the signal to the complete step, where the preview makes a retry safe.
+   */
+  signal?: AbortSignal;
 };
 
 export type CompleteSwapOptions = {
@@ -294,6 +326,10 @@ export type CompleteSwapOptions = {
    * Script path spends for v3 inputs, evaluated when each transaction input digest exists.
    */
   scriptPath?: ScriptPathPlan[];
+  /**
+   * Aborts the requests this call makes; the call rejects with `CallerAbortError`.
+   */
+  signal?: AbortSignal;
 };
 
 export type CompleteMeltOptions = {
@@ -307,4 +343,18 @@ export type CompleteMeltOptions = {
    * Script path spends for v3 inputs, evaluated when each transaction input digest exists.
    */
   scriptPath?: ScriptPathPlan[];
+  /**
+   * Aborts the requests this call makes; the call rejects with `CallerAbortError`.
+   */
+  signal?: AbortSignal;
 };
+
+/**
+ * Per-call abort: the request rejects with `CallerAbortError` when `signal` fires.
+ */
+export type AbortOptions = { signal?: AbortSignal };
+
+/**
+ * Options for `completeMint` and `completeBatchMint`.
+ */
+export type CompleteMintOptions = AbortOptions;

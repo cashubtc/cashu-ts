@@ -190,6 +190,15 @@ export class SendBuilder {
   private sendOT?: OutputType;
   private keepOT?: OutputType;
   private config: SendConfig = {};
+
+  /**
+   * Aborts the requests made while preparing. `run()` still sends the commit request to completion;
+   * to cancel that too, `prepare()` then pass the signal to the wallet's complete step.
+   */
+  signal(signal: AbortSignal) {
+    this.config.signal = signal;
+    return this;
+  }
   private offlineExact?: { requireDleq: boolean };
   private offlineClose?: { requireDleq: boolean };
   private amount: Amount;
@@ -543,6 +552,15 @@ export class ReceiveBuilder {
   private outputType?: OutputType;
   private config: ReceiveConfig = {};
 
+  /**
+   * Aborts the requests made while preparing. `run()` still sends the commit request to completion;
+   * to cancel that too, `prepare()` then pass the signal to the wallet's complete step.
+   */
+  signal(signal: AbortSignal) {
+    this.config.signal = signal;
+    return this;
+  }
+
   constructor(
     private wallet: Wallet,
     private token: Token | string | ProofLike[],
@@ -725,6 +743,15 @@ export class MintBuilder<
 > {
   private outputType?: OutputType;
   private config: MintProofsConfig = {};
+
+  /**
+   * Aborts the requests made while preparing. `run()` still sends the commit request to completion;
+   * to cancel that too, `prepare()` then pass the signal to the wallet's complete step.
+   */
+  signal(signal: AbortSignal) {
+    this.config.signal = signal;
+    return this;
+  }
   private amount: Amount;
 
   // phantom field to satisfy linter (erased at emit)
@@ -936,7 +963,7 @@ export class MintBuilder<
    */
   async run(this: MintBuilder<M, true>) {
     const preview = await this.prepare();
-    return this.wallet.completeMint(preview);
+    return this.wallet.completeMint(preview); // no abort
   }
 }
 
@@ -965,6 +992,15 @@ export class MeltBuilder<
 > {
   private outputType?: OutputType;
   private config: MeltProofsConfig = {};
+
+  /**
+   * Aborts the requests made while preparing. `run()` still sends the commit request to completion;
+   * to cancel that too, `prepare()` then pass the signal to the wallet's complete step.
+   */
+  signal(signal: AbortSignal) {
+    this.config.signal = signal;
+    return this;
+  }
 
   constructor(
     private wallet: Wallet,
@@ -1110,6 +1146,7 @@ export class MeltBuilder<
     );
 
     // Step 2, sign if needed and complete the melt
+    // no abort
     return this.wallet.completeMelt(preview, this.config.privkey, {
       ...(this.config.scriptPath && { scriptPath: this.config.scriptPath }),
     });
@@ -1140,6 +1177,15 @@ export class MeltBuilder<
  */
 export class MeltOnchainBuilder {
   private config: MeltProofsConfig = {};
+
+  /**
+   * Aborts the requests made while preparing. `run()` still sends the commit request to completion;
+   * to cancel that too, `prepare()` then pass the signal to the wallet's complete step.
+   */
+  signal(signal: AbortSignal) {
+    this.config.signal = signal;
+    return this;
+  }
   private selectedFeeIndex?: number;
 
   constructor(
