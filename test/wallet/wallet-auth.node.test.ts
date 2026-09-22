@@ -107,14 +107,17 @@ describe('Auth header redirect handling', () => {
       Promise.resolve(args.endpoint.includes('/v1/info') ? protectedSwapInfo : { signatures: [] }),
     );
     const authedMint = new Mint(mintUrl, { authProvider: mockAuthProvider() });
-    await authedMint.swap({ inputs: [], outputs: [] }, authedSpy as unknown as RequestFn);
+    await authedMint.swap(
+      { inputs: [], outputs: [] },
+      { customRequest: authedSpy as unknown as RequestFn },
+    );
     const authedArgs = authedSpy.mock.calls.find((c) => c[0].endpoint.includes('/v1/swap'))![0];
     expect(authedArgs).toMatchObject({ redirect: 'error' });
 
     // No auth token, but the body carries proofs.
     const plainSpy = vi.fn().mockResolvedValue({ signatures: [] });
     const plainMint = new Mint(mintUrl);
-    await plainMint.swap({ inputs: [], outputs: [] }, plainSpy);
+    await plainMint.swap({ inputs: [], outputs: [] }, { customRequest: plainSpy });
     expect(plainSpy.mock.calls[0][0]).toMatchObject({ redirect: 'error' });
 
     const getSpy = vi

@@ -1111,3 +1111,18 @@ builder.validate('pre-v3');
 builder.validate('nutroot');
 builder.validate('p2pk');
 ```
+
+---
+
+## `Mint` methods take an options object instead of a positional `customRequest`
+
+Every `Mint` method that accepted a trailing `customRequest` function now takes `MintCallOptions`, `{ customRequest?, signal? }`. `signal` aborts the request and rejects with `CallerAbortError`. The constructor option is unchanged.
+
+```ts
+// Before
+await mint.swap(payload, myRequestFn);
+
+// After
+await mint.swap(payload, { customRequest: myRequestFn });
+await mint.swap(payload, { signal: controller.signal });
+```

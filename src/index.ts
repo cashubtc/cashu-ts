@@ -9,7 +9,7 @@
 // ==========================
 // Public API Surface
 // ==========================
-export { Mint } from './mint';
+export { Mint, type MintCallOptions } from './mint';
 export { KeyChain } from './wallet/KeyChain';
 export { Keyset } from './wallet/Keyset';
 export { LockBuilder, type LockFamily } from './wallet/LockBuilder';
