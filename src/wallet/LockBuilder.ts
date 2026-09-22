@@ -46,11 +46,17 @@ function assertUnixSeconds(seconds: number): number {
 }
 
 /**
+ * How a lock is encoded on the wire: `nutroot` for BLS (`02`) keysets, `p2pk` (NUT-10 P2PK and HTLC
+ * secrets) for secp256k1 ones.
+ */
+export type LockFamily = 'nutroot' | 'p2pk';
+
+/**
  * Builder for lock spending conditions, independent of keyset version.
  *
  * @remarks
  * Emits {@link LockOptions}; the wallet encodes them for whichever keyset is active, so consumers
- * state the conditions and never the keyset version. `addLeaf` shapes are v3-only.
+ * state the conditions and never the keyset version. `addLeaf` shapes are nutroot-only.
  */
 export class LockBuilder {
   // Keys are deduplicated by x-only identity and first-seen order preserved.
@@ -247,16 +253,16 @@ export class LockBuilder {
   }
 
   /**
-   * Lists why this lock will not encode for the target keyset version; empty means it encodes.
+   * Lists why this lock will not encode for the target lock family; empty means it encodes.
    *
    * @remarks
    * Runs the same checks and encoder as a real build, so it cannot drift from what
    * {@link LockBuilder.toOptions | toOptions} and the wallet refuse. Reports the first refusal.
    */
-  validate(target: 'v3' | 'pre-v3'): CTSError[] {
+  validate(target: LockFamily): CTSError[] {
     try {
       const lock = this.toOptions();
-      if (target === 'v3') {
+      if (target === 'nutroot') {
         lockToNutrootOptions(lock);
       } else {
         assertP2PKLockEncodes(lock);

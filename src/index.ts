@@ -12,7 +12,7 @@
 export { Mint } from './mint';
 export { KeyChain } from './wallet/KeyChain';
 export { Keyset } from './wallet/Keyset';
-export { LockBuilder } from './wallet/LockBuilder';
+export { LockBuilder, type LockFamily } from './wallet/LockBuilder';
 export {
   auditableLock,
   lockToNutrootOptions,

@@ -18,7 +18,7 @@ new LockBuilder()
   .blindKeys(keys?: string | string[]) // blind every key, or exactly the listed keys (list is v3 only)
   .disclose() // publish the exercised witness (NUT-10 disclosure) on every generated leaf; a no-op pre-v3
   .sigAll() // NUT-11 SIG_ALL; on v3 this is the default and only behavior
-  .validate(target: 'v3' | 'pre-v3'): CTSError[] // pre-flight check; empty array = encodes clean
+  .validate(target: 'nutroot' | 'p2pk'): CTSError[] // pre-flight check; empty array = encodes clean
   .toOptions(): LockOptions;
 
 LockBuilder.fromOptions(lock: LockOptions): LockBuilder
@@ -45,7 +45,7 @@ const builder = new LockBuilder()
   .addRefundPubkey('02def...');
 
 // optional pre-flight, eg before enabling a form's submit button
-const issues = builder.validate('v3');
+const issues = builder.validate('nutroot');
 if (issues.length) throw issues[0]; // or show issues[0].message in the UI
 
 const lock = builder.toOptions();
