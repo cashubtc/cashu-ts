@@ -87,6 +87,141 @@ export function errorMessage(err: unknown, fallback: string): string {
 }
 
 /**
+<<<<<<< HEAD
+=======
+ * Message for a failed request: the innermost cause and its code (a bare `fetch failed` hides
+ * both), and the mint's origin only (path can carry quote ids).
+ */
+function describeNetworkFailure(err: unknown, fallback: string, endpoint: string): string {
+  let root: unknown = err;
+  for (;;) {
+    const next = (root as { cause?: unknown }).cause;
+    if (!(next instanceof Error) || next === root) break;
+    root = next;
+  }
+  let detail = '';
+  if (root instanceof Error && root !== err && root.message) {
+    const code = (root as { code?: unknown }).code;
+    detail = ` (${root.message}${typeof code === 'string' ? `, ${code}` : ''})`;
+  }
+  return `${errorMessage(err, fallback)}${detail} at ${endpointOrigin(endpoint)}`;
+}
+
+function endpointOrigin(endpoint: string): string {
+  try {
+    return new URL(endpoint).origin;
+  } catch {
+    return endpoint;
+  }
+}
+
+/**
+ * Reads a response body as text, failing once it exceeds `maxBytes`.
+ *
+ * @remarks
+ * With a readable stream (`response.body`) the read is bounded as it arrives (the cap rejects
+ * before over-allocating) and an abort cancels the reader, unblocking a pending read. The fallback
+ * (`response.text()`, eg React Native / custom transports with no stream) reads the whole body
+ * raced against `signal`, then size-checks the decoded text, so strict pre-allocation enforcement
+ * needs a streaming transport.
+ * @internal
+ */
+export async function readBodyText(
+  response: Response,
+  maxBytes: number,
+  signal?: AbortSignal,
+): Promise<string> {
+  const body = response.body;
+  const contentLength = Number(response.headers.get('Content-Length') ?? '');
+  if (contentLength > maxBytes) {
+    if (body && typeof body.cancel === 'function') {
+      body.cancel().catch(() => undefined);
+    }
+    throw new CTSError(`response body exceeds ${maxBytes} bytes`);
+  }
+
+  if (!body || typeof body.getReader !== 'function') {
+    // No stream to cancel (eg React Native): race the whole-body read against the signal once,
+    // then size-check (utf8 bytes >= string length, so the cheap length check catches gross
+    // oversize without re-encoding).
+    if (signal?.aborted) throw new CTSError('response body read aborted');
+    const text = await raceAbort(response.text(), signal);
+    if (text.length > maxBytes || new TextEncoder().encode(text).length > maxBytes) {
+      throw new CTSError(`response body exceeds ${maxBytes} bytes`);
+    }
+    return text;
+  }
+
+  // Wire the signal to cancel the reader once, rather than racing every read() against a
+  // never-settling abort promise (which piles a reaction onto it per chunk). Cancelling unblocks a
+  // pending read; real fetch streams also reject the read on abort directly.
+  const reader = body.getReader();
+  let aborted = false;
+  let onAbort: (() => void) | undefined;
+  if (signal) {
+    onAbort = () => {
+      aborted = true;
+      reader.cancel().catch(() => undefined);
+    };
+    if (signal.aborted) onAbort();
+    else signal.addEventListener('abort', onAbort, { once: true });
+  }
+  try {
+    // Copy each chunk into a growing buffer immediately rather than retaining every chunk view
+    // until EOF: a stream delivering many tiny chunks would otherwise hold one object per chunk.
+    let bytes = new Uint8Array(0);
+    let received = 0;
+    for (;;) {
+      const result = await reader.read();
+      if (aborted) throw new CTSError('response body read aborted');
+      if (result.done) break;
+      const nextReceived = received + result.value.byteLength;
+      if (nextReceived > maxBytes) {
+        throw new CTSError(`response body exceeds ${maxBytes} bytes`);
+      }
+      if (nextReceived > bytes.byteLength) {
+        const grown = new Uint8Array(
+          Math.min(maxBytes, Math.max(nextReceived, bytes.byteLength * 2)),
+        );
+        grown.set(bytes);
+        bytes = grown;
+      }
+      bytes.set(result.value, received);
+      received = nextReceived;
+    }
+    // Lossy like response.text() above: the body doubles as error text, and JSON is parsed strictly later.
+    return bytesToUtf8(bytes.subarray(0, received));
+  } finally {
+    if (onAbort) signal?.removeEventListener('abort', onAbort);
+    reader.cancel().catch(() => undefined); // release the connection; no-op if already closed
+  }
+}
+
+/**
+ * Awaits `promise`, rejecting early if `signal` aborts. For whole-body reads that cannot be
+ * cancelled (the no-stream fallback); a single race, not one per chunk.
+ *
+ * @internal
+ */
+function raceAbort(promise: Promise<string>, signal?: AbortSignal): Promise<string> {
+  if (!signal) return promise;
+  promise.catch(() => undefined); // settles after we abort: keep it from going unhandled
+  let onAbort: (() => void) | undefined;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    // A whole-body read has no reader to cancel: mark it so a timeout is not retried (the native
+    // read may still be consuming the body).
+    onAbort = () => reject(new UncancellableReadError('response body read aborted'));
+    if (signal.aborted) onAbort();
+    else signal.addEventListener('abort', onAbort, { once: true });
+  });
+  aborted.catch(() => undefined);
+  return Promise.race([promise, aborted]).finally(() => {
+    if (onAbort) signal.removeEventListener('abort', onAbort);
+  });
+}
+
+/**
+>>>>>>> a95d4c5 (fix(transport): quieter retry logging, slower backoff, and NetworkError names the mint (#1240))
  * Maps a body-read failure that happened under an armed timeout or caller signal to the matching
  * abort error. The body is read via `response.text()`, which cannot be cancelled, so a timeout may
  * leave the native read still consuming the body: it is reported as {@link UncancellableReadError}
@@ -425,12 +560,12 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
         const shouldRetry = retries < MAX_CACHED_RETRIES && (!ttl || totalElapsedTime < ttl);
 
         if (shouldRetry) {
-          const cappedDelay = Math.min(2 ** retries * BASE_DELAY, MAX_DELAY);
-
-          const delay = Math.random() * cappedDelay;
+          // Jitter within the upper half of the cap, so retries never rapid-fire from zero.
+          const halfCap = Math.min(2 ** retries * BASE_DELAY, MAX_DELAY) / 2;
+          const delay = halfCap + Math.random() * halfCap;
 
           if (totalElapsedTime + delay > ttl) {
-            activeLogger.error(`Network Error: request abandoned after ${retries} retries`, {
+            activeLogger.warn(`Network Error: request abandoned after ${retries} retries`, {
               e,
               retries,
             });
@@ -447,7 +582,8 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
           return retry();
         }
       }
-      activeLogger.error(`Request failed and could not be retried`, { e });
+      // The error propagates; the caller decides whether it is one (eg a signature fallback).
+      activeLogger.debug(`Request failed and could not be retried`, { e });
       throw e;
     }
   };
@@ -544,17 +680,22 @@ async function _request(options: RequestOptions): Promise<unknown> {
       const timedOut = !!timeoutController?.signal.aborted;
       const callerAborted = !!callerSignal?.aborted;
       if (timedOut) {
-        throw new NetworkError(`Request timed out after ${requestTimeout}ms`, { cause: err });
+        throw new NetworkError(
+          `Request timed out after ${requestTimeout}ms at ${endpointOrigin(endpoint)}`,
+          { cause: err },
+        );
       }
       if (callerAborted) {
         throw new CallerAbortError(errorMessage(err, 'Request aborted by caller'));
       }
       if (err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError')) {
-        throw new NetworkError(err.message, { cause: err });
+        throw new NetworkError(describeNetworkFailure(err, err.message, endpoint), { cause: err });
       }
       // A fetch() promise only rejects when the request fails,
       // for example, because of a badly-formed request URL or a network error.
-      throw new NetworkError(errorMessage(err, 'Network request failed'), { cause: err });
+      throw new NetworkError(describeNetworkFailure(err, 'Network request failed', endpoint), {
+        cause: err,
+      });
     }
 
     // Parse Retry-After once for reuse in both ResponseMeta and RateLimitError
