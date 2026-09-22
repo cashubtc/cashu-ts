@@ -85,7 +85,10 @@ function makeWallet() {
   const wallet = new Wallet(mint, { unit });
   const info = {
     ...mintInfoResp,
-    nuts: { 4: { methods: [{ method: 'bolt11', unit }], disabled: false } },
+    nuts: {
+      4: { methods: [{ method: 'bolt11', unit }], disabled: false },
+      29: { methods: ['bolt11'], max_batch_size: 100 },
+    },
   };
   wallet.loadMintFromCache(
     info,
