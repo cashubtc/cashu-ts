@@ -97,6 +97,9 @@ export type {
 // Logging & errors
 export { type LogLevel, ConsoleLogger, type Logger } from './logger';
 export {
+  AmountError,
+  AmountWithUnitError,
+  CallerAbortError,
   CTSError,
   isMintOperationError,
   MeltChangeError,
@@ -105,18 +108,16 @@ export {
   HttpResponseError,
   RateLimitError,
   StaleKeysetError,
+<<<<<<< HEAD
+=======
+  InvalidScalarError,
+  UncancellableReadError,
+>>>>>>> 13324fb (chore(errors): move stray error classes into model/Errors (#1246))
   UnknownKeysetError,
 } from './model/Errors';
-export { CallerAbortError, UncancellableReadError } from './transport/request';
 
 // Low-level helpers/types that appear in public surfaces
-export {
-  Amount,
-  AmountError,
-  AmountWithUnit,
-  AmountWithUnitError,
-  type AmountLike,
-} from './model/Amount';
+export { Amount, AmountWithUnit, type AmountLike } from './model/Amount';
 export { OutputData } from './model/OutputData';
 export type { OutputDataLike, OutputDataFactory, SerializedOutputData } from './model/OutputData';
 export type { OutputDataCreator } from './model/OutputDataCreator';

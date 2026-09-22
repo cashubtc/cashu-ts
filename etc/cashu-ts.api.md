@@ -56,7 +56,7 @@ export class Amount {
     static zero(): Amount;
 }
 
-// @public (undocumented)
+// @public
 export class AmountError extends CTSError {
     constructor(message: string);
 }
@@ -129,7 +129,7 @@ export class AmountWithUnit {
     static zero(unit: string): AmountWithUnit;
 }
 
-// @public (undocumented)
+// @public
 export class AmountWithUnitError extends CTSError {
     constructor(message: string);
 }
@@ -216,7 +216,26 @@ export type BlindSignature = {
     id: string;
 };
 
+<<<<<<< HEAD
 // @public (undocumented)
+=======
+// @public
+export const BLS_FP_ORDER = 4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787n;
+
+// @public
+export const BLS_FR_ORDER = 52435875175126190479447740508185965837690552500527637822603658699938581184513n;
+
+// @public
+export const BLS_HASH_TO_CURVE_DST = "CASHU_BLS12_381_G1_XMD:SHA-256_SSWU_RO_";
+
+// @public
+export function buildMintBackupPayload(mints: string[], timestamp: number): string;
+
+// @public
+export function bytesToHex(bytes: Uint8Array): string;
+
+// @public
+>>>>>>> 13324fb (chore(errors): move stray error classes into model/Errors (#1246))
 export class CallerAbortError extends NetworkError {
     constructor(message: string);
 }

@@ -1,5 +1,6 @@
 import { U64_MAX } from '../utils/limits';
 
+<<<<<<< HEAD
 import { CTSError } from './Errors';
 
 // ponytail: one warning per process, so a reduce over amounts does not spam the console
@@ -12,6 +13,9 @@ export class AmountError extends CTSError {
     Object.setPrototypeOf(this, AmountError.prototype);
   }
 }
+=======
+import { AmountError, AmountWithUnitError } from './Errors';
+>>>>>>> 13324fb (chore(errors): move stray error classes into model/Errors (#1246))
 
 /**
  * All types that can be converted to an {@link Amount} value object.
@@ -443,14 +447,6 @@ export class Amount {
    */
   withUnit(unit: string): AmountWithUnit {
     return new AmountWithUnit(this, unit);
-  }
-}
-
-export class AmountWithUnitError extends CTSError {
-  constructor(message: string) {
-    super(message);
-    this.name = 'AmountWithUnitError';
-    Object.setPrototypeOf(this, AmountWithUnitError.prototype);
   }
 }
 

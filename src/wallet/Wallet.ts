@@ -21,6 +21,7 @@ import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } f
 import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
 import {
+  CallerAbortError,
   CTSError,
   MeltChangeError,
   StaleKeysetError,
@@ -54,6 +55,11 @@ import { CheckStateEnum, type ProofState } from '../model/types/NUT07';
 import { type BatchMintRequest, type Nut29Info } from '../model/types/NUT29';
 import type { Proof, ProofLike } from '../model/types/proof';
 import type { Token } from '../model/types/token';
+<<<<<<< HEAD
+=======
+import { BATCH_POOL_SIZE, runPool } from '../transport';
+import type { RequestFetch, RequestFn } from '../transport';
+>>>>>>> 13324fb (chore(errors): move stray error classes into model/Errors (#1246))
 import {
   bolt11AmountMsat,
   getDecodedToken,

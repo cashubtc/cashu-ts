@@ -1,10 +1,12 @@
 import { type Logger, NULL_LOGGER, safeCallback } from '../logger';
 import {
+  CallerAbortError,
   CTSError,
   HttpResponseError,
   NetworkError,
   MintOperationError,
   RateLimitError,
+  UncancellableReadError,
 } from '../model/Errors';
 import { type Nut19Policy } from '../model/types';
 import { JSONInt } from '../utils/JSONInt';
@@ -329,6 +331,7 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 300_000; // per attempt, matches undici's own
 const BASE_DELAY = 100; // 100 ms
 const AUTH_HEADERS = ['blind-auth', 'clear-auth']; // NUT-21/22 tokens, lowercased for comparison
 
+<<<<<<< HEAD
 export class CallerAbortError extends NetworkError {
   constructor(message: string) {
     super(message);
@@ -350,6 +353,8 @@ export class UncancellableReadError extends NetworkError {
   }
 }
 
+=======
+>>>>>>> 13324fb (chore(errors): move stray error classes into model/Errors (#1246))
 /**
  * Returns true if the error warrants a retry on NUT-19 cached endpoints:
  *
