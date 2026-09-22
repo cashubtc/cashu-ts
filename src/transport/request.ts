@@ -331,30 +331,6 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 300_000; // per attempt, matches undici's own
 const BASE_DELAY = 100; // 100 ms
 const AUTH_HEADERS = ['blind-auth', 'clear-auth']; // NUT-21/22 tokens, lowercased for comparison
 
-<<<<<<< HEAD
-export class CallerAbortError extends NetworkError {
-  constructor(message: string) {
-    super(message);
-    this.name = 'CallerAbortError';
-    Object.setPrototypeOf(this, CallerAbortError.prototype);
-  }
-}
-
-/**
- * A timeout that fired while reading a response body that could not be cancelled. The underlying
- * read may still be consuming the body, so this is NOT retried: another attempt would start a
- * second uncancellable read against the same (possibly unbounded) body.
- */
-export class UncancellableReadError extends NetworkError {
-  constructor(message: string, options?: { cause?: unknown }) {
-    super(message, options);
-    this.name = 'UncancellableReadError';
-    Object.setPrototypeOf(this, UncancellableReadError.prototype);
-  }
-}
-
-=======
->>>>>>> 13324fb (chore(errors): move stray error classes into model/Errors (#1246))
 /**
  * Returns true if the error warrants a retry on NUT-19 cached endpoints:
  *

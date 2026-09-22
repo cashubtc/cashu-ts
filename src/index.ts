@@ -108,11 +108,7 @@ export {
   HttpResponseError,
   RateLimitError,
   StaleKeysetError,
-<<<<<<< HEAD
-=======
-  InvalidScalarError,
   UncancellableReadError,
->>>>>>> 13324fb (chore(errors): move stray error classes into model/Errors (#1246))
   UnknownKeysetError,
 } from './model/Errors';
 

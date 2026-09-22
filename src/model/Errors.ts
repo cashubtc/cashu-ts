@@ -58,9 +58,9 @@ export class CallerAbortError extends NetworkError {
 }
 
 /**
- * A timeout that fired while reading a response body that could not be cancelled (the no-stream
- * fallback). The underlying read may still be consuming the body, so this is NOT retried: another
- * attempt would start a second uncancellable read against the same (possibly unbounded) body.
+ * A timeout that fired while reading a response body that could not be cancelled. The underlying
+ * read may still be consuming the body, so this is NOT retried: another attempt would start a
+ * second uncancellable read against the same (possibly unbounded) body.
  */
 export class UncancellableReadError extends NetworkError {
   constructor(message: string, options?: { cause?: unknown }) {
@@ -71,7 +71,7 @@ export class UncancellableReadError extends NetworkError {
 }
 
 /**
- * Thrown by `Amount` on invalid input, arithmetic underflow or an unsafe implicit coercion.
+ * Thrown by `Amount` on invalid input or arithmetic underflow.
  */
 export class AmountError extends CTSError {
   constructor(message: string) {
