@@ -37,7 +37,7 @@ const logger: Logger = {
 const wallet = new Wallet('http://localhost:3338', { logger });
 ```
 
-Every method receives an optional `context` object of structured fields. `debug` is verbose: it
-dumps the whole keychain cache once per load, along with lock and spending-condition evaluation,
-so budget for a large entry if you ship it to a log service. `trace` is part of the interface but
-the library does not currently emit at that level.
+Every method receives an optional `context` object of structured fields. `debug` logs a per-keyset
+summary once per load (id, unit, active, fee, key count) plus lock and spending-condition
+evaluation; the full cache is `wallet.keyChain.cache` if you need it. `trace` is part of the
+interface but the library does not currently emit at that level.
