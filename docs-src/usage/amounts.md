@@ -44,6 +44,14 @@ Number(a); // throws AmountError
 // a + 1, a - 1, a < b, a == 100: each throws AmountError
 ```
 
+### Persisting amounts
+
+`Amount` is a class. `JSON.stringify` throws on it (bigint), and `structuredClone`, which IndexedDB, `postMessage` and most KV stores use under the hood, strips its prototype and hands back a plain `{ value }` object. You should therefore use the serialization helpers provided by the library.
+
+Persist `serializeProofs(proofs)` and rehydrate with `deserializeProofs(rows)`; for previews use `serializeSwapPreview` / `serializeMintPreview`.
+
+`Amount.from` accepts a cloned `Amount`, so rows that went through structuredClone still sum and deserialize correctly.
+
 ## Working with `AmountWithUnit`
 
 ```ts
