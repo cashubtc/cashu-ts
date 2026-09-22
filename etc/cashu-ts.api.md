@@ -3077,6 +3077,13 @@ export type WebSocketSupport = {
     commands: string[];
 };
 
+// @public
+export type WSCloseEvent = {
+    code: number;
+    reason: string;
+    wasClean: boolean;
+};
+
 // @public (undocumented)
 export class WSConnection {
     constructor(url: string, logger?: Logger);
@@ -3093,7 +3100,7 @@ export class WSConnection {
     createSubscription<TPayload = unknown>(params: Omit<JsonRpcReqParams, 'subId'>, callback: (payload: TPayload) => void, errorCallback: (e: Error) => void): string;
     // (undocumented)
     ensureConnection(timeoutMs?: number): Promise<void>;
-    onClose(callback: (e: CloseEvent) => void): () => void;
+    onClose(callback: (e: WSCloseEvent) => void): () => void;
     // (undocumented)
     sendRequest(method: 'subscribe', params: JsonRpcReqParams): void;
     // (undocumented)
