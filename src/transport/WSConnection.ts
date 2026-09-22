@@ -100,7 +100,13 @@ export class WSConnection {
     this.messageQueue = new MessageQueue();
     this._logger = logger ?? NULL_LOGGER;
     if (options?.keepaliveMs !== undefined) {
-      if (!(options.keepaliveMs > 0)) throw new CTSError('keepaliveMs must be a positive number');
+      if (
+        !Number.isFinite(options.keepaliveMs) ||
+        options.keepaliveMs < 1 ||
+        options.keepaliveMs > 2_147_483_647
+      ) {
+        throw new CTSError('keepaliveMs must be a finite number between 1 and 2147483647');
+      }
       this.keepaliveMs = options.keepaliveMs;
     }
   }
@@ -347,7 +353,7 @@ export class WSConnection {
       this.dropSocket(new CTSError(`WebSocket keepalive probe unanswered after ${timeoutMs}ms`));
     }, timeoutMs);
     try {
-      this.sendRpcMessage('unsubscribe', { subId: 'keepalive' }, id);
+      this.sendRpcMessage('unsubscribe', { subId: generateUuidV7() }, id);
     } catch {
       // sendRpcMessage already tore the socket down and failed the probe listener
     }

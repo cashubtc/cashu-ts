@@ -755,7 +755,7 @@ describe('WSConnection – keepalive', () => {
               id: parsed.id,
             }),
           );
-        } else if (parsed.method === 'unsubscribe' && parsed.params.subId === 'keepalive') {
+        } else if (parsed.method === 'unsubscribe') {
           probes.push(Date.now());
           if (answerProbes) {
             // What cdk sends for an unknown subId; Nutshell sends a different error, same shape.
@@ -775,10 +775,17 @@ describe('WSConnection – keepalive', () => {
 
   const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
-  test('rejects a non-positive interval', () => {
-    expect(() => new WSConnection(fakeUrl, undefined, { keepaliveMs: 0 })).toThrow(
-      'keepaliveMs must be a positive number',
-    );
+  test.each([0, -1, 0.5, NaN, Infinity, 2_147_483_648, '30000', true, null])(
+    'rejects an invalid interval: %s',
+    (keepaliveMs) => {
+      expect(
+        () => new WSConnection(fakeUrl, undefined, { keepaliveMs: keepaliveMs as number }),
+      ).toThrow('keepaliveMs must be a finite number between 1 and 2147483647');
+    },
+  );
+
+  test.each([1, 30_000, 2_147_483_647])('accepts interval %s', (keepaliveMs) => {
+    expect(() => new WSConnection(fakeUrl, undefined, { keepaliveMs })).not.toThrow();
   });
 
   test('a mint that answers the probe keeps the connection and its subscriptions', async () => {

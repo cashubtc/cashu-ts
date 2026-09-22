@@ -38,7 +38,12 @@ describe('WebSocket Updates', () => {
       await wallet.mint.connectWebSocket();
       await new Promise((res) => setTimeout(res, 80));
       expect(probes.length).toBeGreaterThanOrEqual(1);
-      expect(probes.every((s) => s === 'keepalive')).toBe(true);
+      for (const subId of probes) {
+        expect(subId).toMatch(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+        );
+      }
+      expect(new Set(probes).size).toBe(probes.length);
     } finally {
       wallet.mint.disconnectWebSocket();
       server.close();
