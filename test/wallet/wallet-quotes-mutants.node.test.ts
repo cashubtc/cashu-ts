@@ -107,6 +107,30 @@ describe('constructor mutants', () => {
 });
 
 describe('finishInit / getKeyset mutants', () => {
+  test('logs a per-keyset summary on load, never the keys themselves', async () => {
+    const debug = vi.fn();
+    const logger = {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug,
+      trace: vi.fn(),
+      log: vi.fn(),
+    };
+    const wallet = new Wallet(mint, { unit, logger });
+    await wallet.loadMint();
+
+    const call = debug.mock.calls.find(([message]) => message === 'KeyChain loaded');
+    expect(call).toBeDefined();
+    const context = call?.[1] as { keysets: Array<{ id: string; keys: number }> };
+    expect(context.keysets).toHaveLength(dummyKeysetResp.keysets.length);
+    expect(
+      context.keysets.every((k) => typeof k.id === 'string' && typeof k.keys === 'number'),
+    ).toBe(true);
+    const somePubkey = Object.values(dummyKeysResp.keysets[0].keys)[0];
+    expect(JSON.stringify(call)).not.toContain(somePubkey);
+  });
+
   test('a constructor-bound keyset with a mismatched unit is rejected on load', () => {
     const wallet = new Wallet(mint, { unit, keysetId: '00ffffffffffffff' });
     const cache = KeyChain.mintToCacheDTO(mintUrl, dummyKeysetResp.keysets, dummyKeysResp.keysets);
