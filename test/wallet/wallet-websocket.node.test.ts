@@ -9,11 +9,42 @@ import {
   type MintQuoteBolt11Response,
 } from '../../src';
 
-import { mint, useTestServer } from './_setup';
+import { mint, mintUrl, useTestServer } from './_setup';
 
 useTestServer();
 
 describe('WebSocket Updates', () => {
+  test('wsKeepaliveMs on the wallet reaches the socket', async () => {
+    const fakeUrl = 'ws://localhost:3338/v1/ws';
+    const server = new Server(fakeUrl, { mock: false });
+    const probes: string[] = [];
+    server.on('connection', (socket) => {
+      socket.on('message', (m) => {
+        const parsed = JSON.parse(m.toString());
+        if (parsed.method === 'unsubscribe') {
+          probes.push(parsed.params.subId);
+          socket.send(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              error: { code: -32602, message: 'Invalid params' },
+              id: parsed.id,
+            }),
+          );
+        }
+      });
+    });
+    const wallet = new Wallet(mintUrl, { wsKeepaliveMs: 20 });
+    try {
+      await wallet.mint.connectWebSocket();
+      await new Promise((res) => setTimeout(res, 80));
+      expect(probes.length).toBeGreaterThanOrEqual(1);
+      expect(probes.every((s) => s === 'keepalive')).toBe(true);
+    } finally {
+      wallet.mint.disconnectWebSocket();
+      server.close();
+    }
+  });
+
   test('mint update', async () => {
     const fakeUrl = 'ws://localhost:3338/v1/ws';
     const server = new Server(fakeUrl, { mock: false });

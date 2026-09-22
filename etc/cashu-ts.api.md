@@ -1224,6 +1224,7 @@ export class Mint {
         requestFetch?: RequestFetch;
         authProvider?: AuthProvider;
         logger?: Logger;
+        wsKeepaliveMs?: number;
     });
     check(checkPayload: CheckStatePayload, opts?: MintCallOptions): Promise<CheckStateResponse>;
     checkMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(method: string, quote: string, options?: MintCallOptions & {
@@ -2870,6 +2871,7 @@ export class Wallet {
         customRequest?: RequestFn;
         requestFetch?: RequestFetch;
         logger?: Logger;
+        wsKeepaliveMs?: number;
     });
     batchRestore(config?: BatchRestoreConfig): Promise<{
         proofs: Proof[];
@@ -3086,7 +3088,9 @@ export type WSCloseEvent = {
 
 // @public (undocumented)
 export class WSConnection {
-    constructor(url: string, logger?: Logger);
+    constructor(url: string, logger?: Logger, options?: {
+        keepaliveMs?: number;
+    });
     // (undocumented)
     get activeSubscriptions(): string[];
     // (undocumented)

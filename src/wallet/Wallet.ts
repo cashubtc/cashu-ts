@@ -316,6 +316,11 @@ class Wallet {
       customRequest?: RequestFn;
       requestFetch?: RequestFetch;
       logger?: Logger;
+      /**
+       * Probes the NUT-17 socket at this interval and drops it as an abnormal close when the mint
+       * stops answering, so a half-open connection fails loudly (see `Mint`).
+       */
+      wsKeepaliveMs?: number;
     },
   ) {
     this.ops = new WalletOps(this);
@@ -331,6 +336,7 @@ class Wallet {
             customRequest: options?.customRequest,
             requestFetch: options?.requestFetch,
             logger: this._logger,
+            wsKeepaliveMs: options?.wsKeepaliveMs,
           })
         : mint;
     this._unit = options?.unit ?? this._unit;

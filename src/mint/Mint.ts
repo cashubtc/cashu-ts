@@ -100,6 +100,7 @@ class Mint {
   private _mintInfo?: MintInfo;
   private _authProvider?: AuthProvider;
   private _lastResponseMetadata: ResponseMeta | undefined = undefined;
+  private readonly _wsKeepaliveMs?: number;
   private readonly _captureResponseMetadata = (meta: ResponseMeta): void => {
     this._lastResponseMetadata = meta;
   };
@@ -112,6 +113,8 @@ class Mint {
    *   Ignored when `customRequest` is supplied.
    * @param authTokenGetter Optional. Function to obtain a NUT-22 BlindedAuthToken (e.g. from a
    *   database or localstorage)
+   * @param wsKeepaliveMs Optional. Probes the NUT-17 socket at this interval and drops it as an
+   *   abnormal close when the mint stops answering, so a half-open connection fails loudly.
    */
   constructor(
     mintUrl: string,
@@ -120,9 +123,11 @@ class Mint {
       requestFetch?: RequestFetch;
       authProvider?: AuthProvider;
       logger?: Logger;
+      wsKeepaliveMs?: number;
     },
   ) {
     this._mintUrl = normalizeMintUrl(mintUrl);
+    this._wsKeepaliveMs = options?.wsKeepaliveMs;
     if (options?.customRequest) {
       this._request = options.customRequest;
     } else if (options?.requestFetch) {
@@ -1151,7 +1156,7 @@ class Mint {
       const wsUrl = mintUrl.toString();
 
       if (!this.ws) {
-        this.ws = new WSConnection(wsUrl, this._logger);
+        this.ws = new WSConnection(wsUrl, this._logger, { keepaliveMs: this._wsKeepaliveMs });
       }
 
       await this.ws.ensureConnection();
