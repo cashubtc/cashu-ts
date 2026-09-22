@@ -981,7 +981,7 @@ export class LockBuilder {
     requireRefundSignatures(n: number): this;
     sigAll(): this;
     toOptions(): LockOptions_2;
-    validate(target: 'v3' | 'pre-v3'): CTSError[];
+    validate(target: LockFamily): CTSError[];
 }
 
 // @public
@@ -995,6 +995,9 @@ export type LockConditions = {
     blindKeys?: boolean;
     sigFlag?: SigFlag;
 };
+
+// @public
+export type LockFamily = 'nutroot' | 'p2pk';
 
 // @public
 type LockOptions_2 = {
@@ -2370,7 +2373,7 @@ export function selectProofsRotating(proofs: ProofLike[], amountToSelect: Amount
 
 // @public
 export class SendBuilder {
-    constructor(wallet: Wallet, amount: AmountLike, proofs: ProofLike[], lockFamily?: "v3" | "legacy" | undefined, fromRequest?: boolean);
+    constructor(wallet: Wallet, amount: AmountLike, proofs: ProofLike[], lockFamily?: LockFamily | undefined, fromRequest?: boolean);
     asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: AmountLike[]): this;
     asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;

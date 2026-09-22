@@ -1095,3 +1095,19 @@ const oidc = await mint.oidcAuth(opts);
 // After
 const oidc = OIDCAuth.fromMintInfo(await mint.getLazyMintInfo(), opts);
 ```
+
+---
+
+## Lock families are named by encoding, not version
+
+`LockBuilder.validate` takes `'nutroot' | 'p2pk'` (exported as `LockFamily`) instead of `'v3' | 'pre-v3'`. Nothing else changes: `nutroot` runs the BLS keyset encoder, `p2pk` the NUT-10 one.
+
+```ts
+// Before
+builder.validate('v3');
+builder.validate('pre-v3');
+
+// After
+builder.validate('nutroot');
+builder.validate('p2pk');
+```

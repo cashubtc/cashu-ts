@@ -529,8 +529,8 @@ describe('LockBuilder.disclose()', () => {
     const b = new LockBuilder().addMainPubkey(comp('a', '02')).disclose();
     expect(b.toOptions().disclosure).toBe(true);
     expect(LockBuilder.fromOptions(b.toOptions()).toOptions().disclosure).toBe(true);
-    expect(b.validate('v3')).toEqual([]);
-    expect(b.validate('pre-v3')).toEqual([]);
+    expect(b.validate('nutroot')).toEqual([]);
+    expect(b.validate('p2pk')).toEqual([]);
   });
 });
 
@@ -551,14 +551,14 @@ describe('LockBuilder.validate()', () => {
       .addMainPubkey(comp('a', '02'))
       .lockUntil(4102444800)
       .addRefundPubkey(comp('b', '02'));
-    expect(b.validate('v3')).toEqual([]);
-    expect(b.validate('pre-v3')).toEqual([]);
+    expect(b.validate('nutroot')).toEqual([]);
+    expect(b.validate('p2pk')).toEqual([]);
   });
 
   it('flags anyone-after-locktime on v3 only', () => {
     const b = new LockBuilder().addMainPubkey(comp('a', '02')).lockUntil(4102444800);
-    expect(b.validate('pre-v3')).toEqual([]);
-    const issues = b.validate('v3');
+    expect(b.validate('p2pk')).toEqual([]);
+    const issues = b.validate('nutroot');
     expect(issues).toHaveLength(1);
     expect(issues[0].message).toMatch(/anyone-after-locktime/i);
   });
@@ -570,15 +570,15 @@ describe('LockBuilder.validate()', () => {
       time: 4102444800,
       keys: [comp('a', '02')],
     });
-    expect(b.validate('v3')).toEqual([]);
-    const issues = b.validate('pre-v3');
+    expect(b.validate('nutroot')).toEqual([]);
+    const issues = b.validate('p2pk');
     expect(issues).toHaveLength(1);
     expect(issues[0].message).toMatch(/need a v3 keyset/i);
   });
 
   it('reports builder-level refusals for both targets instead of throwing', () => {
     const b = new LockBuilder().addMainPubkey(comp('a', '02')).addRefundPubkey(comp('b', '02'));
-    for (const target of ['v3', 'pre-v3'] as const) {
+    for (const target of ['nutroot', 'p2pk'] as const) {
       const issues = b.validate(target);
       expect(issues).toHaveLength(1);
       expect(issues[0].message).toMatch(/refund keys require a locktime/i);

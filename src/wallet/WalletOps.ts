@@ -17,7 +17,7 @@ import type { Token } from '../model/types/token';
 
 import { assertQuoteUnit } from './_internal';
 import { nutrootToLockOptions, p2pkToLockOptions, type LockOptions } from './lock';
-import { LockBuilder } from './LockBuilder';
+import { LockBuilder, type LockFamily } from './LockBuilder';
 import {
   type OutputType,
   type OutputConfig,
@@ -117,7 +117,7 @@ export class WalletOps {
     // Net of input fees (NUT-18): the payee must net the requested amount after swapping.
     const v3 = isBlsKeyset(wallet.keysetId);
     // Only a locked request negotiates an encoding; an unlocked one may use any keyset.
-    const family = lock || nutroot ? (v3 ? 'v3' : 'legacy') : undefined;
+    const family = lock || nutroot ? (v3 ? 'nutroot' : 'p2pk') : undefined;
     const builder = new SendBuilder(wallet, base.add(fee), proofs, family, true).includeFees(true);
     if (family) builder.keyset(wallet.keysetId);
     if (nutroot && v3) {
@@ -204,7 +204,7 @@ export class SendBuilder {
     private wallet: Wallet,
     amount: AmountLike,
     private proofs: ProofLike[],
-    private lockFamily?: 'v3' | 'legacy',
+    private lockFamily?: LockFamily,
     private fromRequest = false,
   ) {
     this.amount = Amount.from(amount);
@@ -358,7 +358,7 @@ export class SendBuilder {
    */
   keyset(id: string) {
     // The lock encoding was negotiated for one family (NUT-18); the other would re-encode it.
-    if (this.lockFamily && (isBlsKeyset(id) ? 'v3' : 'legacy') !== this.lockFamily) {
+    if (this.lockFamily && (isBlsKeyset(id) ? 'nutroot' : 'p2pk') !== this.lockFamily) {
       throw new CTSError(
         `keyset ${id} is not in the family this payment request was negotiated for`,
       );
