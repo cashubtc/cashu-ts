@@ -47,6 +47,52 @@ export class NetworkError extends CTSError {
 }
 
 /**
+ * Thrown when the caller's `AbortSignal` fires; never retried.
+ */
+export class CallerAbortError extends NetworkError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CallerAbortError';
+    Object.setPrototypeOf(this, CallerAbortError.prototype);
+  }
+}
+
+/**
+ * A timeout that fired while reading a response body that could not be cancelled. The underlying
+ * read may still be consuming the body, so this is NOT retried: another attempt would start a
+ * second uncancellable read against the same (possibly unbounded) body.
+ */
+export class UncancellableReadError extends NetworkError {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = 'UncancellableReadError';
+    Object.setPrototypeOf(this, UncancellableReadError.prototype);
+  }
+}
+
+/**
+ * Thrown by `Amount` on invalid input or arithmetic underflow.
+ */
+export class AmountError extends CTSError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AmountError';
+    Object.setPrototypeOf(this, AmountError.prototype);
+  }
+}
+
+/**
+ * Thrown by `AmountWithUnit` on a missing unit, a unit mismatch or an unsafe implicit coercion.
+ */
+export class AmountWithUnitError extends CTSError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AmountWithUnitError';
+    Object.setPrototypeOf(this, AmountWithUnitError.prototype);
+  }
+}
+
+/**
  * Thrown when a keyset id cannot be resolved against the wallet's view of the mint.
  *
  * @remarks

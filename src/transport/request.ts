@@ -1,10 +1,12 @@
 import { type Logger, NULL_LOGGER, safeCallback } from '../logger';
 import {
+  CallerAbortError,
   CTSError,
   HttpResponseError,
   NetworkError,
   MintOperationError,
   RateLimitError,
+  UncancellableReadError,
 } from '../model/Errors';
 import { type Nut19Policy } from '../model/types';
 import { JSONInt } from '../utils/JSONInt';
@@ -328,27 +330,6 @@ const MAX_DELAY = 1000; // 1 sec
 const DEFAULT_REQUEST_TIMEOUT_MS = 300_000; // per attempt, matches undici's own; Infinity disables
 const BASE_DELAY = 100; // 100 ms
 const AUTH_HEADERS = ['blind-auth', 'clear-auth']; // NUT-21/22 tokens, lowercased for comparison
-
-export class CallerAbortError extends NetworkError {
-  constructor(message: string) {
-    super(message);
-    this.name = 'CallerAbortError';
-    Object.setPrototypeOf(this, CallerAbortError.prototype);
-  }
-}
-
-/**
- * A timeout that fired while reading a response body that could not be cancelled. The underlying
- * read may still be consuming the body, so this is NOT retried: another attempt would start a
- * second uncancellable read against the same (possibly unbounded) body.
- */
-export class UncancellableReadError extends NetworkError {
-  constructor(message: string, options?: { cause?: unknown }) {
-    super(message, options);
-    this.name = 'UncancellableReadError';
-    Object.setPrototypeOf(this, UncancellableReadError.prototype);
-  }
-}
 
 /**
  * Returns true if the error warrants a retry on NUT-19 cached endpoints:
