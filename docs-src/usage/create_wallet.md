@@ -30,6 +30,19 @@ After `loadMint()`, use `wallet.getMintInfo()` to inspect what the mint supports
 
 > ⚠️ **Server-side usage:** If you construct a `Wallet` (or `Mint`) using a URL from untrusted input (e.g. a received token), validate the mint URL against your own trusted-mint allowlist **before** passing it in. The library validates URL structure but cannot know which mints your application trusts.
 
+## Seed
+
+Everything recoverable in cashu-ts (deterministic secrets, NUT-09 restore, derived P2PK keys, quote locks) hangs off `bip39seed`: the 64-byte BIP-39 seed, not the entropy behind the mnemonic. The constructor rejects any other length. `mnemonicToSeedSync` derives it from the phrase (and optional passphrase) with the library's existing primitives; it normalizes and checks the word count but does **NOT** validate the checksum or wordlist, so validate a user-entered phrase first, with `@scure/bip39` or similar, which is also where mnemonic generation lives.
+
+```typescript
+import { Wallet, mnemonicToSeedSync } from '@cashu/cashu-ts';
+
+const wallet = new Wallet(mintUrl, { unit: 'sat', bip39seed: mnemonicToSeedSync(mnemonic) });
+await wallet.loadMint();
+```
+
+A wallet constructed without a seed uses random secrets. Its proofs live only in your proof store and cannot be recovered from the mint.
+
 ## Custom mint transport
 
 Pass `requestFetch` when one wallet or mint needs a runtime-specific transport, for example OHTTP, Tor, a native mobile HTTP client, or an application proxy. This keeps the default cashu-ts request behavior for JSON parsing, timeouts, errors, and NUT-19 retries while replacing only the network primitive.
