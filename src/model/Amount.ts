@@ -1,14 +1,6 @@
 import { U64_MAX } from '../utils/limits';
 
-import { CTSError } from './Errors';
-
-export class AmountError extends CTSError {
-  constructor(message: string) {
-    super(message);
-    this.name = 'AmountError';
-    Object.setPrototypeOf(this, AmountError.prototype);
-  }
-}
+import { AmountError, AmountWithUnitError } from './Errors';
 
 /**
  * All types that can be converted to an {@link Amount} value object.
@@ -435,14 +427,6 @@ export class Amount {
    */
   withUnit(unit: string): AmountWithUnit {
     return new AmountWithUnit(this, unit);
-  }
-}
-
-export class AmountWithUnitError extends CTSError {
-  constructor(message: string) {
-    super(message);
-    this.name = 'AmountWithUnitError';
-    Object.setPrototypeOf(this, AmountWithUnitError.prototype);
   }
 }
 
