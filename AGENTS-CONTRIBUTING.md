@@ -125,7 +125,7 @@ Hooks are installed by Husky:
 1. Start with the public surface: check `src/index.ts` for exports and types.
 2. Keep changes tight and scoped; follow patterns in `src/wallet/`, `src/mint/`, `src/model/`.
 3. Public API changes: run `npm run api:update` and commit `/etc/cashu-ts.api.md`.
-4. Update docs/usage examples if the API behavior changes (`docs-src/usage/*`).
+4. Update docs/usage examples if the API behavior changes (`docs-src/usage/*`). Every ` ```ts ` fence there is type-checked against the shipped types by `npm run check-docs` (after `npm run compile`); fragments get their ambient names from `scripts/docs-snippet-prelude.d.ts`, and a deliberately partial fence is tagged ` ```ts skip `.
 5. Run `npm run prtasks`; run `npm run test-integration` if behavior depends on a mint.
 
 ## PR review flow (reviewer)
