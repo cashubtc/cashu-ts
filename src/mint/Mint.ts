@@ -6,7 +6,6 @@
  * Wallet class when you pass in the mint url.
  */
 import type { AuthProvider } from '../auth/AuthProvider';
-import { OIDCAuth, type OIDCAuthOptions } from '../auth/OIDCAuth';
 import { type Logger, NULL_LOGGER, failIf } from '../logger';
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
@@ -148,34 +147,6 @@ class Mint {
    */
   get lastResponseMetadata(): ResponseMeta | undefined {
     return this._lastResponseMetadata;
-  }
-
-  /**
-   * Create an OIDC client using this mint’s NUT-21 metadata.
-   *
-   * @remarks
-   * Do not combine an `onTokens` callback that calls `setCAT` with `attachOIDC`. Both install the
-   * CAT, and `setCAT` replaces the whole token record, so the refresh token would be dropped.
-   * @example
-   *
-   * ```ts
-   * const oidc = await mint.oidcAuth();
-   * authMgr.attachOIDC(oidc); // keeps the CAT and its refresh state up to date
-   * const start = await oidc.startDeviceAuth();
-   * // show start.user_code / start.verification_uri to the user
-   * const token = await start.poll(); // call start.cancel() if the user dismisses the flow
-   * // token.access_token is your CAT
-   * ```
-   */
-  async oidcAuth(opts?: OIDCAuthOptions): Promise<OIDCAuth> {
-    const n21 = (await this.getLazyMintInfo()).nuts['21'];
-    if (!n21?.openid_discovery) {
-      throw new CTSError('Mint: no NUT-21 openid_discovery');
-    }
-    return new OIDCAuth(n21.openid_discovery, {
-      ...opts,
-      clientId: opts?.clientId ?? n21.client_id ?? 'cashu-client',
-    });
   }
 
   /**

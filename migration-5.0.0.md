@@ -1081,3 +1081,17 @@ const total = sumProofs(proofs); // or proofs.reduce((sum, p) => sum.add(p.amoun
 if (a.lessThan(b)) { ... } // or a.compareTo(b) < 0
 const n = a.toNumber(); // explicit, throws above MAX_SAFE_INTEGER; a.toBigInt() never does
 ```
+
+---
+
+## `Mint.oidcAuth` removed; use `OIDCAuth.fromMintInfo`
+
+`Mint` no longer constructs the OIDC client, so a bundle that never signs in to a NUT-21 mint no longer carries it. `OIDCAuth.fromMintInfo` takes the mint info and applies the same `clientId` fallback (`opts.clientId`, then the mint's `client_id`, then `cashu-client`). `createAuthWallet` is unchanged.
+
+```ts
+// Before
+const oidc = await mint.oidcAuth(opts);
+
+// After
+const oidc = OIDCAuth.fromMintInfo(await mint.getLazyMintInfo(), opts);
+```

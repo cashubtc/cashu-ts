@@ -134,23 +134,6 @@ describe('Mint normalization', () => {
     }
   });
 
-  it('oidcAuth throws when the mint does not advertise NUT-21 discovery metadata', async () => {
-    const mint = new Mint(mintUrl, {
-      customRequest: makeRequest({
-        name: 'mint',
-        pubkey: '02abcd',
-        version: 'test',
-        contact: [],
-        nuts: {
-          '4': { disabled: false, methods: [] },
-          '5': { disabled: false, methods: [] },
-        },
-      }),
-    });
-
-    await expect(mint.oidcAuth()).rejects.toThrow('Mint: no NUT-21 openid_discovery');
-  });
-
   it('passes through AmountLike min/max amounts from getInfo()', async () => {
     const mint = new Mint(mintUrl, {
       customRequest: makeRequest({
