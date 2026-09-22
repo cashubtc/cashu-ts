@@ -2373,7 +2373,7 @@ export class WSConnection {
     // (undocumented)
     get activeSubscriptions(): string[];
     // (undocumented)
-    addSubListener<TPayload = unknown>(subId: string, callback: (payload: TPayload) => void): void;
+    addSubListener<TPayload = unknown>(subId: string, callback: (payload: TPayload) => void, errorCallback?: (e: Error) => void): void;
     cancelSubscription<TPayload = unknown>(subId: string, callback: (payload: TPayload) => void, errorCallback?: (e: Error) => void): void;
     // (undocumented)
     close(): void;
