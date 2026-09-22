@@ -49,7 +49,8 @@ const { keep, send } = await wallet.ops.sendToRequest(pr, proofs).run();
 const body = pr.encodePayload(wallet.mint.mintUrl, send, { memo: 'thanks' });
 
 // HTTP POST transport; for a Nostr transport, send `body` as the DM content.
-const post = pr.getTransport('post');
+const post = pr.getTransport(PaymentRequestTransportType.POST);
+if (!post) throw new Error('request has no HTTP POST transport');
 await fetch(post.target, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
