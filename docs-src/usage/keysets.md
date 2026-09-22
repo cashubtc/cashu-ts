@@ -18,6 +18,25 @@ Keys load lazily because the retired-keyset set only grows: fetching every one u
 an unbounded series of `/v1/keys/{id}` calls per load. Keys are immutable per keyset id and
 verified against it, so loading them late is safe.
 
+## Which keyset, which curve
+
+`wallet.keysetId` is the keyset the wallet builds outputs on, and `wallet.keyChain.getKeysets()` lists everything the mint offers for the wallet's unit, each with `unit`, `isActive`, `fee` and `version`, the id's first byte. That byte selects the curve: `02` is BLS12-381 and takes nutroot locks, `00` and `01` are secp256k1; `isBlsKeyset(id)` answers the same question from a bare id.
+
+```ts
+import { isBlsKeyset } from '@cashu/cashu-ts';
+
+for (const k of wallet.keyChain.getKeysets()) {
+  console.log(k.id, k.unit, k.isActive, k.fee, isBlsKeyset(k.id) ? 'bls' : 'secp');
+}
+console.log('bound to', wallet.keysetId);
+```
+
+An auto-bound wallet picks the cheapest active keyset for its unit, newest version first, and outputs, change included, are built on it. A wallet holding proofs on an older keyset therefore moves that value onto the bound one on its first send. That is intended.
+
+To pin the wallet to a certain keyset, pass `keysetId` when constructing it (`new Wallet(mintUrl, { keysetId })`), or call `wallet.bindKeyset(id)` on a loaded wallet.
+
+Note: a pinned wallet stays on that keyset across `loadMint(true)`, even if the mint retires it.
+
 ## When the wallet repairs itself
 
 Two things count as evidence that a rotation happened. Both refresh the snapshot once, then throw:
