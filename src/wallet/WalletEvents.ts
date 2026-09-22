@@ -300,10 +300,13 @@ export class WalletEvents {
 
   // Whether the mint says it pushes `kind` for this wallet's unit. Unknown until mint info is
   // loaded; then the socket decides
-  // The batched check is only tried where the mint advertises NUT-29; unknown info tries it once
-  private _batches(): boolean {
+  // The batched check is only tried where the mint advertises NUT-29 for the method; unknown info
+  // tries it once
+  private _batches(method: string): boolean {
     try {
-      return this.wallet.getMintInfo().isSupported(29).supported;
+      const nut29 = this.wallet.getMintInfo().isSupported(29);
+      const methods = nut29.params?.methods;
+      return nut29.supported && (!Array.isArray(methods) || methods.includes(method));
     } catch {
       return true;
     }
@@ -588,7 +591,7 @@ export class WalletEvents {
   ): Promise<SubscriptionCanceller> {
     const method = opts?.method ?? 'bolt11';
     const uniq = Array.from(new Set(ids));
-    let batch = uniq.length > 1 && this._batches();
+    let batch = uniq.length > 1 && this._batches(method);
     const fetch = async () => {
       if (batch) {
         try {
