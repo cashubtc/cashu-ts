@@ -122,7 +122,7 @@ Because the source is shared, the global event on any wallet instance reflects t
 
 Implement `CounterSource` yourself when the cursor must live in your storage: when several tabs or processes reserve from one DB, or when a crash between reserving and saving must not risk reusing a counter. Each method is then one atomic transaction:
 
-```ts
+```ts skip
 import type { CounterSource, CounterRange } from '@cashu/cashu-ts';
 
 class IndexedDbCounterSource implements CounterSource {

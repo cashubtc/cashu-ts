@@ -77,7 +77,7 @@ DLEQ or a signature count mismatch does not, and needs a NUT-09 restore instead.
 
 ```ts
 try {
-  const { change } = await wallet.meltProofsBolt11(quote, proofs);
+  const { change } = await wallet.meltProofsBolt11(meltQuote, proofs);
 } catch (e) {
   if (!(e instanceof MeltChangeError)) throw e;
   const sigs = e.quote.change ?? [];

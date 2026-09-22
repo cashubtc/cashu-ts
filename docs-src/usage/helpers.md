@@ -32,6 +32,7 @@ proof state publishes, which is exactly what a third-party verifier of a disclos
 ```ts
 import { computeMessageDigest, hexToBytes, bytesToHex, sha256, taggedHash } from '@cashu/cashu-ts';
 
+if (!state.input_digest || !state.witness) throw new Error('proof has not been spent');
 const commitment = taggedHash(
   'Cashu_SpendCommitment',
   hexToBytes(state.Y),

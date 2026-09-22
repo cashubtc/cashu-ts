@@ -8,7 +8,9 @@
 
 ```ts
 const { keep, send } = await wallet.ops.send(5, myProofs).run();
+```
 
+```ts
 // Or use prepare() instead of run() to do a dry run preview first
 const preview = await wallet.ops.send(5, myProofs).prepare();
 const { keep, send } = await wallet.completeSwap(preview);

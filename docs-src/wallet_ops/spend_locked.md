@@ -50,7 +50,9 @@ Receiving swaps locked proofs into your own seed-derived secrets, and that swap 
 ```ts
 // Bearer (k travels with the token): nothing to pass, the wallet signs with it.
 const proofs = await wallet.ops.receive(token).run();
+```
 
+```ts
 // Receiver-keyed (locked to your pubkey): same call as pre-v3 P2PK.
 const proofs = await wallet.ops.receive(token).privkey(myStaticPrivkey).run();
 ```
