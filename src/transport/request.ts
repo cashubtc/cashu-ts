@@ -97,6 +97,33 @@ export function errorMessage(err: unknown, fallback: string): string {
 }
 
 /**
+ * Message for a failed request: the innermost cause and its code (a bare `fetch failed` hides
+ * both), and the mint's origin only (path can carry quote ids).
+ */
+function describeNetworkFailure(err: unknown, fallback: string, endpoint: string): string {
+  let root: unknown = err;
+  for (;;) {
+    const next = (root as { cause?: unknown }).cause;
+    if (!(next instanceof Error) || next === root) break;
+    root = next;
+  }
+  let detail = '';
+  if (root instanceof Error && root !== err && root.message) {
+    const code = (root as { code?: unknown }).code;
+    detail = ` (${root.message}${typeof code === 'string' ? `, ${code}` : ''})`;
+  }
+  return `${errorMessage(err, fallback)}${detail} at ${endpointOrigin(endpoint)}`;
+}
+
+function endpointOrigin(endpoint: string): string {
+  try {
+    return new URL(endpoint).origin;
+  } catch {
+    return endpoint;
+  }
+}
+
+/**
  * Reads a response body as text, failing once it exceeds `maxBytes`.
  *
  * @remarks
@@ -556,10 +583,11 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
         if (shouldRetry) {
           const cappedDelay = Math.min(2 ** retries * BASE_DELAY, MAX_DELAY);
 
-          const delay = Math.random() * cappedDelay;
+          // Jitter within the upper half of the cap, so retries never rapid-fire from zero.
+          const delay = cappedDelay / 2 + Math.random() * (cappedDelay / 2);
 
           if (totalElapsedTime + delay > ttl) {
-            activeLogger.error(`Network Error: request abandoned after ${retries} retries`, {
+            activeLogger.warn(`Network Error: request abandoned after ${retries} retries`, {
               e,
               retries,
             });
@@ -576,7 +604,8 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
           return retry();
         }
       }
-      activeLogger.error(`Request failed and could not be retried`, { e });
+      // The error propagates; the caller decides whether it is one (eg a signature fallback).
+      activeLogger.debug(`Request failed and could not be retried`, { e });
       throw e;
     }
   };
@@ -691,17 +720,22 @@ async function _request(options: RequestOptions): Promise<unknown> {
       const timedOut = !!timeoutController?.signal.aborted;
       const callerAborted = !!callerSignal?.aborted;
       if (timedOut) {
-        throw new NetworkError(`Request timed out after ${requestTimeout}ms`, { cause: err });
+        throw new NetworkError(
+          `Request timed out after ${requestTimeout}ms at ${endpointOrigin(endpoint)}`,
+          { cause: err },
+        );
       }
       if (callerAborted) {
         throw new CallerAbortError(errorMessage(err, 'Request aborted by caller'));
       }
       if (err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError')) {
-        throw new NetworkError(err.message, { cause: err });
+        throw new NetworkError(describeNetworkFailure(err, err.message, endpoint), { cause: err });
       }
       // A fetch() promise only rejects when the request fails,
       // for example, because of a badly-formed request URL or a network error.
-      throw new NetworkError(errorMessage(err, 'Network request failed'), { cause: err });
+      throw new NetworkError(describeNetworkFailure(err, 'Network request failed', endpoint), {
+        cause: err,
+      });
     }
 
     // Parse Retry-After once for reuse in both ResponseMeta and RateLimitError

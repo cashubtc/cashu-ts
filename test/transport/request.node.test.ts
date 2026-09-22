@@ -514,8 +514,26 @@ describe('requests', { timeout: 7500 }, () => {
     try {
       const thrown = await request({ endpoint }).catch((e) => e);
       expect(thrown).toBeInstanceOf(NetworkError);
-      expect(thrown).toMatchObject({ message: 'aborted by runtime' });
+      expect(thrown).toMatchObject({ message: `aborted by runtime at ${mintUrl}` });
       expect((thrown as NetworkError).cause).toBe(abortError);
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  test('names the innermost cause, its code and the mint origin in a NetworkError', async () => {
+    const endpoint = mintUrl + '/v1/mint/quote/bolt11/quote-id-must-not-leak';
+    const socketError = Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' });
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      throw Object.assign(new TypeError('fetch failed'), { cause: socketError });
+    });
+
+    try {
+      const thrown = await request({ endpoint }).catch((e) => e);
+      expect(thrown).toBeInstanceOf(NetworkError);
+      expect((thrown as Error).message).toBe(
+        `fetch failed (other side closed, UND_ERR_SOCKET) at ${mintUrl}`,
+      );
     } finally {
       fetchMock.mockRestore();
     }
@@ -698,8 +716,9 @@ describe('requests', { timeout: 7500 }, () => {
       );
 
       setRequestLogger(logger);
+      // Jitter sits in the upper half of the 100 ms base cap: 50 + random * 50.
       const mockedRandom = 0.12345;
-      const expectedDelay = mockedRandom * 100;
+      const expectedDelay = 50 + mockedRandom * 50;
       vi.spyOn(Math, 'random').mockReturnValue(mockedRandom);
 
       try {
@@ -708,6 +727,35 @@ describe('requests', { timeout: 7500 }, () => {
         expect(logger.info).toHaveBeenCalledWith(
           `Network Error: attempting retry 1 in ${expectedDelay}ms`,
           expect.objectContaining({ retries: 1, delay: expectedDelay }),
+        );
+      } finally {
+        setRequestLogger(NULL_LOGGER);
+      }
+    });
+
+    test('logs a non-retryable failure on a cached endpoint at debug, not error', async () => {
+      const endpoint = mintUrl + '/v1/keys';
+      const retryPolicy: Nut19Policy = {
+        ttl: 1000,
+        cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+      };
+      const logger = {
+        error: vi.fn(),
+        warn: vi.fn(),
+        info: vi.fn(),
+        debug: vi.fn(),
+        trace: vi.fn(),
+        log: vi.fn(),
+      };
+      server.use(http.get(endpoint, () => new HttpResponse('nope', { status: 400 })));
+
+      setRequestLogger(logger);
+      try {
+        await expect(request({ endpoint, ...retryPolicy })).rejects.toThrow(HttpResponseError);
+        expect(logger.error).not.toHaveBeenCalled();
+        expect(logger.debug).toHaveBeenCalledWith(
+          'Request failed and could not be retried',
+          expect.anything(),
         );
       } finally {
         setRequestLogger(NULL_LOGGER);
