@@ -778,6 +778,21 @@ describe('requests', { timeout: 7500 }, () => {
       expect(result).toEqual({ keysets: [] });
     }, 5000);
 
+    test('arms a 5 minute timeout by default and none for Infinity', async () => {
+      const endpoint = mintUrl + '/v1/keys';
+      server.use(http.get(endpoint, () => HttpResponse.json({ keysets: [] })));
+      const spy = vi.spyOn(globalThis, 'setTimeout');
+      try {
+        expect(await request({ endpoint })).toEqual({ keysets: [] });
+        expect(spy.mock.calls.some(([, ms]) => ms === 300_000)).toBe(true);
+        spy.mockClear();
+        expect(await request({ endpoint, requestTimeout: Infinity })).toEqual({ keysets: [] });
+        expect(spy.mock.calls.some(([, ms]) => ms === 300_000 || ms === Infinity)).toBe(false);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
     test('composes requestTimeout with already-aborted external signal', async () => {
       const endpoint = mintUrl + '/v1/keys';
       const ac = new AbortController();
