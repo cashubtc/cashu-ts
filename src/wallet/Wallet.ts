@@ -51,7 +51,7 @@ import type {
 import type { SerializedBlindedSignature } from '../model/types/blinded';
 import type { KeyChainCache } from '../model/types/keyset';
 import { CheckStateEnum, type ProofState } from '../model/types/NUT07';
-import { type BatchMintRequest } from '../model/types/NUT29';
+import { type BatchMintRequest, type Nut29Info } from '../model/types/NUT29';
 import type { Proof, ProofLike } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 import {
@@ -296,6 +296,22 @@ class Wallet {
     context?: Record<string, unknown>,
   ): asserts value is Exclude<T, null | undefined> {
     return failIfNullish(value, message, this._logger, context);
+  }
+  /**
+   * NUT-29 params once loaded mint info advertises it for the method; undefined before mint info is
+   * loaded, when the batch endpoints are assumed.
+   *
+   * @throws When loaded info omits NUT-29, or lists methods without this one.
+   */
+  private requireNut29(method: string, op: string, alternative: string): Nut29Info | undefined {
+    const nut29 = this._mintInfo?.isSupported(29);
+    if (nut29 === undefined) return undefined;
+    const methods = nut29.params?.methods;
+    this.failIf(
+      !nut29.supported || (Array.isArray(methods) && !methods.includes(method)),
+      `${op}: mint does not advertise NUT-29 for ${method}; use ${alternative} per quote`,
+    );
+    return nut29.params;
   }
   private requireSupport(op: 'mint' | 'melt', method: string): void {
     this.failIf(
@@ -2424,6 +2440,7 @@ class Wallet {
     quotes: Array<string | Pick<TRes, 'quote'>>,
     options?: { normalize?: (raw: Record<string, unknown>) => TRes },
   ): Promise<TRes[]> {
+    this.requireNut29(method, 'checkMintQuoteBatch', 'checkMintQuote');
     const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
     return this.mint.checkMintQuoteBatch<TRes>(method, quoteIds, {
       normalize: options?.normalize,
@@ -2443,6 +2460,7 @@ class Wallet {
   async checkMintQuoteBatchBolt11(
     quotes: Array<string | MintQuoteBolt11Response>,
   ): Promise<MintQuoteBolt11Response[]> {
+    this.requireNut29('bolt11', 'checkMintQuoteBatchBolt11', 'checkMintQuoteBolt11');
     const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
     const res = await this.mint.checkMintQuoteBatchBolt11(quoteIds);
     for (const quote of res) this.assertBolt11MintQuoteAmount(quote, quote.amount);
@@ -2462,6 +2480,7 @@ class Wallet {
   async checkMintQuoteBatchBolt12(
     quotes: Array<string | MintQuoteBolt12Response>,
   ): Promise<MintQuoteBolt12Response[]> {
+    this.requireNut29('bolt12', 'checkMintQuoteBatchBolt12', 'checkMintQuoteBolt12');
     const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
     return this.mint.checkMintQuoteBatchBolt12(quoteIds);
   }
@@ -2872,12 +2891,9 @@ class Wallet {
     outputType?: OutputType,
   ): Promise<BatchMintPreview<TQuote>> {
     this.failIf(entries.length === 0, 'prepareBatchMint: no entries provided');
-
     // Enforce NUT-29 batch-size limit advertised by the mint, clamped to our absolute cap.
-    // If the mint does not advertise NUT-29 info, the absolute cap still applies.
-    const nut29 = this._mintInfo?.isSupported(29);
-    const nut29Params = nut29?.supported ? nut29.params : undefined;
-
+    // Before mint info is loaded the absolute cap still applies.
+    const nut29Params = this.requireNut29(method, 'prepareBatchMint', 'prepareMint');
     const effectiveLimit = nut29Params?.max_batch_size ?? ABSOLUTE_MAX_BATCH_SIZE;
 
     if (entries.length > effectiveLimit) {
@@ -2888,15 +2904,6 @@ class Wallet {
         `prepareBatchMint: batch size ${entries.length} exceeds ` +
           `${limitSource} of ${effectiveLimit}`,
       );
-    }
-
-    // Warn if the requested method is not in the mint's NUT-29 supported methods
-    if (nut29Params?.methods?.length) {
-      if (!nut29Params.methods.includes(method)) {
-        this._logger.warn(
-          `prepareBatchMint: method '${method}' is not in mint's advertised NUT-29 methods`,
-        );
-      }
     }
 
     const { privkey, keysetId, proofsWeHave, onCountersReserved } = config ?? {};

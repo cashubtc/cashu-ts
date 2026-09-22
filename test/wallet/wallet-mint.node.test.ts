@@ -1048,14 +1048,14 @@ describe('NUT-29 max_batch_size enforcement', () => {
     };
   }
 
-  test('logs a warning when method is not in advertised NUT-29 methods', async () => {
+  test('refuses a method that is not in the advertised NUT-29 methods', async () => {
     overrideMintInfo({ methods: ['bolt12'] });
-    const spyLogger = mockLogger();
-    const wallet = new Wallet(mintUrl, { unit, logger: spyLogger });
+    const wallet = new Wallet(mintUrl, { unit });
     await wallet.loadMint();
 
-    await wallet.prepareBatchMint('bolt11', makeQuotes(1));
-    expect(spyLogger.warn).toHaveBeenCalledWith(expect.stringContaining("method 'bolt11'"));
+    await expect(wallet.prepareBatchMint('bolt11', makeQuotes(1))).rejects.toThrow(
+      'prepareBatchMint: mint does not advertise NUT-29 for bolt11; use prepareMint per quote',
+    );
   });
 
   test('does not warn when method IS in advertised NUT-29 methods', async () => {
@@ -1078,13 +1078,13 @@ describe('NUT-29 max_batch_size enforcement', () => {
     expect(spyLogger.warn).not.toHaveBeenCalled();
   });
 
-  test('throws when entries exceed ABSOLUTE_MAX_BATCH_SIZE even without NUT-29 info', async () => {
-    // Default mint info has no nuts['29'] key — absolute cap still applies
+  test('throws when entries exceed ABSOLUTE_MAX_BATCH_SIZE and the mint advertises no limit', async () => {
+    overrideMintInfo({ methods: ['bolt11'] });
     const wallet = new Wallet(mintUrl, { unit });
     await wallet.loadMint();
 
     await expect(wallet.prepareBatchMint('bolt11', makeQuotes(101))).rejects.toThrow(
-      /batch size 101.*internal cap.*100/,
+      /batch size 101.*100/,
     );
   });
 
@@ -1099,6 +1099,12 @@ describe('NUT-29 max_batch_size enforcement', () => {
       /batch size 101.*limit of 100/,
     );
   });
+});
+
+// The shared fixture advertises NUT-29 for bolt11 and bolt12; custom methods add themselves
+const withNut29 = (info: typeof mintInfoResp, methods: string[]) => ({
+  ...info,
+  nuts: { ...info.nuts, 29: { methods, max_batch_size: 100 } },
 });
 
 describe('generic mint/melt methods', () => {
@@ -1385,6 +1391,63 @@ describe('generic mint/melt methods', () => {
       expect(quote.quote).toBe('bacs-quote-2');
     });
 
+    test('batch checks fail fast when the mint does not advertise NUT-29', async () => {
+      const posted = vi.fn();
+      server.use(
+        http.get(mintUrl + '/v1/info', () =>
+          HttpResponse.json({ ...mintInfoResp, nuts: { ...mintInfoResp.nuts, 29: undefined } }),
+        ),
+        http.post(mintUrl + '/v1/mint/quote/bolt11/check', () => {
+          posted();
+          return HttpResponse.json([]);
+        }),
+      );
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+      await expect(wallet.checkMintQuoteBatchBolt11(['a'])).rejects.toThrow(
+        'checkMintQuoteBatchBolt11: mint does not advertise NUT-29 for bolt11; use checkMintQuoteBolt11 per quote',
+      );
+      await expect(wallet.checkMintQuoteBatch('bolt11', ['a'])).rejects.toThrow('NUT-29');
+      expect(posted).not.toHaveBeenCalled();
+    });
+
+    test('prepareBatchMint fails fast when the mint does not advertise NUT-29', async () => {
+      const posted = vi.fn();
+      server.use(
+        http.get(mintUrl + '/v1/info', () =>
+          HttpResponse.json({ ...mintInfoResp, nuts: { ...mintInfoResp.nuts, 29: undefined } }),
+        ),
+        http.post(mintUrl + '/v1/mint/quote/bolt11/check', () => {
+          posted();
+          return HttpResponse.json([]);
+        }),
+      );
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+      await expect(
+        wallet.prepareBatchMint('bolt11', [{ amount: 1, quote: { quote: 'q' } }]),
+      ).rejects.toThrow(
+        'prepareBatchMint: mint does not advertise NUT-29 for bolt11; use prepareMint per quote',
+      );
+      expect(posted).not.toHaveBeenCalled();
+    });
+
+    test('batch checks fail fast for a method the NUT-29 methods list omits', async () => {
+      server.use(
+        http.get(mintUrl + '/v1/info', () =>
+          HttpResponse.json({
+            ...mintInfoResp,
+            nuts: { ...mintInfoResp.nuts, 29: { methods: ['bolt11'] } },
+          }),
+        ),
+      );
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+      await expect(wallet.checkMintQuoteBatchBolt12(['a'])).rejects.toThrow(
+        'checkMintQuoteBatchBolt12: mint does not advertise NUT-29 for bolt12; use checkMintQuoteBolt12 per quote',
+      );
+    });
+
     test('checkMintQuoteBatchBolt11 posts quote ids and normalizes responses', async () => {
       server.use(
         http.post(mintUrl + '/v1/mint/quote/bolt11/check', async ({ request }) => {
@@ -1489,7 +1552,9 @@ describe('generic mint/melt methods', () => {
 
     test('checkMintQuoteBatch with custom method hits /v1/mint/quote/{method}/check', async () => {
       server.use(
-        http.get(mintUrl + '/v1/info', () => HttpResponse.json(mintInfoRespWithBacs)),
+        http.get(mintUrl + '/v1/info', () =>
+          HttpResponse.json(withNut29(mintInfoRespWithBacs, ['bacs'])),
+        ),
         http.post(mintUrl + '/v1/mint/quote/bacs/check', async ({ request }) => {
           const body = (await request.json()) as { quotes: string[] };
           expect(body).toEqual({ quotes: ['bacs-batch-1', 'bacs-batch-2'] });
