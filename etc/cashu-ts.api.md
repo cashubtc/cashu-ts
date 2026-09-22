@@ -2383,12 +2383,8 @@ export class WSConnection {
     createSubscription<TPayload = unknown>(params: Omit<JsonRpcReqParams, 'subId'>, callback: (payload: TPayload) => void, errorCallback: (e: Error) => void): string;
     // (undocumented)
     ensureConnection(timeoutMs?: number): Promise<void>;
-<<<<<<< HEAD
     // (undocumented)
-    onClose(callback: (e: CloseEvent) => void): void;
-=======
-    onClose(callback: (e: WSCloseEvent) => void): () => void;
->>>>>>> af762f7 (fix(transport): drop the DOM CloseEvent type from the WSConnection public surface (#1249))
+    onClose(callback: (e: WSCloseEvent) => void): void;
     // (undocumented)
     sendRequest(method: 'subscribe', params: JsonRpcReqParams): void;
     // (undocumented)

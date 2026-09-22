@@ -486,14 +486,7 @@ export class WSConnection {
     this.stopMessageHandling();
   }
 
-<<<<<<< HEAD
-  onClose(callback: (e: CloseEvent) => void) {
-=======
-  /**
-   * Registers a socket-close callback and returns a function that removes it.
-   */
   onClose(callback: (e: WSCloseEvent) => void) {
->>>>>>> af762f7 (fix(transport): drop the DOM CloseEvent type from the WSConnection public surface (#1249))
     this.onCloseCallbacks.push(callback);
   }
 }
