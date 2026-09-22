@@ -31,6 +31,8 @@ for (const k of wallet.keyChain.getKeysets()) {
 console.log('bound to', wallet.keysetId);
 ```
 
+BLS keysets carry no DLEQ: NUT-12 is defined for secp256k1, so a `02` proof arrives with `dleq` absent even from a mint that advertises NUT-12. The pairing check on the signature gives the same guarantee, and `requireDleq` (on receive and the offline send modes) accepts `02` proofs on that basis rather than reporting them unverifiable.
+
 An auto-bound wallet picks the cheapest active keyset for its unit, newest version first, and outputs, change included, are built on it. A wallet holding proofs on an older keyset therefore moves that value onto the bound one on its first send. That is intended.
 
 To pin the wallet to a certain keyset, pass `keysetId` when constructing it (`new Wallet(mintUrl, { keysetId })`), or call `wallet.bindKeyset(id)` on a loaded wallet.
