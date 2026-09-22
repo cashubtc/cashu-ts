@@ -8,6 +8,7 @@ import {
   deriveSecretAndBlindingFactor,
   getKeysetIdInt,
   hashToCurveBls,
+  mnemonicToSeedSync,
 } from '../../src/crypto';
 import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import {
@@ -186,12 +187,9 @@ describe('v3 (BLS) derivation', () => {
 });
 
 describe('v2 derivation spec vectors', () => {
-  // Lock-in for nuts/tests/13-tests.md "Version 2: Secret derivation". cashu-ts works in seed
-  // space, so the spec's mnemonic ("half depart obvious quality work element tank gorilla view
-  // sugar picture humble") is pre-derived to its BIP39 seed here.
-  const seed = hexToBytes(
-    'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25' +
-      '780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
+  // Lock-in for nuts/tests/13-tests.md "Version 2: Secret derivation", from the spec's mnemonic.
+  const seed = mnemonicToSeedSync(
+    'half depart obvious quality work element tank gorilla view sugar picture humble',
   );
   const v2KeysetId = '015ba18a8adcd02e715a58358eb618da4a4b3791151a4bee5e968bb88406ccf76a';
   const secrets = [

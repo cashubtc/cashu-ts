@@ -1,13 +1,15 @@
-import { hexToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 
-import { type Bip32KeyPurpose, createKeyPairDeriver, deriveKeyPair } from '../../src/crypto';
+import {
+  type Bip32KeyPurpose,
+  createKeyPairDeriver,
+  deriveKeyPair,
+  mnemonicToSeedSync,
+} from '../../src/crypto';
 
-// BIP39 seed (no passphrase) for the mnemonic in the NUT-11 / NUT-20 test vectors:
-// "half depart obvious quality work element tank gorilla view sugar picture humble"
-const SEED = hexToBytes(
-  'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25' +
-    '780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
+// The mnemonic in the NUT-11 / NUT-20 test vectors, no passphrase.
+const SEED = mnemonicToSeedSync(
+  'half depart obvious quality work element tank gorilla view sugar picture humble',
 );
 
 // Expected compressed (02/03-prefixed) public keys from the PR test vectors.
