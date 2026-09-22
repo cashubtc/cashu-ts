@@ -71,10 +71,7 @@ const { wallet, oidc } = await createAuthWallet('http://localhost:3338', {
 
 ### Transport policy
 
-cashu-ts does not enforce a transport policy. It accepts `http:` mint and identity-provider URLs,
-follows redirects on bodiless GETs, and does not know which networks are private, because Tor, LAN
-and local-development mints are legitimate. A server-side consumer that needs such a policy applies
-it in the fetch it passes in, once, and hands the same fetch to every entry point.
+cashu-ts does not enforce a transport policy. It accepts `http:` mint and identity-provider URLs, follows redirects on bodiless GETs, and does not know which networks are private, because Tor, LAN and local-development mints are legitimate. A server-side consumer that needs such a policy applies it in the fetch it passes in, once, and hands the same fetch to every entry point.
 
 ```typescript
 import { createAuthWallet, setGlobalRequestOptions, type RequestFetch } from '@cashu/cashu-ts';
@@ -90,10 +87,9 @@ setGlobalRequestOptions({ fetch: policyFetch });
 const { wallet } = await createAuthWallet(mintUrl, { oidc: { fetch: policyFetch } });
 ```
 
-`isPrivateHost` is yours to define. A hostname check cannot see what DNS resolves to, so a strict
-egress policy belongs at the socket layer (for example undici's `connect` hook), where the resolved
-address is known. Retries after a 5xx on NUT-19 cached endpoints are deliberate, see
-[NUT-19 Cached Responses](./nut19.md): they replay an idempotent request, never a fresh one.
+`isPrivateHost` is yours to define. A hostname check cannot see what DNS resolves to, so a strict egress policy belongs at the socket layer (for example undici's `connect` hook), where the resolved address is known. Retries after a 5xx on NUT-19 cached endpoints are deliberate, see [NUT-19 Cached Responses](./nut19.md): they replay an idempotent request, never a fresh one.
+
+**Transport defaults.** Every request attempt times out after 5 minutes, the bound Node's own fetch applies, unless `requestTimeout` says otherwise (per call or through `setGlobalRequestOptions`; `Infinity` disables it), so a mint that stops answering surfaces as a `NetworkError` rather than a hang. And outside browsers the library sends `User-Agent: Mozilla/5.0`, replacing the runtime's own string (undici, NSURLSession, OkHttp) that would otherwise fingerprint the process; `requestHeaders` overrides it.
 
 ## Auth state and application sessions
 
@@ -107,17 +103,12 @@ When ending an application session, cancel any device flow with its `cancel()` h
 
 ## Custom output generation
 
-Pass `outputDataCreator` when you need to replace the default output generation logic, for
-example to use a platform specific implementation for deterministic secrets.
+Pass `outputDataCreator` when you need to replace the default output generation logic, for example to use a platform specific implementation for deterministic secrets.
 
-`OutputDataCreator` is the injectable strategy interface used by `Wallet`. The canonical default
-creation surface remains `OutputData.create*()`, so custom creators can delegate back to it for the standard random and P2PK behavior.
+`OutputDataCreator` is the injectable strategy interface used by `Wallet`. The canonical default creation surface remains `OutputData.create*()`, so custom creators can delegate back to it for the standard random and P2PK behavior.
 
 > [!CAUTION]
-> The only officially supported and maintained `OutputDataCreator` is the default Noble Curves based
-> implementation exposed by `OutputData.create*()`. Custom creators are an escape hatch for
-> runtime-specific needs, but their compatibility and maintenance are the integrator's
-> responsibility.
+> The only officially supported and maintained `OutputDataCreator` is the default Noble Curves based implementation exposed by `OutputData.create*()`. Custom creators are an escape hatch for runtime-specific needs, but their compatibility and maintenance are the integrator's responsibility.
 
 ```typescript
 import { OutputData, type OutputDataCreator, Wallet } from '@cashu/cashu-ts';
@@ -165,12 +156,7 @@ const wallet = new Wallet('http://localhost:3338', {
 await wallet.loadMint();
 ```
 
-The `hashToCurve` option is the same escape hatch for `Y = hash_to_curve(secret)`, used by
-`checkProofsStates` and NUT-17 subscriptions. A restore scan hashes every counter it visits, and on
-BLS keysets the pure JS hash dominates that cost, so a WASM or native implementation is worth
-plugging in there. The keyset id selects the curve: v3 (`02...`) ids are BLS12-381 G1, all others
-secp256k1. Hash the secret string as UTF-8 and return the compressed point as hex; `hashToCurveHex`
-is the default and can serve the curve you are not replacing.
+The `hashToCurve` option is the same escape hatch for `Y = hash_to_curve(secret)`, used by `checkProofsStates` and NUT-17 subscriptions. A restore scan hashes every counter it visits, and on BLS keysets the pure JS hash dominates that cost, so a WASM or native implementation is worth plugging in there. The keyset id selects the curve: v3 (`02...`) ids are BLS12-381 G1, all others secp256k1. Hash the secret string as UTF-8 and return the compressed point as hex; `hashToCurveHex` is the default and can serve the curve you are not replacing.
 
 ```typescript
 const wallet = new Wallet('http://localhost:3338', {

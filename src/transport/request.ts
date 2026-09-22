@@ -277,10 +277,9 @@ export type RequestOptions = RequestArgs &
   Omit<RequestInit, 'body' | 'headers'> &
   Partial<Nut19Policy> & {
     /**
-     * Per-request timeout in milliseconds. If a single fetch hangs longer than this (connecting,
-     * waiting, or reading the body), it is aborted and treated as a NetworkError (triggering retry
-     * on cached endpoints). Without this, a hung connection can consume the entire TTL retry
-     * window.
+     * Per-attempt timeout in milliseconds, default 300000 (5 minutes). If a single fetch hangs
+     * longer than this (connecting, waiting, or reading the body), it is aborted and treated as a
+     * NetworkError (triggering retry on cached endpoints). `Infinity` disables it.
      */
     requestTimeout?: number;
     /**
@@ -410,6 +409,7 @@ export function setRequestLogger(logger: Logger): void {
 
 const MAX_CACHED_RETRIES = 9; // 10 requests total
 const MAX_DELAY = 1000; // 1 sec
+const DEFAULT_REQUEST_TIMEOUT_MS = 300_000; // per attempt, matches undici's own; Infinity disables
 const BASE_DELAY = 100; // 100 ms
 const AUTH_HEADERS = ['blind-auth', 'clear-auth']; // NUT-21/22 tokens, lowercased for comparison
 
@@ -641,7 +641,10 @@ async function _request(options: RequestOptions): Promise<unknown> {
   }
 
   // Construct an AbortController based on timeout, user signal, or both!
-  const timeoutController = requestTimeout !== undefined ? new AbortController() : undefined;
+  const timeoutController =
+    requestTimeout !== undefined && Number.isFinite(requestTimeout)
+      ? new AbortController()
+      : undefined;
   let signal: AbortSignal | undefined = callerSignal;
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   let cleanupAbortListeners: (() => void) | undefined;
@@ -849,6 +852,7 @@ export default async function request<T>(options: RequestOptions): Promise<T> {
   for (const key of Object.keys(PER_CALL_OPTIONS) as PerCallOption[]) {
     if (options[key] !== undefined) (merged as Record<string, unknown>)[key] = options[key];
   }
+  if (merged.requestTimeout === undefined) merged.requestTimeout = DEFAULT_REQUEST_TIMEOUT_MS;
   // Neither side owns the header bag: a global adds app-wide headers, per-call carries auth.
   // Header names are case-insensitive over the wire, so the merge must be too, or a per-call
   // header differing only in case leaves the global value in place alongside it.

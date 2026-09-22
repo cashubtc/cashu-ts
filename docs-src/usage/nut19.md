@@ -56,10 +56,9 @@ setGlobalRequestOptions({});
 
 ## Caller aborts vs timeout retries
 
-Use `requestTimeout` for app-wide timeout policy. Use `AbortController` only when you want to
-cancel one specific low-level request.
+Use `requestTimeout` for app-wide timeout policy. Use `AbortController` only when you want to cancel one specific low-level request.
 
-- `requestTimeout` turns a hung request into a retryable network error on NUT-19 cached endpoints
+- `requestTimeout` turns a hung request into a retryable network error on NUT-19 cached endpoints; it is per attempt and defaults to 5 minutes (`Infinity` disables it)
 - `signal.abort()` is treated as a caller cancel and stops retries immediately; the call rejects with `CallerAbortError`
 
 ```ts
