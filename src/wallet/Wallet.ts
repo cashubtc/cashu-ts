@@ -2875,6 +2875,9 @@ class Wallet {
    * estimation) that must not pollute the recovery scan, or for a mint that publishes no NUT-06
    * `pubkey` to scope the derivation to.
    * @throws {@link CTSError} On a seeded wallet whose mint publishes no `pubkey`, unless `random`.
+   * @experimental Seed derivation follows draft NUT-13 type `0x04` and draft NUT-06 identity
+   *   scoping and may change before GA; a key derived now may then no longer be found by scan, so
+   *   persist the `privkey` with its quote.
    */
   async createQuoteLockKey(opts?: {
     random?: boolean;
@@ -2907,6 +2910,8 @@ class Wallet {
    * strand the key but only this mint's quotes are found.
    * @throws {@link CTSError} On a seedless wallet, which has nothing to scan, or a mint with no
    *   NUT-06 `pubkey`.
+   * @experimental The scan follows draft NUT-13 type `0x04` and draft NUT-06 identity scoping and
+   *   may change before GA, so it finds only keys derived under the current scheme.
    */
   async recoverQuoteLockKey(pubkey: string): Promise<string | undefined> {
     this.failIf(!this._seed, 'recoverQuoteLockKey requires a seeded wallet');

@@ -406,6 +406,8 @@ export function deriveLeafKey(
  * two mints. The counter is per mint and not recoverable from the seed alone; recover a key by
  * scanning candidates against the quote's pubkey.
  * @param mintPubkey - The mint's NUT-06 `pubkey` (33-byte compressed, hex).
+ * @experimental Follows draft NUT-13 type `0x04` and draft NUT-06 identity scoping; may change
+ *   before GA.
  */
 export function deriveQuoteLockKey(
   seed: Uint8Array,

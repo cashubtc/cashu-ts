@@ -23,6 +23,8 @@ export interface CounterRange {
  * minting and so must never collide with a proof secret key. A `CounterSource` sees it as just
  * another key to persist, so nothing implementing the interface needs to know about purposes; do
  * not assume every key is a keyset id.
+ * @experimental The key format follows draft NUT-13 type `0x04` and draft NUT-06 identity scoping
+ *   and may change before GA.
  */
 export function quoteCounterKey(mintPubkey: string): string {
   return `mint-quote-lock:${normalizeSecpPubkey(mintPubkey)}`;
