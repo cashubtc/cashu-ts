@@ -483,7 +483,19 @@ class Wallet {
    * Finishes wiring up the wallet instance and checks we are "Go for launch".
    */
   private finishInit(): void {
-    this._logger.debug('KeyChain', { keychain: this._keyChain.cache });
+    // A per-keyset summary; the full cache with every key is `wallet.keyChain.cache`.
+    const { keysets, mintUrl, savedAt } = this._keyChain.cache;
+    this._logger.debug('KeyChain loaded', {
+      mintUrl,
+      savedAt,
+      keysets: keysets.map((k) => ({
+        id: k.id,
+        unit: k.unit,
+        active: k.active,
+        fee: k.input_fee_ppk,
+        keys: k.keys ? Object.keys(k.keys).length : 0,
+      })),
+    });
 
     // Go Keychain?
     if (this._boundKeysetId === PENDING_KEYSET_ID) {
