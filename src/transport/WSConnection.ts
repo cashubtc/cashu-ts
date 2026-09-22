@@ -9,6 +9,8 @@ import { getWebSocketImpl } from './ws';
 
 // RFC 6455 7.4.1: reported locally when a connection drops without a Close frame.
 const WS_ABNORMAL_CLOSURE = 1006;
+// Longest a keepalive probe waits for its reply; a shorter interval caps it further.
+const WS_KEEPALIVE_TIMEOUT_MS = 10_000;
 
 /**
  * The close notification handed to `onClose`: the `CloseEvent` fields the library reads, so Node
@@ -84,12 +86,29 @@ export class WSConnection {
   private rpcId = 0;
   private _logger: Logger;
   private onCloseCallbacks: Array<(e: WSCloseEvent) => void> = [];
+  private readonly keepaliveMs?: number;
+  private keepaliveTimer?: ReturnType<typeof setInterval>;
+  private probeTimer?: ReturnType<typeof setTimeout>;
 
-  constructor(url: string, logger?: Logger) {
+  /**
+   * @param options `keepaliveMs` probes the mint at that interval with a JSON-RPC request it must
+   *   answer; no reply within the interval (10 s at most) drops the socket as an abnormal close.
+   */
+  constructor(url: string, logger?: Logger, options?: { keepaliveMs?: number }) {
     this._WS = getWebSocketImpl();
     this.url = new URL(url);
     this.messageQueue = new MessageQueue();
     this._logger = logger ?? NULL_LOGGER;
+    if (options?.keepaliveMs !== undefined) {
+      if (
+        !Number.isFinite(options.keepaliveMs) ||
+        options.keepaliveMs < 1 ||
+        options.keepaliveMs > 2_147_483_647
+      ) {
+        throw new CTSError('keepaliveMs must be a finite number between 1 and 2147483647');
+      }
+      this.keepaliveMs = options.keepaliveMs;
+    }
   }
 
   setLogger(logger: Logger) {
@@ -161,6 +180,7 @@ export class WSConnection {
         if (!isCurrent()) return;
         opened = true;
         settle(resolve);
+        this.armKeepalive();
       };
 
       socket.onerror = (ev) => {
@@ -179,14 +199,7 @@ export class WSConnection {
           this._logger.error('WebSocket message queue exceeded its bound, closing connection', {
             size: this.messageQueue.size,
           });
-          const err = new CTSError('WebSocket message queue exceeded its bound');
-          fail(err);
-          // fail() nulls onclose before closing, so onClose consumers (eg the polling fallback) get
-          // the notification here. Teardown first, callbacks last, as the real close path does: a
-          // callback that reconnects or unsubscribes must not see the dying socket as current.
-          this.onCloseCallbacks.forEach((cb) =>
-            cb({ code: WS_ABNORMAL_CLOSURE, reason: err.message, wasClean: false }),
-          );
+          this.dropSocket(new CTSError('WebSocket message queue exceeded its bound'));
           return;
         }
         this.messageQueue.enqueue(e.data as string);
@@ -259,6 +272,9 @@ export class WSConnection {
   }
 
   private stopMessageHandling(err: Error) {
+    clearInterval(this.keepaliveTimer);
+    clearTimeout(this.probeTimer);
+    this.keepaliveTimer = this.probeTimer = undefined;
     if (this.handlingInterval) {
       clearInterval(this.handlingInterval);
       this.handlingInterval = undefined;
@@ -280,6 +296,66 @@ export class WSConnection {
           // ignore user error callbacks throwing
         }
       }
+    }
+  }
+
+  /**
+   * Tears the current socket down as if it had closed abnormally: teardown first, callbacks last,
+   * so a callback that reconnects or unsubscribes never sees the dying socket as current.
+   */
+  private dropSocket(err: Error) {
+    const socket = this.ws;
+    if (!socket) return;
+    this.connectionPromise = undefined;
+    try {
+      socket.onopen = null;
+      socket.onerror = null;
+      socket.onmessage = null;
+      socket.onclose = null;
+    } catch {
+      // silence
+    }
+    try {
+      socket.close();
+    } catch {
+      // silence
+    }
+    this.ws = undefined;
+    this.stopMessageHandling(err);
+    this.failPendingRpc(err);
+    this.onCloseCallbacks.forEach((cb) =>
+      cb({ code: WS_ABNORMAL_CLOSURE, reason: err.message, wasClean: false }),
+    );
+  }
+
+  private armKeepalive() {
+    if (!this.keepaliveMs) return;
+    clearInterval(this.keepaliveTimer);
+    this.keepaliveTimer = setInterval(() => this.probe(), this.keepaliveMs);
+  }
+
+  // A JSON-RPC request the mint must answer (result or error): an unsubscribe for a subId that
+  // never existed. Silence past the timeout is a half-open socket, which never closes by itself.
+  private probe() {
+    if (this.probeTimer || !this.keepaliveMs || this.ws?.readyState !== this._WS.OPEN) return;
+    const id = this.rpcId;
+    this.rpcId++;
+    const answered = () => {
+      clearTimeout(this.probeTimer);
+      this.probeTimer = undefined;
+    };
+    this.addRpcListener(answered, answered, id);
+    const timeoutMs = Math.min(this.keepaliveMs, WS_KEEPALIVE_TIMEOUT_MS);
+    this.probeTimer = setTimeout(() => {
+      this._logger.warn('WebSocket keepalive probe unanswered, dropping the connection', {
+        timeoutMs,
+      });
+      this.dropSocket(new CTSError(`WebSocket keepalive probe unanswered after ${timeoutMs}ms`));
+    }, timeoutMs);
+    try {
+      this.sendRpcMessage('unsubscribe', { subId: generateUuidV7() }, id);
+    } catch {
+      // sendRpcMessage already tore the socket down and failed the probe listener
     }
   }
 

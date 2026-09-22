@@ -737,6 +737,193 @@ describe('WSConnection – established subscriptions on close', () => {
   });
 });
 
+describe('WSConnection – keepalive', () => {
+  // Acks subscribes; answers or ignores the keepalive probe per `answerProbes`.
+  function probeServer(url: string, answerProbes: boolean) {
+    const srv = new Server(url, { mock: false });
+    const sockets: Client[] = [];
+    const probes: number[] = []; // timestamps of probes received
+    srv.on('connection', (socket) => {
+      sockets.push(socket);
+      socket.on('message', (message) => {
+        const parsed = JSON.parse(message.toString());
+        if (parsed.method === 'subscribe') {
+          socket.send(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              result: { status: 'OK', subId: parsed.params.subId },
+              id: parsed.id,
+            }),
+          );
+        } else if (parsed.method === 'unsubscribe') {
+          probes.push(Date.now());
+          if (answerProbes) {
+            // What cdk sends for an unknown subId; Nutshell sends a different error, same shape.
+            socket.send(
+              JSON.stringify({
+                jsonrpc: '2.0',
+                error: { code: -32602, message: 'Invalid params' },
+                id: parsed.id,
+              }),
+            );
+          }
+        }
+      });
+    });
+    return { srv, sockets, probes };
+  }
+
+  const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
+
+  test.each([0, -1, 0.5, NaN, Infinity, 2_147_483_648, '30000', true, null])(
+    'rejects an invalid interval: %s',
+    (keepaliveMs) => {
+      expect(
+        () => new WSConnection(fakeUrl, undefined, { keepaliveMs: keepaliveMs as number }),
+      ).toThrow('keepaliveMs must be a finite number between 1 and 2147483647');
+    },
+  );
+
+  test.each([1, 30_000, 2_147_483_647])('accepts interval %s', (keepaliveMs) => {
+    expect(() => new WSConnection(fakeUrl, undefined, { keepaliveMs })).not.toThrow();
+  });
+
+  test('a mint that answers the probe keeps the connection and its subscriptions', async () => {
+    const url = 'ws://localhost:3395/v1/ws';
+    const { srv, probes } = probeServer(url, true);
+    const conn = new WSConnection(url, undefined, { keepaliveMs: 20 });
+    try {
+      await conn.connect();
+      const errorCb = vi.fn();
+      const closeCb = vi.fn();
+      conn.onClose(closeCb);
+      const subId = conn.createSubscription(
+        { kind: 'bolt11_mint_quote', filters: ['q'] },
+        vi.fn(),
+        errorCb,
+      );
+      await waitForSubscription(conn, subId);
+      await sleep(120);
+      expect(probes.length).toBeGreaterThanOrEqual(2);
+      expect(conn.activeSubscriptions).toContain(subId);
+      expect(errorCb).not.toHaveBeenCalled();
+      expect(closeCb).not.toHaveBeenCalled();
+    } finally {
+      conn.close();
+      srv.close();
+    }
+  });
+
+  test('a mint that goes silent is dropped as an abnormal close', async () => {
+    const url = 'ws://localhost:3396/v1/ws';
+    const { srv, sockets, probes } = probeServer(url, false);
+    const logger = createLogger();
+    const conn = new WSConnection(url, logger, { keepaliveMs: 20 });
+    try {
+      await conn.connect();
+      const errorCb = vi.fn();
+      const closeCb = vi.fn();
+      conn.onClose(closeCb);
+      const subId = conn.createSubscription(
+        { kind: 'bolt11_mint_quote', filters: ['q'] },
+        vi.fn(),
+        errorCb,
+      );
+      await waitForSubscription(conn, subId);
+      await sleep(120);
+      // The socket never closed on its own (the server is still up and holding it open).
+      expect(probes.length).toBeGreaterThanOrEqual(1);
+      expect(closeCb).toHaveBeenCalledTimes(1);
+      expect(closeCb).toHaveBeenCalledWith(
+        expect.objectContaining({ code: 1006, wasClean: false }),
+      );
+      expect(errorCb).toHaveBeenCalledTimes(1);
+      expect(errorCb).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringMatching(/keepalive probe unanswered/) }),
+      );
+      expect(conn.activeSubscriptions).toEqual([]);
+      expect(logger.warn).toHaveBeenCalledWith(
+        'WebSocket keepalive probe unanswered, dropping the connection',
+        { timeoutMs: 20 },
+      );
+      // Only one drop: probing stopped with the socket.
+      const probesAtDrop = probes.length;
+      await sleep(60);
+      expect(probes.length).toBe(probesAtDrop);
+      // The connection is reusable, as after a real close.
+      await conn.connect();
+      expect(sockets).toHaveLength(2);
+      const again = conn.createSubscription(
+        { kind: 'bolt11_mint_quote', filters: ['q'] },
+        vi.fn(),
+        vi.fn(),
+      );
+      await waitForSubscription(conn, again);
+    } finally {
+      conn.close();
+      srv.close();
+    }
+  });
+
+  test('probes stop after close()', async () => {
+    const url = 'ws://localhost:3397/v1/ws';
+    const { srv, probes } = probeServer(url, true);
+    const conn = new WSConnection(url, undefined, { keepaliveMs: 20 });
+    try {
+      await conn.connect();
+      await sleep(50);
+      expect(probes.length).toBeGreaterThanOrEqual(1);
+      conn.close();
+      await sleep(30); // a probe already on the wire may still land
+      const seen = probes.length;
+      await sleep(80);
+      expect(probes.length).toBe(seen);
+    } finally {
+      srv.close();
+    }
+  });
+
+  type Internals = {
+    probe: () => void;
+    dropSocket: (err: Error) => void;
+    rpcListeners: Record<string, unknown>;
+  };
+
+  test('a probe is not sent while one is still pending', async () => {
+    const url = 'ws://localhost:3398/v1/ws';
+    const { srv, probes } = probeServer(url, false);
+    // Interval long enough that only the direct calls below can send a probe.
+    const conn = new WSConnection(url, undefined, { keepaliveMs: 60_000 });
+    try {
+      await conn.connect();
+      const internals = conn as unknown as Internals;
+      internals.probe();
+      internals.probe();
+      await sleep(30);
+      expect(probes).toHaveLength(1);
+      expect(Object.keys(internals.rpcListeners)).toHaveLength(1);
+    } finally {
+      conn.close();
+      srv.close();
+    }
+  });
+
+  test('a probe on a socket that is not open sends nothing', () => {
+    const conn = new WSConnection(fakeUrl, undefined, { keepaliveMs: 60_000 });
+    const internals = conn as unknown as Internals;
+    internals.probe();
+    expect(Object.keys(internals.rpcListeners)).toHaveLength(0);
+  });
+
+  test('dropping when there is no socket is a no-op', () => {
+    const conn = new WSConnection(fakeUrl);
+    const closeCb = vi.fn();
+    conn.onClose(closeCb);
+    (conn as unknown as Internals).dropSocket(new Error('nothing to drop'));
+    expect(closeCb).not.toHaveBeenCalled();
+  });
+});
+
 describe('WSConnection – message handling', () => {
   test('RPC error response calls errorCallback with the error message', async () => {
     const url = 'ws://localhost:3342/v1/ws';
