@@ -67,7 +67,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
 
     const result = await offlineMint.createMintQuoteBolt12(
       { amount: 21, unit: 'sat', pubkey: '02abcd' },
-      customRequest,
+      { customRequest },
     );
 
     expect(result.quote).toBe('q1');
@@ -86,7 +86,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
       throw new Error('unexpected endpoint');
     };
 
-    const info = await offlineMint.getLazyMintInfo(customRequest);
+    const info = await offlineMint.getLazyMintInfo({ customRequest });
 
     expect(info.name).toBe(MINTCACHE.mintInfo.name);
     expect(calls).toHaveLength(1);

@@ -1211,79 +1211,65 @@ export class Mint {
         authProvider?: AuthProvider;
         logger?: Logger;
     });
-    check(checkPayload: CheckStatePayload, customRequest?: RequestFn): Promise<CheckStateResponse>;
-    checkMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(method: string, quote: string, options?: {
-        customRequest?: RequestFn;
+    check(checkPayload: CheckStatePayload, opts?: MintCallOptions): Promise<CheckStateResponse>;
+    checkMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(method: string, quote: string, options?: MintCallOptions & {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
-    checkMeltQuoteBolt11(quote: string, customRequest?: RequestFn): Promise<MeltQuoteBolt11Response>;
-    checkMeltQuoteBolt12(quote: string, customRequest?: RequestFn): Promise<MeltQuoteBolt12Response>;
-    checkMeltQuoteOnchain(quote: string, customRequest?: RequestFn): Promise<MeltQuoteOnchainResponse>;
-    checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, quote: string, options?: {
-        customRequest?: RequestFn;
+    checkMeltQuoteBolt11(quote: string, opts?: MintCallOptions): Promise<MeltQuoteBolt11Response>;
+    checkMeltQuoteBolt12(quote: string, opts?: MintCallOptions): Promise<MeltQuoteBolt12Response>;
+    checkMeltQuoteOnchain(quote: string, opts?: MintCallOptions): Promise<MeltQuoteOnchainResponse>;
+    checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, quote: string, options?: MintCallOptions & {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
-    checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(method: string, quotes: string[], options?: {
-        customRequest?: RequestFn;
+    checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(method: string, quotes: string[], options?: MintCallOptions & {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes[]>;
-    checkMintQuoteBatchBolt11(quotes: string[], customRequest?: RequestFn): Promise<MintQuoteBolt11Response[]>;
-    checkMintQuoteBatchBolt12(quotes: string[], customRequest?: RequestFn): Promise<MintQuoteBolt12Response[]>;
-    checkMintQuoteBolt11(quote: string, customRequest?: RequestFn): Promise<MintQuoteBolt11Response>;
-    checkMintQuoteBolt12(quote: string, customRequest?: RequestFn): Promise<MintQuoteBolt12Response>;
-    checkMintQuoteOnchain(quote: string, customRequest?: RequestFn): Promise<MintQuoteOnchainResponse>;
+    checkMintQuoteBatchBolt11(quotes: string[], opts?: MintCallOptions): Promise<MintQuoteBolt11Response[]>;
+    checkMintQuoteBatchBolt12(quotes: string[], opts?: MintCallOptions): Promise<MintQuoteBolt12Response[]>;
+    checkMintQuoteBolt11(quote: string, opts?: MintCallOptions): Promise<MintQuoteBolt11Response>;
+    checkMintQuoteBolt12(quote: string, opts?: MintCallOptions): Promise<MintQuoteBolt12Response>;
+    checkMintQuoteOnchain(quote: string, opts?: MintCallOptions): Promise<MintQuoteOnchainResponse>;
     connectWebSocket(): Promise<void>;
-    createMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(method: string, payload: Record<string, unknown>, options?: {
-        customRequest?: RequestFn;
+    createMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(method: string, payload: Record<string, unknown>, options?: MintCallOptions & {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
-    createMeltQuoteBolt11(meltQuotePayload: MeltQuoteBolt11Request, customRequest?: RequestFn): Promise<MeltQuoteBolt11Response>;
-    createMeltQuoteBolt12(meltQuotePayload: MeltQuoteBolt12Request, customRequest?: RequestFn): Promise<MeltQuoteBolt12Response>;
-    createMeltQuoteOnchain(meltQuotePayload: MeltQuoteOnchainRequest, customRequest?: RequestFn): Promise<MeltQuoteOnchainResponse>;
-    createMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, payload: Record<string, unknown>, options?: {
-        customRequest?: RequestFn;
+    createMeltQuoteBolt11(meltQuotePayload: MeltQuoteBolt11Request, opts?: MintCallOptions): Promise<MeltQuoteBolt11Response>;
+    createMeltQuoteBolt12(meltQuotePayload: MeltQuoteBolt12Request, opts?: MintCallOptions): Promise<MeltQuoteBolt12Response>;
+    createMeltQuoteOnchain(meltQuotePayload: MeltQuoteOnchainRequest, opts?: MintCallOptions): Promise<MeltQuoteOnchainResponse>;
+    createMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, payload: Record<string, unknown>, options?: MintCallOptions & {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
-    createMintQuoteBolt11(mintQuotePayload: MintQuoteBolt11Request, customRequest?: RequestFn): Promise<MintQuoteBolt11Response>;
-    createMintQuoteBolt12(mintQuotePayload: MintQuoteBolt12Request, customRequest?: RequestFn): Promise<MintQuoteBolt12Response>;
-    createMintQuoteOnchain(mintQuotePayload: MintQuoteOnchainRequest, customRequest?: RequestFn): Promise<MintQuoteOnchainResponse>;
+    createMintQuoteBolt11(mintQuotePayload: MintQuoteBolt11Request, opts?: MintCallOptions): Promise<MintQuoteBolt11Response>;
+    createMintQuoteBolt12(mintQuotePayload: MintQuoteBolt12Request, opts?: MintCallOptions): Promise<MintQuoteBolt12Response>;
+    createMintQuoteOnchain(mintQuotePayload: MintQuoteOnchainRequest, opts?: MintCallOptions): Promise<MintQuoteOnchainResponse>;
     disconnectWebSocket(): void;
-    getInfo(customRequest?: RequestFn): Promise<GetInfoResponse>;
-    getKeys(keysetId?: string, mintUrl?: string, customRequest?: RequestFn): Promise<GetKeysResponse>;
-    getKeySets(customRequest?: RequestFn): Promise<GetKeysetsResponse>;
-    getLazyMintInfo(customRequest?: RequestFn): Promise<MintInfo>;
+    getInfo(opts?: MintCallOptions): Promise<GetInfoResponse>;
+    getKeys(keysetId?: string, mintUrl?: string, opts?: MintCallOptions): Promise<GetKeysResponse>;
+    getKeySets(opts?: MintCallOptions): Promise<GetKeysetsResponse>;
+    getLazyMintInfo(opts?: MintCallOptions): Promise<MintInfo>;
     get lastResponseMetadata(): ResponseMeta | undefined;
-    melt<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, meltPayload: MeltRequest, options?: {
-        customRequest?: RequestFn;
+    melt<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, meltPayload: MeltRequest, options?: MintCallOptions & {
         normalize?: (raw: Record<string, unknown>) => MeltQuoteBaseResponse & TRes;
     }): Promise<MeltQuoteBaseResponse & TRes>;
-    meltBolt11(meltPayload: MeltRequest, options?: {
-        customRequest?: RequestFn;
-    }): Promise<MeltQuoteBolt11Response>;
-    meltBolt12(meltPayload: MeltRequest, options?: {
-        customRequest?: RequestFn;
-    }): Promise<MeltQuoteBolt12Response>;
-    meltOnchain(meltPayload: MeltRequest, options?: {
-        customRequest?: RequestFn;
-    }): Promise<MeltQuoteOnchainResponse>;
-    mint<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, mintPayload: MintRequest, options?: {
-        customRequest?: RequestFn;
+    meltBolt11(meltPayload: MeltRequest, options?: MintCallOptions): Promise<MeltQuoteBolt11Response>;
+    meltBolt12(meltPayload: MeltRequest, options?: MintCallOptions): Promise<MeltQuoteBolt12Response>;
+    meltOnchain(meltPayload: MeltRequest, options?: MintCallOptions): Promise<MeltQuoteOnchainResponse>;
+    mint<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, mintPayload: MintRequest, options?: MintCallOptions & {
         normalize?: (raw: Record<string, unknown>) => MintResponse & TRes;
     }): Promise<MintResponse & TRes>;
-    mintBatch<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, mintPayload: BatchMintRequest, options?: {
-        customRequest?: RequestFn;
+    mintBatch<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, mintPayload: BatchMintRequest, options?: MintCallOptions & {
         normalize?: (raw: Record<string, unknown>) => MintResponse & TRes;
     }): Promise<MintResponse & TRes>;
-    mintBatchBolt11(mintPayload: BatchMintRequest, customRequest?: RequestFn): Promise<MintResponse>;
-    mintBatchBolt12(mintPayload: BatchMintRequest, customRequest?: RequestFn): Promise<MintResponse>;
-    mintBolt11(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse>;
-    mintBolt12(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse>;
-    mintOnchain(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse>;
+    mintBatchBolt11(mintPayload: BatchMintRequest, opts?: MintCallOptions): Promise<MintResponse>;
+    mintBatchBolt12(mintPayload: BatchMintRequest, opts?: MintCallOptions): Promise<MintResponse>;
+    mintBolt11(mintPayload: MintRequest, opts?: MintCallOptions): Promise<MintResponse>;
+    mintBolt12(mintPayload: MintRequest, opts?: MintCallOptions): Promise<MintResponse>;
+    mintOnchain(mintPayload: MintRequest, opts?: MintCallOptions): Promise<MintResponse>;
     // (undocumented)
     get mintUrl(): string;
-    restore(restorePayload: PostRestorePayload, customRequest?: RequestFn): Promise<PostRestoreResponse>;
+    restore(restorePayload: PostRestorePayload, opts?: MintCallOptions): Promise<PostRestoreResponse>;
     setMintInfo(mintInfo: MintInfo | GetInfoResponse): void;
-    swap(swapPayload: SwapRequest, customRequest?: RequestFn): Promise<SwapResponse>;
+    swap(swapPayload: SwapRequest, opts?: MintCallOptions): Promise<SwapResponse>;
     // (undocumented)
     get webSocketConnection(): WSConnection | undefined;
 }
@@ -1318,6 +1304,12 @@ export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M ex
     run(this: MintBuilder<M, true>): Promise<Proof[]>;
     sign(fn: NonNullable<MintProofsConfig['sign']>): MintBuilder<M, true>;
 }
+
+// @public
+export type MintCallOptions = {
+    customRequest?: RequestFn;
+    signal?: AbortSignal;
+};
 
 // @public (undocumented)
 export type MintContactInfo = {

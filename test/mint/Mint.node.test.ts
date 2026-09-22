@@ -134,6 +134,26 @@ describe('Mint normalization', () => {
     }
   });
 
+  it('forwards a per-call signal to the request on both request paths', async () => {
+    const seen: Array<AbortSignal | undefined> = [];
+    const customRequest = (async (args: { endpoint: string; signal?: AbortSignal }) => {
+      seen.push(args.signal);
+      if (args.endpoint.endsWith('/v1/info')) {
+        return { name: 'mint', pubkey: '02abcd', version: 'test', contact: [], nuts: {} };
+      }
+      if (args.endpoint.endsWith('/v1/keysets')) return { keysets: [] };
+      return { signatures: [] };
+    }) as unknown as RequestFn;
+    const mint = new Mint(mintUrl, { customRequest });
+    const ac = new AbortController();
+
+    await mint.getKeySets({ signal: ac.signal }); // raw request path
+    await mint.swap({ inputs: [], outputs: [] }, { signal: ac.signal }); // requestWithAuth path
+    await mint.getKeySets(); // no signal: nothing leaks between calls
+
+    expect(seen).toEqual([ac.signal, ac.signal, undefined]);
+  });
+
   it('passes through AmountLike min/max amounts from getInfo()', async () => {
     const mint = new Mint(mintUrl, {
       customRequest: makeRequest({

@@ -183,88 +183,101 @@ describe('Mint mutation coverage', () => {
       {
         name: 'createMintQuoteBolt11',
         response: mintQuoteBolt11Resp,
-        invoke: (m: Mint, cr: RequestFn) => m.createMintQuoteBolt11({ amount: 1, unit: 'sat' }, cr),
+        invoke: (m: Mint, cr: RequestFn) =>
+          m.createMintQuoteBolt11({ amount: 1, unit: 'sat' }, { customRequest: cr }),
       },
       {
         name: 'createMintQuoteOnchain',
         response: mintQuoteOnchainResp,
         invoke: (m: Mint, cr: RequestFn) =>
-          m.createMintQuoteOnchain({ unit: 'sat', pubkey: '02abcd' }, cr),
+          m.createMintQuoteOnchain({ unit: 'sat', pubkey: '02abcd' }, { customRequest: cr }),
       },
       {
         name: 'checkMintQuoteBolt11',
         response: mintQuoteBolt11Resp,
-        invoke: (m: Mint, cr: RequestFn) => m.checkMintQuoteBolt11('q1', cr),
+        invoke: (m: Mint, cr: RequestFn) => m.checkMintQuoteBolt11('q1', { customRequest: cr }),
       },
       {
         name: 'checkMintQuoteBolt12',
         response: mintQuoteBolt12Resp,
-        invoke: (m: Mint, cr: RequestFn) => m.checkMintQuoteBolt12('q1', cr),
+        invoke: (m: Mint, cr: RequestFn) => m.checkMintQuoteBolt12('q1', { customRequest: cr }),
       },
       {
         name: 'checkMintQuoteOnchain',
         response: mintQuoteOnchainResp,
-        invoke: (m: Mint, cr: RequestFn) => m.checkMintQuoteOnchain('q1', cr),
+        invoke: (m: Mint, cr: RequestFn) => m.checkMintQuoteOnchain('q1', { customRequest: cr }),
       },
       {
         name: 'mintBolt11',
         response: { signatures: [] },
-        invoke: (m: Mint, cr: RequestFn) => m.mintBolt11({ quote: 'q1', outputs: [] }, cr),
+        invoke: (m: Mint, cr: RequestFn) =>
+          m.mintBolt11({ quote: 'q1', outputs: [] }, { customRequest: cr }),
       },
       {
         name: 'mintBolt12',
         response: { signatures: [] },
-        invoke: (m: Mint, cr: RequestFn) => m.mintBolt12({ quote: 'q1', outputs: [] }, cr),
+        invoke: (m: Mint, cr: RequestFn) =>
+          m.mintBolt12({ quote: 'q1', outputs: [] }, { customRequest: cr }),
       },
       {
         name: 'mintOnchain',
         response: { signatures: [] },
-        invoke: (m: Mint, cr: RequestFn) => m.mintOnchain({ quote: 'q1', outputs: [] }, cr),
+        invoke: (m: Mint, cr: RequestFn) =>
+          m.mintOnchain({ quote: 'q1', outputs: [] }, { customRequest: cr }),
       },
       {
         name: 'mintBatchBolt11',
         response: { signatures: [] },
         invoke: (m: Mint, cr: RequestFn) =>
-          m.mintBatchBolt11({ quotes: ['q1'], quote_amounts: [Amount.from(1)], outputs: [] }, cr),
+          m.mintBatchBolt11(
+            { quotes: ['q1'], quote_amounts: [Amount.from(1)], outputs: [] },
+            { customRequest: cr },
+          ),
       },
       {
         name: 'mintBatchBolt12',
         response: { signatures: [] },
         invoke: (m: Mint, cr: RequestFn) =>
-          m.mintBatchBolt12({ quotes: ['q1'], quote_amounts: [Amount.from(1)], outputs: [] }, cr),
+          m.mintBatchBolt12(
+            { quotes: ['q1'], quote_amounts: [Amount.from(1)], outputs: [] },
+            { customRequest: cr },
+          ),
       },
       {
         name: 'createMeltQuoteBolt11',
         response: meltBoltResp,
         invoke: (m: Mint, cr: RequestFn) =>
-          m.createMeltQuoteBolt11({ request: 'lnbc1...', unit: 'sat' }, cr),
+          m.createMeltQuoteBolt11({ request: 'lnbc1...', unit: 'sat' }, { customRequest: cr }),
       },
       {
         name: 'createMeltQuoteBolt12',
         response: meltBoltResp,
         invoke: (m: Mint, cr: RequestFn) =>
-          m.createMeltQuoteBolt12({ request: 'lno1...', unit: 'sat' }, cr),
+          m.createMeltQuoteBolt12({ request: 'lno1...', unit: 'sat' }, { customRequest: cr }),
       },
       {
         name: 'createMeltQuoteOnchain',
         response: meltOnchainResp,
         invoke: (m: Mint, cr: RequestFn) =>
-          m.createMeltQuoteOnchain({ request: 'bc1qrecipient', unit: 'sat', amount: 10 }, cr),
+          m.createMeltQuoteOnchain(
+            { request: 'bc1qrecipient', unit: 'sat', amount: 10 },
+            { customRequest: cr },
+          ),
       },
       {
         name: 'checkMeltQuoteBolt11',
         response: meltBoltResp,
-        invoke: (m: Mint, cr: RequestFn) => m.checkMeltQuoteBolt11('q1', cr),
+        invoke: (m: Mint, cr: RequestFn) => m.checkMeltQuoteBolt11('q1', { customRequest: cr }),
       },
       {
         name: 'checkMeltQuoteBolt12',
         response: meltBoltResp,
-        invoke: (m: Mint, cr: RequestFn) => m.checkMeltQuoteBolt12('q1', cr),
+        invoke: (m: Mint, cr: RequestFn) => m.checkMeltQuoteBolt12('q1', { customRequest: cr }),
       },
       {
         name: 'checkMeltQuoteOnchain',
         response: meltOnchainResp,
-        invoke: (m: Mint, cr: RequestFn) => m.checkMeltQuoteOnchain('q1', cr),
+        invoke: (m: Mint, cr: RequestFn) => m.checkMeltQuoteOnchain('q1', { customRequest: cr }),
       },
     ])('$name uses the passed customRequest, not the default', async ({ response, invoke }) => {
       const defaultSpy = vi.fn(async () => {
