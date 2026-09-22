@@ -1,6 +1,13 @@
 import { describe, expect, test, vi } from 'vitest';
 
-import { Wallet, type MintQuoteBolt12Response, type SwapPreview } from '../../src';
+import {
+  Wallet,
+  type MeltQuoteBolt11Response,
+  type MeltQuoteOnchainResponse,
+  type MintQuoteBolt11Response,
+  type MintQuoteBolt12Response,
+  type SwapPreview,
+} from '../../src';
 
 import { useTestServer, mint, mintInfoResp, unit } from './_setup';
 
@@ -75,5 +82,53 @@ describe('AbortSignal on wallet operations', () => {
     );
 
     expect(spy.mock.calls[0][2]).toEqual({ signal: ac.signal });
+  });
+
+  test('every builder forwards its signal to the wallet config', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const ac = new AbortController();
+    const hasSignal = (calls: unknown[][]) =>
+      calls[0].some(
+        (a) =>
+          typeof a === 'object' && a !== null && (a as { signal?: unknown }).signal === ac.signal,
+      );
+    const stop = new Error('stop here');
+
+    const receive = vi.spyOn(wallet, 'prepareSwapToReceive').mockRejectedValue(stop);
+    await expect(wallet.ops.receive('cashuB...').signal(ac.signal).prepare()).rejects.toThrow(stop);
+    expect(hasSignal(receive.mock.calls)).toBe(true);
+
+    const mintPrep = vi.spyOn(wallet, 'prepareMint').mockRejectedValue(stop);
+    const q11 = { quote: 'q11', unit: 'sat', amount: 21 } as unknown as MintQuoteBolt11Response;
+    await expect(wallet.ops.mintBolt11(21, q11).signal(ac.signal).prepare()).rejects.toThrow(stop);
+    expect(hasSignal(mintPrep.mock.calls)).toBe(true);
+
+    const meltPrep = vi.spyOn(wallet, 'prepareMelt').mockRejectedValue(stop);
+    const mq = { quote: 'mq', amount: 1, unit: 'sat' } as unknown as MeltQuoteBolt11Response;
+    await expect(wallet.ops.meltBolt11(mq, []).signal(ac.signal).prepare()).rejects.toThrow(stop);
+    expect(hasSignal(meltPrep.mock.calls)).toBe(true);
+
+    const onchain = vi.spyOn(wallet, 'meltProofsOnchain').mockRejectedValue(stop);
+    const oq = {
+      quote: 'oq',
+      amount: 1,
+      unit: 'sat',
+      fee_options: [{ fee_index: 0, fee: 1 }],
+    } as unknown as MeltQuoteOnchainResponse;
+    await expect(wallet.ops.meltOnchain(oq, []).signal(ac.signal).run()).rejects.toThrow(stop);
+    expect(hasSignal(onchain.mock.calls)).toBe(true);
+  });
+
+  test('melt quote checks pass the signal through', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const ac = new AbortController();
+    const q = { quote: 'mq12', amount: 1, unit: 'sat' } as unknown as MeltQuoteBolt11Response;
+    const spy = vi.spyOn(wallet.mint, 'checkMeltQuoteBolt12').mockResolvedValue(q);
+
+    await wallet.checkMeltQuoteBolt12('mq12', { signal: ac.signal });
+
+    expect(spy).toHaveBeenCalledWith('mq12', { signal: ac.signal });
   });
 });
