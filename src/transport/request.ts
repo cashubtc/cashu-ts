@@ -581,10 +581,9 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
         const shouldRetry = retries < MAX_CACHED_RETRIES && (!ttl || totalElapsedTime < ttl);
 
         if (shouldRetry) {
-          const cappedDelay = Math.min(2 ** retries * BASE_DELAY, MAX_DELAY);
-
           // Jitter within the upper half of the cap, so retries never rapid-fire from zero.
-          const delay = cappedDelay / 2 + Math.random() * (cappedDelay / 2);
+          const halfCap = Math.min(2 ** retries * BASE_DELAY, MAX_DELAY) / 2;
+          const delay = halfCap + Math.random() * halfCap;
 
           if (totalElapsedTime + delay > ttl) {
             activeLogger.warn(`Network Error: request abandoned after ${retries} retries`, {
