@@ -30,6 +30,16 @@ describe('Amount.from validation', () => {
     expect(() => Amount.from({} as unknown as Amount)).toThrow('Unsupported amount input type');
   });
 
+  it('rehydrates an Amount that lost its prototype to structuredClone', () => {
+    const cloned = structuredClone(Amount.from(8n));
+    expect(cloned).not.toBeInstanceOf(Amount);
+    expect(Amount.from(cloned).equals(8)).toBe(true);
+    expect(() => Amount.from({ value: -1n } as unknown as Amount)).toThrow('Amount must be >= 0');
+    expect(() => Amount.from({ value: '8' } as unknown as Amount)).toThrow(
+      'Unsupported amount input type',
+    );
+  });
+
   it('rejects a negative value passed directly to the exported constructor', () => {
     expect(() => Reflect.construct(Amount, [-1n])).toThrow('Amount must be >= 0');
   });

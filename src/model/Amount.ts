@@ -101,7 +101,15 @@ export class Amount {
       return new Amount(BigInt(input)); // constructor enforces the u64 ceiling
     }
 
-    // Unknown type
+    // structuredClone (IndexedDB, postMessage, KV stores) strips the prototype and leaves { value: bigint }.
+    if (
+      typeof input === 'object' &&
+      input !== null &&
+      typeof (input as { value?: unknown }).value === 'bigint'
+    ) {
+      return new Amount((input as { value: bigint }).value); // constructor enforces the u64 range
+    }
+
     throw new AmountError('Unsupported amount input type');
   }
 
