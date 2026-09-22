@@ -2360,6 +2360,13 @@ export type WebSocketSupport = {
     commands: string[];
 };
 
+// @public
+export type WSCloseEvent = {
+    code: number;
+    reason: string;
+    wasClean: boolean;
+};
+
 // @public (undocumented)
 export class WSConnection {
     constructor(url: string, logger?: Logger);
@@ -2377,7 +2384,7 @@ export class WSConnection {
     // (undocumented)
     ensureConnection(timeoutMs?: number): Promise<void>;
     // (undocumented)
-    onClose(callback: (e: CloseEvent) => void): void;
+    onClose(callback: (e: WSCloseEvent) => void): void;
     // (undocumented)
     sendRequest(method: 'subscribe', params: JsonRpcReqParams): void;
     // (undocumented)
