@@ -36,7 +36,11 @@ describe('mnemonicToSeedSync', () => {
   });
 
   it('normalizes the passphrase to NFKD', () => {
-    expect(mnemonicToSeedSync(ABANDON, 'café')).toEqual(mnemonicToSeedSync(ABANDON, 'café'));
+    // Precomposed U+00E9 and e + combining U+0301 render the same and must derive the same seed;
+    // the accent itself still matters.
+    const composed = mnemonicToSeedSync(ABANDON, 'caf\u00e9');
+    expect(composed).toEqual(mnemonicToSeedSync(ABANDON, 'cafe\u0301'));
+    expect(composed).not.toEqual(mnemonicToSeedSync(ABANDON, 'cafe'));
   });
 
   it('rejects a wrong word count and non-string input', () => {
