@@ -565,6 +565,178 @@ describe('WSConnection – close and lifecycle', () => {
   });
 });
 
+describe('WSConnection – established subscriptions on close', () => {
+  // The subscribe is acknowledged, so the RPC listener is gone; the socket then drops.
+  function ackingServer(url: string) {
+    const srv = new Server(url, { mock: false });
+    const sockets: Client[] = [];
+    srv.on('connection', (socket) => {
+      sockets.push(socket);
+      socket.on('message', (message) => {
+        const parsed = JSON.parse(message.toString());
+        if (parsed.method === 'subscribe') {
+          socket.send(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              result: { status: 'OK', subId: parsed.params.subId },
+              id: parsed.id,
+            }),
+          );
+        }
+      });
+    });
+    return { srv, sockets };
+  }
+
+  async function established(url: string) {
+    const { srv, sockets } = ackingServer(url);
+    const conn = new WSConnection(url);
+    await conn.connect();
+    const callback = vi.fn();
+    const errorCb = vi.fn();
+    const subId = conn.createSubscription(
+      { kind: 'bolt11_mint_quote', filters: ['q'] },
+      callback,
+      errorCb,
+    );
+    await waitForSubscription(conn, subId);
+    return { srv, sockets, conn, callback, errorCb, subId };
+  }
+
+  const remoteCloses = [
+    ['abnormal (1006)', { wasClean: false, code: 1006, reason: 'dropped' }],
+    ['going away (1001, mint restart)', { wasClean: true, code: 1001, reason: 'restart' }],
+    ['clean (1000)', undefined],
+  ] as const;
+
+  test.each(remoteCloses)('a %s remote close fails the subscription', async (_name, close) => {
+    const { srv, sockets, conn, errorCb, subId } = await established('ws://localhost:3390/v1/ws');
+    try {
+      await new Promise<void>((res) => {
+        conn.onClose(() => setTimeout(res, 0));
+        if (close) sockets[0].close(close);
+        else sockets[0].close();
+      });
+      expect(conn.activeSubscriptions).not.toContain(subId);
+      expect(errorCb).toHaveBeenCalledTimes(1);
+      expect(errorCb).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringMatching(/^WebSocket closed \(code/) }),
+      );
+    } finally {
+      conn.close();
+      srv.close();
+    }
+  });
+
+  test('an explicit close() fails the subscription once', async () => {
+    const { srv, conn, errorCb, subId } = await established('ws://localhost:3391/v1/ws');
+    try {
+      conn.close();
+      // The socket's own close event follows; it must not notify a second time.
+      await new Promise((res) => setTimeout(res, 20));
+      expect(conn.activeSubscriptions).not.toContain(subId);
+      expect(errorCb).toHaveBeenCalledTimes(1);
+      expect(errorCb).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'WebSocket closed' }),
+      );
+    } finally {
+      srv.close();
+    }
+  });
+
+  test('a cancelled subscription is not failed by a later close', async () => {
+    const { srv, sockets, conn, callback, errorCb, subId } = await established(
+      'ws://localhost:3392/v1/ws',
+    );
+    try {
+      conn.cancelSubscription(subId, callback);
+      await new Promise<void>((res) => {
+        conn.onClose(() => setTimeout(res, 0));
+        sockets[0].close({ wasClean: false, code: 1006, reason: 'dropped' });
+      });
+      expect(errorCb).not.toHaveBeenCalled();
+    } finally {
+      conn.close();
+      srv.close();
+    }
+  });
+
+  test('a throwing error callback does not stop the others or the teardown', async () => {
+    const url = 'ws://localhost:3393/v1/ws';
+    const { srv, sockets } = ackingServer(url);
+    const conn = new WSConnection(url);
+    try {
+      await conn.connect();
+      const first = vi.fn(() => {
+        throw new Error('consumer bug');
+      });
+      const second = vi.fn();
+      const a = conn.createSubscription(
+        { kind: 'bolt11_mint_quote', filters: ['a'] },
+        vi.fn(),
+        first,
+      );
+      const b = conn.createSubscription(
+        { kind: 'bolt11_mint_quote', filters: ['b'] },
+        vi.fn(),
+        second,
+      );
+      await waitForSubscription(conn, a);
+      await waitForSubscription(conn, b);
+      const closed = vi.fn();
+      await new Promise<void>((res) => {
+        conn.onClose(() => {
+          closed();
+          setTimeout(res, 0);
+        });
+        sockets[0].close({ wasClean: false, code: 1006, reason: 'dropped' });
+      });
+      expect(first).toHaveBeenCalledTimes(1);
+      expect(second).toHaveBeenCalledTimes(1);
+      expect(closed).toHaveBeenCalledTimes(1);
+      expect(conn.activeSubscriptions).toEqual([]);
+    } finally {
+      conn.close();
+      srv.close();
+    }
+  });
+
+  test('an error callback that reconnects and resubscribes sees a clean connection', async () => {
+    const url = 'ws://localhost:3394/v1/ws';
+    const { srv, sockets, conn, callback, errorCb } = await established(url);
+    try {
+      let resubscribed: string | undefined;
+      errorCb.mockImplementation(() => {
+        void conn.connect().then(() => {
+          resubscribed = conn.createSubscription(
+            { kind: 'bolt11_mint_quote', filters: ['q'] },
+            callback,
+            vi.fn(),
+          );
+          return resubscribed;
+        });
+      });
+      sockets[0].close({ wasClean: false, code: 1006, reason: 'dropped' });
+      await new Promise((res) => setTimeout(res, 30));
+      expect(resubscribed).toBeDefined();
+      await waitForSubscription(conn, resubscribed!);
+      expect(sockets).toHaveLength(2);
+      sockets[1].send(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'subscribe',
+          params: { subId: resubscribed, payload: { quote: 'q', state: 'PAID' } },
+        }),
+      );
+      await new Promise((res) => setTimeout(res, 20));
+      expect(callback).toHaveBeenCalledTimes(1);
+    } finally {
+      conn.close();
+      srv.close();
+    }
+  });
+});
+
 describe('WSConnection – message handling', () => {
   test('RPC error response calls errorCallback with the error message', async () => {
     const url = 'ws://localhost:3342/v1/ws';
