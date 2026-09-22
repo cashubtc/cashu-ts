@@ -160,6 +160,7 @@ export type {
   RequestArgs,
   RequestOptions,
   ResponseMeta,
+  WSCloseEvent,
 } from './transport';
 export {
   SigAll,
