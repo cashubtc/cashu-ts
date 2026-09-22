@@ -882,6 +882,46 @@ describe('WSConnection – keepalive', () => {
       srv.close();
     }
   });
+
+  type Internals = {
+    probe: () => void;
+    dropSocket: (err: Error) => void;
+    rpcListeners: Record<string, unknown>;
+  };
+
+  test('a probe is not sent while one is still pending', async () => {
+    const url = 'ws://localhost:3398/v1/ws';
+    const { srv, probes } = probeServer(url, false);
+    // Interval long enough that only the direct calls below can send a probe.
+    const conn = new WSConnection(url, undefined, { keepaliveMs: 60_000 });
+    try {
+      await conn.connect();
+      const internals = conn as unknown as Internals;
+      internals.probe();
+      internals.probe();
+      await sleep(30);
+      expect(probes).toHaveLength(1);
+      expect(Object.keys(internals.rpcListeners)).toHaveLength(1);
+    } finally {
+      conn.close();
+      srv.close();
+    }
+  });
+
+  test('a probe on a socket that is not open sends nothing', () => {
+    const conn = new WSConnection(fakeUrl, undefined, { keepaliveMs: 60_000 });
+    const internals = conn as unknown as Internals;
+    internals.probe();
+    expect(Object.keys(internals.rpcListeners)).toHaveLength(0);
+  });
+
+  test('dropping when there is no socket is a no-op', () => {
+    const conn = new WSConnection(fakeUrl);
+    const closeCb = vi.fn();
+    conn.onClose(closeCb);
+    (conn as unknown as Internals).dropSocket(new Error('nothing to drop'));
+    expect(closeCb).not.toHaveBeenCalled();
+  });
 });
 
 describe('WSConnection – message handling', () => {
