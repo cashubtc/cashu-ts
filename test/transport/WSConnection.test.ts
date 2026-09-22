@@ -774,6 +774,14 @@ describe('WSConnection – keepalive', () => {
   }
 
   const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
+  // Slow runners make timers and mock-socket delivery late; wait for the state, not the clock.
+  async function waitFor(condition: () => boolean, timeoutMs = 2000): Promise<void> {
+    const startedAt = Date.now();
+    while (!condition()) {
+      if (Date.now() - startedAt > timeoutMs) throw new Error('waitFor timed out');
+      await sleep(5);
+    }
+  }
 
   test.each([0, -1, 0.5, NaN, Infinity, 2_147_483_648, '30000', true, null])(
     'rejects an invalid interval: %s',
@@ -791,7 +799,9 @@ describe('WSConnection – keepalive', () => {
   test('a mint that answers the probe keeps the connection and its subscriptions', async () => {
     const url = 'ws://localhost:3395/v1/ws';
     const { srv, probes } = probeServer(url, true);
-    const conn = new WSConnection(url, undefined, { keepaliveMs: 20 });
+    // Probes are driven by hand: a 60 s interval keeps both the interval and the reply timeout
+    // (10 s) out of the test, so a slow browser runner cannot turn a late reply into a drop.
+    const conn = new WSConnection(url, undefined, { keepaliveMs: 60_000 });
     try {
       await conn.connect();
       const errorCb = vi.fn();
@@ -803,8 +813,12 @@ describe('WSConnection – keepalive', () => {
         errorCb,
       );
       await waitForSubscription(conn, subId);
-      await sleep(120);
-      expect(probes.length).toBeGreaterThanOrEqual(2);
+      const internals = conn as unknown as { probe: () => void; probeTimer?: unknown };
+      for (let i = 0; i < 2; i++) {
+        internals.probe();
+        await waitFor(() => internals.probeTimer === undefined); // the reply cleared the probe
+      }
+      expect(probes).toHaveLength(2);
       expect(conn.activeSubscriptions).toContain(subId);
       expect(errorCb).not.toHaveBeenCalled();
       expect(closeCb).not.toHaveBeenCalled();
@@ -830,8 +844,9 @@ describe('WSConnection – keepalive', () => {
         errorCb,
       );
       await waitForSubscription(conn, subId);
-      await sleep(120);
-      // The socket never closed on its own (the server is still up and holding it open).
+      // The socket never closes on its own (the server is up and holding it open): only the
+      // unanswered probe can end it.
+      await waitFor(() => closeCb.mock.calls.length > 0);
       expect(probes.length).toBeGreaterThanOrEqual(1);
       expect(closeCb).toHaveBeenCalledTimes(1);
       expect(closeCb).toHaveBeenCalledWith(
@@ -871,8 +886,7 @@ describe('WSConnection – keepalive', () => {
     const conn = new WSConnection(url, undefined, { keepaliveMs: 20 });
     try {
       await conn.connect();
-      await sleep(50);
-      expect(probes.length).toBeGreaterThanOrEqual(1);
+      await waitFor(() => probes.length >= 1);
       conn.close();
       await sleep(30); // a probe already on the wire may still land
       const seen = probes.length;
@@ -899,7 +913,7 @@ describe('WSConnection – keepalive', () => {
       const internals = conn as unknown as Internals;
       internals.probe();
       internals.probe();
-      await sleep(30);
+      await waitFor(() => probes.length >= 1);
       expect(probes).toHaveLength(1);
       expect(Object.keys(internals.rpcListeners)).toHaveLength(1);
     } finally {
