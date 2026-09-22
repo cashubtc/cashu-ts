@@ -135,6 +135,8 @@ const proofs = await wallet.mintProofsBolt11(64, quote, { privkey });
 
 `createLockedMintQuote` callers rename the method and keep their arguments. A seedless wallet that drops the key has lost the quote, the same way it loses a dropped proof; a seeded wallet can call `recoverQuoteLockKey(quote.pubkey)`.
 
+The seed derivation behind `createQuoteLockKey` and `recoverQuoteLockKey` is experimental: it follows draft NUT-13 (type `0x04`) and draft NUT-06 identity scoping, and may change before GA, in which case keys derived earlier are no longer found by scan. Persist the `privkey` with its quote regardless; the scan is disaster recovery, not storage.
+
 ---
 
 ## Minting on a v3 keyset needs the quote object, not the quote id
