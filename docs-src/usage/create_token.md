@@ -22,7 +22,7 @@ const receiveProofs = await wallet2.receive(token);
 ```typescript
 import { serializeSwapPreview } from '@cashu/cashu-ts';
 
-const preview = await wallet.ops.send(32, proofs).prepare();
+const preview = await wallet.prepareSwapToSend(32, proofs);
 await savePendingSend(serializeSwapPreview(preview)); // spendable material: protect it like proofs
 const { keep, send } = await wallet.completeSwap(preview);
 // the swap settled: delete the pending send, and return preview.unselectedProofs to storage
