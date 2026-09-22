@@ -1,4 +1,5 @@
 import eslint from '@eslint/js';
+import { defineConfig } from 'eslint/config';
 import vitest from '@vitest/eslint-plugin';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
@@ -7,7 +8,7 @@ import importPlugin from 'eslint-plugin-import';
 import nPlugin from 'eslint-plugin-n';
 import promisePlugin from 'eslint-plugin-promise';
 
-export default tseslint.config(
+export default defineConfig(
   {
     ignores: [
       'node_modules/**',
