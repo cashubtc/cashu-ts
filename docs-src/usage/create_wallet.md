@@ -55,7 +55,7 @@ setGlobalRequestOptions({ redirect: 'error' });
 Retries after a 5xx on NUT-19 cached endpoints are deliberate, see
 [NUT-19 Cached Responses](./nut19.md): they replay an idempotent request, never a fresh one.
 
-Two transport defaults worth knowing. Every request attempt times out after 5 minutes, the bound Node's own fetch applies, unless `requestTimeout` says otherwise (per call or through `setGlobalRequestOptions`; `Infinity` disables it), so a mint that stops answering surfaces as a `NetworkError` rather than a hang. And outside browsers the library sends `User-Agent: Mozilla/5.0`, replacing the runtime's own string (undici, NSURLSession, OkHttp) that would otherwise fingerprint the process; `requestHeaders` overrides it.
+**Transport defaults.** Every request attempt times out after 5 minutes, the bound Node's own fetch applies, unless `requestTimeout` says otherwise (per call or through `setGlobalRequestOptions`; `Infinity` disables it), so a mint that stops answering surfaces as a `NetworkError` rather than a hang. And outside browsers the library sends `User-Agent: Mozilla/5.0`, replacing the runtime's own string (undici, NSURLSession, OkHttp) that would otherwise fingerprint the process; `requestHeaders` overrides it.
 
 ## Auth state and application sessions
 
