@@ -3,13 +3,22 @@
 # Error handling patterns
 
 ```ts
+import { CTSError, MintOperationError, NetworkError } from '@cashu/cashu-ts';
+
 try {
   const res = await wallet.ops.send(5, proofs).offlineExactOnly().run();
   console.log('Sent:', res.send.length, 'Kept:', res.keep.length);
 } catch (e) {
-  // e is a proper Error (WalletOps normalizes unknowns internally)
-  if ((e as Error).message.includes('Timeout')) {
-    // …
+  // Every library error sets a stable `name`, so logs and generic handlers can
+  // tell them apart. Do not use `constructor.name`: the shipped build is
+  // minified and it reads as a single letter.
+  if (e instanceof MintOperationError) {
+    // the mint rejected the operation: e.code and e.message say why
+  } else if (e instanceof NetworkError) {
+    // no usable response: retry or surface it
+  } else if (e instanceof CTSError) {
+    // any other library error; name says which, eg 'StaleKeysetError'
+    console.error(e.name, e.message);
   }
   throw e;
 }
