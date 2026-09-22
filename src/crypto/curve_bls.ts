@@ -34,19 +34,18 @@ export const BLS_HASH_TO_CURVE_DST = 'CASHU_BLS12_381_G1_XMD:SHA-256_SSWU_RO_';
  * BLS12-381 scalar field order (Fr). Distinct from secp256k1's `n`.
  *
  * Used for the NUT-13 HMAC reduction on v3 keysets and for the modular inverse of `r` during
- * wallet-side unblinding. Sourced from `@noble/curves/bls12-381` so it tracks the library; verified
- * equal to the locked constant in Nutshell PR #999 / RFC 9380:
- * `52435875175126190479447740508185965837690552500527637822603658699938581184513`.
+ * wallet-side unblinding. Written as a literal so a bundle that never touches BLS can drop noble's
+ * pairing tower; a test pins it to `bls12_381.fields.Fr.ORDER` and to Nutshell PR #999 / RFC 9380.
  */
-export const BLS_FR_ORDER = bls12_381.fields.Fr.ORDER;
+export const BLS_FR_ORDER =
+  52435875175126190479447740508185965837690552500527637822603658699938581184513n;
 
 /**
- * G2 generator used for the pairing equality `e(C, G2_gen) == e(Y, K2)`.
- *
- * Sourced from `@noble/curves/bls12-381` (`bls12_381.G2.Point.BASE`); verified byte-for-byte equal
- * to Nutshell PR #999's hardcoded `_G2_HEX` (compressed, 96 bytes / 192 hex chars).
+ * BLS12-381 base field order (Fp), the canonical-coordinate bound for decoded points. Literal for
+ * the same reason as {@link BLS_FR_ORDER}; a test pins it to `bls12_381.fields.Fp.ORDER`.
  */
-export const BLS_G2_GENERATOR = bls12_381.G2.Point.BASE;
+export const BLS_FP_ORDER =
+  0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaabn;
 
 /**
  * Domain-separation tag for the Fiat-Shamir transcript used to derive batch-verification weights in
@@ -54,9 +53,6 @@ export const BLS_G2_GENERATOR = bls12_381.G2.Point.BASE;
  * {@link deriveDLEQNonce} in `NUT12.ts` for the analogous secp-side pattern.
  */
 const BLS_BATCH_DST = utf8ToBytes('Cashu_BLS_Batch_v1');
-
-const Fr = bls12_381.fields.Fr;
-const Fp_ORDER = bls12_381.fields.Fp.ORDER;
 
 function blsScalar(bytes: Uint8Array, label: string): bigint {
   const scalar = bytes.length === 32 ? bytesToNumberBE(bytes) : 0n;
@@ -151,7 +147,7 @@ function assertCanonicalCoordinates(
   const coordWidth = width / coordCount;
   for (let i = 0; i < coordCount; i++) {
     const v = bytesToNumberBE(cleared.subarray(i * coordWidth, (i + 1) * coordWidth));
-    if (v >= Fp_ORDER) {
+    if (v >= BLS_FP_ORDER) {
       throw new CTSError(`${label} point non-canonical: coordinate >= p`);
     }
   }
@@ -190,7 +186,7 @@ export function pointFromHexG2(hex: string): G2Point {
  */
 export function getG2PubKeyFromPrivKey(privKey: Uint8Array): Uint8Array<ArrayBufferLike> {
   const a = blsScalar(privKey, 'Mint');
-  return BLS_G2_GENERATOR.multiply(a).toBytes(true);
+  return bls12_381.G2.Point.BASE.multiply(a).toBytes(true);
 }
 
 function randomScalar(): bigint {
@@ -233,7 +229,7 @@ export function unblindSignatureBls(C_: G1Point, r: bigint): G1Point {
   if (r <= 0n || r >= BLS_FR_ORDER) {
     throw new CTSError('Blinding factor r must be in Fr*');
   }
-  return C_.multiply(Fr.inv(r));
+  return C_.multiply(bls12_381.fields.Fr.inv(r));
 }
 
 export function constructUnblindedSignatureBls(
@@ -282,7 +278,7 @@ export function verifyUnblindedSignatureBls(K2: G2Point, C: G1Point, secret: Uin
   if (C.is0() || K2.is0()) return false;
   const Y = hashToCurveBls(secret);
   const acc = bls12_381.pairingBatch([
-    { g1: C.negate(), g2: BLS_G2_GENERATOR },
+    { g1: C.negate(), g2: bls12_381.G2.Point.BASE },
     { g1: Y, g2: K2 },
   ]);
   return bls12_381.fields.Fp12.eql(acc, bls12_381.fields.Fp12.ONE);
@@ -366,7 +362,7 @@ export function batchVerifyUnblindedSignatureBls(
   for (const it of items) {
     if (it.C.is0() || it.K2.is0()) return false;
   }
-  const G2 = BLS_G2_GENERATOR;
+  const G2 = bls12_381.G2.Point.BASE;
 
   const rs = deriveBatchWeights(items);
 

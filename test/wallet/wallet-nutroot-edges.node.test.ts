@@ -1,7 +1,8 @@
+import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { describe, expect, test, vi } from 'vitest';
 
 import { Amount, OutputData, PaymentRequest, Wallet, type Proof, MeltQuoteState } from '../../src';
-import { BLS_G2_GENERATOR, hashToCurveBls } from '../../src/crypto/curve_bls';
+import { hashToCurveBls } from '../../src/crypto/curve_bls';
 import { blindMessage, getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import {
   NUTROOT_NUMS_KEY,
@@ -26,7 +27,7 @@ const mintInfo = {
     '11': { supported: true },
   },
 };
-const keys = { '1': BLS_G2_GENERATOR.multiply(5n).toHex(true) };
+const keys = { '1': bls12_381.G2.Point.BASE.multiply(5n).toHex(true) };
 const id = deriveKeysetId(keys, { versionByte: 2, unit: 'sat', input_fee_ppk: 0 });
 const legacyKeys = { '1': pub(5) };
 const legacyId = deriveKeysetId(legacyKeys, { versionByte: 0 });

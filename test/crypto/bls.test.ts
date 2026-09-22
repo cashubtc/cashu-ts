@@ -6,6 +6,7 @@ import { describe, expect, test } from 'vitest';
 
 import {
   assertV3PointSecret,
+  BLS_FP_ORDER,
   BLS_FR_ORDER,
   BLS_HASH_TO_CURVE_DST,
   hashToCurveBls,
@@ -59,6 +60,11 @@ describe('BLS constants', () => {
     expect(BLS_FR_ORDER).toBe(
       52435875175126190479447740508185965837690552500527637822603658699938581184513n,
     );
+  });
+
+  test('field order literals match noble', () => {
+    expect(BLS_FR_ORDER).toBe(bls12_381.fields.Fr.ORDER);
+    expect(BLS_FP_ORDER).toBe(bls12_381.fields.Fp.ORDER);
   });
 
   test("noble's G2 BASE matches Nutshell hardcoded _G2_HEX", () => {
