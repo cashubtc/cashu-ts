@@ -79,11 +79,16 @@ export default defineConfig(({ command }) => {
         entry: { 'cashu-ts': resolve(__dirname, 'src/index.ts') },
         name: 'cashuts',
         formats: [format],
-        fileName: (outFormat) =>
-          format === 'iife' ? `cashu-ts.${outFormat}.js` : `cashu-ts.es.js`,
+        fileName: (outFormat, entryName) => {
+          if (format === 'iife') return `cashu-ts.${outFormat}.js`;
+          // Preserved modules name their chunks by source path; only the package entry keeps its name.
+          return entryName === 'cashu-ts' ? 'cashu-ts.es.js' : `${entryName}.js`;
+        },
       },
       rollupOptions: {
         external: makeExternal(format),
+        // One chunk per source module so a consumer's bundler drops what it does not import.
+        output: format === 'es' ? { preserveModules: true, preserveModulesRoot: 'src' } : undefined,
       },
       sourcemap: true,
     },

@@ -3,6 +3,7 @@
   "version": "5.0.0-rc.10",
   "description": "cashu library for communicating with a cashu mint",
   "type": "module",
+  "sideEffects": false,
   "engines": {
     "node": ">=22.4.0"
   },
