@@ -1311,6 +1311,9 @@ export type MintResponse = {
 };
 
 // @public
+export function mnemonicToSeedSync(mnemonic: string, passphrase?: string): Uint8Array;
+
+// @public
 export type MPPMethod = {
     method: string;
     unit: string;
