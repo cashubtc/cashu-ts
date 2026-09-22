@@ -59,6 +59,12 @@ interface RpcListener {
   errorCallback: (e: Error) => void;
 }
 
+// Internal interface for subscription listeners; errorCallback fires when the socket drops them.
+interface SubListener {
+  callback: (payload: unknown) => void;
+  errorCallback?: (e: Error) => void;
+}
+
 type OnOpenSuccess = () => void;
 type OnOpenError = (err: Error) => void;
 
@@ -67,7 +73,7 @@ export class WSConnection {
   private readonly _WS: typeof WebSocket;
   private ws: WebSocket | undefined;
   private connectionPromise: Promise<void> | undefined;
-  private subListeners: { [subId: string]: Array<(payload: unknown) => void> } = {};
+  private subListeners: { [subId: string]: SubListener[] } = {};
   private rpcListeners: { [rpcSubId: string]: RpcListener } = {};
   private messageQueue: MessageQueue;
   private handlingInterval?: ReturnType<typeof setInterval>;
@@ -105,7 +111,7 @@ export class WSConnection {
       };
       this.abandonConnect = (err: Error) => settle(() => reject(err));
 
-      const cleanupSocket = () => {
+      const cleanupSocket = (err: Error) => {
         if (!this.ws) return;
         try {
           this.ws.onopen = null;
@@ -121,13 +127,13 @@ export class WSConnection {
           // silence
         }
         this.ws = undefined;
-        this.stopMessageHandling();
+        this.stopMessageHandling(err);
       };
 
       const fail = (e: unknown) => {
         this.connectionPromise = undefined;
-        cleanupSocket();
         const err = e instanceof Error ? e : new CTSError(String(e), { cause: e });
+        cleanupSocket(err);
         this.failPendingRpc(err);
         settle(() => reject(err));
       };
@@ -199,17 +205,19 @@ export class WSConnection {
           return;
         }
 
-        this.stopMessageHandling();
-
-        // If the socket closed unexpectedly, fail any in flight RPC acks.
-        // Otherwise just clear them to avoid leaks, but don't spam errors.
         const reason = e?.reason ? `, ${e.reason}` : '';
         const code = e?.code ?? 0;
         const wasClean = typeof e.wasClean === 'boolean' ? e.wasClean : true;
+        const err = new CTSError(`WebSocket closed (code ${code}${reason})`);
+
+        // Every subscription on this socket is gone whatever the close code (1001 is a mint
+        // restart), so each owner is told. In-flight acks keep the old rule: errored on an
+        // abnormal close, cleared quietly on a clean one.
+        this.stopMessageHandling(err);
 
         const abnormal = !wasClean || (code !== 1000 && code !== 1001);
         if (abnormal) {
-          this.failPendingRpc(new CTSError(`WebSocket closed (code ${code}${reason})`));
+          this.failPendingRpc(err);
         } else {
           this.rpcListeners = {};
         }
@@ -237,13 +245,18 @@ export class WSConnection {
     this.sendRpcMessage(method, params, id);
   }
 
-  addSubListener<TPayload = unknown>(subId: string, callback: (payload: TPayload) => void) {
-    (this.subListeners[subId] = this.subListeners[subId] || []).push(
-      callback as (payload: unknown) => void,
-    );
+  addSubListener<TPayload = unknown>(
+    subId: string,
+    callback: (payload: TPayload) => void,
+    errorCallback?: (e: Error) => void,
+  ) {
+    (this.subListeners[subId] = this.subListeners[subId] || []).push({
+      callback: callback as (payload: unknown) => void,
+      errorCallback,
+    });
   }
 
-  private stopMessageHandling() {
+  private stopMessageHandling(err: Error) {
     if (this.handlingInterval) {
       clearInterval(this.handlingInterval);
       this.handlingInterval = undefined;
@@ -253,8 +266,19 @@ export class WSConnection {
       this.messageQueue.dequeue();
     }
     // Subscriptions are scoped to the connection being torn down, explicit or remote: a mint
-    // replaying an old subId after a reconnect must not reach a stale callback.
+    // replaying an old subId after a reconnect must not reach a stale callback. Each owner hears
+    // about the drop, so a watch can resubscribe or fall back rather than wait on a dead socket.
+    const listeners = this.subListeners;
     this.subListeners = {};
+    for (const subs of Object.values(listeners)) {
+      for (const { errorCallback } of subs) {
+        try {
+          errorCallback?.(err);
+        } catch {
+          // ignore user error callbacks throwing
+        }
+      }
+    }
   }
 
   private failPendingRpc(err: Error) {
@@ -294,9 +318,8 @@ export class WSConnection {
         // silence
       }
       this.ws = undefined;
-      this.stopMessageHandling();
-
       const err = e instanceof Error ? e : new CTSError(String(e), { cause: e });
+      this.stopMessageHandling(err);
       this.failPendingRpc(err);
       throw err;
     }
@@ -323,7 +346,7 @@ export class WSConnection {
       return;
     }
     this.subListeners[subId] = this.subListeners[subId].filter(
-      (fn) => fn !== (callback as (payload: unknown) => void),
+      (l) => l.callback !== (callback as (payload: unknown) => void),
     );
   }
 
@@ -366,7 +389,7 @@ export class WSConnection {
 
             if (this.subListeners[subId]?.length > 0) {
               const notification = parsed;
-              this.subListeners[subId].forEach((cb) => {
+              this.subListeners[subId].forEach(({ callback: cb }) => {
                 try {
                   // A callback typed to return void may still be an async function; a returned
                   // thenable's rejection needs the same containment as a synchronous throw. Duck
@@ -410,7 +433,7 @@ export class WSConnection {
     const rpcId = this.rpcId; // this is the id sendRequest will use next
     this.addRpcListener(
       () => {
-        this.addSubListener(subId, callback);
+        this.addSubListener(subId, callback, errorCallback);
       },
       errorCallback,
       rpcId,
@@ -483,7 +506,7 @@ export class WSConnection {
     }
     this.connectionPromise = undefined;
     this.failPendingRpc(err);
-    this.stopMessageHandling();
+    this.stopMessageHandling(err);
   }
 
   onClose(callback: (e: WSCloseEvent) => void) {
