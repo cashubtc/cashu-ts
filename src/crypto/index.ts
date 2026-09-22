@@ -1,3 +1,4 @@
+export * from './bip39';
 export * from './core';
 export * from './NUT01';
 export * from './NUT10';
