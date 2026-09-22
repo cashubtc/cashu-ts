@@ -119,7 +119,18 @@ export type { OutputDataLike, OutputDataFactory, SerializedOutputData } from './
 export type { OutputDataCreator } from './model/OutputDataCreator';
 export { MintInfo } from './model/MintInfo';
 export { WSConnection, injectWebSocketImpl, setGlobalRequestOptions } from './transport';
+<<<<<<< HEAD
 export type { RequestFn, RequestArgs, RequestOptions, ResponseMeta } from './transport';
+=======
+export type {
+  RequestFn,
+  RequestFetch,
+  RequestArgs,
+  RequestOptions,
+  ResponseMeta,
+  WSCloseEvent,
+} from './transport';
+>>>>>>> af762f7 (fix(transport): drop the DOM CloseEvent type from the WSConnection public surface (#1249))
 export {
   SigAll,
   type SigAllApi,

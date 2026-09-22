@@ -2360,6 +2360,13 @@ export type WebSocketSupport = {
     commands: string[];
 };
 
+// @public
+export type WSCloseEvent = {
+    code: number;
+    reason: string;
+    wasClean: boolean;
+};
+
 // @public (undocumented)
 export class WSConnection {
     constructor(url: string, logger?: Logger);
@@ -2376,8 +2383,12 @@ export class WSConnection {
     createSubscription<TPayload = unknown>(params: Omit<JsonRpcReqParams, 'subId'>, callback: (payload: TPayload) => void, errorCallback: (e: Error) => void): string;
     // (undocumented)
     ensureConnection(timeoutMs?: number): Promise<void>;
+<<<<<<< HEAD
     // (undocumented)
     onClose(callback: (e: CloseEvent) => void): void;
+=======
+    onClose(callback: (e: WSCloseEvent) => void): () => void;
+>>>>>>> af762f7 (fix(transport): drop the DOM CloseEvent type from the WSConnection public surface (#1249))
     // (undocumented)
     sendRequest(method: 'subscribe', params: JsonRpcReqParams): void;
     // (undocumented)

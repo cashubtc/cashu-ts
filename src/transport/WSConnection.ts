@@ -9,6 +9,12 @@ import { getWebSocketImpl } from './ws';
 // RFC 6455 7.4.1: reported locally when a connection drops without a Close frame.
 const WS_ABNORMAL_CLOSURE = 1006;
 
+/**
+ * The close notification handed to `onClose`: the `CloseEvent` fields the library reads, so Node
+ * consumers need no DOM lib.
+ */
+export type WSCloseEvent = { code: number; reason: string; wasClean: boolean };
+
 class MessageNode {
   value: string;
   next: MessageNode | null = null;
@@ -69,7 +75,7 @@ export class WSConnection {
   private abandonConnect?: (err: Error) => void;
   private rpcId = 0;
   private _logger: Logger;
-  private onCloseCallbacks: Array<(e: CloseEvent) => void> = [];
+  private onCloseCallbacks: Array<(e: WSCloseEvent) => void> = [];
 
   constructor(url: string, logger?: Logger) {
     this._WS = getWebSocketImpl();
@@ -171,7 +177,7 @@ export class WSConnection {
           // the notification here. Teardown first, callbacks last, as the real close path does: a
           // callback that reconnects or unsubscribes must not see the dying socket as current.
           this.onCloseCallbacks.forEach((cb) =>
-            cb({ code: WS_ABNORMAL_CLOSURE, reason: err.message, wasClean: false } as CloseEvent),
+            cb({ code: WS_ABNORMAL_CLOSURE, reason: err.message, wasClean: false }),
           );
           return;
         }
@@ -181,7 +187,7 @@ export class WSConnection {
         }
       };
 
-      socket.onclose = (e: CloseEvent) => {
+      socket.onclose = (e: WSCloseEvent) => {
         // Bail only if a replacement socket is now current. this.ws === undefined (explicit close,
         // no reconnect) still runs teardown so onClose subscribers are notified.
         if (this.ws && this.ws !== socket) return;
@@ -480,7 +486,14 @@ export class WSConnection {
     this.stopMessageHandling();
   }
 
+<<<<<<< HEAD
   onClose(callback: (e: CloseEvent) => void) {
+=======
+  /**
+   * Registers a socket-close callback and returns a function that removes it.
+   */
+  onClose(callback: (e: WSCloseEvent) => void) {
+>>>>>>> af762f7 (fix(transport): drop the DOM CloseEvent type from the WSConnection public surface (#1249))
     this.onCloseCallbacks.push(callback);
   }
 }

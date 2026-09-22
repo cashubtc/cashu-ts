@@ -4,4 +4,4 @@ export type { RequestFn, RequestArgs, RequestOptions, ResponseMeta } from './req
 
 export { injectWebSocketImpl } from './ws';
 
-export { WSConnection } from './WSConnection';
+export { WSConnection, type WSCloseEvent } from './WSConnection';
