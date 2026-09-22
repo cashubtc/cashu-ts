@@ -42,6 +42,7 @@ import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } f
 import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
 import {
+  CallerAbortError,
   CTSError,
   InvalidScalarError,
   MeltChangeError,
@@ -82,7 +83,6 @@ import type { Proof, ProofLike } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 import { BATCH_POOL_SIZE, runPool } from '../transport';
 import type { RequestFetch, RequestFn } from '../transport';
-import { CallerAbortError } from '../transport/request';
 import {
   ABSOLUTE_MAX_BATCH_SIZE,
   bolt11AmountMsat,

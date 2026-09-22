@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
-import { Amount, AmountError, AmountWithUnit, AmountWithUnitError } from '../../src/model/Amount';
+import { Amount, AmountWithUnit } from '../../src/model/Amount';
+import { AmountError, AmountWithUnitError } from '../../src/model/Errors';
 
 describe('Amount.from validation', () => {
   it('rejects negative bigint amounts', () => {

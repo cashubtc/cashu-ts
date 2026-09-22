@@ -62,7 +62,7 @@ export class Amount {
     static zero(): Amount;
 }
 
-// @public (undocumented)
+// @public
 export class AmountError extends CTSError {
     constructor(message: string);
 }
@@ -135,7 +135,7 @@ export class AmountWithUnit {
     static zero(unit: string): AmountWithUnit;
 }
 
-// @public (undocumented)
+// @public
 export class AmountWithUnitError extends CTSError {
     constructor(message: string);
 }
@@ -287,7 +287,7 @@ export function buildMintBackupPayload(mints: string[], timestamp: number): stri
 // @public
 export function bytesToHex(bytes: Uint8Array): string;
 
-// @public (undocumented)
+// @public
 export class CallerAbortError extends NetworkError {
     constructor(message: string);
 }
