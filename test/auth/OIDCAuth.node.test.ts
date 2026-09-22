@@ -36,6 +36,42 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
+// ---------- fromMintInfo ----------
+describe('OIDCAuth.fromMintInfo', () => {
+  const baseNuts = {
+    '4': { disabled: false, methods: [] },
+    '5': { disabled: false, methods: [] },
+  };
+  const infoWithN21 = (client_id?: string) => {
+    const n21 = { openid_discovery: DISCOVERY, protected_endpoints: [] };
+    // The NUT-21 type requires client_id; the omitted case exercises the JS-only fallback.
+    return {
+      nuts: { ...baseNuts, '21': client_id === undefined ? n21 : { ...n21, client_id } },
+    } as unknown as Parameters<typeof OIDCAuth.fromMintInfo>[0];
+  };
+  const clientIdOf = (oidc: object) => (oidc as { clientId?: string }).clientId;
+
+  test('prefers the caller clientId over mint metadata', () => {
+    expect(
+      clientIdOf(OIDCAuth.fromMintInfo(infoWithN21('mint-client'), { clientId: 'my-client' })),
+    ).toBe('my-client');
+  });
+
+  test('falls back to the mint client_id when no opts are given', () => {
+    expect(clientIdOf(OIDCAuth.fromMintInfo(infoWithN21('mint-client')))).toBe('mint-client');
+  });
+
+  test('defaults to cashu-client when neither caller nor mint supply one', () => {
+    expect(clientIdOf(OIDCAuth.fromMintInfo(infoWithN21()))).toBe('cashu-client');
+  });
+
+  test('throws when the mint does not advertise NUT-21 discovery metadata', () => {
+    expect(() => OIDCAuth.fromMintInfo({ nuts: baseNuts })).toThrow(
+      'OIDCAuth: mint does not advertise NUT-21 openid_discovery',
+    );
+  });
+});
+
 // ---------- discovery & caching ----------
 describe('OIDCAuth: discovery & caching', () => {
   test('loadConfig fetches and caches discovery', async () => {

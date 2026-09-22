@@ -1278,7 +1278,6 @@ export class Mint {
     mintOnchain(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse>;
     // (undocumented)
     get mintUrl(): string;
-    oidcAuth(opts?: OIDCAuthOptions): Promise<OIDCAuth>;
     restore(restorePayload: PostRestorePayload, customRequest?: RequestFn): Promise<PostRestoreResponse>;
     setMintInfo(mintInfo: MintInfo | GetInfoResponse): void;
     swap(swapPayload: SwapRequest, customRequest?: RequestFn): Promise<SwapResponse>;
@@ -1732,7 +1731,6 @@ export class OIDCAuth {
         redirectUri: string;
         codeVerifier: string;
     }): Promise<TokenResponse>;
-    // (undocumented)
     static fromMintInfo(info: {
         nuts: GetInfoResponse['nuts'];
     }, opts?: OIDCAuthOptions): OIDCAuth;

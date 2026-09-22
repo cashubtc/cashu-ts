@@ -104,6 +104,26 @@ export class OIDCAuth {
     }
   >();
 
+  /**
+   * Create an OIDC client from a mint's NUT-21 metadata.
+   *
+   * @remarks
+   * `clientId` falls back to the mint's `client_id`, then to `cashu-client`. Do not combine an
+   * `onTokens` callback that calls `setCAT` with `attachOIDC`: both install the CAT, and `setCAT`
+   * replaces the whole token record, so the refresh token would be dropped.
+   * @example
+   *
+   * ```ts
+   * const oidc = OIDCAuth.fromMintInfo(await mint.getLazyMintInfo());
+   * authMgr.attachOIDC(oidc); // keeps the CAT and its refresh state up to date
+   * const start = await oidc.startDeviceAuth();
+   * // show start.user_code / start.verification_uri to the user
+   * const token = await start.poll(); // call start.cancel() if the user dismisses the flow
+   * // token.access_token is your CAT
+   * ```
+   *
+   * @throws CTSError if the mint does not advertise `openid_discovery`.
+   */
   static fromMintInfo(info: { nuts: GetInfoResponse['nuts'] }, opts?: OIDCAuthOptions): OIDCAuth {
     const n21 = info?.nuts?.['21'];
     if (!n21?.openid_discovery) {

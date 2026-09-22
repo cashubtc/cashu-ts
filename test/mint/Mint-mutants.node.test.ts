@@ -52,21 +52,6 @@ const baseInfo = {
   contact: [],
 };
 
-const infoWithN21 = (client_id?: string) => ({
-  ...baseInfo,
-  nuts: {
-    '4': { disabled: false, methods: [] },
-    '5': { disabled: false, methods: [] },
-    '21': {
-      openid_discovery: 'https://auth.example/.well-known/openid-configuration',
-      ...(client_id ? { client_id } : {}),
-      protected_endpoints: [],
-    },
-  },
-});
-
-const clientIdOf = (oidc: object): string | undefined => (oidc as { clientId?: string }).clientId;
-
 const meltBaseResp = {
   quote: 'q1',
   request: 'pay-me',
@@ -126,32 +111,6 @@ afterAll(() => {
 });
 
 describe('Mint mutation coverage', () => {
-  describe('oidcAuth clientId resolution', () => {
-    it('prefers the caller clientId over mint metadata', async () => {
-      const mint = new Mint(mintUrl, { customRequest: makeRequest(infoWithN21('mint-client')) });
-
-      const oidc = await mint.oidcAuth({ clientId: 'my-client' });
-
-      expect(clientIdOf(oidc)).toBe('my-client');
-    });
-
-    it('falls back to the mint client_id when no opts are given', async () => {
-      const mint = new Mint(mintUrl, { customRequest: makeRequest(infoWithN21('mint-client')) });
-
-      const oidc = await mint.oidcAuth();
-
-      expect(clientIdOf(oidc)).toBe('mint-client');
-    });
-
-    it('defaults to cashu-client when neither caller nor mint supply one', async () => {
-      const mint = new Mint(mintUrl, { customRequest: makeRequest(infoWithN21()) });
-
-      const oidc = await mint.oidcAuth();
-
-      expect(clientIdOf(oidc)).toBe('cashu-client');
-    });
-  });
-
   describe('generic quote methods without options', () => {
     it('createMintQuote works without an options argument', async () => {
       const requestSpy = vi.fn(async (options: ReqArgs) => {

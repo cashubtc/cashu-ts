@@ -4,7 +4,7 @@ import request, { type RequestFetch, type RequestFn, type RequestOptions } from 
 import { Wallet } from '../wallet/Wallet';
 
 import { AuthManager } from './AuthManager';
-import type { OIDCAuth, OIDCAuthOptions } from './OIDCAuth';
+import { OIDCAuth, type OIDCAuthOptions } from './OIDCAuth';
 
 /**
  * High-level helper to create a fully authenticated wallet session.
@@ -56,8 +56,8 @@ export async function createAuthWallet(
     logger: options?.logger,
   });
 
-  // 3. Discover and configure OIDCAuth from the mint
-  const oidc = await mint.oidcAuth({
+  // 3. Discover and configure OIDCAuth from the mint's NUT-21 metadata
+  const oidc = OIDCAuth.fromMintInfo(await mint.getLazyMintInfo(), {
     ...options?.oidc,
     logger: options?.logger,
   });
