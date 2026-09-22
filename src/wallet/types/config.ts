@@ -220,8 +220,8 @@ export type SendConfig = {
   onCountersReserved?: OnCountersReserved;
   /**
    * Aborts the requests this call makes; the call rejects with `CallerAbortError`. A one-shot
-   * operation honours it only until its commit request is sent; to cancel a commit, prepare first
-   * and pass the signal to the complete step, where the preview makes a retry safe.
+   * operation honours it only until preparation finishes; to cancel a commit, prepare first and
+   * pass the signal to the complete step, where the preview makes a retry safe.
    */
   signal?: AbortSignal;
 };
@@ -251,8 +251,8 @@ export type ReceiveConfig = {
   onCountersReserved?: OnCountersReserved;
   /**
    * Aborts the requests this call makes; the call rejects with `CallerAbortError`. A one-shot
-   * operation honours it only until its commit request is sent; to cancel a commit, prepare first
-   * and pass the signal to the complete step, where the preview makes a retry safe.
+   * operation honours it only until preparation finishes; to cancel a commit, prepare first and
+   * pass the signal to the complete step, where the preview makes a retry safe.
    */
   signal?: AbortSignal;
 };
@@ -290,8 +290,8 @@ export type MintProofsConfig = {
   onCountersReserved?: OnCountersReserved;
   /**
    * Aborts the requests this call makes; the call rejects with `CallerAbortError`. A one-shot
-   * operation honours it only until its commit request is sent; to cancel a commit, prepare first
-   * and pass the signal to the complete step, where the preview makes a retry safe.
+   * operation honours it only until preparation finishes; to cancel a commit, prepare first and
+   * pass the signal to the complete step, where the preview makes a retry safe.
    */
   signal?: AbortSignal;
 };
@@ -315,8 +315,8 @@ export type MeltProofsConfig = {
   nut08Change?: boolean;
   /**
    * Aborts the requests this call makes; the call rejects with `CallerAbortError`. A one-shot
-   * operation honours it only until its commit request is sent; to cancel a commit, prepare first
-   * and pass the signal to the complete step, where the preview makes a retry safe.
+   * operation honours it only until preparation finishes; to cancel a commit, prepare first and
+   * pass the signal to the complete step, where the preview makes a retry safe.
    */
   signal?: AbortSignal;
 };

@@ -82,6 +82,7 @@ import type { Proof, ProofLike } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 import { BATCH_POOL_SIZE, runPool } from '../transport';
 import type { RequestFetch, RequestFn } from '../transport';
+import { CallerAbortError } from '../transport/request';
 import {
   ABSOLUTE_MAX_BATCH_SIZE,
   bolt11AmountMsat,
@@ -398,6 +399,10 @@ class Wallet {
     );
     return nut29.params;
   }
+  private throwIfAborted(signal?: AbortSignal): void {
+    if (signal?.aborted) throw new CallerAbortError('Operation aborted by caller');
+  }
+
   private requireSupport(op: 'mint' | 'melt', method: string): void {
     this.failIf(
       !this.getMintInfo().supportsMintMeltMethod(op, method, this._unit),
@@ -1456,6 +1461,7 @@ class Wallet {
     config?: ReceiveConfig,
     outputType?: OutputType,
   ): Promise<SwapPreview> {
+    this.throwIfAborted(config?.signal);
     const { keysetId, requireDleq, proofsWeHave, onCountersReserved, preimage } = config || {};
     outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 
@@ -1537,6 +1543,7 @@ class Wallet {
     const outputs = this.createOutputData(this.preparedTotal(receiveOT), keyset, receiveOT);
 
     // Return SwapPreview
+    this.throwIfAborted(config?.signal);
     return {
       amount: receiveAmount,
       fees: swapFee,
@@ -1629,6 +1636,7 @@ class Wallet {
     config?: SendConfig,
     outputConfig?: OutputConfig,
   ): Promise<SendResponse> {
+    this.throwIfAborted(config?.signal);
     const sendAmount = this.parseAmount(amount, 'send');
     const { keysetId, includeFees = false } = config || {};
     // Fallback to policy defaults if no outputConfig
@@ -1731,6 +1739,7 @@ class Wallet {
     config?: SendConfig,
     outputConfig?: OutputConfig,
   ): Promise<SwapPreview> {
+    this.throwIfAborted(config?.signal);
     const sendAmountTarget = this.parseAmount(amount, 'prepareSwapToSend');
     const normalizedProofs = normalizeProofAmounts(proofs);
     const { keysetId, includeFees = false, onCountersReserved, preimage } = config || {};
@@ -1815,6 +1824,7 @@ class Wallet {
     const keepOutputs = this.createOutputData(keepAmount, keyset, keepOT);
 
     // Return SwapPreview
+    this.throwIfAborted(config?.signal);
     return {
       amount: sendAmountTarget,
       fees: swapFee,
@@ -2693,6 +2703,7 @@ class Wallet {
     if (counters.length === 0) return { proofs: [], used: false };
     const states = await this.checkProofsStates(
       secrets.map((secret) => ({ secret, id: keyset.id })),
+      { signal },
     );
 
     // Spent counters drop out here, so their B_ is never built or sent and the mint never sees
@@ -3351,6 +3362,7 @@ class Wallet {
     config?: MintProofsConfig,
     outputType?: OutputType,
   ): Promise<MintPreview<TQuote>> {
+    this.throwIfAborted(config?.signal);
     this.failIf(
       typeof quote === 'string',
       `prepareMint: expected a quote object, not a string ID. Pass { quote: id } and the wallet reads it from the mint.`,
@@ -3494,6 +3506,7 @@ class Wallet {
       }
     }
 
+    this.throwIfAborted(config?.signal);
     return { method, quote: resolvedQuote, outputData: outputs, signature, legacySignature };
   }
 
@@ -3599,6 +3612,7 @@ class Wallet {
     config?: MintProofsConfig,
     outputType?: OutputType,
   ): Promise<BatchMintPreview<TQuote>> {
+    this.throwIfAborted(config?.signal);
     this.failIf(entries.length === 0, 'prepareBatchMint: no entries provided');
     // Enforce NUT-29 batch-size limit advertised by the mint, clamped to our absolute cap.
     // Before mint info is loaded the absolute cap still applies.
@@ -3770,6 +3784,7 @@ class Wallet {
       }
     }
 
+    this.throwIfAborted(config?.signal);
     return {
       method,
       quotes: resolvedEntries.map((e) => e.quote),
@@ -4309,6 +4324,7 @@ class Wallet {
     config?: MeltProofsConfig,
     outputType?: OutputType,
   ): Promise<MeltPreview<TQuote>> {
+    this.throwIfAborted(config?.signal);
     this.failIf(
       typeof meltQuote.quote !== 'string' || meltQuote.quote.length === 0,
       'prepareMelt: the quote needs its id',
@@ -4415,6 +4431,7 @@ class Wallet {
       quote: resolvedQuote,
     };
 
+    this.throwIfAborted(config?.signal);
     return meltPreview;
   }
 

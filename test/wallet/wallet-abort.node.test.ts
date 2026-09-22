@@ -2,6 +2,10 @@ import { describe, expect, test, vi } from 'vitest';
 
 import {
   Wallet,
+  Amount,
+  CallerAbortError,
+  CheckStateEnum,
+  MeltQuoteState,
   type MeltQuoteBolt11Response,
   type MeltQuoteOnchainResponse,
   type MintQuoteBolt11Response,
@@ -9,7 +13,7 @@ import {
   type SwapPreview,
 } from '../../src';
 
-import { useTestServer, mint, mintInfoResp, unit } from './_setup';
+import { useTestServer, mint, mintInfoResp, unit, token3sat } from './_setup';
 
 useTestServer();
 
@@ -131,4 +135,101 @@ describe('AbortSignal on wallet operations', () => {
 
     expect(spy).toHaveBeenCalledWith('mq12', { signal: ac.signal });
   });
+});
+
+test.each(['send', 'receive', 'mint', 'batchMint', 'melt'] as const)(
+  '%s rejects cancellation before and during preparation without committing',
+  async (operation) => {
+    const wallet = new Wallet(mint, { unit, bip39seed: new Uint8Array(64).fill(1) });
+    await wallet.loadMint();
+    const proofs = wallet.decodeToken(token3sat).proofs;
+    const quote = {
+      quote: 'q',
+      unit,
+      amount: Amount.from(1),
+      amount_paid: Amount.from(1),
+      amount_issued: Amount.zero(),
+    };
+    const swap = vi.spyOn(wallet.mint, 'swap');
+    const mintCall = vi.spyOn(wallet.mint, 'mint');
+    const melt = vi.spyOn(wallet.mint, 'melt');
+    const batch = vi.spyOn(wallet.mint, 'mintBatch');
+    for (const preAborted of [true, false]) {
+      const ac = new AbortController();
+      if (preAborted) ac.abort();
+      const config = { signal: ac.signal, onCountersReserved: () => ac.abort() };
+      const run = () => {
+        switch (operation) {
+          case 'send':
+            return wallet.send(1, proofs, config);
+          case 'receive':
+            return wallet.receive(proofs, config);
+          case 'mint':
+            return wallet.mintProofs('bolt11', 1, quote, config);
+          case 'batchMint':
+            return wallet.prepareBatchMint('bolt11', [{ amount: 1, quote }], config);
+          case 'melt':
+            return wallet.meltProofs(
+              'bolt11',
+              { ...quote, state: MeltQuoteState.UNPAID },
+              proofs,
+              config,
+            );
+        }
+      };
+      await expect(run()).rejects.toBeInstanceOf(CallerAbortError);
+    }
+    expect(swap).not.toHaveBeenCalled();
+    expect(mintCall).not.toHaveBeenCalled();
+    expect(melt).not.toHaveBeenCalled();
+    expect(batch).not.toHaveBeenCalled();
+  },
+);
+
+test('a one-shot mint finishes when aborted during the commit', async () => {
+  const wallet = new Wallet(mint, { unit });
+  await wallet.loadMint();
+  const ac = new AbortController();
+  const commit = vi
+    .spyOn(wallet.mint, 'mint')
+    .mockImplementation(async (_method, _payload, opts) => {
+      ac.abort();
+      expect(opts?.signal).toBeUndefined();
+      return {
+        signatures: _payload.outputs.map((o) => ({
+          id: o.id,
+          amount: o.amount,
+          C_: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+        })),
+      };
+    });
+  await expect(
+    wallet.mintProofs(
+      'bolt11',
+      1,
+      {
+        quote: 'q',
+        unit,
+        amount_paid: Amount.from(1),
+        amount_issued: Amount.zero(),
+      },
+      { signal: ac.signal },
+    ),
+  ).resolves.toHaveLength(1);
+  expect(commit).toHaveBeenCalledOnce();
+});
+
+test('restore cancels state checks even when every scanned proof is spent', async () => {
+  const wallet = new Wallet(mint, { unit, bip39seed: new Uint8Array(64).fill(1) });
+  await wallet.loadMint();
+  const ac = new AbortController();
+  const check = vi.spyOn(wallet.mint, 'check').mockImplementation(async ({ Ys }, opts) => {
+    if (opts?.signal?.aborted) throw new CallerAbortError('aborted');
+    ac.abort();
+    return { states: Ys.map((Y) => ({ Y, state: CheckStateEnum.SPENT, witness: null })) };
+  });
+  await expect(
+    wallet.batchRestore({ signal: ac.signal, gapLimit: 1, batchSize: 1, maxCounter: 1 }),
+  ).rejects.toBeInstanceOf(CallerAbortError);
+  expect(check).toHaveBeenCalledTimes(2);
 });

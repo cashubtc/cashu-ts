@@ -61,7 +61,7 @@ const ac = new AbortController();
 // A read or a quote check: the signal covers the whole call.
 const quote = await wallet.checkMintQuoteBolt11(quoteId, { signal: ac.signal });
 
-// A one-shot operation honours the signal only until its commit request is sent, so a swap the
+// A one-shot operation honours the signal only until preparation finishes, so a swap the
 // mint may already have processed is never abandoned with its outputs unknown.
 const { keep, send } = await wallet.ops.send(5, myProofs).signal(ac.signal).run();
 
