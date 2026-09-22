@@ -2244,9 +2244,9 @@ describe('batchRestore mutants', () => {
     await wallet.batchRestore({ gapLimit: 1, batchSize: 1, keysetId: KEYSET_ID });
 
     // Counters 0-3 are handed out in order (a `-` mutant in the start math would probe -1).
-    expect(restoreSpy).toHaveBeenNthCalledWith(1, 0, 1, KEYSET_ID);
-    expect(restoreSpy).toHaveBeenNthCalledWith(2, 1, 1, KEYSET_ID);
+    expect(restoreSpy).toHaveBeenNthCalledWith(1, 0, 1, KEYSET_ID, undefined);
+    expect(restoreSpy).toHaveBeenNthCalledWith(2, 1, 1, KEYSET_ID, undefined);
     // Every batch so far was used, so the fifth must start at counter 4 (a `-=` advance mutant goes negative).
-    expect(restoreSpy).toHaveBeenNthCalledWith(5, 4, 1, KEYSET_ID);
+    expect(restoreSpy).toHaveBeenNthCalledWith(5, 4, 1, KEYSET_ID, undefined);
   });
 });

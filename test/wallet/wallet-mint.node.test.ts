@@ -799,7 +799,7 @@ describe('requestTokens', () => {
         await expect(
           wallet.mintProofsBolt11(1, quote.quote, { privkey }, { type: 'custom', data }),
         ).resolves.toEqual([]);
-        expect(fetchQuote).toHaveBeenCalledExactlyOnceWith(quote.quote);
+        expect(fetchQuote).toHaveBeenCalledExactlyOnceWith(quote.quote, { signal: undefined });
       },
     );
 

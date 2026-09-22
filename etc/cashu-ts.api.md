@@ -8,6 +8,11 @@ import { Fp2 } from '@noble/curves/abstract/tower.js';
 import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 
 // @public
+export type AbortOptions = {
+    signal?: AbortSignal;
+};
+
+// @public
 export class Amount {
     // (undocumented)
     add(other: AmountLike): Amount;
@@ -242,6 +247,7 @@ export type BatchRestoreConfig = {
     batchSize?: number;
     counter?: number;
     keysetId?: string;
+    signal?: AbortSignal;
 };
 
 // @public
@@ -339,11 +345,16 @@ export type CompleteMeltOptions = {
     preferAsync?: boolean;
     extraPayload?: Record<string, unknown>;
     scriptPath?: ScriptPathPlan[];
+    signal?: AbortSignal;
 };
+
+// @public
+export type CompleteMintOptions = AbortOptions;
 
 // @public (undocumented)
 export type CompleteSwapOptions = {
     scriptPath?: ScriptPathPlan[];
+    signal?: AbortSignal;
 };
 
 // @public
@@ -1064,6 +1075,7 @@ export class MeltBuilder<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | '
     privkey(k: string | string[]): this;
     run(): Promise<MeltProofsResponse<TQuote>>;
     scriptPath(plans: ScriptPathPlan[]): this;
+    signal(signal: AbortSignal): this;
 }
 
 // @public
@@ -1084,6 +1096,7 @@ export class MeltOnchainBuilder {
     privkey(k: string | string[]): this;
     run(): Promise<MeltProofsResponse<MeltQuoteOnchainResponse>>;
     scriptPath(plans: ScriptPathPlan[]): this;
+    signal(signal: AbortSignal): this;
 }
 
 // @public
@@ -1103,6 +1116,7 @@ export type MeltProofsConfig = {
     preimage?: string;
     onCountersReserved?: OnCountersReserved;
     nut08Change?: boolean;
+    signal?: AbortSignal;
 };
 
 // @public
@@ -1303,6 +1317,7 @@ export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M ex
     proofsWeHave(p: Array<Pick<ProofLike, 'amount'>>): this;
     run(this: MintBuilder<M, true>): Promise<Proof[]>;
     sign(fn: NonNullable<MintProofsConfig['sign']>): MintBuilder<M, true>;
+    signal(signal: AbortSignal): this;
 }
 
 // @public
@@ -1496,6 +1511,7 @@ export type MintProofsConfig = {
     sign?: (request: MintQuoteSignRequest) => Promise<string>;
     proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
     onCountersReserved?: OnCountersReserved;
+    signal?: AbortSignal;
 };
 
 // @public
@@ -2210,6 +2226,7 @@ export class ReceiveBuilder {
     requireDleq(on?: boolean): this;
     run(): Promise<Proof[]>;
     scriptPath(plans: ScriptPathPlan[]): this;
+    signal(signal: AbortSignal): this;
 }
 
 // @public
@@ -2221,6 +2238,7 @@ export type ReceiveConfig = {
     requireDleq?: boolean;
     proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
     onCountersReserved?: OnCountersReserved;
+    signal?: AbortSignal;
 };
 
 // @public
@@ -2268,6 +2286,7 @@ export type RestoreAllConfig = Omit<BatchRestoreConfig, 'counter' | 'keysetId'>;
 // @public (undocumented)
 export type RestoreConfig = {
     keysetId?: string;
+    signal?: AbortSignal;
 };
 
 // @public (undocumented)
@@ -2387,6 +2406,7 @@ export class SendBuilder {
     proofsWeHave(p: Array<Pick<ProofLike, 'amount'>>): this;
     run(): Promise<SendResponse>;
     scriptPath(plans: ScriptPathPlan[]): this;
+    signal(signal: AbortSignal): this;
 }
 
 // @public
@@ -2398,6 +2418,7 @@ export type SendConfig = {
     includeFees?: boolean;
     proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
     onCountersReserved?: OnCountersReserved;
+    signal?: AbortSignal;
 };
 
 // @public
@@ -2855,46 +2876,47 @@ export class Wallet {
         lastCounterWithSignature?: number;
     }>;
     bindKeyset(id: string): void;
-    checkMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(method: string, quote: string | Pick<TRes, 'quote'>, options?: {
+    checkMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(method: string, quote: string | Pick<TRes, 'quote'>, options?: AbortOptions & {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
-    checkMeltQuoteBolt11(quote: string | MeltQuoteBolt11Response): Promise<MeltQuoteBolt11Response>;
-    checkMeltQuoteBolt12(quote: string): Promise<MeltQuoteBolt12Response>;
-    checkMeltQuoteOnchain(quote: string): Promise<MeltQuoteOnchainResponse>;
-    checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, quote: string | Pick<TRes, 'quote'>, options?: {
+    checkMeltQuoteBolt11(quote: string | MeltQuoteBolt11Response, opts?: AbortOptions): Promise<MeltQuoteBolt11Response>;
+    checkMeltQuoteBolt12(quote: string, opts?: AbortOptions): Promise<MeltQuoteBolt12Response>;
+    checkMeltQuoteOnchain(quote: string, opts?: AbortOptions): Promise<MeltQuoteOnchainResponse>;
+    checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, quote: string | Pick<TRes, 'quote'>, options?: AbortOptions & {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
-    checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, quotes: Array<string | Pick<TRes, 'quote'>>, options?: {
+    checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, quotes: Array<string | Pick<TRes, 'quote'>>, options?: AbortOptions & {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes[]>;
-    checkMintQuoteBatchBolt11(quotes: Array<string | MintQuoteBolt11Response>): Promise<MintQuoteBolt11Response[]>;
-    checkMintQuoteBatchBolt12(quotes: Array<string | MintQuoteBolt12Response>): Promise<MintQuoteBolt12Response[]>;
-    checkMintQuoteBolt11(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response>;
-    checkMintQuoteBolt12(quote: string): Promise<MintQuoteBolt12Response>;
-    checkMintQuoteOnchain(quote: string): Promise<MintQuoteOnchainResponse>;
-    checkProofsStates(proofs: Array<Pick<ProofLike, 'secret' | 'id'>>): Promise<ProofState[]>;
-    completeBatchMint(batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;
+    checkMintQuoteBatchBolt11(quotes: Array<string | MintQuoteBolt11Response>, opts?: AbortOptions): Promise<MintQuoteBolt11Response[]>;
+    checkMintQuoteBatchBolt12(quotes: Array<string | MintQuoteBolt12Response>, opts?: AbortOptions): Promise<MintQuoteBolt12Response[]>;
+    checkMintQuoteBolt11(quote: string | MintQuoteBolt11Response, opts?: AbortOptions): Promise<MintQuoteBolt11Response>;
+    checkMintQuoteBolt12(quote: string, opts?: AbortOptions): Promise<MintQuoteBolt12Response>;
+    checkMintQuoteOnchain(quote: string, opts?: AbortOptions): Promise<MintQuoteOnchainResponse>;
+    checkProofsStates(proofs: Array<Pick<ProofLike, 'secret' | 'id'>>, opts?: AbortOptions): Promise<ProofState[]>;
+    completeBatchMint(batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>, opts?: CompleteMintOptions): Promise<Proof[]>;
     completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote>, privkey?: string | string[], options?: CompleteMeltOptions): Promise<MeltProofsResponse<TQuote>>;
-    completeMint(mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;
+    completeMint(mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>, opts?: CompleteMintOptions): Promise<Proof[]>;
     completeSwap(swapPreview: SwapPreview, privkey?: string | string[], options?: CompleteSwapOptions): Promise<SendResponse>;
     readonly counters: WalletCounters;
     createMeltChangeProofs(outputData: OutputDataLike[], changeSigs: SerializedBlindedSignature[]): Proof[];
-    createMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(method: string, payload: Record<string, unknown>, options?: {
+    createMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(method: string, payload: Record<string, unknown>, options?: AbortOptions & {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
-    createMeltQuoteBolt11(invoice: string, amountMsat?: AmountLike): Promise<MeltQuoteBolt11Response>;
-    createMeltQuoteBolt12(offer: string, amountMsat?: AmountLike): Promise<MeltQuoteBolt12Response>;
-    createMeltQuoteOnchain(address: string, amount: AmountLike): Promise<MeltQuoteOnchainResponse>;
-    createMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, payload: Record<string, unknown>, options?: {
+    createMeltQuoteBolt11(invoice: string, amountMsat?: AmountLike, opts?: AbortOptions): Promise<MeltQuoteBolt11Response>;
+    createMeltQuoteBolt12(offer: string, amountMsat?: AmountLike, opts?: AbortOptions): Promise<MeltQuoteBolt12Response>;
+    createMeltQuoteOnchain(address: string, amount: AmountLike, opts?: AbortOptions): Promise<MeltQuoteOnchainResponse>;
+    createMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, payload: Record<string, unknown>, options?: AbortOptions & {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
-    createMintQuoteBolt11(amount: AmountLike, pubkey: string, description?: string): Promise<MintQuoteBolt11Response>;
+    createMintQuoteBolt11(amount: AmountLike, pubkey: string, description?: string, opts?: AbortOptions): Promise<MintQuoteBolt11Response>;
     createMintQuoteBolt12(pubkey: string, options?: {
         amount?: AmountLike;
         description?: string;
+        signal?: AbortSignal;
     }): Promise<MintQuoteBolt12Response>;
-    createMintQuoteOnchain(pubkey: string): Promise<MintQuoteOnchainResponse>;
-    createMultiPathMeltQuote(invoice: string, millisatPartialAmount: AmountLike): Promise<MeltQuoteBolt11Response>;
+    createMintQuoteOnchain(pubkey: string, opts?: AbortOptions): Promise<MintQuoteOnchainResponse>;
+    createMultiPathMeltQuote(invoice: string, millisatPartialAmount: AmountLike, opts?: AbortOptions): Promise<MeltQuoteBolt11Response>;
     createQuoteLockKey(opts?: {
         random?: boolean;
     }): Promise<{
@@ -2922,7 +2944,7 @@ export class Wallet {
     }): boolean;
     get keyChain(): KeyChain;
     get keysetId(): string;
-    loadMint(forceRefresh?: boolean): Promise<void>;
+    loadMint(forceRefresh?: boolean, opts?: AbortOptions): Promise<void>;
     loadMintFromCache(mintInfo: GetInfoResponse, cache: KeyChainCache): void;
     // (undocumented)
     get logger(): Logger;

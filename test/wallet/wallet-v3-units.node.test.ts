@@ -156,7 +156,7 @@ describe('Wallet v3 mint preparation', () => {
     const prepare = vi.spyOn(wallet, 'prepareMint').mockResolvedValue({} as never);
     vi.spyOn(wallet, 'completeMint').mockResolvedValue([]);
     await wallet.mintProofsBolt11(1, 'q1');
-    expect(check).toHaveBeenCalledWith('q1');
+    expect(check).toHaveBeenCalledWith('q1', { signal: undefined });
     expect(prepare.mock.calls[0][2]).toBe(full);
   });
 
