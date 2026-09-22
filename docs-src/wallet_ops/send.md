@@ -4,6 +4,8 @@
 
 ## 1) Smallest possible send (policy defaults)
 
+> A crash or disconnect between the swap and your proof store strands the inputs. For anything that must survive that, persist the preview first: see [7) Crash-safe send](#7-crash-safe-send-persist-the-preview) and [NUT-19 replay](../usage/nut19.md).
+
 ```ts
 const { keep, send } = await wallet.ops.send(5, myProofs).run();
 
