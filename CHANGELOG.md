@@ -1,5 +1,36 @@
 # Changelog
 
+## [4.11.0](https://github.com/cashubtc/cashu-ts/compare/v4.10.2...v4.11.0) (2026-09-22)
+
+
+### Features
+
+* **crypto:** add mnemonicToSeedSync ([#1225](https://github.com/cashubtc/cashu-ts/issues/1225)) ([264c7b1](https://github.com/cashubtc/cashu-ts/commit/264c7b1f7cdf82a6de4ea3338c953238feae4f79))
+
+
+### Bug Fixes
+
+* **auth:** check OIDC endpoint schemes against the discovery document ([#1167](https://github.com/cashubtc/cashu-ts/issues/1167)) ([2ae444d](https://github.com/cashubtc/cashu-ts/commit/2ae444ddb330d7838c6fa1783375c9e3bd867b47))
+* **core:** keep a token's witness verbatim when re-encoding ([#1181](https://github.com/cashubtc/cashu-ts/issues/1181)) ([fb5b6a9](https://github.com/cashubtc/cashu-ts/commit/fb5b6a99ef7a532a7b6463da283bf9b311c953f6))
+* **core:** warn on implicit numeric coercion of Amount ([#1205](https://github.com/cashubtc/cashu-ts/issues/1205)) ([5973817](https://github.com/cashubtc/cashu-ts/commit/5973817f161fbae89c8c07805037de211a73493c))
+* **mint:** check a bolt11 melt preimage against the invoice payment hash ([#1165](https://github.com/cashubtc/cashu-ts/issues/1165)) ([61a2749](https://github.com/cashubtc/cashu-ts/commit/61a27492bb19eb4b55160cd6b65473ea1ed01042))
+* **model:** accept a structuredClone'd Amount in Amount.from ([#1230](https://github.com/cashubtc/cashu-ts/issues/1230)) ([0f53897](https://github.com/cashubtc/cashu-ts/commit/0f53897449eedee3d5590653735e3b95ff408430))
+* **model:** require boolean true for advertised NUT support ([#1177](https://github.com/cashubtc/cashu-ts/issues/1177)) ([969adbf](https://github.com/cashubtc/cashu-ts/commit/969adbf96604e32db739885c3e90ad64f7e5e9f3))
+* **transport:** drop the DOM CloseEvent type from the WSConnection public surface ([#1250](https://github.com/cashubtc/cashu-ts/issues/1250)) ([d6a0dfd](https://github.com/cashubtc/cashu-ts/commit/d6a0dfd4828bf6aa5ce59b2776eacfb19ddb23c9))
+* **transport:** export CallerAbortError and UncancellableReadError ([#1219](https://github.com/cashubtc/cashu-ts/issues/1219)) ([f2130fa](https://github.com/cashubtc/cashu-ts/commit/f2130fae9a8e7c7fd2cb8f3bece9a10c0992c2ec))
+* **transport:** fail established subscriptions when the socket closes ([#1252](https://github.com/cashubtc/cashu-ts/issues/1252)) ([1c26afa](https://github.com/cashubtc/cashu-ts/commit/1c26afa1d42609040882a6c10ed16b4dcd774f1c))
+* **transport:** log a failed unsubscribe at info ([#1217](https://github.com/cashubtc/cashu-ts/issues/1217)) ([f971aa8](https://github.com/cashubtc/cashu-ts/commit/f971aa873042930389007a38fa864cfdac23a3d8))
+* **transport:** quieter retry logging, slower backoff, and NetworkError names the mint ([#1241](https://github.com/cashubtc/cashu-ts/issues/1241)) ([d865e63](https://github.com/cashubtc/cashu-ts/commit/d865e63e4178e9c4ba335c93ecae4b31b81c542f))
+* **transport:** time out request attempts after 5 minutes by default ([#1227](https://github.com/cashubtc/cashu-ts/issues/1227)) ([23bae29](https://github.com/cashubtc/cashu-ts/commit/23bae29d583608c4a84a28d8a14bb22448f92b85))
+* **utils:** apply the keyset unit alphabet to version 01 ids too ([#1166](https://github.com/cashubtc/cashu-ts/issues/1166)) ([6891c1c](https://github.com/cashubtc/cashu-ts/commit/6891c1cad3091c63bdceafd77d74ad6164f69cc5))
+* **utils:** refuse text with a lone surrogate in the CBOR and TLV encoders ([#1210](https://github.com/cashubtc/cashu-ts/issues/1210)) ([9ce792f](https://github.com/cashubtc/cashu-ts/commit/9ce792febdb55f3093f29d230d100f5124ea71b4))
+* **utils:** resolve short keyset IDs in getDecodedTokenBinary ([#1154](https://github.com/cashubtc/cashu-ts/issues/1154)) ([ca89f63](https://github.com/cashubtc/cashu-ts/commit/ca89f63d339ac476f15a6572da447c25643aaf78))
+* **wallet:** log a keyset summary on load instead of the whole cache ([#1239](https://github.com/cashubtc/cashu-ts/issues/1239)) ([cef19af](https://github.com/cashubtc/cashu-ts/commit/cef19af77fc66c29c3c39886ba5c2c09d60b4416))
+* **wallet:** refuse keyset id versions this build cannot spend ([#1200](https://github.com/cashubtc/cashu-ts/issues/1200)) ([d932917](https://github.com/cashubtc/cashu-ts/commit/d932917f207fd44348d8520bb445365d49b8183f))
+* **wallet:** refuse NUT-29 batch operations the mint does not advertise ([#1226](https://github.com/cashubtc/cashu-ts/issues/1226)) ([6f17033](https://github.com/cashubtc/cashu-ts/commit/6f17033857882a8c7d6463a97bc544cc158ed157))
+* **wallet:** refuse pre-v3 locks the mint does not advertise ([#1196](https://github.com/cashubtc/cashu-ts/issues/1196)) ([d7fe998](https://github.com/cashubtc/cashu-ts/commit/d7fe998cc8f47c728f198164806a2df176d3b429))
+* **wallet:** verify the preimage on melt quote subscription updates ([#1211](https://github.com/cashubtc/cashu-ts/issues/1211)) ([f3f78fb](https://github.com/cashubtc/cashu-ts/commit/f3f78fb3350d44e601c68931ae5b58648aabc224))
+
 ## [4.10.2](https://github.com/cashubtc/cashu-ts/compare/v4.10.1...v4.10.2) (2026-09-14)
 
 
