@@ -728,7 +728,7 @@ describe('send', () => {
     const result = await wallet.send(2, proofs).catch((e) => e);
 
     expect(result).toBeInstanceOf(CTSError);
-    expect(result).toMatchObject({ message: 'Not enough funds available to send' });
+    expect(result.message).toMatch(/^Not enough funds available to send: /);
   });
   test('test send bad response', async () => {
     server.use(
