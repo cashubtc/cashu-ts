@@ -120,7 +120,7 @@ Because the source is shared, the global event on any wallet instance reflects t
 
 `createEphemeralCounterSource` returns the built-in in-memory implementation, which survives restarts when paired with the `countersReserved` persistence above. For multi-wallet use inside a single app instance, it is usually enough.
 
-Implement `CounterSource` yourself when the cursor must live in your storage: when several tabs or processes reserve from one DB, or when a crash between reserving and saving must not risk reusing a counter. Each method is then one atomic transaction:
+Implement `CounterSource` yourself when the cursor must live in your storage: when several tabs or processes reserve from one DB, or when a crash between reserving and saving must not risk reusing a counter. Each method is then one atomic transaction. `reserve` and `reserveAt` return a `CounterRange`, just `{ start, count }`; the wallet adds `counterKey` and `next` (`start + count`) when it emits `countersReserved`, so the source never computes them:
 
 ```ts skip
 import type { CounterSource, CounterRange } from '@cashu/cashu-ts';
@@ -128,6 +128,8 @@ import type { CounterSource, CounterRange } from '@cashu/cashu-ts';
 class IndexedDbCounterSource implements CounterSource {
   async reserve(counterKey: string, n: number): Promise<CounterRange> {
     // atomic read-and-increment in your DB
+    const start = await db.incrementAndGetPrevious(counterKey, n);
+    return { start, count: n };
   }
   async reserveAt(counterKey: string, start: number, count: number): Promise<CounterRange> {
     // one transaction: throw if start < next, else SET next = start + count

@@ -56,6 +56,6 @@ import { getDecodedToken } from '@cashu/cashu-ts';
 const token = getDecodedToken(tokenString, myKeyChain.getAllKeysetIds());
 ```
 
-> ⚠️ Will throw if the token contains v2 short keyset IDs that do not match a full keyset ID.
+> ⚠️ Will throw if the token contains v2 short keyset IDs that do not match a full keyset ID. Keyset ids are not mint-scoped, so a list gathered from several mints can resolve a short id to another mint's keyset; pass the ids of the token's mint.
 
 `getDecodedTokenBinary(bytes, keysetIds)` is the same advanced path for raw binary tokens and takes the same keyset ID list.

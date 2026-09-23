@@ -18,6 +18,10 @@ Keys load lazily because the retired-keyset set only grows: fetching every one u
 an unbounded series of `/v1/keys/{id}` calls per load. Keys are immutable per keyset id and
 verified against it, so loading them late is safe.
 
+The wire shape (`MintKeyset`, what `/v1/keysets` returns and what a cache stores) uses the NUT-02 field names, `active` and `input_fee_ppk`. The `Keyset` object the wallet hands you exposes the same values as `isActive` and `fee`; the wire names appear only on its constructor and `toJSON()`.
+
+A keyset id is derived from the key material, so two mints publishing the same keys share an id. The wallet's snapshot is per mint and never mixes them, but your storage can: key proofs, counters and trust decisions by mint URL and keyset id together, never by id alone. The same applies when resolving short v2 ids against a list gathered from several mints, see [Get Token](./get_token.md).
+
 ## Which keyset, which curve
 
 `wallet.keysetId` is the keyset the wallet builds outputs on, and `wallet.keyChain.getKeysets()` lists everything the mint offers for the wallet's unit, each with `unit`, `isActive`, `fee` and `version`, the id's first byte. That byte selects the curve: `02` is BLS12-381 and takes nutroot locks, `00` and `01` are secp256k1; `isBlsKeyset(id)` answers the same question from a bare id.

@@ -66,22 +66,22 @@ import {
 } from './limits';
 
 /**
- * Splits the amount into denominations of the provided keyset.
+ * Splits the amount into denominations present in the given keys.
  *
  * @remarks
  * Partial splits will be filled up to value using minimum splits required. Sorting is only applied
  * if a fill was made - exact custom splits are always returned in the same order.
  * @param value Amount to split.
- * @param keyset Keys to look up split amounts.
+ * @param keys Denomination-to-pubkey map of the keyset (`Keyset.keys`), not the keyset or its id.
  * @param split? Optional custom split amounts.
  * @param order? Optional order for split amounts (if fill was required)
  * @returns Array of split amounts.
- * @throws Error if split sum is greater than value, the keyset lacks requested denominations, or
- *   the fill would exceed an internal output cap (coarse denominations over a large value).
+ * @throws Error if split sum is greater than value, the keys lack requested denominations, or the
+ *   fill would exceed an internal output cap (coarse denominations over a large value).
  */
 export function splitAmount(
   value: AmountLike,
-  keyset: Keys,
+  keys: Keys,
   split?: AmountLike[],
   order?: 'desc' | 'asc',
 ): Amount[] {
@@ -107,7 +107,7 @@ export function splitAmount(
         `Split is greater than total amount: ${totalPositive.toString()} > ${remainingValue.toString()}`,
       );
     }
-    if (positive.some((amt) => !hasCorrespondingKey(amt, keyset))) {
+    if (positive.some((amt) => !hasCorrespondingKey(amt, keys))) {
       throw new CTSError(
         'Provided amount preferences do not match the amounts of the mint keyset.',
       );
@@ -126,7 +126,7 @@ export function splitAmount(
   }
 
   // Denomination fill for the remaining value
-  const sortedKeyAmounts = getKeysetAmountsAsAmount(keyset, 'desc');
+  const sortedKeyAmounts = getKeysetAmountsAsAmount(keys, 'desc');
   if (sortedKeyAmounts.length === 0) {
     throw new CTSError('Cannot split amount, keyset is inactive or contains no keys');
   }

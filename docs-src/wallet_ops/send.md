@@ -53,7 +53,7 @@ The replay window has bounds:
 ```ts
 const { keep, send } = await wallet.ops
   .send(15, myProofs)
-  .asDeterministic(0, [4, 4]) // counter=0 => auto-reserve; split must include 2x 4's
+  .asDeterministic(0, [4, 4]) // counter=0 => auto-reserve; denominations must include 2x 4's
   .keepAsRandom() // change proofs must have random secrets
   .run();
 ```

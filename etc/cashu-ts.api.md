@@ -2690,7 +2690,7 @@ export type SpendReceiptVerdict = {
 };
 
 // @public
-export function splitAmount(value: AmountLike, keyset: Keys, split?: AmountLike[], order?: 'desc' | 'asc'): Amount[];
+export function splitAmount(value: AmountLike, keys: Keys, split?: AmountLike[], order?: 'desc' | 'asc'): Amount[];
 
 // @public
 export class StaleKeysetError extends CTSError {
