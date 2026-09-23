@@ -67,7 +67,8 @@ const { keep, send } = await wallet.ops.send(5, myProofs).signal(ac.signal).run(
 
 // To be able to cancel the commit itself, prepare first. The preview holds the outputs, so a
 // cancelled complete can be retried with the same preview (NUT-19 replay) or restored (NUT-09).
-const preview = await wallet.ops.send(5, myProofs).prepare();
+const { preview, unselected } = await wallet.ops.send(5, myProofs).prepare();
+returnToStore(unselected); // the swap does not touch these
 const result = await wallet.completeSwap(preview, undefined, { signal: ac.signal });
 ```
 

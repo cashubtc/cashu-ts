@@ -1553,6 +1553,7 @@ class Wallet {
     return {
       amount: receiveAmount,
       fees: swapFee,
+      sendTotal: Amount.zero(),
       inputs: preimage === undefined ? proofs : attachHTLCPreimage(proofs, preimage),
       keepOutputs: outputs,
     };
@@ -1706,13 +1707,20 @@ class Wallet {
     }
 
     // Prepare and complete the send
-    const txn = await this.prepareSwapToSend(sendAmount, proofs, config, outputConfig);
+    const { preview, unselected } = await this.prepareSwapToSend(
+      sendAmount,
+      proofs,
+      config,
+      outputConfig,
+    );
     // no abort
-    return await this.completeSwap(
-      txn,
+    const result = await this.completeSwap(
+      preview,
       config?.privkey,
       config?.scriptPath?.length ? { scriptPath: config.scriptPath } : undefined,
     );
+    // One-shot callers never see the split, so keep is the full remainder.
+    return { ...result, keep: [...result.keep, ...unselected] };
   }
 
   /**
@@ -1726,17 +1734,21 @@ class Wallet {
    *
    * ```typescript
    * // Prepare transaction
-   * const txn = await wallet.prepareSwapToSend(5, proofs, { includeFees: true });
-   * const fees = txn.fees;
+   * const { preview, unselected } = await wallet.prepareSwapToSend(5, proofs, {
+   *   includeFees: true,
+   * });
+   * returnToStore(unselected); // the swap does not touch these
+   * const fees = preview.fees;
    *
-   * // Complete transaction
-   * const { keep, send } = await wallet.completeSwap(txn);
+   * // Complete transaction; keep is the change only, unselected went back to storage
+   * const { keep, send } = await wallet.completeSwap(preview);
    * ```
    *
    * @param amount Amount to send (receiver gets this net amount).
    * @param proofs Array of proofs to split.
    * @param config Optional parameters for the swap.
-   * @returns SwapPreview with metadata for swap transaction.
+   * @returns The swap preview, and the proofs it did not select. `unselected` take no part in the
+   *   swap: return them to storage, they are not in `completeSwap`'s `keep`.
    * @throws Throws if the send cannot be completed offline or if funds are insufficient.
    */
   async prepareSwapToSend(
@@ -1744,7 +1756,7 @@ class Wallet {
     proofs: ProofLike[],
     config?: SendConfig,
     outputConfig?: OutputConfig,
-  ): Promise<SwapPreview> {
+  ): Promise<{ preview: SwapPreview; unselected: Proof[] }> {
     this.throwIfAborted(config?.signal);
     const sendAmountTarget = this.parseAmount(amount, 'prepareSwapToSend');
     const normalizedProofs = normalizeProofAmounts(proofs);
@@ -1837,13 +1849,16 @@ class Wallet {
     // Return SwapPreview
     this.throwIfAborted(config?.signal);
     return {
-      amount: sendAmountTarget,
-      fees: swapFee,
-      inputs:
-        preimage === undefined ? selectedProofs : attachHTLCPreimage(selectedProofs, preimage),
-      sendOutputs,
-      keepOutputs,
-      unselectedProofs,
+      preview: {
+        amount: sendAmountTarget,
+        fees: swapFee,
+        sendTotal: sendAmount,
+        inputs:
+          preimage === undefined ? selectedProofs : attachHTLCPreimage(selectedProofs, preimage),
+        sendOutputs,
+        keepOutputs,
+      },
+      unselected: unselectedProofs,
     };
   }
 
@@ -1854,15 +1869,18 @@ class Wallet {
    *
    * ```typescript
    * // Prepare transaction
-   * const txn = await wallet.prepareSwapToSend(5, proofs, { includeFees: true });
+   * const { preview, unselected } = await wallet.prepareSwapToSend(5, proofs, {
+   *   includeFees: true,
+   * });
+   * returnToStore(unselected); // the swap does not touch these
    *
-   * // Complete transaction
-   * const result = await wallet.completeSwap(txn);
+   * // Complete transaction; keep is the change only
+   * const result = await wallet.completeSwap(preview);
    * ```
    *
    * @param swapPreview With metadata for swap transaction.
    * @param privkey The private key(s) for signing.
-   * @returns SendResponse with keep/send proofs.
+   * @returns SendResponse with keep/send proofs. `keep` is only what the swap produced.
    * @throws {@link StaleKeysetError} If the mint rejects the outputs' keyset.
    */
   async completeSwap(
@@ -1873,9 +1891,6 @@ class Wallet {
     const scriptPath = options?.scriptPath;
     const keepOutputs: OutputDataLike[] = swapPreview?.keepOutputs ? swapPreview.keepOutputs : [];
     const sendOutputs: OutputDataLike[] = swapPreview.sendOutputs ? swapPreview.sendOutputs : [];
-    const unselectedProofs: Proof[] = swapPreview.unselectedProofs
-      ? swapPreview.unselectedProofs
-      : [];
 
     // Sign proofs if needed. SIG_ALL covers the outputs, so it must see them in the order the
     // payload will carry, which is what orderOutputsForPayload decides for both.
@@ -1936,12 +1951,11 @@ class Wallet {
       }
     });
     this._logger.debug('SEND COMPLETED', {
-      unselectedProofs: unselectedProofs.map((p) => p.amount.toString()),
       keepProofs: keepProofs.map((p) => p.amount.toString()),
       sendProofs: sendProofs.map((p) => p.amount.toString()),
     });
     return {
-      keep: [...keepProofs, ...unselectedProofs],
+      keep: keepProofs,
       send: sendProofs,
       ...(receipts.length > 0 && { receipts }),
     };

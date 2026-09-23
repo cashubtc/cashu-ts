@@ -230,7 +230,7 @@ describe('nutroot edge cases', () => {
       w.loadMintFromCache(mintInfo, cache(true));
       expect(w.keysetId).toBe(id);
       if (mode === 'prepare') {
-        const preview = await builder.prepare();
+        const { preview } = await builder.prepare();
         expect(preview.sendOutputs?.[0].blindedMessage.id).toBe(legacyId);
       } else {
         const complete = vi.spyOn(w, 'completeSwap').mockResolvedValue({ send: [], keep: [] });

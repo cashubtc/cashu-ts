@@ -22,10 +22,11 @@ const receiveProofs = await wallet2.receive(token);
 ```typescript
 import { serializeSwapPreview } from '@cashu/cashu-ts';
 
-const preview = await wallet.prepareSwapToSend(32, proofs);
+const { preview, unselected } = await wallet.prepareSwapToSend(32, proofs);
+returnToStore(unselected); // the swap does not touch these
 await savePendingSend(serializeSwapPreview(preview)); // spendable material: protect it like proofs
 const { keep, send } = await wallet.completeSwap(preview);
-// the swap settled: delete the pending send, and return preview.unselectedProofs to storage
+// the swap settled: delete the pending send and store keep
 ```
 
 Replay and its bounds are in [Crash-safe send](../wallet_ops/send.md#2-crash-safe-send-persist-the-preview) and [NUT-19 replay](./nut19.md).

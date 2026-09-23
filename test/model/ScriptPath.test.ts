@@ -56,6 +56,7 @@ function fixture() {
   const preview: SwapPreview = {
     amount: Amount.from(1),
     fees: Amount.from(0),
+    sendTotal: Amount.from(0),
     inputs: [proof],
     keepOutputs: [OutputData.createSingleRandomData(1, keysetId)],
   };
@@ -104,6 +105,7 @@ describe('ScriptPath signing packages', () => {
     const preview: SwapPreview = {
       amount: Amount.from(1),
       fees: Amount.from(0),
+      sendTotal: Amount.from(0),
       inputs: [proof],
       keepOutputs: [OutputData.createSingleRandomData(1, keysetId)],
     };
@@ -185,6 +187,7 @@ describe('ScriptPath signing packages', () => {
     const preview: SwapPreview = {
       amount: Amount.from(1),
       fees: Amount.from(0),
+      sendTotal: Amount.from(0),
       inputs: [proof],
       keepOutputs: [OutputData.createSingleRandomData(1, keysetId)],
     };
@@ -215,6 +218,7 @@ describe('ScriptPath signing packages', () => {
     const preview: SwapPreview = {
       amount: Amount.from(1),
       fees: Amount.from(0),
+      sendTotal: Amount.from(0),
       inputs: [proof],
       keepOutputs: [OutputData.createSingleRandomData(1, keysetId)],
     };
@@ -293,6 +297,7 @@ describe('ScriptPath signing packages', () => {
     const preview: SwapPreview = {
       amount: Amount.from(1),
       fees: Amount.from(0),
+      sendTotal: Amount.from(0),
       inputs: [proof],
       keepOutputs: [OutputData.createSingleRandomData(1, keysetId)],
     };

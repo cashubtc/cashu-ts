@@ -103,9 +103,13 @@ export type SwapPreview = {
    */
   amount: Amount;
   /**
-   * Total fees for the swap (inc receiver's fees if applicable)
+   * Input fee the swap charges the sender for `inputs`.
    */
   fees: Amount;
+  /**
+   * Sum of `sendOutputs`: what the receiver gets. Zero for a receive preview.
+   */
+  sendTotal: Amount;
   /**
    * Input Proofs for this transaction.
    */
@@ -118,8 +122,4 @@ export type SwapPreview = {
    * Blinding data to construct proofs to keep.
    */
   keepOutputs?: OutputDataLike[];
-  /**
-   * Proofs not selected for this transaction (can be returned to storage).
-   */
-  unselectedProofs?: Proof[];
 };

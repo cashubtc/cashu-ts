@@ -453,8 +453,9 @@ export class SendBuilder {
    * Prepare the swap to send.
    *
    * @remarks
-   * Call `wallet.completeSwap(SwapPreview)` to complete the send.
-   * @returns A SwapPreview containing inputs, outputs, amount, fee and unselectedProofs.
+   * Call `wallet.completeSwap(preview)` to complete the send. `unselected` take no part in the swap
+   * and are not in its `keep`: return them to storage.
+   * @returns The swap preview (inputs, outputs, amount, fee) and the proofs not selected.
    * @throws If an offline mode is set: an offline selection has no swap to complete.
    */
   async prepare() {
