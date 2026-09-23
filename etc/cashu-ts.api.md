@@ -1375,6 +1375,11 @@ export class MintInfo {
         supported: boolean;
         params?: Nut29Info;
     };
+    isSupported(num: number): {
+        supported?: boolean;
+        disabled?: boolean;
+        params?: unknown;
+    };
     get maxArrayLength(): number;
     // (undocumented)
     get motd(): string | undefined;
