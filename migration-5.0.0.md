@@ -65,6 +65,7 @@ Return `unselected` to storage as soon as `prepare()` returns. They never enter 
 // Before
 const preview = await wallet.prepareSwapToSend(21, proofs);
 const { keep, send } = await wallet.completeSwap(preview); // keep included preview.unselectedProofs
+
 // After
 const { preview, unselected } = await wallet.prepareSwapToSend(21, proofs);
 returnToStore(unselected);
