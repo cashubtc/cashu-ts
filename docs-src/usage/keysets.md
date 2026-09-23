@@ -20,7 +20,7 @@ verified against it, so loading them late is safe.
 
 The wire shape (`MintKeyset`, what `/v1/keysets` returns and what a cache stores) uses the NUT-02 field names, `active` and `input_fee_ppk`. The `Keyset` object the wallet hands you exposes the same values as `isActive` and `fee`; the wire names appear only on its constructor and `toJSON()`.
 
-A keyset id is derived from the key material, so two mints publishing the same keys share an id. The wallet's snapshot is per mint and never mixes them, but your storage can: key proofs, counters and trust decisions by mint URL and keyset id together, never by id alone.
+A keyset id is derived from the key material, so two mints publishing the same keys share an id. The wallet's snapshot is per mint and never mixes them, but a proof store can: a proof is only redeemable at its mint, so key stored proofs by mint URL as well as keyset id.
 
 ## Which keyset, which curve
 
