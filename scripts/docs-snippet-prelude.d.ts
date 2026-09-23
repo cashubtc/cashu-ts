@@ -107,6 +107,3 @@ declare function storeChange(proofs: Proof[]): void;
 
 // Storage hook used by the custom CounterSource recipe.
 declare const db: { incrementAndGetPrevious(key: string, n: number): Promise<number> };
-
-// App-side mapping used by the derive_keys recipe.
-declare const counterByPubkey: Map<string, number>;
