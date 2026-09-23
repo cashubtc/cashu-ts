@@ -27,7 +27,7 @@ const newProofs = await wallet.completeMint(preview);
 ```ts
 const newProofs = await wallet.ops
   .mintBolt11(250, quote)
-  .asDeterministic(0, [128, 64]) // counter=0 => auto-reserve; denominations must be in the keyset
+  .asDeterministic(0, [128, 64]) // counter=0 => auto-reserve; denoms is a partial split, filled to 250
   .keyset('0123456')
   .onCountersReserved((info) => console.log(info))
   .run();
