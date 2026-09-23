@@ -324,6 +324,12 @@ export class MintInfo {
   isSupported(num: 15): { supported: boolean; params?: MPPMethod[] };
   isSupported(num: 19): { supported: boolean; params?: Nut19Policy };
   isSupported(num: 29): { supported: boolean; params?: Nut29Info };
+  /**
+   * Any NUT number cashu-ts knows, for iteration; the literal overloads above narrow the shape.
+   *
+   * @throws {@link CTSError} For a NUT number cashu-ts does not model.
+   */
+  isSupported(num: number): { supported?: boolean; disabled?: boolean; params?: unknown };
   isSupported(num: number) {
     switch (num) {
       case 4:

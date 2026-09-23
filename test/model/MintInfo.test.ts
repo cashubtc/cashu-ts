@@ -1307,3 +1307,17 @@ describe('MintInfo retained list caps', () => {
     expect(() => info.cache).toThrow('nesting');
   });
 });
+
+describe('isSupported from a loop', () => {
+  it('accepts a plain number and returns the union shape', () => {
+    const info = new MintInfo(MINTINFORESP);
+    const nuts: number[] = [4, 5, 7, 8, 9, 10, 11, 12, 14, 15, 17, 19, 20, 29];
+    const supported = nuts.filter((n) => {
+      const r = info.isSupported(n);
+      return r.supported ?? !r.disabled;
+    });
+    expect(supported).toContain(4);
+    expect(supported).toContain(7);
+    expect(() => info.isSupported(99)).toThrow('nut is not supported by cashu-ts');
+  });
+});
