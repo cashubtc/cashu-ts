@@ -38,6 +38,15 @@ const { privkey: recovered } = deriveKeyPair(seed, 'P2PK', counter);
 const receiveProofs = await wallet.receive(token, { privkey: recovered });
 ```
 
+Receiving a token locked to one of your keys is the reverse lookup: read the pubkeys the proof expects off its secret, then find the counter you stored for that pubkey. For v3 (nutroot) proofs use `wallet.spendOptions(proof, { privkeys })` instead, see [Spending locked proofs](../wallet_ops/spend_locked.md).
+
+```ts
+import { getP2PKExpectedWitnessPubkeys } from '@cashu/cashu-ts';
+
+const needed = getP2PKExpectedWitnessPubkeys(proof.secret); // [] when unlocked, or expired with no refund path
+const counter = counterByPubkey.get(needed[0]); // your own pubkey -> counter mapping
+```
+
 ## NUT-20: lock a mint quote
 
 ```typescript

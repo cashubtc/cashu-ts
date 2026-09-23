@@ -79,6 +79,14 @@ for (let attempt = 0; attempt < 3; attempt++) {
 if (!quote) throw new Error('Melt-all did not converge');
 ```
 
+## Proof count: `denominationTarget` and `proofsWeHave`
+
+When an operation is given `proofsWeHave` and no explicit `denominations`, the wallet shapes the new outputs so that you end up holding about `denominationTarget` proofs of each denomination (default 3, set on the `Wallet` constructor) instead of the plain binary split of the amount. That makes future change without a swap more likely, at the cost of holding more proofs, and on a keyset with `input_fee_ppk` every held proof is a future input fee. A fee-conscious wallet lowers the target or omits `proofsWeHave`; without `proofsWeHave` the target is never used.
+
+```ts
+const wallet = new Wallet(mintUrl, { unit: 'sat', denominationTarget: 1 });
+```
+
 ## NUT-18 payment requests
 
 The payee checks that incoming proofs net the requested amount after the input fees they will cost to swap (`Wallet.isPaymentRequestSatisfied`); the payer totals the request amount plus the applicable method fee (`PaymentRequest.amountToSend`). Both are covered in [Payment Requests](./payment_requests.md).
