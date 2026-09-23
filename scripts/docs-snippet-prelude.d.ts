@@ -104,3 +104,6 @@ declare const appLogger: { write(level: string, message: string, context?: unkno
 // Storage hooks used by the persisted-preview recipes.
 declare function returnToStore(proofs: Proof[]): void;
 declare function storeChange(proofs: Proof[]): void;
+
+// Storage hook used by the custom CounterSource recipe.
+declare const db: { incrementAndGetPrevious(key: string, n: number): Promise<number> };

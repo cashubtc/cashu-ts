@@ -4,7 +4,7 @@
 
 Two separate costs apply when spending proofs:
 
-- **Input fees** (NUT-02): each keyset advertises `input_fee_ppk` (parts per thousand, per input). Spending N proofs from that keyset costs `ceil(N * ppk / 1000)`, rounded up once per transaction.
+- **Input fees** (NUT-02): each keyset advertises `input_fee_ppk` (parts per thousand, per input; `keyset.fee` on the `Keyset` object). Spending N proofs from that keyset costs `ceil(N * ppk / 1000)`, rounded up once per transaction.
 - **Lightning costs** (melt only): a melt quote's `fee_reserve` is the ceiling the mint holds back for routing, not an estimate. When the mint supports NUT-08, unused reserve comes back as change.
 
 Most flows need no fee arithmetic at all: pass `includeFees: true` to `send` (or `.includeFees(true)` on the `wallet.ops` builders) and the wallet inflates the outputs so the receiver nets the requested amount. It solves for the amount, not the proof count: on a fragmented wallet the token can carry many small proofs, which the receiver then pays to spend. Pass `proofsWeHave` or a `denominations` plan when the shape matters. The helpers below are for when you budget, validate, or plan outputs yourself.
@@ -77,6 +77,14 @@ for (let attempt = 0; attempt < 3; attempt++) {
   quote = undefined; // reserve ate into the amount: re-quote smaller
 }
 if (!quote) throw new Error('Melt-all did not converge');
+```
+
+## Proof count: `denominationTarget` and `proofsWeHave`
+
+When an operation is given `proofsWeHave` and no explicit `denominations`, the wallet shapes the new outputs so that you end up holding about `denominationTarget` proofs of each denomination (default 3, set on the `Wallet` constructor) instead of the plain binary split of the amount. That makes future change without a swap more likely, at the cost of holding more proofs, and on a keyset with `input_fee_ppk` every held proof is a future input fee. A fee-conscious wallet lowers the target or omits `proofsWeHave`; without `proofsWeHave` the target is never used.
+
+```ts
+const wallet = new Wallet(mintUrl, { unit: 'sat', denominationTarget: 1 });
 ```
 
 ## NUT-18 payment requests
