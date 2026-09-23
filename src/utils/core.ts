@@ -72,7 +72,7 @@ import {
  * Partial splits will be filled up to value using minimum splits required. Sorting is only applied
  * if a fill was made - exact custom splits are always returned in the same order.
  * @param value Amount to split.
- * @param keys Denomination-to-pubkey map of the keyset (`Keyset.keys`), not the keyset or its id.
+ * @param keys Denomination-to-pubkey map of the keyset (`Keyset.keys`).
  * @param split? Optional custom split amounts.
  * @param order? Optional order for split amounts (if fill was required)
  * @returns Array of split amounts.
