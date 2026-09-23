@@ -28,4 +28,4 @@ const { keep, send } = await wallet.completeSwap(preview);
 // the swap settled: delete the pending send, and return preview.unselectedProofs to storage
 ```
 
-Replay and its bounds are in [Crash-safe send](../wallet_ops/send.md#7-crash-safe-send-persist-the-preview) and [NUT-19 replay](./nut19.md).
+Replay and its bounds are in [Crash-safe send](../wallet_ops/send.md#2-crash-safe-send-persist-the-preview) and [NUT-19 replay](./nut19.md).
