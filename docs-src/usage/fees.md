@@ -7,7 +7,7 @@ Two separate costs apply when spending proofs:
 - **Input fees** (NUT-02): each keyset advertises `input_fee_ppk` (parts per thousand, per input). Spending N proofs from that keyset costs `ceil(N * ppk / 1000)`, rounded up once per transaction.
 - **Lightning costs** (melt only): a melt quote's `fee_reserve` is the ceiling the mint holds back for routing, not an estimate. When the mint supports NUT-08, unused reserve comes back as change.
 
-Most flows need no fee arithmetic at all: pass `includeFees: true` to `send` (or `.includeFees(true)` on the `wallet.ops` builders) and the wallet inflates the outputs so the receiver nets the requested amount. It solves for the amount, not the proof count: on a fragmented wallet the padded token can carry many small proofs, which the receiver then pays to spend. Pass `proofsWeHave` or a `denominations` plan when the shape matters. The helpers below are for when you budget, validate, or plan outputs yourself.
+Most flows need no fee arithmetic at all: pass `includeFees: true` to `send` (or `.includeFees(true)` on the `wallet.ops` builders) and the wallet inflates the outputs so the receiver nets the requested amount. It solves for the amount, not the proof count: on a fragmented wallet the token can carry many small proofs, which the receiver then pays to spend. Pass `proofsWeHave` or a `denominations` plan when the shape matters. The helpers below are for when you budget, validate, or plan outputs yourself.
 
 ## Which helper, when
 
@@ -32,7 +32,7 @@ returnToStore(unselected); // the swap does not touch these
 // preview.fees - the input fees to swap your proofs
 
 // Receiver's side: they net the amount, and the token carries their spend fee on top.
-// For the default split that padding is what getFeesToInclude prices.
+// For the default split that fee is what getFeesToInclude prices.
 const receiverFee = wallet.getFeesToInclude(preview.amount);
 const tokenTotal = preview.sendTotal; // what the receiver gets
 tokenTotal.equals(preview.amount.add(receiverFee)); // true
@@ -44,7 +44,7 @@ const totalCost = tokenTotal.add(preview.fees);
 const { keep, send } = await wallet.completeSwap(preview);
 ```
 
-`getFeesToInclude` prices the padding from the default split of `amount`; pass `nOutputs` for a custom denominations plan. `selectProofsToSend(proofs, amount, includeFees)` is the selection alone: its `send` sums to the inputs picked, overspend included, not the amount the receiver nets. Price it with `getFeesForProofs(send)` if you use it directly.
+`getFeesToInclude` prices the receiver's swap fee from the default split of `amount`; pass `nOutputs` for a custom denominations plan. `selectProofsToSend(proofs, amount, includeFees)` is the selection alone: its `send` sums to the inputs picked, overspend included, not the amount the receiver nets. Price it with `getFeesForProofs(send)` if you use it directly.
 
 ## Exact-target: the receiver nets a fixed amount
 
@@ -53,7 +53,8 @@ const { keep, send } = await wallet.completeSwap(preview);
 ```ts
 // Price a sender-pays-fees send before committing to it
 const fee = wallet.getFeesToInclude(1000); // eg 2 on a 1000 ppk keyset
-// wallet.send(1000, proofs, { includeFees: true }) creates outputs totalling 1000 + fee
+// wallet.send(1000, proofs, { includeFees: true }) creates outputs totalling 1000 + fee.
+// On the result, sumProofs(send) is what the receiver gets; minus the amount, the receiver's swap fee.
 
 // Custom denomination sets: pass the planned output count instead of the default split
 wallet.getFeesToInclude(1000, { nOutputs: 4 });
