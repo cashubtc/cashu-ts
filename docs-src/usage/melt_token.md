@@ -26,6 +26,8 @@ const meltResponse = await wallet.meltProofsBolt11(meltQuote, proofsToSend);
 // store proofsToKeep and meltResponse.change in your app ..
 ```
 
+Show `amount + fee_reserve` as the cost. A mint may return no change even when routing cost less than the reserve, so treat `change` as a refund to reconcile afterwards, not a figure to promise.
+
 ## 2) Two-step melt with `prepareMelt()` / `completeMelt()`
 
 The two-step flow lets you persist the preview before paying. This is the recommended pattern when

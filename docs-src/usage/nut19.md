@@ -154,7 +154,7 @@ const { keep } = await wallet.completeSwap(deserializeSwapPreview(JSON.parse(sto
 
 `completeSwap` builds its request purely from the preview, so a replayed preview posts a
 byte-identical `/v1/swap` body. See [Receive § 5](../wallet_ops/receive.md) and
-[Send § 7](../wallet_ops/send.md) for the full serialize-and-rehydrate round trip.
+[Send § 2](../wallet_ops/send.md) for the full serialize-and-rehydrate round trip.
 
 Use the same pattern with `wallet.ops`:
 
