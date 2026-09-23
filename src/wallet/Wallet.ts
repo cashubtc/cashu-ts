@@ -1785,8 +1785,13 @@ class Wallet {
     // 	unselectedProofs: unselectedProofs.map(p=>p.amount.toString()),
     // 	selectedProofs: selectedProofs.map(p=>p.amount.toString()),
     // });
+    // A balance equal to the amount still fails once the input fee is added, so name the fee.
     if (selectedProofs.length === 0) {
-      throw new CTSError('Not enough funds available to send');
+      const available = sumProofs(normalizedProofs).toString();
+      const inputFee = this.getFeesForProofs(normalizedProofs).toString();
+      this.fail(
+        `Not enough funds available to send: ${available} available, ${sendAmount.toString()} required plus up to ${inputFee} input fee`,
+      );
     }
 
     // Calculate our expected change from the swap (and sanity check!)

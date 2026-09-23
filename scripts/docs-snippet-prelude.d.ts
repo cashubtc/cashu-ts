@@ -100,3 +100,7 @@ declare function loadCountersFromDb(): Record<string, number>;
 declare function savePendingSend(serialized: unknown): Promise<void>;
 declare function getInvoiceFor(amount: import('@cashu/cashu-ts').AmountLike): Promise<string>;
 declare const appLogger: { write(level: string, message: string, context?: unknown): void };
+
+// Storage hooks used by the persisted-preview recipes.
+declare function returnToStore(proofs: Proof[]): void;
+declare function storeChange(proofs: Proof[]): void;
