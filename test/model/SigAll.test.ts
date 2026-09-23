@@ -78,6 +78,7 @@ function makeSwapPreview() {
     sendOutputs: [dummyOutput],
     amount: Amount.from(32),
     fees: Amount.from(0),
+    sendTotal: Amount.from(0),
     keysetId: 'dummy-keyset-id',
   } as SwapPreview;
 }

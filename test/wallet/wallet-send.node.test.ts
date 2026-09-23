@@ -487,6 +487,7 @@ describe('send', () => {
     expect(preview.keepOutputs?.length).toBeGreaterThan(0);
     const stored = JSON.stringify(serializeSwapPreview(preview));
     const revived = deserializeSwapPreview(JSON.parse(stored) as SerializedSwapPreview);
+    expect(revived.sendTotal.equals(preview.sendTotal)).toBe(true);
 
     const first = await wallet.completeSwap(preview);
     const replayed = await wallet.completeSwap(revived);

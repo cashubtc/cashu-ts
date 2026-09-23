@@ -34,7 +34,7 @@ returnToStore(unselected); // the swap does not touch these
 // Receiver's side: they net the amount, and the token carries their spend fee on top.
 // For the default split that padding is what getFeesToInclude prices.
 const receiverFee = wallet.getFeesToInclude(preview.amount);
-const tokenTotal = Amount.sum((preview.sendOutputs ?? []).map((o) => o.blindedMessage.amount));
+const tokenTotal = preview.sendTotal; // what the receiver gets
 tokenTotal.equals(preview.amount.add(receiverFee)); // true
 
 // Your side: the token plus the swap's input fee, priced from the inputs it selected.

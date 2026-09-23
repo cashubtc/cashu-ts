@@ -366,6 +366,7 @@ describe('unselected proofs', () => {
     const spare = makeProof(8);
     const { preview, unselected } = await wallet.prepareSwapToSend(1, [makeProof(2), spare]);
     expect(unselected).toEqual([spare]);
+    expect(preview.sendTotal.equals(1)).toBe(true);
     const { keep } = await wallet.completeSwap(preview);
     expect(keep.some((p) => p.secret === spare.secret)).toBe(false);
   });

@@ -108,13 +108,13 @@ export function serializeSwapPreview(preview: SwapPreview): SerializedSwapPrevie
  */
 export function deserializeSwapPreview(serialized: SerializedSwapPreview): SwapPreview {
   try {
+    const sendOutputs = serialized.sendOutputs?.map((s) => OutputData.deserialize(s));
     return {
       amount: Amount.from(serialized.amount),
       fees: Amount.from(serialized.fees),
+      sendTotal: Amount.sum((sendOutputs ?? []).map((o) => o.blindedMessage.amount)),
       inputs: normalizeProofAmounts(serialized.inputs),
-      ...(serialized.sendOutputs && {
-        sendOutputs: serialized.sendOutputs.map((s) => OutputData.deserialize(s)),
-      }),
+      ...(sendOutputs && { sendOutputs }),
       ...(serialized.keepOutputs && {
         keepOutputs: serialized.keepOutputs.map((s) => OutputData.deserialize(s)),
       }),

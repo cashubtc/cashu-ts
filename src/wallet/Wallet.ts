@@ -1553,6 +1553,7 @@ class Wallet {
     return {
       amount: receiveAmount,
       fees: swapFee,
+      sendTotal: Amount.zero(),
       inputs: preimage === undefined ? proofs : attachHTLCPreimage(proofs, preimage),
       keepOutputs: outputs,
     };
@@ -1851,6 +1852,7 @@ class Wallet {
       preview: {
         amount: sendAmountTarget,
         fees: swapFee,
+        sendTotal: sendAmount,
         inputs:
           preimage === undefined ? selectedProofs : attachHTLCPreimage(selectedProofs, preimage),
         sendOutputs,

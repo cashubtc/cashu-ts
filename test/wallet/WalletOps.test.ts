@@ -143,6 +143,7 @@ class MockWallet {
     preview: {
       amount: Amount.from(16),
       fees: Amount.one(),
+      sendTotal: Amount.from(16),
       keysetId: '123',
       inputs: [],
       keepOutputs: [],
@@ -154,6 +155,7 @@ class MockWallet {
   prepareSwapToReceive: Mock<PrepareReceiveFn> = vi.fn<PrepareReceiveFn>(async () => ({
     amount: Amount.from(16),
     fees: Amount.one(),
+    sendTotal: Amount.zero(),
     keysetId: '123',
     inputs: [],
     keepOutputs: [],

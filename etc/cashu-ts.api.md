@@ -2739,6 +2739,7 @@ export type SwapMethod = {
 export type SwapPreview = {
     amount: Amount;
     fees: Amount;
+    sendTotal: Amount;
     inputs: Proof[];
     sendOutputs?: OutputDataLike[];
     keepOutputs?: OutputDataLike[];
