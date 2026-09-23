@@ -26,7 +26,8 @@ Most flows need no fee arithmetic at all: pass `includeFees: true` to `send` (or
 The number to put in front of a user is the input fee on the proofs the wallet will actually select, and that depends on the selection. `prepare()` runs it and returns the real figures:
 
 ```ts
-const preview = await wallet.ops.send(150, proofs).includeFees(true).prepare();
+const { preview, unselected } = await wallet.ops.send(150, proofs).includeFees(true).prepare();
+returnToStore(unselected); // the swap does not touch these
 // preview.amount - the amount to send
 // preview.fees - the input fees to swap your proofs
 

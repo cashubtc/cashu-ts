@@ -84,8 +84,7 @@ function serializeProof(proof: Proof): SerializedProof {
  * with {@link deserializeSwapPreview} replays a byte-identical swap request.
  *
  * The result holds `inputs` in the clear, so it is spendable bearer material: store it as carefully
- * as the proof database. `unselectedProofs` take no part in the replay and are not included; return
- * them to storage separately.
+ * as the proof database.
  */
 export function serializeSwapPreview(preview: SwapPreview): SerializedSwapPreview {
   return {

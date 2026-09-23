@@ -118,8 +118,4 @@ export type SwapPreview = {
    * Blinding data to construct proofs to keep.
    */
   keepOutputs?: OutputDataLike[];
-  /**
-   * Proofs not selected for this transaction (can be returned to storage).
-   */
-  unselectedProofs?: Proof[];
 };

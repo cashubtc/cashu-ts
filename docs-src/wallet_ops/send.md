@@ -18,22 +18,19 @@ A crash or disconnect between the swap and your proof store strands the inputs. 
 
 A one-shot `run()` that dies between the mint's reply and your storage write has spent the inputs without you ever seeing the new proofs. Persisting the preview closes that window: `completeSwap` builds its request purely from the preview, so replaying a persisted preview posts a byte-identical `/v1/swap` body, and a mint that caches the endpoint (NUT-19) returns the original signatures. `prepare()` is also the dry run: `preview.fees` is the input fee the swap will charge you, see [Fees](../usage/fees.md).
 
-`keep` means something different here. Proofs that were not selected sit in `preview.unselectedProofs`. A live preview still carries them and `completeSwap()` merges them into `keep`, but a preview that has been through `serializeSwapPreview` does not, so after a replay `keep` is the change only. Code that moved from `run()` to this form and kept storing `keep` wholesale will drop those proofs on the first replay. The pattern below behaves the same way on both paths.
+`keep` means something different here. `prepare()` hands back the proofs the swap will not touch as `unselected`, and `completeSwap()` returns only what the swap produced. Return `unselected` to storage as soon as `prepare()` returns: they never enter the preview, so they are not in the persisted blob and not in `keep`, and the storage code is the same whether you complete straight away or replay after a restart.
 
 ```ts
 import { deserializeSwapPreview, serializeSwapPreview } from '@cashu/cashu-ts';
 
-const preview = await wallet.ops.send(21, myProofs).prepare();
-
-// Unselected proofs take no part in the swap: back to storage now, not into the blob.
-returnToStore(preview.unselectedProofs ?? []);
+const { preview, unselected } = await wallet.ops.send(21, myProofs).prepare();
+returnToStore(unselected); // never part of the swap or the blob
 
 // Persist before completing. Previews hold Amount, bigint and Uint8Array values, so use
 // the serialization helper before stringify.
 const stored = JSON.stringify(serializeSwapPreview(preview));
 
-// Complete from the deserialized copy so keep is the change only, as it will be on a replay.
-const { keep, send } = await wallet.completeSwap(deserializeSwapPreview(JSON.parse(stored)));
+const { keep, send } = await wallet.completeSwap(preview);
 storeChange(keep);
 
 // ... after a restart: load the mint again, then replay the same preview ...
@@ -41,8 +38,6 @@ const { keep: change, send: recovered } = await wallet.completeSwap(
   deserializeSwapPreview(JSON.parse(stored)),
 );
 ```
-
-Completing from the deserialized copy rather than the live preview is what makes the two paths match: the live preview would merge `unselectedProofs` back into `keep`, and a store that already took them back would hold them twice.
 
 > The serialized preview contains `inputs` in the clear, so it is spendable bearer material.
 > Store it with the same protection as the proof database, and delete it once the swap settles.

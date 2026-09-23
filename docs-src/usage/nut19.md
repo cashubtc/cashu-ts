@@ -148,7 +148,6 @@ recover-after-restart lifecycle.
 import { deserializeSwapPreview, serializeSwapPreview } from '@cashu/cashu-ts';
 
 const receivePreview = await wallet.prepareSwapToReceive(token);
-const sendPreview = await wallet.prepareSwapToSend(21, proofs, { includeFees: true });
 
 // Swap previews have a serialize helper: persist the JSON-safe form, then
 // rehydrate it with deserializeSwapPreview to replay after a restart. The blob carries
@@ -167,5 +166,6 @@ Use the same pattern with `wallet.ops`:
 const mintPreview = await wallet.ops.mintBolt11(64, quoteId).prepare();
 const meltPreview = await wallet.ops.meltBolt11(meltQuote, proofsToSend).prepare();
 const receivePreview = await wallet.ops.receive(token).prepare();
-const sendPreview = await wallet.ops.send(21, myProofs).prepare();
+const { preview: sendPreview, unselected } = await wallet.ops.send(21, myProofs).prepare();
+returnToStore(unselected); // the swap does not touch these
 ```

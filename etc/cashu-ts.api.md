@@ -2402,7 +2402,10 @@ export class SendBuilder {
     offlineExactOnly(requireDleq?: boolean): this;
     onCountersReserved(cb: OnCountersReserved): this;
     preimage(preimage: string): this;
-    prepare(): Promise<SwapPreview>;
+    prepare(): Promise<{
+        preview: SwapPreview;
+        unselected: Proof[];
+    }>;
     privkey(k: string | string[]): this;
     proofsWeHave(p: Array<Pick<ProofLike, 'amount'>>): this;
     run(): Promise<SendResponse>;
@@ -2739,7 +2742,6 @@ export type SwapPreview = {
     inputs: Proof[];
     sendOutputs?: OutputDataLike[];
     keepOutputs?: OutputDataLike[];
-    unselectedProofs?: Proof[];
 };
 
 // @public
@@ -2974,7 +2976,10 @@ export class Wallet {
     prepareMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(method: string, meltQuote: TQuote, proofsToSend: ProofLike[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltPreview<TQuote>>;
     prepareMint<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>>(method: string, amount: AmountLike, quote: TQuote, config?: MintProofsConfig, outputType?: OutputType): Promise<MintPreview<TQuote>>;
     prepareSwapToReceive(token: Token | string | ProofLike[], config?: ReceiveConfig, outputType?: OutputType): Promise<SwapPreview>;
-    prepareSwapToSend(amount: AmountLike, proofs: ProofLike[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SwapPreview>;
+    prepareSwapToSend(amount: AmountLike, proofs: ProofLike[], config?: SendConfig, outputConfig?: OutputConfig): Promise<{
+        preview: SwapPreview;
+        unselected: Proof[];
+    }>;
     receive(token: Token | string | ProofLike[], config?: ReceiveConfig, outputType?: OutputType): Promise<Proof[]>;
     recoverQuoteLockKey(pubkey: string): Promise<string | undefined>;
     restore(start: number, count: number, config?: RestoreConfig): Promise<{

@@ -483,7 +483,7 @@ describe('send', () => {
 
     // A 3-sat input sending 1 produces change, so keepOutputs round trips too.
     const threeSat: Proof[] = [{ ...proofs[0], amount: Amount.from(3) }];
-    const preview = await wallet.prepareSwapToSend(1, threeSat);
+    const { preview } = await wallet.prepareSwapToSend(1, threeSat);
     expect(preview.keepOutputs?.length).toBeGreaterThan(0);
     const stored = JSON.stringify(serializeSwapPreview(preview));
     const revived = deserializeSwapPreview(JSON.parse(stored) as SerializedSwapPreview);
@@ -496,18 +496,6 @@ describe('send', () => {
     expect(replayed.send).toHaveLength(1);
     expect(replayed.send[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
     expect(first.send[0].secret).toBe(replayed.send[0].secret);
-  });
-
-  test('serializeSwapPreview omits unselected proofs', () => {
-    const serialized = serializeSwapPreview({
-      amount: Amount.from(1),
-      fees: Amount.from(0),
-      inputs: [proofs[0]],
-      unselectedProofs: [{ ...proofs[0], secret: 'not-part-of-the-replay' }],
-    });
-
-    expect(serialized).not.toHaveProperty('unselectedProofs');
-    expect(JSON.stringify(serialized)).not.toContain('not-part-of-the-replay');
   });
 
   test('deserializeSwapPreview rejects malformed output data', () => {
@@ -1214,7 +1202,7 @@ describe('send', () => {
       const wallet = new Wallet(mint, { unit, bip39seed: seed, logger });
       await wallet.loadMint();
 
-      const res = await wallet.prepareSwapToSend(
+      const { preview: res } = await wallet.prepareSwapToSend(
         tc.amount,
         proofs,
         { includeFees: tc.includeFees },
@@ -1317,7 +1305,7 @@ describe('send', () => {
       ]),
     ) as ProofLike[];
 
-    const res = await wallet.prepareSwapToSend(3, storedProofs, { includeFees: true });
+    const { preview: res } = await wallet.prepareSwapToSend(3, storedProofs, { includeFees: true });
     expect(res.inputs.length).toBeGreaterThan(0);
     expect(res.inputs.every((p) => p.amount instanceof Amount)).toBe(true);
   });
@@ -1415,7 +1403,12 @@ describe('send', () => {
       send: { type: 'deterministic', counter: 50 },
       keep: { type: 'deterministic', counter: 0 },
     };
-    const res1 = await wallet.prepareSwapToSend(3, proofs, { includeFees: true }, out1);
+    const { preview: res1 } = await wallet.prepareSwapToSend(
+      3,
+      proofs,
+      { includeFees: true },
+      out1,
+    );
 
     const sendLen1 = res1.sendOutputs?.length ?? 0;
     const keepLen1 = res1.keepOutputs?.length ?? 0;
@@ -1437,7 +1430,12 @@ describe('send', () => {
       send: { type: 'deterministic', counter: 0 },
       keep: { type: 'deterministic', counter: 0 },
     };
-    const res2 = await wallet.prepareSwapToSend(3, proofs, { includeFees: true }, out2);
+    const { preview: res2 } = await wallet.prepareSwapToSend(
+      3,
+      proofs,
+      { includeFees: true },
+      out2,
+    );
 
     const sendLen2 = res2.sendOutputs?.length ?? 0;
     const keepLen2 = res2.keepOutputs?.length ?? 0;

@@ -55,6 +55,22 @@ const id = preview.keysetId;
 const id = preview.outputData[0].blindedMessage.id; // or sendOutputs / keepOutputs for a SwapPreview
 ```
 
+## `prepareSwapToSend` returns the unselected proofs beside the preview
+
+`prepareSwapToSend` and the `wallet.ops.send(...).prepare()` builder now return `{ preview, unselected }` instead of a bare `SwapPreview`. `SwapPreview.unselectedProofs` is gone, and `completeSwap` returns only what the swap produced: the merge of unselected proofs into `keep` on a live preview no longer happens. One-shot `send()` and `run()` are unchanged and still return the full remainder in `keep`.
+
+Return `unselected` to storage as soon as `prepare()` returns. They never enter the preview, so they are not in the persisted blob and not in `keep`, whether you complete straight away or replay after a restart. Code that stored `keep` from `completeSwap` as the whole remainder will now drop the unselected proofs unless it does this.
+
+```ts
+// Before
+const preview = await wallet.prepareSwapToSend(21, proofs);
+const { keep, send } = await wallet.completeSwap(preview); // keep included preview.unselectedProofs
+// After
+const { preview, unselected } = await wallet.prepareSwapToSend(21, proofs);
+returnToStore(unselected);
+const { keep, send } = await wallet.completeSwap(preview); // keep is the change only
+```
+
 ## Mint previews no longer carry a wire `payload`
 
 `MintPreview` and `BatchMintPreview` are what the wallet decided, not the request it will send.

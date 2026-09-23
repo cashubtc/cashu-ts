@@ -50,7 +50,7 @@ type PrepareSendFn = (
   proofs: Proof[],
   config?: SendConfig,
   outputConfig?: OutputConfig,
-) => Promise<SwapPreview>;
+) => Promise<{ preview: SwapPreview; unselected: Proof[] }>;
 
 type ReceiveFn = (
   token: string,
@@ -140,13 +140,15 @@ class MockWallet {
   signP2PKProofs: Mock<SignP2PKFn> = vi.fn<SignP2PKFn>((ps) => ps); // passthrough
   send: Mock<SendFn> = vi.fn<SendFn>(async () => ({ keep: [], send: [] }));
   prepareSwapToSend: Mock<PrepareSendFn> = vi.fn<PrepareSendFn>(async () => ({
-    amount: Amount.from(16),
-    fees: Amount.one(),
-    keysetId: '123',
-    inputs: [],
-    keepOutputs: [],
-    sendOutputs: [],
-    unselectedProofs: [],
+    preview: {
+      amount: Amount.from(16),
+      fees: Amount.one(),
+      keysetId: '123',
+      inputs: [],
+      keepOutputs: [],
+      sendOutputs: [],
+    },
+    unselected: [],
   }));
   receive: Mock<ReceiveFn> = vi.fn<ReceiveFn>(async () => ({ proofs: [] }));
   prepareSwapToReceive: Mock<PrepareReceiveFn> = vi.fn<PrepareReceiveFn>(async () => ({

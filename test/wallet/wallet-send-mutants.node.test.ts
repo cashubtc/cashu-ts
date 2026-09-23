@@ -358,6 +358,28 @@ describe('send includeFees fee direction', () => {
   });
 });
 
+describe('unselected proofs', () => {
+  test('prepare hands them back and completeSwap leaves them out of keep', async () => {
+    echoSwap();
+    const wallet = new Wallet(mint, { unit, bip39seed: seed });
+    await wallet.loadMint();
+    const spare = makeProof(8);
+    const { preview, unselected } = await wallet.prepareSwapToSend(1, [makeProof(2), spare]);
+    expect(unselected).toEqual([spare]);
+    const { keep } = await wallet.completeSwap(preview);
+    expect(keep.some((p) => p.secret === spare.secret)).toBe(false);
+  });
+
+  test('one-shot send merges them into keep', async () => {
+    echoSwap();
+    const wallet = new Wallet(mint, { unit, bip39seed: seed });
+    await wallet.loadMint();
+    const spare = makeProof(8);
+    const { keep } = await wallet.send(1, [makeProof(2), spare]);
+    expect(keep.some((p) => p.secret === spare.secret)).toBe(true);
+  });
+});
+
 // -----------------------------------------------------------------
 // prepareSwapToSend: insufficient selection
 // -----------------------------------------------------------------

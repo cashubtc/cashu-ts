@@ -51,7 +51,9 @@ describe('AbortSignal on wallet operations', () => {
     await wallet.loadMint();
     const ac = new AbortController();
     const preview = { amount: 5 } as unknown as SwapPreview;
-    const prepare = vi.spyOn(wallet, 'prepareSwapToSend').mockResolvedValue(preview);
+    const prepare = vi
+      .spyOn(wallet, 'prepareSwapToSend')
+      .mockResolvedValue({ preview, unselected: [] });
     const complete = vi.spyOn(wallet, 'completeSwap').mockResolvedValue({ keep: [], send: [] });
 
     await wallet.ops.send(5, []).signal(ac.signal).run();
