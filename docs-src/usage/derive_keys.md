@@ -43,8 +43,7 @@ Receiving a token locked to one of your keys is the reverse lookup: read the pub
 ```ts
 import { getP2PKExpectedWitnessPubkeys } from '@cashu/cashu-ts';
 
-// [] when unlocked, or expired with no refund path; derive the key for whichever counter produced one of these
-const needed = getP2PKExpectedWitnessPubkeys(proof.secret);
+const needed = getP2PKExpectedWitnessPubkeys(proof.secret); // [] when unlocked, or expired with no refund path
 ```
 
 ## NUT-20: lock a mint quote
