@@ -169,7 +169,7 @@ describe('Restoring deterministic proofs', () => {
     // the find at 600 leaves 297 empty counters, so one more two-batch wave closes the gap
     expect(scan).toHaveBeenCalledTimes(5);
   });
-  test('Batch restore probes the gap, then doubles the wave up to the pool for a used HMAC keyset', async () => {
+  test('Batch restore probes the gap, then widens the wave up to the pool for a used HMAC keyset', async () => {
     const wallet = new Wallet(mint);
     await wallet.loadMint();
     const calls: Array<[number, number]> = [];
@@ -177,17 +177,15 @@ describe('Restoring deterministic proofs', () => {
       calls.push([start, count]);
       return start < 1500 ? found(1, start + count - 1) : empty;
     });
-    // the scan step is stubbed, so the keyset only has to look like a v1 (HMAC) id: 500-batches, pool 4
+    // the scan step is stubbed, so the keyset only has to look like a v1 (HMAC) id: 500-batches, pool 2
     await wallet.batchRestore({ keysetId: `01${'ab'.repeat(32)}` });
-    // one 300-wide probe, then waves of 2 and 4 batches as usage keeps showing
+    // one 300-wide probe, then waves of 1 and 2 batches while usage shows; the last batch closes the gap
     expect(calls).toEqual([
       [0, 300],
       [300, 500],
       [800, 500],
       [1300, 500],
       [1800, 500],
-      [2300, 500],
-      [2800, 500],
     ]);
   });
   test('Batch restore treats maxCounter as an inclusive ceiling and ends there', async () => {

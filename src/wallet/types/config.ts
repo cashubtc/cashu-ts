@@ -34,7 +34,7 @@ export type BatchRestoreConfig = {
   maxCounter?: number;
   /**
    * Counters per restore request after the opening probe. Defaults by keyset kind (500 for HMAC,
-   * 200 for BIP32, 100 for BLS), capped at the mint's advertised `max_array_length` (NUT-06).
+   * 200 for BIP32, 300 for BLS), capped at the mint's advertised `max_array_length` (NUT-06).
    */
   batchSize?: number;
   /**

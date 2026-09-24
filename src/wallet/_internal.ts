@@ -13,7 +13,6 @@ import type {
   SerializedBlindedMessage,
   SerializedBlindedSignature,
 } from '../model/types';
-import { BATCH_POOL_SIZE } from '../transport';
 import { mapInChunks } from '../utils/chunked';
 import { splitAmount } from '../utils/core';
 import { MAX_SPLIT_OUTPUTS } from '../utils/limits';
@@ -215,17 +214,16 @@ export function orderOutputsForPayload(
  * Scan geometry for a keyset kind: counters per restore batch and batches in flight.
  *
  * @remarks
- * Every scanned counter costs a derivation, a `Y` and, past the frontier, a blinded message, all on
- * the JS thread: about 0.1ms for HMAC (v1), 0.7ms for BIP32 (v0) and 1.1ms for BLS (v3). A batch is
- * sized to roughly one round trip of that work. Width only hides latency, and on the dear kinds two
- * batches already saturate it; wider waves just deepen the overshoot past the frontier.
+ * Measured on aged-spent histories against Nutshell and CDK: the scan's local work yields, so the
+ * limit is the mint's work and the overshoot past the frontier. Larger batches or more in flight
+ * add overshoot faster than they save round trips; two in flight won on every kind and both mints.
  * @internal
  */
 export function scanProfile(keysetId: string): { batchSize: number; poolSize: number } {
-  if (isBlsKeyset(keysetId)) return { batchSize: 100, poolSize: 2 };
+  if (isBlsKeyset(keysetId)) return { batchSize: 300, poolSize: 2 };
   // BIP32 (v0) keysets: base64 ids, or hex ids with a 00 version byte
   const bip32 = keysetId.startsWith('00') || !/^[0-9a-f]+$/i.test(keysetId);
-  return bip32 ? { batchSize: 200, poolSize: 2 } : { batchSize: 500, poolSize: BATCH_POOL_SIZE };
+  return { batchSize: bip32 ? 200 : 500, poolSize: 2 };
 }
 
 /**

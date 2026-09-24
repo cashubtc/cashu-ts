@@ -374,7 +374,7 @@ async function main() {
   console.log('\n--- Device lost! Recovering from seed on a fresh wallet ---');
   await recover('restore everything  ', true, expected, batchSize);
   await recover('state check first   ', false, expected, batchSize);
-  // A wider batch than the default (100 BLS, 200 BIP32), at the practical cap: many mints accept
+  // A wider batch than the default (300 BLS, 200 BIP32), at the practical cap: many mints accept
   // no more than 500. Fewer round trips, more overshoot past the last used counter.
   const alt = Math.min(wallet.getMintInfo().maxArrayLength, 500);
   await recover(`state check @${alt}`.padEnd(20), false, expected, alt);
