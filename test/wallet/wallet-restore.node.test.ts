@@ -318,6 +318,10 @@ describe('restore', () => {
     // response shape is OK and produced proofs
     expect(Array.isArray(res.proofs)).toBe(true);
     expect(res.proofs.length).toBeGreaterThan(0);
+
+    // over the per-chunk cap, so output construction yields between chunks
+    const wide = await wallet.restore(0, 40);
+    expect(wide.proofs).toHaveLength(40);
     // proofs should be of amount 1 because we overprinted 1 in the signatures
     expect(res.proofs.every((p) => p.amount.equals(Amount.from(1)))).toBe(true);
   });
@@ -475,6 +479,23 @@ describe('restore', () => {
       expect(proofs).toHaveLength(2);
       expect(lastCounterWithSignature).toBe(2);
       expect(spy).toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test('a derivation failure other than an invalid scalar propagates', async () => {
+    const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(64) });
+    await wallet.loadMint();
+    const spy = vi
+      .spyOn(NUT13, 'createSecretAndBlindingFactorDeriver')
+      .mockImplementation(() => () => {
+        throw new Error('derivation broke');
+      });
+    try {
+      await expect(wallet.batchRestore({ batchSize: 1, gapLimit: 1 })).rejects.toThrow(
+        'derivation broke',
+      );
     } finally {
       spy.mockRestore();
     }

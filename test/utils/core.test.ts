@@ -1079,6 +1079,13 @@ describe('test zero-knowledge utilities', () => {
       'No keys loaded for keyset 00bd033559de27d0',
     );
   });
+  test('a keyset lookup that throws a non-Error is reported with its text', async () => {
+    const { invalid } = await verifyMintSignatures([serializedProof], () => {
+      // eslint-disable-next-line @typescript-eslint/only-throw-error
+      throw 'lookup offline';
+    });
+    expect(invalid[0].error.message).toBe('lookup offline');
+  });
   test('a keyset lookup that throws is reported, not thrown', async () => {
     const { invalid } = await verifyMintSignatures([serializedProof], () => {
       throw new Error('not in this wallet');
@@ -1114,6 +1121,28 @@ describe('test zero-knowledge utilities', () => {
       expect((await firstError({ ...v3Proof, amount: Amount.from(2) }, keyset))?.message).toMatch(
         /Undefined key for amount/,
       );
+    });
+
+    test('a malformed amount on a v3 proof is one invalid entry', async () => {
+      const keyset = { id: v3Id, unit: 'sat', keys: { [1]: v3K2 } };
+      const bad = { ...v3Proof, amount: 'x' } as unknown as Proof;
+      const { valid, invalid } = await verifyMintSignatures([v3Proof, bad], () => keyset);
+      expect(valid).toEqual([v3Proof]);
+      expect(invalid.map((i) => i.proof)).toEqual([bad]);
+      expect(invalid[0].error.message).toMatch(/Invalid amount x/);
+    });
+
+    test('an abort between v3 slices rejects', async () => {
+      const keyset = { id: v3Id, unit: 'sat', keys: { [1]: v3K2 } };
+      const ac = new AbortController();
+      const many = Array.from({ length: 6 }, () => v3Proof);
+      await expect(
+        verifyMintSignatures(many, () => keyset, {
+          chunkSize: 2,
+          signal: ac.signal,
+          onProgress: () => ac.abort(),
+        }),
+      ).rejects.toBeInstanceOf(CTSError);
     });
 
     test('invalid when v3 keyset key is malformed (mirrors secp behaviour)', async () => {

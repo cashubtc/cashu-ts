@@ -56,12 +56,16 @@ export type VerifyProofsOptions = {
 
 type Lookup = (id: string) => HasKeysetKeys;
 
+function messageOf(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
 function keyFor(p: Proof, getKeyset: Lookup): { key: string } | { error: CTSError } {
   let ks: HasKeysetKeys;
   try {
     ks = getKeyset(p.id);
   } catch (e) {
-    return { error: new CTSError(e instanceof Error ? e.message : String(e), { cause: e }) };
+    return { error: new CTSError(messageOf(e), { cause: e }) };
   }
   // An empty keyset means keys were never loaded (eg rotated-out keyset per NUT-01), not that
   // the denomination is missing. Say so: the two failures have different fixes.
@@ -152,8 +156,9 @@ function verifyBlsSlice(
       try {
         verifyNutrootSpendInfo(p.secret, p.spend_info);
       } catch (e) {
-        const message = e instanceof Error ? e.message : 'Invalid spend info';
-        errors[index] = new CTSError(`${message} (keyset ${p.id}, amount ${p.amount.toString()})`);
+        errors[index] = new CTSError(
+          `${messageOf(e)} (keyset ${p.id}, amount ${p.amount.toString()})`,
+        );
         return;
       }
     }

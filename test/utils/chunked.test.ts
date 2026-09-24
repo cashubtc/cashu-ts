@@ -1,7 +1,7 @@
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import { CallerAbortError } from '../../src/model/Errors';
-import { mapInChunks } from '../../src/utils/chunked';
+import { mapInChunks, yieldToEventLoop } from '../../src/utils/chunked';
 
 describe('mapInChunks', () => {
   test.each([NaN, Infinity, -1])('rejects budgetMs %s', async (budgetMs) => {
@@ -82,5 +82,22 @@ describe('mapInChunks', () => {
         { chunkSize: 1, signal: ac.signal },
       ),
     ).rejects.toBeInstanceOf(CallerAbortError);
+  });
+});
+
+describe('yieldToEventLoop', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  test('prefers scheduler.yield where the platform has it', async () => {
+    const y = vi.fn(async () => {});
+    vi.stubGlobal('scheduler', { yield: y });
+    await yieldToEventLoop();
+    expect(y).toHaveBeenCalledTimes(1);
+  });
+
+  test('falls back to a timer without scheduler or MessageChannel', async () => {
+    vi.stubGlobal('scheduler', undefined);
+    vi.stubGlobal('MessageChannel', undefined);
+    await expect(yieldToEventLoop()).resolves.toBeUndefined();
   });
 });
