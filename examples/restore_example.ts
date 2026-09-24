@@ -8,8 +8,8 @@
  * - The pre-v5 scan (`restoreEverything` below): restore every issued counter, drop the spent ones
  *   afterwards.
  * - The default: state check each batch, restore only what is live.
- * - The default again at another `batchSize` (100, or 300 on BLS where 100 is the default), which
- *   trades how far the scan overshoots against how many requests it makes.
+ * - The default again at a wider `batchSize` (500 on BLS, 1000 on secp, capped at the mint's
+ *   `max_array_length`): fewer round trips, paid for by more overshoot past the last used counter.
  *
  * `SCENARIO=` picks a wallet shape to churn (see `SCENARIOS` in main), each with a note on what
  * dominates its recovery and how to tune for it.
@@ -300,7 +300,8 @@ const SCENARIOS: Record<string, Record<string, string>> = {
   // so most batches restore something and unblinding the live set is the floor. Keep the defaults.
   'aged-sparse': { CHURN_ROUNDS: '200', SPEND_FRAC: '0.2', PIN_MID: '1' },
   // Newer, mostly unspent: the history is short, so the overshoot past the last counter is most of
-  // the work. A smaller batchSize (the @100 leg on secp) trims it for a couple of extra requests.
+  // the work. A smaller BATCH trims it for a couple of extra requests; the wider second leg shows the
+  // opposite trade.
   'fresh-live': { CHURN_ROUNDS: '2', SPEND_FRAC: '0.3' },
   // Many keysets the seed never used (a multi-mint recovery) are the never-used-seed leg below:
   // the gap-width probe is the whole scan, two requests per keyset, so nothing to tune.
@@ -374,8 +375,12 @@ async function main() {
   console.log('\n--- Device lost! Recovering from seed on a fresh wallet ---');
   await recover('restore everything  ', true, expected, batchSize);
   await recover('state check first   ', false, expected, batchSize);
-  // BLS already defaults to 100, so compare against a wider batch there
-  const alt = isBlsKeyset(wallet.keysetId) ? 300 : 100;
+  // A wider batch than the default (100 BLS, 200 or 500 secp), capped at what the mint accepts:
+  // fewer round trips, more overshoot past the last used counter.
+  const alt = Math.min(
+    wallet.getMintInfo().maxArrayLength,
+    isBlsKeyset(wallet.keysetId) ? 500 : 1000,
+  );
   await recover(`state check @${alt}`.padEnd(20), false, expected, alt);
 
   // The empty-scan leg: a seed this mint has never signed for. Every counter reports UNSPENT and
