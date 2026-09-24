@@ -40,6 +40,7 @@ import {
   createSecretAndBlindingFactorDeriver,
   sumProofs,
   type Proof,
+  type RestoreProgress,
 } from '../src';
 
 dns.setDefaultResultOrder('ipv4first');
@@ -258,15 +259,7 @@ async function recover(
   await wallet.loadMint();
   const start = performance.now();
   // The default scan reports after every wave; the pre-v5 scan has no hook.
-  const onProgress = ({
-    keysetId,
-    counter,
-    proofs,
-  }: {
-    keysetId: string;
-    counter: number;
-    proofs: number;
-  }) =>
+  const onProgress = ({ keysetId, counter, proofs }: RestoreProgress) =>
     process.stdout.write(
       `\r  ${keysetId.slice(0, 8)}…: scanned to counter ${counter}, ${proofs} live proofs so far`,
     );

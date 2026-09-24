@@ -53,8 +53,14 @@ export type BatchRestoreConfig = {
   /**
    * Called after each wave of requests with the next counter to scan and the proofs found so far.
    */
-  onProgress?: (progress: { keysetId: string; counter: number; proofs: number }) => void;
+  onProgress?: (progress: RestoreProgress) => void;
 };
+
+/**
+ * One `batchRestore` progress report: the keyset being scanned, the next counter, live proofs so
+ * far.
+ */
+export type RestoreProgress = { keysetId: string; counter: number; proofs: number };
 
 /**
  * Configuration for `restoreAll`: `batchRestore` options minus the per-keyset fields.

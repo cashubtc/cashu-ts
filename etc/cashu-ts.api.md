@@ -248,11 +248,7 @@ export type BatchRestoreConfig = {
     counter?: number;
     keysetId?: string;
     signal?: AbortSignal;
-    onProgress?: (progress: {
-        keysetId: string;
-        counter: number;
-        proofs: number;
-    }) => void;
+    onProgress?: (progress: RestoreProgress) => void;
 };
 
 // @public
@@ -2302,6 +2298,13 @@ export type RestoreAllConfig = Omit<BatchRestoreConfig, 'counter' | 'keysetId'>;
 export type RestoreConfig = {
     keysetId?: string;
     signal?: AbortSignal;
+};
+
+// @public
+export type RestoreProgress = {
+    keysetId: string;
+    counter: number;
+    proofs: number;
 };
 
 // @public (undocumented)
