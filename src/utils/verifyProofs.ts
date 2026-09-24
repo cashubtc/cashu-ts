@@ -41,7 +41,7 @@ export type VerifyProofsOptions = {
    */
   chunkSize?: number;
   /**
-   * Milliseconds of work between yields. Default 16, about one frame.
+   * Milliseconds of work between yields. Default 50, a few frames.
    */
   budgetMs?: number;
   /**

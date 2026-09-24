@@ -2,8 +2,9 @@ import { CallerAbortError, CTSError } from '../model/Errors';
 
 // Cap on items between yields; the time budget usually yields first on curve work.
 export const YIELD_CHUNK_SIZE = 32;
-// About one frame: a chunk that has used this much CPU yields before the next item.
-export const YIELD_BUDGET_MS = 16;
+// A few frames: a chunk that has used this much CPU yields before the next item. Measured on
+// v3 verification, 50 ms takes most of the batched-pairing win with stalls no spinner shows.
+export const YIELD_BUDGET_MS = 50;
 
 export type ChunkOptions = {
   /**
@@ -11,7 +12,7 @@ export type ChunkOptions = {
    */
   chunkSize?: number;
   /**
-   * Milliseconds of work between yields. Default 16, about one frame.
+   * Milliseconds of work between yields. Default 50, a few frames.
    */
   budgetMs?: number;
   /**
@@ -63,7 +64,7 @@ export async function yieldToEventLoop(): Promise<void> {
 }
 
 /**
- * Maps synchronously over `items`, yielding to the event loop about once a frame.
+ * Maps synchronously over `items`, yielding to the event loop every few frames.
  *
  * @remarks
  * Order is preserved. A yield happens when a chunk has used `budgetMs` of time or `chunkSize`
