@@ -284,7 +284,7 @@ describe('sendOffline witness normalization', () => {
 
 describe('sendOffline requireDleq', () => {
   // v3 (BLS) proofs satisfy requireDleq via pairing equivalence — they carry no DLEQ proof
-  // but the receive-side `hasValidDleq` accepts them. sendOffline must mirror that.
+  // but the receive-side `verifyReceivedProofs` accepts them. sendOffline must mirror that.
   const v3Id = '02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d';
   const v3Secret = 'test_message';
   const v3C =

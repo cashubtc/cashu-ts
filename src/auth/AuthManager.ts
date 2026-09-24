@@ -25,7 +25,7 @@ import {
   normalizeMintKeys,
   normalizeMintKeyset,
   normalizeSafeIntegerMetadata,
-  verifyProofsForReceive,
+  verifyReceivedProofs,
 } from '../utils';
 import { decodeUtf8Document } from '../utils/bytes';
 import { KeyChain, type Keyset } from '../wallet';
@@ -544,7 +544,8 @@ export class AuthManager implements AuthProvider {
       // v3 BATs: redundant with the pairing check inside toProof (~1 extra pairing per BAT,
       // only on top-up). Kept for the secp branch where it enforces DLEQ-must-be-present —
       // toProof's DLEQ check is conditional on the field being sent.
-      verifyProofsForReceive(proofs, () => keys, { requireDleq: true });
+      const { invalid } = await verifyReceivedProofs(proofs, () => keys, { require: true });
+      if (invalid.length > 0) throw invalid[0].error;
     } catch (err) {
       throw new CTSError('AuthManager: mint returned BAT that failed verification', {
         cause: err,

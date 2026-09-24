@@ -62,6 +62,20 @@ describe('Restoring deterministic proofs', () => {
     expect(scan.mock.calls.every((c) => c[2] === bound)).toBe(true);
   });
 
+  test('batchRestore reports progress after each wave', async () => {
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+    stubScan(wallet, (start) => (start === 0 ? found(2, 0) : empty));
+    const seen: Array<{ keysetId: string; counter: number; proofs: number }> = [];
+    await wallet.batchRestore({ gapLimit: 100, batchSize: 50, onProgress: (p) => seen.push(p) });
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every((p) => p.keysetId === wallet.keysetId)).toBe(true);
+    expect(seen[seen.length - 1].proofs).toBe(2);
+    for (let i = 1; i < seen.length; i++) {
+      expect(seen[i].counter).toBeGreaterThan(seen[i - 1].counter);
+    }
+  });
+
   test('a range signed only at zero value counts as used but yields no proofs', async () => {
     const VALID_POINT = '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422';
     server.use(

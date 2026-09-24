@@ -1,0 +1,238 @@
+import { hexToBytes } from '@noble/hashes/utils.js';
+
+import {
+  type G1Point,
+  type G2Point,
+  assertV3PointSecret,
+  batchVerifyUnblindedSignatureBls,
+  isBlsKeyset,
+  pointFromHex,
+  pointFromHexG1,
+  pointFromHexG2,
+  verifyDLEQProof_reblind,
+  verifyUnblindedSignatureBls,
+} from '../crypto';
+import { verifyNutrootSpendInfo } from '../crypto/nutroot';
+import { Amount } from '../model/Amount';
+import { CTSError } from '../model/Errors';
+import type { HasKeysetKeys, Proof, ProofLike } from '../model/types';
+
+import { chunkSizeOrThrow, mapInChunks } from './chunked';
+import { hexToNumber } from './core';
+import { ABSOLUTE_MAX_ARRAY_LENGTH } from './limits';
+
+/**
+ * Result of a proof verification: the caller's own objects, split, order preserved.
+ */
+export type ProofVerification<T> = {
+  valid: T[];
+  invalid: Array<{ proof: T; error: CTSError }>;
+};
+
+export type VerifyProofsOptions = {
+  /**
+   * When true, a v0/v1/v2 proof without a DLEQ is invalid. The NUT-12 default accepts it ("verify
+   * if present"). Ignored for v3, which always pairing-verifies.
+   */
+  require?: boolean;
+  /**
+   * Positive safe integer of proofs checked between yields to the event loop. Default 32.
+   */
+  chunkSize?: number;
+  /**
+   * Checked between chunks; the call rejects with `CallerAbortError`.
+   */
+  signal?: AbortSignal;
+  /**
+   * Called after each chunk with proofs checked so far and the total.
+   */
+  onProgress?: (done: number, total: number) => void;
+};
+
+type Lookup = (id: string) => HasKeysetKeys;
+
+function keyFor(p: Proof, getKeyset: Lookup): { key: string } | { error: CTSError } {
+  let ks: HasKeysetKeys;
+  try {
+    ks = getKeyset(p.id);
+  } catch (e) {
+    return { error: new CTSError(e instanceof Error ? e.message : String(e), { cause: e }) };
+  }
+  // An empty keyset means keys were never loaded (eg rotated-out keyset per NUT-01), not that
+  // the denomination is missing. Say so: the two failures have different fixes.
+  if (Object.keys(ks.keys).length === 0) {
+    return { error: new CTSError(`No keys loaded for keyset ${ks.id}`) };
+  }
+  const key = ks.keys[p.amount.toString()];
+  if (!key) {
+    return {
+      error: new CTSError(`Undefined key for amount ${p.amount.toString()} in keyset ${ks.id}`),
+    };
+  }
+  return { key };
+}
+
+function dleqHolds(p: Proof, key: string, require: boolean): boolean {
+  if (p.dleq == undefined) return !require;
+  // A DLEQ the wallet never completed with its own `r` is malformed, not absent: it cannot be
+  // re-blinded, and a zero blinding factor would assert the message was never blinded at all.
+  if (p.dleq.r == undefined) return false;
+  try {
+    return verifyDLEQProof_reblind(
+      new TextEncoder().encode(p.secret),
+      { e: hexToBytes(p.dleq.e), s: hexToBytes(p.dleq.s), r: hexToNumber(p.dleq.r) },
+      pointFromHex(p.C),
+      pointFromHex(key),
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * One synchronous slice: DLEQ per v0/v1/v2 proof, one batched pairing for the v3 proofs.
+ *
+ * @remarks
+ * The batch falls back to per-proof only when it fails, so a bad proof is named without paying a
+ * pairing each on the happy path. With `cascade`, a v3 proof's spend info must reconstruct its
+ * secret before anything else is looked at (nutroot secrets 2.5.1).
+ */
+function verifySlice(
+  proofs: ProofLike[],
+  getKeyset: Lookup,
+  opts: { require: boolean; cascade: boolean },
+): Array<CTSError | undefined> {
+  const failMsg = opts.require
+    ? 'Token contains proofs with invalid or missing DLEQ'
+    : 'Token contains a proof with an invalid DLEQ';
+  const fail = (p: ProofLike) =>
+    new CTSError(`${failMsg} (keyset ${p.id}, amount ${p.amount.toString()})`);
+  // Filled, not sparse: holes would vanish in the flatten that follows.
+  const errors: Array<CTSError | undefined> = new Array<CTSError | undefined>(proofs.length).fill(
+    undefined,
+  );
+  const items: Array<{ K2: G2Point; C: G1Point; secret: Uint8Array; index: number }> = [];
+
+  proofs.forEach((raw, index) => {
+    let p: Proof;
+    try {
+      p = { ...raw, amount: Amount.from(raw.amount) };
+    } catch (cause) {
+      errors[index] = new CTSError(`Invalid amount ${String(raw.amount)} in keyset ${raw.id}`, {
+        cause,
+      });
+      return;
+    }
+    const bls = isBlsKeyset(p.id);
+    if (bls && opts.cascade && p.spend_info) {
+      try {
+        verifyNutrootSpendInfo(p.secret, p.spend_info);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : 'Invalid spend info';
+        errors[index] = new CTSError(`${message} (keyset ${p.id}, amount ${p.amount.toString()})`);
+        return;
+      }
+    }
+    const found = keyFor(p, getKeyset);
+    if ('error' in found) {
+      errors[index] = found.error;
+      return;
+    }
+    if (!bls) {
+      if (!dleqHolds(p, found.key, opts.require)) errors[index] = fail(p);
+      return;
+    }
+    try {
+      assertV3PointSecret(p.secret);
+      items.push({
+        K2: pointFromHexG2(found.key),
+        C: pointFromHexG1(p.C),
+        secret: new TextEncoder().encode(p.secret),
+        index,
+      });
+    } catch {
+      // Malformed keyset hex, secret or C: invalid, never an unhandled throw.
+      errors[index] = fail(p);
+    }
+  });
+
+  if (items.length > 0) {
+    // A single proof pairs directly; the batch wrapper would cost an extra multiplication.
+    const batchOk = items.length > 1 && batchVerifyUnblindedSignatureBls(items);
+    for (const it of items) {
+      if (!batchOk && !verifyUnblindedSignatureBls(it.K2, it.C, it.secret)) {
+        errors[it.index] = fail(proofs[it.index]);
+      }
+    }
+  }
+  return errors;
+}
+
+async function verify<T extends ProofLike>(
+  proofs: T[],
+  getKeyset: Lookup,
+  opts: VerifyProofsOptions | undefined,
+  cascade: boolean,
+): Promise<ProofVerification<T>> {
+  // Every proof costs curve work, so bound the batch before any of it: a token is untrusted
+  // input and the cap is far above any real one.
+  if (proofs.length > ABSOLUTE_MAX_ARRAY_LENGTH) {
+    throw new CTSError(
+      `Token contains too many proofs: ${proofs.length}, maximum is ${ABSOLUTE_MAX_ARRAY_LENGTH}`,
+    );
+  }
+  const total = proofs.length;
+  const chunkSize = chunkSizeOrThrow(opts?.chunkSize);
+  const slices: ProofLike[][] = [];
+  for (let i = 0; i < total; i += chunkSize) slices.push(proofs.slice(i, i + chunkSize));
+  const perSlice = await mapInChunks(
+    slices,
+    (slice) => verifySlice(slice, getKeyset, { require: opts?.require ?? false, cascade }),
+    {
+      chunkSize: 1,
+      signal: opts?.signal,
+      onProgress: (done) => opts?.onProgress?.(Math.min(done * chunkSize, total), total),
+    },
+  );
+  const result: ProofVerification<T> = { valid: [], invalid: [] };
+  perSlice.flat().forEach((error, i) => {
+    if (error) result.invalid.push({ proof: proofs[i], error });
+    else result.valid.push(proofs[i]);
+  });
+  return result;
+}
+
+/**
+ * Checks that the mint signed each proof: DLEQ on v0/v1/v2 (NUT-12), pairing on v3.
+ *
+ * @remarks
+ * For signatures the mint just returned, or a store audit. Runs in chunks that yield to the event
+ * loop. Spend info and witnesses are not looked at: use {@link verifyReceivedProofs} for proofs that
+ * arrived from outside. An unknown keyset or denomination is reported as invalid.
+ * @param getKeyset Lookup callback (e.g. `(id) => keyChain.getKeyset(id)`).
+ * @throws {@link CTSError} If more proofs than the batch cap are passed.
+ */
+export function verifyMintSignatures<T extends ProofLike>(
+  proofs: T[],
+  getKeyset: (id: string) => HasKeysetKeys,
+  opts?: VerifyProofsOptions,
+): Promise<ProofVerification<T>> {
+  return verify(proofs, getKeyset, opts, false);
+}
+
+/**
+ * Verifies proofs that arrived from outside: the mint signature on every proof, and the nutroot
+ * spend-info cascade on v3 proofs.
+ *
+ * @remarks
+ * Same engine and options as {@link verifyMintSignatures}. A receive is all or nothing, so a caller
+ * typically throws `invalid[0].error`, which names the offending keyset and amount.
+ * @throws {@link CTSError} If more proofs than the batch cap are passed.
+ */
+export function verifyReceivedProofs<T extends ProofLike>(
+  proofs: T[],
+  getKeyset: (id: string) => HasKeysetKeys,
+  opts?: VerifyProofsOptions,
+): Promise<ProofVerification<T>> {
+  return verify(proofs, getKeyset, opts, true);
+}

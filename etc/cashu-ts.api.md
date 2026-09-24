@@ -248,6 +248,11 @@ export type BatchRestoreConfig = {
     counter?: number;
     keysetId?: string;
     signal?: AbortSignal;
+    onProgress?: (progress: {
+        keysetId: string;
+        counter: number;
+        proofs: number;
+    }) => void;
 };
 
 // @public
@@ -822,11 +827,6 @@ export function hasP2PKSignedProof(pubkey: string, proof: Proof, digest?: Digest
 
 // @public
 export function hasTag(secret: Secret | string, key: string): boolean;
-
-// @public
-export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys, opts?: {
-    require?: boolean;
-}): boolean;
 
 // @public
 export function hexToBytes(hex: string): Uint8Array;
@@ -2152,6 +2152,15 @@ export type ProofStatesStreamOpts<P extends ProofLike = Proof> = WatchOpts & {
 };
 
 // @public
+export type ProofVerification<T> = {
+    valid: T[];
+    invalid: Array<{
+        proof: T;
+        error: CTSError;
+    }>;
+};
+
+// @public
 export function quoteCounterKey(mintPubkey: string): string;
 
 // @public
@@ -2844,12 +2853,21 @@ export function verifyHTLCSpendingConditions(proof: Proof, logger?: Logger, dige
 export function verifyMintQuoteSignature(pubkey: string, quote: string, blindedMessages: SerializedBlindedMessage[], signature: string): boolean;
 
 // @public
-export function verifyP2PKSpendingConditions(proof: Proof, logger?: Logger, digest?: DigestInput): P2PKVerificationResult;
+export function verifyMintSignatures<T extends ProofLike>(proofs: T[], getKeyset: (id: string) => HasKeysetKeys, opts?: VerifyProofsOptions): Promise<ProofVerification<T>>;
 
 // @public
-export function verifyProofsForReceive(proofs: ProofLike[], getKeyset: (id: string) => HasKeysetKeys, opts?: {
-    requireDleq?: boolean;
-}): void;
+export function verifyP2PKSpendingConditions(proof: Proof, logger?: Logger, digest?: DigestInput): P2PKVerificationResult;
+
+// @public (undocumented)
+export type VerifyProofsOptions = {
+    require?: boolean;
+    chunkSize?: number;
+    signal?: AbortSignal;
+    onProgress?: (done: number, total: number) => void;
+};
+
+// @public
+export function verifyReceivedProofs<T extends ProofLike>(proofs: T[], getKeyset: (id: string) => HasKeysetKeys, opts?: VerifyProofsOptions): Promise<ProofVerification<T>>;
 
 // @public
 export function verifySpendReceipt(receipt: SpendReceipt, proof: Pick<Proof, 'id' | 'secret' | 'amount' | 'C'>): SpendReceiptVerdict;
@@ -3005,6 +3023,7 @@ export class Wallet {
         now?: number;
     }): SpendOptions;
     get unit(): string;
+    verifyMintSignatures<T extends ProofLike = Proof>(proofs: T[], opts?: VerifyProofsOptions): Promise<ProofVerification<T>>;
     withKeyset(id: string, opts?: {
         counterSource?: CounterSource;
     }): Wallet;

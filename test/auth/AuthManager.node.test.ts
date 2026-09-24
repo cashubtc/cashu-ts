@@ -134,13 +134,13 @@ function providerStub(refresh: () => Promise<unknown> = vi.fn()) {
  * Per-test state
  * -------------------------- */
 let reqSpy: ReturnType<typeof vi.fn>;
-let verifyProofsForReceiveSpy: MockInstance;
+let verifyReceivedProofsSpy: MockInstance;
 
 beforeEach(() => {
   reqSpy = vi.fn();
-  verifyProofsForReceiveSpy = vi
-    .spyOn(utils, 'verifyProofsForReceive')
-    .mockImplementation(() => {});
+  verifyReceivedProofsSpy = vi
+    .spyOn(utils, 'verifyReceivedProofs')
+    .mockImplementation(async () => ({ valid: [], invalid: [] }));
 
   const KeyChainMock = getKeyChainMock();
   if (vi.isMockFunction(KeyChainMock)) KeyChainMock.mockClear();
@@ -1131,9 +1131,15 @@ describe('topUp error branches', () => {
     } as any;
 
     stubOutputs(1);
-    verifyProofsForReceiveSpy.mockImplementation(() => {
-      throw new Error('Token contains proofs with invalid or missing DLEQ');
-    });
+    verifyReceivedProofsSpy.mockImplementation(async (proofs) => ({
+      valid: [],
+      invalid: [
+        {
+          proof: proofs[0],
+          error: new CTSError('Token contains proofs with invalid or missing DLEQ'),
+        },
+      ],
+    }));
     reqSpy.mockResolvedValueOnce({ signatures: [fakeSig] });
 
     await expect(am.ensure(1)).rejects.toThrow('BAT that failed verification');

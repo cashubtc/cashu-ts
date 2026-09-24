@@ -46,9 +46,14 @@ export type BatchRestoreConfig = {
    */
   keysetId?: string;
   /**
-   * Aborts the requests this call makes; the call rejects with `CallerAbortError`.
+   * Aborts the scan; the call rejects with `CallerAbortError`. Checked between requests and between
+   * chunks of local work.
    */
   signal?: AbortSignal;
+  /**
+   * Called after each wave of requests with the next counter to scan and the proofs found so far.
+   */
+  onProgress?: (progress: { keysetId: string; counter: number; proofs: number }) => void;
 };
 
 /**

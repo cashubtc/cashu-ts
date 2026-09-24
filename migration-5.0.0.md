@@ -526,32 +526,34 @@ await wallet.batchRestore();
 
 ---
 
-## `verifyDleqIfPresent` removed; `hasValidDleq` default flipped to spec semantics
+## `hasValidDleq` and `verifyDleqIfPresent` replaced by `verifyMintSignatures`; `verifyProofsForReceive` is now `verifyReceivedProofs`
 
-`verifyDleqIfPresent` is removed. Its NUT-12 "verify-if-present" semantic is now the default behavior of `hasValidDleq`, which gains an optional `{ require?: boolean }` argument for the stricter opt-in policy.
+Both are removed. One async engine replaces them, chunked so a large batch yields to the event loop, and named for what is checked rather than the mechanism: v3 proofs have no DLEQ, the pairing stands in.
 
-- **Default** (`require: false`, or omit `opts`): a v0/v1/v2 proof without a DLEQ returns `true` (NUT-12 "MUST verify-if-present"); present DLEQs are verified. v3 (BLS) proofs always pairing-verify regardless.
-- **Strict** (`require: true`): a v0/v1/v2 proof without a DLEQ returns `false` (above-spec policy callers can opt into when they want to require DLEQs on every proof).
+- `verifyMintSignatures(proofs, getKeyset, opts?)`: did the mint sign each proof. For signatures the mint just returned, or a store audit. `Wallet.verifyMintSignatures(proofs, opts?)` is the same with the wallet's keysets loaded on demand.
+- `verifyReceivedProofs(proofs, getKeyset, opts?)`: the same plus the nutroot spend-info cascade on v3 proofs. What `receive` runs.
 
-The proof's `amount` is now validated against the keyset on every path through `hasValidDleq`, not just when a DLEQ is present. A forged-amount proof with no DLEQ now throws `Undefined key for amount …` instead of silently passing.
+Both return `{ valid, invalid }` with the caller's own proof objects, each invalid entry carrying a `CTSError` that names the keyset and amount. Nothing throws per proof: an unknown keyset, a missing denomination or a malformed point is reported as invalid. Options are `{ require, chunkSize, signal, onProgress }`; `require: true` is the former strict policy (a v0/v1/v2 proof without a DLEQ is invalid), the default is NUT-12 verify-if-present. The amount is checked against the keyset on every path.
 
 ### Migration
 
 ```ts
 // Before
-import { verifyDleqIfPresent, hasValidDleq } from '@cashu/cashu-ts';
-
-if (!verifyDleqIfPresent(proof, keyset)) throw new Error('bad DLEQ');
-if (!hasValidDleq(proof, keyset)) throw new Error('DLEQ missing or invalid');
-
-// After
-import { hasValidDleq } from '@cashu/cashu-ts';
+import { hasValidDleq, verifyProofsForReceive } from '@cashu/cashu-ts';
 
 if (!hasValidDleq(proof, keyset)) throw new Error('bad DLEQ');
 if (!hasValidDleq(proof, keyset, { require: true })) throw new Error('DLEQ missing or invalid');
-```
+verifyProofsForReceive(proofs, getKeyset, { requireDleq: true }); // throws
 
-If you were calling `hasValidDleq(proof, keyset)` and relying on the previous strict semantics (missing DLEQ → `false`), add `{ require: true }`. If you were calling `verifyDleqIfPresent`, drop it for `hasValidDleq` with no `opts` — same behavior.
+// After
+import { verifyMintSignatures, verifyReceivedProofs } from '@cashu/cashu-ts';
+
+const { invalid } = await verifyMintSignatures([proof], () => keyset);
+if (invalid.length > 0) throw invalid[0].error;
+const strict = await verifyMintSignatures([proof], () => keyset, { require: true });
+const received = await verifyReceivedProofs(proofs, getKeyset, { require: true });
+if (received.invalid.length > 0) throw received.invalid[0].error;
+```
 
 `Wallet.prepareSwapToReceive`'s `requireDleq` option is unchanged: leave it unset (or `false`) for spec-default verify-if-present, pass `true` for the strict policy.
 
