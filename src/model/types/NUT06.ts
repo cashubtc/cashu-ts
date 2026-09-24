@@ -120,6 +120,10 @@ export type SwapMethod = {
   options?: {
     description?: boolean;
     amountless?: boolean;
+    /**
+     * NUT-23: a `PAID` melt response will carry `payment_preimage`.
+     */
+    preimage_guaranteed?: boolean;
     confirmations?: number;
   };
 };
