@@ -353,10 +353,9 @@ async function main() {
     // The static invoice melts only once per mint instance. On re-runs, melt one of the
     // mint's own invoices instead (internal settlement, no change).
     console.log('External invoice already melted on this mint; melting an internal one instead');
-    const target = await wallet.createMintQuoteBolt11(
-      2000,
-      (await wallet.createQuoteLockKey()).pubkey,
-    );
+    // A throwaway quote, only wanted for its invoice: a random key consumes no quote counter.
+    const { pubkey: throwaway } = await wallet.createQuoteLockKey({ random: true });
+    const target = await wallet.createMintQuoteBolt11(2000, throwaway);
     await meltSats(wallet, target.request);
   }
   await churn(churnRounds);
