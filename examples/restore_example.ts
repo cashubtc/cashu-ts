@@ -136,11 +136,13 @@ function report(label: string, stats: ReturnType<typeof countingFetch>['stats'],
 // Wallet operations
 // ---------------------------------------------------------------------------
 async function mintSats(wallet: Wallet, amount: number) {
-  const quote = await wallet.createMintQuoteBolt11(amount);
+  // Every mint quote is locked to a key the wallet holds (NUT-20); a seeded wallet derives one.
+  const { pubkey, privkey } = await wallet.createQuoteLockKey();
+  const quote = await wallet.createMintQuoteBolt11(amount, pubkey);
   while ((await wallet.checkMintQuoteBolt11(quote.quote)).state !== MintQuoteState.PAID) {
     await new Promise((r) => setTimeout(r, 200));
   }
-  proofs.push(...(await wallet.mintProofsBolt11(amount, quote)));
+  proofs.push(...(await wallet.mintProofsBolt11(amount, quote, { privkey })));
   console.log(`Minted ${amount} sats (balance ${sumProofs(proofs)})`);
 }
 
@@ -255,9 +257,23 @@ async function recover(
   const wallet = new Wallet(mintUrl, { bip39seed: walletSeed, requestFetch: counted.wrapped });
   await wallet.loadMint();
   const start = performance.now();
+  // The default scan reports after every wave; the pre-v5 scan has no hook.
+  const onProgress = ({
+    keysetId,
+    counter,
+    proofs,
+  }: {
+    keysetId: string;
+    counter: number;
+    proofs: number;
+  }) =>
+    process.stdout.write(
+      `\r  ${keysetId.slice(0, 8)}…: scanned to counter ${counter}, ${proofs} live proofs so far`,
+    );
   const { proofs: all, lastCounters } = legacy
     ? await restoreEverything(wallet, batchSize)
-    : await wallet.restoreAll({ batchSize });
+    : await wallet.restoreAll({ batchSize, onProgress });
+  if (!legacy) process.stdout.write('\n');
   // the legacy scan returns every issued proof, so filter locally for a like-for-like total
   const found = legacy ? (await wallet.groupProofsByState(all)).unspent : all;
   const ms = performance.now() - start;
@@ -337,7 +353,10 @@ async function main() {
     // The static invoice melts only once per mint instance. On re-runs, melt one of the
     // mint's own invoices instead (internal settlement, no change).
     console.log('External invoice already melted on this mint; melting an internal one instead');
-    const target = await wallet.createMintQuoteBolt11(2000);
+    const target = await wallet.createMintQuoteBolt11(
+      2000,
+      (await wallet.createQuoteLockKey()).pubkey,
+    );
     await meltSats(wallet, target.request);
   }
   await churn(churnRounds);

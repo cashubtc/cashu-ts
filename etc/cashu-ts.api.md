@@ -2862,6 +2862,7 @@ export function verifyP2PKSpendingConditions(proof: Proof, logger?: Logger, dige
 export type VerifyProofsOptions = {
     require?: boolean;
     chunkSize?: number;
+    budgetMs?: number;
     signal?: AbortSignal;
     onProgress?: (done: number, total: number) => void;
 };

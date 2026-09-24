@@ -14,10 +14,10 @@ import {
 } from '../crypto';
 import { verifyNutrootSpendInfo } from '../crypto/nutroot';
 import { Amount } from '../model/Amount';
-import { CTSError } from '../model/Errors';
+import { CallerAbortError, CTSError } from '../model/Errors';
 import type { HasKeysetKeys, Proof, ProofLike } from '../model/types';
 
-import { chunkSizeOrThrow, mapInChunks } from './chunked';
+import { chunkSizeOrThrow, mapInChunks, yieldToEventLoop, YIELD_BUDGET_MS } from './chunked';
 import { hexToNumber } from './core';
 import { ABSOLUTE_MAX_ARRAY_LENGTH } from './limits';
 
@@ -36,9 +36,14 @@ export type VerifyProofsOptions = {
    */
   require?: boolean;
   /**
-   * Positive safe integer of proofs checked between yields to the event loop. Default 32.
+   * Most proofs checked between yields to the event loop. Default 32; the time budget usually
+   * yields earlier.
    */
   chunkSize?: number;
+  /**
+   * Milliseconds of work between yields. Default 16, about one frame.
+   */
+  budgetMs?: number;
   /**
    * Checked between chunks; the call rejects with `CallerAbortError`.
    */
@@ -89,42 +94,61 @@ function dleqHolds(p: Proof, key: string, require: boolean): boolean {
   }
 }
 
+type Failure = CTSError | undefined;
+
+function failFor(require: boolean) {
+  const failMsg = require
+    ? 'Token contains proofs with invalid or missing DLEQ'
+    : 'Token contains a proof with an invalid DLEQ';
+  return (p: ProofLike) =>
+    new CTSError(`${failMsg} (keyset ${p.id}, amount ${p.amount.toString()})`);
+}
+
+function normalize(raw: ProofLike): { p: Proof } | { error: CTSError } {
+  try {
+    return { p: { ...raw, amount: Amount.from(raw.amount) } };
+  } catch (cause) {
+    return {
+      error: new CTSError(`Invalid amount ${String(raw.amount)} in keyset ${raw.id}`, { cause }),
+    };
+  }
+}
+
 /**
- * One synchronous slice: DLEQ per v0/v1/v2 proof, one batched pairing for the v3 proofs.
+ * One v0/v1/v2 proof: keyset, denomination, then the DLEQ.
+ */
+function verifySecp(raw: ProofLike, getKeyset: Lookup, require: boolean): Failure {
+  const n = normalize(raw);
+  if ('error' in n) return n.error;
+  const found = keyFor(n.p, getKeyset);
+  if ('error' in found) return found.error;
+  return dleqHolds(n.p, found.key, require) ? undefined : failFor(require)(n.p);
+}
+
+/**
+ * One slice of v3 proofs: optional spend-info cascade, keyset, then one batched pairing.
  *
  * @remarks
  * The batch falls back to per-proof only when it fails, so a bad proof is named without paying a
- * pairing each on the happy path. With `cascade`, a v3 proof's spend info must reconstruct its
- * secret before anything else is looked at (nutroot secrets 2.5.1).
+ * pairing each on the happy path. With `cascade`, spend info must reconstruct the secret before
+ * anything else is looked at (nutroot secrets 2.5.1).
  */
-function verifySlice(
-  proofs: ProofLike[],
+function verifyBlsSlice(
+  slice: ProofLike[],
   getKeyset: Lookup,
   opts: { require: boolean; cascade: boolean },
-): Array<CTSError | undefined> {
-  const failMsg = opts.require
-    ? 'Token contains proofs with invalid or missing DLEQ'
-    : 'Token contains a proof with an invalid DLEQ';
-  const fail = (p: ProofLike) =>
-    new CTSError(`${failMsg} (keyset ${p.id}, amount ${p.amount.toString()})`);
-  // Filled, not sparse: holes would vanish in the flatten that follows.
-  const errors: Array<CTSError | undefined> = new Array<CTSError | undefined>(proofs.length).fill(
-    undefined,
-  );
+): Failure[] {
+  const fail = failFor(opts.require);
+  const errors: Failure[] = new Array<Failure>(slice.length).fill(undefined);
   const items: Array<{ K2: G2Point; C: G1Point; secret: Uint8Array; index: number }> = [];
-
-  proofs.forEach((raw, index) => {
-    let p: Proof;
-    try {
-      p = { ...raw, amount: Amount.from(raw.amount) };
-    } catch (cause) {
-      errors[index] = new CTSError(`Invalid amount ${String(raw.amount)} in keyset ${raw.id}`, {
-        cause,
-      });
+  slice.forEach((raw, index) => {
+    const n = normalize(raw);
+    if ('error' in n) {
+      errors[index] = n.error;
       return;
     }
-    const bls = isBlsKeyset(p.id);
-    if (bls && opts.cascade && p.spend_info) {
+    const p = n.p;
+    if (opts.cascade && p.spend_info) {
       try {
         verifyNutrootSpendInfo(p.secret, p.spend_info);
       } catch (e) {
@@ -136,10 +160,6 @@ function verifySlice(
     const found = keyFor(p, getKeyset);
     if ('error' in found) {
       errors[index] = found.error;
-      return;
-    }
-    if (!bls) {
-      if (!dleqHolds(p, found.key, opts.require)) errors[index] = fail(p);
       return;
     }
     try {
@@ -155,13 +175,12 @@ function verifySlice(
       errors[index] = fail(p);
     }
   });
-
   if (items.length > 0) {
     // A single proof pairs directly; the batch wrapper would cost an extra multiplication.
     const batchOk = items.length > 1 && batchVerifyUnblindedSignatureBls(items);
     for (const it of items) {
       if (!batchOk && !verifyUnblindedSignatureBls(it.K2, it.C, it.secret)) {
-        errors[it.index] = fail(proofs[it.index]);
+        errors[it.index] = fail(slice[it.index]);
       }
     }
   }
@@ -181,21 +200,54 @@ async function verify<T extends ProofLike>(
       `Token contains too many proofs: ${proofs.length}, maximum is ${ABSOLUTE_MAX_ARRAY_LENGTH}`,
     );
   }
+  const require = opts?.require ?? false;
+  const cap = chunkSizeOrThrow(opts?.chunkSize);
+  const budget = opts?.budgetMs ?? YIELD_BUDGET_MS;
   const total = proofs.length;
-  const chunkSize = chunkSizeOrThrow(opts?.chunkSize);
-  const slices: ProofLike[][] = [];
-  for (let i = 0; i < total; i += chunkSize) slices.push(proofs.slice(i, i + chunkSize));
-  const perSlice = await mapInChunks(
-    slices,
-    (slice) => verifySlice(slice, getKeyset, { require: opts?.require ?? false, cascade }),
-    {
-      chunkSize: 1,
-      signal: opts?.signal,
-      onProgress: (done) => opts?.onProgress?.(Math.min(done * chunkSize, total), total),
+  const errors: Failure[] = new Array<Failure>(total).fill(undefined);
+  let done = 0;
+  const report = () => opts?.onProgress?.(done, total);
+
+  // v0/v1/v2: one DLEQ each, the helper yields on the time budget.
+  const secp: number[] = [];
+  const bls: number[] = [];
+  proofs.forEach((p, i) => (isBlsKeyset(p.id) ? bls : secp).push(i));
+  await mapInChunks(secp, (i) => (errors[i] = verifySecp(proofs[i], getKeyset, require)), {
+    chunkSize: cap,
+    budgetMs: budget,
+    signal: opts?.signal,
+    onProgress: (n) => {
+      done = n;
+      report();
     },
-  );
+  });
+
+  // v3: a batched pairing per slice. A slice is one synchronous call, so its size is set from
+  // the measured cost of the previous slice to fit the budget, within the cap.
+  let sliceSize = Math.min(4, cap);
+  for (let at = 0; at < bls.length;) {
+    if (at > 0) {
+      report();
+      await yieldToEventLoop();
+    }
+    if (opts?.signal?.aborted) throw new CallerAbortError('Operation aborted by caller');
+    const idx = bls.slice(at, at + sliceSize);
+    const t0 = performance.now();
+    const found = verifyBlsSlice(
+      idx.map((i) => proofs[i]),
+      getKeyset,
+      { require, cascade },
+    );
+    const perItem = (performance.now() - t0) / idx.length;
+    idx.forEach((i, k) => (errors[i] = found[k]));
+    at += idx.length;
+    done = secp.length + at;
+    sliceSize = Math.max(1, Math.min(cap, Math.floor(budget / Math.max(perItem, 0.01))));
+  }
+  if (bls.length > 0) report();
+
   const result: ProofVerification<T> = { valid: [], invalid: [] };
-  perSlice.flat().forEach((error, i) => {
+  errors.forEach((error, i) => {
     if (error) result.invalid.push({ proof: proofs[i], error });
     else result.valid.push(proofs[i]);
   });

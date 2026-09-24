@@ -14,6 +14,7 @@ import type {
   SerializedBlindedSignature,
 } from '../model/types';
 import { BATCH_POOL_SIZE } from '../transport';
+import { mapInChunks } from '../utils/chunked';
 import { splitAmount } from '../utils/core';
 import { MAX_SPLIT_OUTPUTS } from '../utils/limits';
 
@@ -29,15 +30,15 @@ import { type OutputType } from './types';
  * signatures count as used but yield no proof (NUT-08); `keysetFor` resolves the keyset each
  * signature names, which need not be the scanned one.
  */
-export function proofsFromRestoreResponse(
+export async function proofsFromRestoreResponse(
   outputData: OutputDataLike[],
   response: { outputs: SerializedBlindedMessage[]; signatures: SerializedBlindedSignature[] },
   keysetFor: (id: string) => HasKeysetKeys,
-): { proofs: Proof[]; lastIndex: number } {
+): Promise<{ proofs: Proof[]; lastIndex: number }> {
   const signatureByB_: { [b: string]: SerializedBlindedSignature } = {};
   response.outputs.forEach((o, i) => (signatureByB_[o.B_] = response.signatures[i]));
 
-  const proofs: Proof[] = [];
+  const signed: Array<{ data: OutputDataLike; signature: SerializedBlindedSignature }> = [];
   let lastIndex = -1;
   outputData.forEach((data, i) => {
     const signature = signatureByB_[data.blindedMessage.B_];
@@ -45,9 +46,14 @@ export function proofsFromRestoreResponse(
     lastIndex = i;
     // Signed at zero (a NUT-08 blank the mint did not omit): used counter, but no ecash
     if (signature.amount.isZero()) return;
-    // The output stays a blank: toProof takes the amount and keyset from the signature
-    proofs.push(data.toProof(signature, keysetFor(signature.id)));
+    signed.push({ data, signature });
   });
+  // Unblinding pairing-verifies each v3 signature, so it yields like the rest of the scan. No
+  // signal here: the mint has signed, and stopping now would strand the proofs.
+  const proofs = await mapInChunks(signed, ({ data, signature }) =>
+    // The output stays a blank: toProof takes the amount and keyset from the signature
+    data.toProof(signature, keysetFor(signature.id)),
+  );
   return { proofs, lastIndex };
 }
 

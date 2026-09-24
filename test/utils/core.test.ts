@@ -1192,7 +1192,10 @@ describe('test zero-knowledge utilities', () => {
       });
       expect(valid).toHaveLength(70);
       expect(invalid).toHaveLength(0);
-      expect(seen).toEqual([32, 64, 70]);
+      // yields on the time budget, so the steps vary; progress is monotonic and completes
+      expect(seen.length).toBeGreaterThan(1);
+      expect(seen.every((d, i) => i === 0 || d >= seen[i - 1])).toBe(true);
+      expect(seen[seen.length - 1]).toBe(70);
     });
   });
 

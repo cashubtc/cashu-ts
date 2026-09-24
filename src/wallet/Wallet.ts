@@ -1940,7 +1940,9 @@ class Wallet {
     // Construct proofs. Each signature names the keyset it was made under, which custom outputs
     // may have chosen per output; unblinding must use that one.
     await this._ensureKeysetsForSignatures(signatures);
-    const swapProofs = swapTransaction.outputData.map((d, i) =>
+    // Unblinding pairing-verifies each v3 signature, so it yields. No signal: the mint has
+    // signed, and stopping now would strand the proofs.
+    const swapProofs = await mapInChunks(swapTransaction.outputData, (d, i) =>
       d.toProof(signatures[i], this.keysetForSignature(signatures[i].id)),
     );
     const reorderedProofs = Array(swapProofs.length);
@@ -2696,7 +2698,7 @@ class Wallet {
     );
     await this._ensureKeysetsForSignatures(response.signatures);
     // counters here are contiguous from `start`, so the index maps straight onto one
-    const { proofs, lastIndex } = proofsFromRestoreResponse(outputData, response, (id) =>
+    const { proofs, lastIndex } = await proofsFromRestoreResponse(outputData, response, (id) =>
       this.keysetForSignature(id),
     );
 
@@ -2739,14 +2741,19 @@ class Wallet {
     // dropped out below. An invalid-scalar counter failed at issuance too, so it holds nothing.
     const counters: number[] = [];
     const secrets: string[] = [];
-    for (let c = start; c < start + count; c++) {
-      try {
-        secrets.push(bytesToHex(derive(c).secret));
-        counters.push(c);
-      } catch (e) {
-        if (!(e instanceof InvalidScalarError)) throw e;
-      }
-    }
+    const range = Array.from({ length: count }, (_, i) => start + i);
+    await mapInChunks(
+      range,
+      (c) => {
+        try {
+          secrets.push(bytesToHex(derive(c).secret));
+          counters.push(c);
+        } catch (e) {
+          if (!(e instanceof InvalidScalarError)) throw e;
+        }
+      },
+      { signal },
+    );
     if (counters.length === 0) return { proofs: [], used: false };
     const states = await this.checkProofsStates(
       secrets.map((secret) => ({ secret, id: keyset.id })),
@@ -2781,7 +2788,7 @@ class Wallet {
     );
     await this._ensureKeysetsForSignatures(response.signatures);
     // outputCounters is ascending, so the last signed index carries the highest live counter
-    const { proofs, lastIndex } = proofsFromRestoreResponse(outputs, response, (id) =>
+    const { proofs, lastIndex } = await proofsFromRestoreResponse(outputs, response, (id) =>
       this.keysetForSignature(id),
     );
     if (lastIndex >= 0) lastIssued = Math.max(lastIssued, outputCounters[lastIndex]);
@@ -3629,7 +3636,7 @@ class Wallet {
     this._logger.debug('MINT COMPLETED', {
       amounts: outputData.map((o) => o.blindedMessage.amount.toString()),
     });
-    return outputData.map((d, i) =>
+    return mapInChunks(outputData, (d, i) =>
       d.toProof(signatures[i], this.keysetForSignature(signatures[i].id)),
     );
   }
@@ -3888,7 +3895,9 @@ class Wallet {
       quotes: quotes.length,
       amounts: outputData.map((o) => o.blindedMessage.amount.toString()),
     });
-    return outputData.map((d, i) => d.toProof(sigs[i], this.keysetForSignature(sigs[i].id)));
+    return mapInChunks(outputData, (d, i) =>
+      d.toProof(sigs[i], this.keysetForSignature(sigs[i].id)),
+    );
   }
 
   // -----------------------------------------------------------------

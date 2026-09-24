@@ -1,16 +1,25 @@
 import { CallerAbortError, CTSError } from '../model/Errors';
 
-// One size for every curve; a BLS item is about 1 ms, so a chunk stays under a frame.
+// Cap on items between yields; the time budget usually yields first on curve work.
 export const YIELD_CHUNK_SIZE = 32;
+// About one frame: a chunk that has used this much CPU yields before the next item.
+export const YIELD_BUDGET_MS = 16;
 
 export type ChunkOptions = {
+  /**
+   * Most items between yields. Default 32. The time budget usually yields earlier.
+   */
   chunkSize?: number;
   /**
-   * Checked before each chunk; the call rejects with `CallerAbortError`.
+   * Milliseconds of work between yields. Default 16, about one frame.
+   */
+  budgetMs?: number;
+  /**
+   * Checked before and after each yield; the call rejects with `CallerAbortError`.
    */
   signal?: AbortSignal;
   /**
-   * Called after each chunk with items done so far and the total.
+   * Called at each yield and at the end, with items done so far and the total.
    */
   onProgress?: (done: number, total: number) => void;
 };
@@ -54,10 +63,12 @@ export async function yieldToEventLoop(): Promise<void> {
 }
 
 /**
- * Maps synchronously over `items` in chunks, yielding to the event loop between them.
+ * Maps synchronously over `items`, yielding to the event loop about once a frame.
  *
  * @remarks
- * Order is preserved. The first chunk runs without a yield, so a short list costs nothing extra.
+ * Order is preserved. A yield happens when a chunk has used `budgetMs` of time or `chunkSize`
+ * items, whichever comes first, so a slow item and a fast one both stay responsive. A short list
+ * that finishes inside the budget never yields.
  */
 export async function mapInChunks<T, R>(
   items: readonly T[],
@@ -65,15 +76,27 @@ export async function mapInChunks<T, R>(
   opts?: ChunkOptions,
 ): Promise<R[]> {
   const size = chunkSizeOrThrow(opts?.chunkSize);
+  const budget = opts?.budgetMs ?? YIELD_BUDGET_MS;
   const total = items.length;
   const out: R[] = new Array<R>(total);
-  for (let start = 0; start < total; start += size) {
+  const abort = () => {
     if (opts?.signal?.aborted) throw new CallerAbortError('Operation aborted by caller');
-    if (start > 0) await yieldToEventLoop();
-    if (opts?.signal?.aborted) throw new CallerAbortError('Operation aborted by caller');
-    const end = Math.min(start + size, total);
-    for (let i = start; i < end; i++) out[i] = fn(items[i], i);
-    opts?.onProgress?.(end, total);
+  };
+  abort();
+  let chunkStart = performance.now();
+  let inChunk = 0;
+  for (let i = 0; i < total; i++) {
+    out[i] = fn(items[i], i);
+    inChunk++;
+    const last = i + 1 === total;
+    if (!last && (inChunk >= size || performance.now() - chunkStart >= budget)) {
+      opts?.onProgress?.(i + 1, total);
+      await yieldToEventLoop();
+      abort();
+      chunkStart = performance.now();
+      inChunk = 0;
+    }
   }
+  opts?.onProgress?.(total, total);
   return out;
 }

@@ -34,6 +34,23 @@ describe('mapInChunks', () => {
     ]);
   });
 
+  test('yields when the time budget is spent, before the count cap', async () => {
+    const calls: number[] = [];
+    const spin = (x: number) => {
+      const until = performance.now() + 5;
+      while (performance.now() < until) {
+        // burn ~5 ms per item
+      }
+      calls.push(x);
+      return x;
+    };
+    const pending = mapInChunks([1, 2, 3, 4, 5, 6], spin, { chunkSize: 100, budgetMs: 8 });
+    // the first chunk stops once 8 ms have gone by, well before six items
+    expect(calls.length).toBeLessThan(6);
+    await pending;
+    expect(calls).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
   test('yields between chunks', async () => {
     const calls: number[] = [];
     const pending = mapInChunks(
