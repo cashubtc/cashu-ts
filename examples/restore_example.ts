@@ -8,8 +8,8 @@
  * - The pre-v5 scan (`restoreEverything` below): restore every issued counter, drop the spent ones
  *   afterwards.
  * - The default: state check each batch, restore only what is live.
- * - The default again at a wider `batchSize` (500 on BLS, 1000 on secp, capped at the mint's
- *   `max_array_length`): fewer round trips, paid for by more overshoot past the last used counter.
+ * - The default again at `batchSize` 500, the practical cap: fewer round trips than the BLS and BIP32
+ *   defaults, paid for by more overshoot. HMAC keysets already default to 500.
  *
  * `SCENARIO=` picks a wallet shape to churn (see `SCENARIOS` in main), each with a note on what
  * dominates its recovery and how to tune for it.
@@ -42,7 +42,6 @@ import {
   sumProofs,
   type Proof,
   type RestoreProgress,
-  isBlsKeyset,
 } from '../src';
 
 dns.setDefaultResultOrder('ipv4first');
@@ -375,12 +374,9 @@ async function main() {
   console.log('\n--- Device lost! Recovering from seed on a fresh wallet ---');
   await recover('restore everything  ', true, expected, batchSize);
   await recover('state check first   ', false, expected, batchSize);
-  // A wider batch than the default (100 BLS, 200 or 500 secp), capped at what the mint accepts:
-  // fewer round trips, more overshoot past the last used counter.
-  const alt = Math.min(
-    wallet.getMintInfo().maxArrayLength,
-    isBlsKeyset(wallet.keysetId) ? 500 : 1000,
-  );
+  // A wider batch than the default (100 BLS, 200 BIP32), at the practical cap: many mints accept
+  // no more than 500. Fewer round trips, more overshoot past the last used counter.
+  const alt = Math.min(wallet.getMintInfo().maxArrayLength, 500);
   await recover(`state check @${alt}`.padEnd(20), false, expected, alt);
 
   // The empty-scan leg: a seed this mint has never signed for. Every counter reports UNSPENT and
