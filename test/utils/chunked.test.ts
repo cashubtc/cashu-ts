@@ -4,6 +4,10 @@ import { CallerAbortError } from '../../src/model/Errors';
 import { mapInChunks } from '../../src/utils/chunked';
 
 describe('mapInChunks', () => {
+  test.each([NaN, Infinity, -1])('rejects budgetMs %s', async (budgetMs) => {
+    await expect(mapInChunks([1], (x) => x, { budgetMs })).rejects.toThrow('budgetMs');
+  });
+
   test.each([NaN, Infinity, 0, -1, 1.5])('rejects chunkSize %s', async (chunkSize) => {
     await expect(mapInChunks([1], (x) => x, { chunkSize })).rejects.toThrow('chunkSize');
   });

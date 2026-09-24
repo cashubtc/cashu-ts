@@ -1200,6 +1200,14 @@ describe('test zero-knowledge utilities', () => {
   });
 
   describe('verifyReceivedProofs', () => {
+    test.each([NaN, Infinity, -1])('rejects budgetMs %s before verifying', async (budgetMs) => {
+      for (const verify of [utils.verifyReceivedProofs, utils.verifyMintSignatures]) {
+        await expect(verify([serializedProof], () => secpKeyset, { budgetMs })).rejects.toThrow(
+          'budgetMs',
+        );
+      }
+    });
+
     test.each([NaN, Infinity, 0, -1, 1.5])('rejects chunkSize %s', async (chunkSize) => {
       await expect(
         utils.verifyReceivedProofs([serializedProof], () => secpKeyset, { chunkSize }),

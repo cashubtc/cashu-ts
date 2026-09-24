@@ -17,7 +17,7 @@ import { Amount } from '../model/Amount';
 import { CallerAbortError, CTSError } from '../model/Errors';
 import type { HasKeysetKeys, Proof, ProofLike } from '../model/types';
 
-import { chunkSizeOrThrow, mapInChunks, yieldToEventLoop, YIELD_BUDGET_MS } from './chunked';
+import { budgetOrThrow, chunkSizeOrThrow, mapInChunks, yieldToEventLoop } from './chunked';
 import { hexToNumber } from './core';
 import { ABSOLUTE_MAX_ARRAY_LENGTH } from './limits';
 
@@ -202,7 +202,7 @@ async function verify<T extends ProofLike>(
   }
   const require = opts?.require ?? false;
   const cap = chunkSizeOrThrow(opts?.chunkSize);
-  const budget = opts?.budgetMs ?? YIELD_BUDGET_MS;
+  const budget = budgetOrThrow(opts?.budgetMs);
   const total = proofs.length;
   const errors: Failure[] = new Array<Failure>(total).fill(undefined);
   let done = 0;

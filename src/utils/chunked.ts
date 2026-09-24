@@ -37,6 +37,17 @@ export function chunkSizeOrThrow(chunkSize: number | undefined): number {
 }
 
 /**
+ * The time budget to use, or a `CTSError`: a NaN budget would never yield, or stall the v3 slices.
+ */
+export function budgetOrThrow(budgetMs: number | undefined): number {
+  const budget = budgetMs ?? YIELD_BUDGET_MS;
+  if (!Number.isFinite(budget) || budget < 0) {
+    throw new CTSError('budgetMs must be a finite, non-negative number');
+  }
+  return budget;
+}
+
+/**
  * Hands the thread back to the event loop as a macrotask, so pending input and paint can run.
  *
  * @remarks
@@ -77,7 +88,7 @@ export async function mapInChunks<T, R>(
   opts?: ChunkOptions,
 ): Promise<R[]> {
   const size = chunkSizeOrThrow(opts?.chunkSize);
-  const budget = opts?.budgetMs ?? YIELD_BUDGET_MS;
+  const budget = budgetOrThrow(opts?.budgetMs);
   const total = items.length;
   const out: R[] = new Array<R>(total);
   const abort = () => {

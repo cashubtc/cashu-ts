@@ -33,6 +33,7 @@ export async function proofsFromRestoreResponse(
   outputData: OutputDataLike[],
   response: { outputs: SerializedBlindedMessage[]; signatures: SerializedBlindedSignature[] },
   keysetFor: (id: string) => HasKeysetKeys,
+  signal?: AbortSignal,
 ): Promise<{ proofs: Proof[]; lastIndex: number }> {
   const signatureByB_: { [b: string]: SerializedBlindedSignature } = {};
   response.outputs.forEach((o, i) => (signatureByB_[o.B_] = response.signatures[i]));
@@ -47,11 +48,13 @@ export async function proofsFromRestoreResponse(
     if (signature.amount.isZero()) return;
     signed.push({ data, signature });
   });
-  // Unblinding pairing-verifies each v3 signature, so it yields like the rest of the scan. No
-  // signal here: the mint has signed, and stopping now would strand the proofs.
-  const proofs = await mapInChunks(signed, ({ data, signature }) =>
+  // Unblinding pairing-verifies each v3 signature, so it yields like the rest of the scan. A
+  // restore replays signatures the mint already holds, so an abort here loses nothing.
+  const proofs = await mapInChunks(
+    signed,
     // The output stays a blank: toProof takes the amount and keyset from the signature
-    data.toProof(signature, keysetFor(signature.id)),
+    ({ data, signature }) => data.toProof(signature, keysetFor(signature.id)),
+    { signal },
   );
   return { proofs, lastIndex };
 }

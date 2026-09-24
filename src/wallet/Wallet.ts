@@ -2698,8 +2698,11 @@ class Wallet {
     );
     await this._ensureKeysetsForSignatures(response.signatures);
     // counters here are contiguous from `start`, so the index maps straight onto one
-    const { proofs, lastIndex } = await proofsFromRestoreResponse(outputData, response, (id) =>
-      this.keysetForSignature(id),
+    const { proofs, lastIndex } = await proofsFromRestoreResponse(
+      outputData,
+      response,
+      (id) => this.keysetForSignature(id),
+      config?.signal,
     );
 
     return {
@@ -2788,8 +2791,11 @@ class Wallet {
     );
     await this._ensureKeysetsForSignatures(response.signatures);
     // outputCounters is ascending, so the last signed index carries the highest live counter
-    const { proofs, lastIndex } = await proofsFromRestoreResponse(outputs, response, (id) =>
-      this.keysetForSignature(id),
+    const { proofs, lastIndex } = await proofsFromRestoreResponse(
+      outputs,
+      response,
+      (id) => this.keysetForSignature(id),
+      signal,
     );
     if (lastIndex >= 0) lastIssued = Math.max(lastIssued, outputCounters[lastIndex]);
 
