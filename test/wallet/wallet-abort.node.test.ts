@@ -221,7 +221,7 @@ test('a one-shot mint finishes when aborted during the commit', async () => {
   expect(commit).toHaveBeenCalledOnce();
 });
 
-test('restore cancels state checks even when every scanned proof is spent', async () => {
+test('restore cancels before the next state check even when every scanned proof is spent', async () => {
   const wallet = new Wallet(mint, { unit, bip39seed: new Uint8Array(64).fill(1) });
   await wallet.loadMint();
   const ac = new AbortController();
@@ -233,5 +233,6 @@ test('restore cancels state checks even when every scanned proof is spent', asyn
   await expect(
     wallet.batchRestore({ signal: ac.signal, gapLimit: 1, batchSize: 1, maxCounter: 1 }),
   ).rejects.toBeInstanceOf(CallerAbortError);
-  expect(check).toHaveBeenCalledTimes(2);
+  // the second batch aborts while hashing its counters, before it reaches the mint
+  expect(check).toHaveBeenCalledTimes(1);
 });

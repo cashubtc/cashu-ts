@@ -85,6 +85,7 @@ import { BATCH_POOL_SIZE, runPool } from '../transport';
 import type { RequestFetch, RequestFn } from '../transport';
 import {
   ABSOLUTE_MAX_BATCH_SIZE,
+  ABSOLUTE_MAX_ARRAY_LENGTH,
   bolt11AmountMsat,
   bytesToHex,
   DEFAULT_MAX_ARRAY_LENGTH,
@@ -94,11 +95,14 @@ import {
   SEED_BYTES,
   normalizeMintUrl,
   normalizeProofAmounts,
+  verifyMintSignatures,
+  verifyReceivedProofs,
   REPAIR_COOLDOWN_MS,
   splitAmount,
   sumProofs,
-  verifyProofsForReceive,
 } from '../utils';
+import { mapInChunks, yieldToEventLoop, YIELD_CHUNK_SIZE } from '../utils/chunked';
+import type { ProofVerification, VerifyProofsOptions } from '../utils/verifyProofs';
 
 import {
   assertQuoteUnit,
@@ -1519,7 +1523,11 @@ class Wallet {
     // NUT-12: wallets MUST verify any DLEQ on a received proof (the spec default).
     // `requireDleq: true` opts into the stricter "DLEQ must also be present" policy.
     // For v3 (BLS) proofs the single multi-pairing replaces per-proof DLEQ verification.
-    verifyProofsForReceive(proofs, (id) => this._keyChain.getKeyset(id), { requireDleq });
+    const verified = await verifyReceivedProofs(proofs, (id) => this._keyChain.getKeyset(id), {
+      require: requireDleq,
+      signal: config?.signal,
+    });
+    if (verified.invalid.length > 0) throw verified.invalid[0].error;
 
     // Shape receive output type and denominations
     const keyset = this.getOutputKeyset(keysetId); // specified or wallet keyset
@@ -1932,7 +1940,9 @@ class Wallet {
     // Construct proofs. Each signature names the keyset it was made under, which custom outputs
     // may have chosen per output; unblinding must use that one.
     await this._ensureKeysetsForSignatures(signatures);
-    const swapProofs = swapTransaction.outputData.map((d, i) =>
+    // Unblinding pairing-verifies each v3 signature, so it yields. No signal: the mint has
+    // signed, and stopping now would strand the proofs.
+    const swapProofs = await mapInChunks(swapTransaction.outputData, (d, i) =>
       d.toProof(signatures[i], this.keysetForSignature(signatures[i].id)),
     );
     const reorderedProofs = Array(swapProofs.length);
@@ -2584,6 +2594,11 @@ class Wallet {
         }
         lastCounterWithSignature = res.lastCounterWithSignature;
       });
+      this.safeCallback(
+        config?.onProgress,
+        { keysetId, counter, proofs: restoredProofs.length },
+        { op: 'batchRestore' },
+      );
     }
 
     return { proofs: restoredProofs, lastCounterWithSignature };
@@ -2654,17 +2669,26 @@ class Wallet {
       await this._keyChain.ensureKeysetKeys(scanId);
     }
     const keyset = this.getKeyset(scanId);
+    const seed = this._seed;
 
-    // create deterministic blank outputs for unknown restore amounts
-    // Note: zero amount + zero denomination passes splitAmount validation
-    const zeros = Array(count).fill(0);
-    const outputData = this._outputDataCreator.createDeterministicData(
-      0,
-      this._seed,
-      start,
-      keyset,
-      zeros,
-    );
+    // create deterministic blank outputs for unknown restore amounts, a chunk at a time so a
+    // BLS range does not hold the thread. Zero amount + zero denomination passes splitAmount.
+    const outputData: OutputDataLike[] = [];
+    for (let offset = 0; offset < count; offset += YIELD_CHUNK_SIZE) {
+      this.throwIfAborted(config?.signal);
+      if (offset > 0) await yieldToEventLoop();
+      this.throwIfAborted(config?.signal);
+      const zeros = Array(Math.min(YIELD_CHUNK_SIZE, count - offset)).fill(0);
+      for (const d of this._outputDataCreator.createDeterministicData(
+        0,
+        seed,
+        start + offset,
+        keyset,
+        zeros,
+      )) {
+        outputData.push(d);
+      }
+    }
 
     const response = await this.mint.restore(
       {
@@ -2674,8 +2698,11 @@ class Wallet {
     );
     await this._ensureKeysetsForSignatures(response.signatures);
     // counters here are contiguous from `start`, so the index maps straight onto one
-    const { proofs, lastIndex } = proofsFromRestoreResponse(outputData, response, (id) =>
-      this.keysetForSignature(id),
+    const { proofs, lastIndex } = await proofsFromRestoreResponse(
+      outputData,
+      response,
+      (id) => this.keysetForSignature(id),
+      config?.signal,
     );
 
     return {
@@ -2717,14 +2744,19 @@ class Wallet {
     // dropped out below. An invalid-scalar counter failed at issuance too, so it holds nothing.
     const counters: number[] = [];
     const secrets: string[] = [];
-    for (let c = start; c < start + count; c++) {
-      try {
-        secrets.push(bytesToHex(derive(c).secret));
-        counters.push(c);
-      } catch (e) {
-        if (!(e instanceof InvalidScalarError)) throw e;
-      }
-    }
+    const range = Array.from({ length: count }, (_, i) => start + i);
+    await mapInChunks(
+      range,
+      (c) => {
+        try {
+          secrets.push(bytesToHex(derive(c).secret));
+          counters.push(c);
+        } catch (e) {
+          if (!(e instanceof InvalidScalarError)) throw e;
+        }
+      },
+      { signal },
+    );
     if (counters.length === 0) return { proofs: [], used: false };
     const states = await this.checkProofsStates(
       secrets.map((secret) => ({ secret, id: keyset.id })),
@@ -2735,22 +2767,23 @@ class Wallet {
     // the pair that would tie an issuance to its spend. The rest are blinded through the output
     // creator, so a custom crypto backend is honoured here as it is in a swap.
     let lastIssued = -1;
-    const outputs: OutputDataLike[] = [];
     const outputCounters: number[] = [];
     states.forEach((state, i) => {
       if (state.state === CheckStateEnum.SPENT) {
         lastIssued = Math.max(lastIssued, counters[i]);
         return;
       }
-      outputs.push(
-        this._outputDataCreator.createSingleDeterministicData(0, seed, counters[i], keyset.id),
-      );
       outputCounters.push(counters[i]);
     });
     // Every counter spent: the range is used but holds nothing, so skip the restore entirely.
-    if (outputs.length === 0) {
+    if (outputCounters.length === 0) {
       return { proofs: [], lastCounterWithSignature: lastIssued, used: true };
     }
+    const outputs = await mapInChunks(
+      outputCounters,
+      (c) => this._outputDataCreator.createSingleDeterministicData(0, seed, c, keyset.id),
+      { signal },
+    );
 
     const response = await this.mint.restore(
       { outputs: outputs.map((d) => d.blindedMessage) },
@@ -2758,8 +2791,11 @@ class Wallet {
     );
     await this._ensureKeysetsForSignatures(response.signatures);
     // outputCounters is ascending, so the last signed index carries the highest live counter
-    const { proofs, lastIndex } = proofsFromRestoreResponse(outputs, response, (id) =>
-      this.keysetForSignature(id),
+    const { proofs, lastIndex } = await proofsFromRestoreResponse(
+      outputs,
+      response,
+      (id) => this.keysetForSignature(id),
+      signal,
     );
     if (lastIndex >= 0) lastIssued = Math.max(lastIssued, outputCounters[lastIndex]);
 
@@ -3606,7 +3642,7 @@ class Wallet {
     this._logger.debug('MINT COMPLETED', {
       amounts: outputData.map((o) => o.blindedMessage.amount.toString()),
     });
-    return outputData.map((d, i) =>
+    return mapInChunks(outputData, (d, i) =>
       d.toProof(signatures[i], this.keysetForSignature(signatures[i].id)),
     );
   }
@@ -3865,7 +3901,9 @@ class Wallet {
       quotes: quotes.length,
       amounts: outputData.map((o) => o.blindedMessage.amount.toString()),
     });
-    return outputData.map((d, i) => d.toProof(sigs[i], this.keysetForSignature(sigs[i].id)));
+    return mapInChunks(outputData, (d, i) =>
+      d.toProof(sigs[i], this.keysetForSignature(sigs[i].id)),
+    );
   }
 
   // -----------------------------------------------------------------
@@ -4688,7 +4726,9 @@ class Wallet {
     proofs: Array<Pick<ProofLike, 'secret' | 'id'>>,
     opts?: AbortOptions,
   ): Promise<ProofState[]> {
-    const Ys = proofs.map((p) => this.computeY(p.secret, p.id));
+    const Ys = await mapInChunks(proofs, (p) => this.computeY(p.secret, p.id), {
+      signal: opts?.signal,
+    });
     // Shuffle the wire order to reduce linkability with B_'s (eg when coupled with a restore scan).
     // Indices travel with the request, so callers still get their original order back.
     const order = Ys.map((_, i) => i);
@@ -4719,6 +4759,35 @@ class Wallet {
       });
     });
     return states;
+  }
+
+  /**
+   * Checks that the mint signed each proof (DLEQ, or pairing on v3), loading keys as needed.
+   *
+   * @remarks
+   * `verifyMintSignatures` with this wallet's keysets: chunked, yielding, never throwing per proof.
+   * Says nothing about spendability; a token from outside goes through `receive`.
+   */
+  async verifyMintSignatures<T extends ProofLike = Proof>(
+    proofs: T[],
+    opts?: VerifyProofsOptions,
+  ): Promise<ProofVerification<T>> {
+    this.throwIfAborted(opts?.signal);
+    this.failIf(
+      proofs.length > ABSOLUTE_MAX_ARRAY_LENGTH,
+      `Token contains too many proofs: ${proofs.length}, maximum is ${ABSOLUTE_MAX_ARRAY_LENGTH}`,
+    );
+    if (!this._strictCachedKeysets) {
+      for (const id of new Set(proofs.map((p) => p.id))) {
+        this.throwIfAborted(opts?.signal);
+        try {
+          await this._keyChain.ensureKeysetKeys(id);
+        } catch {
+          // Unknown keyset: its proofs are reported invalid.
+        }
+      }
+    }
+    return verifyMintSignatures(proofs, (id) => this._keyChain.getKeyset(id), opts);
   }
 
   /**

@@ -62,6 +62,20 @@ describe('Restoring deterministic proofs', () => {
     expect(scan.mock.calls.every((c) => c[2] === bound)).toBe(true);
   });
 
+  test('batchRestore reports progress after each wave', async () => {
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+    stubScan(wallet, (start) => (start === 0 ? found(2, 0) : empty));
+    const seen: Array<{ keysetId: string; counter: number; proofs: number }> = [];
+    await wallet.batchRestore({ gapLimit: 100, batchSize: 50, onProgress: (p) => seen.push(p) });
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every((p) => p.keysetId === wallet.keysetId)).toBe(true);
+    expect(seen[seen.length - 1].proofs).toBe(2);
+    for (let i = 1; i < seen.length; i++) {
+      expect(seen[i].counter).toBeGreaterThan(seen[i - 1].counter);
+    }
+  });
+
   test('a range signed only at zero value counts as used but yields no proofs', async () => {
     const VALID_POINT = '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422';
     server.use(
@@ -155,7 +169,7 @@ describe('Restoring deterministic proofs', () => {
     // the find at 600 leaves 297 empty counters, so one more two-batch wave closes the gap
     expect(scan).toHaveBeenCalledTimes(5);
   });
-  test('Batch restore probes the gap, then doubles the wave up to the pool for a used HMAC keyset', async () => {
+  test('Batch restore probes the gap, then widens the wave up to the pool for a used HMAC keyset', async () => {
     const wallet = new Wallet(mint);
     await wallet.loadMint();
     const calls: Array<[number, number]> = [];
@@ -163,17 +177,15 @@ describe('Restoring deterministic proofs', () => {
       calls.push([start, count]);
       return start < 1500 ? found(1, start + count - 1) : empty;
     });
-    // the scan step is stubbed, so the keyset only has to look like a v1 (HMAC) id: 500-batches, pool 4
+    // the scan step is stubbed, so the keyset only has to look like a v1 (HMAC) id: 500-batches, pool 2
     await wallet.batchRestore({ keysetId: `01${'ab'.repeat(32)}` });
-    // one 300-wide probe, then waves of 2 and 4 batches as usage keeps showing
+    // one 300-wide probe, then waves of 1 and 2 batches while usage shows; the last batch closes the gap
     expect(calls).toEqual([
       [0, 300],
       [300, 500],
       [800, 500],
       [1300, 500],
       [1800, 500],
-      [2300, 500],
-      [2800, 500],
     ]);
   });
   test('Batch restore treats maxCounter as an inclusive ceiling and ends there', async () => {
@@ -306,6 +318,10 @@ describe('restore', () => {
     // response shape is OK and produced proofs
     expect(Array.isArray(res.proofs)).toBe(true);
     expect(res.proofs.length).toBeGreaterThan(0);
+
+    // over the per-chunk cap, so output construction yields between chunks
+    const wide = await wallet.restore(0, 40);
+    expect(wide.proofs).toHaveLength(40);
     // proofs should be of amount 1 because we overprinted 1 in the signatures
     expect(res.proofs.every((p) => p.amount.equals(Amount.from(1)))).toBe(true);
   });
@@ -463,6 +479,23 @@ describe('restore', () => {
       expect(proofs).toHaveLength(2);
       expect(lastCounterWithSignature).toBe(2);
       expect(spy).toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test('a derivation failure other than an invalid scalar propagates', async () => {
+    const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(64) });
+    await wallet.loadMint();
+    const spy = vi
+      .spyOn(NUT13, 'createSecretAndBlindingFactorDeriver')
+      .mockImplementation(() => () => {
+        throw new Error('derivation broke');
+      });
+    try {
+      await expect(wallet.batchRestore({ batchSize: 1, gapLimit: 1 })).rejects.toThrow(
+        'derivation broke',
+      );
     } finally {
       spy.mockRestore();
     }

@@ -1,10 +1,11 @@
 import { hexToBytes } from '@noble/curves/utils.js';
 import { HttpResponse, http } from 'msw';
-import { test, describe, expect } from 'vitest';
+import { test, describe, expect, vi } from 'vitest';
 
 import {
   Wallet,
   Amount,
+  CallerAbortError,
   OutputData,
   type Proof,
   type OutputConfig,
@@ -378,6 +379,56 @@ describe('unselected proofs', () => {
     const spare = makeProof(8);
     const { keep } = await wallet.send(1, [makeProof(2), spare]);
     expect(keep.some((p) => p.secret === spare.secret)).toBe(true);
+  });
+});
+
+describe('verifyMintSignatures', () => {
+  test('rejects aborted and oversized audits before loading keys', async () => {
+    const wallet = new Wallet(mint, { unit });
+    const load = vi.spyOn(wallet.keyChain, 'ensureKeysetKeys');
+    const ac = new AbortController();
+    ac.abort();
+    await expect(
+      wallet.verifyMintSignatures([makeProof(1)], { signal: ac.signal }),
+    ).rejects.toBeInstanceOf(CallerAbortError);
+    await expect(
+      wallet.verifyMintSignatures(Array.from({ length: 10_001 }, () => makeProof(1))),
+    ).rejects.toThrow('too many proofs');
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  test('stops loading keys after cancellation during a lookup', async () => {
+    const wallet = new Wallet(mint, { unit });
+    const ac = new AbortController();
+    const load = vi.spyOn(wallet.keyChain, 'ensureKeysetKeys').mockImplementation(async () => {
+      ac.abort();
+      throw new Error('Key lookup failed');
+    });
+    await expect(
+      wallet.verifyMintSignatures([makeProof(1), { ...makeProof(1), id: '00ffffffffffffff' }], {
+        signal: ac.signal,
+      }),
+    ).rejects.toBeInstanceOf(CallerAbortError);
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  test('splits proofs and never throws for an unknown keyset', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const alien = { ...makeProof(1), id: '00ffffffffffffff' };
+    const seen: number[] = [];
+    const { valid, invalid } = await wallet.verifyMintSignatures(
+      [makeProof(1), alien, makeProof(2)],
+      {
+        onProgress: (done) => seen.push(done),
+      },
+    );
+    expect(valid.map((p) => p.amount.toString())).toEqual(['1', '2']);
+    expect(invalid.map((i) => i.proof)).toEqual([alien]);
+    expect(invalid[0].error.message).toMatch(/00ffffffffffffff/);
+    expect(seen).toEqual([3]);
+    const strict = await wallet.verifyMintSignatures([makeProof(1)], { require: true });
+    expect(strict.invalid).toHaveLength(1);
   });
 });
 

@@ -8,7 +8,8 @@
  * - The pre-v5 scan (`restoreEverything` below): restore every issued counter, drop the spent ones
  *   afterwards.
  * - The default: state check each batch, restore only what is live.
- * - The default again at a smaller `batchSize`, which shrinks how far the scan overshoots.
+ * - The default again at `batchSize` 500, the practical cap: fewer round trips than the BLS and BIP32
+ *   defaults, paid for by more overshoot. HMAC keysets already default to 500.
  *
  * `SCENARIO=` picks a wallet shape to churn (see `SCENARIOS` in main), each with a note on what
  * dominates its recovery and how to tune for it.
@@ -40,6 +41,7 @@ import {
   createSecretAndBlindingFactorDeriver,
   sumProofs,
   type Proof,
+  type RestoreProgress,
 } from '../src';
 
 dns.setDefaultResultOrder('ipv4first');
@@ -136,11 +138,13 @@ function report(label: string, stats: ReturnType<typeof countingFetch>['stats'],
 // Wallet operations
 // ---------------------------------------------------------------------------
 async function mintSats(wallet: Wallet, amount: number) {
-  const quote = await wallet.createMintQuoteBolt11(amount);
+  // Every mint quote is locked to a key the wallet holds (NUT-20); a seeded wallet derives one.
+  const { pubkey, privkey } = await wallet.createQuoteLockKey();
+  const quote = await wallet.createMintQuoteBolt11(amount, pubkey);
   while ((await wallet.checkMintQuoteBolt11(quote.quote)).state !== MintQuoteState.PAID) {
     await new Promise((r) => setTimeout(r, 200));
   }
-  proofs.push(...(await wallet.mintProofsBolt11(amount, quote)));
+  proofs.push(...(await wallet.mintProofsBolt11(amount, quote, { privkey })));
   console.log(`Minted ${amount} sats (balance ${sumProofs(proofs)})`);
 }
 
@@ -219,7 +223,12 @@ function liveWindow(walletSeed: Uint8Array, keysetId: string, found: Proof[], T:
  * The scan before v5, kept here for the comparison: replay every counter in batches until the gap
  * closes, and sort the spent ones out afterwards.
  */
-async function restoreEverything(wallet: Wallet, batchSize = 500, gapLimit = 300) {
+async function restoreEverything(
+  wallet: Wallet,
+  batchSize = 500,
+  onProgress?: (p: RestoreProgress) => void,
+  gapLimit = 300,
+) {
   const proofs: Proof[] = [];
   const lastCounters: Record<string, number> = {};
   const keysetIds = wallet.keyChain
@@ -239,6 +248,7 @@ async function restoreEverything(wallet: Wallet, batchSize = 500, gapLimit = 300
         emptyRun = start + batchSize - 1 - last;
       }
       start += batchSize;
+      onProgress?.({ keysetId, counter: start, proofs: proofs.length });
     }
   }
   return { proofs, lastCounters };
@@ -255,9 +265,15 @@ async function recover(
   const wallet = new Wallet(mintUrl, { bip39seed: walletSeed, requestFetch: counted.wrapped });
   await wallet.loadMint();
   const start = performance.now();
+  // The legacy scan counts every issued proof; the default counts only the live ones.
+  const onProgress = ({ keysetId, counter, proofs }: RestoreProgress) =>
+    process.stdout.write(
+      `\r  ${keysetId.slice(0, 8)}…: scanned to counter ${counter}, ${proofs} proofs so far`,
+    );
   const { proofs: all, lastCounters } = legacy
-    ? await restoreEverything(wallet, batchSize)
-    : await wallet.restoreAll({ batchSize });
+    ? await restoreEverything(wallet, batchSize, onProgress)
+    : await wallet.restoreAll({ batchSize, onProgress });
+  process.stdout.write('\n');
   // the legacy scan returns every issued proof, so filter locally for a like-for-like total
   const found = legacy ? (await wallet.groupProofsByState(all)).unspent : all;
   const ms = performance.now() - start;
@@ -283,7 +299,8 @@ const SCENARIOS: Record<string, Record<string, string>> = {
   // so most batches restore something and unblinding the live set is the floor. Keep the defaults.
   'aged-sparse': { CHURN_ROUNDS: '200', SPEND_FRAC: '0.2', PIN_MID: '1' },
   // Newer, mostly unspent: the history is short, so the overshoot past the last counter is most of
-  // the work. A smaller batchSize (the @100 leg) trims it for a couple of extra requests.
+  // the work. A smaller BATCH trims it for a couple of extra requests; the wider second leg shows the
+  // opposite trade.
   'fresh-live': { CHURN_ROUNDS: '2', SPEND_FRAC: '0.3' },
   // Many keysets the seed never used (a multi-mint recovery) are the never-used-seed leg below:
   // the gap-width probe is the whole scan, two requests per keyset, so nothing to tune.
@@ -299,7 +316,7 @@ async function main() {
   //   SPEND_FRAC=f    max spend as a fraction of balance; small values model a lump-funded
   //                   wallet making everyday payments, which leaves old proofs live (default 0.9)
   //   PIN_MID=1       send the unclaimed token mid-history rather than at the end
-  //   BATCH=n         batchSize for every leg except the @100 one (default: the mint's
+  //   BATCH=n         batchSize for every leg except the second state-check one (default: the mint's
   //                   advertised cap); the client does one derivation, Y and blinded message
   //                   per counter in a batch, so this also sweeps the crypto cost per wave
   const preset = SCENARIOS[process.env.SCENARIO ?? ''] ?? {};
@@ -337,7 +354,9 @@ async function main() {
     // The static invoice melts only once per mint instance. On re-runs, melt one of the
     // mint's own invoices instead (internal settlement, no change).
     console.log('External invoice already melted on this mint; melting an internal one instead');
-    const target = await wallet.createMintQuoteBolt11(2000);
+    // A throwaway quote, only wanted for its invoice: a random key consumes no quote counter.
+    const { pubkey: throwaway } = await wallet.createQuoteLockKey({ random: true });
+    const target = await wallet.createMintQuoteBolt11(2000, throwaway);
     await meltSats(wallet, target.request);
   }
   await churn(churnRounds);
@@ -355,7 +374,10 @@ async function main() {
   console.log('\n--- Device lost! Recovering from seed on a fresh wallet ---');
   await recover('restore everything  ', true, expected, batchSize);
   await recover('state check first   ', false, expected, batchSize);
-  await recover('state check @100    ', false, expected, 100);
+  // A wider batch than the default (300 BLS, 200 BIP32), at the practical cap: many mints accept
+  // no more than 500. Fewer round trips, more overshoot past the last used counter.
+  const alt = Math.min(wallet.getMintInfo().maxArrayLength, 500);
+  await recover(`state check @${alt}`.padEnd(20), false, expected, alt);
 
   // The empty-scan leg: a seed this mint has never signed for. Every counter reports UNSPENT and
   // is restored regardless, so the state check can skip nothing and its cost shows undiluted.

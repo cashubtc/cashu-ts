@@ -10,7 +10,7 @@ import {
   serializeNutrootLeafHex,
   type NutrootLeaf,
 } from '../../src/crypto/nutroot';
-import { bytesToHex, hexToBytes, deriveKeysetId, verifyProofsForReceive } from '../../src/utils';
+import { bytesToHex, hexToBytes, deriveKeysetId, verifyReceivedProofs } from '../../src/utils';
 
 const priv = (n: number) => n.toString(16).padStart(64, '0');
 const pub = (n: number) => bytesToHex(getPubKeyFromPrivKey(hexToBytes(priv(n))));
@@ -65,7 +65,7 @@ const leaf: NutrootLeaf = { type: 'threshold', n: 1, keys: [pub(1)] };
 describe('nutroot edge cases', () => {
   test.each([NUTROOT_NUMS_KEY, pub(1)])(
     'binds blinded owners to their requested conditions with internal key %s',
-    (receiverKey) => {
+    async (receiverKey) => {
       const w = wallet();
       const leaves: NutrootLeaf[] = [
         leaf,
@@ -78,7 +78,9 @@ describe('nutroot edge cases', () => {
         deriveReceiverKeyedSecret(receiverKey, { leaves: swapped, blindKeys }),
       );
       // The proof is well formed; only the owner assignment differs from the request.
-      expect(() => verifyProofsForReceive([swappedOwners], () => ({ id, keys }))).not.toThrow();
+      expect((await verifyReceivedProofs([swappedOwners], () => ({ id, keys }))).invalid).toEqual(
+        [],
+      );
       for (const privkeys of [priv(1), [priv(1), priv(2)], [priv(1), priv(1)]]) {
         expect(() =>
           w.isPaymentRequestSatisfied(pr, [swappedOwners], undefined, { privkeys }),

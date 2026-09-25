@@ -1,6 +1,7 @@
 import { test, describe, expect } from 'vitest';
 
 import { Amount, type Keys, type Proof, type OutputType } from '../../src';
+import { CallerAbortError } from '../../src/model/Errors';
 import { OutputData, type OutputDataLike } from '../../src/model/OutputData';
 import {
   ceilLog2,
@@ -8,6 +9,7 @@ import {
   orderOutputsForPayload,
   scanProfile,
   stringifyOutputTypeForLog,
+  proofsFromRestoreResponse,
 } from '../../src/wallet/_internal';
 import { PUBKEYS } from '../consts';
 
@@ -208,14 +210,12 @@ describe('stringifyOutputTypeForLog', () => {
 });
 
 describe('scanProfile', () => {
-  test('sizes the scan by keyset kind: cheap kinds get wide batches, dear kinds narrow ones', () => {
-    // v1 (HMAC): a counter costs ~0.1ms, so big batches and the full pool
-    expect(scanProfile(`01${'ab'.repeat(32)}`)).toEqual({ batchSize: 500, poolSize: 4 });
-    // v0 (BIP32) as hex or base64: ~0.7ms per counter
+  test('sizes the scan by keyset kind, two batches in flight for all', () => {
+    expect(scanProfile(`01${'ab'.repeat(32)}`)).toEqual({ batchSize: 500, poolSize: 2 });
+    // v0 (BIP32) as hex or base64
     expect(scanProfile('00bd033559de27d0')).toEqual({ batchSize: 200, poolSize: 2 });
     expect(scanProfile('I2yN+iRYfkzT')).toEqual({ batchSize: 200, poolSize: 2 });
-    // v3 (BLS): ~1.1ms per counter, and the pool stops paying off past two
-    expect(scanProfile(`02${'ab'.repeat(32)}`)).toEqual({ batchSize: 100, poolSize: 2 });
+    expect(scanProfile(`02${'ab'.repeat(32)}`)).toEqual({ batchSize: 300, poolSize: 2 });
   });
 });
 
@@ -273,5 +273,36 @@ describe('stringifyOutputTypeForLog: lock with leaves', () => {
     });
     expect(s).not.toContain(mainKey);
     expect(s).not.toContain(leafKey);
+  });
+});
+
+describe('proofsFromRestoreResponse', () => {
+  test('an abort during unblinding rejects rather than returning part of the batch', async () => {
+    const ac = new AbortController();
+    const n = 40; // over the per-chunk cap, so the helper yields and re-checks the signal
+    const outputs = Array.from({ length: n }, (_, i) => ({
+      B_: `b${i}`,
+      amount: Amount.from(1),
+      id: 'k',
+    }));
+    const outputData = outputs.map(
+      (o) =>
+        ({
+          blindedMessage: o,
+          toProof: () => {
+            ac.abort();
+            return { id: 'k', amount: Amount.from(1), secret: o.B_, C: '' } as Proof;
+          },
+        }) as unknown as OutputDataLike,
+    );
+    const signatures = outputs.map(() => ({ id: 'k', amount: Amount.from(1), C_: '' }));
+    await expect(
+      proofsFromRestoreResponse(
+        outputData,
+        { outputs, signatures },
+        () => ({ id: 'k', keys: {} }),
+        ac.signal,
+      ),
+    ).rejects.toBeInstanceOf(CallerAbortError);
   });
 });
