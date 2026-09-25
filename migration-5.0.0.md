@@ -469,6 +469,8 @@ await wallet.checkProofsStates([{ secret: '…' }]);
 await wallet.checkProofsStates([{ id: '00bd033559de27d0', secret: '…' }]);
 ```
 
+Hashing to `Y` now yields to the event loop every 50 ms, so a large check no longer blocks a UI thread; the new optional `budgetMs` sets the interval. When running several checks at once, divide the budget between them so together they stay within it.
+
 If you were already passing full `Proof` objects (the normal case — `wallet.checkProofsStates(proofs)` where `proofs: Proof[]`), no change is required.
 
 ---

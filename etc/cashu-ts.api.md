@@ -2925,7 +2925,9 @@ export class Wallet {
     checkMintQuoteBolt11(quote: string | MintQuoteBolt11Response, opts?: AbortOptions): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt12(quote: string, opts?: AbortOptions): Promise<MintQuoteBolt12Response>;
     checkMintQuoteOnchain(quote: string, opts?: AbortOptions): Promise<MintQuoteOnchainResponse>;
-    checkProofsStates(proofs: Array<Pick<ProofLike, 'secret' | 'id'>>, opts?: AbortOptions): Promise<ProofState[]>;
+    checkProofsStates(proofs: Array<Pick<ProofLike, 'secret' | 'id'>>, opts?: AbortOptions & {
+        budgetMs?: number;
+    }): Promise<ProofState[]>;
     completeBatchMint(batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>, opts?: CompleteMintOptions): Promise<Proof[]>;
     completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote>, privkey?: string | string[], options?: CompleteMeltOptions): Promise<MeltProofsResponse<TQuote>>;
     completeMint(mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>, opts?: CompleteMintOptions): Promise<Proof[]>;

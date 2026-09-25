@@ -2763,7 +2763,7 @@ class Wallet {
       opts,
     );
     if (counters.length === 0) return { proofs: [], used: false };
-    const states = await this._checkProofsStates(
+    const states = await this.checkProofsStates(
       secrets.map((secret) => ({ secret, id: keyset.id })),
       opts,
     );
@@ -4726,19 +4726,11 @@ class Wallet {
    *
    * @param proofs Each proof must carry `id` and `secret`. The keyset id selects the hash-to-curve
    *   variant: v0/v1/v2 use secp256k1; v3 (`02…`) uses BLS12-381 G1.
+   * @param opts.budgetMs Milliseconds of hashing between yields to the event loop. Default 50;
+   *   lower it when running several checks at once so together they stay within a frame budget.
    * @returns NUT-07 state for each proof, in same order.
    */
   async checkProofsStates(
-    proofs: Array<Pick<ProofLike, 'secret' | 'id'>>,
-    opts?: AbortOptions,
-  ): Promise<ProofState[]> {
-    return this._checkProofsStates(proofs, opts);
-  }
-
-  /**
-   * `checkProofsStates` with a yield budget, for a caller running several at once.
-   */
-  private async _checkProofsStates(
     proofs: Array<Pick<ProofLike, 'secret' | 'id'>>,
     opts?: AbortOptions & { budgetMs?: number },
   ): Promise<ProofState[]> {

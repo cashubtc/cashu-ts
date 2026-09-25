@@ -41,6 +41,17 @@ describe('checkProofsStates', () => {
     });
   });
 
+  test.each([NaN, Infinity, -1])(
+    'checkProofsStates rejects budgetMs %s before any request',
+    async (budgetMs) => {
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+      const check = vi.spyOn(wallet.mint, 'check');
+      await expect(wallet.checkProofsStates(proofs, { budgetMs })).rejects.toThrow('budgetMs');
+      expect(check).not.toHaveBeenCalled();
+    },
+  );
+
   test('checkProofsStates uses a custom hashToCurve for Y', async () => {
     const fakeY = '02' + 'ab'.repeat(32);
     const seen: string[][] = [];
