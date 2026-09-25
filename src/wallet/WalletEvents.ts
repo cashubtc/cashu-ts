@@ -19,6 +19,7 @@ import {
   nullIfUndefined,
   verifiedPreimage,
 } from '../utils';
+import { mapInChunks } from '../utils/chunked';
 
 import { type OperationCounters } from './CounterSource';
 import type { Wallet } from './Wallet';
@@ -731,13 +732,16 @@ export class WalletEvents {
     // payload.Y === '__proto__' (or 'constructor', etc.) would otherwise
     // resolve to an inherited property and bypass the unknown-Y guard below.
     const proofMap = Object.create(null) as Record<string, T>;
-    for (const p of proofs) {
-      const y = this.wallet.computeY(p.secret, p.id);
+    // Hashing to Y is curve work per proof, so it yields.
+    const ys = await mapInChunks(proofs, (p) => this.wallet.computeY(p.secret, p.id), {
+      signal: opts?.signal,
+    });
+    ys.forEach((y, i) => {
       if (proofMap[y]) {
         throw new CTSError('Duplicate proof secret in proofStateUpdates input');
       }
-      proofMap[y] = p;
-    }
+      proofMap[y] = proofs[i];
+    });
     return this._watch<ProofState & { proof: T }, ProofState>(
       {
         kind: 'proof_state',

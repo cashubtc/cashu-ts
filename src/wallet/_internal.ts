@@ -33,7 +33,7 @@ export async function proofsFromRestoreResponse(
   outputData: OutputDataLike[],
   response: { outputs: SerializedBlindedMessage[]; signatures: SerializedBlindedSignature[] },
   keysetFor: (id: string) => HasKeysetKeys,
-  signal?: AbortSignal,
+  opts?: { signal?: AbortSignal; budgetMs?: number },
 ): Promise<{ proofs: Proof[]; lastIndex: number }> {
   const signatureByB_: { [b: string]: SerializedBlindedSignature } = {};
   response.outputs.forEach((o, i) => (signatureByB_[o.B_] = response.signatures[i]));
@@ -54,7 +54,7 @@ export async function proofsFromRestoreResponse(
     signed,
     // The output stays a blank: toProof takes the amount and keyset from the signature
     ({ data, signature }) => data.toProof(signature, keysetFor(signature.id)),
-    { signal },
+    opts,
   );
   return { proofs, lastIndex };
 }

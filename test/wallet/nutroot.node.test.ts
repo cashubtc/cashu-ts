@@ -330,6 +330,23 @@ describe('prepareScriptPathSpends', () => {
  * -------------------------- */
 
 describe('attachTransactionWitnesses', () => {
+  test('an aborted signal rejects before any input is signed', async () => {
+    const input = v3Proof(PUB_A);
+    const ac = new AbortController();
+    ac.abort();
+    await expect(
+      attachTransactionWitnesses(
+        { inputs: [input], outputs: [OUTPUT] },
+        undefined,
+        new Map([[PUB_A, hexToBytes(PRIV_A)]]),
+        undefined,
+        makeState(undefined),
+        ac.signal,
+      ),
+    ).rejects.toThrow(/aborted/);
+    expect(input.witness).toBeUndefined();
+  });
+
   test('falls back to extraKeys, which carry the keys proofs hold in spend info', async () => {
     const fromExtra = v3Proof(PUB_A);
     // A random v3 output's key rides on the proof (spend_info.k), not in wallet state; callers

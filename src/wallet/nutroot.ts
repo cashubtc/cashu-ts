@@ -27,6 +27,7 @@ import { CTSError } from '../model/Errors';
 import { type MeltRequest } from '../model/types';
 import type { Proof } from '../model/types/proof';
 import { bytesToHex, hexToBytes } from '../utils';
+import { mapInChunks } from '../utils/chunked';
 
 import { quoteCounterKey } from './CounterSource';
 import type { ScriptPathPlan, SpendOption, SpendOptions, SpendReceipt } from './types';
@@ -74,12 +75,19 @@ export async function attachTransactionWitnesses(
   extraKeys: Map<string, Uint8Array> | undefined,
   scriptSpends: Map<string, ScriptPathSpend> | undefined,
   state: NutrootWalletState,
+  signal?: AbortSignal,
 ): Promise<SpendReceipt[]> {
   const v3Inputs = payload.inputs.filter((p) => isBlsKeyset(p.id) && isV3PointSecret(p.secret));
   if (v3Inputs.length === 0) return [];
   // Each input signs its own input digest over the shared transcript (NUT-10). The transcript
   // names inputs by Y, which the receipts need too, so hash each v3 secret once here.
-  const Ys = new Map(v3Inputs.map((p) => [p.secret, hashToCurveHex(p.secret, p.id)]));
+  // Hashing and signing are curve work per input, so both yield; nothing is posted yet, so an
+  // abort here is safe.
+  const Ys = new Map(
+    await mapInChunks(v3Inputs, (p) => [p.secret, hashToCurveHex(p.secret, p.id)] as const, {
+      signal,
+    }),
+  );
   const { transactionMessage, proofs: inputContexts } = inputsForPayload({
     inputs: payload.inputs.map((p) => {
       const Y = Ys.get(p.secret);
@@ -121,12 +129,16 @@ export async function attachTransactionWitnesses(
       spend.preimage,
     );
   }
-  for (const input of v3Inputs) {
-    if (input.witness) continue; // pre-built witness (e.g. script path): leave it alone
-    const secretKey = extraKeys?.get(input.secret);
-    const context = inputContexts.get(Ys.get(input.secret)!);
-    if (secretKey && context) input.witness = signTransactionInput(context.digest, secretKey);
-  }
+  await mapInChunks(
+    v3Inputs,
+    (input) => {
+      if (input.witness) return; // pre-built witness (e.g. script path): leave it alone
+      const secretKey = extraKeys?.get(input.secret);
+      const context = inputContexts.get(Ys.get(input.secret)!);
+      if (secretKey && context) input.witness = signTransactionInput(context.digest, secretKey);
+    },
+    { signal },
+  );
   // Every v3 input signs (NUT-10), so an unsigned one is a request the mint will refuse.
   // Say which proof and why here, rather than letting it come back as a witness error naming
   // nothing: the cause is always a key this wallet does not hold.
