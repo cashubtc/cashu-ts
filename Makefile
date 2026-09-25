@@ -16,6 +16,7 @@ RATE_LIMIT_PM ?= 200
 CDK_IMAGE_RC ?= cashubtc/mintd:0.18.0-rc.3
 CDK_IMAGE ?= cashubtc/mintd:0.18.1
 CDK_NAME ?= cashu-dev-cdk
+CDK_PULL ?= always
 
 NUT_IMAGE_RC ?= cashubtc/nutshell:0.18.2
 NUT_IMAGE ?= cashubtc/nutshell:0.21.0
@@ -34,6 +35,13 @@ NUT_BLS_NAME ?= cashu-dev-nutshell-bls
 # comes up as a mint upgraded into v3: legacy keysets from the database, which
 # serve NUT-10 and plain text secrets, plus its own fresh v3 keyset.
 NUT_BLS_VOLUME ?= cashu-dev-nutshell-bls-data
+
+# BLS (v3) CDK: built from a local checkout of cashubtc/cdk#2607 (nutroot).
+CDK_BLS_PATH ?= ../cdk
+CDK_BLS_IMAGE ?= cashu-dev-cdk-bls:local
+CDK_BLS_NAME ?= cashu-dev-cdk-bls
+# Issuance version for the config document; empty leaves the mint's default.
+CDK_KEYSET_VERSION ?=
 
 # ------------------------
 # Docker envs per dependency
@@ -60,6 +68,7 @@ listen_host = "0.0.0.0"
 listen_port = 3338
 mnemonic = "env:CDK_MINTD_MNEMONIC"
 input_fee_ppk = $(INPUT_FEE_PPK)
+$(if $(CDK_KEYSET_VERSION),keyset_version = "$(CDK_KEYSET_VERSION)")
 
 [database]
 engine = "sqlite"
@@ -102,7 +111,7 @@ PLATFORM_FLAG := $(if $(PLATFORM),--platform=$(PLATFORM),)
 
 cdk-up:
 	-$(DOCKER) rm -f -v $(CDK_NAME) >/dev/null 2>&1 || true
-	$(DOCKER) run --pull=always -d --name $(CDK_NAME) $(PLATFORM_FLAG) \
+	$(DOCKER) run --pull=$(CDK_PULL) -d --name $(CDK_NAME) $(PLATFORM_FLAG) \
 		-p $(BIND_ADDR):$(PORT):3338 \
 		$(CDK_ENVS) \
 		-e CDK_CONFIG_TOML \
@@ -130,6 +139,7 @@ print-mint-images:
 	@echo "NUT_IMAGE=$(NUT_IMAGE)"
 	@echo "NUT_IMAGE_RC=$(NUT_IMAGE_RC)"
 	@echo "NUT_BLS_IMAGE=$(NUT_BLS_IMAGE) (built from $(NUT_BLS_PATH))"
+	@echo "CDK_BLS_IMAGE=$(CDK_BLS_IMAGE) (built from $(CDK_BLS_PATH))"
 
 # ------------------------
 # Nutshell Targets
@@ -189,3 +199,21 @@ nutshell-bls-up: nutshell-bls-build
 nutshell-bls-down:
 	-$(DOCKER) rm -f -v $(NUT_BLS_NAME)
 	-$(DOCKER) volume rm $(NUT_BLS_VOLUME)
+
+# ------------------------
+# CDK BLS (v3) Targets
+# ------------------------
+# Built natively like the nutshell BLS image. CDK keeps one active keyset per
+# unit, so this mint issues v3 only: no upgrade-path seeding, unlike nutshell.
+.PHONY: cdk-bls-build cdk-bls-up cdk-bls-down
+
+# Upstream Dockerfile.arm predates the bindings workspace members and the lockfile.
+cdk-bls-build:
+	awk '1; /^COPY crates/ { print "COPY bindings ./bindings"; print "COPY Cargo.lock ./Cargo.lock" }' \
+		$(CDK_BLS_PATH)/Dockerfile.arm | $(DOCKER) build -f - -t $(CDK_BLS_IMAGE) $(CDK_BLS_PATH)
+
+cdk-bls-up: cdk-bls-build
+	$(MAKE) cdk-up CDK_NAME=$(CDK_BLS_NAME) CDK_IMAGE=$(CDK_BLS_IMAGE) CDK_KEYSET_VERSION=02 PLATFORM= CDK_PULL=never
+
+cdk-bls-down:
+	$(MAKE) cdk-down CDK_NAME=$(CDK_BLS_NAME)

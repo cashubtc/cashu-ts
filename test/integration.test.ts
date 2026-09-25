@@ -20,7 +20,7 @@
 
 import { secp256k1, schnorr } from '@noble/curves/secp256k1.js';
 import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils.js';
-import { vi, test, describe, expect, beforeAll } from 'vitest';
+import { vi, test, describe, expect } from 'vitest';
 
 import {
   Mint,
@@ -66,13 +66,14 @@ vi.setConfig({
 // secrets only, and their flows live in integration-v3.test.ts. A mint that serves both
 // hands the wallet the v3 keyset by default (getCheapestKeyset prefers the highest
 // version), so wallets here bind to the pre-v3 keyset explicitly.
-let legacyKeysetId: string | undefined;
-
-beforeAll(async () => {
-  const { keysets } = await new Mint(mintUrl).getKeySets();
+const legacyKeysetId = await new Mint(mintUrl).getKeySets().then(({ keysets }) => {
   const preV3 = keysets.filter((k) => k.unit === unit && k.active && !isBlsKeyset(k.id));
-  legacyKeysetId = preV3[preV3.length - 1]?.id;
+  return preV3[preV3.length - 1]?.id;
 });
+
+// Tests of pre-v3 secret shapes. A v3-only mint (eg CDK, one active keyset per unit) cannot
+// issue them, so they skip there instead of running against the v3 keyset.
+const testPreV3 = legacyKeysetId ? test : test.skip;
 
 // Wallet bound to the pre-v3 keyset. Falls back to the mint's default when the mint serves
 // no pre-v3 keyset, so this suite still runs against mints that never rotated to v3.
@@ -161,7 +162,7 @@ async function lockedMintQuote(
 }
 
 describe('mint api', () => {
-  test('suite binds to a pre-v3 keyset when the mint serves one', async () => {
+  testPreV3('suite binds to a pre-v3 keyset when the mint serves one', async () => {
     const { keysets } = await new Mint(mintUrl).getKeySets();
     const servesV3 = keysets.some((k) => k.unit === unit && k.active && isBlsKeyset(k.id));
     if (!servesV3) return; // mint has no v3 keyset: nothing to bind away from
@@ -374,7 +375,7 @@ describe('mint api', () => {
     const response = await wallet.receive(encoded);
     expect(response).toBeDefined();
   });
-  test('send and receive p2pk', async () => {
+  testPreV3('send and receive p2pk', async () => {
     const wallet = newWallet({ unit });
     await wallet.loadMint();
     const privKeyAlice = secp256k1.utils.randomSecretKey();
@@ -413,7 +414,7 @@ describe('mint api', () => {
     const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyBob) });
     expect(sumProofs(proofs).equals(63)).toBeTruthy();
   });
-  test('send and receive p2pk with SIG_ALL', async () => {
+  testPreV3('send and receive p2pk with SIG_ALL', async () => {
     const wallet = newWallet({ unit });
     await wallet.loadMint();
     const privKeyAlice = secp256k1.utils.randomSecretKey();
@@ -448,7 +449,7 @@ describe('mint api', () => {
     const { keep } = await wallet.completeSwap(txn, bytesToHex(privKeyBob));
     expect(sumProofs(keep).equals(64)).toBeTruthy();
   });
-  test('send and receive p2pk with additional tags', async () => {
+  testPreV3('send and receive p2pk with additional tags', async () => {
     const wallet = newWallet({ unit });
     await wallet.loadMint();
 
@@ -489,7 +490,7 @@ describe('mint api', () => {
     expect(sumProofs(proofs).equals(63)).toBeTruthy();
   });
 
-  test('send and receive p2bk', async () => {
+  testPreV3('send and receive p2bk', async () => {
     const wallet = newWallet({ unit });
     await wallet.loadMint();
 
@@ -524,7 +525,7 @@ describe('mint api', () => {
     expect(sumProofs(proofs).equals(63)).toBeTruthy();
   });
 
-  test('send and receive p2bk SCHNORR', async () => {
+  testPreV3('send and receive p2bk SCHNORR', async () => {
     const wallet = newWallet({ unit });
     await wallet.loadMint();
 
@@ -559,7 +560,7 @@ describe('mint api', () => {
     expect(sumProofs(proofs).equals(63)).toBeTruthy();
   });
 
-  test('send and receive p2bk HTLC', async () => {
+  testPreV3('send and receive p2bk HTLC', async () => {
     const wallet = newWallet({ unit });
     await wallet.loadMint();
 
@@ -594,7 +595,7 @@ describe('mint api', () => {
     const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyBob) });
     expect(sumProofs(proofs).equals(63)).toBeTruthy();
   });
-  test('mint and melt p2pk', async () => {
+  testPreV3('mint and melt p2pk', async () => {
     const invoice =
       'lnbc20u1p5tnrdtsp5xaus66jztyj4f4m9wuza7ay9994d5dals6dluvw80dduhhulgxvspp5gsdp48uz9x20etle8j7muweujzxd2w4ay2v6cwzwjy7pff44r4gqhp5jujtt4hgd57c5hskstzkjkxqtfmctfvpfc3wmt3h42a9f2p9sqcsxq9z0rgqcqpnrzjqvxr759n8jl5226n47zw6325pyffxqlpyrjh9ztswvnglhrmtcsfzrw8mqqqf2cqqqqqqqlgqqqqzhsqjq9qxpqysgq2rtnpkqzmwmuf6cw653s63552qf0hgst6xzdywkgekhz836ayrz572cm72r7ejj7w0ktgldlwfu33fpr9dxywx5wqy4tte7smpa9q4gqaaydvv';
     const wallet = newWallet();
@@ -937,7 +938,7 @@ describe('Custom Outputs', () => {
   const hexPk = bytesToHex(pk);
   const invoice =
     'lnbc10n1pn449a7pp5eh3jn9p8hlcq0c0ppcfem2hg9ehptqr9hjk5gst6c0c9qfmrrvgsdq4gdshx6r4ypqkgerjv4ehxcqzpuxqr8pqsp539s9559pdth06j37kexk9zq2pusl4yvy97ruf36jqgyskawlls3s9p4gqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqpqysgqy00qa3xgn03jtwrtpu93rqrp806czmpftj8g97cm0r3d2x4rsvlhp5vzgjyzzazl9xf4gpgd35gmys998tlfu8j5zrk7sf3n2nh3t3gpyul75t';
-  test('Default keepFactory', async () => {
+  testPreV3('Default keepFactory', async () => {
     // First we create a keep factory, this is a function that will be used to construct all outputs that we "keep"
     function p2pkFactory(a: AmountLike, k: HasKeysetKeys) {
       return OutputData.createSingleP2PKData({ kind: 'P2PK', data: hexPk }, a, k.id);
@@ -1002,7 +1003,7 @@ describe('Custom Outputs', () => {
     // We expect all received proofs to be locked using newFactory
     expectNUT10SecretDataToEqual(newProofs, testPk);
   });
-  test('Manual Factory Mint', async () => {
+  testPreV3('Manual Factory Mint', async () => {
     function createFactory(pubkey: string): OutputDataFactory {
       function inner(a: AmountLike, k: HasKeysetKeys) {
         return OutputData.createSingleP2PKData({ kind: 'P2PK', data: pubkey }, a, k.id);
@@ -1023,7 +1024,7 @@ describe('Custom Outputs', () => {
     );
     expectNUT10SecretDataToEqual(proofs, mintPk);
   });
-  test('Manual Factory Send', async () => {
+  testPreV3('Manual Factory Send', async () => {
     function createFactory(pubkey: string): OutputDataFactory {
       function inner(a: AmountLike, k: HasKeysetKeys) {
         return OutputData.createSingleP2PKData({ kind: 'P2PK', data: pubkey }, a, k.id);
@@ -1050,7 +1051,7 @@ describe('Custom Outputs', () => {
     expectNUT10SecretDataToEqual(send, sendPk);
     expectNUT10SecretDataToEqual(keep, keepPk);
   });
-  test('Manual BlindingData', async () => {
+  testPreV3('Manual BlindingData', async () => {
     const wallet = newWallet();
     await wallet.loadMint();
     const keys = wallet.keyChain.getKeyset(wallet.keysetId);
@@ -1203,7 +1204,7 @@ describe('CDK Mint NUT-19 Cache Tests', () => {
     }
   }
 
-  test('mint tokens with NUT-19 cache retry on network failure', async () => {
+  testPreV3('mint tokens with NUT-19 cache retry on network failure', async () => {
     if (!(await shouldRunCDKTests())) {
       console.log('Skipping test - not CDK mint');
       return;
