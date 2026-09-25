@@ -301,7 +301,7 @@ describe('proofsFromRestoreResponse', () => {
         outputData,
         { outputs, signatures },
         () => ({ id: 'k', keys: {} }),
-        ac.signal,
+        { signal: ac.signal },
       ),
     ).rejects.toBeInstanceOf(CallerAbortError);
   });

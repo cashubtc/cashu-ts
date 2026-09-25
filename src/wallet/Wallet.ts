@@ -101,7 +101,7 @@ import {
   splitAmount,
   sumProofs,
 } from '../utils';
-import { mapInChunks, yieldToEventLoop, YIELD_CHUNK_SIZE } from '../utils/chunked';
+import { mapInChunks, yieldToEventLoop, YIELD_BUDGET_MS, YIELD_CHUNK_SIZE } from '../utils/chunked';
 import type { ProofVerification, VerifyProofsOptions } from '../utils/verifyProofs';
 
 import {
@@ -1927,6 +1927,7 @@ class Wallet {
         ? prepareScriptPathSpends(swapPreview.inputs, scriptPath, privkeys)
         : undefined,
       this._nutrootState(),
+      options?.signal,
     );
     const { signatures } = await this.withStaleKeysetRepair(() =>
       this.mint.swap(swapTransaction.payload, { signal: options?.signal }),
@@ -2525,6 +2526,9 @@ class Wallet {
   ): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
     const keysetId = config?.keysetId ?? this.keysetId;
     const profile = scanProfile(keysetId);
+    // Batches in flight each yield on their own budget, so share one frame budget between them:
+    // otherwise the thread can go a full budget per batch without a break.
+    const budgetMs = YIELD_BUDGET_MS / profile.poolSize;
     const { gapLimit = 300, batchSize = Math.min(this.maxArrayLength, profile.batchSize) } =
       config ?? {};
     let counter = config?.counter ?? 0;
@@ -2571,7 +2575,7 @@ class Wallet {
       }
       // Restore the batches via a pool, keeping results in counter order
       const wave = await runPool(batches, profile.poolSize, ({ start, count }) =>
-        this.restoreUnspent(start, count, keysetId, config?.signal),
+        this.restoreUnspent(start, count, keysetId, { signal: config?.signal, budgetMs }),
       );
       const last = batches[batches.length - 1];
       counter = last.start + last.count;
@@ -2702,7 +2706,7 @@ class Wallet {
       outputData,
       response,
       (id) => this.keysetForSignature(id),
-      config?.signal,
+      { signal: config?.signal },
     );
 
     return {
@@ -2727,8 +2731,9 @@ class Wallet {
     start: number,
     count: number,
     keysetId?: string,
-    signal?: AbortSignal,
+    opts?: { signal?: AbortSignal; budgetMs?: number },
   ): Promise<ScanResult> {
+    const signal = opts?.signal;
     this.failIfNullish(this._seed, 'Cashu Wallet must be initialized with a seed to use restore');
     const seed = this._seed;
     // Resolve once: an auto-bound wallet can rebind during the awaits below
@@ -2755,12 +2760,12 @@ class Wallet {
           if (!(e instanceof InvalidScalarError)) throw e;
         }
       },
-      { signal },
+      opts,
     );
     if (counters.length === 0) return { proofs: [], used: false };
     const states = await this.checkProofsStates(
       secrets.map((secret) => ({ secret, id: keyset.id })),
-      { signal },
+      opts,
     );
 
     // Spent counters drop out here, so their B_ is never built or sent and the mint never sees
@@ -2782,7 +2787,7 @@ class Wallet {
     const outputs = await mapInChunks(
       outputCounters,
       (c) => this._outputDataCreator.createSingleDeterministicData(0, seed, c, keyset.id),
-      { signal },
+      opts,
     );
 
     const response = await this.mint.restore(
@@ -2795,7 +2800,7 @@ class Wallet {
       outputs,
       response,
       (id) => this.keysetForSignature(id),
-      signal,
+      opts,
     );
     if (lastIndex >= 0) lastIssued = Math.max(lastIssued, outputCounters[lastIndex]);
 
@@ -4586,6 +4591,7 @@ class Wallet {
             )
           : undefined,
         this._nutrootState(),
+        completeOptions.signal,
       );
     }
 
@@ -4720,14 +4726,17 @@ class Wallet {
    *
    * @param proofs Each proof must carry `id` and `secret`. The keyset id selects the hash-to-curve
    *   variant: v0/v1/v2 use secp256k1; v3 (`02…`) uses BLS12-381 G1.
+   * @param opts.budgetMs Milliseconds of hashing between yields to the event loop. Default 50;
+   *   lower it when running several checks at once so together they stay within a frame budget.
    * @returns NUT-07 state for each proof, in same order.
    */
   async checkProofsStates(
     proofs: Array<Pick<ProofLike, 'secret' | 'id'>>,
-    opts?: AbortOptions,
+    opts?: AbortOptions & { budgetMs?: number },
   ): Promise<ProofState[]> {
     const Ys = await mapInChunks(proofs, (p) => this.computeY(p.secret, p.id), {
       signal: opts?.signal,
+      budgetMs: opts?.budgetMs,
     });
     // Shuffle the wire order to reduce linkability with B_'s (eg when coupled with a restore scan).
     // Indices travel with the request, so callers still get their original order back.

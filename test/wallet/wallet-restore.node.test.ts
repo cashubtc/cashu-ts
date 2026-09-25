@@ -15,6 +15,8 @@ import {
 } from '../../src';
 import { MAX_SUPPORTED_KEYSET_VERSION_BYTE } from '../../src/crypto/curves';
 import * as NUT13 from '../../src/crypto/NUT13';
+import * as chunked from '../../src/utils/chunked';
+import { YIELD_BUDGET_MS } from '../../src/utils/chunked';
 import { PUBKEYS } from '../consts';
 
 import {
@@ -34,7 +36,12 @@ describe('Restoring deterministic proofs', () => {
   type ScanResult =
     | { proofs: Proof[]; used: false }
     | { proofs: Proof[]; lastCounterWithSignature: number; used: true };
-  type Scan = (start: number, count: number, keysetId?: string) => Promise<ScanResult>;
+  type Scan = (
+    start: number,
+    count: number,
+    keysetId?: string,
+    opts?: { signal?: AbortSignal; budgetMs?: number },
+  ) => Promise<ScanResult>;
   // The scan step is private, so stub it by name: these tests pin the geometry, which is what
   // batchRestore owns, and the step itself is covered end to end further down.
   const stubScan = (wallet: Wallet, impl: (start: number, count: number) => ScanResult) =>
@@ -102,6 +109,31 @@ describe('Restoring deterministic proofs', () => {
     await wallet.loadMint();
     const scan = (wallet as unknown as { restoreUnspent: Scan }).restoreUnspent.bind(wallet);
     expect(await scan(0, 3)).toEqual({ proofs: [], lastCounterWithSignature: 2, used: true });
+
+    // every local loop of a scan batch (derive, hash to Y, blind, unblind) yields on the batch's budget
+    const loops = vi.spyOn(chunked, 'mapInChunks');
+    try {
+      const scanWith = (
+        wallet as unknown as {
+          restoreUnspent: (s: number, c: number, k?: string, o?: { budgetMs?: number }) => unknown;
+        }
+      ).restoreUnspent.bind(wallet);
+      await scanWith(0, 3, undefined, { budgetMs: 7 });
+      expect(loops.mock.calls).toHaveLength(4);
+      expect(loops.mock.calls.every(([, , o]) => o?.budgetMs === 7)).toBe(true);
+    } finally {
+      loops.mockRestore();
+    }
+  });
+
+  test('batches in flight share one yield budget', async () => {
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+    const scan = stubScan(wallet, () => empty);
+    await wallet.batchRestore({ keysetId: `02${'ab'.repeat(32)}`, gapLimit: 1 });
+    // two BLS batches in flight, so each gets half the budget
+    const opts = scan.mock.calls[0][3] as unknown as { budgetMs: number };
+    expect(opts.budgetMs).toBe(YIELD_BUDGET_MS / 2);
   });
 
   test('Batch restore', async () => {

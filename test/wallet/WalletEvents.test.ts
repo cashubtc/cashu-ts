@@ -410,6 +410,18 @@ describe('WalletEvents', () => {
       expect(mock.mint.webSocketConnection).toBeUndefined();
     });
 
+    it('proofStateUpdates rejects an aborted signal before opening a socket', async () => {
+      const ac = new AbortController();
+      ac.abort();
+      const proofs: Proof[] = [
+        { amount: Amount.from(2), id: '00bd033559de27d0', secret: 's1', C: 'a' },
+      ];
+      await expect(
+        events.proofStateUpdates(proofs, vi.fn(), vi.fn(), { signal: ac.signal }),
+      ).rejects.toThrow(/aborted/);
+      expect(mock.mint.connectWebSocket).not.toHaveBeenCalled();
+    });
+
     it('proofStateUpdates throws on duplicate proof secrets', async () => {
       const proofs: Proof[] = [
         { amount: Amount.from(2), id: '00bd033559de27d0', secret: 'same', C: 'a' },
