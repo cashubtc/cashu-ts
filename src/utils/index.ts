@@ -3,6 +3,7 @@ export * from './bech32m';
 export * from './cbor';
 export * from './limits';
 export * from './core';
+export * from './verifyProofs';
 export * from './JSONInt';
 export * from './meltPreimage';
 export * from './normalizeNumbers';

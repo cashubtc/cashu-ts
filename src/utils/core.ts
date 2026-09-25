@@ -845,6 +845,8 @@ function mapShortKeysetIds(proofs: Proof[], keysetIds: readonly string[]): Proof
 /**
  * Checks that the proof has a valid DLEQ proof according to keyset `keys`
  *
+ * @deprecated Use {@link verifyMintSignatures}, which v5 keeps; this is removed in v5. Its default
+ *   is NUT-12 verify-if-present, so pass `{ require: true }` for this function's default.
  * @param proof The proof subject to verification.
  * @param keyset Object containing keyset keys (eg: Keyset, MintKeys, KeysetCache)
  * @param opts.require Default `true`. When `false`, a proof without a DLEQ payload returns `true`
@@ -896,7 +898,7 @@ export function hasValidDleq(
 }
 
 /**
- * @deprecated Use `hasValidDleq(proof, keyset, { require: false })`.
+ * @deprecated Use {@link verifyMintSignatures}, whose default is this function's behaviour.
  *
  *   Will be removed in v5.0.
  */
