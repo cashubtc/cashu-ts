@@ -606,7 +606,7 @@ export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: strin
 // @public
 export function hasTag(secret: Secret | string, key: string): boolean;
 
-// @public
+// @public @deprecated
 export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys, opts?: {
     require?: boolean;
 }): boolean;
@@ -1674,6 +1674,15 @@ export type ProofState = {
 };
 
 // @public
+export type ProofVerification<T> = {
+    valid: T[];
+    invalid: Array<{
+        proof: T;
+        error: CTSError;
+    }>;
+};
+
+// @public
 export class RateLimitError extends HttpResponseError {
     constructor(message: string, retryAfterMs?: number | undefined);
     // (undocumented)
@@ -2150,7 +2159,22 @@ export function verifyHTLCSpendingConditions(proof: Proof, logger?: Logger, mess
 export function verifyMintQuoteSignature(pubkey: string, quote: string, blindedMessages: SerializedBlindedMessage[], signature: string): boolean;
 
 // @public
+export function verifyMintSignatures<T extends ProofLike>(proofs: T[], getKeyset: (id: string) => HasKeysetKeys, opts?: VerifyProofsOptions): Promise<ProofVerification<T>>;
+
+// @public
 export function verifyP2PKSpendingConditions(proof: Proof, logger?: Logger, message?: string): P2PKVerificationResult;
+
+// @public (undocumented)
+export type VerifyProofsOptions = {
+    require?: boolean;
+    chunkSize?: number;
+    budgetMs?: number;
+    signal?: AbortSignal;
+    onProgress?: (done: number, total: number) => void;
+};
+
+// @public
+export function verifyReceivedProofs<T extends ProofLike>(proofs: T[], getKeyset: (id: string) => HasKeysetKeys, opts?: VerifyProofsOptions): Promise<ProofVerification<T>>;
 
 // @public (undocumented)
 export function verifyUnblindedSignature(proof: UnblindedSignature, privKey: Uint8Array): boolean;
@@ -2274,6 +2298,7 @@ export class Wallet {
     sendOffline(amount: AmountLike, proofs: ProofLike[], config?: SendOfflineConfig): SendResponse;
     signP2PKProofs(proofs: ProofLike[], privkey: string | string[], outputData?: OutputDataLike[], quoteId?: string): Proof[];
     get unit(): string;
+    verifyMintSignatures<T extends ProofLike = Proof>(proofs: T[], opts?: VerifyProofsOptions): Promise<ProofVerification<T>>;
     withKeyset(id: string, opts?: {
         counterSource?: CounterSource;
     }): Wallet;

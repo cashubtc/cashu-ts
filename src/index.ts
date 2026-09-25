@@ -80,6 +80,7 @@ export * from './crypto';
 
 // Core Utils
 export * from './utils/core';
+export * from './utils/verifyProofs';
 export { JSONInt, type JSONIntApi } from './utils/JSONInt';
 
 // Payment request facade (tests rely on these at top level)

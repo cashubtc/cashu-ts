@@ -26,6 +26,7 @@ import {
   StaleKeysetError,
   UnknownKeysetError,
   isMintOperationError,
+  CallerAbortError,
 } from '../model/Errors';
 import { MintInfo } from '../model/MintInfo';
 import { OutputData, type OutputDataLike } from '../model/OutputData';
@@ -55,8 +56,12 @@ import { type BatchMintRequest, type Nut29Info } from '../model/types/NUT29';
 import type { Proof, ProofLike } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 import {
+  ABSOLUTE_MAX_ARRAY_LENGTH,
   bolt11AmountMsat,
   getDecodedToken,
+  verifyMintSignatures,
+  type ProofVerification,
+  type VerifyProofsOptions,
   assertSpendableVersion,
   hasValidDleq,
   invoiceHasAmountInHRP,
@@ -3843,6 +3848,35 @@ class Wallet {
       }
     }
     return states;
+  }
+
+  /**
+   * Checks that the mint signed each proof (NUT-12 DLEQ), loading keys as needed.
+   *
+   * @remarks
+   * `verifyMintSignatures` with this wallet's keysets: chunked, yielding, never throwing per proof.
+   * Replaces `hasValidDleq`, which v5 removes.
+   */
+  async verifyMintSignatures<T extends ProofLike = Proof>(
+    proofs: T[],
+    opts?: VerifyProofsOptions,
+  ): Promise<ProofVerification<T>> {
+    if (opts?.signal?.aborted) throw new CallerAbortError('Operation aborted by caller');
+    this.failIf(
+      proofs.length > ABSOLUTE_MAX_ARRAY_LENGTH,
+      `Token contains too many proofs: ${proofs.length}, maximum is ${ABSOLUTE_MAX_ARRAY_LENGTH}`,
+    );
+    if (!this._strictCachedKeysets) {
+      for (const id of new Set(proofs.map((p) => p.id))) {
+        if (opts?.signal?.aborted) throw new CallerAbortError('Operation aborted by caller');
+        try {
+          await this._keyChain.ensureKeysetKeys(id);
+        } catch {
+          // Unknown keyset: its proofs are reported invalid.
+        }
+      }
+    }
+    return verifyMintSignatures(proofs, (id) => this._keyChain.getKeyset(id), opts);
   }
 
   /**
