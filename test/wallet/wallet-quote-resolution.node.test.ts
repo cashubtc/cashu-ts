@@ -56,7 +56,7 @@ test('an explicit null clears a stale pubkey and expiry while caller-only fields
 });
 
 test.each(['single', 'batch'])(
-  'resolved amountless BOLT12 quote supplies the %s v3 signing amount',
+  'a %s v3 mint signs the amount issued, not a stale quote amount',
   async (mode) => {
     const response = { ...quote, request: 'lno1offer', amount: null, pubkey };
     server.use(
@@ -77,11 +77,13 @@ test.each(['single', 'batch'])(
     expect(resolved).toMatchObject({ amount: null, localRef: 'keep' });
     const signature = 'quote' in preview ? preview.signature : preview.signatures?.[0];
     expect(signature).toBeTruthy();
-    const tx = inputsForPayload({
-      mintQuotes: [{ quoteId: 'stored', amount: 0 }],
-      outputs: preview.outputData.map((d) => d.blindedMessage),
-    });
-    expect(schnorrVerifyDigest(signature!, tx.quotes.get('stored')!.digest, pubkey)).toBe(true);
+    const digestFor = (amount: number) =>
+      inputsForPayload({
+        mintQuotes: [{ quoteId: 'stored', amount }],
+        outputs: preview.outputData.map((d) => d.blindedMessage),
+      }).quotes.get('stored')!.digest;
+    expect(schnorrVerifyDigest(signature!, digestFor(1), pubkey)).toBe(true);
+    expect(schnorrVerifyDigest(signature!, digestFor(10), pubkey)).toBe(false);
   },
 );
 

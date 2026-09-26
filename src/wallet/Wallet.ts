@@ -3537,17 +3537,9 @@ class Wallet {
       if (v3) {
         // V3 (nutroot secrets): the quote is a transaction input; its lock key signs the
         // quote input digest (NUT-10). No legacy fallback on v3 keysets.
-        // The transcript commits the quote's face amount, not this draw: the output
-        // section already binds the draw (NUT-10). Amountless quotes commit 0;
-        // a bolt11 quote always has an amount, so an absent one is a caller omission.
-        const quoteAmount =
-          'amount' in resolvedQuote ? (resolvedQuote.amount as AmountLike) : undefined;
-        this.failIf(
-          quoteAmount === undefined && method === 'bolt11',
-          'prepareMint: quote object lacks its amount; pass the full mint quote',
-        );
+        // The quote input commits the amount this request issues (NUT-04).
         const tx = inputsForPayload({
-          mintQuotes: [{ quoteId: resolvedQuote.quote, amount: quoteAmount ?? 0 }],
+          mintQuotes: [{ quoteId: resolvedQuote.quote, amount: mintAmount }],
           outputs: blindedMessages,
         });
         const { digest, inputContainer } = tx.quotes.get(resolvedQuote.quote)!;
@@ -3815,16 +3807,11 @@ class Wallet {
     }
     const v3BatchDigests = v3
       ? inputsForPayload({
-          mintQuotes: resolvedEntries.map((e, i) => {
-            // Face amount, as in prepareMint: the transcript never commits the draw,
-            // so a slim bolt11 quote object cannot stand in for it.
-            const quoteAmount = 'amount' in e.quote ? (e.quote.amount as AmountLike) : undefined;
-            this.failIf(
-              quoteAmount === undefined && method === 'bolt11',
-              `prepareBatchMint: quote #${i + 1} lacks its amount; pass the full mint quote`,
-            );
-            return { quoteId: e.quote.quote, amount: quoteAmount ?? 0 };
-          }),
+          // Each quote input commits its quote_amounts entry (NUT-29).
+          mintQuotes: resolvedEntries.map((e, i) => ({
+            quoteId: e.quote.quote,
+            amount: amounts[i],
+          })),
           outputs: blindedMessages,
         }).quotes
       : undefined;

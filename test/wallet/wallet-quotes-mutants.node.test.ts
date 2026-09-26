@@ -344,21 +344,19 @@ describe('createMintQuoteBolt11 mutants', () => {
     expect(preview.signatures?.every((signature) => typeof signature === 'string')).toBe(true);
   });
 
-  test('batch mint refuses a locked quote object missing its face amount', async () => {
+  test('batch mint signs a slim locked quote after fetching it', async () => {
     useV3Keyset();
     useEchoQuote('q-slim-batch', 2);
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
     const lock = await wallet.createQuoteLockKey();
     const quote = await wallet.createMintQuoteBolt11(2, lock.pubkey);
-    // A partial draw against a slim quote: the transcript commits the face
-    // amount (NUT-10), which the slim object cannot supply.
+    // A partial draw against a slim quote: the mint's copy supplies the accounting.
     const slim = { quote: quote.quote, unit: quote.unit, pubkey: quote.pubkey };
     server.use(
       http.post(mintUrl + '/v1/mint/quote/bolt11/check', () => HttpResponse.json([quote])),
     );
 
-    // The mint's copy supplies the face amount the transcript commits to, so a slim object works.
     const preview = await wallet.prepareBatchMint('bolt11', [{ amount: 1, quote: slim }], {
       privkey: lock.privkey,
     });

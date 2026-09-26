@@ -862,6 +862,36 @@ describe('requestTokens', () => {
       });
       expect(preview.legacySignatures).toEqual([null, null]);
     });
+
+    test('a partial draw commits the amount issued, not the quote amount', async () => {
+      serveBothKeysets();
+      const wallet = new Wallet(mintUrl, { unit });
+      await wallet.loadMint();
+      const quote = { ...lockedQuote(), amount: Amount.from(2), amount_paid: Amount.from(2) };
+      const data = [OutputData.createSingleRandomData(1, NUT02_V3_VECTOR1_KEYSET.id)];
+      const single = await wallet.prepareMint(
+        'bolt11',
+        1,
+        quote,
+        { privkey },
+        { type: 'custom', data },
+      );
+      const batch = await wallet.prepareBatchMint(
+        'bolt11',
+        [{ amount: 1, quote }],
+        { privkey },
+        { type: 'custom', data },
+      );
+      const digestFor = (amount: number) =>
+        inputsForPayload({
+          mintQuotes: [{ quoteId: quote.quote, amount }],
+          outputs: data.map((d) => d.blindedMessage),
+        }).quotes.get(quote.quote)!.digest;
+      for (const signature of [single.signature!, batch.signatures![0]!]) {
+        expect(schnorrVerifyDigest(signature, digestFor(1), pubkey)).toBe(true);
+        expect(schnorrVerifyDigest(signature, digestFor(2), pubkey)).toBe(false);
+      }
+    });
   });
 
   test('prepareMint fails when multiple privkeys and no quote pubkey', async () => {

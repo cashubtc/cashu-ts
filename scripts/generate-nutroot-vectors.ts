@@ -285,7 +285,7 @@ for (const name of ['swap', 'mint', 'melt', 'melt_with_change'] as const) {
 if (d.transcript.swap.input_id !== d.transcript.melt.input_id)
   throw new Error('swap and melt spend the same proof, so their input ids must match');
 d.transcript.comment =
-  'Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash("Cashu_TransactionInput", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers: 01 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 02 mint quote input (01 amount, 02 quote id utf8), 03 blinded output (01 amount, 02 keyset id, 03 B_), 04 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.';
+  'Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash("Cashu_TransactionInput", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers: 01 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 02 mint quote input (01 amount issued, 02 quote id utf8), 03 blinded output (01 amount, 02 keyset id, 03 B_), 04 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.';
 
 // Two proof inputs in one transaction pin the distinction between the shared transaction digest
 // and each input's signing digest.
@@ -369,6 +369,32 @@ d.transcript.comment =
         signature: bytesToHex(schnorr.sign(digestForInput, hexToBytes(lock.privkey), AUX0)),
       };
     }),
+  };
+}
+
+// A partial mint: an 8-sat quote issued for 4. The quote input commits the 4 issued, not the
+// quote amount, so this is the vector that tells the two readings apart.
+{
+  const txVector = {
+    mint_quote_inputs: [{ amount: 4, quote_id: 'quote-mint-0004' }],
+    blinded_outputs: [d.transcript.swap.tx.blinded_outputs[0]],
+  };
+  const tx = fromVectorTx(txVector);
+  const transcript = buildTransactionTranscript(tx);
+  const digest = transactionDigest(tx);
+  const container = transcript.subarray(0, 3 + ((transcript[1] << 8) | transcript[2]));
+  if (container[0] !== 0x02) throw new Error('partial_mint: expected the quote container first');
+  const digestForInput = inputDigest(digest, container);
+  const lock = d.nut13_v3.quote_locks[0];
+  d.transcript.partial_mint = {
+    quote_amount: 8,
+    tx: txVector,
+    transcript: bytesToHex(transcript),
+    digest: bytesToHex(digest),
+    lock_pubkey: lock.pubkey,
+    input_id: bytesToHex(sha256(container)),
+    input_digest: bytesToHex(digestForInput),
+    signature: bytesToHex(schnorr.sign(digestForInput, hexToBytes(lock.privkey), AUX0)),
   };
 }
 

@@ -231,6 +231,27 @@ describe('transaction transcript (vectors)', () => {
     expect(vector.inputs[0].input_digest).not.toBe(vector.inputs[1].input_digest);
   });
 
+  test('the partial-mint vector commits the amount issued, not the quote amount', () => {
+    const vector = tv.partial_mint;
+    const quote = vector.tx.mint_quote_inputs[0];
+    const tx = fromVectorTx(vector.tx);
+    const contexts = transactionInputs(tx);
+    expect(bytesToHex(buildTransactionTranscript(tx))).toBe(vector.transcript);
+    expect(bytesToHex(contexts.transactionDigest)).toBe(vector.digest);
+    const context = contexts.quotes.get(quote.quote_id)!;
+    expect(bytesToHex(sha256(context.inputContainer))).toBe(vector.input_id);
+    expect(bytesToHex(context.digest)).toBe(vector.input_digest);
+    const lock = hexToBytes(vector.lock_pubkey).subarray(1);
+    const signature = hexToBytes(vector.signature);
+    expect(schnorr.verify(signature, context.digest, lock)).toBe(true);
+    const faceTx = fromVectorTx({
+      ...vector.tx,
+      mint_quote_inputs: [{ ...quote, amount: vector.quote_amount }],
+    });
+    const faceDigest = transactionInputs(faceTx).quotes.get(quote.quote_id)!.digest;
+    expect(schnorr.verify(signature, faceDigest, lock)).toBe(false);
+  });
+
   test('the disclosed script-path vector uses a complete transaction context', () => {
     const aud = vectors.auditable_lock;
     const tx = fromVectorTx(aud.tx);
