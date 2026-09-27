@@ -141,7 +141,7 @@ describe('Wallet v3 mint preparation', () => {
   };
 
   test('mintProofsBolt11 with a bare quote ID fetches the quote on a v3 keyset', async () => {
-    // The transcript commits the quote's face amount and the lock key must be known (NUT-04):
+    // The lock key must be known (NUT-04):
     // the pre-v3 `{ quote }` stub cannot mint here, so the full quote is fetched first.
     const wallet = withV3Keyset();
     const full = {
