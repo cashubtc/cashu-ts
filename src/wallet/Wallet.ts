@@ -5049,6 +5049,8 @@ class Wallet {
     preview: TransactionPreview,
     response: TransactionResponse,
   ): Promise<TransactionResult> {
+    // Settlement may already have spent the inputs. Warn about record metadata instead of
+    // throwing away returned assets; keep the wallet's digest so polling/retries remain usable.
     if (response.digest !== preview.digest) {
       this._logger.warn('Transaction response reports a different digest', {
         expected: preview.digest,
@@ -5058,6 +5060,8 @@ class Wallet {
     }
     const { outputData } = preview;
     if (response.state !== 'PAID') return { response, proofs: [] };
+    // The change quote is returned as the mint reports it: the mint already holds that value, and
+    // refusing or re-checking it after settlement would recover nothing.
     const { signatures } = response;
     this.failIf(
       signatures.length !== outputData.length,
