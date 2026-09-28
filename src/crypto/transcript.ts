@@ -7,19 +7,12 @@ import { CTSError } from '../model/Errors';
 import { bytesToHex, hexToBytes, isValidHex } from '../utils';
 
 import { taggedHash } from './core';
+import { isValidSecpPubkey } from './curve_secp';
 import { hashToCurveHex, isBlsKeyset } from './curves';
 import { minimalBE, tlvRecord } from './nutroot';
 
 /**
  * Transaction transcript (NUT-10): one shared digest, one derived message per input.
- *
- * @remarks
- * `transaction_digest = SHA256(TLV stream)`; each input carries one BIP-340 signature over its
- * input digest, `tagged_hash("Cashu_TransactionInput", transaction_digest || SHA256(its own
- * container record))`. Containers: 0x01 proof input, 0x02 mint quote input, 0x03 blinded message
- * output, 0x04 melt quote output. Container types ascend (inputs before outputs by construction);
- * elements keep request order within their type; field streams inside are ascending unique
- * (NUT-10).
  */
 
 export const TRANSCRIPT_REQUEST_TAG = 'Cashu_AuthorizedRequest';
@@ -31,6 +24,7 @@ const CONTAINER_PROOF_INPUT = 0x11;
 const CONTAINER_MINT_QUOTE_INPUT = 0x12;
 const CONTAINER_BLINDED_OUTPUT = 0x21;
 const CONTAINER_MELT_QUOTE_OUTPUT = 0x22;
+const CONTAINER_CHANGE_QUOTE_OUTPUT = 0x23;
 const CONTAINER_AUTHORIZED_REQUEST = 0xf1;
 
 export type TranscriptProofInput = {
@@ -76,6 +70,10 @@ export type TransactionShape = {
   mintQuoteInputs?: TranscriptQuoteInput[];
   blindedOutputs?: TranscriptBlindedOutput[];
   meltQuoteOutputs?: TranscriptQuote[];
+  /**
+   * Lock key of the change quote output (NUT-XX), 33-byte compressed hex.
+   */
+  changePubkey?: string;
 };
 
 /**
@@ -181,6 +179,13 @@ function blindedOutputContainer(output: TranscriptBlindedOutput): Uint8Array {
   );
 }
 
+function changeContainer(lockKey: string): Uint8Array {
+  if (!isValidSecpPubkey(lockKey)) {
+    throw new CTSError('Transcript change lock key must be a 33-byte compressed point');
+  }
+  return tlvRecord(CONTAINER_CHANGE_QUOTE_OUTPUT, tlvRecord(0x01, hexToBytes(lockKey)));
+}
+
 /**
  * Serialize a transaction to its TLV transcript (without the domain tag).
  */
@@ -192,7 +197,8 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
   if (proofs.length + mintQuotes.length === 0) {
     throw new CTSError('Transaction requires at least one input');
   }
-  if (blinded.length + meltQuotes.length === 0) {
+  const change = tx.changePubkey === undefined ? [] : [changeContainer(tx.changePubkey)];
+  if (blinded.length + meltQuotes.length + change.length === 0) {
     throw new CTSError('Transaction requires at least one output');
   }
   // NUT-10: the same proof or quote twice would sign one input digest for two inputs.
@@ -202,11 +208,13 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
   if (new Set(mintQuotes.map((q) => q.quoteId)).size !== mintQuotes.length) {
     throw new CTSError('Transaction repeats a mint quote input');
   }
+  // Ascending container order
   return concatBytes(
     ...proofs.map(proofInputContainer),
     ...mintQuotes.map(mintQuoteInputContainer),
     ...blinded.map(blindedOutputContainer),
     ...meltQuotes.map(meltQuoteOutputContainer),
+    ...change,
   );
 }
 
@@ -227,7 +235,7 @@ export function transactionMessage(tx: TransactionShape): Uint8Array {
  *
  * @remarks
  * Throws unless the bytes are exactly a run of well-formed, non-empty NUT-10 containers (proof
- * input through authorized request); an event id or other opaque 32 bytes never passes.
+ * input through change quote output); an event id or other opaque 32 bytes never passes.
  */
 export function transcriptContainers(transcript: Uint8Array): Uint8Array[] {
   const records: Uint8Array[] = [];
@@ -305,10 +313,17 @@ export function transactionInputs(tx: TransactionShape): {
 export type PayloadProofInput = { amount: AmountLike; id: string; C: string } & ProofInputName;
 
 type PayloadShape = {
-  inputs?: PayloadProofInput[];
-  mintQuotes?: Array<{ quoteId: string; amount: AmountLike; lockKey: string }>;
-  outputs?: Array<{ amount: AmountLike; id: string; B_: string }>;
-  meltQuote?: { quoteId: string; amount: AmountLike };
+  proofInputs?: PayloadProofInput[];
+  /**
+   * `amount` is what this transaction issues against the quote, at most its mintable amount.
+   */
+  mintQuoteInputs?: Array<{ quoteId: string; amount: AmountLike; lockKey: string }>;
+  blindedOutputs?: Array<{ amount: AmountLike; id: string; B_: string }>;
+  /**
+   * `amount` is the quote amount plus the selected fee reserve ({@link meltOutputAmount}).
+   */
+  meltQuoteOutput?: { quoteId: string; amount: AmountLike };
+  changePubkey?: string;
 };
 
 /**
@@ -354,25 +369,26 @@ function payloadToTransaction(payload: PayloadShape): TransactionShape {
     quoteId: q.quoteId,
   });
   return {
-    ...(payload.inputs && {
-      proofInputs: payload.inputs.map((p) => ({
+    ...(payload.proofInputs && {
+      proofInputs: payload.proofInputs.map((p) => ({
         amount: Amount.from(p.amount).toBigInt(),
         keysetId: p.id,
         Y: proofInputY(p),
         C: p.C,
       })),
     }),
-    ...(payload.mintQuotes && {
-      mintQuoteInputs: payload.mintQuotes.map((q) => ({ ...quote(q), lockKey: q.lockKey })),
+    ...(payload.mintQuoteInputs && {
+      mintQuoteInputs: payload.mintQuoteInputs.map((q) => ({ ...quote(q), lockKey: q.lockKey })),
     }),
-    ...(payload.outputs && {
-      blindedOutputs: payload.outputs.map((o) => ({
+    ...(payload.blindedOutputs && {
+      blindedOutputs: payload.blindedOutputs.map((o) => ({
         amount: Amount.from(o.amount).toBigInt(),
         keysetId: o.id,
         B_: o.B_,
       })),
     }),
-    ...(payload.meltQuote && { meltQuoteOutputs: [quote(payload.meltQuote)] }),
+    ...(payload.meltQuoteOutput && { meltQuoteOutputs: [quote(payload.meltQuoteOutput)] }),
+    ...(payload.changePubkey !== undefined && { changePubkey: payload.changePubkey }),
   };
 }
 
