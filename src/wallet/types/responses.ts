@@ -1,6 +1,6 @@
 import type { NutrootLeaf } from '../../crypto/nutroot';
 import type { OutputDataLike } from '../../model/OutputData';
-import type { MeltQuoteBaseResponse, Proof } from '../../model/types';
+import type { MeltQuoteBaseResponse, Proof, TransactionResponse } from '../../model/types';
 
 /**
  * Evidence that this wallet spent one v3 input: the data behind the mint's NUT-07 spend commitment.
@@ -125,4 +125,16 @@ export type SpendOptions = {
    * Unix seconds the earliest waiting leaf unlocks, with `blockedBy: 'locktime'`.
    */
   availableAt?: number;
+};
+
+/**
+ * Result of `Wallet.transact`.
+ */
+export type TransactionResult = {
+  response: TransactionResponse;
+  /**
+   * The new proofs; empty until the transaction is `PAID`.
+   */
+  proofs: Proof[];
+  receipts?: SpendReceipt[];
 };

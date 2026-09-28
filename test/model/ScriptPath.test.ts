@@ -186,9 +186,9 @@ describe('ScriptPath signing packages', () => {
       ...pkg,
       transcript: bytesToHex(
         messageForPayload({
-          inputs: preview.inputs,
-          mintQuotes: [{ quoteId: 'quote-1', amount: 1, lockKey }],
-          outputs: preview.keepOutputs!.map((o) => o.blindedMessage),
+          proofInputs: preview.inputs,
+          mintQuoteInputs: [{ quoteId: 'quote-1', amount: 1, lockKey }],
+          blindedOutputs: preview.keepOutputs!.map((o) => o.blindedMessage),
         }),
       ),
       spends: [{ ...pkg.spends[0], input: 1 }],
@@ -328,8 +328,8 @@ describe('ScriptPath signing packages', () => {
     expect(pkg.transcript).toBe(
       bytesToHex(
         messageForPayload({
-          inputs: mixed.inputs,
-          outputs: mixed.keepOutputs!.map((o) => o.blindedMessage),
+          proofInputs: mixed.inputs,
+          blindedOutputs: mixed.keepOutputs!.map((o) => o.blindedMessage),
         }),
       ),
     );
@@ -612,9 +612,9 @@ describe('ScriptPath melt packages', () => {
     const transcriptFor = (amount: bigint) =>
       bytesToHex(
         messageForPayload({
-          inputs: meltPreview.inputs,
-          outputs: meltPreview.outputData.map((d) => d.blindedMessage),
-          meltQuote: { quoteId: 'quote-1', amount },
+          proofInputs: meltPreview.inputs,
+          blindedOutputs: meltPreview.outputData.map((d) => d.blindedMessage),
+          meltQuoteOutput: { quoteId: 'quote-1', amount },
         }),
       );
     const bolt11 = { ...meltPreview, quote: { ...meltPreview.quote, fee_reserve: Amount.from(2) } };

@@ -32,6 +32,7 @@ If you are building a wallet integration from scratch, read these in order:
 | [Browser Signers](./nip07_signers.md)               | Sign NUT-11 and nutroot spends with a NIP-07 extension (`CashuNip07`).          |
 | [Get Token](./get_token.md)                         | Inspect token metadata before wallet creation or decode it after load.          |
 | [Melt Token](./melt_token.md)                       | Pay BOLT11 invoices or other payment methods with wallet proofs.                |
+| [Transactions](./transactions.md)                   | Spend proofs and paid quotes into proofs, a melt and a change quote (NUT-XX).   |
 | [Payment Requests](./payment_requests.md)           | Decode, price (fees), fulfil, and create NUT-18 / NUT-26 payment requests.      |
 | [Restore Proofs](./restore_proofs.md)               | Recover deterministic proofs from the wallet seed across keysets.               |
 | [Keysets & Rotation](./keysets.md)                  | What the wallet snapshot tracks, lazy key loading, and self-repair on rotation. |
