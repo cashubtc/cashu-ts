@@ -2,9 +2,10 @@ import { HttpResponse, http } from 'msw';
 import { describe, expect, test } from 'vitest';
 
 import { Wallet, deserializeTransactionPreview, serializeTransactionPreview } from '../../src';
-import { schnorrVerifyDigest } from '../../src/crypto';
+import { schnorrSignDigest, schnorrVerifyDigest } from '../../src/crypto';
 import { inputsForPayload } from '../../src/crypto/transcript';
 import { Amount } from '../../src/model/Amount';
+import type { Proof } from '../../src/model/types';
 
 import { mintInfoResp, mintUrl, unit, useTestServer } from './_setup';
 
@@ -247,5 +248,124 @@ describe('Wallet transactions (NUT-XX)', () => {
         changePubkey: changeKey,
       }),
     ).rejects.toThrow('offering fee_options');
+  });
+  test('swaps proofs into new proofs, and a rehydrated preview unblinds the same', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0 });
+    const bodies: any[] = [];
+    server.use(
+      http.post(mintUrl + '/v1/transaction', async ({ request }) => {
+        const body: any = await request.json();
+        bodies.push(body);
+        return HttpResponse.json({
+          digest: 'ab'.repeat(32),
+          state: 'PAID',
+          signatures: body.blinded_outputs.map((b: any) => ({
+            id: b.id,
+            amount: b.amount,
+            C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+          })),
+          melt_quotes: [],
+          change_quote: null,
+        });
+      }),
+    );
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+    const proofs: Proof[] = [1, 2].map((n) => ({
+      id: '00bd033559de27d0',
+      amount: Amount.from(n),
+      secret: `secret-${n}`,
+      C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+    }));
+    const preview = await wallet.prepareTransaction({ proofInputs: proofs });
+    expect(preview.amount.toNumber()).toBe(3);
+    const stored = JSON.parse(JSON.stringify(serializeTransactionPreview(preview)));
+    const result = await wallet.completeTransaction(
+      deserializeTransactionPreview(stored),
+      privkey,
+      {
+        preferAsync: true,
+      },
+    );
+    expect(bodies[0].prefer_async).toBe(true);
+    expect(bodies[0].proof_inputs.map((p: any) => p.secret)).toEqual(['secret-1', 'secret-2']);
+    expect(result.proofs.map((p) => p.amount.toNumber()).sort()).toEqual([1, 2]);
+    expect(result.proofs[0].id).toBe('00bd033559de27d0');
+  });
+
+  test('a sign callback signs the quote input, and a wrong signature is refused', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0 });
+    const bodies = serveTransaction();
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+    const preview = await wallet.prepareTransaction({
+      mintQuoteInputs: [{ quote, amount: 8 }],
+      changePubkey: changeKey,
+    });
+    const signed: string[] = [];
+    const signer = (key: string) => async (ctx: { digest: Uint8Array; quoteId: string }) => {
+      signed.push(ctx.quoteId);
+      return schnorrSignDigest(ctx.digest, key);
+    };
+    await wallet.completeTransaction(preview, undefined, { sign: signer(privkey) });
+    expect(signed).toEqual(['quote-mint-0001']);
+    expect(bodies).toHaveLength(1);
+    await expect(
+      wallet.completeTransaction(preview, undefined, { sign: signer(privkey.replace(/1$/, '2')) }),
+    ).rejects.toThrow('does not verify');
+    expect(bodies).toHaveLength(1);
+  });
+
+  test('rejects a malformed transaction record', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0 });
+    server.use(
+      http.post(mintUrl + '/v1/transaction', () =>
+        HttpResponse.json({ digest: 'ab'.repeat(32), state: 'DONE', signatures: [] }),
+      ),
+    );
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+    await expect(
+      transact(wallet, { mintQuoteInputs: [{ quote, amount: 8 }], changePubkey: changeKey }),
+    ).rejects.toThrow('Invalid response from mint');
+  });
+  test('refuses an overdraw of a partly issued quote, and returns the change quote', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0 });
+    server.use(
+      http.post(mintUrl + '/v1/transaction', () =>
+        HttpResponse.json({
+          digest: 'ab'.repeat(32),
+          state: 'PAID',
+          signatures: [],
+          melt_quotes: [],
+          change_quote: {
+            quote: 'change-0001',
+            request: 'ab'.repeat(32),
+            unit,
+            amount: 3,
+            amount_paid: 3,
+            amount_issued: 0,
+            state: 'PAID',
+            expiry: null,
+            pubkey: changeKey,
+          },
+        }),
+      ),
+    );
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+    const partial = { ...quote, unit, amount_paid: Amount.from(8), amount_issued: Amount.from(5) };
+    await expect(
+      wallet.prepareTransaction({
+        mintQuoteInputs: [{ quote: partial, amount: 4 }],
+        changePubkey: changeKey,
+      }),
+    ).rejects.toThrow('only 3 available');
+    const result = await transact(wallet, {
+      mintQuoteInputs: [{ quote: partial, amount: 3 }],
+      changePubkey: changeKey,
+    });
+    expect(result.response.change_quote).toMatchObject({ quote: 'change-0001', method: 'change' });
+    expect(result.response.change_quote!.amount_paid.toNumber()).toBe(3);
   });
 });
