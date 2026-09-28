@@ -1,6 +1,7 @@
 import type { AmountLike } from '../Amount';
 
 import type { Nut29Info } from './NUT29';
+import type { NutXXInfo } from './NUTXX';
 
 /**
  * Response from mint at /info endpoint.
@@ -93,6 +94,7 @@ export type GetInfoResponse = {
       protected_endpoints: Array<{ method: 'GET' | 'POST'; path: string }>;
     };
     '29'?: Nut29Info;
+    XX?: NutXXInfo;
   };
   motd?: string;
 };

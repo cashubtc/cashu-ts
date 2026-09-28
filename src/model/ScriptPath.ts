@@ -112,7 +112,11 @@ function digestOf(
   outputs: SerializedBlindedMessage[],
   meltQuote?: { quoteId: string; amount: bigint },
 ): Uint8Array {
-  return digestForPayload({ inputs, outputs, ...(meltQuote && { meltQuote }) });
+  return digestForPayload({
+    proofInputs: inputs,
+    blindedOutputs: outputs,
+    ...(meltQuote && { meltQuoteOutput: meltQuote }),
+  });
 }
 
 /**
@@ -142,9 +146,9 @@ function packageInputDigests(pkg: ScriptPathSigningPackage): Map<string, Uint8Ar
       ? { quoteId: pkg.quote!, amount: Amount.from(pkg.quoteAmount!).toBigInt() }
       : undefined;
   const { proofs } = inputsForPayload({
-    inputs: pkg.inputs,
-    outputs: pkg.outputs,
-    ...(meltQuote && { meltQuote }),
+    proofInputs: pkg.inputs,
+    blindedOutputs: pkg.outputs,
+    ...(meltQuote && { meltQuoteOutput: meltQuote }),
   });
   return new Map(
     pkg.spends.map((spend) => {

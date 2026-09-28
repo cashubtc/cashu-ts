@@ -163,7 +163,7 @@ describe('ScriptPath signing packages', () => {
     expect(
       schnorr.verify(
         hexToBytes(signed.spends[0].signatures[0]),
-        inputsForPayload({ inputs: pkg.inputs, outputs: pkg.outputs }).proofs.get(
+        inputsForPayload({ proofInputs: pkg.inputs, blindedOutputs: pkg.outputs }).proofs.get(
           proofInputContextKey({ keysetId: proof.id, secret: proof.secret }),
         )!.digest,
         hexToBytes(pub(3)).subarray(1),
@@ -198,7 +198,7 @@ describe('ScriptPath signing packages', () => {
     expect(
       schnorr.verify(
         hexToBytes(signed.spends[0].signatures[0]),
-        inputsForPayload({ inputs: pkg.inputs, outputs: pkg.outputs }).proofs.get(
+        inputsForPayload({ proofInputs: pkg.inputs, blindedOutputs: pkg.outputs }).proofs.get(
           proofInputContextKey({ keysetId: proof.id, secret: proof.secret }),
         )!.digest,
         hexToBytes(opposite).subarray(1),
@@ -234,9 +234,10 @@ describe('ScriptPath signing packages', () => {
     const mixed = { ...preview, inputs: [proof, legacy] };
     const pkg = ScriptPath.extractSwapPackage(mixed, [{ secret: proof.secret, leafIndex: 0 }]);
     const signed = ScriptPath.signPackage(pkg, bytesToHex(sk(3)));
-    const digest = inputsForPayload({ inputs: pkg.inputs, outputs: pkg.outputs }).proofs.get(
-      proofInputContextKey({ keysetId: proof.id, secret: proof.secret }),
-    )!.digest;
+    const digest = inputsForPayload({
+      proofInputs: pkg.inputs,
+      blindedOutputs: pkg.outputs,
+    }).proofs.get(proofInputContextKey({ keysetId: proof.id, secret: proof.secret }))!.digest;
     expect(
       schnorr.verify(
         hexToBytes(signed.spends[0].signatures[0]),
@@ -269,9 +270,10 @@ describe('ScriptPath signing packages', () => {
       ScriptPath.deserializePackage(encoded),
       bytesToHex(sk(3)),
     );
-    const digest = inputsForPayload({ inputs: mixed.inputs, outputs: pkg.outputs }).proofs.get(
-      proofInputContextKey({ keysetId: proof.id, secret: proof.secret }),
-    )!.digest;
+    const digest = inputsForPayload({
+      proofInputs: mixed.inputs,
+      blindedOutputs: pkg.outputs,
+    }).proofs.get(proofInputContextKey({ keysetId: proof.id, secret: proof.secret }))!.digest;
     expect(
       schnorr.verify(
         hexToBytes(signed.spends[0].signatures[0]),
@@ -473,9 +475,9 @@ describe('ScriptPath melt packages', () => {
     const digestOfPkg = (p: typeof melt) =>
       bytesToHex(
         digestForPayload({
-          inputs: p.inputs,
-          outputs: p.outputs,
-          ...(p.quote && { meltQuote: { quoteId: p.quote, amount: p.quoteAmount! } }),
+          proofInputs: p.inputs,
+          blindedOutputs: p.outputs,
+          ...(p.quote && { meltQuoteOutput: { quoteId: p.quote, amount: p.quoteAmount! } }),
         }),
       );
     expect(digestOfPkg(melt)).not.toBe(digestOfPkg(swap));

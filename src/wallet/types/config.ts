@@ -369,3 +369,25 @@ export type AbortOptions = { signal?: AbortSignal };
  * Options for `completeMint` and `completeBatchMint`.
  */
 export type CompleteMintOptions = AbortOptions;
+
+export type PrepareTransactionConfig = {
+  /**
+   * Give up a melt's unspent fee reserve instead of returning it to a change quote. Defaults to
+   * false, which requires `changePubkey` for any melt with a reserve.
+   */
+  forfeitFeeReserve?: boolean;
+  proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
+  onCountersReserved?: OnCountersReserved;
+  signal?: AbortSignal;
+};
+
+export type CompleteTransactionOptions = {
+  preferAsync?: boolean;
+  scriptPath?: ScriptPathPlan[];
+  /**
+   * Signs a quote input whose key is not in the page (eg a NIP-07 extension); ignored when a
+   * `privkey` is given. See `MintProofsConfig.sign`.
+   */
+  sign?: (request: MintQuoteSignRequest) => Promise<string>;
+  signal?: AbortSignal;
+};
