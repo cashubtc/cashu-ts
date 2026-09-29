@@ -226,6 +226,18 @@ describe('Wallet transactions (NUT-XX)', () => {
         changePubkey: changeKey,
       }),
     ).rejects.toThrow('must equal');
+    // New proofs beside a melt need a change quote, even when the reserve is given up: the mint
+    // cannot sign them if their keyset rotates during the payment.
+    await expect(
+      wallet.prepareTransaction(
+        {
+          mintQuoteInputs: [{ quote, amount: 8 }],
+          proofOutputs: { amount: 1 },
+          meltQuoteOutput: melt,
+        },
+        { forfeitFeeReserve: true },
+      ),
+    ).rejects.toThrow('cannot be signed if their keyset rotates');
     // A slim melt quote cannot say what the digest binds.
     await expect(
       wallet.prepareTransaction({
@@ -329,6 +341,46 @@ describe('Wallet transactions (NUT-XX)', () => {
       transact(wallet, { mintQuoteInputs: [{ quote, amount: 8 }], changePubkey: changeKey }),
     ).rejects.toThrow('Invalid response from mint');
   });
+  test('a melt whose outputs lost their keyset returns them as change, not proofs', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0 });
+    server.use(
+      http.post(mintUrl + '/v1/transaction', () =>
+        HttpResponse.json({
+          digest: 'ab'.repeat(32),
+          state: 'PAID',
+          signatures: [],
+          melt_quotes: [
+            { quote: 'quote-melt-0001', amount: 5, fee_reserve: 1, unit, state: 'PAID', expiry: 0 },
+          ],
+          change_quote: {
+            quote: 'change-0002',
+            request: 'ab'.repeat(32),
+            unit,
+            amount: 2,
+            amount_paid: 2,
+            amount_issued: 0,
+            state: 'PAID',
+            expiry: null,
+            pubkey: changeKey,
+          },
+        }),
+      ),
+    );
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+    const preview = await wallet.prepareTransaction({
+      mintQuoteInputs: [{ quote, amount: 8 }],
+      proofOutputs: { amount: 1 },
+      meltQuoteOutput: melt,
+      changePubkey: changeKey,
+    });
+    expect(preview.outputData).toHaveLength(1);
+    const result = await wallet.completeTransaction(preview, privkey);
+    expect(result.response.state).toBe('PAID');
+    expect(result.proofs).toEqual([]);
+    expect(result.response.change_quote!.amount_paid.toNumber()).toBe(2);
+  });
+
   test('refuses an overdraw of a partly issued quote, and returns the change quote', async () => {
     serveInfo({ supported: true, quote_input_fee_ppk: 0 });
     server.use(

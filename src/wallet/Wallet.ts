@@ -4870,6 +4870,12 @@ class Wallet {
       change ? amount.add(spent).greaterThan(inputs) : !amount.add(spent).equals(inputs),
       'prepareTransaction: inputs must equal the outputs, melt and fee unless a changePubkey takes the rest',
     );
+    // The mint cannot sign the outputs if their keyset rotates during the payment (NUT-02); the
+    // change quote is where their value goes then, so a melt with new proofs must name one (NUT-XX).
+    this.failIf(
+      melt !== undefined && !change && !amount.isZero(),
+      'prepareTransaction: a melt with new proofs needs a changePubkey; the outputs cannot be signed if their keyset rotates during the payment',
+    );
 
     let outputData: OutputDataLike[] = [];
     if (!amount.isZero()) {
@@ -5063,6 +5069,15 @@ class Wallet {
     // The change quote is returned as the mint reports it: the mint already holds that value, and
     // refusing or re-checking it after settlement would recover nothing.
     const { signatures } = response;
+    // The outputs' keyset rotated during the melt: nothing was signed and their value is in the
+    // change quote (NUT-XX). The reserved secrets go unused.
+    if (signatures.length === 0 && outputData.length > 0 && response.change_quote) {
+      this._logger.warn(
+        'Mint did not sign the transaction outputs; their value is in the change quote',
+        { digest: preview.digest, changeQuote: response.change_quote.quote },
+      );
+      return { response, proofs: [] };
+    }
     this.failIf(
       signatures.length !== outputData.length,
       `Mint returned ${signatures.length} signatures, expected ${outputData.length}. If the wallet is seeded, try restoring (NUT-09) to recover.`,
