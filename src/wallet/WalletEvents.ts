@@ -22,6 +22,8 @@ import {
 import { mapInChunks } from '../utils/chunked';
 
 import { type OperationCounters } from './CounterSource';
+import type { TransactionPreview } from './types/payloads';
+import type { TransactionResult } from './types/responses';
 import type { Wallet } from './Wallet';
 
 export type SubscriptionCanceller = () => void;
@@ -952,6 +954,58 @@ export class WalletEvents {
       opts,
       'Timeout waiting for melt paid',
     );
+  }
+
+  /**
+   * Resolve once a NUT-XX transaction leaves `PENDING`, with optional abort signal and timeout.
+   *
+   * @remarks
+   * Mirrors onceMeltPaid for a transaction with a melt. NUT-17 has no transaction kind, so this
+   * polls `GET /v1/transaction/{digest}` through {@link Wallet.checkTransaction}; each poll counts
+   * against the mint's rate limit. Resolves with the result whether it settled `PAID` or `FAILED`;
+   * read `response.state`.
+   * @example
+   *
+   * ```ts
+   * const result = await wallet.completeTransaction(preview, privkey, { preferAsync: true });
+   * const settled =
+   *   result.response.state === 'PENDING'
+   *     ? await wallet.on.onceTransactionSettled(preview, { timeoutMs: 60_000 })
+   *     : result;
+   * ```
+   *
+   * @param preview The prepared transaction to watch.
+   * @param opts Optional controls.
+   * @param opts.signal AbortSignal to cancel the wait early.
+   * @param opts.timeoutMs Milliseconds to wait before rejecting with a timeout error.
+   * @param opts.pollMs Polling interval, default 1000.
+   * @returns A promise that resolves with the transaction result once it is no longer `PENDING`.
+   */
+  async onceTransactionSettled(
+    preview: TransactionPreview,
+    opts: { signal?: AbortSignal; timeoutMs?: number; pollMs?: number } = {},
+  ): Promise<TransactionResult> {
+    const deadline = opts.timeoutMs && opts.timeoutMs > 0 ? Date.now() + opts.timeoutMs : null;
+    const pollMs = opts.pollMs ?? 1000;
+    for (;;) {
+      if (opts.signal?.aborted) throw makeAbortError();
+      const result = await this.wallet.checkTransaction(preview, { signal: opts.signal });
+      if (result.response.state !== 'PENDING') return result;
+      if (deadline !== null && Date.now() >= deadline) {
+        throw new CTSError('Timeout waiting for transaction to settle');
+      }
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          opts.signal?.removeEventListener('abort', onAbort);
+          resolve();
+        }, pollMs);
+        const onAbort = () => {
+          clearTimeout(timer);
+          reject(makeAbortError());
+        };
+        opts.signal?.addEventListener('abort', onAbort, { once: true });
+      });
+    }
   }
 
   /**
