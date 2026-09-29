@@ -251,7 +251,7 @@ describe('OutputData.toProof DLEQ verification', () => {
       dleq: { s: bytesToHex(dleq.s), e: bytesToHex(dleq.e) },
     };
     const proof = od.toProof(sig, keyset);
-    expect(proof.amount.equals(Amount.from(1))).toBe(true);
+    expect(proof.amount.equals(1)).toBe(true);
     expect(proof.dleq).toBeDefined();
   });
 
@@ -333,6 +333,6 @@ describe('OutputData.toProof DLEQ verification', () => {
       dleq: { s: bytesToHex(dleq.s), e: bytesToHex(dleq.e) },
     };
     const proof = blank.toProof(sig, keyset);
-    expect(proof.amount.equals(Amount.from(1))).toBe(true);
+    expect(proof.amount.equals(1)).toBe(true);
   });
 });

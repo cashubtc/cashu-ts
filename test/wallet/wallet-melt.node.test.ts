@@ -991,7 +991,7 @@ describe('async melt preference body', () => {
     const change = wallet.createMeltChangeProofs(blanks, raw);
     expect(change).toHaveLength(1);
     expect(change[0].amount).toBeInstanceOf(Amount);
-    expect(change[0].amount.equals(Amount.from(2))).toBe(true);
+    expect(change[0].amount.equals(2)).toBe(true);
   });
 
   test('createMeltChangeProofs pairs by index and drops zero-value signatures', async () => {

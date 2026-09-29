@@ -144,6 +144,7 @@ Hooks are installed by Husky:
 - Mint response DTOs are normalized to `Amount` before reaching consumers — API response amount fields return `Amount` objects, not raw numbers.
 - When constructing `Proof` objects, always normalize: `amount: Amount.from(x)`. Use `ProofLike` (`amount: AmountLike`) to model un-normalized proofs from external storage.
 - Avoid `number` in canonical domain models and avoid `bigint | number` in stored/core types.
+- `Amount` methods take `AmountLike` (number, bigint, decimal string or `Amount`), so pass literals bare: `fee.add(1)`, `amount.equals(100)`. `Amount.from` is for making an `Amount`, such as the right side of `expect().toEqual()` or a value handed to code that requires the class.
 
 ## Branching and releases
 

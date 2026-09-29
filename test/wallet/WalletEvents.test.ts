@@ -234,7 +234,7 @@ describe('WalletEvents', () => {
       });
       const p = cb.mock.calls[0][0];
       expect(p.amount).toBeInstanceOf(Amount);
-      expect(p.amount_paid.equals(Amount.from(5))).toBe(true);
+      expect(p.amount_paid.equals(5)).toBe(true);
       expect(p.amount_issued.isZero()).toBe(true);
     });
 
@@ -246,7 +246,7 @@ describe('WalletEvents', () => {
       ws.emit('bolt11_mint_quote', { quote: 'n3', state: 'PAID', amount: 64, unit: 'sat' });
       const p = cb.mock.calls[0][0];
       expect(p.method).toBe('bolt11');
-      expect(p.amount_paid.equals(Amount.from(64))).toBe(true);
+      expect(p.amount_paid.equals(64)).toBe(true);
       expect(p.amount_issued.isZero()).toBe(true);
       expect(p.updated_at).toBeNull();
 
@@ -338,8 +338,8 @@ describe('WalletEvents', () => {
         change: [{ id: '00bd033559de27d0', amount: 1, C_: '02' + 'ab'.repeat(32) }],
       });
       const p = cb.mock.calls[0][0];
-      expect(p.amount.equals(Amount.from(10))).toBe(true);
-      expect(p.fee_reserve.equals(Amount.from(2))).toBe(true);
+      expect(p.amount.equals(10)).toBe(true);
+      expect(p.fee_reserve.equals(2)).toBe(true);
       expect(p.change[0].amount).toBeInstanceOf(Amount);
       expect(p.change[0].amount.isZero()).toBe(false);
     });
