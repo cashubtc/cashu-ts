@@ -311,9 +311,9 @@ export function meltOutputAmount(quote: MeltOutputAmountSource, feeIndex?: numbe
     if (!option) {
       throw new CTSError('A melt quote with fee options needs the selected feeIndex');
     }
-    return amount.add(Amount.from(option.fee_reserve));
+    return amount.add(option.fee_reserve);
   }
-  return amount.add(Amount.from(quote.fee_reserve ?? 0));
+  return amount.add(quote.fee_reserve ?? 0);
 }
 
 type MeltOutputAmountSource = {

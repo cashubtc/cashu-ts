@@ -241,7 +241,7 @@ describe('AmountWithUnit.sum', () => {
 describe('Amount.withUnit', () => {
   it('lifts a unitless Amount and round-trips', () => {
     const a = Amount.from(100).withUnit('sat');
-    expect(a.toAmount().equals(Amount.from(100))).toBe(true);
+    expect(a.toAmount().equals(100)).toBe(true);
     expect(a.unit).toBe('sat');
   });
 

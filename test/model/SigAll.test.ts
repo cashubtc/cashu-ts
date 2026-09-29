@@ -231,7 +231,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
       }),
     );
 
-    expect(parsed.outputs[0].amount.equals(Amount.from(32))).toBeTruthy();
+    expect(parsed.outputs[0].amount.equals(32)).toBeTruthy();
   });
 
   test('serializePackage emits unquoted integer amounts', () => {

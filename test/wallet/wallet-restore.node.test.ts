@@ -5,7 +5,6 @@ import { test, describe, expect, vi } from 'vitest';
 
 import {
   Wallet,
-  Amount,
   CheckStateEnum,
   OutputData,
   createSecretAndBlindingFactorDeriver,
@@ -355,7 +354,7 @@ describe('restore', () => {
     const wide = await wallet.restore(0, 40);
     expect(wide.proofs).toHaveLength(40);
     // proofs should be of amount 1 because we overprinted 1 in the signatures
-    expect(res.proofs.every((p) => p.amount.equals(Amount.from(1)))).toBe(true);
+    expect(res.proofs.every((p) => p.amount.equals(1))).toBe(true);
   });
 
   test('unblinds restore signatures with the keyset they name and skips zero-value ones', async () => {

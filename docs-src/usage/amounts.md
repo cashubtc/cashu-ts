@@ -19,7 +19,7 @@ const b = Amount.from('21');
 
 a.add(b).toBigInt(); // 121n
 a.subtract(b).toString(); // '79'
-a.equals(Amount.from(100)); // true
+a.equals(100); // true
 a.greaterThan(50); // true
 
 // Finance helpers — integer arithmetic, no floats

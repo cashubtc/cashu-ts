@@ -302,7 +302,7 @@ export class Amount {
    * @example
    *
    *     fee.clamp(MIN_FEE, tokenAmount);
-   *     invoiceAmount.clamp(Amount.from(minSendable), Amount.from(maxSendable));
+   *     invoiceAmount.clamp(minSendable, maxSendable);
    *
    * @throws If min > max.
    */
