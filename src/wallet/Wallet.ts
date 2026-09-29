@@ -4920,7 +4920,8 @@ class Wallet {
    * @remarks
    * `privkey` holds proof spend keys and quote lock keys alike. Completing the same preview again
    * returns the mint's record for it, so a lost response is recovered by retrying. While the result
-   * is `PENDING`, poll {@link Wallet.checkTransaction} with the same preview.
+   * is `PENDING`, poll {@link Wallet.checkTransaction} with the same preview, or pass
+   * `waitForSettlementMs` to have this call wait.
    */
   async completeTransaction(
     preview: TransactionPreview,
@@ -5013,10 +5014,14 @@ class Wallet {
         { signal: options.signal, meltMethod: melt?.method },
       ),
     );
-    return {
-      ...(await this.processTransactionResponse(preview, response)),
-      ...(receipts.length > 0 && { receipts }),
-    };
+    let result = await this.processTransactionResponse(preview, response);
+    if (result.response.state === 'PENDING' && options.waitForSettlementMs) {
+      result = await this.on.onceTransactionSettled(preview, {
+        timeoutMs: options.waitForSettlementMs,
+        signal: options.signal,
+      });
+    }
+    return { ...result, ...(receipts.length > 0 && { receipts }) };
   }
 
   /**

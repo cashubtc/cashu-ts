@@ -361,6 +361,7 @@ export type CompleteSwapOptions = {
 // @public (undocumented)
 export type CompleteTransactionOptions = {
     preferAsync?: boolean;
+    waitForSettlementMs?: number;
     scriptPath?: ScriptPathPlan[];
     sign?: (request: MintQuoteSignRequest) => Promise<string>;
     signal?: AbortSignal;
@@ -3221,6 +3222,11 @@ export class WalletEvents {
     onceMintPaid<TRes extends MintQuoteBaseResponse = MintQuoteBolt11Response>(id: string, opts?: WatchOpts & {
         timeoutMs?: number;
     }): Promise<TRes>;
+    onceTransactionSettled(preview: TransactionPreview, opts?: {
+        signal?: AbortSignal;
+        timeoutMs?: number;
+        pollMs?: number;
+    }): Promise<TransactionResult>;
     proofStatesStream<P extends ProofLike = Proof>(proofs: P[], opts?: ProofStatesStreamOpts<P>): AsyncIterable<ProofState & {
         proof: P;
     }>;
