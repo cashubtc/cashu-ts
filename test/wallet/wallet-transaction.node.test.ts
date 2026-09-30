@@ -169,6 +169,43 @@ describe('Wallet transactions (NUT-XX)', () => {
     expect(settled.response.state).toBe('PAID');
   });
 
+  test('waitForSettlementMs polls a PENDING reply until it settles', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0 });
+    let polls = 0;
+    server.use(
+      http.post(mintUrl + '/v1/transaction', () =>
+        HttpResponse.json({
+          digest: 'ab'.repeat(32),
+          state: 'PENDING',
+          signatures: [],
+          melt_quotes: [],
+          change_quote: null,
+        }),
+      ),
+      http.get(mintUrl + '/v1/transaction/:digest', ({ params }) => {
+        polls++;
+        return HttpResponse.json({
+          digest: params.digest,
+          state: 'PAID',
+          signatures: [],
+          melt_quotes: [],
+          change_quote: null,
+        });
+      }),
+    );
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+    const preview = await wallet.prepareTransaction({
+      mintQuoteInputs: [{ quote, amount: 8 }],
+      changePubkey: changeKey,
+    });
+    const result = await wallet.completeTransaction(preview, privkey, {
+      waitForSettlementMs: 5_000,
+    });
+    expect(polls).toBe(1);
+    expect(result.response.state).toBe('PAID');
+  });
+
   test('a NUT-30 melt carries its fee_index and signs over that option', async () => {
     serveInfo({ supported: true, quote_input_fee_ppk: 0 });
     const bodies = serveTransaction();
