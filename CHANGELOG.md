@@ -1,5 +1,26 @@
 # Changelog
 
+## [5.0.0-rc.12](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.11...v5.0.0-rc.12) (2026-10-01)
+
+
+### Features
+
+* **wallet:** return unselected proofs beside the send preview ([#1260](https://github.com/cashubtc/cashu-ts/issues/1260)) ([6b8226d](https://github.com/cashubtc/cashu-ts/commit/6b8226dc04a54cb4d71dea24f1ac5a0a5dad6710))
+* **wallet:** verify proofs and restore in chunks that yield to the event loop ([#1264](https://github.com/cashubtc/cashu-ts/issues/1264)) ([46d7b11](https://github.com/cashubtc/cashu-ts/commit/46d7b111172c83ed7e699100e998bd80029aad5f))
+
+
+### Bug Fixes
+
+* **deps:** bump fast-uri from 3.1.6 to 3.1.8 ([#1275](https://github.com/cashubtc/cashu-ts/issues/1275)) ([5e7b97e](https://github.com/cashubtc/cashu-ts/commit/5e7b97ef9113b75d2195a720e1ac71857123ecfe))
+* **model:** let isSupported take a NUT number from a loop ([#1263](https://github.com/cashubtc/cashu-ts/issues/1263)) ([2ce0f54](https://github.com/cashubtc/cashu-ts/commit/2ce0f54fe466183c41d91fff115290630a78644c))
+* **wallet:** v3 quote inputs commit the amount issued ([#1272](https://github.com/cashubtc/cashu-ts/issues/1272)) ([4333eaa](https://github.com/cashubtc/cashu-ts/commit/4333eaa89908673d5a9953d66eb6ebacacfd347f))
+* **wallet:** yield during witnesses and subscriptions, share the restore budget ([#1271](https://github.com/cashubtc/cashu-ts/issues/1271)) ([9c44601](https://github.com/cashubtc/cashu-ts/commit/9c44601a1c4bfd117f901b20fd9fe36e58d37b11))
+
+
+### Tests
+
+* **transport:** wait for state instead of the clock in the keepalive tests ([#1255](https://github.com/cashubtc/cashu-ts/issues/1255)) ([bc70dc4](https://github.com/cashubtc/cashu-ts/commit/bc70dc49a63c7e5b99865c596024c2e39b8c6709))
+
 ## [5.0.0-rc.11](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.10...v5.0.0-rc.11) (2026-09-22)
 
 
