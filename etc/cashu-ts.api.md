@@ -1340,6 +1340,7 @@ export class MintInfo {
     // (undocumented)
     get description_long(): string | undefined;
     getMintMeltMethod(op: 'mint' | 'melt', method: string, unit: string): SwapMethod | undefined;
+    guaranteesPreimage(method?: string, unit?: string): boolean;
     // (undocumented)
     get icon_url(): string | undefined;
     // (undocumented)
@@ -2748,6 +2749,7 @@ export type SwapMethod = {
     options?: {
         description?: boolean;
         amountless?: boolean;
+        preimage_guaranteed?: boolean;
         confirmations?: number;
     };
 };
