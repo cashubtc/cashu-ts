@@ -365,6 +365,56 @@ describe('Wallet transactions (NUT-XX)', () => {
     expect(bodies).toHaveLength(1);
   });
 
+  test('proofs only, no outputs or melt: the full amount parks as change', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0 });
+    const bodies: any[] = [];
+    server.use(
+      http.post(mintUrl + '/v1/transaction', async ({ request }) => {
+        const body: any = await request.json();
+        bodies.push(body);
+        return HttpResponse.json({
+          digest: 'ab'.repeat(32),
+          state: 'PAID',
+          signatures: [],
+          melt_quotes: [],
+          change_quote: {
+            quote: 'change-0003',
+            request: 'ab'.repeat(32),
+            unit,
+            amount: 3,
+            amount_paid: 3,
+            amount_issued: 0,
+            state: 'PAID',
+            expiry: null,
+            pubkey: changeKey,
+          },
+        });
+      }),
+    );
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+    const proofs: Proof[] = [1, 2].map((n) => ({
+      id: '00bd033559de27d0',
+      amount: Amount.from(n),
+      secret: `secret-${n}`,
+      C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+    }));
+    const preview = await wallet.prepareTransaction({
+      proofInputs: proofs,
+      changePubkey: changeKey,
+    });
+    expect(preview.amount.toNumber()).toBe(0);
+    expect(preview.outputData).toHaveLength(0);
+    const result = await wallet.completeTransaction(preview, privkey);
+    expect(bodies[0].blinded_outputs).toEqual([]);
+    expect(bodies[0].melt_quote_outputs).toEqual([]);
+    expect(bodies[0].change_pubkey).toBe(changeKey);
+    expect(result.response.state).toBe('PAID');
+    expect(result.proofs).toEqual([]);
+    expect(result.response.change_quote).toMatchObject({ quote: 'change-0003', method: 'change' });
+    expect(result.response.change_quote!.amount_paid.toNumber()).toBe(3);
+  });
+
   test('rejects a malformed transaction record', async () => {
     serveInfo({ supported: true, quote_input_fee_ppk: 0 });
     server.use(
