@@ -58,12 +58,17 @@ type SecretAndBlindingFactorDeriver = (counter: number) => DerivedSecretAndBlind
  */
 export function findLegacyDerivationCollisions(keysetIds: readonly string[]): string[][] {
   const groups = new Map<bigint, string[]>();
-  for (const keysetId of new Set(keysetIds)) {
+  const seenIds = new Set<string>();
+  for (const keysetId of keysetIds) {
     const isHex = /^[a-fA-F0-9]+$/.test(keysetId);
     const isLegacyBase64 =
       (keysetId.length === LEGACY_KEYSET_ID_LENGTH || !isHex) && isBase64String(keysetId);
     const isLegacyHex = isHex && keysetId.startsWith('00') && keysetId.length % 2 === 0;
     if (!isLegacyBase64 && !isLegacyHex) continue;
+
+    const identity = isLegacyBase64 ? keysetId : keysetId.toLowerCase();
+    if (seenIds.has(identity)) continue;
+    seenIds.add(identity);
 
     const keysetIdInt = getKeysetIdInt(keysetId);
     const group = groups.get(keysetIdInt);

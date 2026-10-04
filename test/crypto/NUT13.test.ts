@@ -61,6 +61,36 @@ describe('findLegacyDerivationCollisions', () => {
     ).toEqual([['AAAAAIAAAAA=', '0000000000000001', 'AAAAAP////8=']]);
   });
 
+  test('hex casing differences do not form a collision', () => {
+    expect(findLegacyDerivationCollisions(['00000000ABCDEF01', '00000000abcdef01'])).toEqual([]);
+  });
+
+  test.each(['00000000ABCDEF01', '00000000abcdef01'])(
+    'preserves the first hex spelling %s in a collision group',
+    (firstId) => {
+      expect(
+        findLegacyDerivationCollisions([
+          firstId,
+          '00000000ABCDEF01',
+          '000000012bcdef00',
+          '00000000abcdef01',
+        ]),
+      ).toEqual([[firstId, '000000012bcdef00']]);
+    },
+  );
+
+  test('keeps all-hex legacy base64 IDs case-sensitive', () => {
+    const firstId = 'd9f0F7F2875b';
+    const secondId = firstId.toLowerCase();
+    const firstHexId = '00' + getKeysetIdInt(firstId).toString(16).padStart(14, '0');
+    const secondHexId = '00' + getKeysetIdInt(secondId).toString(16).padStart(14, '0');
+    expect(firstHexId).not.toBe(secondHexId);
+    expect(findLegacyDerivationCollisions([firstId, secondId, firstHexId, secondHexId])).toEqual([
+      [firstId, firstHexId],
+      [secondId, secondHexId],
+    ]);
+  });
+
   test('accepts standard and URL-safe legacy base64', () => {
     expect(findLegacyDerivationCollisions(['+//wAAAAAAAA', '000000007fe003ef'])).toEqual([
       ['+//wAAAAAAAA', '000000007fe003ef'],
