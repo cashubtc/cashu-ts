@@ -6,6 +6,7 @@ import { describe, expect, test } from 'vitest';
 import {
   BLS_FR_ORDER,
   deriveSecretAndBlindingFactor,
+  findLegacyDerivationCollisions,
   getKeysetIdInt,
   hashToCurveBls,
   mnemonicToSeedSync,
@@ -30,6 +31,79 @@ const MINT_PUBKEY = '0338596797cef0627f653cd6568387361b00314add55d9f1ea9c94f46ae
 // The standalone deriveBlindingFactor() helper was removed in v5; derive it locally for these tests.
 const deriveBlindingFactor = (seed: Uint8Array, keysetId: string, counter: number): Uint8Array =>
   deriveSecretAndBlindingFactor(seed, keysetId, counter).blindingFactor;
+
+describe('findLegacyDerivationCollisions', () => {
+  test('returns no groups for empty, unique or repeated identical IDs', () => {
+    expect(findLegacyDerivationCollisions([])).toEqual([]);
+    expect(findLegacyDerivationCollisions(['0000000000000001', '0000000000000002'])).toEqual([]);
+    expect(findLegacyDerivationCollisions(['0000000000000001', '0000000000000001'])).toEqual([]);
+  });
+
+  test('groups distinct hex 00 IDs and omits duplicates and singletons', () => {
+    const ids = Object.freeze([
+      '0000000000000001',
+      '0000000000000002',
+      '0000000080000000',
+      '0000000000000003',
+      '0000000080000001',
+      '00000000ffffffff',
+      '0000000080000000',
+    ]);
+    expect(findLegacyDerivationCollisions(ids)).toEqual([
+      ['0000000000000001', '0000000080000000', '00000000ffffffff'],
+      ['0000000000000002', '0000000080000001'],
+    ]);
+  });
+
+  test('groups base64 IDs with each other and with hex 00 IDs', () => {
+    expect(
+      findLegacyDerivationCollisions(['AAAAAIAAAAA=', '0000000000000001', 'AAAAAP////8=']),
+    ).toEqual([['AAAAAIAAAAA=', '0000000000000001', 'AAAAAP////8=']]);
+  });
+
+  test('accepts standard and URL-safe legacy base64', () => {
+    expect(findLegacyDerivationCollisions(['+//wAAAAAAAA', '000000007fe003ef'])).toEqual([
+      ['+//wAAAAAAAA', '000000007fe003ef'],
+    ]);
+    expect(findLegacyDerivationCollisions(['-__wAAAAAAAA', '000000007fe003ef'])).toEqual([
+      ['-__wAAAAAAAA', '000000007fe003ef'],
+    ]);
+  });
+
+  test.each([
+    ['d9f0F7F2875b', '0000000026dbef9d'],
+    ['010000000000', '000000006f3cf71b'],
+    ['00abcdefabcd', '000000002ca09e19'],
+  ])('treats the 12-character all-hex ID %s as legacy base64', (legacyId, hexId) => {
+    expect(findLegacyDerivationCollisions([legacyId, hexId])).toEqual([[legacyId, hexId]]);
+  });
+
+  test.each(['01', '02', '03', 'ff'])(
+    'ignores hex version %s even with matching integers',
+    (version) => {
+      const modernId = version + '00000000000000';
+      const legacyId = '00' + getKeysetIdInt(modernId).toString(16).padStart(14, '0');
+      expect(findLegacyDerivationCollisions([modernId, legacyId])).toEqual([]);
+    },
+  );
+
+  test('skips unrecognized forms and malformed hex without throwing', () => {
+    expect(
+      findLegacyDerivationCollisions([
+        '',
+        'not-a-keyset!',
+        '!'.repeat(12),
+        '00f',
+        '01f',
+        '03ff00',
+        'AA=A',
+        '+__wAAAAAAAA',
+        '0000000000000001',
+        '0000000080000000',
+      ]),
+    ).toEqual([['0000000000000001', '0000000080000000']]);
+  });
+});
 
 describe('deriveBlindingFactor', () => {
   test('preserves 32-byte encoding when reduced scalar has leading zeros', () => {

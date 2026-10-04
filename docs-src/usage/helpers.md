@@ -71,6 +71,20 @@ if (found?.kind === 'token') {
 }
 ```
 
+## `findLegacyDerivationCollisions`
+
+Call with all known keyset IDs when adding a mint or refreshing keysets, including inactive
+keysets. Returns groups of distinct legacy IDs (base64 or hex version `00`) that share a
+NUT-13 BIP-32 path integer, or `[]` when none collide. Repeated identical IDs do not form a
+collision. Other hex versions, including future versions, and unrecognized forms are skipped
+without throwing. How to handle a reported collision is wallet policy.
+
+```ts
+import { findLegacyDerivationCollisions } from '@cashu/cashu-ts';
+
+const collisions = findLegacyDerivationCollisions(myKeyChain.getAllKeysetIds());
+```
+
 ## `hexToBytes` and `bytesToHex`
 
 Most of the API speaks hex strings, but the crypto entry points take and return `Uint8Array`:

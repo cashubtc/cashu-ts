@@ -630,6 +630,9 @@ export function findCashuPayload(text: string): {
 } | null;
 
 // @public
+export function findLegacyDerivationCollisions(keysetIds: readonly string[]): string[][];
+
+// @public
 export function findSigningKey(pubkey: string, privkeys: string | string[]): string;
 
 // @public (undocumented)

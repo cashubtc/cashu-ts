@@ -49,6 +49,31 @@ export type DerivedSecretAndBlindingFactor = {
 type SecretAndBlindingFactorDeriver = (counter: number) => DerivedSecretAndBlindingFactor;
 
 /**
+ * Groups of distinct legacy keyset IDs (base64 or hex version `00`) that share a truncated BIP-32
+ * path integer. Other ID versions and unrecognized forms are ignored; this never throws.
+ *
+ * @param keysetIds - All known keyset IDs, including inactive keysets.
+ * @returns Colliding groups of distinct IDs, or an empty array when none collide. Handling a
+ *   collision is wallet policy.
+ */
+export function findLegacyDerivationCollisions(keysetIds: readonly string[]): string[][] {
+  const groups = new Map<bigint, string[]>();
+  for (const keysetId of new Set(keysetIds)) {
+    const isHex = /^[a-fA-F0-9]+$/.test(keysetId);
+    const isLegacyBase64 =
+      (keysetId.length === LEGACY_KEYSET_ID_LENGTH || !isHex) && isBase64String(keysetId);
+    const isLegacyHex = isHex && keysetId.startsWith('00') && keysetId.length % 2 === 0;
+    if (!isLegacyBase64 && !isLegacyHex) continue;
+
+    const keysetIdInt = getKeysetIdInt(keysetId);
+    const group = groups.get(keysetIdInt);
+    if (group) group.push(keysetId);
+    else groups.set(keysetIdInt, [keysetId]);
+  }
+  return [...groups.values()].filter((group) => group.length > 1);
+}
+
+/**
  * Derives the deterministic secret and blinding factor for one counter.
  *
  * @remarks
