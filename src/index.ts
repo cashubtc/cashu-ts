@@ -131,12 +131,21 @@ export type {
 
 // Logging & errors
 export { type LogLevel, ConsoleLogger, type Logger } from './logger';
+export { MintErrorCode } from './model/ErrorCodes';
 export {
   AmountError,
   AmountWithUnitError,
   CallerAbortError,
   CTSError,
+  hasMintErrorCode,
+  isAlreadyIssuedError,
+  isAuthError,
   isMintOperationError,
+  isPaymentFailedError,
+  isPendingError,
+  isProofsAlreadySpentError,
+  isQuoteExpiredError,
+  isQuoteNotPaidError,
   MeltChangeError,
   MintOperationError,
   NetworkError,

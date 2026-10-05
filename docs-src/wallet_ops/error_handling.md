@@ -3,7 +3,13 @@
 # Error handling patterns
 
 ```ts
-import { CTSError, MintOperationError, NetworkError } from '@cashu/cashu-ts';
+import {
+  CTSError,
+  isMintOperationError,
+  isPendingError,
+  isProofsAlreadySpentError,
+  NetworkError,
+} from '@cashu/cashu-ts';
 
 try {
   const res = await wallet.ops.send(5, proofs).offlineExactOnly().run();
@@ -12,8 +18,13 @@ try {
   // Every library error sets a stable `name`, so logs and generic handlers can
   // tell them apart. Do not use `constructor.name`: the shipped build is
   // minified and it reads as a single letter.
-  if (e instanceof MintOperationError) {
-    // the mint rejected the operation: e.code and e.message say why
+  if (isProofsAlreadySpentError(e)) {
+    // Reconcile the proof store with the mint's proof states.
+  } else if (isPendingError(e)) {
+    // Back off and check proof/quote state again; keep the proofs while pending.
+  } else if (isMintOperationError(e)) {
+    // Other mint rejection: the protocol code says why.
+    console.error(e.code, e.message);
   } else if (e instanceof NetworkError) {
     // no usable response: retry or surface it
   } else if (e instanceof CTSError) {
@@ -23,6 +34,37 @@ try {
   throw e;
 }
 ```
+
+`MintErrorCode` provides a named constant for every code in the canonical [NUT error registry](https://github.com/cashubtc/nuts/blob/main/error_codes.md). The predicates below check code sets through `isMintOperationError`, which also accepts errors from another copy of cashu-ts or a custom request layer by name and code. They never inspect the message.
+
+| Predicate                   | Codes                                    |
+| --------------------------- | ---------------------------------------- |
+| `isProofsAlreadySpentError` | 11001                                    |
+| `isPendingError`            | 11002, 11004, 20005                      |
+| `isAlreadyIssuedError`      | 11003, 20002                             |
+| `isQuoteNotPaidError`       | 20001                                    |
+| `isQuoteExpiredError`       | 20007                                    |
+| `isPaymentFailedError`      | 20004                                    |
+| `isAuthError`               | 30001, 30002, 31001, 31002, 31003, 31004 |
+
+`isAlreadyIssuedError` covers both already-signed outputs and an already-issued quote, because a repeated mint request can encounter either check first. It identifies the rejection; recovering issued proofs is a separate wallet action. `isPaymentFailedError` excludes pending payments. Current Nutshell uses the registry auth codes and reports pending and expired quotes as 20005 and 20007.
+
+For a custom code set, use `hasMintErrorCode`:
+
+```ts
+import { hasMintErrorCode, MintErrorCode } from '@cashu/cashu-ts';
+
+try {
+  await wallet.ops.send(5, proofs).run();
+} catch (e) {
+  if (hasMintErrorCode(e, [MintErrorCode.KEYSET_NOT_KNOWN, MintErrorCode.KEYSET_EXPIRED])) {
+    console.error('The mint rejected the keyset');
+  }
+  throw e;
+}
+```
+
+Unknown codes return `false` from the named predicates and remain readable on `MintOperationError.code`. Callers can include mint-specific codes in `hasMintErrorCode` without adding them to the constants table.
 
 ## Concurrent operations
 

@@ -819,6 +819,9 @@ export type HasKeysetKeys = {
 };
 
 // @public
+export function hasMintErrorCode(e: unknown, codes: readonly number[]): boolean;
+
+// @public
 export function hasP2PKSignedProof(pubkey: string, proof: Proof, digest?: DigestInput): boolean;
 
 // @public
@@ -856,6 +859,12 @@ export class InvalidScalarError extends CTSError {
 }
 
 // @public
+export function isAlreadyIssuedError(e: unknown): boolean;
+
+// @public
+export function isAuthError(e: unknown): boolean;
+
+// @public
 export function isBlsKeyset(keysetId: string): boolean;
 
 // @public
@@ -872,6 +881,21 @@ export function isMintOperationError(e: unknown): e is MintOperationError;
 
 // @public
 export function isP2PKSpendAuthorised(proof: Proof, logger?: Logger, digest?: DigestInput): boolean;
+
+// @public
+export function isPaymentFailedError(e: unknown): boolean;
+
+// @public
+export function isPendingError(e: unknown): boolean;
+
+// @public
+export function isProofsAlreadySpentError(e: unknown): boolean;
+
+// @public
+export function isQuoteExpiredError(e: unknown): boolean;
+
+// @public
+export function isQuoteNotPaidError(e: unknown): boolean;
 
 // @public
 export function isV3PointSecret(secret: string): boolean;
@@ -1327,6 +1351,46 @@ export type MintCallOptions = {
 export type MintContactInfo = {
     method: string;
     info: string;
+};
+
+// @public
+export const MintErrorCode: {
+    readonly PROOF_VERIFICATION_FAILED: 10001;
+    readonly PROOFS_ALREADY_SPENT: 11001;
+    readonly PROOFS_PENDING: 11002;
+    readonly OUTPUTS_ALREADY_SIGNED: 11003;
+    readonly OUTPUTS_PENDING: 11004;
+    readonly TRANSACTION_NOT_BALANCED: 11005;
+    readonly AMOUNT_OUTSIDE_LIMIT_RANGE: 11006;
+    readonly DUPLICATE_INPUTS_PROVIDED: 11007;
+    readonly DUPLICATE_OUTPUTS_PROVIDED: 11008;
+    readonly INPUTS_OUTPUTS_OF_MULTIPLE_UNITS: 11009;
+    readonly INPUTS_AND_OUTPUTS_NOT_OF_SAME_UNIT: 11010;
+    readonly AMOUNTLESS_INVOICE_NOT_SUPPORTED: 11011;
+    readonly AMOUNT_IN_REQUEST_DOES_NOT_EQUAL_INVOICE: 11012;
+    readonly UNIT_IN_REQUEST_NOT_SUPPORTED: 11013;
+    readonly MAX_INPUTS_EXCEEDED: 11014;
+    readonly MAX_OUTPUTS_EXCEEDED: 11015;
+    readonly DUPLICATE_QUOTE_IDS_PROVIDED: 11016;
+    readonly MAX_BATCH_SIZE_EXCEEDED: 11017;
+    readonly KEYSET_NOT_KNOWN: 12001;
+    readonly KEYSET_INACTIVE: 12002;
+    readonly KEYSET_EXPIRED: 12003;
+    readonly QUOTE_NOT_PAID: 20001;
+    readonly QUOTE_ALREADY_ISSUED: 20002;
+    readonly MINTING_DISABLED: 20003;
+    readonly LIGHTNING_PAYMENT_FAILED: 20004;
+    readonly QUOTE_PENDING: 20005;
+    readonly INVOICE_ALREADY_PAID: 20006;
+    readonly QUOTE_EXPIRED: 20007;
+    readonly SIGNATURE_FOR_MINT_REQUEST_INVALID: 20008;
+    readonly PUBKEY_REQUIRED_FOR_MINT_QUOTE: 20009;
+    readonly ENDPOINT_REQUIRES_CLEAR_AUTH: 30001;
+    readonly CLEAR_AUTHENTICATION_FAILED: 30002;
+    readonly ENDPOINT_REQUIRES_BLIND_AUTH: 31001;
+    readonly BLIND_AUTHENTICATION_FAILED: 31002;
+    readonly MAXIMUM_BAT_MINT_AMOUNT_EXCEEDED: 31003;
+    readonly BAT_MINT_RATE_LIMIT_EXCEEDED: 31004;
 };
 
 // @public

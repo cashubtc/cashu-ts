@@ -1,5 +1,16 @@
 import { describe, expect, test } from 'vitest';
 
+import {
+  hasMintErrorCode,
+  isAlreadyIssuedError,
+  isAuthError,
+  isPaymentFailedError,
+  isPendingError,
+  isProofsAlreadySpentError,
+  isQuoteExpiredError,
+  isQuoteNotPaidError,
+  MintErrorCode,
+} from '../../src/index';
 import { Amount } from '../../src/model/Amount';
 import {
   CTSError,
@@ -173,6 +184,95 @@ describe('isMintOperationError', () => {
     expect(isMintOperationError(new Error('MintOperationError'))).toBe(false);
     expect(isMintOperationError({ name: 'MintOperationError', code: 20008 })).toBe(false);
     expect(isMintOperationError(undefined)).toBe(false);
+  });
+});
+
+describe('hasMintErrorCode', () => {
+  test('checks membership in a readonly code set', () => {
+    const codes = [11002, 11004, 20005] as const;
+    expect(hasMintErrorCode(new MintOperationError(20005, 'pending'), codes)).toBe(true);
+    expect(hasMintErrorCode(new MintOperationError(20004, 'failed'), codes)).toBe(false);
+    expect(hasMintErrorCode(new MintOperationError(20005, 'pending'), [])).toBe(false);
+  });
+
+  test('accepts an error from a custom request layer by name and code', () => {
+    const lookAlike = Object.assign(new Error('mint-specific wording'), {
+      name: 'MintOperationError',
+      code: 11001,
+    });
+    expect(lookAlike).not.toBeInstanceOf(MintOperationError);
+    expect(hasMintErrorCode(lookAlike, [11001])).toBe(true);
+  });
+
+  test('keeps unknown codes readable and allows callers to check them explicitly', () => {
+    const err = new MintOperationError(99999, 'new mint error');
+    expect(hasMintErrorCode(err, Object.values(MintErrorCode))).toBe(false);
+    expect(err.code).toBe(99999);
+    expect(hasMintErrorCode(err, [99999])).toBe(true);
+  });
+
+  test('rejects other errors and non-errors even when they carry a matching code', () => {
+    for (const e of [
+      Object.assign(new NetworkError('offline'), { code: 11001 }),
+      Object.assign(new HttpResponseError('bad response', 400), { code: 11001 }),
+      new Error('proofs already spent'),
+      { name: 'MintOperationError', code: 11001 },
+      null,
+      undefined,
+      11001,
+    ]) {
+      expect(hasMintErrorCode(e, [11001])).toBe(false);
+    }
+  });
+});
+
+describe.each([
+  { name: 'isProofsAlreadySpentError', check: isProofsAlreadySpentError, codes: [11001] },
+  { name: 'isPendingError', check: isPendingError, codes: [11002, 11004, 20005] },
+  { name: 'isAlreadyIssuedError', check: isAlreadyIssuedError, codes: [11003, 20002] },
+  { name: 'isQuoteNotPaidError', check: isQuoteNotPaidError, codes: [20001] },
+  { name: 'isQuoteExpiredError', check: isQuoteExpiredError, codes: [20007] },
+  { name: 'isPaymentFailedError', check: isPaymentFailedError, codes: [20004] },
+  { name: 'isAuthError', check: isAuthError, codes: [30001, 30002, 31001, 31002, 31003, 31004] },
+])('$name', ({ check, codes }) => {
+  test('matches exactly its documented codes regardless of message wording', () => {
+    for (const code of [
+      ...Object.values(MintErrorCode),
+      11000,
+      80001,
+      80002,
+      81001,
+      81002,
+      81003,
+      81004,
+      99999,
+    ]) {
+      for (const message of ['', 'different mint wording', 'quote is pending; quote is expired']) {
+        expect(check(new MintOperationError(code, message))).toBe(codes.includes(code));
+      }
+    }
+  });
+
+  test('accepts matching look-alikes from another package copy or request layer', () => {
+    for (const code of codes) {
+      const lookAlike = Object.assign(new Error('custom request layer'), {
+        name: 'MintOperationError',
+        code,
+      });
+      expect(check(lookAlike)).toBe(true);
+    }
+  });
+
+  test('rejects other errors and non-errors', () => {
+    for (const e of [
+      Object.assign(new Error('mint error'), { code: codes[0] }),
+      { name: 'MintOperationError', code: codes[0] },
+      new NetworkError('offline'),
+      null,
+      undefined,
+    ]) {
+      expect(check(e)).toBe(false);
+    }
   });
 });
 
