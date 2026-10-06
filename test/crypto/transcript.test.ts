@@ -98,10 +98,10 @@ describe('transaction transcript (vectors)', () => {
       })),
     };
     expect(bytesToHex(buildTransactionTranscript(tx))).toBe(
-      '01008e0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030a0acf939f033e3d0ae9b5f784341fada38367eec190edfb34e1f0cce9050c80672dbee77a7512b7243544c85ae290a7304003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d033270100570100010202000800456a94ab4e1c46030021029ef117210f475254efd911de93a9d22d471e356f5b1e3f00df8c24bbb37bd3ae04002102a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba203005b0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd5503005b0100010202002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55',
+      '11008e0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030a0acf939f033e3d0ae9b5f784341fada38367eec190edfb34e1f0cce9050c80672dbee77a7512b7243544c85ae290a7304003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d033271100570100010202000800456a94ab4e1c46030021029ef117210f475254efd911de93a9d22d471e356f5b1e3f00df8c24bbb37bd3ae04002102a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba221005b0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd5521005b0100010202002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55',
     );
     expect(bytesToHex(transactionDigest(tx))).toBe(
-      'e8eb75f3f209bbf592e7cc7ed727dcd33fe118add5ab7a992a3a2d7a9392d893',
+      'f3eda61cef37e0ea952968fecf7a54fa2ee31fd5b9b62a3ec0e6cbcab5675f0e',
     );
     const { proofs } = transactionInputs(tx);
     const v3Key = proofInputContextKey({ keysetId: v3.id, secret: v3.secret });
@@ -109,7 +109,7 @@ describe('transaction transcript (vectors)', () => {
       'a0acf939f033e3d0ae9b5f784341fada38367eec190edfb34e1f0cce9050c80672dbee77a7512b7243544c85ae290a73',
     );
     expect(bytesToHex(proofs.get(v3Key)!.digest)).toBe(
-      '3f48aab72fb7ec0e29d1fa49e4e194f09110068fe94a95e8553f53755af55837',
+      'a01808ebee8586577034824a151a2558910496144b5fa020dbfd431f3b421021',
     );
     expect(
       bytesToHex(
@@ -118,7 +118,7 @@ describe('transaction transcript (vectors)', () => {
             .inputContainer,
         ),
       ),
-    ).toBe('22df4d688b7337f49aa47dd5d0dc6578506229c36908d79608c50d7814d1bd04');
+    ).toBe('efbdd5d14874cb021fc962d93a9848553ca65ae101e9b57f6678aa37ffe1ebd9');
     // Neither secret appears in the transcript bytes.
     const transcript = bytesToHex(buildTransactionTranscript(tx));
     expect(transcript).not.toContain(v3.secret);
@@ -520,16 +520,16 @@ describe('request transcript (NUT-22 vector)', () => {
   const TARGET = '/v1/swap';
   const BODY = new TextEncoder().encode('illustrative request body');
   const SECRET = '02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9';
-  const DIGEST = 'd1e1e96f321842c6a3fc4805c67cb6886b2ec5ec8d41a14712d8c64c4daf5024';
+  const DIGEST = 'aaa50f1820f34bc7109b375c9a41e444ce362aabbb5aa6a18b2dbff75d03a54d';
   const WITNESS = JSON.stringify({
     signatures: [
-      'f6a405d660003c1b79c0c118f95173e6d5f376bbca6f915ddc2a9d421cb7858d1799930cfb3b066af72def5ea7b09ced08734bb593cd40aa5d4fb8d9d20ee7ee',
+      '775fdc83744bd6f9b2b051ade53cd979f5a3552cb1f53c13be694a559ef2adc6feaf69b1901a4c0dce20fc17bdc3ae20aa077a703ab7d370f47a4c491de60260',
     ],
   });
 
   test('pins the transcript and digest byte for byte', () => {
     expect(bytesToHex(buildRequestTranscript(METHOD, TARGET, BODY))).toBe(
-      '050035010004504f53540200082f76312f73776170030020bc14236ec9e2bf6d961268b7463d7be83e01554adfd063361e9e3ae985edce19',
+      'f10035010004504f53540200082f76312f73776170030020bc14236ec9e2bf6d961268b7463d7be83e01554adfd063361e9e3ae985edce19',
     );
     expect(bytesToHex(requestDigest(METHOD, TARGET, BODY))).toBe(DIGEST);
   });
@@ -564,16 +564,16 @@ describe('request transcript with a query string (NUT-22 vector)', () => {
   const TARGET = '/v1/mint/quote/bolt11/quote123?b=2&a=1&q=a%20b';
   const BODY = new Uint8Array();
   const SECRET = '02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9';
-  const DIGEST = '8d98e2e2adef927be5beb69f352b0e160d33831b4e73ae7259aedbfe9fcb6129';
+  const DIGEST = 'ccddd0edd33747425ab506ed56ab5c0f8e83e3fd24b67282239cec87b2e98ec2';
   const WITNESS = JSON.stringify({
     signatures: [
-      '440b6e51cdc21d8c6f2bb092fa8fe44f2a77428ccabbcdc2acff2cbcf04cec69b3c8f8336244600bacccbd29335b5116d5ba0f734d9f4666662f00d6c61b5d2c',
+      '0621ea88520bbf8e0519e0bbc5653040b1a10cac36a4891ba9fe354fed2b1990b8a68d918e024083c91fe875695c965c54aac75b830e180381073f63a684d980',
     ],
   });
 
   test('pins the transcript and digest byte for byte', () => {
     expect(bytesToHex(buildRequestTranscript(METHOD, TARGET, BODY))).toBe(
-      '05005a01000347455402002e2f76312f6d696e742f71756f74652f626f6c7431312f71756f74653132333f623d3226613d3126713d6125323062030020e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+      'f1005a01000347455402002e2f76312f6d696e742f71756f74652f626f6c7431312f71756f74653132333f623d3226613d3126713d6125323062030020e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
     );
     expect(bytesToHex(requestDigest(METHOD, TARGET, BODY))).toBe(DIGEST);
   });

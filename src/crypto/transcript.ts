@@ -26,11 +26,12 @@ export const TRANSCRIPT_REQUEST_TAG = 'Cashu_AuthorizedRequest';
 export const TRANSCRIPT_INPUT_TAG = 'Cashu_TransactionInput';
 export const SPEND_COMMITMENT_TAG = 'Cashu_SpendCommitment';
 
-const CONTAINER_PROOF_INPUT = 0x01;
-const CONTAINER_MINT_QUOTE_INPUT = 0x02;
-const CONTAINER_BLINDED_OUTPUT = 0x03;
-const CONTAINER_MELT_QUOTE_OUTPUT = 0x04;
-const CONTAINER_AUTHORIZED_REQUEST = 0x05;
+// The high nibble is the section: 0x1n inputs, 0x2n outputs, 0xFn never in a transaction.
+const CONTAINER_PROOF_INPUT = 0x11;
+const CONTAINER_MINT_QUOTE_INPUT = 0x12;
+const CONTAINER_BLINDED_OUTPUT = 0x21;
+const CONTAINER_MELT_QUOTE_OUTPUT = 0x22;
+const CONTAINER_AUTHORIZED_REQUEST = 0xf1;
 
 export type TranscriptProofInput = {
   amount: bigint;
@@ -216,12 +217,8 @@ export function transcriptContainers(transcript: Uint8Array): Uint8Array[] {
     const type = transcript[at];
     const length = (transcript[at + 1] << 8) | transcript[at + 2];
     const end = at + 3 + length;
-    if (
-      type < CONTAINER_PROOF_INPUT ||
-      type > CONTAINER_AUTHORIZED_REQUEST ||
-      length === 0 ||
-      end > transcript.length
-    ) {
+    const section = type >> 4;
+    if ((section !== 1 && section !== 2) || length === 0 || end > transcript.length) {
       throw new CTSError('Malformed transaction transcript');
     }
     records.push(transcript.subarray(at, end));
@@ -389,7 +386,7 @@ export function spendCommitment(YHex: string, inputDigest: Uint8Array, witness: 
  * Serialize a request to its authorized-request transcript (NUT-22).
  *
  * @remarks
- * One 0x05 container: 01 the uppercase HTTP method, 02 the origin-form request-target as sent, 03
+ * One 0xF1 container: 01 the uppercase HTTP method, 02 the origin-form request-target as sent, 03
  * SHA256 over the exact body bytes (a request without a body hashes the empty byte string).
  */
 export function buildRequestTranscript(
