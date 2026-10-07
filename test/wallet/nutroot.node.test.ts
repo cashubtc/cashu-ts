@@ -28,6 +28,7 @@ import {
   decodeSpendReceipt,
   encodeSpendReceipt,
   encodeUint8ToBase64Url,
+  getDecodedToken,
   hexToBytes,
   verifySpendReceipt,
 } from '../../src/utils';
@@ -403,6 +404,13 @@ describe('attachTransactionWitnesses', () => {
       r.inputDigest,
     );
     expect(verifyTransactionInputWitness(hexToBytes(r.inputDigest), PUB_B, r.witness)).toBe(true);
+  });
+
+  test('the shared nutrcA vector decodes and verifies against its proof', () => {
+    const bundle = decodeSpendReceipt(vectors.transport_strings.spend_receipt);
+    const [proof] = getDecodedToken(bundle.token, [KEYSET]).proofs;
+    expect(verifySpendReceipt(bundle.receipts[0], proof)).toMatchObject({ path: 'key', ok: true });
+    expect(encodeSpendReceipt(bundle)).toBe(vectors.transport_strings.spend_receipt);
   });
 
   test('verifySpendReceipt checks a receipt against the proof, key path and script path', async () => {

@@ -1,27 +1,24 @@
 import { equalBytes } from '@noble/curves/utils.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { schnorrSignDigest } from '../crypto/core';
-import { hashToCurveBls } from '../crypto/curve_bls';
 import { getPubKeyFromPrivKey } from '../crypto/curve_secp';
-import { hashToCurveHex, isBlsKeyset } from '../crypto/curves';
+import { isBlsKeyset } from '../crypto/curves';
 import {
   buildScriptPathWitness,
   enumerateLeafKeySlots,
   parseNutrootLeaf,
   selectRequiredLeafSignatures,
   slotKeysByBlindedPubkey,
-  nutrootLeafHash,
-  nutrootMerklePath,
   type NutrootConditionLeaf,
   type NutrootLeaf,
-  verifyNutrootCommitment,
 } from '../crypto/nutroot';
 import {
-  digestForPayload,
-  inputsForPayload,
+  inputDigest,
   meltOutputAmount,
-  type PayloadProofInput,
+  messageForPayload,
+  transcriptContainers,
 } from '../crypto/transcript';
 import {
   bytesToHex,
@@ -36,7 +33,6 @@ import { NUTROOT_MAX_SLOTS } from '../utils/limits';
 import { orderOutputsForPayload } from '../wallet/_internal';
 import type { MeltPreview, ScriptPathPlan, SwapPreview } from '../wallet/types';
 
-import { Amount } from './Amount';
 import { CTSError } from './Errors';
 import type { MeltQuoteBaseResponse, Proof, SerializedBlindedMessage } from './types';
 
@@ -50,17 +46,13 @@ const SCRIPT_PATH_PREFIX = 'nutspA';
  */
 export type ScriptPathSpendRequest = {
   /**
-   * The input being spent, by its 33-byte point secret hex.
+   * Index of the input's container in the package transcript.
    */
-  secret: string;
+  input: number;
   /**
    * The serialized leaf being exercised, hex.
    */
   leaf: string;
-  /**
-   * Control block for the witness: internal key and merkle path.
-   */
-  control: { K: string; path: string[] };
   /**
    * Ephemeral `E` when the proof is receiver-keyed, so a signer holding a blinded slot key can
    * derive it. Absent for bearer and script-only proofs, whose leaf keys are verbatim.
@@ -81,122 +73,77 @@ export type ScriptPathSpendRequest = {
  * Everything a signer needs to satisfy one or more script path spends, and nothing else.
  *
  * @remarks
- * Carries no secrets, no preimages and no blinding factors: inputs are named by `Y`, as in the
- * transcript, and a hashlock preimage stays with the coordinator until merge. Serialize it, send it
- * wherever the keys are, sign, and merge the result back into the preview it came from. Unlike a
- * co-signer hook, the transaction is not in flight meanwhile, so a ceremony can outlive the process
- * that started it, which is the normal case on a phone.
+ * The transaction travels as its TLV transcript; spend info and hashlock preimages stay with the
+ * wallet that built the package, which assembles the witnesses at merge.
  */
 export type ScriptPathSigningPackage = {
   version: 'nutspA';
-  type: 'swap' | 'melt';
   /**
-   * Melt quote id; melt packages only.
+   * The transaction's TLV transcript, hex (NUT-10).
    */
-  quote?: string;
-  /**
-   * Every transaction input, named by `Y` rather than by secret (NUT-10).
-   */
-  inputs: Array<Pick<Proof, 'amount' | 'id' | 'C'> & { Y: string }>;
-  outputs: SerializedBlindedMessage[];
-  /**
-   * The melt output's amount, quote amount plus the selected fee reserve (NUT-10); needed to
-   * reproduce the digest. Melt packages only.
-   */
-  quoteAmount?: bigint;
+  transcript: string;
   spends: ScriptPathSpendRequest[];
 };
 
-function digestOf(
-  inputs: PayloadProofInput[],
+function payloadTranscript(
+  inputs: Proof[],
   outputs: SerializedBlindedMessage[],
   meltQuote?: { quoteId: string; amount: bigint },
 ): Uint8Array {
-  return digestForPayload({ inputs, outputs, ...(meltQuote && { meltQuote }) });
+  return messageForPayload({ inputs, outputs, ...(meltQuote && { meltQuote }) });
 }
 
 /**
- * The digest a package's signatures cover, always rebuilt from its inputs and outputs: the package
- * carries no digest field, so there is nothing to sign but what it shows.
+ * Each spend's input digest, in spend order, derived from the package transcript alone.
  */
-function packageDigest(pkg: ScriptPathSigningPackage): Uint8Array {
-  return digestOf(
-    pkg.inputs,
-    pkg.outputs,
-    pkg.type === 'melt'
-      ? { quoteId: pkg.quote!, amount: Amount.from(pkg.quoteAmount!).toBigInt() }
-      : undefined,
-  );
+function packageInputDigests(pkg: ScriptPathSigningPackage): Uint8Array[] {
+  const transcript = hexToBytes(pkg.transcript);
+  const containers = transcriptContainers(transcript);
+  const digest = sha256(transcript);
+  return pkg.spends.map((spend) => inputDigest(digest, containers[spend.input]));
 }
 
 /**
- * Each spend's input digest by its secret, rebuilt the same way (NUT-10: inputs sign per input).
- *
- * @remarks
- * Package inputs are named by `Y`, so a spend finds its input by hashing its own secret: one hash
- * per spend, on the BLS curve every v3 keyset uses.
+ * The proof's internal key `K`, from its spend info.
  */
-function packageInputDigests(pkg: ScriptPathSigningPackage): Map<string, Uint8Array> {
-  const meltQuote =
-    pkg.type === 'melt'
-      ? { quoteId: pkg.quote!, amount: Amount.from(pkg.quoteAmount!).toBigInt() }
-      : undefined;
-  const { proofs } = inputsForPayload({
-    inputs: pkg.inputs,
-    outputs: pkg.outputs,
-    ...(meltQuote && { meltQuote }),
-  });
-  return new Map(
-    pkg.spends.map((spend) => {
-      const Y = spendY(spend);
-      const proof = pkg.inputs.find((input) => input.Y === Y && isBlsKeyset(input.id));
-      if (!proof) throw new CTSError('Signing package spend must name a v3 transaction input');
-      return [spend.secret, proofs.get(Y)!.digest];
-    }),
-  );
-}
-
-/**
- * The `Y` of a spend's v3 point secret, hashed as every BLS keyset does.
- */
-function spendY(spend: Pick<ScriptPathSpendRequest, 'secret'>): string {
-  return hashToCurveBls(utf8ToBytes(spend.secret)).toHex(true);
+function internalKey(proof: Proof): string {
+  const info = proof.spend_info;
+  if (info?.k) {
+    try {
+      return bytesToHex(getPubKeyFromPrivKey(hexToBytes(info.k)));
+    } catch {
+      throw new CTSError('Script path package bearer key is not a valid private key');
+    }
+  }
+  if (!info?.K) {
+    // NUT-10: K travels with a disclosed tree precisely so a wallet that is not the receiver
+    // can build a control block.
+    throw new CTSError('Script path package needs the internal key from the proof spend info');
+  }
+  return info.K;
 }
 
 function buildPackage(
-  type: 'swap' | 'melt',
   inputs: Proof[],
-  outputs: SerializedBlindedMessage[],
+  transcript: Uint8Array,
   plans: ScriptPathPlan[],
-  meltQuote?: { quoteId: string; amount: bigint },
 ): ScriptPathSigningPackage {
   if (plans.length === 0) {
     throw new CTSError('A script path package needs at least one plan');
   }
   const spends = plans.map((plan) => {
-    const proof = inputs.find((p) => p.secret === plan.secret && isBlsKeyset(p.id));
-    if (!proof) {
+    // Proof inputs are the transcript's first containers, in request order (NUT-10).
+    const input = inputs.findIndex((p) => p.secret === plan.secret && isBlsKeyset(p.id));
+    if (input < 0) {
       throw new CTSError('Script path plan names a secret not in this transaction');
     }
+    const proof = inputs[input];
     const tree = proof.spend_info?.tree;
     if (!tree || plan.leafIndex < 0 || plan.leafIndex >= tree.length) {
       throw new CTSError(`Script path plan names leaf ${plan.leafIndex}, which is not disclosed`);
     }
-    const info = proof.spend_info;
-    let K = info?.K;
-    if (info?.k) {
-      try {
-        K = bytesToHex(getPubKeyFromPrivKey(hexToBytes(info.k)));
-      } catch {
-        throw new CTSError('Script path package bearer key is not a valid private key');
-      }
-    }
-    if (!K) {
-      // NUT-10: K travels with a disclosed tree precisely so a signer who is not the receiver
-      // can build a control block.
-      throw new CTSError('Script path package needs the internal key from the proof spend info');
-    }
-    const leafHashes = tree.map((leaf) => nutrootLeafHash(hexToBytes(leaf)));
+    // Merge needs K for the control block, so a proof without one fails here, not after signing.
+    internalKey(proof);
     const E = proof.spend_info?.E;
     // The package carries one leaf, so only the builder, holding the whole tree, knows the slots.
     const slots = E
@@ -204,30 +151,9 @@ function buildPackage(
           .filter((s) => s.leafIndex === plan.leafIndex)
           .map((s) => s.slot)
       : undefined;
-    return {
-      secret: plan.secret,
-      leaf: tree[plan.leafIndex],
-      control: {
-        K,
-        path: nutrootMerklePath(leafHashes, plan.leafIndex).map((h) => bytesToHex(h)),
-      },
-      ...(E && { E, slots }),
-      signatures: [],
-    };
+    return { input, leaf: tree[plan.leafIndex], ...(E && { E, slots }), signatures: [] };
   });
-  return {
-    version: SCRIPT_PATH_PREFIX,
-    type,
-    ...(meltQuote && { quote: meltQuote.quoteId, quoteAmount: meltQuote.amount }),
-    inputs: inputs.map((p) => ({
-      amount: p.amount,
-      id: p.id,
-      Y: hashToCurveHex(p.secret, p.id),
-      C: p.C,
-    })),
-    outputs,
-    spends,
-  };
+  return { version: SCRIPT_PATH_PREFIX, transcript: bytesToHex(transcript), spends };
 }
 
 /**
@@ -240,11 +166,26 @@ function orderedOutputs(preview: SwapPreview): SerializedBlindedMessage[] {
   ).outputData.map((d) => d.blindedMessage);
 }
 
+function swapTranscript(preview: SwapPreview): Uint8Array {
+  return payloadTranscript(preview.inputs, orderedOutputs(preview));
+}
+
+function meltTranscript<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'amount'>>(
+  preview: MeltPreview<TQuote>,
+  feeIndex?: number,
+): Uint8Array {
+  return payloadTranscript(
+    preview.inputs,
+    preview.outputData.map((d) => d.blindedMessage),
+    { quoteId: preview.quote.quote, amount: meltOutputAmount(preview.quote, feeIndex).toBigInt() },
+  );
+}
+
 function extractSwapPackage(
   preview: SwapPreview,
   plans: ScriptPathPlan[],
 ): ScriptPathSigningPackage {
-  return buildPackage('swap', preview.inputs, orderedOutputs(preview), plans);
+  return buildPackage(preview.inputs, swapTranscript(preview), plans);
 }
 
 function extractMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'amount'>>(
@@ -252,13 +193,7 @@ function extractMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' |
   plans: ScriptPathPlan[],
   feeIndex?: number,
 ): ScriptPathSigningPackage {
-  return buildPackage(
-    'melt',
-    preview.inputs,
-    preview.outputData.map((d) => d.blindedMessage),
-    plans,
-    { quoteId: preview.quote.quote, amount: meltOutputAmount(preview.quote, feeIndex).toBigInt() },
-  );
+  return buildPackage(preview.inputs, meltTranscript(preview, feeIndex), plans);
 }
 
 function serializePackage(pkg: ScriptPathSigningPackage): string {
@@ -289,89 +224,29 @@ function assertValidPackage(pkg: ScriptPathSigningPackage): NutrootConditionLeaf
   if (!pkg || typeof pkg !== 'object' || pkg.version !== SCRIPT_PATH_PREFIX) {
     throw new CTSError('Invalid signing package version');
   }
-  if (pkg.type !== 'swap' && pkg.type !== 'melt') {
-    throw new CTSError('Invalid signing package type');
-  }
-  if (!Array.isArray(pkg.inputs) || !Array.isArray(pkg.outputs) || !Array.isArray(pkg.spends)) {
+  if (!isValidHex(pkg.transcript) || !Array.isArray(pkg.spends)) {
     throw new CTSError('Malformed signing package');
   }
-  // JSONInt flattens Amount to bare integers, so a decoded package must be rehydrated
-  // before consumers touch it; digestOf normalizing internally would otherwise mask this.
-  for (const [i, input] of pkg.inputs.entries()) {
-    if (
-      !input ||
-      typeof input !== 'object' ||
-      typeof input.Y !== 'string' ||
-      typeof input.id !== 'string' ||
-      typeof input.C !== 'string'
-    ) {
-      throw new CTSError(`Signing package input ${i} is malformed`);
-    }
-    try {
-      input.amount = Amount.from(input.amount);
-    } catch (e) {
-      throw new CTSError(`Signing package input ${i} amount is invalid`, { cause: e });
-    }
+  let containers: Uint8Array[];
+  try {
+    containers = transcriptContainers(hexToBytes(pkg.transcript));
+  } catch (e) {
+    throw new CTSError('Signing package transcript is malformed', { cause: e });
   }
-  for (const [i, output] of pkg.outputs.entries()) {
-    if (
-      !output ||
-      typeof output !== 'object' ||
-      typeof output.B_ !== 'string' ||
-      typeof output.id !== 'string'
-    ) {
-      throw new CTSError(`Signing package output ${i} is malformed`);
-    }
-    try {
-      output.amount = Amount.from(output.amount);
-    } catch (e) {
-      throw new CTSError(`Signing package output ${i} amount is invalid`, { cause: e });
-    }
-  }
-  if (
-    pkg.type === 'melt' &&
-    (typeof pkg.quote !== 'string' || pkg.quote.length === 0 || pkg.quoteAmount === undefined)
-  ) {
-    throw new CTSError('Melt signing package needs a quote and amount');
-  }
-  if (pkg.quoteAmount !== undefined) {
-    try {
-      pkg.quoteAmount = Amount.from(pkg.quoteAmount).toBigInt();
-    } catch (e) {
-      throw new CTSError('Signing package quote amount is invalid', { cause: e });
-    }
-  }
-  const inputYs = new Set(pkg.inputs.filter((input) => isBlsKeyset(input.id)).map((i) => i.Y));
-  const spent = new Set<string>();
+  const spent = new Set<number>();
   const leaves: NutrootConditionLeaf[] = [];
   for (const spend of pkg.spends) {
-    if (
-      typeof spend?.secret !== 'string' ||
-      !isValidHex(spend.secret) ||
-      spend.secret.length !== 66 ||
-      !inputYs.has(spendY(spend)) ||
-      spent.has(spend.secret)
-    ) {
+    const container = Number.isInteger(spend?.input) ? containers[spend.input] : undefined;
+    // The high nibble of a container type is its section; 0x1n is an input.
+    if (!container || container[0] >> 4 !== 1 || spent.has(spend.input)) {
       throw new CTSError('Signing package spend must name one unique transaction input');
     }
-    spent.add(spend.secret);
+    spent.add(spend.input);
     let leaf;
     try {
       leaf = parseNutrootLeaf(hexToBytes(spend.leaf));
-      if (
-        !spend.control ||
-        !Array.isArray(spend.control.path) ||
-        !verifyNutrootCommitment(
-          hexToBytes(spend.secret),
-          hexToBytes(spend.control.K),
-          hexToBytes(spend.leaf),
-          spend.control.path.map((hash) => hexToBytes(hash)),
-        )
-      ) {
-        throw new CTSError('commitment mismatch');
-      }
     } catch (e) {
-      throw new CTSError('Signing package leaf does not commit to its input secret', { cause: e });
+      throw new CTSError('Signing package leaf is malformed', { cause: e });
     }
     if (leaf.type === 'commit') {
       throw new CTSError('Signing package names a commit leaf, which is not a spend path');
@@ -416,9 +291,7 @@ function signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPath
       keys.push(...(hinted.length > 0 ? hinted : matches(NUTROOT_MAX_SLOTS - 1)));
     }
     if (keys.length === 0) return spend;
-    const digest = digests.get(spend.secret);
-    if (!digest) return spend; // assertValidPackage already rejected an unmatched spend
-    const added = keys.map((k) => schnorrSignDigest(digest, k));
+    const added = keys.map((k) => schnorrSignDigest(digests[i], k));
     return { ...spend, signatures: [...new Set([...spend.signatures, ...added])] };
   });
   return { ...pkg, spends };
@@ -429,9 +302,8 @@ function mergeSwapPackage(
   preview: SwapPreview,
   plans?: ScriptPathPlan[],
 ): SwapPreview {
-  if (pkg.type !== 'swap') throw new CTSError('Cannot merge a melt package into a swap');
   assertValidPackage(pkg);
-  assertMatches(pkg, digestOf(preview.inputs, orderedOutputs(preview)));
+  assertMatches(pkg, swapTranscript(preview));
   return { ...preview, inputs: applyWitnesses(pkg, preview.inputs, plans) };
 }
 
@@ -439,26 +311,43 @@ function mergeMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | '
   pkg: ScriptPathSigningPackage,
   preview: MeltPreview<TQuote>,
   plans?: ScriptPathPlan[],
+  feeIndex?: number,
 ): MeltPreview<TQuote> {
-  if (pkg.type !== 'melt') throw new CTSError('Cannot merge a swap package into a melt');
   assertValidPackage(pkg);
-  assertMatches(
-    pkg,
-    digestOf(
-      preview.inputs,
-      preview.outputData.map((d) => d.blindedMessage),
-      { quoteId: preview.quote.quote, amount: Amount.from(preview.quote.amount).toBigInt() },
-    ),
-  );
+  assertMatches(pkg, meltTranscript(preview, feeIndex));
   return { ...preview, inputs: applyWitnesses(pkg, preview.inputs, plans) };
 }
 
 function assertMatches(pkg: ScriptPathSigningPackage, expected: Uint8Array): void {
-  if (!equalBytes(expected, packageDigest(pkg))) {
+  if (!equalBytes(expected, hexToBytes(pkg.transcript))) {
     throw new CTSError(
       'Signing package does not match this transaction: its inputs, outputs or their order moved since it was extracted',
     );
   }
+}
+
+/**
+ * A spend's witness, built from its input's spend info and the package's signatures.
+ */
+function spendWitness(
+  spend: ScriptPathSpendRequest,
+  proof: Proof,
+  digest: Uint8Array,
+  preimage?: string,
+): string {
+  const tree = proof.spend_info?.tree ?? [];
+  const leafIndex = tree.indexOf(spend.leaf.toLowerCase());
+  if (leafIndex < 0) {
+    throw new CTSError('Signing package leaf is not in its input proof spend info');
+  }
+  const leaf = parseNutrootLeaf(hexToBytes(spend.leaf));
+  if (leaf.type === 'hashlock' && preimage === undefined) {
+    throw new CTSError(
+      'A hashlock spend needs its preimage at merge: pass the plans the package was extracted with',
+    );
+  }
+  const signatures = selectRequiredLeafSignatures(leaf, digest, spend.signatures);
+  return buildScriptPathWitness(tree, leafIndex, internalKey(proof), signatures, preimage);
 }
 
 function applyWitnesses(
@@ -467,33 +356,17 @@ function applyWitnesses(
   plans: ScriptPathPlan[] = [],
 ): Proof[] {
   const digests = packageInputDigests(pkg);
-  const bySecret = new Map(pkg.spends.map((s) => [s.secret, s]));
   const preimages = new Map(plans.map((p) => [p.secret, p.preimage]));
-  return inputs.map((proof) => {
-    const spend = bySecret.get(proof.secret);
-    if (!spend || !isBlsKeyset(proof.id)) return proof;
-    const leaf = parseNutrootLeaf(hexToBytes(spend.leaf));
-    const preimage = preimages.get(proof.secret);
-    if (leaf.type === 'hashlock' && preimage === undefined) {
-      throw new CTSError(
-        'A hashlock spend needs its preimage at merge: pass the plans the package was extracted with',
-      );
+  const witnessed = [...inputs];
+  pkg.spends.forEach((spend, i) => {
+    const proof = inputs[spend.input];
+    if (!proof || !isBlsKeyset(proof.id)) {
+      throw new CTSError('Signing package spend does not name a v3 proof input');
     }
-    const signatures = selectRequiredLeafSignatures(
-      leaf,
-      digests.get(proof.secret)!,
-      spend.signatures,
-    );
-    return {
-      ...proof,
-      witness: JSON.stringify({
-        leaf: spend.leaf,
-        control: spend.control,
-        signatures,
-        ...(preimage !== undefined && { preimage }),
-      }),
-    };
+    const witness = spendWitness(spend, proof, digests[i], preimages.get(proof.secret));
+    witnessed[spend.input] = { ...proof, witness };
   });
+  return witnessed;
 }
 
 /**
@@ -552,16 +425,12 @@ export type ScriptPathApi = {
     pkg: ScriptPathSigningPackage,
     preview: MeltPreview<TQuote>,
     plans?: ScriptPathPlan[],
+    feeIndex?: number,
   ): MeltPreview<TQuote>;
   /**
-   * The witness a spend would produce, without a preview. Useful for inspection.
+   * The witness a spend would produce for `proof`, without a preview. Useful for inspection.
    */
-  witnessFor(
-    spend: ScriptPathSpendRequest,
-    tree: string[],
-    leafIndex: number,
-    preimage?: string,
-  ): string;
+  witnessFor(spend: ScriptPathSpendRequest, proof: Proof, preimage?: string): string;
 };
 
 /**
@@ -582,8 +451,12 @@ export const ScriptPath: ScriptPathApi = {
   signPackage,
   mergeSwapPackage,
   mergeMeltPackage,
-  witnessFor: (spend, tree, leafIndex, preimage) =>
-    buildScriptPathWitness(tree, leafIndex, spend.control.K, spend.signatures, preimage),
+  witnessFor: (spend, proof, preimage) => {
+    const tree = proof.spend_info?.tree ?? [];
+    const leafIndex = tree.indexOf(spend.leaf.toLowerCase());
+    if (leafIndex < 0) throw new CTSError('Spend leaf is not in the proof spend info');
+    return buildScriptPathWitness(tree, leafIndex, internalKey(proof), spend.signatures, preimage);
+  },
 };
 
 export type { NutrootLeaf };

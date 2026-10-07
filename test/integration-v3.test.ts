@@ -45,6 +45,7 @@ import {
   verifyTransactionInputWitness,
   meltOutputAmount,
 } from '../src/crypto/transcript';
+import { bytesToUtf8, decodeBase64UrlToUint8 } from '../src/utils';
 
 type LockedQuote = Awaited<ReturnType<Wallet['createMintQuoteBolt11']>> & { privkey: string };
 /**
@@ -1350,13 +1351,13 @@ describeV3('M9 script path through the wallet API', () => {
       const plan = { secret: proof.secret, leafIndex: 0 };
       const pkg = ScriptPath.extractSwapPackage(preview, [plan]);
       expect(pkg.spends[0].signatures).toHaveLength(0);
-      expect(pkg.spends[0].control.K).toBe(proof.spend_info?.K);
 
       // Round-trip through the wire, twice, signed by a different party each time. Nothing but
       // the string crosses, and it carries no secret and no blinding factor.
       const wire = ScriptPath.serializePackage(pkg);
       expect(wire.startsWith('nutspA')).toBe(true);
       expect(wire).not.toContain(alicePriv);
+      expect(bytesToUtf8(decodeBase64UrlToUint8(wire.slice(6)))).not.toContain(proof.secret);
       let carried = ScriptPath.signPackage(ScriptPath.deserializePackage(wire), alicePriv);
       carried = ScriptPath.signPackage(
         ScriptPath.deserializePackage(ScriptPath.serializePackage(carried)),
@@ -1400,15 +1401,11 @@ describeV3('M9 script path through the wallet API', () => {
       // here rather than by the mint, which would only say the witness was invalid.
       const other = await alice.prepareSwapToReceive([proof]);
       expect(() => ScriptPath.mergeSwapPackage(pkg, other)).toThrow(/does not match/);
-      // The package carries no digest to edit: signatures cover whatever inputs and outputs it
-      // shows, so a package whose contents were edited reads back fine and fails at merge.
+      // The package carries no digest to edit: signatures cover whatever transcript it shows, so
+      // a package whose transcript was edited reads back fine and fails at merge.
+      const last = pkg.transcript.slice(-2) === '00' ? '01' : '00';
       const tampered = ScriptPath.deserializePackage(
-        ScriptPath.serializePackage({
-          ...pkg,
-          outputs: pkg.outputs.map((o, i) =>
-            i === 0 ? { ...o, B_: (o.B_.startsWith('02') ? '03' : '02') + o.B_.slice(2) } : o,
-          ),
-        }),
+        ScriptPath.serializePackage({ ...pkg, transcript: pkg.transcript.slice(0, -2) + last }),
       );
       expect(() => ScriptPath.mergeSwapPackage(tampered, preview)).toThrow(/does not match/);
     },

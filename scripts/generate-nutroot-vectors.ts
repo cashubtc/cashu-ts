@@ -34,7 +34,8 @@ import {
   type NutrootLeaf,
   NUTROOT_NUMS_KEY,
 } from '../src/crypto/nutroot';
-import { deriveKeysetId, getEncodedToken } from '../src/utils/core';
+import { ScriptPath, type ScriptPathSigningPackage } from '../src/model/ScriptPath';
+import { deriveKeysetId, encodeSpendReceipt, getEncodedToken } from '../src/utils/core';
 import { taggedHash } from '../src/crypto/core';
 
 const PATH = 'test/vectors/nutroot-v3.json';
@@ -497,6 +498,47 @@ d.nut07_commitments = {
     commitment: commitment(d.auditable_lock.Y, d.auditable_lock.input_digest, audWitness),
   },
 };
+
+// NUT-10 transport strings, through the library's own encoders so the spec copies cannot drift.
+// The signed package carries the AUX0 signature: signPackage uses fresh aux randomness.
+const audPackage: ScriptPathSigningPackage = {
+  version: 'nutspA',
+  transcript: bytesToHex(audTranscript),
+  spends: [{ input: 0, leaf: d.leaf_forms.threshold_1of1_disclosure, signatures: [] }],
+};
+const audSignedByLibrary = ScriptPath.signPackage(audPackage, bytesToHex(bigTo32(3n)));
+if (
+  !schnorr.verify(
+    hexToBytes(audSignedByLibrary.spends[0].signatures[0]),
+    audInputDigest,
+    hexToBytes(d.auditable_lock.P).subarray(1),
+  )
+) {
+  throw new Error('signPackage signature does not verify over the auditable lock input digest');
+}
+const audSigned = { ...audPackage, spends: [{ ...audPackage.spends[0], signatures: [audSig] }] };
+d.transport_strings = {
+  comment:
+    'Prefix plus base64url of the JSON. The signing package is the auditable lock spent in the pinned swap; the spend receipt is the swap bearer input.',
+  signing_package: ScriptPath.serializePackage(audPackage),
+  signing_package_signed: ScriptPath.serializePackage(audSigned),
+  spend_receipt: encodeSpendReceipt({
+    token: d.tokens_v4.shapes.bearer_k.token_cashu_ts,
+    receipts: [
+      {
+        Y: d.nut13_v3.outputs[0].Y,
+        keysetId: d.transcript.swap.tx.proof_inputs[0].keyset_id,
+        inputDigest: d.transcript.swap.input_digest,
+        witness: swapWitness,
+        commitment: d.nut07_commitments.keypath_private.commitment,
+        transcript: d.transcript.swap.transcript,
+      },
+    ],
+  }),
+};
+for (const s of [d.transport_strings.signing_package, d.transport_strings.signing_package_signed]) {
+  ScriptPath.deserializePackage(s);
+}
 
 writeFileSync(PATH, JSON.stringify(d, null, 2) + '\n');
 console.log(
