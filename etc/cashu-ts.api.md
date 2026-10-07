@@ -2685,7 +2685,10 @@ export type SerializedTransactionPreview = {
         feeReserve: string;
         feeIndex?: number;
     };
-    changePubkey?: string;
+    changeQuoteOutputs: Array<{
+        pubkey: string;
+        amount?: string;
+    }>;
     outputData: SerializedOutputData[];
     amount: string;
     fee: string;
@@ -2967,7 +2970,10 @@ export type TransactionPreview = {
         feeReserve: Amount;
         feeIndex?: number;
     };
-    changePubkey?: string;
+    changeQuoteOutputs: Array<{
+        pubkey: string;
+        amount?: Amount;
+    }>;
     outputData: OutputDataLike[];
     amount: Amount;
     fee: Amount;
@@ -2990,7 +2996,10 @@ export type TransactionRequest = {
         fee_reserve: Amount;
         fee_index?: number;
     }>;
-    change_pubkey?: string;
+    change_quote_outputs?: Array<{
+        pubkey: string;
+        amount?: Amount;
+    }>;
     prefer_async?: boolean;
 };
 
@@ -3000,7 +3009,7 @@ export type TransactionResponse = {
     state: TransactionState;
     signatures: SerializedBlindedSignature[];
     melt_quotes: MeltQuoteBaseResponse[];
-    change_quote: MintQuoteBaseResponse | null;
+    change_quotes: Array<MintQuoteBaseResponse | null>;
 };
 
 // @public
@@ -3238,7 +3247,10 @@ export class Wallet {
             };
             feeIndex?: number;
         };
-        changePubkey?: string;
+        changeQuoteOutputs?: Array<{
+            pubkey: string;
+            amount?: AmountLike;
+        }>;
     }, config?: PrepareTransactionConfig): Promise<TransactionPreview>;
     receive(token: Token | string | ProofLike[], config?: ReceiveConfig, outputType?: OutputType): Promise<Proof[]>;
     recoverQuoteLockKey(pubkey: string): Promise<string | undefined>;

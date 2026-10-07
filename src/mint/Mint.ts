@@ -293,7 +293,8 @@ class Mint {
       typeof data.digest !== 'string' ||
       !['PENDING', 'PAID', 'FAILED'].includes(data.state) ||
       !Array.isArray(data.signatures) ||
-      !Array.isArray(data.melt_quotes)
+      !Array.isArray(data.melt_quotes) ||
+      !Array.isArray(data.change_quotes)
     ) {
       this._logger.error('Invalid response from mint...', { op: 'transaction' });
       throw new CTSError('Invalid response from mint');
@@ -305,9 +306,9 @@ class Mint {
       melt_quotes: data.melt_quotes.map((m) =>
         this.normalizeMeltQuoteResponse(meltMethod, m, undefined, true),
       ),
-      change_quote: data.change_quote
-        ? this.normalizeMintQuoteResponse('change', data.change_quote)
-        : null,
+      change_quotes: data.change_quotes.map((q) =>
+        q ? this.normalizeMintQuoteResponse('change', q) : null,
+      ),
     };
   }
 

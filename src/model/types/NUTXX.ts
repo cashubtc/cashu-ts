@@ -38,9 +38,10 @@ export type TransactionRequest = {
    */
   melt_quote_outputs: Array<{ quote: string; fee_reserve: Amount; fee_index?: number }>;
   /**
-   * Lock key of the change quote, 33-byte compressed hex.
+   * Change quotes to create: each a lock key (33-byte compressed hex) and a positive amount, or no
+   * amount on at most one of them, the remainder quote that takes the balance.
    */
-  change_pubkey?: string;
+  change_quote_outputs?: Array<{ pubkey: string; amount?: Amount }>;
   prefer_async?: boolean;
 };
 
@@ -61,7 +62,8 @@ export type TransactionResponse = {
   signatures: SerializedBlindedSignature[];
   melt_quotes: MeltQuoteBaseResponse[];
   /**
-   * The change quote once `PAID` with positive change, else null.
+   * One per change quote output, in request order: the quote once `PAID`, else null (a remainder
+   * quote with zero change stays null).
    */
-  change_quote: MintQuoteBaseResponse | null;
+  change_quotes: Array<MintQuoteBaseResponse | null>;
 };

@@ -153,9 +153,10 @@ export type TransactionPreview = {
     feeIndex?: number;
   };
   /**
-   * Lock key of the change quote.
+   * Change quotes in request order: each a lock key and fixed amount, or no amount on the one
+   * remainder quote, which takes whatever the outputs, melt and fee leave.
    */
-  changePubkey?: string;
+  changeQuoteOutputs: Array<{ pubkey: string; amount?: Amount }>;
   outputData: OutputDataLike[];
   /**
    * Total of the new proofs.

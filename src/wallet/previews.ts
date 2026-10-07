@@ -266,7 +266,7 @@ export type SerializedTransactionPreview = {
     feeReserve: string;
     feeIndex?: number;
   };
-  changePubkey?: string;
+  changeQuoteOutputs: Array<{ pubkey: string; amount?: string }>;
   outputData: SerializedOutputData[];
   amount: string;
   fee: string;
@@ -294,7 +294,10 @@ export function serializeTransactionPreview(
         feeReserve: preview.meltQuoteOutput.feeReserve.toString(),
       },
     }),
-    ...(preview.changePubkey && { changePubkey: preview.changePubkey }),
+    changeQuoteOutputs: preview.changeQuoteOutputs.map((c) => ({
+      pubkey: c.pubkey,
+      ...(c.amount && { amount: c.amount.toString() }),
+    })),
     outputData: preview.outputData.map((o) => OutputData.serialize(o)),
     amount: preview.amount.toString(),
     fee: preview.fee.toString(),
@@ -323,7 +326,10 @@ export function deserializeTransactionPreview(
         feeReserve: Amount.from(serialized.meltQuoteOutput.feeReserve),
       },
     }),
-    ...(serialized.changePubkey && { changePubkey: serialized.changePubkey }),
+    changeQuoteOutputs: serialized.changeQuoteOutputs.map((c) => ({
+      pubkey: c.pubkey,
+      ...(c.amount !== undefined && { amount: Amount.from(c.amount) }),
+    })),
     outputData: serialized.outputData.map((s) => OutputData.deserialize(s)),
     amount: Amount.from(serialized.amount),
     fee: Amount.from(serialized.fee),
