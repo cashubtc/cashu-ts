@@ -85,8 +85,9 @@ collision is wallet policy.
 ```ts
 import { findLegacyDerivationCollisions } from '@cashu/cashu-ts';
 
+// One wallet per mint, all on the same seed
 const collisions = findLegacyDerivationCollisions(
-  myWallets.flatMap((wallet) => wallet.keyChain.getAllKeysetIds()),
+  [walletA, walletB].flatMap((w) => w.keyChain.getAllKeysetIds()),
 );
 ```
 
