@@ -378,9 +378,10 @@ describe('attachTransactionWitnesses', () => {
   });
 
   test('returns a receipt per v3 input that opens the NUT-07 commitment', async () => {
-    const legacy = { ...v3Proof(PUB_A), id: '00' + 'ab'.repeat(32), secret: 'plain', witness: 'w' };
+    // Same text as the v3 input's secret: under a pre-v3 keyset it is a different proof (NUT-10).
+    const legacy = { ...v3Proof(PUB_A), id: '00' + 'ab'.repeat(32), secret: PUB_B, witness: 'w' };
     const input = v3Proof(PUB_B, { k: PRIV_B });
-    const inputs = [legacy, input];
+    const inputs = [input, legacy];
     const receipts = await attachTransactionWitnesses(
       { inputs, outputs: [OUTPUT] },
       undefined,

@@ -287,6 +287,16 @@ describe('Wallet transactions (NUT-XX)', () => {
       }),
     ).rejects.toThrow('full melt quote');
     await expect(
+      wallet.prepareTransaction({
+        mintQuoteInputs: [{ quote, amount: 8 }],
+        meltQuoteOutput: {
+          method: 'bolt11',
+          quote: { quote: 'quote-melt-0001', fee_reserve: Amount.from(1) } as any,
+        },
+        changeQuoteOutputs: [{ pubkey: changeKey }],
+      }),
+    ).rejects.toThrow('full melt quote');
+    await expect(
       wallet.prepareTransaction({ mintQuoteInputs: [{ quote: { quote: 'q' }, amount: 8 }] }),
     ).rejects.toThrow('must be locked');
     // fee_index belongs only to a quote offering fee_options.
