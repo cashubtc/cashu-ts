@@ -22,7 +22,7 @@ import {
   transcriptContainers,
   transactionInputs,
   verifyTransactionInputWitness,
-  type TransactionShape,
+  type TransactionElements,
   meltOutputAmount,
 } from '../../src/crypto/transcript';
 import { Amount } from '../../src/model/Amount';
@@ -43,7 +43,7 @@ function fromVectorTx(tx: {
   blinded_outputs?: Array<{ amount: number; keyset_id: string; B_: string }>;
   melt_quote_outputs?: Array<{ amount: number; quote_id: string }>;
   change_quote_outputs?: Array<{ pubkey: string; amount?: number }>;
-}): TransactionShape {
+}): TransactionElements {
   return {
     proofInputs: tx.proof_inputs?.map((p) => ({
       amount: BigInt(p.amount),
@@ -89,7 +89,7 @@ describe('transaction transcript (vectors)', () => {
         C: '02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2',
       },
     ];
-    const tx: TransactionShape = {
+    const tx: TransactionElements = {
       proofInputs: [v3, legacy].map((p) => ({
         amount: BigInt(p.amount),
         keysetId: p.id,
@@ -297,14 +297,14 @@ describe('transaction transcript (vectors)', () => {
   test('any field change lands on a different digest', () => {
     const base = fromVectorTx(tv.swap.tx);
     const d0 = bytesToHex(transactionDigest(base));
-    const bumped: TransactionShape = {
+    const bumped: TransactionElements = {
       ...base,
       blindedOutputs: base.blindedOutputs!.map((o, i) =>
         i === 0 ? { ...o, amount: o.amount + 1n } : o,
       ),
     };
     expect(bytesToHex(transactionDigest(bumped))).not.toBe(d0);
-    const reordered: TransactionShape = {
+    const reordered: TransactionElements = {
       ...base,
       blindedOutputs: [
         { ...base.blindedOutputs![0], amount: 1n },

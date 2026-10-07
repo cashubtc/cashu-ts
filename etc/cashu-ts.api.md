@@ -1034,6 +1034,7 @@ export class LockBuilder {
     addRefundPubkey(pk: string | string[]): this;
     addTag(key: string, values?: string[] | string): this;
     addTags(tags: P2PKTag[]): this;
+    addTemplate(outputs: TemplateOutputs): this;
     blindKeys(keys?: string | string[]): this;
     disclose(): this;
     static fromOptions(lock: LockOptions_2): LockBuilder;
@@ -1065,6 +1066,7 @@ type LockOptions_2 = {
     mainKeys?: string[];
     requiredMainSignatures?: number;
     hashlock?: string;
+    template?: TemplateOutputs;
     locktime?: number;
     refundKeys?: string[];
     requiredRefundSignatures?: number;
@@ -1790,6 +1792,7 @@ export const NUTROOT_LEAF_TYPE: {
     readonly after: 2;
     readonly hashlock: 3;
     readonly commit: 4;
+    readonly template: 5;
 };
 
 // @public
@@ -2917,6 +2920,26 @@ export type SwapResponse = {
 
 // @public
 export function taggedHash(tag: string, ...messages: Uint8Array[]): Uint8Array;
+
+// @public
+export function templateHash(outputs: TemplateOutputs): string;
+
+// @public
+export type TemplateOutputs = {
+    blindedOutputs?: Array<{
+        amount: AmountLike;
+        id: string;
+        B_: string;
+    }>;
+    meltQuoteOutput?: {
+        quoteId: string;
+        amount: AmountLike;
+    };
+    changeQuoteOutputs?: Array<{
+        pubkey: string;
+        amount?: AmountLike;
+    }>;
+};
 
 // @public
 export type Token = {
