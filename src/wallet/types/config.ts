@@ -373,7 +373,7 @@ export type CompleteMintOptions = AbortOptions;
 export type PrepareTransactionConfig = {
   /**
    * Give up a melt's unspent fee reserve instead of returning it to a change quote. Defaults to
-   * false, which requires `changePubkey` for any melt with a reserve.
+   * false, which requires a remainder quote for any melt with a reserve.
    */
   forfeitFeeReserve?: boolean;
   proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;

@@ -72,7 +72,7 @@ export type ScriptPathSpend = {
 export async function attachTransactionWitnesses(
   payload: Pick<MeltRequest, 'inputs' | 'outputs'> & {
     mintQuoteInputs?: Array<{ quoteId: string; amount: Amount; lockKey: string }>;
-    changePubkey?: string;
+    changeQuoteOutputs?: Array<{ pubkey: string; amount?: Amount }>;
   },
   meltQuote: { quoteId: string; amount: Amount } | undefined,
   extraKeys: Map<string, Uint8Array> | undefined,
@@ -99,7 +99,7 @@ export async function attachTransactionWitnesses(
     blindedOutputs: payload.outputs ?? [],
     ...(meltQuote && { meltQuoteOutput: meltQuote }),
     mintQuoteInputs: payload.mintQuoteInputs,
-    changePubkey: payload.changePubkey,
+    changeQuoteOutputs: payload.changeQuoteOutputs,
   });
   // Script path spends first: they name their own leaf, so they take precedence over the key
   // path even where both are available. Everything but the signature was settled before the

@@ -71,9 +71,18 @@ export type TransactionShape = {
   blindedOutputs?: TranscriptBlindedOutput[];
   meltQuoteOutputs?: TranscriptQuote[];
   /**
-   * Lock key of the change quote output (NUT-XX), 33-byte compressed hex.
+   * Change quote outputs (NUT-XX) in request order; at most one omits `amount`, the remainder
+   * quote.
    */
-  changePubkey?: string;
+  changeQuoteOutputs?: TranscriptChangeOutput[];
+};
+
+export type TranscriptChangeOutput = {
+  /**
+   * Lock key, 33-byte compressed secp256k1 hex.
+   */
+  pubkey: string;
+  amount?: bigint;
 };
 
 /**
@@ -179,11 +188,18 @@ function blindedOutputContainer(output: TranscriptBlindedOutput): Uint8Array {
   );
 }
 
-function changeContainer(lockKey: string): Uint8Array {
-  if (!isValidSecpPubkey(lockKey)) {
+function changeContainer(output: TranscriptChangeOutput): Uint8Array {
+  if (!isValidSecpPubkey(output.pubkey)) {
     throw new CTSError('Transcript change lock key must be a 33-byte compressed point');
   }
-  return tlvRecord(CONTAINER_CHANGE_QUOTE_OUTPUT, tlvRecord(0x01, hexToBytes(lockKey)));
+  const lockKey = tlvRecord(0x02, hexToBytes(output.pubkey));
+  // The remainder quote omits the amount record entirely (NUT-XX).
+  if (output.amount === undefined) return tlvRecord(CONTAINER_CHANGE_QUOTE_OUTPUT, lockKey);
+  const amount = amountRecord(output.amount);
+  if (Amount.from(output.amount).isZero()) {
+    throw new CTSError('Transcript change quote amount must be positive');
+  }
+  return tlvRecord(CONTAINER_CHANGE_QUOTE_OUTPUT, concatBytes(amount, lockKey));
 }
 
 /**
@@ -197,9 +213,12 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
   if (proofs.length + mintQuotes.length === 0) {
     throw new CTSError('Transaction requires at least one input');
   }
-  const change = tx.changePubkey === undefined ? [] : [changeContainer(tx.changePubkey)];
+  const change = tx.changeQuoteOutputs ?? [];
   if (blinded.length + meltQuotes.length + change.length === 0) {
     throw new CTSError('Transaction requires at least one output');
+  }
+  if (change.filter((c) => c.amount === undefined).length > 1) {
+    throw new CTSError('Transaction allows at most one remainder quote');
   }
   // NUT-10: the same proof or quote twice would sign one input digest for two inputs.
   if (new Set(proofs.map((p) => p.Y)).size !== proofs.length) {
@@ -214,7 +233,7 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
     ...mintQuotes.map(mintQuoteInputContainer),
     ...blinded.map(blindedOutputContainer),
     ...meltQuotes.map(meltQuoteOutputContainer),
-    ...change,
+    ...change.map(changeContainer),
   );
 }
 
@@ -323,7 +342,7 @@ type PayloadShape = {
    * `amount` is the quote amount plus the selected fee reserve ({@link meltOutputAmount}).
    */
   meltQuoteOutput?: { quoteId: string; amount: AmountLike };
-  changePubkey?: string;
+  changeQuoteOutputs?: Array<{ pubkey: string; amount?: AmountLike }>;
 };
 
 /**
@@ -388,7 +407,12 @@ function payloadToTransaction(payload: PayloadShape): TransactionShape {
       })),
     }),
     ...(payload.meltQuoteOutput && { meltQuoteOutputs: [quote(payload.meltQuoteOutput)] }),
-    ...(payload.changePubkey !== undefined && { changePubkey: payload.changePubkey }),
+    ...(payload.changeQuoteOutputs && {
+      changeQuoteOutputs: payload.changeQuoteOutputs.map((c) => ({
+        pubkey: c.pubkey,
+        ...(c.amount !== undefined && { amount: Amount.from(c.amount).toBigInt() }),
+      })),
+    }),
   };
 }
 

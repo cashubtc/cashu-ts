@@ -41,7 +41,7 @@ function fromVectorTx(tx: {
   mint_quote_inputs?: Array<{ amount: number; quote_id: string; lock_pubkey: string }>;
   blinded_outputs?: Array<{ amount: number; keyset_id: string; B_: string }>;
   melt_quote_outputs?: Array<{ amount: number; quote_id: string }>;
-  change_pubkey?: string;
+  change_quote_outputs?: Array<{ pubkey: string; amount?: number }>;
 }): TransactionShape {
   return {
     proofInputs: tx.proof_inputs?.map((p) => ({
@@ -64,7 +64,10 @@ function fromVectorTx(tx: {
       amount: BigInt(q.amount),
       quoteId: q.quote_id,
     })),
-    changePubkey: tx.change_pubkey,
+    changeQuoteOutputs: tx.change_quote_outputs?.map((c) => ({
+      pubkey: c.pubkey,
+      ...(c.amount !== undefined && { amount: BigInt(c.amount) }),
+    })),
   };
 }
 
@@ -519,24 +522,48 @@ describe('keyset ids in the transcript', () => {
   });
 });
 
-describe('change quote output (NUT-XX vector)', () => {
+describe('change quote outputs (NUT-XX vectors)', () => {
   const v = tv.proof_to_change;
+  const two = tv.proof_to_two_changes;
 
-  test('binds only the lock key, after every other container', () => {
+  test('a remainder quote binds only the lock key, after every other container', () => {
     expect(v.transcript.endsWith(v.change_container)).toBe(true);
+    expect(bytesToHex(buildTransactionTranscript(fromVectorTx(v.tx)))).toBe(v.transcript);
+    expect(bytesToHex(transactionDigest(fromVectorTx(v.tx)))).toBe(v.digest);
     const { proofs } = inputsForPayload({
       proofInputs: v.tx.proof_inputs.map((p) => ({ ...p, id: p.keyset_id })),
-      changePubkey: v.tx.change_pubkey,
+      changeQuoteOutputs: v.tx.change_quote_outputs,
     });
     expect(bytesToHex([...proofs.values()][0].digest)).toBe(v.input_digest);
   });
 
-  test('a change key alone is a valid output; a malformed one throws', () => {
+  test('a fixed quote carries its amount first, then the remainder quote, in request order', () => {
+    expect(two.transcript.endsWith(two.change_containers.join(''))).toBe(true);
+    expect(bytesToHex(buildTransactionTranscript(fromVectorTx(two.tx)))).toBe(two.transcript);
+    expect(bytesToHex(transactionDigest(fromVectorTx(two.tx)))).toBe(two.digest);
+    const { proofs } = inputsForPayload({
+      proofInputs: two.tx.proof_inputs.map((p) => ({ ...p, id: p.keyset_id })),
+      changeQuoteOutputs: two.tx.change_quote_outputs,
+    });
+    expect(bytesToHex([...proofs.values()][0].digest)).toBe(two.input_digest);
+  });
+
+  test('a change quote alone is a valid output; a malformed one throws', () => {
     const proofInputs = fromVectorTx(v.tx).proofInputs;
+    const { pubkey } = v.tx.change_quote_outputs[0];
     expect(() => buildTransactionTranscript({ proofInputs })).toThrow(/output/);
     expect(() =>
-      buildTransactionTranscript({ proofInputs, changePubkey: v.tx.change_pubkey.slice(2) }),
+      buildTransactionTranscript({
+        proofInputs,
+        changeQuoteOutputs: [{ pubkey: pubkey.slice(2) }],
+      }),
     ).toThrow(/lock key/);
+    expect(() =>
+      buildTransactionTranscript({ proofInputs, changeQuoteOutputs: [{ pubkey, amount: 0n }] }),
+    ).toThrow(/positive/);
+    expect(() =>
+      buildTransactionTranscript({ proofInputs, changeQuoteOutputs: [{ pubkey }, { pubkey }] }),
+    ).toThrow(/one remainder/);
   });
 });
 
