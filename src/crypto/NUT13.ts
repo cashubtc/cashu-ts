@@ -5,7 +5,7 @@ import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/
 import { HDKey, HARDENED_OFFSET } from '@scure/bip32';
 
 import { CTSError, InvalidScalarError } from '../model/Errors';
-import { isBase64String } from '../utils';
+import { isBase64String, isValidHex } from '../utils';
 import { MAX_SEED_BYTES, MIN_SEED_BYTES, NUTROOT_MAX_SLOTS } from '../utils/limits';
 
 import { BLS_FR_ORDER } from './curve_bls';
@@ -60,17 +60,22 @@ export function findLegacyDerivationCollisions(keysetIds: readonly string[]): st
   const groups = new Map<bigint, string[]>();
   const seenIds = new Set<string>();
   for (const keysetId of keysetIds) {
-    const isHex = /^[a-fA-F0-9]+$/.test(keysetId);
-    const isLegacyBase64 =
-      (keysetId.length === LEGACY_KEYSET_ID_LENGTH || !isHex) && isBase64String(keysetId);
-    const isLegacyHex = isHex && keysetId.startsWith('00') && keysetId.length % 2 === 0;
-    if (!isLegacyBase64 && !isLegacyHex) continue;
+    let keysetIdInt: bigint;
+    try {
+      if (getDerivationKind(keysetId) !== DerivationKind.DEPRECATED_BIP32) continue;
+      keysetIdInt = getKeysetIdInt(keysetId);
+    } catch {
+      continue;
+    }
 
-    const identity = isLegacyBase64 ? keysetId : keysetId.toLowerCase();
+    // Hex is case-insensitive; legacy base64 also travelled URL-safe (see getKeysetIdInt).
+    const isHexId = isValidHex(keysetId) && keysetId.length !== LEGACY_KEYSET_ID_LENGTH;
+    const identity = isHexId
+      ? keysetId.toLowerCase()
+      : keysetId.replace(/-/g, '+').replace(/_/g, '/');
     if (seenIds.has(identity)) continue;
     seenIds.add(identity);
 
-    const keysetIdInt = getKeysetIdInt(keysetId);
     const group = groups.get(keysetIdInt);
     if (group) group.push(keysetId);
     else groups.set(keysetIdInt, [keysetId]);

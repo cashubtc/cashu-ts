@@ -100,6 +100,13 @@ describe('findLegacyDerivationCollisions', () => {
     ]);
   });
 
+  test('URL-safe and standard spellings of one base64 ID do not form a collision', () => {
+    expect(findLegacyDerivationCollisions(['+//wAAAAAAAA', '-__wAAAAAAAA'])).toEqual([]);
+    expect(
+      findLegacyDerivationCollisions(['-__wAAAAAAAA', '+//wAAAAAAAA', '000000007fe003ef']),
+    ).toEqual([['-__wAAAAAAAA', '000000007fe003ef']]);
+  });
+
   test.each([
     ['d9f0F7F2875b', '0000000026dbef9d'],
     ['010000000000', '000000006f3cf71b'],

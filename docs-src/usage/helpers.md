@@ -73,17 +73,21 @@ if (found?.kind === 'token') {
 
 ## `findLegacyDerivationCollisions`
 
-Call with all known keyset IDs when adding a mint or refreshing keysets, including inactive
-keysets. Returns groups of distinct legacy IDs (base64 or hex version `00`) that share a
-NUT-13 BIP-32 path integer, or `[]` when none collide. Repeated identical IDs do not form a
-collision, nor do hex casing differences; returned IDs retain their first spelling.
-Other hex versions, including future versions, and unrecognized forms are skipped
-without throwing. How to handle a reported collision is wallet policy.
+Call with the keyset IDs of every mint the seed is used with, including inactive keysets,
+when adding a mint or refreshing keysets. The derivation path does not include the mint, so
+keysets from different mints can collide. Returns groups of distinct legacy IDs (base64 or
+hex version `00`) that share a NUT-13 BIP-32 path integer, or `[]` when none collide.
+Repeated identical IDs do not form a collision, nor do hex casing or URL-safe base64
+spellings; returned IDs retain their first spelling. Other hex versions, including future
+versions, and unrecognized forms are skipped without throwing. How to handle a reported
+collision is wallet policy.
 
 ```ts
 import { findLegacyDerivationCollisions } from '@cashu/cashu-ts';
 
-const collisions = findLegacyDerivationCollisions(myKeyChain.getAllKeysetIds());
+const collisions = findLegacyDerivationCollisions(
+  myWallets.flatMap((wallet) => wallet.keyChain.getAllKeysetIds()),
+);
 ```
 
 ## `hexToBytes` and `bytesToHex`
