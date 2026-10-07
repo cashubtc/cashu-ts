@@ -276,6 +276,20 @@ describe.each([
   });
 });
 
+test('predicates narrow to their codes and keep other mint errors on false', () => {
+  const e: unknown = new MintOperationError(11002, 'pending');
+  if (isPendingError(e)) {
+    const code: 11002 | 11004 | 20005 = e.code;
+    expect(code).toBe(11002);
+  }
+  const other: MintOperationError | string = new MintOperationError(11001, 'spent');
+  if (!isPendingError(other)) {
+    // @ts-expect-error a non-pending MintOperationError must survive the false branch
+    const s: string = other;
+    expect(s).toBeInstanceOf(MintOperationError);
+  }
+});
+
 describe('UnknownKeysetError', () => {
   test('says the wallet never checked when no refresh ran', () => {
     const e = new UnknownKeysetError('00deadbeefdeadbe');

@@ -859,10 +859,14 @@ export class InvalidScalarError extends CTSError {
 }
 
 // @public
-export function isAlreadyIssuedError(e: unknown): boolean;
+export function isAlreadyIssuedError(e: unknown): e is MintOperationError & {
+    code: typeof MintErrorCode.OUTPUTS_ALREADY_SIGNED | typeof MintErrorCode.QUOTE_ALREADY_ISSUED;
+};
 
 // @public
-export function isAuthError(e: unknown): boolean;
+export function isAuthError(e: unknown): e is MintOperationError & {
+    code: typeof MintErrorCode.ENDPOINT_REQUIRES_CLEAR_AUTH | typeof MintErrorCode.CLEAR_AUTHENTICATION_FAILED | typeof MintErrorCode.ENDPOINT_REQUIRES_BLIND_AUTH | typeof MintErrorCode.BLIND_AUTHENTICATION_FAILED | typeof MintErrorCode.MAXIMUM_BAT_MINT_AMOUNT_EXCEEDED | typeof MintErrorCode.BAT_MINT_RATE_LIMIT_EXCEEDED;
+};
 
 // @public
 export function isBlsKeyset(keysetId: string): boolean;
@@ -883,19 +887,29 @@ export function isMintOperationError(e: unknown): e is MintOperationError;
 export function isP2PKSpendAuthorised(proof: Proof, logger?: Logger, digest?: DigestInput): boolean;
 
 // @public
-export function isPaymentFailedError(e: unknown): boolean;
+export function isPaymentFailedError(e: unknown): e is MintOperationError & {
+    code: typeof MintErrorCode.LIGHTNING_PAYMENT_FAILED;
+};
 
 // @public
-export function isPendingError(e: unknown): boolean;
+export function isPendingError(e: unknown): e is MintOperationError & {
+    code: typeof MintErrorCode.PROOFS_PENDING | typeof MintErrorCode.OUTPUTS_PENDING | typeof MintErrorCode.QUOTE_PENDING;
+};
 
 // @public
-export function isProofsAlreadySpentError(e: unknown): boolean;
+export function isProofsAlreadySpentError(e: unknown): e is MintOperationError & {
+    code: typeof MintErrorCode.PROOFS_ALREADY_SPENT;
+};
 
 // @public
-export function isQuoteExpiredError(e: unknown): boolean;
+export function isQuoteExpiredError(e: unknown): e is MintOperationError & {
+    code: typeof MintErrorCode.QUOTE_EXPIRED;
+};
 
 // @public
-export function isQuoteNotPaidError(e: unknown): boolean;
+export function isQuoteNotPaidError(e: unknown): e is MintOperationError & {
+    code: typeof MintErrorCode.QUOTE_NOT_PAID;
+};
 
 // @public
 export function isV3PointSecret(secret: string): boolean;

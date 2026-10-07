@@ -47,7 +47,7 @@ try {
 | `isPaymentFailedError`      | 20004                                    |
 | `isAuthError`               | 30001, 30002, 31001, 31002, 31003, 31004 |
 
-`isAlreadyIssuedError` covers both already-signed outputs and an already-issued quote, because a repeated mint request can encounter either check first. It identifies the rejection; recovering issued proofs is a separate wallet action. `isPaymentFailedError` excludes pending payments. Current Nutshell uses the registry auth codes and reports pending and expired quotes as 20005 and 20007.
+`isAlreadyIssuedError` covers both already-signed outputs and an already-issued quote, because a repeated mint request can encounter either check first. It identifies the rejection; recovering issued proofs is a separate wallet action. `isPaymentFailedError` excludes pending payments.
 
 For a custom code set, use `hasMintErrorCode`:
 

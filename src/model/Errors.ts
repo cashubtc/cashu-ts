@@ -274,14 +274,21 @@ export function hasMintErrorCode(e: unknown, codes: readonly number[]): boolean 
 /**
  * True when the mint reports that the proofs are already spent.
  */
-export function isProofsAlreadySpentError(e: unknown): boolean {
+export function isProofsAlreadySpentError(e: unknown): e is MintOperationError & {
+  code: typeof MintErrorCode.PROOFS_ALREADY_SPENT;
+} {
   return hasMintErrorCode(e, [MintErrorCode.PROOFS_ALREADY_SPENT]);
 }
 
 /**
  * True when proofs, outputs or a quote are pending.
  */
-export function isPendingError(e: unknown): boolean {
+export function isPendingError(e: unknown): e is MintOperationError & {
+  code:
+    | typeof MintErrorCode.PROOFS_PENDING
+    | typeof MintErrorCode.OUTPUTS_PENDING
+    | typeof MintErrorCode.QUOTE_PENDING;
+} {
   return hasMintErrorCode(e, [
     MintErrorCode.PROOFS_PENDING,
     MintErrorCode.OUTPUTS_PENDING,
@@ -296,7 +303,9 @@ export function isPendingError(e: unknown): boolean {
  * A mint retry after a lost response can encounter either code, depending on whether the mint
  * checks outputs or quote state first. This does not recover the issued proofs.
  */
-export function isAlreadyIssuedError(e: unknown): boolean {
+export function isAlreadyIssuedError(e: unknown): e is MintOperationError & {
+  code: typeof MintErrorCode.OUTPUTS_ALREADY_SIGNED | typeof MintErrorCode.QUOTE_ALREADY_ISSUED;
+} {
   return hasMintErrorCode(e, [
     MintErrorCode.OUTPUTS_ALREADY_SIGNED,
     MintErrorCode.QUOTE_ALREADY_ISSUED,
@@ -306,28 +315,42 @@ export function isAlreadyIssuedError(e: unknown): boolean {
 /**
  * True when a quote has not been paid.
  */
-export function isQuoteNotPaidError(e: unknown): boolean {
+export function isQuoteNotPaidError(e: unknown): e is MintOperationError & {
+  code: typeof MintErrorCode.QUOTE_NOT_PAID;
+} {
   return hasMintErrorCode(e, [MintErrorCode.QUOTE_NOT_PAID]);
 }
 
 /**
  * True when a quote has expired.
  */
-export function isQuoteExpiredError(e: unknown): boolean {
+export function isQuoteExpiredError(e: unknown): e is MintOperationError & {
+  code: typeof MintErrorCode.QUOTE_EXPIRED;
+} {
   return hasMintErrorCode(e, [MintErrorCode.QUOTE_EXPIRED]);
 }
 
 /**
  * True when a Lightning payment failed. Pending payments do not match.
  */
-export function isPaymentFailedError(e: unknown): boolean {
+export function isPaymentFailedError(e: unknown): e is MintOperationError & {
+  code: typeof MintErrorCode.LIGHTNING_PAYMENT_FAILED;
+} {
   return hasMintErrorCode(e, [MintErrorCode.LIGHTNING_PAYMENT_FAILED]);
 }
 
 /**
  * True when the mint reports a NUT-21 clear auth or NUT-22 blind auth error.
  */
-export function isAuthError(e: unknown): boolean {
+export function isAuthError(e: unknown): e is MintOperationError & {
+  code:
+    | typeof MintErrorCode.ENDPOINT_REQUIRES_CLEAR_AUTH
+    | typeof MintErrorCode.CLEAR_AUTHENTICATION_FAILED
+    | typeof MintErrorCode.ENDPOINT_REQUIRES_BLIND_AUTH
+    | typeof MintErrorCode.BLIND_AUTHENTICATION_FAILED
+    | typeof MintErrorCode.MAXIMUM_BAT_MINT_AMOUNT_EXCEEDED
+    | typeof MintErrorCode.BAT_MINT_RATE_LIMIT_EXCEEDED;
+} {
   return hasMintErrorCode(e, [
     MintErrorCode.ENDPOINT_REQUIRES_CLEAR_AUTH,
     MintErrorCode.CLEAR_AUTHENTICATION_FAILED,
