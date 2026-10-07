@@ -29,7 +29,7 @@ const tv = vectors.transcript;
 
 function fromVectorTx(tx: {
   proof_inputs?: Array<{ amount: number; keyset_id: string; secret: string; C: string }>;
-  mint_quote_inputs?: Array<{ amount: number; quote_id: string }>;
+  mint_quote_inputs?: Array<{ amount: number; quote_id: string; lock_pubkey: string }>;
   blinded_outputs?: Array<{ amount: number; keyset_id: string; B_: string }>;
   melt_quote_outputs?: Array<{ amount: number; quote_id: string }>;
 }): TransactionShape {
@@ -43,6 +43,7 @@ function fromVectorTx(tx: {
     mintQuoteInputs: tx.mint_quote_inputs?.map((q) => ({
       amount: BigInt(q.amount),
       quoteId: q.quote_id,
+      lockKey: q.lock_pubkey,
     })),
     blindedOutputs: tx.blinded_outputs?.map((o) => ({
       amount: BigInt(o.amount),

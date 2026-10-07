@@ -45,7 +45,6 @@ import {
   verifyTransactionInputWitness,
   meltOutputAmount,
 } from '../src/crypto/transcript';
-import { bytesToUtf8, decodeBase64UrlToUint8 } from '../src/utils';
 
 type LockedQuote = Awaited<ReturnType<Wallet['createMintQuoteBolt11']>> & { privkey: string };
 /**
@@ -598,7 +597,7 @@ describeV3('M4 locked quotes', () => {
         ),
       ];
       const digestB = inputsForPayload({
-        mintQuotes: [{ amount: 32n, quoteId: quoteB.quote }],
+        mintQuotes: [{ amount: 32n, quoteId: quoteB.quote, lockKey: lockB.secret }],
         outputs: outputsB.map((o) => o.blindedMessage),
       }).quotes.get(quoteB.quote)!.digest;
       const mint = new Mint(mintUrl);
@@ -625,7 +624,7 @@ describeV3('M4 locked quotes', () => {
         ),
       ];
       const digestC = inputsForPayload({
-        mintQuotes: [{ amount: 32n, quoteId: quoteC.quote }],
+        mintQuotes: [{ amount: 32n, quoteId: quoteC.quote, lockKey: lockC.secret }],
         outputs: outputsC.map((o) => o.blindedMessage),
       }).quotes.get(quoteC.quote)!.digest;
       await expect(
@@ -1351,13 +1350,13 @@ describeV3('M9 script path through the wallet API', () => {
       const plan = { secret: proof.secret, leafIndex: 0 };
       const pkg = ScriptPath.extractSwapPackage(preview, [plan]);
       expect(pkg.spends[0].signatures).toHaveLength(0);
+      expect(pkg.spends[0].control.K).toBe(proof.spend_info?.K);
 
       // Round-trip through the wire, twice, signed by a different party each time. Nothing but
       // the string crosses, and it carries no secret and no blinding factor.
       const wire = ScriptPath.serializePackage(pkg);
       expect(wire.startsWith('nutspA')).toBe(true);
       expect(wire).not.toContain(alicePriv);
-      expect(bytesToUtf8(decodeBase64UrlToUint8(wire.slice(6)))).not.toContain(proof.secret);
       let carried = ScriptPath.signPackage(ScriptPath.deserializePackage(wire), alicePriv);
       carried = ScriptPath.signPackage(
         ScriptPath.deserializePackage(ScriptPath.serializePackage(carried)),

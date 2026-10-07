@@ -2337,7 +2337,7 @@ export type ScriptPathApi = {
     signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPathSigningPackage;
     mergeSwapPackage(pkg: ScriptPathSigningPackage, preview: SwapPreview, plans?: ScriptPathPlan[]): SwapPreview;
     mergeMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'amount'>>(pkg: ScriptPathSigningPackage, preview: MeltPreview<TQuote>, plans?: ScriptPathPlan[], feeIndex?: number): MeltPreview<TQuote>;
-    witnessFor(spend: ScriptPathSpendRequest, proof: Proof, preimage?: string): string;
+    witnessFor(spend: ScriptPathSpendRequest, tree: string[], leafIndex: number, preimage?: string): string;
 };
 
 // @public
@@ -2359,7 +2359,12 @@ export type ScriptPathSigningPackage = {
 // @public
 export type ScriptPathSpendRequest = {
     input: number;
+    secret: string;
     leaf: string;
+    control: {
+        K: string;
+        path: string[];
+    };
     E?: string;
     slots?: number[];
     signatures: string[];

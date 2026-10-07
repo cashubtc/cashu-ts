@@ -3,16 +3,21 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { schnorrSignDigest } from '../crypto/core';
+import { hashToCurveBls } from '../crypto/curve_bls';
 import { getPubKeyFromPrivKey } from '../crypto/curve_secp';
 import { isBlsKeyset } from '../crypto/curves';
 import {
   buildScriptPathWitness,
   enumerateLeafKeySlots,
+  nutrootLeafHash,
+  nutrootMerklePath,
   parseNutrootLeaf,
+  readTlvRecords,
   selectRequiredLeafSignatures,
   slotKeysByBlindedPubkey,
   type NutrootConditionLeaf,
   type NutrootLeaf,
+  verifyNutrootCommitment,
 } from '../crypto/nutroot';
 import {
   inputDigest,
@@ -41,6 +46,9 @@ import type { MeltQuoteBaseResponse, Proof, SerializedBlindedMessage } from './t
  */
 const SCRIPT_PATH_PREFIX = 'nutspA';
 
+// NUT-10 mint quote input container type; the other input type is a proof.
+const CONTAINER_MINT_QUOTE_INPUT = 0x12;
+
 /**
  * One input's script path spend, awaiting signatures.
  */
@@ -50,9 +58,17 @@ export type ScriptPathSpendRequest = {
    */
   input: number;
   /**
+   * The input's 33-byte point secret hex, so a signer can check the leaf belongs to that input.
+   */
+  secret: string;
+  /**
    * The serialized leaf being exercised, hex.
    */
   leaf: string;
+  /**
+   * Control block for the witness: internal key and merkle path.
+   */
+  control: { K: string; path: string[] };
   /**
    * Ephemeral `E` when the proof is receiver-keyed, so a signer holding a blinded slot key can
    * derive it. Absent for bearer and script-only proofs, whose leaf keys are verbatim.
@@ -73,8 +89,8 @@ export type ScriptPathSpendRequest = {
  * Everything a signer needs to satisfy one or more script path spends, and nothing else.
  *
  * @remarks
- * The transaction travels as its TLV transcript; spend info and hashlock preimages stay with the
- * wallet that built the package, which assembles the witnesses at merge.
+ * The transaction travels as its TLV transcript, and each spend opens its leaf to the input it
+ * names. Hashlock preimages stay with the wallet that built the package until merge.
  */
 export type ScriptPathSigningPackage = {
   version: 'nutspA';
@@ -142,8 +158,11 @@ function buildPackage(
     if (!tree || plan.leafIndex < 0 || plan.leafIndex >= tree.length) {
       throw new CTSError(`Script path plan names leaf ${plan.leafIndex}, which is not disclosed`);
     }
-    // Merge needs K for the control block, so a proof without one fails here, not after signing.
-    internalKey(proof);
+    const leafHashes = tree.map((leaf) => nutrootLeafHash(hexToBytes(leaf)));
+    const control = {
+      K: internalKey(proof),
+      path: nutrootMerklePath(leafHashes, plan.leafIndex).map((h) => bytesToHex(h)),
+    };
     const E = proof.spend_info?.E;
     // The package carries one leaf, so only the builder, holding the whole tree, knows the slots.
     const slots = E
@@ -151,7 +170,14 @@ function buildPackage(
           .filter((s) => s.leafIndex === plan.leafIndex)
           .map((s) => s.slot)
       : undefined;
-    return { input, leaf: tree[plan.leafIndex], ...(E && { E, slots }), signatures: [] };
+    return {
+      input,
+      secret: plan.secret,
+      leaf: tree[plan.leafIndex],
+      control,
+      ...(E && { E, slots }),
+      signatures: [],
+    };
   });
   return { version: SCRIPT_PATH_PREFIX, transcript: bytesToHex(transcript), spends };
 }
@@ -242,11 +268,24 @@ function assertValidPackage(pkg: ScriptPathSigningPackage): NutrootConditionLeaf
       throw new CTSError('Signing package spend must name one unique transaction input');
     }
     spent.add(spend.input);
+    assertSpendNamesInput(spend, container);
     let leaf;
     try {
       leaf = parseNutrootLeaf(hexToBytes(spend.leaf));
+      if (
+        !spend.control ||
+        !Array.isArray(spend.control.path) ||
+        !verifyNutrootCommitment(
+          hexToBytes(spend.secret),
+          hexToBytes(spend.control.K),
+          hexToBytes(spend.leaf),
+          spend.control.path.map((hash) => hexToBytes(hash)),
+        )
+      ) {
+        throw new CTSError('commitment mismatch');
+      }
     } catch (e) {
-      throw new CTSError('Signing package leaf is malformed', { cause: e });
+      throw new CTSError('Signing package leaf does not commit to its input secret', { cause: e });
     }
     if (leaf.type === 'commit') {
       throw new CTSError('Signing package names a commit leaf, which is not a spend path');
@@ -268,6 +307,32 @@ function assertValidPackage(pkg: ScriptPathSigningPackage): NutrootConditionLeaf
     leaves.push(leaf);
   }
   return leaves;
+}
+
+/**
+ * Checks a spend's secret is the one its container commits to, so the leaf it opens is that
+ * input's.
+ *
+ * @remarks
+ * A proof input commits `Y = hash_to_curve(secret)`; a mint quote input commits its lock key.
+ */
+function assertSpendNamesInput(spend: ScriptPathSpendRequest, container: Uint8Array): void {
+  if (typeof spend.secret !== 'string' || !isValidHex(spend.secret) || spend.secret.length !== 66) {
+    throw new CTSError('Signing package spend secret is malformed');
+  }
+  const secret = spend.secret.toLowerCase();
+  const fields = new Map(readTlvRecords(container.subarray(3)).map((r) => [r.type, r.value]));
+  const field03 = bytesToHex(fields.get(0x03) ?? new Uint8Array());
+  if (container[0] === CONTAINER_MINT_QUOTE_INPUT) {
+    if (field03 !== secret) {
+      throw new CTSError('Signing package spend secret is not its quote input lock key');
+    }
+    return;
+  }
+  const keysetId = bytesToHex(fields.get(0x02) ?? new Uint8Array());
+  if (!isBlsKeyset(keysetId) || hashToCurveBls(utf8ToBytes(secret)).toHex(true) !== field03) {
+    throw new CTSError('Signing package spend secret does not match its v3 input');
+  }
 }
 
 function signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPathSigningPackage {
@@ -369,6 +434,15 @@ function applyWitnesses(
   return witnessed;
 }
 
+function witnessFor(
+  spend: ScriptPathSpendRequest,
+  tree: string[],
+  leafIndex: number,
+  preimage?: string,
+): string {
+  return buildScriptPathWitness(tree, leafIndex, spend.control.K, spend.signatures, preimage);
+}
+
 /**
  * The {@link ScriptPath} surface.
  */
@@ -428,9 +502,14 @@ export type ScriptPathApi = {
     feeIndex?: number,
   ): MeltPreview<TQuote>;
   /**
-   * The witness a spend would produce for `proof`, without a preview. Useful for inspection.
+   * The witness a spend would produce, without a preview. Useful for inspection.
    */
-  witnessFor(spend: ScriptPathSpendRequest, proof: Proof, preimage?: string): string;
+  witnessFor(
+    spend: ScriptPathSpendRequest,
+    tree: string[],
+    leafIndex: number,
+    preimage?: string,
+  ): string;
 };
 
 /**
@@ -451,12 +530,7 @@ export const ScriptPath: ScriptPathApi = {
   signPackage,
   mergeSwapPackage,
   mergeMeltPackage,
-  witnessFor: (spend, proof, preimage) => {
-    const tree = proof.spend_info?.tree ?? [];
-    const leafIndex = tree.indexOf(spend.leaf.toLowerCase());
-    if (leafIndex < 0) throw new CTSError('Spend leaf is not in the proof spend info');
-    return buildScriptPathWitness(tree, leafIndex, internalKey(proof), spend.signatures, preimage);
-  },
+  witnessFor,
 };
 
 export type { NutrootLeaf };

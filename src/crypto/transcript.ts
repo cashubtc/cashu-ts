@@ -57,6 +57,11 @@ export type TranscriptQuote = {
   quoteId: string;
 };
 
+/**
+ * A mint quote input: the quote, and the 33-byte compressed lock key hex it is locked to.
+ */
+export type TranscriptQuoteInput = TranscriptQuote & { lockKey: string };
+
 export type TranscriptBlindedOutput = {
   amount: bigint;
   keysetId: string;
@@ -68,7 +73,7 @@ export type TranscriptBlindedOutput = {
 
 export type TransactionShape = {
   proofInputs?: TranscriptProofInput[];
-  mintQuoteInputs?: TranscriptQuote[];
+  mintQuoteInputs?: TranscriptQuoteInput[];
   blindedOutputs?: TranscriptBlindedOutput[];
   meltQuoteOutputs?: TranscriptQuote[];
 };
@@ -142,13 +147,29 @@ export function proofInputContainer(input: TranscriptProofInput): Uint8Array {
   );
 }
 
-function quoteContainer(containerType: number, quote: TranscriptQuote): Uint8Array {
+function quoteContainer(
+  containerType: number,
+  quote: TranscriptQuote,
+  ...fields: Uint8Array[]
+): Uint8Array {
   if (quote.quoteId.length === 0) {
     throw new CTSError('Transcript quote id must be non-empty');
   }
   return tlvRecord(
     containerType,
-    concatBytes(amountRecord(quote.amount), tlvRecord(0x02, utf8ToBytes(quote.quoteId))),
+    concatBytes(amountRecord(quote.amount), tlvRecord(0x02, utf8ToBytes(quote.quoteId)), ...fields),
+  );
+}
+
+// The container commits the lock key, so an offline co-signer can tell which key the input needs.
+function mintQuoteInputContainer(quote: TranscriptQuoteInput): Uint8Array {
+  if (!isValidHex(quote.lockKey) || quote.lockKey.length !== 66) {
+    throw new CTSError('Transcript mint quote input needs its 33-byte lock key');
+  }
+  return quoteContainer(
+    CONTAINER_MINT_QUOTE_INPUT,
+    quote,
+    tlvRecord(0x03, hexToBytes(quote.lockKey)),
   );
 }
 
@@ -186,7 +207,7 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
   }
   return concatBytes(
     ...proofs.map(proofInputContainer),
-    ...mintQuotes.map((q) => quoteContainer(CONTAINER_MINT_QUOTE_INPUT, q)),
+    ...mintQuotes.map(mintQuoteInputContainer),
     ...blinded.map(blindedOutputContainer),
     ...meltQuotes.map((q) => quoteContainer(CONTAINER_MELT_QUOTE_OUTPUT, q)),
   );
@@ -275,7 +296,7 @@ export function transactionInputs(tx: TransactionShape): {
     });
   }
   for (const q of tx.mintQuoteInputs ?? []) {
-    const inputContainer = quoteContainer(CONTAINER_MINT_QUOTE_INPUT, q);
+    const inputContainer = mintQuoteInputContainer(q);
     quotes.set(q.quoteId, { inputContainer, digest: inputDigest(digest, inputContainer) });
   }
   return { transactionMessage: message, transactionDigest: digest, proofs, quotes };
@@ -288,7 +309,7 @@ export type PayloadProofInput = { amount: AmountLike; id: string; C: string } & 
 
 type PayloadShape = {
   inputs?: PayloadProofInput[];
-  mintQuotes?: Array<{ quoteId: string; amount: AmountLike }>;
+  mintQuotes?: Array<{ quoteId: string; amount: AmountLike; lockKey: string }>;
   outputs?: Array<{ amount: AmountLike; id: string; B_: string }>;
   meltQuote?: { quoteId: string; amount: AmountLike };
 };
@@ -344,7 +365,9 @@ function payloadToTransaction(payload: PayloadShape): TransactionShape {
         C: p.C,
       })),
     }),
-    ...(payload.mintQuotes && { mintQuoteInputs: payload.mintQuotes.map(quote) }),
+    ...(payload.mintQuotes && {
+      mintQuoteInputs: payload.mintQuotes.map((q) => ({ ...quote(q), lockKey: q.lockKey })),
+    }),
     ...(payload.outputs && {
       blindedOutputs: payload.outputs.map((o) => ({
         amount: Amount.from(o.amount).toBigInt(),

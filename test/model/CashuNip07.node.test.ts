@@ -132,7 +132,7 @@ describe('CashuNip07', () => {
 
   test('signQuote signs a v3 quote through signTransaction and a legacy one through signSchnorr', async () => {
     const quote = inputsForPayload({
-      mintQuotes: [{ quoteId: 'q1', amount: 1 }],
+      mintQuotes: [{ quoteId: 'q1', amount: 1, lockKey: `02${'11'.repeat(32)}` }],
       outputs: [{ amount: 1, id: KEYSET, B_: 'bb'.repeat(48) }],
     });
     const { digest, inputContainer } = quote.quotes.get('q1')!;
@@ -164,7 +164,7 @@ describe('CashuNip07', () => {
 
   test('signQuote rejects a signer that hashed something else', async () => {
     const quote = inputsForPayload({
-      mintQuotes: [{ quoteId: 'q1', amount: 1 }],
+      mintQuotes: [{ quoteId: 'q1', amount: 1, lockKey: `02${'11'.repeat(32)}` }],
       outputs: [{ amount: 1, id: KEYSET, B_: 'bb'.repeat(48) }],
     });
     const { digest, inputContainer } = quote.quotes.get('q1')!;

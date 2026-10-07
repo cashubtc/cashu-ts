@@ -143,6 +143,7 @@ function fromVectorTx(tx: any): TransactionShape {
     mintQuoteInputs: tx.mint_quote_inputs?.map((q: any) => ({
       amount: BigInt(q.amount),
       quoteId: q.quote_id,
+      lockKey: q.lock_pubkey,
     })),
     blindedOutputs: tx.blinded_outputs?.map((o: any) => ({
       amount: BigInt(o.amount),
@@ -156,6 +157,8 @@ function fromVectorTx(tx: any): TransactionShape {
   };
 }
 
+// The mint vector's quote is locked to NUT-13 quote lock 0, like the partial mint's.
+d.transcript.mint.tx.mint_quote_inputs[0].lock_pubkey = d.nut13_v3.quote_locks[0].pubkey;
 for (const name of ['swap', 'mint', 'melt', 'melt_with_change'] as const) {
   const example = d.transcript[name];
   for (const fld of ['proof_inputs', 'blinded_outputs'] as const) {
@@ -286,7 +289,7 @@ for (const name of ['swap', 'mint', 'melt', 'melt_with_change'] as const) {
 if (d.transcript.swap.input_id !== d.transcript.melt.input_id)
   throw new Error('swap and melt spend the same proof, so their input ids must match');
 d.transcript.comment =
-  'Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash("Cashu_TransactionInput", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers (high nibble is the section, 1 inputs, 2 outputs): 11 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 12 mint quote input (01 amount issued, 02 quote id utf8), 21 blinded output (01 amount, 02 keyset id, 03 B_), 22 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.';
+  'Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash("Cashu_TransactionInput", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers (high nibble is the section, 1 inputs, 2 outputs): 11 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 12 mint quote input (01 amount issued, 02 quote id utf8, 03 lock key), 21 blinded output (01 amount, 02 keyset id, 03 B_), 22 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.';
 
 // Two proof inputs in one transaction pin the distinction between the shared transaction digest
 // and each input's signing digest.
@@ -339,8 +342,8 @@ d.transcript.comment =
 {
   const txVector = {
     mint_quote_inputs: [
-      { amount: 5, quote_id: 'quote-mint-0002' },
-      { amount: 3, quote_id: 'quote-mint-0003' },
+      { amount: 5, quote_id: 'quote-mint-0002', lock_pubkey: d.nut13_v3.quote_locks[0].pubkey },
+      { amount: 3, quote_id: 'quote-mint-0003', lock_pubkey: d.nut13_v3.quote_locks[1].pubkey },
     ],
     blinded_outputs: d.transcript.mint.tx.blinded_outputs,
   };
@@ -377,7 +380,9 @@ d.transcript.comment =
 // quote amount, so this is the vector that tells the two readings apart.
 {
   const txVector = {
-    mint_quote_inputs: [{ amount: 4, quote_id: 'quote-mint-0004' }],
+    mint_quote_inputs: [
+      { amount: 4, quote_id: 'quote-mint-0004', lock_pubkey: d.nut13_v3.quote_locks[0].pubkey },
+    ],
     blinded_outputs: [d.transcript.swap.tx.blinded_outputs[0]],
   };
   const tx = fromVectorTx(txVector);
@@ -504,7 +509,15 @@ d.nut07_commitments = {
 const audPackage: ScriptPathSigningPackage = {
   version: 'nutspA',
   transcript: bytesToHex(audTranscript),
-  spends: [{ input: 0, leaf: d.leaf_forms.threshold_1of1_disclosure, signatures: [] }],
+  spends: [
+    {
+      input: 0,
+      secret: bytesToHex(audSecret),
+      leaf: d.leaf_forms.threshold_1of1_disclosure,
+      control: { K: bytesToHex(K_aud), path: [] },
+      signatures: [],
+    },
+  ],
 };
 const audSignedByLibrary = ScriptPath.signPackage(audPackage, bytesToHex(bigTo32(3n)));
 if (

@@ -121,15 +121,23 @@ describe('ScriptPath signing packages', () => {
       keepOutputs: [OutputData.createSingleRandomData(1, keysetId)],
     };
     const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]);
+    const hashes = locked.tree!.map((leaf) => nutrootLeafHash(hexToBytes(leaf)));
     const revealed = {
       ...pkg,
-      spends: [{ ...pkg.spends[0], leaf: locked.tree![2], slots: undefined }],
+      spends: [
+        {
+          ...pkg.spends[0],
+          leaf: locked.tree![2],
+          control: { K: locked.K!, path: nutrootMerklePath(hashes, 2).map(bytesToHex) },
+          slots: undefined,
+        },
+      ],
     };
     expect(() => ScriptPath.signPackage(revealed, bytesToHex(sk(2)))).toThrow(/not a spend path/);
   });
 
-  test('merge refuses a leaf that is not in the input spend info', () => {
-    const { leaves, preview, proof } = fixture();
+  test('refuses to sign a leaf that is not committed by the input secret', () => {
+    const { alice, leaves, preview, proof } = fixture();
     const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]);
     const tampered = {
       ...pkg,
@@ -142,8 +150,56 @@ describe('ScriptPath signing packages', () => {
         },
       ],
     };
-    expect(() => ScriptPath.mergeSwapPackage(tampered, preview)).toThrow(
-      /not in its input proof spend info/,
+    expect(() => ScriptPath.signPackage(tampered, alice)).toThrow(/does not commit/);
+    expect(() => ScriptPath.deserializePackage(ScriptPath.serializePackage(tampered))).toThrow(
+      /does not commit/,
+    );
+  });
+
+  test('refuses a spend whose secret is not the input it names', () => {
+    const { alice, leaves, preview, proof } = fixture();
+    const otherLocked = deriveReceiverKeyedSecret(pub(4), {
+      leaves,
+      blindKeys: [pub(2)],
+      eBytes: sk(6),
+    });
+    const other: Proof = {
+      ...proof,
+      secret: otherLocked.secret,
+      spend_info: { E: otherLocked.E, K: otherLocked.K, tree: otherLocked.tree },
+    };
+    const both: SwapPreview = { ...preview, inputs: [other, proof] };
+    const pkg = ScriptPath.extractSwapPackage(both, [{ secret: proof.secret, leafIndex: 1 }]);
+    expect(pkg.spends[0].input).toBe(1);
+    // The leaf opens to proof's secret, but the spend points at the other input.
+    const moved = { ...pkg, spends: [{ ...pkg.spends[0], input: 0 }] };
+    expect(() => ScriptPath.signPackage(moved, alice)).toThrow(/does not match its v3 input/);
+  });
+
+  test('a quote input spend must open the lock key its container commits', () => {
+    const { alice, preview, proof } = fixture();
+    const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]);
+    // A quote locked to a nutroot point: the same tree as the proof, for brevity.
+    const quoteSpend = (lockKey: string) => ({
+      ...pkg,
+      transcript: bytesToHex(
+        messageForPayload({
+          inputs: preview.inputs,
+          mintQuotes: [{ quoteId: 'quote-1', amount: 1, lockKey }],
+          outputs: preview.keepOutputs!.map((o) => o.blindedMessage),
+        }),
+      ),
+      spends: [{ ...pkg.spends[0], input: 1 }],
+    });
+    const signed = ScriptPath.signPackage(quoteSpend(proof.secret), alice);
+    const [leafKey] = (parseNutrootLeaf(hexToBytes(signed.spends[0].leaf)) as NutrootConditionLeaf)
+      .keys;
+    const [signature] = signed.spends[0].signatures;
+    expect(
+      schnorr.verify(hexToBytes(signature), spendDigest(signed), hexToBytes(leafKey).subarray(1)),
+    ).toBe(true);
+    expect(() => ScriptPath.signPackage(quoteSpend(pub(9)), alice)).toThrow(
+      /not its quote input lock key/,
     );
   });
 
@@ -245,7 +301,7 @@ describe('ScriptPath signing packages', () => {
     ).toBe(true);
   });
 
-  test('the package carries the transcript and no secret', () => {
+  test('the package carries the transcript and only the secrets it spends', () => {
     const { preview, proof } = fixture();
     const companion: Proof = {
       id: `00${'22'.repeat(7)}`,
@@ -259,8 +315,10 @@ describe('ScriptPath signing packages', () => {
     expect(Object.keys(pkg).sort()).toEqual(['spends', 'transcript', 'version']);
     expect(Object.keys(pkg.spends[0]).sort()).toEqual([
       'E',
+      'control',
       'input',
       'leaf',
+      'secret',
       'signatures',
       'slots',
     ]);
@@ -275,9 +333,7 @@ describe('ScriptPath signing packages', () => {
     );
     const encoded = ScriptPath.serializePackage(pkg);
     const json = bytesToUtf8(decodeBase64UrlToUint8(encoded.slice(6)));
-    for (const secret of [companion.secret, proof.secret, proof.spend_info!.K!]) {
-      expect(json).not.toContain(secret);
-    }
+    expect(json).not.toContain(companion.secret);
     // The signer derives its input digest from the transcript alone.
     const signed = ScriptPath.signPackage(
       ScriptPath.deserializePackage(encoded),
@@ -325,7 +381,9 @@ describe('ScriptPath signing packages', () => {
     const merged = ScriptPath.mergeSwapPackage(signed, preview, plans);
     const witness = JSON.parse(merged.inputs[0].witness as string) as { preimage?: string };
     expect(witness.preimage).toBe(preimage);
-    expect(JSON.parse(ScriptPath.witnessFor(signed.spends[0], proof, preimage))).toEqual(witness);
+    expect(JSON.parse(ScriptPath.witnessFor(signed.spends[0], built.tree, 0, preimage))).toEqual(
+      witness,
+    );
   });
 
   test('signing with a key the tree does not name adds nothing', { timeout: SCAN_TIMEOUT }, () => {
@@ -555,13 +613,15 @@ describe('ScriptPath.witnessFor', () => {
       ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]),
       alice,
     );
-    const witness = JSON.parse(ScriptPath.witnessFor(signed.spends[0], proof)) as {
+    const witness = JSON.parse(
+      ScriptPath.witnessFor(signed.spends[0], proof.spend_info!.tree!, 1),
+    ) as {
       leaf: string;
       control: { K: string; path: string[] };
       signatures: string[];
     };
     expect(witness.leaf).toBe(signed.spends[0].leaf);
-    expect(witness.control).toEqual(controlFor(proof, 1));
+    expect(witness.control).toEqual(signed.spends[0].control);
     expect(witness.signatures).toEqual(signed.spends[0].signatures);
   });
 });
