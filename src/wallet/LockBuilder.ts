@@ -267,7 +267,7 @@ export class LockBuilder {
       ...(this._sigAll && { sigAll: true }),
     };
     // Smoke-test through the encoder checks so a bad lock fails here, not at send time.
-    if (lock.leaves || Array.isArray(lock.blindKeys)) {
+    if (lock.leaves || lock.template || Array.isArray(lock.blindKeys)) {
       lockToNutrootOptions(lock);
     } else {
       assertP2PKLockEncodes(lock);
