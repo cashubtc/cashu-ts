@@ -39,6 +39,7 @@ export const NUTROOT_LEAF_TYPE = {
   after: 0x02,
   hashlock: 0x03,
   commit: 0x04,
+  template: 0x05,
 } as const;
 
 /**
@@ -71,7 +72,8 @@ export const NUTROOT_MAX_LEAF_TIME = Number.MAX_SAFE_INTEGER;
  * A parsed condition leaf (version 0x00): a spend path.
  *
  * @remarks
- * `keys` are 33-byte compressed SEC1 hex. `time` is unix seconds. `hash` is 32 bytes hex.
+ * `keys` are 33-byte compressed SEC1 hex. `time` is unix seconds. `hash` is 32 bytes hex: a
+ * hashlock's preimage digest, or a template's digest of the transaction's output section.
  */
 export type NutrootConditionLeaf = {
   type: Exclude<keyof typeof NUTROOT_LEAF_TYPE, 'commit'>;
@@ -243,10 +245,10 @@ export function serializeNutrootLeaf(leaf: NutrootLeaf): Uint8Array {
   } else if (leaf.time !== undefined) {
     throw new CTSError(`${leaf.type} leaf must not carry a time field`);
   }
-  if (leaf.type === 'hashlock') {
+  if (leaf.type === 'hashlock' || leaf.type === 'template') {
     const h = hexToBytes(leaf.hash ?? '');
     if (h.length !== 32) {
-      throw new CTSError('hashlock leaf requires a 32-byte hash');
+      throw new CTSError(`${leaf.type} leaf requires a 32-byte hash`);
     }
     fields.push(tlvRecord(FIELD_HASH, h));
   } else if (leaf.hash !== undefined) {
@@ -368,13 +370,14 @@ export function parseNutrootLeaf(bytes: Uint8Array): NutrootLeaf {
   if (typeName === 'after' && time === undefined) {
     throw new CTSError('after leaf missing time field');
   }
-  if (typeName === 'hashlock' && hash === undefined) {
-    throw new CTSError('hashlock leaf missing hash field');
+  const hashed = typeName === 'hashlock' || typeName === 'template';
+  if (hashed && hash === undefined) {
+    throw new CTSError(`${typeName} leaf missing hash field`);
   }
   if (typeName !== 'after' && time !== undefined) {
     throw new CTSError(`${typeName} leaf must not carry a time field`);
   }
-  if (typeName !== 'hashlock' && hash !== undefined) {
+  if (!hashed && hash !== undefined) {
     throw new CTSError(`${typeName} leaf must not carry a hash field`);
   }
   const leaf: NutrootConditionLeaf = { type: typeName, n, keys };

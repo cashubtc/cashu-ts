@@ -14,6 +14,7 @@ import {
   type NutrootLeaf,
   type ParsedNutrootOption,
 } from '../crypto/nutroot';
+import { templateHash, type TemplateOutputs } from '../crypto/transcript';
 import { CTSError } from '../model/Errors';
 import { hexToBytes } from '../utils';
 
@@ -35,6 +36,14 @@ export type LockOptions = {
    * SHA-256 hashlock (NUT-14 HTLC semantics): a preimage is required alongside signatures.
    */
   hashlock?: string;
+  /**
+   * Covenant (NUT-10 `template`): the main keys may spend only into exactly these outputs. v3 only.
+   *
+   * @remarks
+   * A melt quote expires, so a template over one needs `locktime` and `refundKeys` beside it;
+   * blinded messages need those or a remainder change quote; change quotes alone need neither.
+   */
+  template?: TemplateOutputs;
   /**
    * Unix seconds after which the refund path activates; the main path never expires.
    */
@@ -109,13 +118,21 @@ export function lockToNutrootOptions(lock: LockOptions): ParsedNutrootOption {
   const explicit = (lock.leaves ?? []).map((leaf) =>
     leaf.type === 'commit' ? leaf : { ...leaf, keys: leaf.keys.map(lc) },
   );
-  if (mainKeys.length === 0 && lock.hashlock === undefined && explicit.length === 0) {
-    throw new CTSError('A lock needs at least one main key, hashlock, or leaf');
+  if (
+    mainKeys.length === 0 &&
+    lock.hashlock === undefined &&
+    lock.template === undefined &&
+    explicit.length === 0
+  ) {
+    throw new CTSError('A lock needs at least one main key, hashlock, template, or leaf');
   }
-  if (lock.hashlock !== undefined && mainKeys.length === 0) {
+  if ((lock.hashlock !== undefined || lock.template !== undefined) && mainKeys.length === 0) {
     throw new CTSError(
-      'A keyless hashlock does not fit a v3 lock: leaves require at least one key',
+      'A keyless hashlock or template does not fit a v3 lock: leaves require at least one key',
     );
+  }
+  if (lock.hashlock !== undefined && lock.template !== undefined) {
+    throw new CTSError('A lock takes a hashlock or a template, not both');
   }
   const n = lock.requiredMainSignatures ?? 1;
   if (n > mainKeys.length && (mainKeys.length > 0 || lock.requiredMainSignatures !== undefined)) {
@@ -125,9 +142,21 @@ export function lockToNutrootOptions(lock: LockOptions): ParsedNutrootOption {
   const mode = lock.disclosure ? { disclosure: 1 } : {};
   // A key-path spend has no leaf to disclose, so a disclosed single key becomes a leaf under NUMS.
   const keyPath =
-    lock.hashlock === undefined && mainKeys.length === 1 && n === 1 && !lock.disclosure;
+    lock.hashlock === undefined &&
+    lock.template === undefined &&
+    mainKeys.length === 1 &&
+    n === 1 &&
+    !lock.disclosure;
   if (lock.hashlock !== undefined) {
     leaves.push({ type: 'hashlock', n, hash: lc(lock.hashlock), keys: mainKeys, ...mode });
+  } else if (lock.template !== undefined) {
+    leaves.push({
+      type: 'template',
+      n,
+      hash: templateHash(lock.template),
+      keys: mainKeys,
+      ...mode,
+    });
   } else if (!keyPath && mainKeys.length > 0) {
     leaves.push({ type: 'threshold', n, keys: mainKeys, ...mode });
   }
@@ -149,6 +178,19 @@ export function lockToNutrootOptions(lock: LockOptions): ParsedNutrootOption {
     leaves.push({ type: 'after', n: nRefund, time: lock.locktime, keys: refundKeys, ...mode });
   }
   leaves.push(...explicit);
+  // Build-time policy (NUT-10): a template over targets that can expire strands the value unless
+  // an after leaf, or for blinded messages a remainder quote, can reclaim it.
+  if (lock.template !== undefined && !leaves.some((leaf) => leaf.type === 'after')) {
+    const remainder = lock.template.changeQuoteOutputs?.some((c) => c.amount === undefined);
+    if (
+      lock.template.meltQuoteOutput !== undefined ||
+      (lock.template.blindedOutputs?.length && !remainder)
+    ) {
+      throw new CTSError(
+        'A template over outputs that can expire needs a locktime and refund keys beside it',
+      );
+    }
+  }
   // A commit leaf is never a spend path, so a lock made only of them is a burn.
   if (!keyPath && !leaves.some((leaf) => leaf.type !== 'commit')) {
     throw new CTSError('A lock needs a spend path: a commit leaf alone is unspendable');
@@ -171,7 +213,7 @@ export function lockToNutrootOptions(lock: LockOptions): ParsedNutrootOption {
  * @throws On a shape NUT-11 cannot express: explicit leaves, or a partial blind-me list.
  */
 export function lockToP2PKOptions(lock: LockOptions): P2PKOptions {
-  if (lock.leaves?.length) {
+  if (lock.leaves?.length || lock.template !== undefined) {
     throw new CTSError('Leaf locks need a v3 keyset: NUT-11 tags cannot express a tree');
   }
   if (Array.isArray(lock.blindKeys)) {

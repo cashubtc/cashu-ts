@@ -14,6 +14,7 @@ new LockBuilder()
   .addTag(key: string, values?: string[] | string) // extra NUT-11 tag (eg: NutZap 'e'); pre-v3 only
   .addTags(tags: P2PKTag[]) // add multiple tags at once
   .addHashlock(hashlock: string) // preimage required alongside signatures (NUT-14 semantics)
+  .addTemplate(outputs: TemplateOutputs) // covenant: the main keys may spend only into exactly these outputs; v3 only
   .addLeaf(leaf: NutrootLeaf) // explicit tree leaf (eg staged reclaim); v3 only
   .blindKeys(keys?: string | string[]) // blind every key, or exactly the listed keys (list is v3 only)
   .disclose() // publish the exercised witness (NUT-10 disclosure) on every generated leaf; a no-op pre-v3

@@ -213,3 +213,4 @@ export {
   type NutrootCommitLeaf,
   type ParsedNutrootOption,
 } from './crypto/nutroot';
+export { templateHash, type TemplateOutputs } from './crypto/transcript';
