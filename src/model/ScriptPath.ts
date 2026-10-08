@@ -401,7 +401,8 @@ function spendWitness(
   preimage?: string,
 ): string {
   const tree = proof.spend_info?.tree ?? [];
-  const leafIndex = tree.indexOf(spend.leaf.toLowerCase());
+  const wanted = spend.leaf.toLowerCase();
+  const leafIndex = tree.findIndex((leaf) => leaf.toLowerCase() === wanted);
   if (leafIndex < 0) {
     throw new CTSError('Signing package leaf is not in its input proof spend info');
   }

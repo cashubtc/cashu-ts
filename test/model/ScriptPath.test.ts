@@ -448,6 +448,21 @@ describe('ScriptPath signing packages', () => {
     );
   });
 
+  test('merges when the proof discloses its tree in uppercase hex', () => {
+    const { alice, preview, proof } = fixture();
+    const upper: Proof = {
+      ...proof,
+      spend_info: {
+        ...proof.spend_info,
+        tree: proof.spend_info!.tree!.map((l) => l.toUpperCase()),
+      },
+    };
+    const shouted: SwapPreview = { ...preview, inputs: [upper] };
+    const pkg = ScriptPath.extractSwapPackage(shouted, [{ secret: proof.secret, leafIndex: 1 }]);
+    const signed = ScriptPath.signPackage(pkg, alice);
+    expect(ScriptPath.mergeSwapPackage(signed, shouted).inputs[0].witness).toBeDefined();
+  });
+
   test('deserialize fails closed on malformed transport strings', () => {
     const { preview, proof } = fixture();
     const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]);
