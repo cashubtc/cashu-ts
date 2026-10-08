@@ -1,7 +1,7 @@
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { utf8ToBytes } from '@noble/hashes/utils.js';
+import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 
 import {
@@ -13,6 +13,8 @@ import {
   type NutrootConditionLeaf,
   nutrootLeafHash,
   nutrootMerklePath,
+  readTlvRecords,
+  tlvRecord,
 } from '../../src/crypto/nutroot';
 import { inputDigest, messageForPayload, transcriptContainers } from '../../src/crypto/transcript';
 import { Amount } from '../../src/model/Amount';
@@ -442,6 +444,32 @@ describe('ScriptPath signing packages', () => {
     const undisclosed: SwapPreview = {
       ...preview,
       inputs: [{ ...proof, spend_info: { ...proof.spend_info, tree: [tree[0]] } }],
+    };
+    expect(() => ScriptPath.mergeSwapPackage(signed, undisclosed)).toThrow(
+      /not in its input proof spend info/,
+    );
+  });
+
+  test.each([0x02, 0x03])('refuses a proof input missing field %i', (missing) => {
+    const { alice, preview, proof } = fixture();
+    const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]);
+    const containers = transcriptContainers(hexToBytes(pkg.transcript));
+    const input = containers[0];
+    const fields = readTlvRecords(input.subarray(3))
+      .filter(({ type }) => type !== missing)
+      .map(({ type, value }) => tlvRecord(type, value));
+    containers[0] = tlvRecord(input[0], concatBytes(...fields));
+    const malformed = { ...pkg, transcript: bytesToHex(concatBytes(...containers)) };
+    expect(() => ScriptPath.signPackage(malformed, alice)).toThrow(/does not match its v3 input/);
+  });
+
+  test('merge refuses a proof whose spend info is no longer available', () => {
+    const { alice, preview, proof } = fixture();
+    const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]);
+    const signed = ScriptPath.signPackage(pkg, alice);
+    const undisclosed: SwapPreview = {
+      ...preview,
+      inputs: [{ ...proof, spend_info: undefined }],
     };
     expect(() => ScriptPath.mergeSwapPackage(signed, undisclosed)).toThrow(
       /not in its input proof spend info/,
