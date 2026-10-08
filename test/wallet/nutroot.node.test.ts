@@ -15,6 +15,7 @@ import {
 } from '../../src/crypto/nutroot';
 import {
   inputDigest,
+  inputsForPayload,
   proofInputContextKey,
   spendCommitment,
   transactionInputs,
@@ -553,6 +554,32 @@ describe('attachTransactionWitnesses', () => {
         makeState(undefined),
       ),
     ).rejects.toThrow(/No key to sign a v3 input/);
+  });
+
+  test('signs a mixed-input transaction with only change quotes as outputs', async () => {
+    const input = v3Proof(PUB_A, { k: PRIV_A });
+    const legacy = { ...v3Proof('legacy'), id: '00' + 'ab'.repeat(7), C: PUB_B };
+    const payload = { inputs: [input, legacy], changeQuoteOutputs: [{ pubkey: PUB_B }] };
+    const receipts = await attachTransactionWitnesses(
+      payload,
+      undefined,
+      collectSpendInfoKeys([input], undefined, NULL_LOGGER),
+      undefined,
+      makeState(),
+    );
+    const tx = inputsForPayload({
+      proofInputs: payload.inputs,
+      changeQuoteOutputs: payload.changeQuoteOutputs,
+    });
+    expect(
+      verifyTransactionInputWitness(
+        [...tx.proofs.values()][0].digest,
+        input.secret,
+        input.witness as string,
+      ),
+    ).toBe(true);
+    expect(receipts).toHaveLength(1);
+    expect(legacy.witness).toBeUndefined();
   });
 
   test('a pre-built witness is left alone', async () => {

@@ -703,6 +703,29 @@ describe('WalletEvents', () => {
       await p;
     });
 
+    // Review regression: timeoutMs must also bound an in-flight status request.
+    it.fails('times out while a status request is stalled', async () => {
+      vi.useFakeTimers();
+      let finish!: (result: ReturnType<typeof state>) => void;
+      const pending = new Promise<ReturnType<typeof state>>((resolve) => {
+        finish = resolve;
+      });
+      (mock as any).checkTransaction = vi.fn().mockReturnValue(pending);
+      const rejected = vi.fn();
+      const waiting = events.onceTransactionSettled(preview, { timeoutMs: 10 }).catch(rejected);
+      try {
+        await vi.advanceTimersByTimeAsync(10);
+        expect(rejected).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message: 'Timeout waiting for transaction to settle',
+          }),
+        );
+      } finally {
+        finish(state('FAILED'));
+        await waiting;
+      }
+    });
+
     it('rejects with AbortError before polling and while sleeping', async () => {
       const check = vi.fn().mockResolvedValue(state('PENDING'));
       (mock as any).checkTransaction = check;

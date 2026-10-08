@@ -551,6 +551,13 @@ describe('change quote outputs (NUT-XX vectors)', () => {
     expect(two.tx.change_quote_outputs.map((c) => changeQuoteId(c.pubkey))).toEqual(two.quote_ids);
   });
 
+  test.each(['', v.tx.change_quote_outputs[0].pubkey.slice(2), '02' + 'ff'.repeat(32)])(
+    'rejects an invalid change quote recovery key %s',
+    (pubkey) => {
+      expect(() => changeQuoteId(pubkey)).toThrow('33-byte compressed point');
+    },
+  );
+
   test('a change quote alone is a valid output; a malformed one throws', () => {
     const proofInputs = fromVectorTx(v.tx).proofInputs;
     const { pubkey } = v.tx.change_quote_outputs[0];
