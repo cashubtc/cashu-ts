@@ -8,6 +8,7 @@ import { recoverV3SecretKeys } from '../../src/crypto/NUT13';
 import {
   buildRequestTranscript,
   buildTransactionTranscript,
+  changeQuoteId,
   digestForPayload,
   inputDigest,
   proofInputContextKey,
@@ -504,6 +505,7 @@ describe('change quote outputs (NUT-XX vectors)', () => {
       changeQuoteOutputs: v.tx.change_quote_outputs,
     });
     expect(bytesToHex([...proofs.values()][0].digest)).toBe(v.input_digest);
+    expect(changeQuoteId(v.tx.change_quote_outputs[0].pubkey)).toBe(v.quote_id);
   });
 
   test('a fixed quote carries its amount first, then the remainder quote, in request order', () => {
@@ -515,6 +517,7 @@ describe('change quote outputs (NUT-XX vectors)', () => {
       changeQuoteOutputs: two.tx.change_quote_outputs,
     });
     expect(bytesToHex([...proofs.values()][0].digest)).toBe(two.input_digest);
+    expect(two.tx.change_quote_outputs.map((c) => changeQuoteId(c.pubkey))).toEqual(two.quote_ids);
   });
 
   test('a change quote alone is a valid output; a malformed one throws', () => {

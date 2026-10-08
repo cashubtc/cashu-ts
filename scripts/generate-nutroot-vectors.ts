@@ -26,6 +26,7 @@ import { hashToCurveHex } from '../src/crypto/curves';
 import {
   buildTransactionTranscript,
   derivedQuoteId,
+  changeQuoteId,
   inputDigest,
   spendCommitment,
   transactionDigest,
@@ -509,8 +510,11 @@ for (const [name, txVector] of [
     changes.length === 0
       ? {}
       : changes.length === 1
-        ? { change_container: bytesToHex(rest) }
-        : { change_containers: transcriptContainers(rest).map((c) => bytesToHex(c)) };
+        ? { change_container: bytesToHex(rest), quote_id: changeQuoteId(changes[0].pubkey) }
+        : {
+            change_containers: transcriptContainers(rest).map((c) => bytesToHex(c)),
+            quote_ids: changes.map((c) => changeQuoteId(c.pubkey)),
+          };
   d.transcript[name] = {
     tx: txVector,
     ...last,

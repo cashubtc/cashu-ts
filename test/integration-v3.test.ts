@@ -40,6 +40,7 @@ import {
   type NutrootConditionLeaf,
 } from '../src/crypto/nutroot';
 import {
+  changeQuoteId,
   inputsForPayload,
   proofInputContextKey,
   transactionDigest,
@@ -1599,9 +1600,27 @@ describeXX('NUT-XX transactions', () => {
     expect(result.response.state).toBe('PAID');
     const [fixedQuote, restQuote] = result.response.change_quotes;
     expect(fixedQuote!.pubkey).toBe(fixed.pubkey);
+    expect(fixedQuote!.quote).toBe(changeQuoteId(fixed.pubkey));
     expect(fixedQuote!.amount_paid.toBigInt()).toBe(3n);
     expect(restQuote!.pubkey).toBe(rest.pubkey);
+    expect(restQuote!.quote).toBe(changeQuoteId(rest.pubkey));
     expect(restQuote!.amount_paid.toBigInt()).toBe(64n - fee - 3n);
+  });
+
+  test('a change quote lock key names one quote: reusing it is rejected', async () => {
+    const { wallet, proofs } = await funded(64);
+    const lock = await wallet.createQuoteLockKey();
+    const first = await wallet.prepareTransaction({
+      proofInputs: proofs,
+      changeQuoteOutputs: [{ pubkey: lock.pubkey }],
+    });
+    expect((await wallet.completeTransaction(first)).response.state).toBe('PAID');
+    const other = await funded(64);
+    const second = await other.wallet.prepareTransaction({
+      proofInputs: other.proofs,
+      changeQuoteOutputs: [{ pubkey: lock.pubkey }],
+    });
+    await expect(other.wallet.completeTransaction(second)).rejects.toThrow(MintOperationError);
   });
 
   test('mint-shaped: a quote input for its full amount, proofs out', async () => {

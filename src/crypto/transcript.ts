@@ -192,6 +192,16 @@ function blindedOutputContainer(output: TranscriptBlindedOutput): Uint8Array {
   );
 }
 
+/**
+ * The id a mint gives a change quote locked to `pubkey` (NUT-XX): one key, one quote.
+ */
+export function changeQuoteId(pubkey: string): string {
+  if (!isValidSecpPubkey(pubkey)) {
+    throw new CTSError('Change quote lock key must be a 33-byte compressed point');
+  }
+  return bytesToHex(taggedHash(QUOTE_ID_TAG, hexToBytes(pubkey)));
+}
+
 function changeContainer(output: TranscriptChangeOutput): Uint8Array {
   if (!isValidSecpPubkey(output.pubkey)) {
     throw new CTSError('Transcript change lock key must be a 33-byte compressed point');
