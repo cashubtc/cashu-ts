@@ -18,6 +18,7 @@ import { minimalBE, tlvRecord } from './nutroot';
 export const TRANSCRIPT_REQUEST_TAG = 'Cashu_AuthorizedRequest';
 export const TRANSCRIPT_INPUT_TAG = 'Cashu_TransactionInput';
 export const SPEND_COMMITMENT_TAG = 'Cashu_SpendCommitment';
+export const QUOTE_ID_TAG = 'Cashu_QuoteId';
 
 // The high nibble is the section: 0x1n inputs, 0x2n outputs, 0xFn never in a transaction.
 const CONTAINER_PROOF_INPUT = 0x11;
@@ -186,6 +187,16 @@ function blindedOutputContainer(output: TranscriptBlindedOutput): Uint8Array {
       tlvRecord(0x03, hexToBytes(output.B_)),
     ),
   );
+}
+
+/**
+ * The id a mint gives a change quote locked to `pubkey` (NUT-XX): one key, one quote.
+ */
+export function changeQuoteId(pubkey: string): string {
+  if (!isValidSecpPubkey(pubkey)) {
+    throw new CTSError('Change quote lock key must be a 33-byte compressed point');
+  }
+  return bytesToHex(taggedHash(QUOTE_ID_TAG, hexToBytes(pubkey)));
 }
 
 function changeContainer(output: TranscriptChangeOutput): Uint8Array {

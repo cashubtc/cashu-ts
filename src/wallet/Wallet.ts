@@ -37,7 +37,12 @@ import {
   verifyNutrootSpendInfo,
   type ParsedNutrootOption,
 } from '../crypto/nutroot';
-import { digestForPayload, inputsForPayload, meltOutputAmount } from '../crypto/transcript';
+import {
+  changeQuoteId,
+  digestForPayload,
+  inputsForPayload,
+  meltOutputAmount,
+} from '../crypto/transcript';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
@@ -5094,6 +5099,21 @@ class Wallet {
     // The change quotes are returned as the mint reports them: the mint already holds that value,
     // and refusing or re-checking them after settlement would recover nothing.
     const { signatures } = response;
+    // A change quote id is derived from its lock key (NUT-XX); any other id cannot be found again
+    // from the seed, so say so, but the value is the mint's already and the proofs still matter.
+    response.change_quotes.forEach((q, i) => {
+      const expected = changeQuoteId(changeQuoteOutputs[i].pubkey);
+      if (q && q.quote !== expected) {
+        this._logger.warn(
+          'Mint assigned a change quote id that does not derive from its lock key',
+          {
+            digest: preview.digest,
+            expected,
+            received: q.quote,
+          },
+        );
+      }
+    });
     // The outputs' keyset rotated during the melt: nothing was signed and their value is in the
     // remainder quote (NUT-XX). The reserved secrets go unused.
     const remainder = changeQuoteOutputs.findIndex((c) => c.amount === undefined);
