@@ -279,6 +279,11 @@ describe('v3 (BLS) derivation', () => {
   test('the new types are v3 only', () => {
     const v2KeysetId = '01abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567';
     expect(() => deriveNumsOffset(seed, v2KeysetId, 0)).toThrow(/v3 keyset/);
+    // A short v3 keyset id is still a v3 keyset, but not a derivation scope (NUT-13).
+    const shortId = v3KeysetId.slice(0, 16);
+    expect(() => deriveSecretAndBlindingFactor(seed, shortId, 0)).toThrow(/33 bytes/);
+    expect(() => deriveNumsOffset(seed, shortId, 0)).toThrow(/33 bytes/);
+    expect(() => deriveLeafKey(seed, shortId, 0, 0)).toThrow(/33 bytes/);
     expect(() => deriveLeafKey(seed, v2KeysetId, 0, 0)).toThrow(/v3 keyset/);
     expect(() => deriveLeafKey(seed, v3KeysetId, 0, -1)).toThrow(/index/);
   });

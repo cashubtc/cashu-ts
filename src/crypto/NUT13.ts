@@ -364,6 +364,10 @@ function deriveV3Scalar(
   assertSeed(seed);
   assertCounter(counter);
   const scopeBytes = hexToBytes(scope);
+  // NUT-13: the full keyset id or the mint identity key, never a short id.
+  if (scopeBytes.length !== 33) {
+    throw new CTSError('V3 derivation scope must be 33 bytes');
+  }
   const base = concatBytes(
     utf8ToBytes('Cashu_KDF_HMAC_SHA256'),
     numberToBytesBE(scopeBytes.length, 4),
