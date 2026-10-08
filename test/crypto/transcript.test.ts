@@ -673,6 +673,16 @@ describe('input uniqueness and spend commitments (vectors)', () => {
     ).toThrow(/repeats a mint quote/);
   });
 
+  test('a mint quote input needs its 33-byte lock key', () => {
+    const mint = fromVectorTx(tv.mint.tx);
+    expect(() =>
+      buildTransactionTranscript({
+        ...mint,
+        mintQuoteInputs: [{ ...mint.mintQuoteInputs![0], lockKey: 'zz' }],
+      }),
+    ).toThrow(/lock key/);
+  });
+
   test('the mint quote input derives its digest from its own container', () => {
     const { quotes } = transactionInputs(fromVectorTx(tv.mint.tx));
     const context = quotes.get(tv.mint.tx.mint_quote_inputs[0].quote_id)!;

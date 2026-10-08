@@ -423,6 +423,31 @@ describe('ScriptPath signing packages', () => {
     ).toThrow(/internal key/);
   });
 
+  test('malformed spends and inputs fail closed at extract, sign and merge', () => {
+    const { alice, preview, proof } = fixture();
+    const tree = proof.spend_info!.tree!;
+    const badBearer: SwapPreview = {
+      ...preview,
+      inputs: [{ ...proof, spend_info: { k: 'ff'.repeat(32), tree } }],
+    };
+    expect(() =>
+      ScriptPath.extractSwapPackage(badBearer, [{ secret: proof.secret, leafIndex: 1 }]),
+    ).toThrow(/not a valid private key/);
+    const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]);
+    expect(() =>
+      ScriptPath.signPackage({ ...pkg, spends: [{ ...pkg.spends[0], secret: 'zz' }] }, alice),
+    ).toThrow(/secret is malformed/);
+    const signed = ScriptPath.signPackage(pkg, alice);
+    // The input's spend info no longer discloses the leaf the package opens.
+    const undisclosed: SwapPreview = {
+      ...preview,
+      inputs: [{ ...proof, spend_info: { ...proof.spend_info, tree: [tree[0]] } }],
+    };
+    expect(() => ScriptPath.mergeSwapPackage(signed, undisclosed)).toThrow(
+      /not in its input proof spend info/,
+    );
+  });
+
   test('deserialize fails closed on malformed transport strings', () => {
     const { preview, proof } = fixture();
     const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]);
