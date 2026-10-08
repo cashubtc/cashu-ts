@@ -147,18 +147,12 @@ export function proofInputContainer(input: TranscriptProofInput): Uint8Array {
   );
 }
 
-function quoteContainer(
-  containerType: number,
-  quote: TranscriptQuote,
-  ...fields: Uint8Array[]
-): Uint8Array {
+// Fields 01 amount and 02 quote id, shared by the mint quote input and melt quote output containers.
+function quoteFields(quote: TranscriptQuote): Uint8Array {
   if (quote.quoteId.length === 0) {
     throw new CTSError('Transcript quote id must be non-empty');
   }
-  return tlvRecord(
-    containerType,
-    concatBytes(amountRecord(quote.amount), tlvRecord(0x02, utf8ToBytes(quote.quoteId)), ...fields),
-  );
+  return concatBytes(amountRecord(quote.amount), tlvRecord(0x02, utf8ToBytes(quote.quoteId)));
 }
 
 // The container commits the lock key, so an offline co-signer can tell which key the input needs.
@@ -166,11 +160,14 @@ function mintQuoteInputContainer(quote: TranscriptQuoteInput): Uint8Array {
   if (!isValidHex(quote.lockKey) || quote.lockKey.length !== 66) {
     throw new CTSError('Transcript mint quote input needs its 33-byte lock key');
   }
-  return quoteContainer(
+  return tlvRecord(
     CONTAINER_MINT_QUOTE_INPUT,
-    quote,
-    tlvRecord(0x03, hexToBytes(quote.lockKey)),
+    concatBytes(quoteFields(quote), tlvRecord(0x03, hexToBytes(quote.lockKey))),
   );
+}
+
+function meltQuoteOutputContainer(quote: TranscriptQuote): Uint8Array {
+  return tlvRecord(CONTAINER_MELT_QUOTE_OUTPUT, quoteFields(quote));
 }
 
 function blindedOutputContainer(output: TranscriptBlindedOutput): Uint8Array {
@@ -209,7 +206,7 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
     ...proofs.map(proofInputContainer),
     ...mintQuotes.map(mintQuoteInputContainer),
     ...blinded.map(blindedOutputContainer),
-    ...meltQuotes.map((q) => quoteContainer(CONTAINER_MELT_QUOTE_OUTPUT, q)),
+    ...meltQuotes.map(meltQuoteOutputContainer),
   );
 }
 
