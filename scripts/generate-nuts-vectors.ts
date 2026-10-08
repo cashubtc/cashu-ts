@@ -3,13 +3,11 @@
 
 import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { bytesToHex, numberToBytesBE } from '@noble/curves/utils.js';
-import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
+import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import {
   BLS_FR_ORDER,
-  BLS_G2_GENERATOR,
   hashToCurveBls,
   blindMessageBls,
   createBlindSignatureBls,
@@ -20,7 +18,7 @@ import {
 } from '../src/crypto/curve_bls';
 import { deriveKeysetId } from '../src/utils/core';
 
-const G2 = BLS_G2_GENERATOR;
+const G2 = bls12_381.G2.Point.BASE;
 
 function g2PubFromScalar(a: bigint): G2Point {
   return G2.multiply(a);
@@ -202,52 +200,6 @@ function nut00Batch() {
 }
 
 // ---------------------------------------------------------------------------
-// 4. NUT-13 V3 deterministic blinding-factor derivation (rejection sampling).
-//    Picks a (seed, keyset_id, counter) tuple where attempt=0 is rejected so the
-//    vector locks in the retry behavior.
-// ---------------------------------------------------------------------------
-const KDF_DST = utf8ToBytes('Cashu_KDF_HMAC_SHA256');
-
-function nut13V3Derive(seed: Uint8Array, keysetIdHex: string, counter: number) {
-  const keysetIdBytes = new Uint8Array(keysetIdHex.match(/.{2}/g)!.map((b) => parseInt(b, 16)));
-  const counterBytes = numberToBytesBE(BigInt(counter), 8);
-  const base = concatBytes(KDF_DST, keysetIdBytes, counterBytes);
-  const secret = hmac(sha256, seed, concatBytes(base, new Uint8Array([0])));
-  for (let attempt = 0; attempt < 1 << 16; attempt++) {
-    const msg = concatBytes(base, new Uint8Array([1]), numberToBytesBE(attempt, 4));
-    const digest = hmac(sha256, seed, msg);
-    const x = BigInt('0x' + bytesToHex(digest));
-    if (x === 0n || x >= BLS_FR_ORDER) continue;
-    return { secret, r: digest, attempt };
-  }
-  throw new Error('nut13V3Derive: no acceptance');
-}
-
-function nut13V3Vector() {
-  // Probe counters under a fixed seed/keyset until we find one where attempt=0 is rejected.
-  // The keyset id is the NUT-02 V3 vector-1 id, so this stays in sync with the derivation.
-  // The 64-byte seed the NUT-13 vectors carry (nuts tests/13-tests.md).
-  const seed = hexToBytes(
-    '6e757431332076332074657374207365656400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
-  );
-  const keysetIdHex = nut02V3Keyset([1, 2], 'sat').id;
-  for (let counter = 0; counter < 200; counter++) {
-    const out = nut13V3Derive(seed, keysetIdHex, counter);
-    if (out.attempt > 0) {
-      return {
-        seed_hex: bytesToHex(seed),
-        keyset_id: keysetIdHex,
-        counter,
-        accepted_attempt: out.attempt,
-        secret: bytesToHex(out.secret),
-        blinding_factor: bytesToHex(out.r),
-      };
-    }
-  }
-  throw new Error('nut13V3Vector: no retrying counter in [0, 200)');
-}
-
-// ---------------------------------------------------------------------------
 // Output
 // ---------------------------------------------------------------------------
 const out = {
@@ -257,6 +209,5 @@ const out = {
     vector_2: nut02V3Keyset([1, 2, 4, 8], 'sat', 100, 2000000000),
   },
   nut00_batch: nut00Batch(),
-  nut13_v3: nut13V3Vector(),
 };
 console.log(JSON.stringify(out, null, 2));
