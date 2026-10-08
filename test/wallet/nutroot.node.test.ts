@@ -407,7 +407,7 @@ describe('attachTransactionWitnesses', () => {
 
   test('verifySpendReceipt checks a receipt against the proof, key path and script path', async () => {
     const keyPath = v3Proof(PUB_B, { k: PRIV_B });
-    const tree = buildNutrootSecret(PUB_A, [{ type: 'threshold', n: 1, keys: [PUB_B] }]);
+    const tree = buildNutrootSecret(PUB_A, [{ type: 'threshold', n: 1, keys: [PUB_B, PUB_A] }]);
     const scriptPath = v3Proof(tree.secret, { k: PRIV_A, tree: tree.tree });
     const inputs = [keyPath, scriptPath];
     const [rKey, rScript] = await attachTransactionWitnesses(
@@ -442,6 +442,17 @@ describe('attachTransactionWitnesses', () => {
       witness: false,
     });
     expect(verifySpendReceipt(rKey, { ...keyPath, id: '00' + 'ab'.repeat(32) }).ok).toBe(false);
+    // NUT-10 witness shape: a malformed signature entry or a preimage on a non-hashlock leaf.
+    const script = JSON.parse(rScript.witness) as { signatures: string[]; preimage?: string };
+    const malformed = { ...script, signatures: [script.signatures[0], 'zz'.repeat(64)] };
+    expect(
+      verifySpendReceipt({ ...rScript, witness: JSON.stringify(malformed) }, scriptPath).witness,
+    ).toBe(false);
+    const strayPreimage = { ...script, preimage: '07'.repeat(32) };
+    expect(
+      verifySpendReceipt({ ...rScript, witness: JSON.stringify(strayPreimage) }, scriptPath)
+        .witness,
+    ).toBe(false);
     expect(verifySpendReceipt({ ...rKey, transcript: 'zz' }, keyPath).ok).toBe(false);
     expect(verifySpendReceipt({ ...rScript, witness: '{bad' }, scriptPath).witness).toBe(false);
     const unsigned = JSON.stringify({ ...JSON.parse(rScript.witness), signatures: undefined });
