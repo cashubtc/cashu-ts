@@ -1,13 +1,15 @@
 import { HttpResponse, http } from 'msw';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 
 import { Wallet, deserializeTransactionPreview, serializeTransactionPreview } from '../../src';
 import { schnorrSignDigest, schnorrVerifyDigest } from '../../src/crypto';
+import { buildNutrootSecret } from '../../src/crypto/nutroot';
 import { inputsForPayload } from '../../src/crypto/transcript';
 import { Amount } from '../../src/model/Amount';
 import type { Proof } from '../../src/model/types';
+import { NUT02_V3_VECTOR1_KEYS, NUT02_V3_VECTOR1_KEYSET } from '../consts';
 
-import { mintInfoResp, mintUrl, unit, useTestServer } from './_setup';
+import { dummyKeysetResp, mintInfoResp, mintUrl, unit, useTestServer } from './_setup';
 
 const server = useTestServer();
 const privkey = '0000000000000000000000000000000000000000000000000000000000000001';
@@ -529,5 +531,279 @@ describe('Wallet transactions (NUT-XX)', () => {
       method: 'change',
     });
     expect(result.response.change_quotes[0]!.amount_paid.toNumber()).toBe(3);
+  });
+
+  test('rounds proof fees and quote popcounts together exactly once', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 200 });
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({
+          keysets: dummyKeysetResp.keysets.map((k) => ({ ...k, input_fee_ppk: 400 })),
+        }),
+      ),
+    );
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+    const preview = await wallet.prepareTransaction({
+      proofInputs: [
+        {
+          id: dummyKeysetResp.keysets[0].id,
+          amount: Amount.from(8),
+          secret: 'fee-input',
+          C: pubkey,
+        },
+      ],
+      mintQuoteInputs: [{ quote: { ...quote, unit }, amount: 7 }],
+    });
+    // 400 + popcount(7) * 200 = 1000 ppk: rounding each source separately costs 2.
+    expect(preview.fee).toEqual(Amount.from(1));
+    expect(preview.amount).toEqual(Amount.from(14));
+  });
+
+  test('reserves disjoint deterministic outputs and persists their counters', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0 });
+    const wallet = new Wallet(mintUrl, { unit, bip39seed: new Uint8Array(64).fill(1) });
+    await wallet.loadMint();
+    const onCountersReserved = vi.fn();
+    const transaction = { mintQuoteInputs: [{ quote, amount: 3 }] };
+    const first = await wallet.prepareTransaction(transaction, { onCountersReserved });
+    const second = await wallet.prepareTransaction(transaction, { onCountersReserved });
+    expect(onCountersReserved.mock.calls.map(([range]) => range)).toEqual([
+      expect.objectContaining({ start: 0, count: 2, next: 2 }),
+      expect.objectContaining({ start: 2, count: 2, next: 4 }),
+    ]);
+    expect(await wallet.counters.peekNext(first.outputData[0].blindedMessage.id)).toBe(4);
+    expect(
+      new Set([...first.outputData, ...second.outputData].map((d) => d.blindedMessage.B_)).size,
+    ).toBe(4);
+    const restored = deserializeTransactionPreview(
+      JSON.parse(JSON.stringify(serializeTransactionPreview(first))),
+    );
+    expect(restored.outputData.map((d) => d.blindedMessage)).toEqual(
+      first.outputData.map((d) => d.blindedMessage),
+    );
+    expect(restored.digest).toBe(first.digest);
+  });
+
+  test('custom outputs determine the proof total while the remainder takes the surplus', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0 });
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+    const { outputData } = await wallet.prepareTransaction({
+      mintQuoteInputs: [{ quote, amount: 3 }],
+    });
+    const preview = await wallet.prepareTransaction({
+      mintQuoteInputs: [{ quote, amount: 8 }],
+      proofOutputs: { outputType: { type: 'custom', data: outputData } },
+      changeQuoteOutputs: [{ pubkey: changeKey }],
+    });
+    expect(preview.amount).toEqual(Amount.from(3));
+    expect(preview.outputData.map((d) => d.blindedMessage)).toEqual(
+      outputData.map((d) => d.blindedMessage),
+    );
+  });
+
+  test.each(['PENDING', 'FAILED'] as const)(
+    '%s with reserved outputs returns no proofs and preserves null change',
+    async (state) => {
+      serveInfo({ supported: true, quote_input_fee_ppk: 0 });
+      const wallet = new Wallet(mintUrl, { unit });
+      await wallet.loadMint();
+      const preview = await wallet.prepareTransaction({
+        mintQuoteInputs: [{ quote, amount: 8 }],
+        proofOutputs: { amount: 1 },
+        meltQuoteOutput: { ...melt, quote: { ...melt.quote, unit } },
+        changeQuoteOutputs: [{ pubkey: changeKey }],
+      });
+      server.use(
+        http.post(mintUrl + '/v1/transaction', () =>
+          HttpResponse.json({
+            digest: preview.digest,
+            state,
+            signatures: [],
+            melt_quotes: [],
+            change_quotes: [null],
+          }),
+        ),
+      );
+      const result = await wallet.completeTransaction(preview, privkey);
+      expect(result.response).toMatchObject({
+        digest: preview.digest,
+        state,
+        change_quotes: [null],
+      });
+      expect(result.proofs).toEqual([]);
+    },
+  );
+
+  test('recovers signed outputs by polling a persisted preview after a lost POST response', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0 });
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+    const preview = await wallet.prepareTransaction({
+      mintQuoteInputs: [{ quote, amount: 3 }],
+      proofOutputs: { amount: 3 },
+      changeQuoteOutputs: [{ pubkey: changeKey }],
+    });
+    const stored = JSON.parse(JSON.stringify(serializeTransactionPreview(preview)));
+    const record = {
+      digest: preview.digest,
+      state: 'PAID',
+      melt_quotes: [],
+      change_quotes: [null],
+      signatures: preview.outputData.map((d) => ({
+        id: d.blindedMessage.id,
+        amount: d.blindedMessage.amount,
+        C_: pubkey,
+      })),
+    };
+    const posted = vi.fn();
+    server.use(
+      http.post(mintUrl + '/v1/transaction', () => {
+        posted();
+        return HttpResponse.error();
+      }),
+      http.get(mintUrl + '/v1/transaction/:digest', ({ params }) => {
+        expect(params.digest).toBe(preview.digest);
+        return HttpResponse.json(record);
+      }),
+    );
+    await expect(wallet.completeTransaction(preview, privkey)).rejects.toThrow();
+    expect(posted).toHaveBeenCalled();
+    const recovered = await wallet.checkTransaction(deserializeTransactionPreview(stored));
+    expect(recovered.proofs.map((p) => p.amount.toNumber()).sort()).toEqual([1, 2]);
+    expect(recovered.response.digest).toBe(preview.digest);
+    const again = await wallet.checkTransaction(deserializeTransactionPreview(stored));
+    expect(again.proofs).toEqual(recovered.proofs);
+  });
+
+  test('v3 script-path witnesses and receipts bind both quote inputs and change outputs', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0 });
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({ keysets: [NUT02_V3_VECTOR1_KEYSET] }),
+      ),
+      http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [NUT02_V3_VECTOR1_KEYS] })),
+    );
+    const bodies = serveTransaction();
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+    const built = buildNutrootSecret(changeKey, [{ type: 'threshold', n: 1, keys: [pubkey] }]);
+    const input: Proof = {
+      id: NUT02_V3_VECTOR1_KEYSET.id,
+      amount: Amount.from(8),
+      secret: built.secret,
+      C: NUT02_V3_VECTOR1_KEYS.keys['1'],
+      spend_info: { k: '0'.repeat(63) + '5', tree: built.tree },
+    };
+    const preview = await wallet.prepareTransaction({
+      proofInputs: [input],
+      mintQuoteInputs: [{ quote, amount: 8 }],
+      changeQuoteOutputs: [{ pubkey: changeKey }],
+    });
+    const result = await wallet.completeTransaction(preview, privkey, {
+      scriptPath: [{ secret: input.secret, leafIndex: 0 }],
+    });
+    expect(result.receipts).toHaveLength(1);
+    expect(bodies[0].proof_inputs[0]).not.toHaveProperty('spend_info');
+    const tx = inputsForPayload({
+      proofInputs: [input],
+      mintQuoteInputs: [{ quoteId: quote.quote, amount: 8, lockKey: pubkey }],
+      changeQuoteOutputs: [{ pubkey: changeKey }],
+    });
+    const digest = [...tx.proofs.values()][0].digest;
+    const witness = JSON.parse(bodies[0].proof_inputs[0].witness);
+    expect(witness.leaf).toBe(built.tree[0]);
+    expect(witness.control.K).toBe(changeKey);
+    expect(schnorrVerifyDigest(witness.signatures[0], digest, pubkey)).toBe(true);
+    expect(result.receipts![0].inputDigest).toBe(Buffer.from(digest).toString('hex'));
+    const changed = inputsForPayload({
+      proofInputs: [input],
+      mintQuoteInputs: [{ quoteId: quote.quote, amount: 7, lockKey: pubkey }],
+      changeQuoteOutputs: [{ pubkey: changeKey }],
+    });
+    expect(
+      schnorrVerifyDigest(witness.signatures[0], [...changed.proofs.values()][0].digest, pubkey),
+    ).toBe(false);
+  });
+
+  // Review regression: metadata warnings must not prevent recovery of settled proofs.
+  test.fails('an extra null change entry does not discard settled proofs', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0 });
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+    const preview = await wallet.prepareTransaction({ mintQuoteInputs: [{ quote, amount: 1 }] });
+    server.use(
+      http.get(mintUrl + '/v1/transaction/:digest', () =>
+        HttpResponse.json({
+          digest: preview.digest,
+          state: 'PAID',
+          melt_quotes: [],
+          change_quotes: [null],
+          signatures: preview.outputData.map((d) => ({
+            id: d.blindedMessage.id,
+            amount: d.blindedMessage.amount,
+            C_: pubkey,
+          })),
+        }),
+      ),
+    );
+    const result = await wallet.checkTransaction(preview);
+    expect(result.proofs).toHaveLength(1);
+    expect(result.proofs[0].amount).toEqual(Amount.from(1));
+  });
+
+  test.each([
+    { name: 'short', signatures: [], error: '0 signatures, expected 1' },
+    {
+      name: 'wrong amount',
+      signatures: [{ id: '00bd033559de27d0', amount: 2, C_: pubkey }],
+      error: 'wrong amount',
+    },
+    {
+      name: 'wrong keyset',
+      signatures: [{ id: '00aaaaaaaaaaaaaa', amount: 1, C_: pubkey }],
+      error: 'does not match output',
+    },
+  ])(
+    'rejects a $name settled signature response with recovery advice',
+    async ({ signatures, error }) => {
+      serveInfo({ supported: true, quote_input_fee_ppk: 0 });
+      const wallet = new Wallet(mintUrl, { unit });
+      await wallet.loadMint();
+      const preview = await wallet.prepareTransaction({ mintQuoteInputs: [{ quote, amount: 1 }] });
+      server.use(
+        http.get(mintUrl + '/v1/transaction/:digest', () =>
+          HttpResponse.json({
+            digest: preview.digest,
+            state: 'PAID',
+            signatures,
+            melt_quotes: [],
+            change_quotes: [],
+          }),
+        ),
+      );
+      await expect(wallet.checkTransaction(preview)).rejects.toThrow(error);
+      await expect(wallet.checkTransaction(preview)).rejects.toThrow('NUT-09');
+    },
+  );
+
+  test('rejects unknown NUT-30 fee selections before signing', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0 });
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+    for (const feeIndex of [undefined, 2]) {
+      await expect(
+        wallet.prepareTransaction({
+          mintQuoteInputs: [{ quote, amount: 8 }],
+          meltQuoteOutput: {
+            ...melt,
+            quote: { ...melt.quote, fee_options: [{ fee_index: 0, fee_reserve: 1 }] },
+            feeIndex,
+          },
+          changeQuoteOutputs: [{ pubkey: changeKey }],
+        }),
+      ).rejects.toThrow('selected feeIndex');
+    }
   });
 });
