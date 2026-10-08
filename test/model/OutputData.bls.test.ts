@@ -159,7 +159,7 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
   }, 15000);
 
   test('deterministic v3 derivation produces a verifiable proof', () => {
-    const seed = hexToBytes('11'.repeat(32));
+    const seed = hexToBytes('11'.repeat(64));
     const out = OutputData.createSingleDeterministicData(4, seed, 0, keyset.id);
     expect(out.blindedMessage.B_).toMatch(/^[0-9a-f]{96}$/);
 
@@ -175,7 +175,7 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
   });
 
   test('deterministic v3 outputs carry their derived key as spend info', () => {
-    const seed = hexToBytes('22'.repeat(32));
+    const seed = hexToBytes('22'.repeat(64));
     const outputs = OutputData.createDeterministicData(7, seed, 5, keyset);
     expect(outputs).toHaveLength(3);
     outputs.forEach((out, i) => {
@@ -190,7 +190,7 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
   });
 
   test('deterministic secp outputs carry no key or spend info', () => {
-    const seed = hexToBytes('22'.repeat(32));
+    const seed = hexToBytes('22'.repeat(64));
     const out = OutputData.createSingleDeterministicData(1, seed, 0, `01${'ab'.repeat(32)}`);
     expect(out.secretKey).toBeUndefined();
     expect(out.spendInfo).toBeUndefined();

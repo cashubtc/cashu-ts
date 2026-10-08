@@ -25,6 +25,13 @@ import { CTSError } from '../../src/model/Errors';
 import { decodeBase64ToUint8Legacy } from '../../src/utils';
 import { nut13_v3 as nut13Vectors } from '../vectors/nutroot-v3.json';
 
+// The NUT-13 helpers take the 64-byte BIP-39 seed; pad a label out to that length.
+const seed64 = (label: string): Uint8Array => {
+  const seed = new Uint8Array(64);
+  seed.set(new TextEncoder().encode(label));
+  return seed;
+};
+
 // NUT-06 example identity: the scope of every 0x04 quote lock key below.
 const MINT_PUBKEY = '0338596797cef0627f653cd6568387361b00314add55d9f1ea9c94f46ae421e3da';
 
@@ -144,7 +151,7 @@ describe('findLegacyDerivationCollisions', () => {
 
 describe('deriveBlindingFactor', () => {
   test('preserves 32-byte encoding when reduced scalar has leading zeros', () => {
-    const seed = new TextEncoder().encode('test seed for regression');
+    const seed = seed64('test seed for regression');
     const keysetId = '01abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567';
 
     const r = deriveBlindingFactor(seed, keysetId, 197);
@@ -155,7 +162,7 @@ describe('deriveBlindingFactor', () => {
 });
 
 describe('v3 (BLS) derivation', () => {
-  const seed = new TextEncoder().encode('nut13 v3 test seed');
+  const seed = seed64('nut13 v3 test seed');
   const v3KeysetId = '02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6';
 
   test('uses HMAC_SHA256 and produces a 32-byte blinding factor below BLS_FR_ORDER', () => {
@@ -328,7 +335,7 @@ describe('v2 derivation spec vectors', () => {
 });
 
 describe('HMAC counter range', () => {
-  const seed = new TextEncoder().encode('nut13 counter range seed');
+  const seed = seed64('nut13 counter range seed');
   const v2KeysetId = '01abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567';
 
   test('rejects counters that a uint64 encoding would alias onto a valid one', () => {
@@ -359,16 +366,14 @@ describe('HMAC counter range', () => {
 describe('seed length', () => {
   const v2KeysetId = '01abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567';
   const v3KeysetId = '02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6';
-  const bad = /seed must be a 16 to 64 byte Uint8Array/;
+  const bad = /seed must be a 64 byte Uint8Array/;
 
-  test('every seeded derivation takes 16 to 64 bytes and nothing else', () => {
-    for (const length of [16, 32, 64]) {
-      const seed = new Uint8Array(length).fill(7);
-      expect(() => deriveSecretAndBlindingFactor(seed, v2KeysetId, 0)).not.toThrow();
-      expect(() => deriveKeyPair(seed, 'P2PK', 0)).not.toThrow();
-      expect(() => deriveQuoteLockKey(seed, MINT_PUBKEY, 0)).not.toThrow();
-    }
-    for (const length of [0, 15, 65]) {
+  test('every seeded derivation takes 64 bytes and nothing else', () => {
+    const seed = new Uint8Array(64).fill(7);
+    expect(() => deriveSecretAndBlindingFactor(seed, v2KeysetId, 0)).not.toThrow();
+    expect(() => deriveKeyPair(seed, 'P2PK', 0)).not.toThrow();
+    expect(() => deriveQuoteLockKey(seed, MINT_PUBKEY, 0)).not.toThrow();
+    for (const length of [0, 16, 32, 63, 65]) {
       const seed = new Uint8Array(length);
       expect(() => deriveSecretAndBlindingFactor(seed, v2KeysetId, 0)).toThrow(bad);
       expect(() => createSecretAndBlindingFactorDeriver(seed, v2KeysetId)).toThrow(bad);
