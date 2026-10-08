@@ -728,7 +728,7 @@ describe('Wallet transactions (NUT-XX)', () => {
   });
 
   // Review regression: metadata warnings must not prevent recovery of settled proofs.
-  test.fails('an extra null change entry does not discard settled proofs', async () => {
+  test('an extra null change entry does not discard settled proofs', async () => {
     serveInfo({ supported: true, quote_input_fee_ppk: 0 });
     const wallet = new Wallet(mintUrl, { unit });
     await wallet.loadMint();

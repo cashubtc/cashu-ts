@@ -685,7 +685,7 @@ describe('WalletEvents', () => {
       await vi.advanceTimersByTimeAsync(5);
       await expect(p).resolves.toEqual(state('PAID'));
       expect(check).toHaveBeenCalledTimes(2);
-      expect(check).toHaveBeenCalledWith(preview, { signal: undefined });
+      expect(check).toHaveBeenCalledWith(preview, { signal: expect.any(AbortSignal) });
     });
 
     it('returns FAILED without waiting further', async () => {
@@ -704,7 +704,7 @@ describe('WalletEvents', () => {
     });
 
     // Review regression: timeoutMs must also bound an in-flight status request.
-    it.fails('times out while a status request is stalled', async () => {
+    it('times out while a status request is stalled', async () => {
       vi.useFakeTimers();
       let finish!: (result: ReturnType<typeof state>) => void;
       const pending = new Promise<ReturnType<typeof state>>((resolve) => {

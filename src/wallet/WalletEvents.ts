@@ -985,26 +985,48 @@ export class WalletEvents {
     preview: TransactionPreview,
     opts: { signal?: AbortSignal; timeoutMs?: number; pollMs?: number } = {},
   ): Promise<TransactionResult> {
-    const deadline = opts.timeoutMs && opts.timeoutMs > 0 ? Date.now() + opts.timeoutMs : null;
     const pollMs = opts.pollMs ?? 1000;
-    for (;;) {
-      if (opts.signal?.aborted) throw makeAbortError();
-      const result = await this.wallet.checkTransaction(preview, { signal: opts.signal });
-      if (result.response.state !== 'PENDING') return result;
-      if (deadline !== null && Date.now() >= deadline) {
-        throw new CTSError('Timeout waiting for transaction to settle');
-      }
-      await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(() => {
-          opts.signal?.removeEventListener('abort', onAbort);
-          resolve();
-        }, pollMs);
-        const onAbort = () => {
-          clearTimeout(timer);
-          reject(makeAbortError());
-        };
-        opts.signal?.addEventListener('abort', onAbort, { once: true });
+    // One inner signal bounds every request and poll delay: the caller's abort or the deadline.
+    const ac = new AbortController();
+    let timedOut = false;
+    const onOuterAbort = () => ac.abort();
+    if (opts.signal?.aborted) throw makeAbortError();
+    opts.signal?.addEventListener('abort', onOuterAbort, { once: true });
+    const deadline =
+      opts.timeoutMs && opts.timeoutMs > 0
+        ? setTimeout(() => {
+            timedOut = true;
+            ac.abort();
+          }, opts.timeoutMs)
+        : null;
+    // Rejects on the inner abort even if the raced promise never settles.
+    const untilAbort = <T>(p: Promise<T>) => {
+      let onAbort!: () => void;
+      const aborted = new Promise<never>((_resolve, reject) => {
+        onAbort = () => reject(makeAbortError());
+        ac.signal.addEventListener('abort', onAbort, { once: true });
       });
+      return Promise.race([p, aborted]).finally(() =>
+        ac.signal.removeEventListener('abort', onAbort),
+      );
+    };
+    try {
+      for (;;) {
+        const result = await untilAbort(
+          this.wallet.checkTransaction(preview, { signal: ac.signal }),
+        );
+        if (result.response.state !== 'PENDING') return result;
+        let timer!: ReturnType<typeof setTimeout>;
+        await untilAbort(
+          new Promise<void>((resolve) => (timer = setTimeout(resolve, pollMs))),
+        ).finally(() => clearTimeout(timer));
+      }
+    } catch (e) {
+      if (timedOut) throw new CTSError('Timeout waiting for transaction to settle');
+      throw e;
+    } finally {
+      if (deadline) clearTimeout(deadline);
+      opts.signal?.removeEventListener('abort', onOuterAbort);
     }
   }
 

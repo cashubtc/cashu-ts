@@ -5101,8 +5101,9 @@ class Wallet {
     const { signatures } = response;
     // A change quote id is derived from its lock key (NUT-XX); any other id cannot be found again
     // from the seed, so say so, but the value is the mint's already and the proofs still matter.
-    response.change_quotes.forEach((q, i) => {
-      const expected = changeQuoteId(changeQuoteOutputs[i].pubkey);
+    changeQuoteOutputs.forEach((c, i) => {
+      const q = response.change_quotes[i];
+      const expected = changeQuoteId(c.pubkey);
       if (q && q.quote !== expected) {
         this._logger.warn(
           'Mint assigned a change quote id that does not derive from its lock key',
