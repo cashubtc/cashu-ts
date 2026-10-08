@@ -8,6 +8,8 @@ import { recoverV3SecretKeys } from '../../src/crypto/NUT13';
 import {
   buildRequestTranscript,
   buildTransactionTranscript,
+  digestForPayload,
+  inputDigest,
   proofInputContextKey,
   proofInputY,
   inputsForPayload,
@@ -36,7 +38,7 @@ const tv = vectors.transcript;
 
 function fromVectorTx(tx: {
   proof_inputs?: Array<{ amount: number; keyset_id: string; secret: string; C: string }>;
-  mint_quote_inputs?: Array<{ amount: number; quote_id: string }>;
+  mint_quote_inputs?: Array<{ amount: number; quote_id: string; lock_pubkey: string }>;
   blinded_outputs?: Array<{ amount: number; keyset_id: string; B_: string }>;
   melt_quote_outputs?: Array<{ amount: number; quote_id: string }>;
 }): TransactionShape {
@@ -50,6 +52,7 @@ function fromVectorTx(tx: {
     mintQuoteInputs: tx.mint_quote_inputs?.map((q) => ({
       amount: BigInt(q.amount),
       quoteId: q.quote_id,
+      lockKey: q.lock_pubkey,
     })),
     blindedOutputs: tx.blinded_outputs?.map((o) => ({
       amount: BigInt(o.amount),
@@ -133,6 +136,7 @@ describe('transaction transcript (vectors)', () => {
     // At the payload boundary a caller names an input by secret or by the Y it already holds.
     const outputs = tx.blindedOutputs!.map((o) => ({ amount: o.amount, id: o.keysetId, B_: o.B_ }));
     const bySecret = messageForPayload({ inputs: [v3, legacy], outputs });
+    expect(digestForPayload({ inputs: [v3, legacy], outputs })).toEqual(sha256(bySecret));
     const byY = messageForPayload({
       inputs: [{ amount: v3.amount, id: v3.id, C: v3.C, Y: v3Key }, legacy],
       outputs,
@@ -162,6 +166,10 @@ describe('transaction transcript (vectors)', () => {
       expect(bytesToHex(transactionDigest(tx))).toBe(example.digest);
     },
   );
+
+  test('an input digest needs a 32-byte transaction digest', () => {
+    expect(() => inputDigest(new Uint8Array(31), new Uint8Array(3))).toThrow(/32 bytes/);
+  });
 
   test('the swap signature is a key-path witness over the input digest by the proof secret', () => {
     const { proofs, transactionDigest: txDigest } = transactionInputs(fromVectorTx(tv.swap.tx));
@@ -310,6 +318,8 @@ describe('transaction transcript (vectors)', () => {
     const parsed = JSON.parse(witness) as { signatures: string[] };
     expect(parsed.signatures).toHaveLength(1);
     expect(verifyTransactionInputWitness(digest, secret, witness)).toBe(true);
+    // A secret with no key bytes behind its prefix cannot verify anything.
+    expect(verifyTransactionInputWitness(digest, '02', witness)).toBe(false);
     // The pinned vector signature also verifies through the same path.
     expect(
       verifyTransactionInputWitness(
@@ -677,6 +687,16 @@ describe('input uniqueness and spend commitments (vectors)', () => {
         mintQuoteInputs: [...mint.mintQuoteInputs!, mint.mintQuoteInputs![0]],
       }),
     ).toThrow(/repeats a mint quote/);
+  });
+
+  test('a mint quote input needs its 33-byte lock key', () => {
+    const mint = fromVectorTx(tv.mint.tx);
+    expect(() =>
+      buildTransactionTranscript({
+        ...mint,
+        mintQuoteInputs: [{ ...mint.mintQuoteInputs![0], lockKey: 'zz' }],
+      }),
+    ).toThrow(/lock key/);
   });
 
   test('the mint quote input derives its digest from its own container', () => {

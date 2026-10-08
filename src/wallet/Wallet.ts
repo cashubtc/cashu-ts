@@ -3537,9 +3537,10 @@ class Wallet {
       if (v3) {
         // V3 (nutroot secrets): the quote is a transaction input; its lock key signs the
         // quote input digest (NUT-10). No legacy fallback on v3 keysets.
-        // The quote input commits the amount this request issues (NUT-04).
+        // The quote input commits the amount this request issues and its lock key (NUT-04).
+        this.failIf(!quotePubkey, 'prepareMint: a v3 mint needs the quote lock pubkey');
         const tx = inputsForPayload({
-          mintQuotes: [{ quoteId: resolvedQuote.quote, amount: mintAmount }],
+          mintQuotes: [{ quoteId: resolvedQuote.quote, amount: mintAmount, lockKey: quotePubkey! }],
           outputs: blindedMessages,
         });
         const { digest, inputContainer } = tx.quotes.get(resolvedQuote.quote)!;
@@ -3811,6 +3812,7 @@ class Wallet {
           mintQuotes: resolvedEntries.map((e, i) => ({
             quoteId: e.quote.quote,
             amount: amounts[i],
+            lockKey: e.quote.pubkey!,
           })),
           outputs: blindedMessages,
         }).quotes

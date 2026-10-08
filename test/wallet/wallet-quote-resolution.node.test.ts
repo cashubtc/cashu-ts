@@ -79,7 +79,7 @@ test.each(['single', 'batch'])(
     expect(signature).toBeTruthy();
     const digestFor = (amount: number) =>
       inputsForPayload({
-        mintQuotes: [{ quoteId: 'stored', amount }],
+        mintQuotes: [{ quoteId: 'stored', amount, lockKey: pubkey }],
         outputs: preview.outputData.map((d) => d.blindedMessage),
       }).quotes.get('stored')!.digest;
     expect(schnorrVerifyDigest(signature!, digestFor(1), pubkey)).toBe(true);

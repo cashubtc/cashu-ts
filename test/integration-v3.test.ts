@@ -597,7 +597,7 @@ describeV3('M4 locked quotes', () => {
         ),
       ];
       const digestB = inputsForPayload({
-        mintQuotes: [{ amount: 32n, quoteId: quoteB.quote }],
+        mintQuotes: [{ amount: 32n, quoteId: quoteB.quote, lockKey: lockB.secret }],
         outputs: outputsB.map((o) => o.blindedMessage),
       }).quotes.get(quoteB.quote)!.digest;
       const mint = new Mint(mintUrl);
@@ -624,7 +624,7 @@ describeV3('M4 locked quotes', () => {
         ),
       ];
       const digestC = inputsForPayload({
-        mintQuotes: [{ amount: 32n, quoteId: quoteC.quote }],
+        mintQuotes: [{ amount: 32n, quoteId: quoteC.quote, lockKey: lockC.secret }],
         outputs: outputsC.map((o) => o.blindedMessage),
       }).quotes.get(quoteC.quote)!.digest;
       await expect(
@@ -1400,15 +1400,11 @@ describeV3('M9 script path through the wallet API', () => {
       // here rather than by the mint, which would only say the witness was invalid.
       const other = await alice.prepareSwapToReceive([proof]);
       expect(() => ScriptPath.mergeSwapPackage(pkg, other)).toThrow(/does not match/);
-      // The package carries no digest to edit: signatures cover whatever inputs and outputs it
-      // shows, so a package whose contents were edited reads back fine and fails at merge.
+      // The package carries no digest to edit: signatures cover whatever transcript it shows, so
+      // a package whose transcript was edited reads back fine and fails at merge.
+      const last = pkg.transcript.slice(-2) === '00' ? '01' : '00';
       const tampered = ScriptPath.deserializePackage(
-        ScriptPath.serializePackage({
-          ...pkg,
-          outputs: pkg.outputs.map((o, i) =>
-            i === 0 ? { ...o, B_: (o.B_.startsWith('02') ? '03' : '02') + o.B_.slice(2) } : o,
-          ),
-        }),
+        ScriptPath.serializePackage({ ...pkg, transcript: pkg.transcript.slice(0, -2) + last }),
       );
       expect(() => ScriptPath.mergeSwapPackage(tampered, preview)).toThrow(/does not match/);
     },
