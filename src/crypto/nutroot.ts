@@ -761,6 +761,13 @@ export function verifyNutrootSpendInfo(
   if (spendInfo.k !== undefined && spendInfo.E !== undefined) {
     throw new CTSError('Spend info carries both k and E');
   }
+  // Shape rules (NUT-10): a tree holds at least one leaf, and a NUMS key needs one to be spendable.
+  if (spendInfo.tree !== undefined && spendInfo.tree.length === 0) {
+    throw new CTSError('Spend info tree must hold at least one leaf');
+  }
+  if (spendInfo.u !== undefined && spendInfo.tree === undefined) {
+    throw new CTSError('Spend info carries a NUMS offset without a tree');
+  }
   // `u` present means the internal key is a NUMS offset (NUT-10), so it must reduce to the
   // base: without this check `u` is decoration and a key path may still exist. Present iff the key
   // is an offset, so a claimed offset that does not reduce is a lie, not an omission.

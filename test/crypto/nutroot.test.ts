@@ -750,6 +750,20 @@ describe('locked secret construction and spend info cascade', () => {
     );
   });
 
+  test('spend info shapes: an empty tree and a NUMS offset without a tree are malformed', () => {
+    const v = vectors.empty_tweak;
+    expect(() => verifyNutrootSpendInfo(v.secret, { K: v.internal_key, tree: [] })).toThrow(
+      /at least one leaf/,
+    );
+    expect(() => verifyNutrootSpendInfo(v.secret, { k: vRefund.carol_priv, tree: [] })).toThrow(
+      /at least one leaf/,
+    );
+    const aud = vectors.auditable_lock;
+    expect(() => verifyNutrootSpendInfo(aud.secret, { K: aud.K, u: aud.u })).toThrow(
+      /without a tree/,
+    );
+  });
+
   test('cascade rejects partial disclosure, wrong keys, unknown leaves', () => {
     // Tree-only spend info: no key source.
     expect(() => verifyNutrootSpendInfo(vRefund.secret, { tree: [vRefund.leaf_after] })).toThrow(
@@ -757,11 +771,11 @@ describe('locked secret construction and spend info cascade', () => {
     );
     // Wrong bearer key.
     expect(() => verifyNutrootSpendInfo(vRefund.secret, { k: '11'.repeat(32) })).toThrow(/match/);
-    // Partial (empty vs actual tree): K alone would be complete only if the secret were its
+    // Partial (K without its tree): K alone would be complete only if the secret were its
     // empty tweak (NUT-10), and this secret is tweaked over a real tree instead.
-    expect(() =>
-      verifyNutrootSpendInfo(vRefund.secret, { K: vRefund.internal_key, tree: [] }),
-    ).toThrow(/does not commit/);
+    expect(() => verifyNutrootSpendInfo(vRefund.secret, { K: vRefund.internal_key })).toThrow(
+      /does not commit/,
+    );
     // Wrong tree does not reconstruct.
     expect(() =>
       verifyNutrootSpendInfo(vRefund.secret, {
