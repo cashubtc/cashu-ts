@@ -1611,6 +1611,8 @@ class Mint {
     // until the invoice is paid; coerce undefined → null so consumers can
     // rely on `payment_preimage === null` checks.
     nullIfUndefined(data, 'payment_preimage');
+    // The guarantee is about supplying one at all; a supplied-but-wrong preimage warns once, below.
+    const supplied = data.payment_preimage;
     if (
       method === 'bolt11' &&
       typeof data.payment_preimage === 'string' &&
@@ -1622,6 +1624,16 @@ class Mint {
         this._logger,
         op,
       );
+    }
+    if (
+      method === 'bolt11' &&
+      data.state === 'PAID' &&
+      supplied === null &&
+      this._mintInfo?.guaranteesPreimage('bolt11', data.unit as string)
+    ) {
+      this._logger.warn('Mint advertises preimage_guaranteed but returned no payment_preimage', {
+        op,
+      });
     }
   }
 
