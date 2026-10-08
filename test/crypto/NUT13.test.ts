@@ -178,7 +178,7 @@ describe('v3 (BLS) derivation', () => {
   });
 
   test('matches the shared nutroot-v3 nut13 vectors', () => {
-    const vseed = new TextEncoder().encode(nut13Vectors.seed_utf8);
+    const vseed = hexToBytes(nut13Vectors.seed_hex);
     for (const output of nut13Vectors.outputs) {
       const { secret, secretKey, blindingFactor } = deriveSecretAndBlindingFactor(
         vseed,
@@ -230,7 +230,7 @@ describe('v3 (BLS) derivation', () => {
   });
 
   test('the other derivation types match the shared vectors', () => {
-    const vseed = new TextEncoder().encode(nut13Vectors.seed_utf8);
+    const vseed = hexToBytes(nut13Vectors.seed_hex);
     const id = nut13Vectors.keyset_id;
     for (const output of nut13Vectors.outputs) {
       expect(bytesToHex(deriveNumsOffset(vseed, id, output.counter))).toBe(output.nums_offset);

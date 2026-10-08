@@ -54,7 +54,7 @@ const d = JSON.parse(readFileSync(PATH, 'utf8'));
 const OLD_ID = d.nut13_v3.keyset_id;
 
 // --- nut13_v3 ---------------------------------------------------------------
-const seed = new TextEncoder().encode(d.nut13_v3.seed_utf8);
+const seed = hexToBytes(d.nut13_v3.seed_hex);
 const oldSecretIndex: Record<string, number> = {};
 d.nut13_v3.outputs.forEach((o: any, i: number) => {
   oldSecretIndex[o.secret] = i;
