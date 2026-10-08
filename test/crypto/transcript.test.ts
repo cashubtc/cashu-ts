@@ -335,7 +335,7 @@ describe('transaction transcript (vectors)', () => {
   });
 
   test('recoverV3SecretKeys resolves self-owned secrets by counter scan', () => {
-    const seed = new TextEncoder().encode(vectors.nut13_v3.seed_utf8);
+    const seed = hexToBytes(vectors.nut13_v3.seed_hex);
     const keysetId = vectors.nut13_v3.keyset_id;
     const secrets = vectors.nut13_v3.outputs.map((o) => o.secret);
     const found = recoverV3SecretKeys(seed, keysetId, [...secrets, '02'.padEnd(66, 'f')], 16);

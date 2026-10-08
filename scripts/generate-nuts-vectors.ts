@@ -5,7 +5,7 @@ import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { bytesToHex, numberToBytesBE } from '@noble/curves/utils.js';
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
+import { concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import {
   BLS_FR_ORDER,
@@ -226,13 +226,15 @@ function nut13V3Derive(seed: Uint8Array, keysetIdHex: string, counter: number) {
 function nut13V3Vector() {
   // Probe counters under a fixed seed/keyset until we find one where attempt=0 is rejected.
   // The keyset id is the NUT-02 V3 vector-1 id, so this stays in sync with the derivation.
-  const seed = utf8ToBytes('nut13 v3 test seed');
+  // The 64-byte seed the NUT-13 vectors carry (nuts tests/13-tests.md).
+  const seed = hexToBytes(
+    '6e757431332076332074657374207365656400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+  );
   const keysetIdHex = nut02V3Keyset([1, 2], 'sat').id;
   for (let counter = 0; counter < 200; counter++) {
     const out = nut13V3Derive(seed, keysetIdHex, counter);
     if (out.attempt > 0) {
       return {
-        seed_utf8: 'nut13 v3 test seed',
         seed_hex: bytesToHex(seed),
         keyset_id: keysetIdHex,
         counter,
