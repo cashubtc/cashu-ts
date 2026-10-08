@@ -987,7 +987,16 @@ function scriptPathWitnessSpends(digest: Uint8Array, secretHex: string, witness:
       hexToBytes(w.leaf),
       w.control.path.map((h) => hexToBytes(h)),
     );
-    const signed = countLeafSigners(leaf, digest, w.signatures ?? []) >= leaf.n;
+    // NUT-10: at most one entry per leaf key, each a 64-byte signature, preimage only on a hashlock.
+    const signatures = w.signatures ?? [];
+    if (
+      signatures.length > leaf.keys.length ||
+      !signatures.every((s) => typeof s === 'string' && s.length === 128 && HEX.test(s))
+    ) {
+      return false;
+    }
+    if (w.preimage !== undefined && leaf.type !== 'hashlock') return false;
+    const signed = countLeafSigners(leaf, digest, signatures) >= leaf.n;
     const unlocked =
       leaf.hash === undefined || (!!w.preimage && verifyHTLCHash(w.preimage, leaf.hash));
     return committed && signed && unlocked;
