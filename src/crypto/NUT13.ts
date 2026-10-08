@@ -6,7 +6,7 @@ import { HDKey, HARDENED_OFFSET } from '@scure/bip32';
 
 import { CTSError, InvalidScalarError } from '../model/Errors';
 import { isBase64String, isValidHex } from '../utils';
-import { MAX_SEED_BYTES, MIN_SEED_BYTES, NUTROOT_MAX_SLOTS } from '../utils/limits';
+import { NUTROOT_MAX_SLOTS, SEED_BYTES } from '../utils/limits';
 
 import { BLS_FR_ORDER } from './curve_bls';
 import { getPubKeyFromPrivKey, normalizeSecpPubkey } from './curve_secp';
@@ -315,12 +315,8 @@ export const DERIVATION_TYPE = {
 function assertSeed(seed: Uint8Array): void {
   // Every secret, blinding factor and key derived here inherits the seed's strength, and types
   // are erased for JS callers.
-  if (
-    !(seed instanceof Uint8Array) ||
-    seed.length < MIN_SEED_BYTES ||
-    seed.length > MAX_SEED_BYTES
-  ) {
-    throw new CTSError(`seed must be a ${MIN_SEED_BYTES} to ${MAX_SEED_BYTES} byte Uint8Array`);
+  if (!(seed instanceof Uint8Array) || seed.length !== SEED_BYTES) {
+    throw new CTSError(`seed must be a ${SEED_BYTES} byte Uint8Array`);
   }
 }
 

@@ -25,6 +25,13 @@ import {
 import { Amount } from '../../src/model/Amount';
 import vectors from '../vectors/nutroot-v3.json';
 
+// The NUT-13 helpers take the 64-byte BIP-39 seed; pad a label out to that length.
+const seed64 = (label: string): Uint8Array => {
+  const seed = new Uint8Array(64);
+  seed.set(new TextEncoder().encode(label));
+  return seed;
+};
+
 const tv = vectors.transcript;
 
 function fromVectorTx(tx: {
@@ -642,7 +649,7 @@ describe('transcript input guards', () => {
   });
 
   test('recoverV3SecretKeys guards its keyset and scan bound', () => {
-    const seed = new TextEncoder().encode('seed');
+    const seed = seed64('seed');
     expect(() => recoverV3SecretKeys(seed, `00${'11'.repeat(32)}`, [], 4)).toThrow(/v3 keyset/);
     const bls = vectors.nut13_v3.keyset_id;
     expect(() => recoverV3SecretKeys(seed, bls, [], -1)).toThrow(/maxCounter/);
