@@ -670,9 +670,12 @@ describe('locked secret construction and spend info cascade', () => {
     expect(() =>
       buildScriptPathWitness([vRefund.leaf_after], 0, vRefund.internal_key, [sig, sig]),
     ).toThrow(/signature/);
-    // A preimage is at most 32 bytes.
+    // A preimage is exactly 32 bytes.
     expect(() =>
       buildScriptPathWitness([vRefund.leaf_after], 0, vRefund.internal_key, [sig], 'ab'.repeat(33)),
+    ).toThrow(/preimage/);
+    expect(() =>
+      buildScriptPathWitness([vRefund.leaf_after], 0, vRefund.internal_key, [sig], 'ab'.repeat(31)),
     ).toThrow(/preimage/);
   });
 
