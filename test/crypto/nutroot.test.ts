@@ -198,7 +198,7 @@ describe('leaf serialization (vectors 6.2)', () => {
     );
   });
 
-  test('an unallocated leaf type (0x06) fails closed', () => {
+  test('an unallocated leaf type fails closed', () => {
     expect(() => parseNutrootLeaf(hexToBytes(vectors.leaf_forms.leaf_unknown_type))).toThrow(
       /type/,
     );

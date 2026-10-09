@@ -634,8 +634,8 @@ d.template_lock = {
     after_witness_path: [bytesToHex(taggedHash('Cashu_NutrootLeaf', tplLeaf))],
   };
 }
-// An unallocated leaf type (0x06, the threshold leaf's bytes under that type) fails closed.
-d.leaf_forms.leaf_unknown_type = '0006' + d.leaf_forms.threshold_1of1.slice(4);
+// An unallocated leaf type (0xff, the threshold leaf's bytes under that type) fails closed; far from the allocated range so new types never move it.
+d.leaf_forms.leaf_unknown_type = '00ff' + d.leaf_forms.threshold_1of1.slice(4);
 
 // NUT-07 spend commitments: tagged_hash("Cashu_SpendCommitment", Y || input_digest || witness_hash)
 // over the exact compact witness string. One private key-path spend (the swap), one disclosed
