@@ -234,9 +234,9 @@ export function serializeNutrootLeaf(leaf: NutrootLeaf): Uint8Array {
     tlvRecord(FIELD_N, new Uint8Array([leaf.n])),
     tlvRecord(FIELD_KEYS, concatBytes(...keyBytes)),
   ];
-  if (leaf.type === 'after') {
+  if (leaf.type === 'after' || leaf.type === 'template') {
     if (!Number.isInteger(leaf.time) || (leaf.time as number) < 0) {
-      throw new CTSError('after leaf requires a unix time');
+      throw new CTSError(`${leaf.type} leaf requires a unix time`);
     }
     if ((leaf.time as number) > NUTROOT_MAX_LEAF_TIME) {
       throw new CTSError('time out of range');
@@ -367,14 +367,15 @@ export function parseNutrootLeaf(bytes: Uint8Array): NutrootLeaf {
   if (n > keys.length) {
     throw new CTSError('Threshold exceeds leaf key count');
   }
-  if (typeName === 'after' && time === undefined) {
-    throw new CTSError('after leaf missing time field');
+  const timed = typeName === 'after' || typeName === 'template';
+  if (timed && time === undefined) {
+    throw new CTSError(`${typeName} leaf missing time field`);
   }
   const hashed = typeName === 'hashlock' || typeName === 'template';
   if (hashed && hash === undefined) {
     throw new CTSError(`${typeName} leaf missing hash field`);
   }
-  if (typeName !== 'after' && time !== undefined) {
+  if (!timed && time !== undefined) {
     throw new CTSError(`${typeName} leaf must not carry a time field`);
   }
   if (!hashed && hash !== undefined) {

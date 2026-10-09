@@ -541,7 +541,13 @@ const tplOutputs = {
 };
 const tplHashOf = (o: any) => bytesToHex(sha256(outputSection(fromVectorTx(o))));
 const tplHash = tplHashOf(tplOutputs);
-const tplLeaf = serializeNutrootLeaf({ type: 'template', n: 1, keys: [testKey(3)], hash: tplHash });
+const tplLeaf = serializeNutrootLeaf({
+  type: 'template',
+  n: 1,
+  keys: [testKey(3)],
+  time: d.two_leaf_covenant.vest_time,
+  hash: tplHash,
+});
 const tplRejected = {
   change_quote_outputs: [
     { ...tplOutputs.change_quote_outputs[0], amount: 4 },

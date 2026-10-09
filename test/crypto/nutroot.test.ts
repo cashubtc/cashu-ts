@@ -169,6 +169,7 @@ describe('leaf serialization (vectors 6.2)', () => {
       type: 'template',
       n: 1,
       keys: [vCovenant.kid_pub],
+      time: vCovenant.vest_time,
       hash: vectors.template_lock.hash,
     });
     expect(bytesToHex(leaf)).toBe(vCovenant.leaf_template);
@@ -176,6 +177,7 @@ describe('leaf serialization (vectors 6.2)', () => {
       type: 'template',
       n: 1,
       keys: [vCovenant.kid_pub],
+      time: vCovenant.vest_time,
       hash: vectors.template_lock.hash,
     });
     // One byte of the outputs changes the hash.

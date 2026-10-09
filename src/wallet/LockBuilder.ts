@@ -197,8 +197,8 @@ export class LockBuilder {
    * these outputs. v3 keysets only.
    *
    * @remarks
-   * A melt quote expires, so a template over one also needs `lockUntil` and refund keys; blinded
-   * messages need those or a remainder change quote; change quotes alone need neither.
+   * Needs `lockUntil`: the covenant ends then and the main keys spend freely after. Refund keys are
+   * optional and add an after leaf for different keys.
    * @throws If the outputs do not serialize, or there are none.
    */
   addTemplate(outputs: TemplateOutputs) {

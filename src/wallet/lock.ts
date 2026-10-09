@@ -40,8 +40,8 @@ export type LockOptions = {
    * Covenant (NUT-10 `template`): the main keys may spend only into exactly these outputs. v3 only.
    *
    * @remarks
-   * A melt quote expires, so a template over one needs `locktime` and `refundKeys` beside it;
-   * blinded messages need those or a remainder change quote; change quotes alone need neither.
+   * Needs `locktime`: the covenant ends then and the main keys spend freely after. `refundKeys` are
+   * optional and add an after leaf for different keys.
    */
   template?: TemplateOutputs;
   /**
@@ -154,6 +154,7 @@ export function lockToNutrootOptions(lock: LockOptions): ParsedNutrootOption {
       type: 'template',
       n,
       hash: templateHash(lock.template),
+      time: lock.locktime,
       keys: mainKeys,
       ...mode,
     });
@@ -162,7 +163,10 @@ export function lockToNutrootOptions(lock: LockOptions): ParsedNutrootOption {
   }
   // Refund keys without a locktime are inert under NUT-11 too (the refund path never activates),
   // so dropping them preserves the semantics exactly.
-  if (lock.locktime !== undefined) {
+  if (lock.template !== undefined && lock.locktime === undefined) {
+    throw new CTSError('A template needs a locktime: the covenant ends then');
+  }
+  if (lock.locktime !== undefined && (lock.template === undefined || lock.refundKeys?.length)) {
     const refundKeys = (lock.refundKeys ?? []).map(lc);
     if (refundKeys.length === 0) {
       throw new CTSError(
@@ -178,19 +182,6 @@ export function lockToNutrootOptions(lock: LockOptions): ParsedNutrootOption {
     leaves.push({ type: 'after', n: nRefund, time: lock.locktime, keys: refundKeys, ...mode });
   }
   leaves.push(...explicit);
-  // Build-time policy (NUT-10): a template over targets that can expire strands the value unless
-  // an after leaf, or for blinded messages a remainder quote, can reclaim it.
-  if (lock.template !== undefined && !leaves.some((leaf) => leaf.type === 'after')) {
-    const remainder = lock.template.changeQuoteOutputs?.some((c) => c.amount === undefined);
-    if (
-      lock.template.meltQuoteOutput !== undefined ||
-      (lock.template.blindedOutputs?.length && !remainder)
-    ) {
-      throw new CTSError(
-        'A template over outputs that can expire needs a locktime and refund keys beside it',
-      );
-    }
-  }
   // A commit leaf is never a spend path, so a lock made only of them is a burn.
   if (!keyPath && !leaves.some((leaf) => leaf.type !== 'commit')) {
     throw new CTSError('A lock needs a spend path: a commit leaf alone is unspendable');
