@@ -1635,7 +1635,10 @@ describeXX('NUT-XX transactions', () => {
     // NUMS internal key: the template is the holder's only way to move the value.
     const { send } = await wallet.ops
       .send(32, proofs)
-      .asLocked({ mainKeys: [holderPub], template }, [32])
+      .asLocked(
+        { mainKeys: [holderPub], template, locktime: Math.floor(Date.now() / 1000) + 3600 },
+        [32],
+      )
       .run();
     expect(send).toHaveLength(1);
     expect(send[0].spend_info?.u).toBeDefined();
