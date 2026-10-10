@@ -1426,7 +1426,78 @@ describe('tokenFromTemplate rejects valid CBOR of wrong shape', () => {
     expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
   });
 
+<<<<<<< HEAD
   test('defaults unit to sat when template omits it', () => {
+=======
+  test('throws CTSError when a proof entry is not an object', async () => {
+    const id = hexToBytes('00' + 'ab'.repeat(7));
+    const body = utils.encodeCBOR({ m: 'http://localhost:3338', t: [{ i: id, p: [null] }] });
+    const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
+    expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
+  });
+
+  test('throws CTSError when spend_info tree is not an array', async () => {
+    const id = hexToBytes('00' + 'ab'.repeat(7));
+    const c = hexToBytes('02' + '00'.repeat(32));
+    const proof = { a: 1n, s: 'abc', c, si: { t: 5 } };
+    const body = utils.encodeCBOR({ m: 'http://localhost:3338', t: [{ i: id, p: [proof] }] });
+    const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
+    expect(() => utils.getDecodedToken(token, [])).toThrow(/spend_info tree/);
+  });
+
+  describe('text fields', () => {
+    function tokenWith(top: Record<string, unknown>, proof: Record<string, unknown>): string {
+      const id = hexToBytes('00' + 'ab'.repeat(7));
+      const p = { a: 1n, s: 'abc', c: hexToBytes('02' + '00'.repeat(32)), ...proof };
+      const template = { m: 'http://localhost:3338', ...top, t: [{ i: id, p: [p] }] };
+      return 'cashuB' + utils.encodeUint8ToBase64Url(utils.encodeCBOR(template));
+    }
+    const wrongTypes = [42n, true, { signatures: ['sig'] }, ['sig'], new Uint8Array([1])];
+    const cases = [
+      ['mint', (v: unknown) => tokenWith({ m: v }, {})],
+      ['unit', (v: unknown) => tokenWith({ u: v }, {})],
+      ['memo', (v: unknown) => tokenWith({ d: v }, {})],
+      ['secret', (v: unknown) => tokenWith({}, { s: v })],
+      ['witness', (v: unknown) => tokenWith({}, { w: v })],
+    ] as const;
+
+    describe.each(cases)('throws CTSError when the %s is not a string', (field, build) => {
+      test.each(wrongTypes)('%o', (value) => {
+        const token = build(value);
+        expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
+        expect(() => utils.getDecodedToken(token, [])).toThrow(
+          `${field} must be a non-empty string`,
+        );
+      });
+    });
+
+    test.each(cases.filter(([field]) => field === 'mint' || field === 'secret'))(
+      'throws CTSError when the required %s is empty',
+      (field, build) => {
+        expect(() => utils.getDecodedToken(build(''), [])).toThrow(
+          `${field} must be a non-empty string`,
+        );
+      },
+    );
+
+    test('a missing mint is rejected', () => {
+      const id = hexToBytes('00' + 'ab'.repeat(7));
+      const p = { a: 1n, s: 'abc', c: hexToBytes('02' + '00'.repeat(32)) };
+      const body = utils.encodeCBOR({ t: [{ i: id, p: [p] }] });
+      const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
+      expect(() => utils.getDecodedToken(token, [])).toThrow('mint must be a non-empty string');
+    });
+
+    test('a falsy unit, memo or witness keeps its fallback', () => {
+      const decoded = utils.getDecodedToken(tokenWith({ u: '', d: '' }, { w: '' }), []);
+      expect(decoded.unit).toBe('sat');
+      expect(decoded).not.toHaveProperty('memo');
+      expect(decoded.proofs[0]).not.toHaveProperty('witness');
+    });
+  });
+
+  test('defaults unit to sat when template omits it', async () => {
+>>>>>>> 9a6bd03 (fix(core): validate text fields when decoding a v4 token (#1307))
     const body = utils.encodeCBOR({ m: 'http://localhost:3338', t: [] });
     const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
     const decoded = utils.getDecodedToken(token, []);
