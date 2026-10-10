@@ -315,6 +315,9 @@ const token = wallet.decodeToken(bytes);
 
 // or, outside a wallet instance
 const token = getDecodedTokenBinary(bytes, myKeyChain.getAllKeysetIds());
+
+// or, to read the mint and unit before you have a wallet
+const { mint, unit } = getTokenMetadata(bytes);
 ```
 
 ---

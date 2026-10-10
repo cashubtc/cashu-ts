@@ -790,7 +790,7 @@ export function getTags(secret: Secret | string): string[][];
 export function getTagScalar(secret: Secret | string, key: string): string | undefined;
 
 // @public
-export function getTokenMetadata(token: string): TokenMetadata;
+export function getTokenMetadata(token: string | Uint8Array): TokenMetadata;
 
 // @public
 export function getValidSigners(signatures: string[], digest: DigestInput, pubkeys: string[]): string[];
