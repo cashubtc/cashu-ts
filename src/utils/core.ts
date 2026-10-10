@@ -341,6 +341,16 @@ function templateHex(value: unknown, field: string): string {
 }
 
 /**
+ * Reads a text field from a decoded token template; the text counterpart of {@link templateHex}.
+ */
+function templateText(value: unknown, field: string): string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new CTSError(`Invalid token: ${field} must be a non-empty string`);
+  }
+  return value;
+}
+
+/**
  * True when a decoded v4 DLEQ block carries all three of `e`, `s` and `r`.
  *
  * @remarks
@@ -356,6 +366,9 @@ function fromV4CborTemplate(template: TokenV4Template): Token {
   if (!template || !Array.isArray(template.t)) {
     throw new CTSError('Invalid token');
   }
+  const mint = templateText(template.m, 'mint');
+  const unit = template.u ? templateText(template.u, 'unit') : 'sat';
+  const memo = template.d ? templateText(template.d, 'memo') : undefined;
   const proofs: Proof[] = [];
   template.t.forEach((t) => {
     if (!t || !Array.isArray(t.p)) {
@@ -363,8 +376,11 @@ function fromV4CborTemplate(template: TokenV4Template): Token {
     }
     t.p.forEach((p) => {
       const id = templateHex(t.i, 'keyset id');
+      const secret = templateText(p.s, 'secret');
+      // NUT-00 carries the witness as serialized JSON text.
+      const witness = p.w ? templateText(p.w, 'witness') : undefined;
       proofs.push({
-        secret: p.s,
+        secret,
         C: templateHex(p.c, 'proof C'),
         amount: Amount.from(p.a),
         id,
@@ -378,17 +394,11 @@ function fromV4CborTemplate(template: TokenV4Template): Token {
         ...(p.pe && {
           p2pk_e: templateHex(p.pe, 'p2pk_e'),
         }),
-        ...(p.w && {
-          witness: p.w,
-        }),
+        ...(witness && { witness }),
       });
     });
   });
-  const decodedToken: Token = { mint: template.m, proofs, unit: template.u || 'sat' };
-  if (template.d) {
-    decodedToken.memo = template.d;
-  }
-  return decodedToken;
+  return { mint, proofs, unit, ...(memo && { memo }) };
 }
 
 /**
