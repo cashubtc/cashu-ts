@@ -394,23 +394,7 @@ function fromV4CborTemplate(template: TokenV4Template): Token {
         ...(p.pe && {
           p2pk_e: templateHex(p.pe, 'p2pk_e'),
         }),
-<<<<<<< HEAD
-        ...(p.w && {
-          witness: p.w,
-=======
-        ...(witness && !isV3TransactionWitness(id, secret) && { witness }),
-        ...(p.si && {
-          spend_info: {
-            ...(p.si.k && { k: templateHex(p.si.k, 'spend_info k') }),
-            ...(p.si.e && { E: templateHex(p.si.e, 'spend_info E') }),
-            ...(p.si.i && { K: templateHex(p.si.i, 'spend_info K') }),
-            ...(p.si.u && { u: templateHex(p.si.u, 'spend_info u') }),
-            ...(p.si.t && {
-              tree: p.si.t.map((leaf) => templateHex(leaf, 'spend_info tree leaf')),
-            }),
-          },
->>>>>>> 9a6bd03 (fix(core): validate text fields when decoding a v4 token (#1307))
-        }),
+        ...(witness && { witness }),
       });
     });
   });

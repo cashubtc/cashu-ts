@@ -1426,25 +1426,6 @@ describe('tokenFromTemplate rejects valid CBOR of wrong shape', () => {
     expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
   });
 
-<<<<<<< HEAD
-  test('defaults unit to sat when template omits it', () => {
-=======
-  test('throws CTSError when a proof entry is not an object', async () => {
-    const id = hexToBytes('00' + 'ab'.repeat(7));
-    const body = utils.encodeCBOR({ m: 'http://localhost:3338', t: [{ i: id, p: [null] }] });
-    const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
-    expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
-  });
-
-  test('throws CTSError when spend_info tree is not an array', async () => {
-    const id = hexToBytes('00' + 'ab'.repeat(7));
-    const c = hexToBytes('02' + '00'.repeat(32));
-    const proof = { a: 1n, s: 'abc', c, si: { t: 5 } };
-    const body = utils.encodeCBOR({ m: 'http://localhost:3338', t: [{ i: id, p: [proof] }] });
-    const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
-    expect(() => utils.getDecodedToken(token, [])).toThrow(/spend_info tree/);
-  });
-
   describe('text fields', () => {
     function tokenWith(top: Record<string, unknown>, proof: Record<string, unknown>): string {
       const id = hexToBytes('00' + 'ab'.repeat(7));
@@ -1496,8 +1477,7 @@ describe('tokenFromTemplate rejects valid CBOR of wrong shape', () => {
     });
   });
 
-  test('defaults unit to sat when template omits it', async () => {
->>>>>>> 9a6bd03 (fix(core): validate text fields when decoding a v4 token (#1307))
+  test('defaults unit to sat when template omits it', () => {
     const body = utils.encodeCBOR({ m: 'http://localhost:3338', t: [] });
     const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
     const decoded = utils.getDecodedToken(token, []);
