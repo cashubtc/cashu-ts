@@ -13,6 +13,12 @@ const MAX_MESSAGE_LENGTH = 1_048_576;
 const MAX_SEQUENCE = 0xffffffff;
 // 189 + 24 bytes fills a version 10-M QR symbol exactly.
 const DEFAULT_FRAGMENT_SIZE = 189;
+// QR alphanumeric mode's 45 characters, in RFC 9285 order.
+const BASE45 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:';
+// no text prefix until the spec picks one; every frame already starts 'D+9' ('NF').
+const TEXT_PREFIX = '';
+const TEXT_MAGIC = TEXT_PREFIX + 'D+9';
+const MAX_TEXT_LENGTH = TEXT_PREFIX.length + ((MAX_FRAGMENT_SIZE + 24) / 2) * 3;
 
 let crcTable: Uint32Array | undefined;
 
@@ -74,6 +80,61 @@ function xorInto(
   from = 0,
 ): void {
   for (let i = from; i < target.length; i++) target[i] ^= source[i];
+}
+
+/**
+ * RFC 9285 Base45: two bytes to three QR alphanumeric characters.
+ *
+ * @internal
+ */
+export function encodeBase45(bytes: Uint8Array): string {
+  let out = '';
+  for (let i = 0; i < bytes.length; i += 2) {
+    const pair = i + 1 < bytes.length;
+    let n = pair ? bytes[i] * 256 + bytes[i + 1] : bytes[i];
+    for (let digits = pair ? 3 : 2; digits > 0; digits--) {
+      out += BASE45[n % 45];
+      n = Math.floor(n / 45);
+    }
+  }
+  return out;
+}
+
+/**
+ * RFC 9285 Base45 decode, rejecting bad characters, lengths and out-of-range groups.
+ *
+ * @internal
+ */
+export function decodeBase45(text: string): Uint8Array {
+  if (text.length % 3 === 1) {
+    throw new CTSError('Invalid base45 text: bad length');
+  }
+  const out = new Uint8Array(Math.floor(text.length / 3) * 2 + (text.length % 3 ? 1 : 0));
+  let o = 0;
+  for (let i = 0; i < text.length; i += 3) {
+    const group = text.slice(i, i + 3);
+    let n = 0;
+    for (let d = group.length - 1; d >= 0; d--) {
+      const value = BASE45.indexOf(group[d]);
+      if (value < 0) {
+        throw new CTSError('Invalid base45 text: unexpected character');
+      }
+      n = n * 45 + value;
+    }
+    if (n > (group.length === 3 ? 0xffff : 0xff)) {
+      throw new CTSError('Invalid base45 text: group out of range');
+    }
+    if (group.length === 3) out[o++] = n >>> 8;
+    out[o++] = n & 0xff;
+  }
+  return out;
+}
+
+function frameFromText(text: string): Uint8Array {
+  if (text.length > MAX_TEXT_LENGTH || !text.startsWith(TEXT_PREFIX)) {
+    throw new CTSError('Invalid fountain frame text');
+  }
+  return decodeBase45(text.slice(TEXT_PREFIX.length));
 }
 
 type FrameHeader = {
@@ -222,6 +283,16 @@ export class FountainEncoder {
     view.setUint32(HEADER_LENGTH + size, crc32(frame.subarray(0, HEADER_LENGTH + size)));
     return frame;
   }
+
+  /**
+   * Returns the next frame as Base45 text, for a QR alphanumeric-mode symbol.
+   *
+   * @remarks
+   * Text costs 1.5 characters per byte: a version 10-M symbol fits a `fragmentSize` of 183.
+   */
+  nextFrameText(): string {
+    return TEXT_PREFIX + encodeBase45(this.nextFrame());
+  }
 }
 
 type Equation = { coefficients: Uint32Array; data: Uint8Array };
@@ -240,11 +311,12 @@ export class FountainDecoder {
   private message?: Uint8Array;
 
   /**
-   * True when the bytes carry the NUT-16 `NF` magic and belong to this decoder rather than a text
-   * parser. Unsupported versions still match, and {@link FountainDecoder.receive} rejects them.
+   * True when a scanned frame, as bytes or Base45 text, carries the NUT-16 `NF` magic. Unsupported
+   * versions still match, and {@link FountainDecoder.receive} rejects them.
    */
-  static isFrame(bytes: Uint8Array): boolean {
-    return bytes instanceof Uint8Array && bytes[0] === 0x4e && bytes[1] === 0x46;
+  static isFrame(frame: Uint8Array | string): boolean {
+    if (typeof frame === 'string') return frame.startsWith(TEXT_MAGIC);
+    return frame instanceof Uint8Array && frame[0] === 0x4e && frame[1] === 0x46;
   }
 
   /**
@@ -276,8 +348,9 @@ export class FountainDecoder {
    * @throws {CTSError} If the frame is invalid, belongs to another transfer (call
    *   {@link FountainDecoder.reset} to switch), or completes a message that fails its checksum.
    */
-  receive(frame: Uint8Array): boolean {
-    const { sequence, payload, ...transfer } = parseFrame(frame);
+  receive(frame: Uint8Array | string): boolean {
+    const bytes = typeof frame === 'string' ? frameFromText(frame) : frame;
+    const { sequence, payload, ...transfer } = parseFrame(bytes);
     if (this.transfer && !sameTransfer(this.transfer, transfer)) {
       throw new CTSError('Fountain frame belongs to a different transfer; call reset() to switch');
     }
