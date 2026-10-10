@@ -1623,6 +1623,45 @@ describeXX('NUT-XX transactions', () => {
     await expect(other.wallet.completeTransaction(second)).rejects.toThrow(MintOperationError);
   });
 
+  test('a template covenant spends only into its committed change quotes', async () => {
+    const { wallet, proofs } = await funded(64);
+    const fixed = await wallet.createQuoteLockKey();
+    const rest = await wallet.createQuoteLockKey();
+    const template = {
+      changeQuoteOutputs: [{ pubkey: fixed.pubkey, amount: 3 }, { pubkey: rest.pubkey }],
+    };
+    const holderPriv = bytesToHex(randomBytes(32));
+    const holderPub = bytesToHex(secp256k1.getPublicKey(hexToBytes(holderPriv), true));
+    // NUMS internal key: the template is the holder's only way to move the value.
+    const { send } = await wallet.ops
+      .send(32, proofs)
+      .asLocked(
+        { mainKeys: [holderPub], template, locktime: Math.floor(Date.now() / 1000) + 3600 },
+        [32],
+      )
+      .run();
+    expect(send).toHaveLength(1);
+    expect(send[0].spend_info?.u).toBeDefined();
+    const [proof] = send;
+    const plan = { secret: proof.secret, leafIndex: 0 };
+    // The committed outputs, one byte off: the mint refuses.
+    const wrong = await wallet.prepareTransaction({
+      proofInputs: [proof],
+      changeQuoteOutputs: [{ pubkey: fixed.pubkey, amount: 4 }, { pubkey: rest.pubkey }],
+    });
+    await expect(
+      wallet.completeTransaction(wrong, holderPriv, { scriptPath: [plan] }),
+    ).rejects.toThrow(MintOperationError);
+    const preview = await wallet.prepareTransaction({ proofInputs: [proof], ...template });
+    const result = await wallet.completeTransaction(preview, holderPriv, { scriptPath: [plan] });
+    expect(result.response.state).toBe('PAID');
+    const [fixedQuote, restQuote] = result.response.change_quotes;
+    expect(fixedQuote!.amount_paid.toBigInt()).toBe(3n);
+    expect(restQuote!.amount_paid.toBigInt()).toBe(
+      32n - wallet.getFeesForProofs([proof]).toBigInt() - 3n,
+    );
+  });
+
   test('mint-shaped: a quote input for its full amount, proofs out', async () => {
     const wallet = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
     await wallet.loadMint();

@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest';
 import { LockBuilder, Wallet } from '../../src';
 import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import { NUTROOT_NUMS_KEY, parseNutrootLeaf, serializeNutrootLeaf } from '../../src/crypto/nutroot';
+import { templateHash } from '../../src/crypto/transcript';
 import { Amount } from '../../src/model/Amount';
 import type { OutputData } from '../../src/model/OutputData';
 import { bytesToHex, hexToBytes } from '../../src/utils';
@@ -236,6 +237,23 @@ describe('lockToNutrootOptions (v3 encoder)', () => {
     expect(() =>
       lockToNutrootOptions({ mainKeys: [PUB_A, PUB_B], requiredMainSignatures: 3 }),
     ).toThrow();
+  });
+
+  test('a template is a template leaf under NUMS that ends at the locktime', () => {
+    const template = { changeQuoteOutputs: [{ pubkey: PUB_B, amount: 3 }, { pubkey: PUB_C }] };
+    expect(lockToNutrootOptions({ mainKeys: [PUB_A], template, locktime: TIME })).toEqual({
+      receiverKey: NUTROOT_NUMS_KEY,
+      leaves: [{ type: 'template', n: 1, keys: [PUB_A], time: TIME, hash: templateHash(template) }],
+    });
+    expect(() => lockToNutrootOptions({ mainKeys: [PUB_A], template })).toThrow(/locktime/);
+    expect(() => lockToNutrootOptions({ template, locktime: TIME })).toThrow(/key/i);
+    expect(() =>
+      lockToNutrootOptions({ mainKeys: [PUB_A], template, locktime: TIME, hashlock: HASH }),
+    ).toThrow(/not both/);
+    expect(() => lockToP2PKOptions({ mainKeys: [PUB_A], template, locktime: TIME })).toThrow(/v3/);
+    // Refund keys add an after leaf for different keys; without them the template keys spend freely.
+    const escaped = { mainKeys: [PUB_A], template, locktime: TIME, refundKeys: [PUB_R] };
+    expect(lockToNutrootOptions(escaped).leaves?.map((l) => l.type)).toEqual(['template', 'after']);
   });
 });
 

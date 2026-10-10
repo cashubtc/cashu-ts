@@ -7,6 +7,7 @@ import {
   type P2PKTag,
 } from '../crypto';
 import { serializeNutrootLeaf, type NutrootLeaf } from '../crypto/nutroot';
+import { templateHash, type TemplateOutputs } from '../crypto/transcript';
 import { CTSError } from '../model/Errors';
 import { MAX_SECRET_LENGTH } from '../utils/limits';
 
@@ -70,6 +71,7 @@ export class LockBuilder {
   private _sigAll?: boolean;
   private _disclosure?: boolean;
   private hashlock?: string;
+  private template?: TemplateOutputs;
   private leaves: NutrootLeaf[] = [];
 
   /**
@@ -191,6 +193,21 @@ export class LockBuilder {
   }
 
   /**
+   * Makes the main path a covenant (NUT-10 `template`): the main keys may spend only into exactly
+   * these outputs. v3 keysets only.
+   *
+   * @remarks
+   * Needs `lockUntil`: the covenant ends then and the main keys spend freely after. Refund keys are
+   * optional and add an after leaf for different keys.
+   * @throws If the outputs do not serialize, or there are none.
+   */
+  addTemplate(outputs: TemplateOutputs) {
+    templateHash(outputs); // validate at the setter, like the other inputs
+    this.template = outputs;
+    return this;
+  }
+
+  /**
    * Adds an explicit tree leaf beyond what the other methods express (eg staged reclaim windows).
    * v3 keysets only.
    *
@@ -216,8 +233,13 @@ export class LockBuilder {
    * Builds the {@link LockOptions}, validating through a real encoder so a bad lock fails here.
    */
   toOptions(): LockOptions {
-    if (this.mainKeys.length === 0 && this.hashlock === undefined && this.leaves.length === 0) {
-      throw new CTSError('At least one main pubkey, hashlock, or leaf is required');
+    if (
+      this.mainKeys.length === 0 &&
+      this.hashlock === undefined &&
+      this.template === undefined &&
+      this.leaves.length === 0
+    ) {
+      throw new CTSError('At least one main pubkey, hashlock, template, or leaf is required');
     }
     // Encoders drop inert refund keys quietly; the builder catches them as the user error they
     // almost certainly are (a forgotten lockUntil).
@@ -232,6 +254,7 @@ export class LockBuilder {
         ? { requiredMainSignatures: this.nSigs }
         : {}),
       ...(this.hashlock !== undefined && { hashlock: this.hashlock }),
+      ...(this.template !== undefined && { template: this.template }),
       ...(this.locktime !== undefined && { locktime: this.locktime }),
       ...(this.refundKeys.length > 0 && { refundKeys: this.refundKeys.slice() }),
       ...(this.nSigsRefund !== undefined && (this.nSigsRefund > 1 || this.refundKeys.length === 0)
@@ -244,7 +267,7 @@ export class LockBuilder {
       ...(this._sigAll && { sigAll: true }),
     };
     // Smoke-test through the encoder checks so a bad lock fails here, not at send time.
-    if (lock.leaves || Array.isArray(lock.blindKeys)) {
+    if (lock.leaves || lock.template || Array.isArray(lock.blindKeys)) {
       lockToNutrootOptions(lock);
     } else {
       assertP2PKLockEncodes(lock);
@@ -288,6 +311,7 @@ export class LockBuilder {
       throw new CTSError(`${field} must be an array of pubkeys`);
     }
     if (lock.hashlock !== undefined) b.addHashlock(lock.hashlock);
+    if (lock.template !== undefined) b.addTemplate(lock.template);
     if (lock.mainKeys?.length) b.addMainPubkey(lock.mainKeys);
     // lock.locktime is already canonical Unix seconds; assign directly so lockUntil's
     // ms heuristic can't re-interpret a >= 1e12 second value and expire the lock.

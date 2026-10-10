@@ -22,15 +22,18 @@ import {
   buildTransactionTranscript,
   changeQuoteId,
   inputDigest,
+  outputSection,
   spendCommitment,
   transactionDigest,
   transcriptContainers,
 } from '../src/crypto/transcript';
-import type { TransactionShape } from '../src/crypto/transcript';
+import type { TransactionElements } from '../src/crypto/transcript';
 import { Amount } from '../src/model/Amount';
 import { decodeCBOR, encodeCBOR } from '../src/utils/cbor';
 import {
   buildNutrootSecret,
+  nutrootMerklePath,
+  nutrootMerkleRoot,
   parseNutrootLeafHex,
   serializeNutrootLeaf,
   type NutrootLeaf,
@@ -134,7 +137,7 @@ if (!claim.test(d.nut13_v3.comment))
 d.nut13_v3.comment = d.nut13_v3.comment.replace(claim, summary);
 
 // --- transcript -------------------------------------------------------------
-function fromVectorTx(tx: any): TransactionShape {
+function fromVectorTx(tx: any): TransactionElements {
   return {
     proofInputs: tx.proof_inputs?.map((p: any) => ({
       amount: BigInt(p.amount),
@@ -528,6 +531,111 @@ d.auditable_lock = {
   input_digest: bytesToHex(audInputDigest),
   witness: audWitness,
 };
+
+// Template leaf (NUT-10): hash = SHA256 over the output section, here the two change quote
+// containers of proof_to_two_changes. A spend through it is the swap proof (same amount, keyset
+// and C) under a new secret, spent into exactly those outputs. The rejection case bumps the fixed
+// quote from 3 to 4 sat: one byte of the output section, a different hash.
+const tplOutputs = {
+  change_quote_outputs: d.transcript.proof_to_two_changes.tx.change_quote_outputs,
+};
+const tplHashOf = (o: any) => bytesToHex(sha256(outputSection(fromVectorTx(o))));
+const tplHash = tplHashOf(tplOutputs);
+const tplLeaf = serializeNutrootLeaf({
+  type: 'template',
+  n: 1,
+  keys: [testKey(3)],
+  time: d.two_leaf_covenant.vest_time,
+  hash: tplHash,
+});
+const tplRejected = {
+  change_quote_outputs: [
+    { ...tplOutputs.change_quote_outputs[0], amount: 4 },
+    tplOutputs.change_quote_outputs[1],
+  ],
+};
+// Spend leaf `index` of `tree` under internal key `K` into tplOutputs, signed by test key 3.
+function spendTemplate(K: Uint8Array, tree: Uint8Array[], index: number) {
+  const hashes = tree.map((leaf) => taggedHash('Cashu_NutrootLeaf', leaf));
+  const root = nutrootMerkleRoot(hashes);
+  const tweak = BigInt('0x' + bytesToHex(taggedHash('Cashu_NutrootTweak', K, root))) % N_SECP;
+  const secret = SecpPoint.fromBytes(K).add(SecpPoint.BASE.multiply(tweak)).toBytes(true);
+  const txVector = {
+    proof_inputs: [{ ...d.transcript.swap.tx.proof_inputs[0], secret: bytesToHex(secret) }],
+    ...tplOutputs,
+  };
+  const tx = fromVectorTx(txVector);
+  const transcript = buildTransactionTranscript(tx);
+  const digest = transactionDigest(tx);
+  const container = transcript.subarray(0, 3 + ((transcript[1] << 8) | transcript[2]));
+  const digestForInput = inputDigest(digest, container);
+  return {
+    merkle_root: bytesToHex(root),
+    tweak: bytesToHex(bigTo32(tweak)),
+    secret: bytesToHex(secret),
+    Y: hashToCurveBls(secret).toHex(true),
+    tx: txVector,
+    transcript: bytesToHex(transcript),
+    digest: bytesToHex(digest),
+    input_id: bytesToHex(sha256(container)),
+    input_digest: bytesToHex(digestForInput),
+    witness: JSON.stringify({
+      leaf: bytesToHex(tree[index]),
+      control: { K: bytesToHex(K), path: nutrootMerklePath(hashes, index).map(bytesToHex) },
+      signatures: [bytesToHex(schnorr.sign(digestForInput, bigTo32(3n), AUX0))],
+    }),
+  };
+}
+d.template_lock = {
+  comment:
+    'Template covenant: NUMS offset u = 7, one template leaf n = 1 to test key 3 whose hash is SHA256 over the output section (the two change quote containers of proof_to_two_changes), spent into exactly those outputs. rejected_outputs is the same transaction with the fixed quote at 4 sat: its output section hashes differently, so the witness is rejected.',
+  u: bytesToHex(bigTo32(7n)),
+  K: bytesToHex(K_aud),
+  output_section: bytesToHex(outputSection(fromVectorTx(tplOutputs))),
+  hash: tplHash,
+  leaf: bytesToHex(tplLeaf),
+  ...spendTemplate(K_aud, [tplLeaf], 0),
+  rejected_outputs: {
+    change_quote_outputs: tplRejected.change_quote_outputs,
+    output_section: bytesToHex(outputSection(fromVectorTx(tplRejected))),
+    hash: tplHashOf(tplRejected),
+  },
+};
+
+// Two leaves and a filled path: the template leaf beside an after leaf (key 3, vest_time) under
+// internal key 6, the parent's. The kid spends through the template until vesting, then freely.
+{
+  const K6 = hexToBytes(testKey(6));
+  const afterLeaf = hexToBytes(d.two_leaf_covenant.leaf_after);
+  const spend = spendTemplate(K6, [tplLeaf, afterLeaf], 0);
+  const witness = JSON.parse(spend.witness);
+  d.two_leaf_covenant = {
+    comment:
+      'Allowance covenant: until vesting the kid (key 3) can only spend into the template outputs (3 sat to key 5, remainder to key 6); after vest_time the after leaf lets the kid spend freely; the parent (key 6) holds the key path. Two leaves, one branch: template_witness reveals leaf 0 with path [leaf_hash_after], the after path is [leaf_hash_template].',
+    kid_priv: bytesToHex(bigTo32(3n)),
+    kid_pub: testKey(3),
+    parent_priv: bytesToHex(bigTo32(6n)),
+    internal_key: testKey(6),
+    vest_time: d.two_leaf_covenant.vest_time,
+    leaf_template: bytesToHex(tplLeaf),
+    leaf_after: bytesToHex(afterLeaf),
+    leaf_hash_template: bytesToHex(taggedHash('Cashu_NutrootLeaf', tplLeaf)),
+    leaf_hash_after: bytesToHex(taggedHash('Cashu_NutrootLeaf', afterLeaf)),
+    merkle_root: spend.merkle_root,
+    tweak: spend.tweak,
+    secret: spend.secret,
+    Y: spend.Y,
+    tx: spend.tx,
+    transcript: spend.transcript,
+    digest: spend.digest,
+    input_id: spend.input_id,
+    input_digest: spend.input_digest,
+    template_witness: witness,
+    after_witness_path: [bytesToHex(taggedHash('Cashu_NutrootLeaf', tplLeaf))],
+  };
+}
+// An unallocated leaf type (0xff, the threshold leaf's bytes under that type) fails closed; far from the allocated range so new types never move it.
+d.leaf_forms.leaf_unknown_type = '00ff' + d.leaf_forms.threshold_1of1.slice(4);
 
 // NUT-07 spend commitments: tagged_hash("Cashu_SpendCommitment", Y || input_digest || witness_hash)
 // over the exact compact witness string. One private key-path spend (the swap), one disclosed

@@ -534,6 +534,27 @@ describe('LockBuilder.disclose()', () => {
   });
 });
 
+describe('LockBuilder.addTemplate()', () => {
+  it('carries the template into the options, round-trips, and encodes for v3 only', () => {
+    const template = { changeQuoteOutputs: [{ pubkey: comp('b', '02') }] };
+    const b = new LockBuilder()
+      .addMainPubkey(comp('a', '02'))
+      .addTemplate(template)
+      .lockUntil(2000000000);
+    expect(b.toOptions().template).toEqual(template);
+    expect(LockBuilder.fromOptions(b.toOptions()).toOptions().template).toEqual(template);
+    expect(b.validate('nutroot')).toEqual([]);
+    expect(b.validate('p2pk')).toHaveLength(1);
+    // Validated at the setter; a template alone is a lock, refused later for want of a key.
+    expect(() => new LockBuilder().addTemplate({})).toThrow(/at least one output/i);
+    expect(() => new LockBuilder().addTemplate(template).toOptions()).toThrow(/key/i);
+    // The covenant ends at the locktime, so a template without one is refused.
+    expect(
+      new LockBuilder().addMainPubkey(comp('a', '02')).addTemplate(template).validate('nutroot'),
+    ).toHaveLength(1);
+  });
+});
+
 describe('P2PKBuilder.blindKeys()', () => {
   it('sets blindKeys flag and round-trips via fromOptions', () => {
     const k = comp('a', '02');

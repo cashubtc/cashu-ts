@@ -14,6 +14,7 @@ import {
   type NutrootLeaf,
   type ParsedNutrootOption,
 } from '../crypto/nutroot';
+import { templateHash, type TemplateOutputs } from '../crypto/transcript';
 import { CTSError } from '../model/Errors';
 import { hexToBytes } from '../utils';
 
@@ -35,6 +36,14 @@ export type LockOptions = {
    * SHA-256 hashlock (NUT-14 HTLC semantics): a preimage is required alongside signatures.
    */
   hashlock?: string;
+  /**
+   * Covenant (NUT-10 `template`): the main keys may spend only into exactly these outputs. v3 only.
+   *
+   * @remarks
+   * Needs `locktime`: the covenant ends then and the main keys spend freely after. `refundKeys` are
+   * optional and add an after leaf for different keys.
+   */
+  template?: TemplateOutputs;
   /**
    * Unix seconds after which the refund path activates; the main path never expires.
    */
@@ -109,13 +118,21 @@ export function lockToNutrootOptions(lock: LockOptions): ParsedNutrootOption {
   const explicit = (lock.leaves ?? []).map((leaf) =>
     leaf.type === 'commit' ? leaf : { ...leaf, keys: leaf.keys.map(lc) },
   );
-  if (mainKeys.length === 0 && lock.hashlock === undefined && explicit.length === 0) {
-    throw new CTSError('A lock needs at least one main key, hashlock, or leaf');
+  if (
+    mainKeys.length === 0 &&
+    lock.hashlock === undefined &&
+    lock.template === undefined &&
+    explicit.length === 0
+  ) {
+    throw new CTSError('A lock needs at least one main key, hashlock, template, or leaf');
   }
-  if (lock.hashlock !== undefined && mainKeys.length === 0) {
+  if ((lock.hashlock !== undefined || lock.template !== undefined) && mainKeys.length === 0) {
     throw new CTSError(
-      'A keyless hashlock does not fit a v3 lock: leaves require at least one key',
+      'A keyless hashlock or template does not fit a v3 lock: leaves require at least one key',
     );
+  }
+  if (lock.hashlock !== undefined && lock.template !== undefined) {
+    throw new CTSError('A lock takes a hashlock or a template, not both');
   }
   const n = lock.requiredMainSignatures ?? 1;
   if (n > mainKeys.length && (mainKeys.length > 0 || lock.requiredMainSignatures !== undefined)) {
@@ -125,15 +142,31 @@ export function lockToNutrootOptions(lock: LockOptions): ParsedNutrootOption {
   const mode = lock.disclosure ? { disclosure: 1 } : {};
   // A key-path spend has no leaf to disclose, so a disclosed single key becomes a leaf under NUMS.
   const keyPath =
-    lock.hashlock === undefined && mainKeys.length === 1 && n === 1 && !lock.disclosure;
+    lock.hashlock === undefined &&
+    lock.template === undefined &&
+    mainKeys.length === 1 &&
+    n === 1 &&
+    !lock.disclosure;
   if (lock.hashlock !== undefined) {
     leaves.push({ type: 'hashlock', n, hash: lc(lock.hashlock), keys: mainKeys, ...mode });
+  } else if (lock.template !== undefined) {
+    leaves.push({
+      type: 'template',
+      n,
+      hash: templateHash(lock.template),
+      time: lock.locktime,
+      keys: mainKeys,
+      ...mode,
+    });
   } else if (!keyPath && mainKeys.length > 0) {
     leaves.push({ type: 'threshold', n, keys: mainKeys, ...mode });
   }
   // Refund keys without a locktime are inert under NUT-11 too (the refund path never activates),
   // so dropping them preserves the semantics exactly.
-  if (lock.locktime !== undefined) {
+  if (lock.template !== undefined && lock.locktime === undefined) {
+    throw new CTSError('A template needs a locktime: the covenant ends then');
+  }
+  if (lock.locktime !== undefined && (lock.template === undefined || lock.refundKeys?.length)) {
     const refundKeys = (lock.refundKeys ?? []).map(lc);
     if (refundKeys.length === 0) {
       throw new CTSError(
@@ -171,7 +204,7 @@ export function lockToNutrootOptions(lock: LockOptions): ParsedNutrootOption {
  * @throws On a shape NUT-11 cannot express: explicit leaves, or a partial blind-me list.
  */
 export function lockToP2PKOptions(lock: LockOptions): P2PKOptions {
-  if (lock.leaves?.length) {
+  if (lock.leaves?.length || lock.template !== undefined) {
     throw new CTSError('Leaf locks need a v3 keyset: NUT-11 tags cannot express a tree');
   }
   if (Array.isArray(lock.blindKeys)) {
