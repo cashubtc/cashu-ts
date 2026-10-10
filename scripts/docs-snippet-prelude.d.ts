@@ -110,3 +110,7 @@ declare const db: { incrementAndGetPrevious(key: string, n: number): Promise<num
 
 // UI hook used by the restore recipe.
 declare function render(...args: unknown[]): void;
+
+// QR hooks used by the animated QR recipe.
+declare function showQr(frame: Uint8Array): void;
+declare function onQrScanned(callback: (bytes: Uint8Array) => void): void;
