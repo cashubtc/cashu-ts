@@ -620,9 +620,9 @@ export function findSigningKey(pubkey: string, privkeys: string | string[]): str
 // @public
 export class FountainDecoder {
     get isComplete(): boolean;
-    static isFrame(frame: Uint8Array | string): boolean;
+    static isFrame(text: string): boolean;
     get progress(): number;
-    receive(frame: Uint8Array | string): boolean;
+    receive(text: string): boolean;
     reset(): void;
     get result(): Uint8Array | undefined;
 }
@@ -636,8 +636,7 @@ export class FountainEncoder {
         fragmentSize?: number;
     }): FountainEncoder;
     readonly fragmentCount: number;
-    nextFrame(): Uint8Array;
-    nextFrameText(): string;
+    nextFrame(): string;
 }
 
 // @public (undocumented)

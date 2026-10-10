@@ -8,25 +8,25 @@ If the token string fits one QR code, show it as a static QR code instead. Every
 
 ## Sending
 
-`FountainEncoder.forToken` accepts a `cashuB` string or a `Token`. Show each frame as one byte-mode QR symbol, using the frame bytes exactly as returned.
+`FountainEncoder.forToken` accepts a `cashuB` string or a `Token`. Each frame is Base45 text: show it as one QR code exactly as returned, with no prefix.
 
 ```ts
 import { FountainEncoder } from '@cashu/cashu-ts';
 
-const encoder = FountainEncoder.forToken(tokenString, { fragmentSize: 189 });
+const encoder = FountainEncoder.forToken(tokenString, { fragmentSize: 183 });
 const timer = setInterval(() => showQr(encoder.nextFrame()), 100); // `showQr` is your app's renderer
 // clearInterval(timer) when the user closes the dialog
 ```
 
-Pass the frame to your QR library as bytes, not as a string (some libraries UTF-8 encode string input), as a single byte-mode segment with no ECI header.
+Frames use only the 45 characters of QR alphanumeric mode, so most QR libraries pick that mode automatically; if yours takes a mode option, choose alphanumeric, as a single segment with no ECI header.
 
-Each frame holds `fragmentSize + 24` bytes. The default, 189, fills a version 10 QR code at error-correction level M exactly. A larger size means fewer frames but denser codes that are harder to scan from a phone screen; keep it within the QR library's byte-mode capacity for the version and error-correction level you choose. The encoder keeps producing new frames for as long as you call it, so there is no need to cycle back to the first one. Nothing tells the sender when the receiver has finished, so let the user stop the animation.
+Each frame is `fragmentSize + 24` bytes, encoded as 1.5 characters per byte. The default, 183, makes a 311-character frame that fills a version 10 QR code at error-correction level M exactly. A larger size means fewer frames but denser codes that are harder to scan from a phone screen; keep it within the QR library's alphanumeric capacity for the version and error-correction level you choose. The encoder keeps producing new frames for as long as you call it, so there is no need to cycle back to the first one. Nothing tells the sender when the receiver has finished, so let the user stop the animation.
 
 `cashuA` tokens cannot be sent this way: NUT-16 carries V4 tokens only.
 
 ## Receiving
 
-The scanner must return the raw bytes of each QR code as a `Uint8Array`. Decoded text is not enough, because frames are binary. The browser `BarcodeDetector` API only exposes text, so use a library that exposes the bytes, such as zxing-wasm or jsQR (wrap its `binaryData` array in `new Uint8Array()`).
+Any scanner that returns the QR code's text works, including the browser `BarcodeDetector` API (`rawValue`). Pass the text exactly as scanned: frames contain spaces, so do not trim it or change its case.
 
 ```ts
 import { FountainDecoder, getTokenMetadata, Wallet } from '@cashu/cashu-ts';
@@ -34,13 +34,13 @@ import { FountainDecoder, getTokenMetadata, Wallet } from '@cashu/cashu-ts';
 const decoder = new FountainDecoder();
 
 // Your camera loop callback
-onQrScanned((bytes) => {
-  if (!FountainDecoder.isFrame(bytes)) {
-    return; // Not a fountain frame: hand it to your text token parser instead
+onQrScanned((text) => {
+  if (!FountainDecoder.isFrame(text)) {
+    return; // Not a fountain frame: hand it to your token or UR parser instead
   }
   let added: boolean;
   try {
-    added = decoder.receive(bytes);
+    added = decoder.receive(text);
   } catch {
     return; // A corrupt or unrelated frame; keep scanning
   }
@@ -65,6 +65,6 @@ The result is the token's raw binary form (`craw` + `B` + CBOR). `getTokenMetada
 
 ## When `receive` throws
 
-`receive` throws a `CTSError` for a frame it cannot use: corrupt, from an unsupported format version, or from a different transfer. Usually you keep scanning. To switch to a new transfer, for example when the sender restarts with another token, call `decoder.reset()` first.
+`receive` throws a `CTSError` for a frame it cannot use: corrupt, from an unsupported format version, or from a different transfer. Usually you keep scanning. Never pass text that `isFrame` accepted to your token parser instead, even after a throw: NUT-16 forbids that fallback. For an unsupported version, tell the user the format is not supported. To switch to a new transfer, for example when the sender restarts with another token, call `decoder.reset()` first.
 
 If the frames reassemble into a message that fails its checksum, `receive` throws and the decoder resets itself, so the next frames start the transfer again.
