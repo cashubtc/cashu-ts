@@ -635,6 +635,28 @@ export function findLegacyDerivationCollisions(keysetIds: readonly string[]): st
 // @public
 export function findSigningKey(pubkey: string, privkeys: string | string[]): string;
 
+// @public
+export class FountainDecoder {
+    get isComplete(): boolean;
+    static isFrame(text: string): boolean;
+    get progress(): number;
+    receive(text: string): boolean;
+    reset(): void;
+    get result(): Uint8Array | undefined;
+}
+
+// @public
+export class FountainEncoder {
+    constructor(message: Uint8Array, options?: {
+        fragmentSize?: number;
+    });
+    static forToken(token: string | Token, options?: {
+        fragmentSize?: number;
+    }): FountainEncoder;
+    readonly fragmentCount: number;
+    nextFrame(): string;
+}
+
 // @public (undocumented)
 export type G1Point = WeierstrassPoint<bigint>;
 

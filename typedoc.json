@@ -19,6 +19,7 @@
     "docs-src/usage/create_p2pk.md",
     "docs-src/usage/create_wallet.md",
     "docs-src/usage/get_token.md",
+    "docs-src/usage/animated_qr.md",
     "docs-src/usage/bolt12.md",
     "docs-src/usage/payment_requests.md",
     "docs-src/usage/nut19.md",
