@@ -20,9 +20,11 @@ import { BLS_FR_ORDER, hashToCurveBls } from '../src/crypto/curve_bls';
 import { hashToCurveHex } from '../src/crypto/curves';
 import {
   buildTransactionTranscript,
+  changeQuoteId,
   inputDigest,
   spendCommitment,
   transactionDigest,
+  transcriptContainers,
 } from '../src/crypto/transcript';
 import type { TransactionShape } from '../src/crypto/transcript';
 import { Amount } from '../src/model/Amount';
@@ -153,6 +155,10 @@ function fromVectorTx(tx: any): TransactionShape {
     meltQuoteOutputs: tx.melt_quote_outputs?.map((q: any) => ({
       amount: BigInt(q.amount),
       quoteId: q.quote_id,
+    })),
+    changeQuoteOutputs: tx.change_quote_outputs?.map((c: any) => ({
+      pubkey: c.pubkey,
+      ...(c.amount !== undefined && { amount: BigInt(c.amount) }),
     })),
   };
 }
@@ -289,7 +295,7 @@ for (const name of ['swap', 'mint', 'melt', 'melt_with_change'] as const) {
 if (d.transcript.swap.input_id !== d.transcript.melt.input_id)
   throw new Error('swap and melt spend the same proof, so their input ids must match');
 d.transcript.comment =
-  'Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash("Cashu_TransactionInput", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers (high nibble is the section, 1 inputs, 2 outputs): 11 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 12 mint quote input (01 amount issued, 02 quote id utf8, 03 lock key), 21 blinded output (01 amount, 02 keyset id, 03 B_), 22 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.';
+  'Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash("Cashu_TransactionInput", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers (high nibble is the section, 1 inputs, 2 outputs): 11 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 12 mint quote input (01 amount issued, 02 quote id utf8, 03 lock key), 21 blinded output (01 amount, 02 keyset id, 03 B_), 22 melt quote output (01 amount, 02 quote id utf8), 23 change quote output (01 amount, absent on the remainder quote, 02 lock key). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.';
 
 // Two proof inputs in one transaction pin the distinction between the shared transaction digest
 // and each input's signing digest.
@@ -403,6 +409,62 @@ d.transcript.comment =
     signature: bytesToHex(schnorr.sign(digestForInput, hexToBytes(lock.privkey), AUX0)),
   };
 }
+
+// NUT-XX transactions: a mint quote paying a melt directly, and a proof parked in a change quote
+// locked to test key 5. Each has one input, so its container is the transcript's first record.
+const testKey = (k: number) =>
+  bytesToHex(secp256k1.getPublicKey(hexToBytes(k.toString(16).padStart(64, '0')), true));
+for (const [name, txVector] of [
+  [
+    'mint_quote_to_melt',
+    {
+      mint_quote_inputs: d.transcript.mint.tx.mint_quote_inputs,
+      melt_quote_outputs: d.transcript.melt.tx.melt_quote_outputs,
+    },
+  ],
+  [
+    'proof_to_change',
+    {
+      proof_inputs: d.transcript.swap.tx.proof_inputs,
+      change_quote_outputs: [{ pubkey: testKey(5) }],
+    },
+  ],
+  [
+    'proof_to_two_changes',
+    {
+      proof_inputs: d.transcript.swap.tx.proof_inputs,
+      change_quote_outputs: [{ pubkey: testKey(5), amount: 3 }, { pubkey: testKey(6) }],
+    },
+  ],
+] as const) {
+  const tx = fromVectorTx(txVector);
+  const transcript = buildTransactionTranscript(tx);
+  const digest = transactionDigest(tx);
+  const container = transcript.subarray(0, 3 + ((transcript[1] << 8) | transcript[2]));
+  const rest = transcript.subarray(container.length);
+  const changes = tx.changeQuoteOutputs ?? [];
+  const last =
+    changes.length === 0
+      ? {}
+      : changes.length === 1
+        ? { change_container: bytesToHex(rest), quote_id: changeQuoteId(changes[0].pubkey) }
+        : {
+            change_containers: transcriptContainers(rest).map((c) => bytesToHex(c)),
+            quote_ids: changes.map((c) => changeQuoteId(c.pubkey)),
+          };
+  d.transcript[name] = {
+    tx: txVector,
+    ...last,
+    transcript: bytesToHex(transcript),
+    digest: bytesToHex(digest),
+    input_id: bytesToHex(sha256(container)),
+    input_digest: bytesToHex(inputDigest(digest, container)),
+  };
+}
+if (d.transcript.mint_quote_to_melt.input_id !== d.transcript.mint.input_id)
+  throw new Error('mint_quote_to_melt reuses the mint quote input, so its input id must match');
+if (d.transcript.proof_to_change.input_id !== d.transcript.swap.input_id)
+  throw new Error('proof_to_change spends the swap proof, so its input id must match');
 
 // Disclosure leaf forms: threshold_1of1 with the 0x0a field, plus its rejection shapes.
 d.leaf_forms.threshold_1of1_disclosure = d.leaf_forms.threshold_1of1 + '0a000101';

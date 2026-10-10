@@ -37,7 +37,12 @@ import {
   verifyNutrootSpendInfo,
   type ParsedNutrootOption,
 } from '../crypto/nutroot';
-import { inputsForPayload, meltOutputAmount } from '../crypto/transcript';
+import {
+  changeQuoteId,
+  digestForPayload,
+  inputsForPayload,
+  meltOutputAmount,
+} from '../crypto/transcript';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
@@ -74,6 +79,8 @@ import type {
   MintQuoteBolt12Request,
   SpendInfo,
   SwapRequest,
+  TransactionRequest,
+  TransactionResponse,
 } from '../model/types';
 import type { SerializedBlindedMessage, SerializedBlindedSignature } from '../model/types/blinded';
 import type { KeyChainCache } from '../model/types/keyset';
@@ -92,6 +99,7 @@ import {
   getDecodedToken,
   getDecodedTokenBinary,
   invoiceHasAmountInHRP,
+  isObj,
   SEED_BYTES,
   normalizeMintUrl,
   normalizeProofAmounts,
@@ -110,6 +118,7 @@ import {
   ceilLog2,
   getKeepAmounts,
   orderOutputsForPayload,
+  popcount,
   proofsFromRestoreResponse,
   scanProfile,
   stringifyOutputTypeForLog,
@@ -161,6 +170,10 @@ import {
   type SwapPreview,
   type MintPreview,
   type BatchMintPreview,
+  type CompleteTransactionOptions,
+  type PrepareTransactionConfig,
+  type TransactionPreview,
+  type TransactionResult,
 } from './types';
 import { WalletCounters } from './WalletCounters';
 import { WalletEvents } from './WalletEvents';
@@ -2061,8 +2074,14 @@ class Wallet {
    * @throws Throws an error if the proofs keyset is unknown.
    */
   getFeesForProofs(proofs: Array<Pick<Proof, 'id'>>): Amount {
-    const sumPPK = Amount.sum(proofs.map((proof) => this.getProofFeePPK(proof))).toBigInt();
-    return Amount.from((sumPPK + 999n) / 1000n);
+    return Amount.from((this.sumProofFeePPK(proofs) + 999n) / 1000n);
+  }
+
+  /**
+   * Sum of the proofs' `input_fee_ppk`, before NUT-02's rounding.
+   */
+  private sumProofFeePPK(proofs: Array<Pick<Proof, 'id'>>): bigint {
+    return Amount.sum(proofs.map((proof) => this.getProofFeePPK(proof))).toBigInt();
   }
 
   /**
@@ -3540,8 +3559,10 @@ class Wallet {
         // The quote input commits the amount this request issues and its lock key (NUT-04).
         this.failIf(!quotePubkey, 'prepareMint: a v3 mint needs the quote lock pubkey');
         const tx = inputsForPayload({
-          mintQuotes: [{ quoteId: resolvedQuote.quote, amount: mintAmount, lockKey: quotePubkey! }],
-          outputs: blindedMessages,
+          mintQuoteInputs: [
+            { quoteId: resolvedQuote.quote, amount: mintAmount, lockKey: quotePubkey! },
+          ],
+          blindedOutputs: blindedMessages,
         });
         const { digest, inputContainer } = tx.quotes.get(resolvedQuote.quote)!;
         Object.assign(request, {
@@ -3809,12 +3830,12 @@ class Wallet {
     const v3BatchDigests = v3
       ? inputsForPayload({
           // Each quote input commits its quote_amounts entry (NUT-29).
-          mintQuotes: resolvedEntries.map((e, i) => ({
+          mintQuoteInputs: resolvedEntries.map((e, i) => ({
             quoteId: e.quote.quote,
             amount: amounts[i],
             lockKey: e.quote.pubkey!,
           })),
-          outputs: blindedMessages,
+          blindedOutputs: blindedMessages,
         }).quotes
       : undefined;
     for (const [i, entry] of resolvedEntries.entries()) {
@@ -4704,6 +4725,418 @@ class Wallet {
         { cause: e },
       );
     }
+  }
+
+  // -----------------------------------------------------------------
+  // Section: Transactions
+  // -----------------------------------------------------------------
+
+  /**
+   * Prepares a NUT-XX transaction: proofs and paid quotes in; new proofs, a melt and change quotes
+   * out.
+   *
+   * @remarks
+   * Proofs spend in full and each quote issues its `amount`. Without a remainder quote (a change
+   * quote output with no amount), the new proofs take whatever the melt, fee and fixed change
+   * quotes leave; with one, they default to none and the rest becomes that quote. Nothing is sent:
+   * pass the preview to {@link Wallet.completeTransaction}.
+   * @param transaction.mintQuoteInputs Paid, locked quotes, each with the amount to issue from it.
+   * @param transaction.proofOutputs The new proofs: their total, output type and keyset.
+   * @param transaction.meltQuoteOutput The full melt quote; `feeIndex` selects a NUT-30 fee option.
+   * @param transaction.changeQuoteOutputs Change quotes to create, each locked to `pubkey` with a
+   *   positive `amount`, or none on at most one: the remainder quote.
+   * @throws If the mint does not support NUT-XX, a quote is unlocked, or the inputs do not balance.
+   */
+  async prepareTransaction(
+    transaction: {
+      proofInputs?: Proof[];
+      mintQuoteInputs?: Array<{
+        quote: Pick<MintQuoteBaseResponse, 'quote' | 'pubkey'> &
+          Partial<Pick<MintQuoteBaseResponse, 'unit' | 'amount_paid' | 'amount_issued'>>;
+        amount: AmountLike;
+      }>;
+      proofOutputs?: { amount?: AmountLike; outputType?: OutputType; keysetId?: string };
+      meltQuoteOutput?: {
+        method: string;
+        quote: Pick<MeltQuoteBaseResponse, 'quote' | 'amount' | 'fee_reserve'> &
+          Partial<Pick<MeltQuoteBaseResponse, 'unit'>> & {
+            fee_options?: Array<{ fee_index: number; fee_reserve: AmountLike }>;
+          };
+        feeIndex?: number;
+      };
+      changeQuoteOutputs?: Array<{ pubkey: string; amount?: AmountLike }>;
+    },
+    config: PrepareTransactionConfig = {},
+  ): Promise<TransactionPreview> {
+    this.throwIfAborted(config.signal);
+    this.failIf(!isObj(transaction), 'prepareTransaction: expected a transaction object');
+    const { supported, quoteInputFeePpk } = this.getMintInfo().transactions;
+    this.failIf(!supported, 'Mint does not support transactions (NUT-XX)');
+    this.failIf(
+      transaction.proofInputs !== undefined && !Array.isArray(transaction.proofInputs),
+      'prepareTransaction: proofInputs must be an array',
+    );
+    const proofs = normalizeProofAmounts(transaction.proofInputs ?? []);
+    // Rotation evidence check: inputs are priced from keyset metadata, so keys are not fetched.
+    await this._ensureOperableKeysets(
+      proofs.map((p) => p.id),
+      { implicit: true, fetchKeys: false },
+    );
+    // Validate Proof inputs
+    this.assertProofsInWalletUnit(proofs);
+    this.assertNoDuplicateProofs(proofs);
+    this.failIf(
+      isP2PKSigAll(proofs),
+      'prepareTransaction: SIG_ALL proofs cannot be spent in a transaction; swap them first',
+    );
+    // Validate Mint Quote inputs
+    const quotes = (transaction.mintQuoteInputs ?? []).map((q) => {
+      const id = q?.quote?.quote;
+      this.failIf(
+        typeof id !== 'string' || id.length === 0,
+        'prepareTransaction: a quote needs its id',
+      );
+      this.failIf(
+        !q.quote.pubkey,
+        'prepareTransaction: every quote input must be locked; pass the quote with its pubkey',
+        { quote: id },
+      );
+      if (q.quote.unit !== undefined) assertQuoteUnit(q.quote, this.unit, this._logger);
+      const amount = this.parseAmount(q.amount, 'prepareTransaction.quote');
+      if (q.quote.amount_paid != null && q.quote.amount_issued != null) {
+        this.validateMintQuoteAvailableAmount(
+          'transaction',
+          q.quote.amount_paid,
+          q.quote.amount_issued,
+          amount,
+        );
+      }
+      return { quote: id, pubkey: normalizeSecpPubkey(q.quote.pubkey!), amount };
+    });
+    // Validate Change Outputs: fixed amounts are positive, and at most one entry has none.
+    this.failIf(
+      transaction.changeQuoteOutputs !== undefined &&
+        !Array.isArray(transaction.changeQuoteOutputs),
+      'prepareTransaction: changeQuoteOutputs must be an array',
+    );
+    const change = (transaction.changeQuoteOutputs ?? []).map((c) => ({
+      pubkey: normalizeSecpPubkey(c?.pubkey),
+      ...(c.amount !== undefined && {
+        amount: this.parseAmount(c.amount, 'prepareTransaction.changeQuoteOutputs'),
+      }),
+    }));
+    const remainder = change.some((c) => c.amount === undefined);
+    this.failIf(
+      change.filter((c) => c.amount === undefined).length > 1,
+      'prepareTransaction: at most one change quote output may omit its amount',
+    );
+    const fixedChange = Amount.sum(change.map((c) => c.amount ?? Amount.zero()));
+    // Validate Melt Output
+    let melt: TransactionPreview['meltQuoteOutput'];
+    if (transaction.meltQuoteOutput) {
+      const { method, quote, feeIndex } = transaction.meltQuoteOutput;
+      this.requireSupport('melt', method);
+      // The digest binds the amount plus the selected reserve, so a slim quote cannot sign.
+      this.failIf(
+        quote?.amount == null || (quote.fee_reserve == null && !quote.fee_options?.length),
+        'prepareTransaction: pass the full melt quote; its amount and fee reserve are signed',
+      );
+      if (quote.unit !== undefined) assertQuoteUnit(quote, this.unit, this._logger);
+      // fee_index travels only with a quote offering fee_options (NUT-XX).
+      this.failIf(
+        feeIndex !== undefined && !quote.fee_options?.length,
+        'prepareTransaction: feeIndex applies only to a melt quote offering fee_options',
+      );
+      const amount = meltOutputAmount(quote, feeIndex);
+      melt = {
+        method,
+        quote: quote.quote,
+        amount,
+        feeReserve: amount.subtract(quote.amount),
+        ...(feeIndex !== undefined && { feeIndex }),
+      };
+      // Without a remainder quote the unspent reserve stays with the mint (NUT-XX).
+      this.failIf(
+        !remainder && !config.forfeitFeeReserve && melt.amount.greaterThan(quote.amount),
+        'prepareTransaction: a melt with a fee reserve needs a remainder quote to recover what it does not spend, or set forfeitFeeReserve',
+      );
+    }
+
+    // A quote input prices as its minimal split, inside NUT-02's single rounding (NUT-XX).
+    const quotePpk =
+      quotes.reduce((sum, q) => sum + BigInt(popcount(q.amount.toBigInt())), 0n) *
+      BigInt(quoteInputFeePpk);
+    const fee = Amount.from((this.sumProofFeePPK(proofs) + quotePpk + 999n) / 1000n);
+    const inputs = sumProofs(proofs).add(Amount.sum(quotes.map((q) => q.amount)));
+    const spent = fee.add(melt?.amount ?? Amount.zero()).add(fixedChange);
+    this.failIf(
+      inputs.lessThan(spent),
+      'prepareTransaction: inputs do not cover the melt, change quotes and fee',
+      {
+        inputs: inputs.toString(),
+        needed: spent.toString(),
+      },
+    );
+    const outputs = transaction.proofOutputs ?? {};
+    const outputType = outputs.outputType ?? this.defaultOutputType();
+    // New proofs: none with a remainder quote, else what is left; custom outputs and an explicit
+    // amount override that, in that order.
+    let amount = remainder ? Amount.zero() : inputs.subtract(spent);
+    if (outputType.type === 'custom') amount = OutputData.sumOutputAmounts(outputType.data);
+    if (outputs.amount !== undefined) {
+      amount = this.parseAmount(outputs.amount, 'prepareTransaction.proofOutputs', true);
+    }
+    this.failIf(
+      remainder ? amount.add(spent).greaterThan(inputs) : !amount.add(spent).equals(inputs),
+      'prepareTransaction: inputs must equal the outputs, melt, change quotes and fee unless a remainder quote takes the rest',
+    );
+    // The mint cannot sign the outputs if their keyset rotates during the payment (NUT-02); the
+    // remainder quote is where their value goes then, so a melt with new proofs must have one.
+    this.failIf(
+      melt !== undefined && !remainder && !amount.isZero(),
+      'prepareTransaction: a melt with new proofs needs a remainder quote; the outputs cannot be signed if their keyset rotates during the payment',
+    );
+
+    let outputData: OutputDataLike[] = [];
+    if (!amount.isZero()) {
+      const keyset = this.getOutputKeyset(outputs.keysetId);
+      let ot = this.configureOutputs(amount, keyset, outputType, false, config.proofsWeHave);
+      const autoCounters = await this.addCountersToOutputTypes(keyset.id, ot);
+      [ot] = autoCounters.outputTypes;
+      if (autoCounters.used) {
+        this.safeCallback(config.onCountersReserved, autoCounters.used, {
+          op: 'prepareTransaction',
+        });
+      }
+      outputData = this.createOutputData(this.preparedTotal(ot), keyset, ot);
+    }
+    this.assertUniqueOutputSecrets(outputData);
+    this.failIf(
+      new Set(outputData.map((d) => d.blindedMessage.id)).size > 1,
+      'prepareTransaction: all outputs must share one keyset (NUT-XX)',
+    );
+    // Computed here so a caller can poll or resend even if completion never returns.
+    const digest = bytesToHex(
+      digestForPayload({
+        proofInputs: proofs,
+        mintQuoteInputs: quotes.map((q) => ({
+          quoteId: q.quote,
+          amount: q.amount,
+          lockKey: q.pubkey,
+        })),
+        blindedOutputs: outputData.map((d) => d.blindedMessage),
+        ...(melt && { meltQuoteOutput: { quoteId: melt.quote, amount: melt.amount } }),
+        changeQuoteOutputs: change,
+      }),
+    );
+    this.throwIfAborted(config.signal);
+    return {
+      digest,
+      proofInputs: proofs,
+      mintQuoteInputs: quotes,
+      ...(melt && { meltQuoteOutput: melt }),
+      changeQuoteOutputs: change,
+      outputData,
+      amount,
+      fee,
+    };
+  }
+
+  /**
+   * Signs and posts a prepared NUT-XX transaction.
+   *
+   * @remarks
+   * `privkey` holds proof spend keys and quote lock keys alike. Completing the same preview again
+   * returns the mint's record for it, so a lost response is recovered by retrying. While the result
+   * is `PENDING`, poll {@link Wallet.checkTransaction} with the same preview, or pass
+   * `waitForSettlementMs` to have this call wait.
+   */
+  async completeTransaction(
+    preview: TransactionPreview,
+    privkey?: string | string[],
+    options: CompleteTransactionOptions = {},
+  ): Promise<TransactionResult> {
+    const {
+      proofInputs: proofs,
+      mintQuoteInputs: quotes,
+      meltQuoteOutput: melt,
+      changeQuoteOutputs: change,
+      outputData,
+    } = preview;
+    this.assertUniqueOutputSecrets(outputData);
+    const blinded = outputData.map((d) => d.blindedMessage);
+
+    // Pre-v3 P2PK proofs sign per input; the mint refuses SIG_ALL here (NUT-XX).
+    const privkeys = privkey === undefined ? [] : [privkey].flat();
+    const sign = privkeys.length ? undefined : options.sign;
+    // Find every quote's key before any input signs, so a missing one fails before cosign hooks.
+    const quoteKeys = sign ? [] : quotes.map((q) => findSigningKey(q.pubkey, privkeys));
+    let wireProofs = privkeys.length ? this.signP2PKProofs(proofs, privkeys, outputData) : proofs;
+    wireProofs = this._prepareInputsForMint(wireProofs);
+    const mintQuotes = quotes.map((q) => ({
+      quoteId: q.quote,
+      amount: q.amount,
+      lockKey: q.pubkey,
+    }));
+    const meltQuote = melt && { quoteId: melt.quote, amount: melt.amount };
+    const receipts = await attachTransactionWitnesses(
+      {
+        inputs: wireProofs,
+        outputs: blinded,
+        mintQuoteInputs: mintQuotes,
+        changeQuoteOutputs: change,
+      },
+      meltQuote,
+      collectSpendInfoKeys(proofs, privkey, this._logger),
+      options.scriptPath?.length
+        ? prepareScriptPathSpends(proofs, options.scriptPath, privkeys)
+        : undefined,
+      this._nutrootState(),
+      options.signal,
+    );
+    const tx = quotes.length
+      ? inputsForPayload({
+          proofInputs: wireProofs,
+          blindedOutputs: blinded,
+          mintQuoteInputs: mintQuotes,
+          ...(meltQuote && { meltQuoteOutput: meltQuote }),
+          changeQuoteOutputs: change,
+        })
+      : undefined;
+    const quoteInputs: TransactionRequest['mint_quote_inputs'] = [];
+    for (const [i, q] of quotes.entries()) {
+      const { digest, inputContainer } = tx!.quotes.get(q.quote)!;
+      let signature: string;
+      if (sign) {
+        signature = await sign({
+          digest,
+          quoteId: q.quote,
+          outputs: blinded,
+          transactionMessage: tx!.transactionMessage,
+          inputContainer,
+        });
+        this.failIf(
+          !schnorrVerifyDigest(signature, digest, q.pubkey),
+          'completeTransaction: the sign callback returned a signature the quote pubkey does not verify',
+        );
+      } else {
+        signature = schnorrSignDigest(digest, quoteKeys[i]);
+      }
+      quoteInputs.push({
+        quote: q.quote,
+        amount: q.amount,
+        witness: JSON.stringify({ signatures: [signature] }),
+      });
+    }
+
+    this.throwIfAborted(options.signal);
+    const response = await this.withStaleKeysetRepair(() =>
+      this.mint.transaction(
+        {
+          proof_inputs: wireProofs,
+          mint_quote_inputs: quoteInputs,
+          blinded_outputs: blinded,
+          melt_quote_outputs: melt
+            ? [
+                {
+                  quote: melt.quote,
+                  fee_reserve: melt.feeReserve,
+                  ...(melt.feeIndex !== undefined && { fee_index: melt.feeIndex }),
+                },
+              ]
+            : [],
+          change_quote_outputs: change,
+          ...(options.preferAsync && { prefer_async: true }),
+        },
+        { signal: options.signal, meltMethod: melt?.method },
+      ),
+    );
+    let result = await this.processTransactionResponse(preview, response);
+    if (result.response.state === 'PENDING' && options.waitForSettlementMs) {
+      result = await this.on.onceTransactionSettled(preview, {
+        timeoutMs: options.waitForSettlementMs,
+        signal: options.signal,
+      });
+    }
+    return { ...result, ...(receipts.length > 0 && { receipts }) };
+  }
+
+  /**
+   * Fetches a prepared transaction's record, with its new proofs once it is `PAID`.
+   *
+   * @remarks
+   * Poll this while {@link Wallet.completeTransaction} reports `PENDING`.
+   */
+  async checkTransaction(
+    preview: TransactionPreview,
+    options: AbortOptions = {},
+  ): Promise<TransactionResult> {
+    const response = await this.mint.checkTransaction(preview.digest, {
+      signal: options.signal,
+      meltMethod: preview.meltQuoteOutput?.method,
+    });
+    return this.processTransactionResponse(preview, response);
+  }
+
+  /**
+   * The result for a transaction record: the wallet's digest, and the new proofs once `PAID`.
+   */
+  private async processTransactionResponse(
+    preview: TransactionPreview,
+    response: TransactionResponse,
+  ): Promise<TransactionResult> {
+    // Settlement may already have spent the inputs. Warn about record metadata instead of
+    // throwing away returned assets; keep the wallet's digest so polling/retries remain usable.
+    if (response.digest !== preview.digest) {
+      this._logger.warn('Transaction response reports a different digest', {
+        expected: preview.digest,
+        received: response.digest,
+      });
+      response.digest = preview.digest;
+    }
+    const { outputData, changeQuoteOutputs } = preview;
+    if (response.state !== 'PAID') return { response, proofs: [] };
+    // The change quotes are returned as the mint reports them: the mint already holds that value,
+    // and refusing or re-checking them after settlement would recover nothing.
+    const { signatures } = response;
+    // A change quote id is derived from its lock key (NUT-XX); any other id cannot be found again
+    // from the seed, so say so, but the value is the mint's already and the proofs still matter.
+    changeQuoteOutputs.forEach((c, i) => {
+      const q = response.change_quotes[i];
+      const expected = changeQuoteId(c.pubkey);
+      if (q && q.quote !== expected) {
+        this._logger.warn(
+          'Mint assigned a change quote id that does not derive from its lock key',
+          {
+            digest: preview.digest,
+            expected,
+            received: q.quote,
+          },
+        );
+      }
+    });
+    // The outputs' keyset rotated during the melt: nothing was signed and their value is in the
+    // remainder quote (NUT-XX). The reserved secrets go unused.
+    const remainder = changeQuoteOutputs.findIndex((c) => c.amount === undefined);
+    const remainderQuote = remainder < 0 ? null : response.change_quotes[remainder];
+    if (signatures.length === 0 && outputData.length > 0 && remainderQuote) {
+      this._logger.warn(
+        'Mint did not sign the transaction outputs; their value is in the remainder quote',
+        { digest: preview.digest, changeQuote: remainderQuote.quote },
+      );
+      return { response, proofs: [] };
+    }
+    this.failIf(
+      signatures.length !== outputData.length,
+      `Mint returned ${signatures.length} signatures, expected ${outputData.length}. If the wallet is seeded, try restoring (NUT-09) to recover.`,
+    );
+    this.validateReturnedSignatures(signatures, outputData);
+    await this._ensureKeysetsForSignatures(signatures);
+    // No signal: the mint has signed, and stopping now would strand the proofs.
+    const proofs = await mapInChunks(outputData, (d, i) =>
+      d.toProof(signatures[i], this.keysetForSignature(signatures[i].id)),
+    );
+    return { response, proofs };
   }
 
   // -----------------------------------------------------------------

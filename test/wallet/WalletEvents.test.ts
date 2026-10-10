@@ -670,6 +670,81 @@ describe('WalletEvents', () => {
     });
   });
 
+  describe('onceTransactionSettled', () => {
+    const preview = { digest: 'ab'.repeat(32) } as any;
+    const state = (s: string) => ({ response: { state: s } });
+
+    it('polls until the transaction leaves PENDING', async () => {
+      vi.useFakeTimers();
+      const check = vi
+        .fn()
+        .mockResolvedValueOnce(state('PENDING'))
+        .mockResolvedValueOnce(state('PAID'));
+      (mock as any).checkTransaction = check;
+      const p = events.onceTransactionSettled(preview, { pollMs: 5 });
+      await vi.advanceTimersByTimeAsync(5);
+      await expect(p).resolves.toEqual(state('PAID'));
+      expect(check).toHaveBeenCalledTimes(2);
+      expect(check).toHaveBeenCalledWith(preview, { signal: expect.any(AbortSignal) });
+    });
+
+    it('returns FAILED without waiting further', async () => {
+      (mock as any).checkTransaction = vi.fn().mockResolvedValue(state('FAILED'));
+      await expect(events.onceTransactionSettled(preview)).resolves.toEqual(state('FAILED'));
+    });
+
+    it('rejects on timeout', async () => {
+      vi.useFakeTimers();
+      (mock as any).checkTransaction = vi.fn().mockResolvedValue(state('PENDING'));
+      const p = expect(
+        events.onceTransactionSettled(preview, { timeoutMs: 10, pollMs: 4 }),
+      ).rejects.toThrow(/Timeout waiting for transaction to settle/);
+      await vi.advanceTimersByTimeAsync(12);
+      await p;
+    });
+
+    // Review regression: timeoutMs must also bound an in-flight status request.
+    it('times out while a status request is stalled', async () => {
+      vi.useFakeTimers();
+      let finish!: (result: ReturnType<typeof state>) => void;
+      const pending = new Promise<ReturnType<typeof state>>((resolve) => {
+        finish = resolve;
+      });
+      (mock as any).checkTransaction = vi.fn().mockReturnValue(pending);
+      const rejected = vi.fn();
+      const waiting = events.onceTransactionSettled(preview, { timeoutMs: 10 }).catch(rejected);
+      try {
+        await vi.advanceTimersByTimeAsync(10);
+        expect(rejected).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message: 'Timeout waiting for transaction to settle',
+          }),
+        );
+      } finally {
+        finish(state('FAILED'));
+        await waiting;
+      }
+    });
+
+    it('rejects with AbortError before polling and while sleeping', async () => {
+      const check = vi.fn().mockResolvedValue(state('PENDING'));
+      (mock as any).checkTransaction = check;
+      const early = new AbortController();
+      early.abort();
+      await expect(
+        events.onceTransactionSettled(preview, { signal: early.signal }),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+      expect(check).not.toHaveBeenCalled();
+
+      const ac = new AbortController();
+      const p = events.onceTransactionSettled(preview, { signal: ac.signal, pollMs: 60_000 });
+      await flushMicrotasks(4);
+      ac.abort();
+      await expect(p).rejects.toMatchObject({ name: 'AbortError' });
+      expect(check).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('proofStatesStream', () => {
     it('surfaces setup errors via the consumer (no hang, no unhandled rejection)', async () => {
       // Vitest fails the test on any unhandled rejection, so reaching the

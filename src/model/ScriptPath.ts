@@ -106,7 +106,11 @@ function payloadTranscript(
   outputs: SerializedBlindedMessage[],
   meltQuote?: { quoteId: string; amount: bigint },
 ): Uint8Array {
-  return messageForPayload({ inputs, outputs, ...(meltQuote && { meltQuote }) });
+  return messageForPayload({
+    proofInputs: inputs,
+    blindedOutputs: outputs,
+    ...(meltQuote && { meltQuoteOutput: meltQuote }),
+  });
 }
 
 /**

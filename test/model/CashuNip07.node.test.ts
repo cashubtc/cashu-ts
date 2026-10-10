@@ -26,8 +26,8 @@ const OTHER = bytesToHex(getPubKeyFromPrivKey(hexToBytes('22'.repeat(32))));
 const LEAF: NutrootLeaf = { type: 'threshold', n: 1, keys: [PUB] };
 const SECRET = `02${'33'.repeat(32)}`;
 const inputs = inputsForPayload({
-  inputs: [{ amount: 1, id: KEYSET, secret: SECRET, C: 'aa'.repeat(48) }],
-  outputs: [{ amount: 1, id: KEYSET, B_: 'bb'.repeat(48) }],
+  proofInputs: [{ amount: 1, id: KEYSET, secret: SECRET, C: 'aa'.repeat(48) }],
+  blindedOutputs: [{ amount: 1, id: KEYSET, B_: 'bb'.repeat(48) }],
 });
 const MESSAGE = inputs.transactionMessage;
 const { inputContainer: CONTAINER, digest: DIGEST } = inputs.proofs.get(
@@ -132,8 +132,8 @@ describe('CashuNip07', () => {
 
   test('signQuote signs a v3 quote through signTransaction and a legacy one through signSchnorr', async () => {
     const quote = inputsForPayload({
-      mintQuotes: [{ quoteId: 'q1', amount: 1, lockKey: `02${'11'.repeat(32)}` }],
-      outputs: [{ amount: 1, id: KEYSET, B_: 'bb'.repeat(48) }],
+      mintQuoteInputs: [{ quoteId: 'q1', amount: 1, lockKey: `02${'11'.repeat(32)}` }],
+      blindedOutputs: [{ amount: 1, id: KEYSET, B_: 'bb'.repeat(48) }],
     });
     const { digest, inputContainer } = quote.quotes.get('q1')!;
     const v3 = {
@@ -164,8 +164,8 @@ describe('CashuNip07', () => {
 
   test('signQuote rejects a signer that hashed something else', async () => {
     const quote = inputsForPayload({
-      mintQuotes: [{ quoteId: 'q1', amount: 1, lockKey: `02${'11'.repeat(32)}` }],
-      outputs: [{ amount: 1, id: KEYSET, B_: 'bb'.repeat(48) }],
+      mintQuoteInputs: [{ quoteId: 'q1', amount: 1, lockKey: `02${'11'.repeat(32)}` }],
+      blindedOutputs: [{ amount: 1, id: KEYSET, B_: 'bb'.repeat(48) }],
     });
     const { digest, inputContainer } = quote.quotes.get('q1')!;
     const liar: Nip07Like = {

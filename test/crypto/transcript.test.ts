@@ -8,6 +8,7 @@ import { recoverV3SecretKeys } from '../../src/crypto/NUT13';
 import {
   buildRequestTranscript,
   buildTransactionTranscript,
+  changeQuoteId,
   digestForPayload,
   inputDigest,
   proofInputContextKey,
@@ -41,6 +42,7 @@ function fromVectorTx(tx: {
   mint_quote_inputs?: Array<{ amount: number; quote_id: string; lock_pubkey: string }>;
   blinded_outputs?: Array<{ amount: number; keyset_id: string; B_: string }>;
   melt_quote_outputs?: Array<{ amount: number; quote_id: string }>;
+  change_quote_outputs?: Array<{ pubkey: string; amount?: number }>;
 }): TransactionShape {
   return {
     proofInputs: tx.proof_inputs?.map((p) => ({
@@ -62,6 +64,10 @@ function fromVectorTx(tx: {
     meltQuoteOutputs: tx.melt_quote_outputs?.map((q) => ({
       amount: BigInt(q.amount),
       quoteId: q.quote_id,
+    })),
+    changeQuoteOutputs: tx.change_quote_outputs?.map((c) => ({
+      pubkey: c.pubkey,
+      ...(c.amount !== undefined && { amount: BigInt(c.amount) }),
     })),
   };
 }
@@ -135,11 +141,13 @@ describe('transaction transcript (vectors)', () => {
     expect(transcript).not.toContain(bytesToHex(new TextEncoder().encode(legacy.secret)));
     // At the payload boundary a caller names an input by secret or by the Y it already holds.
     const outputs = tx.blindedOutputs!.map((o) => ({ amount: o.amount, id: o.keysetId, B_: o.B_ }));
-    const bySecret = messageForPayload({ inputs: [v3, legacy], outputs });
-    expect(digestForPayload({ inputs: [v3, legacy], outputs })).toEqual(sha256(bySecret));
+    const bySecret = messageForPayload({ proofInputs: [v3, legacy], blindedOutputs: outputs });
+    expect(digestForPayload({ proofInputs: [v3, legacy], blindedOutputs: outputs })).toEqual(
+      sha256(bySecret),
+    );
     const byY = messageForPayload({
-      inputs: [{ amount: v3.amount, id: v3.id, C: v3.C, Y: v3Key }, legacy],
-      outputs,
+      proofInputs: [{ amount: v3.amount, id: v3.id, C: v3.C, Y: v3Key }, legacy],
+      blindedOutputs: outputs,
     });
     expect(bytesToHex(bySecret)).toBe(transcript);
     expect(bytesToHex(byY)).toBe(transcript);
@@ -157,15 +165,19 @@ describe('transaction transcript (vectors)', () => {
     ).toThrow(/Y/);
   });
 
-  test.each(['swap', 'mint', 'melt', 'melt_with_change'] as const)(
-    '%s transcript and digest match',
-    (name) => {
-      const example = tv[name];
-      const tx = fromVectorTx(example.tx);
-      expect(bytesToHex(buildTransactionTranscript(tx))).toBe(example.transcript);
-      expect(bytesToHex(transactionDigest(tx))).toBe(example.digest);
-    },
-  );
+  test.each([
+    'swap',
+    'mint',
+    'melt',
+    'melt_with_change',
+    'mint_quote_to_melt',
+    'proof_to_change',
+  ] as const)('%s transcript and digest match', (name) => {
+    const example = tv[name];
+    const tx = fromVectorTx(example.tx);
+    expect(bytesToHex(buildTransactionTranscript(tx))).toBe(example.transcript);
+    expect(bytesToHex(transactionDigest(tx))).toBe(example.digest);
+  });
 
   test('an input digest needs a 32-byte transaction digest', () => {
     expect(() => inputDigest(new Uint8Array(31), new Uint8Array(3))).toThrow(/32 bytes/);
@@ -411,7 +423,7 @@ describe('transaction transcript (vectors)', () => {
       id: o.keyset_id,
       B_: o.B_,
     }));
-    const { proofs } = inputsForPayload({ inputs: [legacy, v3], outputs });
+    const { proofs } = inputsForPayload({ proofInputs: [legacy, v3], blindedOutputs: outputs });
     expect(proofs.size).toBe(2);
     expect(proofs.get(proofInputY(legacy))!.digest).not.toEqual(
       proofs.get(proofInputY(v3))!.digest,
@@ -511,6 +523,60 @@ describe('keyset ids in the transcript', () => {
   });
 });
 
+describe('change quote outputs (NUT-XX vectors)', () => {
+  const v = tv.proof_to_change;
+  const two = tv.proof_to_two_changes;
+
+  test('a remainder quote binds only the lock key, after every other container', () => {
+    expect(v.transcript.endsWith(v.change_container)).toBe(true);
+    expect(bytesToHex(buildTransactionTranscript(fromVectorTx(v.tx)))).toBe(v.transcript);
+    expect(bytesToHex(transactionDigest(fromVectorTx(v.tx)))).toBe(v.digest);
+    const { proofs } = inputsForPayload({
+      proofInputs: v.tx.proof_inputs.map((p) => ({ ...p, id: p.keyset_id })),
+      changeQuoteOutputs: v.tx.change_quote_outputs,
+    });
+    expect(bytesToHex([...proofs.values()][0].digest)).toBe(v.input_digest);
+    expect(changeQuoteId(v.tx.change_quote_outputs[0].pubkey)).toBe(v.quote_id);
+  });
+
+  test('a fixed quote carries its amount first, then the remainder quote, in request order', () => {
+    expect(two.transcript.endsWith(two.change_containers.join(''))).toBe(true);
+    expect(bytesToHex(buildTransactionTranscript(fromVectorTx(two.tx)))).toBe(two.transcript);
+    expect(bytesToHex(transactionDigest(fromVectorTx(two.tx)))).toBe(two.digest);
+    const { proofs } = inputsForPayload({
+      proofInputs: two.tx.proof_inputs.map((p) => ({ ...p, id: p.keyset_id })),
+      changeQuoteOutputs: two.tx.change_quote_outputs,
+    });
+    expect(bytesToHex([...proofs.values()][0].digest)).toBe(two.input_digest);
+    expect(two.tx.change_quote_outputs.map((c) => changeQuoteId(c.pubkey))).toEqual(two.quote_ids);
+  });
+
+  test.each(['', v.tx.change_quote_outputs[0].pubkey.slice(2), '02' + 'ff'.repeat(32)])(
+    'rejects an invalid change quote recovery key %s',
+    (pubkey) => {
+      expect(() => changeQuoteId(pubkey)).toThrow('33-byte compressed point');
+    },
+  );
+
+  test('a change quote alone is a valid output; a malformed one throws', () => {
+    const proofInputs = fromVectorTx(v.tx).proofInputs;
+    const { pubkey } = v.tx.change_quote_outputs[0];
+    expect(() => buildTransactionTranscript({ proofInputs })).toThrow(/output/);
+    expect(() =>
+      buildTransactionTranscript({
+        proofInputs,
+        changeQuoteOutputs: [{ pubkey: pubkey.slice(2) }],
+      }),
+    ).toThrow(/lock key/);
+    expect(() =>
+      buildTransactionTranscript({ proofInputs, changeQuoteOutputs: [{ pubkey, amount: 0n }] }),
+    ).toThrow(/positive/);
+    expect(() =>
+      buildTransactionTranscript({ proofInputs, changeQuoteOutputs: [{ pubkey }, { pubkey }] }),
+    ).toThrow(/one remainder/);
+  });
+});
+
 describe('transcriptContainers', () => {
   const swap = hexToBytes(tv.swap.transcript);
 
@@ -523,7 +589,7 @@ describe('transcriptContainers', () => {
   test.each([
     ['empty', ''],
     ['an opaque 32 bytes', '00'.repeat(32)],
-    ['a type above the authorized request', '06000101'],
+    ['a type above the change quote output', '07000101'],
     ['a zero-length record', '010000'],
     ['a truncated record', tv.swap.transcript.slice(0, -2)],
   ])('rejects %s', (_, hex) => {

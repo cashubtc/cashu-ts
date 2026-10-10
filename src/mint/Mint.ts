@@ -36,6 +36,8 @@ import {
   type MeltQuoteOnchainResponse,
   type Proof,
   type SwapRequest,
+  type TransactionRequest,
+  type TransactionResponse,
   type SerializedBlindedMessage,
   type SerializedBlindedSignature,
 } from '../model/types';
@@ -231,6 +233,83 @@ class Mint {
     data.signatures = this.normalizeSignatureAmounts(data.signatures);
 
     return data;
+  }
+
+  // -----------------------------------------------------------------
+  // Section: Transaction (NUT-XX)
+  // -----------------------------------------------------------------
+
+  /**
+   * Posts a NUT-XX transaction: proofs and quote inputs in, blinded messages, a melt and a change
+   * quote out.
+   *
+   * @remarks
+   * Resending the same request returns the mint's record for it rather than spending twice.
+   * @param options.meltMethod The melt quote's payment method, for response normalization.
+   * @returns The transaction record.
+   */
+  async transaction(
+    payload: TransactionRequest,
+    options?: MintCallOptions & { meltMethod?: string },
+  ): Promise<TransactionResponse> {
+    failIf(
+      !Array.isArray(payload?.proof_inputs),
+      'transaction: proof_inputs must be an array',
+      this._logger,
+    );
+    const data = await this.requestWithAuth<TransactionResponse>(
+      'POST',
+      '/v1/transaction',
+      { requestBody: { ...payload, proof_inputs: this.stripWalletFields(payload.proof_inputs) } },
+      options,
+    );
+    return this.normalizeTransactionResponse(data, payload.blinded_outputs, options?.meltMethod);
+  }
+
+  /**
+   * Fetches a transaction record by its digest (NUT-XX); poll this for a pending transaction.
+   */
+  async checkTransaction(
+    digest: string,
+    options?: MintCallOptions & { meltMethod?: string },
+  ): Promise<TransactionResponse> {
+    failIf(!/^[0-9a-f]{64}$/.test(digest), 'Invalid transaction digest', this._logger);
+    const data = await this.requestWithAuth<TransactionResponse>(
+      'GET',
+      `/v1/transaction/${digest}`,
+      {},
+      options,
+    );
+    return this.normalizeTransactionResponse(data, undefined, options?.meltMethod);
+  }
+
+  private normalizeTransactionResponse(
+    data: TransactionResponse,
+    outputs: unknown[] | undefined,
+    meltMethod = 'bolt11',
+  ): TransactionResponse {
+    if (
+      !isRecord(data) ||
+      typeof data.digest !== 'string' ||
+      !['PENDING', 'PAID', 'FAILED'].includes(data.state) ||
+      !Array.isArray(data.signatures) ||
+      !Array.isArray(data.melt_quotes) ||
+      !Array.isArray(data.change_quotes)
+    ) {
+      this._logger.error('Invalid response from mint...', { op: 'transaction' });
+      throw new CTSError('Invalid response from mint');
+    }
+    if (outputs) this.assertSignatureCount(data.signatures, outputs, 'transaction');
+    return {
+      ...data,
+      signatures: this.normalizeSignatureAmounts(data.signatures),
+      melt_quotes: data.melt_quotes.map((m) =>
+        this.normalizeMeltQuoteResponse(meltMethod, m, undefined, true),
+      ),
+      change_quotes: data.change_quotes.map((q) =>
+        q ? this.normalizeMintQuoteResponse('change', q) : null,
+      ),
+    };
   }
 
   // -----------------------------------------------------------------
