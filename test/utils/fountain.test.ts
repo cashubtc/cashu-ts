@@ -6,6 +6,8 @@ import { encodeUint8ToBase64Url } from '../../src/utils/base64';
 import { getDecodedTokenBinary } from '../../src/utils/core';
 import {
   crc32,
+  decodeBase45,
+  encodeBase45,
   FountainDecoder,
   FountainEncoder,
   parseFrame,
@@ -257,5 +259,70 @@ describe('FountainDecoder', () => {
       frames++;
     }
     expect(bytesToHex(decoder.result!)).toBe(bytesToHex(message));
+  });
+});
+
+describe('Base45 text frames', () => {
+  const ascii = (s: string) => new TextEncoder().encode(s);
+
+  test.each([
+    ['AB', 'BB8'],
+    ['Hello!!', '%69 VD92EX0'],
+    ['base-45', 'UJCLQE7W581'],
+    ['ietf!', 'QED8WEX0'],
+    ['', ''],
+  ])('RFC 9285 example %j <-> %j', (plain, encoded) => {
+    expect(encodeBase45(ascii(plain))).toBe(encoded);
+    expect(decodeBase45(encoded)).toEqual(ascii(plain));
+  });
+
+  test.each(['GGW', 'A', 'ab', 'A!B', ':::'])('rejects invalid base45 %j', (text) => {
+    expect(() => decodeBase45(text)).toThrow(CTSError);
+  });
+
+  test('every frame text starts with the NF magic', () => {
+    expect(encodeBase45(hexToBytes('4e460100'))).toBe('D+9V50');
+  });
+
+  describe.each(vectors.transfers)('transfer $name as text', (transfer) => {
+    test('encodes the same frames as Base45', () => {
+      const encoder = new FountainEncoder(hexToBytes(transfer.message_hex), {
+        fragmentSize: transfer.fragment_size,
+      });
+      for (const f of transfer.frames.filter((f) => f.sequence <= 13)) {
+        expect(encoder.nextFrameText()).toBe(encodeBase45(hexToBytes(f.frame_hex)));
+      }
+    });
+
+    test('recovers from repair frames received as text', () => {
+      const decoder = new FountainDecoder();
+      for (const q of transfer.mixed_only_recovery_sequences) {
+        const text = encodeBase45(frameFor(transfer, q));
+        expect(FountainDecoder.isFrame(text)).toBe(true);
+        decoder.receive(text);
+      }
+      expect(bytesToHex(decoder.result!)).toBe(transfer.message_hex);
+    });
+  });
+
+  test.each(vectors.invalid_frames.filter((f) => f.reject_at === 'frame'))(
+    'rejects invalid frame $name as text',
+    (f) => {
+      expect(() => new FountainDecoder().receive(encodeBase45(hexToBytes(f.frame_hex)))).toThrow(
+        CTSError,
+      );
+    },
+  );
+
+  test('isFrame and receive reject other text', () => {
+    expect(FountainDecoder.isFrame('cashuBo2Ft')).toBe(false);
+    expect(FountainDecoder.isFrame('')).toBe(false);
+    expect(() => new FountainDecoder().receive('cashuBo2Ft')).toThrow(CTSError);
+    expect(() => new FountainDecoder().receive('D+9' + '0'.repeat(7000))).toThrow('frame text');
+  });
+
+  test('a 207-byte frame is 311 characters, the 10-M alphanumeric capacity', () => {
+    const encoder = new FountainEncoder(new Uint8Array(1000), { fragmentSize: 183 });
+    expect(encoder.nextFrameText()).toHaveLength(311);
   });
 });
