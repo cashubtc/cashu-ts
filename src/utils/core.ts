@@ -383,6 +383,16 @@ function templateHex(value: unknown, field: string): string {
 }
 
 /**
+ * Reads a text field from a decoded token template; the text counterpart of {@link templateHex}.
+ */
+function templateText(value: unknown, field: string): string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new CTSError(`Invalid token: ${field} must be a non-empty string`);
+  }
+  return value;
+}
+
+/**
  * True when a decoded v4 DLEQ block carries all three of `e`, `s` and `r`.
  *
  * @remarks
@@ -398,6 +408,9 @@ function fromV4CborTemplate(template: TokenV4Template): Token {
   if (!template || !Array.isArray(template.t)) {
     throw new CTSError('Invalid token');
   }
+  const mint = templateText(template.m, 'mint');
+  const unit = template.u ? templateText(template.u, 'unit') : 'sat';
+  const memo = template.d ? templateText(template.d, 'memo') : undefined;
   const proofs: Proof[] = [];
   template.t.forEach((t) => {
     if (!t || !Array.isArray(t.p)) {
@@ -411,8 +424,11 @@ function fromV4CborTemplate(template: TokenV4Template): Token {
         throw new CTSError('Invalid token: spend_info tree must be an array');
       }
       const id = templateHex(t.i, 'keyset id');
+      const secret = templateText(p.s, 'secret');
+      // NUT-00 carries the witness as serialized JSON text.
+      const witness = p.w ? templateText(p.w, 'witness') : undefined;
       proofs.push({
-        secret: p.s,
+        secret,
         C: templateHex(p.c, 'proof C'),
         amount: Amount.from(p.a),
         id,
@@ -426,10 +442,7 @@ function fromV4CborTemplate(template: TokenV4Template): Token {
         ...(p.pe && {
           p2pk_e: templateHex(p.pe, 'p2pk_e'),
         }),
-        ...(p.w &&
-          !isV3TransactionWitness(id, p.s) && {
-            witness: p.w,
-          }),
+        ...(witness && !isV3TransactionWitness(id, secret) && { witness }),
         ...(p.si && {
           spend_info: {
             ...(p.si.k && { k: templateHex(p.si.k, 'spend_info k') }),
@@ -444,11 +457,7 @@ function fromV4CborTemplate(template: TokenV4Template): Token {
       });
     });
   });
-  const decodedToken: Token = { mint: template.m, proofs, unit: template.u || 'sat' };
-  if (template.d) {
-    decodedToken.memo = template.d;
-  }
-  return decodedToken;
+  return { mint, proofs, unit, ...(memo && { memo }) };
 }
 
 /**
