@@ -2,7 +2,6 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 
 import { CTSError } from '../../src/model/Errors';
-import { encodeUint8ToBase64Url } from '../../src/utils/base64';
 import { getDecodedTokenBinary } from '../../src/utils/core';
 import {
   crc32,
@@ -21,19 +20,22 @@ function indexes(bits: Uint32Array, count: number): number[] {
   return out;
 }
 
-function frameFor(transfer: (typeof vectors.transfers)[number], sequence: number): Uint8Array {
-  return hexToBytes(transfer.frames.find((f) => f.sequence === sequence)!.frame_hex);
+function textFor(transfer: (typeof vectors.transfers)[number], sequence: number): string {
+  return transfer.frames.find((f) => f.sequence === sequence)!.qr_text;
 }
 
-function decode(frames: Uint8Array[]): FountainDecoder {
+function decode(frames: string[]): FountainDecoder {
   const decoder = new FountainDecoder();
   for (const frame of frames) decoder.receive(frame);
   return decoder;
 }
 
+function jumpTo(encoder: FountainEncoder, sequence: number): void {
+  (encoder as unknown as { sequence: number }).sequence = sequence - 1;
+}
+
 const tokenTransfer = vectors.transfers.find((t) => t.scope === 'token')!;
-const tokenString =
-  'cashuB' + encodeUint8ToBase64Url(hexToBytes(tokenTransfer.message_hex.slice(10)));
+const tokenText = tokenTransfer.token_text!;
 
 describe('NUT-16 vectors', () => {
   test('crc32 check values', () => {
@@ -49,23 +51,28 @@ describe('NUT-16 vectors', () => {
     },
   );
 
+  test.each(vectors.base45_vectors)('base45 $text', ({ bytes_hex, text }) => {
+    expect(encodeBase45(hexToBytes(bytes_hex))).toBe(text);
+    expect(bytesToHex(decodeBase45(text))).toBe(bytes_hex);
+  });
+
   describe.each(vectors.transfers)('transfer $name', (transfer) => {
     const message = hexToBytes(transfer.message_hex);
-    const systematic = transfer.frames.filter((f) => f.sequence <= transfer.fragment_count);
 
-    test('encodes each frame byte for byte', () => {
+    test('encodes each frame as the exact QR text', () => {
       const encoder = new FountainEncoder(message, { fragmentSize: transfer.fragment_size });
       expect(encoder.fragmentCount).toBe(transfer.fragment_count);
       for (const f of transfer.frames) {
         // The last vector is sequence 0xffffffff; jump the counter to it.
-        (encoder as unknown as { sequence: number }).sequence = f.sequence - 1;
-        expect(bytesToHex(encoder.nextFrame())).toBe(f.frame_hex);
+        jumpTo(encoder, f.sequence);
+        expect(encoder.nextFrame()).toBe(f.qr_text);
       }
     });
 
-    test('parses each frame, including the last sequence', () => {
+    test('each QR text decodes to its frame', () => {
       for (const f of transfer.frames) {
-        const frame = parseFrame(hexToBytes(f.frame_hex));
+        const frame = parseFrame(decodeBase45(f.qr_text));
+        expect(bytesToHex(decodeBase45(f.qr_text))).toBe(f.frame_hex);
         expect(frame.sequence).toBe(f.sequence);
         expect(bytesToHex(frame.payload)).toBe(f.data_hex);
         expect(
@@ -75,17 +82,19 @@ describe('NUT-16 vectors', () => {
     });
 
     test('recovers from systematic frames', () => {
-      const decoder = decode(systematic.map((f) => hexToBytes(f.frame_hex)));
-      expect(bytesToHex(decoder.result!)).toBe(transfer.message_hex);
+      const systematic = transfer.frames.filter((f) => f.sequence <= transfer.fragment_count);
+      expect(bytesToHex(decode(systematic.map((f) => f.qr_text)).result!)).toBe(
+        transfer.message_hex,
+      );
     });
 
     test('recovers from repair frames alone', () => {
-      const frames = transfer.mixed_only_recovery_sequences.map((q) => frameFor(transfer, q));
+      const frames = transfer.mixed_only_recovery_sequences.map((q) => textFor(transfer, q));
       expect(bytesToHex(decode(frames).result!)).toBe(transfer.message_hex);
     });
 
     test('recovers from reversed frames with duplicates', () => {
-      const frames = transfer.frames.map((f) => hexToBytes(f.frame_hex));
+      const frames = transfer.frames.map((f) => f.qr_text);
       const decoder = decode([...frames].reverse().concat(frames));
       expect(bytesToHex(decoder.result!)).toBe(transfer.message_hex);
     });
@@ -98,7 +107,8 @@ describe('NUT-16 vectors', () => {
   });
 
   test.each(vectors.valid_frames)('accepts valid frame $name', (f) => {
-    const frame = parseFrame(hexToBytes(f.frame_hex));
+    expect(encodeBase45(hexToBytes(f.frame_hex))).toBe(f.qr_text);
+    const frame = parseFrame(decodeBase45(f.qr_text));
     expect(frame).toMatchObject({
       sequence: f.sequence,
       count: f.fragment_count,
@@ -107,12 +117,16 @@ describe('NUT-16 vectors', () => {
     });
     expect(frame.checksum.toString(16).padStart(8, '0')).toBe(f.message_crc32);
     expect(bytesToHex(frame.payload)).toBe(f.data_hex);
-    expect(new FountainDecoder().receive(hexToBytes(f.frame_hex))).toBe(true);
+    expect(new FountainDecoder().receive(f.qr_text)).toBe(true);
   });
 
   test.each(vectors.invalid_frames)('rejects $name at $reject_at', (f) => {
     const decoder = new FountainDecoder();
-    const receive = () => decoder.receive(hexToBytes(f.frame_hex));
+    const receive = () => decoder.receive(f.qr_text);
+    if (f.reject_at === 'frame') {
+      // The binary layer rejects it too, even where the text bounds catch it first.
+      expect(() => parseFrame(hexToBytes(f.frame_hex))).toThrow(CTSError);
+    }
     if (f.reject_at !== 'token') {
       expect(receive).toThrow(CTSError);
       expect(decoder.progress).toBe(0);
@@ -122,11 +136,39 @@ describe('NUT-16 vectors', () => {
     expect(decoder.isComplete).toBe(true);
     expect(() => getDecodedTokenBinary(decoder.result!, [])).toThrow(CTSError);
   });
+
+  test.each(vectors.invalid_qr_text)('rejects QR text $name', ({ text }) => {
+    const decoder = new FountainDecoder();
+    expect(() => decoder.receive(text)).toThrow(CTSError);
+    expect(decoder.progress).toBe(0);
+  });
+
+  test.each(vectors.routing_vectors)('routes $name to the $parser parser', ({ text, parser }) => {
+    expect(FountainDecoder.isFrame(text)).toBe(parser === 'fountain');
+  });
+
+  test.each(vectors.receiver_sequences)('receiver sequence $name', (sequence) => {
+    const decoder = new FountainDecoder();
+    for (const step of sequence.steps) {
+      const text = step.qr_text;
+      if (text === undefined) {
+        decoder.reset();
+        continue;
+      }
+      if (step.result === 'reject') {
+        expect(() => decoder.receive(text)).toThrow(CTSError);
+        continue;
+      }
+      decoder.receive(text);
+      expect(decoder.isComplete).toBe(step.result === 'complete');
+    }
+    expect(bytesToHex(decoder.result!)).toBe(sequence.message_hex);
+  });
 });
 
 describe('FountainEncoder', () => {
-  test('defaults to 189-byte fragments, a 213-byte frame', () => {
-    expect(new FountainEncoder(new Uint8Array(500)).nextFrame()).toHaveLength(213);
+  test('defaults to 183-byte fragments, 311 characters: a version 10-M symbol', () => {
+    expect(new FountainEncoder(new Uint8Array(500)).nextFrame()).toHaveLength(311);
   });
 
   test.each([0, 4097, 1.5, NaN])('rejects fragmentSize %s', (fragmentSize) => {
@@ -148,17 +190,17 @@ describe('FountainEncoder', () => {
 
   test('stops at the last sequence number', () => {
     const encoder = new FountainEncoder(new Uint8Array(4), { fragmentSize: 1 });
-    (encoder as unknown as { sequence: number }).sequence = 0xfffffffe;
-    expect(parseFrame(encoder.nextFrame()).sequence).toBe(0xffffffff);
+    jumpTo(encoder, 0xffffffff);
+    expect(parseFrame(decodeBase45(encoder.nextFrame())).sequence).toBe(0xffffffff);
     expect(() => encoder.nextFrame()).toThrow('exhausted');
   });
 
   test('forToken keeps a cashuB string byte for byte', () => {
-    for (const token of [tokenString, `cashu:${tokenString}`]) {
+    for (const token of [tokenText, `cashu:${tokenText}`]) {
       const encoder = FountainEncoder.forToken(token, {
         fragmentSize: tokenTransfer.fragment_size,
       });
-      expect(bytesToHex(encoder.nextFrame())).toBe(bytesToHex(frameFor(tokenTransfer, 1)));
+      expect(encoder.nextFrame()).toBe(textFor(tokenTransfer, 1));
     }
   });
 
@@ -170,7 +212,7 @@ describe('FountainEncoder', () => {
     expect(getDecodedTokenBinary(decoder.result!, [])).toEqual(token);
   });
 
-  test('forToken rejects a cashuA token and a malformed cashuB string', () => {
+  test('forToken rejects a cashuA token, a malformed cashuB string, and a non-token', () => {
     expect(() => FountainEncoder.forToken('cashuAeyJ0b2tlbiI6W119')).toThrow('cashuB');
     expect(() => FountainEncoder.forToken('cashuBnotatoken')).toThrow(CTSError);
     expect(() => FountainEncoder.forToken(undefined as never)).toThrow('forToken needs');
@@ -180,27 +222,31 @@ describe('FountainEncoder', () => {
 describe('FountainDecoder', () => {
   const transfer = vectors.transfers.find((t) => t.name === 'padded-multipart')!;
 
-  test('isFrame matches the NF magic only', () => {
-    expect(FountainDecoder.isFrame(frameFor(transfer, 1))).toBe(true);
-    expect(FountainDecoder.isFrame(hexToBytes(vectors.invalid_frames[1].frame_hex))).toBe(true);
-    expect(FountainDecoder.isFrame(new TextEncoder().encode('cashuB'))).toBe(false);
-    expect(FountainDecoder.isFrame(new Uint8Array())).toBe(false);
+  test('isFrame matches D+9 text only', () => {
+    expect(FountainDecoder.isFrame(textFor(transfer, 1))).toBe(true);
+    expect(FountainDecoder.isFrame(tokenText)).toBe(false);
+    expect(FountainDecoder.isFrame('')).toBe(false);
+    expect(FountainDecoder.isFrame(new Uint8Array([0x4e, 0x46]) as never)).toBe(false);
+  });
+
+  test('rejects a frame that is not text', () => {
+    expect(() => new FountainDecoder().receive(new Uint8Array(40) as never)).toThrow('QR text');
   });
 
   test('reports progress, ignores duplicates, and stops at completion', () => {
     const decoder = new FountainDecoder();
     expect(decoder.progress).toBe(0);
-    expect(decoder.receive(frameFor(transfer, 1))).toBe(true);
-    expect(decoder.receive(frameFor(transfer, 1))).toBe(false);
+    expect(decoder.receive(textFor(transfer, 1))).toBe(true);
+    expect(decoder.receive(textFor(transfer, 1))).toBe(false);
     expect(decoder.progress).toBe(0.25);
-    for (const q of [2, 3, 4]) decoder.receive(frameFor(transfer, q));
+    for (const q of [2, 3, 4]) decoder.receive(textFor(transfer, q));
     expect(decoder.isComplete).toBe(true);
     expect(decoder.progress).toBe(1);
-    expect(decoder.receive(frameFor(transfer, 5))).toBe(false);
+    expect(decoder.receive(textFor(transfer, 5))).toBe(false);
   });
 
   test('result is a copy', () => {
-    const decoder = decode([1, 2, 3, 4].map((q) => frameFor(transfer, q)));
+    const decoder = decode([1, 2, 3, 4].map((q) => textFor(transfer, q)));
     decoder.result![0] ^= 1;
     expect(bytesToHex(decoder.result!)).toBe(transfer.message_hex);
   });
@@ -208,121 +254,29 @@ describe('FountainDecoder', () => {
   test('refuses a frame from another transfer until reset', () => {
     const other = vectors.transfers.find((t) => t.name === 'canonical-four-fragments')!;
     const decoder = new FountainDecoder();
-    decoder.receive(frameFor(transfer, 1));
-    expect(() => decoder.receive(frameFor(other, 1))).toThrow('different transfer');
+    decoder.receive(textFor(transfer, 1));
+    expect(() => decoder.receive(textFor(other, 1))).toThrow('different transfer');
     decoder.reset();
     expect(decoder.progress).toBe(0);
-    expect(decoder.receive(frameFor(other, 1))).toBe(true);
+    expect(decoder.receive(textFor(other, 1))).toBe(true);
   });
 
-  test('resets after a reassembly that fails its checksum', () => {
+  test('resets itself after a reassembly that fails verification', () => {
     const bad = vectors.invalid_frames.find((f) => f.name === 'valid-frame-crc-wrong-message-crc')!;
     const decoder = new FountainDecoder();
-    expect(() => decoder.receive(hexToBytes(bad.frame_hex))).toThrow('failed verification');
+    expect(() => decoder.receive(bad.qr_text)).toThrow('failed verification');
     expect(decoder.progress).toBe(0);
-    expect(decoder.receive(frameFor(transfer, 1))).toBe(true);
-  });
-
-  test('rejects a frame that is not a Uint8Array', () => {
-    expect(() => new FountainDecoder().receive([0x4e, 0x46] as never)).toThrow('Uint8Array');
-  });
-
-  test('copies frames, even from a reused scan buffer whose slice is a view', () => {
-    // Buffer#slice returns a view; scanners often reuse one buffer at an offset.
-    class ViewSlice extends Uint8Array {
-      slice(start?: number, end?: number): Uint8Array<ArrayBuffer> {
-        return this.subarray(start, end);
-      }
-    }
-    const encoder = new FountainEncoder(hexToBytes(transfer.message_hex), { fragmentSize: 5 });
-    const scan = new ViewSlice(64);
-    const decoder = new FountainDecoder();
-    for (let q = 5; !decoder.isComplete && q < 40; q++) {
-      const frame = encoder.nextFrame();
-      if (q < 9) continue; // skip the systematic frames so rows get reduced
-      scan.set(frame, 3);
-      const view = scan.subarray(3, 3 + frame.length);
-      decoder.receive(view);
-      expect(bytesToHex(view)).toBe(bytesToHex(frame));
-    }
-    expect(bytesToHex(decoder.result!)).toBe(transfer.message_hex);
+    expect(decoder.receive(textFor(transfer, 1))).toBe(true);
   });
 
   test('recovers 1024 fragments from repair frames alone', () => {
     const message = Uint8Array.from({ length: 1024 * 16 - 7 }, (_, i) => (i * 131 + 7) & 0xff);
     const encoder = new FountainEncoder(message, { fragmentSize: 16 });
-    for (let i = 0; i < encoder.fragmentCount; i++) encoder.nextFrame();
+    jumpTo(encoder, encoder.fragmentCount + 1);
     const decoder = new FountainDecoder();
-    let frames = 0;
-    while (!decoder.isComplete && frames < 1100) {
+    for (let frames = 0; !decoder.isComplete && frames < 1100; frames++) {
       decoder.receive(encoder.nextFrame());
-      frames++;
     }
     expect(bytesToHex(decoder.result!)).toBe(bytesToHex(message));
-  });
-});
-
-describe('Base45 text frames', () => {
-  const ascii = (s: string) => new TextEncoder().encode(s);
-
-  test.each([
-    ['AB', 'BB8'],
-    ['Hello!!', '%69 VD92EX0'],
-    ['base-45', 'UJCLQE7W581'],
-    ['ietf!', 'QED8WEX0'],
-    ['', ''],
-  ])('RFC 9285 example %j <-> %j', (plain, encoded) => {
-    expect(encodeBase45(ascii(plain))).toBe(encoded);
-    expect(decodeBase45(encoded)).toEqual(ascii(plain));
-  });
-
-  test.each(['GGW', 'A', 'ab', 'A!B', ':::'])('rejects invalid base45 %j', (text) => {
-    expect(() => decodeBase45(text)).toThrow(CTSError);
-  });
-
-  test('every frame text starts with the NF magic', () => {
-    expect(encodeBase45(hexToBytes('4e460100'))).toBe('D+9V50');
-  });
-
-  describe.each(vectors.transfers)('transfer $name as text', (transfer) => {
-    test('encodes the same frames as Base45', () => {
-      const encoder = new FountainEncoder(hexToBytes(transfer.message_hex), {
-        fragmentSize: transfer.fragment_size,
-      });
-      for (const f of transfer.frames.filter((f) => f.sequence <= 13)) {
-        expect(encoder.nextFrameText()).toBe(encodeBase45(hexToBytes(f.frame_hex)));
-      }
-    });
-
-    test('recovers from repair frames received as text', () => {
-      const decoder = new FountainDecoder();
-      for (const q of transfer.mixed_only_recovery_sequences) {
-        const text = encodeBase45(frameFor(transfer, q));
-        expect(FountainDecoder.isFrame(text)).toBe(true);
-        decoder.receive(text);
-      }
-      expect(bytesToHex(decoder.result!)).toBe(transfer.message_hex);
-    });
-  });
-
-  test.each(vectors.invalid_frames.filter((f) => f.reject_at === 'frame'))(
-    'rejects invalid frame $name as text',
-    (f) => {
-      expect(() => new FountainDecoder().receive(encodeBase45(hexToBytes(f.frame_hex)))).toThrow(
-        CTSError,
-      );
-    },
-  );
-
-  test('isFrame and receive reject other text', () => {
-    expect(FountainDecoder.isFrame('cashuBo2Ft')).toBe(false);
-    expect(FountainDecoder.isFrame('')).toBe(false);
-    expect(() => new FountainDecoder().receive('cashuBo2Ft')).toThrow(CTSError);
-    expect(() => new FountainDecoder().receive('D+9' + '0'.repeat(7000))).toThrow('frame text');
-  });
-
-  test('a 207-byte frame is 311 characters, the 10-M alphanumeric capacity', () => {
-    const encoder = new FountainEncoder(new Uint8Array(1000), { fragmentSize: 183 });
-    expect(encoder.nextFrameText()).toHaveLength(311);
   });
 });

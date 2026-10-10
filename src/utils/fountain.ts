@@ -11,14 +11,15 @@ const MAX_FRAGMENT_SIZE = 4096;
 const MAX_FRAGMENTS = 1024;
 const MAX_MESSAGE_LENGTH = 1_048_576;
 const MAX_SEQUENCE = 0xffffffff;
-// 189 + 24 bytes fills a version 10-M QR symbol exactly.
-const DEFAULT_FRAGMENT_SIZE = 189;
+// 183 + 24 bytes is 311 Base45 characters, a version 10-M symbol's alphanumeric capacity.
+const DEFAULT_FRAGMENT_SIZE = 183;
 // QR alphanumeric mode's 45 characters, in RFC 9285 order.
 const BASE45 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:';
-// no text prefix until the spec picks one; every frame already starts 'D+9' ('NF').
-const TEXT_PREFIX = '';
-const TEXT_MAGIC = TEXT_PREFIX + 'D+9';
-const MAX_TEXT_LENGTH = TEXT_PREFIX.length + ((MAX_FRAGMENT_SIZE + 24) / 2) * 3;
+// Base45 of the 'NF' magic, whatever the version and flags.
+const TEXT_MAGIC = 'D+9';
+// Base45 lengths of the 25- and 4120-byte frame bounds.
+const MIN_TEXT_LENGTH = 38;
+const MAX_TEXT_LENGTH = 6180;
 
 let crcTable: Uint32Array | undefined;
 
@@ -131,10 +132,13 @@ export function decodeBase45(text: string): Uint8Array {
 }
 
 function frameFromText(text: string): Uint8Array {
-  if (text.length > MAX_TEXT_LENGTH || !text.startsWith(TEXT_PREFIX)) {
-    throw new CTSError('Invalid fountain frame text');
+  if (typeof text !== 'string') {
+    throw new CTSError('Fountain frame must be the scanned QR text');
   }
-  return decodeBase45(text.slice(TEXT_PREFIX.length));
+  if (text.length < MIN_TEXT_LENGTH || text.length > MAX_TEXT_LENGTH) {
+    throw new CTSError(`Invalid fountain frame text: length ${text.length} is out of range`);
+  }
+  return decodeBase45(text);
 }
 
 type FrameHeader = {
@@ -153,9 +157,6 @@ type FrameHeader = {
  * @internal
  */
 export function parseFrame(frame: Uint8Array): FrameHeader & { payload: Uint8Array } {
-  if (!(frame instanceof Uint8Array)) {
-    throw new CTSError('Fountain frame must be a Uint8Array');
-  }
   const size = frame.length - FRAME_OVERHEAD;
   if (size < 1 || size > MAX_FRAGMENT_SIZE) {
     throw new CTSError(`Invalid fountain frame: length ${frame.length} is out of range`);
@@ -187,16 +188,15 @@ export function parseFrame(frame: Uint8Array): FrameHeader & { payload: Uint8Arr
   if (header.count !== Math.max(1, Math.ceil(header.length / size))) {
     throw new CTSError('Invalid fountain frame: fragment count does not match length and size');
   }
-  // Copy explicitly: Buffer#slice returns a view, and the decoder XORs into the payload.
-  return { ...header, payload: new Uint8Array(frame.subarray(HEADER_LENGTH, end)) };
+  return { ...header, payload: frame.slice(HEADER_LENGTH, end) };
 }
 
 /**
- * Splits a message into NUT-16 binary fountain frames for an animated QR code.
+ * Splits a message into NUT-16 fountain frames for an animated QR code.
  *
  * @remarks
- * Show each frame as one byte-mode QR symbol. The first `fragmentCount` frames carry the message in
- * order; later frames mix fragments so a receiver can fill gaps from any of them.
+ * Frames are Base45 text; show each as one alphanumeric-mode QR symbol. The first `fragmentCount`
+ * frames carry the message in order; later ones mix fragments so a receiver can fill any gaps.
  */
 export class FountainEncoder {
   /**
@@ -210,8 +210,9 @@ export class FountainEncoder {
 
   /**
    * @param message Bytes to send. For a Cashu token, use {@link FountainEncoder.forToken}.
-   * @param options.fragmentSize Payload bytes per frame, 1 to 4096. Default 189; each frame is
-   *   `fragmentSize + 24` bytes and must fit the QR symbol.
+   * @param options.fragmentSize Payload bytes per frame, 1 to 4096. Default 183, which fits a
+   *   version 10-M symbol; each frame is `fragmentSize + 24` bytes, 1.5 Base45 characters per
+   *   byte.
    * @throws {CTSError} If the message needs more than 1024 fragments or exceeds 1 MiB.
    */
   constructor(message: Uint8Array, options?: { fragmentSize?: number }) {
@@ -259,11 +260,15 @@ export class FountainEncoder {
   }
 
   /**
-   * Returns the next frame. Loop the display over as many frames as the receiver needs.
+   * Returns the next frame as QR text. Loop the display over as many frames as the receiver needs.
    *
    * @throws {CTSError} After 2^32 - 1 frames; start a new encoder.
    */
-  nextFrame(): Uint8Array {
+  nextFrame(): string {
+    return encodeBase45(this.nextFrameBytes());
+  }
+
+  private nextFrameBytes(): Uint8Array {
     if (this.sequence === MAX_SEQUENCE) {
       throw new CTSError('Fountain sequence exhausted; start a new encoder');
     }
@@ -283,16 +288,6 @@ export class FountainEncoder {
     view.setUint32(HEADER_LENGTH + size, crc32(frame.subarray(0, HEADER_LENGTH + size)));
     return frame;
   }
-
-  /**
-   * Returns the next frame as Base45 text, for a QR alphanumeric-mode symbol.
-   *
-   * @remarks
-   * Text costs 1.5 characters per byte: a version 10-M symbol fits a `fragmentSize` of 183.
-   */
-  nextFrameText(): string {
-    return TEXT_PREFIX + encodeBase45(this.nextFrame());
-  }
 }
 
 type Equation = { coefficients: Uint32Array; data: Uint8Array };
@@ -311,12 +306,14 @@ export class FountainDecoder {
   private message?: Uint8Array;
 
   /**
-   * True when a scanned frame, as bytes or Base45 text, carries the NUT-16 `NF` magic. Unsupported
-   * versions still match, and {@link FountainDecoder.receive} rejects them.
+   * True when scanned QR text starts `D+9`, the `NF` magic, so must go to this decoder.
+   *
+   * @remarks
+   * NUT-16: such text never falls back to the token or UR parser, even if
+   * {@link FountainDecoder.receive} then rejects it (eg an unsupported version).
    */
-  static isFrame(frame: Uint8Array | string): boolean {
-    if (typeof frame === 'string') return frame.startsWith(TEXT_MAGIC);
-    return frame instanceof Uint8Array && frame[0] === 0x4e && frame[1] === 0x46;
+  static isFrame(text: string): boolean {
+    return typeof text === 'string' && text.startsWith(TEXT_MAGIC);
   }
 
   /**
@@ -342,15 +339,14 @@ export class FountainDecoder {
   }
 
   /**
-   * Adds a scanned frame.
+   * Adds a frame, as the scanned QR text exactly (no trimming or case changes).
    *
    * @returns True if the frame added information, false for duplicates and redundant frames.
    * @throws {CTSError} If the frame is invalid, belongs to another transfer (call
    *   {@link FountainDecoder.reset} to switch), or completes a message that fails its checksum.
    */
-  receive(frame: Uint8Array | string): boolean {
-    const bytes = typeof frame === 'string' ? frameFromText(frame) : frame;
-    const { sequence, payload, ...transfer } = parseFrame(bytes);
+  receive(text: string): boolean {
+    const { sequence, payload, ...transfer } = parseFrame(frameFromText(text));
     if (this.transfer && !sameTransfer(this.transfer, transfer)) {
       throw new CTSError('Fountain frame belongs to a different transfer; call reset() to switch');
     }
