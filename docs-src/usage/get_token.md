@@ -43,7 +43,7 @@ const token = wallet.decodeToken(tokenString);
 // token.mint, token.unit, token.memo
 ```
 
-`wallet.decodeToken` also accepts the raw binary form (`craw` + `B` + CBOR, eg from an NFC tap) as a `Uint8Array`, with the same keyset ID resolution.
+`getTokenMetadata` and `wallet.decodeToken` also accept the raw binary form (`craw` + `B` + CBOR, eg from an NFC tap) as a `Uint8Array`, and `decodeToken` resolves its keyset IDs the same way.
 
 ## Advanced: `getDecodedToken`
 

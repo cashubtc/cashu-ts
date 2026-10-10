@@ -483,12 +483,12 @@ export function getDecodedToken(tokenString: string, keysetIds: readonly string[
 /**
  * Returns the metadata of a cashu token.
  *
- * @param token An encoded cashu token (cashuB...)
+ * @param token An encoded cashu token (cashuB...), or a raw binary token (`craw` + `B` + CBOR).
  * @returns Token metadata.
  */
-export function getTokenMetadata(token: string): TokenMetadata {
-  token = removePrefix(token);
-  const tokenObj = handleTokens(token);
+export function getTokenMetadata(token: string | Uint8Array): TokenMetadata {
+  const tokenObj =
+    typeof token === 'string' ? handleTokens(removePrefix(token)) : decodeBinaryToken(token);
   return {
     unit: tokenObj.unit || 'sat',
     mint: tokenObj.mint,
@@ -1264,6 +1264,18 @@ export function getEncodedTokenBinary(token: Token): Uint8Array {
   return mergeUInt8Arrays(prefix, version, binaryTemplate);
 }
 
+function decodeBinaryToken(bytes: Uint8Array): Token {
+  // 'craw' + 'B' as bytes; no decoding needed for a fixed ASCII magic.
+  const magic = [0x63, 0x72, 0x61, 0x77, 0x42];
+  if (!(bytes instanceof Uint8Array)) {
+    throw new CTSError('Token must be a string or a Uint8Array');
+  }
+  if (bytes.length < 5 || magic.some((b, i) => bytes[i] !== b)) {
+    throw new CTSError('not a valid binary token');
+  }
+  return fromV4CborTemplate(decodeCBOR(bytes.slice(5)) as TokenV4Template);
+}
+
 /**
  * Decodes a raw binary token (`craw` + `B` + CBOR) into a {@link Token}.
  *
@@ -1279,14 +1291,7 @@ export function getDecodedTokenBinary(bytes: Uint8Array, keysetIds: readonly str
       'getDecodedTokenBinary requires keysetIds (the wallet keyset id list) as its second argument; see the v5 migration guide, or use wallet.decodeToken()',
     );
   }
-  // 'craw' + 'B' as bytes; no decoding needed for a fixed ASCII magic.
-  const magic = [0x63, 0x72, 0x61, 0x77, 0x42];
-  if (bytes.length < 5 || magic.some((b, i) => bytes[i] !== b)) {
-    throw new CTSError('not a valid binary token');
-  }
-  const binaryToken = bytes.slice(5);
-  const decoded = decodeCBOR(binaryToken) as TokenV4Template;
-  const token = fromV4CborTemplate(decoded);
+  const token = decodeBinaryToken(bytes);
   token.proofs = mapShortKeysetIds(token.proofs, keysetIds);
   return token;
 }

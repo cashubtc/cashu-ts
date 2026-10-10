@@ -418,6 +418,27 @@ describe('test getTokenMetadata', () => {
       ],
     });
   });
+  test('reads a raw binary token the same as its string form', () => {
+    const token: Token = {
+      mint: 'https://mint.example',
+      unit: 'usd',
+      memo: 'hi',
+      proofs: [
+        {
+          amount: Amount.from(2),
+          id: '00' + 'ab'.repeat(7),
+          secret: 's',
+          C: '02' + '11'.repeat(32),
+        },
+      ],
+    };
+    const binary = utils.getEncodedTokenBinary(token);
+    expect(utils.getTokenMetadata(binary)).toStrictEqual(
+      utils.getTokenMetadata(utils.getEncodedToken(token)),
+    );
+    expect(() => utils.getTokenMetadata(binary.subarray(1))).toThrow('not a valid binary token');
+    expect(() => utils.getTokenMetadata(123 as never)).toThrow('string or a Uint8Array');
+  });
 });
 
 describe('findCashuPayload', () => {
