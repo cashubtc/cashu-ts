@@ -413,6 +413,60 @@ d.transcript.comment =
   };
 }
 
+// Mixed keysets (NUT-10): a v3 input and a pre-v3 input in one transaction, each container
+// carrying Y on its own keyset's curve. Only the v3 input signs; the pre-v3 one keeps its rules.
+{
+  const txVector = {
+    proof_inputs: [
+      { ...d.transcript.multi_input.tx.proof_inputs[0] },
+      {
+        amount: 2,
+        keyset_id: '00456a94ab4e1c46',
+        secret: 'd341ee4871f1f889041e63cf0d3823c713eea6aff01e80f1719f08f9e5be98f6',
+        C: '02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2',
+      },
+    ],
+    blinded_outputs: [
+      { ...d.transcript.swap.tx.blinded_outputs[0], amount: 8 },
+      { ...d.transcript.swap.tx.blinded_outputs[0], amount: 2 },
+    ],
+  };
+  const tx = fromVectorTx(txVector);
+  const transcript = buildTransactionTranscript(tx);
+  const digest = transactionDigest(tx);
+  const containers: Uint8Array[] = [];
+  for (let offset = 0; offset < transcript.length;) {
+    const record = transcript.subarray(
+      offset,
+      offset + 3 + ((transcript[offset + 1] << 8) | transcript[offset + 2]),
+    );
+    if (record[0] === 0x11) containers.push(record);
+    offset += record.length;
+  }
+  if (containers.length !== 2) throw new Error('mixed_keysets: expected two proof containers');
+  d.transcript.mixed_keysets = {
+    tx: txVector,
+    transcript: bytesToHex(transcript),
+    digest: bytesToHex(digest),
+    inputs: containers.map((container, index) => {
+      const p = txVector.proof_inputs[index];
+      const entry: Record<string, string> = {
+        Y: hashToCurveHex(p.secret, p.keyset_id),
+        container: bytesToHex(container),
+        input_id: bytesToHex(sha256(container)),
+      };
+      if (index === 0) {
+        const digestForInput = inputDigest(digest, container);
+        entry.input_digest = bytesToHex(digestForInput);
+        entry.signature = bytesToHex(
+          schnorr.sign(digestForInput, hexToBytes(d.nut13_v3.outputs[0].secret_key), AUX0),
+        );
+      }
+      return entry;
+    }),
+  };
+}
+
 // Disclosure leaf forms: threshold_1of1 with the 0x0a field, plus its rejection shapes.
 d.leaf_forms.threshold_1of1_disclosure = d.leaf_forms.threshold_1of1 + '0a000101';
 {
