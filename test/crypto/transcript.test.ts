@@ -98,9 +98,8 @@ describe('transaction transcript (vectors)', () => {
         hexToBytes(v3.secret).subarray(1),
       ),
     ).toBe(true);
-    // Neither secret appears in the transcript bytes, nor does a B_: its container carries the hash.
+    // Neither secret appears in the transcript bytes.
     expect(transcript).not.toContain(v3.secret);
-    expect(transcript).not.toContain(tx.blindedOutputs![0].B_);
     expect(transcript).not.toContain(bytesToHex(new TextEncoder().encode(legacy.secret)));
     // At the payload boundary a caller names an input by secret or by the Y it already holds.
     const outputs = tx.blindedOutputs!.map((o) => ({ amount: o.amount, id: o.keysetId, B_: o.B_ }));

@@ -171,7 +171,6 @@ function meltQuoteOutputContainer(quote: TranscriptQuote): Uint8Array {
   return tlvRecord(CONTAINER_MELT_QUOTE_OUTPUT, quoteFields(quote));
 }
 
-// B_ enters as its hash (NUT-10); the request still carries B_ itself.
 function blindedOutputContainer(output: TranscriptBlindedOutput): Uint8Array {
   if (!isValidHex(output.B_) || output.B_.length === 0) {
     throw new CTSError('Transcript blinded message B_ must be hex');
