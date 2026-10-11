@@ -287,7 +287,7 @@ function deriveHmacSecretAndBlindingFactor(
 
 /**
  * NUT-13 derivation types. `0x00`-`0x03` are components of one proof allocation and share the
- * keyset's proof counter; `0x04` has its own quote counter.
+ * keyset's proof counter; `0x04` and `0x05` are one quote allocation on a per-mint quote counter.
  */
 export const DERIVATION_TYPE = {
   /**
@@ -310,6 +310,10 @@ export const DERIVATION_TYPE = {
    * Mint quote lock key; scoped to the mint identity and counted per mint, not on a proof counter.
    */
   quoteLock: 0x04,
+  /**
+   * Mint quote id preimage; same quote counter and scope as `quoteLock`, used as is (no sampling).
+   */
+  quoteIdPreimage: 0x05,
 } as const;
 
 function assertSeed(seed: Uint8Array): void {
@@ -357,20 +361,7 @@ function deriveV3Scalar(
   suffix?: Uint8Array,
   order: bigint = SECP256K1_N,
 ): Uint8Array {
-  assertSeed(seed);
-  assertCounter(counter);
-  const scopeBytes = hexToBytes(scope);
-  // NUT-13: the full keyset id or the mint identity key, never a short id.
-  if (scopeBytes.length !== 33) {
-    throw new CTSError('V3 derivation scope must be 33 bytes');
-  }
-  const base = concatBytes(
-    utf8ToBytes('Cashu_KDF_HMAC_SHA256'),
-    numberToBytesBE(scopeBytes.length, 4),
-    scopeBytes,
-    numberToBytesBE(counter, 8),
-    Uint8Array.of(type),
-  );
+  const base = v3BaseMessage(seed, scope, counter, type);
   for (let attempt = 0; attempt < 1 << 16; attempt++) {
     const msg = concatBytes(base, numberToBytesBE(attempt, 4), suffix ?? new Uint8Array(0));
     const digest = hmac(sha256, seed, msg);
@@ -380,6 +371,23 @@ function deriveV3Scalar(
   }
   /* c8 ignore next */
   throw new InvalidScalarError(counter);
+}
+
+function v3BaseMessage(seed: Uint8Array, scope: string, counter: number, type: number): Uint8Array {
+  assertSeed(seed);
+  assertCounter(counter);
+  const scopeBytes = hexToBytes(scope);
+  // NUT-13: the full keyset id or the mint identity key, never a short id.
+  if (scopeBytes.length !== 33) {
+    throw new CTSError('V3 derivation scope must be 33 bytes');
+  }
+  return concatBytes(
+    utf8ToBytes('Cashu_KDF_HMAC_SHA256'),
+    numberToBytesBE(scopeBytes.length, 4),
+    scopeBytes,
+    numberToBytesBE(counter, 8),
+    Uint8Array.of(type),
+  );
 }
 
 function computeV2BlindingFactor(seed: Uint8Array, base: Uint8Array, counter: number): Uint8Array {
@@ -450,6 +458,30 @@ export function deriveQuoteLockKey(
   counter: number,
 ): Uint8Array {
   return deriveV3Scalar(seed, normalizeSecpPubkey(mintPubkey), counter, DERIVATION_TYPE.quoteLock);
+}
+
+/**
+ * A mint quote id preimage (NUT-13 message type `0x05`), on the same quote counter as its lock key.
+ *
+ * @remarks
+ * Any 32 bytes is a valid preimage, so `attempt` is always 0. The quote id is its NUT-04 derived
+ * id, so a reused quote counter repeats the id.
+ * @param mintPubkey - The mint's NUT-06 `pubkey` (33-byte compressed, hex).
+ * @experimental Follows draft NUT-13 type `0x05` and draft NUT-04 derived quote ids; may change
+ *   before GA.
+ */
+export function deriveQuoteIdPreimage(
+  seed: Uint8Array,
+  mintPubkey: string,
+  counter: number,
+): Uint8Array {
+  const base = v3BaseMessage(
+    seed,
+    normalizeSecpPubkey(mintPubkey),
+    counter,
+    DERIVATION_TYPE.quoteIdPreimage,
+  );
+  return hmac(sha256, seed, concatBytes(base, numberToBytesBE(0, 4)));
 }
 
 function assertV3Keyset(keysetId: string, what: string): void {

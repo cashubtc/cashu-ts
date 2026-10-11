@@ -16,15 +16,16 @@ import { minimalBE, tlvRecord } from './nutroot';
  * @remarks
  * `transaction_digest = SHA256(TLV stream)`; each input carries one BIP-340 signature over its
  * input digest, `tagged_hash("Cashu_TransactionInput", transaction_digest || SHA256(its own
- * container record))`. Containers: 0x01 proof input, 0x02 mint quote input, 0x03 blinded message
- * output, 0x04 melt quote output. Container types ascend (inputs before outputs by construction);
- * elements keep request order within their type; field streams inside are ascending unique
- * (NUT-10).
+ * container record))`. Containers: 0x11 proof input, 0x12 mint quote input, 0x21 blinded message
+ * output (carrying `SHA256(B_)`), 0x22 melt quote output. Container types ascend (inputs before
+ * outputs by construction); elements keep request order within their type; field streams inside are
+ * ascending unique (NUT-10).
  */
 
 export const TRANSCRIPT_REQUEST_TAG = 'Cashu_AuthorizedRequest';
 export const TRANSCRIPT_INPUT_TAG = 'Cashu_TransactionInput';
 export const SPEND_COMMITMENT_TAG = 'Cashu_SpendCommitment';
+export const QUOTE_ID_TAG = 'Cashu_QuoteId';
 
 // The high nibble is the section: 0x1n inputs, 0x2n outputs, 0xFn never in a transaction.
 const CONTAINER_PROOF_INPUT = 0x11;
@@ -171,14 +172,31 @@ function meltQuoteOutputContainer(quote: TranscriptQuote): Uint8Array {
 }
 
 function blindedOutputContainer(output: TranscriptBlindedOutput): Uint8Array {
+  if (!isValidHex(output.B_) || output.B_.length === 0) {
+    throw new CTSError('Transcript blinded message B_ must be hex');
+  }
   return tlvRecord(
     CONTAINER_BLINDED_OUTPUT,
     concatBytes(
       amountRecord(output.amount),
       tlvRecord(0x02, keysetIdBytes(output.keysetId)),
-      tlvRecord(0x03, hexToBytes(output.B_)),
+      tlvRecord(0x03, sha256(hexToBytes(output.B_))),
     ),
   );
+}
+
+/**
+ * A derived quote id (NUT-04): `hex(tagged_hash("Cashu_QuoteId", id_preimage))`.
+ *
+ * @remarks
+ * The preimage is 32 bytes its creator supplies (NUT-13 type `0x05` for a seeded wallet) and the
+ * mint never discloses.
+ */
+export function derivedQuoteId(idPreimage: Uint8Array): string {
+  if (idPreimage.length !== 32) {
+    throw new CTSError('Quote id preimage must be 32 bytes');
+  }
+  return bytesToHex(taggedHash(QUOTE_ID_TAG, idPreimage));
 }
 
 /**
