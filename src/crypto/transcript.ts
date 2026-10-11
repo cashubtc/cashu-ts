@@ -83,6 +83,10 @@ export type TranscriptChangeOutput = {
    * Lock key, 33-byte compressed secp256k1 hex.
    */
   pubkey: string;
+  /**
+   * The change quote's id, derived from its preimage ({@link derivedQuoteId}).
+   */
+  quoteId: string;
   amount?: bigint;
 };
 
@@ -192,28 +196,24 @@ function blindedOutputContainer(output: TranscriptBlindedOutput): Uint8Array {
   );
 }
 
-/**
- * The id a mint gives a change quote locked to `pubkey` (NUT-XX): one key, one quote.
- */
-export function changeQuoteId(pubkey: string): string {
-  if (!isValidSecpPubkey(pubkey)) {
-    throw new CTSError('Change quote lock key must be a 33-byte compressed point');
-  }
-  return bytesToHex(taggedHash(QUOTE_ID_TAG, hexToBytes(pubkey)));
-}
-
 function changeContainer(output: TranscriptChangeOutput): Uint8Array {
   if (!isValidSecpPubkey(output.pubkey)) {
     throw new CTSError('Transcript change lock key must be a 33-byte compressed point');
   }
-  const lockKey = tlvRecord(0x02, hexToBytes(output.pubkey));
+  if (output.quoteId.length === 0) {
+    throw new CTSError('Transcript quote id must be non-empty');
+  }
+  const fields = concatBytes(
+    tlvRecord(0x02, hexToBytes(output.pubkey)),
+    tlvRecord(0x03, utf8ToBytes(output.quoteId)),
+  );
   // The remainder quote omits the amount record entirely (NUT-XX).
-  if (output.amount === undefined) return tlvRecord(CONTAINER_CHANGE_QUOTE_OUTPUT, lockKey);
+  if (output.amount === undefined) return tlvRecord(CONTAINER_CHANGE_QUOTE_OUTPUT, fields);
   const amount = amountRecord(output.amount);
   if (Amount.from(output.amount).isZero()) {
     throw new CTSError('Transcript change quote amount must be positive');
   }
-  return tlvRecord(CONTAINER_CHANGE_QUOTE_OUTPUT, concatBytes(amount, lockKey));
+  return tlvRecord(CONTAINER_CHANGE_QUOTE_OUTPUT, concatBytes(amount, fields));
 }
 
 /**
@@ -370,7 +370,7 @@ type PayloadShape = {
    * `amount` is the quote amount plus the selected fee reserve ({@link meltOutputAmount}).
    */
   meltQuoteOutput?: { quoteId: string; amount: AmountLike };
-  changeQuoteOutputs?: Array<{ pubkey: string; amount?: AmountLike }>;
+  changeQuoteOutputs?: Array<{ pubkey: string; quoteId: string; amount?: AmountLike }>;
 };
 
 /**
@@ -438,6 +438,7 @@ function payloadToTransaction(payload: PayloadShape): TransactionShape {
     ...(payload.changeQuoteOutputs && {
       changeQuoteOutputs: payload.changeQuoteOutputs.map((c) => ({
         pubkey: c.pubkey,
+        quoteId: c.quoteId,
         ...(c.amount !== undefined && { amount: Amount.from(c.amount).toBigInt() }),
       })),
     }),

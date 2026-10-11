@@ -41,7 +41,7 @@ class MockWS {
    * Deliver an update payload to matching subscribers for a kind.
    */
   emit(
-    kind: 'bolt11_mint_quote' | 'bolt11_melt_quote',
+    kind: 'bolt11_mint_quote' | 'bolt11_melt_quote' | 'change_mint_quote',
     payload: { quote: string; [k: string]: any },
   ) {
     for (const { kind: k, filters, cb } of this.subs.values()) {
@@ -174,6 +174,21 @@ describe('WalletEvents', () => {
 
       expect(cb).toHaveBeenCalledWith(expect.objectContaining({ quote: 'a' }));
       expect(typeof canceller).toBe('function');
+    });
+
+    it('watches change quotes under NUT-17 change_mint_quote', async () => {
+      const cb = vi.fn();
+      await events.mintQuoteUpdates(['c'], cb, vi.fn(), { method: 'change' });
+      const ws = mock.mint.webSocketConnection!;
+      ws.emit('change_mint_quote', {
+        quote: 'c',
+        request: '',
+        state: 'PAID',
+        amount: 2,
+        amount_paid: 2,
+        amount_issued: 0,
+      });
+      expect(cb).toHaveBeenCalledWith(expect.objectContaining({ quote: 'c', method: 'change' }));
     });
 
     it('reports the websocket mode on the first frame when pollMs is unset', async () => {
@@ -671,7 +686,7 @@ describe('WalletEvents', () => {
   });
 
   describe('onceTransactionSettled', () => {
-    const preview = { digest: 'ab'.repeat(32) } as any;
+    const preview = { meltQuoteOutput: { method: 'bolt11', quote: 'q' } } as any;
     const state = (s: string) => ({ response: { state: s } });
 
     it('polls until the transaction leaves PENDING', async () => {

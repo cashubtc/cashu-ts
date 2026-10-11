@@ -1,3 +1,5 @@
+import { randomBytes } from '@noble/hashes/utils.js';
+
 import { assertV3PointSecret, isBlsKeyset, isV3PointSecret, schnorrSignDigest } from '../crypto';
 import {
   createRandomSecretKey,
@@ -7,7 +9,7 @@ import {
 import { hashToCurveHex } from '../crypto/curves';
 import { parseSecret } from '../crypto/NUT10';
 import { maybeDeriveP2BKPrivateKeys, p2pkSpendLeaves } from '../crypto/NUT11';
-import { deriveQuoteLockKey } from '../crypto/NUT13';
+import { deriveQuoteIdPreimage, deriveQuoteLockKey } from '../crypto/NUT13';
 import {
   buildScriptPathWitness,
   parseNutrootLeaf,
@@ -72,7 +74,7 @@ export type ScriptPathSpend = {
 export async function attachTransactionWitnesses(
   payload: Pick<MeltRequest, 'inputs' | 'outputs'> & {
     mintQuoteInputs?: Array<{ quoteId: string; amount: Amount; lockKey: string }>;
-    changeQuoteOutputs?: Array<{ pubkey: string; amount?: Amount }>;
+    changeQuoteOutputs?: Array<{ pubkey: string; quoteId: string; amount?: Amount }>;
   },
   meltQuote: { quoteId: string; amount: Amount } | undefined,
   extraKeys: Map<string, Uint8Array> | undefined,
@@ -451,10 +453,11 @@ export function collectSpendInfoKeys(
 }
 
 /**
- * Creates a quote lock keypair; the full contract is documented on `Wallet.createQuoteLockKey`.
+ * Creates a quote lock keypair and id preimage; the full contract is documented on
+ * `Wallet.createQuoteLockKey`.
  *
  * @remarks
- * Seed-derived under `mintPubkey` from a freshly reserved quote counter when seeded, random
+ * Seed-derived under `mintPubkey` from one freshly reserved quote counter when seeded, random
  * otherwise. Reserving (and any persistence events it fires) is the caller's, via
  * `reserveQuoteCounter`.
  */
@@ -462,12 +465,22 @@ export async function createQuoteLockKeyPair(
   seed: Uint8Array | undefined,
   mintPubkey: string | undefined,
   reserveQuoteCounter: () => Promise<number>,
-): Promise<{ pubkey: string; privkey: string }> {
-  const privkey =
-    seed && mintPubkey
-      ? deriveQuoteLockKey(seed, mintPubkey, await reserveQuoteCounter())
-      : createRandomSecretKey();
-  return { pubkey: bytesToHex(getPubKeyFromPrivKey(privkey)), privkey: bytesToHex(privkey) };
+): Promise<{ pubkey: string; privkey: string; idPreimage: string }> {
+  let privkey: Uint8Array;
+  let idPreimage: Uint8Array;
+  if (seed && mintPubkey) {
+    const counter = await reserveQuoteCounter();
+    privkey = deriveQuoteLockKey(seed, mintPubkey, counter);
+    idPreimage = deriveQuoteIdPreimage(seed, mintPubkey, counter);
+  } else {
+    privkey = createRandomSecretKey();
+    idPreimage = randomBytes(32);
+  }
+  return {
+    pubkey: bytesToHex(getPubKeyFromPrivKey(privkey)),
+    privkey: bytesToHex(privkey),
+    idPreimage: bytesToHex(idPreimage),
+  };
 }
 
 /**

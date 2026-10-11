@@ -4,7 +4,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { Wallet, deserializeTransactionPreview, serializeTransactionPreview } from '../../src';
 import { schnorrSignDigest, schnorrVerifyDigest } from '../../src/crypto';
 import { buildNutrootSecret } from '../../src/crypto/nutroot';
-import { inputsForPayload } from '../../src/crypto/transcript';
+import { derivedQuoteId, inputsForPayload } from '../../src/crypto/transcript';
 import { Amount } from '../../src/model/Amount';
 import type { Proof } from '../../src/model/types';
 import { NUT02_V3_VECTOR1_KEYS, NUT02_V3_VECTOR1_KEYSET } from '../consts';
@@ -15,11 +15,26 @@ const server = useTestServer();
 const privkey = '0000000000000000000000000000000000000000000000000000000000000001';
 const pubkey = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
 const changeKey = '022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4';
+const change = { pubkey: changeKey, idPreimage: '11'.repeat(32) };
+const changeId = derivedQuoteId(Buffer.from(change.idPreimage, 'hex'));
 const quote = { quote: 'quote-mint-0001', pubkey };
 const melt = {
   method: 'bolt11',
   quote: { quote: 'quote-melt-0001', amount: Amount.from(5), fee_reserve: Amount.from(1) },
 };
+
+const meltQuoteJson = { amount: 5, fee_reserve: 1, unit, request: 'lnbc1', expiry: 0 };
+const changeQuoteJson = (id: string, amount: number) => ({
+  quote: id,
+  request: '',
+  unit,
+  amount,
+  amount_paid: amount,
+  amount_issued: 0,
+  state: 'PAID',
+  expiry: null,
+  pubkey: changeKey,
+});
 
 function serveInfo(xx?: object) {
   server.use(
@@ -30,8 +45,7 @@ function serveInfo(xx?: object) {
 }
 
 /**
- * Serves `/v1/transaction`, echoing the digest the request's quote input signed, and collects each
- * body.
+ * Serves `/v1/transaction` as settled, and collects each body.
  */
 function serveTransaction(): any[] {
   const bodies: any[] = [];
@@ -40,7 +54,6 @@ function serveTransaction(): any[] {
       const body: any = await request.json();
       bodies.push(body);
       return HttpResponse.json({
-        digest: 'ab'.repeat(32),
         state: 'PAID',
         signatures: [],
         melt_quotes: body.melt_quote_outputs.map((m: any) => ({
@@ -74,7 +87,7 @@ describe('Wallet transactions (NUT-XX)', () => {
       transact(wallet, {
         mintQuoteInputs: [{ quote, amount: 8 }],
         meltQuoteOutput: melt,
-        changeQuoteOutputs: [{ pubkey: changeKey }],
+        changeQuoteOutputs: [change],
       }),
     ).rejects.toThrow('does not support transactions');
   });
@@ -87,7 +100,7 @@ describe('Wallet transactions (NUT-XX)', () => {
     const result = await transact(wallet, {
       mintQuoteInputs: [{ quote, amount: 8 }],
       meltQuoteOutput: melt,
-      changeQuoteOutputs: [{ pubkey: changeKey }],
+      changeQuoteOutputs: [change],
     });
     const [body] = bodies;
     expect(result.response.state).toBe('PAID');
@@ -96,21 +109,19 @@ describe('Wallet transactions (NUT-XX)', () => {
       proof_inputs: [],
       blinded_outputs: [],
       melt_quote_outputs: [{ quote: 'quote-melt-0001', fee_reserve: 1 }],
-      change_quote_outputs: [{ pubkey: changeKey }],
+      change_quote_outputs: [{ id_preimage: change.idPreimage, pubkey: changeKey }],
     });
     expect(body.mint_quote_inputs[0]).toMatchObject({ quote: 'quote-mint-0001', amount: 8 });
-    // The quote signs over the melt output (amount + fee reserve) and the change key.
+    // The quote signs over the melt output (amount + fee reserve) and the change quote.
     const tx = inputsForPayload({
       mintQuoteInputs: [{ quoteId: 'quote-mint-0001', amount: 8, lockKey: pubkey }],
       meltQuoteOutput: { quoteId: 'quote-melt-0001', amount: 6 },
-      changeQuoteOutputs: [{ pubkey: changeKey }],
+      changeQuoteOutputs: [{ pubkey: changeKey, quoteId: changeId }],
     });
     const [signature] = JSON.parse(body.mint_quote_inputs[0].witness).signatures;
     expect(schnorrVerifyDigest(signature, tx.quotes.get('quote-mint-0001')!.digest, pubkey)).toBe(
       true,
     );
-    // The wallet's own digest wins over the mint's echo.
-    expect(result.response.digest).toBe(Buffer.from(tx.transactionDigest).toString('hex'));
   });
 
   test('a rehydrated preview resends the same transaction', async () => {
@@ -121,12 +132,11 @@ describe('Wallet transactions (NUT-XX)', () => {
     const preview = await wallet.prepareTransaction({
       mintQuoteInputs: [{ quote, amount: 8 }],
       meltQuoteOutput: melt,
-      changeQuoteOutputs: [{ pubkey: changeKey }],
+      changeQuoteOutputs: [change],
     });
     await wallet.completeTransaction(preview, privkey);
     const stored = JSON.parse(JSON.stringify(serializeTransactionPreview(preview)));
-    const again = await wallet.completeTransaction(deserializeTransactionPreview(stored), privkey);
-    expect(again.response.digest).toBe(preview.digest);
+    await wallet.completeTransaction(deserializeTransactionPreview(stored), privkey);
     const strip = (b: any) => ({
       ...b,
       mint_quote_inputs: b.mint_quote_inputs.map((q: any) => q.quote),
@@ -134,41 +144,81 @@ describe('Wallet transactions (NUT-XX)', () => {
     expect(strip(bodies[1])).toEqual(strip(bodies[0]));
   });
 
-  test('checkTransaction polls a pending transaction by its digest', async () => {
+  test('checkTransaction reads a pending transaction from its melt quote and change quotes', async () => {
     serveInfo({ supported: true, quote_input_fee_ppk: 0 });
-    let polled: string | undefined;
+    let meltState = 'PENDING';
+    const fetched: string[] = [];
     server.use(
       http.post(mintUrl + '/v1/transaction', () =>
         HttpResponse.json({
-          digest: 'ab'.repeat(32),
           state: 'PENDING',
           signatures: [],
           melt_quotes: [],
-          change_quotes: [],
+          change_quotes: [null],
         }),
       ),
-      http.get(mintUrl + '/v1/transaction/:digest', ({ params }) => {
-        polled = params.digest as string;
-        return HttpResponse.json({
-          digest: polled,
-          state: 'PAID',
-          signatures: [],
-          melt_quotes: [],
-          change_quotes: [],
-        });
+      http.get(mintUrl + '/v1/melt/quote/bolt11/:id', ({ params }) =>
+        HttpResponse.json({ ...meltQuoteJson, quote: params.id, state: meltState }),
+      ),
+      http.get(mintUrl + '/v1/mint/quote/change/:id', ({ params }) => {
+        fetched.push(params.id as string);
+        return HttpResponse.json(changeQuoteJson(params.id as string, 2));
       }),
     );
     const wallet = new Wallet(mintUrl, { unit });
     await wallet.loadMint();
     const preview = await wallet.prepareTransaction({
       mintQuoteInputs: [{ quote, amount: 8 }],
-      changeQuoteOutputs: [{ pubkey: changeKey }],
+      meltQuoteOutput: melt,
+      changeQuoteOutputs: [change],
     });
     const first = await wallet.completeTransaction(preview, privkey);
     expect(first.response.state).toBe('PENDING');
+    const pending = await wallet.checkTransaction(preview);
+    expect(pending.response).toMatchObject({ state: 'PENDING', change_quotes: [null] });
+    expect(fetched).toEqual([]);
+    meltState = 'PAID';
     const settled = await wallet.checkTransaction(preview);
-    expect(polled).toBe(preview.digest);
     expect(settled.response.state).toBe('PAID');
+    expect(fetched).toEqual([changeId]);
+    expect(settled.response.change_quotes[0]).toMatchObject({ quote: changeId, method: 'change' });
+    // A released payment leaves the melt quote UNPAID.
+    meltState = 'UNPAID';
+    expect((await wallet.checkTransaction(preview)).response.state).toBe('FAILED');
+  });
+
+  test('checkTransaction reads a missing remainder quote as zero change, and needs a melt', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0 });
+    server.use(
+      http.get(mintUrl + '/v1/melt/quote/bolt11/:id', ({ params }) =>
+        HttpResponse.json({ ...meltQuoteJson, quote: params.id, state: 'PAID' }),
+      ),
+      http.get(mintUrl + '/v1/mint/quote/change/:id', () =>
+        HttpResponse.json({ detail: 'quote not found', code: 20007 }, { status: 400 }),
+      ),
+    );
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+    const fixed = { pubkey: changeKey, idPreimage: '22'.repeat(32), amount: 1 };
+    const preview = await wallet.prepareTransaction({
+      mintQuoteInputs: [{ quote, amount: 8 }],
+      meltQuoteOutput: melt,
+      changeQuoteOutputs: [change],
+    });
+    const result = await wallet.checkTransaction(preview);
+    expect(result.response).toMatchObject({ state: 'PAID', change_quotes: [null] });
+    // A fixed change quote always exists once PAID, so a failed fetch is an error.
+    const withFixed = await wallet.prepareTransaction({
+      mintQuoteInputs: [{ quote, amount: 8 }],
+      meltQuoteOutput: melt,
+      changeQuoteOutputs: [fixed, change],
+    });
+    await expect(wallet.checkTransaction(withFixed)).rejects.toThrow('quote not found');
+    const swap = await wallet.prepareTransaction({
+      mintQuoteInputs: [{ quote, amount: 8 }],
+      changeQuoteOutputs: [change],
+    });
+    await expect(wallet.checkTransaction(swap)).rejects.toThrow('only a transaction with a melt');
   });
 
   test('waitForSettlementMs polls a PENDING reply until it settles', async () => {
@@ -177,29 +227,26 @@ describe('Wallet transactions (NUT-XX)', () => {
     server.use(
       http.post(mintUrl + '/v1/transaction', () =>
         HttpResponse.json({
-          digest: 'ab'.repeat(32),
           state: 'PENDING',
           signatures: [],
           melt_quotes: [],
-          change_quotes: [],
+          change_quotes: [null],
         }),
       ),
-      http.get(mintUrl + '/v1/transaction/:digest', ({ params }) => {
+      http.get(mintUrl + '/v1/melt/quote/bolt11/:id', ({ params }) => {
         polls++;
-        return HttpResponse.json({
-          digest: params.digest,
-          state: 'PAID',
-          signatures: [],
-          melt_quotes: [],
-          change_quotes: [],
-        });
+        return HttpResponse.json({ ...meltQuoteJson, quote: params.id, state: 'PAID' });
       }),
+      http.get(mintUrl + '/v1/mint/quote/change/:id', ({ params }) =>
+        HttpResponse.json(changeQuoteJson(params.id as string, 2)),
+      ),
     );
     const wallet = new Wallet(mintUrl, { unit });
     await wallet.loadMint();
     const preview = await wallet.prepareTransaction({
       mintQuoteInputs: [{ quote, amount: 8 }],
-      changeQuoteOutputs: [{ pubkey: changeKey }],
+      meltQuoteOutput: melt,
+      changeQuoteOutputs: [change],
     });
     const result = await wallet.completeTransaction(preview, privkey, {
       waitForSettlementMs: 5_000,
@@ -228,7 +275,7 @@ describe('Wallet transactions (NUT-XX)', () => {
     await transact(wallet, {
       mintQuoteInputs: [{ quote, amount: 8 }],
       meltQuoteOutput: onchain,
-      changeQuoteOutputs: [{ pubkey: changeKey }],
+      changeQuoteOutputs: [change],
     });
     expect(bodies[0].melt_quote_outputs).toEqual([
       { quote: 'quote-melt-0001', fee_reserve: 3, fee_index: 1 },
@@ -236,7 +283,7 @@ describe('Wallet transactions (NUT-XX)', () => {
     const { digest } = inputsForPayload({
       mintQuoteInputs: [{ quoteId: 'quote-mint-0001', amount: 8, lockKey: pubkey }],
       meltQuoteOutput: { quoteId: 'quote-melt-0001', amount: 8 },
-      changeQuoteOutputs: [{ pubkey: changeKey }],
+      changeQuoteOutputs: [{ pubkey: changeKey, quoteId: changeId }],
     }).quotes.get('quote-mint-0001')!;
     const [signature] = JSON.parse(bodies[0].mint_quote_inputs[0].witness).signatures;
     expect(schnorrVerifyDigest(signature, digest, pubkey)).toBe(true);
@@ -262,7 +309,7 @@ describe('Wallet transactions (NUT-XX)', () => {
         mintQuoteInputs: [{ quote, amount: 7 }],
         proofOutputs: { amount: 1 },
         meltQuoteOutput: melt,
-        changeQuoteOutputs: [{ pubkey: changeKey }],
+        changeQuoteOutputs: [change],
       }),
     ).rejects.toThrow('must equal');
     // New proofs beside a melt need a change quote, even when the reserve is given up: the mint
@@ -285,7 +332,7 @@ describe('Wallet transactions (NUT-XX)', () => {
           method: 'bolt11',
           quote: { quote: 'quote-melt-0001', amount: Amount.from(5) },
         },
-        changeQuoteOutputs: [{ pubkey: changeKey }],
+        changeQuoteOutputs: [change],
       }),
     ).rejects.toThrow('full melt quote');
     await expect(
@@ -295,7 +342,7 @@ describe('Wallet transactions (NUT-XX)', () => {
           method: 'bolt11',
           quote: { quote: 'quote-melt-0001', fee_reserve: Amount.from(1) } as any,
         },
-        changeQuoteOutputs: [{ pubkey: changeKey }],
+        changeQuoteOutputs: [change],
       }),
     ).rejects.toThrow('full melt quote');
     await expect(
@@ -306,7 +353,7 @@ describe('Wallet transactions (NUT-XX)', () => {
       wallet.prepareTransaction({
         mintQuoteInputs: [{ quote, amount: 8 }],
         meltQuoteOutput: { ...melt, feeIndex: 0 },
-        changeQuoteOutputs: [{ pubkey: changeKey }],
+        changeQuoteOutputs: [change],
       }),
     ).rejects.toThrow('offering fee_options');
   });
@@ -315,16 +362,20 @@ describe('Wallet transactions (NUT-XX)', () => {
     const bodies = serveTransaction();
     const wallet = new Wallet(mintUrl, { unit });
     await wallet.loadMint();
-    const other = '03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556';
+    const other = {
+      pubkey: '03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556',
+      idPreimage: '22'.repeat(32),
+    };
+    const otherId = derivedQuoteId(Buffer.from(other.idPreimage, 'hex'));
     // 8 in, 3 to the fixed quote, the remainder quote takes 5: no new proofs by default.
     const preview = await wallet.prepareTransaction({
       mintQuoteInputs: [{ quote, amount: 8 }],
-      changeQuoteOutputs: [{ pubkey: changeKey, amount: 3 }, { pubkey: other }],
+      changeQuoteOutputs: [{ ...change, amount: 3 }, other],
     });
     expect(preview.amount.isZero()).toBe(true);
     expect(preview.changeQuoteOutputs).toEqual([
-      { pubkey: changeKey, amount: Amount.from(3) },
-      { pubkey: other },
+      { quote: changeId, ...change, amount: Amount.from(3) },
+      { quote: otherId, ...other },
     ]);
     const stored = JSON.parse(JSON.stringify(serializeTransactionPreview(preview)));
     expect(deserializeTransactionPreview(stored).changeQuoteOutputs).toEqual(
@@ -332,33 +383,60 @@ describe('Wallet transactions (NUT-XX)', () => {
     );
     await wallet.completeTransaction(preview, privkey);
     expect(bodies[0].change_quote_outputs).toEqual([
-      { pubkey: changeKey, amount: 3 },
-      { pubkey: other },
+      { id_preimage: change.idPreimage, pubkey: changeKey, amount: 3 },
+      { id_preimage: other.idPreimage, pubkey: other.pubkey },
     ]);
     // Without a remainder quote the fixed quotes and new proofs must use the inputs exactly.
     await expect(
       wallet.prepareTransaction({
         mintQuoteInputs: [{ quote, amount: 8 }],
-        changeQuoteOutputs: [{ pubkey: changeKey, amount: 3 }],
+        changeQuoteOutputs: [{ ...change, amount: 3 }],
       }),
     ).resolves.toMatchObject({ amount: Amount.from(5) });
     await expect(
       wallet.prepareTransaction({
         mintQuoteInputs: [{ quote, amount: 8 }],
-        changeQuoteOutputs: [{ pubkey: changeKey, amount: 9 }],
+        changeQuoteOutputs: [{ ...change, amount: 9 }],
       }),
     ).rejects.toThrow('do not cover');
     // What the mint would reject is refused before anything is signed.
     await expect(
       wallet.prepareTransaction({
         mintQuoteInputs: [{ quote, amount: 8 }],
-        changeQuoteOutputs: [{ pubkey: changeKey }, { pubkey: other }],
+        changeQuoteOutputs: [change, other],
       }),
     ).rejects.toThrow('at most one');
     await expect(
       wallet.prepareTransaction({
         mintQuoteInputs: [{ quote, amount: 8 }],
-        changeQuoteOutputs: [{ pubkey: changeKey, amount: 0 }],
+        changeQuoteOutputs: [
+          { ...change, amount: 3 },
+          { ...other, idPreimage: change.idPreimage },
+        ],
+      }),
+    ).rejects.toThrow('must not repeat');
+    for (const idPreimage of [undefined, '11'.repeat(31), 'zz'.repeat(32)]) {
+      await expect(
+        wallet.prepareTransaction({
+          mintQuoteInputs: [{ quote, amount: 8 }],
+          changeQuoteOutputs: [{ pubkey: changeKey, idPreimage: idPreimage as string }],
+        }),
+      ).rejects.toThrow('32-byte hex idPreimage');
+    }
+    // Lock keys may repeat.
+    await expect(
+      wallet.prepareTransaction({
+        mintQuoteInputs: [{ quote, amount: 8 }],
+        changeQuoteOutputs: [
+          { ...change, amount: 3 },
+          { ...other, pubkey: changeKey },
+        ],
+      }),
+    ).resolves.toMatchObject({ amount: Amount.zero() });
+    await expect(
+      wallet.prepareTransaction({
+        mintQuoteInputs: [{ quote, amount: 8 }],
+        changeQuoteOutputs: [{ ...change, amount: 0 }],
       }),
     ).rejects.toThrow('must be positive');
   });
@@ -371,7 +449,6 @@ describe('Wallet transactions (NUT-XX)', () => {
         const body: any = await request.json();
         bodies.push(body);
         return HttpResponse.json({
-          digest: 'ab'.repeat(32),
           state: 'PAID',
           signatures: body.blinded_outputs.map((b: any) => ({
             id: b.id,
@@ -414,7 +491,7 @@ describe('Wallet transactions (NUT-XX)', () => {
     await wallet.loadMint();
     const preview = await wallet.prepareTransaction({
       mintQuoteInputs: [{ quote, amount: 8 }],
-      changeQuoteOutputs: [{ pubkey: changeKey }],
+      changeQuoteOutputs: [change],
     });
     const signed: string[] = [];
     const signer = (key: string) => async (ctx: { digest: Uint8Array; quoteId: string }) => {
@@ -442,7 +519,7 @@ describe('Wallet transactions (NUT-XX)', () => {
     await expect(
       transact(wallet, {
         mintQuoteInputs: [{ quote, amount: 8 }],
-        changeQuoteOutputs: [{ pubkey: changeKey }],
+        changeQuoteOutputs: [change],
       }),
     ).rejects.toThrow('Invalid response from mint');
   });
@@ -451,7 +528,6 @@ describe('Wallet transactions (NUT-XX)', () => {
     server.use(
       http.post(mintUrl + '/v1/transaction', () =>
         HttpResponse.json({
-          digest: 'ab'.repeat(32),
           state: 'PAID',
           signatures: [],
           melt_quotes: [
@@ -459,8 +535,8 @@ describe('Wallet transactions (NUT-XX)', () => {
           ],
           change_quotes: [
             {
-              quote: 'change-0002',
-              request: 'ab'.repeat(32),
+              quote: changeId,
+              request: '',
               unit,
               amount: 2,
               amount_paid: 2,
@@ -479,7 +555,7 @@ describe('Wallet transactions (NUT-XX)', () => {
       mintQuoteInputs: [{ quote, amount: 8 }],
       proofOutputs: { amount: 1 },
       meltQuoteOutput: melt,
-      changeQuoteOutputs: [{ pubkey: changeKey }],
+      changeQuoteOutputs: [change],
     });
     expect(preview.outputData).toHaveLength(1);
     const result = await wallet.completeTransaction(preview, privkey);
@@ -493,14 +569,13 @@ describe('Wallet transactions (NUT-XX)', () => {
     server.use(
       http.post(mintUrl + '/v1/transaction', () =>
         HttpResponse.json({
-          digest: 'ab'.repeat(32),
           state: 'PAID',
           signatures: [],
           melt_quotes: [],
           change_quotes: [
             {
-              quote: 'change-0001',
-              request: 'ab'.repeat(32),
+              quote: changeId,
+              request: '',
               unit,
               amount: 3,
               amount_paid: 3,
@@ -519,15 +594,15 @@ describe('Wallet transactions (NUT-XX)', () => {
     await expect(
       wallet.prepareTransaction({
         mintQuoteInputs: [{ quote: partial, amount: 4 }],
-        changeQuoteOutputs: [{ pubkey: changeKey }],
+        changeQuoteOutputs: [change],
       }),
     ).rejects.toThrow('only 3 available');
     const result = await transact(wallet, {
       mintQuoteInputs: [{ quote: partial, amount: 3 }],
-      changeQuoteOutputs: [{ pubkey: changeKey }],
+      changeQuoteOutputs: [change],
     });
     expect(result.response.change_quotes[0]).toMatchObject({
-      quote: 'change-0001',
+      quote: changeId,
       method: 'change',
     });
     expect(result.response.change_quotes[0]!.amount_paid.toNumber()).toBe(3);
@@ -582,7 +657,6 @@ describe('Wallet transactions (NUT-XX)', () => {
     expect(restored.outputData.map((d) => d.blindedMessage)).toEqual(
       first.outputData.map((d) => d.blindedMessage),
     );
-    expect(restored.digest).toBe(first.digest);
   });
 
   test('custom outputs determine the proof total while the remainder takes the surplus', async () => {
@@ -595,7 +669,7 @@ describe('Wallet transactions (NUT-XX)', () => {
     const preview = await wallet.prepareTransaction({
       mintQuoteInputs: [{ quote, amount: 8 }],
       proofOutputs: { outputType: { type: 'custom', data: outputData } },
-      changeQuoteOutputs: [{ pubkey: changeKey }],
+      changeQuoteOutputs: [change],
     });
     expect(preview.amount).toEqual(Amount.from(3));
     expect(preview.outputData.map((d) => d.blindedMessage)).toEqual(
@@ -613,12 +687,11 @@ describe('Wallet transactions (NUT-XX)', () => {
         mintQuoteInputs: [{ quote, amount: 8 }],
         proofOutputs: { amount: 1 },
         meltQuoteOutput: { ...melt, quote: { ...melt.quote, unit } },
-        changeQuoteOutputs: [{ pubkey: changeKey }],
+        changeQuoteOutputs: [change],
       });
       server.use(
         http.post(mintUrl + '/v1/transaction', () =>
           HttpResponse.json({
-            digest: preview.digest,
             state,
             signatures: [],
             melt_quotes: [],
@@ -628,7 +701,6 @@ describe('Wallet transactions (NUT-XX)', () => {
       );
       const result = await wallet.completeTransaction(preview, privkey);
       expect(result.response).toMatchObject({
-        digest: preview.digest,
         state,
         change_quotes: [null],
       });
@@ -636,43 +708,44 @@ describe('Wallet transactions (NUT-XX)', () => {
     },
   );
 
-  test('recovers signed outputs by polling a persisted preview after a lost POST response', async () => {
+  test('recovers signed outputs from the melt quote after a lost POST response', async () => {
     serveInfo({ supported: true, quote_input_fee_ppk: 0 });
     const wallet = new Wallet(mintUrl, { unit });
     await wallet.loadMint();
     const preview = await wallet.prepareTransaction({
-      mintQuoteInputs: [{ quote, amount: 3 }],
+      mintQuoteInputs: [{ quote, amount: 9 }],
       proofOutputs: { amount: 3 },
-      changeQuoteOutputs: [{ pubkey: changeKey }],
+      meltQuoteOutput: melt,
+      changeQuoteOutputs: [change],
     });
     const stored = JSON.parse(JSON.stringify(serializeTransactionPreview(preview)));
-    const record = {
-      digest: preview.digest,
-      state: 'PAID',
-      melt_quotes: [],
-      change_quotes: [null],
-      signatures: preview.outputData.map((d) => ({
-        id: d.blindedMessage.id,
-        amount: d.blindedMessage.amount,
-        C_: pubkey,
-      })),
-    };
     const posted = vi.fn();
     server.use(
       http.post(mintUrl + '/v1/transaction', () => {
         posted();
         return HttpResponse.error();
       }),
-      http.get(mintUrl + '/v1/transaction/:digest', ({ params }) => {
-        expect(params.digest).toBe(preview.digest);
-        return HttpResponse.json(record);
-      }),
+      http.get(mintUrl + '/v1/melt/quote/bolt11/:id', ({ params }) =>
+        HttpResponse.json({
+          ...meltQuoteJson,
+          quote: params.id,
+          state: 'PAID',
+          change: preview.outputData.map((d) => ({
+            id: d.blindedMessage.id,
+            amount: d.blindedMessage.amount,
+            C_: pubkey,
+          })),
+        }),
+      ),
+      http.get(mintUrl + '/v1/mint/quote/change/:id', ({ params }) =>
+        HttpResponse.json(changeQuoteJson(params.id as string, 1)),
+      ),
     );
     await expect(wallet.completeTransaction(preview, privkey)).rejects.toThrow();
     expect(posted).toHaveBeenCalled();
     const recovered = await wallet.checkTransaction(deserializeTransactionPreview(stored));
     expect(recovered.proofs.map((p) => p.amount.toNumber()).sort()).toEqual([1, 2]);
-    expect(recovered.response.digest).toBe(preview.digest);
+    expect(recovered.response.change_quotes[0]).toMatchObject({ quote: changeId });
     const again = await wallet.checkTransaction(deserializeTransactionPreview(stored));
     expect(again.proofs).toEqual(recovered.proofs);
   });
@@ -699,7 +772,7 @@ describe('Wallet transactions (NUT-XX)', () => {
     const preview = await wallet.prepareTransaction({
       proofInputs: [input],
       mintQuoteInputs: [{ quote, amount: 8 }],
-      changeQuoteOutputs: [{ pubkey: changeKey }],
+      changeQuoteOutputs: [change],
     });
     const result = await wallet.completeTransaction(preview, privkey, {
       scriptPath: [{ secret: input.secret, leafIndex: 0 }],
@@ -709,7 +782,7 @@ describe('Wallet transactions (NUT-XX)', () => {
     const tx = inputsForPayload({
       proofInputs: [input],
       mintQuoteInputs: [{ quoteId: quote.quote, amount: 8, lockKey: pubkey }],
-      changeQuoteOutputs: [{ pubkey: changeKey }],
+      changeQuoteOutputs: [{ pubkey: changeKey, quoteId: changeId }],
     });
     const digest = [...tx.proofs.values()][0].digest;
     const witness = JSON.parse(bodies[0].proof_inputs[0].witness);
@@ -720,7 +793,7 @@ describe('Wallet transactions (NUT-XX)', () => {
     const changed = inputsForPayload({
       proofInputs: [input],
       mintQuoteInputs: [{ quoteId: quote.quote, amount: 7, lockKey: pubkey }],
-      changeQuoteOutputs: [{ pubkey: changeKey }],
+      changeQuoteOutputs: [{ pubkey: changeKey, quoteId: changeId }],
     });
     expect(
       schnorrVerifyDigest(witness.signatures[0], [...changed.proofs.values()][0].digest, pubkey),
@@ -734,9 +807,8 @@ describe('Wallet transactions (NUT-XX)', () => {
     await wallet.loadMint();
     const preview = await wallet.prepareTransaction({ mintQuoteInputs: [{ quote, amount: 1 }] });
     server.use(
-      http.get(mintUrl + '/v1/transaction/:digest', () =>
+      http.post(mintUrl + '/v1/transaction', () =>
         HttpResponse.json({
-          digest: preview.digest,
           state: 'PAID',
           melt_quotes: [],
           change_quotes: [null],
@@ -748,9 +820,43 @@ describe('Wallet transactions (NUT-XX)', () => {
         }),
       ),
     );
-    const result = await wallet.checkTransaction(preview);
+    const result = await wallet.completeTransaction(preview, privkey);
     expect(result.proofs).toHaveLength(1);
     expect(result.proofs[0].amount).toEqual(Amount.from(1));
+  });
+
+  test('warns when a change quote comes back under a different id, and keeps the proofs', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0 });
+    const warn = vi.fn();
+    const logger = {
+      error: vi.fn(),
+      warn,
+      info: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+      log: vi.fn(),
+    };
+    server.use(
+      http.post(mintUrl + '/v1/transaction', () =>
+        HttpResponse.json({
+          state: 'PAID',
+          signatures: [],
+          melt_quotes: [],
+          change_quotes: [changeQuoteJson('other-id', 8)],
+        }),
+      ),
+    );
+    const wallet = new Wallet(mintUrl, { unit, logger });
+    await wallet.loadMint();
+    const result = await transact(wallet, {
+      mintQuoteInputs: [{ quote, amount: 8 }],
+      changeQuoteOutputs: [change],
+    });
+    expect(result.response.change_quotes[0]).toMatchObject({ quote: 'other-id' });
+    expect(warn).toHaveBeenCalledWith(
+      'Mint returned a change quote under a different id',
+      expect.objectContaining({ expected: changeId, received: 'other-id' }),
+    );
   });
 
   test.each([
@@ -773,9 +879,8 @@ describe('Wallet transactions (NUT-XX)', () => {
       await wallet.loadMint();
       const preview = await wallet.prepareTransaction({ mintQuoteInputs: [{ quote, amount: 1 }] });
       server.use(
-        http.get(mintUrl + '/v1/transaction/:digest', () =>
+        http.post(mintUrl + '/v1/transaction', () =>
           HttpResponse.json({
-            digest: preview.digest,
             state: 'PAID',
             signatures,
             melt_quotes: [],
@@ -783,8 +888,8 @@ describe('Wallet transactions (NUT-XX)', () => {
           }),
         ),
       );
-      await expect(wallet.checkTransaction(preview)).rejects.toThrow(error);
-      await expect(wallet.checkTransaction(preview)).rejects.toThrow('NUT-09');
+      await expect(wallet.completeTransaction(preview, privkey)).rejects.toThrow(error);
+      await expect(wallet.completeTransaction(preview, privkey)).rejects.toThrow('NUT-09');
     },
   );
 
@@ -801,7 +906,7 @@ describe('Wallet transactions (NUT-XX)', () => {
             quote: { ...melt.quote, fee_options: [{ fee_index: 0, fee_reserve: 1 }] },
             feeIndex,
           },
-          changeQuoteOutputs: [{ pubkey: changeKey }],
+          changeQuoteOutputs: [change],
         }),
       ).rejects.toThrow('selected feeIndex');
     }

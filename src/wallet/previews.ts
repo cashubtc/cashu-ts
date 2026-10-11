@@ -256,7 +256,6 @@ export function deserializeMeltPreview(
  * JSON-safe representation of a {@link TransactionPreview}.
  */
 export type SerializedTransactionPreview = {
-  digest: string;
   proofInputs: SerializedProof[];
   mintQuoteInputs: Array<{ quote: string; pubkey: string; amount: string }>;
   meltQuoteOutput?: {
@@ -266,7 +265,7 @@ export type SerializedTransactionPreview = {
     feeReserve: string;
     feeIndex?: number;
   };
-  changeQuoteOutputs: Array<{ pubkey: string; amount?: string }>;
+  changeQuoteOutputs: Array<{ quote: string; idPreimage: string; pubkey: string; amount?: string }>;
   outputData: SerializedOutputData[];
   amount: string;
   fee: string;
@@ -276,15 +275,13 @@ export type SerializedTransactionPreview = {
  * Converts a transaction preview to a JSON-safe form for persistence.
  *
  * @remarks
- * Persist the result before `completeTransaction`: completing the rehydrated preview posts the same
- * transaction digest, so the mint returns its record instead of spending twice. The result holds
- * `proofs` in the clear, so it is spendable bearer material.
+ * Persist the result before `completeTransaction`, to check a pending melt transaction after a
+ * restart. The result holds `proofs` in the clear, so it is spendable bearer material.
  */
 export function serializeTransactionPreview(
   preview: TransactionPreview,
 ): SerializedTransactionPreview {
   return {
-    digest: preview.digest,
     proofInputs: preview.proofInputs.map(serializeProof),
     mintQuoteInputs: preview.mintQuoteInputs.map((q) => ({ ...q, amount: q.amount.toString() })),
     ...(preview.meltQuoteOutput && {
@@ -295,6 +292,8 @@ export function serializeTransactionPreview(
       },
     }),
     changeQuoteOutputs: preview.changeQuoteOutputs.map((c) => ({
+      quote: c.quote,
+      idPreimage: c.idPreimage,
       pubkey: c.pubkey,
       ...(c.amount && { amount: c.amount.toString() }),
     })),
@@ -313,7 +312,6 @@ export function deserializeTransactionPreview(
   serialized: SerializedTransactionPreview,
 ): TransactionPreview {
   return deserializeWith('SerializedTransactionPreview', () => ({
-    digest: serialized.digest,
     proofInputs: normalizeProofAmounts(serialized.proofInputs),
     mintQuoteInputs: serialized.mintQuoteInputs.map((q) => ({
       ...q,
@@ -327,6 +325,8 @@ export function deserializeTransactionPreview(
       },
     }),
     changeQuoteOutputs: serialized.changeQuoteOutputs.map((c) => ({
+      quote: c.quote,
+      idPreimage: c.idPreimage,
       pubkey: c.pubkey,
       ...(c.amount !== undefined && { amount: Amount.from(c.amount) }),
     })),

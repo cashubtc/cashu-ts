@@ -128,14 +128,9 @@ export type SwapPreview = {
  * Preview of a NUT-XX transaction created by `prepareTransaction`.
  *
  * @remarks
- * Completing the same preview again posts the same transaction digest, so the mint returns its
- * record rather than spending twice. Persist via `serializeTransactionPreview`.
+ * Persist via `serializeTransactionPreview`: a pending melt transaction is checked through it.
  */
 export type TransactionPreview = {
-  /**
-   * The transaction digest, hex: the id the mint keeps the record under.
-   */
-  digest: string;
   proofInputs: Proof[];
   /**
    * Each quote's id, lock key and the amount this transaction issues against it.
@@ -153,10 +148,10 @@ export type TransactionPreview = {
     feeIndex?: number;
   };
   /**
-   * Change quotes in request order: each a lock key and fixed amount, or no amount on the one
-   * remainder quote, which takes whatever the outputs, melt and fee leave.
+   * Change quotes in request order: each its derived id, id preimage, lock key and fixed amount, or
+   * no amount on the one remainder quote, which takes whatever the outputs, melt and fee leave.
    */
-  changeQuoteOutputs: Array<{ pubkey: string; amount?: Amount }>;
+  changeQuoteOutputs: Array<{ quote: string; idPreimage: string; pubkey: string; amount?: Amount }>;
   outputData: OutputDataLike[];
   /**
    * Total of the new proofs.

@@ -384,7 +384,7 @@ export type PrepareTransactionConfig = {
 export type CompleteTransactionOptions = {
   preferAsync?: boolean;
   /**
-   * Keep polling the record after a `PENDING` response until the transaction settles, for up to
+   * Keep polling the melt quote after a `PENDING` response until the transaction settles, for up to
    * this many milliseconds (see `WalletEvents.onceTransactionSettled`). Unset, `PENDING` is
    * returned as the mint reported it.
    */

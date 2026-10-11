@@ -8,7 +8,6 @@ import { recoverV3SecretKeys } from '../../src/crypto/NUT13';
 import {
   buildRequestTranscript,
   buildTransactionTranscript,
-  changeQuoteId,
   digestForPayload,
   inputDigest,
   proofInputContextKey,
@@ -43,7 +42,7 @@ function fromVectorTx(tx: {
   mint_quote_inputs?: Array<{ amount: number; quote_id: string; lock_pubkey: string }>;
   blinded_outputs?: Array<{ amount: number; keyset_id: string; B_: string }>;
   melt_quote_outputs?: Array<{ amount: number; quote_id: string }>;
-  change_quote_outputs?: Array<{ pubkey: string; amount?: number }>;
+  change_quote_outputs?: Array<{ id_preimage: string; pubkey: string; amount?: number }>;
 }): TransactionShape {
   return {
     proofInputs: tx.proof_inputs?.map((p) => ({
@@ -67,6 +66,7 @@ function fromVectorTx(tx: {
       quoteId: q.quote_id,
     })),
     changeQuoteOutputs: tx.change_quote_outputs?.map((c) => ({
+      quoteId: derivedQuoteId(hexToBytes(c.id_preimage)),
       pubkey: c.pubkey,
       ...(c.amount !== undefined && { amount: BigInt(c.amount) }),
     })),
@@ -495,17 +495,20 @@ describe('keyset ids in the transcript', () => {
 describe('change quote outputs (NUT-XX vectors)', () => {
   const v = tv.proof_to_change;
   const two = tv.proof_to_two_changes;
+  // Payload shape: the quote id each id preimage derives.
+  const payloadChange = (outputs: typeof two.tx.change_quote_outputs) =>
+    outputs.map((c) => ({ ...c, quoteId: derivedQuoteId(hexToBytes(c.id_preimage)) }));
 
-  test('a remainder quote binds only the lock key, after every other container', () => {
+  test('a remainder quote binds its lock key and quote id, after every other container', () => {
     expect(v.transcript.endsWith(v.change_container)).toBe(true);
     expect(bytesToHex(buildTransactionTranscript(fromVectorTx(v.tx)))).toBe(v.transcript);
     expect(bytesToHex(transactionDigest(fromVectorTx(v.tx)))).toBe(v.digest);
     const { proofs } = inputsForPayload({
       proofInputs: v.tx.proof_inputs.map((p) => ({ ...p, id: p.keyset_id })),
-      changeQuoteOutputs: v.tx.change_quote_outputs,
+      changeQuoteOutputs: payloadChange(v.tx.change_quote_outputs),
     });
     expect(bytesToHex([...proofs.values()][0].digest)).toBe(v.input_digest);
-    expect(changeQuoteId(v.tx.change_quote_outputs[0].pubkey)).toBe(v.quote_id);
+    expect(derivedQuoteId(hexToBytes(v.tx.change_quote_outputs[0].id_preimage))).toBe(v.quote_id);
   });
 
   test('a fixed quote carries its amount first, then the remainder quote, in request order', () => {
@@ -514,34 +517,40 @@ describe('change quote outputs (NUT-XX vectors)', () => {
     expect(bytesToHex(transactionDigest(fromVectorTx(two.tx)))).toBe(two.digest);
     const { proofs } = inputsForPayload({
       proofInputs: two.tx.proof_inputs.map((p) => ({ ...p, id: p.keyset_id })),
-      changeQuoteOutputs: two.tx.change_quote_outputs,
+      changeQuoteOutputs: payloadChange(two.tx.change_quote_outputs),
     });
     expect(bytesToHex([...proofs.values()][0].digest)).toBe(two.input_digest);
-    expect(two.tx.change_quote_outputs.map((c) => changeQuoteId(c.pubkey))).toEqual(two.quote_ids);
+    expect(payloadChange(two.tx.change_quote_outputs).map((c) => c.quoteId)).toEqual(two.quote_ids);
   });
-
-  test.each(['', v.tx.change_quote_outputs[0].pubkey.slice(2), '02' + 'ff'.repeat(32)])(
-    'rejects an invalid change quote recovery key %s',
-    (pubkey) => {
-      expect(() => changeQuoteId(pubkey)).toThrow('33-byte compressed point');
-    },
-  );
 
   test('a change quote alone is a valid output; a malformed one throws', () => {
     const proofInputs = fromVectorTx(v.tx).proofInputs;
     const { pubkey } = v.tx.change_quote_outputs[0];
+    const quoteId = v.quote_id;
     expect(() => buildTransactionTranscript({ proofInputs })).toThrow(/output/);
     expect(() =>
       buildTransactionTranscript({
         proofInputs,
-        changeQuoteOutputs: [{ pubkey: pubkey.slice(2) }],
+        changeQuoteOutputs: [{ pubkey: pubkey.slice(2), quoteId }],
       }),
     ).toThrow(/lock key/);
     expect(() =>
-      buildTransactionTranscript({ proofInputs, changeQuoteOutputs: [{ pubkey, amount: 0n }] }),
+      buildTransactionTranscript({ proofInputs, changeQuoteOutputs: [{ pubkey, quoteId: '' }] }),
+    ).toThrow(/quote id/);
+    expect(() =>
+      buildTransactionTranscript({
+        proofInputs,
+        changeQuoteOutputs: [{ pubkey, quoteId, amount: 0n }],
+      }),
     ).toThrow(/positive/);
     expect(() =>
-      buildTransactionTranscript({ proofInputs, changeQuoteOutputs: [{ pubkey }, { pubkey }] }),
+      buildTransactionTranscript({
+        proofInputs,
+        changeQuoteOutputs: [
+          { pubkey, quoteId },
+          { pubkey, quoteId: two.quote_ids[1] },
+        ],
+      }),
     ).toThrow(/one remainder/);
   });
 });

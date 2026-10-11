@@ -37,12 +37,7 @@ import {
   verifyNutrootSpendInfo,
   type ParsedNutrootOption,
 } from '../crypto/nutroot';
-import {
-  changeQuoteId,
-  digestForPayload,
-  inputsForPayload,
-  meltOutputAmount,
-} from '../crypto/transcript';
+import { derivedQuoteId, inputsForPayload, meltOutputAmount } from '../crypto/transcript';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
@@ -98,6 +93,7 @@ import {
   DEFAULT_MAX_ARRAY_LENGTH,
   getDecodedToken,
   getDecodedTokenBinary,
+  hexToBytes,
   invoiceHasAmountInHRP,
   isObj,
   SEED_BYTES,
@@ -2948,19 +2944,20 @@ class Wallet {
    * counter) when seeded, random otherwise.
    *
    * @remarks
-   * Derived keys are recoverable via {@link Wallet.recoverQuoteLockKey | recoverQuoteLockKey};
-   * random ones exist only in the returned object, so persist the key with its quote. `{ random:
-   * true }` forces a random key on a seeded wallet, consuming no counter: for throwaway quotes (eg
-   * estimation) that must not pollute the recovery scan, or for a mint that publishes no NUT-06
-   * `pubkey` to scope the derivation to.
+   * `idPreimage` (NUT-13 type `0x05`, same counter) names a change quote locked to this key
+   * ({@link Wallet.prepareTransaction}); a mint quote leaves it unused. Derived keys are recoverable
+   * via {@link Wallet.recoverQuoteLockKey | recoverQuoteLockKey}; random ones exist only in the
+   * returned object, so persist the key with its quote. `{ random: true }` forces a random key on a
+   * seeded wallet, consuming no counter: for throwaway quotes (eg estimation) that must not pollute
+   * the recovery scan, or for a mint that publishes no NUT-06 `pubkey` to scope the derivation to.
    * @throws {@link CTSError} On a seeded wallet whose mint publishes no `pubkey`, unless `random`.
-   * @experimental Seed derivation follows draft NUT-13 type `0x04` and draft NUT-06 identity
+   * @experimental Seed derivation follows draft NUT-13 types `0x04`/`0x05` and draft NUT-06 identity
    *   scoping and may change before GA; a key derived now may then no longer be found by scan, so
    *   persist the `privkey` with its quote.
    */
   async createQuoteLockKey(opts?: {
     random?: boolean;
-  }): Promise<{ pubkey: string; privkey: string }> {
+  }): Promise<{ pubkey: string; privkey: string; idPreimage: string }> {
     const seed = opts?.random ? undefined : this._seed;
     const mintPubkey = seed ? this.requireMintIdentity('createQuoteLockKey') : undefined;
     return createQuoteLockKeyPair(seed, mintPubkey, async () => {
@@ -4743,8 +4740,9 @@ class Wallet {
    * @param transaction.mintQuoteInputs Paid, locked quotes, each with the amount to issue from it.
    * @param transaction.proofOutputs The new proofs: their total, output type and keyset.
    * @param transaction.meltQuoteOutput The full melt quote; `feeIndex` selects a NUT-30 fee option.
-   * @param transaction.changeQuoteOutputs Change quotes to create, each locked to `pubkey` with a
-   *   positive `amount`, or none on at most one: the remainder quote.
+   * @param transaction.changeQuoteOutputs Change quotes to create, each locked to `pubkey` under
+   *   the id its `idPreimage` derives (both from {@link Wallet.createQuoteLockKey}), with a positive
+   *   `amount`, or none on at most one: the remainder quote.
    * @throws If the mint does not support NUT-XX, a quote is unlocked, or the inputs do not balance.
    */
   async prepareTransaction(
@@ -4764,7 +4762,7 @@ class Wallet {
           };
         feeIndex?: number;
       };
-      changeQuoteOutputs?: Array<{ pubkey: string; amount?: AmountLike }>;
+      changeQuoteOutputs?: Array<{ pubkey: string; idPreimage: string; amount?: AmountLike }>;
     },
     config: PrepareTransactionConfig = {},
   ): Promise<TransactionPreview> {
@@ -4813,18 +4811,24 @@ class Wallet {
       }
       return { quote: id, pubkey: normalizeSecpPubkey(q.quote.pubkey!), amount };
     });
-    // Validate Change Outputs: fixed amounts are positive, and at most one entry has none.
+    // Validate Change Outputs: unique ids, fixed amounts are positive, and at most one has none.
     this.failIf(
       transaction.changeQuoteOutputs !== undefined &&
         !Array.isArray(transaction.changeQuoteOutputs),
       'prepareTransaction: changeQuoteOutputs must be an array',
     );
     const change = (transaction.changeQuoteOutputs ?? []).map((c) => ({
-      pubkey: normalizeSecpPubkey(c?.pubkey),
+      quote: this.changeQuoteIdFor(c?.idPreimage),
+      idPreimage: c.idPreimage.toLowerCase(),
+      pubkey: normalizeSecpPubkey(c.pubkey),
       ...(c.amount !== undefined && {
         amount: this.parseAmount(c.amount, 'prepareTransaction.changeQuoteOutputs'),
       }),
     }));
+    this.failIf(
+      new Set(change.map((c) => c.quote)).size !== change.length,
+      'prepareTransaction: change quote ids must not repeat; take a fresh idPreimage for each',
+    );
     const remainder = change.some((c) => c.amount === undefined);
     this.failIf(
       change.filter((c) => c.amount === undefined).length > 1,
@@ -4915,23 +4919,8 @@ class Wallet {
       new Set(outputData.map((d) => d.blindedMessage.id)).size > 1,
       'prepareTransaction: all outputs must share one keyset (NUT-XX)',
     );
-    // Computed here so a caller can poll or resend even if completion never returns.
-    const digest = bytesToHex(
-      digestForPayload({
-        proofInputs: proofs,
-        mintQuoteInputs: quotes.map((q) => ({
-          quoteId: q.quote,
-          amount: q.amount,
-          lockKey: q.pubkey,
-        })),
-        blindedOutputs: outputData.map((d) => d.blindedMessage),
-        ...(melt && { meltQuoteOutput: { quoteId: melt.quote, amount: melt.amount } }),
-        changeQuoteOutputs: change,
-      }),
-    );
     this.throwIfAborted(config.signal);
     return {
-      digest,
       proofInputs: proofs,
       mintQuoteInputs: quotes,
       ...(melt && { meltQuoteOutput: melt }),
@@ -4946,10 +4935,10 @@ class Wallet {
    * Signs and posts a prepared NUT-XX transaction.
    *
    * @remarks
-   * `privkey` holds proof spend keys and quote lock keys alike. Completing the same preview again
-   * returns the mint's record for it, so a lost response is recovered by retrying. While the result
-   * is `PENDING`, poll {@link Wallet.checkTransaction} with the same preview, or pass
-   * `waitForSettlementMs` to have this call wait.
+   * `privkey` holds proof spend keys and quote lock keys alike. The change quote ids are taken once
+   * the mint accepts the request, so resending a preview after a lost response succeeds only from a
+   * mint's NUT-19 cache. While the result is `PENDING`, poll {@link Wallet.checkTransaction} with
+   * the same preview, or pass `waitForSettlementMs` to have this call wait.
    */
   async completeTransaction(
     preview: TransactionPreview,
@@ -4979,12 +4968,17 @@ class Wallet {
       lockKey: q.pubkey,
     }));
     const meltQuote = melt && { quoteId: melt.quote, amount: melt.amount };
+    const changeOutputs = change.map((c) => ({
+      pubkey: c.pubkey,
+      quoteId: c.quote,
+      ...(c.amount !== undefined && { amount: c.amount }),
+    }));
     const receipts = await attachTransactionWitnesses(
       {
         inputs: wireProofs,
         outputs: blinded,
         mintQuoteInputs: mintQuotes,
-        changeQuoteOutputs: change,
+        changeQuoteOutputs: changeOutputs,
       },
       meltQuote,
       collectSpendInfoKeys(proofs, privkey, this._logger),
@@ -5000,7 +4994,7 @@ class Wallet {
           blindedOutputs: blinded,
           mintQuoteInputs: mintQuotes,
           ...(meltQuote && { meltQuoteOutput: meltQuote }),
-          changeQuoteOutputs: change,
+          changeQuoteOutputs: changeOutputs,
         })
       : undefined;
     const quoteInputs: TransactionRequest['mint_quote_inputs'] = [];
@@ -5045,7 +5039,11 @@ class Wallet {
                 },
               ]
             : [],
-          change_quote_outputs: change,
+          change_quote_outputs: change.map((c) => ({
+            id_preimage: c.idPreimage,
+            pubkey: c.pubkey,
+            ...(c.amount !== undefined && { amount: c.amount }),
+          })),
           ...(options.preferAsync && { prefer_async: true }),
         },
         { signal: options.signal, meltMethod: melt?.method },
@@ -5062,57 +5060,75 @@ class Wallet {
   }
 
   /**
-   * Fetches a prepared transaction's record, with its new proofs once it is `PAID`.
+   * Fetches a prepared melt transaction's state through its melt quote, with the change quotes and
+   * new proofs once it is `PAID`.
    *
    * @remarks
-   * Poll this while {@link Wallet.completeTransaction} reports `PENDING`.
+   * Poll this while {@link Wallet.completeTransaction} reports `PENDING`. An `UNPAID` melt quote
+   * reads as `FAILED`: the payment failed and the inputs were released.
+   * @throws If the preview has no melt: such a transaction settles in its own response.
    */
   async checkTransaction(
     preview: TransactionPreview,
     options: AbortOptions = {},
   ): Promise<TransactionResult> {
-    const response = await this.mint.checkTransaction(preview.digest, {
+    const melt = preview.meltQuoteOutput;
+    this.failIf(!melt, 'checkTransaction: only a transaction with a melt settles later');
+    const meltQuote = await this.mint.checkMeltQuote(melt!.method, melt!.quote, {
       signal: options.signal,
-      meltMethod: preview.meltQuoteOutput?.method,
     });
-    return this.processTransactionResponse(preview, response);
+    const state = meltQuote.state === 'UNPAID' ? 'FAILED' : meltQuote.state;
+    const change = preview.changeQuoteOutputs;
+    const changeQuotes =
+      state === 'PAID'
+        ? await Promise.all(
+            change.map((c) =>
+              this.mint.checkMintQuote('change', c.quote, { signal: options.signal }).catch((e) => {
+                // The mint creates no remainder quote for zero change (NUT-XX).
+                if (c.amount === undefined) return null;
+                throw e;
+              }),
+            ),
+          )
+        : change.map(() => null);
+    return this.processTransactionResponse(preview, {
+      state,
+      signatures: state === 'PAID' ? (meltQuote.change ?? []) : [],
+      melt_quotes: [meltQuote],
+      change_quotes: changeQuotes,
+    });
   }
 
   /**
-   * The result for a transaction record: the wallet's digest, and the new proofs once `PAID`.
+   * The derived id (NUT-04) a change quote output takes from its 32-byte hex `idPreimage`.
+   */
+  private changeQuoteIdFor(idPreimage: unknown): string {
+    this.failIf(
+      typeof idPreimage !== 'string' || !/^[0-9a-fA-F]{64}$/.test(idPreimage),
+      'prepareTransaction: a change quote output needs a 32-byte hex idPreimage',
+    );
+    return derivedQuoteId(hexToBytes(idPreimage as string));
+  }
+
+  /**
+   * The result for a transaction response: the new proofs once `PAID`.
    */
   private async processTransactionResponse(
     preview: TransactionPreview,
     response: TransactionResponse,
   ): Promise<TransactionResult> {
-    // Settlement may already have spent the inputs. Warn about record metadata instead of
-    // throwing away returned assets; keep the wallet's digest so polling/retries remain usable.
-    if (response.digest !== preview.digest) {
-      this._logger.warn('Transaction response reports a different digest', {
-        expected: preview.digest,
-        received: response.digest,
-      });
-      response.digest = preview.digest;
-    }
     const { outputData, changeQuoteOutputs } = preview;
     if (response.state !== 'PAID') return { response, proofs: [] };
     // The change quotes are returned as the mint reports them: the mint already holds that value,
     // and refusing or re-checking them after settlement would recover nothing.
     const { signatures } = response;
-    // A change quote id is derived from its lock key (NUT-XX); any other id cannot be found again
-    // from the seed, so say so, but the value is the mint's already and the proofs still matter.
     changeQuoteOutputs.forEach((c, i) => {
       const q = response.change_quotes[i];
-      const expected = changeQuoteId(c.pubkey);
-      if (q && q.quote !== expected) {
-        this._logger.warn(
-          'Mint assigned a change quote id that does not derive from its lock key',
-          {
-            digest: preview.digest,
-            expected,
-            received: q.quote,
-          },
-        );
+      if (q && q.quote !== c.quote) {
+        this._logger.warn('Mint returned a change quote under a different id', {
+          expected: c.quote,
+          received: q.quote,
+        });
       }
     });
     // The outputs' keyset rotated during the melt: nothing was signed and their value is in the
@@ -5122,7 +5138,7 @@ class Wallet {
     if (signatures.length === 0 && outputData.length > 0 && remainderQuote) {
       this._logger.warn(
         'Mint did not sign the transaction outputs; their value is in the remainder quote',
-        { digest: preview.digest, changeQuote: remainderQuote.quote },
+        { changeQuote: remainderQuote.quote },
       );
       return { response, proofs: [] };
     }

@@ -4,7 +4,7 @@ import { describe, expect, test, vi } from 'vitest';
 
 import { Wallet, quoteCounterKey, type OperationCounters } from '../../src';
 import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
-import { deriveQuoteLockKey } from '../../src/crypto/NUT13';
+import { deriveQuoteIdPreimage, deriveQuoteLockKey } from '../../src/crypto/NUT13';
 import { Amount } from '../../src/model/Amount';
 import type { Proof } from '../../src/model/types';
 
@@ -51,9 +51,11 @@ describe('Wallet quote lock keys', () => {
     const first = await wallet.createQuoteLockKey();
     expect(bytesToHex(deriveQuoteLockKey(SEED, MINT_PUBKEY, 0))).toBe(first.privkey);
     expect(bytesToHex(getPubKeyFromPrivKey(hexToBytes(first.privkey)))).toBe(first.pubkey);
+    expect(bytesToHex(deriveQuoteIdPreimage(SEED, MINT_PUBKEY, 0))).toBe(first.idPreimage);
     // The counter moved: the next key is a different derivation.
     const second = await wallet.createQuoteLockKey();
     expect(bytesToHex(deriveQuoteLockKey(SEED, MINT_PUBKEY, 1))).toBe(second.privkey);
+    expect(bytesToHex(deriveQuoteIdPreimage(SEED, MINT_PUBKEY, 1))).toBe(second.idPreimage);
   });
 
   test('createQuoteLockKey is random without a seed', async () => {
@@ -61,6 +63,8 @@ describe('Wallet quote lock keys', () => {
     const a = await wallet.createQuoteLockKey();
     const b = await wallet.createQuoteLockKey();
     expect(a.privkey).not.toBe(b.privkey);
+    expect(a.idPreimage).toMatch(/^[0-9a-f]{64}$/);
+    expect(a.idPreimage).not.toBe(b.idPreimage);
     expect(bytesToHex(getPubKeyFromPrivKey(hexToBytes(a.privkey)))).toBe(a.pubkey);
   });
 

@@ -1298,9 +1298,6 @@ export class Mint {
     checkMintQuoteBolt11(quote: string, opts?: MintCallOptions): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt12(quote: string, opts?: MintCallOptions): Promise<MintQuoteBolt12Response>;
     checkMintQuoteOnchain(quote: string, opts?: MintCallOptions): Promise<MintQuoteOnchainResponse>;
-    checkTransaction(digest: string, options?: MintCallOptions & {
-        meltMethod?: string;
-    }): Promise<TransactionResponse>;
     connectWebSocket(): Promise<void>;
     createMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(method: string, payload: Record<string, unknown>, options?: MintCallOptions & {
         normalize?: (raw: Record<string, unknown>) => TRes;
@@ -2671,7 +2668,6 @@ export type SerializedSwapPreview = {
 
 // @public
 export type SerializedTransactionPreview = {
-    digest: string;
     proofInputs: SerializedProof[];
     mintQuoteInputs: Array<{
         quote: string;
@@ -2686,6 +2682,8 @@ export type SerializedTransactionPreview = {
         feeIndex?: number;
     };
     changeQuoteOutputs: Array<{
+        quote: string;
+        idPreimage: string;
         pubkey: string;
         amount?: string;
     }>;
@@ -2956,7 +2954,6 @@ export type TokenResponse = {
 
 // @public
 export type TransactionPreview = {
-    digest: string;
     proofInputs: Proof[];
     mintQuoteInputs: Array<{
         quote: string;
@@ -2971,6 +2968,8 @@ export type TransactionPreview = {
         feeIndex?: number;
     };
     changeQuoteOutputs: Array<{
+        quote: string;
+        idPreimage: string;
         pubkey: string;
         amount?: Amount;
     }>;
@@ -2997,6 +2996,7 @@ export type TransactionRequest = {
         fee_index?: number;
     }>;
     change_quote_outputs?: Array<{
+        id_preimage: string;
         pubkey: string;
         amount?: Amount;
     }>;
@@ -3005,7 +3005,6 @@ export type TransactionRequest = {
 
 // @public
 export type TransactionResponse = {
-    digest: string;
     state: TransactionState;
     signatures: SerializedBlindedSignature[];
     melt_quotes: MeltQuoteBaseResponse[];
@@ -3172,6 +3171,7 @@ export class Wallet {
     }): Promise<{
         pubkey: string;
         privkey: string;
+        idPreimage: string;
     }>;
     decodeToken(token: string | Uint8Array): Token;
     defaultOutputType(): OutputType;
@@ -3249,6 +3249,7 @@ export class Wallet {
         };
         changeQuoteOutputs?: Array<{
             pubkey: string;
+            idPreimage: string;
             amount?: AmountLike;
         }>;
     }, config?: PrepareTransactionConfig): Promise<TransactionPreview>;

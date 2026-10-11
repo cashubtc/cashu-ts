@@ -244,9 +244,9 @@ class Mint {
    * quote out.
    *
    * @remarks
-   * Resending the same request returns the mint's record for it rather than spending twice.
+   * A pending transaction settles through its melt quote ({@link Mint.checkMeltQuote}); a mint with
+   * NUT-19 caching may answer a resent request from its cache.
    * @param options.meltMethod The melt quote's payment method, for response normalization.
-   * @returns The transaction record.
    */
   async transaction(
     payload: TransactionRequest,
@@ -266,31 +266,13 @@ class Mint {
     return this.normalizeTransactionResponse(data, payload.blinded_outputs, options?.meltMethod);
   }
 
-  /**
-   * Fetches a transaction record by its digest (NUT-XX); poll this for a pending transaction.
-   */
-  async checkTransaction(
-    digest: string,
-    options?: MintCallOptions & { meltMethod?: string },
-  ): Promise<TransactionResponse> {
-    failIf(!/^[0-9a-f]{64}$/.test(digest), 'Invalid transaction digest', this._logger);
-    const data = await this.requestWithAuth<TransactionResponse>(
-      'GET',
-      `/v1/transaction/${digest}`,
-      {},
-      options,
-    );
-    return this.normalizeTransactionResponse(data, undefined, options?.meltMethod);
-  }
-
   private normalizeTransactionResponse(
     data: TransactionResponse,
-    outputs: unknown[] | undefined,
+    outputs: unknown[],
     meltMethod = 'bolt11',
   ): TransactionResponse {
     if (
       !isRecord(data) ||
-      typeof data.digest !== 'string' ||
       !['PENDING', 'PAID', 'FAILED'].includes(data.state) ||
       !Array.isArray(data.signatures) ||
       !Array.isArray(data.melt_quotes) ||
@@ -299,7 +281,7 @@ class Mint {
       this._logger.error('Invalid response from mint...', { op: 'transaction' });
       throw new CTSError('Invalid response from mint');
     }
-    if (outputs) this.assertSignatureCount(data.signatures, outputs, 'transaction');
+    this.assertSignatureCount(data.signatures, outputs, 'transaction');
     return {
       ...data,
       signatures: this.normalizeSignatureAmounts(data.signatures),

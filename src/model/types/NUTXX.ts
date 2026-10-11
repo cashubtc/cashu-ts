@@ -38,28 +38,28 @@ export type TransactionRequest = {
    */
   melt_quote_outputs: Array<{ quote: string; fee_reserve: Amount; fee_index?: number }>;
   /**
-   * Change quotes to create: each a lock key (33-byte compressed hex) and a positive amount, or no
-   * amount on at most one of them, the remainder quote that takes the balance.
+   * Change quotes to create: each the 32-byte preimage of its id (hex), a lock key (33-byte
+   * compressed hex) and a positive amount, or no amount on at most one of them, the remainder quote
+   * that takes the balance.
    */
-  change_quote_outputs?: Array<{ pubkey: string; amount?: Amount }>;
+  change_quote_outputs?: Array<{ id_preimage: string; pubkey: string; amount?: Amount }>;
   prefer_async?: boolean;
 };
 
 export type TransactionState = 'PENDING' | 'PAID' | 'FAILED';
 
 /**
- * Response from `POST /v1/transaction` and `GET /v1/transaction/{digest}` (NUT-XX).
+ * Response from `POST /v1/transaction` (NUT-XX).
  */
 export type TransactionResponse = {
-  /**
-   * The transaction digest, hex.
-   */
-  digest: string;
   state: TransactionState;
   /**
    * One per blinded message, in request order; empty unless `PAID`.
    */
   signatures: SerializedBlindedSignature[];
+  /**
+   * The melt quote, if any; once `PAID` its `change` carries the same signatures.
+   */
   melt_quotes: MeltQuoteBaseResponse[];
   /**
    * One per change quote output, in request order: the quote once `PAID`, else null (a remainder
