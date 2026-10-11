@@ -16,6 +16,7 @@ import {
   messageForPayload,
   requestDigest,
   signTransactionInput,
+  derivedQuoteId,
   spendCommitment,
   transactionDigest,
   transcriptContainers,
@@ -665,6 +666,22 @@ describe('input uniqueness and spend commitments (vectors)', () => {
         mintQuoteInputs: [{ ...mint.mintQuoteInputs![0], lockKey: 'zz' }],
       }),
     ).toThrow(/lock key/);
+  });
+
+  test('a blinded output needs its B_ as hex', () => {
+    const swap = fromVectorTx(tv.swap.tx);
+    for (const B_ of ['', 'zz']) {
+      expect(() =>
+        buildTransactionTranscript({
+          ...swap,
+          blindedOutputs: [{ ...swap.blindedOutputs![0], B_ }],
+        }),
+      ).toThrow(/B_ must be hex/);
+    }
+  });
+
+  test('a derived quote id needs a 32-byte preimage', () => {
+    expect(() => derivedQuoteId(new Uint8Array(31))).toThrow(/32 bytes/);
   });
 
   test('the mint quote input derives its digest from its own container', () => {
