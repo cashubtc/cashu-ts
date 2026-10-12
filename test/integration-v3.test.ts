@@ -1498,16 +1498,16 @@ describeXX('NUT-XX transactions', () => {
       const states = await wallet.checkProofsStates(proofs);
       expect(states.every((s) => s.state === CheckStateEnum.SPENT)).toBe(true);
 
-      // A partial draw through a transaction, resent from the same preview.
+      // A partial draw through a transaction. A resend from the same preview signs afresh, so it is
+      // a new request, and the signed outputs refuse it.
       const preview = await wallet.prepareTransaction({
         mintQuoteInputs: [{ quote: change, amount: 32 }],
       });
       const drawn = await wallet.completeTransaction(preview, lock.privkey);
       expect(drawn.response.state).toBe('PAID');
       expect(sumProofs(drawn.proofs).toBigInt()).toBe(32n);
-      const resent = await wallet.completeTransaction(preview, lock.privkey);
-      expect(resent.response.signatures.map((s) => s.C_)).toEqual(
-        drawn.response.signatures.map((s) => s.C_),
+      await expect(wallet.completeTransaction(preview, lock.privkey)).rejects.toThrow(
+        MintOperationError,
       );
       const partial = await wallet.mint.checkMintQuote('change', change.quote);
       expect(partial.amount_issued.toBigInt()).toBe(32n);
