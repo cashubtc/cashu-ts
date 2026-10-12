@@ -1505,7 +1505,7 @@ describeXX('NUT-XX transactions', () => {
       });
       const drawn = await wallet.completeTransaction(preview, lock.privkey);
       expect(drawn.response.state).toBe('PAID');
-      expect(sumProofs(drawn.proofs).toBigInt()).toBe(32n);
+      expect(sumProofs(drawn.proofs).toBigInt()).toBe(32n - quoteFee(wallet, 32));
       await expect(wallet.completeTransaction(preview, lock.privkey)).rejects.toThrow(
         MintOperationError,
       );
@@ -1530,12 +1530,15 @@ describeXX('NUT-XX transactions', () => {
     await wallet.loadMint();
     const meltQuote = await wallet.createMeltQuoteBolt11(externalInvoice);
     const needed = meltQuote.amount.add(meltQuote.fee_reserve).toNumber();
-    const quote = await lockedMintQuote(wallet, needed);
+    // The quote input pays its own fee on top of the melt.
+    let amount = needed;
+    while (amount - Number(quoteFee(wallet, amount)) < needed) amount++;
+    const quote = await lockedMintQuote(wallet, amount);
     await wallet.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
 
     const lock = await wallet.createQuoteLockKey();
     const preview = await wallet.prepareTransaction({
-      mintQuoteInputs: [{ quote, amount: needed }],
+      mintQuoteInputs: [{ quote, amount }],
       meltQuoteOutput: { method: 'bolt11', quote: meltQuote },
       changeQuoteOutputs: [{ pubkey: lock.pubkey, idPreimage: lock.idPreimage }],
     });
@@ -1548,7 +1551,7 @@ describeXX('NUT-XX transactions', () => {
     expect(response.melt_quotes[0].state).toBe('PAID');
     expect(response.signatures).toEqual([]);
     const issued = await wallet.checkMintQuoteBolt11(quote.quote);
-    expect(issued.amount_issued.toNumber()).toBe(needed);
+    expect(issued.amount_issued.toNumber()).toBe(amount);
   });
 
   // Fresh fake invoices, one per melting test: a payment hash may only be paid once per mint run. The last one
@@ -1562,6 +1565,15 @@ describeXX('NUT-XX transactions', () => {
   const failingInvoice =
     'lnbc20n1p4tcxrapp5up5dw64vr4hf86mxc9x8t2hjsfm380uaduak0r4cj4a587wc070qd9y0v38qcteta5kuan0d93k2hmnw3shgefz8gszy3jpf9xy23pz9sszycmgv43kkhmsv9uk6etww30hxarpw3jjyw3qyfryzj2vg4zzytpqyfcxz72lv4e8yg36ypnxzmrnv5kzqgnrdpjkx66lv4e8yg36ypnxzmrnv47ssp5lvs286q83dpqdwqny66jwnql3r49qsh0pslve2d9yu9haj7un3kqxqxjespsq9qrsgqdnu9g5ht697e6lhzqx55ulzt4z287nqtxm43jnqnxte7dwj2afsnvzg6yhvzmuug0c6gyrdkleqj3aarmk68km0yeh892ptrp4u6c0cp74ckqp';
   const testCdk = mintVersion.startsWith('cdk') ? test : test.skip;
+
+  /**
+   * The fee on a lone quote input of `amount` (NUT-XX), from the mint's advertised rate.
+   */
+  function quoteFee(wallet: Wallet, amount: number): bigint {
+    const ppk = wallet.getMintInfo().transactions.quoteInputFeePpk;
+    const bits = amount.toString(2).replace(/0/g, '').length;
+    return BigInt(Math.ceil((bits * ppk) / 1000));
+  }
 
   /**
    * A fresh wallet holding `amount` freshly minted v3 proofs.
@@ -1644,7 +1656,7 @@ describeXX('NUT-XX transactions', () => {
     const preview = await wallet.prepareTransaction({ mintQuoteInputs: [{ quote, amount: 32 }] });
     const result = await wallet.completeTransaction(preview, quote.privkey);
     expect(result.response.state).toBe('PAID');
-    expect(sumProofs(result.proofs).toBigInt()).toBe(32n);
+    expect(sumProofs(result.proofs).toBigInt()).toBe(32n - quoteFee(wallet, 32));
     const issued = await wallet.checkMintQuoteBolt11(quote.quote);
     expect(issued.amount_issued.toBigInt()).toBe(32n);
   });
