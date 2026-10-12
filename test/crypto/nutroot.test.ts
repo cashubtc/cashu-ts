@@ -51,7 +51,15 @@ import { NUTROOT_MAX_SLOTS } from '../../src/utils/limits';
 import vectors from '../vectors/nutroot-v3.json';
 
 const vRefund = vectors.receiver_keyed_refund;
-const vCovenant = vectors.two_leaf_covenant;
+const vEscrow = vectors.template_escrow;
+const escrowWitness = JSON.parse(vEscrow.witness) as {
+  leaf: string;
+  control: { K: string; path: string[] };
+  signatures: string[];
+};
+// The template vectors carry change quotes as request JSON (snake_case).
+const changeOutputs = (outputs: Array<{ pubkey: string; id_preimage: string; amount?: number }>) =>
+  outputs.map(({ pubkey, id_preimage, amount }) => ({ pubkey, idPreimage: id_preimage, amount }));
 
 // The scalar an x-only (nostr) import may hold: n - d, whose pubkey is the negated point.
 const negate = (priv: string) =>
@@ -112,88 +120,43 @@ describe('TLV primitives', () => {
 });
 
 describe('leaf serialization (vectors 6.1)', () => {
-  test('after leaf serializes to the vector bytes', () => {
-    const leaf = serializeNutrootLeaf({
-      type: 'after',
-      n: 1,
-      keys: [vRefund.alice_refund_pub],
-      time: vRefund.refund_time,
-    });
-    expect(bytesToHex(leaf)).toBe(vRefund.leaf_after);
-  });
-
-  test('after leaf parses back', () => {
-    const parsed = parseNutrootLeaf(hexToBytes(vRefund.leaf_after));
-    expect(parsed).toEqual({
-      type: 'after',
-      n: 1,
-      keys: [vRefund.alice_refund_pub],
-      time: vRefund.refund_time,
-    });
-  });
-
-  test('leaf hash matches the vector root (single leaf tree)', () => {
-    expect(bytesToHex(nutrootLeafHash(hexToBytes(vRefund.leaf_after)))).toBe(vRefund.merkle_root);
-  });
-
-  test('hex wrappers round-trip the wire form', () => {
-    const leaf = parseNutrootLeafHex(vRefund.leaf_after);
-    expect(leaf).toEqual({
-      type: 'after',
-      n: 1,
-      keys: [vRefund.alice_refund_pub],
-      time: vRefund.refund_time,
-    });
-    expect(serializeNutrootLeafHex(leaf)).toBe(vRefund.leaf_after);
-  });
-});
-
-describe('leaf serialization (vectors 6.2)', () => {
-  test('after leaf serializes to the vector bytes', () => {
-    const after = serializeNutrootLeaf({
-      type: 'after',
-      n: 1,
-      keys: [vCovenant.kid_pub],
-      time: vCovenant.vest_time,
-    });
-    expect(bytesToHex(after)).toBe(vCovenant.leaf_after);
-  });
-
   test('template leaf serializes to the vector, hash over the output section', () => {
-    expect(
-      templateHash({
-        changeQuoteOutputs: vectors.template_lock.tx.change_quote_outputs,
-      }),
-    ).toBe(vectors.template_lock.hash);
-    const leaf = serializeNutrootLeaf({
-      type: 'template',
-      n: 1,
-      keys: [vCovenant.kid_pub],
-      hash: vectors.template_lock.hash,
-    });
-    expect(bytesToHex(leaf)).toBe(vCovenant.leaf_template);
-    expect(parseNutrootLeaf(leaf)).toEqual({
-      type: 'template',
-      n: 1,
-      keys: [vCovenant.kid_pub],
-      hash: vectors.template_lock.hash,
-    });
+    const tpl = vectors.template_lock;
+    expect(templateHash({ changeQuoteOutputs: changeOutputs(tpl.tx.change_quote_outputs) })).toBe(
+      tpl.hash,
+    );
+    const leaf = { type: 'template', n: 1, keys: [vectors.auditable_lock.P], hash: tpl.hash };
+    expect(bytesToHex(serializeNutrootLeaf(leaf as NutrootLeaf))).toBe(tpl.leaf);
+    expect(parseNutrootLeafHex(tpl.leaf)).toEqual(leaf);
     // One byte of the outputs changes the hash.
     expect(
       templateHash({
-        changeQuoteOutputs: vectors.template_lock.rejected_outputs.change_quote_outputs,
+        changeQuoteOutputs: changeOutputs(tpl.rejected_outputs.change_quote_outputs),
       }),
-    ).toBe(vectors.template_lock.rejected_outputs.hash);
+    ).toBe(tpl.rejected_outputs.hash);
     expect(() => templateHash({})).toThrow(/at least one output/);
   });
 
-  test('leaf hashes match the vectors', () => {
-    expect(bytesToHex(nutrootLeafHash(hexToBytes(vCovenant.leaf_template)))).toBe(
-      vCovenant.leaf_hash_template,
+  test('escrow leaves: a template per outcome by quote id, and a 2-of-2 threshold', () => {
+    const outcome = (pubkey: string, quoteId: string) =>
+      serializeNutrootLeafHex({
+        type: 'template',
+        n: 1,
+        keys: [vEscrow.arbiter],
+        hash: templateHash({ changeQuoteOutputs: [{ pubkey, quoteId }] }),
+      });
+    expect(outcome(vEscrow.seller, vEscrow.seller_quote_id)).toBe(vEscrow.leaf_release);
+    expect(outcome(vEscrow.buyer, vEscrow.buyer_quote_id)).toBe(vEscrow.leaf_refund);
+    expect(
+      serializeNutrootLeafHex({ type: 'threshold', n: 2, keys: [vEscrow.buyer, vEscrow.seller] }),
+    ).toBe(vEscrow.leaf_coop);
+    expect(bytesToHex(nutrootLeafHash(hexToBytes(vEscrow.leaf_release)))).toBe(
+      vEscrow.leaf_hash_release,
     );
-    expect(bytesToHex(nutrootLeafHash(hexToBytes(vCovenant.leaf_after)))).toBe(
-      vCovenant.leaf_hash_after,
+    expect(bytesToHex(nutrootLeafHash(hexToBytes(vEscrow.leaf_refund)))).toBe(
+      vEscrow.leaf_hash_refund,
     );
+    expect(bytesToHex(nutrootLeafHash(hexToBytes(vEscrow.leaf_coop)))).toBe(vEscrow.leaf_hash_coop);
   });
 
   test('an unallocated leaf type fails closed', () => {
@@ -426,24 +389,20 @@ describe('leaf parsing fails closed', () => {
 });
 
 describe('merkle tree (vectors 6.2)', () => {
-  test('two-leaf root matches, pair sorted', () => {
-    const hTemplate = hexToBytes(vCovenant.leaf_hash_template);
-    const hAfter = hexToBytes(vCovenant.leaf_hash_after);
-    expect(bytesToHex(nutrootBranchHash(hTemplate, hAfter))).toBe(vCovenant.merkle_root);
-    expect(bytesToHex(nutrootBranchHash(hAfter, hTemplate))).toBe(vCovenant.merkle_root);
-    expect(bytesToHex(nutrootMerkleRoot([hTemplate, hAfter]))).toBe(vCovenant.merkle_root);
-  });
-
-  test('merkle paths recompute the root', () => {
-    const hTemplate = hexToBytes(vCovenant.leaf_hash_template);
-    const hAfter = hexToBytes(vCovenant.leaf_hash_after);
-    const leaves = [hTemplate, hAfter];
-    const pathTemplate = nutrootMerklePath(leaves, 0);
-    expect(pathTemplate.map(bytesToHex)).toEqual(vCovenant.template_witness.control.path);
-    expect(bytesToHex(nutrootRootFromPath(hTemplate, pathTemplate))).toBe(vCovenant.merkle_root);
-    const pathAfter = nutrootMerklePath(leaves, 1);
-    expect(pathAfter.map(bytesToHex)).toEqual(vCovenant.after_witness_path);
-    expect(bytesToHex(nutrootRootFromPath(hAfter, pathAfter))).toBe(vCovenant.merkle_root);
+  test('three-leaf root promotes the odd leaf, and the release path recomputes it', () => {
+    const [release, refund, coop] = [
+      vEscrow.leaf_hash_release,
+      vEscrow.leaf_hash_refund,
+      vEscrow.leaf_hash_coop,
+    ].map(hexToBytes);
+    const leaves = [release, refund, coop];
+    expect(bytesToHex(nutrootMerkleRoot(leaves))).toBe(vEscrow.merkle_root);
+    expect(bytesToHex(nutrootBranchHash(nutrootBranchHash(refund, release), coop))).toBe(
+      vEscrow.merkle_root,
+    );
+    const path = nutrootMerklePath(leaves, 0);
+    expect(path.map(bytesToHex)).toEqual(escrowWitness.control.path);
+    expect(bytesToHex(nutrootRootFromPath(release, path))).toBe(vEscrow.merkle_root);
   });
 
   test('four leaves fold as the spec diagram and paths verify', () => {
@@ -506,11 +465,11 @@ describe('tweak math (vectors)', () => {
     expect(bytesToHex(nutrootTweakPubkey(K, root))).toBe(vRefund.secret);
   });
 
-  test('6.2 tweak and P', () => {
-    const K = hexToBytes(vCovenant.internal_key);
-    const root = hexToBytes(vCovenant.merkle_root);
-    expect(nutrootTweak(K, root).toString(16).padStart(64, '0')).toBe(vCovenant.tweak);
-    expect(bytesToHex(nutrootTweakPubkey(K, root))).toBe(vCovenant.secret);
+  test('escrow tweak and P', () => {
+    const K = hexToBytes(vEscrow.K);
+    const root = hexToBytes(vEscrow.merkle_root);
+    expect(nutrootTweak(K, root).toString(16).padStart(64, '0')).toBe(vEscrow.tweak);
+    expect(bytesToHex(nutrootTweakPubkey(K, root))).toBe(vEscrow.secret);
   });
 
   test('6.1 tweaked seckey lands on P and signs for it', () => {
@@ -545,12 +504,11 @@ describe('tweak math (vectors)', () => {
         hexToBytes(vRefund.alice_refund_pub).subarray(1),
       ),
     ).toBe(true);
-    const sig62 = hexToBytes(vCovenant.template_witness.signatures[0]);
     expect(
       schnorr.verify(
-        sig62,
-        hexToBytes(vCovenant.input_digest),
-        hexToBytes(vCovenant.kid_pub).subarray(1),
+        hexToBytes(escrowWitness.signatures[0]),
+        hexToBytes(vEscrow.input_digest),
+        hexToBytes(vEscrow.arbiter).subarray(1),
       ),
     ).toBe(true);
   });
@@ -568,13 +526,13 @@ describe('script-path commitment verification', () => {
     ).toBe(true);
   });
 
-  test('6.2 template witness verifies', () => {
+  test('escrow release witness verifies', () => {
     expect(
       verifyNutrootCommitment(
-        hexToBytes(vCovenant.secret),
-        hexToBytes(vCovenant.template_witness.control.K),
-        hexToBytes(vCovenant.template_witness.leaf),
-        vCovenant.template_witness.control.path.map(hexToBytes),
+        hexToBytes(vEscrow.secret),
+        hexToBytes(escrowWitness.control.K),
+        hexToBytes(escrowWitness.leaf),
+        escrowWitness.control.path.map(hexToBytes),
       ),
     ).toBe(true);
   });
@@ -582,10 +540,10 @@ describe('script-path commitment verification', () => {
   test('wrong merkle path fails', () => {
     expect(
       verifyNutrootCommitment(
-        hexToBytes(vCovenant.secret),
-        hexToBytes(vCovenant.template_witness.control.K),
-        hexToBytes(vCovenant.template_witness.leaf),
-        [hexToBytes(vCovenant.leaf_hash_template)],
+        hexToBytes(vEscrow.secret),
+        hexToBytes(escrowWitness.control.K),
+        hexToBytes(escrowWitness.leaf),
+        [hexToBytes(vEscrow.leaf_hash_refund)],
       ),
     ).toBe(false);
   });
@@ -593,10 +551,10 @@ describe('script-path commitment verification', () => {
   test('wrong internal key fails', () => {
     expect(
       verifyNutrootCommitment(
-        hexToBytes(vCovenant.secret),
+        hexToBytes(vEscrow.secret),
         hexToBytes(vRefund.internal_key),
-        hexToBytes(vCovenant.template_witness.leaf),
-        vCovenant.template_witness.control.path.map(hexToBytes),
+        hexToBytes(escrowWitness.leaf),
+        escrowWitness.control.path.map(hexToBytes),
       ),
     ).toBe(false);
   });
@@ -812,29 +770,28 @@ describe('locked secret construction and spend info cascade', () => {
     expect(() =>
       verifyNutrootSpendInfo(vRefund.secret, {
         K: vRefund.internal_key,
-        tree: [vCovenant.leaf_after],
+        tree: [vEscrow.leaf_coop],
       }),
     ).toThrow(/reconstruct/);
-    // 6.2 tree reconstructs; with an unknown leaf in its place, acceptance policy fails closed.
+    // The escrow tree reconstructs; with an unknown leaf in its place, acceptance fails closed.
+    const escrowTree = [vEscrow.leaf_release, vEscrow.leaf_refund, vEscrow.leaf_coop];
     expect(
-      verifyNutrootSpendInfo(vCovenant.secret, {
-        K: vCovenant.internal_key,
-        tree: [vCovenant.leaf_template, vCovenant.leaf_after],
-      }),
+      verifyNutrootSpendInfo(vEscrow.secret, { K: vEscrow.K, u: vEscrow.u, tree: escrowTree }),
     ).toBe('tweaked');
     expect(() =>
-      verifyNutrootSpendInfo(vCovenant.secret, {
-        K: vCovenant.internal_key,
-        tree: [vectors.leaf_forms.leaf_unknown_type, vCovenant.leaf_after],
+      verifyNutrootSpendInfo(vEscrow.secret, {
+        K: vEscrow.K,
+        u: vEscrow.u,
+        tree: [vectors.leaf_forms.leaf_unknown_type, ...escrowTree.slice(1)],
       }),
     ).toThrow(/type/);
   });
 
   test('receiver-keyed disclosure parses every leaf even without K', () => {
     expect(() =>
-      verifyNutrootSpendInfo(vCovenant.secret, {
+      verifyNutrootSpendInfo(vEscrow.secret, {
         E: vRefund.ephemeral_pub,
-        tree: [vectors.leaf_forms.leaf_unknown_type, vCovenant.leaf_after],
+        tree: [vectors.leaf_forms.leaf_unknown_type, vEscrow.leaf_coop],
       }),
     ).toThrow(/type/);
   });

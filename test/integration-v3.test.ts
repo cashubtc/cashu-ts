@@ -1653,7 +1653,10 @@ describeXX('NUT-XX transactions', () => {
     const fixed = await wallet.createQuoteLockKey();
     const rest = await wallet.createQuoteLockKey();
     const template = {
-      changeQuoteOutputs: [{ pubkey: fixed.pubkey, amount: 3 }, { pubkey: rest.pubkey }],
+      changeQuoteOutputs: [
+        { pubkey: fixed.pubkey, idPreimage: fixed.idPreimage, amount: 3 },
+        { pubkey: rest.pubkey, idPreimage: rest.idPreimage },
+      ],
     };
     const holderPriv = bytesToHex(randomBytes(32));
     const holderPub = bytesToHex(secp256k1.getPublicKey(hexToBytes(holderPriv), true));
@@ -1669,7 +1672,10 @@ describeXX('NUT-XX transactions', () => {
     // The committed outputs, one byte off: the mint refuses.
     const wrong = await wallet.prepareTransaction({
       proofInputs: [proof],
-      changeQuoteOutputs: [{ pubkey: fixed.pubkey, amount: 4 }, { pubkey: rest.pubkey }],
+      changeQuoteOutputs: [
+        { ...template.changeQuoteOutputs[0], amount: 4 },
+        template.changeQuoteOutputs[1],
+      ],
     });
     await expect(
       wallet.completeTransaction(wrong, holderPriv, { scriptPath: [plan] }),

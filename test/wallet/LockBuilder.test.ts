@@ -536,7 +536,7 @@ describe('LockBuilder.disclose()', () => {
 
 describe('LockBuilder.addTemplate()', () => {
   it('carries the template into the options, round-trips, and encodes for v3 only', () => {
-    const template = { changeQuoteOutputs: [{ pubkey: comp('b', '02') }] };
+    const template = { changeQuoteOutputs: [{ pubkey: comp('b', '02'), quoteId: 'q' }] };
     const b = new LockBuilder().addMainPubkey(comp('a', '02')).addTemplate(template);
     expect(b.toOptions().template).toEqual(template);
     expect(LockBuilder.fromOptions(b.toOptions()).toOptions().template).toEqual(template);

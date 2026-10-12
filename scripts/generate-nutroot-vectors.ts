@@ -598,6 +598,8 @@ d.auditable_lock = {
   witness: audWitness,
 };
 
+const testKey = (k: number) => bytesToHex(secp256k1.getPublicKey(bigTo32(BigInt(k)), true));
+
 // Template leaf (NUT-10): hash = SHA256 over the output section, here the two change quote
 // containers of proof_to_two_changes. A spend through it is the swap proof (same amount, keyset
 // and C) under a new secret, spent into exactly those outputs. The rejection case bumps the fixed
@@ -614,15 +616,21 @@ const tplRejected = {
     tplOutputs.change_quote_outputs[1],
   ],
 };
-// Spend leaf `index` of `tree` under internal key `K` into tplOutputs, signed by test key 3.
-function spendTemplate(K: Uint8Array, tree: Uint8Array[], index: number) {
+// Spend leaf `index` of `tree` under internal key `K` into `outputs`, signed by test key `signer`.
+function spendTemplate(
+  K: Uint8Array,
+  tree: Uint8Array[],
+  index: number,
+  outputs: { change_quote_outputs: any[] } = tplOutputs,
+  signer = 3n,
+) {
   const hashes = tree.map((leaf) => taggedHash('Cashu_NutrootLeaf', leaf));
   const root = nutrootMerkleRoot(hashes);
   const tweak = BigInt('0x' + bytesToHex(taggedHash('Cashu_NutrootTweak', K, root))) % N_SECP;
   const secret = SecpPoint.fromBytes(K).add(SecpPoint.BASE.multiply(tweak)).toBytes(true);
   const txVector = {
     proof_inputs: [{ ...d.transcript.swap.tx.proof_inputs[0], secret: bytesToHex(secret) }],
-    ...tplOutputs,
+    ...outputs,
   };
   const tx = fromVectorTx(txVector);
   const transcript = buildTransactionTranscript(tx);
@@ -642,7 +650,7 @@ function spendTemplate(K: Uint8Array, tree: Uint8Array[], index: number) {
     witness: JSON.stringify({
       leaf: bytesToHex(tree[index]),
       control: { K: bytesToHex(K), path: nutrootMerklePath(hashes, index).map(bytesToHex) },
-      signatures: [bytesToHex(schnorr.sign(digestForInput, bigTo32(3n), AUX0))],
+      signatures: [bytesToHex(schnorr.sign(digestForInput, bigTo32(signer), AUX0))],
     }),
   };
 }
@@ -662,36 +670,46 @@ d.template_lock = {
   },
 };
 
-// Two leaves and a filled path: the template leaf beside an after leaf (key 3, vest_time) under
-// internal key 6, the parent's. The kid spends through the template until vesting, then freely.
+// Arbiter escrow: the arbiter (key 4) can only release to the seller (key 5) or refund
+// the buyer (key 3), each a remainder quote; buyer and seller together settle any other way.
+// Three leaves under NUMS u = 7, so the fold promotes the odd leaf and the release path has two hashes.
 {
-  const K6 = hexToBytes(testKey(6));
-  const afterLeaf = hexToBytes(d.two_leaf_covenant.leaf_after);
-  const spend = spendTemplate(K6, [tplLeaf, afterLeaf], 0);
-  const witness = JSON.parse(spend.witness);
-  d.two_leaf_covenant = {
+  const remainder = (key: number, preimage: string) => ({
+    change_quote_outputs: [{ id_preimage: preimage.repeat(32), pubkey: testKey(key) }],
+  });
+  const toSeller = remainder(5, '55');
+  const toBuyer = remainder(3, '33');
+  const templateTo = (outputs: typeof toSeller) =>
+    serializeNutrootLeaf({ type: 'template', n: 1, keys: [testKey(4)], hash: tplHashOf(outputs) });
+  const release = templateTo(toSeller);
+  const refund = templateTo(toBuyer);
+  const coop = serializeNutrootLeaf({ type: 'threshold', n: 2, keys: [testKey(3), testKey(5)] });
+  const tree = [release, refund, coop];
+  const leafHash = (leaf: Uint8Array) => bytesToHex(taggedHash('Cashu_NutrootLeaf', leaf));
+  const spend = spendTemplate(K_aud, tree, 0, toSeller, 4n);
+  delete d.two_leaf_covenant;
+  d.template_escrow = {
     comment:
-      'Allowance covenant: until vesting the kid (key 3) can only spend into the template outputs (3 sat to key 5, remainder to key 6); after vest_time the after leaf lets the kid spend freely; the parent (key 6) holds the key path. Two leaves, one branch: template_witness reveals leaf 0 with path [leaf_hash_after], the after path is [leaf_hash_template].',
-    kid_priv: bytesToHex(bigTo32(3n)),
-    kid_pub: testKey(3),
-    parent_priv: bytesToHex(bigTo32(6n)),
-    internal_key: testKey(6),
-    vest_time: d.two_leaf_covenant.vest_time,
-    leaf_template: bytesToHex(tplLeaf),
-    leaf_after: bytesToHex(afterLeaf),
-    leaf_hash_template: bytesToHex(taggedHash('Cashu_NutrootLeaf', tplLeaf)),
-    leaf_hash_after: bytesToHex(taggedHash('Cashu_NutrootLeaf', afterLeaf)),
-    merkle_root: spend.merkle_root,
-    tweak: spend.tweak,
-    secret: spend.secret,
-    Y: spend.Y,
-    tx: spend.tx,
-    transcript: spend.transcript,
-    digest: spend.digest,
-    input_id: spend.input_id,
-    input_digest: spend.input_digest,
-    template_witness: witness,
-    after_witness_path: [bytesToHex(taggedHash('Cashu_NutrootLeaf', tplLeaf))],
+      'Arbiter escrow: NUMS offset u = 7 and three leaves. release and refund are template leaves n = 1 to the arbiter (key 4) over one remainder change quote each, to the seller (key 5, id_preimage 55..55) or the buyer (key 3, id_preimage 33..33); coop is a 2-of-2 threshold of buyer and seller. The fold promotes the odd leaf. The release spend is the swap proof under this secret, signed by the arbiter; self_deal is a remainder quote to the arbiter itself, matching neither template.',
+    buyer: testKey(3),
+    seller: testKey(5),
+    arbiter: testKey(4),
+    seller_quote_id: derivedQuoteId(hexToBytes(toSeller.change_quote_outputs[0].id_preimage)),
+    buyer_quote_id: derivedQuoteId(hexToBytes(toBuyer.change_quote_outputs[0].id_preimage)),
+    out_seller: bytesToHex(outputSection(fromVectorTx(toSeller))),
+    out_buyer: bytesToHex(outputSection(fromVectorTx(toBuyer))),
+    hash_seller: tplHashOf(toSeller),
+    hash_buyer: tplHashOf(toBuyer),
+    leaf_release: bytesToHex(release),
+    leaf_refund: bytesToHex(refund),
+    leaf_coop: bytesToHex(coop),
+    leaf_hash_release: leafHash(release),
+    leaf_hash_refund: leafHash(refund),
+    leaf_hash_coop: leafHash(coop),
+    u: bytesToHex(bigTo32(7n)),
+    K: bytesToHex(K_aud),
+    ...spend,
+    self_deal_hash: tplHashOf(remainder(4, '44')),
   };
 }
 // An unallocated leaf type (0xff, the threshold leaf's bytes under that type) fails closed; far from the allocated range so new types never move it.

@@ -2940,7 +2940,11 @@ export type TemplateOutputs = {
     changeQuoteOutputs?: Array<{
         pubkey: string;
         amount?: AmountLike;
-    }>;
+    } & ({
+        quoteId: string;
+    } | {
+        idPreimage: string;
+    })>;
 };
 
 // @public

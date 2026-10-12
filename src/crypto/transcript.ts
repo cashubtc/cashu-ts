@@ -293,10 +293,15 @@ type TransactionOutputs = Pick<
 export type TemplateOutputs = {
   blindedOutputs?: Array<{ amount: AmountLike; id: string; B_: string }>;
   /**
-   * `amount` is the quote amount plus the selected fee reserve ({@link meltOutputAmount}).
+   * `amount` is the quote amount plus the selected fee reserve.
    */
   meltQuoteOutput?: { quoteId: string; amount: AmountLike };
-  changeQuoteOutputs?: Array<{ pubkey: string; quoteId: string; amount?: AmountLike }>;
+  /**
+   * Each names its id directly, or by the preimage it derives from when the author holds it.
+   */
+  changeQuoteOutputs?: Array<
+    { pubkey: string; amount?: AmountLike } & ({ quoteId: string } | { idPreimage: string })
+  >;
 };
 
 /**
@@ -483,7 +488,7 @@ function payloadToTransaction(payload: TransactionPayload): TransactionElements 
     ...(payload.changeQuoteOutputs && {
       changeQuoteOutputs: payload.changeQuoteOutputs.map((c) => ({
         pubkey: c.pubkey,
-        quoteId: c.quoteId,
+        quoteId: 'quoteId' in c ? c.quoteId : derivedQuoteId(hexToBytes(c.idPreimage)),
         ...(c.amount !== undefined && { amount: Amount.from(c.amount).toBigInt() }),
       })),
     }),

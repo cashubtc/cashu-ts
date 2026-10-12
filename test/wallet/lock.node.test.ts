@@ -240,7 +240,12 @@ describe('lockToNutrootOptions (v3 encoder)', () => {
   });
 
   test('a template over change quotes is a template leaf under NUMS, no escape needed', () => {
-    const template = { changeQuoteOutputs: [{ pubkey: PUB_B, amount: 3 }, { pubkey: PUB_C }] };
+    const template = {
+      changeQuoteOutputs: [
+        { pubkey: PUB_B, quoteId: 'ab'.repeat(32), amount: 3 },
+        { pubkey: PUB_C, idPreimage: 'cd'.repeat(32) },
+      ],
+    };
     expect(lockToNutrootOptions({ mainKeys: [PUB_A], template })).toEqual({
       receiverKey: NUTROOT_NUMS_KEY,
       leaves: [{ type: 'template', n: 1, keys: [PUB_A], hash: templateHash(template) }],
@@ -252,26 +257,17 @@ describe('lockToNutrootOptions (v3 encoder)', () => {
     expect(() => lockToP2PKOptions({ mainKeys: [PUB_A], template })).toThrow(/v3/);
   });
 
-  test('a template over outputs that expire needs a refund leaf or a remainder quote', () => {
+  test('a template over outputs that expire needs a refund leaf', () => {
     const melt = { meltQuoteOutput: { quoteId: 'q', amount: 5 } };
     expect(() => lockToNutrootOptions({ mainKeys: [PUB_A], template: melt })).toThrow(/refund/);
     const escaped = { mainKeys: [PUB_A], template: melt, locktime: TIME, refundKeys: [PUB_R] };
     expect(lockToNutrootOptions(escaped).leaves?.map((l) => l.type)).toEqual(['template', 'after']);
-    // A remainder quote absorbs unsigned blinded messages, but never an expired melt quote.
-    const blinded = { blindedOutputs: [{ amount: 1, id: 'ab'.repeat(16), B_: PUB_B }] };
+    // Blinded messages expire with their keyset; a remainder quote beside them does not help.
+    const blinded = {
+      blindedOutputs: [{ amount: 1, id: 'ab'.repeat(16), B_: PUB_B }],
+      changeQuoteOutputs: [{ pubkey: PUB_C, quoteId: 'ab'.repeat(32) }],
+    };
     expect(() => lockToNutrootOptions({ mainKeys: [PUB_A], template: blinded })).toThrow(/refund/);
-    expect(
-      lockToNutrootOptions({
-        mainKeys: [PUB_A],
-        template: { ...blinded, changeQuoteOutputs: [{ pubkey: PUB_C }] },
-      }).leaves,
-    ).toHaveLength(1);
-    expect(() =>
-      lockToNutrootOptions({
-        mainKeys: [PUB_A],
-        template: { ...melt, changeQuoteOutputs: [{ pubkey: PUB_C }] },
-      }),
-    ).toThrow(/refund/);
   });
 });
 
