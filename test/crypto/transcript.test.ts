@@ -39,7 +39,12 @@ const tv = vectors.transcript;
 
 function fromVectorTx(tx: {
   proof_inputs?: Array<{ amount: number; keyset_id: string; secret: string; C: string }>;
-  mint_quote_inputs?: Array<{ amount: number; quote_id: string; lock_pubkey: string }>;
+  mint_quote_inputs?: Array<{
+    amount: number;
+    quote_id: string;
+    lock_pubkey: string;
+    issued: number;
+  }>;
   blinded_outputs?: Array<{ amount: number; keyset_id: string; B_: string }>;
   melt_quote_outputs?: Array<{ amount: number; quote_id: string }>;
   change_quote_outputs?: Array<{ id_preimage: string; pubkey: string; amount?: number }>;
@@ -55,6 +60,7 @@ function fromVectorTx(tx: {
       amount: BigInt(q.amount),
       quoteId: q.quote_id,
       lockKey: q.lock_pubkey,
+      issued: BigInt(q.issued),
     })),
     blindedOutputs: tx.blinded_outputs?.map((o) => ({
       amount: BigInt(o.amount),

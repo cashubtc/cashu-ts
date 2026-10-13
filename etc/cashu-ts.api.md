@@ -2676,6 +2676,7 @@ export type SerializedTransactionPreview = {
         quote: string;
         pubkey: string;
         amount: string;
+        issued: string;
     }>;
     meltQuoteOutput?: {
         method: string;
@@ -2986,6 +2987,7 @@ export type TransactionPreview = {
         quote: string;
         pubkey: string;
         amount: Amount;
+        issued: Amount;
     }>;
     meltQuoteOutput?: {
         method: string;
@@ -3256,7 +3258,7 @@ export class Wallet {
     prepareTransaction(transaction: {
         proofInputs?: Proof[];
         mintQuoteInputs?: Array<{
-            quote: Pick<MintQuoteBaseResponse, 'quote' | 'pubkey'> & Partial<Pick<MintQuoteBaseResponse, 'unit' | 'amount_paid' | 'amount_issued'>>;
+            quote: Pick<MintQuoteBaseResponse, 'quote' | 'pubkey' | 'amount_issued'> & Partial<Pick<MintQuoteBaseResponse, 'unit' | 'amount_paid'>>;
             amount: AmountLike;
         }>;
         proofOutputs?: {
