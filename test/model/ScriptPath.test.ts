@@ -187,7 +187,7 @@ describe('ScriptPath signing packages', () => {
       transcript: bytesToHex(
         messageForPayload({
           proofInputs: preview.inputs,
-          mintQuoteInputs: [{ quoteId: 'quote-1', amount: 1, lockKey }],
+          mintQuoteInputs: [{ quoteId: 'quote-1', amount: 1, lockKey, issued: 0 }],
           blindedOutputs: preview.keepOutputs!.map((o) => o.blindedMessage),
         }),
       ),

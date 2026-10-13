@@ -53,9 +53,10 @@ export type TranscriptQuote = {
 };
 
 /**
- * A mint quote input: the quote, and the 33-byte compressed lock key hex it is locked to.
+ * A mint quote input: the quote, the 33-byte compressed lock key hex it is locked to, and the
+ * quote's `amount_issued` before this transaction (NUT-10), so a witness authorizes one draw.
  */
-export type TranscriptQuoteInput = TranscriptQuote & { lockKey: string };
+export type TranscriptQuoteInput = TranscriptQuote & { lockKey: string; issued: bigint };
 
 export type TranscriptBlindedOutput = {
   amount: bigint;
@@ -174,7 +175,11 @@ function mintQuoteInputContainer(quote: TranscriptQuoteInput): Uint8Array {
   }
   return tlvRecord(
     CONTAINER_MINT_QUOTE_INPUT,
-    concatBytes(quoteFields(quote), tlvRecord(0x03, hexToBytes(quote.lockKey))),
+    concatBytes(
+      quoteFields(quote),
+      tlvRecord(0x03, hexToBytes(quote.lockKey)),
+      tlvRecord(0x04, minimalBE(Amount.from(quote.issued).toBigInt())),
+    ),
   );
 }
 
@@ -362,9 +367,15 @@ export type PayloadProofInput = { amount: AmountLike; id: string; C: string } & 
 type PayloadShape = {
   proofInputs?: PayloadProofInput[];
   /**
-   * `amount` is what this transaction issues against the quote, at most its mintable amount.
+   * `amount` is what this transaction issues against the quote, at most its mintable amount;
+   * `issued` is the quote's `amount_issued` before it.
    */
-  mintQuoteInputs?: Array<{ quoteId: string; amount: AmountLike; lockKey: string }>;
+  mintQuoteInputs?: Array<{
+    quoteId: string;
+    amount: AmountLike;
+    lockKey: string;
+    issued: AmountLike;
+  }>;
   blindedOutputs?: Array<{ amount: AmountLike; id: string; B_: string }>;
   /**
    * `amount` is the quote amount plus the selected fee reserve ({@link meltOutputAmount}).
@@ -425,7 +436,11 @@ function payloadToTransaction(payload: PayloadShape): TransactionShape {
       })),
     }),
     ...(payload.mintQuoteInputs && {
-      mintQuoteInputs: payload.mintQuoteInputs.map((q) => ({ ...quote(q), lockKey: q.lockKey })),
+      mintQuoteInputs: payload.mintQuoteInputs.map((q) => ({
+        ...quote(q),
+        lockKey: q.lockKey,
+        issued: Amount.from(q.issued).toBigInt(),
+      })),
     }),
     ...(payload.blindedOutputs && {
       blindedOutputs: payload.blindedOutputs.map((o) => ({

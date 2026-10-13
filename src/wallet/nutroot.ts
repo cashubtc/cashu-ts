@@ -73,7 +73,7 @@ export type ScriptPathSpend = {
  */
 export async function attachTransactionWitnesses(
   payload: Pick<MeltRequest, 'inputs' | 'outputs'> & {
-    mintQuoteInputs?: Array<{ quoteId: string; amount: Amount; lockKey: string }>;
+    mintQuoteInputs?: Array<{ quoteId: string; amount: Amount; lockKey: string; issued: Amount }>;
     changeQuoteOutputs?: Array<{ pubkey: string; quoteId: string; amount?: Amount }>;
   },
   meltQuote: { quoteId: string; amount: Amount } | undefined,

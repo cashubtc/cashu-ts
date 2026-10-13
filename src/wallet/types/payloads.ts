@@ -133,9 +133,10 @@ export type SwapPreview = {
 export type TransactionPreview = {
   proofInputs: Proof[];
   /**
-   * Each quote's id, lock key and the amount this transaction issues against it.
+   * Each quote's id, lock key, the amount this transaction issues against it, and its
+   * `amount_issued` before, which the transcript binds.
    */
-  mintQuoteInputs: Array<{ quote: string; pubkey: string; amount: Amount }>;
+  mintQuoteInputs: Array<{ quote: string; pubkey: string; amount: Amount; issued: Amount }>;
   /**
    * The melt output: `amount` is the quote amount plus the selected fee reserve, which the
    * transcript binds.

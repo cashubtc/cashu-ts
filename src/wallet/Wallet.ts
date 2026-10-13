@@ -3440,7 +3440,9 @@ class Wallet {
    * @param quote The mint quote for this method. A mint response is used as given; anything short
    *   of one, such as `{ quote: string }`, is read from the mint and merged over what you passed,
    *   so the unit and accounting checks run against the mint's values. Pass `config.privkey` to
-   *   produce a NUT-20 signature regardless of whether the quote carries a `pubkey` field.
+   *   produce a NUT-20 signature regardless of whether the quote carries a `pubkey` field. On a v3
+   *   keyset the signature binds the quote's `amount_issued`, so a stored quote another draw has
+   *   moved fails with 20008: pass `{ quote: id }` to read it fresh.
    */
   async prepareMint<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>>(
     method: string,
@@ -3557,7 +3559,12 @@ class Wallet {
         this.failIf(!quotePubkey, 'prepareMint: a v3 mint needs the quote lock pubkey');
         const tx = inputsForPayload({
           mintQuoteInputs: [
-            { quoteId: resolvedQuote.quote, amount: mintAmount, lockKey: quotePubkey! },
+            {
+              quoteId: resolvedQuote.quote,
+              amount: mintAmount,
+              lockKey: quotePubkey!,
+              issued: resolvedQuote.amount_issued,
+            },
           ],
           blindedOutputs: blindedMessages,
         });
@@ -3831,6 +3838,7 @@ class Wallet {
             quoteId: e.quote.quote,
             amount: amounts[i],
             lockKey: e.quote.pubkey!,
+            issued: e.quote.amount_issued!,
           })),
           blindedOutputs: blindedMessages,
         }).quotes
@@ -4749,8 +4757,8 @@ class Wallet {
     transaction: {
       proofInputs?: Proof[];
       mintQuoteInputs?: Array<{
-        quote: Pick<MintQuoteBaseResponse, 'quote' | 'pubkey'> &
-          Partial<Pick<MintQuoteBaseResponse, 'unit' | 'amount_paid' | 'amount_issued'>>;
+        quote: Pick<MintQuoteBaseResponse, 'quote' | 'pubkey' | 'amount_issued'> &
+          Partial<Pick<MintQuoteBaseResponse, 'unit' | 'amount_paid'>>;
         amount: AmountLike;
       }>;
       proofOutputs?: { amount?: AmountLike; outputType?: OutputType; keysetId?: string };
@@ -4801,15 +4809,17 @@ class Wallet {
       );
       if (q.quote.unit !== undefined) assertQuoteUnit(q.quote, this.unit, this._logger);
       const amount = this.parseAmount(q.amount, 'prepareTransaction.quote');
-      if (q.quote.amount_paid != null && q.quote.amount_issued != null) {
-        this.validateMintQuoteAvailableAmount(
-          'transaction',
-          q.quote.amount_paid,
-          q.quote.amount_issued,
-          amount,
-        );
+      // The transcript binds the quote's state (NUT-10), so a stale amount_issued fails at the mint.
+      this.failIfNullish(
+        q.quote.amount_issued,
+        'prepareTransaction: every quote input needs its amount_issued; read the quote first',
+        { quote: id },
+      );
+      const issued = this.parseAmount(q.quote.amount_issued, 'prepareTransaction.quote', true);
+      if (q.quote.amount_paid != null) {
+        this.validateMintQuoteAvailableAmount('transaction', q.quote.amount_paid, issued, amount);
       }
-      return { quote: id, pubkey: normalizeSecpPubkey(q.quote.pubkey!), amount };
+      return { quote: id, pubkey: normalizeSecpPubkey(q.quote.pubkey!), amount, issued };
     });
     // Validate Change Outputs: unique ids, fixed amounts are positive, and at most one has none.
     this.failIf(
@@ -4966,6 +4976,7 @@ class Wallet {
       quoteId: q.quote,
       amount: q.amount,
       lockKey: q.pubkey,
+      issued: q.issued,
     }));
     const meltQuote = melt && { quoteId: melt.quote, amount: melt.amount };
     const changeOutputs = change.map((c) => ({

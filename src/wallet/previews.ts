@@ -257,7 +257,7 @@ export function deserializeMeltPreview(
  */
 export type SerializedTransactionPreview = {
   proofInputs: SerializedProof[];
-  mintQuoteInputs: Array<{ quote: string; pubkey: string; amount: string }>;
+  mintQuoteInputs: Array<{ quote: string; pubkey: string; amount: string; issued: string }>;
   meltQuoteOutput?: {
     method: string;
     quote: string;
@@ -283,7 +283,11 @@ export function serializeTransactionPreview(
 ): SerializedTransactionPreview {
   return {
     proofInputs: preview.proofInputs.map(serializeProof),
-    mintQuoteInputs: preview.mintQuoteInputs.map((q) => ({ ...q, amount: q.amount.toString() })),
+    mintQuoteInputs: preview.mintQuoteInputs.map((q) => ({
+      ...q,
+      amount: q.amount.toString(),
+      issued: q.issued.toString(),
+    })),
     ...(preview.meltQuoteOutput && {
       meltQuoteOutput: {
         ...preview.meltQuoteOutput,
@@ -316,6 +320,7 @@ export function deserializeTransactionPreview(
     mintQuoteInputs: serialized.mintQuoteInputs.map((q) => ({
       ...q,
       amount: Amount.from(q.amount),
+      issued: Amount.from(q.issued),
     })),
     ...(serialized.meltQuoteOutput && {
       meltQuoteOutput: {
