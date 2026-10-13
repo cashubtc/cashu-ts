@@ -1011,6 +1011,25 @@ describe('getBlindAuthToken coverage', () => {
     expect(verifyTransactionInputWitness(other, secret, parsed.witness!)).toBe(false);
   });
 
+  test('version 02 BAT: a mint URL subpath is not part of the signed target', async () => {
+    const am = new AuthManager('https://mint.test/cashu', { request: reqSpy as RequestFn });
+    am['info'] = fakeInfo({ batMax: 1, blindProtected: true });
+    am['keychain'] = {
+      getCheapestKeyset: vi.fn().mockReturnValue({ id: '02aabbccddeeff00', keys: { 1: '02aa' } }),
+    } as any;
+
+    const k = '22'.repeat(32);
+    const secret = bytesToHex(secp256k1.getPublicKey(hexToBytes(k), true));
+    am['pool'] = [
+      { id: '02aabbccddeeff00', C: 'C', secret, amount: Amount.from(1), spend_info: { k } },
+    ];
+
+    const bat = await am.getBlindAuthToken({ method: 'POST', path: '/v1/swap', body: '{}' });
+    const witness = decodeBAT(bat).witness!;
+    const signed = requestDigest('POST', '/v1/swap', utf8ToBytes('{}'));
+    expect(verifyTransactionInputWitness(signed, secret, witness)).toBe(true);
+  });
+
   test('version 02 BATs missing their signing key are purged, not served', async () => {
     const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
     am['info'] = fakeInfo({ batMax: 1, blindProtected: true });

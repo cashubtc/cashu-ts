@@ -334,9 +334,8 @@ export class AuthManager implements AuthProvider {
       // even on error, so no in-flight tracking is needed.
       const proof = this.pool[this.pool.length - 1];
       // A version 02 BAT signs the request it authorizes (NUT-22): the key rides
-      // on the pooled proof's spend info from mint time. The target must be the
-      // origin-form request-target as sent, so a mint served under a URL subpath
-      // signs its full path.
+      // on the pooled proof's spend info from mint time. The target starts at the
+      // /v1/ segment (NUT-10), so a mint URL subpath is not signed.
       let witness: string | undefined;
       if (isBlsKeyset(proof.id)) {
         const k = proof.spend_info?.k;
@@ -345,7 +344,9 @@ export class AuthManager implements AuthProvider {
           throw new CTSError('AuthManager: version 02 BAT is missing its signing key');
         }
         const url = new URL(joinUrls(this.mintUrl, path));
-        const digest = requestDigest(method, url.pathname + url.search, utf8ToBytes(body ?? ''));
+        const sent = url.pathname + url.search;
+        const target = sent.slice(Math.max(0, sent.indexOf('/v1/')));
+        const digest = requestDigest(method, target, utf8ToBytes(body ?? ''));
         witness = signTransactionInput(digest, hexToBytes(k));
       }
       this.pool.pop();
