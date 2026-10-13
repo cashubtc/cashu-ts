@@ -27,12 +27,11 @@ import {
   buildTransactionTranscript,
   derivedQuoteId,
   inputDigest,
-  outputSection,
   spendCommitment,
   transactionDigest,
   transcriptContainers,
 } from '../src/crypto/transcript';
-import type { TransactionElements } from '../src/crypto/transcript';
+import type { TransactionShape } from '../src/crypto/transcript';
 import { Amount } from '../src/model/Amount';
 import { decodeCBOR, encodeCBOR } from '../src/utils/cbor';
 import {
@@ -145,7 +144,7 @@ if (!claim.test(d.nut13_v3.comment))
 d.nut13_v3.comment = d.nut13_v3.comment.replace(claim, summary);
 
 // --- transcript -------------------------------------------------------------
-function fromVectorTx(tx: any): TransactionElements {
+function fromVectorTx(tx: any): TransactionShape {
   return {
     proofInputs: tx.proof_inputs?.map((p: any) => ({
       amount: BigInt(p.amount),
@@ -617,20 +616,24 @@ d.auditable_lock = {
 
 const testKey = (k: number) => bytesToHex(secp256k1.getPublicKey(bigTo32(BigInt(k)), true));
 
-// Template leaf (NUT-10): hash = SHA256 over the output section, here the two change quote
-// containers of proof_to_two_changes. A spend through it is the swap proof (same amount, keyset
-// and C) under a new secret, spent into exactly those outputs. The rejection case bumps the fixed
-// quote from 3 to 4 sat: one byte of the output section, a different hash.
+// Template leaf (NUT-10): every output must be a change quote locked to a key in dests. A spend
+// through it is the swap proof (same amount, keyset and C) under a new secret, into the two change
+// quotes of proof_to_two_changes. The rejection case locks the remainder quote to test key 4,
+// which dests does not list.
 const tplOutputs = {
   change_quote_outputs: d.transcript.proof_to_two_changes.tx.change_quote_outputs,
 };
-const tplHashOf = (o: any) => bytesToHex(sha256(outputSection(fromVectorTx(o))));
-const tplHash = tplHashOf(tplOutputs);
-const tplLeaf = serializeNutrootLeaf({ type: 'template', n: 1, keys: [testKey(3)], hash: tplHash });
+const tplDests = tplOutputs.change_quote_outputs.map((c: any) => c.pubkey);
+const tplLeaf = serializeNutrootLeaf({
+  type: 'template',
+  n: 1,
+  keys: [testKey(3)],
+  dests: tplDests,
+});
 const tplRejected = {
   change_quote_outputs: [
-    { ...tplOutputs.change_quote_outputs[0], amount: 4 },
-    tplOutputs.change_quote_outputs[1],
+    tplOutputs.change_quote_outputs[0],
+    { ...tplOutputs.change_quote_outputs[1], pubkey: testKey(4) },
   ],
 };
 // Spend leaf `index` of `tree` under internal key `K` into `outputs`, signed by test key `signer`.
@@ -673,60 +676,59 @@ function spendTemplate(
 }
 d.template_lock = {
   comment:
-    'Template covenant: NUMS offset u = 7, one template leaf n = 1 to test key 3 whose hash is SHA256 over the output section (the two change quote containers of proof_to_two_changes), spent into exactly those outputs. rejected_outputs is the same transaction with the fixed quote at 4 sat: its output section hashes differently, so the witness is rejected.',
+    'Template covenant: NUMS offset u = 7, one template leaf n = 1 to test key 3 whose dests are the lock keys of the two change quotes of proof_to_two_changes, spent into exactly those outputs. rejected_outputs locks the remainder quote to test key 4 instead, which dests does not list, so the witness is rejected.',
   u: bytesToHex(bigTo32(7n)),
   K: bytesToHex(K_aud),
-  output_section: bytesToHex(outputSection(fromVectorTx(tplOutputs))),
-  hash: tplHash,
+  dests: tplDests,
   leaf: bytesToHex(tplLeaf),
   ...spendTemplate(K_aud, [tplLeaf], 0),
-  rejected_outputs: {
-    change_quote_outputs: tplRejected.change_quote_outputs,
-    output_section: bytesToHex(outputSection(fromVectorTx(tplRejected))),
-    hash: tplHashOf(tplRejected),
-  },
+  rejected_outputs: tplRejected,
 };
 
-// Arbiter escrow: the arbiter (key 4) can only release to the seller (key 5) or refund
-// the buyer (key 3), each a remainder quote; buyer and seller together settle any other way.
-// Three leaves under NUMS u = 7, so the fold promotes the odd leaf and the release path has two hashes.
+// Arbiter escrow: the arbiter (key 4) can only pay the buyer (key 3) and the seller (key 5), in any
+// split; buyer and seller together settle any other way; the buyer alone after refund_time. Three
+// leaves, so the fold promotes the odd leaf. The spend is the seller building a split, 5 sat to
+// itself and the remainder to the buyer, and the arbiter signing it.
 {
-  const remainder = (key: number, preimage: string) => ({
-    change_quote_outputs: [{ id_preimage: preimage.repeat(32), pubkey: testKey(key) }],
-  });
-  const toSeller = remainder(5, '55');
-  const toBuyer = remainder(3, '33');
-  const templateTo = (outputs: typeof toSeller) =>
-    serializeNutrootLeaf({ type: 'template', n: 1, keys: [testKey(4)], hash: tplHashOf(outputs) });
-  const release = templateTo(toSeller);
-  const refund = templateTo(toBuyer);
   const coop = serializeNutrootLeaf({ type: 'threshold', n: 2, keys: [testKey(3), testKey(5)] });
-  const tree = [release, refund, coop];
+  const arbiter = serializeNutrootLeaf({
+    type: 'template',
+    n: 1,
+    keys: [testKey(4)],
+    dests: [testKey(3), testKey(5)],
+  });
+  const refund = serializeNutrootLeaf({
+    type: 'after',
+    n: 1,
+    keys: [testKey(3)],
+    time: d.receiver_keyed_refund.refund_time,
+  });
+  const tree = [arbiter, refund, coop];
   const leafHash = (leaf: Uint8Array) => bytesToHex(taggedHash('Cashu_NutrootLeaf', leaf));
-  const spend = spendTemplate(K_aud, tree, 0, toSeller, 4n);
+  const split = {
+    change_quote_outputs: [
+      { id_preimage: '55'.repeat(32), pubkey: testKey(5), amount: 5 },
+      { id_preimage: '33'.repeat(32), pubkey: testKey(3) },
+    ],
+  };
+  const spend = spendTemplate(K_aud, tree, 0, split, 4n);
   delete d.two_leaf_covenant;
   d.template_escrow = {
     comment:
-      'Arbiter escrow: NUMS offset u = 7 and three leaves. release and refund are template leaves n = 1 to the arbiter (key 4) over one remainder change quote each, to the seller (key 5, id_preimage 55..55) or the buyer (key 3, id_preimage 33..33); coop is a 2-of-2 threshold of buyer and seller. The fold promotes the odd leaf. The release spend is the swap proof under this secret, signed by the arbiter; self_deal is a remainder quote to the arbiter itself, matching neither template.',
+      'Arbiter escrow: NUMS offset u = 7 and three leaves. arbiter is a template leaf n = 1 to the arbiter (key 4) with dests buyer (key 3) and seller (key 5); refund is an after leaf to the buyer at receiver_keyed_refund.refund_time; coop is a 2-of-2 threshold of buyer and seller. The fold promotes the odd leaf. The spend is the swap proof under this secret into a split the seller built (5 sat to the seller under id_preimage 55..55, the remainder to the buyer under 33..33), signed by the arbiter. self_deal is a remainder quote to the arbiter itself, which dests does not list.',
     buyer: testKey(3),
     seller: testKey(5),
     arbiter: testKey(4),
-    seller_quote_id: derivedQuoteId(hexToBytes(toSeller.change_quote_outputs[0].id_preimage)),
-    buyer_quote_id: derivedQuoteId(hexToBytes(toBuyer.change_quote_outputs[0].id_preimage)),
-    out_seller: bytesToHex(outputSection(fromVectorTx(toSeller))),
-    out_buyer: bytesToHex(outputSection(fromVectorTx(toBuyer))),
-    hash_seller: tplHashOf(toSeller),
-    hash_buyer: tplHashOf(toBuyer),
-    leaf_release: bytesToHex(release),
+    leaf_arbiter: bytesToHex(arbiter),
     leaf_refund: bytesToHex(refund),
     leaf_coop: bytesToHex(coop),
-    leaf_hash_release: leafHash(release),
+    leaf_hash_arbiter: leafHash(arbiter),
     leaf_hash_refund: leafHash(refund),
     leaf_hash_coop: leafHash(coop),
     u: bytesToHex(bigTo32(7n)),
     K: bytesToHex(K_aud),
     ...spend,
-    self_deal_hash: tplHashOf(remainder(4, '44')),
+    self_deal: { change_quote_outputs: [{ id_preimage: '44'.repeat(32), pubkey: testKey(4) }] },
   };
 }
 // An unallocated leaf type (0xff, the threshold leaf's bytes under that type) fails closed; far from the allocated range so new types never move it.

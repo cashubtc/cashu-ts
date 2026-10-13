@@ -535,20 +535,18 @@ describe('LockBuilder.disclose()', () => {
 });
 
 describe('LockBuilder.addTemplate()', () => {
-  it('carries the template into the options, round-trips, and encodes for v3 only', () => {
-    const template = { changeQuoteOutputs: [{ pubkey: comp('b', '02'), quoteId: 'q' }] };
+  it('carries the destinations into the options, round-trips, and encodes for v3 only', () => {
+    const dest = comp('b', '02');
     const b = new LockBuilder()
       .addMainPubkey(comp('a', '02'))
-      .addTemplate(template)
-      .lockUntil(4102444800)
-      .addRefundPubkey(comp('c', '02'));
-    expect(b.toOptions().template).toEqual(template);
-    expect(LockBuilder.fromOptions(b.toOptions()).toOptions().template).toEqual(template);
+      .addTemplate(dest)
+      .addTemplate([dest]);
+    expect(b.toOptions().template).toEqual([dest]);
+    expect(LockBuilder.fromOptions(b.toOptions()).toOptions().template).toEqual([dest]);
     expect(b.validate('nutroot')).toEqual([]);
     expect(b.validate('p2pk')).toHaveLength(1);
-    // Validated at the setter; a template alone is a lock, refused later for want of a key.
-    expect(() => new LockBuilder().addTemplate({})).toThrow(/at least one output/i);
-    expect(() => new LockBuilder().addTemplate(template).toOptions()).toThrow(/key/i);
+    // A template alone is refused for want of a signing key.
+    expect(() => new LockBuilder().addTemplate(dest).toOptions()).toThrow(/key/i);
   });
 });
 

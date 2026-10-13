@@ -7,7 +7,6 @@ import {
   type P2PKTag,
 } from '../crypto';
 import { serializeNutrootLeaf, type NutrootLeaf } from '../crypto/nutroot';
-import { templateHash, type TemplateOutputs } from '../crypto/transcript';
 import { CTSError } from '../model/Errors';
 import { MAX_SECRET_LENGTH } from '../utils/limits';
 
@@ -71,7 +70,7 @@ export class LockBuilder {
   private _sigAll?: boolean;
   private _disclosure?: boolean;
   private hashlock?: string;
-  private template?: TemplateOutputs;
+  private template?: string[];
   private leaves: NutrootLeaf[] = [];
 
   /**
@@ -193,17 +192,12 @@ export class LockBuilder {
   }
 
   /**
-   * Makes the main path a covenant (NUT-10 `template`): the main keys may spend only into exactly
-   * these outputs. v3 keysets only.
-   *
-   * @remarks
-   * Melt quotes and blinded messages can expire, so a template over either also needs `lockUntil`
-   * and refund keys; change quotes alone need neither.
-   * @throws If the outputs do not serialize, or there are none.
+   * Makes the main path a covenant (NUT-10 `template`): the main keys may spend only into change
+   * quotes locked to these destination keys. v3 keysets only.
    */
-  addTemplate(outputs: TemplateOutputs) {
-    templateHash(outputs); // validate at the setter, like the other inputs
-    this.template = outputs;
+  addTemplate(dests: string | string[]) {
+    const arr = (Array.isArray(dests) ? dests : [dests]).map((k) => k.toLowerCase());
+    this.template = [...new Set([...(this.template ?? []), ...arr])];
     return this;
   }
 

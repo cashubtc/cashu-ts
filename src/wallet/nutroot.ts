@@ -202,7 +202,7 @@ export function proofSpendOptions(
   // Parses every leaf, so an unknown one throws here rather than being reported as spendable.
   const leaves = tree.map((leaf) => parseNutrootLeaf(hexToBytes(leaf)));
   const hits = recoverLeafKeySecretKeys(tree, proof.spend_info?.E, privkeys);
-  return withVerdict(keyPath, scriptOptions(leaves, hits, now));
+  return withVerdict(keyPath, scriptOptions(leaves, hits, now, heldXOnly(privkeys)));
 }
 
 /**
@@ -231,16 +231,23 @@ function legacySpendOptions(proof: Proof, privkeys: string[], now: number): Spen
       held.has(key.slice(2)) ? [{ leafIndex, keyIndex, blinded }] : [],
     ),
   );
-  return withVerdict(false, scriptOptions(leaves, hits, now));
+  return withVerdict(false, scriptOptions(leaves, hits, now, held));
+}
+
+// x-only hex of each private key's public key.
+function heldXOnly(privkeys: string[]): Set<string> {
+  return new Set(privkeys.map((k) => bytesToHex(getPubKeyFromPrivKey(hexToBytes(k))).slice(2)));
 }
 
 /**
- * Judges each leaf from the key hits against it, at `now`.
+ * Judges each leaf from the key hits against it, at `now`; `held` (x-only) finds template
+ * destinations this wallet holds.
  */
 function scriptOptions(
   leaves: NutrootLeaf[],
   hits: Array<{ leafIndex: number; keyIndex: number; blinded: boolean }>,
   now: number,
+  held: Set<string>,
 ): SpendOption[] {
   return leaves.map((leaf, leafIndex) => {
     if (leaf.type === 'commit') {
@@ -264,6 +271,9 @@ function scriptOptions(
       option.blockedBy = 'threshold';
     } else if (leaf.type === 'hashlock') {
       option.blockedBy = 'preimage';
+    } else if (leaf.type === 'template' && !leaf.dests?.some((d) => held.has(d.slice(2)))) {
+      // NUT-10 check 2: value reaches only the dests, so a template pays this wallet only to its own.
+      option.blockedBy = 'destination';
     } else {
       option.satisfiable = true;
     }
@@ -287,6 +297,9 @@ function withVerdict(keyPath: boolean, script: SpendOption[]): SpendOptions {
     return { ...stuck, blockedBy: 'locktime', availableAt };
   }
   if (script.some((o) => o.blockedBy === 'preimage')) return { ...stuck, blockedBy: 'preimage' };
+  if (script.some((o) => o.blockedBy === 'destination')) {
+    return { ...stuck, blockedBy: 'destination' };
+  }
   if (script.some((o) => o.keys.length > 0)) return { ...stuck, blockedBy: 'threshold' };
   return { ...stuck, blockedBy: 'not-keyed-to-you' };
 }

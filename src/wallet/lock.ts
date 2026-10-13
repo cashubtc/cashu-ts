@@ -14,7 +14,6 @@ import {
   type NutrootLeaf,
   type ParsedNutrootOption,
 } from '../crypto/nutroot';
-import { templateHash, type TemplateOutputs } from '../crypto/transcript';
 import { CTSError } from '../model/Errors';
 import { hexToBytes } from '../utils';
 
@@ -37,13 +36,10 @@ export type LockOptions = {
    */
   hashlock?: string;
   /**
-   * Covenant (NUT-10 `template`): the main keys may spend only into exactly these outputs. v3 only.
-   *
-   * @remarks
-   * Melt quotes and blinded messages can expire, so a template over either needs `locktime` and
-   * `refundKeys` beside it; change quotes alone need neither.
+   * Covenant (NUT-10 `template`): the main keys may spend only into change quotes locked to these
+   * keys. v3 only.
    */
-  template?: TemplateOutputs;
+  template?: string[];
   /**
    * Unix seconds after which the refund path activates; the main path never expires.
    */
@@ -116,7 +112,9 @@ export function lockToNutrootOptions(lock: LockOptions): ParsedNutrootOption {
   }
   const mainKeys = (lock.mainKeys ?? []).map(lc);
   const explicit = (lock.leaves ?? []).map((leaf) =>
-    leaf.type === 'commit' ? leaf : { ...leaf, keys: leaf.keys.map(lc) },
+    leaf.type === 'commit'
+      ? leaf
+      : { ...leaf, keys: leaf.keys.map(lc), ...(leaf.dests && { dests: leaf.dests.map(lc) }) },
   );
   if (
     mainKeys.length === 0 &&
@@ -150,13 +148,7 @@ export function lockToNutrootOptions(lock: LockOptions): ParsedNutrootOption {
   if (lock.hashlock !== undefined) {
     leaves.push({ type: 'hashlock', n, hash: lc(lock.hashlock), keys: mainKeys, ...mode });
   } else if (lock.template !== undefined) {
-    leaves.push({
-      type: 'template',
-      n,
-      hash: templateHash(lock.template),
-      keys: mainKeys,
-      ...mode,
-    });
+    leaves.push({ type: 'template', n, keys: mainKeys, ...mode, dests: lock.template.map(lc) });
   } else if (!keyPath && mainKeys.length > 0) {
     leaves.push({ type: 'threshold', n, keys: mainKeys, ...mode });
   }
@@ -178,10 +170,6 @@ export function lockToNutrootOptions(lock: LockOptions): ParsedNutrootOption {
     leaves.push({ type: 'after', n: nRefund, time: lock.locktime, keys: refundKeys, ...mode });
   }
   leaves.push(...explicit);
-  // NUT-10: a template is used once and its outputs can expire, so it needs an after leaf beside it.
-  if (lock.template !== undefined && !leaves.some((leaf) => leaf.type === 'after')) {
-    throw new CTSError('A template needs a locktime and refund keys beside it');
-  }
   // A commit leaf is never a spend path, so a lock made only of them is a burn.
   if (!keyPath && !leaves.some((leaf) => leaf.type !== 'commit')) {
     throw new CTSError('A lock needs a spend path: a commit leaf alone is unspendable');

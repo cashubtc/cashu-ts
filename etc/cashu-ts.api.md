@@ -1038,7 +1038,7 @@ export class LockBuilder {
     addRefundPubkey(pk: string | string[]): this;
     addTag(key: string, values?: string[] | string): this;
     addTags(tags: P2PKTag[]): this;
-    addTemplate(outputs: TemplateOutputs): this;
+    addTemplate(dests: string | string[]): this;
     blindKeys(keys?: string | string[]): this;
     disclose(): this;
     static fromOptions(lock: LockOptions_2): LockBuilder;
@@ -1070,7 +1070,7 @@ type LockOptions_2 = {
     mainKeys?: string[];
     requiredMainSignatures?: number;
     hashlock?: string;
-    template?: TemplateOutputs;
+    template?: string[];
     locktime?: number;
     refundKeys?: string[];
     requiredRefundSignatures?: number;
@@ -1812,6 +1812,7 @@ export type NutrootConditionLeaf = {
     keys: string[];
     time?: number;
     hash?: string;
+    dests?: string[];
     disclosure?: number;
 };
 
@@ -2815,7 +2816,7 @@ export type SpendOption = {
         blinded: boolean;
     }>;
     satisfiable: boolean;
-    blockedBy?: 'threshold' | 'locktime' | 'preimage' | 'commit';
+    blockedBy?: 'threshold' | 'locktime' | 'preimage' | 'commit' | 'destination';
     availableAt?: number;
 };
 
@@ -2824,7 +2825,7 @@ export type SpendOptions = {
     keyPath: boolean;
     script: SpendOption[];
     spendable: boolean;
-    blockedBy?: 'not-keyed-to-you' | 'locktime' | 'threshold' | 'preimage';
+    blockedBy?: 'not-keyed-to-you' | 'locktime' | 'threshold' | 'preimage' | 'destination';
     availableAt?: number;
 };
 
@@ -2923,30 +2924,6 @@ export type SwapResponse = {
 
 // @public
 export function taggedHash(tag: string, ...messages: Uint8Array[]): Uint8Array;
-
-// @public
-export function templateHash(outputs: TemplateOutputs): string;
-
-// @public
-export type TemplateOutputs = {
-    blindedOutputs?: Array<{
-        amount: AmountLike;
-        id: string;
-        B_: string;
-    }>;
-    meltQuoteOutput?: {
-        quoteId: string;
-        amount: AmountLike;
-    };
-    changeQuoteOutputs?: Array<{
-        pubkey: string;
-        amount?: AmountLike;
-    } & ({
-        quoteId: string;
-    } | {
-        idPreimage: string;
-    })>;
-};
 
 // @public
 export type Token = {

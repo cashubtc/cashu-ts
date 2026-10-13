@@ -67,11 +67,7 @@ export type TranscriptBlindedOutput = {
   B_: string;
 };
 
-/**
- * A transaction's elements in the form the transcript serializes them: bigint amounts, keyset ids,
- * `Y` for a proof. {@link TransactionPayload} is the request-payload form.
- */
-export type TransactionElements = {
+export type TransactionShape = {
   proofInputs?: TranscriptProofInput[];
   mintQuoteInputs?: TranscriptQuoteInput[];
   blindedOutputs?: TranscriptBlindedOutput[];
@@ -242,7 +238,7 @@ export function derivedQuoteId(idPreimage: Uint8Array): string {
 /**
  * Serialize a transaction to its TLV transcript (without the domain tag).
  */
-export function buildTransactionTranscript(tx: TransactionElements): Uint8Array {
+export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
   const proofs = tx.proofInputs ?? [];
   const mintQuotes = tx.mintQuoteInputs ?? [];
   const blinded = tx.blindedOutputs ?? [];
@@ -268,58 +264,10 @@ export function buildTransactionTranscript(tx: TransactionElements): Uint8Array 
   return concatBytes(
     ...proofs.map(proofInputContainer),
     ...mintQuotes.map(mintQuoteInputContainer),
-    outputSection(tx),
+    ...blinded.map(blindedOutputContainer),
+    ...meltQuotes.map(meltQuoteOutputContainer),
+    ...change.map(changeContainer),
   );
-}
-
-/**
- * The transcript's output section: its `0x2n` containers, exactly as serialized.
- *
- * @remarks
- * A `template` leaf commits to `SHA256` of these bytes ({@link templateHash}), so a wallet building
- * such a lock passes the outputs it will later spend into, and nothing else.
- */
-export function outputSection(outputs: TransactionOutputs): Uint8Array {
-  return concatBytes(
-    ...(outputs.blindedOutputs ?? []).map(blindedOutputContainer),
-    ...(outputs.meltQuoteOutputs ?? []).map((q) => meltQuoteOutputContainer(q)),
-    ...(outputs.changeQuoteOutputs ?? []).map(changeContainer),
-  );
-}
-
-type TransactionOutputs = Pick<
-  TransactionElements,
-  'blindedOutputs' | 'meltQuoteOutputs' | 'changeQuoteOutputs'
->;
-
-/**
- * The outputs a `template` leaf commits to, in the wire shapes a request carries them.
- */
-export type TemplateOutputs = {
-  blindedOutputs?: Array<{ amount: AmountLike; id: string; B_: string }>;
-  /**
-   * `amount` is the quote amount plus the selected fee reserve.
-   */
-  meltQuoteOutput?: { quoteId: string; amount: AmountLike };
-  /**
-   * Each names its id directly, or by the preimage it derives from when the author holds it.
-   */
-  changeQuoteOutputs?: Array<
-    { pubkey: string; amount?: AmountLike } & ({ quoteId: string } | { idPreimage: string })
-  >;
-};
-
-/**
- * The `hash` of a `template` leaf (NUT-10): `SHA256(output section)` over these outputs, hex.
- *
- * @remarks
- * The spending transaction must carry exactly these outputs, in this order, and nothing else. A
- * melt quote's amount is its `amount` plus the selected fee reserve.
- */
-export function templateHash(outputs: TemplateOutputs): string {
-  const section = outputSection(payloadToTransaction(outputs));
-  if (section.length === 0) throw new CTSError('A template needs at least one output');
-  return bytesToHex(sha256(section));
 }
 
 /**
@@ -330,7 +278,7 @@ export function templateHash(outputs: TemplateOutputs): string {
  * asked to sign for is one of the transcript's records ({@link transcriptContainers}), so it can
  * never be tricked into signing some other 32 bytes.
  */
-export function transactionMessage(tx: TransactionElements): Uint8Array {
+export function transactionMessage(tx: TransactionShape): Uint8Array {
   return buildTransactionTranscript(tx);
 }
 
@@ -361,7 +309,7 @@ export function transcriptContainers(transcript: Uint8Array): Uint8Array[] {
 /**
  * The 32-byte shared transaction digest: `SHA256(transcript)`.
  */
-export function transactionDigest(tx: TransactionElements): Uint8Array {
+export function transactionDigest(tx: TransactionShape): Uint8Array {
   return sha256(transactionMessage(tx));
 }
 
@@ -387,7 +335,7 @@ export type TransactionInputContext = { inputContainer: Uint8Array; digest: Uint
  * `proofs` is keyed by the input's `Y` and `quotes` by quote id; the transcript builder has already
  * refused duplicates, so the keys are unique.
  */
-export function transactionInputs(tx: TransactionElements): {
+export function transactionInputs(tx: TransactionShape): {
   transactionMessage: Uint8Array;
   transactionDigest: Uint8Array;
   proofs: Map<string, TransactionInputContext>;
@@ -416,11 +364,7 @@ export function transactionInputs(tx: TransactionElements): {
  */
 export type PayloadProofInput = { amount: AmountLike; id: string; C: string } & ProofInputName;
 
-/**
- * A transaction as request payloads carry it: request field names, {@link AmountLike} amounts;
- * {@link payloadToTransaction} normalizes it to {@link TransactionElements}.
- */
-type TransactionPayload = {
+type PayloadShape = {
   proofInputs?: PayloadProofInput[];
   /**
    * `amount` is what this transaction issues against the quote, at most its mintable amount;
@@ -432,7 +376,13 @@ type TransactionPayload = {
     lockKey: string;
     issued: AmountLike;
   }>;
-} & TemplateOutputs;
+  blindedOutputs?: Array<{ amount: AmountLike; id: string; B_: string }>;
+  /**
+   * `amount` is the quote amount plus the selected fee reserve ({@link meltOutputAmount}).
+   */
+  meltQuoteOutput?: { quoteId: string; amount: AmountLike };
+  changeQuoteOutputs?: Array<{ pubkey: string; quoteId: string; amount?: AmountLike }>;
+};
 
 /**
  * The melt quote output's amount (NUT-10): the quote's `amount` plus the fee reserve the request
@@ -464,14 +414,14 @@ type MeltOutputAmountSource = {
  * {@link transactionDigest} over payload wire shapes: proofs, quotes and blinded messages as the
  * request carries them, amounts in any {@link AmountLike} form.
  */
-export function digestForPayload(payload: TransactionPayload): Uint8Array {
+export function digestForPayload(payload: PayloadShape): Uint8Array {
   return sha256(messageForPayload(payload));
 }
 
 /**
- * A request payload normalized to its transcript elements.
+ * A payload wire shape as a {@link TransactionShape}.
  */
-function payloadToTransaction(payload: TransactionPayload): TransactionElements {
+function payloadToTransaction(payload: PayloadShape): TransactionShape {
   const quote = (q: { quoteId: string; amount: AmountLike }): TranscriptQuote => ({
     amount: Amount.from(q.amount).toBigInt(),
     quoteId: q.quoteId,
@@ -503,7 +453,7 @@ function payloadToTransaction(payload: TransactionPayload): TransactionElements 
     ...(payload.changeQuoteOutputs && {
       changeQuoteOutputs: payload.changeQuoteOutputs.map((c) => ({
         pubkey: c.pubkey,
-        quoteId: 'quoteId' in c ? c.quoteId : derivedQuoteId(hexToBytes(c.idPreimage)),
+        quoteId: c.quoteId,
         ...(c.amount !== undefined && { amount: Amount.from(c.amount).toBigInt() }),
       })),
     }),
@@ -513,16 +463,14 @@ function payloadToTransaction(payload: TransactionPayload): TransactionElements 
 /**
  * {@link transactionMessage} over payload wire shapes; see {@link digestForPayload}.
  */
-export function messageForPayload(payload: TransactionPayload): Uint8Array {
+export function messageForPayload(payload: PayloadShape): Uint8Array {
   return transactionMessage(payloadToTransaction(payload));
 }
 
 /**
  * {@link transactionInputs} over payload wire shapes.
  */
-export function inputsForPayload(
-  payload: TransactionPayload,
-): ReturnType<typeof transactionInputs> {
+export function inputsForPayload(payload: PayloadShape): ReturnType<typeof transactionInputs> {
   return transactionInputs(payloadToTransaction(payload));
 }
 

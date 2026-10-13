@@ -3,7 +3,6 @@ import { describe, expect, test } from 'vitest';
 import { LockBuilder, Wallet } from '../../src';
 import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import { NUTROOT_NUMS_KEY, parseNutrootLeaf, serializeNutrootLeaf } from '../../src/crypto/nutroot';
-import { templateHash } from '../../src/crypto/transcript';
 import { Amount } from '../../src/model/Amount';
 import type { OutputData } from '../../src/model/OutputData';
 import { bytesToHex, hexToBytes } from '../../src/utils';
@@ -239,41 +238,24 @@ describe('lockToNutrootOptions (v3 encoder)', () => {
     ).toThrow();
   });
 
-  test('a template over change quotes is a template leaf under NUMS, beside its after leaf', () => {
-    const template = {
-      changeQuoteOutputs: [
-        { pubkey: PUB_B, quoteId: 'ab'.repeat(32), amount: 3 },
-        { pubkey: PUB_C, idPreimage: 'cd'.repeat(32) },
-      ],
-    };
-    expect(() => lockToNutrootOptions({ mainKeys: [PUB_A], template })).toThrow(/refund/);
-    expect(
-      lockToNutrootOptions({ mainKeys: [PUB_A], template, locktime: TIME, refundKeys: [PUB_R] }),
-    ).toEqual({
+  test('a template is a template leaf under NUMS naming its destination keys', () => {
+    const template = [PUB_B, PUB_C];
+    expect(lockToNutrootOptions({ mainKeys: [PUB_A], template })).toEqual({
       receiverKey: NUTROOT_NUMS_KEY,
-      leaves: [
-        { type: 'template', n: 1, keys: [PUB_A], hash: templateHash(template) },
-        { type: 'after', n: 1, time: TIME, keys: [PUB_R] },
-      ],
+      leaves: [{ type: 'template', n: 1, keys: [PUB_A], dests: template }],
     });
+    expect(
+      lockToNutrootOptions({ mainKeys: [PUB_A], template, locktime: TIME, refundKeys: [PUB_R] })
+        .leaves,
+    ).toEqual([
+      { type: 'template', n: 1, keys: [PUB_A], dests: template },
+      { type: 'after', n: 1, time: TIME, keys: [PUB_R] },
+    ]);
     expect(() => lockToNutrootOptions({ template })).toThrow(/key/i);
     expect(() => lockToNutrootOptions({ mainKeys: [PUB_A], template, hashlock: HASH })).toThrow(
       /not both/,
     );
     expect(() => lockToP2PKOptions({ mainKeys: [PUB_A], template })).toThrow(/v3/);
-  });
-
-  test('a template over outputs that expire needs a refund leaf too', () => {
-    const melt = { meltQuoteOutput: { quoteId: 'q', amount: 5 } };
-    expect(() => lockToNutrootOptions({ mainKeys: [PUB_A], template: melt })).toThrow(/refund/);
-    const escaped = { mainKeys: [PUB_A], template: melt, locktime: TIME, refundKeys: [PUB_R] };
-    expect(lockToNutrootOptions(escaped).leaves?.map((l) => l.type)).toEqual(['template', 'after']);
-    // Blinded messages expire with their keyset; a remainder quote beside them does not help.
-    const blinded = {
-      blindedOutputs: [{ amount: 1, id: 'ab'.repeat(16), B_: PUB_B }],
-      changeQuoteOutputs: [{ pubkey: PUB_C, quoteId: 'ab'.repeat(32) }],
-    };
-    expect(() => lockToNutrootOptions({ mainKeys: [PUB_A], template: blinded })).toThrow(/refund/);
   });
 });
 

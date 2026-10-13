@@ -174,6 +174,16 @@ describe('wallet.spendOptions: the script path', () => {
     expect(script[0].keys).toHaveLength(1); // the key is still reported, for the caller's plan
   });
 
+  test('a template pays only its dests, so it counts only with a destination key held', async () => {
+    const template: NutrootLeaf = { type: 'template', n: 1, keys: [pub(ALICE)], dests: [pub(BOB)] };
+    const proof = locked([template]);
+    const arbiter = wallet().spendOptions(proof, { privkeys: priv(ALICE) });
+    expect(arbiter.script[0]).toMatchObject({ satisfiable: false, blockedBy: 'destination' });
+    expect(arbiter).toMatchObject({ spendable: false, blockedBy: 'destination' });
+    const both = wallet().spendOptions(proof, { privkeys: [priv(ALICE), priv(BOB)] });
+    expect(both.script[0]).toMatchObject({ satisfiable: true });
+  });
+
   test('leaves are reported in tree order, each judged on its own', async () => {
     const unlockAt = 4102444800;
     const proof = locked([

@@ -1652,39 +1652,38 @@ describeXX('NUT-XX transactions', () => {
     });
   });
 
-  test('a template covenant spends only into its committed change quotes', async () => {
+  test('a template covenant spends only into change quotes to its destinations', async () => {
     const { wallet, proofs } = await funded(64);
     const fixed = await wallet.createQuoteLockKey();
     const rest = await wallet.createQuoteLockKey();
-    const template = {
-      changeQuoteOutputs: [
-        { pubkey: fixed.pubkey, idPreimage: fixed.idPreimage, amount: 3 },
-        { pubkey: rest.pubkey, idPreimage: rest.idPreimage },
-      ],
-    };
+    const stranger = await wallet.createQuoteLockKey();
     const holderPriv = bytesToHex(randomBytes(32));
     const holderPub = bytesToHex(secp256k1.getPublicKey(hexToBytes(holderPriv), true));
     // NUMS internal key: the template is the holder's only way to move the value.
     const { send } = await wallet.ops
       .send(32, proofs)
-      .asLocked({ mainKeys: [holderPub], template }, [32])
+      .asLocked({ mainKeys: [holderPub], template: [fixed.pubkey, rest.pubkey] }, [32])
       .run();
     expect(send).toHaveLength(1);
     expect(send[0].spend_info?.u).toBeDefined();
     const [proof] = send;
     const plan = { secret: proof.secret, leafIndex: 0 };
-    // The committed outputs, one byte off: the mint refuses.
+    // A remainder quote to a key outside dests: the mint refuses.
     const wrong = await wallet.prepareTransaction({
       proofInputs: [proof],
-      changeQuoteOutputs: [
-        { ...template.changeQuoteOutputs[0], amount: 4 },
-        template.changeQuoteOutputs[1],
-      ],
+      changeQuoteOutputs: [{ pubkey: stranger.pubkey, idPreimage: stranger.idPreimage }],
     });
     await expect(
       wallet.completeTransaction(wrong, holderPriv, { scriptPath: [plan] }),
     ).rejects.toThrow(MintOperationError);
-    const preview = await wallet.prepareTransaction({ proofInputs: [proof], ...template });
+    // Any split between the destinations settles.
+    const preview = await wallet.prepareTransaction({
+      proofInputs: [proof],
+      changeQuoteOutputs: [
+        { pubkey: fixed.pubkey, idPreimage: fixed.idPreimage, amount: 3 },
+        { pubkey: rest.pubkey, idPreimage: rest.idPreimage },
+      ],
+    });
     const result = await wallet.completeTransaction(preview, holderPriv, { scriptPath: [plan] });
     expect(result.response.state).toBe('PAID');
     const [fixedQuote, restQuote] = result.response.change_quotes;
