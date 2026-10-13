@@ -3002,7 +3002,7 @@ export type TransactionRequest = {
         fee_index?: number;
     }>;
     change_quote_outputs?: Array<{
-        id_preimage: string;
+        id_preimage?: string;
         pubkey: string;
         amount?: Amount;
     }>;

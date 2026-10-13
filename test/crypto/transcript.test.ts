@@ -1,6 +1,6 @@
 import { schnorr } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, concatBytes, hexToBytes } from '@noble/hashes/utils.js';
 import { describe, test, expect } from 'vitest';
 
 import { hashToCurveHex } from '../../src/crypto/curves';
@@ -17,6 +17,7 @@ import {
   requestDigest,
   signTransactionInput,
   derivedQuoteId,
+  inputBoundQuoteId,
   spendCommitment,
   transactionDigest,
   transcriptContainers,
@@ -47,9 +48,9 @@ function fromVectorTx(tx: {
   }>;
   blinded_outputs?: Array<{ amount: number; keyset_id: string; B_: string }>;
   melt_quote_outputs?: Array<{ amount: number; quote_id: string }>;
-  change_quote_outputs?: Array<{ id_preimage: string; pubkey: string; amount?: number }>;
+  change_quote_outputs?: Array<{ id_preimage?: string; pubkey: string; amount?: number }>;
 }): TransactionShape {
-  return {
+  const shape: TransactionShape = {
     proofInputs: tx.proof_inputs?.map((p) => ({
       amount: BigInt(p.amount),
       keysetId: p.keyset_id,
@@ -71,15 +72,41 @@ function fromVectorTx(tx: {
       amount: BigInt(q.amount),
       quoteId: q.quote_id,
     })),
-    changeQuoteOutputs: tx.change_quote_outputs?.map((c) => ({
-      quoteId: derivedQuoteId(hexToBytes(c.id_preimage)),
-      pubkey: c.pubkey,
-      ...(c.amount !== undefined && { amount: BigInt(c.amount) }),
-    })),
   };
+  shape.changeQuoteOutputs = tx.change_quote_outputs?.map((c, k) => ({
+    quoteId:
+      c.id_preimage !== undefined
+        ? derivedQuoteId(hexToBytes(c.id_preimage))
+        : inputBoundQuoteId(shape, k),
+    pubkey: c.pubkey,
+    ...(c.amount !== undefined && { amount: BigInt(c.amount) }),
+  }));
+  return shape;
 }
 
 describe('transaction transcript (vectors)', () => {
+  // NUT-XX: an output without id_preimage takes an id bound to the transaction's inputs.
+  test('an input-bound quote id hashes the input section and the output position', () => {
+    const v = tv.proof_to_input_bound_change;
+    const tx = fromVectorTx(v.tx);
+    expect(bytesToHex(buildTransactionTranscript(tx))).toBe(v.transcript);
+    expect(bytesToHex(transactionDigest(tx))).toBe(v.digest);
+    expect(tx.changeQuoteOutputs!.map((c) => c.quoteId)).toEqual(v.quote_ids);
+    const inputs = transcriptContainers(hexToBytes(v.transcript)).filter((c) => c[0] >> 4 === 1);
+    expect(inputs).toHaveLength(2);
+    expect(
+      transcriptContainers(hexToBytes(v.transcript))
+        .filter((c) => c[0] === 0x23)
+        .map((c) => bytesToHex(c)),
+    ).toEqual(v.change_containers);
+    expect(bytesToHex(sha256(concatBytes(...inputs)))).toBe(v.input_section_hash);
+    // The id moves with the position and with any input, and no preimage reaches it.
+    expect(inputBoundQuoteId(tx, 0)).not.toBe(v.quote_ids[1]);
+    expect(inputBoundQuoteId({ proofInputs: tx.proofInputs }, 1)).not.toBe(v.quote_ids[1]);
+    expect(derivedQuoteId(hexToBytes(v.input_section_hash))).not.toBe(v.quote_ids[1]);
+    expect(() => inputBoundQuoteId(tx, -1)).toThrow(/u32/);
+  });
+
   // NUT-10 tests, "Mixed keysets": every proof input's 03 field is Y on its keyset's curve.
   test('a mixed-keyset transcript names every proof input by Y', () => {
     const mixed = tv.mixed_keysets;

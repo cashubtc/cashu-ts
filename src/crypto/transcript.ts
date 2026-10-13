@@ -19,6 +19,7 @@ export const TRANSCRIPT_REQUEST_TAG = 'Cashu_AuthorizedRequest';
 export const TRANSCRIPT_INPUT_TAG = 'Cashu_TransactionInput';
 export const SPEND_COMMITMENT_TAG = 'Cashu_SpendCommitment';
 export const QUOTE_ID_TAG = 'Cashu_QuoteId';
+export const INPUT_QUOTE_ID_TAG = 'Cashu_InputQuoteId';
 
 // The high nibble is the section: 0x1n inputs, 0x2n outputs, 0xFn never in a transaction.
 const CONTAINER_PROOF_INPUT = 0x11;
@@ -236,6 +237,36 @@ export function derivedQuoteId(idPreimage: Uint8Array): string {
 }
 
 /**
+ * The id a change quote output without `id_preimage` takes (NUT-XX), from the transaction's inputs.
+ *
+ * @remarks
+ * `hex(tagged_hash("Cashu_InputQuoteId", SHA256(input section) || u32_BE(k)))`, `k` the output's
+ * position among the change quote outputs. Only a transaction spending exactly these inputs creates
+ * it.
+ */
+export function inputBoundQuoteId(
+  tx: Pick<TransactionShape, 'proofInputs' | 'mintQuoteInputs'>,
+  k: number,
+): string {
+  if (!Number.isInteger(k) || k < 0 || k > 0xffffffff) {
+    throw new CTSError('Change quote output position must be a u32');
+  }
+  const position = new Uint8Array(4);
+  new DataView(position.buffer).setUint32(0, k);
+  return bytesToHex(
+    taggedHash(INPUT_QUOTE_ID_TAG, concatBytes(sha256(inputSection(tx)), position)),
+  );
+}
+
+// The transcript's input containers (0x1n) in order, the bytes an input-bound quote id hashes.
+function inputSection(tx: Pick<TransactionShape, 'proofInputs' | 'mintQuoteInputs'>): Uint8Array {
+  return concatBytes(
+    ...(tx.proofInputs ?? []).map(proofInputContainer),
+    ...(tx.mintQuoteInputs ?? []).map(mintQuoteInputContainer),
+  );
+}
+
+/**
  * Serialize a transaction to its TLV transcript (without the domain tag).
  */
 export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
@@ -262,8 +293,7 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
   }
   // Ascending container order
   return concatBytes(
-    ...proofs.map(proofInputContainer),
-    ...mintQuotes.map(mintQuoteInputContainer),
+    inputSection(tx),
     ...blinded.map(blindedOutputContainer),
     ...meltQuotes.map(meltQuoteOutputContainer),
     ...change.map(changeContainer),
