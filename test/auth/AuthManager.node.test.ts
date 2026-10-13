@@ -1012,7 +1012,8 @@ describe('getBlindAuthToken coverage', () => {
   });
 
   test('version 02 BAT: a mint URL subpath is not part of the signed target', async () => {
-    const am = new AuthManager('https://mint.test/cashu', { request: reqSpy as RequestFn });
+    // The subpath itself holds a /v1/ segment: only the mint URL decides the cut.
+    const am = new AuthManager('https://mint.test/v1/cashu', { request: reqSpy as RequestFn });
     am['info'] = fakeInfo({ batMax: 1, blindProtected: true });
     am['keychain'] = {
       getCheapestKeyset: vi.fn().mockReturnValue({ id: '02aabbccddeeff00', keys: { 1: '02aa' } }),
