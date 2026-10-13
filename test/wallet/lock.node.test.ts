@@ -239,16 +239,22 @@ describe('lockToNutrootOptions (v3 encoder)', () => {
     ).toThrow();
   });
 
-  test('a template over change quotes is a template leaf under NUMS, no escape needed', () => {
+  test('a template over change quotes is a template leaf under NUMS, beside its after leaf', () => {
     const template = {
       changeQuoteOutputs: [
         { pubkey: PUB_B, quoteId: 'ab'.repeat(32), amount: 3 },
         { pubkey: PUB_C, idPreimage: 'cd'.repeat(32) },
       ],
     };
-    expect(lockToNutrootOptions({ mainKeys: [PUB_A], template })).toEqual({
+    expect(() => lockToNutrootOptions({ mainKeys: [PUB_A], template })).toThrow(/refund/);
+    expect(
+      lockToNutrootOptions({ mainKeys: [PUB_A], template, locktime: TIME, refundKeys: [PUB_R] }),
+    ).toEqual({
       receiverKey: NUTROOT_NUMS_KEY,
-      leaves: [{ type: 'template', n: 1, keys: [PUB_A], hash: templateHash(template) }],
+      leaves: [
+        { type: 'template', n: 1, keys: [PUB_A], hash: templateHash(template) },
+        { type: 'after', n: 1, time: TIME, keys: [PUB_R] },
+      ],
     });
     expect(() => lockToNutrootOptions({ template })).toThrow(/key/i);
     expect(() => lockToNutrootOptions({ mainKeys: [PUB_A], template, hashlock: HASH })).toThrow(
@@ -257,7 +263,7 @@ describe('lockToNutrootOptions (v3 encoder)', () => {
     expect(() => lockToP2PKOptions({ mainKeys: [PUB_A], template })).toThrow(/v3/);
   });
 
-  test('a template over outputs that expire needs a refund leaf', () => {
+  test('a template over outputs that expire needs a refund leaf too', () => {
     const melt = { meltQuoteOutput: { quoteId: 'q', amount: 5 } };
     expect(() => lockToNutrootOptions({ mainKeys: [PUB_A], template: melt })).toThrow(/refund/);
     const escaped = { mainKeys: [PUB_A], template: melt, locktime: TIME, refundKeys: [PUB_R] };

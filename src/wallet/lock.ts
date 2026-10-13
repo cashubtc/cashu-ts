@@ -178,13 +178,9 @@ export function lockToNutrootOptions(lock: LockOptions): ParsedNutrootOption {
     leaves.push({ type: 'after', n: nRefund, time: lock.locktime, keys: refundKeys, ...mode });
   }
   leaves.push(...explicit);
-  // NUT-10: a template over outputs that can expire strands the value without an after leaf.
-  const expires =
-    lock.template?.meltQuoteOutput !== undefined || !!lock.template?.blindedOutputs?.length;
-  if (expires && !leaves.some((leaf) => leaf.type === 'after')) {
-    throw new CTSError(
-      'A template over outputs that can expire needs a locktime and refund keys beside it',
-    );
+  // NUT-10: a template is used once and its outputs can expire, so it needs an after leaf beside it.
+  if (lock.template !== undefined && !leaves.some((leaf) => leaf.type === 'after')) {
+    throw new CTSError('A template needs a locktime and refund keys beside it');
   }
   // A commit leaf is never a spend path, so a lock made only of them is a burn.
   if (!keyPath && !leaves.some((leaf) => leaf.type !== 'commit')) {
