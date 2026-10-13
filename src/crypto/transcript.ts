@@ -59,9 +59,10 @@ export type TranscriptQuote = {
 };
 
 /**
- * A mint quote input: the quote, and the 33-byte compressed lock key hex it is locked to.
+ * A mint quote input: the quote, the 33-byte compressed lock key hex it is locked to, and the
+ * quote's `amount_issued` before this transaction (NUT-10), so a witness authorizes one draw.
  */
-export type TranscriptQuoteInput = TranscriptQuote & { lockKey: string };
+export type TranscriptQuoteInput = TranscriptQuote & { lockKey: string; issued: bigint };
 
 export type TranscriptBlindedOutput = {
   amount: bigint;
@@ -163,7 +164,11 @@ function mintQuoteInputContainer(quote: TranscriptQuoteInput): Uint8Array {
   }
   return tlvRecord(
     CONTAINER_MINT_QUOTE_INPUT,
-    concatBytes(quoteFields(quote), tlvRecord(0x03, hexToBytes(quote.lockKey))),
+    concatBytes(
+      quoteFields(quote),
+      tlvRecord(0x03, hexToBytes(quote.lockKey)),
+      tlvRecord(0x04, minimalBE(Amount.from(quote.issued).toBigInt())),
+    ),
   );
 }
 
@@ -324,7 +329,7 @@ export type PayloadProofInput = { amount: AmountLike; id: string; C: string } & 
 
 type PayloadShape = {
   inputs?: PayloadProofInput[];
-  mintQuotes?: Array<{ quoteId: string; amount: AmountLike; lockKey: string }>;
+  mintQuotes?: Array<{ quoteId: string; amount: AmountLike; lockKey: string; issued: AmountLike }>;
   outputs?: Array<{ amount: AmountLike; id: string; B_: string }>;
   meltQuote?: { quoteId: string; amount: AmountLike };
 };
@@ -381,7 +386,11 @@ function payloadToTransaction(payload: PayloadShape): TransactionShape {
       })),
     }),
     ...(payload.mintQuotes && {
-      mintQuoteInputs: payload.mintQuotes.map((q) => ({ ...quote(q), lockKey: q.lockKey })),
+      mintQuoteInputs: payload.mintQuotes.map((q) => ({
+        ...quote(q),
+        lockKey: q.lockKey,
+        issued: Amount.from(q.issued).toBigInt(),
+      })),
     }),
     ...(payload.outputs && {
       blindedOutputs: payload.outputs.map((o) => ({

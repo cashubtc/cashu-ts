@@ -153,6 +153,7 @@ function fromVectorTx(tx: any): TransactionShape {
       amount: BigInt(q.amount),
       quoteId: q.quote_id,
       lockKey: q.lock_pubkey,
+      issued: BigInt(q.issued),
     })),
     blindedOutputs: tx.blinded_outputs?.map((o: any) => ({
       amount: BigInt(o.amount),
@@ -168,6 +169,7 @@ function fromVectorTx(tx: any): TransactionShape {
 
 // The mint vector's quote is locked to NUT-13 quote lock 0, like the partial mint's.
 d.transcript.mint.tx.mint_quote_inputs[0].lock_pubkey = d.nut13_v3.quote_locks[0].pubkey;
+d.transcript.mint.tx.mint_quote_inputs[0].issued = 0;
 for (const name of ['swap', 'mint', 'melt', 'melt_with_change'] as const) {
   const example = d.transcript[name];
   for (const fld of ['proof_inputs', 'blinded_outputs'] as const) {
@@ -351,8 +353,18 @@ d.transcript.comment =
 {
   const txVector = {
     mint_quote_inputs: [
-      { amount: 5, quote_id: 'quote-mint-0002', lock_pubkey: d.nut13_v3.quote_locks[0].pubkey },
-      { amount: 3, quote_id: 'quote-mint-0003', lock_pubkey: d.nut13_v3.quote_locks[1].pubkey },
+      {
+        amount: 5,
+        quote_id: 'quote-mint-0002',
+        lock_pubkey: d.nut13_v3.quote_locks[0].pubkey,
+        issued: 0,
+      },
+      {
+        amount: 3,
+        quote_id: 'quote-mint-0003',
+        lock_pubkey: d.nut13_v3.quote_locks[1].pubkey,
+        issued: 0,
+      },
     ],
     blinded_outputs: d.transcript.mint.tx.blinded_outputs,
   };
@@ -385,12 +397,17 @@ d.transcript.comment =
   };
 }
 
-// A partial mint: an 8-sat quote issued for 4. The quote input commits the 4 issued, not the
-// quote amount, so this is the vector that tells the two readings apart.
+// A partial mint: an 8-sat quote with 3 already issued, issuing 4. The quote input commits the 4
+// this request issues and the 3 before it, so this vector tells amount, quote amount and issued apart.
 {
   const txVector = {
     mint_quote_inputs: [
-      { amount: 4, quote_id: 'quote-mint-0004', lock_pubkey: d.nut13_v3.quote_locks[0].pubkey },
+      {
+        amount: 4,
+        quote_id: 'quote-mint-0004',
+        lock_pubkey: d.nut13_v3.quote_locks[0].pubkey,
+        issued: 3,
+      },
     ],
     blinded_outputs: [d.transcript.swap.tx.blinded_outputs[0]],
   };
