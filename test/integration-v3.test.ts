@@ -1701,6 +1701,7 @@ describeXX('NUT-XX transactions', () => {
     // A remainder quote to a key outside dests: the mint refuses.
     const wrong = await wallet.prepareTransaction({
       proofInputs: [proof],
+      proofOutputs: { amount: 0 }, // the remainder quote takes the rest
       changeQuoteOutputs: [{ pubkey: stranger.pubkey, idPreimage: stranger.idPreimage }],
     });
     await expect(
@@ -1709,6 +1710,7 @@ describeXX('NUT-XX transactions', () => {
     // Any split between the destinations settles.
     const preview = await wallet.prepareTransaction({
       proofInputs: [proof],
+      proofOutputs: { amount: 0 }, // the remainder quote takes the rest
       changeQuoteOutputs: [
         { pubkey: fixed.pubkey, idPreimage: fixed.idPreimage, amount: 3 },
         { pubkey: rest.pubkey, idPreimage: rest.idPreimage },
