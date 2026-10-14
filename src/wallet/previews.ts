@@ -265,7 +265,12 @@ export type SerializedTransactionPreview = {
     feeReserve: string;
     feeIndex?: number;
   };
-  changeQuoteOutputs: Array<{ quote: string; idPreimage: string; pubkey: string; amount?: string }>;
+  changeQuoteOutputs: Array<{
+    quote: string;
+    idPreimage?: string;
+    pubkey: string;
+    amount?: string;
+  }>;
   outputData: SerializedOutputData[];
   amount: string;
   fee: string;
@@ -297,7 +302,7 @@ export function serializeTransactionPreview(
     }),
     changeQuoteOutputs: preview.changeQuoteOutputs.map((c) => ({
       quote: c.quote,
-      idPreimage: c.idPreimage,
+      ...(c.idPreimage !== undefined && { idPreimage: c.idPreimage }),
       pubkey: c.pubkey,
       ...(c.amount && { amount: c.amount.toString() }),
     })),
@@ -331,7 +336,7 @@ export function deserializeTransactionPreview(
     }),
     changeQuoteOutputs: serialized.changeQuoteOutputs.map((c) => ({
       quote: c.quote,
-      idPreimage: c.idPreimage,
+      ...(c.idPreimage !== undefined && { idPreimage: c.idPreimage }),
       pubkey: c.pubkey,
       ...(c.amount !== undefined && { amount: Amount.from(c.amount) }),
     })),

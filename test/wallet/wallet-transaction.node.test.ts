@@ -4,7 +4,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { Wallet, deserializeTransactionPreview, serializeTransactionPreview } from '../../src';
 import { schnorrSignDigest, schnorrVerifyDigest } from '../../src/crypto';
 import { buildNutrootSecret } from '../../src/crypto/nutroot';
-import { derivedQuoteId, inputsForPayload } from '../../src/crypto/transcript';
+import { derivedQuoteId, inputBoundQuoteId, inputsForPayload } from '../../src/crypto/transcript';
 import { Amount } from '../../src/model/Amount';
 import type { Proof } from '../../src/model/types';
 import { NUT02_V3_VECTOR1_KEYS, NUT02_V3_VECTOR1_KEYSET } from '../consts';
@@ -359,6 +359,46 @@ describe('Wallet transactions (NUT-XX)', () => {
       }),
     ).rejects.toThrow('offering fee_options');
   });
+  test('a change quote output without idPreimage takes an id bound to the inputs', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0 });
+    const bodies = serveTransaction();
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+    const preview = await wallet.prepareTransaction({
+      mintQuoteInputs: [{ quote, amount: 8 }],
+      changeQuoteOutputs: [{ ...change, amount: 3 }, { pubkey: changeKey }],
+    });
+    // k counts every change quote output, so the remainder is at 1.
+    const boundId = inputBoundQuoteId(
+      { mintQuoteInputs: [{ quoteId: quote.quote, amount: 8n, lockKey: pubkey, issued: 0n }] },
+      1,
+    );
+    expect(preview.changeQuoteOutputs).toEqual([
+      { quote: changeId, ...change, amount: Amount.from(3) },
+      { quote: boundId, pubkey: changeKey },
+    ]);
+    const stored = JSON.parse(JSON.stringify(serializeTransactionPreview(preview)));
+    expect(deserializeTransactionPreview(stored).changeQuoteOutputs).toEqual(
+      preview.changeQuoteOutputs,
+    );
+    await wallet.completeTransaction(preview, privkey);
+    const [body] = bodies;
+    expect(body.change_quote_outputs).toEqual([
+      { id_preimage: change.idPreimage, pubkey: changeKey, amount: 3 },
+      { pubkey: changeKey },
+    ]);
+    // The quote signs over the input-bound id, as the mint computes it.
+    const tx = inputsForPayload({
+      mintQuoteInputs: [{ quoteId: quote.quote, amount: 8, lockKey: pubkey, issued: 0 }],
+      changeQuoteOutputs: [
+        { pubkey: changeKey, quoteId: changeId, amount: 3 },
+        { pubkey: changeKey, quoteId: boundId },
+      ],
+    });
+    const [signature] = JSON.parse(body.mint_quote_inputs[0].witness).signatures;
+    expect(schnorrVerifyDigest(signature, tx.quotes.get(quote.quote)!.digest, pubkey)).toBe(true);
+  });
+
   test('a fixed change quote is paid out of the inputs; the remainder quote takes the rest', async () => {
     serveInfo({ supported: true, quote_input_fee_ppk: 0 });
     const bodies = serveTransaction();
@@ -417,7 +457,7 @@ describe('Wallet transactions (NUT-XX)', () => {
         ],
       }),
     ).rejects.toThrow('must not repeat');
-    for (const idPreimage of [undefined, '11'.repeat(31), 'zz'.repeat(32)]) {
+    for (const idPreimage of [null, '11'.repeat(31), 'zz'.repeat(32)]) {
       await expect(
         wallet.prepareTransaction({
           mintQuoteInputs: [{ quote, amount: 8 }],

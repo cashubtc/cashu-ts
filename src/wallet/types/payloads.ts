@@ -149,10 +149,16 @@ export type TransactionPreview = {
     feeIndex?: number;
   };
   /**
-   * Change quotes in request order: each its derived id, id preimage, lock key and fixed amount, or
-   * no amount on the one remainder quote, which takes whatever the outputs, melt and fee leave.
+   * Change quotes in request order: each its id, id preimage (none for an id bound to the inputs),
+   * lock key and fixed amount, or no amount on the one remainder quote, which takes whatever the
+   * outputs, melt and fee leave.
    */
-  changeQuoteOutputs: Array<{ quote: string; idPreimage: string; pubkey: string; amount?: Amount }>;
+  changeQuoteOutputs: Array<{
+    quote: string;
+    idPreimage?: string;
+    pubkey: string;
+    amount?: Amount;
+  }>;
   outputData: OutputDataLike[];
   /**
    * Total of the new proofs.

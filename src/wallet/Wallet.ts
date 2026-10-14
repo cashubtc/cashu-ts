@@ -37,7 +37,12 @@ import {
   verifyNutrootSpendInfo,
   type ParsedNutrootOption,
 } from '../crypto/nutroot';
-import { derivedQuoteId, inputsForPayload, meltOutputAmount } from '../crypto/transcript';
+import {
+  derivedQuoteId,
+  inputBoundIdsForPayload,
+  inputsForPayload,
+  meltOutputAmount,
+} from '../crypto/transcript';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
@@ -4749,8 +4754,9 @@ class Wallet {
    * @param transaction.proofOutputs The new proofs: their total, output type and keyset.
    * @param transaction.meltQuoteOutput The full melt quote; `feeIndex` selects a NUT-30 fee option.
    * @param transaction.changeQuoteOutputs Change quotes to create, each locked to `pubkey` under
-   *   the id its `idPreimage` derives (both from {@link Wallet.createQuoteLockKey}), with a positive
-   *   `amount`, or none on at most one: the remainder quote.
+   *   the id its `idPreimage` derives (both from {@link Wallet.createQuoteLockKey}), or without one
+   *   under an id bound to the inputs, with a positive `amount`, or none on at most one: the
+   *   remainder quote.
    * @throws If the mint does not support NUT-XX, a quote is unlocked, or the inputs do not balance.
    */
   async prepareTransaction(
@@ -4770,7 +4776,7 @@ class Wallet {
           };
         feeIndex?: number;
       };
-      changeQuoteOutputs?: Array<{ pubkey: string; idPreimage: string; amount?: AmountLike }>;
+      changeQuoteOutputs?: Array<{ pubkey: string; idPreimage?: string; amount?: AmountLike }>;
     },
     config: PrepareTransactionConfig = {},
   ): Promise<TransactionPreview> {
@@ -4827,10 +4833,22 @@ class Wallet {
         !Array.isArray(transaction.changeQuoteOutputs),
       'prepareTransaction: changeQuoteOutputs must be an array',
     );
-    const change = (transaction.changeQuoteOutputs ?? []).map((c) => ({
-      quote: this.changeQuoteIdFor(c?.idPreimage),
-      idPreimage: c.idPreimage.toLowerCase(),
-      pubkey: normalizeSecpPubkey(c.pubkey),
+    // Inputs hash once, and only when an output takes an id bound to them (NUT-XX).
+    const boundId = (transaction.changeQuoteOutputs ?? []).some((c) => c?.idPreimage === undefined)
+      ? inputBoundIdsForPayload({
+          proofInputs: proofs,
+          mintQuoteInputs: quotes.map((q) => ({
+            quoteId: q.quote,
+            amount: q.amount,
+            lockKey: q.pubkey,
+            issued: q.issued,
+          })),
+        })
+      : undefined;
+    const change = (transaction.changeQuoteOutputs ?? []).map((c, k) => ({
+      quote: c?.idPreimage === undefined ? boundId!(k) : this.changeQuoteIdFor(c.idPreimage),
+      ...(c?.idPreimage !== undefined && { idPreimage: c.idPreimage.toLowerCase() }),
+      pubkey: normalizeSecpPubkey(c?.pubkey),
       ...(c.amount !== undefined && {
         amount: this.parseAmount(c.amount, 'prepareTransaction.changeQuoteOutputs'),
       }),
@@ -5051,7 +5069,7 @@ class Wallet {
               ]
             : [],
           change_quote_outputs: change.map((c) => ({
-            id_preimage: c.idPreimage,
+            ...(c.idPreimage !== undefined && { id_preimage: c.idPreimage }),
             pubkey: c.pubkey,
             ...(c.amount !== undefined && { amount: c.amount }),
           })),

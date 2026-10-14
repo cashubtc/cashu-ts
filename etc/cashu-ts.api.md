@@ -2684,7 +2684,7 @@ export type SerializedTransactionPreview = {
     };
     changeQuoteOutputs: Array<{
         quote: string;
-        idPreimage: string;
+        idPreimage?: string;
         pubkey: string;
         amount?: string;
     }>;
@@ -2971,7 +2971,7 @@ export type TransactionPreview = {
     };
     changeQuoteOutputs: Array<{
         quote: string;
-        idPreimage: string;
+        idPreimage?: string;
         pubkey: string;
         amount?: Amount;
     }>;
@@ -3251,7 +3251,7 @@ export class Wallet {
         };
         changeQuoteOutputs?: Array<{
             pubkey: string;
-            idPreimage: string;
+            idPreimage?: string;
             amount?: AmountLike;
         }>;
     }, config?: PrepareTransactionConfig): Promise<TransactionPreview>;
