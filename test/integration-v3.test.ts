@@ -1626,6 +1626,29 @@ describeXX('NUT-XX transactions', () => {
     expect(restQuote!.amount_paid.toBigInt()).toBe(64n - fee - 3n);
   });
 
+  test('a change quote output without idPreimage takes the id the mint binds to the inputs', async () => {
+    const { wallet, proofs } = await funded(64);
+    const fee = wallet.getFeesForProofs(proofs).toBigInt();
+    const fixed = await wallet.createQuoteLockKey();
+    const other = await wallet.createQuoteLockKey();
+    const preview = await wallet.prepareTransaction({
+      proofInputs: proofs,
+      changeQuoteOutputs: [
+        { pubkey: fixed.pubkey, idPreimage: fixed.idPreimage, amount: 3 },
+        { pubkey: other.pubkey },
+      ],
+    });
+    const boundId = preview.changeQuoteOutputs[1].quote;
+    const result = await wallet.completeTransaction(preview);
+    expect(result.response.state).toBe('PAID');
+    const [, restQuote] = result.response.change_quotes;
+    expect(restQuote!.quote).toBe(boundId);
+    expect(restQuote!.pubkey).toBe(other.pubkey);
+    expect(restQuote!.amount_paid.toBigInt()).toBe(64n - fee - 3n);
+    const fetched = await wallet.mint.checkMintQuote('change', boundId);
+    expect(fetched.pubkey).toBe(other.pubkey);
+  });
+
   test('a change quote id is single use; its lock key may repeat', async () => {
     const { wallet, proofs } = await funded(64);
     const lock = await wallet.createQuoteLockKey();
