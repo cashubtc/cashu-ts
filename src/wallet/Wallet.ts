@@ -46,6 +46,7 @@ import {
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
+import { MintErrorCode } from '../model/ErrorCodes';
 import {
   CallerAbortError,
   CTSError,
@@ -108,6 +109,7 @@ import {
   verifyReceivedProofs,
   REPAIR_COOLDOWN_MS,
   splitAmount,
+  getKeysetAmounts,
   sumProofs,
 } from '../utils';
 import { mapInChunks, yieldToEventLoop, YIELD_BUDGET_MS, YIELD_CHUNK_SIZE } from '../utils/chunked';
@@ -4746,10 +4748,10 @@ class Wallet {
    * out.
    *
    * @remarks
-   * Proofs spend in full and each quote issues its `amount`. Without a remainder quote (a change
-   * quote output with no amount), the new proofs take whatever the melt, fee and fixed change
-   * quotes leave; with one, they default to none and the rest becomes that quote. Nothing is sent:
-   * pass the preview to {@link Wallet.completeTransaction}.
+   * Proofs spend in full and each quote issues its `amount`. By default the new proofs take what
+   * the melt, fee and fixed change quotes leave; a melt's unspent reserve returns in NUT-08 blank
+   * outputs. A remainder quote (a change quote output with no amount) takes only what cannot be
+   * allocated up front. Nothing is sent: pass the preview to {@link Wallet.completeTransaction}.
    * @param transaction.mintQuoteInputs Paid, locked quotes, each with the amount to issue from it.
    * @param transaction.proofOutputs The new proofs: their total, output type and keyset.
    * @param transaction.meltQuoteOutput The full melt quote; `feeIndex` selects a NUT-30 fee option.
@@ -4911,36 +4913,91 @@ class Wallet {
     );
     const outputs = transaction.proofOutputs ?? {};
     const outputType = outputs.outputType ?? this.defaultOutputType();
-    // New proofs: none with a remainder quote, else what is left; custom outputs and an explicit
-    // amount override that, in that order.
-    let amount = remainder ? Amount.zero() : inputs.subtract(spent);
+    // New proofs take what is left, computable change included, so a remainder quote only catches
+    // what cannot be computed (NUT-XX). Custom outputs and an explicit amount override that.
+    let amount = inputs.subtract(spent);
     if (outputType.type === 'custom') amount = OutputData.sumOutputAmounts(outputType.data);
     if (outputs.amount !== undefined) {
       amount = this.parseAmount(outputs.amount, 'prepareTransaction.proofOutputs', true);
+    } else if (remainder && outputType.type !== 'custom') {
+      // Default proofs take what the keyset can represent; the residue is the remainder quote's.
+      let left = amount.toBigInt();
+      for (const a of getKeysetAmounts(this.getOutputKeyset(outputs.keysetId).keys)) {
+        left %= a.toBigInt();
+      }
+      amount = amount.subtract(left);
     }
     this.failIf(
       remainder ? amount.add(spent).greaterThan(inputs) : !amount.add(spent).equals(inputs),
       'prepareTransaction: inputs must equal the outputs, melt, change quotes and fee unless a remainder quote takes the rest',
     );
-    // The mint cannot sign the outputs if their keyset rotates during the payment (NUT-02); the
-    // remainder quote is where their value goes then, so a melt with new proofs must have one.
+    const custom = outputType.type === 'custom' ? outputType.data : [];
     this.failIf(
-      melt !== undefined && !remainder && !amount.isZero(),
+      melt === undefined && custom.some((d) => d.blindedMessage.amount.isZero()),
+      'prepareTransaction: blank outputs are allowed only beside a melt',
+    );
+    // The mint cannot sign the outputs if their keyset rotates during the payment (NUT-02); the
+    // remainder quote is where their value goes then, so a melt with outputs must have one.
+    this.failIf(
+      melt !== undefined && !remainder && (!amount.isZero() || custom.length > 0),
       'prepareTransaction: a melt with new proofs needs a remainder quote; the outputs cannot be signed if their keyset rotates during the payment',
     );
+    // A melt's unspent reserve returns in NUT-08 blank outputs, which keep it blinded; the
+    // remainder quote only catches it if they cannot be signed. An explicit amount leaves the rest,
+    // melt change included, to the remainder quote, which may be another party's.
+    const maxChange = inputs
+      .subtract(spent)
+      .subtract(amount)
+      .add(melt?.feeReserve ?? 0);
+    // NUT-08 sizes blanks as ceil(log2) of the change; a keyset whose largest amount is smaller
+    // needs one more blank per multiple of it.
+    let blanks = 0;
+    if (
+      melt &&
+      remainder &&
+      outputs.amount === undefined &&
+      outputType.type !== 'custom' &&
+      maxChange.greaterThan(0)
+    ) {
+      const largest = getKeysetAmounts(this.getOutputKeyset(outputs.keysetId).keys)[0].toBigInt();
+      const max = maxChange.toBigInt();
+      blanks = Math.max(ceilLog2(max < largest ? max : largest) + Number(max / largest), 1);
+    }
 
     let outputData: OutputDataLike[] = [];
-    if (!amount.isZero()) {
+    if (!amount.isZero() || custom.length > 0 || blanks > 0) {
       const keyset = this.getOutputKeyset(outputs.keysetId);
-      let ot = this.configureOutputs(amount, keyset, outputType, false, config.proofsWeHave);
-      const autoCounters = await this.addCountersToOutputTypes(keyset.id, ot);
-      [ot] = autoCounters.outputTypes;
+      const fixed =
+        !amount.isZero() || custom.length > 0
+          ? this.configureOutputs(amount, keyset, outputType, false, config.proofsWeHave)
+          : undefined;
+      const types: OutputType[] = fixed ? [fixed] : [];
+      if (blanks > 0 && outputType.type !== 'custom') {
+        // An explicit counter continues after the fixed outputs' range.
+        const after =
+          outputType.type === 'deterministic' && outputType.counter > 0
+            ? {
+                ...outputType,
+                counter:
+                  outputType.counter +
+                  (fixed?.type === 'deterministic' ? (fixed.denominations?.length ?? 0) : 0),
+              }
+            : outputType;
+        types.push({ ...after, denominations: new Array<number>(blanks).fill(0) });
+      }
+      const autoCounters = await this.addCountersToOutputTypes(keyset.id, ...types);
       if (autoCounters.used) {
         this.safeCallback(config.onCountersReserved, autoCounters.used, {
           op: 'prepareTransaction',
         });
       }
-      outputData = this.createOutputData(this.preparedTotal(ot), keyset, ot);
+      const [fixedOT, blankOT] = fixed
+        ? autoCounters.outputTypes
+        : [undefined, autoCounters.outputTypes[0]];
+      outputData = [
+        ...(fixedOT ? this.createOutputData(this.preparedTotal(fixedOT), keyset, fixedOT) : []),
+        ...(blankOT ? this.createOutputData(0, keyset, blankOT) : []),
+      ];
     }
     this.assertUniqueOutputSecrets(outputData);
     this.failIf(
@@ -5113,8 +5170,15 @@ class Wallet {
         ? await Promise.all(
             change.map((c) =>
               this.mint.checkMintQuote('change', c.quote, { signal: options.signal }).catch((e) => {
-                // The mint creates no remainder quote for zero change (NUT-XX).
-                if (c.amount === undefined) return null;
+                // The mint creates no remainder quote for zero change, and says so with 20010
+                // (NUT-XX); any other failure may be hiding a refund.
+                if (
+                  c.amount === undefined &&
+                  isMintOperationError(e) &&
+                  e.code === MintErrorCode.QUOTE_NOT_FOUND
+                ) {
+                  return null;
+                }
                 throw e;
               }),
             ),
@@ -5164,22 +5228,46 @@ class Wallet {
     // remainder quote (NUT-XX). The reserved secrets go unused.
     const remainder = changeQuoteOutputs.findIndex((c) => c.amount === undefined);
     const remainderQuote = remainder < 0 ? null : response.change_quotes[remainder];
-    if (signatures.length === 0 && outputData.length > 0 && remainderQuote) {
+    if (
+      signatures.length === 0 &&
+      outputData.some((d) => !d.blindedMessage.amount.isZero()) &&
+      remainderQuote
+    ) {
       this._logger.warn(
         'Mint did not sign the transaction outputs; their value is in the remainder quote',
         { changeQuote: remainderQuote.quote },
       );
       return { response, proofs: [] };
     }
+    // Blanks fill in request order and those left at zero are omitted (NUT-XX), so the signed ones
+    // are the first `signedBlanks` blanks.
+    const blanks = outputData.filter((d) => d.blindedMessage.amount.isZero()).length;
+    const signedBlanks = signatures.length - (outputData.length - blanks);
     this.failIf(
-      signatures.length !== outputData.length,
-      `Mint returned ${signatures.length} signatures, expected ${outputData.length}. If the wallet is seeded, try restoring (NUT-09) to recover.`,
+      signedBlanks < 0 || signedBlanks > blanks,
+      `Mint returned ${signatures.length} signatures for ${outputData.length} outputs (${blanks} blank). If the wallet is seeded, try restoring (NUT-09) to recover.`,
     );
-    this.validateReturnedSignatures(signatures, outputData);
+    let blankIndex = 0;
+    const signed = outputData.filter(
+      (d) => !d.blindedMessage.amount.isZero() || blankIndex++ < signedBlanks,
+    );
+    this.validateReturnedSignatures(signatures, signed);
+    // A rotation signs nothing here (NUT-XX), so a blank comes back under the outputs' keyset too.
+    this.failIf(
+      outputData.length > 0 &&
+        signatures.some(
+          (sig) => !sig.amount.isZero() && sig.id !== outputData[0].blindedMessage.id,
+        ),
+      'Mint signed an output under a keyset other than the request named. If the wallet is seeded, try restoring (NUT-09) to recover.',
+    );
     await this._ensureKeysetsForSignatures(signatures);
-    // No signal: the mint has signed, and stopping now would strand the proofs.
-    const proofs = await mapInChunks(outputData, (d, i) =>
-      d.toProof(signatures[i], this.keysetForSignature(signatures[i].id)),
+    // No signal: the mint has signed, and stopping now would strand the proofs. A zero-value
+    // signature on a blank carries no ecash (NUT-08).
+    const pairs = signed
+      .map((d, i) => ({ d, s: signatures[i] }))
+      .filter(({ s }) => !s.amount.isZero());
+    const proofs = await mapInChunks(pairs, ({ d, s }) =>
+      d.toProof(s, this.keysetForSignature(s.id)),
     );
     return { response, proofs };
   }
