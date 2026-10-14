@@ -38,7 +38,7 @@ Everything the inputs bring in ends up as new proofs, the melt, a change quote o
 
 - **A change quote with an `amount`** takes exactly that amount.
 - **The remainder quote** is the one change quote without an `amount` (at most one). It receives what cannot be allocated up front: the value of outputs that cannot be signed, a melt's change the blank outputs do not take, or a fee change before a transaction signed for later is submitted. Lock it to whoever is entitled to that value: if you have outputs beside a melt, that is you.
-- **New proofs** (`proofOutputs`) take everything left by default, so change you can compute comes back as proofs. Setting `proofOutputs.amount` yourself (eg `0`) leaves the rest, a melt's change included, to the remainder quote, eg to pay it to another party; the wallet then adds no blank outputs. Without a remainder quote, an `amount` you set must use the inputs up exactly. A custom `outputType` sets its own total.
+- **New proofs** (`proofOutputs`) take everything left by default, so change you can compute comes back as proofs. Setting `proofOutputs.amount` yourself (eg `0`) leaves the rest, a melt's change included, to the remainder quote, and the wallet then adds no blank outputs: do that only when the rest belongs to another party, eg in a transaction signed for later. Without a remainder quote, an `amount` you set must use the inputs up exactly. A custom `outputType` sets its own total.
 
 ### Melt change
 
