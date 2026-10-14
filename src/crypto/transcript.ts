@@ -1,4 +1,5 @@
 import { schnorr } from '@noble/curves/secp256k1.js';
+import { numberToBytesBE } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
@@ -248,13 +249,15 @@ export function inputBoundQuoteId(
   tx: Pick<TransactionShape, 'proofInputs' | 'mintQuoteInputs'>,
   k: number,
 ): string {
+  return inputBoundIdAt(sha256(inputSection(tx)), k);
+}
+
+function inputBoundIdAt(sectionHash: Uint8Array, k: number): string {
   if (!Number.isInteger(k) || k < 0 || k > 0xffffffff) {
     throw new CTSError('Change quote output position must be a u32');
   }
-  const position = new Uint8Array(4);
-  new DataView(position.buffer).setUint32(0, k);
   return bytesToHex(
-    taggedHash(INPUT_QUOTE_ID_TAG, concatBytes(sha256(inputSection(tx)), position)),
+    taggedHash(INPUT_QUOTE_ID_TAG, concatBytes(sectionHash, numberToBytesBE(k, 4))),
   );
 }
 
@@ -502,6 +505,19 @@ export function messageForPayload(payload: PayloadShape): Uint8Array {
  */
 export function inputsForPayload(payload: PayloadShape): ReturnType<typeof transactionInputs> {
   return transactionInputs(payloadToTransaction(payload));
+}
+
+/**
+ * {@link inputBoundQuoteId} over payload wire shapes, for any position `k`.
+ *
+ * @remarks
+ * The inputs are converted and hashed once, here: each proof's `Y` is a hash to curve.
+ */
+export function inputBoundIdsForPayload(
+  payload: Pick<PayloadShape, 'proofInputs' | 'mintQuoteInputs'>,
+): (k: number) => string {
+  const sectionHash = sha256(inputSection(payloadToTransaction(payload)));
+  return (k) => inputBoundIdAt(sectionHash, k);
 }
 
 /**

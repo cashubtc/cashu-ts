@@ -1424,6 +1424,7 @@ export const MintErrorCode: {
     readonly QUOTE_EXPIRED: 20007;
     readonly SIGNATURE_FOR_MINT_REQUEST_INVALID: 20008;
     readonly PUBKEY_REQUIRED_FOR_MINT_QUOTE: 20009;
+    readonly QUOTE_NOT_FOUND: 20010;
     readonly ENDPOINT_REQUIRES_CLEAR_AUTH: 30001;
     readonly CLEAR_AUTHENTICATION_FAILED: 30002;
     readonly ENDPOINT_REQUIRES_BLIND_AUTH: 31001;
@@ -2688,7 +2689,7 @@ export type SerializedTransactionPreview = {
     };
     changeQuoteOutputs: Array<{
         quote: string;
-        idPreimage: string;
+        idPreimage?: string;
         pubkey: string;
         amount?: string;
     }>;
@@ -2975,7 +2976,7 @@ export type TransactionPreview = {
     };
     changeQuoteOutputs: Array<{
         quote: string;
-        idPreimage: string;
+        idPreimage?: string;
         pubkey: string;
         amount?: Amount;
     }>;
@@ -3255,7 +3256,7 @@ export class Wallet {
         };
         changeQuoteOutputs?: Array<{
             pubkey: string;
-            idPreimage: string;
+            idPreimage?: string;
             amount?: AmountLike;
         }>;
     }, config?: PrepareTransactionConfig): Promise<TransactionPreview>;
