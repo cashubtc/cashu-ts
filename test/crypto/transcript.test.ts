@@ -560,7 +560,7 @@ describe('transcriptContainers', () => {
   test.each([
     ['empty', ''],
     ['an opaque 32 bytes', '00'.repeat(32)],
-    ['a type above the change quote output', '07000101'],
+    ['a type above the mint quote output', '07000101'],
     ['a zero-length record', '010000'],
     ['a truncated record', tv.swap.transcript.slice(0, -2)],
   ])('rejects %s', (_, hex) => {

@@ -3232,7 +3232,7 @@ export class Wallet {
     prepareTransaction(transaction: {
         proofInputs?: Proof[];
         mintQuoteInputs?: Array<{
-            quote: Pick<MintQuoteBaseResponse, 'quote' | 'pubkey' | 'amount_issued'> & Partial<Pick<MintQuoteBaseResponse, 'unit' | 'amount_paid'>>;
+            quote: Pick<MintQuoteBaseResponse, 'quote' | 'method'> & Partial<MintQuoteBaseResponse>;
             amount: AmountLike;
         }>;
         proofOutputs?: {

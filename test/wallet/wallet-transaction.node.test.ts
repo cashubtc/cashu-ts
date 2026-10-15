@@ -26,7 +26,14 @@ const pubkey = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f817
 const remainderKey = '022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4';
 const remainder = { pubkey: remainderKey };
 const remainderId = remainderQuoteId('quote-melt-0001');
-const quote = { quote: 'quote-mint-0001', pubkey, amount_issued: Amount.from(0) };
+const quote = {
+  quote: 'quote-mint-0001',
+  method: 'bolt11',
+  unit,
+  pubkey,
+  amount_paid: Amount.from(64),
+  amount_issued: Amount.from(0),
+};
 const melt = {
   method: 'bolt11',
   quote: { quote: 'quote-melt-0001', amount: Amount.from(5), fee_reserve: Amount.from(1) },
@@ -372,11 +379,6 @@ describe('Wallet transactions (NUT-XX)', () => {
         mintQuoteOutputs: [remainder],
       }),
     ).rejects.toThrow('full melt quote');
-    await expect(
-      wallet.prepareTransaction({
-        mintQuoteInputs: [{ quote: { quote: 'q', amount_issued: Amount.from(0) }, amount: 8 }],
-      }),
-    ).rejects.toThrow('must be locked');
     // fee_index belongs only to a quote offering fee_options.
     await expect(
       wallet.prepareTransaction({
@@ -649,6 +651,72 @@ describe('Wallet transactions (NUT-XX)', () => {
     const anonymous = new Wallet(mintUrl, { unit, bip39seed: new Uint8Array(64).fill(1) });
     await anonymous.loadMint();
     expect((await anonymous.prepareTransaction(meltTx)).mintQuoteOutputs).toEqual([]);
+  });
+
+  test('a quote input named by id and method is read from the mint', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0 });
+    const fetched: string[] = [];
+    server.use(
+      http.get(mintUrl + '/v1/mint/quote/bolt11/:id', ({ params }) => {
+        fetched.push(params.id as string);
+        const { amount_paid, amount_issued, ...rest } = quote;
+        return HttpResponse.json({
+          ...rest,
+          quote: params.id,
+          request: 'lnbc1',
+          state: 'PAID',
+          amount: 64,
+          amount_paid: amount_paid.toNumber(),
+          amount_issued: amount_issued.toNumber(),
+          expiry: null,
+          ...(params.id === 'unlocked' && { pubkey: undefined }),
+        });
+      }),
+    );
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+    const preview = await wallet.prepareTransaction({
+      mintQuoteInputs: [{ quote: { quote: 'quote-mint-0001', method: 'bolt11' }, amount: 8 }],
+    });
+    expect(fetched).toEqual(['quote-mint-0001']);
+    expect(preview.mintQuoteInputs).toEqual([
+      { quote: 'quote-mint-0001', pubkey, amount: Amount.from(8), issued: Amount.from(0) },
+    ]);
+    // A full quote is taken as given.
+    await wallet.prepareTransaction({ mintQuoteInputs: [{ quote, amount: 8 }] });
+    expect(fetched).toHaveLength(1);
+    await expect(
+      wallet.prepareTransaction({
+        mintQuoteInputs: [{ quote: { quote: 'unlocked', method: 'bolt11' }, amount: 8 }],
+      }),
+    ).rejects.toThrow('must be locked');
+    await expect(
+      wallet.prepareTransaction({
+        mintQuoteInputs: [{ quote: { quote: 'q' } as typeof quote, amount: 8 }],
+      }),
+    ).rejects.toThrow('needs its method');
+  });
+
+  test('a txout quote is drawn only in full, in a transaction or by its mint route', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0 });
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+    const txout = {
+      ...quote,
+      method: 'txout',
+      unit,
+      amount_paid: Amount.from(5),
+      amount_issued: Amount.from(0),
+    };
+    await expect(
+      wallet.prepareTransaction({ mintQuoteInputs: [{ quote: txout, amount: 3 }] }),
+    ).rejects.toThrow('redeems in full');
+    await expect(
+      wallet.prepareTransaction({ mintQuoteInputs: [{ quote: txout, amount: 5 }] }),
+    ).resolves.toMatchObject({ amount: Amount.from(5) });
+    await expect(wallet.prepareMint('txout', 3, txout, { privkey })).rejects.toThrow(
+      'redeems in full',
+    );
   });
 
   test('refuses an overdraw of a partly issued quote, and binds its issued amount', async () => {

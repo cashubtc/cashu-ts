@@ -3321,6 +3321,12 @@ class Wallet {
         requestedAmount: requestedAmount.toString(),
       },
     );
+    // A txout quote redeems once and in full (NUT-XX).
+    this.failIf(
+      method === 'txout' && !requestedAmount.equals(availableAmount),
+      `A txout quote redeems in full: ${availableAmount.toString()} available; requested ${requestedAmount.toString()}`,
+      { method, requestedAmount: requestedAmount.toString() },
+    );
   }
 
   /**
@@ -4769,7 +4775,8 @@ class Wallet {
    * Proofs spend in full and each quote issues its `amount`; the new proofs take what the melt and
    * fee leave, and a melt's unspent reserve returns in NUT-08 blank outputs. Nothing is sent: pass
    * the preview to {@link Wallet.completeTransaction}.
-   * @param transaction.mintQuoteInputs Paid, locked quotes, each with the amount to issue from it.
+   * @param transaction.mintQuoteInputs Paid, locked quotes, each with the amount to issue from it;
+   *   `{ quote, method }` is enough, the rest is fetched.
    * @param transaction.proofOutputs The new proofs: their total, output type and keyset.
    * @param transaction.meltQuoteOutput The full melt quote; `feeIndex` selects a NUT-30 fee option.
    * @param transaction.mintQuoteOutputs At most one, beside a melt with outputs: the remainder
@@ -4782,8 +4789,7 @@ class Wallet {
     transaction: {
       proofInputs?: Proof[];
       mintQuoteInputs?: Array<{
-        quote: Pick<MintQuoteBaseResponse, 'quote' | 'pubkey' | 'amount_issued'> &
-          Partial<Pick<MintQuoteBaseResponse, 'unit' | 'amount_paid'>>;
+        quote: Pick<MintQuoteBaseResponse, 'quote' | 'method'> & Partial<MintQuoteBaseResponse>;
         amount: AmountLike;
       }>;
       proofOutputs?: { amount?: AmountLike; outputType?: OutputType; keysetId?: string };
@@ -4821,31 +4827,44 @@ class Wallet {
       'prepareTransaction: SIG_ALL proofs cannot be spent in a transaction; swap them first',
     );
     // Validate Mint Quote inputs
-    const quotes = (transaction.mintQuoteInputs ?? []).map((q) => {
+    const quotes: TransactionPreview['mintQuoteInputs'] = [];
+    for (const q of transaction.mintQuoteInputs ?? []) {
       const id = q?.quote?.quote;
       this.failIf(
         typeof id !== 'string' || id.length === 0,
         'prepareTransaction: a quote needs its id',
       );
+      const method = q.quote.method;
       this.failIf(
-        !q.quote.pubkey,
-        'prepareTransaction: every quote input must be locked; pass the quote with its pubkey',
+        typeof method !== 'string' || method.length === 0,
+        'prepareTransaction: a quote input needs its method',
         { quote: id },
       );
-      if (q.quote.unit !== undefined) assertQuoteUnit(q.quote, this.unit, this._logger);
+      // Fetch what the caller left out, as prepareMint does; the mint's values win.
+      let full: typeof q.quote & Partial<MintQuoteBaseResponse> = q.quote;
+      if (
+        full.pubkey == null ||
+        full.unit == null ||
+        full.amount_paid == null ||
+        full.amount_issued == null
+      ) {
+        const fetched = await this.checkMintQuote<MintQuoteBaseResponse>(method, id, {
+          signal: config.signal,
+        });
+        full = { ...full, ...definedOnly(fetched) };
+      }
+      this.failIf(!full.pubkey, 'prepareTransaction: every quote input must be locked', {
+        quote: id,
+      });
+      assertQuoteUnit(full, this.unit, this._logger);
       const amount = this.parseAmount(q.amount, 'prepareTransaction.quote');
       // The transcript binds the quote's state (NUT-10), so a stale amount_issued fails at the mint.
-      this.failIfNullish(
-        q.quote.amount_issued,
-        'prepareTransaction: every quote input needs its amount_issued; read the quote first',
-        { quote: id },
-      );
-      const issued = this.parseAmount(q.quote.amount_issued, 'prepareTransaction.quote', true);
-      if (q.quote.amount_paid != null) {
-        this.validateMintQuoteAvailableAmount('transaction', q.quote.amount_paid, issued, amount);
-      }
-      return { quote: id, pubkey: normalizeSecpPubkey(q.quote.pubkey!), amount, issued };
-    });
+      this.failIfNullish(full.amount_paid, 'prepareTransaction: quote accounting is unavailable');
+      this.failIfNullish(full.amount_issued, 'prepareTransaction: quote accounting is unavailable');
+      const issued = this.parseAmount(full.amount_issued, 'prepareTransaction.quote', true);
+      this.validateMintQuoteAvailableAmount(method, full.amount_paid, issued, amount);
+      quotes.push({ quote: id, pubkey: normalizeSecpPubkey(full.pubkey!), amount, issued });
+    }
     // Validate Melt Output
     let melt: TransactionPreview['meltQuoteOutput'];
     if (transaction.meltQuoteOutput) {

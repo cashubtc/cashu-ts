@@ -31,6 +31,8 @@ if (response.state === 'PAID') {
 }
 ```
 
+A quote input needs at least its `quote` and `method`; the wallet reads anything else it needs from the mint. A txout quote is drawn only in full.
+
 ### Where the value goes
 
 Inputs must equal outputs: everything the inputs bring in ends up as new proofs, the melt (its amount plus fee reserve) or the fee. New proofs (`proofOutputs`) take what the melt and fee leave by default. Setting `proofOutputs.amount` or a custom `outputType` must use the inputs up exactly.
