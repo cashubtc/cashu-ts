@@ -6,6 +6,8 @@ A mint that advertises NUT-XX takes proofs and paid mint quotes in, and issues n
 
 ## Pay an invoice straight from a paid mint quote
 
+The mint sees this payment matched to the quote that funded it, which suits a service that forwards in the open (a Lightning address, a payment processor). A wallet paying from its own balance pays from proofs.
+
 ```ts
 import { Wallet, serializeTransactionPreview } from '@cashu/cashu-ts';
 
