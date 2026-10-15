@@ -149,9 +149,10 @@ export type TransactionPreview = {
     feeIndex?: number;
   };
   /**
-   * The remainder quote, if requested: its id and lock key.
+   * Txout quotes in request order: each its id, lock key and, on a fixed one, amount and any id
+   * preimage. The one without an amount is the remainder quote.
    */
-  mintQuoteOutputs: Array<{ quote: string; pubkey: string }>;
+  mintQuoteOutputs: Array<{ quote: string; pubkey: string; amount?: Amount; idPreimage?: string }>;
   outputData: OutputDataLike[];
   /**
    * Total of the new proofs.

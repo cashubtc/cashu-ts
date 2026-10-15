@@ -1573,6 +1573,7 @@ export class MintInfo {
     get transactions(): {
         supported: boolean;
         quoteInputFeePpk: number;
+        fixedTxoutQuotes: boolean;
     };
     get urls(): string[] | undefined;
     // (undocumented)
@@ -1845,6 +1846,7 @@ export function nutrootToLockOptions(options: {
 export type NutXXInfo = {
     supported: boolean;
     quote_input_fee_ppk?: number;
+    fixed_txout_quotes?: boolean;
 };
 
 // @public (undocumented)
@@ -2693,6 +2695,8 @@ export type SerializedTransactionPreview = {
     mintQuoteOutputs: Array<{
         quote: string;
         pubkey: string;
+        amount?: string;
+        idPreimage?: string;
     }>;
     outputData: SerializedOutputData[];
     amount: string;
@@ -2978,6 +2982,8 @@ export type TransactionPreview = {
     mintQuoteOutputs: Array<{
         quote: string;
         pubkey: string;
+        amount?: Amount;
+        idPreimage?: string;
     }>;
     outputData: OutputDataLike[];
     amount: Amount;
@@ -3003,6 +3009,8 @@ export type TransactionRequest = {
     }>;
     mint_quote_outputs?: Array<{
         pubkey: string;
+        amount?: Amount;
+        id_preimage?: string;
     }>;
     prefer_async?: boolean;
 };
@@ -3175,6 +3183,7 @@ export class Wallet {
     }): Promise<{
         pubkey: string;
         privkey: string;
+        idPreimage: string;
     }>;
     createRemainderLockKey(meltQuoteId: string): {
         pubkey: string;
@@ -3236,7 +3245,7 @@ export class Wallet {
     prepareTransaction(transaction: {
         proofInputs?: Proof[];
         mintQuoteInputs?: Array<{
-            quote: Pick<MintQuoteBaseResponse, 'quote' | 'pubkey' | 'amount_issued'> & Partial<Pick<MintQuoteBaseResponse, 'unit' | 'amount_paid'>>;
+            quote: Pick<MintQuoteBaseResponse, 'quote' | 'method'> & Partial<MintQuoteBaseResponse>;
             amount: AmountLike;
         }>;
         proofOutputs?: {
@@ -3256,6 +3265,8 @@ export class Wallet {
         };
         mintQuoteOutputs?: Array<{
             pubkey: string;
+            amount?: AmountLike;
+            idPreimage?: string;
         }>;
     }, config?: PrepareTransactionConfig): Promise<TransactionPreview>;
     receive(token: Token | string | ProofLike[], config?: ReceiveConfig, outputType?: OutputType): Promise<Proof[]>;

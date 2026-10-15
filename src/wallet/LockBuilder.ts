@@ -192,8 +192,8 @@ export class LockBuilder {
   }
 
   /**
-   * Makes the main path a covenant (NUT-10 `template`): the main keys may spend only into change
-   * quotes locked to these destination keys. v3 keysets only.
+   * Makes the main path a covenant (NUT-10 `template`): the main keys may spend only into fixed
+   * txout quotes locked to these destination keys. v3 keysets only.
    */
   addTemplate(dests: string | string[]) {
     const arr = (Array.isArray(dests) ? dests : [dests]).map((k) => k.toLowerCase());

@@ -74,7 +74,7 @@ export const NUTROOT_MAX_LEAF_TIME = Number.MAX_SAFE_INTEGER;
  *
  * @remarks
  * `keys` are 33-byte compressed SEC1 hex. `time` is unix seconds. `hash` is 32 bytes hex. `dests`
- * (template only) are the 33-byte lock keys every change quote output must be locked to.
+ * (template only) are the 33-byte lock keys every fixed txout quote output must be locked to.
  */
 export type NutrootConditionLeaf = {
   type: Exclude<keyof typeof NUTROOT_LEAF_TYPE, 'commit'>;
@@ -278,7 +278,7 @@ export function serializeNutrootLeaf(leaf: NutrootLeaf): Uint8Array {
   return out;
 }
 
-// A template destination: a change quote lock key, compared byte for byte with the output's.
+// A template destination: a fixed txout quote lock key, compared byte for byte with the output's.
 function destBytes(key: string): Uint8Array {
   const b = hexToBytes(key);
   let valid = b.length === 33;

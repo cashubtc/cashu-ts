@@ -36,8 +36,8 @@ export type LockOptions = {
    */
   hashlock?: string;
   /**
-   * Covenant (NUT-10 `template`): the main keys may spend only into change quotes locked to these
-   * keys. v3 only.
+   * Covenant (NUT-10 `template`): the main keys may spend only into fixed txout quotes locked to
+   * these keys. v3 only.
    */
   template?: string[];
   /**

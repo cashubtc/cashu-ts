@@ -2,7 +2,7 @@
 
 # Transactions (NUT-XX)
 
-A mint that advertises NUT-XX takes proofs and paid mint quotes in, and issues new proofs and one melt out, in one request. Check `wallet.getMintInfo().transactions.supported` first.
+A mint that advertises NUT-XX takes proofs and paid mint quotes in, and issues new proofs, one melt and txout quotes out, in one request. Check `wallet.getMintInfo().transactions.supported` first.
 
 ## Pay an invoice straight from a paid mint quote
 
@@ -31,6 +31,8 @@ if (response.state === 'PAID') {
 }
 ```
 
+A quote input needs at least its `quote` and `method`; the wallet reads anything else it needs from the mint. A txout quote is drawn only in full.
+
 ### Where the value goes
 
 Inputs must equal outputs: everything the inputs bring in ends up as new proofs, the melt (its amount plus fee reserve) or the fee. New proofs (`proofOutputs`) take what the melt and fee leave by default. Setting `proofOutputs.amount` or a custom `outputType` must use the inputs up exactly.
@@ -45,7 +47,28 @@ For a quote offering `fee_options` (NUT-30), pass the chosen option as `meltQuot
 
 If the outputs' keyset rotates while the melt is in flight, the mint cannot sign them. The remainder quote catches that value: the mint creates it, locked to your `pubkey`, only in that case, holding the outputs' amount and the change the blanks would have taken. Without one, that value stays with the mint.
 
-A seeded wallet adds one by default, its key derived from the seed and the melt quote id (`createRemainderLockKey` gives you the same key again, with no counter); pass `mintQuoteOutputs: []` to opt out. An unseeded wallet adds none: pass one yourself and store its random key with the transaction. The quote's id derives from the melt quote id, so it is known up front.
+A seeded wallet adds one by default when you leave out `mintQuoteOutputs`, its key derived from the seed and the melt quote id (`createRemainderLockKey` gives you the same key again, with no counter); pass `mintQuoteOutputs: []` to opt out.
+
+An unseeded wallet adds none: pass one yourself and store its random key with the transaction. The quote's id derives from the melt quote id, so it is known up front.
+
+## Fixed txout quotes
+
+A mint advertising `fixed_txout_quotes` (`wallet.getMintInfo().transactions.fixedTxoutQuotes`) also takes mint quote outputs with an `amount`: each creates a txout quote for exactly that amount, locked to its `pubkey`, paid out of the inputs like a melt.
+
+Passing `mintQuoteOutputs` turns off the default remainder quote, so beside a melt with outputs add it yourself: `{ pubkey: wallet.createRemainderLockKey(meltQuote.quote).pubkey }` with no `amount`.
+
+```ts
+const lock = await wallet.createQuoteLockKey(); // keep lock.privkey: it redeems the quote
+const preview = await wallet.prepareTransaction({
+  proofInputs: proofs,
+  mintQuoteOutputs: [{ pubkey: lock.pubkey, idPreimage: lock.idPreimage, amount: 5 }],
+});
+```
+
+- **With `idPreimage`**, the id derives from it (NUT-04). `createQuoteLockKey` returns a pubkey and preimage from one quote counter step, so a seeded wallet can find the quote again from the seed. Ids are single use; lock keys may repeat.
+- **Without `idPreimage`**, the id is bound to the transaction's inputs, so only a transaction spending exactly those inputs can create the quote. Use this to pay another party in a transaction you sign now and submit later.
+
+A txout quote redeems once and in full, and value in one cannot move straight into another: a transaction with a txout quote input takes no fixed txout quote outputs. A `template` leaf ([lock builder](../wallet_ops/lock_builder.md)) spends only into fixed txout quotes to its destinations.
 
 ## Pending transactions and retries
 
