@@ -1,5 +1,4 @@
 import { schnorr } from '@noble/curves/secp256k1.js';
-import { numberToBytesBE } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
@@ -20,14 +19,14 @@ export const TRANSCRIPT_REQUEST_TAG = 'Cashu_AuthorizedRequest';
 export const TRANSCRIPT_INPUT_TAG = 'Cashu_TransactionInput';
 export const SPEND_COMMITMENT_TAG = 'Cashu_SpendCommitment';
 export const QUOTE_ID_TAG = 'Cashu_QuoteId';
-export const INPUT_QUOTE_ID_TAG = 'Cashu_InputQuoteId';
+export const REMAINDER_QUOTE_ID_TAG = 'Cashu_RemainderQuoteId';
 
 // The high nibble is the section: 0x1n inputs, 0x2n outputs, 0xFn never in a transaction.
 const CONTAINER_PROOF_INPUT = 0x11;
 const CONTAINER_MINT_QUOTE_INPUT = 0x12;
 const CONTAINER_BLINDED_OUTPUT = 0x21;
 const CONTAINER_MELT_QUOTE_OUTPUT = 0x22;
-const CONTAINER_CHANGE_QUOTE_OUTPUT = 0x23;
+const CONTAINER_MINT_QUOTE_OUTPUT = 0x23;
 const CONTAINER_AUTHORIZED_REQUEST = 0xf1;
 
 export type TranscriptProofInput = {
@@ -75,19 +74,18 @@ export type TransactionShape = {
   blindedOutputs?: TranscriptBlindedOutput[];
   meltQuoteOutputs?: TranscriptQuote[];
   /**
-   * Change quote outputs (NUT-XX) in request order; at most one omits `amount`, the remainder
-   * quote.
+   * Mint quote outputs (NUT-XX) in request order; at most one omits `amount`, the remainder quote.
    */
-  changeQuoteOutputs?: TranscriptChangeOutput[];
+  mintQuoteOutputs?: TranscriptMintQuoteOutput[];
 };
 
-export type TranscriptChangeOutput = {
+export type TranscriptMintQuoteOutput = {
   /**
    * Lock key, 33-byte compressed secp256k1 hex.
    */
   pubkey: string;
   /**
-   * The change quote's id, derived from its preimage ({@link derivedQuoteId}).
+   * The txout quote's id; the remainder quote's is {@link remainderQuoteId}.
    */
   quoteId: string;
   amount?: bigint;
@@ -203,9 +201,9 @@ function blindedOutputContainer(output: TranscriptBlindedOutput): Uint8Array {
   );
 }
 
-function changeContainer(output: TranscriptChangeOutput): Uint8Array {
+function mintQuoteOutputContainer(output: TranscriptMintQuoteOutput): Uint8Array {
   if (!isValidSecpPubkey(output.pubkey)) {
-    throw new CTSError('Transcript change lock key must be a 33-byte compressed point');
+    throw new CTSError('Transcript mint quote output lock key must be a 33-byte compressed point');
   }
   if (output.quoteId.length === 0) {
     throw new CTSError('Transcript quote id must be non-empty');
@@ -215,12 +213,12 @@ function changeContainer(output: TranscriptChangeOutput): Uint8Array {
     tlvRecord(0x03, utf8ToBytes(output.quoteId)),
   );
   // The remainder quote omits the amount record entirely (NUT-XX).
-  if (output.amount === undefined) return tlvRecord(CONTAINER_CHANGE_QUOTE_OUTPUT, fields);
+  if (output.amount === undefined) return tlvRecord(CONTAINER_MINT_QUOTE_OUTPUT, fields);
   const amount = amountRecord(output.amount);
   if (Amount.from(output.amount).isZero()) {
-    throw new CTSError('Transcript change quote amount must be positive');
+    throw new CTSError('Transcript mint quote output amount must be positive');
   }
-  return tlvRecord(CONTAINER_CHANGE_QUOTE_OUTPUT, concatBytes(amount, fields));
+  return tlvRecord(CONTAINER_MINT_QUOTE_OUTPUT, concatBytes(amount, fields));
 }
 
 /**
@@ -238,35 +236,13 @@ export function derivedQuoteId(idPreimage: Uint8Array): string {
 }
 
 /**
- * The id a change quote output without `id_preimage` takes (NUT-XX), from the transaction's inputs.
- *
- * @remarks
- * `hex(tagged_hash("Cashu_InputQuoteId", SHA256(input section) || u32_BE(k)))`, `k` the output's
- * position among the change quote outputs. Only a transaction spending exactly these inputs creates
- * it.
+ * The remainder quote's id (NUT-XX): `hex(tagged_hash("Cashu_RemainderQuoteId", melt_quote_id))`.
  */
-export function inputBoundQuoteId(
-  tx: Pick<TransactionShape, 'proofInputs' | 'mintQuoteInputs'>,
-  k: number,
-): string {
-  return inputBoundIdAt(sha256(inputSection(tx)), k);
-}
-
-function inputBoundIdAt(sectionHash: Uint8Array, k: number): string {
-  if (!Number.isInteger(k) || k < 0 || k > 0xffffffff) {
-    throw new CTSError('Change quote output position must be a u32');
+export function remainderQuoteId(meltQuoteId: string): string {
+  if (typeof meltQuoteId !== 'string' || meltQuoteId.length === 0) {
+    throw new CTSError('Remainder quote id needs the melt quote id');
   }
-  return bytesToHex(
-    taggedHash(INPUT_QUOTE_ID_TAG, concatBytes(sectionHash, numberToBytesBE(k, 4))),
-  );
-}
-
-// The transcript's input containers (0x1n) in order, the bytes an input-bound quote id hashes.
-function inputSection(tx: Pick<TransactionShape, 'proofInputs' | 'mintQuoteInputs'>): Uint8Array {
-  return concatBytes(
-    ...(tx.proofInputs ?? []).map(proofInputContainer),
-    ...(tx.mintQuoteInputs ?? []).map(mintQuoteInputContainer),
-  );
+  return bytesToHex(taggedHash(REMAINDER_QUOTE_ID_TAG, utf8ToBytes(meltQuoteId)));
 }
 
 /**
@@ -280,11 +256,11 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
   if (proofs.length + mintQuotes.length === 0) {
     throw new CTSError('Transaction requires at least one input');
   }
-  const change = tx.changeQuoteOutputs ?? [];
-  if (blinded.length + meltQuotes.length + change.length === 0) {
+  const quoteOutputs = tx.mintQuoteOutputs ?? [];
+  if (blinded.length + meltQuotes.length + quoteOutputs.length === 0) {
     throw new CTSError('Transaction requires at least one output');
   }
-  if (change.filter((c) => c.amount === undefined).length > 1) {
+  if (quoteOutputs.filter((c) => c.amount === undefined).length > 1) {
     throw new CTSError('Transaction allows at most one remainder quote');
   }
   // NUT-10: the same proof or quote twice would sign one input digest for two inputs.
@@ -294,12 +270,12 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
   if (new Set(mintQuotes.map((q) => q.quoteId)).size !== mintQuotes.length) {
     throw new CTSError('Transaction repeats a mint quote input');
   }
-  // Ascending container order
   return concatBytes(
-    inputSection(tx),
+    ...proofs.map(proofInputContainer),
+    ...mintQuotes.map(mintQuoteInputContainer),
     ...blinded.map(blindedOutputContainer),
     ...meltQuotes.map(meltQuoteOutputContainer),
-    ...change.map(changeContainer),
+    ...quoteOutputs.map(mintQuoteOutputContainer),
   );
 }
 
@@ -320,7 +296,7 @@ export function transactionMessage(tx: TransactionShape): Uint8Array {
  *
  * @remarks
  * Throws unless the bytes are exactly a run of well-formed, non-empty NUT-10 containers (proof
- * input through change quote output); an event id or other opaque 32 bytes never passes.
+ * input through mint quote output); an event id or other opaque 32 bytes never passes.
  */
 export function transcriptContainers(transcript: Uint8Array): Uint8Array[] {
   const records: Uint8Array[] = [];
@@ -414,7 +390,7 @@ type PayloadShape = {
    * `amount` is the quote amount plus the selected fee reserve ({@link meltOutputAmount}).
    */
   meltQuoteOutput?: { quoteId: string; amount: AmountLike };
-  changeQuoteOutputs?: Array<{ pubkey: string; quoteId: string; amount?: AmountLike }>;
+  mintQuoteOutputs?: Array<{ pubkey: string; quoteId: string; amount?: AmountLike }>;
 };
 
 /**
@@ -483,8 +459,8 @@ function payloadToTransaction(payload: PayloadShape): TransactionShape {
       })),
     }),
     ...(payload.meltQuoteOutput && { meltQuoteOutputs: [quote(payload.meltQuoteOutput)] }),
-    ...(payload.changeQuoteOutputs && {
-      changeQuoteOutputs: payload.changeQuoteOutputs.map((c) => ({
+    ...(payload.mintQuoteOutputs && {
+      mintQuoteOutputs: payload.mintQuoteOutputs.map((c) => ({
         pubkey: c.pubkey,
         quoteId: c.quoteId,
         ...(c.amount !== undefined && { amount: Amount.from(c.amount).toBigInt() }),
@@ -505,19 +481,6 @@ export function messageForPayload(payload: PayloadShape): Uint8Array {
  */
 export function inputsForPayload(payload: PayloadShape): ReturnType<typeof transactionInputs> {
   return transactionInputs(payloadToTransaction(payload));
-}
-
-/**
- * {@link inputBoundQuoteId} over payload wire shapes, for any position `k`.
- *
- * @remarks
- * The inputs are converted and hashed once, here: each proof's `Y` is a hash to curve.
- */
-export function inputBoundIdsForPayload(
-  payload: Pick<PayloadShape, 'proofInputs' | 'mintQuoteInputs'>,
-): (k: number) => string {
-  const sectionHash = sha256(inputSection(payloadToTransaction(payload)));
-  return (k) => inputBoundIdAt(sectionHash, k);
 }
 
 /**

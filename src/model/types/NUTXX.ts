@@ -38,11 +38,10 @@ export type TransactionRequest = {
    */
   melt_quote_outputs: Array<{ quote: string; fee_reserve: Amount; fee_index?: number }>;
   /**
-   * Change quotes to create: each the 32-byte preimage of its id (hex), or none for an id bound to
-   * the inputs, a lock key (33-byte compressed hex) and a positive amount, or no amount on at most
-   * one of them, the remainder quote that takes the balance.
+   * At most one, beside a melt with blinded outputs: the remainder quote's lock key (33-byte
+   * compressed hex). The mint creates it only if it cannot sign those outputs.
    */
-  change_quote_outputs?: Array<{ id_preimage?: string; pubkey: string; amount?: Amount }>;
+  mint_quote_outputs?: Array<{ pubkey: string }>;
   prefer_async?: boolean;
 };
 
@@ -62,8 +61,7 @@ export type TransactionResponse = {
    */
   melt_quotes: MeltQuoteBaseResponse[];
   /**
-   * One per change quote output, in request order: the quote once `PAID`, else null (a remainder
-   * quote with zero change stays null).
+   * One per mint quote output, in request order: the txout quote once created, else null.
    */
-  change_quotes: Array<MintQuoteBaseResponse | null>;
+  mint_quotes: Array<MintQuoteBaseResponse | null>;
 };

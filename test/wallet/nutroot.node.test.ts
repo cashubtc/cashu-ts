@@ -567,12 +567,12 @@ describe('attachTransactionWitnesses', () => {
     ).rejects.toThrow(/No key to sign a v3 input/);
   });
 
-  test('signs a mixed-input transaction with only change quotes as outputs', async () => {
+  test('signs a mixed-input transaction with only a mint quote output', async () => {
     const input = v3Proof(PUB_A, { k: PRIV_A });
     const legacy = { ...v3Proof('legacy'), id: '00' + 'ab'.repeat(7), C: PUB_B };
     const payload = {
       inputs: [input, legacy],
-      changeQuoteOutputs: [{ pubkey: PUB_B, quoteId: 'change-quote-0' }],
+      mintQuoteOutputs: [{ pubkey: PUB_B, quoteId: 'txout-quote-0' }],
     };
     const receipts = await attachTransactionWitnesses(
       payload,
@@ -583,7 +583,7 @@ describe('attachTransactionWitnesses', () => {
     );
     const tx = inputsForPayload({
       proofInputs: payload.inputs,
-      changeQuoteOutputs: payload.changeQuoteOutputs,
+      mintQuoteOutputs: payload.mintQuoteOutputs,
     });
     expect(
       verifyTransactionInputWitness(

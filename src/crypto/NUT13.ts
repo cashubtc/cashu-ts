@@ -287,7 +287,8 @@ function deriveHmacSecretAndBlindingFactor(
 
 /**
  * NUT-13 derivation types. `0x00`-`0x03` are components of one proof allocation and share the
- * keyset's proof counter; `0x04` and `0x05` are one quote allocation on a per-mint quote counter.
+ * keyset's proof counter; `0x04` and `0x05` are one quote allocation on a per-mint quote counter;
+ * `0x06` uses no counter.
  */
 export const DERIVATION_TYPE = {
   /**
@@ -314,6 +315,10 @@ export const DERIVATION_TYPE = {
    * Mint quote id preimage; same quote counter and scope as `quoteLock`, used as is (no sampling).
    */
   quoteIdPreimage: 0x05,
+  /**
+   * Remainder quote lock key (NUT-XX); counter 0, the message carries `SHA256(melt quote id)`.
+   */
+  remainderLock: 0x06,
 } as const;
 
 function assertSeed(seed: Uint8Array): void {
@@ -482,6 +487,32 @@ export function deriveQuoteIdPreimage(
     DERIVATION_TYPE.quoteIdPreimage,
   );
   return hmac(sha256, seed, concatBytes(base, numberToBytesBE(0, 4)));
+}
+
+/**
+ * A remainder quote lock key (NUT-13 message type `0x06`), from the melt quote id alone.
+ *
+ * @remarks
+ * Counter 0 and suffix `SHA256(utf8(meltQuoteId))`, so recovery needs only the seed, the mint and
+ * the melt quote id.
+ * @param mintPubkey - The mint's NUT-06 `pubkey` (33-byte compressed, hex).
+ * @experimental Follows draft NUT-13 type `0x06` and draft NUT-XX; may change before GA.
+ */
+export function deriveRemainderLockKey(
+  seed: Uint8Array,
+  mintPubkey: string,
+  meltQuoteId: string,
+): Uint8Array {
+  if (typeof meltQuoteId !== 'string' || meltQuoteId.length === 0) {
+    throw new CTSError('Remainder lock key needs the melt quote id');
+  }
+  return deriveV3Scalar(
+    seed,
+    normalizeSecpPubkey(mintPubkey),
+    0,
+    DERIVATION_TYPE.remainderLock,
+    sha256(utf8ToBytes(meltQuoteId)),
+  );
 }
 
 function assertV3Keyset(keysetId: string, what: string): void {

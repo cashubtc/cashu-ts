@@ -520,6 +520,7 @@ export const DERIVATION_TYPE: {
     readonly leafKey: 3;
     readonly quoteLock: 4;
     readonly quoteIdPreimage: 5;
+    readonly remainderLock: 6;
 };
 
 // @public (undocumented)
@@ -582,6 +583,9 @@ export function deriveQuoteIdPreimage(seed: Uint8Array, mintPubkey: string, coun
 
 // @public
 export function deriveQuoteLockKey(seed: Uint8Array, mintPubkey: string, counter: number): Uint8Array;
+
+// @public
+export function deriveRemainderLockKey(seed: Uint8Array, mintPubkey: string, meltQuoteId: string): Uint8Array;
 
 // @public
 export function deriveSecretAndBlindingFactor(seed: Uint8Array, keysetId: string, counter: number): DerivedSecretAndBlindingFactor;
@@ -2219,7 +2223,6 @@ export type PostRestoreResponse = {
 
 // @public (undocumented)
 export type PrepareTransactionConfig = {
-    forfeitFeeReserve?: boolean;
     proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
     onCountersReserved?: OnCountersReserved;
     signal?: AbortSignal;
@@ -2683,11 +2686,9 @@ export type SerializedTransactionPreview = {
         feeReserve: string;
         feeIndex?: number;
     };
-    changeQuoteOutputs: Array<{
+    mintQuoteOutputs: Array<{
         quote: string;
-        idPreimage?: string;
         pubkey: string;
-        amount?: string;
     }>;
     outputData: SerializedOutputData[];
     amount: string;
@@ -2970,11 +2971,9 @@ export type TransactionPreview = {
         feeReserve: Amount;
         feeIndex?: number;
     };
-    changeQuoteOutputs: Array<{
+    mintQuoteOutputs: Array<{
         quote: string;
-        idPreimage?: string;
         pubkey: string;
-        amount?: Amount;
     }>;
     outputData: OutputDataLike[];
     amount: Amount;
@@ -2998,10 +2997,8 @@ export type TransactionRequest = {
         fee_reserve: Amount;
         fee_index?: number;
     }>;
-    change_quote_outputs?: Array<{
-        id_preimage?: string;
+    mint_quote_outputs?: Array<{
         pubkey: string;
-        amount?: Amount;
     }>;
     prefer_async?: boolean;
 };
@@ -3011,7 +3008,7 @@ export type TransactionResponse = {
     state: TransactionState;
     signatures: SerializedBlindedSignature[];
     melt_quotes: MeltQuoteBaseResponse[];
-    change_quotes: Array<MintQuoteBaseResponse | null>;
+    mint_quotes: Array<MintQuoteBaseResponse | null>;
 };
 
 // @public
@@ -3174,8 +3171,11 @@ export class Wallet {
     }): Promise<{
         pubkey: string;
         privkey: string;
-        idPreimage: string;
     }>;
+    createRemainderLockKey(meltQuoteId: string): {
+        pubkey: string;
+        privkey: string;
+    };
     decodeToken(token: string | Uint8Array): Token;
     defaultOutputType(): OutputType;
     ensureOperableKeysets(ids: Array<string | undefined>): Promise<void>;
@@ -3250,10 +3250,8 @@ export class Wallet {
             };
             feeIndex?: number;
         };
-        changeQuoteOutputs?: Array<{
+        mintQuoteOutputs?: Array<{
             pubkey: string;
-            idPreimage?: string;
-            amount?: AmountLike;
         }>;
     }, config?: PrepareTransactionConfig): Promise<TransactionPreview>;
     receive(token: Token | string | ProofLike[], config?: ReceiveConfig, outputType?: OutputType): Promise<Proof[]>;

@@ -41,7 +41,7 @@ class MockWS {
    * Deliver an update payload to matching subscribers for a kind.
    */
   emit(
-    kind: 'bolt11_mint_quote' | 'bolt11_melt_quote' | 'change_mint_quote',
+    kind: 'bolt11_mint_quote' | 'bolt11_melt_quote' | 'txout_mint_quote',
     payload: { quote: string; [k: string]: any },
   ) {
     for (const { kind: k, filters, cb } of this.subs.values()) {
@@ -176,11 +176,11 @@ describe('WalletEvents', () => {
       expect(typeof canceller).toBe('function');
     });
 
-    it('watches change quotes under NUT-17 change_mint_quote', async () => {
+    it('watches txout quotes under NUT-17 txout_mint_quote', async () => {
       const cb = vi.fn();
-      await events.mintQuoteUpdates(['c'], cb, vi.fn(), { method: 'change' });
+      await events.mintQuoteUpdates(['c'], cb, vi.fn(), { method: 'txout' });
       const ws = mock.mint.webSocketConnection!;
-      ws.emit('change_mint_quote', {
+      ws.emit('txout_mint_quote', {
         quote: 'c',
         request: '',
         state: 'PAID',
@@ -188,7 +188,7 @@ describe('WalletEvents', () => {
         amount_paid: 2,
         amount_issued: 0,
       });
-      expect(cb).toHaveBeenCalledWith(expect.objectContaining({ quote: 'c', method: 'change' }));
+      expect(cb).toHaveBeenCalledWith(expect.objectContaining({ quote: 'c', method: 'txout' }));
     });
 
     it('reports the websocket mode on the first frame when pollMs is unset', async () => {
