@@ -20,14 +20,15 @@ import {
   deriveNumsOffset,
   deriveQuoteIdPreimage,
   deriveQuoteLockKey,
+  deriveRemainderLockKey,
 } from '../src/crypto/NUT13';
 import { BLS_FR_ORDER, hashToCurveBls } from '../src/crypto/curve_bls';
 import { hashToCurveHex } from '../src/crypto/curves';
 import {
   buildTransactionTranscript,
   derivedQuoteId,
-  inputBoundQuoteId,
   inputDigest,
+  remainderQuoteId,
   spendCommitment,
   transactionDigest,
   transcriptContainers,
@@ -110,6 +111,18 @@ d.nut13_v3.quote_locks = [0, 1, 2, 3].map((counter) => {
     quote_id: derivedQuoteId(idPreimage),
   };
 });
+// The remainder quote lock key (0x06) for the melt vector's quote: counter 0, no quote counter.
+{
+  const meltQuoteId = 'quote-melt-0001';
+  const privkey = deriveRemainderLockKey(seed, MINT_IDENTITY, meltQuoteId);
+  d.nut13_v3.remainder_lock = {
+    melt_quote_id: meltQuoteId,
+    suffix: bytesToHex(sha256(utf8ToBytes(meltQuoteId))),
+    privkey: bytesToHex(privkey),
+    pubkey: bytesToHex(getPubKeyFromPrivKey(privkey)),
+    quote_id: remainderQuoteId(meltQuoteId),
+  };
+}
 
 // Recompute the attempt summary in the comment so it always states the current tuple.
 const KDF_DST = utf8ToBytes('Cashu_KDF_HMAC_SHA256');
@@ -169,14 +182,10 @@ function fromVectorTx(tx: any): TransactionShape {
       quoteId: q.quote_id,
     })),
   };
-  // An output without id_preimage takes the id its inputs bind (NUT-XX).
-  shape.changeQuoteOutputs = tx.change_quote_outputs?.map((c: any, k: number) => ({
+  // The remainder quote is named by the melt it backs (NUT-XX).
+  shape.mintQuoteOutputs = tx.mint_quote_outputs?.map((c: any) => ({
     pubkey: c.pubkey,
-    quoteId:
-      c.id_preimage !== undefined
-        ? derivedQuoteId(hexToBytes(c.id_preimage))
-        : inputBoundQuoteId(shape, k),
-    ...(c.amount !== undefined && { amount: BigInt(c.amount) }),
+    quoteId: remainderQuoteId(tx.melt_quote_outputs[0].quote_id),
   }));
   return shape;
 }
@@ -314,7 +323,7 @@ for (const name of ['swap', 'mint', 'melt', 'melt_with_change'] as const) {
 if (d.transcript.swap.input_id !== d.transcript.melt.input_id)
   throw new Error('swap and melt spend the same proof, so their input ids must match');
 d.transcript.comment =
-  'Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash("Cashu_TransactionInput", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers (high nibble is the section, 1 inputs, 2 outputs): 11 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 12 mint quote input (01 amount issued, 02 quote id utf8, 03 lock key), 21 blinded output (01 amount, 02 keyset id, 03 SHA256(B_)), 22 melt quote output (01 amount, 02 quote id utf8), 23 change quote output (01 amount, absent on the remainder quote, 02 lock key, 03 quote id utf8 = hex(tagged_hash("Cashu_QuoteId", id_preimage))). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.';
+  'Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash("Cashu_TransactionInput", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers (high nibble is the section, 1 inputs, 2 outputs): 11 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 12 mint quote input (01 amount issued by this transaction, 02 quote id utf8, 03 lock key, 04 amount_issued before this transaction), 21 blinded output (01 amount, 02 keyset id, 03 SHA256(B_)), 22 melt quote output (01 amount, 02 quote id utf8), 23 mint quote output (01 amount, absent on the remainder quote, 02 lock key, 03 quote id utf8; the remainder quote id is hex(tagged_hash("Cashu_RemainderQuoteId", melt quote id))). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.';
 
 // Two proof inputs in one transaction pin the distinction between the shared transaction digest
 // and each input's signing digest.
@@ -498,13 +507,9 @@ d.transcript.comment =
   };
 }
 
-// NUT-XX transactions: a mint quote paying a melt directly, and a proof parked in change quotes
-// from NUT-13 quote locks 2 and 3. The recorded input id and digest are the first input's, whose
-// container is the transcript's first record.
-const changeOutput = (counter: number, amount?: number) => {
-  const { pubkey, id_preimage } = d.nut13_v3.quote_locks[counter];
-  return { id_preimage, pubkey, ...(amount !== undefined && { amount }) };
-};
+// NUT-XX transactions: a mint quote paying a melt directly, and the melt with change backed by a
+// remainder quote. The recorded input id and digest are the first input's, whose container is the
+// transcript's first record.
 for (const [name, txVector] of [
   [
     'mint_quote_to_melt',
@@ -514,27 +519,10 @@ for (const [name, txVector] of [
     },
   ],
   [
-    'proof_to_change',
+    'melt_with_remainder',
     {
-      proof_inputs: d.transcript.swap.tx.proof_inputs,
-      change_quote_outputs: [changeOutput(2)],
-    },
-  ],
-  [
-    'proof_to_two_changes',
-    {
-      proof_inputs: d.transcript.swap.tx.proof_inputs,
-      change_quote_outputs: [changeOutput(2, 3), changeOutput(3)],
-    },
-  ],
-  // A proof and a mint quote in; the remainder pays quote lock 3's key under an id bound to both
-  // inputs, with no preimage.
-  [
-    'proof_to_input_bound_change',
-    {
-      proof_inputs: d.transcript.swap.tx.proof_inputs,
-      mint_quote_inputs: d.transcript.mint.tx.mint_quote_inputs,
-      change_quote_outputs: [changeOutput(2, 3), { pubkey: d.nut13_v3.quote_locks[3].pubkey }],
+      ...d.transcript.melt_with_change.tx,
+      mint_quote_outputs: [{ pubkey: d.nut13_v3.remainder_lock.pubkey }],
     },
   ],
 ] as const) {
@@ -542,23 +530,13 @@ for (const [name, txVector] of [
   const transcript = buildTransactionTranscript(tx);
   const digest = transactionDigest(tx);
   const container = transcript.subarray(0, 3 + ((transcript[1] << 8) | transcript[2]));
-  const changeContainers = transcriptContainers(transcript).filter((c) => c[0] === 0x23);
-  const changes = tx.changeQuoteOutputs ?? [];
-  const last =
-    changes.length === 0
-      ? {}
-      : changes.length === 1
-        ? { change_container: bytesToHex(changeContainers[0]), quote_id: changes[0].quoteId }
-        : {
-            change_containers: changeContainers.map((c) => bytesToHex(c)),
-            quote_ids: changes.map((c) => c.quoteId),
-          };
-  const inputSection = transcriptContainers(transcript).filter((c) => c[0] >> 4 === 1);
-  const inputSectionHash = bytesToHex(sha256(concatBytes(...inputSection)));
+  const quoteOutput = transcriptContainers(transcript).find((c) => c[0] === 0x23);
   d.transcript[name] = {
     tx: txVector,
-    ...last,
-    ...(name === 'proof_to_input_bound_change' && { input_section_hash: inputSectionHash }),
+    ...(quoteOutput && {
+      mint_quote_output_container: bytesToHex(quoteOutput),
+      quote_id: tx.mintQuoteOutputs![0].quoteId,
+    }),
     transcript: bytesToHex(transcript),
     digest: bytesToHex(digest),
     input_id: bytesToHex(sha256(container)),
@@ -567,19 +545,12 @@ for (const [name, txVector] of [
 }
 if (d.transcript.mint_quote_to_melt.input_id !== d.transcript.mint.input_id)
   throw new Error('mint_quote_to_melt reuses the mint quote input, so its input id must match');
-// Recompute the input-bound id from the transcript bytes alone, apart from the helper.
-{
-  const v = d.transcript.proof_to_input_bound_change;
-  const tag = sha256(utf8ToBytes('Cashu_InputQuoteId'));
-  const id = bytesToHex(
-    sha256(concatBytes(tag, tag, hexToBytes(v.input_section_hash), new Uint8Array([0, 0, 0, 1]))),
-  );
-  if (v.quote_ids[1] !== id) throw new Error('input-bound quote id does not recompute');
-  if (v.quote_ids[0] !== d.transcript.proof_to_two_changes.quote_ids[0])
-    throw new Error('the preimage output must keep its derived id');
-}
-if (d.transcript.proof_to_change.input_id !== d.transcript.swap.input_id)
-  throw new Error('proof_to_change spends the swap proof, so its input id must match');
+if (d.transcript.melt_with_remainder.input_id !== d.transcript.swap.input_id)
+  throw new Error('melt_with_remainder spends the swap proof, so its input id must match');
+if (d.transcript.melt_with_remainder.quote_id !== d.nut13_v3.remainder_lock.quote_id)
+  throw new Error('melt_with_remainder names the remainder quote of its melt');
+for (const old of ['proof_to_change', 'proof_to_two_changes', 'proof_to_input_bound_change'])
+  delete d.transcript[old];
 
 // Disclosure leaf forms: threshold_1of1 with the 0x0a field, plus its rejection shapes.
 d.leaf_forms.threshold_1of1_disclosure = d.leaf_forms.threshold_1of1 + '0a000101';

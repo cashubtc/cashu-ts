@@ -149,16 +149,9 @@ export type TransactionPreview = {
     feeIndex?: number;
   };
   /**
-   * Change quotes in request order: each its id, id preimage (none for an id bound to the inputs),
-   * lock key and fixed amount, or no amount on the one remainder quote, which takes whatever the
-   * outputs, melt and fee leave.
+   * The remainder quote, if requested: its id and lock key.
    */
-  changeQuoteOutputs: Array<{
-    quote: string;
-    idPreimage?: string;
-    pubkey: string;
-    amount?: Amount;
-  }>;
+  mintQuoteOutputs: Array<{ quote: string; pubkey: string }>;
   outputData: OutputDataLike[];
   /**
    * Total of the new proofs.

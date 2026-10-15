@@ -1,6 +1,6 @@
 import { schnorr } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex, concatBytes, hexToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { describe, test, expect } from 'vitest';
 
 import { hashToCurveHex } from '../../src/crypto/curves';
@@ -17,7 +17,7 @@ import {
   requestDigest,
   signTransactionInput,
   derivedQuoteId,
-  inputBoundQuoteId,
+  remainderQuoteId,
   spendCommitment,
   transactionDigest,
   transcriptContainers,
@@ -48,7 +48,7 @@ function fromVectorTx(tx: {
   }>;
   blinded_outputs?: Array<{ amount: number; keyset_id: string; B_: string }>;
   melt_quote_outputs?: Array<{ amount: number; quote_id: string }>;
-  change_quote_outputs?: Array<{ id_preimage?: string; pubkey: string; amount?: number }>;
+  mint_quote_outputs?: Array<{ pubkey: string }>;
 }): TransactionShape {
   const shape: TransactionShape = {
     proofInputs: tx.proof_inputs?.map((p) => ({
@@ -73,40 +73,14 @@ function fromVectorTx(tx: {
       quoteId: q.quote_id,
     })),
   };
-  shape.changeQuoteOutputs = tx.change_quote_outputs?.map((c, k) => ({
-    quoteId:
-      c.id_preimage !== undefined
-        ? derivedQuoteId(hexToBytes(c.id_preimage))
-        : inputBoundQuoteId(shape, k),
+  shape.mintQuoteOutputs = tx.mint_quote_outputs?.map((c) => ({
+    quoteId: remainderQuoteId(tx.melt_quote_outputs![0].quote_id),
     pubkey: c.pubkey,
-    ...(c.amount !== undefined && { amount: BigInt(c.amount) }),
   }));
   return shape;
 }
 
 describe('transaction transcript (vectors)', () => {
-  // NUT-XX: an output without id_preimage takes an id bound to the transaction's inputs.
-  test('an input-bound quote id hashes the input section and the output position', () => {
-    const v = tv.proof_to_input_bound_change;
-    const tx = fromVectorTx(v.tx);
-    expect(bytesToHex(buildTransactionTranscript(tx))).toBe(v.transcript);
-    expect(bytesToHex(transactionDigest(tx))).toBe(v.digest);
-    expect(tx.changeQuoteOutputs!.map((c) => c.quoteId)).toEqual(v.quote_ids);
-    const inputs = transcriptContainers(hexToBytes(v.transcript)).filter((c) => c[0] >> 4 === 1);
-    expect(inputs).toHaveLength(2);
-    expect(
-      transcriptContainers(hexToBytes(v.transcript))
-        .filter((c) => c[0] === 0x23)
-        .map((c) => bytesToHex(c)),
-    ).toEqual(v.change_containers);
-    expect(bytesToHex(sha256(concatBytes(...inputs)))).toBe(v.input_section_hash);
-    // The id moves with the position and with any input, and no preimage reaches it.
-    expect(inputBoundQuoteId(tx, 0)).not.toBe(v.quote_ids[1]);
-    expect(inputBoundQuoteId({ proofInputs: tx.proofInputs }, 1)).not.toBe(v.quote_ids[1]);
-    expect(derivedQuoteId(hexToBytes(v.input_section_hash))).not.toBe(v.quote_ids[1]);
-    expect(() => inputBoundQuoteId(tx, -1)).toThrow(/u32/);
-  });
-
   // NUT-10 tests, "Mixed keysets": every proof input's 03 field is Y on its keyset's curve.
   test('a mixed-keyset transcript names every proof input by Y', () => {
     const mixed = tv.mixed_keysets;
@@ -173,7 +147,7 @@ describe('transaction transcript (vectors)', () => {
     'melt',
     'melt_with_change',
     'mint_quote_to_melt',
-    'proof_to_change',
+    'melt_with_remainder',
   ] as const)('%s transcript and digest match', (name) => {
     const example = tv[name];
     const tx = fromVectorTx(example.tx);
@@ -525,63 +499,49 @@ describe('keyset ids in the transcript', () => {
   });
 });
 
-describe('change quote outputs (NUT-XX vectors)', () => {
-  const v = tv.proof_to_change;
-  const two = tv.proof_to_two_changes;
-  // Payload shape: the quote id each id preimage derives.
-  const payloadChange = (outputs: typeof two.tx.change_quote_outputs) =>
-    outputs.map((c) => ({ ...c, quoteId: derivedQuoteId(hexToBytes(c.id_preimage)) }));
+describe('mint quote outputs (NUT-XX vectors)', () => {
+  const v = tv.melt_with_remainder;
+  const lock = vectors.nut13_v3.remainder_lock;
 
-  test('a remainder quote binds its lock key and quote id, after every other container', () => {
-    expect(v.transcript.endsWith(v.change_container)).toBe(true);
-    expect(bytesToHex(buildTransactionTranscript(fromVectorTx(v.tx)))).toBe(v.transcript);
-    expect(bytesToHex(transactionDigest(fromVectorTx(v.tx)))).toBe(v.digest);
+  test('the remainder quote binds its lock key and the id its melt derives, after the melt', () => {
+    expect(remainderQuoteId(lock.melt_quote_id)).toBe(lock.quote_id);
+    expect(v.quote_id).toBe(lock.quote_id);
+    expect(v.transcript.endsWith(v.mint_quote_output_container)).toBe(true);
     const { proofs } = inputsForPayload({
       proofInputs: v.tx.proof_inputs.map((p) => ({ ...p, id: p.keyset_id })),
-      changeQuoteOutputs: payloadChange(v.tx.change_quote_outputs),
+      blindedOutputs: v.tx.blinded_outputs.map((o) => ({ ...o, id: o.keyset_id })),
+      meltQuoteOutput: { quoteId: lock.melt_quote_id, amount: v.tx.melt_quote_outputs[0].amount },
+      mintQuoteOutputs: [{ pubkey: lock.pubkey, quoteId: lock.quote_id }],
     });
     expect(bytesToHex([...proofs.values()][0].digest)).toBe(v.input_digest);
-    expect(derivedQuoteId(hexToBytes(v.tx.change_quote_outputs[0].id_preimage))).toBe(v.quote_id);
+    expect(() => remainderQuoteId('')).toThrow(/melt quote id/);
   });
 
-  test('a fixed quote carries its amount first, then the remainder quote, in request order', () => {
-    expect(two.transcript.endsWith(two.change_containers.join(''))).toBe(true);
-    expect(bytesToHex(buildTransactionTranscript(fromVectorTx(two.tx)))).toBe(two.transcript);
-    expect(bytesToHex(transactionDigest(fromVectorTx(two.tx)))).toBe(two.digest);
-    const { proofs } = inputsForPayload({
-      proofInputs: two.tx.proof_inputs.map((p) => ({ ...p, id: p.keyset_id })),
-      changeQuoteOutputs: payloadChange(two.tx.change_quote_outputs),
-    });
-    expect(bytesToHex([...proofs.values()][0].digest)).toBe(two.input_digest);
-    expect(payloadChange(two.tx.change_quote_outputs).map((c) => c.quoteId)).toEqual(two.quote_ids);
-  });
-
-  test('a change quote alone is a valid output; a malformed one throws', () => {
+  test('a malformed mint quote output throws', () => {
     const proofInputs = fromVectorTx(v.tx).proofInputs;
-    const { pubkey } = v.tx.change_quote_outputs[0];
-    const quoteId = v.quote_id;
+    const { pubkey, quote_id: quoteId } = lock;
     expect(() => buildTransactionTranscript({ proofInputs })).toThrow(/output/);
     expect(() =>
       buildTransactionTranscript({
         proofInputs,
-        changeQuoteOutputs: [{ pubkey: pubkey.slice(2), quoteId }],
+        mintQuoteOutputs: [{ pubkey: pubkey.slice(2), quoteId }],
       }),
     ).toThrow(/lock key/);
     expect(() =>
-      buildTransactionTranscript({ proofInputs, changeQuoteOutputs: [{ pubkey, quoteId: '' }] }),
+      buildTransactionTranscript({ proofInputs, mintQuoteOutputs: [{ pubkey, quoteId: '' }] }),
     ).toThrow(/quote id/);
     expect(() =>
       buildTransactionTranscript({
         proofInputs,
-        changeQuoteOutputs: [{ pubkey, quoteId, amount: 0n }],
+        mintQuoteOutputs: [{ pubkey, quoteId, amount: 0n }],
       }),
     ).toThrow(/positive/);
     expect(() =>
       buildTransactionTranscript({
         proofInputs,
-        changeQuoteOutputs: [
+        mintQuoteOutputs: [
           { pubkey, quoteId },
-          { pubkey, quoteId: two.quote_ids[1] },
+          { pubkey, quoteId: 'other' },
         ],
       }),
     ).toThrow(/one remainder/);

@@ -960,11 +960,11 @@ export class WalletEvents {
    * Resolve once a NUT-XX transaction leaves `PENDING`, with optional abort signal and timeout.
    *
    * @remarks
-   * Mirrors onceMeltPaid for a transaction with a melt: polls its melt quote and then its change
-   * quotes through {@link Wallet.checkTransaction}; each poll counts against the mint's rate limit.
+   * Mirrors onceMeltPaid for a transaction with a melt: polls its melt quote and then any remainder
+   * quote through {@link Wallet.checkTransaction}; each poll counts against the mint's rate limit.
    * Resolves with the result whether it settled `PAID` or `FAILED`; read `response.state`. To push
-   * instead, subscribe to the melt quote and to the change quotes (`opts.method: 'change'`, NUT-17
-   * `change_mint_quote`).
+   * instead, subscribe to the melt quote and to the remainder quote (`opts.method: 'txout'`, NUT-17
+   * `txout_mint_quote`).
    * @example
    *
    * ```ts

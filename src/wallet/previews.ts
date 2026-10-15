@@ -265,12 +265,7 @@ export type SerializedTransactionPreview = {
     feeReserve: string;
     feeIndex?: number;
   };
-  changeQuoteOutputs: Array<{
-    quote: string;
-    idPreimage?: string;
-    pubkey: string;
-    amount?: string;
-  }>;
+  mintQuoteOutputs: Array<{ quote: string; pubkey: string }>;
   outputData: SerializedOutputData[];
   amount: string;
   fee: string;
@@ -300,12 +295,7 @@ export function serializeTransactionPreview(
         feeReserve: preview.meltQuoteOutput.feeReserve.toString(),
       },
     }),
-    changeQuoteOutputs: preview.changeQuoteOutputs.map((c) => ({
-      quote: c.quote,
-      ...(c.idPreimage !== undefined && { idPreimage: c.idPreimage }),
-      pubkey: c.pubkey,
-      ...(c.amount && { amount: c.amount.toString() }),
-    })),
+    mintQuoteOutputs: preview.mintQuoteOutputs.map((c) => ({ quote: c.quote, pubkey: c.pubkey })),
     outputData: preview.outputData.map((o) => OutputData.serialize(o)),
     amount: preview.amount.toString(),
     fee: preview.fee.toString(),
@@ -334,11 +324,9 @@ export function deserializeTransactionPreview(
         feeReserve: Amount.from(serialized.meltQuoteOutput.feeReserve),
       },
     }),
-    changeQuoteOutputs: serialized.changeQuoteOutputs.map((c) => ({
+    mintQuoteOutputs: serialized.mintQuoteOutputs.map((c) => ({
       quote: c.quote,
-      ...(c.idPreimage !== undefined && { idPreimage: c.idPreimage }),
       pubkey: c.pubkey,
-      ...(c.amount !== undefined && { amount: Amount.from(c.amount) }),
     })),
     outputData: serialized.outputData.map((s) => OutputData.deserialize(s)),
     amount: Amount.from(serialized.amount),

@@ -40,7 +40,7 @@ import {
   type NutrootConditionLeaf,
 } from '../src/crypto/nutroot';
 import {
-  derivedQuoteId,
+  remainderQuoteId,
   inputsForPayload,
   proofInputContextKey,
   transactionDigest,
@@ -1476,58 +1476,6 @@ const mintVersion = await fetch(`${mintUrl}/v1/info`)
   .catch(() => '');
 
 describeXX('NUT-XX transactions', () => {
-  test(
-    'proofs park in a change quote, drawn partly as a quote input and the rest by mint',
-    { timeout: 30_000 },
-    async () => {
-      const wallet = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
-      await wallet.loadMint();
-      const quote = await lockedMintQuote(wallet, 64);
-      await wallet.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
-      const proofs = await wallet.mintProofsBolt11(64, quote, { privkey: quote.privkey });
-
-      const lock = await wallet.createQuoteLockKey();
-      const parked = await wallet.completeTransaction(
-        await wallet.prepareTransaction({
-          proofInputs: proofs,
-          proofOutputs: { amount: 0 }, // the remainder quote takes the rest
-          changeQuoteOutputs: [{ pubkey: lock.pubkey, idPreimage: lock.idPreimage }],
-        }),
-      );
-      expect(parked.response.state).toBe('PAID');
-      const change = parked.response.change_quotes[0]!;
-      expect(change.method).toBe('change');
-      expect(change.pubkey).toBe(lock.pubkey);
-      const total = 64n - wallet.getFeesForProofs(proofs).toBigInt();
-      expect(change.amount_paid.toBigInt()).toBe(total);
-      const states = await wallet.checkProofsStates(proofs);
-      expect(states.every((s) => s.state === CheckStateEnum.SPENT)).toBe(true);
-
-      // A partial draw through a transaction. A resend from the same preview signs afresh, so it is
-      // a new request, and the signed outputs refuse it.
-      const preview = await wallet.prepareTransaction({
-        mintQuoteInputs: [{ quote: change, amount: 32 }],
-      });
-      const drawn = await wallet.completeTransaction(preview, lock.privkey);
-      expect(drawn.response.state).toBe('PAID');
-      expect(sumProofs(drawn.proofs).toBigInt()).toBe(32n - quoteFee(wallet, 32));
-      await expect(wallet.completeTransaction(preview, lock.privkey)).rejects.toThrow(
-        MintOperationError,
-      );
-      const partial = await wallet.mint.checkMintQuote('change', change.quote);
-      expect(partial.amount_issued.toBigInt()).toBe(32n);
-
-      // The rest through the change quote's own mint route.
-      const rest = total - 32n;
-      const minted = await wallet.completeMint(
-        await wallet.prepareMint('change', rest, partial, { privkey: lock.privkey }),
-      );
-      expect(sumProofs(minted).toBigInt()).toBe(rest);
-      const after = await wallet.mint.checkMintQuote('change', change.quote);
-      expect(after.amount_issued.toBigInt()).toBe(total);
-    },
-  );
-
   test('a paid mint quote pays a melt directly', { timeout: 30_000 }, async () => {
     const externalInvoice =
       'lnbc210n1p53lq0wpp5tsmnj3c6znsdyu5v8t2k3y8xw33m9hnd6exzwspxa4pqz3hze8rsdp82pshjgr5dusyymrfde4jq4mpd3kx2apq24ek2uscqzpuxqrwzqsp5jgr8l0yx8zpxfez9hns5t25j9m90yrzjz34gpacssd6lwr7an40q9qxpqysgqws7g2g9hh6awk2n6vhzpqjyf6matulx0cc0ct099nz6kudzv8xmy9clu4kyvurrt99zkr7y03hse85c2jvm7jm8qlqnvzawudn4e3vsq0m6qpa';
@@ -1541,11 +1489,11 @@ describeXX('NUT-XX transactions', () => {
     const quote = await lockedMintQuote(wallet, amount);
     await wallet.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
 
-    const lock = await wallet.createQuoteLockKey();
+    const lock = wallet.createRemainderLockKey(meltQuote.quote);
     const preview = await wallet.prepareTransaction({
       mintQuoteInputs: [{ quote, amount }],
       meltQuoteOutput: { method: 'bolt11', quote: meltQuote },
-      changeQuoteOutputs: [{ pubkey: lock.pubkey, idPreimage: lock.idPreimage }],
+      mintQuoteOutputs: [{ pubkey: lock.pubkey }],
     });
     let { response } = await wallet.completeTransaction(preview, quote.privkey);
     for (let i = 0; response.state === 'PENDING' && i < 20; i++) {
@@ -1554,8 +1502,11 @@ describeXX('NUT-XX transactions', () => {
     }
     expect(response.state).toBe('PAID');
     expect(response.melt_quotes[0].state).toBe('PAID');
-    // The unspent reserve came back in blank outputs, so the remainder quote holds nothing.
-    expect(response.change_quotes[0]).toBeNull();
+    // The outputs were signed, so the mint created no remainder quote and says so with 20010.
+    expect(response.mint_quotes[0]).toBeNull();
+    await expect(
+      wallet.mint.checkMintQuote('txout', remainderQuoteId(meltQuote.quote)),
+    ).rejects.toMatchObject({ code: 20010 });
     const issued = await wallet.checkMintQuoteBolt11(quote.quote);
     expect(issued.amount_issued.toNumber()).toBe(amount);
   });
@@ -1599,7 +1550,7 @@ describeXX('NUT-XX transactions', () => {
     const preview = await wallet.prepareTransaction({ proofInputs: proofs });
     const result = await wallet.completeTransaction(preview);
     expect(result.response.state).toBe('PAID');
-    expect(result.response.change_quotes).toEqual([]);
+    expect(result.response.mint_quotes).toEqual([]);
     expect(sumProofs(result.proofs).toBigInt()).toBe(64n - fee);
     const states = await wallet.checkProofsStates(proofs);
     expect(states.every((s) => s.state === CheckStateEnum.SPENT)).toBe(true);
@@ -1738,15 +1689,34 @@ describeXX('NUT-XX transactions', () => {
     expect(issued.amount_issued.toBigInt()).toBe(32n);
   });
 
+  test('quote inputs draw a paid quote in parts, each over its current amount_issued', async () => {
+    const wallet = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
+    await wallet.loadMint();
+    const quote = await lockedMintQuote(wallet, 64);
+    await wallet.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
+    const preview = await wallet.prepareTransaction({ mintQuoteInputs: [{ quote, amount: 32 }] });
+    const drawn = await wallet.completeTransaction(preview, quote.privkey);
+    expect(sumProofs(drawn.proofs).toBigInt()).toBe(32n - quoteFee(wallet, 32));
+    // A resend signs afresh over the old amount_issued, so the mint refuses it.
+    await expect(wallet.completeTransaction(preview, quote.privkey)).rejects.toThrow(
+      MintOperationError,
+    );
+    const partial = await wallet.checkMintQuoteBolt11(quote.quote);
+    expect(partial.amount_issued.toBigInt()).toBe(32n);
+    const rest = await wallet.completeTransaction(
+      await wallet.prepareTransaction({ mintQuoteInputs: [{ quote: partial, amount: 32 }] }),
+      quote.privkey,
+    );
+    expect(sumProofs(rest.proofs).toBigInt()).toBe(32n - quoteFee(wallet, 32));
+  });
+
   test('melt-shaped: proofs pay an invoice, the unspent reserve comes back in blank outputs', async () => {
     const { wallet, proofs } = await funded(64);
     const fee = wallet.getFeesForProofs(proofs).toBigInt();
     const meltQuote = await wallet.createMeltQuoteBolt11(invoices[0]);
-    const lock = await wallet.createQuoteLockKey();
     const preview = await wallet.prepareTransaction({
       proofInputs: proofs,
       meltQuoteOutput: { method: 'bolt11', quote: meltQuote },
-      changeQuoteOutputs: [{ pubkey: lock.pubkey, idPreimage: lock.idPreimage }],
     });
     const result = await wallet.completeTransaction(preview, undefined, {
       waitForSettlementMs: 20_000,
@@ -1758,67 +1728,51 @@ describeXX('NUT-XX transactions', () => {
     const change = sumProofs(result.proofs).toBigInt();
     expect(change).toBeLessThanOrEqual(excess);
     expect(change).toBeGreaterThanOrEqual(excess - meltQuote.fee_reserve.toBigInt());
-    expect(result.response.change_quotes[0]).toBeNull();
+    expect(result.response.mint_quotes[0]).toBeNull();
   });
 
-  test('consolidation: proofs and a quote input in, proofs out, the rest as change', async () => {
+  test('consolidation: proofs and a quote input in, proofs out', async () => {
     const { wallet, proofs } = await funded(32);
     const fee = wallet.getFeesForProofs(proofs).toBigInt();
     const quote = await lockedMintQuote(wallet, 16);
     await wallet.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
-    const lock = await wallet.createQuoteLockKey();
     const preview = await wallet.prepareTransaction({
       proofInputs: proofs,
       mintQuoteInputs: [{ quote, amount: 16 }],
-      proofOutputs: { amount: 40 },
-      changeQuoteOutputs: [{ pubkey: lock.pubkey, idPreimage: lock.idPreimage }],
     });
     const result = await wallet.completeTransaction(preview, quote.privkey);
     expect(result.response.state).toBe('PAID');
-    expect(sumProofs(result.proofs).toBigInt()).toBe(40n);
-    expect(result.response.change_quotes[0]!.amount_paid.toBigInt()).toBe(48n - fee - 40n);
+    // Proofs and the quote input share one fee rounding (NUT-XX).
+    expect(sumProofs(result.proofs).toBigInt()).toBe(48n - preview.fee.toBigInt());
+    expect(preview.fee.toBigInt()).toBeGreaterThanOrEqual(fee);
   });
 
-  test('melt with new proofs beside it needs a change key, and signs them when it settles', async () => {
+  test('melt with new proofs beside it signs them when it settles', async () => {
     const { wallet, proofs } = await funded(64);
     const fee = wallet.getFeesForProofs(proofs).toBigInt();
     const meltQuote = await wallet.createMeltQuoteBolt11(invoices[1]);
-    const lock = await wallet.createQuoteLockKey();
     const preview = await wallet.prepareTransaction({
       proofInputs: proofs,
-      proofOutputs: { amount: 10 },
       meltQuoteOutput: { method: 'bolt11', quote: meltQuote },
-      changeQuoteOutputs: [{ pubkey: lock.pubkey, idPreimage: lock.idPreimage }],
     });
-    // The mint refuses the same shape without a change key, before any witness is looked at.
-    await expect(
-      wallet.mint.transaction({
-        proof_inputs: proofs,
-        mint_quote_inputs: [],
-        blinded_outputs: preview.outputData.map((d) => d.blindedMessage),
-        melt_quote_outputs: [{ quote: meltQuote.quote, fee_reserve: meltQuote.fee_reserve }],
-      }),
-    ).rejects.toThrow();
     const result = await wallet.completeTransaction(preview, undefined, {
       waitForSettlementMs: 20_000,
     });
     expect(result.response.state).toBe('PAID');
-    // The explicit amount gets exactly 10; everything else goes to the remainder quote.
-    expect(sumProofs(result.proofs).toBigInt()).toBe(10n);
-    const excess = 64n - fee - 10n - meltQuote.amount.toBigInt();
-    const change = result.response.change_quotes[0]!.amount_paid.toBigInt();
+    // New proofs take everything above amount + reserve, and the blanks what the melt left of it.
+    const excess = 64n - fee - meltQuote.amount.toBigInt();
+    const change = sumProofs(result.proofs).toBigInt();
     expect(change).toBeLessThanOrEqual(excess);
     expect(change).toBeGreaterThanOrEqual(excess - meltQuote.fee_reserve.toBigInt());
+    expect(result.response.mint_quotes[0]).toBeNull();
   });
 
   test('async: the transaction is PENDING first, then PAID through its melt quote', async () => {
     const { wallet, proofs } = await funded(32);
     const meltQuote = await wallet.createMeltQuoteBolt11(invoices[2]);
-    const lock = await wallet.createQuoteLockKey();
     const preview = await wallet.prepareTransaction({
       proofInputs: proofs,
       meltQuoteOutput: { method: 'bolt11', quote: meltQuote },
-      changeQuoteOutputs: [{ pubkey: lock.pubkey, idPreimage: lock.idPreimage }],
     });
     // Both test mints delay outgoing payments by a second, so the reply comes back before the
     // payment does.
@@ -1840,17 +1794,15 @@ describeXX('NUT-XX transactions', () => {
   testCdk('a failed melt releases the inputs, which then spend again', async () => {
     const { wallet, proofs } = await funded(16);
     const meltQuote = await wallet.createMeltQuoteBolt11(failingInvoice);
-    const lock = await wallet.createQuoteLockKey();
     const preview = await wallet.prepareTransaction({
       proofInputs: proofs,
       meltQuoteOutput: { method: 'bolt11', quote: meltQuote },
-      changeQuoteOutputs: [{ pubkey: lock.pubkey, idPreimage: lock.idPreimage }],
     });
     const result = await wallet.completeTransaction(preview, undefined, {
       waitForSettlementMs: 20_000,
     });
     expect(result.response.state).toBe('FAILED');
-    expect(result.response.change_quotes[0]).toBeNull();
+    expect(result.response.mint_quotes[0]).toBeNull();
     const states = await wallet.checkProofsStates(proofs);
     expect(states.every((s) => s.state === CheckStateEnum.UNSPENT)).toBe(true);
     const again = await wallet.completeTransaction(
@@ -1859,7 +1811,7 @@ describeXX('NUT-XX transactions', () => {
     expect(again.response.state).toBe('PAID');
   });
 
-  test('the mint rejects blank outputs, a repeated quote and a wrong fee reserve', async () => {
+  test('the mint rejects blank outputs, a repeated quote, a wrong fee reserve and a stray remainder quote', async () => {
     const { wallet, proofs } = await funded(8);
     const quote = await lockedMintQuote(wallet, 8);
     await wallet.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
@@ -1886,12 +1838,12 @@ describeXX('NUT-XX transactions', () => {
       raw({
         proof_inputs: proofs,
         melt_quote_outputs: [{ quote: meltQuote.quote, fee_reserve: meltQuote.fee_reserve.add(1) }],
-        change_quote_outputs: [
-          (({ pubkey, idPreimage }) => ({ pubkey, id_preimage: idPreimage }))(
-            await wallet.createQuoteLockKey(),
-          ),
-        ],
       }),
+    ).rejects.toThrow();
+    // A remainder quote backs a melt's outputs, so a swap cannot name one.
+    const { pubkey } = wallet.createRemainderLockKey(meltQuote.quote);
+    await expect(
+      raw({ proof_inputs: proofs, blinded_outputs: [output], mint_quote_outputs: [{ pubkey }] }),
     ).rejects.toThrow();
   });
 });
