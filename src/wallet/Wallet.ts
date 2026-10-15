@@ -2445,7 +2445,8 @@ class Wallet {
    *
    * `satisfiable` is this wallet's own assessment from what it holds. The mint compares an `after`
    * leaf against its own clock, so a leaf that unlocked seconds ago may still be refused, and a
-   * hashlock leaf is never satisfiable from the wallet alone: its preimage comes from the caller.
+   * hashlock leaf is never satisfiable from the wallet alone: its preimage comes from the caller. A
+   * template leaf counts only when the loaded mint info advertises `fixed_txout_quotes`.
    * @param proof Any proof, with its spend info when it has one.
    * @param opts.privkeys Static keys to trial-match, for receiver-keyed proofs and leaf keys.
    * @param opts.now Unix seconds to judge locktimes against. Defaults to the current time.
@@ -2455,7 +2456,12 @@ class Wallet {
    *   type or constraint field): the same fail-closed rule the receive cascade applies.
    */
   spendOptions(proof: Proof, opts?: { privkeys?: string | string[]; now?: number }): SpendOptions {
-    return proofSpendOptions(proof, opts, this._nutrootState());
+    return proofSpendOptions(proof, opts, this._nutrootState(), this.templateAdvertised());
+  }
+
+  // An optional leaf counts only at a mint that advertises it (NUT-10); unknown without mint info.
+  private templateAdvertised(): boolean {
+    return this._mintInfo?.transactions.fixedTxoutQuotes === true;
   }
 
   /**
@@ -2482,7 +2488,7 @@ class Wallet {
     const plans: ScriptPathPlan[] = [];
     for (const proof of proofs) {
       if (!isBlsKeyset(proof.id) || !isV3PointSecret(proof.secret)) continue;
-      const spend = proofSpendOptions(proof, opts, this._nutrootState());
+      const spend = proofSpendOptions(proof, opts, this._nutrootState(), this.templateAdvertised());
       if (spend.keyPath) continue;
       const open = spend.script.find((o) => o.satisfiable);
       if (open) {

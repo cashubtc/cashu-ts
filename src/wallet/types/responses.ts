@@ -90,9 +90,10 @@ export type SpendOption = {
    * shortfall, then `preimage`, meaning a hashlock leaf whose keys are covered and which only needs
    * the caller-supplied preimage. `commit` is a commitment leaf, which no one can spend through.
    * `destination` is a template leaf whose keys are covered but whose dests this wallet holds none
-   * of.
+   * of. `unsupported` is a template leaf at a mint that does not advertise `fixed_txout_quotes`, or
+   * whose mint info is not loaded.
    */
-  blockedBy?: 'threshold' | 'locktime' | 'preimage' | 'commit' | 'destination';
+  blockedBy?: 'threshold' | 'locktime' | 'preimage' | 'commit' | 'destination' | 'unsupported';
   /**
    * Unix seconds an `after` leaf unlocks.
    */
@@ -121,9 +122,11 @@ export type SpendOptions = {
    * Why nothing spends it, when `spendable` is false: `locktime` when a leaf this wallet covers is
    * only waiting (see `availableAt`), then `preimage`, then `threshold` when it holds some but not
    * enough keys, else `not-keyed-to-you`, meaning none of its keys are held. `destination` follows
-   * `preimage`: a covered template leaf pays only dests this wallet holds none of.
+   * `preimage`: a covered template leaf pays only dests this wallet holds none of. `unsupported`
+   * follows: the only paths left are template leaves this mint does not serve.
    */
-  blockedBy?: 'not-keyed-to-you' | 'locktime' | 'threshold' | 'preimage' | 'destination';
+  blockedBy?:
+    'not-keyed-to-you' | 'locktime' | 'threshold' | 'preimage' | 'destination' | 'unsupported';
   /**
    * Unix seconds the earliest waiting leaf unlocks, with `blockedBy: 'locktime'`.
    */

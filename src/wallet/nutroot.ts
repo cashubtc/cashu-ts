@@ -182,6 +182,7 @@ export function proofSpendOptions(
   proof: Proof,
   opts: { privkeys?: string | string[]; now?: number } | undefined,
   state: NutrootWalletState,
+  templateAdvertised: boolean,
 ): SpendOptions {
   const privkeys = opts?.privkeys === undefined ? [] : [opts.privkeys].flat();
   const now = opts?.now ?? Math.floor(Date.now() / 1000);
@@ -202,7 +203,10 @@ export function proofSpendOptions(
   // Parses every leaf, so an unknown one throws here rather than being reported as spendable.
   const leaves = tree.map((leaf) => parseNutrootLeaf(hexToBytes(leaf)));
   const hits = recoverLeafKeySecretKeys(tree, proof.spend_info?.E, privkeys);
-  return withVerdict(keyPath, scriptOptions(leaves, hits, now, heldXOnly(privkeys)));
+  return withVerdict(
+    keyPath,
+    scriptOptions(leaves, hits, now, heldXOnly(privkeys), templateAdvertised),
+  );
 }
 
 /**
@@ -231,7 +235,7 @@ function legacySpendOptions(proof: Proof, privkeys: string[], now: number): Spen
       held.has(key.slice(2)) ? [{ leafIndex, keyIndex, blinded }] : [],
     ),
   );
-  return withVerdict(false, scriptOptions(leaves, hits, now, held));
+  return withVerdict(false, scriptOptions(leaves, hits, now, held, false));
 }
 
 // x-only hex of each private key's public key.
@@ -241,13 +245,14 @@ function heldXOnly(privkeys: string[]): Set<string> {
 
 /**
  * Judges each leaf from the key hits against it, at `now`; `held` (x-only) finds template
- * destinations this wallet holds.
+ * destinations this wallet holds, and `templateAdvertised` says the mint serves template leaves.
  */
 function scriptOptions(
   leaves: NutrootLeaf[],
   hits: Array<{ leafIndex: number; keyIndex: number; blinded: boolean }>,
   now: number,
   held: Set<string>,
+  templateAdvertised: boolean,
 ): SpendOption[] {
   return leaves.map((leaf, leafIndex) => {
     if (leaf.type === 'commit') {
@@ -265,7 +270,10 @@ function scriptOptions(
     if (leaf.type === 'after') option.availableAt = leaf.time;
     // Order matters: a locktime is absolute; then the key shortfall, which the leaf itself does
     // not show; a hashlock's preimage need is readable off leaf.type, so it reports last.
-    if (leaf.type === 'after' && leaf.time !== undefined && now < leaf.time) {
+    if (leaf.type === 'template' && !templateAdvertised) {
+      // NUT-10: an optional leaf counts only at a mint that advertises it (`fixed_txout_quotes`).
+      option.blockedBy = 'unsupported';
+    } else if (leaf.type === 'after' && leaf.time !== undefined && now < leaf.time) {
       option.blockedBy = 'locktime';
     } else if (keys.length < leaf.n) {
       option.blockedBy = 'threshold';
@@ -299,6 +307,9 @@ function withVerdict(keyPath: boolean, script: SpendOption[]): SpendOptions {
   if (script.some((o) => o.blockedBy === 'preimage')) return { ...stuck, blockedBy: 'preimage' };
   if (script.some((o) => o.blockedBy === 'destination')) {
     return { ...stuck, blockedBy: 'destination' };
+  }
+  if (script.some((o) => o.blockedBy === 'unsupported')) {
+    return { ...stuck, blockedBy: 'unsupported' };
   }
   if (script.some((o) => o.keys.length > 0)) return { ...stuck, blockedBy: 'threshold' };
   return { ...stuck, blockedBy: 'not-keyed-to-you' };

@@ -1,5 +1,6 @@
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
+import { HttpResponse, http } from 'msw';
 import { test, describe, expect } from 'vitest';
 
 import { Amount, Wallet, createHTLCHash, createHTLCsecret, createP2PKsecret } from '../../src';
@@ -12,9 +13,9 @@ import {
 } from '../../src/crypto/nutroot';
 import type { Proof, SpendInfo } from '../../src/model/types';
 
-import { mint, useTestServer } from './_setup';
+import { mint, mintInfoResp, mintUrl, useTestServer } from './_setup';
 
-useTestServer();
+const server = useTestServer();
 
 const V3_KEYSET = '02' + 'ab'.repeat(32);
 const priv = (seed: number) => bytesToHex(new Uint8Array(32).fill(seed));
@@ -35,8 +36,28 @@ const v3Proof = (secret: string, spend_info?: SpendInfo): Proof => ({
   ...(spend_info && { spend_info }),
 });
 
-// spendOptions is offline, so nothing here needs a loaded mint.
+// spendOptions is offline, so nothing here needs a loaded mint, bar a template leaf's support.
 const wallet = () => new Wallet(mint);
+
+/**
+ * A wallet whose mint advertises NUT-XX with `fixed_txout_quotes` as given.
+ */
+const loadedWallet = async (fixedTxoutQuotes: boolean) => {
+  server.use(
+    http.get(mintUrl + '/v1/info', () =>
+      HttpResponse.json({
+        ...mintInfoResp,
+        nuts: {
+          ...mintInfoResp.nuts,
+          XX: { supported: true, quote_input_fee_ppk: 0, fixed_txout_quotes: fixedTxoutQuotes },
+        },
+      }),
+    ),
+  );
+  const w = wallet();
+  await w.loadMint();
+  return w;
+};
 
 describe('wallet.spendOptions: the key path', () => {
   test('rejects anything that is not a v3 point secret', async () => {
@@ -177,11 +198,23 @@ describe('wallet.spendOptions: the script path', () => {
   test('a template pays only its dests, so it counts only with a destination key held', async () => {
     const template: NutrootLeaf = { type: 'template', n: 1, keys: [pub(ALICE)], dests: [pub(BOB)] };
     const proof = locked([template]);
-    const arbiter = wallet().spendOptions(proof, { privkeys: priv(ALICE) });
+    const w = await loadedWallet(true);
+    const arbiter = w.spendOptions(proof, { privkeys: priv(ALICE) });
     expect(arbiter.script[0]).toMatchObject({ satisfiable: false, blockedBy: 'destination' });
     expect(arbiter).toMatchObject({ spendable: false, blockedBy: 'destination' });
-    const both = wallet().spendOptions(proof, { privkeys: [priv(ALICE), priv(BOB)] });
+    const both = w.spendOptions(proof, { privkeys: [priv(ALICE), priv(BOB)] });
     expect(both.script[0]).toMatchObject({ satisfiable: true });
+  });
+
+  test('a template counts only at a mint that advertises fixed_txout_quotes', async () => {
+    const template: NutrootLeaf = { type: 'template', n: 1, keys: [pub(ALICE)], dests: [pub(BOB)] };
+    const proof = locked([template]);
+    const keys = { privkeys: [priv(ALICE), priv(BOB)] };
+    for (const w of [wallet(), await loadedWallet(false)]) {
+      const options = w.spendOptions(proof, keys);
+      expect(options.script[0]).toMatchObject({ satisfiable: false, blockedBy: 'unsupported' });
+      expect(options).toMatchObject({ spendable: false, blockedBy: 'unsupported' });
+    }
   });
 
   test('leaves are reported in tree order, each judged on its own', async () => {

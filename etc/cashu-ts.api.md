@@ -2822,7 +2822,7 @@ export type SpendOption = {
         blinded: boolean;
     }>;
     satisfiable: boolean;
-    blockedBy?: 'threshold' | 'locktime' | 'preimage' | 'commit' | 'destination';
+    blockedBy?: 'threshold' | 'locktime' | 'preimage' | 'commit' | 'destination' | 'unsupported';
     availableAt?: number;
 };
 
@@ -2831,7 +2831,7 @@ export type SpendOptions = {
     keyPath: boolean;
     script: SpendOption[];
     spendable: boolean;
-    blockedBy?: 'not-keyed-to-you' | 'locktime' | 'threshold' | 'preimage' | 'destination';
+    blockedBy?: 'not-keyed-to-you' | 'locktime' | 'threshold' | 'preimage' | 'destination' | 'unsupported';
     availableAt?: number;
 };
 
