@@ -1575,13 +1575,10 @@ describeXX('NUT-XX transactions', () => {
     expect(txout).toMatchObject({ method: 'txout', pubkey: lock.pubkey });
     expect(txout.quote).toBe(derivedQuoteId(hexToBytes(lock.idPreimage)));
     expect(txout.amount_paid.toBigInt()).toBe(total);
-    // A partial draw is refused: a txout quote redeems in full.
+    // A partial draw is refused before signing: a txout quote redeems in full.
     await expect(
-      wallet.completeTransaction(
-        await wallet.prepareTransaction({ mintQuoteInputs: [{ quote: txout, amount: 32 }] }),
-        lock.privkey,
-      ),
-    ).rejects.toThrow(MintOperationError);
+      wallet.prepareTransaction({ mintQuoteInputs: [{ quote: txout, amount: 32 }] }),
+    ).rejects.toThrow('redeems in full');
     const minted = await wallet.completeMint(
       await wallet.prepareMint('txout', total, txout, { privkey: lock.privkey }),
     );
