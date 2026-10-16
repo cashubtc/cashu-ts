@@ -58,7 +58,15 @@ test('an explicit null clears a stale pubkey and expiry while caller-only fields
 test.each(['single', 'batch'])(
   'a %s v3 mint signs the amount issued, not a stale quote amount',
   async (mode) => {
-    const response = { ...quote, request: 'lno1offer', amount: null, pubkey };
+    // Two already issued: the quote input commits the quote's amount_issued (NUT-10).
+    const response = {
+      ...quote,
+      request: 'lno1offer',
+      amount: null,
+      pubkey,
+      amount_paid: 3,
+      amount_issued: 2,
+    };
     server.use(
       http.get(mintUrl + '/v1/keysets', () =>
         HttpResponse.json({ keysets: [NUT02_V3_VECTOR1_KEYSET] }),
@@ -79,7 +87,7 @@ test.each(['single', 'batch'])(
     expect(signature).toBeTruthy();
     const digestFor = (amount: number) =>
       inputsForPayload({
-        mintQuotes: [{ quoteId: 'stored', amount, lockKey: pubkey }],
+        mintQuotes: [{ quoteId: 'stored', amount, lockKey: pubkey, issued: 2 }],
         outputs: preview.outputData.map((d) => d.blindedMessage),
       }).quotes.get('stored')!.digest;
     expect(schnorrVerifyDigest(signature!, digestFor(1), pubkey)).toBe(true);

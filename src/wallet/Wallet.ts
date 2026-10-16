@@ -3424,7 +3424,9 @@ class Wallet {
    * @param quote The mint quote for this method. A mint response is used as given; anything short
    *   of one, such as `{ quote: string }`, is read from the mint and merged over what you passed,
    *   so the unit and accounting checks run against the mint's values. Pass `config.privkey` to
-   *   produce a NUT-20 signature regardless of whether the quote carries a `pubkey` field.
+   *   produce a NUT-20 signature regardless of whether the quote carries a `pubkey` field. On a v3
+   *   keyset the signature binds the quote's `amount_issued`, so a stored quote another draw has
+   *   moved fails with 20008: pass `{ quote: id }` to read it fresh.
    */
   async prepareMint<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>>(
     method: string,
@@ -3540,7 +3542,14 @@ class Wallet {
         // The quote input commits the amount this request issues and its lock key (NUT-04).
         this.failIf(!quotePubkey, 'prepareMint: a v3 mint needs the quote lock pubkey');
         const tx = inputsForPayload({
-          mintQuotes: [{ quoteId: resolvedQuote.quote, amount: mintAmount, lockKey: quotePubkey! }],
+          mintQuotes: [
+            {
+              quoteId: resolvedQuote.quote,
+              amount: mintAmount,
+              lockKey: quotePubkey!,
+              issued: resolvedQuote.amount_issued,
+            },
+          ],
           outputs: blindedMessages,
         });
         const { digest, inputContainer } = tx.quotes.get(resolvedQuote.quote)!;
@@ -3813,6 +3822,7 @@ class Wallet {
             quoteId: e.quote.quote,
             amount: amounts[i],
             lockKey: e.quote.pubkey!,
+            issued: e.quote.amount_issued!,
           })),
           outputs: blindedMessages,
         }).quotes

@@ -753,7 +753,7 @@ describe('requestTokens', () => {
       // The digest is the quote's input digest under the transaction transcript (NUT-10), so the
       // signer can recompute it from transaction message and input container alone.
       const tx = inputsForPayload({
-        mintQuotes: [{ quoteId: 'callback-quote', amount: 1, lockKey: pubkey }],
+        mintQuotes: [{ quoteId: 'callback-quote', amount: 1, lockKey: pubkey, issued: 0 }],
         outputs: preview.outputData.map((d) => d.blindedMessage),
       });
       expect(bytesToHex(seen!.digest)).toBe(bytesToHex(tx.quotes.get('callback-quote')!.digest));
@@ -816,7 +816,7 @@ describe('requestTokens', () => {
         { type: 'custom', data },
       );
       const tx = inputsForPayload({
-        mintQuotes: [{ quoteId: 'callback-quote', amount: 1, lockKey: pubkey }],
+        mintQuotes: [{ quoteId: 'callback-quote', amount: 1, lockKey: pubkey, issued: 0 }],
         outputs: preview.outputData.map((d) => d.blindedMessage),
       });
       expect(
@@ -852,7 +852,12 @@ describe('requestTokens', () => {
         { type: 'custom', data },
       );
       const tx = inputsForPayload({
-        mintQuotes: quotes.map((q) => ({ quoteId: q.quote, amount: 1, lockKey: pubkey })),
+        mintQuotes: quotes.map((q) => ({
+          quoteId: q.quote,
+          amount: 1,
+          lockKey: pubkey,
+          issued: 0,
+        })),
         outputs: preview.outputData.map((d) => d.blindedMessage),
       });
       quotes.forEach((q, i) => {
@@ -884,7 +889,7 @@ describe('requestTokens', () => {
       );
       const digestFor = (amount: number) =>
         inputsForPayload({
-          mintQuotes: [{ quoteId: quote.quote, amount, lockKey: pubkey }],
+          mintQuotes: [{ quoteId: quote.quote, amount, lockKey: pubkey, issued: 0 }],
           outputs: data.map((d) => d.blindedMessage),
         }).quotes.get(quote.quote)!.digest;
       for (const signature of [single.signature!, batch.signatures![0]!]) {

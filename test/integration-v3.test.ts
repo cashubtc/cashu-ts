@@ -597,7 +597,7 @@ describeV3('M4 locked quotes', () => {
         ),
       ];
       const digestB = inputsForPayload({
-        mintQuotes: [{ amount: 32n, quoteId: quoteB.quote, lockKey: lockB.secret }],
+        mintQuotes: [{ amount: 32n, quoteId: quoteB.quote, lockKey: lockB.secret, issued: 0n }],
         outputs: outputsB.map((o) => o.blindedMessage),
       }).quotes.get(quoteB.quote)!.digest;
       const mint = new Mint(mintUrl);
@@ -624,7 +624,7 @@ describeV3('M4 locked quotes', () => {
         ),
       ];
       const digestC = inputsForPayload({
-        mintQuotes: [{ amount: 32n, quoteId: quoteC.quote, lockKey: lockC.secret }],
+        mintQuotes: [{ amount: 32n, quoteId: quoteC.quote, lockKey: lockC.secret, issued: 0n }],
         outputs: outputsC.map((o) => o.blindedMessage),
       }).quotes.get(quoteC.quote)!.digest;
       await expect(
