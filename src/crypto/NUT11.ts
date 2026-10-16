@@ -874,7 +874,7 @@ function getLocktime(secret: Secret): number {
   // value is passed through for the mint to judge rather than rejected here. Arity still throws.
   const v = getTagScalar(secret, 'locktime');
   const ts = v !== undefined && /^\d+$/.test(v) ? Number(v) : NaN;
-  return Number.isSafeInteger(ts) && ts > 0 ? ts : Infinity;
+  return Number.isSafeInteger(ts) ? ts : Infinity;
 }
 
 function deriveLockState(
@@ -882,7 +882,7 @@ function deriveLockState(
   nowSeconds: number = Math.floor(Date.now() / 1000),
 ): LockState {
   if (!Number.isFinite(locktime)) return 'PERMANENT';
-  return nowSeconds < locktime ? 'ACTIVE' : 'EXPIRED';
+  return nowSeconds <= locktime ? 'ACTIVE' : 'EXPIRED';
 }
 
 function resolveNSigs(secret: Secret, lockState: LockState, refundKeys: string[]): number {
