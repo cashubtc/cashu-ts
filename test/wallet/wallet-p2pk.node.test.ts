@@ -1,6 +1,7 @@
-import { test, describe, expect } from 'vitest';
+import { test, describe, expect, vi } from 'vitest';
 
-import { Amount, Wallet, OutputData, type P2PKOptions } from '../../src';
+import { Amount, Wallet, OutputData, type Logger, type P2PKOptions } from '../../src';
+import { NULL_LOGGER } from '../../src/logger';
 
 import { mint, mintUrl, useTestServer } from './_setup';
 
@@ -230,8 +231,8 @@ describe('P2PK BlindingData', () => {
 describe('Wallet.createOutputData p2pk chokepoint', () => {
   // A mint signs a lock blind and reads it only at spend time, so a kind it does not
   // support spends as a bearer proof (NUT-10).
-  const walletFor = (nuts: Record<string, { supported: boolean }>) => {
-    const w = new Wallet(mintUrl, { unit: 'sat' });
+  const walletFor = (nuts: Record<string, { supported: boolean }>, logger?: Logger) => {
+    const w = new Wallet(mintUrl, { unit: 'sat', logger });
     w.loadMintFromCache(
       {
         name: 'lock mint',
@@ -270,5 +271,19 @@ describe('Wallet.createOutputData p2pk chokepoint', () => {
     const wallet = walletFor({ '11': { supported: true } });
     expect(() => create(wallet, { pubkey: PK1 })).not.toThrow();
     expect(() => create(wallet, { pubkey: PK1, hashlock: 'ab'.repeat(32) })).toThrow(/NUT-14/);
+  });
+
+  test('a locktime that is not in the future warns but still encodes', () => {
+    const warn = vi.fn();
+    const wallet = walletFor({ '11': { supported: true } }, { ...NULL_LOGGER, warn });
+    const [out] = create(wallet, { pubkey: PK1, locktime: 0 });
+    expect(JSON.parse(new TextDecoder().decode(out.secret))[1].tags).toContainEqual([
+      'locktime',
+      '0',
+    ]);
+    expect(warn).toHaveBeenCalledWith('Lock locktime is not in the future', { locktime: 0 });
+    warn.mockClear();
+    create(wallet, { pubkey: PK1, locktime: Math.floor(Date.now() / 1000) + 3600 });
+    expect(warn).not.toHaveBeenCalled();
   });
 });

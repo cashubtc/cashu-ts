@@ -1192,6 +1192,15 @@ class Wallet {
             'Mint does not support NUT-14: the hashlock would be spendable by anyone',
           );
         }
+        // Allowed for testing, but the refund path (or anyone, with no refund keys) can spend now.
+        if (
+          outputType.options.locktime !== undefined &&
+          outputType.options.locktime <= Math.floor(Date.now() / 1000)
+        ) {
+          this._logger.warn('Lock locktime is not in the future', {
+            locktime: outputType.options.locktime,
+          });
+        }
         outputData = this._outputDataCreator.createP2PKData(
           outputType.options,
           outputAmount,
