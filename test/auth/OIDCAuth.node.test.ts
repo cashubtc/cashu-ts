@@ -5,6 +5,8 @@ import { setupServer } from 'msw/node';
 import { beforeAll, afterAll, beforeEach, afterEach, describe, test, expect, vi } from 'vitest';
 
 import { OIDCAuth, type OIDCConfig, type TokenResponse } from '../../src/auth/OIDCAuth';
+import { NULL_LOGGER } from '../../src/logger';
+import { CTSError } from '../../src/model/Errors';
 import { encodeUint8ToBase64Url } from '../../src/utils';
 
 const ISSUER = 'http://idp.local/realms/cashu';
@@ -163,6 +165,81 @@ describe('OIDCAuth: PKCE + auth code', () => {
         '&client_id=cashu-client' +
         '&code_verifier=verifier_123',
     );
+  });
+
+  test('changing client ID starts an independent refresh', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const clients: string[] = [];
+    server.use(
+      http.post(TOKEN_EP, async ({ request }) => {
+        clients.push(new URLSearchParams(await request.text()).get('client_id')!);
+        await gate;
+        return HttpResponse.json(accessOk);
+      }),
+    );
+    const oidc = new OIDCAuth(DISCOVERY, { clientId: 'first' });
+    const first = oidc.refresh('saved-r');
+    oidc.setClient('second');
+    const second = oidc.refresh('saved-r');
+    try {
+      await vi.waitFor(() => expect(clients).toHaveLength(2));
+      expect(clients).toEqual(['first', 'second']);
+    } finally {
+      release();
+      await Promise.all([first, second]);
+    }
+  });
+
+  test('completed refreshes can be retried after failure and success', async () => {
+    let requests = 0;
+    server.use(
+      http.post(TOKEN_EP, () => {
+        requests++;
+        return requests === 1
+          ? HttpResponse.json({ error: 'temporarily_unavailable' }, { status: 503 })
+          : HttpResponse.json(accessOk);
+      }),
+    );
+    const oidc = new OIDCAuth(DISCOVERY);
+    await expect(oidc.refresh('saved-r')).rejects.toThrow('temporarily_unavailable');
+    await expect(oidc.refresh('saved-r')).resolves.toEqual(accessOk);
+    await expect(oidc.refresh('saved-r')).resolves.toEqual(accessOk);
+    expect(requests).toBe(3);
+  });
+
+  test('refresh retains its starting listeners and honours removal while pending', async () => {
+    let release!: (response: Response) => void;
+    const response = new Promise<Response>((resolve) => {
+      release = resolve;
+    });
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    server.use(
+      http.post(TOKEN_EP, async () => {
+        markStarted();
+        return response;
+      }),
+    );
+    const oidc = new OIDCAuth(DISCOVERY);
+    const removed = vi.fn();
+    const retained = vi.fn();
+    const added = vi.fn();
+    oidc.addTokenListener(removed);
+    oidc.addTokenListener(retained);
+    const pending = oidc.refresh('saved-r');
+    await started;
+    oidc.removeTokenListener(removed);
+    oidc.addTokenListener(added);
+    release(Response.json(accessOk));
+    await pending;
+    expect(removed).not.toHaveBeenCalled();
+    expect(added).not.toHaveBeenCalled();
+    expect(retained).toHaveBeenCalledWith(accessOk, 'refresh');
   });
 
   test('removeTokenListener stops a listener from firing', async () => {
@@ -346,6 +423,155 @@ describe('OIDCAuth: device flow', () => {
     start.cancel();
     // loop checks "aborted" before sleeping, no timers needed
     await expect(promise).rejects.toThrow('device polling cancelled');
+  });
+
+  test('startDeviceAuth: cancel() ends a pending poll delay instead of waiting it out', async () => {
+    const oidc = new OIDCAuth(DISCOVERY, { clientId: 'cashu-client' });
+    const start = await oidc.startDeviceAuth(600);
+    vi.useFakeTimers();
+    try {
+      const promise = start.poll();
+      // Let poll() reach the delay (discovery is already cached by startDeviceAuth).
+      await vi.advanceTimersByTimeAsync(0);
+      expect(vi.getTimerCount()).toBe(1);
+
+      start.cancel();
+
+      expect(vi.getTimerCount()).toBe(0);
+      await expect(promise).rejects.toThrow('device polling cancelled');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('startDeviceAuth: cancel() during the poll delay drops a token that arrives after it', async () => {
+    let tokenRequests = 0;
+    const onTokens = vi.fn();
+    server.use(
+      http.post(TOKEN_EP, () => {
+        tokenRequests++;
+        return HttpResponse.json(accessOk);
+      }),
+    );
+    const oidc = new OIDCAuth(DISCOVERY, { clientId: 'cashu-client', onTokens });
+    let wake!: () => void;
+    const sleepSpy = vi
+      .spyOn(oidc as unknown as { sleep: (ms: number) => Promise<void> }, 'sleep')
+      .mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            wake = resolve;
+          }),
+      );
+
+    const start = await oidc.startDeviceAuth(1);
+    const promise = start.poll();
+    // Let poll() load config and enter the pending sleep.
+    await vi.waitFor(() => expect(sleepSpy).toHaveBeenCalled());
+
+    start.cancel();
+    wake();
+
+    await expect(promise).rejects.toThrow('device polling cancelled');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onTokens).not.toHaveBeenCalled();
+    // The cancelled flow stops before asking for the token at all.
+    expect(tokenRequests).toBe(0);
+  });
+
+  test('startDeviceAuth: cancel() during the token request drops the token it returns', async () => {
+    let releaseToken!: () => void;
+    const tokenGate = new Promise<void>((resolve) => {
+      releaseToken = resolve;
+    });
+    let tokenRequests = 0;
+    server.use(
+      http.post(TOKEN_EP, async () => {
+        tokenRequests++;
+        await tokenGate;
+        return HttpResponse.json(accessOk);
+      }),
+    );
+    const onTokens = vi.fn();
+    const oidc = new OIDCAuth(DISCOVERY, { clientId: 'cashu-client', onTokens });
+    vi.spyOn(
+      oidc as unknown as { sleep: (ms: number) => Promise<void> },
+      'sleep',
+    ).mockResolvedValue(undefined);
+
+    const start = await oidc.startDeviceAuth(1);
+    const promise = start.poll();
+    await vi.waitFor(() => expect(tokenRequests).toBe(1));
+
+    start.cancel();
+    releaseToken();
+
+    await expect(promise).rejects.toThrow('device polling cancelled');
+    await Promise.resolve();
+    expect(onTokens).not.toHaveBeenCalled();
+  });
+
+  test('cancel settles a poll even when its fetch ignores cancellation', async () => {
+    let release!: (response: Response) => void;
+    const response = new Promise<Response>((resolve) => {
+      release = resolve;
+    });
+    let markStarted!: () => void;
+    const tokenStarted = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    let tokenSignal: AbortSignal | null | undefined;
+    const onTokens = vi.fn();
+    server.use(
+      http.post(TOKEN_EP, async ({ request }) => {
+        tokenSignal = request.signal;
+        markStarted();
+        return response;
+      }),
+    );
+    const oidc = new OIDCAuth(DISCOVERY, { onTokens });
+    vi.spyOn(
+      oidc as unknown as { sleep: (ms: number) => Promise<void> },
+      'sleep',
+    ).mockResolvedValue(undefined);
+    const start = await oidc.startDeviceAuth(1);
+    let outcome: unknown;
+    const pending = start.poll().then(
+      (t) => {
+        outcome = t;
+        return t;
+      },
+      (err: unknown) => {
+        outcome = err;
+      },
+    );
+    await tokenStarted;
+    start.cancel();
+    try {
+      await vi.waitFor(() => expect(outcome).toBeInstanceOf(CTSError));
+      expect(tokenSignal?.aborted).toBe(true);
+    } finally {
+      release(Response.json(accessOk));
+      await pending;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    expect(onTokens).not.toHaveBeenCalled();
+  });
+
+  test('cancel clears every concurrently sleeping poll', async () => {
+    const oidc = new OIDCAuth(DISCOVERY);
+    const start = await oidc.startDeviceAuth(600);
+    vi.useFakeTimers();
+    try {
+      const pending = [start.poll(), start.poll()].map((p) => p.catch((err: unknown) => err));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(vi.getTimerCount()).toBe(2);
+      start.cancel();
+      expect(vi.getTimerCount()).toBe(0);
+      for (const result of await Promise.all(pending)) expect(result).toBeInstanceOf(CTSError);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test('deviceStart throws if provider lacks device_authorization_endpoint', async () => {
@@ -764,4 +990,222 @@ test('postFormStrict throws HTTP <status> when non 2xx and no JSON', async () =>
   const o = new OIDCAuth(DISC);
   await o.loadConfig();
   await expect(o['postFormStrict'](TOKEN, 'grant_type=x')).rejects.toThrow('OIDCAuth: HTTP 502');
+});
+
+// ---------- request policy ----------
+describe('OIDCAuth: request policy', () => {
+  afterEach(() => vi.restoreAllMocks());
+  const DISC = 'http://oidc/.well-known/openid-configuration';
+  const TOKEN = 'http://oidc/token';
+  const DEVICE = 'http://oidc/device';
+  const AUTHZ = 'http://oidc/auth';
+  const deviceStart = {
+    device_code: 'dev',
+    user_code: 'U',
+    verification_uri: 'http://oidc/verify',
+  };
+
+  /**
+   * Serves a minimal provider and records the redirect mode of every POST.
+   */
+  function useProvider(): string[] {
+    const redirects: string[] = [];
+    server.use(
+      http.get(DISC, () =>
+        HttpResponse.json({
+          token_endpoint: TOKEN,
+          device_authorization_endpoint: DEVICE,
+          authorization_endpoint: AUTHZ,
+        }),
+      ),
+      http.post(DEVICE, ({ request }) => {
+        redirects.push(request.redirect);
+        return HttpResponse.json(deviceStart);
+      }),
+      http.post(TOKEN, ({ request }) => {
+        redirects.push(request.redirect);
+        return HttpResponse.json({ access_token: 'ok' });
+      }),
+    );
+    return redirects;
+  }
+
+  /**
+   * Records every setTimeout delay and fires the callback at once.
+   */
+  function recordTimeouts(): number[] {
+    const delays: number[] = [];
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((cb: () => void, ms?: number) => {
+      delays.push(ms ?? 0);
+      cb();
+      return 0;
+    }) as unknown as typeof setTimeout);
+    return delays;
+  }
+
+  test('token endpoint requests fail rather than follow a redirect', async () => {
+    const redirects = useProvider();
+    const oidc = new OIDCAuth(DISC);
+    vi.spyOn(oidc as unknown as { sleep: () => Promise<void> }, 'sleep').mockResolvedValue();
+
+    await oidc.passwordGrant('user', 'pass'); // strict path
+    await oidc.devicePoll('dev', 0); // loose path
+
+    expect(redirects).toEqual(['error', 'error']);
+  });
+
+  test('sleep keeps the scheduled delay within the timer range', async () => {
+    const delays = recordTimeouts();
+    const oidc = new OIDCAuth(DISC);
+
+    await oidc['sleep'](2_147_484 * 1000);
+    await oidc['sleep'](1000);
+
+    expect(delays).toEqual([2_147_483_647, 1000]);
+  });
+
+  test('startDeviceAuth keeps an oversized provider interval within the timer range', async () => {
+    useProvider();
+    server.use(http.post(DEVICE, () => HttpResponse.json({ ...deviceStart, interval: 2_147_484 })));
+    const delays = recordTimeouts();
+    const oidc = new OIDCAuth(DISC);
+
+    const start = await oidc.startDeviceAuth();
+    await start.poll();
+
+    expect(delays.length).toBeGreaterThan(0);
+    for (const ms of delays) expect(ms).toBeLessThanOrEqual(2_147_483_647);
+  });
+
+  test.each([
+    ['a non-numeric caller interval falls back to the default', 'abc' as unknown as number, 5000],
+    ['a huge caller interval stays within the timer range', 2_147_484, 2_147_483_647],
+  ])('startDeviceAuth: %s', async (_name, intervalSec, expectedMs) => {
+    useProvider();
+    const delays = recordTimeouts();
+    const oidc = new OIDCAuth(DISC);
+
+    await (await oidc.startDeviceAuth(intervalSec)).poll();
+
+    expect(delays).toEqual([expectedMs]);
+  });
+
+  test.each([
+    ['a non-numeric interval falls back to the default', 'abc' as unknown as number, 5000],
+    ['a huge interval stays within the timer range', 2_147_484, 2_147_483_647],
+  ])('devicePoll: %s', async (_name, intervalSec, expectedMs) => {
+    useProvider();
+    const delays = recordTimeouts();
+    const oidc = new OIDCAuth(DISC);
+
+    await oidc.devicePoll('dev', intervalSec);
+
+    expect(delays).toEqual([expectedMs]);
+  });
+
+  test('buildAuthCodeUrl warns about a PKCE method other than S256 and still sends it', async () => {
+    useProvider();
+    const warn = vi.fn();
+    const oidc = new OIDCAuth(DISC, { logger: { ...NULL_LOGGER, warn } });
+
+    const url = await oidc.buildAuthCodeUrl({
+      redirectUri: 'http://app/cb',
+      codeChallenge: 'challenge',
+      codeChallengeMethod: 'plain',
+    });
+
+    expect(new URL(url).searchParams.get('code_challenge_method')).toBe('plain');
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/'plain'.*S256/));
+    warn.mockClear();
+    await oidc.buildAuthCodeUrl({ redirectUri: 'http://app/cb', codeChallenge: 'challenge' });
+    expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+// ---------- endpoint schemes ----------
+describe('OIDCAuth: endpoint schemes', () => {
+  const SECURE_BASE = 'https://oidc.local';
+  const SECURE_DISCOVERY = `${SECURE_BASE}/.well-known/openid-configuration`;
+  const secureDiscovery: OIDCConfig = {
+    issuer: ISSUER,
+    token_endpoint: `${SECURE_BASE}/token`,
+    device_authorization_endpoint: `${SECURE_BASE}/device`,
+    authorization_endpoint: `${SECURE_BASE}/auth`,
+  };
+  const spyLogger = () => ({ ...NULL_LOGGER, warn: vi.fn() });
+
+  test('loadConfig rejects a token_endpoint that is not http(s)', async () => {
+    server.use(
+      http.get(DISCOVERY, () =>
+        HttpResponse.json({ ...goodDiscovery, token_endpoint: 'javascript:alert(1)' }),
+      ),
+    );
+    await expect(new OIDCAuth(DISCOVERY).loadConfig()).rejects.toThrow(
+      'OIDCAuth: token_endpoint must be an http(s) URL',
+    );
+  });
+
+  test('deviceStart refuses a device endpoint that is not http(s)', async () => {
+    server.use(
+      http.get(DISCOVERY, () =>
+        HttpResponse.json({ ...goodDiscovery, device_authorization_endpoint: 'ftp://x' }),
+      ),
+    );
+    const oidc = new OIDCAuth(DISCOVERY, { clientId: 'cashu-client' });
+    await expect(oidc.deviceStart()).rejects.toThrow(
+      'OIDCAuth: device_authorization_endpoint must be an http(s) URL',
+    );
+  });
+
+  test('an https discovery document naming an http token_endpoint loads with a warning', async () => {
+    server.use(
+      http.get(SECURE_DISCOVERY, () =>
+        HttpResponse.json({ ...secureDiscovery, token_endpoint: TOKEN_EP }),
+      ),
+    );
+    const logger = spyLogger();
+    const cfg = await new OIDCAuth(SECURE_DISCOVERY, { logger }).loadConfig();
+    expect(cfg.token_endpoint).toBe(TOKEN_EP);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'OIDCAuth: token_endpoint is not https although discovery is; v5 rejects this',
+      { label: 'token_endpoint' },
+    );
+  });
+
+  test('an https discovery document with https endpoints loads quietly', async () => {
+    server.use(http.get(SECURE_DISCOVERY, () => HttpResponse.json(secureDiscovery)));
+    const logger = spyLogger();
+    const cfg = await new OIDCAuth(SECURE_DISCOVERY, { logger }).loadConfig();
+    expect(cfg.token_endpoint).toBe(`${SECURE_BASE}/token`);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  test('deviceStart and buildAuthCodeUrl warn on an http endpoint named by https discovery', async () => {
+    server.use(
+      http.get(SECURE_DISCOVERY, () =>
+        HttpResponse.json({
+          ...secureDiscovery,
+          device_authorization_endpoint: DEVICE_EP,
+          authorization_endpoint: AUTH_EP,
+        }),
+      ),
+      http.post(DEVICE_EP, () =>
+        HttpResponse.json({
+          device_code: 'dev-123',
+          user_code: 'UCODE-123',
+          verification_uri: `${ISSUER}/device`,
+          interval: 2,
+          expires_in: 600,
+        }),
+      ),
+    );
+    const logger = spyLogger();
+    const oidc = new OIDCAuth(SECURE_DISCOVERY, { clientId: 'cashu-client', logger });
+    await oidc.deviceStart();
+    await oidc.buildAuthCodeUrl({ redirectUri: 'http://localhost/cb', codeChallenge: 'c' });
+    expect(logger.warn.mock.calls.map((c) => c[1])).toEqual([
+      { label: 'device_authorization_endpoint' },
+      { label: 'authorization_endpoint' },
+    ]);
+  });
 });

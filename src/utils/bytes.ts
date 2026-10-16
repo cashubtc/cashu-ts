@@ -1,5 +1,6 @@
 import { CTSError } from '../model/Errors';
 
+// eslint-disable-next-line no-restricted-syntax -- this module owns the decoders
 const fieldUtf8Decoder = new TextDecoder('utf-8', { ignoreBOM: true, fatal: true });
 
 /**
@@ -18,6 +19,7 @@ export function decodeUtf8Field(bytes: Uint8Array): string {
   }
 }
 
+// eslint-disable-next-line no-restricted-syntax -- this module owns the decoders
 const documentUtf8Decoder = new TextDecoder('utf-8', { fatal: true });
 
 /**

@@ -1,10 +1,12 @@
 import { type Logger, NULL_LOGGER, safeCallback } from '../logger';
 import {
+  CallerAbortError,
   CTSError,
   HttpResponseError,
   NetworkError,
   MintOperationError,
   RateLimitError,
+  UncancellableReadError,
 } from '../model/Errors';
 import { type Nut19Policy } from '../model/types';
 import { JSONInt } from '../utils/JSONInt';
@@ -56,7 +58,7 @@ const IS_BROWSER_LIKE = detectBrowserLike(globalThis);
  * native HTTP stacks otherwise leak fingerprintable identifiers (undici, NSURLSession, OkHttp).
  * Skipped in browsers + workers because Firefox/WebKit can promote it to a CORS preflight even
  * though the Fetch spec lists it as a forbidden header. Caller-supplied `requestHeaders` always
- * wins.
+ * wins, matched case-insensitively (HTTP header names are not case-sensitive).
  * @internal
  */
 export function buildRequestHeaders(
@@ -64,12 +66,14 @@ export function buildRequestHeaders(
   requestHeaders: Record<string, string> | undefined,
   isBrowserLike: boolean = IS_BROWSER_LIKE,
 ): Record<string, string> {
-  return {
-    Accept: 'application/json, text/plain, */*',
-    ...(body ? { 'Content-Type': 'application/json' } : undefined),
-    ...(isBrowserLike ? undefined : { 'User-Agent': 'Mozilla/5.0' }),
-    ...requestHeaders,
-  };
+  return mergeHeadersCaseInsensitive(
+    {
+      Accept: 'application/json, text/plain, */*',
+      ...(body ? { 'Content-Type': 'application/json' } : undefined),
+      ...(isBrowserLike ? undefined : { 'User-Agent': 'Mozilla/5.0' }),
+    },
+    requestHeaders,
+  );
 }
 
 /**
@@ -82,6 +86,33 @@ export function buildRequestHeaders(
  */
 export function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
+}
+
+/**
+ * Message for a failed request: the innermost cause and its code (a bare `fetch failed` hides
+ * both), and the mint's origin, never the path, which can carry quote ids.
+ */
+function describeNetworkFailure(err: unknown, fallback: string, endpoint: string): string {
+  let root: unknown = err;
+  for (;;) {
+    const next = (root as { cause?: unknown }).cause;
+    if (!(next instanceof Error) || next === root) break;
+    root = next;
+  }
+  let detail = '';
+  if (root instanceof Error && root !== err && root.message) {
+    const code = (root as { code?: unknown }).code;
+    detail = ` (${root.message}${typeof code === 'string' ? `, ${code}` : ''})`;
+  }
+  return `${errorMessage(err, fallback)}${detail} at ${endpointOrigin(endpoint)}`;
+}
+
+function endpointOrigin(endpoint: string): string {
+  try {
+    return new URL(endpoint).origin;
+  } catch {
+    return endpoint;
+  }
 }
 
 /**
@@ -185,9 +216,9 @@ export type RequestOptions = RequestArgs &
   Omit<RequestInit, 'body' | 'headers'> &
   Partial<Nut19Policy> & {
     /**
-     * Per-request timeout in milliseconds. If a single fetch hangs longer than this, it is aborted
-     * and treated as a NetworkError (triggering retry on cached endpoints). Without this, a hung
-     * connection can consume the entire TTL retry window.
+     * Per-attempt timeout in milliseconds, default 300000 (5 minutes). If a single fetch hangs
+     * longer than this, it is aborted and treated as a NetworkError (triggering retry on cached
+     * endpoints). `Infinity` disables it.
      */
     requestTimeout?: number;
     /**
@@ -284,9 +315,11 @@ export function setGlobalRequestOptions(options: Partial<RequestOptions>): void 
 }
 
 /**
- * Allows a logger to be set.
+ * Sets the process-wide fallback logger for transport calls.
  *
- * @param {Logger} logger The logger instance to use.
+ * @remarks
+ * A per-call or global `logger` request option takes precedence; this only applies when neither is
+ * set.
  */
 export function setRequestLogger(logger: Logger): void {
   requestLogger = logger;
@@ -294,29 +327,9 @@ export function setRequestLogger(logger: Logger): void {
 
 const MAX_CACHED_RETRIES = 9; // 10 requests total
 const MAX_DELAY = 1000; // 1 sec
+const DEFAULT_REQUEST_TIMEOUT_MS = 300_000; // per attempt, matches undici's own; Infinity disables
 const BASE_DELAY = 100; // 100 ms
 const AUTH_HEADERS = ['blind-auth', 'clear-auth']; // NUT-21/22 tokens, lowercased for comparison
-
-class CallerAbortError extends NetworkError {
-  constructor(message: string) {
-    super(message);
-    this.name = 'CallerAbortError';
-    Object.setPrototypeOf(this, CallerAbortError.prototype);
-  }
-}
-
-/**
- * A timeout that fired while reading a response body that could not be cancelled. The underlying
- * read may still be consuming the body, so this is NOT retried: another attempt would start a
- * second uncancellable read against the same (possibly unbounded) body.
- */
-class UncancellableReadError extends NetworkError {
-  constructor(message: string, options?: { cause?: unknown }) {
-    super(message, options);
-    this.name = 'UncancellableReadError';
-    Object.setPrototypeOf(this, UncancellableReadError.prototype);
-  }
-}
 
 /**
  * Returns true if the error warrants a retry on NUT-19 cached endpoints:
@@ -381,6 +394,8 @@ function endpointPathMatchesCachedPath(endpointPath: string, cachedPath: string)
  */
 async function requestWithRetry(options: RequestOptions): Promise<unknown> {
   const { ttl, cached_endpoints, endpoint } = options;
+  // Per-call logger wins; the process-wide default only covers callers that never set one.
+  const activeLogger = options.logger ?? requestLogger;
   // A BAT is single-use (NUT-22): if the first attempt reached the mint, a retry replays a spent
   // token and fails auth, hiding the original result. The auth layer issues a fresh one per call.
   const carriesBat = Object.keys(options.headers ?? {}).some(
@@ -418,19 +433,19 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
         const shouldRetry = retries < MAX_CACHED_RETRIES && (!ttl || totalElapsedTime < ttl);
 
         if (shouldRetry) {
-          const cappedDelay = Math.min(2 ** retries * BASE_DELAY, MAX_DELAY);
-
-          const delay = Math.random() * cappedDelay;
+          // Jitter within the upper half of the cap, so retries never rapid-fire from zero.
+          const halfCap = Math.min(2 ** retries * BASE_DELAY, MAX_DELAY) / 2;
+          const delay = halfCap + Math.random() * halfCap;
 
           if (totalElapsedTime + delay > ttl) {
-            requestLogger.error(`Network Error: request abandoned after ${retries} retries`, {
+            activeLogger.warn(`Network Error: request abandoned after ${retries} retries`, {
               e,
               retries,
             });
             throw e;
           }
           retries++;
-          requestLogger.info(`Network Error: attempting retry ${retries} in ${delay}ms`, {
+          activeLogger.info(`Network Error: attempting retry ${retries} in ${delay}ms`, {
             e,
             retries,
             delay,
@@ -440,7 +455,8 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
           return retry();
         }
       }
-      requestLogger.error(`Request failed and could not be retried`, { e });
+      // The error propagates; the caller decides whether it is one (eg a signature fallback).
+      activeLogger.debug(`Request failed and could not be retried`, { e });
       throw e;
     }
   };
@@ -473,7 +489,8 @@ async function _request(options: RequestOptions): Promise<unknown> {
   // Intentionally unused vars (extracted from fetchOptions)
   void cached_endpoints;
   void ttl;
-  void logger;
+  // Per-call logger wins; the process-wide default only covers callers that never set one.
+  const activeLogger = logger ?? requestLogger;
 
   const body = requestBody ? JSONInt.stringify(requestBody) : undefined;
   const headers = buildRequestHeaders(body, requestHeaders);
@@ -486,7 +503,10 @@ async function _request(options: RequestOptions): Promise<unknown> {
   }
 
   // Construct an AbortController based on timeout, user signal, or both!
-  const timeoutController = requestTimeout !== undefined ? new AbortController() : undefined;
+  const timeoutController =
+    requestTimeout !== undefined && Number.isFinite(requestTimeout)
+      ? new AbortController()
+      : undefined;
   let signal: AbortSignal | undefined = callerSignal;
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   let cleanupAbortListeners: (() => void) | undefined;
@@ -533,17 +553,22 @@ async function _request(options: RequestOptions): Promise<unknown> {
       const timedOut = !!timeoutController?.signal.aborted;
       const callerAborted = !!callerSignal?.aborted;
       if (timedOut) {
-        throw new NetworkError(`Request timed out after ${requestTimeout}ms`, { cause: err });
+        throw new NetworkError(
+          `Request timed out after ${requestTimeout}ms at ${endpointOrigin(endpoint)}`,
+          { cause: err },
+        );
       }
       if (callerAborted) {
         throw new CallerAbortError(errorMessage(err, 'Request aborted by caller'));
       }
       if (err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError')) {
-        throw new NetworkError(err.message, { cause: err });
+        throw new NetworkError(describeNetworkFailure(err, err.message, endpoint), { cause: err });
       }
       // A fetch() promise only rejects when the request fails,
       // for example, because of a badly-formed request URL or a network error.
-      throw new NetworkError(errorMessage(err, 'Network request failed'), { cause: err });
+      throw new NetworkError(describeNetworkFailure(err, 'Network request failed', endpoint), {
+        cause: err,
+      });
     }
 
     // Parse Retry-After once for reuse in both ResponseMeta and RateLimitError
@@ -559,7 +584,7 @@ async function _request(options: RequestOptions): Promise<unknown> {
         rateLimitPolicy: response.headers.get('RateLimit-Policy') ?? undefined,
         headers: response.headers,
       };
-      safeCallback(onResponseMeta, meta, requestLogger, {
+      safeCallback(onResponseMeta, meta, activeLogger, {
         op: 'request.onResponseMeta',
         status: response.status,
         endpoint,
@@ -567,6 +592,16 @@ async function _request(options: RequestOptions): Promise<unknown> {
     }
 
     if (!response.ok) {
+      // The status is already known: check it before reading the optional body, so a stalled
+      // body cannot turn a known 429 into a retryable network failure.
+      if (response.status === 429) {
+        const body = response.body;
+        if (body && typeof body.cancel === 'function') {
+          body.cancel().catch(() => undefined);
+        }
+        throw new RateLimitError('429 Too Many Requests', retryAfterMs);
+      }
+
       let errorData: ApiError;
       let errorDataCause: unknown;
       try {
@@ -578,10 +613,6 @@ async function _request(options: RequestOptions): Promise<unknown> {
         if (aborted) throw aborted;
         errorDataCause = err;
         errorData = { error: 'bad response' };
-      }
-
-      if (response.status === 429) {
-        throw new RateLimitError('429 Too Many Requests', retryAfterMs);
       }
 
       if (
@@ -612,7 +643,7 @@ async function _request(options: RequestOptions): Promise<unknown> {
       // like the fetch-level catch so cached-endpoint retry still engages on a timeout.
       const aborted = abortError(err, timeoutController, requestTimeout, callerSignal);
       if (aborted) throw aborted;
-      requestLogger.error('Failed to read HTTP response', { err });
+      activeLogger.error('Failed to read HTTP response', { err });
       // Keep the stable "bad response" message rather than exposing the transport error, with the
       // original error retained as cause.
       throw new HttpResponseError('bad response', response.status, { cause: err });
@@ -622,9 +653,9 @@ async function _request(options: RequestOptions): Promise<unknown> {
       if (!responseText) {
         throw new CTSError('Empty response body');
       }
-      return JSONInt.parse(responseText);
+      return JSONInt.parse(responseText, undefined, { strict: true });
     } catch (err) {
-      requestLogger.error('Failed to parse HTTP response', { err });
+      activeLogger.error('Failed to parse HTTP response', { err });
       throw new HttpResponseError('bad response', response.status, { cause: err });
     }
   } finally {
@@ -640,7 +671,7 @@ function parseErrorBody(errorText: string): ApiError {
   if (!errorText) return { detail: 'bad response' };
   let parsed: unknown;
   try {
-    parsed = JSONInt.parse(errorText);
+    parsed = JSONInt.parse(errorText, undefined, { strict: true });
   } catch {
     return { detail: errorText };
   }
@@ -652,6 +683,25 @@ function parseErrorBody(errorText: string): ApiError {
     return parsed as ApiError;
   }
   return { detail: parsed };
+}
+
+/**
+ * Merges header records by lowercase name so a global and a per-call header differing only in case
+ * do not both survive; `overrides` wins per name and its original spelling is kept.
+ *
+ * @internal
+ */
+function mergeHeadersCaseInsensitive(
+  base: Record<string, string> | undefined,
+  overrides: Record<string, string> | undefined,
+): Record<string, string> {
+  const merged = new Map<string, [string, string]>();
+  for (const headers of [base, overrides]) {
+    for (const [name, value] of Object.entries(headers ?? {})) {
+      merged.set(name.toLowerCase(), [name, value]);
+    }
+  }
+  return Object.fromEntries(merged.values());
 }
 
 /**
@@ -668,18 +718,22 @@ export default async function request<T>(options: RequestOptions): Promise<T> {
   for (const key of Object.keys(PER_CALL_OPTIONS) as PerCallOption[]) {
     if (options[key] !== undefined) (merged as Record<string, unknown>)[key] = options[key];
   }
+  if (merged.requestTimeout === undefined) merged.requestTimeout = DEFAULT_REQUEST_TIMEOUT_MS;
   // Neither side owns the header bag: a global adds app-wide headers, per-call carries auth.
-  merged.headers = { ...globalRequestOptions.headers, ...options.headers };
+  // Header names are case-insensitive over the wire, so the merge must be too, or a per-call
+  // header differing only in case leaves the global value in place alongside it.
+  merged.headers = mergeHeadersCaseInsensitive(globalRequestOptions.headers, options.headers);
 
   // Both set: wrap in safeCallback so a throw in one doesn't prevent the other from firing.
   if (perRequest && globalMeta && perRequest !== globalMeta) {
+    const activeLogger = merged.logger ?? requestLogger;
     merged.onResponseMeta = (meta) => {
-      safeCallback(perRequest, meta, requestLogger, {
+      safeCallback(perRequest, meta, activeLogger, {
         op: 'request.onResponseMeta',
         scope: 'per-request',
         endpoint: options.endpoint,
       });
-      safeCallback(globalMeta, meta, requestLogger, {
+      safeCallback(globalMeta, meta, activeLogger, {
         op: 'request.onResponseMeta',
         scope: 'global',
         endpoint: options.endpoint,

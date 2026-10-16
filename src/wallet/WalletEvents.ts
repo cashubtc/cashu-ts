@@ -1,5 +1,5 @@
 import { hashToCurve } from '../crypto';
-import { safeCallback } from '../logger';
+import { type Logger, safeCallback } from '../logger';
 import { Amount } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { MintQuoteState, MeltQuoteState } from '../model/types';
@@ -11,6 +11,7 @@ import type {
   MintQuoteBolt11Response,
 } from '../model/types';
 import type { KeyChainCache } from '../model/types/keyset';
+import { assertSpendableVersion, nullIfUndefined, verifiedPreimage } from '../utils';
 
 import { type OperationCounters } from './CounterSource';
 import type { Wallet } from './Wallet';
@@ -20,6 +21,10 @@ export type SubscriptionCanceller = () => void;
 export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
 
 export type SubscribeOpts = { signal?: AbortSignal };
+
+function noop(): void {
+  /* noop */
+}
 
 function safeStringify(obj: unknown): string {
   const seen = new WeakSet<object>();
@@ -46,13 +51,27 @@ function normalizeMintQuoteUpdate(p: MintQuoteBolt11Response): MintQuoteBolt11Re
   };
 }
 
-function normalizeMeltQuoteUpdate(p: MeltQuoteBolt11Response): MeltQuoteBolt11Response {
-  return {
+// NUT-17 frames are raw JSON; give callbacks the preimage handling the HTTP melt responses get
+function normalizeMeltQuoteUpdate(
+  p: MeltQuoteBolt11Response,
+  logger: Logger,
+): MeltQuoteBolt11Response {
+  const data: Record<string, unknown> = {
     ...p,
     ...(p.amount != null && { amount: Amount.from(p.amount) }),
     ...(p.fee_reserve != null && { fee_reserve: Amount.from(p.fee_reserve) }),
     ...(p.change && { change: p.change.map((s) => ({ ...s, amount: Amount.from(s.amount) })) }),
   };
+  nullIfUndefined(data, 'payment_preimage');
+  if (typeof data.payment_preimage === 'string' && typeof data.request === 'string') {
+    data.payment_preimage = verifiedPreimage(
+      data.request,
+      data.payment_preimage,
+      logger,
+      'bolt11 melt quote update',
+    );
+  }
+  return data as MeltQuoteBolt11Response;
 }
 
 function normalizeError(err: unknown): Error {
@@ -100,9 +119,7 @@ export class WalletEvents {
     if (!signal) return cancel;
     if (signal.aborted) {
       cancel();
-      return () => {
-        /* noop */
-      };
+      return noop;
     }
     const onAbort = () => cancel();
     signal.addEventListener('abort', onAbort, { once: true });
@@ -260,7 +277,11 @@ export class WalletEvents {
     err: (e: Error) => void,
     opts?: SubscribeOpts,
   ): Promise<SubscriptionCanceller> {
+    // Filters must never reach the wire for a subscription already cancelled, so an abort is
+    // checked both before the connect and again once it settles.
+    if (opts?.signal?.aborted) return noop;
     await this.wallet.mint.connectWebSocket();
+    if (opts?.signal?.aborted) return noop;
     const ws = this.wallet.mint.webSocketConnection;
     if (!ws) throw new CTSError('Failed to establish WebSocket connection.');
 
@@ -274,7 +295,8 @@ export class WalletEvents {
         err(normalizeError(e));
         return;
       }
-      cb(quote);
+      // cb may be an async consumer callback; a rejection must not escape uncontained.
+      safeCallback(cb, quote, this.wallet.logger, { event: 'bolt11_mint_quote' });
     };
     const subId = ws.createSubscription({ kind: 'bolt11_mint_quote', filters: uniq }, handler, err);
     const cancel = () => ws.cancelSubscription(subId, handler);
@@ -319,7 +341,11 @@ export class WalletEvents {
     err: (e: Error) => void,
     opts?: SubscribeOpts,
   ): Promise<SubscriptionCanceller> {
+    // Filters must never reach the wire for a subscription already cancelled, so an abort is
+    // checked both before the connect and again once it settles.
+    if (opts?.signal?.aborted) return noop;
     await this.wallet.mint.connectWebSocket();
+    if (opts?.signal?.aborted) return noop;
     const ws = this.wallet.mint.webSocketConnection;
     if (!ws) throw new CTSError('Failed to establish WebSocket connection.');
 
@@ -327,12 +353,12 @@ export class WalletEvents {
     const handler = (p: MeltQuoteBolt11Response) => {
       let quote: MeltQuoteBolt11Response;
       try {
-        quote = normalizeMeltQuoteUpdate(p);
+        quote = normalizeMeltQuoteUpdate(p, this.wallet.logger);
       } catch (e) {
         err(normalizeError(e));
         return;
       }
-      cb(quote);
+      safeCallback(cb, quote, this.wallet.logger, { event: 'bolt11_melt_quote' });
     };
     const subId = ws.createSubscription({ kind: 'bolt11_melt_quote', filters: uniq }, handler, err);
     const cancel = () => ws.cancelSubscription(subId, handler);
@@ -382,7 +408,15 @@ export class WalletEvents {
     err: (e: Error) => void,
     opts?: SubscribeOpts,
   ): Promise<SubscriptionCanceller> {
+    // Filters must never reach the wire for a subscription already cancelled, so an abort is
+    // checked both before the connect and again once it settles.
+    if (opts?.signal?.aborted) return noop;
+    // Y is computed on secp below, so a keyset whose curve this build does not know would be
+    // watched under the wrong point and never see the proof's real state changes. Checked before
+    // the connect: no socket should be opened for a subscription that cannot work.
+    for (const p of proofs) assertSpendableVersion(p.id, this.wallet.logger);
     await this.wallet.mint.connectWebSocket();
+    if (opts?.signal?.aborted) return noop;
     const ws = this.wallet.mint.webSocketConnection;
     if (!ws) throw new CTSError('Failed to establish WebSocket connection.');
 
@@ -403,7 +437,7 @@ export class WalletEvents {
     const handler = (payload: ProofState) => {
       const proof = proofMap[payload.Y];
       if (!proof) return; // ignore unsolicited Y from a misbehaving mint
-      cb({ ...payload, proof });
+      safeCallback(cb, { ...payload, proof }, this.wallet.logger, { event: 'proof_state' });
     };
     const subId = ws.createSubscription({ kind: 'proof_state', filters: ys }, handler, err);
     const cancel = () => ws.cancelSubscription(subId, handler);

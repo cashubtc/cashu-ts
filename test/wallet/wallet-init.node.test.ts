@@ -498,7 +498,7 @@ describe('test fees', () => {
     server.use(
       http.get(mintUrl + '/v1/melt/quote/bolt11/test', () => {
         return HttpResponse.json({
-          quote: 'test_melt_quote_id',
+          quote: 'test',
           amount: Amount.from(2000),
           unit: 'sat',
           request: 'lnbc20u1pfake', // HRP encodes the quoted 2,000 sat
@@ -569,7 +569,7 @@ describe('bindKeyset & withKeyset', () => {
     expect(w2).not.toBe(wallet); // new instance
     expect(w2.keysetId).toBe(current);
     expect(w2.getMintInfo()).toStrictEqual(wallet.getMintInfo()); // same mintinfo
-    expect(w2.keyChain).toStrictEqual(wallet.keyChain); // same keychain data
+    expect(w2.keyChain.cache).toStrictEqual(wallet.keyChain.cache); // same keychain data
     expect(() => {
       w2.keyChain.getCheapestKeyset();
     }).not.toThrow(); // smoke test
@@ -608,7 +608,7 @@ describe('multi mint', async () => {
         mintUrl + '/v1/melt/quote/bolt11',
         async ({ request }) => {
           const body = await request.json();
-          if (!body?.options.mpp) {
+          if (!body?.options?.mpp) {
             return new HttpResponse('No MPP', { status: 400 });
           }
           return HttpResponse.json({
@@ -634,5 +634,27 @@ describe('multi mint', async () => {
     expect(meltQuote.amount).toEqual(Amount.from(1));
     expect(meltQuote.quote).toBe('K-80Mo7xrtQRgaA1ifrxDKGQGZEGlo7zNDwTtf-D');
     await expect(wallet.createMeltQuoteBolt11(invoice)).rejects.toThrow();
+  });
+});
+
+describe('unsupported keyset diagnostics', () => {
+  // Byte 0x02 is the v3 (BLS) generation, which this line cannot read.
+  const future = { ...dummyKeysetResp.keysets[0], id: '02' + '11'.repeat(32) };
+
+  test('an unbound wallet surfaces the upgrade diagnosis instead of "no bound keyset"', () => {
+    const wallet = new Wallet(mint);
+    wallet.loadMintFromCache(mintInfoResp, KeyChain.mintToCacheDTO(mintUrl, [future], []));
+    expect(() => wallet.keysetId).toThrow(/Upgrade/);
+  });
+
+  test('wallet lookup diagnoses future versions, keychain lookup stays a plain lookup', () => {
+    const wallet = new Wallet(mint);
+    wallet.loadMintFromCache(
+      mintInfoResp,
+      KeyChain.mintToCacheDTO(mintUrl, [...dummyKeysetResp.keysets, future], dummyKeysResp.keysets),
+    );
+    // The plain lookup must keep working: callers filter over every id the mint lists.
+    expect(wallet.keyChain.getKeyset(future.id).version).toBe(2);
+    expect(() => wallet.getKeyset(future.id)).toThrow(/Upgrade/);
   });
 });

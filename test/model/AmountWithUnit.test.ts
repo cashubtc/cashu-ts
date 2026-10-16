@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
-import { Amount, AmountWithUnit, AmountWithUnitError } from '../../src/model/Amount';
+import { Amount, AmountWithUnit } from '../../src/model/Amount';
+import { AmountWithUnitError } from '../../src/model/Errors';
 
 describe('AmountWithUnit construction', () => {
   it('rejects empty unit string', () => {

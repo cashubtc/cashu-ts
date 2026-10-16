@@ -1,7 +1,7 @@
 import { HttpResponse, http } from 'msw';
-import { test, describe, expect } from 'vitest';
+import { test, describe, expect, vi } from 'vitest';
 
-import { Wallet, CheckStateEnum, Amount } from '../../src';
+import { Wallet, Mint, CheckStateEnum, Amount } from '../../src';
 import { hashToCurve } from '../../src/crypto';
 
 import { mint, unit, mintUrl, mintInfoResp, useTestServer } from './_setup';
@@ -231,5 +231,90 @@ describe('groupProofsByState', () => {
     expect(result.spent[1].amount.equals(128n)).toBeTruthy();
     expect(result.spent[2].amount.equals(16n)).toBeTruthy();
     expect(result.pending[0].amount.equals(1n)).toBeTruthy();
+  });
+});
+
+describe('unsupported proof state versions', () => {
+  // Y is computed on secp for every proof here, so an id whose curve this build does not know
+  // would be asked about under the wrong point and come back UNSPENT.
+  test('refuses a future keyset id before reaching the mint', async () => {
+    const isolated = new Mint(mintUrl);
+    const check = vi.spyOn(isolated, 'check');
+    const wallet = new Wallet(isolated);
+    await expect(
+      wallet.checkProofsStates([{ id: '02' + '11'.repeat(32), secret: 'test' }]),
+    ).rejects.toThrow(/Upgrade/);
+    expect(check).not.toHaveBeenCalled();
+  });
+
+  test('still accepts every keyset version this build supports', async () => {
+    const isolated = new Mint(mintUrl);
+    vi.spyOn(isolated, 'check').mockImplementation(async ({ Ys }) => ({
+      states: Ys.map((Y) => ({ Y, state: CheckStateEnum.UNSPENT, witness: null })),
+    }));
+    const wallet = new Wallet(isolated);
+    for (const id of ['I2yN+iRYfkzT', '00bd033559de27d0', '01' + '11'.repeat(32)]) {
+      await expect(wallet.checkProofsStates([{ id, secret: 'test' }])).resolves.toBeDefined();
+    }
+  });
+});
+
+describe('verifyMintSignatures', () => {
+  const proof = {
+    id: '00bd033559de27d0',
+    amount: Amount.from(2),
+    secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+    C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+  };
+
+  test('reports an unknown keyset as invalid, and a known one without DLEQ as valid', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const alien = { ...proof, id: '00ffffffffffffff' };
+    const seen: number[] = [];
+    const { valid, invalid } = await wallet.verifyMintSignatures([proof, alien], {
+      onProgress: (d) => seen.push(d),
+    });
+    expect(valid).toEqual([proof]);
+    expect(invalid.map((i) => i.proof)).toEqual([alien]);
+    expect(seen[seen.length - 1]).toBe(2);
+  });
+
+  test('rejects aborted and oversized audits before loading keys', async () => {
+    const wallet = new Wallet(mint, { unit });
+    const load = vi.spyOn(wallet.keyChain, 'ensureKeysetKeys');
+    const ac = new AbortController();
+    ac.abort();
+    await expect(wallet.verifyMintSignatures([proof], { signal: ac.signal })).rejects.toThrow(
+      'aborted',
+    );
+    await expect(
+      wallet.verifyMintSignatures(Array.from({ length: 10_001 }, () => proof)),
+    ).rejects.toThrow('too many proofs');
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  test('stops loading keys once aborted between lookups', async () => {
+    const wallet = new Wallet(mint, { unit });
+    const ac = new AbortController();
+    const load = vi.spyOn(wallet.keyChain, 'ensureKeysetKeys').mockImplementation(async () => {
+      ac.abort();
+      throw new Error('lookup failed');
+    });
+    await expect(
+      wallet.verifyMintSignatures([proof, { ...proof, id: '00ffffffffffffff' }], {
+        signal: ac.signal,
+      }),
+    ).rejects.toThrow('aborted');
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  test('strict cached keysets skips key loading', async () => {
+    const wallet = new Wallet(mint, { unit, strictCachedKeysets: true });
+    await wallet.loadMint();
+    const load = vi.spyOn(wallet.keyChain, 'ensureKeysetKeys');
+    const { valid } = await wallet.verifyMintSignatures([proof]);
+    expect(valid).toEqual([proof]);
+    expect(load).not.toHaveBeenCalled();
   });
 });

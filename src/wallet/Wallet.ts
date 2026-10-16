@@ -29,6 +29,7 @@ import {
   StaleKeysetError,
   UnknownKeysetError,
   isMintOperationError,
+  CallerAbortError,
 } from '../model/Errors';
 import { MintInfo } from '../model/MintInfo';
 import { OutputData, type OutputDataLike } from '../model/OutputData';
@@ -54,14 +55,21 @@ import type {
 import type { SerializedBlindedSignature } from '../model/types/blinded';
 import type { KeyChainCache } from '../model/types/keyset';
 import { CheckStateEnum, type ProofState } from '../model/types/NUT07';
-import { type BatchMintRequest } from '../model/types/NUT29';
+import { type BatchMintRequest, type Nut29Info } from '../model/types/NUT29';
 import type { Proof, ProofLike } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 import {
+  ABSOLUTE_MAX_ARRAY_LENGTH,
   bolt11AmountMsat,
   getDecodedToken,
+  verifyMintSignatures,
+  type ProofVerification,
+  type VerifyProofsOptions,
+  assertSpendableVersion,
   hasValidDleq,
   invoiceHasAmountInHRP,
+  MAX_SEED_BYTES,
+  MIN_SEED_BYTES,
   normalizeMintUrl,
   normalizeProofAmounts,
   splitAmount,
@@ -200,7 +208,7 @@ class Wallet {
    * @param options Optional settings.
    * @param options.unit Wallet unit, default 'sat'.
    * @param options.keysetId Bind to this keyset id, else bind on `loadMint`.
-   * @param options.bip39seed BIP39 seed for deterministic secrets.
+   * @param options.bip39seed BIP39 seed for deterministic secrets, 16 to 64 bytes.
    * @param options.secretsPolicy Secrets policy, default 'auto'.
    * @param options.counterSource Counter source for deterministic outputs. If provided, this takes
    *   precedence over counterInit. Use when you need persistence across processes or devices.
@@ -257,6 +265,13 @@ class Wallet {
         'bip39seed must be a valid Uint8Array',
         { received: typeof options.bip39seed },
       );
+      // Fail here rather than at the first derivation: a wallet on a seed NUT-13 will refuse is
+      // broken, and the deriver's own guard would surface it mid-operation.
+      this.failIf(
+        options.bip39seed.length < MIN_SEED_BYTES || options.bip39seed.length > MAX_SEED_BYTES,
+        `bip39seed must be ${MIN_SEED_BYTES} to ${MAX_SEED_BYTES} bytes`,
+        { length: options.bip39seed.length },
+      );
       this._seed = options.bip39seed;
     }
     this._secretsPolicy = options?.secretsPolicy ?? this._secretsPolicy;
@@ -266,7 +281,7 @@ class Wallet {
       this._counterSource = new EphemeralCounterSource(options?.counterInit);
     }
     this.counters = new WalletCounters(this._counterSource);
-    this._keyChain = new KeyChain(this.mint, this._unit);
+    this._keyChain = new KeyChain(this.mint, this._unit, this._logger);
     this._denominationTarget = options?.denominationTarget ?? this._denominationTarget;
     this._requireSigDleq = options?.requireSigDleq ?? this._requireSigDleq;
     this._strictCachedKeysets = options?.strictCachedKeysets ?? this._strictCachedKeysets;
@@ -289,6 +304,22 @@ class Wallet {
     context?: Record<string, unknown>,
   ): asserts value is Exclude<T, null | undefined> {
     return failIfNullish(value, message, this._logger, context);
+  }
+  /**
+   * NUT-29 params once loaded mint info advertises it for the method; undefined before mint info is
+   * loaded, when the batch endpoints are assumed.
+   *
+   * @throws When loaded info omits NUT-29, or lists methods without this one.
+   */
+  private requireNut29(method: string, op: string, alternative: string): Nut29Info | undefined {
+    const nut29 = this._mintInfo?.isSupported(29);
+    if (nut29 === undefined) return undefined;
+    const methods = nut29.params?.methods;
+    this.failIf(
+      !nut29.supported || (Array.isArray(methods) && !methods.includes(method)),
+      `${op}: mint does not advertise NUT-29 for ${method}; use ${alternative} per quote`,
+    );
+    return nut29.params;
   }
   private requireSupport(op: 'mint' | 'melt', method: string): void {
     this.failIf(
@@ -375,7 +406,19 @@ class Wallet {
    * Finishes wiring up the wallet instance and checks we are "Go for launch".
    */
   private finishInit(): void {
-    this._logger.debug('KeyChain', { keychain: this._keyChain.cache });
+    // A per-keyset summary; the full cache with every key is `wallet.keyChain.cache`.
+    const { keysets, mintUrl, savedAt } = this._keyChain.cache;
+    this._logger.debug('KeyChain loaded', {
+      mintUrl,
+      savedAt,
+      keysets: keysets.map((k) => ({
+        id: k.id,
+        unit: k.unit,
+        active: k.active,
+        fee: k.input_fee_ppk,
+        keys: k.keys ? Object.keys(k.keys).length : 0,
+      })),
+    });
 
     // Go Keychain?
     if (this._boundKeysetId === PENDING_KEYSET_ID) {
@@ -400,6 +443,7 @@ class Wallet {
         unit: k.unit,
         walletUnit: this._unit,
       });
+      assertSpendableVersion(k.id, this._logger);
     } else {
       // Auto-bound: re-apply keyset selection so the binding tracks mint truth.
       // getCheapestKeyset prefers the newest version, then lowest fee, then latest expiry.
@@ -481,6 +525,14 @@ class Wallet {
    * The keyset ID bound to this wallet instance.
    */
   get keysetId(): string {
+    // Initialization permits an unbound wallet for restore; surface the selection error on use.
+    if (this._boundKeysetId === PENDING_KEYSET_ID && this._mintInfo) {
+      try {
+        this._keyChain.getCheapestKeyset();
+      } catch (e) {
+        this.fail(`Wallet has no bound keyset: ${(e as Error).message}`);
+      }
+    }
     this.failIf(
       this._boundKeysetId === PENDING_KEYSET_ID,
       'Wallet has no bound keyset. The mint may have no active keysets, or wallet was not initialized via loadMint or loadMintFromCache',
@@ -512,6 +564,7 @@ class Wallet {
       unit: keyset.unit,
       walletUnit: this._unit,
     });
+    assertSpendableVersion(keyset.id, this._logger);
     this.failIf(!keyset.hasKeys, 'Keyset has no keys loaded', { keyset: keyset.id });
     return keyset;
   }
@@ -748,7 +801,7 @@ class Wallet {
       this._keyChain.getCheapestKeyset();
     } catch (e) {
       this.fail(
-        `${op}: no active keyset for unit '${this._unit}' — a paid mint quote could not be redeemed`,
+        `${op}: no active keyset for unit '${this._unit}' — a paid mint quote could not be redeemed. ${(e as Error).message}`,
         { reason: (e as Error).message },
       );
     }
@@ -893,6 +946,9 @@ class Wallet {
       unit: ks.unit,
       walletUnit: this._unit,
     });
+    // Before the keys check: a keyset this build cannot spend has no keys either, and "no keys
+    // loaded" reads as a mint problem rather than a version gap.
+    assertSpendableVersion(ks.id, this._logger);
     this.failIf(!ks.hasKeys, 'Keyset has no keys loaded', { keyset: ks.id });
     this._boundKeysetId = ks.id;
     this._explicitBind = true;
@@ -1126,6 +1182,28 @@ class Wallet {
         );
         break;
       case 'p2pk':
+        // A mint signs a lock blind and reads it only at spend time, so a kind it does not
+        // support spends as a bearer proof (NUT-10).
+        {
+          const info = this.getMintInfo();
+          this.failIf(
+            !info.isSupported(11).supported,
+            'Mint does not support NUT-11: the lock would be spendable by anyone',
+          );
+          this.failIf(
+            outputType.options.hashlock !== undefined && !info.isSupported(14).supported,
+            'Mint does not support NUT-14: the hashlock would be spendable by anyone',
+          );
+        }
+        // Allowed for testing, but the refund path (or anyone, with no refund keys) can spend now.
+        if (
+          outputType.options.locktime !== undefined &&
+          outputType.options.locktime <= Math.floor(Date.now() / 1000)
+        ) {
+          this._logger.warn('Lock locktime is not in the future', {
+            locktime: outputType.options.locktime,
+          });
+        }
         outputData = this._outputDataCreator.createP2PKData(
           outputType.options,
           outputAmount,
@@ -1554,8 +1632,13 @@ class Wallet {
     // 	unselectedProofs: unselectedProofs.map(p=>p.amount.toString()),
     // 	selectedProofs: selectedProofs.map(p=>p.amount.toString()),
     // });
+    // A balance equal to the amount still fails once the input fee is added, so name the fee.
     if (selectedProofs.length === 0) {
-      throw new CTSError('Not enough funds available to send');
+      const available = sumProofs(normalizedProofs).toString();
+      const inputFee = this.getFeesForProofs(normalizedProofs).toString();
+      this.fail(
+        `Not enough funds available to send: ${available} available, ${sendAmount.toString()} required plus up to ${inputFee} input fee`,
+      );
     }
 
     // Calculate our expected change from the swap (and sanity check!)
@@ -2092,30 +2175,61 @@ class Wallet {
     const res = await this.mint.createMintQuote<TRes>(method, body, {
       normalize: options?.normalize,
     });
+    this.warnQuoteUnit(res, `createMintQuote: ${method}`);
     return { ...res, unit: res.unit || this._unit };
+  }
+
+  /**
+   * Warns when the mint denominated a freshly created quote in another unit.
+   *
+   * @remarks
+   * V5 refuses such a quote at creation. On this line it is a warning, so a mint that answers in
+   * the wrong unit still fails later rather than changing behaviour mid-major.
+   */
+  private warnQuoteUnit(quote: { unit?: string }, op: string): void {
+    if (typeof quote.unit !== 'string' || quote.unit === '' || quote.unit === this._unit) return;
+    this._logger.warn(
+      `${op}: the mint quoted unit '${quote.unit}' but this wallet uses '${this._unit}'. This will become an error in cashu-ts v5.`,
+      { quoted: quote.unit, wallet: this._unit },
+    );
+  }
+
+  /**
+   * Warns when a freshly created quote does not state the amount that was asked for.
+   *
+   * @remarks
+   * As with the unit, v5 refuses these at creation.
+   */
+  private warnQuoteAmount(op: string, expected: string | null, quoted: string | null): void {
+    if (expected === quoted) return;
+    this._logger.warn(
+      `${op}: the mint quoted ${quoted ?? 'no amount'} but ${expected ?? 'no amount'} was requested. This will become an error in cashu-ts v5.`,
+      { expected, quoted },
+    );
   }
 
   /**
    * Asserts a bolt11 mint quote matches the amount the caller asked for.
    *
    * @remarks
-   * For sat quotes the invoice HRP amount is compared too; other units are not directly comparable
-   * to the invoice, so only the quoted amount is checked.
+   * For sat and msat quotes the invoice HRP amount is compared too; other units are not directly
+   * comparable to the invoice, so only the quoted amount is checked.
    */
   private assertBolt11MintQuoteAmount(res: MintQuoteBolt11Response, expected: Amount): void {
     this.failIf(!res.amount.equals(expected), 'Mint quote amount does not match', {
       expected: expected.toString(),
       quoted: res.amount.toString(),
     });
-    if (this._unit !== 'sat') return;
+    if (this._unit !== 'sat' && this._unit !== 'msat') return;
     let msat: bigint | null = null;
     try {
       msat = bolt11AmountMsat(res.request);
     } catch {
       // fall through: an unreadable invoice fails the comparison below
     }
-    // A sat quote's invoice must ask for exactly the requested amount (in whole sats).
-    const matches = msat !== null && expected.multiplyBy(1000).equals(msat);
+    // Compare the invoice against the requested amount expressed in millisatoshis.
+    const expectedMsat = this._unit === 'sat' ? expected.multiplyBy(1000) : expected;
+    const matches = msat !== null && expectedMsat.equals(msat);
     this.failIf(!matches, 'Mint quote invoice amount does not match the quote', {
       expected: expected.toString(),
       invoiceMsat: msat,
@@ -2153,6 +2267,7 @@ class Wallet {
       description: description,
     };
     const res = await this.mint.createMintQuoteBolt11(mintQuotePayload);
+    this.warnQuoteUnit(res, 'createMintQuoteBolt11');
     this.assertBolt11MintQuoteAmount(res, mintAmount);
     return { ...res, unit: res.unit || this._unit };
   }
@@ -2187,6 +2302,7 @@ class Wallet {
       pubkey: pubkey,
     };
     const res = await this.mint.createMintQuoteBolt11(mintQuotePayload);
+    this.warnQuoteUnit(res, 'createLockedMintQuote');
     this.assertBolt11MintQuoteAmount(res, mintAmount);
     this.failIf(typeof res.pubkey !== 'string', 'Mint returned unlocked mint quote');
     const resPubkey = res.pubkey!;
@@ -2240,6 +2356,13 @@ class Wallet {
     };
 
     const res = await this.mint.createMintQuoteBolt12(mintQuotePayload);
+    this.warnQuoteUnit(res, 'createMintQuoteBolt12');
+    // The offer itself is opaque here, so the quoted amount is the only thing to hold the mint to.
+    this.warnQuoteAmount(
+      'createMintQuoteBolt12',
+      amount?.toString() ?? null,
+      res.amount?.toString() ?? null,
+    );
     this.failIf(
       typeof res.pubkey !== 'string' || res.pubkey.toLowerCase() !== pubkey.toLowerCase(),
       'Mint quote is not locked to the requested pubkey',
@@ -2263,6 +2386,7 @@ class Wallet {
       'A pubkey is required to lock the mint quote',
     );
     const res = await this.mint.createMintQuoteOnchain({ unit: this._unit, pubkey });
+    this.warnQuoteUnit(res, 'createMintQuoteOnchain');
     this.failIf(
       typeof res.pubkey !== 'string' || res.pubkey.toLowerCase() !== pubkey.toLowerCase(),
       'Mint quote is not locked to the requested pubkey',
@@ -2357,6 +2481,7 @@ class Wallet {
     quotes: Array<string | Pick<TRes, 'quote'>>,
     options?: { normalize?: (raw: Record<string, unknown>) => TRes },
   ): Promise<TRes[]> {
+    this.requireNut29(method, 'checkMintQuoteBatch', 'checkMintQuote');
     const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
     return this.mint.checkMintQuoteBatch<TRes>(method, quoteIds, {
       normalize: options?.normalize,
@@ -2376,6 +2501,7 @@ class Wallet {
   async checkMintQuoteBatchBolt11(
     quotes: Array<string | MintQuoteBolt11Response>,
   ): Promise<MintQuoteBolt11Response[]> {
+    this.requireNut29('bolt11', 'checkMintQuoteBatchBolt11', 'checkMintQuoteBolt11');
     const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
     const res = await this.mint.checkMintQuoteBatchBolt11(quoteIds);
     for (const quote of res) this.assertBolt11MintQuoteAmount(quote, quote.amount);
@@ -2395,6 +2521,7 @@ class Wallet {
   async checkMintQuoteBatchBolt12(
     quotes: Array<string | MintQuoteBolt12Response>,
   ): Promise<MintQuoteBolt12Response[]> {
+    this.requireNut29('bolt12', 'checkMintQuoteBatchBolt12', 'checkMintQuoteBolt12');
     const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
     return this.mint.checkMintQuoteBatchBolt12(quoteIds);
   }
@@ -2750,12 +2877,15 @@ class Wallet {
     mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>,
   ): Promise<Proof[]> {
     const { payload, outputData, method, legacySignature } = mintPreview;
+    // Ask the mint to sign the outputs this preview can unblind, rather than a field that a
+    // persisted preview may no longer agree with.
+    const request: MintRequest = { ...payload, outputs: outputData.map((d) => d.blindedMessage) };
     // TODO: Remove legacy message support
     const { signatures } = await this.withStaleKeysetRepair(() =>
       this.withLegacyQuoteSigFallback(
         legacySignature !== undefined,
-        () => this.mint.mint(method, payload),
-        () => this.mint.mint(method, { ...payload, signature: legacySignature }),
+        () => this.mint.mint(method, request),
+        () => this.mint.mint(method, { ...request, signature: legacySignature }),
       ),
     );
     this.failIf(
@@ -2802,12 +2932,9 @@ class Wallet {
     outputType?: OutputType,
   ): Promise<BatchMintPreview<TQuote>> {
     this.failIf(entries.length === 0, 'prepareBatchMint: no entries provided');
-
     // Enforce NUT-29 batch-size limit advertised by the mint, clamped to our absolute cap.
-    // If the mint does not advertise NUT-29 info, the absolute cap still applies.
-    const nut29 = this._mintInfo?.isSupported(29);
-    const nut29Params = nut29?.supported ? nut29.params : undefined;
-
+    // Before mint info is loaded the absolute cap still applies.
+    const nut29Params = this.requireNut29(method, 'prepareBatchMint', 'prepareMint');
     const effectiveLimit = nut29Params?.max_batch_size ?? ABSOLUTE_MAX_BATCH_SIZE;
 
     if (entries.length > effectiveLimit) {
@@ -2818,15 +2945,6 @@ class Wallet {
         `prepareBatchMint: batch size ${entries.length} exceeds ` +
           `${limitSource} of ${effectiveLimit}`,
       );
-    }
-
-    // Warn if the requested method is not in the mint's NUT-29 supported methods
-    if (nut29Params?.methods?.length) {
-      if (!nut29Params.methods.includes(method)) {
-        this._logger.warn(
-          `prepareBatchMint: method '${method}' is not in mint's advertised NUT-29 methods`,
-        );
-      }
     }
 
     const { privkey, keysetId, proofsWeHave, onCountersReserved } = config ?? {};
@@ -2927,12 +3045,18 @@ class Wallet {
     batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>,
   ): Promise<Proof[]> {
     const { method, payload, outputData, legacySignatures } = batchPreview;
+    // Ask the mint to sign the outputs this preview can unblind, rather than a field that a
+    // persisted preview may no longer agree with.
+    const request: BatchMintRequest = {
+      ...payload,
+      outputs: outputData.map((d) => d.blindedMessage),
+    };
     // TODO: Remove legacy message support
     const { signatures: sigs } = await this.withStaleKeysetRepair(() =>
       this.withLegacyQuoteSigFallback(
         legacySignatures !== undefined,
-        () => this.mint.mintBatch(method, payload),
-        () => this.mint.mintBatch(method, { ...payload, signatures: legacySignatures! }),
+        () => this.mint.mintBatch(method, request),
+        () => this.mint.mintBatch(method, { ...request, signatures: legacySignatures! }),
       ),
     );
     this.failIf(
@@ -2978,6 +3102,7 @@ class Wallet {
     const res = await this.mint.createMeltQuote<TRes>(method, body, {
       normalize: options?.normalize,
     });
+    this.warnQuoteUnit(res, `createMeltQuote: ${method}`);
     return { ...res, unit: res.unit || this._unit };
   }
 
@@ -2993,13 +3118,22 @@ class Wallet {
     res: MeltQuoteBolt11Response,
     expectedMsat: AmountLike | null,
   ): void {
-    if (this._unit !== 'sat' || expectedMsat === null) return;
-    const msat = Amount.from(expectedMsat);
-    const maxSat = msat.ceilPercent(1, 1000); // ceil(msat / 1000)
-    this.failIf(res.amount.greaterThan(maxSat), 'Melt quote amount exceeds the invoice amount', {
+    if (!this.meltQuoteExceeds(res, expectedMsat)) return;
+    this.fail('Melt quote amount exceeds the invoice amount', {
       quoted: res.amount.toString(),
-      invoiceMsat: msat.toString(),
+      invoiceMsat: Amount.from(expectedMsat!).toString(),
     });
+  }
+
+  /**
+   * True when a sat or msat melt quote charges more than the caller's millisat expectation allows.
+   * A sat quote may round a sub-sat request up to the next sat; an msat quote compares directly.
+   */
+  private meltQuoteExceeds(res: { amount: Amount }, expectedMsat: AmountLike | null): boolean {
+    if ((this._unit !== 'sat' && this._unit !== 'msat') || expectedMsat === null) return false;
+    const msat = Amount.from(expectedMsat);
+    const maxAmount = this._unit === 'sat' ? msat.ceilPercent(1, 1000) : msat;
+    return res.amount.greaterThan(maxAmount);
   }
 
   /**
@@ -3053,6 +3187,7 @@ class Wallet {
     if (expectedMsat === null && normalizedAmountMsat !== undefined) {
       expectedMsat = normalizedAmountMsat;
     }
+    this.warnQuoteUnit(meltQuote, 'createMeltQuoteBolt11');
     this.assertBolt11MeltQuoteAmount(meltQuote, expectedMsat);
     return {
       ...meltQuote,
@@ -3078,7 +3213,7 @@ class Wallet {
     this.requireSupport('melt', 'bolt12');
     const normalizedAmountMsat =
       amountMsat !== undefined ? this.parseAmount(amountMsat, 'createMeltQuoteBolt12') : undefined;
-    return this.mint.createMeltQuoteBolt12({
+    const meltQuote = await this.mint.createMeltQuoteBolt12({
       unit: this._unit,
       request: offer,
       options: normalizedAmountMsat
@@ -3089,6 +3224,16 @@ class Wallet {
           }
         : undefined,
     });
+    this.warnQuoteUnit(meltQuote, 'createMeltQuoteBolt12');
+    // The offer itself is opaque here, so only an explicit caller amount bounds the quote.
+    if (this.meltQuoteExceeds(meltQuote, normalizedAmountMsat ?? null)) {
+      this.warnQuoteAmount(
+        'createMeltQuoteBolt12',
+        `at most ${normalizedAmountMsat!.toString()} msat`,
+        meltQuote.amount.toString(),
+      );
+    }
+    return meltQuote;
   }
 
   /**
@@ -3110,6 +3255,13 @@ class Wallet {
       request: address,
       amount: normalizedAmount,
     });
+    this.warnQuoteUnit(quote, 'createMeltQuoteOnchain');
+    // Onchain amounts are already in the wallet unit, so the quote should match exactly.
+    this.warnQuoteAmount(
+      'createMeltQuoteOnchain',
+      normalizedAmount.toString(),
+      quote.amount.toString(),
+    );
     return { ...quote, unit: quote.unit || this._unit };
   }
 
@@ -3144,6 +3296,7 @@ class Wallet {
       options: { mpp: { amount: normalizedMillisatPartialAmount } },
     };
     const meltQuote = await this.mint.createMeltQuoteBolt11(meltQuotePayload);
+    this.warnQuoteUnit(meltQuote, 'createMultiPathMeltQuote');
     // A partial quote is bounded by the caller's own millisat share, not the invoice total.
     this.assertBolt11MeltQuoteAmount(meltQuote, normalizedMillisatPartialAmount);
     return { ...meltQuote, request: invoice, unit: this._unit };
@@ -3190,7 +3343,7 @@ class Wallet {
     const quoteId = typeof quote === 'string' ? quote : quote.quote;
     const res = await this.mint.checkMeltQuoteBolt11(quoteId);
     // No caller-side expectation here, so check the quote against its own invoice.
-    if (this._unit === 'sat') {
+    if (this._unit === 'sat' || this._unit === 'msat') {
       let expectedMsat: bigint | null = null;
       try {
         expectedMsat = bolt11AmountMsat(res.request);
@@ -3689,9 +3842,13 @@ class Wallet {
   async checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]>;
   async checkProofsStates(proofs: Array<Pick<ProofLike, 'secret'>>): Promise<ProofState[]> {
     const enc = new TextEncoder();
-    const Ys = proofs.map((p: Pick<Proof, 'secret'>) =>
-      hashToCurve(enc.encode(p.secret)).toHex(true),
-    );
+    const Ys = proofs.map((p: Pick<ProofLike, 'secret'> & { id?: string }) => {
+      // Y is computed on secp here, so a keyset whose curve this build does not know would be
+      // asked about under the wrong point and come back UNSPENT. The id is optional on the
+      // deprecated overload, so only check it when given.
+      if (p.id !== undefined) assertSpendableVersion(p.id, this._logger);
+      return hashToCurve(enc.encode(p.secret)).toHex(true);
+    });
     const batchSize = this.maxArrayLength;
     const states: ProofState[] = [];
     for (let i = 0; i < Ys.length; i += batchSize) {
@@ -3710,6 +3867,35 @@ class Wallet {
       }
     }
     return states;
+  }
+
+  /**
+   * Checks that the mint signed each proof (NUT-12 DLEQ), loading keys as needed.
+   *
+   * @remarks
+   * `verifyMintSignatures` with this wallet's keysets: chunked, yielding, never throwing per proof.
+   * Replaces `hasValidDleq`, which v5 removes.
+   */
+  async verifyMintSignatures<T extends ProofLike = Proof>(
+    proofs: T[],
+    opts?: VerifyProofsOptions,
+  ): Promise<ProofVerification<T>> {
+    if (opts?.signal?.aborted) throw new CallerAbortError('Operation aborted by caller');
+    this.failIf(
+      proofs.length > ABSOLUTE_MAX_ARRAY_LENGTH,
+      `Token contains too many proofs: ${proofs.length}, maximum is ${ABSOLUTE_MAX_ARRAY_LENGTH}`,
+    );
+    if (!this._strictCachedKeysets) {
+      for (const id of new Set(proofs.map((p) => p.id))) {
+        if (opts?.signal?.aborted) throw new CallerAbortError('Operation aborted by caller');
+        try {
+          await this._keyChain.ensureKeysetKeys(id);
+        } catch {
+          // Unknown keyset: its proofs are reported invalid.
+        }
+      }
+    }
+    return verifyMintSignatures(proofs, (id) => this._keyChain.getKeyset(id), opts);
   }
 
   /**

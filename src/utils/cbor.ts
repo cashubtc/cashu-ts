@@ -1,6 +1,6 @@
 import { CTSError } from '../model/Errors';
 
-import { decodeUtf8Field } from './bytes';
+import { decodeUtf8Field, hasLoneSurrogate } from './bytes';
 import { MAX_CBOR_NODES } from './limits';
 /*
  * Lightweight CBOR encoder/decoder (purpose and limitations)
@@ -237,6 +237,8 @@ function encodeByteString(value: Uint8Array, buffer: number[]) {
 }
 
 function encodeString(value: string, buffer: number[]) {
+  // Ill-formed UTF-16 would be written as its U+FFFD replacement and decode as a different string
+  if (hasLoneSurrogate(value)) throw new CTSError('CBOR text must be well-formed UTF-16');
   const utf8 = new TextEncoder().encode(value);
   const length = utf8.length;
 

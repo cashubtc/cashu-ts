@@ -56,7 +56,7 @@ export class Amount {
     static zero(): Amount;
 }
 
-// @public (undocumented)
+// @public
 export class AmountError extends CTSError {
     constructor(message: string);
 }
@@ -129,7 +129,7 @@ export class AmountWithUnit {
     static zero(unit: string): AmountWithUnit;
 }
 
-// @public (undocumented)
+// @public
 export class AmountWithUnitError extends CTSError {
     constructor(message: string);
 }
@@ -159,7 +159,6 @@ export class AuthManager implements AuthProvider {
     get poolSize(): number;
     // (undocumented)
     get poolTarget(): number;
-    // (undocumented)
     setCAT(cat: string | undefined): void;
 }
 
@@ -216,6 +215,11 @@ export type BlindSignature = {
     C_: WeierstrassPoint<bigint>;
     id: string;
 };
+
+// @public
+export class CallerAbortError extends NetworkError {
+    constructor(message: string);
+}
 
 // @public (undocumented)
 export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
@@ -432,7 +436,7 @@ export function getDataField(secret: Secret | string): string;
 export function getDecodedToken(tokenString: string, keysetIds: readonly string[]): Token;
 
 // @public
-export function getDecodedTokenBinary(bytes: Uint8Array): Token;
+export function getDecodedTokenBinary(bytes: Uint8Array, keysetIds?: readonly string[]): Token;
 
 // @public
 export function getEncodedToken(token: Token, opts?: {
@@ -602,7 +606,7 @@ export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: Messa
 // @public
 export function hasTag(secret: Secret | string, key: string): boolean;
 
-// @public
+// @public @deprecated
 export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys, opts?: {
     require?: boolean;
 }): boolean;
@@ -658,14 +662,14 @@ export type JsonRpcReqParams = {
 
 // @public
 export class KeyChain {
-    constructor(mint: string | Mint, unit: string);
+    constructor(mint: string | Mint, unit: string, logger?: Logger);
     get cache(): KeyChainCache;
     static cacheToMintDTO(cache: KeyChainCache): {
         keysets: MintKeyset[];
         keys: MintKeys[];
     };
     ensureKeysetKeys(id: string): Promise<Keyset>;
-    static fromCache(mint: string | Mint, unit: string, cache: KeyChainCache): KeyChain;
+    static fromCache(mint: string | Mint, unit: string, cache: KeyChainCache, logger?: Logger): KeyChain;
     getAllKeys(): MintKeys[];
     getAllKeysetIds(): string[];
     getCheapestKeyset(): Keyset;
@@ -1312,6 +1316,9 @@ export type MintResponse = {
 };
 
 // @public
+export function mnemonicToSeedSync(mnemonic: string, passphrase?: string): Uint8Array;
+
+// @public
 export type MPPMethod = {
     method: string;
     unit: string;
@@ -1355,7 +1362,7 @@ export type Nut29Info = {
 // @public (undocumented)
 export class OIDCAuth {
     constructor(discoveryUrl: string, opts?: OIDCAuthOptions);
-    addTokenListener(fn: (t: TokenResponse) => void | Promise<void>): void;
+    addTokenListener(fn: (t: TokenResponse, origin: TokenOrigin) => void | Promise<void>): void;
     buildAuthCodeUrl(input: {
         redirectUri: string;
         codeChallenge: string;
@@ -1363,7 +1370,7 @@ export class OIDCAuth {
         state?: string;
         scope?: string;
     }): Promise<string>;
-    // (undocumented)
+    // @deprecated
     devicePoll(device_code: string, intervalSec?: number): Promise<TokenResponse>;
     // (undocumented)
     deviceStart(): Promise<DeviceStartResponse>;
@@ -1384,9 +1391,8 @@ export class OIDCAuth {
     loadConfig(): Promise<OIDCConfig>;
     // (undocumented)
     passwordGrant(username: string, password: string): Promise<TokenResponse>;
-    // (undocumented)
     refresh(refresh_token: string): Promise<TokenResponse>;
-    removeTokenListener(fn: (t: TokenResponse) => void | Promise<void>): void;
+    removeTokenListener(fn: (t: TokenResponse, origin: TokenOrigin) => void | Promise<void>): void;
     // (undocumented)
     setClient(id: string): void;
     // (undocumented)
@@ -1402,7 +1408,7 @@ export type OIDCAuthOptions = {
     clientId?: string;
     scope?: string;
     logger?: Logger;
-    onTokens?: (t: TokenResponse) => void | Promise<void>;
+    onTokens?: (t: TokenResponse, origin: TokenOrigin) => void | Promise<void>;
 };
 
 // @public (undocumented)
@@ -1473,7 +1479,7 @@ export interface OutputDataCreator {
     // (undocumented)
     createSingleDeterministicData(amount: AmountLike, seed: Uint8Array, counter: number, keysetId: string): OutputDataLike;
     // (undocumented)
-    createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string): OutputDataLike;
+    createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string, eBytes?: Uint8Array): OutputDataLike;
     // (undocumented)
     createSingleRandomData(amount: AmountLike, keysetId: string): OutputDataLike;
 }
@@ -1511,9 +1517,6 @@ export type OutputType = ({
     type: 'custom';
     data: OutputDataLike[];
 };
-
-// @public
-export const P2BK_DST: Uint8Array<ArrayBufferLike>;
 
 // @public @deprecated (undocumented)
 export const P2PKBuilder: typeof LockBuilder;
@@ -1673,6 +1676,15 @@ export type ProofState = {
     Y: string;
     state: CheckStateEnum;
     witness: string | null;
+};
+
+// @public
+export type ProofVerification<T> = {
+    valid: T[];
+    invalid: Array<{
+        proof: T;
+        error: CTSError;
+    }>;
 };
 
 // @public
@@ -2093,6 +2105,9 @@ export type TokenMetadata = {
     proofAmounts: Amount[];
 };
 
+// @public
+export type TokenOrigin = 'signin' | 'refresh';
+
 // @public (undocumented)
 export type TokenResponse = {
     access_token?: string;
@@ -2114,6 +2129,13 @@ export type UnblindedSignature = {
 
 // @public (undocumented)
 export function unblindSignature(C_: WeierstrassPoint<bigint>, r: bigint, A: WeierstrassPoint<bigint>): WeierstrassPoint<bigint>;
+
+// @public
+export class UncancellableReadError extends NetworkError {
+    constructor(message: string, options?: {
+        cause?: unknown;
+    });
+}
 
 // @public
 export class UnknownKeysetError extends CTSError {
@@ -2146,7 +2168,22 @@ export function verifyHTLCSpendingConditions(proof: Proof, logger?: Logger, mess
 export function verifyMintQuoteSignature(pubkey: string, quote: string, blindedMessages: SerializedBlindedMessage[], signature: string): boolean;
 
 // @public
+export function verifyMintSignatures<T extends ProofLike>(proofs: T[], getKeyset: (id: string) => HasKeysetKeys, opts?: VerifyProofsOptions): Promise<ProofVerification<T>>;
+
+// @public
 export function verifyP2PKSpendingConditions(proof: Proof, logger?: Logger, message?: MessageInput): P2PKVerificationResult;
+
+// @public (undocumented)
+export type VerifyProofsOptions = {
+    require?: boolean;
+    chunkSize?: number;
+    budgetMs?: number;
+    signal?: AbortSignal;
+    onProgress?: (done: number, total: number) => void;
+};
+
+// @public
+export function verifyReceivedProofs<T extends ProofLike>(proofs: T[], getKeyset: (id: string) => HasKeysetKeys, opts?: VerifyProofsOptions): Promise<ProofVerification<T>>;
 
 // @public (undocumented)
 export function verifyUnblindedSignature(proof: UnblindedSignature, privKey: Uint8Array): boolean;
@@ -2270,6 +2307,7 @@ export class Wallet {
     sendOffline(amount: AmountLike, proofs: ProofLike[], config?: SendOfflineConfig): SendResponse;
     signP2PKProofs(proofs: ProofLike[], privkey: string | string[], outputData?: OutputDataLike[], quoteId?: string): Proof[];
     get unit(): string;
+    verifyMintSignatures<T extends ProofLike = Proof>(proofs: T[], opts?: VerifyProofsOptions): Promise<ProofVerification<T>>;
     withKeyset(id: string, opts?: {
         counterSource?: CounterSource;
     }): Wallet;
@@ -2356,13 +2394,20 @@ export type WebSocketSupport = {
     commands: string[];
 };
 
+// @public
+export type WSCloseEvent = {
+    code: number;
+    reason: string;
+    wasClean: boolean;
+};
+
 // @public (undocumented)
 export class WSConnection {
     constructor(url: string, logger?: Logger);
     // (undocumented)
     get activeSubscriptions(): string[];
     // (undocumented)
-    addSubListener<TPayload = unknown>(subId: string, callback: (payload: TPayload) => void): void;
+    addSubListener<TPayload = unknown>(subId: string, callback: (payload: TPayload) => void, errorCallback?: (e: Error) => void): void;
     cancelSubscription<TPayload = unknown>(subId: string, callback: (payload: TPayload) => void, errorCallback?: (e: Error) => void): void;
     // (undocumented)
     close(): void;
@@ -2373,7 +2418,7 @@ export class WSConnection {
     // (undocumented)
     ensureConnection(timeoutMs?: number): Promise<void>;
     // (undocumented)
-    onClose(callback: (e: CloseEvent) => void): void;
+    onClose(callback: (e: WSCloseEvent) => void): void;
     // (undocumented)
     sendRequest(method: 'subscribe', params: JsonRpcReqParams): void;
     // (undocumented)

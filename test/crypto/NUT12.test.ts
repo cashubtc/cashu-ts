@@ -1,3 +1,4 @@
+import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
@@ -26,6 +27,16 @@ describe('test hash_e', () => {
     console.log('e = ' + bytesToHex(e));
     expect(bytesToHex(e)).toEqual(
       'a4dc034b74338c28c6bc3ea49731f2a24440fc7c4affc08b31a93fc9fbe6401e',
+    );
+  });
+});
+
+describe('createDLEQProof', () => {
+  test('rejects a blinded message from another curve', () => {
+    // The point type is structural, so a BLS12-381 G1 point satisfies it at compile time.
+    const foreign = bls12_381.G1.Point.fromAffine({ x: 0n, y: 2n });
+    expect(() => createDLEQProof(foreign, hexToBytes('0'.repeat(63) + '2'))).toThrow(
+      /secp256k1 point/,
     );
   });
 });

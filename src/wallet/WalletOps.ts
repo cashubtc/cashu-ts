@@ -322,8 +322,17 @@ export class SendBuilder {
    * @remarks
    * Call `wallet.completeSwap(SwapPreview)` to complete the send.
    * @returns A SwapPreview containing inputs, outputs, amount, fee and unselectedProofs.
+   * @throws If an offline mode is set: an offline selection has no swap to complete.
    */
   async prepare() {
+    // An offline selection reuses existing proofs and never reaches the mint, so there is no
+    // preview to hand to completeSwap.
+    if (this.offlineExact || this.offlineClose) {
+      throw new CTSError(
+        'Offline selection has nothing to prepare; call run() instead, or drop the offline mode for an online swap.',
+      );
+    }
+
     // Construct an OutputConfig using default send if no customizations
     const outputConfig: OutputConfig = {
       send: this.sendOT ?? this.wallet.defaultOutputType(),
@@ -745,7 +754,7 @@ export class MintBuilder<
       const bolt12 = this.quote as MintQuoteBolt12Response;
       this.wallet.validateMintQuote(bolt12);
       if (!this.config.privkey) {
-        throw new Error('privkey is required for BOLT12 mint quotes');
+        throw new CTSError('privkey is required for BOLT12 mint quotes');
       }
       return this.wallet.prepareMint(
         this.method,
@@ -1026,7 +1035,9 @@ export class MeltOnchainBuilder {
     }
 
     if (this.selectedFeeIndex === undefined) {
-      throw new Error('feeIndex is required when an onchain melt quote has multiple fee options');
+      throw new CTSError(
+        'feeIndex is required when an onchain melt quote has multiple fee options',
+      );
     }
 
     return this.wallet.meltProofsOnchain(

@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
-import { Amount, AmountError, AmountWithUnit, AmountWithUnitError } from '../../src/model/Amount';
+import { Amount, AmountWithUnit } from '../../src/model/Amount';
+import { AmountError, AmountWithUnitError } from '../../src/model/Errors';
 
 describe('Amount.from validation', () => {
   it('rejects negative bigint amounts', () => {
@@ -28,6 +29,26 @@ describe('Amount.from validation', () => {
 
   it('rejects unsupported input types', () => {
     expect(() => Amount.from({} as unknown as Amount)).toThrow('Unsupported amount input type');
+  });
+
+  it('rehydrates an Amount that lost its prototype to structuredClone', () => {
+    const cloned = structuredClone(Amount.from(8n));
+    expect(cloned).not.toBeInstanceOf(Amount);
+    expect(Amount.from(cloned).equals(8)).toBe(true);
+    expect(() => Amount.from({ value: -1n } as unknown as Amount)).toThrow('Amount must be >= 0');
+    expect(() => Amount.from({ value: '8' } as unknown as Amount)).toThrow(
+      'Unsupported amount input type',
+    );
+  });
+
+  it('rejects a negative value passed directly to the exported constructor', () => {
+    expect(() => Reflect.construct(Amount, [-1n])).toThrow('Amount must be >= 0');
+  });
+
+  it('rejects an object forged with Amount.prototype without running the constructor', () => {
+    const forged = Object.create(Amount.prototype) as Amount;
+    Object.defineProperty(forged, 'value', { value: -7n });
+    expect(() => Amount.from(forged)).toThrow(AmountError);
   });
 
   it('accepts the u64 max at the boundary', () => {
@@ -77,6 +98,29 @@ describe('Amount conversions', () => {
   });
 });
 
+describe('Amount implicit coercion', () => {
+  it('string coercion yields the decimal form', () => {
+    const a = Amount.from(21);
+    /* eslint-disable @typescript-eslint/restrict-template-expressions -- template coercion is the tested behavior */
+    expect(`${a}`).toBe('21');
+    /* eslint-enable @typescript-eslint/restrict-template-expressions */
+    expect(String(a)).toBe('21');
+  });
+
+  it('numeric and default coercion warn once and use the number, not the string', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const n = Amount.from(21) as unknown as number;
+    expect(n + 1).toBe(22);
+    expect(n - 1).toBe(20);
+    expect((Amount.from(9) as unknown as number) < (Amount.from(10) as unknown as number)).toBe(
+      true,
+    );
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toMatch(/throws in cashu-ts v5/);
+    warn.mockRestore();
+  });
+});
+
 describe('Amount.isSafeNumber', () => {
   it('returns true up to MAX_SAFE_INTEGER', () => {
     const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
@@ -119,6 +163,11 @@ describe('Amount.floorPercent', () => {
     expect(() => Amount.from(100).floorPercent(2, 0)).toThrow('floorPercent');
     expect(() => Amount.from(100).floorPercent(-1)).toThrow('floorPercent');
   });
+  it('rejects unsafe integer ratio operands', () => {
+    const unsafe = Number.MAX_SAFE_INTEGER + 1;
+    expect(() => Amount.from(100).floorPercent(unsafe)).toThrow('floorPercent');
+    expect(() => Amount.from(100).floorPercent(1, unsafe)).toThrow('floorPercent');
+  });
   it('works with large (unsafe integer) amounts', () => {
     const large = Amount.from(BigInt(Number.MAX_SAFE_INTEGER) + 1000n);
     const result = large.floorPercent(2);
@@ -149,6 +198,11 @@ describe('Amount.ceilPercent', () => {
     expect(Amount.from(100).ceilPercent(0).toBigInt()).toBe(0n);
     expect(() => Amount.from(100).ceilPercent(2, 0)).toThrow('ceilPercent');
     expect(() => Amount.from(100).ceilPercent(-1)).toThrow('ceilPercent');
+  });
+  it('rejects unsafe integer ratio operands', () => {
+    const unsafe = Number.MAX_SAFE_INTEGER + 1;
+    expect(() => Amount.from(100).ceilPercent(unsafe)).toThrow('ceilPercent');
+    expect(() => Amount.from(100).ceilPercent(1, unsafe)).toThrow('ceilPercent');
   });
 });
 
@@ -324,10 +378,13 @@ describe('AmountError metadata', () => {
   });
 });
 
-describe('Amount.scaledBy zero-numerator short-circuit', () => {
-  it('returns zero for scaledBy(0, 0) without reaching the divisor guard', () => {
-    // numerator zero short-circuits to zero before the denominator-zero check throws
-    expect(Amount.from(500).scaledBy(0, 0).toBigInt()).toBe(0n);
+describe('Amount.scaledBy denominator validation', () => {
+  it('rejects a 0/0 ratio instead of returning zero', () => {
+    expect(() => Amount.from(500).scaledBy(0, 0)).toThrow('denominator must be > 0');
+  });
+
+  it('still short-circuits a zero numerator once the denominator is valid', () => {
+    expect(Amount.from(500).scaledBy(0, 100).toBigInt()).toBe(0n);
   });
 });
 

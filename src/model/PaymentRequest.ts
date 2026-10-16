@@ -1,6 +1,6 @@
 import { getTag, getTagInt, getTagScalar } from '../crypto/NUT10';
 import type { P2PKOptions, P2PKTag } from '../crypto/NUT11';
-import { P2PK_KNOWN_TAG_KEYS, parseP2PKSecret } from '../crypto/NUT11';
+import { isP2PKKnownTagKey, parseP2PKSecret } from '../crypto/NUT11';
 import {
   decodeBase64AnyToUint8,
   decodeCBOR,
@@ -168,7 +168,7 @@ export class PaymentRequest {
 
     // Forward any non-standard tags verbatim.
     const additionalTags = (nut10.tags ?? []).filter(
-      (t) => t.length > 0 && !P2PK_KNOWN_TAG_KEYS.has(t[0]),
+      (t) => t.length > 0 && !isP2PKKnownTagKey(t[0]),
     ) as P2PKTag[];
     if (additionalTags.length > 0) {
       options.additionalTags = additionalTags;

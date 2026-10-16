@@ -122,13 +122,17 @@ export class Keyset {
   /**
    * Verifies that a MintKeys DTO has a correct id for its keys/unit/expiry.
    *
-   * @returns True if verification succeeds, false otherwise (e.g: no keys, too many keys, or
-   *   mismatch).
+   * @returns True if verification succeeds, false otherwise (e.g: no keys, too many keys, one key
+   *   serving two denominations, or mismatch).
    */
   static verifyKeysetId(keys: MintKeys): boolean {
     try {
       const count = keys.keys ? Object.keys(keys.keys).length : 0;
       if (count === 0 || count > MAX_KEYSET_DENOMINATIONS) return false;
+
+      // A keyset id selects one key per amount, so a key repeated across denominations is malformed.
+      const distinct = new Set(Object.values(keys.keys).map((k) => k.toLowerCase()));
+      if (distinct.size !== count) return false;
 
       const isDeprecatedBase64 = isBase64String(keys.id) && !isValidHex(keys.id);
       const versionByte = isValidHex(keys.id) ? hexToBytes(keys.id)[0] : 0;

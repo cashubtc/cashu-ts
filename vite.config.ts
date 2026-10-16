@@ -43,6 +43,9 @@ function resolveIntegrationBrowser(): BrowserName {
   throw new Error(`Unsupported INTEGRATION_BROWSER "${browser}"`);
 }
 
+// CI runs node, three browsers and coverage on one runner; CPU-bound tests can stretch 20x.
+const testTimeout = 20_000;
+
 const sourceCoverage = {
   provider: 'v8' as const,
   reporter: ['text', 'lcov'],
@@ -106,6 +109,7 @@ export default defineConfig(({ command }) => {
           test: {
             name: 'node',
             globals: true,
+            testTimeout,
             environment: 'node',
             include: ['test/**/*.test.ts'],
             exclude: [
@@ -120,6 +124,7 @@ export default defineConfig(({ command }) => {
           test: {
             name: 'browser',
             globals: true,
+            testTimeout,
             browser: {
               provider: playwright(),
               api: {
@@ -147,6 +152,7 @@ export default defineConfig(({ command }) => {
           test: {
             name: 'integration',
             globals: true,
+            testTimeout,
             environment: 'node',
             include: ['test/integration.test.ts'],
             exclude: [...configDefaults.exclude],
@@ -156,6 +162,7 @@ export default defineConfig(({ command }) => {
           test: {
             name: 'integration-browser',
             globals: true,
+            testTimeout,
             browser: {
               provider: playwright(),
               api: {

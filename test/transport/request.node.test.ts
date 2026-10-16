@@ -58,7 +58,7 @@ describe('requests', { timeout: 7500 }, () => {
       http.get(mintUrl + '/v1/melt/quote/bolt11/test', ({ request }) => {
         headers = request.headers;
         return HttpResponse.json({
-          quote: 'test_melt_quote_id',
+          quote: 'test',
           amount: 2000,
           fee_reserve: 20,
           payment_preimage: null,
@@ -84,7 +84,7 @@ describe('requests', { timeout: 7500 }, () => {
       http.get(mintUrl + '/v1/melt/quote/bolt11/test', ({ request }) => {
         headers = request.headers;
         return HttpResponse.json({
-          quote: 'test_melt_quote_id',
+          quote: 'test',
           amount: 2000,
           fee_reserve: 20,
           payment_preimage: null,
@@ -248,6 +248,31 @@ describe('requests', { timeout: 7500 }, () => {
     expect(headers!.get('x-both')).toBe('per-request');
   });
 
+  test('a per-request header overrides a global one differing only in case', async () => {
+    let observed: Headers | undefined;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      observed = new Headers(init?.headers);
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+
+    setGlobalRequestOptions({ headers: { Authorization: 'Bearer global' } });
+    try {
+      await request({
+        endpoint: `${mintUrl}/v1/info`,
+        headers: { authorization: 'Bearer per-request' },
+      });
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    // A combined value ("Bearer global, Bearer per-request") means both headers were sent;
+    // Headers itself joins duplicates this way, so an exact match proves only one survived.
+    expect(observed?.get('authorization')).toBe('Bearer per-request');
+  });
+
   test('handles HttpResponseError on non-200 response', async () => {
     server.use(
       http.get(mintUrl + '/v1/melt/quote/bolt11/test', () => {
@@ -325,6 +350,20 @@ describe('requests', { timeout: 7500 }, () => {
     await expect(wallet.checkMeltQuoteBolt11('test')).rejects.toThrow('primitive failure');
   });
 
+  test('falls back to raw text for an error body with a duplicate JSON key', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/melt/quote/bolt11/test', () => {
+        return new HttpResponse('{"detail":"trusted","detail":"attacker"}', { status: 404 });
+      }),
+    );
+
+    const wallet = new Wallet(mintUrl);
+    wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+    await expect(wallet.checkMeltQuoteBolt11('test')).rejects.toThrow(
+      '{"detail":"trusted","detail":"attacker"}',
+    );
+  });
+
   test('maps empty error response body to bad response', async () => {
     server.use(
       http.get(mintUrl + '/v1/melt/quote/bolt11/test', () => {
@@ -349,6 +388,19 @@ describe('requests', { timeout: 7500 }, () => {
     expect(thrown).toBeInstanceOf(HttpResponseError);
     expect(thrown).toMatchObject({ message: 'bad response', status: 200 });
     expect((thrown as HttpResponseError).cause).toMatchObject({ message: 'Empty response body' });
+  });
+
+  test('rejects a response body with a duplicate JSON key instead of taking the last value', async () => {
+    const endpoint = mintUrl + '/v1/keys';
+    server.use(
+      http.get(endpoint, () => {
+        return new HttpResponse('{"id":"trusted","id":"attacker"}', { status: 200 });
+      }),
+    );
+
+    const thrown = await request({ endpoint }).catch((e) => e);
+    expect(thrown).toBeInstanceOf(HttpResponseError);
+    expect(thrown).toMatchObject({ message: 'bad response', status: 200 });
   });
 
   test('maps malformed success JSON to bad response and logs parsing failure', async () => {
@@ -394,8 +446,26 @@ describe('requests', { timeout: 7500 }, () => {
     try {
       const thrown = await request({ endpoint }).catch((e) => e);
       expect(thrown).toBeInstanceOf(NetworkError);
-      expect(thrown).toMatchObject({ message: 'aborted by runtime' });
+      expect(thrown).toMatchObject({ message: `aborted by runtime at ${mintUrl}` });
       expect((thrown as NetworkError).cause).toBe(abortError);
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  test('names the innermost cause, its code and the mint origin in a NetworkError', async () => {
+    const endpoint = mintUrl + '/v1/mint/quote/bolt11/quote-id-must-not-leak';
+    const socketError = Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' });
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      throw Object.assign(new TypeError('fetch failed'), { cause: socketError });
+    });
+
+    try {
+      const thrown = await request({ endpoint }).catch((e) => e);
+      expect(thrown).toBeInstanceOf(NetworkError);
+      expect((thrown as Error).message).toBe(
+        `fetch failed (other side closed, UND_ERR_SOCKET) at ${mintUrl}`,
+      );
     } finally {
       fetchMock.mockRestore();
     }
@@ -597,8 +667,9 @@ describe('requests', { timeout: 7500 }, () => {
       );
 
       setRequestLogger(logger);
+      // Jitter sits in the upper half of the 100 ms base cap: 50 + random * 50.
       const mockedRandom = 0.12345;
-      const expectedDelay = mockedRandom * 100;
+      const expectedDelay = 50 + mockedRandom * 50;
       vi.spyOn(Math, 'random').mockReturnValue(mockedRandom);
 
       try {
@@ -607,6 +678,35 @@ describe('requests', { timeout: 7500 }, () => {
         expect(logger.info).toHaveBeenCalledWith(
           `Network Error: attempting retry 1 in ${expectedDelay}ms`,
           expect.objectContaining({ retries: 1, delay: expectedDelay }),
+        );
+      } finally {
+        setRequestLogger(NULL_LOGGER);
+      }
+    });
+
+    test('logs a non-retryable failure on a cached endpoint at debug, not error', async () => {
+      const endpoint = mintUrl + '/v1/keys';
+      const retryPolicy: Nut19Policy = {
+        ttl: 1000,
+        cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+      };
+      const logger = {
+        error: vi.fn(),
+        warn: vi.fn(),
+        info: vi.fn(),
+        debug: vi.fn(),
+        trace: vi.fn(),
+        log: vi.fn(),
+      };
+      server.use(http.get(endpoint, () => new HttpResponse('nope', { status: 400 })));
+
+      setRequestLogger(logger);
+      try {
+        await expect(request({ endpoint, ...retryPolicy })).rejects.toThrow(HttpResponseError);
+        expect(logger.error).not.toHaveBeenCalled();
+        expect(logger.debug).toHaveBeenCalledWith(
+          'Request failed and could not be retried',
+          expect.anything(),
         );
       } finally {
         setRequestLogger(NULL_LOGGER);
@@ -725,6 +825,21 @@ describe('requests', { timeout: 7500 }, () => {
       expect(requestCount).toBe(2); // first hung + aborted, second succeeded
       expect(result).toEqual({ keysets: [] });
     }, 5000);
+
+    test('arms a 5 minute timeout by default and none for Infinity', async () => {
+      const endpoint = mintUrl + '/v1/keys';
+      server.use(http.get(endpoint, () => HttpResponse.json({ keysets: [] })));
+      const spy = vi.spyOn(globalThis, 'setTimeout');
+      try {
+        expect(await request({ endpoint })).toEqual({ keysets: [] });
+        expect(spy.mock.calls.some(([, ms]) => ms === 300_000)).toBe(true);
+        spy.mockClear();
+        expect(await request({ endpoint, requestTimeout: Infinity })).toEqual({ keysets: [] });
+        expect(spy.mock.calls.some(([, ms]) => ms === 300_000 || ms === Infinity)).toBe(false);
+      } finally {
+        spy.mockRestore();
+      }
+    });
 
     test('composes requestTimeout with already-aborted external signal', async () => {
       const endpoint = mintUrl + '/v1/keys';
@@ -1149,6 +1264,36 @@ describe('response body read timeout', () => {
       } as unknown as Response),
     );
 
+  test('does not retry a 429 response whose body stalls', async () => {
+    const fetchSpy = hungBody(429);
+
+    const thrown = await request({
+      endpoint,
+      requestTimeout: 50,
+      ttl: 60_000,
+      cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+    }).catch((e) => e);
+
+    expect(thrown).toBeInstanceOf(RateLimitError);
+    // The status is already known; a stalled optional body must not turn it into a retryable error.
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('surfaces RateLimitError for a 429 whose body has no cancel method', async () => {
+    const response = {
+      ok: false,
+      status: 429,
+      headers: new Headers(),
+      body: { getReader: () => ({ read: async () => ({ done: true, value: undefined }) }) },
+      text: async () => '',
+    } as unknown as Response;
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
+
+    const thrown = await request({ endpoint }).catch((e) => e);
+
+    expect(thrown).toBeInstanceOf(RateLimitError);
+  });
+
   test('requestTimeout covers a hung success body that ignores the signal', async () => {
     hungBody(200);
     const thrown = await request({ endpoint, requestTimeout: 100 }).catch((e) => e);
@@ -1325,6 +1470,12 @@ describe('buildRequestHeaders', () => {
   test('caller-supplied User-Agent always wins', () => {
     expect(buildRequestHeaders(undefined, { 'User-Agent': 'X' }, false)['User-Agent']).toBe('X');
     expect(buildRequestHeaders(undefined, { 'User-Agent': 'X' }, true)['User-Agent']).toBe('X');
+  });
+
+  test('caller-supplied header replaces a default differing only in case', () => {
+    const headers = buildRequestHeaders(undefined, { 'user-agent': 'X' }, false);
+    expect(headers['user-agent']).toBe('X');
+    expect(Object.keys(headers).filter((k) => k.toLowerCase() === 'user-agent')).toHaveLength(1);
   });
 
   test('Content-Type is added only when body is present', () => {

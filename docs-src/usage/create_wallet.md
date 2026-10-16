@@ -28,6 +28,58 @@ wallet2.loadMintFromCache(mintInfoCache, keychainCache);
 
 > ⚠️ **Server-side usage:** If you construct a `Wallet` (or `Mint`) using a URL from untrusted input (e.g. a received token), validate the mint URL against your own trusted-mint allowlist **before** passing it in. The library validates URL structure but cannot know which mints your application trusts.
 
+## Seed
+
+Everything recoverable in cashu-ts (deterministic secrets, NUT-09 restore, derived P2PK keys, quote locks) hangs off `bip39seed`: the 64-byte BIP-39 seed, not the entropy behind the mnemonic. This line accepts 16 to 64 bytes; use the 64-byte seed, which is what NUT-13 derivation expects and what v5 requires. `mnemonicToSeedSync` derives it from the phrase (and optional passphrase) with the library's existing primitives; it normalizes and checks the word count but does **NOT** validate the checksum or wordlist, so validate a user-entered phrase first, with `@scure/bip39` or similar, which is also where mnemonic generation lives.
+
+```typescript
+import { Wallet, mnemonicToSeedSync } from '@cashu/cashu-ts';
+
+const wallet = new Wallet(mintUrl, { unit: 'sat', bip39seed: mnemonicToSeedSync(mnemonic) });
+await wallet.loadMint();
+```
+
+A wallet constructed without a seed uses random secrets. Its proofs live only in your proof store and cannot be recovered from the mint.
+
+## Transport policy
+
+cashu-ts does not enforce a transport policy. It accepts `http:` mint and identity-provider URLs,
+follows redirects on bodiless GETs, and does not know which networks are private, because Tor, LAN
+and local-development mints are legitimate. A server-side consumer that needs such a policy applies
+it itself, at the seams 4.x offers:
+
+- Require `https:` and an allowlisted host when validating the mint URL, before constructing the
+  `Wallet` (see the warning above). A NUT-21 `openid_discovery` URL deserves the same check.
+- Set `redirect: 'error'` process-wide with `setGlobalRequestOptions`; the library already forces
+  it on requests that carry a body or an auth header.
+- For egress control, replace the request pipeline with `customRequest`, or apply the rule at the
+  socket layer (for example undici's `connect` hook), where the resolved address is known and a
+  hostname check is not fooled by DNS.
+- NUT-17 subscriptions have the same seam for the socket: `injectWebSocketImpl(ws)` replaces the
+  `WebSocket` class the library captured when it loaded, for a proxy, a polyfill or a runtime
+  without a global `WebSocket`. Call it before the first subscription.
+
+```typescript
+import { setGlobalRequestOptions } from '@cashu/cashu-ts';
+
+setGlobalRequestOptions({ redirect: 'error' });
+```
+
+Retries after a 5xx on NUT-19 cached endpoints are deliberate, see
+[NUT-19 Cached Responses](./nut19.md): they replay an idempotent request, never a fresh one.
+
+**Transport defaults.** Every request attempt times out after 5 minutes, the bound Node's own fetch applies, unless `requestTimeout` says otherwise (per call or through `setGlobalRequestOptions`; `Infinity` disables it), so a mint that stops answering surfaces as a `NetworkError` rather than a hang. And outside browsers the library sends `User-Agent: Mozilla/5.0`, replacing the runtime's own string (undici, NSURLSession, OkHttp) that would otherwise fingerprint the process; `requestHeaders` overrides it.
+
+## Auth state and application sessions
+
+`createAuthWallet` connects one `AuthManager` and `OIDCAuth` to a mint and wallet. The manager owns the CAT record and BAT pool; your app owns account selection, login flow lifetime, and persistence. Keep separate managers and persisted BAT pools for separate application accounts.
+
+Use the attached OIDC client for sign-in or call `oidc.refresh(savedRefreshToken)` to restore a session. Its listener installs the complete token state. `auth.setCAT(cat)` is manual replacement: it clears the previous refresh token and expiry. A provider refresh keeps the token used for that request if the response omits a replacement; a new sign-in does not inherit it. Attaching a different OIDC instance clears the CAT and refresh state; initial attachment and reattaching the same instance preserve them.
+
+When ending an application session, cancel any device flow with its `cancel()` helper and clear the CAT with `auth.setCAT(undefined)`. Existing BATs remain available; use `auth.importPool([], 'replace')` if they should also be discarded. Clearing the CAT does not cancel an independently started sign-in.
+
+`oidc.onTokens(tokens, origin)` observes provider responses (`origin` is `'signin'` or `'refresh'`), including refresh results the manager may decline after an account change. Persistence callbacks must follow your app's account lifetime; do not use them to call `setCAT` alongside the attached manager.
+
 ## Custom output generation
 
 Pass `outputDataCreator` when you need to replace the default output generation logic, for
@@ -52,8 +104,9 @@ class CustomOutputDataCreator implements OutputDataCreator {
   }
 
   createSingleP2PKData(...args: Parameters<OutputDataCreator['createSingleP2PKData']>) {
-    const [p2pk, amount, keysetId] = args;
-    return OutputData.createSingleP2PKData(p2pk, amount, keysetId);
+    const [p2pk, amount, keysetId, eBytes] = args;
+    // Forward eBytes as-is: a SIG_ALL batch relies on every output sharing this key.
+    return OutputData.createSingleP2PKData(p2pk, amount, keysetId, eBytes);
   }
 
   createRandomData(...args: Parameters<OutputDataCreator['createRandomData']>) {

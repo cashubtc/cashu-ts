@@ -2,8 +2,17 @@ import { HttpResponse, http } from 'msw';
 import { setupServer } from 'msw/node';
 import { beforeAll, beforeEach, afterAll, afterEach, test, describe, expect, vi } from 'vitest';
 
-import { Mint, KeyChain, Keyset, type MintKeyset, type MintKeys, type Keys } from '../../src';
-import { deriveKeysetId, isValidHex } from '../../src/utils';
+import {
+  Mint,
+  KeyChain,
+  Keyset,
+  type MintKeyset,
+  type MintKeys,
+  type Keys,
+  type KeyChainCache,
+} from '../../src';
+import { NULL_LOGGER } from '../../src/logger';
+import { deriveKeysetId, isValidHex, MAX_SUPPORTED_KEYSET_VERSION_BYTE } from '../../src/utils';
 import { DUMMY_TEST_KEYS, DUMMY_TEST_KEYSET, PUBKEYS } from '../consts';
 
 const mintUrl = 'http://localhost:3338';
@@ -218,10 +227,12 @@ describe('KeyChain initialization', () => {
       }),
     );
 
-    const keyChain = new KeyChain(mint, unit);
+    const warn = vi.fn();
+    const keyChain = new KeyChain(mint, unit, { ...NULL_LOGGER, warn });
     await keyChain.init();
     expect(keyChain.getKeyset('00bd033559de27d1').id).toEqual('00bd033559de27d1');
     expect(keyChain.getKeyset('00bd033559de27d1').keys).toEqual({});
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/do not derive/), { id: newId });
   });
 
   test('should not throw on init with empty keysets; queries throw instead', async () => {
@@ -300,6 +311,225 @@ describe('KeyChain initialization', () => {
     expect(keyChain.getKeyset('00bd033559de27d0').keys).toEqual(DUMMY_TEST_KEYS.keys);
   });
 
+  test('init(true) drops carried-forward keys when the fresh metadata no longer derives their id', async () => {
+    const original = makeKeyset(7, 1);
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () => HttpResponse.json({ keysets: [original.meta] })),
+      http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [original.keys] })),
+    );
+    const warn = vi.fn();
+    const keyChain = new KeyChain(mint, unit, { ...NULL_LOGGER, warn });
+    await keyChain.init();
+    expect(keyChain.getKeyset(original.meta.id).verify()).toBe(true);
+
+    // A v1 id commits to the fee, so the same keys under a changed fee no longer derive it.
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({ keysets: [{ ...original.meta, input_fee_ppk: 8 }] }),
+      ),
+      http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [] })),
+    );
+    await keyChain.init(true);
+
+    const changed = keyChain.getKeyset(original.meta.id);
+    expect(changed.hasKeys).toBe(false);
+    expect(changed.verify()).toBe(false);
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/carried keys/), {
+      id: original.meta.id,
+    });
+  });
+
+  test('init(true) carries forward keys for a v0 id when the unit is unchanged', async () => {
+    const original = makeKeyset(7, 0);
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () => HttpResponse.json({ keysets: [original.meta] })),
+      http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [original.keys] })),
+    );
+    const keyChain = new KeyChain(mint, unit);
+    await keyChain.init();
+    const priorKeys = keyChain.getKeyset(original.meta.id).keys;
+
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({ keysets: [{ ...original.meta, active: false }] }),
+      ),
+      http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [] })),
+    );
+    await keyChain.init(true);
+
+    const carried = keyChain.getKeyset(original.meta.id);
+    expect(carried.hasKeys).toBe(true);
+    expect(carried.keys).toEqual(PUBKEYS);
+    // Carried keys are copied, so a keyset held from before the refresh shares nothing live.
+    expect(carried.keys).not.toBe(priorKeys);
+  });
+
+  test('init(true) drops carried-forward keys for a v0 id served under a different unit', async () => {
+    const original = makeKeyset(7, 0);
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () => HttpResponse.json({ keysets: [original.meta] })),
+      http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [original.keys] })),
+    );
+    const keyChain = new KeyChain(mint, unit);
+    await keyChain.init();
+    expect(keyChain.getKeyset(original.meta.id).hasKeys).toBe(true);
+
+    // A v0 id hashes the keys alone, so a relabelled unit still derives it.
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({ keysets: [{ ...original.meta, unit: 'usd' }] }),
+      ),
+      http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [] })),
+    );
+    await keyChain.init(true);
+
+    expect(keyChain.getKeyset(original.meta.id).hasKeys).toBe(false);
+  });
+
+  test('an older overlapping refresh does not replace the newer keychain', async () => {
+    const debug = vi.fn();
+    const keyChain = new KeyChain(mint, unit, { ...NULL_LOGGER, debug });
+    await keyChain.init();
+
+    let releaseOldMeta!: (value: { keysets: MintKeyset[] }) => void;
+    let releaseOldKeys!: (value: { keysets: MintKeys[] }) => void;
+    const oldMeta = new Promise<{ keysets: MintKeyset[] }>((resolve) => {
+      releaseOldMeta = resolve;
+    });
+    const oldKeys = new Promise<{ keysets: MintKeys[] }>((resolve) => {
+      releaseOldKeys = resolve;
+    });
+    vi.spyOn(mint, 'getKeySets')
+      .mockImplementationOnce(() => oldMeta)
+      .mockResolvedValueOnce({ keysets: [keysetB] });
+    vi.spyOn(mint, 'getKeys')
+      .mockImplementationOnce(() => oldKeys)
+      .mockResolvedValueOnce({ keysets: [keysB] });
+
+    const olderRefresh = keyChain.init(true);
+    await keyChain.init(true);
+    expect(keyChain.hasKeyset(keysetB.id)).toBe(true);
+    expect(keyChain.hasKeyset(keysetA.id)).toBe(false);
+
+    releaseOldMeta({ keysets: [keysetA] });
+    releaseOldKeys({ keysets: [DUMMY_TEST_KEYS] });
+    await olderRefresh;
+
+    expect(keyChain.hasKeyset(keysetA.id)).toBe(false);
+    expect(keyChain.hasKeyset(keysetB.id)).toBe(true);
+    expect(debug).toHaveBeenCalledWith(expect.stringMatching(/superseded/), { seq: 2 });
+  });
+
+  test('the newer overlapping refresh wins even when it returns last', async () => {
+    const keyChain = new KeyChain(mint, unit);
+    await keyChain.init();
+
+    let releaseNewMeta!: (value: { keysets: MintKeyset[] }) => void;
+    let releaseNewKeys!: (value: { keysets: MintKeys[] }) => void;
+    const newMeta = new Promise<{ keysets: MintKeyset[] }>((resolve) => {
+      releaseNewMeta = resolve;
+    });
+    const newKeys = new Promise<{ keysets: MintKeys[] }>((resolve) => {
+      releaseNewKeys = resolve;
+    });
+    vi.spyOn(mint, 'getKeySets')
+      .mockResolvedValueOnce({ keysets: [keysetA] })
+      .mockImplementationOnce(() => newMeta);
+    vi.spyOn(mint, 'getKeys')
+      .mockResolvedValueOnce({ keysets: [DUMMY_TEST_KEYS] })
+      .mockImplementationOnce(() => newKeys);
+
+    const olderRefresh = keyChain.init(true);
+    const newerRefresh = keyChain.init(true);
+    await olderRefresh;
+
+    releaseNewMeta({ keysets: [keysetB] });
+    releaseNewKeys({ keysets: [keysB] });
+    await newerRefresh;
+
+    expect(keyChain.hasKeyset(keysetB.id)).toBe(true);
+    expect(keyChain.hasKeyset(keysetA.id)).toBe(false);
+  });
+
+  test('loadFromCache keeps the current keychain when the cache fails validation', async () => {
+    const keyChain = new KeyChain(mint, unit);
+    await keyChain.init();
+    const injected = makeKeyset(7, 1);
+    const cache = KeyChain.mintToCacheDTO(
+      mintUrl,
+      [
+        injected.meta,
+        { id: '00badbadbadbadba', unit, active: true, input_fee_ppk: Number.MAX_SAFE_INTEGER + 1 },
+      ],
+      [injected.keys],
+    );
+
+    expect(() => keyChain.loadFromCache(cache)).toThrow(/input_fee_ppk/);
+    expect(keyChain.hasKeyset(DUMMY_TEST_KEYSET.id)).toBe(true);
+    expect(keyChain.hasKeyset(injected.meta.id)).toBe(false);
+  });
+
+  test('fromCache warns about a cache recorded for a different mint, then loads it', async () => {
+    const chain = new KeyChain(mint, unit);
+    await chain.init();
+    const foreign = { ...chain.cache, mintUrl: 'https://other-mint.example' };
+    const warn = vi.fn();
+    const restored = KeyChain.fromCache(mint, unit, foreign, { ...NULL_LOGGER, warn });
+    expect(restored.getAllKeysetIds()).toEqual(chain.getAllKeysetIds());
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/different mint.*v5/), {
+      cacheMintUrl: 'https://other-mint.example',
+      mintUrl,
+    });
+  });
+
+  test('fromCache warns about a cache with no mint URL, then loads it', async () => {
+    const chain = new KeyChain(mint, unit);
+    await chain.init();
+    const { mintUrl: _dropped, ...nameless } = chain.cache;
+    const warn = vi.fn();
+    const restored = KeyChain.fromCache(mint, unit, nameless as KeyChainCache, {
+      ...NULL_LOGGER,
+      warn,
+    });
+    expect(restored.getAllKeysetIds()).toEqual(chain.getAllKeysetIds());
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/unknown/), expect.anything());
+  });
+
+  test('fromCache accepts a cache whose mint URL differs only in normalization', async () => {
+    const chain = new KeyChain(mint, unit);
+    await chain.init();
+    const unnormalized = { ...chain.cache, mintUrl: 'HTTP://LOCALHOST:3338/' };
+    const warn = vi.fn();
+    const restored = KeyChain.fromCache(mint, unit, unnormalized, { ...NULL_LOGGER, warn });
+    expect(restored.getAllKeysetIds()).toEqual(chain.getAllKeysetIds());
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  test('cache snapshots do not share key objects with the live keyset', async () => {
+    const chain = new KeyChain(mint, unit);
+    await chain.init();
+    const live = chain.getKeyset(DUMMY_TEST_KEYSET.id);
+    expect(live.verify()).toBe(true);
+
+    const cached = chain.cache.keysets.find((k) => k.id === DUMMY_TEST_KEYSET.id);
+    expect(cached?.keys).toBeDefined();
+    cached!.keys!['3'] = '02' + '0'.repeat(64);
+
+    expect(Object.prototype.hasOwnProperty.call(live.keys, '3')).toBe(false);
+    expect(live.verify()).toBe(true);
+  });
+
+  test('cacheToMintDTO does not share key objects with the cache', async () => {
+    const chain = new KeyChain(mint, unit);
+    await chain.init();
+    const cache = chain.cache;
+    const { keys } = KeyChain.cacheToMintDTO(cache);
+    keys[0].keys['3'] = '02' + '0'.repeat(64);
+
+    const source = cache.keysets.find((k) => k.id === keys[0].id);
+    expect(Object.prototype.hasOwnProperty.call(source!.keys, '3')).toBe(false);
+  });
+
   test('should preload from cache and match original cache', async () => {
     const originalChain = new KeyChain(mint, unit);
     await originalChain.init();
@@ -320,6 +550,25 @@ describe('KeyChain initialization', () => {
     const newCache = cachedChain.cache;
     expect(newCache.keysets).toEqual(originalCache.keysets);
     expect(newCache.mintUrl).toEqual(originalCache.mintUrl);
+  });
+
+  test('carries the loaded savedAt through a reserialization, and stamps a fetch', async () => {
+    const originalChain = new KeyChain(mint, unit);
+    await originalChain.init();
+    const fetchedAt = originalChain.cache.savedAt;
+    expect(fetchedAt).toBeGreaterThan(0);
+
+    const savedAt = 1_600_000_000_000;
+    const restored = KeyChain.fromCache(mint, unit, { ...originalChain.cache, savedAt });
+    expect(restored.cache.savedAt).toBe(savedAt);
+
+    // A cache saved without the timestamp cannot invent one for the data it carries.
+    const undated = KeyChain.fromCache(mint, unit, { ...originalChain.cache, savedAt: undefined });
+    expect(undated.cache.savedAt).toBeUndefined();
+
+    // A refresh from the mint is fresh data, so it takes the current time.
+    await restored.init(true);
+    expect(restored.cache.savedAt).toBeGreaterThan(savedAt);
   });
 
   test('loading a sat cache into a usd KeyChain still loads data; getKeysets throws for missing unit', async () => {
@@ -394,6 +643,10 @@ describe('KeyChain getters', () => {
 
   test('should throw on invalid keyset ID', () => {
     expect(() => keyChain.getKeyset('invalid')).toThrow("Keyset 'invalid' not found");
+  });
+
+  test('falls back to the cheapest keyset for an empty keyset ID', () => {
+    expect(keyChain.getKeyset('').id).toBe(keyChain.getCheapestKeyset().id);
   });
 
   test('should get active keyset correctly', () => {
@@ -583,6 +836,57 @@ describe('KeyChain.getCheapestKeyset picks the lowest fee regardless of order', 
   });
 });
 
+describe('KeyChain refuses keyset id version bytes this build cannot spend', () => {
+  const unsupportedVersion = MAX_SUPPORTED_KEYSET_VERSION_BYTE + 1;
+  const versionName = (byte: number) => `v${byte + 1}`;
+
+  // Byte 0x02 is the v3 (BLS) keyset generation, which this line cannot read: its id derivation
+  // is v5-only. The id cannot be derived here either, so stamp the version byte onto a derived
+  // one; its keys then fail to verify and are blanked, exactly as they would be in the field.
+  function makeFutureKeyset(fee: number): { meta: MintKeyset; keys: MintKeys } {
+    const derived = makeKeyset(fee, MAX_SUPPORTED_KEYSET_VERSION_BYTE);
+    const id =
+      unsupportedVersion.toString(16).padStart(2, '0') + derived.meta.id.slice(2).toLowerCase();
+    const meta: MintKeyset = { ...derived.meta, id };
+    return { meta, keys: { ...meta, keys: PUBKEYS } };
+  }
+
+  test('auto-selection skips it in favour of a supported keyset', async () => {
+    const supported = makeKeyset(100, MAX_SUPPORTED_KEYSET_VERSION_BYTE);
+    const future = makeFutureKeyset(1);
+    // Newest-version-wins would otherwise pick `future`, and it is the cheaper one too.
+    const chain = await initChainWith([supported.keys, future.keys]);
+    expect(chain.getCheapestKeyset().id).toBe(supported.meta.id);
+  });
+
+  test('auto-selection names the version gap when every active keyset is too new', async () => {
+    const chain = await initChainWith([makeFutureKeyset(1).keys]);
+    // Without this the caller only sees "No active keyset found", which reads as a mint problem.
+    expect(() => chain.getCheapestKeyset()).toThrow(/No supported keyset for unit: sat/);
+    expect(() => chain.getCheapestKeyset()).toThrow(
+      new RegExp(`supports up to ${versionName(MAX_SUPPORTED_KEYSET_VERSION_BYTE)}`),
+    );
+  });
+
+  test('getKeyset stays a plain lookup, so filters and fee sums do not throw', async () => {
+    const supported = makeKeyset(1, MAX_SUPPORTED_KEYSET_VERSION_BYTE);
+    const future = makeFutureKeyset(1);
+    const chain = await initChainWith([supported.keys, future.keys]);
+    // Callers filter over every keyset id the mint lists; throwing here would abort the whole
+    // operation over one keyset the caller never asked for.
+    expect(() => chain.getAllKeysetIds().map((id) => chain.getKeyset(id).unit)).not.toThrow();
+    expect(chain.getKeyset(future.meta.id).version).toBe(unsupportedVersion);
+  });
+
+  test('ensureKeysetKeys refuses it instead of reporting a verification failure', async () => {
+    const future = makeFutureKeyset(1);
+    const chain = await initChainWith([future.keys]);
+    await expect(chain.ensureKeysetKeys(future.meta.id)).rejects.toThrow(
+      new RegExp(`is a ${versionName(unsupportedVersion)} keyset`),
+    );
+  });
+});
+
 describe('KeyChain.getCheapestKeyset prefers the newest keyset version', () => {
   test('picks a newer, dearer keyset over an older, cheaper one', async () => {
     const oldCheap = makeKeyset(1, 0);
@@ -636,6 +940,18 @@ describe('KeyChain.ensureKeysetKeys', () => {
     return chain;
   }
 
+  // Hold back the /v1/keys/{id} reply until the test releases it; the bulk /v1/keys stays empty.
+  function holdKeysFetch(): () => void {
+    let release!: () => void;
+    const delayed = new Promise<{ keysets: MintKeys[] }>((resolve) => {
+      release = () => resolve({ keysets: [{ ...metaOnly, keys: PUBKEYS }] });
+    });
+    vi.spyOn(mint, 'getKeys').mockImplementation((id?: string) =>
+      id ? delayed : Promise.resolve({ keysets: [] }),
+    );
+    return release;
+  }
+
   test('fetches, verifies and stores keys for a meta-only keyset', async () => {
     const chain = await initMetaOnlyChain();
     expect(chain.getKeyset(KEYS_ID).hasKeys).toBe(false);
@@ -653,6 +969,35 @@ describe('KeyChain.ensureKeysetKeys', () => {
     expect(ks.keys).toEqual(PUBKEYS);
     // The rebuilt keyset is now cached on the chain.
     expect(chain.getKeyset(KEYS_ID).hasKeys).toBe(true);
+  });
+
+  test('does not reinstate a keyset that a refresh removed while its keys were in flight', async () => {
+    const chain = await initMetaOnlyChain();
+    const releaseKeys = holdKeysFetch();
+    vi.spyOn(mint, 'getKeySets').mockResolvedValue({ keysets: [] });
+
+    const pendingFetch = chain.ensureKeysetKeys(KEYS_ID);
+    await chain.init(true);
+    expect(chain.hasKeyset(KEYS_ID)).toBe(false);
+
+    releaseKeys();
+    await expect(pendingFetch).rejects.toThrow(`Keyset '${KEYS_ID}' not found`);
+    expect(chain.hasKeyset(KEYS_ID)).toBe(false);
+  });
+
+  test('returns the refreshed entry when a refresh replaced the keyset while its keys were in flight', async () => {
+    const chain = await initMetaOnlyChain();
+    const releaseKeys = holdKeysFetch();
+    vi.spyOn(mint, 'getKeySets').mockResolvedValue({ keysets: [{ ...metaOnly, active: false }] });
+
+    const pendingFetch = chain.ensureKeysetKeys(KEYS_ID);
+    await chain.init(true);
+    releaseKeys();
+    const fetched = await pendingFetch;
+
+    // The captured metadata is pre-refresh, so the caller gets the live entry instead.
+    expect(fetched).toBe(chain.getKeyset(KEYS_ID));
+    expect(fetched.isActive).toBe(false);
   });
 
   test('returns the existing keyset without a fetch when keys are present', async () => {

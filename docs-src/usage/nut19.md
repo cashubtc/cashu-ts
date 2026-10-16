@@ -54,11 +54,10 @@ setGlobalRequestOptions({});
 
 ## Caller aborts vs timeout retries
 
-Use `requestTimeout` for app-wide timeout policy. Use `AbortController` only when you want to
-cancel one specific low-level request.
+Use `requestTimeout` for app-wide timeout policy. Use `AbortController` only when you want to cancel one specific low-level request.
 
-- `requestTimeout` turns a hung request into a retryable network error on NUT-19 cached endpoints
-- `signal.abort()` is treated as a caller cancel and stops retries immediately
+- `requestTimeout` turns a hung request into a retryable network error on NUT-19 cached endpoints; it is per attempt and defaults to 5 minutes (`Infinity` disables it)
+- `signal.abort()` is treated as a caller cancel and stops retries immediately; the call rejects with `CallerAbortError`
 
 ```ts
 import { Wallet, setGlobalRequestOptions } from '@cashu/cashu-ts';
@@ -155,7 +154,7 @@ const { keep } = await wallet.completeSwap(deserializeSwapPreview(JSON.parse(sto
 
 `completeSwap` builds its request purely from the preview, so a replayed preview posts a
 byte-identical `/v1/swap` body. See [Receive § 5](../wallet_ops/receive.md) and
-[Send § 7](../wallet_ops/send.md) for the full serialize-and-rehydrate round trip.
+[Send § 2](../wallet_ops/send.md) for the full serialize-and-rehydrate round trip.
 
 Use the same pattern with `wallet.ops`:
 

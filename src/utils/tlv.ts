@@ -4,7 +4,7 @@ import { CTSError } from '../model/Errors';
 import { PaymentRequestTransportType } from '../wallet/types/payment-requests';
 import type { PaymentRequestTransport } from '../wallet/types/payment-requests';
 
-import { decodeUtf8Field } from './bytes';
+import { decodeUtf8Field, hasLoneSurrogate } from './bytes';
 
 /**
  * NUT-10 Spending Condition structure.
@@ -497,6 +497,8 @@ function encodeTLVPart(tag: number, value: Uint8Array): Uint8Array {
 }
 
 function encodeString(str: string): Uint8Array {
+  // Ill-formed UTF-16 would be written as its U+FFFD replacement and decode as a different string
+  if (hasLoneSurrogate(str)) throw new CTSError('TLV text must be well-formed UTF-16');
   return new TextEncoder().encode(str);
 }
 

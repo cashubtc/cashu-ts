@@ -70,6 +70,41 @@ export const MAX_SECRET_LENGTH = 1024;
 export const MAX_WITNESS_LENGTH = 16_384;
 
 /**
+ * NUT-28: locking slots in a P2BK lock, `[data, ...pubkeys, ...refund]` at index bytes
+ * `0x00..0x0A`. `data` always fills slot 0, so an HTLC lock has one fewer key to give away.
+ */
+export const MAX_P2BK_SLOTS = 11;
+
+/**
+ * NUT-13: accepted length range for a deterministic-secrets seed. BIP-32's 16-byte floor at the
+ * bottom, the 64 bytes a BIP-39 mnemonic produces at the top; every derived secret and blinding
+ * factor inherits the seed's strength.
+ */
+export const MIN_SEED_BYTES = 16;
+export const MAX_SEED_BYTES = 64;
+
+/**
+ * Upper bound on entries we process from a mint's keyset lists. `/v1/keysets` is historical: it
+ * grows with every rotation and never shrinks, so this sits far above any plausible mint rather
+ * than at the mint-info list cap. It only bounds the per-entry normalization work; the transport
+ * byte cap still applies.
+ */
+export const MAX_KEYSET_LIST = 10_000;
+
+/**
+ * Upper bound on how deeply mint-advertised metadata may nest before a snapshot of it is refused.
+ * Real `/v1/info` metadata nests a handful of levels; the recursive copy overflows the call stack
+ * well before this is a limitation. Mirrors the parser depth caps in JSONInt and cbor.
+ */
+export const MAX_MINT_INFO_DEPTH = 64;
+
+/**
+ * Longest delay `setTimeout` honours (2^31 - 1 ms, about 24.8 days). Provider-driven delays are
+ * clamped to this before scheduling.
+ */
+export const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
+/**
  * Max u64 (2^64 - 1): the ceiling every Amount is held to. Enforced in the Amount constructor, so
  * arithmetic results are bounded too; muldiv helpers keep their wide intermediate in bigint and
  * only construct the divided-down result.
@@ -85,6 +120,22 @@ export const U64_MAX = 2n ** 64n - 1n;
  * 90,000; this leaves headroom above that on top of the usual one-allocation-per-input-byte bound.
  */
 export const MAX_CBOR_NODES = 262_144;
+
+/**
+ * Upper bound on a BOLT11 invoice's human-readable prefix, checked before the amount digits reach
+ * `BigInt`.
+ *
+ * Real invoices need a handful of characters here; this clears them with headroom.
+ */
+export const MAX_BOLT11_HRP_LENGTH = 100;
+
+/**
+ * Cap on frames `WSConnection` will buffer between two drain ticks: each tick empties the whole
+ * queue, so this bounds arrivals within a single tick, not messages held overall. Matches
+ * {@link ABSOLUTE_MAX_ARRAY_LENGTH}, since a NUT-17 replay sends one frame per subscribed filter and
+ * a full-size batch must fit in one burst without tripping the cap.
+ */
+export const MAX_WS_QUEUED_MESSAGES = ABSOLUTE_MAX_ARRAY_LENGTH;
 
 /**
  * NUT-11: Upper bound on the keys in one `pubkeys` or `refund` tag, applied before any per-key
@@ -107,3 +158,9 @@ export const MAX_P2PK_SIGNATURES = 64;
  * 2,000 plain P2PK inputs, or 700 under a maximal 11-slot lock (data plus ten keys).
  */
 export const MAX_SIGNING_PACKAGE_LENGTH = 1_048_576;
+
+/**
+ * How deep `ConsoleLogger` recurses into structured log context to sanitize nested strings. Bounds
+ * the recursion over a nested mint response object.
+ */
+export const MAX_LOG_CONTEXT_DEPTH = 8;

@@ -42,6 +42,7 @@ export {
   type AuthProvider,
   type AuthManagerOptions,
   type TokenResponse,
+  type TokenOrigin,
   type DeviceStartResponse,
   type OIDCConfig,
   type OIDCAuthOptions,
@@ -79,6 +80,7 @@ export * from './crypto';
 
 // Core Utils
 export * from './utils/core';
+export * from './utils/verifyProofs';
 export { JSONInt, type JSONIntApi } from './utils/JSONInt';
 
 // Payment request facade (tests rely on these at top level)
@@ -96,6 +98,9 @@ export type {
 // Logging & errors
 export { type LogLevel, ConsoleLogger, type Logger } from './logger';
 export {
+  AmountError,
+  AmountWithUnitError,
+  CallerAbortError,
   CTSError,
   isMintOperationError,
   MeltChangeError,
@@ -104,23 +109,24 @@ export {
   HttpResponseError,
   RateLimitError,
   StaleKeysetError,
+  UncancellableReadError,
   UnknownKeysetError,
 } from './model/Errors';
 
 // Low-level helpers/types that appear in public surfaces
-export {
-  Amount,
-  AmountError,
-  AmountWithUnit,
-  AmountWithUnitError,
-  type AmountLike,
-} from './model/Amount';
+export { Amount, AmountWithUnit, type AmountLike } from './model/Amount';
 export { OutputData } from './model/OutputData';
 export type { OutputDataLike, OutputDataFactory, SerializedOutputData } from './model/OutputData';
 export type { OutputDataCreator } from './model/OutputDataCreator';
 export { MintInfo } from './model/MintInfo';
 export { WSConnection, injectWebSocketImpl, setGlobalRequestOptions } from './transport';
-export type { RequestFn, RequestArgs, RequestOptions, ResponseMeta } from './transport';
+export type {
+  RequestFn,
+  RequestArgs,
+  RequestOptions,
+  ResponseMeta,
+  WSCloseEvent,
+} from './transport';
 export {
   SigAll,
   type SigAllApi,

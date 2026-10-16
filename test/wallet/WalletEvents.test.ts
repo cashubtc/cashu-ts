@@ -1,3 +1,6 @@
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+import { bech32 } from '@scure/base';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { Amount } from '../../src';
@@ -200,6 +203,65 @@ describe('WalletEvents', () => {
       expect(p.amount_issued.isZero()).toBe(true);
     });
 
+    it('meltQuoteUpdates nulls an absent preimage and drops a mismatched one', async () => {
+      const logger = {
+        warn: vi.fn(),
+        error: vi.fn(),
+        info: vi.fn(),
+        debug: vi.fn(),
+        trace: vi.fn(),
+        log: vi.fn(),
+      };
+      const ws = new MockWS();
+      const wallet = {
+        mint: { connectWebSocket: vi.fn(async () => {}), webSocketConnection: ws },
+        logger,
+      };
+      const ev = new WalletEvents(wallet as any);
+      const cb = vi.fn();
+      await ev.meltQuoteUpdates(['n4'], cb, vi.fn());
+
+      ws.emit('bolt11_melt_quote', { quote: 'n4', state: 'UNPAID', amount: 10, fee_reserve: 1 });
+      expect(cb.mock.calls[0][0]).toMatchObject({ payment_preimage: null });
+
+      const preimage = 'ab'.repeat(32);
+      const invoiceFor = (hashHex: string) =>
+        bech32.encode(
+          'lnbc',
+          [
+            ...new Array<number>(7).fill(0),
+            1,
+            1,
+            20,
+            ...bech32.toWords(hexToBytes(hashHex)),
+          ].concat(new Array<number>(104).fill(0)),
+          false,
+        );
+      const good = invoiceFor(bytesToHex(sha256(hexToBytes(preimage))));
+      ws.emit('bolt11_melt_quote', {
+        quote: 'n4',
+        state: 'PAID',
+        amount: 10,
+        request: good,
+        payment_preimage: preimage,
+      });
+      expect(cb.mock.calls[1][0].payment_preimage).toBe(preimage);
+
+      const other = invoiceFor(bytesToHex(sha256(hexToBytes('00'.repeat(31) + '01'))));
+      ws.emit('bolt11_melt_quote', {
+        quote: 'n4',
+        state: 'PAID',
+        amount: 10,
+        request: other,
+        payment_preimage: preimage,
+      });
+      expect(cb.mock.calls[2][0].payment_preimage).toBeNull();
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Mint returned a payment_preimage that does not match the invoice',
+        { op: 'bolt11 melt quote update' },
+      );
+    });
+
     it('meltQuoteUpdates normalises amount, fee reserve and change signatures', async () => {
       const cb = vi.fn();
       await events.meltQuoteUpdates(['n2'], cb, vi.fn());
@@ -272,6 +334,21 @@ describe('WalletEvents', () => {
       expect(typeof seen[0].proof.amount).toBe('number');
     });
 
+    const proofStateUpdatesCall = (proofs: Proof[]) =>
+      events.proofStateUpdates(proofs, vi.fn(), vi.fn());
+
+    it('proofStateUpdates refuses a keyset version this build cannot read', async () => {
+      // Y is computed on secp, so a v3 (BLS) proof would be watched under the wrong point and
+      // silently never report a state change.
+      const proofs: Proof[] = [
+        { amount: Amount.from(2), id: '02' + '11'.repeat(32), secret: 's1', C: 'test' },
+      ];
+      await expect(proofStateUpdatesCall(proofs)).rejects.toThrow(/Upgrade/);
+      // Rejected before any I/O: no socket opened, so no subscription either.
+      expect(mock.mint.connectWebSocket).not.toHaveBeenCalled();
+      expect(mock.mint.webSocketConnection).toBeUndefined();
+    });
+
     it('proofStateUpdates throws on duplicate proof secrets', async () => {
       const proofs: Proof[] = [
         { amount: Amount.from(2), id: '00bd033559de27d0', secret: 'same', C: 'a' },
@@ -338,7 +415,8 @@ describe('WalletEvents', () => {
       await expect(p).rejects.toMatchObject({ name: 'AbortError' });
       const ws = mock.mint.webSocketConnection!;
       await flushMicrotasks();
-      expect(ws.cancelSubscription).toHaveBeenCalled();
+      // Aborted before the connect settled, so the filters were never sent.
+      expect(ws.createSubscription).not.toHaveBeenCalled();
     });
 
     it('rejects on timeout and unsubscribes', async () => {
@@ -479,7 +557,8 @@ describe('WalletEvents', () => {
       await expect(p).rejects.toMatchObject({ name: 'AbortError' });
       const ws = mock.mint.webSocketConnection!;
       await flushMicrotasks();
-      expect(ws.cancelSubscription).toHaveBeenCalled();
+      // Aborted before the connect settled, so the filters were never sent.
+      expect(ws.createSubscription).not.toHaveBeenCalled();
       expect(rmSpy).toHaveBeenCalled();
     });
 
@@ -759,9 +838,9 @@ describe('WalletEvents', () => {
       for await (const x of iter) out.push(x);
 
       expect(out).toEqual([]);
-      const ws = mock.mint.webSocketConnection!;
       await flushMicrotasks();
-      expect(ws.cancelSubscription).toHaveBeenCalled();
+      // Already aborted before the stream started, so the WebSocket connect was never attempted.
+      expect(mock.mint.connectWebSocket).not.toHaveBeenCalled();
     });
   });
 
@@ -965,13 +1044,13 @@ describe('WalletEvents', () => {
       expect(ws.cancelSubscription).toHaveBeenCalled();
     });
 
-    it('an already-aborted signal cancels the subscription immediately', async () => {
+    it('an already-aborted signal skips the subscription setup entirely', async () => {
       const ac = new AbortController();
       ac.abort();
       await events.mintQuoteUpdates(['a'], vi.fn(), vi.fn(), { signal: ac.signal });
-      const ws = mock.mint.webSocketConnection!;
       await flushMicrotasks();
-      expect(ws.cancelSubscription).toHaveBeenCalled();
+      expect(mock.mint.connectWebSocket).not.toHaveBeenCalled();
+      expect(mock.mint.webSocketConnection).toBeUndefined();
     });
 
     it('the returned canceller detaches the abort listener (no double cancel on later abort)', async () => {
@@ -983,6 +1062,32 @@ describe('WalletEvents', () => {
       ac.abort();
       await flushMicrotasks();
       expect(ws.cancelSubscription).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not send proof filters when aborted while the WebSocket connects', async () => {
+      let finishConnect!: () => void;
+      const connecting = new Promise<void>((resolve) => {
+        finishConnect = resolve;
+      });
+      const ws = new MockWS();
+      const wallet = {
+        mint: {
+          connectWebSocket: vi.fn(() => connecting),
+          webSocketConnection: ws,
+        },
+      };
+      const ev = new WalletEvents(wallet as any);
+      const ac = new AbortController();
+      const proofs: Proof[] = [
+        { amount: Amount.from(1), id: '00bd033559de27d0', secret: 'private-secret', C: 'c' },
+      ];
+
+      const pending = ev.proofStateUpdates(proofs, vi.fn(), vi.fn(), { signal: ac.signal });
+      ac.abort();
+      finishConnect();
+      await pending;
+
+      expect(ws.createSubscription).not.toHaveBeenCalled();
     });
   });
 
@@ -1340,6 +1445,46 @@ describe('WalletEvents', () => {
       };
       const ev = new WalletEvents(wallet as any);
       await expect(ev.onceAnyMintPaid(['a', 'b'])).rejects.toThrow('No subscriptions remaining');
+    });
+  });
+
+  describe('async consumer callback containment', () => {
+    // A rejecting async consumer callback must not escape as an unhandled rejection; safeCallback
+    // is the local pattern already used for onMode/countersReserved/keychainUpdated.
+    it('contains and logs a rejecting websocket delivery callback', async () => {
+      const logger = {
+        warn: vi.fn(),
+        error: vi.fn(),
+        info: vi.fn(),
+        debug: vi.fn(),
+        trace: vi.fn(),
+        log: vi.fn(),
+      };
+      const ws = new MockWS();
+      const wallet = {
+        mint: { connectWebSocket: vi.fn(async () => {}), webSocketConnection: ws },
+        logger,
+      };
+      const ev = new WalletEvents(wallet as any);
+
+      await ev.mintQuoteUpdates(
+        ['q1'],
+        // eslint-disable-next-line @typescript-eslint/no-misused-promises -- async-callback tolerance is what's under test
+        async () => {
+          throw new Error('deliver boom');
+        },
+        vi.fn(),
+      );
+      ws.emit('bolt11_mint_quote', { quote: 'q1', state: 'PAID' });
+      await flushMicrotasks(4);
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        'callback failed',
+        expect.objectContaining({
+          event: 'bolt11_mint_quote',
+          error: expect.objectContaining({ message: 'deliver boom' }),
+        }),
+      );
     });
   });
 

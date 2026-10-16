@@ -290,6 +290,12 @@ describe('mint quote signature verification rejects malformed input (no throw)',
   const withOutputs = (outputs: unknown) =>
     outputs as Array<{ amount: Amount; id: string; B_: string }>;
 
+  test('a non-string pubkey verifies as false in both message formats', () => {
+    const missing = null as unknown as string;
+    expect(verifyMintQuoteSignature(missing, 'q', [], sig)).toBe(false);
+    expect(verifyMintQuoteSignatureAmended(missing, 'q', [], sig)).toBe(false);
+  });
+
   test('amended: negative amount verifies as false', () => {
     const outputs = withOutputs([{ amount: -1, id: keysetId, B_: goodB_ }]);
     expect(verifyMintQuoteSignatureAmended(pubkey, 'q', outputs, sig)).toBe(false);

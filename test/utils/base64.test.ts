@@ -201,6 +201,15 @@ describe('v4 keeps decoding permissive', () => {
     expect(() => decodeBase64UrlToUint8('o2F0gaJhaUgA/9SLj17PgGFw')).toThrow();
   });
 
+  test('v3 token path rejects a duplicate key rather than taking the last value', () => {
+    const ambiguousJson = '{"mint":"https://trusted.example","mint":"https://attacker.example"}';
+    const encoded = encodeUint8ToBase64(new TextEncoder().encode(ambiguousJson));
+    expect(() => decodeBase64AnyToJson(encoded)).toThrow(/Duplicate key/);
+    expect(() =>
+      decodeBase64UrlToJson(encodeUint8ToBase64Url(new TextEncoder().encode(ambiguousJson))),
+    ).toThrow(/Duplicate key/);
+  });
+
   test('decodes a deprecated keyset ID, which is standard base64', () => {
     expect(decodeBase64ToUint8Legacy('+//wAAAAAAAA')).toEqual(
       new Uint8Array([251, 255, 240, 0, 0, 0, 0, 0, 0]),

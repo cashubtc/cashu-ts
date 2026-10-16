@@ -43,4 +43,15 @@ describe('bolt11AmountMsat', () => {
   it('throws on non-string input', () => {
     expect(() => bolt11AmountMsat(null as unknown as string)).toThrow();
   });
+
+  it('rejects an amount digit run far longer than any real invoice needs', () => {
+    const invoice = `lnbc${'9'.repeat(100_000)}1pfake`;
+    expect(() => bolt11AmountMsat(invoice)).toThrow('Invalid BOLT11 invoice');
+  });
+
+  it('bounds the prefix at exactly 100 characters', () => {
+    // An all-letter prefix parses as amountless once it clears the length check.
+    expect(bolt11AmountMsat(`ln${'x'.repeat(98)}1pfake`)).toBeNull();
+    expect(() => bolt11AmountMsat(`ln${'x'.repeat(99)}1pfake`)).toThrow('Invalid BOLT11 invoice');
+  });
 });

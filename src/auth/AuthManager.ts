@@ -14,6 +14,7 @@ import type {
 } from '../model/types';
 import request, { type RequestFn } from '../transport';
 import {
+  MAX_KEYSET_LIST,
   joinUrls,
   hasValidDleq,
   decodeBase64UrlToUint8,
@@ -23,10 +24,11 @@ import {
   normalizeSafeIntegerMetadata,
   ABSOLUTE_MAX_PER_MINT,
 } from '../utils';
+import { decodeUtf8Document } from '../utils/bytes';
 import { KeyChain, type Keyset } from '../wallet';
 
 import type { AuthProvider } from './AuthProvider';
-import { type OIDCAuth, type TokenResponse } from './OIDCAuth';
+import { type OIDCAuth, type TokenOrigin, type TokenResponse } from './OIDCAuth';
 
 export type AuthManagerOptions = {
   /**
@@ -79,16 +81,18 @@ export class AuthManager implements AuthProvider {
   private readonly logger: Logger;
   private info?: MintInfo;
   private lockChain?: Promise<void>;
-  private inflightRefresh?: Promise<void>;
-  // Bumped whenever the caller sets or clears the CAT. An in-flight refresh that started under an
-  // older generation must not write its result back (eg a refresh landing after logout).
+  private inflightRefresh?: { session: number; promise: Promise<void> };
+  // Bumped whenever the stored tokens change, a refresh result included. A refresh that started
+  // under an older generation must not write its result back over newer tokens.
   private tokenGeneration = 0;
+  // Tracks setCAT, provider replacement and sign-ins; ordinary refreshes keep the same session.
+  private sessionGeneration = 0;
   private static readonly MIN_VALID_SECS = 30;
 
   // Open ID Connect (OIDC)
   private oidc?: OIDCAuth;
   // The listener registered on the current `oidc`, kept so it can be detached on replacement.
-  private oidcListener?: (t: TokenResponse) => void;
+  private oidcListener?: (t: TokenResponse, origin: TokenOrigin) => void;
   private tokens: StoredTokens = {};
 
   // Blind Auth Token (BAT) pool
@@ -138,10 +142,30 @@ export class AuthManager implements AuthProvider {
     if (this.oidc && this.oidcListener) {
       this.oidc.removeTokenListener(this.oidcListener);
     }
+    // Credentials from a replaced provider must never be sent to its replacement.
+    if (this.oidc && this.oidc !== oidc) this.tokens = {};
+    // A refresh still running on the old provider must not install its result either.
+    this.tokenGeneration++;
+    this.sessionGeneration++;
     this.oidc = oidc;
-    this.oidcListener = (t) => this.updateFromOIDC(t);
-    this.oidc.addTokenListener(this.oidcListener);
+    this.bindOIDC();
     return this;
+  }
+
+  // Refreshes retain their original registration, so replacing it declines older results.
+  private bindOIDC(): void {
+    const oidc = this.oidc;
+    if (!oidc) return;
+    if (this.oidcListener) oidc.removeTokenListener(this.oidcListener);
+    const listener = (t: TokenResponse, origin: TokenOrigin): void => {
+      if (this.oidc !== oidc || (origin === 'refresh' && this.oidcListener !== listener)) {
+        this.logger.warn('AuthManager: ignoring tokens from an earlier session');
+        return;
+      }
+      this.updateFromOIDC(t, origin);
+    };
+    this.oidcListener = listener;
+    oidc.addTokenListener(listener);
   }
 
   get poolSize(): number {
@@ -169,14 +193,16 @@ export class AuthManager implements AuthProvider {
     return this.tokens.accessToken;
   }
 
+  /**
+   * Set or clear the CAT. Replaces the whole token record, so any refresh token is dropped.
+   */
   setCAT(cat: string | undefined): void {
-    // Invalidate any in-flight refresh: the caller is taking control of the token state.
+    // The caller is taking control of the token state: any in-flight refresh is invalidated and the
+    // previous token's refresh state goes with it.
     this.tokenGeneration++;
-    this.tokens.accessToken = cat;
-    if (!cat) {
-      this.tokens.refreshToken = undefined;
-      this.tokens.expiresAt = undefined;
-    }
+    this.sessionGeneration++;
+    this.tokens = { accessToken: cat };
+    this.bindOIDC();
   }
 
   /**
@@ -192,22 +218,27 @@ export class AuthManager implements AuthProvider {
       return this.tokens.accessToken; // nothing we can do
     }
 
-    // One refresh at a time
-    if (!this.inflightRefresh) {
-      const startedGeneration = this.tokenGeneration;
-      this.inflightRefresh = (async () => {
+    // Share refreshes within a session without making a new account wait for the old one.
+    if (this.inflightRefresh?.session !== this.sessionGeneration) {
+      const startedAt = this.tokenGeneration;
+      const session = this.sessionGeneration;
+      const promise = (async () => {
         try {
           const tok = await this.oidc!.refresh(this.tokens.refreshToken!);
-          // Drop the result if the session was set or cleared while the refresh was in flight.
-          if (this.tokenGeneration === startedGeneration) this.updateFromOIDC(tok);
+          // Providers that emit tokens already installed the result through our listener.
+          if (this.tokenGeneration === startedAt) this.updateFromOIDC(tok, 'refresh');
         } catch (err) {
           this.logger.warn('AuthManager: CAT refresh failed', { err });
-        } finally {
-          this.inflightRefresh = undefined;
         }
       })();
+      this.inflightRefresh = { session, promise };
     }
-    await this.inflightRefresh;
+    const refresh = this.inflightRefresh;
+    try {
+      await refresh.promise;
+    } finally {
+      if (this.inflightRefresh === refresh) this.inflightRefresh = undefined;
+    }
     return this.validForAtLeast(0) ? this.tokens.accessToken : undefined;
   }
 
@@ -219,12 +250,15 @@ export class AuthManager implements AuthProvider {
     return Date.now() + minValidSecs * 1000 < expiresAt;
   }
 
-  // Updates access and refresh tokens in our store, using either the explicit expires_in key or falling back to the JWT expiry.
-  private updateFromOIDC(t: TokenResponse): void {
+  // Sign-ins replace the account; refreshes may retain an unchanged refresh token.
+  private updateFromOIDC(t: TokenResponse, origin: TokenOrigin): void {
     if (!t.access_token) return;
+    this.tokenGeneration++;
+    if (origin === 'signin') this.sessionGeneration++;
     const nowMs = Date.now();
     this.tokens.accessToken = t.access_token;
-    if (t.refresh_token) this.tokens.refreshToken = t.refresh_token;
+    this.tokens.refreshToken =
+      t.refresh_token || (origin === 'refresh' ? this.tokens.refreshToken : undefined);
     if (typeof t.expires_in === 'number' && t.expires_in > 0) {
       this.tokens.expiresAt = nowMs + t.expires_in * 1000; // Prefer expires_in
     } else {
@@ -232,6 +266,7 @@ export class AuthManager implements AuthProvider {
       const expSec = this.parseJwtExpSec(t.access_token);
       this.tokens.expiresAt = expSec ? expSec * 1000 : undefined;
     }
+    this.bindOIDC();
     this.logger.debug('AuthManager: OIDC tokens updated', { expiresAt: this.tokens.expiresAt });
   }
 
@@ -327,7 +362,7 @@ export class AuthManager implements AuthProvider {
     const parts = token.split('.');
     if (parts.length !== 3) return;
     try {
-      const jsonStr = new TextDecoder('utf-8').decode(decodeBase64UrlToUint8(parts[1]));
+      const jsonStr = decodeUtf8Document(decodeBase64UrlToUint8(parts[1]));
       const obj = JSON.parse(jsonStr) as { exp?: unknown };
       const exp = typeof obj.exp === 'number' ? obj.exp : Number(obj.exp);
       if (Number.isFinite(exp) && exp > 0) return exp;
@@ -366,6 +401,7 @@ export class AuthManager implements AuthProvider {
       const info = await this.req<GetInfoResponse>({
         endpoint: joinUrls(this.mintUrl, '/v1/info'),
         method: 'GET',
+        logger: this.logger,
       });
       this.info = new MintInfo(info, this.logger);
     }
@@ -375,12 +411,20 @@ export class AuthManager implements AuthProvider {
         this.req<GetKeysetsResponse>({
           endpoint: joinUrls(this.mintUrl, '/v1/auth/blind/keysets'),
           method: 'GET',
+          logger: this.logger,
         }),
         this.req<GetKeysResponse>({
           endpoint: joinUrls(this.mintUrl, '/v1/auth/blind/keys'),
           method: 'GET',
+          logger: this.logger,
         }),
       ]);
+      if (!Array.isArray(allKeysets.keysets) || !Array.isArray(allKeys.keysets)) {
+        throw new CTSError('AuthManager: mint returned malformed auth keysets');
+      }
+      if (allKeysets.keysets.length > MAX_KEYSET_LIST || allKeys.keysets.length > MAX_KEYSET_LIST) {
+        throw new CTSError('AuthManager: mint returned more auth keysets than can be processed');
+      }
       const normalizedKeysets = allKeysets.keysets.map((keyset) => normalizeMintKeyset(keyset));
       const normalizedKeys = allKeys.keysets.map((keyset) => normalizeMintKeys(keyset));
       // build a KeyChain preloaded with caches, unit 'auth'
@@ -418,9 +462,13 @@ export class AuthManager implements AuthProvider {
 
     // Check NUT-21 protection of the BAT mint endpoint
     const needsCAT = this.info.requiresClearAuthToken('POST', '/v1/auth/blind/mint');
+    const startedSession = this.sessionGeneration;
     let cat: string | undefined;
     if (needsCAT) {
       cat = await this.ensureCAT();
+      if (this.sessionGeneration !== startedSession) {
+        throw new CTSError('AuthManager: session changed while obtaining BATs');
+      }
       if (!cat) {
         throw new CTSError(
           'AuthManager: Clear-auth token required for /v1/auth/blind/mint but not available. Authenticate with the mint to obtain a CAT first.',
@@ -442,6 +490,7 @@ export class AuthManager implements AuthProvider {
       // A CAT must never be replayed to a redirect target: fail rather than follow.
       ...(cat ? { redirect: 'error' as const } : {}),
       requestBody: payload,
+      logger: this.logger,
     });
     if (!Array.isArray(res?.signatures) || res.signatures.length !== outputs.length) {
       throw new CTSError('AuthManager: bad BAT mint response');
@@ -457,6 +506,10 @@ export class AuthManager implements AuthProvider {
       if (!hasValidDleq(p, keys)) {
         throw new CTSError('AuthManager: mint returned BAT with invalid DLEQ');
       }
+    }
+    // BATs minted for an account the caller has since changed do not enter the pool.
+    if (needsCAT && this.sessionGeneration !== startedSession) {
+      throw new CTSError('AuthManager: session changed while obtaining BATs');
     }
     // Add BAT proofs to pool
     this.pool.push(...proofs);

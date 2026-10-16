@@ -60,6 +60,17 @@ describe('constructor mutants', () => {
     );
   });
 
+  test('rejects a bip39seed outside the accepted length range', () => {
+    for (const length of [1, 15, 65]) {
+      expect(() => new Wallet(mint, { unit, bip39seed: new Uint8Array(length) })).toThrow(
+        /bip39seed must be 16 to 64 bytes/,
+      );
+    }
+    for (const length of [16, 32, 64]) {
+      expect(() => new Wallet(mint, { unit, bip39seed: new Uint8Array(length) })).not.toThrow();
+    }
+  });
+
   test('never logs the rejected seed value', () => {
     // failIf logs its context before throwing, so the value must not appear there.
     const mnemonic = 'abandon abandon abandon abandon about';
@@ -96,6 +107,30 @@ describe('constructor mutants', () => {
 });
 
 describe('finishInit / getKeyset mutants', () => {
+  test('logs a per-keyset summary on load, never the keys themselves', async () => {
+    const debug = vi.fn();
+    const logger = {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug,
+      trace: vi.fn(),
+      log: vi.fn(),
+    };
+    const wallet = new Wallet(mint, { unit, logger });
+    await wallet.loadMint();
+
+    const call = debug.mock.calls.find(([message]) => message === 'KeyChain loaded');
+    expect(call).toBeDefined();
+    const context = call?.[1] as { keysets: Array<{ id: string; keys: number }> };
+    expect(context.keysets).toHaveLength(dummyKeysetResp.keysets.length);
+    expect(
+      context.keysets.every((k) => typeof k.id === 'string' && typeof k.keys === 'number'),
+    ).toBe(true);
+    const somePubkey = Object.values(dummyKeysResp.keysets[0].keys)[0];
+    expect(JSON.stringify(call)).not.toContain(somePubkey);
+  });
+
   test('a constructor-bound keyset with a mismatched unit is rejected on load', () => {
     const wallet = new Wallet(mint, { unit, keysetId: '00ffffffffffffff' });
     const cache = KeyChain.mintToCacheDTO(mintUrl, dummyKeysetResp.keysets, dummyKeysResp.keysets);

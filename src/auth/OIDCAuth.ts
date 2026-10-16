@@ -4,7 +4,7 @@ import { randomBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { type Logger, NULL_LOGGER, safeCallback } from '../logger';
 import { CTSError } from '../model/Errors';
 import { type GetInfoResponse } from '../model/types';
-import { encodeUint8ToBase64Url } from '../utils';
+import { MAX_TIMER_DELAY_MS, encodeUint8ToBase64Url } from '../utils';
 
 export type OIDCConfig = {
   issuer: string;
@@ -12,6 +12,11 @@ export type OIDCConfig = {
   token_endpoint: string;
   device_authorization_endpoint?: string;
 };
+
+/**
+ * Where a token came from: a sign-in the user performed, or a refresh continuing an older one.
+ */
+export type TokenOrigin = 'signin' | 'refresh';
 
 export type TokenResponse = {
   access_token?: string;
@@ -37,7 +42,10 @@ export type OIDCAuthOptions = {
   clientId?: string;
   scope?: string;
   logger?: Logger;
-  onTokens?: (t: TokenResponse) => void | Promise<void>;
+  /**
+   * Observe provider tokens and whether they came from a sign-in or refresh.
+   */
+  onTokens?: (t: TokenResponse, origin: TokenOrigin) => void | Promise<void>;
 };
 
 /**
@@ -46,7 +54,7 @@ export type OIDCAuthOptions = {
  * @remarks
  * Guards against a `javascript:`/`data:` endpoint that the client would navigate to or open.
  */
-function assertHttpUrl(url: string, label: string): void {
+function assertHttpUrl(url: string, label: string): string {
   let protocol: string;
   try {
     protocol = new URL(url).protocol;
@@ -56,19 +64,31 @@ function assertHttpUrl(url: string, label: string): void {
   if (protocol !== 'https:' && protocol !== 'http:') {
     throw new CTSError(`OIDCAuth: ${label} must be an http(s) URL`);
   }
+  return protocol;
 }
 
 export class OIDCAuth {
   private readonly discoveryUrl: string;
+  private readonly secureDiscovery: boolean;
   private readonly logger: Logger;
 
   private clientId: string;
   private scope: string;
   private config?: OIDCConfig;
-  private onTokens?: (t: TokenResponse) => void | Promise<void>;
+  private onTokens?: (t: TokenResponse, origin: TokenOrigin) => void | Promise<void>;
 
   // External listeners, notified after onTokens fires
-  private tokenListeners: Array<(t: TokenResponse) => void | Promise<void>> = [];
+  private tokenListeners: Array<(t: TokenResponse, origin: TokenOrigin) => void | Promise<void>> =
+    [];
+
+  private inflightRefreshes = new Map<
+    string,
+    {
+      clientId: string;
+      listeners: OIDCAuth['tokenListeners'];
+      promise: Promise<TokenResponse>;
+    }
+  >();
 
   static fromMintInfo(info: { nuts: GetInfoResponse['nuts'] }, opts?: OIDCAuthOptions): OIDCAuth {
     const n21 = info?.nuts?.['21'];
@@ -81,6 +101,7 @@ export class OIDCAuth {
 
   constructor(discoveryUrl: string, opts?: OIDCAuthOptions) {
     this.discoveryUrl = discoveryUrl;
+    this.secureDiscovery = discoveryUrl.startsWith('https:');
     this.logger = opts?.logger ?? NULL_LOGGER;
     this.clientId = opts?.clientId ?? 'cashu-client';
     this.scope = opts?.scope ?? 'openid';
@@ -96,16 +117,16 @@ export class OIDCAuth {
   }
 
   /**
-   * Subscribe to token updates. Listeners are called after the primary onTokens callback.
+   * Subscribe after onTokens, with origin identifying a sign-in or refresh.
    */
-  addTokenListener(fn: (t: TokenResponse) => void | Promise<void>): void {
-    this.tokenListeners.push(fn);
+  addTokenListener(fn: (t: TokenResponse, origin: TokenOrigin) => void | Promise<void>): void {
+    this.tokenListeners = [...this.tokenListeners, fn];
   }
 
   /**
-   * Remove a previously registered token listener (by reference).
+   * Remove a token listener by reference, including from pending refresh delivery.
    */
-  removeTokenListener(fn: (t: TokenResponse) => void | Promise<void>): void {
+  removeTokenListener(fn: (t: TokenResponse, origin: TokenOrigin) => void | Promise<void>): void {
     this.tokenListeners = this.tokenListeners.filter((l) => l !== fn);
   }
 
@@ -133,8 +154,24 @@ export class OIDCAuth {
     if (typeof cfg.token_endpoint !== 'string' || cfg.token_endpoint.length === 0) {
       throw new CTSError('OIDCAuth: invalid discovery document, missing token_endpoint');
     }
+    this.assertEndpoint(cfg.token_endpoint, 'token_endpoint');
     this.config = cfg;
     return cfg;
+  }
+
+  /**
+   * Assert a discovery endpoint is http(s); warn when discovery was https and the endpoint is not.
+   *
+   * @remarks
+   * Cashu-ts v5 rejects the https-to-http case instead of warning.
+   */
+  private assertEndpoint(url: string, label: string): void {
+    const protocol = assertHttpUrl(url, label);
+    if (this.secureDiscovery && protocol !== 'https:') {
+      this.logger.warn(`OIDCAuth: ${label} is not https although discovery is; v5 rejects this`, {
+        label,
+      });
+    }
   }
 
   // --- Authorization Code with PKCE ---
@@ -170,6 +207,13 @@ export class OIDCAuth {
   }): Promise<string> {
     const cfg = await this.loadConfig();
     const scope = input.scope ?? this.scope;
+    // v5 supports S256 only; anything else still goes to the provider on this line, with notice.
+    const method: unknown = input.codeChallengeMethod;
+    if (method !== undefined && method !== 'S256') {
+      this.logger.warn(
+        `OIDCAuth: codeChallengeMethod '${typeof method === 'string' ? method : typeof method}' is not supported by cashu-ts v5, which accepts S256 only.`,
+      );
+    }
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: this.clientId,
@@ -183,7 +227,7 @@ export class OIDCAuth {
     if (!cfg.authorization_endpoint) {
       throw new CTSError('OIDCAuth: discovery lacks authorization_endpoint');
     }
-    assertHttpUrl(cfg.authorization_endpoint, 'authorization_endpoint');
+    this.assertEndpoint(cfg.authorization_endpoint, 'authorization_endpoint');
     return `${cfg.authorization_endpoint}?${params.toString()}`;
   }
 
@@ -200,7 +244,7 @@ export class OIDCAuth {
       code_verifier: input.codeVerifier,
     });
     const tok = await this.postFormStrict<TokenResponse>(cfg.token_endpoint, form);
-    this.handleTokens(tok);
+    this.handleTokens(tok, 'signin');
     return tok;
   }
 
@@ -210,6 +254,7 @@ export class OIDCAuth {
     const cfg = await this.loadConfig();
     const ep = cfg.device_authorization_endpoint;
     if (!ep) throw new CTSError('OIDCAuth: provider lacks device_authorization_endpoint');
+    this.assertEndpoint(ep, 'device_authorization_endpoint');
 
     const form = this.toForm({ client_id: this.clientId, scope: this.scope });
     const res = await this.postFormStrict<DeviceStartResponse>(ep, form);
@@ -221,10 +266,17 @@ export class OIDCAuth {
     return res;
   }
 
+  /**
+   * Polls the device-code endpoint until the provider answers.
+   *
+   * @deprecated Removed in v5. Use {@link OIDCAuth.startDeviceAuth}, which returns the start fields
+   *   with `poll()` and `cancel()`: this loop cannot be stopped once it is running.
+   */
   async devicePoll(device_code: string, intervalSec = 5): Promise<TokenResponse> {
     const cfg = await this.loadConfig();
-    // Clamp to a sensible minimum to avoid hot loops
-    let delay = Math.max(1, intervalSec);
+    // Coerce the interval as startDeviceAuth does; sleep bounds the top of the range.
+    const requested = Number(intervalSec);
+    let delay = Number.isFinite(requested) ? Math.max(1, requested) : 5;
     while (true) {
       await this.sleep(delay * 1000);
       const form = this.toForm({
@@ -234,7 +286,7 @@ export class OIDCAuth {
       });
       const res = await this.postFormLoose<TokenResponse>(cfg.token_endpoint, form);
       if (res.access_token) {
-        this.handleTokens(res);
+        this.handleTokens(res, 'signin', this.tokenListeners);
         return res;
       }
       const err = (res.error ?? '').toString();
@@ -252,7 +304,8 @@ export class OIDCAuth {
    * One call convenience for Device Code flow.
    *
    * @remarks
-   * Polling interval will be the MAX of intervalSec and Mint interval.
+   * Polling uses the larger requested interval; cancel settles every poll and aborts pending token
+   * requests.
    * @param intervalSec Desired polling interval in seconds.
    * @returns The start fields and helpers to poll or cancel.
    */
@@ -267,23 +320,47 @@ export class OIDCAuth {
     const providerInterval = Number(start.interval);
     const safeProviderInterval =
       Number.isFinite(providerInterval) && providerInterval > 0 ? providerInterval : 1;
-    const interval = Math.max(safeProviderInterval, intervalSec);
-    let aborted = false;
+    // The caller's interval is coerced the same way as the provider's.
+    const requested = Number(intervalSec);
+    const safeRequested = Number.isFinite(requested) ? requested : 5;
+    const interval = Math.max(safeProviderInterval, safeRequested);
+    const controller = new AbortController();
+    let settleCancellation!: () => void;
+    const cancelled = new Promise<void>((resolve) => {
+      settleCancellation = resolve;
+    });
+    // Ends the delay each running poll is sitting in; poll() may be called more than once.
+    const endDelays = new Set<() => void>();
+    // Checked again after every await so a cancel during the delay or the request still wins.
+    const throwIfCancelled = (): void => {
+      if (controller.signal.aborted) throw new CTSError('OIDCAuth: device polling cancelled');
+    };
 
     const poll = async (): Promise<TokenResponse> => {
       const cfg = await this.loadConfig();
       let delay = Math.max(1, interval);
       while (true) {
-        if (aborted) throw new CTSError('OIDCAuth: device polling cancelled');
-        await this.sleep(delay * 1000);
+        throwIfCancelled();
+        let endDelay!: () => void;
+        await this.sleep(delay * 1000, (end) => {
+          endDelay = end;
+          endDelays.add(end);
+        });
+        endDelays.delete(endDelay);
+        throwIfCancelled();
         const form = this.toForm({
           grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
           device_code: start.device_code,
           client_id: this.clientId,
         });
-        const res = await this.postFormLoose<TokenResponse>(cfg.token_endpoint, form);
+        const res = await this.postFormLoose<TokenResponse>(
+          cfg.token_endpoint,
+          form,
+          controller.signal,
+        );
+        throwIfCancelled();
         if (res.access_token) {
-          this.handleTokens(res);
+          this.handleTokens(res, 'signin');
           return res;
         }
         const err = (res.error ?? '').toString();
@@ -298,24 +375,59 @@ export class OIDCAuth {
     };
 
     const cancel = (): void => {
-      aborted = true;
+      controller.abort();
+      settleCancellation();
+      // Settle every running poll now rather than at the end of a provider-chosen interval.
+      for (const end of endDelays) end();
+      endDelays.clear();
     };
 
-    return { ...start, poll, cancel };
+    return {
+      ...start,
+      poll: () =>
+        Promise.race([
+          poll(),
+          cancelled.then(() => {
+            throw new CTSError('OIDCAuth: device polling cancelled');
+          }),
+        ]),
+      cancel,
+    };
   }
 
   // ---- Refresh ----
 
+  /**
+   * Refresh tokens and notify the listeners registered when the request starts.
+   */
   async refresh(refresh_token: string): Promise<TokenResponse> {
-    const cfg = await this.loadConfig();
-    const form = this.toForm({
-      grant_type: 'refresh_token',
-      refresh_token,
-      client_id: this.clientId,
-    });
-    const tok = await this.postFormStrict<TokenResponse>(cfg.token_endpoint, form);
-    this.handleTokens(tok);
-    return tok;
+    const clientId = this.clientId;
+    const listeners = this.tokenListeners;
+    const pending = this.inflightRefreshes.get(refresh_token);
+    if (pending?.listeners === listeners && pending.clientId === clientId) return pending.promise;
+
+    // Matching calls share one token rotation; changed registrations start a separate request.
+    const promise = (async () => {
+      const cfg = await this.loadConfig();
+      const form = this.toForm({
+        grant_type: 'refresh_token',
+        refresh_token,
+        client_id: clientId,
+      });
+      const tok = await this.postFormStrict<TokenResponse>(cfg.token_endpoint, form);
+      // Providers may keep the refresh token instead of rotating it.
+      tok.refresh_token ||= refresh_token;
+      this.handleTokens(tok, 'refresh', listeners);
+      return tok;
+    })();
+    this.inflightRefreshes.set(refresh_token, { clientId, listeners, promise });
+    try {
+      return await promise;
+    } finally {
+      if (this.inflightRefreshes.get(refresh_token)?.promise === promise) {
+        this.inflightRefreshes.delete(refresh_token);
+      }
+    }
   }
 
   // ---- ROPC (discouraged, but some mints allow it) ----
@@ -330,29 +442,35 @@ export class OIDCAuth {
       scope: this.scope,
     });
     const tok = await this.postFormStrict<TokenResponse>(cfg.token_endpoint, form);
-    this.handleTokens(tok);
+    this.handleTokens(tok, 'signin');
     return tok;
   }
 
   // ---- internals ----
 
   /**
-   * Fire and forget token fan out. Any listener errors are logged inside safeCallback. Nothing
-   * thrown here will come from listeners.
+   * Notify callbacks without blocking the caller or propagating listener errors.
    */
-  private handleTokens(t: TokenResponse): void {
+  private handleTokens(
+    t: TokenResponse,
+    origin: TokenOrigin,
+    listeners = this.tokenListeners,
+  ): void {
     if (!t.access_token) {
       const msg = t.error_description || t.error || 'token response missing access_token';
       throw new CTSError(`OIDCAuth: ${msg}`);
     }
-    // Schedule on microtask queue so we never block the caller and we avoid sync throws leaking.
+    // Keep the app's persistence hook ahead of token listeners.
     queueMicrotask(() =>
-      safeCallback(this.onTokens, t, this.logger, { where: 'OIDCAuth.handleTokens' }),
+      safeCallback((tok: TokenResponse) => this.onTokens?.(tok, origin), t, this.logger, {
+        where: 'OIDCAuth.handleTokens',
+      }),
     );
-
-    for (const listener of this.tokenListeners) {
+    const subscribed = new Set(this.tokenListeners);
+    for (const listener of listeners) {
+      if (!subscribed.has(listener)) continue;
       queueMicrotask(() =>
-        safeCallback(listener, t, this.logger, {
+        safeCallback((tok: TokenResponse) => listener(tok, origin), t, this.logger, {
           where: 'OIDCAuth.handleTokens.listener',
         }),
       );
@@ -380,6 +498,7 @@ export class OIDCAuth {
           Accept: 'application/json',
         },
         body: formBody,
+        redirect: 'error', // never follow a redirect with a form body
       });
       const text = await res.text();
       let json: unknown;
@@ -407,16 +526,19 @@ export class OIDCAuth {
   private async postFormLoose<T extends object>(
     endpoint: string,
     formBody: string,
+    signal?: AbortSignal,
   ): Promise<T | TokenResponse> {
     try {
       // this.logger.debug('OIDCAuth Request', { endpoint });
       const res = await fetch(endpoint, {
         method: 'POST',
+        signal,
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
           Accept: 'application/json',
         },
         body: formBody,
+        redirect: 'error', // never follow a redirect with a form body
       });
       const text = await res.text();
       let json: unknown;
@@ -433,7 +555,18 @@ export class OIDCAuth {
     }
   }
 
-  private sleep(ms: number): Promise<void> {
-    return new Promise<void>((resolve) => setTimeout(resolve, ms));
+  /**
+   * Waits ms. `onEnd` receives a callback that ends the wait early and clears the timer.
+   */
+  private sleep(ms: number, onEnd?: (end: () => void) => void): Promise<void> {
+    // Clamp to the range setTimeout honours.
+    const delay = Math.min(ms, MAX_TIMER_DELAY_MS);
+    return new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, delay);
+      onEnd?.(() => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
   }
 }

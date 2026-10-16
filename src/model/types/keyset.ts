@@ -129,7 +129,9 @@ export type KeyChainCache = {
    */
   mintUrl: string;
   /**
-   * Unix timestamp (ms) when this cache was created. Use for TTL / staleness checks.
+   * Unix timestamp (ms) when the data was fetched from the mint; restoring and re-saving a cache
+   * carries the original value over, so it stays usable for TTL / staleness checks. Undefined when
+   * the provenance is unknown.
    */
   savedAt?: number;
 };

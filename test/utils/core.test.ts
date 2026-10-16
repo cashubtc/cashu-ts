@@ -1,4 +1,6 @@
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bech32 } from '@scure/base';
 import { test, describe, expect } from 'vitest';
 
 import { Amount, type MintKeys, type Keys, type Proof, type Token, Keyset } from '../../src';
@@ -26,6 +28,8 @@ import {
   normalizeMintUrl,
   verifyDleqIfPresent,
 } from '../../src/utils';
+import { encodeJsonToBase64Url, encodeUint8ToBase64Url } from '../../src/utils/base64';
+import { encodeCBOR } from '../../src/utils/cbor';
 import {
   NUT02_V1_VECTOR1_KEYS,
   NUT02_V1_VECTOR2_KEYS,
@@ -126,6 +130,34 @@ describe('splitAmount output bound', () => {
     expect(utils.splitAmount(8_192, onlyOnes)).toHaveLength(8_192);
     // One more output must be rejected, not allocated.
     expect(() => utils.splitAmount(8_193, onlyOnes)).toThrow(/would exceed .* outputs/);
+  });
+
+  test('rejects an exact custom split above the output cap', () => {
+    // An exact caller-supplied split (sums to the requested value) returns before the fill
+    // logic's own budget check; it needs the same cap.
+    const oversizedSplit = Array.from({ length: 8_193 }, () => 1);
+    expect(() => utils.splitAmount(8_193, onlyOnes, oversizedSplit)).toThrow(
+      /would exceed .* outputs/,
+    );
+  });
+
+  test('allows an exact custom split at exactly the cap', () => {
+    const split = Array.from({ length: 8_192 }, () => 1);
+    expect(utils.splitAmount(8_192, onlyOnes, split)).toHaveLength(8_192);
+  });
+
+  test('rejects a zero-total custom split above the output cap', () => {
+    // Zero value and zero-total split (restore/NUT-08 blanks) returns before the fill logic's
+    // own budget check too; it needs the same cap as the exact-positive-split path.
+    const oversizedZeroSplit = Array.from({ length: 8_193 }, () => 0);
+    expect(() => utils.splitAmount(0, onlyOnes, oversizedZeroSplit)).toThrow(
+      /would exceed .* outputs/,
+    );
+  });
+
+  test('allows a zero-total custom split at exactly the cap', () => {
+    const zeroSplit = Array.from({ length: 8_192 }, () => 0);
+    expect(utils.splitAmount(0, onlyOnes, zeroSplit)).toHaveLength(8_192);
   });
 });
 
@@ -478,6 +510,19 @@ describe('test keyset derivation', () => {
     });
     expect(keysetId).toBe(NUT02_V2_VECTOR3_KEYS.id);
   });
+  test('rejects a version 2 unit outside the keyset unit alphabet', () => {
+    // A delimiter in the unit would otherwise read as a metadata field in the id preimage.
+    expect(() =>
+      utils.deriveKeysetId(NUT02_V2_VECTOR1_KEYS.keys, {
+        versionByte: 1,
+        unit: 'sat|input_fee_ppk:100',
+      }),
+    ).toThrow('Invalid keyset unit');
+    // Case is folded before the check, so it is not a rejection.
+    expect(() =>
+      utils.deriveKeysetId(NUT02_V2_VECTOR1_KEYS.keys, { versionByte: 1, unit: 'SAT' }),
+    ).not.toThrow();
+  });
   test('verifies NUT-02 version 2 vector DTOs', () => {
     expect(Keyset.verifyKeysetId(NUT02_V2_VECTOR1_KEYS)).toBe(true);
     expect(Keyset.verifyKeysetId(NUT02_V2_VECTOR2_KEYS)).toBe(true);
@@ -651,10 +696,98 @@ describe('test v4 encoding', () => {
   });
 });
 
+describe('incomplete DLEQ proofs', () => {
+  const MINT = 'https://nofees.testnut.cashu.space';
+  const ID = '00b4cd27d8861a44';
+  const SECRET = '10216467bb33f6f079ae92349ba54fa34df99ba24572645b8b813688c74b582d';
+  const C = '03ff2e729416437f9ea8d022c501ff5b309d607f98c9ab53d51cd24185b4d3e42b';
+  const E = '8269767ac3f6ac368ad9ea8c05b13724ea8a58469677925aa948435685107b0d';
+  const S = '26f44e265699d95ae2171db58257aeffe03d325e0f69da4bc95b9749358380fc';
+  const R = '40ce4dbe14a1f65ae74328b5f81d83cdb3977595d78ddf01665d9aca6d450233';
+
+  const proofWithPartialDleq = (): Proof => ({
+    amount: Amount.from(1),
+    id: ID,
+    secret: SECRET,
+    C,
+    dleq: { e: E, s: S },
+  });
+
+  // A mint-signed DLEQ that a buggy wallet passed on without adding its own blinding factor.
+  const encodeV4WithPartialDleq = (dleq: object): string =>
+    'cashuB' +
+    encodeUint8ToBase64Url(
+      encodeCBOR({
+        m: MINT,
+        u: 'sat',
+        t: [{ i: hexToBytes(ID), p: [{ a: 1n, s: SECRET, c: hexToBytes(C), d: dleq }] }],
+      }),
+    );
+
+  test('v4 decode drops the DLEQ instead of throwing', () => {
+    const encoded = encodeV4WithPartialDleq({ e: hexToBytes(E), s: hexToBytes(S) });
+    const decoded = utils.getDecodedToken(encoded, [ID]);
+    expect(decoded.proofs[0].C).toBe(C);
+    expect(decoded.proofs[0].dleq).toBeUndefined();
+  });
+
+  test('v4 decode keeps a complete DLEQ', () => {
+    const encoded = utils.getEncodedToken({
+      mint: MINT,
+      proofs: [{ ...proofWithPartialDleq(), dleq: { e: E, s: S, r: R } }],
+    });
+    expect(utils.getDecodedToken(encoded, [ID]).proofs[0].dleq).toEqual({ e: E, s: S, r: R });
+  });
+
+  test('decode reports a wrong-typed byte field instead of a raw TypeError', () => {
+    // Same crash class as an omitted `r`: any CBOR type can land in any field.
+    const encoded = encodeV4WithPartialDleq({ e: hexToBytes(E), s: hexToBytes(S), r: 42n });
+    expect(() => utils.getDecodedToken(encoded, [ID])).toThrow(CTSError);
+    expect(() => utils.getDecodedToken(encoded, [ID])).toThrow(
+      'dleq r must be a non-empty byte string',
+    );
+  });
+
+  test('v3 decode drops the DLEQ', () => {
+    const encoded =
+      'cashuA' +
+      encodeJsonToBase64Url({
+        token: [
+          { mint: MINT, proofs: [{ amount: 1, id: ID, secret: SECRET, C, dleq: { e: E, s: S } }] },
+        ],
+        unit: 'sat',
+      });
+    const decoded = utils.getDecodedToken(encoded, [ID]);
+    expect(decoded.proofs[0].C).toBe(C);
+    expect(decoded.proofs[0].dleq).toBeUndefined();
+  });
+
+  test('encoding refuses to emit a DLEQ without its blinding factor', () => {
+    const token: Token = { mint: MINT, proofs: [proofWithPartialDleq()] };
+    expect(() => utils.getEncodedToken(token)).toThrow('Missing blinding factor');
+    expect(() => utils.getEncodedTokenBinary(token)).toThrow('Missing blinding factor');
+  });
+
+  test('stripping the DLEQ makes an otherwise unencodable token encodable', () => {
+    const token: Token = { mint: MINT, proofs: [proofWithPartialDleq()] };
+    expect(() => utils.getEncodedToken(token, { removeDleq: true })).not.toThrow();
+  });
+});
+
 describe('test output selection', () => {
   test('hasCorrespondingKey accepts AmountLike', () => {
     expect(utils.hasCorrespondingKey('8', keys)).toBe(true);
     expect(utils.hasCorrespondingKey(Amount.from(3), keys)).toBe(false);
+  });
+
+  test('hasCorrespondingKey counts own denominations only', () => {
+    Object.defineProperty(Object.prototype, '3', { value: 'inherited', configurable: true });
+    try {
+      expect(utils.hasCorrespondingKey(3, keys)).toBe(false);
+      expect(utils.hasCorrespondingKey(8, keys)).toBe(true);
+    } finally {
+      Reflect.deleteProperty(Object.prototype, '3');
+    }
   });
 });
 describe('test zero-knowledge utilities', () => {
@@ -728,6 +861,14 @@ describe('test zero-knowledge utilities', () => {
       expect(verifyDleqIfPresent(serializedProof, keyset)).toBe(true);
     });
 
+    test('returns false for a DLEQ that carries no blinding factor', () => {
+      const { r, ...partial } = serializedProof.dleq!;
+      void r;
+      const proof: Proof = { ...serializedProof, dleq: partial };
+      expect(verifyDleqIfPresent(proof, keyset)).toBe(false);
+      expect(hasValidDleq(proof, keyset)).toBe(false);
+    });
+
     test('returns false for a tampered DLEQ', () => {
       const tampered: Proof = {
         ...serializedProof,
@@ -799,6 +940,58 @@ describe('test raw tokens', () => {
       expect(() => utils.getEncodedTokenBinary(badToken)).toThrow(CTSError);
     },
   );
+});
+
+describe('getDecodedTokenBinary short keyset ID resolution', () => {
+  const fullV2Id = NUT02_V2_VECTOR1_KEYS.id;
+  const cBytes = hexToBytes('02' + '00'.repeat(32));
+
+  function encodeRawBinaryToken(idBytes: Uint8Array): Uint8Array {
+    const template = {
+      m: 'http://localhost:3338',
+      u: 'sat',
+      t: [{ i: idBytes, p: [{ a: 1n, s: 'abc', c: cBytes }] }],
+    };
+    const prefix = new TextEncoder().encode('crawB');
+    return new Uint8Array([...prefix, ...utils.encodeCBOR(template)]);
+  }
+
+  test('resolves an 8-byte short keyset ID to the full ID when keysetIds are given', () => {
+    const bytes = encodeRawBinaryToken(hexToBytes(fullV2Id.slice(0, 16)));
+    const decoded = utils.getDecodedTokenBinary(bytes, [fullV2Id]);
+    expect(decoded.proofs[0].id).toBe(fullV2Id);
+  });
+
+  test('throws when a short keyset ID has no keysets to map to', () => {
+    const bytes = encodeRawBinaryToken(hexToBytes(fullV2Id.slice(0, 16)));
+    expect(() => utils.getDecodedTokenBinary(bytes, [])).toThrow(
+      /short keyset ID v2 was encountered, but got no keysets/,
+    );
+  });
+
+  test('leaves the short keyset ID untouched when keysetIds are omitted', () => {
+    const shortId = fullV2Id.slice(0, 16);
+    const bytes = encodeRawBinaryToken(hexToBytes(shortId));
+    const decoded = utils.getDecodedTokenBinary(bytes);
+    expect(decoded.proofs[0].id).toBe(shortId);
+  });
+
+  test('throws when a short keyset ID is ambiguous', () => {
+    const bytes = encodeRawBinaryToken(hexToBytes(fullV2Id.slice(0, 16)));
+    const ambiguous = fullV2Id + 'aa';
+    expect(() => utils.getDecodedTokenBinary(bytes, [fullV2Id, ambiguous])).toThrow(/ambiguous/);
+  });
+
+  test('round-trips a full keyset ID through getEncodedTokenBinary unchanged', () => {
+    const token: Token = {
+      mint: 'http://localhost:3338',
+      unit: 'sat',
+      proofs: [{ id: fullV2Id, amount: Amount.from(1), secret: 'abc', C: '02' + '00'.repeat(32) }],
+    };
+    const bytes = utils.getEncodedTokenBinary(token);
+    const decoded = utils.getDecodedTokenBinary(bytes, [fullV2Id]);
+    expect(decoded.proofs[0].id).toBe(fullV2Id);
+  });
 });
 
 describe('test deprecated base64 keyset id derivation', () => {
@@ -1233,6 +1426,57 @@ describe('tokenFromTemplate rejects valid CBOR of wrong shape', () => {
     expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
   });
 
+  describe('text fields', () => {
+    function tokenWith(top: Record<string, unknown>, proof: Record<string, unknown>): string {
+      const id = hexToBytes('00' + 'ab'.repeat(7));
+      const p = { a: 1n, s: 'abc', c: hexToBytes('02' + '00'.repeat(32)), ...proof };
+      const template = { m: 'http://localhost:3338', ...top, t: [{ i: id, p: [p] }] };
+      return 'cashuB' + utils.encodeUint8ToBase64Url(utils.encodeCBOR(template));
+    }
+    const wrongTypes = [42n, true, { signatures: ['sig'] }, ['sig'], new Uint8Array([1])];
+    const cases = [
+      ['mint', (v: unknown) => tokenWith({ m: v }, {})],
+      ['unit', (v: unknown) => tokenWith({ u: v }, {})],
+      ['memo', (v: unknown) => tokenWith({ d: v }, {})],
+      ['secret', (v: unknown) => tokenWith({}, { s: v })],
+      ['witness', (v: unknown) => tokenWith({}, { w: v })],
+    ] as const;
+
+    describe.each(cases)('throws CTSError when the %s is not a string', (field, build) => {
+      test.each(wrongTypes)('%o', (value) => {
+        const token = build(value);
+        expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
+        expect(() => utils.getDecodedToken(token, [])).toThrow(
+          `${field} must be a non-empty string`,
+        );
+      });
+    });
+
+    test.each(cases.filter(([field]) => field === 'mint' || field === 'secret'))(
+      'throws CTSError when the required %s is empty',
+      (field, build) => {
+        expect(() => utils.getDecodedToken(build(''), [])).toThrow(
+          `${field} must be a non-empty string`,
+        );
+      },
+    );
+
+    test('a missing mint is rejected', () => {
+      const id = hexToBytes('00' + 'ab'.repeat(7));
+      const p = { a: 1n, s: 'abc', c: hexToBytes('02' + '00'.repeat(32)) };
+      const body = utils.encodeCBOR({ t: [{ i: id, p: [p] }] });
+      const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
+      expect(() => utils.getDecodedToken(token, [])).toThrow('mint must be a non-empty string');
+    });
+
+    test('a falsy unit, memo or witness keeps its fallback', () => {
+      const decoded = utils.getDecodedToken(tokenWith({ u: '', d: '' }, { w: '' }), []);
+      expect(decoded.unit).toBe('sat');
+      expect(decoded).not.toHaveProperty('memo');
+      expect(decoded.proofs[0]).not.toHaveProperty('witness');
+    });
+  });
+
   test('defaults unit to sat when template omits it', () => {
     const body = utils.encodeCBOR({ m: 'http://localhost:3338', t: [] });
     const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
@@ -1241,11 +1485,48 @@ describe('tokenFromTemplate rejects valid CBOR of wrong shape', () => {
   });
 });
 
+describe('legacy cashuA token shape validation', () => {
+  test('rejects an empty token array with CTSError instead of a raw TypeError', () => {
+    const body = encodeJsonToBase64Url({ token: [], unit: 'sat' });
+    const token = 'cashuA' + body;
+
+    expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
+  });
+
+  test('rejects a token whose root is not the expected object shape', () => {
+    const body = encodeJsonToBase64Url(['not', 'an', 'object']);
+    const token = 'cashuA' + body;
+
+    expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
+  });
+
+  test('rejects a token entry missing its proofs array', () => {
+    const body = encodeJsonToBase64Url({
+      token: [{ mint: 'http://localhost:3338' }],
+      unit: 'sat',
+    });
+    const token = 'cashuA' + body;
+
+    expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
+  });
+});
+
 describe('deriveKeysetId edge cases', () => {
   test('throws for unknown version byte', () => {
     expect(() => utils.deriveKeysetId(keys, { versionByte: 99 })).toThrow(
       /Unrecognized keyset ID version/,
     );
+  });
+
+  test('rejects a denomination key over 20 digits before parsing it', () => {
+    const oversized = { ...keys, ['1'.repeat(21)]: Object.values(keys)[0] };
+    expect(() => utils.deriveKeysetId(oversized, { versionByte: 1 })).toThrow(/exceeds 20 digits/);
+    expect(
+      utils.deriveKeysetId(
+        { ...keys, ['1'.repeat(20)]: Object.values(keys)[0] },
+        { versionByte: 1 },
+      ),
+    ).toMatch(/^01[0-9a-f]{64}$/);
   });
 });
 
@@ -1370,5 +1651,90 @@ describe('normalizeMintUrl', () => {
   });
   test('lowercases hostname', () => {
     expect(normalizeMintUrl('https://Mint.Example.COM')).toBe('https://mint.example.com');
+  });
+});
+
+describe('token witnesses survive re-encoding', () => {
+  const mint = 'https://m.example';
+  const locked: Proof = {
+    amount: Amount.from(8),
+    id: '0088553333aabbcc',
+    secret: '["P2PK",{"nonce":"a","data":"b"}]',
+    C: '02' + 'aa'.repeat(32),
+    witness: JSON.stringify({ signatures: ['11'.repeat(64)] }),
+  };
+
+  test('a witness comes back verbatim, not nested', () => {
+    // Re-encoding a decoded token must not stringify the witness again, or the mint gets a JSON
+    // string where it expects the witness object.
+    const encoded = utils.getEncodedToken({ mint, unit: 'sat', proofs: [locked] });
+    const decoded = utils.getDecodedToken(encoded, [locked.id]);
+    expect(decoded.proofs[0].witness).toBe(locked.witness);
+  });
+
+  test('a witness survives any number of decode/encode round trips', () => {
+    let token = utils.getEncodedToken({ mint, unit: 'sat', proofs: [locked] });
+    for (let i = 0; i < 3; i++) {
+      const decoded = utils.getDecodedToken(token, [locked.id]);
+      expect(decoded.proofs[0].witness).toBe(locked.witness);
+      token = utils.getEncodedToken(decoded);
+    }
+  });
+});
+
+describe('bolt11PaymentHash', () => {
+  // BOLT 11 test vector: "Please consider supporting this project", payment hash 0001..0102.
+  const VECTOR =
+    'lnbc1pvjluezsp5zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygspp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqdpl2pkx2ctnv5sxxmmwwd5kgetjypeh2ursdae8g6twvus8g6rfwvs8qun0dfjkxaq9qrsgq357wnc5r2ueh7ck6q93dj32dlqnls087fxdwk8qakdyafkq3yap9us6v52vjjsrvywa6rt52cm9r9zqt8r2t7mlcwspyetp5h2tztugp9lfyql';
+
+  test('reads the payment hash from the spec vector', () => {
+    expect(utils.bolt11PaymentHash(VECTOR)).toBe(
+      '0001020304050607080900010203040506070809000102030405060708090102',
+    );
+    expect(utils.bolt11PaymentHash(VECTOR.toUpperCase())).toBe(
+      '0001020304050607080900010203040506070809000102030405060708090102',
+    );
+  });
+
+  test('bolt11PreimageMatches compares sha256(preimage) with the payment hash', () => {
+    const preimage = 'ab'.repeat(32);
+    const hash = bytesToHex(sha256(hexToBytes(preimage)));
+    const invoice = bech32.encode(
+      'lnbc',
+      [...new Array<number>(7).fill(0), 1, 1, 20, ...bech32.toWords(hexToBytes(hash))].concat(
+        new Array<number>(104).fill(0),
+      ),
+      false,
+    );
+    expect(utils.bolt11PreimageMatches(invoice, preimage)).toBe(true);
+    expect(utils.bolt11PreimageMatches(invoice, preimage.toUpperCase())).toBe(true);
+    expect(utils.bolt11PreimageMatches(invoice, 'cd'.repeat(32))).toBe(false);
+    expect(utils.bolt11PreimageMatches(invoice, 'not-hex')).toBe(false);
+  });
+
+  test('rejects strings that are not invoices or carry no payment hash', () => {
+    expect(() => utils.bolt11PaymentHash('lnbc1notbech32')).toThrow('Invalid BOLT11 invoice');
+    expect(() => utils.bolt11PaymentHash(42 as unknown as string)).toThrow(
+      'BOLT11 invoice must be a string',
+    );
+    // Timestamp and signature only: nothing tagged.
+    const bare = bech32.encode('lnbc', new Array(7 + 104).fill(0), false);
+    expect(() => utils.bolt11PaymentHash(bare)).toThrow('BOLT11 invoice has no payment hash');
+    // A tagged field whose declared length runs into the signature.
+    const truncated = bech32.encode(
+      'lnbc',
+      [...new Array<number>(7).fill(0), 1, 1, 20, ...new Array<number>(10 + 104).fill(0)],
+      false,
+    );
+    expect(() => utils.bolt11PaymentHash(truncated)).toThrow('BOLT11 invoice has no payment hash');
+    // 52 words carry 260 bits; the trailing four must be zero.
+    const padded = bech32.encode(
+      'lnbc',
+      [...new Array<number>(7).fill(0), 1, 1, 20, ...new Array<number>(51).fill(0), 31].concat(
+        new Array<number>(104).fill(0),
+      ),
+      false,
+    );
+    expect(() => utils.bolt11PaymentHash(padded)).toThrow('Invalid BOLT11 payment hash');
   });
 });

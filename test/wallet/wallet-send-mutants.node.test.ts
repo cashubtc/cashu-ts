@@ -216,7 +216,23 @@ describe('validateReturnedSignatures', () => {
     );
   });
 
-  test('completeSwap rejects a signature count that differs from outputs', async () => {
+  test('completeSwap rejects fewer signatures than outputs', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/swap', () =>
+        // one output requested, none returned
+        HttpResponse.json({ signatures: [] }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.receive([makeProof(1)])).rejects.toThrow(
+      'Mint returned 0 signatures, expected 1',
+    );
+  });
+
+  // The upper bound belongs to the Mint layer, which carries the same recovery route.
+  test('completeSwap rejects more signatures than outputs', async () => {
     server.use(
       http.post(mintUrl + '/v1/swap', () =>
         HttpResponse.json({
@@ -232,7 +248,7 @@ describe('validateReturnedSignatures', () => {
     await wallet.loadMint();
 
     await expect(wallet.receive([makeProof(1)])).rejects.toThrow(
-      'Mint returned 2 signatures, expected 1',
+      /2 signatures, expected 1\..*NUT-09/,
     );
   });
 });
@@ -351,7 +367,22 @@ describe('prepareSwapToSend selection', () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
     await expect(wallet.prepareSwapToSend(10, [makeProof(1)])).rejects.toThrow(
-      'Not enough funds available to send',
+      'Not enough funds available to send: 1 available, 10 required plus up to 0 input fee',
+    );
+  });
+
+  test('names the input fee when the balance equals the amount', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({
+          keysets: [{ id: keysetId, unit: 'sat', active: true, input_fee_ppk: 1000 }],
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit, bip39seed: seed });
+    await wallet.loadMint();
+    await expect(wallet.send(4, [makeProof(4)])).rejects.toThrow(
+      'Not enough funds available to send: 4 available, 4 required plus up to 1 input fee',
     );
   });
 });

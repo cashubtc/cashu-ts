@@ -3,6 +3,7 @@ import { hexToBytes, bytesToHex } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 
 import {
+  P2BK_DST,
   pointFromHex,
   deriveP2BKSecretKey,
   deriveP2BKBlindedPubkeys,
@@ -273,6 +274,40 @@ describe('NUT28 uncovered branches and guards', () => {
 
   test('deriveP2BKBlindedPubkeys returns empty result for empty input', () => {
     expect(deriveP2BKBlindedPubkeys([])).toEqual({ blinded: [], Ehex: '' });
+  });
+
+  test('deriveP2BKBlindedPubkeys fills every slot up to the cap and refuses more', () => {
+    const key = bytesToHex(secp256k1.getPublicKey(secp256k1.utils.randomSecretKey(), true));
+    const eBytes = secp256k1.utils.randomSecretKey();
+    expect(deriveP2BKBlindedPubkeys(Array(11).fill(key), eBytes).blinded).toHaveLength(11);
+    expect(() => deriveP2BKBlindedPubkeys(Array(12).fill(key), eBytes)).toThrow(
+      /maximum allowed is 11/,
+    );
+    // Slot 0 is taken by the hashlock, so an HTLC lock has one fewer to give away.
+    expect(deriveP2BKBlindedPubkeys(Array(10).fill(key), eBytes, false).blinded).toHaveLength(10);
+    expect(() => deriveP2BKBlindedPubkeys(Array(11).fill(key), eBytes, false)).toThrow(
+      /maximum allowed is 11/,
+    );
+  });
+
+  test('deriveP2BKSecretKeys derives for every slot up to the cap and refuses more', () => {
+    // Spending is judged by the mint, so a foreign proof past the builder's 11 slots still derives;
+    // only an index that would not fit its byte is refused.
+    const atCap = Array(11).fill(slot0Blinded);
+    expect(() => deriveP2BKSecretKeys(Ehex, privKeyBob, atCap)).not.toThrow();
+    expect(() => deriveP2BKSecretKeys(Ehex, privKeyBob, [...atCap, slot0Blinded])).not.toThrow();
+    const pastTheByte = Array(257).fill(slot0Blinded);
+    expect(() => deriveP2BKSecretKeys(Ehex, privKeyBob, pastTheByte)).toThrow(/slot index/);
+  });
+
+  test('mutating the exported domain separator leaves derivation alone', () => {
+    const before = deriveP2BKBlindedPubkeys([slot0Blinded], hexToBytes('11'.repeat(32)));
+    P2BK_DST[0] ^= 0xff;
+    try {
+      expect(deriveP2BKBlindedPubkeys([slot0Blinded], hexToBytes('11'.repeat(32)))).toEqual(before);
+    } finally {
+      P2BK_DST[0] ^= 0xff;
+    }
   });
 
   test('deriveP2BKSecretKeys accepts a single (non-array) blinded pubkey', () => {

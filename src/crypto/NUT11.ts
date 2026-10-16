@@ -8,6 +8,7 @@ import { CTSError } from '../model/Errors';
 import { type OutputDataLike } from '../model/OutputData';
 import { type HTLCWitness, type P2PKWitness, type Proof } from '../model/types';
 import {
+  MAX_P2BK_SLOTS,
   MAX_P2PK_PUBKEYS,
   MAX_P2PK_SIGNATURES,
   MAX_SECRET_LENGTH,
@@ -129,13 +130,8 @@ type WitnessData = {
   signatures: string[];
 };
 
-/**
- * NUT-11 tag keys that map onto structured {@link P2PKOptions} fields, rather than being carried as
- * free-form `additionalTags`.
- *
- * @internal
- */
-export const P2PK_KNOWN_TAG_KEYS = new Set([
+// NUT-11 tag keys that map onto structured lock fields, so they are reserved as additional tags.
+const P2PK_KNOWN_TAG_KEYS = new Set([
   'locktime',
   'pubkeys',
   'n_sigs',
@@ -143,6 +139,15 @@ export const P2PK_KNOWN_TAG_KEYS = new Set([
   'n_sigs_refund',
   'sigflag',
 ]);
+
+/**
+ * True if a tag key is one NUT-11 reserves.
+ *
+ * @internal
+ */
+export function isP2PKKnownTagKey(key: string): boolean {
+  return P2PK_KNOWN_TAG_KEYS.has(key);
+}
 
 // ------------------------------
 // NUT-11 Secrets
@@ -250,13 +255,12 @@ export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
   if (pubkeys.length === 0 && !isHTLC) {
     throw new CTSError('P2PK requires at least one pubkey');
   }
-  // NUT-28: up to 11 locking slots in [data, ...pubkeys, ...refund] (i_byte 0x00..0x0A). Slot 0 is
-  // the first pubkey for P2PK, but the hashlock for HTLC, so HTLC's hashlock costs a slot on top of
-  // the keys. P2PK thus allows 11 keys, HTLC 10.
+  // NUT-28 slot map: [data, ...pubkeys, ...refund]. Slot 0 is the first pubkey for P2PK but the
+  // hashlock for HTLC, so HTLC's hashlock costs a slot on top of the keys.
   const slotCount = (isHTLC ? 1 : 0) + pubkeys.length + refundKeys.length;
-  if (slotCount > 11) {
+  if (slotCount > MAX_P2BK_SLOTS) {
     throw new CTSError(
-      `Too many pubkeys, ${slotCount} slots provided, maximum allowed is 11 in total`,
+      `Too many pubkeys, ${slotCount} slots provided, maximum allowed is ${MAX_P2BK_SLOTS} in total`,
     );
   }
   if (p2pk.sigFlag !== undefined) assertSigFlag(p2pk.sigFlag);
@@ -844,7 +848,7 @@ function assertNoDuplicateP2PKTags(tags: string[][]): void {
   const seen = new Set<string>();
   for (const tag of tags) {
     const key = tag[0];
-    if (!P2PK_KNOWN_TAG_KEYS.has(key)) continue;
+    if (!isP2PKKnownTagKey(key)) continue;
     if (seen.has(key)) {
       throw new CTSError(`Duplicate P2PK tag "${key}"`);
     }
@@ -939,7 +943,7 @@ function getLocktime(secret: Secret): number {
   // value is passed through for the mint to judge rather than rejected here. Arity still throws.
   const v = getTagScalar(secret, 'locktime');
   const ts = v !== undefined && /^\d+$/.test(v) ? Number(v) : NaN;
-  return Number.isSafeInteger(ts) && ts > 0 ? ts : Infinity;
+  return Number.isSafeInteger(ts) ? ts : Infinity;
 }
 
 function deriveLockState(
@@ -947,7 +951,7 @@ function deriveLockState(
   nowSeconds: number = Math.floor(Date.now() / 1000),
 ): LockState {
   if (!Number.isFinite(locktime)) return 'PERMANENT';
-  return nowSeconds < locktime ? 'ACTIVE' : 'EXPIRED';
+  return nowSeconds <= locktime ? 'ACTIVE' : 'EXPIRED';
 }
 
 function resolveNSigs(secret: Secret, lockState: LockState, refundKeys: string[]): number {

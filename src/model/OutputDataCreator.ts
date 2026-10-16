@@ -1,7 +1,8 @@
-import { type P2PKOptions } from '../crypto';
+import { createRandomSecretKey, type P2PKOptions } from '../crypto';
 import { splitAmount } from '../utils';
 
 import { type AmountLike } from './Amount';
+import { CTSError } from './Errors';
 import { OutputData, type OutputDataLike } from './OutputData';
 import type { HasKeysetKeys } from './types';
 
@@ -21,7 +22,17 @@ export interface OutputDataCreator {
     keyset: HasKeysetKeys,
     customSplit?: AmountLike[],
   ): OutputDataLike[];
-  createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string): OutputDataLike;
+  /**
+   * @param eBytes Shared P2BK ephemeral key for a SIG_ALL batch (NUT-28). Batch callers pass the
+   *   same key to every output in the split; an override must forward it as-is, not derive a fresh
+   *   one, or the split's outputs stop sharing locking data.
+   */
+  createSingleP2PKData(
+    p2pk: P2PKOptions,
+    amount: AmountLike,
+    keysetId: string,
+    eBytes?: Uint8Array,
+  ): OutputDataLike;
   createRandomData(
     amount: AmountLike,
     keyset: HasKeysetKeys,
@@ -62,11 +73,28 @@ export class DefaultOutputDataCreator implements OutputDataCreator {
       return OutputData.createP2PKData(p2pk, amount, keyset, customSplit);
     }
     const amounts = splitAmount(amount, keyset.keys, customSplit);
-    return amounts.map((a) => this.createSingleP2PKData(p2pk, a, keyset.id));
+    // Mirrors OutputData.createP2PKData's shared key, so a subclassed hook's SIG_ALL
+    // split still carries identical data/tags across every output (NUT-28).
+    const eBytes =
+      p2pk.blindKeys && p2pk.sigFlag === 'SIG_ALL' ? createRandomSecretKey() : undefined;
+    const outputs = amounts.map((a) => this.createSingleP2PKData(p2pk, a, keyset.id, eBytes));
+    // An override that ignores eBytes silently reverts to a fresh key per output, which
+    // defeats the point of sharing one: catch that here rather than at the mint.
+    if (eBytes && new Set(outputs.map((o) => o.ephemeralE)).size > 1) {
+      throw new CTSError(
+        'createSingleP2PKData override must reuse the shared eBytes ephemeral key for a SIG_ALL split',
+      );
+    }
+    return outputs;
   }
 
-  createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string): OutputDataLike {
-    return OutputData.createSingleP2PKData(p2pk, amount, keysetId);
+  createSingleP2PKData(
+    p2pk: P2PKOptions,
+    amount: AmountLike,
+    keysetId: string,
+    eBytes?: Uint8Array,
+  ): OutputDataLike {
+    return OutputData.createSingleP2PKData(p2pk, amount, keysetId, eBytes);
   }
 
   createRandomData(
@@ -98,6 +126,16 @@ export class DefaultOutputDataCreator implements OutputDataCreator {
       return OutputData.createDeterministicData(amount, seed, counter, keyset, customSplit);
     }
     const amounts = splitAmount(amount, keyset.keys, customSplit);
+    // The canonical batch path rejects an unsafe counter itself; a custom hook may not, so
+    // the whole range is checked before it aliases two outputs onto the same counter.
+    const lastCounter = counter + (amounts.length - 1);
+    if (
+      !Number.isSafeInteger(counter) ||
+      counter < 0 ||
+      (amounts.length > 0 && !Number.isSafeInteger(lastCounter))
+    ) {
+      throw new CTSError('Counter must be an integer in the range 0 <= counter <= 2^53 - 1');
+    }
     return amounts.map((a, i) =>
       this.createSingleDeterministicData(a, seed, counter + i, keyset.id),
     );

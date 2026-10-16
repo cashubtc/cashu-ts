@@ -1,7 +1,9 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
+import { bech32 } from '@scure/base';
 
-import { type DLEQ, pointFromHex, verifyDLEQProof_reblind } from '../crypto';
+import { pointFromHex, verifyDLEQProof_reblind } from '../crypto';
+import { failIf, type Logger } from '../logger';
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { PaymentRequest } from '../model/PaymentRequest';
@@ -11,8 +13,10 @@ import type {
   Keys,
   Proof,
   ProofLike,
+  SerializedDLEQ,
   Token,
   TokenV4Template,
+  V4DLEQTemplate,
   V4InnerToken,
   V4ProofTemplate,
   HasKeysetKeys,
@@ -26,7 +30,7 @@ import {
 } from './base64';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { JSONInt } from './JSONInt';
-import { MAX_SPLIT_OUTPUTS } from './limits';
+import { MAX_BOLT11_HRP_LENGTH, MAX_SPLIT_OUTPUTS } from './limits';
 
 /**
  * Splits the amount into denominations of the provided keyset.
@@ -52,6 +56,9 @@ export function splitAmount(
   let normalizedSplit = split?.map((amt) => toAmount(amt, 'splitAmount.split', true));
 
   if (normalizedSplit) {
+    if (normalizedSplit.length > MAX_SPLIT_OUTPUTS) {
+      throw new CTSError(`Cannot split amount: split would exceed ${MAX_SPLIT_OUTPUTS} outputs`);
+    }
     const totalSplitAmount = Amount.sum(normalizedSplit);
 
     // Special case: explicit "zero-total" outputs (restore or NUT-08 blanks)
@@ -147,7 +154,10 @@ function getKeysetAmountsAsAmount(keyset: Keys, order: 'asc' | 'desc'): Amount[]
  * @returns True if the amount is in the keyset, false otherwise.
  */
 export function hasCorrespondingKey(amount: AmountLike, keyset: Keys): boolean {
-  return toAmount(amount, 'hasCorrespondingKey.amount', true).toString() in keyset;
+  // Own denominations only: a `Keys` object inherits from Object.prototype, and only the keys
+  // the keyset id commits to count.
+  const denomination = toAmount(amount, 'hasCorrespondingKey.amount', true).toString();
+  return Object.prototype.hasOwnProperty.call(keyset, denomination);
 }
 
 function toAmount(amount: AmountLike, op: string, allowZero = false): Amount {
@@ -239,12 +249,6 @@ function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
   if (removeDleq) {
     proofs = stripDleq(proofs);
   }
-  // Make sure each DLEQ has its blinding factor
-  proofs.forEach((p) => {
-    if (p.dleq && p.dleq.r == undefined) {
-      throw new CTSError('Missing blinding factor in included DLEQ proof');
-    }
-  });
   const nonHex = hasNonHexId(proofs);
   if (nonHex) {
     throw new CTSError('can not encode to v4 token if proofs contain non-hex keyset id');
@@ -252,7 +256,7 @@ function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
   // Map keyset IDs to short IDs
   proofs = convertToShortKeysetId(proofs);
 
-  const tokenTemplate = templateFromToken({ ...token, proofs });
+  const tokenTemplate = toV4CborTemplate({ ...token, proofs });
 
   const encodedData = encodeCBOR(tokenTemplate);
   const prefix = 'cashu';
@@ -261,7 +265,22 @@ function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
   return prefix + version + base64Data;
 }
 
-function templateFromToken(token: Token): TokenV4Template {
+/**
+ * Encodes a proof's DLEQ for the v4 wire format.
+ *
+ * @remarks
+ * Per NUT-12 the wallet adds its own blinding factor `r` to the mint's `{e, s}`. A DLEQ without it
+ * is unverifiable by the next holder and costs its owner privacy, so refuse rather than pad `r`: a
+ * zero blinding factor would also assert the message was never blinded.
+ */
+function toV4CborDleq(dleq: SerializedDLEQ): V4DLEQTemplate {
+  if (dleq.r == undefined) {
+    throw new CTSError('Missing blinding factor in included DLEQ proof');
+  }
+  return { e: hexToBytes(dleq.e), s: hexToBytes(dleq.s), r: hexToBytes(dleq.r) };
+}
+
+function toV4CborTemplate(token: Token): TokenV4Template {
   // Keyed by token-supplied IDs, so a plain object would resolve `__proto__` etc. to inherited members.
   const idMap = Object.create(null) as { [id: string]: Proof[] };
   const mint = token.mint;
@@ -285,17 +304,15 @@ function templateFromToken(token: Token): TokenV4Template {
             s: p.secret,
             c: hexToBytes(p.C),
             ...(p.dleq && {
-              d: {
-                e: hexToBytes(p.dleq.e),
-                s: hexToBytes(p.dleq.s),
-                r: hexToBytes(p.dleq.r ?? '00'),
-              },
+              d: toV4CborDleq(p.dleq),
             }),
             ...(p.p2pk_e && {
               pe: hexToBytes(p.p2pk_e),
             }),
             ...(p.witness && {
-              w: JSON.stringify(p.witness),
+              // A decoded token's witness is already the wire string; stringifying it again
+              // would nest it, and the mint cannot parse what comes back.
+              w: typeof p.witness === 'string' ? p.witness : JSON.stringify(p.witness),
             }),
           }),
         ),
@@ -308,42 +325,80 @@ function templateFromToken(token: Token): TokenV4Template {
   return tokenTemplate;
 }
 
-function tokenFromTemplate(template: TokenV4Template): Token {
-  if (!template || !Array.isArray(template.t)) {
-    throw new CTSError('Invalid token template');
+/**
+ * Hex-encodes a byte string read from a decoded token template.
+ *
+ * @remarks
+ * The template types describe what this library emits, but a decoded token holds whatever the
+ * sender put on the wire and any field may carry any CBOR type. Without this, a wrong-typed field
+ * surfaces as a raw `TypeError` from the hex encoder rather than a token error naming the field.
+ */
+function templateHex(value: unknown, field: string): string {
+  if (!(value instanceof Uint8Array) || value.length === 0) {
+    throw new CTSError(`Invalid token: ${field} must be a non-empty byte string`);
   }
+  return bytesToHex(value);
+}
+
+/**
+ * Reads a text field from a decoded token template; the text counterpart of {@link templateHex}.
+ */
+function templateText(value: unknown, field: string): string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new CTSError(`Invalid token: ${field} must be a non-empty string`);
+  }
+  return value;
+}
+
+/**
+ * True when a decoded v4 DLEQ block carries all three of `e`, `s` and `r`.
+ *
+ * @remarks
+ * A block missing any of them is dropped on decode: without `r` it can never verify, and carrying a
+ * partial one costs the holder privacy (NUT-12). Absent is tolerated, present-but-malformed is not,
+ * so the fields themselves are still read through {@link templateHex}.
+ */
+function isCompleteDleq(d: V4DLEQTemplate | undefined): d is V4DLEQTemplate {
+  return d != undefined && d.e != undefined && d.s != undefined && d.r != undefined;
+}
+
+function fromV4CborTemplate(template: TokenV4Template): Token {
+  if (!template || !Array.isArray(template.t)) {
+    throw new CTSError('Invalid token');
+  }
+  const mint = templateText(template.m, 'mint');
+  const unit = template.u ? templateText(template.u, 'unit') : 'sat';
+  const memo = template.d ? templateText(template.d, 'memo') : undefined;
   const proofs: Proof[] = [];
   template.t.forEach((t) => {
     if (!t || !Array.isArray(t.p)) {
-      throw new CTSError('Invalid token template');
+      throw new CTSError('Invalid token');
     }
     t.p.forEach((p) => {
+      const id = templateHex(t.i, 'keyset id');
+      const secret = templateText(p.s, 'secret');
+      // NUT-00 carries the witness as serialized JSON text.
+      const witness = p.w ? templateText(p.w, 'witness') : undefined;
       proofs.push({
-        secret: p.s,
-        C: bytesToHex(p.c),
+        secret,
+        C: templateHex(p.c, 'proof C'),
         amount: Amount.from(p.a),
-        id: bytesToHex(t.i),
-        ...(p.d && {
+        id,
+        ...(isCompleteDleq(p.d) && {
           dleq: {
-            r: bytesToHex(p.d.r),
-            s: bytesToHex(p.d.s),
-            e: bytesToHex(p.d.e),
+            r: templateHex(p.d.r, 'dleq r'),
+            s: templateHex(p.d.s, 'dleq s'),
+            e: templateHex(p.d.e, 'dleq e'),
           },
         }),
         ...(p.pe && {
-          p2pk_e: bytesToHex(p.pe),
+          p2pk_e: templateHex(p.pe, 'p2pk_e'),
         }),
-        ...(p.w && {
-          witness: p.w,
-        }),
+        ...(witness && { witness }),
       });
     });
   });
-  const decodedToken: Token = { mint: template.m, proofs, unit: template.u || 'sat' };
-  if (template.d) {
-    decodedToken.memo = template.d;
-  }
-  return decodedToken;
+  return { mint, proofs, unit, ...(memo && { memo }) };
 }
 
 /**
@@ -402,14 +457,25 @@ function handleTokens(token: string): Token {
   const encodedToken = token.slice(1);
   if (version === 'A') {
     const parsedV3Token = decodeBase64AnyToJson<DeprecatedToken>(encodedToken);
+    if (!parsedV3Token || !Array.isArray(parsedV3Token.token)) {
+      throw new CTSError('Invalid token');
+    }
     if (parsedV3Token.token.length > 1) {
       throw new CTSError('Multi entry token are not supported');
     }
     const entry = parsedV3Token.token[0];
-    const proofs = entry.proofs.map((p) => ({
-      ...p,
-      amount: Amount.from(p.amount as AmountLike),
-    }));
+    if (!entry || !Array.isArray(entry.proofs)) {
+      throw new CTSError('Invalid token');
+    }
+    const proofs = entry.proofs.map((p) => {
+      const { dleq, ...rest } = p;
+      return {
+        ...rest,
+        amount: Amount.from(p.amount),
+        // Same rule as the v4 path: an incomplete DLEQ is useless and leaky, so it does not travel.
+        ...(dleq?.r && dleq.s && dleq.e && { dleq }),
+      };
+    });
     const tokenObj: Token = {
       mint: entry.mint,
       proofs,
@@ -422,7 +488,7 @@ function handleTokens(token: string): Token {
   } else if (version === 'B') {
     const uInt8Token = decodeBase64AnyToUint8(encodedToken);
     const tokenData = decodeCBOR(uInt8Token) as TokenV4Template;
-    return tokenFromTemplate(tokenData);
+    return fromV4CborTemplate(tokenData);
   }
   throw new CTSError('Token version is not supported');
 }
@@ -435,6 +501,48 @@ export type DeriveKeysetIdOptions = {
   isDeprecatedBase64?: boolean;
 };
 
+const KEYSET_UNIT_RE = /^[a-z0-9_-]+$/;
+
+/**
+ * Highest keyset id version byte this build can spend: 0x01, the v2 keysets.
+ *
+ * @remarks
+ * `deriveKeysetId` below is the authority on which versions exist, so bump this only alongside a
+ * new case there. Named for the byte, not the keyset generation: the docs call byte 0x01 a "v2"
+ * keyset, so an unqualified number here would be read one generation out.
+ * @internal
+ */
+export const MAX_SUPPORTED_KEYSET_VERSION_BYTE = 0x01;
+
+/**
+ * Name a keyset id version byte the way the docs do.
+ *
+ * @remarks
+ * Version bytes are zero-indexed and the names are not: byte 0x01 is a "v2" keyset, and a legacy
+ * base64 id (byte -1) is v0.
+ * @internal
+ */
+export const versionName = (versionByte: number): string => `v${versionByte + 1}`;
+
+/**
+ * Refuse unsupported keyset versions, including paths that never load keys.
+ *
+ * @remarks
+ * Takes the id rather than a `Keyset` so callers holding only a proof can use it. The parse mirrors
+ * `Keyset.version`, which reads the same byte off a loaded keyset.
+ * @internal
+ */
+export function assertSpendableVersion(keysetId: string, logger?: Logger): void {
+  const version = isValidHex(keysetId) ? Number.parseInt(keysetId.slice(0, 2), 16) : -1;
+  failIf(
+    version > MAX_SUPPORTED_KEYSET_VERSION_BYTE,
+    `Keyset '${keysetId}' is a ${versionName(version)} keyset; this build of cashu-ts supports ` +
+      `up to ${versionName(MAX_SUPPORTED_KEYSET_VERSION_BYTE)}. Upgrade to use this keyset.`,
+    logger,
+    { keysetId, versionByte: version, supported: MAX_SUPPORTED_KEYSET_VERSION_BYTE },
+  );
+}
+
 /**
  * Returns the keyset id of a set of keys.
  *
@@ -445,9 +553,15 @@ export type DeriveKeysetIdOptions = {
  * @param options.versionByte (optional) version of the keyset ID. Default: 1.
  * @param options.isDeprecatedBase64 (optional) version of the keyset ID. Default: false.
  * @returns Keyset id of the keys.
- * @throws If keyset versionByte is not valid.
+ * @throws If keyset versionByte is not valid, or a denomination key is over 20 digits.
  */
 export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): string {
+  // A u64 denomination is at most 20 digits; bound every key before any amount is parsed.
+  for (const amount of Object.keys(keys)) {
+    if (amount.length > 20) {
+      throw new CTSError('Invalid keyset denomination: exceeds 20 digits');
+    }
+  }
   const unit = options?.unit ?? 'sat'; // default: sat
   const expiry = options?.expiry;
   const versionByte = options?.versionByte ?? 1; // default: 1
@@ -478,6 +592,11 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
     case 1: {
       if (!unit) {
         throw new CTSError('Cannot compute keyset ID version 01: unit is required.');
+      }
+      // Per NUT-02 V2 the unit is restricted to [a-z0-9_-] (case folded here), so it cannot
+      // collide with the metadata fields that follow it in the preimage.
+      if (!KEYSET_UNIT_RE.test(unit.toLowerCase())) {
+        throw new CTSError(`Invalid keyset unit: ${unit}`);
       }
       const sortedEntries = Object.entries(keys).sort(([amountA], [amountB]) =>
         Amount.from(amountA).compareTo(amountB),
@@ -525,6 +644,18 @@ export function sortProofsById(proofs: Proof[]) {
  */
 export function isObj(v: unknown): v is object {
   return v != null && typeof v === 'object';
+}
+
+/**
+ * Type guard: returns `true` if `v` is a record, i.e. a non-null object that is not an array.
+ *
+ * @remarks
+ * Use this over {@link isObj} on anything off the wire: JSON admits an array or a string where a
+ * record is declared, and spreading one of those materializes a property per element/character.
+ * @internal
+ */
+export function isRecord(v: unknown): v is Record<string, unknown> {
+  return isObj(v) && !Array.isArray(v);
 }
 
 /**
@@ -724,6 +855,8 @@ function mapShortKeysetIds(proofs: Proof[], keysetIds: readonly string[]): Proof
 /**
  * Checks that the proof has a valid DLEQ proof according to keyset `keys`
  *
+ * @deprecated Use {@link verifyMintSignatures}, which v5 keeps; this is removed in v5. Its default
+ *   is NUT-12 verify-if-present, so pass `{ require: true }` for this function's default.
  * @param proof The proof subject to verification.
  * @param keyset Object containing keyset keys (eg: Keyset, MintKeys, KeysetCache)
  * @param opts.require Default `true`. When `false`, a proof without a DLEQ payload returns `true`
@@ -737,7 +870,7 @@ export function hasValidDleq(
   keyset: HasKeysetKeys,
   opts?: { require?: boolean },
 ): boolean {
-  const require = opts?.require ?? true;
+  const required = opts?.require ?? true;
   if (!hasCorrespondingKey(proof.amount, keyset.keys)) {
     // An empty keyset means keys were never loaded (eg rotated-out keyset per NUT-01),
     // not that the denomination is missing. Say so: the two failures have different fixes.
@@ -748,15 +881,20 @@ export function hasValidDleq(
     throw new CTSError(message);
   }
   if (proof?.dleq == undefined) {
-    return !require;
+    return !required;
+  }
+  // A DLEQ the wallet never completed with its own `r` is malformed, not absent: it cannot be
+  // re-blinded, and a zero blinding factor would assert the message was never blinded at all.
+  if (proof.dleq.r == undefined) {
+    return false;
   }
   const key = keyset.keys[proof.amount.toString()];
   try {
     const dleq = {
       e: hexToBytes(proof.dleq.e),
       s: hexToBytes(proof.dleq.s),
-      r: hexToNumber(proof.dleq.r ?? '00'),
-    } as DLEQ;
+      r: hexToNumber(proof.dleq.r),
+    };
     return verifyDLEQProof_reblind(
       new TextEncoder().encode(proof.secret),
       dleq,
@@ -770,7 +908,7 @@ export function hasValidDleq(
 }
 
 /**
- * @deprecated Use `hasValidDleq(proof, keyset, { require: false })`.
+ * @deprecated Use {@link verifyMintSignatures}, whose default is this function's behaviour.
  *
  *   Will be removed in v5.0.
  */
@@ -790,7 +928,7 @@ export function getEncodedTokenBinary(token: Token): Uint8Array {
       'Proofs contain a legacy keyset ID and cannot be encoded. Swap them at the mint first.',
     );
   }
-  const template = templateFromToken({ ...token, proofs });
+  const template = toV4CborTemplate({ ...token, proofs });
   const binaryTemplate = encodeCBOR(template);
   const prefix = utf8Encoder.encode('craw');
   const version = utf8Encoder.encode('B');
@@ -799,17 +937,25 @@ export function getEncodedTokenBinary(token: Token): Uint8Array {
 
 /**
  * Decodes a raw binary token (`craw` + `B` + CBOR) into a {@link Token}.
+ *
+ * @param bytes The encoded binary token.
+ * @param keysetIds Array of full keyset ID strings, eg: from `KeyChain.getAllKeysetIds()`. When
+ *   provided, short keyset IDs are mapped to their full form like {@link getDecodedToken} does.
+ * @returns Cashu token object.
  */
-export function getDecodedTokenBinary(bytes: Uint8Array): Token {
-  const utfDecoder = new TextDecoder();
-  const prefix = utfDecoder.decode(bytes.slice(0, 4));
-  const version = utfDecoder.decode(new Uint8Array([bytes[4]]));
-  if (prefix !== 'craw' || version !== 'B') {
+export function getDecodedTokenBinary(bytes: Uint8Array, keysetIds?: readonly string[]): Token {
+  // 'craw' + 'B' as bytes; no decoding needed for a fixed ASCII magic.
+  const magic = [0x63, 0x72, 0x61, 0x77, 0x42];
+  if (bytes.length < 5 || magic.some((b, i) => bytes[i] !== b)) {
     throw new CTSError('not a valid binary token');
   }
   const binaryToken = bytes.slice(5);
   const decoded = decodeCBOR(binaryToken) as TokenV4Template;
-  return tokenFromTemplate(decoded);
+  const token = fromV4CborTemplate(decoded);
+  if (Array.isArray(keysetIds)) {
+    token.proofs = mapShortKeysetIds(token.proofs, keysetIds);
+  }
+  return token;
 }
 
 function removePrefix(token: string): string {
@@ -866,7 +1012,12 @@ export function bolt11AmountMsat(pr: string): bigint | null {
   const lower = pr.toLowerCase();
   // The bech32 charset excludes '1', so the last '1' is the HRP separator.
   const sep = lower.lastIndexOf('1');
-  if (!lower.startsWith('ln') || sep < 3 || sep === lower.length - 1) {
+  if (
+    !lower.startsWith('ln') ||
+    sep < 3 ||
+    sep > MAX_BOLT11_HRP_LENGTH ||
+    sep === lower.length - 1
+  ) {
     throw new CTSError('Invalid BOLT11 invoice');
   }
   const match = /^ln[a-z]+?(\d*)([munp]?)$/.exec(lower.slice(0, sep));
@@ -884,4 +1035,53 @@ export function bolt11AmountMsat(pr: string): bigint | null {
     return n / 10n;
   }
   return n * MULTIPLIER_MSAT[multiplier];
+}
+
+/**
+ * Reads the payment hash from a BOLT11 invoice's tagged fields, as lowercase hex.
+ *
+ * @remarks
+ * Bech32 checksum only, no signature check: that is the payer's job.
+ * @throws If the string is not a BOLT11 invoice or carries no payment hash.
+ * @internal
+ */
+export function bolt11PaymentHash(pr: string): string {
+  if (typeof pr !== 'string') throw new CTSError('BOLT11 invoice must be a string');
+  let words: number[];
+  try {
+    ({ words } = bech32.decode(pr.toLowerCase(), false));
+  } catch (e) {
+    throw new CTSError('Invalid BOLT11 invoice', { cause: e });
+  }
+  // BOLT 11: a 7-word timestamp, then tagged fields (type, 10-bit length, data), then a
+  // 104-word signature. The payment hash is type 1, 52 words.
+  const end = words.length - 104;
+  for (let i = 7; i + 3 <= end; ) {
+    const type = words[i];
+    const len = (words[i + 1] << 5) | words[i + 2];
+    const next = i + 3 + len;
+    if (next > end) break;
+    if (type === 1 && len === 52) {
+      try {
+        return bytesToHex(bech32.fromWords(words.slice(i + 3, next)));
+      } catch (e) {
+        throw new CTSError('Invalid BOLT11 payment hash', { cause: e });
+      }
+    }
+    i = next;
+  }
+  throw new CTSError('BOLT11 invoice has no payment hash');
+}
+
+/**
+ * Whether a hex preimage hashes to a BOLT11 invoice's payment hash.
+ *
+ * @throws If the invoice cannot be parsed; a malformed preimage is simply false.
+ * @internal
+ */
+export function bolt11PreimageMatches(pr: string, preimage: string): boolean {
+  const paymentHash = bolt11PaymentHash(pr);
+  return (
+    /^[0-9a-fA-F]{64}$/.test(preimage) && bytesToHex(sha256(hexToBytes(preimage))) === paymentHash
+  );
 }

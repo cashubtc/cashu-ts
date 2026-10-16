@@ -279,6 +279,24 @@ describe('P2PKBuilder.toOptions()', () => {
   it('rejects invalid pubkey formats up front', () => {
     expect(() => new P2PKBuilder().addLockPubkey('zz')).toThrow(/Invalid pubkey/i);
   });
+
+  it('fromOptions takes refund keys as an array and blindKeys as a boolean only', () => {
+    const pubkey = comp('a', '02');
+    const refund = comp('b', '02');
+    expect(() =>
+      P2PKBuilder.fromOptions({
+        pubkey,
+        refundKeys: refund,
+        locktime: 1,
+      } as unknown as P2PKOptions),
+    ).toThrow(/refundKeys must be an array/);
+    expect(() =>
+      P2PKBuilder.fromOptions({ pubkey, blindKeys: 'yes' } as unknown as P2PKOptions),
+    ).toThrow(/blindKeys must be a boolean/);
+    const options: P2PKOptions = { pubkey, refundKeys: [refund], locktime: 4102444800 };
+    expect(P2PKBuilder.fromOptions(options).toOptions()).toEqual(options);
+    expect(P2PKBuilder.fromOptions({ pubkey, blindKeys: true }).toOptions().blindKeys).toBe(true);
+  });
 });
 
 describe('P2PKBuilder, simple fuzzish case', () => {

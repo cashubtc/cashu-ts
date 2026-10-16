@@ -1,8 +1,9 @@
+import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToNumberBE } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { hexToBytes, bytesToHex } from '@noble/hashes/utils.js';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 
 import {
   hashToCurve,
@@ -25,6 +26,7 @@ import {
   findSigningKey,
 } from '../../src/crypto';
 import { verifyUnblindedSignature } from '../../src/crypto/NUT01';
+import { decodeBase64ToUint8Legacy } from '../../src/utils';
 
 const SECRET_MESSAGE = 'test_message';
 
@@ -66,6 +68,41 @@ describe('testing hash to curve', () => {
     const Y = hashToCurve(secret);
     const hexY = Y.toHex(true);
     expect(hexY).toBe('022e7158e11c9506f1aa4248bf531298daa7febd6194f003edcd9b93ade6253acf');
+  });
+
+  test('produces the same point regardless of host byte order', () => {
+    const NativeUint32Array = globalThis.Uint32Array;
+    // Simulates a big-endian host's typed-array backing store, so the counter encoding
+    // must be pinned explicitly rather than following whatever the host happens to use.
+    const BigEndianTypedArrays = new Proxy(NativeUint32Array, {
+      construct(Target, args) {
+        if (args.length !== 1 || args[0] !== 1) {
+          return Reflect.construct(Target, args);
+        }
+        const buffer = new ArrayBuffer(4);
+        const view = new DataView(buffer);
+        return {
+          buffer,
+          get 0() {
+            return view.getUint32(0, false);
+          },
+          set 0(value: number) {
+            view.setUint32(0, value, false);
+          },
+        };
+      },
+    });
+
+    vi.stubGlobal('Uint32Array', BigEndianTypedArrays);
+    try {
+      // This vector reaches counter 3 before finding a valid point.
+      const secret = hexToBytes('0000000000000000000000000000000000000000000000000000000000000001');
+      expect(hashToCurve(secret).toHex(true)).toBe(
+        '022e7158e11c9506f1aa4248bf531298daa7febd6194f003edcd9b93ade6253acf',
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 
@@ -149,6 +186,23 @@ describe('getKeysetIdInt', () => {
     const expected = BigInt(0x010203) % MOD;
     expect(getKeysetIdInt(b64Id)).toBe(expected);
   });
+
+  test('a 12-character id is legacy base64 even when every character is a hex digit', () => {
+    // Same rule as getDerivationKind: length decides, since the base64 alphabet overlaps hex.
+    const MOD = BigInt(2 ** 31 - 1);
+    const id = 'abcdef012345';
+    const expected = bytesToNumberBE(decodeBase64ToUint8Legacy(id)) % MOD;
+    expect(getKeysetIdInt(id)).toBe(expected);
+    expect(getKeysetIdInt(id)).not.toBe(BigInt('0x' + id) % MOD);
+  });
+
+  test('a URL-safe spelling of a legacy id derives the same path', () => {
+    expect(getKeysetIdInt('22aBcD-_eFgH')).toBe(getKeysetIdInt('22aBcD+/eFgH'));
+  });
+
+  test('rejects an id that is neither hex nor base64', () => {
+    expect(() => getKeysetIdInt('not-a-keyset!')).toThrow(/Invalid keyset id/);
+  });
 });
 
 describe('schnorrVerifyDigest', () => {
@@ -214,6 +268,13 @@ describe('getValidSigners / meetsSignerThreshold', () => {
     expect(meetsSignerThreshold([signature], message, [compressed, '03' + xOnly], 2)).toBe(false);
   });
 
+  test('a threshold below one is rejected instead of passing on no signatures', () => {
+    expect(meetsSignerThreshold([], message, [compressed], 0)).toBe(false);
+    expect(meetsSignerThreshold([], message, [compressed], -1)).toBe(false);
+    expect(meetsSignerThreshold([signature], message, [compressed], 1.5)).toBe(false);
+    expect(meetsSignerThreshold([signature], message, [compressed], 1)).toBe(true);
+  });
+
   test('non-string pubkey entries fail closed without throwing', () => {
     const pubkeys = [42 as unknown as string, compressed];
     expect(getValidSigners([signature], message, pubkeys)).toEqual([compressed]);
@@ -253,5 +314,24 @@ describe('computeMessageDigest with a prehashed digest', () => {
     const digest = sha256(new TextEncoder().encode('hello'));
     expect(computeMessageDigest({ digest })).toEqual(digest);
     expect(computeMessageDigest({ digest }, true)).toBe(bytesToHex(digest));
+  });
+});
+
+describe('createBlindSignature', () => {
+  // A valid compressed secp256k1 point (the generator).
+  const VALID = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+  const a = hexToBytes('0'.repeat(63) + '2');
+
+  test('signs a secp256k1 blinded message', () => {
+    const B_ = pointFromHex(VALID);
+    const sig = createBlindSignature(B_, a, 'keyset-id');
+    expect(sig.id).toBe('keyset-id');
+    expect(sig.C_.toHex(true)).toBe(B_.multiply(2n).toHex(true));
+  });
+
+  test('rejects a blinded message from another curve', () => {
+    // The point type is structural, so a BLS12-381 G1 point satisfies it at compile time.
+    const foreign = bls12_381.G1.Point.fromAffine({ x: 0n, y: 2n });
+    expect(() => createBlindSignature(foreign, a, 'keyset-id')).toThrow(/secp256k1 point/);
   });
 });

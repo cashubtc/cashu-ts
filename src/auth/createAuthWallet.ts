@@ -14,7 +14,8 @@ import type { OIDCAuth, OIDCAuthOptions } from './OIDCAuth';
  * @param mintUrl URL of the mint to connect to.
  * @param options.authPool Optional. Desired BAT pool size and per-request mint cap. Both
  *   desiredPoolSize and maxPerMint on the AuthManager will be set to this value. Defaults to 10.
- * @param options.oidc Optional. Options for OIDCAuth (scope, clientId, logger, etc.)
+ * @param options.oidc Optional OIDCAuth options, including an onTokens callback for persistence.
+ *   The attached manager installs token state; the callback should not call setCAT.
  * @returns {mint, auth, oidc, wallet} — hydrated, ready to use.
  * @throws If mint does not require authentication.
  */
@@ -40,10 +41,9 @@ export async function createAuthWallet(
   const oidc = await mint.oidcAuth({
     ...options?.oidc,
     logger: options?.logger,
-    onTokens: (t) => auth.setCAT(t.access_token), // set CAT automatically
   });
 
-  // 4. Attach OIDCAuth back into AuthManager for refresh, etc.
+  // 4. Attach OIDCAuth back into AuthManager: its listener installs the CAT and refresh state.
   auth.attachOIDC(oidc);
 
   // 5. Hydrate wallet using the same mint and auth provider

@@ -61,6 +61,22 @@ describe('getKeepAmounts', () => {
     amountsToKeep = getKeepAmounts(proofsWeHave, '22', keys, 2);
     expect(amountsToKeep.map((a) => a.toNumber())).toEqual([1, 1, 2, 2, 8, 8]);
   });
+
+  test('rejects an optimized split that would exceed the output cap', () => {
+    const singleDenominationKeys = { 1: '02'.padEnd(66, '1') } as Keys;
+    const unrelatedProof = { amount: Amount.from(2) } as Pick<Proof, 'amount'>;
+
+    expect(() => getKeepAmounts([unrelatedProof], 8193, singleDenominationKeys, 8193)).toThrow(
+      /8192 outputs/,
+    );
+  });
+
+  test('rejects an optimized split even when only the fill remainder tips it over the cap', () => {
+    const singleDenominationKeys = { 1: '02'.padEnd(66, '1') } as Keys;
+    // The optimize loop alone stays under the cap (8000 < 8192); only combined with the 300-output
+    // fill for the remainder does the total exceed it.
+    expect(() => getKeepAmounts([], 8300, singleDenominationKeys, 8000)).toThrow(/8192 outputs/);
+  });
 });
 
 describe('stringifyOutputTypeForLog', () => {

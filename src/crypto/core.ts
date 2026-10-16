@@ -11,7 +11,7 @@ import {
 } from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
-import { hexToNumber, decodeBase64AnyToUint8 } from '../utils';
+import { hexToNumber, decodeBase64AnyToUint8, isBase64String, isValidHex } from '../utils';
 import { hasLoneSurrogate } from '../utils/bytes';
 
 /**
@@ -48,15 +48,19 @@ const DOMAIN_SEPARATOR = utf8ToBytes('Secp256k1_HashToCurve_Cashu_');
 
 export function hashToCurve(secret: Uint8Array): WeierstrassPoint<bigint> {
   const msgToHash = sha256(concatBytes(DOMAIN_SEPARATOR, secret));
-  const counter = new Uint32Array(1);
+  // NUT-00 fixes the counter as little-endian; a typed array's backing bytes follow host
+  // endianness instead, so DataView pins the encoding explicitly.
+  let counter = 0;
+  const counterBytes = new Uint8Array(4);
+  const counterView = new DataView(counterBytes.buffer);
   const maxIterations = 2 ** 16;
   for (let i = 0; i < maxIterations; i++) {
-    const counterBytes = new Uint8Array(counter.buffer);
+    counterView.setUint32(0, counter, true);
     const hash = sha256(concatBytes(msgToHash, counterBytes));
     try {
       return pointFromHex(bytesToHex(concatBytes(new Uint8Array([0x02]), hash)));
     } catch {
-      counter[0]++;
+      counter++;
     }
   }
   throw new CTSError('No valid point found');
@@ -76,13 +80,44 @@ export function pointFromHex(hex: string) {
   return secp256k1.Point.fromHex(hex);
 }
 
+/**
+ * Reparses a point as secp256k1, for entry points that take the structural point type.
+ *
+ * @remarks
+ * `WeierstrassPoint<bigint>` is shared with the other curves and scalar multiplication does not
+ * check membership, so a point that never went through a secp parser has to be sent through one.
+ * @throws {@link CTSError} If the point is not a secp256k1 point.
+ * @internal
+ */
+export function assertSecpPoint(point: WeierstrassPoint<bigint>): WeierstrassPoint<bigint> {
+  try {
+    return pointFromHex(point.toHex(true));
+  } catch (e) {
+    throw new CTSError('Invalid point: not a valid secp256k1 point', { cause: e });
+  }
+}
+
+/**
+ * Length of a legacy (pre-2024) base64 keyset id, which has no version byte.
+ *
+ * @internal
+ */
+export const LEGACY_KEYSET_ID_LENGTH = 12;
+
 export const getKeysetIdInt = (keysetId: string): bigint => {
   let keysetIdInt: bigint;
-  if (/^[a-fA-F0-9]+$/.test(keysetId)) {
+  // Length and alphabet separate the two encodings, the same rule getDerivationKind applies.
+  // Legacy ids travelled URL-safe in `GET /keys/{id}`, which the either-alphabet decoder accepts.
+  const legacy = (id: string): bigint =>
+    bytesToNumberBE(decodeBase64AnyToUint8(id)) % BigInt(2 ** 31 - 1);
+  if (keysetId.length === LEGACY_KEYSET_ID_LENGTH && isBase64String(keysetId)) {
+    keysetIdInt = legacy(keysetId);
+  } else if (isValidHex(keysetId)) {
     keysetIdInt = hexToNumber(keysetId) % BigInt(2 ** 31 - 1);
+  } else if (isBase64String(keysetId)) {
+    keysetIdInt = legacy(keysetId);
   } else {
-    //legacy keyset compatibility
-    keysetIdInt = bytesToNumberBE(decodeBase64AnyToUint8(keysetId)) % BigInt(2 ** 31 - 1);
+    throw new CTSError('Invalid keyset id: neither hex nor base64');
   }
   return keysetIdInt;
 };
@@ -97,7 +132,7 @@ export function createBlindSignature(
   id: string,
 ): BlindSignature {
   const a = secp256k1.Point.Fn.fromBytes(privateKey);
-  const C_: WeierstrassPoint<bigint> = B_.multiply(a);
+  const C_: WeierstrassPoint<bigint> = assertSecpPoint(B_).multiply(a);
   return { C_, id };
 }
 
@@ -354,8 +389,9 @@ export function getValidSigners(
  * @param message - The message to verify.
  * @param pubkeys - The Cashu P2PK public key(s) (hex-encoded, X-only or with 02/03 prefix) to
  *   check.
- * @param threshold - The minimum number of unique witnesses required.
- * @returns True if the witness threshold was reached, false otherwise.
+ * @param threshold - The minimum number of unique witnesses required; at least 1.
+ * @returns True if the witness threshold was reached, false otherwise (a threshold below 1
+ *   included, which no set of witnesses can satisfy).
  */
 export const meetsSignerThreshold = (
   signatures: string[],
@@ -363,6 +399,7 @@ export const meetsSignerThreshold = (
   pubkeys: string[],
   threshold: number = 1,
 ): boolean => {
+  if (!Number.isInteger(threshold) || threshold < 1) return false;
   const validSigners = getValidSigners(signatures, message, pubkeys);
   return validSigners.length >= threshold;
 };
