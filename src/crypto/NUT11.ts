@@ -1,5 +1,6 @@
 import { schnorr } from '@noble/curves/secp256k1.js';
 import { numberToBytesBE } from '@noble/curves/utils.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { type Logger, NULL_LOGGER } from '../logger';
@@ -936,13 +937,13 @@ export function buildP2PKSigAllMessageV0(
 }
 
 /**
- * Message aggregation for SIG_ALL (spec v1): the length-framed `message` bytes.
+ * Message aggregation for SIG_ALL (spec v1): typed, length-framed records as `message` bytes.
  *
  * NOTE: Use `assertSigAllInputs()` to ensure valid message inputs.
  *
  * @remarks
- * Melt transactions MUST include the quoteId; swaps commit an empty quote field. The value that is
- * signed is `hashP2PKSigAllMessageV1(message)`, not a plain SHA-256 of these bytes.
+ * Outputs commit `SHA256(B_)`, so a signer can approve outputs from their hashes alone. Melts MUST
+ * include the quoteId; swaps have no quote record. The signed value is `hashP2PKSigAllMessageV1`.
  * @param inputs Array of Proofs (only `secret` and `C` fields required).
  * @param outputs Array of OutputDataLike objects (OutputData, Factory etc).
  * @param quoteId Optional. Quote id for Melt transactions.
@@ -957,14 +958,20 @@ export function buildP2PKSigAllMessageV1(
   const pushFramed = (bytes: Uint8Array): void => {
     parts.push(numberToBytesBE(bytes.length, 4), bytes);
   };
-  pushFramed(utf8ToBytes(quoteId ?? ''));
+  // Record types follow the v3 transcript's input/output/melt quote containers.
   for (const p of inputs) {
+    parts.push(Uint8Array.of(0x11));
     pushFramed(utf8ToBytes(p.secret));
     pushFramed(hexToBytes(p.C));
   }
   for (const o of outputs) {
+    parts.push(Uint8Array.of(0x21));
     pushFramed(minimalBytesBE(Amount.from(o.blindedMessage.amount).toBigInt()));
-    pushFramed(hexToBytes(o.blindedMessage.B_));
+    pushFramed(sha256(hexToBytes(o.blindedMessage.B_)));
+  }
+  if (quoteId) {
+    parts.push(Uint8Array.of(0x22));
+    pushFramed(utf8ToBytes(quoteId));
   }
   // Manual copy rather than concatBytes(...parts): spreading per-field chunks
   // would hit V8's argument-count limit on large transactions.
