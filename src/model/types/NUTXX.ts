@@ -38,7 +38,7 @@ export type TransactionRequest = {
    */
   melt_quote_outputs: Array<{ quote: string; fee_reserve: Amount; fee_index?: number }>;
   /**
-   * At most one, beside a melt with blinded outputs: the remainder quote's lock key (33-byte
+   * At most one, beside a melt with blinded outputs: the rotation quote's lock key (33-byte
    * compressed hex). The mint creates it only if it cannot sign those outputs.
    */
   mint_quote_outputs?: Array<{ pubkey: string }>;

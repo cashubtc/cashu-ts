@@ -17,7 +17,7 @@ import {
   requestDigest,
   signTransactionInput,
   derivedQuoteId,
-  remainderQuoteId,
+  rotationQuoteId,
   spendCommitment,
   transactionDigest,
   transcriptContainers,
@@ -74,7 +74,7 @@ function fromVectorTx(tx: {
     })),
   };
   shape.mintQuoteOutputs = tx.mint_quote_outputs?.map((c) => ({
-    quoteId: remainderQuoteId(tx.melt_quote_outputs![0].quote_id),
+    quoteId: rotationQuoteId(tx.melt_quote_outputs![0].quote_id),
     pubkey: c.pubkey,
   }));
   return shape;
@@ -147,7 +147,7 @@ describe('transaction transcript (vectors)', () => {
     'melt',
     'melt_with_change',
     'mint_quote_to_melt',
-    'melt_with_remainder',
+    'melt_with_rotation',
   ] as const)('%s transcript and digest match', (name) => {
     const example = tv[name];
     const tx = fromVectorTx(example.tx);
@@ -500,11 +500,11 @@ describe('keyset ids in the transcript', () => {
 });
 
 describe('mint quote outputs (NUT-XX vectors)', () => {
-  const v = tv.melt_with_remainder;
-  const lock = vectors.nut13_v3.remainder_lock;
+  const v = tv.melt_with_rotation;
+  const lock = vectors.nut13_v3.rotation_lock;
 
-  test('the remainder quote binds its lock key and the id its melt derives, after the melt', () => {
-    expect(remainderQuoteId(lock.melt_quote_id)).toBe(lock.quote_id);
+  test('the rotation quote binds its lock key and the id its melt derives, after the melt', () => {
+    expect(rotationQuoteId(lock.melt_quote_id)).toBe(lock.quote_id);
     expect(v.quote_id).toBe(lock.quote_id);
     expect(v.transcript.endsWith(v.mint_quote_output_container)).toBe(true);
     const { proofs } = inputsForPayload({
@@ -514,7 +514,7 @@ describe('mint quote outputs (NUT-XX vectors)', () => {
       mintQuoteOutputs: [{ pubkey: lock.pubkey, quoteId: lock.quote_id }],
     });
     expect(bytesToHex([...proofs.values()][0].digest)).toBe(v.input_digest);
-    expect(() => remainderQuoteId('')).toThrow(/melt quote id/);
+    expect(() => rotationQuoteId('')).toThrow(/melt quote id/);
   });
 
   test('a malformed mint quote output throws', () => {
@@ -544,7 +544,7 @@ describe('mint quote outputs (NUT-XX vectors)', () => {
           { pubkey, quoteId: 'other' },
         ],
       }),
-    ).toThrow(/one remainder/);
+    ).toThrow(/one rotation/);
   });
 });
 

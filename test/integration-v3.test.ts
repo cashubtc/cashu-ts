@@ -40,7 +40,7 @@ import {
   type NutrootConditionLeaf,
 } from '../src/crypto/nutroot';
 import {
-  remainderQuoteId,
+  rotationQuoteId,
   inputsForPayload,
   proofInputContextKey,
   transactionDigest,
@@ -1489,7 +1489,7 @@ describeXX('NUT-XX transactions', () => {
     const quote = await lockedMintQuote(wallet, amount);
     await wallet.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
 
-    const lock = wallet.createRemainderLockKey(meltQuote.quote);
+    const lock = wallet.createRotationLockKey(meltQuote.quote);
     const preview = await wallet.prepareTransaction({
       mintQuoteInputs: [{ quote, amount }],
       meltQuoteOutput: { method: 'bolt11', quote: meltQuote },
@@ -1502,10 +1502,10 @@ describeXX('NUT-XX transactions', () => {
     }
     expect(response.state).toBe('PAID');
     expect(response.melt_quotes[0].state).toBe('PAID');
-    // The outputs were signed, so the mint created no remainder quote and says so with 20010.
+    // The outputs were signed, so the mint created no rotation quote and says so with 20010.
     expect(response.mint_quotes[0]).toBeNull();
     await expect(
-      wallet.mint.checkMintQuote('txout', remainderQuoteId(meltQuote.quote)),
+      wallet.mint.checkMintQuote('txout', rotationQuoteId(meltQuote.quote)),
     ).rejects.toMatchObject({ code: 20010 });
     const issued = await wallet.checkMintQuoteBolt11(quote.quote);
     expect(issued.amount_issued.toNumber()).toBe(amount);
@@ -1691,7 +1691,7 @@ describeXX('NUT-XX transactions', () => {
     expect(again.response.state).toBe('PAID');
   });
 
-  test('the mint rejects blank outputs, a repeated quote, a wrong fee reserve and a stray remainder quote', async () => {
+  test('the mint rejects blank outputs, a repeated quote, a wrong fee reserve and a stray rotation quote', async () => {
     const { wallet, proofs } = await funded(8);
     const quote = await lockedMintQuote(wallet, 8);
     await wallet.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
@@ -1720,8 +1720,8 @@ describeXX('NUT-XX transactions', () => {
         melt_quote_outputs: [{ quote: meltQuote.quote, fee_reserve: meltQuote.fee_reserve.add(1) }],
       }),
     ).rejects.toThrow();
-    // A remainder quote backs a melt's outputs, so a swap cannot name one.
-    const { pubkey } = wallet.createRemainderLockKey(meltQuote.quote);
+    // A rotation quote backs a melt's outputs, so a swap cannot name one.
+    const { pubkey } = wallet.createRotationLockKey(meltQuote.quote);
     await expect(
       raw({ proof_inputs: proofs, blinded_outputs: [output], mint_quote_outputs: [{ pubkey }] }),
     ).rejects.toThrow();

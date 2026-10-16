@@ -3,9 +3,9 @@ import { describe, expect, test, vi } from 'vitest';
 
 import { Wallet, deserializeTransactionPreview, serializeTransactionPreview } from '../../src';
 import { schnorrSignDigest, schnorrVerifyDigest } from '../../src/crypto';
-import { deriveRemainderLockKey } from '../../src/crypto/NUT13';
+import { deriveRotationLockKey } from '../../src/crypto/NUT13';
 import { buildNutrootSecret } from '../../src/crypto/nutroot';
-import { inputsForPayload, remainderQuoteId } from '../../src/crypto/transcript';
+import { inputsForPayload, rotationQuoteId } from '../../src/crypto/transcript';
 import { Amount } from '../../src/model/Amount';
 import type { Proof } from '../../src/model/types';
 import { deriveKeysetId } from '../../src/utils';
@@ -23,9 +23,9 @@ import {
 const server = useTestServer();
 const privkey = '0000000000000000000000000000000000000000000000000000000000000001';
 const pubkey = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
-const remainderKey = '022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4';
-const remainder = { pubkey: remainderKey };
-const remainderId = remainderQuoteId('quote-melt-0001');
+const rotationKey = '022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4';
+const rotation = { pubkey: rotationKey };
+const rotationId = rotationQuoteId('quote-melt-0001');
 const quote = {
   quote: 'quote-mint-0001',
   method: 'bolt11',
@@ -49,7 +49,7 @@ const txoutQuoteJson = (id: string, amount: number) => ({
   amount_issued: 0,
   state: 'PAID',
   expiry: null,
-  pubkey: remainderKey,
+  pubkey: rotationKey,
 });
 
 function serveInfo(xx?: object) {
@@ -103,7 +103,7 @@ describe('Wallet transactions (NUT-XX)', () => {
       transact(wallet, {
         mintQuoteInputs: [{ quote, amount: 8 }],
         meltQuoteOutput: melt,
-        mintQuoteOutputs: [remainder],
+        mintQuoteOutputs: [rotation],
       }),
     ).rejects.toThrow('does not support transactions');
   });
@@ -116,7 +116,7 @@ describe('Wallet transactions (NUT-XX)', () => {
     const result = await transact(wallet, {
       mintQuoteInputs: [{ quote, amount: 8 }],
       meltQuoteOutput: melt,
-      mintQuoteOutputs: [remainder],
+      mintQuoteOutputs: [rotation],
     });
     const [body] = bodies;
     expect(result.response.state).toBe('PAID');
@@ -125,16 +125,16 @@ describe('Wallet transactions (NUT-XX)', () => {
     expect(body).toMatchObject({
       proof_inputs: [],
       melt_quote_outputs: [{ quote: 'quote-melt-0001', fee_reserve: 1 }],
-      mint_quote_outputs: [{ pubkey: remainderKey }],
+      mint_quote_outputs: [{ pubkey: rotationKey }],
     });
     expect(body.mint_quote_inputs[0]).toMatchObject({ quote: 'quote-mint-0001', amount: 8 });
-    // The quote signs over the outputs, the melt output (amount + fee reserve) and the remainder
+    // The quote signs over the outputs, the melt output (amount + fee reserve) and the rotation
     // quote, named by the melt.
     const tx = inputsForPayload({
       mintQuoteInputs: [{ quoteId: 'quote-mint-0001', amount: 8, lockKey: pubkey, issued: 0 }],
       blindedOutputs: body.blinded_outputs,
       meltQuoteOutput: { quoteId: 'quote-melt-0001', amount: 6 },
-      mintQuoteOutputs: [{ pubkey: remainderKey, quoteId: remainderId }],
+      mintQuoteOutputs: [{ pubkey: rotationKey, quoteId: rotationId }],
     });
     const [signature] = JSON.parse(body.mint_quote_inputs[0].witness).signatures;
     expect(schnorrVerifyDigest(signature, tx.quotes.get('quote-mint-0001')!.digest, pubkey)).toBe(
@@ -150,7 +150,7 @@ describe('Wallet transactions (NUT-XX)', () => {
     const preview = await wallet.prepareTransaction({
       mintQuoteInputs: [{ quote, amount: 8 }],
       meltQuoteOutput: melt,
-      mintQuoteOutputs: [remainder],
+      mintQuoteOutputs: [rotation],
     });
     await wallet.completeTransaction(preview, privkey);
     const stored = JSON.parse(JSON.stringify(serializeTransactionPreview(preview)));
@@ -162,7 +162,7 @@ describe('Wallet transactions (NUT-XX)', () => {
     expect(strip(bodies[1])).toEqual(strip(bodies[0]));
   });
 
-  test('checkTransaction reads a pending transaction from its melt quote and remainder quote', async () => {
+  test('checkTransaction reads a pending transaction from its melt quote and rotation quote', async () => {
     serveInfo({ supported: true, quote_input_fee_ppk: 0 });
     let meltState = 'PENDING';
     const fetched: string[] = [];
@@ -188,7 +188,7 @@ describe('Wallet transactions (NUT-XX)', () => {
     const preview = await wallet.prepareTransaction({
       mintQuoteInputs: [{ quote, amount: 8 }],
       meltQuoteOutput: melt,
-      mintQuoteOutputs: [remainder],
+      mintQuoteOutputs: [rotation],
     });
     const first = await wallet.completeTransaction(preview, privkey);
     expect(first.response.state).toBe('PENDING');
@@ -198,14 +198,14 @@ describe('Wallet transactions (NUT-XX)', () => {
     meltState = 'PAID';
     const settled = await wallet.checkTransaction(preview);
     expect(settled.response.state).toBe('PAID');
-    expect(fetched).toEqual([remainderId]);
-    expect(settled.response.mint_quotes[0]).toMatchObject({ quote: remainderId, method: 'txout' });
+    expect(fetched).toEqual([rotationId]);
+    expect(settled.response.mint_quotes[0]).toMatchObject({ quote: rotationId, method: 'txout' });
     // A released payment leaves the melt quote UNPAID.
     meltState = 'UNPAID';
     expect((await wallet.checkTransaction(preview)).response.state).toBe('FAILED');
   });
 
-  test('checkTransaction reads a remainder quote never created as null, and needs a melt', async () => {
+  test('checkTransaction reads a rotation quote never created as null, and needs a melt', async () => {
     serveInfo({ supported: true, quote_input_fee_ppk: 0 });
     server.use(
       http.get(mintUrl + '/v1/melt/quote/bolt11/:id', ({ params }) =>
@@ -220,11 +220,11 @@ describe('Wallet transactions (NUT-XX)', () => {
     const preview = await wallet.prepareTransaction({
       mintQuoteInputs: [{ quote, amount: 8 }],
       meltQuoteOutput: melt,
-      mintQuoteOutputs: [remainder],
+      mintQuoteOutputs: [rotation],
     });
     const result = await wallet.checkTransaction(preview);
     expect(result.response).toMatchObject({ state: 'PAID', mint_quotes: [null] });
-    // A failed fetch is not an answer: the remainder quote may hold the outputs' value.
+    // A failed fetch is not an answer: the rotation quote may hold the outputs' value.
     server.use(http.get(mintUrl + '/v1/mint/quote/txout/:id', () => HttpResponse.error()));
     await expect(wallet.checkTransaction(preview)).rejects.toThrow();
     server.use(
@@ -269,7 +269,7 @@ describe('Wallet transactions (NUT-XX)', () => {
     const preview = await wallet.prepareTransaction({
       mintQuoteInputs: [{ quote, amount: 8 }],
       meltQuoteOutput: melt,
-      mintQuoteOutputs: [remainder],
+      mintQuoteOutputs: [rotation],
     });
     const result = await wallet.completeTransaction(preview, privkey, {
       waitForSettlementMs: 5_000,
@@ -298,7 +298,7 @@ describe('Wallet transactions (NUT-XX)', () => {
     await transact(wallet, {
       mintQuoteInputs: [{ quote, amount: 8 }],
       meltQuoteOutput: onchain,
-      mintQuoteOutputs: [remainder],
+      mintQuoteOutputs: [rotation],
     });
     expect(bodies[0].melt_quote_outputs).toEqual([
       { quote: 'quote-melt-0001', fee_reserve: 3, fee_index: 1 },
@@ -307,7 +307,7 @@ describe('Wallet transactions (NUT-XX)', () => {
       mintQuoteInputs: [{ quoteId: 'quote-mint-0001', amount: 8, lockKey: pubkey, issued: 0 }],
       blindedOutputs: bodies[0].blinded_outputs,
       meltQuoteOutput: { quoteId: 'quote-melt-0001', amount: 8 },
-      mintQuoteOutputs: [{ pubkey: remainderKey, quoteId: remainderId }],
+      mintQuoteOutputs: [{ pubkey: rotationKey, quoteId: rotationId }],
     }).quotes.get('quote-mint-0001')!;
     const [signature] = JSON.parse(bodies[0].mint_quote_inputs[0].witness).signatures;
     expect(schnorrVerifyDigest(signature, digest, pubkey)).toBe(true);
@@ -317,7 +317,7 @@ describe('Wallet transactions (NUT-XX)', () => {
     serveInfo({ supported: true, quote_input_fee_ppk: 100 });
     const wallet = new Wallet(mintUrl, { unit });
     await wallet.loadMint();
-    // 7 in, 6 melt, 1 fee: no proofs, one blank for the reserve, and no remainder quote needed.
+    // 7 in, 6 melt, 1 fee: no proofs, one blank for the reserve, and no rotation quote needed.
     const exact = await wallet.prepareTransaction({
       mintQuoteInputs: [{ quote, amount: 7 }],
       meltQuoteOutput: melt,
@@ -331,21 +331,21 @@ describe('Wallet transactions (NUT-XX)', () => {
         mintQuoteInputs: [{ quote, amount: 7 }],
         proofOutputs: { amount: 1 },
         meltQuoteOutput: melt,
-        mintQuoteOutputs: [remainder],
+        mintQuoteOutputs: [rotation],
       }),
     ).rejects.toThrow('must equal');
-    // The remainder quote backs a melt's outputs: one at most, never without both.
+    // The rotation quote backs a melt's outputs: one at most, never without both.
     await expect(
       wallet.prepareTransaction({
         mintQuoteInputs: [{ quote, amount: 8 }],
-        mintQuoteOutputs: [remainder],
+        mintQuoteOutputs: [rotation],
       }),
     ).rejects.toThrow('needs a melt');
     await expect(
       wallet.prepareTransaction({
         mintQuoteInputs: [{ quote, amount: 8 }],
         meltQuoteOutput: melt,
-        mintQuoteOutputs: [remainder, remainder],
+        mintQuoteOutputs: [rotation, rotation],
       }),
     ).rejects.toThrow('at most one');
     await expect(
@@ -355,7 +355,7 @@ describe('Wallet transactions (NUT-XX)', () => {
           method: 'bolt11',
           quote: { quote: 'quote-melt-0001', amount: Amount.from(4), fee_reserve: Amount.from(0) },
         },
-        mintQuoteOutputs: [remainder],
+        mintQuoteOutputs: [rotation],
       }),
     ).rejects.toThrow('needs blinded outputs');
     // A slim melt quote cannot say what the digest binds.
@@ -366,7 +366,7 @@ describe('Wallet transactions (NUT-XX)', () => {
           method: 'bolt11',
           quote: { quote: 'quote-melt-0001', amount: Amount.from(5) },
         },
-        mintQuoteOutputs: [remainder],
+        mintQuoteOutputs: [rotation],
       }),
     ).rejects.toThrow('full melt quote');
     await expect(
@@ -376,7 +376,7 @@ describe('Wallet transactions (NUT-XX)', () => {
           method: 'bolt11',
           quote: { quote: 'quote-melt-0001', fee_reserve: Amount.from(1) } as any,
         },
-        mintQuoteOutputs: [remainder],
+        mintQuoteOutputs: [rotation],
       }),
     ).rejects.toThrow('full melt quote');
     // fee_index belongs only to a quote offering fee_options.
@@ -384,7 +384,7 @@ describe('Wallet transactions (NUT-XX)', () => {
       wallet.prepareTransaction({
         mintQuoteInputs: [{ quote, amount: 8 }],
         meltQuoteOutput: { ...melt, feeIndex: 0 },
-        mintQuoteOutputs: [remainder],
+        mintQuoteOutputs: [rotation],
       }),
     ).rejects.toThrow('offering fee_options');
   });
@@ -481,7 +481,7 @@ describe('Wallet transactions (NUT-XX)', () => {
       mintQuoteInputs: [{ quote, amount: 16 }],
       proofOutputs: { amount: 9 },
       meltQuoteOutput,
-      mintQuoteOutputs: [remainder],
+      mintQuoteOutputs: [rotation],
     });
     expect(preview.amount).toEqual(Amount.from(9));
     expect(preview.outputData.some((d) => d.blindedMessage.amount.isZero())).toBe(true);
@@ -490,7 +490,7 @@ describe('Wallet transactions (NUT-XX)', () => {
         mintQuoteInputs: [{ quote, amount: 16 }],
         proofOutputs: { amount: 0 },
         meltQuoteOutput,
-        mintQuoteOutputs: [remainder],
+        mintQuoteOutputs: [rotation],
       }),
     ).rejects.toThrow('must equal');
   });
@@ -524,7 +524,7 @@ describe('Wallet transactions (NUT-XX)', () => {
         method: 'bolt11',
         quote: { quote: 'quote-melt-0001', amount: Amount.from(5), fee_reserve: Amount.from(7) },
       },
-      mintQuoteOutputs: [remainder],
+      mintQuoteOutputs: [rotation],
     });
     // The 1 sat surplus is a fixed output; on this {1, 2} keyset a change of 7 is 2+2+2+1, so four
     // blanks cover the reserve.
@@ -532,7 +532,7 @@ describe('Wallet transactions (NUT-XX)', () => {
     expect(result.proofs.map((p) => p.amount.toNumber())).toEqual([1, 2]);
   });
 
-  test('a melt whose outputs lost their keyset returns their value in the remainder quote', async () => {
+  test('a melt whose outputs lost their keyset returns their value in the rotation quote', async () => {
     serveInfo({ supported: true, quote_input_fee_ppk: 0 });
     server.use(
       http.post(mintUrl + '/v1/transaction', () =>
@@ -544,7 +544,7 @@ describe('Wallet transactions (NUT-XX)', () => {
           ],
           mint_quotes: [
             {
-              quote: remainderId,
+              quote: rotationId,
               request: '',
               unit,
               amount: 2,
@@ -552,7 +552,7 @@ describe('Wallet transactions (NUT-XX)', () => {
               amount_issued: 0,
               state: 'PAID',
               expiry: null,
-              pubkey: remainderKey,
+              pubkey: rotationKey,
             },
           ],
         }),
@@ -563,7 +563,7 @@ describe('Wallet transactions (NUT-XX)', () => {
     const preview = await wallet.prepareTransaction({
       mintQuoteInputs: [{ quote, amount: 8 }],
       meltQuoteOutput: melt,
-      mintQuoteOutputs: [remainder],
+      mintQuoteOutputs: [rotation],
     });
     expect(preview.outputData.map((d) => d.blindedMessage.amount.toNumber())).toEqual([2, 0]);
     const result = await wallet.completeTransaction(preview, privkey);
@@ -572,7 +572,7 @@ describe('Wallet transactions (NUT-XX)', () => {
     expect(result.response.mint_quotes[0]!.amount_paid.toNumber()).toBe(2);
   });
 
-  test('a melt without a remainder quote forfeits unsigned outputs without throwing', async () => {
+  test('a melt without a rotation quote forfeits unsigned outputs without throwing', async () => {
     serveInfo({ supported: true, quote_input_fee_ppk: 0 });
     server.use(
       http.post(mintUrl + '/v1/transaction', () =>
@@ -596,36 +596,36 @@ describe('Wallet transactions (NUT-XX)', () => {
     });
     expect(result.proofs).toEqual([]);
     expect(warn).toHaveBeenCalledWith(
-      'Mint did not sign the transaction outputs and there is no remainder quote',
+      'Mint did not sign the transaction outputs and there is no rotation quote',
       expect.anything(),
     );
   });
 
-  test('createRemainderLockKey derives from the melt quote id when seeded', async () => {
+  test('createRotationLockKey derives from the melt quote id when seeded', async () => {
     serveInfo({ supported: true, quote_input_fee_ppk: 0 });
     const seed = new Uint8Array(64).fill(1);
     const wallet = new Wallet(mintUrl, { unit, bip39seed: seed });
     await wallet.loadMint();
-    const lock = wallet.createRemainderLockKey('quote-melt-0001');
+    const lock = wallet.createRotationLockKey('quote-melt-0001');
     const mintPubkey = mintInfoResp.pubkey;
     expect(lock.privkey).toBe(
-      Buffer.from(deriveRemainderLockKey(seed, mintPubkey, 'quote-melt-0001')).toString('hex'),
+      Buffer.from(deriveRotationLockKey(seed, mintPubkey, 'quote-melt-0001')).toString('hex'),
     );
     // No counter: the same melt quote id recovers the same key.
-    expect(wallet.createRemainderLockKey('quote-melt-0001')).toEqual(lock);
+    expect(wallet.createRotationLockKey('quote-melt-0001')).toEqual(lock);
     const unseeded = new Wallet(mintUrl, { unit });
     await unseeded.loadMint();
-    expect(unseeded.createRemainderLockKey('quote-melt-0001').pubkey).not.toBe(lock.pubkey);
+    expect(unseeded.createRotationLockKey('quote-melt-0001').pubkey).not.toBe(lock.pubkey);
   });
 
-  test('a seeded wallet backs a melt with outputs with its remainder quote by default', async () => {
+  test('a seeded wallet backs a melt with outputs with its rotation quote by default', async () => {
     serveInfo({ supported: true, quote_input_fee_ppk: 0 });
     const seeded = new Wallet(mintUrl, { unit, bip39seed: new Uint8Array(64).fill(1) });
     await seeded.loadMint();
     const meltTx = { mintQuoteInputs: [{ quote, amount: 8 }], meltQuoteOutput: melt };
     const auto = await seeded.prepareTransaction(meltTx);
     expect(auto.mintQuoteOutputs).toEqual([
-      { quote: remainderId, pubkey: seeded.createRemainderLockKey('quote-melt-0001').pubkey },
+      { quote: rotationId, pubkey: seeded.createRotationLockKey('quote-melt-0001').pubkey },
     ]);
     // `[]` opts out, a swap has nothing to back, and an unseeded wallet has no key to recover.
     expect(
@@ -816,7 +816,7 @@ describe('Wallet transactions (NUT-XX)', () => {
       mintQuoteInputs: [{ quote, amount: 8 }],
       proofOutputs: { outputType: { type: 'deterministic', counter: 100 } },
       meltQuoteOutput: melt,
-      mintQuoteOutputs: [remainder],
+      mintQuoteOutputs: [rotation],
     });
     expect(preview.outputData.map((d) => d.blindedMessage.amount.toNumber())).toEqual([2, 0]);
     // The output takes counter 100 and the blank 101, so the cursor sits after both.
@@ -839,7 +839,7 @@ describe('Wallet transactions (NUT-XX)', () => {
       mintQuoteInputs: [{ quote, amount: 6 }],
       proofOutputs: { outputType },
       meltQuoteOutput: melt,
-      mintQuoteOutputs: [remainder],
+      mintQuoteOutputs: [rotation],
     });
     expect(preview.outputData).toHaveLength(blanks.length);
     await expect(
@@ -898,7 +898,7 @@ describe('Wallet transactions (NUT-XX)', () => {
   });
 
   test.each(['PENDING', 'FAILED'] as const)(
-    '%s with reserved outputs returns no proofs and a null remainder quote',
+    '%s with reserved outputs returns no proofs and a null rotation quote',
     async (state) => {
       serveInfo({ supported: true, quote_input_fee_ppk: 0 });
       const wallet = new Wallet(mintUrl, { unit });
@@ -907,7 +907,7 @@ describe('Wallet transactions (NUT-XX)', () => {
         mintQuoteInputs: [{ quote, amount: 8 }],
         proofOutputs: { amount: 2 },
         meltQuoteOutput: { ...melt, quote: { ...melt.quote, unit } },
-        mintQuoteOutputs: [remainder],
+        mintQuoteOutputs: [rotation],
       });
       server.use(
         http.post(mintUrl + '/v1/transaction', () =>
@@ -936,7 +936,7 @@ describe('Wallet transactions (NUT-XX)', () => {
       mintQuoteInputs: [{ quote, amount: 9 }],
       proofOutputs: { amount: 3 },
       meltQuoteOutput: melt,
-      mintQuoteOutputs: [remainder],
+      mintQuoteOutputs: [rotation],
     });
     const stored = JSON.parse(JSON.stringify(serializeTransactionPreview(preview)));
     const posted = vi.fn();
@@ -965,12 +965,12 @@ describe('Wallet transactions (NUT-XX)', () => {
     expect(posted).toHaveBeenCalled();
     const recovered = await wallet.checkTransaction(deserializeTransactionPreview(stored));
     expect(recovered.proofs.map((p) => p.amount.toNumber()).sort()).toEqual([1, 2]);
-    expect(recovered.response.mint_quotes[0]).toMatchObject({ quote: remainderId });
+    expect(recovered.response.mint_quotes[0]).toMatchObject({ quote: rotationId });
     const again = await wallet.checkTransaction(deserializeTransactionPreview(stored));
     expect(again.proofs).toEqual(recovered.proofs);
   });
 
-  test('v3 script-path witnesses and receipts bind quote inputs, the melt and the remainder quote', async () => {
+  test('v3 script-path witnesses and receipts bind quote inputs, the melt and the rotation quote', async () => {
     serveInfo({ supported: true, quote_input_fee_ppk: 0 });
     server.use(
       http.get(mintUrl + '/v1/keysets', () =>
@@ -981,7 +981,7 @@ describe('Wallet transactions (NUT-XX)', () => {
     const bodies = serveTransaction();
     const wallet = new Wallet(mintUrl, { unit });
     await wallet.loadMint();
-    const built = buildNutrootSecret(remainderKey, [{ type: 'threshold', n: 1, keys: [pubkey] }]);
+    const built = buildNutrootSecret(rotationKey, [{ type: 'threshold', n: 1, keys: [pubkey] }]);
     const input: Proof = {
       id: NUT02_V3_VECTOR1_KEYSET.id,
       amount: Amount.from(8),
@@ -993,7 +993,7 @@ describe('Wallet transactions (NUT-XX)', () => {
       proofInputs: [input],
       mintQuoteInputs: [{ quote, amount: 8 }],
       meltQuoteOutput: melt,
-      mintQuoteOutputs: [remainder],
+      mintQuoteOutputs: [rotation],
     });
     const result = await wallet.completeTransaction(preview, privkey, {
       scriptPath: [{ secret: input.secret, leafIndex: 0 }],
@@ -1005,12 +1005,12 @@ describe('Wallet transactions (NUT-XX)', () => {
       mintQuoteInputs: [{ quoteId: quote.quote, amount: 8, lockKey: pubkey, issued: 0 }],
       blindedOutputs: bodies[0].blinded_outputs,
       meltQuoteOutput: { quoteId: 'quote-melt-0001', amount: 6 },
-      mintQuoteOutputs: [{ pubkey: remainderKey, quoteId: remainderId }],
+      mintQuoteOutputs: [{ pubkey: rotationKey, quoteId: rotationId }],
     });
     const digest = [...tx.proofs.values()][0].digest;
     const witness = JSON.parse(bodies[0].proof_inputs[0].witness);
     expect(witness.leaf).toBe(built.tree[0]);
-    expect(witness.control.K).toBe(remainderKey);
+    expect(witness.control.K).toBe(rotationKey);
     expect(schnorrVerifyDigest(witness.signatures[0], digest, pubkey)).toBe(true);
     expect(result.receipts![0].inputDigest).toBe(Buffer.from(digest).toString('hex'));
     const changed = inputsForPayload({
@@ -1018,7 +1018,7 @@ describe('Wallet transactions (NUT-XX)', () => {
       mintQuoteInputs: [{ quoteId: quote.quote, amount: 7, lockKey: pubkey, issued: 0 }],
       blindedOutputs: bodies[0].blinded_outputs,
       meltQuoteOutput: { quoteId: 'quote-melt-0001', amount: 6 },
-      mintQuoteOutputs: [{ pubkey: remainderKey, quoteId: remainderId }],
+      mintQuoteOutputs: [{ pubkey: rotationKey, quoteId: rotationId }],
     });
     expect(
       schnorrVerifyDigest(witness.signatures[0], [...changed.proofs.values()][0].digest, pubkey),
@@ -1050,7 +1050,7 @@ describe('Wallet transactions (NUT-XX)', () => {
     expect(result.proofs[0].amount).toEqual(Amount.from(1));
   });
 
-  test('warns when the remainder quote comes back under a different id', async () => {
+  test('warns when the rotation quote comes back under a different id', async () => {
     serveInfo({ supported: true, quote_input_fee_ppk: 0 });
     const warn = vi.fn();
     const logger = {
@@ -1076,12 +1076,12 @@ describe('Wallet transactions (NUT-XX)', () => {
     const result = await transact(wallet, {
       mintQuoteInputs: [{ quote, amount: 8 }],
       meltQuoteOutput: melt,
-      mintQuoteOutputs: [remainder],
+      mintQuoteOutputs: [rotation],
     });
     expect(result.response.mint_quotes[0]).toMatchObject({ quote: 'other-id' });
     expect(warn).toHaveBeenCalledWith(
-      'Mint returned the remainder quote under a different id',
-      expect.objectContaining({ expected: remainderId, received: 'other-id' }),
+      'Mint returned the rotation quote under a different id',
+      expect.objectContaining({ expected: rotationId, received: 'other-id' }),
     );
   });
 
@@ -1132,7 +1132,7 @@ describe('Wallet transactions (NUT-XX)', () => {
             quote: { ...melt.quote, fee_options: [{ fee_index: 0, fee_reserve: 1 }] },
             feeIndex,
           },
-          mintQuoteOutputs: [remainder],
+          mintQuoteOutputs: [rotation],
         }),
       ).rejects.toThrow('selected feeIndex');
     }

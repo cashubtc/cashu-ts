@@ -149,7 +149,7 @@ export type TransactionPreview = {
     feeIndex?: number;
   };
   /**
-   * The remainder quote, if requested: its id and lock key.
+   * The rotation quote, if requested: its id and lock key.
    */
   mintQuoteOutputs: Array<{ quote: string; pubkey: string }>;
   outputData: OutputDataLike[];

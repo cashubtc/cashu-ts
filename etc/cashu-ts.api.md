@@ -520,7 +520,7 @@ export const DERIVATION_TYPE: {
     readonly leafKey: 3;
     readonly quoteLock: 4;
     readonly quoteIdPreimage: 5;
-    readonly remainderLock: 6;
+    readonly rotationLock: 6;
 };
 
 // @public (undocumented)
@@ -585,7 +585,7 @@ export function deriveQuoteIdPreimage(seed: Uint8Array, mintPubkey: string, coun
 export function deriveQuoteLockKey(seed: Uint8Array, mintPubkey: string, counter: number): Uint8Array;
 
 // @public
-export function deriveRemainderLockKey(seed: Uint8Array, mintPubkey: string, meltQuoteId: string): Uint8Array;
+export function deriveRotationLockKey(seed: Uint8Array, mintPubkey: string, meltQuoteId: string): Uint8Array;
 
 // @public
 export function deriveSecretAndBlindingFactor(seed: Uint8Array, keysetId: string, counter: number): DerivedSecretAndBlindingFactor;
@@ -3172,7 +3172,7 @@ export class Wallet {
         pubkey: string;
         privkey: string;
     }>;
-    createRemainderLockKey(meltQuoteId: string): {
+    createRotationLockKey(meltQuoteId: string): {
         pubkey: string;
         privkey: string;
     };

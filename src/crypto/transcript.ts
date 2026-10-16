@@ -19,7 +19,7 @@ export const TRANSCRIPT_REQUEST_TAG = 'Cashu_AuthorizedRequest';
 export const TRANSCRIPT_INPUT_TAG = 'Cashu_TransactionInput';
 export const SPEND_COMMITMENT_TAG = 'Cashu_SpendCommitment';
 export const QUOTE_ID_TAG = 'Cashu_QuoteId';
-export const REMAINDER_QUOTE_ID_TAG = 'Cashu_RemainderQuoteId';
+export const ROTATION_QUOTE_ID_TAG = 'Cashu_RotationQuoteId';
 
 // The high nibble is the section: 0x1n inputs, 0x2n outputs, 0xFn never in a transaction.
 const CONTAINER_PROOF_INPUT = 0x11;
@@ -74,7 +74,7 @@ export type TransactionShape = {
   blindedOutputs?: TranscriptBlindedOutput[];
   meltQuoteOutputs?: TranscriptQuote[];
   /**
-   * Mint quote outputs (NUT-XX) in request order; at most one omits `amount`, the remainder quote.
+   * Mint quote outputs (NUT-XX) in request order; at most one omits `amount`, the rotation quote.
    */
   mintQuoteOutputs?: TranscriptMintQuoteOutput[];
 };
@@ -85,7 +85,7 @@ export type TranscriptMintQuoteOutput = {
    */
   pubkey: string;
   /**
-   * The txout quote's id; the remainder quote's is {@link remainderQuoteId}.
+   * The txout quote's id; the rotation quote's is {@link rotationQuoteId}.
    */
   quoteId: string;
   amount?: bigint;
@@ -212,7 +212,7 @@ function mintQuoteOutputContainer(output: TranscriptMintQuoteOutput): Uint8Array
     tlvRecord(0x02, hexToBytes(output.pubkey)),
     tlvRecord(0x03, utf8ToBytes(output.quoteId)),
   );
-  // The remainder quote omits the amount record entirely (NUT-XX).
+  // The rotation quote omits the amount record entirely (NUT-XX).
   if (output.amount === undefined) return tlvRecord(CONTAINER_MINT_QUOTE_OUTPUT, fields);
   const amount = amountRecord(output.amount);
   if (Amount.from(output.amount).isZero()) {
@@ -236,13 +236,13 @@ export function derivedQuoteId(idPreimage: Uint8Array): string {
 }
 
 /**
- * The remainder quote's id (NUT-XX): `hex(tagged_hash("Cashu_RemainderQuoteId", melt_quote_id))`.
+ * The rotation quote's id (NUT-XX): `hex(tagged_hash("Cashu_RotationQuoteId", melt_quote_id))`.
  */
-export function remainderQuoteId(meltQuoteId: string): string {
+export function rotationQuoteId(meltQuoteId: string): string {
   if (typeof meltQuoteId !== 'string' || meltQuoteId.length === 0) {
-    throw new CTSError('Remainder quote id needs the melt quote id');
+    throw new CTSError('Rotation quote id needs the melt quote id');
   }
-  return bytesToHex(taggedHash(REMAINDER_QUOTE_ID_TAG, utf8ToBytes(meltQuoteId)));
+  return bytesToHex(taggedHash(ROTATION_QUOTE_ID_TAG, utf8ToBytes(meltQuoteId)));
 }
 
 /**
@@ -261,7 +261,7 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
     throw new CTSError('Transaction requires at least one output');
   }
   if (quoteOutputs.filter((c) => c.amount === undefined).length > 1) {
-    throw new CTSError('Transaction allows at most one remainder quote');
+    throw new CTSError('Transaction allows at most one rotation quote');
   }
   // NUT-10: the same proof or quote twice would sign one input digest for two inputs.
   if (new Set(proofs.map((p) => p.Y)).size !== proofs.length) {
