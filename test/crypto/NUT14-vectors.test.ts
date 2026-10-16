@@ -53,7 +53,6 @@ describe('NUT-14 spec vectors', () => {
     expect(isHTLCSpendAuthorised(proof)).toBe(true);
   });
 
-  // From tests/11-test.md (HTLC), which holds every SIG_ALL vector.
   test('SIG_ALL swap vector: message, digest, signature and spend', () => {
     const sigAllSecret = `["HTLC",{"nonce":"e72b0dbe91e3c17f0680b0a2ecf407f5e237d00d311313b33bcd77f957087e56","data":"${HASHLOCK}","tags":[["pubkeys","${PUB}"],["sigflag","SIG_ALL"]]}]`;
     const sigAllSig =
