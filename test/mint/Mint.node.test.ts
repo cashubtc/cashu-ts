@@ -872,6 +872,28 @@ describe('Mint normalization', () => {
     );
   });
 
+  it('throws when a checked melt quote reports a different quote id', async () => {
+    const logger = createLogger();
+    const mint = new Mint(mintUrl, {
+      customRequest: makeRequest({
+        quote: 'other-quote',
+        amount: 12,
+        unit: 'sat',
+        state: MeltQuoteState.UNPAID,
+        expiry: 123,
+        request: 'lnbc1...',
+        fee_reserve: 1,
+        payment_preimage: null,
+      }),
+      logger,
+    });
+
+    await expect(mint.checkMeltQuoteBolt11('my-quote')).rejects.toThrow(/different quote/);
+    expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
+      op: 'checkMeltQuote.bolt11',
+    });
+  });
+
   it('throws on invalid swap responses', async () => {
     const logger = createLogger();
     const mint = new Mint(mintUrl, {
