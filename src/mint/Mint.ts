@@ -803,10 +803,7 @@ class Mint {
     );
     const normalized = this.normalizeMeltQuoteResponse(method, response, options?.normalize);
     if (normalized.quote !== quote) {
-      this._logger.error('Invalid response from mint...', {
-        data: normalized,
-        op: `checkMeltQuote.${method}`,
-      });
+      this._logger.error('Invalid response from mint...', { op: `checkMeltQuote.${method}` });
       throw new CTSError('Melt quote response is for a different quote');
     }
     return normalized;
