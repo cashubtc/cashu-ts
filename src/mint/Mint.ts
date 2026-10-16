@@ -6,7 +6,6 @@
  * Wallet class when you pass in the mint url.
  */
 import type { AuthProvider } from '../auth/AuthProvider';
-import { OIDCAuth, type OIDCAuthOptions } from '../auth/OIDCAuth';
 import { type Logger, NULL_LOGGER, failIf } from '../logger';
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
@@ -35,6 +34,7 @@ import {
   type MintQuoteOnchainResponse,
   type MeltQuoteOnchainRequest,
   type MeltQuoteOnchainResponse,
+  type Proof,
   type SwapRequest,
   type SerializedBlindedMessage,
   type SerializedBlindedSignature,
@@ -50,14 +50,19 @@ import request, {
   type ResponseMeta,
 } from '../transport';
 import {
+  deriveMintQuoteAccounting,
   isObj,
+  isRecord,
   joinUrls,
   JSONInt,
+  MAX_KEYSET_LIST,
+  MAX_MINT_INFO_LIST,
   normalizeMintKeys,
   normalizeMintKeyset,
   normalizeMintUrl,
   normalizeSafeIntegerMetadata,
   nullIfUndefined,
+  verifiedPreimage,
 } from '../utils';
 
 import type {
@@ -66,6 +71,20 @@ import type {
   CheckStatePayload,
   PostRestorePayload,
 } from './types';
+
+/**
+ * Names the shape of a refused response for logs, without handing the value itself to a
+ * consumer-supplied logger that would enumerate it.
+ */
+function describeShape(value: unknown): string {
+  return Array.isArray(value) ? 'array' : typeof value;
+}
+
+/**
+ * Per-call options for a mint request: a `customRequest` override, and a `signal` that aborts the
+ * request (rejects with `CallerAbortError`).
+ */
+export type MintCallOptions = { customRequest?: RequestFn; signal?: AbortSignal };
 
 /**
  * Class represents Cashu Mint API.
@@ -81,6 +100,7 @@ class Mint {
   private _mintInfo?: MintInfo;
   private _authProvider?: AuthProvider;
   private _lastResponseMetadata: ResponseMeta | undefined = undefined;
+  private readonly _wsKeepaliveMs?: number;
   private readonly _captureResponseMetadata = (meta: ResponseMeta): void => {
     this._lastResponseMetadata = meta;
   };
@@ -93,6 +113,8 @@ class Mint {
    *   Ignored when `customRequest` is supplied.
    * @param authTokenGetter Optional. Function to obtain a NUT-22 BlindedAuthToken (e.g. from a
    *   database or localstorage)
+   * @param wsKeepaliveMs Optional. Probes the NUT-17 socket at this interval and drops it as an
+   *   abnormal close when the mint stops answering, so a half-open connection fails loudly.
    */
   constructor(
     mintUrl: string,
@@ -101,9 +123,11 @@ class Mint {
       requestFetch?: RequestFetch;
       authProvider?: AuthProvider;
       logger?: Logger;
+      wsKeepaliveMs?: number;
     },
   ) {
     this._mintUrl = normalizeMintUrl(mintUrl);
+    this._wsKeepaliveMs = options?.wsKeepaliveMs;
     if (options?.customRequest) {
       this._request = options.customRequest;
     } else if (options?.requestFetch) {
@@ -137,42 +161,20 @@ class Mint {
   }
 
   /**
-   * Create an OIDC client using this mint’s NUT-21 metadata.
-   *
-   * @example
-   *
-   * ```ts
-   * const oidc = await mint.oidcAuth({ onTokens: (t) => authMgr.setCAT(t.access_token!) });
-   * const start = await oidc.deviceStart();
-   * // show start.user_code / start.verification_uri to the user
-   * const token = await oidc.devicePoll(start.device_code, start.interval ?? 5);
-   * // token.access_token is your CAT
-   * ```
-   */
-  async oidcAuth(opts?: OIDCAuthOptions): Promise<OIDCAuth> {
-    const n21 = (await this.getLazyMintInfo()).nuts['21'];
-    if (!n21?.openid_discovery) {
-      throw new CTSError('Mint: no NUT-21 openid_discovery');
-    }
-    return new OIDCAuth(n21.openid_discovery, {
-      ...opts,
-      clientId: opts?.clientId ?? n21.client_id ?? 'cashu-client',
-    });
-  }
-
-  /**
    * Fetches mint's info at the /info endpoint.
    *
-   * @param customRequest Optional override for the request function.
+   * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns The mint's information response.
    */
-  async getInfo(customRequest?: RequestFn): Promise<GetInfoResponse> {
-    const requestInstance = customRequest ?? this._request;
+  async getInfo(opts?: MintCallOptions): Promise<GetInfoResponse> {
+    const requestInstance = opts?.customRequest ?? this._request;
     const response = await requestInstance<GetInfoResponse>({
+      signal: opts?.signal,
       endpoint: joinUrls(this._mintUrl, '/v1/info'),
       onResponseMeta: this._captureResponseMetadata,
+      logger: this._logger,
     });
-    return MintInfo.normalizeInfo(response);
+    return MintInfo.normalizeInfo(response, this._logger);
   }
 
   /**
@@ -180,11 +182,11 @@ class Mint {
    *
    * @returns The parsed MintInfo object.
    */
-  async getLazyMintInfo(customRequest?: RequestFn): Promise<MintInfo> {
+  async getLazyMintInfo(opts?: MintCallOptions): Promise<MintInfo> {
     if (this._mintInfo) {
       return this._mintInfo;
     }
-    const data = await this.getInfo(customRequest);
+    const data = await this.getInfo(opts);
     this._mintInfo = new MintInfo(data, this._logger);
     return this._mintInfo;
   }
@@ -204,21 +206,28 @@ class Mint {
    * Performs a swap operation with ecash inputs and outputs.
    *
    * @param swapPayload Payload containing inputs and outputs.
-   * @param customRequest Optional override for the request function.
+   * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns Signed outputs.
    */
-  async swap(swapPayload: SwapRequest, customRequest?: RequestFn): Promise<SwapResponse> {
+  async swap(swapPayload: SwapRequest, opts?: MintCallOptions): Promise<SwapResponse> {
+    failIf(
+      !Array.isArray(swapPayload?.inputs),
+      'swap: inputs must be an array of proofs',
+      this._logger,
+    );
+    // `dleq`, `p2pk_e` and `spend_info` are wallet-side data: keep them off the wire.
     const data = await this.requestWithAuth<SwapResponse>(
       'POST',
       '/v1/swap',
-      { requestBody: swapPayload },
-      customRequest,
+      { requestBody: { ...swapPayload, inputs: this.stripWalletFields(swapPayload.inputs) } },
+      opts,
     );
 
     if (!isObj(data) || !Array.isArray(data?.signatures)) {
       this._logger.error('Invalid response from mint...', { data, op: 'swap' });
       throw new CTSError('Invalid response from mint');
     }
+    this.assertSignatureCount(data.signatures, swapPayload.outputs, 'swap');
     data.signatures = this.normalizeSignatureAmounts(data.signatures);
 
     return data;
@@ -239,20 +248,21 @@ class Mint {
    * @param method The payment method (e.g., 'bolt11', 'bolt12', or custom method name).
    * @param payload The request body to POST (method-specific fields).
    * @param options.customRequest Optional override for the request function.
+   * @param options.signal Aborts the request.
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns The mint quote response.
    */
   async createMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(
     method: string,
     payload: Record<string, unknown>,
-    options?: { customRequest?: RequestFn; normalize?: (raw: Record<string, unknown>) => TRes },
+    options?: MintCallOptions & { normalize?: (raw: Record<string, unknown>) => TRes },
   ): Promise<TRes> {
     failIf(!this.isValidMethodString(method), `Invalid mint quote method: ${method}`, this._logger);
     const response = await this.requestWithAuth<TRes>(
       'POST',
       `/v1/mint/quote/${method}`,
       { requestBody: payload },
-      options?.customRequest,
+      options,
     );
     return this.normalizeMintQuoteResponse(method, response, options?.normalize);
   }
@@ -263,12 +273,12 @@ class Mint {
    * @remarks
    * Thin wrapper around createMintQuote('bolt11', ...).
    * @param mintQuotePayload Payload for creating a new mint quote.
-   * @param customRequest Optional override for the request function.
+   * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns A new mint quote containing a payment request for the specified amount and unit.
    */
   async createMintQuoteBolt11(
     mintQuotePayload: MintQuoteBolt11Request,
-    customRequest?: RequestFn,
+    opts?: MintCallOptions,
   ): Promise<MintQuoteBolt11Response> {
     return this.createMintQuote<MintQuoteBolt11Response>(
       'bolt11',
@@ -276,7 +286,7 @@ class Mint {
         ...mintQuotePayload,
         amount: Amount.from(mintQuotePayload.amount).toBigInt(),
       },
-      { customRequest },
+      opts,
     );
   }
 
@@ -287,18 +297,18 @@ class Mint {
    * Thin wrapper around createMintQuote('bolt12', ...).
    * @param mintQuotePayload Payload containing amount, unit, optional description, and required
    *   pubkey.
-   * @param customRequest Optional override for the request function.
+   * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns A mint quote containing a BOLT12 offer.
    */
   async createMintQuoteBolt12(
     mintQuotePayload: MintQuoteBolt12Request,
-    customRequest?: RequestFn,
+    opts?: MintCallOptions,
   ): Promise<MintQuoteBolt12Response> {
     const body: Record<string, unknown> = { ...mintQuotePayload };
     if (mintQuotePayload.amount !== undefined) {
       body.amount = Amount.from(mintQuotePayload.amount).toBigInt();
     }
-    return this.createMintQuote<MintQuoteBolt12Response>('bolt12', body, { customRequest });
+    return this.createMintQuote<MintQuoteBolt12Response>('bolt12', body, opts);
   }
 
   /**
@@ -307,17 +317,15 @@ class Mint {
    * @remarks
    * Thin wrapper around createMintQuote('onchain', ...).
    * @param mintQuotePayload Payload containing unit and required pubkey.
-   * @param customRequest Optional override for the request function.
+   * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns A mint quote containing a Bitcoin address for minting tokens.
    * @experimental Onchain support follows NUT-30 semantics and may change.
    */
   async createMintQuoteOnchain(
     mintQuotePayload: MintQuoteOnchainRequest,
-    customRequest?: RequestFn,
+    opts?: MintCallOptions,
   ): Promise<MintQuoteOnchainResponse> {
-    return this.createMintQuote<MintQuoteOnchainResponse>('onchain', mintQuotePayload, {
-      customRequest,
-    });
+    return this.createMintQuote<MintQuoteOnchainResponse>('onchain', mintQuotePayload, opts);
   }
 
   // -----------------------------------------------------------------
@@ -333,22 +341,28 @@ class Mint {
    * @param method The payment method (e.g., 'bolt11', 'bolt12', or custom method name).
    * @param quote Quote ID.
    * @param options.customRequest Optional override for the request function.
+   * @param options.signal Aborts the request.
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns The mint quote response.
    */
   async checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(
     method: string,
     quote: string,
-    options?: { customRequest?: RequestFn; normalize?: (raw: Record<string, unknown>) => TRes },
+    options?: MintCallOptions & { normalize?: (raw: Record<string, unknown>) => TRes },
   ): Promise<TRes> {
     failIf(!this.isValidMethodString(method), `Invalid mint quote method: ${method}`, this._logger);
     const response = await this.requestWithAuth<TRes>(
       'GET',
       `/v1/mint/quote/${method}/${quote}`,
       {},
-      options?.customRequest,
+      options,
     );
-    return this.normalizeMintQuoteResponse(method, response, options?.normalize);
+    const normalized = this.normalizeMintQuoteResponse(method, response, options?.normalize);
+    if (normalized.quote !== quote) {
+      this._logger.error('Invalid response from mint...', { op: `checkMintQuote.${method}` });
+      throw new CTSError('Mint quote response is for a different quote');
+    }
+    return normalized;
   }
 
   /**
@@ -357,14 +371,14 @@ class Mint {
    * @remarks
    * Thin wrapper around checkMintQuote('bolt11', ...).
    * @param quote Quote ID.
-   * @param customRequest Optional override for the request function.
+   * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns The status of the mint quote, including payment details and state.
    */
   async checkMintQuoteBolt11(
     quote: string,
-    customRequest?: RequestFn,
+    opts?: MintCallOptions,
   ): Promise<MintQuoteBolt11Response> {
-    return this.checkMintQuote<MintQuoteBolt11Response>('bolt11', quote, { customRequest });
+    return this.checkMintQuote<MintQuoteBolt11Response>('bolt11', quote, opts);
   }
 
   /**
@@ -373,14 +387,14 @@ class Mint {
    * @remarks
    * Thin wrapper around checkMintQuote('bolt12', ...).
    * @param quote Quote ID to check.
-   * @param customRequest Optional override for the request function.
+   * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns Updated quote with current payment and issuance amounts.
    */
   async checkMintQuoteBolt12(
     quote: string,
-    customRequest?: RequestFn,
+    opts?: MintCallOptions,
   ): Promise<MintQuoteBolt12Response> {
-    return this.checkMintQuote<MintQuoteBolt12Response>('bolt12', quote, { customRequest });
+    return this.checkMintQuote<MintQuoteBolt12Response>('bolt12', quote, opts);
   }
 
   /**
@@ -389,15 +403,15 @@ class Mint {
    * @remarks
    * Thin wrapper around checkMintQuote('onchain', ...).
    * @param quote Quote ID.
-   * @param customRequest Optional override for the request function.
+   * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns Updated quote with current payment and issuance amounts.
    * @experimental Onchain support follows NUT-30 semantics and may change.
    */
   async checkMintQuoteOnchain(
     quote: string,
-    customRequest?: RequestFn,
+    opts?: MintCallOptions,
   ): Promise<MintQuoteOnchainResponse> {
-    return this.checkMintQuote<MintQuoteOnchainResponse>('onchain', quote, { customRequest });
+    return this.checkMintQuote<MintQuoteOnchainResponse>('onchain', quote, opts);
   }
 
   /**
@@ -410,6 +424,7 @@ class Mint {
    * @param method The payment method (e.g., 'bolt11', 'bolt12', or custom method name).
    * @param quotes Quote IDs to check.
    * @param options.customRequest Optional override for the request function.
+   * @param options.signal Aborts the request.
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns Mint quote responses in request order.
    * @experimental only supported by CDK mint >= 0.16.0
@@ -417,7 +432,7 @@ class Mint {
   async checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(
     method: string,
     quotes: string[],
-    options?: { customRequest?: RequestFn; normalize?: (raw: Record<string, unknown>) => TRes },
+    options?: MintCallOptions & { normalize?: (raw: Record<string, unknown>) => TRes },
   ): Promise<TRes[]> {
     failIf(!this.isValidMethodString(method), `Invalid mint quote method: ${method}`, this._logger);
     failIf(quotes.length === 0, 'checkMintQuoteBatch: no quote ids provided', this._logger);
@@ -431,12 +446,14 @@ class Mint {
       'POST',
       `/v1/mint/quote/${method}/check`,
       { requestBody: { quotes } },
-      options?.customRequest,
+      options,
     );
 
     if (!Array.isArray(data) || data.length !== quotes.length) {
+      // Log the counts, not the response: quote ids do not belong in a shared log sink.
       this._logger.error('Invalid response from mint...', {
-        data,
+        expectedCount: quotes.length,
+        actualCount: Array.isArray(data) ? data.length : undefined,
         op: `checkMintQuoteBatch.${method}`,
       });
       throw new CTSError('Invalid response from mint');
@@ -445,7 +462,7 @@ class Mint {
     return data.map((response, index) => {
       if (response.quote !== quotes[index]) {
         this._logger.error('Invalid response from mint...', {
-          data,
+          index,
           op: `checkMintQuoteBatch.${method}`,
         });
         throw new CTSError('Invalid response from mint');
@@ -460,17 +477,15 @@ class Mint {
    * @remarks
    * Thin wrapper around checkMintQuoteBatch('bolt11', ...).
    * @param quotes Quote IDs to check.
-   * @param customRequest Optional override for the request function.
+   * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns Updated BOLT11 mint quotes in request order.
    * @experimental only supported by CDK mint >= 0.16.0
    */
   async checkMintQuoteBatchBolt11(
     quotes: string[],
-    customRequest?: RequestFn,
+    opts?: MintCallOptions,
   ): Promise<MintQuoteBolt11Response[]> {
-    return this.checkMintQuoteBatch<MintQuoteBolt11Response>('bolt11', quotes, {
-      customRequest,
-    });
+    return this.checkMintQuoteBatch<MintQuoteBolt11Response>('bolt11', quotes, opts);
   }
 
   /**
@@ -479,17 +494,15 @@ class Mint {
    * @remarks
    * Thin wrapper around checkMintQuoteBatch('bolt12', ...).
    * @param quotes Quote IDs to check.
-   * @param customRequest Optional override for the request function.
+   * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns Updated BOLT12 mint quotes in request order.
    * @experimental only supported by CDK mint >= 0.16.0
    */
   async checkMintQuoteBatchBolt12(
     quotes: string[],
-    customRequest?: RequestFn,
+    opts?: MintCallOptions,
   ): Promise<MintQuoteBolt12Response[]> {
-    return this.checkMintQuoteBatch<MintQuoteBolt12Response>('bolt12', quotes, {
-      customRequest,
-    });
+    return this.checkMintQuoteBatch<MintQuoteBolt12Response>('bolt12', quotes, opts);
   }
 
   // -----------------------------------------------------------------
@@ -502,11 +515,11 @@ class Mint {
    * @remarks
    * Thin wrapper around mint('bolt11', ...).
    * @param mintPayload Payload containing the outputs to get blind signatures on.
-   * @param customRequest Optional override for the request function.
+   * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns Serialized blinded signatures.
    */
-  async mintBolt11(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse> {
-    return this.mint('bolt11', mintPayload, { customRequest });
+  async mintBolt11(mintPayload: MintRequest, opts?: MintCallOptions): Promise<MintResponse> {
+    return this.mint('bolt11', mintPayload, opts);
   }
 
   /**
@@ -515,11 +528,11 @@ class Mint {
    * @remarks
    * Thin wrapper around mint('bolt12', ...).
    * @param mintPayload Payload containing the quote ID and outputs to get blind signatures on.
-   * @param customRequest Optional override for the request function.
+   * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns Serialized blinded signatures for the requested outputs.
    */
-  async mintBolt12(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse> {
-    return this.mint('bolt12', mintPayload, { customRequest });
+  async mintBolt12(mintPayload: MintRequest, opts?: MintCallOptions): Promise<MintResponse> {
+    return this.mint('bolt12', mintPayload, opts);
   }
 
   /**
@@ -528,12 +541,12 @@ class Mint {
    * @remarks
    * Thin wrapper around mint('onchain', ...).
    * @param mintPayload Payload containing the quote ID and outputs.
-   * @param customRequest Optional override for the request function.
+   * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns Serialized blinded signatures.
    * @experimental Onchain support follows NUT-30 semantics and may change.
    */
-  async mintOnchain(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse> {
-    return this.mint('onchain', mintPayload, { customRequest });
+  async mintOnchain(mintPayload: MintRequest, opts?: MintCallOptions): Promise<MintResponse> {
+    return this.mint('onchain', mintPayload, opts);
   }
 
   /**
@@ -545,14 +558,14 @@ class Mint {
    * @param method The minting method (e.g., 'bolt11', 'bolt12', or custom method name).
    * @param mintPayload Payload containing the quote ID and outputs to get blind signatures on.
    * @param options.customRequest Optional override for the request function.
+   * @param options.signal Aborts the request.
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns Serialized blinded signatures for the requested outputs.
    */
   async mint<TRes extends Record<string, unknown> = Record<string, unknown>>(
     method: string,
     mintPayload: MintRequest,
-    options?: {
-      customRequest?: RequestFn;
+    options?: MintCallOptions & {
       normalize?: (raw: Record<string, unknown>) => MintResponse & TRes;
     },
   ): Promise<MintResponse & TRes> {
@@ -561,13 +574,14 @@ class Mint {
       'POST',
       `/v1/mint/${method}`,
       { requestBody: mintPayload },
-      options?.customRequest,
+      options,
     );
 
     if (!isObj(data) || !Array.isArray(data?.signatures)) {
       this._logger.error('Invalid response from mint...', { data, op: `mint.${method}` });
       throw new CTSError('Invalid response from mint');
     }
+    this.assertSignatureCount(data.signatures, mintPayload.outputs, `mint.${method}`);
     data.signatures = this.normalizeSignatureAmounts(data.signatures);
     return options?.normalize ? options.normalize(data) : data;
   }
@@ -581,14 +595,14 @@ class Mint {
    * at once.
    *
    * @param mintPayload Payload containing the outputs to get blind signatures on.
-   * @param customRequest Optional override for the request function.
+   * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns Serialized blinded signatures.
    */
   async mintBatchBolt11(
     mintPayload: BatchMintRequest,
-    customRequest?: RequestFn,
+    opts?: MintCallOptions,
   ): Promise<MintResponse> {
-    return this.mintBatch('bolt11', mintPayload, { customRequest });
+    return this.mintBatch('bolt11', mintPayload, opts);
   }
 
   /**
@@ -596,14 +610,14 @@ class Mint {
    * outputs.
    *
    * @param mintPayload Payload containing the outputs to get blind signatures on.
-   * @param customRequest Optional override for the request function.
+   * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns Serialized blinded signatures.
    */
   async mintBatchBolt12(
     mintPayload: BatchMintRequest,
-    customRequest?: RequestFn,
+    opts?: MintCallOptions,
   ): Promise<MintResponse> {
-    return this.mintBatch('bolt12', mintPayload, { customRequest });
+    return this.mintBatch('bolt12', mintPayload, opts);
   }
 
   /**
@@ -616,14 +630,14 @@ class Mint {
    * @param method The minting method (e.g., 'bolt11', 'bolt12', or custom method name).
    * @param mintPayload Payload containing the quote ID and outputs to get blind signatures on.
    * @param options.customRequest Optional override for the request function.
+   * @param options.signal Aborts the request.
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns Serialized blinded signatures for the requested outputs.
    */
   async mintBatch<TRes extends Record<string, unknown> = Record<string, unknown>>(
     method: string,
     mintPayload: BatchMintRequest,
-    options?: {
-      customRequest?: RequestFn;
+    options?: MintCallOptions & {
       normalize?: (raw: Record<string, unknown>) => MintResponse & TRes;
     },
   ): Promise<MintResponse & TRes> {
@@ -636,13 +650,14 @@ class Mint {
       'POST',
       `/v1/mint/${method}/batch`,
       { requestBody: body },
-      options?.customRequest,
+      options,
     );
 
     if (!isObj(data) || !Array.isArray(data?.signatures)) {
       this._logger.error('Invalid response from mint...', { data, op: `mintBatch.${method}` });
       throw new CTSError('Invalid response from mint');
     }
+    this.assertSignatureCount(data.signatures, mintPayload.outputs, `mintBatch.${method}`);
     data.signatures = this.normalizeSignatureAmounts(data.signatures);
     return options?.normalize ? options.normalize(data) : data;
   }
@@ -662,20 +677,21 @@ class Mint {
    * @param method The payment method (e.g., 'bolt11', 'bolt12', or custom method name).
    * @param payload The request body to POST (method-specific fields).
    * @param options.customRequest Optional override for the request function.
+   * @param options.signal Aborts the request.
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns The melt quote response.
    */
   async createMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(
     method: string,
     payload: Record<string, unknown>,
-    options?: { customRequest?: RequestFn; normalize?: (raw: Record<string, unknown>) => TRes },
+    options?: MintCallOptions & { normalize?: (raw: Record<string, unknown>) => TRes },
   ): Promise<TRes> {
     failIf(!this.isValidMethodString(method), `Invalid melt quote method: ${method}`, this._logger);
     const response = await this.requestWithAuth<TRes>(
       'POST',
       `/v1/melt/quote/${method}`,
       { requestBody: payload },
-      options?.customRequest,
+      options,
     );
     return this.normalizeMeltQuoteResponse(method, response, options?.normalize);
   }
@@ -686,18 +702,27 @@ class Mint {
    * @remarks
    * Thin wrapper around createMeltQuote('bolt11', ...).
    * @param meltQuotePayload Payload for creating a new melt quote.
-   * @param customRequest Optional override for the request function.
+   * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns The melt quote response.
    */
   async createMeltQuoteBolt11(
     meltQuotePayload: MeltQuoteBolt11Request,
-    customRequest?: RequestFn,
+    opts?: MintCallOptions,
   ): Promise<MeltQuoteBolt11Response> {
-    return this.createMeltQuote<MeltQuoteBolt11Response>(
+    const response = await this.createMeltQuote<MeltQuoteBolt11Response>(
       'bolt11',
       this.normalizeMeltQuoteRequestOptions(meltQuotePayload),
-      { customRequest },
+      opts,
     );
+    // The quote must be for the invoice that was asked for. Bech32 is case insensitive, and an
+    // empty request means the mint echoed nothing back for the caller to compare.
+    failIf(
+      response.request !== '' &&
+        response.request.toLowerCase() !== meltQuotePayload.request.toLowerCase(),
+      'Melt quote is for a different payment request',
+      this._logger,
+    );
+    return response;
   }
 
   /**
@@ -707,17 +732,17 @@ class Mint {
    * @remarks
    * Thin wrapper around createMeltQuote('bolt12', ...).
    * @param meltQuotePayload Payload containing the BOLT12 offer to pay and unit.
-   * @param customRequest Optional override for the request function.
+   * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns Melt quote with amount, fee reserve, and payment state.
    */
   async createMeltQuoteBolt12(
     meltQuotePayload: MeltQuoteBolt12Request,
-    customRequest?: RequestFn,
+    opts?: MintCallOptions,
   ): Promise<MeltQuoteBolt12Response> {
     return this.createMeltQuote<MeltQuoteBolt12Response>(
       'bolt12',
       this.normalizeMeltQuoteRequestOptions(meltQuotePayload),
-      { customRequest },
+      opts,
     );
   }
 
@@ -727,13 +752,13 @@ class Mint {
    * @remarks
    * Thin wrapper around createMeltQuote('onchain', ...).
    * @param meltQuotePayload Payload containing the Bitcoin address, amount, and unit.
-   * @param customRequest Optional override for the request function.
+   * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns Melt quote with fee options.
    * @experimental Onchain support follows NUT-30 semantics and may change.
    */
   async createMeltQuoteOnchain(
     meltQuotePayload: MeltQuoteOnchainRequest,
-    customRequest?: RequestFn,
+    opts?: MintCallOptions,
   ): Promise<MeltQuoteOnchainResponse> {
     return this.createMeltQuote<MeltQuoteOnchainResponse>(
       'onchain',
@@ -741,7 +766,7 @@ class Mint {
         ...meltQuotePayload,
         amount: Amount.from(meltQuotePayload.amount).toBigInt(),
       },
-      { customRequest },
+      opts,
     );
   }
 
@@ -758,22 +783,31 @@ class Mint {
    * @param method The payment method (e.g., 'bolt11', 'bolt12', or custom method name).
    * @param quote Quote ID.
    * @param options.customRequest Optional override for the request function.
+   * @param options.signal Aborts the request.
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns The melt quote response.
    */
   async checkMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(
     method: string,
     quote: string,
-    options?: { customRequest?: RequestFn; normalize?: (raw: Record<string, unknown>) => TRes },
+    options?: MintCallOptions & { normalize?: (raw: Record<string, unknown>) => TRes },
   ): Promise<TRes> {
     failIf(!this.isValidMethodString(method), `Invalid melt quote method: ${method}`, this._logger);
     const response = await this.requestWithAuth<TRes>(
       'GET',
       `/v1/melt/quote/${method}/${quote}`,
       {},
-      options?.customRequest,
+      options,
     );
-    return this.normalizeMeltQuoteResponse(method, response, options?.normalize);
+    const normalized = this.normalizeMeltQuoteResponse(method, response, options?.normalize);
+    if (normalized.quote !== quote) {
+      this._logger.error('Invalid response from mint...', {
+        data: normalized,
+        op: `checkMeltQuote.${method}`,
+      });
+      throw new CTSError('Melt quote response is for a different quote');
+    }
+    return normalized;
   }
 
   /**
@@ -782,14 +816,14 @@ class Mint {
    * @remarks
    * Thin wrapper around checkMeltQuote('bolt11', ...).
    * @param quote Quote ID.
-   * @param customRequest Optional override for the request function.
+   * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns The melt quote response.
    */
   async checkMeltQuoteBolt11(
     quote: string,
-    customRequest?: RequestFn,
+    opts?: MintCallOptions,
   ): Promise<MeltQuoteBolt11Response> {
-    return this.checkMeltQuote<MeltQuoteBolt11Response>('bolt11', quote, { customRequest });
+    return this.checkMeltQuote<MeltQuoteBolt11Response>('bolt11', quote, opts);
   }
 
   /**
@@ -799,14 +833,14 @@ class Mint {
    * @remarks
    * Thin wrapper around checkMeltQuote('bolt12', ...).
    * @param quote Quote ID to check.
-   * @param customRequest Optional override for the request function.
+   * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns Updated quote with current payment state and preimage if available.
    */
   async checkMeltQuoteBolt12(
     quote: string,
-    customRequest?: RequestFn,
+    opts?: MintCallOptions,
   ): Promise<MeltQuoteBolt12Response> {
-    return this.checkMeltQuote<MeltQuoteBolt12Response>('bolt12', quote, { customRequest });
+    return this.checkMeltQuote<MeltQuoteBolt12Response>('bolt12', quote, opts);
   }
 
   /**
@@ -815,15 +849,15 @@ class Mint {
    * @remarks
    * Thin wrapper around checkMeltQuote('onchain', ...).
    * @param quote Quote ID.
-   * @param customRequest Optional override for the request function.
+   * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns Updated melt quote with current state.
    * @experimental Onchain support follows NUT-30 semantics and may change.
    */
   async checkMeltQuoteOnchain(
     quote: string,
-    customRequest?: RequestFn,
+    opts?: MintCallOptions,
   ): Promise<MeltQuoteOnchainResponse> {
-    return this.checkMeltQuote<MeltQuoteOnchainResponse>('onchain', quote, { customRequest });
+    return this.checkMeltQuote<MeltQuoteOnchainResponse>('onchain', quote, opts);
   }
 
   // -----------------------------------------------------------------
@@ -838,7 +872,8 @@ class Mint {
    * constructs the endpoint as `/v1/melt/{method}` and POSTs the payload. The response must contain
    * the common fields: quote, amount, state, expiry. Method-specific fields (e.g. `fee_reserve` for
    * bolt11/bolt12) are normalized when present. Custom methods can supply an optional `normalize`
-   * callback for their own fields.
+   * callback for their own fields. The response may omit quote fields such as `request` and
+   * `fee_reserve` (NUT-05 asynchronous shape): merge it over the quote you already hold.
    * @example
    *
    * ```ts
@@ -849,25 +884,49 @@ class Mint {
    * @param method The payment method (e.g., 'bolt11', 'bolt12', or custom method name).
    * @param meltPayload The melt payload containing inputs and optional outputs.
    * @param options.customRequest Optional override for the request function.
+   * @param options.signal Aborts the request.
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns A response object with at least the required melt quote fields.
    */
   async melt<TRes extends Record<string, unknown> = Record<string, unknown>>(
     method: string,
     meltPayload: MeltRequest,
-    options?: {
-      customRequest?: RequestFn;
+    options?: MintCallOptions & {
       normalize?: (raw: Record<string, unknown>) => MeltQuoteBaseResponse & TRes;
     },
   ): Promise<MeltQuoteBaseResponse & TRes> {
     failIf(!this.isValidMethodString(method), `Invalid melt method: ${method}`, this._logger);
+    failIf(
+      !Array.isArray(meltPayload?.inputs),
+      'melt: inputs must be an array of proofs',
+      this._logger,
+    );
+    // `dleq`, `p2pk_e` and `spend_info` are wallet-side data: keep them off the wire.
     const response = await this.requestWithAuth<MeltQuoteBaseResponse & TRes>(
       'POST',
       `/v1/melt/${method}`,
-      { requestBody: meltPayload },
-      options?.customRequest,
+      { requestBody: { ...meltPayload, inputs: this.stripWalletFields(meltPayload.inputs) } },
+      options,
     );
-    return this.normalizeMeltQuoteResponse(method, response, options?.normalize);
+    // The proofs are spent by now, so the response is normalized as an execution result.
+    const execution = true;
+    const normalized = this.normalizeMeltQuoteResponse(
+      method,
+      response,
+      options?.normalize,
+      execution,
+    );
+    // The inputs are spent by now, so a mismatched id must not cost the caller the response it
+    // needs to recover its change: keep the id that was asked for and say so.
+    if (normalized.quote !== meltPayload.quote) {
+      this._logger.warn('Melt response reports a different quote id', {
+        op: `melt.${method}`,
+        expected: meltPayload.quote,
+        received: normalized.quote,
+      });
+      normalized.quote = meltPayload.quote;
+    }
+    return normalized;
   }
 
   /**
@@ -876,16 +935,16 @@ class Mint {
    * also contain blank outputs in order to receive back overpaid Lightning fees.
    *
    * @remarks
-   * Thin wrapper around melt('bolt11', ...).
+   * Thin wrapper around melt('bolt11', ...). The response may omit `request` and `fee_reserve`
+   * (NUT-05 asynchronous shape): merge it over the quote you already hold.
    * @param meltPayload The melt payload containing inputs and optional outputs.
    * @param options.customRequest Optional override for the request function.
+   * @param options.signal Aborts the request.
    * @returns The melt response.
    */
   async meltBolt11(
     meltPayload: MeltRequest,
-    options?: {
-      customRequest?: RequestFn;
-    },
+    options?: MintCallOptions,
   ): Promise<MeltQuoteBolt11Response> {
     return this.melt<MeltQuoteBolt11Response>('bolt11', meltPayload, options);
   }
@@ -899,13 +958,12 @@ class Mint {
    * Thin wrapper around melt('bolt12', ...).
    * @param meltPayload Payload containing quote ID, inputs, and optional outputs for change.
    * @param options.customRequest Optional override for the request function.
+   * @param options.signal Aborts the request.
    * @returns Payment result with state and optional change signatures.
    */
   async meltBolt12(
     meltPayload: MeltRequest,
-    options?: {
-      customRequest?: RequestFn;
-    },
+    options?: MintCallOptions,
   ): Promise<MeltQuoteBolt12Response> {
     return this.melt<MeltQuoteBolt12Response>('bolt12', meltPayload, options);
   }
@@ -918,12 +976,13 @@ class Mint {
    * NUT-08 fee change does not apply to onchain melts.
    * @param meltPayload The melt payload containing inputs (no outputs).
    * @param options.customRequest Optional override for the request function.
+   * @param options.signal Aborts the request.
    * @returns The melt response.
    * @experimental Onchain support follows NUT-30 semantics and may change.
    */
   async meltOnchain(
     meltPayload: MeltRequest,
-    options?: { customRequest?: RequestFn },
+    options?: MintCallOptions,
   ): Promise<MeltQuoteOnchainResponse> {
     return this.melt<MeltQuoteOnchainResponse>('onchain', meltPayload, options);
   }
@@ -936,24 +995,31 @@ class Mint {
    * Checks if specific proofs have already been redeemed.
    *
    * @param checkPayload The payload containing proofs to check.
-   * @param customRequest Optional override for the request function.
+   * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns Redeemed and unredeemed ordered list of booleans.
    */
   async check(
     checkPayload: CheckStatePayload,
-    customRequest?: RequestFn,
+    opts?: MintCallOptions,
   ): Promise<CheckStateResponse> {
     const data = await this.requestWithAuth<CheckStateResponse>(
       'POST',
       '/v1/checkstate',
       { requestBody: checkPayload, idempotent: true },
-      customRequest,
+      opts,
     );
 
-    if (!isObj(data) || !Array.isArray(data?.states)) {
+    // Per NUT-07 the mint returns one state per requested Y, so the request bounds the response.
+    if (
+      !isObj(data) ||
+      !Array.isArray(data?.states) ||
+      data.states.length > checkPayload.Ys.length
+    ) {
       this._logger.error('Invalid response from mint...', { data, op: 'check' });
       throw new CTSError('Invalid response from mint');
     }
+
+    this.assertRecordEntries(data.states, 'check');
 
     // Per NUT-07, ProofState.witness is `<str | null>`. Some mints may omit the
     // field instead of sending null; coerce undefined → null so consumers
@@ -971,13 +1037,13 @@ class Mint {
    * @param keysetId Optional param to get the keys for a specific keyset. If not specified, the
    *   keys from all active keysets are fetched.
    * @param mintUrl Optional alternative mint URL to use for this request.
-   * @param customRequest Optional override for the request function.
+   * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns The mint's public keys.
    */
   async getKeys(
     keysetId?: string,
     mintUrl?: string,
-    customRequest?: RequestFn,
+    opts?: MintCallOptions,
   ): Promise<GetKeysResponse> {
     const targetUrl = mintUrl || this._mintUrl;
     // backwards compatibility for base64 encoded keyset ids
@@ -985,18 +1051,21 @@ class Mint {
       // make the keysetId url safe
       keysetId = keysetId.replace(/\//g, '_').replace(/\+/g, '-');
     }
-    const requestInstance = customRequest ?? this._request;
+    const requestInstance = opts?.customRequest ?? this._request;
     const data = await requestInstance<GetKeysResponse>({
+      signal: opts?.signal,
       endpoint: keysetId
         ? joinUrls(targetUrl, '/v1/keys', keysetId)
         : joinUrls(targetUrl, '/v1/keys'),
       onResponseMeta: this._captureResponseMetadata,
+      logger: this._logger,
     });
 
     if (!isObj(data) || !Array.isArray(data.keysets)) {
       this._logger.error('Invalid response from mint...', { data, op: 'getKeys' });
       throw new CTSError('Invalid response from mint');
     }
+    this.assertKeysetList(data.keysets, 'getKeys');
 
     return {
       ...data,
@@ -1007,19 +1076,22 @@ class Mint {
   /**
    * Get the mint's keysets in no specific order.
    *
-   * @param customRequest Optional override for the request function.
+   * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns All the mint's past and current keysets.
    */
-  async getKeySets(customRequest?: RequestFn): Promise<GetKeysetsResponse> {
-    const requestInstance = customRequest ?? this._request;
+  async getKeySets(opts?: MintCallOptions): Promise<GetKeysetsResponse> {
+    const requestInstance = opts?.customRequest ?? this._request;
     const data = await requestInstance<GetKeysetsResponse>({
+      signal: opts?.signal,
       endpoint: joinUrls(this._mintUrl, '/v1/keysets'),
       onResponseMeta: this._captureResponseMetadata,
+      logger: this._logger,
     });
     if (!isObj(data) || !Array.isArray(data.keysets)) {
       this._logger.error('Invalid response from mint...', { data, op: 'getKeySets' });
       throw new CTSError('Invalid response from mint');
     }
+    this.assertKeysetList(data.keysets, 'getKeySets');
     return {
       ...data,
       keysets: data.keysets.map((keyset) => normalizeMintKeyset(keyset)),
@@ -1030,23 +1102,32 @@ class Mint {
    * Restores proofs from the provided blinded messages.
    *
    * @param restorePayload The payload containing outputs to restore.
-   * @param customRequest Optional override for the request function.
+   * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns The restore response with outputs and signatures.
    */
   async restore(
     restorePayload: PostRestorePayload,
-    customRequest?: RequestFn,
+    opts?: MintCallOptions,
   ): Promise<PostRestoreResponse> {
-    const requestInstance = customRequest ?? this._request;
+    const requestInstance = opts?.customRequest ?? this._request;
     const data = await requestInstance<PostRestoreResponse>({
+      signal: opts?.signal,
       endpoint: joinUrls(this._mintUrl, '/v1/restore'),
       method: 'POST',
       requestBody: restorePayload,
       idempotent: true,
       onResponseMeta: this._captureResponseMetadata,
+      logger: this._logger,
     });
 
-    if (!isObj(data) || !Array.isArray(data?.outputs) || !Array.isArray(data?.signatures)) {
+    // Per NUT-09 the mint returns paired outputs and signatures, one pair per requested output.
+    if (
+      !isObj(data) ||
+      !Array.isArray(data?.outputs) ||
+      !Array.isArray(data?.signatures) ||
+      data.outputs.length !== data.signatures.length ||
+      data.outputs.length > restorePayload.outputs.length
+    ) {
       this._logger.error('Invalid response from mint...', { data, op: 'restore' });
       throw new CTSError('Invalid response from mint');
     }
@@ -1075,7 +1156,7 @@ class Mint {
       const wsUrl = mintUrl.toString();
 
       if (!this.ws) {
-        this.ws = new WSConnection(wsUrl, this._logger);
+        this.ws = new WSConnection(wsUrl, this._logger, { keepaliveMs: this._wsKeepaliveMs });
       }
 
       await this.ws.ensureConnection();
@@ -1158,12 +1239,12 @@ class Mint {
       requestBody?: Record<string, unknown>;
       headers?: Record<string, string>;
     } = {},
-    customRequest?: RequestFn,
+    opts?: MintCallOptions,
   ): Promise<T> {
-    const requestInstance = customRequest ?? this._request;
+    const requestInstance = opts?.customRequest ?? this._request;
     let mintInfo = this._mintInfo;
     if (this._authProvider) {
-      mintInfo = await this.getLazyMintInfo(customRequest);
+      mintInfo = await this.getLazyMintInfo(opts);
     }
     // Serialize once and pass the string down: blind auth signs these exact bytes,
     // and the transport contract sends a string body verbatim.
@@ -1178,6 +1259,7 @@ class Mint {
     const nut19 = mintInfo?.isSupported(19);
     return requestInstance<T>({
       ...init,
+      signal: init.signal ?? opts?.signal,
       requestBody: bodyString,
       endpoint: joinUrls(this._mintUrl, path),
       method,
@@ -1187,6 +1269,7 @@ class Mint {
       ...(bat || cat || init.requestBody ? { redirect: 'error' as const } : {}),
       ...(nut19?.supported && nut19.params ? nut19.params : {}),
       onResponseMeta: this._captureResponseMetadata,
+      logger: init.logger ?? this._logger,
     });
   }
 
@@ -1233,6 +1316,7 @@ class Mint {
   private normalizeSignatureAmounts(
     signatures: SerializedBlindedSignature[],
   ): SerializedBlindedSignature[] {
+    this.assertRecordEntries(signatures, 'signatures');
     return signatures.map((signature) => ({
       ...signature,
       amount: Amount.from(signature.amount),
@@ -1242,10 +1326,65 @@ class Mint {
   private normalizeMessageAmounts(
     messages: SerializedBlindedMessage[],
   ): SerializedBlindedMessage[] {
+    this.assertRecordEntries(messages, 'outputs');
     return messages.map((message) => ({
       ...message,
       amount: Amount.from(message.amount),
     }));
+  }
+
+  /**
+   * Drops the wallet-side proof fields (`dleq`, `p2pk_e`, `spend_info`) before a request goes out.
+   */
+  private stripWalletFields(proofs: Proof[]): Array<Omit<Proof, 'dleq' | 'p2pk_e' | 'spend_info'>> {
+    return proofs.map((p) => {
+      const { dleq, p2pk_e, spend_info, ...rest } = p;
+      void dleq;
+      void p2pk_e;
+      void spend_info;
+      return rest;
+    });
+  }
+
+  /**
+   * Rejects list entries that are not records, before any spread copies them. A response element is
+   * whatever the JSON held, and spreading a string or an array expands it into indexed properties.
+   */
+  private assertRecordEntries(entries: unknown[], op: string): void {
+    if (entries.every((entry) => isRecord(entry))) return;
+    this._logger.error('Invalid response from mint...', { entries: entries.length, op });
+    throw new CTSError('Invalid response from mint');
+  }
+
+  /**
+   * Rejects a response carrying more signatures than the request had outputs. The mint signs the
+   * outputs it was sent, so the request bounds the per-entry work a response can cause.
+   */
+  private assertSignatureCount(signatures: unknown[], outputs: unknown[], op: string): void {
+    if (signatures.length <= outputs.length) return;
+    this._logger.error('Invalid response from mint...', {
+      signatures: signatures.length,
+      outputs: outputs.length,
+      op,
+    });
+    // Only used on paths where the mint has already settled, so carry the same recovery route the
+    // wallet gives for a short response.
+    throw new CTSError(
+      `Invalid response from mint: ${signatures.length} signatures, expected ${outputs.length}. ` +
+        'The operation may already have been applied; if the wallet is seeded, try restoring ' +
+        '(NUT-09) to recover.',
+    );
+  }
+
+  /**
+   * Bounds a mint-supplied keyset list before normalization copies every entry.
+   */
+  private assertKeysetList(keysets: unknown[], op: string): void {
+    if (keysets.length > MAX_KEYSET_LIST) {
+      this._logger.error('Invalid response from mint...', { keysets: keysets.length, op });
+      throw new CTSError('Invalid response from mint');
+    }
+    this.assertRecordEntries(keysets, op);
   }
 
   /**
@@ -1260,6 +1399,10 @@ class Mint {
     normalize?: (raw: Record<string, unknown>) => TRes,
   ): TRes {
     const op = `${method} mint quote`;
+    if (!isRecord(response)) {
+      this._logger.error('Invalid response from mint...', { type: describeShape(response), op });
+      throw new CTSError('Invalid response from mint');
+    }
     const data: Record<string, unknown> = { ...response };
     this.normalizeMintBaseFields(data, method, op);
     if (method === 'bolt11') {
@@ -1283,9 +1426,10 @@ class Mint {
       data.amount_paid = Amount.from(data.amount_paid as AmountLike);
       data.amount_issued = Amount.from(data.amount_issued as AmountLike);
     } else {
-      const derived = this.deriveMintQuoteAccounting(data);
+      const derived = deriveMintQuoteAccounting(data);
       if (!derived) {
-        this._logger.error('Invalid response from mint...', { data, op });
+        // Log the reason, not the response: it carries the quote id.
+        this._logger.error('Invalid response from mint...', { op });
         throw new CTSError('Invalid response from mint');
       }
       [data.amount_paid, data.amount_issued] = derived;
@@ -1299,9 +1443,10 @@ class Mint {
     if (
       typeof data.quote !== 'string' ||
       typeof data.request !== 'string' ||
-      typeof data.unit !== 'string'
+      typeof data.unit !== 'string' ||
+      data.unit === ''
     ) {
-      this._logger.error('Invalid response from mint...', { data, op });
+      this._logger.error('Invalid response from mint...', { op });
       throw new CTSError('Invalid response from mint');
     }
   }
@@ -1314,32 +1459,9 @@ class Mint {
     if (data.method === undefined) {
       data.method = method;
     } else if (data.method !== method) {
-      this._logger.error('Invalid response from mint...', { data, op });
+      this._logger.error('Invalid response from mint...', { op });
       throw new CTSError('Invalid response from mint');
     }
-  }
-
-  /**
-   * Derives `[amount_paid, amount_issued]` from the legacy single-use `state` and quote `amount`,
-   * or returns null when underivable.
-   */
-  private deriveMintQuoteAccounting(data: Record<string, unknown>): [Amount, Amount] | null {
-    if (
-      typeof data.state !== 'string' ||
-      !Object.values(MintQuoteState).includes(data.state as MintQuoteState)
-    ) {
-      return null;
-    }
-    if (data.state === MintQuoteState.UNPAID) {
-      return [Amount.from(0), Amount.from(0)];
-    }
-    let amount: Amount;
-    try {
-      amount = Amount.from(data.amount as AmountLike);
-    } catch {
-      return null;
-    }
-    return data.state === MintQuoteState.PAID ? [amount, Amount.from(0)] : [amount, amount];
   }
 
   /**
@@ -1383,19 +1505,35 @@ class Mint {
    * Stacks normalizers for melt quote responses: base normalization (amount, expiry, change) is
    * always applied, then first-class bolt normalization for known methods, then any custom
    * normalize callback.
+   *
+   * @remarks
+   * `execution` marks the response to `POST /v1/melt/{method}`, which NUT-05 lets the mint answer
+   * with the settled fields only. Absent quote fields are dropped there so the caller keeps the
+   * values it already holds; the quote endpoint stays strict.
    */
   private normalizeMeltQuoteResponse<TRes extends MeltQuoteBaseResponse>(
     method: string,
     response: TRes,
     normalize?: (raw: Record<string, unknown>) => TRes,
+    execution: boolean = false,
   ): TRes {
     const op = `${method} melt quote`;
+    if (!isRecord(response)) {
+      this._logger.error('Invalid response from mint...', { type: describeShape(response), op });
+      throw new CTSError('Invalid response from mint');
+    }
     const data: Record<string, unknown> = { ...response };
-    this.normalizeMeltBaseFields(data, method, op);
+    if (execution) {
+      // An empty request is a mint that echoed nothing back, same as an absent one. A zero
+      // fee reserve is a real value, so only a nullish one goes.
+      if (data.request == null || data.request === '') delete data.request;
+      if (data.fee_reserve == null) delete data.fee_reserve;
+    }
+    this.normalizeMeltBaseFields(data, method, op, execution);
     if (method === 'bolt11' || method === 'bolt12') {
-      this.normalizeMeltBoltFields(data, op);
+      this.normalizeMeltBoltFields(data, method, op, execution);
     } else if (method === 'onchain') {
-      this.normalizeMeltOnchainFields(data);
+      this.normalizeMeltOnchainFields(data, execution);
     }
     return normalize ? normalize(data) : (data as TRes);
   }
@@ -1403,7 +1541,12 @@ class Mint {
   /**
    * Mutates `data` in place, normalizing protocol-mandatory melt base fields.
    */
-  private normalizeMeltBaseFields(data: Record<string, unknown>, method: string, op: string): void {
+  private normalizeMeltBaseFields(
+    data: Record<string, unknown>,
+    method: string,
+    op: string,
+    execution: boolean,
+  ): void {
     this.normalizeQuoteMethod(data, method, op);
     data.amount = Amount.from(data.amount as AmountLike);
     data.expiry = normalizeSafeIntegerMetadata(
@@ -1416,19 +1559,34 @@ class Mint {
       data.fee_reserve = Amount.from(data.fee_reserve as AmountLike);
     }
     if (data.change) {
+      // Bounded before any per-entry work; the wallet still owns the blanks-vs-change comparison.
+      if (!Array.isArray(data.change) || data.change.length > MAX_MINT_INFO_LIST) {
+        this._logger.error('Invalid response from mint...', {
+          type: describeShape(data.change),
+          op,
+        });
+        throw new CTSError('Invalid response from mint');
+      }
       data.change = this.normalizeSignatureAmounts(data.change as SerializedBlindedSignature[]);
     }
+    // A quote must state its request (NUT-05); only an execution response may omit it.
+    const hasRequest =
+      (typeof data.request === 'string' && data.request !== '') ||
+      (execution && data.request === undefined);
     if (
       !isObj(data) ||
       typeof data.quote !== 'string' ||
-      typeof data.request !== 'string' ||
+      !hasRequest ||
       !(data.amount instanceof Amount) ||
       typeof data.unit !== 'string' ||
+      data.unit === '' ||
       typeof data.state !== 'string' ||
       typeof data.expiry !== 'number' ||
       !Object.values(MeltQuoteState).includes(data.state as MeltQuoteState)
     ) {
-      this._logger.error('Invalid response from mint...', { data, op });
+      // Log the reason, not the response: it carries the quote id, payment request, and any
+      // change signatures.
+      this._logger.error('Invalid response from mint...', { op });
       throw new CTSError('Invalid response from mint');
     }
   }
@@ -1436,32 +1594,60 @@ class Mint {
   /**
    * Mutates `data` in place, normalizing bolt11/bolt12-specific melt fields.
    */
-  private normalizeMeltBoltFields(data: Record<string, unknown>, op: string): void {
-    // Base normalization already coerced fee_reserve when present; bolt methods require it.
-    if (!(data.fee_reserve instanceof Amount)) {
-      this._logger.error('Invalid response from mint...', { data, op });
+  private normalizeMeltBoltFields(
+    data: Record<string, unknown>,
+    method: string,
+    op: string,
+    execution: boolean,
+  ): void {
+    // Base normalization already coerced fee_reserve when present; bolt quotes require it.
+    const hasFeeReserve =
+      data.fee_reserve instanceof Amount || (execution && data.fee_reserve === undefined);
+    if (!hasFeeReserve) {
+      this._logger.error('Invalid response from mint...', { op });
       throw new CTSError('Invalid response from mint');
     }
     // Per NUT-23, payment_preimage is `<str | null>`. Some mints may omit it
     // until the invoice is paid; coerce undefined → null so consumers can
     // rely on `payment_preimage === null` checks.
     nullIfUndefined(data, 'payment_preimage');
+    if (
+      method === 'bolt11' &&
+      typeof data.payment_preimage === 'string' &&
+      typeof data.request === 'string'
+    ) {
+      data.payment_preimage = verifiedPreimage(
+        data.request,
+        data.payment_preimage,
+        this._logger,
+        op,
+      );
+    }
   }
 
   /**
    * Mutates `data` in place, normalizing onchain-specific melt fields.
    */
-  private normalizeMeltOnchainFields(data: Record<string, unknown>): void {
-    if (!Array.isArray(data.fee_options) || data.fee_options.length === 0) {
-      this._logger.error('Invalid response from mint...', { data, op: 'onchain melt quote' });
-      throw new Error('Invalid response from mint');
+  private normalizeMeltOnchainFields(data: Record<string, unknown>, execution: boolean): void {
+    // An execution response may carry only the settled fields; the quote endpoint requires them.
+    if (execution && data.fee_options === undefined) {
+      nullIfUndefined(data, 'selected_fee_index', 'outpoint');
+      return;
+    }
+    if (
+      !Array.isArray(data.fee_options) ||
+      data.fee_options.length === 0 ||
+      data.fee_options.length > MAX_MINT_INFO_LIST
+    ) {
+      this._logger.error('Invalid response from mint...', { op: 'onchain melt quote' });
+      throw new CTSError('Invalid response from mint');
     }
     data.fee_options = data.fee_options.map((raw) => {
       const opt = raw as Record<string, unknown>;
       // fee_index is the load-bearing selector for the melt request
       if (!Number.isSafeInteger(opt.fee_index)) {
-        this._logger.error('Invalid response from mint...', { data, op: 'onchain melt quote' });
-        throw new Error('Invalid response from mint');
+        this._logger.error('Invalid response from mint...', { op: 'onchain melt quote' });
+        throw new CTSError('Invalid response from mint');
       }
       return {
         ...opt,
@@ -1475,8 +1661,8 @@ class Mint {
       (data.selected_fee_index !== null && !Number.isSafeInteger(data.selected_fee_index)) ||
       (data.outpoint !== null && typeof data.outpoint !== 'string')
     ) {
-      this._logger.error('Invalid response from mint...', { data, op: 'onchain melt quote' });
-      throw new Error('Invalid response from mint');
+      this._logger.error('Invalid response from mint...', { op: 'onchain melt quote' });
+      throw new CTSError('Invalid response from mint');
     }
   }
 }

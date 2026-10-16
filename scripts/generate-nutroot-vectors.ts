@@ -15,10 +15,17 @@ import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/
 
 import { deriveSecretAndBlindingFactor } from '../src/crypto';
 import { getPubKeyFromPrivKey } from '../src/crypto/curve_secp';
-import { deriveLeafKey, deriveNumsOffset, deriveQuoteLockKey } from '../src/crypto/NUT13';
+import {
+  deriveLeafKey,
+  deriveNumsOffset,
+  deriveQuoteIdPreimage,
+  deriveQuoteLockKey,
+} from '../src/crypto/NUT13';
 import { BLS_FR_ORDER, hashToCurveBls } from '../src/crypto/curve_bls';
+import { hashToCurveHex } from '../src/crypto/curves';
 import {
   buildTransactionTranscript,
+  derivedQuoteId,
   inputDigest,
   spendCommitment,
   transactionDigest,
@@ -30,11 +37,12 @@ import {
   buildNutrootSecret,
   parseNutrootLeafHex,
   serializeNutrootLeaf,
-  taggedHash,
   type NutrootLeaf,
   NUTROOT_NUMS_KEY,
 } from '../src/crypto/nutroot';
-import { deriveKeysetId, getEncodedToken } from '../src/utils/core';
+import { ScriptPath, type ScriptPathSigningPackage } from '../src/model/ScriptPath';
+import { deriveKeysetId, encodeSpendReceipt, getEncodedToken } from '../src/utils/core';
+import { taggedHash } from '../src/crypto/core';
 
 const PATH = 'test/vectors/nutroot-v3.json';
 const SECP256K1_N = BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141');
@@ -46,12 +54,14 @@ const VEC1_KEYS = {
   '2': bytesToHex(G2.multiply(13n).toBytes(true)),
 };
 const KEYSET_ID = deriveKeysetId(VEC1_KEYS, { versionByte: 2, unit: 'sat' });
+// NUT-06 example identity (seed: UTF-8 of 'NUT-06 example mint seed'); scopes the 0x04 quote lock keys.
+const MINT_IDENTITY = '0338596797cef0627f653cd6568387361b00314add55d9f1ea9c94f46ae421e3da';
 
 const d = JSON.parse(readFileSync(PATH, 'utf8'));
 const OLD_ID = d.nut13_v3.keyset_id;
 
 // --- nut13_v3 ---------------------------------------------------------------
-const seed = new TextEncoder().encode(d.nut13_v3.seed_utf8);
+const seed = hexToBytes(d.nut13_v3.seed_hex);
 const oldSecretIndex: Record<string, number> = {};
 d.nut13_v3.outputs.forEach((o: any, i: number) => {
   oldSecretIndex[o.secret] = i;
@@ -84,12 +94,16 @@ d.nut13_v3.leaf_keys = [0, 1, 2].map((index) => {
     pubkey: bytesToHex(getPubKeyFromPrivKey(privkey)),
   };
 });
+d.nut13_v3.mint_identity = MINT_IDENTITY;
 d.nut13_v3.quote_locks = [0, 1].map((counter) => {
-  const privkey = deriveQuoteLockKey(seed, counter);
+  const privkey = deriveQuoteLockKey(seed, MINT_IDENTITY, counter);
+  const idPreimage = deriveQuoteIdPreimage(seed, MINT_IDENTITY, counter);
   return {
     counter,
     privkey: bytesToHex(privkey),
     pubkey: bytesToHex(getPubKeyFromPrivKey(privkey)),
+    id_preimage: bytesToHex(idPreimage),
+    quote_id: derivedQuoteId(idPreimage),
   };
 });
 
@@ -132,12 +146,14 @@ function fromVectorTx(tx: any): TransactionShape {
     proofInputs: tx.proof_inputs?.map((p: any) => ({
       amount: BigInt(p.amount),
       keysetId: p.keyset_id,
-      secret: p.secret,
+      Y: hashToCurveHex(p.secret, p.keyset_id),
       C: p.C,
     })),
     mintQuoteInputs: tx.mint_quote_inputs?.map((q: any) => ({
       amount: BigInt(q.amount),
       quoteId: q.quote_id,
+      lockKey: q.lock_pubkey,
+      issued: BigInt(q.issued),
     })),
     blindedOutputs: tx.blinded_outputs?.map((o: any) => ({
       amount: BigInt(o.amount),
@@ -151,6 +167,9 @@ function fromVectorTx(tx: any): TransactionShape {
   };
 }
 
+// The mint vector's quote is locked to NUT-13 quote lock 0, like the partial mint's.
+d.transcript.mint.tx.mint_quote_inputs[0].lock_pubkey = d.nut13_v3.quote_locks[0].pubkey;
+d.transcript.mint.tx.mint_quote_inputs[0].issued = 0;
 for (const name of ['swap', 'mint', 'melt', 'melt_with_change'] as const) {
   const example = d.transcript[name];
   for (const fld of ['proof_inputs', 'blinded_outputs'] as const) {
@@ -258,7 +277,7 @@ const bigTo32 = (x: bigint) => hexToBytes(x.toString(16).padStart(64, '0'));
 for (const name of ['swap', 'mint', 'melt', 'melt_with_change'] as const) {
   const example = d.transcript[name];
   const t = hexToBytes(example.transcript);
-  const digestCheck = bytesToHex(sha256(concatBytes(utf8ToBytes('Cashu_Transaction_v1'), t)));
+  const digestCheck = bytesToHex(sha256(t));
   if (digestCheck !== example.digest) throw new Error(`${name}: transcript/digest mismatch`);
   const container = t.subarray(0, 3 + ((t[1] << 8) | t[2]));
   example.input_id = bytesToHex(sha256(container));
@@ -281,7 +300,7 @@ for (const name of ['swap', 'mint', 'melt', 'melt_with_change'] as const) {
 if (d.transcript.swap.input_id !== d.transcript.melt.input_id)
   throw new Error('swap and melt spend the same proof, so their input ids must match');
 d.transcript.comment =
-  'Transaction transcript (NUT-10). msg = domain_tag utf8 bytes || TLV stream; digest = SHA256(msg). Each input signs tagged_hash("Cashu_TransactionInput", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers: 01 proof input (fields: 01 amount, 02 keyset id, 03 secret P, 04 C), 02 mint quote input (01 amount, 02 quote id utf8), 03 blinded output (01 amount, 02 keyset id, 03 B_), 04 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.';
+  'Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash("Cashu_TransactionInput", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers (high nibble is the section, 1 inputs, 2 outputs): 11 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 12 mint quote input (01 amount issued, 02 quote id utf8, 03 lock key), 21 blinded output (01 amount, 02 keyset id, 03 SHA256(B_)), 22 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.';
 
 // Two proof inputs in one transaction pin the distinction between the shared transaction digest
 // and each input's signing digest.
@@ -308,7 +327,7 @@ d.transcript.comment =
   for (let offset = 0; offset < transcript.length;) {
     const length = (transcript[offset + 1] << 8) | transcript[offset + 2];
     const record = transcript.subarray(offset, offset + 3 + length);
-    if (record[0] === 0x01) containers.push(record);
+    if (record[0] === 0x11) containers.push(record);
     offset += record.length;
   }
   if (containers.length !== 2) throw new Error('multi_input: expected two proof containers');
@@ -334,8 +353,18 @@ d.transcript.comment =
 {
   const txVector = {
     mint_quote_inputs: [
-      { amount: 5, quote_id: 'quote-mint-0002' },
-      { amount: 3, quote_id: 'quote-mint-0003' },
+      {
+        amount: 5,
+        quote_id: 'quote-mint-0002',
+        lock_pubkey: d.nut13_v3.quote_locks[0].pubkey,
+        issued: 0,
+      },
+      {
+        amount: 3,
+        quote_id: 'quote-mint-0003',
+        lock_pubkey: d.nut13_v3.quote_locks[1].pubkey,
+        issued: 0,
+      },
     ],
     blinded_outputs: d.transcript.mint.tx.blinded_outputs,
   };
@@ -346,7 +375,7 @@ d.transcript.comment =
   for (let offset = 0; offset < transcript.length;) {
     const length = (transcript[offset + 1] << 8) | transcript[offset + 2];
     const record = transcript.subarray(offset, offset + 3 + length);
-    if (record[0] === 0x02) containers.push(record);
+    if (record[0] === 0x12) containers.push(record);
     offset += record.length;
   }
   if (containers.length !== 2) throw new Error('batch_mint: expected two quote containers');
@@ -364,6 +393,93 @@ d.transcript.comment =
         input_digest: bytesToHex(digestForInput),
         signature: bytesToHex(schnorr.sign(digestForInput, hexToBytes(lock.privkey), AUX0)),
       };
+    }),
+  };
+}
+
+// A partial mint: an 8-sat quote with 3 already issued, issuing 4. The quote input commits the 4
+// this request issues and the 3 before it, so this vector tells amount, quote amount and issued apart.
+{
+  const txVector = {
+    mint_quote_inputs: [
+      {
+        amount: 4,
+        quote_id: 'quote-mint-0004',
+        lock_pubkey: d.nut13_v3.quote_locks[0].pubkey,
+        issued: 3,
+      },
+    ],
+    blinded_outputs: [d.transcript.swap.tx.blinded_outputs[0]],
+  };
+  const tx = fromVectorTx(txVector);
+  const transcript = buildTransactionTranscript(tx);
+  const digest = transactionDigest(tx);
+  const container = transcript.subarray(0, 3 + ((transcript[1] << 8) | transcript[2]));
+  if (container[0] !== 0x12) throw new Error('partial_mint: expected the quote container first');
+  const digestForInput = inputDigest(digest, container);
+  const lock = d.nut13_v3.quote_locks[0];
+  d.transcript.partial_mint = {
+    quote_amount: 8,
+    tx: txVector,
+    transcript: bytesToHex(transcript),
+    digest: bytesToHex(digest),
+    lock_pubkey: lock.pubkey,
+    input_id: bytesToHex(sha256(container)),
+    input_digest: bytesToHex(digestForInput),
+    signature: bytesToHex(schnorr.sign(digestForInput, hexToBytes(lock.privkey), AUX0)),
+  };
+}
+
+// Mixed keysets (NUT-10): a v3 input and a pre-v3 input in one transaction, each container
+// carrying Y on its own keyset's curve. Only the v3 input signs; the pre-v3 one keeps its rules.
+{
+  const txVector = {
+    proof_inputs: [
+      { ...d.transcript.multi_input.tx.proof_inputs[0] },
+      {
+        amount: 2,
+        keyset_id: '00456a94ab4e1c46',
+        secret: 'd341ee4871f1f889041e63cf0d3823c713eea6aff01e80f1719f08f9e5be98f6',
+        C: '02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2',
+      },
+    ],
+    blinded_outputs: [
+      { ...d.transcript.swap.tx.blinded_outputs[0], amount: 8 },
+      { ...d.transcript.swap.tx.blinded_outputs[0], amount: 2 },
+    ],
+  };
+  const tx = fromVectorTx(txVector);
+  const transcript = buildTransactionTranscript(tx);
+  const digest = transactionDigest(tx);
+  const containers: Uint8Array[] = [];
+  for (let offset = 0; offset < transcript.length;) {
+    const record = transcript.subarray(
+      offset,
+      offset + 3 + ((transcript[offset + 1] << 8) | transcript[offset + 2]),
+    );
+    if (record[0] === 0x11) containers.push(record);
+    offset += record.length;
+  }
+  if (containers.length !== 2) throw new Error('mixed_keysets: expected two proof containers');
+  d.transcript.mixed_keysets = {
+    tx: txVector,
+    transcript: bytesToHex(transcript),
+    digest: bytesToHex(digest),
+    inputs: containers.map((container, index) => {
+      const p = txVector.proof_inputs[index];
+      const entry: Record<string, string> = {
+        Y: hashToCurveHex(p.secret, p.keyset_id),
+        container: bytesToHex(container),
+        input_id: bytesToHex(sha256(container)),
+      };
+      if (index === 0) {
+        const digestForInput = inputDigest(digest, container);
+        entry.input_digest = bytesToHex(digestForInput);
+        entry.signature = bytesToHex(
+          schnorr.sign(digestForInput, hexToBytes(d.nut13_v3.outputs[0].secret_key), AUX0),
+        );
+      }
+      return entry;
     }),
   };
 }
@@ -467,6 +583,55 @@ d.nut07_commitments = {
     commitment: commitment(d.auditable_lock.Y, d.auditable_lock.input_digest, audWitness),
   },
 };
+
+// NUT-10 transport strings, through the library's own encoders so the spec copies cannot drift.
+// The signed package carries the AUX0 signature: signPackage uses fresh aux randomness.
+const audPackage: ScriptPathSigningPackage = {
+  version: 'nutspA',
+  transcript: bytesToHex(audTranscript),
+  spends: [
+    {
+      input: 0,
+      secret: bytesToHex(audSecret),
+      leaf: d.leaf_forms.threshold_1of1_disclosure,
+      control: { K: bytesToHex(K_aud), path: [] },
+      signatures: [],
+    },
+  ],
+};
+const audSignedByLibrary = ScriptPath.signPackage(audPackage, bytesToHex(bigTo32(3n)));
+if (
+  !schnorr.verify(
+    hexToBytes(audSignedByLibrary.spends[0].signatures[0]),
+    audInputDigest,
+    hexToBytes(d.auditable_lock.P).subarray(1),
+  )
+) {
+  throw new Error('signPackage signature does not verify over the auditable lock input digest');
+}
+const audSigned = { ...audPackage, spends: [{ ...audPackage.spends[0], signatures: [audSig] }] };
+d.transport_strings = {
+  comment:
+    'Prefix plus base64url of the JSON. The signing package is the auditable lock spent in the pinned swap; the spend receipt is the swap bearer input.',
+  signing_package: ScriptPath.serializePackage(audPackage),
+  signing_package_signed: ScriptPath.serializePackage(audSigned),
+  spend_receipt: encodeSpendReceipt({
+    token: d.tokens_v4.shapes.bearer_k.token_cashu_ts,
+    receipts: [
+      {
+        Y: d.nut13_v3.outputs[0].Y,
+        keysetId: d.transcript.swap.tx.proof_inputs[0].keyset_id,
+        inputDigest: d.transcript.swap.input_digest,
+        witness: swapWitness,
+        commitment: d.nut07_commitments.keypath_private.commitment,
+        transcript: d.transcript.swap.transcript,
+      },
+    ],
+  }),
+};
+for (const s of [d.transport_strings.signing_package, d.transport_strings.signing_package_signed]) {
+  ScriptPath.deserializePackage(s);
+}
 
 writeFileSync(PATH, JSON.stringify(d, null, 2) + '\n');
 console.log(

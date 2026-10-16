@@ -3,28 +3,48 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { describe, test, expect } from 'vitest';
 
+import { hashToCurveHex } from '../../src/crypto/curves';
 import { recoverV3SecretKeys } from '../../src/crypto/NUT13';
 import {
   buildRequestTranscript,
   buildTransactionTranscript,
+  digestForPayload,
+  inputDigest,
   proofInputContextKey,
+  proofInputY,
+  inputsForPayload,
+  messageForPayload,
   requestDigest,
   signTransactionInput,
+  derivedQuoteId,
   spendCommitment,
   transactionDigest,
+  transcriptContainers,
   transactionInputs,
-  TRANSCRIPT_DOMAIN_TAG,
   verifyTransactionInputWitness,
   type TransactionShape,
+  meltOutputAmount,
 } from '../../src/crypto/transcript';
 import { Amount } from '../../src/model/Amount';
 import vectors from '../vectors/nutroot-v3.json';
+
+// The NUT-13 helpers take the 64-byte BIP-39 seed; pad a label out to that length.
+const seed64 = (label: string): Uint8Array => {
+  const seed = new Uint8Array(64);
+  seed.set(new TextEncoder().encode(label));
+  return seed;
+};
 
 const tv = vectors.transcript;
 
 function fromVectorTx(tx: {
   proof_inputs?: Array<{ amount: number; keyset_id: string; secret: string; C: string }>;
-  mint_quote_inputs?: Array<{ amount: number; quote_id: string }>;
+  mint_quote_inputs?: Array<{
+    amount: number;
+    quote_id: string;
+    lock_pubkey: string;
+    issued: number;
+  }>;
   blinded_outputs?: Array<{ amount: number; keyset_id: string; B_: string }>;
   melt_quote_outputs?: Array<{ amount: number; quote_id: string }>;
 }): TransactionShape {
@@ -32,12 +52,14 @@ function fromVectorTx(tx: {
     proofInputs: tx.proof_inputs?.map((p) => ({
       amount: BigInt(p.amount),
       keysetId: p.keyset_id,
-      secret: p.secret,
+      Y: hashToCurveHex(p.secret, p.keyset_id),
       C: p.C,
     })),
     mintQuoteInputs: tx.mint_quote_inputs?.map((q) => ({
       amount: BigInt(q.amount),
       quoteId: q.quote_id,
+      lockKey: q.lock_pubkey,
+      issued: BigInt(q.issued),
     })),
     blindedOutputs: tx.blinded_outputs?.map((o) => ({
       amount: BigInt(o.amount),
@@ -52,8 +74,62 @@ function fromVectorTx(tx: {
 }
 
 describe('transaction transcript (vectors)', () => {
-  test('domain tag matches the vectors', () => {
-    expect(tv.domain_tag).toBe(TRANSCRIPT_DOMAIN_TAG);
+  // NUT-10 tests, "Mixed keysets": every proof input's 03 field is Y on its keyset's curve.
+  test('a mixed-keyset transcript names every proof input by Y', () => {
+    const mixed = tv.mixed_keysets;
+    const [v3, legacy] = mixed.tx.proof_inputs.map((p) => ({
+      amount: p.amount,
+      id: p.keyset_id,
+      secret: p.secret,
+      C: p.C,
+    }));
+    const tx = fromVectorTx(mixed.tx);
+    const transcript = bytesToHex(buildTransactionTranscript(tx));
+    expect(transcript).toBe(mixed.transcript);
+    expect(bytesToHex(transactionDigest(tx))).toBe(mixed.digest);
+    const { proofs } = transactionInputs(tx);
+    mixed.inputs.forEach((input, index) => {
+      const p = mixed.tx.proof_inputs[index];
+      expect(proofInputContextKey({ keysetId: p.keyset_id, secret: p.secret })).toBe(input.Y);
+      const context = proofs.get(input.Y)!;
+      expect(bytesToHex(context.inputContainer)).toBe(input.container);
+      expect(bytesToHex(sha256(context.inputContainer))).toBe(input.input_id);
+    });
+    // Only the v3 input signs its input digest.
+    const v3Key = mixed.inputs[0].Y;
+    expect(bytesToHex(proofs.get(v3Key)!.digest)).toBe(mixed.inputs[0].input_digest);
+    expect(
+      schnorr.verify(
+        hexToBytes(mixed.inputs[0].signature!),
+        hexToBytes(mixed.inputs[0].input_digest!),
+        hexToBytes(v3.secret).subarray(1),
+      ),
+    ).toBe(true);
+    // Neither secret appears in the transcript bytes.
+    expect(transcript).not.toContain(v3.secret);
+    expect(transcript).not.toContain(bytesToHex(new TextEncoder().encode(legacy.secret)));
+    // At the payload boundary a caller names an input by secret or by the Y it already holds.
+    const outputs = tx.blindedOutputs!.map((o) => ({ amount: o.amount, id: o.keysetId, B_: o.B_ }));
+    const bySecret = messageForPayload({ inputs: [v3, legacy], outputs });
+    expect(digestForPayload({ inputs: [v3, legacy], outputs })).toEqual(sha256(bySecret));
+    const byY = messageForPayload({
+      inputs: [{ amount: v3.amount, id: v3.id, C: v3.C, Y: v3Key }, legacy],
+      outputs,
+    });
+    expect(bytesToHex(bySecret)).toBe(transcript);
+    expect(bytesToHex(byY)).toBe(transcript);
+    // A Y of the wrong curve for its keyset is refused by shape.
+    expect(() =>
+      buildTransactionTranscript({
+        ...tx,
+        proofInputs: [
+          {
+            ...tx.proofInputs![0],
+            Y: '029ef117210f475254efd911de93a9d22d471e356f5b1e3f00df8c24bbb37bd3ae',
+          },
+        ],
+      }),
+    ).toThrow(/Y/);
   });
 
   test.each(['swap', 'mint', 'melt', 'melt_with_change'] as const)(
@@ -65,6 +141,10 @@ describe('transaction transcript (vectors)', () => {
       expect(bytesToHex(transactionDigest(tx))).toBe(example.digest);
     },
   );
+
+  test('an input digest needs a 32-byte transaction digest', () => {
+    expect(() => inputDigest(new Uint8Array(31), new Uint8Array(3))).toThrow(/32 bytes/);
+  });
 
   test('the swap signature is a key-path witness over the input digest by the proof secret', () => {
     const { proofs, transactionDigest: txDigest } = transactionInputs(fromVectorTx(tv.swap.tx));
@@ -141,13 +221,34 @@ describe('transaction transcript (vectors)', () => {
     expect(vector.inputs[0].input_digest).not.toBe(vector.inputs[1].input_digest);
   });
 
+  test('the partial-mint vector commits the amount issued, not the quote amount', () => {
+    const vector = tv.partial_mint;
+    const quote = vector.tx.mint_quote_inputs[0];
+    const tx = fromVectorTx(vector.tx);
+    const contexts = transactionInputs(tx);
+    expect(bytesToHex(buildTransactionTranscript(tx))).toBe(vector.transcript);
+    expect(bytesToHex(contexts.transactionDigest)).toBe(vector.digest);
+    const context = contexts.quotes.get(quote.quote_id)!;
+    expect(bytesToHex(sha256(context.inputContainer))).toBe(vector.input_id);
+    expect(bytesToHex(context.digest)).toBe(vector.input_digest);
+    const lock = hexToBytes(vector.lock_pubkey).subarray(1);
+    const signature = hexToBytes(vector.signature);
+    expect(schnorr.verify(signature, context.digest, lock)).toBe(true);
+    const faceTx = fromVectorTx({
+      ...vector.tx,
+      mint_quote_inputs: [{ ...quote, amount: vector.quote_amount }],
+    });
+    const faceDigest = transactionInputs(faceTx).quotes.get(quote.quote_id)!.digest;
+    expect(schnorr.verify(signature, faceDigest, lock)).toBe(false);
+  });
+
   test('the disclosed script-path vector uses a complete transaction context', () => {
     const aud = vectors.auditable_lock;
     const tx = fromVectorTx(aud.tx);
     const context = transactionInputs(tx).proofs.get(
       proofInputContextKey({
         keysetId: aud.tx.proof_inputs[0].keyset_id,
-        secret: aud.tx.proof_inputs[0].secret,
+        Y: hashToCurveHex(aud.tx.proof_inputs[0].secret, aud.tx.proof_inputs[0].keyset_id),
       }),
     )!;
     expect(bytesToHex(buildTransactionTranscript(tx))).toBe(aud.transcript);
@@ -192,6 +293,8 @@ describe('transaction transcript (vectors)', () => {
     const parsed = JSON.parse(witness) as { signatures: string[] };
     expect(parsed.signatures).toHaveLength(1);
     expect(verifyTransactionInputWitness(digest, secret, witness)).toBe(true);
+    // A secret with no key bytes behind its prefix cannot verify anything.
+    expect(verifyTransactionInputWitness(digest, '02', witness)).toBe(false);
     // The pinned vector signature also verifies through the same path.
     expect(
       verifyTransactionInputWitness(
@@ -224,7 +327,7 @@ describe('transaction transcript (vectors)', () => {
   });
 
   test('recoverV3SecretKeys resolves self-owned secrets by counter scan', () => {
-    const seed = new TextEncoder().encode(vectors.nut13_v3.seed_utf8);
+    const seed = hexToBytes(vectors.nut13_v3.seed_hex);
     const keysetId = vectors.nut13_v3.keyset_id;
     const secrets = vectors.nut13_v3.outputs.map((o) => o.secret);
     const found = recoverV3SecretKeys(seed, keysetId, [...secrets, '02'.padEnd(66, 'f')], 16);
@@ -235,68 +338,84 @@ describe('transaction transcript (vectors)', () => {
     expect(found.has('02'.padEnd(66, 'f'))).toBe(false);
   });
 
-  test('rejects an empty proof secret', () => {
-    const swap = fromVectorTx(tv.swap.tx);
-    const bad = {
-      ...swap,
-      proofInputs: [{ ...swap.proofInputs![0], secret: '' }],
-    };
-    expect(() => buildTransactionTranscript(bad)).toThrow(/non-empty/);
+  test('proofInputY returns a supplied Y and derives one from the secret otherwise', () => {
+    const { keyset_id: id, secret } = tv.swap.tx.proof_inputs[0];
+    const derived = proofInputY({ id, secret });
+    expect(derived).toBe(vectors.nut13_v3.outputs[0].Y);
+    expect(proofInputY({ id, Y: 'aa'.repeat(48) })).toBe('aa'.repeat(48));
+    expect(proofInputContextKey({ keysetId: id, secret })).toBe(derived);
+    expect(() => proofInputY({ id, secret: '' })).toThrow(/secret or its Y/);
   });
 
-  test('carries a v0-v2 secret verbatim beside a v3 input (mixed transaction)', () => {
+  test('names a v0-v2 input by its secp256k1 Y beside a v3 input (mixed transaction)', () => {
     // NUT-10: rules follow the proof's keyset and verification is per input, so a legacy
-    // secret rides in the transcript as its utf8 bytes rather than being rejected.
+    // input rides in the transcript as the Y its keyset's curve gives, never as its secret.
     const swap = fromVectorTx(tv.swap.tx);
     const legacySecret = '["P2PK",{"nonce":"00","data":"02aa"}]';
-    const mixed = {
-      ...swap,
-      proofInputs: [
-        {
-          ...swap.proofInputs![0],
-          keysetId: `01${'11'.repeat(32)}`,
-          secret: legacySecret,
-        },
-      ],
+    const legacy = {
+      ...swap.proofInputs![0],
+      keysetId: `01${'11'.repeat(32)}`,
+      Y: hashToCurveHex(legacySecret, `01${'11'.repeat(32)}`),
     };
-    const bytes = buildTransactionTranscript(mixed);
-    const needle = new TextEncoder().encode(legacySecret);
-    const hay = bytesToHex(bytes);
-    expect(hay).toContain(bytesToHex(needle));
+    const hay = bytesToHex(buildTransactionTranscript({ ...swap, proofInputs: [legacy] }));
+    expect(hay).not.toContain(bytesToHex(new TextEncoder().encode(legacySecret)));
+    const Y = hashToCurveHex(legacySecret, legacy.keysetId);
+    expect(Y).toHaveLength(66);
+    expect(hay).toContain(`030021${Y}`);
   });
 
-  test('a point-shaped v0-v2 secret remains utf8', () => {
+  test('a point-shaped v0-v2 secret hashes as text on the secp256k1 curve', () => {
     const swap = fromVectorTx(tv.swap.tx);
     const legacySecret = tv.swap.tx.proof_inputs[0].secret;
-    const bytes = buildTransactionTranscript({
-      ...swap,
-      proofInputs: [
-        {
-          ...swap.proofInputs![0],
-          keysetId: `01${'11'.repeat(32)}`,
-          secret: legacySecret,
-        },
-      ],
-    });
-    expect(bytesToHex(bytes)).toContain(bytesToHex(new TextEncoder().encode(legacySecret)));
+    const legacy = {
+      ...swap.proofInputs![0],
+      keysetId: `01${'11'.repeat(32)}`,
+      Y: hashToCurveHex(legacySecret, `01${'11'.repeat(32)}`),
+    };
+    const hay = bytesToHex(buildTransactionTranscript({ ...swap, proofInputs: [legacy] }));
+    expect(hay).not.toContain(`030021${legacySecret}`);
+    expect(hay).toContain(`030021${hashToCurveHex(legacySecret, legacy.keysetId)}`);
   });
 
   test('the same secret text is distinct across legacy and v3 inputs', () => {
-    const swap = fromVectorTx(tv.swap.tx);
-    const v3 = swap.proofInputs![0];
-    const legacy = { ...v3, keysetId: `01${'11'.repeat(32)}` };
-    const { proofs } = transactionInputs({ ...swap, proofInputs: [legacy, v3] });
+    const p = tv.swap.tx.proof_inputs[0];
+    const v3 = { amount: 8, id: p.keyset_id, secret: p.secret, C: p.C };
+    const legacy = { ...v3, id: `01${'11'.repeat(32)}` };
+    const outputs = tv.swap.tx.blinded_outputs.map((o) => ({
+      amount: o.amount,
+      id: o.keyset_id,
+      B_: o.B_,
+    }));
+    const { proofs } = inputsForPayload({ inputs: [legacy, v3], outputs });
     expect(proofs.size).toBe(2);
-    expect(proofs.get(proofInputContextKey(legacy))!.digest).not.toEqual(
-      proofs.get(proofInputContextKey(v3))!.digest,
+    expect(proofs.get(proofInputY(legacy))!.digest).not.toEqual(
+      proofs.get(proofInputY(v3))!.digest,
     );
+  });
+});
+
+describe('meltOutputAmount', () => {
+  test('is the amount plus the fee reserve the request selects', () => {
+    expect(meltOutputAmount({ amount: 10, fee_reserve: 2 }).toBigInt()).toBe(12n);
+    expect(meltOutputAmount({ amount: 10 }).toBigInt()).toBe(10n);
+    const onchain = {
+      amount: 10,
+      fee_options: [
+        { fee_index: 0, fee_reserve: 2 },
+        { fee_index: 1, fee_reserve: 50 },
+      ],
+    };
+    expect(meltOutputAmount(onchain, 0).toBigInt()).toBe(12n);
+    expect(meltOutputAmount(onchain, 1).toBigInt()).toBe(60n);
+    expect(() => meltOutputAmount(onchain)).toThrow(/feeIndex/);
+    expect(() => meltOutputAmount(onchain, 2)).toThrow(/feeIndex/);
   });
 });
 
 describe('amounts are normalized at the transcript boundary', () => {
   const input = {
     keysetId: '0200',
-    secret: '02'.padEnd(66, 'a'),
+    Y: '02'.padEnd(66, 'a'),
     C: 'aa'.repeat(48),
   };
   const output = { amount: 1n, keysetId: '0200', B_: 'bb'.repeat(48) };
@@ -336,7 +455,10 @@ describe('keyset ids in the transcript', () => {
   const v3Input = {
     amount: 1n,
     keysetId: '0088553333aabbcc',
-    secret: '02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9',
+    Y: hashToCurveHex(
+      '02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9',
+      '0088553333aabbcc',
+    ),
     C: 'aa'.repeat(48),
   };
   const out = { amount: 1n, keysetId: '0088553333aabbcc', B_: 'bb'.repeat(48) };
@@ -347,7 +469,7 @@ describe('keyset ids in the transcript', () => {
     const legacy = {
       amount: 1n,
       keysetId: 'I2yN+iRYfkzT',
-      secret: 'legacy-plain-secret',
+      Y: hashToCurveHex('legacy-plain-secret', 'I2yN+iRYfkzT'),
       C: 'ab'.repeat(33),
     };
     expect(
@@ -364,22 +486,42 @@ describe('keyset ids in the transcript', () => {
   });
 });
 
+describe('transcriptContainers', () => {
+  const swap = hexToBytes(tv.swap.transcript);
+
+  test('splits a transcript into its container records byte for byte', () => {
+    const records = transcriptContainers(swap);
+    expect(records.map(bytesToHex).join('')).toBe(tv.swap.transcript);
+    expect(bytesToHex(sha256(records[0]))).toBe(tv.swap.input_id);
+  });
+
+  test.each([
+    ['empty', ''],
+    ['an opaque 32 bytes', '00'.repeat(32)],
+    ['a type above the authorized request', '06000101'],
+    ['a zero-length record', '010000'],
+    ['a truncated record', tv.swap.transcript.slice(0, -2)],
+  ])('rejects %s', (_, hex) => {
+    expect(() => transcriptContainers(hexToBytes(hex))).toThrow('Malformed');
+  });
+});
+
 describe('request transcript (NUT-22 vector)', () => {
   // nuts tests/22-tests.md: a BAT (secret key 3) authorizing POST /v1/swap.
   const METHOD = 'POST';
   const TARGET = '/v1/swap';
   const BODY = new TextEncoder().encode('illustrative request body');
   const SECRET = '02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9';
-  const DIGEST = 'ed581b087f06e474da2417eaf96d358244cb1b1b14464b2e3d8706f9a67bc10c';
+  const DIGEST = 'aaa50f1820f34bc7109b375c9a41e444ce362aabbb5aa6a18b2dbff75d03a54d';
   const WITNESS = JSON.stringify({
     signatures: [
-      '6a120a859e0cb85f9cb3d7a69c756d4f4f8ac0954785d7c9a9262ed937ddb3123d10a296a5ded693974f2b4722f89f9d00498d50f0706eb94bd967e5f3c7b85c',
+      '775fdc83744bd6f9b2b051ade53cd979f5a3552cb1f53c13be694a559ef2adc6feaf69b1901a4c0dce20fc17bdc3ae20aa077a703ab7d370f47a4c491de60260',
     ],
   });
 
   test('pins the transcript and digest byte for byte', () => {
     expect(bytesToHex(buildRequestTranscript(METHOD, TARGET, BODY))).toBe(
-      '050035010004504f53540200082f76312f73776170030020bc14236ec9e2bf6d961268b7463d7be83e01554adfd063361e9e3ae985edce19',
+      'f10035010004504f53540200082f76312f73776170030020bc14236ec9e2bf6d961268b7463d7be83e01554adfd063361e9e3ae985edce19',
     );
     expect(bytesToHex(requestDigest(METHOD, TARGET, BODY))).toBe(DIGEST);
   });
@@ -414,16 +556,16 @@ describe('request transcript with a query string (NUT-22 vector)', () => {
   const TARGET = '/v1/mint/quote/bolt11/quote123?b=2&a=1&q=a%20b';
   const BODY = new Uint8Array();
   const SECRET = '02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9';
-  const DIGEST = '6ed8e3a69429d4845ddcfa8728c7461c97b0c189592228c25266c630f62b1680';
+  const DIGEST = 'ccddd0edd33747425ab506ed56ab5c0f8e83e3fd24b67282239cec87b2e98ec2';
   const WITNESS = JSON.stringify({
     signatures: [
-      '9306bc19ad0e497185a34ec9a49de0bd8161bcdf1c58f0fd9f108a7603affb1d24b1a2fd6d513bf843ac92c29c95614beb535ace4e3a4a8677d688388209fb88',
+      '0621ea88520bbf8e0519e0bbc5653040b1a10cac36a4891ba9fe354fed2b1990b8a68d918e024083c91fe875695c965c54aac75b830e180381073f63a684d980',
     ],
   });
 
   test('pins the transcript and digest byte for byte', () => {
     expect(bytesToHex(buildRequestTranscript(METHOD, TARGET, BODY))).toBe(
-      '05005a01000347455402002e2f76312f6d696e742f71756f74652f626f6c7431312f71756f74653132333f623d3226613d3126713d6125323062030020e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+      'f1005a01000347455402002e2f76312f6d696e742f71756f74652f626f6c7431312f71756f74653132333f623d3226613d3126713d6125323062030020e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
     );
     expect(bytesToHex(requestDigest(METHOD, TARGET, BODY))).toBe(DIGEST);
   });
@@ -444,7 +586,7 @@ describe('request transcript with a query string (NUT-22 vector)', () => {
 });
 
 describe('transcript input guards', () => {
-  const input = { amount: 1n, keysetId: '0200', secret: '02'.padEnd(66, 'a'), C: 'aa'.repeat(48) };
+  const input = { amount: 1n, keysetId: '0200', Y: '02'.padEnd(66, 'a'), C: 'aa'.repeat(48) };
   const out = { amount: 1n, keysetId: '0200', B_: 'bb'.repeat(48) };
 
   test('a negative amount cannot enter the transcript', () => {
@@ -492,7 +634,7 @@ describe('transcript input guards', () => {
   });
 
   test('recoverV3SecretKeys guards its keyset and scan bound', () => {
-    const seed = new TextEncoder().encode('seed');
+    const seed = seed64('seed');
     expect(() => recoverV3SecretKeys(seed, `00${'11'.repeat(32)}`, [], 4)).toThrow(/v3 keyset/);
     const bls = vectors.nut13_v3.keyset_id;
     expect(() => recoverV3SecretKeys(seed, bls, [], -1)).toThrow(/maxCounter/);
@@ -520,6 +662,32 @@ describe('input uniqueness and spend commitments (vectors)', () => {
         mintQuoteInputs: [...mint.mintQuoteInputs!, mint.mintQuoteInputs![0]],
       }),
     ).toThrow(/repeats a mint quote/);
+  });
+
+  test('a mint quote input needs its 33-byte lock key', () => {
+    const mint = fromVectorTx(tv.mint.tx);
+    expect(() =>
+      buildTransactionTranscript({
+        ...mint,
+        mintQuoteInputs: [{ ...mint.mintQuoteInputs![0], lockKey: 'zz' }],
+      }),
+    ).toThrow(/lock key/);
+  });
+
+  test('a blinded output needs its B_ as hex', () => {
+    const swap = fromVectorTx(tv.swap.tx);
+    for (const B_ of ['', 'zz']) {
+      expect(() =>
+        buildTransactionTranscript({
+          ...swap,
+          blindedOutputs: [{ ...swap.blindedOutputs![0], B_ }],
+        }),
+      ).toThrow(/B_ must be hex/);
+    }
+  });
+
+  test('a derived quote id needs a 32-byte preimage', () => {
+    expect(() => derivedQuoteId(new Uint8Array(31))).toThrow(/32 bytes/);
   });
 
   test('the mint quote input derives its digest from its own container', () => {

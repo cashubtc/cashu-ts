@@ -9,11 +9,50 @@ import {
   type MintQuoteBolt11Response,
 } from '../../src';
 
-import { mint, useTestServer } from './_setup';
+import { mint, mintUrl, useTestServer } from './_setup';
 
 useTestServer();
 
 describe('WebSocket Updates', () => {
+  test('wsKeepaliveMs on the wallet reaches the socket', async () => {
+    const fakeUrl = 'ws://localhost:3338/v1/ws';
+    const server = new Server(fakeUrl, { mock: false });
+    const probes: string[] = [];
+    server.on('connection', (socket) => {
+      socket.on('message', (m) => {
+        const parsed = JSON.parse(m.toString());
+        if (parsed.method === 'unsubscribe') {
+          probes.push(parsed.params.subId);
+          socket.send(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              error: { code: -32602, message: 'Invalid params' },
+              id: parsed.id,
+            }),
+          );
+        }
+      });
+    });
+    const wallet = new Wallet(mintUrl, { wsKeepaliveMs: 20 });
+    try {
+      await wallet.mint.connectWebSocket();
+      const startedAt = Date.now();
+      while (probes.length === 0) {
+        if (Date.now() - startedAt > 2000) throw new Error('no keepalive probe within 2s');
+        await new Promise((res) => setTimeout(res, 5));
+      }
+      for (const subId of probes) {
+        expect(subId).toMatch(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+        );
+      }
+      expect(new Set(probes).size).toBe(probes.length);
+    } finally {
+      wallet.mint.disconnectWebSocket();
+      server.close();
+    }
+  });
+
   test('mint update', async () => {
     const fakeUrl = 'ws://localhost:3338/v1/ws';
     const server = new Server(fakeUrl, { mock: false });
@@ -26,7 +65,7 @@ describe('WebSocket Updates', () => {
             const message = `{"jsonrpc": "2.0", "result": {"status": "OK", "subId": "${parsed.params.subId}"}, "id": ${parsed.id}}`;
             socket.send(message);
             setTimeout(() => {
-              const message = `{"jsonrpc": "2.0", "method": "subscribe", "params": {"subId": "${parsed.params.subId}", "payload": {"quote": "123", "request": "456", "state": "PAID", "paid": true, "expiry": 123}}}`;
+              const message = `{"jsonrpc": "2.0", "method": "subscribe", "params": {"subId": "${parsed.params.subId}", "payload": {"quote": "123", "request": "456", "amount": 1, "state": "PAID", "paid": true, "expiry": 123}}}`;
               socket.send(message);
             }, 500);
           }

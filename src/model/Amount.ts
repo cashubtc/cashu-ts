@@ -1,14 +1,6 @@
 import { U64_MAX } from '../utils/limits';
 
-import { CTSError } from './Errors';
-
-export class AmountError extends CTSError {
-  constructor(message: string) {
-    super(message);
-    this.name = 'AmountError';
-    Object.setPrototypeOf(this, AmountError.prototype);
-  }
-}
+import { AmountError, AmountWithUnitError } from './Errors';
 
 /**
  * All types that can be converted to an {@link Amount} value object.
@@ -29,12 +21,16 @@ export type AmountLike = number | bigint | string | Amount;
  *     Amount.one();
  */
 export class Amount {
+  // Proves the constructor ran; instanceof alone does not, so from() requires it.
+  #brand = true;
   private readonly value: bigint;
 
   private constructor(value: bigint) {
-    // Single choke point for the u64 ceiling: every Amount, including arithmetic results, is
-    // <= u64 max. Muldiv helpers keep their wide intermediate in bigint and only construct the
-    // divided-down result, so a valid `a*n/d` still works while an out-of-range result throws.
+    // Single choke point for the [0, u64 max] invariant; muldiv helpers construct only their
+    // divided-down result, so a wide intermediate never hits this check.
+    if (value < 0n) {
+      throw new AmountError(`Amount must be >= 0, got ${value}`);
+    }
     if (value > U64_MAX) {
       throw new AmountError(`Amount exceeds u64 max, got ${value}`);
     }
@@ -53,7 +49,12 @@ export class Amount {
    *   is above the safe integer limit for a `number`.
    */
   static from(input: AmountLike): Amount {
-    if (input instanceof Amount) return input;
+    if (input instanceof Amount) {
+      if (!(#brand in input)) {
+        throw new AmountError('Invalid Amount instance');
+      }
+      return input;
+    }
 
     if (typeof input === 'bigint') {
       if (input < 0n) {
@@ -92,7 +93,15 @@ export class Amount {
       return new Amount(BigInt(input)); // constructor enforces the u64 ceiling
     }
 
-    // Unknown type
+    // structuredClone (IndexedDB, postMessage, KV stores) strips the prototype and leaves { value: bigint }.
+    if (
+      typeof input === 'object' &&
+      input !== null &&
+      typeof (input as { value?: unknown }).value === 'bigint'
+    ) {
+      return new Amount((input as { value: bigint }).value); // constructor enforces the u64 range
+    }
+
     throw new AmountError('Unsupported amount input type');
   }
 
@@ -148,6 +157,19 @@ export class Amount {
    */
   toJSON(): string {
     return this.toString();
+  }
+
+  /**
+   * Coercion hook: returns the decimal string for `"string"` hints (`String(x)`, template
+   * literals), throws otherwise. Without it `+` concatenates and `<` compares strings.
+   *
+   * @internal
+   */
+  [Symbol.toPrimitive](hint: 'number' | 'string' | 'default'): string {
+    if (hint === 'string') return this.toString();
+    throw new AmountError(
+      `Implicit ${hint === 'number' ? 'numeric' : 'default'} coercion of Amount is unsafe; use .add()/.subtract()/.compareTo(), .toBigInt() or .toNumber(), or .toString() for display.`,
+    );
   }
 
   // -----------------------------------------------------------------
@@ -210,12 +232,12 @@ export class Amount {
    * @throws If numerator is a negative or non-integer, or denominator is not a positive integer.
    */
   ceilPercent(numerator: number, denominator: number = 100): Amount {
-    if (!Number.isInteger(numerator) || numerator < 0) {
+    if (!Number.isSafeInteger(numerator) || numerator < 0) {
       throw new AmountError(
         `ceilPercent: numerator must be a non-negative integer, got ${numerator}`,
       );
     }
-    if (!Number.isInteger(denominator) || denominator <= 0) {
+    if (!Number.isSafeInteger(denominator) || denominator <= 0) {
       throw new AmountError(
         `ceilPercent: denominator must be a positive integer, got ${denominator}`,
       );
@@ -240,12 +262,12 @@ export class Amount {
    * @throws If numerator is a negative or non-integer, or denominator is not a positive integer.
    */
   floorPercent(numerator: number, denominator: number = 100): Amount {
-    if (!Number.isInteger(numerator) || numerator < 0) {
+    if (!Number.isSafeInteger(numerator) || numerator < 0) {
       throw new AmountError(
         `floorPercent: numerator must be a non-negative integer, got ${numerator}`,
       );
     }
-    if (!Number.isInteger(denominator) || denominator <= 0) {
+    if (!Number.isSafeInteger(denominator) || denominator <= 0) {
       throw new AmountError(
         `floorPercent: denominator must be a positive integer, got ${denominator}`,
       );
@@ -280,7 +302,7 @@ export class Amount {
    * @example
    *
    *     fee.clamp(MIN_FEE, tokenAmount);
-   *     invoiceAmount.clamp(Amount.from(minSendable), Amount.from(maxSendable));
+   *     invoiceAmount.clamp(minSendable, maxSendable);
    *
    * @throws If min > max.
    */
@@ -314,10 +336,10 @@ export class Amount {
   scaledBy(numerator: AmountLike, denominator: AmountLike): Amount {
     const n = Amount.from(numerator).value;
     const d = Amount.from(denominator).value;
-    if (n === 0n) return Amount.zero();
     if (d === 0n) {
       throw new AmountError('scaledBy: denominator must be > 0');
     }
+    if (n === 0n) return Amount.zero();
     // round(a × n / d) = floor((2 × a × n + d) / (2 × d)); the 2*a*n intermediate stays in bigint
     return new Amount((2n * this.value * n + d) / (2n * d));
   }
@@ -405,14 +427,6 @@ export class Amount {
    */
   withUnit(unit: string): AmountWithUnit {
     return new AmountWithUnit(this, unit);
-  }
-}
-
-export class AmountWithUnitError extends CTSError {
-  constructor(message: string) {
-    super(message);
-    this.name = 'AmountWithUnitError';
-    Object.setPrototypeOf(this, AmountWithUnitError.prototype);
   }
 }
 

@@ -1,17 +1,17 @@
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, bytesToNumberBE } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { concatBytes } from '@noble/hashes/utils.js';
+import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 
 import {
   assertValidTagKey,
+  blindMessage,
   createBlindSignature,
   createDLEQProof,
   getPubKeyFromPrivKey,
+  hashToCurve,
   pointFromHex,
-  P2BK_DST,
-  P2PK_KNOWN_TAG_KEYS,
 } from '../../src/crypto';
 import { verifyUnblindedSignature } from '../../src/crypto/NUT01';
 import { Amount } from '../../src/model/Amount';
@@ -139,6 +139,72 @@ describe('OutputData secp round-trip (secp256k1 + NUT-12 DLEQ)', () => {
     expect(() => out.toProof(tampered, keyset)).toThrowError(/DLEQ verification failed/);
   });
 
+  describe('constructor guards (types are erased for plain-JS callers)', () => {
+    const bm = { amount: Amount.from(1), B_: '02'.repeat(33), id: '009a1f293253e41e' };
+    const secretBytes = utf8ToBytes('s');
+
+    test.each([
+      ['undefined', undefined],
+      ['null', null],
+      ['a number', 1],
+      ['a decimal string', '123'],
+      ['zero', 0n],
+      ['negative', -1n],
+    ])('rejects a blindingFactor that is %s', (_label, bad) => {
+      expect(() => new OutputData(bm, bad as bigint, secretBytes)).toThrow(
+        'blindingFactor must be a positive bigint',
+      );
+    });
+
+    test('rejects a secret that is not a non-empty Uint8Array', () => {
+      expect(() => new OutputData(bm, 1n, 's' as unknown as Uint8Array)).toThrow(
+        'secret must be a non-empty Uint8Array',
+      );
+      expect(() => new OutputData(bm, 1n, new Uint8Array())).toThrow(
+        'secret must be a non-empty Uint8Array',
+      );
+    });
+
+    test('rejects a missing blindedMessage', () => {
+      expect(() => new OutputData(undefined as unknown as typeof bm, 1n, secretBytes)).toThrow(
+        'blindedMessage is required',
+      );
+    });
+
+    test('accepts a well-formed set', () => {
+      expect(() => new OutputData(bm, 1n, secretBytes)).not.toThrow();
+    });
+  });
+
+  test('rejects a mint response that unblinds to a non-UTF-8 secret', () => {
+    // Bypass the factories (which only ever build UTF-8 secrets) to exercise toProof's own guard.
+    const secretBytes = Uint8Array.of(0xff);
+    const { r, B_ } = blindMessage(secretBytes);
+    const out = new OutputData(
+      { amount: Amount.from(1), B_: B_.toHex(true), id: keyset.id },
+      r,
+      secretBytes,
+    );
+    const sig = signWithMint(out, privKeys, keyset.id);
+    expect(() => out.toProof(sig, keyset)).toThrow(/utf-8/i);
+  });
+
+  test('keeps a leading BOM as secret content so the proof re-encodes to the bytes that were blinded', () => {
+    // efbbbf61 is a UTF-8 BOM followed by 'a'; the mint hashes the UTF-8 bytes of the string it
+    // receives, so the BOM must survive decoding or Y would no longer match.
+    const secretBytes = Uint8Array.of(0xef, 0xbb, 0xbf, 0x61);
+    const { r, B_ } = blindMessage(secretBytes);
+    const out = new OutputData(
+      { amount: Amount.from(1), B_: B_.toHex(true), id: keyset.id },
+      r,
+      secretBytes,
+    );
+    const sig = signWithMint(out, privKeys, keyset.id);
+    const proof = out.toProof(sig, keyset);
+    expect(proof.secret).toBe('\uFEFFa');
+    expect(new TextEncoder().encode(proof.secret)).toEqual(secretBytes);
+  });
+
   test('wraps a missing secp keyset key with the underlying cause', () => {
     // Blank output (amount=0) lets the mint pick; amount 128 is not in the keyset, so `keys[128]`
     // is undefined. toProof must surface a CTSError whose cause names the offending amount.
@@ -166,7 +232,8 @@ describe('OutputData secp round-trip (secp256k1 + NUT-12 DLEQ)', () => {
 
 describe('OutputData.assertValidTagKey and reserved tags', () => {
   test('rejects every reserved P2PK tag key', () => {
-    for (const key of P2PK_KNOWN_TAG_KEYS) {
+    const reserved = ['pubkeys', 'locktime', 'refund', 'n_sigs', 'n_sigs_refund', 'sigflag'];
+    for (const key of reserved) {
       expect(() => assertValidTagKey(key)).toThrowError(/reserved key/);
     }
     // Explicit check for the last reserved entry, guarding against a dropped set member.
@@ -271,7 +338,9 @@ describe('OutputData.createSingleP2PKData tag construction', () => {
     // Independent receiver-side NUT-28 math: r1 = sha256(DST || Zx || 0x01), P' = P + r1·G
     const p = secp256k1.Point.Fn.fromBytes(lockPriv);
     const Zx = secp256k1.Point.fromHex(out.ephemeralE!).multiply(p).toBytes(true).slice(1);
-    const r1 = bytesToNumberBE(sha256(concatBytes(P2BK_DST, Zx, Uint8Array.of(1))));
+    const r1 = bytesToNumberBE(
+      sha256(concatBytes(utf8ToBytes('Cashu_P2BK_v1'), Zx, Uint8Array.of(1))),
+    );
     const expected = pointFromHex(lock1).add(secp256k1.Point.BASE.multiply(r1)).toHex(true);
     expect(blinded).toBe(expected);
   });
@@ -375,5 +444,77 @@ describe('OutputData.deserialize', () => {
     expect((caught as CTSError).message).toMatch(/Invalid SerializedOutputData/);
     // Cause must be preserved for diagnostics (kills `{ cause: e }` -> `{}`).
     expect((caught as CTSError).cause).toBeInstanceOf(Error);
+  });
+
+  test('accepts a blinded message that matches its secret and blinding factor', () => {
+    const original = OutputData.createSingleRandomData(1, '009a1f293253e41e');
+    const serialized = OutputData.serialize(original);
+    const restored = OutputData.deserialize(serialized);
+    expect(restored.blindedMessage.B_).toBe(original.blindedMessage.B_);
+  });
+
+  test('rejects a blinded message that does not match its secret and blinding factor', () => {
+    const original = OutputData.createSingleRandomData(1, '009a1f293253e41e');
+    const replacement = OutputData.createSingleRandomData(1, '009a1f293253e41e');
+    const serialized = OutputData.serialize(original);
+
+    expect(() =>
+      OutputData.deserialize({
+        ...serialized,
+        blindedMessage: { ...serialized.blindedMessage, B_: replacement.blindedMessage.B_ },
+      }),
+    ).toThrow(/does not match/i);
+  });
+
+  test('rejects a zero blinding factor', () => {
+    const secret = new TextEncoder().encode('output-secret');
+    const Y = hashToCurve(secret);
+
+    expect(() =>
+      OutputData.deserialize({
+        blindedMessage: { amount: '1', B_: Y.toHex(true), id: '009a1f293253e41e' },
+        blindingFactor: '0',
+        secret: bytesToHex(secret),
+      }),
+    ).toThrow(/blinding factor/i);
+  });
+
+  test('rejects a malformed persisted P2BK ephemeral public key', () => {
+    const output = OutputData.createSingleP2PKData(
+      { kind: 'P2PK', data: bytesToHex(getPubKeyFromPrivKey(secpPriv(0))), blindKeys: true },
+      1,
+      '009a1f293253e41e',
+    );
+    const serialized = OutputData.serialize(output);
+    expect(() => OutputData.deserialize({ ...serialized, ephemeralE: 'not-hex' })).toThrow(
+      /invalid/i,
+    );
+  });
+
+  test('rejects secret bytes that cannot round-trip through a UTF-8 proof string', () => {
+    const secret = Uint8Array.of(0xff);
+    const { B_, r } = blindMessage(secret, 1n);
+
+    expect(() =>
+      OutputData.deserialize({
+        blindedMessage: { amount: '1', B_: B_.toHex(true), id: '009a1f293253e41e' },
+        blindingFactor: r.toString(),
+        secret: 'ff',
+      }),
+    ).toThrow(/utf-8/i);
+  });
+
+  test('accepts a secret with a leading BOM and preserves its bytes', () => {
+    // efbbbf61 is a UTF-8 BOM followed by 'a'; the BOM is content, not framing, so the stored
+    // bytes round-trip unchanged and still match B_.
+    const secret = Uint8Array.of(0xef, 0xbb, 0xbf, 0x61);
+    const { B_, r } = blindMessage(secret, 1n);
+
+    const restored = OutputData.deserialize({
+      blindedMessage: { amount: '1', B_: B_.toHex(true), id: '009a1f293253e41e' },
+      blindingFactor: r.toString(),
+      secret: 'efbbbf61',
+    });
+    expect(restored.secret).toEqual(secret);
   });
 });

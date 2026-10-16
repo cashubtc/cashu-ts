@@ -206,6 +206,24 @@ describe('wallet.spendOptions: the script path', () => {
     expect(script[0].keys[0].pubkey).not.toBe(pub(ALICE));
   });
 
+  test('a commit leaf is reported as commit, satisfiable by no one', async () => {
+    const commit: NutrootLeaf = { type: 'commit', hash: 'cc'.repeat(32) };
+    const proof = locked([threshold([pub(ALICE)]), commit]);
+    const alice = wallet().spendOptions(proof, { privkeys: priv(ALICE) });
+    expect(alice.spendable).toBe(true);
+    expect(alice.script[1]).toEqual({
+      leafIndex: 1,
+      leaf: commit,
+      keys: [],
+      satisfiable: false,
+      blockedBy: 'commit',
+    });
+    expect(wallet().spendOptions(proof, { privkeys: priv(STRANGER) })).toMatchObject({
+      spendable: false,
+      blockedBy: 'not-keyed-to-you',
+    });
+  });
+
   test('an unparseable leaf throws rather than being reported as spendable', async () => {
     // Leaf type 0x7f is not in the registry: the receive cascade fails closed on it, so this must
     // not quietly report a tree it cannot reason about.
@@ -330,13 +348,18 @@ describe('wallet.spendOptions: legacy and bearer proofs', () => {
       ['refund', pub(BOB)],
     ]);
     const proof = legacy(secret);
-    const bob = wallet().spendOptions(proof, { privkeys: priv(BOB), now: unlockAt - 1 });
+    // NUT-11 expires after the locktime, so the refund leaf opens one second past it.
+    const bob = wallet().spendOptions(proof, { privkeys: priv(BOB), now: unlockAt });
     expect(bob.script.map((o) => o.leaf)).toEqual([
       { type: 'threshold', n: 1, keys: [pub(ALICE)] },
-      { type: 'after', n: 1, keys: [pub(BOB)], time: unlockAt },
+      { type: 'after', n: 1, keys: [pub(BOB)], time: unlockAt + 1 },
     ]);
-    expect(bob).toMatchObject({ spendable: false, blockedBy: 'locktime', availableAt: unlockAt });
-    expect(wallet().spendOptions(proof, { privkeys: priv(BOB), now: unlockAt }).spendable).toBe(
+    expect(bob).toMatchObject({
+      spendable: false,
+      blockedBy: 'locktime',
+      availableAt: unlockAt + 1,
+    });
+    expect(wallet().spendOptions(proof, { privkeys: priv(BOB), now: unlockAt + 1 }).spendable).toBe(
       true,
     );
     // Alice's main path is live on both sides of the locktime.
@@ -347,17 +370,14 @@ describe('wallet.spendOptions: legacy and bearer proofs', () => {
 
   test('a locktime with no refund keys unlocks for anyone', async () => {
     const proof = legacy(createP2PKsecret(pub(ALICE), [['locktime', String(unlockAt)]]));
-    const before = wallet().spendOptions(proof, {
-      privkeys: priv(STRANGER),
-      now: unlockAt - 1,
-    });
+    const before = wallet().spendOptions(proof, { privkeys: priv(STRANGER), now: unlockAt });
     expect(before).toMatchObject({
       spendable: false,
       blockedBy: 'locktime',
-      availableAt: unlockAt,
+      availableAt: unlockAt + 1,
     });
-    expect(before.script[1].leaf).toEqual({ type: 'after', n: 0, keys: [], time: unlockAt });
-    const after = wallet().spendOptions(proof, { now: unlockAt });
+    expect(before.script[1].leaf).toEqual({ type: 'after', n: 0, keys: [], time: unlockAt + 1 });
+    const after = wallet().spendOptions(proof, { now: unlockAt + 1 });
     expect(after).toMatchObject({ spendable: true });
     expect(after.script[1].satisfiable).toBe(true);
   });

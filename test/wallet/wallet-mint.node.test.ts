@@ -142,13 +142,53 @@ describe('requestTokens', () => {
     const preview = await wallet.prepareMint('bolt11', 1, mintQuote);
     expect(mintCalls).toBe(0);
     expect(preview.method).toBe('bolt11');
-    expect(preview.payload.quote).toBe('deferred-quote-id');
+    expect(preview.quote.quote).toBe('deferred-quote-id');
     expect(preview.outputData).toHaveLength(1);
 
     const proofs = await wallet.completeMint(preview);
 
     expect(mintCalls).toBe(1);
     expect(proofs).toHaveLength(1);
+    expect(proofs[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
+  });
+
+  test('mints the blinded messages in outputData; the preview carries no wire copy', async () => {
+    let sent: Array<{ B_: string; id: string }> = [];
+    server.use(
+      http.post(mintUrl + '/v1/mint/bolt11', async ({ request }) => {
+        sent = ((await request.json()) as { outputs: Array<{ B_: string; id: string }> }).outputs;
+        return HttpResponse.json({
+          signatures: [
+            {
+              id: '00bd033559de27d0',
+              amount: 1,
+              C_: '0361a2725cfd88f60ded718378e8049a4a6cee32e214a9870b44c3ffea2dc9e625',
+            },
+          ],
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const preview = await wallet.prepareMint('bolt11', 1, {
+      quote: 'restored-quote-id',
+      request: 'lnbc...',
+      amount: Amount.from(1),
+      unit: 'sat',
+      method: 'bolt11',
+      state: MintQuoteState.PAID,
+      amount_paid: Amount.from(1),
+      amount_issued: Amount.from(0),
+      updated_at: null,
+      expiry: null,
+    });
+    const prepared = preview.outputData[0].blindedMessage.B_;
+    expect(preview).not.toHaveProperty('payload');
+
+    const proofs = await wallet.completeMint(preview);
+
+    expect(sent[0].B_).toBe(prepared);
     expect(proofs[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
   });
 
@@ -173,6 +213,8 @@ describe('requestTokens', () => {
 
     const quote = {
       quote: 'no-expiry-quote',
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
       request: 'lnbc...',
       amount: Amount.from(1),
       unit: 'sat',
@@ -205,6 +247,8 @@ describe('requestTokens', () => {
 
     const preview = await wallet.prepareMint('bolt11', 1, {
       quote: 'quote-dleq-required',
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
       request: 'lnbc...',
       amount: Amount.from(1),
       unit: 'sat',
@@ -215,6 +259,46 @@ describe('requestTokens', () => {
     await expect(wallet.completeMint(preview)).rejects.toThrow(
       'Mint supports NUT-12, but returned a signature without DLEQ proof',
     );
+  });
+
+  test('batch-mints the blinded messages in outputData; the preview carries no wire copy', async () => {
+    let sent: Array<{ B_: string }> = [];
+    server.use(
+      http.post(mintUrl + '/v1/mint/bolt11/batch', async ({ request }) => {
+        const body = (await request.json()) as { outputs: Array<{ B_: string; amount: unknown }> };
+        sent = body.outputs;
+        return HttpResponse.json({
+          signatures: body.outputs.map((o) => ({
+            id: '00bd033559de27d0',
+            amount: o.amount,
+            C_: '0361a2725cfd88f60ded718378e8049a4a6cee32e214a9870b44c3ffea2dc9e625',
+          })),
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const quote: MintQuoteBolt11Response = {
+      quote: 'restored-batch-quote',
+      request: 'lnbc...',
+      amount: Amount.from(1),
+      unit: 'sat',
+      method: 'bolt11',
+      state: MintQuoteState.PAID,
+      amount_paid: Amount.from(1),
+      amount_issued: Amount.from(0),
+      updated_at: null,
+      expiry: null,
+    };
+    const preview = await wallet.prepareBatchMint('bolt11', [{ amount: 1, quote }]);
+    const prepared = preview.outputData[0].blindedMessage.B_;
+    expect(preview).not.toHaveProperty('payload');
+
+    const proofs = await wallet.completeBatchMint(preview);
+
+    expect(sent[0].B_).toBe(prepared);
+    expect(proofs[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
   });
 
   test('prepareBatchMint consolidates outputs and completeBatchMint sends batch request', async () => {
@@ -362,7 +446,7 @@ describe('requestTokens', () => {
     );
 
     // Both quotes are locked, so both should have signatures
-    const sentSigs = batchPreview.payload.signatures;
+    const sentSigs = batchPreview.signatures;
     expect(sentSigs).toBeDefined();
     expect(sentSigs).toHaveLength(2);
     expect(typeof sentSigs![0]).toBe('string');
@@ -398,6 +482,8 @@ describe('requestTokens', () => {
         amount: 1,
         quote: {
           quote: 'quote-a',
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
           request: 'lnbc...',
           amount: Amount.from(1),
           unit: 'sat',
@@ -461,7 +547,7 @@ describe('requestTokens', () => {
     ]);
 
     // No signatures field when all quotes are unlocked
-    expect(batchPreview.payload.signatures).toBeUndefined();
+    expect(batchPreview.signatures).toBeUndefined();
 
     const proofs = await wallet.completeBatchMint(batchPreview);
     expect(sumProofs(proofs).equals(5)).toBe(true);
@@ -486,8 +572,18 @@ describe('requestTokens', () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
 
-    const quoteA = { quote: 'stored-a' };
-    const quoteB = { quote: 'stored-b' };
+    const quoteA = {
+      quote: 'stored-a',
+      unit,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+    };
+    const quoteB = {
+      quote: 'stored-b',
+      unit,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+    };
 
     const privkey = '0000000000000000000000000000000000000000000000000000000000000001';
     const batchPreview = await wallet.prepareBatchMint(
@@ -499,7 +595,7 @@ describe('requestTokens', () => {
       { privkey },
     );
 
-    expect(batchPreview.payload.signatures).toBeUndefined();
+    expect(batchPreview.signatures).toBeUndefined();
 
     const proofs = await wallet.completeBatchMint(batchPreview);
     expect(sumProofs(proofs).equals(5)).toBe(true);
@@ -563,8 +659,8 @@ describe('requestTokens', () => {
     const preview = await wallet.prepareMint('bolt11', 1, quote, { privkey });
 
     // Should still produce a signature using the provided privkey
-    expect(preview.payload.signature).toBeDefined();
-    expect(typeof preview.payload.signature).toBe('string');
+    expect(preview.signature).toBeDefined();
+    expect(typeof preview.signature).toBe('string');
   });
 
   describe('prepareMint signs a locked quote through a sign callback', () => {
@@ -595,15 +691,15 @@ describe('requestTokens', () => {
       const preview = await wallet.prepareMint('bolt11', 1, lockedQuote(), { sign });
       expect(seen).toHaveLength(1);
       expect(seen[0].quoteId).toBe('callback-quote');
-      expect(seen[0].outputs).toEqual(preview.payload.outputs);
+      expect(seen[0].outputs).toEqual(preview.outputData.map((d) => d.blindedMessage));
       // A pre-v3 quote has no transaction transcript to hand a signer.
       expect(seen[0].transactionMessage).toBeUndefined();
       expect(
         verifyMintQuoteSignature(
           pubkey,
           'callback-quote',
-          preview.payload.outputs,
-          preview.payload.signature!,
+          preview.outputData.map((d) => d.blindedMessage),
+          preview.signature!,
         ),
       ).toBe(true);
       expect(preview.legacySignature).toBeUndefined();
@@ -657,8 +753,8 @@ describe('requestTokens', () => {
       // The digest is the quote's input digest under the transaction transcript (NUT-10), so the
       // signer can recompute it from transaction message and input container alone.
       const tx = inputsForPayload({
-        mintQuotes: [{ quoteId: 'callback-quote', amount: 1 }],
-        outputs: preview.payload.outputs,
+        mintQuotes: [{ quoteId: 'callback-quote', amount: 1, lockKey: pubkey, issued: 0 }],
+        outputs: preview.outputData.map((d) => d.blindedMessage),
       });
       expect(bytesToHex(seen!.digest)).toBe(bytesToHex(tx.quotes.get('callback-quote')!.digest));
       expect(bytesToHex(seen!.transactionMessage!)).toBe(bytesToHex(tx.transactionMessage));
@@ -703,7 +799,7 @@ describe('requestTokens', () => {
         await expect(
           wallet.mintProofsBolt11(1, quote.quote, { privkey }, { type: 'custom', data }),
         ).resolves.toEqual([]);
-        expect(fetchQuote).toHaveBeenCalledExactlyOnceWith(quote.quote);
+        expect(fetchQuote).toHaveBeenCalledExactlyOnceWith(quote.quote, { signal: undefined });
       },
     );
 
@@ -720,15 +816,11 @@ describe('requestTokens', () => {
         { type: 'custom', data },
       );
       const tx = inputsForPayload({
-        mintQuotes: [{ quoteId: 'callback-quote', amount: 1 }],
-        outputs: preview.payload.outputs,
+        mintQuotes: [{ quoteId: 'callback-quote', amount: 1, lockKey: pubkey, issued: 0 }],
+        outputs: preview.outputData.map((d) => d.blindedMessage),
       });
       expect(
-        schnorrVerifyDigest(
-          preview.payload.signature!,
-          tx.quotes.get('callback-quote')!.digest,
-          pubkey,
-        ),
+        schnorrVerifyDigest(preview.signature!, tx.quotes.get('callback-quote')!.digest, pubkey),
       ).toBe(true);
       expect(preview.legacySignature).toBeUndefined();
     });
@@ -760,19 +852,50 @@ describe('requestTokens', () => {
         { type: 'custom', data },
       );
       const tx = inputsForPayload({
-        mintQuotes: quotes.map((q) => ({ quoteId: q.quote, amount: 1 })),
-        outputs: preview.payload.outputs,
+        mintQuotes: quotes.map((q) => ({
+          quoteId: q.quote,
+          amount: 1,
+          lockKey: pubkey,
+          issued: 0,
+        })),
+        outputs: preview.outputData.map((d) => d.blindedMessage),
       });
       quotes.forEach((q, i) => {
         expect(
-          schnorrVerifyDigest(
-            preview.payload.signatures![i]!,
-            tx.quotes.get(q.quote)!.digest,
-            pubkey,
-          ),
+          schnorrVerifyDigest(preview.signatures![i]!, tx.quotes.get(q.quote)!.digest, pubkey),
         ).toBe(true);
       });
       expect(preview.legacySignatures).toEqual([null, null]);
+    });
+
+    test('a partial draw commits the amount issued, not the quote amount', async () => {
+      serveBothKeysets();
+      const wallet = new Wallet(mintUrl, { unit });
+      await wallet.loadMint();
+      const quote = { ...lockedQuote(), amount: Amount.from(2), amount_paid: Amount.from(2) };
+      const data = [OutputData.createSingleRandomData(1, NUT02_V3_VECTOR1_KEYSET.id)];
+      const single = await wallet.prepareMint(
+        'bolt11',
+        1,
+        quote,
+        { privkey },
+        { type: 'custom', data },
+      );
+      const batch = await wallet.prepareBatchMint(
+        'bolt11',
+        [{ amount: 1, quote }],
+        { privkey },
+        { type: 'custom', data },
+      );
+      const digestFor = (amount: number) =>
+        inputsForPayload({
+          mintQuotes: [{ quoteId: quote.quote, amount, lockKey: pubkey, issued: 0 }],
+          outputs: data.map((d) => d.blindedMessage),
+        }).quotes.get(quote.quote)!.digest;
+      for (const signature of [single.signature!, batch.signatures![0]!]) {
+        expect(schnorrVerifyDigest(signature, digestFor(1), pubkey)).toBe(true);
+        expect(schnorrVerifyDigest(signature, digestFor(2), pubkey)).toBe(false);
+      }
     });
   });
 
@@ -941,7 +1064,8 @@ describe('mint quote signature legacy fallback', () => {
     test('prepareMint', async () => {
       const wallet = await makeWallet();
       const preview = await wallet.prepareMint('bolt11', 3, makeLockedQuote(), { privkey });
-      const { outputs, signature } = preview.payload;
+      const outputs = preview.outputData.map((d) => d.blindedMessage);
+      const { signature } = preview;
       const legacy = preview.legacySignature!;
 
       // Wire signature is the amended message; the fallback is the legacy message. Each verifies
@@ -961,7 +1085,8 @@ describe('mint quote signature legacy fallback', () => {
         [{ amount: 3, quote: makeLockedQuote() }],
         { privkey },
       );
-      const { outputs, signatures } = preview.payload;
+      const outputs = preview.outputData.map((d) => d.blindedMessage);
+      const { signatures } = preview;
       const legacy = preview.legacySignatures![0]!;
 
       expect(verifyMintQuoteSignature(pubkey, 'locked-quote', outputs, signatures![0]!)).toBe(true);
@@ -970,8 +1095,13 @@ describe('mint quote signature legacy fallback', () => {
 
     test('omits the legacy fallback for an unsigned (unlocked) quote', async () => {
       const wallet = await makeWallet();
-      const preview = await wallet.prepareMint('bolt11', 3, { quote: 'unlocked' });
-      expect(preview.payload.signature).toBeUndefined();
+      const preview = await wallet.prepareMint('bolt11', 3, {
+        quote: 'unlocked',
+        unit: 'sat',
+        amount_paid: Amount.from(0),
+        amount_issued: Amount.from(0),
+      });
+      expect(preview.signature).toBeUndefined();
       expect(preview.legacySignature).toBeUndefined();
     });
   });
@@ -1184,10 +1314,17 @@ describe('NUT-29 max_batch_size enforcement', () => {
     );
   }
 
-  function makeQuotes(n: number): Array<{ amount: number; quote: { quote: string } }> {
+  function makeQuotes(
+    n: number,
+  ): Array<{ amount: number; quote: { quote: string; unit: string } }> {
     return Array.from({ length: n }, (_, i) => ({
       amount: 1,
-      quote: { quote: `quote-${i}` },
+      quote: {
+        quote: `quote-${i}`,
+        unit,
+        amount_paid: Amount.from(0),
+        amount_issued: Amount.from(0),
+      },
     }));
   }
 
@@ -1208,7 +1345,7 @@ describe('NUT-29 max_batch_size enforcement', () => {
     await wallet.loadMint();
 
     const preview = await wallet.prepareBatchMint('bolt11', makeQuotes(3));
-    expect(preview.payload.quotes).toHaveLength(3);
+    expect(preview.quotes).toHaveLength(3);
   });
 
   test('does not throw when entries.length is below max_batch_size', async () => {
@@ -1218,7 +1355,7 @@ describe('NUT-29 max_batch_size enforcement', () => {
     await wallet.loadMint();
 
     const preview = await wallet.prepareBatchMint('bolt11', makeQuotes(2));
-    expect(preview.payload.quotes).toHaveLength(2);
+    expect(preview.quotes).toHaveLength(2);
   });
 
   test('does not throw when mint does not advertise NUT-29 info', async () => {
@@ -1228,7 +1365,7 @@ describe('NUT-29 max_batch_size enforcement', () => {
     await wallet.loadMint();
 
     const preview = await wallet.prepareBatchMint('bolt11', makeQuotes(10));
-    expect(preview.payload.quotes).toHaveLength(10);
+    expect(preview.quotes).toHaveLength(10);
   });
 
   function mockLogger() {
@@ -1242,14 +1379,14 @@ describe('NUT-29 max_batch_size enforcement', () => {
     };
   }
 
-  test('logs a warning when method is not in advertised NUT-29 methods', async () => {
+  test('refuses a method that is not in the advertised NUT-29 methods', async () => {
     overrideMintInfo({ methods: ['bolt12'] });
-    const spyLogger = mockLogger();
-    const wallet = new Wallet(mintUrl, { unit, logger: spyLogger });
+    const wallet = new Wallet(mintUrl, { unit });
     await wallet.loadMint();
 
-    await wallet.prepareBatchMint('bolt11', makeQuotes(1));
-    expect(spyLogger.warn).toHaveBeenCalledWith(expect.stringContaining("method 'bolt11'"));
+    await expect(wallet.prepareBatchMint('bolt11', makeQuotes(1))).rejects.toThrow(
+      'prepareBatchMint: mint does not advertise NUT-29 for bolt11; use prepareMint per quote',
+    );
   });
 
   test('does not warn when method IS in advertised NUT-29 methods', async () => {
@@ -1272,13 +1409,13 @@ describe('NUT-29 max_batch_size enforcement', () => {
     expect(spyLogger.warn).not.toHaveBeenCalled();
   });
 
-  test('throws when entries exceed ABSOLUTE_MAX_BATCH_SIZE even without NUT-29 info', async () => {
-    // Default mint info has no nuts['29'] key — absolute cap still applies
+  test('throws when entries exceed ABSOLUTE_MAX_BATCH_SIZE and the mint advertises no limit', async () => {
+    overrideMintInfo({ methods: ['bolt11'] });
     const wallet = new Wallet(mintUrl, { unit });
     await wallet.loadMint();
 
     await expect(wallet.prepareBatchMint('bolt11', makeQuotes(101))).rejects.toThrow(
-      /batch size 101.*internal cap.*100/,
+      /batch size 101.*100/,
     );
   });
 
@@ -1295,6 +1432,12 @@ describe('NUT-29 max_batch_size enforcement', () => {
   });
 });
 
+// The shared fixture advertises NUT-29 for bolt11 and bolt12; custom methods add themselves
+const withNut29 = (info: typeof mintInfoResp, methods: string[]) => ({
+  ...info,
+  nuts: { ...info.nuts, 29: { methods, max_batch_size: 100 } },
+});
+
 describe('generic mint/melt methods', () => {
   describe('wallet.createMintQuote / checkMintQuote', () => {
     test('createMintQuote with custom method hits /v1/mint/quote/{method}', async () => {
@@ -1303,8 +1446,10 @@ describe('generic mint/melt methods', () => {
         http.post(mintUrl + '/v1/mint/quote/bacs', () =>
           HttpResponse.json({
             quote: 'bacs-quote-1',
+            amount_paid: Amount.from(0),
+            amount_issued: Amount.from(0),
             request: 'CASHU-REF-ABC',
-            unit: 'gbp',
+            unit,
             amount: 5000,
             reference: 'REF-123',
             state: MintQuoteState.UNPAID,
@@ -1351,8 +1496,8 @@ describe('generic mint/melt methods', () => {
             quote: 'bacs-quote-unit',
             request: 'CASHU-REF-UNIT',
             unit: body.unit,
-            amount_paid: 0,
-            amount_issued: 0,
+            amount_paid: Amount.from(0),
+            amount_issued: Amount.from(0),
           });
         }),
       );
@@ -1377,8 +1522,8 @@ describe('generic mint/melt methods', () => {
             request: 'CASHU-REF',
             unit: 'sat',
             pubkey: '02dcba', // not the requested key
-            amount_paid: 0,
-            amount_issued: 0,
+            amount_paid: Amount.from(0),
+            amount_issued: Amount.from(0),
           }),
         ),
       );
@@ -1400,8 +1545,8 @@ describe('generic mint/melt methods', () => {
             request: 'CASHU-REF',
             unit: 'sat',
             pubkey: lockPubkey,
-            amount_paid: 0,
-            amount_issued: 0,
+            amount_paid: Amount.from(0),
+            amount_issued: Amount.from(0),
           }),
         ),
       );
@@ -1430,6 +1575,8 @@ describe('generic mint/melt methods', () => {
         http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
           HttpResponse.json({
             quote: 'bolt11-quote-1',
+            amount_paid: Amount.from(0),
+            amount_issued: Amount.from(0),
             pubkey: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
             request: 'lnbc10u1pfake', // HRP encodes the quoted 1,000 sat
             unit: 'sat',
@@ -1457,6 +1604,8 @@ describe('generic mint/melt methods', () => {
         http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
           HttpResponse.json({
             quote: 'bolt11-amount-mismatch',
+            amount_paid: Amount.from(0),
+            amount_issued: Amount.from(0),
             request: invoice, // 2,000 sat fixture invoice
             unit: 'sat',
             amount: 1,
@@ -1481,6 +1630,8 @@ describe('generic mint/melt methods', () => {
         http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
           HttpResponse.json({
             quote: 'bolt11-echo-mismatch',
+            amount_paid: Amount.from(0),
+            amount_issued: Amount.from(0),
             request: invoice, // internally consistent: 2,000 sat invoice and amount
             unit: 'sat',
             amount: 2000,
@@ -1505,6 +1656,8 @@ describe('generic mint/melt methods', () => {
         http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
           HttpResponse.json({
             quote: 'bolt11-amount-match',
+            amount_paid: Amount.from(0),
+            amount_issued: Amount.from(0),
             pubkey: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
             request: invoice, // 2,000 sat fixture invoice
             unit: 'sat',
@@ -1529,6 +1682,8 @@ describe('generic mint/melt methods', () => {
         http.get(mintUrl + '/v1/mint/quote/bolt11/bolt11-check-mismatch', () =>
           HttpResponse.json({
             quote: 'bolt11-check-mismatch',
+            amount_paid: Amount.from(0),
+            amount_issued: Amount.from(0),
             request: invoice, // 2,000 sat fixture invoice
             unit: 'sat',
             amount: 1,
@@ -1551,6 +1706,8 @@ describe('generic mint/melt methods', () => {
           HttpResponse.json([
             {
               quote: 'bolt11-batch-ok',
+              amount_paid: Amount.from(0),
+              amount_issued: Amount.from(0),
               request: invoice, // 2,000 sat fixture invoice
               unit: 'sat',
               amount: 2000,
@@ -1559,6 +1716,8 @@ describe('generic mint/melt methods', () => {
             },
             {
               quote: 'bolt11-batch-bad',
+              amount_paid: Amount.from(0),
+              amount_issued: Amount.from(0),
               request: invoice, // 2,000 sat fixture invoice
               unit: 'sat',
               amount: 1,
@@ -1581,6 +1740,8 @@ describe('generic mint/melt methods', () => {
         http.get(mintUrl + '/v1/mint/quote/bolt11/bolt11-quote-merge', () =>
           HttpResponse.json({
             quote: 'bolt11-quote-merge',
+            amount_paid: Amount.from(0),
+            amount_issued: Amount.from(0),
             request: 'lnbc10u1premote', // HRP encodes the quoted 1,000 sat
             unit: 'sat',
             amount: 1000,
@@ -1614,6 +1775,8 @@ describe('generic mint/melt methods', () => {
         http.get(mintUrl + '/v1/mint/quote/bacs/bacs-quote-1', () =>
           HttpResponse.json({
             quote: 'bacs-quote-1',
+            amount_paid: Amount.from(0),
+            amount_issued: Amount.from(0),
             request: 'CASHU-REF-ABC',
             unit: 'gbp',
             amount: 5000,
@@ -1649,6 +1812,8 @@ describe('generic mint/melt methods', () => {
         http.get(mintUrl + '/v1/mint/quote/bacs/bacs-quote-2', () =>
           HttpResponse.json({
             quote: 'bacs-quote-2',
+            amount_paid: Amount.from(0),
+            amount_issued: Amount.from(0),
             request: 'REF',
             unit: 'gbp',
             state: MintQuoteState.UNPAID,
@@ -1663,6 +1828,63 @@ describe('generic mint/melt methods', () => {
       expect(quote.quote).toBe('bacs-quote-2');
     });
 
+    test('batch checks fail fast when the mint does not advertise NUT-29', async () => {
+      const posted = vi.fn();
+      server.use(
+        http.get(mintUrl + '/v1/info', () =>
+          HttpResponse.json({ ...mintInfoResp, nuts: { ...mintInfoResp.nuts, 29: undefined } }),
+        ),
+        http.post(mintUrl + '/v1/mint/quote/bolt11/check', () => {
+          posted();
+          return HttpResponse.json([]);
+        }),
+      );
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+      await expect(wallet.checkMintQuoteBatchBolt11(['a'])).rejects.toThrow(
+        'checkMintQuoteBatchBolt11: mint does not advertise NUT-29 for bolt11; use checkMintQuoteBolt11 per quote',
+      );
+      await expect(wallet.checkMintQuoteBatch('bolt11', ['a'])).rejects.toThrow('NUT-29');
+      expect(posted).not.toHaveBeenCalled();
+    });
+
+    test('prepareBatchMint fails fast when the mint does not advertise NUT-29', async () => {
+      const posted = vi.fn();
+      server.use(
+        http.get(mintUrl + '/v1/info', () =>
+          HttpResponse.json({ ...mintInfoResp, nuts: { ...mintInfoResp.nuts, 29: undefined } }),
+        ),
+        http.post(mintUrl + '/v1/mint/quote/bolt11/check', () => {
+          posted();
+          return HttpResponse.json([]);
+        }),
+      );
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+      await expect(
+        wallet.prepareBatchMint('bolt11', [{ amount: 1, quote: { quote: 'q' } }]),
+      ).rejects.toThrow(
+        'prepareBatchMint: mint does not advertise NUT-29 for bolt11; use prepareMint per quote',
+      );
+      expect(posted).not.toHaveBeenCalled();
+    });
+
+    test('batch checks fail fast for a method the NUT-29 methods list omits', async () => {
+      server.use(
+        http.get(mintUrl + '/v1/info', () =>
+          HttpResponse.json({
+            ...mintInfoResp,
+            nuts: { ...mintInfoResp.nuts, 29: { methods: ['bolt11'] } },
+          }),
+        ),
+      );
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+      await expect(wallet.checkMintQuoteBatchBolt12(['a'])).rejects.toThrow(
+        'checkMintQuoteBatchBolt12: mint does not advertise NUT-29 for bolt12; use checkMintQuoteBolt12 per quote',
+      );
+    });
+
     test('checkMintQuoteBatchBolt11 posts quote ids and normalizes responses', async () => {
       server.use(
         http.post(mintUrl + '/v1/mint/quote/bolt11/check', async ({ request }) => {
@@ -1671,6 +1893,8 @@ describe('generic mint/melt methods', () => {
           return HttpResponse.json([
             {
               quote: 'bolt11-batch-1',
+              amount_paid: Amount.from(0),
+              amount_issued: Amount.from(0),
               request: 'lnbc10u1pfake', // HRP encodes the quoted 1,000 sat
               unit: 'sat',
               amount: 1000,
@@ -1679,6 +1903,8 @@ describe('generic mint/melt methods', () => {
             },
             {
               quote: 'bolt11-batch-2',
+              amount_paid: Amount.from(0),
+              amount_issued: Amount.from(0),
               request: 'lnbc20u1pfake', // HRP encodes the quoted 2,000 sat
               unit: 'sat',
               amount: 2000,
@@ -1773,13 +1999,17 @@ describe('generic mint/melt methods', () => {
 
     test('checkMintQuoteBatch with custom method hits /v1/mint/quote/{method}/check', async () => {
       server.use(
-        http.get(mintUrl + '/v1/info', () => HttpResponse.json(mintInfoRespWithBacs)),
+        http.get(mintUrl + '/v1/info', () =>
+          HttpResponse.json(withNut29(mintInfoRespWithBacs, ['bacs'])),
+        ),
         http.post(mintUrl + '/v1/mint/quote/bacs/check', async ({ request }) => {
           const body = (await request.json()) as { quotes: string[] };
           expect(body).toEqual({ quotes: ['bacs-batch-1', 'bacs-batch-2'] });
           return HttpResponse.json([
             {
               quote: 'bacs-batch-1',
+              amount_paid: Amount.from(0),
+              amount_issued: Amount.from(0),
               request: 'CASHU-REF-1',
               unit: 'gbp',
               amount: 5000,
@@ -1789,6 +2019,8 @@ describe('generic mint/melt methods', () => {
             },
             {
               quote: 'bacs-batch-2',
+              amount_paid: Amount.from(0),
+              amount_issued: Amount.from(0),
               request: 'CASHU-REF-2',
               unit: 'gbp',
               amount: 2500,
@@ -1988,7 +2220,12 @@ describe('generic mint/melt methods', () => {
       const wallet = new Wallet(mint, { unit });
       await wallet.loadMint();
 
-      const customQuote = { quote: 'custom-mint-quote' };
+      const customQuote = {
+        quote: 'custom-mint-quote',
+        unit: 'sat',
+        amount_paid: Amount.from(0),
+        amount_issued: Amount.from(0),
+      };
       const proofs = await wallet.mintProofs('bacs', 1, customQuote);
 
       expect(proofs).toHaveLength(1);
@@ -2004,6 +2241,8 @@ describe('generic mint/melt methods', () => {
           quote: 'wrong-unit-mint-quote',
           request: 'req',
           unit: 'usd',
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
         }),
       ).rejects.toThrow("Quote unit 'usd' does not match wallet unit 'sat'");
     });
@@ -2062,7 +2301,7 @@ describe('generic mint/melt methods', () => {
         amount_issued: Amount.from(0),
       });
 
-      expect(preview.payload.quote).toBe('stale-unpaid');
+      expect(preview.quote.quote).toBe('stale-unpaid');
     });
 
     test('prepareMint keeps string-only quote support without available amount fields', async () => {
@@ -2072,14 +2311,19 @@ describe('generic mint/melt methods', () => {
       const preview = await wallet.prepareMint(
         'bolt12',
         3,
-        { quote: 'stored-bolt12' },
+        {
+          quote: 'stored-bolt12',
+          unit: 'sat',
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
+        },
         {
           privkey: '01'.repeat(32),
         },
       );
 
       expect(preview.method).toBe('bolt12');
-      expect(preview.payload.quote).toBe('stored-bolt12');
+      expect(preview.quote.quote).toBe('stored-bolt12');
     });
 
     test('mintProofsOnchain rejects amounts above paid minus issued amount', async () => {
@@ -2166,7 +2410,7 @@ describe('generic mint/melt methods', () => {
             quote: 'bacs-melt-1',
             request: 'GB29NWBK60161331926819',
             amount: 5000,
-            unit: 'gbp',
+            unit,
             state: MeltQuoteState.UNPAID,
             expiry: 3600,
             fee_estimate: 50,
@@ -2394,8 +2638,9 @@ describe('generic mint/melt methods', () => {
       const wallet = new Wallet(mint, { unit, logger });
       await wallet.loadMint();
 
-      const meltQuote: Pick<MeltQuoteBaseResponse, 'amount' | 'quote' | 'state'> = {
+      const meltQuote: Pick<MeltQuoteBaseResponse, 'amount' | 'quote' | 'state' | 'unit'> = {
         quote: 'bacs-melt-1',
+        unit: 'sat',
         amount: Amount.from(10),
         state: MeltQuoteState.UNPAID,
       };
@@ -2422,6 +2667,7 @@ describe('generic mint/melt methods', () => {
             quote: 'wrong-unit-melt-quote',
             amount: Amount.from(10),
             unit: 'usd',
+            state: MeltQuoteState.UNPAID,
           },
           [{ id: '00bd033559de27d0', amount: Amount.from(10), secret: 'secret1', C: 'C1' }],
         ),
@@ -2738,7 +2984,7 @@ describe('generic mint/melt methods', () => {
             quote: 'swift-1',
             request: 'SWIFT-REF',
             amount: 200,
-            unit: 'usd',
+            unit,
             state: MeltQuoteState.UNPAID,
             expiry: 7200,
             processing_fee: 15,

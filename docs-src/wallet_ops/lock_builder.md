@@ -4,7 +4,7 @@
 
 Small helper that shapes a semantic `LockOptions` lock, it does not create secrets. The wallet encodes the result for whichever keyset is active: NUT-11/14 tags on pre-v3 keysets, a nutroot tree on v3.
 
-```ts
+```text
 new LockBuilder()
   .addMainPubkey(k: string | string[])    // 02|03 compressed only; for an x-only (Nostr) key prepend '02'
   .addRefundPubkey(k: string | string[])  // requires lockUntil(...) to be set
@@ -18,7 +18,7 @@ new LockBuilder()
   .blindKeys(keys?: string | string[]) // blind every key, or exactly the listed keys (list is v3 only)
   .disclose() // publish the exercised witness (NUT-10 disclosure) on every generated leaf; a no-op pre-v3
   .sigAll() // NUT-11 SIG_ALL; on v3 this is the default and only behavior
-  .validate(target: 'v3' | 'pre-v3'): CTSError[] // pre-flight check; empty array = encodes clean
+  .validate(target: 'nutroot' | 'p2pk'): CTSError[] // pre-flight check; empty array = encodes clean
   .toOptions(): LockOptions;
 
 LockBuilder.fromOptions(lock: LockOptions): LockBuilder
@@ -29,6 +29,8 @@ LockBuilder.fromOptions(lock: LockOptions): LockBuilder
 Keys must be 33-byte compressed hex and on the secp256k1 curve (NUT-11); a 32-byte x-only key (eg Nostr) throws until you prepend `'02'`, per NIP-61. Keys are de-duplicated, insertion order is preserved, total main plus refund keys must be ≤ 11 for a plain lock or ≤ 10 with a hashlock (the hashlock takes a slot, NUT-28), refund keys will throw if no locktime is set.
 
 Shapes only one encoding can express refuse at encode time, naming the reason: extra tags, anyone-after-locktime, and keyless hashlocks do not fit v3; explicit leaves and partial blind lists do not fit pre-v3. `disclose()` closes the v3 key path: a lone main key becomes a leaf under the NUMS key so every spend is a public script path (`auditableLock(pubkey)` is exactly that shape). A pre-v3 lock is disclosed by nature (plaintext secret, witness returned by NUT-07), so the flag changes nothing there. See the [v5 migration guide](../../migration-5.0.0.md) for the full matrix.
+
+On a pre-v3 keyset a lock also refuses unless the mint advertises NUT-11 (and NUT-14 for a hashlock). A mint signs a lock blind and reads it only at spend time, so a kind it does not support would spend as a bearer proof. v3 keysets enforce locks by construction and need no flag.
 
 To surface these refusals before building a transaction (eg to gate a form), call `validate(target)`: it runs the same checks and encoder as a real build and returns the refusal as a `CTSError` array, empty when the lock encodes for that keyset version. The spending side (inspecting, receiving, and script-path spends of locked proofs) is covered in [Spending Locked Proofs](./spend_locked.md).
 
@@ -43,7 +45,7 @@ const builder = new LockBuilder()
   .addRefundPubkey('02def...');
 
 // optional pre-flight, eg before enabling a form's submit button
-const issues = builder.validate('v3');
+const issues = builder.validate('nutroot');
 if (issues.length) throw issues[0]; // or show issues[0].message in the UI
 
 const lock = builder.toOptions();

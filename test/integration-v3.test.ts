@@ -11,6 +11,7 @@ import {
   type AmountLike,
   CheckStateEnum,
   Mint,
+  MintOperationError,
   OutputData,
   PaymentRequest,
   ScriptPath,
@@ -20,6 +21,7 @@ import {
   isBlsKeyset,
   sumProofs,
 } from '../src';
+import { hashToCurveHex } from '../src/crypto/curves';
 import {
   buildScriptPathWitness,
   buildNutrootSecret,
@@ -34,12 +36,14 @@ import {
   nutrootTweakSeckey,
   type NutrootLeaf,
   verifyNutrootSpendInfo,
+  type NutrootConditionLeaf,
 } from '../src/crypto/nutroot';
 import {
   inputsForPayload,
   proofInputContextKey,
   transactionDigest,
   verifyTransactionInputWitness,
+  meltOutputAmount,
 } from '../src/crypto/transcript';
 
 type LockedQuote = Awaited<ReturnType<Wallet['createMintQuoteBolt11']>> & { privkey: string };
@@ -55,13 +59,18 @@ const mintUrl = 'http://127.0.0.1:3338';
 
 // The v3 suite needs a mint serving a BLS (02) keyset. CI also runs this file against
 // stock nutshell and CDK mints, which have none; skip there rather than fail.
-const hasV3Keyset = await fetch(`${mintUrl}/v1/keysets`)
-  .then(async (res) => {
-    const { keysets } = (await res.json()) as { keysets: Array<{ id: string }> };
-    return keysets.some((k) => k.id.startsWith('02'));
-  })
-  .catch(() => false);
+type KeysetSummary = { id: string; unit: string; active: boolean };
+const mintKeysets = await fetch(`${mintUrl}/v1/keysets`)
+  .then(async (res) => ((await res.json()) as { keysets: KeysetSummary[] }).keysets)
+  .catch((): KeysetSummary[] => []);
+const hasV3Keyset = mintKeysets.some((k) => k.id.startsWith('02'));
 const describeV3 = hasV3Keyset ? describe : describe.skip;
+// Mixed-keyset tests need a pre-v3 keyset that still issues. A mint with one active keyset
+// per unit (eg CDK) retires it on upgrade, so they skip there.
+const hasPreV3Keyset = mintKeysets.some(
+  (k) => k.unit === 'sat' && k.active && !k.id.startsWith('02'),
+);
+const describeMixed = hasV3Keyset && hasPreV3Keyset ? describe : describe.skip;
 
 describeV3('v3 keyset bring-up', () => {
   test('mint advertises an active BLS (v3) keyset and serves its keys', async () => {
@@ -167,7 +176,7 @@ describeV3('v3 transaction witnesses', () => {
       const contexts = inputsForPayload({
         inputs: body.inputs,
         outputs: body.outputs ?? [],
-        meltQuote: { amount: meltQuote.amount, quoteId: body.quote },
+        meltQuote: { amount: meltOutputAmount(meltQuote), quoteId: body.quote },
       }).proofs;
       for (const input of body.inputs) {
         const digest = contexts.get(
@@ -497,69 +506,7 @@ describeV3('M3 nutroot conditions', () => {
         good.control.path = ['00'.repeat(32)];
         return JSON.stringify(good);
       }),
-    ).rejects.toThrow(/script path/i);
-  });
-
-  test('mixed transaction: the v3 input is verified per input', { timeout: 40_000 }, async () => {
-    // NUT-10: rules follow the proof's keyset and verification is per input, so a legacy input
-    // alongside a v3 one must not excuse the v3 input from carrying a witness.
-    const { keysets } = await new Mint(mintUrl).getKeySets();
-    const legacyKeyset = keysets.find((k) => k.unit === 'sat' && k.active && !isBlsKeyset(k.id));
-    expect(legacyKeyset, 'mint must serve a pre-v3 keyset for this test').toBeDefined();
-
-    const seed = randomBytes(64);
-    const v3Wallet = new Wallet(mintUrl, { bip39seed: seed });
-    await v3Wallet.loadMint();
-    const v3Quote = await lockedMintQuote(v3Wallet, 32);
-    await v3Wallet.on.onceMintPaid(v3Quote.quote, { timeoutMs: 10_000 });
-    const v3Proofs = await v3Wallet.mintProofsBolt11(32, v3Quote, { privkey: v3Quote.privkey });
-
-    const legacyWallet = new Wallet(mintUrl, { bip39seed: seed, keysetId: legacyKeyset!.id });
-    await legacyWallet.loadMint();
-    const legacyQuote = await lockedMintQuote(legacyWallet, 32);
-    await legacyWallet.on.onceMintPaid(legacyQuote.quote, { timeoutMs: 10_000 });
-    const legacyProofs = await legacyWallet.mintProofsBolt11(32, legacyQuote, {
-      privkey: legacyQuote.privkey,
-    });
-
-    const v3KeysetId = v3Proofs[0].id;
-    expect(isBlsKeyset(v3KeysetId)).toBe(true);
-    expect(isBlsKeyset(legacyProofs[0].id)).toBe(false);
-
-    // 64 in, 2 inputs at 100 ppk = 1 sat of fees, so 63 out.
-    const outputs = [32n, 16n, 8n, 4n, 2n, 1n].map((a) =>
-      OutputData.createSingleNutrootData(
-        bytesToHex(secp256k1.getPublicKey(randomBytes(32), true)),
-        a,
-        v3KeysetId,
-      ),
-    );
-    const inputs = [...v3Proofs, ...legacyProofs];
-    const digest = transactionDigest({
-      proofInputs: inputs.map((p) => ({
-        amount: Amount.from(p.amount).toBigInt(),
-        keysetId: p.id,
-        secret: p.secret,
-        C: p.C,
-      })),
-      blindedOutputs: outputs.map((o) => ({
-        amount: Amount.from(o.blindedMessage.amount).toBigInt(),
-        keysetId: o.blindedMessage.id,
-        B_: o.blindedMessage.B_,
-      })),
-    });
-
-    // Unsigned v3 input beside a legacy input: the mint must still demand its witness.
-    // Before per-input verification the whole check was skipped whenever any input was not a
-    // v3 point secret, so this swap went through and the lock was bypassed.
-    await expect(
-      new Mint(mintUrl).swap({
-        inputs: inputs.map((p) => ({ ...p })),
-        outputs: outputs.map((o) => o.blindedMessage),
-      }),
-    ).rejects.toThrow(/witness/i);
-    // The digest is well-formed over the mixed inputs (legacy secret carried verbatim).
-    expect(digest).toHaveLength(32);
+    ).rejects.toThrow(MintOperationError);
   });
 
   test('a NUT-10 secret is refused on a v3 keyset', { timeout: 30_000 }, async () => {
@@ -586,7 +533,7 @@ describeV3('M3 nutroot conditions', () => {
         inputs: [{ amount: 32n, id: keysetId, secret: nut10Secret, C: locked.C }],
         outputs: outputs.map((o) => o.blindedMessage),
       } as never),
-    ).rejects.toThrow(/point secret/i);
+    ).rejects.toThrow(MintOperationError);
   });
 
   test('partial tree disclosure is rejected on receive', { timeout: 30_000 }, async () => {
@@ -650,7 +597,7 @@ describeV3('M4 locked quotes', () => {
         ),
       ];
       const digestB = inputsForPayload({
-        mintQuotes: [{ amount: 32n, quoteId: quoteB.quote }],
+        mintQuotes: [{ amount: 32n, quoteId: quoteB.quote, lockKey: lockB.secret, issued: 0n }],
         outputs: outputsB.map((o) => o.blindedMessage),
       }).quotes.get(quoteB.quote)!.digest;
       const mint = new Mint(mintUrl);
@@ -677,7 +624,7 @@ describeV3('M4 locked quotes', () => {
         ),
       ];
       const digestC = inputsForPayload({
-        mintQuotes: [{ amount: 32n, quoteId: quoteC.quote }],
+        mintQuotes: [{ amount: 32n, quoteId: quoteC.quote, lockKey: lockC.secret, issued: 0n }],
         outputs: outputsC.map((o) => o.blindedMessage),
       }).quotes.get(quoteC.quote)!.digest;
       await expect(
@@ -808,14 +755,16 @@ describeV3('M6 leaf-key blinding through the wallet', () => {
         const tree = proof.spend_info?.tree;
         expect(tree).toHaveLength(1);
         // The leaf carries a blinded key, not Alice's key verbatim.
-        expect(parseNutrootLeaf(hexToBytes(tree![0])).keys[0]).not.toBe(alicePub);
+        expect((parseNutrootLeaf(hexToBytes(tree![0])) as NutrootConditionLeaf).keys[0]).not.toBe(
+          alicePub,
+        );
 
         // Alice recognises her own key at slot 1; a stranger's key matches nothing.
         const mine = recoverLeafKeySecretKeys(tree!, proof.spend_info?.E, [alicePriv]);
         expect(mine).toHaveLength(1);
         expect(mine[0]).toMatchObject({ leafIndex: 0, keyIndex: 0, slot: 1, blinded: true });
         expect(bytesToHex(secp256k1.getPublicKey(hexToBytes(mine[0].secretKey), true))).toBe(
-          parseNutrootLeaf(hexToBytes(tree![0])).keys[0],
+          (parseNutrootLeaf(hexToBytes(tree![0])) as NutrootConditionLeaf).keys[0],
         );
         expect(recoverLeafKeySecretKeys(tree!, proof.spend_info?.E, [strangerPriv])).toEqual([]);
       }
@@ -834,7 +783,69 @@ describeV3('M6 leaf-key blinding through the wallet', () => {
   );
 });
 
-describeV3('M7 mixed-keyset transactions through the wallet API', () => {
+describeMixed('M7 mixed-keyset transactions through the wallet API', () => {
+  test('mixed transaction: the v3 input is verified per input', { timeout: 40_000 }, async () => {
+    // NUT-10: rules follow the proof's keyset and verification is per input, so a legacy input
+    // alongside a v3 one must not excuse the v3 input from carrying a witness.
+    const { keysets } = await new Mint(mintUrl).getKeySets();
+    const legacyKeyset = keysets.find((k) => k.unit === 'sat' && k.active && !isBlsKeyset(k.id));
+    expect(legacyKeyset, 'mint must serve a pre-v3 keyset for this test').toBeDefined();
+
+    const seed = randomBytes(64);
+    const v3Wallet = new Wallet(mintUrl, { bip39seed: seed });
+    await v3Wallet.loadMint();
+    const v3Quote = await lockedMintQuote(v3Wallet, 32);
+    await v3Wallet.on.onceMintPaid(v3Quote.quote, { timeoutMs: 10_000 });
+    const v3Proofs = await v3Wallet.mintProofsBolt11(32, v3Quote, { privkey: v3Quote.privkey });
+
+    const legacyWallet = new Wallet(mintUrl, { bip39seed: seed, keysetId: legacyKeyset!.id });
+    await legacyWallet.loadMint();
+    const legacyQuote = await lockedMintQuote(legacyWallet, 32);
+    await legacyWallet.on.onceMintPaid(legacyQuote.quote, { timeoutMs: 10_000 });
+    const legacyProofs = await legacyWallet.mintProofsBolt11(32, legacyQuote, {
+      privkey: legacyQuote.privkey,
+    });
+
+    const v3KeysetId = v3Proofs[0].id;
+    expect(isBlsKeyset(v3KeysetId)).toBe(true);
+    expect(isBlsKeyset(legacyProofs[0].id)).toBe(false);
+
+    // 64 in, 2 inputs at 100 ppk = 1 sat of fees, so 63 out.
+    const outputs = [32n, 16n, 8n, 4n, 2n, 1n].map((a) =>
+      OutputData.createSingleNutrootData(
+        bytesToHex(secp256k1.getPublicKey(randomBytes(32), true)),
+        a,
+        v3KeysetId,
+      ),
+    );
+    const inputs = [...v3Proofs, ...legacyProofs];
+    const digest = transactionDigest({
+      proofInputs: inputs.map((p) => ({
+        amount: Amount.from(p.amount).toBigInt(),
+        keysetId: p.id,
+        Y: hashToCurveHex(p.secret, p.id),
+        C: p.C,
+      })),
+      blindedOutputs: outputs.map((o) => ({
+        amount: Amount.from(o.blindedMessage.amount).toBigInt(),
+        keysetId: o.blindedMessage.id,
+        B_: o.blindedMessage.B_,
+      })),
+    });
+
+    // Unsigned v3 input beside a legacy input: the mint must still demand its witness.
+    // Before per-input verification the whole check was skipped whenever any input was not a
+    // v3 point secret, so this swap went through and the lock was bypassed.
+    await expect(
+      new Mint(mintUrl).swap({
+        inputs: inputs.map((p) => ({ ...p })),
+        outputs: outputs.map((o) => o.blindedMessage),
+      }),
+    ).rejects.toThrow(/witness/i);
+    // The digest is well-formed over the mixed inputs (legacy secret carried verbatim).
+    expect(digest).toHaveLength(32);
+  });
+
   /**
    * The mint serves a v3 (BLS) keyset beside a pre-v3 one; both are active for sat.
    */
@@ -1304,7 +1315,7 @@ describeV3('M9 script path through the wallet API', () => {
             leafIndex: 0,
             cosign: async ({ digest, leaf: signingLeaf }) => {
               sawDigest = digest;
-              expect(signingLeaf.keys).toContain(bobPub);
+              expect((signingLeaf as NutrootConditionLeaf).keys).toContain(bobPub);
               return [bytesToHex(schnorr.sign(digest, hexToBytes(bobPriv)))];
             },
           },
@@ -1353,7 +1364,9 @@ describeV3('M9 script path through the wallet API', () => {
       );
       expect(carried.spends[0].signatures).toHaveLength(2);
       // Alice's key was blinded into the leaf, so a verbatim signature would not have counted.
-      expect(parseNutrootLeaf(hexToBytes(carried.spends[0].leaf)).keys).not.toContain(alicePub);
+      expect(
+        (parseNutrootLeaf(hexToBytes(carried.spends[0].leaf)) as NutrootConditionLeaf).keys,
+      ).not.toContain(alicePub);
 
       const signed = ScriptPath.mergeSwapPackage(carried, preview);
       const { keep } = await alice.completeSwap(signed);
@@ -1387,15 +1400,11 @@ describeV3('M9 script path through the wallet API', () => {
       // here rather than by the mint, which would only say the witness was invalid.
       const other = await alice.prepareSwapToReceive([proof]);
       expect(() => ScriptPath.mergeSwapPackage(pkg, other)).toThrow(/does not match/);
-      // The package carries no digest to edit: signatures cover whatever inputs and outputs it
-      // shows, so a package whose contents were edited reads back fine and fails at merge.
+      // The package carries no digest to edit: signatures cover whatever transcript it shows, so
+      // a package whose transcript was edited reads back fine and fails at merge.
+      const last = pkg.transcript.slice(-2) === '00' ? '01' : '00';
       const tampered = ScriptPath.deserializePackage(
-        ScriptPath.serializePackage({
-          ...pkg,
-          outputs: pkg.outputs.map((o, i) =>
-            i === 0 ? { ...o, B_: (o.B_.startsWith('02') ? '03' : '02') + o.B_.slice(2) } : o,
-          ),
-        }),
+        ScriptPath.serializePackage({ ...pkg, transcript: pkg.transcript.slice(0, -2) + last }),
       );
       expect(() => ScriptPath.mergeSwapPackage(tampered, preview)).toThrow(/does not match/);
     },

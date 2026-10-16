@@ -50,12 +50,14 @@ Receiving swaps locked proofs into your own seed-derived secrets, and that swap 
 ```ts
 // Bearer (k travels with the token): nothing to pass, the wallet signs with it.
 const proofs = await wallet.ops.receive(token).run();
+```
 
+```ts
 // Receiver-keyed (locked to your pubkey): same call as pre-v3 P2PK.
 const proofs = await wallet.ops.receive(token).privkey(myStaticPrivkey).run();
 ```
 
-The same `.privkey(...)` serves send and melt when spending a still-locked proof directly. Every v3 input signs the whole transaction (NUT-10); an input the wallet holds no key for fails the call before the mint sees it.
+The same `.privkey(...)` serves send and melt when spending a still-locked proof directly. Every v3 input signs the whole transaction (NUT-10); a v3 input the wallet holds no key for fails the call before the mint sees it. A legacy lock is only rejected by the mint, so check `spendOptions` first.
 
 ## Script path: `.scriptPath(plans)`
 
@@ -91,7 +93,7 @@ For the common policy (first satisfiable leaf per proof the key path cannot spen
 
 Plans are keyed by `secret`, not input index: proof selection decides input order. Everything except the signatures is checked when the transaction is prepared, so a plan that cannot be honored (undisclosed leaf, missing preimage, key shortfall with no cosigner) fails before any request is built.
 
-**Cosigning.** A leaf whose other keys live elsewhere takes a `cosign` hook. It runs once the transaction is fixed and its input digest known (the digest covers the outputs, so it cannot exist earlier), and returns BIP-340 signature hex over `digest`. `transactionMessage` is the tagged pre-hash transcript and `inputContainer` the input's own TLV container record (NUT-10); `digest = tagged_hash("Cashu_TransactionInput", SHA256(transactionMessage) || SHA256(inputContainer))`, so a signer can recompute what it signs. It is awaited mid-flight: fine for a remote signer measured in seconds, not for approval ceremonies measured in days. Duplicate and non-verifying signatures are trimmed; the leaf still needs `n` valid ones or the spend fails.
+**Cosigning.** A leaf whose other keys live elsewhere takes a `cosign` hook. It runs once the transaction is fixed and its input digest known (the digest covers the outputs, so it cannot exist earlier), and returns BIP-340 signature hex over `digest`. `transactionMessage` is the TLV transcript and `inputContainer` the input's own TLV container record (NUT-10); `digest = tagged_hash("Cashu_TransactionInput", SHA256(transactionMessage) || SHA256(inputContainer))`, so a signer can recompute what it signs. It is awaited mid-flight: fine for a remote signer measured in seconds, not for approval ceremonies measured in days. Duplicate and non-verifying signatures are trimmed; the leaf still needs `n` valid ones or the spend fails.
 
 ## Browser signers
 

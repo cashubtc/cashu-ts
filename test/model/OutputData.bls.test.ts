@@ -17,6 +17,7 @@ import {
   recoverLeafKeySecretKeys,
   recoverReceiverKeyedSecretKey,
   type NutrootLeaf,
+  type NutrootConditionLeaf,
 } from '../../src/crypto/nutroot';
 import { Amount } from '../../src/model/Amount';
 import { CTSError } from '../../src/model/Errors';
@@ -112,6 +113,23 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
     expect(proof.spend_info?.k).toBe(out.spendInfo?.k);
   });
 
+  test('deserialize round-trips a v3 output, including its spend info', () => {
+    const out = OutputData.createSingleRandomData(1, keyset.id);
+    const restored = OutputData.deserialize(OutputData.serialize(out));
+    expect(restored.blindedMessage.B_).toBe(out.blindedMessage.B_);
+    expect(restored.spendInfo).toEqual(out.spendInfo);
+  });
+
+  test('deserialize rejects a v3 payload whose secret is not a point', () => {
+    const serialized = OutputData.serialize(OutputData.createSingleRandomData(1, keyset.id));
+    expect(() =>
+      OutputData.deserialize({
+        ...serialized,
+        secret: bytesToHex(new TextEncoder().encode('not-a-point')),
+      }),
+    ).toThrow(/point secret/i);
+  });
+
   // ~21 BLS pairings (7 amounts × 3 verifications each). Locally ~700ms, but under the
   // 4-environment parallel run (node + chromium + firefox + webkit), CPU contention can
   // push this past the 5s default. Bumped to absorb that noise.
@@ -141,7 +159,7 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
   }, 15000);
 
   test('deterministic v3 derivation produces a verifiable proof', () => {
-    const seed = hexToBytes('11'.repeat(32));
+    const seed = hexToBytes('11'.repeat(64));
     const out = OutputData.createSingleDeterministicData(4, seed, 0, keyset.id);
     expect(out.blindedMessage.B_).toMatch(/^[0-9a-f]{96}$/);
 
@@ -157,7 +175,7 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
   });
 
   test('deterministic v3 outputs carry their derived key as spend info', () => {
-    const seed = hexToBytes('22'.repeat(32));
+    const seed = hexToBytes('22'.repeat(64));
     const outputs = OutputData.createDeterministicData(7, seed, 5, keyset);
     expect(outputs).toHaveLength(3);
     outputs.forEach((out, i) => {
@@ -172,7 +190,7 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
   });
 
   test('deterministic secp outputs carry no key or spend info', () => {
-    const seed = hexToBytes('22'.repeat(32));
+    const seed = hexToBytes('22'.repeat(64));
     const out = OutputData.createSingleDeterministicData(1, seed, 0, `01${'ab'.repeat(32)}`);
     expect(out.secretKey).toBeUndefined();
     expect(out.spendInfo).toBeUndefined();
@@ -347,12 +365,9 @@ describe('OutputData v3 — Nutshell PR #999 deterministic test vector', () => {
     expect(bytesToHex(B_.toBytes(true))).toBe(NUTSHELL_B_HEX);
 
     const id = '02' + '00'.repeat(32); // arbitrary v3-shaped id — toProof dispatches on prefix only
-    // Build an OutputData by hand so we can lock r=3 exactly.
-    const od = OutputData.deserialize({
-      blindedMessage: { amount: '1', B_: B_.toHex(true), id },
-      blindingFactor: r.toString(),
-      secret: bytesToHex(secretBytes),
-    });
+    // Construct the OutputData directly (not via deserialize, which requires a v3 point secret)
+    // so we can lock r=3 exactly against this plain-text cross-implementation vector.
+    const od = new OutputData({ amount: Amount.from(1), B_: B_.toHex(true), id }, r, secretBytes);
 
     const aBytes = hexToBytes('0'.repeat(63) + '2'); // mint scalar a=2
     const { C_ } = createBlindSignatureBls(B_, aBytes, id);
@@ -408,7 +423,9 @@ describe('OutputData.createNutrootData (receiver-keyed, NUT-28)', () => {
     const tree = proof.spend_info!.tree!;
     expect(tree).toHaveLength(1);
     // The leaf key is not Alice's key verbatim, but Alice still finds it at slot 1.
-    expect(parseNutrootLeaf(hexToBytes(tree[0])).keys[0]).not.toBe(alicePub);
+    expect((parseNutrootLeaf(hexToBytes(tree[0])) as NutrootConditionLeaf).keys[0]).not.toBe(
+      alicePub,
+    );
     expect(recoverLeafKeySecretKeys(tree, proof.spend_info!.E, [alicePriv])).toEqual([
       { leafIndex: 0, keyIndex: 0, slot: 1, secretKey: expect.any(String), blinded: true },
     ]);

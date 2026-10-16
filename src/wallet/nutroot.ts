@@ -1,10 +1,10 @@
 import { assertV3PointSecret, isBlsKeyset, isV3PointSecret, schnorrSignDigest } from '../crypto';
-import { hashToCurveBls } from '../crypto/curve_bls';
 import {
   createRandomSecretKey,
   getPubKeyFromPrivKey,
   normalizeSecpPubkey,
 } from '../crypto/curve_secp';
+import { hashToCurveHex } from '../crypto/curves';
 import { parseSecret } from '../crypto/NUT10';
 import { maybeDeriveP2BKPrivateKeys, p2pkSpendLeaves } from '../crypto/NUT11';
 import { deriveQuoteLockKey } from '../crypto/NUT13';
@@ -20,20 +20,16 @@ import {
   nutrootTweakSeckey,
   verifyNutrootSpendInfo,
 } from '../crypto/nutroot';
-import {
-  inputsForPayload,
-  proofInputContextKey,
-  signTransactionInput,
-  spendCommitment,
-} from '../crypto/transcript';
+import { inputsForPayload, signTransactionInput, spendCommitment } from '../crypto/transcript';
 import { type Logger, fail } from '../logger';
 import { type Amount } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { type MeltRequest } from '../model/types';
 import type { Proof } from '../model/types/proof';
 import { bytesToHex, hexToBytes } from '../utils';
+import { mapInChunks } from '../utils/chunked';
 
-import { QUOTE_COUNTER_KEY } from './CounterSource';
+import { quoteCounterKey } from './CounterSource';
 import type { ScriptPathPlan, SpendOption, SpendOptions, SpendReceipt } from './types';
 
 /**
@@ -79,12 +75,24 @@ export async function attachTransactionWitnesses(
   extraKeys: Map<string, Uint8Array> | undefined,
   scriptSpends: Map<string, ScriptPathSpend> | undefined,
   state: NutrootWalletState,
+  signal?: AbortSignal,
 ): Promise<SpendReceipt[]> {
   const v3Inputs = payload.inputs.filter((p) => isBlsKeyset(p.id) && isV3PointSecret(p.secret));
   if (v3Inputs.length === 0) return [];
-  // Each input signs its own input digest over the shared transcript (NUT-10).
+  // Each input signs its own input digest over the shared transcript (NUT-10). The transcript
+  // names inputs by Y, which the receipts need too, so hash each v3 secret once here.
+  // Hashing and signing are curve work per input, so both yield; nothing is posted yet, so an
+  // abort here is safe.
+  const Ys = new Map(
+    await mapInChunks(v3Inputs, (p) => [p.secret, hashToCurveHex(p.secret, p.id)] as const, {
+      signal,
+    }),
+  );
   const { transactionMessage, proofs: inputContexts } = inputsForPayload({
-    inputs: payload.inputs,
+    inputs: payload.inputs.map((p) => {
+      const Y = Ys.get(p.secret);
+      return Y !== undefined && isBlsKeyset(p.id) ? { amount: p.amount, id: p.id, C: p.C, Y } : p;
+    }),
     outputs: payload.outputs ?? [],
     ...(meltQuote && { meltQuote }),
   });
@@ -96,9 +104,7 @@ export async function attachTransactionWitnesses(
     if (!input) {
       fail('Script path plan names a secret not in this transaction', state.logger);
     }
-    const { digest, inputContainer } = inputContexts.get(
-      proofInputContextKey({ keysetId: input.id, secret: input.secret }),
-    )!;
+    const { digest, inputContainer } = inputContexts.get(Ys.get(input.secret)!)!;
     const mine = spend.keys.map((k: string) => schnorrSignDigest(digest, k));
     // The co-signer sees the digest only now, which is why it is a hook and not a signature the
     // caller could have supplied up front: the digest covers the outputs, and those are only
@@ -123,14 +129,16 @@ export async function attachTransactionWitnesses(
       spend.preimage,
     );
   }
-  for (const input of v3Inputs) {
-    if (input.witness) continue; // pre-built witness (e.g. script path): leave it alone
-    const secretKey = extraKeys?.get(input.secret);
-    const context = inputContexts.get(
-      proofInputContextKey({ keysetId: input.id, secret: input.secret }),
-    );
-    if (secretKey && context) input.witness = signTransactionInput(context.digest, secretKey);
-  }
+  await mapInChunks(
+    v3Inputs,
+    (input) => {
+      if (input.witness) return; // pre-built witness (e.g. script path): leave it alone
+      const secretKey = extraKeys?.get(input.secret);
+      const context = inputContexts.get(Ys.get(input.secret)!);
+      if (secretKey && context) input.witness = signTransactionInput(context.digest, secretKey);
+    },
+    { signal },
+  );
   // Every v3 input signs (NUT-10), so an unsigned one is a request the mint will refuse.
   // Say which proof and why here, rather than letting it come back as a witness error naming
   // nothing: the cause is always a key this wallet does not hold.
@@ -145,12 +153,9 @@ export async function attachTransactionWitnesses(
   // The receipt is the spender's copy of what NUT-07 commits to: nothing here is secret to the
   // wallet, and nothing but the wallet ever holds all of it together.
   const transcript = bytesToHex(transactionMessage);
-  const enc = new TextEncoder();
   return v3Inputs.map((input) => {
-    const { digest } = inputContexts.get(
-      proofInputContextKey({ keysetId: input.id, secret: input.secret }),
-    )!;
-    const Y = hashToCurveBls(enc.encode(input.secret)).toHex(true);
+    const Y = Ys.get(input.secret)!;
+    const { digest } = inputContexts.get(Y)!;
     const witness = input.witness as string;
     return {
       Y,
@@ -195,12 +200,15 @@ export function proofSpendOptions(
 
 /**
  * Spend options for a pre-v3 proof: an unlocked secret spends as it stands, a NUT-11 lock reads as
- * leaves, and an unknown NUT-10 kind throws.
+ * leaves, and an unknown NUT-10 kind or a malformed NUT-10 secret throws.
  */
 function legacySpendOptions(proof: Proof, privkeys: string[], now: number): SpendOptions {
   try {
     parseSecret(proof.secret);
-  } catch {
+  } catch (e) {
+    // A JSON array this wallet cannot read is not a bearer secret: a mint with a laxer parser may
+    // still enforce it as a lock, so it fails closed like any other condition it cannot judge.
+    if (typeof proof.secret !== 'string' || proof.secret.trimStart().startsWith('[')) throw e;
     return withVerdict(true, []); // not a NUT-10 secret: a bearer proof anyone can spend
   }
   const leaves = p2pkSpendLeaves(proof.secret);
@@ -228,6 +236,9 @@ function scriptOptions(
   now: number,
 ): SpendOption[] {
   return leaves.map((leaf, leafIndex) => {
+    if (leaf.type === 'commit') {
+      return { leafIndex, leaf, keys: [], satisfiable: false, blockedBy: 'commit' };
+    }
     // One hit per leaf key slot: the same private key supplied twice is still one signer.
     const byKeyIndex = new Map(
       hits.filter((h) => h.leafIndex === leafIndex).map((h) => [h.keyIndex, h] as const),
@@ -261,7 +272,9 @@ function withVerdict(keyPath: boolean, script: SpendOption[]): SpendOptions {
   const stuck = { keyPath, script, spendable: false };
   // A locktime counts only on a leaf this wallet otherwise covers: a stranger's refund leaf is
   // not "unlocks later".
-  const waiting = script.filter((o) => o.blockedBy === 'locktime' && o.keys.length >= o.leaf.n);
+  const waiting = script.filter(
+    (o) => o.blockedBy === 'locktime' && o.leaf.type !== 'commit' && o.keys.length >= o.leaf.n,
+  );
   if (waiting.length) {
     const availableAt = Math.min(...waiting.map((o) => o.availableAt as number));
     return { ...stuck, blockedBy: 'locktime', availableAt };
@@ -300,6 +313,9 @@ export function prepareScriptPathSpends(
       throw new CTSError(`Script path plan names leaf ${plan.leafIndex}, which is not disclosed`);
     }
     const leaf = parseNutrootLeaf(hexToBytes(tree[plan.leafIndex]));
+    if (leaf.type === 'commit') {
+      throw new CTSError('Script path plan names a commit leaf, which is not a spend path');
+    }
     if (leaf.type === 'hashlock' && plan.preimage === undefined) {
       throw new CTSError('Script path plan for a hashlock leaf needs a preimage');
     }
@@ -433,16 +449,19 @@ export function collectSpendInfoKeys(
  * Creates a quote lock keypair; the full contract is documented on `Wallet.createQuoteLockKey`.
  *
  * @remarks
- * Seed-derived from a freshly reserved quote counter when seeded, random otherwise. Reserving (and
- * any persistence events it fires) is the caller's, via `reserveQuoteCounter`.
+ * Seed-derived under `mintPubkey` from a freshly reserved quote counter when seeded, random
+ * otherwise. Reserving (and any persistence events it fires) is the caller's, via
+ * `reserveQuoteCounter`.
  */
 export async function createQuoteLockKeyPair(
   seed: Uint8Array | undefined,
+  mintPubkey: string | undefined,
   reserveQuoteCounter: () => Promise<number>,
 ): Promise<{ pubkey: string; privkey: string }> {
-  const privkey = seed
-    ? deriveQuoteLockKey(seed, await reserveQuoteCounter())
-    : createRandomSecretKey();
+  const privkey =
+    seed && mintPubkey
+      ? deriveQuoteLockKey(seed, mintPubkey, await reserveQuoteCounter())
+      : createRandomSecretKey();
   return { pubkey: bytesToHex(getPubKeyFromPrivKey(privkey)), privkey: bytesToHex(privkey) };
 }
 
@@ -453,19 +472,28 @@ export async function createQuoteLockKeyPair(
 const QUOTE_SCAN_HEADROOM = 128;
 
 /**
- * Scans the quote counter for the key behind a quote lock pubkey; the full contract is documented
- * on `Wallet.recoverQuoteLockKey`. Returns undefined for a pubkey the seed never derived.
+ * Floor on the scan: a seed-only restore recovers no quote cursor (the counter is not derivable
+ * from the seed), so the cursor reads 0 and the headroom alone would stop at 128.
+ */
+const QUOTE_SCAN_MIN_DEPTH = 1024;
+
+/**
+ * Scans a mint's quote counter for the key behind a quote lock pubkey; the full contract is
+ * documented on `Wallet.recoverQuoteLockKey`. Returns undefined for a pubkey the seed never derived
+ * at this mint.
  */
 export async function scanQuoteLockKey(
   pubkey: string,
+  mintPubkey: string,
   state: NutrootWalletState,
 ): Promise<string | undefined> {
   if (!state.seed) fail('recoverQuoteLockKey requires a seeded wallet', state.logger);
   const seed = state.seed;
   const normalizedPubkey = normalizeSecpPubkey(pubkey);
-  const bound = (await state.counters.peekNext(QUOTE_COUNTER_KEY)) + QUOTE_SCAN_HEADROOM;
+  const next = await state.counters.peekNext(quoteCounterKey(mintPubkey));
+  const bound = Math.max(next + QUOTE_SCAN_HEADROOM, QUOTE_SCAN_MIN_DEPTH);
   for (let counter = 0; counter < bound; counter++) {
-    const privkey = deriveQuoteLockKey(seed, counter);
+    const privkey = deriveQuoteLockKey(seed, mintPubkey, counter);
     if (bytesToHex(getPubKeyFromPrivKey(privkey)) === normalizedPubkey) {
       return bytesToHex(privkey);
     }

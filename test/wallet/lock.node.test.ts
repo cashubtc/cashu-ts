@@ -1,8 +1,9 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 
-import { LockBuilder, Wallet } from '../../src';
+import { LockBuilder, type Logger, Wallet } from '../../src';
 import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import { NUTROOT_NUMS_KEY, parseNutrootLeaf, serializeNutrootLeaf } from '../../src/crypto/nutroot';
+import { NULL_LOGGER } from '../../src/logger';
 import { Amount } from '../../src/model/Amount';
 import type { OutputData } from '../../src/model/OutputData';
 import { bytesToHex, hexToBytes } from '../../src/utils';
@@ -212,6 +213,26 @@ describe('lockToNutrootOptions (v3 encoder)', () => {
     expect(() => lockToNutrootOptions({})).toThrow(/key|leaf/i);
   });
 
+  test('a commit leaf rides along, and a disclosed single key still closes the key path', () => {
+    const commit = { type: 'commit' as const, hash: HASH };
+    expect(lockToNutrootOptions({ mainKeys: [PUB_A], disclosure: true, leaves: [commit] })).toEqual(
+      {
+        receiverKey: NUTROOT_NUMS_KEY,
+        leaves: [{ type: 'threshold', n: 1, keys: [PUB_A], disclosure: 1 }, commit],
+      },
+    );
+    expect(lockToNutrootOptions({ mainKeys: [PUB_A], leaves: [commit] })).toEqual({
+      receiverKey: PUB_A,
+      leaves: [commit],
+    });
+  });
+
+  test('refuses a lock made only of commit leaves: nobody could spend it', () => {
+    expect(() => lockToNutrootOptions({ leaves: [{ type: 'commit', hash: HASH }] })).toThrow(
+      /spend path/,
+    );
+  });
+
   test('refuses a threshold above the key count', () => {
     expect(() =>
       lockToNutrootOptions({ mainKeys: [PUB_A, PUB_B], requiredMainSignatures: 3 }),
@@ -410,7 +431,27 @@ describe('nutrootToLockOptions (readable conditions)', () => {
 });
 
 describe('Wallet.createOutputData lock chokepoint', () => {
-  const wallet = new Wallet('http://localhost:3338', { unit: 'sat' });
+  const mintUrl = 'http://localhost:3338';
+  // Pre-v3 locks are refused unless the mint advertises the NUT that enforces them.
+  const walletFor = (nuts: Record<string, { supported: boolean }>, logger?: Logger) => {
+    const w = new Wallet(mintUrl, { unit: 'sat', logger });
+    w.loadMintFromCache(
+      {
+        name: 'lock mint',
+        pubkey: PUB_B,
+        version: 'test/1',
+        contact: [],
+        nuts: {
+          '4': { methods: [], disabled: false },
+          '5': { methods: [], disabled: false },
+          ...nuts,
+        },
+      },
+      { mintUrl, savedAt: Date.now(), keysets: [] },
+    );
+    return w;
+  };
+  let wallet = walletFor({ '11': { supported: true }, '14': { supported: true } });
   const V3_KEYSET = { id: `02${'ab'.repeat(32)}`, keys: { '1': 'x', '2': 'x' } };
   const LEGACY_KEYSET = { id: `00${'cd'.repeat(16)}`, keys: { '1': 'x', '2': 'x' } };
   const create = (keyset: { id: string; keys: Record<string, string> }, ot: OutputType) =>
@@ -468,6 +509,41 @@ describe('Wallet.createOutputData lock chokepoint', () => {
       }),
     ).toThrow(/v3/i);
   });
+
+  test('a pre-v3 lock refuses when the mint does not enforce it', () => {
+    const lock: OutputType = { type: 'lock', options: { mainKeys: [PUB_A] } };
+    const htlc: OutputType = { type: 'lock', options: { mainKeys: [PUB_A], hashlock: HASH } };
+    wallet = walletFor({ '10': { supported: true } });
+    expect(() => create(LEGACY_KEYSET, lock)).toThrow(/NUT-11/);
+    wallet = walletFor({ '11': { supported: true } });
+    expect(() => create(LEGACY_KEYSET, lock)).not.toThrow();
+    expect(() => create(LEGACY_KEYSET, htlc)).toThrow(/NUT-14/);
+  });
+
+  test('a locktime that is not in the future warns but still encodes', () => {
+    const warn = vi.fn();
+    wallet = walletFor({ '11': { supported: true } }, { ...NULL_LOGGER, warn });
+    const lock = (locktime: number): OutputType => ({
+      type: 'lock',
+      options: { mainKeys: [PUB_A], locktime },
+    });
+    const [out] = create(LEGACY_KEYSET, lock(0));
+    expect(JSON.parse(new TextDecoder().decode(out.secret))[1].tags).toContainEqual([
+      'locktime',
+      '0',
+    ]);
+    expect(warn).toHaveBeenCalledWith('Lock locktime is not in the future', { locktime: 0 });
+    warn.mockClear();
+    create(LEGACY_KEYSET, lock(Math.floor(Date.now() / 1000) + 3600));
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  test('a v3 lock needs no info flag: the keyset version enforces it', () => {
+    wallet = walletFor({});
+    expect(() =>
+      create(V3_KEYSET, { type: 'lock', options: { mainKeys: [PUB_A], hashlock: HASH } }),
+    ).not.toThrow();
+  });
 });
 
 describe('LockBuilder', () => {
@@ -484,6 +560,15 @@ describe('LockBuilder', () => {
       locktime: TIME,
       refundKeys: [PUB_R],
     });
+  });
+
+  test('addCommitment binds the lock to outside data', () => {
+    const lock = new LockBuilder()
+      .addMainPubkey(PUB_A)
+      .disclose()
+      .addCommitment(HASH.toUpperCase());
+    expect(lock.toOptions().leaves).toEqual([{ type: 'commit', hash: HASH }]);
+    expect(() => new LockBuilder().addCommitment('abcd')).toThrow(/64-character hex/);
   });
 
   test('addLeaf makes trees NUT-11 cannot express', () => {
@@ -504,6 +589,25 @@ describe('LockBuilder', () => {
       .blindKeys()
       .toOptions();
     expect(LockBuilder.fromOptions(options).toOptions()).toEqual(options);
+  });
+
+  test('fromOptions takes key lists as arrays only', () => {
+    const scalar = (field: 'mainKeys' | 'refundKeys' | 'blindKeys') =>
+      ({ mainKeys: [PUB_A], [field]: PUB_A, locktime: 4102444800 }) as unknown as LockOptions;
+    for (const field of ['mainKeys', 'refundKeys', 'blindKeys'] as const) {
+      expect(() => LockBuilder.fromOptions(scalar(field))).toThrow(
+        new RegExp(`${field} must be an array`),
+      );
+    }
+    const options = { mainKeys: [PUB_A], refundKeys: [PUB_B], locktime: 4102444800 };
+    expect(LockBuilder.fromOptions(options).toOptions()).toEqual(options);
+    // blindKeys doubles as a flag: a boolean and a key list are both accepted.
+    expect(LockBuilder.fromOptions({ ...options, blindKeys: true }).toOptions().blindKeys).toBe(
+      true,
+    );
+    expect(
+      LockBuilder.fromOptions({ ...options, blindKeys: [PUB_A] }).toOptions().blindKeys,
+    ).toEqual([PUB_A]);
   });
 
   test('P2PKBuilder is gone: the v5 break is clean', async () => {

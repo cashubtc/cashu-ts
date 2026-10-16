@@ -1,3 +1,4 @@
+export * from './bip39';
 export * from './core';
 export * from './curve_bls';
 export * from './curve_secp';

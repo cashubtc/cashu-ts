@@ -26,6 +26,8 @@ const meltResponse = await wallet.meltProofsBolt11(meltQuote, proofsToSend);
 // store proofsToKeep and meltResponse.change in your app ..
 ```
 
+Show `amount + fee_reserve` as the cost. A mint may return no change even when routing cost less than the reserve, so treat `change` as a refund to reconcile afterwards, not a figure to promise.
+
 ## 2) Two-step melt with `prepareMelt()` / `completeMelt()`
 
 The two-step flow lets you persist the preview before paying. This is the recommended pattern when
@@ -45,8 +47,7 @@ const { send: proofsToSend } = await wallet.send(amountToSend, proofs, {
 
 const meltPreview = await wallet.prepareMelt('bolt11', meltQuote, proofsToSend);
 
-// Persist an app-defined snapshot here.
-// Do not call JSON.stringify(meltPreview) directly; preview objects contain non-JSON-safe values.
+// Persist serializeMeltPreview(meltPreview) to replay safely later; see the NUT-19 page.
 const meltResponse = await wallet.completeMelt(meltPreview);
 ```
 

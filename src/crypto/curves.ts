@@ -2,8 +2,9 @@ import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToNumberBE } from '@noble/curves/utils.js';
 
+import { failIf, type Logger } from '../logger';
 import { CTSError } from '../model/Errors';
-import { decodeBase64ToUint8Legacy, hexToNumber, isValidHex } from '../utils';
+import { decodeBase64ToUint8Legacy, hexToNumber, isBase64String, isValidHex } from '../utils';
 
 import { type G1Point, hashToCurveBls, pointFromHexG1 } from './curve_bls';
 import { hashToCurve } from './curve_secp';
@@ -43,6 +44,45 @@ export function pointToHex(p: CurvePoint): string {
 }
 
 /**
+ * Highest keyset id version byte this build can spend: 0x02, the v3 BLS keysets.
+ *
+ * @remarks
+ * Keysets above this are refused before binding, loading keys, or computing `Y`. Bump it only with
+ * the curve and derivation dispatch a new version needs.
+ * @internal
+ */
+export const MAX_SUPPORTED_KEYSET_VERSION_BYTE = 0x02;
+
+/**
+ * Name a keyset id version byte the way the docs do.
+ *
+ * @remarks
+ * Version bytes are zero-indexed and the names are not: byte 0x02 is a "v3" keyset, and a legacy
+ * base64 id (byte -1) is v0.
+ * @internal
+ */
+export const versionName = (versionByte: number): string => `v${versionByte + 1}`;
+
+/**
+ * Refuse unsupported keyset versions, including paths that do not load keys.
+ *
+ * @remarks
+ * Takes the id rather than a `Keyset` so the curve dispatch below can use it: crypto cannot import
+ * from wallet. The parse mirrors `Keyset.version`, which reads the same byte off a loaded keyset.
+ * @internal
+ */
+export function assertSpendableVersion(keysetId: string, logger?: Logger): void {
+  const version = isValidHex(keysetId) ? Number.parseInt(keysetId.slice(0, 2), 16) : -1;
+  failIf(
+    version > MAX_SUPPORTED_KEYSET_VERSION_BYTE,
+    `Keyset '${keysetId}' is a ${versionName(version)} keyset; this build of cashu-ts supports ` +
+      `up to ${versionName(MAX_SUPPORTED_KEYSET_VERSION_BYTE)}. Upgrade to use this keyset.`,
+    logger,
+    { keysetId, versionByte: version, supported: MAX_SUPPORTED_KEYSET_VERSION_BYTE },
+  );
+}
+
+/**
  * True if `keysetId` is a v3 BLS12-381 keyset id (modern hex, version byte 0x02).
  *
  * @remarks
@@ -61,17 +101,33 @@ export function isBlsKeyset(keysetId: string): boolean {
  * The secret string is hashed as UTF-8, hex secrets included.
  */
 export function hashToCurveHex(secret: string, keysetId: string): string {
+  assertSpendableVersion(keysetId);
   const msg = new TextEncoder().encode(secret);
   return (isBlsKeyset(keysetId) ? hashToCurveBls(msg) : hashToCurve(msg)).toHex(true);
 }
 
+/**
+ * Length of a legacy (pre-2024) base64 keyset id, which has no version byte.
+ *
+ * @internal
+ */
+export const LEGACY_KEYSET_ID_LENGTH = 12;
+
 export const getKeysetIdInt = (keysetId: string): bigint => {
   let keysetIdInt: bigint;
-  if (/^[a-fA-F0-9]+$/.test(keysetId)) {
+  // Length and alphabet separate the two encodings, the same rule getDerivationKind applies.
+  // Legacy ids travelled URL-safe in `GET /keys/{id}`; fold that spelling back to the standard one.
+  const legacy = (id: string): bigint =>
+    bytesToNumberBE(decodeBase64ToUint8Legacy(id.replace(/-/g, '+').replace(/_/g, '/'))) %
+    BigInt(2 ** 31 - 1);
+  if (keysetId.length === LEGACY_KEYSET_ID_LENGTH && isBase64String(keysetId)) {
+    keysetIdInt = legacy(keysetId);
+  } else if (isValidHex(keysetId)) {
     keysetIdInt = hexToNumber(keysetId) % BigInt(2 ** 31 - 1);
+  } else if (isBase64String(keysetId)) {
+    keysetIdInt = legacy(keysetId);
   } else {
-    //legacy keyset compatibility
-    keysetIdInt = bytesToNumberBE(decodeBase64ToUint8Legacy(keysetId)) % BigInt(2 ** 31 - 1);
+    throw new CTSError('Invalid keyset id: neither hex nor base64');
   }
   return keysetIdInt;
 };

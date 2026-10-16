@@ -22,6 +22,8 @@ for (const [keysetId, last] of Object.entries(lastCounters)) {
 
 `lastCounters` maps each keyset id to the highest counter that returned a signature. Keysets with no signatures are absent. Counter advancement uses all found signatures, including any whose proofs were filtered out as spent, so it is always safe to resume from `last + 1`.
 
+Restore recovers keyset counters only. Quote lock keys (NUT-13 type `0x04`) live on a per-mint cursor the mint has no record of, so a seed-only restore cannot rebuild it; `recoverQuoteLockKey` scans for a known quote pubkey instead.
+
 ## Single keyset and options
 
 `batchRestore` scans one keyset. Both it and `restoreAll` accept the same scan options (`restoreAll` forwards them to every keyset):
@@ -31,6 +33,7 @@ const { proofs, lastCounterWithSignature } = await wallet.batchRestore({
   keysetId: '00bd033559de27d0', // defaults to the wallet's keyset
   gapLimit: 300, // consecutive empty counters that end the scan
   batchSize: 200, // counters per request after the gap-width probe (default depends on the keyset kind)
+  onProgress: ({ counter, proofs }) => render(counter, proofs), // after each wave of requests
   counter: 0, // starting counter
 });
 ```
@@ -39,8 +42,9 @@ Semantics worth knowing:
 
 - **`gapLimit` is a floor, not an exact ceiling.** The scan opens with one probe as wide as the gap limit, so an unused keyset costs a single pair of requests. Once usage shows it continues in `batchSize` steps through a small request pool, doubling the batches per wave up to the pool, so a few batches are already in flight when the gap closes. Their results are still processed: proofs sitting shortly past the gap limit are recovered rather than dropped, and the scan may probe up to a wave of extra batches past the gap.
 - **Spent proofs are dropped and pending ones kept** (a pending melt can fail and return them to spendable). Each batch is state checked first and only the counters that are not spent are restored, so signatures are fetched and unblinded for live proofs alone, and the work scales with the live set rather than the wallet's whole history. `lastCounterWithSignature` still covers every issued counter found, spent included. For the raw output, e.g. for auditing, loop over `restore()` below.
-- **`batchSize` defaults by keyset kind: 500 for HMAC (`01`), 200 for BIP32 (`00`), 100 for BLS (`02`).** Every scanned counter costs the client a derivation, a `Y` and a blinded message, at about 0.1ms, 0.7ms and 1.1ms respectively, and a batch is sized to roughly one round trip of that work; the dearer kinds also keep fewer batches in flight. A mint advertising a smaller `max_array_length` (NUT-06) caps the default; a larger one is not followed. Setting it yourself is still allowed, but a value above the mint's cap gets the request rejected.
-- **`batchSize` also trades round trips against how far the scan overshoots.** The scan probes past the last used counter until the gap rule is satisfied, and it does so in whole batches, so a smaller `batchSize` reveals fewer never-issued counters at the cost of more requests. Drop it below the default if you are optimising what the mint sees. `examples/restore_example.ts` measures both.
+- **`batchSize` defaults by keyset kind: 500 for HMAC (`01`), 200 for BIP32 (`00`), 300 for BLS (`02`), with two batches in flight.** The client's per-counter work (a derivation, a `Y` and a blinded message) yields, so the limit is the mint's work and the overshoot past the last used counter: measured on long spent histories, larger batches or more in flight added overshoot faster than they saved round trips. A mint advertising a smaller `max_array_length` (NUT-06) caps the default; a larger one is not followed. Setting it yourself is still allowed, but a value above the mint's cap gets the request rejected.
+- **`batchSize` also trades round trips against how far the scan overshoots.** The scan probes past the last used counter until the gap rule is satisfied, and it does so in whole batches, so a smaller `batchSize` reveals fewer never-issued counters at the cost of more requests. Drop it below the default if you are optimising what the mint sees. [`examples/restore_example.ts`](https://github.com/cashubtc/cashu-ts/blob/main/examples/restore_example.ts) measures both.
+- **The scan yields between chunks of local work.** Deriving, hashing and blinding a BLS batch is about a tenth of a second of CPU, so the scan hands the thread back every few frames, unblinding included; a UI stays responsive and `signal` is honoured there as well as between requests. `onProgress` fires after each wave with the next counter to scan and the proofs found so far.
 - **`maxCounter` bounds the scan** (inclusive); nothing above it is probed. Combine with `gapLimit: Infinity` to fetch a known counter range wall to wall:
 
 ```typescript
@@ -58,8 +62,8 @@ const { proofs, lastCounterWithSignature } = await wallet.restore(0, 100, { keys
 
 ## Notes
 
-- `restore()` replays **issued signatures**, so its result includes proofs you have long since spent. Filter before crediting a balance.
+- The low-level `restore()` replays **issued signatures** with no state check, so its result includes proofs you have long since spent; `batchRestore` and `restoreAll` drop those for you. Filter a raw `restore()` result before crediting a balance: `wallet.groupProofsByState(proofs)` returns `{ unspent, pending, spent }` in one call and is the same check to run when cleaning a store. `wallet.verifyMintSignatures(proofs, { onProgress })` re-checks the mint signatures the same way, in chunks that yield, so a large store can be audited from a UI thread.
 - Restoring reveals derived values for every scanned counter to the mint. The gap limit exists to bound that reveal; raise it only when you expect large counter gaps.
 - A mint can only answer for what it has a record of. It stores `B_` when it signs an output and `Y` when a proof is spent, and it cannot connect the two, so a `Y` it has never seen is reported `UNSPENT` whether the proof is live or the counter was never used. That is why the scan cannot rely on the state check alone: it confirms with a restore, which is the only thing that proves a counter was issued.
-- A live demo of the whole flow, with a report of what each scan costs, is in `examples/restore_example.ts`.
+- A live demo of the whole flow, with a report of what each scan costs, is in [`examples/restore_example.ts`](https://github.com/cashubtc/cashu-ts/blob/main/examples/restore_example.ts) in the repository (not shipped in the package).
 - Upgrading from v4: `batchRestore` took positional arguments and returned spent proofs. See the [v5 migration guide](https://github.com/cashubtc/cashu-ts/blob/main/migration-5.0.0.md) for the config-object signature.

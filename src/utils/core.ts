@@ -1,20 +1,8 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
+import { bech32 } from '@scure/base';
 
-import {
-  type DLEQ,
-  type G1Point,
-  type G2Point,
-  assertV3PointSecret,
-  batchVerifyUnblindedSignatureBls,
-  isBlsKeyset,
-  isV3PointSecret,
-  pointFromHex,
-  pointFromHexG1,
-  pointFromHexG2,
-  verifyDLEQProof_reblind,
-  verifyUnblindedSignatureBls,
-} from '../crypto';
+import { isBlsKeyset, isV3PointSecret } from '../crypto';
 import { hashToCurveBls } from '../crypto/curve_bls';
 import { verifyHTLCHash } from '../crypto/NUT14';
 import {
@@ -38,11 +26,12 @@ import type {
   Keys,
   Proof,
   ProofLike,
+  SerializedProofDLEQ,
   Token,
   TokenV4Template,
+  V4DLEQTemplate,
   V4InnerToken,
   V4ProofTemplate,
-  HasKeysetKeys,
 } from '../model/types';
 import type { SpendReceipt } from '../wallet/types/responses';
 
@@ -55,25 +44,30 @@ import {
 import { decodeUtf8Document, minimalBytesBE } from './bytes';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { JSONInt } from './JSONInt';
-import { MAX_PAYLOAD_DECODE_ATTEMPTS, MAX_PAYLOAD_LENGTH, MAX_SPLIT_OUTPUTS } from './limits';
+import {
+  MAX_BOLT11_HRP_LENGTH,
+  MAX_PAYLOAD_DECODE_ATTEMPTS,
+  MAX_PAYLOAD_LENGTH,
+  MAX_SPLIT_OUTPUTS,
+} from './limits';
 
 /**
- * Splits the amount into denominations of the provided keyset.
+ * Splits the amount into denominations present in the given keys.
  *
  * @remarks
  * Partial splits will be filled up to value using minimum splits required. Sorting is only applied
  * if a fill was made - exact custom splits are always returned in the same order.
  * @param value Amount to split.
- * @param keyset Keys to look up split amounts.
+ * @param keys Denomination-to-pubkey map of the keyset (`Keyset.keys`).
  * @param split? Optional custom split amounts.
  * @param order? Optional order for split amounts (if fill was required)
  * @returns Array of split amounts.
- * @throws Error if split sum is greater than value, the keyset lacks requested denominations, or
- *   the fill would exceed an internal output cap (coarse denominations over a large value).
+ * @throws Error if split sum is greater than value, the keys lack requested denominations, or the
+ *   fill would exceed an internal output cap (coarse denominations over a large value).
  */
 export function splitAmount(
   value: AmountLike,
-  keyset: Keys,
+  keys: Keys,
   split?: AmountLike[],
   order?: 'desc' | 'asc',
 ): Amount[] {
@@ -81,6 +75,9 @@ export function splitAmount(
   let normalizedSplit = split?.map((amt) => toAmount(amt, 'splitAmount.split', true));
 
   if (normalizedSplit) {
+    if (normalizedSplit.length > MAX_SPLIT_OUTPUTS) {
+      throw new CTSError(`Cannot split amount: split would exceed ${MAX_SPLIT_OUTPUTS} outputs`);
+    }
     const totalSplitAmount = Amount.sum(normalizedSplit);
 
     // Special case: explicit "zero-total" outputs (restore or NUT-08 blanks)
@@ -96,7 +93,7 @@ export function splitAmount(
         `Split is greater than total amount: ${totalPositive.toString()} > ${remainingValue.toString()}`,
       );
     }
-    if (positive.some((amt) => !hasCorrespondingKey(amt, keyset))) {
+    if (positive.some((amt) => !hasCorrespondingKey(amt, keys))) {
       throw new CTSError(
         'Provided amount preferences do not match the amounts of the mint keyset.',
       );
@@ -115,7 +112,7 @@ export function splitAmount(
   }
 
   // Denomination fill for the remaining value
-  const sortedKeyAmounts = getKeysetAmountsAsAmount(keyset, 'desc');
+  const sortedKeyAmounts = getKeysetAmountsAsAmount(keys, 'desc');
   if (sortedKeyAmounts.length === 0) {
     throw new CTSError('Cannot split amount, keyset is inactive or contains no keys');
   }
@@ -176,7 +173,10 @@ function getKeysetAmountsAsAmount(keyset: Keys, order: 'asc' | 'desc'): Amount[]
  * @returns True if the amount is in the keyset, false otherwise.
  */
 export function hasCorrespondingKey(amount: AmountLike, keyset: Keys): boolean {
-  return toAmount(amount, 'hasCorrespondingKey.amount', true).toString() in keyset;
+  // Own denominations only: a `Keys` object inherits from Object.prototype, and only the keys
+  // the keyset id commits to count.
+  const denomination = toAmount(amount, 'hasCorrespondingKey.amount', true).toString();
+  return Object.prototype.hasOwnProperty.call(keyset, denomination);
 }
 
 function toAmount(amount: AmountLike, op: string, allowZero = false): Amount {
@@ -268,12 +268,6 @@ function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
   if (removeDleq) {
     proofs = stripDleq(proofs);
   }
-  // Make sure each DLEQ has its blinding factor
-  proofs.forEach((p) => {
-    if (p.dleq && p.dleq.r == undefined) {
-      throw new CTSError('Missing blinding factor in included DLEQ proof');
-    }
-  });
   const nonHex = hasNonHexId(proofs);
   if (nonHex) {
     throw new CTSError('can not encode to v4 token if proofs contain non-hex keyset id');
@@ -281,7 +275,7 @@ function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
   // Map keyset IDs to short IDs
   proofs = convertToShortKeysetId(proofs);
 
-  const tokenTemplate = templateFromToken({ ...token, proofs });
+  const tokenTemplate = toV4CborTemplate({ ...token, proofs });
 
   const encodedData = encodeCBOR(tokenTemplate);
   const prefix = 'cashu';
@@ -307,7 +301,22 @@ function isV3TransactionWitness(keysetId: string, secret: string): boolean {
   return isBlsKeyset(keysetId) && isV3PointSecret(secret);
 }
 
-function templateFromToken(token: Token): TokenV4Template {
+/**
+ * Encodes a proof's DLEQ for the v4 wire format.
+ *
+ * @remarks
+ * Per NUT-12 the wallet adds its own blinding factor `r` to the mint's `{e, s}`. A DLEQ without it
+ * is unverifiable by the next holder and costs its owner privacy, so refuse rather than pad `r`: a
+ * zero blinding factor would also assert the message was never blinded.
+ */
+function toV4CborDleq(dleq: SerializedProofDLEQ): V4DLEQTemplate {
+  if (dleq.r == undefined) {
+    throw new CTSError('Missing blinding factor in included DLEQ proof');
+  }
+  return { e: hexToBytes(dleq.e), s: hexToBytes(dleq.s), r: hexToBytes(dleq.r) };
+}
+
+function toV4CborTemplate(token: Token): TokenV4Template {
   // Keyed by token-supplied IDs, so a plain object would resolve `__proto__` etc. to inherited members.
   const idMap = Object.create(null) as { [id: string]: Proof[] };
   const mint = token.mint;
@@ -329,18 +338,16 @@ function templateFromToken(token: Token): TokenV4Template {
         s: p.secret,
         c: hexToBytes(p.C),
         ...(p.dleq && {
-          d: {
-            e: hexToBytes(p.dleq.e),
-            s: hexToBytes(p.dleq.s),
-            r: hexToBytes(p.dleq.r ?? '00'),
-          },
+          d: toV4CborDleq(p.dleq),
         }),
         ...(p.p2pk_e && {
           pe: hexToBytes(p.p2pk_e),
         }),
         ...(p.witness &&
           !isV3TransactionWitness(id, p.secret) && {
-            w: JSON.stringify(p.witness),
+            // A decoded token's witness is already the wire string; stringifying it again
+            // would nest it, and the mint cannot parse what comes back.
+            w: typeof p.witness === 'string' ? p.witness : JSON.stringify(p.witness),
           }),
         ...(p.spend_info && {
           si: {
@@ -360,52 +367,97 @@ function templateFromToken(token: Token): TokenV4Template {
   return tokenTemplate;
 }
 
-function tokenFromTemplate(template: TokenV4Template): Token {
-  if (!template || !Array.isArray(template.t)) {
-    throw new CTSError('Invalid token template');
+/**
+ * Hex-encodes a byte string read from a decoded token template.
+ *
+ * @remarks
+ * The template types describe what this library emits, but a decoded token holds whatever the
+ * sender put on the wire and any field may carry any CBOR type. Without this, a wrong-typed field
+ * surfaces as a raw `TypeError` from the hex encoder rather than a token error naming the field.
+ */
+function templateHex(value: unknown, field: string): string {
+  if (!(value instanceof Uint8Array) || value.length === 0) {
+    throw new CTSError(`Invalid token: ${field} must be a non-empty byte string`);
   }
+  return bytesToHex(value);
+}
+
+/**
+ * Reads a text field from a decoded token template; the text counterpart of {@link templateHex}.
+ */
+function templateText(value: unknown, field: string): string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new CTSError(`Invalid token: ${field} must be a non-empty string`);
+  }
+  return value;
+}
+
+/**
+ * True when a decoded v4 DLEQ block carries all three of `e`, `s` and `r`.
+ *
+ * @remarks
+ * A block missing any of them is dropped on decode: without `r` it can never verify, and carrying a
+ * partial one costs the holder privacy (NUT-12). Absent is tolerated, present-but-malformed is not,
+ * so the fields themselves are still read through {@link templateHex}.
+ */
+function isCompleteDleq(d: V4DLEQTemplate | undefined): d is V4DLEQTemplate {
+  return d != undefined && d.e != undefined && d.s != undefined && d.r != undefined;
+}
+
+function fromV4CborTemplate(template: TokenV4Template): Token {
+  if (!template || !Array.isArray(template.t)) {
+    throw new CTSError('Invalid token');
+  }
+  const mint = templateText(template.m, 'mint');
+  const unit = template.u ? templateText(template.u, 'unit') : 'sat';
+  const memo = template.d ? templateText(template.d, 'memo') : undefined;
   const proofs: Proof[] = [];
   template.t.forEach((t) => {
     if (!t || !Array.isArray(t.p)) {
-      throw new CTSError('Invalid token template');
+      throw new CTSError('Invalid token');
     }
     t.p.forEach((p) => {
+      if (!p || typeof p !== 'object') {
+        throw new CTSError('Invalid token');
+      }
+      if (p.si?.t != undefined && !Array.isArray(p.si.t)) {
+        throw new CTSError('Invalid token: spend_info tree must be an array');
+      }
+      const id = templateHex(t.i, 'keyset id');
+      const secret = templateText(p.s, 'secret');
+      // NUT-00 carries the witness as serialized JSON text.
+      const witness = p.w ? templateText(p.w, 'witness') : undefined;
       proofs.push({
-        secret: p.s,
-        C: bytesToHex(p.c),
+        secret,
+        C: templateHex(p.c, 'proof C'),
         amount: Amount.from(p.a),
-        id: bytesToHex(t.i),
-        ...(p.d && {
+        id,
+        ...(isCompleteDleq(p.d) && {
           dleq: {
-            r: bytesToHex(p.d.r),
-            s: bytesToHex(p.d.s),
-            e: bytesToHex(p.d.e),
+            r: templateHex(p.d.r, 'dleq r'),
+            s: templateHex(p.d.s, 'dleq s'),
+            e: templateHex(p.d.e, 'dleq e'),
           },
         }),
         ...(p.pe && {
-          p2pk_e: bytesToHex(p.pe),
+          p2pk_e: templateHex(p.pe, 'p2pk_e'),
         }),
-        ...(p.w &&
-          !isV3TransactionWitness(bytesToHex(t.i), p.s) && {
-            witness: p.w,
-          }),
+        ...(witness && !isV3TransactionWitness(id, secret) && { witness }),
         ...(p.si && {
           spend_info: {
-            ...(p.si.k && { k: bytesToHex(p.si.k) }),
-            ...(p.si.e && { E: bytesToHex(p.si.e) }),
-            ...(p.si.i && { K: bytesToHex(p.si.i) }),
-            ...(p.si.u && { u: bytesToHex(p.si.u) }),
-            ...(p.si.t && { tree: p.si.t.map(bytesToHex) }),
+            ...(p.si.k && { k: templateHex(p.si.k, 'spend_info k') }),
+            ...(p.si.e && { E: templateHex(p.si.e, 'spend_info E') }),
+            ...(p.si.i && { K: templateHex(p.si.i, 'spend_info K') }),
+            ...(p.si.u && { u: templateHex(p.si.u, 'spend_info u') }),
+            ...(p.si.t && {
+              tree: p.si.t.map((leaf) => templateHex(leaf, 'spend_info tree leaf')),
+            }),
           },
         }),
       });
     });
   });
-  const decodedToken: Token = { mint: template.m, proofs, unit: template.u || 'sat' };
-  if (template.d) {
-    decodedToken.memo = template.d;
-  }
-  return decodedToken;
+  return { mint, proofs, unit, ...(memo && { memo }) };
 }
 
 /**
@@ -431,12 +483,12 @@ export function getDecodedToken(tokenString: string, keysetIds: readonly string[
 /**
  * Returns the metadata of a cashu token.
  *
- * @param token An encoded cashu token (cashuB...)
+ * @param token An encoded cashu token (cashuB...), or a raw binary token (`craw` + `B` + CBOR).
  * @returns Token metadata.
  */
-export function getTokenMetadata(token: string): TokenMetadata {
-  token = removePrefix(token);
-  const tokenObj = handleTokens(token);
+export function getTokenMetadata(token: string | Uint8Array): TokenMetadata {
+  const tokenObj =
+    typeof token === 'string' ? handleTokens(removePrefix(token)) : decodeBinaryToken(token);
   return {
     unit: tokenObj.unit || 'sat',
     mint: tokenObj.mint,
@@ -541,14 +593,25 @@ function handleTokens(token: string): Token {
   const encodedToken = token.slice(1);
   if (version === 'A') {
     const parsedV3Token = decodeBase64UrlToJson<DeprecatedToken>(encodedToken);
+    if (!parsedV3Token || !Array.isArray(parsedV3Token.token)) {
+      throw new CTSError('Invalid token');
+    }
     if (parsedV3Token.token.length > 1) {
       throw new CTSError('Multi entry token are not supported');
     }
     const entry = parsedV3Token.token[0];
-    const proofs = entry.proofs.map((p) => ({
-      ...p,
-      amount: Amount.from(p.amount as AmountLike),
-    }));
+    if (!entry || !Array.isArray(entry.proofs)) {
+      throw new CTSError('Invalid token');
+    }
+    const proofs = entry.proofs.map((p) => {
+      const { dleq, ...rest } = p;
+      return {
+        ...rest,
+        amount: Amount.from(p.amount),
+        // Same rule as the v4 path: an incomplete DLEQ is useless and leaky, so it does not travel.
+        ...(dleq?.r && dleq.s && dleq.e && { dleq }),
+      };
+    });
     const tokenObj: Token = {
       mint: entry.mint,
       proofs,
@@ -561,7 +624,7 @@ function handleTokens(token: string): Token {
   } else if (version === 'B') {
     const uInt8Token = decodeBase64UrlToUint8(encodedToken);
     const tokenData = decodeCBOR(uInt8Token) as TokenV4Template;
-    return tokenFromTemplate(tokenData);
+    return fromV4CborTemplate(tokenData);
   }
   throw new CTSError('Token version is not supported');
 }
@@ -573,6 +636,8 @@ export type DeriveKeysetIdOptions = {
   versionByte?: number;
   isDeprecatedBase64?: boolean;
 };
+
+const KEYSET_UNIT_RE = /^[a-z0-9_-]+$/;
 
 /**
  * Returns the keyset id of a set of keys.
@@ -588,6 +653,12 @@ export type DeriveKeysetIdOptions = {
  * @throws If keyset versionByte is not valid.
  */
 export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): string {
+  // A u64 denomination is at most 20 digits; bound every key before any amount is parsed.
+  for (const amount of Object.keys(keys)) {
+    if (amount.length > 20) {
+      throw new CTSError('Invalid keyset denomination: exceeds 20 digits');
+    }
+  }
   const unit = options?.unit ?? 'sat'; // default: sat
   const expiry = options?.expiry;
   const versionByte = options?.versionByte ?? 1; // default: 1
@@ -619,7 +690,11 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
       if (!unit) {
         throw new CTSError(`Cannot compute keyset ID version 01: unit is required.`);
       }
-      // Per NUT-02 V2: pubkey hex and unit string MUST be lowercased in the preimage.
+      // Per NUT-02 V2: pubkey hex and unit string MUST be lowercased in the preimage, and the
+      // unit shares V3's alphabet so it cannot collide with the metadata fields that follow it.
+      if (!KEYSET_UNIT_RE.test(unit.toLowerCase())) {
+        throw new CTSError(`Invalid keyset unit: ${unit}`);
+      }
       const sortedEntries = Object.entries(keys).sort(([amountA], [amountB]) =>
         Amount.from(amountA).compareTo(amountB),
       );
@@ -644,7 +719,7 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
       }
       // Per NUT-02 V3: length-framed preimage over raw bytes; unit MUST match
       // [a-z0-9_-]+ and final_expiry is not committed to the id.
-      if (!/^[a-z0-9_-]+$/.test(unit)) {
+      if (!KEYSET_UNIT_RE.test(unit)) {
         throw new CTSError(`Invalid keyset unit: ${unit}`);
       }
       const sortedEntries = Object.entries(keys).sort(([amountA], [amountB]) =>
@@ -723,27 +798,44 @@ export function classifyNutrootSpendInfo(proof: Pick<Proof, 'spend_info'>): Nutr
 }
 
 /**
- * The key an auditable lock (NUT-10) commits to, fully verified; `undefined` for any other shape.
+ * What an auditable lock (NUT-10) commits to, fully verified; `undefined` for any other shape.
  *
  * @remarks
  * An auditable lock is script-only with a NUMS-proven internal key and exactly one threshold leaf
- * of one key (`auditableLock` builds it), so anyone holding the proof can verify who it is locked
- * to. Verifies the commitments (NUMS offset, root, tweak), not just the claimed fields.
+ * of one key, optionally beside one commit leaf (`auditableLock` builds it), so anyone holding the
+ * proof can verify who it is locked to and what context it is bound to. Verifies the commitments
+ * (NUMS offset, root, tweak), not just the claimed fields.
+ */
+export function auditableLockInfo(
+  proof: Pick<Proof, 'id' | 'secret' | 'spend_info'>,
+): { pubkey: string; commit?: string } | undefined {
+  const si = proof.spend_info;
+  if (!isBlsKeyset(proof.id)) return undefined;
+  if (!si || si.k || si.E || !si.K || !si.u || !si.tree?.length || si.tree.length > 2) {
+    return undefined;
+  }
+  try {
+    const leaves = si.tree.map(parseNutrootLeafHex);
+    const locks = leaves.filter((leaf) => leaf.type !== 'commit');
+    const commits = leaves.filter((leaf) => leaf.type === 'commit');
+    const [leaf] = locks;
+    if (locks.length !== 1 || leaf.type !== 'threshold' || leaf.n !== 1) return undefined;
+    if (leaf.keys.length !== 1) return undefined;
+    verifyNutrootSpendInfo(proof.secret, si);
+    const [commit] = commits;
+    return { pubkey: leaf.keys[0], ...(commit && { commit: commit.hash }) };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The key an auditable lock (NUT-10) commits to; see {@link auditableLockInfo}.
  */
 export function auditableLockKey(
   proof: Pick<Proof, 'id' | 'secret' | 'spend_info'>,
 ): string | undefined {
-  const si = proof.spend_info;
-  if (!isBlsKeyset(proof.id)) return undefined;
-  if (!si || si.k || si.E || !si.K || !si.u || si.tree?.length !== 1) return undefined;
-  try {
-    const leaf = parseNutrootLeafHex(si.tree[0]);
-    if (leaf.type !== 'threshold' || leaf.n !== 1 || leaf.keys.length !== 1) return undefined;
-    verifyNutrootSpendInfo(proof.secret, si);
-    return leaf.keys[0];
-  } catch {
-    return undefined;
-  }
+  return auditableLockInfo(proof)?.pubkey;
 }
 
 /**
@@ -804,7 +896,7 @@ export function verifySpendReceipt(
     const container = proofInputContainer({
       amount: Amount.from(proof.amount).toBigInt(),
       keysetId: proof.id,
-      secret: proof.secret,
+      Y,
       C: proof.C,
     });
     const recomputed = inputDigest(sha256(hexToBytes(receipt.transcript)), container);
@@ -897,13 +989,23 @@ function scriptPathWitnessSpends(digest: Uint8Array, secretHex: string, witness:
     };
     if (!w.leaf || !w.control?.K || !Array.isArray(w.control.path)) return false;
     const leaf = parseNutrootLeafHex(w.leaf);
+    if (leaf.type === 'commit') return false;
     const committed = verifyNutrootCommitment(
       hexToBytes(secretHex),
       hexToBytes(w.control.K),
       hexToBytes(w.leaf),
       w.control.path.map((h) => hexToBytes(h)),
     );
-    const signed = countLeafSigners(leaf, digest, w.signatures ?? []) >= leaf.n;
+    // NUT-10: at most one entry per leaf key, each a 64-byte signature, preimage only on a hashlock.
+    const signatures = w.signatures ?? [];
+    if (
+      signatures.length > leaf.keys.length ||
+      !signatures.every((s) => typeof s === 'string' && s.length === 128 && HEX.test(s))
+    ) {
+      return false;
+    }
+    if (w.preimage !== undefined && leaf.type !== 'hashlock') return false;
+    const signed = countLeafSigners(leaf, digest, signatures) >= leaf.n;
     const unlocked =
       leaf.hash === undefined || (!!w.preimage && verifyHTLCHash(w.preimage, leaf.hash));
     return committed && signed && unlocked;
@@ -926,6 +1028,18 @@ export function sortProofsById(proofs: Proof[]) {
  */
 export function isObj(v: unknown): v is object {
   return v != null && typeof v === 'object';
+}
+
+/**
+ * Type guard: returns `true` if `v` is a record, i.e. a non-null object that is not an array.
+ *
+ * @remarks
+ * Use this over {@link isObj} on anything off the wire: JSON admits an array or a string where a
+ * record is declared, and spreading one of those materializes a property per element/character.
+ * @internal
+ */
+export function isRecord(v: unknown): v is Record<string, unknown> {
+  return isObj(v) && !Array.isArray(v);
 }
 
 /**
@@ -1132,171 +1246,6 @@ function mapShortKeysetIds(proofs: Proof[], keysetIds: readonly string[]): Proof
 }
 
 /**
- * NUT-12: verifies the DLEQ on a Proof. v3 (BLS) proofs have no DLEQ payload — pairing equality
- * stands in and runs regardless of `require`.
- *
- * @param proof The proof subject to verification.
- * @param keyset Object containing keyset keys (eg: Keyset, MintKeys, KeysetCache).
- * @param opts.require Default `false` (NUT-12 "MUST verify-if-present" — missing DLEQ on v0/v1/v2
- *   returns `true`). `true` opts into above-spec strictness: missing DLEQ → `false`.
- * @returns True if verification succeeded, false otherwise.
- * @throws CTSError if the proof amount is not a denomination in the keyset.
- */
-export function hasValidDleq(
-  proof: Proof,
-  keyset: HasKeysetKeys,
-  opts?: { require?: boolean },
-): boolean {
-  const require = opts?.require ?? false;
-  // v3 (BLS) proofs carry no DLEQ; pairing verification stands in. Returns true iff
-  // e(C, G2) == e(Y, K2). This is "valid signature" in v3 terms — equivalent guarantee
-  // to a verifying DLEQ on v0/v1/v2 proofs.
-  if (!hasCorrespondingKey(proof.amount, keyset.keys)) {
-    // An empty keyset means keys were never loaded (eg rotated-out keyset per NUT-01),
-    // not that the denomination is missing. Say so: the two failures have different fixes.
-    const message =
-      Object.keys(keyset.keys).length === 0
-        ? `No keys loaded for keyset ${keyset.id}`
-        : `Undefined key for amount ${proof.amount.toString()} in keyset ${keyset.id}`;
-    throw new CTSError(message);
-  }
-
-  if (isBlsKeyset(proof.id)) {
-    try {
-      assertV3PointSecret(proof.secret);
-      const K2 = pointFromHexG2(keyset.keys[proof.amount.toString()]);
-      return verifyUnblindedSignatureBls(
-        K2,
-        pointFromHexG1(proof.C),
-        new TextEncoder().encode(proof.secret),
-      );
-    } catch {
-      // Malformed v3 keyset hex, malformed proof.C, etc. — match secp behaviour: return false.
-      return false;
-    }
-  }
-
-  if (proof?.dleq == undefined) {
-    return !require;
-  }
-
-  const key = keyset.keys[proof.amount.toString()];
-  try {
-    const dleq = {
-      e: hexToBytes(proof.dleq.e),
-      s: hexToBytes(proof.dleq.s),
-      r: hexToNumber(proof.dleq.r ?? '00'),
-    } as DLEQ;
-    return verifyDLEQProof_reblind(
-      new TextEncoder().encode(proof.secret),
-      dleq,
-      pointFromHex(proof.C),
-      pointFromHex(key),
-    );
-  } catch {
-    // Malformed DLEQ payload (out-of-range scalar, bad point encoding, etc.) — treat as invalid.
-    return false;
-  }
-}
-
-/**
- * Verifies a batch of received proofs in one pass, batching the v3 (BLS) subset into a single
- * multi-pairing while keeping per-proof DLEQ verification for v0/v1/v2.
- *
- * Batch path: builds the {K2, C, secret} triples once, runs `batchVerifyUnblindedSignatureBls`, and
- * on failure re-runs per-proof to identify the offending proof — cost is one extra batch's worth of
- * work on the unhappy path, acceptable.
- *
- * @param proofs The proofs to verify (mixed curves allowed; `amount` may be any {@link AmountLike}
- *   shape — normalized internally).
- * @param getKeyset Lookup callback (e.g. `(id) => keyChain.getKeyset(id)`).
- * @param opts.requireDleq Forwarded to {@link hasValidDleq} as `require` for v0/v1/v2 proofs;
- *   ignored for v3.
- * @throws CTSError if any proof's amount is not in its keyset, or DLEQ/pairing verification fails.
- */
-export function verifyProofsForReceive(
-  proofs: ProofLike[],
-  getKeyset: (id: string) => HasKeysetKeys,
-  opts?: { requireDleq?: boolean },
-): void {
-  const normalized = normalizeProofAmounts(proofs);
-  const requireDleq = opts?.requireDleq ?? false;
-  const failMsg = requireDleq
-    ? 'Token contains proofs with invalid or missing DLEQ'
-    : 'Token contains a proof with an invalid DLEQ';
-
-  const blsProofs: Proof[] = [];
-  const otherProofs: Proof[] = [];
-  for (const p of normalized) {
-    (isBlsKeyset(p.id) ? blsProofs : otherProofs).push(p);
-  }
-
-  const offenderSuffix = (p: Proof) => ` (keyset ${p.id}, amount ${p.amount.toString()})`;
-
-  for (const p of otherProofs) {
-    if (!hasValidDleq(p, getKeyset(p.id), { require: requireDleq })) {
-      throw new CTSError(failMsg + offenderSuffix(p));
-    }
-  }
-
-  if (blsProofs.length === 0) return;
-
-  // Receive-time verification cascade (nutroot secrets 2.5.1): spend info must reconstruct the
-  // secret (bare key, or complete disclosed tree). Anything partial or mismatched rejects.
-  for (const p of blsProofs) {
-    if (!p.spend_info) continue;
-    try {
-      verifyNutrootSpendInfo(p.secret, p.spend_info);
-    } catch (e) {
-      throw new CTSError(
-        `${e instanceof Error ? e.message : 'Invalid spend info'}${offenderSuffix(p)}`,
-      );
-    }
-  }
-
-  // Batch path bypasses hasValidDleq, so the amount-in-keyset check is repeated here.
-  const items = blsProofs.map((p) => {
-    const ks = getKeyset(p.id);
-    if (!hasCorrespondingKey(p.amount, ks.keys)) {
-      throw new CTSError(`Undefined key for amount ${p.amount.toString()} in keyset ${ks.id}`);
-    }
-    // Wrap both parses: a malformed/foreign-curve K2 must surface as a CTSError, not an
-    // unhandled throw that escapes the receive path.
-    let K2: G2Point;
-    let C: G1Point;
-    try {
-      assertV3PointSecret(p.secret);
-      K2 = pointFromHexG2(ks.keys[p.amount.toString()]);
-      C = pointFromHexG1(p.C);
-    } catch {
-      throw new CTSError(failMsg + offenderSuffix(p));
-    }
-    return { K2, C, secret: new TextEncoder().encode(p.secret), proof: p };
-  });
-
-  // Single proof: batch wrapper costs an extra mul; just pair directly.
-  if (items.length === 1) {
-    const it = items[0];
-    if (!verifyUnblindedSignatureBls(it.K2, it.C, it.secret)) {
-      throw new CTSError(failMsg + offenderSuffix(it.proof));
-    }
-    return;
-  }
-
-  if (batchVerifyUnblindedSignatureBls(items)) return;
-
-  // Batch failed — pinpoint the offender so the caller can surface a useful error.
-  for (const it of items) {
-    if (!verifyUnblindedSignatureBls(it.K2, it.C, it.secret)) {
-      throw new CTSError(failMsg + offenderSuffix(it.proof));
-    }
-  }
-  // Defensive: batch returned false but every proof verified individually. Shouldn't happen
-  // unless the batch implementation regresses; treat as a hard failure rather than silently passing.
-  throw new CTSError(failMsg);
-}
-
-/**
  * Encodes a {@link Token} as a raw binary token (`craw` + `B` + CBOR).
  */
 export function getEncodedTokenBinary(token: Token): Uint8Array {
@@ -1308,26 +1257,43 @@ export function getEncodedTokenBinary(token: Token): Uint8Array {
       'Proofs contain a legacy keyset ID and cannot be encoded. Swap them at the mint first.',
     );
   }
-  const template = templateFromToken({ ...token, proofs });
+  const template = toV4CborTemplate({ ...token, proofs });
   const binaryTemplate = encodeCBOR(template);
   const prefix = utf8Encoder.encode('craw');
   const version = utf8Encoder.encode('B');
   return mergeUInt8Arrays(prefix, version, binaryTemplate);
 }
 
-/**
- * Decodes a raw binary token (`craw` + `B` + CBOR) into a {@link Token}.
- */
-export function getDecodedTokenBinary(bytes: Uint8Array): Token {
-  const utfDecoder = new TextDecoder();
-  const prefix = utfDecoder.decode(bytes.slice(0, 4));
-  const version = utfDecoder.decode(new Uint8Array([bytes[4]]));
-  if (prefix !== 'craw' || version !== 'B') {
+function decodeBinaryToken(bytes: Uint8Array): Token {
+  // 'craw' + 'B' as bytes; no decoding needed for a fixed ASCII magic.
+  const magic = [0x63, 0x72, 0x61, 0x77, 0x42];
+  if (!(bytes instanceof Uint8Array)) {
+    throw new CTSError('Token must be a string or a Uint8Array');
+  }
+  if (bytes.length < 5 || magic.some((b, i) => bytes[i] !== b)) {
     throw new CTSError('not a valid binary token');
   }
-  const binaryToken = bytes.slice(5);
-  const decoded = decodeCBOR(binaryToken) as TokenV4Template;
-  return tokenFromTemplate(decoded);
+  return fromV4CborTemplate(decodeCBOR(bytes.slice(5)) as TokenV4Template);
+}
+
+/**
+ * Decodes a raw binary token (`craw` + `B` + CBOR) into a {@link Token}.
+ *
+ * @param bytes The encoded binary token.
+ * @param keysetIds Array of full keyset ID strings, eg: from `KeyChain.getAllKeysetIds()`. Short
+ *   keyset IDs are mapped to their full form like {@link getDecodedToken} does.
+ * @returns Cashu token object.
+ */
+export function getDecodedTokenBinary(bytes: Uint8Array, keysetIds: readonly string[]): Token {
+  // Plain JS callers on the pre-v5 signature otherwise decode short IDs unresolved
+  if (!Array.isArray(keysetIds)) {
+    throw new CTSError(
+      'getDecodedTokenBinary requires keysetIds (the wallet keyset id list) as its second argument; see the v5 migration guide, or use wallet.decodeToken()',
+    );
+  }
+  const token = decodeBinaryToken(bytes);
+  token.proofs = mapShortKeysetIds(token.proofs, keysetIds);
+  return token;
 }
 
 function removePrefix(token: string): string {
@@ -1384,7 +1350,12 @@ export function bolt11AmountMsat(pr: string): bigint | null {
   const lower = pr.toLowerCase();
   // The bech32 charset excludes '1', so the last '1' is the HRP separator.
   const sep = lower.lastIndexOf('1');
-  if (!lower.startsWith('ln') || sep < 3 || sep === lower.length - 1) {
+  if (
+    !lower.startsWith('ln') ||
+    sep < 3 ||
+    sep > MAX_BOLT11_HRP_LENGTH ||
+    sep === lower.length - 1
+  ) {
     throw new CTSError('Invalid BOLT11 invoice');
   }
   const match = /^ln[a-z]+?(\d*)([munp]?)$/.exec(lower.slice(0, sep));
@@ -1402,4 +1373,53 @@ export function bolt11AmountMsat(pr: string): bigint | null {
     return n / 10n;
   }
   return n * MULTIPLIER_MSAT[multiplier];
+}
+
+/**
+ * Reads the payment hash from a BOLT11 invoice's tagged fields, as lowercase hex.
+ *
+ * @remarks
+ * Bech32 checksum only, no signature check: that is the payer's job.
+ * @throws If the string is not a BOLT11 invoice or carries no payment hash.
+ * @internal
+ */
+export function bolt11PaymentHash(pr: string): string {
+  if (typeof pr !== 'string') throw new CTSError('BOLT11 invoice must be a string');
+  let words: number[];
+  try {
+    ({ words } = bech32.decode(pr.toLowerCase(), false));
+  } catch (e) {
+    throw new CTSError('Invalid BOLT11 invoice', { cause: e });
+  }
+  // BOLT 11: a 7-word timestamp, then tagged fields (type, 10-bit length, data), then a
+  // 104-word signature. The payment hash is type 1, 52 words.
+  const end = words.length - 104;
+  for (let i = 7; i + 3 <= end;) {
+    const type = words[i];
+    const len = (words[i + 1] << 5) | words[i + 2];
+    const next = i + 3 + len;
+    if (next > end) break;
+    if (type === 1 && len === 52) {
+      try {
+        return bytesToHex(bech32.fromWords(words.slice(i + 3, next)));
+      } catch (e) {
+        throw new CTSError('Invalid BOLT11 payment hash', { cause: e });
+      }
+    }
+    i = next;
+  }
+  throw new CTSError('BOLT11 invoice has no payment hash');
+}
+
+/**
+ * Whether a hex preimage hashes to a BOLT11 invoice's payment hash.
+ *
+ * @throws If the invoice cannot be parsed; a malformed preimage is simply false.
+ * @internal
+ */
+export function bolt11PreimageMatches(pr: string, preimage: string): boolean {
+  const paymentHash = bolt11PaymentHash(pr);
+  return (
+    /^[0-9a-fA-F]{64}$/.test(preimage) && bytesToHex(sha256(hexToBytes(preimage))) === paymentHash
+  );
 }

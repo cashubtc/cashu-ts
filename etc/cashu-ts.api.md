@@ -8,6 +8,11 @@ import { Fp2 } from '@noble/curves/abstract/tower.js';
 import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 
 // @public
+export type AbortOptions = {
+    signal?: AbortSignal;
+};
+
+// @public
 export class Amount {
     // (undocumented)
     add(other: AmountLike): Amount;
@@ -57,7 +62,7 @@ export class Amount {
     static zero(): Amount;
 }
 
-// @public (undocumented)
+// @public
 export class AmountError extends CTSError {
     constructor(message: string);
 }
@@ -130,7 +135,7 @@ export class AmountWithUnit {
     static zero(unit: string): AmountWithUnit;
 }
 
-// @public (undocumented)
+// @public
 export class AmountWithUnitError extends CTSError {
     constructor(message: string);
 }
@@ -151,7 +156,15 @@ export function assertV3PointSecret(secret: Uint8Array | string): void;
 export function attachHTLCPreimage<T extends ProofLike>(proofs: T[], preimage: string): T[];
 
 // @public
-export function auditableLock(pubkey: string): LockOptions_2;
+export function auditableLock(pubkey: string, opts?: {
+    commit?: string;
+}): LockOptions_2;
+
+// @public
+export function auditableLockInfo(proof: Pick<Proof, 'id' | 'secret' | 'spend_info'>): {
+    pubkey: string;
+    commit?: string;
+} | undefined;
 
 // @public
 export function auditableLockKey(proof: Pick<Proof, 'id' | 'secret' | 'spend_info'>): string | undefined;
@@ -179,7 +192,6 @@ export class AuthManager implements AuthProvider {
     get poolSize(): number;
     // (undocumented)
     get poolTarget(): number;
-    // (undocumented)
     setCAT(cat: string | undefined): void;
 }
 
@@ -210,13 +222,14 @@ export interface AuthProvider {
 
 // @public
 export interface BatchMintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'quote' | 'pubkey'> = MintQuoteBaseResponse> {
+    amounts: Amount[];
     // @deprecated (undocumented)
     legacySignatures?: Array<string | null>;
     // (undocumented)
     method: string;
     outputData: OutputDataLike[];
-    payload: BatchMintRequest;
     quotes: TQuote[];
+    signatures?: Array<string | null>;
 }
 
 // @public
@@ -234,6 +247,8 @@ export type BatchRestoreConfig = {
     batchSize?: number;
     counter?: number;
     keysetId?: string;
+    signal?: AbortSignal;
+    onProgress?: (progress: RestoreProgress) => void;
 };
 
 // @public
@@ -259,10 +274,10 @@ export type BlindSignature = {
 };
 
 // @public
-export const BLS_FR_ORDER: bigint;
+export const BLS_FP_ORDER = 4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787n;
 
 // @public
-export const BLS_G2_GENERATOR: WeierstrassPoint<Fp2>;
+export const BLS_FR_ORDER = 52435875175126190479447740508185965837690552500527637822603658699938581184513n;
 
 // @public
 export const BLS_HASH_TO_CURVE_DST = "CASHU_BLS12_381_G1_XMD:SHA-256_SSWU_RO_";
@@ -272,6 +287,11 @@ export function buildMintBackupPayload(mints: string[], timestamp: number): stri
 
 // @public
 export function bytesToHex(bytes: Uint8Array): string;
+
+// @public
+export class CallerAbortError extends NetworkError {
+    constructor(message: string);
+}
 
 // @public (undocumented)
 export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
@@ -326,11 +346,16 @@ export type CompleteMeltOptions = {
     preferAsync?: boolean;
     extraPayload?: Record<string, unknown>;
     scriptPath?: ScriptPathPlan[];
+    signal?: AbortSignal;
 };
+
+// @public
+export type CompleteMintOptions = AbortOptions;
 
 // @public (undocumented)
 export type CompleteSwapOptions = {
     scriptPath?: ScriptPathPlan[];
+    signal?: AbortSignal;
 };
 
 // @public
@@ -485,6 +510,7 @@ export const DERIVATION_TYPE: {
     readonly numsOffset: 2;
     readonly leafKey: 3;
     readonly quoteLock: 4;
+    readonly quoteIdPreimage: 5;
 };
 
 // @public (undocumented)
@@ -543,13 +569,32 @@ export function deriveP2BKSecretKeys(Ehex: string, privateKey: string | string[]
 export function deriveP2BKSlotSecretKeyCandidates(Ehex: string, privkeyHex: string, slotIndex?: number): [string, string];
 
 // @public
-export function deriveQuoteLockKey(seed: Uint8Array, counter: number): Uint8Array;
+export function deriveQuoteIdPreimage(seed: Uint8Array, mintPubkey: string, counter: number): Uint8Array;
+
+// @public
+export function deriveQuoteLockKey(seed: Uint8Array, mintPubkey: string, counter: number): Uint8Array;
 
 // @public
 export function deriveSecretAndBlindingFactor(seed: Uint8Array, keysetId: string, counter: number): DerivedSecretAndBlindingFactor;
 
+// @public
+export function deserializeBatchMintPreview(serialized: SerializedBatchMintPreview): BatchMintPreview<{
+    quote: string;
+}>;
+
+// @public
+export function deserializeMeltPreview(serialized: SerializedMeltPreview): MeltPreview<{
+    quote: string;
+    amount?: Amount;
+}>;
+
 // @public (undocumented)
 export function deserializeMintKeys(serializedMintKeys: SerializedMintKeys): RawMintKeys;
+
+// @public
+export function deserializeMintPreview(serialized: SerializedMintPreview): MintPreview<{
+    quote: string;
+}>;
 
 // @public
 export function deserializeProofs(json: string | string[] | ProofLike[]): Proof[];
@@ -570,11 +615,10 @@ export type DeviceStartResponse = {
 // @public (undocumented)
 export type DigestInput = Uint8Array | string;
 
-// @public (undocumented)
+// @public
 export type DLEQ = {
-    s: Uint8Array;
     e: Uint8Array;
-    r?: bigint;
+    s: Uint8Array;
 };
 
 // @public
@@ -588,6 +632,9 @@ export function findCashuPayload(text: string): {
     kind: CashuPayloadKind;
     payload: string;
 } | null;
+
+// @public
+export function findLegacyDerivationCollisions(keysetIds: readonly string[]): string[][];
 
 // @public
 export function findSigningKey(pubkey: string, privkeys: string | string[]): string;
@@ -605,7 +652,7 @@ export function getDataField(secret: Secret | string): string;
 export function getDecodedToken(tokenString: string, keysetIds: readonly string[]): Token;
 
 // @public
-export function getDecodedTokenBinary(bytes: Uint8Array): Token;
+export function getDecodedTokenBinary(bytes: Uint8Array, keysetIds: readonly string[]): Token;
 
 // @public
 export function getEncodedToken(token: Token, opts?: {
@@ -747,7 +794,7 @@ export function getTags(secret: Secret | string): string[][];
 export function getTagScalar(secret: Secret | string, key: string): string | undefined;
 
 // @public
-export function getTokenMetadata(token: string): TokenMetadata;
+export function getTokenMetadata(token: string | Uint8Array): TokenMetadata;
 
 // @public
 export function getValidSigners(signatures: string[], digest: DigestInput, pubkeys: string[]): string[];
@@ -779,15 +826,13 @@ export type HasKeysetKeys = {
 };
 
 // @public
+export function hasMintErrorCode(e: unknown, codes: readonly number[]): boolean;
+
+// @public
 export function hasP2PKSignedProof(pubkey: string, proof: Proof, digest?: DigestInput): boolean;
 
 // @public
 export function hasTag(secret: Secret | string, key: string): boolean;
-
-// @public
-export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys, opts?: {
-    require?: boolean;
-}): boolean;
 
 // @public
 export function hexToBytes(hex: string): Uint8Array;
@@ -821,10 +866,23 @@ export class InvalidScalarError extends CTSError {
 }
 
 // @public
+export function isAlreadyIssuedError(e: unknown): e is MintOperationError & {
+    code: typeof MintErrorCode.OUTPUTS_ALREADY_SIGNED | typeof MintErrorCode.QUOTE_ALREADY_ISSUED;
+};
+
+// @public
+export function isAuthError(e: unknown): e is MintOperationError & {
+    code: typeof MintErrorCode.ENDPOINT_REQUIRES_CLEAR_AUTH | typeof MintErrorCode.CLEAR_AUTHENTICATION_FAILED | typeof MintErrorCode.ENDPOINT_REQUIRES_BLIND_AUTH | typeof MintErrorCode.BLIND_AUTHENTICATION_FAILED | typeof MintErrorCode.MAXIMUM_BAT_MINT_AMOUNT_EXCEEDED | typeof MintErrorCode.BAT_MINT_RATE_LIMIT_EXCEEDED;
+};
+
+// @public
 export function isBlsKeyset(keysetId: string): boolean;
 
 // @public
 export function isBlsProof(proof: Pick<Proof, 'id'>): boolean;
+
+// @public
+export function isConditionLeaf(leaf: NutrootLeaf): leaf is NutrootConditionLeaf;
 
 // @public
 export function isHTLCSpendAuthorised(proof: Proof, logger?: Logger, digest?: DigestInput): boolean;
@@ -834,6 +892,31 @@ export function isMintOperationError(e: unknown): e is MintOperationError;
 
 // @public
 export function isP2PKSpendAuthorised(proof: Proof, logger?: Logger, digest?: DigestInput): boolean;
+
+// @public
+export function isPaymentFailedError(e: unknown): e is MintOperationError & {
+    code: typeof MintErrorCode.LIGHTNING_PAYMENT_FAILED;
+};
+
+// @public
+export function isPendingError(e: unknown): e is MintOperationError & {
+    code: typeof MintErrorCode.PROOFS_PENDING | typeof MintErrorCode.OUTPUTS_PENDING | typeof MintErrorCode.QUOTE_PENDING;
+};
+
+// @public
+export function isProofsAlreadySpentError(e: unknown): e is MintOperationError & {
+    code: typeof MintErrorCode.PROOFS_ALREADY_SPENT;
+};
+
+// @public
+export function isQuoteExpiredError(e: unknown): e is MintOperationError & {
+    code: typeof MintErrorCode.QUOTE_EXPIRED;
+};
+
+// @public
+export function isQuoteNotPaidError(e: unknown): e is MintOperationError & {
+    code: typeof MintErrorCode.QUOTE_NOT_PAID;
+};
 
 // @public
 export function isV3PointSecret(secret: string): boolean;
@@ -862,14 +945,14 @@ export type JsonRpcReqParams = {
 
 // @public
 export class KeyChain {
-    constructor(mint: string | Mint, unit: string);
+    constructor(mint: string | Mint, unit: string, logger?: Logger);
     get cache(): KeyChainCache;
     static cacheToMintDTO(cache: KeyChainCache): {
         keysets: MintKeyset[];
         keys: MintKeys[];
     };
     ensureKeysetKeys(id: string): Promise<Keyset>;
-    static fromCache(mint: string | Mint, unit: string, cache: KeyChainCache): KeyChain;
+    static fromCache(mint: string | Mint, unit: string, cache: KeyChainCache, logger?: Logger): KeyChain;
     getAllKeys(): MintKeys[];
     getAllKeysetIds(): string[];
     getCheapestKeyset(): Keyset;
@@ -935,6 +1018,7 @@ export type KeysetPair = {
 
 // @public
 export class LockBuilder {
+    addCommitment(hash: string): this;
     addHashlock(hashlock: string): this;
     addLeaf(leaf: NutrootLeaf): this;
     addMainPubkey(pk: string | string[]): this;
@@ -949,7 +1033,7 @@ export class LockBuilder {
     requireRefundSignatures(n: number): this;
     sigAll(): this;
     toOptions(): LockOptions_2;
-    validate(target: 'v3' | 'pre-v3'): CTSError[];
+    validate(target: LockFamily): CTSError[];
 }
 
 // @public
@@ -963,6 +1047,9 @@ export type LockConditions = {
     blindKeys?: boolean;
     sigFlag?: SigFlag;
 };
+
+// @public
+export type LockFamily = 'nutroot' | 'p2pk';
 
 // @public
 type LockOptions_2 = {
@@ -1029,6 +1116,7 @@ export class MeltBuilder<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | '
     privkey(k: string | string[]): this;
     run(): Promise<MeltProofsResponse<TQuote>>;
     scriptPath(plans: ScriptPathPlan[]): this;
+    signal(signal: AbortSignal): this;
 }
 
 // @public
@@ -1049,6 +1137,7 @@ export class MeltOnchainBuilder {
     privkey(k: string | string[]): this;
     run(): Promise<MeltProofsResponse<MeltQuoteOnchainResponse>>;
     scriptPath(plans: ScriptPathPlan[]): this;
+    signal(signal: AbortSignal): this;
 }
 
 // @public
@@ -1068,6 +1157,7 @@ export type MeltProofsConfig = {
     preimage?: string;
     onCountersReserved?: OnCountersReserved;
     nut08Change?: boolean;
+    signal?: AbortSignal;
 };
 
 // @public
@@ -1175,81 +1265,67 @@ export class Mint {
         requestFetch?: RequestFetch;
         authProvider?: AuthProvider;
         logger?: Logger;
+        wsKeepaliveMs?: number;
     });
-    check(checkPayload: CheckStatePayload, customRequest?: RequestFn): Promise<CheckStateResponse>;
-    checkMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(method: string, quote: string, options?: {
-        customRequest?: RequestFn;
+    check(checkPayload: CheckStatePayload, opts?: MintCallOptions): Promise<CheckStateResponse>;
+    checkMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(method: string, quote: string, options?: MintCallOptions & {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
-    checkMeltQuoteBolt11(quote: string, customRequest?: RequestFn): Promise<MeltQuoteBolt11Response>;
-    checkMeltQuoteBolt12(quote: string, customRequest?: RequestFn): Promise<MeltQuoteBolt12Response>;
-    checkMeltQuoteOnchain(quote: string, customRequest?: RequestFn): Promise<MeltQuoteOnchainResponse>;
-    checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, quote: string, options?: {
-        customRequest?: RequestFn;
+    checkMeltQuoteBolt11(quote: string, opts?: MintCallOptions): Promise<MeltQuoteBolt11Response>;
+    checkMeltQuoteBolt12(quote: string, opts?: MintCallOptions): Promise<MeltQuoteBolt12Response>;
+    checkMeltQuoteOnchain(quote: string, opts?: MintCallOptions): Promise<MeltQuoteOnchainResponse>;
+    checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, quote: string, options?: MintCallOptions & {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
-    checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(method: string, quotes: string[], options?: {
-        customRequest?: RequestFn;
+    checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(method: string, quotes: string[], options?: MintCallOptions & {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes[]>;
-    checkMintQuoteBatchBolt11(quotes: string[], customRequest?: RequestFn): Promise<MintQuoteBolt11Response[]>;
-    checkMintQuoteBatchBolt12(quotes: string[], customRequest?: RequestFn): Promise<MintQuoteBolt12Response[]>;
-    checkMintQuoteBolt11(quote: string, customRequest?: RequestFn): Promise<MintQuoteBolt11Response>;
-    checkMintQuoteBolt12(quote: string, customRequest?: RequestFn): Promise<MintQuoteBolt12Response>;
-    checkMintQuoteOnchain(quote: string, customRequest?: RequestFn): Promise<MintQuoteOnchainResponse>;
+    checkMintQuoteBatchBolt11(quotes: string[], opts?: MintCallOptions): Promise<MintQuoteBolt11Response[]>;
+    checkMintQuoteBatchBolt12(quotes: string[], opts?: MintCallOptions): Promise<MintQuoteBolt12Response[]>;
+    checkMintQuoteBolt11(quote: string, opts?: MintCallOptions): Promise<MintQuoteBolt11Response>;
+    checkMintQuoteBolt12(quote: string, opts?: MintCallOptions): Promise<MintQuoteBolt12Response>;
+    checkMintQuoteOnchain(quote: string, opts?: MintCallOptions): Promise<MintQuoteOnchainResponse>;
     connectWebSocket(): Promise<void>;
-    createMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(method: string, payload: Record<string, unknown>, options?: {
-        customRequest?: RequestFn;
+    createMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(method: string, payload: Record<string, unknown>, options?: MintCallOptions & {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
-    createMeltQuoteBolt11(meltQuotePayload: MeltQuoteBolt11Request, customRequest?: RequestFn): Promise<MeltQuoteBolt11Response>;
-    createMeltQuoteBolt12(meltQuotePayload: MeltQuoteBolt12Request, customRequest?: RequestFn): Promise<MeltQuoteBolt12Response>;
-    createMeltQuoteOnchain(meltQuotePayload: MeltQuoteOnchainRequest, customRequest?: RequestFn): Promise<MeltQuoteOnchainResponse>;
-    createMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, payload: Record<string, unknown>, options?: {
-        customRequest?: RequestFn;
+    createMeltQuoteBolt11(meltQuotePayload: MeltQuoteBolt11Request, opts?: MintCallOptions): Promise<MeltQuoteBolt11Response>;
+    createMeltQuoteBolt12(meltQuotePayload: MeltQuoteBolt12Request, opts?: MintCallOptions): Promise<MeltQuoteBolt12Response>;
+    createMeltQuoteOnchain(meltQuotePayload: MeltQuoteOnchainRequest, opts?: MintCallOptions): Promise<MeltQuoteOnchainResponse>;
+    createMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, payload: Record<string, unknown>, options?: MintCallOptions & {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
-    createMintQuoteBolt11(mintQuotePayload: MintQuoteBolt11Request, customRequest?: RequestFn): Promise<MintQuoteBolt11Response>;
-    createMintQuoteBolt12(mintQuotePayload: MintQuoteBolt12Request, customRequest?: RequestFn): Promise<MintQuoteBolt12Response>;
-    createMintQuoteOnchain(mintQuotePayload: MintQuoteOnchainRequest, customRequest?: RequestFn): Promise<MintQuoteOnchainResponse>;
+    createMintQuoteBolt11(mintQuotePayload: MintQuoteBolt11Request, opts?: MintCallOptions): Promise<MintQuoteBolt11Response>;
+    createMintQuoteBolt12(mintQuotePayload: MintQuoteBolt12Request, opts?: MintCallOptions): Promise<MintQuoteBolt12Response>;
+    createMintQuoteOnchain(mintQuotePayload: MintQuoteOnchainRequest, opts?: MintCallOptions): Promise<MintQuoteOnchainResponse>;
     disconnectWebSocket(): void;
-    getInfo(customRequest?: RequestFn): Promise<GetInfoResponse>;
-    getKeys(keysetId?: string, mintUrl?: string, customRequest?: RequestFn): Promise<GetKeysResponse>;
-    getKeySets(customRequest?: RequestFn): Promise<GetKeysetsResponse>;
-    getLazyMintInfo(customRequest?: RequestFn): Promise<MintInfo>;
+    getInfo(opts?: MintCallOptions): Promise<GetInfoResponse>;
+    getKeys(keysetId?: string, mintUrl?: string, opts?: MintCallOptions): Promise<GetKeysResponse>;
+    getKeySets(opts?: MintCallOptions): Promise<GetKeysetsResponse>;
+    getLazyMintInfo(opts?: MintCallOptions): Promise<MintInfo>;
     get lastResponseMetadata(): ResponseMeta | undefined;
-    melt<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, meltPayload: MeltRequest, options?: {
-        customRequest?: RequestFn;
+    melt<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, meltPayload: MeltRequest, options?: MintCallOptions & {
         normalize?: (raw: Record<string, unknown>) => MeltQuoteBaseResponse & TRes;
     }): Promise<MeltQuoteBaseResponse & TRes>;
-    meltBolt11(meltPayload: MeltRequest, options?: {
-        customRequest?: RequestFn;
-    }): Promise<MeltQuoteBolt11Response>;
-    meltBolt12(meltPayload: MeltRequest, options?: {
-        customRequest?: RequestFn;
-    }): Promise<MeltQuoteBolt12Response>;
-    meltOnchain(meltPayload: MeltRequest, options?: {
-        customRequest?: RequestFn;
-    }): Promise<MeltQuoteOnchainResponse>;
-    mint<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, mintPayload: MintRequest, options?: {
-        customRequest?: RequestFn;
+    meltBolt11(meltPayload: MeltRequest, options?: MintCallOptions): Promise<MeltQuoteBolt11Response>;
+    meltBolt12(meltPayload: MeltRequest, options?: MintCallOptions): Promise<MeltQuoteBolt12Response>;
+    meltOnchain(meltPayload: MeltRequest, options?: MintCallOptions): Promise<MeltQuoteOnchainResponse>;
+    mint<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, mintPayload: MintRequest, options?: MintCallOptions & {
         normalize?: (raw: Record<string, unknown>) => MintResponse & TRes;
     }): Promise<MintResponse & TRes>;
-    mintBatch<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, mintPayload: BatchMintRequest, options?: {
-        customRequest?: RequestFn;
+    mintBatch<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, mintPayload: BatchMintRequest, options?: MintCallOptions & {
         normalize?: (raw: Record<string, unknown>) => MintResponse & TRes;
     }): Promise<MintResponse & TRes>;
-    mintBatchBolt11(mintPayload: BatchMintRequest, customRequest?: RequestFn): Promise<MintResponse>;
-    mintBatchBolt12(mintPayload: BatchMintRequest, customRequest?: RequestFn): Promise<MintResponse>;
-    mintBolt11(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse>;
-    mintBolt12(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse>;
-    mintOnchain(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse>;
+    mintBatchBolt11(mintPayload: BatchMintRequest, opts?: MintCallOptions): Promise<MintResponse>;
+    mintBatchBolt12(mintPayload: BatchMintRequest, opts?: MintCallOptions): Promise<MintResponse>;
+    mintBolt11(mintPayload: MintRequest, opts?: MintCallOptions): Promise<MintResponse>;
+    mintBolt12(mintPayload: MintRequest, opts?: MintCallOptions): Promise<MintResponse>;
+    mintOnchain(mintPayload: MintRequest, opts?: MintCallOptions): Promise<MintResponse>;
     // (undocumented)
     get mintUrl(): string;
-    oidcAuth(opts?: OIDCAuthOptions): Promise<OIDCAuth>;
-    restore(restorePayload: PostRestorePayload, customRequest?: RequestFn): Promise<PostRestoreResponse>;
+    restore(restorePayload: PostRestorePayload, opts?: MintCallOptions): Promise<PostRestoreResponse>;
     setMintInfo(mintInfo: MintInfo | GetInfoResponse): void;
-    swap(swapPayload: SwapRequest, customRequest?: RequestFn): Promise<SwapResponse>;
+    swap(swapPayload: SwapRequest, opts?: MintCallOptions): Promise<SwapResponse>;
     // (undocumented)
     get webSocketConnection(): WSConnection | undefined;
 }
@@ -1283,12 +1359,59 @@ export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M ex
     proofsWeHave(p: Array<Pick<ProofLike, 'amount'>>): this;
     run(this: MintBuilder<M, true>): Promise<Proof[]>;
     sign(fn: NonNullable<MintProofsConfig['sign']>): MintBuilder<M, true>;
+    signal(signal: AbortSignal): this;
 }
+
+// @public
+export type MintCallOptions = {
+    customRequest?: RequestFn;
+    signal?: AbortSignal;
+};
 
 // @public (undocumented)
 export type MintContactInfo = {
     method: string;
     info: string;
+};
+
+// @public
+export const MintErrorCode: {
+    readonly PROOF_VERIFICATION_FAILED: 10001;
+    readonly PROOFS_ALREADY_SPENT: 11001;
+    readonly PROOFS_PENDING: 11002;
+    readonly OUTPUTS_ALREADY_SIGNED: 11003;
+    readonly OUTPUTS_PENDING: 11004;
+    readonly TRANSACTION_NOT_BALANCED: 11005;
+    readonly AMOUNT_OUTSIDE_LIMIT_RANGE: 11006;
+    readonly DUPLICATE_INPUTS_PROVIDED: 11007;
+    readonly DUPLICATE_OUTPUTS_PROVIDED: 11008;
+    readonly INPUTS_OUTPUTS_OF_MULTIPLE_UNITS: 11009;
+    readonly INPUTS_AND_OUTPUTS_NOT_OF_SAME_UNIT: 11010;
+    readonly AMOUNTLESS_INVOICE_NOT_SUPPORTED: 11011;
+    readonly AMOUNT_IN_REQUEST_DOES_NOT_EQUAL_INVOICE: 11012;
+    readonly UNIT_IN_REQUEST_NOT_SUPPORTED: 11013;
+    readonly MAX_INPUTS_EXCEEDED: 11014;
+    readonly MAX_OUTPUTS_EXCEEDED: 11015;
+    readonly DUPLICATE_QUOTE_IDS_PROVIDED: 11016;
+    readonly MAX_BATCH_SIZE_EXCEEDED: 11017;
+    readonly KEYSET_NOT_KNOWN: 12001;
+    readonly KEYSET_INACTIVE: 12002;
+    readonly KEYSET_EXPIRED: 12003;
+    readonly QUOTE_NOT_PAID: 20001;
+    readonly QUOTE_ALREADY_ISSUED: 20002;
+    readonly MINTING_DISABLED: 20003;
+    readonly LIGHTNING_PAYMENT_FAILED: 20004;
+    readonly QUOTE_PENDING: 20005;
+    readonly INVOICE_ALREADY_PAID: 20006;
+    readonly QUOTE_EXPIRED: 20007;
+    readonly SIGNATURE_FOR_MINT_REQUEST_INVALID: 20008;
+    readonly PUBKEY_REQUIRED_FOR_MINT_QUOTE: 20009;
+    readonly ENDPOINT_REQUIRES_CLEAR_AUTH: 30001;
+    readonly CLEAR_AUTHENTICATION_FAILED: 30002;
+    readonly ENDPOINT_REQUIRES_BLIND_AUTH: 31001;
+    readonly BLIND_AUTHENTICATION_FAILED: 31002;
+    readonly MAXIMUM_BAT_MINT_AMOUNT_EXCEEDED: 31003;
+    readonly BAT_MINT_RATE_LIMIT_EXCEEDED: 31004;
 };
 
 // @public
@@ -1332,6 +1455,11 @@ export class MintInfo {
     isSupported(num: 29): {
         supported: boolean;
         params?: Nut29Info;
+    };
+    isSupported(num: number): {
+        supported?: boolean;
+        disabled?: boolean;
+        params?: unknown;
     };
     get maxArrayLength(): number;
     // (undocumented)
@@ -1459,8 +1587,8 @@ export interface MintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>
     // (undocumented)
     method: string;
     outputData: OutputDataLike[];
-    payload: MintRequest;
     quote: TQuote;
+    signature?: string;
 }
 
 // @public
@@ -1470,6 +1598,7 @@ export type MintProofsConfig = {
     sign?: (request: MintQuoteSignRequest) => Promise<string>;
     proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
     onCountersReserved?: OnCountersReserved;
+    signal?: AbortSignal;
 };
 
 // @public
@@ -1565,6 +1694,9 @@ export type MintResponse = {
 };
 
 // @public
+export function mnemonicToSeedSync(mnemonic: string, passphrase?: string): Uint8Array;
+
+// @public
 export type MPPMethod = {
     method: string;
     unit: string;
@@ -1637,20 +1769,30 @@ export const NUTROOT_LEAF_TYPE: {
     readonly threshold: 1;
     readonly after: 2;
     readonly hashlock: 3;
+    readonly commit: 4;
 };
 
 // @public
 export const NUTROOT_NUMS_KEY = "0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0";
 
 // @public
-export type NutrootLeaf = {
-    type: keyof typeof NUTROOT_LEAF_TYPE;
+export type NutrootCommitLeaf = {
+    type: 'commit';
+    hash: string;
+};
+
+// @public
+export type NutrootConditionLeaf = {
+    type: Exclude<keyof typeof NUTROOT_LEAF_TYPE, 'commit'>;
     n: number;
     keys: string[];
     time?: number;
     hash?: string;
     disclosure?: number;
 };
+
+// @public
+export type NutrootLeaf = NutrootConditionLeaf | NutrootCommitLeaf;
 
 // @public
 export type NutrootOption = {
@@ -1672,16 +1814,14 @@ export function nutrootToLockOptions(options: {
 // @public (undocumented)
 export class OIDCAuth {
     constructor(discoveryUrl: string, opts?: OIDCAuthOptions);
-    addTokenListener(fn: (t: TokenResponse) => void | Promise<void>): void;
+    addTokenListener(fn: (t: TokenResponse, origin: TokenOrigin) => void | Promise<void>): void;
     buildAuthCodeUrl(input: {
         redirectUri: string;
         codeChallenge: string;
-        codeChallengeMethod?: 'S256' | 'plain';
+        codeChallengeMethod?: 'S256';
         state?: string;
         scope?: string;
     }): Promise<string>;
-    // (undocumented)
-    devicePoll(device_code: string, intervalSec?: number): Promise<TokenResponse>;
     // (undocumented)
     deviceStart(): Promise<DeviceStartResponse>;
     exchangeAuthCode(input: {
@@ -1689,7 +1829,6 @@ export class OIDCAuth {
         redirectUri: string;
         codeVerifier: string;
     }): Promise<TokenResponse>;
-    // (undocumented)
     static fromMintInfo(info: {
         nuts: GetInfoResponse['nuts'];
     }, opts?: OIDCAuthOptions): OIDCAuth;
@@ -1701,9 +1840,8 @@ export class OIDCAuth {
     loadConfig(): Promise<OIDCConfig>;
     // (undocumented)
     passwordGrant(username: string, password: string): Promise<TokenResponse>;
-    // (undocumented)
     refresh(refresh_token: string): Promise<TokenResponse>;
-    removeTokenListener(fn: (t: TokenResponse) => void | Promise<void>): void;
+    removeTokenListener(fn: (t: TokenResponse, origin: TokenOrigin) => void | Promise<void>): void;
     // (undocumented)
     setClient(id: string): void;
     // (undocumented)
@@ -1720,7 +1858,7 @@ export type OIDCAuthOptions = {
     scope?: string;
     logger?: Logger;
     fetch?: OIDCFetch;
-    onTokens?: (t: TokenResponse) => void | Promise<void>;
+    onTokens?: (t: TokenResponse, origin: TokenOrigin) => void | Promise<void>;
 };
 
 // @public (undocumented)
@@ -1798,7 +1936,7 @@ export interface OutputDataCreator {
     // (undocumented)
     createSingleDeterministicData(amount: AmountLike, seed: Uint8Array, counter: number, keysetId: string): OutputDataLike;
     // (undocumented)
-    createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string): OutputDataLike;
+    createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string, eBytes?: Uint8Array): OutputDataLike;
     // (undocumented)
     createSingleRandomData(amount: AmountLike, keysetId: string): OutputDataLike;
 }
@@ -1838,9 +1976,6 @@ export type OutputType = ({
     type: 'custom';
     data: OutputDataLike[];
 };
-
-// @public
-export const P2BK_DST: Uint8Array<ArrayBufferLike>;
 
 // @public
 export type P2PKOptions = SpendingConditionsBase & LockConditions & {
@@ -2063,10 +2198,15 @@ export type Proof = {
     amount: Amount;
     secret: string;
     C: string;
-    dleq?: SerializedDLEQ;
+    dleq?: SerializedProofDLEQ;
     p2pk_e?: string;
     witness?: string | P2PKWitness | HTLCWitness;
     spend_info?: SpendInfo;
+};
+
+// @public
+export type ProofDLEQ = DLEQ & {
+    r: bigint;
 };
 
 // @public
@@ -2093,7 +2233,16 @@ export type ProofStatesStreamOpts<P extends ProofLike = Proof> = WatchOpts & {
 };
 
 // @public
-export const QUOTE_COUNTER_KEY = "mint-quote-lock";
+export type ProofVerification<T> = {
+    valid: T[];
+    invalid: Array<{
+        proof: T;
+        error: CTSError;
+    }>;
+};
+
+// @public
+export function quoteCounterKey(mintPubkey: string): string;
 
 // @public
 export class RateLimitError extends HttpResponseError {
@@ -2173,6 +2322,7 @@ export class ReceiveBuilder {
     requireDleq(on?: boolean): this;
     run(): Promise<Proof[]>;
     scriptPath(plans: ScriptPathPlan[]): this;
+    signal(signal: AbortSignal): this;
 }
 
 // @public
@@ -2184,6 +2334,7 @@ export type ReceiveConfig = {
     requireDleq?: boolean;
     proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
     onCountersReserved?: OnCountersReserved;
+    signal?: AbortSignal;
 };
 
 // @public
@@ -2231,6 +2382,14 @@ export type RestoreAllConfig = Omit<BatchRestoreConfig, 'counter' | 'keysetId'>;
 // @public (undocumented)
 export type RestoreConfig = {
     keysetId?: string;
+    signal?: AbortSignal;
+};
+
+// @public
+export type RestoreProgress = {
+    keysetId: string;
+    counter: number;
+    proofs: number;
 };
 
 // @public (undocumented)
@@ -2254,13 +2413,13 @@ export const ScriptPath: ScriptPathApi;
 // @public
 export type ScriptPathApi = {
     extractSwapPackage(preview: SwapPreview, plans: ScriptPathPlan[]): ScriptPathSigningPackage;
-    extractMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'amount'>>(preview: MeltPreview<TQuote>, plans: ScriptPathPlan[]): ScriptPathSigningPackage;
+    extractMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'amount'>>(preview: MeltPreview<TQuote>, plans: ScriptPathPlan[], feeIndex?: number): ScriptPathSigningPackage;
     serializePackage(pkg: ScriptPathSigningPackage): string;
     deserializePackage(input: string): ScriptPathSigningPackage;
     signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPathSigningPackage;
-    mergeSwapPackage(pkg: ScriptPathSigningPackage, preview: SwapPreview): SwapPreview;
-    mergeMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'amount'>>(pkg: ScriptPathSigningPackage, preview: MeltPreview<TQuote>): MeltPreview<TQuote>;
-    witnessFor(spend: ScriptPathSpendRequest, tree: string[], leafIndex: number): string;
+    mergeSwapPackage(pkg: ScriptPathSigningPackage, preview: SwapPreview, plans?: ScriptPathPlan[]): SwapPreview;
+    mergeMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'amount'>>(pkg: ScriptPathSigningPackage, preview: MeltPreview<TQuote>, plans?: ScriptPathPlan[], feeIndex?: number): MeltPreview<TQuote>;
+    witnessFor(spend: ScriptPathSpendRequest, tree: string[], leafIndex: number, preimage?: string): string;
 };
 
 // @public
@@ -2275,16 +2434,13 @@ export type ScriptPathPlan = {
 // @public
 export type ScriptPathSigningPackage = {
     version: 'nutspA';
-    type: 'swap' | 'melt';
-    quote?: string;
-    inputs: Array<Pick<Proof, 'amount' | 'id' | 'secret' | 'C'>>;
-    outputs: SerializedBlindedMessage[];
-    quoteAmount?: bigint;
+    transcript: string;
     spends: ScriptPathSpendRequest[];
 };
 
 // @public
 export type ScriptPathSpendRequest = {
+    input: number;
     secret: string;
     leaf: string;
     control: {
@@ -2293,7 +2449,6 @@ export type ScriptPathSpendRequest = {
     };
     E?: string;
     slots?: number[];
-    preimage?: string;
     signatures: string[];
 };
 
@@ -2327,7 +2482,7 @@ export function selectProofsRotating(proofs: ProofLike[], amountToSelect: Amount
 
 // @public
 export class SendBuilder {
-    constructor(wallet: Wallet, amount: AmountLike, proofs: ProofLike[], lockFamily?: "v3" | "legacy" | undefined);
+    constructor(wallet: Wallet, amount: AmountLike, proofs: ProofLike[], lockFamily?: LockFamily | undefined, fromRequest?: boolean);
     asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: AmountLike[]): this;
     asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
@@ -2344,11 +2499,15 @@ export class SendBuilder {
     offlineExactOnly(requireDleq?: boolean): this;
     onCountersReserved(cb: OnCountersReserved): this;
     preimage(preimage: string): this;
-    prepare(): Promise<SwapPreview>;
+    prepare(): Promise<{
+        preview: SwapPreview;
+        unselected: Proof[];
+    }>;
     privkey(k: string | string[]): this;
     proofsWeHave(p: Array<Pick<ProofLike, 'amount'>>): this;
     run(): Promise<SendResponse>;
     scriptPath(plans: ScriptPathPlan[]): this;
+    signal(signal: AbortSignal): this;
 }
 
 // @public
@@ -2360,6 +2519,7 @@ export type SendConfig = {
     includeFees?: boolean;
     proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
     onCountersReserved?: OnCountersReserved;
+    signal?: AbortSignal;
 };
 
 // @public
@@ -2381,6 +2541,21 @@ export type SendResponse = {
 };
 
 // @public
+export function serializeBatchMintPreview(preview: BatchMintPreview<{
+    quote: string;
+}>): SerializedBatchMintPreview;
+
+// @public
+export type SerializedBatchMintPreview = {
+    method: string;
+    quotes: string[];
+    amounts: string[];
+    outputData: SerializedOutputData[];
+    signatures?: Array<string | null>;
+    legacySignatures?: Array<string | null>;
+};
+
+// @public
 export type SerializedBlindedMessage = {
     amount: Amount;
     B_: string;
@@ -2395,16 +2570,33 @@ export type SerializedBlindedSignature = {
     dleq?: SerializedDLEQ;
 };
 
-// @public (undocumented)
+// @public
 export type SerializedDLEQ = {
     s: string;
     e: string;
-    r?: string;
+};
+
+// @public
+export type SerializedMeltPreview = {
+    method: string;
+    quote: string;
+    amount?: string;
+    inputs: SerializedProof[];
+    outputData: SerializedOutputData[];
 };
 
 // @public (undocumented)
 export type SerializedMintKeys = {
     [k: string]: string;
+};
+
+// @public
+export type SerializedMintPreview = {
+    method: string;
+    quote: string;
+    outputData: SerializedOutputData[];
+    signature?: string;
+    legacySignature?: string;
 };
 
 // @public
@@ -2426,6 +2618,11 @@ export type SerializedProof = Omit<Proof, 'amount'> & {
 };
 
 // @public
+export type SerializedProofDLEQ = SerializedDLEQ & {
+    r: string;
+};
+
+// @public
 export type SerializedSwapPreview = {
     amount: string;
     fees: string;
@@ -2434,8 +2631,19 @@ export type SerializedSwapPreview = {
     keepOutputs?: SerializedOutputData[];
 };
 
+// @public
+export function serializeMeltPreview(preview: MeltPreview<{
+    quote: string;
+    amount?: Amount;
+}>): SerializedMeltPreview;
+
 // @public (undocumented)
 export function serializeMintKeys(mintKeys: RawMintKeys): SerializedMintKeys;
+
+// @public
+export function serializeMintPreview(preview: MintPreview<{
+    quote: string;
+}>): SerializedMintPreview;
 
 // @public
 export function serializeNutrootLeaf(leaf: NutrootLeaf): Uint8Array;
@@ -2540,7 +2748,7 @@ export type SpendOption = {
         blinded: boolean;
     }>;
     satisfiable: boolean;
-    blockedBy?: 'threshold' | 'locktime' | 'preimage';
+    blockedBy?: 'threshold' | 'locktime' | 'preimage' | 'commit';
     availableAt?: number;
 };
 
@@ -2580,7 +2788,7 @@ export type SpendReceiptVerdict = {
 };
 
 // @public
-export function splitAmount(value: AmountLike, keyset: Keys, split?: AmountLike[], order?: 'desc' | 'asc'): Amount[];
+export function splitAmount(value: AmountLike, keys: Keys, split?: AmountLike[], order?: 'desc' | 'asc'): Amount[];
 
 // @public
 export class StaleKeysetError extends CTSError {
@@ -2629,10 +2837,10 @@ export type SwapMethod = {
 export type SwapPreview = {
     amount: Amount;
     fees: Amount;
+    sendTotal: Amount;
     inputs: Proof[];
     sendOutputs?: OutputDataLike[];
     keepOutputs?: OutputDataLike[];
-    unselectedProofs?: Proof[];
 };
 
 // @public
@@ -2644,14 +2852,6 @@ export type SwapRequest = {
 // @public
 export type SwapResponse = {
     signatures: SerializedBlindedSignature[];
-};
-
-// @public
-export type SwapTransaction = {
-    payload: SwapRequest;
-    outputData: OutputDataLike[];
-    keepVector: boolean[];
-    sortedIndices: number[];
 };
 
 // @public
@@ -2673,6 +2873,9 @@ export type TokenMetadata = {
     amount: Amount;
     proofAmounts: Amount[];
 };
+
+// @public
+export type TokenOrigin = 'signin' | 'refresh';
 
 // @public (undocumented)
 export type TokenResponse = {
@@ -2700,6 +2903,13 @@ export function unblindSignature(C_: WeierstrassPoint<bigint>, r: bigint, A: Wei
 export function unblindSignatureBls(C_: G1Point, r: bigint): G1Point;
 
 // @public
+export class UncancellableReadError extends NetworkError {
+    constructor(message: string, options?: {
+        cause?: unknown;
+    });
+}
+
+// @public
 export class UnknownKeysetError extends CTSError {
     constructor(keysetId: string, options?: {
         refreshed?: boolean;
@@ -2714,7 +2924,7 @@ export const verifyDLEQProof: (dleq: DLEQ, B_: WeierstrassPoint<bigint>, C_: Wei
 
 // @public (undocumented)
 export const verifyDLEQProof_reblind: (secret: Uint8Array, // secret
-dleq: DLEQ, C: WeierstrassPoint<bigint>, // unblinded e-cash signature point
+dleq: ProofDLEQ, C: WeierstrassPoint<bigint>, // unblinded e-cash signature point
 A: WeierstrassPoint<bigint>) => boolean;
 
 // @public
@@ -2727,12 +2937,22 @@ export function verifyHTLCSpendingConditions(proof: Proof, logger?: Logger, dige
 export function verifyMintQuoteSignature(pubkey: string, quote: string, blindedMessages: SerializedBlindedMessage[], signature: string): boolean;
 
 // @public
-export function verifyP2PKSpendingConditions(proof: Proof, logger?: Logger, digest?: DigestInput): P2PKVerificationResult;
+export function verifyMintSignatures<T extends ProofLike>(proofs: T[], getKeyset: (id: string) => HasKeysetKeys, opts?: VerifyProofsOptions): Promise<ProofVerification<T>>;
 
 // @public
-export function verifyProofsForReceive(proofs: ProofLike[], getKeyset: (id: string) => HasKeysetKeys, opts?: {
-    requireDleq?: boolean;
-}): void;
+export function verifyP2PKSpendingConditions(proof: Proof, logger?: Logger, digest?: DigestInput): P2PKVerificationResult;
+
+// @public (undocumented)
+export type VerifyProofsOptions = {
+    require?: boolean;
+    chunkSize?: number;
+    budgetMs?: number;
+    signal?: AbortSignal;
+    onProgress?: (done: number, total: number) => void;
+};
+
+// @public
+export function verifyReceivedProofs<T extends ProofLike>(proofs: T[], getKeyset: (id: string) => HasKeysetKeys, opts?: VerifyProofsOptions): Promise<ProofVerification<T>>;
 
 // @public
 export function verifySpendReceipt(receipt: SpendReceipt, proof: Pick<Proof, 'id' | 'secret' | 'amount' | 'C'>): SpendReceiptVerdict;
@@ -2762,59 +2982,63 @@ export class Wallet {
         customRequest?: RequestFn;
         requestFetch?: RequestFetch;
         logger?: Logger;
+        wsKeepaliveMs?: number;
     });
     batchRestore(config?: BatchRestoreConfig): Promise<{
         proofs: Proof[];
         lastCounterWithSignature?: number;
     }>;
     bindKeyset(id: string): void;
-    checkMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(method: string, quote: string | Pick<TRes, 'quote'>, options?: {
+    checkMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(method: string, quote: string | Pick<TRes, 'quote'>, options?: AbortOptions & {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
-    checkMeltQuoteBolt11(quote: string | MeltQuoteBolt11Response): Promise<MeltQuoteBolt11Response>;
-    checkMeltQuoteBolt12(quote: string): Promise<MeltQuoteBolt12Response>;
-    checkMeltQuoteOnchain(quote: string): Promise<MeltQuoteOnchainResponse>;
-    checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, quote: string | Pick<TRes, 'quote'>, options?: {
+    checkMeltQuoteBolt11(quote: string | MeltQuoteBolt11Response, opts?: AbortOptions): Promise<MeltQuoteBolt11Response>;
+    checkMeltQuoteBolt12(quote: string, opts?: AbortOptions): Promise<MeltQuoteBolt12Response>;
+    checkMeltQuoteOnchain(quote: string, opts?: AbortOptions): Promise<MeltQuoteOnchainResponse>;
+    checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, quote: string | Pick<TRes, 'quote'>, options?: AbortOptions & {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
-    checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, quotes: Array<string | Pick<TRes, 'quote'>>, options?: {
+    checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, quotes: Array<string | Pick<TRes, 'quote'>>, options?: AbortOptions & {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes[]>;
-    checkMintQuoteBatchBolt11(quotes: Array<string | MintQuoteBolt11Response>): Promise<MintQuoteBolt11Response[]>;
-    checkMintQuoteBatchBolt12(quotes: Array<string | MintQuoteBolt12Response>): Promise<MintQuoteBolt12Response[]>;
-    checkMintQuoteBolt11(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response>;
-    checkMintQuoteBolt12(quote: string): Promise<MintQuoteBolt12Response>;
-    checkMintQuoteOnchain(quote: string): Promise<MintQuoteOnchainResponse>;
-    checkProofsStates(proofs: Array<Pick<ProofLike, 'secret' | 'id'>>): Promise<ProofState[]>;
-    completeBatchMint(batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;
+    checkMintQuoteBatchBolt11(quotes: Array<string | MintQuoteBolt11Response>, opts?: AbortOptions): Promise<MintQuoteBolt11Response[]>;
+    checkMintQuoteBatchBolt12(quotes: Array<string | MintQuoteBolt12Response>, opts?: AbortOptions): Promise<MintQuoteBolt12Response[]>;
+    checkMintQuoteBolt11(quote: string | MintQuoteBolt11Response, opts?: AbortOptions): Promise<MintQuoteBolt11Response>;
+    checkMintQuoteBolt12(quote: string, opts?: AbortOptions): Promise<MintQuoteBolt12Response>;
+    checkMintQuoteOnchain(quote: string, opts?: AbortOptions): Promise<MintQuoteOnchainResponse>;
+    checkProofsStates(proofs: Array<Pick<ProofLike, 'secret' | 'id'>>, opts?: AbortOptions & {
+        budgetMs?: number;
+    }): Promise<ProofState[]>;
+    completeBatchMint(batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>, opts?: CompleteMintOptions): Promise<Proof[]>;
     completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote>, privkey?: string | string[], options?: CompleteMeltOptions): Promise<MeltProofsResponse<TQuote>>;
-    completeMint(mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;
+    completeMint(mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>, opts?: CompleteMintOptions): Promise<Proof[]>;
     completeSwap(swapPreview: SwapPreview, privkey?: string | string[], options?: CompleteSwapOptions): Promise<SendResponse>;
     readonly counters: WalletCounters;
     createMeltChangeProofs(outputData: OutputDataLike[], changeSigs: SerializedBlindedSignature[]): Proof[];
-    createMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(method: string, payload: Record<string, unknown>, options?: {
+    createMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(method: string, payload: Record<string, unknown>, options?: AbortOptions & {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
-    createMeltQuoteBolt11(invoice: string, amountMsat?: AmountLike): Promise<MeltQuoteBolt11Response>;
-    createMeltQuoteBolt12(offer: string, amountMsat?: AmountLike): Promise<MeltQuoteBolt12Response>;
-    createMeltQuoteOnchain(address: string, amount: AmountLike): Promise<MeltQuoteOnchainResponse>;
-    createMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, payload: Record<string, unknown>, options?: {
+    createMeltQuoteBolt11(invoice: string, amountMsat?: AmountLike, opts?: AbortOptions): Promise<MeltQuoteBolt11Response>;
+    createMeltQuoteBolt12(offer: string, amountMsat?: AmountLike, opts?: AbortOptions): Promise<MeltQuoteBolt12Response>;
+    createMeltQuoteOnchain(address: string, amount: AmountLike, opts?: AbortOptions): Promise<MeltQuoteOnchainResponse>;
+    createMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(method: string, payload: Record<string, unknown>, options?: AbortOptions & {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
-    createMintQuoteBolt11(amount: AmountLike, pubkey: string, description?: string): Promise<MintQuoteBolt11Response>;
+    createMintQuoteBolt11(amount: AmountLike, pubkey: string, description?: string, opts?: AbortOptions): Promise<MintQuoteBolt11Response>;
     createMintQuoteBolt12(pubkey: string, options?: {
         amount?: AmountLike;
         description?: string;
+        signal?: AbortSignal;
     }): Promise<MintQuoteBolt12Response>;
-    createMintQuoteOnchain(pubkey: string): Promise<MintQuoteOnchainResponse>;
-    createMultiPathMeltQuote(invoice: string, millisatPartialAmount: AmountLike): Promise<MeltQuoteBolt11Response>;
+    createMintQuoteOnchain(pubkey: string, opts?: AbortOptions): Promise<MintQuoteOnchainResponse>;
+    createMultiPathMeltQuote(invoice: string, millisatPartialAmount: AmountLike, opts?: AbortOptions): Promise<MeltQuoteBolt11Response>;
     createQuoteLockKey(opts?: {
         random?: boolean;
     }): Promise<{
         pubkey: string;
         privkey: string;
     }>;
-    decodeToken(token: string): Token;
+    decodeToken(token: string | Uint8Array): Token;
     defaultOutputType(): OutputType;
     ensureOperableKeysets(ids: Array<string | undefined>): Promise<void>;
     getFeesForKeyset(nInputs: number, keysetId: string): Amount;
@@ -2830,12 +3054,12 @@ export class Wallet {
         pending: T[];
         spent: T[];
     }>;
-    isPaymentRequestSatisfied(pr: PaymentRequest_2, proofs: Array<Pick<Proof, 'id' | 'amount' | 'secret' | 'spend_info'>>, expectedAmount?: AmountLike, opts?: {
+    isPaymentRequestSatisfied(pr: PaymentRequest_2, proofs: Array<Pick<Proof, 'id' | 'amount' | 'secret' | 'spend_info' | 'p2pk_e'>>, expectedAmount?: AmountLike, opts?: {
         privkeys?: string | string[];
     }): boolean;
     get keyChain(): KeyChain;
     get keysetId(): string;
-    loadMint(forceRefresh?: boolean): Promise<void>;
+    loadMint(forceRefresh?: boolean, opts?: AbortOptions): Promise<void>;
     loadMintFromCache(mintInfo: GetInfoResponse, cache: KeyChainCache): void;
     // (undocumented)
     get logger(): Logger;
@@ -2863,7 +3087,10 @@ export class Wallet {
     prepareMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(method: string, meltQuote: TQuote, proofsToSend: ProofLike[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltPreview<TQuote>>;
     prepareMint<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>>(method: string, amount: AmountLike, quote: TQuote, config?: MintProofsConfig, outputType?: OutputType): Promise<MintPreview<TQuote>>;
     prepareSwapToReceive(token: Token | string | ProofLike[], config?: ReceiveConfig, outputType?: OutputType): Promise<SwapPreview>;
-    prepareSwapToSend(amount: AmountLike, proofs: ProofLike[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SwapPreview>;
+    prepareSwapToSend(amount: AmountLike, proofs: ProofLike[], config?: SendConfig, outputConfig?: OutputConfig): Promise<{
+        preview: SwapPreview;
+        unselected: Proof[];
+    }>;
     receive(token: Token | string | ProofLike[], config?: ReceiveConfig, outputType?: OutputType): Promise<Proof[]>;
     recoverQuoteLockKey(pubkey: string): Promise<string | undefined>;
     restore(start: number, count: number, config?: RestoreConfig): Promise<{
@@ -2883,6 +3110,7 @@ export class Wallet {
         now?: number;
     }): SpendOptions;
     get unit(): string;
+    verifyMintSignatures<T extends ProofLike = Proof>(proofs: T[], opts?: VerifyProofsOptions): Promise<ProofVerification<T>>;
     withKeyset(id: string, opts?: {
         counterSource?: CounterSource;
     }): Wallet;
@@ -2968,13 +3196,22 @@ export type WebSocketSupport = {
     commands: string[];
 };
 
+// @public
+export type WSCloseEvent = {
+    code: number;
+    reason: string;
+    wasClean: boolean;
+};
+
 // @public (undocumented)
 export class WSConnection {
-    constructor(url: string, logger?: Logger);
+    constructor(url: string, logger?: Logger, options?: {
+        keepaliveMs?: number;
+    });
     // (undocumented)
     get activeSubscriptions(): string[];
     // (undocumented)
-    addSubListener<TPayload = unknown>(subId: string, callback: (payload: TPayload) => void): void;
+    addSubListener<TPayload = unknown>(subId: string, callback: (payload: TPayload) => void, errorCallback?: (e: Error) => void): void;
     cancelSubscription<TPayload = unknown>(subId: string, callback: (payload: TPayload) => void, errorCallback?: (e: Error) => void): void;
     // (undocumented)
     close(): void;
@@ -2984,7 +3221,7 @@ export class WSConnection {
     createSubscription<TPayload = unknown>(params: Omit<JsonRpcReqParams, 'subId'>, callback: (payload: TPayload) => void, errorCallback: (e: Error) => void): string;
     // (undocumented)
     ensureConnection(timeoutMs?: number): Promise<void>;
-    onClose(callback: (e: CloseEvent) => void): () => void;
+    onClose(callback: (e: WSCloseEvent) => void): () => void;
     // (undocumented)
     sendRequest(method: 'subscribe', params: JsonRpcReqParams): void;
     // (undocumented)

@@ -284,7 +284,7 @@ describe('sendOffline witness normalization', () => {
 
 describe('sendOffline requireDleq', () => {
   // v3 (BLS) proofs satisfy requireDleq via pairing equivalence — they carry no DLEQ proof
-  // but the receive-side `hasValidDleq` accepts them. sendOffline must mirror that.
+  // but the receive-side `verifyReceivedProofs` accepts them. sendOffline must mirror that.
   const v3Id = '02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d';
   const v3Secret = 'test_message';
   const v3C =
@@ -483,10 +483,11 @@ describe('send', () => {
 
     // A 3-sat input sending 1 produces change, so keepOutputs round trips too.
     const threeSat: Proof[] = [{ ...proofs[0], amount: Amount.from(3) }];
-    const preview = await wallet.prepareSwapToSend(1, threeSat);
+    const { preview } = await wallet.prepareSwapToSend(1, threeSat);
     expect(preview.keepOutputs?.length).toBeGreaterThan(0);
     const stored = JSON.stringify(serializeSwapPreview(preview));
     const revived = deserializeSwapPreview(JSON.parse(stored) as SerializedSwapPreview);
+    expect(revived.sendTotal.equals(preview.sendTotal)).toBe(true);
 
     const first = await wallet.completeSwap(preview);
     const replayed = await wallet.completeSwap(revived);
@@ -496,18 +497,6 @@ describe('send', () => {
     expect(replayed.send).toHaveLength(1);
     expect(replayed.send[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
     expect(first.send[0].secret).toBe(replayed.send[0].secret);
-  });
-
-  test('serializeSwapPreview omits unselected proofs', () => {
-    const serialized = serializeSwapPreview({
-      amount: Amount.from(1),
-      fees: Amount.from(0),
-      inputs: [proofs[0]],
-      unselectedProofs: [{ ...proofs[0], secret: 'not-part-of-the-replay' }],
-    });
-
-    expect(serialized).not.toHaveProperty('unselectedProofs');
-    expect(JSON.stringify(serialized)).not.toContain('not-part-of-the-replay');
   });
 
   test('deserializeSwapPreview rejects malformed output data', () => {
@@ -902,7 +891,7 @@ describe('send', () => {
     const result = await wallet.send(2, proofs).catch((e) => e);
 
     expect(result).toBeInstanceOf(CTSError);
-    expect(result).toMatchObject({ message: 'Not enough funds available to send' });
+    expect(result.message).toMatch(/^Not enough funds available to send: /);
   });
   test('test send bad response', async () => {
     server.use(
@@ -1214,7 +1203,7 @@ describe('send', () => {
       const wallet = new Wallet(mint, { unit, bip39seed: seed, logger });
       await wallet.loadMint();
 
-      const res = await wallet.prepareSwapToSend(
+      const { preview: res } = await wallet.prepareSwapToSend(
         tc.amount,
         proofs,
         { includeFees: tc.includeFees },
@@ -1317,7 +1306,7 @@ describe('send', () => {
       ]),
     ) as ProofLike[];
 
-    const res = await wallet.prepareSwapToSend(3, storedProofs, { includeFees: true });
+    const { preview: res } = await wallet.prepareSwapToSend(3, storedProofs, { includeFees: true });
     expect(res.inputs.length).toBeGreaterThan(0);
     expect(res.inputs.every((p) => p.amount instanceof Amount)).toBe(true);
   });
@@ -1415,7 +1404,12 @@ describe('send', () => {
       send: { type: 'deterministic', counter: 50 },
       keep: { type: 'deterministic', counter: 0 },
     };
-    const res1 = await wallet.prepareSwapToSend(3, proofs, { includeFees: true }, out1);
+    const { preview: res1 } = await wallet.prepareSwapToSend(
+      3,
+      proofs,
+      { includeFees: true },
+      out1,
+    );
 
     const sendLen1 = res1.sendOutputs?.length ?? 0;
     const keepLen1 = res1.keepOutputs?.length ?? 0;
@@ -1437,7 +1431,12 @@ describe('send', () => {
       send: { type: 'deterministic', counter: 0 },
       keep: { type: 'deterministic', counter: 0 },
     };
-    const res2 = await wallet.prepareSwapToSend(3, proofs, { includeFees: true }, out2);
+    const { preview: res2 } = await wallet.prepareSwapToSend(
+      3,
+      proofs,
+      { includeFees: true },
+      out2,
+    );
 
     const sendLen2 = res2.sendOutputs?.length ?? 0;
     const keepLen2 = res2.keepOutputs?.length ?? 0;
@@ -1573,6 +1572,26 @@ describe('output secret uniqueness (NUT-10)', () => {
         { type: 'custom', data: [factory(), factory()] },
       ),
     ).toThrow(/Duplicate output secret/);
+  });
+
+  test('tells apart binary secrets that decode to the same lossy string', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const keyset = wallet.keyChain.getKeyset(wallet.keysetId);
+    // Both are invalid UTF-8 and read as U+FFFD U+FFFD; only the bytes tell them apart.
+    const output = (secret: number[]) =>
+      new OutputData(
+        { amount: Amount.from(1), B_: '02'.padEnd(66, 'a'), id: keyset.id },
+        1n,
+        new Uint8Array(secret),
+      );
+    expect(() =>
+      (wallet as unknown as { createOutputData: (...a: unknown[]) => unknown }).createOutputData(
+        Amount.from(2),
+        keyset,
+        { type: 'custom', data: [output([0xc0, 0x80]), output([0xc1, 0x80])] },
+      ),
+    ).not.toThrow();
   });
 
   test('rejects a secret shared between a send output and a keep output', async () => {

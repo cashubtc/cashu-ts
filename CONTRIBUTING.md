@@ -154,6 +154,19 @@ npm run test-integration
 - **Runtime ESM** (`lib/**/*.js`) must have `.js` on relative imports.
 - **Type declarations** (`lib/types/**/*.d.ts`) are a rolled up file (no relative imports/re-exports).
 
+## AI-assisted contributions
+
+Finally, we encourage AI use and AI-assisted contributions, especially to improve code quality, strengthen tests, and support code review.
+
+However, a human must remain in the loop and take responsibility for every submission:
+
+- Review and understand every change. Be prepared to explain the implementation and how it fits the existing code.
+- Verify claims, run relevant checks, and report what you tested and any limitations.
+- Review and edit AI-assisted PR descriptions, issues, discussions, and review comments before posting. Keep them concise, accurate, and relevant.
+- Submit work that is ready for human review. Use AI to help with investigation and validation, and check its results before asking maintainers to review.
+
+Do not use unattended AI agents to submit pull requests, issues, or comments without human review. Automated spam and repeated low-effort submissions consume maintainer time and may be closed or removed. Repeated disregard for these expectations may lead to contribution restrictions.
+
 ---
 
 Thanks for contributing - please open [Issues](https://github.com/cashubtc/cashu-ts/issues) or [Pull Requests](https://github.com/cashubtc/cashu-ts/pulls) if anything is unclear.

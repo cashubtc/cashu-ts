@@ -10,6 +10,10 @@ export type SecretsPolicy = 'auto' | 'deterministic' | 'random';
 
 export type RestoreConfig = {
   keysetId?: string;
+  /**
+   * Aborts the requests this call makes; the call rejects with `CallerAbortError`.
+   */
+  signal?: AbortSignal;
 };
 
 /**
@@ -30,7 +34,7 @@ export type BatchRestoreConfig = {
   maxCounter?: number;
   /**
    * Counters per restore request after the opening probe. Defaults by keyset kind (500 for HMAC,
-   * 200 for BIP32, 100 for BLS), capped at the mint's advertised `max_array_length` (NUT-06).
+   * 200 for BIP32, 300 for BLS), capped at the mint's advertised `max_array_length` (NUT-06).
    */
   batchSize?: number;
   /**
@@ -41,7 +45,22 @@ export type BatchRestoreConfig = {
    * Keyset to restore; defaults to the wallet's.
    */
   keysetId?: string;
+  /**
+   * Aborts the scan; the call rejects with `CallerAbortError`. Checked between requests and between
+   * chunks of local work.
+   */
+  signal?: AbortSignal;
+  /**
+   * Called after each wave of requests with the next counter to scan and the proofs found so far.
+   */
+  onProgress?: (progress: RestoreProgress) => void;
 };
+
+/**
+ * One `batchRestore` progress report: the keyset being scanned, the next counter, live proofs so
+ * far.
+ */
+export type RestoreProgress = { keysetId: string; counter: number; proofs: number };
 
 /**
  * Configuration for `restoreAll`: `batchRestore` options minus the per-keyset fields.
@@ -185,9 +204,9 @@ export type ScriptPathPlan = {
  *
  * @remarks
  * `digest` is what gets signed: the input digest, `tagged_hash("Cashu_TransactionInput",
- * SHA256(transactionMessage) || SHA256(inputContainer))` (NUT-10). `transactionMessage` is the
- * tagged pre-hash transcript and `inputContainer` the input's own TLV container record, so a signer
- * can recompute the digest and refuse anything it cannot verify.
+ * SHA256(transactionMessage) || SHA256(inputContainer))` (NUT-10). `transactionMessage` is the TLV
+ * transcript and `inputContainer` the input's own TLV container record, so a signer can recompute
+ * the digest and refuse anything it cannot verify.
  */
 export type CosignRequest = {
   digest: Uint8Array;
@@ -210,6 +229,12 @@ export type SendConfig = {
   includeFees?: boolean;
   proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
   onCountersReserved?: OnCountersReserved;
+  /**
+   * Aborts the requests this call makes; the call rejects with `CallerAbortError`. A one-shot
+   * operation honours it only until preparation finishes; to cancel a commit, prepare first and
+   * pass the signal to the complete step, where the preview makes a retry safe.
+   */
+  signal?: AbortSignal;
 };
 
 /**
@@ -235,13 +260,19 @@ export type ReceiveConfig = {
   requireDleq?: boolean;
   proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
   onCountersReserved?: OnCountersReserved;
+  /**
+   * Aborts the requests this call makes; the call rejects with `CallerAbortError`. A one-shot
+   * operation honours it only until preparation finishes; to cancel a commit, prepare first and
+   * pass the signal to the complete step, where the preview makes a retry safe.
+   */
+  signal?: AbortSignal;
 };
 
 /**
  * What a {@link MintProofsConfig.sign} callback receives: the digest to sign and what it covers.
  *
  * @remarks
- * A v3 quote also carries the tagged `transactionMessage` and the quote's `inputContainer` (as
+ * A v3 quote also carries the TLV `transactionMessage` and the quote's `inputContainer` (as
  * {@link CosignRequest}), so a NIP-60 `signTransaction` signer can derive the digest itself and
  * refuse anything else.
  */
@@ -268,6 +299,12 @@ export type MintProofsConfig = {
   sign?: (request: MintQuoteSignRequest) => Promise<string>;
   proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
   onCountersReserved?: OnCountersReserved;
+  /**
+   * Aborts the requests this call makes; the call rejects with `CallerAbortError`. A one-shot
+   * operation honours it only until preparation finishes; to cancel a commit, prepare first and
+   * pass the signal to the complete step, where the preview makes a retry safe.
+   */
+  signal?: AbortSignal;
 };
 
 /**
@@ -287,6 +324,12 @@ export type MeltProofsConfig = {
    * false to forfeit the change, which also permits melting on an inactive keyset.
    */
   nut08Change?: boolean;
+  /**
+   * Aborts the requests this call makes; the call rejects with `CallerAbortError`. A one-shot
+   * operation honours it only until preparation finishes; to cancel a commit, prepare first and
+   * pass the signal to the complete step, where the preview makes a retry safe.
+   */
+  signal?: AbortSignal;
 };
 
 export type CompleteSwapOptions = {
@@ -294,6 +337,10 @@ export type CompleteSwapOptions = {
    * Script path spends for v3 inputs, evaluated when each transaction input digest exists.
    */
   scriptPath?: ScriptPathPlan[];
+  /**
+   * Aborts the requests this call makes; the call rejects with `CallerAbortError`.
+   */
+  signal?: AbortSignal;
 };
 
 export type CompleteMeltOptions = {
@@ -307,4 +354,18 @@ export type CompleteMeltOptions = {
    * Script path spends for v3 inputs, evaluated when each transaction input digest exists.
    */
   scriptPath?: ScriptPathPlan[];
+  /**
+   * Aborts the requests this call makes; the call rejects with `CallerAbortError`.
+   */
+  signal?: AbortSignal;
 };
+
+/**
+ * Per-call abort: the request rejects with `CallerAbortError` when `signal` fires.
+ */
+export type AbortOptions = { signal?: AbortSignal };
+
+/**
+ * Options for `completeMint` and `completeBatchMint`.
+ */
+export type CompleteMintOptions = AbortOptions;

@@ -50,7 +50,7 @@ type PrepareSendFn = (
   proofs: Proof[],
   config?: SendConfig,
   outputConfig?: OutputConfig,
-) => Promise<SwapPreview>;
+) => Promise<{ preview: SwapPreview; unselected: Proof[] }>;
 
 type ReceiveFn = (
   token: string,
@@ -80,7 +80,6 @@ type MintBolt12Fn = (
 ) => Promise<{ proofs: Proof[] }>;
 
 type CheckMintQuoteBolt11Fn = (quote: string) => Promise<MintQuoteBolt11Response>;
-type ValidateMintQuoteFn = (quote: MintQuoteBolt11Response) => void;
 
 type PrepareMintFn = (
   method: string,
@@ -141,18 +140,22 @@ class MockWallet {
   signP2PKProofs: Mock<SignP2PKFn> = vi.fn<SignP2PKFn>((ps) => ps); // passthrough
   send: Mock<SendFn> = vi.fn<SendFn>(async () => ({ keep: [], send: [] }));
   prepareSwapToSend: Mock<PrepareSendFn> = vi.fn<PrepareSendFn>(async () => ({
-    amount: Amount.from(16),
-    fees: Amount.one(),
-    keysetId: '123',
-    inputs: [],
-    keepOutputs: [],
-    sendOutputs: [],
-    unselectedProofs: [],
+    preview: {
+      amount: Amount.from(16),
+      fees: Amount.one(),
+      sendTotal: Amount.from(16),
+      keysetId: '123',
+      inputs: [],
+      keepOutputs: [],
+      sendOutputs: [],
+    },
+    unselected: [],
   }));
   receive: Mock<ReceiveFn> = vi.fn<ReceiveFn>(async () => ({ proofs: [] }));
   prepareSwapToReceive: Mock<PrepareReceiveFn> = vi.fn<PrepareReceiveFn>(async () => ({
     amount: Amount.from(16),
     fees: Amount.one(),
+    sendTotal: Amount.zero(),
     keysetId: '123',
     inputs: [],
     keepOutputs: [],
@@ -167,13 +170,12 @@ class MockWallet {
       expiry: 0,
       request: '',
       amount: Amount.from(0),
-      unit: '',
+      unit: 'sat',
       amount_paid: Amount.from(0),
       amount_issued: Amount.from(0),
       updated_at: null,
     }),
   );
-  validateMintQuote: Mock<ValidateMintQuoteFn> = vi.fn<ValidateMintQuoteFn>();
   prepareMint: Mock<PrepareMintFn> = vi.fn<PrepareMintFn>(async (m, _a, q, _c, _o) => {
     return {
       method: m,
@@ -352,6 +354,40 @@ describe('WalletOps builders', () => {
     it('rejects a unit mismatch', () => {
       const pr = new PaymentRequest({ amount: 100, unit: 'usd' });
       expect(() => ops.sendToRequest(pr, proofs)).toThrow(/unit/);
+    });
+
+    it('rejects supported methods without a unit, listed mint or not', async () => {
+      const pr = new PaymentRequest({
+        mints: [myMint],
+        supportedMethods: [{ method: 'bolt11', fee: 1 }],
+      });
+      expect(() => ops.sendToRequest(pr, proofs, 100)).toThrow(/unit/);
+
+      const withAmount = new PaymentRequest({ amount: 100 });
+      expect(() => ops.sendToRequest(withAmount, proofs)).toThrow(/unit/);
+      expect(wallet.send).not.toHaveBeenCalled();
+
+      // A request setting neither is not covered by the rule; the payer picks both.
+      const bare = new PaymentRequest({});
+      await ops.sendToRequest(bare, proofs, 100).run();
+      expect(Amount.from(wallet.send.mock.calls[0][0]).equals(100)).toBeTruthy();
+    });
+
+    it('keeps the request terms when further options are chained', async () => {
+      const locked = new PaymentRequest({
+        amount: 100,
+        unit: 'sat',
+        nut10: { kind: 'P2PK', data: '02'.padEnd(66, 'a') },
+      });
+      expect(() => ops.sendToRequest(locked, proofs).asRandom()).toThrow(/payment request/);
+      expect(() => ops.sendToRequest(locked, proofs).includeFees(false)).toThrow(/payment request/);
+
+      // An unlocked request mandates no send output, so shaping one is still allowed.
+      const unlocked = new PaymentRequest({ amount: 100, unit: 'sat' });
+      await ops.sendToRequest(unlocked, proofs).asRandom([50, 50]).includeFees(true).run();
+      const [, , config, outputConfig] = wallet.send.mock.calls[0];
+      expect(config?.includeFees).toBe(true);
+      expect(outputConfig?.send).toMatchObject({ type: 'random' });
     });
 
     it('rejects when the mint cannot melt the request unit via any accepted method', () => {
@@ -556,6 +592,13 @@ describe('WalletOps builders', () => {
       await expect(ops.send(5, proofs).keepAsRandom().offlineCloseMatch().run()).rejects.toThrow(
         /Offline selection cannot be combined/i,
       );
+    });
+
+    it('refuses to prepare an online swap in an offline mode', async () => {
+      await expect(ops.send(5, proofs).offlineExactOnly().prepare()).rejects.toThrow(/offline/i);
+      await expect(ops.send(5, proofs).offlineCloseMatch().prepare()).rejects.toThrow(/offline/i);
+      expect(wallet.prepareSwapToSend).not.toHaveBeenCalled();
+      expect(wallet.sendOffline).not.toHaveBeenCalled();
     });
 
     it('asLocked and keepAsLocked accept a LockBuilder directly', async () => {
@@ -956,7 +999,6 @@ describe('WalletOps builders', () => {
     it('run uses wallet.prepareMint and wallet.completeMint', async () => {
       const preview: MintPreview = {
         method: 'bolt11',
-        payload: { quote, outputs: [] },
         outputData: [],
         quote: {
           quote,
@@ -1024,7 +1066,6 @@ describe('WalletOps builders', () => {
     it('bolt12 run uses wallet.prepareMint and wallet.completeMint', async () => {
       const preview: MintPreview = {
         method: 'bolt12',
-        payload: { quote: mint12.quote, outputs: [] },
         outputData: [],
         quote: {
           quote: mint12.quote,
@@ -1132,7 +1173,6 @@ describe('WalletOps builders', () => {
     it('onchain run uses wallet.prepareMint and wallet.completeMint', async () => {
       const preview: MintPreview = {
         method: 'onchain',
-        payload: { quote: mintOnchain.quote, outputs: [] },
         outputData: [],
         quote: mintOnchain,
       };

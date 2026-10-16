@@ -3,8 +3,9 @@ import { equalBytes } from '@noble/curves/utils.js';
 import { normalizeSecpPubkey } from '../crypto/curve_secp';
 import { getTag, getTagInt, getTagScalar } from '../crypto/NUT10';
 import type { P2PKOptions, P2PKTag } from '../crypto/NUT11';
-import { P2PK_KNOWN_TAG_KEYS, p2pkOptionsToPRNut10, parseP2PKSecret } from '../crypto/NUT11';
+import { isP2PKKnownTagKey, p2pkOptionsToPRNut10, parseP2PKSecret } from '../crypto/NUT11';
 import {
+  isConditionLeaf,
   parseNutrootLeaf,
   serializeNutrootLeaf,
   serializeNutrootLeafHex,
@@ -152,7 +153,7 @@ export class PaymentRequest {
   feesFor(mint: string, meltMethods?: string[]): Amount {
     this.assertUnitRule();
     // Fees compensate the payee for melting out: payments from a listed mint carry none.
-    if (!this.supportedMethods?.length || this.mints?.includes(mint)) {
+    if (!this.supportedMethods?.length || this.includesMint(mint)) {
       return Amount.zero();
     }
     const applicable = this.supportedMethods
@@ -475,14 +476,14 @@ export class PaymentRequest {
     });
     // Every blind-me key must be a leaf key, so the tree's own key count (at most
     // NUTROOT_MAX_SLOTS) bounds the list before any EC decompression.
-    const leafKeys = new Set(leaves.flatMap((leaf) => leaf.keys));
+    const treeKeys = new Set(leaves.filter(isConditionLeaf).flatMap((leaf) => leaf.keys));
     const requestedBlindKeys = nutroot.blindKeys ?? [];
-    if (requestedBlindKeys.length > leafKeys.size) {
+    if (requestedBlindKeys.length > treeKeys.size) {
       throw new CTSError(`Too many blind-me keys: ${requestedBlindKeys.length}`);
     }
     const blindKeys = requestedBlindKeys.map((key) => normalizeSecpPubkey(key));
     for (const key of blindKeys) {
-      if (!leafKeys.has(key)) {
+      if (!treeKeys.has(key)) {
         throw new CTSError(`blind-me key is not in the requested tree: ${key}`);
       }
     }
@@ -830,11 +831,14 @@ export class PaymentRequestBuilder {
     }
     // Validate here rather than at build(): a request nobody can pay is worth catching at the
     // point the payee wrote it, not at the payer.
-    const leafKeys = new Set(
-      (nutroot.leaves ?? []).flatMap((hex) => parseNutrootLeaf(hexToBytes(hex)).keys),
+    const treeKeys = new Set(
+      (nutroot.leaves ?? [])
+        .map((hex) => parseNutrootLeaf(hexToBytes(hex)))
+        .filter(isConditionLeaf)
+        .flatMap((leaf) => leaf.keys),
     );
     for (const key of nutroot.blindKeys ?? []) {
-      if (!leafKeys.has(key)) {
+      if (!treeKeys.has(key)) {
         throw new CTSError(`blind-me key is not in the requested tree: ${key}`);
       }
     }
@@ -967,7 +971,7 @@ export function nut10ToP2PKOptions(nut10: NUT10Option | undefined): P2PKOptions 
 
   // Forward any non-standard tags verbatim.
   const additionalTags = (nut10.tags ?? []).filter(
-    (t) => t.length > 0 && !P2PK_KNOWN_TAG_KEYS.has(t[0]),
+    (t) => t.length > 0 && !isP2PKKnownTagKey(t[0]),
   ) as P2PKTag[];
   if (additionalTags.length > 0) {
     options.additionalTags = additionalTags;

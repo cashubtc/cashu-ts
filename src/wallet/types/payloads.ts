@@ -1,36 +1,31 @@
 import { type Amount } from '../../model/Amount';
 import { type OutputDataLike } from '../../model/OutputData';
-import {
-  type MeltQuoteBaseResponse,
-  type MintQuoteBaseResponse,
-  type SwapRequest,
-  type MintRequest,
-  type BatchMintRequest,
-} from '../../model/types';
+import { type MeltQuoteBaseResponse, type MintQuoteBaseResponse } from '../../model/types';
 import { type Proof } from '../../model/types/proof';
 
 /**
  * Preview of a mint transaction created by prepareMint.
  *
  * @remarks
- * Contains JSON-unsafe values (`bigint`, `Uint8Array`). Not intended for direct serialization.
+ * Contains JSON-unsafe values (`bigint`, `Uint8Array`); persist via `serializeMintPreview` and
+ * rehydrate with `deserializeMintPreview`.
  */
 export interface MintPreview<
   TQuote extends Pick<MintQuoteBaseResponse, 'quote'> = MintQuoteBaseResponse,
 > {
   method: string;
   /**
-   * Mint payload to be sent to the mint.
-   */
-  payload: MintRequest;
-  /**
-   * Blinding data required to construct proofs.
-   */
-  outputData: OutputDataLike[];
-  /**
    * Mint Quote object.
    */
   quote: TQuote;
+  /**
+   * Blinding data required to construct proofs; `completeMint` sends their blinded messages.
+   */
+  outputData: OutputDataLike[];
+  /**
+   * NUT-20 signature over the quote and outputs, present when the quote is locked.
+   */
+  signature?: string;
   /**
    * @deprecated Temporary compatibility for legacy mints.
    */
@@ -41,24 +36,29 @@ export interface MintPreview<
  * Preview of a batched mint transaction created by prepareBatchMint.
  *
  * @remarks
- * Contains JSON-unsafe values (`bigint`, `Uint8Array`). Not intended for direct serialization.
+ * Contains JSON-unsafe values (`bigint`, `Uint8Array`); persist via `serializeBatchMintPreview` and
+ * rehydrate with `deserializeBatchMintPreview`.
  */
 export interface BatchMintPreview<
   TQuote extends Pick<MintQuoteBaseResponse, 'quote' | 'pubkey'> = MintQuoteBaseResponse,
 > {
   method: string;
   /**
-   * Batch mint payload to be sent to the mint.
+   * Mint Quote objects included in this batch.
    */
-  payload: BatchMintRequest;
+  quotes: TQuote[];
+  /**
+   * Amount drawn from each quote, in `quotes` order.
+   */
+  amounts: Amount[];
   /**
    * Blinding data required to construct proofs (consolidated across all quotes).
    */
   outputData: OutputDataLike[];
   /**
-   * Mint Quote objects included in this batch.
+   * NUT-20 signatures in `quotes` order, `null` for an unlocked quote; omitted when none is locked.
    */
-  quotes: TQuote[];
+  signatures?: Array<string | null>;
   /**
    * @deprecated Temporary compatibility for legacy mints.
    */
@@ -69,7 +69,8 @@ export interface BatchMintPreview<
  * Preview of a Melt transaction created by prepareMelt.
  *
  * @remarks
- * Contains JSON-unsafe values (`bigint`, `Uint8Array`). Not intended for direct serialization.
+ * Contains JSON-unsafe values (`bigint`, `Uint8Array`); persist via `serializeMeltPreview` and
+ * rehydrate with `deserializeMeltPreview`.
  */
 export interface MeltPreview<
   TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse,
@@ -90,31 +91,6 @@ export interface MeltPreview<
 }
 
 /**
- * Includes all data required to swap inputs for outputs and construct proofs from them.
- *
- * @remarks
- * Contains JSON-unsafe values (`bigint`, `Uint8Array`). Not intended for direct serialization.
- */
-export type SwapTransaction = {
-  /**
-   * Payload that will be sent to the mint for a swap.
-   */
-  payload: SwapRequest;
-  /**
-   * Blinding data required to construct proofs.
-   */
-  outputData: OutputDataLike[];
-  /**
-   * List of booleans to determine which proofs to keep.
-   */
-  keepVector: boolean[];
-  /**
-   * Indices that can be used to restore original output data.
-   */
-  sortedIndices: number[];
-};
-
-/**
  * Preview of a swap transaction created by prepareSend / prepareReceive.
  *
  * @remarks
@@ -127,9 +103,13 @@ export type SwapPreview = {
    */
   amount: Amount;
   /**
-   * Total fees for the swap (inc receiver's fees if applicable)
+   * Input fee the swap charges the sender for `inputs`.
    */
   fees: Amount;
+  /**
+   * Sum of `sendOutputs`: what the receiver gets. Zero for a receive preview.
+   */
+  sendTotal: Amount;
   /**
    * Input Proofs for this transaction.
    */
@@ -142,8 +122,4 @@ export type SwapPreview = {
    * Blinding data to construct proofs to keep.
    */
   keepOutputs?: OutputDataLike[];
-  /**
-   * Proofs not selected for this transaction (can be returned to storage).
-   */
-  unselectedProofs?: Proof[];
 };

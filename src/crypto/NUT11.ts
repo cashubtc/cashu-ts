@@ -9,6 +9,7 @@ import { type OutputDataLike } from '../model/OutputData';
 import { type HTLCWitness, type P2PKWitness, type Proof } from '../model/types';
 import { minimalBytesBE } from '../utils/bytes';
 import {
+  MAX_P2BK_SLOTS,
   MAX_P2PK_PUBKEYS,
   MAX_P2PK_SIGNATURES,
   MAX_SECRET_LENGTH,
@@ -40,7 +41,7 @@ import {
   getSecretKind,
 } from './NUT10';
 import { deriveP2BKSecretKeys } from './NUT28';
-import type { NutrootLeaf } from './nutroot';
+import type { NutrootConditionLeaf } from './nutroot';
 
 export const SigFlags = {
   SIG_INPUTS: 'SIG_INPUTS',
@@ -148,13 +149,8 @@ type WitnessData = {
   signatures: string[];
 };
 
-/**
- * NUT-11 tag keys that map onto structured {@link LockConditions} fields, rather than being carried
- * as free-form `additionalTags`, and are therefore reserved (not settable as additional tags).
- *
- * @internal
- */
-export const P2PK_KNOWN_TAG_KEYS = new Set([
+// NUT-11 tag keys that map onto structured lock fields, so they are reserved as additional tags.
+const P2PK_KNOWN_TAG_KEYS = new Set([
   'locktime',
   'pubkeys',
   'n_sigs',
@@ -162,6 +158,15 @@ export const P2PK_KNOWN_TAG_KEYS = new Set([
   'n_sigs_refund',
   'sigflag',
 ]);
+
+/**
+ * True if a tag key is one NUT-11 reserves.
+ *
+ * @internal
+ */
+export function isP2PKKnownTagKey(key: string): boolean {
+  return P2PK_KNOWN_TAG_KEYS.has(key);
+}
 
 // ------------------------------
 // NUT-11 Secrets
@@ -285,12 +290,12 @@ export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
 
   // Signers: P2PK - data key + pubkeys; HTLC - data is a hash, so only pubkeys.
   const signerCount = (kind === 'P2PK' ? 1 : 0) + pubkeys.length;
-  // NUT-28: up to 11 locking slots in [data, ...pubkeys, ...refund] (i_byte 0x00..0x0A). `data`
-  // always fills slot 0 (a pubkey for P2PK, a hashlock for HTLC), so HTLC allows one fewer key.
+  // NUT-28 slot map: [data, ...pubkeys, ...refund]. `data` always fills slot 0 (a pubkey for
+  // P2PK, a hashlock for HTLC), so HTLC allows one fewer key.
   const slotCount = 1 + pubkeys.length + refundKeys.length;
-  if (slotCount > 11) {
+  if (slotCount > MAX_P2BK_SLOTS) {
     throw new CTSError(
-      `Too many pubkeys, ${slotCount} slots provided, maximum allowed is 11 in total`,
+      `Too many pubkeys, ${slotCount} slots provided, maximum allowed is ${MAX_P2BK_SLOTS} in total`,
     );
   }
   if (p2pk.sigFlag !== undefined) assertSigFlag(p2pk.sigFlag);
@@ -340,7 +345,7 @@ export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
  */
 export function assertValidTagKey(key: string) {
   if (!key || typeof key !== 'string') throw new CTSError('tag key must be a non empty string');
-  if (P2PK_KNOWN_TAG_KEYS.has(key)) {
+  if (isP2PKKnownTagKey(key)) {
     throw new CTSError(`additionalTags must not use reserved key "${key}"`);
   }
 }
@@ -789,11 +794,12 @@ export function verifyP2PKSpendingConditions(
  *
  * @remarks
  * Diagnostic shape for `Wallet.spendOptions`. A keyless `after` leaf (`n: 0`) is NUT-11's
- * anyone-after-expiry, which no nutroot tree can encode: never serialize these leaves.
+ * anyone-after-expiry, which no nutroot tree can encode: never serialize these leaves. Its `time`
+ * is `locktime + 1`, as NUT-11 expires after the locktime and an `after` leaf opens at it.
  * @throws If the secret is not P2PK/HTLC or its tags break the NUT-11 rules.
  * @internal
  */
-export function p2pkSpendLeaves(secretStr: string | Secret): NutrootLeaf[] {
+export function p2pkSpendLeaves(secretStr: string | Secret): NutrootConditionLeaf[] {
   const secret = parseP2PKSecret(secretStr);
   const mainKeys = getP2PKWitnessPubkeys(secret);
   const refundKeys = getP2PKWitnessRefundkeys(secret);
@@ -808,14 +814,14 @@ export function p2pkSpendLeaves(secretStr: string | Secret): NutrootLeaf[] {
   // A path with no keys needs no signatures (keyless HTLC, or expiry with no refund keys).
   const n = (tag: string, keys: string[]) =>
     keys.length ? Math.max(getTagInt(secret, tag) ?? 1, 1) : 0;
-  const main: NutrootLeaf =
+  const main: NutrootConditionLeaf =
     getSecretKind(secret) === 'HTLC'
       ? { type: 'hashlock', n: n('n_sigs', mainKeys), keys: mainKeys, hash: getDataField(secret) }
       : { type: 'threshold', n: n('n_sigs', mainKeys), keys: mainKeys };
   if (!Number.isFinite(locktime)) return [main];
   return [
     main,
-    { type: 'after', n: n('n_sigs_refund', refundKeys), keys: refundKeys, time: locktime },
+    { type: 'after', n: n('n_sigs_refund', refundKeys), keys: refundKeys, time: locktime + 1 },
   ];
 }
 
@@ -1008,7 +1014,7 @@ function assertNoDuplicateP2PKTags(tags: string[][]): void {
   const seen = new Set<string>();
   for (const tag of tags) {
     const key = tag[0];
-    if (!P2PK_KNOWN_TAG_KEYS.has(key)) continue;
+    if (!isP2PKKnownTagKey(key)) continue;
     if (seen.has(key)) {
       throw new CTSError(`Duplicate P2PK tag "${key}"`);
     }
@@ -1103,7 +1109,7 @@ function getLocktime(secret: Secret): number {
   // value is passed through for the mint to judge rather than rejected here. Arity still throws.
   const v = getTagScalar(secret, 'locktime');
   const ts = v !== undefined && /^\d+$/.test(v) ? Number(v) : NaN;
-  return Number.isSafeInteger(ts) && ts > 0 ? ts : Infinity;
+  return Number.isSafeInteger(ts) ? ts : Infinity;
 }
 
 function deriveLockState(
@@ -1111,7 +1117,7 @@ function deriveLockState(
   nowSeconds: number = Math.floor(Date.now() / 1000),
 ): LockState {
   if (!Number.isFinite(locktime)) return 'PERMANENT';
-  return nowSeconds < locktime ? 'ACTIVE' : 'EXPIRED';
+  return nowSeconds <= locktime ? 'ACTIVE' : 'EXPIRED';
 }
 
 function resolveNSigs(secret: Secret, lockState: LockState, refundKeys: string[]): number {

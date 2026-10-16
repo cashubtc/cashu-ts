@@ -69,6 +69,14 @@ const hasLabel = (item, names) => (item.labels || []).some((l) => names.includes
 const skip = (item) => hasLabel(item, [...REPORT_LABELS, ...SKIP_LABELS]);
 const isBackport = (pr) => /^\[backport/i.test(pr.title.trim());
 
+// Titles and display names are contributor text, so they go in as text: GitHub renders a
+// backslash-escaped ASCII punctuation mark as itself.
+function md(value) {
+  return String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .replace(/[!-/:-@[-`{-~]/g, '\\$&');
+}
+
 // Group items by author as [type, item] pairs
 const byUser = new Map();
 function add(type, items, filter = () => true) {
@@ -76,9 +84,11 @@ function add(type, items, filter = () => true) {
     if (skip(item) || !filter(item)) continue;
     const a = item.author || {};
     const key = a.login || 'unknown';
-    const display = a.name ? `${a.name} (${a.login})` : key;
+    const display = a.name ? `${md(a.name)} (${md(a.login)})` : md(key);
     if (!byUser.has(key)) byUser.set(key, { display, rows: [] });
-    byUser.get(key).rows.push(`- [ ] **${type}:** [#${item.number}](${item.url}) - ${item.title}`);
+    byUser
+      .get(key)
+      .rows.push(`- [ ] **${type}:** [#${item.number}](${item.url}) - ${md(item.title)}`);
   }
 }
 
@@ -90,7 +100,7 @@ add('Backport', merged, isBackport);
 
 const fmt = (items) =>
   items.length
-    ? items.map((i) => `- [ ] [#${i.number}](${i.url}) - ${i.title}`).join('\n')
+    ? items.map((i) => `- [ ] [#${i.number}](${i.url}) - ${md(i.title)}`).join('\n')
     : '- None';
 
 // Spec activity is an ecosystem feed, not personal credit: one section,
@@ -99,7 +109,10 @@ const fmt = (items) =>
 const fmtNuts = (items) =>
   items.length
     ? items
-        .map((i) => `- [ ] [nuts#${i.number}](${i.url}) - ${i.title} (${i.author?.login || '?'})`)
+        .map(
+          (i) =>
+            `- [ ] [nuts#${i.number}](${i.url}) - ${md(i.title)} (${md(i.author?.login || '?')})`,
+        )
         .join('\n')
     : '- None';
 

@@ -5,6 +5,7 @@ import { test, describe, expect } from 'vitest';
 import {
   Wallet,
   getDecodedToken,
+  getEncodedTokenBinary,
   OutputData,
   Amount,
   UnknownKeysetError,
@@ -608,6 +609,15 @@ describe('receive', () => {
     await expect(wallet.receive(token3sat, { requireDleq: true })).rejects.toThrow(
       'Token contains proofs with invalid or missing DLEQ',
     );
+  });
+
+  test('decodeToken accepts a raw binary token and resolves keyset IDs like the string form', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const fromString = wallet.decodeToken(token3sat);
+    const fromBytes = wallet.decodeToken(getEncodedTokenBinary(fromString));
+    expect(fromBytes).toEqual(fromString);
   });
 
   test('test receive verifies DLEQ when present even without requireDleq (NUT-12 MUST)', async () => {

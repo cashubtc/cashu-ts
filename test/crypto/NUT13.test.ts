@@ -6,26 +6,154 @@ import { describe, expect, test } from 'vitest';
 import {
   BLS_FR_ORDER,
   deriveSecretAndBlindingFactor,
+  findLegacyDerivationCollisions,
   getKeysetIdInt,
   hashToCurveBls,
+  mnemonicToSeedSync,
 } from '../../src/crypto';
 import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import {
+  createKeyPairDeriver,
+  createSecretAndBlindingFactorDeriver,
+  deriveKeyPair,
   deriveLeafKey,
   deriveNumsOffset,
+  deriveQuoteIdPreimage,
   deriveQuoteLockKey,
   recoverV3LeafKeys,
 } from '../../src/crypto/NUT13';
+import { derivedQuoteId } from '../../src/crypto/transcript';
 import { CTSError } from '../../src/model/Errors';
+import { decodeBase64ToUint8Legacy } from '../../src/utils';
 import { nut13_v3 as nut13Vectors } from '../vectors/nutroot-v3.json';
+
+// The NUT-13 helpers take the 64-byte BIP-39 seed; pad a label out to that length.
+const seed64 = (label: string): Uint8Array => {
+  const seed = new Uint8Array(64);
+  seed.set(new TextEncoder().encode(label));
+  return seed;
+};
+
+// NUT-06 example identity: the scope of every 0x04 quote lock key below.
+const MINT_PUBKEY = '0338596797cef0627f653cd6568387361b00314add55d9f1ea9c94f46ae421e3da';
 
 // The standalone deriveBlindingFactor() helper was removed in v5; derive it locally for these tests.
 const deriveBlindingFactor = (seed: Uint8Array, keysetId: string, counter: number): Uint8Array =>
   deriveSecretAndBlindingFactor(seed, keysetId, counter).blindingFactor;
 
+describe('findLegacyDerivationCollisions', () => {
+  test('returns no groups for empty, unique or repeated identical IDs', () => {
+    expect(findLegacyDerivationCollisions([])).toEqual([]);
+    expect(findLegacyDerivationCollisions(['0000000000000001', '0000000000000002'])).toEqual([]);
+    expect(findLegacyDerivationCollisions(['0000000000000001', '0000000000000001'])).toEqual([]);
+  });
+
+  test('groups distinct hex 00 IDs and omits duplicates and singletons', () => {
+    const ids = Object.freeze([
+      '0000000000000001',
+      '0000000000000002',
+      '0000000080000000',
+      '0000000000000003',
+      '0000000080000001',
+      '00000000ffffffff',
+      '0000000080000000',
+    ]);
+    expect(findLegacyDerivationCollisions(ids)).toEqual([
+      ['0000000000000001', '0000000080000000', '00000000ffffffff'],
+      ['0000000000000002', '0000000080000001'],
+    ]);
+  });
+
+  test('groups base64 IDs with each other and with hex 00 IDs', () => {
+    expect(
+      findLegacyDerivationCollisions(['AAAAAIAAAAA=', '0000000000000001', 'AAAAAP////8=']),
+    ).toEqual([['AAAAAIAAAAA=', '0000000000000001', 'AAAAAP////8=']]);
+  });
+
+  test('hex casing differences do not form a collision', () => {
+    expect(findLegacyDerivationCollisions(['00000000ABCDEF01', '00000000abcdef01'])).toEqual([]);
+  });
+
+  test.each(['00000000ABCDEF01', '00000000abcdef01'])(
+    'preserves the first hex spelling %s in a collision group',
+    (firstId) => {
+      expect(
+        findLegacyDerivationCollisions([
+          firstId,
+          '00000000ABCDEF01',
+          '000000012bcdef00',
+          '00000000abcdef01',
+        ]),
+      ).toEqual([[firstId, '000000012bcdef00']]);
+    },
+  );
+
+  test('keeps all-hex legacy base64 IDs case-sensitive', () => {
+    const firstId = 'd9f0F7F2875b';
+    const secondId = firstId.toLowerCase();
+    const firstHexId = '00' + getKeysetIdInt(firstId).toString(16).padStart(14, '0');
+    const secondHexId = '00' + getKeysetIdInt(secondId).toString(16).padStart(14, '0');
+    expect(firstHexId).not.toBe(secondHexId);
+    expect(findLegacyDerivationCollisions([firstId, secondId, firstHexId, secondHexId])).toEqual([
+      [firstId, firstHexId],
+      [secondId, secondHexId],
+    ]);
+  });
+
+  test('accepts standard and URL-safe legacy base64', () => {
+    expect(findLegacyDerivationCollisions(['+//wAAAAAAAA', '000000007fe003ef'])).toEqual([
+      ['+//wAAAAAAAA', '000000007fe003ef'],
+    ]);
+    expect(findLegacyDerivationCollisions(['-__wAAAAAAAA', '000000007fe003ef'])).toEqual([
+      ['-__wAAAAAAAA', '000000007fe003ef'],
+    ]);
+  });
+
+  test('URL-safe and standard spellings of one base64 ID do not form a collision', () => {
+    expect(findLegacyDerivationCollisions(['+//wAAAAAAAA', '-__wAAAAAAAA'])).toEqual([]);
+    expect(
+      findLegacyDerivationCollisions(['-__wAAAAAAAA', '+//wAAAAAAAA', '000000007fe003ef']),
+    ).toEqual([['-__wAAAAAAAA', '000000007fe003ef']]);
+  });
+
+  test.each([
+    ['d9f0F7F2875b', '0000000026dbef9d'],
+    ['010000000000', '000000006f3cf71b'],
+    ['00abcdefabcd', '000000002ca09e19'],
+  ])('treats the 12-character all-hex ID %s as legacy base64', (legacyId, hexId) => {
+    expect(findLegacyDerivationCollisions([legacyId, hexId])).toEqual([[legacyId, hexId]]);
+  });
+
+  test.each(['01', '02', '03', 'ff'])(
+    'ignores hex version %s even with matching integers',
+    (version) => {
+      const modernId = version + '00000000000000';
+      const legacyId = '00' + getKeysetIdInt(modernId).toString(16).padStart(14, '0');
+      expect(findLegacyDerivationCollisions([modernId, legacyId])).toEqual([]);
+    },
+  );
+
+  test('skips unrecognized forms and malformed hex without throwing', () => {
+    expect(
+      findLegacyDerivationCollisions([
+        '',
+        'not-a-keyset!',
+        '!'.repeat(12),
+        '00f',
+        '01f',
+        '03ff00',
+        'AA=A',
+        '+__wAAAAAAAA',
+        '0000000000000001',
+        '0000000080000000',
+      ]),
+    ).toEqual([['0000000000000001', '0000000080000000']]);
+  });
+});
+
 describe('deriveBlindingFactor', () => {
   test('preserves 32-byte encoding when reduced scalar has leading zeros', () => {
-    const seed = new TextEncoder().encode('test seed for regression');
+    const seed = seed64('test seed for regression');
     const keysetId = '01abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567';
 
     const r = deriveBlindingFactor(seed, keysetId, 197);
@@ -36,7 +164,7 @@ describe('deriveBlindingFactor', () => {
 });
 
 describe('v3 (BLS) derivation', () => {
-  const seed = new TextEncoder().encode('nut13 v3 test seed');
+  const seed = seed64('nut13 v3 test seed');
   const v3KeysetId = '02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6';
 
   test('uses HMAC_SHA256 and produces a 32-byte blinding factor below BLS_FR_ORDER', () => {
@@ -59,7 +187,7 @@ describe('v3 (BLS) derivation', () => {
   });
 
   test('matches the shared nutroot-v3 nut13 vectors', () => {
-    const vseed = new TextEncoder().encode(nut13Vectors.seed_utf8);
+    const vseed = hexToBytes(nut13Vectors.seed_hex);
     for (const output of nut13Vectors.outputs) {
       const { secret, secretKey, blindingFactor } = deriveSecretAndBlindingFactor(
         vseed,
@@ -111,7 +239,7 @@ describe('v3 (BLS) derivation', () => {
   });
 
   test('the other derivation types match the shared vectors', () => {
-    const vseed = new TextEncoder().encode(nut13Vectors.seed_utf8);
+    const vseed = hexToBytes(nut13Vectors.seed_hex);
     const id = nut13Vectors.keyset_id;
     for (const output of nut13Vectors.outputs) {
       expect(bytesToHex(deriveNumsOffset(vseed, id, output.counter))).toBe(output.nums_offset);
@@ -122,9 +250,12 @@ describe('v3 (BLS) derivation', () => {
       expect(bytesToHex(getPubKeyFromPrivKey(key))).toBe(leaf.pubkey);
     }
     for (const lock of nut13Vectors.quote_locks) {
-      const key = deriveQuoteLockKey(vseed, lock.counter);
+      const key = deriveQuoteLockKey(vseed, nut13Vectors.mint_identity, lock.counter);
       expect(bytesToHex(key)).toBe(lock.privkey);
       expect(bytesToHex(getPubKeyFromPrivKey(key))).toBe(lock.pubkey);
+      const idPreimage = deriveQuoteIdPreimage(vseed, nut13Vectors.mint_identity, lock.counter);
+      expect(bytesToHex(idPreimage)).toBe(lock.id_preimage);
+      expect(derivedQuoteId(idPreimage)).toBe(lock.quote_id);
     }
   });
 
@@ -136,7 +267,7 @@ describe('v3 (BLS) derivation', () => {
       deriveSecretAndBlindingFactor(seed, v3KeysetId, 4).blindingFactor,
       deriveNumsOffset(seed, v3KeysetId, 4),
       deriveLeafKey(seed, v3KeysetId, 4, 0),
-      deriveQuoteLockKey(seed, 4),
+      deriveQuoteLockKey(seed, MINT_PUBKEY, 4),
     ].map(bytesToHex);
     expect(new Set(derived).size).toBe(derived.length);
     // The leaf index is in the message, not just the caller's bookkeeping.
@@ -160,6 +291,11 @@ describe('v3 (BLS) derivation', () => {
   test('the new types are v3 only', () => {
     const v2KeysetId = '01abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567';
     expect(() => deriveNumsOffset(seed, v2KeysetId, 0)).toThrow(/v3 keyset/);
+    // A short v3 keyset id is still a v3 keyset, but not a derivation scope (NUT-13).
+    const shortId = v3KeysetId.slice(0, 16);
+    expect(() => deriveSecretAndBlindingFactor(seed, shortId, 0)).toThrow(/33 bytes/);
+    expect(() => deriveNumsOffset(seed, shortId, 0)).toThrow(/33 bytes/);
+    expect(() => deriveLeafKey(seed, shortId, 0, 0)).toThrow(/33 bytes/);
     expect(() => deriveLeafKey(seed, v2KeysetId, 0, 0)).toThrow(/v3 keyset/);
     expect(() => deriveLeafKey(seed, v3KeysetId, 0, -1)).toThrow(/index/);
   });
@@ -179,12 +315,9 @@ describe('v3 (BLS) derivation', () => {
 });
 
 describe('v2 derivation spec vectors', () => {
-  // Lock-in for nuts/tests/13-tests.md "Version 2: Secret derivation". cashu-ts works in seed
-  // space, so the spec's mnemonic ("half depart obvious quality work element tank gorilla view
-  // sugar picture humble") is pre-derived to its BIP39 seed here.
-  const seed = hexToBytes(
-    'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25' +
-      '780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
+  // Lock-in for nuts/tests/13-tests.md "Version 2: Secret derivation", from the spec's mnemonic.
+  const seed = mnemonicToSeedSync(
+    'half depart obvious quality work element tank gorilla view sugar picture humble',
   );
   const v2KeysetId = '015ba18a8adcd02e715a58358eb618da4a4b3791151a4bee5e968bb88406ccf76a';
   const secrets = [
@@ -212,7 +345,7 @@ describe('v2 derivation spec vectors', () => {
 });
 
 describe('HMAC counter range', () => {
-  const seed = new TextEncoder().encode('nut13 counter range seed');
+  const seed = seed64('nut13 counter range seed');
   const v2KeysetId = '01abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567';
 
   test('rejects counters that a uint64 encoding would alias onto a valid one', () => {
@@ -240,6 +373,37 @@ describe('HMAC counter range', () => {
   });
 });
 
+describe('seed length', () => {
+  const v2KeysetId = '01abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567';
+  const v3KeysetId = '02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6';
+  const bad = /seed must be a 64 byte Uint8Array/;
+
+  test('every seeded derivation takes 64 bytes and nothing else', () => {
+    const seed = new Uint8Array(64).fill(7);
+    expect(() => deriveSecretAndBlindingFactor(seed, v2KeysetId, 0)).not.toThrow();
+    expect(() => deriveKeyPair(seed, 'P2PK', 0)).not.toThrow();
+    expect(() => deriveQuoteLockKey(seed, MINT_PUBKEY, 0)).not.toThrow();
+    for (const length of [0, 16, 32, 63, 65]) {
+      const seed = new Uint8Array(length);
+      expect(() => deriveSecretAndBlindingFactor(seed, v2KeysetId, 0)).toThrow(bad);
+      expect(() => createSecretAndBlindingFactorDeriver(seed, v2KeysetId)).toThrow(bad);
+      expect(() => deriveKeyPair(seed, 'P2PK', 0)).toThrow(bad);
+      expect(() => createKeyPairDeriver(seed, 'QuoteLock')).toThrow(bad);
+      expect(() => deriveQuoteLockKey(seed, MINT_PUBKEY, 0)).toThrow(bad);
+      expect(() => deriveNumsOffset(seed, v3KeysetId, 0)).toThrow(bad);
+      expect(() => deriveLeafKey(seed, v3KeysetId, 0, 0)).toThrow(bad);
+      expect(() => recoverV3LeafKeys(seed, v3KeysetId, 0, ['02'.padEnd(66, 'a')])).toThrow(bad);
+    }
+  });
+
+  test('a seed that is not a Uint8Array is rejected the same way', () => {
+    const notBytes = 'dd44ee516b0647e80b488e8dcc56d736' as unknown as Uint8Array;
+    expect(() => deriveSecretAndBlindingFactor(notBytes, v2KeysetId, 0)).toThrow(bad);
+    expect(() => deriveKeyPair(notBytes, 'P2PK', 0)).toThrow(bad);
+    expect(() => deriveQuoteLockKey(notBytes, MINT_PUBKEY, 0)).toThrow(bad);
+  });
+});
+
 describe('derivation kind selection', () => {
   // Known BIP-32 seed (NUT-13 spec / NUT-09 fixtures).
   const seed = hexToBytes(
@@ -262,6 +426,31 @@ describe('derivation kind selection', () => {
     const { secret, blindingFactor } = deriveSecretAndBlindingFactor(seed, base64KeysetId, counter);
     expect(bytesToHex(secret)).toBe(bytesToHex(expectedSecret as Uint8Array));
     expect(bytesToHex(blindingFactor)).toBe(bytesToHex(expectedR as Uint8Array));
+  });
+
+  test('a 12-character all-hex keyset id still takes the deprecated BIP-32 path', () => {
+    // Legacy ids predate the version byte and their base64 alphabet overlaps hex, so length
+    // is what separates them from a modern id.
+    const legacyKeysetId = 'd9f0F7F2875b';
+    const counter = 2;
+    const keysetIdInt =
+      bytesToNumberBE(decodeBase64ToUint8Legacy(legacyKeysetId)) % BigInt(2 ** 31 - 1);
+    expect(getKeysetIdInt(legacyKeysetId)).toBe(keysetIdInt);
+
+    const hdkey = HDKey.fromMasterSeed(seed);
+    const path = `m/129372'/0'/${keysetIdInt}'/${counter}'`;
+    const expectedSecret = hdkey.derive(`${path}/0`).privateKey;
+    const expectedR = hdkey.derive(`${path}/1`).privateKey;
+    expect(expectedSecret).not.toBeNull();
+
+    const { secret, blindingFactor } = deriveSecretAndBlindingFactor(seed, legacyKeysetId, counter);
+    expect(bytesToHex(secret)).toBe(bytesToHex(expectedSecret as Uint8Array));
+    expect(bytesToHex(blindingFactor)).toBe(bytesToHex(expectedR as Uint8Array));
+
+    // Length alone is not enough: a 12-character id outside both alphabets is still rejected.
+    expect(() => deriveSecretAndBlindingFactor(seed, '!'.repeat(12), 0)).toThrow(
+      /Unrecognized keyset ID version/,
+    );
   });
 
   test('rejects a negative counter on the deprecated BIP-32 path', () => {

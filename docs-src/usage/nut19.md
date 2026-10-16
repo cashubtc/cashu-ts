@@ -27,8 +27,8 @@ const nut19 = wallet.getMintInfo().isSupported(19);
 if (!nut19.supported) {
   console.log('This mint does not advertise NUT-19 cached endpoints');
 } else {
-  console.log('TTL (ms):', nut19.params.ttl);
-  console.log('Cached endpoints:', nut19.params.cached_endpoints);
+  console.log('TTL (ms):', nut19.params?.ttl);
+  console.log('Cached endpoints:', nut19.params?.cached_endpoints);
 }
 ```
 
@@ -56,11 +56,10 @@ setGlobalRequestOptions({});
 
 ## Caller aborts vs timeout retries
 
-Use `requestTimeout` for app-wide timeout policy. Use `AbortController` only when you want to
-cancel one specific low-level request.
+Use `requestTimeout` for app-wide timeout policy. Use `AbortController` only when you want to cancel one specific low-level request.
 
-- `requestTimeout` turns a hung request into a retryable network error on NUT-19 cached endpoints
-- `signal.abort()` is treated as a caller cancel and stops retries immediately
+- `requestTimeout` turns a hung request into a retryable network error on NUT-19 cached endpoints; it is per attempt and defaults to 5 minutes (`Infinity` disables it)
+- `signal.abort()` is treated as a caller cancel and stops retries immediately; the call rejects with `CallerAbortError`
 
 ```ts
 import { Wallet, setGlobalRequestOptions } from '@cashu/cashu-ts';
@@ -75,7 +74,7 @@ const wallet = new Wallet('http://localhost:3338');
 await wallet.loadMint();
 
 try {
-  const pending = wallet.checkProofsStates([{ secret: 'my-proof-secret' }]);
+  const pending = wallet.checkProofsStates([{ id: '00bd033559de27d0', secret: 'my-proof-secret' }]);
 
   cancelButton.onclick = () => {
     ac.abort();
@@ -100,6 +99,8 @@ advertising the endpoint in `cached_endpoints` and by its TTL.
 ### Mint
 
 ```ts
+import { deserializeMintPreview, serializeMintPreview } from '@cashu/cashu-ts';
+
 const mintQuote = await wallet.checkMintQuoteBolt11(quoteId);
 
 const mintPreview = await wallet.prepareMint('bolt11', 64, mintQuote, undefined, {
@@ -107,26 +108,27 @@ const mintPreview = await wallet.prepareMint('bolt11', 64, mintQuote, undefined,
   counter: 0,
 });
 
-// Persist an app-defined snapshot here.
-// Do not call JSON.stringify(mintPreview) directly; preview objects contain
-// Amount, bigint, Uint8Array, and class instances that need explicit rehydration.
-const proofs = await wallet.completeMint(mintPreview);
+// Persist the JSON-safe form, then rehydrate it to replay after a restart.
+const stored = JSON.stringify(serializeMintPreview(mintPreview));
+const proofs = await wallet.completeMint(deserializeMintPreview(JSON.parse(stored)));
 ```
+
+The serialized form keeps only the quote id, which is all `completeMint` needs; keep the quote
+itself in your own storage. `serializeBatchMintPreview` / `deserializeBatchMintPreview` do the same
+for `prepareBatchMint`.
 
 ### Melt
 
-A melt keeps a server-side handle (the quote), so the full preview does not need persisting:
-quote state is recoverable from the mint, the inputs are your own proofs, and once the quote
-pays, the NUT-08 change signatures ride on it. Persist the quote id plus the serialized change
-blanks (the only client-side state you cannot rebuild), then reconstruct change with
-`wallet.createMeltChangeProofs` once the quote is paid:
+`serializeMeltPreview` / `deserializeMeltPreview` persist the whole preview for a replay of
+`completeMelt`; the blob carries the input proofs, so protect it like the proof database. A melt
+also keeps a server-side handle (the quote), so a lighter option is the quote id plus the
+serialized change blanks (the only client-side state you cannot rebuild), reconstructing change
+with `wallet.createMeltChangeProofs` once the quote is paid:
 
 ```ts
 import { OutputData } from '@cashu/cashu-ts';
 
-const meltPreview = await wallet.prepareMelt('bolt11', meltQuote, proofsToSend, {
-  includeFees: true,
-});
+const meltPreview = await wallet.prepareMelt('bolt11', meltQuote, proofsToSend);
 
 // Persist before completing.
 const stored = JSON.stringify({
@@ -146,7 +148,6 @@ recover-after-restart lifecycle.
 import { deserializeSwapPreview, serializeSwapPreview } from '@cashu/cashu-ts';
 
 const receivePreview = await wallet.prepareSwapToReceive(token);
-const sendPreview = await wallet.prepareSwapToSend(21, proofs, { includeFees: true });
 
 // Swap previews have a serialize helper: persist the JSON-safe form, then
 // rehydrate it with deserializeSwapPreview to replay after a restart. The blob carries
@@ -157,7 +158,7 @@ const { keep } = await wallet.completeSwap(deserializeSwapPreview(JSON.parse(sto
 
 `completeSwap` builds its request purely from the preview, so a replayed preview posts a
 byte-identical `/v1/swap` body. See [Receive § 5](../wallet_ops/receive.md) and
-[Send § 7](../wallet_ops/send.md) for the full serialize-and-rehydrate round trip.
+[Send § 2](../wallet_ops/send.md) for the full serialize-and-rehydrate round trip.
 
 Use the same pattern with `wallet.ops`:
 
@@ -165,5 +166,6 @@ Use the same pattern with `wallet.ops`:
 const mintPreview = await wallet.ops.mintBolt11(64, quoteId).prepare();
 const meltPreview = await wallet.ops.meltBolt11(meltQuote, proofsToSend).prepare();
 const receivePreview = await wallet.ops.receive(token).prepare();
-const sendPreview = await wallet.ops.send(21, myProofs).prepare();
+const { preview: sendPreview, unselected } = await wallet.ops.send(21, myProofs).prepare();
+returnToStore(unselected); // the swap does not touch these
 ```

@@ -836,7 +836,7 @@ describe('strictCachedKeysets', () => {
     const { counts } = useRotatedMint(server);
     const wallet = new Wallet(mint, {
       unit,
-      bip39seed: randomBytes(32),
+      bip39seed: randomBytes(64),
       strictCachedKeysets: true,
     });
     await wallet.loadMint(); // single load against rotated handlers: A known-but-keyless
@@ -851,7 +851,7 @@ describe('strictCachedKeysets', () => {
     const { counts } = useRotatedMint(server);
     const wallet = new Wallet(mint, {
       unit,
-      bip39seed: randomBytes(32),
+      bip39seed: randomBytes(64),
       strictCachedKeysets: true,
     });
     await wallet.loadMint(); // single load against rotated handlers: A known-but-keyless
@@ -903,7 +903,7 @@ describe('send and melt inputs across a rotation', () => {
     await wallet.loadMint(); // knows only A
     const { counts } = useRotatedMint(server);
 
-    const preview = await wallet.prepareSwapToSend(1, [proofOnB]);
+    const { preview } = await wallet.prepareSwapToSend(1, [proofOnB]);
     expect(preview.inputs[0].id).toBe('009a1f293253e41e');
     expect(preview.sendOutputs?.[0].blindedMessage.id).toBe('009a1f293253e41e'); // outputs on the repaired binding
     expect(counts().keysetsRequests).toBe(1); // exactly one repair refresh
@@ -1017,7 +1017,7 @@ describe('send and melt inputs across a rotation', () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint(); // A known-but-keyless, bound to B
 
-    const sendPreview = await wallet.prepareSwapToSend(1, [proofOnA]);
+    const { preview: sendPreview } = await wallet.prepareSwapToSend(1, [proofOnA]);
     expect(sendPreview.sendOutputs?.[0].blindedMessage.id).toBe('009a1f293253e41e');
 
     const meltPreview = await wallet.prepareMelt('bolt11', meltQuote, meltProofsOn(proofOnA.id));

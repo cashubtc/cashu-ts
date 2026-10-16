@@ -2,7 +2,9 @@
  * Internal wallet utilities — not part of the public API.
  */
 import { isBlsKeyset } from '../crypto/curves';
+import { failIf, type Logger } from '../logger';
 import { Amount, type AmountLike } from '../model/Amount';
+import { CTSError } from '../model/Errors';
 import { type OutputDataLike } from '../model/OutputData';
 import type {
   HasKeysetKeys,
@@ -11,8 +13,9 @@ import type {
   SerializedBlindedMessage,
   SerializedBlindedSignature,
 } from '../model/types';
-import { BATCH_POOL_SIZE } from '../transport';
+import { mapInChunks } from '../utils/chunked';
 import { splitAmount } from '../utils/core';
+import { MAX_SPLIT_OUTPUTS } from '../utils/limits';
 
 import { type OutputType } from './types';
 
@@ -26,15 +29,16 @@ import { type OutputType } from './types';
  * signatures count as used but yield no proof (NUT-08); `keysetFor` resolves the keyset each
  * signature names, which need not be the scanned one.
  */
-export function proofsFromRestoreResponse(
+export async function proofsFromRestoreResponse(
   outputData: OutputDataLike[],
   response: { outputs: SerializedBlindedMessage[]; signatures: SerializedBlindedSignature[] },
   keysetFor: (id: string) => HasKeysetKeys,
-): { proofs: Proof[]; lastIndex: number } {
+  opts?: { signal?: AbortSignal; budgetMs?: number },
+): Promise<{ proofs: Proof[]; lastIndex: number }> {
   const signatureByB_: { [b: string]: SerializedBlindedSignature } = {};
   response.outputs.forEach((o, i) => (signatureByB_[o.B_] = response.signatures[i]));
 
-  const proofs: Proof[] = [];
+  const signed: Array<{ data: OutputDataLike; signature: SerializedBlindedSignature }> = [];
   let lastIndex = -1;
   outputData.forEach((data, i) => {
     const signature = signatureByB_[data.blindedMessage.B_];
@@ -42,9 +46,16 @@ export function proofsFromRestoreResponse(
     lastIndex = i;
     // Signed at zero (a NUT-08 blank the mint did not omit): used counter, but no ecash
     if (signature.amount.isZero()) return;
-    // The output stays a blank: toProof takes the amount and keyset from the signature
-    proofs.push(data.toProof(signature, keysetFor(signature.id)));
+    signed.push({ data, signature });
   });
+  // Unblinding pairing-verifies each v3 signature, so it yields like the rest of the scan. A
+  // restore replays signatures the mint already holds, so an abort here loses nothing.
+  const proofs = await mapInChunks(
+    signed,
+    // The output stays a blank: toProof takes the amount and keyset from the signature
+    ({ data, signature }) => data.toProof(signature, keysetFor(signature.id)),
+    opts,
+  );
   return { proofs, lastIndex };
 }
 
@@ -60,6 +71,14 @@ function getKeysetAmountsAsc(keys: Keys): Amount[] {
   const amounts = Object.keys(keys).map((k) => Amount.from(k));
   amounts.sort((a, b) => a.compareTo(b));
   return amounts;
+}
+
+function assertSplitBudget(count: number): void {
+  if (count > MAX_SPLIT_OUTPUTS) {
+    throw new CTSError(
+      `Cannot split amount: optimized split would exceed ${MAX_SPLIT_OUTPUTS} outputs`,
+    );
+  }
 }
 
 /**
@@ -89,13 +108,16 @@ export function getKeepAmounts(
       if (nextTotal.greaterThan(normalizedAmountToKeep)) {
         break;
       }
+      assertSplitBudget(amountsWeWant.length + 1);
       amountsWeWant.push(amt);
       runningTotal = nextTotal;
     }
   }
   const amountDiff = normalizedAmountToKeep.subtract(runningTotal);
   if (!amountDiff.isZero()) {
-    for (const amt of splitAmount(amountDiff, keys)) {
+    const fillAmounts = splitAmount(amountDiff, keys);
+    assertSplitBudget(amountsWeWant.length + fillAmounts.length);
+    for (const amt of fillAmounts) {
       amountsWeWant.push(amt);
       runningTotal = runningTotal.add(amt);
     }
@@ -195,15 +217,41 @@ export function orderOutputsForPayload(
  * Scan geometry for a keyset kind: counters per restore batch and batches in flight.
  *
  * @remarks
- * Every scanned counter costs a derivation, a `Y` and, past the frontier, a blinded message, all on
- * the JS thread: about 0.1ms for HMAC (v1), 0.7ms for BIP32 (v0) and 1.1ms for BLS (v3). A batch is
- * sized to roughly one round trip of that work. Width only hides latency, and on the dear kinds two
- * batches already saturate it; wider waves just deepen the overshoot past the frontier.
+ * Measured on aged-spent histories against Nutshell and CDK: the scan's local work yields, so the
+ * limit is the mint's work and the overshoot past the frontier. Larger batches or more in flight
+ * add overshoot faster than they save round trips; two in flight won on every kind and both mints.
  * @internal
  */
 export function scanProfile(keysetId: string): { batchSize: number; poolSize: number } {
-  if (isBlsKeyset(keysetId)) return { batchSize: 100, poolSize: 2 };
+  if (isBlsKeyset(keysetId)) return { batchSize: 300, poolSize: 2 };
   // BIP32 (v0) keysets: base64 ids, or hex ids with a 00 version byte
   const bip32 = keysetId.startsWith('00') || !/^[0-9a-f]+$/i.test(keysetId);
-  return bip32 ? { batchSize: 200, poolSize: 2 } : { batchSize: 500, poolSize: BATCH_POOL_SIZE };
+  return { batchSize: bip32 ? 200 : 500, poolSize: 2 };
+}
+
+/**
+ * Throws unless a quote is denominated in the given unit.
+ *
+ * @remarks
+ * A quote given as an id alone states no unit; callers resolve it against the mint first.
+ */
+export function assertQuoteUnit(
+  quote: { unit?: string },
+  walletUnit: string,
+  logger?: Logger,
+): void {
+  failIf(
+    quote.unit !== walletUnit,
+    `Quote unit '${quote.unit}' does not match wallet unit '${walletUnit}'`,
+    logger,
+  );
+}
+
+/**
+ * Copies defined fields, including explicit nulls that clear the target's stale values.
+ */
+export function definedOnly<T extends object>(source: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(source).filter(([, value]) => value !== undefined),
+  ) as Partial<T>;
 }

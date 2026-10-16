@@ -132,7 +132,7 @@ describe('CashuNip07', () => {
 
   test('signQuote signs a v3 quote through signTransaction and a legacy one through signSchnorr', async () => {
     const quote = inputsForPayload({
-      mintQuotes: [{ quoteId: 'q1', amount: 1 }],
+      mintQuotes: [{ quoteId: 'q1', amount: 1, lockKey: `02${'11'.repeat(32)}`, issued: 0 }],
       outputs: [{ amount: 1, id: KEYSET, B_: 'bb'.repeat(48) }],
     });
     const { digest, inputContainer } = quote.quotes.get('q1')!;
@@ -164,7 +164,7 @@ describe('CashuNip07', () => {
 
   test('signQuote rejects a signer that hashed something else', async () => {
     const quote = inputsForPayload({
-      mintQuotes: [{ quoteId: 'q1', amount: 1 }],
+      mintQuotes: [{ quoteId: 'q1', amount: 1, lockKey: `02${'11'.repeat(32)}`, issued: 0 }],
       outputs: [{ amount: 1, id: KEYSET, B_: 'bb'.repeat(48) }],
     });
     const { digest, inputContainer } = quote.quotes.get('q1')!;
@@ -188,7 +188,7 @@ describe('CashuNip07', () => {
     ).rejects.toThrow(/different message/);
   });
 
-  test('signTransaction refuses anything without the domain tag or a foreign container', () => {
+  test('signTransaction refuses anything that is not a transcript, or a foreign container', () => {
     const inputContainerHex = bytesToHex(CONTAINER);
     // An event id, or any other 32 bytes, must never come out signed.
     expect(() => CashuNip07.signTransaction('00'.repeat(32), inputContainerHex, PRIV)).toThrow(
@@ -219,6 +219,8 @@ describe('CashuNip07', () => {
     expect(CashuNip07.completes(option({}), XONLY)).toBe(true); // x-only accepted
     expect(CashuNip07.completes(option({}), `02${XONLY}`)).toBe(true); // either parity prefix
     expect(CashuNip07.completes(option({}), OTHER)).toBe(false); // not listed
+    const inert = { ...option({}), leaf: { type: 'commit' as const, hash: '00'.repeat(32) } };
+    expect(CashuNip07.completes(inert, PUB)).toBe(false); // a commit leaf has no signers
     expect(CashuNip07.completes(option({ satisfiable: true, blockedBy: undefined }), PUB)).toBe(
       false,
     );

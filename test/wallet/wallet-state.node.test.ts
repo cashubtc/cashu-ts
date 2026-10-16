@@ -1,7 +1,8 @@
 import { HttpResponse, http } from 'msw';
-import { test, describe, expect } from 'vitest';
+import { test, describe, expect, vi } from 'vitest';
 
-import { Wallet, CheckStateEnum, Amount, hashToCurve } from '../../src';
+import { Wallet, Mint, CheckStateEnum, Amount, hashToCurve } from '../../src';
+import { hashToCurveHex } from '../../src/crypto/curves';
 
 import { mint, unit, mintUrl, mintInfoResp, useTestServer } from './_setup';
 
@@ -39,6 +40,17 @@ describe('checkProofsStates', () => {
       expect(r.witness).toEqual('witness-asd');
     });
   });
+
+  test.each([NaN, Infinity, -1])(
+    'checkProofsStates rejects budgetMs %s before any request',
+    async (budgetMs) => {
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+      const check = vi.spyOn(wallet.mint, 'check');
+      await expect(wallet.checkProofsStates(proofs, { budgetMs })).rejects.toThrow('budgetMs');
+      expect(check).not.toHaveBeenCalled();
+    },
+  );
 
   test('checkProofsStates uses a custom hashToCurve for Y', async () => {
     const fakeY = '02' + 'ab'.repeat(32);
@@ -283,5 +295,32 @@ describe('groupProofsByState', () => {
     expect(result.spent[1].amount.equals(128n)).toBeTruthy();
     expect(result.spent[2].amount.equals(16n)).toBeTruthy();
     expect(result.pending[0].amount.equals(1n)).toBeTruthy();
+  });
+});
+
+describe('unsupported proof state versions', () => {
+  test.each([false, true])(
+    'refuses future ids before any request (custom hash: %s)',
+    async (custom) => {
+      const mint = new Mint(mintUrl);
+      const check = vi.spyOn(mint, 'check');
+      const hash = vi.fn(() => '02' + 'ab'.repeat(32));
+      const wallet = new Wallet(mint, custom ? { hashToCurve: hash } : undefined);
+      await expect(
+        wallet.checkProofsStates([{ id: '03' + '11'.repeat(32), secret: 'test' }]),
+      ).rejects.toThrow(/Upgrade/);
+      expect(check).not.toHaveBeenCalled();
+      expect(hash).not.toHaveBeenCalled();
+    },
+  );
+
+  test('the shared hash function refuses future ids and keeps supported curve dispatch', () => {
+    expect(() => hashToCurveHex('test', '03' + '11'.repeat(32))).toThrow(/Upgrade/);
+    for (const id of ['I2yN+iRYfkzT', '00bd033559de27d0', '01' + '11'.repeat(32)]) {
+      expect(hashToCurveHex('test', id)).toBe(
+        hashToCurve(new TextEncoder().encode('test')).toHex(true),
+      );
+    }
+    expect(hashToCurveHex('test', '02' + '11'.repeat(32))).toHaveLength(96);
   });
 });

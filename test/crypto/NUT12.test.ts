@@ -1,3 +1,4 @@
+import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
@@ -12,6 +13,7 @@ import {
   verifyDLEQProof_reblind,
   constructUnblindedSignature,
   createRandomRawBlindedMessage,
+  type ProofDLEQ,
 } from '../../src/crypto';
 import { Amount } from '../../src/model/Amount';
 import { OutputData } from '../../src/model/OutputData';
@@ -26,6 +28,16 @@ describe('test hash_e', () => {
     console.log('e = ' + bytesToHex(e));
     expect(bytesToHex(e)).toEqual(
       'a4dc034b74338c28c6bc3ea49731f2a24440fc7c4affc08b31a93fc9fbe6401e',
+    );
+  });
+});
+
+describe('createDLEQProof', () => {
+  test('rejects a blinded message from another curve', () => {
+    // The point type is structural, so a BLS12-381 G1 point satisfies it at compile time.
+    const foreign = bls12_381.G1.Point.fromAffine({ x: 0n, y: 2n });
+    expect(() => createDLEQProof(foreign, hexToBytes('0'.repeat(63) + '2'))).toThrow(
+      /secp256k1 point/,
     );
   });
 });
@@ -64,10 +76,11 @@ describe('test DLEQ scheme', () => {
       blindMessage.secret,
       mintPubKey,
     );
-    dleqProof.r = blindMessage.r;
+    // Wallet(Alice) completes the mint's proof with the blinding factor she used
+    const completed = { ...dleqProof, r: blindMessage.r };
 
     // Wallet(Carol)
-    const isValid = verifyDLEQProof_reblind(blindMessage.secret, dleqProof, proof.C, mintPubKey);
+    const isValid = verifyDLEQProof_reblind(blindMessage.secret, completed, proof.C, mintPubKey);
     expect(isValid).toBe(true);
   });
 });
@@ -131,8 +144,10 @@ describe('verifyDLEQProof_reblind blinding factor guard', () => {
     const blindSig = createBlindSignature(blindMsg.B_, mintPrivKey, '');
     const proof = constructUnblindedSignature(blindSig, blindMsg.r, blindMsg.secret, mintPubKey);
     const dleq = createDLEQProof(blindMsg.B_, mintPrivKey);
-    expect(dleq.r).toBeUndefined();
-    expect(() => verifyDLEQProof_reblind(blindMsg.secret, dleq, proof.C, mintPubKey)).toThrow(
+    expect('r' in dleq).toBe(false);
+    // Deliberately malformed: the type forbids this, a plain-JS caller does not.
+    const incomplete = dleq as ProofDLEQ;
+    expect(() => verifyDLEQProof_reblind(blindMsg.secret, incomplete, proof.C, mintPubKey)).toThrow(
       'verifyDLEQProof_reblind: Undefined blinding factor',
     );
   });
@@ -144,8 +159,9 @@ describe('verifyDLEQProof_reblind blinding factor guard', () => {
     const blindSig = createBlindSignature(blindMsg.B_, mintPrivKey, '');
     const proof = constructUnblindedSignature(blindSig, blindMsg.r, blindMsg.secret, mintPubKey);
     const dleq = createDLEQProof(blindMsg.B_, mintPrivKey);
-    dleq.r = createRandomRawBlindedMessage().r; // a blinding factor from an unrelated message
-    expect(verifyDLEQProof_reblind(blindMsg.secret, dleq, proof.C, mintPubKey)).toBe(false);
+    // completed with a blinding factor from an unrelated message
+    const wrong = { ...dleq, r: createRandomRawBlindedMessage().r };
+    expect(verifyDLEQProof_reblind(blindMsg.secret, wrong, proof.C, mintPubKey)).toBe(false);
   });
 });
 
@@ -235,7 +251,7 @@ describe('OutputData.toProof DLEQ verification', () => {
       dleq: { s: bytesToHex(dleq.s), e: bytesToHex(dleq.e) },
     };
     const proof = od.toProof(sig, keyset);
-    expect(proof.amount.equals(Amount.from(1))).toBe(true);
+    expect(proof.amount.equals(1)).toBe(true);
     expect(proof.dleq).toBeDefined();
   });
 
@@ -317,6 +333,6 @@ describe('OutputData.toProof DLEQ verification', () => {
       dleq: { s: bytesToHex(dleq.s), e: bytesToHex(dleq.e) },
     };
     const proof = blank.toProof(sig, keyset);
-    expect(proof.amount.equals(Amount.from(1))).toBe(true);
+    expect(proof.amount.equals(1)).toBe(true);
   });
 });

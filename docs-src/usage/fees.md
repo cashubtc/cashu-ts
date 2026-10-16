@@ -4,20 +4,16 @@
 
 Two separate costs apply when spending proofs:
 
-- **Input fees** (NUT-02): each keyset advertises `input_fee_ppk` (parts per thousand, per input).
-  Spending N proofs from that keyset costs `ceil(N * ppk / 1000)`, rounded up once per transaction.
-- **Lightning costs** (melt only): a melt quote's `fee_reserve` is the ceiling the mint holds back
-  for routing, not an estimate. When the mint supports NUT-08, unused reserve comes back as change.
+- **Input fees** (NUT-02): each keyset advertises `input_fee_ppk` (parts per thousand, per input; `keyset.fee` on the `Keyset` object). Spending N proofs from that keyset costs `ceil(N * ppk / 1000)`, rounded up once per transaction.
+- **Lightning costs** (melt only): a melt quote's `fee_reserve` is the ceiling the mint holds back for routing, not an estimate. When the mint supports NUT-08, unused reserve comes back as change.
 
-Most flows need no fee arithmetic at all: pass `includeFees: true` to `send` (or
-`.includeFees(true)` on the `wallet.ops` builders) and the wallet inflates the outputs so the
-receiver nets the requested amount. The helpers below are for when you budget, validate, or plan
-outputs yourself.
+Most flows need no fee arithmetic at all: pass `includeFees: true` to `send` (or `.includeFees(true)` on the `wallet.ops` builders) and the wallet inflates the outputs so the receiver nets the requested amount. It solves for the amount, not the proof count: on a fragmented wallet the token can carry many small proofs, which the receiver then pays to spend. Pass `proofsWeHave` or a `denominations` plan when the shape matters. The helpers below are for when you budget, validate, or plan outputs yourself.
 
 ## Which helper, when
 
 | Question                                                       | Helper                                                         |
 | :------------------------------------------------------------- | :------------------------------------------------------------- |
+| What will this send cost me, before I commit?                  | `wallet.ops.send(amount, proofs).prepare()` (see below)        |
 | What does it cost to spend these exact proofs?                 | `Wallet.getFeesForProofs(proofs)`                              |
 | What would N inputs of a keyset cost?                          | `Wallet.getFeesForKeyset(nInputs, keysetId)`                   |
 | Receiver must net `amount`: what does the sender add on top?   | `Wallet.getFeesToInclude(amount, opts?)`                       |
@@ -25,30 +21,50 @@ outputs yourself.
 | Payee: do these received proofs net a NUT-18 request?          | `Wallet.isPaymentRequestSatisfied(pr, proofs, amount?, opts?)` |
 | Payer: what do I owe on a NUT-18 request, method fee included? | `PaymentRequest.amountToSend(mintUrl, methods)`                |
 
+## Previewing a send
+
+The number to put in front of a user is the input fee on the proofs the wallet will actually select, and that depends on the selection. `prepare()` runs it and returns the real figures:
+
+```ts
+const { preview, unselected } = await wallet.ops.send(150, proofs).includeFees(true).prepare();
+returnToStore(unselected); // the swap does not touch these
+// preview.amount - the amount to send
+// preview.fees - the input fees to swap your proofs
+
+// Receiver's side: they net the amount, and the token carries their spend fee on top.
+// For the default split that fee is what getFeesToInclude prices.
+const receiverFee = wallet.getFeesToInclude(preview.amount);
+const tokenTotal = preview.sendTotal; // what the receiver gets
+tokenTotal.equals(preview.amount.add(receiverFee)); // true
+
+// Your side: the token plus the swap's input fee, priced from the inputs it selected.
+// This is what you show to the user:
+const totalCost = tokenTotal.add(preview.fees);
+
+const { keep, send } = await wallet.completeSwap(preview);
+```
+
+`getFeesToInclude` prices the receiver's swap fee from the default split of `amount`; pass `nOutputs` for a custom denominations plan. `selectProofsToSend(proofs, amount, includeFees)` is the selection alone: its `send` sums to the inputs picked, overspend included, not the amount the receiver nets. Price it with `getFeesForProofs(send)` if you use it directly.
+
 ## Exact-target: the receiver nets a fixed amount
 
-`getFeesToInclude` returns the amount `includeFees` would add: the input fee for spending the
-planned outputs, including the fee outputs themselves (fee outputs also incur fees, so the wallet
-iterates until the total is stable). Use it to budget before selecting, or to price a custom
-denomination plan:
+`getFeesToInclude` returns the amount `includeFees` would add: the input fee for spending the planned outputs, including the fee outputs themselves (fee outputs also incur fees, so the wallet iterates until the total is stable). Use it to budget before selecting, or to price a custom denomination plan:
 
 ```ts
 // Price a sender-pays-fees send before committing to it
 const fee = wallet.getFeesToInclude(1000); // eg 2 on a 1000 ppk keyset
-// wallet.send(1000, proofs, { includeFees: true }) creates outputs totalling 1000 + fee
+// wallet.send(1000, proofs, { includeFees: true }) creates outputs totalling 1000 + fee.
+// On the result, sumProofs(send) is what the receiver gets; minus the amount, the receiver's swap fee.
 
 // Custom denomination sets: pass the planned output count instead of the default split
 wallet.getFeesToInclude(1000, { nOutputs: 4 });
 ```
 
-`getFeesForProofs` prices a concrete proof set (eg inputs you are about to melt).
-`getFeesForKeyset` prices a count when the proofs do not exist yet (eg outputs a swap will create).
+`getFeesForProofs` prices a concrete proof set (eg inputs you are about to melt). `getFeesForKeyset` prices a count when the proofs do not exist yet (eg outputs a swap will create).
 
 ## Send-max: "melt everything"
 
-`maxSpendableAfterFees` works in the opposite direction: given a proof set, the largest amount that
-remains after input fees and, optionally, a melt quote's `fee_reserve`. Because `fee_reserve`
-shrinks with the amount, iterate until the quote stabilizes:
+`maxSpendableAfterFees` works in the opposite direction: given a proof set, the largest amount that remains after input fees and, optionally, a melt quote's `fee_reserve`. Because `fee_reserve` shrinks with the amount, iterate until the quote stabilizes:
 
 ```ts
 let target = wallet.maxSpendableAfterFees(proofs); // before any quote: input fees only
@@ -63,11 +79,17 @@ for (let attempt = 0; attempt < 3; attempt++) {
 if (!quote) throw new Error('Melt-all did not converge');
 ```
 
+## Proof count: `denominationTarget` and `proofsWeHave`
+
+When an operation is given `proofsWeHave` and no explicit `denominations`, the wallet shapes the new outputs so that you end up holding about `denominationTarget` proofs of each denomination (default 3, set on the `Wallet` constructor) instead of the plain binary split of the amount. That makes future change without a swap more likely, at the cost of holding more proofs, and on a keyset with `input_fee_ppk` every held proof is a future input fee. A fee-conscious wallet lowers the target or omits `proofsWeHave`; without `proofsWeHave` the target is never used.
+
+```ts
+const wallet = new Wallet(mintUrl, { unit: 'sat', denominationTarget: 1 });
+```
+
 ## NUT-18 payment requests
 
-The payee checks that incoming proofs net the requested amount after the input fees they will cost
-to swap (`Wallet.isPaymentRequestSatisfied`); the payer totals the request amount plus the applicable
-method fee (`PaymentRequest.amountToSend`). Both are covered in [Payment Requests](./payment_requests.md).
+The payee checks that incoming proofs net the requested amount after the input fees they will cost to swap (`Wallet.isPaymentRequestSatisfied`); the payer totals the request amount plus the applicable method fee (`PaymentRequest.amountToSend`). Both are covered in [Payment Requests](./payment_requests.md).
 
 ## Related docs
 

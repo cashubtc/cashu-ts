@@ -1,5 +1,7 @@
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 
 import {
@@ -8,17 +10,21 @@ import {
   parseNutrootLeaf,
   serializeNutrootLeaf,
   type NutrootLeaf,
+  type NutrootConditionLeaf,
+  nutrootLeafHash,
+  nutrootMerklePath,
+  readTlvRecords,
+  tlvRecord,
 } from '../../src/crypto/nutroot';
-import {
-  digestForPayload,
-  inputsForPayload,
-  proofInputContextKey,
-} from '../../src/crypto/transcript';
+import { inputDigest, messageForPayload, transcriptContainers } from '../../src/crypto/transcript';
 import { Amount } from '../../src/model/Amount';
 import { OutputData } from '../../src/model/OutputData';
 import { ScriptPath } from '../../src/model/ScriptPath';
+import type { ScriptPathSigningPackage } from '../../src/model/ScriptPath';
 import type { Proof } from '../../src/model/types';
+import { bytesToUtf8, decodeBase64UrlToUint8, encodeUint8ToBase64Url } from '../../src/utils';
 import type { MeltPreview, SwapPreview } from '../../src/wallet/types';
+import vectors from '../vectors/nutroot-v3.json';
 
 const keysetId = `02${'11'.repeat(32)}`;
 const sk = (n: number) => {
@@ -27,6 +33,12 @@ const sk = (n: number) => {
   return bytes;
 };
 const pub = (n: number) => bytesToHex(secp256k1.getPublicKey(sk(n), true));
+
+// A spend's input digest, recomputed independently from the package transcript (NUT-10).
+function spendDigest(pkg: ScriptPathSigningPackage, i = 0): Uint8Array {
+  const transcript = hexToBytes(pkg.transcript);
+  return inputDigest(sha256(transcript), transcriptContainers(transcript)[pkg.spends[i].input]);
+}
 
 function fixture() {
   const alice = bytesToHex(sk(2));
@@ -49,10 +61,19 @@ function fixture() {
   const preview: SwapPreview = {
     amount: Amount.from(1),
     fees: Amount.from(0),
+    sendTotal: Amount.from(0),
     inputs: [proof],
     keepOutputs: [OutputData.createSingleRandomData(1, keysetId)],
   };
   return { alice, leaves, preview, proof };
+}
+
+function controlFor(proof: Proof, leafIndex: number) {
+  const hashes = proof.spend_info!.tree!.map((leaf) => nutrootLeafHash(hexToBytes(leaf)));
+  return {
+    K: proof.spend_info!.K!,
+    path: nutrootMerklePath(hashes, leafIndex).map((h) => bytesToHex(h)),
+  };
 }
 
 // Without a usable slot hint, signPackage trial-derives every blinded slot for the signer's key
@@ -76,6 +97,47 @@ describe('ScriptPath signing packages', () => {
     expect(ScriptPath.signPackage(misled, alice).spends[0].signatures).toHaveLength(1);
   });
 
+  test('refuses a spend that reveals a commit leaf, even one that commits correctly', () => {
+    const leaves: NutrootLeaf[] = [
+      { type: 'threshold', n: 1, keys: [pub(3)] },
+      { type: 'threshold', n: 1, keys: [pub(2)] },
+      { type: 'commit', hash: '77'.repeat(32) },
+    ];
+    const locked = deriveReceiverKeyedSecret(pub(4), {
+      leaves,
+      blindKeys: [pub(2)],
+      eBytes: sk(5),
+    });
+    const proof: Proof = {
+      id: keysetId,
+      amount: Amount.from(1),
+      secret: locked.secret,
+      C: '11'.repeat(48),
+      spend_info: { E: locked.E, K: locked.K, tree: locked.tree },
+    };
+    const preview: SwapPreview = {
+      amount: Amount.from(1),
+      fees: Amount.from(0),
+      sendTotal: Amount.from(0),
+      inputs: [proof],
+      keepOutputs: [OutputData.createSingleRandomData(1, keysetId)],
+    };
+    const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]);
+    const hashes = locked.tree!.map((leaf) => nutrootLeafHash(hexToBytes(leaf)));
+    const revealed = {
+      ...pkg,
+      spends: [
+        {
+          ...pkg.spends[0],
+          leaf: locked.tree![2],
+          control: { K: locked.K!, path: nutrootMerklePath(hashes, 2).map(bytesToHex) },
+          slots: undefined,
+        },
+      ],
+    };
+    expect(() => ScriptPath.signPackage(revealed, bytesToHex(sk(2)))).toThrow(/not a spend path/);
+  });
+
   test('refuses to sign a leaf that is not committed by the input secret', () => {
     const { alice, leaves, preview, proof } = fixture();
     const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]);
@@ -84,13 +146,62 @@ describe('ScriptPath signing packages', () => {
       spends: [
         {
           ...pkg.spends[0],
-          leaf: bytesToHex(serializeNutrootLeaf({ ...leaves[1], keys: [pub(6)] })),
+          leaf: bytesToHex(
+            serializeNutrootLeaf({ ...(leaves[1] as NutrootConditionLeaf), keys: [pub(6)] }),
+          ),
         },
       ],
     };
     expect(() => ScriptPath.signPackage(tampered, alice)).toThrow(/does not commit/);
     expect(() => ScriptPath.deserializePackage(ScriptPath.serializePackage(tampered))).toThrow(
       /does not commit/,
+    );
+  });
+
+  test('refuses a spend whose secret is not the input it names', () => {
+    const { alice, leaves, preview, proof } = fixture();
+    const otherLocked = deriveReceiverKeyedSecret(pub(4), {
+      leaves,
+      blindKeys: [pub(2)],
+      eBytes: sk(6),
+    });
+    const other: Proof = {
+      ...proof,
+      secret: otherLocked.secret,
+      spend_info: { E: otherLocked.E, K: otherLocked.K, tree: otherLocked.tree },
+    };
+    const both: SwapPreview = { ...preview, inputs: [other, proof] };
+    const pkg = ScriptPath.extractSwapPackage(both, [{ secret: proof.secret, leafIndex: 1 }]);
+    expect(pkg.spends[0].input).toBe(1);
+    // The leaf opens to proof's secret, but the spend points at the other input.
+    const moved = { ...pkg, spends: [{ ...pkg.spends[0], input: 0 }] };
+    expect(() => ScriptPath.signPackage(moved, alice)).toThrow(/does not match its v3 input/);
+  });
+
+  test('a quote input spend must open the lock key its container commits', () => {
+    const { alice, preview, proof } = fixture();
+    const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]);
+    // A quote locked to a nutroot point: the same tree as the proof, for brevity.
+    const quoteSpend = (lockKey: string) => ({
+      ...pkg,
+      transcript: bytesToHex(
+        messageForPayload({
+          inputs: preview.inputs,
+          mintQuotes: [{ quoteId: 'quote-1', amount: 1, lockKey, issued: 0 }],
+          outputs: preview.keepOutputs!.map((o) => o.blindedMessage),
+        }),
+      ),
+      spends: [{ ...pkg.spends[0], input: 1 }],
+    });
+    const signed = ScriptPath.signPackage(quoteSpend(proof.secret), alice);
+    const [leafKey] = (parseNutrootLeaf(hexToBytes(signed.spends[0].leaf)) as NutrootConditionLeaf)
+      .keys;
+    const [signature] = signed.spends[0].signatures;
+    expect(
+      schnorr.verify(hexToBytes(signature), spendDigest(signed), hexToBytes(leafKey).subarray(1)),
+    ).toBe(true);
+    expect(() => ScriptPath.signPackage(quoteSpend(pub(9)), alice)).toThrow(
+      /not its quote input lock key/,
     );
   });
 
@@ -112,9 +223,7 @@ describe('ScriptPath signing packages', () => {
     expect(
       schnorr.verify(
         hexToBytes(signed.spends[0].signatures[0]),
-        inputsForPayload({ inputs: pkg.inputs, outputs: pkg.outputs }).proofs.get(
-          proofInputContextKey({ keysetId: proof.id, secret: proof.secret }),
-        )!.digest,
+        spendDigest(pkg),
         hexToBytes(pub(3)).subarray(1),
       ),
     ).toBe(true);
@@ -136,6 +245,7 @@ describe('ScriptPath signing packages', () => {
     const preview: SwapPreview = {
       amount: Amount.from(1),
       fees: Amount.from(0),
+      sendTotal: Amount.from(0),
       inputs: [proof],
       keepOutputs: [OutputData.createSingleRandomData(1, keysetId)],
     };
@@ -146,9 +256,7 @@ describe('ScriptPath signing packages', () => {
     expect(
       schnorr.verify(
         hexToBytes(signed.spends[0].signatures[0]),
-        inputsForPayload({ inputs: pkg.inputs, outputs: pkg.outputs }).proofs.get(
-          proofInputContextKey({ keysetId: proof.id, secret: proof.secret }),
-        )!.digest,
+        spendDigest(pkg),
         hexToBytes(opposite).subarray(1),
       ),
     ).toBe(true);
@@ -166,13 +274,17 @@ describe('ScriptPath signing packages', () => {
     const preview: SwapPreview = {
       amount: Amount.from(1),
       fees: Amount.from(0),
+      sendTotal: Amount.from(0),
       inputs: [proof],
       keepOutputs: [OutputData.createSingleRandomData(1, keysetId)],
     };
     const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 0 }]);
-    expect(pkg.spends[0].control.K).toBe(pub(4));
-    // The derived key is the real control-block key: the committed leaf verifies and signs.
-    expect(ScriptPath.signPackage(pkg, bytesToHex(sk(3))).spends[0].signatures).toHaveLength(1);
+    const signed = ScriptPath.signPackage(pkg, bytesToHex(sk(3)));
+    expect(signed.spends[0].signatures).toHaveLength(1);
+    // The merged witness takes K from the bearer key, as the control block needs.
+    const merged = ScriptPath.mergeSwapPackage(signed, preview);
+    const witness = JSON.parse(merged.inputs[0].witness as string) as { control: { K: string } };
+    expect(witness.control.K).toBe(pub(4));
   });
 
   test('a point-shaped legacy secret cannot replace the v3 input digest', () => {
@@ -181,9 +293,7 @@ describe('ScriptPath signing packages', () => {
     const mixed = { ...preview, inputs: [proof, legacy] };
     const pkg = ScriptPath.extractSwapPackage(mixed, [{ secret: proof.secret, leafIndex: 0 }]);
     const signed = ScriptPath.signPackage(pkg, bytesToHex(sk(3)));
-    const digest = inputsForPayload({ inputs: pkg.inputs, outputs: pkg.outputs }).proofs.get(
-      proofInputContextKey({ keysetId: proof.id, secret: proof.secret }),
-    )!.digest;
+    const digest = spendDigest(pkg);
     expect(
       schnorr.verify(
         hexToBytes(signed.spends[0].signatures[0]),
@@ -191,6 +301,91 @@ describe('ScriptPath signing packages', () => {
         hexToBytes(pub(3)).subarray(1),
       ),
     ).toBe(true);
+  });
+
+  test('the package carries the transcript and only the secrets it spends', () => {
+    const { preview, proof } = fixture();
+    const companion: Proof = {
+      id: `00${'22'.repeat(7)}`,
+      amount: Amount.from(1),
+      secret: 'companion-proof-secret',
+      C: pub(8),
+    };
+    // The locked proof second, so its spend must name input 1.
+    const mixed: SwapPreview = { ...preview, inputs: [companion, proof] };
+    const pkg = ScriptPath.extractSwapPackage(mixed, [{ secret: proof.secret, leafIndex: 0 }]);
+    expect(Object.keys(pkg).sort()).toEqual(['spends', 'transcript', 'version']);
+    expect(Object.keys(pkg.spends[0]).sort()).toEqual([
+      'E',
+      'control',
+      'input',
+      'leaf',
+      'secret',
+      'signatures',
+      'slots',
+    ]);
+    expect(pkg.spends[0].input).toBe(1);
+    expect(pkg.transcript).toBe(
+      bytesToHex(
+        messageForPayload({
+          inputs: mixed.inputs,
+          outputs: mixed.keepOutputs!.map((o) => o.blindedMessage),
+        }),
+      ),
+    );
+    const encoded = ScriptPath.serializePackage(pkg);
+    const json = bytesToUtf8(decodeBase64UrlToUint8(encoded.slice(6)));
+    expect(json).not.toContain(companion.secret);
+    // The signer derives its input digest from the transcript alone.
+    const signed = ScriptPath.signPackage(
+      ScriptPath.deserializePackage(encoded),
+      bytesToHex(sk(3)),
+    );
+    expect(
+      schnorr.verify(
+        hexToBytes(signed.spends[0].signatures[0]),
+        spendDigest(signed),
+        hexToBytes(pub(3)).subarray(1),
+      ),
+    ).toBe(true);
+    const merged = ScriptPath.mergeSwapPackage(signed, mixed);
+    expect(merged.inputs[0]).toEqual(companion);
+    expect(merged.inputs[1].witness).toBeDefined();
+  });
+
+  test('a hashlock preimage stays with the coordinator and is added at merge', () => {
+    const preimage = `${'00'.repeat(31)}01`;
+    const built = buildNutrootSecret(pub(4), [
+      { type: 'hashlock', n: 1, keys: [pub(3)], hash: bytesToHex(sha256(hexToBytes(preimage))) },
+    ]);
+    const proof: Proof = {
+      id: keysetId,
+      amount: Amount.from(1),
+      secret: built.secret,
+      C: '11'.repeat(48),
+      spend_info: { k: bytesToHex(sk(4)), tree: built.tree },
+    };
+    const preview: SwapPreview = {
+      amount: Amount.from(1),
+      fees: Amount.from(0),
+      sendTotal: Amount.from(0),
+      inputs: [proof],
+      keepOutputs: [OutputData.createSingleRandomData(1, keysetId)],
+    };
+    const plans = [{ secret: proof.secret, leafIndex: 0, preimage }];
+    const pkg = ScriptPath.extractSwapPackage(preview, plans);
+    expect(pkg.spends[0]).not.toHaveProperty('preimage');
+    expect(ScriptPath.serializePackage(pkg)).not.toContain(
+      encodeUint8ToBase64Url(utf8ToBytes(preimage)),
+    );
+    const signed = ScriptPath.signPackage(pkg, bytesToHex(sk(3)));
+    expect(() => ScriptPath.mergeSwapPackage(signed, preview)).toThrow(/preimage/);
+    const merged = ScriptPath.mergeSwapPackage(signed, preview, plans);
+    const witness = JSON.parse(merged.inputs[0].witness as string) as { preimage?: string };
+    expect(witness.preimage).toBe(preimage);
+    expect(JSON.parse(ScriptPath.witnessFor(signed.spends[0], built.tree, 0, preimage))).toEqual(
+      witness,
+    );
   });
 
   test('signing with a key the tree does not name adds nothing', { timeout: SCAN_TIMEOUT }, () => {
@@ -206,21 +401,10 @@ describe('ScriptPath signing packages', () => {
     const encoded = ScriptPath.serializePackage(pkg);
     expect(encoded.startsWith('nutspA')).toBe(true);
     const decoded = ScriptPath.deserializePackage(encoded);
-    expect(decoded.spends).toEqual(pkg.spends);
-    expect(decoded.type).toBe('swap');
+    expect(decoded).toEqual(pkg);
     // A signature added remotely survives the trip back.
     const signed = ScriptPath.signPackage(decoded, bytesToHex(sk(2)));
     expect(signed.spends[0].signatures).toHaveLength(1);
-  });
-
-  test('deserialize rehydrates amounts to their model types', () => {
-    const { preview, proof } = fixture();
-    const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]);
-    const decoded = ScriptPath.deserializePackage(ScriptPath.serializePackage(pkg));
-    // JSONInt flattens Amount to bare integers; the other side must get Amounts back.
-    expect(decoded.inputs[0].amount).toBeInstanceOf(Amount);
-    expect(decoded.inputs[0].amount.toBigInt()).toBe(1n);
-    expect(decoded.outputs[0].amount).toBeInstanceOf(Amount);
   });
 
   test('extract refuses plans it cannot honour', () => {
@@ -241,12 +425,80 @@ describe('ScriptPath signing packages', () => {
     ).toThrow(/internal key/);
   });
 
+  test('malformed spends and inputs fail closed at extract, sign and merge', () => {
+    const { alice, preview, proof } = fixture();
+    const tree = proof.spend_info!.tree!;
+    const badBearer: SwapPreview = {
+      ...preview,
+      inputs: [{ ...proof, spend_info: { k: 'ff'.repeat(32), tree } }],
+    };
+    expect(() =>
+      ScriptPath.extractSwapPackage(badBearer, [{ secret: proof.secret, leafIndex: 1 }]),
+    ).toThrow(/not a valid private key/);
+    const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]);
+    expect(() =>
+      ScriptPath.signPackage({ ...pkg, spends: [{ ...pkg.spends[0], secret: 'zz' }] }, alice),
+    ).toThrow(/secret is malformed/);
+    const signed = ScriptPath.signPackage(pkg, alice);
+    // The input's spend info no longer discloses the leaf the package opens.
+    const undisclosed: SwapPreview = {
+      ...preview,
+      inputs: [{ ...proof, spend_info: { ...proof.spend_info, tree: [tree[0]] } }],
+    };
+    expect(() => ScriptPath.mergeSwapPackage(signed, undisclosed)).toThrow(
+      /not in its input proof spend info/,
+    );
+  });
+
+  test.each([0x02, 0x03])('refuses a proof input missing field %i', (missing) => {
+    const { alice, preview, proof } = fixture();
+    const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]);
+    const containers = transcriptContainers(hexToBytes(pkg.transcript));
+    const input = containers[0];
+    const fields = readTlvRecords(input.subarray(3))
+      .filter(({ type }) => type !== missing)
+      .map(({ type, value }) => tlvRecord(type, value));
+    containers[0] = tlvRecord(input[0], concatBytes(...fields));
+    const malformed = { ...pkg, transcript: bytesToHex(concatBytes(...containers)) };
+    expect(() => ScriptPath.signPackage(malformed, alice)).toThrow(/does not match its v3 input/);
+  });
+
+  test('merge refuses a proof whose spend info is no longer available', () => {
+    const { alice, preview, proof } = fixture();
+    const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]);
+    const signed = ScriptPath.signPackage(pkg, alice);
+    const undisclosed: SwapPreview = {
+      ...preview,
+      inputs: [{ ...proof, spend_info: undefined }],
+    };
+    expect(() => ScriptPath.mergeSwapPackage(signed, undisclosed)).toThrow(
+      /not in its input proof spend info/,
+    );
+  });
+
+  test('merges when the proof discloses its tree in uppercase hex', () => {
+    const { alice, preview, proof } = fixture();
+    const upper: Proof = {
+      ...proof,
+      spend_info: {
+        ...proof.spend_info,
+        tree: proof.spend_info!.tree!.map((l) => l.toUpperCase()),
+      },
+    };
+    const shouted: SwapPreview = { ...preview, inputs: [upper] };
+    const pkg = ScriptPath.extractSwapPackage(shouted, [{ secret: proof.secret, leafIndex: 1 }]);
+    const signed = ScriptPath.signPackage(pkg, alice);
+    expect(ScriptPath.mergeSwapPackage(signed, shouted).inputs[0].witness).toBeDefined();
+  });
+
   test('deserialize fails closed on malformed transport strings', () => {
     const { preview, proof } = fixture();
     const pkg = ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]);
     expect(() => ScriptPath.deserializePackage('cashuA0000')).toThrow(/must start with/);
     expect(() => ScriptPath.deserializePackage('nutspA!!!not-base64!!!')).toThrow(/parse/);
-    // Shallow clone: structuredClone would strip the Amount prototypes off the inputs.
+    const dupKeyPackage =
+      'nutspA' + encodeUint8ToBase64Url(utf8ToBytes('{"version":"nutspA","version":"nutspA"}'));
+    expect(() => ScriptPath.deserializePackage(dupKeyPackage)).toThrow(/parse/);
     const reserialize = (mangle: (p: typeof pkg) => unknown) =>
       ScriptPath.serializePackage(
         mangle({ ...pkg, spends: pkg.spends.map((s) => ({ ...s })) }) as typeof pkg,
@@ -255,8 +507,21 @@ describe('ScriptPath signing packages', () => {
       ScriptPath.deserializePackage(reserialize((p) => ({ ...p, version: 'nutspB' }))),
     ).toThrow(/version/);
     expect(() =>
-      ScriptPath.deserializePackage(reserialize((p) => ({ ...p, type: 'mint' }))),
-    ).toThrow(/type/);
+      ScriptPath.deserializePackage(reserialize((p) => ({ ...p, transcript: 'zz' }))),
+    ).toThrow(/Malformed/);
+    expect(() =>
+      ScriptPath.deserializePackage(
+        reserialize((p) => ({ ...p, transcript: p.transcript + '00' })),
+      ),
+    ).toThrow(/transcript is malformed/);
+    // Index 1 is the blinded output's container, and 2 is past the end.
+    for (const input of [1, 2, -1, 0.5, '0']) {
+      expect(() =>
+        ScriptPath.deserializePackage(
+          reserialize((p) => ({ ...p, spends: [{ ...p.spends[0], input }] })),
+        ),
+      ).toThrow(/one unique transaction input/);
+    }
     expect(() =>
       ScriptPath.deserializePackage(reserialize((p) => ({ ...p, spends: 'none' }))),
     ).toThrow(/Malformed/);
@@ -279,7 +544,7 @@ describe('ScriptPath signing packages', () => {
     }
   });
 
-  test('merge refuses a package whose transaction moved, and the wrong package type', () => {
+  test('merge refuses a package whose transaction moved, or another transaction', () => {
     const { alice, preview, proof } = fixture();
     const pkg = ScriptPath.signPackage(
       ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]),
@@ -297,7 +562,7 @@ describe('ScriptPath signing packages', () => {
         outputData: [],
         quote: { quote: 'q1', amount: Amount.from(1) },
       }),
-    ).toThrow(/Cannot merge a swap package into a melt/);
+    ).toThrow(/does not match/);
   });
 
   test('merge applies a complete spend as the input witness', () => {
@@ -314,8 +579,8 @@ describe('ScriptPath signing packages', () => {
       signatures: string[];
     };
     expect(witness.leaf).toBe(pkg.spends[0].leaf);
-    expect(witness.control).toEqual(pkg.spends[0].control);
-    const leaf = parseNutrootLeaf(hexToBytes(witness.leaf));
+    expect(witness.control).toEqual(controlFor(proof, 1));
+    const leaf = parseNutrootLeaf(hexToBytes(witness.leaf)) as NutrootConditionLeaf;
     expect(witness.signatures).toHaveLength(leaf.n);
   });
 });
@@ -332,40 +597,67 @@ describe('ScriptPath melt packages', () => {
     return { alice, meltPreview, proof, swapPreview: preview };
   }
 
-  test('the melt quote is part of the signed digest', () => {
+  test('the melt quote is part of the signed transcript', () => {
     const { meltPreview, swapPreview, proof } = meltFixture();
-    const melt = ScriptPath.extractMeltPackage(meltPreview, [
-      { secret: proof.secret, leafIndex: 1 },
-    ]);
-    expect(melt.type).toBe('melt');
-    expect(melt.quote).toBe('quote-1');
-    const swap = ScriptPath.extractSwapPackage(swapPreview, [
-      { secret: proof.secret, leafIndex: 1 },
-    ]);
-    // Same inputs; the quote container must move the digest (NUT-10 melt transcript).
-    const digestOfPkg = (p: typeof melt) =>
-      bytesToHex(
-        digestForPayload({
-          inputs: p.inputs,
-          outputs: p.outputs,
-          ...(p.quote && { meltQuote: { quoteId: p.quote, amount: p.quoteAmount! } }),
-        }),
-      );
-    expect(digestOfPkg(melt)).not.toBe(digestOfPkg(swap));
+    const plans = [{ secret: proof.secret, leafIndex: 1 }];
+    const melt = ScriptPath.extractMeltPackage(meltPreview, plans);
+    // Same inputs and outputs; the melt quote container moves the transcript (NUT-10).
+    expect(melt.transcript).not.toBe(ScriptPath.extractSwapPackage(swapPreview, plans).transcript);
+    expect(melt.transcript).toContain(bytesToHex(utf8ToBytes('quote-1')));
   });
 
-  test('deserialize rehydrates the melt quote amount as bigint', () => {
+  test('the transcript carries the melt output amount: quote amount plus the selected fee reserve', () => {
     const { meltPreview, proof } = meltFixture();
-    const pkg = ScriptPath.extractMeltPackage(meltPreview, [
-      { secret: proof.secret, leafIndex: 1 },
-    ]);
-    const decoded = ScriptPath.deserializePackage(ScriptPath.serializePackage(pkg));
-    expect(typeof decoded.quoteAmount).toBe('bigint');
-    expect(decoded.quoteAmount).toBe(1n);
+    const plans = [{ secret: proof.secret, leafIndex: 1 }];
+    const transcriptFor = (amount: bigint) =>
+      bytesToHex(
+        messageForPayload({
+          inputs: meltPreview.inputs,
+          outputs: meltPreview.outputData.map((d) => d.blindedMessage),
+          meltQuote: { quoteId: 'quote-1', amount },
+        }),
+      );
+    const bolt11 = { ...meltPreview, quote: { ...meltPreview.quote, fee_reserve: Amount.from(2) } };
+    expect(ScriptPath.extractMeltPackage(bolt11, plans).transcript).toBe(transcriptFor(3n));
+    const onchain = {
+      ...meltPreview,
+      quote: {
+        ...meltPreview.quote,
+        fee_options: [
+          { fee_index: 0, fee_reserve: Amount.from(2) },
+          { fee_index: 1, fee_reserve: Amount.from(50) },
+        ],
+      },
+    };
+    expect(ScriptPath.extractMeltPackage(onchain, plans, 1).transcript).toBe(transcriptFor(51n));
+    expect(() => ScriptPath.extractMeltPackage(onchain, plans)).toThrow(/feeIndex/);
+  });
+
+  test('merge rebuilds the melt transcript with the same fee reserve', () => {
+    const { alice, meltPreview, proof } = meltFixture();
+    const plans = [{ secret: proof.secret, leafIndex: 1 }];
+    const bolt11 = { ...meltPreview, quote: { ...meltPreview.quote, fee_reserve: Amount.from(2) } };
+    const signed = ScriptPath.signPackage(ScriptPath.extractMeltPackage(bolt11, plans), alice);
+    expect(ScriptPath.mergeMeltPackage(signed, bolt11).inputs[0].witness).toBeDefined();
+    const onchain = {
+      ...meltPreview,
+      quote: {
+        ...meltPreview.quote,
+        fee_options: [{ fee_index: 1, fee_reserve: Amount.from(50) }],
+      },
+    };
+    const onchainSigned = ScriptPath.signPackage(
+      ScriptPath.extractMeltPackage(onchain, plans, 1),
+      alice,
+    );
+    expect(
+      ScriptPath.mergeMeltPackage(onchainSigned, onchain, plans, 1).inputs[0].witness,
+    ).toBeDefined();
+    expect(() => ScriptPath.mergeMeltPackage(onchainSigned, onchain, plans)).toThrow(/feeIndex/);
   });
 
   test('sign and merge complete a melt spend end to end', () => {
-    const { alice, meltPreview, proof } = meltFixture();
+    const { alice, meltPreview, proof, swapPreview } = meltFixture();
     const pkg = ScriptPath.signPackage(
       ScriptPath.deserializePackage(
         ScriptPath.serializePackage(
@@ -377,20 +669,8 @@ describe('ScriptPath melt packages', () => {
     const merged = ScriptPath.mergeMeltPackage(pkg, meltPreview);
     const witness = JSON.parse(merged.inputs[0].witness as string) as { signatures: string[] };
     expect(witness.signatures).toHaveLength(1);
-    expect(() => ScriptPath.mergeSwapPackage(pkg, meltPreview as unknown as SwapPreview)).toThrow(
-      /Cannot merge a melt package into a swap/,
-    );
-  });
-
-  test('a melt package without its quote is rejected', () => {
-    const { meltPreview, proof } = meltFixture();
-    const pkg = ScriptPath.extractMeltPackage(meltPreview, [
-      { secret: proof.secret, leafIndex: 1 },
-    ]);
-    const stripped = { ...pkg, quote: undefined, quoteAmount: undefined };
-    expect(() =>
-      ScriptPath.deserializePackage(ScriptPath.serializePackage(stripped as typeof pkg)),
-    ).toThrow(/needs a quote and amount/);
+    // Same inputs and outputs as the swap, but the melt quote is part of what was signed.
+    expect(() => ScriptPath.mergeSwapPackage(pkg, swapPreview)).toThrow(/does not match/);
   });
 });
 
@@ -403,9 +683,28 @@ describe('ScriptPath.witnessFor', () => {
     );
     const witness = JSON.parse(
       ScriptPath.witnessFor(signed.spends[0], proof.spend_info!.tree!, 1),
-    ) as { leaf: string; control: { K: string; path: string[] }; signatures: string[] };
+    ) as {
+      leaf: string;
+      control: { K: string; path: string[] };
+      signatures: string[];
+    };
     expect(witness.leaf).toBe(signed.spends[0].leaf);
     expect(witness.control).toEqual(signed.spends[0].control);
     expect(witness.signatures).toEqual(signed.spends[0].signatures);
+  });
+});
+
+describe('ScriptPath transport vectors', () => {
+  test('the shared nutspA vectors decode, and the signature covers the spend input digest', () => {
+    const { auditable_lock: lock, transport_strings: wire } = vectors;
+    const unsigned = ScriptPath.deserializePackage(wire.signing_package);
+    expect(unsigned.transcript).toBe(lock.transcript);
+    expect(bytesToHex(spendDigest(unsigned))).toBe(lock.input_digest);
+    const signed = ScriptPath.deserializePackage(wire.signing_package_signed);
+    const [signature] = signed.spends[0].signatures;
+    expect(
+      schnorr.verify(hexToBytes(signature), spendDigest(signed), hexToBytes(lock.P).subarray(1)),
+    ).toBe(true);
+    expect(ScriptPath.serializePackage(signed)).toBe(wire.signing_package_signed);
   });
 });

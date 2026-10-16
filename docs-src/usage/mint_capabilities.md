@@ -86,7 +86,7 @@ network calls, use [`wallet.loadMintFromCache(storedInfo, keyChainCache)`](./cre
 
 ## Inspect raw NUT support
 
-`isSupported(num)` reports the mint's advertised support for a given NUT.
+`isSupported(num)` reports the mint's advertised support for a given NUT. A literal number narrows the return shape to that NUT's; a `number` from a loop returns the union, with `supported` for most NUTs and `disabled` for NUT-04 and NUT-05. It throws for a NUT cashu-ts does not model.
 
 For NUT-4 (mint) and NUT-5 (melt) it returns the `disabled` flag and the raw method list:
 
@@ -94,6 +94,13 @@ For NUT-4 (mint) and NUT-5 (melt) it returns the `disabled` flag and the raw met
 const melt = info.isSupported(5);
 console.log('melt disabled?', melt.disabled);
 console.log('advertised melt methods:', melt.params);
+
+// Every NUT the mint advertises support for, from the ones cashu-ts models
+const nuts: number[] = [4, 5, 7, 8, 9, 10, 11, 12, 14, 15, 17, 19, 20, 29];
+const supported = nuts.filter((n) => {
+  const r = info.isSupported(n);
+  return r.supported ?? !r.disabled;
+});
 ```
 
 > `isSupported(4 | 5).params` returns the advertised methods **even when the operation is disabled**. Prefer `supportedMethods(op)` when you want only the methods you can actually use — it returns `[]` for a disabled operation.

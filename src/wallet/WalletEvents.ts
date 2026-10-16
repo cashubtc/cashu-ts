@@ -1,5 +1,5 @@
-import { safeCallback } from '../logger';
-import { Amount } from '../model/Amount';
+import { type Logger, safeCallback } from '../logger';
+import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError, HttpResponseError } from '../model/Errors';
 import { MintQuoteState, MeltQuoteState } from '../model/types';
 import type {
@@ -13,6 +13,13 @@ import type {
   RpcSubKinds,
 } from '../model/types';
 import type { KeyChainCache } from '../model/types/keyset';
+import {
+  deriveMintQuoteAccounting,
+  normalizeSafeIntegerMetadata,
+  nullIfUndefined,
+  verifiedPreimage,
+} from '../utils';
+import { mapInChunks } from '../utils/chunked';
 
 import { type OperationCounters } from './CounterSource';
 import type { Wallet } from './Wallet';
@@ -73,6 +80,10 @@ export type ProofStatesStreamOpts<P extends ProofLike = Proof> = WatchOpts & {
  */
 type Poller<T> = { fetch: () => Promise<T[]>; key: (p: T) => string; state: (p: T) => string };
 
+function noop(): void {
+  /* noop */
+}
+
 function safeStringify(obj: unknown): string {
   const seen = new WeakSet<object>();
   try {
@@ -88,25 +99,60 @@ function safeStringify(obj: unknown): string {
   }
 }
 
-// NUT-17 payloads are raw JSON, so give callbacks the Amount fields the HTTP responses carry.
-function normalizeMintQuoteUpdate<T extends MintQuoteBaseResponse & { amount?: Amount | null }>(
-  p: T,
-): T {
-  return {
-    ...p,
-    ...(p.amount != null && { amount: Amount.from(p.amount) }),
-    ...(p.amount_paid != null && { amount_paid: Amount.from(p.amount_paid) }),
-    ...(p.amount_issued != null && { amount_issued: Amount.from(p.amount_issued) }),
-  };
+// NUT-17 frames are raw JSON and mints leave out the NUT-04 base fields, so fill them the way
+// the HTTP path does; an underivable frame is dropped through `guarded`.
+function normalizeMintQuoteUpdate<T extends MintQuoteBaseResponse>(p: T, method: string): T {
+  const data: Record<string, unknown> = { ...p };
+  if (data.method === undefined) data.method = method;
+  if (data.amount != null) data.amount = Amount.from(data.amount as AmountLike);
+  const accounting =
+    data.amount_paid != null && data.amount_issued != null
+      ? [Amount.from(data.amount_paid as AmountLike), Amount.from(data.amount_issued as AmountLike)]
+      : deriveMintQuoteAccounting(data);
+  if (!accounting) throw new CTSError('Invalid mint quote update');
+  [data.amount_paid, data.amount_issued] = accounting;
+  data.updated_at = normalizeSafeIntegerMetadata(
+    data.updated_at as number | undefined,
+    'mintQuote.updated_at',
+    null,
+  );
+  return data as T;
 }
 
-function normalizeMeltQuoteUpdate<T extends MeltQuoteBaseResponse>(p: T): T {
-  return {
+// NUT-17 frames are raw JSON; give callbacks the shape and checks the HTTP melt responses get
+function normalizeMeltQuoteUpdate<T extends MeltQuoteBaseResponse>(
+  p: T,
+  method: string,
+  logger: Logger,
+): T {
+  const data: Record<string, unknown> = {
     ...p,
     ...(p.amount != null && { amount: Amount.from(p.amount) }),
     ...(p.fee_reserve != null && { fee_reserve: Amount.from(p.fee_reserve) }),
     ...(p.change && { change: p.change.map((s) => ({ ...s, amount: Amount.from(s.amount) })) }),
   };
+  if (data.method === undefined) data.method = method;
+  data.expiry = normalizeSafeIntegerMetadata(
+    data.expiry as number | undefined,
+    'meltQuote.expiry',
+    undefined,
+  );
+  if (method === 'bolt11' || method === 'bolt12') {
+    nullIfUndefined(data, 'payment_preimage');
+    if (
+      method === 'bolt11' &&
+      typeof data.payment_preimage === 'string' &&
+      typeof data.request === 'string'
+    ) {
+      data.payment_preimage = verifiedPreimage(
+        data.request,
+        data.payment_preimage,
+        logger,
+        `${method} melt quote update`,
+      );
+    }
+  }
+  return data as T;
 }
 
 function normalizeError(err: unknown): Error {
@@ -216,9 +262,7 @@ export class WalletEvents {
     if (!signal) return cancel;
     if (signal.aborted) {
       cancel();
-      return () => {
-        /* noop */
-      };
+      return noop;
     }
     const onAbort = () => cancel();
     signal.addEventListener('abort', onAbort, { once: true });
@@ -237,7 +281,11 @@ export class WalletEvents {
     signal?: AbortSignal,
     onClose?: () => void,
   ): Promise<SubscriptionCanceller> {
+    // Filters (eg proof Ys) must never reach the wire for a subscription already cancelled, so an
+    // abort is checked both before the connect and again once it settles.
+    if (signal?.aborted) return noop;
     await this.wallet.mint.connectWebSocket();
+    if (signal?.aborted) return noop;
     const ws = this.wallet.mint.webSocketConnection;
     if (!ws) throw new CTSError('Failed to establish WebSocket connection.');
     const subId = ws.createSubscription<W>({ kind, filters }, cb, err);
@@ -253,6 +301,18 @@ export class WalletEvents {
 
   // Whether the mint says it pushes `kind` for this wallet's unit. Unknown until mint info is
   // loaded; then the socket decides
+  // The batched check is only tried where the mint advertises NUT-29 for the method; unknown info
+  // tries it once
+  private _batches(method: string): boolean {
+    try {
+      const nut29 = this.wallet.getMintInfo().isSupported(29);
+      const methods = nut29.params?.methods;
+      return nut29.supported && (!Array.isArray(methods) || methods.includes(method));
+    } catch {
+      return true;
+    }
+  }
+
   private _pushes(kind: RpcSubKinds): boolean {
     try {
       const nut17 = this.wallet.getMintInfo().isSupported(17);
@@ -283,13 +343,23 @@ export class WalletEvents {
     const { kind, filters, decode } = socket;
     const deliver = (wire: W) => {
       const p = decode(wire);
-      if (p !== undefined) cb(p);
+      // cb may be an async consumer callback; a rejection must not escape uncontained, matching
+      // WSConnection's own containment (which never sees it, since this wrapper doesn't return it).
+      if (p !== undefined) safeCallback(cb, p, this.wallet.logger, { event: kind });
     };
     const pollMs = opts?.pollMs;
-    if (pollMs === undefined) return this._subscribe(kind, filters, deliver, err, opts?.signal);
-    if (!(pollMs > 0)) throw new CTSError('pollMs must be a positive number');
     const mode = (m: 'websocket' | 'polling') =>
       safeCallback(opts?.onMode, m, this.wallet.logger, { event: kind });
+    if (pollMs === undefined) {
+      // Websocket only: still report the transport, on the first frame as the fallback path does
+      const live = once(() => mode('websocket'));
+      const onWire = (wire: W) => {
+        live();
+        deliver(wire);
+      };
+      return this._subscribe(kind, filters, onWire, err, opts?.signal);
+    }
+    if (!(pollMs > 0)) throw new CTSError('pollMs must be a positive number');
 
     const all = new AbortController(); // everything this watch owns
     const sub = new AbortController(); // the subscription alone, so polling can outlive it
@@ -360,7 +430,7 @@ export class WalletEvents {
         if (++failures >= POLL_FAILURE_LIMIT) throw normalizeError(e);
       }
       if (signal.aborted) return;
-      for (const item of changed) cb(item);
+      for (const item of changed) safeCallback(cb, item, this.wallet.logger);
       // A failed poll is often a rate limit, so back off before the next one
       await sleep(pollMs * 2 ** failures, signal);
     }
@@ -522,14 +592,14 @@ export class WalletEvents {
   ): Promise<SubscriptionCanceller> {
     const method = opts?.method ?? 'bolt11';
     const uniq = Array.from(new Set(ids));
-    let batch = uniq.length > 1;
+    let batch = uniq.length > 1 && this._batches(method);
     const fetch = async () => {
       if (batch) {
         try {
           return await this.wallet.checkMintQuoteBatch<TRes>(method, uniq);
         } catch (e) {
-          // Only a missing endpoint means the mint cannot batch; anything else is the poll failing
-          if (!(e instanceof HttpResponseError) || e.status !== 404) throw e;
+          // A missing or refused endpoint means the mint cannot batch; anything else is the poll failing
+          if (!(e instanceof HttpResponseError) || (e.status !== 404 && e.status !== 405)) throw e;
           batch = false;
         }
       }
@@ -539,7 +609,7 @@ export class WalletEvents {
       {
         kind: `${method}_mint_quote`,
         filters: uniq,
-        decode: guarded<TRes>(normalizeMintQuoteUpdate, err),
+        decode: guarded<TRes>((p) => normalizeMintQuoteUpdate(p, method), err),
       },
       { fetch, key: (q) => q.quote, state: mintQuoteState },
       cb,
@@ -598,7 +668,7 @@ export class WalletEvents {
       {
         kind: `${method}_melt_quote`,
         filters: uniq,
-        decode: guarded<TRes>(normalizeMeltQuoteUpdate, err),
+        decode: guarded<TRes>((p) => normalizeMeltQuoteUpdate(p, method, this.wallet.logger), err),
       },
       {
         fetch: () => this._eachQuote(uniq, (id) => this.wallet.checkMeltQuote<TRes>(method, id)),
@@ -662,13 +732,16 @@ export class WalletEvents {
     // payload.Y === '__proto__' (or 'constructor', etc.) would otherwise
     // resolve to an inherited property and bypass the unknown-Y guard below.
     const proofMap = Object.create(null) as Record<string, T>;
-    for (const p of proofs) {
-      const y = this.wallet.computeY(p.secret, p.id);
+    // Hashing to Y is curve work per proof, so it yields.
+    const ys = await mapInChunks(proofs, (p) => this.wallet.computeY(p.secret, p.id), {
+      signal: opts?.signal,
+    });
+    ys.forEach((y, i) => {
       if (proofMap[y]) {
         throw new CTSError('Duplicate proof secret in proofStateUpdates input');
       }
-      proofMap[y] = p;
-    }
+      proofMap[y] = proofs[i];
+    });
     return this._watch<ProofState & { proof: T }, ProofState>(
       {
         kind: 'proof_state',

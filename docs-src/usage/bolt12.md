@@ -9,7 +9,7 @@ BOLT12 enables reusable Lightning offers that can be paid multiple times, unlike
 
 ```typescript
 // Create reusable BOLT12 offer
-const bolt12Quote = await wallet.createMintQuoteBolt12(bytesToHex(pubkey), {
+const bolt12Quote = await wallet.createMintQuoteBolt12(pubkeyHex, {
   amount: 1000, // Optional: omit to create an amountless offer
   description: 'My reusable offer', // The mint must signal in their settings that offers with a description are supported
 });
@@ -24,7 +24,7 @@ const updatedQuote = await wallet.checkMintQuoteBolt12(bolt12Quote.quote);
 const availableAmount = updatedQuote.amount_paid.subtract(updatedQuote.amount_issued);
 if (availableAmount.greaterThan(0)) {
   const preview = await wallet.prepareMint('bolt12', availableAmount, updatedQuote, {
-    privkey: bytesToHex(privateKey),
+    privkey: privkeyHex,
   });
   const newProofs = await wallet.completeMint(preview);
 }

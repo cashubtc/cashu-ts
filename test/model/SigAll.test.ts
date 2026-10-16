@@ -79,6 +79,7 @@ function makeSwapPreview() {
     sendOutputs: [dummyOutput],
     amount: Amount.from(32),
     fees: Amount.from(0),
+    sendTotal: Amount.from(0),
     keysetId: 'dummy-keyset-id',
   } as SwapPreview;
 }
@@ -243,7 +244,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
       }),
     );
 
-    expect(parsed.outputs[0].amount.equals(Amount.from(32))).toBeTruthy();
+    expect(parsed.outputs[0].amount.equals(32)).toBeTruthy();
   });
 
   test('serializePackage emits unquoted integer amounts', () => {
@@ -330,6 +331,12 @@ describe('SigAll — serializePackage / deserializePackage', () => {
     const bytes = new Uint8Array([...prefix, 0xff, ...suffix]);
     const encoded = 'sigallA' + encodeUint8ToBase64Url(bytes);
 
+    expect(() => SigAll.deserializePackage(encoded)).toThrow('Failed to parse signing package');
+  });
+
+  test('rejects a duplicate JSON key rather than taking the last value', () => {
+    const encoded =
+      'sigallA' + btoa('{"version":"sigallA","type":"swap","type":"melt"}').replace(/=+$/, '');
     expect(() => SigAll.deserializePackage(encoded)).toThrow('Failed to parse signing package');
   });
 

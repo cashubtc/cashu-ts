@@ -251,6 +251,17 @@ describe('test wallet init', () => {
     }
   });
 
+  test('a rejected cache leaves the wallet uninitialized', () => {
+    const wallet = new Wallet(mintUrl, { unit });
+    const foreign = KeyChain.mintToCacheDTO(
+      'https://other-mint.example',
+      dummyKeysetResp.keysets,
+      dummyKeysResp.keysets,
+    );
+    expect(() => wallet.loadMintFromCache(mintInfoResp, foreign)).toThrow(/different mint/);
+    expect(() => wallet.getMintInfo()).toThrow();
+  });
+
   test('should initialize with preloaded mint info, keys, and keysets without fetching', async () => {
     const wallet = new Wallet(mintUrl, { unit });
     const cache = KeyChain.mintToCacheDTO(mintUrl, dummyKeysetResp.keysets, dummyKeysResp.keysets);
@@ -510,7 +521,19 @@ describe('test info', () => {
     const usdWallet = new Wallet(mint, { unit: 'usd' });
     const usdKeychainCache = { ...MINTCACHE.keychainCache, unit: 'usd' };
     usdWallet.loadMintFromCache(MINTCACHE.mintInfo, usdKeychainCache);
-    // console.log('usdWallet', usdWallet.keyChain.cache);
+    server.use(
+      http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
+        HttpResponse.json({
+          quote: 'usd-quote',
+          request: 'lnbc10u1pfake',
+          unit: 'usd',
+          amount: 1000,
+          state: MintQuoteState.UNPAID,
+          expiry: null,
+          pubkey: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+        }),
+      ),
+    );
     await expect(
       usdWallet.createMintQuoteBolt11(
         1000,
@@ -601,7 +624,7 @@ describe('test fees', () => {
     server.use(
       http.get(mintUrl + '/v1/melt/quote/bolt11/test', () => {
         return HttpResponse.json({
-          quote: 'test_melt_quote_id',
+          quote: 'test',
           amount: Amount.from(2000),
           unit: 'sat',
           request: 'lnbc20u1pfake', // HRP encodes the quoted 2,000 sat
@@ -672,7 +695,7 @@ describe('bindKeyset & withKeyset', () => {
     expect(w2).not.toBe(wallet); // new instance
     expect(w2.keysetId).toBe(current);
     expect(w2.getMintInfo()).toStrictEqual(wallet.getMintInfo()); // same mintinfo
-    expect(w2.keyChain).toStrictEqual(wallet.keyChain); // same keychain data
+    expect(w2.keyChain.cache).toStrictEqual(wallet.keyChain.cache); // same keychain data
     expect(() => {
       w2.keyChain.getCheapestKeyset();
     }).not.toThrow(); // smoke test
@@ -711,7 +734,7 @@ describe('multi mint', async () => {
         mintUrl + '/v1/melt/quote/bolt11',
         async ({ request }) => {
           const body = await request.json();
-          if (!body?.options.mpp) {
+          if (!body?.options?.mpp) {
             return new HttpResponse('No MPP', { status: 400 });
           }
           return HttpResponse.json({
@@ -737,5 +760,27 @@ describe('multi mint', async () => {
     expect(meltQuote.amount).toEqual(Amount.from(1));
     expect(meltQuote.quote).toBe('K-80Mo7xrtQRgaA1ifrxDKGQGZEGlo7zNDwTtf-D');
     await expect(wallet.createMeltQuoteBolt11(invoice)).rejects.toThrow();
+  });
+});
+
+describe('unsupported keyset diagnostics', () => {
+  const future = { ...dummyKeysetResp.keysets[0], id: '03' + '11'.repeat(32) };
+
+  test('an unbound wallet preserves the upgrade diagnosis and remains available for restore', async () => {
+    const wallet = new Wallet(mint);
+    wallet.loadMintFromCache(mintInfoResp, KeyChain.mintToCacheDTO(mintUrl, [future], []));
+    expect(() => wallet.keysetId).toThrow(/Upgrade/);
+    await expect(wallet.createMintQuoteBolt11(1, mintInfoResp.pubkey)).rejects.toThrow(/Upgrade/);
+    await expect(wallet.restoreAll()).resolves.toEqual({ proofs: [], lastCounters: {} });
+  });
+
+  test('wallet lookup diagnoses future versions but keychain lookup remains available', () => {
+    const wallet = new Wallet(mint, { strictCachedKeysets: true });
+    wallet.loadMintFromCache(
+      mintInfoResp,
+      KeyChain.mintToCacheDTO(mintUrl, [...dummyKeysetResp.keysets, future], dummyKeysResp.keysets),
+    );
+    expect(wallet.keyChain.getKeyset(future.id).version).toBe(3);
+    expect(() => wallet.getKeyset(future.id)).toThrow(/Upgrade/);
   });
 });

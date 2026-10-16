@@ -22,10 +22,27 @@ export type RawBlindedMessage = {
   secret: Uint8Array;
 };
 
+/**
+ * DLEQ proof as the mint issues it (NUT-12).
+ *
+ * @remarks
+ * The mint never sees the wallet's blinding factor, so its proof is `{e, s}` alone. Verifying it
+ * against a `Proof` needs {@link ProofDLEQ}.
+ */
 export type DLEQ = {
-  s: Uint8Array; // signature
   e: Uint8Array; // challenge
-  r?: bigint; // optional: blinding factor
+  s: Uint8Array; // response
+};
+
+/**
+ * A mint's DLEQ proof completed by the wallet with its own blinding factor.
+ *
+ * @remarks
+ * The shape that travels on a `Proof`. NUT-12 requires the wallet to add `r`; without it the proof
+ * cannot be re-blinded and so cannot be verified by anyone downstream.
+ */
+export type ProofDLEQ = DLEQ & {
+  r: bigint; // blinding factor
 };
 
 export type UnblindedSignature = {
@@ -246,8 +263,9 @@ export function getValidSigners(
  * @param digest - The 32-byte digest that was signed (hex string or bytes).
  * @param pubkeys - The Cashu P2PK public key(s) (hex-encoded, X-only or with 02/03 prefix) to
  *   check.
- * @param threshold - The minimum number of unique witnesses required.
- * @returns True if the witness threshold was reached, false otherwise.
+ * @param threshold - The minimum number of unique witnesses required; at least 1.
+ * @returns True if the witness threshold was reached, false otherwise (a threshold below 1
+ *   included, which no set of witnesses can satisfy).
  */
 export const meetsSignerThreshold = (
   signatures: string[],
@@ -255,6 +273,7 @@ export const meetsSignerThreshold = (
   pubkeys: string[],
   threshold: number = 1,
 ): boolean => {
+  if (!Number.isInteger(threshold) || threshold < 1) return false;
   const validSigners = getValidSigners(signatures, digest, pubkeys);
   return validSigners.length >= threshold;
 };

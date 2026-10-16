@@ -206,6 +206,12 @@ test('base64url JSON still decodes a document with a leading BOM', () => {
   expect(decodeBase64UrlToJson(encoded)).toEqual({ a: 1 });
 });
 
+test('v3 token path rejects a duplicate key rather than taking the last value', () => {
+  const ambiguousJson = '{"mint":"https://trusted.example","mint":"https://attacker.example"}';
+  const encoded = encodeUint8ToBase64(new TextEncoder().encode(ambiguousJson));
+  expect(() => decodeBase64UrlToJson(encoded)).toThrow(/Duplicate key/);
+});
+
 describe('alphabet split', () => {
   test('decodes a deprecated keyset ID, which is standard base64', () => {
     expect(decodeBase64ToUint8Legacy('+//wAAAAAAAA')).toEqual(

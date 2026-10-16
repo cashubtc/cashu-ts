@@ -5,11 +5,13 @@ import { describe, expect, test, vi } from 'vitest';
 
 import { hashToCurveBls } from '../../src/crypto/curve_bls';
 import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
+import { hashToCurveHex } from '../../src/crypto/curves';
 import {
   buildNutrootSecret,
   deriveReceiverKeyedSecret,
   nutrootTweakPubkey,
   type NutrootLeaf,
+  type NutrootConditionLeaf,
 } from '../../src/crypto/nutroot';
 import {
   inputDigest,
@@ -23,10 +25,10 @@ import { Amount } from '../../src/model/Amount';
 import type { Proof, SerializedBlindedMessage } from '../../src/model/types';
 import {
   bytesToHex,
-  bytesToUtf8,
   decodeSpendReceipt,
   encodeSpendReceipt,
   encodeUint8ToBase64Url,
+  getDecodedToken,
   hexToBytes,
   verifySpendReceipt,
 } from '../../src/utils';
@@ -89,7 +91,7 @@ function transactionInputsOf(inputs: Proof[], meltQuote?: { quoteId: string; amo
     proofInputs: inputs.map((p) => ({
       amount: Amount.from(p.amount).toBigInt(),
       keysetId: p.id,
-      secret: p.secret,
+      Y: hashToCurveHex(p.secret, p.id),
       C: p.C,
     })),
     blindedOutputs: [{ amount: OUTPUT.amount.toBigInt(), keysetId: OUTPUT.id, B_: OUTPUT.B_ }],
@@ -181,6 +183,17 @@ describe('prepareScriptPathSpends', () => {
     expect(spend.keys).toEqual([PRIV_B]);
     expect(spend.leaf.type).toBe('threshold');
     expect(spend.tree).toEqual(built.tree);
+  });
+
+  test('refuses a plan naming a commit leaf', () => {
+    const withCommit = buildNutrootSecret(PUB_A, [
+      ...leaves,
+      { type: 'commit', hash: 'cc'.repeat(32) },
+    ]);
+    const proof = v3Proof(withCommit.secret, { k: PRIV_A, tree: withCommit.tree });
+    expect(() =>
+      prepareScriptPathSpends([proof], [{ secret: withCommit.secret, leafIndex: 1 }], []),
+    ).toThrow(/not a spend path/);
   });
 
   test('takes the internal key from explicit spend_info.K when no scalar is present', () => {
@@ -318,6 +331,23 @@ describe('prepareScriptPathSpends', () => {
  * -------------------------- */
 
 describe('attachTransactionWitnesses', () => {
+  test('an aborted signal rejects before any input is signed', async () => {
+    const input = v3Proof(PUB_A);
+    const ac = new AbortController();
+    ac.abort();
+    await expect(
+      attachTransactionWitnesses(
+        { inputs: [input], outputs: [OUTPUT] },
+        undefined,
+        new Map([[PUB_A, hexToBytes(PRIV_A)]]),
+        undefined,
+        makeState(undefined),
+        ac.signal,
+      ),
+    ).rejects.toThrow(/aborted/);
+    expect(input.witness).toBeUndefined();
+  });
+
   test('falls back to extraKeys, which carry the keys proofs hold in spend info', async () => {
     const fromExtra = v3Proof(PUB_A);
     // A random v3 output's key rides on the proof (spend_info.k), not in wallet state; callers
@@ -376,9 +406,16 @@ describe('attachTransactionWitnesses', () => {
     expect(verifyTransactionInputWitness(hexToBytes(r.inputDigest), PUB_B, r.witness)).toBe(true);
   });
 
+  test('the shared nutrcA vector decodes and verifies against its proof', () => {
+    const bundle = decodeSpendReceipt(vectors.transport_strings.spend_receipt);
+    const [proof] = getDecodedToken(bundle.token, [KEYSET]).proofs;
+    expect(verifySpendReceipt(bundle.receipts[0], proof)).toMatchObject({ path: 'key', ok: true });
+    expect(encodeSpendReceipt(bundle)).toBe(vectors.transport_strings.spend_receipt);
+  });
+
   test('verifySpendReceipt checks a receipt against the proof, key path and script path', async () => {
     const keyPath = v3Proof(PUB_B, { k: PRIV_B });
-    const tree = buildNutrootSecret(PUB_A, [{ type: 'threshold', n: 1, keys: [PUB_B] }]);
+    const tree = buildNutrootSecret(PUB_A, [{ type: 'threshold', n: 1, keys: [PUB_B, PUB_A] }]);
     const scriptPath = v3Proof(tree.secret, { k: PRIV_A, tree: tree.tree });
     const inputs = [keyPath, scriptPath];
     const [rKey, rScript] = await attachTransactionWitnesses(
@@ -413,10 +450,27 @@ describe('attachTransactionWitnesses', () => {
       witness: false,
     });
     expect(verifySpendReceipt(rKey, { ...keyPath, id: '00' + 'ab'.repeat(32) }).ok).toBe(false);
+    // NUT-10 witness shape: a malformed signature entry or a preimage on a non-hashlock leaf.
+    const script = JSON.parse(rScript.witness) as { signatures: string[]; preimage?: string };
+    const malformed = { ...script, signatures: [script.signatures[0], 'zz'.repeat(64)] };
+    expect(
+      verifySpendReceipt({ ...rScript, witness: JSON.stringify(malformed) }, scriptPath).witness,
+    ).toBe(false);
+    const strayPreimage = { ...script, preimage: '07'.repeat(32) };
+    expect(
+      verifySpendReceipt({ ...rScript, witness: JSON.stringify(strayPreimage) }, scriptPath)
+        .witness,
+    ).toBe(false);
     expect(verifySpendReceipt({ ...rKey, transcript: 'zz' }, keyPath).ok).toBe(false);
     expect(verifySpendReceipt({ ...rScript, witness: '{bad' }, scriptPath).witness).toBe(false);
     const unsigned = JSON.stringify({ ...JSON.parse(rScript.witness), signatures: undefined });
     expect(verifySpendReceipt({ ...rScript, witness: unsigned }, scriptPath).witness).toBe(false);
+    // A witness revealing a commit leaf never spends, whatever else it carries.
+    const commitLeaf = JSON.stringify({
+      ...JSON.parse(rScript.witness),
+      leaf: '0004' + '080020' + '77'.repeat(32),
+    });
+    expect(verifySpendReceipt({ ...rScript, witness: commitLeaf }, scriptPath).witness).toBe(false);
   });
 
   test('a receipt bundle round-trips through the nutrcA transport string', async () => {
@@ -553,7 +607,7 @@ describe('attachTransactionWitnesses', () => {
     ).toBe(true);
   });
 
-  test('the cosigner is handed the tagged message the digest was hashed from', async () => {
+  test('the cosigner is handed the transcript the digest was hashed from', async () => {
     const built = buildNutrootSecret(PUB_A, [{ type: 'threshold', n: 2, keys: [PUB_A, PUB_B] }]);
     const input = v3Proof(built.secret, { k: PRIV_A, tree: built.tree });
     let seen: CosignRequest | undefined;
@@ -573,14 +627,49 @@ describe('attachTransactionWitnesses', () => {
       spends,
       makeState(undefined),
     );
-    expect(seen!.leaf.keys).toEqual([PUB_A, PUB_B]);
-    expect(bytesToUtf8(seen!.transactionMessage.subarray(0, 20))).toBe('Cashu_Transaction_v1');
+    expect((seen!.leaf as NutrootConditionLeaf).keys).toEqual([PUB_A, PUB_B]);
+    expect(bytesToHex(seen!.transactionMessage)).toContain(bytesToHex(seen!.inputContainer));
     // digest = tagged_hash(input tag, SHA256(message) || SHA256(container)): recomputable, so a
     // signer can refuse anything it cannot verify.
     expect(bytesToHex(inputDigest(sha256(seen!.transactionMessage), seen!.inputContainer))).toBe(
       bytesToHex(seen!.digest),
     );
     expect(bytesToHex(seen!.digest)).toBe(bytesToHex(digestOf([input])));
+  });
+
+  test('the transcript a cosigner sees names companion inputs by Y, never by secret', async () => {
+    const built = buildNutrootSecret(PUB_A, [{ type: 'threshold', n: 2, keys: [PUB_A, PUB_B] }]);
+    const locked = v3Proof(built.secret, { k: PRIV_A, tree: built.tree });
+    const companion: Proof = {
+      id: `00${'33'.repeat(7)}`,
+      amount: Amount.from(1),
+      secret: 'companion-proof-secret',
+      C: PUB_A,
+    };
+    let seen: CosignRequest | undefined;
+    const cosign = async (request: CosignRequest) => {
+      seen = request;
+      return [bytesToHex(schnorr.sign(request.digest, hexToBytes(PRIV_B)))];
+    };
+    const spends = prepareScriptPathSpends(
+      [locked, companion],
+      [{ secret: locked.secret, leafIndex: 0, extraKeys: [PRIV_A], cosign }],
+      [],
+    );
+    const receipts = await attachTransactionWitnesses(
+      { inputs: [locked, companion], outputs: [OUTPUT] },
+      undefined,
+      undefined,
+      spends,
+      makeState(undefined),
+    );
+    const message = bytesToHex(seen!.transactionMessage);
+    expect(message).not.toContain(bytesToHex(utf8ToBytes(companion.secret)));
+    expect(message).toContain(hashToCurveHex(companion.secret, companion.id));
+    expect(message).not.toContain(locked.secret);
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0].Y).toBe(hashToCurveHex(locked.secret, locked.id));
+    expect(locked.witness).toBeDefined();
   });
 
   test('cosigner signatures fill a threshold; invalid or duplicate extras are trimmed', async () => {

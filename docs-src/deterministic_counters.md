@@ -2,7 +2,7 @@
 
 # Deterministic counters (persist, inspect, bump)
 
-Deterministic outputs use per-keyset counters. The wallet reserves them atomically and emits a single event you can use to persist the "next" value in your storage. A seeded wallet keeps one extra cursor for mint quote lock keys under the exported `QUOTE_COUNTER_KEY` (`'mint-quote-lock'`): it flows through the same `CounterSource` and `countersReserved` event, so persist it like any keyset counter and do not assume every counter key is a keyset id.
+Deterministic outputs use per-keyset counters. The wallet reserves them atomically and emits a single event you can use to persist the "next" value in your storage. A seeded wallet keeps one extra cursor per mint for quote lock keys under `quoteCounterKey(mintPubkey)` (`'mint-quote-lock:<NUT-06 pubkey>'`): it flows through the same `CounterSource` and `countersReserved` event, so persist it like any keyset counter and do not assume every counter key is a keyset id.
 
 API at a glance:
 
@@ -120,14 +120,16 @@ Because the source is shared, the global event on any wallet instance reflects t
 
 `createEphemeralCounterSource` returns the built-in in-memory implementation, which survives restarts when paired with the `countersReserved` persistence above. For multi-wallet use inside a single app instance, it is usually enough.
 
-Implement `CounterSource` yourself when the cursor must live in your storage: when several tabs or processes reserve from one DB, or when a crash between reserving and saving must not risk reusing a counter. Each method is then one atomic transaction:
+Implement `CounterSource` yourself when the cursor must live in your storage: when several tabs or processes reserve from one DB, or when a crash between reserving and saving must not risk reusing a counter. Each method is then one atomic transaction. `reserve` and `reserveAt` return a `CounterRange`, just `{ start, count }`; the wallet adds `counterKey` and `next` (`start + count`) when it emits `countersReserved`, so the source never computes them:
 
-```ts
+```ts skip
 import type { CounterSource, CounterRange } from '@cashu/cashu-ts';
 
 class IndexedDbCounterSource implements CounterSource {
   async reserve(counterKey: string, n: number): Promise<CounterRange> {
     // atomic read-and-increment in your DB
+    const start = await db.incrementAndGetPrevious(counterKey, n);
+    return { start, count: n };
   }
   async reserveAt(counterKey: string, start: number, count: number): Promise<CounterRange> {
     // one transaction: throw if start < next, else SET next = start + count

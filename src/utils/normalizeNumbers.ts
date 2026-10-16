@@ -1,6 +1,6 @@
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
-import type { MintKeys, MintKeyset } from '../model/types';
+import { MintQuoteState, type MintKeys, type MintKeyset } from '../model/types';
 
 /**
  * Normalize metadata-like numeric fields that must remain safe JS numbers, such as timestamps,
@@ -60,4 +60,27 @@ export function normalizeMintKeys(keys: MintKeys): MintKeys {
     ),
     final_expiry: normalizeSafeIntegerMetadata(keys.final_expiry, 'keys.final_expiry', undefined),
   };
+}
+
+/**
+ * Derives `[amount_paid, amount_issued]` from the legacy single-use `state` and quote `amount`, or
+ * returns null when underivable. Shared by the HTTP and NUT-17 mint quote paths.
+ */
+export function deriveMintQuoteAccounting(data: Record<string, unknown>): [Amount, Amount] | null {
+  if (
+    typeof data.state !== 'string' ||
+    !Object.values(MintQuoteState).includes(data.state as MintQuoteState)
+  ) {
+    return null;
+  }
+  if (data.state === MintQuoteState.UNPAID) {
+    return [Amount.from(0), Amount.from(0)];
+  }
+  let amount: Amount;
+  try {
+    amount = Amount.from(data.amount as AmountLike);
+  } catch {
+    return null;
+  }
+  return data.state === MintQuoteState.PAID ? [amount, Amount.from(0)] : [amount, amount];
 }

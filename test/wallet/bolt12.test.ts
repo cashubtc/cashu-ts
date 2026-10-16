@@ -1,6 +1,15 @@
 import { describe, it, expect, vi } from 'vitest';
 
-import { Amount, JSONInt, Mint, Wallet, type MintKeys, Keyset, type Proof } from '../../src';
+import {
+  MeltQuoteState,
+  Amount,
+  JSONInt,
+  Mint,
+  Wallet,
+  type MintKeys,
+  Keyset,
+  type Proof,
+} from '../../src';
 import { MINTCACHE } from '../consts';
 
 type ReqArgs = {
@@ -31,7 +40,7 @@ const makeRequestSpy = <T>(payload: T) => {
   return { req, calls };
 };
 
-const mintUrl = 'https://localhost:3338';
+const mintUrl = MINTCACHE.mintUrl;
 
 function makeKeysetFromCache(k: MintKeys, active = true) {
   const ks = new Keyset(k.id, k.unit, active, 0, undefined);
@@ -51,14 +60,14 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
         amount: 21,
         unit: 'sat',
         pubkey: '02abcd',
-        amount_paid: 0,
-        amount_issued: 0,
+        amount_paid: Amount.from(0),
+        amount_issued: Amount.from(0),
       } as any;
     };
 
     const result = await offlineMint.createMintQuoteBolt12(
       { amount: 21, unit: 'sat', pubkey: '02abcd' },
-      customRequest,
+      { customRequest },
     );
 
     expect(result.quote).toBe('q1');
@@ -77,7 +86,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
       throw new Error('unexpected endpoint');
     };
 
-    const info = await offlineMint.getLazyMintInfo(customRequest);
+    const info = await offlineMint.getLazyMintInfo({ customRequest });
 
     expect(info.name).toBe(MINTCACHE.mintInfo.name);
     expect(calls).toHaveLength(1);
@@ -92,8 +101,8 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
       unit: 'sat',
       expiry: 123456,
       pubkey: '02abcd',
-      amount_paid: 0,
-      amount_issued: 0,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
     };
     const { req, calls } = makeRequestSpy(response);
     const mint = new Mint(mintUrl, { customRequest: req });
@@ -106,7 +115,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
     expect(res.expiry).toBe(response.expiry);
     expect(calls).toHaveLength(1);
     const c = calls[0];
-    expect(c.endpoint).toMatch(/^https:\/\/localhost:3338\/v1\/mint\/quote\/bolt12$/);
+    expect(c.endpoint).toBe(mintUrl + '/v1/mint/quote/bolt12');
     expect(c.method?.toUpperCase()).toBe('POST');
     expect(c.requestBody).toEqual(payload);
   });
@@ -145,8 +154,8 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
       unit: 'sat',
       expiry: 9007199254740999n,
       pubkey: '02abcd',
-      amount_paid: 0,
-      amount_issued: 0,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
     };
     const { req } = makeRequestSpy(response);
     const mint = new Mint(mintUrl, { customRequest: req });
@@ -181,7 +190,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
     expect(res.amount_issued).toEqual(Amount.from(response.amount_issued));
     expect(calls).toHaveLength(1);
     const c = calls[0];
-    expect(c.endpoint).toMatch(/^https:\/\/localhost:3338\/v1\/mint\/quote\/bolt12\/q123$/);
+    expect(c.endpoint).toBe(mintUrl + '/v1/mint/quote/bolt12/q123');
   });
 
   it('mintBolt12 posts to /v1/mint/bolt12', async () => {
@@ -192,7 +201,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
     const res = await mint.mintBolt12(mintPayload as any);
     expect(res.signatures[0].amount).toEqual(Amount.from(response.signatures[0].amount));
     const c = calls[0];
-    expect(c.endpoint).toMatch(/^https:\/\/localhost:3338\/v1\/mint\/bolt12$/);
+    expect(c.endpoint).toBe(mintUrl + '/v1/mint/bolt12');
     expect(c.method?.toUpperCase()).toBe('POST');
     expect(c.requestBody).toEqual(mintPayload);
   });
@@ -230,7 +239,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
     expect(res.amount).toEqual(Amount.from(response.amount));
     expect(res.fee_reserve).toEqual(Amount.from(response.fee_reserve));
     const c = calls[0];
-    expect(c.endpoint).toMatch(/^https:\/\/localhost:3338\/v1\/melt\/quote\/bolt12$/);
+    expect(c.endpoint).toBe(mintUrl + '/v1/melt/quote/bolt12');
     expect(c.method?.toUpperCase()).toBe('POST');
     expect(c.requestBody).toEqual(meltQuotePayload);
   });
@@ -262,6 +271,8 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
   it('rejects out-of-range bigint melt quote expiry', async () => {
     const response = {
       quote: 'm123',
+      state: MeltQuoteState.UNPAID,
+      unit: 'sat',
       amount: 100,
       fee_reserve: 2,
       expiry: 9007199254740997n,
@@ -296,7 +307,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
     expect(res.amount).toEqual(Amount.from(response.amount));
     expect(res.fee_reserve).toEqual(Amount.from(response.fee_reserve));
     const c = calls[0];
-    expect(c.endpoint).toMatch(/^https:\/\/localhost:3338\/v1\/melt\/quote\/bolt12\/m123$/);
+    expect(c.endpoint).toBe(mintUrl + '/v1/melt/quote/bolt12/m123');
   });
 
   it('meltBolt12 posts to /v1/melt/bolt12', async () => {
@@ -317,7 +328,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
     expect(res.quote).toBe(response.quote);
     expect(res.amount).toEqual(Amount.from(response.amount));
     const c = calls[0];
-    expect(c.endpoint).toMatch(/^https:\/\/localhost:3338\/v1\/melt\/bolt12$/);
+    expect(c.endpoint).toBe(mintUrl + '/v1/melt/bolt12');
     expect(c.method?.toUpperCase()).toBe('POST');
     expect(c.requestBody).toEqual(meltPayload);
   });
@@ -332,8 +343,8 @@ describe('Mint (BOLT12) – instance methods', () => {
       unit: 'sat',
       expiry: null,
       pubkey: '02abcd',
-      amount_paid: 0,
-      amount_issued: 0,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
     };
     const mint = new Mint(mintUrl);
     const spy = vi.spyOn(mint, 'createMintQuoteBolt12').mockResolvedValue(response as any);
@@ -349,8 +360,20 @@ describe('Mint (BOLT12) – instance methods', () => {
   it('instance methods for melt/mint/check variants', async () => {
     const mint = new Mint(mintUrl);
     const responses = {
-      createMeltQuoteBolt12: { quote: 'm1', amount: 100, fee_reserve: 2, request: 'lno1offer...' },
-      checkMintQuoteBolt12: { quote: 'q1', state: 'PAID', amount_issued: 42 },
+      createMeltQuoteBolt12: {
+        quote: 'm1',
+        state: MeltQuoteState.UNPAID,
+        unit: 'sat',
+        amount: 100,
+        fee_reserve: 2,
+        request: 'lno1offer...',
+      },
+      checkMintQuoteBolt12: {
+        quote: 'q1',
+        state: 'PAID',
+        amount_paid: 42,
+        amount_issued: 42,
+      },
       checkMeltQuoteBolt12: { quote: 'm1', state: 'UNPAID' },
       mintBolt12: { signatures: [] },
       meltBolt12: { quote: 'm1', change: [] },
@@ -400,8 +423,8 @@ describe('Wallet (BOLT12) – wrappers', () => {
       unit: 'sat',
       expiry: null,
       pubkey: pk,
-      amount_paid: 0,
-      amount_issued: 0,
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
     };
     const { req, calls } = makeRequestSpy(response);
     const mint = new Mint(mintUrl, { customRequest: req });
@@ -493,6 +516,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
     vi.spyOn(wallet as any, 'createOutputData').mockReturnValue([]);
     const meltQuote = {
       quote: 'm1',
+      state: MeltQuoteState.UNPAID,
       amount: Amount.from(100),
       unit: 'sat',
       request: 'lno1offer...',
@@ -550,6 +574,9 @@ describe('Wallet (BOLT12) – wrappers', () => {
         21,
         {
           quote: 'q1',
+          unit: 'sat',
+          amount_paid: Amount.from(0),
+          amount_issued: Amount.from(0),
           request: 'lno1offer...',
           pubkey: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
         } as any,
@@ -562,6 +589,9 @@ describe('Wallet (BOLT12) – wrappers', () => {
       21,
       {
         quote: 'q1',
+        unit: 'sat',
+        amount_paid: Amount.from(0),
+        amount_issued: Amount.from(0),
         request: 'lno1offer...',
         pubkey: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
       } as any,
@@ -612,6 +642,9 @@ describe('Wallet (BOLT12) – wrappers', () => {
       21,
       {
         quote: 'q1',
+        unit: 'sat',
+        amount_paid: Amount.from(0),
+        amount_issued: Amount.from(0),
         request: 'lno1offer...',
         pubkey: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
       } as any,
@@ -619,9 +652,9 @@ describe('Wallet (BOLT12) – wrappers', () => {
     );
 
     expect(calls).toHaveLength(0);
-    expect(preview.payload).toMatchObject({
-      quote: 'q1',
-      outputs: expect.any(Array),
+    expect(preview).toMatchObject({
+      quote: { quote: 'q1' },
+      outputData: expect.any(Array),
       signature: expect.any(String),
     });
 
@@ -629,7 +662,15 @@ describe('Wallet (BOLT12) – wrappers', () => {
 
     expect(proofs).toHaveLength(3);
     expect(calls).toHaveLength(1);
-    expect(calls[0].endpoint).toMatch(/^https:\/\/localhost:3338\/v1\/mint\/bolt12$/);
-    expect(calls[0].requestBody).toEqual(JSONInt.parse(JSONInt.stringify(preview.payload)!));
+    expect(calls[0].endpoint).toBe(mintUrl + '/v1/mint/bolt12');
+    expect(calls[0].requestBody).toEqual(
+      JSONInt.parse(
+        JSONInt.stringify({
+          quote: 'q1',
+          outputs: preview.outputData.map((d) => d.blindedMessage),
+          signature: preview.signature,
+        })!,
+      ),
+    );
   });
 });

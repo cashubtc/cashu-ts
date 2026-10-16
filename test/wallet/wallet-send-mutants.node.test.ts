@@ -1,10 +1,11 @@
 import { hexToBytes } from '@noble/curves/utils.js';
 import { HttpResponse, http } from 'msw';
-import { test, describe, expect } from 'vitest';
+import { test, describe, expect, vi } from 'vitest';
 
 import {
   Wallet,
   Amount,
+  CallerAbortError,
   OutputData,
   type Proof,
   type OutputConfig,
@@ -216,7 +217,23 @@ describe('validateReturnedSignatures', () => {
     );
   });
 
-  test('completeSwap rejects a signature count that differs from outputs', async () => {
+  test('completeSwap rejects fewer signatures than outputs', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/swap', () =>
+        // one output requested, none returned
+        HttpResponse.json({ signatures: [] }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    await expect(wallet.receive([makeProof(1)])).rejects.toThrow(
+      'Mint returned 0 signatures, expected 1',
+    );
+  });
+
+  // The upper bound belongs to the Mint layer, which carries the same recovery route.
+  test('completeSwap rejects more signatures than outputs', async () => {
     server.use(
       http.post(mintUrl + '/v1/swap', () =>
         HttpResponse.json({
@@ -232,7 +249,7 @@ describe('validateReturnedSignatures', () => {
     await wallet.loadMint();
 
     await expect(wallet.receive([makeProof(1)])).rejects.toThrow(
-      'Mint returned 2 signatures, expected 1',
+      /2 signatures, expected 1\..*NUT-09/,
     );
   });
 });
@@ -342,6 +359,79 @@ describe('send includeFees fee direction', () => {
   });
 });
 
+describe('unselected proofs', () => {
+  test('prepare hands them back and completeSwap leaves them out of keep', async () => {
+    echoSwap();
+    const wallet = new Wallet(mint, { unit, bip39seed: seed });
+    await wallet.loadMint();
+    const spare = makeProof(8);
+    const { preview, unselected } = await wallet.prepareSwapToSend(1, [makeProof(2), spare]);
+    expect(unselected).toEqual([spare]);
+    expect(preview.sendTotal.equals(1)).toBe(true);
+    const { keep } = await wallet.completeSwap(preview);
+    expect(keep.some((p) => p.secret === spare.secret)).toBe(false);
+  });
+
+  test('one-shot send merges them into keep', async () => {
+    echoSwap();
+    const wallet = new Wallet(mint, { unit, bip39seed: seed });
+    await wallet.loadMint();
+    const spare = makeProof(8);
+    const { keep } = await wallet.send(1, [makeProof(2), spare]);
+    expect(keep.some((p) => p.secret === spare.secret)).toBe(true);
+  });
+});
+
+describe('verifyMintSignatures', () => {
+  test('rejects aborted and oversized audits before loading keys', async () => {
+    const wallet = new Wallet(mint, { unit });
+    const load = vi.spyOn(wallet.keyChain, 'ensureKeysetKeys');
+    const ac = new AbortController();
+    ac.abort();
+    await expect(
+      wallet.verifyMintSignatures([makeProof(1)], { signal: ac.signal }),
+    ).rejects.toBeInstanceOf(CallerAbortError);
+    await expect(
+      wallet.verifyMintSignatures(Array.from({ length: 10_001 }, () => makeProof(1))),
+    ).rejects.toThrow('too many proofs');
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  test('stops loading keys after cancellation during a lookup', async () => {
+    const wallet = new Wallet(mint, { unit });
+    const ac = new AbortController();
+    const load = vi.spyOn(wallet.keyChain, 'ensureKeysetKeys').mockImplementation(async () => {
+      ac.abort();
+      throw new Error('Key lookup failed');
+    });
+    await expect(
+      wallet.verifyMintSignatures([makeProof(1), { ...makeProof(1), id: '00ffffffffffffff' }], {
+        signal: ac.signal,
+      }),
+    ).rejects.toBeInstanceOf(CallerAbortError);
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  test('splits proofs and never throws for an unknown keyset', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const alien = { ...makeProof(1), id: '00ffffffffffffff' };
+    const seen: number[] = [];
+    const { valid, invalid } = await wallet.verifyMintSignatures(
+      [makeProof(1), alien, makeProof(2)],
+      {
+        onProgress: (done) => seen.push(done),
+      },
+    );
+    expect(valid.map((p) => p.amount.toString())).toEqual(['1', '2']);
+    expect(invalid.map((i) => i.proof)).toEqual([alien]);
+    expect(invalid[0].error.message).toMatch(/00ffffffffffffff/);
+    expect(seen).toEqual([3]);
+    const strict = await wallet.verifyMintSignatures([makeProof(1)], { require: true });
+    expect(strict.invalid).toHaveLength(1);
+  });
+});
+
 // -----------------------------------------------------------------
 // prepareSwapToSend: insufficient selection
 // -----------------------------------------------------------------
@@ -351,7 +441,22 @@ describe('prepareSwapToSend selection', () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
     await expect(wallet.prepareSwapToSend(10, [makeProof(1)])).rejects.toThrow(
-      'Not enough funds available to send',
+      'Not enough funds available to send: 1 available, 10 required plus up to 0 input fee',
+    );
+  });
+
+  test('names the input fee when the balance equals the amount', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({
+          keysets: [{ id: keysetId, unit: 'sat', active: true, input_fee_ppk: 1000 }],
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit, bip39seed: seed });
+    await wallet.loadMint();
+    await expect(wallet.send(4, [makeProof(4)])).rejects.toThrow(
+      'Not enough funds available to send: 4 available, 4 required plus up to 1 input fee',
     );
   });
 });

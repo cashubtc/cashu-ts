@@ -43,6 +43,9 @@ function resolveIntegrationBrowser(): BrowserName {
   throw new Error(`Unsupported INTEGRATION_BROWSER "${browser}"`);
 }
 
+// CI runs node, three browsers and coverage on one runner; CPU-bound tests can stretch 20x.
+const testTimeout = 20_000;
+
 const sourceCoverage = {
   provider: 'v8' as const,
   reporter: ['text', 'lcov'],
@@ -76,11 +79,16 @@ export default defineConfig(({ command }) => {
         entry: { 'cashu-ts': resolve(__dirname, 'src/index.ts') },
         name: 'cashuts',
         formats: [format],
-        fileName: (outFormat) =>
-          format === 'iife' ? `cashu-ts.${outFormat}.js` : `cashu-ts.es.js`,
+        fileName: (outFormat, entryName) => {
+          if (format === 'iife') return `cashu-ts.${outFormat}.js`;
+          // Preserved modules name their chunks by source path; only the package entry keeps its name.
+          return entryName === 'cashu-ts' ? 'cashu-ts.es.js' : `${entryName}.js`;
+        },
       },
       rollupOptions: {
         external: makeExternal(format),
+        // One chunk per source module so a consumer's bundler drops what it does not import.
+        output: format === 'es' ? { preserveModules: true, preserveModulesRoot: 'src' } : undefined,
       },
       sourcemap: true,
     },
@@ -106,6 +114,7 @@ export default defineConfig(({ command }) => {
           test: {
             name: 'node',
             globals: true,
+            testTimeout,
             environment: 'node',
             include: ['test/**/*.test.ts'],
             exclude: [
@@ -120,18 +129,15 @@ export default defineConfig(({ command }) => {
           test: {
             name: 'browser',
             globals: true,
+            testTimeout,
+            api: {
+              host: '127.0.0.1',
+            },
             browser: {
               provider: playwright(),
-              api: {
-                host: '127.0.0.1',
-              },
               enabled: true,
               headless: true,
-              instances: [
-                { browser: 'chromium' },
-                { browser: 'firefox', coverage: { enabled: false } },
-                { browser: 'webkit', coverage: { enabled: false } },
-              ],
+              instances: [{ browser: 'chromium' }, { browser: 'firefox' }, { browser: 'webkit' }],
               screenshotFailures: false,
             },
             include: ['test/**/*.test.ts'],
@@ -147,6 +153,7 @@ export default defineConfig(({ command }) => {
           test: {
             name: 'integration',
             globals: true,
+            testTimeout,
             environment: 'node',
             include: ['test/integration.test.ts', 'test/integration-v3.test.ts'],
             exclude: [...configDefaults.exclude],
@@ -156,18 +163,15 @@ export default defineConfig(({ command }) => {
           test: {
             name: 'integration-browser',
             globals: true,
+            testTimeout,
+            api: {
+              host: '127.0.0.1',
+            },
             browser: {
               provider: playwright(),
-              api: {
-                host: '127.0.0.1',
-              },
               enabled: true,
               headless: true,
-              instances: [
-                integrationBrowser === 'chromium'
-                  ? { browser: integrationBrowser }
-                  : { browser: integrationBrowser, coverage: { enabled: false } },
-              ],
+              instances: [{ browser: integrationBrowser }],
               screenshotFailures: false,
             },
             include: ['test/integration.test.ts'],

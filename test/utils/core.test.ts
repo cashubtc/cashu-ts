@@ -1,5 +1,7 @@
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bech32 } from '@scure/base';
 import { test, describe, expect } from 'vitest';
 
 import { Amount, type MintKeys, type Keys, type Proof, type Token, Keyset } from '../../src';
@@ -23,7 +25,7 @@ import {
   bigIntStringify,
   findCashuPayload,
   getKeysetAmounts,
-  hasValidDleq,
+  verifyMintSignatures,
   hexToNumber,
   invoiceHasAmountInHRP,
   numberToHexPadded64,
@@ -33,7 +35,8 @@ import {
   sortProofsById,
   normalizeMintUrl,
 } from '../../src/utils';
-import { encodeJsonToBase64Url } from '../../src/utils/base64';
+import { encodeJsonToBase64Url, encodeUint8ToBase64Url } from '../../src/utils/base64';
+import { encodeCBOR } from '../../src/utils/cbor';
 import { MAX_PAYLOAD_DECODE_ATTEMPTS, MAX_PAYLOAD_LENGTH } from '../../src/utils/limits';
 import { auditableLock, lockToNutrootOptions } from '../../src/wallet/lock';
 import {
@@ -144,6 +147,34 @@ describe('splitAmount output bound', () => {
     expect(utils.splitAmount(8_192, onlyOnes)).toHaveLength(8_192);
     // One more output must be rejected, not allocated.
     expect(() => utils.splitAmount(8_193, onlyOnes)).toThrow(/would exceed .* outputs/);
+  });
+
+  test('rejects an exact custom split above the output cap', () => {
+    // An exact caller-supplied split (sums to the requested value) returns before the fill
+    // logic's own budget check; it needs the same cap.
+    const oversizedSplit = Array.from({ length: 8_193 }, () => 1);
+    expect(() => utils.splitAmount(8_193, onlyOnes, oversizedSplit)).toThrow(
+      /would exceed .* outputs/,
+    );
+  });
+
+  test('allows an exact custom split at exactly the cap', () => {
+    const split = Array.from({ length: 8_192 }, () => 1);
+    expect(utils.splitAmount(8_192, onlyOnes, split)).toHaveLength(8_192);
+  });
+
+  test('rejects a zero-total custom split above the output cap', () => {
+    // Zero value and zero-total split (restore/NUT-08 blanks) returns before the fill logic's
+    // own budget check too; it needs the same cap as the exact-positive-split path.
+    const oversizedZeroSplit = Array.from({ length: 8_193 }, () => 0);
+    expect(() => utils.splitAmount(0, onlyOnes, oversizedZeroSplit)).toThrow(
+      /would exceed .* outputs/,
+    );
+  });
+
+  test('allows a zero-total custom split at exactly the cap', () => {
+    const zeroSplit = Array.from({ length: 8_192 }, () => 0);
+    expect(utils.splitAmount(0, onlyOnes, zeroSplit)).toHaveLength(8_192);
   });
 });
 
@@ -387,6 +418,27 @@ describe('test getTokenMetadata', () => {
       ],
     });
   });
+  test('reads a raw binary token the same as its string form', () => {
+    const token: Token = {
+      mint: 'https://mint.example',
+      unit: 'usd',
+      memo: 'hi',
+      proofs: [
+        {
+          amount: Amount.from(2),
+          id: '00' + 'ab'.repeat(7),
+          secret: 's',
+          C: '02' + '11'.repeat(32),
+        },
+      ],
+    };
+    const binary = utils.getEncodedTokenBinary(token);
+    expect(utils.getTokenMetadata(binary)).toStrictEqual(
+      utils.getTokenMetadata(utils.getEncodedToken(token)),
+    );
+    expect(() => utils.getTokenMetadata(binary.subarray(1))).toThrow('not a valid binary token');
+    expect(() => utils.getTokenMetadata(123 as never)).toThrow('string or a Uint8Array');
+  });
 });
 
 describe('findCashuPayload', () => {
@@ -568,6 +620,19 @@ describe('test keyset derivation', () => {
       unit: NUT02_V2_VECTOR3_KEYS.unit,
     });
     expect(keysetId).toBe(NUT02_V2_VECTOR3_KEYS.id);
+  });
+  test('rejects a version 2 unit outside the keyset unit alphabet', () => {
+    // A delimiter in the unit would otherwise read as a metadata field in the id preimage.
+    expect(() =>
+      utils.deriveKeysetId(NUT02_V2_VECTOR1_KEYS.keys, {
+        versionByte: 1,
+        unit: 'sat|input_fee_ppk:100',
+      }),
+    ).toThrow('Invalid keyset unit');
+    // The V2 preimage lowercases the unit, so case alone is not a rejection.
+    expect(utils.deriveKeysetId(NUT02_V2_VECTOR1_KEYS.keys, { versionByte: 1, unit: 'SAT' })).toBe(
+      utils.deriveKeysetId(NUT02_V2_VECTOR1_KEYS.keys, { versionByte: 1, unit: 'sat' }),
+    );
   });
   test('verifies NUT-02 version 2 vector DTOs', () => {
     expect(Keyset.verifyKeysetId(NUT02_V2_VECTOR1_KEYS)).toBe(true);
@@ -810,6 +875,117 @@ describe('test v4 encoding', () => {
   });
 });
 
+describe('incomplete DLEQ proofs', () => {
+  const MINT = 'https://nofees.testnut.cashu.space';
+  const ID = '00b4cd27d8861a44';
+  const SECRET = '10216467bb33f6f079ae92349ba54fa34df99ba24572645b8b813688c74b582d';
+  const C = '03ff2e729416437f9ea8d022c501ff5b309d607f98c9ab53d51cd24185b4d3e42b';
+  const E = '8269767ac3f6ac368ad9ea8c05b13724ea8a58469677925aa948435685107b0d';
+  const S = '26f44e265699d95ae2171db58257aeffe03d325e0f69da4bc95b9749358380fc';
+  const R = '40ce4dbe14a1f65ae74328b5f81d83cdb3977595d78ddf01665d9aca6d450233';
+
+  // Deliberately malformed: Proof.dleq requires `r`, a plain-JS caller can still omit it.
+  const proofWithPartialDleq = (): Proof =>
+    ({
+      amount: Amount.from(1),
+      id: ID,
+      secret: SECRET,
+      C,
+      dleq: { e: E, s: S },
+    }) as Proof;
+
+  // A mint-signed DLEQ that a buggy wallet passed on without adding its own blinding factor.
+  const encodeV4WithPartialDleq = (): string =>
+    'cashuB' +
+    encodeUint8ToBase64Url(
+      encodeCBOR({
+        m: MINT,
+        u: 'sat',
+        t: [
+          {
+            i: hexToBytes(ID),
+            p: [
+              {
+                a: 1n,
+                s: SECRET,
+                c: hexToBytes(C),
+                d: { e: hexToBytes(E), s: hexToBytes(S) },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+  test('v4 decode drops the DLEQ instead of throwing', () => {
+    const decoded = utils.getDecodedToken(encodeV4WithPartialDleq(), [ID]);
+    expect(decoded.proofs[0].C).toBe(C);
+    expect(decoded.proofs[0].dleq).toBeUndefined();
+  });
+
+  test('v4 decode keeps a complete DLEQ', () => {
+    const encoded = utils.getEncodedToken({
+      mint: MINT,
+      proofs: [{ ...proofWithPartialDleq(), dleq: { e: E, s: S, r: R } }],
+    });
+    expect(utils.getDecodedToken(encoded, [ID]).proofs[0].dleq).toEqual({ e: E, s: S, r: R });
+  });
+
+  test('v3 decode drops the DLEQ', () => {
+    const encoded =
+      'cashuA' +
+      encodeJsonToBase64Url({
+        token: [
+          { mint: MINT, proofs: [{ amount: 1, id: ID, secret: SECRET, C, dleq: { e: E, s: S } }] },
+        ],
+        unit: 'sat',
+      });
+    const decoded = utils.getDecodedToken(encoded, [ID]);
+    expect(decoded.proofs[0].C).toBe(C);
+    expect(decoded.proofs[0].dleq).toBeUndefined();
+  });
+
+  test('decode reports a wrong-typed byte field instead of a raw TypeError', () => {
+    // Same crash class as an omitted `r`: any CBOR type can land in any field.
+    const encoded =
+      'cashuB' +
+      encodeUint8ToBase64Url(
+        encodeCBOR({
+          m: MINT,
+          u: 'sat',
+          t: [
+            {
+              i: hexToBytes(ID),
+              p: [
+                {
+                  a: 1n,
+                  s: SECRET,
+                  c: hexToBytes(C),
+                  d: { e: hexToBytes(E), s: hexToBytes(S), r: 42n },
+                },
+              ],
+            },
+          ],
+        }),
+      );
+    expect(() => utils.getDecodedToken(encoded, [ID])).toThrow(CTSError);
+    expect(() => utils.getDecodedToken(encoded, [ID])).toThrow(
+      'dleq r must be a non-empty byte string',
+    );
+  });
+
+  test('encoding refuses to emit a DLEQ without its blinding factor', () => {
+    const token: Token = { mint: MINT, proofs: [proofWithPartialDleq()] };
+    expect(() => utils.getEncodedToken(token)).toThrow('Missing blinding factor');
+    expect(() => utils.getEncodedTokenBinary(token)).toThrow('Missing blinding factor');
+  });
+
+  test('stripping the DLEQ makes an otherwise unencodable token encodable', () => {
+    const token: Token = { mint: MINT, proofs: [proofWithPartialDleq()] };
+    expect(() => utils.getEncodedToken(token, { removeDleq: true })).not.toThrow();
+  });
+});
+
 describe('test deriveKeysetId edge cases', () => {
   // v3 (BLS) keysets folded case 2 into the case 1 unit-required branch and rewrote the
   // throw to interpolate the version byte. Cover both paths against the shared guard.
@@ -856,6 +1032,16 @@ describe('test output selection', () => {
     expect(utils.hasCorrespondingKey('8', keys)).toBe(true);
     expect(utils.hasCorrespondingKey(Amount.from(3), keys)).toBe(false);
   });
+
+  test('hasCorrespondingKey counts own denominations only', () => {
+    Object.defineProperty(Object.prototype, '3', { value: 'inherited', configurable: true });
+    try {
+      expect(utils.hasCorrespondingKey(3, keys)).toBe(false);
+      expect(utils.hasCorrespondingKey(8, keys)).toBe(true);
+    } finally {
+      Reflect.deleteProperty(Object.prototype, '3');
+    }
+  });
 });
 describe('test zero-knowledge utilities', () => {
   // create private public key pair
@@ -887,30 +1073,47 @@ describe('test zero-knowledge utilities', () => {
     },
   };
 
-  test('has valid dleq', () => {
-    const keyset = {
-      id: '00',
-      unit: 'sat',
-      keys: { [1]: pubkey.toHex(true) },
-    };
-    const validDleq = hasValidDleq(serializedProof, keyset);
-    expect(validDleq).toBe(true);
+  // First error for a single proof, or undefined when the mint signature holds.
+  const firstError = async (
+    proof: Proof,
+    keyset: { id: string; unit: string; keys: Record<string, string> },
+    opts?: { require?: boolean },
+  ) => {
+    const r = await verifyMintSignatures([proof], () => keyset, opts);
+    expect(r.valid.length + r.invalid.length).toBe(1);
+    return r.invalid[0]?.error;
+  };
+
+  test('has valid dleq', async () => {
+    const keyset = { id: '00', unit: 'sat', keys: { [1]: pubkey.toHex(true) } };
+    expect(await firstError(serializedProof, keyset)).toBeUndefined();
   });
-  test('has valid dleq with no matching key', () => {
-    const keyset = {
-      id: '00',
-      unit: 'sat',
-      keys: { [2]: pubkey.toHex(true) },
-    };
-    expect(() => hasValidDleq(serializedProof, keyset)).toThrow(/Undefined key for amount/);
+  test('has valid dleq with no matching key', async () => {
+    const keyset = { id: '00', unit: 'sat', keys: { [2]: pubkey.toHex(true) } };
+    expect((await firstError(serializedProof, keyset))?.message).toMatch(
+      /Undefined key for amount/,
+    );
   });
-  test('hasValidDleq names key loading when the keyset is keyless', () => {
+  test('names key loading when the keyset is keyless', async () => {
     const keylessKeyset = { id: '00bd033559de27d0', unit: 'sat', keys: {} };
-    expect(() => hasValidDleq(serializedProof, keylessKeyset)).toThrow(
+    expect((await firstError(serializedProof, keylessKeyset))?.message).toBe(
       'No keys loaded for keyset 00bd033559de27d0',
     );
   });
-  describe('v3 (BLS) proof signature verification via hasValidDleq', () => {
+  test('a keyset lookup that throws a non-Error is reported with its text', async () => {
+    const { invalid } = await verifyMintSignatures([serializedProof], () => {
+      // eslint-disable-next-line @typescript-eslint/only-throw-error
+      throw 'lookup offline';
+    });
+    expect(invalid[0].error.message).toBe('lookup offline');
+  });
+  test('a keyset lookup that throws is reported, not thrown', async () => {
+    const { invalid } = await verifyMintSignatures([serializedProof], () => {
+      throw new Error('not in this wallet');
+    });
+    expect(invalid[0].error.message).toBe('not in this wallet');
+  });
+  describe('v3 (BLS) proof signature verification', () => {
     // v3 proofs carry point secrets, so C is signed over the point's own Y. The
     // primitive's Nutshell vector is pinned in the curve_bls tests instead.
     const v3Id = '02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d';
@@ -919,149 +1122,206 @@ describe('test zero-knowledge utilities', () => {
     const aBytes = hexToBytes('0'.repeat(63) + '2');
     const v3C = hashToCurveBls(new TextEncoder().encode(v3Secret)).multiply(2n).toHex(true);
     const v3K2 = bytesToHex(getG2PubKeyFromPrivKey(aBytes));
+    const v3Proof: Proof = { amount: Amount.from(1), id: v3Id, secret: v3Secret, C: v3C };
 
-    test('returns true for a v3 proof whose pairing equality holds', () => {
-      const v3Proof: Proof = {
-        amount: Amount.from(1),
-        id: v3Id,
-        secret: v3Secret,
-        C: v3C,
-      };
+    test('valid for a v3 proof whose pairing equality holds', async () => {
       const keyset = { id: v3Id, unit: 'sat', keys: { [1]: v3K2 } };
-      expect(hasValidDleq(v3Proof, keyset)).toBe(true);
+      expect(await firstError(v3Proof, keyset)).toBeUndefined();
     });
 
-    test('returns false for a v3 proof with tampered C', () => {
+    test('invalid for a v3 proof with tampered C', async () => {
       const tampered = v3C.slice(0, v3C.length - 2) + (v3C.slice(-2) === 'aa' ? 'bb' : 'aa');
-      const v3Proof: Proof = {
-        amount: Amount.from(1),
-        id: v3Id,
-        secret: v3Secret,
-        C: tampered,
-      };
       const keyset = { id: v3Id, unit: 'sat', keys: { [1]: v3K2 } };
-      expect(hasValidDleq(v3Proof, keyset)).toBe(false);
+      expect((await firstError({ ...v3Proof, C: tampered }, keyset))?.message).toMatch(
+        /invalid DLEQ/,
+      );
     });
 
-    test('throws on missing key for amount in v3 keyset', () => {
-      const v3Proof: Proof = {
-        amount: Amount.from(2),
-        id: v3Id,
-        secret: v3Secret,
-        C: v3C,
-      };
+    test('names a missing key for amount in a v3 keyset', async () => {
       const keyset = { id: v3Id, unit: 'sat', keys: { [1]: v3K2 } };
-      expect(() => hasValidDleq(v3Proof, keyset)).toThrow(/Undefined key for amount/);
+      expect((await firstError({ ...v3Proof, amount: Amount.from(2) }, keyset))?.message).toMatch(
+        /Undefined key for amount/,
+      );
     });
 
-    test('returns false when v3 keyset key is malformed (mirrors secp behaviour)', () => {
-      const v3Proof: Proof = {
-        amount: Amount.from(1),
-        id: v3Id,
-        secret: v3Secret,
-        C: v3C,
-      };
+    test('a malformed amount on a v3 proof is one invalid entry', async () => {
+      const keyset = { id: v3Id, unit: 'sat', keys: { [1]: v3K2 } };
+      const bad = { ...v3Proof, amount: 'x' } as unknown as Proof;
+      const { valid, invalid } = await verifyMintSignatures([v3Proof, bad], () => keyset);
+      expect(valid).toEqual([v3Proof]);
+      expect(invalid.map((i) => i.proof)).toEqual([bad]);
+      expect(invalid[0].error.message).toMatch(/Invalid amount x/);
+    });
+
+    test('an abort between v3 slices rejects', async () => {
+      const keyset = { id: v3Id, unit: 'sat', keys: { [1]: v3K2 } };
+      const ac = new AbortController();
+      const many = Array.from({ length: 6 }, () => v3Proof);
+      await expect(
+        verifyMintSignatures(many, () => keyset, {
+          chunkSize: 2,
+          signal: ac.signal,
+          onProgress: () => ac.abort(),
+        }),
+      ).rejects.toBeInstanceOf(CTSError);
+    });
+
+    test('invalid when v3 keyset key is malformed (mirrors secp behaviour)', async () => {
       // Wrong length (66 hex would be a secp point); pointFromHexG2 throws inside try/catch.
       const keyset = { id: v3Id, unit: 'sat', keys: { [1]: '00'.repeat(33) } };
-      expect(hasValidDleq(v3Proof, keyset)).toBe(false);
+      expect((await firstError(v3Proof, keyset))?.message).toMatch(/invalid DLEQ/);
     });
   });
 
-  describe('hasValidDleq default (NUT-12 verify-if-present)', () => {
-    const keyset = {
-      id: '00',
-      unit: 'sat',
-      keys: { [1]: pubkey.toHex(true) },
-    };
+  describe('default (NUT-12 verify-if-present)', () => {
+    const keyset = { id: '00', unit: 'sat', keys: { [1]: pubkey.toHex(true) } };
 
-    test('returns true when no DLEQ is present (spec default)', () => {
+    test('valid when no DLEQ is present (spec default)', async () => {
       const { dleq, ...proofNoDleq } = serializedProof;
       void dleq;
-      expect(hasValidDleq(proofNoDleq, keyset)).toBe(true);
+      expect(await firstError(proofNoDleq, keyset)).toBeUndefined();
     });
 
-    test('returns true for a valid DLEQ', () => {
-      expect(hasValidDleq(serializedProof, keyset)).toBe(true);
+    test('valid for a valid DLEQ', async () => {
+      expect(await firstError(serializedProof, keyset)).toBeUndefined();
     });
 
-    test('returns false for a tampered DLEQ', () => {
+    test('invalid for a DLEQ that carries no blinding factor', async () => {
+      const { r, ...partial } = serializedProof.dleq!;
+      void r;
+      // Deliberately malformed, as above.
+      const proof = { ...serializedProof, dleq: partial } as Proof;
+      expect((await firstError(proof, keyset))?.message).toMatch(/invalid DLEQ/);
+    });
+
+    test('invalid for a tampered DLEQ', async () => {
       const tampered: Proof = {
         ...serializedProof,
-        dleq: {
-          ...serializedProof.dleq!,
-          e: '00'.repeat(32),
-        },
+        dleq: { ...serializedProof.dleq!, e: '00'.repeat(32) },
       };
-      expect(hasValidDleq(tampered, keyset)).toBe(false);
+      expect((await firstError(tampered, keyset))?.message).toMatch(/invalid DLEQ/);
     });
 
-    test('throws if DLEQ is present but no matching keyset key', () => {
-      const wrongKeyset = {
-        id: '00',
-        unit: 'sat',
-        keys: { [2]: pubkey.toHex(true) },
-      };
-      expect(() => hasValidDleq(serializedProof, wrongKeyset)).toThrow(/Undefined key for amount/);
+    test('names the key when DLEQ is present but no matching keyset key', async () => {
+      const wrongKeyset = { id: '00', unit: 'sat', keys: { [2]: pubkey.toHex(true) } };
+      expect((await firstError(serializedProof, wrongKeyset))?.message).toMatch(
+        /Undefined key for amount/,
+      );
     });
 
-    test('throws on bad amount even when DLEQ is absent (amount check is unbypassable)', () => {
+    test('bad amount is reported even when DLEQ is absent (amount check is unbypassable)', async () => {
       const { dleq, ...proofNoDleq } = serializedProof;
       void dleq;
-      const wrongKeyset = {
-        id: '00',
-        unit: 'sat',
-        keys: { [2]: pubkey.toHex(true) },
-      };
-      expect(() => hasValidDleq(proofNoDleq, wrongKeyset)).toThrow(
+      const wrongKeyset = { id: '00', unit: 'sat', keys: { [2]: pubkey.toHex(true) } };
+      expect((await firstError(proofNoDleq, wrongKeyset))?.message).toMatch(
         /Undefined key for amount 1 in keyset 00/,
       );
     });
   });
 
-  describe('hasValidDleq with require: true (opt-in strict)', () => {
-    const keyset = {
-      id: '00',
-      unit: 'sat',
-      keys: { [1]: pubkey.toHex(true) },
-    };
+  describe('require: true (opt-in strict)', () => {
+    const keyset = { id: '00', unit: 'sat', keys: { [1]: pubkey.toHex(true) } };
 
-    test('returns false when no DLEQ is present (above-spec strict policy)', () => {
+    test('invalid when no DLEQ is present (above-spec strict policy)', async () => {
       const { dleq, ...proofNoDleq } = serializedProof;
       void dleq;
-      expect(hasValidDleq(proofNoDleq, keyset, { require: true })).toBe(false);
+      expect((await firstError(proofNoDleq, keyset, { require: true }))?.message).toMatch(
+        /invalid or missing DLEQ/,
+      );
     });
 
-    test('returns true for a valid DLEQ (same as default)', () => {
-      expect(hasValidDleq(serializedProof, keyset, { require: true })).toBe(true);
+    test('valid for a valid DLEQ (same as default)', async () => {
+      expect(await firstError(serializedProof, keyset, { require: true })).toBeUndefined();
+    });
+
+    test('chunks and reports progress over a large batch', async () => {
+      const seen: number[] = [];
+      const many = Array.from({ length: 70 }, () => serializedProof);
+      const { valid, invalid } = await verifyMintSignatures(many, () => keyset, {
+        onProgress: (done) => seen.push(done),
+      });
+      expect(valid).toHaveLength(70);
+      expect(invalid).toHaveLength(0);
+      // yields on the time budget, so the steps vary; progress is monotonic and completes
+      expect(seen.length).toBeGreaterThan(1);
+      expect(seen.every((d, i) => i === 0 || d >= seen[i - 1])).toBe(true);
+      expect(seen[seen.length - 1]).toBe(70);
     });
   });
 
-  describe('verifyProofsForReceive', () => {
-    const secpKeyset = { id: '00', unit: 'sat', keys: { [1]: pubkey.toHex(true) } };
-
-    test('accepts a single valid v0/v1/v2 proof (requireDleq=true)', () => {
-      const getKeyset = () => secpKeyset;
-      expect(() =>
-        utils.verifyProofsForReceive([serializedProof], getKeyset, { requireDleq: true }),
-      ).not.toThrow();
+  describe('verifyReceivedProofs', () => {
+    test.each([NaN, Infinity, -1])('rejects budgetMs %s before verifying', async (budgetMs) => {
+      for (const verify of [utils.verifyReceivedProofs, utils.verifyMintSignatures]) {
+        await expect(verify([serializedProof], () => secpKeyset, { budgetMs })).rejects.toThrow(
+          'budgetMs',
+        );
+      }
     });
 
-    test('rejects a missing-DLEQ v0/v1/v2 proof under requireDleq=true (names offender)', () => {
+    test.each([NaN, Infinity, 0, -1, 1.5])('rejects chunkSize %s', async (chunkSize) => {
+      await expect(
+        utils.verifyReceivedProofs([serializedProof], () => secpKeyset, { chunkSize }),
+      ).rejects.toThrow('chunkSize');
+    });
+
+    test('reports malformed amounts without losing other proofs or their order', async () => {
+      const bad = { ...serializedProof, amount: 'bad' };
+      for (const verify of [utils.verifyReceivedProofs, utils.verifyMintSignatures]) {
+        const result = await verify([serializedProof, bad, serializedProof], () => secpKeyset, {
+          chunkSize: 2,
+        });
+        expect(result.valid).toEqual([serializedProof, serializedProof]);
+        expect(result.valid[0]).toBe(serializedProof);
+        expect(result.invalid).toHaveLength(1);
+        expect(result.invalid[0].proof).toBe(bad);
+        expect(result.invalid[0].error).toBeInstanceOf(CTSError);
+        expect(result.invalid[0].error.message).toMatch(/amount bad.*keyset 00/);
+      }
+    });
+
+    // First error of a receive, or undefined when every proof passes.
+    const receiveError = async (...args: Parameters<typeof utils.verifyReceivedProofs>) => {
+      const r = await utils.verifyReceivedProofs(...args);
+      expect(r.valid.length + r.invalid.length).toBe(args[0].length);
+      return r.invalid[0]?.error;
+    };
+
+    const secpKeyset = { id: '00', unit: 'sat', keys: { [1]: pubkey.toHex(true) } };
+
+    test('accepts a single valid v0/v1/v2 proof (requireDleq=true)', async () => {
+      const getKeyset = () => secpKeyset;
+      await expect(
+        receiveError([serializedProof], getKeyset, { require: true }),
+      ).resolves.toBeUndefined();
+    });
+
+    test('rejects a missing-DLEQ v0/v1/v2 proof under requireDleq=true (names offender)', async () => {
       const { dleq, ...noDleq } = serializedProof;
       void dleq;
       const getKeyset = () => secpKeyset;
-      expect(() =>
-        utils.verifyProofsForReceive([noDleq], getKeyset, { requireDleq: true }),
-      ).toThrow(/invalid or missing DLEQ.*keyset 00/);
+      await expect(receiveError([noDleq], getKeyset, { require: true })).resolves.toMatchObject({
+        message: expect.stringMatching(/invalid or missing DLEQ.*keyset 00/),
+      });
     });
 
-    test('rejects a v0/v1/v2 proof whose amount is not in the keyset, even with no DLEQ', () => {
+    test('rejects a v0/v1/v2 proof whose amount is not in the keyset, even with no DLEQ', async () => {
       const { dleq, ...noDleq } = serializedProof;
       void dleq;
       const tampered = { ...noDleq, amount: Amount.from(3) };
       const getKeyset = () => secpKeyset;
-      expect(() => utils.verifyProofsForReceive([tampered], getKeyset)).toThrow(
-        /Undefined key for amount 3 in keyset 00/,
+      await expect(receiveError([tampered], getKeyset)).resolves.toMatchObject({
+        message: expect.stringMatching(/Undefined key for amount 3 in keyset 00/),
+      });
+    });
+
+    test('verifies a batch at the proof-count cap but refuses one above it', async () => {
+      const { dleq, ...noDleq } = serializedProof;
+      void dleq;
+      const getKeyset = () => secpKeyset;
+      const capacity = Array.from({ length: 10_000 }, () => noDleq);
+      await expect(receiveError(capacity, getKeyset)).resolves.toBeUndefined();
+      await expect(receiveError([...capacity, noDleq], getKeyset)).rejects.toThrow(
+        /too many proofs/i,
       );
     });
 
@@ -1081,11 +1341,11 @@ describe('test zero-knowledge utilities', () => {
       };
       const v3Keyset = { id: v3Id, unit: 'sat', keys: { [1]: v3K2 } };
 
-      test('single v3 proof verifies via direct pairing', () => {
-        expect(() => utils.verifyProofsForReceive([v3Proof], () => v3Keyset)).not.toThrow();
+      test('single v3 proof verifies via direct pairing', async () => {
+        await expect(receiveError([v3Proof], () => v3Keyset)).resolves.toBeUndefined();
       });
 
-      test('mixed-denomination v3 batch verifies in one pairing', () => {
+      test('mixed-denomination v3 batch verifies in one pairing', async () => {
         // Same mint key (a=2), different secrets + amounts → realistic mixed-denomination receive.
         const aBytes = hexToBytes('0'.repeat(63) + '2');
         const K2hex = bytesToHex(getG2PubKeyFromPrivKey(aBytes));
@@ -1113,10 +1373,10 @@ describe('test zero-knowledge utilities', () => {
           makeProof(8n, pointSecret(4), 17n),
           makeProof(16n, pointSecret(5), 19n),
         ];
-        expect(() => utils.verifyProofsForReceive(proofs, () => keyset)).not.toThrow();
+        await expect(receiveError(proofs, () => keyset)).resolves.toBeUndefined();
       });
 
-      test('tampered C in a 5-proof v3 batch is rejected and offender named', () => {
+      test('tampered C in a 5-proof v3 batch is rejected and offender named', async () => {
         const aBytes = hexToBytes('0'.repeat(63) + '2');
         const K2hex = bytesToHex(getG2PubKeyFromPrivKey(aBytes));
         const makeProof = (amount: bigint, secret: string, r: bigint): Proof => {
@@ -1146,69 +1406,67 @@ describe('test zero-knowledge utilities', () => {
         // Replace the C on the third proof with the first proof's C — keeps it on-curve
         // (so parseHex doesn't throw) but breaks pairing equality for that secret.
         const tampered = good.map((p, i) => (i === 2 ? { ...p, C: good[0].C } : p));
-        expect(() => utils.verifyProofsForReceive(tampered, () => keyset)).toThrow(
-          /invalid DLEQ.*amount 4/,
-        );
+        await expect(receiveError(tampered, () => keyset)).resolves.toMatchObject({
+          message: expect.stringMatching(/invalid DLEQ.*amount 4/),
+        });
       });
 
-      test('mixed-curve token: v0/v1/v2 path runs DLEQ, v3 path runs pairing', () => {
+      test('mixed-curve token: v0/v1/v2 path runs DLEQ, v3 path runs pairing', async () => {
         const getKeyset = (id: string) => (id === v3Id ? v3Keyset : secpKeyset);
-        expect(() =>
-          utils.verifyProofsForReceive([serializedProof, v3Proof], getKeyset),
-        ).not.toThrow();
+        await expect(receiveError([serializedProof, v3Proof], getKeyset)).resolves.toBeUndefined();
       });
 
-      test('v3 proof with malformed C surfaces offender id in error', () => {
+      test('v3 proof with malformed C surfaces offender id in error', async () => {
         const bad: Proof = { ...v3Proof, C: 'gg'.repeat(48) };
-        expect(() => utils.verifyProofsForReceive([bad], () => v3Keyset)).toThrow(
-          new RegExp(`invalid DLEQ.*keyset ${v3Id}`),
-        );
+        await expect(receiveError([bad], () => v3Keyset)).resolves.toMatchObject({
+          message: expect.stringMatching(new RegExp(`invalid DLEQ.*keyset ${v3Id}`)),
+        });
       });
 
-      test('v3 receive rejects a signature-valid secret that is not a secp point', () => {
+      test('v3 receive rejects a signature-valid secret that is not a secp point', async () => {
         const secret = `02${'ff'.repeat(32)}`;
         const bad: Proof = {
           ...v3Proof,
           secret,
           C: hashToCurveBls(new TextEncoder().encode(secret)).multiply(2n).toHex(true),
         };
-        expect(() => utils.verifyProofsForReceive([bad], () => v3Keyset)).toThrow(
-          new RegExp(`invalid DLEQ.*keyset ${v3Id}`),
-        );
+        await expect(receiveError([bad], () => v3Keyset)).resolves.toMatchObject({
+          message: expect.stringMatching(new RegExp(`invalid DLEQ.*keyset ${v3Id}`)),
+        });
       });
 
       // Regression: a v3-prefixed keyset whose pubkey is actually a 33-byte secp key used to
       // escape as an unhandled throw because only the G1 parse was wrapped.
-      test('v3-prefixed keyset with a non-G2 pubkey throws CTSError, not an unhandled error', () => {
+      test('v3-prefixed keyset with a non-G2 pubkey throws CTSError, not an unhandled error', async () => {
         const secpPubHex = pubkey.toHex(true); // 33-byte / 66-hex secp key
         const hostileKeyset = { id: v3Id, unit: 'sat', keys: { [1]: secpPubHex } };
-        expect(() => utils.verifyProofsForReceive([v3Proof], () => hostileKeyset)).toThrow(
-          new RegExp(`invalid DLEQ.*keyset ${v3Id}`),
-        );
-        expect(() => utils.verifyProofsForReceive([v3Proof], () => hostileKeyset)).toThrow(
+        await expect(receiveError([v3Proof], () => hostileKeyset)).resolves.toMatchObject({
+          message: expect.stringMatching(new RegExp(`invalid DLEQ.*keyset ${v3Id}`)),
+        });
+        await expect(receiveError([v3Proof], () => hostileKeyset)).resolves.toBeInstanceOf(
           CTSError,
         );
       });
 
-      test('v3 proof with truncated K2 hex throws CTSError, not an unhandled error', () => {
+      test('v3 proof with truncated K2 hex throws CTSError, not an unhandled error', async () => {
         const truncatedKeyset = {
           id: v3Id,
           unit: 'sat',
           keys: { [1]: v3K2.slice(0, -2) }, // chop one byte off the 96-byte G2 encoding
         };
-        expect(() => utils.verifyProofsForReceive([v3Proof], () => truncatedKeyset)).toThrow(
+        await expect(receiveError([v3Proof], () => truncatedKeyset)).resolves.toBeInstanceOf(
           CTSError,
         );
       });
 
-      test('requireDleq=true uses the strict error message for v3 failures', () => {
+      test('requireDleq=true uses the strict error message for v3 failures', async () => {
         const tampered: Proof = {
           ...v3Proof,
           C: v3C.slice(0, -2) + (v3C.endsWith('aa') ? 'bb' : 'aa'),
         };
-        expect(() =>
-          utils.verifyProofsForReceive([tampered], () => v3Keyset, { requireDleq: true }),
-        ).toThrow(/invalid or missing DLEQ/);
+        await expect(
+          receiveError([tampered], () => v3Keyset, { require: true }),
+        ).resolves.toMatchObject({ message: expect.stringMatching(/invalid or missing DLEQ/) });
       });
     });
   });
@@ -1229,26 +1487,26 @@ describe('test raw tokens', () => {
     unit: 'sat',
   };
 
-  test('bytes to token', () => {
+  test('bytes to token', async () => {
     const expectedBytes = hexToBytes(
       '6372617742a4617481a261694800ad268c4d1f5826617081a3616101617378403961366462623834376264323332626137366462306466313937323136623239643362386363313435353363643237383237666331636339343266656462346561635821038618543ffb6b8695df4ad4babcde92a34a96bdcd97dcee0d7ccf98d4721267926164695468616e6b20796f75616d75687474703a2f2f6c6f63616c686f73743a33333338617563736174',
     );
 
-    const decodedToken = utils.getDecodedTokenBinary(expectedBytes);
+    const decodedToken = utils.getDecodedTokenBinary(expectedBytes, []);
     expect(decodedToken).toEqual(token);
   });
 
-  test('token to bytes', () => {
+  test('token to bytes', async () => {
     const bytes = utils.getEncodedTokenBinary(token);
-    const decodedToken = utils.getDecodedTokenBinary(bytes);
+    const decodedToken = utils.getDecodedTokenBinary(bytes, []);
     expect(decodedToken).toEqual(token);
   });
 
-  test('getEncodedTokenBinary accepts JSON-parsed tokens and rehydrates proof amounts', () => {
+  test('getEncodedTokenBinary accepts JSON-parsed tokens and rehydrates proof amounts', async () => {
     const parsedToken = JSON.parse(JSON.stringify(token)) as Token;
 
     const bytes = utils.getEncodedTokenBinary(parsedToken);
-    const decodedToken = utils.getDecodedTokenBinary(bytes);
+    const decodedToken = utils.getDecodedTokenBinary(bytes, []);
 
     expect(decodedToken).toEqual(token);
   });
@@ -1263,8 +1521,59 @@ describe('test raw tokens', () => {
   );
 });
 
+describe('getDecodedTokenBinary short keyset ID resolution', () => {
+  const fullV2Id = NUT02_V2_VECTOR1_KEYS.id;
+  const shortId = fullV2Id.slice(0, 16);
+
+  // The binary encoder writes the id as given, so a 16-char id yields a short-form token.
+  function encodeBinaryToken(id: string): Uint8Array {
+    return utils.getEncodedTokenBinary({
+      mint: 'http://localhost:3338',
+      unit: 'sat',
+      proofs: [{ id, amount: Amount.from(1), secret: 'abc', C: '02' + '00'.repeat(32) }],
+    });
+  }
+
+  test('resolves an 8-byte short keyset ID to the full ID', async () => {
+    const decoded = utils.getDecodedTokenBinary(encodeBinaryToken(shortId), [fullV2Id]);
+    expect(decoded.proofs[0].id).toBe(fullV2Id);
+  });
+
+  test('throws when a short keyset ID has no keysets to map to', async () => {
+    expect(() => utils.getDecodedTokenBinary(encodeBinaryToken(shortId), [])).toThrow(
+      /Short keyset ID .* cannot be resolved/,
+    );
+  });
+
+  test('throws when a short keyset ID is ambiguous', async () => {
+    const sibling = shortId + 'ff'.repeat(25);
+    expect(() =>
+      utils.getDecodedTokenBinary(encodeBinaryToken(shortId), [fullV2Id, sibling]),
+    ).toThrow(/ambiguous/);
+  });
+
+  test('throws a CTSError when keysetIds is missing or not an array', async () => {
+    const bytes = encodeBinaryToken(shortId);
+    // @ts-expect-error pre-v5 single-argument call
+    expect(() => utils.getDecodedTokenBinary(bytes)).toThrow(/requires keysetIds/);
+    // @ts-expect-error a single id instead of a list
+    expect(() => utils.getDecodedTokenBinary(bytes, fullV2Id)).toThrow(/requires keysetIds/);
+  });
+
+  test('passes a v0 (8-byte full-form) keyset ID through unchanged', async () => {
+    const v0Id = '00' + 'ab'.repeat(7);
+    const decoded = utils.getDecodedTokenBinary(encodeBinaryToken(v0Id), [fullV2Id]);
+    expect(decoded.proofs[0].id).toBe(v0Id);
+  });
+
+  test('round-trips a full keyset ID through getEncodedTokenBinary unchanged', async () => {
+    const decoded = utils.getDecodedTokenBinary(encodeBinaryToken(fullV2Id), [fullV2Id]);
+    expect(decoded.proofs[0].id).toBe(fullV2Id);
+  });
+});
+
 describe('test deprecated base64 keyset id derivation', () => {
-  test('derives expected MiniBits base64 keyset id from known keys', () => {
+  test('derives expected MiniBits base64 keyset id from known keys', async () => {
     // Reference from https://mint.minibits.cash/Bitcoin/v1/keys/9mlfd5vCzgGl
     const keys = {
       '1': '037de920102afb5f25c26dc48a152a73159c6b7202f08b4c603c29714f4d01b543',
@@ -1335,7 +1644,7 @@ describe('test deprecated base64 keyset id derivation', () => {
     const idB64 = utils.deriveKeysetId(keys, { isDeprecatedBase64: true });
     expect(idB64).toBe('9mlfd5vCzgGl');
   });
-  test('verifies MiniBits base64 keyset id', () => {
+  test('verifies MiniBits base64 keyset id', async () => {
     // Reference from https://mint.minibits.cash/Bitcoin/v1/keys/9mlfd5vCzgGl
     const keys = {
       '1': '037de920102afb5f25c26dc48a152a73159c6b7202f08b4c603c29714f4d01b543',
@@ -1416,14 +1725,14 @@ describe('test deprecated base64 keyset id derivation', () => {
 });
 
 describe('invoiceHasAmountInHRP()', () => {
-  test('detects amountless invoices correctly', () => {
+  test('detects amountless invoices correctly', async () => {
     const amountless = [
       'lnbc1p53lqw7pp5d8ntp7kfaqcqtxfgks0n32xd4lng2hhx5z3gvfcm9teyn4vee35sdp82pshjgr5dusyymrfde4jq4mpd3kx2apq24ek2uscqzpuxqr8pqsp5wdg4qaq6ktrvfm4z99ry98y4qrmg3krnc4mhf2rwce230hyyeu4s9qxpqysgqgz7lt5hnxcq3wrpd5qe64a37msj0lhqfa0ky6ppagyedd79lz86zrcg20p78csjtqv3sc2m06uu24ykh8q0jzhu30yr820sysh9wv8gpz44nvz',
     ];
     amountless.forEach((inv) => expect(invoiceHasAmountInHRP(inv)).toBe(false));
   });
 
-  test('detects invoices with amount', () => {
+  test('detects invoices with amount', async () => {
     const withAmount = [
       // 21 sats (210n → valid)
       'lnbc210n1p53lq0wpp5tsmnj3c6znsdyu5v8t2k3y8xw33m9hnd6exzwspxa4pqz3hze8rsdp82pshjgr5dusyymrfde4jq4mpd3kx2apq24ek2uscqzpuxqrwzqsp5jgr8l0yx8zpxfez9hns5t25j9m90yrzjz34gpacssd6lwr7an40q9qxpqysgqws7g2g9hh6awk2n6vhzpqjyf6matulx0cc0ct099nz6kudzv8xmy9clu4kyvurrt99zkr7y03hse85c2jvm7jm8qlqnvzawudn4e3vsq0m6qpa',
@@ -1441,7 +1750,7 @@ describe('invoiceHasAmountInHRP()', () => {
     withAmount.forEach((inv) => expect(invoiceHasAmountInHRP(inv)).toBe(true));
   });
 
-  test('rejects malformed or invalid HRP structure', () => {
+  test('rejects malformed or invalid HRP structure', async () => {
     const invalid = [
       'lnbc0210n1...', // leading zero in amount → invalid per spec
       'lnsomething', // incomplete HRP
@@ -1459,26 +1768,26 @@ describe('serializeProofs / deserializeProofs / normalizeProofAmounts', () => {
   ];
 
   describe('serializeProofs', () => {
-    test('returns one JSON string per proof', () => {
+    test('returns one JSON string per proof', async () => {
       const result = serializeProofs(proofs);
       expect(result).toHaveLength(2);
       expect(typeof result[0]).toBe('string');
       expect(typeof result[1]).toBe('string');
     });
 
-    test('emits amounts as plain JSON numbers', () => {
+    test('emits amounts as plain JSON numbers', async () => {
       const [s0, s1] = serializeProofs(proofs);
       expect(JSON.parse(s0).amount).toBe(1);
       expect(JSON.parse(s1).amount).toBe(2);
     });
 
-    test('accepts a single proof', () => {
+    test('accepts a single proof', async () => {
       const result = serializeProofs(proofs[0]);
       expect(result).toHaveLength(1);
       expect(JSON.parse(result[0]).amount).toBe(1);
     });
 
-    test('maps cleanly to NutZap proof tags', () => {
+    test('maps cleanly to NutZap proof tags', async () => {
       const tags = serializeProofs(proofs).map((s) => ['proof', s]);
       expect(tags[0][0]).toBe('proof');
       expect(JSON.parse(tags[0][1]).secret).toBe('abc');
@@ -1486,7 +1795,7 @@ describe('serializeProofs / deserializeProofs / normalizeProofAmounts', () => {
   });
 
   describe('deserializeProofs', () => {
-    test('restores Amount objects from string[] (NutZap / DB)', () => {
+    test('restores Amount objects from string[] (NutZap / DB)', async () => {
       const strings = serializeProofs(proofs);
       const restored = deserializeProofs(strings);
       expect(restored[0].amount.equals(1)).toBe(true);
@@ -1494,7 +1803,7 @@ describe('serializeProofs / deserializeProofs / normalizeProofAmounts', () => {
       expect(restored[0].amount).toBeInstanceOf(Amount);
     });
 
-    test('restores Amount objects from raw localStorage string (serializeProofs blob)', () => {
+    test('restores Amount objects from raw localStorage string (serializeProofs blob)', async () => {
       // serializeProofs returns string[], JSON.stringify wraps it as a JSON array of strings
       const raw = JSON.stringify(serializeProofs(proofs));
       // pass the raw string directly — no JSON.parse needed
@@ -1503,7 +1812,7 @@ describe('serializeProofs / deserializeProofs / normalizeProofAmounts', () => {
       expect(restored[1].amount.equals(2)).toBe(true);
     });
 
-    test('restores Amount objects from JSON.parse of localStorage (string[])', () => {
+    test('restores Amount objects from JSON.parse of localStorage (string[])', async () => {
       const json = JSON.stringify(serializeProofs(proofs));
       // JSON.parse gives string[], deserializeProofs accepts that too
       const restored = deserializeProofs(JSON.parse(json));
@@ -1511,33 +1820,33 @@ describe('serializeProofs / deserializeProofs / normalizeProofAmounts', () => {
       expect(restored[1].amount.equals(2)).toBe(true);
     });
 
-    test('round-trips all proof fields', () => {
+    test('round-trips all proof fields', async () => {
       const restored = deserializeProofs(serializeProofs(proofs));
       expect(restored[0].id).toBe(proofs[0].id);
       expect(restored[0].secret).toBe(proofs[0].secret);
       expect(restored[0].C).toBe(proofs[0].C);
     });
 
-    test('handles amounts above MAX_SAFE_INTEGER without precision loss', () => {
+    test('handles amounts above MAX_SAFE_INTEGER without precision loss', async () => {
       const large = Amount.from(2n ** 53n + 1n);
       const p: Proof[] = [{ id: '009a1f293253e41e', amount: large, secret: 'abc', C: '02abc' }];
       const restored = deserializeProofs(serializeProofs(p));
       expect(restored[0].amount.equals(large)).toBe(true);
     });
 
-    test('handles empty string[] input', () => {
+    test('handles empty string[] input', async () => {
       expect(deserializeProofs([])).toEqual([]);
     });
 
-    test('throws when string input is not a JSON array', () => {
+    test('throws when string input is not a JSON array', async () => {
       expect(() => deserializeProofs('{"id":"abc"}')).toThrow('expected a JSON array of proofs');
     });
 
-    test('handles empty JSON array string', () => {
+    test('handles empty JSON array string', async () => {
       expect(deserializeProofs('[]')).toEqual([]);
     });
 
-    test('handles already-parsed object[] (e.g. plain JSON.parse of stored proofs)', () => {
+    test('handles already-parsed object[] (e.g. plain JSON.parse of stored proofs)', async () => {
       const legacyObjects = [
         { id: '009a1f293253e41e', amount: 1, secret: 'abc', C: '02abc' },
         { id: '009a1f293253e41e', amount: 2, secret: 'def', C: '02def' },
@@ -1553,14 +1862,14 @@ describe('serializeProofs / deserializeProofs / normalizeProofAmounts', () => {
   });
 
   describe('normalizeProofAmounts', () => {
-    test('converts number amounts to Amount', () => {
+    test('converts number amounts to Amount', async () => {
       const raw = [{ id: '009a1f293253e41e', amount: 4, secret: 'abc', C: '02abc' }];
       const normalized = normalizeProofAmounts(raw);
       expect(normalized[0].amount.equals(4)).toBe(true);
       expect(normalized[0].amount).toBeInstanceOf(Amount);
     });
 
-    test('accepts string amounts', () => {
+    test('accepts string amounts', async () => {
       const raw = [{ id: '009a1f293253e41e', amount: '8', secret: 'abc', C: '02abc' }];
       const normalized = normalizeProofAmounts(raw);
       expect(normalized[0].amount.equals(8)).toBe(true);
@@ -1569,12 +1878,12 @@ describe('serializeProofs / deserializeProofs / normalizeProofAmounts', () => {
 });
 
 describe('splitAmount edge cases', () => {
-  test('throws when keyset has no keys', () => {
+  test('throws when keyset has no keys', async () => {
     const emptyKeyset: Keys = {};
     expect(() => utils.splitAmount(10, emptyKeyset)).toThrow(/keyset is inactive/);
   });
 
-  test('throws when remaining amount cannot be split', () => {
+  test('throws when remaining amount cannot be split', async () => {
     // keyset only has denomination 4, so amount 3 can't be represented
     const sparse: Keys = { '4': 'deadbeef' };
     expect(() => utils.splitAmount(3, sparse)).toThrow(/Unable to split remaining amount/);
@@ -1582,14 +1891,14 @@ describe('splitAmount edge cases', () => {
 });
 
 describe('getKeysetAmounts', () => {
-  test('returns amounts in descending order by default', () => {
+  test('returns amounts in descending order by default', async () => {
     const amounts = getKeysetAmounts(keys);
     const nums = amounts.map((a) => a.toNumber());
     expect(nums).toStrictEqual([...nums].sort((a, b) => b - a));
     expect(nums[0]).toBe(2048);
   });
 
-  test('returns amounts in ascending order', () => {
+  test('returns amounts in ascending order', async () => {
     const amounts = getKeysetAmounts(keys, 'asc');
     const nums = amounts.map((a) => a.toNumber());
     expect(nums[0]).toBe(1);
@@ -1598,7 +1907,7 @@ describe('getKeysetAmounts', () => {
 });
 
 describe('sortProofsById', () => {
-  test('sorts proofs by keyset id lexicographically', () => {
+  test('sorts proofs by keyset id lexicographically', async () => {
     const proofs: Proof[] = [
       { id: 'ccc', amount: Amount.from(1), secret: 'a', C: '02a' },
       { id: 'aaa', amount: Amount.from(2), secret: 'b', C: '02b' },
@@ -1608,7 +1917,7 @@ describe('sortProofsById', () => {
     expect(sorted.map((p) => p.id)).toStrictEqual(['aaa', 'bbb', 'ccc']);
   });
 
-  test('does not mutate the original array', () => {
+  test('does not mutate the original array', async () => {
     const proofs: Proof[] = [
       { id: 'bbb', amount: Amount.from(1), secret: 'a', C: '02a' },
       { id: 'aaa', amount: Amount.from(2), secret: 'b', C: '02b' },
@@ -1619,7 +1928,7 @@ describe('sortProofsById', () => {
 });
 
 describe('getEncodedToken edge cases', () => {
-  test('throws for proofs with non-hex keyset IDs', () => {
+  test('throws for proofs with non-hex keyset IDs', async () => {
     const token: Token = {
       mint: 'http://localhost:3338',
       proofs: [{ id: 'not+hex!', amount: Amount.from(1), secret: 'abc', C: '02abc' }],
@@ -1627,7 +1936,7 @@ describe('getEncodedToken edge cases', () => {
     };
     expect(() => utils.getEncodedToken(token)).toThrow(/legacy keyset ID/);
   });
-  test('throws for proofs with odd-length hex keyset IDs', () => {
+  test('throws for proofs with odd-length hex keyset IDs', async () => {
     const token: Token = {
       mint: 'http://localhost:3338',
       proofs: [{ id: '00abc', amount: Amount.from(1), secret: 'abc', C: '02abc' }],
@@ -1635,7 +1944,7 @@ describe('getEncodedToken edge cases', () => {
     };
     expect(() => utils.getEncodedToken(token)).toThrow(/legacy keyset ID/);
   });
-  test('rejects a proof with a nullish id as legacy, not with a TypeError', () => {
+  test('rejects a proof with a nullish id as legacy, not with a TypeError', async () => {
     // A hand-built or JSON-parsed token may carry id: undefined/null. The id checks must
     // classify it as legacy and reject, not read .length off a nullish value.
     for (const id of [undefined, null]) {
@@ -1652,50 +1961,117 @@ describe('getEncodedToken edge cases', () => {
 });
 
 describe('isValidHex', () => {
-  test('returns false for non-string input without throwing', () => {
+  test('returns false for non-string input without throwing', async () => {
     expect(utils.isValidHex(undefined as unknown as string)).toBe(false);
     expect(utils.isValidHex(null)).toBe(false);
     expect(utils.isValidHex(1234)).toBe(false);
   });
-  test('returns false for empty and odd-length strings', () => {
+  test('returns false for empty and odd-length strings', async () => {
     expect(utils.isValidHex('')).toBe(false);
     expect(utils.isValidHex('abc')).toBe(false);
   });
-  test('returns true for even-length hex', () => {
+  test('returns true for even-length hex', async () => {
     expect(utils.isValidHex('00abcd')).toBe(true);
   });
 });
 
 describe('getDecodedTokenBinary edge cases', () => {
-  test('throws for invalid binary prefix', () => {
+  test('throws for invalid binary prefix', async () => {
     const bad = new TextEncoder().encode('junkBdata');
-    expect(() => utils.getDecodedTokenBinary(bad)).toThrow(/not a valid binary token/);
+    expect(() => utils.getDecodedTokenBinary(bad, [])).toThrow(/not a valid binary token/);
   });
 });
 
-describe('tokenFromTemplate rejects valid CBOR of wrong shape', () => {
-  test('getDecodedToken (cashuB) throws CTSError, not a raw TypeError', () => {
+describe('fromV4CborTemplate rejects valid CBOR of wrong shape', () => {
+  test('getDecodedToken (cashuB) throws CTSError, not a raw TypeError', async () => {
     const body = utils.encodeCBOR({ m: 'http://localhost:3338', u: 'sat' });
     const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
     expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
   });
 
-  test('getDecodedTokenBinary (crawB) throws CTSError, not a raw TypeError', () => {
+  test('getDecodedTokenBinary (crawB) throws CTSError, not a raw TypeError', async () => {
     const body = utils.encodeCBOR({ m: 'http://localhost:3338', u: 'sat' });
     const prefix = new TextEncoder().encode('crawB');
     const bytes = new Uint8Array(prefix.length + body.length);
     bytes.set(prefix, 0);
     bytes.set(body, prefix.length);
-    expect(() => utils.getDecodedTokenBinary(bytes)).toThrow(CTSError);
+    expect(() => utils.getDecodedTokenBinary(bytes, [])).toThrow(CTSError);
   });
 
-  test('throws CTSError when a token entry has no proofs array', () => {
+  test('throws CTSError when a token entry has no proofs array', async () => {
     const body = utils.encodeCBOR({ m: 'http://localhost:3338', u: 'sat', t: [{ i: 'nope' }] });
     const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
     expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
   });
 
-  test('defaults unit to sat when template omits it', () => {
+  test('throws CTSError when a proof entry is not an object', async () => {
+    const id = hexToBytes('00' + 'ab'.repeat(7));
+    const body = utils.encodeCBOR({ m: 'http://localhost:3338', t: [{ i: id, p: [null] }] });
+    const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
+    expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
+  });
+
+  test('throws CTSError when spend_info tree is not an array', async () => {
+    const id = hexToBytes('00' + 'ab'.repeat(7));
+    const c = hexToBytes('02' + '00'.repeat(32));
+    const proof = { a: 1n, s: 'abc', c, si: { t: 5 } };
+    const body = utils.encodeCBOR({ m: 'http://localhost:3338', t: [{ i: id, p: [proof] }] });
+    const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
+    expect(() => utils.getDecodedToken(token, [])).toThrow(/spend_info tree/);
+  });
+
+  describe('text fields', () => {
+    function tokenWith(top: Record<string, unknown>, proof: Record<string, unknown>): string {
+      const id = hexToBytes('00' + 'ab'.repeat(7));
+      const p = { a: 1n, s: 'abc', c: hexToBytes('02' + '00'.repeat(32)), ...proof };
+      const template = { m: 'http://localhost:3338', ...top, t: [{ i: id, p: [p] }] };
+      return 'cashuB' + utils.encodeUint8ToBase64Url(utils.encodeCBOR(template));
+    }
+    const wrongTypes = [42n, true, { signatures: ['sig'] }, ['sig'], new Uint8Array([1])];
+    const cases = [
+      ['mint', (v: unknown) => tokenWith({ m: v }, {})],
+      ['unit', (v: unknown) => tokenWith({ u: v }, {})],
+      ['memo', (v: unknown) => tokenWith({ d: v }, {})],
+      ['secret', (v: unknown) => tokenWith({}, { s: v })],
+      ['witness', (v: unknown) => tokenWith({}, { w: v })],
+    ] as const;
+
+    describe.each(cases)('throws CTSError when the %s is not a string', (field, build) => {
+      test.each(wrongTypes)('%o', (value) => {
+        const token = build(value);
+        expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
+        expect(() => utils.getDecodedToken(token, [])).toThrow(
+          `${field} must be a non-empty string`,
+        );
+      });
+    });
+
+    test.each(cases.filter(([field]) => field === 'mint' || field === 'secret'))(
+      'throws CTSError when the required %s is empty',
+      (field, build) => {
+        expect(() => utils.getDecodedToken(build(''), [])).toThrow(
+          `${field} must be a non-empty string`,
+        );
+      },
+    );
+
+    test('a missing mint is rejected', () => {
+      const id = hexToBytes('00' + 'ab'.repeat(7));
+      const p = { a: 1n, s: 'abc', c: hexToBytes('02' + '00'.repeat(32)) };
+      const body = utils.encodeCBOR({ t: [{ i: id, p: [p] }] });
+      const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
+      expect(() => utils.getDecodedToken(token, [])).toThrow('mint must be a non-empty string');
+    });
+
+    test('a falsy unit, memo or witness keeps its fallback', () => {
+      const decoded = utils.getDecodedToken(tokenWith({ u: '', d: '' }, { w: '' }), []);
+      expect(decoded.unit).toBe('sat');
+      expect(decoded).not.toHaveProperty('memo');
+      expect(decoded.proofs[0]).not.toHaveProperty('witness');
+    });
+  });
+
+  test('defaults unit to sat when template omits it', async () => {
     const body = utils.encodeCBOR({ m: 'http://localhost:3338', t: [] });
     const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
     const decoded = utils.getDecodedToken(token, []);
@@ -1703,18 +2079,55 @@ describe('tokenFromTemplate rejects valid CBOR of wrong shape', () => {
   });
 });
 
+describe('legacy cashuA token shape validation', () => {
+  test('rejects an empty token array with CTSError instead of a raw TypeError', async () => {
+    const body = encodeJsonToBase64Url({ token: [], unit: 'sat' });
+    const token = 'cashuA' + body;
+
+    expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
+  });
+
+  test('rejects a token whose root is not the expected object shape', async () => {
+    const body = encodeJsonToBase64Url(['not', 'an', 'object']);
+    const token = 'cashuA' + body;
+
+    expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
+  });
+
+  test('rejects a token entry missing its proofs array', async () => {
+    const body = encodeJsonToBase64Url({
+      token: [{ mint: 'http://localhost:3338' }],
+      unit: 'sat',
+    });
+    const token = 'cashuA' + body;
+
+    expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);
+  });
+});
+
 describe('deriveKeysetId edge cases', () => {
-  test('throws for unknown version byte', () => {
+  test('throws for unknown version byte', async () => {
     expect(() => utils.deriveKeysetId(keys, { versionByte: 99 })).toThrow(
       /Unrecognized keyset ID version/,
     );
+  });
+
+  test('rejects a denomination key over 20 digits before parsing it', async () => {
+    const oversized = { ...keys, ['1'.repeat(21)]: Object.values(keys)[0] };
+    expect(() => utils.deriveKeysetId(oversized, { versionByte: 2 })).toThrow(/exceeds 20 digits/);
+    expect(
+      utils.deriveKeysetId(
+        { ...keys, ['1'.repeat(20)]: Object.values(keys)[0] },
+        { versionByte: 2 },
+      ),
+    ).toMatch(/^02[0-9a-f]{64}$/);
   });
 });
 
 describe('mapShortKeysetIds via getDecodedToken (v2 keyset IDs)', () => {
   const fullV2Id = NUT02_V2_VECTOR1_KEYS.id; // 01-prefixed, 66 hex chars
 
-  test('maps short v2 keyset ID back to full ID', () => {
+  test('maps short v2 keyset ID back to full ID', async () => {
     // Encode a token using the full v2 ID — internally it gets truncated to 16 chars
     const token: Token = {
       mint: 'http://localhost:3338',
@@ -1727,7 +2140,7 @@ describe('mapShortKeysetIds via getDecodedToken (v2 keyset IDs)', () => {
     expect(decoded.proofs[0].id).toBe(fullV2Id);
   });
 
-  test('throws when v2 short ID has no keysets to map to', () => {
+  test('throws when v2 short ID has no keysets to map to', async () => {
     const token: Token = {
       mint: 'http://localhost:3338',
       proofs: [{ id: fullV2Id, amount: Amount.from(1), secret: 'abc', C: '02' + '00'.repeat(32) }],
@@ -1739,7 +2152,7 @@ describe('mapShortKeysetIds via getDecodedToken (v2 keyset IDs)', () => {
     );
   });
 
-  test('throws when v2 short ID matches no known keyset', () => {
+  test('throws when v2 short ID matches no known keyset', async () => {
     const token: Token = {
       mint: 'http://localhost:3338',
       proofs: [{ id: fullV2Id, amount: Amount.from(1), secret: 'abc', C: '02' + '00'.repeat(32) }],
@@ -1752,7 +2165,7 @@ describe('mapShortKeysetIds via getDecodedToken (v2 keyset IDs)', () => {
     );
   });
 
-  test('throws when v2 short ID is ambiguous', () => {
+  test('throws when v2 short ID is ambiguous', async () => {
     const token: Token = {
       mint: 'http://localhost:3338',
       proofs: [{ id: fullV2Id, amount: Amount.from(1), secret: 'abc', C: '02' + '00'.repeat(32) }],
@@ -1772,7 +2185,7 @@ describe('mapShortKeysetIds via getDecodedToken (v3 BLS keyset IDs)', () => {
   const v3C =
     'b7a4881059133fd91a8753600d9a5e524c65d6224f6fe2d5aef9e59f1507fdad90b3b4d48ee46da5c8dfaa0b88e28b69';
 
-  test('maps short v3 keyset ID back to full ID round-trip', () => {
+  test('maps short v3 keyset ID back to full ID round-trip', async () => {
     const token: Token = {
       mint: 'http://localhost:3338',
       proofs: [{ id: fullV3Id, amount: Amount.from(1), secret: 'test_message', C: v3C }],
@@ -1784,7 +2197,7 @@ describe('mapShortKeysetIds via getDecodedToken (v3 BLS keyset IDs)', () => {
     expect(decoded.proofs[0].C).toBe(v3C);
   });
 
-  test('throws when v3 short ID has no keysets to map to', () => {
+  test('throws when v3 short ID has no keysets to map to', async () => {
     const token: Token = {
       mint: 'http://localhost:3338',
       proofs: [{ id: fullV3Id, amount: Amount.from(1), secret: 'test_message', C: v3C }],
@@ -1814,14 +2227,14 @@ describe('mapShortKeysetIds full-length pass-through (non-conformant tokens)', (
     return 'cashuB' + utils.encodeUint8ToBase64Url(utils.encodeCBOR(template));
   }
 
-  test('passes full-length v2 ID through unchanged with empty keyset cache', () => {
+  test('passes full-length v2 ID through unchanged with empty keyset cache', async () => {
     const fullV2Id = NUT02_V2_VECTOR1_KEYS.id;
     const encoded = encodeRawToken(hexToBytes(fullV2Id), hexToBytes('02' + '00'.repeat(32)));
     const decoded = utils.getDecodedToken(encoded, []);
     expect(decoded.proofs[0].id).toBe(fullV2Id);
   });
 
-  test('passes full-length v3 ID through unchanged with empty keyset cache', () => {
+  test('passes full-length v3 ID through unchanged with empty keyset cache', async () => {
     const fullV3Id = '02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d';
     const v3C =
       'b7a4881059133fd91a8753600d9a5e524c65d6224f6fe2d5aef9e59f1507fdad90b3b4d48ee46da5c8dfaa0b88e28b69';
@@ -1830,7 +2243,7 @@ describe('mapShortKeysetIds full-length pass-through (non-conformant tokens)', (
     expect(decoded.proofs[0].id).toBe(fullV3Id);
   });
 
-  test('throws on malformed modern hex ID length (neither 16 nor 66)', () => {
+  test('throws on malformed modern hex ID length (neither 16 nor 66)', async () => {
     // 20-char hex: 0x01-prefixed but not a valid short (16) or full (66) length
     const malformedId = '01' + '00'.repeat(9); // 20 chars total
     const encoded = encodeRawToken(hexToBytes(malformedId), hexToBytes('02' + '00'.repeat(32)));
@@ -1841,52 +2254,52 @@ describe('mapShortKeysetIds full-length pass-through (non-conformant tokens)', (
 });
 
 describe('normalizeMintUrl', () => {
-  test('strips trailing slash', () => {
+  test('strips trailing slash', async () => {
     expect(normalizeMintUrl('https://mint.example.com/')).toBe('https://mint.example.com');
   });
-  test('strips multiple trailing slashes', () => {
+  test('strips multiple trailing slashes', async () => {
     expect(normalizeMintUrl('https://mint.example.com///')).toBe('https://mint.example.com');
   });
-  test('preserves path', () => {
+  test('preserves path', async () => {
     expect(normalizeMintUrl('https://mint.example.com/v1/mint')).toBe(
       'https://mint.example.com/v1/mint',
     );
   });
-  test('throws on malformed URL', () => {
+  test('throws on malformed URL', async () => {
     expect(() => normalizeMintUrl('not-a-url')).toThrow('Invalid mint URL: not-a-url');
   });
-  test('throws on non-http scheme', () => {
+  test('throws on non-http scheme', async () => {
     expect(() => normalizeMintUrl('ftp://mint.example.com')).toThrow(
       'Invalid mint URL scheme: ftp:',
     );
   });
-  test('accepts http', () => {
+  test('accepts http', async () => {
     expect(normalizeMintUrl('http://localhost:3338')).toBe('http://localhost:3338');
   });
-  test('accepts .onion', () => {
+  test('accepts .onion', async () => {
     expect(normalizeMintUrl('http://abc123.onion/path')).toBe('http://abc123.onion/path');
   });
-  test('rejects query parameters', () => {
+  test('rejects query parameters', async () => {
     expect(() => normalizeMintUrl('https://mint.example.com?token=abc')).toThrow(
       'Mint URL must not contain query parameters',
     );
   });
-  test('rejects trailing ? with no query value', () => {
+  test('rejects trailing ? with no query value', async () => {
     expect(() => normalizeMintUrl('https://mint.example.com/path?')).toThrow(
       'Mint URL must not contain query parameters',
     );
   });
-  test('rejects fragment', () => {
+  test('rejects fragment', async () => {
     expect(() => normalizeMintUrl('https://mint.example.com#section')).toThrow(
       'Mint URL must not contain a fragment',
     );
   });
-  test('rejects trailing # with no fragment value', () => {
+  test('rejects trailing # with no fragment value', async () => {
     expect(() => normalizeMintUrl('https://mint.example.com/path#')).toThrow(
       'Mint URL must not contain a fragment',
     );
   });
-  test('rejects credentials', () => {
+  test('rejects credentials', async () => {
     expect(() => normalizeMintUrl('https://user:pass@mint.example.com')).toThrow(
       'Mint URL must not contain credentials',
     );
@@ -1894,7 +2307,7 @@ describe('normalizeMintUrl', () => {
       'Mint URL must not contain credentials',
     );
   });
-  test('rejects percent-encoded path characters', () => {
+  test('rejects percent-encoded path characters', async () => {
     expect(() => normalizeMintUrl('https://mint.example.com/path%3Ftoken=abc')).toThrow(
       'Mint URL path must not contain percent-encoded characters',
     );
@@ -1905,13 +2318,13 @@ describe('normalizeMintUrl', () => {
       'Mint URL path must not contain percent-encoded characters',
     );
   });
-  test('lowercases hostname', () => {
+  test('lowercases hostname', async () => {
     expect(normalizeMintUrl('https://Mint.Example.COM')).toBe('https://mint.example.com');
   });
 });
 
 describe('nutroot spend_info token serialization', () => {
-  test('spend_info roundtrips through V4 CBOR', () => {
+  test('spend_info roundtrips through V4 CBOR', async () => {
     const proof: Proof = {
       id: '02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd',
       amount: Amount.from(8),
@@ -1931,7 +2344,7 @@ describe('nutroot spend_info token serialization', () => {
     expect(decoded.proofs[0].spend_info).toEqual(proof.spend_info);
   });
 
-  test('every spend_info shape survives the V4 round-trip', () => {
+  test('every spend_info shape survives the V4 round-trip', async () => {
     // NUT-10 spend info shapes: bearer `k`, receiver-keyed `E`, explicit `K` for a script-only proof,
     // each with and without a disclosed tree. All four CBOR fields must come back as they went in.
     const leaf =
@@ -1964,7 +2377,7 @@ describe('nutroot spend_info token serialization', () => {
     }
   });
 
-  test('the shared token vectors: same spend_info from either encoder', () => {
+  test('the shared token vectors: same spend_info from either encoder', async () => {
     // Cross-implementation pin. The two encoders differ on what NUT-00 leaves free (this one
     // writes the short keyset id, nutshell the full one), so what must agree is the spend_info:
     // both strings decode to the same fields here and in nutshell's mirror of this test.
@@ -1990,7 +2403,7 @@ describe('nutroot spend_info token serialization', () => {
     }
   });
 
-  test('proofs without spend_info stay without it', () => {
+  test('proofs without spend_info stay without it', async () => {
     const proof: Proof = {
       id: '02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd',
       amount: Amount.from(8),
@@ -2013,7 +2426,7 @@ describe('v3 transaction witnesses do not travel in tokens', () => {
     spend_info: { k: '00'.repeat(31) + '07' },
   };
 
-  test('a witness is dropped on encode and on decode, spend info is kept', () => {
+  test('a witness is dropped on encode and on decode, spend info is kept', async () => {
     // A v3 witness signs one transaction's digest, so it can never verify against another. Kept on
     // receive it would sit where the new owner's own signature has to go, and their sweep would be
     // refused for a witness a stranger chose.
@@ -2027,7 +2440,7 @@ describe('v3 transaction witnesses do not travel in tokens', () => {
     expect(decoded.proofs[0].spend_info).toEqual({ k: '00'.repeat(31) + '07' });
   });
 
-  test('a pre-v3 witness still travels', () => {
+  test('a pre-v3 witness still travels', async () => {
     const legacy = {
       amount: 8,
       id: '0088553333aabbcc',
@@ -2039,10 +2452,32 @@ describe('v3 transaction witnesses do not travel in tokens', () => {
       utils.getEncodedToken({ mint: 'https://m.example', unit: 'sat', proofs: [legacy] } as never),
       ['0088553333aabbcc'],
     );
-    expect(decoded.proofs[0].witness).toBeDefined();
+    // Verbatim, not nested: re-encoding a decoded token must not stringify the witness again,
+    // or the mint gets a JSON string where it expects the witness object.
+    expect(decoded.proofs[0].witness).toBe(legacy.witness);
   });
 
-  test('a pre-v3 witness travels even when its secret looks like a point', () => {
+  test('a pre-v3 witness survives any number of decode/encode round trips', async () => {
+    const legacy = {
+      amount: 8,
+      id: '0088553333aabbcc',
+      secret: '["P2PK",{"nonce":"a","data":"b"}]',
+      C: '02' + 'aa'.repeat(32),
+      witness: JSON.stringify({ signatures: ['11'.repeat(64)] }),
+    };
+    let token = utils.getEncodedToken({
+      mint: 'https://m.example',
+      unit: 'sat',
+      proofs: [legacy],
+    } as never);
+    for (let i = 0; i < 3; i++) {
+      const decoded = utils.getDecodedToken(token, ['0088553333aabbcc']);
+      expect(decoded.proofs[0].witness).toBe(legacy.witness);
+      token = utils.getEncodedToken(decoded);
+    }
+  });
+
+  test('a pre-v3 witness travels even when its secret looks like a point', async () => {
     // A pre-v3 secret is an arbitrary string and may happen to be 33 point-shaped bytes of hex.
     // Its witness is a NUT-11 witness, which does travel, so the rule has to follow the keyset
     // (NUT-10) and not the secret's shape.
@@ -2065,8 +2500,8 @@ describe('v3 transaction witnesses do not travel in tokens', () => {
   });
 });
 
-describe('verifyProofsForReceive: v3 spend info cascade', () => {
-  test('an invalid spend info rejects and names the offending proof', () => {
+describe('verifyReceivedProofs: v3 spend info cascade', () => {
+  test('an invalid spend info rejects and names the offending proof', async () => {
     const secret = bytesToHex(secp256k1.getPublicKey(hexToBytes('11'.repeat(32)), true));
     const proof: Proof = {
       id: `02${'ab'.repeat(32)}`,
@@ -2075,11 +2510,10 @@ describe('verifyProofsForReceive: v3 spend info cascade', () => {
       C: '00'.repeat(48),
       spend_info: { k: '22'.repeat(32) }, // a scalar that does not reconstruct the secret
     };
-    expect(() =>
-      utils.verifyProofsForReceive([proof], () => {
-        throw new Error('keyset lookup must not be reached');
-      }),
-    ).toThrow(/does not match the proof secret.*keyset 02ab/);
+    const { invalid } = await utils.verifyReceivedProofs([proof], () => {
+      throw new Error('keyset lookup must not be reached');
+    });
+    expect(invalid[0].error.message).toMatch(/does not match the proof secret.*keyset 02ab/);
   });
 });
 
@@ -2132,6 +2566,48 @@ describe('auditable locks', () => {
     expect(() => auditableLock('nonsense')).toThrow();
   });
 
+  test('auditableLock with a commit binds the proof to outside context', () => {
+    const commit = 'cd'.repeat(32);
+    const options = lockToNutrootOptions(auditableLock(P, { commit: commit.toUpperCase() }));
+    expect(options.leaves).toEqual([
+      { type: 'threshold', n: 1, keys: [P], disclosure: 1 },
+      { type: 'commit', hash: commit },
+    ]);
+    expect(() => auditableLock(P, { commit: 'abcd' })).toThrow(/64-character hex/);
+    const built = buildNutrootSecret(options.receiverKey, options.leaves!);
+    const proof: Proof = {
+      id: `02${'ab'.repeat(32)}`,
+      amount: Amount.from(8),
+      secret: built.secret,
+      C: 'aa'.repeat(48),
+      spend_info: { K: built.K, u: built.u, tree: built.tree },
+    };
+    expect(utils.auditableLockInfo(proof)).toEqual({ pubkey: P, commit });
+    expect(utils.auditableLockKey(proof)).toBe(P);
+    // The commitment is bound: a different digest is a different secret.
+    const other = buildNutrootSecret(options.receiverKey, [
+      options.leaves![0],
+      { type: 'commit', hash: 'ef'.repeat(32) },
+    ]);
+    expect(
+      utils.auditableLockInfo({ ...proof, spend_info: { ...proof.spend_info, tree: other.tree } }),
+    ).toBeUndefined();
+    // Two commit leaves, or a commit leaf alone, is not the auditable shape.
+    for (const leaves of [
+      [options.leaves![0], options.leaves![1], { type: 'commit' as const, hash: 'ef'.repeat(32) }],
+      [options.leaves![1]],
+    ]) {
+      const b = buildNutrootSecret(options.receiverKey, leaves);
+      expect(
+        utils.auditableLockInfo({
+          ...proof,
+          secret: b.secret,
+          spend_info: { K: b.K, u: b.u, tree: b.tree },
+        }),
+      ).toBeUndefined();
+    }
+  });
+
   test('auditableLockKey verifies the full commitment round-trip and returns the key', () => {
     // The real encode path: lock options -> nutroot options -> script-only secret
     const options = lockToNutrootOptions(auditableLock(P));
@@ -2144,6 +2620,7 @@ describe('auditable locks', () => {
       spend_info: { K: built.K, u: built.u, tree: built.tree },
     };
     expect(utils.auditableLockKey(proof)).toBe(P);
+    expect(utils.auditableLockInfo(proof)).toEqual({ pubkey: P });
     // Tampering with the disclosed leaf breaks the commitment, not just the shape
     const other = buildNutrootSecret(options.receiverKey, [
       { type: 'threshold', n: 1, keys: [keyFor(0x55)] },
@@ -2179,5 +2656,62 @@ describe('auditable locks', () => {
     expect(utils.auditableLockKey(base({ k: '11'.repeat(32) }))).toBeUndefined(); // bearer
     expect(utils.auditableLockKey(base({ E: P, tree: ['aa'] }))).toBeUndefined(); // receiver
     expect(utils.auditableLockKey({ ...base(), id: `00${'11'.repeat(16)}` })).toBeUndefined(); // not v3
+  });
+});
+
+describe('bolt11PaymentHash', () => {
+  // BOLT 11 test vector: "Please consider supporting this project", payment hash 0001..0102.
+  const VECTOR =
+    'lnbc1pvjluezsp5zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygspp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqdpl2pkx2ctnv5sxxmmwwd5kgetjypeh2ursdae8g6twvus8g6rfwvs8qun0dfjkxaq9qrsgq357wnc5r2ueh7ck6q93dj32dlqnls087fxdwk8qakdyafkq3yap9us6v52vjjsrvywa6rt52cm9r9zqt8r2t7mlcwspyetp5h2tztugp9lfyql';
+
+  test('reads the payment hash from the spec vector', () => {
+    expect(utils.bolt11PaymentHash(VECTOR)).toBe(
+      '0001020304050607080900010203040506070809000102030405060708090102',
+    );
+    expect(utils.bolt11PaymentHash(VECTOR.toUpperCase())).toBe(
+      '0001020304050607080900010203040506070809000102030405060708090102',
+    );
+  });
+
+  test('bolt11PreimageMatches compares sha256(preimage) with the payment hash', () => {
+    const preimage = 'ab'.repeat(32);
+    const hash = bytesToHex(sha256(hexToBytes(preimage)));
+    const invoice = bech32.encode(
+      'lnbc',
+      [...new Array<number>(7).fill(0), 1, 1, 20, ...bech32.toWords(hexToBytes(hash))].concat(
+        new Array<number>(104).fill(0),
+      ),
+      false,
+    );
+    expect(utils.bolt11PreimageMatches(invoice, preimage)).toBe(true);
+    expect(utils.bolt11PreimageMatches(invoice, preimage.toUpperCase())).toBe(true);
+    expect(utils.bolt11PreimageMatches(invoice, 'cd'.repeat(32))).toBe(false);
+    expect(utils.bolt11PreimageMatches(invoice, 'not-hex')).toBe(false);
+  });
+
+  test('rejects strings that are not invoices or carry no payment hash', () => {
+    expect(() => utils.bolt11PaymentHash('lnbc1notbech32')).toThrow('Invalid BOLT11 invoice');
+    expect(() => utils.bolt11PaymentHash(42 as unknown as string)).toThrow(
+      'BOLT11 invoice must be a string',
+    );
+    // Timestamp and signature only: nothing tagged.
+    const bare = bech32.encode('lnbc', new Array(7 + 104).fill(0), false);
+    expect(() => utils.bolt11PaymentHash(bare)).toThrow('BOLT11 invoice has no payment hash');
+    // A tagged field whose declared length runs into the signature.
+    const truncated = bech32.encode(
+      'lnbc',
+      [...new Array<number>(7).fill(0), 1, 1, 20, ...new Array<number>(10 + 104).fill(0)],
+      false,
+    );
+    expect(() => utils.bolt11PaymentHash(truncated)).toThrow('BOLT11 invoice has no payment hash');
+    // 52 words carry 260 bits; the trailing four must be zero.
+    const padded = bech32.encode(
+      'lnbc',
+      [...new Array<number>(7).fill(0), 1, 1, 20, ...new Array<number>(51).fill(0), 31].concat(
+        new Array<number>(104).fill(0),
+      ),
+      false,
+    );
+    expect(() => utils.bolt11PaymentHash(padded)).toThrow('Invalid BOLT11 payment hash');
   });
 });

@@ -1,7 +1,8 @@
+import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { describe, expect, test, vi } from 'vitest';
 
-import { Amount, OutputData, PaymentRequest, Wallet, type Proof } from '../../src';
-import { BLS_G2_GENERATOR, hashToCurveBls } from '../../src/crypto/curve_bls';
+import { Amount, OutputData, PaymentRequest, Wallet, type Proof, MeltQuoteState } from '../../src';
+import { hashToCurveBls } from '../../src/crypto/curve_bls';
 import { blindMessage, getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import {
   NUTROOT_NUMS_KEY,
@@ -9,7 +10,7 @@ import {
   serializeNutrootLeafHex,
   type NutrootLeaf,
 } from '../../src/crypto/nutroot';
-import { bytesToHex, hexToBytes, deriveKeysetId, verifyProofsForReceive } from '../../src/utils';
+import { bytesToHex, hexToBytes, deriveKeysetId, verifyReceivedProofs } from '../../src/utils';
 
 const priv = (n: number) => n.toString(16).padStart(64, '0');
 const pub = (n: number) => bytesToHex(getPubKeyFromPrivKey(hexToBytes(priv(n))));
@@ -19,9 +20,14 @@ const mintInfo = {
   pubkey: pub(5),
   version: 'test/1',
   contact: [],
-  nuts: { '4': { methods: [], disabled: false }, '5': { methods: [], disabled: false } },
+  nuts: {
+    '4': { methods: [], disabled: false },
+    '5': { methods: [], disabled: false },
+    // The legacy-keyset locks below need the mint to enforce P2PK.
+    '11': { supported: true },
+  },
 };
-const keys = { '1': BLS_G2_GENERATOR.multiply(5n).toHex(true) };
+const keys = { '1': bls12_381.G2.Point.BASE.multiply(5n).toHex(true) };
 const id = deriveKeysetId(keys, { versionByte: 2, unit: 'sat', input_fee_ppk: 0 });
 const legacyKeys = { '1': pub(5) };
 const legacyId = deriveKeysetId(legacyKeys, { versionByte: 0 });
@@ -59,7 +65,7 @@ const leaf: NutrootLeaf = { type: 'threshold', n: 1, keys: [pub(1)] };
 describe('nutroot edge cases', () => {
   test.each([NUTROOT_NUMS_KEY, pub(1)])(
     'binds blinded owners to their requested conditions with internal key %s',
-    (receiverKey) => {
+    async (receiverKey) => {
       const w = wallet();
       const leaves: NutrootLeaf[] = [
         leaf,
@@ -72,7 +78,9 @@ describe('nutroot edge cases', () => {
         deriveReceiverKeyedSecret(receiverKey, { leaves: swapped, blindKeys }),
       );
       // The proof is well formed; only the owner assignment differs from the request.
-      expect(() => verifyProofsForReceive([swappedOwners], () => ({ id, keys }))).not.toThrow();
+      expect((await verifyReceivedProofs([swappedOwners], () => ({ id, keys }))).invalid).toEqual(
+        [],
+      );
       for (const privkeys of [priv(1), [priv(1), priv(2)], [priv(1), priv(1)]]) {
         expect(() =>
           w.isPaymentRequestSatisfied(pr, [swappedOwners], undefined, { privkeys }),
@@ -192,7 +200,12 @@ describe('nutroot edge cases', () => {
       const input: Proof = { id: legacyId, amount: Amount.from(4), secret: 'input', C: pub(5) };
       const preview = await w.prepareMelt(
         'bolt11',
-        { quote: 'test', amount: Amount.from(1) },
+        {
+          quote: 'test',
+          amount: Amount.from(1),
+          unit: 'sat',
+          state: MeltQuoteState.UNPAID,
+        },
         [input],
         { keysetId: family === 'v3' ? id : legacyId },
         { type: 'custom', data: outputs },
@@ -219,7 +232,7 @@ describe('nutroot edge cases', () => {
       w.loadMintFromCache(mintInfo, cache(true));
       expect(w.keysetId).toBe(id);
       if (mode === 'prepare') {
-        const preview = await builder.prepare();
+        const { preview } = await builder.prepare();
         expect(preview.sendOutputs?.[0].blindedMessage.id).toBe(legacyId);
       } else {
         const complete = vi.spyOn(w, 'completeSwap').mockResolvedValue({ send: [], keep: [] });

@@ -46,11 +46,17 @@ function assertUnixSeconds(seconds: number): number {
 }
 
 /**
+ * How a lock is encoded on the wire: `nutroot` for BLS (`02`) keysets, `p2pk` (NUT-10 P2PK and HTLC
+ * secrets) for secp256k1 ones.
+ */
+export type LockFamily = 'nutroot' | 'p2pk';
+
+/**
  * Builder for lock spending conditions, independent of keyset version.
  *
  * @remarks
  * Emits {@link LockOptions}; the wallet encodes them for whichever keyset is active, so consumers
- * state the conditions and never the keyset version. `addLeaf` shapes are v3-only.
+ * state the conditions and never the keyset version. `addLeaf` shapes are nutroot-only.
  */
 export class LockBuilder {
   // Keys are deduplicated by x-only identity and first-seen order preserved.
@@ -192,8 +198,18 @@ export class LockBuilder {
    */
   addLeaf(leaf: NutrootLeaf) {
     serializeNutrootLeaf(leaf); // validate at the setter, like the other inputs
-    this.leaves.push({ ...leaf, keys: [...leaf.keys] });
+    this.leaves.push(leaf.type === 'commit' ? { ...leaf } : { ...leaf, keys: [...leaf.keys] });
     return this;
+  }
+
+  /**
+   * Binds the lock to 32 bytes of outside data (a NUT-10 `commit` leaf), eg the event a Nutzap pays
+   * for, so the proof cannot be reused for another. Never a spend path. v3 keysets only.
+   *
+   * @throws If the hash is not a 64-character hex string.
+   */
+  addCommitment(hash: string) {
+    return this.addLeaf({ type: 'commit', hash: normalizeHashlock(hash) });
   }
 
   /**
@@ -237,16 +253,16 @@ export class LockBuilder {
   }
 
   /**
-   * Lists why this lock will not encode for the target keyset version; empty means it encodes.
+   * Lists why this lock will not encode for the target lock family; empty means it encodes.
    *
    * @remarks
    * Runs the same checks and encoder as a real build, so it cannot drift from what
    * {@link LockBuilder.toOptions | toOptions} and the wallet refuse. Reports the first refusal.
    */
-  validate(target: 'v3' | 'pre-v3'): CTSError[] {
+  validate(target: LockFamily): CTSError[] {
     try {
       const lock = this.toOptions();
-      if (target === 'v3') {
+      if (target === 'nutroot') {
         lockToNutrootOptions(lock);
       } else {
         assertP2PKLockEncodes(lock);
@@ -262,6 +278,15 @@ export class LockBuilder {
    */
   static fromOptions(lock: LockOptions): LockBuilder {
     const b = new LockBuilder();
+    // The setters take a key or a list; stored options are lists, so a bare string here is
+    // malformed input rather than a shorthand. `blindKeys` doubles as a flag, so it also takes a
+    // boolean.
+    for (const field of ['mainKeys', 'refundKeys', 'blindKeys'] as const) {
+      const value = lock[field];
+      if (value === undefined || Array.isArray(value)) continue;
+      if (field === 'blindKeys' && typeof value === 'boolean') continue;
+      throw new CTSError(`${field} must be an array of pubkeys`);
+    }
     if (lock.hashlock !== undefined) b.addHashlock(lock.hashlock);
     if (lock.mainKeys?.length) b.addMainPubkey(lock.mainKeys);
     // lock.locktime is already canonical Unix seconds; assign directly so lockUntil's

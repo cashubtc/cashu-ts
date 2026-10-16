@@ -1,3 +1,4 @@
+import { MintErrorCode } from './ErrorCodes';
 import type { OutputDataLike } from './OutputData';
 import type { MeltQuoteBaseResponse } from './types/NUT05';
 
@@ -47,6 +48,52 @@ export class NetworkError extends CTSError {
 }
 
 /**
+ * Thrown when the caller's `AbortSignal` fires; never retried.
+ */
+export class CallerAbortError extends NetworkError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CallerAbortError';
+    Object.setPrototypeOf(this, CallerAbortError.prototype);
+  }
+}
+
+/**
+ * A timeout that fired while reading a response body that could not be cancelled (the no-stream
+ * fallback). The underlying read may still be consuming the body, so this is NOT retried: another
+ * attempt would start a second uncancellable read against the same (possibly unbounded) body.
+ */
+export class UncancellableReadError extends NetworkError {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = 'UncancellableReadError';
+    Object.setPrototypeOf(this, UncancellableReadError.prototype);
+  }
+}
+
+/**
+ * Thrown by `Amount` on invalid input, arithmetic underflow or an unsafe implicit coercion.
+ */
+export class AmountError extends CTSError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AmountError';
+    Object.setPrototypeOf(this, AmountError.prototype);
+  }
+}
+
+/**
+ * Thrown by `AmountWithUnit` on a missing unit, a unit mismatch or an unsafe implicit coercion.
+ */
+export class AmountWithUnitError extends CTSError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AmountWithUnitError';
+    Object.setPrototypeOf(this, AmountWithUnitError.prototype);
+  }
+}
+
+/**
  * Thrown when a keyset id cannot be resolved against the wallet's view of the mint.
  *
  * @remarks
@@ -85,17 +132,19 @@ export class UnknownKeysetError extends CTSError {
  * The inputs are spent and the payment stands. `cause` says which recovery applies: a keyset that
  * can be loaded (see `keyChain.ensureKeysetKeys`) rebuilds from `outputData` and the quote's
  * `change` signatures via `wallet.createMeltChangeProofs()`. Anything else, eg invalid DLEQ or a
- * signature count mismatch, needs a NUT-09 restore on a seeded wallet.
+ * signature count mismatch, needs a NUT-09 restore on a seeded wallet. `outputData` and `quote` are
+ * non-enumerable, so read them directly; a spread or `JSON.stringify` of the error will not carry
+ * them.
  */
 export class MeltChangeError extends CTSError {
   /**
    * The melt's blank outputs, the input to change recovery.
    */
-  readonly outputData: OutputDataLike[];
+  readonly outputData!: OutputDataLike[];
   /**
    * The melt quote, merged from the preview and the mint's response.
    */
-  readonly quote: MeltQuoteBaseResponse;
+  readonly quote!: MeltQuoteBaseResponse;
   constructor(
     outputData: OutputDataLike[],
     quote: MeltQuoteBaseResponse,
@@ -105,8 +154,20 @@ export class MeltChangeError extends CTSError {
       'Melt completed but its change could not be reconstructed; see cause: a keyset that will load rebuilds via createMeltChangeProofs(), anything else needs a NUT-09 restore',
       options,
     );
-    this.outputData = outputData;
-    this.quote = quote;
+    // Non-enumerable like cause: read outputData/quote directly, not via a spread or
+    // JSON.stringify of the error.
+    Object.defineProperty(this, 'outputData', {
+      configurable: true,
+      enumerable: false,
+      value: outputData,
+      writable: true,
+    });
+    Object.defineProperty(this, 'quote', {
+      configurable: true,
+      enumerable: false,
+      value: quote,
+      writable: true,
+    });
     this.name = 'MeltChangeError';
     Object.setPrototypeOf(this, MeltChangeError.prototype);
   }
@@ -196,4 +257,106 @@ export function isMintOperationError(e: unknown): e is MintOperationError {
     e instanceof MintOperationError ||
     (e instanceof Error && e.name === 'MintOperationError' && 'code' in e)
   );
+}
+
+/**
+ * True when `e` is a mint operation error whose code is in `codes`.
+ *
+ * @remarks
+ * Uses {@link isMintOperationError} to accept errors from other package copies or custom request
+ * layers. Only the code is checked; messages are never matched. Unrecognized codes remain readable
+ * on the error and can be checked by passing them in `codes`.
+ */
+export function hasMintErrorCode(e: unknown, codes: readonly number[]): boolean {
+  return isMintOperationError(e) && codes.includes(e.code);
+}
+
+/**
+ * True when the mint reports that the proofs are already spent.
+ */
+export function isProofsAlreadySpentError(e: unknown): e is MintOperationError & {
+  code: typeof MintErrorCode.PROOFS_ALREADY_SPENT;
+} {
+  return hasMintErrorCode(e, [MintErrorCode.PROOFS_ALREADY_SPENT]);
+}
+
+/**
+ * True when proofs, outputs or a quote are pending.
+ */
+export function isPendingError(e: unknown): e is MintOperationError & {
+  code:
+    | typeof MintErrorCode.PROOFS_PENDING
+    | typeof MintErrorCode.OUTPUTS_PENDING
+    | typeof MintErrorCode.QUOTE_PENDING;
+} {
+  return hasMintErrorCode(e, [
+    MintErrorCode.PROOFS_PENDING,
+    MintErrorCode.OUTPUTS_PENDING,
+    MintErrorCode.QUOTE_PENDING,
+  ]);
+}
+
+/**
+ * True when outputs are already signed or a quote has already been issued.
+ *
+ * @remarks
+ * A mint retry after a lost response can encounter either code, depending on whether the mint
+ * checks outputs or quote state first. This does not recover the issued proofs.
+ */
+export function isAlreadyIssuedError(e: unknown): e is MintOperationError & {
+  code: typeof MintErrorCode.OUTPUTS_ALREADY_SIGNED | typeof MintErrorCode.QUOTE_ALREADY_ISSUED;
+} {
+  return hasMintErrorCode(e, [
+    MintErrorCode.OUTPUTS_ALREADY_SIGNED,
+    MintErrorCode.QUOTE_ALREADY_ISSUED,
+  ]);
+}
+
+/**
+ * True when a quote has not been paid.
+ */
+export function isQuoteNotPaidError(e: unknown): e is MintOperationError & {
+  code: typeof MintErrorCode.QUOTE_NOT_PAID;
+} {
+  return hasMintErrorCode(e, [MintErrorCode.QUOTE_NOT_PAID]);
+}
+
+/**
+ * True when a quote has expired.
+ */
+export function isQuoteExpiredError(e: unknown): e is MintOperationError & {
+  code: typeof MintErrorCode.QUOTE_EXPIRED;
+} {
+  return hasMintErrorCode(e, [MintErrorCode.QUOTE_EXPIRED]);
+}
+
+/**
+ * True when a Lightning payment failed. Pending payments do not match.
+ */
+export function isPaymentFailedError(e: unknown): e is MintOperationError & {
+  code: typeof MintErrorCode.LIGHTNING_PAYMENT_FAILED;
+} {
+  return hasMintErrorCode(e, [MintErrorCode.LIGHTNING_PAYMENT_FAILED]);
+}
+
+/**
+ * True when the mint reports a NUT-21 clear auth or NUT-22 blind auth error.
+ */
+export function isAuthError(e: unknown): e is MintOperationError & {
+  code:
+    | typeof MintErrorCode.ENDPOINT_REQUIRES_CLEAR_AUTH
+    | typeof MintErrorCode.CLEAR_AUTHENTICATION_FAILED
+    | typeof MintErrorCode.ENDPOINT_REQUIRES_BLIND_AUTH
+    | typeof MintErrorCode.BLIND_AUTHENTICATION_FAILED
+    | typeof MintErrorCode.MAXIMUM_BAT_MINT_AMOUNT_EXCEEDED
+    | typeof MintErrorCode.BAT_MINT_RATE_LIMIT_EXCEEDED;
+} {
+  return hasMintErrorCode(e, [
+    MintErrorCode.ENDPOINT_REQUIRES_CLEAR_AUTH,
+    MintErrorCode.CLEAR_AUTHENTICATION_FAILED,
+    MintErrorCode.ENDPOINT_REQUIRES_BLIND_AUTH,
+    MintErrorCode.BLIND_AUTHENTICATION_FAILED,
+    MintErrorCode.MAXIMUM_BAT_MINT_AMOUNT_EXCEEDED,
+    MintErrorCode.BAT_MINT_RATE_LIMIT_EXCEEDED,
+  ]);
 }

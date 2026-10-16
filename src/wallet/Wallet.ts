@@ -13,7 +13,9 @@ import {
   findSigningKey,
   signP2PKProofs as cryptoSignP2PKProofs,
   hashToCurveHex,
+  assertSpendableVersion,
   isBlsKeyset,
+  MAX_SUPPORTED_KEYSET_VERSION_BYTE,
   isP2PKSigAll,
   buildP2PKSigAllMessageV0,
   buildP2PKSigAllMessageV1,
@@ -37,11 +39,12 @@ import {
   verifyNutrootSpendInfo,
   type ParsedNutrootOption,
 } from '../crypto/nutroot';
-import { inputsForPayload } from '../crypto/transcript';
+import { inputsForPayload, meltOutputAmount } from '../crypto/transcript';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
 import {
+  CallerAbortError,
   CTSError,
   InvalidScalarError,
   MeltChangeError,
@@ -77,27 +80,35 @@ import type {
 import type { SerializedBlindedMessage, SerializedBlindedSignature } from '../model/types/blinded';
 import type { KeyChainCache } from '../model/types/keyset';
 import { CheckStateEnum, type ProofState } from '../model/types/NUT07';
-import { type BatchMintRequest } from '../model/types/NUT29';
+import { type BatchMintRequest, type Nut29Info } from '../model/types/NUT29';
 import type { Proof, ProofLike } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 import { BATCH_POOL_SIZE, runPool } from '../transport';
 import type { RequestFetch, RequestFn } from '../transport';
 import {
   ABSOLUTE_MAX_BATCH_SIZE,
+  ABSOLUTE_MAX_ARRAY_LENGTH,
   bolt11AmountMsat,
   bytesToHex,
   DEFAULT_MAX_ARRAY_LENGTH,
   getDecodedToken,
+  getDecodedTokenBinary,
   invoiceHasAmountInHRP,
+  SEED_BYTES,
   normalizeMintUrl,
   normalizeProofAmounts,
+  verifyMintSignatures,
+  verifyReceivedProofs,
   REPAIR_COOLDOWN_MS,
   splitAmount,
   sumProofs,
-  verifyProofsForReceive,
 } from '../utils';
+import { mapInChunks, yieldToEventLoop, YIELD_BUDGET_MS, YIELD_CHUNK_SIZE } from '../utils/chunked';
+import type { ProofVerification, VerifyProofsOptions } from '../utils/verifyProofs';
 
 import {
+  assertQuoteUnit,
+  definedOnly,
   ceilLog2,
   getKeepAmounts,
   orderOutputsForPayload,
@@ -110,7 +121,7 @@ import {
   EphemeralCounterSource,
   type OperationCounters,
   type CounterRange,
-  QUOTE_COUNTER_KEY,
+  quoteCounterKey,
 } from './CounterSource';
 import { KeyChain } from './KeyChain';
 import { type Keyset } from './Keyset';
@@ -135,9 +146,10 @@ import {
   type ReceiveConfig,
   type MintProofsConfig,
   type MeltProofsConfig,
+  type AbortOptions,
   type CompleteMeltOptions,
+  type CompleteMintOptions,
   type CompleteSwapOptions,
-  type SwapTransaction,
   type MeltProofsResponse,
   type SendResponse,
   type SpendReceipt,
@@ -259,7 +271,7 @@ class Wallet {
    * @param options Optional settings.
    * @param options.unit Wallet unit, default 'sat'.
    * @param options.keysetId Bind to this keyset id, else bind on `loadMint`.
-   * @param options.bip39seed BIP39 seed for deterministic secrets.
+   * @param options.bip39seed BIP39 seed for deterministic secrets, 64 bytes.
    * @param options.secretsPolicy Secrets policy, default 'auto'.
    * @param options.counterSource Counter source for deterministic outputs. If provided, this takes
    *   precedence over counterInit. Use when you need persistence across processes or devices.
@@ -310,6 +322,11 @@ class Wallet {
       customRequest?: RequestFn;
       requestFetch?: RequestFetch;
       logger?: Logger;
+      /**
+       * Probes the NUT-17 socket at this interval and drops it as an abnormal close when the mint
+       * stops answering, so a half-open connection fails loudly (see `Mint`).
+       */
+      wsKeepaliveMs?: number;
     },
   ) {
     this.ops = new WalletOps(this);
@@ -325,6 +342,7 @@ class Wallet {
             customRequest: options?.customRequest,
             requestFetch: options?.requestFetch,
             logger: this._logger,
+            wsKeepaliveMs: options?.wsKeepaliveMs,
           })
         : mint;
     this._unit = options?.unit ?? this._unit;
@@ -337,6 +355,13 @@ class Wallet {
         'bip39seed must be a valid Uint8Array',
         { received: typeof options.bip39seed },
       );
+      // Fail here rather than at the first derivation: a wallet on a seed NUT-13 will refuse is
+      // broken, and the deriver's own guard would surface it mid-operation.
+      this.failIf(
+        options.bip39seed.length !== SEED_BYTES,
+        `bip39seed must be ${SEED_BYTES} bytes`,
+        { length: options.bip39seed.length },
+      );
       this._seed = options.bip39seed;
     }
     this._secretsPolicy = options?.secretsPolicy ?? this._secretsPolicy;
@@ -346,7 +371,7 @@ class Wallet {
       this._counterSource = new EphemeralCounterSource(options?.counterInit);
     }
     this.counters = new WalletCounters(this._counterSource);
-    this._keyChain = new KeyChain(this.mint, this._unit);
+    this._keyChain = new KeyChain(this.mint, this._unit, this._logger);
     this._denominationTarget = options?.denominationTarget ?? this._denominationTarget;
     this._requireSigDleq = options?.requireSigDleq ?? this._requireSigDleq;
     this._strictCachedKeysets = options?.strictCachedKeysets ?? this._strictCachedKeysets;
@@ -370,6 +395,26 @@ class Wallet {
   ): asserts value is Exclude<T, null | undefined> {
     return failIfNullish(value, message, this._logger, context);
   }
+  /**
+   * NUT-29 params once loaded mint info advertises it for the method; undefined before mint info is
+   * loaded, when the batch endpoints are assumed.
+   *
+   * @throws When loaded info omits NUT-29, or lists methods without this one.
+   */
+  private requireNut29(method: string, op: string, alternative: string): Nut29Info | undefined {
+    const nut29 = this._mintInfo?.isSupported(29);
+    if (nut29 === undefined) return undefined;
+    const methods = nut29.params?.methods;
+    this.failIf(
+      !nut29.supported || (Array.isArray(methods) && !methods.includes(method)),
+      `${op}: mint does not advertise NUT-29 for ${method}; use ${alternative} per quote`,
+    );
+    return nut29.params;
+  }
+  private throwIfAborted(signal?: AbortSignal): void {
+    if (signal?.aborted) throw new CallerAbortError('Operation aborted by caller');
+  }
+
   private requireSupport(op: 'mint' | 'melt', method: string): void {
     this.failIf(
       !this.getMintInfo().supportsMintMeltMethod(op, method, this._unit),
@@ -414,13 +459,13 @@ class Wallet {
    * @param forceRefresh If true, re-fetches data even if cached.
    * @throws If fetching mint info, keysets, or keys fails.
    */
-  async loadMint(forceRefresh?: boolean): Promise<void> {
+  async loadMint(forceRefresh?: boolean, opts?: AbortOptions): Promise<void> {
     const promises = [];
 
     // Load mint info
     if (!this._mintInfo || forceRefresh) {
       promises.push(
-        this.mint.getInfo().then((info) => {
+        this.mint.getInfo(opts).then((info) => {
           this._mintInfo = new MintInfo(info, this._logger);
           this.mint.setMintInfo(this._mintInfo);
           return null;
@@ -445,9 +490,11 @@ class Wallet {
    * The `cache` argument should usually come from `wallet.keyChain.cache`.
    */
   loadMintFromCache(mintInfo: GetInfoResponse, cache: KeyChainCache): void {
+    // The keychain load is the step that can reject the cache, so it goes first and a rejected
+    // cache leaves the wallet untouched.
+    this._keyChain.loadFromCache(cache);
     this._mintInfo = new MintInfo(mintInfo, this._logger);
     this.mint.setMintInfo(this._mintInfo);
-    this._keyChain.loadFromCache(cache);
     this.finishInit();
   }
 
@@ -455,7 +502,19 @@ class Wallet {
    * Finishes wiring up the wallet instance and checks we are "Go for launch".
    */
   private finishInit(): void {
-    this._logger.debug('KeyChain', { keychain: this._keyChain.cache });
+    // A per-keyset summary; the full cache with every key is `wallet.keyChain.cache`.
+    const { keysets, mintUrl, savedAt } = this._keyChain.cache;
+    this._logger.debug('KeyChain loaded', {
+      mintUrl,
+      savedAt,
+      keysets: keysets.map((k) => ({
+        id: k.id,
+        unit: k.unit,
+        active: k.active,
+        fee: k.input_fee_ppk,
+        keys: k.keys ? Object.keys(k.keys).length : 0,
+      })),
+    });
 
     // Go Keychain?
     if (this._boundKeysetId === PENDING_KEYSET_ID) {
@@ -480,6 +539,7 @@ class Wallet {
         unit: k.unit,
         walletUnit: this._unit,
       });
+      assertSpendableVersion(k.id, this._logger);
     } else {
       // Auto-bound: re-apply keyset selection so the binding tracks mint truth.
       // getCheapestKeyset prefers the newest version, then lowest fee, then latest expiry.
@@ -562,6 +622,14 @@ class Wallet {
    * The keyset ID bound to this wallet instance.
    */
   get keysetId(): string {
+    // Initialization permits an unbound wallet for restore; surface the selection error on use.
+    if (this._boundKeysetId === PENDING_KEYSET_ID && this._mintInfo) {
+      try {
+        this._keyChain.getCheapestKeyset();
+      } catch (e) {
+        this.fail(`Wallet has no bound keyset: ${(e as Error).message}`);
+      }
+    }
     this.failIf(
       this._boundKeysetId === PENDING_KEYSET_ID,
       'Wallet has no bound keyset. The mint may have no active keysets, or wallet was not initialized via loadMint or loadMintFromCache',
@@ -593,6 +661,7 @@ class Wallet {
       unit: keyset.unit,
       walletUnit: this._unit,
     });
+    assertSpendableVersion(keyset.id, this._logger);
     this.failIf(!keyset.hasKeys, 'Keyset has no keys loaded', { keyset: keyset.id });
     return keyset;
   }
@@ -603,8 +672,8 @@ class Wallet {
    * @remarks
    * Legacy (pre-v1, base64-id) keysets may be spent and restored, but never used to create new
    * proofs. Inactive keysets are rejected per NUT-02, the mint would refuse to sign outputs on
-   * them, so fail fast here. Unknown hex versions are already excluded upstream: their keys fail
-   * verification and `getKeyset` rejects keysets without keys.
+   * them, so fail fast here. Unknown hex versions are rejected by `getKeyset` before checking
+   * whether keys are loaded.
    *
    * Only the prepare-side ops use this gate. The `complete*` ops use plain `getKeyset` as the mint
    * will have signed.
@@ -845,7 +914,7 @@ class Wallet {
       this._keyChain.getCheapestKeyset();
     } catch (e) {
       this.fail(
-        `${op}: no active keyset for unit '${this._unit}' — a paid mint quote could not be redeemed`,
+        `${op}: no active keyset for unit '${this._unit}' — a paid mint quote could not be redeemed. ${(e as Error).message}`,
         { reason: (e as Error).message },
       );
     }
@@ -964,6 +1033,9 @@ class Wallet {
       unit: ks.unit,
       walletUnit: this._unit,
     });
+    // Before the keys check: a keyset this build cannot spend has no keys either, and "no keys
+    // loaded" reads as a mint problem rather than a version gap.
+    assertSpendableVersion(ks.id, this._logger);
     this.failIf(!ks.hasKeys, 'Keyset has no keys loaded', { keyset: ks.id });
     this._boundKeysetId = ks.id;
     this._explicitBind = true;
@@ -1199,6 +1271,28 @@ class Wallet {
       case 'lock':
         // The one place the keyset version is known: semantic lock options encode here, so
         // consumers never pick an encoding. Inexpressible shapes refuse naming the reason.
+        // A mint signs a lock blind and reads it only at spend time, so a kind it does not
+        // support spends as a bearer proof (NUT-10). v3 keysets enforce locks by construction.
+        if (!isBlsKeyset(keyset.id)) {
+          const info = this.getMintInfo();
+          this.failIf(
+            !info.isSupported(11).supported,
+            'Mint does not support NUT-11: the lock would be spendable by anyone',
+          );
+          this.failIf(
+            outputType.options.hashlock !== undefined && !info.isSupported(14).supported,
+            'Mint does not support NUT-14: the hashlock would be spendable by anyone',
+          );
+        }
+        // Allowed for testing, but the refund path (or anyone, with no refund keys) can spend now.
+        if (
+          outputType.options.locktime !== undefined &&
+          outputType.options.locktime <= Math.floor(Date.now() / 1000)
+        ) {
+          this._logger.warn('Lock locktime is not in the future', {
+            locktime: outputType.options.locktime,
+          });
+        }
         outputData = isBlsKeyset(keyset.id)
           ? OutputData.createNutrootData(
               lockToNutrootOptions(outputType.options),
@@ -1264,10 +1358,10 @@ class Wallet {
    * @returns Swap transaction with payload and metadata for processing signatures.
    */
   private assertUniqueOutputSecrets(outputData: OutputDataLike[]): void {
-    const decoder = new TextDecoder();
     const seenSecrets = new Set<string>();
     for (const [i, d] of outputData.entries()) {
-      const secret = decoder.decode(d.secret);
+      // Hex is a one-to-one key for the bytes; decoding is not, it merges invalid sequences.
+      const secret = bytesToHex(d.secret);
       // Report the position, never the secret: it is the spending material.
       this.failIf(seenSecrets.has(secret), `Duplicate output secret at index ${i}`, { index: i });
       seenSecrets.add(secret);
@@ -1278,7 +1372,12 @@ class Wallet {
     inputs: Proof[],
     keepOutputs: OutputDataLike[],
     sendOutputs: OutputDataLike[] = [],
-  ): SwapTransaction {
+  ): {
+    payload: SwapRequest;
+    outputData: OutputDataLike[];
+    keepVector: boolean[];
+    sortedIndices: number[];
+  } {
     // Keep and send are generated separately; the duplicate-secret guard has to see them together.
     this.assertUniqueOutputSecrets([...keepOutputs, ...sendOutputs]);
     // Prepare inputs for mint
@@ -1346,6 +1445,7 @@ class Wallet {
   ): Promise<Proof[]> {
     // Prepare and complete the send
     const txn = await this.prepareSwapToReceive(token, config, outputType);
+    // no abort
     const { keep } = await this.completeSwap(
       txn,
       config?.privkey,
@@ -1382,6 +1482,7 @@ class Wallet {
     config?: ReceiveConfig,
     outputType?: OutputType,
   ): Promise<SwapPreview> {
+    this.throwIfAborted(config?.signal);
     const { keysetId, requireDleq, proofsWeHave, onCountersReserved, preimage } = config || {};
     outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 
@@ -1433,7 +1534,11 @@ class Wallet {
     // NUT-12: wallets MUST verify any DLEQ on a received proof (the spec default).
     // `requireDleq: true` opts into the stricter "DLEQ must also be present" policy.
     // For v3 (BLS) proofs the single multi-pairing replaces per-proof DLEQ verification.
-    verifyProofsForReceive(proofs, (id) => this._keyChain.getKeyset(id), { requireDleq });
+    const verified = await verifyReceivedProofs(proofs, (id) => this._keyChain.getKeyset(id), {
+      require: requireDleq,
+      signal: config?.signal,
+    });
+    if (verified.invalid.length > 0) throw verified.invalid[0].error;
 
     // Shape receive output type and denominations
     const keyset = this.getOutputKeyset(keysetId); // specified or wallet keyset
@@ -1463,9 +1568,11 @@ class Wallet {
     const outputs = this.createOutputData(this.preparedTotal(receiveOT), keyset, receiveOT);
 
     // Return SwapPreview
+    this.throwIfAborted(config?.signal);
     return {
       amount: receiveAmount,
       fees: swapFee,
+      sendTotal: Amount.zero(),
       inputs: preimage === undefined ? proofs : attachHTLCPreimage(proofs, preimage),
       keepOutputs: outputs,
     };
@@ -1555,6 +1662,7 @@ class Wallet {
     config?: SendConfig,
     outputConfig?: OutputConfig,
   ): Promise<SendResponse> {
+    this.throwIfAborted(config?.signal);
     const sendAmount = this.parseAmount(amount, 'send');
     const { keysetId, includeFees = false } = config || {};
     // Fallback to policy defaults if no outputConfig
@@ -1618,12 +1726,20 @@ class Wallet {
     }
 
     // Prepare and complete the send
-    const txn = await this.prepareSwapToSend(sendAmount, proofs, config, outputConfig);
-    return await this.completeSwap(
-      txn,
+    const { preview, unselected } = await this.prepareSwapToSend(
+      sendAmount,
+      proofs,
+      config,
+      outputConfig,
+    );
+    // no abort
+    const result = await this.completeSwap(
+      preview,
       config?.privkey,
       config?.scriptPath?.length ? { scriptPath: config.scriptPath } : undefined,
     );
+    // One-shot callers never see the split, so keep is the full remainder.
+    return { ...result, keep: [...result.keep, ...unselected] };
   }
 
   /**
@@ -1637,17 +1753,21 @@ class Wallet {
    *
    * ```typescript
    * // Prepare transaction
-   * const txn = await wallet.prepareSwapToSend(5, proofs, { includeFees: true });
-   * const fees = txn.fees;
+   * const { preview, unselected } = await wallet.prepareSwapToSend(5, proofs, {
+   *   includeFees: true,
+   * });
+   * returnToStore(unselected); // the swap does not touch these
+   * const fees = preview.fees;
    *
-   * // Complete transaction
-   * const { keep, send } = await wallet.completeSwap(txn);
+   * // Complete transaction; keep is the change only, unselected went back to storage
+   * const { keep, send } = await wallet.completeSwap(preview);
    * ```
    *
    * @param amount Amount to send (receiver gets this net amount).
    * @param proofs Array of proofs to split.
    * @param config Optional parameters for the swap.
-   * @returns SwapPreview with metadata for swap transaction.
+   * @returns The swap preview, and the proofs it did not select. `unselected` take no part in the
+   *   swap: return them to storage, they are not in `completeSwap`'s `keep`.
    * @throws Throws if the send cannot be completed offline or if funds are insufficient.
    */
   async prepareSwapToSend(
@@ -1655,7 +1775,8 @@ class Wallet {
     proofs: ProofLike[],
     config?: SendConfig,
     outputConfig?: OutputConfig,
-  ): Promise<SwapPreview> {
+  ): Promise<{ preview: SwapPreview; unselected: Proof[] }> {
+    this.throwIfAborted(config?.signal);
     const sendAmountTarget = this.parseAmount(amount, 'prepareSwapToSend');
     const normalizedProofs = normalizeProofAmounts(proofs);
     const { keysetId, includeFees = false, onCountersReserved, preimage } = config || {};
@@ -1695,8 +1816,13 @@ class Wallet {
     // 	unselectedProofs: unselectedProofs.map(p=>p.amount.toString()),
     // 	selectedProofs: selectedProofs.map(p=>p.amount.toString()),
     // });
+    // A balance equal to the amount still fails once the input fee is added, so name the fee.
     if (selectedProofs.length === 0) {
-      throw new CTSError('Not enough funds available to send');
+      const available = sumProofs(normalizedProofs).toString();
+      const inputFee = this.getFeesForProofs(normalizedProofs).toString();
+      this.fail(
+        `Not enough funds available to send: ${available} available, ${sendAmount.toString()} required plus up to ${inputFee} input fee`,
+      );
     }
 
     // Calculate our expected change from the swap (and sanity check!)
@@ -1740,14 +1866,18 @@ class Wallet {
     const keepOutputs = this.createOutputData(keepAmount, keyset, keepOT);
 
     // Return SwapPreview
+    this.throwIfAborted(config?.signal);
     return {
-      amount: sendAmountTarget,
-      fees: swapFee,
-      inputs:
-        preimage === undefined ? selectedProofs : attachHTLCPreimage(selectedProofs, preimage),
-      sendOutputs,
-      keepOutputs,
-      unselectedProofs,
+      preview: {
+        amount: sendAmountTarget,
+        fees: swapFee,
+        sendTotal: sendAmount,
+        inputs:
+          preimage === undefined ? selectedProofs : attachHTLCPreimage(selectedProofs, preimage),
+        sendOutputs,
+        keepOutputs,
+      },
+      unselected: unselectedProofs,
     };
   }
 
@@ -1758,15 +1888,18 @@ class Wallet {
    *
    * ```typescript
    * // Prepare transaction
-   * const txn = await wallet.prepareSwapToSend(5, proofs, { includeFees: true });
+   * const { preview, unselected } = await wallet.prepareSwapToSend(5, proofs, {
+   *   includeFees: true,
+   * });
+   * returnToStore(unselected); // the swap does not touch these
    *
-   * // Complete transaction
-   * const result = await wallet.completeSwap(txn);
+   * // Complete transaction; keep is the change only
+   * const result = await wallet.completeSwap(preview);
    * ```
    *
    * @param swapPreview With metadata for swap transaction.
    * @param privkey The private key(s) for signing.
-   * @returns SendResponse with keep/send proofs.
+   * @returns SendResponse with keep/send proofs. `keep` is only what the swap produced.
    * @throws {@link StaleKeysetError} If the mint rejects the outputs' keyset.
    */
   async completeSwap(
@@ -1777,9 +1910,6 @@ class Wallet {
     const scriptPath = options?.scriptPath;
     const keepOutputs: OutputDataLike[] = swapPreview?.keepOutputs ? swapPreview.keepOutputs : [];
     const sendOutputs: OutputDataLike[] = swapPreview.sendOutputs ? swapPreview.sendOutputs : [];
-    const unselectedProofs: Proof[] = swapPreview.unselectedProofs
-      ? swapPreview.unselectedProofs
-      : [];
 
     // Sign proofs if needed. SIG_ALL covers the outputs, so it must see them in the order the
     // payload will carry, which is what orderOutputsForPayload decides for both.
@@ -1808,9 +1938,10 @@ class Wallet {
         ? prepareScriptPathSpends(swapPreview.inputs, scriptPath, privkeys)
         : undefined,
       this._nutrootState(),
+      options?.signal,
     );
     const { signatures } = await this.withStaleKeysetRepair(() =>
-      this.mint.swap(swapTransaction.payload),
+      this.mint.swap(swapTransaction.payload, { signal: options?.signal }),
     );
     this.failIf(
       signatures.length !== swapTransaction.outputData.length,
@@ -1821,7 +1952,9 @@ class Wallet {
     // Construct proofs. Each signature names the keyset it was made under, which custom outputs
     // may have chosen per output; unblinding must use that one.
     await this._ensureKeysetsForSignatures(signatures);
-    const swapProofs = swapTransaction.outputData.map((d, i) =>
+    // Unblinding pairing-verifies each v3 signature, so it yields. No signal: the mint has
+    // signed, and stopping now would strand the proofs.
+    const swapProofs = await mapInChunks(swapTransaction.outputData, (d, i) =>
       d.toProof(signatures[i], this.keysetForSignature(signatures[i].id)),
     );
     const reorderedProofs = Array(swapProofs.length);
@@ -1840,12 +1973,11 @@ class Wallet {
       }
     });
     this._logger.debug('SEND COMPLETED', {
-      unselectedProofs: unselectedProofs.map((p) => p.amount.toString()),
       keepProofs: keepProofs.map((p) => p.amount.toString()),
       sendProofs: sendProofs.map((p) => p.amount.toString()),
     });
     return {
-      keep: [...keepProofs, ...unselectedProofs],
+      keep: keepProofs,
       send: sendProofs,
       ...(receipts.length > 0 && { receipts }),
     };
@@ -1950,26 +2082,31 @@ class Wallet {
    *
    * @remarks
    * Verifies `sum(proofs) - inputFees >= amount + mf`, with input fees from this wallet's keysets
-   * and `mf` priced from this mint's NUT-05 melt methods for the wallet unit. A locked request also
-   * checks that each proof carries the lock that was asked for: exactly the requested tree for a
-   * nutroot request, and exactly the requested condition for a nut10 one. A receiver-keyed nutroot
-   * request needs `opts.privkeys`, because binding a proof to the receiver key is an ECDH
-   * trial-match only that key can do (NUT-28); without it there is nothing to check and the call
-   * throws rather than passing a payment the payee cannot spend. Proof integrity (pairing/DLEQ)
-   * remains a separate check.
+   * and `mf` priced from this mint's NUT-05 melt methods for the wallet unit. This mint must also
+   * be admissible: inside a strict mint list, and able to melt via a method the request accepts. A
+   * locked request also checks that each proof carries the lock that was asked for: exactly the
+   * requested tree for a nutroot request, and exactly the requested condition for a nut10 one. A
+   * receiver-keyed nutroot request needs `opts.privkeys`, because binding a proof to the receiver
+   * key is an ECDH trial-match only that key can do (NUT-28); without it there is nothing to check
+   * and the call throws rather than passing a payment the payee cannot spend. An unlocked request
+   * takes only proofs the payee can spend, bearer or locked to one of `opts.privkeys`, so a payer
+   * cannot settle it with proofs locked to themselves. Proof integrity (pairing/DLEQ) remains a
+   * separate check.
    * @param pr - The payment request being settled.
    * @param proofs - The received proofs (from this wallet's mint), with spend info when present.
    * @param expectedAmount - Expected amount for amountless requests; ignored when the request sets
    *   `a`.
-   * @param opts.privkeys - The receiver key(s) the request locks to. Required for a receiver-keyed
-   *   nutroot request, unused otherwise.
-   * @throws If no amount is available to check against, the request unit does not match this
-   *   wallet, a proof keyset is unknown, the request is invalid per NUT-18, a receiver-keyed
-   *   nutroot request is checked without its key, or a proof does not carry the requested lock.
+   * @param opts.privkeys - The payee's key(s). Required for a receiver-keyed nutroot request; on an
+   *   unlocked request, proofs locked to one of them still count.
+   * @throws If no amount is available to check against, this wallet's mint is not admissible for
+   *   the request (unit, strict mint list, or no accepted melt method), a proof keyset is unknown,
+   *   the request is invalid per NUT-18, a receiver-keyed nutroot request is checked without its
+   *   key, a proof does not carry the requested lock, or an unlocked request is paid with a proof
+   *   the payee cannot spend or `spendOptions` cannot read.
    */
   isPaymentRequestSatisfied(
     pr: PaymentRequest,
-    proofs: Array<Pick<Proof, 'id' | 'amount' | 'secret' | 'spend_info'>>,
+    proofs: Array<Pick<Proof, 'id' | 'amount' | 'secret' | 'spend_info' | 'p2pk_e'>>,
     expectedAmount?: AmountLike,
     opts?: { privkeys?: string | string[] },
   ): boolean {
@@ -2006,15 +2143,34 @@ class Wallet {
         this.failIfNullish(nut10Lock, 'legacy proof: the request is for v3 proofs only');
         this.assertNut10Lock(nut10Lock, p.secret);
       }
+    } else {
+      // An unlocked request asks only for value the payee can spend: proofs locked to the payer sum
+      // to the amount and transfer nothing, while proofs locked to a key the payee holds still pay.
+      for (const p of proofs) {
+        // `spendOptions` reads only the fields the Pick carries; the cast keeps its signature.
+        const { spendable, blockedBy } = this.spendOptions(p as Proof, opts);
+        this.failIf(!spendable, `unlocked request: the payee cannot spend a proof (${blockedBy})`);
+      }
     }
+    // Admissibility, as the payer side checks it (NUT-18): a strict list binds the issuer, and the
+    // proofs must be redeemable through a method the request accepts.
+    const listed = pr.includesMint(this.mint.mintUrl);
+    this.failIf(
+      pr.isMintListStrict === true && !listed,
+      "this wallet's mint is not in the request's strict mint list",
+    );
     // mf applies only when this mint is outside the request's mint list (NUT-18).
     let mf = Amount.zero();
-    if (pr.supportedMethods?.length && !pr.includesMint(this.mint.mintUrl)) {
+    if (pr.supportedMethods?.length) {
       const meltMethods = this.getMintInfo()
         .supportedMethods('melt')
         .filter((m) => m.unit === this._unit)
         .map((m) => m.method);
-      mf = pr.feesFor(this.mint.mintUrl, meltMethods);
+      this.failIf(
+        !pr.supportedMethods.some((m) => meltMethods.includes(m.method)),
+        `mint cannot melt ${this._unit} via any method the request accepts`,
+      );
+      mf = listed ? Amount.zero() : pr.feesFor(this.mint.mintUrl, meltMethods);
     }
     const needed = expected.add(mf).add(this.getFeesForProofs(proofs));
     return sumProofs(proofs).compareTo(needed) >= 0;
@@ -2277,10 +2433,10 @@ class Wallet {
    * @param proof Any proof, with its spend info when it has one.
    * @param opts.privkeys Static keys to trial-match, for receiver-keyed proofs and leaf keys.
    * @param opts.now Unix seconds to judge locktimes against. Defaults to the current time.
-   * @throws If a v3 keyset proof is not a point secret, a NUT-10 secret is of a kind this wallet
-   *   cannot spend, a NUT-11 tag is malformed (a non-integer `n_sigs`, or a scalar tag with more
-   *   than one value), or a disclosed tree holds a leaf it cannot parse (unknown version, type or
-   *   constraint field): the same fail-closed rule the receive cascade applies.
+   * @throws If a v3 keyset proof is not a point secret, a NUT-10 secret is malformed or of a kind
+   *   this wallet cannot spend, a NUT-11 tag is malformed (a non-integer `n_sigs`, or a scalar tag
+   *   with more than one value), or a disclosed tree holds a leaf it cannot parse (unknown version,
+   *   type or constraint field): the same fail-closed rule the receive cascade applies.
    */
   spendOptions(proof: Proof, opts?: { privkeys?: string | string[]; now?: number }): SpendOptions {
     return proofSpendOptions(proof, opts, this._nutrootState());
@@ -2350,17 +2506,19 @@ class Wallet {
   }
 
   /**
-   * Decodes a string token.
+   * Decodes a string (`cashuB...`) or raw binary (`craw` + `B`) token.
    *
    * @remarks
    * Rehydrates a token from the space-saving CBOR format, including mapping short keyset ids to
    * their full representation.
-   * @param token The token in string format (cashuB...)
+   * @param token The token as a string or as binary bytes.
    * @returns Token object.
    */
-  public decodeToken(token: string): Token {
+  public decodeToken(token: string | Uint8Array): Token {
     const keysetIds = this._keyChain.getAllKeysetIds();
-    return getDecodedToken(token, keysetIds);
+    return typeof token === 'string'
+      ? getDecodedToken(token, keysetIds)
+      : getDecodedTokenBinary(token, keysetIds);
   }
 
   // -----------------------------------------------------------------
@@ -2380,6 +2538,9 @@ class Wallet {
   ): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
     const keysetId = config?.keysetId ?? this.keysetId;
     const profile = scanProfile(keysetId);
+    // Batches in flight each yield on their own budget, so share one frame budget between them:
+    // otherwise the thread can go a full budget per batch without a break.
+    const budgetMs = YIELD_BUDGET_MS / profile.poolSize;
     const { gapLimit = 300, batchSize = Math.min(this.maxArrayLength, profile.batchSize) } =
       config ?? {};
     let counter = config?.counter ?? 0;
@@ -2393,9 +2554,10 @@ class Wallet {
     this.failIf(
       !Number.isSafeInteger(batchSize) ||
         batchSize < 1 ||
+        batchSize > this.maxArrayLength ||
         !(Number.isSafeInteger(gapLimit) || gapLimit === Infinity) ||
         gapLimit < 1,
-      'batchSize must be a positive integer and gapLimit a positive integer or Infinity',
+      `batchSize must be a positive integer up to ${this.maxArrayLength} and gapLimit a positive integer or Infinity`,
     );
     const probeSize = Math.min(gapLimit, this.maxArrayLength);
     const restoredProofs: Proof[] = [];
@@ -2425,7 +2587,7 @@ class Wallet {
       }
       // Restore the batches via a pool, keeping results in counter order
       const wave = await runPool(batches, profile.poolSize, ({ start, count }) =>
-        this.restoreUnspent(start, count, keysetId),
+        this.restoreUnspent(start, count, keysetId, { signal: config?.signal, budgetMs }),
       );
       const last = batches[batches.length - 1];
       counter = last.start + last.count;
@@ -2448,6 +2610,11 @@ class Wallet {
         }
         lastCounterWithSignature = res.lastCounterWithSignature;
       });
+      this.safeCallback(
+        config?.onProgress,
+        { keysetId, counter, proofs: restoredProofs.length },
+        { op: 'batchRestore' },
+      );
     }
 
     return { proofs: restoredProofs, lastCounterWithSignature };
@@ -2463,9 +2630,24 @@ class Wallet {
   async restoreAll(
     config?: RestoreAllConfig,
   ): Promise<{ proofs: Proof[]; lastCounters: Record<string, number> }> {
-    const keysetIds = this._keyChain
-      .getAllKeysetIds()
-      .filter((id) => this._keyChain.getKeyset(id).unit === this.unit);
+    const keysetIds = this._keyChain.getAllKeysetIds().filter((id) => {
+      const ks = this._keyChain.getKeyset(id);
+      if (ks.unit !== this.unit) return false;
+      // Recover everything this build can read. One keyset from a newer mint must not cost the
+      // caller the proofs held on every older one.
+      if (ks.version > MAX_SUPPORTED_KEYSET_VERSION_BYTE) {
+        this._logger.warn(
+          'Skipping keyset during restore: id version byte is newer than this build',
+          {
+            keysetId: id,
+            versionByte: ks.version,
+            supported: MAX_SUPPORTED_KEYSET_VERSION_BYTE,
+          },
+        );
+        return false;
+      }
+      return true;
+    });
     let proofs: Proof[] = [];
     const lastCounters: Record<string, number> = {};
     for (const keysetId of keysetIds) {
@@ -2503,25 +2685,40 @@ class Wallet {
       await this._keyChain.ensureKeysetKeys(scanId);
     }
     const keyset = this.getKeyset(scanId);
+    const seed = this._seed;
 
-    // create deterministic blank outputs for unknown restore amounts
-    // Note: zero amount + zero denomination passes splitAmount validation
-    const zeros = Array(count).fill(0);
-    const outputData = this._outputDataCreator.createDeterministicData(
-      0,
-      this._seed,
-      start,
-      keyset,
-      zeros,
+    // create deterministic blank outputs for unknown restore amounts, a chunk at a time so a
+    // BLS range does not hold the thread. Zero amount + zero denomination passes splitAmount.
+    const outputData: OutputDataLike[] = [];
+    for (let offset = 0; offset < count; offset += YIELD_CHUNK_SIZE) {
+      this.throwIfAborted(config?.signal);
+      if (offset > 0) await yieldToEventLoop();
+      this.throwIfAborted(config?.signal);
+      const zeros = Array(Math.min(YIELD_CHUNK_SIZE, count - offset)).fill(0);
+      for (const d of this._outputDataCreator.createDeterministicData(
+        0,
+        seed,
+        start + offset,
+        keyset,
+        zeros,
+      )) {
+        outputData.push(d);
+      }
+    }
+
+    const response = await this.mint.restore(
+      {
+        outputs: outputData.map((d) => d.blindedMessage),
+      },
+      { signal: config?.signal },
     );
-
-    const response = await this.mint.restore({
-      outputs: outputData.map((d) => d.blindedMessage),
-    });
     await this._ensureKeysetsForSignatures(response.signatures);
     // counters here are contiguous from `start`, so the index maps straight onto one
-    const { proofs, lastIndex } = proofsFromRestoreResponse(outputData, response, (id) =>
-      this.keysetForSignature(id),
+    const { proofs, lastIndex } = await proofsFromRestoreResponse(
+      outputData,
+      response,
+      (id) => this.keysetForSignature(id),
+      { signal: config?.signal },
     );
 
     return {
@@ -2546,7 +2743,9 @@ class Wallet {
     start: number,
     count: number,
     keysetId?: string,
+    opts?: { signal?: AbortSignal; budgetMs?: number },
   ): Promise<ScanResult> {
+    const signal = opts?.signal;
     this.failIfNullish(this._seed, 'Cashu Wallet must be initialized with a seed to use restore');
     const seed = this._seed;
     // Resolve once: an auto-bound wallet can rebind during the awaits below
@@ -2562,45 +2761,58 @@ class Wallet {
     // dropped out below. An invalid-scalar counter failed at issuance too, so it holds nothing.
     const counters: number[] = [];
     const secrets: string[] = [];
-    for (let c = start; c < start + count; c++) {
-      try {
-        secrets.push(bytesToHex(derive(c).secret));
-        counters.push(c);
-      } catch (e) {
-        if (!(e instanceof InvalidScalarError)) throw e;
-      }
-    }
+    const range = Array.from({ length: count }, (_, i) => start + i);
+    await mapInChunks(
+      range,
+      (c) => {
+        try {
+          secrets.push(bytesToHex(derive(c).secret));
+          counters.push(c);
+        } catch (e) {
+          if (!(e instanceof InvalidScalarError)) throw e;
+        }
+      },
+      opts,
+    );
     if (counters.length === 0) return { proofs: [], used: false };
     const states = await this.checkProofsStates(
       secrets.map((secret) => ({ secret, id: keyset.id })),
+      opts,
     );
 
     // Spent counters drop out here, so their B_ is never built or sent and the mint never sees
     // the pair that would tie an issuance to its spend. The rest are blinded through the output
     // creator, so a custom crypto backend is honoured here as it is in a swap.
     let lastIssued = -1;
-    const outputs: OutputDataLike[] = [];
     const outputCounters: number[] = [];
     states.forEach((state, i) => {
       if (state.state === CheckStateEnum.SPENT) {
         lastIssued = Math.max(lastIssued, counters[i]);
         return;
       }
-      outputs.push(
-        this._outputDataCreator.createSingleDeterministicData(0, seed, counters[i], keyset.id),
-      );
       outputCounters.push(counters[i]);
     });
     // Every counter spent: the range is used but holds nothing, so skip the restore entirely.
-    if (outputs.length === 0) {
+    if (outputCounters.length === 0) {
       return { proofs: [], lastCounterWithSignature: lastIssued, used: true };
     }
+    const outputs = await mapInChunks(
+      outputCounters,
+      (c) => this._outputDataCreator.createSingleDeterministicData(0, seed, c, keyset.id),
+      opts,
+    );
 
-    const response = await this.mint.restore({ outputs: outputs.map((d) => d.blindedMessage) });
+    const response = await this.mint.restore(
+      { outputs: outputs.map((d) => d.blindedMessage) },
+      { signal },
+    );
     await this._ensureKeysetsForSignatures(response.signatures);
     // outputCounters is ascending, so the last signed index carries the highest live counter
-    const { proofs, lastIndex } = proofsFromRestoreResponse(outputs, response, (id) =>
-      this.keysetForSignature(id),
+    const { proofs, lastIndex } = await proofsFromRestoreResponse(
+      outputs,
+      response,
+      (id) => this.keysetForSignature(id),
+      opts,
     );
     if (lastIndex >= 0) lastIssued = Math.max(lastIssued, outputCounters[lastIndex]);
 
@@ -2630,7 +2842,7 @@ class Wallet {
   async createMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(
     method: string,
     payload: Record<string, unknown>,
-    options?: { normalize?: (raw: Record<string, unknown>) => TRes },
+    options?: AbortOptions & { normalize?: (raw: Record<string, unknown>) => TRes },
   ): Promise<TRes> {
     // Custom methods are fine, but NUT-04 requires the mint to advertise them
     this.requireSupport('mint', method);
@@ -2638,40 +2850,41 @@ class Wallet {
     // When the caller locks the quote (NUT-20), validate and normalize the pubkey.
     const rawPubkey = payload.pubkey;
     const normPubkey =
-      typeof rawPubkey === 'string' && rawPubkey.length > 0
-        ? normalizeSecpPubkey(rawPubkey)
-        : undefined;
+      rawPubkey !== undefined ? normalizeSecpPubkey(rawPubkey as string) : undefined;
     const body = { ...payload, unit: this._unit, ...(normPubkey ? { pubkey: normPubkey } : {}) };
     const res = await this.mint.createMintQuote<TRes>(method, body, {
       normalize: options?.normalize,
+      signal: options?.signal,
     });
+    assertQuoteUnit(res, this.unit, this._logger);
     if (normPubkey) {
       assertQuoteLockedTo(res, normPubkey, this._logger);
     }
-    return { ...res, unit: res.unit || this._unit };
+    return res;
   }
 
   /**
    * Asserts a bolt11 mint quote matches the amount the caller asked for.
    *
    * @remarks
-   * For sat quotes the invoice HRP amount is compared too; other units are not directly comparable
-   * to the invoice, so only the quoted amount is checked.
+   * For sat and msat quotes the invoice HRP amount is compared too; other units are not directly
+   * comparable to the invoice, so only the quoted amount is checked.
    */
   private assertBolt11MintQuoteAmount(res: MintQuoteBolt11Response, expected: Amount): void {
     this.failIf(!res.amount.equals(expected), 'Mint quote amount does not match', {
       expected: expected.toString(),
       quoted: res.amount.toString(),
     });
-    if (this._unit !== 'sat') return;
+    if (this._unit !== 'sat' && this._unit !== 'msat') return;
     let msat: bigint | null = null;
     try {
       msat = bolt11AmountMsat(res.request);
     } catch {
       // fall through: an unreadable invoice fails the comparison below
     }
-    // A sat quote's invoice must ask for exactly the requested amount (in whole sats).
-    const matches = msat !== null && expected.multiplyBy(1000).equals(msat);
+    // Compare the invoice against the requested amount expressed in millisatoshis.
+    const expectedMsat = this._unit === 'sat' ? expected.multiplyBy(1000) : expected;
+    const matches = msat !== null && expectedMsat.equals(msat);
     this.failIf(!matches, 'Mint quote invoice amount does not match the quote', {
       expected: expected.toString(),
       invoiceMsat: msat,
@@ -2696,6 +2909,7 @@ class Wallet {
     amount: AmountLike,
     pubkey: string,
     description?: string,
+    opts?: AbortOptions,
   ): Promise<MintQuoteBolt11Response> {
     this.requireSupport('mint', 'bolt11');
     this.requireMintableKeyset('createMintQuoteBolt11');
@@ -2715,31 +2929,40 @@ class Wallet {
       description: description,
       pubkey: normPubkey,
     };
-    const res = await this.mint.createMintQuoteBolt11(mintQuotePayload);
+    const res = await this.mint.createMintQuoteBolt11(mintQuotePayload, opts);
+    assertQuoteUnit(res, this.unit, this._logger);
     this.assertBolt11MintQuoteAmount(res, mintAmount);
     assertQuoteLockedTo(res, normPubkey, this._logger);
-    return { ...res, unit: res.unit || this._unit };
+    return res;
   }
 
   /**
-   * Creates a quote lock keypair: seed-derived (consuming the quote counter) when seeded, random
-   * otherwise.
+   * Creates a quote lock keypair: seed-derived under the mint identity (consuming this mint's quote
+   * counter) when seeded, random otherwise.
    *
    * @remarks
    * Derived keys are recoverable via {@link Wallet.recoverQuoteLockKey | recoverQuoteLockKey};
    * random ones exist only in the returned object, so persist the key with its quote. `{ random:
    * true }` forces a random key on a seeded wallet, consuming no counter: for throwaway quotes (eg
-   * estimation) that must not pollute the recovery scan.
+   * estimation) that must not pollute the recovery scan, or for a mint that publishes no NUT-06
+   * `pubkey` to scope the derivation to.
+   * @throws {@link CTSError} On a seeded wallet whose mint publishes no `pubkey`, unless `random`.
+   * @experimental Seed derivation follows draft NUT-13 type `0x04` and draft NUT-06 identity
+   *   scoping and may change before GA; a key derived now may then no longer be found by scan, so
+   *   persist the `privkey` with its quote.
    */
   async createQuoteLockKey(opts?: {
     random?: boolean;
   }): Promise<{ pubkey: string; privkey: string }> {
-    return createQuoteLockKeyPair(opts?.random ? undefined : this._seed, async () => {
-      const range = await this._counterSource.reserve(QUOTE_COUNTER_KEY, 1);
+    const seed = opts?.random ? undefined : this._seed;
+    const mintPubkey = seed ? this.requireMintIdentity('createQuoteLockKey') : undefined;
+    return createQuoteLockKeyPair(seed, mintPubkey, async () => {
+      const counterKey = quoteCounterKey(mintPubkey!);
+      const range = await this._counterSource.reserve(counterKey, 1);
       // Event-persisted sources must see the quote cursor move too, or a restart
       // re-derives keys already handed out.
       this.on._emitCountersReserved({
-        counterKey: QUOTE_COUNTER_KEY,
+        counterKey,
         start: range.start,
         count: range.count,
         next: range.start + range.count,
@@ -2755,11 +2978,30 @@ class Wallet {
    * @remarks
    * Offline disaster recovery for a lost quote `privkey`; the happy path is persisting the key the
    * quote response carries. Targeted, not discovery: one HMAC and one point multiply per counter.
-   * No keyset is involved (NUT-13 type `0x04`), so a rotation cannot strand the key.
-   * @throws {@link CTSError} On a seedless wallet, which has nothing to scan.
+   * Keys are scoped to the mint identity, not a keyset (NUT-13 type `0x04`), so a rotation cannot
+   * strand the key but only this mint's quotes are found.
+   * @throws {@link CTSError} On a seedless wallet, which has nothing to scan, or a mint with no
+   *   NUT-06 `pubkey`.
+   * @experimental The scan follows draft NUT-13 type `0x04` and draft NUT-06 identity scoping and
+   *   may change before GA, so it finds only keys derived under the current scheme.
    */
   async recoverQuoteLockKey(pubkey: string): Promise<string | undefined> {
-    return scanQuoteLockKey(pubkey, this._nutrootState());
+    this.failIf(!this._seed, 'recoverQuoteLockKey requires a seeded wallet');
+    const mintPubkey = this.requireMintIdentity('recoverQuoteLockKey');
+    return scanQuoteLockKey(pubkey, mintPubkey, this._nutrootState());
+  }
+
+  /**
+   * The mint's NUT-06 identity `pubkey`, which scopes quote lock derivation.
+   */
+  private requireMintIdentity(what: string): string {
+    // The pubkey is taken as published until mint info signatures are verified.
+    const pubkey = this.getMintInfo().pubkey;
+    this.failIf(
+      !pubkey,
+      `${what}: the mint publishes no NUT-06 pubkey to scope quote lock keys to`,
+    );
+    return normalizeSecpPubkey(pubkey);
   }
 
   /**
@@ -2778,6 +3020,7 @@ class Wallet {
     options?: {
       amount?: AmountLike;
       description?: string;
+      signal?: AbortSignal;
     },
   ): Promise<MintQuoteBolt12Response> {
     this.requireSupport('mint', 'bolt12');
@@ -2802,7 +3045,17 @@ class Wallet {
       description: options?.description,
     };
 
-    const res = await this.mint.createMintQuoteBolt12(mintQuotePayload);
+    const res = await this.mint.createMintQuoteBolt12(mintQuotePayload, {
+      signal: options?.signal,
+    });
+    assertQuoteUnit(res, this.unit, this._logger);
+    // The offer itself is opaque here, so the quoted amount is the only thing to hold the mint to.
+    const amountMatches =
+      amount === undefined ? res.amount === null : res.amount !== null && res.amount.equals(amount);
+    this.failIf(!amountMatches, 'Mint quote amount does not match', {
+      expected: amount?.toString() ?? null,
+      quoted: res.amount?.toString() ?? null,
+    });
     assertQuoteLockedTo(res, normPubkey, this._logger);
     return res;
   }
@@ -2815,14 +3068,21 @@ class Wallet {
    * @returns The mint will return a mint quote with a Bitcoin address for minting tokens.
    * @experimental Onchain support follows NUT-30 semantics and may change.
    */
-  async createMintQuoteOnchain(pubkey: string): Promise<MintQuoteOnchainResponse> {
+  async createMintQuoteOnchain(
+    pubkey: string,
+    opts?: AbortOptions,
+  ): Promise<MintQuoteOnchainResponse> {
     this.requireSupport('mint', 'onchain');
     this.requireMintableKeyset('createMintQuoteOnchain');
     this.failIf(typeof pubkey !== 'string', 'A pubkey is required to lock the mint quote');
     const normPubkey = normalizeSecpPubkey(pubkey);
-    const res = await this.mint.createMintQuoteOnchain({ unit: this._unit, pubkey: normPubkey });
+    const res = await this.mint.createMintQuoteOnchain(
+      { unit: this._unit, pubkey: normPubkey },
+      opts,
+    );
+    assertQuoteUnit(res, this.unit, this._logger);
     assertQuoteLockedTo(res, normPubkey, this._logger);
-    return { ...res, unit: res.unit || this._unit };
+    return res;
   }
 
   // -----------------------------------------------------------------
@@ -2846,11 +3106,12 @@ class Wallet {
   async checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(
     method: string,
     quote: string | Pick<TRes, 'quote'>,
-    options?: { normalize?: (raw: Record<string, unknown>) => TRes },
+    options?: AbortOptions & { normalize?: (raw: Record<string, unknown>) => TRes },
   ): Promise<TRes> {
     const quoteId = typeof quote === 'string' ? quote : (quote as { quote: string }).quote;
     return this.mint.checkMintQuote<TRes>(method, quoteId, {
       normalize: options?.normalize,
+      signal: options?.signal,
     });
   }
 
@@ -2862,9 +3123,10 @@ class Wallet {
    */
   async checkMintQuoteBolt11(
     quote: string | MintQuoteBolt11Response,
+    opts?: AbortOptions,
   ): Promise<MintQuoteBolt11Response> {
     const quoteId = typeof quote === 'string' ? quote : quote.quote;
-    const res = await this.mint.checkMintQuoteBolt11(quoteId);
+    const res = await this.mint.checkMintQuoteBolt11(quoteId, opts);
     // No caller-side expectation here, so check the invoice against the quote's own amount.
     this.assertBolt11MintQuoteAmount(res, res.amount);
     return res;
@@ -2876,8 +3138,8 @@ class Wallet {
    * @param quote Quote ID.
    * @returns The latest mint quote for the given quote ID.
    */
-  async checkMintQuoteBolt12(quote: string): Promise<MintQuoteBolt12Response> {
-    return this.mint.checkMintQuoteBolt12(quote);
+  async checkMintQuoteBolt12(quote: string, opts?: AbortOptions): Promise<MintQuoteBolt12Response> {
+    return this.mint.checkMintQuoteBolt12(quote, opts);
   }
 
   /**
@@ -2887,8 +3149,11 @@ class Wallet {
    * @returns The latest mint quote for the given quote ID.
    * @experimental Onchain support follows NUT-30 semantics and may change.
    */
-  async checkMintQuoteOnchain(quote: string): Promise<MintQuoteOnchainResponse> {
-    return this.mint.checkMintQuoteOnchain(quote);
+  async checkMintQuoteOnchain(
+    quote: string,
+    opts?: AbortOptions,
+  ): Promise<MintQuoteOnchainResponse> {
+    return this.mint.checkMintQuoteOnchain(quote, opts);
   }
 
   /**
@@ -2910,11 +3175,13 @@ class Wallet {
   async checkMintQuoteBatch<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(
     method: string,
     quotes: Array<string | Pick<TRes, 'quote'>>,
-    options?: { normalize?: (raw: Record<string, unknown>) => TRes },
+    options?: AbortOptions & { normalize?: (raw: Record<string, unknown>) => TRes },
   ): Promise<TRes[]> {
+    this.requireNut29(method, 'checkMintQuoteBatch', 'checkMintQuote');
     const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
     return this.mint.checkMintQuoteBatch<TRes>(method, quoteIds, {
       normalize: options?.normalize,
+      signal: options?.signal,
     });
   }
 
@@ -2930,9 +3197,11 @@ class Wallet {
    */
   async checkMintQuoteBatchBolt11(
     quotes: Array<string | MintQuoteBolt11Response>,
+    opts?: AbortOptions,
   ): Promise<MintQuoteBolt11Response[]> {
+    this.requireNut29('bolt11', 'checkMintQuoteBatchBolt11', 'checkMintQuoteBolt11');
     const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
-    const res = await this.mint.checkMintQuoteBatchBolt11(quoteIds);
+    const res = await this.mint.checkMintQuoteBatchBolt11(quoteIds, opts);
     for (const quote of res) this.assertBolt11MintQuoteAmount(quote, quote.amount);
     return res;
   }
@@ -2949,9 +3218,11 @@ class Wallet {
    */
   async checkMintQuoteBatchBolt12(
     quotes: Array<string | MintQuoteBolt12Response>,
+    opts?: AbortOptions,
   ): Promise<MintQuoteBolt12Response[]> {
+    this.requireNut29('bolt12', 'checkMintQuoteBatchBolt12', 'checkMintQuoteBolt12');
     const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
-    return this.mint.checkMintQuoteBatchBolt12(quoteIds);
+    return this.mint.checkMintQuoteBatchBolt12(quoteIds, opts);
   }
 
   // -----------------------------------------------------------------
@@ -2998,14 +3269,12 @@ class Wallet {
 
   private validateMintQuoteAvailableAmount(
     method: string,
-    quote: Pick<MintQuoteBaseResponse, 'quote'>,
+    paid: AmountLike,
+    issued: AmountLike,
     requestedAmount: Amount,
   ): void {
-    if (!('amount_paid' in quote) || !('amount_issued' in quote)) {
-      return;
-    }
-    const amountPaid = Amount.from(quote.amount_paid as AmountLike);
-    const amountIssued = Amount.from(quote.amount_issued as AmountLike);
+    const amountPaid = Amount.from(paid);
+    const amountIssued = Amount.from(issued);
     // A 0/0 snapshot may simply have been fetched before the payment was made (create -> pay
     // externally -> mint with the original object); the mint is the source of truth.
     if (amountPaid.isZero() && amountIssued.isZero()) {
@@ -3028,27 +3297,8 @@ class Wallet {
    * @internal
    */
   computeY(secret: string, keysetId: string): string {
+    assertSpendableVersion(keysetId, this._logger);
     return this._hashToCurve(secret, keysetId);
-  }
-
-  /**
-   * @internal
-   */
-  validateMintQuote(quote: Partial<MintQuoteBaseResponse>): void {
-    this.failIf(
-      'unit' in quote && typeof quote.unit === 'string' && quote.unit !== this.unit,
-      `Quote unit '${quote.unit}' does not match wallet unit '${this.unit}'`,
-    );
-  }
-
-  /**
-   * @internal
-   */
-  validateMeltQuote(quote: Partial<MeltQuoteBaseResponse>): void {
-    this.failIf(
-      'unit' in quote && typeof quote.unit === 'string' && quote.unit !== this.unit,
-      `Quote unit '${quote.unit}' does not match wallet unit '${this.unit}'`,
-    );
   }
 
   /**
@@ -3075,7 +3325,7 @@ class Wallet {
     outputType?: OutputType,
   ): Promise<Proof[]> {
     const preview = await this.prepareMint(method, amount, quote, config, outputType);
-    return this.completeMint(preview);
+    return this.completeMint(preview); // no abort
   }
 
   /**
@@ -3100,11 +3350,11 @@ class Wallet {
   ): Promise<Proof[]> {
     this.requireSupport('mint', 'bolt11');
     if (typeof quote === 'string') {
-      quote = await this.checkMintQuoteBolt11(quote);
+      quote = await this.checkMintQuoteBolt11(quote, { signal: config?.signal });
     }
-    this.validateMintQuote(quote);
+    assertQuoteUnit(quote, this.unit, this._logger);
     const preview = await this.prepareMint('bolt11', amount, quote, config, outputType);
-    return this.completeMint(preview);
+    return this.completeMint(preview); // no abort
   }
 
   /**
@@ -3136,7 +3386,7 @@ class Wallet {
       { ...config, privkey },
       outputType,
     );
-    return this.completeMint(preview);
+    return this.completeMint(preview); // no abort
   }
 
   /**
@@ -3169,7 +3419,7 @@ class Wallet {
       { ...config, privkey },
       outputType,
     );
-    return this.completeMint(preview);
+    return this.completeMint(preview); // no abort
   }
 
   /**
@@ -3181,11 +3431,14 @@ class Wallet {
    * built-in methods, prefer `mintProofsBolt11()`, `mintProofsBolt12()`, or
    * `wallet.ops.mintBolt11()/mintBolt12()`.
    *
-   * Returns a `MintPreview` that contains the exact mint payload and output data needed to
-   * construct proofs. Persist this preview to support NUT-19 replay safety.
-   * @param quote The mint quote. Only `quote` (ID) is required — a full `MintQuoteBolt11Response`
-   *   works, but `{ quote: string }` is sufficient. Pass `config.privkey` to produce a NUT-20
-   *   signature regardless of whether the quote carries a `pubkey` field.
+   * Returns a `MintPreview` with the quote, output data and NUT-20 signature that `completeMint`
+   * sends. Persist this preview to support NUT-19 replay safety.
+   * @param quote The mint quote for this method. A mint response is used as given; anything short
+   *   of one, such as `{ quote: string }`, is read from the mint and merged over what you passed,
+   *   so the unit and accounting checks run against the mint's values. Pass `config.privkey` to
+   *   produce a NUT-20 signature regardless of whether the quote carries a `pubkey` field. On a v3
+   *   keyset the signature binds the quote's `amount_issued`, so a stored quote another draw has
+   *   moved fails with 20008: pass `{ quote: id }` to read it fresh.
    */
   async prepareMint<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>>(
     method: string,
@@ -3194,13 +3447,42 @@ class Wallet {
     config?: MintProofsConfig,
     outputType?: OutputType,
   ): Promise<MintPreview<TQuote>> {
+    this.throwIfAborted(config?.signal);
     this.failIf(
       typeof quote === 'string',
-      `prepareMint: expected a quote object, not a string ID. Use mintBolt11() which accepts string quote IDs.`,
+      `prepareMint: expected a quote object, not a string ID. Pass { quote: id } and the wallet reads it from the mint.`,
     );
-    this.validateMintQuote(quote);
+    this.failIf(
+      typeof quote.quote !== 'string' || quote.quote.length === 0,
+      'prepareMint: the quote needs its id',
+    );
+    // Keep the caller's quote type while reading optional protocol fields. Stored accounting
+    // may still be AmountLike; validateMintQuoteAvailableAmount normalizes it before use.
+    let resolvedQuote: TQuote & Partial<MintQuoteBaseResponse> = quote;
+    // Mint fills the unit and accounting on every response; fetch any missing fields first.
+    // Merge rather than swap: the mint's values win on every field it sends, and anything the
+    // caller carries on its own quote type survives into the request, transcript and preview.
+    if (
+      resolvedQuote.unit == null ||
+      resolvedQuote.amount_paid == null ||
+      resolvedQuote.amount_issued == null
+    ) {
+      const fetched = await this.checkMintQuote<MintQuoteBaseResponse>(method, quote.quote, {
+        signal: config?.signal,
+      });
+      resolvedQuote = { ...quote, ...definedOnly(fetched) };
+    }
+    assertQuoteUnit(resolvedQuote, this.unit, this._logger);
     const requestedAmount = this.parseAmount(amount, `prepareMint: ${method}`);
-    this.validateMintQuoteAvailableAmount(method, quote, requestedAmount);
+    // Resolution above guarantees both, so a gap here is this wallet's bug, not the mint's.
+    this.failIfNullish(resolvedQuote.amount_paid, 'prepareMint: quote accounting is unavailable');
+    this.failIfNullish(resolvedQuote.amount_issued, 'prepareMint: quote accounting is unavailable');
+    this.validateMintQuoteAvailableAmount(
+      method,
+      resolvedQuote.amount_paid,
+      resolvedQuote.amount_issued,
+      requestedAmount,
+    );
     outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
     const { keysetId, proofsWeHave, onCountersReserved } = config ?? {};
     const privkey = config?.privkey;
@@ -3229,22 +3511,18 @@ class Wallet {
       mintOT: stringifyOutputTypeForLog(mintOT),
     });
 
-    // Create outputs and mint payload
     const outputs = this.createOutputData(mintAmount, keyset, mintOT);
     const blindedMessages = outputs.map((d) => d.blindedMessage);
     const v3 = this.mintsOntoV3(blindedMessages);
-    const mintPayload: MintRequest = {
-      outputs: blindedMessages,
-      quote: quote.quote,
-    };
 
     // Sign whenever a privkey or sign callback is provided — quote.pubkey may be absent if only
     // the quote ID was stored, but the caller still needs to produce a NUT-20 signature
+    let signature: string | undefined;
     let legacySignature: string | undefined;
     // The key is caller state, passed in config; nothing is recovered implicitly
     // (recoverQuoteLockKey is the explicit tool for a seeded wallet that lost it).
     const sign = privkey ? undefined : config?.sign;
-    const quotePubkey = 'pubkey' in quote ? (quote.pubkey as string | undefined) : undefined;
+    const quotePubkey = resolvedQuote.pubkey;
     if (quotePubkey) {
       this.failIf(
         !privkey && !sign,
@@ -3267,59 +3545,54 @@ class Wallet {
       }
       const request: MintQuoteSignRequest = {
         digest: new Uint8Array(),
-        quoteId: quote.quote,
+        quoteId: resolvedQuote.quote,
         outputs: blindedMessages,
       };
       if (v3) {
         // V3 (nutroot secrets): the quote is a transaction input; its lock key signs the
         // quote input digest (NUT-10). No legacy fallback on v3 keysets.
-        // The transcript commits the quote's face amount, not this draw: the output
-        // section already binds the draw (NUT-10). Amountless quotes commit 0;
-        // a bolt11 quote always has an amount, so an absent one is a caller omission.
-        const quoteAmount = 'amount' in quote ? (quote.amount as AmountLike) : undefined;
-        this.failIf(
-          quoteAmount === undefined && method === 'bolt11',
-          'prepareMint: quote object lacks its amount; pass the full mint quote',
-        );
+        // The quote input commits the amount this request issues and its lock key (NUT-04).
+        this.failIf(!quotePubkey, 'prepareMint: a v3 mint needs the quote lock pubkey');
         const tx = inputsForPayload({
-          mintQuotes: [{ quoteId: quote.quote, amount: quoteAmount ?? 0 }],
+          mintQuotes: [
+            {
+              quoteId: resolvedQuote.quote,
+              amount: mintAmount,
+              lockKey: quotePubkey!,
+              issued: resolvedQuote.amount_issued,
+            },
+          ],
           outputs: blindedMessages,
         });
-        const { digest, inputContainer } = tx.quotes.get(quote.quote)!;
+        const { digest, inputContainer } = tx.quotes.get(resolvedQuote.quote)!;
         Object.assign(request, {
           digest,
           transactionMessage: tx.transactionMessage,
           inputContainer,
         });
       } else {
-        request.digest = mintQuoteDigest(quote.quote, blindedMessages);
+        request.digest = mintQuoteDigest(resolvedQuote.quote, blindedMessages);
       }
       if (signingKey) {
-        mintPayload.signature = schnorrSignDigest(request.digest, signingKey);
+        signature = schnorrSignDigest(request.digest, signingKey);
         // Keep a legacy (pre nuts#375) signature over the same outputs as a fallback for
         // not-yet-upgraded mints — see completeMint(). Never on v3 keysets.
         if (!v3) {
-          legacySignature = signMintQuoteLegacy(signingKey, quote.quote, blindedMessages);
+          legacySignature = signMintQuoteLegacy(signingKey, resolvedQuote.quote, blindedMessages);
         }
       } else {
-        const signature = await sign!(request);
+        signature = await sign!(request);
         // A wrong signer fails here, not at the mint; without a quote pubkey there is nothing
         // to check against, as with a bare privkey.
         this.failIf(
           !!quotePubkey && !schnorrVerifyDigest(signature, request.digest, quotePubkey),
           'prepareMint: the sign callback returned a signature the quote pubkey does not verify',
         );
-        mintPayload.signature = signature;
       }
     }
 
-    return {
-      method,
-      payload: mintPayload,
-      outputData: outputs,
-      quote,
-      legacySignature,
-    };
+    this.throwIfAborted(config?.signal);
+    return { method, quote: resolvedQuote, outputData: outputs, signature, legacySignature };
   }
 
   /**
@@ -3361,14 +3634,20 @@ class Wallet {
    */
   async completeMint(
     mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>,
+    opts?: CompleteMintOptions,
   ): Promise<Proof[]> {
-    const { payload, outputData, method, legacySignature } = mintPreview;
+    const { quote, outputData, method, signature, legacySignature } = mintPreview;
+    const request: MintRequest = {
+      quote: quote.quote,
+      outputs: outputData.map((d) => d.blindedMessage),
+      ...(signature !== undefined ? { signature } : {}),
+    };
     // TODO: Remove legacy message support
     const { signatures } = await this.withStaleKeysetRepair(() =>
       this.withLegacyQuoteSigFallback(
         legacySignature !== undefined,
-        () => this.mint.mint(method, payload),
-        () => this.mint.mint(method, { ...payload, signature: legacySignature }),
+        () => this.mint.mint(method, request, opts),
+        () => this.mint.mint(method, { ...request, signature: legacySignature }, opts),
       ),
     );
     this.failIf(
@@ -3382,7 +3661,7 @@ class Wallet {
     this._logger.debug('MINT COMPLETED', {
       amounts: outputData.map((o) => o.blindedMessage.amount.toString()),
     });
-    return outputData.map((d, i) =>
+    return mapInChunks(outputData, (d, i) =>
       d.toProof(signatures[i], this.keysetForSignature(signatures[i].id)),
     );
   }
@@ -3391,15 +3670,19 @@ class Wallet {
    * Prepare a batched mint transaction (NUT-29).
    *
    * @remarks
-   * Creates a single consolidated set of outputs for all quotes.
+   * Creates a single consolidated set of outputs for all quotes. Each requested amount is checked
+   * against its quote's available balance before outputs or counters are allocated. A 0/0
+   * accounting snapshot defers to the mint, as in prepareMint.
    *
    * NOTE:
    *
    * - Any quote without a pubkey is considered unlocked. Pass `pubkey` for locked quotes.
-   * - Check all quotes are in the PAID state. If any quote is unpaid, the entire batch with fail.
+   * - Check all quotes are in the PAID state. If any quote is unpaid, the entire batch will fail.
    *
    * @param method Payment method identifier (e.g., 'bolt11', 'bolt12').
-   * @param entries Array of per-quote parameters: `{ amount, quote }`.
+   * @param entries Array of per-quote parameters: `{ amount, quote }`. Quotes missing a unit or
+   *   accounting are fetched in one batched lookup and merged over the supplied objects. The mint's
+   *   values, including nulls, win; caller-only fields survive in the preview.
    * @param config Optional config applied to the entire batch (keysetId, privkey, counters, etc.).
    * @param outputType Optional output type override applied to the consolidated outputs.
    * @returns A `BatchMintPreview` ready to pass to `completeBatchMint`.
@@ -3414,13 +3697,11 @@ class Wallet {
     config?: MintProofsConfig,
     outputType?: OutputType,
   ): Promise<BatchMintPreview<TQuote>> {
+    this.throwIfAborted(config?.signal);
     this.failIf(entries.length === 0, 'prepareBatchMint: no entries provided');
-
     // Enforce NUT-29 batch-size limit advertised by the mint, clamped to our absolute cap.
-    // If the mint does not advertise NUT-29 info, the absolute cap still applies.
-    const nut29 = this._mintInfo?.isSupported(29);
-    const nut29Params = nut29?.supported ? nut29.params : undefined;
-
+    // Before mint info is loaded the absolute cap still applies.
+    const nut29Params = this.requireNut29(method, 'prepareBatchMint', 'prepareMint');
     const effectiveLimit = nut29Params?.max_batch_size ?? ABSOLUTE_MAX_BATCH_SIZE;
 
     if (entries.length > effectiveLimit) {
@@ -3433,24 +3714,49 @@ class Wallet {
       );
     }
 
-    // Warn if the requested method is not in the mint's NUT-29 supported methods
-    if (nut29Params?.methods?.length) {
-      if (!nut29Params.methods.includes(method)) {
-        this._logger.warn(
-          `prepareBatchMint: method '${method}' is not in mint's advertised NUT-29 methods`,
-        );
-      }
-    }
-
     const { privkey, keysetId, proofsWeHave, onCountersReserved } = config ?? {};
 
-    // Validate all quotes
-    for (const entry of entries) {
+    let resolvedEntries: Array<{
+      amount: AmountLike;
+      quote: TQuote & Partial<MintQuoteBaseResponse>;
+    }> = entries;
+    // Validate every quote, and sort them: as in prepareMint, a mint response is used as given
+    // and anything the caller built is read back, all of those in one request.
+    const unresolved: string[] = [];
+    for (const entry of resolvedEntries) {
       this.failIf(
-        typeof entry.quote === 'string',
-        `prepareBatchMint: expected a quote object, not a string ID`,
+        typeof entry.quote !== 'object' || entry.quote === null,
+        `prepareBatchMint: expected a quote object, not a string ID. Pass { quote: id } and the wallet reads it from the mint.`,
       );
-      this.validateMintQuote(entry.quote);
+      this.failIf(
+        typeof entry.quote.quote !== 'string' || entry.quote.quote.length === 0,
+        'prepareBatchMint: every quote needs its id',
+      );
+      if (
+        entry.quote.unit != null &&
+        entry.quote.amount_paid != null &&
+        entry.quote.amount_issued != null
+      ) {
+        assertQuoteUnit(entry.quote, this.unit, this._logger);
+      } else {
+        unresolved.push(entry.quote.quote);
+      }
+    }
+    if (unresolved.length) {
+      const fetched = new Map<string, MintQuoteBaseResponse>();
+      for (const quote of await this.checkMintQuoteBatch<MintQuoteBaseResponse>(
+        method,
+        [...new Set(unresolved)],
+        { signal: config?.signal },
+      )) {
+        assertQuoteUnit(quote, this.unit, this._logger);
+        fetched.set(quote.quote, quote);
+      }
+      // As in prepareMint, the mint's values win and the caller's own fields survive.
+      resolvedEntries = resolvedEntries.map((entry) => {
+        const resolved = fetched.get(entry.quote.quote);
+        return resolved ? { ...entry, quote: { ...entry.quote, ...definedOnly(resolved) } } : entry;
+      });
     }
 
     const keyset = this.getOutputKeyset(keysetId);
@@ -3458,7 +3764,7 @@ class Wallet {
     const signingKeys = privkey ? [privkey].flat() : [];
 
     // Check locked quotes: require a privkey and verify it can sign
-    const hasLockedQuotes = entries.some((e) => 'pubkey' in e.quote && e.quote.pubkey);
+    const hasLockedQuotes = resolvedEntries.some((e) => e.quote.pubkey);
     if (hasLockedQuotes) {
       this.failIf(
         signingKeys.length === 0,
@@ -3467,7 +3773,18 @@ class Wallet {
     }
 
     // Parse amounts and determine keyset
-    const amounts = entries.map((e) => this.parseAmount(e.amount, `prepareBatchMint: ${method}`));
+    const amounts = resolvedEntries.map(({ amount, quote }) => {
+      const requestedAmount = this.parseAmount(amount, `prepareBatchMint: ${method}`);
+      this.failIfNullish(quote.amount_paid, 'prepareBatchMint: quote accounting is unavailable');
+      this.failIfNullish(quote.amount_issued, 'prepareBatchMint: quote accounting is unavailable');
+      this.validateMintQuoteAvailableAmount(
+        method,
+        quote.amount_paid,
+        quote.amount_issued,
+        requestedAmount,
+      );
+      return requestedAmount;
+    });
     const totalAmount = Amount.sum(amounts);
 
     // Shape consolidated outputs over the total amount
@@ -3504,7 +3821,7 @@ class Wallet {
     // Every quote in a v3 batch is a signing input, so an unlocked one has no witness and the
     // mint must reject the batch (NUT-29). Fail here, before any request is built.
     if (v3) {
-      const unlocked = entries.findIndex((e) => !('pubkey' in e.quote && e.quote.pubkey));
+      const unlocked = resolvedEntries.findIndex((e) => !e.quote.pubkey);
       this.failIf(
         unlocked >= 0,
         `prepareBatchMint: quote #${unlocked + 1} is unlocked; every quote minting onto a v3 keyset must be locked`,
@@ -3512,21 +3829,18 @@ class Wallet {
     }
     const v3BatchDigests = v3
       ? inputsForPayload({
-          mintQuotes: entries.map((e, i) => {
-            // Face amount, as in prepareMint: the transcript never commits the draw,
-            // so a slim bolt11 quote object cannot stand in for it.
-            const quoteAmount = 'amount' in e.quote ? (e.quote.amount as AmountLike) : undefined;
-            this.failIf(
-              quoteAmount === undefined && method === 'bolt11',
-              `prepareBatchMint: quote #${i + 1} lacks its amount; pass the full mint quote`,
-            );
-            return { quoteId: e.quote.quote, amount: quoteAmount ?? 0 };
-          }),
+          // Each quote input commits its quote_amounts entry (NUT-29).
+          mintQuotes: resolvedEntries.map((e, i) => ({
+            quoteId: e.quote.quote,
+            amount: amounts[i],
+            lockKey: e.quote.pubkey!,
+            issued: e.quote.amount_issued!,
+          })),
           outputs: blindedMessages,
         }).quotes
       : undefined;
-    for (const [i, entry] of entries.entries()) {
-      const quotePubkey = 'pubkey' in entry.quote ? entry.quote.pubkey : undefined;
+    for (const [i, entry] of resolvedEntries.entries()) {
+      const quotePubkey = entry.quote.pubkey;
       if (quotePubkey && signingKeys.length > 0) {
         const signingKey = findSigningKey(quotePubkey, signingKeys);
         if (v3BatchDigests) {
@@ -3552,19 +3866,13 @@ class Wallet {
       }
     }
 
-    const batchPayload: BatchMintRequest = {
-      quotes: entries.map((e) => e.quote.quote),
-      quote_amounts: amounts,
-      outputs: blindedMessages,
-      ...(hasSignatures ? { signatures } : {}),
-    };
-
+    this.throwIfAborted(config?.signal);
     return {
       method,
-      payload: batchPayload,
+      quotes: resolvedEntries.map((e) => e.quote),
+      amounts,
       outputData: outputs,
-      quotes: entries.map((e) => e.quote),
-      ...(hasSignatures ? { legacySignatures } : {}),
+      ...(hasSignatures ? { signatures, legacySignatures } : {}),
     };
   }
 
@@ -3580,14 +3888,21 @@ class Wallet {
    */
   async completeBatchMint(
     batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>,
+    opts?: CompleteMintOptions,
   ): Promise<Proof[]> {
-    const { method, payload, outputData, legacySignatures } = batchPreview;
+    const { method, quotes, amounts, outputData, signatures, legacySignatures } = batchPreview;
+    const request: BatchMintRequest = {
+      quotes: quotes.map((q) => q.quote),
+      quote_amounts: amounts,
+      outputs: outputData.map((d) => d.blindedMessage),
+      ...(signatures ? { signatures } : {}),
+    };
     // TODO: Remove legacy message support
     const { signatures: sigs } = await this.withStaleKeysetRepair(() =>
       this.withLegacyQuoteSigFallback(
         legacySignatures !== undefined,
-        () => this.mint.mintBatch(method, payload),
-        () => this.mint.mintBatch(method, { ...payload, signatures: legacySignatures! }),
+        () => this.mint.mintBatch(method, request, opts),
+        () => this.mint.mintBatch(method, { ...request, signatures: legacySignatures! }, opts),
       ),
     );
     this.failIf(
@@ -3599,10 +3914,12 @@ class Wallet {
     // Unblind under the keyset each signature names, as custom outputs may pick their own.
     await this._ensureKeysetsForSignatures(sigs);
     this._logger.debug('BATCH MINT COMPLETED', {
-      quotes: payload.quotes.length,
+      quotes: quotes.length,
       amounts: outputData.map((o) => o.blindedMessage.amount.toString()),
     });
-    return outputData.map((d, i) => d.toProof(sigs[i], this.keysetForSignature(sigs[i].id)));
+    return mapInChunks(outputData, (d, i) =>
+      d.toProof(sigs[i], this.keysetForSignature(sigs[i].id)),
+    );
   }
 
   // -----------------------------------------------------------------
@@ -3627,36 +3944,42 @@ class Wallet {
   async createMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(
     method: string,
     payload: Record<string, unknown>,
-    options?: { normalize?: (raw: Record<string, unknown>) => TRes },
+    options?: AbortOptions & { normalize?: (raw: Record<string, unknown>) => TRes },
   ): Promise<TRes> {
     // Custom methods are fine, but NUT-05 requires the mint to advertise them
     this.requireSupport('melt', method);
     const body = { ...payload, unit: this._unit };
     const res = await this.mint.createMeltQuote<TRes>(method, body, {
       normalize: options?.normalize,
+      signal: options?.signal,
     });
-    return { ...res, unit: res.unit || this._unit };
+    assertQuoteUnit(res, this.unit, this._logger);
+    return res;
   }
 
   /**
-   * Asserts a bolt11 melt quote does not charge more than the invoice asks for.
+   * Asserts a lightning melt quote does not charge more than the millisat request asks for.
    *
    * @remarks
-   * Sat quotes only; other units are not directly comparable to the invoice. One-sided by design: a
-   * quote may round a sub-sat invoice up to the next sat, and undercharging is the mint's loss.
-   * Pass `null` when there is no millisat expectation to compare against.
+   * Sat and msat quotes only; other units need a conversion policy. One-sided by design: a quote
+   * may round a sub-sat request up to the next sat, and undercharging is the mint's loss. Pass
+   * `null` when there is no millisat expectation to compare against.
    */
   private assertBolt11MeltQuoteAmount(
     res: MeltQuoteBolt11Response,
     expectedMsat: AmountLike | null,
   ): void {
-    if (this._unit !== 'sat' || expectedMsat === null) return;
+    if ((this._unit !== 'sat' && this._unit !== 'msat') || expectedMsat === null) return;
     const msat = Amount.from(expectedMsat);
-    const maxSat = msat.ceilPercent(1, 1000); // ceil(msat / 1000)
-    this.failIf(res.amount.greaterThan(maxSat), 'Melt quote amount exceeds the invoice amount', {
-      quoted: res.amount.toString(),
-      invoiceMsat: msat.toString(),
-    });
+    const maxAmount = this._unit === 'sat' ? msat.ceilPercent(1, 1000) : msat;
+    this.failIf(
+      res.amount.greaterThan(maxAmount),
+      'Melt quote amount exceeds the requested amount',
+      {
+        quoted: res.amount.toString(),
+        requestedMsat: msat.toString(),
+      },
+    );
   }
 
   /**
@@ -3672,6 +3995,7 @@ class Wallet {
   async createMeltQuoteBolt11(
     invoice: string,
     amountMsat?: AmountLike,
+    opts?: AbortOptions,
   ): Promise<MeltQuoteBolt11Response> {
     this.requireSupport('melt', 'bolt11');
     const normalizedAmountMsat =
@@ -3700,7 +4024,8 @@ class Wallet {
           }
         : {}),
     };
-    const meltQuote = await this.mint.createMeltQuoteBolt11(meltQuotePayload);
+    const meltQuote = await this.mint.createMeltQuoteBolt11(meltQuotePayload, opts);
+    assertQuoteUnit(meltQuote, this.unit, this._logger);
     let expectedMsat: AmountLike | null = null;
     try {
       expectedMsat = bolt11AmountMsat(invoice);
@@ -3711,11 +4036,7 @@ class Wallet {
       expectedMsat = normalizedAmountMsat;
     }
     this.assertBolt11MeltQuoteAmount(meltQuote, expectedMsat);
-    return {
-      ...meltQuote,
-      unit: meltQuote.unit || this._unit,
-      request: meltQuote.request || invoice,
-    };
+    return meltQuote;
   }
 
   /**
@@ -3731,21 +4052,29 @@ class Wallet {
   async createMeltQuoteBolt12(
     offer: string,
     amountMsat?: AmountLike,
+    opts?: AbortOptions,
   ): Promise<MeltQuoteBolt12Response> {
     this.requireSupport('melt', 'bolt12');
     const normalizedAmountMsat =
       amountMsat !== undefined ? this.parseAmount(amountMsat, 'createMeltQuoteBolt12') : undefined;
-    return this.mint.createMeltQuoteBolt12({
-      unit: this._unit,
-      request: offer,
-      options: normalizedAmountMsat
-        ? {
-            amountless: {
-              amount_msat: normalizedAmountMsat,
-            },
-          }
-        : undefined,
-    });
+    const meltQuote = await this.mint.createMeltQuoteBolt12(
+      {
+        unit: this._unit,
+        request: offer,
+        options: normalizedAmountMsat
+          ? {
+              amountless: {
+                amount_msat: normalizedAmountMsat,
+              },
+            }
+          : undefined,
+      },
+      opts,
+    );
+    assertQuoteUnit(meltQuote, this.unit, this._logger);
+    // The offer itself is opaque here, so only an explicit caller amount bounds the quote.
+    this.assertBolt11MeltQuoteAmount(meltQuote, normalizedAmountMsat ?? null);
+    return meltQuote;
   }
 
   /**
@@ -3759,15 +4088,25 @@ class Wallet {
   async createMeltQuoteOnchain(
     address: string,
     amount: AmountLike,
+    opts?: AbortOptions,
   ): Promise<MeltQuoteOnchainResponse> {
     this.requireSupport('melt', 'onchain');
     const normalizedAmount = this.parseAmount(amount, 'createMeltQuoteOnchain');
-    const quote = await this.mint.createMeltQuoteOnchain({
-      unit: this._unit,
-      request: address,
-      amount: normalizedAmount,
+    const quote = await this.mint.createMeltQuoteOnchain(
+      {
+        unit: this._unit,
+        request: address,
+        amount: normalizedAmount,
+      },
+      opts,
+    );
+    assertQuoteUnit(quote, this.unit, this._logger);
+    // Onchain amounts are already in the wallet unit, so the quote must match exactly.
+    this.failIf(!quote.amount.equals(normalizedAmount), 'Melt quote amount does not match', {
+      expected: normalizedAmount.toString(),
+      quoted: quote.amount.toString(),
     });
-    return { ...quote, unit: quote.unit || this._unit };
+    return quote;
   }
 
   /**
@@ -3784,6 +4123,7 @@ class Wallet {
   async createMultiPathMeltQuote(
     invoice: string,
     millisatPartialAmount: AmountLike,
+    opts?: AbortOptions,
   ): Promise<MeltQuoteBolt11Response> {
     const normalizedMillisatPartialAmount = this.parseAmount(
       millisatPartialAmount,
@@ -3800,10 +4140,11 @@ class Wallet {
       request: invoice,
       options: { mpp: { amount: normalizedMillisatPartialAmount } },
     };
-    const meltQuote = await this.mint.createMeltQuoteBolt11(meltQuotePayload);
+    const meltQuote = await this.mint.createMeltQuoteBolt11(meltQuotePayload, opts);
+    assertQuoteUnit(meltQuote, this.unit, this._logger);
     // A partial quote is bounded by the caller's own millisat share, not the invoice total.
     this.assertBolt11MeltQuoteAmount(meltQuote, normalizedMillisatPartialAmount);
-    return { ...meltQuote, request: invoice, unit: this._unit };
+    return meltQuote;
   }
 
   // -----------------------------------------------------------------
@@ -3827,11 +4168,12 @@ class Wallet {
   async checkMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(
     method: string,
     quote: string | Pick<TRes, 'quote'>,
-    options?: { normalize?: (raw: Record<string, unknown>) => TRes },
+    options?: AbortOptions & { normalize?: (raw: Record<string, unknown>) => TRes },
   ): Promise<TRes> {
     const quoteId = typeof quote === 'string' ? quote : (quote as { quote: string }).quote;
     return this.mint.checkMeltQuote<TRes>(method, quoteId, {
       normalize: options?.normalize,
+      signal: options?.signal,
     });
   }
 
@@ -3843,11 +4185,12 @@ class Wallet {
    */
   async checkMeltQuoteBolt11(
     quote: string | MeltQuoteBolt11Response,
+    opts?: AbortOptions,
   ): Promise<MeltQuoteBolt11Response> {
     const quoteId = typeof quote === 'string' ? quote : quote.quote;
-    const res = await this.mint.checkMeltQuoteBolt11(quoteId);
+    const res = await this.mint.checkMeltQuoteBolt11(quoteId, opts);
     // No caller-side expectation here, so check the quote against its own invoice.
-    if (this._unit === 'sat') {
+    if (this._unit === 'sat' || this._unit === 'msat') {
       let expectedMsat: bigint | null = null;
       try {
         expectedMsat = bolt11AmountMsat(res.request);
@@ -3865,8 +4208,8 @@ class Wallet {
    * @param quote ID of the melt quote.
    * @returns The mint will return an existing melt quote.
    */
-  async checkMeltQuoteBolt12(quote: string): Promise<MeltQuoteBolt12Response> {
-    return this.mint.checkMeltQuoteBolt12(quote);
+  async checkMeltQuoteBolt12(quote: string, opts?: AbortOptions): Promise<MeltQuoteBolt12Response> {
+    return this.mint.checkMeltQuoteBolt12(quote, opts);
   }
 
   /**
@@ -3876,8 +4219,11 @@ class Wallet {
    * @returns The mint will return an existing melt quote.
    * @experimental Onchain support follows NUT-30 semantics and may change.
    */
-  async checkMeltQuoteOnchain(quote: string): Promise<MeltQuoteOnchainResponse> {
-    return this.mint.checkMeltQuoteOnchain(quote);
+  async checkMeltQuoteOnchain(
+    quote: string,
+    opts?: AbortOptions,
+  ): Promise<MeltQuoteOnchainResponse> {
+    return this.mint.checkMeltQuoteOnchain(quote, opts);
   }
 
   // -----------------------------------------------------------------
@@ -3908,6 +4254,7 @@ class Wallet {
     outputType?: OutputType,
   ): Promise<MeltProofsResponse<TQuote>> {
     const meltTxn = await this.prepareMelt(method, meltQuote, proofsToSend, config, outputType);
+    // no abort
     return this.completeMelt<TQuote>(
       meltTxn,
       config?.privkey,
@@ -3935,6 +4282,7 @@ class Wallet {
   ): Promise<MeltProofsResponse<MeltQuoteBolt11Response>> {
     this.requireSupport('melt', 'bolt11');
     const meltTxn = await this.prepareMelt('bolt11', meltQuote, proofsToSend, config, outputType);
+    // no abort
     return this.completeMelt<MeltQuoteBolt11Response>(
       meltTxn,
       config?.privkey,
@@ -3962,6 +4310,7 @@ class Wallet {
   ): Promise<MeltProofsResponse<MeltQuoteBolt12Response>> {
     this.requireSupport('melt', 'bolt12');
     const meltTxn = await this.prepareMelt('bolt12', meltQuote, proofsToSend, config, outputType);
+    // no abort
     return this.completeMelt<MeltQuoteBolt12Response>(
       meltTxn,
       config?.privkey,
@@ -3994,7 +4343,7 @@ class Wallet {
     config?: MeltProofsConfig,
   ): Promise<MeltProofsResponse<MeltQuoteOnchainResponse>> {
     this.requireSupport('melt', 'onchain');
-    this.validateMeltQuote(meltQuote);
+    assertQuoteUnit(meltQuote, this.unit, this._logger);
     // Validate fee_option selection
     const feeOption = meltQuote.fee_options.find((o) => o.fee_index === feeIndex);
     this.failIfNullish(feeOption, 'feeIndex must match an onchain melt quote fee option', {
@@ -4024,6 +4373,7 @@ class Wallet {
     });
     // Perform melt
     const meltTxn = await this.prepareMelt('onchain', meltQuote, normalizedProofs, config);
+    // no abort
     const response = await this.completeMelt<MeltQuoteOnchainResponse>(meltTxn, config?.privkey, {
       extraPayload: { fee_index: feeIndex },
       ...(config?.scriptPath?.length && { scriptPath: config.scriptPath }),
@@ -4039,13 +4389,16 @@ class Wallet {
    * pre-melt tasks (such as marking proofs in-flight etc). Creates NUT-08 blanks (amount 0) for
    * melt change and returns a MeltPreview, which you can melt using completeMelt.
    * @param method Payment method of the quote.
-   * @param meltQuote The melt quote. Only `quote` (ID) and `amount` are required — a full
-   *   `MeltQuoteBolt11Response` works, but `{ quote: string, amount: Amount }` is sufficient.
+   * @param meltQuote The melt quote for this method. A mint response is used as given. Anything
+   *   short of one, such as `{ quote: string, amount: Amount }`, is read from the mint and merged
+   *   over what you passed, so an `amount` you supply is replaced by the mint's and is not compared
+   *   against it; pass the response from `createMeltQuote*` or `checkMeltQuote*` to melt the amount
+   *   you hold.
    * @param proofsToSend Proofs to melt.
    * @param config Optional configuration (keysetId, privkey, etc.).
    * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
    * @returns MeltPreview.
-   * @throws If params are invalid.
+   * @throws If params are invalid, or the quote is not in the wallet's unit.
    * @see https://github.com/cashubtc/nuts/blob/main/08.md.
    */
   async prepareMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(
@@ -4055,7 +4408,20 @@ class Wallet {
     config?: MeltProofsConfig,
     outputType?: OutputType,
   ): Promise<MeltPreview<TQuote>> {
-    this.validateMeltQuote(meltQuote);
+    this.throwIfAborted(config?.signal);
+    this.failIf(
+      typeof meltQuote.quote !== 'string' || meltQuote.quote.length === 0,
+      'prepareMelt: the quote needs its id',
+    );
+    let resolvedQuote: TQuote & Partial<MeltQuoteBaseResponse> = meltQuote;
+    // As in prepareMint, fetch any missing fields required on a mint response (NUT-05).
+    if (resolvedQuote.unit == null || resolvedQuote.state == null) {
+      const fetched = await this.checkMeltQuote<MeltQuoteBaseResponse>(method, meltQuote.quote, {
+        signal: config?.signal,
+      });
+      resolvedQuote = { ...meltQuote, ...definedOnly(fetched) };
+    }
+    assertQuoteUnit(resolvedQuote, this.unit, this._logger);
     outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
     const { keysetId, onCountersReserved, nut08Change = true, preimage } = config || {};
 
@@ -4090,14 +4456,14 @@ class Wallet {
     // this equals the quote’s fee_reserve. If you overshoot more,
     // the extra also becomes NUT-08 change, if melt method allows.
     this.failIf(
-      sendAmount.lessThan(meltQuote.amount),
+      sendAmount.lessThan(resolvedQuote.amount),
       'Not enough proofs to cover amount + fee reserve',
       {
         sendAmount: sendAmount.toString(),
-        quoteAmount: meltQuote.amount.toString(),
+        quoteAmount: resolvedQuote.amount.toString(),
       },
     );
-    const feeReserve = sendAmount.subtract(meltQuote.amount);
+    const feeReserve = sendAmount.subtract(resolvedQuote.amount);
 
     // Custom OT is definitive (no extra NUT-08 blanks)
     if (outputType.type === 'custom') {
@@ -4146,9 +4512,10 @@ class Wallet {
       inputs:
         preimage === undefined ? normalizedProofs : attachHTLCPreimage(normalizedProofs, preimage),
       outputData,
-      quote: meltQuote,
+      quote: resolvedQuote,
     };
 
+    this.throwIfAborted(config?.signal);
     return meltPreview;
   }
 
@@ -4207,8 +4574,9 @@ class Wallet {
       ...extra,
     };
 
-    // Attach nutroot transaction witnesses (v3 keysets). The digest binds the quote amount,
-    // so a slim quote object cannot sign v3 inputs: fail fast rather than send them unsigned.
+    // Attach nutroot transaction witnesses (v3 keysets). The digest binds the melt output's
+    // amount (quote amount plus the selected fee reserve), so a slim quote object cannot sign v3
+    // inputs: fail fast rather than send them unsigned.
     const quoteAmount =
       'amount' in meltPreview.quote ? (meltPreview.quote.amount as AmountLike) : undefined;
     this.failIf(
@@ -4218,9 +4586,13 @@ class Wallet {
     );
     let receipts: SpendReceipt[] = [];
     if (quoteAmount !== undefined) {
+      const feeIndex = typeof extra?.fee_index === 'number' ? extra.fee_index : undefined;
       receipts = await attachTransactionWitnesses(
         meltPayload,
-        { quoteId: quote, amount: Amount.from(quoteAmount) },
+        {
+          quoteId: quote,
+          amount: meltOutputAmount({ ...meltPreview.quote, amount: quoteAmount }, feeIndex),
+        },
         collectSpendInfoKeys(meltPreview.inputs, privkey, this._logger),
         completeOptions.scriptPath?.length
           ? prepareScriptPathSpends(
@@ -4230,12 +4602,13 @@ class Wallet {
             )
           : undefined,
         this._nutrootState(),
+        completeOptions.signal,
       );
     }
 
     // Execute melt and validate result
     const meltResponse: MeltQuoteBaseResponse = await this.withStaleKeysetRepair(() =>
-      this.mint.melt<TQuote>(meltPreview.method, meltPayload),
+      this.mint.melt<TQuote>(meltPreview.method, meltPayload, { signal: completeOptions.signal }),
     );
 
     // Merge preview quote with response to protect against incomplete response.
@@ -4364,10 +4737,18 @@ class Wallet {
    *
    * @param proofs Each proof must carry `id` and `secret`. The keyset id selects the hash-to-curve
    *   variant: v0/v1/v2 use secp256k1; v3 (`02…`) uses BLS12-381 G1.
+   * @param opts.budgetMs Milliseconds of hashing between yields to the event loop. Default 50;
+   *   lower it when running several checks at once so together they stay within a frame budget.
    * @returns NUT-07 state for each proof, in same order.
    */
-  async checkProofsStates(proofs: Array<Pick<ProofLike, 'secret' | 'id'>>): Promise<ProofState[]> {
-    const Ys = proofs.map((p) => this.computeY(p.secret, p.id));
+  async checkProofsStates(
+    proofs: Array<Pick<ProofLike, 'secret' | 'id'>>,
+    opts?: AbortOptions & { budgetMs?: number },
+  ): Promise<ProofState[]> {
+    const Ys = await mapInChunks(proofs, (p) => this.computeY(p.secret, p.id), {
+      signal: opts?.signal,
+      budgetMs: opts?.budgetMs,
+    });
     // Shuffle the wire order to reduce linkability with B_'s (eg when coupled with a restore scan).
     // Indices travel with the request, so callers still get their original order back.
     const order = Ys.map((_, i) => i);
@@ -4384,7 +4765,7 @@ class Wallet {
     const states = new Array<ProofState>(Ys.length);
     // Slices are independent, so run them through the bounded pool.
     await runPool(slices, BATCH_POOL_SIZE, async (slice) => {
-      const { states: batchStates } = await this.mint.check({ Ys: slice.map((i) => Ys[i]) });
+      const { states: batchStates } = await this.mint.check({ Ys: slice.map((i) => Ys[i]) }, opts);
       // don't trust the mint's ordering: map results onto the request slice so order is
       // guaranteed and any omitted Y fails loudly instead of misaligning states
       const proofStatesByY: { [y: string]: ProofState } = {};
@@ -4398,6 +4779,35 @@ class Wallet {
       });
     });
     return states;
+  }
+
+  /**
+   * Checks that the mint signed each proof (DLEQ, or pairing on v3), loading keys as needed.
+   *
+   * @remarks
+   * `verifyMintSignatures` with this wallet's keysets: chunked, yielding, never throwing per proof.
+   * Says nothing about spendability; a token from outside goes through `receive`.
+   */
+  async verifyMintSignatures<T extends ProofLike = Proof>(
+    proofs: T[],
+    opts?: VerifyProofsOptions,
+  ): Promise<ProofVerification<T>> {
+    this.throwIfAborted(opts?.signal);
+    this.failIf(
+      proofs.length > ABSOLUTE_MAX_ARRAY_LENGTH,
+      `Token contains too many proofs: ${proofs.length}, maximum is ${ABSOLUTE_MAX_ARRAY_LENGTH}`,
+    );
+    if (!this._strictCachedKeysets) {
+      for (const id of new Set(proofs.map((p) => p.id))) {
+        this.throwIfAborted(opts?.signal);
+        try {
+          await this._keyChain.ensureKeysetKeys(id);
+        } catch {
+          // Unknown keyset: its proofs are reported invalid.
+        }
+      }
+    }
+    return verifyMintSignatures(proofs, (id) => this._keyChain.getKeyset(id), opts);
   }
 
   /**

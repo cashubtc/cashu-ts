@@ -2,6 +2,9 @@ import { numberToVarBytesBE } from '@noble/curves/utils.js';
 
 import { CTSError } from '../model/Errors';
 
+import { U64_MAX } from './limits';
+
+// eslint-disable-next-line no-restricted-syntax -- this module owns the decoders
 const utf8Decoder = new TextDecoder('utf-8');
 
 /**
@@ -16,6 +19,7 @@ export function bytesToUtf8(bytes: Uint8Array): string {
   return utf8Decoder.decode(bytes);
 }
 
+// eslint-disable-next-line no-restricted-syntax -- this module owns the decoders
 const fieldUtf8Decoder = new TextDecoder('utf-8', { ignoreBOM: true, fatal: true });
 
 /**
@@ -34,6 +38,7 @@ export function decodeUtf8Field(bytes: Uint8Array): string {
   }
 }
 
+// eslint-disable-next-line no-restricted-syntax -- this module owns the decoders
 const documentUtf8Decoder = new TextDecoder('utf-8', { fatal: true });
 
 /**
@@ -92,9 +97,11 @@ export function compareBytes(a: Uint8Array, b: Uint8Array): number {
  * @remarks
  * The empty encoding of zero is the difference from noble's `numberToVarBytesBE`, which emits
  * `0x00`. Length-framed fields (NUT-02 keyset ids) need the empty form.
- * @throws RangeError If `value` is negative.
+ * @throws RangeError If `value` is negative or above the u64 range every Cashu amount is held to.
  */
 export function minimalBytesBE(value: bigint): Uint8Array {
   if (value < 0n) throw new RangeError('value must be non-negative');
+  // Bound the encoder before it allocates: the fields framed here are all u64 amounts.
+  if (value > U64_MAX) throw new RangeError('value must not exceed u64 max');
   return value === 0n ? new Uint8Array(0) : numberToVarBytesBE(value);
 }

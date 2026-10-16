@@ -5,12 +5,12 @@ import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/
 import { HDKey, HARDENED_OFFSET } from '@scure/bip32';
 
 import { CTSError, InvalidScalarError } from '../model/Errors';
-import { isBase64String } from '../utils';
+import { isBase64String, isValidHex } from '../utils';
+import { NUTROOT_MAX_SLOTS, SEED_BYTES } from '../utils/limits';
 
 import { BLS_FR_ORDER } from './curve_bls';
-import { getPubKeyFromPrivKey } from './curve_secp';
-import { getKeysetIdInt, isBlsKeyset } from './curves';
-import { NUTROOT_MAX_SLOTS } from './nutroot';
+import { getPubKeyFromPrivKey, normalizeSecpPubkey } from './curve_secp';
+import { getKeysetIdInt, isBlsKeyset, LEGACY_KEYSET_ID_LENGTH } from './curves';
 
 const STANDARD_DERIVATION_PATH = `m/129372'/0'`;
 
@@ -49,6 +49,41 @@ export type DerivedSecretAndBlindingFactor = {
 type SecretAndBlindingFactorDeriver = (counter: number) => DerivedSecretAndBlindingFactor;
 
 /**
+ * Groups of distinct legacy keyset IDs (base64 or hex version `00`) that share a truncated BIP-32
+ * path integer. Other ID versions and unrecognized forms are ignored; this never throws.
+ *
+ * @param keysetIds - All known keyset IDs, including inactive keysets.
+ * @returns Colliding groups of distinct IDs, or an empty array when none collide. Handling a
+ *   collision is wallet policy.
+ */
+export function findLegacyDerivationCollisions(keysetIds: readonly string[]): string[][] {
+  const groups = new Map<bigint, string[]>();
+  const seenIds = new Set<string>();
+  for (const keysetId of keysetIds) {
+    let keysetIdInt: bigint;
+    try {
+      if (getDerivationKind(keysetId) !== DerivationKind.DEPRECATED_BIP32) continue;
+      keysetIdInt = getKeysetIdInt(keysetId);
+    } catch {
+      continue;
+    }
+
+    // Hex is case-insensitive; legacy base64 also travelled URL-safe (see getKeysetIdInt).
+    const isHexId = isValidHex(keysetId) && keysetId.length !== LEGACY_KEYSET_ID_LENGTH;
+    const identity = isHexId
+      ? keysetId.toLowerCase()
+      : keysetId.replace(/-/g, '+').replace(/_/g, '/');
+    if (seenIds.has(identity)) continue;
+    seenIds.add(identity);
+
+    const group = groups.get(keysetIdInt);
+    if (group) group.push(keysetId);
+    else groups.set(keysetIdInt, [keysetId]);
+  }
+  return [...groups.values()].filter((group) => group.length > 1);
+}
+
+/**
  * Derives the deterministic secret and blinding factor for one counter.
  *
  * @remarks
@@ -63,8 +98,8 @@ type SecretAndBlindingFactorDeriver = (counter: number) => DerivedSecretAndBlind
  * @param keysetId - Mint keyset ID that selects the derivation method.
  * @param counter - Deterministic counter for the output.
  * @returns The derived secret bytes and blinding factor bytes.
- * @throws {@link CTSError} If the keyset ID version is unsupported or if derivation produces an
- *   invalid private key.
+ * @throws {@link CTSError} If the seed is not 16 to 64 bytes, the keyset ID version is unsupported,
+ *   or derivation produces an invalid private key.
  */
 export function deriveSecretAndBlindingFactor(
   seed: Uint8Array,
@@ -91,8 +126,8 @@ export function deriveSecretAndBlindingFactor(
  * @param purpose - Key purpose (`'P2PK'` or `'QuoteLock'`), which selects the path's purpose index.
  * @param counter - Non-hardened BIP-32 child index.
  * @returns The derived keypair, both hex-encoded: compressed (02/03) `pubkey` and `privkey`.
- * @throws {@link CTSError} If the counter is not a non-hardened index (integer below 2^31) or
- *   derivation produces an invalid private key.
+ * @throws {@link CTSError} If the seed is not 16 to 64 bytes, the counter is not a non-hardened
+ *   index (integer below 2^31), or derivation produces an invalid private key.
  */
 export function deriveKeyPair(
   seed: Uint8Array,
@@ -118,11 +153,13 @@ export function deriveKeyPair(
  * @param seed - Wallet seed used for deterministic derivation.
  * @param purpose - Key purpose, which selects the path's purpose index.
  * @returns A function mapping a non-hardened counter to its hex keypair.
+ * @throws {@link CTSError} If the seed is not 16 to 64 bytes.
  */
 export function createKeyPairDeriver(
   seed: Uint8Array,
   purpose: Bip32KeyPurpose,
 ): (counter: number) => { pubkey: string; privkey: string } {
+  assertSeed(seed);
   const index = PURPOSE_INDEX[purpose];
   const parentKey = HDKey.fromMasterSeed(seed).derive(`m/129373'/${index}'/0'/0'`);
   return (counter: number) => {
@@ -156,6 +193,7 @@ export function createSecretAndBlindingFactorDeriver(
   seed: Uint8Array,
   keysetId: string,
 ): SecretAndBlindingFactorDeriver {
+  assertSeed(seed);
   switch (getDerivationKind(keysetId)) {
     case DerivationKind.DEPRECATED_BIP32: {
       const keysetIdInt = getKeysetIdInt(keysetId);
@@ -170,6 +208,11 @@ export function createSecretAndBlindingFactorDeriver(
 }
 
 function getDerivationKind(keysetId: string): DerivationKind {
+  // Legacy ids are 12-character base64 and predate the version byte, so length tells them from a
+  // modern id: their alphabet overlaps hex.
+  if (keysetId.length === LEGACY_KEYSET_ID_LENGTH && isBase64String(keysetId)) {
+    return DerivationKind.DEPRECATED_BIP32;
+  }
   const isValidHex = /^[a-fA-F0-9]+$/.test(keysetId);
   const isHmacHexVersion = keysetId.startsWith('01') || keysetId.startsWith('02');
   if (isValidHex && isHmacHexVersion && keysetId.length % 2 !== 0) {
@@ -203,7 +246,8 @@ function deriveBip32SecretAndBlindingFactor(
     const secret = baseKey.deriveChild(0).privateKey;
     const blindingFactor = baseKey.deriveChild(1).privateKey;
     /* c8 ignore next */
-    if (secret === null || blindingFactor === null) throw new Error('Could not derive private key');
+    if (secret === null || blindingFactor === null)
+      throw new CTSError('Could not derive private key');
     return { secret, blindingFactor };
     /* c8 ignore next 3 */
   } catch (e) {
@@ -243,7 +287,7 @@ function deriveHmacSecretAndBlindingFactor(
 
 /**
  * NUT-13 derivation types. `0x00`-`0x03` are components of one proof allocation and share the
- * keyset's proof counter; `0x04` has its own quote counter.
+ * keyset's proof counter; `0x04` and `0x05` are one quote allocation on a per-mint quote counter.
  */
 export const DERIVATION_TYPE = {
   /**
@@ -263,10 +307,22 @@ export const DERIVATION_TYPE = {
    */
   leafKey: 0x03,
   /**
-   * Mint quote lock key; counted on the quote counter, not the proof counter.
+   * Mint quote lock key; scoped to the mint identity and counted per mint, not on a proof counter.
    */
   quoteLock: 0x04,
+  /**
+   * Mint quote id preimage; same quote counter and scope as `quoteLock`, used as is (no sampling).
+   */
+  quoteIdPreimage: 0x05,
 } as const;
+
+function assertSeed(seed: Uint8Array): void {
+  // Every secret, blinding factor and key derived here inherits the seed's strength, and types
+  // are erased for JS callers.
+  if (!(seed instanceof Uint8Array) || seed.length !== SEED_BYTES) {
+    throw new CTSError(`seed must be a ${SEED_BYTES} byte Uint8Array`);
+  }
+}
 
 function assertCounter(counter: number): void {
   // NUT-13 encodes the counter as u64, but cap at MAX_SAFE_INTEGER: past it
@@ -290,33 +346,22 @@ function v2BaseMessage(keysetId: string, counter: number): Uint8Array {
  * Derive one V3 scalar by rejection sampling (NUT-13 V3 message).
  *
  * @remarks
- * `DST || u32_BE(len(keyset_id)) || keyset_id || u64_BE(counter) || type || u32_BE(attempt) ||
- * suffix`. The keyset id is length-framed because it is the one variable-length field and a type
- * may append its own suffix; `attempt` sits ahead of the suffix because every type samples.
- * Rejection against `SECP256K1_N` is a ~2^-128 event, so the loop is on one pattern with the
- * blinding factor's `BLS_FR_ORDER` rather than a separate shape.
- *
- * An absent `keysetId` frames an empty field, which is what type `0x04` uses: a quote exists before
- * any keyset is chosen. The framing is what makes an empty field unambiguous.
+ * `DST || u32_BE(len(scope)) || scope || u64_BE(counter) || type || u32_BE(attempt) || suffix`. The
+ * scope (a keyset id, or the mint identity for `0x04`) is length-framed because it is the one
+ * variable-length field and a type may append its own suffix; `attempt` sits ahead of the suffix
+ * because every type samples. Rejection against `SECP256K1_N` is a ~2^-128 event, so the loop is on
+ * one pattern with the blinding factor's `BLS_FR_ORDER` rather than a separate shape.
  * @internal
  */
 function deriveV3Scalar(
   seed: Uint8Array,
-  keysetId: string | undefined,
+  scope: string,
   counter: number,
   type: number,
   suffix?: Uint8Array,
   order: bigint = SECP256K1_N,
 ): Uint8Array {
-  assertCounter(counter);
-  const keysetIdBytes = keysetId === undefined ? new Uint8Array(0) : hexToBytes(keysetId);
-  const base = concatBytes(
-    utf8ToBytes('Cashu_KDF_HMAC_SHA256'),
-    numberToBytesBE(keysetIdBytes.length, 4),
-    keysetIdBytes,
-    numberToBytesBE(counter, 8),
-    Uint8Array.of(type),
-  );
+  const base = v3BaseMessage(seed, scope, counter, type);
   for (let attempt = 0; attempt < 1 << 16; attempt++) {
     const msg = concatBytes(base, numberToBytesBE(attempt, 4), suffix ?? new Uint8Array(0));
     const digest = hmac(sha256, seed, msg);
@@ -326,6 +371,23 @@ function deriveV3Scalar(
   }
   /* c8 ignore next */
   throw new InvalidScalarError(counter);
+}
+
+function v3BaseMessage(seed: Uint8Array, scope: string, counter: number, type: number): Uint8Array {
+  assertSeed(seed);
+  assertCounter(counter);
+  const scopeBytes = hexToBytes(scope);
+  // NUT-13: the full keyset id or the mint identity key, never a short id.
+  if (scopeBytes.length !== 33) {
+    throw new CTSError('V3 derivation scope must be 33 bytes');
+  }
+  return concatBytes(
+    utf8ToBytes('Cashu_KDF_HMAC_SHA256'),
+    numberToBytesBE(scopeBytes.length, 4),
+    scopeBytes,
+    numberToBytesBE(counter, 8),
+    Uint8Array.of(type),
+  );
 }
 
 function computeV2BlindingFactor(seed: Uint8Array, base: Uint8Array, counter: number): Uint8Array {
@@ -380,22 +442,46 @@ export function deriveLeafKey(
 }
 
 /**
- * A mint quote lock key (NUT-13 message type `0x04`, defined in NUT-20).
+ * A mint quote lock key (NUT-13 message type `0x04`), scoped to the mint's NUT-06 identity pubkey.
  *
  * @remarks
- * No keyset: a mint quote is requested before any keyset is chosen (the outputs of the later mint
- * request fix it), so binding the key to one would leave a wallet unable to sign for its own paid
- * quote after a rotation. The message frames an empty keyset id instead, and the counter is the
- * wallet's single quote counter, so the key is recoverable from the seed and the quote's pubkey
- * alone.
- *
- * Its own counter, never the proof counter: a quote may mint nothing, and a lock key may be handed
- * over for delegated minting, so it must never collide with a key that has to stay secret. Nothing
- * detects a reused quote counter the way a repeated `B_` detects a reused proof counter, so advance
- * it on every quote request.
+ * The scope is the mint identity pubkey to ensure one seed and counter never yield the same key at
+ * two mints. The counter is per mint and not recoverable from the seed alone; recover a key by
+ * scanning candidates against the quote's pubkey.
+ * @param mintPubkey - The mint's NUT-06 `pubkey` (33-byte compressed, hex).
+ * @experimental Follows draft NUT-13 type `0x04` and draft NUT-06 identity scoping; may change
+ *   before GA.
  */
-export function deriveQuoteLockKey(seed: Uint8Array, counter: number): Uint8Array {
-  return deriveV3Scalar(seed, undefined, counter, DERIVATION_TYPE.quoteLock);
+export function deriveQuoteLockKey(
+  seed: Uint8Array,
+  mintPubkey: string,
+  counter: number,
+): Uint8Array {
+  return deriveV3Scalar(seed, normalizeSecpPubkey(mintPubkey), counter, DERIVATION_TYPE.quoteLock);
+}
+
+/**
+ * A mint quote id preimage (NUT-13 message type `0x05`), on the same quote counter as its lock key.
+ *
+ * @remarks
+ * Any 32 bytes is a valid preimage, so `attempt` is always 0. The quote id is its NUT-04 derived
+ * id, so a reused quote counter repeats the id.
+ * @param mintPubkey - The mint's NUT-06 `pubkey` (33-byte compressed, hex).
+ * @experimental Follows draft NUT-13 type `0x05` and draft NUT-04 derived quote ids; may change
+ *   before GA.
+ */
+export function deriveQuoteIdPreimage(
+  seed: Uint8Array,
+  mintPubkey: string,
+  counter: number,
+): Uint8Array {
+  const base = v3BaseMessage(
+    seed,
+    normalizeSecpPubkey(mintPubkey),
+    counter,
+    DERIVATION_TYPE.quoteIdPreimage,
+  );
+  return hmac(sha256, seed, concatBytes(base, numberToBytesBE(0, 4)));
 }
 
 function assertV3Keyset(keysetId: string, what: string): void {

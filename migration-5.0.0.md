@@ -55,6 +55,51 @@ const id = preview.keysetId;
 const id = preview.outputData[0].blindedMessage.id; // or sendOutputs / keepOutputs for a SwapPreview
 ```
 
+## `prepareSwapToSend` returns the unselected proofs beside the preview
+
+`prepareSwapToSend` and the `wallet.ops.send(...).prepare()` builder now return `{ preview, unselected }` instead of a bare `SwapPreview`. `SwapPreview.unselectedProofs` is gone, and `completeSwap` returns only what the swap produced: the merge of unselected proofs into `keep` on a live preview no longer happens. One-shot `send()` and `run()` are unchanged and still return the full remainder in `keep`.
+
+Return `unselected` to storage as soon as `prepare()` returns. They never enter the preview, so they are not in the persisted blob and not in `keep`, whether you complete straight away or replay after a restart. Code that stored `keep` from `completeSwap` as the whole remainder will now drop the unselected proofs unless it does this.
+
+```ts
+// Before
+const preview = await wallet.prepareSwapToSend(21, proofs);
+const { keep, send } = await wallet.completeSwap(preview); // keep included preview.unselectedProofs
+
+// After
+const { preview, unselected } = await wallet.prepareSwapToSend(21, proofs);
+returnToStore(unselected);
+const { keep, send } = await wallet.completeSwap(preview); // keep is the change only
+```
+
+## Mint previews no longer carry a wire `payload`
+
+`MintPreview` and `BatchMintPreview` are what the wallet decided, not the request it will send.
+`completeMint` and `completeBatchMint` build the request from the preview's `quote`/`quotes` and
+`outputData`, so the `payload` copy of the quote ids and blinded messages is gone. The NUT-20
+signature moves up a level: `signature` on `MintPreview`, `signatures` on `BatchMintPreview`, which
+also gains `amounts` (the draw per quote, in `quotes` order).
+
+```ts
+// Before
+preview.payload.quote; // MintPreview
+preview.payload.signature;
+batch.payload.quotes; // BatchMintPreview
+batch.payload.quote_amounts;
+batch.payload.signatures;
+// After
+preview.quote.quote;
+preview.signature;
+batch.quotes.map((q) => q.quote);
+batch.amounts;
+batch.signatures;
+```
+
+The blinded messages are `preview.outputData.map((d) => d.blindedMessage)` in both.
+
+`SwapTransaction` is removed from the public types. It was exported by mistake in v2.2.0: no public
+method ever returned or accepted one, so nothing can depend on it.
+
 ## Mint quotes now require a usable active keyset
 
 All mint-quote creation methods (`createMintQuote`, `createMintQuoteBolt11`, `createMintQuoteBolt12`, `createMintQuoteOnchain`) now throw `no active keyset for unit '…' — a paid mint quote could not be redeemed` if the mint has no usable (active, hex-id, keyed) keyset for the wallet's unit. This prevents paying an invoice for a quote that could never be redeemed for proofs — `loadMint` deliberately tolerates keyset-less mints (e.g. a mint unwinding liabilities) by leaving the wallet unbound, so without this check the failure only surfaced after payment, at minting time.
@@ -106,6 +151,8 @@ const proofs = await wallet.mintProofsBolt11(64, quote, { privkey });
 ```
 
 `createLockedMintQuote` callers rename the method and keep their arguments. A seedless wallet that drops the key has lost the quote, the same way it loses a dropped proof; a seeded wallet can call `recoverQuoteLockKey(quote.pubkey)`.
+
+The seed derivation behind `createQuoteLockKey` and `recoverQuoteLockKey` is experimental: it follows draft NUT-13 (type `0x04`) and draft NUT-06 identity scoping, and may change before GA, in which case keys derived earlier are no longer found by scan. Persist the `privkey` with its quote regardless; the scan is disaster recovery, not storage.
 
 ---
 
@@ -168,6 +215,40 @@ Code that never branched on those codes needs no change beyond expecting `StaleK
 
 ---
 
+## `getKeyset` looks up any explicit id as given
+
+`KeyChain.getKeyset(id)` used to treat any falsy id as "no id" and return the cheapest active keyset, so an empty string (or `null` from plain JS) silently selected the default. v5 looks up every explicit value and throws `Keyset '' not found` for one it does not hold. Only `undefined`, or calling with no argument, selects the default.
+
+`Wallet.getKeyset(id)` passes an explicit id straight through, so it follows the same rule; without an id it still returns the wallet's bound keyset.
+
+---
+
+## A quote given as an id alone is read from the mint
+
+`prepareMint` and `prepareBatchMint` still accept a quote object carrying only its id. `prepareMelt` still requires both `quote` and `amount`. v5 reads incomplete quotes from the mint before using them, rather than assuming they belong to this wallet.
+
+A quote is used as given when it carries a `unit` plus `amount_paid` and `amount_issued` for a mint quote, or a `unit` plus `state` for a melt quote. Missing or null fields trigger a lookup; unresolved batch entries use one batched request. The response is merged over the object you passed, so caller-only fields survive while the mint's values win, including explicit nulls that clear stale fields. A complete response you already hold costs no extra request.
+
+That makes two previously silent cases fail. A quote denominated in another unit is rejected instead of being minted or melted as though it were the wallet's, and mint draws, including each batch entry, are checked against the available balance. A fetched lock pubkey also requires the corresponding signing key. For an incomplete melt quote, the fetched amount replaces the caller's amount before proof coverage and change are calculated. Quote ids passed as strings to `mintProofsBolt11()` and the `check*` helpers were already looked up and are unaffected.
+
+```ts
+// Read from the mint, then merged over what you passed
+await wallet.prepareMint('bolt11', 1000, { quote: savedId });
+
+// Used as given: it already carries the mint's accounting
+await wallet.prepareMint('bolt11', 1000, quoteFromCreateOrCheck);
+```
+
+## New quote checks at creation
+
+Every quote creator now rejects a response denominated in a unit other than the wallet's, rather than letting it fail later. `Mint` also rejects empty units in mint quotes, melt quotes and melt execution responses; missing units were already rejected. Melt quote creation and lookup require a non-empty `request`: the wallet no longer substitutes its own payment request for an empty response. Melt execution responses may still omit `request`.
+
+A bolt12 mint quote must answer with the amount requested, or with no amount when none was requested. A bolt12 melt quote with an explicit `amountMsat` is bounded by that amount: sat quotes may round up to the next sat, and msat quotes must not exceed the explicit millisatoshi amount. Offers passed without an explicit amount remain opaque to the wallet and have no local amount bound. An onchain melt quote must match the requested amount exactly, rejecting both overquotes and underquotes. A mint quote lookup must answer for the quote that was asked for.
+
+The generic `createMintQuote` now rejects any supplied invalid pubkey, including `''`, `null` and non-string values, before sending a request. Omit `pubkey` or pass `undefined` to request an unlocked quote; invalid values no longer silently produce bearer quotes.
+
+---
+
 ## Melt inputs are checked against the snapshot
 
 `prepareMelt` (and the `meltProofs*` wrappers) never looked up the keyset of an input proof, so proofs on an id the wallet did not hold were melted anyway. v5 resolves those ids first, exactly as `receive` does: unknown ids trigger one `loadMint(true)`.
@@ -198,6 +279,8 @@ await wallet.meltProofsBolt11(quote, proofs);
 
 Catch it where a melt can fail, and recover once the keys are reachable. The `cause` says whether that is possible: a keyset that will load rebuilds, while an invalid DLEQ or a signature count mismatch needs a NUT-09 restore.
 
+`outputData` and `quote` are non-enumerable, like `cause`. Read them directly and persist those values; a spread or `JSON.stringify` of the error will not carry them.
+
 ```ts
 // Before: the melt is paid, and the change is gone
 await wallet.meltProofsBolt11(quote, proofs);
@@ -211,6 +294,30 @@ try {
   await wallet.ensureOperableKeysets(sigs.map((s) => s.id)); // change may span keysets
   const change = wallet.createMeltChangeProofs(e.outputData, sigs);
 }
+```
+
+---
+
+## `getDecodedTokenBinary` requires the keyset ID list
+
+`getDecodedTokenBinary(bytes, keysetIds)` now takes the same keyset ID list as `getDecodedToken` and resolves short keyset IDs against it, as NUT-00 requires of receivers. Calling it without the list, or with a single ID instead of an array, throws a `CTSError`. Passing the function directly as a callback (eg `chunks.map(getDecodedTokenBinary)`) no longer compiles, since the index would land in the second argument.
+
+`wallet.decodeToken` accepts a `Uint8Array` as well as a string, so a wallet can decode either encoding with its own keysets.
+
+### Migration
+
+```typescript
+// Before
+const token = getDecodedTokenBinary(bytes);
+
+// After: let the wallet supply its keysets
+const token = wallet.decodeToken(bytes);
+
+// or, outside a wallet instance
+const token = getDecodedTokenBinary(bytes, myKeyChain.getAllKeysetIds());
+
+// or, to read the mint and unit before you have a wallet
+const { mint, unit } = getTokenMetadata(bytes);
 ```
 
 ---
@@ -333,7 +440,7 @@ calls reintroduces the window this closes.
 
 ## Counter keys are not always keyset ids: `OperationCounters.keysetId` is now `counterKey`
 
-Seeded wallets reserve mint quote lock counters (see the locked-quotes section above) under the exported `QUOTE_COUNTER_KEY` (`'mint-quote-lock'`), flowing through the same `CounterSource` and `countersReserved` event as keyset counters. The payload field is renamed to say what it is.
+Seeded wallets reserve mint quote lock counters (see the locked-quotes section above) under one key per mint, `quoteCounterKey(mintPubkey)` (`'mint-quote-lock:<NUT-06 pubkey>'`), flowing through the same `CounterSource` and `countersReserved` event as keyset counters. The payload field is renamed to say what it is.
 
 ### Migration
 
@@ -345,7 +452,7 @@ wallet.on.countersReserved(({ keysetId, next }) => saveNextToDb(keysetId, next))
 wallet.on.countersReserved(({ counterKey, next }) => saveNextToDb(counterKey, next));
 ```
 
-A custom `CounterSource` that validates its keys as keyset ids, or joins them against a keysets table, must accept `QUOTE_COUNTER_KEY` too: every seeded wallet reserves from it on its first mint quote.
+A custom `CounterSource` that validates its keys as keyset ids, or joins them against a keysets table, must accept these `mint-quote-lock:` keys too: every seeded wallet reserves from one on its first mint quote at a mint. Quote lock keys are scoped to the mint's NUT-06 `pubkey`, so a seeded wallet at a mint that publishes none must pass `{ random: true }` to `createQuoteLockKey`.
 
 ---
 
@@ -364,6 +471,8 @@ await wallet.checkProofsStates([{ secret: '…' }]);
 // After
 await wallet.checkProofsStates([{ id: '00bd033559de27d0', secret: '…' }]);
 ```
+
+Hashing to `Y` now yields to the event loop every 50 ms, so a large check no longer blocks a UI thread; the new optional `budgetMs` sets the interval. When running several checks at once, divide the budget between them so together they stay within it.
 
 If you were already passing full `Proof` objects (the normal case — `wallet.checkProofsStates(proofs)` where `proofs: Proof[]`), no change is required.
 
@@ -422,34 +531,67 @@ await wallet.batchRestore();
 
 ---
 
-## `verifyDleqIfPresent` removed; `hasValidDleq` default flipped to spec semantics
+## `hasValidDleq` and `verifyDleqIfPresent` replaced by `verifyMintSignatures`; `verifyProofsForReceive` is now `verifyReceivedProofs`
 
-`verifyDleqIfPresent` is removed. Its NUT-12 "verify-if-present" semantic is now the default behavior of `hasValidDleq`, which gains an optional `{ require?: boolean }` argument for the stricter opt-in policy.
+Both are removed. One async engine replaces them, chunked so a large batch yields to the event loop, and named for what is checked rather than the mechanism: v3 proofs have no DLEQ, the pairing stands in.
 
-- **Default** (`require: false`, or omit `opts`): a v0/v1/v2 proof without a DLEQ returns `true` (NUT-12 "MUST verify-if-present"); present DLEQs are verified. v3 (BLS) proofs always pairing-verify regardless.
-- **Strict** (`require: true`): a v0/v1/v2 proof without a DLEQ returns `false` (above-spec policy callers can opt into when they want to require DLEQs on every proof).
+- `verifyMintSignatures(proofs, getKeyset, opts?)`: did the mint sign each proof. For signatures the mint just returned, or a store audit. `Wallet.verifyMintSignatures(proofs, opts?)` is the same with the wallet's keysets loaded on demand.
+- `verifyReceivedProofs(proofs, getKeyset, opts?)`: the same plus the nutroot spend-info cascade on v3 proofs. What `receive` runs.
 
-The proof's `amount` is now validated against the keyset on every path through `hasValidDleq`, not just when a DLEQ is present. A forged-amount proof with no DLEQ now throws `Undefined key for amount …` instead of silently passing.
+Both return `{ valid, invalid }` with the caller's own proof objects, each invalid entry carrying a `CTSError` that names the keyset and amount. Nothing throws per proof: an unknown keyset, a missing denomination or a malformed point is reported as invalid. Options are `{ require, chunkSize, signal, onProgress }`; `require: true` is the former strict policy (a v0/v1/v2 proof without a DLEQ is invalid), the default is NUT-12 verify-if-present. The amount is checked against the keyset on every path.
 
 ### Migration
 
 ```ts
 // Before
-import { verifyDleqIfPresent, hasValidDleq } from '@cashu/cashu-ts';
-
-if (!verifyDleqIfPresent(proof, keyset)) throw new Error('bad DLEQ');
-if (!hasValidDleq(proof, keyset)) throw new Error('DLEQ missing or invalid');
-
-// After
-import { hasValidDleq } from '@cashu/cashu-ts';
+import { hasValidDleq, verifyProofsForReceive } from '@cashu/cashu-ts';
 
 if (!hasValidDleq(proof, keyset)) throw new Error('bad DLEQ');
 if (!hasValidDleq(proof, keyset, { require: true })) throw new Error('DLEQ missing or invalid');
+verifyProofsForReceive(proofs, getKeyset, { requireDleq: true }); // throws
+
+// After
+import { verifyMintSignatures, verifyReceivedProofs } from '@cashu/cashu-ts';
+
+const { invalid } = await verifyMintSignatures([proof], () => keyset);
+if (invalid.length > 0) throw invalid[0].error;
+const strict = await verifyMintSignatures([proof], () => keyset, { require: true });
+const received = await verifyReceivedProofs(proofs, getKeyset, { require: true });
+if (received.invalid.length > 0) throw received.invalid[0].error;
 ```
 
-If you were calling `hasValidDleq(proof, keyset)` and relying on the previous strict semantics (missing DLEQ → `false`), add `{ require: true }`. If you were calling `verifyDleqIfPresent`, drop it for `hasValidDleq` with no `opts` — same behavior.
-
 `Wallet.prepareSwapToReceive`'s `requireDleq` option is unchanged: leave it unset (or `false`) for spec-default verify-if-present, pass `true` for the strict policy.
+
+---
+
+## `Proof.dleq` requires `r`; `DLEQ` split from `ProofDLEQ`
+
+The DLEQ types did two jobs. `DLEQ` and `SerializedDLEQ` both carried an optional blinding factor, so they described the mint's proof and the wallet's completed one at once, and nothing in the type said which you held.
+
+NUT-12 splits the work: the mint issues `{e, s}`, because it never sees the blinding factor, and the wallet adds the `r` it blinded with when it builds the `Proof`. v5 splits the types to match.
+
+- `DLEQ` and `SerializedDLEQ` are now the mint's pair, with no `r`. They type `SerializedBlindedSignature.dleq`, which is what the mint returns.
+- `ProofDLEQ` and `SerializedProofDLEQ` add a required `r`. `Proof.dleq` takes the serialized one, and `verifyDLEQProof_reblind` takes the other.
+
+So a `Proof` either has no DLEQ at all, or has a complete one. A two-field DLEQ on a proof is no longer representable, because it can never be verified by the next holder and costs its owner privacy.
+
+Encoding a proof whose DLEQ has no `r` throws, for binary tokens as well as `cashuB`. Decoding a token that carries one drops the block rather than crashing, leaving the verify-if-present behavior above. `hasValidDleq` reports one as invalid instead of verifying against a zero blinding factor.
+
+### Migration
+
+```ts
+// Before
+const dleq: SerializedDLEQ = { e, s };
+const proof: Proof = { id, amount, secret, C, dleq };
+
+// After
+const dleq: SerializedProofDLEQ = { e, s, r };
+const proof: Proof = { id, amount, secret, C, dleq };
+```
+
+Reading is unaffected and gains a guarantee: `proof.dleq.r` is a `string` wherever `proof.dleq` is set, so the `?? '00'` and `!` workarounds around it can go.
+
+You only need to act if your own code builds proofs, which normally means a custom `OutputDataLike`. Proofs from `wallet.receive`, `getDecodedToken` or any mint operation already satisfy this. If you hold a mint's blind signature rather than a proof, keep `SerializedDLEQ`.
 
 ---
 
@@ -511,6 +653,12 @@ try {
   // no exact offline match: swap online, or retry with { exactMatch: false }
 }
 ```
+
+---
+
+## The seed is exactly 64 bytes
+
+`new Wallet(mint, { bip39seed })` and the NUT-13 derivation helpers called directly (`deriveSecretAndBlindingFactor`, `deriveKeyPair`, `deriveQuoteLockKey` and the v3 helpers) now require a 64-byte seed, the output of a BIP-39 derivation (`mnemonicToSeedSync(mnemonic)`), as NUT-13 specifies, and throw a `CTSError` for any other length; v4 accepts 16 to 64 bytes. Wallets that already pass the BIP-39 seed, which is every known one, are unaffected. A wallet that had been passing raw entropy of another length cannot convert it: no 64-byte seed derives the same secrets, so its existing proofs are reachable only on v4. Restore them there (NUT-09), sweep them into a wallet built on a BIP-39 seed, and retire the old bytes.
 
 ---
 
@@ -735,7 +883,7 @@ Generic mint quote responses (custom payment methods) are now base-validated lik
 
 ## Bolt11 mint quotes are checked against the requested amount
 
-`createMintQuoteBolt11` and `createLockedMintQuote` now throw when the mint's response does not carry the amount that was asked for. For `sat` quotes the BOLT11 invoice's HRP amount must also equal the quoted amount; amountless or unreadable invoices fail the same check. The `checkMintQuoteBolt11` and `checkMintQuoteBatchBolt11` lookups apply the invoice check against each returned quote's own amount. Other units are not directly comparable to an invoice, so only the quoted amount is verified there.
+`createMintQuoteBolt11` and `createLockedMintQuote` now throw when the mint's response does not carry the amount that was asked for. For `sat` and `msat` quotes the BOLT11 invoice's HRP amount must also equal the quoted amount (converted to millisatoshis for sat quotes); amountless or unreadable invoices fail the same check. The `checkMintQuoteBolt11` and `checkMintQuoteBatchBolt11` lookups apply the invoice check against each returned quote's own amount. Other units are not directly comparable to an invoice, so only the quoted amount is verified there.
 
 Apps talking to conforming mints need no change. Tests that stub bolt11 mint quote responses must give the invoice an HRP that matches the quoted amount, e.g. `request: 'lnbc10u1pfake'` for a 1,000 sat quote; the raw `createMintQuote('bolt11', …)` escape hatch remains unvalidated.
 
@@ -743,7 +891,7 @@ Apps talking to conforming mints need no change. Tests that stub bolt11 mint quo
 
 ## Bolt11 melt quotes must not charge more than the invoice
 
-For `sat` quotes, `createMeltQuoteBolt11` now throws when the quote's `amount` exceeds the invoice's encoded amount (a sub-sat invoice may round up to the next sat). Amountless invoices are bounded by the caller's `amountMsat` when given, and `createMultiPathMeltQuote` is bounded by the requested partial amount. `checkMeltQuoteBolt11` applies the same bound against the quote's own `request`, and rejects a response whose `request` is not readable as a BOLT11 invoice. Undercharging is not rejected, and other units are not directly comparable to the invoice, so they are unchecked; the raw `createMeltQuote`/`checkMeltQuote` escape hatches also remain unvalidated.
+For `sat` and `msat` quotes, `createMeltQuoteBolt11` now throws when the quote's `amount` exceeds the invoice's encoded amount (a sub-sat invoice may round up to the next sat; msat quotes use the exact millisatoshi ceiling). Amountless invoices are bounded by the caller's `amountMsat` when given, and `createMultiPathMeltQuote` is bounded by the requested partial amount. `checkMeltQuoteBolt11` applies the same bound against the quote's own `request`, and rejects a response whose `request` is not readable as a BOLT11 invoice. Undercharging is not rejected, and other units are not directly comparable to the invoice, so they are unchecked; the raw `createMeltQuote`/`checkMeltQuote` escape hatches also remain unvalidated.
 
 Test stubs follow the same HRP rule as mint quotes above.
 
@@ -763,10 +911,7 @@ bolt11, bolt12 and onchain flows are unaffected: those responses already require
 
 `prepareMint`/`mintProofs` previously rejected requests above `amount_paid − amount_issued` only for bolt12 and onchain quotes. v5 applies the check to any quote object that carries accounting fields, regardless of method.
 
-Two escape hatches keep stored-quote flows working:
-
-- Quote objects without accounting fields (e.g. minimal `{ quote: '…' }` references) skip the check, as before.
-- Quotes reporting `0/0` defer to the mint — a zero snapshot may simply have been fetched before the payment was made, so the create → pay externally → mint flow is unaffected.
+Quote objects without accounting fields (e.g. minimal `{ quote: '…' }` references) are now read from the mint before checking the balance. `prepareBatchMint` also checks each entry against its available balance. Quotes reporting `0/0` still defer to the mint — a zero snapshot may simply have been fetched before payment, so the create → pay externally → mint flow is unaffected.
 
 The practical change from v4: attempting to re-mint a quote object whose snapshot shows it fully issued (`amount_paid === amount_issued > 0`) now fails fast client-side instead of round-tripping to the mint for a rejection.
 
@@ -878,3 +1023,132 @@ const customRequest: RequestFn = async ({ endpoint, requestBody, ...rest }) => {
 ```
 
 A transport that re-serializes the string sends quoted JSON and fails at the mint, so a missed migration surfaces as a hard request error, not a silent auth failure. Prefer `JSONInt.stringify` over `JSON.stringify` for object bodies: it emits bigint amounts as plain JSON numbers.
+
+---
+
+## `AuthManager.setCAT` replaces the whole token record
+
+`setCAT(cat)` now clears `refreshToken` and `expiresAt` as well as setting the access token; previously they were only cleared when the CAT was unset. A CAT set by hand carries no refresh token and no expiry the caller can state, so the manager treats it as "unknown expiry, the mint decides" rather than inheriting the previous token's refresh state.
+
+Let `attachOIDC` install the provider's token record, including refresh token and expiry when supplied. An `onTokens` callback that calls `setCAT` must not be combined with `attachOIDC`, since both install the CAT and only the provider path carries the refresh state.
+
+---
+
+## `createAuthWallet` honours a caller-supplied `oidc.onTokens`
+
+`createAuthWallet` used to overwrite `options.oidc.onTokens` with its own CAT-setting callback; it now passes the caller's callback through and relies on `attachOIDC` alone to install the CAT and refresh state. Code that passed `onTokens` and saw it ignored will now see it called on every token update.
+
+---
+
+## `OIDCAuth.devicePoll` removed; use `startDeviceAuth`
+
+`devicePoll(device_code)` is gone. It was a second, parallel implementation of the device-code poll loop that shipped alongside `startDeviceAuth()` and never gained the cancellation, abort and interval handling the latter has: it loops until the provider answers and offers no way to stop it.
+
+```ts
+// Before
+const start = await oidc.deviceStart();
+const tokens = await oidc.devicePoll(start.device_code);
+
+// After
+const start = await oidc.startDeviceAuth();
+// show start.verification_uri and start.user_code, then
+const tokens = await start.poll();
+// and, to abandon the sign-in, start.cancel();
+```
+
+`deviceStart()` is unchanged and still available if you want the start fields on their own.
+
+---
+
+## OIDC refreshes belong to the session that started them
+
+`AuthManager` ignores refresh results after `setCAT`, `attachOIDC`, a sign-in, or another token update replaces the state they started with. Both `ensureCAT()` and direct `oidc.refresh()` calls use this rule. A new session can refresh while an older session request is still pending. A refresh explicitly started on an empty manager can restore a saved refresh token, including after an earlier `setCAT(undefined)`.
+
+Refreshes notify the listeners registered when they started, excluding listeners removed before the response is dispatched. Listeners added during a refresh receive subsequent updates. Concurrent `oidc.refresh()` calls with the same refresh token, client ID, and listener registrations share one request and one callback delivery, including calls from `ensureCAT()`. Changing client ID or registrations starts a separate request, even when the refresh token is unchanged.
+
+Token listeners and `oidc.onTokens` now receive `(tokens, origin)`, where `origin` is `'signin'` or `'refresh'`; existing one-argument listeners continue to work. Sign-ins replace the token record, while refreshes retain the current refresh token when the provider omits a replacement. The caller's `onTokens` callback and other listeners still receive provider results, including ones a manager declines; persistence callbacks must apply their own account-lifecycle rules.
+
+CAT-protected BAT minting rejects with `CTSError: AuthManager: session changed while obtaining BATs` if the session changes during CAT acquisition or minting; any resulting batch is discarded. Ordinary CAT refreshes keep the session and its outstanding BAT batch. Already pooled or imported BATs remain available until consumed or explicitly replaced with `importPool([], 'replace')`.
+
+`startDeviceAuth().cancel()` now settles all active polls promptly, clears their delay timers, and aborts token requests. Results from a custom fetch that ignores the abort signal are still ignored.
+
+---
+
+## OIDC endpoints must match the discovery scheme
+
+Every endpoint a discovery document names must be an http(s) URL, and once the discovery document
+itself has come over https, so must the endpoints it names. Previously only `authorization_endpoint`
+was checked; `token_endpoint` and `device_authorization_endpoint` were taken as given.
+
+A provider whose https discovery document points at an http endpoint now fails with
+`OIDCAuth: <endpoint> must be https when discovery is https`, at `loadConfig` for the token endpoint
+and at `deviceStart` or `buildAuthCodeUrl` for the others. Nothing changes for an http discovery
+URL, which is how local development setups run.
+
+## `OIDCAuth.buildAuthCodeUrl` accepts only `codeChallengeMethod: 'S256'`
+
+`codeChallengeMethod` narrows from `'S256' | 'plain'` to `'S256'`. The parameter can be omitted (S256 is already the default), and `generatePKCE()` always produces an S256 challenge, so no caller following the built-in flow needs to change. A TS caller passing `'plain'` fails to compile; a plain-JS caller gets a thrown `OIDCAuth: only the S256 PKCE method is supported`.
+
+---
+
+## `Amount` refuses implicit numeric coercion
+
+`Amount` now defines `Symbol.toPrimitive` the way `AmountWithUnit` already did. String contexts (`String(a)`, template literals) still give the decimal string. Arithmetic, comparison and equality operators, unary `+` and `Number(a)` now throw `AmountError` instead of falling through to `toString()`, where `a + 1` concatenated to `"211"` and `a < b` compared strings. v4 logs a warning and returns the number in these cases; v5 throws.
+
+TypeScript already rejected these operators on `Amount`, so this reaches plain JavaScript callers and `any`-typed boundaries such as a JSON round trip or a reduce over a list.
+
+```ts
+// Before (JavaScript)
+const total = proofs.reduce((sum, p) => sum + p.amount, 0); // "0" + ... concatenates
+if (a < b) { ... } // string comparison
+
+// After
+const total = sumProofs(proofs); // or proofs.reduce((sum, p) => sum.add(p.amount), Amount.zero())
+if (a.lessThan(b)) { ... } // or a.compareTo(b) < 0
+const n = a.toNumber(); // explicit, throws above MAX_SAFE_INTEGER; a.toBigInt() never does
+```
+
+---
+
+## `Mint.oidcAuth` removed; use `OIDCAuth.fromMintInfo`
+
+`Mint` no longer constructs the OIDC client, so a bundle that never signs in to a NUT-21 mint no longer carries it. `OIDCAuth.fromMintInfo` takes the mint info and applies the same `clientId` fallback (`opts.clientId`, then the mint's `client_id`, then `cashu-client`). `createAuthWallet` is unchanged.
+
+```ts
+// Before
+const oidc = await mint.oidcAuth(opts);
+
+// After
+const oidc = OIDCAuth.fromMintInfo(await mint.getLazyMintInfo(), opts);
+```
+
+---
+
+## Lock families are named by encoding, not version
+
+`LockBuilder.validate` takes `'nutroot' | 'p2pk'` (exported as `LockFamily`) instead of `'v3' | 'pre-v3'`. Nothing else changes: `nutroot` runs the BLS keyset encoder, `p2pk` the NUT-10 one.
+
+```ts
+// Before
+builder.validate('v3');
+builder.validate('pre-v3');
+
+// After
+builder.validate('nutroot');
+builder.validate('p2pk');
+```
+
+---
+
+## `Mint` methods take an options object instead of a positional `customRequest`
+
+Every `Mint` method that accepted a trailing `customRequest` function now takes `MintCallOptions`, `{ customRequest?, signal? }`. `signal` aborts the request and rejects with `CallerAbortError`. The constructor option is unchanged.
+
+```ts
+// Before
+await mint.swap(payload, myRequestFn);
+
+// After
+await mint.swap(payload, { customRequest: myRequestFn });
+await mint.swap(payload, { signal: controller.signal });
+```

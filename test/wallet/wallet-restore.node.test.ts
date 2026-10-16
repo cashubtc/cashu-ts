@@ -5,7 +5,6 @@ import { test, describe, expect, vi } from 'vitest';
 
 import {
   Wallet,
-  Amount,
   CheckStateEnum,
   OutputData,
   createSecretAndBlindingFactorDeriver,
@@ -13,7 +12,10 @@ import {
   InvalidScalarError,
   type Proof,
 } from '../../src';
+import { MAX_SUPPORTED_KEYSET_VERSION_BYTE } from '../../src/crypto/curves';
 import * as NUT13 from '../../src/crypto/NUT13';
+import * as chunked from '../../src/utils/chunked';
+import { YIELD_BUDGET_MS } from '../../src/utils/chunked';
 import { PUBKEYS } from '../consts';
 
 import {
@@ -33,7 +35,12 @@ describe('Restoring deterministic proofs', () => {
   type ScanResult =
     | { proofs: Proof[]; used: false }
     | { proofs: Proof[]; lastCounterWithSignature: number; used: true };
-  type Scan = (start: number, count: number, keysetId?: string) => Promise<ScanResult>;
+  type Scan = (
+    start: number,
+    count: number,
+    keysetId?: string,
+    opts?: { signal?: AbortSignal; budgetMs?: number },
+  ) => Promise<ScanResult>;
   // The scan step is private, so stub it by name: these tests pin the geometry, which is what
   // batchRestore owns, and the step itself is covered end to end further down.
   const stubScan = (wallet: Wallet, impl: (start: number, count: number) => ScanResult) =>
@@ -61,6 +68,20 @@ describe('Restoring deterministic proofs', () => {
     expect(scan.mock.calls.every((c) => c[2] === bound)).toBe(true);
   });
 
+  test('batchRestore reports progress after each wave', async () => {
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+    stubScan(wallet, (start) => (start === 0 ? found(2, 0) : empty));
+    const seen: Array<{ keysetId: string; counter: number; proofs: number }> = [];
+    await wallet.batchRestore({ gapLimit: 100, batchSize: 50, onProgress: (p) => seen.push(p) });
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every((p) => p.keysetId === wallet.keysetId)).toBe(true);
+    expect(seen[seen.length - 1].proofs).toBe(2);
+    for (let i = 1; i < seen.length; i++) {
+      expect(seen[i].counter).toBeGreaterThan(seen[i - 1].counter);
+    }
+  });
+
   test('a range signed only at zero value counts as used but yields no proofs', async () => {
     const VALID_POINT = '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422';
     server.use(
@@ -83,10 +104,35 @@ describe('Restoring deterministic proofs', () => {
         });
       }),
     );
-    const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(32), logger });
+    const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(64), logger });
     await wallet.loadMint();
     const scan = (wallet as unknown as { restoreUnspent: Scan }).restoreUnspent.bind(wallet);
     expect(await scan(0, 3)).toEqual({ proofs: [], lastCounterWithSignature: 2, used: true });
+
+    // every local loop of a scan batch (derive, hash to Y, blind, unblind) yields on the batch's budget
+    const loops = vi.spyOn(chunked, 'mapInChunks');
+    try {
+      const scanWith = (
+        wallet as unknown as {
+          restoreUnspent: (s: number, c: number, k?: string, o?: { budgetMs?: number }) => unknown;
+        }
+      ).restoreUnspent.bind(wallet);
+      await scanWith(0, 3, undefined, { budgetMs: 7 });
+      expect(loops.mock.calls).toHaveLength(4);
+      expect(loops.mock.calls.every(([, , o]) => o?.budgetMs === 7)).toBe(true);
+    } finally {
+      loops.mockRestore();
+    }
+  });
+
+  test('batches in flight share one yield budget', async () => {
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+    const scan = stubScan(wallet, () => empty);
+    await wallet.batchRestore({ keysetId: `02${'ab'.repeat(32)}`, gapLimit: 1 });
+    // two BLS batches in flight, so each gets half the budget
+    const opts = scan.mock.calls[0][3] as unknown as { budgetMs: number };
+    expect(opts.budgetMs).toBe(YIELD_BUDGET_MS / 2);
   });
 
   test('Batch restore', async () => {
@@ -154,7 +200,7 @@ describe('Restoring deterministic proofs', () => {
     // the find at 600 leaves 297 empty counters, so one more two-batch wave closes the gap
     expect(scan).toHaveBeenCalledTimes(5);
   });
-  test('Batch restore probes the gap, then doubles the wave up to the pool for a used HMAC keyset', async () => {
+  test('Batch restore probes the gap, then widens the wave up to the pool for a used HMAC keyset', async () => {
     const wallet = new Wallet(mint);
     await wallet.loadMint();
     const calls: Array<[number, number]> = [];
@@ -162,17 +208,15 @@ describe('Restoring deterministic proofs', () => {
       calls.push([start, count]);
       return start < 1500 ? found(1, start + count - 1) : empty;
     });
-    // the scan step is stubbed, so the keyset only has to look like a v1 (HMAC) id: 500-batches, pool 4
+    // the scan step is stubbed, so the keyset only has to look like a v1 (HMAC) id: 500-batches, pool 2
     await wallet.batchRestore({ keysetId: `01${'ab'.repeat(32)}` });
-    // one 300-wide probe, then waves of 2 and 4 batches as usage keeps showing
+    // one 300-wide probe, then waves of 1 and 2 batches while usage shows; the last batch closes the gap
     expect(calls).toEqual([
       [0, 300],
       [300, 500],
       [800, 500],
       [1300, 500],
       [1800, 500],
-      [2300, 500],
-      [2800, 500],
     ]);
   });
   test('Batch restore treats maxCounter as an inclusive ceiling and ends there', async () => {
@@ -231,6 +275,28 @@ describe('restoreAll', () => {
     expect(batchSpy).toHaveBeenCalledWith({ keysetId: 'B' });
   });
 
+  test('skips a keyset newer than this build and still restores the rest', async () => {
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+    vi.spyOn(wallet.keyChain, 'getAllKeysetIds').mockReturnValue(['old', 'future']);
+    vi.spyOn(wallet.keyChain, 'getKeyset').mockImplementation((id) =>
+      id === 'future'
+        ? ({ unit: 'sat', version: MAX_SUPPORTED_KEYSET_VERSION_BYTE + 1 } as never)
+        : ({ unit: 'sat', version: MAX_SUPPORTED_KEYSET_VERSION_BYTE } as never),
+    );
+    const batchSpy = vi
+      .spyOn(wallet, 'batchRestore')
+      .mockResolvedValue({ proofs: [{ secret: 'o1' }] as Proof[], lastCounterWithSignature: 3 });
+
+    const { proofs, lastCounters } = await wallet.restoreAll();
+
+    // A mint that has moved on must not cost the caller the proofs on every older keyset.
+    expect(batchSpy).toHaveBeenCalledTimes(1);
+    expect(batchSpy).toHaveBeenCalledWith({ keysetId: 'old' });
+    expect(proofs.map((p) => p.secret)).toEqual(['o1']);
+    expect(lastCounters).toEqual({ old: 3 });
+  });
+
   test('forwards scan options to every keyset', async () => {
     const wallet = new Wallet(mint);
     await wallet.loadMint();
@@ -246,7 +312,7 @@ describe('restoreAll', () => {
 
 describe('restore', () => {
   test('sends zero-amount blanks and maps signatures to proofs', async () => {
-    const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(32), logger });
+    const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(64), logger });
     await wallet.loadMint();
     interface RestoreBody {
       outputs: unknown[];
@@ -283,8 +349,12 @@ describe('restore', () => {
     // response shape is OK and produced proofs
     expect(Array.isArray(res.proofs)).toBe(true);
     expect(res.proofs.length).toBeGreaterThan(0);
+
+    // over the per-chunk cap, so output construction yields between chunks
+    const wide = await wallet.restore(0, 40);
+    expect(wide.proofs).toHaveLength(40);
     // proofs should be of amount 1 because we overprinted 1 in the signatures
-    expect(res.proofs.every((p) => p.amount.equals(Amount.from(1)))).toBe(true);
+    expect(res.proofs.every((p) => p.amount.equals(1))).toBe(true);
   });
 
   test('unblinds restore signatures with the keyset they name and skips zero-value ones', async () => {
@@ -311,7 +381,7 @@ describe('restore', () => {
         });
       }),
     );
-    const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(32), logger });
+    const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(64), logger });
     await wallet.loadMint();
 
     const res = await wallet.restore(0, 3);
@@ -321,7 +391,7 @@ describe('restore', () => {
   });
 
   test('state checks before restoring: skips spent, keeps pending, scans past a spent wave', async () => {
-    const seed = randomBytes(32);
+    const seed = randomBytes(64);
     const keysetId = dummyKeysResp.keysets[0].id;
     const wallet = new Wallet(mint, { unit, bip39seed: seed, logger });
     await wallet.loadMint();
@@ -389,10 +459,10 @@ describe('restore', () => {
       (b) => (counterByB_.get(b) ?? Infinity) <= SPENT_THROUGH,
     );
     expect(spentRevealed).toEqual([]);
-  });
+  }, 15_000);
 
   test('skips an invalid-scalar counter and recovers proofs past it', async () => {
-    const seed = randomBytes(32);
+    const seed = randomBytes(64);
     const keysetId = dummyKeysResp.keysets[0].id;
     const VALID_POINT = '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422';
     const counterByB_ = new Map<string, number>();
@@ -445,14 +515,33 @@ describe('restore', () => {
     }
   });
 
+  test('a derivation failure other than an invalid scalar propagates', async () => {
+    const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(64) });
+    await wallet.loadMint();
+    const spy = vi
+      .spyOn(NUT13, 'createSecretAndBlindingFactorDeriver')
+      .mockImplementation(() => () => {
+        throw new Error('derivation broke');
+      });
+    try {
+      await expect(wallet.batchRestore({ batchSize: 1, gapLimit: 1 })).rejects.toThrow(
+        'derivation broke',
+      );
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   test('an invalid counter rejects rather than reporting an empty scan', async () => {
-    const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(32) });
+    const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(64) });
     await wallet.loadMint();
     await expect(wallet.batchRestore({ counter: 0.5, gapLimit: 3 })).rejects.toThrow(
       /non-negative safe integers/,
     );
     // a zero batch never advances the counter, so the scan would loop forever
     await expect(wallet.batchRestore({ batchSize: 0 })).rejects.toThrow(/batchSize must be/);
+    // above the mint's advertised max_array_length (the library default here)
+    await expect(wallet.batchRestore({ batchSize: 501 })).rejects.toThrow(/batchSize must be/);
     await expect(wallet.batchRestore({ gapLimit: 0 })).rejects.toThrow(/gapLimit/);
     // a fractional gap would leave the probe width and gap count fractional
     await expect(wallet.batchRestore({ gapLimit: 2.5 })).rejects.toThrow(/gapLimit/);

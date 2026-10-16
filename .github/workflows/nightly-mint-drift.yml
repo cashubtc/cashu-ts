@@ -68,3 +68,51 @@ jobs:
 
           Run: $RUN_URL"
           fi
+
+  auth-demo:
+    if: github.repository == 'cashubtc/cashu-ts'
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22.x'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Run the auth demo against mintd:latest
+        working-directory: examples/auth_mint
+        env:
+          MINT_IMAGE: cashubtc/mintd:latest
+        run: make demo-ci
+
+      - name: Container logs on failure
+        if: ${{ failure() }}
+        working-directory: examples/auth_mint
+        run: docker compose logs --tail 200 || true
+
+      - name: Open drift issue on failure
+        if: ${{ failure() }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Drift: auth demo fails against mintd:latest"
+          # One open issue — comment on it instead of duplicating
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --label drift --search "in:title \"$title\"" \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" \
+              --body "Still failing: $RUN_URL"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "$title" \
+              --label drift \
+              --body "The nightly drift check failed running \`examples/auth_mint\` against \`cashubtc/mintd:latest\` (the pinned version still passes PR CI, so this is upstream drift or a breaking mint release).
+
+          Run: $RUN_URL"
+          fi

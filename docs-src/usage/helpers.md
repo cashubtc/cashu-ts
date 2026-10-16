@@ -32,6 +32,7 @@ proof state publishes, which is exactly what a third-party verifier of a disclos
 ```ts
 import { computeMessageDigest, hexToBytes, bytesToHex, sha256, taggedHash } from '@cashu/cashu-ts';
 
+if (!state.input_digest || !state.witness) throw new Error('proof has not been spent');
 const commitment = taggedHash(
   'Cashu_SpendCommitment',
   hexToBytes(state.Y),
@@ -62,11 +63,32 @@ const found = findCashuPayload(pastedText);
 if (found?.kind === 'token') {
   const meta = getTokenMetadata(found.payload); // mint, unit and amount, no keysets needed
   // getDecodedToken resolves short keyset IDs against the keysets you pass it, so it throws for a
-  // mint you have not loaded, which is the common case for a stranger's paste.
+  // mint you have not loaded, which is the common case for a stranger's paste. Raw binary tokens
+  // go through getDecodedTokenBinary(bytes, keysetIds) with the same list.
   const token = getDecodedToken(found.payload, myKeyChain.getAllKeysetIds());
 } else if (found?.kind === 'paymentRequest') {
   const pr = decodePaymentRequest(found.payload);
 }
+```
+
+## `findLegacyDerivationCollisions`
+
+Call with the keyset IDs of every mint the seed is used with, including inactive keysets,
+when adding a mint or refreshing keysets. The derivation path does not include the mint, so
+keysets from different mints can collide. Returns groups of distinct legacy IDs (base64 or
+hex version `00`) that share a NUT-13 BIP-32 path integer, or `[]` when none collide.
+Repeated identical IDs do not form a collision, nor do hex casing or URL-safe base64
+spellings; returned IDs retain their first spelling. Other hex versions, including future
+versions, and unrecognized forms are skipped without throwing. How to handle a reported
+collision is wallet policy.
+
+```ts
+import { findLegacyDerivationCollisions } from '@cashu/cashu-ts';
+
+// One wallet per mint, all on the same seed
+const collisions = findLegacyDerivationCollisions(
+  [walletA, walletB].flatMap((w) => w.keyChain.getAllKeysetIds()),
+);
 ```
 
 ## `hexToBytes` and `bytesToHex`

@@ -9,10 +9,10 @@
 // ==========================
 // Public API Surface
 // ==========================
-export { Mint } from './mint';
+export { Mint, type MintCallOptions } from './mint';
 export { KeyChain } from './wallet/KeyChain';
 export { Keyset } from './wallet/Keyset';
-export { LockBuilder } from './wallet/LockBuilder';
+export { LockBuilder, type LockFamily } from './wallet/LockBuilder';
 export {
   auditableLock,
   lockToNutrootOptions,
@@ -25,9 +25,18 @@ export { type SelectProofs, selectProofsRGLI, selectProofsRotating } from './wal
 export {
   serializeSwapPreview,
   deserializeSwapPreview,
+  serializeMintPreview,
+  deserializeMintPreview,
+  serializeBatchMintPreview,
+  deserializeBatchMintPreview,
+  serializeMeltPreview,
+  deserializeMeltPreview,
   type SerializedProof,
   type SerializedSwapPreview,
-} from './wallet/SwapPreview';
+  type SerializedMintPreview,
+  type SerializedBatchMintPreview,
+  type SerializedMeltPreview,
+} from './wallet/previews';
 export { Wallet } from './wallet/Wallet';
 export { WalletCounters } from './wallet/WalletCounters';
 export { WalletEvents } from './wallet/WalletEvents';
@@ -50,6 +59,7 @@ export {
   type AuthProvider,
   type AuthManagerOptions,
   type TokenResponse,
+  type TokenOrigin,
   type DeviceStartResponse,
   type OIDCConfig,
   type OIDCFetch,
@@ -58,7 +68,7 @@ export {
 
 // Wallet/Mint types used in the public API surface
 export type { CounterRange, CounterSource, OperationCounters } from './wallet/CounterSource';
-export { createEphemeralCounterSource, QUOTE_COUNTER_KEY } from './wallet/CounterSource';
+export { createEphemeralCounterSource, quoteCounterKey } from './wallet/CounterSource';
 export type {
   SubscribeOpts,
   CancellerLike,
@@ -94,6 +104,7 @@ export * from './crypto';
 
 // Core Utils
 export * from './utils/core';
+export * from './utils/verifyProofs';
 export { JSONInt, type JSONIntApi } from './utils/JSONInt';
 // Public byte conversion is intentionally limited to strict hex codecs.
 export { bytesToHex, hexToBytes } from './utils/hex';
@@ -120,9 +131,21 @@ export type {
 
 // Logging & errors
 export { type LogLevel, ConsoleLogger, type Logger } from './logger';
+export { MintErrorCode } from './model/ErrorCodes';
 export {
+  AmountError,
+  AmountWithUnitError,
+  CallerAbortError,
   CTSError,
+  hasMintErrorCode,
+  isAlreadyIssuedError,
+  isAuthError,
   isMintOperationError,
+  isPaymentFailedError,
+  isPendingError,
+  isProofsAlreadySpentError,
+  isQuoteExpiredError,
+  isQuoteNotPaidError,
   MeltChangeError,
   MintOperationError,
   NetworkError,
@@ -130,17 +153,12 @@ export {
   RateLimitError,
   StaleKeysetError,
   InvalidScalarError,
+  UncancellableReadError,
   UnknownKeysetError,
 } from './model/Errors';
 
 // Low-level helpers/types that appear in public surfaces
-export {
-  Amount,
-  AmountError,
-  AmountWithUnit,
-  AmountWithUnitError,
-  type AmountLike,
-} from './model/Amount';
+export { Amount, AmountWithUnit, type AmountLike } from './model/Amount';
 export { OutputData } from './model/OutputData';
 export type { OutputDataLike, OutputDataFactory, SerializedOutputData } from './model/OutputData';
 export type { OutputDataCreator } from './model/OutputDataCreator';
@@ -152,6 +170,7 @@ export type {
   RequestArgs,
   RequestOptions,
   ResponseMeta,
+  WSCloseEvent,
 } from './transport';
 export {
   SigAll,
@@ -177,7 +196,10 @@ export {
   serializeNutrootLeaf,
   serializeNutrootLeafHex,
   NUTROOT_LEAF_TYPE,
+  isConditionLeaf,
   NUTROOT_NUMS_KEY,
   type NutrootLeaf,
+  type NutrootConditionLeaf,
+  type NutrootCommitLeaf,
   type ParsedNutrootOption,
 } from './crypto/nutroot';

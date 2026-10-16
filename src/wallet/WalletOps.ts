@@ -15,8 +15,9 @@ import {
 import type { ProofLike } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 
+import { assertQuoteUnit } from './_internal';
 import { nutrootToLockOptions, p2pkToLockOptions, type LockOptions } from './lock';
-import { LockBuilder } from './LockBuilder';
+import { LockBuilder, type LockFamily } from './LockBuilder';
 import {
   type OutputType,
   type OutputConfig,
@@ -63,7 +64,8 @@ export class WalletOps {
    * @param proofs - Proofs to select from.
    * @param amount - Payer-chosen amount for amountless requests; forbidden when the request sets
    *   `a`.
-   * @returns A preconfigured {@link SendBuilder}; chain further options and `.run()`.
+   * @returns A preconfigured {@link SendBuilder}; chain further options and `.run()`. The terms the
+   *   request set are fixed: chaining cannot replace its lock or disable `includeFees`.
    * @throws If the wallet's mint, unit, or melt methods are unacceptable to the request, the
    *   request's lock cannot be honoured, or the request is invalid per NUT-18.
    */
@@ -76,8 +78,11 @@ export class WalletOps {
     if (!base) {
       throw new CTSError('amountless payment request: pass the chosen amount');
     }
-    if (pr.amount && !pr.unit) {
-      throw new CTSError('invalid payment request: amount (a) without unit (u)');
+    // NUT-18: u MUST be set if a or sm is set, since mf is denominated in the request unit.
+    if (!pr.unit && (pr.amount !== undefined || pr.supportedMethods?.length)) {
+      throw new CTSError(
+        'invalid payment request: unit (u) is required when an amount (a) or supported methods (sm) are set',
+      );
     }
     if (pr.unit && pr.unit !== wallet.unit) {
       throw new CTSError(`request unit '${pr.unit}' does not match wallet unit '${wallet.unit}'`);
@@ -112,8 +117,8 @@ export class WalletOps {
     // Net of input fees (NUT-18): the payee must net the requested amount after swapping.
     const v3 = isBlsKeyset(wallet.keysetId);
     // Only a locked request negotiates an encoding; an unlocked one may use any keyset.
-    const family = lock || nutroot ? (v3 ? 'v3' : 'legacy') : undefined;
-    const builder = new SendBuilder(wallet, base.add(fee), proofs, family).includeFees(true);
+    const family = lock || nutroot ? (v3 ? 'nutroot' : 'p2pk') : undefined;
+    const builder = new SendBuilder(wallet, base.add(fee), proofs, family, true).includeFees(true);
     if (family) builder.keyset(wallet.keysetId);
     if (nutroot && v3) {
       return builder.asLocked(nutrootToLockOptions(nutroot));
@@ -185,6 +190,15 @@ export class SendBuilder {
   private sendOT?: OutputType;
   private keepOT?: OutputType;
   private config: SendConfig = {};
+
+  /**
+   * Aborts the requests made while preparing. `run()` still sends the commit request to completion;
+   * to cancel that too, `prepare()` then pass the signal to the wallet's complete step.
+   */
+  signal(signal: AbortSignal) {
+    this.config.signal = signal;
+    return this;
+  }
   private offlineExact?: { requireDleq: boolean };
   private offlineClose?: { requireDleq: boolean };
   private amount: Amount;
@@ -192,14 +206,28 @@ export class SendBuilder {
   /**
    * @param lockFamily Set by `sendToRequest`: the keyset family the request was negotiated for
    *   (NUT-18). `keyset()` then refuses an id from the other family.
+   * @param fromRequest Set by `sendToRequest`: the request's own terms (its lock, and selection net
+   *   of input fees) are then fixed, and chaining cannot replace them.
    */
   constructor(
     private wallet: Wallet,
     amount: AmountLike,
     private proofs: ProofLike[],
-    private lockFamily?: 'v3' | 'legacy',
+    private lockFamily?: LockFamily,
+    private fromRequest = false,
   ) {
     this.amount = Amount.from(amount);
+  }
+
+  /**
+   * Guards a send output the payment request itself asked for (NUT-18).
+   */
+  private assertSendOutputMutable(): void {
+    if (this.fromRequest && this.sendOT) {
+      throw new CTSError(
+        'the payment request mandates this send output; it cannot be replaced by chaining',
+      );
+    }
   }
 
   /**
@@ -208,6 +236,7 @@ export class SendBuilder {
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
   asRandom(denoms?: AmountLike[]) {
+    this.assertSendOutputMutable();
     this.sendOT = { type: 'random', denominations: denoms };
     return this;
   }
@@ -219,6 +248,7 @@ export class SendBuilder {
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
   asDeterministic(counter = 0, denoms?: AmountLike[]) {
+    this.assertSendOutputMutable();
     this.sendOT = { type: 'deterministic', counter, denominations: denoms };
     return this;
   }
@@ -230,6 +260,7 @@ export class SendBuilder {
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
   asLocked(lock: LockOptions | LockBuilder, denoms?: AmountLike[]) {
+    this.assertSendOutputMutable();
     const options = lock instanceof LockBuilder ? lock.toOptions() : lock;
     this.sendOT = { type: 'lock', options, denominations: denoms };
     return this;
@@ -242,6 +273,7 @@ export class SendBuilder {
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
   asFactory(factory: OutputDataFactory, denoms?: AmountLike[]) {
+    this.assertSendOutputMutable();
     this.sendOT = { type: 'factory', factory, denominations: denoms };
     return this;
   }
@@ -253,6 +285,7 @@ export class SendBuilder {
    *   wallet will throw.
    */
   asCustom(data: OutputDataLike[]) {
+    this.assertSendOutputMutable();
     this.sendOT = { type: 'custom', data };
     return this;
   }
@@ -317,6 +350,12 @@ export class SendBuilder {
    * @param on When true, include fees in the sent amount. Default true if called.
    */
   includeFees(on = true) {
+    // A payment request is settled net of input fees (NUT-18), so the payee nets the amount asked.
+    if (this.fromRequest && !on) {
+      throw new CTSError(
+        'a payment request is sent net of input fees; includeFees cannot be disabled',
+      );
+    }
     this.config.includeFees = on;
     return this;
   }
@@ -328,7 +367,7 @@ export class SendBuilder {
    */
   keyset(id: string) {
     // The lock encoding was negotiated for one family (NUT-18); the other would re-encode it.
-    if (this.lockFamily && (isBlsKeyset(id) ? 'v3' : 'legacy') !== this.lockFamily) {
+    if (this.lockFamily && (isBlsKeyset(id) ? 'nutroot' : 'p2pk') !== this.lockFamily) {
       throw new CTSError(
         `keyset ${id} is not in the family this payment request was negotiated for`,
       );
@@ -414,10 +453,20 @@ export class SendBuilder {
    * Prepare the swap to send.
    *
    * @remarks
-   * Call `wallet.completeSwap(SwapPreview)` to complete the send.
-   * @returns A SwapPreview containing inputs, outputs, amount, fee and unselectedProofs.
+   * Call `wallet.completeSwap(preview)` to complete the send. `unselected` take no part in the swap
+   * and are not in its `keep`: return them to storage.
+   * @returns The swap preview (inputs, outputs, amount, fee) and the proofs not selected.
+   * @throws If an offline mode is set: an offline selection has no swap to complete.
    */
   async prepare() {
+    // An offline selection reuses existing proofs and never reaches the mint, so there is no
+    // preview to hand to completeSwap.
+    if (this.offlineExact || this.offlineClose) {
+      throw new CTSError(
+        'Offline selection has nothing to prepare; call run() instead, or drop the offline mode for an online swap.',
+      );
+    }
+
     // Construct an OutputConfig using default send if no customizations
     const outputConfig: OutputConfig = {
       send: this.sendOT ?? this.wallet.defaultOutputType(),
@@ -503,6 +552,15 @@ export class SendBuilder {
 export class ReceiveBuilder {
   private outputType?: OutputType;
   private config: ReceiveConfig = {};
+
+  /**
+   * Aborts the requests made while preparing. `run()` still sends the commit request to completion;
+   * to cancel that too, `prepare()` then pass the signal to the wallet's complete step.
+   */
+  signal(signal: AbortSignal) {
+    this.config.signal = signal;
+    return this;
+  }
 
   constructor(
     private wallet: Wallet,
@@ -686,6 +744,15 @@ export class MintBuilder<
 > {
   private outputType?: OutputType;
   private config: MintProofsConfig = {};
+
+  /**
+   * Aborts the requests made while preparing. `run()` still sends the commit request to completion;
+   * to cancel that too, `prepare()` then pass the signal to the wallet's complete step.
+   */
+  signal(signal: AbortSignal) {
+    this.config.signal = signal;
+    return this;
+  }
   private amount: Amount;
 
   // phantom field to satisfy linter (erased at emit)
@@ -823,7 +890,8 @@ export class MintBuilder<
    * @remarks
    * Call `wallet.completeMint(MintPreview)` to complete the mint. This method can only be called
    * for bolt12 quotes when `.privkey()` is set.
-   * @returns A MintPreview containing the payload and output data needed to complete the mint.
+   * @returns A MintPreview containing the quote, output data and signature needed to complete the
+   *   mint.
    */
   async prepare(
     this: MintBuilder<M, true>,
@@ -844,7 +912,7 @@ export class MintBuilder<
     if (this.method === 'bolt11') {
       const raw = this.quote as string | MintQuoteBolt11Response;
       const quote = typeof raw === 'string' ? await this.wallet.checkMintQuoteBolt11(raw) : raw;
-      this.wallet.validateMintQuote(quote);
+      assertQuoteUnit(quote, this.wallet.unit, this.wallet.logger);
       return this.wallet.prepareMint(
         this.method,
         this.amount,
@@ -857,9 +925,9 @@ export class MintBuilder<
     // BOLT 12
     if (this.method === 'bolt12') {
       const bolt12 = this.quote as MintQuoteBolt12Response;
-      this.wallet.validateMintQuote(bolt12);
+      assertQuoteUnit(bolt12, this.wallet.unit, this.wallet.logger);
       if (!this.config.privkey) {
-        throw new Error('privkey is required for BOLT12 mint quotes');
+        throw new CTSError('privkey is required for BOLT12 mint quotes');
       }
       return this.wallet.prepareMint(
         this.method,
@@ -872,7 +940,7 @@ export class MintBuilder<
 
     // Onchain
     const onchain = this.quote as MintQuoteOnchainResponse;
-    this.wallet.validateMintQuote(onchain);
+    assertQuoteUnit(onchain, this.wallet.unit, this.wallet.logger);
     if (!this.config.privkey) {
       throw new CTSError('privkey is required for onchain mint quotes');
     }
@@ -896,7 +964,7 @@ export class MintBuilder<
    */
   async run(this: MintBuilder<M, true>) {
     const preview = await this.prepare();
-    return this.wallet.completeMint(preview);
+    return this.wallet.completeMint(preview); // no abort
   }
 }
 
@@ -925,6 +993,15 @@ export class MeltBuilder<
 > {
   private outputType?: OutputType;
   private config: MeltProofsConfig = {};
+
+  /**
+   * Aborts the requests made while preparing. `run()` still sends the commit request to completion;
+   * to cancel that too, `prepare()` then pass the signal to the wallet's complete step.
+   */
+  signal(signal: AbortSignal) {
+    this.config.signal = signal;
+    return this;
+  }
 
   constructor(
     private wallet: Wallet,
@@ -1070,6 +1147,7 @@ export class MeltBuilder<
     );
 
     // Step 2, sign if needed and complete the melt
+    // no abort
     return this.wallet.completeMelt(preview, this.config.privkey, {
       ...(this.config.scriptPath && { scriptPath: this.config.scriptPath }),
     });
@@ -1100,6 +1178,15 @@ export class MeltBuilder<
  */
 export class MeltOnchainBuilder {
   private config: MeltProofsConfig = {};
+
+  /**
+   * Aborts the requests made while preparing. `run()` still sends the commit request to completion;
+   * to cancel that too, `prepare()` then pass the signal to the wallet's complete step.
+   */
+  signal(signal: AbortSignal) {
+    this.config.signal = signal;
+    return this;
+  }
   private selectedFeeIndex?: number;
 
   constructor(
@@ -1169,7 +1256,9 @@ export class MeltOnchainBuilder {
     }
 
     if (this.selectedFeeIndex === undefined) {
-      throw new Error('feeIndex is required when an onchain melt quote has multiple fee options');
+      throw new CTSError(
+        'feeIndex is required when an onchain melt quote has multiple fee options',
+      );
     }
 
     return this.wallet.meltProofsOnchain(

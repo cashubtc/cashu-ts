@@ -7,49 +7,62 @@ import { CTSError } from '../model/Errors';
 import { bytesToHex, hexToBytes, isValidHex } from '../utils';
 
 import { taggedHash } from './core';
-import { isBlsKeyset } from './curves';
+import { hashToCurveHex, isBlsKeyset } from './curves';
 import { minimalBE, tlvRecord } from './nutroot';
 
 /**
  * Transaction transcript (NUT-10): one shared digest, one derived message per input.
  *
  * @remarks
- * `transaction_digest = SHA256(domain tag || TLV stream)`; each input carries one BIP-340 signature
- * over its input digest, `tagged_hash("Cashu_TransactionInput", transaction_digest || SHA256(its
- * own container record))`. Containers: 0x01 proof input, 0x02 mint quote input, 0x03 blinded
- * message output, 0x04 melt quote output. Container types ascend (inputs before outputs by
- * construction); elements keep request order within their type; field streams inside are ascending
- * unique (NUT-10).
+ * `transaction_digest = SHA256(TLV stream)`; each input carries one BIP-340 signature over its
+ * input digest, `tagged_hash("Cashu_TransactionInput", transaction_digest || SHA256(its own
+ * container record))`. Containers: 0x11 proof input, 0x12 mint quote input, 0x21 blinded message
+ * output (carrying `SHA256(B_)`), 0x22 melt quote output. Container types ascend (inputs before
+ * outputs by construction); elements keep request order within their type; field streams inside are
+ * ascending unique (NUT-10).
  */
 
-export const TRANSCRIPT_DOMAIN_TAG = 'Cashu_Transaction_v1';
+export const TRANSCRIPT_REQUEST_TAG = 'Cashu_AuthorizedRequest';
 export const TRANSCRIPT_INPUT_TAG = 'Cashu_TransactionInput';
 export const SPEND_COMMITMENT_TAG = 'Cashu_SpendCommitment';
+export const QUOTE_ID_TAG = 'Cashu_QuoteId';
 
-const CONTAINER_PROOF_INPUT = 0x01;
-const CONTAINER_MINT_QUOTE_INPUT = 0x02;
-const CONTAINER_BLINDED_OUTPUT = 0x03;
-const CONTAINER_MELT_QUOTE_OUTPUT = 0x04;
-const CONTAINER_AUTHORIZED_REQUEST = 0x05;
+// The high nibble is the section: 0x1n inputs, 0x2n outputs, 0xFn never in a transaction.
+const CONTAINER_PROOF_INPUT = 0x11;
+const CONTAINER_MINT_QUOTE_INPUT = 0x12;
+const CONTAINER_BLINDED_OUTPUT = 0x21;
+const CONTAINER_MELT_QUOTE_OUTPUT = 0x22;
+const CONTAINER_AUTHORIZED_REQUEST = 0xf1;
 
 export type TranscriptProofInput = {
   amount: bigint;
   keysetId: string;
   /**
-   * The proof's secret: a v3 point `P` as 33-byte compressed SEC1 hex, or a v0-v2 secret verbatim,
-   * which a mixed transaction carries alongside v3 inputs (NUT-10).
+   * `Y = hash_to_curve(secret)` hex on the keyset's curve, the value the container carries
+   * (NUT-10); see {@link proofInputY}. A secret never enters a transcript.
    */
-  secret: string;
+  Y: string;
   /**
    * The mint signature `C` hex (BLS G1 under v3 keysets).
    */
   C: string;
 };
 
+/**
+ * How a caller names a proof input: by its secret, or by `Y` when that is what it holds.
+ */
+export type ProofInputName = { secret: string; Y?: undefined } | { Y: string; secret?: undefined };
+
 export type TranscriptQuote = {
   amount: bigint;
   quoteId: string;
 };
+
+/**
+ * A mint quote input: the quote, the 33-byte compressed lock key hex it is locked to, and the
+ * quote's `amount_issued` before this transaction (NUT-10), so a witness authorizes one draw.
+ */
+export type TranscriptQuoteInput = TranscriptQuote & { lockKey: string; issued: bigint };
 
 export type TranscriptBlindedOutput = {
   amount: bigint;
@@ -62,7 +75,7 @@ export type TranscriptBlindedOutput = {
 
 export type TransactionShape = {
   proofInputs?: TranscriptProofInput[];
-  mintQuoteInputs?: TranscriptQuote[];
+  mintQuoteInputs?: TranscriptQuoteInput[];
   blindedOutputs?: TranscriptBlindedOutput[];
   meltQuoteOutputs?: TranscriptQuote[];
 };
@@ -70,10 +83,19 @@ export type TransactionShape = {
 /**
  * Stable lookup key for one proof input's signing context.
  */
-export function proofInputContextKey(
-  input: Pick<TranscriptProofInput, 'keysetId' | 'secret'>,
-): string {
-  return `${isBlsKeyset(input.keysetId) ? 'v3' : 'legacy'}:${input.secret}`;
+export function proofInputContextKey(input: { keysetId: string } & ProofInputName): string {
+  return input.Y ?? proofInputY({ id: input.keysetId, secret: input.secret });
+}
+
+/**
+ * A proof input's `Y` hex: as supplied, else the keyset's hash_to_curve of its secret.
+ */
+export function proofInputY(input: { id: string } & ProofInputName): string {
+  if (input.Y !== undefined) return input.Y;
+  if (input.secret.length === 0) {
+    throw new CTSError('Transcript proof input needs a secret or its Y');
+  }
+  return hashToCurveHex(input.secret, input.id);
 }
 
 function amountRecord(amount: bigint): Uint8Array {
@@ -109,43 +131,77 @@ function keysetIdBytes(keysetId: string): Uint8Array {
  * One proof input's transcript container record (NUT-10), the bytes `inputDigest` hashes.
  */
 export function proofInputContainer(input: TranscriptProofInput): Uint8Array {
-  // A v3 secret contributes its raw 33 bytes; a v0-v2 secret its utf8 bytes.
-  const secret = isBlsKeyset(input.keysetId)
-    ? hexToBytes(input.secret)
-    : new TextEncoder().encode(input.secret);
-  if (secret.length === 0) {
-    throw new CTSError('Transcript proof secret must be non-empty');
+  const { Y } = input;
+  const keysetId = keysetIdBytes(input.keysetId);
+  // Shape only: a 48-byte G1 point under a BLS keyset, a 33-byte secp256k1 point otherwise.
+  const expected = isBlsKeyset(input.keysetId) ? 48 : 33;
+  if (!isValidHex(Y) || Y.length !== expected * 2) {
+    throw new CTSError(`Transcript proof Y must be a ${expected}-byte compressed point`);
   }
   return tlvRecord(
     CONTAINER_PROOF_INPUT,
     concatBytes(
       amountRecord(input.amount),
-      tlvRecord(0x02, keysetIdBytes(input.keysetId)),
-      tlvRecord(0x03, secret),
+      tlvRecord(0x02, keysetId),
+      tlvRecord(0x03, hexToBytes(Y)),
       tlvRecord(0x04, hexToBytes(input.C)),
     ),
   );
 }
 
-function quoteContainer(containerType: number, quote: TranscriptQuote): Uint8Array {
+// Fields 01 amount and 02 quote id, shared by the mint quote input and melt quote output containers.
+function quoteFields(quote: TranscriptQuote): Uint8Array {
   if (quote.quoteId.length === 0) {
     throw new CTSError('Transcript quote id must be non-empty');
   }
+  return concatBytes(amountRecord(quote.amount), tlvRecord(0x02, utf8ToBytes(quote.quoteId)));
+}
+
+// The container commits the lock key, so an offline co-signer can tell which key the input needs.
+function mintQuoteInputContainer(quote: TranscriptQuoteInput): Uint8Array {
+  if (!isValidHex(quote.lockKey) || quote.lockKey.length !== 66) {
+    throw new CTSError('Transcript mint quote input needs its 33-byte lock key');
+  }
   return tlvRecord(
-    containerType,
-    concatBytes(amountRecord(quote.amount), tlvRecord(0x02, utf8ToBytes(quote.quoteId))),
+    CONTAINER_MINT_QUOTE_INPUT,
+    concatBytes(
+      quoteFields(quote),
+      tlvRecord(0x03, hexToBytes(quote.lockKey)),
+      tlvRecord(0x04, minimalBE(Amount.from(quote.issued).toBigInt())),
+    ),
   );
 }
 
+function meltQuoteOutputContainer(quote: TranscriptQuote): Uint8Array {
+  return tlvRecord(CONTAINER_MELT_QUOTE_OUTPUT, quoteFields(quote));
+}
+
 function blindedOutputContainer(output: TranscriptBlindedOutput): Uint8Array {
+  if (!isValidHex(output.B_) || output.B_.length === 0) {
+    throw new CTSError('Transcript blinded message B_ must be hex');
+  }
   return tlvRecord(
     CONTAINER_BLINDED_OUTPUT,
     concatBytes(
       amountRecord(output.amount),
       tlvRecord(0x02, keysetIdBytes(output.keysetId)),
-      tlvRecord(0x03, hexToBytes(output.B_)),
+      tlvRecord(0x03, sha256(hexToBytes(output.B_))),
     ),
   );
+}
+
+/**
+ * A derived quote id (NUT-04): `hex(tagged_hash("Cashu_QuoteId", id_preimage))`.
+ *
+ * @remarks
+ * The preimage is 32 bytes its creator supplies (NUT-13 type `0x05` for a seeded wallet) and the
+ * mint never discloses.
+ */
+export function derivedQuoteId(idPreimage: Uint8Array): string {
+  if (idPreimage.length !== 32) {
+    throw new CTSError('Quote id preimage must be 32 bytes');
+  }
+  return bytesToHex(taggedHash(QUOTE_ID_TAG, idPreimage));
 }
 
 /**
@@ -163,7 +219,7 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
     throw new CTSError('Transaction requires at least one output');
   }
   // NUT-10: the same proof or quote twice would sign one input digest for two inputs.
-  if (new Set(proofs.map(proofInputContextKey)).size !== proofs.length) {
+  if (new Set(proofs.map((p) => p.Y)).size !== proofs.length) {
     throw new CTSError('Transaction repeats a proof input');
   }
   if (new Set(mintQuotes.map((q) => q.quoteId)).size !== mintQuotes.length) {
@@ -171,25 +227,50 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
   }
   return concatBytes(
     ...proofs.map(proofInputContainer),
-    ...mintQuotes.map((q) => quoteContainer(CONTAINER_MINT_QUOTE_INPUT, q)),
+    ...mintQuotes.map(mintQuoteInputContainer),
     ...blinded.map(blindedOutputContainer),
-    ...meltQuotes.map((q) => quoteContainer(CONTAINER_MELT_QUOTE_OUTPUT, q)),
+    ...meltQuotes.map(meltQuoteOutputContainer),
   );
 }
 
 /**
- * The bytes every input signs over, before hashing: `domain tag || transcript`.
+ * The bytes the transaction digest hashes: the TLV transcript itself.
  *
  * @remarks
- * A signer handed this rather than the digest can hash it itself and refuse anything that does not
- * carry the tag, so it can never be tricked into signing some other 32 bytes.
+ * A signer handed this rather than the digest can hash it itself and check the container it is
+ * asked to sign for is one of the transcript's records ({@link transcriptContainers}), so it can
+ * never be tricked into signing some other 32 bytes.
  */
 export function transactionMessage(tx: TransactionShape): Uint8Array {
-  return concatBytes(utf8ToBytes(TRANSCRIPT_DOMAIN_TAG), buildTransactionTranscript(tx));
+  return buildTransactionTranscript(tx);
 }
 
 /**
- * The 32-byte shared transaction digest: `SHA256(domain tag || transcript)`.
+ * Split a transcript into its top-level container records, byte for byte.
+ *
+ * @remarks
+ * Throws unless the bytes are exactly a run of well-formed, non-empty NUT-10 containers (proof
+ * input through authorized request); an event id or other opaque 32 bytes never passes.
+ */
+export function transcriptContainers(transcript: Uint8Array): Uint8Array[] {
+  const records: Uint8Array[] = [];
+  for (let at = 0; at < transcript.length;) {
+    const type = transcript[at];
+    const length = (transcript[at + 1] << 8) | transcript[at + 2];
+    const end = at + 3 + length;
+    const section = type >> 4;
+    if ((section !== 1 && section !== 2) || length === 0 || end > transcript.length) {
+      throw new CTSError('Malformed transaction transcript');
+    }
+    records.push(transcript.subarray(at, end));
+    at = end;
+  }
+  if (records.length === 0) throw new CTSError('Malformed transaction transcript');
+  return records;
+}
+
+/**
+ * The 32-byte shared transaction digest: `SHA256(transcript)`.
  */
 export function transactionDigest(tx: TransactionShape): Uint8Array {
   return sha256(transactionMessage(tx));
@@ -214,9 +295,8 @@ export type TransactionInputContext = { inputContainer: Uint8Array; digest: Uint
  * Every input's signing context, plus the shared message and digest.
  *
  * @remarks
- * `proofs` is keyed by {@link proofInputContextKey} and `quotes` by quote id; the transcript builder
- * has already refused duplicates, so the keys are unique. The proof key includes its protocol
- * family because identical text denotes raw point bytes in v3 and UTF-8 bytes in v0-v2.
+ * `proofs` is keyed by the input's `Y` and `quotes` by quote id; the transcript builder has already
+ * refused duplicates, so the keys are unique.
  */
 export function transactionInputs(tx: TransactionShape): {
   transactionMessage: Uint8Array;
@@ -230,23 +310,54 @@ export function transactionInputs(tx: TransactionShape): {
   const quotes = new Map<string, TransactionInputContext>();
   for (const p of tx.proofInputs ?? []) {
     const inputContainer = proofInputContainer(p);
-    proofs.set(proofInputContextKey(p), {
+    proofs.set(p.Y, {
       inputContainer,
       digest: inputDigest(digest, inputContainer),
     });
   }
   for (const q of tx.mintQuoteInputs ?? []) {
-    const inputContainer = quoteContainer(CONTAINER_MINT_QUOTE_INPUT, q);
+    const inputContainer = mintQuoteInputContainer(q);
     quotes.set(q.quoteId, { inputContainer, digest: inputDigest(digest, inputContainer) });
   }
   return { transactionMessage: message, transactionDigest: digest, proofs, quotes };
 }
 
+/**
+ * A proof input as a payload carries it, named by secret or by `Y` ({@link ProofInputName}).
+ */
+export type PayloadProofInput = { amount: AmountLike; id: string; C: string } & ProofInputName;
+
 type PayloadShape = {
-  inputs?: Array<{ amount: AmountLike; id: string; secret: string; C: string }>;
-  mintQuotes?: Array<{ quoteId: string; amount: AmountLike }>;
+  inputs?: PayloadProofInput[];
+  mintQuotes?: Array<{ quoteId: string; amount: AmountLike; lockKey: string; issued: AmountLike }>;
   outputs?: Array<{ amount: AmountLike; id: string; B_: string }>;
   meltQuote?: { quoteId: string; amount: AmountLike };
+};
+
+/**
+ * The melt quote output's amount (NUT-10): the quote's `amount` plus the fee reserve the request
+ * selects.
+ *
+ * @remarks
+ * A quote offering `fee_options` (NUT-30) needs the request's `feeIndex`; any other quote carries
+ * one reserve, or none. The mint derives the same value from its own quote state.
+ */
+export function meltOutputAmount(quote: MeltOutputAmountSource, feeIndex?: number): Amount {
+  const amount = Amount.from(quote.amount);
+  if (quote.fee_options?.length) {
+    const option = quote.fee_options.find((o) => o.fee_index === feeIndex);
+    if (!option) {
+      throw new CTSError('A melt quote with fee options needs the selected feeIndex');
+    }
+    return amount.add(option.fee_reserve);
+  }
+  return amount.add(quote.fee_reserve ?? 0);
+}
+
+type MeltOutputAmountSource = {
+  amount: AmountLike;
+  fee_reserve?: AmountLike;
+  fee_options?: Array<{ fee_index: number; fee_reserve: AmountLike }>;
 };
 
 /**
@@ -270,11 +381,17 @@ function payloadToTransaction(payload: PayloadShape): TransactionShape {
       proofInputs: payload.inputs.map((p) => ({
         amount: Amount.from(p.amount).toBigInt(),
         keysetId: p.id,
-        secret: p.secret,
+        Y: proofInputY(p),
         C: p.C,
       })),
     }),
-    ...(payload.mintQuotes && { mintQuoteInputs: payload.mintQuotes.map(quote) }),
+    ...(payload.mintQuotes && {
+      mintQuoteInputs: payload.mintQuotes.map((q) => ({
+        ...quote(q),
+        lockKey: q.lockKey,
+        issued: Amount.from(q.issued).toBigInt(),
+      })),
+    }),
     ...(payload.outputs && {
       blindedOutputs: payload.outputs.map((o) => ({
         amount: Amount.from(o.amount).toBigInt(),
@@ -316,7 +433,7 @@ export function spendCommitment(YHex: string, inputDigest: Uint8Array, witness: 
  * Serialize a request to its authorized-request transcript (NUT-22).
  *
  * @remarks
- * One 0x05 container: 01 the uppercase HTTP method, 02 the origin-form request-target as sent, 03
+ * One 0xF1 container: 01 the uppercase HTTP method, 02 the origin-form request-target as sent, 03
  * SHA256 over the exact body bytes (a request without a body hashes the empty byte string).
  */
 export function buildRequestTranscript(
@@ -338,12 +455,11 @@ export function buildRequestTranscript(
 }
 
 /**
- * The 32-byte digest a version 02 BAT witness signs (NUT-22).
+ * The 32-byte message a version 02 BAT witness signs (NUT-22):
+ * `tagged_hash("Cashu_AuthorizedRequest", SHA256(request transcript))`.
  */
 export function requestDigest(method: string, target: string, body: Uint8Array): Uint8Array {
-  return sha256(
-    concatBytes(utf8ToBytes(TRANSCRIPT_DOMAIN_TAG), buildRequestTranscript(method, target, body)),
-  );
+  return taggedHash(TRANSCRIPT_REQUEST_TAG, sha256(buildRequestTranscript(method, target, body)));
 }
 
 /**

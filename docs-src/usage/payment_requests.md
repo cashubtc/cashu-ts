@@ -7,7 +7,7 @@ A **payment request** lets a payee describe a payment they want to be paid, enco
 Two encodings are supported and both decode through the same API:
 
 - `creqA…`: CBOR + base64url ([NUT-18][nut18])
-- `CREQB1…`: TLV + Bech32m, more compact and QR-friendly ([NUT-26][nut26])
+- `CREQB1…`: TLV + Bech32m, QR-friendly (uppercase alphanumeric, so QR encoders use the dense alphanumeric mode) ([NUT-26][nut26])
 
 The shortest path is three calls: `decodePaymentRequest` → `wallet.ops.sendToRequest` on the payer side, and `wallet.isPaymentRequestSatisfied` on the payee side. Everything else on this page is either request authoring or [manual control](#manual-control) for when you need to unpack the rules yourself.
 
@@ -16,7 +16,7 @@ The shortest path is three calls: `decodePaymentRequest` → `wallet.ops.sendToR
 ### 1. Decode it
 
 ```typescript
-import { decodePaymentRequest } from '@cashu/cashu-ts';
+import { decodePaymentRequest, PaymentRequestTransportType } from '@cashu/cashu-ts';
 
 const pr = decodePaymentRequest(scanned); // accepts creqA… or CREQB1…
 
@@ -24,7 +24,7 @@ pr.amount; // requested Amount (undefined = payer chooses the amount)
 pr.unit; // e.g. 'sat'
 pr.description; // human-readable, show to the user
 pr.mints; // mints the payee accepts (string[] | undefined)
-pr.getTransport('nostr'); // the transport of a given type, if present
+pr.getTransport(PaymentRequestTransportType.NOSTR); // the transport of a given type, if present
 ```
 
 ### 2. Pay it
@@ -49,7 +49,8 @@ const { keep, send } = await wallet.ops.sendToRequest(pr, proofs).run();
 const body = pr.encodePayload(wallet.mint.mintUrl, send, { memo: 'thanks' });
 
 // HTTP POST transport; for a Nostr transport, send `body` as the DM content.
-const post = pr.getTransport('post');
+const post = pr.getTransport(PaymentRequestTransportType.POST);
+if (!post) throw new Error('request has no HTTP POST transport');
 await fetch(post.target, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
@@ -131,8 +132,14 @@ if (!request.includesMint(payload.mint)) return;
 The requested amount is what the payee must **net**, so check incoming proofs against the input fees they will cost to swap, plus any per-method fee the payer owed, before treating the payment as settled. A wallet on the payload's mint has everything needed:
 
 ```typescript
-if (!wallet.isPaymentRequestSatisfied(pr, payload.proofs)) {
-  // Underpaid: sum(proofs) - inputFees < amount + mf. Ignore or refund.
+try {
+  if (!wallet.isPaymentRequestSatisfied(pr, payload.proofs)) {
+    // Underpaid: sum(proofs) - inputFees < amount + mf. Ignore or refund.
+  }
+} catch {
+  // This mint cannot settle the request (wrong unit, outside a strict mint
+  // list, or no melt method the request accepts), or a proof does not carry
+  // the requested lock, or you cannot spend it. Ignore or refund.
 }
 ```
 
@@ -144,7 +151,7 @@ A **locked** request needs a fourth: the private key it locks to. The check then
 wallet.isPaymentRequestSatisfied(pr, payload.proofs, undefined, { privkeys: myPrivkey });
 ```
 
-The check covers the amount and the requested lock. What it cannot cover is a blind-me leaf key belonging to someone else: only that key's owner can resolve its blinding, so a cosigner checks their own. Mint admissibility (`isMintListStrict` / `includesMint`) and proof integrity (DLEQ) remain separate checks, as does whether a script-path leaf is satisfiable today: ask `wallet.spendOptions(proof, { privkeys })` for that.
+The check covers the amount, the requested lock, and this mint's admissibility: it throws when the mint is outside a strict mint list, or cannot melt the request unit via any method the request accepts. An unlocked request takes only proofs you can spend, bearer or locked to a key you pass as `privkeys`, so it also throws on proofs the payer locked to themselves. What it cannot cover is a blind-me leaf key belonging to someone else: only that key's owner can resolve its blinding, so a cosigner checks their own. Proof integrity (DLEQ) remains a separate check, as does, for a locked request, whether a script-path leaf is satisfiable today: ask `wallet.spendOptions(proof, { privkeys })` for that.
 
 ## Manual control
 

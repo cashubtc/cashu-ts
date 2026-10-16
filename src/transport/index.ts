@@ -6,4 +6,4 @@ export { BATCH_POOL_SIZE, runPool } from './pool';
 
 export { injectWebSocketImpl } from './ws';
 
-export { WSConnection } from './WSConnection';
+export { WSConnection, type WSCloseEvent } from './WSConnection';

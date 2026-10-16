@@ -125,7 +125,7 @@ Hooks are installed by Husky:
 1. Start with the public surface: check `src/index.ts` for exports and types.
 2. Keep changes tight and scoped; follow patterns in `src/wallet/`, `src/mint/`, `src/model/`.
 3. Public API changes: run `npm run api:update` and commit `/etc/cashu-ts.api.md`.
-4. Update docs/usage examples if the API behavior changes (`docs-src/usage/*`).
+4. Update docs/usage examples if the API behavior changes (`docs-src/usage/*`). Every ` ```ts ` fence there is type-checked against the shipped types by `npm run check-docs` (after `npm run compile`); fragments get their ambient names from `scripts/docs-snippet-prelude.d.ts`, and a deliberately partial fence is tagged ` ```ts skip `.
 5. Run `npm run prtasks`; run `npm run test-integration` if behavior depends on a mint.
 
 ## PR review flow (reviewer)
@@ -144,6 +144,7 @@ Hooks are installed by Husky:
 - Mint response DTOs are normalized to `Amount` before reaching consumers — API response amount fields return `Amount` objects, not raw numbers.
 - When constructing `Proof` objects, always normalize: `amount: Amount.from(x)`. Use `ProofLike` (`amount: AmountLike`) to model un-normalized proofs from external storage.
 - Avoid `number` in canonical domain models and avoid `bigint | number` in stored/core types.
+- `Amount` methods take `AmountLike` (number, bigint, decimal string or `Amount`), so pass literals bare: `fee.add(1)`, `amount.equals(100)`. `Amount.from` is for making an `Amount`, such as the right side of `expect().toEqual()` or a value handed to code that requires the class.
 
 ## Branching and releases
 

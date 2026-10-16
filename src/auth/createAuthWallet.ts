@@ -4,7 +4,7 @@ import request, { type RequestFetch, type RequestFn, type RequestOptions } from 
 import { Wallet } from '../wallet/Wallet';
 
 import { AuthManager } from './AuthManager';
-import type { OIDCAuth, OIDCAuthOptions } from './OIDCAuth';
+import { OIDCAuth, type OIDCAuthOptions } from './OIDCAuth';
 
 /**
  * High-level helper to create a fully authenticated wallet session.
@@ -15,7 +15,8 @@ import type { OIDCAuth, OIDCAuthOptions } from './OIDCAuth';
  * @param mintUrl URL of the mint to connect to.
  * @param options.authPool Optional. Desired BAT pool size and per-request mint cap. Both
  *   desiredPoolSize and maxPerMint on the AuthManager will be set to this value. Defaults to 10.
- * @param options.oidc Optional. Options for OIDCAuth (scope, clientId, logger, etc.)
+ * @param options.oidc Optional OIDCAuth options, including an onTokens callback for persistence.
+ *   The attached manager installs token state; the callback should not call setCAT.
  * @param options.customRequest Optional request function for mint HTTP calls.
  * @param options.requestFetch Optional fetch-compatible transport for mint HTTP calls. Ignored when
  *   `customRequest` is supplied.
@@ -55,14 +56,13 @@ export async function createAuthWallet(
     logger: options?.logger,
   });
 
-  // 3. Discover and configure OIDCAuth from the mint
-  const oidc = await mint.oidcAuth({
+  // 3. Discover and configure OIDCAuth from the mint's NUT-21 metadata
+  const oidc = OIDCAuth.fromMintInfo(await mint.getLazyMintInfo(), {
     ...options?.oidc,
     logger: options?.logger,
-    onTokens: (t) => auth.setCAT(t.access_token), // set CAT automatically
   });
 
-  // 4. Attach OIDCAuth back into AuthManager for refresh, etc.
+  // 4. Attach OIDCAuth back into AuthManager: its listener installs the CAT and refresh state.
   auth.attachOIDC(oidc);
 
   // 5. Hydrate wallet using the same mint and auth provider

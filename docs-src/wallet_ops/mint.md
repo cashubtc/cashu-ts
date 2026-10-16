@@ -15,11 +15,11 @@ const newProofs = await wallet.ops
 ```ts
 const preview = await wallet.ops.mintBolt11(100, quote).asDeterministic(0).prepare();
 
-// Persist `preview` if you want to retry safely later.
+// Persist serializeMintPreview(preview) if you want to retry safely later.
 const newProofs = await wallet.completeMint(preview);
 ```
 
-- `prepare()` builds the exact mint payload without calling the mint yet.
+- `prepare()` builds the outputs and signs the quote without calling the mint yet.
 - `run()` is equivalent to `const preview = await prepare(); await wallet.completeMint(preview)`.
 
 ## 3) Deterministic mint with keyset + callback
@@ -27,7 +27,7 @@ const newProofs = await wallet.completeMint(preview);
 ```ts
 const newProofs = await wallet.ops
   .mintBolt11(250, quote)
-  .asDeterministic(0, [128, 64]) // counter=0 => auto-reserve, split must include denoms
+  .asDeterministic(0, [128, 64]) // counter=0 => auto-reserve; denoms is a partial split, filled to 250
   .keyset('0123456')
   .onCountersReserved((info) => console.log(info))
   .run();

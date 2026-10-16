@@ -7,8 +7,8 @@ import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
 
-import { type DLEQ } from './core';
-import { hash_e, hashToCurve } from './curve_secp';
+import { type ProofDLEQ, type DLEQ } from './core';
+import { assertSecpPoint, hash_e, hashToCurve } from './curve_secp';
 
 const DST_R = utf8ToBytes('Cashu_DLEQ_R_v1');
 
@@ -50,10 +50,11 @@ export const verifyDLEQProof = (
 
 export const verifyDLEQProof_reblind = (
   secret: Uint8Array, // secret
-  dleq: DLEQ,
+  dleq: ProofDLEQ,
   C: WeierstrassPoint<bigint>, // unblinded e-cash signature point
   A: WeierstrassPoint<bigint>, // mint public key point
 ) => {
+  // Exported, so a plain-JS caller can still omit `r` whatever the type says.
   if (dleq.r === undefined)
     throw new CTSError('verifyDLEQProof_reblind: Undefined blinding factor');
   const Y = hashToCurve(secret);
@@ -69,6 +70,7 @@ export const verifyDLEQProof_reblind = (
  * https://en.wikipedia.org/wiki/Timing_attack for information about timing attacks.
  */
 export const createDLEQProof = (B_: WeierstrassPoint<bigint>, a: Uint8Array): DLEQ => {
+  B_ = assertSecpPoint(B_); // the point type is structural, so parse before multiplying
   const scalar_a = secp256k1.Point.Fn.fromBytes(a);
   const A = secp256k1.Point.BASE.multiply(scalar_a); // A  = aG
   const C_ = B_.multiply(scalar_a); // C_ = aB_
