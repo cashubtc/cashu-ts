@@ -11,6 +11,10 @@ import { type Proof } from './proof';
 export type NutXXInfo = {
   supported: boolean;
   quote_input_fee_ppk?: number;
+  /**
+   * Accepts mint quote outputs with an `amount` (fixed txout quotes) and `template` leaves.
+   */
+  fixed_txout_quotes?: boolean;
 };
 
 /**
@@ -38,10 +42,12 @@ export type TransactionRequest = {
    */
   melt_quote_outputs: Array<{ quote: string; fee_reserve: Amount; fee_index?: number }>;
   /**
-   * At most one, beside a melt with blinded outputs: the rotation quote's lock key (33-byte
-   * compressed hex). The mint creates it only if it cannot sign those outputs.
+   * Txout quotes to create, each locked to `pubkey` (33-byte compressed hex). With `amount`, a
+   * fixed txout quote, its id derived from `id_preimage` (32-byte hex) or, without one, bound to
+   * the inputs. Without `amount`, at most one: the rotation quote beside a melt with blinded
+   * outputs.
    */
-  mint_quote_outputs?: Array<{ pubkey: string }>;
+  mint_quote_outputs?: Array<{ pubkey: string; amount?: Amount; id_preimage?: string }>;
   prefer_async?: boolean;
 };
 

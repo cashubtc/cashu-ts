@@ -1,6 +1,6 @@
 import { schnorr } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, concatBytes, hexToBytes } from '@noble/hashes/utils.js';
 import { describe, test, expect } from 'vitest';
 
 import { hashToCurveHex } from '../../src/crypto/curves';
@@ -17,6 +17,7 @@ import {
   requestDigest,
   signTransactionInput,
   derivedQuoteId,
+  inputBoundQuoteId,
   rotationQuoteId,
   spendCommitment,
   transactionDigest,
@@ -48,7 +49,7 @@ function fromVectorTx(tx: {
   }>;
   blinded_outputs?: Array<{ amount: number; keyset_id: string; B_: string }>;
   melt_quote_outputs?: Array<{ amount: number; quote_id: string }>;
-  mint_quote_outputs?: Array<{ pubkey: string }>;
+  mint_quote_outputs?: Array<{ pubkey: string; amount?: number; id_preimage?: string }>;
 }): TransactionShape {
   const shape: TransactionShape = {
     proofInputs: tx.proof_inputs?.map((p) => ({
@@ -73,14 +74,49 @@ function fromVectorTx(tx: {
       quoteId: q.quote_id,
     })),
   };
-  shape.mintQuoteOutputs = tx.mint_quote_outputs?.map((c) => ({
-    quoteId: rotationQuoteId(tx.melt_quote_outputs![0].quote_id),
+  shape.mintQuoteOutputs = tx.mint_quote_outputs?.map((c, k) => ({
+    quoteId:
+      c.amount === undefined
+        ? rotationQuoteId(tx.melt_quote_outputs![0].quote_id)
+        : c.id_preimage !== undefined
+          ? derivedQuoteId(hexToBytes(c.id_preimage))
+          : inputBoundQuoteId(shape, k),
     pubkey: c.pubkey,
+    ...(c.amount !== undefined && { amount: BigInt(c.amount) }),
   }));
   return shape;
 }
 
 describe('transaction transcript (vectors)', () => {
+  // NUT-XX: a fixed txout quote without id_preimage takes an id bound to the transaction's inputs.
+  test('an input-bound quote id hashes the input section and the output position', () => {
+    const v = tv.proof_to_input_bound_txout;
+    const tx = fromVectorTx(v.tx);
+    expect(bytesToHex(buildTransactionTranscript(tx))).toBe(v.transcript);
+    expect(bytesToHex(transactionDigest(tx))).toBe(v.digest);
+    expect(tx.mintQuoteOutputs!.map((c) => c.quoteId)).toEqual(v.quote_ids);
+    const inputs = transcriptContainers(hexToBytes(v.transcript)).filter((c) => c[0] >> 4 === 1);
+    expect(inputs).toHaveLength(2);
+    expect(
+      transcriptContainers(hexToBytes(v.transcript))
+        .filter((c) => c[0] === 0x23)
+        .map((c) => bytesToHex(c)),
+    ).toEqual(v.mint_quote_output_containers);
+    expect(bytesToHex(sha256(concatBytes(...inputs)))).toBe(v.input_section_hash);
+    // The id moves with the position and with any input, and no preimage reaches it.
+    expect(inputBoundQuoteId(tx, 0)).not.toBe(v.quote_ids[1]);
+    expect(inputBoundQuoteId({ proofInputs: tx.proofInputs }, 1)).not.toBe(v.quote_ids[1]);
+    expect(derivedQuoteId(hexToBytes(v.input_section_hash))).not.toBe(v.quote_ids[1]);
+    expect(() => inputBoundQuoteId(tx, -1)).toThrow(/u32/);
+  });
+
+  test('fixed txout quotes carry their amounts first, in request order', () => {
+    const v = tv.proof_to_two_fixed_txouts;
+    expect(v.transcript.endsWith(v.mint_quote_output_containers.join(''))).toBe(true);
+    expect(v.mint_quote_output_containers.every((c) => c.startsWith('23006b010001'))).toBe(true);
+    expect(fromVectorTx(v.tx).mintQuoteOutputs!.map((c) => c.quoteId)).toEqual(v.quote_ids);
+  });
+
   // NUT-10 tests, "Mixed keysets": every proof input's 03 field is Y on its keyset's curve.
   test('a mixed-keyset transcript names every proof input by Y', () => {
     const mixed = tv.mixed_keysets;
@@ -148,6 +184,7 @@ describe('transaction transcript (vectors)', () => {
     'melt_with_change',
     'mint_quote_to_melt',
     'melt_with_rotation',
+    'proof_to_two_fixed_txouts',
   ] as const)('%s transcript and digest match', (name) => {
     const example = tv[name];
     const tx = fromVectorTx(example.tx);

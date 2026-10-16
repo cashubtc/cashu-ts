@@ -1,4 +1,5 @@
 import { schnorr } from '@noble/curves/secp256k1.js';
+import { numberToBytesBE } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
@@ -19,6 +20,7 @@ export const TRANSCRIPT_REQUEST_TAG = 'Cashu_AuthorizedRequest';
 export const TRANSCRIPT_INPUT_TAG = 'Cashu_TransactionInput';
 export const SPEND_COMMITMENT_TAG = 'Cashu_SpendCommitment';
 export const QUOTE_ID_TAG = 'Cashu_QuoteId';
+export const INPUT_QUOTE_ID_TAG = 'Cashu_InputQuoteId';
 export const ROTATION_QUOTE_ID_TAG = 'Cashu_RotationQuoteId';
 
 // The high nibble is the section: 0x1n inputs, 0x2n outputs, 0xFn never in a transaction.
@@ -246,6 +248,38 @@ export function rotationQuoteId(meltQuoteId: string): string {
 }
 
 /**
+ * The id a fixed txout quote without `id_preimage` takes (NUT-XX), from the transaction's inputs.
+ *
+ * @remarks
+ * `hex(tagged_hash("Cashu_InputQuoteId", SHA256(input section) || u32_BE(k)))`, `k` the output's
+ * position among the mint quote outputs. Only a transaction spending exactly these inputs creates
+ * it.
+ */
+export function inputBoundQuoteId(
+  tx: Pick<TransactionShape, 'proofInputs' | 'mintQuoteInputs'>,
+  k: number,
+): string {
+  return inputBoundIdAt(sha256(inputSection(tx)), k);
+}
+
+function inputBoundIdAt(sectionHash: Uint8Array, k: number): string {
+  if (!Number.isInteger(k) || k < 0 || k > 0xffffffff) {
+    throw new CTSError('Mint quote output position must be a u32');
+  }
+  return bytesToHex(
+    taggedHash(INPUT_QUOTE_ID_TAG, concatBytes(sectionHash, numberToBytesBE(k, 4))),
+  );
+}
+
+// The transcript's input containers (0x1n) in order, the bytes an input-bound quote id hashes.
+function inputSection(tx: Pick<TransactionShape, 'proofInputs' | 'mintQuoteInputs'>): Uint8Array {
+  return concatBytes(
+    ...(tx.proofInputs ?? []).map(proofInputContainer),
+    ...(tx.mintQuoteInputs ?? []).map(mintQuoteInputContainer),
+  );
+}
+
+/**
  * Serialize a transaction to its TLV transcript (without the domain tag).
  */
 export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
@@ -271,8 +305,7 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
     throw new CTSError('Transaction repeats a mint quote input');
   }
   return concatBytes(
-    ...proofs.map(proofInputContainer),
-    ...mintQuotes.map(mintQuoteInputContainer),
+    inputSection(tx),
     ...blinded.map(blindedOutputContainer),
     ...meltQuotes.map(meltQuoteOutputContainer),
     ...quoteOutputs.map(mintQuoteOutputContainer),
@@ -481,6 +514,19 @@ export function messageForPayload(payload: PayloadShape): Uint8Array {
  */
 export function inputsForPayload(payload: PayloadShape): ReturnType<typeof transactionInputs> {
   return transactionInputs(payloadToTransaction(payload));
+}
+
+/**
+ * {@link inputBoundQuoteId} over payload wire shapes, for any position `k`.
+ *
+ * @remarks
+ * The inputs are converted and hashed once, here: each proof's `Y` is a hash to curve.
+ */
+export function inputBoundIdsForPayload(
+  payload: Pick<PayloadShape, 'proofInputs' | 'mintQuoteInputs'>,
+): (k: number) => string {
+  const sectionHash = sha256(inputSection(payloadToTransaction(payload)));
+  return (k) => inputBoundIdAt(sectionHash, k);
 }
 
 /**

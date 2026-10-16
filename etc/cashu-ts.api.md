@@ -1042,6 +1042,7 @@ export class LockBuilder {
     addRefundPubkey(pk: string | string[]): this;
     addTag(key: string, values?: string[] | string): this;
     addTags(tags: P2PKTag[]): this;
+    addTemplate(dests: string | string[]): this;
     blindKeys(keys?: string | string[]): this;
     disclose(): this;
     static fromOptions(lock: LockOptions_2): LockBuilder;
@@ -1073,6 +1074,7 @@ type LockOptions_2 = {
     mainKeys?: string[];
     requiredMainSignatures?: number;
     hashlock?: string;
+    template?: string[];
     locktime?: number;
     refundKeys?: string[];
     requiredRefundSignatures?: number;
@@ -1571,6 +1573,7 @@ export class MintInfo {
     get transactions(): {
         supported: boolean;
         quoteInputFeePpk: number;
+        fixedTxoutQuotes: boolean;
     };
     get urls(): string[] | undefined;
     // (undocumented)
@@ -1796,6 +1799,7 @@ export const NUTROOT_LEAF_TYPE: {
     readonly after: 2;
     readonly hashlock: 3;
     readonly commit: 4;
+    readonly template: 5;
 };
 
 // @public
@@ -1814,6 +1818,7 @@ export type NutrootConditionLeaf = {
     keys: string[];
     time?: number;
     hash?: string;
+    dests?: string[];
     disclosure?: number;
 };
 
@@ -1841,6 +1846,7 @@ export function nutrootToLockOptions(options: {
 export type NutXXInfo = {
     supported: boolean;
     quote_input_fee_ppk?: number;
+    fixed_txout_quotes?: boolean;
 };
 
 // @public (undocumented)
@@ -2689,6 +2695,8 @@ export type SerializedTransactionPreview = {
     mintQuoteOutputs: Array<{
         quote: string;
         pubkey: string;
+        amount?: string;
+        idPreimage?: string;
     }>;
     outputData: SerializedOutputData[];
     amount: string;
@@ -2814,7 +2822,7 @@ export type SpendOption = {
         blinded: boolean;
     }>;
     satisfiable: boolean;
-    blockedBy?: 'threshold' | 'locktime' | 'preimage' | 'commit';
+    blockedBy?: 'threshold' | 'locktime' | 'preimage' | 'commit' | 'destination' | 'unsupported';
     availableAt?: number;
 };
 
@@ -2823,7 +2831,7 @@ export type SpendOptions = {
     keyPath: boolean;
     script: SpendOption[];
     spendable: boolean;
-    blockedBy?: 'not-keyed-to-you' | 'locktime' | 'threshold' | 'preimage';
+    blockedBy?: 'not-keyed-to-you' | 'locktime' | 'threshold' | 'preimage' | 'destination' | 'unsupported';
     availableAt?: number;
 };
 
@@ -2974,6 +2982,8 @@ export type TransactionPreview = {
     mintQuoteOutputs: Array<{
         quote: string;
         pubkey: string;
+        amount?: Amount;
+        idPreimage?: string;
     }>;
     outputData: OutputDataLike[];
     amount: Amount;
@@ -2999,6 +3009,8 @@ export type TransactionRequest = {
     }>;
     mint_quote_outputs?: Array<{
         pubkey: string;
+        amount?: Amount;
+        id_preimage?: string;
     }>;
     prefer_async?: boolean;
 };
@@ -3171,6 +3183,7 @@ export class Wallet {
     }): Promise<{
         pubkey: string;
         privkey: string;
+        idPreimage: string;
     }>;
     createRotationLockKey(meltQuoteId: string): {
         pubkey: string;
@@ -3252,6 +3265,8 @@ export class Wallet {
         };
         mintQuoteOutputs?: Array<{
             pubkey: string;
+            amount?: AmountLike;
+            idPreimage?: string;
         }>;
     }, config?: PrepareTransactionConfig): Promise<TransactionPreview>;
     receive(token: Token | string | ProofLike[], config?: ReceiveConfig, outputType?: OutputType): Promise<Proof[]>;

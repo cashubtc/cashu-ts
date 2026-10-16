@@ -39,6 +39,7 @@ export const NUTROOT_LEAF_TYPE = {
   after: 0x02,
   hashlock: 0x03,
   commit: 0x04,
+  template: 0x05,
 } as const;
 
 /**
@@ -49,6 +50,7 @@ const FIELD_KEYS = 0x04;
 const FIELD_TIME = 0x06;
 const FIELD_HASH = 0x08;
 const FIELD_DISCLOSURE = 0x0a;
+const FIELD_DESTS = 0x0c;
 
 /**
  * Normative caps from NUT-10. The leaf body excludes the leading version byte.
@@ -71,7 +73,8 @@ export const NUTROOT_MAX_LEAF_TIME = Number.MAX_SAFE_INTEGER;
  * A parsed condition leaf (version 0x00): a spend path.
  *
  * @remarks
- * `keys` are 33-byte compressed SEC1 hex. `time` is unix seconds. `hash` is 32 bytes hex.
+ * `keys` are 33-byte compressed SEC1 hex. `time` is unix seconds. `hash` is 32 bytes hex. `dests`
+ * (template only) are the 33-byte lock keys every fixed txout quote output must be locked to.
  */
 export type NutrootConditionLeaf = {
   type: Exclude<keyof typeof NUTROOT_LEAF_TYPE, 'commit'>;
@@ -79,6 +82,7 @@ export type NutrootConditionLeaf = {
   keys: string[];
   time?: number;
   hash?: string;
+  dests?: string[];
   /**
    * Disclosure mode (NUT-10): `1` publishes the exercised witness via NUT-07/NUT-17. Valid on every
    * leaf type; satisfaction is unaffected.
@@ -258,11 +262,39 @@ export function serializeNutrootLeaf(leaf: NutrootLeaf): Uint8Array {
     }
     fields.push(tlvRecord(FIELD_DISCLOSURE, new Uint8Array([0x01])));
   }
+  if (leaf.type === 'template') {
+    if (!Array.isArray(leaf.dests) || leaf.dests.length === 0) {
+      throw new CTSError('template leaf requires at least one destination key');
+    }
+    fields.push(tlvRecord(FIELD_DESTS, concatBytes(...leaf.dests.map(destBytes))));
+    assertDistinctDests(leaf.dests);
+  } else if (leaf.dests !== undefined) {
+    throw new CTSError(`${leaf.type} leaf must not carry a dests field`);
+  }
   const out = concatBytes(new Uint8Array([NUTROOT_LEAF_VERSION, typeByte]), ...fields);
   if (out.length - 1 > NUTROOT_MAX_LEAF_BYTES) {
     throw new CTSError(`Leaf body exceeds ${NUTROOT_MAX_LEAF_BYTES} bytes`);
   }
   return out;
+}
+
+// A template destination: a fixed txout quote lock key, compared byte for byte with the output's.
+function destBytes(key: string): Uint8Array {
+  const b = hexToBytes(key);
+  let valid = b.length === 33;
+  try {
+    if (valid) pointFromBytes(b);
+  } catch {
+    valid = false;
+  }
+  if (!valid) throw new CTSError('Template destination must be a valid compressed secp256k1 point');
+  return b;
+}
+
+function assertDistinctDests(dests: string[]): void {
+  if (new Set(dests.map((d) => d.toLowerCase())).size !== dests.length) {
+    throw new CTSError('dests field must not repeat a key');
+  }
 }
 
 /**
@@ -303,6 +335,7 @@ export function parseNutrootLeaf(bytes: Uint8Array): NutrootLeaf {
   let time: number | undefined;
   let hash: string | undefined;
   let disclosure: number | undefined;
+  let dests: string[] | undefined;
   for (const rec of records) {
     switch (rec.type) {
       case FIELD_N:
@@ -354,6 +387,16 @@ export function parseNutrootLeaf(bytes: Uint8Array): NutrootLeaf {
         }
         disclosure = rec.value[0];
         break;
+      case FIELD_DESTS:
+        if (rec.value.length === 0 || rec.value.length % 33 !== 0) {
+          throw new CTSError('dests field length must be a positive multiple of 33');
+        }
+        dests = [];
+        for (let i = 0; i < rec.value.length; i += 33) {
+          dests.push(bytesToHex(destBytes(bytesToHex(rec.value.subarray(i, i + 33)))));
+        }
+        assertDistinctDests(dests);
+        break;
       default:
         // Odd types are reserved, so an unknown field of either parity rejects.
         throw new CTSError(`Unknown leaf field: ${rec.type}`);
@@ -371,15 +414,22 @@ export function parseNutrootLeaf(bytes: Uint8Array): NutrootLeaf {
   if (typeName === 'hashlock' && hash === undefined) {
     throw new CTSError('hashlock leaf missing hash field');
   }
+  if (typeName === 'template' && dests === undefined) {
+    throw new CTSError('template leaf missing dests field');
+  }
   if (typeName !== 'after' && time !== undefined) {
     throw new CTSError(`${typeName} leaf must not carry a time field`);
   }
   if (typeName !== 'hashlock' && hash !== undefined) {
     throw new CTSError(`${typeName} leaf must not carry a hash field`);
   }
+  if (typeName !== 'template' && dests !== undefined) {
+    throw new CTSError(`${typeName} leaf must not carry a dests field`);
+  }
   const leaf: NutrootConditionLeaf = { type: typeName, n, keys };
   if (time !== undefined) leaf.time = time;
   if (hash !== undefined) leaf.hash = hash;
+  if (dests !== undefined) leaf.dests = dests;
   if (disclosure !== undefined) leaf.disclosure = disclosure;
   return leaf;
 }

@@ -265,7 +265,7 @@ export type SerializedTransactionPreview = {
     feeReserve: string;
     feeIndex?: number;
   };
-  mintQuoteOutputs: Array<{ quote: string; pubkey: string }>;
+  mintQuoteOutputs: Array<{ quote: string; pubkey: string; amount?: string; idPreimage?: string }>;
   outputData: SerializedOutputData[];
   amount: string;
   fee: string;
@@ -295,7 +295,12 @@ export function serializeTransactionPreview(
         feeReserve: preview.meltQuoteOutput.feeReserve.toString(),
       },
     }),
-    mintQuoteOutputs: preview.mintQuoteOutputs.map((c) => ({ quote: c.quote, pubkey: c.pubkey })),
+    mintQuoteOutputs: preview.mintQuoteOutputs.map((c) => ({
+      quote: c.quote,
+      pubkey: c.pubkey,
+      ...(c.amount !== undefined && { amount: c.amount.toString() }),
+      ...(c.idPreimage !== undefined && { idPreimage: c.idPreimage }),
+    })),
     outputData: preview.outputData.map((o) => OutputData.serialize(o)),
     amount: preview.amount.toString(),
     fee: preview.fee.toString(),
@@ -327,6 +332,8 @@ export function deserializeTransactionPreview(
     mintQuoteOutputs: serialized.mintQuoteOutputs.map((c) => ({
       quote: c.quote,
       pubkey: c.pubkey,
+      ...(c.amount !== undefined && { amount: Amount.from(c.amount) }),
+      ...(c.idPreimage !== undefined && { idPreimage: c.idPreimage }),
     })),
     outputData: serialized.outputData.map((s) => OutputData.deserialize(s)),
     amount: Amount.from(serialized.amount),

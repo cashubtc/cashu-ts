@@ -5,7 +5,12 @@ import { Wallet, deserializeTransactionPreview, serializeTransactionPreview } fr
 import { schnorrSignDigest, schnorrVerifyDigest } from '../../src/crypto';
 import { deriveRotationLockKey } from '../../src/crypto/NUT13';
 import { buildNutrootSecret } from '../../src/crypto/nutroot';
-import { inputsForPayload, rotationQuoteId } from '../../src/crypto/transcript';
+import {
+  derivedQuoteId,
+  inputBoundQuoteId,
+  inputsForPayload,
+  rotationQuoteId,
+} from '../../src/crypto/transcript';
 import { Amount } from '../../src/model/Amount';
 import type { Proof } from '../../src/model/types';
 import { deriveKeysetId } from '../../src/utils';
@@ -388,6 +393,155 @@ describe('Wallet transactions (NUT-XX)', () => {
       }),
     ).rejects.toThrow('offering fee_options');
   });
+  test('a fixed txout quote without idPreimage takes an id bound to the inputs', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0, fixed_txout_quotes: true });
+    const bodies = serveTransaction();
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+    const fixed = { pubkey: rotationKey, idPreimage: '11'.repeat(32), amount: 3 };
+    const fixedId = derivedQuoteId(Buffer.from(fixed.idPreimage, 'hex'));
+    const preview = await wallet.prepareTransaction({
+      mintQuoteInputs: [{ quote, amount: 8 }],
+      mintQuoteOutputs: [fixed, { pubkey: rotationKey, amount: 5 }],
+    });
+    // k counts every mint quote output, so the bound one is at 1.
+    const boundId = inputBoundQuoteId(
+      { mintQuoteInputs: [{ quoteId: quote.quote, amount: 8n, lockKey: pubkey, issued: 0n }] },
+      1,
+    );
+    expect(preview.amount.isZero()).toBe(true);
+    expect(preview.mintQuoteOutputs).toEqual([
+      { quote: fixedId, ...fixed, amount: Amount.from(3) },
+      { quote: boundId, pubkey: rotationKey, amount: Amount.from(5) },
+    ]);
+    const stored = JSON.parse(JSON.stringify(serializeTransactionPreview(preview)));
+    expect(deserializeTransactionPreview(stored).mintQuoteOutputs).toEqual(
+      preview.mintQuoteOutputs,
+    );
+    await wallet.completeTransaction(preview, privkey);
+    const [body] = bodies;
+    expect(body.mint_quote_outputs).toEqual([
+      { id_preimage: fixed.idPreimage, pubkey: rotationKey, amount: 3 },
+      { pubkey: rotationKey, amount: 5 },
+    ]);
+    // The quote signs over the input-bound id, as the mint computes it.
+    const tx = inputsForPayload({
+      mintQuoteInputs: [{ quoteId: quote.quote, amount: 8, lockKey: pubkey, issued: 0 }],
+      mintQuoteOutputs: [
+        { pubkey: rotationKey, quoteId: fixedId, amount: 3 },
+        { pubkey: rotationKey, quoteId: boundId, amount: 5 },
+      ],
+    });
+    const [signature] = JSON.parse(body.mint_quote_inputs[0].witness).signatures;
+    expect(schnorrVerifyDigest(signature, tx.quotes.get(quote.quote)!.digest, pubkey)).toBe(true);
+  });
+
+  test('fixed txout quotes are paid out of the inputs, and refused where the mint would', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0, fixed_txout_quotes: true });
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+    const fixed = { pubkey: rotationKey, idPreimage: '11'.repeat(32), amount: 3 };
+    const other = {
+      pubkey: '03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556',
+      idPreimage: '22'.repeat(32),
+    };
+    // 8 in, 3 to the fixed quote: the new proofs take 5.
+    const preview = await wallet.prepareTransaction({
+      mintQuoteInputs: [{ quote, amount: 8 }],
+      mintQuoteOutputs: [fixed],
+    });
+    expect(preview.amount).toEqual(Amount.from(5));
+    await expect(
+      wallet.prepareTransaction({
+        mintQuoteInputs: [{ quote, amount: 8 }],
+        mintQuoteOutputs: [{ ...fixed, amount: 9 }],
+      }),
+    ).rejects.toThrow('do not cover');
+    await expect(
+      wallet.prepareTransaction({
+        mintQuoteInputs: [{ quote, amount: 8 }],
+        mintQuoteOutputs: [fixed, { ...other, amount: 1, idPreimage: fixed.idPreimage }],
+      }),
+    ).rejects.toThrow('must not repeat');
+    for (const idPreimage of [null, '11'.repeat(31), 'zz'.repeat(32)]) {
+      await expect(
+        wallet.prepareTransaction({
+          mintQuoteInputs: [{ quote, amount: 8 }],
+          mintQuoteOutputs: [{ ...fixed, idPreimage: idPreimage as string }],
+        }),
+      ).rejects.toThrow('32-byte hex idPreimage');
+    }
+    await expect(
+      wallet.prepareTransaction({
+        mintQuoteInputs: [{ quote, amount: 8 }],
+        mintQuoteOutputs: [{ ...fixed, amount: 0 }],
+      }),
+    ).rejects.toThrow('must be positive');
+    // Lock keys may repeat.
+    await expect(
+      wallet.prepareTransaction({
+        mintQuoteInputs: [{ quote, amount: 8 }],
+        mintQuoteOutputs: [fixed, { ...other, pubkey: rotationKey, amount: 5 }],
+      }),
+    ).resolves.toMatchObject({ amount: Amount.zero() });
+    // Value in a txout quote cannot hop to another one.
+    await expect(
+      wallet.prepareTransaction({
+        mintQuoteInputs: [
+          { quote: { ...quote, method: 'txout', amount_paid: Amount.from(8) }, amount: 8 },
+        ],
+        mintQuoteOutputs: [fixed],
+      }),
+    ).rejects.toThrow('cannot pay into a fixed txout quote');
+    // A fixed quote beside the rotation quote, and never two rotation quotes.
+    const withMelt = await wallet.prepareTransaction({
+      mintQuoteInputs: [{ quote, amount: 16 }],
+      meltQuoteOutput: melt,
+      mintQuoteOutputs: [fixed, rotation],
+    });
+    expect(withMelt.mintQuoteOutputs.map((c) => c.quote)).toEqual([
+      derivedQuoteId(Buffer.from(fixed.idPreimage, 'hex')),
+      rotationId,
+    ]);
+    await expect(
+      wallet.prepareTransaction({
+        mintQuoteInputs: [{ quote, amount: 16 }],
+        meltQuoteOutput: melt,
+        mintQuoteOutputs: [rotation, rotation],
+      }),
+    ).rejects.toThrow('at most one');
+    // A mint without fixed_txout_quotes takes only the rotation quote.
+    serveInfo({ supported: true, quote_input_fee_ppk: 0 });
+    const plain = new Wallet(mintUrl, { unit });
+    await plain.loadMint();
+    await expect(
+      plain.prepareTransaction({
+        mintQuoteInputs: [{ quote, amount: 8 }],
+        mintQuoteOutputs: [fixed],
+      }),
+    ).rejects.toThrow('does not accept fixed txout quotes');
+  });
+
+  test('checkTransaction treats a missing fixed txout quote as an error', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0, fixed_txout_quotes: true });
+    server.use(
+      http.get(mintUrl + '/v1/melt/quote/bolt11/:id', ({ params }) =>
+        HttpResponse.json({ ...meltQuoteJson, quote: params.id, state: 'PAID' }),
+      ),
+      http.get(mintUrl + '/v1/mint/quote/txout/:id', () =>
+        HttpResponse.json({ detail: 'quote not found', code: 20010 }, { status: 400 }),
+      ),
+    );
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+    const preview = await wallet.prepareTransaction({
+      mintQuoteInputs: [{ quote, amount: 8 }],
+      meltQuoteOutput: melt,
+      mintQuoteOutputs: [{ pubkey: rotationKey, idPreimage: '22'.repeat(32), amount: 1 }, rotation],
+    });
+    await expect(wallet.checkTransaction(preview)).rejects.toThrow('quote not found');
+  });
+
   test('swaps proofs into new proofs, and a rehydrated preview unblinds the same', async () => {
     serveInfo({ supported: true, quote_input_fee_ppk: 0 });
     const bodies: any[] = [];
@@ -1050,7 +1204,7 @@ describe('Wallet transactions (NUT-XX)', () => {
     expect(result.proofs[0].amount).toEqual(Amount.from(1));
   });
 
-  test('warns when the rotation quote comes back under a different id', async () => {
+  test('warns when a txout quote comes back under a different id', async () => {
     serveInfo({ supported: true, quote_input_fee_ppk: 0 });
     const warn = vi.fn();
     const logger = {
@@ -1080,7 +1234,7 @@ describe('Wallet transactions (NUT-XX)', () => {
     });
     expect(result.response.mint_quotes[0]).toMatchObject({ quote: 'other-id' });
     expect(warn).toHaveBeenCalledWith(
-      'Mint returned the rotation quote under a different id',
+      'Mint returned a txout quote under a different id',
       expect.objectContaining({ expected: rotationId, received: 'other-id' }),
     );
   });
