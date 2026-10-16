@@ -1300,7 +1300,9 @@ describe('Mint normalization', () => {
       });
 
       await expect(mint.checkMeltQuoteBolt11('my-quote')).rejects.toThrow(/different quote/);
-      expect(logger.error).toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
+        op: 'checkMeltQuote.bolt11',
+      });
     });
 
     it('keeps the requested quote id when a melt reports a different one', async () => {
