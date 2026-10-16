@@ -1,6 +1,12 @@
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils.js';
+import {
+  concatBytes,
+  hexToBytes,
+  bytesToHex,
+  randomBytes,
+  utf8ToBytes,
+} from '@noble/hashes/utils.js';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import { Amount, type OutputDataLike } from '../../src';
@@ -22,6 +28,9 @@ import {
   deriveP2BKBlindedPubkeys,
   P2BK_DST,
   buildP2PKSigAllMessageV0,
+  buildP2PKSigAllMessageV1,
+  hashP2PKSigAllMessageV1,
+  schnorrVerifyDigest,
   assertSigAllInputs,
   createSecret,
   dedupeP2PKPubkeys,
@@ -2274,5 +2283,103 @@ describe('SIG_ALL edge cases', () => {
     expect(isP2PKSigAll([sigInputs, sigAll])).toBe(true);
     expect(isP2PKSigAll([sigInputs])).toBe(false);
     expect(isP2PKSigAll([])).toBe(false);
+  });
+});
+
+describe('buildP2PKSigAllMessageV1, length-framed SIG_ALL aggregation', () => {
+  const mkProof = (secret: string, C: string) => ({ secret, C }) as any;
+  const mkOutput = (amount: number, B_: string) => ({ blindedMessage: { amount, B_ } }) as any;
+
+  // Canonical vectors from nuts tests/11-test.md ("SIG_ALL Test Vectors"), pinned
+  // byte-for-byte in the nutshell and cdk suites too.
+  const VECTOR_PUB = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+  const vectorInputs = [
+    mkProof(
+      `["P2PK",{"nonce":"7d544630128e1455d15012e4a88e83d59d89a7c176a73ceab1eda5d4f5744cca","data":"${VECTOR_PUB}","tags":[["sigflag","SIG_ALL"]]}]`,
+      '03c0bdc5da4ffde1f36d261b05106682733217d5eaa0be2fe7288ccf7c4006ee0c',
+    ),
+    mkProof(
+      `["P2PK",{"nonce":"2616f858162c6550227c9bee1f480cf0e33941ae0196e3bddd5c80fdaee15f70","data":"${VECTOR_PUB}","tags":[["sigflag","SIG_ALL"]]}]`,
+      '037a12e58c9205ca2e73371b838463fe360138e667ffca3b58c311f62a8d466c67',
+    ),
+  ];
+  const vectorOutputs = [
+    mkOutput(8, '027c9a3f3dae60a2967dfc3aeea06535fff329cbc196842ecc12a5fb66a2eb9087'),
+    mkOutput(2, '03cd583efc731edcab6935e0a817cec65851ace7ca842396422ff2c0e9db9c49bc'),
+  ];
+  const vectorQuote = '9d745270-1405-46de-b5c5-e2762b4f5e00';
+
+  test('matches the canonical cross-implementation vector', () => {
+    const swapMsg = buildP2PKSigAllMessageV1(vectorInputs, vectorOutputs);
+    expect(swapMsg.length).toBe(552);
+    const swapHash = hashP2PKSigAllMessageV1(swapMsg);
+    expect(bytesToHex(swapHash)).toBe(
+      '211b753e260375ce45e36b2a1e90d60b0a589f3f8c701d1913930c47b5244e53',
+    );
+    // Pinned signature by the well-known test key (privkey 0x...01)
+    expect(
+      schnorrVerifyDigest(
+        '5fba32e9a91078651406bf8afe067ea1e68a03dec3c5ca8ef5ee2afc5be85a0c8ac637ed3789eb1e5bdf00e121b3554026c24112913b685a8a99cb8466bcbd49',
+        swapHash,
+        VECTOR_PUB,
+      ),
+    ).toBe(true);
+
+    const meltMsg = buildP2PKSigAllMessageV1(vectorInputs, vectorOutputs, vectorQuote);
+    expect(meltMsg.length).toBe(593);
+    const meltHash = hashP2PKSigAllMessageV1(meltMsg);
+    expect(bytesToHex(meltHash)).toBe(
+      'd30001353eb216fa9f9296bbe10be23defcd3bd2a567d89e212d586d573ddf7e',
+    );
+    expect(
+      schnorrVerifyDigest(
+        'b5ef213225d90a16ea651b8ad1eca10eefcdfe973dcd33796677b7122dcbadc069ce64e7196d8ad5951411202471e560ef2e949b91509db6b2345c970c50149d',
+        meltHash,
+        VECTOR_PUB,
+      ),
+    ).toBe(true);
+  });
+
+  test('records are typed, and only a melt ends with a quote record', () => {
+    const swap = buildP2PKSigAllMessageV1(vectorInputs, vectorOutputs);
+    const melt = buildP2PKSigAllMessageV1(vectorInputs, vectorOutputs, vectorQuote);
+    expect(swap[0]).toBe(0x11);
+    expect(melt.slice(0, swap.length)).toEqual(swap);
+    expect(bytesToHex(melt.slice(swap.length))).toBe(
+      '22' + '00000024' + bytesToHex(utf8ToBytes(vectorQuote)),
+    );
+  });
+
+  test('the signed value is the BIP-340 tagged hash of the message', () => {
+    const msg = buildP2PKSigAllMessageV1(vectorInputs, vectorOutputs);
+    const tagHash = sha256(utf8ToBytes('Cashu_SigAllSig_v1'));
+    expect(bytesToHex(tagHash)).toBe(
+      'c83c413c874b6f3da4c6310558d0d174c56f1a0a034023ae225ab3648e9626b3',
+    );
+    expect(hashP2PKSigAllMessageV1(msg)).toEqual(sha256(concatBytes(tagHash, tagHash, msg)));
+  });
+
+  test('outputs commit minimal big-endian amounts and SHA256(B_)', () => {
+    const hB = '00000020' + bytesToHex(sha256(hexToBytes('b1')));
+    const zero = buildP2PKSigAllMessageV1([], [mkOutput(0, 'b1')]);
+    expect(bytesToHex(zero)).toBe('21' + '00000000' + hB);
+
+    const big = buildP2PKSigAllMessageV1([], [mkOutput(256, 'b1')]);
+    expect(bytesToHex(big)).toBe('21' + '00000002' + '0100' + hB);
+  });
+
+  test('length framing prevents boundary-shift collisions', () => {
+    const outputs = [mkOutput(1, 'b1')];
+    const shiftedA = [mkProof('ab', 'cccc')];
+    const shiftedB = [mkProof('abcc', 'cc')];
+
+    // The v0 string concatenation cannot tell these apart...
+    expect(buildP2PKSigAllMessageV0(shiftedA, outputs)).toBe(
+      buildP2PKSigAllMessageV0(shiftedB, outputs),
+    );
+    // ...the framed format can.
+    const mA = buildP2PKSigAllMessageV1(shiftedA, outputs);
+    const mB = buildP2PKSigAllMessageV1(shiftedB, outputs);
+    expect(hashP2PKSigAllMessageV1(mA)).not.toEqual(hashP2PKSigAllMessageV1(mB));
   });
 });
