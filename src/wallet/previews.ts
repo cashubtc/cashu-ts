@@ -9,6 +9,7 @@ import {
   type MeltPreview,
   type MintPreview,
   type SwapPreview,
+  type TransactionPreview,
 } from './types/payloads';
 
 /**
@@ -248,5 +249,87 @@ export function deserializeMeltPreview(
     },
     inputs: normalizeProofAmounts(serialized.inputs),
     outputData: serialized.outputData.map((s) => OutputData.deserialize(s)),
+  }));
+}
+
+/**
+ * JSON-safe representation of a {@link TransactionPreview}.
+ */
+export type SerializedTransactionPreview = {
+  proofInputs: SerializedProof[];
+  mintQuoteInputs: Array<{ quote: string; pubkey: string; amount: string; issued: string }>;
+  meltQuoteOutput?: {
+    method: string;
+    quote: string;
+    amount: string;
+    feeReserve: string;
+    feeIndex?: number;
+  };
+  mintQuoteOutputs: Array<{ quote: string; pubkey: string }>;
+  outputData: SerializedOutputData[];
+  amount: string;
+  fee: string;
+};
+
+/**
+ * Converts a transaction preview to a JSON-safe form for persistence.
+ *
+ * @remarks
+ * Persist the result before `completeTransaction`, to check a pending melt transaction after a
+ * restart. The result holds `proofs` in the clear, so it is spendable bearer material.
+ */
+export function serializeTransactionPreview(
+  preview: TransactionPreview,
+): SerializedTransactionPreview {
+  return {
+    proofInputs: preview.proofInputs.map(serializeProof),
+    mintQuoteInputs: preview.mintQuoteInputs.map((q) => ({
+      ...q,
+      amount: q.amount.toString(),
+      issued: q.issued.toString(),
+    })),
+    ...(preview.meltQuoteOutput && {
+      meltQuoteOutput: {
+        ...preview.meltQuoteOutput,
+        amount: preview.meltQuoteOutput.amount.toString(),
+        feeReserve: preview.meltQuoteOutput.feeReserve.toString(),
+      },
+    }),
+    mintQuoteOutputs: preview.mintQuoteOutputs.map((c) => ({ quote: c.quote, pubkey: c.pubkey })),
+    outputData: preview.outputData.map((o) => OutputData.serialize(o)),
+    amount: preview.amount.toString(),
+    fee: preview.fee.toString(),
+  };
+}
+
+/**
+ * Reconstructs a {@link TransactionPreview} from its JSON-safe representation.
+ *
+ * @throws {@link CTSError} If any amount, proof or output data fails validation.
+ */
+export function deserializeTransactionPreview(
+  serialized: SerializedTransactionPreview,
+): TransactionPreview {
+  return deserializeWith('SerializedTransactionPreview', () => ({
+    proofInputs: normalizeProofAmounts(serialized.proofInputs),
+    mintQuoteInputs: serialized.mintQuoteInputs.map((q) => ({
+      ...q,
+      amount: Amount.from(q.amount),
+      issued: Amount.from(q.issued),
+    })),
+    ...(serialized.meltQuoteOutput && {
+      meltQuoteOutput: {
+        ...serialized.meltQuoteOutput,
+        amount: Amount.from(serialized.meltQuoteOutput.amount),
+        feeReserve: Amount.from(serialized.meltQuoteOutput.feeReserve),
+      },
+    }),
+    mintQuoteOutputs: serialized.mintQuoteOutputs.map((c) => ({
+      quote: c.quote,
+      pubkey: c.pubkey,
+    })),
+    outputData: serialized.outputData.map((s) => OutputData.deserialize(s)),
+    amount: Amount.from(serialized.amount),
+    fee: Amount.from(serialized.fee),
   }));
 }

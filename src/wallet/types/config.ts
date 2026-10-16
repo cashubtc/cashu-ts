@@ -369,3 +369,26 @@ export type AbortOptions = { signal?: AbortSignal };
  * Options for `completeMint` and `completeBatchMint`.
  */
 export type CompleteMintOptions = AbortOptions;
+
+export type PrepareTransactionConfig = {
+  proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
+  onCountersReserved?: OnCountersReserved;
+  signal?: AbortSignal;
+};
+
+export type CompleteTransactionOptions = {
+  preferAsync?: boolean;
+  /**
+   * Keep polling the melt quote after a `PENDING` response until the transaction settles, for up to
+   * this many milliseconds (see `WalletEvents.onceTransactionSettled`). Unset, `PENDING` is
+   * returned as the mint reported it.
+   */
+  waitForSettlementMs?: number;
+  scriptPath?: ScriptPathPlan[];
+  /**
+   * Signs a quote input whose key is not in the page (eg a NIP-07 extension); ignored when a
+   * `privkey` is given. See `MintProofsConfig.sign`.
+   */
+  sign?: (request: MintQuoteSignRequest) => Promise<string>;
+  signal?: AbortSignal;
+};

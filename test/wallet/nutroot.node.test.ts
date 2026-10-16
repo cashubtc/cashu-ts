@@ -15,6 +15,7 @@ import {
 } from '../../src/crypto/nutroot';
 import {
   inputDigest,
+  inputsForPayload,
   proofInputContextKey,
   spendCommitment,
   transactionInputs,
@@ -378,9 +379,10 @@ describe('attachTransactionWitnesses', () => {
   });
 
   test('returns a receipt per v3 input that opens the NUT-07 commitment', async () => {
-    const legacy = { ...v3Proof(PUB_A), id: '00' + 'ab'.repeat(32), secret: 'plain', witness: 'w' };
+    // Same text as the v3 input's secret: under a pre-v3 keyset it is a different proof (NUT-10).
+    const legacy = { ...v3Proof(PUB_A), id: '00' + 'ab'.repeat(32), secret: PUB_B, witness: 'w' };
     const input = v3Proof(PUB_B, { k: PRIV_B });
-    const inputs = [legacy, input];
+    const inputs = [input, legacy];
     const receipts = await attachTransactionWitnesses(
       { inputs, outputs: [OUTPUT] },
       undefined,
@@ -563,6 +565,35 @@ describe('attachTransactionWitnesses', () => {
         makeState(undefined),
       ),
     ).rejects.toThrow(/No key to sign a v3 input/);
+  });
+
+  test('signs a mixed-input transaction with only a mint quote output', async () => {
+    const input = v3Proof(PUB_A, { k: PRIV_A });
+    const legacy = { ...v3Proof('legacy'), id: '00' + 'ab'.repeat(7), C: PUB_B };
+    const payload = {
+      inputs: [input, legacy],
+      mintQuoteOutputs: [{ pubkey: PUB_B, quoteId: 'txout-quote-0' }],
+    };
+    const receipts = await attachTransactionWitnesses(
+      payload,
+      undefined,
+      collectSpendInfoKeys([input], undefined, NULL_LOGGER),
+      undefined,
+      makeState(),
+    );
+    const tx = inputsForPayload({
+      proofInputs: payload.inputs,
+      mintQuoteOutputs: payload.mintQuoteOutputs,
+    });
+    expect(
+      verifyTransactionInputWitness(
+        [...tx.proofs.values()][0].digest,
+        input.secret,
+        input.witness as string,
+      ),
+    ).toBe(true);
+    expect(receipts).toHaveLength(1);
+    expect(legacy.witness).toBeUndefined();
   });
 
   test('a pre-built witness is left alone', async () => {

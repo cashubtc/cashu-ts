@@ -358,6 +358,15 @@ export type CompleteSwapOptions = {
     signal?: AbortSignal;
 };
 
+// @public (undocumented)
+export type CompleteTransactionOptions = {
+    preferAsync?: boolean;
+    waitForSettlementMs?: number;
+    scriptPath?: ScriptPathPlan[];
+    sign?: (request: MintQuoteSignRequest) => Promise<string>;
+    signal?: AbortSignal;
+};
+
 // @public
 export function computeMessageDigest(message: string): Uint8Array;
 
@@ -511,6 +520,7 @@ export const DERIVATION_TYPE: {
     readonly leafKey: 3;
     readonly quoteLock: 4;
     readonly quoteIdPreimage: 5;
+    readonly rotationLock: 6;
 };
 
 // @public (undocumented)
@@ -575,6 +585,9 @@ export function deriveQuoteIdPreimage(seed: Uint8Array, mintPubkey: string, coun
 export function deriveQuoteLockKey(seed: Uint8Array, mintPubkey: string, counter: number): Uint8Array;
 
 // @public
+export function deriveRotationLockKey(seed: Uint8Array, mintPubkey: string, meltQuoteId: string): Uint8Array;
+
+// @public
 export function deriveSecretAndBlindingFactor(seed: Uint8Array, keysetId: string, counter: number): DerivedSecretAndBlindingFactor;
 
 // @public
@@ -601,6 +614,9 @@ export function deserializeProofs(json: string | string[] | ProofLike[]): Proof[
 
 // @public
 export function deserializeSwapPreview(serialized: SerializedSwapPreview): SwapPreview;
+
+// @public
+export function deserializeTransactionPreview(serialized: SerializedTransactionPreview): TransactionPreview;
 
 // @public (undocumented)
 export type DeviceStartResponse = {
@@ -743,6 +759,7 @@ export type GetInfoResponse = {
             }>;
         };
         '29'?: Nut29Info;
+        XX?: NutXXInfo;
     };
     motd?: string;
 };
@@ -1326,6 +1343,9 @@ export class Mint {
     restore(restorePayload: PostRestorePayload, opts?: MintCallOptions): Promise<PostRestoreResponse>;
     setMintInfo(mintInfo: MintInfo | GetInfoResponse): void;
     swap(swapPayload: SwapRequest, opts?: MintCallOptions): Promise<SwapResponse>;
+    transaction(payload: TransactionRequest, options?: MintCallOptions & {
+        meltMethod?: string;
+    }): Promise<TransactionResponse>;
     // (undocumented)
     get webSocketConnection(): WSConnection | undefined;
 }
@@ -1406,6 +1426,7 @@ export const MintErrorCode: {
     readonly QUOTE_EXPIRED: 20007;
     readonly SIGNATURE_FOR_MINT_REQUEST_INVALID: 20008;
     readonly PUBKEY_REQUIRED_FOR_MINT_QUOTE: 20009;
+    readonly QUOTE_NOT_FOUND: 20010;
     readonly ENDPOINT_REQUIRES_CLEAR_AUTH: 30001;
     readonly CLEAR_AUTHENTICATION_FAILED: 30002;
     readonly ENDPOINT_REQUIRES_BLIND_AUTH: 31001;
@@ -1531,6 +1552,7 @@ export class MintInfo {
             }>;
         };
         '29'?: Nut29Info;
+        XX?: NutXXInfo;
     };
     // (undocumented)
     get pubkey(): string;
@@ -1546,6 +1568,10 @@ export class MintInfo {
     get time(): number | undefined;
     // (undocumented)
     get tos_url(): string | undefined;
+    get transactions(): {
+        supported: boolean;
+        quoteInputFeePpk: number;
+    };
     get urls(): string[] | undefined;
     // (undocumented)
     get version(): string;
@@ -1810,6 +1836,12 @@ export function nutrootToLockOptions(options: {
     leaves?: Array<NutrootLeaf | string>;
     blindKeys?: string[];
 }): LockOptions_2;
+
+// @public
+export type NutXXInfo = {
+    supported: boolean;
+    quote_input_fee_ppk?: number;
+};
 
 // @public (undocumented)
 export class OIDCAuth {
@@ -2187,6 +2219,13 @@ export type PostRestorePayload = {
 export type PostRestoreResponse = {
     outputs: SerializedBlindedMessage[];
     signatures: SerializedBlindedSignature[];
+};
+
+// @public (undocumented)
+export type PrepareTransactionConfig = {
+    proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
+    onCountersReserved?: OnCountersReserved;
+    signal?: AbortSignal;
 };
 
 // @public
@@ -2632,6 +2671,31 @@ export type SerializedSwapPreview = {
 };
 
 // @public
+export type SerializedTransactionPreview = {
+    proofInputs: SerializedProof[];
+    mintQuoteInputs: Array<{
+        quote: string;
+        pubkey: string;
+        amount: string;
+        issued: string;
+    }>;
+    meltQuoteOutput?: {
+        method: string;
+        quote: string;
+        amount: string;
+        feeReserve: string;
+        feeIndex?: number;
+    };
+    mintQuoteOutputs: Array<{
+        quote: string;
+        pubkey: string;
+    }>;
+    outputData: SerializedOutputData[];
+    amount: string;
+    fee: string;
+};
+
+// @public
 export function serializeMeltPreview(preview: MeltPreview<{
     quote: string;
     amount?: Amount;
@@ -2656,6 +2720,9 @@ export function serializeProofs(proofs: Proof | Proof[]): string[];
 
 // @public
 export function serializeSwapPreview(preview: SwapPreview): SerializedSwapPreview;
+
+// @public
+export function serializeTransactionPreview(preview: TransactionPreview): SerializedTransactionPreview;
 
 // @public
 export function setGlobalRequestOptions(options: Partial<RequestOptions>): void;
@@ -2888,6 +2955,72 @@ export type TokenResponse = {
     error_description?: string;
 };
 
+// @public
+export type TransactionPreview = {
+    proofInputs: Proof[];
+    mintQuoteInputs: Array<{
+        quote: string;
+        pubkey: string;
+        amount: Amount;
+        issued: Amount;
+    }>;
+    meltQuoteOutput?: {
+        method: string;
+        quote: string;
+        amount: Amount;
+        feeReserve: Amount;
+        feeIndex?: number;
+    };
+    mintQuoteOutputs: Array<{
+        quote: string;
+        pubkey: string;
+    }>;
+    outputData: OutputDataLike[];
+    amount: Amount;
+    fee: Amount;
+};
+
+// @public
+export type TransactionQuoteInput = {
+    quote: string;
+    amount: Amount;
+    witness: string;
+};
+
+// @public
+export type TransactionRequest = {
+    proof_inputs: Proof[];
+    mint_quote_inputs: TransactionQuoteInput[];
+    blinded_outputs: SerializedBlindedMessage[];
+    melt_quote_outputs: Array<{
+        quote: string;
+        fee_reserve: Amount;
+        fee_index?: number;
+    }>;
+    mint_quote_outputs?: Array<{
+        pubkey: string;
+    }>;
+    prefer_async?: boolean;
+};
+
+// @public
+export type TransactionResponse = {
+    state: TransactionState;
+    signatures: SerializedBlindedSignature[];
+    melt_quotes: MeltQuoteBaseResponse[];
+    mint_quotes: Array<MintQuoteBaseResponse | null>;
+};
+
+// @public
+export type TransactionResult = {
+    response: TransactionResponse;
+    proofs: Proof[];
+    receipts?: SpendReceipt[];
+};
+
+// @public (undocumented)
+export type TransactionState = 'PENDING' | 'PAID' | 'FAILED';
+
 // @public (undocumented)
 export type UnblindedSignature = {
     C: WeierstrassPoint<bigint>;
@@ -3008,10 +3141,12 @@ export class Wallet {
     checkProofsStates(proofs: Array<Pick<ProofLike, 'secret' | 'id'>>, opts?: AbortOptions & {
         budgetMs?: number;
     }): Promise<ProofState[]>;
+    checkTransaction(preview: TransactionPreview, options?: AbortOptions): Promise<TransactionResult>;
     completeBatchMint(batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>, opts?: CompleteMintOptions): Promise<Proof[]>;
     completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote>, privkey?: string | string[], options?: CompleteMeltOptions): Promise<MeltProofsResponse<TQuote>>;
     completeMint(mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>, opts?: CompleteMintOptions): Promise<Proof[]>;
     completeSwap(swapPreview: SwapPreview, privkey?: string | string[], options?: CompleteSwapOptions): Promise<SendResponse>;
+    completeTransaction(preview: TransactionPreview, privkey?: string | string[], options?: CompleteTransactionOptions): Promise<TransactionResult>;
     readonly counters: WalletCounters;
     createMeltChangeProofs(outputData: OutputDataLike[], changeSigs: SerializedBlindedSignature[]): Proof[];
     createMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(method: string, payload: Record<string, unknown>, options?: AbortOptions & {
@@ -3037,6 +3172,10 @@ export class Wallet {
         pubkey: string;
         privkey: string;
     }>;
+    createRotationLockKey(meltQuoteId: string): {
+        pubkey: string;
+        privkey: string;
+    };
     decodeToken(token: string | Uint8Array): Token;
     defaultOutputType(): OutputType;
     ensureOperableKeysets(ids: Array<string | undefined>): Promise<void>;
@@ -3090,6 +3229,31 @@ export class Wallet {
         preview: SwapPreview;
         unselected: Proof[];
     }>;
+    prepareTransaction(transaction: {
+        proofInputs?: Proof[];
+        mintQuoteInputs?: Array<{
+            quote: Pick<MintQuoteBaseResponse, 'quote' | 'method'> & Partial<MintQuoteBaseResponse>;
+            amount: AmountLike;
+        }>;
+        proofOutputs?: {
+            amount?: AmountLike;
+            outputType?: OutputType;
+            keysetId?: string;
+        };
+        meltQuoteOutput?: {
+            method: string;
+            quote: Pick<MeltQuoteBaseResponse, 'quote' | 'amount' | 'fee_reserve'> & Partial<Pick<MeltQuoteBaseResponse, 'unit'>> & {
+                fee_options?: Array<{
+                    fee_index: number;
+                    fee_reserve: AmountLike;
+                }>;
+            };
+            feeIndex?: number;
+        };
+        mintQuoteOutputs?: Array<{
+            pubkey: string;
+        }>;
+    }, config?: PrepareTransactionConfig): Promise<TransactionPreview>;
     receive(token: Token | string | ProofLike[], config?: ReceiveConfig, outputType?: OutputType): Promise<Proof[]>;
     recoverQuoteLockKey(pubkey: string): Promise<string | undefined>;
     restore(start: number, count: number, config?: RestoreConfig): Promise<{
@@ -3152,6 +3316,11 @@ export class WalletEvents {
     onceMintPaid<TRes extends MintQuoteBaseResponse = MintQuoteBolt11Response>(id: string, opts?: WatchOpts & {
         timeoutMs?: number;
     }): Promise<TRes>;
+    onceTransactionSettled(preview: TransactionPreview, opts?: {
+        signal?: AbortSignal;
+        timeoutMs?: number;
+        pollMs?: number;
+    }): Promise<TransactionResult>;
     proofStatesStream<P extends ProofLike = Proof>(proofs: P[], opts?: ProofStatesStreamOpts<P>): AsyncIterable<ProofState & {
         proof: P;
     }>;

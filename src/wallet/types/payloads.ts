@@ -123,3 +123,42 @@ export type SwapPreview = {
    */
   keepOutputs?: OutputDataLike[];
 };
+
+/**
+ * Preview of a NUT-XX transaction created by `prepareTransaction`.
+ *
+ * @remarks
+ * Persist via `serializeTransactionPreview`: a pending melt transaction is checked through it.
+ */
+export type TransactionPreview = {
+  proofInputs: Proof[];
+  /**
+   * Each quote's id, lock key, the amount this transaction issues against it, and its
+   * `amount_issued` before, which the transcript binds.
+   */
+  mintQuoteInputs: Array<{ quote: string; pubkey: string; amount: Amount; issued: Amount }>;
+  /**
+   * The melt output: `amount` is the quote amount plus the selected fee reserve, which the
+   * transcript binds.
+   */
+  meltQuoteOutput?: {
+    method: string;
+    quote: string;
+    amount: Amount;
+    feeReserve: Amount;
+    feeIndex?: number;
+  };
+  /**
+   * The rotation quote, if requested: its id and lock key.
+   */
+  mintQuoteOutputs: Array<{ quote: string; pubkey: string }>;
+  outputData: OutputDataLike[];
+  /**
+   * Total of the new proofs.
+   */
+  amount: Amount;
+  /**
+   * Input fee for the proofs and quote inputs.
+   */
+  fee: Amount;
+};

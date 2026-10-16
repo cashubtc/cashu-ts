@@ -20,6 +20,7 @@ import {
   deriveNumsOffset,
   deriveQuoteIdPreimage,
   deriveQuoteLockKey,
+  deriveRotationLockKey,
 } from '../src/crypto/NUT13';
 import { BLS_FR_ORDER, hashToCurveBls } from '../src/crypto/curve_bls';
 import { hashToCurveHex } from '../src/crypto/curves';
@@ -27,8 +28,10 @@ import {
   buildTransactionTranscript,
   derivedQuoteId,
   inputDigest,
+  rotationQuoteId,
   spendCommitment,
   transactionDigest,
+  transcriptContainers,
 } from '../src/crypto/transcript';
 import type { TransactionShape } from '../src/crypto/transcript';
 import { Amount } from '../src/model/Amount';
@@ -95,7 +98,7 @@ d.nut13_v3.leaf_keys = [0, 1, 2].map((index) => {
   };
 });
 d.nut13_v3.mint_identity = MINT_IDENTITY;
-d.nut13_v3.quote_locks = [0, 1].map((counter) => {
+d.nut13_v3.quote_locks = [0, 1, 2, 3].map((counter) => {
   const privkey = deriveQuoteLockKey(seed, MINT_IDENTITY, counter);
   const idPreimage = deriveQuoteIdPreimage(seed, MINT_IDENTITY, counter);
   return {
@@ -106,6 +109,18 @@ d.nut13_v3.quote_locks = [0, 1].map((counter) => {
     quote_id: derivedQuoteId(idPreimage),
   };
 });
+// The rotation quote lock key (0x06) for the melt vector's quote: counter 0, no quote counter.
+{
+  const meltQuoteId = 'quote-melt-0001';
+  const privkey = deriveRotationLockKey(seed, MINT_IDENTITY, meltQuoteId);
+  d.nut13_v3.rotation_lock = {
+    melt_quote_id: meltQuoteId,
+    suffix: bytesToHex(sha256(utf8ToBytes(meltQuoteId))),
+    privkey: bytesToHex(privkey),
+    pubkey: bytesToHex(getPubKeyFromPrivKey(privkey)),
+    quote_id: rotationQuoteId(meltQuoteId),
+  };
+}
 
 // Recompute the attempt summary in the comment so it always states the current tuple.
 const KDF_DST = utf8ToBytes('Cashu_KDF_HMAC_SHA256');
@@ -142,7 +157,7 @@ d.nut13_v3.comment = d.nut13_v3.comment.replace(claim, summary);
 
 // --- transcript -------------------------------------------------------------
 function fromVectorTx(tx: any): TransactionShape {
-  return {
+  const shape: TransactionShape = {
     proofInputs: tx.proof_inputs?.map((p: any) => ({
       amount: BigInt(p.amount),
       keysetId: p.keyset_id,
@@ -153,6 +168,7 @@ function fromVectorTx(tx: any): TransactionShape {
       amount: BigInt(q.amount),
       quoteId: q.quote_id,
       lockKey: q.lock_pubkey,
+      issued: BigInt(q.issued),
     })),
     blindedOutputs: tx.blinded_outputs?.map((o: any) => ({
       amount: BigInt(o.amount),
@@ -164,10 +180,17 @@ function fromVectorTx(tx: any): TransactionShape {
       quoteId: q.quote_id,
     })),
   };
+  // The rotation quote is named by the melt it backs (NUT-XX).
+  shape.mintQuoteOutputs = tx.mint_quote_outputs?.map((c: any) => ({
+    pubkey: c.pubkey,
+    quoteId: rotationQuoteId(tx.melt_quote_outputs[0].quote_id),
+  }));
+  return shape;
 }
 
 // The mint vector's quote is locked to NUT-13 quote lock 0, like the partial mint's.
 d.transcript.mint.tx.mint_quote_inputs[0].lock_pubkey = d.nut13_v3.quote_locks[0].pubkey;
+d.transcript.mint.tx.mint_quote_inputs[0].issued = 0;
 for (const name of ['swap', 'mint', 'melt', 'melt_with_change'] as const) {
   const example = d.transcript[name];
   for (const fld of ['proof_inputs', 'blinded_outputs'] as const) {
@@ -298,7 +321,7 @@ for (const name of ['swap', 'mint', 'melt', 'melt_with_change'] as const) {
 if (d.transcript.swap.input_id !== d.transcript.melt.input_id)
   throw new Error('swap and melt spend the same proof, so their input ids must match');
 d.transcript.comment =
-  'Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash("Cashu_TransactionInput", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers (high nibble is the section, 1 inputs, 2 outputs): 11 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 12 mint quote input (01 amount issued, 02 quote id utf8, 03 lock key), 21 blinded output (01 amount, 02 keyset id, 03 SHA256(B_)), 22 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.';
+  'Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash("Cashu_TransactionInput", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers (high nibble is the section, 1 inputs, 2 outputs): 11 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 12 mint quote input (01 amount issued by this transaction, 02 quote id utf8, 03 lock key, 04 amount_issued before this transaction), 21 blinded output (01 amount, 02 keyset id, 03 SHA256(B_)), 22 melt quote output (01 amount, 02 quote id utf8), 23 mint quote output (01 amount, absent on the rotation quote, 02 lock key, 03 quote id utf8; the rotation quote id is hex(tagged_hash("Cashu_RotationQuoteId", melt quote id))). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.';
 
 // Two proof inputs in one transaction pin the distinction between the shared transaction digest
 // and each input's signing digest.
@@ -351,8 +374,18 @@ d.transcript.comment =
 {
   const txVector = {
     mint_quote_inputs: [
-      { amount: 5, quote_id: 'quote-mint-0002', lock_pubkey: d.nut13_v3.quote_locks[0].pubkey },
-      { amount: 3, quote_id: 'quote-mint-0003', lock_pubkey: d.nut13_v3.quote_locks[1].pubkey },
+      {
+        amount: 5,
+        quote_id: 'quote-mint-0002',
+        lock_pubkey: d.nut13_v3.quote_locks[0].pubkey,
+        issued: 0,
+      },
+      {
+        amount: 3,
+        quote_id: 'quote-mint-0003',
+        lock_pubkey: d.nut13_v3.quote_locks[1].pubkey,
+        issued: 0,
+      },
     ],
     blinded_outputs: d.transcript.mint.tx.blinded_outputs,
   };
@@ -385,12 +418,17 @@ d.transcript.comment =
   };
 }
 
-// A partial mint: an 8-sat quote issued for 4. The quote input commits the 4 issued, not the
-// quote amount, so this is the vector that tells the two readings apart.
+// A partial mint: an 8-sat quote with 3 already issued, issuing 4. The quote input commits the 4
+// this request issues and the 3 before it, so this vector tells amount, quote amount and issued apart.
 {
   const txVector = {
     mint_quote_inputs: [
-      { amount: 4, quote_id: 'quote-mint-0004', lock_pubkey: d.nut13_v3.quote_locks[0].pubkey },
+      {
+        amount: 4,
+        quote_id: 'quote-mint-0004',
+        lock_pubkey: d.nut13_v3.quote_locks[0].pubkey,
+        issued: 3,
+      },
     ],
     blinded_outputs: [d.transcript.swap.tx.blinded_outputs[0]],
   };
@@ -466,6 +504,51 @@ d.transcript.comment =
     }),
   };
 }
+
+// NUT-XX transactions: a mint quote paying a melt directly, and the melt with change backed by a
+// rotation quote. The recorded input id and digest are the first input's, whose container is the
+// transcript's first record.
+for (const [name, txVector] of [
+  [
+    'mint_quote_to_melt',
+    {
+      mint_quote_inputs: d.transcript.mint.tx.mint_quote_inputs,
+      melt_quote_outputs: d.transcript.melt.tx.melt_quote_outputs,
+    },
+  ],
+  [
+    'melt_with_rotation',
+    {
+      ...d.transcript.melt_with_change.tx,
+      mint_quote_outputs: [{ pubkey: d.nut13_v3.rotation_lock.pubkey }],
+    },
+  ],
+] as const) {
+  const tx = fromVectorTx(txVector);
+  const transcript = buildTransactionTranscript(tx);
+  const digest = transactionDigest(tx);
+  const container = transcript.subarray(0, 3 + ((transcript[1] << 8) | transcript[2]));
+  const quoteOutput = transcriptContainers(transcript).find((c) => c[0] === 0x23);
+  d.transcript[name] = {
+    tx: txVector,
+    ...(quoteOutput && {
+      mint_quote_output_container: bytesToHex(quoteOutput),
+      quote_id: tx.mintQuoteOutputs![0].quoteId,
+    }),
+    transcript: bytesToHex(transcript),
+    digest: bytesToHex(digest),
+    input_id: bytesToHex(sha256(container)),
+    input_digest: bytesToHex(inputDigest(digest, container)),
+  };
+}
+if (d.transcript.mint_quote_to_melt.input_id !== d.transcript.mint.input_id)
+  throw new Error('mint_quote_to_melt reuses the mint quote input, so its input id must match');
+if (d.transcript.melt_with_rotation.input_id !== d.transcript.swap.input_id)
+  throw new Error('melt_with_rotation spends the swap proof, so its input id must match');
+if (d.transcript.melt_with_rotation.quote_id !== d.nut13_v3.rotation_lock.quote_id)
+  throw new Error('melt_with_rotation names the rotation quote of its melt');
+for (const old of ['proof_to_change', 'proof_to_two_changes', 'proof_to_input_bound_change'])
+  delete d.transcript[old];
 
 // Disclosure leaf forms: threshold_1of1 with the 0x0a field, plus its rejection shapes.
 d.leaf_forms.threshold_1of1_disclosure = d.leaf_forms.threshold_1of1 + '0a000101';

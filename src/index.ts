@@ -31,11 +31,14 @@ export {
   deserializeBatchMintPreview,
   serializeMeltPreview,
   deserializeMeltPreview,
+  serializeTransactionPreview,
+  deserializeTransactionPreview,
   type SerializedProof,
   type SerializedSwapPreview,
   type SerializedMintPreview,
   type SerializedBatchMintPreview,
   type SerializedMeltPreview,
+  type SerializedTransactionPreview,
 } from './wallet/previews';
 export { Wallet } from './wallet/Wallet';
 export { WalletCounters } from './wallet/WalletCounters';
@@ -95,6 +98,13 @@ export type * from './model/types/NUT19';
 export type * from './model/types/NUT23';
 export type * from './model/types/NUT25';
 export type { BatchMintRequest, Nut29Info } from './model/types/NUT29';
+export type {
+  NutXXInfo,
+  TransactionQuoteInput,
+  TransactionRequest,
+  TransactionResponse,
+  TransactionState,
+} from './model/types/NUTXX';
 export type * from './model/types/NUT30';
 export type * from './model/types/proof';
 export type { Token, TokenMetadata } from './model/types/token';

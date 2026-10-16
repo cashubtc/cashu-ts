@@ -7,31 +7,26 @@ import { CTSError } from '../model/Errors';
 import { bytesToHex, hexToBytes, isValidHex } from '../utils';
 
 import { taggedHash } from './core';
+import { isValidSecpPubkey } from './curve_secp';
 import { hashToCurveHex, isBlsKeyset } from './curves';
 import { minimalBE, tlvRecord } from './nutroot';
 
 /**
  * Transaction transcript (NUT-10): one shared digest, one derived message per input.
- *
- * @remarks
- * `transaction_digest = SHA256(TLV stream)`; each input carries one BIP-340 signature over its
- * input digest, `tagged_hash("Cashu_TransactionInput", transaction_digest || SHA256(its own
- * container record))`. Containers: 0x11 proof input, 0x12 mint quote input, 0x21 blinded message
- * output (carrying `SHA256(B_)`), 0x22 melt quote output. Container types ascend (inputs before
- * outputs by construction); elements keep request order within their type; field streams inside are
- * ascending unique (NUT-10).
  */
 
 export const TRANSCRIPT_REQUEST_TAG = 'Cashu_AuthorizedRequest';
 export const TRANSCRIPT_INPUT_TAG = 'Cashu_TransactionInput';
 export const SPEND_COMMITMENT_TAG = 'Cashu_SpendCommitment';
 export const QUOTE_ID_TAG = 'Cashu_QuoteId';
+export const ROTATION_QUOTE_ID_TAG = 'Cashu_RotationQuoteId';
 
 // The high nibble is the section: 0x1n inputs, 0x2n outputs, 0xFn never in a transaction.
 const CONTAINER_PROOF_INPUT = 0x11;
 const CONTAINER_MINT_QUOTE_INPUT = 0x12;
 const CONTAINER_BLINDED_OUTPUT = 0x21;
 const CONTAINER_MELT_QUOTE_OUTPUT = 0x22;
+const CONTAINER_MINT_QUOTE_OUTPUT = 0x23;
 const CONTAINER_AUTHORIZED_REQUEST = 0xf1;
 
 export type TranscriptProofInput = {
@@ -59,9 +54,10 @@ export type TranscriptQuote = {
 };
 
 /**
- * A mint quote input: the quote, and the 33-byte compressed lock key hex it is locked to.
+ * A mint quote input: the quote, the 33-byte compressed lock key hex it is locked to, and the
+ * quote's `amount_issued` before this transaction (NUT-10), so a witness authorizes one draw.
  */
-export type TranscriptQuoteInput = TranscriptQuote & { lockKey: string };
+export type TranscriptQuoteInput = TranscriptQuote & { lockKey: string; issued: bigint };
 
 export type TranscriptBlindedOutput = {
   amount: bigint;
@@ -77,6 +73,22 @@ export type TransactionShape = {
   mintQuoteInputs?: TranscriptQuoteInput[];
   blindedOutputs?: TranscriptBlindedOutput[];
   meltQuoteOutputs?: TranscriptQuote[];
+  /**
+   * Mint quote outputs (NUT-XX) in request order; at most one omits `amount`, the rotation quote.
+   */
+  mintQuoteOutputs?: TranscriptMintQuoteOutput[];
+};
+
+export type TranscriptMintQuoteOutput = {
+  /**
+   * Lock key, 33-byte compressed secp256k1 hex.
+   */
+  pubkey: string;
+  /**
+   * The txout quote's id; the rotation quote's is {@link rotationQuoteId}.
+   */
+  quoteId: string;
+  amount?: bigint;
 };
 
 /**
@@ -163,7 +175,11 @@ function mintQuoteInputContainer(quote: TranscriptQuoteInput): Uint8Array {
   }
   return tlvRecord(
     CONTAINER_MINT_QUOTE_INPUT,
-    concatBytes(quoteFields(quote), tlvRecord(0x03, hexToBytes(quote.lockKey))),
+    concatBytes(
+      quoteFields(quote),
+      tlvRecord(0x03, hexToBytes(quote.lockKey)),
+      tlvRecord(0x04, minimalBE(Amount.from(quote.issued).toBigInt())),
+    ),
   );
 }
 
@@ -185,6 +201,26 @@ function blindedOutputContainer(output: TranscriptBlindedOutput): Uint8Array {
   );
 }
 
+function mintQuoteOutputContainer(output: TranscriptMintQuoteOutput): Uint8Array {
+  if (!isValidSecpPubkey(output.pubkey)) {
+    throw new CTSError('Transcript mint quote output lock key must be a 33-byte compressed point');
+  }
+  if (output.quoteId.length === 0) {
+    throw new CTSError('Transcript quote id must be non-empty');
+  }
+  const fields = concatBytes(
+    tlvRecord(0x02, hexToBytes(output.pubkey)),
+    tlvRecord(0x03, utf8ToBytes(output.quoteId)),
+  );
+  // The rotation quote omits the amount record entirely (NUT-XX).
+  if (output.amount === undefined) return tlvRecord(CONTAINER_MINT_QUOTE_OUTPUT, fields);
+  const amount = amountRecord(output.amount);
+  if (Amount.from(output.amount).isZero()) {
+    throw new CTSError('Transcript mint quote output amount must be positive');
+  }
+  return tlvRecord(CONTAINER_MINT_QUOTE_OUTPUT, concatBytes(amount, fields));
+}
+
 /**
  * A derived quote id (NUT-04): `hex(tagged_hash("Cashu_QuoteId", id_preimage))`.
  *
@@ -200,6 +236,16 @@ export function derivedQuoteId(idPreimage: Uint8Array): string {
 }
 
 /**
+ * The rotation quote's id (NUT-XX): `hex(tagged_hash("Cashu_RotationQuoteId", melt_quote_id))`.
+ */
+export function rotationQuoteId(meltQuoteId: string): string {
+  if (typeof meltQuoteId !== 'string' || meltQuoteId.length === 0) {
+    throw new CTSError('Rotation quote id needs the melt quote id');
+  }
+  return bytesToHex(taggedHash(ROTATION_QUOTE_ID_TAG, utf8ToBytes(meltQuoteId)));
+}
+
+/**
  * Serialize a transaction to its TLV transcript (without the domain tag).
  */
 export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
@@ -210,8 +256,12 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
   if (proofs.length + mintQuotes.length === 0) {
     throw new CTSError('Transaction requires at least one input');
   }
-  if (blinded.length + meltQuotes.length === 0) {
+  const quoteOutputs = tx.mintQuoteOutputs ?? [];
+  if (blinded.length + meltQuotes.length + quoteOutputs.length === 0) {
     throw new CTSError('Transaction requires at least one output');
+  }
+  if (quoteOutputs.filter((c) => c.amount === undefined).length > 1) {
+    throw new CTSError('Transaction allows at most one rotation quote');
   }
   // NUT-10: the same proof or quote twice would sign one input digest for two inputs.
   if (new Set(proofs.map((p) => p.Y)).size !== proofs.length) {
@@ -225,6 +275,7 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
     ...mintQuotes.map(mintQuoteInputContainer),
     ...blinded.map(blindedOutputContainer),
     ...meltQuotes.map(meltQuoteOutputContainer),
+    ...quoteOutputs.map(mintQuoteOutputContainer),
   );
 }
 
@@ -245,7 +296,7 @@ export function transactionMessage(tx: TransactionShape): Uint8Array {
  *
  * @remarks
  * Throws unless the bytes are exactly a run of well-formed, non-empty NUT-10 containers (proof
- * input through authorized request); an event id or other opaque 32 bytes never passes.
+ * input through mint quote output); an event id or other opaque 32 bytes never passes.
  */
 export function transcriptContainers(transcript: Uint8Array): Uint8Array[] {
   const records: Uint8Array[] = [];
@@ -323,10 +374,23 @@ export function transactionInputs(tx: TransactionShape): {
 export type PayloadProofInput = { amount: AmountLike; id: string; C: string } & ProofInputName;
 
 type PayloadShape = {
-  inputs?: PayloadProofInput[];
-  mintQuotes?: Array<{ quoteId: string; amount: AmountLike; lockKey: string }>;
-  outputs?: Array<{ amount: AmountLike; id: string; B_: string }>;
-  meltQuote?: { quoteId: string; amount: AmountLike };
+  proofInputs?: PayloadProofInput[];
+  /**
+   * `amount` is what this transaction issues against the quote, at most its mintable amount;
+   * `issued` is the quote's `amount_issued` before it.
+   */
+  mintQuoteInputs?: Array<{
+    quoteId: string;
+    amount: AmountLike;
+    lockKey: string;
+    issued: AmountLike;
+  }>;
+  blindedOutputs?: Array<{ amount: AmountLike; id: string; B_: string }>;
+  /**
+   * `amount` is the quote amount plus the selected fee reserve ({@link meltOutputAmount}).
+   */
+  meltQuoteOutput?: { quoteId: string; amount: AmountLike };
+  mintQuoteOutputs?: Array<{ pubkey: string; quoteId: string; amount?: AmountLike }>;
 };
 
 /**
@@ -372,25 +436,36 @@ function payloadToTransaction(payload: PayloadShape): TransactionShape {
     quoteId: q.quoteId,
   });
   return {
-    ...(payload.inputs && {
-      proofInputs: payload.inputs.map((p) => ({
+    ...(payload.proofInputs && {
+      proofInputs: payload.proofInputs.map((p) => ({
         amount: Amount.from(p.amount).toBigInt(),
         keysetId: p.id,
         Y: proofInputY(p),
         C: p.C,
       })),
     }),
-    ...(payload.mintQuotes && {
-      mintQuoteInputs: payload.mintQuotes.map((q) => ({ ...quote(q), lockKey: q.lockKey })),
+    ...(payload.mintQuoteInputs && {
+      mintQuoteInputs: payload.mintQuoteInputs.map((q) => ({
+        ...quote(q),
+        lockKey: q.lockKey,
+        issued: Amount.from(q.issued).toBigInt(),
+      })),
     }),
-    ...(payload.outputs && {
-      blindedOutputs: payload.outputs.map((o) => ({
+    ...(payload.blindedOutputs && {
+      blindedOutputs: payload.blindedOutputs.map((o) => ({
         amount: Amount.from(o.amount).toBigInt(),
         keysetId: o.id,
         B_: o.B_,
       })),
     }),
-    ...(payload.meltQuote && { meltQuoteOutputs: [quote(payload.meltQuote)] }),
+    ...(payload.meltQuoteOutput && { meltQuoteOutputs: [quote(payload.meltQuoteOutput)] }),
+    ...(payload.mintQuoteOutputs && {
+      mintQuoteOutputs: payload.mintQuoteOutputs.map((c) => ({
+        pubkey: c.pubkey,
+        quoteId: c.quoteId,
+        ...(c.amount !== undefined && { amount: Amount.from(c.amount).toBigInt() }),
+      })),
+    }),
   };
 }
 

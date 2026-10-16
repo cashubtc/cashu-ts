@@ -364,6 +364,21 @@ export class MintInfo {
     }
   }
 
+  /**
+   * NUT-XX transactions: whether the mint serves `POST /v1/transaction`, and its quote input fee.
+   *
+   * @remarks
+   * A malformed fee reads as 0; the mint then rejects any transaction it underprices.
+   */
+  get transactions(): { supported: boolean; quoteInputFeePpk: number } {
+    const xx = this._mintInfo.nuts?.XX;
+    const fee = xx?.quote_input_fee_ppk;
+    return {
+      supported: xx?.supported === true,
+      quoteInputFeePpk: Number.isSafeInteger(fee) && fee! >= 0 ? fee! : 0,
+    };
+  }
+
   requiresBlindAuthToken(method: 'GET' | 'POST', path: string): boolean {
     return this.matchesProtected(this._protected22, method, path);
   }

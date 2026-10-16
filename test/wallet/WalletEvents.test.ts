@@ -41,7 +41,7 @@ class MockWS {
    * Deliver an update payload to matching subscribers for a kind.
    */
   emit(
-    kind: 'bolt11_mint_quote' | 'bolt11_melt_quote',
+    kind: 'bolt11_mint_quote' | 'bolt11_melt_quote' | 'txout_mint_quote',
     payload: { quote: string; [k: string]: any },
   ) {
     for (const { kind: k, filters, cb } of this.subs.values()) {
@@ -174,6 +174,21 @@ describe('WalletEvents', () => {
 
       expect(cb).toHaveBeenCalledWith(expect.objectContaining({ quote: 'a' }));
       expect(typeof canceller).toBe('function');
+    });
+
+    it('watches txout quotes under NUT-17 txout_mint_quote', async () => {
+      const cb = vi.fn();
+      await events.mintQuoteUpdates(['c'], cb, vi.fn(), { method: 'txout' });
+      const ws = mock.mint.webSocketConnection!;
+      ws.emit('txout_mint_quote', {
+        quote: 'c',
+        request: '',
+        state: 'PAID',
+        amount: 2,
+        amount_paid: 2,
+        amount_issued: 0,
+      });
+      expect(cb).toHaveBeenCalledWith(expect.objectContaining({ quote: 'c', method: 'txout' }));
     });
 
     it('reports the websocket mode on the first frame when pollMs is unset', async () => {
@@ -667,6 +682,81 @@ describe('WalletEvents', () => {
       await flushMicrotasks();
       expect(ws.cancelSubscription).toHaveBeenCalled();
       expect(rmSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('onceTransactionSettled', () => {
+    const preview = { meltQuoteOutput: { method: 'bolt11', quote: 'q' } } as any;
+    const state = (s: string) => ({ response: { state: s } });
+
+    it('polls until the transaction leaves PENDING', async () => {
+      vi.useFakeTimers();
+      const check = vi
+        .fn()
+        .mockResolvedValueOnce(state('PENDING'))
+        .mockResolvedValueOnce(state('PAID'));
+      (mock as any).checkTransaction = check;
+      const p = events.onceTransactionSettled(preview, { pollMs: 5 });
+      await vi.advanceTimersByTimeAsync(5);
+      await expect(p).resolves.toEqual(state('PAID'));
+      expect(check).toHaveBeenCalledTimes(2);
+      expect(check).toHaveBeenCalledWith(preview, { signal: expect.any(AbortSignal) });
+    });
+
+    it('returns FAILED without waiting further', async () => {
+      (mock as any).checkTransaction = vi.fn().mockResolvedValue(state('FAILED'));
+      await expect(events.onceTransactionSettled(preview)).resolves.toEqual(state('FAILED'));
+    });
+
+    it('rejects on timeout', async () => {
+      vi.useFakeTimers();
+      (mock as any).checkTransaction = vi.fn().mockResolvedValue(state('PENDING'));
+      const p = expect(
+        events.onceTransactionSettled(preview, { timeoutMs: 10, pollMs: 4 }),
+      ).rejects.toThrow(/Timeout waiting for transaction to settle/);
+      await vi.advanceTimersByTimeAsync(12);
+      await p;
+    });
+
+    // Review regression: timeoutMs must also bound an in-flight status request.
+    it('times out while a status request is stalled', async () => {
+      vi.useFakeTimers();
+      let finish!: (result: ReturnType<typeof state>) => void;
+      const pending = new Promise<ReturnType<typeof state>>((resolve) => {
+        finish = resolve;
+      });
+      (mock as any).checkTransaction = vi.fn().mockReturnValue(pending);
+      const rejected = vi.fn();
+      const waiting = events.onceTransactionSettled(preview, { timeoutMs: 10 }).catch(rejected);
+      try {
+        await vi.advanceTimersByTimeAsync(10);
+        expect(rejected).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message: 'Timeout waiting for transaction to settle',
+          }),
+        );
+      } finally {
+        finish(state('FAILED'));
+        await waiting;
+      }
+    });
+
+    it('rejects with AbortError before polling and while sleeping', async () => {
+      const check = vi.fn().mockResolvedValue(state('PENDING'));
+      (mock as any).checkTransaction = check;
+      const early = new AbortController();
+      early.abort();
+      await expect(
+        events.onceTransactionSettled(preview, { signal: early.signal }),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+      expect(check).not.toHaveBeenCalled();
+
+      const ac = new AbortController();
+      const p = events.onceTransactionSettled(preview, { signal: ac.signal, pollMs: 60_000 });
+      await flushMicrotasks(4);
+      ac.abort();
+      await expect(p).rejects.toMatchObject({ name: 'AbortError' });
+      expect(check).toHaveBeenCalledTimes(1);
     });
   });
 
