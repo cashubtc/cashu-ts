@@ -1,8 +1,9 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 
-import { LockBuilder, Wallet } from '../../src';
+import { LockBuilder, type Logger, Wallet } from '../../src';
 import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import { NUTROOT_NUMS_KEY, parseNutrootLeaf, serializeNutrootLeaf } from '../../src/crypto/nutroot';
+import { NULL_LOGGER } from '../../src/logger';
 import { Amount } from '../../src/model/Amount';
 import type { OutputData } from '../../src/model/OutputData';
 import { bytesToHex, hexToBytes } from '../../src/utils';
@@ -432,8 +433,8 @@ describe('nutrootToLockOptions (readable conditions)', () => {
 describe('Wallet.createOutputData lock chokepoint', () => {
   const mintUrl = 'http://localhost:3338';
   // Pre-v3 locks are refused unless the mint advertises the NUT that enforces them.
-  const walletFor = (nuts: Record<string, { supported: boolean }>) => {
-    const w = new Wallet(mintUrl, { unit: 'sat' });
+  const walletFor = (nuts: Record<string, { supported: boolean }>, logger?: Logger) => {
+    const w = new Wallet(mintUrl, { unit: 'sat', logger });
     w.loadMintFromCache(
       {
         name: 'lock mint',
@@ -517,6 +518,24 @@ describe('Wallet.createOutputData lock chokepoint', () => {
     wallet = walletFor({ '11': { supported: true } });
     expect(() => create(LEGACY_KEYSET, lock)).not.toThrow();
     expect(() => create(LEGACY_KEYSET, htlc)).toThrow(/NUT-14/);
+  });
+
+  test('a locktime that is not in the future warns but still encodes', () => {
+    const warn = vi.fn();
+    wallet = walletFor({ '11': { supported: true } }, { ...NULL_LOGGER, warn });
+    const lock = (locktime: number): OutputType => ({
+      type: 'lock',
+      options: { mainKeys: [PUB_A], locktime },
+    });
+    const [out] = create(LEGACY_KEYSET, lock(0));
+    expect(JSON.parse(new TextDecoder().decode(out.secret))[1].tags).toContainEqual([
+      'locktime',
+      '0',
+    ]);
+    expect(warn).toHaveBeenCalledWith('Lock locktime is not in the future', { locktime: 0 });
+    warn.mockClear();
+    create(LEGACY_KEYSET, lock(Math.floor(Date.now() / 1000) + 3600));
+    expect(warn).not.toHaveBeenCalled();
   });
 
   test('a v3 lock needs no info flag: the keyset version enforces it', () => {

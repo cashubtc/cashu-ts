@@ -43,6 +43,7 @@ const PUBKEY = bytesToHex(getPubKeyFromPrivKey(PRIVKEY));
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe('test create p2pk secret', () => {
@@ -2230,17 +2231,18 @@ describe('locktime boundaries', () => {
     secret: JSON.stringify(['P2PK', { nonce: bytesToHex(randomBytes(32)), data: PUBKEY, tags }]),
   });
 
-  test('a lock expiring exactly now is EXPIRED, not ACTIVE', () => {
-    const now = 1_750_000_000;
+  test('a lock is ACTIVE at its locktime and EXPIRED one second later (now > locktime)', () => {
+    const locktime = 1_750_000_000;
+    const proof = mkProof([['locktime', String(locktime)]]);
     vi.useFakeTimers();
-    vi.setSystemTime(now * 1000);
-    try {
-      const result = verifyP2PKSpendingConditions(mkProof([['locktime', String(now)]]));
-      expect(result.lockState).toBe('EXPIRED');
-      expect(result.path).toBe('UNLOCKED');
-    } finally {
-      vi.useRealTimers();
-    }
+    vi.setSystemTime(locktime * 1000);
+    const at = verifyP2PKSpendingConditions(proof);
+    expect(at.lockState).toBe('ACTIVE');
+    expect(at.path).toBe('FAILED');
+    vi.setSystemTime((locktime + 1) * 1000);
+    const after = verifyP2PKSpendingConditions(proof);
+    expect(after.lockState).toBe('EXPIRED');
+    expect(after.path).toBe('UNLOCKED');
   });
 
   test('a future locktime reports ACTIVE and fails unsigned', () => {
@@ -2251,10 +2253,23 @@ describe('locktime boundaries', () => {
     expect(result.success).toBe(false);
   });
 
-  test('locktime 0 is treated as no locktime (PERMANENT)', () => {
-    const result = verifyP2PKSpendingConditions(mkProof([['locktime', '0']]));
-    expect(result.lockState).toBe('PERMANENT');
-    expect(result.locktime).toBe(Infinity);
+  test('locktime 0 is a valid unix time, so the lock has expired', () => {
+    const proof = mkProof([['locktime', '0']]);
+    const result = verifyP2PKSpendingConditions(proof);
+    expect(result.lockState).toBe('EXPIRED');
+    expect(result.locktime).toBe(0);
+    expect(result.path).toBe('UNLOCKED');
+    expect(getP2PKExpectedWitnessPubkeys(proof.secret)).toStrictEqual([]);
+  });
+
+  test('locktime 0 with refund keys opens the refund path', () => {
+    const refundHex = bytesToHex(getPubKeyFromPrivKey(schnorr.utils.randomSecretKey()));
+    const proof = mkProof([
+      ['locktime', '0'],
+      ['refund', refundHex],
+    ]);
+    expect(verifyP2PKSpendingConditions(proof).lockState).toBe('EXPIRED');
+    expect(getP2PKExpectedWitnessPubkeys(proof.secret)).toStrictEqual([PUBKEY, refundHex]);
   });
 
   test('a small positive past locktime is EXPIRED, not PERMANENT', () => {
