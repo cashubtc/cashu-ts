@@ -54,32 +54,36 @@ describe('NUT-14 spec vectors', () => {
   });
 
   test('SIG_ALL swap vector: message, digest, signature and spend', () => {
-    const sigAllSecret = `["HTLC",{"nonce":"da62796403af76c80cd6ce9153ed3746","data":"${HASHLOCK}","tags":[["pubkeys","${PUB}"],["sigflag","SIG_ALL"]]}]`;
+    const sigAllSecret = `["HTLC",{"nonce":"e72b0dbe91e3c17f0680b0a2ecf407f5e237d00d311313b33bcd77f957087e56","data":"${HASHLOCK}","tags":[["pubkeys","${PUB}"],["sigflag","SIG_ALL"]]}]`;
     const sigAllSig =
-      '8971f1c3f1de7aa2e401b75eee841a60c61ab4833c2b3ba2e0fde7911893a481d264f858e64dc9bfe614d785ef7ce0a487942850e78839eebdf260046c241d79';
-    const proof = mkProof(sigAllSecret, `{"preimage":"${PREIMAGE}","signatures":["${sigAllSig}"]}`);
+      'f1119822def46095e5f673826336e4c2138f0b7ef62fa0d4b3a59b9b43db6113a7e0ac02e96d59bdbbc7bbc8ebeecddcfd46c872fccc359a41392c758442801c';
+    const proof = {
+      ...mkProof(sigAllSecret, `{"preimage":"${PREIMAGE}","signatures":["${sigAllSig}"]}`),
+      id: '01b8afe98cfccddc07e53fe5f081657f729c322266a1fda00937d27bba3cdf6a82',
+      C: '026c32214e4c4d286ff26be59ee705de8c5155885155c57d1bc44033713f0f6d1a',
+    };
     const outputs = [
       {
         blindedMessage: {
           amount: Amount.from(8),
-          id: '009a1f293253e41e',
-          B_: '035015e6d7ade60ba8426cefaf1832bbd27257636e44a76b922d78e79b47cb689d',
+          id: '01b8afe98cfccddc07e53fe5f081657f729c322266a1fda00937d27bba3cdf6a82',
+          B_: '027c9a3f3dae60a2967dfc3aeea06535fff329cbc196842ecc12a5fb66a2eb9087',
         },
       },
       {
         blindedMessage: {
           amount: Amount.from(2),
-          id: '009a1f293253e41e',
-          B_: '0288d7649652d0a83fc9c966c969fb217f15904431e61a44b14999fabc1b5d9ac6',
+          id: '01b8afe98cfccddc07e53fe5f081657f729c322266a1fda00937d27bba3cdf6a82',
+          B_: '03cd583efc731edcab6935e0a817cec65851ace7ca842396422ff2c0e9db9c49bc',
         },
       },
     ];
 
     const msg = buildP2PKSigAllMessageV1([proof], outputs);
-    expect(msg.length).toBe(368);
+    expect(msg.length).toBe(397);
     const digest = hashP2PKSigAllMessageV1(msg);
     expect(bytesToHex(digest)).toBe(
-      '0eb7eda21bdfc7ffbe74868d32db3981727cfaedc61ef3256681c33fb92512d1',
+      '955548adebe2142b84498625885e2d205208b9983ec7152b75dc72454bf8b4a0',
     );
     expect(schnorrVerifyDigest(sigAllSig, digest, PUB)).toBe(true);
     expect(isHTLCSpendAuthorised(proof, undefined, { digest })).toBe(true);

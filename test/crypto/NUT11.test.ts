@@ -2280,54 +2280,59 @@ describe('buildP2PKSigAllMessageV1, length-framed SIG_ALL aggregation', () => {
   const VECTOR_PUB = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
   const vectorInputs = [
     mkProof(
-      `["P2PK",{"nonce":"859d4935c4907062a6297cf4e663e2835d90d97ecdd510745d32f6816323a41f","data":"${VECTOR_PUB}","tags":[["sigflag","SIG_ALL"]]}]`,
-      '02698c4e2b5f9534cd0687d87513c759790cf829aa5739184a3e3735471fbda904',
+      `["P2PK",{"nonce":"7d544630128e1455d15012e4a88e83d59d89a7c176a73ceab1eda5d4f5744cca","data":"${VECTOR_PUB}","tags":[["sigflag","SIG_ALL"]]}]`,
+      '03c0bdc5da4ffde1f36d261b05106682733217d5eaa0be2fe7288ccf7c4006ee0c',
     ),
     mkProof(
-      `["P2PK",{"nonce":"16d937a29ae4e5d4a6e9f9959c4d4b9a8d6f2f7b2f0a1b3c4d5e6f708192a3b4","data":"${VECTOR_PUB}","tags":[["sigflag","SIG_ALL"]]}]`,
-      '02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5',
+      `["P2PK",{"nonce":"2616f858162c6550227c9bee1f480cf0e33941ae0196e3bddd5c80fdaee15f70","data":"${VECTOR_PUB}","tags":[["sigflag","SIG_ALL"]]}]`,
+      '037a12e58c9205ca2e73371b838463fe360138e667ffca3b58c311f62a8d466c67',
     ),
   ];
   const vectorOutputs = [
-    mkOutput(8, '035015e6d7ade60ba8426cefaf1832bbd27257636e44a76b922d78e79b47cb689d'),
-    mkOutput(2, '0288d7649652d0a83fc9c966c969fb217f15904431e61a44b14999fabc1b5d9ac6'),
+    mkOutput(8, '027c9a3f3dae60a2967dfc3aeea06535fff329cbc196842ecc12a5fb66a2eb9087'),
+    mkOutput(2, '03cd583efc731edcab6935e0a817cec65851ace7ca842396422ff2c0e9db9c49bc'),
   ];
   const vectorQuote = '9d745270-1405-46de-b5c5-e2762b4f5e00';
 
   test('matches the canonical cross-implementation vector', () => {
     const swapMsg = buildP2PKSigAllMessageV1(vectorInputs, vectorOutputs);
-    expect(swapMsg.length).toBe(554);
+    expect(swapMsg.length).toBe(552);
     const swapHash = hashP2PKSigAllMessageV1(swapMsg);
     expect(bytesToHex(swapHash)).toBe(
-      'b2a0a8ee2d8911585d97adce15c8d7e664c712baa31c0f3d8a6e32b909fdda2b',
+      '211b753e260375ce45e36b2a1e90d60b0a589f3f8c701d1913930c47b5244e53',
     );
     // Pinned signature by the well-known test key (privkey 0x...01)
     expect(
       schnorrVerifyDigest(
-        '55c4e0d72598a64af2a04d1d348af7beb97b35fe1af91711e205414a24c869ba047b5bd298b87c7b58b439833e244b5498136fd4cccdf9d41b0fe72db8279722',
+        '5fba32e9a91078651406bf8afe067ea1e68a03dec3c5ca8ef5ee2afc5be85a0c8ac637ed3789eb1e5bdf00e121b3554026c24112913b685a8a99cb8466bcbd49',
         swapHash,
         VECTOR_PUB,
       ),
     ).toBe(true);
 
     const meltMsg = buildP2PKSigAllMessageV1(vectorInputs, vectorOutputs, vectorQuote);
-    expect(meltMsg.length).toBe(590);
+    expect(meltMsg.length).toBe(593);
     const meltHash = hashP2PKSigAllMessageV1(meltMsg);
     expect(bytesToHex(meltHash)).toBe(
-      '2cdffe8a0eed5d22da07adc0f149d49e0ddca5cdafa6d872630d0c52e167e548',
+      'd30001353eb216fa9f9296bbe10be23defcd3bd2a567d89e212d586d573ddf7e',
     );
     expect(
       schnorrVerifyDigest(
-        'b22645e507c51a37070402ccc36b5b41cc33fe5bdc2ff3f3ee12d0b7340f9742dfaf64c49e9b1243e7a71b31329a63d9c174fd82f133491b16723f8dcd3f7693',
+        'b5ef213225d90a16ea651b8ad1eca10eefcdfe973dcd33796677b7122dcbadc069ce64e7196d8ad5951411202471e560ef2e949b91509db6b2345c970c50149d',
         meltHash,
         VECTOR_PUB,
       ),
     ).toBe(true);
   });
 
-  test('swaps commit an empty quote frame first', () => {
-    const msg = buildP2PKSigAllMessageV1(vectorInputs, vectorOutputs);
-    expect(bytesToHex(msg.slice(0, 4))).toBe('00000000');
+  test('records are typed, and only a melt ends with a quote record', () => {
+    const swap = buildP2PKSigAllMessageV1(vectorInputs, vectorOutputs);
+    const melt = buildP2PKSigAllMessageV1(vectorInputs, vectorOutputs, vectorQuote);
+    expect(swap[0]).toBe(0x11);
+    expect(melt.slice(0, swap.length)).toEqual(swap);
+    expect(bytesToHex(melt.slice(swap.length))).toBe(
+      '22' + '00000024' + bytesToHex(utf8ToBytes(vectorQuote)),
+    );
   });
 
   test('the signed value is the BIP-340 tagged hash of the message', () => {
@@ -2339,12 +2344,13 @@ describe('buildP2PKSigAllMessageV1, length-framed SIG_ALL aggregation', () => {
     expect(hashP2PKSigAllMessageV1(msg)).toEqual(sha256(concatBytes(tagHash, tagHash, msg)));
   });
 
-  test('amounts commit as canonical minimal big-endian bytes', () => {
+  test('outputs commit minimal big-endian amounts and SHA256(B_)', () => {
+    const hB = '00000020' + bytesToHex(sha256(hexToBytes('b1')));
     const zero = buildP2PKSigAllMessageV1([], [mkOutput(0, 'b1')]);
-    expect(bytesToHex(zero)).toBe('00000000' + '00000000' + '00000001' + 'b1');
+    expect(bytesToHex(zero)).toBe('21' + '00000000' + hB);
 
     const big = buildP2PKSigAllMessageV1([], [mkOutput(256, 'b1')]);
-    expect(bytesToHex(big)).toBe('00000000' + '00000002' + '0100' + '00000001' + 'b1');
+    expect(bytesToHex(big)).toBe('21' + '00000002' + '0100' + hB);
   });
 
   test('length framing prevents boundary-shift collisions', () => {
