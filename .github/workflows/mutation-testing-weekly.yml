@@ -46,7 +46,7 @@ jobs:
           retention-days: 90
 
       - name: Deploy report to GitHub Pages
-        if: ${{ always() }}
+        if: ${{ always() && hashFiles('reports/mutation/mutation.json') != '' }}
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
