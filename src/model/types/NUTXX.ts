@@ -44,7 +44,7 @@ export type TransactionRequest = {
   /**
    * Txout quotes to create, each locked to `pubkey` (33-byte compressed hex). With `amount`, a
    * fixed txout quote, its id derived from `id_preimage` (32-byte hex) or, without one, bound to
-   * the inputs. Without `amount`, at most one: the remainder quote beside a melt with blinded
+   * the inputs. Without `amount`, at most one: the rotation quote beside a melt with blinded
    * outputs.
    */
   mint_quote_outputs?: Array<{ pubkey: string; amount?: Amount; id_preimage?: string }>;

@@ -316,9 +316,9 @@ export const DERIVATION_TYPE = {
    */
   quoteIdPreimage: 0x05,
   /**
-   * Remainder quote lock key (NUT-XX); counter 0, the message carries `SHA256(melt quote id)`.
+   * Rotation quote lock key (NUT-XX); counter 0, the message carries `SHA256(melt quote id)`.
    */
-  remainderLock: 0x06,
+  rotationLock: 0x06,
 } as const;
 
 function assertSeed(seed: Uint8Array): void {
@@ -490,7 +490,7 @@ export function deriveQuoteIdPreimage(
 }
 
 /**
- * A remainder quote lock key (NUT-13 message type `0x06`), from the melt quote id alone.
+ * A rotation quote lock key (NUT-13 message type `0x06`), from the melt quote id alone.
  *
  * @remarks
  * Counter 0 and suffix `SHA256(utf8(meltQuoteId))`, so recovery needs only the seed, the mint and
@@ -498,19 +498,19 @@ export function deriveQuoteIdPreimage(
  * @param mintPubkey - The mint's NUT-06 `pubkey` (33-byte compressed, hex).
  * @experimental Follows draft NUT-13 type `0x06` and draft NUT-XX; may change before GA.
  */
-export function deriveRemainderLockKey(
+export function deriveRotationLockKey(
   seed: Uint8Array,
   mintPubkey: string,
   meltQuoteId: string,
 ): Uint8Array {
   if (typeof meltQuoteId !== 'string' || meltQuoteId.length === 0) {
-    throw new CTSError('Remainder lock key needs the melt quote id');
+    throw new CTSError('Rotation lock key needs the melt quote id');
   }
   return deriveV3Scalar(
     seed,
     normalizeSecpPubkey(mintPubkey),
     0,
-    DERIVATION_TYPE.remainderLock,
+    DERIVATION_TYPE.rotationLock,
     sha256(utf8ToBytes(meltQuoteId)),
   );
 }

@@ -20,7 +20,7 @@ import {
   deriveNumsOffset,
   deriveQuoteIdPreimage,
   deriveQuoteLockKey,
-  deriveRemainderLockKey,
+  deriveRotationLockKey,
   recoverV3LeafKeys,
 } from '../../src/crypto/NUT13';
 import { derivedQuoteId } from '../../src/crypto/transcript';
@@ -258,14 +258,14 @@ describe('v3 (BLS) derivation', () => {
       expect(bytesToHex(idPreimage)).toBe(lock.id_preimage);
       expect(derivedQuoteId(idPreimage)).toBe(lock.quote_id);
     }
-    const rem = nut13Vectors.remainder_lock;
-    const key = deriveRemainderLockKey(vseed, nut13Vectors.mint_identity, rem.melt_quote_id);
+    const rem = nut13Vectors.rotation_lock;
+    const key = deriveRotationLockKey(vseed, nut13Vectors.mint_identity, rem.melt_quote_id);
     expect(bytesToHex(key)).toBe(rem.privkey);
     expect(bytesToHex(getPubKeyFromPrivKey(key))).toBe(rem.pubkey);
     // Counter 0 with a suffix: never the quote counter's key, and the melt quote id selects it.
     expect(key).not.toEqual(deriveQuoteLockKey(vseed, nut13Vectors.mint_identity, 0));
-    expect(deriveRemainderLockKey(vseed, nut13Vectors.mint_identity, 'other')).not.toEqual(key);
-    expect(() => deriveRemainderLockKey(vseed, nut13Vectors.mint_identity, '')).toThrow(
+    expect(deriveRotationLockKey(vseed, nut13Vectors.mint_identity, 'other')).not.toEqual(key);
+    expect(() => deriveRotationLockKey(vseed, nut13Vectors.mint_identity, '')).toThrow(
       /melt quote id/,
     );
   });

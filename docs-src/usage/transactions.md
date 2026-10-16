@@ -11,17 +11,17 @@ The mint sees this payment matched to the quote that funded it, which suits a se
 ```ts
 import { Wallet, serializeTransactionPreview } from '@cashu/cashu-ts';
 
-const wallet = new Wallet('http://localhost:3338'); // unseeded: no remainder quote by default
+const wallet = new Wallet('http://localhost:3338'); // unseeded: no rotation quote by default
 await wallet.loadMint();
 
 const meltQuote = await wallet.createMeltQuoteBolt11(invoice);
-const remainder = wallet.createRemainderLockKey(meltQuote.quote); // random: store remainder.privkey
+const rotation = wallet.createRotationLockKey(meltQuote.quote); // random: store rotation.privkey
 
 const preview = await wallet.prepareTransaction({
   // an existing paid quote locked to privkey, drawn for everything it still has
   mintQuoteInputs: [{ quote, amount: quote.amount_paid.subtract(quote.amount_issued) }],
   meltQuoteOutput: { method: 'bolt11', quote: meltQuote },
-  mintQuoteOutputs: [{ pubkey: remainder.pubkey }],
+  mintQuoteOutputs: [{ pubkey: rotation.pubkey }],
 });
 // Store this before completing; it holds the proofs in the clear, so treat it like them.
 const stored = JSON.stringify(serializeTransactionPreview(preview));
@@ -45,11 +45,11 @@ A melt's unspent fee reserve comes back as proofs: the wallet adds NUT-08 blank 
 
 For a quote offering `fee_options` (NUT-30), pass the chosen option as `meltQuoteOutput.feeIndex`; the transaction commits the reserve it names.
 
-### The remainder quote
+### The rotation quote
 
-If the outputs' keyset rotates while the melt is in flight, the mint cannot sign them. The remainder quote catches that value: the mint creates it, locked to your `pubkey`, only in that case, holding the outputs' amount and the change the blanks would have taken. Without one, that value stays with the mint.
+If the outputs' keyset rotates while the melt is in flight, the mint cannot sign them. The rotation quote catches that value: the mint creates it, locked to your `pubkey`, only in that case, holding the outputs' amount and the change the blanks would have taken. Without one, that value stays with the mint.
 
-A seeded wallet adds one by default when you leave out `mintQuoteOutputs`, its key derived from the seed and the melt quote id (`createRemainderLockKey` gives you the same key again, with no counter); pass `mintQuoteOutputs: []` to opt out.
+A seeded wallet adds one by default when you leave out `mintQuoteOutputs`, its key derived from the seed and the melt quote id (`createRotationLockKey` gives you the same key again, with no counter); pass `mintQuoteOutputs: []` to opt out.
 
 An unseeded wallet adds none: pass one yourself and store its random key with the transaction. The quote's id derives from the melt quote id, so it is known up front.
 
@@ -57,7 +57,7 @@ An unseeded wallet adds none: pass one yourself and store its random key with th
 
 A mint advertising `fixed_txout_quotes` (`wallet.getMintInfo().transactions.fixedTxoutQuotes`) also takes mint quote outputs with an `amount`: each creates a txout quote for exactly that amount, locked to its `pubkey`, paid out of the inputs like a melt.
 
-Passing `mintQuoteOutputs` turns off the default remainder quote, so beside a melt with outputs add it yourself: `{ pubkey: wallet.createRemainderLockKey(meltQuote.quote).pubkey }` with no `amount`.
+Passing `mintQuoteOutputs` turns off the default rotation quote, so beside a melt with outputs add it yourself: `{ pubkey: wallet.createRotationLockKey(meltQuote.quote).pubkey }` with no `amount`.
 
 ```ts
 const lock = await wallet.createQuoteLockKey(); // keep lock.privkey: it redeems the quote
@@ -74,19 +74,19 @@ A txout quote redeems once and in full, and value in one cannot move straight in
 
 ## Pending transactions and retries
 
-A transaction with a melt settles through its melt quote. While the response is `PENDING`, poll `wallet.checkTransaction(preview)` (the preview can be rehydrated with `deserializeTransactionPreview`): it reads the melt quote, and once that is `PAID` fetches any remainder quote and builds the new proofs from the melt quote's `change` signatures. Pass `waitForSettlementMs` to `completeTransaction` to have it poll for you. To be pushed updates instead, subscribe with `wallet.on.meltQuoteUpdates` and `wallet.on.mintQuoteUpdates(ids, cb, err, { method: 'txout' })` (NUT-17 `txout_mint_quote`); a remainder quote id can be subscribed before its quote exists.
+A transaction with a melt settles through its melt quote. While the response is `PENDING`, poll `wallet.checkTransaction(preview)` (the preview can be rehydrated with `deserializeTransactionPreview`): it reads the melt quote, and once that is `PAID` fetches any rotation quote and builds the new proofs from the melt quote's `change` signatures. Pass `waitForSettlementMs` to `completeTransaction` to have it poll for you. To be pushed updates instead, subscribe with `wallet.on.meltQuoteUpdates` and `wallet.on.mintQuoteUpdates(ids, cb, err, { method: 'txout' })` (NUT-17 `txout_mint_quote`); a rotation quote id can be subscribed before its quote exists.
 
-After a lost response a resent preview succeeds only where the mint caches responses (NUT-19). Otherwise recover as after a swap: NUT-07 shows whether the proofs were spent, NUT-09 restores the new proofs, and `checkTransaction` fetches the remainder quote.
+After a lost response a resent preview succeeds only where the mint caches responses (NUT-19). Otherwise recover as after a swap: NUT-07 shows whether the proofs were spent, NUT-09 restores the new proofs, and `checkTransaction` fetches the rotation quote.
 
-## Redeeming a remainder quote
+## Redeeming a rotation quote
 
-A remainder quote redeems once and in full: through its own mint route, or as a quote input drawing its whole amount.
+A rotation quote redeems once and in full: through its own mint route, or as a quote input drawing its whole amount.
 
 ```ts
-// remainderQuote is response.mint_quotes[0]; remainderPrivkey its lock key.
+// rotationQuote is response.mint_quotes[0]; rotationPrivkey its lock key.
 const proofs = await wallet.completeMint(
-  await wallet.prepareMint('txout', remainderQuote.amount_paid, remainderQuote, {
-    privkey: remainderPrivkey,
+  await wallet.prepareMint('txout', rotationQuote.amount_paid, rotationQuote, {
+    privkey: rotationPrivkey,
   }),
 );
 ```
