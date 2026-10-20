@@ -1,5 +1,19 @@
 # Changelog
 
+## [4.12.0](https://github.com/cashubtc/cashu-ts/compare/v4.11.0...v4.12.0) (2026-10-16)
+
+
+### Features
+
+* **utils:** add verifyMintSignatures ahead of v5, deprecate hasValidDleq ([#1269](https://github.com/cashubtc/cashu-ts/issues/1269)) ([7a9590c](https://github.com/cashubtc/cashu-ts/commit/7a9590c9f94454e915640840e69a4d1085cabd12))
+
+
+### Bug Fixes
+
+* **core:** validate text fields when decoding a v4 token ([#1308](https://github.com/cashubtc/cashu-ts/issues/1308)) ([9f1fa79](https://github.com/cashubtc/cashu-ts/commit/9f1fa79665db232ac7a21a4cf5212460439a71e5))
+* **mint:** log only the op when a melt quote check answers for another quote ([#1327](https://github.com/cashubtc/cashu-ts/issues/1327)) ([c3b01e2](https://github.com/cashubtc/cashu-ts/commit/c3b01e27f112206098724cb566bb4a098b59ed05))
+* **nut11:** read locktime 0 as an expired lock, expire only after locktime ([#1324](https://github.com/cashubtc/cashu-ts/issues/1324)) ([8545690](https://github.com/cashubtc/cashu-ts/commit/8545690bb07454df801296e29901db55ac3a59c5))
+
 ## [4.11.0](https://github.com/cashubtc/cashu-ts/compare/v4.10.2...v4.11.0) (2026-09-22)
 
 
