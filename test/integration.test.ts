@@ -77,6 +77,19 @@ const testPreV3 = legacyKeysetId ? test : test.skip;
 
 // Wallet bound to the pre-v3 keyset. Falls back to the mint's default when the mint serves
 // no pre-v3 keyset, so this suite still runs against mints that never rotated to v3.
+// NUT-07: a spent v3 proof publishes its witness and input digest; a plain pre-v3 proof has none.
+function expectSpentWitnesses(states: ProofState[], proofs: Proof[]) {
+  states.forEach((state, i) => {
+    expect(state.state).toBe(CheckStateEnum.SPENT);
+    if (isBlsKeyset(proofs[i].id)) {
+      expect(state.witness).toBeTruthy();
+      expect(state.input_digest).toMatch(/^[0-9a-f]{64}$/);
+    } else {
+      expect(state.witness).toBeNull();
+    }
+  });
+}
+
 function newWallet(options: Record<string, unknown> = {}): Wallet {
   return new Wallet(mintUrl, { unit, keysetId: legacyKeysetId, ...options });
 }
@@ -264,10 +277,7 @@ describe('mint api', () => {
     const sentProofsStates = await untilProofsSpent(wallet, sendResponse.send, meltQuote.quote);
     expect(sentProofsStates).toBeDefined();
     // expect that all proofs are spent, i.e. all are CheckStateEnum.SPENT
-    sentProofsStates.forEach((state) => {
-      expect(state.state).toBe(CheckStateEnum.SPENT);
-      expect(state.witness).toBeNull();
-    });
+    expectSpentWitnesses(sentProofsStates, sendResponse.send);
     // expect none of the sendResponse.keep to be spent
     const keepProofsStates = await wallet.checkProofsStates(sendResponse.keep);
     expect(keepProofsStates).toBeDefined();
@@ -297,10 +307,7 @@ describe('mint api', () => {
     expect(sumProofs(response.change).lessThan(fee)).toBeTruthy();
     const sentProofsStates = await untilProofsSpent(wallet, sendResponse.send, meltQuote.quote);
     expect(sentProofsStates).toBeDefined();
-    sentProofsStates.forEach((state) => {
-      expect(state.state).toBe(CheckStateEnum.SPENT);
-      expect(state.witness).toBeNull();
-    });
+    expectSpentWitnesses(sentProofsStates, sendResponse.send);
     const keepProofsStates = await wallet.checkProofsStates(sendResponse.keep);
     expect(keepProofsStates).toBeDefined();
     keepProofsStates.forEach((state) => {
