@@ -26,13 +26,8 @@ import {
   isV3PointSecret,
 } from '../crypto';
 // Internal transitional fallback — not part of crypto/index.ts
-import {
-  createRandomSecretKey,
-  getPubKeyFromPrivKey,
-  normalizeSecpPubkey,
-} from '../crypto/curve_secp';
+import { normalizeSecpPubkey } from '../crypto/curve_secp';
 import { p2pkOptionsToPRNut10, type P2PKOptions } from '../crypto/NUT11';
-import { deriveRotationLockKey } from '../crypto/NUT13';
 import { verifyHTLCHash } from '../crypto/NUT14';
 import { mintQuoteDigest, signMintQuoteLegacy } from '../crypto/NUT20';
 import {
@@ -44,11 +39,10 @@ import {
   verifyNutrootSpendInfo,
   type ParsedNutrootOption,
 } from '../crypto/nutroot';
-import { inputsForPayload, meltOutputAmount, rotationQuoteId } from '../crypto/transcript';
+import { inputsForPayload, meltOutputAmount } from '../crypto/transcript';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
-import { MintErrorCode } from '../model/ErrorCodes';
 import {
   CallerAbortError,
   CTSError,
@@ -3009,27 +3003,6 @@ class Wallet {
   }
 
   /**
-   * Creates the rotation quote's lock keypair for a melt ({@link Wallet.prepareTransaction}):
-   * seed-derived from the melt quote id when seeded, random otherwise.
-   *
-   * @remarks
-   * A derived key needs no counter: calling this again with the same melt quote id recovers it.
-   * Persist a random one with the transaction.
-   * @throws {@link CTSError} On a seeded wallet whose mint publishes no `pubkey`.
-   * @experimental Seed derivation follows draft NUT-13 type `0x06` and may change before GA.
-   */
-  createRotationLockKey(meltQuoteId: string): { pubkey: string; privkey: string } {
-    const privkey = this._seed
-      ? deriveRotationLockKey(
-          this._seed,
-          this.requireMintIdentity('createRotationLockKey'),
-          meltQuoteId,
-        )
-      : createRandomSecretKey();
-    return { pubkey: bytesToHex(getPubKeyFromPrivKey(privkey)), privkey: bytesToHex(privkey) };
-  }
-
-  /**
    * Recovers a seed-derived quote lock key from the quote's lock pubkey by scanning the quote
    * counter. Returns undefined for a pubkey this seed never derived.
    *
@@ -3348,12 +3321,6 @@ class Wallet {
         amount_issued: amountIssued.toString(),
         requestedAmount: requestedAmount.toString(),
       },
-    );
-    // A txout quote redeems once and in full (NUT-XX).
-    this.failIf(
-      method === 'txout' && !requestedAmount.equals(availableAmount),
-      `A txout quote redeems in full: ${availableAmount.toString()} available; requested ${requestedAmount.toString()}`,
-      { method, requestedAmount: requestedAmount.toString() },
     );
   }
 
@@ -4805,10 +4772,6 @@ class Wallet {
    *   `{ quote, method }` is enough, the rest is fetched.
    * @param transaction.proofOutputs The new proofs: their total, output type and keyset.
    * @param transaction.meltQuoteOutput The full melt quote; `feeIndex` selects a NUT-30 fee option.
-   * @param transaction.mintQuoteOutputs At most one, beside a melt with outputs: the rotation
-   *   quote's lock key ({@link Wallet.createRotationLockKey}). It holds the outputs' value if the
-   *   mint cannot sign them; without it that value is forfeit. Omitted, a seeded wallet adds one
-   *   from its seed; `[]` opts out.
    * @throws If the mint does not support NUT-XX, a quote is unlocked, or the inputs do not balance.
    */
   async prepareTransaction(
@@ -4827,7 +4790,6 @@ class Wallet {
           };
         feeIndex?: number;
       };
-      mintQuoteOutputs?: Array<{ pubkey: string }>;
     },
     config: PrepareTransactionConfig = {},
   ): Promise<TransactionPreview> {
@@ -4916,24 +4878,6 @@ class Wallet {
         ...(feeIndex !== undefined && { feeIndex }),
       };
     }
-    this.failIf(
-      transaction.mintQuoteOutputs !== undefined && !Array.isArray(transaction.mintQuoteOutputs),
-      'prepareTransaction: mintQuoteOutputs must be an array',
-    );
-    const requested = transaction.mintQuoteOutputs ?? [];
-    this.failIf(
-      requested.length > 1,
-      'prepareTransaction: at most one mint quote output, the rotation quote',
-    );
-    this.failIf(
-      requested.length > 0 && melt === undefined,
-      'prepareTransaction: a rotation quote needs a melt',
-    );
-    // The rotation quote is named by the melt it backs (NUT-XX).
-    const quoteOutputs = requested.map((c) => ({
-      quote: rotationQuoteId(melt!.quote),
-      pubkey: normalizeSecpPubkey(c?.pubkey),
-    }));
 
     // A quote input prices as its minimal split, inside NUT-02's single rounding (NUT-XX).
     const quotePpk =
@@ -4977,26 +4921,6 @@ class Wallet {
       const max = melt.feeReserve.toBigInt();
       blanks = Math.max(ceilLog2(max < largest ? max : largest) + Number(max / largest), 1);
     }
-    const hasOutputs = !amount.isZero() || custom.length > 0 || blanks > 0;
-    this.failIf(
-      quoteOutputs.length > 0 && !hasOutputs,
-      'prepareTransaction: a rotation quote needs blinded outputs beside the melt',
-    );
-    // A seeded wallet backs a melt's outputs with a recoverable rotation quote unless the caller
-    // passed mintQuoteOutputs (`[]` opts out); without a mint identity there is no key to derive.
-    if (
-      transaction.mintQuoteOutputs === undefined &&
-      melt &&
-      hasOutputs &&
-      this._seed &&
-      this.getMintInfo().pubkey
-    ) {
-      quoteOutputs.push({
-        quote: rotationQuoteId(melt.quote),
-        pubkey: this.createRotationLockKey(melt.quote).pubkey,
-      });
-    }
-
     let outputData: OutputDataLike[] = [];
     if (!amount.isZero() || custom.length > 0 || blanks > 0) {
       const keyset = this.getOutputKeyset(outputs.keysetId);
@@ -5042,7 +4966,6 @@ class Wallet {
       proofInputs: proofs,
       mintQuoteInputs: quotes,
       ...(melt && { meltQuoteOutput: melt }),
-      mintQuoteOutputs: quoteOutputs,
       outputData,
       amount,
       fee,
@@ -5067,7 +4990,6 @@ class Wallet {
       proofInputs: proofs,
       mintQuoteInputs: quotes,
       meltQuoteOutput: melt,
-      mintQuoteOutputs,
       outputData,
     } = preview;
     this.assertUniqueOutputSecrets(outputData);
@@ -5087,14 +5009,8 @@ class Wallet {
       issued: q.issued,
     }));
     const meltQuote = melt && { quoteId: melt.quote, amount: melt.amount };
-    const quoteOutputs = mintQuoteOutputs.map((c) => ({ pubkey: c.pubkey, quoteId: c.quote }));
     await attachTransactionWitnesses(
-      {
-        inputs: wireProofs,
-        outputs: blinded,
-        mintQuoteInputs: mintQuotes,
-        mintQuoteOutputs: quoteOutputs,
-      },
+      { inputs: wireProofs, outputs: blinded, mintQuoteInputs: mintQuotes },
       meltQuote,
       collectSpendInfoKeys(proofs, privkey, this._logger),
       options.scriptPath?.length
@@ -5109,7 +5025,6 @@ class Wallet {
           blindedOutputs: blinded,
           mintQuoteInputs: mintQuotes,
           ...(meltQuote && { meltQuoteOutput: meltQuote }),
-          mintQuoteOutputs: quoteOutputs,
         })
       : undefined;
     const quoteInputs: TransactionRequest['mint_quote_inputs'] = [];
@@ -5154,9 +5069,6 @@ class Wallet {
                 },
               ]
             : [],
-          ...(mintQuoteOutputs.length > 0 && {
-            mint_quote_outputs: mintQuoteOutputs.map((c) => ({ pubkey: c.pubkey })),
-          }),
           ...(options.preferAsync && { prefer_async: true }),
         },
         { signal: options.signal, meltMethod: melt?.method },
@@ -5173,8 +5085,8 @@ class Wallet {
   }
 
   /**
-   * Fetches a prepared melt transaction's state through its melt quote, with the rotation quote and
-   * new proofs once it is `PAID`.
+   * Fetches a prepared melt transaction's state through its melt quote, with the new proofs once it
+   * is `PAID`.
    *
    * @remarks
    * Poll this while {@link Wallet.completeTransaction} reports `PENDING`. An `UNPAID` melt quote
@@ -5191,27 +5103,10 @@ class Wallet {
       signal: options.signal,
     });
     const state = meltQuote.state === 'UNPAID' ? 'FAILED' : meltQuote.state;
-    const quoteOutputs = preview.mintQuoteOutputs;
-    const mintQuotes =
-      state === 'PAID'
-        ? await Promise.all(
-            quoteOutputs.map((c) =>
-              this.mint.checkMintQuote('txout', c.quote, { signal: options.signal }).catch((e) => {
-                // The mint creates the rotation quote only if it could not sign the outputs, and
-                // answers 20010 otherwise (NUT-XX); any other failure may be hiding value.
-                if (isMintOperationError(e) && e.code === MintErrorCode.QUOTE_NOT_FOUND) {
-                  return null;
-                }
-                throw e;
-              }),
-            ),
-          )
-        : quoteOutputs.map(() => null);
     return this.processTransactionResponse(preview, {
       state,
       signatures: state === 'PAID' ? (meltQuote.change ?? []) : [],
       melt_quotes: [meltQuote],
-      mint_quotes: mintQuotes,
     });
   }
 
@@ -5222,33 +5117,9 @@ class Wallet {
     preview: TransactionPreview,
     response: TransactionResponse,
   ): Promise<TransactionResult> {
-    const { outputData, mintQuoteOutputs } = preview;
+    const { outputData } = preview;
     if (response.state !== 'PAID') return { response, proofs: [] };
-    // The rotation quote is returned as the mint reports it: the mint already holds that value,
-    // and refusing or re-checking it after settlement would recover nothing.
     const { signatures } = response;
-    const rotationQuote = mintQuoteOutputs.length > 0 ? response.mint_quotes[0] : null;
-    if (rotationQuote && rotationQuote.quote !== mintQuoteOutputs[0].quote) {
-      this._logger.warn('Mint returned the rotation quote under a different id', {
-        expected: mintQuoteOutputs[0].quote,
-        received: rotationQuote.quote,
-      });
-    }
-    // The outputs' keyset rotated during the melt: nothing was signed, and their value is in the
-    // rotation quote if there is one, else forfeit (NUT-XX). The reserved secrets go unused.
-    if (
-      preview.meltQuoteOutput &&
-      signatures.length === 0 &&
-      outputData.some((d) => !d.blindedMessage.amount.isZero())
-    ) {
-      this._logger.warn(
-        rotationQuote
-          ? 'Mint did not sign the transaction outputs; their value is in the rotation quote'
-          : 'Mint did not sign the transaction outputs and there is no rotation quote',
-        { rotationQuote: rotationQuote?.quote },
-      );
-      return { response, proofs: [] };
-    }
     // Blanks fill in request order and those left at zero are omitted (NUT-XX), so the signed ones
     // are the first `signedBlanks` blanks.
     const blanks = outputData.filter((d) => d.blindedMessage.amount.isZero()).length;
@@ -5262,7 +5133,7 @@ class Wallet {
       (d) => !d.blindedMessage.amount.isZero() || blankIndex++ < signedBlanks,
     );
     this.validateReturnedSignatures(signatures, signed);
-    // A rotation signs nothing here (NUT-XX), so a blank comes back under the outputs' keyset too.
+    // Every output, blanks included, is signed under the keyset the request named (NUT-08).
     this.failIf(
       outputData.length > 0 &&
         signatures.some(

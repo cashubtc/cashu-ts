@@ -7,7 +7,6 @@ import { CTSError } from '../model/Errors';
 import { bytesToHex, hexToBytes, isValidHex } from '../utils';
 
 import { taggedHash } from './core';
-import { isValidSecpPubkey } from './curve_secp';
 import { hashToCurveHex, isBlsKeyset } from './curves';
 import { minimalBE, tlvRecord } from './nutroot';
 
@@ -17,15 +16,12 @@ import { minimalBE, tlvRecord } from './nutroot';
 
 export const TRANSCRIPT_REQUEST_TAG = 'Cashu_AuthorizedRequest';
 export const TRANSCRIPT_INPUT_TAG = 'Cashu_TransactionInput';
-export const QUOTE_ID_TAG = 'Cashu_QuoteId';
-export const ROTATION_QUOTE_ID_TAG = 'Cashu_RotationQuoteId';
 
 // The high nibble is the section: 0x1n inputs, 0x2n outputs, 0xFn never in a transaction.
 const CONTAINER_PROOF_INPUT = 0x11;
 const CONTAINER_MINT_QUOTE_INPUT = 0x12;
 const CONTAINER_BLINDED_OUTPUT = 0x21;
 const CONTAINER_MELT_QUOTE_OUTPUT = 0x22;
-const CONTAINER_MINT_QUOTE_OUTPUT = 0x23;
 const CONTAINER_AUTHORIZED_REQUEST = 0xf1;
 
 export type TranscriptProofInput = {
@@ -72,22 +68,6 @@ export type TransactionShape = {
   mintQuoteInputs?: TranscriptQuoteInput[];
   blindedOutputs?: TranscriptBlindedOutput[];
   meltQuoteOutputs?: TranscriptQuote[];
-  /**
-   * Mint quote outputs (NUT-XX) in request order; at most one omits `amount`, the rotation quote.
-   */
-  mintQuoteOutputs?: TranscriptMintQuoteOutput[];
-};
-
-export type TranscriptMintQuoteOutput = {
-  /**
-   * Lock key, 33-byte compressed secp256k1 hex.
-   */
-  pubkey: string;
-  /**
-   * The txout quote's id; the rotation quote's is {@link rotationQuoteId}.
-   */
-  quoteId: string;
-  amount?: bigint;
 };
 
 /**
@@ -200,50 +180,6 @@ function blindedOutputContainer(output: TranscriptBlindedOutput): Uint8Array {
   );
 }
 
-function mintQuoteOutputContainer(output: TranscriptMintQuoteOutput): Uint8Array {
-  if (!isValidSecpPubkey(output.pubkey)) {
-    throw new CTSError('Transcript mint quote output lock key must be a 33-byte compressed point');
-  }
-  if (output.quoteId.length === 0) {
-    throw new CTSError('Transcript quote id must be non-empty');
-  }
-  const fields = concatBytes(
-    tlvRecord(0x02, hexToBytes(output.pubkey)),
-    tlvRecord(0x03, utf8ToBytes(output.quoteId)),
-  );
-  // The rotation quote omits the amount record entirely (NUT-XX).
-  if (output.amount === undefined) return tlvRecord(CONTAINER_MINT_QUOTE_OUTPUT, fields);
-  const amount = amountRecord(output.amount);
-  if (Amount.from(output.amount).isZero()) {
-    throw new CTSError('Transcript mint quote output amount must be positive');
-  }
-  return tlvRecord(CONTAINER_MINT_QUOTE_OUTPUT, concatBytes(amount, fields));
-}
-
-/**
- * A derived quote id (NUT-04): `hex(tagged_hash("Cashu_QuoteId", id_preimage))`.
- *
- * @remarks
- * The preimage is 32 bytes its creator supplies (NUT-13 type `0x05` for a seeded wallet) and the
- * mint never discloses.
- */
-export function derivedQuoteId(idPreimage: Uint8Array): string {
-  if (idPreimage.length !== 32) {
-    throw new CTSError('Quote id preimage must be 32 bytes');
-  }
-  return bytesToHex(taggedHash(QUOTE_ID_TAG, idPreimage));
-}
-
-/**
- * The rotation quote's id (NUT-XX): `hex(tagged_hash("Cashu_RotationQuoteId", melt_quote_id))`.
- */
-export function rotationQuoteId(meltQuoteId: string): string {
-  if (typeof meltQuoteId !== 'string' || meltQuoteId.length === 0) {
-    throw new CTSError('Rotation quote id needs the melt quote id');
-  }
-  return bytesToHex(taggedHash(ROTATION_QUOTE_ID_TAG, utf8ToBytes(meltQuoteId)));
-}
-
 /**
  * Serialize a transaction to its TLV transcript (without the domain tag).
  */
@@ -255,12 +191,8 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
   if (proofs.length + mintQuotes.length === 0) {
     throw new CTSError('Transaction requires at least one input');
   }
-  const quoteOutputs = tx.mintQuoteOutputs ?? [];
-  if (blinded.length + meltQuotes.length + quoteOutputs.length === 0) {
+  if (blinded.length + meltQuotes.length === 0) {
     throw new CTSError('Transaction requires at least one output');
-  }
-  if (quoteOutputs.filter((c) => c.amount === undefined).length > 1) {
-    throw new CTSError('Transaction allows at most one rotation quote');
   }
   // NUT-10: the same proof or quote twice would sign one input digest for two inputs.
   if (new Set(proofs.map((p) => p.Y)).size !== proofs.length) {
@@ -274,7 +206,6 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
     ...mintQuotes.map(mintQuoteInputContainer),
     ...blinded.map(blindedOutputContainer),
     ...meltQuotes.map(meltQuoteOutputContainer),
-    ...quoteOutputs.map(mintQuoteOutputContainer),
   );
 }
 
@@ -295,7 +226,7 @@ export function transactionMessage(tx: TransactionShape): Uint8Array {
  *
  * @remarks
  * Throws unless the bytes are exactly a run of well-formed, non-empty NUT-10 containers (proof
- * input through mint quote output); an event id or other opaque 32 bytes never passes.
+ * input through authorized request); an event id or other opaque 32 bytes never passes.
  */
 export function transcriptContainers(transcript: Uint8Array): Uint8Array[] {
   const records: Uint8Array[] = [];
@@ -389,7 +320,6 @@ type PayloadShape = {
    * `amount` is the quote amount plus the selected fee reserve ({@link meltOutputAmount}).
    */
   meltQuoteOutput?: { quoteId: string; amount: AmountLike };
-  mintQuoteOutputs?: Array<{ pubkey: string; quoteId: string; amount?: AmountLike }>;
 };
 
 /**
@@ -458,13 +388,6 @@ function payloadToTransaction(payload: PayloadShape): TransactionShape {
       })),
     }),
     ...(payload.meltQuoteOutput && { meltQuoteOutputs: [quote(payload.meltQuoteOutput)] }),
-    ...(payload.mintQuoteOutputs && {
-      mintQuoteOutputs: payload.mintQuoteOutputs.map((c) => ({
-        pubkey: c.pubkey,
-        quoteId: c.quoteId,
-        ...(c.amount !== undefined && { amount: Amount.from(c.amount).toBigInt() }),
-      })),
-    }),
   };
 }
 

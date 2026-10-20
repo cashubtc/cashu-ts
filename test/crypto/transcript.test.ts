@@ -16,7 +16,6 @@ import {
   messageForPayload,
   requestDigest,
   signTransactionInput,
-  rotationQuoteId,
   transactionDigest,
   transcriptContainers,
   transactionInputs,
@@ -46,9 +45,8 @@ function fromVectorTx(tx: {
   }>;
   blinded_outputs?: Array<{ amount: number; keyset_id: string; B_: string }>;
   melt_quote_outputs?: Array<{ amount: number; quote_id: string }>;
-  mint_quote_outputs?: Array<{ pubkey: string }>;
 }): TransactionShape {
-  const shape: TransactionShape = {
+  return {
     proofInputs: tx.proof_inputs?.map((p) => ({
       amount: BigInt(p.amount),
       keysetId: p.keyset_id,
@@ -71,11 +69,6 @@ function fromVectorTx(tx: {
       quoteId: q.quote_id,
     })),
   };
-  shape.mintQuoteOutputs = tx.mint_quote_outputs?.map((c) => ({
-    quoteId: rotationQuoteId(tx.melt_quote_outputs![0].quote_id),
-    pubkey: c.pubkey,
-  }));
-  return shape;
 }
 
 describe('transaction transcript (vectors)', () => {
@@ -139,19 +132,15 @@ describe('transaction transcript (vectors)', () => {
     ).toThrow(/Y/);
   });
 
-  test.each([
-    'swap',
-    'mint',
-    'melt',
-    'melt_with_change',
-    'mint_quote_to_melt',
-    'melt_with_rotation',
-  ] as const)('%s transcript and digest match', (name) => {
-    const example = tv[name];
-    const tx = fromVectorTx(example.tx);
-    expect(bytesToHex(buildTransactionTranscript(tx))).toBe(example.transcript);
-    expect(bytesToHex(transactionDigest(tx))).toBe(example.digest);
-  });
+  test.each(['swap', 'mint', 'melt', 'melt_with_change', 'mint_quote_to_melt'] as const)(
+    '%s transcript and digest match',
+    (name) => {
+      const example = tv[name];
+      const tx = fromVectorTx(example.tx);
+      expect(bytesToHex(buildTransactionTranscript(tx))).toBe(example.transcript);
+      expect(bytesToHex(transactionDigest(tx))).toBe(example.digest);
+    },
+  );
 
   test('an input digest needs a 32-byte transaction digest', () => {
     expect(() => inputDigest(new Uint8Array(31), new Uint8Array(3))).toThrow(/32 bytes/);
@@ -493,55 +482,6 @@ describe('keyset ids in the transcript', () => {
   });
 });
 
-describe('mint quote outputs (NUT-XX vectors)', () => {
-  const v = tv.melt_with_rotation;
-  const lock = vectors.nut13_v3.rotation_lock;
-
-  test('the rotation quote binds its lock key and the id its melt derives, after the melt', () => {
-    expect(rotationQuoteId(lock.melt_quote_id)).toBe(lock.quote_id);
-    expect(v.quote_id).toBe(lock.quote_id);
-    expect(v.transcript.endsWith(v.mint_quote_output_container)).toBe(true);
-    const { proofs } = inputsForPayload({
-      proofInputs: v.tx.proof_inputs.map((p) => ({ ...p, id: p.keyset_id })),
-      blindedOutputs: v.tx.blinded_outputs.map((o) => ({ ...o, id: o.keyset_id })),
-      meltQuoteOutput: { quoteId: lock.melt_quote_id, amount: v.tx.melt_quote_outputs[0].amount },
-      mintQuoteOutputs: [{ pubkey: lock.pubkey, quoteId: lock.quote_id }],
-    });
-    expect(bytesToHex([...proofs.values()][0].digest)).toBe(v.input_digest);
-    expect(() => rotationQuoteId('')).toThrow(/melt quote id/);
-  });
-
-  test('a malformed mint quote output throws', () => {
-    const proofInputs = fromVectorTx(v.tx).proofInputs;
-    const { pubkey, quote_id: quoteId } = lock;
-    expect(() => buildTransactionTranscript({ proofInputs })).toThrow(/output/);
-    expect(() =>
-      buildTransactionTranscript({
-        proofInputs,
-        mintQuoteOutputs: [{ pubkey: pubkey.slice(2), quoteId }],
-      }),
-    ).toThrow(/lock key/);
-    expect(() =>
-      buildTransactionTranscript({ proofInputs, mintQuoteOutputs: [{ pubkey, quoteId: '' }] }),
-    ).toThrow(/quote id/);
-    expect(() =>
-      buildTransactionTranscript({
-        proofInputs,
-        mintQuoteOutputs: [{ pubkey, quoteId, amount: 0n }],
-      }),
-    ).toThrow(/positive/);
-    expect(() =>
-      buildTransactionTranscript({
-        proofInputs,
-        mintQuoteOutputs: [
-          { pubkey, quoteId },
-          { pubkey, quoteId: 'other' },
-        ],
-      }),
-    ).toThrow(/one rotation/);
-  });
-});
-
 describe('transcriptContainers', () => {
   const swap = hexToBytes(tv.swap.transcript);
 
@@ -554,7 +494,7 @@ describe('transcriptContainers', () => {
   test.each([
     ['empty', ''],
     ['an opaque 32 bytes', '00'.repeat(32)],
-    ['a type above the mint quote output', '07000101'],
+    ['a type above the authorized request', '06000101'],
     ['a zero-length record', '010000'],
     ['a truncated record', tv.swap.transcript.slice(0, -2)],
   ])('rejects %s', (_, hex) => {

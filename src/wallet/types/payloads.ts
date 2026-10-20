@@ -148,10 +148,6 @@ export type TransactionPreview = {
     feeReserve: Amount;
     feeIndex?: number;
   };
-  /**
-   * The rotation quote, if requested: its id and lock key.
-   */
-  mintQuoteOutputs: Array<{ quote: string; pubkey: string }>;
   outputData: OutputDataLike[];
   /**
    * Total of the new proofs.

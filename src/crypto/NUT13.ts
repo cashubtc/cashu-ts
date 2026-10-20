@@ -287,8 +287,7 @@ function deriveHmacSecretAndBlindingFactor(
 
 /**
  * NUT-13 derivation types. `0x00`-`0x03` are components of one proof allocation and share the
- * keyset's proof counter; `0x04` and `0x05` are one quote allocation on a per-mint quote counter;
- * `0x06` uses no counter.
+ * keyset's proof counter; `0x04` is counted per mint on a quote counter.
  */
 export const DERIVATION_TYPE = {
   /**
@@ -311,14 +310,6 @@ export const DERIVATION_TYPE = {
    * Mint quote lock key; scoped to the mint identity and counted per mint, not on a proof counter.
    */
   quoteLock: 0x04,
-  /**
-   * Mint quote id preimage; same quote counter and scope as `quoteLock`, used as is (no sampling).
-   */
-  quoteIdPreimage: 0x05,
-  /**
-   * Rotation quote lock key (NUT-XX); counter 0, the message carries `SHA256(melt quote id)`.
-   */
-  rotationLock: 0x06,
 } as const;
 
 function assertSeed(seed: Uint8Array): void {
@@ -463,56 +454,6 @@ export function deriveQuoteLockKey(
   counter: number,
 ): Uint8Array {
   return deriveV3Scalar(seed, normalizeSecpPubkey(mintPubkey), counter, DERIVATION_TYPE.quoteLock);
-}
-
-/**
- * A mint quote id preimage (NUT-13 message type `0x05`), on the same quote counter as its lock key.
- *
- * @remarks
- * Any 32 bytes is a valid preimage, so `attempt` is always 0. The quote id is its NUT-04 derived
- * id, so a reused quote counter repeats the id.
- * @param mintPubkey - The mint's NUT-06 `pubkey` (33-byte compressed, hex).
- * @experimental Follows draft NUT-13 type `0x05` and draft NUT-04 derived quote ids; may change
- *   before GA.
- */
-export function deriveQuoteIdPreimage(
-  seed: Uint8Array,
-  mintPubkey: string,
-  counter: number,
-): Uint8Array {
-  const base = v3BaseMessage(
-    seed,
-    normalizeSecpPubkey(mintPubkey),
-    counter,
-    DERIVATION_TYPE.quoteIdPreimage,
-  );
-  return hmac(sha256, seed, concatBytes(base, numberToBytesBE(0, 4)));
-}
-
-/**
- * A rotation quote lock key (NUT-13 message type `0x06`), from the melt quote id alone.
- *
- * @remarks
- * Counter 0 and suffix `SHA256(utf8(meltQuoteId))`, so recovery needs only the seed, the mint and
- * the melt quote id.
- * @param mintPubkey - The mint's NUT-06 `pubkey` (33-byte compressed, hex).
- * @experimental Follows draft NUT-13 type `0x06` and draft NUT-XX; may change before GA.
- */
-export function deriveRotationLockKey(
-  seed: Uint8Array,
-  mintPubkey: string,
-  meltQuoteId: string,
-): Uint8Array {
-  if (typeof meltQuoteId !== 'string' || meltQuoteId.length === 0) {
-    throw new CTSError('Rotation lock key needs the melt quote id');
-  }
-  return deriveV3Scalar(
-    seed,
-    normalizeSecpPubkey(mintPubkey),
-    0,
-    DERIVATION_TYPE.rotationLock,
-    sha256(utf8ToBytes(meltQuoteId)),
-  );
 }
 
 function assertV3Keyset(keysetId: string, what: string): void {

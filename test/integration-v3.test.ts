@@ -40,7 +40,6 @@ import {
   type NutrootConditionLeaf,
 } from '../src/crypto/nutroot';
 import {
-  rotationQuoteId,
   inputsForPayload,
   proofInputContextKey,
   transactionDigest,
@@ -1489,11 +1488,9 @@ describeXX('NUT-XX transactions', () => {
     const quote = await lockedMintQuote(wallet, amount);
     await wallet.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
 
-    const lock = wallet.createRotationLockKey(meltQuote.quote);
     const preview = await wallet.prepareTransaction({
       mintQuoteInputs: [{ quote, amount }],
       meltQuoteOutput: { method: 'bolt11', quote: meltQuote },
-      mintQuoteOutputs: [{ pubkey: lock.pubkey }],
     });
     let { response } = await wallet.completeTransaction(preview, quote.privkey);
     for (let i = 0; response.state === 'PENDING' && i < 20; i++) {
@@ -1502,11 +1499,6 @@ describeXX('NUT-XX transactions', () => {
     }
     expect(response.state).toBe('PAID');
     expect(response.melt_quotes[0].state).toBe('PAID');
-    // The outputs were signed, so the mint created no rotation quote and says so with 20010.
-    expect(response.mint_quotes[0]).toBeNull();
-    await expect(
-      wallet.mint.checkMintQuote('txout', rotationQuoteId(meltQuote.quote)),
-    ).rejects.toMatchObject({ code: 20010 });
     const issued = await wallet.checkMintQuoteBolt11(quote.quote);
     expect(issued.amount_issued.toNumber()).toBe(amount);
   });
@@ -1550,7 +1542,6 @@ describeXX('NUT-XX transactions', () => {
     const preview = await wallet.prepareTransaction({ proofInputs: proofs });
     const result = await wallet.completeTransaction(preview);
     expect(result.response.state).toBe('PAID');
-    expect(result.response.mint_quotes).toEqual([]);
     expect(sumProofs(result.proofs).toBigInt()).toBe(64n - fee);
     const states = await wallet.checkProofsStates(proofs);
     expect(states.every((s) => s.state === CheckStateEnum.SPENT)).toBe(true);
@@ -1608,7 +1599,6 @@ describeXX('NUT-XX transactions', () => {
     const change = sumProofs(result.proofs).toBigInt();
     expect(change).toBeLessThanOrEqual(excess);
     expect(change).toBeGreaterThanOrEqual(excess - meltQuote.fee_reserve.toBigInt());
-    expect(result.response.mint_quotes[0]).toBeNull();
   });
 
   test('consolidation: proofs and a quote input in, proofs out', async () => {
@@ -1644,7 +1634,6 @@ describeXX('NUT-XX transactions', () => {
     const change = sumProofs(result.proofs).toBigInt();
     expect(change).toBeLessThanOrEqual(excess);
     expect(change).toBeGreaterThanOrEqual(excess - meltQuote.fee_reserve.toBigInt());
-    expect(result.response.mint_quotes[0]).toBeNull();
   });
 
   test('async: the transaction is PENDING first, then PAID through its melt quote', async () => {
@@ -1682,7 +1671,6 @@ describeXX('NUT-XX transactions', () => {
       waitForSettlementMs: 20_000,
     });
     expect(result.response.state).toBe('FAILED');
-    expect(result.response.mint_quotes[0]).toBeNull();
     const states = await wallet.checkProofsStates(proofs);
     expect(states.every((s) => s.state === CheckStateEnum.UNSPENT)).toBe(true);
     const again = await wallet.completeTransaction(
@@ -1691,7 +1679,7 @@ describeXX('NUT-XX transactions', () => {
     expect(again.response.state).toBe('PAID');
   });
 
-  test('the mint rejects blank outputs, a repeated quote, a wrong fee reserve and a stray rotation quote', async () => {
+  test('the mint rejects blank outputs, a repeated quote and a wrong fee reserve', async () => {
     const { wallet, proofs } = await funded(8);
     const quote = await lockedMintQuote(wallet, 8);
     await wallet.on.onceMintPaid(quote.quote, { timeoutMs: 10_000 });
@@ -1719,11 +1707,6 @@ describeXX('NUT-XX transactions', () => {
         proof_inputs: proofs,
         melt_quote_outputs: [{ quote: meltQuote.quote, fee_reserve: meltQuote.fee_reserve.add(1) }],
       }),
-    ).rejects.toThrow();
-    // A rotation quote backs a melt's outputs, so a swap cannot name one.
-    const { pubkey } = wallet.createRotationLockKey(meltQuote.quote);
-    await expect(
-      raw({ proof_inputs: proofs, blinded_outputs: [output], mint_quote_outputs: [{ pubkey }] }),
     ).rejects.toThrow();
   });
 });

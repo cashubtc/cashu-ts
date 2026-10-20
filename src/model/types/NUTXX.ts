@@ -1,7 +1,6 @@
 import { type Amount } from '../Amount';
 
 import { type SerializedBlindedMessage, type SerializedBlindedSignature } from './blinded';
-import { type MintQuoteBaseResponse } from './NUT04';
 import { type MeltQuoteBaseResponse } from './NUT05';
 import { type Proof } from './proof';
 
@@ -37,11 +36,6 @@ export type TransactionRequest = {
    * `fee_options`, the selected `fee_index`.
    */
   melt_quote_outputs: Array<{ quote: string; fee_reserve: Amount; fee_index?: number }>;
-  /**
-   * At most one, beside a melt with blinded outputs: the rotation quote's lock key (33-byte
-   * compressed hex). The mint creates it only if it cannot sign those outputs.
-   */
-  mint_quote_outputs?: Array<{ pubkey: string }>;
   prefer_async?: boolean;
 };
 
@@ -60,8 +54,4 @@ export type TransactionResponse = {
    * The melt quote, if any; once `PAID` its `change` carries the same signatures.
    */
   melt_quotes: MeltQuoteBaseResponse[];
-  /**
-   * One per mint quote output, in request order: the txout quote once created, else null.
-   */
-  mint_quotes: Array<MintQuoteBaseResponse | null>;
 };
