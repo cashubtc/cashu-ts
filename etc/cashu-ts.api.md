@@ -493,7 +493,6 @@ export const DERIVATION_TYPE: {
     readonly numsOffset: 2;
     readonly leafKey: 3;
     readonly quoteLock: 4;
-    readonly quoteIdPreimage: 5;
 };
 
 // @public (undocumented)
@@ -550,9 +549,6 @@ export function deriveP2BKSecretKeys(Ehex: string, privateKey: string | string[]
 
 // @public
 export function deriveP2BKSlotSecretKeyCandidates(Ehex: string, privkeyHex: string, slotIndex?: number): [string, string];
-
-// @public
-export function deriveQuoteIdPreimage(seed: Uint8Array, mintPubkey: string, counter: number): Uint8Array;
 
 // @public
 export function deriveQuoteLockKey(seed: Uint8Array, mintPubkey: string, counter: number): Uint8Array;

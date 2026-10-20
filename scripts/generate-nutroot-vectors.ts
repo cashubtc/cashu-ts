@@ -15,17 +15,11 @@ import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/
 
 import { deriveSecretAndBlindingFactor } from '../src/crypto';
 import { getPubKeyFromPrivKey } from '../src/crypto/curve_secp';
-import {
-  deriveLeafKey,
-  deriveNumsOffset,
-  deriveQuoteIdPreimage,
-  deriveQuoteLockKey,
-} from '../src/crypto/NUT13';
+import { deriveLeafKey, deriveNumsOffset, deriveQuoteLockKey } from '../src/crypto/NUT13';
 import { BLS_FR_ORDER, hashToCurveBls } from '../src/crypto/curve_bls';
 import { hashToCurveHex } from '../src/crypto/curves';
 import {
   buildTransactionTranscript,
-  derivedQuoteId,
   inputDigest,
   transactionDigest,
 } from '../src/crypto/transcript';
@@ -96,13 +90,10 @@ d.nut13_v3.leaf_keys = [0, 1, 2].map((index) => {
 d.nut13_v3.mint_identity = MINT_IDENTITY;
 d.nut13_v3.quote_locks = [0, 1].map((counter) => {
   const privkey = deriveQuoteLockKey(seed, MINT_IDENTITY, counter);
-  const idPreimage = deriveQuoteIdPreimage(seed, MINT_IDENTITY, counter);
   return {
     counter,
     privkey: bytesToHex(privkey),
     pubkey: bytesToHex(getPubKeyFromPrivKey(privkey)),
-    id_preimage: bytesToHex(idPreimage),
-    quote_id: derivedQuoteId(idPreimage),
   };
 });
 

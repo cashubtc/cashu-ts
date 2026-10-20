@@ -16,7 +16,6 @@ import {
   messageForPayload,
   requestDigest,
   signTransactionInput,
-  derivedQuoteId,
   transactionDigest,
   transcriptContainers,
   transactionInputs,
@@ -679,10 +678,6 @@ describe('input uniqueness (vectors)', () => {
         }),
       ).toThrow(/B_ must be hex/);
     }
-  });
-
-  test('a derived quote id needs a 32-byte preimage', () => {
-    expect(() => derivedQuoteId(new Uint8Array(31))).toThrow(/32 bytes/);
   });
 
   test('the mint quote input derives its digest from its own container', () => {
