@@ -51,6 +51,8 @@ const CONTAINER_MINT_QUOTE_INPUT = 0x12;
 
 /**
  * One input's script path spend, awaiting signatures.
+ *
+ * @experimental Follows the draft signing package NUT; may change before GA.
  */
 export type ScriptPathSpendRequest = {
   /**
@@ -91,6 +93,7 @@ export type ScriptPathSpendRequest = {
  * @remarks
  * The transaction travels as its TLV transcript, and each spend opens its leaf to the input it
  * names. Hashlock preimages stay with the wallet that built the package until merge.
+ * @experimental Follows the draft signing package NUT; may change before GA.
  */
 export type ScriptPathSigningPackage = {
   version: 'nutspA';
@@ -446,6 +449,8 @@ function witnessFor(
 
 /**
  * The {@link ScriptPath} surface.
+ *
+ * @experimental Follows the draft signing package NUT; may change before GA.
  */
 export type ScriptPathApi = {
   /**
@@ -514,14 +519,14 @@ export type ScriptPathApi = {
 };
 
 /**
- * Out-of-band signing for script path spends (NUT-10).
+ * Out-of-band signing for script path spends (draft signing package NUT).
  *
  * @remarks
  * Extract a package from a preview, send it to whoever holds the keys, merge the signatures back,
  * then complete. The transaction is not in flight while signing happens, so the ceremony can
  * outlive the process: use this where a co-signer is a person or another device, and the `cosign`
  * hook on {@link ScriptPathPlan} where it is a service answering in seconds.
- * @experimental
+ * @experimental Follows the draft signing package NUT; may change before GA.
  */
 export const ScriptPath: ScriptPathApi = {
   extractSwapPackage,
