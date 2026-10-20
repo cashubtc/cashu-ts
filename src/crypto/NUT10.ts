@@ -243,7 +243,7 @@ export function getTagInt(secret: Secret | string, key: string): number | undefi
   if (v === undefined) return undefined;
   // Strict integer parse: reject the partial parses ("1700000000abc" -> 1700000000)
   // and hex/exponent/float forms Number.parseInt would accept. The sign is kept so a
-  // caller's semantic check (assertPositiveInteger, getLocktime's `<= 0`) applies.
+  // caller's semantic check (eg assertPositiveInteger) applies.
   const n = /^-?\d+$/.test(v) ? Number(v) : NaN;
   if (!Number.isSafeInteger(n)) {
     throw new CTSError(`Invalid NUT-10 tag "${key}": must be an integer`);

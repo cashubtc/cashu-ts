@@ -1,8 +1,9 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 
-import { LockBuilder, Wallet } from '../../src';
+import { LockBuilder, type Logger, Wallet } from '../../src';
 import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import { NUTROOT_NUMS_KEY, parseNutrootLeaf, serializeNutrootLeaf } from '../../src/crypto/nutroot';
+import { NULL_LOGGER } from '../../src/logger';
 import { Amount } from '../../src/model/Amount';
 import type { OutputData } from '../../src/model/OutputData';
 import { bytesToHex, hexToBytes } from '../../src/utils';
@@ -46,29 +47,6 @@ describe('lockToNutrootOptions (v3 encoder)', () => {
     expect(lockToNutrootOptions({ mainKeys: [PUB_A, PUB_B] })).toEqual({
       receiverKey: NUTROOT_NUMS_KEY,
       leaves: [{ type: 'threshold', n: 1, keys: [PUB_A, PUB_B] }],
-    });
-  });
-
-  test('disclosure stamps every generated leaf and closes the key path', () => {
-    expect(
-      lockToNutrootOptions({
-        mainKeys: [PUB_A],
-        locktime: TIME,
-        refundKeys: [PUB_R],
-        disclosure: true,
-        leaves: [{ type: 'threshold', n: 1, keys: [PUB_B] }],
-      }),
-    ).toEqual({
-      receiverKey: NUTROOT_NUMS_KEY,
-      leaves: [
-        { type: 'threshold', n: 1, keys: [PUB_A], disclosure: 1 },
-        { type: 'after', n: 1, time: TIME, keys: [PUB_R], disclosure: 1 },
-        { type: 'threshold', n: 1, keys: [PUB_B] }, // explicit leaves keep their own flag
-      ],
-    });
-    expect(lockToNutrootOptions({ mainKeys: [PUB_A], hashlock: HASH, disclosure: true })).toEqual({
-      receiverKey: NUTROOT_NUMS_KEY,
-      leaves: [{ type: 'hashlock', n: 1, hash: HASH, keys: [PUB_A], disclosure: 1 }],
     });
   });
 
@@ -212,14 +190,8 @@ describe('lockToNutrootOptions (v3 encoder)', () => {
     expect(() => lockToNutrootOptions({})).toThrow(/key|leaf/i);
   });
 
-  test('a commit leaf rides along, and a disclosed single key still closes the key path', () => {
+  test('a commit leaf rides along beside the key path', () => {
     const commit = { type: 'commit' as const, hash: HASH };
-    expect(lockToNutrootOptions({ mainKeys: [PUB_A], disclosure: true, leaves: [commit] })).toEqual(
-      {
-        receiverKey: NUTROOT_NUMS_KEY,
-        leaves: [{ type: 'threshold', n: 1, keys: [PUB_A], disclosure: 1 }, commit],
-      },
-    );
     expect(lockToNutrootOptions({ mainKeys: [PUB_A], leaves: [commit] })).toEqual({
       receiverKey: PUB_A,
       leaves: [commit],
@@ -240,12 +212,6 @@ describe('lockToNutrootOptions (v3 encoder)', () => {
 });
 
 describe('lockToP2PKOptions (v2 encoder)', () => {
-  test('disclosure is a no-op: a NUT-11 lock is disclosed by nature', () => {
-    expect(lockToP2PKOptions({ mainKeys: [PUB_A], disclosure: true })).toEqual(
-      lockToP2PKOptions({ mainKeys: [PUB_A] }),
-    );
-  });
-
   test('single main key: data slot only', () => {
     expect(lockToP2PKOptions({ mainKeys: [PUB_A] })).toEqual({ kind: 'P2PK', data: PUB_A });
   });
@@ -432,8 +398,8 @@ describe('nutrootToLockOptions (readable conditions)', () => {
 describe('Wallet.createOutputData lock chokepoint', () => {
   const mintUrl = 'http://localhost:3338';
   // Pre-v3 locks are refused unless the mint advertises the NUT that enforces them.
-  const walletFor = (nuts: Record<string, { supported: boolean }>) => {
-    const w = new Wallet(mintUrl, { unit: 'sat' });
+  const walletFor = (nuts: Record<string, { supported: boolean }>, logger?: Logger) => {
+    const w = new Wallet(mintUrl, { unit: 'sat', logger });
     w.loadMintFromCache(
       {
         name: 'lock mint',
@@ -519,6 +485,24 @@ describe('Wallet.createOutputData lock chokepoint', () => {
     expect(() => create(LEGACY_KEYSET, htlc)).toThrow(/NUT-14/);
   });
 
+  test('a locktime that is not in the future warns but still encodes', () => {
+    const warn = vi.fn();
+    wallet = walletFor({ '11': { supported: true } }, { ...NULL_LOGGER, warn });
+    const lock = (locktime: number): OutputType => ({
+      type: 'lock',
+      options: { mainKeys: [PUB_A], locktime },
+    });
+    const [out] = create(LEGACY_KEYSET, lock(0));
+    expect(JSON.parse(new TextDecoder().decode(out.secret))[1].tags).toContainEqual([
+      'locktime',
+      '0',
+    ]);
+    expect(warn).toHaveBeenCalledWith('Lock locktime is not in the future', { locktime: 0 });
+    warn.mockClear();
+    create(LEGACY_KEYSET, lock(Math.floor(Date.now() / 1000) + 3600));
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   test('a v3 lock needs no info flag: the keyset version enforces it', () => {
     wallet = walletFor({});
     expect(() =>
@@ -544,10 +528,7 @@ describe('LockBuilder', () => {
   });
 
   test('addCommitment binds the lock to outside data', () => {
-    const lock = new LockBuilder()
-      .addMainPubkey(PUB_A)
-      .disclose()
-      .addCommitment(HASH.toUpperCase());
+    const lock = new LockBuilder().addMainPubkey(PUB_A).addCommitment(HASH.toUpperCase());
     expect(lock.toOptions().leaves).toEqual([{ type: 'commit', hash: HASH }]);
     expect(() => new LockBuilder().addCommitment('abcd')).toThrow(/64-character hex/);
   });

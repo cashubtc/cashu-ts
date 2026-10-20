@@ -995,10 +995,9 @@ describe('Wallet transactions (NUT-XX)', () => {
       meltQuoteOutput: melt,
       mintQuoteOutputs: [rotation],
     });
-    const result = await wallet.completeTransaction(preview, privkey, {
+    await wallet.completeTransaction(preview, privkey, {
       scriptPath: [{ secret: input.secret, leafIndex: 0 }],
     });
-    expect(result.receipts).toHaveLength(1);
     expect(bodies[0].proof_inputs[0]).not.toHaveProperty('spend_info');
     const tx = inputsForPayload({
       proofInputs: [input],
@@ -1012,7 +1011,6 @@ describe('Wallet transactions (NUT-XX)', () => {
     expect(witness.leaf).toBe(built.tree[0]);
     expect(witness.control.K).toBe(rotationKey);
     expect(schnorrVerifyDigest(witness.signatures[0], digest, pubkey)).toBe(true);
-    expect(result.receipts![0].inputDigest).toBe(Buffer.from(digest).toString('hex'));
     const changed = inputsForPayload({
       proofInputs: [input],
       mintQuoteInputs: [{ quoteId: quote.quote, amount: 7, lockKey: pubkey, issued: 0 }],

@@ -98,35 +98,3 @@ Plans are keyed by `secret`, not input index: proof selection decides input orde
 ## Browser signers
 
 A NIP-07 extension can complete a script path spend where its key appears verbatim in a leaf, and unlock NIP-60 wallet keys for everything else: see [Browser Signers](../usage/nip07_signers.md).
-
-## Auditable locks
-
-Nutroot locks are private by default: only the key holder can prove who a receiver-keyed proof belongs to. When a payment wants the opposite (a public tip anyone can attest, eg a nostr Nutzap), lock it **auditable**: NUMS internal key, one threshold leaf of one key, with `disclosure` so the spend's witness is published too. Any lock can be disclosed the same way with `LockBuilder.disclose()` or `disclosure: true`. A pre-v3 lock needs no flag: its secret is plaintext and NUT-07 returns its witness, so it is disclosed by nature.
-
-```ts
-const { send } = await wallet.ops.send(21, proofs).asLocked(auditableLock(pubkey)).run();
-
-// Any third party, no keys, no mint round-trip: who is this locked to?
-const committedKey = auditableLockKey(proof); // pubkey hex, or undefined for any other shape
-```
-
-`auditableLockKey` verifies the full commitment (NUMS offset, recomputed root, tweak against the secret), not just the claimed fields. The leaf has one canonical serialization, so a claimer who knows the expected key can rebuild the spend info from `u` alone if it was mangled in transit. Claim via `planScriptPaths` above.
-
-## Spend receipts
-
-A mint commits to every v3 spend (NUT-07): a state check on a spent proof returns `tagged_hash("Cashu_SpendCommitment", Y || input_digest || SHA256(witness))`, and the witness itself only for a leaf carrying `disclosure`. For a private spend the spender alone holds what the commitment was built from, so a send or melt of v3 inputs returns `receipts`, one per input:
-
-```ts
-const { send, receipts } = await wallet.send(21, proofs);
-// receipts[i]: { Y, keysetId, inputDigest, witness, commitment, transcript }
-```
-
-Hand a receipt, with the spent proof, to whoever doubts the payment. `verifySpendReceipt(receipt, proof)` does the client-side part: the receipt is about this proof (`Y` and keyset), `inputDigest` recomputes from `transcript` and the proof, `commitment` recomputes from those and `witness`, and the witness spends the secret (key path, or a script-path leaf it commits to). Compare `receipt.commitment` to the mint's for that `Y` (`checkProofsStates`) to tie it to a real spend:
-
-```ts
-const verdict = verifySpendReceipt(receipt, proof); // { proof, inputDigest, commitment, witness, path, ok }
-const [state] = await wallet.checkProofsStates([proof]);
-const spent = verdict.ok && state.commitment === receipt.commitment;
-```
-
-To hand a receipt around, bundle it with the spent proofs as a token and encode it: `encodeSpendReceipt({ token, receipts })` gives one `nutrcA...` string, `decodeSpendReceipt` reads it back (shape-checked; verify each receipt as above). A receipt reveals the transaction's inputs and outputs, so it is the spender's to keep or show. Receipts are a payer's evidence: a receiver's is the proofs they now hold, so `receive()` returns those alone.

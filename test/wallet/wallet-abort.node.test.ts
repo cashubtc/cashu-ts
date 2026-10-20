@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import {
   Wallet,
@@ -16,6 +16,11 @@ import {
 import { useTestServer, mint, mintInfoResp, unit, token3sat } from './_setup';
 
 useTestServer();
+
+// Spies sit on the shared module-level Mint, and vitest 4 (pinned for Stryker) reuses an existing spy.
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const quote12 = {
   quote: 'q12',

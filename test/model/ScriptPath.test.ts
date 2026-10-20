@@ -696,15 +696,15 @@ describe('ScriptPath.witnessFor', () => {
 
 describe('ScriptPath transport vectors', () => {
   test('the shared nutspA vectors decode, and the signature covers the spend input digest', () => {
-    const { auditable_lock: lock, transport_strings: wire } = vectors;
-    const unsigned = ScriptPath.deserializePackage(wire.signing_package);
-    expect(unsigned.transcript).toBe(lock.transcript);
-    expect(bytesToHex(spendDigest(unsigned))).toBe(lock.input_digest);
-    const signed = ScriptPath.deserializePackage(wire.signing_package_signed);
+    const sp = vectors.signing_package;
+    const key3 = vectors.commit_leaf.leaf_threshold.slice(-64);
+    const unsigned = ScriptPath.deserializePackage(sp.package_string);
+    expect(unsigned).toEqual(sp.package);
+    expect(bytesToHex(spendDigest(unsigned))).toBe(sp.input_digest);
+    const signed = ScriptPath.deserializePackage(sp.signed_string);
     const [signature] = signed.spends[0].signatures;
-    expect(
-      schnorr.verify(hexToBytes(signature), spendDigest(signed), hexToBytes(lock.P).subarray(1)),
-    ).toBe(true);
-    expect(ScriptPath.serializePackage(signed)).toBe(wire.signing_package_signed);
+    expect(schnorr.verify(hexToBytes(signature), spendDigest(signed), hexToBytes(key3))).toBe(true);
+    expect(signed.spends[0].signatures).toEqual(sp.witness.signatures);
+    expect(ScriptPath.serializePackage(signed)).toBe(sp.signed_string);
   });
 });

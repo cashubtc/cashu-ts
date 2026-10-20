@@ -790,7 +790,8 @@ export function verifyP2PKSpendingConditions(
  *
  * @remarks
  * Diagnostic shape for `Wallet.spendOptions`. A keyless `after` leaf (`n: 0`) is NUT-11's
- * anyone-after-expiry, which no nutroot tree can encode: never serialize these leaves.
+ * anyone-after-expiry, which no nutroot tree can encode: never serialize these leaves. Its `time`
+ * is `locktime + 1`, as NUT-11 expires after the locktime and an `after` leaf opens at it.
  * @throws If the secret is not P2PK/HTLC or its tags break the NUT-11 rules.
  * @internal
  */
@@ -816,7 +817,7 @@ export function p2pkSpendLeaves(secretStr: string | Secret): NutrootConditionLea
   if (!Number.isFinite(locktime)) return [main];
   return [
     main,
-    { type: 'after', n: n('n_sigs_refund', refundKeys), keys: refundKeys, time: locktime },
+    { type: 'after', n: n('n_sigs_refund', refundKeys), keys: refundKeys, time: locktime + 1 },
   ];
 }
 
@@ -1051,7 +1052,7 @@ function getLocktime(secret: Secret): number {
   // value is passed through for the mint to judge rather than rejected here. Arity still throws.
   const v = getTagScalar(secret, 'locktime');
   const ts = v !== undefined && /^\d+$/.test(v) ? Number(v) : NaN;
-  return Number.isSafeInteger(ts) && ts > 0 ? ts : Infinity;
+  return Number.isSafeInteger(ts) ? ts : Infinity;
 }
 
 function deriveLockState(
@@ -1059,7 +1060,7 @@ function deriveLockState(
   nowSeconds: number = Math.floor(Date.now() / 1000),
 ): LockState {
   if (!Number.isFinite(locktime)) return 'PERMANENT';
-  return nowSeconds < locktime ? 'ACTIVE' : 'EXPIRED';
+  return nowSeconds <= locktime ? 'ACTIVE' : 'EXPIRED';
 }
 
 function resolveNSigs(secret: Secret, lockState: LockState, refundKeys: string[]): number {

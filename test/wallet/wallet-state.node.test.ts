@@ -100,19 +100,18 @@ describe('checkProofsStates', () => {
     expect(result[0].witness).toBeNull();
   });
 
-  test('checkProofsStates passes v3 spend fields through (NUT-07)', async () => {
+  test('checkProofsStates passes a pending v3 witness and its input digest through (NUT-07)', async () => {
     const inputDigest = 'ab'.repeat(32);
-    const commitment = 'cd'.repeat(32);
+    const witness = '{"signatures":["00"]}';
     server.use(
       http.post(mintUrl + '/v1/checkstate', () => {
         return HttpResponse.json({
           states: [
             {
               Y: '02d5dd71f59d917da3f73defe997928e9459e9d67d8bdb771e4989c2b5f50b2fff',
-              state: 'SPENT',
-              witness: '{"signatures":["00"]}',
+              state: 'PENDING',
+              witness,
               input_digest: inputDigest,
-              commitment,
             },
           ],
         });
@@ -122,8 +121,8 @@ describe('checkProofsStates', () => {
     await wallet.loadMint();
 
     const result = await wallet.checkProofsStates(proofs);
+    expect(result[0].witness).toBe(witness);
     expect(result[0].input_digest).toBe(inputDigest);
-    expect(result[0].commitment).toBe(commitment);
   });
 });
 
