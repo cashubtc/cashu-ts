@@ -150,7 +150,6 @@ import {
   type CompleteSwapOptions,
   type MeltProofsResponse,
   type SendResponse,
-  type SpendReceipt,
   type ScriptPathPlan,
   type SpendOptions,
   type MintQuoteSignRequest,
@@ -1928,7 +1927,7 @@ class Wallet {
 
     // Execute swap and validate result
     const privkeys = privkey === undefined ? [] : [privkey].flat();
-    const receipts = await attachTransactionWitnesses(
+    await attachTransactionWitnesses(
       swapTransaction.payload,
       undefined,
       collectSpendInfoKeys(swapPreview.inputs, privkey, this._logger),
@@ -1977,7 +1976,6 @@ class Wallet {
     return {
       keep: keepProofs,
       send: sendProofs,
-      ...(receipts.length > 0 && { receipts }),
     };
   }
 
@@ -4581,10 +4579,9 @@ class Wallet {
         inputs.some((p) => isBlsKeyset(p.id) && isV3PointSecret(p.secret)),
       'melting v3 inputs needs the melt quote amount; pass the full quote object',
     );
-    let receipts: SpendReceipt[] = [];
     if (quoteAmount !== undefined) {
       const feeIndex = typeof extra?.fee_index === 'number' ? extra.fee_index : undefined;
-      receipts = await attachTransactionWitnesses(
+      await attachTransactionWitnesses(
         meltPayload,
         {
           quoteId: quote,
@@ -4640,7 +4637,6 @@ class Wallet {
       quote: mergedQuote,
       change,
       outputData: change.length > 0 ? [] : meltPreview.outputData,
-      ...(receipts.length > 0 && { receipts }),
     };
   }
 

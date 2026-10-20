@@ -3,20 +3,6 @@ import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { bech32 } from '@scure/base';
 
 import { isBlsKeyset, isV3PointSecret } from '../crypto';
-import { hashToCurveBls } from '../crypto/curve_bls';
-import { verifyHTLCHash } from '../crypto/NUT14';
-import {
-  countLeafSigners,
-  parseNutrootLeafHex,
-  verifyNutrootCommitment,
-  verifyNutrootSpendInfo,
-} from '../crypto/nutroot';
-import {
-  inputDigest,
-  proofInputContainer,
-  spendCommitment,
-  verifyTransactionInputWitness,
-} from '../crypto/transcript';
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { PaymentRequest } from '../model/PaymentRequest';
@@ -33,7 +19,6 @@ import type {
   V4InnerToken,
   V4ProofTemplate,
 } from '../model/types';
-import type { SpendReceipt } from '../wallet/types/responses';
 
 import {
   decodeBase64UrlToJson,
@@ -41,7 +26,7 @@ import {
   encodeUint8ToBase64,
   encodeUint8ToBase64Url,
 } from './base64';
-import { decodeUtf8Document, minimalBytesBE } from './bytes';
+import { minimalBytesBE } from './bytes';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { JSONInt } from './JSONInt';
 import {
@@ -795,223 +780,6 @@ export function classifyNutrootSpendInfo(proof: Pick<Proof, 'spend_info'>): Nutr
   if (si?.E) return 'receiver-keyed';
   if (si?.K) return 'disclosed';
   return 'none';
-}
-
-/**
- * What an auditable lock (NUT-10) commits to, fully verified; `undefined` for any other shape.
- *
- * @remarks
- * An auditable lock is script-only with a NUMS-proven internal key and exactly one threshold leaf
- * of one key, optionally beside one commit leaf (`auditableLock` builds it), so anyone holding the
- * proof can verify who it is locked to and what context it is bound to. Verifies the commitments
- * (NUMS offset, root, tweak), not just the claimed fields.
- */
-export function auditableLockInfo(
-  proof: Pick<Proof, 'id' | 'secret' | 'spend_info'>,
-): { pubkey: string; commit?: string } | undefined {
-  const si = proof.spend_info;
-  if (!isBlsKeyset(proof.id)) return undefined;
-  if (!si || si.k || si.E || !si.K || !si.u || !si.tree?.length || si.tree.length > 2) {
-    return undefined;
-  }
-  try {
-    const leaves = si.tree.map(parseNutrootLeafHex);
-    const locks = leaves.filter((leaf) => leaf.type !== 'commit');
-    const commits = leaves.filter((leaf) => leaf.type === 'commit');
-    const [leaf] = locks;
-    if (locks.length !== 1 || leaf.type !== 'threshold' || leaf.n !== 1) return undefined;
-    if (leaf.keys.length !== 1) return undefined;
-    verifyNutrootSpendInfo(proof.secret, si);
-    const [commit] = commits;
-    return { pubkey: leaf.keys[0], ...(commit && { commit: commit.hash }) };
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * The key an auditable lock (NUT-10) commits to; see {@link auditableLockInfo}.
- */
-export function auditableLockKey(
-  proof: Pick<Proof, 'id' | 'secret' | 'spend_info'>,
-): string | undefined {
-  return auditableLockInfo(proof)?.pubkey;
-}
-
-/**
- * What {@link verifySpendReceipt} checked, one flag per claim the receipt makes.
- */
-export type SpendReceiptVerdict = {
-  /**
-   * The receipt is about this proof: its `Y` and keyset match.
-   */
-  proof: boolean;
-  /**
-   * `inputDigest` recomputes from `transcript` and this proof's own container (NUT-10).
-   */
-  inputDigest: boolean;
-  /**
-   * `commitment` recomputes from `Y`, `inputDigest` and `witness` (NUT-07). Compare it to the
-   * mint's for the same `Y` to tie the receipt to a real spend.
-   */
-  commitment: boolean;
-  /**
-   * `witness` spends this proof over `inputDigest`: a key-path signature by the secret, or a
-   * script-path leaf the secret commits to, with its signatures and any preimage.
-   */
-  witness: boolean;
-  path?: 'key' | 'script';
-  ok: boolean;
-};
-
-/**
- * Verify a spend receipt against the proof it claims to have spent; every check is client-side.
- *
- * @remarks
- * What anyone given the spent proof can establish without the mint: it is about that proof, its
- * digest was built from the transcript it shows, and the witness satisfies the secret. `ok` is all
- * four. An `after` leaf's time is not checked, since nothing here says when the spend happened.
- * Whether the spend happened at all is the mint's `commitment` for `Y` (NUT-07): compare it to the
- * receipt's yourself.
- */
-export function verifySpendReceipt(
-  receipt: SpendReceipt,
-  proof: Pick<Proof, 'id' | 'secret' | 'amount' | 'C'>,
-): SpendReceiptVerdict {
-  // Invalid until proven otherwise
-  const verdict: SpendReceiptVerdict = {
-    proof: false,
-    inputDigest: false,
-    commitment: false,
-    witness: false,
-    ok: false,
-  };
-  if (!isBlsKeyset(proof.id) || receipt.keysetId !== proof.id) return verdict;
-  let Y: string;
-  let digest: Uint8Array;
-  try {
-    Y = hashToCurveBls(utf8ToBytes(proof.secret)).toHex(true);
-    verdict.proof = receipt.Y.toLowerCase() === Y;
-    digest = hexToBytes(receipt.inputDigest);
-    const container = proofInputContainer({
-      amount: Amount.from(proof.amount).toBigInt(),
-      keysetId: proof.id,
-      Y,
-      C: proof.C,
-    });
-    const recomputed = inputDigest(sha256(hexToBytes(receipt.transcript)), container);
-    verdict.inputDigest = bytesToHex(recomputed) === bytesToHex(digest);
-    verdict.commitment =
-      spendCommitment(Y, digest, receipt.witness) === receipt.commitment.toLowerCase();
-  } catch {
-    return verdict;
-  }
-  if (verifyTransactionInputWitness(digest, proof.secret, receipt.witness)) {
-    verdict.path = 'key';
-    verdict.witness = true;
-  } else {
-    verdict.path = 'script';
-    verdict.witness = scriptPathWitnessSpends(digest, proof.secret, receipt.witness);
-  }
-  verdict.ok = verdict.proof && verdict.inputDigest && verdict.commitment && verdict.witness;
-  return verdict;
-}
-
-/**
- * A spend receipt as handed around: the spent proofs as a token plus their receipts.
- */
-export type SpendReceiptBundle = {
-  token: string;
-  receipts: SpendReceipt[];
-};
-
-const SPEND_RECEIPT_PREFIX = 'nutrcA';
-const HEX = /^[0-9a-f]+$/i;
-
-/**
- * Serialize a spend receipt bundle to its `nutrcA` transport string (NUT-10).
- *
- * @remarks
- * `nutrcA` followed by base64url of the JSON `{ token, receipts }`, so a receipt travels as one
- * recognisable blob the way a token or a signing package does.
- */
-export function encodeSpendReceipt(bundle: SpendReceiptBundle): string {
-  return `${SPEND_RECEIPT_PREFIX}${encodeUint8ToBase64Url(utf8ToBytes(JSON.stringify(bundle)))}`;
-}
-
-/**
- * Parse a `nutrcA` transport string back to its bundle, checking shape but not validity.
- *
- * @throws If the prefix, encoding, or shape is wrong; verify each receipt with
- *   {@link verifySpendReceipt} afterwards.
- */
-export function decodeSpendReceipt(input: string): SpendReceiptBundle {
-  if (!input.startsWith(SPEND_RECEIPT_PREFIX)) {
-    throw new CTSError(`Invalid spend receipt: must start with "${SPEND_RECEIPT_PREFIX}"`);
-  }
-  let data: unknown;
-  try {
-    data = JSON.parse(
-      decodeUtf8Document(decodeBase64UrlToUint8(input.slice(SPEND_RECEIPT_PREFIX.length))),
-    );
-  } catch (e) {
-    throw new CTSError('Failed to parse spend receipt', { cause: e });
-  }
-  const bundle = data as SpendReceiptBundle;
-  const isHex = (v: unknown, len?: number) =>
-    typeof v === 'string' && HEX.test(v) && (len === undefined || v.length === len);
-  const wellFormed =
-    isObj(bundle) &&
-    typeof bundle.token === 'string' &&
-    Array.isArray(bundle.receipts) &&
-    bundle.receipts.length > 0 &&
-    bundle.receipts.every(
-      (r) =>
-        isObj(r) &&
-        isHex(r.Y) &&
-        isHex(r.keysetId) &&
-        isHex(r.inputDigest, 64) &&
-        typeof r.witness === 'string' &&
-        isHex(r.commitment, 64) &&
-        isHex(r.transcript),
-    );
-  if (!wellFormed) throw new CTSError('Malformed spend receipt');
-  return bundle;
-}
-
-function scriptPathWitnessSpends(digest: Uint8Array, secretHex: string, witness: string): boolean {
-  try {
-    const w = JSON.parse(witness) as {
-      leaf?: string;
-      control?: { K?: string; path?: string[] };
-      signatures?: string[];
-      preimage?: string;
-    };
-    if (!w.leaf || !w.control?.K || !Array.isArray(w.control.path)) return false;
-    const leaf = parseNutrootLeafHex(w.leaf);
-    if (leaf.type === 'commit') return false;
-    const committed = verifyNutrootCommitment(
-      hexToBytes(secretHex),
-      hexToBytes(w.control.K),
-      hexToBytes(w.leaf),
-      w.control.path.map((h) => hexToBytes(h)),
-    );
-    // NUT-10: at most one entry per leaf key, each a 64-byte signature, preimage only on a hashlock.
-    const signatures = w.signatures ?? [];
-    if (
-      signatures.length > leaf.keys.length ||
-      !signatures.every((s) => typeof s === 'string' && s.length === 128 && HEX.test(s))
-    ) {
-      return false;
-    }
-    if (w.preimage !== undefined && leaf.type !== 'hashlock') return false;
-    const signed = countLeafSigners(leaf, digest, signatures) >= leaf.n;
-    const unlocked =
-      leaf.hash === undefined || (!!w.preimage && verifyHTLCHash(w.preimage, leaf.hash));
-    return committed && signed && unlocked;
-  } catch {
-    return false;
-  }
 }
 
 /**

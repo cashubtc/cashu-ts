@@ -26,7 +26,6 @@ declare const proofsToSend: Proof[];
 declare const token: string;
 declare const tokenA: string;
 declare const tokenB: string;
-declare const receipt: import('@cashu/cashu-ts').SpendReceipt;
 
 declare const quote: import('@cashu/cashu-ts').MintQuoteBolt11Response;
 declare const quoteId: string;

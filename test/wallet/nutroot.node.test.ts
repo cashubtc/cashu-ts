@@ -3,7 +3,6 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test, vi } from 'vitest';
 
-import { hashToCurveBls } from '../../src/crypto/curve_bls';
 import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import { hashToCurveHex } from '../../src/crypto/curves';
 import {
@@ -16,22 +15,13 @@ import {
 import {
   inputDigest,
   proofInputContextKey,
-  spendCommitment,
   transactionInputs,
   verifyTransactionInputWitness,
 } from '../../src/crypto/transcript';
 import { NULL_LOGGER } from '../../src/logger';
 import { Amount } from '../../src/model/Amount';
 import type { Proof, SerializedBlindedMessage } from '../../src/model/types';
-import {
-  bytesToHex,
-  decodeSpendReceipt,
-  encodeSpendReceipt,
-  encodeUint8ToBase64Url,
-  getDecodedToken,
-  hexToBytes,
-  verifySpendReceipt,
-} from '../../src/utils';
+import { bytesToHex, hexToBytes } from '../../src/utils';
 import {
   attachTransactionWitnesses,
   collectSpendInfoKeys,
@@ -377,137 +367,23 @@ describe('attachTransactionWitnesses', () => {
     ).toBe(true);
   });
 
-  test('returns a receipt per v3 input that opens the NUT-07 commitment', async () => {
+  test('signs the v3 input of a mixed transaction and leaves the legacy input alone', async () => {
     const legacy = { ...v3Proof(PUB_A), id: '00' + 'ab'.repeat(32), secret: 'plain', witness: 'w' };
     const input = v3Proof(PUB_B, { k: PRIV_B });
     const inputs = [legacy, input];
-    const receipts = await attachTransactionWitnesses(
+    await attachTransactionWitnesses(
       { inputs, outputs: [OUTPUT] },
       undefined,
       collectSpendInfoKeys([input], undefined, NULL_LOGGER),
       undefined,
       makeState(undefined),
     );
-    expect(receipts).toHaveLength(1); // the legacy input has no commitment to open
-    const [r] = receipts;
-    const enc = new TextEncoder();
-    expect(r.Y).toBe(hashToCurveBls(enc.encode(input.secret)).toHex(true));
-    expect(r.keysetId).toBe(input.id);
-    expect(r.witness).toBe(input.witness);
-    expect(r.inputDigest).toBe(bytesToHex(digestOf(inputs, undefined, input.secret)));
-    expect(r.commitment).toBe(spendCommitment(r.Y, hexToBytes(r.inputDigest), r.witness));
-    // A holder of the proof rebuilds the input digest from the transcript alone (NUT-07).
-    const { inputContainer } = transactionInputsOf(inputs).proofs.get(
-      proofInputContextKey({ keysetId: input.id, secret: input.secret }),
-    )!;
-    expect(bytesToHex(inputDigest(sha256(hexToBytes(r.transcript)), inputContainer))).toBe(
-      r.inputDigest,
-    );
-    expect(verifyTransactionInputWitness(hexToBytes(r.inputDigest), PUB_B, r.witness)).toBe(true);
+    expect(legacy.witness).toBe('w');
+    const digest = digestOf(inputs, undefined, input.secret);
+    expect(verifyTransactionInputWitness(digest, PUB_B, input.witness as string)).toBe(true);
   });
 
-  test('the shared nutrcA vector decodes and verifies against its proof', () => {
-    const bundle = decodeSpendReceipt(vectors.transport_strings.spend_receipt);
-    const [proof] = getDecodedToken(bundle.token, [KEYSET]).proofs;
-    expect(verifySpendReceipt(bundle.receipts[0], proof)).toMatchObject({ path: 'key', ok: true });
-    expect(encodeSpendReceipt(bundle)).toBe(vectors.transport_strings.spend_receipt);
-  });
-
-  test('verifySpendReceipt checks a receipt against the proof, key path and script path', async () => {
-    const keyPath = v3Proof(PUB_B, { k: PRIV_B });
-    const tree = buildNutrootSecret(PUB_A, [{ type: 'threshold', n: 1, keys: [PUB_B, PUB_A] }]);
-    const scriptPath = v3Proof(tree.secret, { k: PRIV_A, tree: tree.tree });
-    const inputs = [keyPath, scriptPath];
-    const [rKey, rScript] = await attachTransactionWitnesses(
-      { inputs, outputs: [OUTPUT] },
-      undefined,
-      collectSpendInfoKeys([keyPath], undefined, NULL_LOGGER),
-      prepareScriptPathSpends(
-        [scriptPath],
-        [{ secret: tree.secret, leafIndex: 0, extraKeys: [PRIV_B] }],
-        [],
-      ),
-      makeState(undefined),
-    );
-    expect(verifySpendReceipt(rKey, keyPath)).toEqual({
-      proof: true,
-      inputDigest: true,
-      commitment: true,
-      witness: true,
-      path: 'key',
-      ok: true,
-    });
-    expect(verifySpendReceipt(rScript, scriptPath)).toMatchObject({ path: 'script', ok: true });
-    // Each claim fails on its own: another proof, a doctored transcript, a swapped witness.
-    expect(verifySpendReceipt(rKey, scriptPath)).toMatchObject({ proof: false, witness: false });
-    const doctored = {
-      ...rKey,
-      transcript: rKey.transcript.replace(/.$/, (c) => (c === '0' ? '1' : '0')),
-    };
-    expect(verifySpendReceipt(doctored, keyPath)).toMatchObject({ inputDigest: false, ok: false });
-    expect(verifySpendReceipt({ ...rKey, witness: rScript.witness }, keyPath)).toMatchObject({
-      commitment: false,
-      witness: false,
-    });
-    expect(verifySpendReceipt(rKey, { ...keyPath, id: '00' + 'ab'.repeat(32) }).ok).toBe(false);
-    // NUT-10 witness shape: a malformed signature entry or a preimage on a non-hashlock leaf.
-    const script = JSON.parse(rScript.witness) as { signatures: string[]; preimage?: string };
-    const malformed = { ...script, signatures: [script.signatures[0], 'zz'.repeat(64)] };
-    expect(
-      verifySpendReceipt({ ...rScript, witness: JSON.stringify(malformed) }, scriptPath).witness,
-    ).toBe(false);
-    const strayPreimage = { ...script, preimage: '07'.repeat(32) };
-    expect(
-      verifySpendReceipt({ ...rScript, witness: JSON.stringify(strayPreimage) }, scriptPath)
-        .witness,
-    ).toBe(false);
-    expect(verifySpendReceipt({ ...rKey, transcript: 'zz' }, keyPath).ok).toBe(false);
-    expect(verifySpendReceipt({ ...rScript, witness: '{bad' }, scriptPath).witness).toBe(false);
-    const unsigned = JSON.stringify({ ...JSON.parse(rScript.witness), signatures: undefined });
-    expect(verifySpendReceipt({ ...rScript, witness: unsigned }, scriptPath).witness).toBe(false);
-    // A witness revealing a commit leaf never spends, whatever else it carries.
-    const commitLeaf = JSON.stringify({
-      ...JSON.parse(rScript.witness),
-      leaf: '0004' + '080020' + '77'.repeat(32),
-    });
-    expect(verifySpendReceipt({ ...rScript, witness: commitLeaf }, scriptPath).witness).toBe(false);
-  });
-
-  test('a receipt bundle round-trips through the nutrcA transport string', async () => {
-    const input = v3Proof(PUB_B, { k: PRIV_B });
-    const receipts = await attachTransactionWitnesses(
-      { inputs: [input], outputs: [OUTPUT] },
-      undefined,
-      collectSpendInfoKeys([input], undefined, NULL_LOGGER),
-      undefined,
-      makeState(undefined),
-    );
-    const encoded = encodeSpendReceipt({ token: 'cashuBtest', receipts });
-    expect(encoded.startsWith('nutrcA')).toBe(true);
-    const decoded = decodeSpendReceipt(encoded);
-    expect(decoded).toEqual({ token: 'cashuBtest', receipts });
-    expect(verifySpendReceipt(decoded.receipts[0], input).ok).toBe(true);
-    expect(() => decodeSpendReceipt('cashuBtest')).toThrow(/must start with/);
-    expect(() => decodeSpendReceipt('nutrcA!!!')).toThrow(/parse/);
-    const tamper = (mangle: (b: { token: string; receipts: unknown[] }) => unknown) =>
-      'nutrcA' +
-      encodeUint8ToBase64Url(
-        utf8ToBytes(JSON.stringify(mangle({ token: 'cashuBtest', receipts: [...receipts] }))),
-      );
-    expect(() => decodeSpendReceipt(tamper((b) => ({ ...b, receipts: [] })))).toThrow(/Malformed/);
-    expect(() =>
-      decodeSpendReceipt(
-        tamper((b) => ({ ...b, receipts: [{ ...receipts[0], commitment: 'zz' }] })),
-      ),
-    ).toThrow(/Malformed/);
-    expect(() => decodeSpendReceipt(tamper((b) => ({ ...b, token: 1 })))).toThrow(/Malformed/);
-    // A bad byte inside the JSON document must not be replaced with U+FFFD and accepted.
-    const raw = utf8ToBytes(JSON.stringify({ token: 'cashuBtestX', receipts }));
-    raw[raw.indexOf(0x58)] = 0xff;
-    expect(() => decodeSpendReceipt('nutrcA' + encodeUint8ToBase64Url(raw))).toThrow(/parse/);
-  });
-
-  test('verifySpendReceipt follows a hashlock leaf with a merkle path and its preimage', async () => {
+  test('a hashlock leaf spend carries its merkle path and preimage', async () => {
     const preimage = 'cd'.repeat(32);
     const hash = bytesToHex(sha256(hexToBytes(preimage)));
     const tree = buildNutrootSecret(PUB_A, [
@@ -515,7 +391,7 @@ describe('attachTransactionWitnesses', () => {
       { type: 'hashlock', n: 1, hash, keys: [PUB_B] },
     ]);
     const proof = v3Proof(tree.secret, { k: PRIV_A, tree: tree.tree });
-    const [r] = await attachTransactionWitnesses(
+    await attachTransactionWitnesses(
       { inputs: [proof], outputs: [OUTPUT] },
       undefined,
       undefined,
@@ -526,10 +402,19 @@ describe('attachTransactionWitnesses', () => {
       ),
       makeState(undefined),
     );
-    expect(verifySpendReceipt(r, proof)).toMatchObject({ path: 'script', ok: true });
-    const w = JSON.parse(r.witness) as { preimage: string };
-    const stripped = JSON.stringify({ ...w, preimage: undefined });
-    expect(verifySpendReceipt({ ...r, witness: stripped }, proof).witness).toBe(false);
+    const w = JSON.parse(proof.witness as string) as {
+      leaf: string;
+      control: { path: string[] };
+      signatures: string[];
+      preimage: string;
+    };
+    expect(w.leaf).toBe(tree.tree[1]);
+    expect(w.control.path).toHaveLength(1);
+    expect(w.preimage).toBe(preimage);
+    const digest = digestOf([proof], undefined, proof.secret);
+    expect(schnorr.verify(hexToBytes(w.signatures[0]), digest, hexToBytes(PUB_B).subarray(1))).toBe(
+      true,
+    );
   });
 
   test('a melt quote is part of the signed transcript', async () => {
@@ -656,7 +541,7 @@ describe('attachTransactionWitnesses', () => {
       [{ secret: locked.secret, leafIndex: 0, extraKeys: [PRIV_A], cosign }],
       [],
     );
-    const receipts = await attachTransactionWitnesses(
+    await attachTransactionWitnesses(
       { inputs: [locked, companion], outputs: [OUTPUT] },
       undefined,
       undefined,
@@ -667,8 +552,6 @@ describe('attachTransactionWitnesses', () => {
     expect(message).not.toContain(bytesToHex(utf8ToBytes(companion.secret)));
     expect(message).toContain(hashToCurveHex(companion.secret, companion.id));
     expect(message).not.toContain(locked.secret);
-    expect(receipts).toHaveLength(1);
-    expect(receipts[0].Y).toBe(hashToCurveHex(locked.secret, locked.id));
     expect(locked.witness).toBeDefined();
   });
 

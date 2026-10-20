@@ -543,49 +543,6 @@ describe('script-path commitment verification', () => {
     ).toBe(false);
   });
 
-  test('disclosure parses at mode 0x01 and fails closed on every other value (vectors)', () => {
-    const lf = vectors.leaf_forms;
-    const parsed = parseNutrootLeafHex(lf.threshold_1of1_disclosure) as NutrootConditionLeaf;
-    expect(parsed.disclosure).toBe(0x01);
-    expect(serializeNutrootLeafHex(parsed)).toBe(lf.threshold_1of1_disclosure);
-    // Mode 0x00, an empty value, and an unallocated mode are each malformed: a private leaf has
-    // exactly one encoding (NUT-10).
-    for (const bad of [
-      lf.leaf_disclosure_mode0,
-      lf.leaf_disclosure_empty,
-      lf.leaf_disclosure_mode2,
-    ]) {
-      expect(() => parseNutrootLeafHex(bad)).toThrow(/disclosure mode/);
-    }
-    expect(() =>
-      serializeNutrootLeaf({ type: 'threshold', n: 1, keys: [vRefund.carol_pub], disclosure: 2 }),
-    ).toThrow(/disclosure mode/);
-    // disclosure is valid on every leaf type and does not affect satisfaction fields.
-    const after = parseNutrootLeafHex(
-      serializeNutrootLeafHex({
-        type: 'after',
-        n: 1,
-        keys: [vRefund.carol_pub],
-        time: 1755561600,
-        disclosure: 1,
-      }),
-    );
-    expect((after as NutrootConditionLeaf).disclosure).toBe(0x01);
-  });
-
-  test('the auditable lock vector reconstructs through the standard build (vectors)', () => {
-    const aud = vectors.auditable_lock;
-    const built = buildNutrootSecret(NUTROOT_NUMS_KEY, [parseNutrootLeafHex(aud.leaf)], {
-      u: hexToBytes(aud.u),
-    });
-    expect(built.K).toBe(aud.K);
-    expect(built.secret).toBe(aud.secret);
-    expect(built.tree).toEqual([aud.leaf]);
-    expect(verifyNutrootSpendInfo(aud.secret, { K: aud.K, u: aud.u, tree: [aud.leaf] })).toBe(
-      'tweaked',
-    );
-  });
-
   test('path deeper than the depth cap throws', () => {
     const filler = sha256(new Uint8Array([9]));
     expect(() =>
@@ -732,8 +689,7 @@ describe('locked secret construction and spend info cascade', () => {
     expect(() => verifyNutrootSpendInfo(v.secret, { k: vRefund.carol_priv, tree: [] })).toThrow(
       /at least one leaf/,
     );
-    const aud = vectors.auditable_lock;
-    expect(() => verifyNutrootSpendInfo(aud.secret, { K: aud.K, u: aud.u })).toThrow(
+    expect(() => verifyNutrootSpendInfo(vCommit.secret, { K: vCommit.K, u: vCommit.u })).toThrow(
       /without a tree/,
     );
   });
@@ -1426,24 +1382,6 @@ describe('verifyNutrootRequestTree (NUT-18 exact match)', () => {
         { E: vRefund.ephemeral_pub, K: vRefund.carol_pub, tree },
       ),
     ).toThrow(/exceeds 8 leaves/);
-  });
-
-  test('a disclosure mismatch is not the requested tree', () => {
-    const withDisc: NutrootLeaf[] = [
-      { type: 'threshold', n: 1, keys: [vRefund.carol_pub], disclosure: 1 },
-    ];
-    const opt = { receiverKey: vRefund.carol_pub, leaves: withDisc };
-    const outDisc = deriveReceiverKeyedSecret(vRefund.carol_pub, { leaves: withDisc, eBytes });
-    expect(() =>
-      verifyNutrootRequestTree(opt, { E: outDisc.E, K: outDisc.K, tree: outDisc.tree }),
-    ).not.toThrow();
-    // The same leaf without the flag ignores the payee's disclosure request and rejects.
-    const bare = [
-      bytesToHex(serializeNutrootLeaf({ type: 'threshold', n: 1, keys: [vRefund.carol_pub] })),
-    ];
-    expect(() => verifyNutrootRequestTree(opt, { E: outDisc.E, K: outDisc.K, tree: bare })).toThrow(
-      /does not match/,
-    );
   });
 
   test('bearer and absent spend info reject', () => {

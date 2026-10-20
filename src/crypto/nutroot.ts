@@ -48,7 +48,6 @@ const FIELD_N = 0x02;
 const FIELD_KEYS = 0x04;
 const FIELD_TIME = 0x06;
 const FIELD_HASH = 0x08;
-const FIELD_DISCLOSURE = 0x0a;
 
 /**
  * Normative caps from NUT-10. The leaf body excludes the leading version byte.
@@ -79,11 +78,6 @@ export type NutrootConditionLeaf = {
   keys: string[];
   time?: number;
   hash?: string;
-  /**
-   * Disclosure mode (NUT-10): `1` publishes the exercised witness via NUT-07/NUT-17. Valid on every
-   * leaf type; satisfaction is unaffected.
-   */
-  disclosure?: number;
 };
 
 /**
@@ -252,12 +246,6 @@ export function serializeNutrootLeaf(leaf: NutrootLeaf): Uint8Array {
   } else if (leaf.hash !== undefined) {
     throw new CTSError(`${leaf.type} leaf must not carry a hash field`);
   }
-  if (leaf.disclosure !== undefined) {
-    if (leaf.disclosure !== 0x01) {
-      throw new CTSError('disclosure mode must be 0x01');
-    }
-    fields.push(tlvRecord(FIELD_DISCLOSURE, new Uint8Array([0x01])));
-  }
   const out = concatBytes(new Uint8Array([NUTROOT_LEAF_VERSION, typeByte]), ...fields);
   if (out.length - 1 > NUTROOT_MAX_LEAF_BYTES) {
     throw new CTSError(`Leaf body exceeds ${NUTROOT_MAX_LEAF_BYTES} bytes`);
@@ -292,7 +280,7 @@ export function parseNutrootLeaf(bytes: Uint8Array): NutrootLeaf {
   }
   const records = readTlvRecords(bytes.subarray(2), true);
   if (typeName === 'commit') {
-    // Digest only: keys or disclosure on a commit leaf are malformed (NUT-10).
+    // Digest only: any other field on a commit leaf is malformed (NUT-10).
     if (records.length !== 1 || records[0].type !== FIELD_HASH || records[0].value.length !== 32) {
       throw new CTSError('commit leaf must carry exactly a 32-byte hash field');
     }
@@ -302,7 +290,6 @@ export function parseNutrootLeaf(bytes: Uint8Array): NutrootLeaf {
   let keys: string[] | undefined;
   let time: number | undefined;
   let hash: string | undefined;
-  let disclosure: number | undefined;
   for (const rec of records) {
     switch (rec.type) {
       case FIELD_N:
@@ -347,13 +334,6 @@ export function parseNutrootLeaf(bytes: Uint8Array): NutrootLeaf {
         }
         hash = bytesToHex(rec.value);
         break;
-      case FIELD_DISCLOSURE:
-        // Mode 0x00 and every unallocated mode reject, so a private leaf has one encoding.
-        if (rec.value.length !== 1 || rec.value[0] !== 0x01) {
-          throw new CTSError('disclosure mode must be 0x01');
-        }
-        disclosure = rec.value[0];
-        break;
       default:
         // Odd types are reserved, so an unknown field of either parity rejects.
         throw new CTSError(`Unknown leaf field: ${rec.type}`);
@@ -380,7 +360,6 @@ export function parseNutrootLeaf(bytes: Uint8Array): NutrootLeaf {
   const leaf: NutrootConditionLeaf = { type: typeName, n, keys };
   if (time !== undefined) leaf.time = time;
   if (hash !== undefined) leaf.hash = hash;
-  if (disclosure !== undefined) leaf.disclosure = disclosure;
   return leaf;
 }
 
@@ -1094,7 +1073,6 @@ function leafMatchesRequested(
   }
   if (leaf.n !== req.n) return false;
   if (leaf.time !== req.time || leaf.hash?.toLowerCase() !== req.hash?.toLowerCase()) return false;
-  if (leaf.disclosure !== req.disclosure) return false;
   if (leaf.keys.length !== req.keys.length) return false;
   return req.keys.every((reqKey, i) => {
     const rk = reqKey.toLowerCase();

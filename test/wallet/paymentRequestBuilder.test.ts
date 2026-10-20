@@ -193,10 +193,6 @@ describe('PaymentRequestBuilder', () => {
     expect(b.omitted.nutroot).toBeUndefined();
     b.lock({ mainKeys: [PUBKEY] });
     expect(b.omitted).toEqual({});
-    // A NUT-11 lock is disclosed by nature, so disclosure keeps the legacy encoding.
-    b.lock({ mainKeys: [PUBKEY], disclosure: true });
-    expect(b.build().nut10?.data).toBe(PUBKEY);
-    expect(b.omitted).toEqual({});
   });
 
   test('legacy: false generates the current spec alone', () => {

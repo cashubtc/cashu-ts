@@ -24,7 +24,6 @@ import { minimalBE, tlvRecord } from './nutroot';
 
 export const TRANSCRIPT_REQUEST_TAG = 'Cashu_AuthorizedRequest';
 export const TRANSCRIPT_INPUT_TAG = 'Cashu_TransactionInput';
-export const SPEND_COMMITMENT_TAG = 'Cashu_SpendCommitment';
 export const QUOTE_ID_TAG = 'Cashu_QuoteId';
 
 // The high nibble is the section: 0x1n inputs, 0x2n outputs, 0xFn never in a transaction.
@@ -415,18 +414,6 @@ export function messageForPayload(payload: PayloadShape): Uint8Array {
  */
 export function inputsForPayload(payload: PayloadShape): ReturnType<typeof transactionInputs> {
   return transactionInputs(payloadToTransaction(payload));
-}
-
-/**
- * The NUT-07 spend commitment: `tagged_hash(tag, Y || input_digest || SHA256(witness))`.
- *
- * @remarks
- * `witness` is the exact string value as sent; `Y` contributes its raw compressed bytes.
- */
-export function spendCommitment(YHex: string, inputDigest: Uint8Array, witness: string): string {
-  return bytesToHex(
-    taggedHash(SPEND_COMMITMENT_TAG, hexToBytes(YHex), inputDigest, sha256(utf8ToBytes(witness))),
-  );
 }
 
 /**
