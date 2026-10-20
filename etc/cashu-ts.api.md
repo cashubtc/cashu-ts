@@ -677,6 +677,7 @@ export type GetInfoResponse = {
         };
         '10'?: {
             supported: boolean;
+            leaves?: string[];
         };
         '11'?: {
             supported: boolean;
@@ -1441,6 +1442,7 @@ export class MintInfo {
     get name(): string;
     // (undocumented)
     static normalizeInfo(info: GetInfoResponse, logger?: Logger): GetInfoResponse;
+    get nutrootLeafTypes(): string[];
     // (undocumented)
     get nuts(): {
         '4': {
@@ -1462,6 +1464,7 @@ export class MintInfo {
         };
         '10'?: {
             supported: boolean;
+            leaves?: string[];
         };
         '11'?: {
             supported: boolean;

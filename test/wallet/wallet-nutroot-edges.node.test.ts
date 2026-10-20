@@ -251,4 +251,26 @@ describe('nutroot edge cases', () => {
       }
     },
   );
+
+  test('refuses a script-only lock with a leaf type the mint does not list', () => {
+    const w = new Wallet(mintUrl);
+    w.loadMintFromCache(
+      { ...mintInfo, nuts: { ...mintInfo.nuts, '10': { supported: true, leaves: ['0001'] } } },
+      cache(),
+    );
+    const keyset = w.keyChain.getKeyset(id);
+    const build = (options: object) =>
+      (w as unknown as { createOutputData: (...a: unknown[]) => unknown }).createOutputData(
+        Amount.from(1),
+        keyset,
+        { type: 'lock', options },
+      );
+    const refund = { locktime: 4_000_000_000, refundKeys: [pub(3)] };
+    // 2-of-2 has no key path, so its refund leaf must be a listed type.
+    expect(() =>
+      build({ mainKeys: [pub(1), pub(2)], requiredMainSignatures: 2, ...refund }),
+    ).toThrow(/does not list the after leaf type/);
+    // A key path remains, so an unlisted leaf only disables that path.
+    expect(() => build({ mainKeys: [pub(1)], ...refund })).not.toThrow();
+  });
 });

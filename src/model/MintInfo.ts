@@ -1,3 +1,4 @@
+import { NUTROOT_CORE_LEAF_TYPES } from '../crypto/nutroot';
 import { type Logger, NULL_LOGGER } from '../logger';
 import { isRecord, nullIfUndefined } from '../utils/core';
 import {
@@ -563,6 +564,20 @@ export class MintInfo {
   }
   get nuts() {
     return MintInfo.snapshot(this._mintInfo.nuts);
+  }
+  /**
+   * Nutroot leaf types the mint understands (NUT-10), lowercase `leaf_version || leaf_type` hex.
+   *
+   * @remarks
+   * A mint that publishes no list is taken to understand the core leaves, which every v3 mint must.
+   */
+  get nutrootLeafTypes(): string[] {
+    const listed: unknown = this._mintInfo.nuts[10]?.leaves;
+    if (!Array.isArray(listed)) return [...NUTROOT_CORE_LEAF_TYPES];
+    return listed
+      .slice(0, MAX_MINT_INFO_LIST)
+      .filter((type): type is string => typeof type === 'string' && /^[0-9a-f]{4}$/i.test(type))
+      .map((type) => type.toLowerCase());
   }
   get version() {
     return this._mintInfo.version;
