@@ -41,35 +41,6 @@
     "illustrative_input_digest_preimage": "illustrative transaction transcript",
     "illustrative_input_digest": "e1d7170b89a2b6eedec90453e32b6c320dfadd590e6a6454bddec95a0e3834cd"
   },
-  "two_leaf_covenant": {
-    "comment": "Allowance covenant: kid may melt toward family node until vesting, parent holds key path. Two leaves, one branch. The melt_to leaf type (0x05) is unallocated in NUT-10, so the nuts tests reuse this tree as the fail-closed unknown-type vector.",
-    "kid_priv": "0000000000000000000000000000000000000000000000000000000000000003",
-    "kid_pub": "02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
-    "parent_priv": "0000000000000000000000000000000000000000000000000000000000000006",
-    "internal_key": "03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556",
-    "node_pub": "03acd484e2f0c7f65309ad178a9f559abde09796974c57e714c35f110dfc27ccbe",
-    "vest_time": 1758240000,
-    "leaf_melt_to": "00050200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f90a002103acd484e2f0c7f65309ad178a9f559abde09796974c57e714c35f110dfc27ccbe",
-    "leaf_after": "00020200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f906000468cc9d00",
-    "leaf_hash_melt_to": "8714a51c3019861df9c4d0d6a1f30f0465ea1252e9c3b949802f73eda61cb101",
-    "leaf_hash_after": "80468218b6e329d4d80682883617af0acd1d4a9d5b1658fbc448cc4781b4f254",
-    "merkle_root": "9d8170c0f86d30de108834ff1ee334decac6ae094fb07652801d9c159c7b1bed",
-    "tweak": "153e9c65e6bea3351f4e78145f328e5aae7e7a4722967bf347f057bcaa47bfba",
-    "secret": "02f4ff2c2894698847760b62bce9d0d6c6c745d0d85c83577a00337d75437bccf0",
-    "melt_witness": {
-      "leaf": "00050200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f90a002103acd484e2f0c7f65309ad178a9f559abde09796974c57e714c35f110dfc27ccbe",
-      "control": {
-        "K": "03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556",
-        "path": ["80468218b6e329d4d80682883617af0acd1d4a9d5b1658fbc448cc4781b4f254"]
-      },
-      "signatures": [
-        "27f53ffb8fe7bae5da0a754fd63aeb04fbfc7ee16c865fb5af3fb4411785b784df09a810c470386602fab69c450dc249efb465cff27f5322d1305e3eaec4d6fb"
-      ]
-    },
-    "after_witness_path": ["8714a51c3019861df9c4d0d6a1f30f0465ea1252e9c3b949802f73eda61cb101"],
-    "illustrative_input_digest_preimage": "illustrative melt transcript",
-    "illustrative_input_digest": "c3530da6be5c8425076a9235228d3ffd24998b9595a5b548b6ee6a4342361765"
-  },
   "nut13_v3": {
     "comment": "NUT-13 v3 derivation (nuts 13.md, the v3 message): HMAC(seed, message_v3) with message_v3 = \"Cashu_KDF_HMAC_SHA256\" || u32_be(len(scope_bytes)) || scope_bytes || u64_be(counter) || type || u32_be(attempt) || type_suffix. Every type rejection samples: 0x00 the internal private key k (secret is K = k*G compressed) and 0x02 the NUMS offset u against SECP256K1_N, 0x01 the blinding factor against BLS Fr, 0x03 a self-owned leaf key with suffix u32_be(i), 0x04 a mint quote lock key and 0x05 its quote id preimage (no sampling: attempt is always 0) on their own per-mint quote counter, whose scope_bytes is the mint identity pubkey (mint_identity, the NUT-06 example identity) rather than a keyset id, so quote_locks below do not depend on keyset_id; quote_id is the NUT-04 derived id, hex(tagged_hash(\"Cashu_QuoteId\", id_preimage)). Types 0x00-0x03 share the proof counter, 0x04 and 0x05 the quote counter. The framing is V3 only: the V2 message keeps its unframed form. Key derivation (0x00) accepts at attempts 0, 0, 0, 0 and blinding factors (0x01) at attempts 7, 1, 2, 2 for counters 0, 1, 2, 3, exercising the rejection loop. Counter 0 also carries Y = bls_hash_to_curve(raw 33 secret bytes) pinning the binary-secret hashing rule and DST across implementations.",
     "seed_hex": "6e757431332076332074657374207365656400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
@@ -512,7 +483,8 @@
     "threshold_1of1_disclosure": "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f90a000101",
     "leaf_disclosure_mode0": "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f90a000100",
     "leaf_disclosure_empty": "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f90a0000",
-    "leaf_disclosure_mode2": "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f90a000102"
+    "leaf_disclosure_mode2": "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f90a000102",
+    "leaf_unknown_type": "00ff0200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9"
   },
   "auditable_lock": {
     "comment": "Canonical auditable lock: NUMS offset u = 7, one threshold leaf n = 1 to test key 3 with disclosure mode 0x01, spent in the pinned transaction.",

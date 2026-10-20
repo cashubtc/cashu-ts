@@ -484,6 +484,10 @@ d.transcript.comment =
   };
 }
 
+// 0xff is never allocated, so this vector survives new leaf types.
+delete d.two_leaf_covenant;
+d.leaf_forms.leaf_unknown_type = '00ff' + d.leaf_forms.threshold_1of1.slice(4);
+
 // Disclosure leaf forms: threshold_1of1 with the 0x0a field, plus its rejection shapes.
 d.leaf_forms.threshold_1of1_disclosure = d.leaf_forms.threshold_1of1 + '0a000101';
 {
