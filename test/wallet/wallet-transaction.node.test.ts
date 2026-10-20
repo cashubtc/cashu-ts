@@ -4,7 +4,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { Wallet, deserializeTransactionPreview, serializeTransactionPreview } from '../../src';
 import { schnorrSignDigest, schnorrVerifyDigest } from '../../src/crypto';
 import { buildNutrootSecret } from '../../src/crypto/nutroot';
-import { inputsForPayload } from '../../src/crypto/transcript';
+import { derivedQuoteId, inputBoundQuoteId, inputsForPayload } from '../../src/crypto/transcript';
 import { Amount } from '../../src/model/Amount';
 import type { Proof } from '../../src/model/types';
 import { deriveKeysetId } from '../../src/utils';
@@ -22,6 +22,7 @@ import {
 const server = useTestServer();
 const privkey = '0000000000000000000000000000000000000000000000000000000000000001';
 const pubkey = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+const lockKey = '022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4';
 const quote = {
   quote: 'quote-mint-0001',
   method: 'bolt11',
@@ -36,6 +37,18 @@ const melt = {
 };
 
 const meltQuoteJson = { amount: 5, fee_reserve: 1, unit, request: 'lnbc1', expiry: 0 };
+const txoutQuoteJson = (id: string, amount: number) => ({
+  quote: id,
+  request: '',
+  unit,
+  amount,
+  amount_paid: amount,
+  amount_issued: 0,
+  state: 'PAID',
+  expiry: null,
+  pubkey: lockKey,
+});
+
 function serveInfo(xx?: object) {
   server.use(
     http.get(mintUrl + '/v1/info', () =>
@@ -308,6 +321,148 @@ describe('Wallet transactions (NUT-XX)', () => {
       }),
     ).rejects.toThrow('offering fee_options');
   });
+  test('a fixed txout quote without idPreimage takes an id bound to the inputs', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0, fixed_txout_quotes: true });
+    const bodies = serveTransaction();
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+    const fixed = { pubkey: lockKey, idPreimage: '11'.repeat(32), amount: 3 };
+    const fixedId = derivedQuoteId(Buffer.from(fixed.idPreimage, 'hex'));
+    const preview = await wallet.prepareTransaction({
+      mintQuoteInputs: [{ quote, amount: 8 }],
+      mintQuoteOutputs: [fixed, { pubkey: lockKey, amount: 5 }],
+    });
+    // k counts every mint quote output, so the bound one is at 1.
+    const boundId = inputBoundQuoteId(
+      { mintQuoteInputs: [{ quoteId: quote.quote, amount: 8n, lockKey: pubkey, issued: 0n }] },
+      1,
+    );
+    expect(preview.amount.isZero()).toBe(true);
+    expect(preview.mintQuoteOutputs).toEqual([
+      { quote: fixedId, ...fixed, amount: Amount.from(3) },
+      { quote: boundId, pubkey: lockKey, amount: Amount.from(5) },
+    ]);
+    const stored = JSON.parse(JSON.stringify(serializeTransactionPreview(preview)));
+    expect(deserializeTransactionPreview(stored).mintQuoteOutputs).toEqual(
+      preview.mintQuoteOutputs,
+    );
+    await wallet.completeTransaction(preview, privkey);
+    const [body] = bodies;
+    expect(body.mint_quote_outputs).toEqual([
+      { id_preimage: fixed.idPreimage, pubkey: lockKey, amount: 3 },
+      { pubkey: lockKey, amount: 5 },
+    ]);
+    // The quote signs over the input-bound id, as the mint computes it.
+    const tx = inputsForPayload({
+      mintQuoteInputs: [{ quoteId: quote.quote, amount: 8, lockKey: pubkey, issued: 0 }],
+      mintQuoteOutputs: [
+        { pubkey: lockKey, quoteId: fixedId, amount: 3 },
+        { pubkey: lockKey, quoteId: boundId, amount: 5 },
+      ],
+    });
+    const [signature] = JSON.parse(body.mint_quote_inputs[0].witness).signatures;
+    expect(schnorrVerifyDigest(signature, tx.quotes.get(quote.quote)!.digest, pubkey)).toBe(true);
+  });
+
+  test('fixed txout quotes are paid out of the inputs, and refused where the mint would', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0, fixed_txout_quotes: true });
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+    const fixed = { pubkey: lockKey, idPreimage: '11'.repeat(32), amount: 3 };
+    const other = {
+      pubkey: '03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556',
+      idPreimage: '22'.repeat(32),
+    };
+    // 8 in, 3 to the fixed quote: the new proofs take 5.
+    const preview = await wallet.prepareTransaction({
+      mintQuoteInputs: [{ quote, amount: 8 }],
+      mintQuoteOutputs: [fixed],
+    });
+    expect(preview.amount).toEqual(Amount.from(5));
+    await expect(
+      wallet.prepareTransaction({
+        mintQuoteInputs: [{ quote, amount: 8 }],
+        mintQuoteOutputs: [{ ...fixed, amount: 9 }],
+      }),
+    ).rejects.toThrow('do not cover');
+    await expect(
+      wallet.prepareTransaction({
+        mintQuoteInputs: [{ quote, amount: 8 }],
+        mintQuoteOutputs: [fixed, { ...other, amount: 1, idPreimage: fixed.idPreimage }],
+      }),
+    ).rejects.toThrow('must not repeat');
+    for (const idPreimage of [null, '11'.repeat(31), 'zz'.repeat(32)]) {
+      await expect(
+        wallet.prepareTransaction({
+          mintQuoteInputs: [{ quote, amount: 8 }],
+          mintQuoteOutputs: [{ ...fixed, idPreimage: idPreimage as string }],
+        }),
+      ).rejects.toThrow('32-byte hex idPreimage');
+    }
+    await expect(
+      wallet.prepareTransaction({
+        mintQuoteInputs: [{ quote, amount: 8 }],
+        mintQuoteOutputs: [{ ...fixed, amount: 0 }],
+      }),
+    ).rejects.toThrow('must be positive');
+    // Lock keys may repeat.
+    await expect(
+      wallet.prepareTransaction({
+        mintQuoteInputs: [{ quote, amount: 8 }],
+        mintQuoteOutputs: [fixed, { ...other, pubkey: lockKey, amount: 5 }],
+      }),
+    ).resolves.toMatchObject({ amount: Amount.zero() });
+    // Value in a txout quote cannot hop to another one.
+    await expect(
+      wallet.prepareTransaction({
+        mintQuoteInputs: [
+          { quote: { ...quote, method: 'txout', amount_paid: Amount.from(8) }, amount: 8 },
+        ],
+        mintQuoteOutputs: [fixed],
+      }),
+    ).rejects.toThrow('cannot pay into a fixed txout quote');
+    // A mint without fixed_txout_quotes takes no mint quote outputs.
+    serveInfo({ supported: true, quote_input_fee_ppk: 0 });
+    const plain = new Wallet(mintUrl, { unit });
+    await plain.loadMint();
+    await expect(
+      plain.prepareTransaction({
+        mintQuoteInputs: [{ quote, amount: 8 }],
+        mintQuoteOutputs: [fixed],
+      }),
+    ).rejects.toThrow('does not accept fixed txout quotes');
+  });
+
+  test('checkTransaction fetches the fixed txout quotes once PAID, and a missing one throws', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0, fixed_txout_quotes: true });
+    server.use(
+      http.get(mintUrl + '/v1/melt/quote/bolt11/:id', ({ params }) =>
+        HttpResponse.json({ ...meltQuoteJson, quote: params.id, state: 'PAID', change: [] }),
+      ),
+      http.get(mintUrl + '/v1/mint/quote/txout/:id', ({ params }) =>
+        HttpResponse.json(txoutQuoteJson(params.id as string, 2)),
+      ),
+    );
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+    const preview = await wallet.prepareTransaction({
+      mintQuoteInputs: [{ quote, amount: 8 }],
+      meltQuoteOutput: melt,
+      mintQuoteOutputs: [{ pubkey: lockKey, idPreimage: '22'.repeat(32), amount: 2 }],
+      proofOutputs: { amount: 0 },
+    });
+    const { response } = await wallet.checkTransaction(preview);
+    expect(response.mint_quotes).toEqual([
+      expect.objectContaining({ quote: preview.mintQuoteOutputs[0].quote, method: 'txout' }),
+    ]);
+    server.use(
+      http.get(mintUrl + '/v1/mint/quote/txout/:id', () =>
+        HttpResponse.json({ detail: 'quote not found', code: 20010 }, { status: 400 }),
+      ),
+    );
+    await expect(wallet.checkTransaction(preview)).rejects.toThrow('quote not found');
+  });
+
   test('swaps proofs into new proofs, and a rehydrated preview unblinds the same', async () => {
     serveInfo({ supported: true, quote_input_fee_ppk: 0 });
     const bodies: any[] = [];
@@ -792,6 +947,69 @@ describe('Wallet transactions (NUT-XX)', () => {
     expect(
       schnorrVerifyDigest(witness.signatures[0], [...changed.proofs.values()][0].digest, pubkey),
     ).toBe(false);
+  });
+
+  // Review regression: metadata warnings must not prevent recovery of settled proofs.
+  test('an extra null mint quote entry does not discard settled proofs', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0 });
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+    const preview = await wallet.prepareTransaction({ mintQuoteInputs: [{ quote, amount: 1 }] });
+    server.use(
+      http.post(mintUrl + '/v1/transaction', () =>
+        HttpResponse.json({
+          state: 'PAID',
+          melt_quotes: [],
+          mint_quotes: [null],
+          signatures: preview.outputData.map((d) => ({
+            id: d.blindedMessage.id,
+            amount: d.blindedMessage.amount,
+            C_: pubkey,
+          })),
+        }),
+      ),
+    );
+    const result = await wallet.completeTransaction(preview, privkey);
+    expect(result.proofs).toHaveLength(1);
+    expect(result.proofs[0].amount).toEqual(Amount.from(1));
+  });
+
+  test('warns when a txout quote comes back under a different id', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0, fixed_txout_quotes: true });
+    const warn = vi.fn();
+    const logger = {
+      error: vi.fn(),
+      warn,
+      info: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+      log: vi.fn(),
+    };
+    server.use(
+      http.post(mintUrl + '/v1/transaction', () =>
+        HttpResponse.json({
+          state: 'PAID',
+          signatures: [],
+          melt_quotes: [],
+          mint_quotes: [txoutQuoteJson('other-id', 8)],
+        }),
+      ),
+    );
+    const wallet = new Wallet(mintUrl, { unit, logger });
+    await wallet.loadMint();
+    const idPreimage = '11'.repeat(32);
+    const result = await transact(wallet, {
+      mintQuoteInputs: [{ quote, amount: 8 }],
+      mintQuoteOutputs: [{ pubkey: lockKey, idPreimage, amount: 8 }],
+    });
+    expect(result.response.mint_quotes[0]).toMatchObject({ quote: 'other-id' });
+    expect(warn).toHaveBeenCalledWith(
+      'Mint returned a txout quote under a different id',
+      expect.objectContaining({
+        expected: derivedQuoteId(Buffer.from(idPreimage, 'hex')),
+        received: 'other-id',
+      }),
+    );
   });
 
   test.each([

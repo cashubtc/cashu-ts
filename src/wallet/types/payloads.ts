@@ -148,6 +148,10 @@ export type TransactionPreview = {
     feeReserve: Amount;
     feeIndex?: number;
   };
+  /**
+   * Fixed txout quotes in request order: each its id, lock key, amount and any id preimage.
+   */
+  mintQuoteOutputs: Array<{ quote: string; pubkey: string; amount: Amount; idPreimage?: string }>;
   outputData: OutputDataLike[];
   /**
    * Total of the new proofs.

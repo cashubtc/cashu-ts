@@ -51,7 +51,12 @@ import vectors from '../vectors/nutroot-v3.json';
 
 const vRefund = vectors.receiver_keyed_refund;
 const vCommit = vectors.commit_leaf;
-
+const vEscrow = vectors.template_escrow;
+const escrowWitness = JSON.parse(vEscrow.witness) as {
+  leaf: string;
+  control: { K: string; path: string[] };
+  signatures: string[];
+};
 // The scalar an x-only (nostr) import may hold: n - d, whose pubkey is the negated point.
 const negate = (priv: string) =>
   bytesToHex(numberToBytesBE(secp256k1.Point.Fn.ORDER - BigInt('0x' + priv), 32));
@@ -111,24 +116,42 @@ describe('TLV primitives', () => {
 });
 
 describe('leaf serialization (vectors 6.1)', () => {
-  test('after leaf serializes to the vector bytes', () => {
-    const leaf = serializeNutrootLeaf({
-      type: 'after',
-      n: 1,
-      keys: [vRefund.alice_refund_pub],
-      time: vRefund.refund_time,
-    });
-    expect(bytesToHex(leaf)).toBe(vRefund.leaf_after);
+  test('template leaf serializes to the vector, its dests last', () => {
+    const tpl = vectors.template_lock;
+    const key3 = bytesToHex(secp256k1.getPublicKey(numberToBytesBE(3n, 32), true));
+    const leaf = { type: 'template', n: 1, keys: [key3], dests: tpl.dests };
+    expect(bytesToHex(serializeNutrootLeaf(leaf as NutrootLeaf))).toBe(tpl.leaf);
+    expect(parseNutrootLeafHex(tpl.leaf)).toEqual(leaf);
+    const bad = (dests: string[] | undefined) =>
+      serializeNutrootLeaf({ ...leaf, dests } as NutrootLeaf);
+    expect(() => bad(undefined)).toThrow(/destination/);
+    expect(() => bad([tpl.dests[0], tpl.dests[0]])).toThrow(/repeat/);
+    expect(() => bad(['02' + '00'.repeat(32)])).toThrow(/valid compressed/);
+    // dests belongs to template alone, and a template carries no hash.
+    expect(() =>
+      serializeNutrootLeaf({ type: 'threshold', n: 1, keys: leaf.keys, dests: tpl.dests }),
+    ).toThrow(/dests/);
+    const withHash = tpl.leaf.slice(0, -2 * (3 + 33 * tpl.dests.length));
+    expect(() => parseNutrootLeafHex(withHash + '080020' + '11'.repeat(32))).toThrow(/hash|dests/);
   });
 
-  test('after leaf parses back', () => {
-    const parsed = parseNutrootLeaf(hexToBytes(vRefund.leaf_after));
-    expect(parsed).toEqual({
-      type: 'after',
-      n: 1,
-      keys: [vRefund.alice_refund_pub],
-      time: vRefund.refund_time,
-    });
+  test('escrow leaves: an arbiter template to buyer and seller, a refund and a 2-of-2', () => {
+    expect(
+      serializeNutrootLeafHex({
+        type: 'template',
+        n: 1,
+        keys: [vEscrow.arbiter],
+        dests: [vEscrow.buyer, vEscrow.seller],
+      }),
+    ).toBe(vEscrow.leaf_arbiter);
+    expect(
+      serializeNutrootLeafHex({ type: 'threshold', n: 2, keys: [vEscrow.buyer, vEscrow.seller] }),
+    ).toBe(vEscrow.leaf_coop);
+    for (const name of ['arbiter', 'refund', 'coop'] as const) {
+      expect(bytesToHex(nutrootLeafHash(hexToBytes(vEscrow[`leaf_${name}`])))).toBe(
+        vEscrow[`leaf_hash_${name}`],
+      );
+    }
   });
 
   test('leaf hash matches the vector root (single leaf tree)', () => {
@@ -396,6 +419,22 @@ describe('merkle tree (vectors 6.2)', () => {
     expect(bytesToHex(nutrootRootFromPath(hCommit, pathCommit))).toBe(vCommit.merkle_root);
   });
 
+  test('three-leaf root promotes the odd leaf, and the arbiter path recomputes it', () => {
+    const [arbiter, refund, coop] = [
+      vEscrow.leaf_hash_arbiter,
+      vEscrow.leaf_hash_refund,
+      vEscrow.leaf_hash_coop,
+    ].map(hexToBytes);
+    const leaves = [arbiter, refund, coop];
+    expect(bytesToHex(nutrootMerkleRoot(leaves))).toBe(vEscrow.merkle_root);
+    expect(bytesToHex(nutrootBranchHash(nutrootBranchHash(refund, arbiter), coop))).toBe(
+      vEscrow.merkle_root,
+    );
+    const path = nutrootMerklePath(leaves, 0);
+    expect(path.map(bytesToHex)).toEqual(escrowWitness.control.path);
+    expect(bytesToHex(nutrootRootFromPath(arbiter, path))).toBe(vEscrow.merkle_root);
+  });
+
   test('four leaves fold as the spec diagram and paths verify', () => {
     const hashes = [1, 2, 3, 4].map((i) => sha256(new Uint8Array([i])));
     // The fold sorts, so build the expected tree over the sorted list.
@@ -463,6 +502,13 @@ describe('tweak math (vectors)', () => {
     expect(bytesToHex(nutrootTweakPubkey(K, root))).toBe(vCommit.secret);
   });
 
+  test('escrow tweak and P', () => {
+    const K = hexToBytes(vEscrow.K);
+    const root = hexToBytes(vEscrow.merkle_root);
+    expect(nutrootTweak(K, root).toString(16).padStart(64, '0')).toBe(vEscrow.tweak);
+    expect(bytesToHex(nutrootTweakPubkey(K, root))).toBe(vEscrow.secret);
+  });
+
   test('6.1 tweaked seckey lands on P and signs for it', () => {
     const carolFull =
       (BigInt('0x' + vRefund.carol_priv) + BigInt('0x' + vRefund.p2bk_r)) %
@@ -495,6 +541,13 @@ describe('tweak math (vectors)', () => {
         hexToBytes(vRefund.alice_refund_pub).subarray(1),
       ),
     ).toBe(true);
+    expect(
+      schnorr.verify(
+        hexToBytes(escrowWitness.signatures[0]),
+        hexToBytes(vEscrow.input_digest),
+        hexToBytes(vEscrow.arbiter).subarray(1),
+      ),
+    ).toBe(true);
   });
 });
 
@@ -517,6 +570,17 @@ describe('script-path commitment verification', () => {
         hexToBytes(vCommit.K),
         hexToBytes(vCommit.leaf_threshold),
         [hexToBytes(vCommit.leaf_hash_commit)],
+      ),
+    ).toBe(true);
+  });
+
+  test('escrow arbiter witness verifies', () => {
+    expect(
+      verifyNutrootCommitment(
+        hexToBytes(vEscrow.secret),
+        hexToBytes(escrowWitness.control.K),
+        hexToBytes(escrowWitness.leaf),
+        escrowWitness.control.path.map(hexToBytes),
       ),
     ).toBe(true);
   });
@@ -721,6 +785,13 @@ describe('locked secret construction and spend info cascade', () => {
         tree: [vCommit.leaf_threshold, vectors.leaf_forms.leaf_unknown_type],
       }),
     ).toThrow(/type/);
+  });
+
+  test('the escrow tree, template leaf included, reconstructs', () => {
+    const tree = [vEscrow.leaf_arbiter, vEscrow.leaf_refund, vEscrow.leaf_coop];
+    expect(verifyNutrootSpendInfo(vEscrow.secret, { K: vEscrow.K, u: vEscrow.u, tree })).toBe(
+      'tweaked',
+    );
   });
 
   test('receiver-keyed disclosure parses every leaf even without K', () => {

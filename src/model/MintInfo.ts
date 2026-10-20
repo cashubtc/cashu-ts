@@ -366,17 +366,19 @@ export class MintInfo {
   }
 
   /**
-   * NUT-XX transactions: whether the mint serves `POST /v1/transaction`, and its quote input fee.
+   * NUT-XX transactions: whether the mint serves `POST /v1/transaction`, its quote input fee, and
+   * whether it accepts fixed txout quotes.
    *
    * @remarks
    * A malformed fee reads as 0; the mint then rejects any transaction it underprices.
    */
-  get transactions(): { supported: boolean; quoteInputFeePpk: number } {
+  get transactions(): { supported: boolean; quoteInputFeePpk: number; fixedTxoutQuotes: boolean } {
     const xx = this._mintInfo.nuts?.XX;
     const fee = xx?.quote_input_fee_ppk;
     return {
       supported: xx?.supported === true,
       quoteInputFeePpk: Number.isSafeInteger(fee) && fee! >= 0 ? fee! : 0,
+      fixedTxoutQuotes: xx?.supported === true && xx?.fixed_txout_quotes === true,
     };
   }
 
