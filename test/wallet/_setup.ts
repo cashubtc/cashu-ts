@@ -58,7 +58,7 @@ export function useTestServer() {
   const server = setupServer();
 
   beforeAll(() => {
-    server.listen({ onUnhandledRequest: 'error' });
+    server.listen({ onUnhandledFrame: 'error' });
   });
   beforeEach(() => {
     setupDefaultHandlers(server);
