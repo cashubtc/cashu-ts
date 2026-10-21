@@ -33,7 +33,7 @@ Adds the extension's signature to every `SIG_INPUTS` proof that lists its key an
 
 ## Nutroot proofs (v3 keysets): `completes` and `cosign`
 
-A nutroot witness signs its input's digest, so the extension can help only where its key appears verbatim in a disclosed leaf: the [auditable lock](../wallet_ops/spend_locked.md#auditable-locks), an unblinded refund or multisig leaf. Blinded leaf keys and the key path (receiver-keyed or tweaked) never match.
+A nutroot witness signs its input's digest, so the extension can help only where its key appears verbatim in a leaf, eg an unblinded refund or multisig leaf. Blinded leaf keys and the key path (receiver-keyed or tweaked) never match.
 
 ```ts
 const { script } = wallet.spendOptions(proof);

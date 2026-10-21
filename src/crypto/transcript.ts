@@ -24,8 +24,6 @@ import { minimalBE, tlvRecord } from './nutroot';
 
 export const TRANSCRIPT_REQUEST_TAG = 'Cashu_AuthorizedRequest';
 export const TRANSCRIPT_INPUT_TAG = 'Cashu_TransactionInput';
-export const SPEND_COMMITMENT_TAG = 'Cashu_SpendCommitment';
-export const QUOTE_ID_TAG = 'Cashu_QuoteId';
 
 // The high nibble is the section: 0x1n inputs, 0x2n outputs, 0xFn never in a transaction.
 const CONTAINER_PROOF_INPUT = 0x11;
@@ -188,20 +186,6 @@ function blindedOutputContainer(output: TranscriptBlindedOutput): Uint8Array {
       tlvRecord(0x03, sha256(hexToBytes(output.B_))),
     ),
   );
-}
-
-/**
- * A derived quote id (NUT-04): `hex(tagged_hash("Cashu_QuoteId", id_preimage))`.
- *
- * @remarks
- * The preimage is 32 bytes its creator supplies (NUT-13 type `0x05` for a seeded wallet) and the
- * mint never discloses.
- */
-export function derivedQuoteId(idPreimage: Uint8Array): string {
-  if (idPreimage.length !== 32) {
-    throw new CTSError('Quote id preimage must be 32 bytes');
-  }
-  return bytesToHex(taggedHash(QUOTE_ID_TAG, idPreimage));
 }
 
 /**
@@ -415,18 +399,6 @@ export function messageForPayload(payload: PayloadShape): Uint8Array {
  */
 export function inputsForPayload(payload: PayloadShape): ReturnType<typeof transactionInputs> {
   return transactionInputs(payloadToTransaction(payload));
-}
-
-/**
- * The NUT-07 spend commitment: `tagged_hash(tag, Y || input_digest || SHA256(witness))`.
- *
- * @remarks
- * `witness` is the exact string value as sent; `Y` contributes its raw compressed bytes.
- */
-export function spendCommitment(YHex: string, inputDigest: Uint8Array, witness: string): string {
-  return bytesToHex(
-    taggedHash(SPEND_COMMITMENT_TAG, hexToBytes(YHex), inputDigest, sha256(utf8ToBytes(witness))),
-  );
 }
 
 /**

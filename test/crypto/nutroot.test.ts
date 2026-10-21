@@ -50,7 +50,7 @@ import { NUTROOT_MAX_SLOTS } from '../../src/utils/limits';
 import vectors from '../vectors/nutroot-v3.json';
 
 const vRefund = vectors.receiver_keyed_refund;
-const vCovenant = vectors.two_leaf_covenant;
+const vCommit = vectors.commit_leaf;
 
 // The scalar an x-only (nostr) import may hold: n - d, whose pubkey is the negated point.
 const negate = (priv: string) =>
@@ -147,33 +147,6 @@ describe('leaf serialization (vectors 6.1)', () => {
   });
 });
 
-describe('leaf serialization (vectors 6.2)', () => {
-  test('after leaf serializes to the vector bytes', () => {
-    const after = serializeNutrootLeaf({
-      type: 'after',
-      n: 1,
-      keys: [vCovenant.kid_pub],
-      time: vCovenant.vest_time,
-    });
-    expect(bytesToHex(after)).toBe(vCovenant.leaf_after);
-  });
-
-  test('leaf hashes match the vectors (melt_to leaf as opaque bytes)', () => {
-    // The 6.2 melt_to covenant is a spec extensibility example, not an
-    // implemented leaf type; its bytes still pin the tree and tweak math.
-    expect(bytesToHex(nutrootLeafHash(hexToBytes(vCovenant.leaf_melt_to)))).toBe(
-      vCovenant.leaf_hash_melt_to,
-    );
-    expect(bytesToHex(nutrootLeafHash(hexToBytes(vCovenant.leaf_after)))).toBe(
-      vCovenant.leaf_hash_after,
-    );
-  });
-
-  test('the example melt_to leaf type (0x05) is unknown and fails closed', () => {
-    expect(() => parseNutrootLeaf(hexToBytes(vCovenant.leaf_melt_to))).toThrow(/type/);
-  });
-});
-
 describe('commit leaf (vectors)', () => {
   const v = vectors.commit_leaf;
 
@@ -244,6 +217,12 @@ describe('commit leaf (vectors)', () => {
 });
 
 describe('leaf parsing fails closed', () => {
+  test('an unallocated leaf type fails closed', () => {
+    expect(() => parseNutrootLeaf(hexToBytes(vectors.leaf_forms.leaf_unknown_type))).toThrow(
+      /type/,
+    );
+  });
+
   test('unknown leaf version', () => {
     const bytes = hexToBytes(vRefund.leaf_after);
     const bad = new Uint8Array(bytes);
@@ -398,23 +377,23 @@ describe('leaf parsing fails closed', () => {
 
 describe('merkle tree (vectors 6.2)', () => {
   test('two-leaf root matches, pair sorted', () => {
-    const hMelt = hexToBytes(vCovenant.leaf_hash_melt_to);
-    const hAfter = hexToBytes(vCovenant.leaf_hash_after);
-    expect(bytesToHex(nutrootBranchHash(hMelt, hAfter))).toBe(vCovenant.merkle_root);
-    expect(bytesToHex(nutrootBranchHash(hAfter, hMelt))).toBe(vCovenant.merkle_root);
-    expect(bytesToHex(nutrootMerkleRoot([hMelt, hAfter]))).toBe(vCovenant.merkle_root);
+    const hThreshold = hexToBytes(vCommit.leaf_hash_threshold);
+    const hCommit = hexToBytes(vCommit.leaf_hash_commit);
+    expect(bytesToHex(nutrootBranchHash(hThreshold, hCommit))).toBe(vCommit.merkle_root);
+    expect(bytesToHex(nutrootBranchHash(hCommit, hThreshold))).toBe(vCommit.merkle_root);
+    expect(bytesToHex(nutrootMerkleRoot([hThreshold, hCommit]))).toBe(vCommit.merkle_root);
   });
 
   test('merkle paths recompute the root', () => {
-    const hMelt = hexToBytes(vCovenant.leaf_hash_melt_to);
-    const hAfter = hexToBytes(vCovenant.leaf_hash_after);
-    const leaves = [hMelt, hAfter];
-    const pathMelt = nutrootMerklePath(leaves, 0);
-    expect(pathMelt.map(bytesToHex)).toEqual(vCovenant.melt_witness.control.path);
-    expect(bytesToHex(nutrootRootFromPath(hMelt, pathMelt))).toBe(vCovenant.merkle_root);
-    const pathAfter = nutrootMerklePath(leaves, 1);
-    expect(pathAfter.map(bytesToHex)).toEqual(vCovenant.after_witness_path);
-    expect(bytesToHex(nutrootRootFromPath(hAfter, pathAfter))).toBe(vCovenant.merkle_root);
+    const hThreshold = hexToBytes(vCommit.leaf_hash_threshold);
+    const hCommit = hexToBytes(vCommit.leaf_hash_commit);
+    const leaves = [hThreshold, hCommit];
+    const pathThreshold = nutrootMerklePath(leaves, 0);
+    expect(pathThreshold.map(bytesToHex)).toEqual([vCommit.leaf_hash_commit]);
+    expect(bytesToHex(nutrootRootFromPath(hThreshold, pathThreshold))).toBe(vCommit.merkle_root);
+    const pathCommit = nutrootMerklePath(leaves, 1);
+    expect(pathCommit.map(bytesToHex)).toEqual([vCommit.leaf_hash_threshold]);
+    expect(bytesToHex(nutrootRootFromPath(hCommit, pathCommit))).toBe(vCommit.merkle_root);
   });
 
   test('four leaves fold as the spec diagram and paths verify', () => {
@@ -477,11 +456,11 @@ describe('tweak math (vectors)', () => {
     expect(bytesToHex(nutrootTweakPubkey(K, root))).toBe(vRefund.secret);
   });
 
-  test('6.2 tweak and P', () => {
-    const K = hexToBytes(vCovenant.internal_key);
-    const root = hexToBytes(vCovenant.merkle_root);
-    expect(nutrootTweak(K, root).toString(16).padStart(64, '0')).toBe(vCovenant.tweak);
-    expect(bytesToHex(nutrootTweakPubkey(K, root))).toBe(vCovenant.secret);
+  test('commit leaf tree tweak and P', () => {
+    const K = hexToBytes(vCommit.K);
+    const root = hexToBytes(vCommit.merkle_root);
+    expect(nutrootTweak(K, root).toString(16).padStart(64, '0')).toBe(vCommit.tweak);
+    expect(bytesToHex(nutrootTweakPubkey(K, root))).toBe(vCommit.secret);
   });
 
   test('6.1 tweaked seckey lands on P and signs for it', () => {
@@ -516,14 +495,6 @@ describe('tweak math (vectors)', () => {
         hexToBytes(vRefund.alice_refund_pub).subarray(1),
       ),
     ).toBe(true);
-    const sig62 = hexToBytes(vCovenant.melt_witness.signatures[0]);
-    expect(
-      schnorr.verify(
-        sig62,
-        hexToBytes(vCovenant.illustrative_input_digest),
-        hexToBytes(vCovenant.kid_pub).subarray(1),
-      ),
-    ).toBe(true);
   });
 });
 
@@ -539,13 +510,13 @@ describe('script-path commitment verification', () => {
     ).toBe(true);
   });
 
-  test('6.2 melt witness verifies', () => {
+  test('commit leaf tree threshold path verifies', () => {
     expect(
       verifyNutrootCommitment(
-        hexToBytes(vCovenant.secret),
-        hexToBytes(vCovenant.melt_witness.control.K),
-        hexToBytes(vCovenant.melt_witness.leaf),
-        vCovenant.melt_witness.control.path.map(hexToBytes),
+        hexToBytes(vCommit.secret),
+        hexToBytes(vCommit.K),
+        hexToBytes(vCommit.leaf_threshold),
+        [hexToBytes(vCommit.leaf_hash_commit)],
       ),
     ).toBe(true);
   });
@@ -553,10 +524,10 @@ describe('script-path commitment verification', () => {
   test('wrong merkle path fails', () => {
     expect(
       verifyNutrootCommitment(
-        hexToBytes(vCovenant.secret),
-        hexToBytes(vCovenant.melt_witness.control.K),
-        hexToBytes(vCovenant.melt_witness.leaf),
-        [hexToBytes(vCovenant.leaf_hash_melt_to)],
+        hexToBytes(vCommit.secret),
+        hexToBytes(vCommit.K),
+        hexToBytes(vCommit.leaf_threshold),
+        [hexToBytes(vCommit.leaf_hash_threshold)],
       ),
     ).toBe(false);
   });
@@ -564,55 +535,12 @@ describe('script-path commitment verification', () => {
   test('wrong internal key fails', () => {
     expect(
       verifyNutrootCommitment(
-        hexToBytes(vCovenant.secret),
+        hexToBytes(vCommit.secret),
         hexToBytes(vRefund.internal_key),
-        hexToBytes(vCovenant.melt_witness.leaf),
-        vCovenant.melt_witness.control.path.map(hexToBytes),
+        hexToBytes(vCommit.leaf_threshold),
+        [hexToBytes(vCommit.leaf_hash_commit)],
       ),
     ).toBe(false);
-  });
-
-  test('disclosure parses at mode 0x01 and fails closed on every other value (vectors)', () => {
-    const lf = vectors.leaf_forms;
-    const parsed = parseNutrootLeafHex(lf.threshold_1of1_disclosure) as NutrootConditionLeaf;
-    expect(parsed.disclosure).toBe(0x01);
-    expect(serializeNutrootLeafHex(parsed)).toBe(lf.threshold_1of1_disclosure);
-    // Mode 0x00, an empty value, and an unallocated mode are each malformed: a private leaf has
-    // exactly one encoding (NUT-10).
-    for (const bad of [
-      lf.leaf_disclosure_mode0,
-      lf.leaf_disclosure_empty,
-      lf.leaf_disclosure_mode2,
-    ]) {
-      expect(() => parseNutrootLeafHex(bad)).toThrow(/disclosure mode/);
-    }
-    expect(() =>
-      serializeNutrootLeaf({ type: 'threshold', n: 1, keys: [vRefund.carol_pub], disclosure: 2 }),
-    ).toThrow(/disclosure mode/);
-    // disclosure is valid on every leaf type and does not affect satisfaction fields.
-    const after = parseNutrootLeafHex(
-      serializeNutrootLeafHex({
-        type: 'after',
-        n: 1,
-        keys: [vRefund.carol_pub],
-        time: 1755561600,
-        disclosure: 1,
-      }),
-    );
-    expect((after as NutrootConditionLeaf).disclosure).toBe(0x01);
-  });
-
-  test('the auditable lock vector reconstructs through the standard build (vectors)', () => {
-    const aud = vectors.auditable_lock;
-    const built = buildNutrootSecret(NUTROOT_NUMS_KEY, [parseNutrootLeafHex(aud.leaf)], {
-      u: hexToBytes(aud.u),
-    });
-    expect(built.K).toBe(aud.K);
-    expect(built.secret).toBe(aud.secret);
-    expect(built.tree).toEqual([aud.leaf]);
-    expect(verifyNutrootSpendInfo(aud.secret, { K: aud.K, u: aud.u, tree: [aud.leaf] })).toBe(
-      'tweaked',
-    );
   });
 
   test('path deeper than the depth cap throws', () => {
@@ -761,8 +689,7 @@ describe('locked secret construction and spend info cascade', () => {
     expect(() => verifyNutrootSpendInfo(v.secret, { k: vRefund.carol_priv, tree: [] })).toThrow(
       /at least one leaf/,
     );
-    const aud = vectors.auditable_lock;
-    expect(() => verifyNutrootSpendInfo(aud.secret, { K: aud.K, u: aud.u })).toThrow(
+    expect(() => verifyNutrootSpendInfo(vCommit.secret, { K: vCommit.K, u: vCommit.u })).toThrow(
       /without a tree/,
     );
   });
@@ -783,23 +710,24 @@ describe('locked secret construction and spend info cascade', () => {
     expect(() =>
       verifyNutrootSpendInfo(vRefund.secret, {
         K: vRefund.internal_key,
-        tree: [vCovenant.leaf_after],
+        tree: [vCommit.leaf_threshold],
       }),
     ).toThrow(/reconstruct/);
-    // 6.2 tree contains the unknown melt_to leaf: acceptance policy fails closed.
+    // With an unknown leaf in place of the commit leaf, acceptance fails closed.
     expect(() =>
-      verifyNutrootSpendInfo(vCovenant.secret, {
-        K: vCovenant.internal_key,
-        tree: [vCovenant.leaf_melt_to, vCovenant.leaf_after],
+      verifyNutrootSpendInfo(vCommit.secret, {
+        K: vCommit.K,
+        u: vCommit.u,
+        tree: [vCommit.leaf_threshold, vectors.leaf_forms.leaf_unknown_type],
       }),
     ).toThrow(/type/);
   });
 
   test('receiver-keyed disclosure parses every leaf even without K', () => {
     expect(() =>
-      verifyNutrootSpendInfo(vCovenant.secret, {
+      verifyNutrootSpendInfo(vCommit.secret, {
         E: vRefund.ephemeral_pub,
-        tree: [vCovenant.leaf_melt_to, vCovenant.leaf_after],
+        tree: [vectors.leaf_forms.leaf_unknown_type, vCommit.leaf_threshold],
       }),
     ).toThrow(/type/);
   });
@@ -1454,24 +1382,6 @@ describe('verifyNutrootRequestTree (NUT-18 exact match)', () => {
         { E: vRefund.ephemeral_pub, K: vRefund.carol_pub, tree },
       ),
     ).toThrow(/exceeds 8 leaves/);
-  });
-
-  test('a disclosure mismatch is not the requested tree', () => {
-    const withDisc: NutrootLeaf[] = [
-      { type: 'threshold', n: 1, keys: [vRefund.carol_pub], disclosure: 1 },
-    ];
-    const opt = { receiverKey: vRefund.carol_pub, leaves: withDisc };
-    const outDisc = deriveReceiverKeyedSecret(vRefund.carol_pub, { leaves: withDisc, eBytes });
-    expect(() =>
-      verifyNutrootRequestTree(opt, { E: outDisc.E, K: outDisc.K, tree: outDisc.tree }),
-    ).not.toThrow();
-    // The same leaf without the flag ignores the payee's disclosure request and rejects.
-    const bare = [
-      bytesToHex(serializeNutrootLeaf({ type: 'threshold', n: 1, keys: [vRefund.carol_pub] })),
-    ];
-    expect(() => verifyNutrootRequestTree(opt, { E: outDisc.E, K: outDisc.K, tree: bare })).toThrow(
-      /does not match/,
-    );
   });
 
   test('bearer and absent spend info reject', () => {

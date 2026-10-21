@@ -624,8 +624,8 @@ export class PaymentRequestBuilder {
    * Why the last `lock()` left an encoding out, per encoding; empty when nothing was dropped.
    *
    * @remarks
-   * Lets a caller tell a deliberate omission (eg no `nut10` for blinded keys or disclosure) from a
-   * bug, and show the reason. Reset by the next `lock()`.
+   * Lets a caller tell a deliberate omission (eg no `nut10` for blinded keys) from a bug, and show
+   * the reason. Reset by the next `lock()`.
    */
   get omitted(): Readonly<{ nut10?: string; nutroot?: string }> {
     return { ...this._omitted };

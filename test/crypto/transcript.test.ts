@@ -16,8 +16,6 @@ import {
   messageForPayload,
   requestDigest,
   signTransactionInput,
-  derivedQuoteId,
-  spendCommitment,
   transactionDigest,
   transcriptContainers,
   transactionInputs,
@@ -242,19 +240,15 @@ describe('transaction transcript (vectors)', () => {
     expect(schnorr.verify(signature, faceDigest, lock)).toBe(false);
   });
 
-  test('the disclosed script-path vector uses a complete transaction context', () => {
-    const aud = vectors.auditable_lock;
-    const tx = fromVectorTx(aud.tx);
-    const context = transactionInputs(tx).proofs.get(
-      proofInputContextKey({
-        keysetId: aud.tx.proof_inputs[0].keyset_id,
-        Y: hashToCurveHex(aud.tx.proof_inputs[0].secret, aud.tx.proof_inputs[0].keyset_id),
-      }),
-    )!;
-    expect(bytesToHex(buildTransactionTranscript(tx))).toBe(aud.transcript);
-    expect(bytesToHex(transactionDigest(tx))).toBe(aud.digest);
-    expect(bytesToHex(sha256(context.inputContainer))).toBe(aud.input_id);
-    expect(bytesToHex(context.digest)).toBe(aud.input_digest);
+  test('the signing package vector uses a complete transaction context', () => {
+    const sp = vectors.signing_package;
+    const quote = { ...tv.mint.tx.mint_quote_inputs[0], lock_pubkey: sp.lock_key };
+    const tx = fromVectorTx({ ...tv.mint.tx, mint_quote_inputs: [quote] });
+    const context = transactionInputs(tx).quotes.get(quote.quote_id)!;
+    expect(bytesToHex(buildTransactionTranscript(tx))).toBe(sp.transcript);
+    expect(bytesToHex(transactionDigest(tx))).toBe(sp.digest);
+    expect(bytesToHex(sha256(context.inputContainer))).toBe(sp.input_id);
+    expect(bytesToHex(context.digest)).toBe(sp.input_digest);
   });
 
   test('any field change lands on a different digest', () => {
@@ -646,7 +640,7 @@ describe('transcript input guards', () => {
   });
 });
 
-describe('input uniqueness and spend commitments (vectors)', () => {
+describe('input uniqueness (vectors)', () => {
   test('a repeated proof or quote input refuses to serialize', () => {
     const swap = fromVectorTx(tv.swap.tx);
     expect(() =>
@@ -686,29 +680,10 @@ describe('input uniqueness and spend commitments (vectors)', () => {
     }
   });
 
-  test('a derived quote id needs a 32-byte preimage', () => {
-    expect(() => derivedQuoteId(new Uint8Array(31))).toThrow(/32 bytes/);
-  });
-
   test('the mint quote input derives its digest from its own container', () => {
     const { quotes } = transactionInputs(fromVectorTx(tv.mint.tx));
     const context = quotes.get(tv.mint.tx.mint_quote_inputs[0].quote_id)!;
     expect(bytesToHex(sha256(context.inputContainer))).toBe(tv.mint.input_id);
     expect(bytesToHex(context.digest)).toBe(tv.mint.input_digest);
-  });
-
-  test('spend commitments reproduce the NUT-07 vectors and bind every field', () => {
-    for (const v of Object.values(vectors.nut07_commitments)) {
-      if (typeof v === 'string') continue; // the comment field
-      expect(bytesToHex(sha256(new TextEncoder().encode(v.witness)))).toBe(v.witness_hash);
-      expect(spendCommitment(v.Y, hexToBytes(v.input_digest), v.witness)).toBe(v.commitment);
-      // Any field change lands on a different commitment.
-      expect(spendCommitment(v.Y, hexToBytes(v.input_digest), v.witness + ' ')).not.toBe(
-        v.commitment,
-      );
-      expect(spendCommitment(v.Y, sha256(hexToBytes(v.input_digest)), v.witness)).not.toBe(
-        v.commitment,
-      );
-    }
   });
 });

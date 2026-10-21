@@ -31,7 +31,9 @@ import { p2pkOptionsToPRNut10, type P2PKOptions } from '../crypto/NUT11';
 import { verifyHTLCHash } from '../crypto/NUT14';
 import { mintQuoteDigest, signMintQuoteLegacy } from '../crypto/NUT20';
 import {
+  NUTROOT_LEAF_TYPE,
   NUTROOT_NUMS_KEY,
+  nutrootLeafTypeHex,
   recoverReceiverKeyedSecretKey,
   verifyNutrootRequestTree,
   verifyNutrootSpendInfo,
@@ -150,7 +152,6 @@ import {
   type CompleteSwapOptions,
   type MeltProofsResponse,
   type SendResponse,
-  type SpendReceipt,
   type ScriptPathPlan,
   type SpendOptions,
   type MintQuoteSignRequest,
@@ -1293,7 +1294,7 @@ class Wallet {
         }
         outputData = isBlsKeyset(keyset.id)
           ? OutputData.createNutrootData(
-              lockToNutrootOptions(outputType.options),
+              this.listedLeavesOnly(lockToNutrootOptions(outputType.options)),
               outputAmount,
               keyset,
               outputType.denominations,
@@ -1928,7 +1929,7 @@ class Wallet {
 
     // Execute swap and validate result
     const privkeys = privkey === undefined ? [] : [privkey].flat();
-    const receipts = await attachTransactionWitnesses(
+    await attachTransactionWitnesses(
       swapTransaction.payload,
       undefined,
       collectSpendInfoKeys(swapPreview.inputs, privkey, this._logger),
@@ -1977,7 +1978,6 @@ class Wallet {
     return {
       keep: keepProofs,
       send: sendProofs,
-      ...(receipts.length > 0 && { receipts }),
     };
   }
 
@@ -2171,6 +2171,25 @@ class Wallet {
     }
     const needed = expected.add(mf).add(this.getFeesForProofs(proofs));
     return sumProofs(proofs).compareTo(needed) >= 0;
+  }
+
+  /**
+   * Refuses a script-only lock using a leaf type the mint does not list (NUT-10).
+   *
+   * @remarks
+   * With no key path, a leaf the mint cannot evaluate leaves the value with no way out.
+   */
+  private listedLeavesOnly(option: ParsedNutrootOption): ParsedNutrootOption {
+    if (option.receiverKey.toLowerCase() !== NUTROOT_NUMS_KEY) return option;
+    const listed = this.getMintInfo().nutrootLeafTypes;
+    const unlisted = (option.leaves ?? []).find(
+      (leaf) => !listed.includes(nutrootLeafTypeHex(NUTROOT_LEAF_TYPE[leaf.type])),
+    );
+    this.failIf(
+      unlisted !== undefined,
+      `Mint does not list the ${unlisted?.type} leaf type (NUT-10): a script-only lock using it could not be spent`,
+    );
+    return option;
   }
 
   /**
@@ -4581,10 +4600,9 @@ class Wallet {
         inputs.some((p) => isBlsKeyset(p.id) && isV3PointSecret(p.secret)),
       'melting v3 inputs needs the melt quote amount; pass the full quote object',
     );
-    let receipts: SpendReceipt[] = [];
     if (quoteAmount !== undefined) {
       const feeIndex = typeof extra?.fee_index === 'number' ? extra.fee_index : undefined;
-      receipts = await attachTransactionWitnesses(
+      await attachTransactionWitnesses(
         meltPayload,
         {
           quoteId: quote,
@@ -4640,7 +4658,6 @@ class Wallet {
       quote: mergedQuote,
       change,
       outputData: change.length > 0 ? [] : meltPreview.outputData,
-      ...(receipts.length > 0 && { receipts }),
     };
   }
 

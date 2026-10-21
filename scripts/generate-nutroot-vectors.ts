@@ -15,19 +15,12 @@ import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/
 
 import { deriveSecretAndBlindingFactor } from '../src/crypto';
 import { getPubKeyFromPrivKey } from '../src/crypto/curve_secp';
-import {
-  deriveLeafKey,
-  deriveNumsOffset,
-  deriveQuoteIdPreimage,
-  deriveQuoteLockKey,
-} from '../src/crypto/NUT13';
+import { deriveLeafKey, deriveNumsOffset, deriveQuoteLockKey } from '../src/crypto/NUT13';
 import { BLS_FR_ORDER, hashToCurveBls } from '../src/crypto/curve_bls';
 import { hashToCurveHex } from '../src/crypto/curves';
 import {
   buildTransactionTranscript,
-  derivedQuoteId,
   inputDigest,
-  spendCommitment,
   transactionDigest,
 } from '../src/crypto/transcript';
 import type { TransactionShape } from '../src/crypto/transcript';
@@ -41,7 +34,7 @@ import {
   NUTROOT_NUMS_KEY,
 } from '../src/crypto/nutroot';
 import { ScriptPath, type ScriptPathSigningPackage } from '../src/model/ScriptPath';
-import { deriveKeysetId, encodeSpendReceipt, getEncodedToken } from '../src/utils/core';
+import { deriveKeysetId, getEncodedToken } from '../src/utils/core';
 import { taggedHash } from '../src/crypto/core';
 
 const PATH = 'test/vectors/nutroot-v3.json';
@@ -97,13 +90,10 @@ d.nut13_v3.leaf_keys = [0, 1, 2].map((index) => {
 d.nut13_v3.mint_identity = MINT_IDENTITY;
 d.nut13_v3.quote_locks = [0, 1].map((counter) => {
   const privkey = deriveQuoteLockKey(seed, MINT_IDENTITY, counter);
-  const idPreimage = deriveQuoteIdPreimage(seed, MINT_IDENTITY, counter);
   return {
     counter,
     privkey: bytesToHex(privkey),
     pubkey: bytesToHex(getPubKeyFromPrivKey(privkey)),
-    id_preimage: bytesToHex(idPreimage),
-    quote_id: derivedQuoteId(idPreimage),
   };
 });
 
@@ -267,7 +257,7 @@ for (const [name, shape] of Object.entries<any>(tv.shapes)) {
   console.log(`token_nutshell repatched: ${name}`);
 }
 
-// --- input digests, disclosure, and NUT-07 commitments ----------------------
+// --- input digests -----------------------------------------------------------
 const SecpPoint = secp256k1.Point;
 const AUX0 = new Uint8Array(32);
 const bigTo32 = (x: bigint) => hexToBytes(x.toString(16).padStart(64, '0'));
@@ -484,154 +474,104 @@ d.transcript.comment =
   };
 }
 
-// Disclosure leaf forms: threshold_1of1 with the 0x0a field, plus its rejection shapes.
-d.leaf_forms.threshold_1of1_disclosure = d.leaf_forms.threshold_1of1 + '0a000101';
+// 0xff is never allocated, so this vector survives new leaf types.
+delete d.two_leaf_covenant;
+d.leaf_forms.leaf_unknown_type = '00ff' + d.leaf_forms.threshold_1of1.slice(4);
+
+// Commit leaf (NUT-10): NUMS offset u = 7 over threshold_1of1 (key 3) and a commit leaf whose hash
+// is SHA256("external data"). Key 3 spends through the threshold leaf; the commit leaf never spends.
+const U7 = bigTo32(7n);
+const commitHash = bytesToHex(sha256(utf8ToBytes('external data')));
 {
-  const parsed = parseNutrootLeafHex(d.leaf_forms.threshold_1of1_disclosure);
-  if (parsed.disclosure !== 0x01) throw new Error('disclosure did not parse');
-  const reserialized = bytesToHex(serializeNutrootLeaf(parsed));
-  if (reserialized !== d.leaf_forms.threshold_1of1_disclosure) {
-    throw new Error('disclosure leaf did not round-trip through the codec');
-  }
-}
-d.leaf_forms.leaf_disclosure_mode0 = d.leaf_forms.threshold_1of1 + '0a000100';
-d.leaf_forms.leaf_disclosure_empty = d.leaf_forms.threshold_1of1 + '0a0000';
-d.leaf_forms.leaf_disclosure_mode2 = d.leaf_forms.threshold_1of1 + '0a000102';
-
-// Auditable lock (NUT-10): NUMS offset u = 7, one threshold leaf to test key 3 carrying
-// disclosure, spent in a complete one-input swap transcript.
-const N_SECP = SECP256K1_N;
-const H_NUMS = SecpPoint.fromBytes(hexToBytes(NUTROOT_NUMS_KEY));
-const K_aud = H_NUMS.add(SecpPoint.BASE.multiply(7n)).toBytes(true);
-const audLeaf = hexToBytes(d.leaf_forms.threshold_1of1_disclosure);
-const audRoot = taggedHash('Cashu_NutrootLeaf', audLeaf);
-const audTweak =
-  BigInt('0x' + bytesToHex(taggedHash('Cashu_NutrootTweak', K_aud, audRoot))) % N_SECP;
-const audSecret = SecpPoint.fromBytes(K_aud).add(SecpPoint.BASE.multiply(audTweak)).toBytes(true);
-const audTxVector = {
-  proof_inputs: [
-    {
-      ...d.transcript.swap.tx.proof_inputs[0],
-      secret: bytesToHex(audSecret),
-    },
-  ],
-  blinded_outputs: d.transcript.swap.tx.blinded_outputs,
-};
-const audTx = fromVectorTx(audTxVector);
-const audTranscript = buildTransactionTranscript(audTx);
-const audTransactionDigest = transactionDigest(audTx);
-const audContainer = audTranscript.subarray(0, 3 + ((audTranscript[1] << 8) | audTranscript[2]));
-const audInputDigest = inputDigest(audTransactionDigest, audContainer);
-const audSig = bytesToHex(schnorr.sign(audInputDigest, bigTo32(3n), AUX0));
-const audWitness = JSON.stringify({
-  leaf: d.leaf_forms.threshold_1of1_disclosure,
-  control: { K: bytesToHex(K_aud), path: [] },
-  signatures: [audSig],
-});
-d.auditable_lock = {
-  comment:
-    'Canonical auditable lock: NUMS offset u = 7, one threshold leaf n = 1 to test key 3 with disclosure mode 0x01, spent in the pinned transaction.',
-  P: bytesToHex(secp256k1.getPublicKey(bigTo32(3n), true)),
-  u: bytesToHex(bigTo32(7n)),
-  K: bytesToHex(K_aud),
-  leaf: d.leaf_forms.threshold_1of1_disclosure,
-  merkle_root: bytesToHex(audRoot),
-  tweak: bytesToHex(bigTo32(audTweak)),
-  secret: bytesToHex(audSecret),
-  Y: hashToCurveBls(audSecret).toHex(true),
-  tx: audTxVector,
-  transcript: bytesToHex(audTranscript),
-  digest: bytesToHex(audTransactionDigest),
-  input_id: bytesToHex(sha256(audContainer)),
-  input_digest: bytesToHex(audInputDigest),
-  witness: audWitness,
-};
-
-// NUT-07 spend commitments: tagged_hash("Cashu_SpendCommitment", Y || input_digest || witness_hash)
-// over the exact compact witness string. One private key-path spend (the swap), one disclosed
-// script-path spend (the auditable lock).
-const commitment = (yHex: string, inputDigestHex: string, witness: string) => {
-  const local = bytesToHex(
-    taggedHash(
-      'Cashu_SpendCommitment',
-      hexToBytes(yHex),
-      hexToBytes(inputDigestHex),
-      sha256(utf8ToBytes(witness)),
-    ),
+  const leaves: NutrootLeaf[] = [
+    parseNutrootLeafHex(d.leaf_forms.threshold_1of1),
+    { type: 'commit', hash: commitHash },
+  ];
+  const built = buildNutrootSecret(NUTROOT_NUMS_KEY, leaves, { u: U7 });
+  const [leafThreshold, leafCommit] = built.tree!;
+  const hashes = [leafThreshold, leafCommit].map((l) =>
+    taggedHash('Cashu_NutrootLeaf', hexToBytes(l)),
   );
-  if (spendCommitment(yHex, hexToBytes(inputDigestHex), witness) !== local) {
-    throw new Error('implementation spendCommitment disagrees with the local recompute');
-  }
-  return local;
-};
-const swapWitness = JSON.stringify({ signatures: [d.transcript.swap.signature] });
-d.nut07_commitments = {
-  comment:
-    'witness_hash = SHA256 over the UTF-8 bytes of the exact witness string value; Y contributes raw compressed bytes.',
-  keypath_private: {
-    Y: d.nut13_v3.outputs[0].Y,
-    input_digest: d.transcript.swap.input_digest,
-    witness: swapWitness,
-    witness_hash: bytesToHex(sha256(utf8ToBytes(swapWitness))),
-    commitment: commitment(d.nut13_v3.outputs[0].Y, d.transcript.swap.input_digest, swapWitness),
-  },
-  disclosed_script_path: {
-    Y: d.auditable_lock.Y,
-    input_digest: d.auditable_lock.input_digest,
-    witness: audWitness,
-    witness_hash: bytesToHex(sha256(utf8ToBytes(audWitness))),
-    commitment: commitment(d.auditable_lock.Y, d.auditable_lock.input_digest, audWitness),
-  },
-};
-
-// NUT-10 transport strings, through the library's own encoders so the spec copies cannot drift.
-// The signed package carries the AUX0 signature: signPackage uses fresh aux randomness.
-const audPackage: ScriptPathSigningPackage = {
-  version: 'nutspA',
-  transcript: bytesToHex(audTranscript),
-  spends: [
-    {
-      input: 0,
-      secret: bytesToHex(audSecret),
-      leaf: d.leaf_forms.threshold_1of1_disclosure,
-      control: { K: bytesToHex(K_aud), path: [] },
-      signatures: [],
-    },
-  ],
-};
-const audSignedByLibrary = ScriptPath.signPackage(audPackage, bytesToHex(bigTo32(3n)));
-if (
-  !schnorr.verify(
-    hexToBytes(audSignedByLibrary.spends[0].signatures[0]),
-    audInputDigest,
-    hexToBytes(d.auditable_lock.P).subarray(1),
-  )
-) {
-  throw new Error('signPackage signature does not verify over the auditable lock input digest');
+  const root = taggedHash('Cashu_NutrootBranch', ...[...hashes].sort(Buffer.compare));
+  const tweak = taggedHash('Cashu_NutrootTweak', hexToBytes(built.K!), root);
+  d.commit_leaf = {
+    comment:
+      'NUT-10 commit leaf (type 0x04): NUMS offset u = 7 over threshold_1of1 (key 3) and a commit leaf of SHA256("external data"). Key 3 spends through the threshold leaf with path [leaf_hash_commit]; a witness revealing the commit leaf is rejected.',
+    u: bytesToHex(U7),
+    K: built.K,
+    hash: commitHash,
+    leaf_threshold: leafThreshold,
+    leaf_commit: leafCommit,
+    leaf_hash_threshold: bytesToHex(hashes[0]),
+    leaf_hash_commit: bytesToHex(hashes[1]),
+    merkle_root: bytesToHex(root),
+    tweak: bytesToHex(bigTo32(BigInt('0x' + bytesToHex(tweak)) % SECP256K1_N)),
+    secret: built.secret,
+  };
+  d.leaf_forms.leaf_commit_with_n = '0004' + '02000101' + leafCommit.slice(4);
 }
-const audSigned = { ...audPackage, spends: [{ ...audPackage.spends[0], signatures: [audSig] }] };
-d.transport_strings = {
-  comment:
-    'Prefix plus base64url of the JSON. The signing package is the auditable lock spent in the pinned swap; the spend receipt is the swap bearer input.',
-  signing_package: ScriptPath.serializePackage(audPackage),
-  signing_package_signed: ScriptPath.serializePackage(audSigned),
-  spend_receipt: encodeSpendReceipt({
-    token: d.tokens_v4.shapes.bearer_k.token_cashu_ts,
-    receipts: [
+
+// Signing package (NUT-XX): the mint vector with its quote locked to a script-only key, NUMS
+// offset u = 7 with threshold_1of1 (key 3), so the quote input spends through that leaf.
+{
+  const leaf = d.leaf_forms.threshold_1of1;
+  const built = buildNutrootSecret(NUTROOT_NUMS_KEY, [parseNutrootLeafHex(leaf)], { u: U7 });
+  const tx = structuredClone(d.transcript.mint.tx);
+  tx.mint_quote_inputs[0].lock_pubkey = built.secret;
+  const shape = fromVectorTx(tx);
+  const transcript = buildTransactionTranscript(shape);
+  const digest = transactionDigest(shape);
+  const container = transcript.subarray(0, 3 + ((transcript[1] << 8) | transcript[2]));
+  const digestIn = inputDigest(digest, container);
+  const pkg: ScriptPathSigningPackage = {
+    version: 'nutspA',
+    transcript: bytesToHex(transcript),
+    spends: [
       {
-        Y: d.nut13_v3.outputs[0].Y,
-        keysetId: d.transcript.swap.tx.proof_inputs[0].keyset_id,
-        inputDigest: d.transcript.swap.input_digest,
-        witness: swapWitness,
-        commitment: d.nut07_commitments.keypath_private.commitment,
-        transcript: d.transcript.swap.transcript,
+        input: 0,
+        secret: built.secret,
+        leaf,
+        control: { K: built.K!, path: [] },
+        signatures: [],
       },
     ],
-  }),
-};
-for (const s of [d.transport_strings.signing_package, d.transport_strings.signing_package_signed]) {
-  ScriptPath.deserializePackage(s);
+  };
+  // The library signs with fresh aux randomness, so pin the AUX0 signature after checking it.
+  const sig = bytesToHex(schnorr.sign(digestIn, bigTo32(3n), AUX0));
+  const byLibrary = ScriptPath.signPackage(pkg, bytesToHex(bigTo32(3n)));
+  const key3 = secp256k1.getPublicKey(bigTo32(3n), true).subarray(1);
+  if (!schnorr.verify(hexToBytes(byLibrary.spends[0].signatures[0]), digestIn, key3)) {
+    throw new Error('signPackage signature does not verify over the quote input digest');
+  }
+  const signed = { ...pkg, spends: [{ ...pkg.spends[0], signatures: [sig] }] };
+  d.signing_package = {
+    comment:
+      'NUT-XX signing package: the mint vector with its quote locked to a script-only key (NUMS offset u = 7, threshold_1of1 key 3). Strings are the prefix plus base64url of the JSON.',
+    lock_key: built.secret,
+    transcript: bytesToHex(transcript),
+    digest: bytesToHex(digest),
+    input_id: bytesToHex(sha256(container)),
+    input_digest: bytesToHex(digestIn),
+    package: pkg,
+    package_string: ScriptPath.serializePackage(pkg),
+    signed_string: ScriptPath.serializePackage(signed),
+    witness: { leaf, control: { K: built.K!, path: [] }, signatures: [sig] },
+  };
+  for (const str of [d.signing_package.package_string, d.signing_package.signed_string]) {
+    ScriptPath.deserializePackage(str);
+  }
 }
+for (const k of [
+  'threshold_1of1_disclosure',
+  'leaf_disclosure_mode0',
+  'leaf_disclosure_empty',
+  'leaf_disclosure_mode2',
+]) {
+  delete d.leaf_forms[k];
+}
+delete d.auditable_lock;
+delete d.nut07_commitments;
+delete d.transport_strings;
 
 writeFileSync(PATH, JSON.stringify(d, null, 2) + '\n');
 console.log(
