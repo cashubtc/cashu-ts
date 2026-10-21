@@ -26,7 +26,7 @@ import {
   isV3PointSecret,
 } from '../crypto';
 // Internal transitional fallback — not part of crypto/index.ts
-import { normalizeSecpPubkey } from '../crypto/curve_secp';
+import { getPubKeyFromPrivKey, normalizeSecpPubkey } from '../crypto/curve_secp';
 import { p2pkOptionsToPRNut10, type P2PKOptions } from '../crypto/NUT11';
 import { verifyHTLCHash } from '../crypto/NUT14';
 import { mintQuoteDigest, signMintQuoteLegacy } from '../crypto/NUT20';
@@ -90,6 +90,7 @@ import {
   ABSOLUTE_MAX_ARRAY_LENGTH,
   bolt11AmountMsat,
   bytesToHex,
+  hexToBytes,
   DEFAULT_MAX_ARRAY_LENGTH,
   getDecodedToken,
   getDecodedTokenBinary,
@@ -3539,7 +3540,7 @@ class Wallet {
     // (recoverQuoteLockKey is the explicit tool for a seeded wallet that lost it).
     const sign = privkey ? undefined : config?.sign;
     const quotePubkey = resolvedQuote.pubkey;
-    if (quotePubkey) {
+    if (quotePubkey && !(v3 && config?.signingPackage)) {
       this.failIf(
         !privkey && !sign,
         'Can not sign locked quote without private key or sign callback (see recoverQuoteLockKey)',
@@ -3693,6 +3694,8 @@ class Wallet {
    * NOTE:
    *
    * - Any quote without a pubkey is considered unlocked. Pass `pubkey` for locked quotes.
+   * - With `config.signingPackage` on a v3 keyset, a locked quote no `privkey` matches gets `null`,
+   *   for `ScriptPath.extractMintPackage` to fill.
    * - Check all quotes are in the PAID state. If any quote is unpaid, the entire batch will fail.
    *
    * @param method Payment method identifier (e.g., 'bolt11', 'bolt12').
@@ -3781,7 +3784,8 @@ class Wallet {
 
     // Check locked quotes: require a privkey and verify it can sign
     const hasLockedQuotes = resolvedEntries.some((e) => e.quote.pubkey);
-    if (hasLockedQuotes) {
+    // With config.signingPackage this waits until the outputs show whether the batch is v3.
+    if (hasLockedQuotes && !config?.signingPackage) {
       this.failIf(
         signingKeys.length === 0,
         'Can not sign locked quotes without private key (see recoverQuoteLockKey)',
@@ -3855,10 +3859,24 @@ class Wallet {
           outputs: blindedMessages,
         }).quotes
       : undefined;
+    const deferUnmatched = !!config?.signingPackage && v3;
+    this.failIf(
+      hasLockedQuotes && !!config?.signingPackage && !v3 && signingKeys.length === 0,
+      'Can not sign locked quotes without private key (see recoverQuoteLockKey)',
+    );
+    const signerXOnly = signingKeys.map((key) =>
+      bytesToHex(getPubKeyFromPrivKey(hexToBytes(key))).slice(2),
+    );
+    // A quote no key matches is left for its signing package (config.signingPackage).
+    const keyForQuote = (pubkey: string): string | undefined =>
+      deferUnmatched && !signerXOnly.includes(pubkey.toLowerCase().slice(2))
+        ? undefined
+        : findSigningKey(pubkey, signingKeys);
     for (const [i, entry] of resolvedEntries.entries()) {
       const quotePubkey = entry.quote.pubkey;
-      if (quotePubkey && signingKeys.length > 0) {
-        const signingKey = findSigningKey(quotePubkey, signingKeys);
+      const signingKey =
+        quotePubkey && signingKeys.length > 0 ? keyForQuote(quotePubkey) : undefined;
+      if (quotePubkey && signingKey) {
         if (v3BatchDigests) {
           signatures.push(
             schnorrSignDigest(v3BatchDigests.get(entry.quote.quote)!.digest, signingKey),
@@ -3888,7 +3906,8 @@ class Wallet {
       quotes: resolvedEntries.map((e) => e.quote),
       amounts,
       outputData: outputs,
-      ...(hasSignatures ? { signatures, legacySignatures } : {}),
+      // A v3 batch has no legacy message to fall back to.
+      ...(hasSignatures ? { signatures, ...(!v3 && { legacySignatures }) } : {}),
     };
   }
 

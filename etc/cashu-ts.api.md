@@ -1572,6 +1572,7 @@ export type MintProofsConfig = {
     keysetId?: string;
     privkey?: string | string[];
     sign?: (request: MintQuoteSignRequest) => Promise<string>;
+    signingPackage?: boolean;
     proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
     onCountersReserved?: OnCountersReserved;
     signal?: AbortSignal;
@@ -2388,6 +2389,8 @@ export const ScriptPath: ScriptPathApi;
 export type ScriptPathApi = {
     extractSwapPackage(preview: SwapPreview, plans: ScriptPathPlan[]): ScriptPathSigningPackage;
     extractMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'amount'>>(preview: MeltPreview<TQuote>, plans: ScriptPathPlan[], feeIndex?: number): ScriptPathSigningPackage;
+    extractMintPackage(preview: MintPreview | BatchMintPreview, plans: ScriptPathQuotePlan[]): ScriptPathSigningPackage;
+    mergeMintPackage<T extends MintPreview | BatchMintPreview>(pkg: ScriptPathSigningPackage, preview: T, plans?: ScriptPathQuotePlan[]): T;
     serializePackage(pkg: ScriptPathSigningPackage): string;
     deserializePackage(input: string): ScriptPathSigningPackage;
     signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPathSigningPackage;
@@ -2403,6 +2406,15 @@ export type ScriptPathPlan = {
     preimage?: string;
     extraKeys?: string[];
     cosign?: (request: CosignRequest) => Promise<string[]>;
+};
+
+// @public
+export type ScriptPathQuotePlan = {
+    quote: string;
+    tree: string[];
+    K: string;
+    leafIndex: number;
+    preimage?: string;
 };
 
 // @public

@@ -36,17 +36,30 @@ import {
 } from '../utils';
 import { NUTROOT_MAX_SLOTS } from '../utils/limits';
 import { orderOutputsForPayload } from '../wallet/_internal';
-import type { MeltPreview, ScriptPathPlan, SwapPreview } from '../wallet/types';
+import type {
+  BatchMintPreview,
+  MeltPreview,
+  MintPreview,
+  ScriptPathPlan,
+  ScriptPathQuotePlan,
+  SwapPreview,
+} from '../wallet/types';
 
+import { Amount } from './Amount';
 import { CTSError } from './Errors';
-import type { MeltQuoteBaseResponse, Proof, SerializedBlindedMessage } from './types';
+import type {
+  MeltQuoteBaseResponse,
+  MintQuoteBaseResponse,
+  Proof,
+  SerializedBlindedMessage,
+} from './types';
 
 /**
  * Transport prefix for a serialized script path signing package.
  */
 const SCRIPT_PATH_PREFIX = 'nutspA';
 
-// NUT-10 mint quote input container type; the other input type is a proof.
+// NUT-00 mint quote input container type; the other input type is a proof.
 const CONTAINER_MINT_QUOTE_INPUT = 0x12;
 
 /**
@@ -98,7 +111,7 @@ export type ScriptPathSpendRequest = {
 export type ScriptPathSigningPackage = {
   version: 'nutspA';
   /**
-   * The transaction's TLV transcript, hex (NUT-10).
+   * The transaction's TLV transcript, hex (NUT-00).
    */
   transcript: string;
   spends: ScriptPathSpendRequest[];
@@ -135,7 +148,7 @@ function internalKey(proof: Proof): string {
     }
   }
   if (!info?.K) {
-    // NUT-10: K travels with a disclosed tree precisely so a wallet that is not the receiver
+    // NUT-00: K travels with a disclosed tree precisely so a wallet that is not the receiver
     // can build a control block.
     throw new CTSError('Script path package needs the internal key from the proof spend info');
   }
@@ -151,21 +164,14 @@ function buildPackage(
     throw new CTSError('A script path package needs at least one plan');
   }
   const spends = plans.map((plan) => {
-    // Proof inputs are the transcript's first containers, in request order (NUT-10).
+    // Proof inputs are the transcript's first containers, in request order (NUT-00).
     const input = inputs.findIndex((p) => p.secret === plan.secret && isBlsKeyset(p.id));
     if (input < 0) {
       throw new CTSError('Script path plan names a secret not in this transaction');
     }
     const proof = inputs[input];
-    const tree = proof.spend_info?.tree;
-    if (!tree || plan.leafIndex < 0 || plan.leafIndex >= tree.length) {
-      throw new CTSError(`Script path plan names leaf ${plan.leafIndex}, which is not disclosed`);
-    }
-    const leafHashes = tree.map((leaf) => nutrootLeafHash(hexToBytes(leaf)));
-    const control = {
-      K: internalKey(proof),
-      path: nutrootMerklePath(leafHashes, plan.leafIndex).map((h) => bytesToHex(h)),
-    };
+    const tree = proof.spend_info?.tree ?? [];
+    const opening = openLeaf(tree, plan.leafIndex, () => internalKey(proof));
     const E = proof.spend_info?.E;
     // The package carries one leaf, so only the builder, holding the whole tree, knows the slots.
     const slots = E
@@ -176,13 +182,90 @@ function buildPackage(
     return {
       input,
       secret: plan.secret,
-      leaf: tree[plan.leafIndex],
-      control,
+      ...opening,
       ...(E && { E, slots }),
       signatures: [],
     };
   });
   return { version: SCRIPT_PATH_PREFIX, transcript: bytesToHex(transcript), spends };
+}
+
+/**
+ * A leaf of `tree` and its control block; `K` is read only once the leaf is known to exist.
+ */
+function openLeaf(
+  tree: string[],
+  leafIndex: number,
+  K: () => string,
+): Pick<ScriptPathSpendRequest, 'leaf' | 'control'> {
+  if (leafIndex < 0 || leafIndex >= tree.length) {
+    throw new CTSError(`Script path plan names leaf ${leafIndex}, which is not disclosed`);
+  }
+  const leafHashes = tree.map((leaf) => nutrootLeafHash(hexToBytes(leaf)));
+  const path = nutrootMerklePath(leafHashes, leafIndex).map((h) => bytesToHex(h));
+  return { leaf: tree[leafIndex], control: { K: K(), path } };
+}
+
+type AnyMintPreview = MintPreview | BatchMintPreview;
+
+/**
+ * A mint preview's quote inputs in transcript order, each with the amount it issues.
+ */
+function mintQuoteInputs(preview: AnyMintPreview) {
+  const entries =
+    'quotes' in preview
+      ? preview.quotes.map((quote, i) => ({ quote, amount: preview.amounts[i] }))
+      : [
+          {
+            quote: preview.quote,
+            amount: Amount.sum(preview.outputData.map((d) => Amount.from(d.blindedMessage.amount))),
+          },
+        ];
+  return entries.map(({ quote, amount }: { quote: MintQuoteBaseResponse; amount: Amount }) => {
+    if (!quote.pubkey || quote.amount_issued == null) {
+      throw new CTSError(`Mint quote ${quote.quote} needs its lock key and amount_issued`);
+    }
+    return { quoteId: quote.quote, amount, lockKey: quote.pubkey, issued: quote.amount_issued };
+  });
+}
+
+function mintTranscript(preview: AnyMintPreview): Uint8Array {
+  const outputs = preview.outputData.map((d) => d.blindedMessage);
+  if (!outputs.every((o) => isBlsKeyset(o.id))) {
+    throw new CTSError('A mint signing package needs outputs on a v3 keyset');
+  }
+  return messageForPayload({ mintQuotes: mintQuoteInputs(preview), outputs });
+}
+
+function extractMintPackage(
+  preview: AnyMintPreview,
+  plans: ScriptPathQuotePlan[],
+): ScriptPathSigningPackage {
+  if (plans.length === 0) {
+    throw new CTSError('A script path package needs at least one plan');
+  }
+  const quotes = mintQuoteInputs(preview);
+  const spends = plans.map((plan) => {
+    // A mint has no proof inputs, so quote input i is transcript container i (NUT-00).
+    const input = quotes.findIndex((q) => q.quoteId === plan.quote);
+    if (input < 0) {
+      throw new CTSError('Script path plan names a quote not in this mint');
+    }
+    return {
+      input,
+      secret: quotes[input].lockKey,
+      ...openLeaf(plan.tree, plan.leafIndex, () => plan.K),
+      signatures: [],
+    };
+  });
+  const pkg: ScriptPathSigningPackage = {
+    version: SCRIPT_PATH_PREFIX,
+    transcript: bytesToHex(mintTranscript(preview)),
+    spends,
+  };
+  // Catches a tree or K that does not commit to the quote's lock key.
+  assertValidPackage(pkg);
+  return pkg;
 }
 
 /**
@@ -253,7 +336,7 @@ function assertValidPackage(pkg: ScriptPathSigningPackage): NutrootConditionLeaf
   if (!pkg || typeof pkg !== 'object' || pkg.version !== SCRIPT_PATH_PREFIX) {
     throw new CTSError('Invalid signing package version');
   }
-  if (!isValidHex(pkg.transcript) || !Array.isArray(pkg.spends)) {
+  if (!isValidHex(pkg.transcript) || !Array.isArray(pkg.spends) || pkg.spends.length === 0) {
     throw new CTSError('Malformed signing package');
   }
   let containers: Uint8Array[];
@@ -386,6 +469,54 @@ function mergeMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | '
   return { ...preview, inputs: applyWitnesses(pkg, preview.inputs, plans) };
 }
 
+function mergeMintPackage<T extends AnyMintPreview>(
+  pkg: ScriptPathSigningPackage,
+  preview: T,
+  plans: ScriptPathQuotePlan[] = [],
+): T {
+  assertValidPackage(pkg);
+  assertMatches(pkg, mintTranscript(preview));
+  const digests = packageInputDigests(pkg);
+  const quotes = mintQuoteInputs(preview);
+  const preimages = new Map(plans.map((p) => [p.quote, p.preimage]));
+  const witnesses = pkg.spends.map((spend, i) =>
+    openingWitness(spend, digests[i], preimages.get(quotes[spend.input].quoteId)),
+  );
+  if ('quotes' in preview) {
+    const signatures = [...(preview.signatures ?? quotes.map(() => null))];
+    pkg.spends.forEach((spend, i) => (signatures[spend.input] = witnesses[i]));
+    return { ...preview, signatures };
+  }
+  return { ...preview, signature: witnesses[0] };
+}
+
+/**
+ * A spend's witness from the package alone: its own leaf and control block, plus the preimage.
+ */
+function openingWitness(
+  spend: ScriptPathSpendRequest,
+  digest: Uint8Array,
+  preimage?: string,
+): string {
+  const leaf = parseNutrootLeaf(hexToBytes(spend.leaf));
+  if (leaf.type === 'hashlock' && preimage === undefined) {
+    throw new CTSError(
+      'A hashlock spend needs its preimage at merge: pass the plans the package was extracted with',
+    );
+  }
+  if (preimage !== undefined && hexToBytes(preimage).length !== 32) {
+    throw new CTSError('Witness preimage is not 32 bytes');
+  }
+  const signatures = selectRequiredLeafSignatures(leaf, digest, spend.signatures);
+  return JSON.stringify({
+    leaf: spend.leaf,
+    // Rebuilt, not copied: the package is untrusted and a strict decoder refuses extra fields.
+    control: { K: spend.control.K, path: spend.control.path },
+    signatures,
+    ...(preimage !== undefined && { preimage }),
+  });
+}
+
 function assertMatches(pkg: ScriptPathSigningPackage, expected: Uint8Array): void {
   if (!equalBytes(expected, hexToBytes(pkg.transcript))) {
     throw new CTSError(
@@ -466,6 +597,30 @@ export type ScriptPathApi = {
     feeIndex?: number,
   ): ScriptPathSigningPackage;
   /**
+   * Builds a signing package for a mint preview's locked quotes.
+   *
+   * @remarks
+   * Prepare the mint with `config.signingPackage`: `prepareMint` then leaves `signature` unset, and
+   * `prepareBatchMint` leaves `null` for each quote it holds no key for.
+   */
+  extractMintPackage(
+    preview: MintPreview | BatchMintPreview,
+    plans: ScriptPathQuotePlan[],
+  ): ScriptPathSigningPackage;
+  /**
+   * Writes the package's quote witnesses into the mint preview it came from, as each quote's
+   * `signature`.
+   *
+   * @remarks
+   * Refuses if the preview moved since extraction, as {@link ScriptPathApi.mergeSwapPackage} does.
+   * `plans` supply any hashlock preimage.
+   */
+  mergeMintPackage<T extends MintPreview | BatchMintPreview>(
+    pkg: ScriptPathSigningPackage,
+    preview: T,
+    plans?: ScriptPathQuotePlan[],
+  ): T;
+  /**
    * Serializes a package to its `nutspA...` transport string.
    */
   serializePackage(pkg: ScriptPathSigningPackage): string;
@@ -531,11 +686,13 @@ export type ScriptPathApi = {
 export const ScriptPath: ScriptPathApi = {
   extractSwapPackage,
   extractMeltPackage,
+  extractMintPackage,
   serializePackage,
   deserializePackage,
   signPackage,
   mergeSwapPackage,
   mergeMeltPackage,
+  mergeMintPackage,
   witnessFor,
 };
 

@@ -9,21 +9,30 @@ import {
   deriveReceiverKeyedSecret,
   parseNutrootLeaf,
   serializeNutrootLeaf,
+  serializeNutrootLeafHex,
   type NutrootLeaf,
   type NutrootConditionLeaf,
   nutrootLeafHash,
   nutrootMerklePath,
+  nutrootMerkleRoot,
+  nutrootTweakPubkey,
   readTlvRecords,
   tlvRecord,
+  verifyNutrootCommitment,
 } from '../../src/crypto/nutroot';
 import { inputDigest, messageForPayload, transcriptContainers } from '../../src/crypto/transcript';
 import { Amount } from '../../src/model/Amount';
 import { OutputData } from '../../src/model/OutputData';
 import { ScriptPath } from '../../src/model/ScriptPath';
 import type { ScriptPathSigningPackage } from '../../src/model/ScriptPath';
-import type { Proof } from '../../src/model/types';
+import type { MintQuoteBaseResponse, Proof } from '../../src/model/types';
 import { bytesToUtf8, decodeBase64UrlToUint8, encodeUint8ToBase64Url } from '../../src/utils';
-import type { MeltPreview, SwapPreview } from '../../src/wallet/types';
+import type {
+  BatchMintPreview,
+  MeltPreview,
+  MintPreview,
+  SwapPreview,
+} from '../../src/wallet/types';
 import vectors from '../vectors/nutroot-v3.json';
 
 const keysetId = `02${'11'.repeat(32)}`;
@@ -509,6 +518,9 @@ describe('ScriptPath signing packages', () => {
     expect(() =>
       ScriptPath.deserializePackage(reserialize((p) => ({ ...p, transcript: 'zz' }))),
     ).toThrow(/Malformed/);
+    expect(() => ScriptPath.deserializePackage(reserialize((p) => ({ ...p, spends: [] })))).toThrow(
+      /Malformed/,
+    );
     expect(() =>
       ScriptPath.deserializePackage(
         reserialize((p) => ({ ...p, transcript: p.transcript + '00' })),
@@ -691,6 +703,95 @@ describe('ScriptPath.witnessFor', () => {
     expect(witness.leaf).toBe(signed.spends[0].leaf);
     expect(witness.control).toEqual(signed.spends[0].control);
     expect(witness.signatures).toEqual(signed.spends[0].signatures);
+  });
+});
+
+describe('ScriptPath mint packages', () => {
+  // A quote locked 2-of-2 by script path: its lock key commits to one threshold leaf under K.
+  const tree = [serializeNutrootLeafHex({ type: 'threshold', n: 2, keys: [pub(2), pub(3)] })];
+  const K = pub(9);
+  const lockKey = bytesToHex(
+    nutrootTweakPubkey(hexToBytes(K), nutrootMerkleRoot([nutrootLeafHash(hexToBytes(tree[0]))])),
+  );
+  const quote = (id: string, pubkey = lockKey) =>
+    ({ quote: id, pubkey, amount_issued: Amount.from(3) }) as MintQuoteBaseResponse;
+  const plan = { quote: 'q-1', tree, K, leafIndex: 0 };
+  const mintPreview = (): MintPreview => ({
+    method: 'bolt11',
+    quote: quote('q-1'),
+    outputData: [OutputData.createSingleRandomData(2, keysetId)],
+  });
+
+  test('a co-signed quote witness lands in the preview signature', () => {
+    const preview = mintPreview();
+    const pkg = ScriptPath.extractMintPackage(preview, [plan]);
+    // The digest the wallet's own key path would sign: the quote input under this transcript.
+    const expected = messageForPayload({
+      mintQuotes: [{ quoteId: 'q-1', amount: 2, lockKey, issued: 3 }],
+      outputs: preview.outputData.map((d) => d.blindedMessage),
+    });
+    expect(pkg.transcript).toBe(bytesToHex(expected));
+    const alice = ScriptPath.signPackage(pkg, bytesToHex(sk(2)));
+    expect(() => ScriptPath.mergeMintPackage(alice, preview)).toThrow(/valid signatures/);
+    const both = ScriptPath.signPackage(alice, bytesToHex(sk(3)));
+    const merged = ScriptPath.mergeMintPackage(both, preview);
+    const witness = JSON.parse(merged.signature!) as {
+      leaf: string;
+      control: { K: string; path: string[] };
+      signatures: string[];
+    };
+    expect(witness.leaf).toBe(tree[0]);
+    expect(
+      verifyNutrootCommitment(
+        hexToBytes(lockKey),
+        hexToBytes(witness.control.K),
+        hexToBytes(witness.leaf),
+        witness.control.path.map((h) => hexToBytes(h)),
+      ),
+    ).toBe(true);
+    const digest = spendDigest(both);
+    for (const [i, key] of [pub(2), pub(3)].entries()) {
+      expect(
+        schnorr.verify(hexToBytes(witness.signatures[i]), digest, hexToBytes(key).subarray(1)),
+      ).toBe(true);
+    }
+    // A co-signer's extra control fields never reach the mint request.
+    const padded = {
+      ...both,
+      spends: [{ ...both.spends[0], control: { ...both.spends[0].control, extra: 'x' } }],
+    };
+    expect(
+      Object.keys(JSON.parse(ScriptPath.mergeMintPackage(padded, preview).signature!).control),
+    ).toEqual(['K', 'path']);
+    // The package belongs to these outputs only.
+    const moved = { ...preview, outputData: [OutputData.createSingleRandomData(2, keysetId)] };
+    expect(() => ScriptPath.mergeMintPackage(both, moved)).toThrow(/does not match/);
+  });
+
+  test('a plan whose tree does not open the lock key is refused at extraction', () => {
+    expect(() => ScriptPath.extractMintPackage(mintPreview(), [{ ...plan, K: pub(8) }])).toThrow();
+    expect(() => ScriptPath.extractMintPackage(mintPreview(), [{ ...plan, quote: 'q-2' }])).toThrow(
+      /not in this mint/,
+    );
+  });
+
+  test('a batch keeps its key-path signatures and fills the co-signed quote', () => {
+    const preview: BatchMintPreview = {
+      method: 'bolt11',
+      quotes: [quote('q-0', pub(4)), quote('q-1')],
+      amounts: [Amount.from(1), Amount.from(2)],
+      outputData: [OutputData.createSingleRandomData(3, keysetId)],
+      signatures: ['aa'.repeat(64), null],
+    };
+    const pkg = ScriptPath.extractMintPackage(preview, [plan]);
+    expect(pkg.spends[0].input).toBe(1);
+    const signed = ScriptPath.signPackage(
+      ScriptPath.signPackage(pkg, bytesToHex(sk(2))),
+      bytesToHex(sk(3)),
+    );
+    const merged = ScriptPath.mergeMintPackage(signed, preview);
+    expect(merged.signatures![0]).toBe('aa'.repeat(64));
+    expect(JSON.parse(merged.signatures![1]!).leaf).toBe(tree[0]);
   });
 });
 

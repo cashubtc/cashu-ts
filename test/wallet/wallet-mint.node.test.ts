@@ -761,6 +761,46 @@ describe('requestTokens', () => {
       expect(preview.legacySignature).toBeUndefined();
     });
 
+    test('a v3 locked quote prepared for a signing package is left unsigned', async () => {
+      server.use(
+        http.get(mintUrl + '/v1/keysets', () =>
+          HttpResponse.json({ keysets: [NUT02_V3_VECTOR1_KEYSET] }),
+        ),
+        http.get(mintUrl + '/v1/keys', () =>
+          HttpResponse.json({ keysets: [NUT02_V3_VECTOR1_KEYS] }),
+        ),
+        http.get(mintUrl + '/v1/keys/' + NUT02_V3_VECTOR1_KEYSET.id, () =>
+          HttpResponse.json({ keysets: [NUT02_V3_VECTOR1_KEYS] }),
+        ),
+      );
+      const wallet = new Wallet(mintUrl, { unit });
+      await wallet.loadMint();
+      await expect(wallet.prepareMint('bolt11', 1, lockedQuote())).rejects.toThrow(
+        /recoverQuoteLockKey/,
+      );
+      const preview = await wallet.prepareMint('bolt11', 1, lockedQuote(), {
+        signingPackage: true,
+      });
+      expect(preview.signature).toBeUndefined();
+      const otherKey = '03'.repeat(32);
+      const other = {
+        ...lockedQuote(),
+        quote: 'other-quote',
+        pubkey: bytesToHex(getPubKeyFromPrivKey(hexToBytes(otherKey))),
+      };
+      const batch = await wallet.prepareBatchMint(
+        'bolt11',
+        [
+          { amount: 1, quote: lockedQuote() },
+          { amount: 1, quote: other },
+        ],
+        { privkey: otherKey, signingPackage: true },
+      );
+      // The quote no key matches waits for its package; the other is signed.
+      expect(batch.signatures?.[0]).toBeNull();
+      expect(batch.signatures?.[1]).toMatch(/^[0-9a-f]{128}$/);
+    });
+
     // A pre-v3 keyset beside the v3 one, so custom outputs can name a keyset the wallet did not
     // pick.
     function serveBothKeysets() {
@@ -865,7 +905,7 @@ describe('requestTokens', () => {
           schnorrVerifyDigest(preview.signatures![i]!, tx.quotes.get(q.quote)!.digest, pubkey),
         ).toBe(true);
       });
-      expect(preview.legacySignatures).toEqual([null, null]);
+      expect(preview.legacySignatures).toBeUndefined();
     });
 
     test('a partial draw commits the amount issued, not the quote amount', async () => {
