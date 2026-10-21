@@ -2049,7 +2049,7 @@ const mswMintUrl = 'https://meta-test-mint.localhost:4444';
 const mswServer = setupServer();
 
 beforeAll(() => {
-  mswServer.listen({ onUnhandledRequest: 'error' });
+  mswServer.listen({ onUnhandledFrame: 'error' });
 });
 
 afterEach(() => {
