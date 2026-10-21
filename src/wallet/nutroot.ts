@@ -1,3 +1,5 @@
+import { randomBytes } from '@noble/hashes/utils.js';
+
 import { assertV3PointSecret, isBlsKeyset, isV3PointSecret, schnorrSignDigest } from '../crypto';
 import {
   createRandomSecretKey,
@@ -7,7 +9,7 @@ import {
 import { hashToCurveHex } from '../crypto/curves';
 import { parseSecret } from '../crypto/NUT10';
 import { maybeDeriveP2BKPrivateKeys, p2pkSpendLeaves } from '../crypto/NUT11';
-import { deriveQuoteLockKey } from '../crypto/NUT13';
+import { deriveQuoteIdPreimage, deriveQuoteLockKey } from '../crypto/NUT13';
 import {
   buildScriptPathWitness,
   parseNutrootLeaf,
@@ -71,6 +73,7 @@ export type ScriptPathSpend = {
 export async function attachTransactionWitnesses(
   payload: Pick<MeltRequest, 'inputs' | 'outputs'> & {
     mintQuoteInputs?: Array<{ quoteId: string; amount: Amount; lockKey: string; issued: Amount }>;
+    mintQuoteOutputs?: Array<{ pubkey: string; quoteId: string; amount: Amount }>;
   },
   meltQuote: { quoteId: string; amount: Amount } | undefined,
   extraKeys: Map<string, Uint8Array> | undefined,
@@ -97,6 +100,7 @@ export async function attachTransactionWitnesses(
     blindedOutputs: payload.outputs ?? [],
     ...(meltQuote && { meltQuoteOutput: meltQuote }),
     mintQuoteInputs: payload.mintQuoteInputs,
+    mintQuoteOutputs: payload.mintQuoteOutputs,
   });
   // Script path spends first: they name their own leaf, so they take precedence over the key
   // path even where both are available. Everything but the signature was settled before the
@@ -161,6 +165,7 @@ export function proofSpendOptions(
   proof: Proof,
   opts: { privkeys?: string | string[]; now?: number } | undefined,
   state: NutrootWalletState,
+  templateListed: boolean,
 ): SpendOptions {
   const privkeys = opts?.privkeys === undefined ? [] : [opts.privkeys].flat();
   const now = opts?.now ?? Math.floor(Date.now() / 1000);
@@ -181,7 +186,10 @@ export function proofSpendOptions(
   // Parses every leaf, so an unknown one throws here rather than being reported as spendable.
   const leaves = tree.map((leaf) => parseNutrootLeaf(hexToBytes(leaf)));
   const hits = recoverLeafKeySecretKeys(tree, proof.spend_info?.E, privkeys);
-  return withVerdict(keyPath, scriptOptions(leaves, hits, now));
+  return withVerdict(
+    keyPath,
+    scriptOptions(leaves, hits, now, heldXOnly(privkeys), templateListed),
+  );
 }
 
 /**
@@ -210,16 +218,24 @@ function legacySpendOptions(proof: Proof, privkeys: string[], now: number): Spen
       held.has(key.slice(2)) ? [{ leafIndex, keyIndex, blinded }] : [],
     ),
   );
-  return withVerdict(false, scriptOptions(leaves, hits, now));
+  return withVerdict(false, scriptOptions(leaves, hits, now, held, false));
+}
+
+// x-only hex of each private key's public key.
+function heldXOnly(privkeys: string[]): Set<string> {
+  return new Set(privkeys.map((k) => bytesToHex(getPubKeyFromPrivKey(hexToBytes(k))).slice(2)));
 }
 
 /**
- * Judges each leaf from the key hits against it, at `now`.
+ * Judges each leaf from the key hits against it, at `now`; `held` (x-only) finds template
+ * destinations this wallet holds, and `templateListed` says the mint lists the template leaf.
  */
 function scriptOptions(
   leaves: NutrootLeaf[],
   hits: Array<{ leafIndex: number; keyIndex: number; blinded: boolean }>,
   now: number,
+  held: Set<string>,
+  templateListed: boolean,
 ): SpendOption[] {
   return leaves.map((leaf, leafIndex) => {
     if (leaf.type === 'commit') {
@@ -237,12 +253,18 @@ function scriptOptions(
     if (leaf.type === 'after') option.availableAt = leaf.time;
     // Order matters: a locktime is absolute; then the key shortfall, which the leaf itself does
     // not show; a hashlock's preimage need is readable off leaf.type, so it reports last.
-    if (leaf.type === 'after' && leaf.time !== undefined && now < leaf.time) {
+    if (leaf.type === 'template' && !templateListed) {
+      // NUT-10: an optional leaf counts only at a mint that lists it in `leaves`.
+      option.blockedBy = 'unsupported';
+    } else if (leaf.type === 'after' && leaf.time !== undefined && now < leaf.time) {
       option.blockedBy = 'locktime';
     } else if (keys.length < leaf.n) {
       option.blockedBy = 'threshold';
     } else if (leaf.type === 'hashlock') {
       option.blockedBy = 'preimage';
+    } else if (leaf.type === 'template' && !leaf.dests?.some((d) => held.has(d.slice(2)))) {
+      // NUT-YY: value reaches only the dests, so a template pays this wallet only to its own.
+      option.blockedBy = 'destination';
     } else {
       option.satisfiable = true;
     }
@@ -266,6 +288,12 @@ function withVerdict(keyPath: boolean, script: SpendOption[]): SpendOptions {
     return { ...stuck, blockedBy: 'locktime', availableAt };
   }
   if (script.some((o) => o.blockedBy === 'preimage')) return { ...stuck, blockedBy: 'preimage' };
+  if (script.some((o) => o.blockedBy === 'destination')) {
+    return { ...stuck, blockedBy: 'destination' };
+  }
+  if (script.some((o) => o.blockedBy === 'unsupported')) {
+    return { ...stuck, blockedBy: 'unsupported' };
+  }
   if (script.some((o) => o.keys.length > 0)) return { ...stuck, blockedBy: 'threshold' };
   return { ...stuck, blockedBy: 'not-keyed-to-you' };
 }
@@ -432,10 +460,11 @@ export function collectSpendInfoKeys(
 }
 
 /**
- * Creates a quote lock keypair; the full contract is documented on `Wallet.createQuoteLockKey`.
+ * Creates a quote lock keypair and id preimage; the full contract is documented on
+ * `Wallet.createQuoteLockKey`.
  *
  * @remarks
- * Seed-derived under `mintPubkey` from a freshly reserved quote counter when seeded, random
+ * Seed-derived under `mintPubkey` from one freshly reserved quote counter when seeded, random
  * otherwise. Reserving (and any persistence events it fires) is the caller's, via
  * `reserveQuoteCounter`.
  */
@@ -443,12 +472,22 @@ export async function createQuoteLockKeyPair(
   seed: Uint8Array | undefined,
   mintPubkey: string | undefined,
   reserveQuoteCounter: () => Promise<number>,
-): Promise<{ pubkey: string; privkey: string }> {
-  const privkey =
-    seed && mintPubkey
-      ? deriveQuoteLockKey(seed, mintPubkey, await reserveQuoteCounter())
-      : createRandomSecretKey();
-  return { pubkey: bytesToHex(getPubKeyFromPrivKey(privkey)), privkey: bytesToHex(privkey) };
+): Promise<{ pubkey: string; privkey: string; idPreimage: string }> {
+  let privkey: Uint8Array;
+  let idPreimage: Uint8Array;
+  if (seed && mintPubkey) {
+    const counter = await reserveQuoteCounter();
+    privkey = deriveQuoteLockKey(seed, mintPubkey, counter);
+    idPreimage = deriveQuoteIdPreimage(seed, mintPubkey, counter);
+  } else {
+    privkey = createRandomSecretKey();
+    idPreimage = randomBytes(32);
+  }
+  return {
+    pubkey: bytesToHex(getPubKeyFromPrivKey(privkey)),
+    privkey: bytesToHex(privkey),
+    idPreimage: bytesToHex(idPreimage),
+  };
 }
 
 /**

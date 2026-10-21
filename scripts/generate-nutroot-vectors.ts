@@ -15,19 +15,29 @@ import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/
 
 import { deriveSecretAndBlindingFactor } from '../src/crypto';
 import { getPubKeyFromPrivKey } from '../src/crypto/curve_secp';
-import { deriveLeafKey, deriveNumsOffset, deriveQuoteLockKey } from '../src/crypto/NUT13';
+import {
+  deriveLeafKey,
+  deriveNumsOffset,
+  deriveQuoteIdPreimage,
+  deriveQuoteLockKey,
+} from '../src/crypto/NUT13';
 import { BLS_FR_ORDER, hashToCurveBls } from '../src/crypto/curve_bls';
 import { hashToCurveHex } from '../src/crypto/curves';
 import {
   buildTransactionTranscript,
+  derivedQuoteId,
+  inputBoundQuoteId,
   inputDigest,
   transactionDigest,
+  transcriptContainers,
 } from '../src/crypto/transcript';
 import type { TransactionShape } from '../src/crypto/transcript';
 import { Amount } from '../src/model/Amount';
 import { decodeCBOR, encodeCBOR } from '../src/utils/cbor';
 import {
   buildNutrootSecret,
+  nutrootMerklePath,
+  nutrootMerkleRoot,
   parseNutrootLeafHex,
   serializeNutrootLeaf,
   type NutrootLeaf,
@@ -88,12 +98,15 @@ d.nut13_v3.leaf_keys = [0, 1, 2].map((index) => {
   };
 });
 d.nut13_v3.mint_identity = MINT_IDENTITY;
-d.nut13_v3.quote_locks = [0, 1].map((counter) => {
+d.nut13_v3.quote_locks = [0, 1, 2, 3].map((counter) => {
   const privkey = deriveQuoteLockKey(seed, MINT_IDENTITY, counter);
+  const idPreimage = deriveQuoteIdPreimage(seed, MINT_IDENTITY, counter);
   return {
     counter,
     privkey: bytesToHex(privkey),
     pubkey: bytesToHex(getPubKeyFromPrivKey(privkey)),
+    id_preimage: bytesToHex(idPreimage),
+    quote_id: derivedQuoteId(idPreimage),
   };
 });
 
@@ -132,7 +145,7 @@ d.nut13_v3.comment = d.nut13_v3.comment.replace(claim, summary);
 
 // --- transcript -------------------------------------------------------------
 function fromVectorTx(tx: any): TransactionShape {
-  return {
+  const shape: TransactionShape = {
     proofInputs: tx.proof_inputs?.map((p: any) => ({
       amount: BigInt(p.amount),
       keysetId: p.keyset_id,
@@ -155,6 +168,18 @@ function fromVectorTx(tx: any): TransactionShape {
       quoteId: q.quote_id,
     })),
   };
+  // A fixed txout quote is named by its preimage or, without one, by its inputs (NUT-XX).
+  if (tx.mint_quote_outputs) {
+    shape.mintQuoteOutputs = tx.mint_quote_outputs.map((c: any, k: number) => ({
+      amount: BigInt(c.amount),
+      pubkey: c.pubkey,
+      quoteId:
+        c.id_preimage !== undefined
+          ? derivedQuoteId(hexToBytes(c.id_preimage))
+          : inputBoundQuoteId(shape, k),
+    }));
+  }
+  return shape;
 }
 
 // The mint vector's quote is locked to NUT-13 quote lock 0, like the partial mint's.
@@ -290,7 +315,7 @@ for (const name of ['swap', 'mint', 'melt', 'melt_with_change'] as const) {
 if (d.transcript.swap.input_id !== d.transcript.melt.input_id)
   throw new Error('swap and melt spend the same proof, so their input ids must match');
 d.transcript.comment =
-  'Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash("Cashu_TransactionInput", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers (high nibble is the section, 1 inputs, 2 outputs): 11 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 12 mint quote input (01 amount issued by this transaction, 02 quote id utf8, 03 lock key, 04 amount_issued before this transaction), 21 blinded output (01 amount, 02 keyset id, 03 SHA256(B_)), 22 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.';
+  'Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash("Cashu_TransactionInput", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers (high nibble is the section, 1 inputs, 2 outputs): 11 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 12 mint quote input (01 amount issued by this transaction, 02 quote id utf8, 03 lock key, 04 amount_issued before this transaction), 21 blinded output (01 amount, 02 keyset id, 03 SHA256(B_)), 22 melt quote output (01 amount, 02 quote id utf8), 23 mint quote output (01 amount, 02 lock key, 03 quote id utf8: hex(tagged_hash("Cashu_QuoteId", id_preimage)), or without one hex(tagged_hash("Cashu_InputQuoteId", SHA256(input containers) || u32_BE(k)))). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.';
 
 // Two proof inputs in one transaction pin the distinction between the shared transaction digest
 // and each input's signing digest.
@@ -496,6 +521,185 @@ d.transcript.comment =
 if (d.transcript.mint_quote_to_melt.input_id !== d.transcript.mint.input_id)
   throw new Error('mint_quote_to_melt reuses the mint quote input, so its input id must match');
 
+// Fixed txout quotes: the swap proof split into two, under NUT-13 quote locks 2 and 3; then a proof
+// and a mint quote in, the second output paying quote lock 3's key under an id bound to both inputs.
+const fixedOutput = (counter: number, amount: number, withPreimage = true) => {
+  const { pubkey, id_preimage } = d.nut13_v3.quote_locks[counter];
+  return { ...(withPreimage && { id_preimage }), pubkey, amount };
+};
+for (const [name, txVector] of [
+  [
+    'proof_to_two_fixed_txouts',
+    {
+      proof_inputs: d.transcript.swap.tx.proof_inputs,
+      mint_quote_outputs: [fixedOutput(2, 3), fixedOutput(3, 5)],
+    },
+  ],
+  [
+    'proof_to_input_bound_txout',
+    {
+      proof_inputs: d.transcript.swap.tx.proof_inputs,
+      mint_quote_inputs: d.transcript.mint.tx.mint_quote_inputs,
+      mint_quote_outputs: [fixedOutput(2, 3), fixedOutput(3, 13, false)],
+    },
+  ],
+] as const) {
+  const tx = fromVectorTx(txVector);
+  const transcript = buildTransactionTranscript(tx);
+  const digest = transactionDigest(tx);
+  const container = transcript.subarray(0, 3 + ((transcript[1] << 8) | transcript[2]));
+  const containers = transcriptContainers(transcript);
+  const inputSection = containers.filter((c) => c[0] >> 4 === 1);
+  d.transcript[name] = {
+    tx: txVector,
+    mint_quote_output_containers: containers.filter((c) => c[0] === 0x23).map((c) => bytesToHex(c)),
+    quote_ids: tx.mintQuoteOutputs!.map((c) => c.quoteId),
+    ...(name === 'proof_to_input_bound_txout' && {
+      input_section_hash: bytesToHex(sha256(concatBytes(...inputSection))),
+    }),
+    transcript: bytesToHex(transcript),
+    digest: bytesToHex(digest),
+    input_id: bytesToHex(sha256(container)),
+    input_digest: bytesToHex(inputDigest(digest, container)),
+  };
+}
+// Recompute the input-bound id from the transcript bytes alone, apart from the helper.
+{
+  const v = d.transcript.proof_to_input_bound_txout;
+  const tag = sha256(utf8ToBytes('Cashu_InputQuoteId'));
+  const id = bytesToHex(
+    sha256(concatBytes(tag, tag, hexToBytes(v.input_section_hash), new Uint8Array([0, 0, 0, 1]))),
+  );
+  if (v.quote_ids[1] !== id) throw new Error('input-bound quote id does not recompute');
+  if (v.quote_ids[0] !== d.transcript.proof_to_two_fixed_txouts.quote_ids[0])
+    throw new Error('the preimage output must keep its derived id');
+}
+if (d.transcript.proof_to_two_fixed_txouts.input_id !== d.transcript.swap.input_id)
+  throw new Error('proof_to_two_fixed_txouts spends the swap proof, so its input id must match');
+
+// Template leaf vectors share the internal key of NUMS offset u = 7.
+const N_SECP = SECP256K1_N;
+const K_U7 = SecpPoint.fromBytes(hexToBytes(NUTROOT_NUMS_KEY))
+  .add(SecpPoint.BASE.multiply(7n))
+  .toBytes(true);
+const testKey = (k: number) => bytesToHex(secp256k1.getPublicKey(bigTo32(BigInt(k)), true));
+
+// Template leaf (NUT-10): every output must be a fixed txout quote locked to a key in dests. A
+// spend through it is the swap proof (same amount, keyset and C) under a new secret, into the two
+// fixed txout quotes of proof_to_two_fixed_txouts. The rejection case locks the second to test key
+// 4, which dests does not list.
+const tplOutputs = {
+  mint_quote_outputs: d.transcript.proof_to_two_fixed_txouts.tx.mint_quote_outputs,
+};
+const tplDests = tplOutputs.mint_quote_outputs.map((c: any) => c.pubkey);
+const tplLeaf = serializeNutrootLeaf({
+  type: 'template',
+  n: 1,
+  keys: [testKey(3)],
+  dests: tplDests,
+});
+const tplRejected = {
+  mint_quote_outputs: [
+    tplOutputs.mint_quote_outputs[0],
+    { ...tplOutputs.mint_quote_outputs[1], pubkey: testKey(4) },
+  ],
+};
+// Spend leaf `index` of `tree` under internal key `K` into `outputs`, signed by test key `signer`.
+function spendTemplate(
+  K: Uint8Array,
+  tree: Uint8Array[],
+  index: number,
+  outputs: { mint_quote_outputs: any[] } = tplOutputs,
+  signer = 3n,
+) {
+  const hashes = tree.map((leaf) => taggedHash('Cashu_NutrootLeaf', leaf));
+  const root = nutrootMerkleRoot(hashes);
+  const tweak = BigInt('0x' + bytesToHex(taggedHash('Cashu_NutrootTweak', K, root))) % N_SECP;
+  const secret = SecpPoint.fromBytes(K).add(SecpPoint.BASE.multiply(tweak)).toBytes(true);
+  const txVector = {
+    proof_inputs: [{ ...d.transcript.swap.tx.proof_inputs[0], secret: bytesToHex(secret) }],
+    ...outputs,
+  };
+  const tx = fromVectorTx(txVector);
+  const transcript = buildTransactionTranscript(tx);
+  const digest = transactionDigest(tx);
+  const container = transcript.subarray(0, 3 + ((transcript[1] << 8) | transcript[2]));
+  const digestForInput = inputDigest(digest, container);
+  return {
+    merkle_root: bytesToHex(root),
+    tweak: bytesToHex(bigTo32(tweak)),
+    secret: bytesToHex(secret),
+    Y: hashToCurveBls(secret).toHex(true),
+    tx: txVector,
+    transcript: bytesToHex(transcript),
+    digest: bytesToHex(digest),
+    input_id: bytesToHex(sha256(container)),
+    input_digest: bytesToHex(digestForInput),
+    witness: JSON.stringify({
+      leaf: bytesToHex(tree[index]),
+      control: { K: bytesToHex(K), path: nutrootMerklePath(hashes, index).map(bytesToHex) },
+      signatures: [bytesToHex(schnorr.sign(digestForInput, bigTo32(signer), AUX0))],
+    }),
+  };
+}
+d.template_lock = {
+  comment:
+    'Template covenant: NUMS offset u = 7, one template leaf n = 1 to test key 3 whose dests are the lock keys of the two fixed txout quotes of proof_to_two_fixed_txouts, spent into exactly those outputs. rejected_outputs locks the second to test key 4 instead, which dests does not list, so the witness is rejected.',
+  u: bytesToHex(bigTo32(7n)),
+  K: bytesToHex(K_U7),
+  dests: tplDests,
+  leaf: bytesToHex(tplLeaf),
+  ...spendTemplate(K_U7, [tplLeaf], 0),
+  rejected_outputs: tplRejected,
+};
+
+// Arbiter escrow: the arbiter (key 4) can only pay the buyer (key 3) and the seller (key 5), in any
+// split; buyer and seller together settle any other way; the buyer alone after refund_time. Three
+// leaves, so the fold promotes the odd leaf. The spend is the seller building a split, 5 sat to
+// itself and 3 to the buyer, and the arbiter signing it.
+{
+  const coop = serializeNutrootLeaf({ type: 'threshold', n: 2, keys: [testKey(3), testKey(5)] });
+  const arbiter = serializeNutrootLeaf({
+    type: 'template',
+    n: 1,
+    keys: [testKey(4)],
+    dests: [testKey(3), testKey(5)],
+  });
+  const refund = serializeNutrootLeaf({
+    type: 'after',
+    n: 1,
+    keys: [testKey(3)],
+    time: d.receiver_keyed_refund.refund_time,
+  });
+  const tree = [arbiter, refund, coop];
+  const leafHash = (leaf: Uint8Array) => bytesToHex(taggedHash('Cashu_NutrootLeaf', leaf));
+  const split = {
+    mint_quote_outputs: [
+      { id_preimage: '55'.repeat(32), pubkey: testKey(5), amount: 5 },
+      { id_preimage: '33'.repeat(32), pubkey: testKey(3), amount: 3 },
+    ],
+  };
+  const spend = spendTemplate(K_U7, tree, 0, split, 4n);
+  d.template_escrow = {
+    comment:
+      'Arbiter escrow: NUMS offset u = 7 and three leaves. arbiter is a template leaf n = 1 to the arbiter (key 4) with dests buyer (key 3) and seller (key 5); refund is an after leaf to the buyer at receiver_keyed_refund.refund_time; coop is a 2-of-2 threshold of buyer and seller. The fold promotes the odd leaf. The spend is the swap proof under this secret into a split the seller built (5 sat to the seller under id_preimage 55..55, 3 to the buyer under 33..33), signed by the arbiter. self_deal is a fixed txout quote of the whole 8 to the arbiter itself, which dests does not list.',
+    buyer: testKey(3),
+    seller: testKey(5),
+    arbiter: testKey(4),
+    leaf_arbiter: bytesToHex(arbiter),
+    leaf_refund: bytesToHex(refund),
+    leaf_coop: bytesToHex(coop),
+    leaf_hash_arbiter: leafHash(arbiter),
+    leaf_hash_refund: leafHash(refund),
+    leaf_hash_coop: leafHash(coop),
+    u: bytesToHex(bigTo32(7n)),
+    K: bytesToHex(K_U7),
+    ...spend,
+    self_deal: {
+      mint_quote_outputs: [{ id_preimage: '44'.repeat(32), pubkey: testKey(4), amount: 8 }],
+    },
+  };
+}
 // 0xff is never allocated, so this vector survives new leaf types.
 delete d.two_leaf_covenant;
 d.leaf_forms.leaf_unknown_type = '00ff' + d.leaf_forms.threshold_1of1.slice(4);

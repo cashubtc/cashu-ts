@@ -287,7 +287,7 @@ function deriveHmacSecretAndBlindingFactor(
 
 /**
  * NUT-13 derivation types. `0x00`-`0x03` are components of one proof allocation and share the
- * keyset's proof counter; `0x04` is counted per mint on a quote counter.
+ * keyset's proof counter; `0x04` and `0x05` are one quote allocation on a per-mint quote counter.
  */
 export const DERIVATION_TYPE = {
   /**
@@ -310,6 +310,10 @@ export const DERIVATION_TYPE = {
    * Mint quote lock key; scoped to the mint identity and counted per mint, not on a proof counter.
    */
   quoteLock: 0x04,
+  /**
+   * Mint quote id preimage; same quote counter and scope as `quoteLock`, used as is (no sampling).
+   */
+  quoteIdPreimage: 0x05,
 } as const;
 
 function assertSeed(seed: Uint8Array): void {
@@ -454,6 +458,30 @@ export function deriveQuoteLockKey(
   counter: number,
 ): Uint8Array {
   return deriveV3Scalar(seed, normalizeSecpPubkey(mintPubkey), counter, DERIVATION_TYPE.quoteLock);
+}
+
+/**
+ * A mint quote id preimage (NUT-13 message type `0x05`), on the same quote counter as its lock key.
+ *
+ * @remarks
+ * Any 32 bytes is a valid preimage, so `attempt` is always 0. The quote id is its NUT-04 derived
+ * id, so a reused quote counter repeats the id.
+ * @param mintPubkey - The mint's NUT-06 `pubkey` (33-byte compressed, hex).
+ * @experimental Follows draft NUT-13 type `0x05` and draft NUT-04 derived quote ids; may change
+ *   before GA.
+ */
+export function deriveQuoteIdPreimage(
+  seed: Uint8Array,
+  mintPubkey: string,
+  counter: number,
+): Uint8Array {
+  const base = v3BaseMessage(
+    seed,
+    normalizeSecpPubkey(mintPubkey),
+    counter,
+    DERIVATION_TYPE.quoteIdPreimage,
+  );
+  return hmac(sha256, seed, concatBytes(base, numberToBytesBE(0, 4)));
 }
 
 function assertV3Keyset(keysetId: string, what: string): void {

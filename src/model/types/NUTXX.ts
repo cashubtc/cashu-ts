@@ -1,6 +1,7 @@
 import { type Amount } from '../Amount';
 
 import { type SerializedBlindedMessage, type SerializedBlindedSignature } from './blinded';
+import { type MintQuoteBaseResponse } from './NUT04';
 import { type MeltQuoteBaseResponse } from './NUT05';
 import { type Proof } from './proof';
 
@@ -10,6 +11,10 @@ import { type Proof } from './proof';
 export type NutXXInfo = {
   supported: boolean;
   quote_input_fee_ppk?: number;
+  /**
+   * Accepts mint quote outputs (fixed txout quotes).
+   */
+  fixed_txout_quotes?: boolean;
 };
 
 /**
@@ -36,6 +41,11 @@ export type TransactionRequest = {
    * `fee_options`, the selected `fee_index`.
    */
   melt_quote_outputs: Array<{ quote: string; fee_reserve: Amount; fee_index?: number }>;
+  /**
+   * Fixed txout quotes to create, each locked to `pubkey` (33-byte compressed hex), its id derived
+   * from `id_preimage` (32-byte hex) or, without one, bound to the inputs.
+   */
+  mint_quote_outputs?: Array<{ pubkey: string; amount: Amount; id_preimage?: string }>;
   prefer_async?: boolean;
 };
 
@@ -54,4 +64,8 @@ export type TransactionResponse = {
    * The melt quote, if any; once `PAID` its `change` carries the same signatures.
    */
   melt_quotes: MeltQuoteBaseResponse[];
+  /**
+   * One per mint quote output, in request order: the txout quote once created, else null.
+   */
+  mint_quotes: Array<MintQuoteBaseResponse | null>;
 };

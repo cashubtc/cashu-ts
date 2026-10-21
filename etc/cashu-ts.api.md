@@ -502,6 +502,7 @@ export const DERIVATION_TYPE: {
     readonly numsOffset: 2;
     readonly leafKey: 3;
     readonly quoteLock: 4;
+    readonly quoteIdPreimage: 5;
 };
 
 // @public (undocumented)
@@ -558,6 +559,9 @@ export function deriveP2BKSecretKeys(Ehex: string, privateKey: string | string[]
 
 // @public
 export function deriveP2BKSlotSecretKeyCandidates(Ehex: string, privkeyHex: string, slotIndex?: number): [string, string];
+
+// @public
+export function deriveQuoteIdPreimage(seed: Uint8Array, mintPubkey: string, counter: number): Uint8Array;
 
 // @public
 export function deriveQuoteLockKey(seed: Uint8Array, mintPubkey: string, counter: number): Uint8Array;
@@ -1015,6 +1019,7 @@ export class LockBuilder {
     addRefundPubkey(pk: string | string[]): this;
     addTag(key: string, values?: string[] | string): this;
     addTags(tags: P2PKTag[]): this;
+    addTemplate(dests: string | string[]): this;
     blindKeys(keys?: string | string[]): this;
     static fromOptions(lock: LockOptions_2): LockBuilder;
     lockUntil(when: Date | number): this;
@@ -1045,6 +1050,7 @@ type LockOptions_2 = {
     mainKeys?: string[];
     requiredMainSignatures?: number;
     hashlock?: string;
+    template?: string[];
     locktime?: number;
     refundKeys?: string[];
     requiredRefundSignatures?: number;
@@ -1396,6 +1402,7 @@ export const MintErrorCode: {
     readonly QUOTE_EXPIRED: 20007;
     readonly SIGNATURE_FOR_MINT_REQUEST_INVALID: 20008;
     readonly PUBKEY_REQUIRED_FOR_MINT_QUOTE: 20009;
+    readonly QUOTE_NOT_FOUND: 20010;
     readonly ENDPOINT_REQUIRES_CLEAR_AUTH: 30001;
     readonly CLEAR_AUTHENTICATION_FAILED: 30002;
     readonly ENDPOINT_REQUIRES_BLIND_AUTH: 31001;
@@ -1542,6 +1549,7 @@ export class MintInfo {
     get transactions(): {
         supported: boolean;
         quoteInputFeePpk: number;
+        fixedTxoutQuotes: boolean;
     };
     get urls(): string[] | undefined;
     // (undocumented)
@@ -1767,6 +1775,7 @@ export const NUTROOT_LEAF_TYPE: {
     readonly after: 2;
     readonly hashlock: 3;
     readonly commit: 4;
+    readonly template: 5;
 };
 
 // @public
@@ -1785,6 +1794,7 @@ export type NutrootConditionLeaf = {
     keys: string[];
     time?: number;
     hash?: string;
+    dests?: string[];
 };
 
 // @public
@@ -1811,6 +1821,7 @@ export function nutrootToLockOptions(options: {
 export type NutXXInfo = {
     supported: boolean;
     quote_input_fee_ppk?: number;
+    fixed_txout_quotes?: boolean;
 };
 
 // @public (undocumented)
@@ -2654,6 +2665,12 @@ export type SerializedTransactionPreview = {
         feeReserve: string;
         feeIndex?: number;
     };
+    mintQuoteOutputs: Array<{
+        quote: string;
+        pubkey: string;
+        amount: string;
+        idPreimage?: string;
+    }>;
     outputData: SerializedOutputData[];
     amount: string;
     fee: string;
@@ -2778,7 +2795,7 @@ export type SpendOption = {
         blinded: boolean;
     }>;
     satisfiable: boolean;
-    blockedBy?: 'threshold' | 'locktime' | 'preimage' | 'commit';
+    blockedBy?: 'threshold' | 'locktime' | 'preimage' | 'commit' | 'destination' | 'unsupported';
     availableAt?: number;
 };
 
@@ -2787,7 +2804,7 @@ export type SpendOptions = {
     keyPath: boolean;
     script: SpendOption[];
     spendable: boolean;
-    blockedBy?: 'not-keyed-to-you' | 'locktime' | 'threshold' | 'preimage';
+    blockedBy?: 'not-keyed-to-you' | 'locktime' | 'threshold' | 'preimage' | 'destination' | 'unsupported';
     availableAt?: number;
 };
 
@@ -2909,6 +2926,12 @@ export type TransactionPreview = {
         feeReserve: Amount;
         feeIndex?: number;
     };
+    mintQuoteOutputs: Array<{
+        quote: string;
+        pubkey: string;
+        amount: Amount;
+        idPreimage?: string;
+    }>;
     outputData: OutputDataLike[];
     amount: Amount;
     fee: Amount;
@@ -2931,6 +2954,11 @@ export type TransactionRequest = {
         fee_reserve: Amount;
         fee_index?: number;
     }>;
+    mint_quote_outputs?: Array<{
+        pubkey: string;
+        amount: Amount;
+        id_preimage?: string;
+    }>;
     prefer_async?: boolean;
 };
 
@@ -2939,6 +2967,7 @@ export type TransactionResponse = {
     state: TransactionState;
     signatures: SerializedBlindedSignature[];
     melt_quotes: MeltQuoteBaseResponse[];
+    mint_quotes: Array<MintQuoteBaseResponse | null>;
 };
 
 // @public
@@ -3097,6 +3126,7 @@ export class Wallet {
     }): Promise<{
         pubkey: string;
         privkey: string;
+        idPreimage: string;
     }>;
     decodeToken(token: string | Uint8Array): Token;
     defaultOutputType(): OutputType;
@@ -3172,6 +3202,11 @@ export class Wallet {
             };
             feeIndex?: number;
         };
+        mintQuoteOutputs?: Array<{
+            pubkey: string;
+            amount: AmountLike;
+            idPreimage?: string;
+        }>;
     }, config?: PrepareTransactionConfig): Promise<TransactionPreview>;
     receive(token: Token | string | ProofLike[], config?: ReceiveConfig, outputType?: OutputType): Promise<Proof[]>;
     recoverQuoteLockKey(pubkey: string): Promise<string | undefined>;
