@@ -290,7 +290,7 @@ for (const name of ['swap', 'mint', 'melt', 'melt_with_change'] as const) {
 if (d.transcript.swap.input_id !== d.transcript.melt.input_id)
   throw new Error('swap and melt spend the same proof, so their input ids must match');
 d.transcript.comment =
-  'Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash("Cashu_TransactionInput", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers (high nibble is the section, 1 inputs, 2 outputs): 11 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 12 mint quote input (01 amount issued, 02 quote id utf8, 03 lock key), 21 blinded output (01 amount, 02 keyset id, 03 SHA256(B_)), 22 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.';
+  'Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash("Cashu_TransactionInput", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers (high nibble is the section, 1 inputs, 2 outputs): 11 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 12 mint quote input (01 amount issued by this transaction, 02 quote id utf8, 03 lock key, 04 amount_issued before this transaction), 21 blinded output (01 amount, 02 keyset id, 03 SHA256(B_)), 22 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.';
 
 // Two proof inputs in one transaction pin the distinction between the shared transaction digest
 // and each input's signing digest.
@@ -473,6 +473,28 @@ d.transcript.comment =
     }),
   };
 }
+
+// NUT-XX transactions: a mint quote paying a melt directly. The recorded input id and digest are
+// the quote input's, whose container is the transcript's first record.
+{
+  const txVector = {
+    mint_quote_inputs: d.transcript.mint.tx.mint_quote_inputs,
+    melt_quote_outputs: d.transcript.melt.tx.melt_quote_outputs,
+  };
+  const tx = fromVectorTx(txVector);
+  const transcript = buildTransactionTranscript(tx);
+  const digest = transactionDigest(tx);
+  const container = transcript.subarray(0, 3 + ((transcript[1] << 8) | transcript[2]));
+  d.transcript.mint_quote_to_melt = {
+    tx: txVector,
+    transcript: bytesToHex(transcript),
+    digest: bytesToHex(digest),
+    input_id: bytesToHex(sha256(container)),
+    input_digest: bytesToHex(inputDigest(digest, container)),
+  };
+}
+if (d.transcript.mint_quote_to_melt.input_id !== d.transcript.mint.input_id)
+  throw new Error('mint_quote_to_melt reuses the mint quote input, so its input id must match');
 
 // 0xff is never allocated, so this vector survives new leaf types.
 delete d.two_leaf_covenant;

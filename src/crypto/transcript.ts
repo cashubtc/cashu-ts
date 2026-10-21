@@ -12,14 +12,6 @@ import { minimalBE, tlvRecord } from './nutroot';
 
 /**
  * Transaction transcript (NUT-10): one shared digest, one derived message per input.
- *
- * @remarks
- * `transaction_digest = SHA256(TLV stream)`; each input carries one BIP-340 signature over its
- * input digest, `tagged_hash("Cashu_TransactionInput", transaction_digest || SHA256(its own
- * container record))`. Containers: 0x11 proof input, 0x12 mint quote input, 0x21 blinded message
- * output (carrying `SHA256(B_)`), 0x22 melt quote output. Container types ascend (inputs before
- * outputs by construction); elements keep request order within their type; field streams inside are
- * ascending unique (NUT-10).
  */
 
 export const TRANSCRIPT_REQUEST_TAG = 'Cashu_AuthorizedRequest';
@@ -312,10 +304,22 @@ export function transactionInputs(tx: TransactionShape): {
 export type PayloadProofInput = { amount: AmountLike; id: string; C: string } & ProofInputName;
 
 type PayloadShape = {
-  inputs?: PayloadProofInput[];
-  mintQuotes?: Array<{ quoteId: string; amount: AmountLike; lockKey: string; issued: AmountLike }>;
-  outputs?: Array<{ amount: AmountLike; id: string; B_: string }>;
-  meltQuote?: { quoteId: string; amount: AmountLike };
+  proofInputs?: PayloadProofInput[];
+  /**
+   * `amount` is what this transaction issues against the quote, at most its mintable amount;
+   * `issued` is the quote's `amount_issued` before it.
+   */
+  mintQuoteInputs?: Array<{
+    quoteId: string;
+    amount: AmountLike;
+    lockKey: string;
+    issued: AmountLike;
+  }>;
+  blindedOutputs?: Array<{ amount: AmountLike; id: string; B_: string }>;
+  /**
+   * `amount` is the quote amount plus the selected fee reserve ({@link meltOutputAmount}).
+   */
+  meltQuoteOutput?: { quoteId: string; amount: AmountLike };
 };
 
 /**
@@ -361,29 +365,29 @@ function payloadToTransaction(payload: PayloadShape): TransactionShape {
     quoteId: q.quoteId,
   });
   return {
-    ...(payload.inputs && {
-      proofInputs: payload.inputs.map((p) => ({
+    ...(payload.proofInputs && {
+      proofInputs: payload.proofInputs.map((p) => ({
         amount: Amount.from(p.amount).toBigInt(),
         keysetId: p.id,
         Y: proofInputY(p),
         C: p.C,
       })),
     }),
-    ...(payload.mintQuotes && {
-      mintQuoteInputs: payload.mintQuotes.map((q) => ({
+    ...(payload.mintQuoteInputs && {
+      mintQuoteInputs: payload.mintQuoteInputs.map((q) => ({
         ...quote(q),
         lockKey: q.lockKey,
         issued: Amount.from(q.issued).toBigInt(),
       })),
     }),
-    ...(payload.outputs && {
-      blindedOutputs: payload.outputs.map((o) => ({
+    ...(payload.blindedOutputs && {
+      blindedOutputs: payload.blindedOutputs.map((o) => ({
         amount: Amount.from(o.amount).toBigInt(),
         keysetId: o.id,
         B_: o.B_,
       })),
     }),
-    ...(payload.meltQuote && { meltQuoteOutputs: [quote(payload.meltQuote)] }),
+    ...(payload.meltQuoteOutput && { meltQuoteOutputs: [quote(payload.meltQuoteOutput)] }),
   };
 }
 
