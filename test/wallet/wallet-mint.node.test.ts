@@ -458,6 +458,11 @@ describe('requestTokens', () => {
     const proofs = await wallet.completeBatchMint(batchPreview);
     const totalAmount = sumProofs(proofs);
     expect(totalAmount.equals(5)).toBe(true);
+
+    // A pre-v3 batch has no signing package to defer to, so it still needs a key.
+    await expect(
+      wallet.prepareBatchMint('bolt11', [{ amount: 3, quote: quoteA }], { signingPackage: true }),
+    ).rejects.toThrow(/recoverQuoteLockKey/);
   });
 
   test('completeBatchMint rejects missing DLEQ when mint advertises NUT-12', async () => {

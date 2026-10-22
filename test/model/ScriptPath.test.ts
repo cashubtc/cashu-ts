@@ -425,6 +425,10 @@ describe('ScriptPath signing packages', () => {
     expect(() =>
       ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 2 }]),
     ).toThrow(/not disclosed/);
+    const treeless: SwapPreview = { ...preview, inputs: [{ ...proof, spend_info: undefined }] };
+    expect(() =>
+      ScriptPath.extractSwapPackage(treeless, [{ secret: proof.secret, leafIndex: 0 }]),
+    ).toThrow(/not disclosed/);
     const keyless: SwapPreview = {
       ...preview,
       inputs: [{ ...proof, spend_info: { E: proof.spend_info!.E, tree: proof.spend_info!.tree } }],
@@ -775,6 +779,47 @@ describe('ScriptPath mint packages', () => {
     );
   });
 
+  test('extraction refuses a mint the package could not describe', () => {
+    expect(() => ScriptPath.extractMintPackage(mintPreview(), [])).toThrow(/at least one plan/);
+    const unlocked = { ...mintPreview(), quote: { quote: 'q-1' } as MintQuoteBaseResponse };
+    expect(() => ScriptPath.extractMintPackage(unlocked, [plan])).toThrow(/amount_issued/);
+    const legacy = {
+      ...mintPreview(),
+      outputData: [OutputData.createSingleRandomData(2, '00bd033559de27d0')],
+    };
+    expect(() => ScriptPath.extractMintPackage(legacy, [plan])).toThrow(/v3 keyset/);
+  });
+
+  test('a hashlock quote takes its preimage from the plans at merge', () => {
+    const preimage = `${'00'.repeat(31)}01`;
+    const hashTree = [
+      serializeNutrootLeafHex({
+        type: 'hashlock',
+        n: 1,
+        keys: [pub(3)],
+        hash: bytesToHex(sha256(hexToBytes(preimage))),
+      }),
+    ];
+    const hashKey = bytesToHex(
+      nutrootTweakPubkey(
+        hexToBytes(K),
+        nutrootMerkleRoot([nutrootLeafHash(hexToBytes(hashTree[0]))]),
+      ),
+    );
+    const preview = { ...mintPreview(), quote: quote('q-1', hashKey) };
+    const hashPlan = { ...plan, tree: hashTree, preimage };
+    const signed = ScriptPath.signPackage(
+      ScriptPath.extractMintPackage(preview, [hashPlan]),
+      bytesToHex(sk(3)),
+    );
+    expect(() => ScriptPath.mergeMintPackage(signed, preview)).toThrow(/preimage/);
+    expect(() =>
+      ScriptPath.mergeMintPackage(signed, preview, [{ ...hashPlan, preimage: '01' }]),
+    ).toThrow(/32 bytes/);
+    const merged = ScriptPath.mergeMintPackage(signed, preview, [hashPlan]);
+    expect(JSON.parse(merged.signature!).preimage).toBe(preimage);
+  });
+
   test('a batch keeps its key-path signatures and fills the co-signed quote', () => {
     const preview: BatchMintPreview = {
       method: 'bolt11',
@@ -792,6 +837,9 @@ describe('ScriptPath mint packages', () => {
     const merged = ScriptPath.mergeMintPackage(signed, preview);
     expect(merged.signatures![0]).toBe('aa'.repeat(64));
     expect(JSON.parse(merged.signatures![1]!).leaf).toBe(tree[0]);
+    // A batch prepared with no key-path signatures gets null for the quotes the package skips.
+    const unsigned = ScriptPath.mergeMintPackage(signed, { ...preview, signatures: undefined });
+    expect(unsigned.signatures![0]).toBeNull();
   });
 });
 
