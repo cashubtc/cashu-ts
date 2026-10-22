@@ -1103,6 +1103,33 @@ describe('melt change keyset rotating out (12004)', () => {
     expect(meltKeysets).toEqual(['00bd033559de27d0']);
   });
 
+  test('retries when the quote carries no expiry', async () => {
+    const { meltKeysets } = useRotatingMint(server, { ...keysetB, final_expiry: 1234567000 });
+    const wallet = new Wallet(mint, { unit, keysetId: '00bd033559de27d0' });
+    await wallet.loadMint();
+    const { expiry: _expiry, ...quoteWithoutExpiry } = meltQuote;
+
+    const { quote } = await wallet.meltProofs('bolt11', quoteWithoutExpiry, proofs);
+    expect(quote.state).toBe(MeltQuoteState.PAID);
+    expect(meltKeysets).toEqual(['00bd033559de27d0', '009a1f293253e41e']);
+  });
+
+  test('the retry keeps scriptPath plans', async () => {
+    useRotatingMint(server, keysetB);
+    const wallet = new Wallet(mint, { unit, keysetId: '00bd033559de27d0' });
+    await wallet.loadMint();
+    const scriptPath = [{ secret: `02${'ab'.repeat(32)}`, leafIndex: 0 }];
+    const complete = vi
+      .spyOn(wallet, 'completeMelt')
+      .mockRejectedValueOnce(new MintOperationError(12004, 'Keyset is rotating soon'))
+      .mockResolvedValueOnce({ quote: meltQuote, change: [], outputData: [] });
+
+    await wallet.meltProofsBolt11(meltQuote, proofs, { scriptPath });
+    expect(complete).toHaveBeenCalledTimes(2);
+    expect(complete.mock.calls.map((c) => c[2])).toEqual([{ scriptPath }, { scriptPath }]);
+    expect(complete.mock.calls[1][0].outputData[0].blindedMessage.id).toBe('009a1f293253e41e');
+  });
+
   test('surfaces 12004 when no other keyset outlives the quote', async () => {
     const { meltKeysets } = useRotatingMint(server, { ...keysetB, final_expiry: 1234567000 });
     const wallet = new Wallet(mint, { unit, keysetId: '00bd033559de27d0' });
