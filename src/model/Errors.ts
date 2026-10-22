@@ -331,6 +331,18 @@ export function isQuoteExpiredError(e: unknown): e is MintOperationError & {
 }
 
 /**
+ * True when the mint is rotating out the keyset of a melt's change outputs.
+ *
+ * @remarks
+ * The melt was refused before payment; prepare it again with blanks on another active keyset.
+ */
+export function isKeysetRotatingError(e: unknown): e is MintOperationError & {
+  code: typeof MintErrorCode.KEYSET_ROTATING;
+} {
+  return hasMintErrorCode(e, [MintErrorCode.KEYSET_ROTATING]);
+}
+
+/**
  * True when a Lightning payment failed. Pending payments do not match.
  */
 export function isPaymentFailedError(e: unknown): e is MintOperationError & {

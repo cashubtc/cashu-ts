@@ -48,6 +48,7 @@ import {
   MeltChangeError,
   StaleKeysetError,
   UnknownKeysetError,
+  isKeysetRotatingError,
   isMintOperationError,
 } from '../model/Errors';
 import { MintInfo } from '../model/MintInfo';
@@ -887,12 +888,14 @@ class Wallet {
       // NUT-00 reserves 12xxx for keyset errors (12001 unknown, 12002 inactive, 12003 expired).
       // Mints that answer without a structured code are unaffected, as are look-alike errors from
       // a custom request layer whose `code` is not a finite number (`Number(undefined)` is NaN):
-      // every range comparison against those is false, so check before comparing.
+      // every range comparison against those is false, so check before comparing. A rotating
+      // keyset (12004) is still active, so the snapshot is not stale.
       if (
         !isMintOperationError(e) ||
         !Number.isFinite(e.code) ||
         e.code < 12000 ||
-        e.code >= 13000
+        e.code >= 13000 ||
+        isKeysetRotatingError(e)
       ) {
         throw e;
       }
@@ -4250,13 +4253,7 @@ class Wallet {
     config?: MeltProofsConfig,
     outputType?: OutputType,
   ): Promise<MeltProofsResponse<TQuote>> {
-    const meltTxn = await this.prepareMelt(method, meltQuote, proofsToSend, config, outputType);
-    // no abort
-    return this.completeMelt<TQuote>(
-      meltTxn,
-      config?.privkey,
-      config?.scriptPath?.length ? { scriptPath: config.scriptPath } : undefined,
-    );
+    return this.prepareAndCompleteMelt<TQuote>(method, meltQuote, proofsToSend, config, outputType);
   }
 
   /**
@@ -4278,13 +4275,7 @@ class Wallet {
     outputType?: OutputType,
   ): Promise<MeltProofsResponse<MeltQuoteBolt11Response>> {
     this.requireSupport('melt', 'bolt11');
-    const meltTxn = await this.prepareMelt('bolt11', meltQuote, proofsToSend, config, outputType);
-    // no abort
-    return this.completeMelt<MeltQuoteBolt11Response>(
-      meltTxn,
-      config?.privkey,
-      config?.scriptPath?.length ? { scriptPath: config.scriptPath } : undefined,
-    );
+    return this.prepareAndCompleteMelt('bolt11', meltQuote, proofsToSend, config, outputType);
   }
 
   /**
@@ -4306,13 +4297,7 @@ class Wallet {
     outputType?: OutputType,
   ): Promise<MeltProofsResponse<MeltQuoteBolt12Response>> {
     this.requireSupport('melt', 'bolt12');
-    const meltTxn = await this.prepareMelt('bolt12', meltQuote, proofsToSend, config, outputType);
-    // no abort
-    return this.completeMelt<MeltQuoteBolt12Response>(
-      meltTxn,
-      config?.privkey,
-      config?.scriptPath?.length ? { scriptPath: config.scriptPath } : undefined,
-    );
+    return this.prepareAndCompleteMelt('bolt12', meltQuote, proofsToSend, config, outputType);
   }
 
   /**
@@ -4368,14 +4353,62 @@ class Wallet {
       fee_reserve: feeOption.fee_reserve.toString(),
       inputFee: inputFee.toString(),
     });
-    // Perform melt
-    const meltTxn = await this.prepareMelt('onchain', meltQuote, normalizedProofs, config);
-    // no abort
-    const response = await this.completeMelt<MeltQuoteOnchainResponse>(meltTxn, config?.privkey, {
+    return this.prepareAndCompleteMelt('onchain', meltQuote, normalizedProofs, config, undefined, {
       extraPayload: { fee_index: feeIndex },
-      ...(config?.scriptPath?.length && { scriptPath: config.scriptPath }),
     });
-    return response;
+  }
+
+  /**
+   * Runs `prepareMelt` then `completeMelt`, retrying once with change blanks on another active
+   * keyset when the mint is rotating out the first (NUT-02).
+   *
+   * @remarks
+   * The mint refuses a rotating keyset before payment, so the inputs are still unspent.
+   * @internal
+   */
+  async prepareAndCompleteMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(
+    method: string,
+    meltQuote: TQuote,
+    proofsToSend: ProofLike[],
+    config?: MeltProofsConfig,
+    outputType?: OutputType,
+    options?: CompleteMeltOptions,
+  ): Promise<MeltProofsResponse<TQuote>> {
+    const complete = (preview: MeltPreview<TQuote>) =>
+      // no abort
+      this.completeMelt<TQuote>(preview, config?.privkey, {
+        ...options,
+        ...(config?.scriptPath?.length && { scriptPath: config.scriptPath }),
+      });
+    const preview = await this.prepareMelt(method, meltQuote, proofsToSend, config, outputType);
+    try {
+      return await complete(preview);
+    } catch (e) {
+      const rejected = preview.outputData[0]?.blindedMessage.id;
+      // Custom outputs are the caller's; only wallet-built blanks can move keyset.
+      if (!isKeysetRotatingError(e) || !rejected || outputType?.type === 'custom') throw e;
+      const quoteExpiry = 'expiry' in preview.quote ? Number(preview.quote.expiry) : undefined;
+      let next: Keyset;
+      try {
+        next = this._keyChain.getCheapestKeyset(
+          (k) => k.id !== rejected && !(k.expiry && quoteExpiry && k.expiry < quoteExpiry),
+        );
+      } catch {
+        throw e; // no other keyset can take the change
+      }
+      this._logger.debug('Melt change keyset is rotating, retrying on another', {
+        rejected,
+        keyset: next.id,
+      });
+      const retry = await this.prepareMelt(
+        method,
+        meltQuote,
+        proofsToSend,
+        { ...config, keysetId: next.id },
+        outputType,
+      );
+      return complete(retry);
+    }
   }
 
   /**
@@ -4611,9 +4644,8 @@ class Wallet {
     // Merge preview quote with response to protect against incomplete response.
     const mergedQuote = { ...meltPreview.quote, ...meltResponse };
 
-    // Create any change Proofs. The spec is silent on which keyset settles change after a
-    // rotation, so take the keyset each signature names. The inputs are spent by now, so a
-    // failure here must hand back what recovery needs.
+    // Create any change Proofs, unblinding each with the keyset its signature names (NUT-08). The
+    // inputs are spent by now, so a failure here must hand back what recovery needs.
     const changeSigs = meltResponse.change ?? [];
     let change: Proof[];
     try {

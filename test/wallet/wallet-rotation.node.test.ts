@@ -16,6 +16,7 @@ import {
   MintOperationError,
   StaleKeysetError,
   UnknownKeysetError,
+  isKeysetRotatingError,
   Amount,
   MeltQuoteState,
   MintQuoteState,
@@ -1024,5 +1025,92 @@ describe('send and melt inputs across a rotation', () => {
     expect(meltPreview.outputData[0].blindedMessage.id).toBe('009a1f293253e41e');
 
     expect(counts().keysARequests).toBe(0); // never attempted
+  });
+});
+
+describe('melt change keyset rotating out (12004)', () => {
+  const keysA = DUMMY_TEST_KEYS;
+  const meltQuote: MeltQuoteBolt11Response = {
+    quote: 'melt-rotating',
+    amount: Amount.from(10),
+    fee_reserve: Amount.from(3),
+    request: 'bolt11request',
+    state: MeltQuoteState.UNPAID,
+    expiry: 1234567890,
+    payment_preimage: null,
+    unit: 'sat',
+    method: 'bolt11',
+  };
+  const proofs: Proof[] = [
+    { id: '00bd033559de27d0', amount: Amount.from(8), secret: 'secret1', C: 'C1' },
+    { id: '00bd033559de27d0', amount: Amount.from(5), secret: 'secret2', C: 'C2' },
+  ];
+
+  // A and B are both active; the mint refuses change blanks on A until its pending melts settle.
+  function useRotatingMint(server: SetupServer, b: MintKeyset) {
+    const meltKeysets: string[] = [];
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({ keysets: [DUMMY_TEST_KEYSET, b] }),
+      ),
+      http.get(mintUrl + '/v1/keys', () =>
+        HttpResponse.json({ keysets: [keysA, { ...b, keys: PUBKEYS }] }),
+      ),
+      http.post(mintUrl + '/v1/melt/bolt11', async ({ request }) => {
+        const body = (await request.json()) as { outputs: Array<{ id: string }> };
+        const id = body.outputs[0].id;
+        meltKeysets.push(id);
+        if (id === '00bd033559de27d0') {
+          return HttpResponse.json(
+            { detail: 'Keyset is rotating soon, no new melts accepted', code: 12004 },
+            { status: 400 },
+          );
+        }
+        return HttpResponse.json({ ...meltQuote, state: MeltQuoteState.PAID, change: [] });
+      }),
+    );
+    return { meltKeysets };
+  }
+
+  test('retries once with blanks on another active keyset', async () => {
+    const { meltKeysets } = useRotatingMint(server, keysetB);
+    const wallet = new Wallet(mint, { unit, keysetId: '00bd033559de27d0' });
+    await wallet.loadMint();
+
+    const { quote } = await wallet.meltProofsBolt11(meltQuote, proofs);
+    expect(quote.state).toBe(MeltQuoteState.PAID);
+    expect(meltKeysets).toEqual(['00bd033559de27d0', '009a1f293253e41e']);
+  });
+
+  test('MeltBuilder.run() retries the same way', async () => {
+    const { meltKeysets } = useRotatingMint(server, keysetB);
+    const wallet = new Wallet(mint, { unit, keysetId: '00bd033559de27d0' });
+    await wallet.loadMint();
+
+    const { quote } = await wallet.ops.meltBolt11(meltQuote, proofs).run();
+    expect(quote.state).toBe(MeltQuoteState.PAID);
+    expect(meltKeysets).toEqual(['00bd033559de27d0', '009a1f293253e41e']);
+  });
+
+  test('completeMelt leaves the retry to the caller', async () => {
+    const { meltKeysets } = useRotatingMint(server, keysetB);
+    const wallet = new Wallet(mint, { unit, keysetId: '00bd033559de27d0' });
+    await wallet.loadMint();
+
+    const preview = await wallet.prepareMelt('bolt11', meltQuote, proofs);
+    const err = await wallet.completeMelt(preview).catch((e: unknown) => e);
+    expect(isKeysetRotatingError(err)).toBe(true);
+    expect(meltKeysets).toEqual(['00bd033559de27d0']);
+  });
+
+  test('surfaces 12004 when no other keyset outlives the quote', async () => {
+    const { meltKeysets } = useRotatingMint(server, { ...keysetB, final_expiry: 1234567000 });
+    const wallet = new Wallet(mint, { unit, keysetId: '00bd033559de27d0' });
+    await wallet.loadMint();
+
+    const err = await wallet.meltProofsBolt11(meltQuote, proofs).catch((e: unknown) => e);
+    expect(isKeysetRotatingError(err)).toBe(true);
+    expect(err).not.toBeInstanceOf(StaleKeysetError);
+    expect(meltKeysets).toEqual(['00bd033559de27d0']);
   });
 });

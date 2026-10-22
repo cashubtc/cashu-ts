@@ -1137,20 +1137,13 @@ export class MeltBuilder<
    * @returns The melt result: `{ quote, change, outputData }`.
    */
   async run(): Promise<MeltProofsResponse<TQuote>> {
-    // Step 1, preview and allocate NUT-08 blanks
-    const preview = await this.wallet.prepareMelt<TQuote>(
+    return this.wallet.prepareAndCompleteMelt<TQuote>(
       this.method,
       this.quote,
       this.proofs,
       this.config,
       this.outputType,
     );
-
-    // Step 2, sign if needed and complete the melt
-    // no abort
-    return this.wallet.completeMelt(preview, this.config.privkey, {
-      ...(this.config.scriptPath && { scriptPath: this.config.scriptPath }),
-    });
   }
 }
 

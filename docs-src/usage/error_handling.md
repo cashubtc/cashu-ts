@@ -42,6 +42,7 @@ try {
 | `isProofsAlreadySpentError` | 11001                                    |
 | `isPendingError`            | 11002, 11004, 20005                      |
 | `isAlreadyIssuedError`      | 11003, 20002                             |
+| `isKeysetRotatingError`     | 12004                                    |
 | `isQuoteNotPaidError`       | 20001                                    |
 | `isQuoteExpiredError`       | 20007                                    |
 | `isPaymentFailedError`      | 20004                                    |

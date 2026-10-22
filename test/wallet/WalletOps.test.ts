@@ -23,6 +23,7 @@ import type {
   MintProofsConfig,
   SendResponse,
   MeltProofsConfig,
+  CompleteMeltOptions,
   SwapPreview,
   MeltPreview,
   MintPreview,
@@ -108,7 +109,7 @@ type PrepareMeltFn = (
 type CompleteMeltFn = (
   meltPreview: MeltPreview,
   privkey?: string | string[],
-  preferAsync?: boolean,
+  options?: CompleteMeltOptions,
 ) => Promise<{ change: Proof[] }>;
 
 type MeltProofsOnchainFn = (
@@ -195,6 +196,13 @@ class MockWallet {
     quote: q,
   }));
   completeMelt: Mock<CompleteMeltFn> = vi.fn<CompleteMeltFn>(async () => ({ change: [] }));
+  // Wallet.prepareAndCompleteMelt minus the rotation retry, so builder tests still see both steps.
+  prepareAndCompleteMelt = async (...args: Parameters<PrepareMeltFn>) => {
+    const config = args[3];
+    return this.completeMelt(await this.prepareMelt(...args), config?.privkey, {
+      ...(config?.scriptPath && { scriptPath: config.scriptPath }),
+    });
+  };
   meltProofsOnchain: Mock<MeltProofsOnchainFn> = vi.fn<MeltProofsOnchainFn>(async (q) => ({
     quote: q,
     change: [],
