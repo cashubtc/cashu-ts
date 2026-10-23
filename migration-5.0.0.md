@@ -1119,7 +1119,7 @@ const n = a.toNumber(); // explicit, throws above MAX_SAFE_INTEGER; a.toBigInt()
 const oidc = await mint.oidcAuth(opts);
 
 // After
-const oidc = OIDCAuth.fromMintInfo(await mint.getLazyMintInfo(), opts);
+const oidc = OIDCAuth.fromMintInfo(await mint.fetchMintInfo(), opts);
 ```
 
 ---
@@ -1151,4 +1151,39 @@ await mint.swap(payload, myRequestFn);
 // After
 await mint.swap(payload, { customRequest: myRequestFn });
 await mint.swap(payload, { signal: controller.signal });
+```
+
+---
+
+## `Mint.getInfo()` returns the wire response
+
+`Mint.getInfo()` used to normalize the `/v1/info` response before returning it: `method_name` was derived when the mint sent none, and omitted `min_amount`/`max_amount` were coerced to `null`. It now returns the response exactly as the mint sent it, so those fields can be `null` or absent. `SwapMethod` declares all three optional now, matching the wire; code that read them without a null check no longer compiles.
+
+Normalization is unchanged for everything built on `MintInfo`, which normalizes on construction: `Wallet`, `Mint.fetchMintInfo()`, and `MintInfo.cache` all return the same values as before.
+
+```ts
+// Before
+const info = await mint.getInfo();
+show(info.nuts['4'].methods[0].method_name); // was derived for you
+
+// After
+const info = await mint.fetchMintInfo();
+show(info.supportedMethods('mint')[0].method_name); // derived here instead
+```
+
+Code that already null-checks those fields, or persists the response for `new MintInfo(...)` later, needs no change.
+
+---
+
+## `Mint.getLazyMintInfo()` removed; use `Mint.fetchMintInfo()`
+
+`fetchMintInfo` returns the cached `MintInfo` as `getLazyMintInfo` did, and `forceRefresh: true` refetches over it. `Wallet.loadMint()` now goes through it too, so it reuses info the `Mint` already holds (eg a `Mint` shared between wallets, or one seeded with `setMintInfo`). Call `loadMint(true)` for a fresh fetch.
+
+```ts
+// Before
+const info = await mint.getLazyMintInfo();
+
+// After
+const info = await mint.fetchMintInfo();
+const fresh = await mint.fetchMintInfo({ forceRefresh: true });
 ```

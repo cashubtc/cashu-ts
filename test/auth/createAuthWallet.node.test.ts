@@ -150,8 +150,8 @@ describe('createAuthWallet wiring', () => {
     const { wallet } = await createAuthWallet(mintUrl, { customRequest });
 
     expect(wallet.mint.mintUrl).toBe(mintUrl);
+    // One info fetch: loadMint reuses the info the OIDC discovery step fetched.
     expect(endpoints).toEqual([
-      `${mintUrl}/v1/info`,
       `${mintUrl}/v1/info`,
       `${mintUrl}/v1/keysets`,
       `${mintUrl}/v1/keys`,
@@ -182,8 +182,8 @@ describe('createAuthWallet wiring', () => {
     const { wallet } = await createAuthWallet(mintUrl, { requestFetch });
 
     expect(wallet.mint.mintUrl).toBe(mintUrl);
+    // One info fetch: loadMint reuses the info the OIDC discovery step fetched.
     expect(endpoints).toEqual([
-      `${mintUrl}/v1/info`,
       `${mintUrl}/v1/info`,
       `${mintUrl}/v1/keysets`,
       `${mintUrl}/v1/keys`,

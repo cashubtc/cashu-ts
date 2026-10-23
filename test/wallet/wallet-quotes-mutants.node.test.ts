@@ -628,7 +628,7 @@ describe('createMintQuoteBolt11 mutants', () => {
         });
       }),
     );
-    const wallet = new Wallet(mint, { unit });
+    const wallet = new Wallet(mintUrl, { unit });
     await wallet.loadMint();
 
     await expect(wallet.createMintQuoteBolt11(1000, LOCK_PUBKEY, 'desc')).rejects.toThrow(
@@ -1104,7 +1104,7 @@ describe('createMeltQuoteBolt11 mutants', () => {
         });
       }),
     );
-    const wallet = new Wallet(mint, { unit });
+    const wallet = new Wallet(mintUrl, { unit });
     await wallet.loadMint();
 
     await wallet.createMeltQuoteBolt11('lnbc1pvjluezz', 5000);
@@ -1132,7 +1132,7 @@ describe('createMultiPathMeltQuote mutants', () => {
         }),
       ),
     );
-    const wallet = new Wallet(mint, { unit });
+    const wallet = new Wallet(mintUrl, { unit });
     await wallet.loadMint();
     // method matches but unit does not: an `||` mutant would wrongly accept this.
     await expect(wallet.createMultiPathMeltQuote(invoice, 1000)).rejects.toThrow(
@@ -2182,7 +2182,7 @@ describe('createMultiPathMeltQuote mutants', () => {
         }),
       ),
     );
-    const wallet = new Wallet(mint, { unit });
+    const wallet = new Wallet(mintUrl, { unit });
     await wallet.loadMint();
     // `some` must match the sat entry among the two methods. An `every` mutant would reject
     // because the usd entry does not match.
@@ -2211,7 +2211,7 @@ describe('createMultiPathMeltQuote mutants', () => {
         }),
       ),
     );
-    const wallet = new Wallet(mint, { unit });
+    const wallet = new Wallet(mintUrl, { unit });
     await wallet.loadMint();
 
     await expect(wallet.createMultiPathMeltQuote(invoice, 5000)).rejects.toThrow(

@@ -75,7 +75,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
     expect(calls[0]).toMatch(/\/v1\/mint\/quote\/bolt12$/);
   });
 
-  it('uses per-call customRequest on getLazyMintInfo cache miss', async () => {
+  it('uses per-call customRequest on fetchMintInfo cache miss', async () => {
     const offlineMint = new Mint('https://offline.invalid');
     const calls: string[] = [];
     const customRequest = async (options: ReqArgs) => {
@@ -86,7 +86,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
       throw new Error('unexpected endpoint');
     };
 
-    const info = await offlineMint.getLazyMintInfo({ customRequest });
+    const info = await offlineMint.fetchMintInfo({ customRequest });
 
     expect(info.name).toBe(MINTCACHE.mintInfo.name);
     expect(calls).toHaveLength(1);

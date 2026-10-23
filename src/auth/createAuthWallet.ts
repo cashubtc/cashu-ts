@@ -57,7 +57,7 @@ export async function createAuthWallet(
   });
 
   // 3. Discover and configure OIDCAuth from the mint's NUT-21 metadata
-  const oidc = OIDCAuth.fromMintInfo(await mint.getLazyMintInfo(), {
+  const oidc = OIDCAuth.fromMintInfo(await mint.fetchMintInfo(), {
     ...options?.oidc,
     logger: options?.logger,
   });

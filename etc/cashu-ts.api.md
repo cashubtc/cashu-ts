@@ -1299,10 +1299,12 @@ export class Mint {
     createMintQuoteBolt12(mintQuotePayload: MintQuoteBolt12Request, opts?: MintCallOptions): Promise<MintQuoteBolt12Response>;
     createMintQuoteOnchain(mintQuotePayload: MintQuoteOnchainRequest, opts?: MintCallOptions): Promise<MintQuoteOnchainResponse>;
     disconnectWebSocket(): void;
+    fetchMintInfo(opts?: MintCallOptions & {
+        forceRefresh?: boolean;
+    }): Promise<MintInfo>;
     getInfo(opts?: MintCallOptions): Promise<GetInfoResponse>;
     getKeys(keysetId?: string, mintUrl?: string, opts?: MintCallOptions): Promise<GetKeysResponse>;
     getKeySets(opts?: MintCallOptions): Promise<GetKeysetsResponse>;
-    getLazyMintInfo(opts?: MintCallOptions): Promise<MintInfo>;
     get lastResponseMetadata(): ResponseMeta | undefined;
     melt<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, meltPayload: MeltRequest, options?: MintCallOptions & {
         normalize?: (raw: Record<string, unknown>) => MeltQuoteBaseResponse & TRes;
@@ -2821,9 +2823,9 @@ export type SupportedMethod = {
 export type SwapMethod = {
     method: string;
     unit: string;
-    method_name: string | null;
-    min_amount: AmountLike | null;
-    max_amount: AmountLike | null;
+    method_name?: string | null;
+    min_amount?: AmountLike | null;
+    max_amount?: AmountLike | null;
     description?: boolean;
     options?: {
         description?: boolean;
