@@ -11,7 +11,7 @@ import type {
   MintQuoteBolt11Response,
 } from '../model/types';
 import type { KeyChainCache } from '../model/types/keyset';
-import { assertSpendableVersion, nullIfUndefined, verifiedPreimage } from '../utils';
+import { assertSpendableVersion, normalizeMeltPreimage } from '../utils';
 
 import { type OperationCounters } from './CounterSource';
 import type { Wallet } from './Wallet';
@@ -62,15 +62,7 @@ function normalizeMeltQuoteUpdate(
     ...(p.fee_reserve != null && { fee_reserve: Amount.from(p.fee_reserve) }),
     ...(p.change && { change: p.change.map((s) => ({ ...s, amount: Amount.from(s.amount) })) }),
   };
-  nullIfUndefined(data, 'payment_preimage');
-  if (typeof data.payment_preimage === 'string' && typeof data.request === 'string') {
-    data.payment_preimage = verifiedPreimage(
-      data.request,
-      data.payment_preimage,
-      logger,
-      'bolt11 melt quote update',
-    );
-  }
+  normalizeMeltPreimage(data, 'bolt11', logger, 'bolt11 melt quote update');
   return data as MeltQuoteBolt11Response;
 }
 

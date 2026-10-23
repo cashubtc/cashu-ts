@@ -53,12 +53,12 @@ import {
   joinUrls,
   MAX_KEYSET_LIST,
   MAX_MINT_INFO_LIST,
+  normalizeMeltPreimage,
   normalizeMintKeys,
   normalizeMintKeyset,
   normalizeMintUrl,
   normalizeSafeIntegerMetadata,
   nullIfUndefined,
-  verifiedPreimage,
 } from '../utils';
 
 import type {
@@ -1584,22 +1584,7 @@ class Mint {
       this._logger.error('Invalid response from mint...', { op });
       throw new CTSError('Invalid response from mint');
     }
-    // Per NUT-23, payment_preimage is `<str | null>`. Some mints may omit it
-    // until the invoice is paid; coerce undefined → null so consumers can
-    // rely on `payment_preimage === null` checks.
-    nullIfUndefined(data, 'payment_preimage');
-    if (
-      method === 'bolt11' &&
-      typeof data.payment_preimage === 'string' &&
-      typeof data.request === 'string'
-    ) {
-      data.payment_preimage = verifiedPreimage(
-        data.request,
-        data.payment_preimage,
-        this._logger,
-        op,
-      );
-    }
+    normalizeMeltPreimage(data, method, this._logger, op);
   }
 
   /**
