@@ -11,16 +11,7 @@ import type {
   MintQuoteBolt11Response,
 } from '../model/types';
 import type { KeyChainCache } from '../model/types/keyset';
-<<<<<<< HEAD
-import { assertSpendableVersion, nullIfUndefined, verifiedPreimage } from '../utils';
-=======
-import {
-  deriveMintQuoteAccounting,
-  normalizeMeltPreimage,
-  normalizeSafeIntegerMetadata,
-} from '../utils';
-import { mapInChunks } from '../utils/chunked';
->>>>>>> 93e1d23 (fix(mint): null a melt payment_preimage that is not a string (#1337))
+import { assertSpendableVersion, normalizeMeltPreimage } from '../utils';
 
 import { type OperationCounters } from './CounterSource';
 import type { Wallet } from './Wallet';
@@ -71,26 +62,7 @@ function normalizeMeltQuoteUpdate(
     ...(p.fee_reserve != null && { fee_reserve: Amount.from(p.fee_reserve) }),
     ...(p.change && { change: p.change.map((s) => ({ ...s, amount: Amount.from(s.amount) })) }),
   };
-<<<<<<< HEAD
-  nullIfUndefined(data, 'payment_preimage');
-  if (typeof data.payment_preimage === 'string' && typeof data.request === 'string') {
-    data.payment_preimage = verifiedPreimage(
-      data.request,
-      data.payment_preimage,
-      logger,
-      'bolt11 melt quote update',
-    );
-=======
-  if (data.method === undefined) data.method = method;
-  data.expiry = normalizeSafeIntegerMetadata(
-    data.expiry as number | undefined,
-    'meltQuote.expiry',
-    undefined,
-  );
-  if (method === 'bolt11' || method === 'bolt12') {
-    normalizeMeltPreimage(data, method, logger, `${method} melt quote update`);
->>>>>>> 93e1d23 (fix(mint): null a melt payment_preimage that is not a string (#1337))
-  }
+  normalizeMeltPreimage(data, 'bolt11', logger, 'bolt11 melt quote update');
   return data as MeltQuoteBolt11Response;
 }
 
