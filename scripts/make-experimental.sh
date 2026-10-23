@@ -72,6 +72,9 @@ if ! git diff-index --quiet HEAD --; then
   echo "working tree dirty — commit or stash first" >&2; exit 1
 fi
 
+# Where to return once the build is published; a run started on the build branch returns to its base.
+START=$(git symbolic-ref -q --short HEAD || git rev-parse HEAD)
+
 echo ">> refreshing $BASE from $REMOTE"
 git fetch "$REMOTE" "$BASE"
 git branch -D "$BRANCH" 2>/dev/null || true
@@ -81,13 +84,15 @@ git branch -D "$BRANCH" 2>/dev/null || true
 # on a stale base. FETCH_HEAD is exactly what we just pulled, refspec-agnostic.
 git checkout -B "$BRANCH" FETCH_HEAD
 BASE_SHA=$(git rev-parse --short HEAD)   # the $BASE commit this build sits on
+[[ "$START" == "$BRANCH" ]] && START=$BASE_SHA
 
 for pr in "${PRS[@]}"; do
   echo ">> merging PR #$pr"
-  git fetch "$REMOTE" "pull/$pr/head:pr-$pr" --force
+  # Merged from FETCH_HEAD, so no local branch per PR is left behind.
+  git fetch "$REMOTE" "pull/$pr/head"
   # Captured, not streamed, because whether the merge hit a conflict is the only
   # way to tell a replayed resolution from a hook that refused the auto-commit.
-  if merge_log=$(git merge --no-edit "pr-$pr" 2>&1); then
+  if merge_log=$(git merge --no-edit FETCH_HEAD 2>&1); then
     printf '%s\n' "$merge_log"
     continue
   fi
@@ -172,4 +177,10 @@ if [[ "${PUBLISH:-}" == "1" ]]; then
   fi
 
   printf '\n=== announce ===\nnpm i @cashu/cashu-ts@%s   (tag: experimental)\nbundled on %s@%s:\n%s\n' "$expver" "$BASE" "$BASE_SHA" "$summary"
+
+  # Published, so the throwaway branch has done its job.
+  git checkout -q "$START"
+  git branch -D "$BRANCH"
+else
+  echo ">> left on $BRANCH to inspect; when done: git checkout $START && git branch -D $BRANCH"
 fi
