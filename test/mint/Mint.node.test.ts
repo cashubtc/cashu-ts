@@ -1263,6 +1263,23 @@ describe('Mint normalization', () => {
       );
     });
 
+    it.each([[true], [12345], [{ a: 'b' }], [['ab']]])(
+      'nulls a non-string preimage (%j) and warns',
+      async (junk) => {
+        const { mint, logger } = mintFor({
+          ...paidResponse(invoiceFor(paymentHash), null),
+          payment_preimage: junk,
+        });
+        const res = await mint.checkMeltQuoteBolt11('my-quote');
+        expect(res.payment_preimage).toBeNull();
+        expect(logger.warn).toHaveBeenCalledTimes(1);
+        expect(logger.warn).toHaveBeenCalledWith(
+          'Mint returned a payment_preimage that is not a string',
+          { op: 'bolt11 melt quote' },
+        );
+      },
+    );
+
     it('does not check bolt12 quotes, whose request is an offer', async () => {
       const { mint, logger } = mintFor({
         ...paidResponse('lno1offer', preimage),
