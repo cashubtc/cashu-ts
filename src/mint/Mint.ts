@@ -1197,17 +1197,16 @@ class Mint {
    * @returns The blind auth token if required, otherwise undefined.
    */
   private async handleClearAuth(
+    auth: AuthProvider,
     method: 'GET' | 'POST',
     path: string,
-    mintInfo?: MintInfo,
+    info: MintInfo,
   ): Promise<string | undefined> {
-    if (!this._authProvider) return undefined;
-    const info = mintInfo ?? (await this.fetchMintInfo());
     if (!info.requiresClearAuthToken(method, path)) return undefined;
-    if (this._authProvider.ensureCAT) {
-      return this._authProvider.ensureCAT(); // optional
+    if (auth.ensureCAT) {
+      return auth.ensureCAT(); // optional
     }
-    return this._authProvider.getCAT();
+    return auth.getCAT();
   }
 
   /**
@@ -1219,16 +1218,14 @@ class Mint {
    * @returns The blind auth token if required, otherwise undefined.
    */
   private async handleBlindAuth(
+    auth: AuthProvider,
     method: 'GET' | 'POST',
     path: string,
-    mintInfo?: MintInfo,
+    info: MintInfo,
     body?: string,
   ): Promise<string | undefined> {
-    if (!this._authProvider) return undefined;
-    const info = mintInfo ?? (await this.fetchMintInfo());
     if (!info.requiresBlindAuthToken(method, path)) return undefined;
-    const bat = await this._authProvider.getBlindAuthToken({ method, path, body });
-    return bat;
+    return auth.getBlindAuthToken({ method, path, body });
   }
 
   private async requestWithAuth<T>(
@@ -1241,15 +1238,18 @@ class Mint {
     opts?: MintCallOptions,
   ): Promise<T> {
     const requestInstance = opts?.customRequest ?? this._request;
-    let mintInfo = this._mintInfo;
-    if (this._authProvider) {
-      mintInfo = await this.fetchMintInfo(opts);
-    }
     // Serialize once and pass the string down: blind auth signs these exact bytes,
     // and the transport contract sends a string body verbatim.
     const bodyString = init.requestBody ? JSONInt.stringify(init.requestBody) : undefined;
-    const bat = await this.handleBlindAuth(method, path, mintInfo, bodyString);
-    const cat = await this.handleClearAuth(method, path, mintInfo);
+    let mintInfo = this._mintInfo;
+    let bat: string | undefined;
+    let cat: string | undefined;
+    if (this._authProvider) {
+      // Auth requirements live in the mint info, so an auth-enabled request loads it first.
+      mintInfo = await this.fetchMintInfo(opts);
+      bat = await this.handleBlindAuth(this._authProvider, method, path, mintInfo, bodyString);
+      cat = await this.handleClearAuth(this._authProvider, method, path, mintInfo);
+    }
     const headers: Record<string, string> = {
       ...(init.headers ?? {}),
       ...(bat ? { 'Blind-auth': bat } : {}),
