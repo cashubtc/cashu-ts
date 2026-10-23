@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.12.1](https://github.com/cashubtc/cashu-ts/compare/v4.12.0...v4.12.1) (2026-10-23)
+
+
+### Bug Fixes
+
+* **mint:** null a melt payment_preimage that is not a string ([#1339](https://github.com/cashubtc/cashu-ts/issues/1339)) ([7d201a4](https://github.com/cashubtc/cashu-ts/commit/7d201a4271bb8b475f29170c6269fec0214243ce))
+
 ## [4.12.0](https://github.com/cashubtc/cashu-ts/compare/v4.11.0...v4.12.0) (2026-10-16)
 
 
