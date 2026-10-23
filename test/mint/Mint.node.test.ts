@@ -1330,6 +1330,21 @@ describe('Mint normalization', () => {
       );
     });
 
+    it('warns once, for the type, when a guaranteeing mint sends a non-string preimage', async () => {
+      const { mint, logger } = mintFor({
+        ...paidResponse(invoiceFor(paymentHash), null),
+        payment_preimage: true,
+      });
+      mint.setMintInfo(guaranteeing('sat'));
+      const res = await mint.checkMeltQuoteBolt11('my-quote');
+      expect(res.payment_preimage).toBeNull();
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Mint returned a payment_preimage that is not a string',
+        { op: 'bolt11 melt quote' },
+      );
+    });
+
     it('stays quiet when the guaranteed preimage is present', async () => {
       const { mint, logger } = mintFor(paidResponse(invoiceFor(paymentHash), preimage));
       mint.setMintInfo(guaranteeing('sat'));
