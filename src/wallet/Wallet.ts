@@ -1064,8 +1064,8 @@ class Wallet {
       counterSource: opts?.counterSource ?? this._counterSource,
       strictCachedKeysets: this._strictCachedKeysets,
     });
-    // Share our MintInfo rather than rebuild it from `cache`, which would also replace the shared
-    // Mint's copy.
+    // Share our MintInfo rather than rebuild it from `cache`: that would drop its signature verdict
+    // and replace the shared Mint's copy with an unsigned one.
     newWallet._keyChain.loadFromCache(this._keyChain.cache);
     newWallet._mintInfo = this.getMintInfo();
     newWallet.finishInit();

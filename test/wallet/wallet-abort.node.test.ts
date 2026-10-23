@@ -6,6 +6,7 @@ import {
   CallerAbortError,
   CheckStateEnum,
   MeltQuoteState,
+  MintInfo,
   type MeltQuoteBolt11Response,
   type MeltQuoteOnchainResponse,
   type MintQuoteBolt11Response,
@@ -44,11 +45,13 @@ describe('AbortSignal on wallet operations', () => {
   test('loadMint forwards the signal to the info request', async () => {
     const wallet = new Wallet(mint, { unit });
     const ac = new AbortController();
-    const spy = vi.spyOn(wallet.mint, 'getInfo').mockResolvedValue(mintInfoResp);
+    const spy = vi
+      .spyOn(wallet.mint, 'fetchMintInfo')
+      .mockResolvedValue(new MintInfo(mintInfoResp));
 
     await wallet.loadMint(true, { signal: ac.signal });
 
-    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ signal: ac.signal }));
+    expect(spy).toHaveBeenCalledWith({ signal: ac.signal, forceRefresh: true });
   });
 
   test('a one-shot send honours the signal while preparing, not for the commit', async () => {

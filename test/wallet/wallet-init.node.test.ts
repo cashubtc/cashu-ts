@@ -1,5 +1,5 @@
 import { HttpResponse, http } from 'msw';
-import { test, describe, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import {
   Mint,
@@ -15,7 +15,7 @@ import {
   type RequestFn,
 } from '../../src';
 import { NULL_LOGGER } from '../../src/logger';
-import { MINTCACHE } from '../consts';
+import { MINTCACHE, MINTINFORESP, signMintInfo } from '../consts';
 
 import {
   mintUrl,
@@ -112,7 +112,7 @@ describe('test wallet init', () => {
     const customRequest = (async <T>({ endpoint }: Parameters<RequestFn>[0]): Promise<T> => {
       endpoints.push(endpoint);
       let payload: unknown;
-      if (endpoint.endsWith('/v1/info')) {
+      if (endpoint.includes('/v1/info?request_nonce=')) {
         payload = mintInfoResp;
       } else if (endpoint.endsWith('/v1/keysets')) {
         payload = dummyKeysetResp;
@@ -129,7 +129,7 @@ describe('test wallet init', () => {
 
     expect(wallet.mint.mintUrl).toBe(mintUrl);
     expect(endpoints).toEqual([
-      `${mintUrl}/v1/info`,
+      expect.stringMatching(/\/v1\/info\?request_nonce=[0-9a-f]{64}$/),
       `${mintUrl}/v1/keysets`,
       `${mintUrl}/v1/keys`,
     ]);
@@ -139,7 +139,7 @@ describe('test wallet init', () => {
     const countingMint = () => {
       let infoFetches = 0;
       const customRequest = (async <T>({ endpoint }: Parameters<RequestFn>[0]): Promise<T> => {
-        if (endpoint.endsWith('/v1/info')) {
+        if (endpoint.includes('/v1/info?')) {
           infoFetches++;
           return mintInfoResp as T;
         }
@@ -174,13 +174,67 @@ describe('test wallet init', () => {
     });
   });
 
+  describe('NUT-06 nonce echo on loadMint', () => {
+    // A signing mint that echoes each request nonce, or serves a captured response echoing `replay`.
+    const signingMint = (replay?: string) => {
+      const infoNonces: string[] = [];
+      const customRequest = (async <T>({ endpoint }: Parameters<RequestFn>[0]): Promise<T> => {
+        const nonce = /\/v1\/info\?request_nonce=([0-9a-f]{64})$/.exec(endpoint)?.[1];
+        if (nonce) {
+          infoNonces.push(nonce);
+          return signMintInfo({ ...MINTINFORESP, request_nonce: replay ?? nonce }) as T;
+        }
+        if (endpoint.endsWith('/v1/keysets')) return dummyKeysetResp as T;
+        if (endpoint.endsWith('/v1/keys')) return dummyKeysResp as T;
+        throw new Error(`Unexpected endpoint: ${endpoint}`);
+      }) as RequestFn;
+      return { mint: new Mint(mintUrl, { customRequest }), infoNonces };
+    };
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(MINTINFORESP.time * 1000);
+    });
+    afterEach(() => vi.useRealTimers());
+
+    test('reports a replayed response invalid, on first load and on forceRefresh', async () => {
+      const { mint, infoNonces } = signingMint('0'.repeat(64));
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+      expect(wallet.getMintInfo().signatureState).toBe('invalid');
+      await wallet.loadMint(true);
+      expect(wallet.getMintInfo().signatureState).toBe('invalid');
+      expect(infoNonces).toHaveLength(2);
+    });
+
+    test('verifies an honest echo and refetches on forceRefresh', async () => {
+      const { mint, infoNonces } = signingMint();
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+      const first = wallet.getMintInfo();
+      expect(first.signatureState).toBe('valid');
+      await wallet.loadMint(true);
+      expect(wallet.getMintInfo()).not.toBe(first);
+      expect(wallet.getMintInfo().signatureState).toBe('valid');
+      expect(infoNonces).toHaveLength(2);
+    });
+
+    test('withKeyset keeps the verdict and leaves the shared Mint copy alone', async () => {
+      const { mint } = signingMint();
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+      const derived = wallet.withKeyset(wallet.keysetId);
+      expect(derived.getMintInfo().signatureState).toBe('valid');
+      expect((await mint.fetchMintInfo()).signatureState).toBe('valid');
+    });
+  });
+
   test('should pass requestFetch from wallet URL options through the default request pipeline', async () => {
     const endpoints: string[] = [];
     const requestFetch = (async (input: Parameters<RequestFetch>[0]) => {
       const endpoint = String(input);
       endpoints.push(endpoint);
       let payload: unknown;
-      if (endpoint.endsWith('/v1/info')) {
+      if (endpoint.includes('/v1/info?request_nonce=')) {
         payload = mintInfoResp;
       } else if (endpoint.endsWith('/v1/keysets')) {
         payload = dummyKeysetResp;
@@ -200,7 +254,7 @@ describe('test wallet init', () => {
 
     expect(wallet.mint.mintUrl).toBe(mintUrl);
     expect(endpoints).toEqual([
-      `${mintUrl}/v1/info`,
+      expect.stringMatching(/\/v1\/info\?request_nonce=[0-9a-f]{64}$/),
       `${mintUrl}/v1/keysets`,
       `${mintUrl}/v1/keys`,
     ]);
@@ -305,7 +359,7 @@ describe('test wallet init', () => {
     const wallet = new Wallet(mintUrl, { unit });
     const cache = KeyChain.mintToCacheDTO(mintUrl, dummyKeysetResp.keysets, dummyKeysResp.keysets);
     wallet.loadMintFromCache(mintInfoResp, cache);
-    const spyMintInfo = vi.spyOn((wallet as any).mint, 'getInfo');
+    const cachedInfo = wallet.getMintInfo();
     const spyKeySets = vi.spyOn((wallet as any).mint, 'getKeySets');
     const spyKeys = vi.spyOn((wallet as any).mint, 'getKeys');
     await wallet.loadMint();
@@ -346,12 +400,11 @@ describe('test wallet init', () => {
     const specificKeys = wallet.keyChain.getKeyset('00bd033559de27d0').keys;
     expect(specificKeys).toEqual(dummyKeysResp.keysets[0].keys);
 
-    // Verify no network calls were made
-    expect(spyMintInfo).toHaveBeenCalledTimes(0);
+    // Verify no network calls were made: a fetch would build a new MintInfo
+    expect(wallet.getMintInfo()).toBe(cachedInfo);
     expect(spyKeySets).toHaveBeenCalledTimes(0);
     expect(spyKeys).toHaveBeenCalledTimes(0);
 
-    spyMintInfo.mockRestore();
     spyKeySets.mockRestore();
     spyKeys.mockRestore();
   });
@@ -381,7 +434,7 @@ describe('test wallet init', () => {
 
   test('should force refresh mint info, keys, and keysets when forceRefresh is true', async () => {
     const wallet = new Wallet(mintUrl, { unit });
-    const spyMintInfo = vi.spyOn((wallet as any).mint, 'getInfo');
+    const spyMintInfo = vi.spyOn((wallet as any).mint, 'fetchMintInfo');
     const spyKeySets = vi.spyOn((wallet as any).mint, 'getKeySets');
     const spyKeys = vi.spyOn((wallet as any).mint, 'getKeys');
     await wallet.loadMint(true); // Force refresh

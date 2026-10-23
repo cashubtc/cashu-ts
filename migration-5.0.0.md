@@ -1177,7 +1177,7 @@ Code that already null-checks those fields, or persists the response for `new Mi
 
 ## `Mint.getLazyMintInfo()` removed; use `Mint.fetchMintInfo()`
 
-`fetchMintInfo` returns the cached `MintInfo` as `getLazyMintInfo` did, and `forceRefresh: true` refetches over it. `Wallet.loadMint()` now goes through it too, so it reuses info the `Mint` already holds (eg a `Mint` shared between wallets, or one seeded with `setMintInfo`). Call `loadMint(true)` for a fresh fetch.
+`fetchMintInfo` returns the cached `MintInfo` as `getLazyMintInfo` did, and `forceRefresh: true` refetches over it. A fetched response is checked against the NUT-06 `request_nonce` sent with it. `Wallet.loadMint()` now goes through it too, so it reuses info the `Mint` already holds (eg a `Mint` shared between wallets, or one seeded with `setMintInfo`). Call `loadMint(true)` for a fresh, nonce-checked fetch.
 
 ```ts
 // Before
@@ -1187,3 +1187,9 @@ const info = await mint.getLazyMintInfo();
 const info = await mint.fetchMintInfo();
 const fresh = await mint.fetchMintInfo({ forceRefresh: true });
 ```
+
+---
+
+## Mint info signatures (NUT-06)
+
+`MintInfo` verifies a signing mint's `/v1/info` signature on construction and reports the verdict as `signatureState` (`'unsigned' | 'valid' | 'invalid'`). `'invalid'` covers a bad signature, a signed `time` more than an hour from the local clock, and (via `fetchMintInfo()` and `Wallet.loadMint()`) a missing or mismatched `request_nonce` echo. Each `/v1/info` request now carries that nonce as a query parameter, so a raw `getInfo()` response from a signing mint includes `signature` and `request_nonce`. The library never rejects a mint over the verdict: policy is yours.

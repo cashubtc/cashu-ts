@@ -5,6 +5,8 @@
  * You should ordinarily not need to instantiate a Mint, as it will be auto-instantiated by the
  * Wallet class when you pass in the mint url.
  */
+import { bytesToHex, randomBytes } from '@noble/curves/utils.js';
+
 import type { AuthProvider } from '../auth/AuthProvider';
 import { type Logger, NULL_LOGGER, failIf } from '../logger';
 import { Amount, type AmountLike } from '../model/Amount';
@@ -165,23 +167,20 @@ class Mint {
    *
    * @remarks
    * Not normalized: `MintInfo` (eg via `fetchMintInfo`) derives missing members and sanitizes
-   * values.
+   * values, and only an unmodified response can pass its NUT-06 signature check. The request
+   * carries a fresh `request_nonce`; `fetchMintInfo` checks the echo, `setMintInfo(raw)` cannot.
    * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns The mint's information response.
    */
   async getInfo(opts?: MintCallOptions): Promise<GetInfoResponse> {
-    const requestInstance = opts?.customRequest ?? this._request;
-    return requestInstance<GetInfoResponse>({
-      signal: opts?.signal,
-      endpoint: joinUrls(this._mintUrl, '/v1/info'),
-      onResponseMeta: this._captureResponseMetadata,
-      logger: this._logger,
-    });
+    return (await this.requestInfo(opts)).info;
   }
 
   /**
    * Returns the mint's info, fetching and caching it when none is held or `forceRefresh` is set.
    *
+   * @remarks
+   * A fetched response is checked against the `request_nonce` sent with it (`signatureState`).
    * @param opts Per-call `customRequest` override, `signal` to abort the request, and
    *   `forceRefresh` to refetch over a cached copy.
    */
@@ -189,7 +188,8 @@ class Mint {
     if (this._mintInfo && !opts?.forceRefresh) {
       return this._mintInfo;
     }
-    this._mintInfo = new MintInfo(await this.getInfo(opts), this._logger);
+    const { info, requestNonce } = await this.requestInfo(opts);
+    this._mintInfo = new MintInfo(info, this._logger, { requestNonce });
     return this._mintInfo;
   }
 
@@ -198,6 +198,21 @@ class Mint {
    */
   setMintInfo(mintInfo: MintInfo | GetInfoResponse): void {
     this._mintInfo = mintInfo instanceof MintInfo ? mintInfo : new MintInfo(mintInfo, this._logger);
+  }
+
+  private async requestInfo(
+    opts?: MintCallOptions,
+  ): Promise<{ info: GetInfoResponse; requestNonce: string }> {
+    const requestInstance = opts?.customRequest ?? this._request;
+    // Mints that predate NUT-06 signing ignore the query parameter.
+    const requestNonce = bytesToHex(randomBytes(32));
+    const info = await requestInstance<GetInfoResponse>({
+      signal: opts?.signal,
+      endpoint: `${joinUrls(this._mintUrl, '/v1/info')}?request_nonce=${requestNonce}`,
+      onResponseMeta: this._captureResponseMetadata,
+      logger: this._logger,
+    });
+    return { info, requestNonce };
   }
 
   // -----------------------------------------------------------------
