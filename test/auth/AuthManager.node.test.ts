@@ -49,6 +49,7 @@ import type { Proof } from '../../src/model/types';
 import * as utils from '../../src/utils';
 import { bytesToHex, decodeBase64UrlToUint8, hexToBytes, MAX_KEYSET_LIST } from '../../src/utils';
 import * as wallet from '../../src/wallet';
+import { MINTINFORESP, signMintInfo } from '../consts';
 
 const mintUrl = 'http://mint.local';
 
@@ -777,6 +778,28 @@ describe('AuthManager: init fetches info then builds KeyChain via wallet mock', 
     expect(KeyChainMock.fromCache).toHaveBeenCalledWith(mintUrl, 'auth', expect.any(Object));
 
     expect(am.activeAuthKeysetId).toBe('00authkeyset0001');
+  });
+
+  test.each([
+    ['an echoed nonce verifies', undefined, 'valid'],
+    ['a replayed response is invalid', '0'.repeat(64), 'invalid'],
+  ])('init sends a request nonce: %s', async (_name, replay, state) => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(MINTINFORESP.time * 1000);
+    const request = (async ({ endpoint }: { endpoint: string }) => {
+      const nonce = /\/v1\/info\?request_nonce=([0-9a-f]{64})$/.exec(endpoint)?.[1];
+      if (nonce) return signMintInfo({ ...MINTINFORESP, request_nonce: replay ?? nonce });
+      return endpoint.endsWith('/keysets')
+        ? { keysets: [{ id: '00k', unit: 'auth', active: true, input_fee_ppk: 0 }] }
+        : { keysets: [{ id: '00k', unit: 'auth', keys: { 1: '02aa' } }] };
+    }) as RequestFn;
+    const am = new AuthManager(mintUrl, { request });
+    try {
+      await am['init']();
+      expect(am['info']?.signatureState).toBe(state);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test('threads the configured logger into every init request, not the process-global', async () => {

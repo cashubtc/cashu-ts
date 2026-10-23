@@ -135,7 +135,7 @@ describe('createAuthWallet wiring', () => {
     const customRequest = (async <T>({ endpoint }: Parameters<RequestFn>[0]): Promise<T> => {
       endpoints.push(endpoint);
       let payload: unknown;
-      if (endpoint.endsWith('/v1/info')) {
+      if (endpoint.includes('/v1/info?request_nonce=')) {
         payload = infoResp;
       } else if (endpoint.endsWith('/v1/keysets')) {
         payload = dummyKeysetResp;
@@ -150,9 +150,9 @@ describe('createAuthWallet wiring', () => {
     const { wallet } = await createAuthWallet(mintUrl, { customRequest });
 
     expect(wallet.mint.mintUrl).toBe(mintUrl);
-    // One info fetch: loadMint reuses the info the OIDC discovery step fetched.
+    // One checked info fetch: loadMint reuses the info the OIDC discovery step fetched.
     expect(endpoints).toEqual([
-      `${mintUrl}/v1/info`,
+      expect.stringMatching(/\/v1\/info\?request_nonce=[0-9a-f]{64}$/),
       `${mintUrl}/v1/keysets`,
       `${mintUrl}/v1/keys`,
     ]);
@@ -164,7 +164,7 @@ describe('createAuthWallet wiring', () => {
       const endpoint = String(input);
       endpoints.push(endpoint);
       let payload: unknown;
-      if (endpoint.endsWith('/v1/info')) {
+      if (endpoint.includes('/v1/info?request_nonce=')) {
         payload = infoResp;
       } else if (endpoint.endsWith('/v1/keysets')) {
         payload = dummyKeysetResp;
@@ -182,9 +182,9 @@ describe('createAuthWallet wiring', () => {
     const { wallet } = await createAuthWallet(mintUrl, { requestFetch });
 
     expect(wallet.mint.mintUrl).toBe(mintUrl);
-    // One info fetch: loadMint reuses the info the OIDC discovery step fetched.
+    // One checked info fetch: loadMint reuses the info the OIDC discovery step fetched.
     expect(endpoints).toEqual([
-      `${mintUrl}/v1/info`,
+      expect.stringMatching(/\/v1\/info\?request_nonce=[0-9a-f]{64}$/),
       `${mintUrl}/v1/keysets`,
       `${mintUrl}/v1/keys`,
     ]);

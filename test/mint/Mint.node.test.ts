@@ -4,7 +4,7 @@ import { bech32 } from '@scure/base';
 import { type Client, Server, WebSocket } from 'mock-socket';
 import { HttpResponse, http } from 'msw';
 import { setupServer } from 'msw/node';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   Mint,
@@ -21,7 +21,7 @@ import type { AuthProvider, Logger, MintQuoteBaseResponse, Proof, RequestFn } fr
 import { NULL_LOGGER } from '../../src/logger';
 import { setRequestLogger } from '../../src/transport/request';
 import { MAX_KEYSET_LIST, MAX_MINT_INFO_LIST } from '../../src/utils/limits';
-import { MINTINFORESP } from '../consts';
+import { MINTINFORESP, signMintInfo } from '../consts';
 
 type ReqArgs = {
   endpoint: string;
@@ -110,6 +110,44 @@ describe('Mint normalization', () => {
     expect(raw.nuts['4'].methods[0].method_name).toBeUndefined();
     const [method] = (await mint.fetchMintInfo()).nuts['4'].methods;
     expect(method).toMatchObject({ method_name: 'Bolt11', min_amount: null, max_amount: null });
+  });
+
+  describe('NUT-06 signed info', () => {
+    const NONCE_RE = /\/v1\/info\?request_nonce=([0-9a-f]{64})$/;
+    // Echoes the request nonce like a signing mint would; `nonce` overrides the echo.
+    const signingMint = (nonce?: string) => {
+      const endpoints: string[] = [];
+      const customRequest = (async ({ endpoint }: { endpoint: string }) => {
+        endpoints.push(endpoint);
+        const echo = nonce ?? NONCE_RE.exec(endpoint)?.[1];
+        return signMintInfo(echo ? { ...MINTINFORESP, request_nonce: echo } : MINTINFORESP);
+      }) as RequestFn;
+      return { mint: new Mint(mintUrl, { customRequest }), endpoints };
+    };
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(MINTINFORESP.time * 1000);
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it('sends a fresh request nonce and verifies the echoed, signed response', async () => {
+      const { mint, endpoints } = signingMint();
+      expect((await mint.fetchMintInfo()).signatureState).toBe('valid');
+      expect(endpoints[0]).toMatch(NONCE_RE);
+      const raw = await mint.getInfo();
+      expect(raw.request_nonce).toBe(NONCE_RE.exec(endpoints[1])?.[1]);
+      expect(new MintInfo(raw, undefined, { requestNonce: raw.request_nonce }).signatureState).toBe(
+        'valid',
+      );
+      expect(endpoints[0]).not.toBe(endpoints[1]);
+    });
+
+    it('reports invalid when the mint echoes another nonce or none', async () => {
+      expect((await signingMint('0'.repeat(64)).mint.fetchMintInfo()).signatureState).toBe(
+        'invalid',
+      );
+      expect((await signingMint('').mint.fetchMintInfo()).signatureState).toBe('invalid');
+    });
   });
 
   it('setMintInfo accepts raw info objects and seeds the cache', async () => {

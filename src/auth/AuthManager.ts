@@ -1,4 +1,4 @@
-import { utf8ToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, randomBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { isBlsKeyset } from '../crypto/curves';
 import { requestDigest, signTransactionInput } from '../crypto/transcript';
@@ -438,12 +438,13 @@ export class AuthManager implements AuthProvider {
    */
   private async init(): Promise<void> {
     if (!this.info) {
+      const requestNonce = bytesToHex(randomBytes(32));
       const info = await this.req<GetInfoResponse>({
-        endpoint: joinUrls(this.mintUrl, '/v1/info'),
+        endpoint: `${joinUrls(this.mintUrl, '/v1/info')}?request_nonce=${requestNonce}`,
         method: 'GET',
         logger: this.logger,
       });
-      this.info = new MintInfo(info, this.logger);
+      this.info = new MintInfo(info, this.logger, { requestNonce });
     }
     if (!this.keychain) {
       // fetch blind keysets and keys for unit 'auth'
