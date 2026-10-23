@@ -16,7 +16,6 @@ new LockBuilder()
   .addHashlock(hashlock: string) // preimage required alongside signatures (NUT-14 semantics)
   .addLeaf(leaf: NutrootLeaf) // explicit tree leaf (eg staged reclaim); v3 only
   .blindKeys(keys?: string | string[]) // blind every key, or exactly the listed keys (list is v3 only)
-  .disclose() // publish the exercised witness (NUT-10 disclosure) on every generated leaf; a no-op pre-v3
   .sigAll() // NUT-11 SIG_ALL; on v3 this is the default and only behavior
   .validate(target: 'nutroot' | 'p2pk'): CTSError[] // pre-flight check; empty array = encodes clean
   .toOptions(): LockOptions;
@@ -28,7 +27,7 @@ LockBuilder.fromOptions(lock: LockOptions): LockBuilder
 
 Keys must be 33-byte compressed hex and on the secp256k1 curve (NUT-11); a 32-byte x-only key (eg Nostr) throws until you prepend `'02'`, per NIP-61. Keys are de-duplicated, insertion order is preserved, total main plus refund keys must be ≤ 11 for a plain lock or ≤ 10 with a hashlock (the hashlock takes a slot, NUT-28), refund keys will throw if no locktime is set.
 
-Shapes only one encoding can express refuse at encode time, naming the reason: extra tags, anyone-after-locktime, and keyless hashlocks do not fit v3; explicit leaves and partial blind lists do not fit pre-v3. `disclose()` closes the v3 key path: a lone main key becomes a leaf under the NUMS key so every spend is a public script path (`auditableLock(pubkey)` is exactly that shape). A pre-v3 lock is disclosed by nature (plaintext secret, witness returned by NUT-07), so the flag changes nothing there. See the [v5 migration guide](../../migration-5.0.0.md) for the full matrix.
+Shapes only one encoding can express refuse at encode time, naming the reason: extra tags, anyone-after-locktime, and keyless hashlocks do not fit v3; explicit leaves and partial blind lists do not fit pre-v3. See the [v5 migration guide](../../migration-5.0.0.md) for the full matrix.
 
 On a pre-v3 keyset a lock also refuses unless the mint advertises NUT-11 (and NUT-14 for a hashlock). A mint signs a lock blind and reads it only at spend time, so a kind it does not support would spend as a bearer proof. v3 keysets enforce locks by construction and need no flag.
 

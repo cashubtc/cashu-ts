@@ -20,7 +20,7 @@ import {
   nutrootTweakSeckey,
   verifyNutrootSpendInfo,
 } from '../crypto/nutroot';
-import { inputsForPayload, signTransactionInput, spendCommitment } from '../crypto/transcript';
+import { inputsForPayload, signTransactionInput } from '../crypto/transcript';
 import { type Logger, fail } from '../logger';
 import { type Amount } from '../model/Amount';
 import { CTSError } from '../model/Errors';
@@ -30,7 +30,7 @@ import { bytesToHex, hexToBytes } from '../utils';
 import { mapInChunks } from '../utils/chunked';
 
 import { quoteCounterKey } from './CounterSource';
-import type { ScriptPathPlan, SpendOption, SpendOptions, SpendReceipt } from './types';
+import type { ScriptPathPlan, SpendOption, SpendOptions } from './types';
 
 /**
  * Wallet-side nutroot secrets logic: witness attachment, spend info key recovery, and script path
@@ -67,7 +67,6 @@ export type ScriptPathSpend = {
  * input's spend-info key, delivered in `extraKeys`. Signing is per input, so a mixed transaction
  * signs its v3 inputs and leaves v0-v2 inputs to their own rules (NUT-10). Inputs whose key is not
  * recoverable are left unsigned and the mint rejects them.
- * @returns A spend receipt per v3 input: the opening of the NUT-07 commitment the mint will hold.
  */
 export async function attachTransactionWitnesses(
   payload: Pick<MeltRequest, 'inputs' | 'outputs'>,
@@ -76,11 +75,11 @@ export async function attachTransactionWitnesses(
   scriptSpends: Map<string, ScriptPathSpend> | undefined,
   state: NutrootWalletState,
   signal?: AbortSignal,
-): Promise<SpendReceipt[]> {
+): Promise<void> {
   const v3Inputs = payload.inputs.filter((p) => isBlsKeyset(p.id) && isV3PointSecret(p.secret));
-  if (v3Inputs.length === 0) return [];
-  // Each input signs its own input digest over the shared transcript (NUT-10). The transcript
-  // names inputs by Y, which the receipts need too, so hash each v3 secret once here.
+  if (v3Inputs.length === 0) return;
+  // Each input signs its own input digest over the shared transcript (NUT-10), which names
+  // inputs by Y, so hash each v3 secret once here.
   // Hashing and signing are curve work per input, so both yield; nothing is posted yet, so an
   // abort here is safe.
   const Ys = new Map(
@@ -150,22 +149,6 @@ export async function attachTransactionWitnesses(
       { id: unsigned.id, amount: unsigned.amount.toString() },
     );
   }
-  // The receipt is the spender's copy of what NUT-07 commits to: nothing here is secret to the
-  // wallet, and nothing but the wallet ever holds all of it together.
-  const transcript = bytesToHex(transactionMessage);
-  return v3Inputs.map((input) => {
-    const Y = Ys.get(input.secret)!;
-    const { digest } = inputContexts.get(Y)!;
-    const witness = input.witness as string;
-    return {
-      Y,
-      keysetId: input.id,
-      inputDigest: bytesToHex(digest),
-      witness,
-      commitment: spendCommitment(Y, digest, witness),
-      transcript,
-    };
-  });
 }
 
 /**

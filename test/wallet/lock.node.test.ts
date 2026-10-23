@@ -50,29 +50,6 @@ describe('lockToNutrootOptions (v3 encoder)', () => {
     });
   });
 
-  test('disclosure stamps every generated leaf and closes the key path', () => {
-    expect(
-      lockToNutrootOptions({
-        mainKeys: [PUB_A],
-        locktime: TIME,
-        refundKeys: [PUB_R],
-        disclosure: true,
-        leaves: [{ type: 'threshold', n: 1, keys: [PUB_B] }],
-      }),
-    ).toEqual({
-      receiverKey: NUTROOT_NUMS_KEY,
-      leaves: [
-        { type: 'threshold', n: 1, keys: [PUB_A], disclosure: 1 },
-        { type: 'after', n: 1, time: TIME, keys: [PUB_R], disclosure: 1 },
-        { type: 'threshold', n: 1, keys: [PUB_B] }, // explicit leaves keep their own flag
-      ],
-    });
-    expect(lockToNutrootOptions({ mainKeys: [PUB_A], hashlock: HASH, disclosure: true })).toEqual({
-      receiverKey: NUTROOT_NUMS_KEY,
-      leaves: [{ type: 'hashlock', n: 1, hash: HASH, keys: [PUB_A], disclosure: 1 }],
-    });
-  });
-
   test('locktime with refund keys: key path plus after leaf', () => {
     expect(
       lockToNutrootOptions({ mainKeys: [PUB_A], locktime: TIME, refundKeys: [PUB_R] }),
@@ -213,14 +190,8 @@ describe('lockToNutrootOptions (v3 encoder)', () => {
     expect(() => lockToNutrootOptions({})).toThrow(/key|leaf/i);
   });
 
-  test('a commit leaf rides along, and a disclosed single key still closes the key path', () => {
+  test('a commit leaf rides along beside the key path', () => {
     const commit = { type: 'commit' as const, hash: HASH };
-    expect(lockToNutrootOptions({ mainKeys: [PUB_A], disclosure: true, leaves: [commit] })).toEqual(
-      {
-        receiverKey: NUTROOT_NUMS_KEY,
-        leaves: [{ type: 'threshold', n: 1, keys: [PUB_A], disclosure: 1 }, commit],
-      },
-    );
     expect(lockToNutrootOptions({ mainKeys: [PUB_A], leaves: [commit] })).toEqual({
       receiverKey: PUB_A,
       leaves: [commit],
@@ -241,12 +212,6 @@ describe('lockToNutrootOptions (v3 encoder)', () => {
 });
 
 describe('lockToP2PKOptions (v2 encoder)', () => {
-  test('disclosure is a no-op: a NUT-11 lock is disclosed by nature', () => {
-    expect(lockToP2PKOptions({ mainKeys: [PUB_A], disclosure: true })).toEqual(
-      lockToP2PKOptions({ mainKeys: [PUB_A] }),
-    );
-  });
-
   test('single main key: data slot only', () => {
     expect(lockToP2PKOptions({ mainKeys: [PUB_A] })).toEqual({ kind: 'P2PK', data: PUB_A });
   });
@@ -563,10 +528,7 @@ describe('LockBuilder', () => {
   });
 
   test('addCommitment binds the lock to outside data', () => {
-    const lock = new LockBuilder()
-      .addMainPubkey(PUB_A)
-      .disclose()
-      .addCommitment(HASH.toUpperCase());
+    const lock = new LockBuilder().addMainPubkey(PUB_A).addCommitment(HASH.toUpperCase());
     expect(lock.toOptions().leaves).toEqual([{ type: 'commit', hash: HASH }]);
     expect(() => new LockBuilder().addCommitment('abcd')).toThrow(/64-character hex/);
   });

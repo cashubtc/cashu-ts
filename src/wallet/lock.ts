@@ -1,7 +1,6 @@
 import { normalizeSecpPubkey } from '../crypto/curve_secp';
 import {
   dedupeP2PKPubkeys,
-  normalizeHashlock,
   normalizeP2PKOptions,
   type P2PKOptions,
   type P2PKTag,
@@ -53,13 +52,6 @@ export type LockOptions = {
    */
   blindKeys?: boolean | string[];
   /**
-   * Publish the exercised witness (NUT-10 `disclosure`) on every leaf built from the fields above;
-   * explicit `leaves` keep their own flag. A lone main key gives up its key path for a leaf, so the
-   * spend is always public. Pre-v3 locks are disclosed by nature (plaintext secret, NUT-07
-   * witness), so the flag changes nothing there.
-   */
-  disclosure?: boolean;
-  /**
    * Extra NUT-11 secret tags. Pre-v3 only: v3 secrets carry no tags.
    */
   additionalTags?: P2PKTag[];
@@ -70,27 +62,6 @@ export type LockOptions = {
 };
 
 const lc = (k: string) => k.toLowerCase();
-
-/**
- * A publicly auditable lock to one key: NUMS key path, one threshold leaf (NUT-10 auditable locks).
- * v3 keysets only.
- *
- * @remarks
- * Unlike the receiver-keyed default, anyone holding the proof can verify who it is locked to
- * (`auditableLockInfo`), at the cost of that visibility. The Nutzap shape. `commit` adds a commit
- * leaf binding the proof to 32 bytes of outside context (eg Nostr event ID).
- * @throws If the pubkey is not a valid compressed secp256k1 point, or `commit` is not 32 bytes hex.
- */
-export function auditableLock(pubkey: string, opts?: { commit?: string }): LockOptions {
-  // disclosure completes the audit trail: the spend's witness is published too (NUT-07).
-  return {
-    mainKeys: [normalizeSecpPubkey(pubkey)],
-    disclosure: true,
-    ...(opts?.commit !== undefined && {
-      leaves: [{ type: 'commit', hash: normalizeHashlock(opts.commit) }],
-    }),
-  };
-}
 
 /**
  * Encodes a lock for a v3 keyset: receiver key plus tree, in `createNutrootData` form.
@@ -122,14 +93,11 @@ export function lockToNutrootOptions(lock: LockOptions): ParsedNutrootOption {
     throw new CTSError(`Threshold ${n} exceeds the ${mainKeys.length} main keys`);
   }
   const leaves: NutrootLeaf[] = [];
-  const mode = lock.disclosure ? { disclosure: 1 } : {};
-  // A key-path spend has no leaf to disclose, so a disclosed single key becomes a leaf under NUMS.
-  const keyPath =
-    lock.hashlock === undefined && mainKeys.length === 1 && n === 1 && !lock.disclosure;
+  const keyPath = lock.hashlock === undefined && mainKeys.length === 1 && n === 1;
   if (lock.hashlock !== undefined) {
-    leaves.push({ type: 'hashlock', n, hash: lc(lock.hashlock), keys: mainKeys, ...mode });
+    leaves.push({ type: 'hashlock', n, hash: lc(lock.hashlock), keys: mainKeys });
   } else if (!keyPath && mainKeys.length > 0) {
-    leaves.push({ type: 'threshold', n, keys: mainKeys, ...mode });
+    leaves.push({ type: 'threshold', n, keys: mainKeys });
   }
   // Refund keys without a locktime are inert under NUT-11 too (the refund path never activates),
   // so dropping them preserves the semantics exactly.
@@ -146,7 +114,7 @@ export function lockToNutrootOptions(lock: LockOptions): ParsedNutrootOption {
         `Refund threshold ${nRefund} exceeds the ${refundKeys.length} refund keys`,
       );
     }
-    leaves.push({ type: 'after', n: nRefund, time: lock.locktime, keys: refundKeys, ...mode });
+    leaves.push({ type: 'after', n: nRefund, time: lock.locktime, keys: refundKeys });
   }
   leaves.push(...explicit);
   // A commit leaf is never a spend path, so a lock made only of them is a burn.

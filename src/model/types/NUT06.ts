@@ -52,6 +52,8 @@ export type GetInfoResponse = {
     '10'?: {
       // Spending conditions
       supported: boolean;
+      // Nutroot leaf types understood, `leaf_version || leaf_type` hex (v3 keysets)
+      leaves?: string[];
     };
     '11'?: {
       // P2PK

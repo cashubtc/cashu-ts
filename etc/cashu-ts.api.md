@@ -156,20 +156,6 @@ export function assertV3PointSecret(secret: Uint8Array | string): void;
 export function attachHTLCPreimage<T extends ProofLike>(proofs: T[], preimage: string): T[];
 
 // @public
-export function auditableLock(pubkey: string, opts?: {
-    commit?: string;
-}): LockOptions_2;
-
-// @public
-export function auditableLockInfo(proof: Pick<Proof, 'id' | 'secret' | 'spend_info'>): {
-    pubkey: string;
-    commit?: string;
-} | undefined;
-
-// @public
-export function auditableLockKey(proof: Pick<Proof, 'id' | 'secret' | 'spend_info'>): string | undefined;
-
-// @public
 export class AuthManager implements AuthProvider {
     constructor(mintUrl: string, opts?: AuthManagerOptions);
     // (undocumented)
@@ -501,16 +487,12 @@ export type CurvePoint = {
 export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
 
 // @public
-export function decodeSpendReceipt(input: string): SpendReceiptBundle;
-
-// @public
 export const DERIVATION_TYPE: {
     readonly secretKey: 0;
     readonly blindingFactor: 1;
     readonly numsOffset: 2;
     readonly leafKey: 3;
     readonly quoteLock: 4;
-    readonly quoteIdPreimage: 5;
 };
 
 // @public (undocumented)
@@ -569,9 +551,6 @@ export function deriveP2BKSecretKeys(Ehex: string, privateKey: string | string[]
 export function deriveP2BKSlotSecretKeyCandidates(Ehex: string, privkeyHex: string, slotIndex?: number): [string, string];
 
 // @public
-export function deriveQuoteIdPreimage(seed: Uint8Array, mintPubkey: string, counter: number): Uint8Array;
-
-// @public
 export function deriveQuoteLockKey(seed: Uint8Array, mintPubkey: string, counter: number): Uint8Array;
 
 // @public
@@ -620,9 +599,6 @@ export type DLEQ = {
     e: Uint8Array;
     s: Uint8Array;
 };
-
-// @public
-export function encodeSpendReceipt(bundle: SpendReceiptBundle): string;
 
 // @public (undocumented)
 export type Enumerate<N extends number, Acc extends number[] = []> = Acc['length'] extends N ? Acc[number] : Enumerate<N, [...Acc, Acc['length']]>;
@@ -701,6 +677,7 @@ export type GetInfoResponse = {
         };
         '10'?: {
             supported: boolean;
+            leaves?: string[];
         };
         '11'?: {
             supported: boolean;
@@ -1026,7 +1003,6 @@ export class LockBuilder {
     addTag(key: string, values?: string[] | string): this;
     addTags(tags: P2PKTag[]): this;
     blindKeys(keys?: string | string[]): this;
-    disclose(): this;
     static fromOptions(lock: LockOptions_2): LockBuilder;
     lockUntil(when: Date | number): this;
     requireMainSignatures(n: number): this;
@@ -1061,7 +1037,6 @@ type LockOptions_2 = {
     requiredRefundSignatures?: number;
     leaves?: NutrootLeaf[];
     blindKeys?: boolean | string[];
-    disclosure?: boolean;
     additionalTags?: P2PKTag[];
     sigAll?: boolean;
 };
@@ -1165,7 +1140,6 @@ export type MeltProofsResponse<TQuote extends Pick<MeltQuoteBaseResponse, 'quote
     quote: TQuote;
     change: Proof[];
     outputData: OutputDataLike[];
-    receipts?: SpendReceipt[];
 };
 
 // @public
@@ -1470,6 +1444,7 @@ export class MintInfo {
     get name(): string;
     // (undocumented)
     static normalizeInfo(info: GetInfoResponse, logger?: Logger): GetInfoResponse;
+    get nutrootLeafTypes(): string[];
     // (undocumented)
     get nuts(): {
         '4': {
@@ -1491,6 +1466,7 @@ export class MintInfo {
         };
         '10'?: {
             supported: boolean;
+            leaves?: string[];
         };
         '11'?: {
             supported: boolean;
@@ -1598,6 +1574,7 @@ export type MintProofsConfig = {
     keysetId?: string;
     privkey?: string | string[];
     sign?: (request: MintQuoteSignRequest) => Promise<string>;
+    signingPackage?: boolean;
     proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
     onCountersReserved?: OnCountersReserved;
     signal?: AbortSignal;
@@ -1790,7 +1767,6 @@ export type NutrootConditionLeaf = {
     keys: string[];
     time?: number;
     hash?: string;
-    disclosure?: number;
 };
 
 // @public
@@ -2222,7 +2198,6 @@ export type ProofState = {
     state: CheckStateEnum;
     witness: string | null;
     input_digest?: string | null;
-    commitment?: string | null;
 };
 
 // @public
@@ -2416,6 +2391,8 @@ export const ScriptPath: ScriptPathApi;
 export type ScriptPathApi = {
     extractSwapPackage(preview: SwapPreview, plans: ScriptPathPlan[]): ScriptPathSigningPackage;
     extractMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'amount'>>(preview: MeltPreview<TQuote>, plans: ScriptPathPlan[], feeIndex?: number): ScriptPathSigningPackage;
+    extractMintPackage(preview: MintPreview | BatchMintPreview, plans: ScriptPathQuotePlan[]): ScriptPathSigningPackage;
+    mergeMintPackage<T extends MintPreview | BatchMintPreview>(pkg: ScriptPathSigningPackage, preview: T, plans?: ScriptPathQuotePlan[]): T;
     serializePackage(pkg: ScriptPathSigningPackage): string;
     deserializePackage(input: string): ScriptPathSigningPackage;
     signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPathSigningPackage;
@@ -2431,6 +2408,15 @@ export type ScriptPathPlan = {
     preimage?: string;
     extraKeys?: string[];
     cosign?: (request: CosignRequest) => Promise<string[]>;
+};
+
+// @public
+export type ScriptPathQuotePlan = {
+    quote: string;
+    tree: string[];
+    K: string;
+    leafIndex: number;
+    preimage?: string;
 };
 
 // @public
@@ -2539,7 +2525,6 @@ export type SendResponse = {
         proof: Proof;
         keep: boolean;
     }>;
-    receipts?: SpendReceipt[];
 };
 
 // @public
@@ -2763,32 +2748,6 @@ export type SpendOptions = {
 };
 
 // @public
-export type SpendReceipt = {
-    Y: string;
-    keysetId: string;
-    inputDigest: string;
-    witness: string;
-    commitment: string;
-    transcript: string;
-};
-
-// @public
-export type SpendReceiptBundle = {
-    token: string;
-    receipts: SpendReceipt[];
-};
-
-// @public
-export type SpendReceiptVerdict = {
-    proof: boolean;
-    inputDigest: boolean;
-    commitment: boolean;
-    witness: boolean;
-    path?: 'key' | 'script';
-    ok: boolean;
-};
-
-// @public
 export function splitAmount(value: AmountLike, keys: Keys, split?: AmountLike[], order?: 'desc' | 'asc'): Amount[];
 
 // @public
@@ -2954,9 +2913,6 @@ export type VerifyProofsOptions = {
 
 // @public
 export function verifyReceivedProofs<T extends ProofLike>(proofs: T[], getKeyset: (id: string) => HasKeysetKeys, opts?: VerifyProofsOptions): Promise<ProofVerification<T>>;
-
-// @public
-export function verifySpendReceipt(receipt: SpendReceipt, proof: Pick<Proof, 'id' | 'secret' | 'amount' | 'C'>): SpendReceiptVerdict;
 
 // @public
 export function verifyUnblindedSignature(proof: UnblindedSignature, privKey: Uint8Array): boolean;

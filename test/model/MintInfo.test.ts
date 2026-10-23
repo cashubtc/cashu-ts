@@ -1321,3 +1321,29 @@ describe('isSupported from a loop', () => {
     expect(() => info.isSupported(99)).toThrow('nut is not supported by cashu-ts');
   });
 });
+
+describe('MintInfo nutroot leaf types (NUT-10)', () => {
+  const withLeaves = (leaves: unknown) =>
+    new MintInfo({
+      ...MINTINFORESP,
+      nuts: { ...MINTINFORESP.nuts, 10: { supported: true, leaves: leaves as string[] } },
+    });
+
+  it('reads the listed types, lowercased, dropping malformed entries', () => {
+    expect(withLeaves(['0001', '0004', '00FF', 'zz', 7, '000102']).nutrootLeafTypes).toEqual([
+      '0001',
+      '0004',
+      '00ff',
+    ]);
+  });
+
+  it('takes a mint with no list to understand the core leaves', () => {
+    expect(withLeaves(undefined).nutrootLeafTypes).toEqual(['0001', '0002', '0003', '0004']);
+    expect(withLeaves([]).nutrootLeafTypes).toEqual(['0001', '0002', '0003', '0004']);
+  });
+
+  it('caps a hostile list', () => {
+    const many = Array.from({ length: MAX_MINT_INFO_LIST + 10 }, () => '0001');
+    expect(withLeaves(many).nutrootLeafTypes).toHaveLength(MAX_MINT_INFO_LIST);
+  });
+});
