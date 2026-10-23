@@ -161,33 +161,35 @@ class Mint {
   }
 
   /**
-   * Fetches mint's info at the /info endpoint.
+   * Fetches mint's info at the /info endpoint, as received.
    *
+   * @remarks
+   * Not normalized: `MintInfo` (eg via `fetchMintInfo`) derives missing members and sanitizes
+   * values.
    * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns The mint's information response.
    */
   async getInfo(opts?: MintCallOptions): Promise<GetInfoResponse> {
     const requestInstance = opts?.customRequest ?? this._request;
-    const response = await requestInstance<GetInfoResponse>({
+    return requestInstance<GetInfoResponse>({
       signal: opts?.signal,
       endpoint: joinUrls(this._mintUrl, '/v1/info'),
       onResponseMeta: this._captureResponseMetadata,
       logger: this._logger,
     });
-    return MintInfo.normalizeInfo(response, this._logger);
   }
 
   /**
-   * Lazily fetches and caches the mint's info if not already loaded.
+   * Returns the mint's info, fetching and caching it when none is held or `forceRefresh` is set.
    *
-   * @returns The parsed MintInfo object.
+   * @param opts Per-call `customRequest` override, `signal` to abort the request, and
+   *   `forceRefresh` to refetch over a cached copy.
    */
-  async getLazyMintInfo(opts?: MintCallOptions): Promise<MintInfo> {
-    if (this._mintInfo) {
+  async fetchMintInfo(opts?: MintCallOptions & { forceRefresh?: boolean }): Promise<MintInfo> {
+    if (this._mintInfo && !opts?.forceRefresh) {
       return this._mintInfo;
     }
-    const data = await this.getInfo(opts);
-    this._mintInfo = new MintInfo(data, this._logger);
+    this._mintInfo = new MintInfo(await this.getInfo(opts), this._logger);
     return this._mintInfo;
   }
 
@@ -1200,7 +1202,7 @@ class Mint {
     mintInfo?: MintInfo,
   ): Promise<string | undefined> {
     if (!this._authProvider) return undefined;
-    const info = mintInfo ?? (await this.getLazyMintInfo());
+    const info = mintInfo ?? (await this.fetchMintInfo());
     if (!info.requiresClearAuthToken(method, path)) return undefined;
     if (this._authProvider.ensureCAT) {
       return this._authProvider.ensureCAT(); // optional
@@ -1223,7 +1225,7 @@ class Mint {
     body?: string,
   ): Promise<string | undefined> {
     if (!this._authProvider) return undefined;
-    const info = mintInfo ?? (await this.getLazyMintInfo());
+    const info = mintInfo ?? (await this.fetchMintInfo());
     if (!info.requiresBlindAuthToken(method, path)) return undefined;
     const bat = await this._authProvider.getBlindAuthToken({ method, path, body });
     return bat;
@@ -1241,7 +1243,7 @@ class Mint {
     const requestInstance = opts?.customRequest ?? this._request;
     let mintInfo = this._mintInfo;
     if (this._authProvider) {
-      mintInfo = await this.getLazyMintInfo(opts);
+      mintInfo = await this.fetchMintInfo(opts);
     }
     // Serialize once and pass the string down: blind auth signs these exact bytes,
     // and the transport contract sends a string body verbatim.

@@ -9,7 +9,6 @@ import { NUT02_V3_VECTOR1_KEYS, NUT02_V3_VECTOR1_KEYSET } from '../consts';
 import {
   dummyKeysResp,
   dummyKeysetResp,
-  mint,
   mintInfoResp,
   mintUrl,
   unit,
@@ -33,7 +32,7 @@ const meltQuote = { ...quote, fee_reserve: 0, expiry: 1234567890, state: MeltQuo
 const proofs = [{ amount: Amount.from(1), id: '00bd033559de27d0', secret: 'test', C: pubkey }];
 
 async function loadWallet(walletUnit = unit) {
-  const wallet = new Wallet(mint, { unit: walletUnit });
+  const wallet = new Wallet(mintUrl, { unit: walletUnit });
   await wallet.loadMint();
   return wallet;
 }

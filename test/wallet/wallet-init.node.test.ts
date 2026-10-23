@@ -135,6 +135,45 @@ describe('test wallet init', () => {
     ]);
   });
 
+  describe('loadMint and a shared Mint', () => {
+    const countingMint = () => {
+      let infoFetches = 0;
+      const customRequest = (async <T>({ endpoint }: Parameters<RequestFn>[0]): Promise<T> => {
+        if (endpoint.endsWith('/v1/info')) {
+          infoFetches++;
+          return mintInfoResp as T;
+        }
+        if (endpoint.endsWith('/v1/keysets')) return dummyKeysetResp as T;
+        if (endpoint.endsWith('/v1/keys')) return dummyKeysResp as T;
+        throw new Error(`Unexpected endpoint: ${endpoint}`);
+      }) as RequestFn;
+      return { mint: new Mint(mintUrl, { customRequest }), infoFetches: () => infoFetches };
+    };
+
+    test('reuses the info a shared Mint holds until forceRefresh', async () => {
+      const { mint, infoFetches } = countingMint();
+      const held = await mint.fetchMintInfo();
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+      expect(wallet.getMintInfo()).toBe(held);
+      expect(infoFetches()).toBe(1);
+
+      await wallet.loadMint(true);
+      expect(infoFetches()).toBe(2);
+      expect(wallet.getMintInfo()).not.toBe(held);
+      expect(await mint.fetchMintInfo()).toBe(wallet.getMintInfo());
+    });
+
+    test('withKeyset shares the MintInfo and leaves the shared Mint copy alone', async () => {
+      const { mint } = countingMint();
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+      const derived = wallet.withKeyset(wallet.keysetId);
+      expect(derived.getMintInfo()).toBe(wallet.getMintInfo());
+      expect(await mint.fetchMintInfo()).toBe(wallet.getMintInfo());
+    });
+  });
+
   test('should pass requestFetch from wallet URL options through the default request pipeline', async () => {
     const endpoints: string[] = [];
     const requestFetch = (async (input: Parameters<RequestFetch>[0]) => {
@@ -171,7 +210,7 @@ describe('test wallet init', () => {
     const wallet = new Wallet(new Mint(mintUrl), { unit });
     await wallet.loadMint();
 
-    const mintInfo = await wallet.mint.getLazyMintInfo();
+    const mintInfo = await wallet.mint.fetchMintInfo();
     expect(mintInfo.isSupported(19)).toEqual({ supported: false });
   });
 
@@ -191,7 +230,7 @@ describe('test wallet init', () => {
     const wallet = new Wallet(new Mint(mintUrl), { unit });
     await wallet.loadMint();
 
-    const mintInfo = await wallet.mint.getLazyMintInfo();
+    const mintInfo = await wallet.mint.fetchMintInfo();
     expect(mintInfo.isSupported(19)).toEqual({
       supported: true,
       params: {
@@ -473,7 +512,7 @@ describe('test info', () => {
         return HttpResponse.json(mintInfoRespDeprecated);
       }),
     );
-    const wallet = new Wallet(mint, { unit });
+    const wallet = new Wallet(mintUrl, { unit });
     await wallet.loadMint();
     const info = wallet.getMintInfo();
     // Wire format array-of-arrays is passed through unchanged in v4
@@ -489,7 +528,7 @@ describe('test info', () => {
         return HttpResponse.json(mintInfoResp);
       }),
     );
-    const wallet = new Wallet(mint, { unit: 'sat' });
+    const wallet = new Wallet(mintUrl, { unit: 'sat' });
     await wallet.loadMint();
     const info = wallet.getMintInfo();
 
@@ -518,7 +557,7 @@ describe('test info', () => {
       ),
     ).resolves.toHaveProperty('quote', 'sat-quote');
 
-    const usdWallet = new Wallet(mint, { unit: 'usd' });
+    const usdWallet = new Wallet(mintUrl, { unit: 'usd' });
     const usdKeychainCache = { ...MINTCACHE.keychainCache, unit: 'usd' };
     usdWallet.loadMintFromCache(MINTCACHE.mintInfo, usdKeychainCache);
     server.use(
@@ -584,7 +623,7 @@ describe('test info', () => {
           ],
         },
       },
-    } as any);
+    });
 
     expect(info.supportsAmountless('bolt11', 'sat')).toBe(true);
 
@@ -613,7 +652,7 @@ describe('test info', () => {
           ],
         },
       },
-    } as any);
+    });
 
     expect(info2.supportsAmountless('bolt11', 'sat')).toBe(false);
   });

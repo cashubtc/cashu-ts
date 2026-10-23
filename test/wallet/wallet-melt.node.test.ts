@@ -213,7 +213,7 @@ describe('melt proofs', () => {
         }),
       ),
     );
-    const wallet = new Wallet(mint, { unit, requireSigDleq: true });
+    const wallet = new Wallet(mintUrl, { unit, requireSigDleq: true });
     await wallet.loadMint();
 
     const meltQuote: MeltQuoteBolt11Response = {
@@ -956,7 +956,7 @@ describe('async melt preference body', () => {
 
   test('createMeltChangeProofs drops a zero-value signature before the DLEQ requirement applies', async () => {
     server.use(http.get(mintUrl + '/v1/info', () => HttpResponse.json(mintInfoRespWithNut12)));
-    const wallet = new Wallet(mint, { unit, requireSigDleq: true, logger });
+    const wallet = new Wallet(mintUrl, { unit, requireSigDleq: true, logger });
     await wallet.loadMint();
 
     const blank = OutputData.createSingleRandomData(0, '00bd033559de27d0');
@@ -1146,7 +1146,7 @@ describe('async melt preference body', () => {
         }),
       ),
     );
-    const wallet = new Wallet(mint, { unit });
+    const wallet = new Wallet(mintUrl, { unit });
     await wallet.loadMint();
     const meltQuote = {
       quote: 'q-async-partial',
@@ -1596,7 +1596,7 @@ describe('bolt11 melt quote amount validation', () => {
         () => HttpResponse.json(meltQuoteJson(2, invoice)), // partial of 1,000 msat allows at most 1 sat
       ),
     );
-    const wallet = new Wallet(mint, { unit });
+    const wallet = new Wallet(mintUrl, { unit });
     await wallet.loadMint();
 
     await expect(wallet.createMultiPathMeltQuote(invoice, 1000)).rejects.toThrow(

@@ -242,7 +242,7 @@ describe('requestTokens', () => {
         }),
       ),
     );
-    const wallet = new Wallet(mint, { unit, requireSigDleq: true });
+    const wallet = new Wallet(mintUrl, { unit, requireSigDleq: true });
     await wallet.loadMint();
 
     const preview = await wallet.prepareMint('bolt11', 1, {
@@ -474,7 +474,7 @@ describe('requestTokens', () => {
         });
       }),
     );
-    const wallet = new Wallet(mint, { unit, requireSigDleq: true });
+    const wallet = new Wallet(mintUrl, { unit, requireSigDleq: true });
     await wallet.loadMint();
 
     const batchPreview = await wallet.prepareBatchMint('bolt11', [
@@ -1457,7 +1457,7 @@ describe('generic mint/melt methods', () => {
           }),
         ),
       );
-      const wallet = new Wallet(mint, { unit });
+      const wallet = new Wallet(mintUrl, { unit });
       await wallet.loadMint();
 
       type BacsMintQuoteRes = MintQuoteBaseResponse & {
@@ -1501,7 +1501,7 @@ describe('generic mint/melt methods', () => {
           });
         }),
       );
-      const wallet = new Wallet(mint, { unit: 'sat' });
+      const wallet = new Wallet(mintUrl, { unit: 'sat' });
       await wallet.loadMint();
 
       const quote = await wallet.createMintQuote('bacs', {
@@ -1527,7 +1527,7 @@ describe('generic mint/melt methods', () => {
           }),
         ),
       );
-      const wallet = new Wallet(mint, { unit: 'sat' });
+      const wallet = new Wallet(mintUrl, { unit: 'sat' });
       await wallet.loadMint();
 
       await expect(
@@ -1550,7 +1550,7 @@ describe('generic mint/melt methods', () => {
           }),
         ),
       );
-      const wallet = new Wallet(mint, { unit: 'sat' });
+      const wallet = new Wallet(mintUrl, { unit: 'sat' });
       await wallet.loadMint();
 
       const quote = await wallet.createMintQuote('bacs', { amount: 5000n, pubkey: lockPubkey });
@@ -1560,7 +1560,7 @@ describe('generic mint/melt methods', () => {
 
     test('createMintQuote rejects a malformed lock pubkey (x-only) before requesting', async () => {
       server.use(http.get(mintUrl + '/v1/info', () => HttpResponse.json(mintInfoRespWithBacs)));
-      const wallet = new Wallet(mint, { unit: 'sat' });
+      const wallet = new Wallet(mintUrl, { unit: 'sat' });
       await wallet.loadMint();
 
       // 64-char x-only key: v5 requires 33-byte compressed, so normalization rejects it up front.
@@ -1839,7 +1839,7 @@ describe('generic mint/melt methods', () => {
           return HttpResponse.json([]);
         }),
       );
-      const wallet = new Wallet(mint, { unit });
+      const wallet = new Wallet(mintUrl, { unit });
       await wallet.loadMint();
       await expect(wallet.checkMintQuoteBatchBolt11(['a'])).rejects.toThrow(
         'checkMintQuoteBatchBolt11: mint does not advertise NUT-29 for bolt11; use checkMintQuoteBolt11 per quote',
@@ -1859,7 +1859,7 @@ describe('generic mint/melt methods', () => {
           return HttpResponse.json([]);
         }),
       );
-      const wallet = new Wallet(mint, { unit });
+      const wallet = new Wallet(mintUrl, { unit });
       await wallet.loadMint();
       await expect(
         wallet.prepareBatchMint('bolt11', [{ amount: 1, quote: { quote: 'q' } }]),
@@ -1878,7 +1878,7 @@ describe('generic mint/melt methods', () => {
           }),
         ),
       );
-      const wallet = new Wallet(mint, { unit });
+      const wallet = new Wallet(mintUrl, { unit });
       await wallet.loadMint();
       await expect(wallet.checkMintQuoteBatchBolt12(['a'])).rejects.toThrow(
         'checkMintQuoteBatchBolt12: mint does not advertise NUT-29 for bolt12; use checkMintQuoteBolt12 per quote',
@@ -2031,7 +2031,7 @@ describe('generic mint/melt methods', () => {
           ]);
         }),
       );
-      const wallet = new Wallet(mint, { unit });
+      const wallet = new Wallet(mintUrl, { unit });
       await wallet.loadMint();
 
       type BacsMintQuoteRes = MintQuoteBaseResponse & {
@@ -2138,7 +2138,7 @@ describe('generic mint/melt methods', () => {
           }),
         ),
       );
-      const wallet = new Wallet(mint, { unit: 'sat' });
+      const wallet = new Wallet(mintUrl, { unit: 'sat' });
       await wallet.loadMint();
 
       await expect(
@@ -2418,7 +2418,7 @@ describe('generic mint/melt methods', () => {
           }),
         ),
       );
-      const wallet = new Wallet(mint, { unit });
+      const wallet = new Wallet(mintUrl, { unit });
       await wallet.loadMint();
 
       type BacsMeltQuoteRes = MeltQuoteBaseResponse & {
@@ -2463,7 +2463,7 @@ describe('generic mint/melt methods', () => {
           });
         }),
       );
-      const wallet = new Wallet(mint, { unit: 'sat' });
+      const wallet = new Wallet(mintUrl, { unit: 'sat' });
       await wallet.loadMint();
 
       const quote = await wallet.createMeltQuote('bacs', {
@@ -2991,7 +2991,7 @@ describe('generic mint/melt methods', () => {
           }),
         ),
       );
-      const wallet = new Wallet(mint, { unit });
+      const wallet = new Wallet(mintUrl, { unit });
       await wallet.loadMint();
 
       type SwiftRes = MeltQuoteBaseResponse & { processing_fee: Amount };

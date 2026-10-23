@@ -454,22 +454,19 @@ class Wallet {
    * Must be called before other methods, unless loading from cache (`loadMintFromCache`). With
    * `forceRefresh`, metadata refreshes, held keys are kept, and an auto-bound wallet re-applies
    * cheapest-keyset selection on every refresh; pinned wallets stay pinned.
-   * @param forceRefresh If true, re-fetches data even if cached.
+   * @param forceRefresh If true, re-fetches data even if the wallet or its `Mint` already holds it.
    * @throws If fetching mint info, keysets, or keys fails.
    */
   async loadMint(forceRefresh?: boolean, opts?: AbortOptions): Promise<void> {
     const promises = [];
 
     // Load mint info
-    if (!this._mintInfo || forceRefresh) {
-      promises.push(
-        this.mint.getInfo(opts).then((info) => {
-          this._mintInfo = new MintInfo(info, this._logger);
-          this.mint.setMintInfo(this._mintInfo);
-          return null;
-        }),
-      );
-    }
+    promises.push(
+      this.mint.fetchMintInfo({ ...opts, forceRefresh }).then((info) => {
+        this._mintInfo = info;
+        return null;
+      }),
+    );
 
     // Load KeyChain
     promises.push(this._keyChain.init(forceRefresh));
@@ -1067,8 +1064,11 @@ class Wallet {
       counterSource: opts?.counterSource ?? this._counterSource,
       strictCachedKeysets: this._strictCachedKeysets,
     });
-    // Load mint info from our caches
-    newWallet.loadMintFromCache(this.getMintInfo().cache, this._keyChain.cache);
+    // Share our MintInfo rather than rebuild it from `cache`, which would also replace the shared
+    // Mint's copy.
+    newWallet._keyChain.loadFromCache(this._keyChain.cache);
+    newWallet._mintInfo = this.getMintInfo();
+    newWallet.finishInit();
     return newWallet;
   }
 
