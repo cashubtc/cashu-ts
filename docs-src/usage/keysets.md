@@ -52,7 +52,7 @@ Two things count as evidence that a rotation happened. Both refresh the snapshot
 
 **A mint rejection.** Your snapshot still calls a retired keyset active, so outputs get built on it and only the mint knows better. `completeSwap`, `completeMint`, `completeBatchMint` and `completeMelt` treat a NUT-00 keyset error (the 12xxx class) as evidence: they refresh, then throw `StaleKeysetError` with the mint's error as `cause`.
 
-The exception is `12004`: the change keyset is still active but rotating out, so `completeMelt` throws it as is (`isKeysetRotatingError`). The melt was refused before payment. `meltProofs*` and `MeltBuilder.run()` retry once with blanks on another active keyset; after `prepareMelt`, prepare again with another `keysetId`.
+The exception is `12004`: the change keyset is still active but rotating out, so `completeMelt` throws it as is (`isKeysetRotatingError`). The melt was refused before payment. `meltProofs*` and `MeltBuilder.run()` retry once with blanks on another active keyset; after `prepareMelt`, prepare again with another `keysetId`. Without a `keysetId`, `prepareMelt` already avoids a change keyset whose `final_expiry` is earlier than the quote `expiry`, since the mint must refuse it.
 
 `StaleKeysetError.repaired` tells you what to do:
 

@@ -183,6 +183,14 @@ type ScanResult =
   | { proofs: Proof[]; lastCounterWithSignature: number; used: true };
 
 /**
+ * Whether a mint may take melt change blanks on this keyset (NUT-02 refuses a `final_expiry`
+ * earlier than the quote `expiry`). A missing or zero expiry on either side counts as never.
+ */
+function keysetOutlivesQuote(keyset: Keyset, quoteExpiry?: number): boolean {
+  return !(keyset.expiry && quoteExpiry && keyset.expiry < quoteExpiry);
+}
+
+/**
  * Class that represents a Cashu wallet.
  *
  * @remarks
@@ -4391,7 +4399,7 @@ class Wallet {
       let next: Keyset;
       try {
         next = this._keyChain.getCheapestKeyset(
-          (k) => k.id !== rejected && !(k.expiry && quoteExpiry && k.expiry < quoteExpiry),
+          (k) => k.id !== rejected && keysetOutlivesQuote(k, quoteExpiry),
         );
       } catch {
         throw e; // no other keyset can take the change
@@ -4510,6 +4518,16 @@ class Wallet {
         { keyset: keyset.id },
       );
       keyset = this.getOutputKeyset(keysetId);
+      // Skip a default keyset the mint must refuse for this quote; an explicit keysetId is kept.
+      const quoteExpiry = Number(resolvedQuote.expiry) || undefined;
+      if (keysetId === undefined && !keysetOutlivesQuote(keyset, quoteExpiry)) {
+        try {
+          const next = this._keyChain.getCheapestKeyset((k) => keysetOutlivesQuote(k, quoteExpiry));
+          keyset = this.getOutputKeyset(next.id);
+        } catch {
+          // None outlives the quote: keep the default and let the mint decide.
+        }
+      }
       // NUT-08 blank outputs: ceil(log2(feeReserve)) blinded messages, at least one.
       // Computed on bigint so a u64-scale reserve cannot lose precision to a float.
       const count = Math.max(ceilLog2(feeReserve.toBigInt()), 1);
