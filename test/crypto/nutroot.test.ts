@@ -1411,6 +1411,23 @@ describe('verifyNutrootRequestTree (NUT-18 exact match)', () => {
     );
   });
 
+  test('a template leaf with other dests rejects', () => {
+    const tpl = (dests: string[]): NutrootLeaf => ({
+      type: 'template',
+      n: 1,
+      keys: [vEscrow.arbiter],
+      dests,
+    });
+    const tplOption = { receiverKey: vRefund.carol_pub, leaves: [tpl([vEscrow.buyer])] };
+    const pay = (dests: string[]) => {
+      const out = deriveReceiverKeyedSecret(vRefund.carol_pub, { leaves: [tpl(dests)], eBytes });
+      return () => verifyNutrootRequestTree(tplOption, { E: out.E, K: out.K, tree: out.tree });
+    };
+    expect(pay([vEscrow.buyer])).not.toThrow();
+    expect(pay([vEscrow.seller])).toThrow(/does not match/);
+    expect(pay([vEscrow.buyer, vEscrow.seller])).toThrow(/does not match/);
+  });
+
   test('an ambiguous disclosure resolves at the maximum tree size', () => {
     // Every blind-me key matches any substituted value, so each disclosed leaf fits all but one
     // requested leaf: this exercises the most ambiguity a valid tree can carry.

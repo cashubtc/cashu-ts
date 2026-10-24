@@ -1138,6 +1138,7 @@ function leafMatchesRequested(
   }
   if (leaf.n !== req.n) return false;
   if (leaf.time !== req.time || leaf.hash?.toLowerCase() !== req.hash?.toLowerCase()) return false;
+  if ((leaf.dests ?? []).join() !== (req.dests ?? []).join().toLowerCase()) return false;
   if (leaf.keys.length !== req.keys.length) return false;
   return req.keys.every((reqKey, i) => {
     const rk = reqKey.toLowerCase();
