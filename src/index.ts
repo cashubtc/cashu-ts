@@ -139,6 +139,7 @@ export {
   hasMintErrorCode,
   isAlreadyIssuedError,
   isAuthError,
+  isKeysetRotatingError,
   isMintOperationError,
   isPaymentFailedError,
   isPendingError,

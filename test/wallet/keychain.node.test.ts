@@ -209,6 +209,17 @@ describe('KeyChain initialization', () => {
     expect(() => keyChain.getCheapestKeyset()).toThrow('No active keyset found for unit: sat');
   });
 
+  test('getCheapestKeyset considers only keysets the filter accepts', async () => {
+    const keyChain = new KeyChain(mint, unit);
+    await keyChain.init();
+    expect(keyChain.getCheapestKeyset((k) => k.id !== '00bd033559de27d0').id).toBe(
+      '009a1f293253e41e',
+    );
+    expect(() => keyChain.getCheapestKeyset(() => false)).toThrow(
+      'No active keyset found for unit: sat',
+    );
+  });
+
   test('should remove keys if verification fails', async () => {
     // Create mismatched data by changing ID but keeping keys the same (derived ID won't match)
     const mismatchedKeysetResp = JSON.parse(JSON.stringify(dummyKeysetResp));

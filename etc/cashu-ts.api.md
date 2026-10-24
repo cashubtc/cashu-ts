@@ -865,6 +865,11 @@ export function isConditionLeaf(leaf: NutrootLeaf): leaf is NutrootConditionLeaf
 export function isHTLCSpendAuthorised(proof: Proof, logger?: Logger, digest?: DigestInput): boolean;
 
 // @public
+export function isKeysetRotatingError(e: unknown): e is MintOperationError & {
+    code: typeof MintErrorCode.KEYSET_ROTATING;
+};
+
+// @public
 export function isMintOperationError(e: unknown): e is MintOperationError;
 
 // @public
@@ -932,7 +937,7 @@ export class KeyChain {
     static fromCache(mint: string | Mint, unit: string, cache: KeyChainCache, logger?: Logger): KeyChain;
     getAllKeys(): MintKeys[];
     getAllKeysetIds(): string[];
-    getCheapestKeyset(): Keyset;
+    getCheapestKeyset(filter?: (keyset: Keyset) => boolean): Keyset;
     getKeyset(id?: string): Keyset;
     getKeysets(): Keyset[];
     hasKeyset(id?: string): boolean;
@@ -1373,6 +1378,7 @@ export const MintErrorCode: {
     readonly KEYSET_NOT_KNOWN: 12001;
     readonly KEYSET_INACTIVE: 12002;
     readonly KEYSET_EXPIRED: 12003;
+    readonly KEYSET_ROTATING: 12004;
     readonly QUOTE_NOT_PAID: 20001;
     readonly QUOTE_ALREADY_ISSUED: 20002;
     readonly MINTING_DISABLED: 20003;

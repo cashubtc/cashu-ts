@@ -275,13 +275,19 @@ export class KeyChain {
    * @remarks
    * Prefers the highest keyset ID version, then the lowest fee, then the latest `final_expiry` (no
    * expiry sorts as never expiring).
+   * @param filter Optional predicate; only keysets it accepts are candidates.
    * @returns Active Keyset.
    * @throws If none found or uninitialized.
    */
-  getCheapestKeyset(): Keyset {
+  getCheapestKeyset(filter?: (keyset: Keyset) => boolean): Keyset {
     this.assertInitialized();
+    failIf(
+      filter !== undefined && typeof filter !== 'function',
+      'filter must be a function',
+      this._logger,
+    );
     const unitActive = Object.values(this.keysets).filter(
-      (k) => k.unit === this.unit && k.isActive && k.hasHexId,
+      (k) => k.unit === this.unit && k.isActive && k.hasHexId && (!filter || filter(k)),
     );
     // Newest version wins below, so a keyset this build cannot spend must not be a candidate. Its
     // keys are already blanked (the id derivation that `verify()` runs rejects the version), so
