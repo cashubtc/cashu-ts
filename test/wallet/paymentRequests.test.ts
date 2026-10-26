@@ -4,11 +4,13 @@ import { test, describe, expect } from 'vitest';
 
 import {
   Amount,
+  CTSError,
   decodePaymentRequest,
   OutputData,
   PaymentRequest,
   PaymentRequestTransportType,
   type NUT10Option,
+  type RawPaymentRequest,
 } from '../../src/index';
 import { encodeCBOR, encodeUint8ToBase64UrlPadded } from '../../src/utils';
 import { encodeUint8ToBase64Url } from '../../src/utils/base64';
@@ -269,6 +271,25 @@ describe('payment requests', () => {
       });
       expect(foreign.supportedMethods?.[0].fee?.equals(5)).toBeTruthy();
       expect(() => foreign.feesFor('https://any.example.com', ['bolt12'])).toThrow(/unit/);
+    });
+
+    test('reads a null sm or mf as absent, as cdk writes unset fields', () => {
+      const raw = (sm: unknown) => ({ u: 'sat', sm }) as unknown as RawPaymentRequest;
+      expect(PaymentRequest.fromRawRequest(raw(null)).supportedMethods).toBeUndefined();
+      const pr = PaymentRequest.fromRawRequest(raw([{ mn: 'bolt11', mf: null }]));
+      expect(pr.supportedMethods).toEqual([{ method: 'bolt11', fee: undefined }]);
+    });
+
+    test.each([
+      ['a non-list sm', 'bolt11', /sm must be a list/],
+      ['a null entry', [null], /malformed sm entry at index 0/],
+      ['an entry without a method', [{ mf: 5 }], /malformed sm entry at index 0/],
+      ['a non-string method', [{ mn: 'bolt11' }, { mn: 12 }], /malformed sm entry at index 1/],
+      ['a malformed fee', [{ mn: 'bolt11', mf: '1.5' }], /Invalid amount string/],
+    ])('rejects %s with a CTSError', (_name, sm, expected) => {
+      const raw = { u: 'sat', sm } as unknown as RawPaymentRequest;
+      expect(() => PaymentRequest.fromRawRequest(raw)).toThrow(CTSError);
+      expect(() => PaymentRequest.fromRawRequest(raw)).toThrow(expected);
     });
 
     test('includesMint matches the mint list after URL normalization', () => {

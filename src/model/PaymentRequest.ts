@@ -60,6 +60,28 @@ function normalizePaymentRequestFlag(value: unknown, field: 's' | 'mp'): boolean
 }
 
 /**
+ * Reads the wire `sm` list into constructor input, with `null` read as absent as for flags.
+ *
+ * @throws If `sm` is not a list of `{ mn: string, mf? }` entries. A malformed `mf` throws when the
+ *   constructor reads it as an amount.
+ */
+function readSupportedMethods(
+  sm: unknown,
+): Array<{ method: string; fee?: AmountLike }> | undefined {
+  if (sm === undefined || sm === null) return undefined;
+  if (!Array.isArray(sm)) {
+    throw new CTSError('invalid payment request: sm must be a list');
+  }
+  return sm.map((m: unknown, i) => {
+    if (typeof m !== 'object' || m === null || typeof (m as { mn?: unknown }).mn !== 'string') {
+      throw new CTSError(`invalid payment request: malformed sm entry at index ${i}`);
+    }
+    const { mn, mf } = m as { mn: string; mf?: AmountLike | null };
+    return { method: mn, fee: mf ?? undefined };
+  });
+}
+
+/**
  * Constructor options for {@link PaymentRequest}. Keys mirror the class properties; `amount` and
  * method `fee` values accept flexible input and are normalized on construction.
  */
@@ -511,7 +533,7 @@ export class PaymentRequest {
           tags: rawPaymentRequest.nut10.t,
         }
       : undefined;
-    const supportedMethods = rawPaymentRequest.sm?.map((m) => ({ method: m.mn, fee: m.mf }));
+    const supportedMethods = readSupportedMethods(rawPaymentRequest.sm);
     const nutroot = rawPaymentRequest.nutroot
       ? {
           receiverKey: rawPaymentRequest.nutroot.k,
