@@ -2,6 +2,7 @@ import { test, describe, expect } from 'vitest';
 
 import {
   Amount,
+  CTSError,
   decodePaymentRequest,
   OutputData,
   PaymentRequest,
@@ -670,6 +671,25 @@ describe('NUT-18 payment payloads', () => {
         sm: [{ mn: 'bolt12', mf: 5 }],
       });
       expect(foreign.supportedMethods?.[0].fee?.equals(5)).toBe(true);
+    });
+
+    test('reads a null sm or mf as absent, as cdk writes unset fields', () => {
+      const raw = (sm: unknown) => ({ u: 'sat', sm }) as unknown as RawPaymentRequest;
+      expect(PaymentRequest.fromRawRequest(raw(null)).supportedMethods).toBeUndefined();
+      const pr = PaymentRequest.fromRawRequest(raw([{ mn: 'bolt11', mf: null }]));
+      expect(pr.supportedMethods).toEqual([{ method: 'bolt11', fee: undefined }]);
+    });
+
+    test.each([
+      ['a non-list sm', 'bolt11', /sm must be a list/],
+      ['a null entry', [null], /malformed sm entry at index 0/],
+      ['an entry without a method', [{ mf: 5 }], /malformed sm entry at index 0/],
+      ['a non-string method', [{ mn: 'bolt11' }, { mn: 12 }], /malformed sm entry at index 1/],
+      ['a malformed fee', [{ mn: 'bolt11', mf: '1.5' }], /Invalid amount string/],
+    ])('rejects %s with a CTSError', (_name, sm, expected) => {
+      const raw = { u: 'sat', sm } as unknown as RawPaymentRequest;
+      expect(() => PaymentRequest.fromRawRequest(raw)).toThrow(CTSError);
+      expect(() => PaymentRequest.fromRawRequest(raw)).toThrow(expected);
     });
   });
 

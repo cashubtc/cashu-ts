@@ -41,6 +41,28 @@ function normalizePaymentRequestFlag(value: unknown, field: 's' | 'mp'): boolean
   throw new CTSError(`invalid payment request: ${field} must be a boolean (or 0/1)`);
 }
 
+/**
+ * Reads the wire `sm` list into constructor input, with `null` read as absent as for flags.
+ *
+ * @throws If `sm` is not a list of `{ mn: string, mf? }` entries. A malformed `mf` throws when the
+ *   constructor reads it as an amount.
+ */
+function readSupportedMethods(
+  sm: unknown,
+): Array<{ method: string; fee?: AmountLike }> | undefined {
+  if (sm === undefined || sm === null) return undefined;
+  if (!Array.isArray(sm)) {
+    throw new CTSError('invalid payment request: sm must be a list');
+  }
+  return sm.map((m: unknown, i) => {
+    if (typeof m !== 'object' || m === null || typeof (m as { mn?: unknown }).mn !== 'string') {
+      throw new CTSError(`invalid payment request: malformed sm entry at index ${i}`);
+    }
+    const { mn, mf } = m as { mn: string; mf?: AmountLike | null };
+    return { method: mn, fee: mf ?? undefined };
+  });
+}
+
 export class PaymentRequest {
   public amount?: Amount;
   public supportedMethods?: SupportedMethod[];
@@ -391,7 +413,7 @@ export class PaymentRequest {
       rawPaymentRequest.s,
       nut10,
       rawPaymentRequest.mp,
-      rawPaymentRequest.sm?.map((m) => ({ method: m.mn, fee: m.mf })),
+      readSupportedMethods(rawPaymentRequest.sm),
     );
   }
 
