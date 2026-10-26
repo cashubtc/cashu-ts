@@ -15,6 +15,9 @@ import {
   buildP2PKSigAllMessageV0,
   assertSigAllInputs,
   parseSecret,
+  canSpendP2PKWithKeys,
+  normalizeP2PKOptions,
+  type P2PKOptions,
 } from '../crypto';
 import { signMintQuoteAmended } from '../crypto/NUT20';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
@@ -31,6 +34,7 @@ import {
 import { MintInfo } from '../model/MintInfo';
 import { OutputData, type OutputDataLike } from '../model/OutputData';
 import { DefaultOutputDataCreator, type OutputDataCreator } from '../model/OutputDataCreator';
+import { type PaymentRequest, nut10ToP2PKOptions } from '../model/PaymentRequest';
 import type {
   GetInfoResponse,
   MeltRequest,
@@ -1861,6 +1865,148 @@ class Wallet {
   getFeesForProofs(proofs: Array<Pick<Proof, 'id'>>): Amount {
     const sumPPK = Amount.sum(proofs.map((proof) => this.getProofFeePPK(proof))).toBigInt();
     return Amount.from((sumPPK + 999n) / 1000n);
+  }
+
+  /**
+   * Payee-side NUT-18 settlement check: do these received proofs net the requested amount?
+   *
+   * @remarks
+   * Verifies `sum(proofs) - inputFees >= amount + mf`, with input fees from this wallet's keysets
+   * and `mf` priced from this mint's NUT-05 melt methods for the wallet unit. This mint must also
+   * be admissible: inside a strict mint list, and able to melt via a method the request accepts. A
+   * locked request needs every proof to carry exactly the requested `nut10` condition, so an
+   * unrequested refund path fails. An unlocked request takes only proofs the payee can spend,
+   * bearer or locked to one of `opts.privkeys`. Proof integrity (DLEQ) remains a separate check.
+   * @param pr - The payment request being settled.
+   * @param proofs - The received proofs (from this wallet's mint).
+   * @param expectedAmount - Expected amount for amountless requests; ignored when the request sets
+   *   `a`.
+   * @param opts.privkeys - The payee's key(s): on an unlocked request, proofs locked to one of them
+   *   still count.
+   * @throws If no amount is available to check against, this wallet's mint is not admissible for
+   *   the request (unit, strict mint list, or no accepted melt method), a proof keyset is unknown,
+   *   a proof repeats, the request is invalid per NUT-18, a proof does not carry the requested
+   *   lock, or an unlocked request is paid with a proof the payee cannot spend or read.
+   */
+  isPaymentRequestSatisfied(
+    pr: PaymentRequest,
+    proofs: Array<Pick<Proof, 'id' | 'amount' | 'secret' | 'p2pk_e'>>,
+    expectedAmount?: AmountLike,
+    opts?: { privkeys?: string | string[] },
+  ): boolean {
+    const expected =
+      pr.amount ?? (expectedAmount !== undefined ? Amount.from(expectedAmount) : undefined);
+    if (!expected) {
+      throw new CTSError('amountless payment request: pass the expected amount to check against');
+    }
+    if (pr.unit && pr.unit !== this._unit) {
+      throw new CTSError(`request unit '${pr.unit}' does not match wallet unit '${this._unit}'`);
+    }
+    this.assertProofsInWalletUnit(proofs);
+    this.assertNoDuplicateProofs(proofs);
+    if (pr.nut10) {
+      // Spend power the payee never requested, eg a refund path, is a payer clawback (NUT-18).
+      const lock = pr.toP2PKOptions();
+      this.failIfNullish(lock, `cannot check the request's nut10 lock kind '${pr.nut10.kind}'`);
+      for (const p of proofs) {
+        this.assertNut10Lock(lock, p.secret);
+      }
+    } else {
+      // Proofs locked to the payer sum to the amount but transfer nothing.
+      const privkeys = opts?.privkeys === undefined ? [] : [opts.privkeys].flat();
+      for (const p of proofs) {
+        this.failIf(
+          !this.canPayeeSpend(p, privkeys),
+          'unlocked request: the payee cannot spend a proof',
+        );
+      }
+    }
+    // Admissibility, as the payer side checks it (NUT-18): a strict list binds the issuer, and the
+    // proofs must be redeemable through a method the request accepts.
+    const listed = pr.includesMint(this.mint.mintUrl);
+    this.failIf(
+      pr.isMintListStrict === true && !listed,
+      "this wallet's mint is not in the request's strict mint list",
+    );
+    // mf applies only when this mint is outside the request's mint list (NUT-18).
+    let mf = Amount.zero();
+    if (pr.supportedMethods?.length) {
+      const { disabled, params } = this.getMintInfo().isSupported(5);
+      const meltMethods = disabled
+        ? []
+        : params.filter((m) => m.unit === this._unit).map((m) => m.method);
+      this.failIf(
+        !pr.supportedMethods.some((m) => meltMethods.includes(m.method)),
+        `mint cannot melt ${this._unit} via any method the request accepts`,
+      );
+      mf = listed ? Amount.zero() : pr.feesFor(this.mint.mintUrl, meltMethods);
+    }
+    const needed = expected.add(mf).add(this.getFeesForProofs(proofs));
+    return sumProofs(proofs).compareTo(needed) >= 0;
+  }
+
+  /**
+   * Asserts a proof's secret is exactly the lock the request asked for.
+   *
+   * @remarks
+   * Both sides canonicalise through the same normalizer, so tag order, hex case and x-only form do
+   * not matter but content does: an unrequested `refund`/`locktime` pair is a payer clawback.
+   * @throws If the proof is unlocked, or carries a condition other than the requested one.
+   */
+  private assertNut10Lock(requested: P2PKOptions, secret: string): void {
+    let held: P2PKOptions | undefined;
+    try {
+      const [kind, data] = parseSecret(secret);
+      held = nut10ToP2PKOptions({ kind, data: data.data, tags: data.tags });
+    } catch {
+      held = undefined;
+    }
+    this.failIfNullish(
+      held,
+      'nut10 request: proof does not carry a NUT-10 lock of the requested kind',
+    );
+    this.failIf(
+      JSON.stringify(normalizeP2PKOptions(held)) !==
+        JSON.stringify(normalizeP2PKOptions(requested)),
+      'nut10 request: proof lock is not the requested spending condition',
+    );
+  }
+
+  /**
+   * Whether the payee can spend a proof now: bearer, or a P2PK/HTLC lock `privkeys` satisfy.
+   *
+   * @throws If the secret is a NUT-10 lock this wallet cannot read: a laxer mint may enforce it.
+   */
+  private canPayeeSpend(proof: Pick<Proof, 'secret' | 'p2pk_e'>, privkeys: string[]): boolean {
+    try {
+      parseSecret(proof.secret);
+    } catch (e) {
+      // A JSON array is not a bearer secret, so an unreadable one fails closed.
+      if (typeof proof.secret !== 'string' || proof.secret.trimStart().startsWith('[')) throw e;
+      return true;
+    }
+    return canSpendP2PKWithKeys(proof, privkeys);
+  }
+
+  /**
+   * Asserts no proof appears twice.
+   *
+   * @remarks
+   * A proof is bearer value redeemable once: the mint keys spent state on `Y =
+   * hash_to_curve(secret)` (NUT-07), so copies sharing a secret are one proof, not two.
+   * @throws If two proofs share a secret.
+   */
+  private assertNoDuplicateProofs(proofs: Array<Pick<Proof, 'secret'>>): void {
+    const seen = new Set<string>();
+    for (const [i, p] of proofs.entries()) {
+      // Report the position, never the secret: it is the spending material.
+      this.failIf(
+        seen.has(p.secret),
+        `Duplicate proof at index ${i}: each proof may appear only once`,
+        { index: i },
+      );
+      seen.add(p.secret);
+    }
   }
 
   /**

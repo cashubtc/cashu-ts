@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { LockBuilder } from '../../src';
 import { Amount, type AmountLike } from '../../src/model/Amount';
 import type { OutputData, OutputDataLike } from '../../src/model/OutputData';
+import { PaymentRequest } from '../../src/model/PaymentRequest';
 import type {
   Proof,
   MintQuoteBolt11Response,
@@ -122,6 +123,23 @@ type MeltProofsOnchainFn = (
 
 class MockWallet {
   defaultOutputType: () => OutputType = vi.fn(() => ({ type: 'random' as const }));
+
+  // sendToRequest fixtures: a sat wallet on mint.example.com that melts sat via bolt11 only.
+  unit = 'sat';
+  mint = { mintUrl: 'https://mint.example.com' };
+  meltDisabled = false;
+  getMintInfo = vi.fn(() => ({
+    isSupported: (num: number) =>
+      num === 5
+        ? {
+            disabled: this.meltDisabled,
+            params: [
+              { method: 'bolt11', unit: 'sat' },
+              { method: 'bolt12', unit: 'usd' },
+            ],
+          }
+        : { disabled: true, params: [] },
+  }));
 
   signP2PKProofs: Mock<SignP2PKFn> = vi.fn<SignP2PKFn>((ps) => ps); // passthrough
   send: Mock<SendFn> = vi.fn<SendFn>(async () => ({ keep: [], send: [] }));
@@ -270,6 +288,143 @@ describe('WalletOps builders', () => {
     wallet = new MockWallet();
     ops = new WalletOps(wallet as unknown as any);
     vi.clearAllMocks();
+  });
+
+  // --------------------------- sendToRequest ---------------------------------
+
+  describe('sendToRequest', () => {
+    // Wallet fixture (MockWallet): unit sat, mint.example.com, melts sat via bolt11 only.
+    const myMint = 'https://mint.example.com';
+    const P2PK_KEY = '02'.padEnd(66, 'a');
+    const request = (o: {
+      amount?: number;
+      unit?: string;
+      mints?: string[];
+      mp?: boolean;
+      sm?: Array<{ method: string; fee?: number }>;
+      nut10?: { kind: string; data: string };
+    }) =>
+      new PaymentRequest(
+        undefined,
+        undefined,
+        o.amount,
+        o.unit,
+        o.mints,
+        undefined,
+        false,
+        o.nut10,
+        o.mp,
+        o.sm,
+      );
+
+    it('sends the bare amount with includeFees from a listed mint', async () => {
+      const pr = request({
+        amount: 100,
+        unit: 'sat',
+        mints: [myMint],
+        sm: [{ method: 'bolt11', fee: 2 }],
+      });
+      await ops.sendToRequest(pr, proofs).run();
+      const [amount, , config] = wallet.send.mock.calls[0];
+      expect(Amount.from(amount).equals(100)).toBe(true); // listed mint: no mf
+      expect(config).toEqual({ includeFees: true }); // net of input fees (NUT-18)
+    });
+
+    it('adds the lowest applicable mf from a non-listed mint', async () => {
+      const pr = request({
+        amount: 100,
+        unit: 'sat',
+        mints: ['https://other.mint'],
+        mp: true,
+        sm: [
+          { method: 'bolt11', fee: 2 },
+          { method: 'bolt12', fee: 5 }, // not melt-supported in sat, so not applicable
+        ],
+      });
+      await ops.sendToRequest(pr, proofs).run();
+      expect(Amount.from(wallet.send.mock.calls[0][0]).equals(102)).toBe(true);
+    });
+
+    it('matches listed mints after URL normalization', async () => {
+      const pr = request({
+        amount: 100,
+        unit: 'sat',
+        mints: ['https://MINT.example.com/'], // strict list; normalizes to this wallet's mint
+        sm: [{ method: 'bolt11', fee: 2 }],
+      });
+      await ops.sendToRequest(pr, proofs).run();
+      expect(Amount.from(wallet.send.mock.calls[0][0]).equals(100)).toBe(true);
+    });
+
+    it('rejects a strict mint list that excludes this mint', () => {
+      const pr = request({ amount: 100, unit: 'sat', mints: ['https://other.mint'] });
+      expect(() => ops.sendToRequest(pr, proofs)).toThrow(/strict mint list/);
+    });
+
+    it('rejects a unit mismatch', () => {
+      expect(() => ops.sendToRequest(request({ amount: 100, unit: 'usd' }), proofs)).toThrow(
+        /unit/,
+      );
+    });
+
+    it('rejects an amount or supported methods without a unit', async () => {
+      const smOnly = request({ mints: [myMint], sm: [{ method: 'bolt11', fee: 1 }] });
+      expect(() => ops.sendToRequest(smOnly, proofs, 100)).toThrow(/unit/);
+      expect(() => ops.sendToRequest(request({ amount: 100 }), proofs)).toThrow(/unit/);
+      expect(wallet.send).not.toHaveBeenCalled();
+
+      // A request setting neither is not covered by the rule; the payer picks both.
+      await ops.sendToRequest(request({}), proofs, 100).run();
+      expect(Amount.from(wallet.send.mock.calls[0][0]).equals(100)).toBe(true);
+    });
+
+    it('keeps the request terms when further options are chained', async () => {
+      const locked = request({ amount: 100, unit: 'sat', nut10: { kind: 'P2PK', data: P2PK_KEY } });
+      expect(() => ops.sendToRequest(locked, proofs).asRandom()).toThrow(/payment request/);
+      expect(() => ops.sendToRequest(locked, proofs).asP2PK({ pubkey: P2PK_KEY })).toThrow(
+        /payment request/,
+      );
+      expect(() => ops.sendToRequest(locked, proofs).includeFees(false)).toThrow(/payment request/);
+
+      // An unlocked request mandates no send output, so shaping one is still allowed.
+      const unlocked = request({ amount: 100, unit: 'sat' });
+      await ops.sendToRequest(unlocked, proofs).asRandom([50, 50]).includeFees(true).run();
+      const [, , config, outputConfig] = wallet.send.mock.calls[0];
+      expect(config?.includeFees).toBe(true);
+      expect(outputConfig?.send).toMatchObject({ type: 'random' });
+    });
+
+    it('rejects when the mint cannot melt the request unit via any accepted method', () => {
+      // The mock mint melts bolt12 only in usd, so bolt12 does not count for a sat request.
+      const pr = request({ amount: 100, unit: 'sat', sm: [{ method: 'bolt12' }] });
+      expect(() => ops.sendToRequest(pr, proofs)).toThrow(/cannot melt/);
+
+      // A mint with melting disabled supports no method at all.
+      wallet.meltDisabled = true;
+      const bolt11 = request({ amount: 100, unit: 'sat', sm: [{ method: 'bolt11' }] });
+      expect(() => ops.sendToRequest(bolt11, proofs)).toThrow(/cannot melt/);
+    });
+
+    it('handles amountless requests via the amount argument', async () => {
+      const pr = request({ unit: 'sat', sm: [{ method: 'bolt11', fee: 1 }] });
+      expect(() => ops.sendToRequest(pr, proofs)).toThrow(/chosen amount/);
+      await ops.sendToRequest(pr, proofs, 50).run();
+      // No mint list: the fee applies from any mint.
+      expect(Amount.from(wallet.send.mock.calls[0][0]).equals(51)).toBe(true);
+
+      const withAmount = request({ amount: 100, unit: 'sat' });
+      expect(() => ops.sendToRequest(withAmount, proofs, 50)).toThrow(/omit the amount/);
+    });
+
+    it('applies the nut10 lock and rejects unbuildable kinds', async () => {
+      const locked = request({ amount: 100, unit: 'sat', nut10: { kind: 'P2PK', data: P2PK_KEY } });
+      await ops.sendToRequest(locked, proofs).run();
+      const send = wallet.send.mock.calls[0][3]?.send;
+      expect(send).toMatchObject({ type: 'p2pk', options: { pubkey: P2PK_KEY } });
+
+      const exotic = request({ amount: 100, unit: 'sat', nut10: { kind: 'FROST', data: 'xyz' } });
+      expect(() => ops.sendToRequest(exotic, proofs)).toThrow(/nut10 lock/);
+    });
   });
 
   // --------------------------- SendBuilder -----------------------------------

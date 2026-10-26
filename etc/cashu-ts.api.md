@@ -2292,6 +2292,9 @@ export class Wallet {
         pending: T[];
         spent: T[];
     }>;
+    isPaymentRequestSatisfied(pr: PaymentRequest_2, proofs: Array<Pick<Proof, 'id' | 'amount' | 'secret' | 'p2pk_e'>>, expectedAmount?: AmountLike, opts?: {
+        privkeys?: string | string[];
+    }): boolean;
     get keyChain(): KeyChain;
     get keysetId(): string;
     loadMint(forceRefresh?: boolean): Promise<void>;
@@ -2406,6 +2409,7 @@ export class WalletOps {
     receive(token: Token | string | ProofLike[]): ReceiveBuilder;
     // (undocumented)
     send(amount: AmountLike, proofs: ProofLike[]): SendBuilder;
+    sendToRequest(pr: PaymentRequest_2, proofs: ProofLike[], amount?: AmountLike): SendBuilder;
 }
 
 // @public
