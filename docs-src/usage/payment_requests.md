@@ -74,7 +74,7 @@ const request = new PaymentRequest(
   [{ type: PaymentRequestTransportType.POST, target: 'https://pay.example.com' }], // transport
   'inv-123', // id
   100, // amount
-  'sat', // unit (required with an amount or supported methods)
+  'sat', // unit (required by NUT-18 with an amount or supported methods)
   ['https://my.mint'], // mints
   'Coffee', // description
   false, // singleUse

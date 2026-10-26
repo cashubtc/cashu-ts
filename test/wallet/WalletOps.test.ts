@@ -425,6 +425,33 @@ describe('WalletOps builders', () => {
       const exotic = request({ amount: 100, unit: 'sat', nut10: { kind: 'FROST', data: 'xyz' } });
       expect(() => ops.sendToRequest(exotic, proofs)).toThrow(/nut10 lock/);
     });
+
+    it('refuses a lock nobody could spend', async () => {
+      const OFF_CURVE = '02' + '5'.padStart(64, '0');
+      const locked = (nut10: { kind: string; data: string; tags?: string[][] }) =>
+        request({ amount: 100, unit: 'sat', nut10 });
+
+      expect(() => ops.sendToRequest(locked({ kind: 'P2PK', data: OFF_CURVE }), proofs)).toThrow(
+        /not a valid secp256k1 point/,
+      );
+      const refund = locked({
+        kind: 'P2PK',
+        data: P2PK_KEY,
+        tags: [
+          ['locktime', '4000000000'],
+          ['refund', OFF_CURVE],
+        ],
+      });
+      expect(() => ops.sendToRequest(refund, proofs)).toThrow(/not a valid secp256k1 point/);
+      expect(() => ops.sendToRequest(locked({ kind: 'HTLC', data: 'abcd' }), proofs)).toThrow(
+        /64-character hex/,
+      );
+      expect(wallet.send).not.toHaveBeenCalled();
+
+      // An x-only key stays payable on v4: NUT-11 signatures use only the x coordinate.
+      await ops.sendToRequest(locked({ kind: 'P2PK', data: P2PK_KEY.slice(2) }), proofs).run();
+      expect(wallet.send.mock.calls[0][3]?.send).toMatchObject({ type: 'p2pk' });
+    });
   });
 
   // --------------------------- SendBuilder -----------------------------------

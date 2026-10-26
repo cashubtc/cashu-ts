@@ -1,4 +1,4 @@
-import { type P2PKOptions } from '../crypto';
+import { type P2PKOptions, normalizeP2PKOptions, pointFromHex } from '../crypto';
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { type OutputDataLike, type OutputDataFactory } from '../model/OutputData';
@@ -33,6 +33,27 @@ import type { Wallet } from './Wallet';
 // Builders from `sendToRequest`: the request's lock and net-of-fees terms are fixed (NUT-18). Kept
 // off the public SendBuilder signature, which v5 shapes differently.
 const requestBuilders = new WeakSet<SendBuilder>();
+
+/**
+ * Refuses a requested lock nobody could ever spend: an off-curve key, or a malformed hashlock.
+ *
+ * @remarks
+ * Applied where a payer pays a request, so `toP2PKOptions` keeps its lenient v4 behaviour.
+ * @throws If a lock or refund key is not a secp256k1 point, or the hashlock is not 64 hex digits.
+ */
+function assertSpendableLock(lock: P2PKOptions): void {
+  const { pubkey, refundKeys = [], hashlock } = normalizeP2PKOptions(lock);
+  for (const key of [pubkey, refundKeys].flat()) {
+    try {
+      pointFromHex(key);
+    } catch (e) {
+      throw new CTSError('payment request lock key is not a valid secp256k1 point', { cause: e });
+    }
+  }
+  if (hashlock !== undefined && !/^[0-9a-f]{64}$/.test(hashlock)) {
+    throw new CTSError('payment request hashlock must be a 64-character hex string');
+  }
+}
 
 export type MintMethod = 'bolt11' | 'bolt12' | 'onchain';
 
@@ -111,6 +132,7 @@ export class WalletOps {
     if (pr.nut10 && !lock) {
       throw new CTSError(`cannot honour the request's nut10 lock kind '${pr.nut10.kind}'`);
     }
+    if (lock) assertSpendableLock(lock);
     // Net of input fees (NUT-18): the payee must net the requested amount after swapping.
     const builder = new SendBuilder(wallet, base.add(fee), proofs);
     requestBuilders.add(builder);

@@ -412,6 +412,9 @@ describe('wallet.isPaymentRequestSatisfied', () => {
     const toPayee = lockedProofs([100], createP2PKsecret(pub(1)));
     expect(() => wallet.isPaymentRequestSatisfied(pr, toPayee)).toThrow(/the payee cannot spend/);
     expect(wallet.isPaymentRequestSatisfied(pr, toPayee, undefined, payee)).toBe(true);
+    // Key hex case carries no meaning.
+    const toPayeeUpper = lockedProofs([100], createP2PKsecret(pub(1).toUpperCase()));
+    expect(wallet.isPaymentRequestSatisfied(pr, toPayeeUpper, undefined, payee)).toBe(true);
 
     // Blinded to the payee (NUT-28): the held key matches only through the proof's `p2pk_e`.
     const { blinded, Ehex } = deriveP2BKBlindedPubkeys([pub(1)]);
