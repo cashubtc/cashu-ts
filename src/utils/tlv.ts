@@ -28,6 +28,7 @@ export type DecodedTLVPaymentRequest = {
   transports?: PaymentRequestTransport[];
   nut10?: Nut10SpendingCondition;
   mintsPreferred?: boolean;
+  supportedMethods?: Array<{ method: string; fee?: bigint }>;
 };
 
 /**
@@ -44,6 +45,7 @@ export type DecodedTLVPaymentRequest = {
  * | 0x07 | transport   | sub-TLV   | Transport configuration (repeatable)             |
  * | 0x08 | nut10       | sub-TLV   | NUT-10 spending conditions (not yet implemented) |
  * | 0x09 | mint_pref   | u8        | Mint list is advisory: 0=strict, 1=preferred     |
+ * | 0x0a | sup_method  | sub-TLV   | Supported method, optional fee (repeatable)      |
  */
 const TAG_ID = 0x01;
 const TAG_AMOUNT = 0x02;
@@ -54,6 +56,18 @@ const TAG_DESCRIPTION = 0x06;
 const TAG_TRANSPORT = 0x07;
 const TAG_NUT10 = 0x08;
 const TAG_MINT_PREFERRED = 0x09;
+const TAG_SUPPORTED_METHODS = 0x0a;
+
+/**
+ * Supported Method Sub-TLV Tag definitions (NUT-26 tag 0x0a).
+ *
+ * | Sub-Tag | Field  | Type   | Description                       |
+ * | ------- | ------ | ------ | --------------------------------- |
+ * | 0x01    | method | string | Method name, e.g. "bolt11"        |
+ * | 0x02    | fee    | u64    | Optional per-method fee; absent=0 |
+ */
+const SUPPORTED_METHOD_TAG_METHOD = 0x01;
+const SUPPORTED_METHOD_TAG_FEE = 0x02;
 
 /**
  * Transport Sub-TLV Tag definitions.
@@ -166,6 +180,12 @@ export function decodeTLV(data: Uint8Array): DecodedTLVPaymentRequest {
           throw new CTSError('invalid pr: multiple mint_preferred fields');
         }
         result.mintsPreferred = parseU8(part.value) === 1;
+        break;
+      case TAG_SUPPORTED_METHODS:
+        if (!result.supportedMethods) {
+          result.supportedMethods = [];
+        }
+        result.supportedMethods.push(parseSupportedMethod(part.value));
         break;
       default:
         // Ignore unknown tags for forward compatibility
@@ -318,6 +338,43 @@ function parseTransport(value: Uint8Array): PaymentRequestTransport {
     target,
     tags: finalTags,
   };
+}
+
+/**
+ * Parses a supported method (NUT-26 tag 0x0a) from its sub-TLV value.
+ *
+ * @param value - The supported_method sub-TLV value bytes.
+ * @returns Parsed method with an optional per-method fee.
+ */
+function parseSupportedMethod(value: Uint8Array): { method: string; fee?: bigint } {
+  const parts = decodeAllParts(value);
+
+  let method: string | undefined;
+  let fee: bigint | undefined;
+
+  for (const part of parts) {
+    switch (part.tag) {
+      case SUPPORTED_METHOD_TAG_METHOD:
+        // Singular: a duplicate makes the method ambiguous, so reject rather than guess.
+        if (method !== undefined) {
+          throw new CTSError('invalid pr: multiple supported_method method fields');
+        }
+        method = parseString(part.value);
+        break;
+      case SUPPORTED_METHOD_TAG_FEE:
+        if (fee !== undefined) {
+          throw new CTSError('invalid pr: multiple supported_method fee fields');
+        }
+        fee = parseU64(part.value);
+        break;
+    }
+  }
+
+  if (method === undefined) {
+    throw new CTSError('supported_method missing required method field');
+  }
+
+  return fee !== undefined ? { method, fee } : { method };
 }
 
 /**
@@ -474,6 +531,13 @@ export function encodeTLV(request: DecodedTLVPaymentRequest): Uint8Array {
     parts.push(encodeTLVPart(TAG_MINT_PREFERRED, encodeU8(request.mintsPreferred ? 1 : 0)));
   }
 
+  // Repeatable: supported_method
+  if (request.supportedMethods && request.supportedMethods.length > 0) {
+    for (const method of request.supportedMethods) {
+      parts.push(encodeTLVPart(TAG_SUPPORTED_METHODS, encodeSupportedMethod(method)));
+    }
+  }
+
   // Concatenate all parts
   const totalLength = parts.reduce((sum, part) => sum + part.length, 0);
   const result = new Uint8Array(totalLength);
@@ -584,6 +648,31 @@ function encodeTransport(transport: PaymentRequestTransport): Uint8Array {
     for (const tag of allTags) {
       parts.push(encodeTLVPart(TRANSPORT_TAG_TAG_TUPLE, encodeTagTuple(tag)));
     }
+  }
+
+  // Concatenate all sub-parts
+  const totalLength = parts.reduce((sum, part) => sum + part.length, 0);
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const part of parts) {
+    result.set(part, offset);
+    offset += part.length;
+  }
+
+  return result;
+}
+
+/**
+ * Encodes a supported method into its TLV sub-structure (NUT-26 tag 0x0a).
+ *
+ * @param method - The method name with an optional per-method fee.
+ * @returns Encoded supported_method sub-TLV.
+ */
+function encodeSupportedMethod(method: { method: string; fee?: bigint }): Uint8Array {
+  const parts: Uint8Array[] = [];
+  parts.push(encodeTLVPart(SUPPORTED_METHOD_TAG_METHOD, encodeString(method.method)));
+  if (method.fee !== undefined) {
+    parts.push(encodeTLVPart(SUPPORTED_METHOD_TAG_FEE, encodeU64(method.fee)));
   }
 
   // Concatenate all sub-parts

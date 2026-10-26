@@ -480,3 +480,55 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
     });
   });
 });
+
+describe('Preferred Mint List with Supported Methods', () => {
+  // NUT-26 spec vector: mp=true and supported methods, bolt12 carrying mf=5.
+  const encoded =
+    'CREQB1QYQP2URJV4NX2UNJV4J97EN9V40K6ET5DPHKGUCZQQYQQQQQQQQQQQRYQVQQZQQ9QQVXSAR5WPEN5TE0D45KUAPWV4UXZMTSD3JJUCM0D5YSQQGPPGQQJQGQQE3X7MR5XYCS5QQ5QYQQVCN0D36RZVSZQQYQQQQQQQQQQQQ9FJ2568';
+
+  test('roundtrip preferred mint list with supported methods', () => {
+    testRoundtrip(encoded, 'NUT-26 spec vector: mp=true, sm=[bolt11, bolt12(mf=5)]');
+  });
+
+  test('verify mp, sm fields', () => {
+    const decoded = decodeTLV(decodeBech32mToBytes(encoded.toLowerCase()));
+    expect(decoded.id).toBe('preferred_fee_methods');
+    expect(decoded.amount).toBe(100n);
+    expect(decoded.unit).toBe('sat');
+    expect(decoded.mints).toEqual(['https://mint.example.com']);
+    expect(decoded.mintsPreferred).toBe(true);
+    expect(decoded.supportedMethods).toEqual([{ method: 'bolt11' }, { method: 'bolt12', fee: 5n }]);
+  });
+});
+
+describe('Supported Method sub-TLV (malformed)', () => {
+  // supported_method (tag 0x0a) is a sub-TLV: 0x01 method (string), 0x02 fee (u64).
+  const u64 = (n: number) => [0x02, 0x00, 0x08, 0, 0, 0, 0, 0, 0, 0, n];
+
+  test('rejects duplicate method sub-tag', () => {
+    const malformed = new Uint8Array([
+      0x0a, 0x00, 0x08, 0x01, 0x00, 0x01, 0x61, 0x01, 0x00, 0x01, 0x62,
+    ]);
+    expect(() => decodeTLV(malformed)).toThrow(/multiple supported_method method/);
+  });
+
+  test('rejects duplicate fee sub-tag', () => {
+    const malformed = new Uint8Array([
+      0x0a,
+      0x00,
+      26,
+      0x01,
+      0x00,
+      0x01,
+      0x61,
+      ...u64(5),
+      ...u64(6),
+    ]);
+    expect(() => decodeTLV(malformed)).toThrow(/multiple supported_method fee/);
+  });
+
+  test('rejects supported_method missing its method field', () => {
+    const malformed = new Uint8Array([0x0a, 0x00, 0x0b, ...u64(5)]);
+    expect(() => decodeTLV(malformed)).toThrow(/supported_method missing required method/);
+  });
+});
