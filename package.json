@@ -94,9 +94,9 @@
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/vitest-runner": "^10.0.0",
     "@types/node": "^26.2.0",
-    "@vitest/browser": "^5.0.0",
-    "@vitest/browser-playwright": "^5.0.0",
-    "@vitest/coverage-v8": "^5.0.0",
+    "@vitest/browser": "^5.0.4",
+    "@vitest/browser-playwright": "^5.0.4",
+    "@vitest/coverage-v8": "^5.0.4",
     "@vitest/eslint-plugin": "^1.6.20",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",
@@ -108,7 +108,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^17.3.0",
     "mock-socket": "^9.3.1",
-    "msw": "^2.14.2",
+    "msw": "^3.0.2",
     "node-fetch": "^3.3.2",
     "playwright": "^1.59.1",
     "prettier": "^3.8.3",
@@ -121,7 +121,7 @@
     "typescript-eslint": "^8.59.1",
     "vite": "^8.0.10",
     "vite-plugin-dts": "^4.5.4",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.4"
   },
   "dependencies": {
     "@noble/curves": "^2.4.0",

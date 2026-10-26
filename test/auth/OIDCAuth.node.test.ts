@@ -32,7 +32,13 @@ const accessOk: TokenResponse = {
 
 const server = setupServer();
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+// msw 3 settles requests via setImmediate, so fake only the timers OIDCAuth sleeps on.
+// Fetch keep-alive timers still share the fake clock: count timers relative, not absolute.
+function useSleepFakeTimers(): void {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+}
+
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
@@ -486,16 +492,16 @@ describe('OIDCAuth: device flow', () => {
   test('startDeviceAuth: cancel() ends a pending poll delay instead of waiting it out', async () => {
     const oidc = new OIDCAuth(DISCOVERY, { clientId: 'cashu-client' });
     const start = await oidc.startDeviceAuth(600);
-    vi.useFakeTimers();
+    useSleepFakeTimers();
     try {
       const promise = start.poll();
       // Let poll() reach the delay (discovery is already cached by startDeviceAuth).
       await vi.advanceTimersByTimeAsync(0);
-      expect(vi.getTimerCount()).toBe(1);
+      const timers = vi.getTimerCount();
 
       start.cancel();
 
-      expect(vi.getTimerCount()).toBe(0);
+      expect(vi.getTimerCount()).toBe(timers - 1);
       await expect(promise).rejects.toThrow('device polling cancelled');
     } finally {
       vi.useRealTimers();
@@ -626,13 +632,13 @@ describe('OIDCAuth: device flow', () => {
   test('cancel clears every concurrently sleeping poll', async () => {
     const oidc = new OIDCAuth(DISCOVERY);
     const start = await oidc.startDeviceAuth(600);
-    vi.useFakeTimers();
+    useSleepFakeTimers();
     try {
       const pending = [start.poll(), start.poll()].map((p) => p.catch((err: unknown) => err));
       await vi.advanceTimersByTimeAsync(0);
-      expect(vi.getTimerCount()).toBe(2);
+      const timers = vi.getTimerCount();
       start.cancel();
-      expect(vi.getTimerCount()).toBe(0);
+      expect(vi.getTimerCount()).toBe(timers - 2);
       for (const result of await Promise.all(pending)) expect(result).toBeInstanceOf(CTSError);
     } finally {
       vi.useRealTimers();
@@ -777,7 +783,7 @@ test('postFormLoose logs warn on bad JSON and returns {}', async () => {
 });
 
 test('startDeviceAuth.poll handles slow_down by increasing delay', async () => {
-  vi.useFakeTimers();
+  useSleepFakeTimers();
   try {
     const DISCOVERY = 'http://oidc/.well-known/openid-configuration';
     const TOKEN = 'http://oidc/token';
@@ -828,7 +834,7 @@ test('startDeviceAuth.poll handles slow_down by increasing delay', async () => {
 
 describe('OIDCAuth: startDeviceAuth.poll compact mix', () => {
   test('slow_down then pending then success with correct delay bump', async () => {
-    vi.useFakeTimers();
+    useSleepFakeTimers();
     try {
       const DISC = 'http://oidc/.well-known/openid-configuration';
       const TOKEN = 'http://oidc/token';
@@ -881,7 +887,7 @@ describe('OIDCAuth: startDeviceAuth.poll compact mix', () => {
 
 describe('OIDCAuth: startDeviceAuth uses caller interval when provider omits it', () => {
   test('initial delay = caller interval if start.interval is undefined', async () => {
-    vi.useFakeTimers();
+    useSleepFakeTimers();
     try {
       const DISC = 'http://oidc/.well-known/openid-configuration';
       const TOKEN = 'http://oidc/token';

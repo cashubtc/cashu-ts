@@ -59,7 +59,8 @@ const loadedWallet = async (listsTemplate: boolean) => {
     ),
   );
   const w = wallet();
-  await w.loadMint();
+  // The shared mint caches its info, so refetch to see this test's leaves.
+  await w.loadMint(true);
   return w;
 };
 

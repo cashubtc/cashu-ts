@@ -260,11 +260,11 @@ describe('leaf parsing fails closed', () => {
     expect(() => parseNutrootLeaf(bad)).toThrow(/type/);
   });
 
-  test('unknown even field rejects', () => {
+  test.each([0x0a, 0x0c])('unknown even field rejects (type %i)', (type) => {
     const body = new Uint8Array([
       ...tlvRecord(0x02, new Uint8Array([1])),
       ...tlvRecord(0x04, hexToBytes(vRefund.carol_pub)),
-      ...tlvRecord(0x0c, new Uint8Array([1])),
+      ...tlvRecord(type, new Uint8Array([1])),
     ]);
     const leaf = new Uint8Array([0x00, 0x01, ...body]);
     expect(() => parseNutrootLeaf(leaf)).toThrow(/field/);

@@ -26,7 +26,7 @@ import {
   isV3PointSecret,
 } from '../crypto';
 // Internal transitional fallback — not part of crypto/index.ts
-import { normalizeSecpPubkey } from '../crypto/curve_secp';
+import { getPubKeyFromPrivKey, normalizeSecpPubkey } from '../crypto/curve_secp';
 import { p2pkOptionsToPRNut10, type P2PKOptions } from '../crypto/NUT11';
 import { verifyHTLCHash } from '../crypto/NUT14';
 import { mintQuoteDigest, signMintQuoteLegacy } from '../crypto/NUT20';
@@ -470,22 +470,19 @@ class Wallet {
    * Must be called before other methods, unless loading from cache (`loadMintFromCache`). With
    * `forceRefresh`, metadata refreshes, held keys are kept, and an auto-bound wallet re-applies
    * cheapest-keyset selection on every refresh; pinned wallets stay pinned.
-   * @param forceRefresh If true, re-fetches data even if cached.
+   * @param forceRefresh If true, re-fetches data even if the wallet or its `Mint` already holds it.
    * @throws If fetching mint info, keysets, or keys fails.
    */
   async loadMint(forceRefresh?: boolean, opts?: AbortOptions): Promise<void> {
     const promises = [];
 
     // Load mint info
-    if (!this._mintInfo || forceRefresh) {
-      promises.push(
-        this.mint.getInfo(opts).then((info) => {
-          this._mintInfo = new MintInfo(info, this._logger);
-          this.mint.setMintInfo(this._mintInfo);
-          return null;
-        }),
-      );
-    }
+    promises.push(
+      this.mint.fetchMintInfo({ ...opts, forceRefresh }).then((info) => {
+        this._mintInfo = info;
+        return null;
+      }),
+    );
 
     // Load KeyChain
     promises.push(this._keyChain.init(forceRefresh));
@@ -710,14 +707,14 @@ class Wallet {
    * Whether a mint request's outputs sit on a v3 keyset, which selects the quote signing rule.
    *
    * @remarks
-   * Chosen from the outputs, not the wallet keyset: custom data may name another. NUT-04 requires
-   * every output of a v3 mint request to share one keyset.
+   * Chosen from the outputs, not the wallet keyset: custom data may name another. NUT-04 forbids
+   * pre-v3 outputs in a v3 mint request; several v3 keysets are fine.
    */
   private mintsOntoV3(outputs: SerializedBlindedMessage[]): boolean {
     const v3 = outputs.some((o) => isBlsKeyset(o.id));
     this.failIf(
-      v3 && new Set(outputs.map((o) => o.id)).size > 1,
-      'Outputs on a v3 keyset must all share that keyset (NUT-04)',
+      v3 && !outputs.every((o) => isBlsKeyset(o.id)),
+      'A mint request with a v3 output cannot have pre-v3 outputs (NUT-04)',
     );
     return v3;
   }
@@ -1083,8 +1080,11 @@ class Wallet {
       counterSource: opts?.counterSource ?? this._counterSource,
       strictCachedKeysets: this._strictCachedKeysets,
     });
-    // Load mint info from our caches
-    newWallet.loadMintFromCache(this.getMintInfo().cache, this._keyChain.cache);
+    // Share our MintInfo rather than rebuild it from `cache`, which would also replace the shared
+    // Mint's copy.
+    newWallet._keyChain.loadFromCache(this._keyChain.cache);
+    newWallet._mintInfo = this.getMintInfo();
+    newWallet.finishInit();
     return newWallet;
   }
 
@@ -3576,7 +3576,7 @@ class Wallet {
     // (recoverQuoteLockKey is the explicit tool for a seeded wallet that lost it).
     const sign = privkey ? undefined : config?.sign;
     const quotePubkey = resolvedQuote.pubkey;
-    if (quotePubkey) {
+    if (quotePubkey && !(v3 && config?.signingPackage)) {
       this.failIf(
         !privkey && !sign,
         'Can not sign locked quote without private key or sign callback (see recoverQuoteLockKey)',
@@ -3730,6 +3730,8 @@ class Wallet {
    * NOTE:
    *
    * - Any quote without a pubkey is considered unlocked. Pass `pubkey` for locked quotes.
+   * - With `config.signingPackage` on a v3 keyset, a locked quote no `privkey` matches gets `null`,
+   *   for `ScriptPath.extractMintPackage` to fill.
    * - Check all quotes are in the PAID state. If any quote is unpaid, the entire batch will fail.
    *
    * @param method Payment method identifier (e.g., 'bolt11', 'bolt12').
@@ -3818,7 +3820,8 @@ class Wallet {
 
     // Check locked quotes: require a privkey and verify it can sign
     const hasLockedQuotes = resolvedEntries.some((e) => e.quote.pubkey);
-    if (hasLockedQuotes) {
+    // With config.signingPackage this waits until the outputs show whether the batch is v3.
+    if (hasLockedQuotes && !config?.signingPackage) {
       this.failIf(
         signingKeys.length === 0,
         'Can not sign locked quotes without private key (see recoverQuoteLockKey)',
@@ -3892,10 +3895,24 @@ class Wallet {
           blindedOutputs: blindedMessages,
         }).quotes
       : undefined;
+    const deferUnmatched = !!config?.signingPackage && v3;
+    this.failIf(
+      hasLockedQuotes && !!config?.signingPackage && !v3 && signingKeys.length === 0,
+      'Can not sign locked quotes without private key (see recoverQuoteLockKey)',
+    );
+    const signerXOnly = signingKeys.map((key) =>
+      bytesToHex(getPubKeyFromPrivKey(hexToBytes(key))).slice(2),
+    );
+    // A quote no key matches is left for its signing package (config.signingPackage).
+    const keyForQuote = (pubkey: string): string | undefined =>
+      deferUnmatched && !signerXOnly.includes(pubkey.toLowerCase().slice(2))
+        ? undefined
+        : findSigningKey(pubkey, signingKeys);
     for (const [i, entry] of resolvedEntries.entries()) {
       const quotePubkey = entry.quote.pubkey;
-      if (quotePubkey && signingKeys.length > 0) {
-        const signingKey = findSigningKey(quotePubkey, signingKeys);
+      const signingKey =
+        quotePubkey && signingKeys.length > 0 ? keyForQuote(quotePubkey) : undefined;
+      if (quotePubkey && signingKey) {
         if (v3BatchDigests) {
           signatures.push(
             schnorrSignDigest(v3BatchDigests.get(entry.quote.quote)!.digest, signingKey),
@@ -3925,7 +3942,8 @@ class Wallet {
       quotes: resolvedEntries.map((e) => e.quote),
       amounts,
       outputData: outputs,
-      ...(hasSignatures ? { signatures, legacySignatures } : {}),
+      // A v3 batch has no legacy message to fall back to.
+      ...(hasSignatures ? { signatures, ...(!v3 && { legacySignatures }) } : {}),
     };
   }
 
@@ -5022,10 +5040,6 @@ class Wallet {
       ];
     }
     this.assertUniqueOutputSecrets(outputData);
-    this.failIf(
-      new Set(outputData.map((d) => d.blindedMessage.id)).size > 1,
-      'prepareTransaction: all outputs must share one keyset (NUT-XX)',
-    );
     this.throwIfAborted(config.signal);
     return {
       proofInputs: proofs,
@@ -5250,12 +5264,9 @@ class Wallet {
       (d) => !d.blindedMessage.amount.isZero() || blankIndex++ < signedBlanks,
     );
     this.validateReturnedSignatures(signatures, signed);
-    // Every output, blanks included, is signed under the keyset the request named (NUT-08).
+    // Every output, blanks included, is signed under the keyset it named (NUT-08).
     this.failIf(
-      outputData.length > 0 &&
-        signatures.some(
-          (sig) => !sig.amount.isZero() && sig.id !== outputData[0].blindedMessage.id,
-        ),
+      signatures.some((sig, i) => !sig.amount.isZero() && sig.id !== signed[i].blindedMessage.id),
       'Mint signed an output under a keyset other than the request named. If the wallet is seeded, try restoring (NUT-09) to recover.',
     );
     await this._ensureKeysetsForSignatures(signatures);

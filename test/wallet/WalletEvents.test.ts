@@ -340,6 +340,19 @@ describe('WalletEvents', () => {
         'Mint returned a payment_preimage that does not match the invoice',
         { op: 'bolt11 melt quote update' },
       );
+
+      ws.emit('bolt11_melt_quote', {
+        quote: 'n4',
+        state: 'PAID',
+        amount: 10,
+        request: good,
+        payment_preimage: true,
+      });
+      expect(cb.mock.calls[3][0].payment_preimage).toBeNull();
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Mint returned a payment_preimage that is not a string',
+        { op: 'bolt11 melt quote update' },
+      );
     });
 
     it('meltQuoteUpdates normalises amount, fee reserve and change signatures', async () => {

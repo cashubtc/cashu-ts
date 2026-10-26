@@ -1,7 +1,12 @@
 import { HttpResponse, http } from 'msw';
 import { describe, expect, test, vi } from 'vitest';
 
-import { Wallet, deserializeTransactionPreview, serializeTransactionPreview } from '../../src';
+import {
+  OutputData,
+  Wallet,
+  deserializeTransactionPreview,
+  serializeTransactionPreview,
+} from '../../src';
 import { schnorrSignDigest, schnorrVerifyDigest } from '../../src/crypto';
 import { buildNutrootSecret } from '../../src/crypto/nutroot';
 import { derivedQuoteId, inputBoundQuoteId, inputsForPayload } from '../../src/crypto/transcript';
@@ -833,6 +838,44 @@ describe('Wallet transactions (NUT-XX)', () => {
     await expect(
       wallet.prepareTransaction({ mintQuoteInputs: [{ quote, amount: 8 }], proofOutputs: custom }),
     ).rejects.toThrow('must equal');
+  });
+
+  test('custom outputs may span keysets in the unit, each signed under its own', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0 });
+    const oneTwo = {
+      '1': dummyKeysResp.keysets[0].keys['1'],
+      '2': dummyKeysResp.keysets[0].keys['2'],
+    };
+    const second = {
+      ...dummyKeysetResp.keysets[0],
+      id: deriveKeysetId(oneTwo, { versionByte: 0 }),
+    };
+    const keysets = [dummyKeysetResp.keysets[0], second];
+    const keys = [dummyKeysResp.keysets[0], { ...second, keys: oneTwo }];
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () => HttpResponse.json({ keysets })),
+      http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: keys })),
+      http.post(mintUrl + '/v1/transaction', async ({ request }) => {
+        const body: any = await request.json();
+        return HttpResponse.json({
+          state: 'PAID',
+          signatures: body.blinded_outputs.map((b: any) => ({
+            id: b.id,
+            amount: b.amount,
+            C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+          })),
+          melt_quotes: [],
+        });
+      }),
+    );
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+    const data = [keysets[0].id, second.id].map((id) => OutputData.createSingleRandomData(1, id));
+    const result = await transact(wallet, {
+      mintQuoteInputs: [{ quote: { ...quote, pubkey }, amount: 2 }],
+      proofOutputs: { outputType: { type: 'custom', data } },
+    });
+    expect(result.proofs.map((p) => p.id)).toEqual([keysets[0].id, second.id]);
   });
 
   test.each(['PENDING', 'FAILED'] as const)(
