@@ -1571,11 +1571,16 @@ export function parseSecret(secret: string | Secret): Secret;
 
 // @public (undocumented)
 class PaymentRequest_2 {
-    constructor(transport?: PaymentRequestTransport[] | undefined, id?: string | undefined, amount?: AmountLike, unit?: string | undefined, mints?: string[] | undefined, description?: string | undefined, singleUse?: boolean, nut10?: NUT10Option | undefined);
+    constructor(transport?: PaymentRequestTransport[] | undefined, id?: string | undefined, amount?: AmountLike, unit?: string | undefined, mints?: string[] | undefined, description?: string | undefined, singleUse?: boolean, nut10?: NUT10Option | undefined, mintsPreferred?: boolean | undefined);
     // (undocumented)
     amount?: Amount;
+    static decodePayload(json: string): PaymentRequestPayload;
     // (undocumented)
     description?: string | undefined;
+    encodePayload(mint: string, proofs: Proof[], opts?: {
+        memo?: string;
+        unit?: string;
+    }): string;
     // (undocumented)
     static fromEncodedRequest(encodedRequest: string): PaymentRequest_2;
     static fromRawRequest(rawPaymentRequest: RawPaymentRequest): PaymentRequest_2;
@@ -1583,8 +1588,12 @@ class PaymentRequest_2 {
     getTransport(type: PaymentRequestTransportType): PaymentRequestTransport | undefined;
     // (undocumented)
     id?: string | undefined;
+    includesMint(mintUrl: string): boolean;
+    get isMintListStrict(): boolean | undefined;
     // (undocumented)
     mints?: string[] | undefined;
+    // (undocumented)
+    mintsPreferred?: boolean | undefined;
     // (undocumented)
     nut10?: NUT10Option | undefined;
     // (undocumented)
@@ -1718,6 +1727,7 @@ export type RawPaymentRequest = {
     d?: string;
     t?: RawTransport[];
     nut10?: RawNUT10Option;
+    mp?: boolean;
 };
 
 // @public (undocumented)

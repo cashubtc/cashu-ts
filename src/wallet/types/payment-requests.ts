@@ -21,6 +21,7 @@ export type RawPaymentRequest = {
   d?: string; // description
   t?: RawTransport[]; // transports
   nut10?: RawNUT10Option;
+  mp?: boolean; // mints preferred: strict list when absent or false, advisory list when true
 };
 
 export type PaymentRequestTransport = {
