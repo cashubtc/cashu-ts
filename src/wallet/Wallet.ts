@@ -693,14 +693,14 @@ class Wallet {
    * Whether a mint request's outputs sit on a v3 keyset, which selects the quote signing rule.
    *
    * @remarks
-   * Chosen from the outputs, not the wallet keyset: custom data may name another. NUT-04 requires
-   * every output of a v3 mint request to share one keyset.
+   * Chosen from the outputs, not the wallet keyset: custom data may name another. NUT-04 forbids
+   * pre-v3 outputs in a v3 mint request; several v3 keysets are fine.
    */
   private mintsOntoV3(outputs: SerializedBlindedMessage[]): boolean {
     const v3 = outputs.some((o) => isBlsKeyset(o.id));
     this.failIf(
-      v3 && new Set(outputs.map((o) => o.id)).size > 1,
-      'Outputs on a v3 keyset must all share that keyset (NUT-04)',
+      v3 && !outputs.every((o) => isBlsKeyset(o.id)),
+      'A mint request with a v3 output cannot have pre-v3 outputs (NUT-04)',
     );
     return v3;
   }
