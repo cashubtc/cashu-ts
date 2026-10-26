@@ -242,8 +242,9 @@ function assertSignable(pkg: SigAllSigningPackage, privkey: string): void {
   if (!PRIVKEY_HEX_RE.test(privkey)) {
     throw new CTSError('Private key must be 64 hex characters');
   }
-  if ((pkg.witness?.signatures.length ?? 0) >= MAX_P2PK_SIGNATURES) {
-    throw new CTSError(`Witness already at the ${MAX_P2PK_SIGNATURES}-signature limit`);
+  // signPackage appends two signatures (v1 + v0).
+  if ((pkg.witness?.signatures.length ?? 0) + 2 > MAX_P2PK_SIGNATURES) {
+    throw new CTSError(`Witness has no room under the ${MAX_P2PK_SIGNATURES}-signature limit`);
   }
   assertSigAllInputs(pkg.inputs);
   pkg.inputs.forEach((input, i) => {
@@ -341,6 +342,9 @@ function mergeSignatures(proofs: Proof[], pkg: SigAllSigningPackage): Proof[] {
   const [first, ...rest] = proofs;
   const witnessData = parseWitnessData(first.witness);
   const existingSignatures = witnessData?.signatures ?? [];
+  if (existingSignatures.length + pkg.witness.signatures.length > MAX_P2PK_SIGNATURES) {
+    throw new CTSError(`Merged witness would exceed the ${MAX_P2PK_SIGNATURES}-signature limit`);
+  }
   const updatedFirst: Proof = {
     ...first,
     witness: {

@@ -9,6 +9,7 @@ import {
   computeMessageDigest,
   createP2PKsecret,
   CTSError,
+  getP2PKWitnessSignatures,
   getPubKeyFromPrivKey,
   schnorrVerifyDigest,
   type OutputDataLike,
@@ -599,6 +600,18 @@ describe('SigAll — signPackage', () => {
     expect(() => SigAll.signPackage(pkg, dummyPrivkey)).toThrow(/signature limit/);
   });
 
+  test('refuses a witness one short of the limit, as both signatures would not fit', () => {
+    const base = SigAll.extractSwapPackage(makeSwapPreview());
+    const seeded = (n: number) => ({
+      ...base,
+      witness: { signatures: Array.from({ length: n }, () => 'ab'.repeat(64)) },
+    });
+    expect(() => SigAll.signPackage(seeded(63), dummyPrivkey)).toThrow(/signature limit/);
+    const signed = SigAll.signPackage(seeded(62), dummyPrivkey);
+    expect(signed.witness!.signatures).toHaveLength(64);
+    expect(() => getP2PKWitnessSignatures(signed.witness)).not.toThrow();
+  });
+
   test('rejects a key the lock does not name', () => {
     const pkg = SigAll.extractSwapPackage(makeSwapPreview());
     expect(() => SigAll.signPackage(pkg, otherPrivkey)).toThrow(/Signature not required/);
@@ -685,6 +698,17 @@ describe('SigAll — mergeSwapPackage', () => {
     const preview = makeSwapPreview();
     const pkg = SigAll.extractSwapPackage(preview);
     expect(() => SigAll.mergeSwapPackage(pkg, preview)).toThrow('No signatures to merge');
+  });
+
+  test('refuses a merge that would push the witness past the limit', () => {
+    const preview = makeSwapPreview();
+    const signed = SigAll.signPackage(SigAll.extractSwapPackage(preview), dummyPrivkey);
+    const at = (n: number) => ({
+      ...preview,
+      inputs: [{ ...dummyProof, witness: { signatures: Array.from({ length: n }, () => 'x') } }],
+    });
+    expect(() => SigAll.mergeSwapPackage(signed, at(63))).toThrow(/signature limit/);
+    expect(() => SigAll.mergeSwapPackage(signed, at(62))).not.toThrow();
   });
 });
 
