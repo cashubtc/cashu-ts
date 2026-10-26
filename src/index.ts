@@ -90,9 +90,11 @@ export type {
   PaymentRequestPayload,
   PaymentRequestTransport,
   RawPaymentRequest,
+  RawSupportedMethod,
   RawTransport,
   NUT10Option,
   RawNUT10Option,
+  SupportedMethod,
 } from './wallet/types';
 
 // Logging & errors

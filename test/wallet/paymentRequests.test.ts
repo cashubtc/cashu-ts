@@ -2,6 +2,7 @@ import { test, describe, expect } from 'vitest';
 
 import {
   Amount,
+  CTSError,
   decodePaymentRequest,
   OutputData,
   PaymentRequest,
@@ -579,6 +580,116 @@ describe('NUT-18 payment payloads', () => {
         withMints(['https://other.mint'], true).encodePayload(MINT, [makeProof(1n)]),
       ).not.toThrow();
       expect(() => withMints([]).encodePayload(MINT, [makeProof(1n)])).not.toThrow();
+    });
+  });
+
+  describe('supported methods (sm)', () => {
+    type Opts = {
+      amount?: number;
+      unit?: string;
+      mints?: string[];
+      mp?: boolean;
+      sm?: Array<{ method: string; fee?: number }>;
+    };
+    const make = (o: Opts) =>
+      new PaymentRequest(
+        undefined,
+        'fees',
+        o.amount,
+        o.unit,
+        o.mints,
+        undefined,
+        false,
+        undefined,
+        o.mp,
+        o.sm,
+      );
+    // NUT-18/NUT-26 spec vectors: mp=true, sm=[bolt11, bolt12(mf=5)].
+    const SPEC_CREQA =
+      'creqApmFpdXByZWZlcnJlZF9mZWVfbWV0aG9kc2FhGGRhdWNzYXRhbYF4GGh0dHBzOi8vbWludC5leGFtcGxlLmNvbWJtcPVic22CoWJtbmZib2x0MTGiYm1uZmJvbHQxMmJtZgU=';
+    const SPEC_CREQB =
+      'CREQB1QYQP2URJV4NX2UNJV4J97EN9V40K6ET5DPHKGUCZQQYQQQQQQQQQQQRYQVQQZQQ9QQVXSAR5WPEN5TE0D45KUAPWV4UXZMTSD3JJUCM0D5YSQQGPPGQQJQGQQE3X7MR5XYCS5QQ5QYQQVCN0D36RZVSZQQYQQQQQQQQQQQQ9FJ2568';
+
+    test.each([
+      ['creqA', SPEC_CREQA],
+      ['creqB', SPEC_CREQB],
+    ])('decodes the %s spec vector and round-trips it', (_name, vector) => {
+      const decoded = decodePaymentRequest(vector);
+      for (const pr of [
+        decoded,
+        PaymentRequest.fromEncodedRequest(decoded.toEncodedCreqA()),
+        PaymentRequest.fromEncodedRequest(decoded.toEncodedCreqB()),
+      ]) {
+        expect(pr.mintsPreferred).toBe(true);
+        expect(pr.supportedMethods?.map((m) => m.method)).toEqual(['bolt11', 'bolt12']);
+        expect(pr.supportedMethods?.[0].fee).toBeUndefined();
+        expect(pr.supportedMethods?.[1].fee?.equals(5)).toBe(true);
+      }
+    });
+
+    test('feesFor prices the lowest applicable per-method (mf) fee', () => {
+      const pr = make({
+        amount: 100,
+        unit: 'sat',
+        mints: ['https://in.example.com/'],
+        mp: true,
+        sm: [{ method: 'bolt11' }, { method: 'bolt12', fee: 5 }],
+      });
+      // In-list mint (after URL normalization): no fee.
+      expect(pr.amountToSend('https://in.example.com', ['bolt12']).equals(100)).toBe(true);
+      // Outside mint supporting both: lowest fee (bolt11 = 0).
+      expect(pr.amountToSend('https://out.example.com', ['bolt11', 'bolt12']).equals(100)).toBe(
+        true,
+      );
+      // Outside mint supporting only the fee-bearing method.
+      expect(pr.amountToSend('https://out.example.com', ['bolt12']).equals(105)).toBe(true);
+      expect(pr.feesFor('https://out.example.com', ['bolt12']).equals(5)).toBe(true);
+      // Mint methods unknown: prices as 0.
+      expect(pr.amountToSend('https://out.example.com').equals(100)).toBe(true);
+
+      const noList = make({ amount: 100, unit: 'sat', sm: [{ method: 'bolt12', fee: 5 }] });
+      expect(noList.amountToSend('https://any.example.com', ['bolt12']).equals(105)).toBe(true);
+      expect(make({ amount: 100, unit: 'sat' }).feesFor('https://any.example.com').equals(0)).toBe(
+        true,
+      );
+    });
+
+    test('amountToSend needs an amount; feesFor still prices amountless requests', () => {
+      const pr = make({ unit: 'sat', sm: [{ method: 'bolt12', fee: 5 }] });
+      expect(() => pr.amountToSend('https://x.example.com')).toThrow(/no amount/);
+      expect(pr.feesFor('https://x.example.com', ['bolt12']).equals(5)).toBe(true);
+    });
+
+    test('pricing enforces the unit rule; encoding and decoding stay lenient', () => {
+      const smNoUnit = make({ sm: [{ method: 'bolt12', fee: 5 }] });
+      expect(() => smNoUnit.feesFor('https://out.example.com', ['bolt12'])).toThrow(/unit/);
+      expect(() => make({ amount: 100 }).amountToSend('https://any.example.com')).toThrow(/unit/);
+      expect(() => smNoUnit.toEncodedCreqA()).not.toThrow();
+
+      const foreign = PaymentRequest.fromRawRequest({
+        i: 'foreign',
+        sm: [{ mn: 'bolt12', mf: 5 }],
+      });
+      expect(foreign.supportedMethods?.[0].fee?.equals(5)).toBe(true);
+    });
+
+    test('reads a null sm or mf as absent, as cdk writes unset fields', () => {
+      const raw = (sm: unknown) => ({ u: 'sat', sm }) as unknown as RawPaymentRequest;
+      expect(PaymentRequest.fromRawRequest(raw(null)).supportedMethods).toBeUndefined();
+      const pr = PaymentRequest.fromRawRequest(raw([{ mn: 'bolt11', mf: null }]));
+      expect(pr.supportedMethods).toEqual([{ method: 'bolt11', fee: undefined }]);
+    });
+
+    test.each([
+      ['a non-list sm', 'bolt11', /sm must be a list/],
+      ['a null entry', [null], /malformed sm entry at index 0/],
+      ['an entry without a method', [{ mf: 5 }], /malformed sm entry at index 0/],
+      ['a non-string method', [{ mn: 'bolt11' }, { mn: 12 }], /malformed sm entry at index 1/],
+      ['a malformed fee', [{ mn: 'bolt11', mf: '1.5' }], /Invalid amount string/],
+    ])('rejects %s with a CTSError', (_name, sm, expected) => {
+      const raw = { u: 'sat', sm } as unknown as RawPaymentRequest;
+      expect(() => PaymentRequest.fromRawRequest(raw)).toThrow(CTSError);
+      expect(() => PaymentRequest.fromRawRequest(raw)).toThrow(expected);
     });
   });
 

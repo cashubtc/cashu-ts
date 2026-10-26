@@ -19,6 +19,7 @@ import type {
   PaymentRequestPayload,
   PaymentRequestTransport,
   PaymentRequestTransportType,
+  SupportedMethod,
 } from '../wallet/types';
 
 import { Amount, type AmountLike } from './Amount';
@@ -40,8 +41,31 @@ function normalizePaymentRequestFlag(value: unknown, field: 's' | 'mp'): boolean
   throw new CTSError(`invalid payment request: ${field} must be a boolean (or 0/1)`);
 }
 
+/**
+ * Reads the wire `sm` list into constructor input, with `null` read as absent as for flags.
+ *
+ * @throws If `sm` is not a list of `{ mn: string, mf? }` entries. A malformed `mf` throws when the
+ *   constructor reads it as an amount.
+ */
+function readSupportedMethods(
+  sm: unknown,
+): Array<{ method: string; fee?: AmountLike }> | undefined {
+  if (sm === undefined || sm === null) return undefined;
+  if (!Array.isArray(sm)) {
+    throw new CTSError('invalid payment request: sm must be a list');
+  }
+  return sm.map((m: unknown, i) => {
+    if (typeof m !== 'object' || m === null || typeof (m as { mn?: unknown }).mn !== 'string') {
+      throw new CTSError(`invalid payment request: malformed sm entry at index ${i}`);
+    }
+    const { mn, mf } = m as { mn: string; mf?: AmountLike | null };
+    return { method: mn, fee: mf ?? undefined };
+  });
+}
+
 export class PaymentRequest {
   public amount?: Amount;
+  public supportedMethods?: SupportedMethod[];
 
   constructor(
     public transport?: PaymentRequestTransport[],
@@ -53,9 +77,73 @@ export class PaymentRequest {
     public singleUse: boolean = false,
     public nut10?: NUT10Option,
     public mintsPreferred?: boolean,
+    supportedMethods?: Array<{ method: string; fee?: AmountLike }>,
   ) {
     this.amount = amount !== undefined ? Amount.from(amount) : undefined;
     this.mintsPreferred = normalizePaymentRequestFlag(mintsPreferred, 'mp');
+    this.supportedMethods = supportedMethods?.map((m) => ({
+      method: m.method,
+      fee: m.fee !== undefined ? Amount.from(m.fee) : undefined,
+    }));
+  }
+
+  /**
+   * NUT-18: `u` MUST be set if `a` or `sm` is set: `mf` and the melt-method check are denominated
+   * in the request unit. Enforced when pricing; encoding and parsing stay lenient on v4.
+   */
+  private assertUnitRule(): void {
+    if (!this.unit && (this.amount !== undefined || this.supportedMethods?.length)) {
+      throw new CTSError(
+        'invalid payment request: unit (u) is required when an amount (a) or supported methods (sm) are set',
+      );
+    }
+  }
+
+  /**
+   * The per-method fee (`mf`) the payer must add when paying from `mint`: `0` if `mint` is in the
+   * mint list, otherwise the lowest fee among the `sm` methods that `meltMethods` says the mint
+   * supports (NUT-18).
+   *
+   * @remarks
+   * For amountless requests, add the result to the payer-chosen amount. Prices only; does not check
+   * admissibility (eg a strict mint list, or a mint supporting none of `sm`).
+   * @param mint - The mint URL the payer will send from.
+   * @param meltMethods - The methods the mint can melt the request unit via (its NUT-05 melt
+   *   methods, matched against `sm`); omit if unknown (prices as `0`).
+   * @throws If the request sets `a` or `sm` without `u` (invalid per NUT-18).
+   */
+  feesFor(mint: string, meltMethods?: string[]): Amount {
+    this.assertUnitRule();
+    // Fees compensate the payee for melting out: payments from a listed mint carry none.
+    if (!this.supportedMethods?.length || this.includesMint(mint)) {
+      return Amount.zero();
+    }
+    const applicable = this.supportedMethods
+      .filter((m) => meltMethods?.includes(m.method))
+      .map((m) => m.fee ?? Amount.zero());
+    if (!applicable.length) {
+      return Amount.zero();
+    }
+    return applicable.reduce((min, fee) => Amount.min(min, fee));
+  }
+
+  /**
+   * The total amount to send from `mint`: the requested amount plus
+   * {@link PaymentRequest.feesFor | feesFor}.
+   *
+   * @param mint - The mint URL the payer will send from.
+   * @param meltMethods - The methods the mint can melt the request unit via (its NUT-05 melt
+   *   methods, matched against `sm`); omit if unknown.
+   * @throws If the request has no amount (use {@link PaymentRequest.feesFor | feesFor} instead), or
+   *   no unit (invalid per NUT-18).
+   */
+  amountToSend(mint: string, meltMethods?: string[]): Amount {
+    if (!this.amount) {
+      throw new CTSError(
+        'cannot compute amount to send: request has no amount; use feesFor() and add the payer-chosen amount',
+      );
+    }
+    return this.amount.add(this.feesFor(mint, meltMethods));
   }
 
   /**
@@ -217,6 +305,11 @@ export class PaymentRequest {
     if (this.mintsPreferred !== undefined) {
       rawRequest.mp = this.mintsPreferred;
     }
+    if (this.supportedMethods && this.supportedMethods.length > 0) {
+      rawRequest.sm = this.supportedMethods.map((m) =>
+        m.fee !== undefined ? { mn: m.method, mf: m.fee.toBigInt() } : { mn: m.method },
+      );
+    }
     return rawRequest;
   }
 
@@ -259,6 +352,10 @@ export class PaymentRequest {
           }
         : undefined,
       mintsPreferred: this.mintsPreferred,
+      supportedMethods: this.supportedMethods?.map((m) => ({
+        method: m.method,
+        fee: m.fee !== undefined ? m.fee.toBigInt() : undefined,
+      })),
     };
 
     const tlvBytes = encodeTLV(tlvRequest);
@@ -356,6 +453,7 @@ export class PaymentRequest {
       rawPaymentRequest.s,
       nut10,
       rawPaymentRequest.mp,
+      readSupportedMethods(rawPaymentRequest.sm),
     );
   }
 
@@ -383,6 +481,7 @@ export class PaymentRequest {
         decoded.singleUse ?? false,
         nut10,
         decoded.mintsPreferred,
+        decoded.supportedMethods,
       );
     }
 

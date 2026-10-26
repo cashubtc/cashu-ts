@@ -1571,9 +1571,13 @@ export function parseSecret(secret: string | Secret): Secret;
 
 // @public (undocumented)
 class PaymentRequest_2 {
-    constructor(transport?: PaymentRequestTransport[] | undefined, id?: string | undefined, amount?: AmountLike, unit?: string | undefined, mints?: string[] | undefined, description?: string | undefined, singleUse?: boolean, nut10?: NUT10Option | undefined, mintsPreferred?: boolean | undefined);
+    constructor(transport?: PaymentRequestTransport[] | undefined, id?: string | undefined, amount?: AmountLike, unit?: string | undefined, mints?: string[] | undefined, description?: string | undefined, singleUse?: boolean, nut10?: NUT10Option | undefined, mintsPreferred?: boolean | undefined, supportedMethods?: Array<{
+        method: string;
+        fee?: AmountLike;
+    }>);
     // (undocumented)
     amount?: Amount;
+    amountToSend(mint: string, meltMethods?: string[]): Amount;
     static decodePayload(json: string): PaymentRequestPayload;
     // (undocumented)
     description?: string | undefined;
@@ -1581,6 +1585,7 @@ class PaymentRequest_2 {
         memo?: string;
         unit?: string;
     }): string;
+    feesFor(mint: string, meltMethods?: string[]): Amount;
     // (undocumented)
     static fromEncodedRequest(encodedRequest: string): PaymentRequest_2;
     static fromRawRequest(rawPaymentRequest: RawPaymentRequest): PaymentRequest_2;
@@ -1598,6 +1603,8 @@ class PaymentRequest_2 {
     nut10?: NUT10Option | undefined;
     // (undocumented)
     singleUse: boolean;
+    // (undocumented)
+    supportedMethods?: SupportedMethod[];
     toEncodedCreqA(): string;
     toEncodedCreqB(): string;
     // (undocumented)
@@ -1728,6 +1735,13 @@ export type RawPaymentRequest = {
     t?: RawTransport[];
     nut10?: RawNUT10Option;
     mp?: boolean;
+    sm?: RawSupportedMethod[];
+};
+
+// @public (undocumented)
+export type RawSupportedMethod = {
+    mn: string;
+    mf?: number | bigint;
 };
 
 // @public (undocumented)
@@ -2043,6 +2057,12 @@ export type SubscriptionCanceller = () => void;
 
 // @public
 export function sumProofs(proofs: Array<Pick<ProofLike, 'amount'>>): Amount;
+
+// @public
+export type SupportedMethod = {
+    method: string;
+    fee?: Amount;
+};
 
 // @public
 export type SwapMethod = {
