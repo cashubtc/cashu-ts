@@ -33,6 +33,8 @@ import {
   DUMMY_TEST_KEYSET,
   NUT02_V3_VECTOR1_KEYS,
   NUT02_V3_VECTOR1_KEYSET,
+  NUT02_V3_VECTOR2_KEYS,
+  NUT02_V3_VECTOR2_KEYSET,
 } from '../consts';
 
 import { useTestServer, mint, mintUrl, unit, logger, mintInfoResp, invoice } from './_setup';
@@ -825,7 +827,7 @@ describe('requestTokens', () => {
       expect(preview.legacySignature).toBeUndefined();
     });
 
-    test('a mint plan mixing a v3 output with another keyset is rejected before the request is built', async () => {
+    test('a mint plan mixing a v3 output with a pre-v3 one is rejected before the request is built', async () => {
       serveBothKeysets();
       const wallet = new Wallet(mintUrl, { unit });
       await wallet.loadMint();
@@ -836,7 +838,39 @@ describe('requestTokens', () => {
       ];
       await expect(
         wallet.prepareMint('bolt11', 2, quote, { privkey }, { type: 'custom', data }),
-      ).rejects.toThrow(/share that keyset/);
+      ).rejects.toThrow(/pre-v3 outputs/);
+    });
+
+    test('a mint plan across two v3 keysets signs the transaction digest', async () => {
+      server.use(
+        http.get(mintUrl + '/v1/keysets', () =>
+          HttpResponse.json({ keysets: [NUT02_V3_VECTOR1_KEYSET, NUT02_V3_VECTOR2_KEYSET] }),
+        ),
+        http.get(mintUrl + '/v1/keys', () =>
+          HttpResponse.json({ keysets: [NUT02_V3_VECTOR1_KEYS, NUT02_V3_VECTOR2_KEYS] }),
+        ),
+      );
+      const wallet = new Wallet(mintUrl, { unit });
+      await wallet.loadMint();
+      const quote = { ...lockedQuote(), amount: Amount.from(2), amount_paid: Amount.from(2) };
+      const data = [
+        OutputData.createSingleRandomData(1, NUT02_V3_VECTOR1_KEYSET.id),
+        OutputData.createSingleRandomData(1, NUT02_V3_VECTOR2_KEYSET.id),
+      ];
+      const preview = await wallet.prepareMint(
+        'bolt11',
+        2,
+        quote,
+        { privkey },
+        { type: 'custom', data },
+      );
+      const tx = inputsForPayload({
+        mintQuoteInputs: [{ quoteId: quote.quote, amount: 2, lockKey: pubkey, issued: 0 }],
+        blindedOutputs: preview.outputData.map((d) => d.blindedMessage),
+      });
+      expect(
+        schnorrVerifyDigest(preview.signature!, tx.quotes.get(quote.quote)!.digest, pubkey),
+      ).toBe(true);
     });
 
     test('a batch onto custom v3 outputs signs every quote over the transaction digest', async () => {
