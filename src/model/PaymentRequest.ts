@@ -208,9 +208,9 @@ export class PaymentRequest {
    * Serializes the default NUT-18 payment payload for this request.
    *
    * @remarks
-   * Plain `JSON.stringify` can't serialize the bigint proof amounts, so use this. Proofs must come
-   * from `mint` and net the request after fees: `wallet.ops.sendToRequest` produces both, this only
-   * packages. Send it as the POST body or Nostr DM content.
+   * Use this, not plain `JSON.stringify`, which writes proof amounts as quoted strings. Proofs must
+   * come from `mint` and net the request after fees: `wallet.ops.sendToRequest` produces both, this
+   * only packages. Send it as the POST body or Nostr DM content.
    * @param mint - The mint the proofs are from.
    * @param proofs - The proofs to send (eg the `send` half of a send flow).
    * @param opts.memo - Optional memo for the payee.
