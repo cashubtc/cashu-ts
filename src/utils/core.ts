@@ -724,7 +724,8 @@ export function sumProofs(proofs: Array<Pick<ProofLike, 'amount'>>): Amount {
 
 /**
  * Normalizes raw proof objects (e.g. from a database query) into typed {@link Proof} objects by
- * converting `amount` to `bigint`. Use {@link deserializeProofs} if your proofs are stored as JSON.
+ * converting `amount` to {@link Amount}. Use {@link deserializeProofs} if your proofs are stored as
+ * JSON.
  *
  * @example
  *
@@ -736,7 +737,8 @@ export function normalizeProofAmounts(raw: ProofLike[]): Proof[] {
 
 /**
  * Serializes one or more {@link Proof} objects to an array of individual JSON strings, one per
- * proof. BigInt `amount` fields are emitted as plain JSON numbers without precision loss.
+ * proof. Amounts are written as JSON numbers without precision loss (plain `JSON.stringify` quotes
+ * them).
  *
  * @example
  *
@@ -753,7 +755,7 @@ export function serializeProofs(proofs: Proof | Proof[]): string[] {
 
 /**
  * Deserializes proofs from JSON back into typed {@link Proof} objects, restoring `amount` as
- * `bigint` without silent precision loss.
+ * {@link Amount} without silent precision loss. Accepts amounts as JSON numbers or decimal strings.
  *
  * - Pass a `string[]` (individual proof JSON strings) when reading from NutZap proof tags or a
  *   database.
