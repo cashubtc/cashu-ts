@@ -1,5 +1,19 @@
 # Changelog
 
+## [4.13.0](https://github.com/cashubtc/cashu-ts/compare/v4.12.0...v4.13.0) (2026-10-26)
+
+
+### Features
+
+* **model:** encode and decode NUT-18 payment payloads, read mint preference (mp) ([#1345](https://github.com/cashubtc/cashu-ts/issues/1345)) ([8622889](https://github.com/cashubtc/cashu-ts/commit/8622889fcae95a17b8f02cbfc658e18fa4927b1f))
+* **model:** read and price NUT-18 supported methods (sm) ([#1346](https://github.com/cashubtc/cashu-ts/issues/1346)) ([3fe5764](https://github.com/cashubtc/cashu-ts/commit/3fe57640425cda66a060d85e8d7699f38684b3fe))
+* **wallet:** pay and validate payment requests end to end ([#1348](https://github.com/cashubtc/cashu-ts/issues/1348)) ([2a5da9d](https://github.com/cashubtc/cashu-ts/commit/2a5da9d82d4ebd1fe8d347794ab7075f2aaba777))
+
+
+### Bug Fixes
+
+* **mint:** null a melt payment_preimage that is not a string ([#1339](https://github.com/cashubtc/cashu-ts/issues/1339)) ([7d201a4](https://github.com/cashubtc/cashu-ts/commit/7d201a4271bb8b475f29170c6269fec0214243ce))
+
 ## [4.12.0](https://github.com/cashubtc/cashu-ts/compare/v4.11.0...v4.12.0) (2026-10-16)
 
 
