@@ -200,6 +200,37 @@ export type ScriptPathPlan = {
 };
 
 /**
+ * One locked mint quote to spend by a script path, for {@link ScriptPathApi.extractMintPackage}.
+ *
+ * @remarks
+ * A quote carries no spend info, so the wallet that chose its lock key supplies the tree and `K`.
+ * Quote locks are not receiver-keyed (NUT-28), so a plan carries no `E`.
+ * @experimental Follows the draft signing package NUT; may change before GA.
+ */
+export type ScriptPathQuotePlan = {
+  /**
+   * The quote id.
+   */
+  quote: string;
+  /**
+   * The serialized leaves the quote's lock key commits to, hex.
+   */
+  tree: string[];
+  /**
+   * The internal key `K` the lock key is tweaked from, 33-byte hex.
+   */
+  K: string;
+  /**
+   * Which leaf of `tree` to exercise.
+   */
+  leafIndex: number;
+  /**
+   * Preimage for a hashlock leaf, hex.
+   */
+  preimage?: string;
+};
+
+/**
  * What a {@link ScriptPathPlan.cosign} hook is handed.
  *
  * @remarks
@@ -297,6 +328,14 @@ export type MintProofsConfig = {
    * signature is produced this way, so the mint must accept the amended message.
    */
   sign?: (request: MintQuoteSignRequest) => Promise<string>;
+  /**
+   * Leave a locked v3 quote that no `privkey` or `sign` covers unsigned (`null` in a batch), for
+   * `ScriptPath.extractMintPackage` to fill. Without it, a missing key fails fast. Complete the
+   * preview only after `ScriptPath.mergeMintPackage`: the mint rejects an unsigned locked quote.
+   *
+   * @experimental Follows the draft signing package NUT; may change before GA.
+   */
+  signingPackage?: boolean;
   proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
   onCountersReserved?: OnCountersReserved;
   /**

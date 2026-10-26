@@ -59,12 +59,12 @@ import {
   JSONInt,
   MAX_KEYSET_LIST,
   MAX_MINT_INFO_LIST,
+  normalizeMeltPreimage,
   normalizeMintKeys,
   normalizeMintKeyset,
   normalizeMintUrl,
   normalizeSafeIntegerMetadata,
   nullIfUndefined,
-  verifiedPreimage,
 } from '../utils';
 
 import type {
@@ -163,33 +163,35 @@ class Mint {
   }
 
   /**
-   * Fetches mint's info at the /info endpoint.
+   * Fetches mint's info at the /info endpoint, as received.
    *
+   * @remarks
+   * Not normalized: `MintInfo` (eg via `fetchMintInfo`) derives missing members and sanitizes
+   * values.
    * @param opts Per-call `customRequest` override and `signal` to abort the request.
    * @returns The mint's information response.
    */
   async getInfo(opts?: MintCallOptions): Promise<GetInfoResponse> {
     const requestInstance = opts?.customRequest ?? this._request;
-    const response = await requestInstance<GetInfoResponse>({
+    return requestInstance<GetInfoResponse>({
       signal: opts?.signal,
       endpoint: joinUrls(this._mintUrl, '/v1/info'),
       onResponseMeta: this._captureResponseMetadata,
       logger: this._logger,
     });
-    return MintInfo.normalizeInfo(response, this._logger);
   }
 
   /**
-   * Lazily fetches and caches the mint's info if not already loaded.
+   * Returns the mint's info, fetching and caching it when none is held or `forceRefresh` is set.
    *
-   * @returns The parsed MintInfo object.
+   * @param opts Per-call `customRequest` override, `signal` to abort the request, and
+   *   `forceRefresh` to refetch over a cached copy.
    */
-  async getLazyMintInfo(opts?: MintCallOptions): Promise<MintInfo> {
-    if (this._mintInfo) {
+  async fetchMintInfo(opts?: MintCallOptions & { forceRefresh?: boolean }): Promise<MintInfo> {
+    if (this._mintInfo && !opts?.forceRefresh) {
       return this._mintInfo;
     }
-    const data = await this.getInfo(opts);
-    this._mintInfo = new MintInfo(data, this._logger);
+    this._mintInfo = new MintInfo(await this.getInfo(opts), this._logger);
     return this._mintInfo;
   }
 
@@ -1251,17 +1253,16 @@ class Mint {
    * @returns The blind auth token if required, otherwise undefined.
    */
   private async handleClearAuth(
+    auth: AuthProvider,
     method: 'GET' | 'POST',
     path: string,
-    mintInfo?: MintInfo,
+    info: MintInfo,
   ): Promise<string | undefined> {
-    if (!this._authProvider) return undefined;
-    const info = mintInfo ?? (await this.getLazyMintInfo());
     if (!info.requiresClearAuthToken(method, path)) return undefined;
-    if (this._authProvider.ensureCAT) {
-      return this._authProvider.ensureCAT(); // optional
+    if (auth.ensureCAT) {
+      return auth.ensureCAT(); // optional
     }
-    return this._authProvider.getCAT();
+    return auth.getCAT();
   }
 
   /**
@@ -1273,16 +1274,14 @@ class Mint {
    * @returns The blind auth token if required, otherwise undefined.
    */
   private async handleBlindAuth(
+    auth: AuthProvider,
     method: 'GET' | 'POST',
     path: string,
-    mintInfo?: MintInfo,
+    info: MintInfo,
     body?: string,
   ): Promise<string | undefined> {
-    if (!this._authProvider) return undefined;
-    const info = mintInfo ?? (await this.getLazyMintInfo());
     if (!info.requiresBlindAuthToken(method, path)) return undefined;
-    const bat = await this._authProvider.getBlindAuthToken({ method, path, body });
-    return bat;
+    return auth.getBlindAuthToken({ method, path, body });
   }
 
   private async requestWithAuth<T>(
@@ -1295,15 +1294,18 @@ class Mint {
     opts?: MintCallOptions,
   ): Promise<T> {
     const requestInstance = opts?.customRequest ?? this._request;
-    let mintInfo = this._mintInfo;
-    if (this._authProvider) {
-      mintInfo = await this.getLazyMintInfo(opts);
-    }
     // Serialize once and pass the string down: blind auth signs these exact bytes,
     // and the transport contract sends a string body verbatim.
     const bodyString = init.requestBody ? JSONInt.stringify(init.requestBody) : undefined;
-    const bat = await this.handleBlindAuth(method, path, mintInfo, bodyString);
-    const cat = await this.handleClearAuth(method, path, mintInfo);
+    let mintInfo = this._mintInfo;
+    let bat: string | undefined;
+    let cat: string | undefined;
+    if (this._authProvider) {
+      // Auth requirements live in the mint info, so an auth-enabled request loads it first.
+      mintInfo = await this.fetchMintInfo(opts);
+      bat = await this.handleBlindAuth(this._authProvider, method, path, mintInfo, bodyString);
+      cat = await this.handleClearAuth(this._authProvider, method, path, mintInfo);
+    }
     const headers: Record<string, string> = {
       ...(init.headers ?? {}),
       ...(bat ? { 'Blind-auth': bat } : {}),
@@ -1660,22 +1662,7 @@ class Mint {
       this._logger.error('Invalid response from mint...', { op });
       throw new CTSError('Invalid response from mint');
     }
-    // Per NUT-23, payment_preimage is `<str | null>`. Some mints may omit it
-    // until the invoice is paid; coerce undefined → null so consumers can
-    // rely on `payment_preimage === null` checks.
-    nullIfUndefined(data, 'payment_preimage');
-    if (
-      method === 'bolt11' &&
-      typeof data.payment_preimage === 'string' &&
-      typeof data.request === 'string'
-    ) {
-      data.payment_preimage = verifiedPreimage(
-        data.request,
-        data.payment_preimage,
-        this._logger,
-        op,
-      );
-    }
+    normalizeMeltPreimage(data, method, this._logger, op);
   }
 
   /**

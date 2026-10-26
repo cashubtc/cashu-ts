@@ -114,7 +114,7 @@ export class OIDCAuth {
    * @example
    *
    * ```ts
-   * const oidc = OIDCAuth.fromMintInfo(await mint.getLazyMintInfo());
+   * const oidc = OIDCAuth.fromMintInfo(await mint.fetchMintInfo());
    * authMgr.attachOIDC(oidc); // keeps the CAT and its refresh state up to date
    * const start = await oidc.startDeviceAuth();
    * // show start.user_code / start.verification_uri to the user

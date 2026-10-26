@@ -557,7 +557,7 @@ describe('send', () => {
         }),
       ),
     );
-    const wallet = new Wallet(mint, { unit, requireSigDleq: true });
+    const wallet = new Wallet(mintUrl, { unit, requireSigDleq: true });
     await wallet.loadMint();
 
     await expect(wallet.send(1, swapProofs)).rejects.toThrow(

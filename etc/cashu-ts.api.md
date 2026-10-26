@@ -1286,10 +1286,12 @@ export class Mint {
     createMintQuoteBolt12(mintQuotePayload: MintQuoteBolt12Request, opts?: MintCallOptions): Promise<MintQuoteBolt12Response>;
     createMintQuoteOnchain(mintQuotePayload: MintQuoteOnchainRequest, opts?: MintCallOptions): Promise<MintQuoteOnchainResponse>;
     disconnectWebSocket(): void;
+    fetchMintInfo(opts?: MintCallOptions & {
+        forceRefresh?: boolean;
+    }): Promise<MintInfo>;
     getInfo(opts?: MintCallOptions): Promise<GetInfoResponse>;
     getKeys(keysetId?: string, mintUrl?: string, opts?: MintCallOptions): Promise<GetKeysResponse>;
     getKeySets(opts?: MintCallOptions): Promise<GetKeysetsResponse>;
-    getLazyMintInfo(opts?: MintCallOptions): Promise<MintInfo>;
     get lastResponseMetadata(): ResponseMeta | undefined;
     melt<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, meltPayload: MeltRequest, options?: MintCallOptions & {
         normalize?: (raw: Record<string, unknown>) => MeltQuoteBaseResponse & TRes;
@@ -1593,6 +1595,7 @@ export type MintProofsConfig = {
     keysetId?: string;
     privkey?: string | string[];
     sign?: (request: MintQuoteSignRequest) => Promise<string>;
+    signingPackage?: boolean;
     proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
     onCountersReserved?: OnCountersReserved;
     signal?: AbortSignal;
@@ -2422,6 +2425,8 @@ export const ScriptPath: ScriptPathApi;
 export type ScriptPathApi = {
     extractSwapPackage(preview: SwapPreview, plans: ScriptPathPlan[]): ScriptPathSigningPackage;
     extractMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'amount'>>(preview: MeltPreview<TQuote>, plans: ScriptPathPlan[], feeIndex?: number): ScriptPathSigningPackage;
+    extractMintPackage(preview: MintPreview | BatchMintPreview, plans: ScriptPathQuotePlan[]): ScriptPathSigningPackage;
+    mergeMintPackage<T extends MintPreview | BatchMintPreview>(pkg: ScriptPathSigningPackage, preview: T, plans?: ScriptPathQuotePlan[]): T;
     serializePackage(pkg: ScriptPathSigningPackage): string;
     deserializePackage(input: string): ScriptPathSigningPackage;
     signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPathSigningPackage;
@@ -2437,6 +2442,15 @@ export type ScriptPathPlan = {
     preimage?: string;
     extraKeys?: string[];
     cosign?: (request: CosignRequest) => Promise<string[]>;
+};
+
+// @public
+export type ScriptPathQuotePlan = {
+    quote: string;
+    tree: string[];
+    K: string;
+    leafIndex: number;
+    preimage?: string;
 };
 
 // @public
@@ -2826,9 +2840,9 @@ export type SupportedMethod = {
 export type SwapMethod = {
     method: string;
     unit: string;
-    method_name: string | null;
-    min_amount: AmountLike | null;
-    max_amount: AmountLike | null;
+    method_name?: string | null;
+    min_amount?: AmountLike | null;
+    max_amount?: AmountLike | null;
     description?: boolean;
     options?: {
         description?: boolean;

@@ -67,7 +67,7 @@ afterAll(() => {
 });
 
 describe('Mint normalization', () => {
-  it('caches getLazyMintInfo after the first request', async () => {
+  it('caches fetchMintInfo after the first request, and refetches on forceRefresh', async () => {
     const requestSpy = vi.fn(async () => ({
       name: 'mint',
       pubkey: '02abcd',
@@ -80,11 +80,36 @@ describe('Mint normalization', () => {
     })) as RequestFn;
     const mint = new Mint(mintUrl, { customRequest: requestSpy });
 
-    const info1 = await mint.getLazyMintInfo();
-    const info2 = await mint.getLazyMintInfo();
+    const info1 = await mint.fetchMintInfo();
+    const info2 = await mint.fetchMintInfo();
 
     expect(requestSpy).toHaveBeenCalledTimes(1);
     expect(info1).toBe(info2);
+
+    const info3 = await mint.fetchMintInfo({ forceRefresh: true });
+    expect(requestSpy).toHaveBeenCalledTimes(2);
+    expect(info3).not.toBe(info1);
+    expect(await mint.fetchMintInfo()).toBe(info3);
+  });
+
+  it('getInfo returns the response as received; MintInfo derives what it lacks', async () => {
+    const wire = {
+      name: 'mint',
+      pubkey: '02abcd',
+      version: 'test',
+      contact: [],
+      nuts: {
+        '4': { disabled: false, methods: [{ method: 'bolt11', unit: 'sat' }] },
+        '5': { disabled: false, methods: [] },
+      },
+    };
+    const mint = new Mint(mintUrl, { customRequest: (async () => wire) as RequestFn });
+
+    const raw = await mint.getInfo();
+    expect(raw).toStrictEqual(wire);
+    expect(raw.nuts['4'].methods[0].method_name).toBeUndefined();
+    const [method] = (await mint.fetchMintInfo()).nuts['4'].methods;
+    expect(method).toMatchObject({ method_name: 'Bolt11', min_amount: null, max_amount: null });
   });
 
   it('setMintInfo accepts raw info objects and seeds the cache', async () => {
@@ -101,7 +126,7 @@ describe('Mint normalization', () => {
       },
     });
 
-    const cached = await mint.getLazyMintInfo();
+    const cached = await mint.fetchMintInfo();
     expect(cached).toBeInstanceOf(MintInfo);
     expect(cached.name).toBe('mint');
   });
@@ -199,12 +224,12 @@ describe('Mint normalization', () => {
     expect(info.nuts['5'].methods[0].min_amount).toBe(789n);
     expect(info.nuts['5'].methods[0].max_amount).toBe(999n);
     // metadata integers normalized by MintInfo construction
-    const mintInfo = await mint.getLazyMintInfo();
+    const mintInfo = await mint.fetchMintInfo();
     expect(mintInfo.cache.nuts['19']?.ttl).toBe(120);
     expect(mintInfo.cache.nuts['22']?.bat_max_mint).toBe(5);
   });
 
-  it('rejects out-of-range bigint info metadata in getLazyMintInfo()', async () => {
+  it('rejects out-of-range bigint info metadata in fetchMintInfo()', async () => {
     const mint = new Mint(mintUrl, {
       customRequest: makeRequest({
         name: 'mint',
@@ -219,7 +244,7 @@ describe('Mint normalization', () => {
       } as any),
     });
 
-    await expect(mint.getLazyMintInfo()).rejects.toThrow('nuts.19.ttl');
+    await expect(mint.fetchMintInfo()).rejects.toThrow('nuts.19.ttl');
   });
 
   it('normalizes bigint fields in getKeySets()', async () => {
@@ -1263,6 +1288,23 @@ describe('Mint normalization', () => {
       );
     });
 
+    it.each([[true], [12345], [{ a: 'b' }], [['ab']]])(
+      'nulls a non-string preimage (%j) and warns',
+      async (junk) => {
+        const { mint, logger } = mintFor({
+          ...paidResponse(invoiceFor(paymentHash), null),
+          payment_preimage: junk,
+        });
+        const res = await mint.checkMeltQuoteBolt11('my-quote');
+        expect(res.payment_preimage).toBeNull();
+        expect(logger.warn).toHaveBeenCalledTimes(1);
+        expect(logger.warn).toHaveBeenCalledWith(
+          'Mint returned a payment_preimage that is not a string',
+          { op: 'bolt11 melt quote' },
+        );
+      },
+    );
+
     it('does not check bolt12 quotes, whose request is an offer', async () => {
       const { mint, logger } = mintFor({
         ...paidResponse('lno1offer', preimage),
@@ -2049,7 +2091,7 @@ const mswMintUrl = 'https://meta-test-mint.localhost:4444';
 const mswServer = setupServer();
 
 beforeAll(() => {
-  mswServer.listen({ onUnhandledRequest: 'error' });
+  mswServer.listen({ onUnhandledFrame: 'error' });
 });
 
 afterEach(() => {

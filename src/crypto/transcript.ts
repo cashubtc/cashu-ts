@@ -11,7 +11,15 @@ import { hashToCurveHex, isBlsKeyset } from './curves';
 import { minimalBE, tlvRecord } from './nutroot';
 
 /**
- * Transaction transcript (NUT-10): one shared digest, one derived message per input.
+ * Transaction transcript (NUT-00): one shared digest, one derived message per input.
+ *
+ * @remarks
+ * `transaction_digest = SHA256(TLV stream)`; each input carries one BIP-340 signature over its
+ * input digest, `tagged_hash("Cashu_TransactionInput", transaction_digest || SHA256(its own
+ * container record))`. Containers: 0x11 proof input, 0x12 mint quote input, 0x21 blinded message
+ * output (carrying `SHA256(B_)`), 0x22 melt quote output. Container types ascend (inputs before
+ * outputs by construction); elements keep request order within their type; field streams inside are
+ * ascending unique (NUT-00).
  */
 
 export const TRANSCRIPT_REQUEST_TAG = 'Cashu_AuthorizedRequest';
@@ -29,7 +37,7 @@ export type TranscriptProofInput = {
   keysetId: string;
   /**
    * `Y = hash_to_curve(secret)` hex on the keyset's curve, the value the container carries
-   * (NUT-10); see {@link proofInputY}. A secret never enters a transcript.
+   * (NUT-00); see {@link proofInputY}. A secret never enters a transcript.
    */
   Y: string;
   /**
@@ -50,7 +58,7 @@ export type TranscriptQuote = {
 
 /**
  * A mint quote input: the quote, the 33-byte compressed lock key hex it is locked to, and the
- * quote's `amount_issued` before this transaction (NUT-10), so a witness authorizes one draw.
+ * quote's `amount_issued` before this transaction (NUT-00), so a witness authorizes one draw.
  */
 export type TranscriptQuoteInput = TranscriptQuote & { lockKey: string; issued: bigint };
 
@@ -118,7 +126,7 @@ function keysetIdBytes(keysetId: string): Uint8Array {
 }
 
 /**
- * One proof input's transcript container record (NUT-10), the bytes `inputDigest` hashes.
+ * One proof input's transcript container record (NUT-00), the bytes `inputDigest` hashes.
  */
 export function proofInputContainer(input: TranscriptProofInput): Uint8Array {
   const { Y } = input;
@@ -194,7 +202,7 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
   if (blinded.length + meltQuotes.length === 0) {
     throw new CTSError('Transaction requires at least one output');
   }
-  // NUT-10: the same proof or quote twice would sign one input digest for two inputs.
+  // NUT-00: the same proof or quote twice would sign one input digest for two inputs.
   if (new Set(proofs.map((p) => p.Y)).size !== proofs.length) {
     throw new CTSError('Transaction repeats a proof input');
   }
@@ -225,7 +233,7 @@ export function transactionMessage(tx: TransactionShape): Uint8Array {
  * Split a transcript into its top-level container records, byte for byte.
  *
  * @remarks
- * Throws unless the bytes are exactly a run of well-formed, non-empty NUT-10 containers (proof
+ * Throws unless the bytes are exactly a run of well-formed, non-empty NUT-00 containers (proof
  * input through authorized request); an event id or other opaque 32 bytes never passes.
  */
 export function transcriptContainers(transcript: Uint8Array): Uint8Array[] {
@@ -323,7 +331,7 @@ type PayloadShape = {
 };
 
 /**
- * The melt quote output's amount (NUT-10): the quote's `amount` plus the fee reserve the request
+ * The melt quote output's amount (NUT-00): the quote's `amount` plus the fee reserve the request
  * selects.
  *
  * @remarks

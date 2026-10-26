@@ -48,7 +48,7 @@ describe('AbortSignal on wallet operations', () => {
 
     await wallet.loadMint(true, { signal: ac.signal });
 
-    expect(spy).toHaveBeenCalledWith({ signal: ac.signal });
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ signal: ac.signal }));
   });
 
   test('a one-shot send honours the signal while preparing, not for the commit', async () => {

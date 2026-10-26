@@ -54,7 +54,7 @@ const infoResp = {
 // ---- MSW server
 const server = setupServer();
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
@@ -150,8 +150,8 @@ describe('createAuthWallet wiring', () => {
     const { wallet } = await createAuthWallet(mintUrl, { customRequest });
 
     expect(wallet.mint.mintUrl).toBe(mintUrl);
+    // One info fetch: loadMint reuses the info the OIDC discovery step fetched.
     expect(endpoints).toEqual([
-      `${mintUrl}/v1/info`,
       `${mintUrl}/v1/info`,
       `${mintUrl}/v1/keysets`,
       `${mintUrl}/v1/keys`,
@@ -182,8 +182,8 @@ describe('createAuthWallet wiring', () => {
     const { wallet } = await createAuthWallet(mintUrl, { requestFetch });
 
     expect(wallet.mint.mintUrl).toBe(mintUrl);
+    // One info fetch: loadMint reuses the info the OIDC discovery step fetched.
     expect(endpoints).toEqual([
-      `${mintUrl}/v1/info`,
       `${mintUrl}/v1/info`,
       `${mintUrl}/v1/keysets`,
       `${mintUrl}/v1/keys`,

@@ -15,9 +15,8 @@ import type {
 import type { KeyChainCache } from '../model/types/keyset';
 import {
   deriveMintQuoteAccounting,
+  normalizeMeltPreimage,
   normalizeSafeIntegerMetadata,
-  nullIfUndefined,
-  verifiedPreimage,
 } from '../utils';
 import { mapInChunks } from '../utils/chunked';
 
@@ -140,19 +139,7 @@ function normalizeMeltQuoteUpdate<T extends MeltQuoteBaseResponse>(
     undefined,
   );
   if (method === 'bolt11' || method === 'bolt12') {
-    nullIfUndefined(data, 'payment_preimage');
-    if (
-      method === 'bolt11' &&
-      typeof data.payment_preimage === 'string' &&
-      typeof data.request === 'string'
-    ) {
-      data.payment_preimage = verifiedPreimage(
-        data.request,
-        data.payment_preimage,
-        logger,
-        `${method} melt quote update`,
-      );
-    }
+    normalizeMeltPreimage(data, method, logger, `${method} melt quote update`);
   }
   return data as T;
 }

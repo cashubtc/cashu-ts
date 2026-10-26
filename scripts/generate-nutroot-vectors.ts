@@ -583,18 +583,6 @@ const commitHash = bytesToHex(sha256(utf8ToBytes('external data')));
     ScriptPath.deserializePackage(str);
   }
 }
-for (const k of [
-  'threshold_1of1_disclosure',
-  'leaf_disclosure_mode0',
-  'leaf_disclosure_empty',
-  'leaf_disclosure_mode2',
-]) {
-  delete d.leaf_forms[k];
-}
-delete d.auditable_lock;
-delete d.nut07_commitments;
-delete d.transport_strings;
-
 writeFileSync(PATH, JSON.stringify(d, null, 2) + '\n');
 console.log(
   `written ${PATH} (keyset id ${OLD_ID === KEYSET_ID ? 'unchanged' : `${OLD_ID} -> ${KEYSET_ID}`})`,

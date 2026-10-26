@@ -244,7 +244,7 @@ describe('requestTokens', () => {
         }),
       ),
     );
-    const wallet = new Wallet(mint, { unit, requireSigDleq: true });
+    const wallet = new Wallet(mintUrl, { unit, requireSigDleq: true });
     await wallet.loadMint();
 
     const preview = await wallet.prepareMint('bolt11', 1, {
@@ -460,6 +460,11 @@ describe('requestTokens', () => {
     const proofs = await wallet.completeBatchMint(batchPreview);
     const totalAmount = sumProofs(proofs);
     expect(totalAmount.equals(5)).toBe(true);
+
+    // A pre-v3 batch has no signing package to defer to, so it still needs a key.
+    await expect(
+      wallet.prepareBatchMint('bolt11', [{ amount: 3, quote: quoteA }], { signingPackage: true }),
+    ).rejects.toThrow(/recoverQuoteLockKey/);
   });
 
   test('completeBatchMint rejects missing DLEQ when mint advertises NUT-12', async () => {
@@ -476,7 +481,7 @@ describe('requestTokens', () => {
         });
       }),
     );
-    const wallet = new Wallet(mint, { unit, requireSigDleq: true });
+    const wallet = new Wallet(mintUrl, { unit, requireSigDleq: true });
     await wallet.loadMint();
 
     const batchPreview = await wallet.prepareBatchMint('bolt11', [
@@ -763,6 +768,46 @@ describe('requestTokens', () => {
       expect(preview.legacySignature).toBeUndefined();
     });
 
+    test('a v3 locked quote prepared for a signing package is left unsigned', async () => {
+      server.use(
+        http.get(mintUrl + '/v1/keysets', () =>
+          HttpResponse.json({ keysets: [NUT02_V3_VECTOR1_KEYSET] }),
+        ),
+        http.get(mintUrl + '/v1/keys', () =>
+          HttpResponse.json({ keysets: [NUT02_V3_VECTOR1_KEYS] }),
+        ),
+        http.get(mintUrl + '/v1/keys/' + NUT02_V3_VECTOR1_KEYSET.id, () =>
+          HttpResponse.json({ keysets: [NUT02_V3_VECTOR1_KEYS] }),
+        ),
+      );
+      const wallet = new Wallet(mintUrl, { unit });
+      await wallet.loadMint();
+      await expect(wallet.prepareMint('bolt11', 1, lockedQuote())).rejects.toThrow(
+        /recoverQuoteLockKey/,
+      );
+      const preview = await wallet.prepareMint('bolt11', 1, lockedQuote(), {
+        signingPackage: true,
+      });
+      expect(preview.signature).toBeUndefined();
+      const otherKey = '03'.repeat(32);
+      const other = {
+        ...lockedQuote(),
+        quote: 'other-quote',
+        pubkey: bytesToHex(getPubKeyFromPrivKey(hexToBytes(otherKey))),
+      };
+      const batch = await wallet.prepareBatchMint(
+        'bolt11',
+        [
+          { amount: 1, quote: lockedQuote() },
+          { amount: 1, quote: other },
+        ],
+        { privkey: otherKey, signingPackage: true },
+      );
+      // The quote no key matches waits for its package; the other is signed.
+      expect(batch.signatures?.[0]).toBeNull();
+      expect(batch.signatures?.[1]).toMatch(/^[0-9a-f]{128}$/);
+    });
+
     // A pre-v3 keyset beside the v3 one, so custom outputs can name a keyset the wallet did not
     // pick.
     function serveBothKeysets() {
@@ -899,7 +944,7 @@ describe('requestTokens', () => {
           schnorrVerifyDigest(preview.signatures![i]!, tx.quotes.get(q.quote)!.digest, pubkey),
         ).toBe(true);
       });
-      expect(preview.legacySignatures).toEqual([null, null]);
+      expect(preview.legacySignatures).toBeUndefined();
     });
 
     test('a partial draw commits the amount issued, not the quote amount', async () => {
@@ -1491,7 +1536,7 @@ describe('generic mint/melt methods', () => {
           }),
         ),
       );
-      const wallet = new Wallet(mint, { unit });
+      const wallet = new Wallet(mintUrl, { unit });
       await wallet.loadMint();
 
       type BacsMintQuoteRes = MintQuoteBaseResponse & {
@@ -1535,7 +1580,7 @@ describe('generic mint/melt methods', () => {
           });
         }),
       );
-      const wallet = new Wallet(mint, { unit: 'sat' });
+      const wallet = new Wallet(mintUrl, { unit: 'sat' });
       await wallet.loadMint();
 
       const quote = await wallet.createMintQuote('bacs', {
@@ -1561,7 +1606,7 @@ describe('generic mint/melt methods', () => {
           }),
         ),
       );
-      const wallet = new Wallet(mint, { unit: 'sat' });
+      const wallet = new Wallet(mintUrl, { unit: 'sat' });
       await wallet.loadMint();
 
       await expect(
@@ -1584,7 +1629,7 @@ describe('generic mint/melt methods', () => {
           }),
         ),
       );
-      const wallet = new Wallet(mint, { unit: 'sat' });
+      const wallet = new Wallet(mintUrl, { unit: 'sat' });
       await wallet.loadMint();
 
       const quote = await wallet.createMintQuote('bacs', { amount: 5000n, pubkey: lockPubkey });
@@ -1594,7 +1639,7 @@ describe('generic mint/melt methods', () => {
 
     test('createMintQuote rejects a malformed lock pubkey (x-only) before requesting', async () => {
       server.use(http.get(mintUrl + '/v1/info', () => HttpResponse.json(mintInfoRespWithBacs)));
-      const wallet = new Wallet(mint, { unit: 'sat' });
+      const wallet = new Wallet(mintUrl, { unit: 'sat' });
       await wallet.loadMint();
 
       // 64-char x-only key: v5 requires 33-byte compressed, so normalization rejects it up front.
@@ -1873,7 +1918,7 @@ describe('generic mint/melt methods', () => {
           return HttpResponse.json([]);
         }),
       );
-      const wallet = new Wallet(mint, { unit });
+      const wallet = new Wallet(mintUrl, { unit });
       await wallet.loadMint();
       await expect(wallet.checkMintQuoteBatchBolt11(['a'])).rejects.toThrow(
         'checkMintQuoteBatchBolt11: mint does not advertise NUT-29 for bolt11; use checkMintQuoteBolt11 per quote',
@@ -1893,7 +1938,7 @@ describe('generic mint/melt methods', () => {
           return HttpResponse.json([]);
         }),
       );
-      const wallet = new Wallet(mint, { unit });
+      const wallet = new Wallet(mintUrl, { unit });
       await wallet.loadMint();
       await expect(
         wallet.prepareBatchMint('bolt11', [{ amount: 1, quote: { quote: 'q' } }]),
@@ -1912,7 +1957,7 @@ describe('generic mint/melt methods', () => {
           }),
         ),
       );
-      const wallet = new Wallet(mint, { unit });
+      const wallet = new Wallet(mintUrl, { unit });
       await wallet.loadMint();
       await expect(wallet.checkMintQuoteBatchBolt12(['a'])).rejects.toThrow(
         'checkMintQuoteBatchBolt12: mint does not advertise NUT-29 for bolt12; use checkMintQuoteBolt12 per quote',
@@ -2065,7 +2110,7 @@ describe('generic mint/melt methods', () => {
           ]);
         }),
       );
-      const wallet = new Wallet(mint, { unit });
+      const wallet = new Wallet(mintUrl, { unit });
       await wallet.loadMint();
 
       type BacsMintQuoteRes = MintQuoteBaseResponse & {
@@ -2172,7 +2217,7 @@ describe('generic mint/melt methods', () => {
           }),
         ),
       );
-      const wallet = new Wallet(mint, { unit: 'sat' });
+      const wallet = new Wallet(mintUrl, { unit: 'sat' });
       await wallet.loadMint();
 
       await expect(
@@ -2452,7 +2497,7 @@ describe('generic mint/melt methods', () => {
           }),
         ),
       );
-      const wallet = new Wallet(mint, { unit });
+      const wallet = new Wallet(mintUrl, { unit });
       await wallet.loadMint();
 
       type BacsMeltQuoteRes = MeltQuoteBaseResponse & {
@@ -2497,7 +2542,7 @@ describe('generic mint/melt methods', () => {
           });
         }),
       );
-      const wallet = new Wallet(mint, { unit: 'sat' });
+      const wallet = new Wallet(mintUrl, { unit: 'sat' });
       await wallet.loadMint();
 
       const quote = await wallet.createMeltQuote('bacs', {
@@ -3025,7 +3070,7 @@ describe('generic mint/melt methods', () => {
           }),
         ),
       );
-      const wallet = new Wallet(mint, { unit });
+      const wallet = new Wallet(mintUrl, { unit });
       await wallet.loadMint();
 
       type SwiftRes = MeltQuoteBaseResponse & { processing_fee: Amount };

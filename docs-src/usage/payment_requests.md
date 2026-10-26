@@ -42,7 +42,7 @@ It returns the normal send builder, so further options (deterministic outputs, k
 
 ### 3. Deliver the payload
 
-`encodePayload` packages the proofs into the default NUT-18 `PaymentRequestPayload`, serialized as bigint-safe JSON ready for the wire (plain `JSON.stringify` throws on proof amounts). It fills `id` and `unit` from the request and rejects a mint outside the request's strict mint list:
+`encodePayload` packages the proofs into the default NUT-18 `PaymentRequestPayload`, serialized as JSON with proof amounts as numbers, ready for the wire. Don't use plain `JSON.stringify`: it writes each `Amount` as a quoted string, which `decodePayload` tolerates but other NUT-18 payees may reject. It fills `id` and `unit` from the request and rejects a mint outside the request's strict mint list:
 
 ```typescript
 const { keep, send } = await wallet.ops.sendToRequest(pr, proofs).run();

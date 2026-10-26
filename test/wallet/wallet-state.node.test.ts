@@ -175,7 +175,7 @@ describe('checkProofsStates batching', () => {
       id: '00bd033559de27d0',
       secret: `probe-secret-${i}`,
     }));
-    const wallet = new Wallet(mint, { unit });
+    const wallet = new Wallet(mintUrl, { unit });
     await wallet.loadMint();
 
     await wallet.checkProofsStates(many);
