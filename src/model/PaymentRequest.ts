@@ -378,47 +378,7 @@ export class PaymentRequest {
    *   lock semantics must not be silently dropped.
    */
   toP2PKOptions(): P2PKOptions | undefined {
-    const nut10 = this.nut10;
-    const isHTLC = nut10?.kind === 'HTLC';
-    if (!nut10 || (nut10.kind !== 'P2PK' && !isHTLC)) {
-      return undefined;
-    }
-    if (!nut10.data) {
-      throw new CTSError(`NUT-10 ${nut10.kind} option is missing its data field`);
-    }
-
-    // Use parseP2PKSecret (the parser the verifier uses): it rejects malformed
-    // tags, duplicate tag keys and bad sigflags — all of which NUT-11 says make a
-    // proof unspendable — so a bad lock fails loudly instead of silently first-winning.
-    const secret = parseP2PKSecret([
-      nut10.kind,
-      { nonce: '', data: nut10.data, tags: nut10.tags ?? [] },
-    ]);
-    const taggedPubkeys = getTag(secret, 'pubkeys') ?? [];
-    const pubkeys = [nut10.data, ...taggedPubkeys];
-    const options: P2PKOptions = isHTLC
-      ? { hashlock: nut10.data, pubkey: taggedPubkeys }
-      : { pubkey: pubkeys.length === 1 ? pubkeys[0] : pubkeys };
-
-    // Optional fields pass straight through: the accessors return undefined when
-    // absent, and the builder ignores undefined options. getTag never yields [].
-    options.locktime = getTagInt(secret, 'locktime');
-    options.refundKeys = getTag(secret, 'refund');
-    options.requiredSignatures = getTagInt(secret, 'n_sigs');
-    options.requiredRefundSignatures = getTagInt(secret, 'n_sigs_refund');
-    if (getTagScalar(secret, 'sigflag') === 'SIG_ALL') {
-      options.sigFlag = 'SIG_ALL';
-    }
-
-    // Forward any non-standard tags verbatim.
-    const additionalTags = (nut10.tags ?? []).filter(
-      (t) => t.length > 0 && !isP2PKKnownTagKey(t[0]),
-    ) as P2PKTag[];
-    if (additionalTags.length > 0) {
-      options.additionalTags = additionalTags;
-    }
-
-    return options;
+    return nut10ToP2PKOptions(this.nut10);
   }
 
   /**
@@ -498,4 +458,58 @@ export class PaymentRequest {
     const decoded = decodeCBOR(data) as RawPaymentRequest;
     return this.fromRawRequest(decoded);
   }
+}
+
+/**
+ * A NUT-10 locking option as {@link P2PKOptions}, shared by the payer (build the lock) and the payee
+ * (check a proof carries it).
+ *
+ * @remarks
+ * Supports `P2PK` (NUT-11) and `HTLC` (NUT-14) only; returns `undefined` for no option or an
+ * unbuildable kind.
+ * @throws If the option is missing its `data` field, or carries malformed NUT-10 tags.
+ * @internal
+ */
+export function nut10ToP2PKOptions(nut10: NUT10Option | undefined): P2PKOptions | undefined {
+  const isHTLC = nut10?.kind === 'HTLC';
+  if (!nut10 || (nut10.kind !== 'P2PK' && !isHTLC)) {
+    return undefined;
+  }
+  if (!nut10.data) {
+    throw new CTSError(`NUT-10 ${nut10.kind} option is missing its data field`);
+  }
+
+  // Use parseP2PKSecret (the parser the verifier uses): it rejects malformed
+  // tags, duplicate tag keys and bad sigflags — all of which NUT-11 says make a
+  // proof unspendable — so a bad lock fails loudly instead of silently first-winning.
+  const secret = parseP2PKSecret([
+    nut10.kind,
+    { nonce: '', data: nut10.data, tags: nut10.tags ?? [] },
+  ]);
+  const taggedPubkeys = getTag(secret, 'pubkeys') ?? [];
+  const pubkeys = [nut10.data, ...taggedPubkeys];
+  // A hashlock is a hex digest, so its case carries no meaning; mints compare it lowercase.
+  const options: P2PKOptions = isHTLC
+    ? { hashlock: nut10.data.toLowerCase(), pubkey: taggedPubkeys }
+    : { pubkey: pubkeys.length === 1 ? pubkeys[0] : pubkeys };
+
+  // Optional fields pass straight through: the accessors return undefined when
+  // absent, and the builder ignores undefined options. getTag never yields [].
+  options.locktime = getTagInt(secret, 'locktime');
+  options.refundKeys = getTag(secret, 'refund');
+  options.requiredSignatures = getTagInt(secret, 'n_sigs');
+  options.requiredRefundSignatures = getTagInt(secret, 'n_sigs_refund');
+  if (getTagScalar(secret, 'sigflag') === 'SIG_ALL') {
+    options.sigFlag = 'SIG_ALL';
+  }
+
+  // Forward any non-standard tags verbatim.
+  const additionalTags = (nut10.tags ?? []).filter(
+    (t) => t.length > 0 && !isP2PKKnownTagKey(t[0]),
+  ) as P2PKTag[];
+  if (additionalTags.length > 0) {
+    options.additionalTags = additionalTags;
+  }
+
+  return options;
 }

@@ -1,7 +1,12 @@
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect } from 'vitest';
 
-import { Wallet, Amount, CTSError, type Proof } from '../../src';
+import { Wallet, Amount, CTSError, OutputData, PaymentRequest, type Proof } from '../../src';
+import { createP2PKsecret } from '../../src/crypto/NUT11';
+import { createHTLCHash, createHTLCsecret } from '../../src/crypto/NUT14';
+import { deriveP2BKBlindedPubkeys } from '../../src/crypto/NUT28';
 import { deriveKeysetId } from '../../src/utils';
 import { PUBKEYS } from '../consts';
 
@@ -226,5 +231,333 @@ describe('wallet.getFeesToInclude', () => {
     await wallet.loadMint();
 
     expect(() => wallet.getFeesToInclude(1)).toThrow(/did not converge/);
+  });
+});
+
+describe('wallet.isPaymentRequestSatisfied', () => {
+  const priv = (seed: number) => bytesToHex(new Uint8Array(32).fill(seed));
+  const pub = (seed: number) => bytesToHex(secp256k1.getPublicKey(hexToBytes(priv(seed)), true));
+  // Legacy proofs all under one lock; amounts are the only thing that varies.
+  const lockedProofs = (amounts: number[], secret: string): Proof[] =>
+    amounts.map((a) => ({ id: '00bd033559de27d0', amount: Amount.from(a), secret, C: 'C' }));
+  const request = (o: {
+    amount?: number;
+    unit?: string;
+    mints?: string[];
+    mp?: boolean;
+    sm?: Array<{ method: string; fee?: number }>;
+    nut10?: { kind: string; data: string; tags?: string[][] };
+  }) =>
+    new PaymentRequest(
+      undefined,
+      'pr',
+      o.amount,
+      o.unit,
+      o.mints,
+      undefined,
+      false,
+      o.nut10,
+      o.mp,
+      o.sm,
+    );
+
+  test('enforces the net-of-input-fees formula (NUT-18)', async () => {
+    // Keyset charges 1 sat per proof (1000 ppk), the spec's dust-protection scenario.
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({
+          keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 1000 }],
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const pr = request({ amount: 100, unit: 'sat' });
+    // 3 proofs cost 3 sats to swap: 103 - 3 >= 100 nets the amount, 102 - 3 does not.
+    expect(wallet.isPaymentRequestSatisfied(pr, proofsTotalling([50, 50, 3]))).toBe(true);
+    expect(wallet.isPaymentRequestSatisfied(pr, proofsTotalling([50, 50, 2]))).toBe(false);
+  });
+
+  test('adds mf when this mint is outside the request mint list', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const outside = request({
+      amount: 100,
+      unit: 'sat',
+      mints: ['https://other.mint'],
+      mp: true,
+      sm: [{ method: 'bolt11', fee: 5 }], // fixture mint melts bolt11/sat
+    });
+    expect(wallet.isPaymentRequestSatisfied(outside, proofsTotalling([105]))).toBe(true);
+    expect(wallet.isPaymentRequestSatisfied(outside, proofsTotalling([104]))).toBe(false);
+
+    // Listed mint (normalized match) owes no mf.
+    const listed = request({
+      amount: 100,
+      unit: 'sat',
+      mints: [mintUrl + '/'],
+      sm: [{ method: 'bolt11', fee: 5 }],
+    });
+    expect(wallet.isPaymentRequestSatisfied(listed, proofsTotalling([100]))).toBe(true);
+  });
+
+  test('does not settle a request this mint is not admissible for', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    // Strict list (mp absent) naming another mint.
+    const strict = request({ amount: 100, unit: 'sat', mints: ['https://other.mint'] });
+    expect(() => wallet.isPaymentRequestSatisfied(strict, proofsTotalling([100]))).toThrow(
+      /strict mint list/,
+    );
+
+    // The fixture mint does not melt swift, so a swift-only request is unsettleable here.
+    const unsupported = request({ amount: 100, unit: 'sat', sm: [{ method: 'swift' }] });
+    expect(() => wallet.isPaymentRequestSatisfied(unsupported, proofsTotalling([100]))).toThrow(
+      /cannot melt/,
+    );
+
+    // A listed mint that melts an accepted method still settles.
+    const ok = request({
+      amount: 100,
+      unit: 'sat',
+      mints: [mintUrl],
+      sm: [{ method: 'bolt11', fee: 5 }],
+    });
+    expect(wallet.isPaymentRequestSatisfied(ok, proofsTotalling([100]))).toBe(true);
+  });
+
+  test('a mint with melting disabled accepts no method', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const info = wallet.getMintInfo();
+    const isSupported = info.isSupported.bind(info);
+    // Stub only NUT-05; every other lookup keeps the fixture's answer.
+    info.isSupported = ((num: number) =>
+      num === 5 ? { disabled: true, params: [] } : isSupported(num as 4)) as typeof isSupported;
+
+    const pr = request({ amount: 100, unit: 'sat', sm: [{ method: 'bolt11' }] });
+    expect(() => wallet.isPaymentRequestSatisfied(pr, proofsTotalling([100]))).toThrow(
+      /cannot melt/,
+    );
+  });
+
+  test('a locked request settles only proofs carrying the requested lock', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const carol = pub(3);
+    // A redundant n_sigs=1 canonicalises away, so the proof need not repeat it.
+    const pr = request({
+      amount: 100,
+      unit: 'sat',
+      nut10: { kind: 'P2PK', data: carol, tags: [['n_sigs', '1']] },
+    });
+    expect(wallet.isPaymentRequestSatisfied(pr, lockedProofs([100], createP2PKsecret(carol)))).toBe(
+      true,
+    );
+
+    // Plain bearer proofs carry no lock at all.
+    expect(() => wallet.isPaymentRequestSatisfied(pr, proofsTotalling([100]))).toThrow(
+      /does not carry a NUT-10 lock/,
+    );
+
+    // An expired refund path is the clawback: locked to carol, spendable by the payer.
+    const clawback = createP2PKsecret(carol, [
+      ['locktime', '1'],
+      ['refund', pub(9)],
+    ]);
+    expect(() => wallet.isPaymentRequestSatisfied(pr, lockedProofs([100], clawback))).toThrow(
+      /not the requested spending condition/,
+    );
+
+    // A kind the wallet cannot read as a lock cannot be checked, so it never settles.
+    const exotic = request({ amount: 100, unit: 'sat', nut10: { kind: 'FROST', data: 'xyz' } });
+    expect(() => wallet.isPaymentRequestSatisfied(exotic, proofsTotalling([100]))).toThrow(
+      /cannot check the request's nut10 lock kind/,
+    );
+  });
+
+  test('an unlocked request settles only proofs the payee can spend', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const pr = request({ amount: 100, unit: 'sat' });
+    const [bearer] = proofsTotalling([100]);
+    const payee = { privkeys: priv(1) };
+
+    expect(wallet.isPaymentRequestSatisfied(pr, [bearer])).toBe(true);
+
+    // Locked to the payer's own key: sums to the amount, transfers nothing.
+    const toPayer = lockedProofs([100], createP2PKsecret(pub(9)));
+    expect(() => wallet.isPaymentRequestSatisfied(pr, toPayer)).toThrow(
+      /unlocked request: the payee cannot spend a proof/,
+    );
+
+    // One unspendable proof sinks the payment, however much the rest covers.
+    expect(() => wallet.isPaymentRequestSatisfied(pr, [bearer, ...toPayer])).toThrow(
+      /the payee cannot spend/,
+    );
+
+    // A lock this wallet cannot read is not a bearer secret: a laxer mint may still enforce it.
+    const unreadable = JSON.stringify([
+      'P2PK',
+      { nonce: 'ab', data: pub(9), tags: [['memo', '']] },
+    ]);
+    expect(() => wallet.isPaymentRequestSatisfied(pr, lockedProofs([100], unreadable))).toThrow(
+      /Invalid NUT-10 tag/,
+    );
+
+    // Locked to the payee is still a payment, once the payee says which key is theirs.
+    const toPayee = lockedProofs([100], createP2PKsecret(pub(1)));
+    expect(() => wallet.isPaymentRequestSatisfied(pr, toPayee)).toThrow(/the payee cannot spend/);
+    expect(wallet.isPaymentRequestSatisfied(pr, toPayee, undefined, payee)).toBe(true);
+    // Key hex case carries no meaning.
+    const toPayeeUpper = lockedProofs([100], createP2PKsecret(pub(1).toUpperCase()));
+    expect(wallet.isPaymentRequestSatisfied(pr, toPayeeUpper, undefined, payee)).toBe(true);
+
+    // Blinded to the payee (NUT-28): the held key matches only through the proof's `p2pk_e`.
+    const { blinded, Ehex } = deriveP2BKBlindedPubkeys([pub(1)]);
+    const [toBlindedPayee] = lockedProofs([100], createP2PKsecret(blinded[0]));
+    const blindedProof = { ...toBlindedPayee, p2pk_e: Ehex };
+    expect(() => wallet.isPaymentRequestSatisfied(pr, [blindedProof])).toThrow(
+      /the payee cannot spend/,
+    );
+    expect(wallet.isPaymentRequestSatisfied(pr, [blindedProof], undefined, payee)).toBe(true);
+  });
+
+  test('an unlocked request reads thresholds, expiry and hashlocks', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const pr = request({ amount: 100, unit: 'sat' });
+    const settles = (secret: string, privkeys?: string[]) =>
+      wallet.isPaymentRequestSatisfied(pr, lockedProofs([100], secret), undefined, { privkeys });
+
+    // 2-of-2: one payee key is not enough.
+    const multisig = createP2PKsecret(pub(1), [
+      ['pubkeys', pub(2)],
+      ['n_sigs', '2'],
+    ]);
+    expect(() => settles(multisig, [priv(1)])).toThrow(/the payee cannot spend/);
+    expect(settles(multisig, [priv(1), priv(2)])).toBe(true);
+
+    // Expired with no refund keys: anyone can spend it.
+    expect(settles(createP2PKsecret(pub(9), [['locktime', '1']]))).toBe(true);
+
+    // Expired with a refund path to the payee: spendable through the refund keys.
+    const refundToPayee = createP2PKsecret(pub(9), [
+      ['locktime', '1'],
+      ['refund', pub(1)],
+    ]);
+    expect(() => settles(refundToPayee)).toThrow(/the payee cannot spend/);
+    expect(settles(refundToPayee, [priv(1)])).toBe(true);
+
+    // Not yet expired: the refund path is closed.
+    const future = String(Math.floor(Date.now() / 1000) + 3600);
+    const refundLater = createP2PKsecret(pub(9), [
+      ['locktime', future],
+      ['refund', pub(1)],
+    ]);
+    expect(() => settles(refundLater, [priv(1)])).toThrow(/the payee cannot spend/);
+
+    // A hashlock needs its preimage, which no key supplies.
+    const htlc = createHTLCsecret(createHTLCHash().hash, [['pubkeys', pub(1)]]);
+    expect(() => settles(htlc, [priv(1)])).toThrow(/the payee cannot spend/);
+
+    // After the locktime, an HTLC refund path to the payee needs no preimage.
+    const htlcRefund = createHTLCsecret(createHTLCHash().hash, [
+      ['pubkeys', pub(9)],
+      ['locktime', '1'],
+      ['refund', pub(1)],
+    ]);
+    expect(() => settles(htlcRefund)).toThrow(/the payee cannot spend/);
+    expect(settles(htlcRefund, [priv(1)])).toBe(true);
+  });
+
+  test('proofs built from the request lock settle it', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    // What a payer's sendToRequest locks to: the request's own options, built into a secret.
+    const builtFrom = (pr: PaymentRequest) => {
+      const output = OutputData.createSingleP2PKData(pr.toP2PKOptions()!, 100, '00bd033559de27d0');
+      return lockedProofs([100], new TextDecoder().decode(output.secret));
+    };
+
+    const p2pk = request({
+      amount: 100,
+      unit: 'sat',
+      nut10: {
+        kind: 'P2PK',
+        data: pub(1),
+        tags: [
+          ['pubkeys', pub(2), pub(3)],
+          ['n_sigs', '2'],
+          ['locktime', '4000000000'],
+          ['refund', pub(4)],
+          ['sigflag', 'SIG_ALL'],
+          ['memo', 'inv-1'],
+        ],
+      },
+    });
+    expect(wallet.isPaymentRequestSatisfied(p2pk, builtFrom(p2pk))).toBe(true);
+
+    // A hashlock is hex: an uppercase request accepts the lowercase proof a payer writes.
+    const { hash } = createHTLCHash();
+    const htlc = request({
+      amount: 100,
+      unit: 'sat',
+      nut10: {
+        kind: 'HTLC',
+        data: hash.toUpperCase(),
+        tags: [
+          ['pubkeys', pub(1)],
+          ['locktime', '4000000000'],
+          ['refund', pub(4)],
+        ],
+      },
+    });
+    expect(wallet.isPaymentRequestSatisfied(htlc, builtFrom(htlc))).toBe(true);
+    const foreign = createHTLCsecret(hash, [
+      ['pubkeys', pub(1)],
+      ['locktime', '4000000000'],
+      ['refund', pub(4)],
+    ]);
+    expect(wallet.isPaymentRequestSatisfied(htlc, lockedProofs([100], foreign))).toBe(true);
+  });
+
+  test('rejects unit mismatches and amountless requests without an expectation', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const usd = request({ amount: 100, unit: 'usd' });
+    expect(() => wallet.isPaymentRequestSatisfied(usd, proofsTotalling([100]))).toThrow(/unit/);
+
+    const amountless = request({ unit: 'sat' });
+    expect(() => wallet.isPaymentRequestSatisfied(amountless, proofsTotalling([10]))).toThrow(
+      /amountless/,
+    );
+    expect(wallet.isPaymentRequestSatisfied(amountless, proofsTotalling([10]), 10)).toBe(true);
+  });
+
+  test('does not count repeated copies of one proof as distinct value', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const pr = request({ amount: 100, unit: 'sat' });
+    const [proof] = proofsTotalling([60]);
+    expect(() => wallet.isPaymentRequestSatisfied(pr, [proof, { ...proof }])).toThrow(
+      /duplicate proof at index 1/i,
+    );
+  });
+
+  test('rejects proofs from a keyset outside the wallet unit', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const pr = request({ amount: 100, unit: 'sat' });
+    const [proof] = proofsTotalling([100]);
+    expect(() =>
+      wallet.isPaymentRequestSatisfied(pr, [{ ...proof, id: '009a1f293253e41f' }]),
+    ).toThrow(/not a sat keyset/);
   });
 });

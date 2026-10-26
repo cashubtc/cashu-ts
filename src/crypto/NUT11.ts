@@ -14,6 +14,7 @@ import {
 } from '../utils/limits';
 
 import { getValidSigners, schnorrSignMessage, schnorrVerifyMessage, type PrivKey } from './core';
+import { getPubKeyFromPrivKey } from './NUT01';
 import {
   getTagInt,
   getTagScalar,
@@ -316,6 +317,51 @@ export function getP2PKExpectedWitnessPubkeys(secretStr: string | Secret): strin
     return Array.from(new Set([...mainKeys, ...refundKeys]));
   }
   return []; // Unlocked or expired with no refund keys
+}
+
+/**
+ * Whether `privkeys` can spend a P2PK or HTLC locked proof at `now`, without a preimage.
+ *
+ * @remarks
+ * Main path: `n_sigs` of the main keys (never HTLC, which also needs the preimage). After the
+ * locktime: `n_sigs_refund` of the refund keys, or none without them. Keys match by x coordinate,
+ * and through `p2pk_e` for a blinded proof (NUT-28).
+ * @throws If the secret is not P2PK/HTLC or its tags break the NUT-11 rules.
+ * @internal
+ */
+export function canSpendP2PKWithKeys(
+  proof: Pick<Proof, 'secret' | 'p2pk_e'>,
+  privkeys: string[],
+  now: number = Math.floor(Date.now() / 1000),
+): boolean {
+  const secret = parseP2PKSecret(proof.secret);
+  const mainKeys = getP2PKWitnessPubkeys(secret);
+  const refundKeys = getP2PKWitnessRefundkeys(secret);
+  const locktime = getLocktime(secret);
+  assertSpendingConditionRules({
+    mainKeyCount: mainKeys.length,
+    refundKeyCount: refundKeys.length,
+    nSigs: getTagInt(secret, 'n_sigs'),
+    nSigsRefund: getTagInt(secret, 'n_sigs_refund'),
+    hasLocktime: Number.isFinite(locktime),
+  });
+  const scalars =
+    proof.p2pk_e !== undefined ? maybeDeriveP2BKPrivateKeys(privkeys, proof as Proof) : privkeys;
+  const held = new Set(
+    scalars.map((k) => bytesToHex(getPubKeyFromPrivKey(hexToBytes(k))).slice(2)),
+  );
+  const heldCount = (keys: string[]) => keys.filter((k) => held.has(k.slice(2))).length;
+  // A path with no keys needs no signatures (expiry with no refund keys).
+  const needed = (tag: string, keys: string[]) =>
+    keys.length ? Math.max(getTagInt(secret, tag) ?? 1, 1) : 0;
+  if (getSecretKind(secret) !== 'HTLC' && heldCount(mainKeys) >= needed('n_sigs', mainKeys)) {
+    return true;
+  }
+  return (
+    Number.isFinite(locktime) &&
+    now > locktime &&
+    heldCount(refundKeys) >= needed('n_sigs_refund', refundKeys)
+  );
 }
 
 /**

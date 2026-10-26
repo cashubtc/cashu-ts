@@ -1,7 +1,8 @@
-import { type P2PKOptions } from '../crypto';
+import { type P2PKOptions, normalizeP2PKOptions, pointFromHex } from '../crypto';
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { type OutputDataLike, type OutputDataFactory } from '../model/OutputData';
+import type { PaymentRequest } from '../model/PaymentRequest';
 import {
   type MeltQuoteBolt11Response,
   type MeltQuoteBolt12Response,
@@ -29,6 +30,31 @@ import {
 } from './types';
 import type { Wallet } from './Wallet';
 
+// Builders from `sendToRequest`: the request's lock and net-of-fees terms are fixed (NUT-18). Kept
+// off the public SendBuilder signature, which v5 shapes differently.
+const requestBuilders = new WeakSet<SendBuilder>();
+
+/**
+ * Refuses a requested lock nobody could ever spend: an off-curve key, or a malformed hashlock.
+ *
+ * @remarks
+ * Applied where a payer pays a request, so `toP2PKOptions` keeps its lenient v4 behaviour.
+ * @throws If a lock or refund key is not a secp256k1 point, or the hashlock is not 64 hex digits.
+ */
+function assertSpendableLock(lock: P2PKOptions): void {
+  const { pubkey, refundKeys = [], hashlock } = normalizeP2PKOptions(lock);
+  for (const key of [pubkey, refundKeys].flat()) {
+    try {
+      pointFromHex(key);
+    } catch (e) {
+      throw new CTSError('payment request lock key is not a valid secp256k1 point', { cause: e });
+    }
+  }
+  if (hashlock !== undefined && !/^[0-9a-f]{64}$/.test(hashlock)) {
+    throw new CTSError('payment request hashlock must be a 64-character hex string');
+  }
+}
+
 export type MintMethod = 'bolt11' | 'bolt12' | 'onchain';
 
 export type MintQuoteFor<M extends MintMethod> = M extends 'bolt11'
@@ -48,6 +74,70 @@ export class WalletOps {
   constructor(private wallet: Wallet) {}
   send(amount: AmountLike, proofs: ProofLike[]) {
     return new SendBuilder(this.wallet, amount, proofs);
+  }
+  /**
+   * Builds a send that satisfies a NUT-18 payment request from this wallet's mint.
+   *
+   * @remarks
+   * Enforces the payer-side MUSTs: strict mint list, unit rule, NUT-05 melt-method support
+   * (resolved from this wallet's MintInfo), the applicable per-method fee (`mf`), the request's
+   * `nut10` lock, and net-of-input-fees selection (`includeFees(true)`). Requires a loaded mint.
+   * @param pr - The decoded payment request.
+   * @param proofs - Proofs to select from.
+   * @param amount - Payer-chosen amount for amountless requests; forbidden when the request sets
+   *   `a`.
+   * @returns A preconfigured {@link SendBuilder}; chain further options and `.run()`. The terms the
+   *   request set are fixed: chaining cannot replace its lock or disable `includeFees`.
+   * @throws If the wallet's mint, unit, or melt methods are unacceptable to the request, the
+   *   request's lock cannot be honoured, or the request is invalid per NUT-18.
+   */
+  sendToRequest(pr: PaymentRequest, proofs: ProofLike[], amount?: AmountLike) {
+    const wallet = this.wallet;
+    if (pr.amount && amount !== undefined) {
+      throw new CTSError('the request specifies its amount; omit the amount argument');
+    }
+    const base = pr.amount ?? (amount !== undefined ? Amount.from(amount) : undefined);
+    if (!base) {
+      throw new CTSError('amountless payment request: pass the chosen amount');
+    }
+    // NUT-18: u MUST be set if a or sm is set, since mf is denominated in the request unit.
+    if (!pr.unit && (pr.amount !== undefined || pr.supportedMethods?.length)) {
+      throw new CTSError(
+        'invalid payment request: unit (u) is required when an amount (a) or supported methods (sm) are set',
+      );
+    }
+    if (pr.unit && pr.unit !== wallet.unit) {
+      throw new CTSError(`request unit '${pr.unit}' does not match wallet unit '${wallet.unit}'`);
+    }
+    // Strict mint list: the payer MUST only send proofs from listed mints (NUT-18).
+    const listed = pr.includesMint(wallet.mint.mintUrl);
+    if (pr.isMintListStrict && !listed) {
+      throw new CTSError("this wallet's mint is not in the request's strict mint list");
+    }
+    // Melt-method support and per-method fee (sm/mf): the mint MUST be able to melt the request
+    // unit via at least one listed method; the fee applies only from non-listed mints.
+    let fee = Amount.zero();
+    if (pr.supportedMethods?.length) {
+      const { disabled, params } = wallet.getMintInfo().isSupported(5);
+      const meltMethods = disabled
+        ? []
+        : params.filter((m) => m.unit === wallet.unit).map((m) => m.method);
+      if (!pr.supportedMethods.some((m) => meltMethods.includes(m.method))) {
+        throw new CTSError(`mint cannot melt ${wallet.unit} via any method the request accepts`);
+      }
+      fee = listed ? Amount.zero() : pr.feesFor(wallet.mint.mintUrl, meltMethods);
+    }
+    // A nut10 kind toP2PKOptions cannot express would otherwise send unlocked; fail instead.
+    const lock = pr.toP2PKOptions();
+    if (pr.nut10 && !lock) {
+      throw new CTSError(`cannot honour the request's nut10 lock kind '${pr.nut10.kind}'`);
+    }
+    if (lock) assertSpendableLock(lock);
+    // Net of input fees (NUT-18): the payee must net the requested amount after swapping.
+    const builder = new SendBuilder(wallet, base.add(fee), proofs);
+    requestBuilders.add(builder);
+    builder.includeFees(true);
+    return lock ? builder.asLocked(lock) : builder;
   }
   receive(token: Token | string | ProofLike[]) {
     return new ReceiveBuilder(this.wallet, token);
@@ -115,11 +205,23 @@ export class SendBuilder {
   }
 
   /**
+   * Guards a send output the payment request itself asked for (NUT-18).
+   */
+  private assertSendOutputMutable(): void {
+    if (requestBuilders.has(this) && this.sendOT) {
+      throw new CTSError(
+        'the payment request mandates this send output; it cannot be replaced by chaining',
+      );
+    }
+  }
+
+  /**
    * Use random blinding for the sent outputs.
    *
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
   asRandom(denoms?: AmountLike[]) {
+    this.assertSendOutputMutable();
     this.sendOT = { type: 'random', denominations: denoms };
     return this;
   }
@@ -131,6 +233,7 @@ export class SendBuilder {
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
   asDeterministic(counter = 0, denoms?: AmountLike[]) {
+    this.assertSendOutputMutable();
     this.sendOT = { type: 'deterministic', counter, denominations: denoms };
     return this;
   }
@@ -144,6 +247,7 @@ export class SendBuilder {
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
   asLocked(lock: P2PKOptions | LockBuilder, denoms?: AmountLike[]) {
+    this.assertSendOutputMutable();
     const options = lock instanceof LockBuilder ? lock.toOptions() : lock;
     this.sendOT = { type: 'p2pk', options, denominations: denoms };
     return this;
@@ -163,6 +267,7 @@ export class SendBuilder {
    * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
    */
   asFactory(factory: OutputDataFactory, denoms?: AmountLike[]) {
+    this.assertSendOutputMutable();
     this.sendOT = { type: 'factory', factory, denominations: denoms };
     return this;
   }
@@ -174,6 +279,7 @@ export class SendBuilder {
    *   wallet will throw.
    */
   asCustom(data: OutputDataLike[]) {
+    this.assertSendOutputMutable();
     this.sendOT = { type: 'custom', data };
     return this;
   }
@@ -247,6 +353,12 @@ export class SendBuilder {
    * @param on When true, include fees in the sent amount. Default true if called.
    */
   includeFees(on = true) {
+    // A payment request is settled net of input fees (NUT-18), so the payee nets the amount asked.
+    if (requestBuilders.has(this) && !on) {
+      throw new CTSError(
+        'a payment request is sent net of input fees; includeFees cannot be disabled',
+      );
+    }
     this.config.includeFees = on;
     return this;
   }

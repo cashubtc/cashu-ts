@@ -501,6 +501,13 @@ describe('Preferred Mint List with Supported Methods', () => {
   });
 });
 
+describe('Mint preferred flag (malformed)', () => {
+  test('rejects a repeated mint_preferred tag', () => {
+    const malformed = new Uint8Array([0x09, 0x00, 0x01, 0x01, 0x09, 0x00, 0x01, 0x00]);
+    expect(() => decodeTLV(malformed)).toThrow(/multiple mint_preferred/);
+  });
+});
+
 describe('Supported Method sub-TLV (malformed)', () => {
   // supported_method (tag 0x0a) is a sub-TLV: 0x01 method (string), 0x02 fee (u64).
   const u64 = (n: number) => [0x02, 0x00, 0x08, 0, 0, 0, 0, 0, 0, 0, n];
