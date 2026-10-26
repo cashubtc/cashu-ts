@@ -948,6 +948,13 @@ describe('NUT-18 payment payloads', () => {
       expect(payload.proofs[0].amount.toBigInt()).toBe(2n);
     });
 
+    test('accepts quoted proof amounts from plain JSON.stringify over Amount', () => {
+      const body = JSON.stringify({ ...valid(), proofs: [makeProof(2n)] });
+      expect(body).toContain('"amount":"2"');
+      const payload = PaymentRequest.decodePayload(body);
+      expect(payload.proofs[0].amount.toBigInt()).toBe(2n);
+    });
+
     test('preserves unknown proof fields (witness, dleq)', () => {
       const obj = valid();
       (obj.proofs[0] as Record<string, unknown>).witness = '{"signatures":[]}';
@@ -969,9 +976,14 @@ describe('NUT-18 payment payloads', () => {
         /malformed proof at index 0/,
       ],
       [
-        'a quoted proof amount (plain JSON.stringify tell)',
-        JSON.stringify({ ...valid(), proofs: [{ ...valid().proofs[0], amount: '2' }] }),
-        /amounts must be JSON numbers/,
+        'a non-canonical quoted proof amount',
+        JSON.stringify({ ...valid(), proofs: [{ ...valid().proofs[0], amount: '02' }] }),
+        /Invalid amount string/,
+      ],
+      [
+        'a non-integer proof amount',
+        JSON.stringify({ ...valid(), proofs: [{ ...valid().proofs[0], amount: true }] }),
+        /malformed proof amount at index 0/,
       ],
     ])('rejects %s', (_name, input, expected) => {
       expect(() => PaymentRequest.decodePayload(input)).toThrow(expected);

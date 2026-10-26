@@ -235,7 +235,8 @@ export class PaymentRequest {
    * Parses a default NUT-18 payment payload received from a payer.
    *
    * @remarks
-   * Validates payload shape only. To confirm the payment settles the request, pass the result to
+   * Validates payload shape only, accepting proof amounts as JSON numbers or canonical decimal
+   * strings. To confirm the payment settles the request, pass the result to
    * {@link Wallet.isPaymentRequestSatisfied}. Imposes no size limit of its own: cap the raw text at
    * the transport (POST body, DM) before decoding.
    * @param json - Raw payload text (POST body or Nostr DM content).
@@ -279,14 +280,8 @@ export class PaymentRequest {
         throw new CTSError(`invalid payment payload: malformed proof at index ${i}`);
       }
       const amount = (p as Record<string, unknown>).amount;
-      if (typeof amount === 'string') {
-        // A quoted amount is the tell-tale of plain JSON.stringify over bigint proofs (or an
-        // Amount VO via toJSON). NUT-18 amounts are JSON numbers: point the payer at the encoder.
-        throw new CTSError(
-          `invalid payment payload: proof amount at index ${i} is a string; amounts must be JSON numbers (serialize with encodePayload() or JSONInt.stringify, not JSON.stringify)`,
-        );
-      }
-      if (typeof amount !== 'number' && typeof amount !== 'bigint') {
+      // Accept canonical decimal strings: plain JSON.stringify over Amount writes them.
+      if (typeof amount !== 'number' && typeof amount !== 'bigint' && typeof amount !== 'string') {
         throw new CTSError(`invalid payment payload: malformed proof amount at index ${i}`);
       }
       return { ...(p as Omit<Proof, 'amount'>), amount: Amount.from(amount) };
