@@ -966,6 +966,20 @@ describe('getBlindAuthToken coverage', () => {
     warn.mockRestore();
   });
 
+  test.each([true, false])('logs omit the request path (protected: %s)', async (blindProtected) => {
+    const logger = { warn: vi.fn(), debug: vi.fn() };
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn, logger: logger as any });
+    am['info'] = fakeInfo({ blindProtected });
+    am['keychain'] = {} as any;
+    am['pool'] = [{ id: 'k', C: 'C', secret: 'S', amount: 1 } as any];
+
+    await am.getBlindAuthToken({ method: 'GET', path: '/v1/mint/quote/bolt11/quote-id-123' });
+    expect(logger.debug).toHaveBeenCalled();
+    expect(JSON.stringify([logger.warn.mock.calls, logger.debug.mock.calls])).not.toContain(
+      'quote-id-123',
+    );
+  });
+
   test('error path: ensure completes but pool remains empty', async () => {
     const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
     am['info'] = fakeInfo({ batMax: 1, blindProtected: true });
