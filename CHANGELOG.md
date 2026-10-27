@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.13.1](https://github.com/cashubtc/cashu-ts/compare/v4.13.0...v4.13.1) (2026-10-27)
+
+
+### Bug Fixes
+
+* **auth:** drop request path from BAT log context ([#1351](https://github.com/cashubtc/cashu-ts/issues/1351)) ([8e1864f](https://github.com/cashubtc/cashu-ts/commit/8e1864f453499412165b7f065dc386471ab5b40f))
+
 ## [4.13.0](https://github.com/cashubtc/cashu-ts/compare/v4.12.0...v4.13.0) (2026-10-26)
 
 
