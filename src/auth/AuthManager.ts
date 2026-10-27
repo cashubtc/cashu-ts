@@ -295,7 +295,7 @@ export class AuthManager implements AuthProvider {
   /**
    * Gets a Blind Authentication Token (BAT)
    *
-   * @param {method, path, body} The Request it authorizes; version 02 BATs sign it.
+   * @param {method, path, body} The Request parameters.
    * @returns The serialized BAT ready to insert into request header.
    */
   async getBlindAuthToken({
