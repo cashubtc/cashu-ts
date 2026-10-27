@@ -292,7 +292,7 @@ export class AuthManager implements AuthProvider {
   /**
    * Gets a Blind Authentication Token (BAT)
    *
-   * @param {method, path} to Call (not used in our implementation)
+   * @param {method, path, body} The Request parameters.
    * @returns The serialized BAT ready to insert into request header.
    */
   async getBlindAuthToken({
@@ -305,7 +305,6 @@ export class AuthManager implements AuthProvider {
     if (this.info && !this.info.requiresBlindAuthToken(method, path)) {
       this.logger.warn('Endpoint is not marked as protected by NUT-22; still issuing BAT', {
         method,
-        path,
       });
     }
 
@@ -319,7 +318,6 @@ export class AuthManager implements AuthProvider {
       const proof = this.pool.pop()!;
       this.logger.debug('AuthManager: BAT requested', {
         method,
-        path,
         remaining: this.pool.length,
       });
       return serializeBAT(proof);
