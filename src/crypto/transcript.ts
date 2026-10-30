@@ -1,4 +1,5 @@
 import { schnorr } from '@noble/curves/secp256k1.js';
+import { numberToBytesBE } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
@@ -7,6 +8,7 @@ import { CTSError } from '../model/Errors';
 import { bytesToHex, hexToBytes, isValidHex } from '../utils';
 
 import { taggedHash } from './core';
+import { isValidSecpPubkey } from './curve_secp';
 import { hashToCurveHex, isBlsKeyset } from './curves';
 import { minimalBE, tlvRecord } from './nutroot';
 
@@ -24,12 +26,15 @@ import { minimalBE, tlvRecord } from './nutroot';
 
 export const TRANSCRIPT_REQUEST_TAG = 'Cashu_AuthorizedRequest';
 export const TRANSCRIPT_INPUT_TAG = 'Cashu_TransactionInput';
+export const QUOTE_ID_TAG = 'Cashu_QuoteId';
+export const INPUT_QUOTE_ID_TAG = 'Cashu_InputQuoteId';
 
 // The high nibble is the section: 0x1n inputs, 0x2n outputs, 0xFn never in a transaction.
 const CONTAINER_PROOF_INPUT = 0x11;
 const CONTAINER_MINT_QUOTE_INPUT = 0x12;
 const CONTAINER_BLINDED_OUTPUT = 0x21;
 const CONTAINER_MELT_QUOTE_OUTPUT = 0x22;
+const CONTAINER_MINT_QUOTE_OUTPUT = 0x23;
 const CONTAINER_AUTHORIZED_REQUEST = 0xf1;
 
 export type TranscriptProofInput = {
@@ -76,6 +81,22 @@ export type TransactionShape = {
   mintQuoteInputs?: TranscriptQuoteInput[];
   blindedOutputs?: TranscriptBlindedOutput[];
   meltQuoteOutputs?: TranscriptQuote[];
+  /**
+   * Mint quote outputs (NUT-XX), each a fixed txout quote, in request order.
+   */
+  mintQuoteOutputs?: TranscriptMintQuoteOutput[];
+};
+
+export type TranscriptMintQuoteOutput = {
+  amount: bigint;
+  /**
+   * Lock key, 33-byte compressed secp256k1 hex.
+   */
+  pubkey: string;
+  /**
+   * The txout quote's id: {@link derivedQuoteId} or {@link inputBoundQuoteId}.
+   */
+  quoteId: string;
 };
 
 /**
@@ -188,6 +209,72 @@ function blindedOutputContainer(output: TranscriptBlindedOutput): Uint8Array {
   );
 }
 
+function mintQuoteOutputContainer(output: TranscriptMintQuoteOutput): Uint8Array {
+  if (!isValidSecpPubkey(output.pubkey)) {
+    throw new CTSError('Transcript mint quote output lock key must be a 33-byte compressed point');
+  }
+  if (output.quoteId.length === 0) {
+    throw new CTSError('Transcript quote id must be non-empty');
+  }
+  if (Amount.from(output.amount).isZero()) {
+    throw new CTSError('Transcript mint quote output amount must be positive');
+  }
+  return tlvRecord(
+    CONTAINER_MINT_QUOTE_OUTPUT,
+    concatBytes(
+      amountRecord(output.amount),
+      tlvRecord(0x02, hexToBytes(output.pubkey)),
+      tlvRecord(0x03, utf8ToBytes(output.quoteId)),
+    ),
+  );
+}
+
+/**
+ * A derived quote id (NUT-04): `hex(tagged_hash("Cashu_QuoteId", id_preimage))`.
+ *
+ * @remarks
+ * The preimage is 32 bytes its creator supplies (NUT-13 type `0x05` for a seeded wallet) and the
+ * mint never discloses.
+ */
+export function derivedQuoteId(idPreimage: Uint8Array): string {
+  if (idPreimage.length !== 32) {
+    throw new CTSError('Quote id preimage must be 32 bytes');
+  }
+  return bytesToHex(taggedHash(QUOTE_ID_TAG, idPreimage));
+}
+
+/**
+ * The id a fixed txout quote without `id_preimage` takes (NUT-XX), from the transaction's inputs.
+ *
+ * @remarks
+ * `hex(tagged_hash("Cashu_InputQuoteId", SHA256(input section) || u32_BE(k)))`, `k` the output's
+ * position among the mint quote outputs. Only a transaction spending exactly these inputs creates
+ * it.
+ */
+export function inputBoundQuoteId(
+  tx: Pick<TransactionShape, 'proofInputs' | 'mintQuoteInputs'>,
+  k: number,
+): string {
+  return inputBoundIdAt(sha256(inputSection(tx)), k);
+}
+
+function inputBoundIdAt(sectionHash: Uint8Array, k: number): string {
+  if (!Number.isInteger(k) || k < 0 || k > 0xffffffff) {
+    throw new CTSError('Mint quote output position must be a u32');
+  }
+  return bytesToHex(
+    taggedHash(INPUT_QUOTE_ID_TAG, concatBytes(sectionHash, numberToBytesBE(k, 4))),
+  );
+}
+
+// The transcript's input containers (0x1n) in order, the bytes an input-bound quote id hashes.
+function inputSection(tx: Pick<TransactionShape, 'proofInputs' | 'mintQuoteInputs'>): Uint8Array {
+  return concatBytes(
+    ...(tx.proofInputs ?? []).map(proofInputContainer),
+    ...(tx.mintQuoteInputs ?? []).map(mintQuoteInputContainer),
+  );
+}
+
 /**
  * Serialize a transaction to its TLV transcript (without the domain tag).
  */
@@ -196,10 +283,11 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
   const mintQuotes = tx.mintQuoteInputs ?? [];
   const blinded = tx.blindedOutputs ?? [];
   const meltQuotes = tx.meltQuoteOutputs ?? [];
+  const quoteOutputs = tx.mintQuoteOutputs ?? [];
   if (proofs.length + mintQuotes.length === 0) {
     throw new CTSError('Transaction requires at least one input');
   }
-  if (blinded.length + meltQuotes.length === 0) {
+  if (blinded.length + meltQuotes.length + quoteOutputs.length === 0) {
     throw new CTSError('Transaction requires at least one output');
   }
   // NUT-00: the same proof or quote twice would sign one input digest for two inputs.
@@ -210,10 +298,10 @@ export function buildTransactionTranscript(tx: TransactionShape): Uint8Array {
     throw new CTSError('Transaction repeats a mint quote input');
   }
   return concatBytes(
-    ...proofs.map(proofInputContainer),
-    ...mintQuotes.map(mintQuoteInputContainer),
+    inputSection(tx),
     ...blinded.map(blindedOutputContainer),
     ...meltQuotes.map(meltQuoteOutputContainer),
+    ...quoteOutputs.map(mintQuoteOutputContainer),
   );
 }
 
@@ -234,7 +322,7 @@ export function transactionMessage(tx: TransactionShape): Uint8Array {
  *
  * @remarks
  * Throws unless the bytes are exactly a run of well-formed, non-empty NUT-00 containers (proof
- * input through authorized request); an event id or other opaque 32 bytes never passes.
+ * input through mint quote output); an event id or other opaque 32 bytes never passes.
  */
 export function transcriptContainers(transcript: Uint8Array): Uint8Array[] {
   const records: Uint8Array[] = [];
@@ -328,6 +416,7 @@ type PayloadShape = {
    * `amount` is the quote amount plus the selected fee reserve ({@link meltOutputAmount}).
    */
   meltQuoteOutput?: { quoteId: string; amount: AmountLike };
+  mintQuoteOutputs?: Array<{ pubkey: string; quoteId: string; amount: AmountLike }>;
 };
 
 /**
@@ -396,6 +485,13 @@ function payloadToTransaction(payload: PayloadShape): TransactionShape {
       })),
     }),
     ...(payload.meltQuoteOutput && { meltQuoteOutputs: [quote(payload.meltQuoteOutput)] }),
+    ...(payload.mintQuoteOutputs && {
+      mintQuoteOutputs: payload.mintQuoteOutputs.map((c) => ({
+        amount: Amount.from(c.amount).toBigInt(),
+        pubkey: c.pubkey,
+        quoteId: c.quoteId,
+      })),
+    }),
   };
 }
 
@@ -411,6 +507,19 @@ export function messageForPayload(payload: PayloadShape): Uint8Array {
  */
 export function inputsForPayload(payload: PayloadShape): ReturnType<typeof transactionInputs> {
   return transactionInputs(payloadToTransaction(payload));
+}
+
+/**
+ * {@link inputBoundQuoteId} over payload wire shapes, for any position `k`.
+ *
+ * @remarks
+ * The inputs are converted and hashed once, here: each proof's `Y` is a hash to curve.
+ */
+export function inputBoundIdsForPayload(
+  payload: Pick<PayloadShape, 'proofInputs' | 'mintQuoteInputs'>,
+): (k: number) => string {
+  const sectionHash = sha256(inputSection(payloadToTransaction(payload)));
+  return (k) => inputBoundIdAt(sectionHash, k);
 }
 
 /**

@@ -1,6 +1,6 @@
 import { schnorr } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, concatBytes, hexToBytes } from '@noble/hashes/utils.js';
 import { describe, test, expect } from 'vitest';
 
 import { hashToCurveHex } from '../../src/crypto/curves';
@@ -16,6 +16,8 @@ import {
   messageForPayload,
   requestDigest,
   signTransactionInput,
+  derivedQuoteId,
+  inputBoundQuoteId,
   transactionDigest,
   transcriptContainers,
   transactionInputs,
@@ -45,8 +47,9 @@ function fromVectorTx(tx: {
   }>;
   blinded_outputs?: Array<{ amount: number; keyset_id: string; B_: string }>;
   melt_quote_outputs?: Array<{ amount: number; quote_id: string }>;
+  mint_quote_outputs?: Array<{ pubkey: string; amount: number; id_preimage?: string }>;
 }): TransactionShape {
-  return {
+  const shape: TransactionShape = {
     proofInputs: tx.proof_inputs?.map((p) => ({
       amount: BigInt(p.amount),
       keysetId: p.keyset_id,
@@ -69,9 +72,47 @@ function fromVectorTx(tx: {
       quoteId: q.quote_id,
     })),
   };
+  shape.mintQuoteOutputs = tx.mint_quote_outputs?.map((c, k) => ({
+    amount: BigInt(c.amount),
+    quoteId:
+      c.id_preimage !== undefined
+        ? derivedQuoteId(hexToBytes(c.id_preimage))
+        : inputBoundQuoteId(shape, k),
+    pubkey: c.pubkey,
+  }));
+  return shape;
 }
 
 describe('transaction transcript (vectors)', () => {
+  // NUT-XX: a fixed txout quote without id_preimage takes an id bound to the transaction's inputs.
+  test('an input-bound quote id hashes the input section and the output position', () => {
+    const v = tv.proof_to_input_bound_txout;
+    const tx = fromVectorTx(v.tx);
+    expect(bytesToHex(buildTransactionTranscript(tx))).toBe(v.transcript);
+    expect(bytesToHex(transactionDigest(tx))).toBe(v.digest);
+    expect(tx.mintQuoteOutputs!.map((c) => c.quoteId)).toEqual(v.quote_ids);
+    const inputs = transcriptContainers(hexToBytes(v.transcript)).filter((c) => c[0] >> 4 === 1);
+    expect(inputs).toHaveLength(2);
+    expect(
+      transcriptContainers(hexToBytes(v.transcript))
+        .filter((c) => c[0] === 0x23)
+        .map((c) => bytesToHex(c)),
+    ).toEqual(v.mint_quote_output_containers);
+    expect(bytesToHex(sha256(concatBytes(...inputs)))).toBe(v.input_section_hash);
+    // The id moves with the position and with any input, and no preimage reaches it.
+    expect(inputBoundQuoteId(tx, 0)).not.toBe(v.quote_ids[1]);
+    expect(inputBoundQuoteId({ proofInputs: tx.proofInputs }, 1)).not.toBe(v.quote_ids[1]);
+    expect(derivedQuoteId(hexToBytes(v.input_section_hash))).not.toBe(v.quote_ids[1]);
+    expect(() => inputBoundQuoteId(tx, -1)).toThrow(/u32/);
+  });
+
+  test('fixed txout quotes carry their amounts first, in request order', () => {
+    const v = tv.proof_to_two_fixed_txouts;
+    expect(v.transcript.endsWith(v.mint_quote_output_containers.join(''))).toBe(true);
+    expect(v.mint_quote_output_containers.every((c) => c.startsWith('23006b010001'))).toBe(true);
+    expect(fromVectorTx(v.tx).mintQuoteOutputs!.map((c) => c.quoteId)).toEqual(v.quote_ids);
+  });
+
   // NUT-10 tests, "Mixed keysets": every proof input's 03 field is Y on its keyset's curve.
   test('a mixed-keyset transcript names every proof input by Y', () => {
     const mixed = tv.mixed_keysets;
@@ -132,15 +173,19 @@ describe('transaction transcript (vectors)', () => {
     ).toThrow(/Y/);
   });
 
-  test.each(['swap', 'mint', 'melt', 'melt_with_change', 'mint_quote_to_melt'] as const)(
-    '%s transcript and digest match',
-    (name) => {
-      const example = tv[name];
-      const tx = fromVectorTx(example.tx);
-      expect(bytesToHex(buildTransactionTranscript(tx))).toBe(example.transcript);
-      expect(bytesToHex(transactionDigest(tx))).toBe(example.digest);
-    },
-  );
+  test.each([
+    'swap',
+    'mint',
+    'melt',
+    'melt_with_change',
+    'mint_quote_to_melt',
+    'proof_to_two_fixed_txouts',
+  ] as const)('%s transcript and digest match', (name) => {
+    const example = tv[name];
+    const tx = fromVectorTx(example.tx);
+    expect(bytesToHex(buildTransactionTranscript(tx))).toBe(example.transcript);
+    expect(bytesToHex(transactionDigest(tx))).toBe(example.digest);
+  });
 
   test('an input digest needs a 32-byte transaction digest', () => {
     expect(() => inputDigest(new Uint8Array(31), new Uint8Array(3))).toThrow(/32 bytes/);
@@ -479,6 +524,52 @@ describe('keyset ids in the transcript', () => {
     expect(() =>
       transactionDigest({ proofInputs: [{ ...v3Input, keysetId: '' }], blindedOutputs: [out] }),
     ).toThrow(/keyset id/);
+  });
+});
+
+describe('mint quote outputs (NUT-XX vectors)', () => {
+  const v = tv.proof_to_two_fixed_txouts;
+  const locks = vectors.nut13_v3.quote_locks;
+
+  test('fixed txout quotes bind amount, lock key and the id their preimage derives', () => {
+    for (const lock of locks) {
+      expect(derivedQuoteId(hexToBytes(lock.id_preimage))).toBe(lock.quote_id);
+    }
+    expect(v.quote_ids).toEqual([locks[2].quote_id, locks[3].quote_id]);
+    expect(v.transcript.endsWith(v.mint_quote_output_containers.join(''))).toBe(true);
+    const { proofs } = inputsForPayload({
+      proofInputs: v.tx.proof_inputs.map((p) => ({ ...p, id: p.keyset_id })),
+      mintQuoteOutputs: v.tx.mint_quote_outputs.map((c, k) => ({
+        pubkey: c.pubkey,
+        quoteId: v.quote_ids[k],
+        amount: c.amount,
+      })),
+    });
+    expect(bytesToHex([...proofs.values()][0].digest)).toBe(v.input_digest);
+    expect(() => derivedQuoteId(new Uint8Array(31))).toThrow(/32 bytes/);
+  });
+
+  test('a malformed mint quote output throws', () => {
+    const proofInputs = fromVectorTx(v.tx).proofInputs;
+    const { pubkey, quote_id: quoteId } = locks[2];
+    expect(() =>
+      buildTransactionTranscript({
+        proofInputs,
+        mintQuoteOutputs: [{ pubkey: pubkey.slice(2), quoteId, amount: 1n }],
+      }),
+    ).toThrow(/lock key/);
+    expect(() =>
+      buildTransactionTranscript({
+        proofInputs,
+        mintQuoteOutputs: [{ pubkey, quoteId: '', amount: 1n }],
+      }),
+    ).toThrow(/quote id/);
+    expect(() =>
+      buildTransactionTranscript({
+        proofInputs,
+        mintQuoteOutputs: [{ pubkey, quoteId, amount: 0n }],
+      }),
+    ).toThrow(/positive/);
   });
 });
 
