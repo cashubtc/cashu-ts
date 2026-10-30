@@ -108,11 +108,13 @@ describe('transaction transcript (vectors)', () => {
     expect(transcript).not.toContain(bytesToHex(new TextEncoder().encode(legacy.secret)));
     // At the payload boundary a caller names an input by secret or by the Y it already holds.
     const outputs = tx.blindedOutputs!.map((o) => ({ amount: o.amount, id: o.keysetId, B_: o.B_ }));
-    const bySecret = messageForPayload({ inputs: [v3, legacy], outputs });
-    expect(digestForPayload({ inputs: [v3, legacy], outputs })).toEqual(sha256(bySecret));
+    const bySecret = messageForPayload({ proofInputs: [v3, legacy], blindedOutputs: outputs });
+    expect(digestForPayload({ proofInputs: [v3, legacy], blindedOutputs: outputs })).toEqual(
+      sha256(bySecret),
+    );
     const byY = messageForPayload({
-      inputs: [{ amount: v3.amount, id: v3.id, C: v3.C, Y: v3Key }, legacy],
-      outputs,
+      proofInputs: [{ amount: v3.amount, id: v3.id, C: v3.C, Y: v3Key }, legacy],
+      blindedOutputs: outputs,
     });
     expect(bytesToHex(bySecret)).toBe(transcript);
     expect(bytesToHex(byY)).toBe(transcript);
@@ -130,7 +132,7 @@ describe('transaction transcript (vectors)', () => {
     ).toThrow(/Y/);
   });
 
-  test.each(['swap', 'mint', 'melt', 'melt_with_change'] as const)(
+  test.each(['swap', 'mint', 'melt', 'melt_with_change', 'mint_quote_to_melt'] as const)(
     '%s transcript and digest match',
     (name) => {
       const example = tv[name];
@@ -380,7 +382,7 @@ describe('transaction transcript (vectors)', () => {
       id: o.keyset_id,
       B_: o.B_,
     }));
-    const { proofs } = inputsForPayload({ inputs: [legacy, v3], outputs });
+    const { proofs } = inputsForPayload({ proofInputs: [legacy, v3], blindedOutputs: outputs });
     expect(proofs.size).toBe(2);
     expect(proofs.get(proofInputY(legacy))!.digest).not.toEqual(
       proofs.get(proofInputY(v3))!.digest,

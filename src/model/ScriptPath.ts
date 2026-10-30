@@ -122,7 +122,11 @@ function payloadTranscript(
   outputs: SerializedBlindedMessage[],
   meltQuote?: { quoteId: string; amount: bigint },
 ): Uint8Array {
-  return messageForPayload({ inputs, outputs, ...(meltQuote && { meltQuote }) });
+  return messageForPayload({
+    proofInputs: inputs,
+    blindedOutputs: outputs,
+    ...(meltQuote && { meltQuoteOutput: meltQuote }),
+  });
 }
 
 /**
@@ -234,7 +238,7 @@ function mintTranscript(preview: AnyMintPreview): Uint8Array {
   if (!outputs.every((o) => isBlsKeyset(o.id))) {
     throw new CTSError('A mint signing package needs outputs on a v3 keyset');
   }
-  return messageForPayload({ mintQuotes: mintQuoteInputs(preview), outputs });
+  return messageForPayload({ mintQuoteInputs: mintQuoteInputs(preview), blindedOutputs: outputs });
 }
 
 function extractMintPackage(

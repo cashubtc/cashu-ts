@@ -36,6 +36,8 @@ import {
   type MeltQuoteOnchainResponse,
   type Proof,
   type SwapRequest,
+  type TransactionRequest,
+  type TransactionResponse,
   type SerializedBlindedMessage,
   type SerializedBlindedSignature,
 } from '../model/types';
@@ -233,6 +235,60 @@ class Mint {
     data.signatures = this.normalizeSignatureAmounts(data.signatures);
 
     return data;
+  }
+
+  // -----------------------------------------------------------------
+  // Section: Transaction (NUT-XX)
+  // -----------------------------------------------------------------
+
+  /**
+   * Posts a NUT-XX transaction: proofs and quote inputs in, blinded messages and a melt out.
+   *
+   * @remarks
+   * A pending transaction settles through its melt quote ({@link Mint.checkMeltQuote}); a mint with
+   * NUT-19 caching may answer a resent request from its cache.
+   * @param options.meltMethod The melt quote's payment method, for response normalization.
+   */
+  async transaction(
+    payload: TransactionRequest,
+    options?: MintCallOptions & { meltMethod?: string },
+  ): Promise<TransactionResponse> {
+    failIf(
+      !Array.isArray(payload?.proof_inputs),
+      'transaction: proof_inputs must be an array',
+      this._logger,
+    );
+    const data = await this.requestWithAuth<TransactionResponse>(
+      'POST',
+      '/v1/transaction',
+      { requestBody: { ...payload, proof_inputs: this.stripWalletFields(payload.proof_inputs) } },
+      options,
+    );
+    return this.normalizeTransactionResponse(data, payload.blinded_outputs, options?.meltMethod);
+  }
+
+  private normalizeTransactionResponse(
+    data: TransactionResponse,
+    outputs: unknown[],
+    meltMethod = 'bolt11',
+  ): TransactionResponse {
+    if (
+      !isRecord(data) ||
+      !['PENDING', 'PAID', 'FAILED'].includes(data.state) ||
+      !Array.isArray(data.signatures) ||
+      !Array.isArray(data.melt_quotes)
+    ) {
+      this._logger.error('Invalid response from mint...', { op: 'transaction' });
+      throw new CTSError('Invalid response from mint');
+    }
+    this.assertSignatureCount(data.signatures, outputs, 'transaction');
+    return {
+      ...data,
+      signatures: this.normalizeSignatureAmounts(data.signatures),
+      melt_quotes: data.melt_quotes.map((m) =>
+        this.normalizeMeltQuoteResponse(meltMethod, m, undefined, true),
+      ),
+    };
   }
 
   // -----------------------------------------------------------------

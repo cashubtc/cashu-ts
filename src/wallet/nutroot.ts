@@ -69,7 +69,9 @@ export type ScriptPathSpend = {
  * recoverable are left unsigned and the mint rejects them.
  */
 export async function attachTransactionWitnesses(
-  payload: Pick<MeltRequest, 'inputs' | 'outputs'>,
+  payload: Pick<MeltRequest, 'inputs' | 'outputs'> & {
+    mintQuoteInputs?: Array<{ quoteId: string; amount: Amount; lockKey: string; issued: Amount }>;
+  },
   meltQuote: { quoteId: string; amount: Amount } | undefined,
   extraKeys: Map<string, Uint8Array> | undefined,
   scriptSpends: Map<string, ScriptPathSpend> | undefined,
@@ -88,12 +90,13 @@ export async function attachTransactionWitnesses(
     }),
   );
   const { transactionMessage, proofs: inputContexts } = inputsForPayload({
-    inputs: payload.inputs.map((p) => {
+    proofInputs: payload.inputs.map((p) => {
       const Y = Ys.get(p.secret);
       return Y !== undefined && isBlsKeyset(p.id) ? { amount: p.amount, id: p.id, C: p.C, Y } : p;
     }),
-    outputs: payload.outputs ?? [],
-    ...(meltQuote && { meltQuote }),
+    blindedOutputs: payload.outputs ?? [],
+    ...(meltQuote && { meltQuoteOutput: meltQuote }),
+    mintQuoteInputs: payload.mintQuoteInputs,
   });
   // Script path spends first: they name their own leaf, so they take precedence over the key
   // path even where both are available. Everything but the signature was settled before the
