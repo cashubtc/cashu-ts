@@ -281,20 +281,11 @@ export class KeyChain {
    * Get the cheapest usable active keyset.
    *
    * @remarks
-   * Selection narrows before it ranks. Superseded keyset ID versions are dropped, so only the
-   * newest version the mint offers is ever chosen. What remains is filtered to keysets that stay
-   * usable until `usableUntil`, then ranked by lowest fee, then the one usable longest, where a
-   * keyset is usable until the earlier of `active_until` and `final_expiry`. An absent timestamp
-   * counts as never, since NUT-02 forbids a mint inactivating a keyset it has not announced an
-   * `active_until` for.
-   *
-   * With no argument the horizon is 30 days out, the window NUT-02 obliges a mint to keep at least
-   * one keyset per unit active for. If the mint offers nothing that long-lived the horizon is
-   * dropped rather than failing, so a misbehaving mint degrades instead of stalling the wallet. An
-   * explicit `usableUntil` is a requirement rather than a preference, and throws when unmet.
-   * @param usableUntil Optional unix time (seconds) the keyset must still be usable at. Use it for
-   *   outputs that must stay spendable for a known period, such as a spending condition with a
-   *   future locktime.
+   * Newest keyset version only, usable past the horizon, then cheapest, then usable longest. Usable
+   * means before both `active_until` and `final_expiry` (absent = never). The default 30 day
+   * horizon (NUT-02) relaxes when nothing meets it; an explicit `usableUntil` throws.
+   * @param usableUntil Optional unix time (seconds) the keyset must still be usable at, eg a
+   *   locktime.
    * @returns Active Keyset.
    * @throws If none found, uninitialized, or nothing meets an explicit `usableUntil`.
    */
