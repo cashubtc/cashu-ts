@@ -364,7 +364,9 @@ export class WalletEvents {
       sub.abort();
       if (all.signal.aborted) return;
       mode('polling');
-      this._poll(poll, pollMs, all.signal, cb).catch(err);
+      this._poll(poll, pollMs, all.signal, cb).catch((e: unknown) =>
+        safeCallback(err, normalizeError(e), this.wallet.logger, { event: kind }),
+      );
     });
     const live = once(() => {
       clearTimeout(grace);
