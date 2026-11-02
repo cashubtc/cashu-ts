@@ -7,6 +7,7 @@ import { type Logger, NULL_LOGGER } from '../logger';
 import { CTSError } from '../model/Errors';
 import { type OutputDataLike } from '../model/OutputData';
 import { type HTLCWitness, type P2PKWitness, type Proof } from '../model/types';
+import { hasLoneSurrogate } from '../utils/bytes';
 import {
   MAX_P2BK_SLOTS,
   MAX_P2PK_PUBKEYS,
@@ -831,6 +832,10 @@ export function buildP2PKSigAllMessageV1(
   const pushFramed = (bytes: Uint8Array): void => {
     parts.push(numberToBytesBE(bytes.length, 4), bytes);
   };
+  // Ill-formed UTF-16 would frame as its U+FFFD replacement, aliasing distinct messages.
+  for (const s of [...inputs.map((p) => p.secret), quoteId ?? '']) {
+    if (hasLoneSurrogate(s)) throw new CTSError('SIG_ALL text must be well-formed UTF-16');
+  }
   // Record types follow the v3 transcript's input/output/melt quote containers.
   for (const p of inputs) {
     parts.push(Uint8Array.of(0x11));
