@@ -4938,7 +4938,14 @@ class Wallet {
     if (melt && outputType.type !== 'custom' && melt.feeReserve.greaterThan(0)) {
       const largest = getKeysetAmounts(this.getOutputKeyset(outputs.keysetId).keys)[0].toBigInt();
       const max = melt.feeReserve.toBigInt();
-      blanks = Math.max(ceilLog2(max < largest ? max : largest) + Number(max / largest), 1);
+      // Compared as bigint: the count becomes an array length, so bound it before Number().
+      const needed = BigInt(ceilLog2(max < largest ? max : largest)) + max / largest;
+      this.failIf(
+        needed > BigInt(this.maxArrayLength),
+        `prepareTransaction: the melt fee reserve needs more blank outputs than the mint accepts (${this.maxArrayLength})`,
+        { feeReserve: melt.feeReserve.toString(), largest: largest.toString() },
+      );
+      blanks = Math.max(Number(needed), 1);
     }
     let outputData: OutputDataLike[] = [];
     if (!amount.isZero() || custom.length > 0 || blanks > 0) {

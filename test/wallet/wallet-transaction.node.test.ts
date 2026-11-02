@@ -417,6 +417,27 @@ describe('Wallet transactions (NUT-XX)', () => {
     ).rejects.toThrow('must equal');
   });
 
+  test('a fee reserve needing more blanks than the mint accepts is rejected', async () => {
+    serveInfo({ supported: true, quote_input_fee_ppk: 0 });
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+    // On this {1, 2} keyset a reserve of 2000 needs 1001 blanks, above the default 500 cap.
+    const big = { ...quote, amount_paid: Amount.from(4096) };
+    await expect(
+      wallet.prepareTransaction({
+        mintQuoteInputs: [{ quote: big, amount: 2005 }],
+        meltQuoteOutput: {
+          method: 'bolt11',
+          quote: {
+            quote: 'quote-melt-0001',
+            amount: Amount.from(5),
+            fee_reserve: Amount.from(2000),
+          },
+        },
+      }),
+    ).rejects.toThrow('more blank outputs than the mint accepts');
+  });
+
   test('a melt returns its change in blank outputs, the zero ones omitted', async () => {
     serveInfo({ supported: true, quote_input_fee_ppk: 0 });
     const bodies: any[] = [];
