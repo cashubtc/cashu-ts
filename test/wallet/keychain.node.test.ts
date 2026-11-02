@@ -917,7 +917,7 @@ describe('KeyChain.getCheapestKeyset prefers the newest keyset version', () => {
     expect(expiringFirst.getCheapestKeyset().id).toBe(forever.meta.id);
   });
 
-  // active_until is the horizon for minting new outputs, so it outranks final_expiry.
+  // A keyset is usable until the earlier of active_until and final_expiry; the later of those wins.
   test('same version and fee: a later active_until beats a later final_expiry', async () => {
     const goesInactiveFirst = makeKeyset(1, 1, 9000, 1000);
     const staysActiveLonger = makeKeyset(1, 1, 8000, 2000);
@@ -925,7 +925,14 @@ describe('KeyChain.getCheapestKeyset prefers the newest keyset version', () => {
     expect(chain.getCheapestKeyset().id).toBe(staysActiveLonger.meta.id);
   });
 
-  test('same version and fee: no active_until beats any active_until', async () => {
+  test('same version and fee: a later final_expiry beats a later active_until', async () => {
+    const expiresFirst = makeKeyset(1, 1, 2000);
+    const expiresLater = makeKeyset(1, 1, 9000, 5000);
+    const chain = await initChainWith([expiresFirst.keys, expiresLater.keys]);
+    expect(chain.getCheapestKeyset().id).toBe(expiresLater.meta.id);
+  });
+
+  test('same version and fee: no active_until beats an earlier active_until', async () => {
     const announced = makeKeyset(1, 1, 9000, 5000);
     const unannounced = makeKeyset(1, 1, 8000);
     const chain = await initChainWith([announced.keys, unannounced.keys]);

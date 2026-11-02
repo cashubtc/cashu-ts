@@ -283,9 +283,10 @@ export class KeyChain {
    * @remarks
    * Selection narrows before it ranks. Superseded keyset ID versions are dropped, so only the
    * newest version the mint offers is ever chosen. What remains is filtered to keysets that stay
-   * usable until `usableUntil`, then ranked by lowest fee, latest `active_until`, latest
-   * `final_expiry`. An absent timestamp counts as never, since NUT-02 forbids a mint inactivating a
-   * keyset it has not announced an `active_until` for.
+   * usable until `usableUntil`, then ranked by lowest fee, then the one usable longest, where a
+   * keyset is usable until the earlier of `active_until` and `final_expiry`. An absent timestamp
+   * counts as never, since NUT-02 forbids a mint inactivating a keyset it has not announced an
+   * `active_until` for.
    *
    * With no argument the horizon is 30 days out, the window NUT-02 obliges a mint to keep at least
    * one keyset per unit active for. If the mint offers nothing that long-lived the horizon is
@@ -337,11 +338,11 @@ export class KeyChain {
     const newest = candidates.reduce((max, k) => (k.version > max ? k.version : max), -1);
     const current = candidates.filter((k) => k.version === newest);
 
+    // A keyset stops being usable at whichever of active_until and final_expiry comes first.
     const never = Number.MAX_SAFE_INTEGER;
+    const usableTo = (k: Keyset): number => Math.min(k.activeUntil ?? never, k.expiry ?? never);
     const horizon = usableUntil ?? Math.floor(Date.now() / 1000) + ACTIVE_WINDOW_SECONDS;
-    const longLived = current.filter(
-      (k) => (k.activeUntil ?? never) >= horizon && (k.expiry ?? never) >= horizon,
-    );
+    const longLived = current.filter((k) => usableTo(k) >= horizon);
     failIf(
       longLived.length === 0 && usableUntil !== undefined,
       `No active keyset for unit ${this.unit} stays usable until ${usableUntil}`,
@@ -350,10 +351,7 @@ export class KeyChain {
     );
 
     return (longLived.length > 0 ? longLived : current).sort(
-      (a, b) =>
-        a.fee - b.fee ||
-        (b.activeUntil ?? never) - (a.activeUntil ?? never) ||
-        (b.expiry ?? never) - (a.expiry ?? never),
+      (a, b) => a.fee - b.fee || usableTo(b) - usableTo(a),
     )[0];
   }
 
