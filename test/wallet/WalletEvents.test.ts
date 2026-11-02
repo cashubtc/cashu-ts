@@ -2032,6 +2032,54 @@ describe('WalletEvents', () => {
         expect.objectContaining({ error: expect.objectContaining({ message: 'poll boom' }) }),
       );
     });
+
+    it.each(['throwing', 'rejecting'])(
+      'contains and logs a %s polling-fallback error callback',
+      async (mode) => {
+        const logger = {
+          warn: vi.fn(),
+          error: vi.fn(),
+          info: vi.fn(),
+          debug: vi.fn(),
+          trace: vi.fn(),
+          log: vi.fn(),
+        };
+        const wallet = {
+          mint: new MockMint(),
+          computeY,
+          unit: 'sat',
+          getMintInfo: () => nut17([]),
+          // Every status request fails, so the poll gives up and reports through err
+          checkMintQuote: vi.fn(async () => {
+            throw new Error('mint down');
+          }),
+          logger,
+        };
+        const ev = new WalletEvents(wallet as any);
+        const ac = new AbortController();
+        const err =
+          mode === 'throwing'
+            ? () => {
+                throw new Error('err boom');
+              }
+            : async () => {
+                throw new Error('err boom');
+              };
+
+        // eslint-disable-next-line @typescript-eslint/no-misused-promises -- async-callback tolerance is what's under test
+        await ev.mintQuoteUpdates(['q1'], vi.fn(), err, { pollMs: 1, signal: ac.signal });
+        await vi.waitFor(() =>
+          expect(logger.warn).toHaveBeenCalledWith(
+            'callback failed',
+            expect.objectContaining({
+              event: 'bolt11_mint_quote',
+              error: expect.objectContaining({ message: 'err boom' }),
+            }),
+          ),
+        );
+        ac.abort();
+      },
+    );
   });
 
   describe('countersReserved error logging', () => {
