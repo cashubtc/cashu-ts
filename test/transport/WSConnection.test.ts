@@ -307,6 +307,28 @@ describe('WSConnection – close and lifecycle', () => {
     expect(errorCallback.mock.calls[0][0]).toMatchObject({ message: 'WebSocket closed' });
   });
 
+  test('close() contains and logs a rejecting subscription error callback', async () => {
+    const logger = createLogger();
+    const conn = new WSConnection(fakeUrl, logger);
+    await conn.connect();
+    conn.createSubscription(
+      { kind: 'bolt11_mint_quote', filters: ['unacked'] },
+      vi.fn(),
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises -- async-callback tolerance is what's under test
+      async () => {
+        throw new Error('err boom');
+      },
+    );
+
+    conn.close();
+    await new Promise((res) => setTimeout(res, 0));
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      'callback failed',
+      expect.objectContaining({ error: expect.objectContaining({ message: 'err boom' }) }),
+    );
+  });
+
   test('connect rejects when socket errors before opening', async () => {
     class ErrorBeforeOpenWebSocket {
       static readonly CONNECTING = 0;
