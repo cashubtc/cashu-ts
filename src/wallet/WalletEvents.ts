@@ -149,12 +149,16 @@ function normalizeError(err: unknown): Error {
 }
 
 // A malformed payload reports through err rather than reaching cb with the wrong types
-function guarded<T>(normalize: (p: T) => T, err: (e: Error) => void): (p: T) => T | undefined {
+function guarded<T>(
+  normalize: (p: T) => T,
+  err: (e: Error) => void,
+  logger: Logger,
+): (p: T) => T | undefined {
   return (p) => {
     try {
       return normalize(p);
     } catch (e) {
-      err(normalizeError(e));
+      safeCallback(err, normalizeError(e), logger);
       return undefined;
     }
   };
@@ -598,7 +602,7 @@ export class WalletEvents {
       {
         kind: `${method}_mint_quote`,
         filters: uniq,
-        decode: guarded<TRes>((p) => normalizeMintQuoteUpdate(p, method), err),
+        decode: guarded<TRes>((p) => normalizeMintQuoteUpdate(p, method), err, this.wallet.logger),
       },
       { fetch, key: (q) => q.quote, state: mintQuoteState },
       cb,
@@ -624,7 +628,7 @@ export class WalletEvents {
     return this.mintQuoteUpdates<TRes>(
       [id],
       (p) => {
-        if (isMintQuotePaid(p)) cb(p);
+        if (isMintQuotePaid(p)) safeCallback(cb, p, this.wallet.logger);
       },
       err,
       opts,
@@ -657,7 +661,11 @@ export class WalletEvents {
       {
         kind: `${method}_melt_quote`,
         filters: uniq,
-        decode: guarded<TRes>((p) => normalizeMeltQuoteUpdate(p, method, this.wallet.logger), err),
+        decode: guarded<TRes>(
+          (p) => normalizeMeltQuoteUpdate(p, method, this.wallet.logger),
+          err,
+          this.wallet.logger,
+        ),
       },
       {
         fetch: () => this._eachQuote(uniq, (id) => this.wallet.checkMeltQuote<TRes>(method, id)),
@@ -687,7 +695,7 @@ export class WalletEvents {
     return this.meltQuoteUpdates<TRes>(
       [id],
       (p) => {
-        if (p.state === MeltQuoteState.PAID) cb(p);
+        if (p.state === MeltQuoteState.PAID) safeCallback(cb, p, this.wallet.logger);
       },
       err,
       opts,
