@@ -1,6 +1,7 @@
 import { hexToBytes } from '@noble/hashes/utils.js';
 
 import { pointFromHex, verifyDLEQProof_reblind } from '../crypto';
+import { safeCallback } from '../logger';
 import { Amount } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import type { HasKeysetKeys, Proof, ProofLike } from '../model/types';
@@ -106,7 +107,7 @@ async function verify<T extends ProofLike>(
     chunkSize: chunkSizeOrThrow(opts?.chunkSize),
     budgetMs: budgetOrThrow(opts?.budgetMs),
     signal: opts?.signal,
-    onProgress: opts?.onProgress,
+    onProgress: (done, total) => safeCallback(() => opts?.onProgress?.(done, total), undefined),
   });
   const result: ProofVerification<T> = { valid: [], invalid: [] };
   errors.forEach((error, i) => {
