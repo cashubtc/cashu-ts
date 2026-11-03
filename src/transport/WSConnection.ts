@@ -182,9 +182,8 @@ export class WSConnection {
           // fail() nulls onclose before closing, so onClose consumers (eg the polling fallback) get
           // the notification here. Teardown first, callbacks last, as the real close path does: a
           // callback that reconnects or unsubscribes must not see the dying socket as current.
-          this.onCloseCallbacks.forEach((cb) =>
-            cb({ code: WS_ABNORMAL_CLOSURE, reason: err.message, wasClean: false }),
-          );
+          const closeEvent = { code: WS_ABNORMAL_CLOSURE, reason: err.message, wasClean: false };
+          this.onCloseCallbacks.forEach((cb) => safeCallback(cb, closeEvent, this._logger));
           return;
         }
         this.messageQueue.enqueue(e.data as string);
@@ -222,7 +221,7 @@ export class WSConnection {
           this.rpcListeners = {};
         }
 
-        this.onCloseCallbacks.forEach((cb) => cb(e));
+        this.onCloseCallbacks.forEach((cb) => safeCallback(cb, e, this._logger));
       };
     });
 
@@ -367,7 +366,8 @@ export class WSConnection {
           }
         } else if ('error' in parsed && parsed.id != undefined) {
           if (this.rpcListeners[parsed.id]) {
-            this.rpcListeners[parsed.id].errorCallback(new CTSError(parsed.error.message));
+            const { errorCallback } = this.rpcListeners[parsed.id];
+            safeCallback(errorCallback, new CTSError(parsed.error.message), this._logger);
             this.removeRpcListener(parsed.id);
           }
         } else if ('method' in parsed) {
