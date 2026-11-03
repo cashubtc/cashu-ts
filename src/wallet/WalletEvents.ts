@@ -1020,19 +1020,11 @@ export class WalletEvents {
           if (dropMode === 'oldest') {
             const dropped = queue.shift();
             if (dropped !== undefined) {
-              try {
-                opts?.onDrop?.(dropped);
-              } catch {
-                /* noop */
-              }
+              safeCallback(opts?.onDrop, dropped, this.wallet.logger, { event: 'onDrop' });
             }
             queue.push(payload);
           } else {
-            try {
-              opts?.onDrop?.(payload);
-            } catch {
-              /* noop */
-            }
+            safeCallback(opts?.onDrop, payload, this.wallet.logger, { event: 'onDrop' });
             return; // drop newest
           }
         } else {

@@ -1245,6 +1245,18 @@ describe('test zero-knowledge utilities', () => {
       expect(seen.every((d, i) => i === 0 || d >= seen[i - 1])).toBe(true);
       expect(seen[seen.length - 1]).toBe(70);
     });
+
+    test.each(['throwing', 'rejecting'])('a %s onProgress is contained', async (mode) => {
+      const fail = () => {
+        throw new Error('progress boom');
+      };
+      const { valid } = await verifyMintSignatures([serializedProof], () => keyset, {
+        // eslint-disable-next-line @typescript-eslint/no-misused-promises -- async-callback tolerance is what's under test
+        onProgress: mode === 'throwing' ? fail : async () => fail(),
+      });
+      await new Promise((r) => setTimeout(r, 0));
+      expect(valid).toHaveLength(1);
+    });
   });
 
   describe('verifyReceivedProofs', () => {
