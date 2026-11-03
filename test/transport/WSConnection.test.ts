@@ -504,6 +504,43 @@ describe('WSConnection – close and lifecycle', () => {
     srv.close();
   });
 
+  test('a throwing or rejecting onClose callback is contained and later ones still fire', async () => {
+    const url = 'ws://localhost:3352/v1/ws';
+    const srv = new Server(url, { mock: false });
+    const logger = createLogger();
+    const conn = new WSConnection(url, logger);
+    let serverSocket!: Client;
+
+    await new Promise<void>((res) => {
+      srv.on('connection', (socket) => {
+        serverSocket = socket;
+        res();
+      });
+      void conn.connect();
+    });
+
+    conn.onClose(() => {
+      throw new Error('sync boom');
+    });
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises -- async-callback tolerance is what's under test
+    conn.onClose(async () => {
+      throw new Error('async boom');
+    });
+    await new Promise<void>((res) => {
+      conn.onClose(() => res());
+      serverSocket.close();
+    });
+    await new Promise((res) => setTimeout(res, 0));
+
+    for (const message of ['sync boom', 'async boom']) {
+      expect(logger.warn).toHaveBeenCalledWith(
+        'callback failed',
+        expect.objectContaining({ error: expect.objectContaining({ message }) }),
+      );
+    }
+    srv.close();
+  });
+
   test('abnormal close (non-1000 code) calls pending RPC errorCallbacks', async () => {
     const url = 'ws://localhost:3340/v1/ws';
     const srv = new Server(url, { mock: false });
@@ -793,6 +830,46 @@ describe('WSConnection – message handling', () => {
     expect(errorCb).toHaveBeenCalledWith(
       expect.objectContaining({ message: 'subscription rejected' }),
     );
+    srv.close();
+  });
+
+  test('a rejecting RPC errorCallback is contained and logged', async () => {
+    const url = 'ws://localhost:3353/v1/ws';
+    const srv = new Server(url, { mock: false });
+
+    srv.on('connection', (socket) => {
+      socket.on('message', (m) => {
+        const parsed = JSON.parse(m.toString());
+        socket.send(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            error: { message: 'subscription rejected', code: -32000 },
+            id: parsed.id,
+          }),
+        );
+      });
+    });
+
+    const logger = createLogger();
+    const conn = new WSConnection(url, logger);
+    await conn.connect();
+
+    conn.createSubscription(
+      { kind: 'bolt11_mint_quote', filters: [] },
+      vi.fn(),
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises -- async-callback tolerance is what's under test
+      async () => {
+        throw new Error('err boom');
+      },
+    );
+
+    await vi.waitFor(() =>
+      expect(logger.warn).toHaveBeenCalledWith(
+        'callback failed',
+        expect.objectContaining({ error: expect.objectContaining({ message: 'err boom' }) }),
+      ),
+    );
+    conn.close();
     srv.close();
   });
 
@@ -1740,6 +1817,10 @@ describe('WSConnection – listener management', () => {
       socket.open();
       await connecting;
 
+      // A throwing callback ahead of it must not stop the notification
+      conn.onClose(() => {
+        throw new Error('close boom');
+      });
       const closeCb = vi.fn();
       conn.onClose(closeCb);
 

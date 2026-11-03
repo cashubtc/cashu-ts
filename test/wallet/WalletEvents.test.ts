@@ -1499,6 +1499,61 @@ describe('WalletEvents', () => {
         }),
       );
     });
+
+    describe('rejecting websocket callbacks', () => {
+      function setup() {
+        const logger = {
+          warn: vi.fn(),
+          error: vi.fn(),
+          info: vi.fn(),
+          debug: vi.fn(),
+          trace: vi.fn(),
+          log: vi.fn(),
+        };
+        const ws = new MockWS();
+        const wallet = {
+          mint: { connectWebSocket: vi.fn(async () => {}), webSocketConnection: ws },
+          logger,
+        };
+        return { logger, ws, ev: new WalletEvents(wallet as any) };
+      }
+      const reject = async () => {
+        throw new Error('boom');
+      };
+      const loggedBoom = expect.objectContaining({
+        error: expect.objectContaining({ message: 'boom' }),
+      });
+
+      it.each(['bolt11_mint_quote', 'bolt11_melt_quote'] as const)(
+        'contains a rejecting paid callback (%s)',
+        async (kind) => {
+          const { logger, ws, ev } = setup();
+          // eslint-disable-next-line @typescript-eslint/no-misused-promises -- async-callback tolerance is what's under test
+          if (kind === 'bolt11_mint_quote') await ev.mintQuotePaid('q1', reject, vi.fn());
+          // eslint-disable-next-line @typescript-eslint/no-misused-promises -- async-callback tolerance is what's under test
+          else await ev.meltQuotePaid('q1', reject, vi.fn());
+          ws.emit(kind, { quote: 'q1', state: 'PAID', amount: 1 });
+          await flushMicrotasks(4);
+
+          expect(logger.warn).toHaveBeenCalledWith('callback failed', loggedBoom);
+        },
+      );
+
+      it.each(['bolt11_mint_quote', 'bolt11_melt_quote'] as const)(
+        'contains a rejecting error callback for a malformed update (%s)',
+        async (kind) => {
+          const { logger, ws, ev } = setup();
+          const subscribe =
+            kind === 'bolt11_mint_quote' ? ev.mintQuoteUpdates : ev.meltQuoteUpdates;
+
+          await subscribe.call(ev, ['q1'], vi.fn(), reject);
+          ws.emit(kind, { quote: 'q1', amount: 'ten' });
+          await flushMicrotasks(4);
+
+          expect(logger.warn).toHaveBeenCalledWith('callback failed', loggedBoom);
+        },
+      );
+    });
   });
 
   describe('countersReserved error logging', () => {

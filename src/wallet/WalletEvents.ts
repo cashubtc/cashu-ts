@@ -284,7 +284,7 @@ export class WalletEvents {
       try {
         quote = normalizeMintQuoteUpdate(p);
       } catch (e) {
-        err(normalizeError(e));
+        safeCallback(err, normalizeError(e), this.wallet.logger);
         return;
       }
       // cb may be an async consumer callback; a rejection must not escape uncontained.
@@ -312,7 +312,7 @@ export class WalletEvents {
     return this.mintQuoteUpdates(
       [id],
       (p) => {
-        if (p.state === MintQuoteState.PAID) cb(p);
+        if (p.state === MintQuoteState.PAID) safeCallback(cb, p, this.wallet.logger);
       },
       err,
       opts,
@@ -347,7 +347,7 @@ export class WalletEvents {
       try {
         quote = normalizeMeltQuoteUpdate(p, this.wallet.logger);
       } catch (e) {
-        err(normalizeError(e));
+        safeCallback(err, normalizeError(e), this.wallet.logger);
         return;
       }
       safeCallback(cb, quote, this.wallet.logger, { event: 'bolt11_melt_quote' });
@@ -374,7 +374,7 @@ export class WalletEvents {
     return this.meltQuoteUpdates(
       [id],
       (p) => {
-        if (p.state === MeltQuoteState.PAID) cb(p);
+        if (p.state === MeltQuoteState.PAID) safeCallback(cb, p, this.wallet.logger);
       },
       err,
       opts,
