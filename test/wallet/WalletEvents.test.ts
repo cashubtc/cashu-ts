@@ -746,13 +746,21 @@ describe('WalletEvents', () => {
       ]);
     });
 
-    it('onDrop exceptions are swallowed', async () => {
+    it.each([
+      ['throwing', 'oldest', 2],
+      ['throwing', 'newest', 1],
+      ['rejecting', 'oldest', 2],
+      ['rejecting', 'newest', 1],
+    ] as const)('%s onDrop is contained (drop: %s)', async (mode, drop, kept) => {
+      const fail = () => {
+        throw new Error('ignore');
+      };
       const proofs: Proof[] = [{ amount: Amount.from(1), id: 'i', secret: 's', C: 'c' }];
       const iter = events.proofStatesStream(proofs, {
         maxBuffer: 1,
-        onDrop: () => {
-          throw new Error('ignore');
-        },
+        drop,
+        // eslint-disable-next-line @typescript-eslint/no-misused-promises -- async-callback tolerance is what's under test
+        onDrop: mode === 'throwing' ? fail : async () => fail(),
       });
 
       const out: any[] = [];
@@ -765,11 +773,12 @@ describe('WalletEvents', () => {
       const ws = mock.mint.webSocketConnection!;
       const [Y] = ws.firstFilters('proof_state');
       ws.emitProof({ Y, n: 1 });
-      ws.emitProof({ Y, n: 2 }); // drops n:1; onDrop throws (ignored)
+      ws.emitProof({ Y, n: 2 }); // buffer full: onDrop fails (contained)
       ws.fail('proof_state', new Error('end'));
 
       const result = await consumer;
-      expect(result).toEqual([expect.objectContaining({ n: 2 })]);
+      await flushMicrotasks();
+      expect(result).toEqual([expect.objectContaining({ n: kept })]);
     });
   });
 

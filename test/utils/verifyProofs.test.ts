@@ -120,6 +120,18 @@ describe('verifyMintSignatures (v4)', () => {
     expect(received.valid).toHaveLength(70);
   });
 
+  test.each(['throwing', 'rejecting'])('a %s onProgress is contained', async (mode) => {
+    const fail = () => {
+      throw new Error('progress boom');
+    };
+    const { valid } = await split([good], {
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises -- async-callback tolerance is what's under test
+      onProgress: mode === 'throwing' ? fail : async () => fail(),
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(valid).toHaveLength(1);
+  });
+
   test.each([NaN, 0, -1, 1.5])('rejects chunkSize %s', async (chunkSize) => {
     await expect(verifyMintSignatures([good], lookup, { chunkSize })).rejects.toThrow('chunkSize');
   });
