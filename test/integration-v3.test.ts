@@ -140,7 +140,7 @@ describeV3('v3 transaction witnesses', () => {
     { timeout: 30_000 },
     async () => {
       const externalInvoice =
-        'lnbc100u1pjaxuyzpp5wn37d3mx38haqs7nd5he4j7pq4r806e6s83jdksxrd77pnanm3zqdpv2phhwetjv4jzqcneypqyc6t8dp6xu6twva2xjuzzda6qcqzzsxqrrsssp5ayy0uuhwgy8hwphvy7ptzpg2dfn8vt3vlgsk53rsvj76jvafhujs9qyyssqc8aj03s5au3tgu6pj0rm0ws4a838s8ffe3y3qkj77esh7qmgsz7qlvdlzgj6dvx7tx7zn6k352z85rvdqvlszrevvzakp96a4pvyn2cpgaaks6';
+        'lnbc100u1p4wkd6wpp58252vfhs29frf5a54hfujqsxyz0dw6w4e5tdegvphmylg3fcz70ssp5jxu425zemyyxnnky0zs30hp64l9wjranh2cvx94wkkl9em6m6sqsdqqxq8zals8sq9qypqqqn0y2hnfz97u34fnfle0zgztm7shm8p38s3skwn5gea33zwpyakd43r05z9rvspkq3y496veyp4589ycmzu2zs42w333nadd8wsujkkqp4jj463';
       const wallet = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
       await wallet.loadMint();
       const quote = await lockedMintQuote(wallet, 11000);
@@ -264,7 +264,7 @@ describeV3('M2 roundtrip', () => {
     { timeout: 40_000 },
     async () => {
       const externalInvoice =
-        'lnbc49730n1pjaxuxnpp5zw0ry2w2heyuv7wk4r6z38vvgnaudfst0hl2p5xnv0mjkxtavg2qdpv2phhwetjv4jzqcneypqyc6t8dp6xu6twva2xjuzzda6qcqzzsxqrrsssp5x8tv2ka0m95hgek25kauw540m0dx727stqqr07l8h37v5283sn5q9qyyssqeevcs6vxcdnerk5w5mwfmntsf8nze7nxrf97dywmga7v0742vhmxtjrulgu3kah4f2r6025j974jpjg4mkqhv2gdls5k7e5cvwdf4wcp3ytsvx';
+        'lnbc49730n1p4wkd6wpp56hsplyfxa4792smqeaasjq5n2lwpwpwdywv9fs2zczczk7amtcfssp5d9gpdck37tuztwl3v0n4jsljr5fg6xvqy9q2hpvkqpz8ncjthrrqdqqxq8zals8sq9qypqqq535pzwsddnfrj8qgz4e28ulgsj9f85vj5fpem0xpqrlsserg3d3ytd9rt4xtkjd4mm65guylrregdrzlmu3syx8a32v9xfzd2jx5hxsqsrhzqg';
       const seed = randomBytes(64);
       const wallet = new Wallet(mintUrl, { bip39seed: seed });
       await wallet.loadMint();
