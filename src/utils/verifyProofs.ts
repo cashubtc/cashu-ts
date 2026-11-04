@@ -13,6 +13,7 @@ import {
   verifyUnblindedSignatureBls,
 } from '../crypto';
 import { verifyNutrootSpendInfo } from '../crypto/nutroot';
+import { safeCallback } from '../logger';
 import { Amount } from '../model/Amount';
 import { CallerAbortError, CTSError } from '../model/Errors';
 import type { HasKeysetKeys, Proof, ProofLike } from '../model/types';
@@ -211,7 +212,7 @@ async function verify<T extends ProofLike>(
   const total = proofs.length;
   const errors: Failure[] = new Array<Failure>(total).fill(undefined);
   let done = 0;
-  const report = () => opts?.onProgress?.(done, total);
+  const report = () => safeCallback(() => opts?.onProgress?.(done, total), undefined);
 
   // v0/v1/v2: one DLEQ each, the helper yields on the time budget.
   const secp: number[] = [];
