@@ -19,7 +19,7 @@ CDK_NAME ?= cashu-dev-cdk
 CDK_PULL ?= always
 
 NUT_IMAGE_RC ?= cashubtc/nutshell:0.18.2
-NUT_IMAGE ?= cashubtc/nutshell:0.21.0
+NUT_IMAGE ?= cashubtc/nutshell:0.22.1
 NUT_NAME ?= cashu-dev-nutshell
 
 # BLS (v3) Nutshell: no published image yet — build from a local checkout that
