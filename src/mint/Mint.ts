@@ -77,8 +77,6 @@ function describeShape(value: unknown): string {
 }
 
 /**
-<<<<<<< HEAD
-=======
  * Shortens a quote id for logs.
  *
  * @remarks
@@ -91,13 +89,6 @@ function maskQuoteId(id: unknown): string {
 }
 
 /**
- * Per-call options for a mint request: a `customRequest` override, and a `signal` that aborts the
- * request (rejects with `CallerAbortError`).
- */
-export type MintCallOptions = { customRequest?: RequestFn; signal?: AbortSignal };
-
-/**
->>>>>>> 234a35a (fix: keep request paths and full quote ids out of log context (#1374))
  * Class represents Cashu Mint API.
  *
  * @remarks
