@@ -1008,6 +1008,12 @@ describe('KeyChain.getCheapestKeyset narrows before it ranks', () => {
     expect(chain.getCheapestKeyset().id).toBe(oldLive.meta.id);
   });
 
+  test('a zero final_expiry means no expiry', async () => {
+    const zero = makeKeyset(1, 1, 0);
+    const chain = await initChainWith([zero.keys]);
+    expect(chain.getCheapestKeyset().id).toBe(zero.meta.id);
+  });
+
   test('an expired keyset counts as inactive, even when it is the only one', async () => {
     const expired = makeKeyset(1, 1, nowPlusDays(-1));
     const chain = await initChainWith([expired.keys]);

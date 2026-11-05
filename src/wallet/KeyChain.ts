@@ -299,9 +299,10 @@ export class KeyChain {
       { usableUntil },
     );
     // A keyset is inactive from its final_expiry (NUT-02), whatever the mint's flag says.
+    // Zero means no expiry, as in the keyset id.
     const now = Math.floor(Date.now() / 1000);
     const never = Number.MAX_SAFE_INTEGER;
-    const expiresAt = (k: Keyset): number => k.expiry ?? never;
+    const expiresAt = (k: Keyset): number => k.expiry || never;
     const unitActive = Object.values(this.keysets).filter(
       (k) => k.unit === this.unit && k.isActive && k.hasHexId && expiresAt(k) > now,
     );
