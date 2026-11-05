@@ -891,6 +891,8 @@ describe('Mint normalization', () => {
     await expect(mint.checkMeltQuoteBolt11('my-quote')).rejects.toThrow(/different quote/);
     expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
       op: 'checkMeltQuote.bolt11',
+      expected: '(hidden)',
+      received: '(hidden)',
     });
   });
 
@@ -1651,12 +1653,18 @@ describe('Mint normalization', () => {
     it('throws when a checked melt quote reports a different quote id', async () => {
       const logger = createLogger();
       const mint = new Mint(mintUrl, {
-        customRequest: makeRequest(meltResponse('other-quote')),
+        customRequest: makeRequest(meltResponse('019a2b3c-other-quote-id-9f8e')),
         logger,
       });
 
-      await expect(mint.checkMeltQuoteBolt11('my-quote')).rejects.toThrow(/different quote/);
-      expect(logger.error).toHaveBeenCalled();
+      await expect(mint.checkMeltQuoteBolt11('abcd1234-5678-90ab-cdef-1234')).rejects.toThrow(
+        /different quote/,
+      );
+      expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
+        op: 'checkMeltQuote.bolt11',
+        expected: 'abcd...1234',
+        received: '019a...9f8e',
+      });
     });
 
     it('keeps the requested quote id when a melt reports a different one', async () => {
@@ -1671,8 +1679,45 @@ describe('Mint normalization', () => {
       expect(response.quote).toBe('my-quote');
       expect(logger.warn).toHaveBeenCalledWith('Melt response reports a different quote id', {
         op: 'melt.bolt11',
-        expected: 'my-quote',
-        received: 'other-quote',
+        expected: '(hidden)',
+        received: '(hidden)',
+      });
+    });
+
+    it('logs quote ids masked when a melt reports a different one', async () => {
+      const logger = createLogger();
+      const mint = new Mint(mintUrl, {
+        customRequest: makeRequest(meltResponse('019a2b3c-other-quote-id-9f8e')),
+        logger,
+      });
+
+      await mint.meltBolt11({ quote: 'abcd1234-5678-90ab-cdef-1234', inputs: [], outputs: [] });
+
+      expect(logger.warn).toHaveBeenCalledWith('Melt response reports a different quote id', {
+        op: 'melt.bolt11',
+        expected: 'abcd...1234',
+        received: '019a...9f8e',
+      });
+    });
+
+    it('keeps the melt response when a normalize hook drops the quote id', async () => {
+      const logger = createLogger();
+      const mint = new Mint(mintUrl, {
+        customRequest: makeRequest(meltResponse('my-quote')),
+        logger,
+      });
+
+      const response = await mint.melt(
+        'bolt11',
+        { quote: 'my-quote', inputs: [], outputs: [] },
+        { normalize: (raw) => ({ ...raw, quote: undefined }) as any },
+      );
+
+      expect(response.quote).toBe('my-quote');
+      expect(logger.warn).toHaveBeenCalledWith('Melt response reports a different quote id', {
+        op: 'melt.bolt11',
+        expected: '(hidden)',
+        received: '(hidden)',
       });
     });
 
@@ -1804,7 +1849,7 @@ describe('Mint normalization', () => {
       const logger = createLogger();
       const mint = new Mint(mintUrl, {
         customRequest: makeRequest({
-          quote: 'other-quote',
+          quote: '019a2b3c-other-quote-id-9f8e',
           request: 'lnbc1...',
           amount: 21,
           unit: 'sat',
@@ -1816,8 +1861,14 @@ describe('Mint normalization', () => {
         logger,
       });
 
-      await expect(mint.checkMintQuoteBolt11('my-quote')).rejects.toThrow(/different quote/);
-      expect(logger.error).toHaveBeenCalled();
+      await expect(mint.checkMintQuoteBolt11('abcd1234-5678-90ab-cdef-1234')).rejects.toThrow(
+        /different quote/,
+      );
+      expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
+        op: 'checkMintQuote.bolt11',
+        expected: 'abcd...1234',
+        received: '019a...9f8e',
+      });
     });
 
     it('returns the quote when the id matches', async () => {

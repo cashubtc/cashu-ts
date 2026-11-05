@@ -77,6 +77,18 @@ function describeShape(value: unknown): string {
 }
 
 /**
+ * Shortens a quote id for logs.
+ *
+ * @remarks
+ * Hides short ids whole, since their ends would be most of the id. Takes `unknown` because a
+ * consumer `normalize` hook can drop the id, and a melt must not throw once inputs are spent.
+ */
+function maskQuoteId(id: unknown): string {
+  if (typeof id !== 'string' || id.length < 16) return '(hidden)';
+  return `${id.slice(0, 4)}...${id.slice(-4)}`;
+}
+
+/**
  * Class represents Cashu Mint API.
  *
  * @remarks
@@ -360,7 +372,11 @@ class Mint {
     );
     const normalized = this.normalizeMintQuoteResponse(method, response, options?.normalize);
     if (normalized.quote !== quote) {
-      this._logger.error('Invalid response from mint...', { op: `checkMintQuote.${method}` });
+      this._logger.error('Invalid response from mint...', {
+        op: `checkMintQuote.${method}`,
+        expected: maskQuoteId(quote),
+        received: maskQuoteId(normalized.quote),
+      });
       throw new CTSError('Mint quote response is for a different quote');
     }
     return normalized;
@@ -803,7 +819,11 @@ class Mint {
     );
     const normalized = this.normalizeMeltQuoteResponse(method, response, options?.normalize);
     if (normalized.quote !== quote) {
-      this._logger.error('Invalid response from mint...', { op: `checkMeltQuote.${method}` });
+      this._logger.error('Invalid response from mint...', {
+        op: `checkMeltQuote.${method}`,
+        expected: maskQuoteId(quote),
+        received: maskQuoteId(normalized.quote),
+      });
       throw new CTSError('Melt quote response is for a different quote');
     }
     return normalized;
@@ -920,8 +940,8 @@ class Mint {
     if (normalized.quote !== meltPayload.quote) {
       this._logger.warn('Melt response reports a different quote id', {
         op: `melt.${method}`,
-        expected: meltPayload.quote,
-        received: normalized.quote,
+        expected: maskQuoteId(meltPayload.quote),
+        received: maskQuoteId(normalized.quote),
       });
       normalized.quote = meltPayload.quote;
     }
