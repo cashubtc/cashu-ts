@@ -1385,7 +1385,7 @@ class Wallet {
 
     // Check total amount
     const totalAmount = this.parseAmount(sumProofs(proofs), 'prepareSwapToReceive', true);
-    this.failIf(totalAmount.isZero(), 'Token contains no proofs', { proofs });
+    this.failIf(totalAmount.isZero(), 'Token contains no proofs');
 
     // NUT-12: wallets MUST verify any DLEQ on a received proof. `requireDleq: true`
     // upgrades that to "DLEQ must also be present" via the stricter `hasValidDleq`.
@@ -3484,7 +3484,7 @@ class Wallet {
       try {
         expectedMsat = bolt11AmountMsat(res.request);
       } catch {
-        this.fail('Melt quote request is not a valid bolt11 invoice', { quote: res.quote });
+        this.fail('Melt quote request is not a valid bolt11 invoice');
       }
       this.assertBolt11MeltQuoteAmount(res, expectedMsat);
     }

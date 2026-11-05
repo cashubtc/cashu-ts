@@ -1,6 +1,6 @@
 import { hexToBytes } from '@noble/curves/utils.js';
 import { HttpResponse, http } from 'msw';
-import { test, describe, expect } from 'vitest';
+import { test, describe, expect, vi } from 'vitest';
 
 import {
   Wallet,
@@ -157,6 +157,21 @@ describe('receive', () => {
     const foreignToken =
       'cashuBo2FtdWh0dHA6Ly9sb2NhbGhvc3Q6MzMzOGF1Y3VzZGF0gaJhaUgAvQM1Wd4n0GFwgaNhYQFhc3hAMDFmOTEwNmQxNWMwMWI5NDBjOThlYTdlOTY4YTA2ZTNhZjY5NjE4ZWRiOGJlOGU1MWI1MTJkMDhlOTA3OTIxNmFjWCEC-F3YSw-EGENmy2kUYQavfA8m8u4K0oej5fqFJSi7Kd8';
     await expect(wallet.receive(foreignToken)).rejects.toThrow('Token is not in wallet unit');
+  });
+
+  test('receive keeps proofs out of the log for a zero-value token', async () => {
+    const error = vi.fn();
+    const wallet = new Wallet(mint, {
+      unit,
+      logger: { error, warn: vi.fn(), info: vi.fn(), debug: vi.fn(), trace: vi.fn(), log: vi.fn() },
+    });
+    await wallet.loadMint();
+    const secret = 'zero-value-proof-secret';
+    const proofs = [{ id: '00bd033559de27d0', amount: 0, secret, C: '02'.padEnd(66, '0') }];
+
+    await expect(wallet.receive(proofs)).rejects.toThrow('Token contains no proofs');
+    expect(error).toHaveBeenCalled();
+    expect(JSON.stringify(error.mock.calls)).not.toContain(secret);
   });
 
   test('test receive token with unsanitized mint url', async () => {

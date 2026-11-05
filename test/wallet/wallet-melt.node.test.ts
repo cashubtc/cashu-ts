@@ -1543,6 +1543,25 @@ describe('bolt11 melt quote amount validation', () => {
     await expect(wallet.checkMeltQuoteBolt11('melt-check-junk')).rejects.toThrow(/bolt11 invoice/i);
   });
 
+  test('checkMeltQuoteBolt11 keeps the quote id out of the log on an unreadable invoice', async () => {
+    const quote = '019a2b3c-4d5e-7f80-9abc-def012345678';
+    server.use(
+      http.get(mintUrl + `/v1/melt/quote/bolt11/${quote}`, () =>
+        HttpResponse.json({ ...meltQuoteJson(1, 'not-an-invoice'), quote }),
+      ),
+    );
+    const error = vi.fn();
+    const wallet = new Wallet(mint, {
+      unit,
+      logger: { error, warn: vi.fn(), info: vi.fn(), debug: vi.fn(), trace: vi.fn(), log: vi.fn() },
+    });
+    await wallet.loadMint();
+
+    await expect(wallet.checkMeltQuoteBolt11(quote)).rejects.toThrow(/bolt11 invoice/i);
+    expect(error).toHaveBeenCalled();
+    expect(JSON.stringify(error.mock.calls)).not.toContain(quote);
+  });
+
   test('checkMeltQuoteBolt11 accepts an amountless invoice in the response', async () => {
     server.use(
       http.get(mintUrl + '/v1/melt/quote/bolt11/melt-check-amountless', () =>
