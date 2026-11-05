@@ -221,9 +221,9 @@ function mintQuoteInputs(preview: AnyMintPreview) {
             amount: Amount.sum(preview.outputData.map((d) => Amount.from(d.blindedMessage.amount))),
           },
         ];
-  return entries.map(({ quote, amount }: { quote: MintQuoteBaseResponse; amount: Amount }) => {
+  return entries.map(({ quote, amount }: { quote: MintQuoteBaseResponse; amount: Amount }, i) => {
     if (!quote.pubkey || quote.amount_issued == null) {
-      throw new CTSError(`Mint quote ${quote.quote} needs its lock key and amount_issued`);
+      throw new CTSError(`Mint quote #${i + 1} needs its lock key and amount_issued`);
     }
     return { quoteId: quote.quote, amount, lockKey: quote.pubkey, issued: quote.amount_issued };
   });
