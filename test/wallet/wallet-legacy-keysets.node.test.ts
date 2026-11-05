@@ -189,6 +189,31 @@ describe('Legacy (pre-v1) keyset output gating', () => {
     );
   });
 
+  test('mint quotes are refused when the only active keyset is past final_expiry', async () => {
+    const expiry = Math.floor(Date.now() / 1000) - 60;
+    const id = deriveKeysetId(PUBKEYS, { versionByte: 1, unit: 'sat', expiry });
+    const expired: MintKeyset = {
+      id,
+      unit: 'sat',
+      active: true,
+      input_fee_ppk: 0,
+      final_expiry: expiry,
+    };
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () => HttpResponse.json({ keysets: [expired] })),
+      http.get(mintUrl + '/v1/keys', () =>
+        HttpResponse.json({ keysets: [{ ...expired, keys: PUBKEYS }] }),
+      ),
+    );
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+
+    expect(() => wallet.keysetId).toThrow(/no bound keyset/i);
+    await expect(wallet.createMintQuote('bolt11', { amount: 1000 })).rejects.toThrow(
+      /no active keyset/i,
+    );
+  });
+
   test('generic quote methods refuse methods the mint does not advertise (NUT-04/05)', async () => {
     const wallet = new Wallet(mint);
     await wallet.loadMint();
