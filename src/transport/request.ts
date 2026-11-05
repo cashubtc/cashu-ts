@@ -734,7 +734,7 @@ async function _request(options: RequestOptions): Promise<unknown> {
       safeCallback(onResponseMeta, meta, activeLogger, {
         op: 'request.onResponseMeta',
         status: response.status,
-        endpoint,
+        endpoint: endpointOrigin(endpoint),
       });
     }
 
@@ -879,12 +879,12 @@ export default async function request<T>(options: RequestOptions): Promise<T> {
       safeCallback(perRequest, meta, activeLogger, {
         op: 'request.onResponseMeta',
         scope: 'per-request',
-        endpoint: options.endpoint,
+        endpoint: endpointOrigin(options.endpoint),
       });
       safeCallback(globalMeta, meta, activeLogger, {
         op: 'request.onResponseMeta',
         scope: 'global',
-        endpoint: options.endpoint,
+        endpoint: endpointOrigin(options.endpoint),
       });
     };
   }
