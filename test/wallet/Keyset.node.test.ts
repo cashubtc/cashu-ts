@@ -9,6 +9,24 @@ const GENUINE_ID = deriveKeysetId(PUBKEYS, { versionByte: 0 });
 // v0 id of an empty keyset — used to probe the empty-keys guard.
 const EMPTY_ID = deriveKeysetId({}, { versionByte: 0 });
 
+describe('Keyset.isActive', () => {
+  const now = Math.floor(Date.now() / 1000);
+
+  test('is false from final_expiry, whatever the mint reports', () => {
+    expect(new Keyset(GENUINE_ID, 'sat', true, 0, now - 1).isActive).toBe(false);
+    expect(new Keyset(GENUINE_ID, 'sat', true, 0, now + 60).isActive).toBe(true);
+    expect(new Keyset(GENUINE_ID, 'sat', false, 0, now + 60).isActive).toBe(false);
+  });
+
+  test('treats a zero final_expiry as no expiry', () => {
+    expect(new Keyset(GENUINE_ID, 'sat', true, 0, 0).isActive).toBe(true);
+  });
+
+  test('keeps the mint flag on the wire shape', () => {
+    expect(new Keyset(GENUINE_ID, 'sat', true, 0, now - 1).toMintKeyset().active).toBe(true);
+  });
+});
+
 describe('Keyset.verifyKeysetId', () => {
   test('returns true for a keyset whose id matches its keys', () => {
     const mk: MintKeys = { id: GENUINE_ID, unit: 'sat', active: true, keys: PUBKEYS };

@@ -135,7 +135,7 @@ describe('KeyChain initialization', () => {
     expect(isValidHex(active.id)).toBe(true);
 
     // Verify final_expiry assigned
-    expect(active.expiry).toBe(1754296607);
+    expect(active.expiry).toBe(2059210353);
   });
 
   test('getKeyset rejects prototype-chain ids instead of returning inherited values', async () => {
@@ -169,7 +169,7 @@ describe('KeyChain initialization', () => {
     expect(isValidHex(active.id)).toBe(true);
 
     // Verify final_expiry assigned
-    expect(active.expiry).toBe(1754296607);
+    expect(active.expiry).toBe(2059210353);
   });
 
   test('should skip loading if already initialized unless forceRefresh', async () => {
@@ -607,7 +607,7 @@ describe('KeyChain getters', () => {
     expect(keyset.unit).toBe('sat');
     expect(keyset.isActive).toBe(true);
     expect(keyset.fee).toBe(0);
-    expect(keyset.expiry).toBe(1754296607);
+    expect(keyset.expiry).toBe(2059210353);
     expect(keyset.hasKeys).toBe(true);
     expect(keyset.hasHexId).toBe(true);
     expect(keyset.keys).toEqual(dummyKeysResp.keysets[0].keys);
@@ -768,12 +768,18 @@ describe('Keyset', () => {
   });
 });
 
+// Comfortably beyond the 30 day window getCheapestKeyset requires by default.
+const FAR_FUTURE = 2059210353;
+const nowPlusDays = (days: number): number => Math.floor(Date.now() / 1000) + days * 24 * 60 * 60;
+
 // Build a genuinely-verifying keyset for PUBKEYS at a given fee.
 // Fee and expiry are part of the v1+ id preimage, so distinct values give distinct ids.
 function makeKeyset(
   fee: number,
   versionByte = 1,
   expiry?: number,
+  activeUntil?: number,
+  activeFrom?: number,
 ): { meta: MintKeyset; keys: MintKeys } {
   const id = deriveKeysetId(PUBKEYS, {
     versionByte,
@@ -786,6 +792,8 @@ function makeKeyset(
     unit: 'sat',
     active: true,
     input_fee_ppk: fee,
+    active_from: activeFrom,
+    active_until: activeUntil,
     final_expiry: expiry,
   };
   return { meta, keys: { ...meta, keys: PUBKEYS } };
@@ -884,32 +892,177 @@ describe('KeyChain.getCheapestKeyset prefers the newest keyset version', () => {
     expect(chain.getCheapestKeyset().id).toBe(newDear.meta.id);
   });
 
-  test('same version: fee beats expiry', async () => {
-    const cheapExpiring = makeKeyset(1, 1, 1000);
+  test('same version: fee beats expiry among long-lived keysets', async () => {
+    const cheapExpiring = makeKeyset(1, 1, FAR_FUTURE);
     const dearForever = makeKeyset(100, 1);
     const chain = await initChainWith([dearForever.keys, cheapExpiring.keys]);
     expect(chain.getCheapestKeyset().id).toBe(cheapExpiring.meta.id);
   });
 
   test('same version and fee: prefers the keyset expiring last', async () => {
-    const dyingSoon = makeKeyset(1, 1, 1000);
-    const dyingLater = makeKeyset(1, 1, 2000);
+    const dyingSoon = makeKeyset(1, 1, FAR_FUTURE + 1000);
+    const dyingLater = makeKeyset(1, 1, FAR_FUTURE + 2000);
     const chain = await initChainWith([dyingSoon.keys, dyingLater.keys]);
     expect(chain.getCheapestKeyset().id).toBe(dyingLater.meta.id);
   });
 
-  test('same version and fee: prefers no expiry over any expiry', async () => {
-    const expiring = makeKeyset(1, 1, 2000);
+  // Both outlive the horizon, so neither is filtered out and the tiebreak is what decides.
+  test('same version and fee: no expiry beats a distant expiry, either order', async () => {
+    const expiringLate = makeKeyset(1, 1, FAR_FUTURE);
     const forever = makeKeyset(1, 1);
-    const chain = await initChainWith([expiring.keys, forever.keys]);
-    expect(chain.getCheapestKeyset().id).toBe(forever.meta.id);
+
+    const foreverFirst = await initChainWith([forever.keys, expiringLate.keys]);
+    expect(foreverFirst.getCheapestKeyset().id).toBe(forever.meta.id);
+
+    const expiringFirst = await initChainWith([expiringLate.keys, forever.keys]);
+    expect(expiringFirst.getCheapestKeyset().id).toBe(forever.meta.id);
   });
 
-  test('same version and fee: no expiry wins regardless of insertion order', async () => {
-    const forever = makeKeyset(1, 1);
-    const expiring = makeKeyset(1, 1, 2000);
-    const chain = await initChainWith([forever.keys, expiring.keys]);
-    expect(chain.getCheapestKeyset().id).toBe(forever.meta.id);
+  // A keyset is usable until the earlier of active_until and final_expiry; the later of those wins.
+  test('same version and fee: a later active_until beats a later final_expiry', async () => {
+    const goesInactiveFirst = makeKeyset(1, 1, FAR_FUTURE + 9000, FAR_FUTURE + 1000);
+    const staysActiveLonger = makeKeyset(1, 1, FAR_FUTURE + 8000, FAR_FUTURE + 2000);
+    const chain = await initChainWith([goesInactiveFirst.keys, staysActiveLonger.keys]);
+    expect(chain.getCheapestKeyset().id).toBe(staysActiveLonger.meta.id);
+  });
+
+  test('same version and fee: a later final_expiry beats a later active_until', async () => {
+    const expiresFirst = makeKeyset(1, 1, FAR_FUTURE + 2000);
+    const expiresLater = makeKeyset(1, 1, FAR_FUTURE + 9000, FAR_FUTURE + 5000);
+    const chain = await initChainWith([expiresFirst.keys, expiresLater.keys]);
+    expect(chain.getCheapestKeyset().id).toBe(expiresLater.meta.id);
+  });
+
+  test('same version and fee: no active_until beats an earlier active_until', async () => {
+    const announced = makeKeyset(1, 1, FAR_FUTURE + 9000, FAR_FUTURE + 5000);
+    const unannounced = makeKeyset(1, 1, FAR_FUTURE + 8000);
+    const chain = await initChainWith([announced.keys, unannounced.keys]);
+    expect(chain.getCheapestKeyset().id).toBe(unannounced.meta.id);
+  });
+
+  test('fee still beats active_until', async () => {
+    const cheapShortLived = makeKeyset(1, 1, FAR_FUTURE + 9000, FAR_FUTURE + 1000);
+    const dearLongLived = makeKeyset(100, 1, FAR_FUTURE + 9000, FAR_FUTURE + 5000);
+    const chain = await initChainWith([dearLongLived.keys, cheapShortLived.keys]);
+    expect(chain.getCheapestKeyset().id).toBe(cheapShortLived.meta.id);
+  });
+});
+
+describe('KeyChain.getCheapestKeyset narrows before it ranks', () => {
+  test('never picks a superseded version, however much cheaper it is', async () => {
+    const oldFree = makeKeyset(0, 0, FAR_FUTURE);
+    const newDear = makeKeyset(1000, 1, FAR_FUTURE);
+    const chain = await initChainWith([oldFree.keys, newDear.keys]);
+    expect(chain.getCheapestKeyset().id).toBe(newDear.meta.id);
+  });
+
+  test('skips a cheaper keyset that is inactivated inside the default 30 day window', async () => {
+    const soon = Math.floor(Date.now() / 1000) + 5 * 24 * 60 * 60;
+    const cheapSoon = makeKeyset(1, 1, FAR_FUTURE, soon);
+    const dearLongLived = makeKeyset(100, 1, FAR_FUTURE);
+    const chain = await initChainWith([cheapSoon.keys, dearLongLived.keys]);
+    expect(chain.getCheapestKeyset().id).toBe(dearLongLived.meta.id);
+  });
+
+  test('skips a cheaper keyset that expires inside the default 30 day window', async () => {
+    const soon = Math.floor(Date.now() / 1000) + 5 * 24 * 60 * 60;
+    const cheapSoon = makeKeyset(1, 1, soon);
+    const dearLongLived = makeKeyset(100, 1, FAR_FUTURE);
+    const chain = await initChainWith([cheapSoon.keys, dearLongLived.keys]);
+    expect(chain.getCheapestKeyset().id).toBe(dearLongLived.meta.id);
+  });
+
+  test('falls back to the cheapest when the mint offers nothing long-lived', async () => {
+    const soon = Math.floor(Date.now() / 1000) + 5 * 24 * 60 * 60;
+    const cheapSoon = makeKeyset(1, 1, soon);
+    const dearSooner = makeKeyset(100, 1, soon - 100);
+    const chain = await initChainWith([dearSooner.keys, cheapSoon.keys]);
+    expect(chain.getCheapestKeyset().id).toBe(cheapSoon.meta.id);
+  });
+
+  test('a keyset clearing the horizon beats a later final_expiry inside active_until', async () => {
+    const clears = makeKeyset(1, 1, nowPlusDays(45));
+    const retiring = makeKeyset(1, 1, nowPlusDays(730), nowPlusDays(20));
+    const chain = await initChainWith([retiring.keys, clears.keys]);
+    expect(chain.getCheapestKeyset().id).toBe(clears.meta.id);
+  });
+
+  test('with nothing long-lived, a later final_expiry beats a later active_until', async () => {
+    const expiring = makeKeyset(1, 1, nowPlusDays(1));
+    const overdue = makeKeyset(1, 1, nowPlusDays(3650), nowPlusDays(-2));
+    const chain = await initChainWith([expiring.keys, overdue.keys]);
+    expect(chain.getCheapestKeyset().id).toBe(overdue.meta.id);
+  });
+
+  test('skips an expired keyset, however cheap', async () => {
+    const cheapExpired = makeKeyset(1, 1, nowPlusDays(-1));
+    const dearOverdue = makeKeyset(100, 1, nowPlusDays(3650), nowPlusDays(-2));
+    const chain = await initChainWith([cheapExpired.keys, dearOverdue.keys]);
+    expect(chain.getCheapestKeyset().id).toBe(dearOverdue.meta.id);
+  });
+
+  test('skips an expired keyset of the newest version for a live older one', async () => {
+    const newExpired = makeKeyset(1, 1, nowPlusDays(-1));
+    const oldLive = makeKeyset(1, 0, FAR_FUTURE);
+    const chain = await initChainWith([newExpired.keys, oldLive.keys]);
+    expect(chain.getCheapestKeyset().id).toBe(oldLive.meta.id);
+  });
+
+  test('a zero final_expiry means no expiry', async () => {
+    const zero = makeKeyset(1, 1, 0);
+    const chain = await initChainWith([zero.keys]);
+    expect(chain.getCheapestKeyset().id).toBe(zero.meta.id);
+  });
+
+  test('an expired keyset counts as inactive, even when it is the only one', async () => {
+    const expired = makeKeyset(1, 1, nowPlusDays(-1));
+    const chain = await initChainWith([expired.keys]);
+    expect(() => chain.getCheapestKeyset()).toThrow(/No active keyset found/);
+  });
+});
+
+describe('KeyChain.getCheapestKeyset honours a usableUntil horizon', () => {
+  test('skips a cheaper keyset that may be inactivated before the horizon', async () => {
+    const cheapShortLived = makeKeyset(1, 1, FAR_FUTURE + 9000, FAR_FUTURE + 1000);
+    const dearLongLived = makeKeyset(100, 1, FAR_FUTURE + 9000, FAR_FUTURE + 5000);
+    const chain = await initChainWith([cheapShortLived.keys, dearLongLived.keys]);
+    expect(chain.getCheapestKeyset(FAR_FUTURE + 2000).id).toBe(dearLongLived.meta.id);
+  });
+
+  test('skips a keyset whose final_expiry falls before the horizon', async () => {
+    const cheapExpiring = makeKeyset(1, 1, FAR_FUTURE + 1500);
+    const dearLasting = makeKeyset(100, 1, FAR_FUTURE + 9000);
+    const chain = await initChainWith([cheapExpiring.keys, dearLasting.keys]);
+    expect(chain.getCheapestKeyset(FAR_FUTURE + 2000).id).toBe(dearLasting.meta.id);
+  });
+
+  test('an unannounced active_until satisfies any horizon', async () => {
+    const unannounced = makeKeyset(1, 1);
+    const chain = await initChainWith([unannounced.keys]);
+    expect(chain.getCheapestKeyset(Number.MAX_SAFE_INTEGER).id).toBe(unannounced.meta.id);
+  });
+
+  test('throws when no active keyset survives the horizon', async () => {
+    const shortLived = makeKeyset(1, 1, FAR_FUTURE + 9000, FAR_FUTURE + 1000);
+    const chain = await initChainWith([shortLived.keys]);
+    const horizon = FAR_FUTURE + 5000;
+    expect(() => chain.getCheapestKeyset(horizon)).toThrow(`stays usable until ${horizon}`);
+  });
+
+  test('rejects a non-integer horizon', async () => {
+    const ks = makeKeyset(1, 1);
+    const chain = await initChainWith([ks.keys]);
+    expect(() => chain.getCheapestKeyset(1.5)).toThrow(/Invalid usableUntil/);
+    expect(() => chain.getCheapestKeyset(-1)).toThrow(/Invalid usableUntil/);
+  });
+
+  test('carries the active window through a cache round trip', async () => {
+    const ks = makeKeyset(1, 1, 9000, 5000, 100);
+    const chain = await initChainWith([ks.keys]);
+    const restored = KeyChain.fromCache(mint, unit, chain.cache);
+    const keyset = restored.getKeyset(ks.meta.id);
+    expect(keyset.activeFrom).toBe(100);
+    expect(keyset.activeUntil).toBe(5000);
   });
 });
 

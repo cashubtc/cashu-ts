@@ -1,6 +1,6 @@
 import { randomBytes } from '@noble/hashes/utils.js';
 import { HttpResponse, http } from 'msw';
-import { test, describe, expect } from 'vitest';
+import { test, describe, expect, vi } from 'vitest';
 
 import { Wallet, type MintKeys, type MintKeyset } from '../../src';
 import { Amount } from '../../src/model/Amount';
@@ -187,6 +187,68 @@ describe('Legacy (pre-v1) keyset output gating', () => {
     await expect(wallet.createMintQuote('bolt11', { amount: 1000 })).rejects.toThrow(
       /no active keyset/i,
     );
+  });
+
+  test('mint quotes are refused when the only active keyset is past final_expiry', async () => {
+    const expiry = Math.floor(Date.now() / 1000) - 60;
+    const id = deriveKeysetId(PUBKEYS, { versionByte: 1, unit: 'sat', expiry });
+    const expired: MintKeyset = {
+      id,
+      unit: 'sat',
+      active: true,
+      input_fee_ppk: 0,
+      final_expiry: expiry,
+    };
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () => HttpResponse.json({ keysets: [expired] })),
+      http.get(mintUrl + '/v1/keys', () =>
+        HttpResponse.json({ keysets: [{ ...expired, keys: PUBKEYS }] }),
+      ),
+    );
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+
+    expect(() => wallet.keysetId).toThrow(/no bound keyset/i);
+    await expect(wallet.createMintQuote('bolt11', { amount: 1000 })).rejects.toThrow(
+      /no active keyset/i,
+    );
+  });
+
+  test('a bound keyset stops taking outputs once it passes final_expiry', async () => {
+    const expiry = Math.floor(Date.now() / 1000) + 60;
+    const id = deriveKeysetId(PUBKEYS, { versionByte: 1, unit: 'sat', expiry });
+    const expiring: MintKeyset = {
+      id,
+      unit: 'sat',
+      active: true,
+      input_fee_ppk: 0,
+      final_expiry: expiry,
+    };
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () => HttpResponse.json({ keysets: [expiring] })),
+      http.get(mintUrl + '/v1/keys', () =>
+        HttpResponse.json({ keysets: [{ ...expiring, keys: PUBKEYS }] }),
+      ),
+    );
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+    expect(wallet.keysetId).toBe(id);
+
+    const quote = {
+      quote: 'test-quote',
+      unit: 'sat',
+      amount_paid: Amount.from(0),
+      amount_issued: Amount.from(0),
+    };
+    const clock = vi.spyOn(Date, 'now').mockReturnValue((expiry + 1) * 1000);
+    try {
+      await expect(wallet.prepareMint('bolt11', 3, quote)).rejects.toThrow(/inactive keyset/i);
+      await expect(wallet.prepareMint('bolt11', 3, quote, { keysetId: id })).rejects.toThrow(
+        /inactive keyset/i,
+      );
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   test('generic quote methods refuse methods the mint does not advertise (NUT-04/05)', async () => {

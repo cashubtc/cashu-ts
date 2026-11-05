@@ -65,6 +65,15 @@ export type MintKeys = {
    */
   input_fee_ppk?: number;
   /**
+   * Unix time from which the mint reports the keyset as active.
+   */
+  active_from?: number;
+  /**
+   * Unix time from which the mint may inactivate the keyset. Absent means the mint has not
+   * announced an inactivation, which NUT-02 guarantees for at least 30 days.
+   */
+  active_until?: number;
+  /**
    * Expiry of the keyset.
    */
   final_expiry?: number;
@@ -95,6 +104,15 @@ export type MintKeyset = {
    * Input fee for keyset (in ppk)
    */
   input_fee_ppk?: number;
+  /**
+   * Unix time from which the mint reports the keyset as active.
+   */
+  active_from?: number;
+  /**
+   * Unix time from which the mint may inactivate the keyset. Absent means the mint has not
+   * announced an inactivation, which NUT-02 guarantees for at least 30 days.
+   */
+  active_until?: number;
   /**
    * Expiry of the keyset.
    */
