@@ -81,7 +81,7 @@ function describeShape(value: unknown): string {
 }
 
 /**
- * Shortens a quote id for logs: enough to correlate, not enough to use.
+ * Shortens a quote id for logs.
  *
  * @remarks
  * Hides short ids whole, since their ends would be most of the id. Takes `unknown` because a
