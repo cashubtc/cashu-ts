@@ -969,7 +969,6 @@ export class Keyset {
     get hasKeys(): boolean;
     // (undocumented)
     get id(): string;
-    // (undocumented)
     get isActive(): boolean;
     // (undocumented)
     get keys(): Record<number, string>;

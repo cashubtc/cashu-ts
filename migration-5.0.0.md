@@ -36,6 +36,7 @@ Previously this was only enforced on the automatic path (the wallet binds to the
 - `completeSwap`/`completeMint`/`completeBatchMint` are **not** gated: the mint has already signed, so a persisted preview (NUT-19) still completes even if the keyset was deactivated in the meantime.
 - `restore()` is **not** gated: proofs on legacy keysets remain recoverable.
 - `bindKeyset()`/`withKeyset()` still allow binding to inactive keysets (useful for restore); the policy fires when an output operation is attempted.
+- `Keyset.isActive` is now false from `final_expiry`, whatever the mint reports, so these calls refuse an expired keyset too. `toMintKeyset()` keeps the mint's own `active` flag.
 
 No migration is needed unless you deliberately created outputs on inactive or legacy keysets — those calls were already doomed to fail at the mint and now fail earlier with a clearer error.
 

@@ -298,13 +298,8 @@ export class KeyChain {
       this._logger,
       { usableUntil },
     );
-    // A keyset is inactive from its final_expiry (NUT-02), whatever the mint's flag says.
-    // Zero means no expiry, as in the keyset id.
-    const now = Math.floor(Date.now() / 1000);
-    const never = Number.MAX_SAFE_INTEGER;
-    const expiresAt = (k: Keyset): number => k.expiry || never;
     const unitActive = Object.values(this.keysets).filter(
-      (k) => k.unit === this.unit && k.isActive && k.hasHexId && expiresAt(k) > now,
+      (k) => k.unit === this.unit && k.isActive && k.hasHexId,
     );
     // Newest version wins below, so a keyset this build cannot spend must not be a candidate. Its
     // keys are already blanked (the id derivation that `verify()` runs rejects the version), so
@@ -336,6 +331,10 @@ export class KeyChain {
     const current = candidates.filter((k) => k.version === newest);
 
     // A keyset stops being usable at whichever of active_until and final_expiry comes first.
+    // Zero means no expiry, as in the keyset id.
+    const now = Math.floor(Date.now() / 1000);
+    const never = Number.MAX_SAFE_INTEGER;
+    const expiresAt = (k: Keyset): number => k.expiry || never;
     const usableTo = (k: Keyset): number => Math.min(k.activeUntil ?? never, expiresAt(k));
     const horizon = usableUntil ?? now + ACTIVE_WINDOW_SECONDS;
     const longLived = current.filter((k) => usableTo(k) >= horizon);

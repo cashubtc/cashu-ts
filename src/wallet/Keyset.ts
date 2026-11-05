@@ -41,8 +41,16 @@ export class Keyset {
     return this._unit;
   }
 
+  /**
+   * Whether the keyset takes new outputs.
+   *
+   * @remarks
+   * False from `final_expiry` (NUT-02), whatever the mint reports. Zero means no expiry, as in the
+   * keyset id. `toMintKeyset` keeps the mint's own flag.
+   */
   get isActive(): boolean {
-    return this._active;
+    const expiry = this._final_expiry;
+    return this._active && !(expiry && expiry <= Math.floor(Date.now() / 1000));
   }
 
   get fee(): number {
