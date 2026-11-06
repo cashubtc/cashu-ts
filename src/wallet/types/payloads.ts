@@ -151,7 +151,7 @@ export type TransactionPreview = {
   /**
    * Fixed txout quotes in request order: each its id, lock key, amount and any id preimage.
    */
-  mintQuoteOutputs: Array<{ quote: string; pubkey: string; amount: Amount; idPreimage?: string }>;
+  mintQuoteOutputs: Array<{ quote: string; pubkey: string; amount: Amount }>;
   outputData: OutputDataLike[];
   /**
    * Total of the new proofs.

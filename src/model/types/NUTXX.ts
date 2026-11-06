@@ -42,10 +42,10 @@ export type TransactionRequest = {
    */
   melt_quote_outputs: Array<{ quote: string; fee_reserve: Amount; fee_index?: number }>;
   /**
-   * Fixed txout quotes to create, each locked to `pubkey` (33-byte compressed hex), its id derived
-   * from `id_preimage` (32-byte hex) or, without one, bound to the inputs.
+   * Fixed txout quotes to create, each locked to `pubkey` (33-byte compressed hex), its id bound to
+   * the inputs.
    */
-  mint_quote_outputs?: Array<{ pubkey: string; amount: Amount; id_preimage?: string }>;
+  mint_quote_outputs?: Array<{ pubkey: string; amount: Amount }>;
   prefer_async?: boolean;
 };
 

@@ -1,5 +1,3 @@
-import { randomBytes } from '@noble/hashes/utils.js';
-
 import { assertV3PointSecret, isBlsKeyset, isV3PointSecret, schnorrSignDigest } from '../crypto';
 import {
   createRandomSecretKey,
@@ -9,7 +7,7 @@ import {
 import { hashToCurveHex } from '../crypto/curves';
 import { parseSecret } from '../crypto/NUT10';
 import { maybeDeriveP2BKPrivateKeys, p2pkSpendLeaves } from '../crypto/NUT11';
-import { deriveQuoteIdPreimage, deriveQuoteLockKey } from '../crypto/NUT13';
+import { deriveQuoteLockKey } from '../crypto/NUT13';
 import {
   buildScriptPathWitness,
   parseNutrootLeaf,
@@ -460,8 +458,7 @@ export function collectSpendInfoKeys(
 }
 
 /**
- * Creates a quote lock keypair and id preimage; the full contract is documented on
- * `Wallet.createQuoteLockKey`.
+ * Creates a quote lock keypair; the full contract is documented on `Wallet.createQuoteLockKey`.
  *
  * @remarks
  * Seed-derived under `mintPubkey` from one freshly reserved quote counter when seeded, random
@@ -472,21 +469,17 @@ export async function createQuoteLockKeyPair(
   seed: Uint8Array | undefined,
   mintPubkey: string | undefined,
   reserveQuoteCounter: () => Promise<number>,
-): Promise<{ pubkey: string; privkey: string; idPreimage: string }> {
+): Promise<{ pubkey: string; privkey: string }> {
   let privkey: Uint8Array;
-  let idPreimage: Uint8Array;
   if (seed && mintPubkey) {
     const counter = await reserveQuoteCounter();
     privkey = deriveQuoteLockKey(seed, mintPubkey, counter);
-    idPreimage = deriveQuoteIdPreimage(seed, mintPubkey, counter);
   } else {
     privkey = createRandomSecretKey();
-    idPreimage = randomBytes(32);
   }
   return {
     pubkey: bytesToHex(getPubKeyFromPrivKey(privkey)),
     privkey: bytesToHex(privkey),
-    idPreimage: bytesToHex(idPreimage),
   };
 }
 

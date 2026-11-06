@@ -502,7 +502,6 @@ export const DERIVATION_TYPE: {
     readonly numsOffset: 2;
     readonly leafKey: 3;
     readonly quoteLock: 4;
-    readonly quoteIdPreimage: 5;
 };
 
 // @public (undocumented)
@@ -559,9 +558,6 @@ export function deriveP2BKSecretKeys(Ehex: string, privateKey: string | string[]
 
 // @public
 export function deriveP2BKSlotSecretKeyCandidates(Ehex: string, privkeyHex: string, slotIndex?: number): [string, string];
-
-// @public
-export function deriveQuoteIdPreimage(seed: Uint8Array, mintPubkey: string, counter: number): Uint8Array;
 
 // @public
 export function deriveQuoteLockKey(seed: Uint8Array, mintPubkey: string, counter: number): Uint8Array;
@@ -2683,7 +2679,6 @@ export type SerializedTransactionPreview = {
         quote: string;
         pubkey: string;
         amount: string;
-        idPreimage?: string;
     }>;
     outputData: SerializedOutputData[];
     amount: string;
@@ -2944,7 +2939,6 @@ export type TransactionPreview = {
         quote: string;
         pubkey: string;
         amount: Amount;
-        idPreimage?: string;
     }>;
     outputData: OutputDataLike[];
     amount: Amount;
@@ -2971,7 +2965,6 @@ export type TransactionRequest = {
     mint_quote_outputs?: Array<{
         pubkey: string;
         amount: Amount;
-        id_preimage?: string;
     }>;
     prefer_async?: boolean;
 };
@@ -3140,7 +3133,6 @@ export class Wallet {
     }): Promise<{
         pubkey: string;
         privkey: string;
-        idPreimage: string;
     }>;
     decodeToken(token: string | Uint8Array): Token;
     defaultOutputType(): OutputType;
@@ -3219,7 +3211,6 @@ export class Wallet {
         mintQuoteOutputs?: Array<{
             pubkey: string;
             amount: AmountLike;
-            idPreimage?: string;
         }>;
     }, config?: PrepareTransactionConfig): Promise<TransactionPreview>;
     receive(token: Token | string | ProofLike[], config?: ReceiveConfig, outputType?: OutputType): Promise<Proof[]>;

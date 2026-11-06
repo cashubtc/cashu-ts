@@ -18,7 +18,6 @@ import {
   deriveKeyPair,
   deriveLeafKey,
   deriveNumsOffset,
-  deriveQuoteIdPreimage,
   deriveQuoteLockKey,
   recoverV3LeafKeys,
 } from '../../src/crypto/NUT13';
@@ -252,8 +251,6 @@ describe('v3 (BLS) derivation', () => {
       const key = deriveQuoteLockKey(vseed, nut13Vectors.mint_identity, lock.counter);
       expect(bytesToHex(key)).toBe(lock.privkey);
       expect(bytesToHex(getPubKeyFromPrivKey(key))).toBe(lock.pubkey);
-      const preimage = deriveQuoteIdPreimage(vseed, nut13Vectors.mint_identity, lock.counter);
-      expect(bytesToHex(preimage)).toBe(lock.id_preimage);
     }
   });
 

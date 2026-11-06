@@ -39,12 +39,7 @@ import {
   verifyNutrootSpendInfo,
   type ParsedNutrootOption,
 } from '../crypto/nutroot';
-import {
-  derivedQuoteId,
-  inputBoundIdsForPayload,
-  inputsForPayload,
-  meltOutputAmount,
-} from '../crypto/transcript';
+import { inputBoundIdsForPayload, inputsForPayload, meltOutputAmount } from '../crypto/transcript';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
@@ -2987,20 +2982,19 @@ class Wallet {
    * counter) when seeded, random otherwise.
    *
    * @remarks
-   * `idPreimage` (NUT-13 type `0x05`, same counter) names a fixed txout quote locked to this key
-   * ({@link Wallet.prepareTransaction}); a mint quote leaves it unused. Derived keys are recoverable
-   * via {@link Wallet.recoverQuoteLockKey | recoverQuoteLockKey}; random ones exist only in the
-   * returned object, so persist the key with its quote. `{ random: true }` forces a random key on a
-   * seeded wallet, consuming no counter: for throwaway quotes (eg estimation) that must not pollute
-   * the recovery scan, or for a mint that publishes no NUT-06 `pubkey` to scope the derivation to.
+   * Derived keys are recoverable via {@link Wallet.recoverQuoteLockKey | recoverQuoteLockKey};
+   * random ones exist only in the returned object, so persist the key with its quote. `{ random:
+   * true }` forces a random key on a seeded wallet, consuming no counter: for throwaway quotes (eg
+   * estimation) that must not pollute the recovery scan, or for a mint that publishes no NUT-06
+   * `pubkey` to scope the derivation to.
    * @throws {@link CTSError} On a seeded wallet whose mint publishes no `pubkey`, unless `random`.
-   * @experimental Seed derivation follows draft NUT-13 types `0x04`/`0x05` and draft NUT-06 identity
+   * @experimental Seed derivation follows draft NUT-13 type `0x04` and draft NUT-06 identity
    *   scoping and may change before GA; a key derived now may then no longer be found by scan, so
    *   persist the `privkey` with its quote.
    */
   async createQuoteLockKey(opts?: {
     random?: boolean;
-  }): Promise<{ pubkey: string; privkey: string; idPreimage: string }> {
+  }): Promise<{ pubkey: string; privkey: string }> {
     const seed = opts?.random ? undefined : this._seed;
     const mintPubkey = seed ? this.requireMintIdentity('createQuoteLockKey') : undefined;
     return createQuoteLockKeyPair(seed, mintPubkey, async () => {
@@ -4813,9 +4807,9 @@ class Wallet {
    *   `{ quote, method }` is enough, the rest is fetched.
    * @param transaction.proofOutputs The new proofs: their total, output type and keyset.
    * @param transaction.meltQuoteOutput The full melt quote; `feeIndex` selects a NUT-30 fee option.
-   * @param transaction.mintQuoteOutputs Fixed txout quotes, each locked to `pubkey` (the mint must
-   *   advertise `fixed_txout_quotes`), named by its `idPreimage` (both from
-   *   {@link Wallet.createQuoteLockKey}) or, without one, by an id bound to the inputs.
+   * @param transaction.mintQuoteOutputs Fixed txout quotes, each locked to `pubkey` (from
+   *   {@link Wallet.createQuoteLockKey}; the mint must advertise `fixed_txout_quotes`), its id bound
+   *   to the inputs.
    * @throws If the mint does not support NUT-XX, a quote is unlocked, or the inputs do not balance.
    */
   async prepareTransaction(
@@ -4834,7 +4828,7 @@ class Wallet {
           };
         feeIndex?: number;
       };
-      mintQuoteOutputs?: Array<{ pubkey: string; amount: AmountLike; idPreimage?: string }>;
+      mintQuoteOutputs?: Array<{ pubkey: string; amount: AmountLike }>;
     },
     config: PrepareTransactionConfig = {},
   ): Promise<TransactionPreview> {
@@ -4938,28 +4932,24 @@ class Wallet {
         (transaction.mintQuoteInputs ?? []).some((q) => q?.quote?.method === 'txout'),
       'prepareTransaction: a txout quote input cannot pay into a fixed txout quote',
     );
-    // Inputs hash once, and only when an output takes an id bound to them (NUT-XX).
-    const boundId = requested.some((c) => c?.idPreimage === undefined)
-      ? inputBoundIdsForPayload({
-          proofInputs: proofs,
-          mintQuoteInputs: quotes.map((q) => ({
-            quoteId: q.quote,
-            amount: q.amount,
-            lockKey: q.pubkey,
-            issued: q.issued,
-          })),
-        })
-      : undefined;
+    // Inputs hash once, and only when a fixed txout quote takes an id bound to them (NUT-XX).
+    const boundId =
+      requested.length > 0
+        ? inputBoundIdsForPayload({
+            proofInputs: proofs,
+            mintQuoteInputs: quotes.map((q) => ({
+              quoteId: q.quote,
+              amount: q.amount,
+              lockKey: q.pubkey,
+              issued: q.issued,
+            })),
+          })
+        : undefined;
     const quoteOutputs: TransactionPreview['mintQuoteOutputs'] = requested.map((c, k) => ({
-      quote: c?.idPreimage === undefined ? boundId!(k) : this.txoutQuoteIdFor(c.idPreimage),
-      ...(c?.idPreimage !== undefined && { idPreimage: c.idPreimage.toLowerCase() }),
+      quote: boundId!(k),
       pubkey: normalizeSecpPubkey(c?.pubkey),
       amount: this.parseAmount(c?.amount, 'prepareTransaction.mintQuoteOutputs'),
     }));
-    this.failIf(
-      new Set(quoteOutputs.map((c) => c.quote)).size !== quoteOutputs.length,
-      'prepareTransaction: txout quote ids must not repeat; take a fresh idPreimage for each',
-    );
     const fixedTotal = Amount.sum(quoteOutputs.map((c) => c.amount));
 
     // A quote input prices as its minimal split, inside NUT-02's single rounding (NUT-XX).
@@ -5165,7 +5155,6 @@ class Wallet {
             mint_quote_outputs: mintQuoteOutputs.map((c) => ({
               pubkey: c.pubkey,
               amount: c.amount,
-              ...(c.idPreimage !== undefined && { id_preimage: c.idPreimage }),
             })),
           }),
           ...(options.preferAsync && { prefer_async: true }),
@@ -5217,17 +5206,6 @@ class Wallet {
       melt_quotes: [meltQuote],
       mint_quotes: mintQuotes,
     });
-  }
-
-  /**
-   * The derived id (NUT-04) a fixed txout quote takes from its 32-byte hex `idPreimage`.
-   */
-  private txoutQuoteIdFor(idPreimage: unknown): string {
-    this.failIf(
-      typeof idPreimage !== 'string' || !/^[0-9a-fA-F]{64}$/.test(idPreimage),
-      'prepareTransaction: a fixed txout quote needs a 32-byte hex idPreimage',
-    );
-    return derivedQuoteId(hexToBytes(idPreimage as string));
   }
 
   /**

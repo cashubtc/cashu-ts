@@ -26,7 +26,6 @@ import { minimalBE, tlvRecord } from './nutroot';
 
 export const TRANSCRIPT_REQUEST_TAG = 'Cashu_AuthorizedRequest';
 export const TRANSCRIPT_INPUT_TAG = 'Cashu_TransactionInput';
-export const QUOTE_ID_TAG = 'Cashu_QuoteId';
 export const INPUT_QUOTE_ID_TAG = 'Cashu_InputQuoteId';
 
 // The high nibble is the section: 0x1n inputs, 0x2n outputs, 0xFn never in a transaction.
@@ -94,7 +93,7 @@ export type TranscriptMintQuoteOutput = {
    */
   pubkey: string;
   /**
-   * The txout quote's id: {@link derivedQuoteId} or {@link inputBoundQuoteId}.
+   * The txout quote's id: {@link inputBoundQuoteId}.
    */
   quoteId: string;
 };
@@ -230,21 +229,7 @@ function mintQuoteOutputContainer(output: TranscriptMintQuoteOutput): Uint8Array
 }
 
 /**
- * A derived quote id (NUT-04): `hex(tagged_hash("Cashu_QuoteId", id_preimage))`.
- *
- * @remarks
- * The preimage is 32 bytes its creator supplies (NUT-13 type `0x05` for a seeded wallet) and the
- * mint never discloses.
- */
-export function derivedQuoteId(idPreimage: Uint8Array): string {
-  if (idPreimage.length !== 32) {
-    throw new CTSError('Quote id preimage must be 32 bytes');
-  }
-  return bytesToHex(taggedHash(QUOTE_ID_TAG, idPreimage));
-}
-
-/**
- * The id a fixed txout quote without `id_preimage` takes (NUT-XX), from the transaction's inputs.
+ * A fixed txout quote's id (NUT-XX), from the transaction's inputs.
  *
  * @remarks
  * `hex(tagged_hash("Cashu_InputQuoteId", SHA256(input section) || u32_BE(k)))`, `k` the output's
