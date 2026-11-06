@@ -309,6 +309,14 @@ describe('findSigningKey', () => {
   });
 });
 
+describe('computeMessageDigest with a prehashed digest', () => {
+  test('returns the digest unchanged, as bytes or hex', () => {
+    const digest = sha256(new TextEncoder().encode('hello'));
+    expect(computeMessageDigest({ digest })).toEqual(digest);
+    expect(computeMessageDigest({ digest }, true)).toBe(bytesToHex(digest));
+  });
+});
+
 describe('createBlindSignature', () => {
   // A valid compressed secp256k1 point (the generator).
   const VALID = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';

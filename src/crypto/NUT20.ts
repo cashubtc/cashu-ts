@@ -12,7 +12,8 @@ const MINT_QUOTE_SIG_DST = utf8ToBytes('Cashu_MintQuoteSig_v1');
 
 // Canonical minimal BE bytes of a non-negative amount (0 → empty, 1 → 0x01, 256 → 0x0100).
 // Amount.from defensively normalizes a raw JSON number/string (Amount passes through).
-function amountToMinimalBytes(blindedMessage: SerializedBlindedMessage): Uint8Array {
+// Shared with the NUT-11 SIG_ALL v1 message builder.
+export function amountToMinimalBytes(blindedMessage: SerializedBlindedMessage): Uint8Array {
   const value = Amount.from(blindedMessage.amount).toBigInt();
   if (value === 0n) return new Uint8Array(0);
   const hex = value.toString(16);
