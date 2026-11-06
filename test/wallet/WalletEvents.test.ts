@@ -1925,6 +1925,37 @@ describe('WalletEvents', () => {
       await flushMicrotasks();
       expect(c).toHaveBeenCalledTimes(1);
     });
+
+    it('contains a failed subscription setup while the group is still live', async () => {
+      const logger = { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() };
+      const setupError = new Error('handshake refused');
+      const wallet = {
+        mint: { connectWebSocket: vi.fn().mockRejectedValue(setupError) },
+        logger,
+      };
+      const ev = new WalletEvents(wallet as any);
+      const g = ev.group();
+
+      void g.add(ev.mintQuoteUpdates(['q1'], vi.fn(), vi.fn()));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(g.cancelled).toBe(false);
+      expect(logger.warn).toHaveBeenCalledWith(
+        'callback failed',
+        expect.objectContaining({
+          event: 'group.add',
+          reason: 'subscription setup failed',
+          error: setupError,
+        }),
+      );
+    });
+
+    it('still hands a failed setup back to a caller of add', async () => {
+      const g = events.group();
+      await expect(g.add(Promise.reject(new Error('setup failed')))).rejects.toThrow(
+        'setup failed',
+      );
+    });
   });
 
   describe('waitUntilPaid default timeout message', () => {
