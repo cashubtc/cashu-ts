@@ -1092,7 +1092,9 @@ export class WalletEvents {
    * cancellers are caught and ignored.
    *
    * The returned function also has an `.add()` method to register more cancellers, and a
-   * `.cancelled` boolean property for debugging.
+   * `.cancelled` boolean property for debugging. A failed subscription setup is logged at warn and
+   * does not reach the subscription's error callback: handle the promise `.add()` returns to act on
+   * it.
    *
    * @example
    *
@@ -1129,6 +1131,15 @@ export class WalletEvents {
         cancelSafely(c);
         return c;
       }
+      // cancelSafely only observes c at cancellation, which may be long after setup has failed
+      safeCallback(
+        async () => {
+          await c;
+        },
+        undefined,
+        this.wallet.logger,
+        { event: 'group.add', reason: 'subscription setup failed' },
+      );
       cancels.push(c);
       return c;
     };
