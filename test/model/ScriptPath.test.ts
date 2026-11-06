@@ -782,7 +782,7 @@ describe('ScriptPath mint packages', () => {
   test('extraction refuses a mint the package could not describe', () => {
     expect(() => ScriptPath.extractMintPackage(mintPreview(), [])).toThrow(/at least one plan/);
     const unlocked = { ...mintPreview(), quote: { quote: 'q-1' } as MintQuoteBaseResponse };
-    expect(() => ScriptPath.extractMintPackage(unlocked, [plan])).toThrow(/amount_issued/);
+    expect(() => ScriptPath.extractMintPackage(unlocked, [plan])).toThrow(/^Mint quote #1 needs/);
     const legacy = {
       ...mintPreview(),
       outputData: [OutputData.createSingleRandomData(2, '00bd033559de27d0')],
