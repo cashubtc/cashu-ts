@@ -1,5 +1,27 @@
 # Changelog
 
+## [5.0.0-rc.13](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.12...v5.0.0-rc.13) (2026-11-07)
+
+
+### Features
+
+* **mint:** add a per-call requestTimeout ([#1384](https://github.com/cashubtc/cashu-ts/issues/1384)) ([ac23d7d](https://github.com/cashubtc/cashu-ts/commit/ac23d7d26e8a85971ad59f88333414b51d2ba9d9))
+* **wallet:** restore a swap from its preview ([#1388](https://github.com/cashubtc/cashu-ts/issues/1388)) ([c79618b](https://github.com/cashubtc/cashu-ts/commit/c79618b87b4e2f0d3284c61df46bf56f58710d08))
+* **wallet:** sign swap previews before persisting ([#1385](https://github.com/cashubtc/cashu-ts/issues/1385)) ([2bdfad8](https://github.com/cashubtc/cashu-ts/commit/2bdfad83b418e5e4d2a09b780443f567f54489b4))
+
+
+### Bug Fixes
+
+* **events:** contain group subscription setup failures ([#1380](https://github.com/cashubtc/cashu-ts/issues/1380)) ([4b3e58f](https://github.com/cashubtc/cashu-ts/commit/4b3e58fd6c8733472964b3a2f17b5cdb542552b0))
+* **events:** contain onDrop and onProgress callbacks ([#1367](https://github.com/cashubtc/cashu-ts/issues/1367)) ([5043fec](https://github.com/cashubtc/cashu-ts/commit/5043fecfd45ceb57f7e0dc42532a772482107575))
+* **events:** contain remaining consumer callbacks ([#1365](https://github.com/cashubtc/cashu-ts/issues/1365)) ([5b8f1e7](https://github.com/cashubtc/cashu-ts/commit/5b8f1e78c29b3dd1e89f262204e9f102b323c6fe))
+* **events:** route error callbacks through safeCallback ([#1362](https://github.com/cashubtc/cashu-ts/issues/1362)) ([dd8bbe3](https://github.com/cashubtc/cashu-ts/commit/dd8bbe34e06e4f7f6da8f0704e6b08acf4e354ab))
+* keep request paths and full quote ids out of log context ([#1374](https://github.com/cashubtc/cashu-ts/issues/1374)) ([234a35a](https://github.com/cashubtc/cashu-ts/commit/234a35a8499f56ff8cd08bb9dee63b9e11b0c86c))
+* **mint:** log the response shape, not the body, on malformed responses ([#1389](https://github.com/cashubtc/cashu-ts/issues/1389)) ([2bf8445](https://github.com/cashubtc/cashu-ts/commit/2bf844566f41fe873383c9dcd2fa55d1bf420c07))
+* **payment-request:** drop an incomplete DLEQ in decodePayload ([#1382](https://github.com/cashubtc/cashu-ts/issues/1382)) ([a5782dd](https://github.com/cashubtc/cashu-ts/commit/a5782ddcf4077efbd1e936d0edbc989cc7a008b2))
+* **wallet:** drop quote ids and proofs from log context ([#1377](https://github.com/cashubtc/cashu-ts/issues/1377)) ([0404b9b](https://github.com/cashubtc/cashu-ts/commit/0404b9b2299ee45e57a7b670016bea6a9a87cf83))
+* **wallet:** keep the DLEQ on offline sends ([#1383](https://github.com/cashubtc/cashu-ts/issues/1383)) ([6cb1de8](https://github.com/cashubtc/cashu-ts/commit/6cb1de87068a3907f3fc6061546e430270135aab))
+
 ## [5.0.0-rc.12](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.11...v5.0.0-rc.12) (2026-10-28)
 
 
