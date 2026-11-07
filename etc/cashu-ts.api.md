@@ -333,6 +333,7 @@ export type CompleteMeltOptions = {
     extraPayload?: Record<string, unknown>;
     scriptPath?: ScriptPathPlan[];
     signal?: AbortSignal;
+    requestTimeout?: number;
 };
 
 // @public
@@ -1342,6 +1343,7 @@ export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M ex
 export type MintCallOptions = {
     customRequest?: RequestFn;
     signal?: AbortSignal;
+    requestTimeout?: number;
 };
 
 // @public (undocumented)
