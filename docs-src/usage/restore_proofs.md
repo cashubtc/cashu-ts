@@ -60,6 +60,16 @@ const { proofs } = await wallet.batchRestore({ maxCounter: lastKnown, gapLimit: 
 const { proofs, lastCounterWithSignature } = await wallet.restore(0, 100, { keysetId });
 ```
 
+## A swap whose response was lost
+
+The seeded scan can only rebuild deterministic outputs. A swap's preview holds every output it asked for, random or locked, so if the response was lost and a replay misses the mint's cache (NUT-19), `restoreSwapPreview` asks the mint for those exact outputs and returns them as `{ keep, send }`, like `completeSwap`. It needs no seed, and locked send outputs come back still locked to the recipient. Empty results only mean the mint has no signature on record yet: the swap may still be in flight, so check `groupProofsByState(preview.inputs)` before you discard the preview.
+
+```ts
+const { preview } = await wallet.prepareSwapToSend(21, myProofs);
+// ... the response was lost, and a replay was refused ...
+const { keep, send } = await wallet.restoreSwapPreview(preview);
+```
+
 ## Notes
 
 - The low-level `restore()` replays **issued signatures** with no state check, so its result includes proofs you have long since spent; `batchRestore` and `restoreAll` drop those for you. Filter a raw `restore()` result before crediting a balance: `wallet.groupProofsByState(proofs)` returns `{ unspent, pending, spent }` in one call and is the same check to run when cleaning a store. `wallet.verifyMintSignatures(proofs, { onProgress })` re-checks the mint signatures the same way, in chunks that yield, so a large store can be audited from a UI thread.

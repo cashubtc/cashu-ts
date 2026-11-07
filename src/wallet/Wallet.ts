@@ -2753,6 +2753,44 @@ class Wallet {
   }
 
   /**
+   * Recovers the proofs a swap produced from its preview (NUT-09), for a swap whose response was
+   * lost.
+   *
+   * @remarks
+   * Needs no seed: the preview holds every output, random or locked. Outputs the mint has not
+   * signed are left out, but empty results do not prove the swap failed, as it may still be in
+   * flight: check `groupProofsByState(preview.inputs)` before discarding the preview.
+   */
+  async restoreSwapPreview(swapPreview: SwapPreview, opts?: AbortOptions): Promise<SendResponse> {
+    this.throwIfAborted(opts?.signal);
+    const keepOutputs: OutputDataLike[] = swapPreview?.keepOutputs ?? [];
+    const sendOutputs: OutputDataLike[] = swapPreview?.sendOutputs ?? [];
+    const outputData = [...keepOutputs, ...sendOutputs];
+    this.failIf(outputData.length === 0, 'restoreSwapPreview: preview has no outputs');
+    this.assertUniqueOutputSecrets(outputData);
+
+    const response = await this.mint.restore(
+      { outputs: outputData.map((d) => d.blindedMessage) },
+      { signal: opts?.signal },
+    );
+    // The mint replies only for outputs it signed, in any order, so match them back by B_.
+    const signatureByB_ = new Map(response.outputs.map((o, i) => [o.B_, response.signatures[i]]));
+    const signed = outputData.filter((d) => signatureByB_.has(d.blindedMessage.B_));
+    const signatures = signed.map((d) => signatureByB_.get(d.blindedMessage.B_)!);
+    this.validateReturnedSignatures(signatures, signed);
+
+    await this._ensureKeysetsForSignatures(signatures);
+    const proofs = await mapInChunks(signed, (d, i) =>
+      d.toProof(signatures[i], this.keysetForSignature(signatures[i].id)),
+    );
+    const keepSet = new Set(keepOutputs);
+    return {
+      keep: proofs.filter((_, i) => keepSet.has(signed[i])),
+      send: proofs.filter((_, i) => !keepSet.has(signed[i])),
+    };
+  }
+
+  /**
    * State checks a counter range, then restores only the counters that are not spent.
    *
    * @remarks
