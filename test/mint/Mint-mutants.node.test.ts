@@ -391,7 +391,7 @@ describe('Mint mutation coverage', () => {
 
       await expect(mint.getKeys()).rejects.toThrow('Invalid response from mint');
       expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
-        data: { invalid: true },
+        type: 'object',
         op: 'getKeys',
       });
     });
@@ -405,7 +405,7 @@ describe('Mint mutation coverage', () => {
 
       await expect(mint.restore({ outputs: [] })).rejects.toThrow('Invalid response from mint');
       expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
-        data: { signatures: [] },
+        type: 'object',
         op: 'restore',
       });
     });
