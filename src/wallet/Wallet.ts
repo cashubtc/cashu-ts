@@ -123,6 +123,24 @@ const PENDING_KEYSET_ID = '__PENDING__';
 const MINT_QUOTE_SIGNATURE_INVALID_CODE = 20008;
 
 /**
+<<<<<<< HEAD
+=======
+ * True when a proof's DLEQ has all of `e`, `s` and `r`.
+ */
+function hasCompleteDleq(proof: Proof): boolean {
+  return !!(proof.dleq?.r && proof.dleq.s && proof.dleq.e);
+}
+
+/**
+ * One scanned counter range. `used` is proven by a SPENT state or a returned signature, and a used
+ * range always names the last such counter.
+ */
+type ScanResult =
+  | { proofs: Proof[]; used: false }
+  | { proofs: Proof[]; lastCounterWithSignature: number; used: true };
+
+/**
+>>>>>>> 6cb1de8 (fix(wallet): keep the DLEQ on offline sends (#1383))
  * Class that represents a Cashu wallet.
  *
  * @remarks
@@ -1443,8 +1461,13 @@ class Wallet {
    * default config uses exact match selection, and does not includeFees or requireDleq. Because the
    * send is offline, the user will unlock the signed proofs when they receive them online.
    *
+<<<<<<< HEAD
    * When no offline selection matches the amount, this returns an empty `send`. In v5 it throws
    * instead; wrap calls in try/catch to stay forward-compatible.
+=======
+   * A proof's DLEQ is kept so the receiver can verify offline (NUT-12); `requireDleq` limits
+   * selection to proofs with one. Pass `removeDleq` to `getEncodedToken` to save space.
+>>>>>>> 6cb1de8 (fix(wallet): keep the DLEQ on offline sends (#1383))
    * @param amount Amount to send.
    * @param proofs Array of proofs (must sum >= amount; pre-sign if P2PK-locked).
    * @param config Optional parameters for the send.
@@ -1457,8 +1480,14 @@ class Wallet {
     let normalizedProofs = normalizeProofAmounts(proofs);
     const { requireDleq = false, includeFees = false, exactMatch = true } = config || {};
     if (requireDleq) {
+<<<<<<< HEAD
       // Only use proofs that have a DLEQ
       normalizedProofs = normalizedProofs.filter((p) => p.dleq != undefined);
+=======
+      // v3 (BLS, `02…`) proofs satisfy `requireDleq` via the pairing check rather than a DLEQ,
+      // the same split `verifyReceivedProofs` makes on receive.
+      normalizedProofs = normalizedProofs.filter((p) => isBlsKeyset(p.id) || hasCompleteDleq(p));
+>>>>>>> 6cb1de8 (fix(wallet): keep the DLEQ on offline sends (#1383))
     }
     this.failIf(
       sumProofs(normalizedProofs).lessThan(sendAmount),
@@ -1471,8 +1500,25 @@ class Wallet {
       includeFees,
       exactMatch,
     );
+<<<<<<< HEAD
     // Ensure witnesses are serialized, strip DLEQ if not required, keep p2pk_e
     const sendPrepared = this._prepareInputsForMint(send, requireDleq, true);
+=======
+    // No selection covers the amount: fail rather than return an empty send. send() catches this
+    // and falls back to a swap; direct callers get a clear failure instead of a silent no-op.
+    this.failIf(
+      !sendAmount.isZero() && send.length === 0,
+      'Send cannot be completed offline for the requested amount',
+    );
+    // Keep NUT-11 witnesses, but never transfer a NUT-10 transaction witness: it signs only the
+    // sender's old transcript and would prevent the receiver from attaching a current one.
+    const sendPrepared = this._prepareInputsForMint(send, true, true, true).map((proof) => {
+      if (!isBlsKeyset(proof.id) || !isV3PointSecret(proof.secret)) return proof;
+      const withoutWitness = { ...proof };
+      delete withoutWitness.witness;
+      return withoutWitness;
+    });
+>>>>>>> 6cb1de8 (fix(wallet): keep the DLEQ on offline sends (#1383))
     return { keep, send: sendPrepared };
   }
 
@@ -2128,7 +2174,12 @@ class Wallet {
       const { dleq, p2pk_e, ...rest } = p; // isolate dleq and p2pk_e
       let newProof: Proof = { ...rest, witness }; // add back normalized witness
       if (keepP2pkE && p2pk_e) newProof = { ...newProof, p2pk_e };
+<<<<<<< HEAD
       if (keepDleq && dleq) newProof = { ...newProof, dleq };
+=======
+      if (keepDleq && hasCompleteDleq(p)) newProof = { ...newProof, dleq };
+      if (keepSpendInfo && spend_info) newProof = { ...newProof, spend_info };
+>>>>>>> 6cb1de8 (fix(wallet): keep the DLEQ on offline sends (#1383))
       return newProof;
     });
   }

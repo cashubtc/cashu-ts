@@ -123,6 +123,8 @@ const { keep, send } = await wallet.ops
   .run();
 ```
 
+Offline modes keep each proof's DLEQ, so the receiver can verify it with no connection. `requireDleq` limits selection to proofs with one. A DLEQ nearly doubles token size, so pass `{ removeDleq: true }` to `getEncodedToken` if size matters, eg for a QR code.
+
 > **Important**
 > Offline modes **cannot** be combined with custom output types (`asXXXX/keepAsXXXX`).
 > The builder will throw:
