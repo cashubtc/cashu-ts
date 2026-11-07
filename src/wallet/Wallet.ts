@@ -123,6 +123,13 @@ const PENDING_KEYSET_ID = '__PENDING__';
 const MINT_QUOTE_SIGNATURE_INVALID_CODE = 20008;
 
 /**
+ * True when a proof's DLEQ has all of `e`, `s` and `r`.
+ */
+function hasCompleteDleq(proof: Proof): boolean {
+  return !!(proof.dleq?.r && proof.dleq.s && proof.dleq.e);
+}
+
+/**
  * Class that represents a Cashu wallet.
  *
  * @remarks
@@ -1443,6 +1450,9 @@ class Wallet {
    * default config uses exact match selection, and does not includeFees or requireDleq. Because the
    * send is offline, the user will unlock the signed proofs when they receive them online.
    *
+   * A proof's DLEQ is kept so the receiver can verify offline (NUT-12); `requireDleq` limits
+   * selection to proofs with one. Pass `removeDleq` to `getEncodedToken` to save space.
+   *
    * When no offline selection matches the amount, this returns an empty `send`. In v5 it throws
    * instead; wrap calls in try/catch to stay forward-compatible.
    * @param amount Amount to send.
@@ -1458,7 +1468,7 @@ class Wallet {
     const { requireDleq = false, includeFees = false, exactMatch = true } = config || {};
     if (requireDleq) {
       // Only use proofs that have a DLEQ
-      normalizedProofs = normalizedProofs.filter((p) => p.dleq != undefined);
+      normalizedProofs = normalizedProofs.filter((p) => hasCompleteDleq(p));
     }
     this.failIf(
       sumProofs(normalizedProofs).lessThan(sendAmount),
@@ -1471,8 +1481,8 @@ class Wallet {
       includeFees,
       exactMatch,
     );
-    // Ensure witnesses are serialized, strip DLEQ if not required, keep p2pk_e
-    const sendPrepared = this._prepareInputsForMint(send, requireDleq, true);
+    // Ensure witnesses are serialized, keep DLEQ and p2pk_e for the receiver
+    const sendPrepared = this._prepareInputsForMint(send, true, true);
     return { keep, send: sendPrepared };
   }
 
@@ -2128,7 +2138,7 @@ class Wallet {
       const { dleq, p2pk_e, ...rest } = p; // isolate dleq and p2pk_e
       let newProof: Proof = { ...rest, witness }; // add back normalized witness
       if (keepP2pkE && p2pk_e) newProof = { ...newProof, p2pk_e };
-      if (keepDleq && dleq) newProof = { ...newProof, dleq };
+      if (keepDleq && hasCompleteDleq(p)) newProof = { ...newProof, dleq };
       return newProof;
     });
   }
