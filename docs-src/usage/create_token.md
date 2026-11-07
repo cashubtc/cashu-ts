@@ -17,15 +17,16 @@ const receiveProofs = await wallet2.receive(token);
 // store receiveProofs in your app ..
 ```
 
-`wallet.send()` is the one-shot form: a crash between the swap and storing the result strands the inputs. The recoverable form persists the preview first, then completes it; a persisted preview replays after a restart because `completeSwap` rebuilds the same request from it.
+`wallet.send()` is the one-shot form: a crash between the swap and storing the result strands the inputs. The recoverable form signs and persists the preview first, then completes it; a persisted signed preview replays after a restart because `completeSwap` rebuilds the same request from it.
 
 ```typescript
 import { serializeSwapPreview } from '@cashu/cashu-ts';
 
 const { preview, unselected } = await wallet.prepareSwapToSend(32, proofs);
 returnToStore(unselected); // the swap does not touch these
-await savePendingSend(serializeSwapPreview(preview)); // spendable material: protect it like proofs
-const { keep, send } = await wallet.completeSwap(preview);
+const signed = await wallet.signSwapPreview(preview);
+await savePendingSend(serializeSwapPreview(signed)); // spendable material: protect it like proofs
+const { keep, send } = await wallet.completeSwap(signed);
 // the swap settled: delete the pending send and store keep
 ```
 

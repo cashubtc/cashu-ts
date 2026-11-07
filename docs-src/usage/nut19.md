@@ -147,7 +147,7 @@ recover-after-restart lifecycle.
 ```ts
 import { deserializeSwapPreview, serializeSwapPreview } from '@cashu/cashu-ts';
 
-const receivePreview = await wallet.prepareSwapToReceive(token);
+const receivePreview = await wallet.signSwapPreview(await wallet.prepareSwapToReceive(token));
 
 // Swap previews have a serialize helper: persist the JSON-safe form, then
 // rehydrate it with deserializeSwapPreview to replay after a restart. The blob carries
@@ -156,7 +156,7 @@ const stored = JSON.stringify(serializeSwapPreview(receivePreview));
 const { keep } = await wallet.completeSwap(deserializeSwapPreview(JSON.parse(stored)));
 ```
 
-`completeSwap` builds its request purely from the preview, so a replayed preview posts a
+`completeSwap` builds its request purely from the preview, so a replayed signed preview posts a
 byte-identical `/v1/swap` body. See [Receive § 5](../wallet_ops/receive.md) and
 [Send § 2](../wallet_ops/send.md) for the full serialize-and-rehydrate round trip.
 
