@@ -237,7 +237,10 @@ class Mint {
     );
 
     if (!isObj(data) || !Array.isArray(data?.signatures)) {
-      this._logger.error('Invalid response from mint...', { data, op: 'swap' });
+      this._logger.error('Invalid response from mint...', {
+        type: describeShape(data),
+        op: 'swap',
+      });
       throw new CTSError('Invalid response from mint');
     }
     this.assertSignatureCount(data.signatures, swapPayload.outputs, 'swap');
@@ -598,7 +601,10 @@ class Mint {
     );
 
     if (!isObj(data) || !Array.isArray(data?.signatures)) {
-      this._logger.error('Invalid response from mint...', { data, op: `mint.${method}` });
+      this._logger.error('Invalid response from mint...', {
+        type: describeShape(data),
+        op: `mint.${method}`,
+      });
       throw new CTSError('Invalid response from mint');
     }
     this.assertSignatureCount(data.signatures, mintPayload.outputs, `mint.${method}`);
@@ -674,7 +680,10 @@ class Mint {
     );
 
     if (!isObj(data) || !Array.isArray(data?.signatures)) {
-      this._logger.error('Invalid response from mint...', { data, op: `mintBatch.${method}` });
+      this._logger.error('Invalid response from mint...', {
+        type: describeShape(data),
+        op: `mintBatch.${method}`,
+      });
       throw new CTSError('Invalid response from mint');
     }
     this.assertSignatureCount(data.signatures, mintPayload.outputs, `mintBatch.${method}`);
@@ -1035,7 +1044,10 @@ class Mint {
       !Array.isArray(data?.states) ||
       data.states.length > checkPayload.Ys.length
     ) {
-      this._logger.error('Invalid response from mint...', { data, op: 'check' });
+      this._logger.error('Invalid response from mint...', {
+        type: describeShape(data),
+        op: 'check',
+      });
       throw new CTSError('Invalid response from mint');
     }
 
@@ -1081,7 +1093,10 @@ class Mint {
     });
 
     if (!isObj(data) || !Array.isArray(data.keysets)) {
-      this._logger.error('Invalid response from mint...', { data, op: 'getKeys' });
+      this._logger.error('Invalid response from mint...', {
+        type: describeShape(data),
+        op: 'getKeys',
+      });
       throw new CTSError('Invalid response from mint');
     }
     this.assertKeysetList(data.keysets, 'getKeys');
@@ -1106,7 +1121,10 @@ class Mint {
       logger: this._logger,
     });
     if (!isObj(data) || !Array.isArray(data.keysets)) {
-      this._logger.error('Invalid response from mint...', { data, op: 'getKeySets' });
+      this._logger.error('Invalid response from mint...', {
+        type: describeShape(data),
+        op: 'getKeySets',
+      });
       throw new CTSError('Invalid response from mint');
     }
     this.assertKeysetList(data.keysets, 'getKeySets');
@@ -1144,7 +1162,10 @@ class Mint {
       data.outputs.length !== data.signatures.length ||
       data.outputs.length > restorePayload.outputs.length
     ) {
-      this._logger.error('Invalid response from mint...', { data, op: 'restore' });
+      this._logger.error('Invalid response from mint...', {
+        type: describeShape(data),
+        op: 'restore',
+      });
       throw new CTSError('Invalid response from mint');
     }
 
