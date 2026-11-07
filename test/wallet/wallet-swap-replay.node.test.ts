@@ -324,6 +324,17 @@ describe('swap preview replay', () => {
     expect(bodies[1]).toBe(bodies[0]);
   });
 
+  test('signs a preview with no keep outputs', async () => {
+    const { wallet, bodies } = walletCapturingSwaps(v3Id);
+    const { preview } = await wallet.prepareSwapToSend(1, [bearer(4)]);
+    const { keepOutputs: _keep, ...sendOnly } = preview;
+
+    const signed = await wallet.signSwapPreview(sendOnly);
+    await completeLosingResponse(wallet, signed);
+
+    expect(witnessOnWire(bodies[0])).toBeDefined();
+  });
+
   test('refuses a preview with no inputs', async () => {
     const { wallet } = walletCapturingSwaps(v3Id);
     await expect(wallet.signSwapPreview({} as SwapPreview)).rejects.toThrow(

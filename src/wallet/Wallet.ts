@@ -1994,13 +1994,12 @@ class Wallet {
       (plan) => !inputs.find((p) => p.secret === plan.secret && isBlsKeyset(p.id))?.witness,
     );
     const { payload } = this.createSwapTransaction(inputs, keepOutputs, sendOutputs);
+    const privkeys = privkey === undefined ? [] : [privkey].flat();
     await attachTransactionWitnesses(
       payload,
       undefined,
       collectSpendInfoKeys(inputs, privkey, this._logger),
-      scriptPath?.length
-        ? prepareScriptPathSpends(inputs, scriptPath, privkey === undefined ? [] : [privkey].flat())
-        : undefined,
+      scriptPath?.length ? prepareScriptPathSpends(inputs, scriptPath, privkeys) : undefined,
       this._nutrootState(),
       options?.signal,
     );
