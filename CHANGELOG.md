@@ -1,5 +1,21 @@
 # Changelog
 
+## [4.13.1](https://github.com/cashubtc/cashu-ts/compare/v4.13.0...v4.13.1) (2026-11-07)
+
+
+### Bug Fixes
+
+* **auth:** drop request path from BAT log context ([#1351](https://github.com/cashubtc/cashu-ts/issues/1351)) ([8e1864f](https://github.com/cashubtc/cashu-ts/commit/8e1864f453499412165b7f065dc386471ab5b40f))
+* **events:** contain group subscription setup failures ([#1381](https://github.com/cashubtc/cashu-ts/issues/1381)) ([913806c](https://github.com/cashubtc/cashu-ts/commit/913806c1b94d495384ca90bdc7b694a29fa3fc31))
+* **events:** contain onDrop and onProgress callbacks ([#1368](https://github.com/cashubtc/cashu-ts/issues/1368)) ([faf2d3a](https://github.com/cashubtc/cashu-ts/commit/faf2d3a0ec343ebd8b211291f38cf5f7cefb1982))
+* **events:** contain remaining consumer callbacks ([#1366](https://github.com/cashubtc/cashu-ts/issues/1366)) ([d6a121a](https://github.com/cashubtc/cashu-ts/commit/d6a121ae2e7318f7e44a2b81229101f86cb791c9))
+* keep request paths and full quote ids out of log context ([#1375](https://github.com/cashubtc/cashu-ts/issues/1375)) ([a3b7cab](https://github.com/cashubtc/cashu-ts/commit/a3b7cab45abaf5e80c723428ca067046961fdca2))
+* **mint:** log the response shape, not the body, on malformed responses ([#1390](https://github.com/cashubtc/cashu-ts/issues/1390)) ([ae6a3e0](https://github.com/cashubtc/cashu-ts/commit/ae6a3e0a1e04a3d054af500f49f579448475216d))
+* **payment-request:** drop an incomplete DLEQ in decodePayload ([#1386](https://github.com/cashubtc/cashu-ts/issues/1386)) ([aae3036](https://github.com/cashubtc/cashu-ts/commit/aae3036d91ec741f65eb30b735a342bd9534ab08))
+* **wallet:** drop quote ids and proofs from log context ([#1378](https://github.com/cashubtc/cashu-ts/issues/1378)) ([8d74a82](https://github.com/cashubtc/cashu-ts/commit/8d74a82e8bdcda703343f29159c1dddcee830cba))
+* **wallet:** keep the DLEQ on offline sends ([#1387](https://github.com/cashubtc/cashu-ts/issues/1387)) ([01da1d1](https://github.com/cashubtc/cashu-ts/commit/01da1d177501f4e180eb13088792c7ad13b17f69))
+* **ws:** route error callbacks through safeCallback ([#1363](https://github.com/cashubtc/cashu-ts/issues/1363)) ([aaf8af3](https://github.com/cashubtc/cashu-ts/commit/aaf8af30a85e86215151e795486dd6cbf94feeb7))
+
 ## [4.13.0](https://github.com/cashubtc/cashu-ts/compare/v4.12.0...v4.13.0) (2026-10-26)
 
 
