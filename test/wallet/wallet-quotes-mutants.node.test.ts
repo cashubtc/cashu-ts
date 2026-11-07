@@ -232,7 +232,13 @@ describe('_prepareInputsForMint mutants', () => {
     await wallet.loadMint();
 
     const proofs = [
-      { id: KEYSET_ID, amount: Amount.from(4), secret: 's4', C: 'C4', dleq: { s: 'a', e: 'b' } },
+      {
+        id: KEYSET_ID,
+        amount: Amount.from(4),
+        secret: 's4',
+        C: 'C4',
+        dleq: { s: 'a', e: 'b', r: 'c' },
+      },
     ] as unknown as Proof[];
 
     const { send } = wallet.sendOffline(4, proofs, { requireDleq: true });

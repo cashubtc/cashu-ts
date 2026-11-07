@@ -176,6 +176,13 @@ const PENDING_KEYSET_ID = '__PENDING__';
 const MINT_QUOTE_SIGNATURE_INVALID_CODE = 20008;
 
 /**
+ * True when a proof's DLEQ has all of `e`, `s` and `r`.
+ */
+function hasCompleteDleq(proof: Proof): boolean {
+  return !!(proof.dleq?.r && proof.dleq.s && proof.dleq.e);
+}
+
+/**
  * One scanned counter range. `used` is proven by a SPENT state or a returned signature, and a used
  * range always names the last such counter.
  */
@@ -1585,6 +1592,9 @@ class Wallet {
    * If proofs are P2PK-locked to your public key, call signP2PKProofs first to sign them. The
    * default config uses exact match selection, and does not includeFees or requireDleq. Because the
    * send is offline, the user will unlock the signed proofs when they receive them online.
+   *
+   * A proof's DLEQ is kept so the receiver can verify offline (NUT-12); `requireDleq` limits
+   * selection to proofs with one. Pass `removeDleq` to `getEncodedToken` to save space.
    * @param amount Amount to send.
    * @param proofs Array of proofs (must sum >= amount; pre-sign if P2PK-locked).
    * @param config Optional parameters for the send.
@@ -1596,11 +1606,9 @@ class Wallet {
     let normalizedProofs = normalizeProofAmounts(proofs);
     const { requireDleq = false, includeFees = false, exactMatch = true } = config || {};
     if (requireDleq) {
-      // v3 (BLS, `02…`) proofs satisfy the "cryptographically-verified mint signature"
-      // semantic of `requireDleq` via pairing equality rather than a DLEQ proof. Accept
-      // them alongside v0/v1/v2 proofs that carry a DLEQ. Mirrors the receive-side
-      // `hasValidDleq` dispatch (`utils/core.ts`).
-      normalizedProofs = normalizedProofs.filter((p) => isBlsKeyset(p.id) || p.dleq != undefined);
+      // v3 (BLS, `02…`) proofs satisfy `requireDleq` via the pairing check rather than a DLEQ,
+      // the same split `verifyReceivedProofs` makes on receive.
+      normalizedProofs = normalizedProofs.filter((p) => isBlsKeyset(p.id) || hasCompleteDleq(p));
     }
     this.failIf(
       sumProofs(normalizedProofs).lessThan(sendAmount),
@@ -1621,7 +1629,7 @@ class Wallet {
     );
     // Keep NUT-11 witnesses, but never transfer a NUT-10 transaction witness: it signs only the
     // sender's old transcript and would prevent the receiver from attaching a current one.
-    const sendPrepared = this._prepareInputsForMint(send, requireDleq, true, true).map((proof) => {
+    const sendPrepared = this._prepareInputsForMint(send, true, true, true).map((proof) => {
       if (!isBlsKeyset(proof.id) || !isV3PointSecret(proof.secret)) return proof;
       const withoutWitness = { ...proof };
       delete withoutWitness.witness;
@@ -2415,7 +2423,7 @@ class Wallet {
       const { dleq, p2pk_e, spend_info, ...rest } = p; // isolate the wallet-side fields
       let newProof: Proof = { ...rest, witness }; // add back normalized witness
       if (keepP2pkE && p2pk_e) newProof = { ...newProof, p2pk_e };
-      if (keepDleq && dleq) newProof = { ...newProof, dleq };
+      if (keepDleq && hasCompleteDleq(p)) newProof = { ...newProof, dleq };
       if (keepSpendInfo && spend_info) newProof = { ...newProof, spend_info };
       return newProof;
     });
