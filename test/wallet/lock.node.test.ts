@@ -209,6 +209,26 @@ describe('lockToNutrootOptions (v3 encoder)', () => {
       lockToNutrootOptions({ mainKeys: [PUB_A, PUB_B], requiredMainSignatures: 3 }),
     ).toThrow();
   });
+
+  test('a template is a template leaf under NUMS naming its destination keys', () => {
+    const template = [PUB_B, PUB_C];
+    expect(lockToNutrootOptions({ mainKeys: [PUB_A], template })).toEqual({
+      receiverKey: NUTROOT_NUMS_KEY,
+      leaves: [{ type: 'template', n: 1, keys: [PUB_A], dests: template }],
+    });
+    expect(
+      lockToNutrootOptions({ mainKeys: [PUB_A], template, locktime: TIME, refundKeys: [PUB_R] })
+        .leaves,
+    ).toEqual([
+      { type: 'template', n: 1, keys: [PUB_A], dests: template },
+      { type: 'after', n: 1, time: TIME, keys: [PUB_R] },
+    ]);
+    expect(() => lockToNutrootOptions({ template })).toThrow(/key/i);
+    expect(() => lockToNutrootOptions({ mainKeys: [PUB_A], template, hashlock: HASH })).toThrow(
+      /not both/,
+    );
+    expect(() => lockToP2PKOptions({ mainKeys: [PUB_A], template })).toThrow(/v3/);
+  });
 });
 
 describe('lockToP2PKOptions (v2 encoder)', () => {

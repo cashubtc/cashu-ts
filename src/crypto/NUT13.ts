@@ -287,7 +287,7 @@ function deriveHmacSecretAndBlindingFactor(
 
 /**
  * NUT-13 derivation types. `0x00`-`0x03` are components of one proof allocation and share the
- * keyset's proof counter; `0x04` is counted per mint on a quote counter.
+ * keyset's proof counter; `0x04` takes a per-mint quote counter.
  */
 export const DERIVATION_TYPE = {
   /**
