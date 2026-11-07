@@ -983,6 +983,23 @@ describe('NUT-18 payment payloads', () => {
       expect(payload.proofs[0].witness).toBe('{"signatures":[]}');
     });
 
+    test('keeps a complete DLEQ', () => {
+      const dleq = { e: 'aa', s: 'bb', r: 'cc' };
+      const obj = { ...valid(), proofs: [{ ...valid().proofs[0], dleq }] };
+      expect(PaymentRequest.decodePayload(JSON.stringify(obj)).proofs[0].dleq).toEqual(dleq);
+    });
+
+    test.each([
+      ['r', { e: 'aa', s: 'bb' }],
+      ['e', { s: 'bb', r: 'cc' }],
+      ['s', { e: 'aa', r: 'cc' }],
+    ])('drops a DLEQ without its %s, as the token decoders do', (_field, dleq) => {
+      const obj = { ...valid(), proofs: [{ ...valid().proofs[0], dleq }] };
+      const [proof] = PaymentRequest.decodePayload(JSON.stringify(obj)).proofs;
+      expect(proof).not.toHaveProperty('dleq');
+      expect(proof.secret).toBe('s');
+    });
+
     test.each([
       ['not JSON', 'nope{', /not valid JSON/],
       ['a JSON array', '[]', /expected a JSON object/],
