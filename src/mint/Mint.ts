@@ -93,10 +93,15 @@ function maskQuoteId(id: unknown): string {
 }
 
 /**
- * Per-call options for a mint request: a `customRequest` override, and a `signal` that aborts the
- * request (rejects with `CallerAbortError`).
+ * Per-call options for a mint request: a `customRequest` override, a `signal` that aborts the
+ * request (rejects with `CallerAbortError`), and a `requestTimeout` per attempt in milliseconds,
+ * overriding any global value.
  */
-export type MintCallOptions = { customRequest?: RequestFn; signal?: AbortSignal };
+export type MintCallOptions = {
+  customRequest?: RequestFn;
+  signal?: AbortSignal;
+  requestTimeout?: number;
+};
 
 /**
  * Class represents Cashu Mint API.
@@ -178,13 +183,14 @@ class Mint {
    * @remarks
    * Not normalized: `MintInfo` (eg via `fetchMintInfo`) derives missing members and sanitizes
    * values.
-   * @param opts Per-call `customRequest` override and `signal` to abort the request.
+   * @param opts Per-call `customRequest` override, `signal` and `requestTimeout`.
    * @returns The mint's information response.
    */
   async getInfo(opts?: MintCallOptions): Promise<GetInfoResponse> {
     const requestInstance = opts?.customRequest ?? this._request;
     return requestInstance<GetInfoResponse>({
       signal: opts?.signal,
+      requestTimeout: opts?.requestTimeout,
       endpoint: joinUrls(this._mintUrl, '/v1/info'),
       onResponseMeta: this._captureResponseMetadata,
       logger: this._logger,
@@ -194,8 +200,8 @@ class Mint {
   /**
    * Returns the mint's info, fetching and caching it when none is held or `forceRefresh` is set.
    *
-   * @param opts Per-call `customRequest` override, `signal` to abort the request, and
-   *   `forceRefresh` to refetch over a cached copy.
+   * @param opts Per-call `customRequest` override, `signal`, `requestTimeout`, and `forceRefresh`
+   *   to refetch over a cached copy.
    */
   async fetchMintInfo(opts?: MintCallOptions & { forceRefresh?: boolean }): Promise<MintInfo> {
     if (this._mintInfo && !opts?.forceRefresh) {
@@ -220,7 +226,7 @@ class Mint {
    * Performs a swap operation with ecash inputs and outputs.
    *
    * @param swapPayload Payload containing inputs and outputs.
-   * @param opts Per-call `customRequest` override and `signal` to abort the request.
+   * @param opts Per-call `customRequest` override, `signal` and `requestTimeout`.
    * @returns Signed outputs.
    */
   async swap(swapPayload: SwapRequest, opts?: MintCallOptions): Promise<SwapResponse> {
@@ -263,6 +269,7 @@ class Mint {
    * @param payload The request body to POST (method-specific fields).
    * @param options.customRequest Optional override for the request function.
    * @param options.signal Aborts the request.
+   * @param options.requestTimeout Per-attempt timeout in milliseconds, overriding any global value.
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns The mint quote response.
    */
@@ -287,7 +294,7 @@ class Mint {
    * @remarks
    * Thin wrapper around createMintQuote('bolt11', ...).
    * @param mintQuotePayload Payload for creating a new mint quote.
-   * @param opts Per-call `customRequest` override and `signal` to abort the request.
+   * @param opts Per-call `customRequest` override, `signal` and `requestTimeout`.
    * @returns A new mint quote containing a payment request for the specified amount and unit.
    */
   async createMintQuoteBolt11(
@@ -311,7 +318,7 @@ class Mint {
    * Thin wrapper around createMintQuote('bolt12', ...).
    * @param mintQuotePayload Payload containing amount, unit, optional description, and required
    *   pubkey.
-   * @param opts Per-call `customRequest` override and `signal` to abort the request.
+   * @param opts Per-call `customRequest` override, `signal` and `requestTimeout`.
    * @returns A mint quote containing a BOLT12 offer.
    */
   async createMintQuoteBolt12(
@@ -331,7 +338,7 @@ class Mint {
    * @remarks
    * Thin wrapper around createMintQuote('onchain', ...).
    * @param mintQuotePayload Payload containing unit and required pubkey.
-   * @param opts Per-call `customRequest` override and `signal` to abort the request.
+   * @param opts Per-call `customRequest` override, `signal` and `requestTimeout`.
    * @returns A mint quote containing a Bitcoin address for minting tokens.
    * @experimental Onchain support follows NUT-30 semantics and may change.
    */
@@ -356,6 +363,7 @@ class Mint {
    * @param quote Quote ID.
    * @param options.customRequest Optional override for the request function.
    * @param options.signal Aborts the request.
+   * @param options.requestTimeout Per-attempt timeout in milliseconds, overriding any global value.
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns The mint quote response.
    */
@@ -389,7 +397,7 @@ class Mint {
    * @remarks
    * Thin wrapper around checkMintQuote('bolt11', ...).
    * @param quote Quote ID.
-   * @param opts Per-call `customRequest` override and `signal` to abort the request.
+   * @param opts Per-call `customRequest` override, `signal` and `requestTimeout`.
    * @returns The status of the mint quote, including payment details and state.
    */
   async checkMintQuoteBolt11(
@@ -405,7 +413,7 @@ class Mint {
    * @remarks
    * Thin wrapper around checkMintQuote('bolt12', ...).
    * @param quote Quote ID to check.
-   * @param opts Per-call `customRequest` override and `signal` to abort the request.
+   * @param opts Per-call `customRequest` override, `signal` and `requestTimeout`.
    * @returns Updated quote with current payment and issuance amounts.
    */
   async checkMintQuoteBolt12(
@@ -421,7 +429,7 @@ class Mint {
    * @remarks
    * Thin wrapper around checkMintQuote('onchain', ...).
    * @param quote Quote ID.
-   * @param opts Per-call `customRequest` override and `signal` to abort the request.
+   * @param opts Per-call `customRequest` override, `signal` and `requestTimeout`.
    * @returns Updated quote with current payment and issuance amounts.
    * @experimental Onchain support follows NUT-30 semantics and may change.
    */
@@ -443,6 +451,7 @@ class Mint {
    * @param quotes Quote IDs to check.
    * @param options.customRequest Optional override for the request function.
    * @param options.signal Aborts the request.
+   * @param options.requestTimeout Per-attempt timeout in milliseconds, overriding any global value.
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns Mint quote responses in request order.
    * @experimental only supported by CDK mint >= 0.16.0
@@ -495,7 +504,7 @@ class Mint {
    * @remarks
    * Thin wrapper around checkMintQuoteBatch('bolt11', ...).
    * @param quotes Quote IDs to check.
-   * @param opts Per-call `customRequest` override and `signal` to abort the request.
+   * @param opts Per-call `customRequest` override, `signal` and `requestTimeout`.
    * @returns Updated BOLT11 mint quotes in request order.
    * @experimental only supported by CDK mint >= 0.16.0
    */
@@ -512,7 +521,7 @@ class Mint {
    * @remarks
    * Thin wrapper around checkMintQuoteBatch('bolt12', ...).
    * @param quotes Quote IDs to check.
-   * @param opts Per-call `customRequest` override and `signal` to abort the request.
+   * @param opts Per-call `customRequest` override, `signal` and `requestTimeout`.
    * @returns Updated BOLT12 mint quotes in request order.
    * @experimental only supported by CDK mint >= 0.16.0
    */
@@ -533,7 +542,7 @@ class Mint {
    * @remarks
    * Thin wrapper around mint('bolt11', ...).
    * @param mintPayload Payload containing the outputs to get blind signatures on.
-   * @param opts Per-call `customRequest` override and `signal` to abort the request.
+   * @param opts Per-call `customRequest` override, `signal` and `requestTimeout`.
    * @returns Serialized blinded signatures.
    */
   async mintBolt11(mintPayload: MintRequest, opts?: MintCallOptions): Promise<MintResponse> {
@@ -546,7 +555,7 @@ class Mint {
    * @remarks
    * Thin wrapper around mint('bolt12', ...).
    * @param mintPayload Payload containing the quote ID and outputs to get blind signatures on.
-   * @param opts Per-call `customRequest` override and `signal` to abort the request.
+   * @param opts Per-call `customRequest` override, `signal` and `requestTimeout`.
    * @returns Serialized blinded signatures for the requested outputs.
    */
   async mintBolt12(mintPayload: MintRequest, opts?: MintCallOptions): Promise<MintResponse> {
@@ -559,7 +568,7 @@ class Mint {
    * @remarks
    * Thin wrapper around mint('onchain', ...).
    * @param mintPayload Payload containing the quote ID and outputs.
-   * @param opts Per-call `customRequest` override and `signal` to abort the request.
+   * @param opts Per-call `customRequest` override, `signal` and `requestTimeout`.
    * @returns Serialized blinded signatures.
    * @experimental Onchain support follows NUT-30 semantics and may change.
    */
@@ -577,6 +586,7 @@ class Mint {
    * @param mintPayload Payload containing the quote ID and outputs to get blind signatures on.
    * @param options.customRequest Optional override for the request function.
    * @param options.signal Aborts the request.
+   * @param options.requestTimeout Per-attempt timeout in milliseconds, overriding any global value.
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns Serialized blinded signatures for the requested outputs.
    */
@@ -613,7 +623,7 @@ class Mint {
    * at once.
    *
    * @param mintPayload Payload containing the outputs to get blind signatures on.
-   * @param opts Per-call `customRequest` override and `signal` to abort the request.
+   * @param opts Per-call `customRequest` override, `signal` and `requestTimeout`.
    * @returns Serialized blinded signatures.
    */
   async mintBatchBolt11(
@@ -628,7 +638,7 @@ class Mint {
    * outputs.
    *
    * @param mintPayload Payload containing the outputs to get blind signatures on.
-   * @param opts Per-call `customRequest` override and `signal` to abort the request.
+   * @param opts Per-call `customRequest` override, `signal` and `requestTimeout`.
    * @returns Serialized blinded signatures.
    */
   async mintBatchBolt12(
@@ -649,6 +659,7 @@ class Mint {
    * @param mintPayload Payload containing the quote ID and outputs to get blind signatures on.
    * @param options.customRequest Optional override for the request function.
    * @param options.signal Aborts the request.
+   * @param options.requestTimeout Per-attempt timeout in milliseconds, overriding any global value.
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns Serialized blinded signatures for the requested outputs.
    */
@@ -696,6 +707,7 @@ class Mint {
    * @param payload The request body to POST (method-specific fields).
    * @param options.customRequest Optional override for the request function.
    * @param options.signal Aborts the request.
+   * @param options.requestTimeout Per-attempt timeout in milliseconds, overriding any global value.
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns The melt quote response.
    */
@@ -720,7 +732,7 @@ class Mint {
    * @remarks
    * Thin wrapper around createMeltQuote('bolt11', ...).
    * @param meltQuotePayload Payload for creating a new melt quote.
-   * @param opts Per-call `customRequest` override and `signal` to abort the request.
+   * @param opts Per-call `customRequest` override, `signal` and `requestTimeout`.
    * @returns The melt quote response.
    */
   async createMeltQuoteBolt11(
@@ -750,7 +762,7 @@ class Mint {
    * @remarks
    * Thin wrapper around createMeltQuote('bolt12', ...).
    * @param meltQuotePayload Payload containing the BOLT12 offer to pay and unit.
-   * @param opts Per-call `customRequest` override and `signal` to abort the request.
+   * @param opts Per-call `customRequest` override, `signal` and `requestTimeout`.
    * @returns Melt quote with amount, fee reserve, and payment state.
    */
   async createMeltQuoteBolt12(
@@ -770,7 +782,7 @@ class Mint {
    * @remarks
    * Thin wrapper around createMeltQuote('onchain', ...).
    * @param meltQuotePayload Payload containing the Bitcoin address, amount, and unit.
-   * @param opts Per-call `customRequest` override and `signal` to abort the request.
+   * @param opts Per-call `customRequest` override, `signal` and `requestTimeout`.
    * @returns Melt quote with fee options.
    * @experimental Onchain support follows NUT-30 semantics and may change.
    */
@@ -802,6 +814,7 @@ class Mint {
    * @param quote Quote ID.
    * @param options.customRequest Optional override for the request function.
    * @param options.signal Aborts the request.
+   * @param options.requestTimeout Per-attempt timeout in milliseconds, overriding any global value.
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns The melt quote response.
    */
@@ -835,7 +848,7 @@ class Mint {
    * @remarks
    * Thin wrapper around checkMeltQuote('bolt11', ...).
    * @param quote Quote ID.
-   * @param opts Per-call `customRequest` override and `signal` to abort the request.
+   * @param opts Per-call `customRequest` override, `signal` and `requestTimeout`.
    * @returns The melt quote response.
    */
   async checkMeltQuoteBolt11(
@@ -852,7 +865,7 @@ class Mint {
    * @remarks
    * Thin wrapper around checkMeltQuote('bolt12', ...).
    * @param quote Quote ID to check.
-   * @param opts Per-call `customRequest` override and `signal` to abort the request.
+   * @param opts Per-call `customRequest` override, `signal` and `requestTimeout`.
    * @returns Updated quote with current payment state and preimage if available.
    */
   async checkMeltQuoteBolt12(
@@ -868,7 +881,7 @@ class Mint {
    * @remarks
    * Thin wrapper around checkMeltQuote('onchain', ...).
    * @param quote Quote ID.
-   * @param opts Per-call `customRequest` override and `signal` to abort the request.
+   * @param opts Per-call `customRequest` override, `signal` and `requestTimeout`.
    * @returns Updated melt quote with current state.
    * @experimental Onchain support follows NUT-30 semantics and may change.
    */
@@ -904,6 +917,7 @@ class Mint {
    * @param meltPayload The melt payload containing inputs and optional outputs.
    * @param options.customRequest Optional override for the request function.
    * @param options.signal Aborts the request.
+   * @param options.requestTimeout Per-attempt timeout in milliseconds, overriding any global value.
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns A response object with at least the required melt quote fields.
    */
@@ -959,6 +973,7 @@ class Mint {
    * @param meltPayload The melt payload containing inputs and optional outputs.
    * @param options.customRequest Optional override for the request function.
    * @param options.signal Aborts the request.
+   * @param options.requestTimeout Per-attempt timeout in milliseconds, overriding any global value.
    * @returns The melt response.
    */
   async meltBolt11(
@@ -978,6 +993,7 @@ class Mint {
    * @param meltPayload Payload containing quote ID, inputs, and optional outputs for change.
    * @param options.customRequest Optional override for the request function.
    * @param options.signal Aborts the request.
+   * @param options.requestTimeout Per-attempt timeout in milliseconds, overriding any global value.
    * @returns Payment result with state and optional change signatures.
    */
   async meltBolt12(
@@ -996,6 +1012,7 @@ class Mint {
    * @param meltPayload The melt payload containing inputs (no outputs).
    * @param options.customRequest Optional override for the request function.
    * @param options.signal Aborts the request.
+   * @param options.requestTimeout Per-attempt timeout in milliseconds, overriding any global value.
    * @returns The melt response.
    * @experimental Onchain support follows NUT-30 semantics and may change.
    */
@@ -1014,7 +1031,7 @@ class Mint {
    * Checks if specific proofs have already been redeemed.
    *
    * @param checkPayload The payload containing proofs to check.
-   * @param opts Per-call `customRequest` override and `signal` to abort the request.
+   * @param opts Per-call `customRequest` override, `signal` and `requestTimeout`.
    * @returns Redeemed and unredeemed ordered list of booleans.
    */
   async check(
@@ -1056,7 +1073,7 @@ class Mint {
    * @param keysetId Optional param to get the keys for a specific keyset. If not specified, the
    *   keys from all active keysets are fetched.
    * @param mintUrl Optional alternative mint URL to use for this request.
-   * @param opts Per-call `customRequest` override and `signal` to abort the request.
+   * @param opts Per-call `customRequest` override, `signal` and `requestTimeout`.
    * @returns The mint's public keys.
    */
   async getKeys(
@@ -1073,6 +1090,7 @@ class Mint {
     const requestInstance = opts?.customRequest ?? this._request;
     const data = await requestInstance<GetKeysResponse>({
       signal: opts?.signal,
+      requestTimeout: opts?.requestTimeout,
       endpoint: keysetId
         ? joinUrls(targetUrl, '/v1/keys', keysetId)
         : joinUrls(targetUrl, '/v1/keys'),
@@ -1095,13 +1113,14 @@ class Mint {
   /**
    * Get the mint's keysets in no specific order.
    *
-   * @param opts Per-call `customRequest` override and `signal` to abort the request.
+   * @param opts Per-call `customRequest` override, `signal` and `requestTimeout`.
    * @returns All the mint's past and current keysets.
    */
   async getKeySets(opts?: MintCallOptions): Promise<GetKeysetsResponse> {
     const requestInstance = opts?.customRequest ?? this._request;
     const data = await requestInstance<GetKeysetsResponse>({
       signal: opts?.signal,
+      requestTimeout: opts?.requestTimeout,
       endpoint: joinUrls(this._mintUrl, '/v1/keysets'),
       onResponseMeta: this._captureResponseMetadata,
       logger: this._logger,
@@ -1121,7 +1140,7 @@ class Mint {
    * Restores proofs from the provided blinded messages.
    *
    * @param restorePayload The payload containing outputs to restore.
-   * @param opts Per-call `customRequest` override and `signal` to abort the request.
+   * @param opts Per-call `customRequest` override, `signal` and `requestTimeout`.
    * @returns The restore response with outputs and signatures.
    */
   async restore(
@@ -1131,6 +1150,7 @@ class Mint {
     const requestInstance = opts?.customRequest ?? this._request;
     const data = await requestInstance<PostRestoreResponse>({
       signal: opts?.signal,
+      requestTimeout: opts?.requestTimeout,
       endpoint: joinUrls(this._mintUrl, '/v1/restore'),
       method: 'POST',
       requestBody: restorePayload,
@@ -1279,6 +1299,7 @@ class Mint {
     return requestInstance<T>({
       ...init,
       signal: init.signal ?? opts?.signal,
+      requestTimeout: init.requestTimeout ?? opts?.requestTimeout,
       requestBody: bodyString,
       endpoint: joinUrls(this._mintUrl, path),
       method,

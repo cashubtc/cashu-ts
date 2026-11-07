@@ -1,10 +1,12 @@
 import { randomBytes } from '@noble/hashes/utils.js';
-import { HttpResponse, http } from 'msw';
+import { HttpResponse, delay, http } from 'msw';
 import { test, describe, expect, vi } from 'vitest';
 
 import {
   Wallet,
   MeltChangeError,
+  NetworkError,
+  setGlobalRequestOptions,
   type Proof,
   type ProofLike,
   type MeltQuoteBolt11Response,
@@ -1116,6 +1118,155 @@ describe('async melt preference body', () => {
     expect(debug).toHaveBeenCalledWith('ASYNC MELT REQUESTED', {
       state: 'UNPAID',
       changeAmounts: [],
+    });
+  });
+
+  describe('completeMelt requestTimeout', () => {
+    const stallMs = 150;
+
+    // A mint that takes longer to answer than the short timeouts below.
+    async function preparedMelt() {
+      const meltQuote = {
+        quote: 'q-timeout',
+        unit: 'sat',
+        amount: Amount.from(1),
+        request: invoice,
+        state: 'UNPAID',
+        fee_reserve: Amount.from(0),
+      } as unknown as MeltQuoteBolt11Response;
+      server.use(
+        http.post(mintUrl + '/v1/melt/bolt11', async () => {
+          await delay(stallMs);
+          return HttpResponse.json({
+            quote: meltQuote.quote,
+            amount: meltQuote.amount,
+            unit: meltQuote.unit,
+            request: meltQuote.request,
+            state: 'PAID',
+            expiry: 1234567890,
+            fee_reserve: meltQuote.fee_reserve,
+            payment_preimage: null,
+            change: [],
+          });
+        }),
+      );
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+      const proofs: Proof[] = [
+        {
+          id: '00bd033559de27d0',
+          amount: Amount.from(1),
+          secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+          C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+        },
+      ];
+      return { wallet, preview: await wallet.prepareMelt('bolt11', meltQuote, proofs) };
+    }
+
+    test('a short global timeout aborts a melt the mint is still paying', async () => {
+      const { wallet, preview } = await preparedMelt();
+      setGlobalRequestOptions({ requestTimeout: 20 });
+      try {
+        await expect(wallet.completeMelt(preview)).rejects.toThrow(NetworkError);
+      } finally {
+        setGlobalRequestOptions({});
+      }
+    });
+
+    test('outlasts a shorter global timeout', async () => {
+      const { wallet, preview } = await preparedMelt();
+      setGlobalRequestOptions({ requestTimeout: 20 });
+      try {
+        const res = await wallet.completeMelt(preview, undefined, { requestTimeout: 5_000 });
+        expect(res.quote.state).toBe(MeltQuoteState.PAID);
+      } finally {
+        setGlobalRequestOptions({});
+      }
+    });
+
+    test.each(['bolt11', 'bolt12', 'onchain'] as const)(
+      'the typed %s melt helper takes one too',
+      async (method) => {
+        server.use(
+          http.post(`${mintUrl}/v1/melt/${method}`, async () => {
+            await delay(stallMs);
+            return HttpResponse.json({});
+          }),
+        );
+        const payload = { quote: 'q-timeout', inputs: [] };
+        setGlobalRequestOptions({ requestTimeout: 5_000 });
+        try {
+          const call =
+            method === 'bolt11'
+              ? mint.meltBolt11(payload, { requestTimeout: 20 })
+              : method === 'bolt12'
+                ? mint.meltBolt12(payload, { requestTimeout: 20 })
+                : mint.meltOnchain(payload, { requestTimeout: 20 });
+          await expect(call).rejects.toThrow(NetworkError);
+        } finally {
+          setGlobalRequestOptions({});
+        }
+      },
+    );
+
+    test('other mint calls take one too', async () => {
+      server.use(
+        http.post(`${mintUrl}/v1/swap`, async () => {
+          await delay(stallMs);
+          return HttpResponse.json({ signatures: [] });
+        }),
+      );
+      setGlobalRequestOptions({ requestTimeout: 5_000 });
+      try {
+        await expect(
+          mint.swap({ inputs: [], outputs: [] }, { requestTimeout: 20 }),
+        ).rejects.toThrow(NetworkError);
+      } finally {
+        setGlobalRequestOptions({});
+      }
+    });
+
+    // These four build their own request rather than going through requestWithAuth.
+    test.each([
+      ['getInfo', 'get', '/v1/info', () => mint.getInfo({ requestTimeout: 20 })],
+      [
+        'getKeys',
+        'get',
+        '/v1/keys',
+        () => mint.getKeys(undefined, undefined, { requestTimeout: 20 }),
+      ],
+      ['getKeySets', 'get', '/v1/keysets', () => mint.getKeySets({ requestTimeout: 20 })],
+      [
+        'restore',
+        'post',
+        '/v1/restore',
+        () => mint.restore({ outputs: [] }, { requestTimeout: 20 }),
+      ],
+    ] as const)('%s takes one too', async (_name, verb, path, call) => {
+      server.use(
+        http[verb](`${mintUrl}${path}`, async () => {
+          await delay(stallMs);
+          return HttpResponse.json({});
+        }),
+      );
+      setGlobalRequestOptions({ requestTimeout: 5_000 });
+      try {
+        await expect(call()).rejects.toThrow(NetworkError);
+      } finally {
+        setGlobalRequestOptions({});
+      }
+    });
+
+    test('can undercut a longer global timeout', async () => {
+      const { wallet, preview } = await preparedMelt();
+      setGlobalRequestOptions({ requestTimeout: 5_000 });
+      try {
+        await expect(
+          wallet.completeMelt(preview, undefined, { requestTimeout: 20 }),
+        ).rejects.toThrow(NetworkError);
+      } finally {
+        setGlobalRequestOptions({});
+      }
     });
   });
 

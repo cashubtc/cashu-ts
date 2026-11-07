@@ -4642,7 +4642,10 @@ class Wallet {
 
     // Execute melt and validate result
     const meltResponse: MeltQuoteBaseResponse = await this.withStaleKeysetRepair(() =>
-      this.mint.melt<TQuote>(meltPreview.method, meltPayload, { signal: completeOptions.signal }),
+      this.mint.melt<TQuote>(meltPreview.method, meltPayload, {
+        signal: completeOptions.signal,
+        requestTimeout: completeOptions.requestTimeout,
+      }),
     );
 
     // Merge preview quote with response to protect against incomplete response.
