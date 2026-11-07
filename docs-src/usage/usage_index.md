@@ -31,6 +31,7 @@ If you are building a wallet integration from scratch, read these in order:
 | [Derive Keys](./derive_keys.md)                     | Derive recoverable P2PK / NUT-20 keys deterministically from the wallet seed.   |
 | [Browser Signers](./nip07_signers.md)               | Sign NUT-11 and nutroot spends with a NIP-07 extension (`CashuNip07`).          |
 | [Get Token](./get_token.md)                         | Inspect token metadata before wallet creation or decode it after load.          |
+| [Animated QR Codes](./animated_qr.md)               | Send and receive large tokens as NUT-16 animated QR codes.                      |
 | [Melt Token](./melt_token.md)                       | Pay BOLT11 invoices or other payment methods with wallet proofs.                |
 | [Payment Requests](./payment_requests.md)           | Decode, price (fees), fulfil, and create NUT-18 / NUT-26 payment requests.      |
 | [Restore Proofs](./restore_proofs.md)               | Recover deterministic proofs from the wallet seed across keysets.               |
