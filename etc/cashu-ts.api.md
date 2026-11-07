@@ -3060,6 +3060,7 @@ export class Wallet {
         proofs: Proof[];
         lastCounters: Record<string, number>;
     }>;
+    restoreSwapPreview(swapPreview: SwapPreview, opts?: AbortOptions): Promise<SendResponse>;
     selectProofsToSend(proofs: ProofLike[], amountToSend: AmountLike, includeFees?: boolean, exactMatch?: boolean): SendResponse;
     send(amount: AmountLike, proofs: ProofLike[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SendResponse>;
     sendOffline(amount: AmountLike, proofs: ProofLike[], config?: SendOfflineConfig): SendResponse;
