@@ -474,6 +474,28 @@ d.transcript.comment =
   };
 }
 
+// NUT-XX transactions: a mint quote paying a melt directly. The recorded input id and digest are
+// the quote input's, whose container is the transcript's first record.
+{
+  const txVector = {
+    mint_quote_inputs: d.transcript.mint.tx.mint_quote_inputs,
+    melt_quote_outputs: d.transcript.melt.tx.melt_quote_outputs,
+  };
+  const tx = fromVectorTx(txVector);
+  const transcript = buildTransactionTranscript(tx);
+  const digest = transactionDigest(tx);
+  const container = transcript.subarray(0, 3 + ((transcript[1] << 8) | transcript[2]));
+  d.transcript.mint_quote_to_melt = {
+    tx: txVector,
+    transcript: bytesToHex(transcript),
+    digest: bytesToHex(digest),
+    input_id: bytesToHex(sha256(container)),
+    input_digest: bytesToHex(inputDigest(digest, container)),
+  };
+}
+if (d.transcript.mint_quote_to_melt.input_id !== d.transcript.mint.input_id)
+  throw new Error('mint_quote_to_melt reuses the mint quote input, so its input id must match');
+
 // 0xff is never allocated, so this vector survives new leaf types.
 delete d.two_leaf_covenant;
 d.leaf_forms.leaf_unknown_type = '00ff' + d.leaf_forms.threshold_1of1.slice(4);
