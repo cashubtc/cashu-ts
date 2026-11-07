@@ -24,10 +24,22 @@ import { serializeSwapPreview } from '@cashu/cashu-ts';
 
 const { preview, unselected } = await wallet.prepareSwapToSend(32, proofs);
 returnToStore(unselected); // the swap does not touch these
-const signed = await wallet.signSwapPreview(preview);
+const signed = await wallet.signSwapPreview(preview); // so a replay after a restart still hits the NUT-19 cache
 await savePendingSend(serializeSwapPreview(signed)); // spendable material: protect it like proofs
 const { keep, send } = await wallet.completeSwap(signed);
 // the swap settled: delete the pending send and store keep
 ```
 
-Replay and its bounds are in [Crash-safe send](../wallet_ops/send.md#2-crash-safe-send-persist-the-preview) and [NUT-19 replay](./nut19.md).
+`wallet.receive()` is one-shot too. A recoverable receive signs and persists its preview the same way:
+
+```typescript
+import { serializeSwapPreview } from '@cashu/cashu-ts';
+
+const preview = await wallet.prepareSwapToReceive(token);
+const signed = await wallet.signSwapPreview(preview); // pass your key if the token is locked to you
+await savePendingReceive(serializeSwapPreview(signed)); // spendable material: protect it like proofs
+const { keep } = await wallet.completeSwap(signed);
+// the swap settled: delete the pending receive and store keep
+```
+
+Replay and its bounds are in [Crash-safe send](../wallet_ops/send.md#2-crash-safe-send-persist-the-preview), [Crash-safe receive](../wallet_ops/receive.md#5-crash-safe-receive-persist-the-preview) and [NUT-19 replay](./nut19.md).
