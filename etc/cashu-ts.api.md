@@ -3065,6 +3065,7 @@ export class Wallet {
     send(amount: AmountLike, proofs: ProofLike[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SendResponse>;
     sendOffline(amount: AmountLike, proofs: ProofLike[], config?: SendOfflineConfig): SendResponse;
     signP2PKProofs(proofs: ProofLike[], privkey: string | string[], outputData?: OutputDataLike[], quoteId?: string): Proof[];
+    signSwapPreview(swapPreview: SwapPreview, privkey?: string | string[], options?: CompleteSwapOptions): Promise<SwapPreview>;
     spendOptions(proof: Proof, opts?: {
         privkeys?: string | string[];
         now?: number;

@@ -60,6 +60,22 @@ export type ScriptPathSpend = {
 };
 
 /**
+ * Drops the transaction witness from v3 point-secret proofs.
+ *
+ * @remarks
+ * A v3 witness signs one transaction (NUT-10), so it cannot follow a proof into a new one. Left in
+ * place it would stop `attachTransactionWitnesses` signing, and the mint would refuse it.
+ */
+export function dropTransactionWitnesses(proofs: Proof[]): Proof[] {
+  return proofs.map((proof) => {
+    if (!isBlsKeyset(proof.id) || !isV3PointSecret(proof.secret)) return proof;
+    const { witness, ...withoutWitness } = proof;
+    void witness;
+    return withoutWitness;
+  });
+}
+
+/**
  * Attaches nutroot transaction witnesses to v3 point-secret inputs (NUT-10).
  *
  * @remarks

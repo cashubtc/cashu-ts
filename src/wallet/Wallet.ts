@@ -133,6 +133,7 @@ import {
   attachTransactionWitnesses,
   collectSpendInfoKeys,
   createQuoteLockKeyPair,
+  dropTransactionWitnesses,
   prepareScriptPathSpends,
   proofSpendOptions,
   scanQuoteLockKey,
@@ -1466,8 +1467,8 @@ class Wallet {
    *
    * @remarks
    * Allows you to preview fees for a receive, get concrete outputs for P2PK SIG_ALL transactions,
-   * and do any pre-swap tasks (such as marking proofs in-flight etc). Persist this preview
-   * (`serializeSwapPreview`) to support NUT-19 replay safety.
+   * and do any pre-swap tasks (such as marking proofs in-flight etc). Sign it (`signSwapPreview`)
+   * then persist it (`serializeSwapPreview`) to support NUT-19 replay safety.
    * @example
    *
    * ```typescript
@@ -1512,17 +1513,9 @@ class Wallet {
       proofs = normalizeProofAmounts(decodedToken.proofs);
     }
 
-    // A v3 witness signs one transaction. An incoming proof cannot already carry a witness for
-    // the outputs created below, so discard the sender's transcript. A script-path package for
-    // this swap is merged into the completed preview later and is therefore preserved.
-    proofs = proofs.map((proof) => {
-      if (!isBlsKeyset(proof.id) || !isV3PointSecret(proof.secret) || proof.witness === undefined) {
-        return proof;
-      }
-      const withoutWitness = { ...proof };
-      delete withoutWitness.witness;
-      return withoutWitness;
-    });
+    // An incoming proof cannot already carry a witness for the outputs created below. A
+    // script-path package for this swap is merged into the completed preview later, so survives.
+    proofs = dropTransactionWitnesses(proofs);
 
     // Rotation evidence check: repair the snapshot and load any missing keys before
     // any assertion or fee math relies on it.
@@ -1629,12 +1622,9 @@ class Wallet {
     );
     // Keep NUT-11 witnesses, but never transfer a NUT-10 transaction witness: it signs only the
     // sender's old transcript and would prevent the receiver from attaching a current one.
-    const sendPrepared = this._prepareInputsForMint(send, true, true, true).map((proof) => {
-      if (!isBlsKeyset(proof.id) || !isV3PointSecret(proof.secret)) return proof;
-      const withoutWitness = { ...proof };
-      delete withoutWitness.witness;
-      return withoutWitness;
-    });
+    const sendPrepared = dropTransactionWitnesses(
+      this._prepareInputsForMint(send, true, true, true),
+    );
     return { keep, send: sendPrepared };
   }
 
@@ -1755,8 +1745,8 @@ class Wallet {
    *
    * @remarks
    * Allows you to preview fees for a send, get concrete outputs for P2PK SIG_ALL transactions, and
-   * do any pre-swap tasks (such as marking proofs in-flight etc). Persist this preview
-   * (`serializeSwapPreview`) to support NUT-19 replay safety.
+   * do any pre-swap tasks (such as marking proofs in-flight etc). Sign it (`signSwapPreview`) then
+   * persist it (`serializeSwapPreview`) to support NUT-19 replay safety.
    * @example
    *
    * ```typescript
@@ -1786,7 +1776,7 @@ class Wallet {
   ): Promise<{ preview: SwapPreview; unselected: Proof[] }> {
     this.throwIfAborted(config?.signal);
     const sendAmountTarget = this.parseAmount(amount, 'prepareSwapToSend');
-    const normalizedProofs = normalizeProofAmounts(proofs);
+    const normalizedProofs = dropTransactionWitnesses(normalizeProofAmounts(proofs));
     const { keysetId, includeFees = false, onCountersReserved, preimage } = config || {};
 
     // Rotation evidence check: repair the snapshot before any assertion or fee math
@@ -1915,39 +1905,17 @@ class Wallet {
     privkey?: string | string[],
     options?: CompleteSwapOptions,
   ): Promise<SendResponse> {
-    const scriptPath = options?.scriptPath;
     const keepOutputs: OutputDataLike[] = swapPreview?.keepOutputs ? swapPreview.keepOutputs : [];
     const sendOutputs: OutputDataLike[] = swapPreview.sendOutputs ? swapPreview.sendOutputs : [];
 
-    // Sign proofs if needed. SIG_ALL covers the outputs, so it must see them in the order the
-    // payload will carry, which is what orderOutputsForPayload decides for both.
-    if (privkey) {
-      swapPreview.inputs = this.signP2PKProofs(
-        swapPreview.inputs,
-        privkey,
-        orderOutputsForPayload(keepOutputs, sendOutputs).outputData,
-      );
-    }
+    // Witnesses stay on the preview, so a retry of this object replays the same signatures.
+    const { inputs } = await this.signSwapPreview(swapPreview, privkey, options);
+    if (!Object.isFrozen(swapPreview)) swapPreview.inputs = inputs;
 
     // Create swap transaction
-    const swapTransaction = this.createSwapTransaction(
-      swapPreview.inputs,
-      keepOutputs,
-      sendOutputs,
-    );
+    const swapTransaction = this.createSwapTransaction(inputs, keepOutputs, sendOutputs);
 
     // Execute swap and validate result
-    const privkeys = privkey === undefined ? [] : [privkey].flat();
-    await attachTransactionWitnesses(
-      swapTransaction.payload,
-      undefined,
-      collectSpendInfoKeys(swapPreview.inputs, privkey, this._logger),
-      scriptPath?.length
-        ? prepareScriptPathSpends(swapPreview.inputs, scriptPath, privkeys)
-        : undefined,
-      this._nutrootState(),
-      options?.signal,
-    );
     const { signatures } = await this.withStaleKeysetRepair(() =>
       this.mint.swap(swapTransaction.payload, { signal: options?.signal }),
     );
@@ -1987,6 +1955,57 @@ class Wallet {
     return {
       keep: keepProofs,
       send: sendProofs,
+    };
+  }
+
+  /**
+   * Signs a swap preview's inputs ahead of `completeSwap`, returning a signed copy.
+   *
+   * @remarks
+   * Signatures are random, so a preview persisted unsigned signs afresh on replay and misses the
+   * mint's NUT-19 cache. Persist the signed copy. Inputs that are already signed are left alone.
+   * @param swapPreview The preview to sign.
+   * @param privkey The private key(s) for signing. A bearer v3 input needs none.
+   * @returns The preview with its input witnesses attached.
+   */
+  async signSwapPreview(
+    swapPreview: SwapPreview,
+    privkey?: string | string[],
+    options?: CompleteSwapOptions,
+  ): Promise<SwapPreview> {
+    this.throwIfAborted(options?.signal);
+    this.failIf(!Array.isArray(swapPreview?.inputs), 'signSwapPreview: preview has no inputs');
+    const keepOutputs: OutputDataLike[] = swapPreview.keepOutputs ?? [];
+    const sendOutputs: OutputDataLike[] = swapPreview.sendOutputs ?? [];
+
+    // SIG_ALL covers the outputs, so it must see them in the order the payload will carry, which
+    // is what orderOutputsForPayload decides for both.
+    const inputs = privkey
+      ? this.signP2PKProofs(
+          swapPreview.inputs,
+          privkey,
+          orderOutputsForPayload(keepOutputs, sendOutputs).outputData,
+        )
+      : swapPreview.inputs;
+
+    // A signed script path input keeps its witness: planning it again would re-sign, and call any
+    // co-signer a second time.
+    const scriptPath = options?.scriptPath?.filter(
+      (plan) => !inputs.find((p) => p.secret === plan.secret && isBlsKeyset(p.id))?.witness,
+    );
+    const { payload } = this.createSwapTransaction(inputs, keepOutputs, sendOutputs);
+    const privkeys = privkey === undefined ? [] : [privkey].flat();
+    await attachTransactionWitnesses(
+      payload,
+      undefined,
+      collectSpendInfoKeys(inputs, privkey, this._logger),
+      scriptPath?.length ? prepareScriptPathSpends(inputs, scriptPath, privkeys) : undefined,
+      this._nutrootState(),
+      options?.signal,
+    );
+    return {
+      ...swapPreview,
+      inputs: inputs.map((p, i) => ({ ...p, witness: payload.inputs[i].witness })),
     };
   }
 
@@ -4528,7 +4547,7 @@ class Wallet {
     // block withdrawal. A mint unwinding liabilities deactivates keysets but
     // keeps melt open; gate output creation below, not the melt itself.
     let keyset = this.getKeyset(keysetId); // specified or wallet keyset
-    const normalizedProofs = normalizeProofAmounts(proofsToSend);
+    const normalizedProofs = dropTransactionWitnesses(normalizeProofAmounts(proofsToSend));
     const sendAmount = sumProofs(normalizedProofs);
     let outputData: OutputDataLike[] = [];
 
