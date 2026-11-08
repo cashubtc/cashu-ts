@@ -1526,6 +1526,7 @@ class Wallet {
 
     // Validate all proof keyset IDs use this wallet's unit
     this.assertProofsInWalletUnit(proofs);
+    this.assertNoDuplicateProofs(proofs);
 
     // Check total amount
     const totalAmount = this.parseAmount(sumProofs(proofs), 'prepareSwapToReceive', true);
@@ -2320,18 +2321,17 @@ class Wallet {
    * @remarks
    * A proof is bearer value redeemable once: the mint keys spent state on `Y =
    * hash_to_curve(secret)` (NUT-07), so copies sharing a secret are one proof, not two.
-   * @throws If two proofs share a secret.
+   * @throws If two proofs share a Y.
    */
-  private assertNoDuplicateProofs(proofs: Array<Pick<Proof, 'secret'>>): void {
+  private assertNoDuplicateProofs(proofs: Array<Pick<Proof, 'id' | 'secret'>>): void {
     const seen = new Set<string>();
     for (const [i, p] of proofs.entries()) {
+      const Y = this.computeY(p.secret, p.id);
       // Report the position, never the secret: it is the spending material.
-      this.failIf(
-        seen.has(p.secret),
-        `Duplicate proof at index ${i}: each proof may appear only once`,
-        { index: i },
-      );
-      seen.add(p.secret);
+      this.failIf(seen.has(Y), `Duplicate proof at index ${i}: each proof may appear only once`, {
+        index: i,
+      });
+      seen.add(Y);
     }
   }
 
