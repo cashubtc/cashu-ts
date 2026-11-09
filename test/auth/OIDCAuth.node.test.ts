@@ -1218,6 +1218,43 @@ describe('OIDCAuth: endpoint schemes', () => {
     );
   });
 
+  test.each(['verification_uri', 'verification_uri_complete'] as const)(
+    'deviceStart refuses an http %s from https discovery',
+    async (field) => {
+      const links = {
+        verification_uri: `${SECURE_BASE}/verify`,
+        verification_uri_complete: `${SECURE_BASE}/verify?user_code=UCODE-123`,
+      };
+      links[field] = links[field].replace('https:', 'http:');
+      server.use(
+        http.get(SECURE_DISCOVERY, () => HttpResponse.json(secureDiscovery)),
+        http.post(`${SECURE_BASE}/device`, () =>
+          HttpResponse.json({ device_code: 'dev-123', user_code: 'UCODE-123', ...links }),
+        ),
+      );
+      const oidc = new OIDCAuth(SECURE_DISCOVERY, { clientId: 'cashu-client' });
+      await expect(oidc.deviceStart()).rejects.toThrow(
+        `OIDCAuth: ${field} must be https when discovery is https`,
+      );
+    },
+  );
+
+  test('deviceStart returns https verification links from https discovery', async () => {
+    const links = {
+      verification_uri: `${SECURE_BASE}/verify`,
+      verification_uri_complete: `${SECURE_BASE}/verify?user_code=UCODE-123`,
+    };
+    server.use(
+      http.get(SECURE_DISCOVERY, () => HttpResponse.json(secureDiscovery)),
+      http.post(`${SECURE_BASE}/device`, () =>
+        HttpResponse.json({ device_code: 'dev-123', user_code: 'UCODE-123', ...links }),
+      ),
+    );
+    const start = await new OIDCAuth(SECURE_DISCOVERY, { clientId: 'cashu-client' }).deviceStart();
+    expect(start.verification_uri).toBe(links.verification_uri);
+    expect(start.verification_uri_complete).toBe(links.verification_uri_complete);
+  });
+
   test('deviceStart refuses a device endpoint that is not http(s)', async () => {
     server.use(
       http.get(DISCOVERY, () =>
