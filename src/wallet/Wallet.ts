@@ -27,7 +27,7 @@ import {
 } from '../crypto';
 // Internal transitional fallback — not part of crypto/index.ts
 import { getPubKeyFromPrivKey, normalizeSecpPubkey } from '../crypto/curve_secp';
-import { p2pkOptionsToPRNut10, type P2PKOptions } from '../crypto/NUT11';
+import { p2pkOptionsToPRNut10, p2pkToSpendLeaves, type P2PKOptions } from '../crypto/NUT11';
 import { verifyHTLCHash } from '../crypto/NUT14';
 import { mintQuoteDigest, signMintQuoteLegacy } from '../crypto/NUT20';
 import {
@@ -2276,24 +2276,27 @@ class Wallet {
    * @remarks
    * Both sides canonicalise through the same NUT-11 builder, so tag order and pubkey form do not
    * matter but content does: an unrequested `refund`/`locktime` pair is a payer clawback, and an
-   * unlocked bearer secret is no lock at all.
+   * unlocked bearer secret is no lock at all. The held lock must first pass the spending verifier's
+   * rules, as the builder would otherwise repair a malformed one (eg drop a repeated key).
    * @throws If the proof is unlocked, or carries a condition other than the requested one.
    */
   private assertNut10Lock(requested: P2PKOptions, secret: string): void {
-    let held: P2PKOptions | undefined;
+    let held: string | undefined;
     try {
+      // Judge as the spending verifier would: canonicalising below repairs some malformed locks.
+      p2pkToSpendLeaves(secret);
       const [kind, data] = parseSecret(secret);
-      held = nut10ToP2PKOptions({ kind, data: data.data, tags: data.tags });
+      const options = nut10ToP2PKOptions({ kind, data: data.data, tags: data.tags });
+      held = options && JSON.stringify(p2pkOptionsToPRNut10(options));
     } catch {
       held = undefined;
     }
     this.failIfNullish(
       held,
-      'nut10 request: proof does not carry a NUT-10 lock of the requested kind',
+      'nut10 request: proof does not carry a valid NUT-10 lock of the requested kind',
     );
     this.failIf(
-      JSON.stringify(p2pkOptionsToPRNut10(held)) !==
-        JSON.stringify(p2pkOptionsToPRNut10(requested)),
+      held !== JSON.stringify(p2pkOptionsToPRNut10(requested)),
       'nut10 request: proof lock is not the requested spending condition',
     );
   }

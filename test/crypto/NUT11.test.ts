@@ -32,7 +32,7 @@ import {
   maybeDeriveP2BKPrivateKeys,
   normalizeHashlock,
   normalizeP2PKOptions,
-  p2pkSpendLeaves,
+  p2pkToSpendLeaves,
   parseWitnessData,
   verifyP2PKSpendingConditions,
 } from '../../src/crypto';
@@ -1925,7 +1925,7 @@ describe('verifyP2PKSpendingConditions — semantic validation', () => {
       const proof = makeProof(tags, '');
       expect(() => verifyP2PKSpendingConditions(proof)).toThrow(/Invalid pubkey/);
       expect(() => getP2PKExpectedWitnessPubkeys(proof.secret)).toThrow(/Invalid pubkey/);
-      expect(() => p2pkSpendLeaves(proof.secret)).toThrow(/Invalid pubkey/);
+      expect(() => p2pkToSpendLeaves(proof.secret)).toThrow(/Invalid pubkey/);
     }
   });
 

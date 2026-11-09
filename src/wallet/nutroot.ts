@@ -6,7 +6,7 @@ import {
 } from '../crypto/curve_secp';
 import { hashToCurveHex } from '../crypto/curves';
 import { parseSecret } from '../crypto/NUT10';
-import { maybeDeriveP2BKPrivateKeys, p2pkSpendLeaves } from '../crypto/NUT11';
+import { maybeDeriveP2BKPrivateKeys, p2pkToSpendLeaves } from '../crypto/NUT11';
 import { deriveQuoteLockKey } from '../crypto/NUT13';
 import {
   buildScriptPathWitness,
@@ -210,7 +210,7 @@ function legacySpendOptions(proof: Proof, privkeys: string[], now: number): Spen
     if (typeof proof.secret !== 'string' || proof.secret.trimStart().startsWith('[')) throw e;
     return withVerdict(true, []); // not a NUT-10 secret: a bearer proof anyone can spend
   }
-  const leaves = p2pkSpendLeaves(proof.secret);
+  const leaves = p2pkToSpendLeaves(proof.secret);
   // Held keys by x coordinate, so an x-only import matches either parity (NUT-11 signatures are
   // x-only). A P2BK proof's keys are blinded, so the held keys are their derivations (NUT-28).
   const blinded = proof.p2pk_e !== undefined;
