@@ -9,6 +9,7 @@ import { parseSecret } from '../crypto/NUT10';
 import { maybeDeriveP2BKPrivateKeys, p2pkToSpendLeaves } from '../crypto/NUT11';
 import { deriveQuoteLockKey } from '../crypto/NUT13';
 import {
+  assertPreimageOpensLeaf,
   buildScriptPathWitness,
   parseNutrootLeaf,
   type NutrootLeaf,
@@ -318,6 +319,7 @@ export function prepareScriptPathSpends(
     if (leaf.type === 'hashlock' && plan.preimage === undefined) {
       throw new CTSError('Script path plan for a hashlock leaf needs a preimage');
     }
+    assertPreimageOpensLeaf(leaf, plan.preimage);
     // The control block's internal key, from whichever source the spend info offers (NUT-10).
     const K = internalKeyOf(proof, privkeys);
     if (!K) {

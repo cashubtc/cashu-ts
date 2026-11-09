@@ -389,6 +389,9 @@ describe('ScriptPath signing packages', () => {
     );
     const signed = ScriptPath.signPackage(pkg, bytesToHex(sk(3)));
     expect(() => ScriptPath.mergeSwapPackage(signed, preview)).toThrow(/preimage/);
+    expect(() =>
+      ScriptPath.mergeSwapPackage(signed, preview, [{ ...plans[0], preimage: '02'.repeat(32) }]),
+    ).toThrow(/does not open the hashlock leaf/);
     const merged = ScriptPath.mergeSwapPackage(signed, preview, plans);
     const witness = JSON.parse(merged.inputs[0].witness as string) as { preimage?: string };
     expect(witness.preimage).toBe(preimage);
@@ -587,6 +590,12 @@ describe('ScriptPath signing packages', () => {
       ScriptPath.extractSwapPackage(preview, [{ secret: proof.secret, leafIndex: 1 }]),
       alice,
     );
+    // A threshold leaf takes no preimage, so one passed at merge is refused, not sent.
+    expect(() =>
+      ScriptPath.mergeSwapPackage(pkg, preview, [
+        { secret: proof.secret, leafIndex: 1, preimage: '02'.repeat(32) },
+      ]),
+    ).toThrow(/threshold leaf takes no preimage/);
     const merged = ScriptPath.mergeSwapPackage(pkg, preview);
     expect(proof.witness).toBeUndefined(); // the preview is not mutated
     const witness = JSON.parse(merged.inputs[0].witness as string) as {
@@ -816,6 +825,9 @@ describe('ScriptPath mint packages', () => {
     expect(() =>
       ScriptPath.mergeMintPackage(signed, preview, [{ ...hashPlan, preimage: '01' }]),
     ).toThrow(/32 bytes/);
+    expect(() =>
+      ScriptPath.mergeMintPackage(signed, preview, [{ ...hashPlan, preimage: '02'.repeat(32) }]),
+    ).toThrow(/does not open the hashlock leaf/);
     const merged = ScriptPath.mergeMintPackage(signed, preview, [hashPlan]);
     expect(JSON.parse(merged.signature!).preimage).toBe(preimage);
   });
