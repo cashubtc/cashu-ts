@@ -710,7 +710,7 @@ describe('receive', () => {
         {
           id: '00bd033559de27d0',
           amount: Amount.from(2),
-          secret: 'e7c1b76d1b31e2bca2b229d160bdf6046f33bc4570222304b65110d926f7af89',
+          secret: 'e8c1b76d1b31e2bca2b229d160bdf6046f33bc4570222304b65110d926f7af89',
           C: '02de40c59d90383b8853ccf3a4b20864ac83ba758fce3d959dbb89361002e8ce47',
         },
         {

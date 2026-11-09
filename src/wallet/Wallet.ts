@@ -104,6 +104,7 @@ import {
   splitAmount,
   sumProofs,
 } from '../utils';
+import { hasLoneSurrogate } from '../utils/bytes';
 import { mapInChunks, yieldToEventLoop, YIELD_BUDGET_MS, YIELD_CHUNK_SIZE } from '../utils/chunked';
 import type { ProofVerification, VerifyProofsOptions } from '../utils/verifyProofs';
 
@@ -1526,6 +1527,7 @@ class Wallet {
 
     // Validate all proof keyset IDs use this wallet's unit
     this.assertProofsInWalletUnit(proofs);
+    this.assertNoDuplicateProofs(proofs);
 
     // Check total amount
     const totalAmount = this.parseAmount(sumProofs(proofs), 'prepareSwapToReceive', true);
@@ -2344,12 +2346,17 @@ class Wallet {
    * @remarks
    * A proof is bearer value redeemable once: the mint keys spent state on `Y =
    * hash_to_curve(secret)` (NUT-07), so copies sharing a secret are one proof, not two.
-   * @throws If two proofs share a secret.
+   * @throws If a secret is ill-formed or two proofs share a secret.
    */
   private assertNoDuplicateProofs(proofs: Array<Pick<Proof, 'secret'>>): void {
     const seen = new Set<string>();
     for (const [i, p] of proofs.entries()) {
       // Report the position, never the secret: it is the spending material.
+      this.failIf(
+        hasLoneSurrogate(p.secret),
+        `Proof secret at index ${i} must be well-formed UTF-16`,
+        { index: i },
+      );
       this.failIf(
         seen.has(p.secret),
         `Duplicate proof at index ${i}: each proof may appear only once`,

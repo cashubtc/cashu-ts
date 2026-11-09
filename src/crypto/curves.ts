@@ -5,6 +5,7 @@ import { bytesToNumberBE } from '@noble/curves/utils.js';
 import { failIf, type Logger } from '../logger';
 import { CTSError } from '../model/Errors';
 import { decodeBase64ToUint8Legacy, hexToNumber, isBase64String, isValidHex } from '../utils';
+import { hasLoneSurrogate } from '../utils/bytes';
 
 import { type G1Point, hashToCurveBls, pointFromHexG1 } from './curve_bls';
 import { hashToCurve } from './curve_secp';
@@ -102,6 +103,9 @@ export function isBlsKeyset(keysetId: string): boolean {
  */
 export function hashToCurveHex(secret: string, keysetId: string): string {
   assertSpendableVersion(keysetId);
+  if (hasLoneSurrogate(secret)) {
+    throw new CTSError('Secret must be well-formed UTF-16');
+  }
   const msg = new TextEncoder().encode(secret);
   return (isBlsKeyset(keysetId) ? hashToCurveBls(msg) : hashToCurve(msg)).toHex(true);
 }
