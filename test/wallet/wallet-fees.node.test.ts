@@ -483,6 +483,13 @@ describe('wallet.isPaymentRequestSatisfied', () => {
     expect(() =>
       wallet.isPaymentRequestSatisfied(pr, [v3Proof(100, payee)], 100, { privkeys: 'nothex' }),
     ).toThrow(/32-byte hex/);
+    for (const outOfRange of ['00'.repeat(32), 'ff'.repeat(32)]) {
+      expect(() =>
+        wallet.isPaymentRequestSatisfied(pr, [v3Proof(100, payee)], 100, {
+          privkeys: [priv(1), outOfRange],
+        }),
+      ).toThrow(/valid 32-byte hex private keys/);
+    }
 
     expect(
       wallet.isPaymentRequestSatisfied(pr, [v3Proof(100, payee)], 100, { privkeys: priv(1) }),
@@ -491,6 +498,31 @@ describe('wallet.isPaymentRequestSatisfied', () => {
     expect(() =>
       wallet.isPaymentRequestSatisfied(pr, [v3Proof(100, payer)], 100, { privkeys: priv(1) }),
     ).toThrow(/not keyed to the requested receiver key/);
+    // A general keyring may hold the key a proof is keyed to, but the request named only pub(1).
+    expect(() =>
+      wallet.isPaymentRequestSatisfied(pr, [v3Proof(100, payer)], 100, {
+        privkeys: [priv(1), priv(9)],
+      }),
+    ).toThrow(/not keyed to the requested receiver key/);
+    expect(() =>
+      wallet.isPaymentRequestSatisfied(pr, [v3Proof(100, payer)], 100, { privkeys: priv(9) }),
+    ).toThrow(/holds no key for the requested receiver key/);
+    // The receiver key binds by x-coordinate: recovery walks either parity.
+    const flipped = (pub(1).startsWith('02') ? '03' : '02') + pub(1).slice(2);
+    const flippedPr = new PaymentRequest({
+      id: 'v3-flipped',
+      amount: 100,
+      unit: 'sat',
+      nutroot: { receiverKey: flipped },
+    });
+    expect(
+      wallet.isPaymentRequestSatisfied(
+        flippedPr,
+        [v3Proof(100, deriveReceiverKeyedSecret(flipped))],
+        100,
+        { privkeys: [priv(9), priv(1)] },
+      ),
+    ).toBe(true);
     // Keyed to the payee, so perfectly spendable, but short: spendability alone cannot catch this.
     expect(
       wallet.isPaymentRequestSatisfied(pr, [v3Proof(8, payee)], 100, { privkeys: priv(1) }),

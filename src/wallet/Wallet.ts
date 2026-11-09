@@ -2151,7 +2151,7 @@ class Wallet {
     // checked against its own option.
     const nutrootOption = pr.toNutrootOptions();
     if (nutrootOption || pr.nut10) {
-      const statics = this.receiverKeysFor(nutrootOption, opts?.privkeys);
+      const privkeys = this.receiverKeysFor(nutrootOption, opts?.privkeys);
       const nut10Lock = pr.nut10 ? pr.toP2PKOptions() : undefined;
       this.failIf(
         !!pr.nut10 && !nut10Lock,
@@ -2160,9 +2160,9 @@ class Wallet {
       for (const p of proofs) {
         if (isBlsKeyset(p.id) && isV3PointSecret(p.secret)) {
           this.failIfNullish(nutrootOption, 'v3 proof: the request carries no nutroot option');
-          verifyNutrootRequestTree(nutrootOption, p.spend_info, statics);
+          verifyNutrootRequestTree(nutrootOption, p.spend_info, privkeys);
           verifyNutrootSpendInfo(p.secret, p.spend_info!);
-          this.assertKeyedToReceiver(nutrootOption, p, statics);
+          this.assertKeyedToReceiver(nutrootOption, p, privkeys);
           continue;
         }
         this.failIfNullish(nut10Lock, 'legacy proof: the request is for v3 proofs only');
@@ -2221,12 +2221,12 @@ class Wallet {
   }
 
   /**
-   * The static keys a locked request must be checked against, validated.
+   * The payee private keys a locked request must be checked against, validated.
    *
    * @remarks
-   * Only a receiver-keyed nutroot request needs one: `K = P_receiver + r0*G` is an ECDH trial-match
-   * no observer can do (NUT-28), so without the key there is nothing to check. A NUMS request needs
-   * none, its internal key is pinned by the disclosed offset instead.
+   * A receiver-keyed request needs them: `K = P_receiver + r0*G` is an ECDH trial-match no observer
+   * can do (NUT-28), so without the key there is nothing to check. So does a blind-me leaf key, for
+   * the same reason. A NUMS request with no blind-me keys needs none: the offset pins its key.
    * @throws If a receiver-keyed request is checked with no key, or a key is not a 32-byte scalar.
    */
   private receiverKeysFor(
@@ -2236,36 +2236,53 @@ class Wallet {
     if (!option) return [];
     const keyed = option.receiverKey.toLowerCase() !== NUTROOT_NUMS_KEY;
     if (!keyed && !option.blindKeys?.length) return [];
-    const statics = privkeys === undefined ? [] : [privkeys].flat();
+    const keys = privkeys === undefined ? [] : [privkeys].flat();
     this.failIf(
-      statics.length === 0,
+      keys.length === 0,
       `${keyed ? 'receiver-keyed' : 'blind-me'} nutroot request: pass the requested key(s) as opts.privkeys, the proofs cannot be checked without them`,
     );
-    const bad = statics.find((k) => !/^[0-9a-f]{64}$/i.test(k));
-    this.failIf(bad !== undefined, 'opts.privkeys must be 32-byte hex private keys');
-    return statics;
+    const bad = keys.find((k) => {
+      if (!/^[0-9a-f]{64}$/i.test(k)) return true;
+      try {
+        getPubKeyFromPrivKey(hexToBytes(k)); // range check: zero or >= n throws
+        return false;
+      } catch {
+        return true;
+      }
+    });
+    this.failIf(bad !== undefined, 'opts.privkeys must be valid 32-byte hex private keys');
+    return keys;
   }
 
   /**
-   * Asserts a v3 proof is receiver-keyed to one of the payee's static keys (NUT-28).
+   * Asserts a receiver-keyed v3 proof (NUT-00: internal key derived from `E`) is keyed to the
+   * request's receiver key.
    *
    * @remarks
-   * No-op for a NUMS request, which has no receiver key to bind to. Otherwise the proof carries a
-   * key path only the holder of the matching static key can walk; a proof keyed to anyone else, the
-   * payer included, is not a payment the payee can spend.
-   * @throws If no held key reproduces the proof's secret.
+   * No-op for a NUMS request, which has no key path. Only private keys whose pubkey shares the
+   * receiver key's x-coordinate are tried, as recovery accepts either parity (NUT-28).
+   * @param privkeys - The validated output of `receiverKeysFor`, so each is a valid scalar.
+   * @throws If no private key is the receiver key, or none reproduces the proof's secret.
    */
   private assertKeyedToReceiver(
     option: ParsedNutrootOption,
     proof: Pick<Proof, 'secret' | 'spend_info'>,
-    statics: string[],
+    privkeys: string[],
   ): void {
-    if (statics.length === 0 || option.receiverKey.toLowerCase() === NUTROOT_NUMS_KEY) return;
+    if (privkeys.length === 0 || option.receiverKey.toLowerCase() === NUTROOT_NUMS_KEY) return;
+    const receiverX = option.receiverKey.slice(2).toLowerCase();
+    const receiverPrivs = privkeys.filter(
+      (priv) => bytesToHex(getPubKeyFromPrivKey(hexToBytes(priv))).slice(2) === receiverX,
+    );
+    this.failIf(
+      receiverPrivs.length === 0,
+      'Nutroot request: opts.privkeys holds no key for the requested receiver key',
+    );
     // `E` is present: verifyNutrootRequestTree rejects a receiver-keyed proof without one.
     const E = proof.spend_info?.E as string;
     const tree = proof.spend_info?.tree;
     this.failIf(
-      !statics.some((priv) => recoverReceiverKeyedSecretKey(proof.secret, E, priv, tree)),
+      !receiverPrivs.some((priv) => recoverReceiverKeyedSecretKey(proof.secret, E, priv, tree)),
       'Nutroot request: proof is not keyed to the requested receiver key',
     );
   }
