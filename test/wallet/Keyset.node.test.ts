@@ -15,6 +15,16 @@ describe('Keyset.verifyKeysetId', () => {
     expect(Keyset.verifyKeysetId(mk)).toBe(true);
   });
 
+  test('verifies a legacy base64 id containing only hex characters', () => {
+    const keys = {
+      1: '02692f48985d58bbfe3d215f6557ab9e108ddbb50e4fba5e27f607db4cd5da7ab3',
+    };
+    const mk: MintKeys = { id: 'dBaAe74DB218', unit: 'sat', active: true, keys };
+    expect(deriveKeysetId(keys, { isDeprecatedBase64: true })).toBe(mk.id);
+    expect(Keyset.verifyKeysetId(mk)).toBe(true);
+    expect(Keyset.verifyKeysetId({ ...mk, keys: PUBKEYS })).toBe(false);
+  });
+
   test('returns false for empty keys even when the id derives the empty keyset', () => {
     // The empty-keys guard must short-circuit before derivation; otherwise an
     // empty keyset would spuriously "verify" against its own empty-derived id.

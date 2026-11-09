@@ -102,6 +102,15 @@ export function assertSecpPoint(point: WeierstrassPoint<bigint>): WeierstrassPoi
  */
 export const LEGACY_KEYSET_ID_LENGTH = 12;
 
+/**
+ * True if `keysetId` is a legacy (pre-v1) base64 id.
+ *
+ * @internal
+ */
+export function isLegacyKeysetId(keysetId: string): boolean {
+  return keysetId.length === LEGACY_KEYSET_ID_LENGTH && isBase64String(keysetId);
+}
+
 export const getKeysetIdInt = (keysetId: string): bigint => {
   let keysetIdInt: bigint;
   // Length and alphabet separate the two encodings, the same rule getDerivationKind applies.

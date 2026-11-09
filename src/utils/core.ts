@@ -2,7 +2,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { bech32 } from '@scure/base';
 
-import { pointFromHex, verifyDLEQProof_reblind } from '../crypto';
+import { isLegacyKeysetId, pointFromHex, verifyDLEQProof_reblind } from '../crypto';
 import { failIf, type Logger } from '../logger';
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
@@ -198,11 +198,8 @@ export function isValidHex(str: unknown): str is string {
   return typeof str === 'string' && str.length % 2 === 0 && /^[a-f0-9]+$/i.test(str);
 }
 
-function hasNonHexId(p: Proof | Proof[]) {
-  if (Array.isArray(p)) {
-    return p.some((proof) => !isValidHex(proof.id));
-  }
-  return !isValidHex(p.id);
+function hasNonHexId(proofs: Proof[]) {
+  return proofs.some((proof) => !isValidHex(proof.id) || isLegacyKeysetId(proof.id));
 }
 
 /**
@@ -533,7 +530,10 @@ export const versionName = (versionByte: number): string => `v${versionByte + 1}
  * @internal
  */
 export function assertSpendableVersion(keysetId: string, logger?: Logger): void {
-  const version = isValidHex(keysetId) ? Number.parseInt(keysetId.slice(0, 2), 16) : -1;
+  const version =
+    isValidHex(keysetId) && !isLegacyKeysetId(keysetId)
+      ? Number.parseInt(keysetId.slice(0, 2), 16)
+      : -1;
   failIf(
     version > MAX_SUPPORTED_KEYSET_VERSION_BYTE,
     `Keyset '${keysetId}' is a ${versionName(version)} keyset; this build of cashu-ts supports ` +

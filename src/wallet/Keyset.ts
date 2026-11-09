@@ -1,8 +1,9 @@
 import { hexToBytes } from '@noble/hashes/utils.js';
 
+import { isLegacyKeysetId } from '../crypto/core';
 import { CTSError } from '../model/Errors';
 import { type MintKeyset, type MintKeys } from '../model/types';
-import { isValidHex, deriveKeysetId, isBase64String, MAX_KEYSET_DENOMINATIONS } from '../utils';
+import { isValidHex, deriveKeysetId, MAX_KEYSET_DENOMINATIONS } from '../utils';
 import { normalizeMintKeyset, normalizeMintKeys } from '../utils/normalizeNumbers';
 
 export class Keyset {
@@ -55,7 +56,7 @@ export class Keyset {
    * True if the ID is modern byte-encoded hex.
    */
   get hasHexId(): boolean {
-    return isValidHex(this._id);
+    return isValidHex(this._id) && !isLegacyKeysetId(this._id);
   }
 
   /**
@@ -134,8 +135,8 @@ export class Keyset {
       const distinct = new Set(Object.values(keys.keys).map((k) => k.toLowerCase()));
       if (distinct.size !== count) return false;
 
-      const isDeprecatedBase64 = isBase64String(keys.id) && !isValidHex(keys.id);
-      const versionByte = isValidHex(keys.id) ? hexToBytes(keys.id)[0] : 0;
+      const isDeprecatedBase64 = isLegacyKeysetId(keys.id);
+      const versionByte = !isDeprecatedBase64 && isValidHex(keys.id) ? hexToBytes(keys.id)[0] : 0;
       const derivedId = deriveKeysetId(keys.keys, {
         input_fee_ppk: keys.input_fee_ppk,
         expiry: keys.final_expiry,
