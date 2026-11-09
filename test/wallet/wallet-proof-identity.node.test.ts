@@ -10,10 +10,7 @@ import {
   createDLEQProof,
   deriveKeysetId,
   getEncodedToken,
-  getG2PubKeyFromPrivKey,
   hashToCurve,
-  hashToCurveBls,
-  hashToCurveHex,
   hexToBytes,
   verifyReceivedProofs,
   type Proof,
@@ -51,31 +48,36 @@ function wallet(): Wallet {
 
 describe('proof identity', () => {
   test.each([
-    ['\uD800', '\uFFFD'],
-    ['\uDC00', '\uFFFD'],
-    ['\uD800', '\uD801'],
-    ['same-secret', 'same-secret'],
-  ])('rejects repeated value for %j and %j', async (first, second) => {
+    ['\uD800', '\uFFFD', /proof secret at index 0 must be well-formed UTF-16/i],
+    ['\uDC00', '\uFFFD', /proof secret at index 0 must be well-formed UTF-16/i],
+    ['\uD800', '\uD801', /proof secret at index 0 must be well-formed UTF-16/i],
+    ['\uFFFD', '\uD800', /proof secret at index 1 must be well-formed UTF-16/i],
+    ['same-secret', 'same-secret', /duplicate proof at index 1/i],
+  ])('rejects repeated value for %j and %j', async (first, second, error) => {
     const proofs = [signedProof(first), signedProof(second)];
     const verified = await verifyReceivedProofs(proofs, () => ({ id, keys }), { require: true });
     expect(verified.invalid).toEqual([]);
     expect(verified.valid).toEqual(proofs);
     expect(proofs[0].C).toBe(proofs[1].C);
-    expect(hashToCurveHex(first, id)).toBe(hashToCurveHex(second, id));
+    expect(new TextEncoder().encode(first)).toEqual(new TextEncoder().encode(second));
 
     const w = wallet();
     const payload = PaymentRequest.decodePayload(request.encodePayload(mintUrl, proofs));
     for (const received of [proofs, payload.proofs]) {
-      expect(() => w.isPaymentRequestSatisfied(request, received)).toThrow(
-        /duplicate proof at index 1/i,
-      );
-      await expect(w.prepareSwapToReceive(received, { requireDleq: true })).rejects.toThrow(
-        /duplicate proof at index 1/i,
-      );
+      expect(() => w.isPaymentRequestSatisfied(request, received)).toThrow(error);
+      await expect(w.prepareSwapToReceive(received, { requireDleq: true })).rejects.toThrow(error);
     }
     await expect(
       w.prepareSwapToReceive({ mint: mintUrl, unit, proofs }, { requireDleq: true }),
-    ).rejects.toThrow(/duplicate proof at index 1/i);
+    ).rejects.toThrow(error);
+  });
+
+  test('rejects a single signed proof with an ill-formed secret', async () => {
+    const proofs = [signedProof('\uD800')];
+    const w = wallet();
+    const error = /proof secret at index 0 must be well-formed UTF-16/i;
+    expect(() => w.isPaymentRequestSatisfied(request, proofs)).toThrow(error);
+    await expect(w.prepareSwapToReceive(proofs, { requireDleq: true })).rejects.toThrow(error);
   });
 
   test('rejects repeated value in an encoded token', async () => {
@@ -86,7 +88,7 @@ describe('proof identity', () => {
     );
   });
 
-  test('rejects the same Y across keyset IDs on the same curve', async () => {
+  test('rejects the same secret across keyset IDs', async () => {
     const otherId = deriveKeysetId(keys, { versionByte: 1, unit });
     const w = wallet();
     w.loadMintFromCache(mintInfoResp, {
@@ -106,29 +108,6 @@ describe('proof identity', () => {
     await expect(w.prepareSwapToReceive(proofs, { requireDleq: true })).rejects.toThrow(
       /duplicate proof/i,
     );
-  });
-
-  test('accepts the same secret on different curves with distinct Ys', async () => {
-    const blsKeys = { '1': bytesToHex(getG2PubKeyFromPrivKey(mintKey)) };
-    const blsId = deriveKeysetId(blsKeys, { versionByte: 2, unit, input_fee_ppk: 0 });
-    const w = wallet();
-    w.loadMintFromCache(mintInfoResp, {
-      mintUrl,
-      savedAt: Date.now(),
-      keysets: [
-        { id, unit, active: true, input_fee_ppk: 0, keys },
-        { id: blsId, unit, active: true, input_fee_ppk: 0, keys: blsKeys },
-      ],
-    });
-    const secret = keys['1'];
-    const blsProof: Proof = {
-      id: blsId,
-      amount: Amount.from(1),
-      secret,
-      C: hashToCurveBls(new TextEncoder().encode(secret)).multiply(2n).toHex(true),
-      spend_info: { k: bytesToHex(mintKey) },
-    };
-    expect(w.isPaymentRequestSatisfied(request, [signedProof(secret), blsProof])).toBe(true);
   });
 
   test('accepts distinct signed proofs with Unicode secrets', async () => {

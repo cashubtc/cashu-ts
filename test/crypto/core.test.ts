@@ -9,6 +9,8 @@ import {
   asBlsG1Point,
   asSecpPoint,
   hashToCurve,
+  hashToCurveBls,
+  hashToCurveHex,
   pointFromHex,
   pointFromHexAuto,
   pointToHex,
@@ -307,6 +309,20 @@ describe('schnorrVerifyDigest', () => {
 
   test('rejects a 33-byte pubkey with a non-02/03 prefix', () => {
     expect(schnorrVerifyDigest(signature, digest, 'ff' + pubkey.slice(2))).toBe(false);
+  });
+});
+
+describe('hashToCurveHex', () => {
+  test.each(['\uD800', '\uDC00'])('rejects an unpaired surrogate %j on either curve', (secret) => {
+    for (const id of ['00bd033559de27d0', '02' + '11'.repeat(32)]) {
+      expect(() => hashToCurveHex(secret, id)).toThrow('Secret must be well-formed UTF-16');
+    }
+  });
+
+  test.each(['\uFFFD', '\uD83D\uDE00'])('hashes a well-formed Unicode secret %j', (secret) => {
+    const bytes = new TextEncoder().encode(secret);
+    expect(hashToCurveHex(secret, '00bd033559de27d0')).toBe(hashToCurve(bytes).toHex(true));
+    expect(hashToCurveHex(secret, '02' + '11'.repeat(32))).toBe(hashToCurveBls(bytes).toHex(true));
   });
 });
 
