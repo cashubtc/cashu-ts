@@ -1180,7 +1180,7 @@ describe('OIDCAuth: endpoint schemes', () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
-  test('deviceStart and buildAuthCodeUrl warn on an http endpoint named by https discovery', async () => {
+  test('deviceStart and buildAuthCodeUrl warn on http endpoints and links from https discovery', async () => {
     server.use(
       http.get(SECURE_DISCOVERY, () =>
         HttpResponse.json({
@@ -1194,6 +1194,7 @@ describe('OIDCAuth: endpoint schemes', () => {
           device_code: 'dev-123',
           user_code: 'UCODE-123',
           verification_uri: `${ISSUER}/device`,
+          verification_uri_complete: `${ISSUER}/device?user_code=UCODE-123`,
           interval: 2,
           expires_in: 600,
         }),
@@ -1205,6 +1206,8 @@ describe('OIDCAuth: endpoint schemes', () => {
     await oidc.buildAuthCodeUrl({ redirectUri: 'http://localhost/cb', codeChallenge: 'c' });
     expect(logger.warn.mock.calls.map((c) => c[1])).toEqual([
       { label: 'device_authorization_endpoint' },
+      { label: 'verification_uri' },
+      { label: 'verification_uri_complete' },
       { label: 'authorization_endpoint' },
     ]);
   });
