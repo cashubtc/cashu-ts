@@ -1803,6 +1803,25 @@ describe('verifyP2PKSpendingConditions — semantic validation', () => {
     );
   });
 
+  test('rejects a P2PK secret with empty data on every lock path', () => {
+    const future = String(Math.floor(Date.now() / 1000) + 3600);
+    const paths = [
+      [],
+      [['locktime', future]],
+      [['locktime', '1']],
+      [['pubkeys', pk2]],
+      [
+        ['locktime', '1'],
+        ['refund', pk3],
+      ],
+    ];
+    for (const tags of paths) {
+      const proof = makeProof(tags, '');
+      expect(() => verifyP2PKSpendingConditions(proof)).toThrow(/Invalid pubkey/);
+      expect(() => getP2PKExpectedWitnessPubkeys(proof.secret)).toThrow(/Invalid pubkey/);
+    }
+  });
+
   test('rejects a malformed n_sigs instead of applying the default threshold', () => {
     // A present but unparseable threshold must not read as an absent tag.
     for (const bad of ['2oops', '2 ', '9007199254740992']) {

@@ -890,13 +890,16 @@ function assertSpendingConditionRules(params: {
 }
 
 function getP2PKWitnessPubkeys(secret: Secret): string[] {
-  const data = getSecretKind(secret) === 'P2PK' ? getDataField(secret) : '';
   const pubkeys = getTag(secret, 'pubkeys') ?? [];
   // Bound EC decompression before mapping over untrusted keys.
   if (pubkeys.length > MAX_P2PK_PUBKEYS) {
     throw new CTSError(`Too many pubkeys: ${pubkeys.length}`);
   }
-  const keys = (data ? [data, ...pubkeys] : pubkeys).map((key) => normalizePubkey(key));
+  // P2PK data is always a signing key (NUT-11); only an HTLC can have no main keys.
+  const isP2PK = getSecretKind(secret) === 'P2PK';
+  const keys = (isP2PK ? [getDataField(secret), ...pubkeys] : pubkeys).map((key) =>
+    normalizePubkey(key),
+  );
   if (dedupeP2PKPubkeys(keys).length !== keys.length) {
     throw new CTSError('Duplicate main pubkeys are not allowed');
   }
