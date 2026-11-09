@@ -73,7 +73,10 @@ export const versionName = (versionByte: number): string => `v${versionByte + 1}
  * @internal
  */
 export function assertSpendableVersion(keysetId: string, logger?: Logger): void {
-  const version = isValidHex(keysetId) ? Number.parseInt(keysetId.slice(0, 2), 16) : -1;
+  const version =
+    isValidHex(keysetId) && !isLegacyKeysetId(keysetId)
+      ? Number.parseInt(keysetId.slice(0, 2), 16)
+      : -1;
   failIf(
     version > MAX_SUPPORTED_KEYSET_VERSION_BYTE,
     `Keyset '${keysetId}' is a ${versionName(version)} keyset; this build of cashu-ts supports ` +
@@ -116,6 +119,15 @@ export function hashToCurveHex(secret: string, keysetId: string): string {
  * @internal
  */
 export const LEGACY_KEYSET_ID_LENGTH = 12;
+
+/**
+ * True if `keysetId` is a legacy (pre-v1) base64 id.
+ *
+ * @internal
+ */
+export function isLegacyKeysetId(keysetId: string): boolean {
+  return keysetId.length === LEGACY_KEYSET_ID_LENGTH && isBase64String(keysetId);
+}
 
 export const getKeysetIdInt = (keysetId: string): bigint => {
   let keysetIdInt: bigint;

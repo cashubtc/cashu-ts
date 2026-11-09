@@ -47,6 +47,30 @@ function useInactiveHandlers() {
 }
 
 describe('Legacy (pre-v1) keyset output gating', () => {
+  test('loads a legacy keyset whose base64 id also contains only hex characters', async () => {
+    const meta: MintKeyset = { ...legacyKeyset, id: 'dBaAe74DB218' };
+    const keys: MintKeys = {
+      ...meta,
+      keys: { 1: '02692f48985d58bbfe3d215f6557ab9e108ddbb50e4fba5e27f607db4cd5da7ab3' },
+    };
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () =>
+        HttpResponse.json({ keysets: [DUMMY_TEST_KEYSET, meta] }),
+      ),
+      http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [DUMMY_TEST_KEYS, keys] })),
+    );
+
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+
+    const keyset = wallet.keyChain.getKeyset(meta.id);
+    expect(keyset.keys).toEqual(keys.keys);
+    expect(keyset.hasHexId).toBe(false);
+    expect(keyset.version).toBe(-1);
+    await expect(wallet.keyChain.ensureKeysetKeys(meta.id)).resolves.toBe(keyset);
+    expect(wallet.keyChain.getCheapestKeyset().id).toBe(DUMMY_TEST_KEYSET.id);
+  });
+
   test('fixture sanity: legacy keyset id is base64, not hex, and verifies', async () => {
     expect(isValidHex(legacyId)).toBe(false);
     expect(isBase64String(legacyId)).toBe(true);
