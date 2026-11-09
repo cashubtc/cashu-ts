@@ -258,10 +258,10 @@ export class OIDCAuth {
 
     const form = this.toForm({ client_id: this.clientId, scope: this.scope });
     const res = await this.postFormStrict<DeviceStartResponse>(ep, form);
-    // The client displays/opens these; a javascript: scheme would run on open.
-    assertHttpUrl(res.verification_uri, 'verification_uri');
+    // The client displays/opens these, so they follow the same scheme rules as the endpoints.
+    this.assertEndpoint(res.verification_uri, 'verification_uri');
     if (res.verification_uri_complete !== undefined) {
-      assertHttpUrl(res.verification_uri_complete, 'verification_uri_complete');
+      this.assertEndpoint(res.verification_uri_complete, 'verification_uri_complete');
     }
     return res;
   }
