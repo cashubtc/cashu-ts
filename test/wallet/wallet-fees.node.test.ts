@@ -360,8 +360,46 @@ describe('wallet.isPaymentRequestSatisfied', () => {
 
     // Plain bearer proofs carry no lock at all.
     expect(() => wallet.isPaymentRequestSatisfied(pr, proofsTotalling([100]))).toThrow(
-      /does not carry a NUT-10 lock/,
+      /does not carry a valid NUT-10 lock/,
     );
+
+    // A repeated key makes the lock unspendable, though the normalizer would dedupe it to carol's.
+    const oddCarol = (carol.startsWith('02') ? '03' : '02') + carol.slice(2);
+    for (const tags of [[['pubkeys', carol]], [['pubkeys', oddCarol]]]) {
+      const repeated = JSON.stringify(['P2PK', { nonce: 'ab', data: carol, tags }]);
+      expect(() => wallet.isPaymentRequestSatisfied(pr, lockedProofs([100], repeated))).toThrow(
+        /does not carry a valid NUT-10 lock/,
+      );
+    }
+    const refundTags = [
+      ['locktime', '4102444800'],
+      ['refund', pub(9)],
+    ];
+    const withRefund = request({
+      amount: 100,
+      unit: 'sat',
+      nut10: { kind: 'P2PK', data: carol, tags: refundTags },
+    });
+    expect(
+      wallet.isPaymentRequestSatisfied(
+        withRefund,
+        lockedProofs([100], createP2PKsecret(carol, refundTags)),
+      ),
+    ).toBe(true);
+    const repeatedRefund = JSON.stringify([
+      'P2PK',
+      {
+        nonce: 'ab',
+        data: carol,
+        tags: [
+          ['locktime', '4102444800'],
+          ['refund', pub(9), pub(9)],
+        ],
+      },
+    ]);
+    expect(() =>
+      wallet.isPaymentRequestSatisfied(withRefund, lockedProofs([100], repeatedRefund)),
+    ).toThrow(/does not carry a valid NUT-10 lock/);
 
     // An expired refund path is the clawback: locked to carol, spendable by the payer.
     const clawback = createP2PKsecret(carol, [
