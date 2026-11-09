@@ -7,6 +7,7 @@ import { hashToCurveBls } from '../crypto/curve_bls';
 import { getPubKeyFromPrivKey } from '../crypto/curve_secp';
 import { isBlsKeyset } from '../crypto/curves';
 import {
+  assertPreimageOpensLeaf,
   buildScriptPathWitness,
   enumerateLeafKeySlots,
   nutrootLeafHash,
@@ -504,9 +505,7 @@ function openingWitness(
       'A hashlock spend needs its preimage at merge: pass the plans the package was extracted with',
     );
   }
-  if (preimage !== undefined && hexToBytes(preimage).length !== 32) {
-    throw new CTSError('Witness preimage is not 32 bytes');
-  }
+  assertPreimageOpensLeaf(leaf, preimage);
   const signatures = selectRequiredLeafSignatures(leaf, digest, spend.signatures);
   return JSON.stringify({
     leaf: spend.leaf,
