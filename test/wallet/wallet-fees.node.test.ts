@@ -527,6 +527,24 @@ describe('wallet.isPaymentRequestSatisfied', () => {
     expect(
       wallet.isPaymentRequestSatisfied(pr, [v3Proof(8, payee)], 100, { privkeys: priv(1) }),
     ).toBe(false);
+
+    // A v3 keyset spends only point secrets, so a legacy lock on one is never the legacy option.
+    const both = new PaymentRequest({
+      id: 'both',
+      amount: 100,
+      unit: 'sat',
+      nut10: { kind: 'P2PK', data: pub(1) },
+      nutroot: { receiverKey: pub(1) },
+    });
+    const legacyOnV3 = v3Proof(100, { secret: createP2PKsecret(pub(1)) });
+    expect(() =>
+      wallet.isPaymentRequestSatisfied(both, [legacyOnV3], 100, { privkeys: priv(1) }),
+    ).toThrow(/not a v3 point secret/);
+    expect(
+      wallet.isPaymentRequestSatisfied(both, lockedProofs([100], createP2PKsecret(pub(1))), 100, {
+        privkeys: priv(1),
+      }),
+    ).toBe(true);
   });
 
   test("a blind-me leaf key must carry the payee's own blinding", async () => {
