@@ -2,7 +2,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { bech32 } from '@scure/base';
 
-import { isBlsKeyset, isV3PointSecret } from '../crypto';
+import { isBlsKeyset, isLegacyKeysetId, isV3PointSecret } from '../crypto';
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { PaymentRequest } from '../model/PaymentRequest';
@@ -203,10 +203,8 @@ export function isValidHex(str: unknown): str is string {
 }
 
 function hasNonHexId(p: Proof | Proof[]) {
-  if (Array.isArray(p)) {
-    return p.some((proof) => !isValidHex(proof.id));
-  }
-  return !isValidHex(p.id);
+  const proofs = Array.isArray(p) ? p : [p];
+  return proofs.some((proof) => !isValidHex(proof.id) || isLegacyKeysetId(proof.id));
 }
 
 /**
