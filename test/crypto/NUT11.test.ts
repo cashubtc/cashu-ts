@@ -32,6 +32,7 @@ import {
   maybeDeriveP2BKPrivateKeys,
   normalizeHashlock,
   normalizeP2PKOptions,
+  p2pkSpendLeaves,
   parseWitnessData,
   verifyP2PKSpendingConditions,
 } from '../../src/crypto';
@@ -1906,6 +1907,26 @@ describe('verifyP2PKSpendingConditions — semantic validation', () => {
     expect(() => verifyP2PKSpendingConditions(proof)).toThrow(
       /n_sigs\) must be a positive integer/,
     );
+  });
+
+  test('rejects a P2PK secret with empty data on every lock path', () => {
+    const future = String(Math.floor(Date.now() / 1000) + 3600);
+    const paths = [
+      [],
+      [['locktime', future]],
+      [['locktime', '1']],
+      [['pubkeys', pk2]],
+      [
+        ['locktime', '1'],
+        ['refund', pk3],
+      ],
+    ];
+    for (const tags of paths) {
+      const proof = makeProof(tags, '');
+      expect(() => verifyP2PKSpendingConditions(proof)).toThrow(/Invalid pubkey/);
+      expect(() => getP2PKExpectedWitnessPubkeys(proof.secret)).toThrow(/Invalid pubkey/);
+      expect(() => p2pkSpendLeaves(proof.secret)).toThrow(/Invalid pubkey/);
+    }
   });
 
   test('rejects a malformed n_sigs instead of applying the default threshold', () => {
