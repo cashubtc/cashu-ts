@@ -785,17 +785,17 @@ export function verifyP2PKSpendingConditions(
 }
 
 /**
- * Reads a P2PK or HTLC secret as nutroot-shaped leaves: the main path at index 0 and, given a
- * locktime, the refund path as an `after` leaf at index 1.
+ * Reads a P2PK or HTLC secret as nutroot-shaped leaves, enforcing the spending verifier's rules.
  *
  * @remarks
- * Diagnostic shape for `Wallet.spendOptions`. A keyless `after` leaf (`n: 0`) is NUT-11's
- * anyone-after-expiry, which no nutroot tree can encode: never serialize these leaves. Its `time`
- * is `locktime + 1`, as NUT-11 expires after the locktime and an `after` leaf opens at it.
+ * Used by `Wallet.spendOptions` for its leaf view, and as a semantic check where a lock must be
+ * judged without signatures. Main path at index 0, refund path as an `after` leaf at index 1 (its
+ * `time` is `locktime + 1`, as NUT-11 expires after the locktime). A keyless `after` leaf is
+ * NUT-11's anyone-after-expiry, which no nutroot tree can encode: never serialize these leaves.
  * @throws If the secret is not P2PK/HTLC or its tags break the NUT-11 rules.
  * @internal
  */
-export function p2pkSpendLeaves(secretStr: string | Secret): NutrootConditionLeaf[] {
+export function p2pkToSpendLeaves(secretStr: string | Secret): NutrootConditionLeaf[] {
   const secret = parseP2PKSecret(secretStr);
   const mainKeys = getP2PKWitnessPubkeys(secret);
   const refundKeys = getP2PKWitnessRefundkeys(secret);
