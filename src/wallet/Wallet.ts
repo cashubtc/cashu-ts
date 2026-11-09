@@ -16,6 +16,7 @@ import {
   assertSigAllInputs,
   parseSecret,
   canSpendP2PKWithKeys,
+  getP2PKExpectedWitnessPubkeys,
   normalizeP2PKOptions,
   type P2PKOptions,
 } from '../crypto';
@@ -1960,24 +1961,28 @@ class Wallet {
    *
    * @remarks
    * Both sides canonicalise through the same normalizer, so tag order, hex case and x-only form do
-   * not matter but content does: an unrequested `refund`/`locktime` pair is a payer clawback.
+   * not matter but content does: an unrequested `refund`/`locktime` pair is a payer clawback. The
+   * held lock's keys must first pass the spending verifier's checks, as the normalizer would
+   * otherwise repair a malformed one (eg drop a repeated key).
    * @throws If the proof is unlocked, or carries a condition other than the requested one.
    */
   private assertNut10Lock(requested: P2PKOptions, secret: string): void {
-    let held: P2PKOptions | undefined;
+    let held: string | undefined;
     try {
+      // Judge the keys as the spending verifier would: normalizing below dedupes them.
+      getP2PKExpectedWitnessPubkeys(secret);
       const [kind, data] = parseSecret(secret);
-      held = nut10ToP2PKOptions({ kind, data: data.data, tags: data.tags });
+      const options = nut10ToP2PKOptions({ kind, data: data.data, tags: data.tags });
+      held = options && JSON.stringify(normalizeP2PKOptions(options));
     } catch {
       held = undefined;
     }
     this.failIfNullish(
       held,
-      'nut10 request: proof does not carry a NUT-10 lock of the requested kind',
+      'nut10 request: proof does not carry a valid NUT-10 lock of the requested kind',
     );
     this.failIf(
-      JSON.stringify(normalizeP2PKOptions(held)) !==
-        JSON.stringify(normalizeP2PKOptions(requested)),
+      held !== JSON.stringify(normalizeP2PKOptions(requested)),
       'nut10 request: proof lock is not the requested spending condition',
     );
   }
