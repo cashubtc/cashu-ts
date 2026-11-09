@@ -202,8 +202,7 @@ export function isValidHex(str: unknown): str is string {
   return typeof str === 'string' && str.length % 2 === 0 && /^[a-f0-9]+$/i.test(str);
 }
 
-function hasNonHexId(p: Proof | Proof[]) {
-  const proofs = Array.isArray(p) ? p : [p];
+function hasNonHexId(proofs: Proof[]) {
   return proofs.some((proof) => !isValidHex(proof.id) || isLegacyKeysetId(proof.id));
 }
 
