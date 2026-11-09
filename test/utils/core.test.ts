@@ -1350,6 +1350,23 @@ describe('sortProofsById', () => {
 });
 
 describe('getEncodedToken edge cases', () => {
+  test('rejects legacy base64 IDs containing only hex characters in both encoders', () => {
+    const token: Token = {
+      mint: 'http://localhost:3338',
+      proofs: [
+        {
+          id: 'dBaAe74DB218',
+          amount: Amount.from(1),
+          secret: 'abc',
+          C: '038618543ffb6b8695df4ad4babcde92a34a96bdcd97dcee0d7ccf98d472126792',
+        },
+      ],
+      unit: 'sat',
+    };
+    expect(() => utils.getEncodedToken(token)).toThrow(/legacy keyset ID/);
+    expect(() => utils.getEncodedTokenBinary(token)).toThrow(/legacy keyset ID/);
+  });
+
   test('throws for proofs with non-hex keyset IDs', () => {
     const token: Token = {
       mint: 'http://localhost:3338',
