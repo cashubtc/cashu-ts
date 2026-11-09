@@ -2160,7 +2160,9 @@ class Wallet {
         `cannot check the request's nut10 lock kind '${pr.nut10?.kind}'`,
       );
       for (const p of proofs) {
-        if (isBlsKeyset(p.id) && isV3PointSecret(p.secret)) {
+        // The keyset alone picks the family: a v3 keyset spends only point secrets.
+        if (isBlsKeyset(p.id)) {
+          this.failIf(!isV3PointSecret(p.secret), 'v3 proof: the secret is not a v3 point secret');
           this.failIfNullish(nutrootOption, 'v3 proof: the request carries no nutroot option');
           verifyNutrootRequestTree(nutrootOption, p.spend_info, privkeys);
           verifyNutrootSpendInfo(p.secret, p.spend_info!);
