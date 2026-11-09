@@ -1707,6 +1707,10 @@ class Wallet {
         exactMatch: true,
         requireDleq: false, // safety
       });
+      this.failIf(
+        send.some((p) => !isBlsKeyset(p.id) && !this.spendOptions(p).keyPath),
+        'A locked legacy proof requires a swap',
+      );
       // Only bearer material can be forwarded to a new holder without a v3 swap.
       const v3 = send.filter((p) => isBlsKeyset(p.id));
       const bearerKeys = collectSpendInfoKeys(v3, undefined, this._logger);

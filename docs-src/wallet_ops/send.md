@@ -99,7 +99,7 @@ const { keep, send } = await wallet.ops.send(15, myProofs).asCustom(mySendData).
 
 Custom data may name any active keyset of the wallet unit, per output. The wallet checks each keyset before the swap and unblinds every output with the keyset the mint signed under.
 
-Normal sends swap v3 proofs that lack transferable bearer keys, even when the amounts match exactly. Supplying a script-path plan also forces a swap.
+Normal sends swap legacy P2PK/HTLC inputs and v3 proofs that lack transferable bearer keys. Supplying a script-path plan also forces a swap.
 
 ## 7) Force pure offline (no mint calls)
 
