@@ -2113,10 +2113,12 @@ class Wallet {
    * requested tree for a nutroot request, and exactly the requested condition for a nut10 one. A
    * receiver-keyed nutroot request needs `opts.privkeys`, because binding a proof to the receiver
    * key is an ECDH trial-match only that key can do (NUT-28); without it there is nothing to check
-   * and the call throws rather than passing a payment the payee cannot spend. An unlocked request
-   * takes only proofs the payee can spend, bearer or locked to one of `opts.privkeys`, so a payer
-   * cannot settle it with proofs locked to themselves. Proof integrity (pairing/DLEQ) remains a
-   * separate check.
+   * and the call throws rather than passing a payment the payee cannot spend. A blind-me leaf key
+   * is checked only when its owner's private key is in `opts.privkeys`. Without it, any substituted
+   * key passes, so include every key the request tags as blind-me that you hold. An unlocked
+   * request takes only proofs the payee can spend, bearer or locked to one of `opts.privkeys`, so a
+   * payer cannot settle it with proofs locked to themselves. Proof integrity (pairing/DLEQ) remains
+   * a separate check.
    * @param pr - The payment request being settled.
    * @param proofs - The received proofs (from this wallet's mint), with spend info when present.
    * @param expectedAmount - Expected amount for amountless requests; ignored when the request sets
