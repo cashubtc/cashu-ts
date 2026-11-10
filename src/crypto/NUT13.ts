@@ -19,7 +19,8 @@ const STANDARD_DERIVATION_PATH = `m/129372'/0'`;
  * `m/129373'/{index}'/0'/0'/{counter}`.
  *
  * - `P2PK`: NUT-11 P2PK signing key.
- * - `QuoteLock`: NUT-20 quote locking key.
+ * - `QuoteLock`: the legacy NUT-20 quote locking key, kept to recover keys older wallets created. New
+ *   quotes use {@link deriveQuoteLockKey} or a random key.
  */
 export type Bip32KeyPurpose = 'P2PK' | 'QuoteLock';
 
@@ -115,9 +116,11 @@ export function deriveSecretAndBlindingFactor(
  * `m/129373'/{purpose}'/0'/0'/{counter}` (the counter child is non-hardened).
  *
  * @remarks
- * Used for NUT-11 P2PK keys and NUT-20 quote locking keys. Both fields are hex: `pubkey` drops into
- * the lock/quote APIs and `privkey` into `signP2PKProofs`. To scan many counters from the same
- * seed, prefer {@link createKeyPairDeriver}, which caches the shared parent.
+ * Used for NUT-11 P2PK keys. The `QuoteLock` purpose is the legacy path NUT-20 no longer issues new
+ * quotes under; use it only to recover keys older wallets created, and derive new quote lock keys
+ * with {@link deriveQuoteLockKey}. Both fields are hex: `pubkey` drops into the lock APIs and
+ * `privkey` into `signP2PKProofs`. To scan many counters from the same seed, prefer
+ * {@link createKeyPairDeriver}, which caches the shared parent.
  *
  * The counter child is non-hardened so the parent xpub can derive counter pubkeys for watch-only
  * use. Consequently, never export the parent xpub alongside any counter's private key: with both,
