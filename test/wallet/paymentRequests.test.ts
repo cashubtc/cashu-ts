@@ -1,6 +1,6 @@
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { test, describe, expect } from 'vitest';
+import { test, describe, expect, vi } from 'vitest';
 
 import {
   Amount,
@@ -698,6 +698,154 @@ describe('payment requests', () => {
 
     const prWithNut10 = (nut10?: NUT10Option) =>
       new PaymentRequest({ id: 'id', amount: 1, unit: 'sat', singleUse: false, nut10 });
+
+    const REFUND_DELAY_REQUEST =
+      'creqApWFpaGM5ZTQ1ZDJhYWEZAfRhdWNzYXRhbYF4GGh0dHBzOi8vbWludC5leGFtcGxlLmNvbWVudXQxMKNha2RQMlBLYWR4QjAyYzNiNWJiMjdlMzYxNDU3YzkyZDkzZDc4ZGQ3M2QzZDUzNzMyMTEwYjJjZmU4YjUwZmJjMGFiYzYxNWU5YzMzMWF0gYJscmVmdW5kX2RlbGF5ZjYwNDgwMA';
+    const NOW = 1700000000;
+
+    test('omits the refund marker without adding an unrequested refund path', () => {
+      const pr = PaymentRequest.fromEncodedRequest(REFUND_DELAY_REQUEST);
+      expect(pr.toP2PKOptions()).toEqual({ kind: 'P2PK', data: pr.nut10!.data });
+      expect(pr.toP2PKOptions({ refundKeys: [], now: NOW })).toEqual({
+        kind: 'P2PK',
+        data: pr.nut10!.data,
+      });
+    });
+
+    test('adds payer refund keys and a delayed locktime that encode into the secret', () => {
+      const pr = PaymentRequest.fromEncodedRequest(REFUND_DELAY_REQUEST);
+      const options = pr.toP2PKOptions({ refundKeys: [REFUND], now: NOW, margin: 120 })!;
+      expect(options).toEqual({
+        kind: 'P2PK',
+        data: pr.nut10!.data,
+        locktime: 1700604920,
+        refundKeys: [REFUND],
+      });
+      const od = OutputData.createSingleP2PKData(options, 1, '00ad268c4d1f5826');
+      const secret = JSON.parse(new TextDecoder().decode(od.secret));
+      expect(secret[1].tags).toEqual([
+        ['locktime', '1700604920'],
+        ['refund', REFUND],
+      ]);
+      expect(pr.nut10!.tags).toEqual([['refund_delay', '604800']]);
+    });
+
+    test('uses the current time when no clock is supplied', () => {
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(1700000000000);
+      try {
+        const pr = PaymentRequest.fromEncodedRequest(REFUND_DELAY_REQUEST);
+        expect(pr.toP2PKOptions({ refundKeys: [REFUND], margin: 0 })!.locktime).toBe(1700604800);
+      } finally {
+        clock.mockRestore();
+      }
+    });
+
+    test('uses the default margin and rounds fractional Unix time up', () => {
+      const pr = PaymentRequest.fromEncodedRequest(REFUND_DELAY_REQUEST);
+      expect(pr.toP2PKOptions({ refundKeys: [REFUND], now: NOW + 0.5 })!.locktime).toBe(1700604861);
+    });
+
+    test.each(
+      [
+        [],
+        [''],
+        ['0'],
+        ['01'],
+        ['-1'],
+        ['+1'],
+        ['1.5'],
+        ['1e3'],
+        ['1 '],
+        [' 1'],
+        ['1\n'],
+        ['604800', '1'],
+        ['9007199254740992'],
+      ].map((values) => ({ values })),
+    )('ignores malformed refund_delay values $values', ({ values }) => {
+      const pr = prWithNut10({ kind: 'P2PK', data: PUBKEY, tags: [['refund_delay', ...values]] });
+      expect(pr.toP2PKOptions({ refundKeys: [REFUND], now: NOW })).toEqual({
+        kind: 'P2PK',
+        data: PUBKEY,
+      });
+    });
+
+    test('ignores repeated refund markers and preserves other extension tags', () => {
+      const pr = prWithNut10({
+        kind: 'P2PK',
+        data: PUBKEY,
+        tags: [
+          ['refund_delay', '1'],
+          ['refund_delay', '2'],
+          ['custom', 'value'],
+        ],
+      });
+      expect(pr.toP2PKOptions({ refundKeys: [REFUND], now: NOW })).toEqual({
+        kind: 'P2PK',
+        data: PUBKEY,
+        additionalTags: [['custom', 'value']],
+      });
+    });
+
+    test.each(
+      [
+        [['locktime', '123']],
+        [['refund', PUBKEY_2]],
+        [['n_sigs_refund', '1']],
+        [
+          ['locktime', '123'],
+          ['refund', PUBKEY_2],
+        ],
+      ].map((tags) => ({ tags })),
+    )('does not add a refund path over explicit request tags $tags', ({ tags }) => {
+      const pr = prWithNut10({ kind: 'P2PK', data: PUBKEY, tags });
+      const explicit = pr.toP2PKOptions();
+      pr.nut10!.tags = [...tags, ['refund_delay', '604800']];
+      expect(pr.toP2PKOptions({ refundKeys: [REFUND], now: NOW })).toEqual(explicit);
+    });
+
+    test('preserves HTLC markers without adding a payer refund path', () => {
+      const pr = prWithNut10({
+        kind: 'HTLC',
+        data: HASH,
+        tags: [
+          ['pubkeys', PUBKEY],
+          ['refund_delay', '604800'],
+        ],
+      });
+      expect(pr.toP2PKOptions({ refundKeys: [REFUND], now: NOW })).toEqual({
+        kind: 'HTLC',
+        data: HASH,
+        pubkeys: [PUBKEY],
+        additionalTags: [['refund_delay', '604800']],
+      });
+    });
+
+    test('does not add payer refunds without a refund_delay marker', () => {
+      expect(
+        prWithNut10({ kind: 'P2PK', data: PUBKEY, tags: [] }).toP2PKOptions({
+          refundKeys: [REFUND],
+          now: NOW,
+        }),
+      ).toEqual({ kind: 'P2PK', data: PUBKEY });
+    });
+
+    test.each([
+      { now: -1 },
+      { now: NaN },
+      { now: Infinity },
+      { margin: -1 },
+      { margin: NaN },
+      { margin: Infinity },
+      { now: Number.MAX_SAFE_INTEGER },
+    ])('rejects invalid refund timing %j', (timing) => {
+      const pr = PaymentRequest.fromEncodedRequest(REFUND_DELAY_REQUEST);
+      expect(() => pr.toP2PKOptions({ refundKeys: [REFUND], now: NOW, ...timing })).toThrow();
+    });
+
+    test('rejects invalid payer refund keys', () => {
+      const pr = PaymentRequest.fromEncodedRequest(REFUND_DELAY_REQUEST);
+      expect(() => pr.toP2PKOptions({ refundKeys: ['invalid'], now: NOW })).toThrow();
+    });
 
     test('returns undefined when there is no nut10 option', () => {
       expect(prWithNut10(undefined).toP2PKOptions()).toBeUndefined();

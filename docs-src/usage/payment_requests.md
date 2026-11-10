@@ -210,6 +210,14 @@ if (opts) builder.asLocked(p2pkToLockOptions(opts));
 const { keep, send } = await builder.run();
 ```
 
+The experimental `refund_delay` proposal lets a payee permit a payer refund path on P2PK requests. Pass keys whose private keys you control to opt in. The converter adds `locktime` and `refund` together only for one valid delay with no explicit `locktime`, `refund`, or `n_sigs_refund` tags. For P2PK it removes the request-only marker, including malformed values. Without refund keys, it adds no refund path. Other lock kinds keep their existing tags. The default margin is 60 seconds; `margin` and the optional Unix-seconds clock `now` can be overridden. Check `opts.locktime !== undefined` before relying on a refund path. If you require one and it is absent, decline to pay.
+
+```typescript
+const payerRefundKey = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+const opts = pr.toP2PKOptions({ refundKeys: [payerRefundKey], margin: 120 });
+// Apply opts through p2pkToLockOptions() and .asLocked() as above.
+```
+
 See [Create P2PK](./create_p2pk.md) for the builder.
 
 [nut18]: https://github.com/cashubtc/nuts/blob/main/18.md

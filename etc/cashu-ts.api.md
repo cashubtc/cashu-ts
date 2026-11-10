@@ -2062,7 +2062,11 @@ class PaymentRequest_2 {
     // (undocumented)
     toEncodedRequest(): string;
     toNutrootOptions(): ParsedNutrootOption | undefined;
-    toP2PKOptions(): P2PKOptions | undefined;
+    toP2PKOptions(refund?: {
+        refundKeys?: string[];
+        margin?: number;
+        now?: number;
+    }): P2PKOptions | undefined;
     // (undocumented)
     toRawRequest(): RawPaymentRequest;
     // (undocumented)
