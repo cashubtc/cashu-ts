@@ -147,7 +147,11 @@ recover-after-restart lifecycle.
 ```ts
 import { deserializeSwapPreview, serializeSwapPreview } from '@cashu/cashu-ts';
 
-const receivePreview = await wallet.prepareSwapToReceive(token);
+const preview = await wallet.prepareSwapToReceive(token);
+
+// Sign before persisting. Signatures are random, so a preview stored unsigned signs afresh
+// on replay and misses the cache; a signed one keeps NUT-19 retries working after a restart.
+const receivePreview = await wallet.signSwapPreview(preview);
 
 // Swap previews have a serialize helper: persist the JSON-safe form, then
 // rehydrate it with deserializeSwapPreview to replay after a restart. The blob carries
@@ -156,7 +160,7 @@ const stored = JSON.stringify(serializeSwapPreview(receivePreview));
 const { keep } = await wallet.completeSwap(deserializeSwapPreview(JSON.parse(stored)));
 ```
 
-`completeSwap` builds its request purely from the preview, so a replayed preview posts a
+`completeSwap` builds its request purely from the preview, so a replayed signed preview posts a
 byte-identical `/v1/swap` body. See [Receive § 5](../wallet_ops/receive.md) and
 [Send § 2](../wallet_ops/send.md) for the full serialize-and-rehydrate round trip.
 

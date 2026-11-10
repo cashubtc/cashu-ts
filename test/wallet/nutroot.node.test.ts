@@ -227,6 +227,21 @@ describe('prepareScriptPathSpends', () => {
       [],
     );
     expect(out.get(b.secret)!.preimage).toBe(preimage);
+    // A preimage that cannot open this hashlock never reaches a witness.
+    expect(() =>
+      prepareScriptPathSpends(
+        [proof],
+        [{ secret: b.secret, leafIndex: 0, preimage: '22'.repeat(32), extraKeys: [PRIV_B] }],
+        [],
+      ),
+    ).toThrow(/does not open the hashlock leaf/);
+  });
+
+  test('refuses a preimage on a leaf that takes none', () => {
+    const plan = { secret: built.secret, leafIndex: 0, extraKeys: [PRIV_B] };
+    expect(() =>
+      prepareScriptPathSpends([lockedProof()], [{ ...plan, preimage: '11'.repeat(32) }], []),
+    ).toThrow(/threshold leaf takes no preimage/);
   });
 
   test('rejects unresolvable plans before any request is built', () => {

@@ -10,6 +10,8 @@ import {
   type Proof,
   type OutputConfig,
   type OperationCounters,
+  getDecodedToken,
+  getEncodedToken,
 } from '../../src';
 
 import { useTestServer, mint, mintUrl, unit } from './_setup';
@@ -161,6 +163,65 @@ describe('sendOffline requireDleq retains dleq-bearing proofs', () => {
     expect(send).toHaveLength(1);
     // requireDleq keeps the DLEQ on the outgoing proof
     expect(send[0].dleq).toMatchObject(dleq);
+  });
+
+  test.each([
+    ['r', { e: '00'.repeat(32), s: '00'.repeat(32) }],
+    ['e', { s: '00'.repeat(32), r: '00'.repeat(32) }],
+    ['s', { e: '00'.repeat(32), r: '00'.repeat(32) }],
+  ])('a DLEQ without its %s does not satisfy requireDleq', async (_field, dleq) => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const proof = { ...makeProof(1), dleq } as unknown as Proof;
+
+    expect(() => wallet.sendOffline(1, [proof], { requireDleq: true })).toThrow(
+      'Not enough funds available to send',
+    );
+  });
+});
+
+describe('sendOffline keeps the DLEQ for the receiver', () => {
+  const dleq = { e: 'aa'.repeat(32), s: 'bb'.repeat(32), r: 'cc'.repeat(32) };
+
+  test('a sent token carries the DLEQ without requireDleq, so an offline receiver can check it', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const { send } = wallet.sendOffline(1, [{ ...makeProof(1), dleq }]);
+    const decoded = getDecodedToken(getEncodedToken({ mint: mintUrl, proofs: send }), [keysetId]);
+    expect(decoded.proofs[0].dleq).toEqual(dleq);
+  });
+
+  test('a send that needs no swap keeps the DLEQ too', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const { send } = await wallet.send(1, [{ ...makeProof(1), dleq }]);
+    expect(send[0].dleq).toEqual(dleq);
+  });
+
+  test('removeDleq still drops it at the encoder', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const { send } = wallet.sendOffline(1, [{ ...makeProof(1), dleq }]);
+    const encoded = getEncodedToken({ mint: mintUrl, proofs: send }, { removeDleq: true });
+    expect(getDecodedToken(encoded, [keysetId]).proofs[0].dleq).toBeUndefined();
+  });
+
+  test.each([
+    ['r', { e: dleq.e, s: dleq.s }],
+    ['e', { s: dleq.s, r: dleq.r }],
+    ['s', { e: dleq.e, r: dleq.r }],
+  ])('a DLEQ without its %s is dropped rather than failing the encode', async (_field, partial) => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const proof = { ...makeProof(1), dleq: partial } as unknown as Proof;
+    const { send } = wallet.sendOffline(1, [proof]);
+    expect(send[0].dleq).toBeUndefined();
+    expect(() => getEncodedToken({ mint: mintUrl, proofs: send })).not.toThrow();
   });
 });
 

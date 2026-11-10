@@ -62,22 +62,21 @@ const proofsB = await wallet.ops
 
 ## 5) Crash-safe receive: persist the preview
 
-A one-shot `run()` that dies between the mint's reply and your storage write has spent the
-inputs without you ever seeing the new proofs. Persisting the preview closes that window:
-`completeSwap` builds its request purely from the preview, so replaying a persisted preview
-posts a byte-identical `/v1/swap` body, and a mint that caches the endpoint (NUT-19) returns
-the original signatures.
+A one-shot `run()` that dies between the mint's reply and your storage write has spent the inputs without you ever seeing the new proofs. Persisting a signed preview closes that window: `completeSwap` builds its request purely from the preview, so replaying it posts a byte-identical `/v1/swap` body, and a mint that caches the endpoint (NUT-19) returns the original signatures.
 
 ```ts
 import { deserializeSwapPreview, serializeSwapPreview } from '@cashu/cashu-ts';
 
 const preview = await wallet.ops.receive(token).prepare();
 
-// Persist before completing. Previews contain Amount, bigint and Uint8Array values,
-// so use the helper rather than calling JSON.stringify(preview) directly.
-const stored = JSON.stringify(serializeSwapPreview(preview));
+// Sign, then persist before completing. Pass your key if the inputs are locked to you.
+const signed = await wallet.signSwapPreview(preview);
 
-const { keep } = await wallet.completeSwap(preview);
+// Previews contain Amount, bigint and Uint8Array values, so use the helper rather than
+// calling JSON.stringify(signed) directly.
+const stored = JSON.stringify(serializeSwapPreview(signed));
+
+const { keep } = await wallet.completeSwap(signed);
 
 // ... after a restart: load the mint again, then replay the same preview ...
 const { keep: recovered } = await wallet.completeSwap(deserializeSwapPreview(JSON.parse(stored)));
@@ -88,6 +87,7 @@ const { keep: recovered } = await wallet.completeSwap(deserializeSwapPreview(JSO
 
 The replay window has bounds:
 
+- The preview must be signed before you persist it. Every v3 input signs the transaction, as does any P2PK input, and those signatures are random. An unsigned preview signs afresh on replay, so the mint no longer recognises the request and answers `11001`, leaving only a NUT-09 restore of the outputs.
 - The mint must advertise `/v1/swap` in its NUT-19 `cached_endpoints`, and the replay must
   happen inside the advertised TTL. See [NUT-19 Cached Responses](../usage/nut19.md).
 - Automatic NUT-19 retries only cover failures inside a running process. The persisted

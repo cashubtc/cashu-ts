@@ -1,5 +1,6 @@
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToNumberBE, numberToBytesBE, equalBytes } from '@noble/curves/utils.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 import { concatBytes } from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
@@ -678,6 +679,27 @@ export function buildNutrootSecret(
 }
 
 /**
+ * Asserts a witness preimage opens its leaf: only a hashlock takes one, and only its own (NUT-10).
+ *
+ * @remarks
+ * Run before any witness leaves the wallet, so a preimage is never sent where it cannot open.
+ * @throws If a preimage is given for a non-hashlock leaf, or it is not the leaf hash's preimage.
+ * @internal
+ */
+export function assertPreimageOpensLeaf(leaf: NutrootLeaf, preimage: string | undefined): void {
+  if (preimage === undefined) return;
+  if (leaf.type !== 'hashlock') {
+    throw new CTSError(`A ${leaf.type} leaf takes no preimage`);
+  }
+  if (!/^[0-9a-f]{64}$/i.test(preimage)) {
+    throw new CTSError('Witness preimage is not 32 bytes');
+  }
+  if (!equalBytes(sha256(hexToBytes(preimage)), hexToBytes(leaf.hash as string))) {
+    throw new CTSError('Preimage does not open the hashlock leaf');
+  }
+}
+
+/**
  * Build a script-path witness JSON for the leaf at `leafIndex` of the disclosed tree.
  *
  * @remarks
@@ -691,8 +713,8 @@ export function buildScriptPathWitness(
   signatures: string[],
   preimage?: string,
 ): string {
-  // NUT-10 witness bounds: no more signature entries than the leaf lists keys,
-  // and a 32-byte preimage. A mint rejects either, so never emit them.
+  // NUT-10 witness bounds: no more signature entries than the leaf lists keys, and a preimage only
+  // where it opens the leaf. A mint rejects either, so never emit them.
   const leaf = parseNutrootLeaf(hexToBytes(tree[leafIndex] ?? ''));
   if (leaf.type === 'commit') {
     throw new CTSError('A commit leaf is not a spend path');
@@ -700,9 +722,7 @@ export function buildScriptPathWitness(
   if (signatures.length > leaf.keys.length) {
     throw new CTSError('Witness holds more signatures than the leaf lists keys');
   }
-  if (preimage !== undefined && hexToBytes(preimage).length !== 32) {
-    throw new CTSError('Witness preimage is not 32 bytes');
-  }
+  assertPreimageOpensLeaf(leaf, preimage);
   const leafHashes = tree.map((leaf) => nutrootLeafHash(hexToBytes(leaf)));
   const path = nutrootMerklePath(leafHashes, leafIndex);
   return JSON.stringify({

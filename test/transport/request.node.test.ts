@@ -2111,7 +2111,7 @@ describe('onResponseMeta callback', () => {
       'callback failed',
       expect.objectContaining({
         op: 'request.onResponseMeta',
-        endpoint,
+        endpoint: mintUrl,
         error: expect.any(Error),
       }),
     );
@@ -2147,10 +2147,43 @@ describe('onResponseMeta callback', () => {
       'callback failed',
       expect.objectContaining({
         op: 'request.onResponseMeta',
-        endpoint,
+        endpoint: mintUrl,
         error: expect.any(Error),
       }),
     );
+  });
+
+  test.each<[string, () => void]>([
+    [
+      'throw',
+      () => {
+        throw new Error('boom');
+      },
+    ],
+
+    ['rejection', () => Promise.reject(new Error('boom'))],
+  ])('a failing callback logs the mint origin, never the path: %s', async (_, hook) => {
+    const endpoint = `${mintUrl}/v1/mint/quote/bolt11/quote-id-123`;
+    server.use(http.get(endpoint, () => HttpResponse.json({})));
+
+    const warnSpy = vi.fn();
+    setRequestLogger({ ...NULL_LOGGER, warn: warnSpy });
+
+    await request({ endpoint, onResponseMeta: hook }); // per-request alone
+    setGlobalRequestOptions({ onResponseMeta: hook });
+    await request({ endpoint }); // global alone
+    await request({ endpoint, onResponseMeta: () => hook() }); // composed, so both fail
+
+    // flush microtask queue for async .catch handler
+    await new Promise((r) => setTimeout(r, 10));
+
+    setGlobalRequestOptions({});
+    setRequestLogger(NULL_LOGGER);
+
+    expect(warnSpy).toHaveBeenCalledTimes(4);
+    for (const [, context] of warnSpy.mock.calls) {
+      expect(context.endpoint).toBe(mintUrl);
+    }
   });
 
   test('composes per-request and global callbacks', async () => {

@@ -333,6 +333,7 @@ export type CompleteMeltOptions = {
     extraPayload?: Record<string, unknown>;
     scriptPath?: ScriptPathPlan[];
     signal?: AbortSignal;
+    requestTimeout?: number;
 };
 
 // @public
@@ -1360,6 +1361,7 @@ export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M ex
 export type MintCallOptions = {
     customRequest?: RequestFn;
     signal?: AbortSignal;
+    requestTimeout?: number;
 };
 
 // @public (undocumented)
@@ -3223,10 +3225,12 @@ export class Wallet {
         proofs: Proof[];
         lastCounters: Record<string, number>;
     }>;
+    restoreSwapPreview(swapPreview: SwapPreview, opts?: AbortOptions): Promise<SendResponse>;
     selectProofsToSend(proofs: ProofLike[], amountToSend: AmountLike, includeFees?: boolean, exactMatch?: boolean): SendResponse;
     send(amount: AmountLike, proofs: ProofLike[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SendResponse>;
     sendOffline(amount: AmountLike, proofs: ProofLike[], config?: SendOfflineConfig): SendResponse;
     signP2PKProofs(proofs: ProofLike[], privkey: string | string[], outputData?: OutputDataLike[], quoteId?: string): Proof[];
+    signSwapPreview(swapPreview: SwapPreview, privkey?: string | string[], options?: CompleteSwapOptions): Promise<SwapPreview>;
     spendOptions(proof: Proof, opts?: {
         privkeys?: string | string[];
         now?: number;

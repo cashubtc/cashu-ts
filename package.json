@@ -1,6 +1,6 @@
 {
   "name": "@cashu/cashu-ts",
-  "version": "5.0.0-rc.11",
+  "version": "5.0.0-rc.12",
   "description": "cashu library for communicating with a cashu mint",
   "type": "module",
   "sideEffects": false,
@@ -130,6 +130,6 @@
     "@scure/bip32": "^2.4.0"
   },
   "overrides": {
-    "qs": "^6.15.3"
+    "qs": "^6.17.0"
   }
 }

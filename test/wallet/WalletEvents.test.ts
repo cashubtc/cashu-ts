@@ -914,15 +914,23 @@ describe('WalletEvents', () => {
       ]);
     });
 
-    it('onDrop exceptions are swallowed', async () => {
+    it.each([
+      ['throwing', 'oldest', 2],
+      ['throwing', 'newest', 1],
+      ['rejecting', 'oldest', 2],
+      ['rejecting', 'newest', 1],
+    ] as const)('%s onDrop is contained (drop: %s)', async (mode, drop, kept) => {
+      const fail = () => {
+        throw new Error('ignore');
+      };
       const proofs: Proof[] = [{ amount: Amount.from(1), id: 'i', secret: 's', C: 'c' }];
       const ac = new AbortController();
       const iter = events.proofStatesStream(proofs, {
         maxBuffer: 1,
+        drop,
         signal: ac.signal,
-        onDrop: () => {
-          throw new Error('ignore');
-        },
+        // eslint-disable-next-line @typescript-eslint/no-misused-promises -- async-callback tolerance is what's under test
+        onDrop: mode === 'throwing' ? fail : async () => fail(),
       });
 
       const out: any[] = [];
@@ -935,11 +943,12 @@ describe('WalletEvents', () => {
       const ws = mock.mint.webSocketConnection!;
       const [Y] = ws.firstFilters('proof_state');
       ws.emitProof({ Y, n: 1 });
-      ws.emitProof({ Y, n: 2 }); // drops n:1; onDrop throws (ignored)
+      ws.emitProof({ Y, n: 2 }); // buffer full: onDrop fails (contained)
       ac.abort();
 
       const result = await consumer;
-      expect(result).toEqual([expect.objectContaining({ n: 2 })]);
+      await flushMicrotasks();
+      expect(result).toEqual([expect.objectContaining({ n: kept })]);
     });
   });
 
@@ -2006,6 +2015,37 @@ describe('WalletEvents', () => {
       await flushMicrotasks();
       expect(c).toHaveBeenCalledTimes(1);
     });
+
+    it('contains a failed subscription setup while the group is still live', async () => {
+      const logger = { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() };
+      const setupError = new Error('handshake refused');
+      const wallet = {
+        mint: { connectWebSocket: vi.fn().mockRejectedValue(setupError) },
+        logger,
+      };
+      const ev = new WalletEvents(wallet as any);
+      const g = ev.group();
+
+      void g.add(ev.mintQuoteUpdates(['q1'], vi.fn(), vi.fn()));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(g.cancelled).toBe(false);
+      expect(logger.warn).toHaveBeenCalledWith(
+        'callback failed',
+        expect.objectContaining({
+          event: 'group.add',
+          reason: 'subscription setup failed',
+          error: setupError,
+        }),
+      );
+    });
+
+    it('still hands a failed setup back to a caller of add', async () => {
+      const g = events.group();
+      await expect(g.add(Promise.reject(new Error('setup failed')))).rejects.toThrow(
+        'setup failed',
+      );
+    });
   });
 
   describe('waitUntilPaid default timeout message', () => {
@@ -2120,6 +2160,110 @@ describe('WalletEvents', () => {
       expect(logger.warn).toHaveBeenCalledWith(
         'callback failed',
         expect.objectContaining({ error: expect.objectContaining({ message: 'poll boom' }) }),
+      );
+    });
+
+    it.each(['throwing', 'rejecting'])(
+      'contains and logs a %s polling-fallback error callback',
+      async (mode) => {
+        const logger = {
+          warn: vi.fn(),
+          error: vi.fn(),
+          info: vi.fn(),
+          debug: vi.fn(),
+          trace: vi.fn(),
+          log: vi.fn(),
+        };
+        const wallet = {
+          mint: new MockMint(),
+          computeY,
+          unit: 'sat',
+          getMintInfo: () => nut17([]),
+          // Every status request fails, so the poll gives up and reports through err
+          checkMintQuote: vi.fn(async () => {
+            throw new Error('mint down');
+          }),
+          logger,
+        };
+        const ev = new WalletEvents(wallet as any);
+        const ac = new AbortController();
+        const err =
+          mode === 'throwing'
+            ? () => {
+                throw new Error('err boom');
+              }
+            : async () => {
+                throw new Error('err boom');
+              };
+
+        // eslint-disable-next-line @typescript-eslint/no-misused-promises -- async-callback tolerance is what's under test
+        await ev.mintQuoteUpdates(['q1'], vi.fn(), err, { pollMs: 1, signal: ac.signal });
+        await vi.waitFor(() =>
+          expect(logger.warn).toHaveBeenCalledWith(
+            'callback failed',
+            expect.objectContaining({
+              event: 'bolt11_mint_quote',
+              error: expect.objectContaining({ message: 'err boom' }),
+            }),
+          ),
+        );
+        ac.abort();
+      },
+    );
+
+    describe('rejecting websocket callbacks', () => {
+      function setup() {
+        const logger = {
+          warn: vi.fn(),
+          error: vi.fn(),
+          info: vi.fn(),
+          debug: vi.fn(),
+          trace: vi.fn(),
+          log: vi.fn(),
+        };
+        const ws = new MockWS();
+        const wallet = {
+          mint: { connectWebSocket: vi.fn(async () => {}), webSocketConnection: ws },
+          computeY,
+          logger,
+        };
+        return { logger, ws, ev: new WalletEvents(wallet as any) };
+      }
+      const reject = async () => {
+        throw new Error('boom');
+      };
+      const loggedBoom = expect.objectContaining({
+        error: expect.objectContaining({ message: 'boom' }),
+      });
+
+      it.each(['bolt11_mint_quote', 'bolt11_melt_quote'] as const)(
+        'contains a rejecting paid callback (%s)',
+        async (kind) => {
+          const { logger, ws, ev } = setup();
+          // eslint-disable-next-line @typescript-eslint/no-misused-promises -- async-callback tolerance is what's under test
+          if (kind === 'bolt11_mint_quote') await ev.mintQuotePaid('q1', reject, vi.fn());
+          // eslint-disable-next-line @typescript-eslint/no-misused-promises -- async-callback tolerance is what's under test
+          else await ev.meltQuotePaid('q1', reject, vi.fn());
+          ws.emit(kind, { quote: 'q1', state: 'PAID', amount: 1 });
+          await flushMicrotasks(4);
+
+          expect(logger.warn).toHaveBeenCalledWith('callback failed', loggedBoom);
+        },
+      );
+
+      it.each(['bolt11_mint_quote', 'bolt11_melt_quote'] as const)(
+        'contains a rejecting error callback for a malformed update (%s)',
+        async (kind) => {
+          const { logger, ws, ev } = setup();
+          const subscribe =
+            kind === 'bolt11_mint_quote' ? ev.mintQuoteUpdates : ev.meltQuoteUpdates;
+
+          await subscribe.call(ev, ['q1'], vi.fn(), reject);
+          ws.emit(kind, { quote: 'q1', amount: 'ten' });
+          await flushMicrotasks(4);
+
+          expect(logger.warn).toHaveBeenCalledWith('callback failed', loggedBoom);
+        },
       );
     });
   });

@@ -151,12 +151,16 @@ function normalizeError(err: unknown): Error {
 }
 
 // A malformed payload reports through err rather than reaching cb with the wrong types
-function guarded<T>(normalize: (p: T) => T, err: (e: Error) => void): (p: T) => T | undefined {
+function guarded<T>(
+  normalize: (p: T) => T,
+  err: (e: Error) => void,
+  logger: Logger,
+): (p: T) => T | undefined {
   return (p) => {
     try {
       return normalize(p);
     } catch (e) {
-      err(normalizeError(e));
+      safeCallback(err, normalizeError(e), logger);
       return undefined;
     }
   };
@@ -366,7 +370,9 @@ export class WalletEvents {
       sub.abort();
       if (all.signal.aborted) return;
       mode('polling');
-      this._poll(poll, pollMs, all.signal, cb).catch(err);
+      this._poll(poll, pollMs, all.signal, cb).catch((e: unknown) =>
+        safeCallback(err, normalizeError(e), this.wallet.logger, { event: kind }),
+      );
     });
     const live = once(() => {
       clearTimeout(grace);
@@ -598,7 +604,7 @@ export class WalletEvents {
       {
         kind: `${method}_mint_quote`,
         filters: uniq,
-        decode: guarded<TRes>((p) => normalizeMintQuoteUpdate(p, method), err),
+        decode: guarded<TRes>((p) => normalizeMintQuoteUpdate(p, method), err, this.wallet.logger),
       },
       { fetch, key: (q) => q.quote, state: mintQuoteState },
       cb,
@@ -624,7 +630,7 @@ export class WalletEvents {
     return this.mintQuoteUpdates<TRes>(
       [id],
       (p) => {
-        if (isMintQuotePaid(p)) cb(p);
+        if (isMintQuotePaid(p)) safeCallback(cb, p, this.wallet.logger);
       },
       err,
       opts,
@@ -657,7 +663,11 @@ export class WalletEvents {
       {
         kind: `${method}_melt_quote`,
         filters: uniq,
-        decode: guarded<TRes>((p) => normalizeMeltQuoteUpdate(p, method, this.wallet.logger), err),
+        decode: guarded<TRes>(
+          (p) => normalizeMeltQuoteUpdate(p, method, this.wallet.logger),
+          err,
+          this.wallet.logger,
+        ),
       },
       {
         fetch: () => this._eachQuote(uniq, (id) => this.wallet.checkMeltQuote<TRes>(method, id)),
@@ -687,7 +697,7 @@ export class WalletEvents {
     return this.meltQuoteUpdates<TRes>(
       [id],
       (p) => {
-        if (p.state === MeltQuoteState.PAID) cb(p);
+        if (p.state === MeltQuoteState.PAID) safeCallback(cb, p, this.wallet.logger);
       },
       err,
       opts,
@@ -1087,19 +1097,11 @@ export class WalletEvents {
           if (dropMode === 'oldest') {
             const dropped = queue.shift();
             if (dropped !== undefined) {
-              try {
-                opts?.onDrop?.(dropped);
-              } catch {
-                /* noop */
-              }
+              safeCallback(opts?.onDrop, dropped, this.wallet.logger, { event: 'onDrop' });
             }
             queue.push(payload);
           } else {
-            try {
-              opts?.onDrop?.(payload);
-            } catch {
-              /* noop */
-            }
+            safeCallback(opts?.onDrop, payload, this.wallet.logger, { event: 'onDrop' });
             return; // drop newest
           }
         } else {
@@ -1167,7 +1169,9 @@ export class WalletEvents {
    * cancellers are caught and ignored.
    *
    * The returned function also has an `.add()` method to register more cancellers, and a
-   * `.cancelled` boolean property for debugging.
+   * `.cancelled` boolean property for debugging. A failed subscription setup is logged at warn and
+   * does not reach the subscription's error callback: handle the promise `.add()` returns to act on
+   * it.
    *
    * @example
    *
@@ -1204,6 +1208,15 @@ export class WalletEvents {
         cancelSafely(c);
         return c;
       }
+      // cancelSafely only observes c at cancellation, which may be long after setup has failed
+      safeCallback(
+        async () => {
+          await c;
+        },
+        undefined,
+        this.wallet.logger,
+        { event: 'group.add', reason: 'subscription setup failed' },
+      );
       cancels.push(c);
       return c;
     };

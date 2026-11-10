@@ -662,13 +662,24 @@ describe('locked secret construction and spend info cascade', () => {
     expect(() =>
       buildScriptPathWitness([vRefund.leaf_after], 0, vRefund.internal_key, [sig, sig]),
     ).toThrow(/signature/);
-    // A preimage is exactly 32 bytes.
+    // Only a hashlock leaf takes a preimage, even a well-formed one.
     expect(() =>
-      buildScriptPathWitness([vRefund.leaf_after], 0, vRefund.internal_key, [sig], 'ab'.repeat(33)),
-    ).toThrow(/preimage/);
-    expect(() =>
-      buildScriptPathWitness([vRefund.leaf_after], 0, vRefund.internal_key, [sig], 'ab'.repeat(31)),
-    ).toThrow(/preimage/);
+      buildScriptPathWitness([vRefund.leaf_after], 0, vRefund.internal_key, [sig], 'ab'.repeat(32)),
+    ).toThrow(/after leaf takes no preimage/);
+    // A hashlock takes exactly its own 32-byte preimage.
+    const preimage = 'ab'.repeat(32);
+    const hashlock = serializeNutrootLeafHex({
+      type: 'hashlock',
+      n: 1,
+      keys: [vRefund.alice_refund_pub],
+      hash: bytesToHex(sha256(hexToBytes(preimage))),
+    });
+    const witness = (p: string) =>
+      buildScriptPathWitness([hashlock], 0, vRefund.internal_key, [], p);
+    expect(JSON.parse(witness(preimage)).preimage).toBe(preimage);
+    expect(() => witness('ab'.repeat(33))).toThrow(/not 32 bytes/);
+    expect(() => witness('ab'.repeat(31))).toThrow(/not 32 bytes/);
+    expect(() => witness('cd'.repeat(32))).toThrow(/does not open the hashlock leaf/);
   });
 
   test('selectLeafSignatures keeps one valid signature per key, dropping duplicates and extras', () => {

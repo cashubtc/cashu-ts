@@ -24,6 +24,8 @@ v5 introduces support for **v3 keysets**, identified by a `02` prefix on the key
 
 Existing v0 (legacy base64), v1 (`00…`), and v2 (`01…`) keysets continue to work unchanged. The breaking change below was prompted by adding v3 support but is independent of which curve you target.
 
+v3 inputs sign the whole transaction, so if you persist swap previews for NUT-19 replay, sign them first with `wallet.signSwapPreview(preview)`. An unsigned preview still completes, but a replay after a restart signs afresh and misses the mint's cache. See [Crash-safe send](./docs-src/wallet_ops/send.md#2-crash-safe-send-persist-the-preview).
+
 ---
 
 ## Keyset output policy: new proofs require an active, prefixed keyset

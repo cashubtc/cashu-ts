@@ -785,17 +785,17 @@ export function verifyP2PKSpendingConditions(
 }
 
 /**
- * Reads a P2PK or HTLC secret as nutroot-shaped leaves: the main path at index 0 and, given a
- * locktime, the refund path as an `after` leaf at index 1.
+ * Reads a P2PK or HTLC secret as nutroot-shaped leaves, enforcing the spending verifier's rules.
  *
  * @remarks
- * Diagnostic shape for `Wallet.spendOptions`. A keyless `after` leaf (`n: 0`) is NUT-11's
- * anyone-after-expiry, which no nutroot tree can encode: never serialize these leaves. Its `time`
- * is `locktime + 1`, as NUT-11 expires after the locktime and an `after` leaf opens at it.
+ * Used by `Wallet.spendOptions` for its leaf view, and as a semantic check where a lock must be
+ * judged without signatures. Main path at index 0, refund path as an `after` leaf at index 1 (its
+ * `time` is `locktime + 1`, as NUT-11 expires after the locktime). A keyless `after` leaf is
+ * NUT-11's anyone-after-expiry, which no nutroot tree can encode: never serialize these leaves.
  * @throws If the secret is not P2PK/HTLC or its tags break the NUT-11 rules.
  * @internal
  */
-export function p2pkSpendLeaves(secretStr: string | Secret): NutrootConditionLeaf[] {
+export function p2pkToSpendLeaves(secretStr: string | Secret): NutrootConditionLeaf[] {
   const secret = parseP2PKSecret(secretStr);
   const mainKeys = getP2PKWitnessPubkeys(secret);
   const refundKeys = getP2PKWitnessRefundkeys(secret);
@@ -1022,13 +1022,16 @@ function assertSpendingConditionRules(params: {
 }
 
 function getP2PKWitnessPubkeys(secret: Secret): string[] {
-  const data = getSecretKind(secret) === 'P2PK' ? getDataField(secret) : '';
   const pubkeys = getTag(secret, 'pubkeys') ?? [];
   // Bound EC decompression before mapping over untrusted keys.
   if (pubkeys.length > MAX_P2PK_PUBKEYS) {
     throw new CTSError(`Too many pubkeys: ${pubkeys.length}`);
   }
-  const keys = (data ? [data, ...pubkeys] : pubkeys).map((key) => normalizeSecpPubkey(key));
+  // P2PK data is always a signing key (NUT-11); only an HTLC can have no main keys.
+  const isP2PK = getSecretKind(secret) === 'P2PK';
+  const keys = (isP2PK ? [getDataField(secret), ...pubkeys] : pubkeys).map((key) =>
+    normalizeSecpPubkey(key),
+  );
   if (dedupeP2PKPubkeys(keys).length !== keys.length) {
     throw new CTSError('Duplicate main pubkeys are not allowed');
   }

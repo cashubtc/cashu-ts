@@ -51,6 +51,15 @@ const meltPreview = await wallet.prepareMelt('bolt11', meltQuote, proofsToSend);
 const meltResponse = await wallet.completeMelt(meltPreview);
 ```
 
+A Lightning payment can take far longer to route than a mint call should take to answer. If you set a short global `requestTimeout`, give the melt its own so the client does not abort while the mint is still paying, which leaves the outcome unknown until you check the quote:
+
+```ts
+const meltPreview = await wallet.prepareMelt('bolt11', meltQuote, proofsToSend);
+const meltResponse = await wallet.completeMelt(meltPreview, undefined, {
+  requestTimeout: 180_000,
+});
+```
+
 ## 3) Async melt with later change recovery (NUT-06 `prefer_async`)
 
 For mints that support NUT-06 asynchronous melts, the melt response can return before the

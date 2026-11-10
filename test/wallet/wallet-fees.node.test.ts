@@ -359,7 +359,58 @@ describe('wallet.isPaymentRequestSatisfied', () => {
     // Plain bearer proofs carry no lock at all.
     expect(() =>
       wallet.isPaymentRequestSatisfied(both, proofsTotalling([100]), 100, { privkeys: priv(1) }),
-    ).toThrow(/does not carry a NUT-10 lock/);
+    ).toThrow(/does not carry a valid NUT-10 lock/);
+
+    // A repeated key makes the lock unspendable, though the builder would dedupe it to carol's.
+    const evenCarol = '02' + carol.slice(2);
+    const oddCarol = '03' + carol.slice(2);
+    for (const tags of [[['pubkeys', carol]], [['pubkeys', oddCarol]]]) {
+      const repeated = JSON.stringify(['P2PK', { nonce: 'ab', data: evenCarol, tags }]);
+      expect(() =>
+        wallet.isPaymentRequestSatisfied(both, lockedProofs([100], repeated), 100, {
+          privkeys: priv(1),
+        }),
+      ).toThrow(/does not carry a valid NUT-10 lock/);
+    }
+    const badHash = JSON.stringify([
+      'HTLC',
+      { nonce: 'ab', data: 'zz', tags: [['pubkeys', carol]] },
+    ]);
+    expect(() =>
+      wallet.isPaymentRequestSatisfied(both, lockedProofs([100], badHash), 100, {
+        privkeys: priv(1),
+      }),
+    ).toThrow(/does not carry a valid NUT-10 lock/);
+    const refundTags = [
+      ['locktime', '4102444800'],
+      ['refund', pub(9)],
+    ];
+    const withRefund = new PaymentRequest({
+      id: 'refund',
+      amount: 100,
+      unit: 'sat',
+      nut10: { kind: 'P2PK', data: carol, tags: refundTags },
+    });
+    expect(
+      wallet.isPaymentRequestSatisfied(
+        withRefund,
+        lockedProofs([100], createP2PKsecret(carol, refundTags)),
+      ),
+    ).toBe(true);
+    const repeatedRefund = JSON.stringify([
+      'P2PK',
+      {
+        nonce: 'ab',
+        data: carol,
+        tags: [
+          ['locktime', '4102444800'],
+          ['refund', pub(9), pub(9)],
+        ],
+      },
+    ]);
+    expect(() =>
+      wallet.isPaymentRequestSatisfied(withRefund, lockedProofs([100], repeatedRefund)),
+    ).toThrow(/does not carry a valid NUT-10 lock/);
 
     // An expired refund path is the legacy clawback: locked to carol, spendable by the payer.
     const clawback = createP2PKsecret(carol, [
@@ -483,6 +534,13 @@ describe('wallet.isPaymentRequestSatisfied', () => {
     expect(() =>
       wallet.isPaymentRequestSatisfied(pr, [v3Proof(100, payee)], 100, { privkeys: 'nothex' }),
     ).toThrow(/32-byte hex/);
+    for (const outOfRange of ['00'.repeat(32), 'ff'.repeat(32)]) {
+      expect(() =>
+        wallet.isPaymentRequestSatisfied(pr, [v3Proof(100, payee)], 100, {
+          privkeys: [priv(1), outOfRange],
+        }),
+      ).toThrow(/valid 32-byte hex private keys/);
+    }
 
     expect(
       wallet.isPaymentRequestSatisfied(pr, [v3Proof(100, payee)], 100, { privkeys: priv(1) }),
@@ -491,10 +549,53 @@ describe('wallet.isPaymentRequestSatisfied', () => {
     expect(() =>
       wallet.isPaymentRequestSatisfied(pr, [v3Proof(100, payer)], 100, { privkeys: priv(1) }),
     ).toThrow(/not keyed to the requested receiver key/);
+    // A general keyring may hold the key a proof is keyed to, but the request named only pub(1).
+    expect(() =>
+      wallet.isPaymentRequestSatisfied(pr, [v3Proof(100, payer)], 100, {
+        privkeys: [priv(1), priv(9)],
+      }),
+    ).toThrow(/not keyed to the requested receiver key/);
+    expect(() =>
+      wallet.isPaymentRequestSatisfied(pr, [v3Proof(100, payer)], 100, { privkeys: priv(9) }),
+    ).toThrow(/holds no key for the requested receiver key/);
+    // The receiver key binds by x-coordinate: recovery walks either parity.
+    const flipped = (pub(1).startsWith('02') ? '03' : '02') + pub(1).slice(2);
+    const flippedPr = new PaymentRequest({
+      id: 'v3-flipped',
+      amount: 100,
+      unit: 'sat',
+      nutroot: { receiverKey: flipped },
+    });
+    expect(
+      wallet.isPaymentRequestSatisfied(
+        flippedPr,
+        [v3Proof(100, deriveReceiverKeyedSecret(flipped))],
+        100,
+        { privkeys: [priv(9), priv(1)] },
+      ),
+    ).toBe(true);
     // Keyed to the payee, so perfectly spendable, but short: spendability alone cannot catch this.
     expect(
       wallet.isPaymentRequestSatisfied(pr, [v3Proof(8, payee)], 100, { privkeys: priv(1) }),
     ).toBe(false);
+
+    // A v3 keyset spends only point secrets, so a legacy lock on one is never the legacy option.
+    const both = new PaymentRequest({
+      id: 'both',
+      amount: 100,
+      unit: 'sat',
+      nut10: { kind: 'P2PK', data: pub(1) },
+      nutroot: { receiverKey: pub(1) },
+    });
+    const legacyOnV3 = v3Proof(100, { secret: createP2PKsecret(pub(1)) });
+    expect(() =>
+      wallet.isPaymentRequestSatisfied(both, [legacyOnV3], 100, { privkeys: priv(1) }),
+    ).toThrow(/not a v3 point secret/);
+    expect(
+      wallet.isPaymentRequestSatisfied(both, lockedProofs([100], createP2PKsecret(pub(1))), 100, {
+        privkeys: priv(1),
+      }),
+    ).toBe(true);
   });
 
   test("a blind-me leaf key must carry the payee's own blinding", async () => {

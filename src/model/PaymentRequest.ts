@@ -306,7 +306,13 @@ export class PaymentRequest {
       if (typeof amount !== 'number' && typeof amount !== 'bigint' && typeof amount !== 'string') {
         throw new CTSError(`invalid payment payload: malformed proof amount at index ${i}`);
       }
-      return { ...(p as Omit<Proof, 'amount'>), amount: Amount.from(amount) };
+      // Same rule as the token decoders: an incomplete DLEQ does not travel.
+      const { dleq, ...rest } = p as Omit<Proof, 'amount'>;
+      return {
+        ...rest,
+        amount: Amount.from(amount),
+        ...(dleq?.r && dleq.s && dleq.e && { dleq }),
+      };
     });
     return {
       ...(id !== undefined && { id }),
