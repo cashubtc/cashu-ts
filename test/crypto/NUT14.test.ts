@@ -82,6 +82,13 @@ describe('NUT14 module core functions', () => {
     expect(verifyHTLCHash(pre, 'ff'.repeat(32))).toBe(false);
   });
 
+  test('verifyHTLCHash compares hexadecimal hash values independent of case', () => {
+    const preimage = '00'.repeat(31) + '01';
+    const hash = 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5';
+    expect(verifyHTLCHash(preimage, hash.toUpperCase())).toBe(true);
+    expect(verifyHTLCHash('00'.repeat(32), hash.toUpperCase())).toBe(false);
+  });
+
   test('verifyHTLCHash returns false for a malformed preimage (no throw)', () => {
     // A non-hex or wrong-length preimage must return false, not throw.
     for (const bad of ['not-hex', 'zz', '', 'abc', 'g'.repeat(64)]) {
