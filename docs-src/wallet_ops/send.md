@@ -9,7 +9,7 @@ const { keep, send } = await wallet.ops.send(5, myProofs).run();
 ```
 
 - Uses wallet policy for both `send` and `keep`.
-- If the wallet's default policy is random, the wallet may attempt an **offline exact match** first, which avoids the swap fee if `send` and `keep` are also policy default.
+- If the wallet's default policy is random, the wallet may attempt an **offline exact match** first, which avoids the swap fee if `send` and `keep` are also policy default. Selected P2PK/HTLC inputs always swap; use the explicit offline modes below to forward them as they are.
 - `keep` is the full remainder: the change from the swap plus every proof that was not selected. Storing it wholesale is correct.
 
 A crash or disconnect between the swap and your proof store strands the inputs. Anything that must survive that uses the two-step form in the next section.
