@@ -2415,7 +2415,7 @@ describe('nutroot spend_info token serialization', () => {
         id: fullId,
         amount: Amount.from(v.amount),
         secret: shape.secret,
-        C: v.C,
+        C: shape.C,
         spend_info: shape.spend_info,
       };
       const token: Token = { mint: v.mint, proofs: [proof], unit: v.unit };

@@ -237,13 +237,12 @@ for (const name of ['swap', 'mint', 'melt', 'melt_with_change'] as const) {
 
 // --- tokens_v4 --------------------------------------------------------------
 const tv = d.tokens_v4;
-// Every shape reuses the bearer proof's C, which is the swap input's (same secret and amount).
-tv.C = d.transcript.swap.tx.proof_inputs[0].C;
+delete tv.C;
 tv.comment = tv.comment.replace(
-  'C fixed.',
   "C is the bearer proof's signature, reused by every shape.",
+  "each shape carries its proof's signature C.",
 );
-if (!tv.comment.includes("C is the bearer proof's signature"))
+if (!tv.comment.includes("each shape carries its proof's signature C."))
   throw new Error('tokens_v4 comment drifted');
 if (tv.shapes.bearer_k.spend_info.k !== oldBearerK) throw new Error('bearer_k mapping drifted');
 tv.shapes.bearer_k.secret = d.nut13_v3.outputs[0].secret;
@@ -269,12 +268,17 @@ tv.shapes.bearer_k.spend_info.k = d.nut13_v3.outputs[0].secret_key;
   };
 }
 
+// Each shape's C is its own proof's signature, so every token holds a valid proof.
+for (const [name, shape] of Object.entries<any>(tv.shapes)) {
+  const { secret, C: _C, spend_info, ...rest } = shape;
+  tv.shapes[name] = { secret, C: mintC(tv.amount, secret), spend_info, ...rest };
+}
 for (const [name, shape] of Object.entries<any>(tv.shapes)) {
   const proof = {
     id: KEYSET_ID,
     amount: Amount.from(tv.amount),
     secret: shape.secret,
-    C: tv.C,
+    C: shape.C,
     spend_info: shape.spend_info,
   };
   shape.token_cashu_ts = getEncodedToken({ mint: tv.mint, proofs: [proof], unit: tv.unit } as any);
@@ -304,7 +308,7 @@ for (const [name, shape] of Object.entries<any>(tv.shapes)) {
   entry.i = hexToBytes(KEYSET_ID);
   const proof = entry.p[0];
   proof.s = shape.secret;
-  proof.c = hexToBytes(tv.C);
+  proof.c = hexToBytes(shape.C);
   // nutshell writes the si map in its model's field order: k, e, i, u, t.
   const si: Record<string, unknown> = {};
   for (const [field, key] of [
