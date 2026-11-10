@@ -16,7 +16,15 @@ import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/
 import { deriveSecretAndBlindingFactor } from '../src/crypto';
 import { getPubKeyFromPrivKey } from '../src/crypto/curve_secp';
 import { deriveLeafKey, deriveNumsOffset, deriveQuoteLockKey } from '../src/crypto/NUT13';
-import { BLS_FR_ORDER, hashToCurveBls } from '../src/crypto/curve_bls';
+import {
+  BLS_FR_ORDER,
+  blindMessageBls,
+  createBlindSignatureBls,
+  hashToCurveBls,
+  pointFromHexG1,
+  pointFromHexG2,
+  verifyUnblindedSignatureBls,
+} from '../src/crypto/curve_bls';
 import { hashToCurveHex } from '../src/crypto/curves';
 import {
   buildTransactionTranscript,
@@ -40,13 +48,17 @@ import { taggedHash } from '../src/crypto/core';
 const PATH = 'test/vectors/nutroot-v3.json';
 const SECP256K1_N = BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141');
 
-// NUT-02 V3 vector 1 (nuts tests/02-tests.md): keys are 7*G2 and 13*G2, unit sat, no fee.
+// NUT-02 V3 vectors 1 and 4 (nuts tests/02-tests.md): the mint scalar per amount, no fee.
 const G2 = bls12_381.G2.Point.BASE;
-const VEC1_KEYS = {
-  '1': bytesToHex(G2.multiply(7n).toBytes(true)),
-  '2': bytesToHex(G2.multiply(13n).toBytes(true)),
-};
+const MINT_SCALARS: Record<string, bigint> = { '1': 7n, '2': 13n, '4': 29n, '8': 71n };
+const mintKeys = (amounts: string[]) =>
+  Object.fromEntries(
+    amounts.map((a) => [a, bytesToHex(G2.multiply(MINT_SCALARS[a]).toBytes(true))]),
+  );
+const VEC1_KEYS = mintKeys(['1', '2', '4', '8']);
 const KEYSET_ID = deriveKeysetId(VEC1_KEYS, { versionByte: 2, unit: 'sat' });
+const AUTH_KEYS = mintKeys(['1']);
+const AUTH_KEYSET_ID = deriveKeysetId(AUTH_KEYS, { versionByte: 2, unit: 'auth' });
 // NUT-06 example identity (seed: UTF-8 of 'NUT-06 example mint seed'); scopes the 0x04 quote lock keys.
 const MINT_IDENTITY = '0338596797cef0627f653cd6568387361b00314add55d9f1ea9c94f46ae421e3da';
 
@@ -130,8 +142,35 @@ if (!claim.test(d.nut13_v3.comment))
   throw new Error('attempt-summary sentence not found in comment');
 d.nut13_v3.comment = d.nut13_v3.comment.replace(claim, summary);
 
+d.keysets = {
+  comment:
+    'NUT-02 V3 keysets behind these vectors. Mint scalars are 7, 13, 29 and 71 for amounts 1, 2, 4 and 8, so a blind signature is C_ = scalar * B_. Transactions use sat; auth is the NUT-22 blind auth keyset.',
+  sat: { id: KEYSET_ID, unit: 'sat', keys: VEC1_KEYS },
+  auth: { id: AUTH_KEYSET_ID, unit: 'auth', keys: AUTH_KEYS },
+};
+const bigTo32 = (x: bigint) => hexToBytes(x.toString(16).padStart(64, '0'));
+const mintSign = (amount: number, B_: string) => ({
+  amount,
+  id: KEYSET_ID,
+  C_: createBlindSignatureBls(
+    pointFromHexG1(B_),
+    bigTo32(MINT_SCALARS[amount]),
+    KEYSET_ID,
+  ).C_.toHex(true),
+});
+// A proof's real signature C = scalar * Y, checked by the pairing against the published key.
+const mintC = (amount: number, secret: string) => {
+  const C = hashToCurveBls(hexToBytes(secret)).multiply(MINT_SCALARS[amount]);
+  const K = pointFromHexG2(VEC1_KEYS[amount]);
+  if (!verifyUnblindedSignatureBls(K, C, hexToBytes(secret))) throw new Error('C does not verify');
+  return C.toHex(true);
+};
+
 // --- transcript -------------------------------------------------------------
 function fromVectorTx(tx: any): TransactionShape {
+  // A mint rejects a request that repeats an output.
+  const B_s = tx.blinded_outputs?.map((o: any) => o.B_) ?? [];
+  if (new Set(B_s).size !== B_s.length) throw new Error('duplicate B_ within a request');
   return {
     proofInputs: tx.proof_inputs?.map((p: any) => ({
       amount: BigInt(p.amount),
@@ -160,6 +199,16 @@ function fromVectorTx(tx: any): TransactionShape {
 // The mint vector's quote is locked to NUT-13 quote lock 0, like the partial mint's.
 d.transcript.mint.tx.mint_quote_inputs[0].lock_pubkey = d.nut13_v3.quote_locks[0].pubkey;
 d.transcript.mint.tx.mint_quote_inputs[0].issued = 0;
+// A request's second output is the NUT-13 counter 2 output, so no request repeats a B_.
+const SECOND_B_ = blindMessageBls(
+  hexToBytes(d.nut13_v3.outputs[2].secret),
+  BigInt('0x' + d.nut13_v3.outputs[2].blinding_factor),
+).B_.toHex(true);
+for (const name of ['swap', 'melt_with_change'] as const) {
+  d.transcript[name].tx.blinded_outputs[1].B_ = SECOND_B_;
+}
+// The change quote is 5 with a fee reserve of 3, so its melt quote output still commits 8.
+d.transcript.melt_with_change.tx.melt_quote_outputs[0].quote_id = 'quote-melt-0002';
 for (const name of ['swap', 'mint', 'melt', 'melt_with_change'] as const) {
   const example = d.transcript[name];
   for (const fld of ['proof_inputs', 'blinded_outputs'] as const) {
@@ -170,6 +219,7 @@ for (const name of ['swap', 'mint', 'melt', 'melt_with_change'] as const) {
         const idx = oldSecretIndex[entry.secret];
         if (idx === undefined) throw new Error(`${name}.${fld}: secret not from nut13 outputs`);
         entry.secret = d.nut13_v3.outputs[idx].secret;
+        entry.C = mintC(entry.amount, entry.secret);
       }
     }
   }
@@ -177,9 +227,24 @@ for (const name of ['swap', 'mint', 'melt', 'melt_with_change'] as const) {
   example.transcript = bytesToHex(buildTransactionTranscript(tx));
   example.digest = bytesToHex(transactionDigest(tx));
 }
+// The payment cost no fee, so the mint returns the whole reserve on the two blank outputs.
+{
+  const melt = d.transcript.melt_with_change;
+  melt.quote = { amount: 5, fee_reserve: 3 };
+  melt.signature = ''; // signed with the other input digests below
+  melt.change = [1, 2].map((amount, index) => mintSign(amount, melt.tx.blinded_outputs[index].B_));
+}
 
 // --- tokens_v4 --------------------------------------------------------------
 const tv = d.tokens_v4;
+// Every shape reuses the bearer proof's C, which is the swap input's (same secret and amount).
+tv.C = d.transcript.swap.tx.proof_inputs[0].C;
+tv.comment = tv.comment.replace(
+  'C fixed.',
+  "C is the bearer proof's signature, reused by every shape.",
+);
+if (!tv.comment.includes("C is the bearer proof's signature"))
+  throw new Error('tokens_v4 comment drifted');
 if (tv.shapes.bearer_k.spend_info.k !== oldBearerK) throw new Error('bearer_k mapping drifted');
 tv.shapes.bearer_k.secret = d.nut13_v3.outputs[0].secret;
 tv.shapes.bearer_k.spend_info.k = d.nut13_v3.outputs[0].secret_key;
@@ -239,6 +304,7 @@ for (const [name, shape] of Object.entries<any>(tv.shapes)) {
   entry.i = hexToBytes(KEYSET_ID);
   const proof = entry.p[0];
   proof.s = shape.secret;
+  proof.c = hexToBytes(tv.C);
   // nutshell writes the si map in its model's field order: k, e, i, u, t.
   const si: Record<string, unknown> = {};
   for (const [field, key] of [
@@ -260,7 +326,6 @@ for (const [name, shape] of Object.entries<any>(tv.shapes)) {
 // --- input digests -----------------------------------------------------------
 const SecpPoint = secp256k1.Point;
 const AUX0 = new Uint8Array(32);
-const bigTo32 = (x: bigint) => hexToBytes(x.toString(16).padStart(64, '0'));
 
 // Each transcript vector has exactly one input, and containers group in
 // ascending type order, so the input container is the transcript's first record.
@@ -303,6 +368,7 @@ d.transcript.comment =
         ...first,
         amount: 4,
         secret: d.nut13_v3.outputs[1].secret,
+        C: mintC(4, d.nut13_v3.outputs[1].secret),
       },
     ],
     blinded_outputs: d.transcript.swap.tx.blinded_outputs.map((output: any, index: number) => ({
@@ -417,6 +483,7 @@ d.transcript.comment =
     input_id: bytesToHex(sha256(container)),
     input_digest: bytesToHex(digestForInput),
     signature: bytesToHex(schnorr.sign(digestForInput, hexToBytes(lock.privkey), AUX0)),
+    blind_signatures: txVector.blinded_outputs.map((o: any) => mintSign(o.amount, o.B_)),
   };
 }
 
@@ -435,7 +502,7 @@ d.transcript.comment =
     ],
     blinded_outputs: [
       { ...d.transcript.swap.tx.blinded_outputs[0], amount: 8 },
-      { ...d.transcript.swap.tx.blinded_outputs[0], amount: 2 },
+      { ...d.transcript.swap.tx.blinded_outputs[1], amount: 2 },
     ],
   };
   const tx = fromVectorTx(txVector);
