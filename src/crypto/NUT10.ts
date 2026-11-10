@@ -218,11 +218,14 @@ export function getTagScalar(secret: Secret | string, key: string): string | und
  * @param secret - The Proof secret.
  * @param key - Tag key to lookup.
  * @returns - Tag value as an integer, undefined if not present.
- * @throws If the tag carries more than one value, or a value that is not a safe integer.
+ * @throws If a present tag does not carry exactly one safe integer value.
  */
 export function getTagInt(secret: Secret | string, key: string): number | undefined {
   const v = getTagScalar(secret, key);
-  if (v === undefined) return undefined;
+  if (v === undefined) {
+    if (!hasTag(secret, key)) return undefined;
+    throw new CTSError(`Invalid NUT-10 tag "${key}": must carry a single value`);
+  }
   // Strict integer parse: reject the partial parses ("1700000000abc" -> 1700000000)
   // and hex/exponent/float forms Number.parseInt would accept. The sign is kept so a
   // caller's semantic check (eg assertPositiveInteger) applies.
