@@ -83,3 +83,27 @@ updates:
     # fix(deps) commit.
     commit-message:
       prefix: chore(deps)
+
+  # v4-dev runs its own copies of the workflows (CI, release-please, npm publish)
+  # and this file is only read from main, so its action pins need their own entries.
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: v4-dev
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ['*']
+    commit-message:
+      prefix: chore(deps)
+
+  - package-ecosystem: github-actions
+    directory: /.github/actions/integration-against-mint
+    target-branch: v4-dev
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ['*']
+    commit-message:
+      prefix: chore(deps)
