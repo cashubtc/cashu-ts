@@ -1707,15 +1707,17 @@ class Wallet {
         exactMatch: true,
         requireDleq: false, // safety
       });
-      this.failIf(
-        send.some((p) => !isBlsKeyset(p.id) && !this.spendOptions(p).keyPath),
-        'A locked legacy proof requires a swap',
-      );
+      // Plain throws: the catch below falls back to a swap, so none of these is an error.
+      if (send.some((p) => !isBlsKeyset(p.id) && !this.spendOptions(p).keyPath)) {
+        throw new CTSError('A locked legacy proof requires a swap');
+      }
       // Only bearer material can be forwarded to a new holder without a v3 swap.
       const v3 = send.filter((p) => isBlsKeyset(p.id));
       const bearerKeys = collectSpendInfoKeys(v3, undefined, this._logger);
       for (const proof of v3) {
-        this.failIf(!bearerKeys.has(proof.secret), 'A non-bearer v3 proof requires a swap');
+        if (!bearerKeys.has(proof.secret)) {
+          throw new CTSError('A non-bearer v3 proof requires a swap');
+        }
         verifyNutrootSpendInfo(proof.secret, proof.spend_info!);
       }
       const expectedFee = includeFees ? this.getFeesForProofs(send) : Amount.zero();
