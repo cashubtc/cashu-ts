@@ -5,6 +5,7 @@ import { test, describe, expect } from 'vitest';
 
 import { Wallet, Amount, CTSError, PaymentRequest, type Proof } from '../../src';
 import { createP2PKsecret } from '../../src/crypto/NUT11';
+import { verifyHTLCSpendingConditions } from '../../src/crypto/NUT14';
 import { deriveP2BKBlindedPubkeys } from '../../src/crypto/NUT28';
 import {
   NUTROOT_NUMS_KEY,
@@ -257,6 +258,24 @@ describe('wallet.getFeesToInclude', () => {
 });
 
 describe('wallet.isPaymentRequestSatisfied', () => {
+  test('matches and verifies an HTLC hash independently of hexadecimal case', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const hash = 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5';
+    const pr = new PaymentRequest({
+      id: 'htlc',
+      amount: 100,
+      unit: 'sat',
+      nut10: { kind: 'HTLC', data: hash },
+    });
+    const secret = JSON.stringify(['HTLC', { nonce: 'ab', data: hash.toUpperCase(), tags: [] }]);
+    const [proof] = lockedProofs([100], secret);
+    proof.witness = { preimage: '00'.repeat(31) + '01' };
+
+    expect(wallet.isPaymentRequestSatisfied(pr, [proof])).toBe(true);
+    expect(verifyHTLCSpendingConditions(proof).success).toBe(true);
+  });
+
   test('enforces the net-of-input-fees formula (NUT-18)', async () => {
     // Keyset charges 1 sat per proof (1000 ppk), the spec's dust-protection scenario.
     server.use(
