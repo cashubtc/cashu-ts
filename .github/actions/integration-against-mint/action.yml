@@ -55,7 +55,7 @@ runs:
         echo "Mint responded to host HTTP at $host_url"
 
     - name: Setup Node.js
-      uses: actions/setup-node@v7
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version: '22.x'
         cache: npm
@@ -79,7 +79,7 @@ runs:
 
     - name: Upload integration coverage to Codecov
       if: ${{ inputs.upload_coverage == 'true' }}
-      uses: codecov/codecov-action@v7
+      uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
       with:
         token: ${{ env.CODECOV_TOKEN }}
         flags: integration
