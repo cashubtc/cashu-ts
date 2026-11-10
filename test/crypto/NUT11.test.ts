@@ -23,6 +23,7 @@ import {
   P2BK_DST,
   buildP2PKSigAllMessageV0,
   assertSigAllInputs,
+  canSpendP2PKWithKeys,
   createSecret,
   dedupeP2PKPubkeys,
   isHTLCSpendAuthorised,
@@ -1848,6 +1849,16 @@ describe('verifyP2PKSpendingConditions — semantic validation', () => {
     expect(() => verifyP2PKSpendingConditions(badRefund)).toThrow(
       /tag "n_sigs_refund": must be an integer/,
     );
+  });
+
+  test.each(['n_sigs', 'n_sigs_refund'])('rejects %s without a value', (tag) => {
+    const tags = [[tag]];
+    if (tag === 'n_sigs_refund') tags.unshift(['locktime', '1'], ['refund', PUBKEY]);
+    const proof = makeProof(tags, tag === 'n_sigs' ? PUBKEY : pk1);
+    const signedProof = signP2PKProof(proof, bytesToHex(PRIVKEY));
+    const error = `tag "${tag}": must carry a single value`;
+    expect(() => verifyP2PKSpendingConditions(signedProof)).toThrow(error);
+    expect(() => canSpendP2PKWithKeys(proof, [])).toThrow(error);
   });
 
   test('a malformed locktime reads as a permanent lock, not a rejection', () => {
