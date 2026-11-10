@@ -151,6 +151,15 @@ A **locked** request needs a fourth: the private key it locks to. The check then
 wallet.isPaymentRequestSatisfied(pr, payload.proofs, undefined, { privkeys: myPrivkey });
 ```
 
+For a P2PK request with one well-formed experimental `refund_delay`, the check accepts permanent locks and optional payer refund tags. A present `locktime` must be a decimal integer at least `now + delay - tolerance`. A copied marker is ignored. The requested key, signing keys, signature threshold, and signature flag must still match; explicit `n_sigs=1` and `SIG_INPUTS` count as absent. Malformed secrets and other tag differences are refused. Refund keys and locktime may appear independently. P2PK requests with malformed, repeated, or conflicting markers ignore every copied marker but keep all other conditions exact. Requests without a marker, and other lock kinds, keep exact lock comparison. Pass `now` and `tolerance` in the fourth argument to control acceptance time in seconds. Defaults are the current time and a 5-second tolerance for small clock differences. When re-checking stored proofs, pass the original acceptance `now` so the delay floor does not move. The 1,024-character secret limit matches Nutshell's default; a mint configured with a lower limit is not detected.
+
+```typescript
+wallet.isPaymentRequestSatisfied(pr, payload.proofs, undefined, {
+  now: Math.floor(Date.now() / 1000),
+  tolerance: 5,
+});
+```
+
 The check covers the amount, the requested lock, and this mint's admissibility: it throws when the mint is outside a strict mint list, or cannot melt the request unit via any method the request accepts. An unlocked request takes only proofs you can spend, bearer or locked to a key you pass as `privkeys`, so it also throws on proofs the payer locked to themselves. What it cannot cover is a blind-me leaf key belonging to someone else: only that key's owner can resolve its blinding, so a cosigner checks their own. Proof integrity (DLEQ) remains a separate check, as does, for a locked request, whether a script-path leaf is satisfiable today: ask `wallet.spendOptions(proof, { privkeys })` for that.
 
 ## Manual control

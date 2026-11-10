@@ -1,9 +1,9 @@
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { HttpResponse, http } from 'msw';
-import { test, describe, expect } from 'vitest';
+import { test, describe, expect, vi } from 'vitest';
 
-import { Wallet, Amount, CTSError, PaymentRequest, type Proof } from '../../src';
+import { Wallet, Amount, CTSError, PaymentRequest, OutputData, type Proof } from '../../src';
 import { createP2PKsecret } from '../../src/crypto/NUT11';
 import { verifyHTLCSpendingConditions } from '../../src/crypto/NUT14';
 import { deriveP2BKBlindedPubkeys } from '../../src/crypto/NUT28';
@@ -13,6 +13,7 @@ import {
   serializeNutrootLeafHex,
   type NutrootLeaf,
 } from '../../src/crypto/nutroot';
+import { NULL_LOGGER } from '../../src/logger';
 import { deriveKeysetId } from '../../src/utils';
 import { PUBKEYS } from '../consts';
 
@@ -274,6 +275,356 @@ describe('wallet.isPaymentRequestSatisfied', () => {
 
     expect(wallet.isPaymentRequestSatisfied(pr, [proof])).toBe(true);
     expect(verifyHTLCSpendingConditions(proof).success).toBe(true);
+  });
+
+  describe('experimental refund_delay acceptance', () => {
+    const now = 1700000000;
+    const payee = '02c3b5bb27e361457c92d93d78dd73d3d53732110b2cfe8b50fbc0abc615e9c331';
+    const refund = '0234ad87e907e117db1590cc20a3942ffdfd5137aa563d36095d5cf5f96bada122';
+    const request = (tags: string[][] = [['refund_delay', '604800']]) =>
+      new PaymentRequest({ amount: 500, unit, nut10: { kind: 'P2PK', data: payee, tags } });
+    const check = async (secret: string, pr = request(), timing = { now, tolerance: 0 }) => {
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+      return wallet.isPaymentRequestSatisfied(pr, lockedProofs([500], secret), undefined, timing);
+    };
+
+    // Exact NUT-18 "Payer refund path / Payee acceptance" secrets, rows a-p.
+    test.each([
+      {
+        row: 'a',
+        accept: true,
+        secret:
+          '["P2PK",{"nonce":"0ed3fcb22c649dd7bbbdcca36e0c52d4f0187dd3b6a19efcc2bfbebb5f85b2a1","data":"02c3b5bb27e361457c92d93d78dd73d3d53732110b2cfe8b50fbc0abc615e9c331"}]',
+      },
+      {
+        row: 'b',
+        accept: true,
+        secret:
+          '["P2PK",{"nonce":"0ed3fcb22c649dd7bbbdcca36e0c52d4f0187dd3b6a19efcc2bfbebb5f85b2a1","data":"02c3b5bb27e361457c92d93d78dd73d3d53732110b2cfe8b50fbc0abc615e9c331","tags":[["locktime","1700604800"],["refund","0234ad87e907e117db1590cc20a3942ffdfd5137aa563d36095d5cf5f96bada122"]]}]',
+      },
+      {
+        row: 'c',
+        accept: true,
+        secret:
+          '["P2PK",{"nonce":"0ed3fcb22c649dd7bbbdcca36e0c52d4f0187dd3b6a19efcc2bfbebb5f85b2a1","data":"02c3b5bb27e361457c92d93d78dd73d3d53732110b2cfe8b50fbc0abc615e9c331","tags":[["locktime","1700604800"],["refund","0234ad87e907e117db1590cc20a3942ffdfd5137aa563d36095d5cf5f96bada122","026acbcd0fff3a424499c83ec892d3155c9d1984438659f448d9d0f1af3e92276a"],["n_sigs_refund","2"]]}]',
+      },
+      {
+        row: 'd',
+        accept: true,
+        secret:
+          '["P2PK",{"nonce":"0ed3fcb22c649dd7bbbdcca36e0c52d4f0187dd3b6a19efcc2bfbebb5f85b2a1","data":"02c3b5bb27e361457c92d93d78dd73d3d53732110b2cfe8b50fbc0abc615e9c331","tags":[["locktime","1700604800"],["refund","0234ad87e907e117db1590cc20a3942ffdfd5137aa563d36095d5cf5f96bada122"],["sigflag","SIG_INPUTS"]]}]',
+      },
+      {
+        row: 'e',
+        accept: true,
+        secret:
+          '["P2PK",{"nonce":"0ed3fcb22c649dd7bbbdcca36e0c52d4f0187dd3b6a19efcc2bfbebb5f85b2a1","data":"02c3b5bb27e361457c92d93d78dd73d3d53732110b2cfe8b50fbc0abc615e9c331","tags":[["locktime","1700604800"],["refund","0234ad87e907e117db1590cc20a3942ffdfd5137aa563d36095d5cf5f96bada122"],["n_sigs","1"]]}]',
+      },
+      {
+        row: 'f',
+        accept: true,
+        secret:
+          '["P2PK",{"nonce":"0ed3fcb22c649dd7bbbdcca36e0c52d4f0187dd3b6a19efcc2bfbebb5f85b2a1","data":"02c3b5bb27e361457c92d93d78dd73d3d53732110b2cfe8b50fbc0abc615e9c331","tags":[["refund_delay","604800"],["locktime","1700604800"],["refund","0234ad87e907e117db1590cc20a3942ffdfd5137aa563d36095d5cf5f96bada122"]]}]',
+      },
+      {
+        row: 'g',
+        accept: true,
+        secret:
+          '["P2PK",{"nonce":"0ed3fcb22c649dd7bbbdcca36e0c52d4f0187dd3b6a19efcc2bfbebb5f85b2a1","data":"02c3b5bb27e361457c92d93d78dd73d3d53732110b2cfe8b50fbc0abc615e9c331","tags":[["refund_delay","604800"]]}]',
+      },
+      {
+        row: 'h',
+        accept: true,
+        secret:
+          '["P2PK",{"nonce":"0ed3fcb22c649dd7bbbdcca36e0c52d4f0187dd3b6a19efcc2bfbebb5f85b2a1","data":"02c3b5bb27e361457c92d93d78dd73d3d53732110b2cfe8b50fbc0abc615e9c331","tags":[["refund","0234ad87e907e117db1590cc20a3942ffdfd5137aa563d36095d5cf5f96bada122"]]}]',
+      },
+      {
+        row: 'i',
+        accept: true,
+        secret:
+          '["P2PK",{"nonce":"0ed3fcb22c649dd7bbbdcca36e0c52d4f0187dd3b6a19efcc2bfbebb5f85b2a1","data":"02c3b5bb27e361457c92d93d78dd73d3d53732110b2cfe8b50fbc0abc615e9c331","tags":[["locktime","1700604800"]]}]',
+      },
+      {
+        row: 'j',
+        accept: false,
+        secret:
+          '["P2PK",{"nonce":"0ed3fcb22c649dd7bbbdcca36e0c52d4f0187dd3b6a19efcc2bfbebb5f85b2a1","data":"02c3b5bb27e361457c92d93d78dd73d3d53732110b2cfe8b50fbc0abc615e9c331","tags":[["locktime","1700604799"],["refund","0234ad87e907e117db1590cc20a3942ffdfd5137aa563d36095d5cf5f96bada122"]]}]',
+      },
+      {
+        row: 'k',
+        accept: false,
+        secret:
+          '["P2PK",{"nonce":"0ed3fcb22c649dd7bbbdcca36e0c52d4f0187dd3b6a19efcc2bfbebb5f85b2a1","data":"0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"}]',
+      },
+      {
+        row: 'l',
+        accept: false,
+        secret:
+          '["P2PK",{"nonce":"0ed3fcb22c649dd7bbbdcca36e0c52d4f0187dd3b6a19efcc2bfbebb5f85b2a1","data":"02c3b5bb27e361457c92d93d78dd73d3d53732110b2cfe8b50fbc0abc615e9c331","tags":[["pubkeys","0234ad87e907e117db1590cc20a3942ffdfd5137aa563d36095d5cf5f96bada122"]]}]',
+      },
+      {
+        row: 'm',
+        accept: false,
+        secret:
+          '["P2PK",{"nonce":"0ed3fcb22c649dd7bbbdcca36e0c52d4f0187dd3b6a19efcc2bfbebb5f85b2a1","data":"02c3b5bb27e361457c92d93d78dd73d3d53732110b2cfe8b50fbc0abc615e9c331","tags":[["locktime","1700604800"],["refund","0234ad87e907e117db1590cc20a3942ffdfd5137aa563d36095d5cf5f96bada122"],["sigflag","SIG_ALL"]]}]',
+      },
+      {
+        row: 'n',
+        accept: false,
+        secret:
+          '["P2PK",{"nonce":"0ed3fcb22c649dd7bbbdcca36e0c52d4f0187dd3b6a19efcc2bfbebb5f85b2a1","data":"02c3b5bb27e361457c92d93d78dd73d3d53732110b2cfe8b50fbc0abc615e9c331","tags":[["locktime","1700604800"],["locktime","1700604800"],["refund","0234ad87e907e117db1590cc20a3942ffdfd5137aa563d36095d5cf5f96bada122"]]}]',
+      },
+      {
+        row: 'o',
+        accept: false,
+        secret:
+          '["P2PK",{"nonce":"0ed3fcb22c649dd7bbbdcca36e0c52d4f0187dd3b6a19efcc2bfbebb5f85b2a1","data":"02c3b5bb27e361457c92d93d78dd73d3d53732110b2cfe8b50fbc0abc615e9c331","tags":[["locktime","1700604800"],["refund","0234ad87e907e117db1590cc20a3942ffdfd5137aa563d36095d5cf5f96bada122","026acbcd0fff3a424499c83ec892d3155c9d1984438659f448d9d0f1af3e92276a"],["n_sigs_refund","3"]]}]',
+      },
+      {
+        row: 'p',
+        accept: false,
+        secret:
+          '["P2PK",{"nonce":"0ed3fcb22c649dd7bbbdcca36e0c52d4f0187dd3b6a19efcc2bfbebb5f85b2a1","data":"02c3b5bb27e361457c92d93d78dd73d3d53732110b2cfe8b50fbc0abc615e9c331","tags":[["locktime","abc"],["refund","0234ad87e907e117db1590cc20a3942ffdfd5137aa563d36095d5cf5f96bada122"]]}]',
+      },
+    ])('spec row $row accepts=$accept', async ({ secret, accept }) => {
+      if (accept) expect(await check(secret)).toBe(true);
+      else await expect(check(secret)).rejects.toThrow(/nut10 request/);
+    });
+
+    test('accepts the opt-in payer output', async () => {
+      const pr = request();
+      const output = OutputData.createSingleP2PKData(
+        pr.toP2PKOptions({ refundKeys: [refund], now, margin: 0 })!,
+        500,
+        '00bd033559de27d0',
+      );
+      expect(await check(new TextDecoder().decode(output.secret), pr)).toBe(true);
+    });
+
+    test('keeps exact equality without a refund_delay request', async () => {
+      const pr = request([]);
+      expect(await check(createP2PKsecret(payee), pr)).toBe(true);
+      await expect(
+        check(
+          createP2PKsecret(payee, [
+            ['locktime', '1700604800'],
+            ['refund', refund],
+          ]),
+          pr,
+        ),
+      ).rejects.toThrow(/requested spending condition/);
+    });
+
+    test.each(['0', '01', 'abc'])('ignores copied or absent malformed delay %s', async (delay) => {
+      const pr = request([['refund_delay', delay]]);
+      const copied = createP2PKsecret(payee, [['refund_delay', delay]]);
+      expect(await check(copied, pr)).toBe(true);
+      expect(await check(createP2PKsecret(payee), pr)).toBe(true);
+    });
+
+    test.each([
+      [
+        ['refund_delay', '1'],
+        ['refund_delay', '2'],
+      ],
+      [
+        ['refund_delay', '604800'],
+        ['locktime', '1700604800'],
+        ['refund', refund],
+        ['n_sigs_refund', '1'],
+      ],
+    ])(
+      'ignores repeated or conflicting markers but keeps refund tags exact %j',
+      async (...tags) => {
+        const pr = request(tags);
+        const conditions = tags.filter((tag) => tag[0] !== 'refund_delay');
+        expect(await check(createP2PKsecret(payee, conditions), pr)).toBe(true);
+        expect(await check(createP2PKsecret(payee, tags), pr)).toBe(true);
+        await expect(
+          check(createP2PKsecret(payee, [...conditions, ['custom', 'extra']]), pr),
+        ).rejects.toThrow(/requested spending condition/);
+        if (conditions.length) {
+          await expect(check(createP2PKsecret(payee), pr)).rejects.toThrow(
+            /requested spending condition/,
+          );
+        }
+      },
+    );
+
+    test.each([
+      [['refund_delay', '0']],
+      [['refund_delay', '01']],
+      [
+        ['refund_delay', '1'],
+        ['refund_delay', '2'],
+      ],
+      [
+        ['refund_delay', '604800'],
+        ['locktime', '1700604800'],
+        ['refund', refund],
+      ],
+    ])('accepts payer output for ineligible markers %j', async (...tags) => {
+      const pr = request(tags);
+      for (const refundKeys of [undefined, [refund]]) {
+        const output = OutputData.createSingleP2PKData(
+          pr.toP2PKOptions({ refundKeys, now, margin: 0 })!,
+          500,
+          '00bd033559de27d0',
+        );
+        expect(await check(new TextDecoder().decode(output.secret), pr)).toBe(true);
+      }
+    });
+
+    test('accepts an upper-case proof key after canonicalisation', async () => {
+      expect(await check(createP2PKsecret(payee.toUpperCase()))).toBe(true);
+    });
+
+    test('refuses a refund-path secret over the parser limit', async () => {
+      const secret = JSON.stringify([
+        'P2PK',
+        {
+          nonce: 'n',
+          data: payee,
+          tags: [
+            ['locktime', '1700604800'],
+            ['refund', refund],
+            ['refund_delay', 'x'.repeat(1024)],
+          ],
+        },
+      ]);
+      await expect(check(secret)).rejects.toThrow(/does not carry a valid NUT-10 lock/);
+    });
+
+    test.each([
+      [['n_sigs', '0']],
+      [['n_sigs', '2']],
+      [['n_sigs', 'abc']],
+      [['custom', 'value']],
+      [
+        ['refund_delay', '1'],
+        ['refund_delay', '2'],
+      ],
+      [['locktime', '1700604800.0']],
+      [['locktime', '-1700604800']],
+      [['locktime', '+1700604800']],
+      [['locktime']],
+      [['refund']],
+      [['n_sigs_refund']],
+      [['locktime'], ['refund', refund]],
+    ])('rejects malformed or different proof tags %j', async (...tags) => {
+      const secret = JSON.stringify(['P2PK', { nonce: 'n', data: payee, tags }]);
+      await expect(check(secret)).rejects.toThrow(/nut10 request/);
+    });
+
+    test.each(['01700604800', '01700604801'])(
+      'accepts decimal locktime %s at or above the floor',
+      async (locktime) => {
+        expect(await check(createP2PKsecret(payee, [['locktime', locktime]]))).toBe(true);
+      },
+    );
+
+    test.each([
+      {
+        secret: 'not a secret',
+        message: 'nut10 request: proof does not carry a valid NUT-10 lock of the requested kind',
+      },
+      {
+        secret: createP2PKsecret(payee, [['locktime', '1700604799']]),
+        message:
+          'nut10 request: proof lock is not the requested spending condition: proof locktime is below the refund delay',
+      },
+    ])('logs a payee rejection once: $secret', async ({ secret, message }) => {
+      const error = vi.fn();
+      const wallet = new Wallet(mint, { unit, logger: { ...NULL_LOGGER, error } });
+      await wallet.loadMint();
+      error.mockClear();
+
+      expect(() =>
+        wallet.isPaymentRequestSatisfied(request(), lockedProofs([500], secret), undefined, {
+          now,
+          tolerance: 0,
+        }),
+      ).toThrow(message);
+      expect(error).toHaveBeenCalledExactlyOnceWith(message, undefined);
+    });
+
+    test('ignores a copied marker value', async () => {
+      expect(await check(createP2PKsecret(payee, [['refund_delay', 'abc']]))).toBe(true);
+    });
+
+    test('keeps HTLC marker equality and refuses unrequested refund tags', async () => {
+      const data = 'ab'.repeat(32);
+      const pr = request();
+      pr.nut10 = {
+        kind: 'HTLC',
+        data,
+        tags: [
+          ['pubkeys', payee],
+          ['refund_delay', '604800'],
+        ],
+      };
+      const secret = (tags: string[][]) => JSON.stringify(['HTLC', { nonce: 'n', data, tags }]);
+      const tags = [
+        ['pubkeys', payee],
+        ['refund_delay', '604800'],
+      ];
+      expect(await check(secret(tags), pr)).toBe(true);
+      await expect(
+        check(secret([...tags, ['locktime', '1700604800'], ['refund', refund]]), pr),
+      ).rejects.toThrow(/requested spending condition/);
+    });
+
+    test('matches explicit request defaults and preserves requested extension tags', async () => {
+      const pr = request([
+        ['refund_delay', '604800'],
+        ['n_sigs', '1'],
+        ['sigflag', 'SIG_INPUTS'],
+        ['custom', 'value'],
+      ]);
+      expect(await check(createP2PKsecret(payee, [['custom', 'value']]), pr)).toBe(true);
+      await expect(check(createP2PKsecret(payee), pr)).rejects.toThrow(
+        /requested spending condition/,
+      );
+    });
+
+    test('uses the current time and five-second default tolerance', async () => {
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(now * 1000);
+      try {
+        const wallet = new Wallet(mint, { unit });
+        await wallet.loadMint();
+        const secret = createP2PKsecret(payee, [['locktime', '1700604795']]);
+        expect(wallet.isPaymentRequestSatisfied(request(), lockedProofs([500], secret))).toBe(true);
+        const early = createP2PKsecret(payee, [['locktime', '1700604794']]);
+        expect(() =>
+          wallet.isPaymentRequestSatisfied(request(), lockedProofs([500], early)),
+        ).toThrow(/nut10 request/);
+      } finally {
+        clock.mockRestore();
+      }
+    });
+
+    test.each([
+      { now: NaN, tolerance: 0 },
+      { now: -1, tolerance: 0 },
+      { now, tolerance: -1 },
+      { now, tolerance: Infinity },
+    ])('rejects invalid payee timing %j', async (timing) => {
+      await expect(check(createP2PKsecret(payee), request(), timing)).rejects.toThrow(
+        /finite seconds/,
+      );
+    });
+
+    test('honours custom tolerance at the inclusive boundary', async () => {
+      const secret = createP2PKsecret(payee, [
+        ['locktime', '1700604790'],
+        ['refund', refund],
+      ]);
+      expect(await check(secret, request(), { now, tolerance: 10 })).toBe(true);
+      await expect(check(secret, request(), { now, tolerance: 9 })).rejects.toThrow(
+        /nut10 request/,
+      );
+    });
   });
 
   test('enforces the net-of-input-fees formula (NUT-18)', async () => {

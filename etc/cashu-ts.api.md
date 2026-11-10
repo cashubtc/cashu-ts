@@ -3019,6 +3019,8 @@ export class Wallet {
     }>;
     isPaymentRequestSatisfied(pr: PaymentRequest_2, proofs: Array<Pick<Proof, 'id' | 'amount' | 'secret' | 'spend_info' | 'p2pk_e'>>, expectedAmount?: AmountLike, opts?: {
         privkeys?: string | string[];
+        now?: number;
+        tolerance?: number;
     }): boolean;
     get keyChain(): KeyChain;
     get keysetId(): string;

@@ -795,8 +795,12 @@ export function verifyP2PKSpendingConditions(
  * @throws If the secret is not P2PK/HTLC or its tags break the NUT-11 rules.
  * @internal
  */
-export function p2pkToSpendLeaves(secretStr: string | Secret): NutrootConditionLeaf[] {
+export function p2pkToSpendLeaves(
+  secretStr: string | Secret,
+  opts?: { allowPermanentRefund?: boolean; rejectRepeatedTags?: boolean },
+): NutrootConditionLeaf[] {
   const secret = parseP2PKSecret(secretStr);
+  if (opts?.rejectRepeatedTags) assertNoDuplicateP2PKTags(getTags(secret), true);
   const mainKeys = getP2PKWitnessPubkeys(secret);
   const refundKeys = getP2PKWitnessRefundkeys(secret);
   const locktime = getLocktime(secret);
@@ -806,6 +810,8 @@ export function p2pkToSpendLeaves(secretStr: string | Secret): NutrootConditionL
     nSigs: getTagInt(secret, 'n_sigs'),
     nSigsRefund: getTagInt(secret, 'n_sigs_refund'),
     hasLocktime: Number.isFinite(locktime),
+    // A refund_delay payee accepts refund keys without a timer as a permanent lock.
+    allowPermanentRefund: opts?.allowPermanentRefund,
   });
   // A path with no keys needs no signatures (keyless HTLC, or expiry with no refund keys).
   const n = (tag: string, keys: string[]) =>
@@ -953,11 +959,11 @@ export function isP2PKSigAll(inputs: Proof[]): boolean {
 // Internal helpers
 // ------------------------------
 
-function assertNoDuplicateP2PKTags(tags: string[][]): void {
+function assertNoDuplicateP2PKTags(tags: string[][], allTags = false): void {
   const seen = new Set<string>();
   for (const tag of tags) {
     const key = tag[0];
-    if (!isP2PKKnownTagKey(key)) continue;
+    if (!allTags && !isP2PKKnownTagKey(key)) continue;
     if (seen.has(key)) {
       throw new CTSError(`Duplicate P2PK tag "${key}"`);
     }
@@ -992,6 +998,7 @@ function assertSpendingConditionRules(params: {
   nSigs?: number;
   nSigsRefund?: number;
   hasLocktime: boolean;
+  allowPermanentRefund?: boolean;
 }): void {
   const { mainKeyCount, refundKeyCount, nSigs, nSigsRefund, hasLocktime } = params;
 
@@ -1016,7 +1023,7 @@ function assertSpendingConditionRules(params: {
     }
   }
 
-  if (refundKeyCount > 0 && !hasLocktime) {
+  if (refundKeyCount > 0 && !hasLocktime && !params.allowPermanentRefund) {
     throw new CTSError('refund keys require a locktime');
   }
 }

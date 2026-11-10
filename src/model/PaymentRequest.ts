@@ -468,20 +468,12 @@ export class PaymentRequest {
     const tags = this.nut10.tags ?? [];
     // Strip request-only metadata before secret validation, even when its value is malformed.
     const isRefundDelay = (tag: string[]) => Array.isArray(tag) && tag[0] === 'refund_delay';
-    const delays = tags.filter(isRefundDelay);
     const options = nut10ToP2PKOptions({
       ...this.nut10,
       tags: tags.filter((tag) => !isRefundDelay(tag)),
     });
-    if (!options || delays.length !== 1 || delays[0].length !== 2) return options;
-    const value = delays[0][1];
-    if (typeof value !== 'string' || !/^[1-9][0-9]*$/.test(value)) return options;
-    const delay = Number(value);
-    // A delay outside the exact integer range cannot yield a representable locktime.
-    if (!Number.isSafeInteger(delay)) return options;
-    if (tags.some((tag) => ['locktime', 'refund', 'n_sigs_refund'].includes(tag[0]))) {
-      return options;
-    }
+    const delay = paymentRequestRefundDelay(this.nut10);
+    if (!options || delay === undefined) return options;
     if (refund?.refundKeys === undefined) return options;
     if (!Array.isArray(refund.refundKeys)) {
       throw new CTSError('refundKeys must be an array of compressed pubkeys');
@@ -984,6 +976,25 @@ function encodeNutrootRequest(lock: LockOptions): NutrootOption {
     ...(leaves?.length && { leaves: leaves.map((leaf) => serializeNutrootLeafHex(leaf)) }),
     ...(blindKeys?.length && { blindKeys }),
   };
+}
+
+/**
+ * @internal Shared eligibility rule for payer construction and payee acceptance.
+ */
+export function paymentRequestRefundDelay(nut10: NUT10Option | undefined): number | undefined {
+  if (nut10?.kind !== 'P2PK') return undefined;
+  const tags = nut10.tags ?? [];
+  const delays = tags.filter((tag) => Array.isArray(tag) && tag[0] === 'refund_delay');
+  if (delays.length !== 1 || delays[0].length !== 2) return undefined;
+  const value = delays[0][1];
+  if (typeof value !== 'string' || !/^[1-9][0-9]*$/.test(value)) return undefined;
+  const delay = Number(value);
+  // A delay outside the exact integer range cannot yield a representable locktime.
+  if (!Number.isSafeInteger(delay)) return undefined;
+  if (tags.some((tag) => ['locktime', 'refund', 'n_sigs_refund'].includes(tag[0]))) {
+    return undefined;
+  }
+  return delay;
 }
 
 /**
