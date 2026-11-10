@@ -427,7 +427,7 @@ describe('send', () => {
     expect(result.send[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
   });
 
-  test('preserves p2pk_e when exact-match send avoids swap', async () => {
+  test('preserves p2pk_e on an explicit exact-match offline send', async () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
 
@@ -441,7 +441,7 @@ describe('send', () => {
       },
     ];
 
-    const result = await wallet.send(1, exactMatchProofs);
+    const result = await wallet.ops.send(1, exactMatchProofs).offlineExactOnly().run();
 
     expect(result.keep).toHaveLength(0);
     expect(result.send).toHaveLength(1);

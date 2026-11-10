@@ -1559,6 +1559,18 @@ class Wallet {
         exactMatch: true,
         requireDleq: false, // safety
       });
+      // A locked proof is not forwarded as is: the swap signs it with the sender's key. Plain
+      // throws, as the catch below falls back to that swap.
+      for (const p of send) {
+        try {
+          parseSecret(p.secret);
+        } catch (e) {
+          // An unreadable JSON array may still be a lock a laxer mint enforces, so it swaps too.
+          if (p.secret.trimStart().startsWith('[')) throw e;
+          continue; // a bearer secret
+        }
+        throw new CTSError('A locked legacy proof requires a swap');
+      }
       const expectedFee = includeFees ? this.getFeesForProofs(send) : Amount.zero();
 
       if (sumProofs(send).equals(sendAmount.add(expectedFee))) {
