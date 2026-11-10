@@ -1,5 +1,38 @@
 # Changelog
 
+## [5.0.0-rc.13](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.12...v5.0.0-rc.13) (2026-11-10)
+
+
+### Features
+
+* **mint:** add a per-call requestTimeout ([#1384](https://github.com/cashubtc/cashu-ts/issues/1384)) ([ac23d7d](https://github.com/cashubtc/cashu-ts/commit/ac23d7d26e8a85971ad59f88333414b51d2ba9d9))
+* **wallet:** restore a swap from its preview ([#1388](https://github.com/cashubtc/cashu-ts/issues/1388)) ([c79618b](https://github.com/cashubtc/cashu-ts/commit/c79618b87b4e2f0d3284c61df46bf56f58710d08))
+* **wallet:** sign swap previews before persisting ([#1385](https://github.com/cashubtc/cashu-ts/issues/1385)) ([2bdfad8](https://github.com/cashubtc/cashu-ts/commit/2bdfad83b418e5e4d2a09b780443f567f54489b4))
+
+
+### Bug Fixes
+
+* **auth:** apply the https discovery rule to device verification links ([#1400](https://github.com/cashubtc/cashu-ts/issues/1400)) ([04eb313](https://github.com/cashubtc/cashu-ts/commit/04eb3134ce040145ee520fb1118300f6a4f8eea3))
+* **crypto:** normalize HTLC hash comparison ([#1415](https://github.com/cashubtc/cashu-ts/issues/1415)) ([43318b7](https://github.com/cashubtc/cashu-ts/commit/43318b7c61d7dabfd677251298c3135fa5035cff))
+* **crypto:** require a pubkey in P2PK data ([#1393](https://github.com/cashubtc/cashu-ts/issues/1393)) ([ec5ef1e](https://github.com/cashubtc/cashu-ts/commit/ec5ef1e6e5d67542194eaa74f2eb99362101ae14))
+* **crypto:** require values for integer tags ([#1413](https://github.com/cashubtc/cashu-ts/issues/1413)) ([8caf21e](https://github.com/cashubtc/cashu-ts/commit/8caf21ea33267214dae2a24ad1eb0bc64af16113))
+* **events:** contain group subscription setup failures ([#1380](https://github.com/cashubtc/cashu-ts/issues/1380)) ([4b3e58f](https://github.com/cashubtc/cashu-ts/commit/4b3e58fd6c8733472964b3a2f17b5cdb542552b0))
+* **events:** contain onDrop and onProgress callbacks ([#1367](https://github.com/cashubtc/cashu-ts/issues/1367)) ([5043fec](https://github.com/cashubtc/cashu-ts/commit/5043fecfd45ceb57f7e0dc42532a772482107575))
+* **events:** contain remaining consumer callbacks ([#1365](https://github.com/cashubtc/cashu-ts/issues/1365)) ([5b8f1e7](https://github.com/cashubtc/cashu-ts/commit/5b8f1e78c29b3dd1e89f262204e9f102b323c6fe))
+* **events:** route error callbacks through safeCallback ([#1362](https://github.com/cashubtc/cashu-ts/issues/1362)) ([dd8bbe3](https://github.com/cashubtc/cashu-ts/commit/dd8bbe34e06e4f7f6da8f0704e6b08acf4e354ab))
+* keep request paths and full quote ids out of log context ([#1374](https://github.com/cashubtc/cashu-ts/issues/1374)) ([234a35a](https://github.com/cashubtc/cashu-ts/commit/234a35a8499f56ff8cd08bb9dee63b9e11b0c86c))
+* keyset handling ([#1399](https://github.com/cashubtc/cashu-ts/issues/1399)) ([6f59c32](https://github.com/cashubtc/cashu-ts/commit/6f59c32cc1af95e0a29f55f83899c8bc447f38b4))
+* **mint:** log the response shape, not the body, on malformed responses ([#1389](https://github.com/cashubtc/cashu-ts/issues/1389)) ([2bf8445](https://github.com/cashubtc/cashu-ts/commit/2bf844566f41fe873383c9dcd2fa55d1bf420c07))
+* **nutroot:** only attach a preimage to the hashlock it opens ([#1398](https://github.com/cashubtc/cashu-ts/issues/1398)) ([6d361d7](https://github.com/cashubtc/cashu-ts/commit/6d361d71aea0409a8a8aaffe08351b11d6b4c688))
+* **payment-request:** drop an incomplete DLEQ in decodePayload ([#1382](https://github.com/cashubtc/cashu-ts/issues/1382)) ([a5782dd](https://github.com/cashubtc/cashu-ts/commit/a5782ddcf4077efbd1e936d0edbc989cc7a008b2))
+* **wallet:** align proof validation ([#1391](https://github.com/cashubtc/cashu-ts/issues/1391)) ([7a2d252](https://github.com/cashubtc/cashu-ts/commit/7a2d252536b1fcca8a8b72040e3b429cad8470ef))
+* **wallet:** drop quote ids and proofs from log context ([#1377](https://github.com/cashubtc/cashu-ts/issues/1377)) ([0404b9b](https://github.com/cashubtc/cashu-ts/commit/0404b9b2299ee45e57a7b670016bea6a9a87cf83))
+* **wallet:** keep the DLEQ on offline sends ([#1383](https://github.com/cashubtc/cashu-ts/issues/1383)) ([6cb1de8](https://github.com/cashubtc/cashu-ts/commit/6cb1de87068a3907f3fc6061546e430270135aab))
+* **wallet:** match nutroot payments to the requested receiver key ([#1392](https://github.com/cashubtc/cashu-ts/issues/1392)) ([f8225fb](https://github.com/cashubtc/cashu-ts/commit/f8225fb08a56457ea96b07a21a3ddd25c831d5b4))
+* **wallet:** pick the proof family by keyset when checking a payment request ([#1397](https://github.com/cashubtc/cashu-ts/issues/1397)) ([b7e81d5](https://github.com/cashubtc/cashu-ts/commit/b7e81d55579517d15a702f44f571c12c5991683c))
+* **wallet:** reject malformed locks when checking a payment request ([#1395](https://github.com/cashubtc/cashu-ts/issues/1395)) ([8e46512](https://github.com/cashubtc/cashu-ts/commit/8e46512acfae41c078e68333666114781e641b03))
+* **wallet:** swap locked legacy inputs before sending ([#1403](https://github.com/cashubtc/cashu-ts/issues/1403)) ([f3ed1fa](https://github.com/cashubtc/cashu-ts/commit/f3ed1fac7dd072232788deaa1c2e87e6c363d87e))
+
 ## [5.0.0-rc.12](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.11...v5.0.0-rc.12) (2026-10-28)
 
 
