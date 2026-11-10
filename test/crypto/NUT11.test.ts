@@ -1957,6 +1957,16 @@ describe('verifyP2PKSpendingConditions — semantic validation', () => {
     );
   });
 
+  test.each(['n_sigs', 'n_sigs_refund'])('rejects %s without a value', (tag) => {
+    const tags = [[tag]];
+    if (tag === 'n_sigs_refund') tags.unshift(['locktime', '1'], ['refund', PUBKEY]);
+    const proof = makeProof(tags, tag === 'n_sigs' ? PUBKEY : pk1);
+    const signedProof = signP2PKProof(proof, bytesToHex(PRIVKEY));
+    const error = `tag "${tag}": must carry a single value`;
+    expect(() => verifyP2PKSpendingConditions(signedProof)).toThrow(error);
+    expect(() => p2pkToSpendLeaves(proof.secret)).toThrow(error);
+  });
+
   test('a malformed locktime reads as a permanent lock, not a rejection', () => {
     // NUT-11: a locktime that is not a valid unix time makes the lock permanent, so the refund
     // path never opens and only the main key can sign; the mint makes the final call.

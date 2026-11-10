@@ -128,6 +128,13 @@ describe('NUT10 module core functions', () => {
     const secret = createSecret('P2PK', DATA, [['n_sigs', '1', '2']]);
     expect(() => getTagInt(secret, 'n_sigs')).toThrow(/tag "n_sigs": must carry a single value/);
   });
+
+  test.each(['n_sigs', 'n_sigs_refund'])('getTagInt requires a value for %s', (key) => {
+    const secret = createSecret('P2PK', DATA, [[key]]);
+    expect(() => getTagInt(secret, key)).toThrow(`tag "${key}": must carry a single value`);
+    expect(getTagInt(createSecret('P2PK', DATA), key)).toBeUndefined();
+    expect(getTagInt(createSecret('P2PK', DATA, [[key, '2']]), key)).toBe(2);
+  });
 });
 
 describe('NUT10 parseSecret round-trip and serialization', () => {
