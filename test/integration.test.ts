@@ -244,7 +244,7 @@ describe('mint api', () => {
   });
   test('get fee for external invoice', async () => {
     const invoice =
-      'lnbc20u1p3u27nppp5pm074ffk6m42lvae8c6847z7xuvhyknwgkk7pzdce47grf2ksqwsdpv2phhwetjv4jzqcneypqyc6t8dp6xu6twva2xjuzzda6qcqzpgxqyz5vqsp5sw6n7cztudpl5m5jv3z6dtqpt2zhd3q6dwgftey9qxv09w82rgjq9qyyssqhtfl8wv7scwp5flqvmgjjh20nf6utvv5daw5h43h69yqfwjch7wnra3cn94qkscgewa33wvfh7guz76rzsfg9pwlk8mqd27wavf2udsq3yeuju';
+      'lnbc20u1p4wkxnrpp5h6fuc24vpdh2enw3p77n5ls03esgm23nc5wapa4vhzptkessnw6ssp5f036c4mq5cq0uunreqgmj05g57pksvpza6480959vjjwdq5kdzjqdqqxq8zals8sq9qypqqqnlpkh94fesk7zaqlcwungmsf2f7mqq9clwrmw6ryawlzyptzrc2zn36zwwm97cklvrgd3aesynaggg46sn9fmqwhdxuj9cst7fkg7fspsafkne';
     const wallet = newWallet({ unit });
     await wallet.loadMint();
     const fee = (await wallet.createMeltQuoteBolt11(invoice)).fee_reserve;
@@ -254,7 +254,7 @@ describe('mint api', () => {
   });
   test('pay external invoice', async () => {
     const invoice =
-      'lnbc20u1p5tj77hsp5hva2cwk48eajjatzje0wwyanfl2dmu87h7c30mnurfmu5mr6ypjspp53cmmk6mgvdrp7xpuf9vfyqyxjl5ce9dqs4prc6jh6eqf5ldmqvvshp55qf3c2rxuxqahgt2d7yp6xdrjdt5r2sm2uqsatyn3v7u0k09mnhqxq9z0rgqcqpnrzjq0xp6zfjhwvmq6tltd09jcdc82ml6eh3alzvnaw8httxcx7tu78syrvfkqqqm0qqqyqqqqlgqqqvx5qqjq9qxpqysgqunatemrzxl5srnxy4jpqeu4rhdfvkx0agvqeumkmx4mvsusc2er4t4h9jg396mfxp0lu72nueehapde6cv42ldd80pryz8jrxky3k5qqm6f4zx';
+      'lnbc20u1p4wkxnrpp52ly5eh5nu2qdsajl9sc9p77mlj97ntswversc63ynw5xr5z74rwssp5q8x585fr53smyd6gvn58tsre6vxkl7kxlvj62qv7dur4fz74vgksdqqxq8zals8sq9qypqqqrc36v9yype55wma4dghckd8t2gklqgcyrpdrcyw59ncrstt5g6hrs8vv0p20nqhd7va2x9f05e2zn9qrd5ny8fggjexfs85ahhlwaqsqkxclxp';
     const wallet = newWallet({ unit });
     await wallet.loadMint();
     const request = await lockedMintQuote(wallet, 3000);
@@ -288,7 +288,7 @@ describe('mint api', () => {
   });
   test('pay external invoice with requireSigDleq', async () => {
     const invoice =
-      'lnbc15u1p3xnhl2pp5jptserfk3zk4qy42tlucycrfwxhydvlemu9pqr93tuzlv9cc7g3sdqsvfhkcap3xyhx7un8cqzpgxqzjcsp5f8c52y2stc300gl6s4xswtjpc37hrnnr3c9wvtgjfuvqmpm35evq9qyyssqy4lgd8tj637qcjp05rdpxxykjenthxftej7a2zzmwrmrl70fyj9hvj0rewhzj7jfyuwkwcg9g2jpwtk3wkjtwnkdks84hsnu8xps5vsq4gj5hs';
+      'lnbc15u1p4wkxnrpp5sy6rs3wwt7d2fxey7jkp0qs3vpvu202sxk5y6wp4pmkw6su4ew5qsp506tyvtg8ess0zktsdmv4l73633y5009jezrp8h5flfrtt28fyejqdqqxq8zals8sq9qypqqq3jzz9kadlcg9st7e7f90gcd8k8xvfr2yg9pjdlwscc3jh3vaye5shhlq04u3gdfyt6t7a6fps6qu8v3wxlm4kemev0cw5957x98gvfsqmglh0m';
     const wallet = newWallet({ unit, requireSigDleq: true });
     await wallet.loadMint();
     const request = await lockedMintQuote(wallet, 3000);
@@ -604,7 +604,7 @@ describe('mint api', () => {
   });
   testPreV3('mint and melt p2pk', async () => {
     const invoice =
-      'lnbc20u1p5tnrdtsp5xaus66jztyj4f4m9wuza7ay9994d5dals6dluvw80dduhhulgxvspp5gsdp48uz9x20etle8j7muweujzxd2w4ay2v6cwzwjy7pff44r4gqhp5jujtt4hgd57c5hskstzkjkxqtfmctfvpfc3wmt3h42a9f2p9sqcsxq9z0rgqcqpnrzjqvxr759n8jl5226n47zw6325pyffxqlpyrjh9ztswvnglhrmtcsfzrw8mqqqf2cqqqqqqqlgqqqqzhsqjq9qxpqysgq2rtnpkqzmwmuf6cw653s63552qf0hgst6xzdywkgekhz836ayrz572cm72r7ejj7w0ktgldlwfu33fpr9dxywx5wqy4tte7smpa9q4gqaaydvv';
+      'lnbc20u1p4wkxnrpp5zfg02gwmretlzqd8p9l7pq899n3zkfynrawzd3nnps9vzxlnhr7ssp535qq8pzltplt8vh34kqz5633gmucgjrym52g4kqzkt70l8zexnrsdqqxq8zals8sq9qypqqq0rhqk8j8c50yjqfq6ppsk5z8aqme0c9y4f027k32gda8884veethpux4f2jmge3q9dmq86rqme4ls3jamnacrru2wwhw5wcsplwevxgqqtp98u';
     const wallet = newWallet();
     await wallet.loadMint();
     const privKeyBob = secp256k1.utils.randomSecretKey();
@@ -626,7 +626,7 @@ describe('mint api', () => {
   });
   test('mint and melt p2pk SIG_ALL', async () => {
     const invoice =
-      'lnbc200n1p530wtspp59anj2yqy6v3695js9ny96upv38unwz7g44p6z75wm5cqufe2dy5qdqqcqzzsxqyz5vqsp5qzr39dz38km5xu2q7yyh0d5g4vfmwlxnvyklnth4h456gyfx7lsq9qxpqysgqx6fw02a2mfvf6eldlgajer9tz4f39clsstzhs37s0r3u7c5mdl59q9qnuqrt7wqje4uxd7lzjas9vz7g0xkc3kk3an7cj99609gy9ksq3qgwdt';
+      'lnbc200n1p4wkxnrpp585ahq9jse9x4363xarzhmpn9n0fgc4cqjsk5jc9efczgkfma9atssp5rxf3qhtaeea4c5xdk9dy5msdqlv9rw3cz4pqq57hnske28mx6edqdqqxq8zals8sq9qypqqqlahmgz80kx2xngh05gxk609rfxkxvc7kp96nlpxfw3ywex098vyqnmaf2lq9wkfek06aylwuam5yhanlpfgcmkyn99u4mcd3nphuafgqyu86gy';
     const wallet = newWallet();
     await wallet.loadMint();
     const privKeyBob = secp256k1.utils.randomSecretKey();
@@ -651,7 +651,7 @@ describe('mint api', () => {
   });
   test('mint then melt async', async () => {
     const invoice =
-      'lnbc210n1p5c5sap9qypqqqdqqxqrrsssp5fdhmkt2jzvlsrj5ulta24k9jfk732um5dz6aquwg0vd5lvwv2lmspp5s9eykld2xel0d80le3ntwsc2sj40a2gdue6jlndr7d9dye5ukldq65w60acwhplrvmnwze4lzzzdrvv9awlw5jl4vhxcy7kp46fj5yxjgzx79qlyvl6r9mj9u67ux6utwccx5r6k7w4per2egckw96z6rksq7pnx7v';
+      'lnbc210n1p4wkxnrpp53a0zm4jfyht57wwx3gdq32jms5yv6pdqjjc8fpv7ghv2fv8v57mssp5je09k7t7t7qcgg8pqqmh9qv69wtgnjcpp3vh2xfx906qqzfnecesdqqxq8zals8sq9qypqqq5p3x0t5lr4ltufnan6tha7p0kvww8y3s0pdu9qldzgnf6lxlt2v45jn0c8465xmknzrtx5jatpxlstzrc08d60wlp66t2nsxlz627ygppalhnr';
     const wallet = newWallet();
     await wallet.loadMint();
     // Mint some proofs
@@ -944,7 +944,7 @@ describe('Custom Outputs', () => {
   const hexSk = bytesToHex(sk);
   const hexPk = bytesToHex(pk);
   const invoice =
-    'lnbc10n1pn449a7pp5eh3jn9p8hlcq0c0ppcfem2hg9ehptqr9hjk5gst6c0c9qfmrrvgsdq4gdshx6r4ypqkgerjv4ehxcqzpuxqr8pqsp539s9559pdth06j37kexk9zq2pusl4yvy97ruf36jqgyskawlls3s9p4gqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqpqysgqy00qa3xgn03jtwrtpu93rqrp806czmpftj8g97cm0r3d2x4rsvlhp5vzgjyzzazl9xf4gpgd35gmys998tlfu8j5zrk7sf3n2nh3t3gpyul75t';
+    'lnbc10n1p4wkxnrpp5zlnam6avckwnxh87c7ar3d7hytzdrqqt4wjqllalx6lgtdlnd9gqsp5ln0lesqd9rjkg2hefemtmdsxjhjyuvdfyuv6k5yy7k8rxymyn5hsdqqxq8zals8sq9qypqqq755rv27g95dmw9ea0lvguevz5wevaqp5apwpwfl9zapgwuag37ljja2ufyxkzll035dlfylqxzkurcfs75qlk3lljc2fnqf3g099x4sqqs523a';
   testPreV3('Default keepFactory', async () => {
     // First we create a keep factory, this is a function that will be used to construct all outputs that we "keep"
     function p2pkFactory(a: AmountLike, k: HasKeysetKeys) {

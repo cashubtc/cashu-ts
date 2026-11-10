@@ -1,4 +1,4 @@
-import { type Logger, NULL_LOGGER } from '../logger';
+import { type Logger, NULL_LOGGER, safeCallback } from '../logger';
 import { CTSError } from '../model/Errors';
 import { type JsonRpcMessage, type JsonRpcReqParams, type RpcSubId } from '../model/types';
 import { JSONInt } from '../utils/JSONInt';
@@ -237,7 +237,7 @@ export class WSConnection {
           this.rpcListeners = {};
         }
 
-        this.onCloseCallbacks.forEach((cb) => cb(e));
+        this.onCloseCallbacks.forEach((cb) => safeCallback(cb, e, this._logger));
       };
     });
 
@@ -290,11 +290,7 @@ export class WSConnection {
     this.subListeners = {};
     for (const subs of Object.values(listeners)) {
       for (const { errorCallback } of subs) {
-        try {
-          errorCallback?.(err);
-        } catch {
-          // ignore user error callbacks throwing
-        }
+        safeCallback(errorCallback, err, this._logger);
       }
     }
   }
@@ -323,9 +319,8 @@ export class WSConnection {
     this.ws = undefined;
     this.stopMessageHandling(err);
     this.failPendingRpc(err);
-    this.onCloseCallbacks.forEach((cb) =>
-      cb({ code: WS_ABNORMAL_CLOSURE, reason: err.message, wasClean: false }),
-    );
+    const closeEvent = { code: WS_ABNORMAL_CLOSURE, reason: err.message, wasClean: false };
+    this.onCloseCallbacks.forEach((cb) => safeCallback(cb, closeEvent, this._logger));
   }
 
   private armKeepalive() {
@@ -363,11 +358,7 @@ export class WSConnection {
     const listeners = this.rpcListeners;
     this.rpcListeners = {};
     for (const key of Object.keys(listeners)) {
-      try {
-        listeners[key].errorCallback(err);
-      } catch {
-        // ignore user error callbacks throwing
-      }
+      safeCallback(listeners[key].errorCallback, err, this._logger);
     }
   }
 
@@ -454,7 +445,8 @@ export class WSConnection {
           }
         } else if ('error' in parsed && parsed.id != undefined) {
           if (this.rpcListeners[parsed.id]) {
-            this.rpcListeners[parsed.id].errorCallback(new CTSError(parsed.error.message));
+            const { errorCallback } = this.rpcListeners[parsed.id];
+            safeCallback(errorCallback, new CTSError(parsed.error.message), this._logger);
             this.removeRpcListener(parsed.id);
           }
         } else if ('method' in parsed) {

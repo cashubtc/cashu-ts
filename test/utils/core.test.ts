@@ -1245,6 +1245,18 @@ describe('test zero-knowledge utilities', () => {
       expect(seen.every((d, i) => i === 0 || d >= seen[i - 1])).toBe(true);
       expect(seen[seen.length - 1]).toBe(70);
     });
+
+    test.each(['throwing', 'rejecting'])('a %s onProgress is contained', async (mode) => {
+      const fail = () => {
+        throw new Error('progress boom');
+      };
+      const { valid } = await verifyMintSignatures([serializedProof], () => keyset, {
+        // eslint-disable-next-line @typescript-eslint/no-misused-promises -- async-callback tolerance is what's under test
+        onProgress: mode === 'throwing' ? fail : async () => fail(),
+      });
+      await new Promise((r) => setTimeout(r, 0));
+      expect(valid).toHaveLength(1);
+    });
   });
 
   describe('verifyReceivedProofs', () => {
@@ -1926,6 +1938,23 @@ describe('sortProofsById', () => {
 });
 
 describe('getEncodedToken edge cases', () => {
+  test('rejects legacy base64 IDs containing only hex characters in both encoders', () => {
+    const token: Token = {
+      mint: 'http://localhost:3338',
+      proofs: [
+        {
+          id: 'dBaAe74DB218',
+          amount: Amount.from(1),
+          secret: 'abc',
+          C: '038618543ffb6b8695df4ad4babcde92a34a96bdcd97dcee0d7ccf98d472126792',
+        },
+      ],
+      unit: 'sat',
+    };
+    expect(() => utils.getEncodedToken(token)).toThrow(/legacy keyset ID/);
+    expect(() => utils.getEncodedTokenBinary(token)).toThrow(/legacy keyset ID/);
+  });
+
   test('throws for proofs with non-hex keyset IDs', async () => {
     const token: Token = {
       mint: 'http://localhost:3338',

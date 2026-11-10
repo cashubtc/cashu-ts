@@ -81,8 +81,9 @@ function serializeProof(proof: Proof): SerializedProof {
  * Converts a swap preview to a JSON-safe form for persistence.
  *
  * @remarks
- * Persist the result before `completeSwap` to support NUT-19 replay safety: a preview rehydrated
- * with {@link deserializeSwapPreview} replays a byte-identical swap request.
+ * Persist the result before `completeSwap` to support NUT-19 replay safety: a preview signed with
+ * `wallet.signSwapPreview` first, then rehydrated with {@link deserializeSwapPreview}, replays a
+ * byte-identical swap request.
  *
  * The result holds `inputs` in the clear, so it is spendable bearer material: store it as carefully
  * as the proof database.

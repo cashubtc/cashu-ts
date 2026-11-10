@@ -16,7 +16,7 @@ A crash or disconnect between the swap and your proof store strands the inputs. 
 
 ## 2) Crash-safe send: persist the preview
 
-A one-shot `run()` that dies between the mint's reply and your storage write has spent the inputs without you ever seeing the new proofs. Persisting the preview closes that window: `completeSwap` builds its request purely from the preview, so replaying a persisted preview posts a byte-identical `/v1/swap` body, and a mint that caches the endpoint (NUT-19) returns the original signatures. `prepare()` is also the dry run: `preview.fees` is the input fee the swap will charge you, see [Fees](../usage/fees.md).
+A one-shot `run()` that dies between the mint's reply and your storage write has spent the inputs without you ever seeing the new proofs. Persisting a signed preview closes that window: `completeSwap` builds its request purely from the preview, so replaying it posts a byte-identical `/v1/swap` body, and a mint that caches the endpoint (NUT-19) returns the original signatures. `prepare()` is also the dry run: `preview.fees` is the input fee the swap will charge you, see [Fees](../usage/fees.md).
 
 `keep` means something different here. `prepare()` hands back the proofs the swap will not touch as `unselected`, and `completeSwap()` returns only what the swap produced. Return `unselected` to storage as soon as `prepare()` returns: they never enter the preview, so they are not in the persisted blob and not in `keep`, and the storage code is the same whether you complete straight away or replay after a restart.
 
@@ -26,11 +26,14 @@ import { deserializeSwapPreview, serializeSwapPreview } from '@cashu/cashu-ts';
 const { preview, unselected } = await wallet.ops.send(21, myProofs).prepare();
 returnToStore(unselected); // never part of the swap or the blob
 
-// Persist before completing. Previews hold Amount, bigint and Uint8Array values, so use
-// the serialization helper before stringify.
-const stored = JSON.stringify(serializeSwapPreview(preview));
+// Sign, then persist before completing. Pass your key if the inputs are locked to you.
+const signed = await wallet.signSwapPreview(preview);
 
-const { keep, send } = await wallet.completeSwap(preview);
+// Previews hold Amount, bigint and Uint8Array values, so use the serialization helper
+// before stringify.
+const stored = JSON.stringify(serializeSwapPreview(signed));
+
+const { keep, send } = await wallet.completeSwap(signed);
 storeChange(keep);
 
 // ... after a restart: load the mint again, then replay the same preview ...
@@ -44,6 +47,7 @@ const { keep: change, send: recovered } = await wallet.completeSwap(
 
 The replay window has bounds:
 
+- The preview must be signed before you persist it. Every v3 input signs the transaction, as does any P2PK input, and those signatures are random. An unsigned preview signs afresh on replay, so the mint no longer recognises the request and answers `11001`, leaving only a NUT-09 restore of the outputs.
 - The mint must advertise `/v1/swap` in its NUT-19 `cached_endpoints`, and the replay must happen inside the advertised TTL. See [NUT-19 Cached Responses](../usage/nut19.md).
 - Automatic NUT-19 retries only cover failures inside a running process. The persisted preview is what covers a process restart.
 - A preview and a seed protect different windows: the preview covers a restart inside the TTL; deterministic secrets plus NUT-09 restore cover loss after it.
@@ -95,7 +99,7 @@ const { keep, send } = await wallet.ops.send(15, myProofs).asCustom(mySendData).
 
 Custom data may name any active keyset of the wallet unit, per output. The wallet checks each keyset before the swap and unblinds every output with the keyset the mint signed under.
 
-Normal sends swap v3 proofs that lack transferable bearer keys, even when the amounts match exactly. Supplying a script-path plan also forces a swap.
+Normal sends swap legacy P2PK/HTLC inputs and v3 proofs that lack transferable bearer keys. Supplying a script-path plan also forces a swap.
 
 ## 7) Force pure offline (no mint calls)
 
@@ -119,6 +123,8 @@ const { keep, send } = await wallet.ops
   .offlineCloseMatch(/* requireDleq? */ true) // only proofs with valid DLEQ
   .run();
 ```
+
+Offline modes keep each proof's DLEQ, so the receiver can verify it with no connection. `requireDleq` limits selection to proofs with one. A DLEQ nearly doubles token size, so pass `{ removeDleq: true }` to `getEncodedToken` if size matters, eg for a QR code.
 
 > **Important**
 > Offline modes **cannot** be combined with custom output types (`asXXXX/keepAsXXXX`).

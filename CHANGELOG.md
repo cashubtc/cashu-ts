@@ -1,5 +1,63 @@
 # Changelog
 
+## [5.0.0-rc.12](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.11...v5.0.0-rc.12) (2026-10-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* **nutroot:** align with the simplified core revision ([#1328](https://github.com/cashubtc/cashu-ts/issues/1328))
+* **mint:** fetchMintInfo replaces getLazyMintInfo; getInfo returns the wire response ([#1341](https://github.com/cashubtc/cashu-ts/issues/1341))
+* **nutroot:** a mint quote input commits the quote's amount_issued ([#1315](https://github.com/cashubtc/cashu-ts/issues/1315))
+* **auth:** the version 02 BAT target is relative to the mint URL ([#1314](https://github.com/cashubtc/cashu-ts/issues/1314))
+* **nutroot:** blinded outputs enter the transcript as a hash, derived quote ids ([#1313](https://github.com/cashubtc/cashu-ts/issues/1313))
+* **crypto:** transcript and signing package refactor for co-signed spends ([#1294](https://github.com/cashubtc/cashu-ts/issues/1294))
+* **nut13:** derivation helpers take the 64-byte BIP-39 seed ([#1296](https://github.com/cashubtc/cashu-ts/issues/1296))
+
+### Features
+
+* **crypto:** detect legacy keyset derivation collisions ([#1287](https://github.com/cashubtc/cashu-ts/issues/1287)) ([719abb0](https://github.com/cashubtc/cashu-ts/commit/719abb08fff94454badef5f70d9d861533e7fc85))
+* **crypto:** transcript and signing package refactor for co-signed spends ([#1294](https://github.com/cashubtc/cashu-ts/issues/1294)) ([b0f2296](https://github.com/cashubtc/cashu-ts/commit/b0f22967f1fea6036ef7b7a8801128a7fb5041fe))
+* **crypto:** transcript container types carry their section in the high nibble ([#1289](https://github.com/cashubtc/cashu-ts/issues/1289)) ([3e6d5d6](https://github.com/cashubtc/cashu-ts/commit/3e6d5d6a9ef785c22fda1192ad48941a00d40030))
+* **errors:** add mint error codes and predicates ([#1288](https://github.com/cashubtc/cashu-ts/issues/1288)) ([2562e6f](https://github.com/cashubtc/cashu-ts/commit/2562e6f9a78cdf5ac49c27b96e5166bfd5340583))
+* **nut13:** derivation helpers take the 64-byte BIP-39 seed ([#1296](https://github.com/cashubtc/cashu-ts/issues/1296)) ([44688a1](https://github.com/cashubtc/cashu-ts/commit/44688a198c454b46e1bff91ec7c136042d2602e0))
+* **nutroot:** a mint quote input commits the quote's amount_issued ([#1315](https://github.com/cashubtc/cashu-ts/issues/1315)) ([39608f2](https://github.com/cashubtc/cashu-ts/commit/39608f2316d61579d698e48b069315166b07f0c7))
+* **nutroot:** align with the simplified core revision ([#1328](https://github.com/cashubtc/cashu-ts/issues/1328)) ([cabc72e](https://github.com/cashubtc/cashu-ts/commit/cabc72eeff637be35156c9571c78a2fbd0821ad3))
+* **nutroot:** blinded outputs enter the transcript as a hash, derived quote ids ([#1313](https://github.com/cashubtc/cashu-ts/issues/1313)) ([23a9667](https://github.com/cashubtc/cashu-ts/commit/23a9667ce7a4adadb8fb7fed233f537f6a293cc4))
+* **utils:** getTokenMetadata accepts a raw binary token ([#1310](https://github.com/cashubtc/cashu-ts/issues/1310)) ([d4ad7f8](https://github.com/cashubtc/cashu-ts/commit/d4ad7f86ae553a1174346ae75285c4eba768e73f))
+* **wallet:** return unselected proofs beside the send preview ([#1260](https://github.com/cashubtc/cashu-ts/issues/1260)) ([6b8226d](https://github.com/cashubtc/cashu-ts/commit/6b8226dc04a54cb4d71dea24f1ac5a0a5dad6710))
+* **wallet:** verify proofs and restore in chunks that yield to the event loop ([#1264](https://github.com/cashubtc/cashu-ts/issues/1264)) ([46d7b11](https://github.com/cashubtc/cashu-ts/commit/46d7b111172c83ed7e699100e998bd80029aad5f))
+
+
+### Bug Fixes
+
+* **auth:** drop request path from BAT log context ([#1350](https://github.com/cashubtc/cashu-ts/issues/1350)) ([7008f96](https://github.com/cashubtc/cashu-ts/commit/7008f962bff3bbb09a29a53bf3af3d590097b12d))
+* **auth:** the version 02 BAT target is relative to the mint URL ([#1314](https://github.com/cashubtc/cashu-ts/issues/1314)) ([145d242](https://github.com/cashubtc/cashu-ts/commit/145d2426d5071f2c321a6ec1171a5ce1c1ea0466))
+* **core:** validate text fields when decoding a v4 token ([#1307](https://github.com/cashubtc/cashu-ts/issues/1307)) ([9a6bd03](https://github.com/cashubtc/cashu-ts/commit/9a6bd03d469d19134a408df570fa4c3005801582))
+* **deps:** bump fast-uri from 3.1.6 to 3.1.8 ([#1275](https://github.com/cashubtc/cashu-ts/issues/1275)) ([5e7b97e](https://github.com/cashubtc/cashu-ts/commit/5e7b97ef9113b75d2195a720e1ac71857123ecfe))
+* **mint:** log only the op when a melt quote check answers for another quote ([#1326](https://github.com/cashubtc/cashu-ts/issues/1326)) ([faf252c](https://github.com/cashubtc/cashu-ts/commit/faf252c75636523186ddc84d47006cd334f1d7ef))
+* **mint:** null a melt payment_preimage that is not a string ([#1337](https://github.com/cashubtc/cashu-ts/issues/1337)) ([93e1d23](https://github.com/cashubtc/cashu-ts/commit/93e1d2388b16cd795f912a0fe7fb1aa6a6350b47))
+* **model:** let isSupported take a NUT number from a loop ([#1263](https://github.com/cashubtc/cashu-ts/issues/1263)) ([2ce0f54](https://github.com/cashubtc/cashu-ts/commit/2ce0f54fe466183c41d91fff115290630a78644c))
+* **nut11:** read locktime 0 as an expired lock, expire only after locktime ([#1323](https://github.com/cashubtc/cashu-ts/issues/1323)) ([bfc64b3](https://github.com/cashubtc/cashu-ts/commit/bfc64b30d1a528ed5deac798604a7c57c218554c))
+* **nut13:** a v3 derivation scope must be 33 bytes ([#1299](https://github.com/cashubtc/cashu-ts/issues/1299)) ([08e5448](https://github.com/cashubtc/cashu-ts/commit/08e5448369ff2e8b7c625b1e2435b1686c507c57))
+* **nutroot:** a hashlock preimage is exactly 32 bytes ([#1306](https://github.com/cashubtc/cashu-ts/issues/1306)) ([152a109](https://github.com/cashubtc/cashu-ts/commit/152a1092c9b16d1b7388055531eb34237b615ac1))
+* **nutroot:** an empty tree or a NUMS offset without a tree is malformed spend info ([#1300](https://github.com/cashubtc/cashu-ts/issues/1300)) ([decd7d3](https://github.com/cashubtc/cashu-ts/commit/decd7d3dcfc7ba1501a664ef49a03ccb357bd85c))
+* **nutroot:** receipts refuse a malformed signature entry or a stray preimage ([#1298](https://github.com/cashubtc/cashu-ts/issues/1298)) ([da18e1a](https://github.com/cashubtc/cashu-ts/commit/da18e1a3f5a79671abd5f5550a6e5e2d84c6a091))
+* **payment-request:** accept quoted proof amounts in decodePayload ([#1344](https://github.com/cashubtc/cashu-ts/issues/1344)) ([8d6011f](https://github.com/cashubtc/cashu-ts/commit/8d6011f93178270eddf6136c64161cc1ed20bbf4))
+* **payment-request:** reject a malformed sm list with a CTSError ([#1349](https://github.com/cashubtc/cashu-ts/issues/1349)) ([21581c9](https://github.com/cashubtc/cashu-ts/commit/21581c98a5f319a102f87e7a1093d61280a000f2))
+* **wallet:** let a v3 mint span v3 keysets ([#1343](https://github.com/cashubtc/cashu-ts/issues/1343)) ([4932626](https://github.com/cashubtc/cashu-ts/commit/49326265d4b8e34ae93baa1c1ede91a3954731ba))
+* **wallet:** v3 quote inputs commit the amount issued ([#1272](https://github.com/cashubtc/cashu-ts/issues/1272)) ([4333eaa](https://github.com/cashubtc/cashu-ts/commit/4333eaa89908673d5a9953d66eb6ebacacfd347f))
+* **wallet:** yield during witnesses and subscriptions, share the restore budget ([#1271](https://github.com/cashubtc/cashu-ts/issues/1271)) ([9c44601](https://github.com/cashubtc/cashu-ts/commit/9c44601a1c4bfd117f901b20fd9fe36e58d37b11))
+
+
+### Code Refactoring
+
+* **mint:** fetchMintInfo replaces getLazyMintInfo; getInfo returns the wire response ([#1341](https://github.com/cashubtc/cashu-ts/issues/1341)) ([036a140](https://github.com/cashubtc/cashu-ts/commit/036a14079874968aeff615095648e079f0c670c3))
+
+
+### Tests
+
+* **transport:** wait for state instead of the clock in the keepalive tests ([#1255](https://github.com/cashubtc/cashu-ts/issues/1255)) ([bc70dc4](https://github.com/cashubtc/cashu-ts/commit/bc70dc49a63c7e5b99865c596024c2e39b8c6709))
+
 ## [5.0.0-rc.11](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.10...v5.0.0-rc.11) (2026-09-22)
 
 

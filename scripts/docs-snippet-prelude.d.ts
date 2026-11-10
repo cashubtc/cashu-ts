@@ -97,6 +97,7 @@ declare function isPrivateHost(hostname: string): boolean;
 declare function fastBlsHashToCurveHex(secret: Uint8Array): string;
 declare function loadCountersFromDb(): Record<string, number>;
 declare function savePendingSend(serialized: unknown): Promise<void>;
+declare function savePendingReceive(serialized: unknown): Promise<void>;
 declare function getInvoiceFor(amount: import('@cashu/cashu-ts').AmountLike): Promise<string>;
 declare const appLogger: { write(level: string, message: string, context?: unknown): void };
 

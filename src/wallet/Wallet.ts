@@ -27,7 +27,7 @@ import {
 } from '../crypto';
 // Internal transitional fallback — not part of crypto/index.ts
 import { getPubKeyFromPrivKey, normalizeSecpPubkey } from '../crypto/curve_secp';
-import { p2pkOptionsToPRNut10, type P2PKOptions } from '../crypto/NUT11';
+import { p2pkOptionsToPRNut10, p2pkToSpendLeaves, type P2PKOptions } from '../crypto/NUT11';
 import { verifyHTLCHash } from '../crypto/NUT14';
 import { mintQuoteDigest, signMintQuoteLegacy } from '../crypto/NUT20';
 import {
@@ -108,6 +108,7 @@ import {
   getKeysetAmounts,
   sumProofs,
 } from '../utils';
+import { hasLoneSurrogate } from '../utils/bytes';
 import { mapInChunks, yieldToEventLoop, YIELD_BUDGET_MS, YIELD_CHUNK_SIZE } from '../utils/chunked';
 import type { ProofVerification, VerifyProofsOptions } from '../utils/verifyProofs';
 
@@ -138,6 +139,7 @@ import {
   attachTransactionWitnesses,
   collectSpendInfoKeys,
   createQuoteLockKeyPair,
+  dropTransactionWitnesses,
   prepareScriptPathSpends,
   proofSpendOptions,
   scanQuoteLockKey,
@@ -183,6 +185,13 @@ const PENDING_KEYSET_ID = '__PENDING__';
 
 // NUT-20 "Signature for mint request invalid"
 const MINT_QUOTE_SIGNATURE_INVALID_CODE = 20008;
+
+/**
+ * True when a proof's DLEQ has all of `e`, `s` and `r`.
+ */
+function hasCompleteDleq(proof: Proof): boolean {
+  return !!(proof.dleq?.r && proof.dleq.s && proof.dleq.e);
+}
 
 /**
  * One scanned counter range. `used` is proven by a SPENT state or a returned signature, and a used
@@ -1468,8 +1477,8 @@ class Wallet {
    *
    * @remarks
    * Allows you to preview fees for a receive, get concrete outputs for P2PK SIG_ALL transactions,
-   * and do any pre-swap tasks (such as marking proofs in-flight etc). Persist this preview
-   * (`serializeSwapPreview`) to support NUT-19 replay safety.
+   * and do any pre-swap tasks (such as marking proofs in-flight etc). Sign it (`signSwapPreview`)
+   * then persist it (`serializeSwapPreview`) to support NUT-19 replay safety.
    * @example
    *
    * ```typescript
@@ -1514,17 +1523,9 @@ class Wallet {
       proofs = normalizeProofAmounts(decodedToken.proofs);
     }
 
-    // A v3 witness signs one transaction. An incoming proof cannot already carry a witness for
-    // the outputs created below, so discard the sender's transcript. A script-path package for
-    // this swap is merged into the completed preview later and is therefore preserved.
-    proofs = proofs.map((proof) => {
-      if (!isBlsKeyset(proof.id) || !isV3PointSecret(proof.secret) || proof.witness === undefined) {
-        return proof;
-      }
-      const withoutWitness = { ...proof };
-      delete withoutWitness.witness;
-      return withoutWitness;
-    });
+    // An incoming proof cannot already carry a witness for the outputs created below. A
+    // script-path package for this swap is merged into the completed preview later, so survives.
+    proofs = dropTransactionWitnesses(proofs);
 
     // Rotation evidence check: repair the snapshot and load any missing keys before
     // any assertion or fee math relies on it.
@@ -1535,10 +1536,11 @@ class Wallet {
 
     // Validate all proof keyset IDs use this wallet's unit
     this.assertProofsInWalletUnit(proofs);
+    this.assertNoDuplicateProofs(proofs);
 
     // Check total amount
     const totalAmount = this.parseAmount(sumProofs(proofs), 'prepareSwapToReceive', true);
-    this.failIf(totalAmount.isZero(), 'Token contains no proofs', { proofs });
+    this.failIf(totalAmount.isZero(), 'Token contains no proofs');
 
     // NUT-12: wallets MUST verify any DLEQ on a received proof (the spec default).
     // `requireDleq: true` opts into the stricter "DLEQ must also be present" policy.
@@ -1594,6 +1596,9 @@ class Wallet {
    * If proofs are P2PK-locked to your public key, call signP2PKProofs first to sign them. The
    * default config uses exact match selection, and does not includeFees or requireDleq. Because the
    * send is offline, the user will unlock the signed proofs when they receive them online.
+   *
+   * A proof's DLEQ is kept so the receiver can verify offline (NUT-12); `requireDleq` limits
+   * selection to proofs with one. Pass `removeDleq` to `getEncodedToken` to save space.
    * @param amount Amount to send.
    * @param proofs Array of proofs (must sum >= amount; pre-sign if P2PK-locked).
    * @param config Optional parameters for the send.
@@ -1605,11 +1610,9 @@ class Wallet {
     let normalizedProofs = normalizeProofAmounts(proofs);
     const { requireDleq = false, includeFees = false, exactMatch = true } = config || {};
     if (requireDleq) {
-      // v3 (BLS, `02…`) proofs satisfy the "cryptographically-verified mint signature"
-      // semantic of `requireDleq` via pairing equality rather than a DLEQ proof. Accept
-      // them alongside v0/v1/v2 proofs that carry a DLEQ. Mirrors the receive-side
-      // `hasValidDleq` dispatch (`utils/core.ts`).
-      normalizedProofs = normalizedProofs.filter((p) => isBlsKeyset(p.id) || p.dleq != undefined);
+      // v3 (BLS, `02…`) proofs satisfy `requireDleq` via the pairing check rather than a DLEQ,
+      // the same split `verifyReceivedProofs` makes on receive.
+      normalizedProofs = normalizedProofs.filter((p) => isBlsKeyset(p.id) || hasCompleteDleq(p));
     }
     this.failIf(
       sumProofs(normalizedProofs).lessThan(sendAmount),
@@ -1630,12 +1633,9 @@ class Wallet {
     );
     // Keep NUT-11 witnesses, but never transfer a NUT-10 transaction witness: it signs only the
     // sender's old transcript and would prevent the receiver from attaching a current one.
-    const sendPrepared = this._prepareInputsForMint(send, requireDleq, true, true).map((proof) => {
-      if (!isBlsKeyset(proof.id) || !isV3PointSecret(proof.secret)) return proof;
-      const withoutWitness = { ...proof };
-      delete withoutWitness.witness;
-      return withoutWitness;
-    });
+    const sendPrepared = dropTransactionWitnesses(
+      this._prepareInputsForMint(send, true, true, true),
+    );
     return { keep, send: sendPrepared };
   }
 
@@ -1716,11 +1716,17 @@ class Wallet {
         exactMatch: true,
         requireDleq: false, // safety
       });
+      // Plain throws: the catch below falls back to a swap, so none of these is an error.
+      if (send.some((p) => !isBlsKeyset(p.id) && !this.spendOptions(p).keyPath)) {
+        throw new CTSError('A locked legacy proof requires a swap');
+      }
       // Only bearer material can be forwarded to a new holder without a v3 swap.
       const v3 = send.filter((p) => isBlsKeyset(p.id));
       const bearerKeys = collectSpendInfoKeys(v3, undefined, this._logger);
       for (const proof of v3) {
-        this.failIf(!bearerKeys.has(proof.secret), 'A non-bearer v3 proof requires a swap');
+        if (!bearerKeys.has(proof.secret)) {
+          throw new CTSError('A non-bearer v3 proof requires a swap');
+        }
         verifyNutrootSpendInfo(proof.secret, proof.spend_info!);
       }
       const expectedFee = includeFees ? this.getFeesForProofs(send) : Amount.zero();
@@ -1756,8 +1762,8 @@ class Wallet {
    *
    * @remarks
    * Allows you to preview fees for a send, get concrete outputs for P2PK SIG_ALL transactions, and
-   * do any pre-swap tasks (such as marking proofs in-flight etc). Persist this preview
-   * (`serializeSwapPreview`) to support NUT-19 replay safety.
+   * do any pre-swap tasks (such as marking proofs in-flight etc). Sign it (`signSwapPreview`) then
+   * persist it (`serializeSwapPreview`) to support NUT-19 replay safety.
    * @example
    *
    * ```typescript
@@ -1787,7 +1793,7 @@ class Wallet {
   ): Promise<{ preview: SwapPreview; unselected: Proof[] }> {
     this.throwIfAborted(config?.signal);
     const sendAmountTarget = this.parseAmount(amount, 'prepareSwapToSend');
-    const normalizedProofs = normalizeProofAmounts(proofs);
+    const normalizedProofs = dropTransactionWitnesses(normalizeProofAmounts(proofs));
     const { keysetId, includeFees = false, onCountersReserved, preimage } = config || {};
 
     // Rotation evidence check: repair the snapshot before any assertion or fee math
@@ -1916,39 +1922,17 @@ class Wallet {
     privkey?: string | string[],
     options?: CompleteSwapOptions,
   ): Promise<SendResponse> {
-    const scriptPath = options?.scriptPath;
     const keepOutputs: OutputDataLike[] = swapPreview?.keepOutputs ? swapPreview.keepOutputs : [];
     const sendOutputs: OutputDataLike[] = swapPreview.sendOutputs ? swapPreview.sendOutputs : [];
 
-    // Sign proofs if needed. SIG_ALL covers the outputs, so it must see them in the order the
-    // payload will carry, which is what orderOutputsForPayload decides for both.
-    if (privkey) {
-      swapPreview.inputs = this.signP2PKProofs(
-        swapPreview.inputs,
-        privkey,
-        orderOutputsForPayload(keepOutputs, sendOutputs).outputData,
-      );
-    }
+    // Witnesses stay on the preview, so a retry of this object replays the same signatures.
+    const { inputs } = await this.signSwapPreview(swapPreview, privkey, options);
+    if (!Object.isFrozen(swapPreview)) swapPreview.inputs = inputs;
 
     // Create swap transaction
-    const swapTransaction = this.createSwapTransaction(
-      swapPreview.inputs,
-      keepOutputs,
-      sendOutputs,
-    );
+    const swapTransaction = this.createSwapTransaction(inputs, keepOutputs, sendOutputs);
 
     // Execute swap and validate result
-    const privkeys = privkey === undefined ? [] : [privkey].flat();
-    await attachTransactionWitnesses(
-      swapTransaction.payload,
-      undefined,
-      collectSpendInfoKeys(swapPreview.inputs, privkey, this._logger),
-      scriptPath?.length
-        ? prepareScriptPathSpends(swapPreview.inputs, scriptPath, privkeys)
-        : undefined,
-      this._nutrootState(),
-      options?.signal,
-    );
     const { signatures } = await this.withStaleKeysetRepair(() =>
       this.mint.swap(swapTransaction.payload, { signal: options?.signal }),
     );
@@ -1988,6 +1972,57 @@ class Wallet {
     return {
       keep: keepProofs,
       send: sendProofs,
+    };
+  }
+
+  /**
+   * Signs a swap preview's inputs ahead of `completeSwap`, returning a signed copy.
+   *
+   * @remarks
+   * Signatures are random, so a preview persisted unsigned signs afresh on replay and misses the
+   * mint's NUT-19 cache. Persist the signed copy. Inputs that are already signed are left alone.
+   * @param swapPreview The preview to sign.
+   * @param privkey The private key(s) for signing. A bearer v3 input needs none.
+   * @returns The preview with its input witnesses attached.
+   */
+  async signSwapPreview(
+    swapPreview: SwapPreview,
+    privkey?: string | string[],
+    options?: CompleteSwapOptions,
+  ): Promise<SwapPreview> {
+    this.throwIfAborted(options?.signal);
+    this.failIf(!Array.isArray(swapPreview?.inputs), 'signSwapPreview: preview has no inputs');
+    const keepOutputs: OutputDataLike[] = swapPreview.keepOutputs ?? [];
+    const sendOutputs: OutputDataLike[] = swapPreview.sendOutputs ?? [];
+
+    // SIG_ALL covers the outputs, so it must see them in the order the payload will carry, which
+    // is what orderOutputsForPayload decides for both.
+    const inputs = privkey
+      ? this.signP2PKProofs(
+          swapPreview.inputs,
+          privkey,
+          orderOutputsForPayload(keepOutputs, sendOutputs).outputData,
+        )
+      : swapPreview.inputs;
+
+    // A signed script path input keeps its witness: planning it again would re-sign, and call any
+    // co-signer a second time.
+    const scriptPath = options?.scriptPath?.filter(
+      (plan) => !inputs.find((p) => p.secret === plan.secret && isBlsKeyset(p.id))?.witness,
+    );
+    const { payload } = this.createSwapTransaction(inputs, keepOutputs, sendOutputs);
+    const privkeys = privkey === undefined ? [] : [privkey].flat();
+    await attachTransactionWitnesses(
+      payload,
+      undefined,
+      collectSpendInfoKeys(inputs, privkey, this._logger),
+      scriptPath?.length ? prepareScriptPathSpends(inputs, scriptPath, privkeys) : undefined,
+      this._nutrootState(),
+      options?.signal,
+    );
+    return {
+      ...swapPreview,
+      inputs: inputs.map((p, i) => ({ ...p, witness: payload.inputs[i].witness })),
     };
   }
 
@@ -2101,10 +2136,12 @@ class Wallet {
    * requested tree for a nutroot request, and exactly the requested condition for a nut10 one. A
    * receiver-keyed nutroot request needs `opts.privkeys`, because binding a proof to the receiver
    * key is an ECDH trial-match only that key can do (NUT-28); without it there is nothing to check
-   * and the call throws rather than passing a payment the payee cannot spend. An unlocked request
-   * takes only proofs the payee can spend, bearer or locked to one of `opts.privkeys`, so a payer
-   * cannot settle it with proofs locked to themselves. Proof integrity (pairing/DLEQ) remains a
-   * separate check.
+   * and the call throws rather than passing a payment the payee cannot spend. A blind-me leaf key
+   * is checked only when its owner's private key is in `opts.privkeys`. Without it, any substituted
+   * key passes, so include every key the request tags as blind-me that you hold. An unlocked
+   * request takes only proofs the payee can spend, bearer or locked to one of `opts.privkeys`, so a
+   * payer cannot settle it with proofs locked to themselves. Proof integrity (pairing/DLEQ) remains
+   * a separate check.
    * @param pr - The payment request being settled.
    * @param proofs - The received proofs (from this wallet's mint), with spend info when present.
    * @param expectedAmount - Expected amount for amountless requests; ignored when the request sets
@@ -2139,18 +2176,20 @@ class Wallet {
     // checked against its own option.
     const nutrootOption = pr.toNutrootOptions();
     if (nutrootOption || pr.nut10) {
-      const statics = this.receiverKeysFor(nutrootOption, opts?.privkeys);
+      const privkeys = this.receiverKeysFor(nutrootOption, opts?.privkeys);
       const nut10Lock = pr.nut10 ? pr.toP2PKOptions() : undefined;
       this.failIf(
         !!pr.nut10 && !nut10Lock,
         `cannot check the request's nut10 lock kind '${pr.nut10?.kind}'`,
       );
       for (const p of proofs) {
-        if (isBlsKeyset(p.id) && isV3PointSecret(p.secret)) {
+        // The keyset alone picks the family: a v3 keyset spends only point secrets.
+        if (isBlsKeyset(p.id)) {
+          this.failIf(!isV3PointSecret(p.secret), 'v3 proof: the secret is not a v3 point secret');
           this.failIfNullish(nutrootOption, 'v3 proof: the request carries no nutroot option');
-          verifyNutrootRequestTree(nutrootOption, p.spend_info, statics);
+          verifyNutrootRequestTree(nutrootOption, p.spend_info, privkeys);
           verifyNutrootSpendInfo(p.secret, p.spend_info!);
-          this.assertKeyedToReceiver(nutrootOption, p, statics);
+          this.assertKeyedToReceiver(nutrootOption, p, privkeys);
           continue;
         }
         this.failIfNullish(nut10Lock, 'legacy proof: the request is for v3 proofs only');
@@ -2209,12 +2248,12 @@ class Wallet {
   }
 
   /**
-   * The static keys a locked request must be checked against, validated.
+   * The payee private keys a locked request must be checked against, validated.
    *
    * @remarks
-   * Only a receiver-keyed nutroot request needs one: `K = P_receiver + r0*G` is an ECDH trial-match
-   * no observer can do (NUT-28), so without the key there is nothing to check. A NUMS request needs
-   * none, its internal key is pinned by the disclosed offset instead.
+   * A receiver-keyed request needs them: `K = P_receiver + r0*G` is an ECDH trial-match no observer
+   * can do (NUT-28), so without the key there is nothing to check. So does a blind-me leaf key, for
+   * the same reason. A NUMS request with no blind-me keys needs none: the offset pins its key.
    * @throws If a receiver-keyed request is checked with no key, or a key is not a 32-byte scalar.
    */
   private receiverKeysFor(
@@ -2224,36 +2263,53 @@ class Wallet {
     if (!option) return [];
     const keyed = option.receiverKey.toLowerCase() !== NUTROOT_NUMS_KEY;
     if (!keyed && !option.blindKeys?.length) return [];
-    const statics = privkeys === undefined ? [] : [privkeys].flat();
+    const keys = privkeys === undefined ? [] : [privkeys].flat();
     this.failIf(
-      statics.length === 0,
+      keys.length === 0,
       `${keyed ? 'receiver-keyed' : 'blind-me'} nutroot request: pass the requested key(s) as opts.privkeys, the proofs cannot be checked without them`,
     );
-    const bad = statics.find((k) => !/^[0-9a-f]{64}$/i.test(k));
-    this.failIf(bad !== undefined, 'opts.privkeys must be 32-byte hex private keys');
-    return statics;
+    const bad = keys.find((k) => {
+      if (!/^[0-9a-f]{64}$/i.test(k)) return true;
+      try {
+        getPubKeyFromPrivKey(hexToBytes(k)); // range check: zero or >= n throws
+        return false;
+      } catch {
+        return true;
+      }
+    });
+    this.failIf(bad !== undefined, 'opts.privkeys must be valid 32-byte hex private keys');
+    return keys;
   }
 
   /**
-   * Asserts a v3 proof is receiver-keyed to one of the payee's static keys (NUT-28).
+   * Asserts a receiver-keyed v3 proof (NUT-00: internal key derived from `E`) is keyed to the
+   * request's receiver key.
    *
    * @remarks
-   * No-op for a NUMS request, which has no receiver key to bind to. Otherwise the proof carries a
-   * key path only the holder of the matching static key can walk; a proof keyed to anyone else, the
-   * payer included, is not a payment the payee can spend.
-   * @throws If no held key reproduces the proof's secret.
+   * No-op for a NUMS request, which has no key path. Only private keys whose pubkey shares the
+   * receiver key's x-coordinate are tried, as recovery accepts either parity (NUT-28).
+   * @param privkeys - The validated output of `receiverKeysFor`, so each is a valid scalar.
+   * @throws If no private key is the receiver key, or none reproduces the proof's secret.
    */
   private assertKeyedToReceiver(
     option: ParsedNutrootOption,
     proof: Pick<Proof, 'secret' | 'spend_info'>,
-    statics: string[],
+    privkeys: string[],
   ): void {
-    if (statics.length === 0 || option.receiverKey.toLowerCase() === NUTROOT_NUMS_KEY) return;
+    if (privkeys.length === 0 || option.receiverKey.toLowerCase() === NUTROOT_NUMS_KEY) return;
+    const receiverX = option.receiverKey.slice(2).toLowerCase();
+    const receiverPrivs = privkeys.filter(
+      (priv) => bytesToHex(getPubKeyFromPrivKey(hexToBytes(priv))).slice(2) === receiverX,
+    );
+    this.failIf(
+      receiverPrivs.length === 0,
+      'Nutroot request: opts.privkeys holds no key for the requested receiver key',
+    );
     // `E` is present: verifyNutrootRequestTree rejects a receiver-keyed proof without one.
     const E = proof.spend_info?.E as string;
     const tree = proof.spend_info?.tree;
     this.failIf(
-      !statics.some((priv) => recoverReceiverKeyedSecretKey(proof.secret, E, priv, tree)),
+      !receiverPrivs.some((priv) => recoverReceiverKeyedSecretKey(proof.secret, E, priv, tree)),
       'Nutroot request: proof is not keyed to the requested receiver key',
     );
   }
@@ -2264,24 +2320,27 @@ class Wallet {
    * @remarks
    * Both sides canonicalise through the same NUT-11 builder, so tag order and pubkey form do not
    * matter but content does: an unrequested `refund`/`locktime` pair is a payer clawback, and an
-   * unlocked bearer secret is no lock at all.
+   * unlocked bearer secret is no lock at all. The held lock must first pass the spending verifier's
+   * rules, as the builder would otherwise repair a malformed one (eg drop a repeated key).
    * @throws If the proof is unlocked, or carries a condition other than the requested one.
    */
   private assertNut10Lock(requested: P2PKOptions, secret: string): void {
-    let held: P2PKOptions | undefined;
+    let held: string | undefined;
     try {
+      // Judge as the spending verifier would: canonicalising below repairs some malformed locks.
+      p2pkToSpendLeaves(secret);
       const [kind, data] = parseSecret(secret);
-      held = nut10ToP2PKOptions({ kind, data: data.data, tags: data.tags });
+      const options = nut10ToP2PKOptions({ kind, data: data.data, tags: data.tags });
+      held = options && JSON.stringify(p2pkOptionsToPRNut10(options));
     } catch {
       held = undefined;
     }
     this.failIfNullish(
       held,
-      'nut10 request: proof does not carry a NUT-10 lock of the requested kind',
+      'nut10 request: proof does not carry a valid NUT-10 lock of the requested kind',
     );
     this.failIf(
-      JSON.stringify(p2pkOptionsToPRNut10(held)) !==
-        JSON.stringify(p2pkOptionsToPRNut10(requested)),
+      held !== JSON.stringify(p2pkOptionsToPRNut10(requested)),
       'nut10 request: proof lock is not the requested spending condition',
     );
   }
@@ -2308,12 +2367,17 @@ class Wallet {
    * @remarks
    * A proof is bearer value redeemable once: the mint keys spent state on `Y =
    * hash_to_curve(secret)` (NUT-07), so copies sharing a secret are one proof, not two.
-   * @throws If two proofs share a secret.
+   * @throws If a secret is ill-formed or two proofs share a secret.
    */
   private assertNoDuplicateProofs(proofs: Array<Pick<Proof, 'secret'>>): void {
     const seen = new Set<string>();
     for (const [i, p] of proofs.entries()) {
       // Report the position, never the secret: it is the spending material.
+      this.failIf(
+        hasLoneSurrogate(p.secret),
+        `Proof secret at index ${i} must be well-formed UTF-16`,
+        { index: i },
+      );
       this.failIf(
         seen.has(p.secret),
         `Duplicate proof at index ${i}: each proof may appear only once`,
@@ -2430,7 +2494,7 @@ class Wallet {
       const { dleq, p2pk_e, spend_info, ...rest } = p; // isolate the wallet-side fields
       let newProof: Proof = { ...rest, witness }; // add back normalized witness
       if (keepP2pkE && p2pk_e) newProof = { ...newProof, p2pk_e };
-      if (keepDleq && dleq) newProof = { ...newProof, dleq };
+      if (keepDleq && hasCompleteDleq(p)) newProof = { ...newProof, dleq };
       if (keepSpendInfo && spend_info) newProof = { ...newProof, spend_info };
       return newProof;
     });
@@ -2756,6 +2820,44 @@ class Wallet {
     return {
       proofs,
       lastCounterWithSignature: lastIndex < 0 ? undefined : start + lastIndex,
+    };
+  }
+
+  /**
+   * Recovers the proofs a swap produced from its preview (NUT-09), for a swap whose response was
+   * lost.
+   *
+   * @remarks
+   * Needs no seed: the preview holds every output, random or locked. Outputs the mint has not
+   * signed are left out, but empty results do not prove the swap failed, as it may still be in
+   * flight: check `groupProofsByState(preview.inputs)` before discarding the preview.
+   */
+  async restoreSwapPreview(swapPreview: SwapPreview, opts?: AbortOptions): Promise<SendResponse> {
+    this.throwIfAborted(opts?.signal);
+    const keepOutputs: OutputDataLike[] = swapPreview?.keepOutputs ?? [];
+    const sendOutputs: OutputDataLike[] = swapPreview?.sendOutputs ?? [];
+    const outputData = [...keepOutputs, ...sendOutputs];
+    this.failIf(outputData.length === 0, 'restoreSwapPreview: preview has no outputs');
+    this.assertUniqueOutputSecrets(outputData);
+
+    const response = await this.mint.restore(
+      { outputs: outputData.map((d) => d.blindedMessage) },
+      { signal: opts?.signal },
+    );
+    // The mint replies only for outputs it signed, in any order, so match them back by B_.
+    const signatureByB_ = new Map(response.outputs.map((o, i) => [o.B_, response.signatures[i]]));
+    const signed = outputData.filter((d) => signatureByB_.has(d.blindedMessage.B_));
+    const signatures = signed.map((d) => signatureByB_.get(d.blindedMessage.B_)!);
+    this.validateReturnedSignatures(signatures, signed);
+
+    await this._ensureKeysetsForSignatures(signatures);
+    const proofs = await mapInChunks(signed, (d, i) =>
+      d.toProof(signatures[i], this.keysetForSignature(signatures[i].id)),
+    );
+    const keepSet = new Set(keepOutputs);
+    return {
+      keep: proofs.filter((_, i) => keepSet.has(signed[i])),
+      send: proofs.filter((_, i) => !keepSet.has(signed[i])),
     };
   }
 
@@ -4245,7 +4347,7 @@ class Wallet {
       try {
         expectedMsat = bolt11AmountMsat(res.request);
       } catch {
-        this.fail('Melt quote request is not a valid bolt11 invoice', { quote: res.quote });
+        this.fail('Melt quote request is not a valid bolt11 invoice');
       }
       this.assertBolt11MeltQuoteAmount(res, expectedMsat);
     }
@@ -4497,7 +4599,7 @@ class Wallet {
     // block withdrawal. A mint unwinding liabilities deactivates keysets but
     // keeps melt open; gate output creation below, not the melt itself.
     let keyset = this.getKeyset(keysetId); // specified or wallet keyset
-    const normalizedProofs = normalizeProofAmounts(proofsToSend);
+    const normalizedProofs = dropTransactionWitnesses(normalizeProofAmounts(proofsToSend));
     const sendAmount = sumProofs(normalizedProofs);
     let outputData: OutputDataLike[] = [];
 
@@ -4657,7 +4759,10 @@ class Wallet {
 
     // Execute melt and validate result
     const meltResponse: MeltQuoteBaseResponse = await this.withStaleKeysetRepair(() =>
-      this.mint.melt<TQuote>(meltPreview.method, meltPayload, { signal: completeOptions.signal }),
+      this.mint.melt<TQuote>(meltPreview.method, meltPayload, {
+        signal: completeOptions.signal,
+        requestTimeout: completeOptions.requestTimeout,
+      }),
     );
 
     // Merge preview quote with response to protect against incomplete response.

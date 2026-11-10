@@ -397,6 +397,10 @@ export type CompleteMeltOptions = {
    * Aborts the requests this call makes; the call rejects with `CallerAbortError`.
    */
   signal?: AbortSignal;
+  /**
+   * Per-attempt timeout for the melt request in milliseconds, overriding any global value.
+   */
+  requestTimeout?: number;
 };
 
 /**

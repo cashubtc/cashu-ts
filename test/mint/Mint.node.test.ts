@@ -1337,13 +1337,41 @@ describe('Mint normalization', () => {
     it('throws when a checked melt quote reports a different quote id', async () => {
       const logger = createLogger();
       const mint = new Mint(mintUrl, {
-        customRequest: makeRequest(meltResponse('other-quote')),
+        customRequest: makeRequest(meltResponse('019a2b3c-other-quote-id-9f8e')),
         logger,
       });
 
-      await expect(mint.checkMeltQuoteBolt11('my-quote')).rejects.toThrow(/different quote/);
+      await expect(mint.checkMeltQuoteBolt11('abcd1234-5678-90ab-cdef-1234')).rejects.toThrow(
+        /different quote/,
+      );
       expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
         op: 'checkMeltQuote.bolt11',
+        expected: 'abcd...1234',
+        received: '019a...9f8e',
+      });
+    });
+
+    it('throws when a checked mint quote reports a different quote id', async () => {
+      const logger = createLogger();
+      const mint = new Mint(mintUrl, {
+        customRequest: makeRequest({
+          quote: '019a2b3c-other-quote-id-9f8e',
+          request: 'lnbc1...',
+          amount: 12,
+          unit: 'sat',
+          state: 'PAID',
+          expiry: 123,
+        }),
+        logger,
+      });
+
+      await expect(mint.checkMintQuoteBolt11('abcd1234-5678-90ab-cdef-1234')).rejects.toThrow(
+        /different quote/,
+      );
+      expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
+        op: 'checkMintQuote.bolt11',
+        expected: 'abcd...1234',
+        received: '019a...9f8e',
       });
     });
 
@@ -1359,8 +1387,45 @@ describe('Mint normalization', () => {
       expect(response.quote).toBe('my-quote');
       expect(logger.warn).toHaveBeenCalledWith('Melt response reports a different quote id', {
         op: 'melt.bolt11',
-        expected: 'my-quote',
-        received: 'other-quote',
+        expected: '(hidden)',
+        received: '(hidden)',
+      });
+    });
+
+    it('logs quote ids masked when a melt reports a different one', async () => {
+      const logger = createLogger();
+      const mint = new Mint(mintUrl, {
+        customRequest: makeRequest(meltResponse('019a2b3c-other-quote-id-9f8e')),
+        logger,
+      });
+
+      await mint.meltBolt11({ quote: 'abcd1234-5678-90ab-cdef-1234', inputs: [], outputs: [] });
+
+      expect(logger.warn).toHaveBeenCalledWith('Melt response reports a different quote id', {
+        op: 'melt.bolt11',
+        expected: 'abcd...1234',
+        received: '019a...9f8e',
+      });
+    });
+
+    it('keeps the melt response when a normalize hook drops the quote id', async () => {
+      const logger = createLogger();
+      const mint = new Mint(mintUrl, {
+        customRequest: makeRequest(meltResponse('my-quote')),
+        logger,
+      });
+
+      const response = await mint.melt(
+        'bolt11',
+        { quote: 'my-quote', inputs: [], outputs: [] },
+        { normalize: (raw) => ({ ...raw, quote: undefined }) as any },
+      );
+
+      expect(response.quote).toBe('my-quote');
+      expect(logger.warn).toHaveBeenCalledWith('Melt response reports a different quote id', {
+        op: 'melt.bolt11',
+        expected: '(hidden)',
+        received: '(hidden)',
       });
     });
 
@@ -1540,9 +1605,38 @@ describe('Mint normalization', () => {
       'Invalid response from mint',
     );
     expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
-      data: { not_signatures: true },
+      type: 'object',
       op: 'swap',
     });
+  });
+
+  it.each<[string, (mint: Mint) => Promise<unknown>]>([
+    ['swap', (m) => m.swap({ inputs: [], outputs: [] })],
+    ['mint', (m) => m.mintBolt11({ quote: 'q1', outputs: [] })],
+    [
+      'mintBatch',
+      (m) =>
+        m.mintBatch('bolt11', {
+          quotes: ['q1'],
+          quote_amounts: [Amount.from(1)] as any,
+          outputs: [],
+        }),
+    ],
+    ['check', (m) => m.check({ Ys: [] })],
+    ['getKeys', (m) => m.getKeys()],
+    ['getKeySets', (m) => m.getKeySets()],
+    ['restore', (m) => m.restore({ outputs: [] })],
+  ])('keeps a malformed %s response body out of the log', async (_op, call) => {
+    const canary = 'CANARY-quote-or-secret';
+    const logger = createLogger();
+    const mint = new Mint(mintUrl, {
+      customRequest: makeRequest({ quote: canary, proofs: [{ secret: canary }] }),
+      logger,
+    });
+
+    await expect(call(mint)).rejects.toThrow('Invalid response from mint');
+    expect(logger.error).toHaveBeenCalled();
+    expect(JSON.stringify(vi.mocked(logger.error).mock.calls)).not.toContain(canary);
   });
 
   it('checkMintQuoteBatch throws on invalid response (not an array)', async () => {
@@ -1571,7 +1665,7 @@ describe('Mint normalization', () => {
 
     await expect(mint.restore({ outputs: [] })).rejects.toThrow('Invalid response from mint');
     expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
-      data: { outputs: [] },
+      type: 'object',
       op: 'restore',
     });
   });
@@ -1585,7 +1679,7 @@ describe('Mint normalization', () => {
 
     await expect(mint.check({ Ys: [] })).rejects.toThrow('Invalid response from mint');
     expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
-      data: { invalid: true },
+      type: 'object',
       op: 'check',
     });
   });
@@ -1612,7 +1706,7 @@ describe('Mint normalization', () => {
 
     await expect(mint.getKeySets()).rejects.toThrow('Invalid response from mint');
     expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
-      data: { invalid: true },
+      type: 'object',
       op: 'getKeySets',
     });
   });
@@ -1980,7 +2074,7 @@ describe('Mint normalization', () => {
       }),
     ).rejects.toThrow('Invalid response from mint');
     expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
-      data: { not_signatures: true },
+      type: 'object',
       op: 'mintBatch.bolt11',
     });
   });
@@ -2000,7 +2094,7 @@ describe('Mint normalization', () => {
       }),
     ).rejects.toThrow('Invalid response from mint');
     expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
-      data: { signatures: {} },
+      type: 'object',
       op: 'mintBatch.bolt11',
     });
   });
@@ -2016,7 +2110,7 @@ describe('Mint normalization', () => {
       'Invalid response from mint',
     );
     expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
-      data: { signatures: {} },
+      type: 'object',
       op: 'mint.bolt12',
     });
   });

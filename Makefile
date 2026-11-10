@@ -14,12 +14,12 @@ RATE_LIMIT_PM ?= 300
 # Pin versions
 # ------------------------
 CDK_IMAGE_RC ?= cashubtc/mintd:0.18.0-rc.3
-CDK_IMAGE ?= cashubtc/mintd:0.18.2
+CDK_IMAGE ?= cashubtc/mintd:0.18.3
 CDK_NAME ?= cashu-dev-cdk
 CDK_PULL ?= always
 
 NUT_IMAGE_RC ?= cashubtc/nutshell:0.18.2
-NUT_IMAGE ?= cashubtc/nutshell:0.21.0
+NUT_IMAGE ?= cashubtc/nutshell:0.22.1
 NUT_NAME ?= cashu-dev-nutshell
 
 # BLS (v3) Nutshell: no published image yet — build from a local checkout that
@@ -35,6 +35,9 @@ NUT_BLS_NAME ?= cashu-dev-nutshell-bls
 # comes up as a mint upgraded into v3: legacy keysets from the database, which
 # serve NUT-10 and plain text secrets, plus its own fresh v3 keyset.
 NUT_BLS_VOLUME ?= cashu-dev-nutshell-bls-data
+# Pre-v3 mint that seeds the volume. Pinned apart from NUT_IMAGE: a seed with
+# newer migrations than the BLS branch makes that mint skip its own.
+NUT_BLS_SEED_IMAGE ?= cashubtc/nutshell:0.21.0
 
 # BLS (v3) CDK: built from a local checkout of cashubtc/cdk#2607 (nutroot).
 CDK_BLS_PATH ?= ../cdk
@@ -189,7 +192,7 @@ nutshell-bls-up: nutshell-bls-build
 	-$(DOCKER) run --rm --name $(NUT_BLS_NAME)-seed \
 		-v $(NUT_BLS_VOLUME):/app/data \
 		$(NUT_ENVS) \
-		--entrypoint sh $(NUT_IMAGE) -c "timeout 15 poetry run mint; true"
+		--entrypoint sh $(NUT_BLS_SEED_IMAGE) -c "timeout 15 poetry run mint; true"
 	$(DOCKER) run -d --name $(NUT_BLS_NAME) \
 		-p $(BIND_ADDR):$(PORT):3338 \
 		-v $(NUT_BLS_VOLUME):/app/data \
