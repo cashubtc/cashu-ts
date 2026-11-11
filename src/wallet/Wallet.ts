@@ -21,6 +21,7 @@ import {
   computeMessageDigest,
   assertSigAllInputs,
   parseSecret,
+  getTagInt,
   attachHTLCPreimage,
   createSecretAndBlindingFactorDeriver,
   isV3PointSecret,
@@ -55,7 +56,11 @@ import {
 import { MintInfo } from '../model/MintInfo';
 import { OutputData, type OutputDataLike } from '../model/OutputData';
 import { DefaultOutputDataCreator, type OutputDataCreator } from '../model/OutputDataCreator';
-import { nut10ToP2PKOptions, type PaymentRequest } from '../model/PaymentRequest';
+import {
+  nut10ToP2PKOptions,
+  paymentRequestRefundDelay,
+  type PaymentRequest,
+} from '../model/PaymentRequest';
 import type {
   GetInfoResponse,
   MeltRequest,
@@ -2118,19 +2123,23 @@ class Wallet {
    * and `mf` priced from this mint's NUT-05 melt methods for the wallet unit. This mint must also
    * be admissible: inside a strict mint list, and able to melt via a method the request accepts. A
    * locked request also checks that each proof carries the lock that was asked for: exactly the
-   * requested tree for a nutroot request, and exactly the requested condition for a nut10 one. A
-   * receiver-keyed nutroot request needs `opts.privkeys`, because binding a proof to the receiver
-   * key is an ECDH trial-match only that key can do (NUT-28); without it there is nothing to check
-   * and the call throws rather than passing a payment the payee cannot spend. A blind-me leaf key
-   * is checked only when its owner's private key is in `opts.privkeys`. Without it, any substituted
-   * key passes, so include every key the request tags as blind-me that you hold. An unlocked
-   * request takes only proofs the payee can spend, bearer or locked to one of `opts.privkeys`, so a
-   * payer cannot settle it with proofs locked to themselves. Proof integrity (pairing/DLEQ) remains
-   * a separate check.
+   * requested tree for a nutroot request, and the requested condition for a nut10 one. A
+   * well-formed P2PK `refund_delay` additionally permits refund tags, subject to the delay and
+   * clock tolerance. A receiver-keyed nutroot request needs `opts.privkeys`, because binding a
+   * proof to the receiver key is an ECDH trial-match only that key can do (NUT-28); without it
+   * there is nothing to check and the call throws rather than passing a payment the payee cannot
+   * spend. A blind-me leaf key is checked only when its owner's private key is in `opts.privkeys`.
+   * Without it, any substituted key passes, so include every key the request tags as blind-me that
+   * you hold. An unlocked request takes only proofs the payee can spend, bearer or locked to one of
+   * `opts.privkeys`, so a payer cannot settle it with proofs locked to themselves. Proof integrity
+   * (pairing/DLEQ) remains a separate check.
    * @param pr - The payment request being settled.
    * @param proofs - The received proofs (from this wallet's mint), with spend info when present.
    * @param expectedAmount - Expected amount for amountless requests; ignored when the request sets
    *   `a`.
+   * @param opts.now - Experimental refund_delay acceptance time in Unix seconds (default: current
+   *   time).
+   * @param opts.tolerance - Experimental refund_delay clock tolerance in seconds (default: 5).
    * @param opts.privkeys - The payee's key(s). Required for a receiver-keyed nutroot request; on an
    *   unlocked request, proofs locked to one of them still count.
    * @throws If no amount is available to check against, this wallet's mint is not admissible for
@@ -2143,7 +2152,17 @@ class Wallet {
     pr: PaymentRequest,
     proofs: Array<Pick<Proof, 'id' | 'amount' | 'secret' | 'spend_info' | 'p2pk_e'>>,
     expectedAmount?: AmountLike,
-    opts?: { privkeys?: string | string[] },
+    opts?: {
+      privkeys?: string | string[];
+      /**
+       * @experimental Unix seconds; defaults to the current time.
+       */
+      now?: number;
+      /**
+       * @experimental Non-negative seconds of clock tolerance; defaults to 5.
+       */
+      tolerance?: number;
+    },
   ): boolean {
     const expected =
       pr.amount ?? (expectedAmount !== undefined ? Amount.from(expectedAmount) : undefined);
@@ -2157,12 +2176,24 @@ class Wallet {
     this.assertNoDuplicateProofs(proofs);
     // A locked request is satisfied only by proofs carrying the lock that was asked for. Spend
     // power the payee never requested is a payer clawback (NUT-18): an extra nutroot leaf, or the
-    // legacy twin, a `refund`/`locktime` tag. A both-encoded request accepts either family, each
-    // checked against its own option.
+    // legacy twin, unpermitted refund timing tags. A both-encoded request accepts either family,
+    // each checked against its own option.
     const nutrootOption = pr.toNutrootOptions();
     if (nutrootOption || pr.nut10) {
       const privkeys = this.receiverKeysFor(nutrootOption, opts?.privkeys);
-      const nut10Lock = pr.nut10 ? pr.toP2PKOptions() : undefined;
+      const refundDelay = paymentRequestRefundDelay(pr.nut10);
+      const ignoreRefundMarker =
+        pr.nut10?.kind === 'P2PK' && !!pr.nut10.tags?.some((tag) => tag[0] === 'refund_delay');
+      const nut10Lock = ignoreRefundMarker ? pr.toP2PKOptions() : nut10ToP2PKOptions(pr.nut10);
+      const now = opts?.now ?? Date.now() / 1000;
+      // Five seconds absorbs small clock differences without materially shortening the delay.
+      const tolerance = opts?.tolerance ?? 5;
+      if (
+        refundDelay !== undefined &&
+        (!Number.isFinite(now) || now < 0 || !Number.isFinite(tolerance) || tolerance < 0)
+      ) {
+        throw new CTSError('Refund now and tolerance must be non-negative finite seconds');
+      }
       this.failIf(
         !!pr.nut10 && !nut10Lock,
         `cannot check the request's nut10 lock kind '${pr.nut10?.kind}'`,
@@ -2178,7 +2209,12 @@ class Wallet {
           continue;
         }
         this.failIfNullish(nut10Lock, 'legacy proof: the request is for v3 proofs only');
-        this.assertNut10Lock(nut10Lock, p.secret);
+        this.assertNut10Lock(
+          nut10Lock,
+          p.secret,
+          refundDelay === undefined ? undefined : now + refundDelay - tolerance,
+          ignoreRefundMarker,
+        );
       }
     } else {
       // An unlocked request asks only for value the payee can spend: proofs locked to the payer sum
@@ -2304,18 +2340,41 @@ class Wallet {
    *
    * @remarks
    * Both sides canonicalise through the same NUT-11 builder, so tag order and pubkey form do not
-   * matter but content does: an unrequested `refund`/`locktime` pair is a payer clawback, and an
-   * unlocked bearer secret is no lock at all. The held lock must first pass the spending verifier's
-   * rules, as the builder would otherwise repair a malformed one (eg drop a repeated key).
+   * matter but content does: refund timing differences need a refund_delay floor, and an unlocked
+   * bearer secret is no lock at all. The held lock must first pass the spending verifier's rules,
+   * as the builder would otherwise repair a malformed one (eg drop a repeated key).
    * @throws If the proof is unlocked, or carries a condition other than the requested one.
    */
-  private assertNut10Lock(requested: P2PKOptions, secret: string): void {
+  private assertNut10Lock(
+    requested: P2PKOptions,
+    secret: string,
+    refundFloor?: number,
+    ignoreRefundMarker = false,
+  ): void {
     let held: string | undefined;
+    let locktime: number | undefined;
     try {
       // Judge as the spending verifier would: canonicalising below repairs some malformed locks.
-      p2pkToSpendLeaves(secret);
+      p2pkToSpendLeaves(secret, {
+        allowPermanentRefund: refundFloor !== undefined,
+        rejectRepeatedTags: refundFloor !== undefined,
+      });
       const [kind, data] = parseSecret(secret);
-      const options = nut10ToP2PKOptions({ kind, data: data.data, tags: data.tags });
+      let tags = data.tags;
+      if (refundFloor !== undefined) {
+        // An empty refund list would be filtered out below and pass as a plain payee lock.
+        if (tags?.some((tag) => tag[0] === 'refund' && tag.length < 2)) {
+          throw new CTSError('Invalid NUT-10 tag "refund": must carry at least one key');
+        }
+        locktime = getTagInt([kind, data], 'locktime');
+        // Validate the whole secret first; only then ignore the permitted refund differences.
+        tags = tags?.filter(
+          (tag) => !['refund_delay', 'locktime', 'refund', 'n_sigs_refund'].includes(tag[0]),
+        );
+      } else if (ignoreRefundMarker) {
+        tags = tags?.filter((tag) => tag[0] !== 'refund_delay');
+      }
+      const options = nut10ToP2PKOptions({ kind, data: data.data, tags });
       held = options && JSON.stringify(p2pkOptionsToPRNut10(options));
     } catch {
       held = undefined;
@@ -2323,6 +2382,10 @@ class Wallet {
     this.failIfNullish(
       held,
       'nut10 request: proof does not carry a valid NUT-10 lock of the requested kind',
+    );
+    this.failIf(
+      refundFloor !== undefined && locktime !== undefined && locktime < refundFloor,
+      'nut10 request: proof lock is not the requested spending condition: proof locktime is below the refund delay',
     );
     this.failIf(
       held !== JSON.stringify(p2pkOptionsToPRNut10(requested)),

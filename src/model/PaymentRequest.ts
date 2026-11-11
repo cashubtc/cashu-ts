@@ -99,6 +99,9 @@ export type PaymentRequestOptions = {
   nutroot?: NutrootOption;
 };
 
+// Default payer margin: 60 seconds for transfer time and clock differences.
+const DEFAULT_REFUND_DELAY_MARGIN = 60;
+
 export class PaymentRequest {
   public id?: string;
   public amount?: Amount;
@@ -445,13 +448,50 @@ export class PaymentRequest {
    *
    * @remarks
    * Supports `P2PK` (NUT-11) and `HTLC` (NUT-14) only; returns `undefined` for no `nut10` or an
-   * unbuildable kind.
+   * unbuildable kind. For P2PK, the experimental `refund_delay` request marker is never copied into
+   * a secret. With one valid marker and no explicit refund timing tags, `refundKeys` opts into a
+   * payer refund path. `now` is Unix seconds (default: Date.now() / 1000); `margin` is non-negative
+   * seconds (default: 60 seconds). Timing is rounded up.
+   * @param refund - Experimental payer refund options; keys must be controlled by the payer.
    * @throws If the option is missing its `data` field, carries malformed NUT-10 tags, or holds a
    *   non-compliant pubkey (x-only or off-curve). Paying this request creates new outputs under the
    *   lock, so invalid lock semantics must not be silently dropped or repaired.
+   * @experimental The refund parameter follows an unmerged proposal and may change.
    */
-  toP2PKOptions(): P2PKOptions | undefined {
-    return nut10ToP2PKOptions(this.nut10);
+  toP2PKOptions(refund?: {
+    refundKeys?: string[];
+    margin?: number;
+    now?: number;
+  }): P2PKOptions | undefined {
+    if (!this.nut10) return undefined;
+    if (this.nut10.kind !== 'P2PK') return nut10ToP2PKOptions(this.nut10);
+    const tags = this.nut10.tags ?? [];
+    // Strip request-only metadata before secret validation, even when its value is malformed.
+    const isRefundDelay = (tag: string[]) => Array.isArray(tag) && tag[0] === 'refund_delay';
+    const options = nut10ToP2PKOptions({
+      ...this.nut10,
+      tags: tags.filter((tag) => !isRefundDelay(tag)),
+    });
+    const delay = paymentRequestRefundDelay(this.nut10);
+    if (!options || delay === undefined) return options;
+    if (refund?.refundKeys === undefined) return options;
+    if (!Array.isArray(refund.refundKeys)) {
+      throw new CTSError('refundKeys must be an array of compressed pubkeys');
+    }
+    if (refund.refundKeys.length === 0) return options;
+    if (refund.refundKeys.length > MAX_P2PK_PUBKEYS) {
+      throw new CTSError(`Too many refund pubkeys: ${refund.refundKeys.length}`);
+    }
+    const now = refund.now ?? Date.now() / 1000;
+    const margin = refund.margin ?? DEFAULT_REFUND_DELAY_MARGIN;
+    if (!Number.isFinite(now) || now < 0 || !Number.isFinite(margin) || margin < 0) {
+      throw new CTSError('Refund now and margin must be non-negative finite seconds');
+    }
+    const locktime = Math.ceil(now + delay + margin);
+    if (!Number.isSafeInteger(locktime)) {
+      throw new CTSError('Refund locktime exceeds the safe integer range');
+    }
+    return { ...options, locktime, refundKeys: refund.refundKeys.map(normalizeSecpPubkey) };
   }
 
   /**
@@ -936,6 +976,25 @@ function encodeNutrootRequest(lock: LockOptions): NutrootOption {
     ...(leaves?.length && { leaves: leaves.map((leaf) => serializeNutrootLeafHex(leaf)) }),
     ...(blindKeys?.length && { blindKeys }),
   };
+}
+
+/**
+ * @internal Shared eligibility rule for payer construction and payee acceptance.
+ */
+export function paymentRequestRefundDelay(nut10: NUT10Option | undefined): number | undefined {
+  if (nut10?.kind !== 'P2PK') return undefined;
+  const tags = nut10.tags ?? [];
+  const delays = tags.filter((tag) => Array.isArray(tag) && tag[0] === 'refund_delay');
+  if (delays.length !== 1 || delays[0].length !== 2) return undefined;
+  const value = delays[0][1];
+  if (typeof value !== 'string' || !/^[1-9][0-9]*$/.test(value)) return undefined;
+  const delay = Number(value);
+  // A delay outside the exact integer range cannot yield a representable locktime.
+  if (!Number.isSafeInteger(delay)) return undefined;
+  if (tags.some((tag) => ['locktime', 'refund', 'n_sigs_refund'].includes(tag[0]))) {
+    return undefined;
+  }
+  return delay;
 }
 
 /**

@@ -2062,7 +2062,11 @@ class PaymentRequest_2 {
     // (undocumented)
     toEncodedRequest(): string;
     toNutrootOptions(): ParsedNutrootOption | undefined;
-    toP2PKOptions(): P2PKOptions | undefined;
+    toP2PKOptions(refund?: {
+        refundKeys?: string[];
+        margin?: number;
+        now?: number;
+    }): P2PKOptions | undefined;
     // (undocumented)
     toRawRequest(): RawPaymentRequest;
     // (undocumented)
@@ -3015,6 +3019,8 @@ export class Wallet {
     }>;
     isPaymentRequestSatisfied(pr: PaymentRequest_2, proofs: Array<Pick<Proof, 'id' | 'amount' | 'secret' | 'spend_info' | 'p2pk_e'>>, expectedAmount?: AmountLike, opts?: {
         privkeys?: string | string[];
+        now?: number;
+        tolerance?: number;
     }): boolean;
     get keyChain(): KeyChain;
     get keysetId(): string;
