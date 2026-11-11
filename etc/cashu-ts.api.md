@@ -632,6 +632,9 @@ export class FountainEncoder {
     constructor(message: Uint8Array, options?: {
         fragmentSize?: number;
     });
+    static forPaymentRequest(request: string | PaymentRequest_2, options?: {
+        fragmentSize?: number;
+    }): FountainEncoder;
     static forToken(token: string | Token, options?: {
         fragmentSize?: number;
     }): FountainEncoder;
@@ -2061,8 +2064,7 @@ class PaymentRequest_2 {
         unit?: string;
     }): string;
     feesFor(mint: string, meltMethods?: string[]): Amount;
-    // (undocumented)
-    static fromEncodedRequest(encodedRequest: string): PaymentRequest_2;
+    static fromEncodedRequest(encodedRequest: string | Uint8Array): PaymentRequest_2;
     static fromRawRequest(rawPaymentRequest: RawPaymentRequest): PaymentRequest_2;
     // (undocumented)
     getTransport(type: PaymentRequestTransportType): PaymentRequestTransport | undefined;
@@ -2082,6 +2084,7 @@ class PaymentRequest_2 {
     singleUse?: boolean;
     // (undocumented)
     supportedMethods?: SupportedMethod[];
+    toEncodedBinary(): Uint8Array;
     toEncodedCreqA(): string;
     toEncodedCreqB(): string;
     // (undocumented)
