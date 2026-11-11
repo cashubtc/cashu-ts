@@ -1,4 +1,5 @@
 import { CTSError } from '../model/Errors';
+import { PaymentRequest } from '../model/PaymentRequest';
 import type { Token } from '../model/types/token';
 
 import { getEncodedTokenBinary, getTokenBinaryFromString } from './core';
@@ -257,6 +258,26 @@ export class FountainEncoder {
     const message =
       typeof token === 'string' ? getTokenBinaryFromString(token) : getEncodedTokenBinary(token);
     return new FountainEncoder(message, options);
+  }
+
+  /**
+   * Encoder for a payment request, sent as its raw binary form (`creqB` + TLV).
+   *
+   * @remarks
+   * Takes a `creqA` or `creqb` string, or a `PaymentRequest`. NUT-16 does not map requests yet, so
+   * the message format may change.
+   * @experimental
+   */
+  static forPaymentRequest(
+    request: string | PaymentRequest,
+    options?: { fragmentSize?: number },
+  ): FountainEncoder {
+    if (typeof request !== 'string' && !(request instanceof PaymentRequest)) {
+      throw new CTSError('forPaymentRequest needs a creq string or a PaymentRequest');
+    }
+    const parsed =
+      typeof request === 'string' ? PaymentRequest.fromEncodedRequest(request) : request;
+    return new FountainEncoder(parsed.toEncodedBinary(), options);
   }
 
   /**

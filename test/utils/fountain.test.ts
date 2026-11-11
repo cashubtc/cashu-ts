@@ -2,6 +2,7 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 
 import { CTSError } from '../../src/model/Errors';
+import { PaymentRequest } from '../../src/model/PaymentRequest';
 import { getDecodedTokenBinary } from '../../src/utils/core';
 import {
   crc32,
@@ -216,6 +217,32 @@ describe('FountainEncoder', () => {
     expect(() => FountainEncoder.forToken('cashuAeyJ0b2tlbiI6W119')).toThrow('cashuB');
     expect(() => FountainEncoder.forToken('cashuBnotatoken')).toThrow(CTSError);
     expect(() => FountainEncoder.forToken(undefined as never)).toThrow('forToken needs');
+  });
+
+  test('forPaymentRequest sends a creq string or a PaymentRequest as creqB bytes', () => {
+    const request = new PaymentRequest({
+      id: 'b7a90176',
+      amount: 2100,
+      unit: 'sat',
+      mints: ['https://8333.space:3338', 'https://mint.example.com'],
+      description: 'animated request',
+    });
+    for (const input of [request, request.toEncodedCreqA(), request.toEncodedCreqB()]) {
+      const encoder = FountainEncoder.forPaymentRequest(input, { fragmentSize: 32 });
+      expect(encoder.fragmentCount).toBeGreaterThan(1);
+      const decoder = new FountainDecoder();
+      while (!decoder.isComplete) decoder.receive(encoder.nextFrame());
+      expect(decoder.result).toEqual(request.toEncodedBinary());
+      const received = PaymentRequest.fromEncodedRequest(decoder.result!);
+      expect(received.toEncodedCreqA()).toBe(request.toEncodedCreqA());
+    }
+  });
+
+  test('forPaymentRequest rejects a token and a non-request', () => {
+    expect(() => FountainEncoder.forPaymentRequest(tokenText)).toThrow(CTSError);
+    expect(() => FountainEncoder.forPaymentRequest(undefined as never)).toThrow(
+      'forPaymentRequest needs',
+    );
   });
 });
 
