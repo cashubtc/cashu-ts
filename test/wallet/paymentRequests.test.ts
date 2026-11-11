@@ -444,6 +444,14 @@ describe('payment requests', () => {
       expect(() => prWithNut10(nut10).toP2PKOptions()).toThrow(/Duplicate P2PK tag "locktime"/);
     });
 
+    test.each(['locktime', 'pubkeys', 'n_sigs', 'refund', 'n_sigs_refund', 'sigflag'])(
+      'rejects a key-only %s tag instead of reading it as absent',
+      (tag) => {
+        const nut10: NUT10Option = { kind: 'P2PK', data: PUBKEY, tags: [[tag]] };
+        expect(() => prWithNut10(nut10).toP2PKOptions()).toThrow(`P2PK tag "${tag}" has no value`);
+      },
+    );
+
     test('maps an HTLC option to a hashlock with signing keys', () => {
       const nut10: NUT10Option = {
         kind: 'HTLC',

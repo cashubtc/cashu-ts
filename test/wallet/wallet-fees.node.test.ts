@@ -388,6 +388,13 @@ describe('wallet.isPaymentRequestSatisfied', () => {
         /does not carry a valid NUT-10 lock/,
       );
     }
+    // A key-only tag is malformed too.
+    for (const key of ['refund', 'sigflag', 'pubkeys']) {
+      const keyOnly = JSON.stringify(['P2PK', { nonce: 'ab', data: carol, tags: [[key]] }]);
+      expect(() => wallet.isPaymentRequestSatisfied(pr, lockedProofs([100], keyOnly))).toThrow(
+        /does not carry a valid NUT-10 lock/,
+      );
+    }
     const refundTags = [
       ['locktime', '4102444800'],
       ['refund', pub(9)],
