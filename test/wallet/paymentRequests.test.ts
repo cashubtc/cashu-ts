@@ -466,6 +466,18 @@ describe('payment requests', () => {
       const request = new PaymentRequest({ id: 'the-id', amount: 1000, unit: 'sat' });
       expect(request.toRawRequest()).toStrictEqual({ i: 'the-id', a: 1000n, u: 'sat' });
     });
+
+    test('omits absent transport and nut10 tags', () => {
+      // An absent key, not one set to undefined: CBOR would encode the latter as `undefined`.
+      const request = new PaymentRequest({
+        transport: [{ type: PaymentRequestTransportType.POST, target: 'https://pay.example' }],
+        nut10: { kind: 'P2PK', data: 'pubkey' },
+      });
+      expect(request.toRawRequest()).toStrictEqual({
+        t: [{ t: 'post', a: 'https://pay.example' }],
+        nut10: { k: 'P2PK', d: 'pubkey' },
+      });
+    });
   });
 
   describe('toEncodedCreqA', () => {
