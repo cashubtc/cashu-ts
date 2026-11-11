@@ -382,6 +382,17 @@ describe('wallet.spendOptions: legacy and bearer proofs', () => {
     expect(after.script[1].satisfiable).toBe(true);
   });
 
+  test('refund keys without a locktime are inert: only the main keys spend', async () => {
+    const proof = legacy(createP2PKsecret(pub(ALICE), [['refund', pub(STRANGER)]]));
+    const mine = wallet().spendOptions(proof, { privkeys: priv(ALICE) });
+    expect(mine.spendable).toBe(true);
+    expect(mine.script).toHaveLength(1);
+    expect(wallet().spendOptions(proof, { privkeys: priv(STRANGER) })).toMatchObject({
+      spendable: false,
+      blockedBy: 'not-keyed-to-you',
+    });
+  });
+
   test('a multisig short on keys is threshold', async () => {
     const secret = createP2PKsecret(pub(ALICE), [
       ['pubkeys', pub(BOB)],

@@ -308,8 +308,12 @@ export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
     refundKeyCount: refundKeys.length,
     nSigs: requiredSignatures,
     nSigsRefund: requiredRefundSignatures,
-    hasLocktime: p2pk.locktime !== undefined,
   });
+  // Refused when building, as a likely mistake (a forgotten locktime). Reading one is allowed:
+  // the refund keys are inert and the main keys spend.
+  if (refundKeys.length > 0 && p2pk.locktime === undefined) {
+    throw new CTSError('refund keys require a locktime');
+  }
 
   return {
     kind,
@@ -360,9 +364,8 @@ export function buildP2PKTags(lock: LockConditions): string[][] {
   const pubkeys = lock.pubkeys ?? [];
   const refund = lock.refundKeys ?? [];
 
-  // Reject a present-but-invalid locktime, don't drop it: refund keys without a locktime
-  // is a structural violation the verifier rejects outright ("refund keys require a
-  // locktime"), so a silent drop makes the whole proof unspendable, main keys included.
+  // Reject a present-but-invalid locktime, don't drop it: a silent drop would leave any refund
+  // keys inert.
   if (lock.locktime !== undefined) {
     if (!Number.isSafeInteger(lock.locktime) || lock.locktime < 0) {
       throw new CTSError(`locktime must be a non-negative integer, got ${lock.locktime}`);
@@ -721,7 +724,6 @@ export function verifyP2PKSpendingConditions(
     refundKeyCount: refundKeys.length,
     nSigs: getTagInt(secret, 'n_sigs'),
     nSigsRefund: getTagInt(secret, 'n_sigs_refund'),
-    hasLocktime: Number.isFinite(getLocktime(secret)),
   });
 
   const signatures = getP2PKWitnessSignatures(proof.witness);
@@ -805,7 +807,6 @@ export function p2pkToSpendLeaves(secretStr: string | Secret): NutrootConditionL
     refundKeyCount: refundKeys.length,
     nSigs: getTagInt(secret, 'n_sigs'),
     nSigsRefund: getTagInt(secret, 'n_sigs_refund'),
-    hasLocktime: Number.isFinite(locktime),
   });
   // A path with no keys needs no signatures (keyless HTLC, or expiry with no refund keys).
   const n = (tag: string, keys: string[]) =>
@@ -995,9 +996,8 @@ function assertSpendingConditionRules(params: {
   refundKeyCount: number;
   nSigs?: number;
   nSigsRefund?: number;
-  hasLocktime: boolean;
 }): void {
-  const { mainKeyCount, refundKeyCount, nSigs, nSigsRefund, hasLocktime } = params;
+  const { mainKeyCount, refundKeyCount, nSigs, nSigsRefund } = params;
 
   if (nSigs !== undefined) {
     assertPositiveInteger(nSigs, 'requiredSignatures (n_sigs)');
@@ -1018,10 +1018,6 @@ function assertSpendingConditionRules(params: {
         `requiredRefundSignatures (n_sigs_refund) (${nSigsRefund}) exceeds available refund keys (${refundKeyCount})`,
       );
     }
-  }
-
-  if (refundKeyCount > 0 && !hasLocktime) {
-    throw new CTSError('refund keys require a locktime');
   }
 }
 
