@@ -391,7 +391,7 @@ describe('wallet.isPaymentRequestSatisfied', () => {
         }),
       ).toThrow(/does not carry a valid NUT-10 lock/);
     }
-    // A key-only tag is malformed too, though the builder would read it as absent.
+    // A key-only tag is malformed too.
     for (const key of ['refund', 'sigflag', 'pubkeys']) {
       const keyOnly = JSON.stringify(['P2PK', { nonce: 'ab', data: carol, tags: [[key]] }]);
       expect(() =>
