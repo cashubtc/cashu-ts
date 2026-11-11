@@ -1,3 +1,11 @@
+# Unit and integration coverage upload separately: report once both are in.
+codecov:
+  notify:
+    after_n_builds: 2
+
+comment:
+  after_n_builds: 2
+
 coverage:
   status:
     project:
