@@ -795,16 +795,6 @@ describe('NUT-11 helper edge cases', () => {
     expect(() => parseP2PKSecret('not-json')).toThrow("Can't parse secret");
   });
 
-  test('getP2PKWitnessPubkeys: empty pubkeys tag returns only data', () => {
-    const s = `["P2PK",{"nonce":"aa","data":"${PUBKEY}","tags":[["pubkeys"]]}]`;
-    expect(getP2PKExpectedWitnessPubkeys(s)).toEqual([PUBKEY]);
-  });
-
-  test('getP2PKWitnessRefundkeys: empty refund tag returns []', () => {
-    const s = `["P2PK",{"nonce":"aa","data":"${PUBKEY}","tags":[["locktime","1"],["refund"]]}]`;
-    expect(getP2PKExpectedWitnessPubkeys(s)).toEqual([]);
-  });
-
   test('getP2PKExpectedWitnessPubkeys: malformed secret throws', () => {
     expect(() => getP2PKExpectedWitnessPubkeys('not-json')).toThrow(/Can't parse secret/);
   });
@@ -1851,14 +1841,25 @@ describe('verifyP2PKSpendingConditions — semantic validation', () => {
     );
   });
 
-  test.each(['n_sigs', 'n_sigs_refund'])('rejects %s without a value', (tag) => {
-    const tags = [[tag]];
-    if (tag === 'n_sigs_refund') tags.unshift(['locktime', '1'], ['refund', PUBKEY]);
-    const proof = makeProof(tags, tag === 'n_sigs' ? PUBKEY : pk1);
-    const signedProof = signP2PKProof(proof, bytesToHex(PRIVKEY));
-    const error = `tag "${tag}": must carry a single value`;
-    expect(() => verifyP2PKSpendingConditions(signedProof)).toThrow(error);
-    expect(() => canSpendP2PKWithKeys(proof, [])).toThrow(error);
+  test.each(['locktime', 'pubkeys', 'n_sigs', 'refund', 'n_sigs_refund', 'sigflag'])(
+    'rejects a key-only %s tag',
+    (tag) => {
+      const proof = makeProof([[tag]]);
+      const error = `P2PK tag "${tag}" has no value`;
+      expect(() => parseP2PKSecret(proof.secret)).toThrow(error);
+      expect(() => getP2PKExpectedWitnessPubkeys(proof.secret)).toThrow(error);
+      expect(() => signP2PKProof(proof, bytesToHex(PRIVKEY))).toThrow(error);
+      expect(() => verifyP2PKSpendingConditions(proof)).toThrow(error);
+      expect(() => canSpendP2PKWithKeys(proof, [])).toThrow(error);
+    },
+  );
+
+  test('rejects a key-only tag on an HTLC secret', () => {
+    const htlc = JSON.stringify([
+      'HTLC',
+      { nonce: 'ab', data: '00'.repeat(32), tags: [['pubkeys']] },
+    ]);
+    expect(() => parseP2PKSecret(htlc)).toThrow('P2PK tag "pubkeys" has no value');
   });
 
   test('a malformed locktime reads as a permanent lock, not a rejection', () => {
