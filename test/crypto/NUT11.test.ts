@@ -2023,9 +2023,25 @@ describe('verifyP2PKSpendingConditions — semantic validation', () => {
     );
   });
 
-  test('rejects refund without locktime', () => {
-    const proof = makeProof([['refund', pk2]]);
-    expect(() => verifyP2PKSpendingConditions(proof)).toThrow(/refund keys require a locktime/);
+  test('reads refund keys without a locktime as inert', () => {
+    const sk = schnorr.utils.randomSecretKey();
+    const refundSk = schnorr.utils.randomSecretKey();
+    const main = bytesToHex(getPubKeyFromPrivKey(sk));
+    const proof = makeProof([['refund', bytesToHex(getPubKeyFromPrivKey(refundSk))]], main);
+
+    expect(p2pkToSpendLeaves(proof.secret)).toEqual([{ type: 'threshold', n: 1, keys: [main] }]);
+    expect(verifyP2PKSpendingConditions(proof)).toMatchObject({
+      success: false,
+      lockState: 'PERMANENT',
+    });
+    expect(() => signP2PKProof(proof, bytesToHex(refundSk))).toThrow();
+    expect(verifyP2PKSpendingConditions(signP2PKProof(proof, bytesToHex(sk))).path).toBe('MAIN');
+  });
+
+  test('the builder refuses refund keys without a locktime', () => {
+    expect(() => normalizeP2PKOptions({ kind: 'P2PK', data: pk1, refundKeys: [pk2] })).toThrow(
+      /refund keys require a locktime/,
+    );
   });
 
   test('rejects data pubkey duplicated in pubkeys tag', () => {

@@ -400,6 +400,13 @@ describe('wallet.isPaymentRequestSatisfied', () => {
         }),
       ).toThrow(/does not carry a valid NUT-10 lock/);
     }
+    // An inert refund key was still not asked for.
+    const inertRefund = createP2PKsecret(carol, [['refund', pub(9)]]);
+    expect(() =>
+      wallet.isPaymentRequestSatisfied(both, lockedProofs([100], inertRefund), 100, {
+        privkeys: priv(1),
+      }),
+    ).toThrow(/does not carry a valid NUT-10 lock/);
     const badHash = JSON.stringify([
       'HTLC',
       { nonce: 'ab', data: 'zz', tags: [['pubkeys', carol]] },
