@@ -280,7 +280,7 @@ export class PaymentRequest {
       rawRequest.t = this.transport.map((t: PaymentRequestTransport) => ({
         t: t.type,
         a: t.target,
-        g: t.tags,
+        ...(t.tags !== undefined && { g: t.tags }),
       }));
     }
     if (this.id) {
@@ -305,7 +305,7 @@ export class PaymentRequest {
       rawRequest.nut10 = {
         k: this.nut10.kind,
         d: this.nut10.data,
-        t: this.nut10.tags,
+        ...(this.nut10.tags !== undefined && { t: this.nut10.tags }),
       };
     }
     if (this.mintsPreferred !== undefined) {
