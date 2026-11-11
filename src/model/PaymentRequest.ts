@@ -984,7 +984,6 @@ export function nut10ToP2PKOptions(nut10: NUT10Option | undefined): P2PKOptions 
   // Optional fields pass straight through: the accessors return undefined when absent
   // and throw when malformed, and the builder ignores undefined options.
   options.locktime = getTagInt(secret, 'locktime');
-  // `getTag` yields undefined, never [], so a key-only tag reads as absent.
   options.refundKeys = refundKeys.length ? refundKeys.map(normalizeSecpPubkey) : undefined;
   options.requiredSignatures = getTagInt(secret, 'n_sigs');
   options.requiredRefundSignatures = getTagInt(secret, 'n_sigs_refund');

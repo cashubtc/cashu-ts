@@ -185,13 +185,13 @@ export function createP2PKsecret(pubkey: string, tags?: string[][]): string {
  * Parse a P2PK Secret and validate NUT-10 shape and NUT-11 tag-level constraints.
  *
  * @remarks
- * Layer 1 validation: Checks NUT-10 structure, rejects duplicate P2PK tag keys, and validates
- * sigflag value. Does NOT validate cross-tag semantics (e.g. n_sigs <= pubkeys) — use
+ * Layer 1 validation: Checks NUT-10 structure, rejects duplicate or key-only P2PK tags, and
+ * validates sigflag value. Does NOT validate cross-tag semantics (e.g. n_sigs <= pubkeys) — use
  * {@link verifyP2PKSpendingConditions} for full semantic validation.
  * @param secret - The Proof secret.
  * @returns Secret object.
- * @throws If the NUT-10 secret is oversized or malformed, tags are duplicated, or sigflag is
- *   unrecognised.
+ * @throws If the NUT-10 secret is oversized or malformed, a P2PK tag is duplicated or key-only, or
+ *   sigflag is unrecognised.
  */
 export function parseP2PKSecret(secret: string | Secret): Secret {
   // Bound the parse work up front; the mint caps secrets at this length too.
@@ -202,7 +202,7 @@ export function parseP2PKSecret(secret: string | Secret): Secret {
   }
   // HTLC extends P2PK, so we include it in our expected list.
   const parsed = assertSecretKind(['P2PK', 'HTLC'], secret);
-  assertNoDuplicateP2PKTags(getTags(parsed));
+  assertP2PKTagRules(getTags(parsed));
   const flag = getTagScalar(parsed, 'sigflag');
   if (flag !== undefined) assertSigFlag(flag);
   return parsed;
@@ -953,13 +953,17 @@ export function isP2PKSigAll(inputs: Proof[]): boolean {
 // Internal helpers
 // ------------------------------
 
-function assertNoDuplicateP2PKTags(tags: string[][]): void {
+// NUT-11: a tag that repeats, or carries no value, makes the secret malformed.
+function assertP2PKTagRules(tags: string[][]): void {
   const seen = new Set<string>();
   for (const tag of tags) {
     const key = tag[0];
     if (!isP2PKKnownTagKey(key)) continue;
     if (seen.has(key)) {
       throw new CTSError(`Duplicate P2PK tag "${key}"`);
+    }
+    if (tag.length < 2) {
+      throw new CTSError(`P2PK tag "${key}" has no value`);
     }
     seen.add(key);
   }
