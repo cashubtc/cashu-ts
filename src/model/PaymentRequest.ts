@@ -109,7 +109,12 @@ function readTags(v: unknown, field: string): string[][] | undefined {
   if (!Array.isArray(v)) {
     throw new CTSError(`invalid payment request: ${field} must be a list of tags`);
   }
-  return v.map((tag) => readTexts(tag, field) ?? []);
+  return v.map((tag: unknown) => {
+    if (!Array.isArray(tag) || !tag.every((x) => typeof x === 'string')) {
+      throw new CTSError(`invalid payment request: ${field} must be a list of tags`);
+    }
+    return tag;
+  });
 }
 
 /**
@@ -569,17 +574,18 @@ export class PaymentRequest {
    */
   static fromRawRequest(rawPaymentRequest: RawPaymentRequest): PaymentRequest {
     // Decoded CBOR is untyped, so each field is checked against its NUT-18 type.
-    const raw = readRecord(rawPaymentRequest, 'request') ?? {};
+    const raw: unknown = rawPaymentRequest;
+    if (!isRecord(raw)) throw new CTSError('invalid payment request: request must be a map');
     const t = raw.t ?? undefined;
     if (t !== undefined && !Array.isArray(t)) {
       throw new CTSError('invalid payment request: t must be a list');
     }
     const transports = t?.map((entry: unknown) => {
-      const tr = readRecord(entry, 'transport') ?? {};
+      if (!isRecord(entry)) throw new CTSError('invalid payment request: transport must be a map');
       return {
-        type: readRequiredText(tr.t, 'transport type') as PaymentRequestTransportType,
-        target: readRequiredText(tr.a, 'transport target'),
-        tags: readTags(tr.g, 'transport tags'),
+        type: readRequiredText(entry.t, 'transport type') as PaymentRequestTransportType,
+        target: readRequiredText(entry.a, 'transport target'),
+        tags: readTags(entry.g, 'transport tags'),
       };
     });
     const rawNut10 = readRecord(raw.nut10, 'nut10');

@@ -126,7 +126,7 @@ describe('payment requests', () => {
     expect(() => decodePaymentRequest(prWithInvalidVersion)).toThrow('unsupported pr version');
   });
 
-  test.each(['i', 'a', 'u', 'm', 'd', 't.g', 'nut10.t'])(
+  test.each(['i', 'a', 'u', 'm', 'd', 't', 't.g', 'nut10', 'nut10.t'])(
     'reads a null creqA %s as absent',
     (field) => {
       const raw = () => ({
@@ -163,6 +163,9 @@ describe('payment requests', () => {
     ['a nut10 without data', { nut10: { k: 'P2PK' } }],
     ['nutroot leaves that are not strings', { nutroot: { k: '02' + 'aa'.repeat(32), l: [{}] } }],
     ['a request that is not a map', ['sat']],
+    ['a null request', null],
+    ['a null transport', { t: [null] }],
+    ['a null transport tag', { t: [{ t: 'post', a: 'https://x', g: [null] }] }],
   ])('rejects a creqA request with %s', (_name, raw) => {
     const encoded = 'creqA' + encodeUint8ToBase64Url(encodeCBOR(raw));
     expect(() => PaymentRequest.fromEncodedRequest(encoded)).toThrow(CTSError);
