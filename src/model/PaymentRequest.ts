@@ -168,10 +168,13 @@ export class PaymentRequest {
     this.transport = options.transport;
     this.nut10 = options.nut10;
     this.amount = options.amount !== undefined ? Amount.from(options.amount) : undefined;
-    this.supportedMethods = options.supportedMethods?.map((m) => ({
-      method: m.method,
-      fee: m.fee !== undefined ? Amount.from(m.fee) : undefined,
-    }));
+    // An empty list restricts nothing, so it reads as absent (as cdk, Nutshell and creqB do).
+    this.supportedMethods = options.supportedMethods?.length
+      ? options.supportedMethods.map((m) => ({
+          method: m.method,
+          fee: m.fee !== undefined ? Amount.from(m.fee) : undefined,
+        }))
+      : undefined;
     this.singleUse = normalizePaymentRequestFlag(options.singleUse, 's');
     this.mintsPreferred = normalizePaymentRequestFlag(options.mintsPreferred, 'mp');
   }
