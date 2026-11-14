@@ -110,6 +110,43 @@ function readRecord(v: unknown, field: string): Record<string, unknown> | undefi
   return v;
 }
 
+<<<<<<< HEAD
+=======
+// Copies so callers and requests never share mutable state.
+const copyTags = (tags: string[][]): string[][] => tags.map((t) => [...t]);
+const copyTransport = (t: PaymentRequestTransport): PaymentRequestTransport => ({
+  ...t,
+  ...(t.tags && { tags: copyTags(t.tags) }),
+});
+const copyNut10 = (n: NUT10Option): NUT10Option => ({
+  ...n,
+  ...(n.tags && { tags: copyTags(n.tags) }),
+});
+const copyNutroot = (n: NutrootOption): NutrootOption => ({
+  ...n,
+  ...(n.leaves && { leaves: [...n.leaves] }),
+  ...(n.blindKeys && { blindKeys: [...n.blindKeys] }),
+});
+
+/**
+ * Constructor options for {@link PaymentRequest}. Keys mirror the class properties; `amount` and
+ * method `fee` values accept flexible input and are normalized on construction.
+ */
+export type PaymentRequestOptions = {
+  id?: string;
+  amount?: AmountLike;
+  unit?: string;
+  mints?: string[];
+  description?: string;
+  transport?: PaymentRequestTransport[];
+  singleUse?: boolean;
+  nut10?: NUT10Option;
+  mintsPreferred?: boolean;
+  supportedMethods?: Array<{ method: string; fee?: AmountLike }>;
+  nutroot?: NutrootOption;
+};
+
+>>>>>>> 5741518 (fix(payment-request): copy arrays in and out of payment requests and their builder (#1463))
 export class PaymentRequest {
   public amount?: Amount;
   public supportedMethods?: SupportedMethod[];
@@ -331,7 +368,7 @@ export class PaymentRequest {
       rawRequest.t = this.transport.map((t: PaymentRequestTransport) => ({
         t: t.type,
         a: t.target,
-        ...(t.tags !== undefined && { g: t.tags }),
+        ...(t.tags !== undefined && { g: copyTags(t.tags) }),
       }));
     }
     if (this.id) {
@@ -344,7 +381,7 @@ export class PaymentRequest {
       rawRequest.u = this.unit;
     }
     if (this.mints) {
-      rawRequest.m = this.mints;
+      rawRequest.m = [...this.mints];
     }
     if (this.description) {
       rawRequest.d = this.description;
@@ -356,9 +393,10 @@ export class PaymentRequest {
       rawRequest.nut10 = {
         k: this.nut10.kind,
         d: this.nut10.data,
-        ...(this.nut10.tags !== undefined && { t: this.nut10.tags }),
+        ...(this.nut10.tags !== undefined && { t: copyTags(this.nut10.tags) }),
       };
     }
+<<<<<<< HEAD
     if (this.mintsPreferred !== undefined) {
       rawRequest.mp = this.mintsPreferred;
     }
@@ -366,6 +404,14 @@ export class PaymentRequest {
       rawRequest.sm = this.supportedMethods.map((m) =>
         m.fee !== undefined ? { mn: m.method, mf: m.fee.toBigInt() } : { mn: m.method },
       );
+=======
+    if (this.nutroot) {
+      rawRequest.nutroot = {
+        k: this.nutroot.receiverKey,
+        ...(this.nutroot.leaves?.length && { l: [...this.nutroot.leaves] }),
+        ...(this.nutroot.blindKeys?.length && { b: [...this.nutroot.blindKeys] }),
+      };
+>>>>>>> 5741518 (fix(payment-request): copy arrays in and out of payment requests and their builder (#1463))
     }
     return rawRequest;
   }
@@ -534,10 +580,332 @@ export class PaymentRequest {
  * (check a proof carries it).
  *
  * @remarks
+<<<<<<< HEAD
  * Supports `P2PK` (NUT-11) and `HTLC` (NUT-14) only; returns `undefined` for no option or an
  * unbuildable kind.
  * @throws If the option is missing its `data` field, or carries malformed NUT-10 tags.
  * @internal
+=======
+ * Setters collect state in any order and never throw on cross-field state; `build()` is the single
+ * validation point. The {@link PaymentRequest} class itself stays lenient because it is also the
+ * decode type for foreign requests.
+ */
+export class PaymentRequestBuilder {
+  private _id?: string;
+  private _amount?: AmountLike;
+  private _unit?: string;
+  private _description?: string;
+  private _mints: string[] = [];
+  private _mintsPreferred?: boolean;
+  private _singleUse?: boolean;
+  private _transports: PaymentRequestTransport[] = [];
+  private _nut10?: NUT10Option;
+  private _nutroot?: NutrootOption;
+  private _omitted: { nut10?: string; nutroot?: string } = {};
+
+  /**
+   * Why the last `lock()` left an encoding out, per encoding; empty when nothing was dropped.
+   *
+   * @remarks
+   * Lets a caller tell a deliberate omission (eg no `nut10` for blinded keys) from a bug, and show
+   * the reason. Reset by the next `lock()`.
+   */
+  get omitted(): Readonly<{ nut10?: string; nutroot?: string }> {
+    return { ...this._omitted };
+  }
+  private _methods: Array<{ method: string; fee?: AmountLike }> = [];
+
+  /**
+   * Sets the optional payment ID reference.
+   */
+  id(id: string): this {
+    this._id = id;
+    return this;
+  }
+
+  /**
+   * Sets the requested amount and its unit together (NUT-18: `u` MUST be set when `a` is set).
+   *
+   * @throws If the unit is empty.
+   */
+  amount(amount: AmountLike, unit: string): this {
+    if (!unit) {
+      throw new CTSError('amount requires a unit (NUT-18: `u` MUST be set when `a` is set)');
+    }
+    this._amount = amount;
+    this._unit = unit;
+    return this;
+  }
+
+  /**
+   * Sets the unit for an amountless request. The last write here or via `amount()` wins.
+   *
+   * @throws If the unit is empty.
+   */
+  unit(unit: string): this {
+    if (!unit) {
+      throw new CTSError('unit must be a non-empty string');
+    }
+    this._unit = unit;
+    return this;
+  }
+
+  /**
+   * A human readable description for the payment request.
+   */
+  description(description: string): this {
+    this._description = description;
+    return this;
+  }
+
+  /**
+   * Appends to the mint list; URLs are normalized (as `Mint` does) and deduplicated, first-seen
+   * order preserved.
+   *
+   * @throws If a URL is not a valid mint URL.
+   */
+  addMint(mint: string | string[]): this {
+    const arr = Array.isArray(mint) ? mint : [mint];
+    for (const m of arr) {
+      const normalized = normalizeMintUrl(m);
+      if (!this._mints.includes(normalized)) this._mints.push(normalized);
+    }
+    return this;
+  }
+
+  /**
+   * Marks the mint list advisory (`mp`) rather than strict; requires mints at `build()`.
+   */
+  mintsPreferred(preferred = true): this {
+    this._mintsPreferred = preferred;
+    return this;
+  }
+
+  singleUse(single = true): this {
+    this._singleUse = single;
+    return this;
+  }
+
+  /**
+   * Appends a transport; order is preference order (NUT-18).
+   */
+  addTransport(transport: PaymentRequestTransport): this {
+    this._transports.push(copyTransport(transport));
+    return this;
+  }
+
+  /**
+   * Appends a nostr transport for the given NIPs (default NIP-17 direct messages).
+   *
+   * @throws If the target is not an nprofile, or `nips` is empty (the `n` tag MUST carry at least
+   *   one value).
+   */
+  addNostrTransport(nprofile: string, nips: string[] = ['17']): this {
+    if (!nprofile.startsWith('nprofile1')) {
+      throw new CTSError('nostr transport target must be an nprofile');
+    }
+    if (nips.length === 0) {
+      throw new CTSError('nostr transport requires at least one NIP (`n` tag value)');
+    }
+    return this.addTransport({
+      type: PaymentRequestTransportType.NOSTR,
+      target: nprofile,
+      tags: [['n', ...nips.map(String)]],
+    });
+  }
+
+  /**
+   * Appends an HTTP POST transport; the payer POSTs the payment payload to `url`.
+   */
+  addHttpPostTransport(url: string): this {
+    return this.addTransport({ type: PaymentRequestTransportType.POST, target: url });
+  }
+
+  /**
+   * Appends a NUT-05 melting method the payee accepts (`sm`), with an optional per-method fee.
+   *
+   * @throws If the method name is empty.
+   */
+  addSupportedMethod(method: string, fee?: AmountLike): this {
+    if (!method) {
+      throw new CTSError('supported method name must be a non-empty string');
+    }
+    this._methods.push({ method, fee });
+    return this;
+  }
+
+  /**
+   * Sets the locking condition from semantic {@link LockOptions}, a {@link LockBuilder}, or wire
+   * {@link P2PKOptions}. Replaces any condition set earlier.
+   *
+   * @remarks
+   * Semantic input is encoded as `nutroot` (the current spec) and, while `legacy` is not `false`,
+   * also as `nut10` so payers that predate v3 can pay: a NUT-18 transition measure. Wire
+   * `P2PKOptions` target `nut10` alone; `requestNutroot()` makes a deliberately v3-only request.
+   * @throws If no permitted encoding can express the lock, or a wire lock is invalid.
+   */
+  lock(lock: LockOptions | LockBuilder | P2PKOptions, opts?: { legacy?: boolean }): this {
+    const semantic = asLockOptions(lock);
+    this._omitted = {};
+    if (!semantic) {
+      this._nut10 = p2pkOptionsToPRNut10(lock as P2PKOptions);
+      this._nutroot = undefined;
+      return this;
+    }
+    const omitted: { nut10?: string; nutroot?: string } = {};
+    const tryEncode = <T>(key: keyof typeof omitted, encode: () => T): T | undefined => {
+      try {
+        return encode();
+      } catch (e) {
+        omitted[key] = e instanceof Error ? e.message : String(e);
+        return undefined;
+      }
+    };
+    const nut10 =
+      opts?.legacy === false
+        ? undefined
+        : tryEncode('nut10', () => p2pkOptionsToPRNut10(lockToP2PKOptions(semantic)));
+    const nutroot = tryEncode('nutroot', () => encodeNutrootRequest(semantic));
+    if (!nut10 && !nutroot) {
+      throw new CTSError(
+        `lock fits no permitted request encoding: ${Object.values(omitted).join('; ')}`,
+      );
+    }
+    this._omitted = omitted;
+    this._nut10 = nut10;
+    this._nutroot = undefined;
+    if (nutroot) this.requestNutroot(nutroot);
+    return this;
+  }
+
+  /**
+   * Sets the `nut10` locking condition verbatim, for kinds `lock()` cannot express.
+   */
+  nut10(option: NUT10Option): this {
+    this._nut10 = copyNut10(option);
+    return this;
+  }
+
+  /**
+   * Requests nutroot (v3 keyset) outputs derived to `receiverKey`, optionally under a tree.
+   *
+   * @remarks
+   * NUT-28: the receiver key is blinded at slot 0 by the payer, so one request can be reused
+   * without linking payments. The payer assigns slots in transmitted leaf order; the receiver
+   * derives every occupied slot and matches keys by value. `blindKeys` names the leaf keys to
+   * blind.
+   * @throws If the receiver key is not a valid point, a leaf is unparsable, or a blind-me key is
+   *   not one of the leaves' keys.
+   */
+  requestNutroot(lock: NutrootOption | LockOptions | LockBuilder): this {
+    const semantic = asLockOptions(lock);
+    const option: NutrootOption = semantic
+      ? encodeNutrootRequest(semantic)
+      : (lock as NutrootOption);
+    const nutroot: NutrootOption = {
+      receiverKey: normalizeSecpPubkey(option.receiverKey),
+      ...(option.leaves?.length && { leaves: [...option.leaves] }),
+      ...(option.blindKeys?.length && {
+        blindKeys: option.blindKeys.map((k) => normalizeSecpPubkey(k)),
+      }),
+    };
+    if ((nutroot.leaves?.length ?? 0) > NUTROOT_MAX_TREE_LEAVES) {
+      throw new CTSError(`nutroot tree exceeds ${NUTROOT_MAX_TREE_LEAVES} leaves`);
+    }
+    // Validate here rather than at build(): a request nobody can pay is worth catching at the
+    // point the payee wrote it, not at the payer.
+    const treeKeys = new Set(
+      (nutroot.leaves ?? [])
+        .map((hex) => parseNutrootLeaf(hexToBytes(hex)))
+        .filter(isConditionLeaf)
+        .flatMap((leaf) => leaf.keys),
+    );
+    for (const key of nutroot.blindKeys ?? []) {
+      if (!treeKeys.has(key)) {
+        throw new CTSError(`blind-me key is not in the requested tree: ${key}`);
+      }
+    }
+    if (nutroot.receiverKey === NUTROOT_NUMS_KEY && !nutroot.leaves?.length) {
+      throw new CTSError('A NUMS receiver key requires leaves');
+    }
+    this._nutroot = nutroot;
+    return this;
+  }
+
+  /**
+   * Validates cross-field state and constructs the {@link PaymentRequest}.
+   *
+   * @throws If `mintsPreferred` is set without mints (NUT-18 ignores `mp` without `m`), a supported
+   *   method is listed twice, or supported methods are set without a unit (NUT-18: `u` MUST be set
+   *   when `sm` is set).
+   */
+  build(): PaymentRequest {
+    if (this._mintsPreferred !== undefined && this._mints.length === 0) {
+      throw new CTSError('mintsPreferred (mp) requires a mint list; add mints or drop the flag');
+    }
+    if (this._methods.length > 0 && !this._unit) {
+      throw new CTSError(
+        'supported methods (sm) require a unit; set it via amount(value, unit) or unit()',
+      );
+    }
+    const seen = new Set<string>();
+    for (const m of this._methods) {
+      if (seen.has(m.method)) {
+        throw new CTSError(`duplicate supported method "${m.method}"`);
+      }
+      seen.add(m.method);
+    }
+    // Copy the collected arrays so reusing the builder cannot mutate the built request.
+    return new PaymentRequest({
+      id: this._id,
+      amount: this._amount,
+      unit: this._unit,
+      mints: this._mints.length ? [...this._mints] : undefined,
+      description: this._description,
+      transport: this._transports.length ? this._transports.map(copyTransport) : undefined,
+      singleUse: this._singleUse,
+      nut10: this._nut10 && copyNut10(this._nut10),
+      mintsPreferred: this._mintsPreferred,
+      supportedMethods: this._methods.length ? this._methods : undefined,
+      nutroot: this._nutroot && copyNutroot(this._nutroot),
+    });
+  }
+}
+
+/**
+ * Reads semantic lock input; undefined for a wire shape (`P2PKOptions` carries `kind`, a
+ * `NutrootOption` carries `receiverKey`).
+ */
+function asLockOptions(
+  lock: LockOptions | LockBuilder | P2PKOptions | NutrootOption,
+): LockOptions | undefined {
+  if (typeof (lock as LockBuilder).toOptions === 'function') {
+    return (lock as LockBuilder).toOptions();
+  }
+  if ('kind' in lock || 'receiverKey' in lock) return undefined;
+  return lock as LockOptions;
+}
+
+/**
+ * Encodes semantic lock options as a wire nutroot request.
+ */
+function encodeNutrootRequest(lock: LockOptions): NutrootOption {
+  const { receiverKey, leaves, blindKeys } = lockToNutrootOptions(lock);
+  return {
+    receiverKey,
+    ...(leaves?.length && { leaves: leaves.map((leaf) => serializeNutrootLeafHex(leaf)) }),
+    ...(blindKeys?.length && { blindKeys }),
+  };
+}
+
+/**
+ * A NUT-10 locking option as wire {@link P2PKOptions}, canonicalising kind, data and tags.
+ *
+ * @remarks
+ * Shared by the payer (build the lock) and the payee (check a proof carries it). Supports `P2PK`
+ * (NUT-11) and `HTLC` (NUT-14) only; returns `undefined` for no option or an unbuildable kind.
+ * @throws If the option is missing `data`, carries malformed tags, or holds a non-compliant pubkey.
+>>>>>>> 5741518 (fix(payment-request): copy arrays in and out of payment requests and their builder (#1463))
  */
 export function nut10ToP2PKOptions(nut10: NUT10Option | undefined): P2PKOptions | undefined {
   const isHTLC = nut10?.kind === 'HTLC';
