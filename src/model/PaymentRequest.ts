@@ -596,7 +596,7 @@ export class PaymentRequest {
           tags: readTags(rawNut10.t, 'nut10 tags'),
         }
       : undefined;
-    const supportedMethods = readSupportedMethods(rawPaymentRequest.sm);
+    const supportedMethods = readSupportedMethods(raw.sm);
     const rawNutroot = readRecord(raw.nutroot, 'nutroot');
     const nutroot = rawNutroot
       ? {
@@ -613,9 +613,9 @@ export class PaymentRequest {
       unit: readText(raw.u, 'u'),
       mints: readTexts(raw.m, 'm'),
       description: readText(raw.d, 'd'),
-      singleUse: rawPaymentRequest.s,
+      singleUse: raw.s as boolean | undefined,
       nut10,
-      mintsPreferred: rawPaymentRequest.mp,
+      mintsPreferred: raw.mp as boolean | undefined,
       supportedMethods,
     });
   }
