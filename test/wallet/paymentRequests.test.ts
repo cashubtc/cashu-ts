@@ -169,7 +169,18 @@ describe('payment requests', () => {
   });
 
   test('reads an empty supported-method list as absent', () => {
-    const request = new PaymentRequest({ unit: 'sat', supportedMethods: [] });
+    const request = new PaymentRequest(
+      undefined,
+      undefined,
+      undefined,
+      'sat',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      [],
+    );
     expect(request.supportedMethods).toBeUndefined();
     const raw = { u: 'sat', sm: [] };
     const decoded = PaymentRequest.fromEncodedRequest(
