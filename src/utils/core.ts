@@ -402,14 +402,14 @@ function isCompleteDleq(d: V4DLEQTemplate | undefined): d is V4DLEQTemplate {
 }
 
 /**
- * Reads one cashuA proof, checking the type of each field it keeps, as the cashuB path does.
+ * Reads one cashuA proof, checking the type of each field it keeps.
  */
 function readCashuAProof(raw: unknown): Proof {
   if (!isRecord(raw)) {
     throw new CTSError('Invalid token');
   }
-  const { dleq, ...rest } = dropNullProofFields(raw);
-  const { witness, p2pk_e, spend_info } = rest;
+  const { dleq, witness, p2pk_e, ...rest } = dropNullProofFields(raw);
+  const { spend_info } = rest;
   if (spend_info !== undefined && !isCashuASpendInfo(spend_info)) {
     throw new CTSError('Invalid token: malformed spend_info');
   }
@@ -419,8 +419,8 @@ function readCashuAProof(raw: unknown): Proof {
     secret: templateText(rest.secret, 'secret'),
     C: templateText(rest.C, 'proof C'),
     amount: Amount.from(rest.amount as AmountLike),
-    ...(witness !== undefined && { witness: readCashuAWitness(witness) }),
-    ...(p2pk_e !== undefined && { p2pk_e: templateText(p2pk_e, 'p2pk_e') }),
+    ...(witness ? { witness: readCashuAWitness(witness) } : {}),
+    ...(p2pk_e ? { p2pk_e: templateText(p2pk_e, 'p2pk_e') } : {}),
     // An incomplete or malformed DLEQ is useless and leaky, so it does not travel.
     ...(isRecord(dleq) &&
       [dleq.e, dleq.s, dleq.r].every((v) => typeof v === 'string' && v.length > 0) && {
@@ -440,8 +440,8 @@ function isCashuASpendInfo(v: unknown): boolean {
   const keys = ['k', 'E', 'K', 'u'].map((k) => v[k]);
   const tree = v.tree;
   return (
-    keys.every((k) => k === undefined || typeof k === 'string') &&
-    (tree === undefined || (Array.isArray(tree) && tree.every((l) => typeof l === 'string')))
+    keys.every((k) => k == null || typeof k === 'string') &&
+    (tree == null || (Array.isArray(tree) && tree.every((l) => typeof l === 'string')))
   );
 }
 
