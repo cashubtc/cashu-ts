@@ -109,6 +109,37 @@ describe('verifyMintSignatures (v4)', () => {
     expect(invalid).toHaveLength(1);
   });
 
+  test.each([
+    ['an array id', { id: ['00'] }],
+    ['a numeric secret', { secret: 0 }],
+    ['a missing C', { C: undefined }],
+  ])('reports a proof with %s as invalid', async (_name, field) => {
+    const bad = { ...good, ...field } as unknown as Proof;
+    for (const verify of [verifyReceivedProofs, verifyMintSignatures]) {
+      const result = await verify([good, bad], lookup);
+      expect(result.valid).toEqual([good]);
+      expect(result.invalid).toHaveLength(1);
+      expect(result.invalid[0].proof).toBe(bad);
+      expect(result.invalid[0].error.message).toMatch(/string id, secret and C/);
+    }
+  });
+
+  test.each([0, null, 'proof'])('reports %j in place of a proof as invalid', async (bad) => {
+    const seen: number[] = [];
+    const result = await verifyReceivedProofs([bad as unknown as Proof, good], lookup, {
+      onProgress: (done) => seen.push(done),
+    });
+    expect(result.valid).toEqual([good]);
+    expect(result.invalid[0].error).toBeInstanceOf(CTSError);
+    expect(seen[seen.length - 1]).toBe(2);
+  });
+
+  test('reports an amount that cannot be printed as invalid', async () => {
+    const bad = { ...good, amount: Object.create(null) as number };
+    const result = await verifyReceivedProofs([bad], lookup);
+    expect(result.invalid[0].error.message).toMatch(/Invalid amount object/);
+  });
+
   test('chunks with progress, and verifyReceivedProofs gives the same result', async () => {
     const seen: number[] = [];
     const many = Array.from({ length: 70 }, () => good);
