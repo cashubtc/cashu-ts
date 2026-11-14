@@ -29,6 +29,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The action pushes with these credentials. GITHUB_TOKEN cannot push
+          # workflow file changes, so backports touching them were rejected.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
       - id: create-pr
         name: Create backport pull requests
         uses: korthout/backport-action@0ebd44f9c79a4a0a171200dcdcceec3ed9ca732f # v4.7.1
