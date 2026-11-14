@@ -30,9 +30,9 @@ jobs:
             prepare_playwright: 'true'
             prepare_playwright_command: npm run test:prepare:ci:firefox
           - runtime: webkit
-            test_command: npm run test-integration:browser:webkit
-            prepare_playwright: 'true'
-            prepare_playwright_command: npm run test:prepare:ci:webkit
+            test_command: scripts/in-playwright-image.sh npm run test-integration:browser:webkit
+            prepare_playwright: 'false'
+            prepare_playwright_command: ''
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -139,9 +139,9 @@ jobs:
             prepare_playwright: 'true'
             prepare_playwright_command: npm run test:prepare:ci:firefox
           - runtime: webkit
-            test_command: npm run test-integration:browser:webkit
-            prepare_playwright: 'true'
-            prepare_playwright_command: npm run test:prepare:ci:webkit
+            test_command: scripts/in-playwright-image.sh npm run test-integration:browser:webkit
+            prepare_playwright: 'false'
+            prepare_playwright_command: ''
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
