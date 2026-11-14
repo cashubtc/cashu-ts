@@ -15,6 +15,7 @@ import type {
   Proof,
   ProofLike,
   SerializedProofDLEQ,
+  SpendInfo,
   Token,
   TokenV4Template,
   V4DLEQTemplate,
@@ -408,11 +409,7 @@ function readCashuAProof(raw: unknown): Proof {
   if (!isRecord(raw)) {
     throw new CTSError('Invalid token');
   }
-  const { dleq, witness, p2pk_e, ...rest } = dropNullProofFields(raw);
-  const { spend_info } = rest;
-  if (spend_info !== undefined && !isCashuASpendInfo(spend_info)) {
-    throw new CTSError('Invalid token: malformed spend_info');
-  }
+  const { dleq, witness, p2pk_e, spend_info, ...rest } = dropNullProofFields(raw);
   return {
     ...rest,
     id: templateText(rest.id, 'keyset id'),
@@ -421,6 +418,7 @@ function readCashuAProof(raw: unknown): Proof {
     amount: Amount.from(rest.amount as AmountLike),
     ...(witness ? { witness: readCashuAWitness(witness) } : {}),
     ...(p2pk_e ? { p2pk_e: templateText(p2pk_e, 'p2pk_e') } : {}),
+    ...(spend_info !== undefined && { spend_info: readCashuASpendInfo(spend_info) }),
     // An incomplete or malformed DLEQ is useless and leaky, so it does not travel.
     ...(isRecord(dleq) &&
       [dleq.e, dleq.s, dleq.r].every((v) => typeof v === 'string' && v.length > 0) && {
@@ -435,14 +433,23 @@ function readCashuAWitness(v: unknown): string | P2PKWitness | HTLCWitness {
   return templateText(v, 'witness');
 }
 
-function isCashuASpendInfo(v: unknown): boolean {
-  if (!isRecord(v)) return false;
-  const keys = ['k', 'E', 'K', 'u'].map((k) => v[k]);
-  const tree = v.tree;
-  return (
-    keys.every((k) => k == null || typeof k === 'string') &&
-    (tree == null || (Array.isArray(tree) && tree.every((l) => typeof l === 'string')))
-  );
+/**
+ * Reads a cashuA proof's spend_info members, as the cashuB path does; `null` reads as absent.
+ */
+function readCashuASpendInfo(v: unknown): SpendInfo {
+  if (!isRecord(v)) throw new CTSError('Invalid token: malformed spend_info');
+  const out: Record<string, unknown> = {};
+  for (const key of ['k', 'E', 'K', 'u', 'tree']) {
+    const value = v[key];
+    if (value == null) continue;
+    const ok =
+      key === 'tree'
+        ? Array.isArray(value) && value.every((l) => typeof l === 'string')
+        : typeof value === 'string';
+    if (!ok) throw new CTSError('Invalid token: malformed spend_info');
+    out[key] = value;
+  }
+  return out;
 }
 
 function fromV4CborTemplate(template: TokenV4Template): Token {
