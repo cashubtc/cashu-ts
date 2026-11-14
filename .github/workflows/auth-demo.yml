@@ -4,14 +4,10 @@ name: Auth demo
 # suite: every auth test mocks fetch. This runs the password-grant demo
 # against a real Keycloak and a real mint so a regression fails the PR that
 # caused it.
-on:
-  push:
-    branches: [main]
-  pull_request:
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+# Called from ci.yml, which owns the triggers and concurrency.
+on:
+  workflow_call:
 
 jobs:
   auth-demo:
