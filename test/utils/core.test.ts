@@ -980,9 +980,11 @@ describe('incomplete DLEQ proofs', () => {
     expect(proof).not.toHaveProperty('p2pk_e');
   });
 
-  test('v3 decode reads null spend_info fields as absent', () => {
-    const spend_info = { k: 'aa', E: null, tree: null };
-    expect(() => utils.getDecodedToken(v3({ spend_info }), [ID])).not.toThrow();
+  test('v3 decode reads null spend_info fields as absent and drops unknown ones', () => {
+    const spend_info = { k: 'aa', E: null, tree: null, extra: 0 };
+    const [proof] = utils.getDecodedToken(v3({ spend_info }), [ID]).proofs;
+    expect(proof.spend_info).toEqual({ k: 'aa' });
+    expect(proof.spend_info).not.toHaveProperty('E');
   });
 
   test('v3 decode drops a DLEQ with a non-string field', () => {
