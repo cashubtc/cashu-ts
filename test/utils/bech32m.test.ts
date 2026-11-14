@@ -7,6 +7,7 @@
 
 import { describe, test, expect } from 'vitest';
 
+import { CTSError } from '../../src/model/Errors';
 import { PaymentRequest } from '../../src/model/PaymentRequest';
 import {
   decodeBech32m,
@@ -32,6 +33,22 @@ describe('bech32m primitives', () => {
     expect(() => decodeBech32m('noseparator')).toThrow(/separator/);
     expect(() => decodeBech32m('1datawithemptyhrp')).toThrow(/separator/);
     expect(() => decodeBech32m('trailingsep1')).toThrow(/separator/);
+  });
+
+  test.each([
+    ['a bad character', 'creqb1 '],
+    ['a bad checksum', BIP350_VALID.slice(0, -1) + 'q'],
+  ])('reports %s as a CTSError', (_name, encoded) => {
+    expect(() => decodeBech32m(encoded)).toThrow(CTSError);
+    expect(() => decodeBech32m(encoded)).toThrow('Invalid bech32m string');
+  });
+
+  test('reports an encoding over the length limit as a CTSError', () => {
+    expect(() => encodeBech32m('creqb', new Uint8Array(700))).toThrow('Cannot encode as bech32m');
+  });
+
+  test('fromEncodedRequest reports a malformed creqB string as a CTSError', () => {
+    expect(() => PaymentRequest.fromEncodedRequest('creqb1 ')).toThrow(CTSError);
   });
 
   test('isBech32m accepts valid strings and checks the HRP', () => {

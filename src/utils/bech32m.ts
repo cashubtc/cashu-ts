@@ -28,8 +28,11 @@ function assertBech32mFormat(str: string): asserts str is Bech32mString {
  * @returns The bech32m encoded string.
  */
 function encodeBech32m(hrp: string, data: Uint8Array, limitLength = LIMIT_LENGTH): string {
-  const words = bech32m.toWords(data);
-  return bech32m.encode(hrp, words, limitLength);
+  try {
+    return bech32m.encode(hrp, bech32m.toWords(data), limitLength);
+  } catch (cause) {
+    throw new CTSError('Cannot encode as bech32m', { cause });
+  }
 }
 
 /**
@@ -43,9 +46,12 @@ function decodeBech32m(
   limitLength = LIMIT_LENGTH,
 ): { hrp: string; data: Uint8Array } {
   assertBech32mFormat(encoded);
-  const { prefix, words } = bech32m.decode(encoded, limitLength);
-  const data = bech32m.fromWords(words);
-  return { hrp: prefix, data };
+  try {
+    const { prefix, words } = bech32m.decode(encoded, limitLength);
+    return { hrp: prefix, data: bech32m.fromWords(words) };
+  } catch (cause) {
+    throw new CTSError('Invalid bech32m string', { cause });
+  }
 }
 
 /**
