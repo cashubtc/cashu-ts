@@ -1,13 +1,8 @@
 name: Mint integration
 
+# Called from ci.yml, which owns the triggers and concurrency.
 on:
-  push:
-    branches: [main]
-  pull_request:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  workflow_call:
 
 jobs:
   cdk-integration-tests:
