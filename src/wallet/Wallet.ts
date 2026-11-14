@@ -1467,9 +1467,18 @@ class Wallet {
     const sendAmount = this.parseAmount(amount, 'sendOffline');
     let normalizedProofs = normalizeProofAmounts(proofs);
     const { requireDleq = false, includeFees = false, exactMatch = true } = config || {};
+    let skipped: Proof[] = [];
     if (requireDleq) {
+<<<<<<< HEAD
       // Only use proofs that have a DLEQ
       normalizedProofs = normalizedProofs.filter((p) => hasCompleteDleq(p));
+=======
+      // v3 (BLS, `02…`) proofs satisfy `requireDleq` via the pairing check rather than a DLEQ,
+      // the same split `verifyReceivedProofs` makes on receive.
+      const all = normalizedProofs;
+      normalizedProofs = all.filter((p) => isBlsKeyset(p.id) || hasCompleteDleq(p));
+      skipped = all.filter((p) => !normalizedProofs.includes(p));
+>>>>>>> ff29497 (fix(wallet): keep proofs skipped by requireDleq in sendOffline (#1433))
     }
     this.failIf(
       sumProofs(normalizedProofs).lessThan(sendAmount),
@@ -1482,9 +1491,24 @@ class Wallet {
       includeFees,
       exactMatch,
     );
+<<<<<<< HEAD
     // Ensure witnesses are serialized, keep DLEQ and p2pk_e for the receiver
     const sendPrepared = this._prepareInputsForMint(send, true, true);
     return { keep, send: sendPrepared };
+=======
+    // No selection covers the amount: fail rather than return an empty send. send() catches this
+    // and falls back to a swap; direct callers get a clear failure instead of a silent no-op.
+    this.failIf(
+      !sendAmount.isZero() && send.length === 0,
+      'Send cannot be completed offline for the requested amount',
+    );
+    // Keep NUT-11 witnesses, but never transfer a NUT-10 transaction witness: it signs only the
+    // sender's old transcript and would prevent the receiver from attaching a current one.
+    const sendPrepared = dropTransactionWitnesses(
+      this._prepareInputsForMint(send, true, true, true),
+    );
+    return { keep: [...keep, ...skipped], send: sendPrepared };
+>>>>>>> ff29497 (fix(wallet): keep proofs skipped by requireDleq in sendOffline (#1433))
   }
 
   /**
