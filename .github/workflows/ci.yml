@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Everything waits on lint, so a broken PR (eg a backport with conflict
+# markers) reports one failure instead of one per job.
+jobs:
+  lint:
+    uses: ./.github/workflows/lint.yml
+  format:
+    needs: lint
+    uses: ./.github/workflows/format.yml
+  types:
+    needs: lint
+    uses: ./.github/workflows/types.yml
+  tests:
+    needs: lint
+    uses: ./.github/workflows/node.js.yml
+    secrets: inherit
+  api:
+    needs: lint
+    uses: ./.github/workflows/api-extractor.yml
+  consumers:
+    needs: lint
+    uses: ./.github/workflows/consumers.yml
+  integration:
+    needs: lint
+    uses: ./.github/workflows/integration-against-mint.yml
+    secrets: inherit
+  auth-demo:
+    needs: lint
+    uses: ./.github/workflows/auth-demo.yml
