@@ -739,6 +739,7 @@ describe('incomplete DLEQ proofs', () => {
     expect(utils.getDecodedToken(encoded, [ID]).proofs[0].dleq).toEqual({ e: E, s: S, r: R });
   });
 
+<<<<<<< HEAD
   test('decode reports a wrong-typed byte field instead of a raw TypeError', () => {
     // Same crash class as an omitted `r`: any CBOR type can land in any field.
     const encoded = encodeV4WithPartialDleq({ e: hexToBytes(E), s: hexToBytes(S), r: 42n });
@@ -746,6 +747,16 @@ describe('incomplete DLEQ proofs', () => {
     expect(() => utils.getDecodedToken(encoded, [ID])).toThrow(
       'dleq r must be a non-empty byte string',
     );
+=======
+  test.each(['witness', 'p2pk_e', 'spend_info'])('v3 decode reads a null %s as absent', (field) => {
+    const encoded =
+      'cashuA' +
+      encodeJsonToBase64Url({
+        token: [{ mint: MINT, proofs: [{ amount: 1, id: ID, secret: SECRET, C, [field]: null }] }],
+        unit: 'sat',
+      });
+    expect(utils.getDecodedToken(encoded, [ID]).proofs[0]).not.toHaveProperty(field);
+>>>>>>> f20db4a (fix(payment-request): read null optional fields as absent in creqA requests and received proofs (#1451))
   });
 
   test('v3 decode drops the DLEQ', () => {

@@ -4,6 +4,11 @@ import { isP2PKKnownTagKey, parseP2PKSecret } from '../crypto/NUT11';
 import {
   decodeBase64AnyToUint8,
   decodeCBOR,
+<<<<<<< HEAD
+=======
+  dropNullProofFields,
+  hexToBytes,
+>>>>>>> f20db4a (fix(payment-request): read null optional fields as absent in creqA requests and received proofs (#1451))
   encodeCBOR,
   encodeUint8ToBase64UrlPadded,
   normalizeMintUrl,
@@ -261,7 +266,7 @@ export class PaymentRequest {
       // Same rule as the token decoders: an incomplete DLEQ does not travel.
       const { dleq, ...rest } = p as Omit<Proof, 'amount'>;
       return {
-        ...rest,
+        ...dropNullProofFields(rest),
         amount: Amount.from(amount),
         ...(dleq?.r && dleq.s && dleq.e && { dleq }),
       };
@@ -400,16 +405,17 @@ export class PaymentRequest {
       ? rawPaymentRequest.t.map((t: RawTransport) => ({
           type: t.t,
           target: t.a,
-          tags: t.g,
+          tags: t.g ?? undefined,
         }))
       : undefined;
     const nut10 = rawPaymentRequest.nut10
       ? {
           kind: rawPaymentRequest.nut10.k,
           data: rawPaymentRequest.nut10.d,
-          tags: rawPaymentRequest.nut10.t,
+          tags: rawPaymentRequest.nut10.t ?? undefined,
         }
       : undefined;
+<<<<<<< HEAD
     return new PaymentRequest(
       transports,
       rawPaymentRequest.i,
@@ -418,6 +424,25 @@ export class PaymentRequest {
       rawPaymentRequest.m,
       rawPaymentRequest.d,
       rawPaymentRequest.s,
+=======
+    const supportedMethods = readSupportedMethods(rawPaymentRequest.sm);
+    const nutroot = rawPaymentRequest.nutroot
+      ? {
+          receiverKey: rawPaymentRequest.nutroot.k,
+          leaves: rawPaymentRequest.nutroot.l,
+          blindKeys: rawPaymentRequest.nutroot.b,
+        }
+      : undefined;
+    return new PaymentRequest({
+      nutroot,
+      transport: transports,
+      id: rawPaymentRequest.i ?? undefined,
+      amount: rawPaymentRequest.a ?? undefined,
+      unit: rawPaymentRequest.u ?? undefined,
+      mints: rawPaymentRequest.m ?? undefined,
+      description: rawPaymentRequest.d ?? undefined,
+      singleUse: rawPaymentRequest.s,
+>>>>>>> f20db4a (fix(payment-request): read null optional fields as absent in creqA requests and received proofs (#1451))
       nut10,
       rawPaymentRequest.mp,
       readSupportedMethods(rawPaymentRequest.sm),
