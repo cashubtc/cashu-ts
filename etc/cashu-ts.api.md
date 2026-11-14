@@ -616,6 +616,31 @@ export function findLegacyDerivationCollisions(keysetIds: readonly string[]): st
 // @public
 export function findSigningKey(pubkey: string, privkeys: string | string[]): string;
 
+// @public
+export class FountainDecoder {
+    get isComplete(): boolean;
+    static isFrame(text: string): boolean;
+    get progress(): number;
+    receive(text: string): boolean;
+    reset(): void;
+    get result(): Uint8Array | undefined;
+}
+
+// @public
+export class FountainEncoder {
+    constructor(message: Uint8Array, options?: {
+        fragmentSize?: number;
+    });
+    static forPaymentRequest(request: string | PaymentRequest_2, options?: {
+        fragmentSize?: number;
+    }): FountainEncoder;
+    static forToken(token: string | Token, options?: {
+        fragmentSize?: number;
+    }): FountainEncoder;
+    readonly fragmentCount: number;
+    nextFrame(): string;
+}
+
 // @public (undocumented)
 export type G1Point = WeierstrassPoint<bigint>;
 
@@ -2036,8 +2061,7 @@ class PaymentRequest_2 {
         unit?: string;
     }): string;
     feesFor(mint: string, meltMethods?: string[]): Amount;
-    // (undocumented)
-    static fromEncodedRequest(encodedRequest: string): PaymentRequest_2;
+    static fromEncodedRequest(encodedRequest: string | Uint8Array): PaymentRequest_2;
     static fromRawRequest(rawPaymentRequest: RawPaymentRequest): PaymentRequest_2;
     // (undocumented)
     getTransport(type: PaymentRequestTransportType): PaymentRequestTransport | undefined;
@@ -2057,6 +2081,7 @@ class PaymentRequest_2 {
     singleUse?: boolean;
     // (undocumented)
     supportedMethods?: SupportedMethod[];
+    toEncodedBinary(): Uint8Array;
     toEncodedCreqA(): string;
     toEncodedCreqB(): string;
     // (undocumented)

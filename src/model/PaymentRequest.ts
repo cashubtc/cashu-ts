@@ -44,6 +44,9 @@ import { Amount, type AmountLike } from './Amount';
 import { CTSError } from './Errors';
 import type { Proof } from './types/proof';
 
+// 'creq' + 'B' as bytes, the raw binary request prefix.
+const BINARY_MAGIC = [0x63, 0x72, 0x65, 0x71, 0x42];
+
 /**
  * Normalizes a wire boolean flag, admitting true/false, the numeric 0/1 form, and null.
  *
@@ -400,6 +403,26 @@ export class PaymentRequest {
    * @experimental
    */
   toEncodedCreqB(): string {
+    return encodeBech32m('creqb', this.toTLVBytes()).toUpperCase();
+  }
+
+  /**
+   * Encodes the payment request in raw binary form (`creq` + `B` + TLV).
+   *
+   * @remarks
+   * The NUT-26 TLV bytes without the bech32m layer, for binary transports such as NUT-16 frames.
+   * Unlike `creqb` text, it has no 1023-character limit.
+   * @experimental
+   */
+  toEncodedBinary(): Uint8Array {
+    const tlvBytes = this.toTLVBytes();
+    const bytes = new Uint8Array(BINARY_MAGIC.length + tlvBytes.length);
+    bytes.set(BINARY_MAGIC);
+    bytes.set(tlvBytes, BINARY_MAGIC.length);
+    return bytes;
+  }
+
+  private toTLVBytes(): Uint8Array {
     this.assertUnitRule();
     const tlvRequest: DecodedTLVPaymentRequest = {
       id: this.id,
@@ -423,9 +446,7 @@ export class PaymentRequest {
         : undefined,
       nutroot: this.nutroot,
     };
-
-    const tlvBytes = encodeTLV(tlvRequest);
-    return encodeBech32m('creqb', tlvBytes).toUpperCase();
+    return encodeTLV(tlvRequest);
   }
 
   getTransport(type: PaymentRequestTransportType) {
@@ -563,7 +584,16 @@ export class PaymentRequest {
     });
   }
 
-  static fromEncodedRequest(encodedRequest: string): PaymentRequest {
+  /**
+   * Decodes a `creqA` or `creqb` string, or a raw binary request (`creq` + `B` + TLV).
+   */
+  static fromEncodedRequest(encodedRequest: string | Uint8Array): PaymentRequest {
+    if (encodedRequest instanceof Uint8Array) {
+      if (BINARY_MAGIC.some((b, i) => encodedRequest[i] !== b)) {
+        throw new CTSError('unsupported pr: invalid prefix');
+      }
+      return this.fromTLVBytes(encodedRequest.subarray(BINARY_MAGIC.length));
+    }
     const lowerRequest = encodedRequest.toLowerCase();
 
     // Version B: bech32m + TLV encoding (creqb...)
@@ -573,27 +603,7 @@ export class PaymentRequest {
       if (hrp !== 'creqb') {
         throw new CTSError('unsupported pr: invalid prefix');
       }
-      const decoded = decodeTLV(data);
-      const nut10 = decoded.nut10
-        ? {
-            kind: decoded.nut10.kind,
-            data: decoded.nut10.data,
-            tags: decoded.nut10.tags ?? [],
-          }
-        : undefined;
-      return new PaymentRequest({
-        transport: decoded.transports,
-        id: decoded.id,
-        amount: decoded.amount,
-        unit: decoded.unit,
-        mints: decoded.mints,
-        description: decoded.description,
-        singleUse: decoded.singleUse,
-        nut10,
-        mintsPreferred: decoded.mintsPreferred,
-        supportedMethods: decoded.supportedMethods,
-        nutroot: decoded.nutroot,
-      });
+      return this.fromTLVBytes(data);
     }
 
     // Version A: CBOR encoding (creqA...). The prefix check is case-insensitive (NUT-26);
@@ -620,6 +630,30 @@ export class PaymentRequest {
     }
     const decoded = decodeCBOR(data) as RawPaymentRequest;
     return this.fromRawRequest(decoded);
+  }
+
+  private static fromTLVBytes(data: Uint8Array): PaymentRequest {
+    const decoded = decodeTLV(data);
+    const nut10 = decoded.nut10
+      ? {
+          kind: decoded.nut10.kind,
+          data: decoded.nut10.data,
+          tags: decoded.nut10.tags ?? [],
+        }
+      : undefined;
+    return new PaymentRequest({
+      transport: decoded.transports,
+      id: decoded.id,
+      amount: decoded.amount,
+      unit: decoded.unit,
+      mints: decoded.mints,
+      description: decoded.description,
+      singleUse: decoded.singleUse,
+      nut10,
+      mintsPreferred: decoded.mintsPreferred,
+      supportedMethods: decoded.supportedMethods,
+      nutroot: decoded.nutroot,
+    });
   }
 }
 
