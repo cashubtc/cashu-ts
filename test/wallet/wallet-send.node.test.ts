@@ -250,6 +250,26 @@ describe('sendOffline witness normalization', () => {
   });
 });
 
+describe('sendOffline requireDleq', () => {
+  test('returns proofs skipped by requireDleq in keep', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const proof = {
+      id: '00bd033559de27d0',
+      amount: Amount.from(1),
+      C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+    };
+    const dleq = { e: '00'.repeat(32), s: '00'.repeat(32), r: '00'.repeat(32) };
+    const withDleq: Proof = { ...proof, secret: plainSecret, dleq };
+    const withoutDleq: Proof = { ...proof, secret: 'aa'.repeat(32) };
+
+    const { keep, send } = wallet.sendOffline(1, [withoutDleq, withDleq], { requireDleq: true });
+
+    expect(send.map((p) => p.secret)).toEqual([withDleq.secret]);
+    expect(keep.map((p) => p.secret)).toEqual([withoutDleq.secret]);
+  });
+});
+
 describe('send', () => {
   const proofs = [
     {

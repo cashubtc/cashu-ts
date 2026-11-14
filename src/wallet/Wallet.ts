@@ -1467,9 +1467,12 @@ class Wallet {
     const sendAmount = this.parseAmount(amount, 'sendOffline');
     let normalizedProofs = normalizeProofAmounts(proofs);
     const { requireDleq = false, includeFees = false, exactMatch = true } = config || {};
+    let skipped: Proof[] = [];
     if (requireDleq) {
       // Only use proofs that have a DLEQ
-      normalizedProofs = normalizedProofs.filter((p) => hasCompleteDleq(p));
+      const all = normalizedProofs;
+      normalizedProofs = all.filter((p) => hasCompleteDleq(p));
+      skipped = all.filter((p) => !normalizedProofs.includes(p));
     }
     this.failIf(
       sumProofs(normalizedProofs).lessThan(sendAmount),
@@ -1484,7 +1487,7 @@ class Wallet {
     );
     // Ensure witnesses are serialized, keep DLEQ and p2pk_e for the receiver
     const sendPrepared = this._prepareInputsForMint(send, true, true);
-    return { keep, send: sendPrepared };
+    return { keep: [...keep, ...skipped], send: sendPrepared };
   }
 
   /**
