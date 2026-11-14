@@ -71,14 +71,12 @@ describe('constructor mutants', () => {
     }
   });
 
-  test('keeps its own copy of the seed, so clearing the caller buffer changes nothing', async () => {
+  test('keeps its own copy of the seed, so clearing the caller buffer changes nothing', () => {
     const caller = SEED.slice();
     const wallet = new Wallet(mint, { unit, bip39seed: caller });
-    const reference = new Wallet(mint, { unit, bip39seed: SEED.slice() });
-    await wallet.loadMint();
-    await reference.loadMint();
     caller.fill(0);
-    expect(await wallet.createQuoteLockKey()).toEqual(await reference.createQuoteLockKey());
+    // v4 has no public seed-derived call without a mint round trip, so read the stored copy.
+    expect((wallet as unknown as { _seed: Uint8Array })._seed).toEqual(SEED);
   });
 
   test('never logs the rejected seed value', () => {
