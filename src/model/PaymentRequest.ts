@@ -114,6 +114,7 @@ export class PaymentRequest {
   public amount?: Amount;
   public supportedMethods?: SupportedMethod[];
 
+<<<<<<< HEAD
   constructor(
     public transport?: PaymentRequestTransport[],
     public id?: string,
@@ -132,6 +133,40 @@ export class PaymentRequest {
       method: m.method,
       fee: m.fee !== undefined ? Amount.from(m.fee) : undefined,
     }));
+=======
+  constructor(options: PaymentRequestOptions = {}) {
+    this.id = options.id;
+    this.nutroot = options.nutroot;
+    this.unit = options.unit;
+    this.mints = options.mints;
+    this.description = options.description;
+    this.transport = options.transport;
+    this.nut10 = options.nut10;
+    this.amount = options.amount !== undefined ? Amount.from(options.amount) : undefined;
+    // An empty list restricts nothing, so it reads as absent (as cdk, Nutshell and creqB do).
+    this.supportedMethods = options.supportedMethods?.length
+      ? options.supportedMethods.map((m) => ({
+          method: m.method,
+          fee: m.fee !== undefined ? Amount.from(m.fee) : undefined,
+        }))
+      : undefined;
+    this.singleUse = normalizePaymentRequestFlag(options.singleUse, 's');
+    this.mintsPreferred = normalizePaymentRequestFlag(options.mintsPreferred, 'mp');
+  }
+
+  /**
+   * Resolves the NUT-18 mint list strictness per spec.
+   *
+   * - `undefined` if no mint list is set (`mp` SHOULD be ignored)
+   * - `true` if the list is strict (`mp` absent or `false`)
+   * - `false` if the list is preferred/advisory (`mp === true`)
+   */
+  get isMintListStrict(): boolean | undefined {
+    if (!this.mints?.length) {
+      return undefined;
+    }
+    return this.mintsPreferred !== true;
+>>>>>>> 4a19fee (fix(payment-request): read an empty supported-method list as absent (#1460))
   }
 
   /**
