@@ -45,6 +45,13 @@ describe('Amount.from validation', () => {
     expect(() => Reflect.construct(Amount, [-1n])).toThrow('Amount must be >= 0');
   });
 
+  it.each([NaN, 1.5, 5, '5', '', {}, null, undefined])(
+    'rejects %s passed directly to the exported constructor',
+    (value) => {
+      expect(() => Reflect.construct(Amount, [value])).toThrow('Amount must be a bigint');
+    },
+  );
+
   it('rejects an object forged with Amount.prototype without running the constructor', () => {
     const forged = Object.create(Amount.prototype) as Amount;
     Object.defineProperty(forged, 'value', { value: -7n });
