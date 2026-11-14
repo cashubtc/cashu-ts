@@ -226,9 +226,15 @@ export class LockBuilder {
       ...(this.nSigsRefund !== undefined && (this.nSigsRefund > 1 || this.refundKeys.length === 0)
         ? { requiredRefundSignatures: this.nSigsRefund }
         : {}),
-      ...(this.leaves.length > 0 && { leaves: this.leaves.map((l) => ({ ...l })) }),
-      ...(this._blindKeys !== undefined && { blindKeys: this._blindKeys }),
-      ...(this.extraTags.length > 0 && { additionalTags: this.extraTags.slice() }),
+      ...(this.leaves.length > 0 && {
+        leaves: this.leaves.map((l) =>
+          l.type === 'commit' ? { ...l } : { ...l, keys: [...l.keys] },
+        ),
+      }),
+      ...(this._blindKeys !== undefined && {
+        blindKeys: Array.isArray(this._blindKeys) ? [...this._blindKeys] : this._blindKeys,
+      }),
+      ...(this.extraTags.length > 0 && { additionalTags: this.extraTags.map((t) => [...t]) }),
       ...(this._sigAll && { sigAll: true }),
     };
     // Smoke-test through the encoder checks so a bad lock fails here, not at send time.

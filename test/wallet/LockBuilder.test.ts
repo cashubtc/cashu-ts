@@ -177,6 +177,22 @@ describe('P2PKBuilder.toOptions()', () => {
     expect(opts.additionalTags).toEqual([['foo', 'bar']]);
   });
 
+  it('returns copies of nested arrays, so editing the options cannot change the builder', () => {
+    const v3 = new LockBuilder()
+      .addLeaf({ type: 'after', n: 1, time: 4102444800, keys: [comp('a', '02')] })
+      .blindKeys([comp('b', '02')]);
+    const first = v3.toOptions();
+    (first.leaves?.[0] as { keys: string[] }).keys[0] = comp('c', '02');
+    (first.blindKeys as string[])[0] = comp('c', '02');
+    const second = v3.toOptions();
+    expect((second.leaves?.[0] as { keys: string[] }).keys).toEqual([comp('a', '02')]);
+    expect(second.blindKeys).toEqual([comp('b', '02')]);
+
+    const p2pk = new LockBuilder().addMainPubkey(comp('a', '02')).addTag('foo', ['bar']);
+    p2pk.toOptions().additionalTags![0][1] = 'changed';
+    expect(p2pk.toOptions().additionalTags).toEqual([['foo', 'bar']]);
+  });
+
   it('rejects an empty tag value (parseSecret refuses empty tag strings)', () => {
     const b = () => new P2PKBuilder().addMainPubkey(comp('a', '02'));
     expect(() => b().addTag('memo', '')).toThrow(/non-empty/i);
