@@ -210,6 +210,9 @@ export function computeMessageDigest(message: string): Uint8Array;
 export function computeMessageDigest(message: string, asHex: false): Uint8Array;
 export function computeMessageDigest(message: string, asHex: true): string;
 export function computeMessageDigest(message: string, asHex = false): string | Uint8Array {
+  if (typeof message !== 'string') {
+    throw new CTSError('Message must be a string');
+  }
   // Ill-formed UTF-16 would hash as its U+FFFD replacement, aliasing distinct messages.
   if (hasLoneSurrogate(message)) {
     throw new CTSError('Message must be well-formed UTF-16');

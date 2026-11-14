@@ -232,6 +232,15 @@ describe('computeMessageDigest', () => {
     expect(() => computeMessageDigest('\ud801')).toThrow();
   });
 
+  test.each([['hello'], { toString: () => 'hello' }, 0, null, undefined])(
+    'rejects %j, which is not a string',
+    (message) => {
+      expect(() => computeMessageDigest(message as unknown as string)).toThrow(
+        'Message must be a string',
+      );
+    },
+  );
+
   test('still digests well-formed strings, surrogate pairs included', () => {
     expect(() => computeMessageDigest('hello')).not.toThrow();
     expect(() => computeMessageDigest('\u{1F95C}')).not.toThrow(); // a valid surrogate pair
