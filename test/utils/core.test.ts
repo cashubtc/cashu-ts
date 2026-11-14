@@ -758,6 +758,57 @@ describe('incomplete DLEQ proofs', () => {
     expect(utils.getDecodedToken(encoded, [ID]).proofs[0]).not.toHaveProperty(field);
   });
 
+  const v3 = (proof: object, top: object = {}, entry: object = {}) =>
+    'cashuA' +
+    encodeJsonToBase64Url({
+      token: [
+        { mint: MINT, proofs: [{ amount: 1, id: ID, secret: SECRET, C, ...proof }], ...entry },
+      ],
+      unit: 'sat',
+      ...top,
+    });
+
+  test.each([
+    ['a non-string mint', v3({}, {}, { mint: {} })],
+    ['a non-string unit', v3({}, { unit: 5 })],
+    ['a non-string memo', v3({}, { memo: {} })],
+    ['a non-string secret', v3({ secret: 0 })],
+    ['a non-string C', v3({ C: 1 })],
+    ['a non-string id', v3({ id: [ID] })],
+    ['a numeric witness', v3({ witness: 1 })],
+    ['a non-string p2pk_e', v3({ p2pk_e: 1 })],
+    ['a malformed spend_info', v3({ spend_info: { tree: 'aa' } })],
+    ['a spend_info that is not a map', v3({ spend_info: 'aa' })],
+    ['a spend_info with a numeric key', v3({ spend_info: { k: 1 } })],
+    ['a proof that is not an object', v3({}, {}, { proofs: [0] })],
+  ])('v3 decode rejects %s', (_name, encoded) => {
+    expect(() => utils.getDecodedToken(encoded, [ID])).toThrow(CTSError);
+  });
+
+  test('v3 decode keeps a parsed witness and a well-formed spend_info', () => {
+    const witness = { signatures: ['aa'] };
+    const spend_info = { k: 'aa', tree: ['bb'] };
+    const [proof] = utils.getDecodedToken(v3({ witness, spend_info }), [ID]).proofs;
+    expect(proof.witness).toEqual(witness);
+    expect(proof.spend_info).toEqual(spend_info);
+  });
+
+  test('v3 decode reads an empty witness or p2pk_e as absent', () => {
+    const [proof] = utils.getDecodedToken(v3({ witness: '', p2pk_e: '' }), [ID]).proofs;
+    expect(proof).not.toHaveProperty('witness');
+    expect(proof).not.toHaveProperty('p2pk_e');
+  });
+
+  test('v3 decode reads null spend_info fields as absent', () => {
+    const spend_info = { k: 'aa', E: null, tree: null };
+    expect(() => utils.getDecodedToken(v3({ spend_info }), [ID])).not.toThrow();
+  });
+
+  test('v3 decode drops a DLEQ with a non-string field', () => {
+    const decoded = utils.getDecodedToken(v3({ dleq: { e: 1, s: S, r: R } }), [ID]);
+    expect(decoded.proofs[0].dleq).toBeUndefined();
+  });
+
   test('v3 decode drops the DLEQ', () => {
     const encoded =
       'cashuA' +
