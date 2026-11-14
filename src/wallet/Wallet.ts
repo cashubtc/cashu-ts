@@ -39,7 +39,7 @@ import {
   verifyNutrootSpendInfo,
   type ParsedNutrootOption,
 } from '../crypto/nutroot';
-import { inputsForPayload, meltOutputAmount } from '../crypto/transcript';
+import { inputBoundIdsForPayload, inputsForPayload, meltOutputAmount } from '../crypto/transcript';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
@@ -92,10 +92,10 @@ import {
   ABSOLUTE_MAX_ARRAY_LENGTH,
   bolt11AmountMsat,
   bytesToHex,
-  hexToBytes,
   DEFAULT_MAX_ARRAY_LENGTH,
   getDecodedToken,
   getDecodedTokenBinary,
+  hexToBytes,
   invoiceHasAmountInHRP,
   isObj,
   SEED_BYTES,
@@ -2528,7 +2528,8 @@ class Wallet {
    *
    * `satisfiable` is this wallet's own assessment from what it holds. The mint compares an `after`
    * leaf against its own clock, so a leaf that unlocked seconds ago may still be refused, and a
-   * hashlock leaf is never satisfiable from the wallet alone: its preimage comes from the caller.
+   * hashlock leaf is never satisfiable from the wallet alone: its preimage comes from the caller. A
+   * template leaf counts only when the loaded mint info lists it in NUT-10 `leaves`.
    * @param proof Any proof, with its spend info when it has one.
    * @param opts.privkeys Static keys to trial-match, for receiver-keyed proofs and leaf keys.
    * @param opts.now Unix seconds to judge locktimes against. Defaults to the current time.
@@ -2538,7 +2539,15 @@ class Wallet {
    *   type or constraint field): the same fail-closed rule the receive cascade applies.
    */
   spendOptions(proof: Proof, opts?: { privkeys?: string | string[]; now?: number }): SpendOptions {
-    return proofSpendOptions(proof, opts, this._nutrootState());
+    return proofSpendOptions(proof, opts, this._nutrootState(), this.templateListed());
+  }
+
+  // An optional leaf counts only at a mint that lists it (NUT-10); unknown without mint info.
+  private templateListed(): boolean {
+    return (
+      this._mintInfo?.nutrootLeafTypes.includes(nutrootLeafTypeHex(NUTROOT_LEAF_TYPE.template)) ===
+      true
+    );
   }
 
   /**
@@ -2565,7 +2574,7 @@ class Wallet {
     const plans: ScriptPathPlan[] = [];
     for (const proof of proofs) {
       if (!isBlsKeyset(proof.id) || !isV3PointSecret(proof.secret)) continue;
-      const spend = proofSpendOptions(proof, opts, this._nutrootState());
+      const spend = proofSpendOptions(proof, opts, this._nutrootState(), this.templateListed());
       if (spend.keyPath) continue;
       const open = spend.script.find((o) => o.satisfiable);
       if (open) {
@@ -3427,6 +3436,12 @@ class Wallet {
         amount_issued: amountIssued.toString(),
         requestedAmount: requestedAmount.toString(),
       },
+    );
+    // A txout quote redeems once and in full (NUT-XX).
+    this.failIf(
+      method === 'txout' && !requestedAmount.equals(availableAmount),
+      `A txout quote redeems in full: ${availableAmount.toString()} available; requested ${requestedAmount.toString()}`,
+      { method, requestedAmount: requestedAmount.toString() },
     );
   }
 
@@ -4889,16 +4904,20 @@ class Wallet {
   // -----------------------------------------------------------------
 
   /**
-   * Prepares a NUT-XX transaction: proofs and paid quotes in; new proofs and a melt out.
+   * Prepares a NUT-XX transaction: proofs and paid quotes in; new proofs, a melt and txout quotes
+   * out.
    *
    * @remarks
-   * Proofs spend in full and each quote issues its `amount`; the new proofs take what the melt and
-   * fee leave, and a melt's unspent reserve returns in NUT-08 blank outputs. Nothing is sent: pass
-   * the preview to {@link Wallet.completeTransaction}.
+   * Proofs spend in full and each quote issues its `amount`; the new proofs take what the melt,
+   * fixed txout quotes and fee leave, and a melt's unspent reserve returns in NUT-08 blank outputs.
+   * Nothing is sent: pass the preview to {@link Wallet.completeTransaction}.
    * @param transaction.mintQuoteInputs Paid, locked quotes, each with the amount to issue from it;
    *   `{ quote, method }` is enough, the rest is fetched.
    * @param transaction.proofOutputs The new proofs: their total, output type and keyset.
    * @param transaction.meltQuoteOutput The full melt quote; `feeIndex` selects a NUT-30 fee option.
+   * @param transaction.mintQuoteOutputs Fixed txout quotes, each locked to `pubkey` (from
+   *   {@link Wallet.createQuoteLockKey}; the mint must advertise `fixed_txout_quotes`), its id bound
+   *   to the inputs.
    * @throws If the mint does not support NUT-XX, a quote is unlocked, or the inputs do not balance.
    */
   async prepareTransaction(
@@ -4917,12 +4936,13 @@ class Wallet {
           };
         feeIndex?: number;
       };
+      mintQuoteOutputs?: Array<{ pubkey: string; amount: AmountLike }>;
     },
     config: PrepareTransactionConfig = {},
   ): Promise<TransactionPreview> {
     this.throwIfAborted(config.signal);
     this.failIf(!isObj(transaction), 'prepareTransaction: expected a transaction object');
-    const { supported, quoteInputFeePpk } = this.getMintInfo().transactions;
+    const { supported, quoteInputFeePpk, fixedTxoutQuotes } = this.getMintInfo().transactions;
     this.failIf(!supported, 'Mint does not support transactions (NUT-XX)');
     this.failIf(
       transaction.proofInputs !== undefined && !Array.isArray(transaction.proofInputs),
@@ -5005,6 +5025,40 @@ class Wallet {
         ...(feeIndex !== undefined && { feeIndex }),
       };
     }
+    this.failIf(
+      transaction.mintQuoteOutputs !== undefined && !Array.isArray(transaction.mintQuoteOutputs),
+      'prepareTransaction: mintQuoteOutputs must be an array',
+    );
+    const requested = transaction.mintQuoteOutputs ?? [];
+    this.failIf(
+      requested.length > 0 && !fixedTxoutQuotes,
+      'prepareTransaction: the mint does not accept fixed txout quotes',
+    );
+    // Value parked in a txout quote cannot hop to another one (NUT-XX).
+    this.failIf(
+      requested.length > 0 &&
+        (transaction.mintQuoteInputs ?? []).some((q) => q?.quote?.method === 'txout'),
+      'prepareTransaction: a txout quote input cannot pay into a fixed txout quote',
+    );
+    // Inputs hash once, and only when a fixed txout quote takes an id bound to them (NUT-XX).
+    const boundId =
+      requested.length > 0
+        ? inputBoundIdsForPayload({
+            proofInputs: proofs,
+            mintQuoteInputs: quotes.map((q) => ({
+              quoteId: q.quote,
+              amount: q.amount,
+              lockKey: q.pubkey,
+              issued: q.issued,
+            })),
+          })
+        : undefined;
+    const quoteOutputs: TransactionPreview['mintQuoteOutputs'] = requested.map((c, k) => ({
+      quote: boundId!(k),
+      pubkey: normalizeSecpPubkey(c?.pubkey),
+      amount: this.parseAmount(c?.amount, 'prepareTransaction.mintQuoteOutputs'),
+    }));
+    const fixedTotal = Amount.sum(quoteOutputs.map((c) => c.amount));
 
     // A quote input prices as its minimal split, inside NUT-02's single rounding (NUT-XX).
     const quotePpk =
@@ -5012,10 +5066,10 @@ class Wallet {
       BigInt(quoteInputFeePpk);
     const fee = Amount.from((this.sumProofFeePPK(proofs) + quotePpk + 999n) / 1000n);
     const inputs = sumProofs(proofs).add(Amount.sum(quotes.map((q) => q.amount)));
-    const spent = fee.add(melt?.amount ?? Amount.zero());
+    const spent = fee.add(melt?.amount ?? Amount.zero()).add(fixedTotal);
     this.failIf(
       inputs.lessThan(spent),
-      'prepareTransaction: inputs do not cover the melt and fee',
+      'prepareTransaction: inputs do not cover the melt, txout quotes and fee',
       {
         inputs: inputs.toString(),
         needed: spent.toString(),
@@ -5037,7 +5091,7 @@ class Wallet {
     );
     this.failIf(
       !amount.add(spent).equals(inputs),
-      'prepareTransaction: inputs must equal the outputs, melt and fee',
+      'prepareTransaction: inputs must equal the outputs, melt, txout quotes and fee',
     );
     // A melt's unspent reserve returns in NUT-08 blank outputs; custom outputs bring their own.
     // NUT-08 sizes blanks as ceil(log2) of the reserve; a keyset whose largest amount is smaller
@@ -5096,6 +5150,7 @@ class Wallet {
       proofInputs: proofs,
       mintQuoteInputs: quotes,
       ...(melt && { meltQuoteOutput: melt }),
+      mintQuoteOutputs: quoteOutputs,
       outputData,
       amount,
       fee,
@@ -5120,6 +5175,7 @@ class Wallet {
       proofInputs: proofs,
       mintQuoteInputs: quotes,
       meltQuoteOutput: melt,
+      mintQuoteOutputs,
       outputData,
     } = preview;
     this.assertUniqueOutputSecrets(outputData);
@@ -5139,8 +5195,18 @@ class Wallet {
       issued: q.issued,
     }));
     const meltQuote = melt && { quoteId: melt.quote, amount: melt.amount };
+    const quoteOutputs = mintQuoteOutputs.map((c) => ({
+      pubkey: c.pubkey,
+      quoteId: c.quote,
+      amount: c.amount,
+    }));
     await attachTransactionWitnesses(
-      { inputs: wireProofs, outputs: blinded, mintQuoteInputs: mintQuotes },
+      {
+        inputs: wireProofs,
+        outputs: blinded,
+        mintQuoteInputs: mintQuotes,
+        mintQuoteOutputs: quoteOutputs,
+      },
       meltQuote,
       collectSpendInfoKeys(proofs, privkey, this._logger),
       options.scriptPath?.length
@@ -5155,6 +5221,7 @@ class Wallet {
           blindedOutputs: blinded,
           mintQuoteInputs: mintQuotes,
           ...(meltQuote && { meltQuoteOutput: meltQuote }),
+          mintQuoteOutputs: quoteOutputs,
         })
       : undefined;
     const quoteInputs: TransactionRequest['mint_quote_inputs'] = [];
@@ -5199,6 +5266,12 @@ class Wallet {
                 },
               ]
             : [],
+          ...(mintQuoteOutputs.length > 0 && {
+            mint_quote_outputs: mintQuoteOutputs.map((c) => ({
+              pubkey: c.pubkey,
+              amount: c.amount,
+            })),
+          }),
           ...(options.preferAsync && { prefer_async: true }),
         },
         { signal: options.signal, meltMethod: melt?.method },
@@ -5233,10 +5306,20 @@ class Wallet {
       signal: options.signal,
     });
     const state = meltQuote.state === 'UNPAID' ? 'FAILED' : meltQuote.state;
+    // A fixed txout quote exists once the transaction is PAID (NUT-XX).
+    const mintQuotes =
+      state === 'PAID'
+        ? await Promise.all(
+            preview.mintQuoteOutputs.map((c) =>
+              this.mint.checkMintQuote('txout', c.quote, { signal: options.signal }),
+            ),
+          )
+        : preview.mintQuoteOutputs.map(() => null);
     return this.processTransactionResponse(preview, {
       state,
       signatures: state === 'PAID' ? (meltQuote.change ?? []) : [],
       melt_quotes: [meltQuote],
+      mint_quotes: mintQuotes,
     });
   }
 
@@ -5247,9 +5330,20 @@ class Wallet {
     preview: TransactionPreview,
     response: TransactionResponse,
   ): Promise<TransactionResult> {
-    const { outputData } = preview;
+    const { outputData, mintQuoteOutputs } = preview;
     if (response.state !== 'PAID') return { response, proofs: [] };
+    // Txout quotes are returned as the mint reports them: the mint already holds that value, and
+    // refusing or re-checking them after settlement would recover nothing.
     const { signatures } = response;
+    mintQuoteOutputs.forEach((c, i) => {
+      const q = response.mint_quotes[i];
+      if (q && q.quote !== c.quote) {
+        this._logger.warn('Mint returned a txout quote under a different id', {
+          expected: c.quote,
+          received: q.quote,
+        });
+      }
+    });
     // Blanks fill in request order and those left at zero are omitted (NUT-XX), so the signed ones
     // are the first `signedBlanks` blanks.
     const blanks = outputData.filter((d) => d.blindedMessage.amount.isZero()).length;

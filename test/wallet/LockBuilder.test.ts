@@ -524,6 +524,22 @@ describe('P2PKBuilder addTag and addTags', () => {
   });
 });
 
+describe('LockBuilder.addTemplate()', () => {
+  it('carries the destinations into the options, round-trips, and encodes for v3 only', () => {
+    const dest = comp('b', '02');
+    const b = new LockBuilder()
+      .addMainPubkey(comp('a', '02'))
+      .addTemplate(dest)
+      .addTemplate([dest]);
+    expect(b.toOptions().template).toEqual([dest]);
+    expect(LockBuilder.fromOptions(b.toOptions()).toOptions().template).toEqual([dest]);
+    expect(b.validate('nutroot')).toEqual([]);
+    expect(b.validate('p2pk')).toHaveLength(1);
+    // A template alone is refused for want of a signing key.
+    expect(() => new LockBuilder().addTemplate(dest).toOptions()).toThrow(/key/i);
+  });
+});
+
 describe('P2PKBuilder.blindKeys()', () => {
   it('sets blindKeys flag and round-trips via fromOptions', () => {
     const k = comp('a', '02');
