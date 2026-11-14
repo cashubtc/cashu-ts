@@ -7,11 +7,33 @@
 
 import { describe, test, expect } from 'vitest';
 
+import { CTSError } from '../../src/model/Errors';
 import { PaymentRequest } from '../../src/model/PaymentRequest';
-import { decodeBech32mToBytes, encodeBech32m } from '../../src/utils/bech32m';
+import { decodeBech32m, decodeBech32mToBytes, encodeBech32m } from '../../src/utils/bech32m';
 import { decodeTLV, encodeTLV } from '../../src/utils/tlv';
 import type { DecodedTLVPaymentRequest } from '../../src/utils/tlv';
 import { PaymentRequestTransportType } from '../../src/wallet/types/payment-requests';
+
+describe('bech32m errors', () => {
+  // BIP-350 valid test vector, HRP "abcdef".
+  const BIP350_VALID = 'abcdef1l7aum6echk45nj3s0wdvt2fg8x9yrzpqzd3ryx';
+
+  test.each([
+    ['a bad character', 'creqb1 '],
+    ['a bad checksum', BIP350_VALID.slice(0, -1) + 'q'],
+  ])('reports %s as a CTSError', (_name, encoded) => {
+    expect(() => decodeBech32m(encoded)).toThrow(CTSError);
+    expect(() => decodeBech32m(encoded)).toThrow('Invalid bech32m string');
+  });
+
+  test('reports an encoding over the length limit as a CTSError', () => {
+    expect(() => encodeBech32m('creqb', new Uint8Array(700))).toThrow('Cannot encode as bech32m');
+  });
+
+  test('fromEncodedRequest reports a malformed creqB string as a CTSError', () => {
+    expect(() => PaymentRequest.fromEncodedRequest('creqb1 ')).toThrow(CTSError);
+  });
+});
 
 describe('NUT-26 Test Vectors', () => {
   describe('Basic Payment Request', () => {
