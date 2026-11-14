@@ -113,6 +113,31 @@ describe('payment requests', () => {
     );
   });
 
+  test('editing the raw form does not change the request', () => {
+    const pr = new PaymentRequest(
+      [
+        {
+          type: PaymentRequestTransportType.POST,
+          target: 'https://example.com',
+          tags: [['n', '17']],
+        },
+      ],
+      undefined,
+      undefined,
+      'sat',
+      ['https://mint.example.com'],
+      undefined,
+      undefined,
+      { kind: 'P2PK', data: '02' + 'aa'.repeat(32), tags: [['locktime', '1']] },
+    );
+    const expected = pr.toEncodedRequest();
+    const raw = pr.toRawRequest();
+    raw.m![0] = 'https://other.example.com';
+    raw.t![0].g![0][1] = '4';
+    raw.nut10!.t![0][1] = '2';
+    expect(pr.toEncodedRequest()).toBe(expected);
+  });
+
   test('test unsupported prefix/version', async () => {
     const prWithInvalidPrefix =
       'croqApGF0gaNhdGVub3N0cmFheKlucHJvZmlsZTFxeTI4d3VtbjhnaGo3dW45ZDNzaGp0bnl2OWtoMnVld2Q5aHN6OW1od2RlbjV0ZTB3ZmprY2N0ZTljdXJ4dmVuOWVlaHFjdHJ2NWhzenJ0aHdkZW41dGUwZGVoaHh0bnZkYWtxcWd5bWRleDNndmZzZnVqcDN4eW43ZTdxcnM4eXlxOWQ4enN1MnpxdWp4dXhjYXBmcXZ6YzhncnFka3RzYWeBgmFuYjE3YWloNDg0MGY1MWVhdWNzYXRhbYFwaHR0cHM6Ly9taW50LmNvbQ==';

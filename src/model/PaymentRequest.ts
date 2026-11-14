@@ -110,6 +110,9 @@ function readRecord(v: unknown, field: string): Record<string, unknown> | undefi
   return v;
 }
 
+// Copies so callers and requests never share mutable state.
+const copyTags = (tags: string[][]): string[][] => tags.map((t) => [...t]);
+
 export class PaymentRequest {
   public amount?: Amount;
   public supportedMethods?: SupportedMethod[];
@@ -331,7 +334,7 @@ export class PaymentRequest {
       rawRequest.t = this.transport.map((t: PaymentRequestTransport) => ({
         t: t.type,
         a: t.target,
-        ...(t.tags !== undefined && { g: t.tags }),
+        ...(t.tags !== undefined && { g: copyTags(t.tags) }),
       }));
     }
     if (this.id) {
@@ -344,7 +347,7 @@ export class PaymentRequest {
       rawRequest.u = this.unit;
     }
     if (this.mints) {
-      rawRequest.m = this.mints;
+      rawRequest.m = [...this.mints];
     }
     if (this.description) {
       rawRequest.d = this.description;
@@ -356,7 +359,7 @@ export class PaymentRequest {
       rawRequest.nut10 = {
         k: this.nut10.kind,
         d: this.nut10.data,
-        ...(this.nut10.tags !== undefined && { t: this.nut10.tags }),
+        ...(this.nut10.tags !== undefined && { t: copyTags(this.nut10.tags) }),
       };
     }
     if (this.mintsPreferred !== undefined) {
