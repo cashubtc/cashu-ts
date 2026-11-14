@@ -19,7 +19,7 @@ import { CallerAbortError, CTSError } from '../model/Errors';
 import type { HasKeysetKeys, Proof, ProofLike } from '../model/types';
 
 import { budgetOrThrow, chunkSizeOrThrow, mapInChunks, yieldToEventLoop } from './chunked';
-import { hexToNumber } from './core';
+import { hexToNumber, isRecord } from './core';
 import { ABSOLUTE_MAX_ARRAY_LENGTH } from './limits';
 
 /**
@@ -59,6 +59,29 @@ type Lookup = (id: string) => HasKeysetKeys;
 
 function messageOf(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+function show(v: unknown): string {
+  try {
+    return String(v);
+  } catch {
+    return typeof v;
+  }
+}
+
+/**
+ * Proofs from outside are untyped, so the fields every later step reads are checked first.
+ */
+function shapeError(p: unknown): Failure {
+  if (
+    isRecord(p) &&
+    typeof p.id === 'string' &&
+    typeof p.secret === 'string' &&
+    typeof p.C === 'string'
+  ) {
+    return undefined;
+  }
+  return new CTSError('Proof must have a string id, secret and C');
 }
 
 function keyFor(p: Proof, getKeyset: Lookup): { key: string } | { error: CTSError } {
@@ -114,7 +137,7 @@ function normalize(raw: ProofLike): { p: Proof } | { error: CTSError } {
     return { p: { ...raw, amount: Amount.from(raw.amount) } };
   } catch (cause) {
     return {
-      error: new CTSError(`Invalid amount ${String(raw.amount)} in keyset ${raw.id}`, { cause }),
+      error: new CTSError(`Invalid amount ${show(raw.amount)} in keyset ${raw.id}`, { cause }),
     };
   }
 }
@@ -217,13 +240,17 @@ async function verify<T extends ProofLike>(
   // v0/v1/v2: one DLEQ each, the helper yields on the time budget.
   const secp: number[] = [];
   const bls: number[] = [];
-  proofs.forEach((p, i) => (isBlsKeyset(p.id) ? bls : secp).push(i));
+  proofs.forEach((p, i) => {
+    errors[i] = shapeError(p);
+    if (!errors[i]) (isBlsKeyset(p.id) ? bls : secp).push(i);
+  });
+  const malformed = total - secp.length - bls.length;
   await mapInChunks(secp, (i) => (errors[i] = verifySecp(proofs[i], getKeyset, require)), {
     chunkSize: cap,
     budgetMs: budget,
     signal: opts?.signal,
     onProgress: (n) => {
-      done = n;
+      done = malformed + n;
       report();
     },
   });
@@ -247,7 +274,7 @@ async function verify<T extends ProofLike>(
     const perItem = (performance.now() - t0) / idx.length;
     idx.forEach((i, k) => (errors[i] = found[k]));
     at += idx.length;
-    done = secp.length + at;
+    done = malformed + secp.length + at;
     sliceSize = Math.max(1, Math.min(cap, Math.floor(budget / Math.max(perItem, 0.01))));
   }
   if (bls.length > 0) report();

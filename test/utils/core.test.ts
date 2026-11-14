@@ -1289,6 +1289,38 @@ describe('test zero-knowledge utilities', () => {
       }
     });
 
+    test.each([
+      ['an array id', { id: ['00'] }],
+      ['a numeric secret', { secret: 0 }],
+      ['a missing C', { C: undefined }],
+    ])('reports a proof with %s as invalid', async (_name, field) => {
+      const bad = { ...serializedProof, ...field } as unknown as typeof serializedProof;
+      for (const verify of [utils.verifyReceivedProofs, utils.verifyMintSignatures]) {
+        const result = await verify([serializedProof, bad], () => secpKeyset);
+        expect(result.valid).toEqual([serializedProof]);
+        expect(result.invalid).toHaveLength(1);
+        expect(result.invalid[0].proof).toBe(bad);
+        expect(result.invalid[0].error.message).toMatch(/string id, secret and C/);
+      }
+    });
+
+    test.each([0, null, 'proof'])('reports %j in place of a proof as invalid', async (bad) => {
+      const proofs = [bad as unknown as typeof serializedProof, serializedProof];
+      const seen: number[] = [];
+      const result = await utils.verifyReceivedProofs(proofs, () => secpKeyset, {
+        onProgress: (done) => seen.push(done),
+      });
+      expect(result.valid).toEqual([serializedProof]);
+      expect(result.invalid[0].error).toBeInstanceOf(CTSError);
+      expect(seen[seen.length - 1]).toBe(2);
+    });
+
+    test('reports an amount that cannot be printed as invalid', async () => {
+      const bad = { ...serializedProof, amount: Object.create(null) as number };
+      const result = await utils.verifyReceivedProofs([bad], () => secpKeyset);
+      expect(result.invalid[0].error.message).toMatch(/Invalid amount object/);
+    });
+
     // First error of a receive, or undefined when every proof passes.
     const receiveError = async (...args: Parameters<typeof utils.verifyReceivedProofs>) => {
       const r = await utils.verifyReceivedProofs(...args);
