@@ -7,12 +7,63 @@
 
 import { describe, test, expect } from 'vitest';
 
+import { CTSError } from '../../src/model/Errors';
 import { PaymentRequest } from '../../src/model/PaymentRequest';
 import { decodeBech32mToBytes, encodeBech32m } from '../../src/utils/bech32m';
 import { decodeTLV, encodeTLV } from '../../src/utils/tlv';
 import type { DecodedTLVPaymentRequest } from '../../src/utils/tlv';
 import { PaymentRequestTransportType } from '../../src/wallet/types/payment-requests';
 
+<<<<<<< HEAD
+=======
+describe('bech32m primitives', () => {
+  // BIP-350 valid test vector: 32 data chars = 20 byte-aligned bytes, HRP "abcdef".
+  const BIP350_VALID = 'abcdef1l7aum6echk45nj3s0wdvt2fg8x9yrzpqzd3ryx';
+
+  test('decodes a BIP-350 vector and round-trips it', () => {
+    const { hrp, data } = decodeBech32m(BIP350_VALID);
+    expect(hrp).toBe('abcdef');
+    expect(encodeBech32m(hrp, data)).toBe(BIP350_VALID);
+  });
+
+  test('rejects a missing or misplaced separator', () => {
+    expect(() => decodeBech32m('noseparator')).toThrow(/separator/);
+    expect(() => decodeBech32m('1datawithemptyhrp')).toThrow(/separator/);
+    expect(() => decodeBech32m('trailingsep1')).toThrow(/separator/);
+  });
+
+  test.each([
+    ['a bad character', 'creqb1 '],
+    ['a bad checksum', BIP350_VALID.slice(0, -1) + 'q'],
+  ])('reports %s as a CTSError', (_name, encoded) => {
+    expect(() => decodeBech32m(encoded)).toThrow(CTSError);
+    expect(() => decodeBech32m(encoded)).toThrow('Invalid bech32m string');
+  });
+
+  test('reports an encoding over the length limit as a CTSError', () => {
+    expect(() => encodeBech32m('creqb', new Uint8Array(700))).toThrow('Cannot encode as bech32m');
+  });
+
+  test('fromEncodedRequest reports a malformed creqB string as a CTSError', () => {
+    expect(() => PaymentRequest.fromEncodedRequest('creqb1 ')).toThrow(CTSError);
+  });
+
+  test('isBech32m accepts valid strings and checks the HRP', () => {
+    expect(isBech32m(BIP350_VALID)).toBe(true);
+    expect(isBech32m(BIP350_VALID, 'abcdef')).toBe(true);
+    expect(isBech32m(BIP350_VALID, 'other')).toBe(false);
+  });
+
+  test('isBech32m rejects bad checksums and bech32 (non-m) strings', () => {
+    // Flip one data character: the checksum no longer holds.
+    expect(isBech32m(`${BIP350_VALID.slice(0, -1)}q`)).toBe(false);
+    // A valid BIP-173 bech32 string uses the other checksum constant.
+    expect(isBech32m('a12uel5l')).toBe(false);
+    expect(isBech32m('not bech32 at all')).toBe(false);
+  });
+});
+
+>>>>>>> 91da3aa (fix(utils): wrap bech32m encode and decode errors in CTSError (#1453))
 describe('NUT-26 Test Vectors', () => {
   describe('Basic Payment Request', () => {
     const encoded =
