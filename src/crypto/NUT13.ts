@@ -205,8 +205,11 @@ export function createSecretAndBlindingFactorDeriver(
       );
       return (counter: number) => deriveBip32SecretAndBlindingFactor(parentKey, counter);
     }
-    case DerivationKind.HMAC_SHA256:
-      return (counter: number) => deriveHmacSecretAndBlindingFactor(seed, keysetId, counter);
+    case DerivationKind.HMAC_SHA256: {
+      // A private copy, so a caller clearing or reusing its buffer cannot change later outputs.
+      const ownSeed = seed.slice();
+      return (counter: number) => deriveHmacSecretAndBlindingFactor(ownSeed, keysetId, counter);
+    }
   }
 }
 
