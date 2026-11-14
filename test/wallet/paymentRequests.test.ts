@@ -182,6 +182,49 @@ describe('payment requests', () => {
     expect(PaymentRequest.fromEncodedRequest(decoded.toEncodedCreqA())).toEqual(decoded);
   });
 
+  describe('copies', () => {
+    const transport = () => ({
+      type: PaymentRequestTransportType.POST,
+      target: 'https://example.com',
+      tags: [['n', '17']],
+    });
+    const nut10 = () => ({ kind: 'P2PK', data: '02' + 'aa'.repeat(32), tags: [['locktime', '1']] });
+    const builder = (t = transport()) =>
+      PaymentRequest.builder()
+        .unit('sat')
+        .addMint('https://mint.example.com')
+        .addTransport(t)
+        .nut10(nut10());
+
+    test('editing the raw form does not change the request', () => {
+      const pr = builder().build();
+      const expected = pr.toEncodedRequest();
+      const raw = pr.toRawRequest();
+      raw.m![0] = 'https://other.example.com';
+      raw.t![0].g![0][1] = '4';
+      raw.nut10!.t![0][1] = '2';
+      expect(pr.toEncodedRequest()).toBe(expected);
+    });
+
+    test('editing a built request does not change a later build', () => {
+      const b = builder();
+      const first = b.build();
+      const expected = first.toEncodedRequest();
+      first.transport![0].tags![0][1] = '4';
+      first.nut10!.tags![0][1] = '2';
+      expect(b.build().toEncodedRequest()).toBe(expected);
+    });
+
+    test('editing a transport after addTransport does not change the build', () => {
+      const t = transport();
+      const b = builder(t);
+      const expected = b.build().toEncodedRequest();
+      t.target = 'https://other.example.com';
+      t.tags[0][1] = '4';
+      expect(b.build().toEncodedRequest()).toBe(expected);
+    });
+  });
+
   test('rejects a creqA request containing duplicate amount keys', () => {
     // CBOR map: { a: 1, a: 1000, u: 'sat' }. A first-wins display and a last-wins decoder
     // would otherwise disagree about the amount the wallet sends.
@@ -1166,6 +1209,17 @@ describe('nutroot (v3) request marking', () => {
       blindKeys: [alicePub],
     });
     expect(new PaymentRequest({}).toNutrootOptions()).toBeUndefined();
+  });
+
+  test('editing the raw form of a nutroot request does not change the request', () => {
+    const pr = PaymentRequest.builder()
+      .requestNutroot({ receiverKey: carolPub, leaves: [leafAfter], blindKeys: [alicePub] })
+      .build();
+    const expected = pr.toEncodedRequest();
+    const raw = pr.toRawRequest();
+    raw.nutroot!.l![0] = 'aa';
+    raw.nutroot!.b![0] = 'bb';
+    expect(pr.toEncodedRequest()).toBe(expected);
   });
 
   test('more than eight requested leaves are refused when authored and parsed', () => {

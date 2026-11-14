@@ -128,6 +128,22 @@ function readRecord(v: unknown, field: string): Record<string, unknown> | undefi
   return v;
 }
 
+// Copies so callers and requests never share mutable state.
+const copyTags = (tags: string[][]): string[][] => tags.map((t) => [...t]);
+const copyTransport = (t: PaymentRequestTransport): PaymentRequestTransport => ({
+  ...t,
+  ...(t.tags && { tags: copyTags(t.tags) }),
+});
+const copyNut10 = (n: NUT10Option): NUT10Option => ({
+  ...n,
+  ...(n.tags && { tags: copyTags(n.tags) }),
+});
+const copyNutroot = (n: NutrootOption): NutrootOption => ({
+  ...n,
+  ...(n.leaves && { leaves: [...n.leaves] }),
+  ...(n.blindKeys && { blindKeys: [...n.blindKeys] }),
+});
+
 /**
  * Constructor options for {@link PaymentRequest}. Keys mirror the class properties; `amount` and
  * method `fee` values accept flexible input and are normalized on construction.
@@ -381,7 +397,7 @@ export class PaymentRequest {
       rawRequest.t = this.transport.map((t: PaymentRequestTransport) => ({
         t: t.type,
         a: t.target,
-        ...(t.tags !== undefined && { g: t.tags }),
+        ...(t.tags !== undefined && { g: copyTags(t.tags) }),
       }));
     }
     if (this.id) {
@@ -394,7 +410,7 @@ export class PaymentRequest {
       rawRequest.u = this.unit;
     }
     if (this.mints) {
-      rawRequest.m = this.mints;
+      rawRequest.m = [...this.mints];
     }
     if (this.mintsPreferred !== undefined) {
       rawRequest.mp = this.mintsPreferred;
@@ -414,14 +430,14 @@ export class PaymentRequest {
       rawRequest.nut10 = {
         k: this.nut10.kind,
         d: this.nut10.data,
-        ...(this.nut10.tags !== undefined && { t: this.nut10.tags }),
+        ...(this.nut10.tags !== undefined && { t: copyTags(this.nut10.tags) }),
       };
     }
     if (this.nutroot) {
       rawRequest.nutroot = {
         k: this.nutroot.receiverKey,
-        ...(this.nutroot.leaves?.length && { l: this.nutroot.leaves }),
-        ...(this.nutroot.blindKeys?.length && { b: this.nutroot.blindKeys }),
+        ...(this.nutroot.leaves?.length && { l: [...this.nutroot.leaves] }),
+        ...(this.nutroot.blindKeys?.length && { b: [...this.nutroot.blindKeys] }),
       };
     }
     return rawRequest;
@@ -794,7 +810,7 @@ export class PaymentRequestBuilder {
    * Appends a transport; order is preference order (NUT-18).
    */
   addTransport(transport: PaymentRequestTransport): this {
-    this._transports.push(transport);
+    this._transports.push(copyTransport(transport));
     return this;
   }
 
@@ -886,7 +902,7 @@ export class PaymentRequestBuilder {
    * Sets the `nut10` locking condition verbatim, for kinds `lock()` cannot express.
    */
   nut10(option: NUT10Option): this {
-    this._nut10 = option;
+    this._nut10 = copyNut10(option);
     return this;
   }
 
@@ -966,12 +982,12 @@ export class PaymentRequestBuilder {
       unit: this._unit,
       mints: this._mints.length ? [...this._mints] : undefined,
       description: this._description,
-      transport: this._transports.length ? [...this._transports] : undefined,
+      transport: this._transports.length ? this._transports.map(copyTransport) : undefined,
       singleUse: this._singleUse,
-      nut10: this._nut10,
+      nut10: this._nut10 && copyNut10(this._nut10),
       mintsPreferred: this._mintsPreferred,
       supportedMethods: this._methods.length ? this._methods : undefined,
-      nutroot: this._nutroot,
+      nutroot: this._nutroot && copyNutroot(this._nutroot),
     });
   }
 }
