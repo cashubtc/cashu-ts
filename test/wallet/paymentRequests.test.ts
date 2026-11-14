@@ -109,6 +109,12 @@ describe('payment requests', () => {
     expect(decoded.id).toBe('bigint_test');
   });
 
+  test.each([0n, 0, null, {}])('rejects %s in place of a request string', (bad) => {
+    expect(() => PaymentRequest.fromEncodedRequest(bad as unknown as string)).toThrow(
+      'Payment request must be a string',
+    );
+  });
+
   test('test unsupported prefix/version', async () => {
     const prWithInvalidPrefix =
       'croqApGF0gaNhdGVub3N0cmFheKlucHJvZmlsZTFxeTI4d3VtbjhnaGo3dW45ZDNzaGp0bnl2OWtoMnVld2Q5aHN6OW1od2RlbjV0ZTB3ZmprY2N0ZTljdXJ4dmVuOWVlaHFjdHJ2NWhzenJ0aHdkZW41dGUwZGVoaHh0bnZkYWtxcWd5bWRleDNndmZzZnVqcDN4eW43ZTdxcnM4eXlxOWQ4enN1MnpxdWp4dXhjYXBmcXZ6YzhncnFka3RzYWeBgmFuYjE3YWloNDg0MGY1MWVhdWNzYXRhbYFwaHR0cHM6Ly9taW50LmNvbQ==';
