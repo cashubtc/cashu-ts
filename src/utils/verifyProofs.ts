@@ -7,7 +7,7 @@ import { CTSError } from '../model/Errors';
 import type { HasKeysetKeys, Proof, ProofLike } from '../model/types';
 
 import { budgetOrThrow, chunkSizeOrThrow, mapInChunks } from './chunked';
-import { hexToNumber } from './core';
+import { hexToNumber, isRecord } from './core';
 import { ABSOLUTE_MAX_ARRAY_LENGTH } from './limits';
 
 /**
@@ -49,15 +49,33 @@ function messageOf(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+function show(v: unknown): string {
+  try {
+    return String(v);
+  } catch {
+    return typeof v;
+  }
+}
+
 /**
  * One proof: amount, keyset, denomination, then the DLEQ. Never throws.
  */
 function verifyOne(raw: ProofLike, getKeyset: Lookup, require: boolean): CTSError | undefined {
+  // Proofs from outside are untyped, so the fields every later step reads are checked first.
+  const r: unknown = raw;
+  if (
+    !isRecord(r) ||
+    typeof r.id !== 'string' ||
+    typeof r.secret !== 'string' ||
+    typeof r.C !== 'string'
+  ) {
+    return new CTSError('Proof must have a string id, secret and C');
+  }
   let p: Proof;
   try {
     p = { ...raw, amount: Amount.from(raw.amount) };
   } catch (cause) {
-    return new CTSError(`Invalid amount ${String(raw.amount)} in keyset ${raw.id}`, { cause });
+    return new CTSError(`Invalid amount ${show(raw.amount)} in keyset ${raw.id}`, { cause });
   }
   let ks: HasKeysetKeys;
   try {
