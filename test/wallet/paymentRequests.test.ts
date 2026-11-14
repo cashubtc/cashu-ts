@@ -12,6 +12,7 @@ import {
 } from '../../src/index';
 import { encodeUint8ToBase64Url } from '../../src/utils/base64';
 import { encodeBech32m } from '../../src/utils/bech32m';
+import { encodeCBOR } from '../../src/utils/cbor';
 import { encodeTLV } from '../../src/utils/tlv';
 
 describe('payment requests', () => {
@@ -122,6 +123,31 @@ describe('payment requests', () => {
     );
     expect(() => decodePaymentRequest(prWithInvalidVersion)).toThrow('unsupported pr version');
   });
+
+  test.each(['i', 'a', 'u', 'm', 'd', 't.g', 'nut10.t'])(
+    'reads a null creqA %s as absent',
+    (field) => {
+      const raw = () => ({
+        i: 'id',
+        a: 1,
+        u: 'sat',
+        m: ['https://mint.example.com'],
+        d: 'memo',
+        t: [{ t: 'post', a: 'https://example.com', g: [['n', '17']] }],
+        nut10: { k: 'P2PK', d: '02' + 'aa'.repeat(32), t: [['locktime', '1']] },
+      });
+      const [head, key] = field.includes('.') ? field.split('.') : [undefined, field];
+      const withNull = raw() as Record<string, unknown>;
+      const without = raw() as Record<string, unknown>;
+      const parent = (r: Record<string, unknown>) =>
+        (head === 't' ? (r.t as object[])[0] : head ? r[head] : r) as Record<string, unknown>;
+      parent(withNull)[key] = null;
+      delete parent(without)[key];
+      const decode = (r: object) =>
+        PaymentRequest.fromEncodedRequest('creqA' + encodeUint8ToBase64Url(encodeCBOR(r)));
+      expect(decode(withNull)).toEqual(decode(without));
+    },
+  );
 
   test('rejects a creqA request containing duplicate amount keys', () => {
     // CBOR map: { a: 1, a: 1000, u: 'sat' }. A first-wins display and a last-wins decoder
@@ -821,6 +847,13 @@ describe('NUT-18 payment payloads', () => {
       const [proof] = PaymentRequest.decodePayload(JSON.stringify(obj)).proofs;
       expect(proof).not.toHaveProperty('dleq');
       expect(proof.secret).toBe('s');
+    });
+
+    test.each(['witness', 'p2pk_e'])('reads a null proof %s as absent', (field) => {
+      const body = valid();
+      const proofs = [{ ...body.proofs[0], [field]: null }];
+      const payload = PaymentRequest.decodePayload(JSON.stringify({ ...body, proofs }));
+      expect(payload.proofs[0]).not.toHaveProperty(field);
     });
 
     test.each(['id', 'memo'])('reads a null %s as absent', (field) => {

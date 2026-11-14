@@ -169,6 +169,19 @@ function toAmount(amount: AmountLike, op: string, allowZero = false): Amount {
 }
 
 /**
+ * Drops the optional proof fields a peer wrote as `null`, which on the wire means absent.
+ *
+ * @internal
+ */
+export function dropNullProofFields<T extends object>(proof: T): T {
+  const out = { ...proof } as Record<string, unknown>;
+  for (const key of ['witness', 'p2pk_e']) {
+    if (out[key] === null) delete out[key];
+  }
+  return out as T;
+}
+
+/**
  * Converts a hex string to a bigint scalar. Returns `0n` for empty/falsy input.
  *
  * @internal
@@ -472,7 +485,7 @@ function handleTokens(token: string): Token {
     const proofs = entry.proofs.map((p) => {
       const { dleq, ...rest } = p;
       return {
-        ...rest,
+        ...dropNullProofFields(rest),
         amount: Amount.from(p.amount),
         // Same rule as the v4 path: an incomplete DLEQ is useless and leaky, so it does not travel.
         ...(dleq?.r && dleq.s && dleq.e && { dleq }),
