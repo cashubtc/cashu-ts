@@ -232,10 +232,11 @@ export class PaymentRequest {
     if (typeof unit !== 'string' || !unit) {
       throw new CTSError('invalid payment payload: missing unit');
     }
-    if (id !== undefined && typeof id !== 'string') {
+    // null reads as absent: some encoders (eg cdk) write an unset optional field as null.
+    if (id != null && typeof id !== 'string') {
       throw new CTSError('invalid payment payload: id must be a string');
     }
-    if (memo !== undefined && typeof memo !== 'string') {
+    if (memo != null && typeof memo !== 'string') {
       throw new CTSError('invalid payment payload: memo must be a string');
     }
     if (!Array.isArray(proofs) || proofs.length === 0) {
@@ -266,8 +267,8 @@ export class PaymentRequest {
       };
     });
     return {
-      ...(id !== undefined && { id }),
-      ...(memo !== undefined && { memo }),
+      ...(id != null && { id }),
+      ...(memo != null && { memo }),
       unit,
       mint,
       proofs: normalized,
