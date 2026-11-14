@@ -1,5 +1,23 @@
 # Changelog
 
+## [4.13.2](https://github.com/cashubtc/cashu-ts/compare/v4.13.1...v4.13.2) (2026-11-14)
+
+
+### Bug Fixes
+
+* **amount:** require a bigint in the Amount constructor ([#1440](https://github.com/cashubtc/cashu-ts/issues/1440)) ([936c0f5](https://github.com/cashubtc/cashu-ts/commit/936c0f520538525c99b9cbf13f8d540b42a0355d))
+* **crypto:** reject key-only NUT-11 tags ([#1424](https://github.com/cashubtc/cashu-ts/issues/1424)) ([e8331fc](https://github.com/cashubtc/cashu-ts/commit/e8331fc20dac9cbe4a83a84c29c76561232f66b6))
+* **crypto:** require a string message in computeMessageDigest ([#1441](https://github.com/cashubtc/cashu-ts/issues/1441)) ([d23741d](https://github.com/cashubtc/cashu-ts/commit/d23741d90bd23d4858821555c0a2f29d9ecb4ec2))
+* **payment-request:** check field types when decoding creqA requests ([#1457](https://github.com/cashubtc/cashu-ts/issues/1457)) ([bedb428](https://github.com/cashubtc/cashu-ts/commit/bedb428d544a30ec79bf0eeff49484abf3a5b4ff))
+* **payment-request:** omit absent tags from the creqA encoding ([#1429](https://github.com/cashubtc/cashu-ts/issues/1429)) ([7f993d4](https://github.com/cashubtc/cashu-ts/commit/7f993d4a64d7e1d9388815da930dc27041b214f9))
+* **payment-request:** read a null id and memo as absent in payment payloads ([#1442](https://github.com/cashubtc/cashu-ts/issues/1442)) ([cada884](https://github.com/cashubtc/cashu-ts/commit/cada8842e95060c2e6abb9b76acdc3d8af7e0849))
+* **payment-request:** read null optional fields as absent in creqA requests and received proofs ([#1452](https://github.com/cashubtc/cashu-ts/issues/1452)) ([b9300e9](https://github.com/cashubtc/cashu-ts/commit/b9300e9edc3fe56216920326a7fe465d9960b28b))
+* **utils:** check field types when decoding cashuA tokens ([#1458](https://github.com/cashubtc/cashu-ts/issues/1458)) ([715cf90](https://github.com/cashubtc/cashu-ts/commit/715cf90cd8f81b07ce00e93ae30b52f5f4590b92))
+* **utils:** check proof field types in verifyReceivedProofs ([#1439](https://github.com/cashubtc/cashu-ts/issues/1439)) ([84f2244](https://github.com/cashubtc/cashu-ts/commit/84f2244424ff748d79536aa5b3434f0485b5e48a))
+* **utils:** reject malformed token and request input with CTSError ([#1450](https://github.com/cashubtc/cashu-ts/issues/1450)) ([aec0b2c](https://github.com/cashubtc/cashu-ts/commit/aec0b2cd27185b1c4f281ec8e6528257f05567fb))
+* **utils:** wrap bech32m encode and decode errors in CTSError ([#1454](https://github.com/cashubtc/cashu-ts/issues/1454)) ([d8ed0ad](https://github.com/cashubtc/cashu-ts/commit/d8ed0ad42e2f96ca5279565232f04d88b7bf2baf))
+* **wallet:** keep proofs skipped by requireDleq in sendOffline ([#1438](https://github.com/cashubtc/cashu-ts/issues/1438)) ([d85b2e7](https://github.com/cashubtc/cashu-ts/commit/d85b2e769c465a4df48011031d681d470efbb65d))
+
 ## [4.13.1](https://github.com/cashubtc/cashu-ts/compare/v4.13.0...v4.13.1) (2026-11-10)
 
 
