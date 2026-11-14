@@ -159,7 +159,6 @@ describe('payment requests', () => {
     ['transport tags that are not a list', { t: [{ t: 'post', a: 'https://x', g: 'n' }] }],
     ['a nut10 that is not a map', { nut10: 'P2PK' }],
     ['a nut10 without data', { nut10: { k: 'P2PK' } }],
-    ['nutroot leaves that are not strings', { nutroot: { k: '02' + 'aa'.repeat(32), l: [{}] } }],
     ['a request that is not a map', ['sat']],
     ['a null request', null],
     ['a null transport', { t: [null] }],

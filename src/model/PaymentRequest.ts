@@ -64,8 +64,6 @@ function readSupportedMethods(
   });
 }
 
-<<<<<<< HEAD
-=======
 function readText(v: unknown, field: string): string | undefined {
   if (v === undefined || v === null) return undefined;
   if (typeof v !== 'string') {
@@ -112,25 +110,6 @@ function readRecord(v: unknown, field: string): Record<string, unknown> | undefi
   return v;
 }
 
-/**
- * Constructor options for {@link PaymentRequest}. Keys mirror the class properties; `amount` and
- * method `fee` values accept flexible input and are normalized on construction.
- */
-export type PaymentRequestOptions = {
-  id?: string;
-  amount?: AmountLike;
-  unit?: string;
-  mints?: string[];
-  description?: string;
-  transport?: PaymentRequestTransport[];
-  singleUse?: boolean;
-  nut10?: NUT10Option;
-  mintsPreferred?: boolean;
-  supportedMethods?: Array<{ method: string; fee?: AmountLike }>;
-  nutroot?: NutrootOption;
-};
-
->>>>>>> 56c76d0 (fix(payment-request): check field types when decoding creqA requests (#1456))
 export class PaymentRequest {
   public amount?: Amount;
   public supportedMethods?: SupportedMethod[];
@@ -487,43 +466,18 @@ export class PaymentRequest {
           tags: readTags(rawNut10.t, 'nut10 tags'),
         }
       : undefined;
-<<<<<<< HEAD
     return new PaymentRequest(
       transports,
-      rawPaymentRequest.i ?? undefined,
-      rawPaymentRequest.a ?? undefined,
-      rawPaymentRequest.u ?? undefined,
-      rawPaymentRequest.m ?? undefined,
-      rawPaymentRequest.d ?? undefined,
-      rawPaymentRequest.s,
+      readText(raw.i, 'i'),
+      (raw.a ?? undefined) as AmountLike | undefined,
+      readText(raw.u, 'u'),
+      readTexts(raw.m, 'm'),
+      readText(raw.d, 'd'),
+      raw.s as boolean | undefined,
       nut10,
-      rawPaymentRequest.mp,
-      readSupportedMethods(rawPaymentRequest.sm),
+      raw.mp as boolean | undefined,
+      readSupportedMethods(raw.sm),
     );
-=======
-    const supportedMethods = readSupportedMethods(raw.sm);
-    const rawNutroot = readRecord(raw.nutroot, 'nutroot');
-    const nutroot = rawNutroot
-      ? {
-          receiverKey: readRequiredText(rawNutroot.k, 'nutroot key'),
-          leaves: readTexts(rawNutroot.l, 'nutroot leaves'),
-          blindKeys: readTexts(rawNutroot.b, 'nutroot blind keys'),
-        }
-      : undefined;
-    return new PaymentRequest({
-      nutroot,
-      transport: transports,
-      id: readText(raw.i, 'i'),
-      amount: (raw.a ?? undefined) as AmountLike | undefined,
-      unit: readText(raw.u, 'u'),
-      mints: readTexts(raw.m, 'm'),
-      description: readText(raw.d, 'd'),
-      singleUse: raw.s as boolean | undefined,
-      nut10,
-      mintsPreferred: raw.mp as boolean | undefined,
-      supportedMethods,
-    });
->>>>>>> 56c76d0 (fix(payment-request): check field types when decoding creqA requests (#1456))
   }
 
   static fromEncodedRequest(encodedRequest: string): PaymentRequest {
