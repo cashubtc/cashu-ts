@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
 import { Amount, AmountWithUnit } from '../../src/model/Amount';
-import { AmountWithUnitError } from '../../src/model/Errors';
+import { AmountError, AmountWithUnitError } from '../../src/model/Errors';
 
 describe('AmountWithUnit construction', () => {
   it('rejects empty unit string', () => {
@@ -16,6 +16,11 @@ describe('AmountWithUnit construction', () => {
     expect(() => new AmountWithUnit(Amount.from(1), null as unknown as string)).toThrow(
       AmountWithUnitError,
     );
+  });
+
+  it('rejects an amount that is not an Amount or amount-like value', () => {
+    expect(() => new AmountWithUnit({} as unknown as Amount, 'sat')).toThrow(AmountError);
+    expect(() => new AmountWithUnit(1.5 as unknown as Amount, 'sat')).toThrow(AmountError);
   });
 
   it('stores amount and unit', () => {
