@@ -1600,10 +1600,13 @@ class Wallet {
     const sendAmount = this.parseAmount(amount, 'sendOffline');
     let normalizedProofs = normalizeProofAmounts(proofs);
     const { requireDleq = false, includeFees = false, exactMatch = true } = config || {};
+    let skipped: Proof[] = [];
     if (requireDleq) {
       // v3 (BLS, `02…`) proofs satisfy `requireDleq` via the pairing check rather than a DLEQ,
       // the same split `verifyReceivedProofs` makes on receive.
-      normalizedProofs = normalizedProofs.filter((p) => isBlsKeyset(p.id) || hasCompleteDleq(p));
+      const all = normalizedProofs;
+      normalizedProofs = all.filter((p) => isBlsKeyset(p.id) || hasCompleteDleq(p));
+      skipped = all.filter((p) => !normalizedProofs.includes(p));
     }
     this.failIf(
       sumProofs(normalizedProofs).lessThan(sendAmount),
@@ -1627,7 +1630,7 @@ class Wallet {
     const sendPrepared = dropTransactionWitnesses(
       this._prepareInputsForMint(send, true, true, true),
     );
-    return { keep, send: sendPrepared };
+    return { keep: [...keep, ...skipped], send: sendPrepared };
   }
 
   /**
