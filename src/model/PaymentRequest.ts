@@ -6,6 +6,7 @@ import {
   decodeCBOR,
   dropNullProofFields,
   encodeCBOR,
+  isRecord,
   encodeUint8ToBase64UrlPadded,
   normalizeMintUrl,
 } from '../utils';
@@ -15,7 +16,6 @@ import { decodeTLV, encodeTLV } from '../utils/tlv';
 import type { DecodedTLVPaymentRequest } from '../utils/tlv';
 import type {
   RawPaymentRequest,
-  RawTransport,
   NUT10Option,
   PaymentRequestPayload,
   PaymentRequestTransport,
@@ -62,6 +62,52 @@ function readSupportedMethods(
     const { mn, mf } = m as { mn: string; mf?: AmountLike | null };
     return { method: mn, fee: mf ?? undefined };
   });
+}
+
+function readText(v: unknown, field: string): string | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== 'string') {
+    throw new CTSError(`invalid payment request: ${field} must be a string`);
+  }
+  return v;
+}
+
+function readRequiredText(v: unknown, field: string): string {
+  const text = readText(v, field);
+  if (text === undefined) throw new CTSError(`invalid payment request: missing ${field}`);
+  return text;
+}
+
+function readTexts(v: unknown, field: string): string[] | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (!Array.isArray(v) || !v.every((x) => typeof x === 'string')) {
+    throw new CTSError(`invalid payment request: ${field} must be a list of strings`);
+  }
+  return v;
+}
+
+function readTags(v: unknown, field: string): string[][] | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (!Array.isArray(v)) {
+    throw new CTSError(`invalid payment request: ${field} must be a list of tags`);
+  }
+  return v.map((tag: unknown) => {
+    if (!Array.isArray(tag) || !tag.every((x) => typeof x === 'string')) {
+      throw new CTSError(`invalid payment request: ${field} must be a list of tags`);
+    }
+    return tag;
+  });
+}
+
+/**
+ * Reads an optional wire object, with `null` read as absent.
+ *
+ * @throws If `v` is present and not a map.
+ */
+function readRecord(v: unknown, field: string): Record<string, unknown> | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (!isRecord(v)) throw new CTSError(`invalid payment request: ${field} must be a map`);
+  return v;
 }
 
 export class PaymentRequest {
@@ -397,31 +443,40 @@ export class PaymentRequest {
    * @throws An error if the raw payment request is not supported.
    */
   static fromRawRequest(rawPaymentRequest: RawPaymentRequest): PaymentRequest {
-    const transports = rawPaymentRequest.t
-      ? rawPaymentRequest.t.map((t: RawTransport) => ({
-          type: t.t,
-          target: t.a,
-          tags: t.g ?? undefined,
-        }))
-      : undefined;
-    const nut10 = rawPaymentRequest.nut10
+    // Decoded CBOR is untyped, so each field is checked against its NUT-18 type.
+    const raw: unknown = rawPaymentRequest;
+    if (!isRecord(raw)) throw new CTSError('invalid payment request: request must be a map');
+    const t = raw.t ?? undefined;
+    if (t !== undefined && !Array.isArray(t)) {
+      throw new CTSError('invalid payment request: t must be a list');
+    }
+    const transports = t?.map((entry: unknown) => {
+      if (!isRecord(entry)) throw new CTSError('invalid payment request: transport must be a map');
+      return {
+        type: readRequiredText(entry.t, 'transport type') as PaymentRequestTransportType,
+        target: readRequiredText(entry.a, 'transport target'),
+        tags: readTags(entry.g, 'transport tags'),
+      };
+    });
+    const rawNut10 = readRecord(raw.nut10, 'nut10');
+    const nut10 = rawNut10
       ? {
-          kind: rawPaymentRequest.nut10.k,
-          data: rawPaymentRequest.nut10.d,
-          tags: rawPaymentRequest.nut10.t ?? undefined,
+          kind: readRequiredText(rawNut10.k, 'nut10 kind'),
+          data: readRequiredText(rawNut10.d, 'nut10 data'),
+          tags: readTags(rawNut10.t, 'nut10 tags'),
         }
       : undefined;
     return new PaymentRequest(
       transports,
-      rawPaymentRequest.i ?? undefined,
-      rawPaymentRequest.a ?? undefined,
-      rawPaymentRequest.u ?? undefined,
-      rawPaymentRequest.m ?? undefined,
-      rawPaymentRequest.d ?? undefined,
-      rawPaymentRequest.s,
+      readText(raw.i, 'i'),
+      (raw.a ?? undefined) as AmountLike | undefined,
+      readText(raw.u, 'u'),
+      readTexts(raw.m, 'm'),
+      readText(raw.d, 'd'),
+      raw.s as boolean | undefined,
       nut10,
-      rawPaymentRequest.mp,
-      readSupportedMethods(rawPaymentRequest.sm),
+      raw.mp as boolean | undefined,
+      readSupportedMethods(raw.sm),
     );
   }
 
