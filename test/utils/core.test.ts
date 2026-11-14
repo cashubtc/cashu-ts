@@ -1421,10 +1421,6 @@ describe('getDecodedTokenBinary edge cases', () => {
   });
 });
 
-<<<<<<< HEAD
-describe('tokenFromTemplate rejects valid CBOR of wrong shape', () => {
-  test('getDecodedToken (cashuB) throws CTSError, not a raw TypeError', () => {
-=======
 describe('getDecodedToken rejects malformed input with CTSError', () => {
   test.each([0n, 0, null, {}])('rejects %s in place of a token string', (bad) => {
     expect(() => utils.getDecodedToken(bad as unknown as string, [])).toThrow(
@@ -1443,9 +1439,8 @@ describe('getDecodedToken rejects malformed input with CTSError', () => {
   });
 });
 
-describe('fromV4CborTemplate rejects valid CBOR of wrong shape', () => {
-  test('getDecodedToken (cashuB) throws CTSError, not a raw TypeError', async () => {
->>>>>>> 2ac1b4d (fix(utils): reject malformed token and request input with CTSError (#1449))
+describe('tokenFromTemplate rejects valid CBOR of wrong shape', () => {
+  test('getDecodedToken (cashuB) throws CTSError, not a raw TypeError', () => {
     const body = utils.encodeCBOR({ m: 'http://localhost:3338', u: 'sat' });
     const token = 'cashuB' + utils.encodeUint8ToBase64Url(body);
     expect(() => utils.getDecodedToken(token, [])).toThrow(CTSError);

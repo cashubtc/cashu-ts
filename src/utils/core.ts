@@ -453,16 +453,12 @@ function handleTokens(token: string): Token {
   const version = token.slice(0, 1);
   const encodedToken = token.slice(1);
   if (version === 'A') {
-<<<<<<< HEAD
-    const parsedV3Token = decodeBase64AnyToJson<DeprecatedToken>(encodedToken);
-=======
     let parsedV3Token: DeprecatedToken;
     try {
-      parsedV3Token = decodeBase64UrlToJson<DeprecatedToken>(encodedToken);
+      parsedV3Token = decodeBase64AnyToJson<DeprecatedToken>(encodedToken);
     } catch (cause) {
       throw new CTSError('Invalid token', { cause });
     }
->>>>>>> 2ac1b4d (fix(utils): reject malformed token and request input with CTSError (#1449))
     if (!parsedV3Token || !Array.isArray(parsedV3Token.token)) {
       throw new CTSError('Invalid token');
     }
