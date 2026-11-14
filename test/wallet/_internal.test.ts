@@ -7,11 +7,27 @@ import {
   ceilLog2,
   getKeepAmounts,
   orderOutputsForPayload,
+  popcount,
   scanProfile,
   stringifyOutputTypeForLog,
   proofsFromRestoreResponse,
 } from '../../src/wallet/_internal';
 import { PUBKEYS } from '../consts';
+
+describe('popcount', () => {
+  test('counts the 1 bits, including above the safe integer range', () => {
+    for (const [n, want] of [
+      [0n, 0],
+      [1n, 1],
+      [6n, 2],
+      [7n, 3],
+      [8n, 1],
+      [2n ** 64n - 1n, 64],
+    ] as const) {
+      expect(popcount(n)).toBe(want);
+    }
+  });
+});
 
 describe('ceilLog2', () => {
   test('matches Math.ceil(Math.log2(n)) for small values', () => {

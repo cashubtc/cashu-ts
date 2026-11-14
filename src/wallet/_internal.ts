@@ -67,6 +67,15 @@ export function ceilLog2(n: bigint): number {
   return n <= 1n ? 0 : (n - 1n).toString(2).length;
 }
 
+/**
+ * Number of 1 bits in `n`: the proof count of its minimal power-of-two split.
+ */
+export function popcount(n: bigint): number {
+  let count = 0;
+  for (; n > 0n; n &= n - 1n) count++;
+  return count;
+}
+
 function getKeysetAmountsAsc(keys: Keys): Amount[] {
   const amounts = Object.keys(keys).map((k) => Amount.from(k));
   amounts.sort((a, b) => a.compareTo(b));
