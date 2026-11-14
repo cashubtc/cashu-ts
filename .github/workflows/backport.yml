@@ -27,10 +27,6 @@ jobs:
         startsWith(github.event.label.name, 'backport')
       )
 
-    outputs:
-      was_successful: ${{ steps.create-pr.outputs.was_successful }}
-      created_pull_numbers: ${{ steps.create-pr.outputs.created_pull_numbers }}
-
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: create-pr
@@ -41,8 +37,7 @@ jobs:
           github_token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           # On conflict, push the branch with the conflict committed and open
           # a DRAFT PR (finish it in place: resolve, regenerate the api report,
-          # push). The action comments resolution steps on the original PR and
-          # the open-issue job below still files a tracking issue.
+          # push). The action comments resolution steps on the original PR.
           # In backport-action v4 this option lives under `experimental`; passed
           # top-level it is silently ignored and the action falls back to
           # fail-on-conflict (no draft PR pushed, as happened on #806/#807).
@@ -57,44 +52,3 @@ jobs:
           # commit parsing after squash-merge (no release PR, no changelog
           # entry — bit us on #743). A suffix keeps the subject parseable.
           pull_title: '${pull_title} [backport ${target_branch}]'
-
-  open-issue:
-    name: Open issue for failed backports
-    runs-on: ubuntu-latest
-    needs: backport
-    if: ${{ needs.backport.outputs.was_successful == 'false' }}
-    permissions:
-      contents: read
-      issues: write
-
-    steps:
-      - name: Create issue
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          # via env, never inline: PR titles are untrusted input
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          DRAFT_PRS: ${{ needs.backport.outputs.created_pull_numbers }}
-        run: |
-          SHORT_PR_TITLE=$(
-            echo "$PR_TITLE" \
-            | awk '{print (length($0) > 40) ? substr($0, 1, 40) "..." : $0}'
-          )
-          DRAFT_LINKS=$(echo "${DRAFT_PRS}" | tr ' ' '\n' | sed '/^$/d; s/^/- #/' || true)
-          cat > issue-body.md <<EOF
-          PR: #${PR_NUMBER}
-          Title: ${PR_TITLE}
-
-          Backporting hit a conflict. Draft PR(s) with the conflict committed:
-          ${DRAFT_LINKS:-"(none pushed - cherry-pick manually)"}
-
-          Finish in place: resolve the conflicts (take the target branch's
-          \`etc/cashu-ts.api.md\` and rerun \`npm run api:update\`), run
-          \`npm run prtasks\`, push, and mark the PR ready.
-          EOF
-
-          gh issue create \
-            --repo "${GITHUB_REPOSITORY}" \
-            --title "Backport PR #${PR_NUMBER}: ${SHORT_PR_TITLE}" \
-            --label backport \
-            --body-file issue-body.md
