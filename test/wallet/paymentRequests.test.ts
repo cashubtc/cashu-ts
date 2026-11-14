@@ -817,6 +817,13 @@ describe('NUT-18 payment payloads', () => {
       expect(proof.secret).toBe('s');
     });
 
+    test.each(['id', 'memo'])('reads a null %s as absent', (field) => {
+      const { id: _id, ...bare } = valid();
+      const payload = PaymentRequest.decodePayload(JSON.stringify({ ...bare, [field]: null }));
+      expect(payload).toEqual(PaymentRequest.decodePayload(JSON.stringify(bare)));
+      expect(payload).not.toHaveProperty(field);
+    });
+
     test.each([
       ['not JSON', 'nope{', /not valid JSON/],
       ['a JSON array', '[]', /expected a JSON object/],
