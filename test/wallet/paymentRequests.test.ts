@@ -168,6 +168,28 @@ describe('payment requests', () => {
     expect(() => PaymentRequest.fromEncodedRequest(encoded)).toThrow(CTSError);
   });
 
+  test('reads an empty supported-method list as absent', () => {
+    const request = new PaymentRequest(
+      undefined,
+      undefined,
+      undefined,
+      'sat',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      [],
+    );
+    expect(request.supportedMethods).toBeUndefined();
+    const raw = { u: 'sat', sm: [] };
+    const decoded = PaymentRequest.fromEncodedRequest(
+      'creqA' + encodeUint8ToBase64Url(encodeCBOR(raw)),
+    );
+    expect(decoded.supportedMethods).toBeUndefined();
+    expect(PaymentRequest.fromEncodedRequest(decoded.toEncodedCreqA())).toEqual(decoded);
+  });
+
   test('rejects a creqA request containing duplicate amount keys', () => {
     // CBOR map: { a: 1, a: 1000, u: 'sat' }. A first-wins display and a last-wins decoder
     // would otherwise disagree about the amount the wallet sends.
