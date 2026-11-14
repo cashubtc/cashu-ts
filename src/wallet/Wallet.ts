@@ -281,7 +281,8 @@ class Wallet {
         `bip39seed must be ${MIN_SEED_BYTES} to ${MAX_SEED_BYTES} bytes`,
         { length: options.bip39seed.length },
       );
-      this._seed = options.bip39seed;
+      // A private copy, so a caller clearing or reusing its buffer cannot change later outputs.
+      this._seed = options.bip39seed.slice();
     }
     this._secretsPolicy = options?.secretsPolicy ?? this._secretsPolicy;
     if (options?.counterSource) {
