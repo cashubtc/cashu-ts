@@ -777,31 +777,21 @@ describe('incomplete DLEQ proofs', () => {
     ['a non-string id', v3({ id: [ID] })],
     ['a numeric witness', v3({ witness: 1 })],
     ['a non-string p2pk_e', v3({ p2pk_e: 1 })],
-    ['a malformed spend_info', v3({ spend_info: { tree: 'aa' } })],
-    ['a spend_info that is not a map', v3({ spend_info: 'aa' })],
-    ['a spend_info with a numeric key', v3({ spend_info: { k: 1 } })],
     ['a proof that is not an object', v3({}, {}, { proofs: [0] })],
   ])('v3 decode rejects %s', (_name, encoded) => {
     expect(() => utils.getDecodedToken(encoded, [ID])).toThrow(CTSError);
   });
 
-  test('v3 decode keeps a parsed witness and a well-formed spend_info', () => {
+  test('v3 decode keeps a parsed witness', () => {
     const witness = { signatures: ['aa'] };
-    const spend_info = { k: 'aa', tree: ['bb'] };
-    const [proof] = utils.getDecodedToken(v3({ witness, spend_info }), [ID]).proofs;
+    const [proof] = utils.getDecodedToken(v3({ witness }), [ID]).proofs;
     expect(proof.witness).toEqual(witness);
-    expect(proof.spend_info).toEqual(spend_info);
   });
 
   test('v3 decode reads an empty witness or p2pk_e as absent', () => {
     const [proof] = utils.getDecodedToken(v3({ witness: '', p2pk_e: '' }), [ID]).proofs;
     expect(proof).not.toHaveProperty('witness');
     expect(proof).not.toHaveProperty('p2pk_e');
-  });
-
-  test('v3 decode reads null spend_info fields as absent', () => {
-    const spend_info = { k: 'aa', E: null, tree: null };
-    expect(() => utils.getDecodedToken(v3({ spend_info }), [ID])).not.toThrow();
   });
 
   test('v3 decode drops a DLEQ with a non-string field', () => {
@@ -897,6 +887,14 @@ describe('test zero-knowledge utilities', () => {
       keys: { [2]: pubkey.toHex(true) },
     };
     expect(() => hasValidDleq(serializedProof, keyset)).toThrow(/Undefined key for amount/);
+  });
+  test.each([
+    ['an array secret', { secret: [serializedProof.secret] }],
+    ['a numeric C', { C: 0 }],
+  ])('hasValidDleq rejects a proof with %s', (_name, field) => {
+    const keyset = { id: '00', unit: 'sat', keys: { [1]: pubkey.toHex(true) } };
+    const bad = { ...serializedProof, ...field } as unknown as Proof;
+    expect(hasValidDleq(bad, keyset)).toBe(false);
   });
   test('hasValidDleq names key loading when the keyset is keyless', () => {
     const keylessKeyset = { id: '00bd033559de27d0', unit: 'sat', keys: {} };

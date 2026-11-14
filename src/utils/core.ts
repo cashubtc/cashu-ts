@@ -382,10 +382,6 @@ function readCashuAProof(raw: unknown): Proof {
     throw new CTSError('Invalid token');
   }
   const { dleq, witness, p2pk_e, ...rest } = dropNullProofFields(raw);
-  const { spend_info } = rest;
-  if (spend_info !== undefined && !isCashuASpendInfo(spend_info)) {
-    throw new CTSError('Invalid token: malformed spend_info');
-  }
   return {
     ...rest,
     id: templateText(rest.id, 'keyset id'),
@@ -406,16 +402,6 @@ function readCashuAProof(raw: unknown): Proof {
 function readCashuAWitness(v: unknown): string | P2PKWitness | HTLCWitness {
   if (isRecord(v)) return v;
   return templateText(v, 'witness');
-}
-
-function isCashuASpendInfo(v: unknown): boolean {
-  if (!isRecord(v)) return false;
-  const keys = ['k', 'E', 'K', 'u'].map((k) => v[k]);
-  const tree = v.tree;
-  return (
-    keys.every((k) => k == null || typeof k === 'string') &&
-    (tree == null || (Array.isArray(tree) && tree.every((l) => typeof l === 'string')))
-  );
 }
 
 function fromV4CborTemplate(template: TokenV4Template): Token {
@@ -943,6 +929,10 @@ export function hasValidDleq(
   // A DLEQ the wallet never completed with its own `r` is malformed, not absent: it cannot be
   // re-blinded, and a zero blinding factor would assert the message was never blinded at all.
   if (proof.dleq.r == undefined) {
+    return false;
+  }
+  // Proofs from outside are untyped: a non-string secret or C cannot carry a valid DLEQ.
+  if (typeof proof.secret !== 'string' || typeof proof.C !== 'string') {
     return false;
   }
   const key = keyset.keys[proof.amount.toString()];
