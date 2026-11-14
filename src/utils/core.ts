@@ -10,7 +10,9 @@ import { PaymentRequest } from '../model/PaymentRequest';
 import type {
   TokenMetadata,
   DeprecatedToken,
+  HTLCWitness,
   Keys,
+  P2PKWitness,
   Proof,
   ProofLike,
   SerializedDLEQ,
@@ -372,6 +374,36 @@ function isCompleteDleq(d: V4DLEQTemplate | undefined): d is V4DLEQTemplate {
   return d != undefined && d.e != undefined && d.s != undefined && d.r != undefined;
 }
 
+/**
+ * Reads one cashuA proof, checking the type of each field it keeps.
+ */
+function readCashuAProof(raw: unknown): Proof {
+  if (!isRecord(raw)) {
+    throw new CTSError('Invalid token');
+  }
+  const { dleq, witness, p2pk_e, ...rest } = dropNullProofFields(raw);
+  return {
+    ...rest,
+    id: templateText(rest.id, 'keyset id'),
+    secret: templateText(rest.secret, 'secret'),
+    C: templateText(rest.C, 'proof C'),
+    amount: Amount.from(rest.amount as AmountLike),
+    ...(witness ? { witness: readCashuAWitness(witness) } : {}),
+    ...(p2pk_e ? { p2pk_e: templateText(p2pk_e, 'p2pk_e') } : {}),
+    // An incomplete or malformed DLEQ is useless and leaky, so it does not travel.
+    ...(isRecord(dleq) &&
+      [dleq.e, dleq.s, dleq.r].every((v) => typeof v === 'string' && v.length > 0) && {
+        dleq: { e: dleq.e as string, s: dleq.s as string, r: dleq.r as string },
+      }),
+  };
+}
+
+// NUT-00 sends the witness as JSON text; the Proof type also allows it parsed.
+function readCashuAWitness(v: unknown): string | P2PKWitness | HTLCWitness {
+  if (isRecord(v)) return v;
+  return templateText(v, 'witness');
+}
+
 function fromV4CborTemplate(template: TokenV4Template): Token {
   if (!template || !Array.isArray(template.t)) {
     throw new CTSError('Invalid token');
@@ -482,22 +514,13 @@ function handleTokens(token: string): Token {
     if (!entry || !Array.isArray(entry.proofs)) {
       throw new CTSError('Invalid token');
     }
-    const proofs = entry.proofs.map((p) => {
-      const { dleq, ...rest } = p;
-      return {
-        ...dropNullProofFields(rest),
-        amount: Amount.from(p.amount),
-        // Same rule as the v4 path: an incomplete DLEQ is useless and leaky, so it does not travel.
-        ...(dleq?.r && dleq.s && dleq.e && { dleq }),
-      };
-    });
     const tokenObj: Token = {
-      mint: entry.mint,
-      proofs,
-      unit: parsedV3Token.unit || 'sat',
+      mint: templateText(entry.mint, 'mint'),
+      proofs: entry.proofs.map(readCashuAProof),
+      unit: parsedV3Token.unit ? templateText(parsedV3Token.unit, 'unit') : 'sat',
     };
     if (parsedV3Token.memo) {
-      tokenObj.memo = parsedV3Token.memo;
+      tokenObj.memo = templateText(parsedV3Token.memo, 'memo');
     }
     return tokenObj;
   } else if (version === 'B') {
@@ -906,6 +929,10 @@ export function hasValidDleq(
   // A DLEQ the wallet never completed with its own `r` is malformed, not absent: it cannot be
   // re-blinded, and a zero blinding factor would assert the message was never blinded at all.
   if (proof.dleq.r == undefined) {
+    return false;
+  }
+  // Proofs from outside are untyped: a non-string secret or C cannot carry a valid DLEQ.
+  if (typeof proof.secret !== 'string' || typeof proof.C !== 'string') {
     return false;
   }
   const key = keyset.keys[proof.amount.toString()];
