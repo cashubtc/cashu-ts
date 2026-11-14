@@ -31,6 +31,9 @@ export class Amount {
   private constructor(value: bigint) {
     // Single choke point for the [0, u64 max] invariant; muldiv helpers construct only their
     // divided-down result, so a wide intermediate never hits this check.
+    if (typeof value !== 'bigint') {
+      throw new AmountError(`Amount must be a bigint, got ${typeof value}`);
+    }
     if (value < 0n) {
       throw new AmountError(`Amount must be >= 0, got ${value}`);
     }
@@ -460,7 +463,7 @@ export class AmountWithUnit {
     if (typeof unit !== 'string' || unit.length === 0) {
       throw new AmountWithUnitError('unit required');
     }
-    this._amount = amount;
+    this._amount = Amount.from(amount);
     this.unit = unit;
     Object.freeze(this);
   }
