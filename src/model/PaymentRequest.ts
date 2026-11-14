@@ -425,6 +425,9 @@ export class PaymentRequest {
   }
 
   static fromEncodedRequest(encodedRequest: string): PaymentRequest {
+    if (typeof encodedRequest !== 'string') {
+      throw new CTSError('Payment request must be a string');
+    }
     const lowerRequest = encodedRequest.toLowerCase();
 
     // Version B: bech32m + TLV encoding (creqb...)
