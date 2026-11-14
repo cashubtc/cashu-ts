@@ -175,7 +175,7 @@ function toAmount(amount: AmountLike, op: string, allowZero = false): Amount {
  */
 export function dropNullProofFields<T extends object>(proof: T): T {
   const out = { ...proof } as Record<string, unknown>;
-  for (const key of ['witness', 'p2pk_e', 'spend_info']) {
+  for (const key of ['witness', 'p2pk_e']) {
     if (out[key] === null) delete out[key];
   }
   return out as T;

@@ -4,11 +4,7 @@ import { isP2PKKnownTagKey, parseP2PKSecret } from '../crypto/NUT11';
 import {
   decodeBase64AnyToUint8,
   decodeCBOR,
-<<<<<<< HEAD
-=======
   dropNullProofFields,
-  hexToBytes,
->>>>>>> f20db4a (fix(payment-request): read null optional fields as absent in creqA requests and received proofs (#1451))
   encodeCBOR,
   encodeUint8ToBase64UrlPadded,
   normalizeMintUrl,
@@ -415,34 +411,14 @@ export class PaymentRequest {
           tags: rawPaymentRequest.nut10.t ?? undefined,
         }
       : undefined;
-<<<<<<< HEAD
     return new PaymentRequest(
       transports,
-      rawPaymentRequest.i,
-      rawPaymentRequest.a,
-      rawPaymentRequest.u,
-      rawPaymentRequest.m,
-      rawPaymentRequest.d,
+      rawPaymentRequest.i ?? undefined,
+      rawPaymentRequest.a ?? undefined,
+      rawPaymentRequest.u ?? undefined,
+      rawPaymentRequest.m ?? undefined,
+      rawPaymentRequest.d ?? undefined,
       rawPaymentRequest.s,
-=======
-    const supportedMethods = readSupportedMethods(rawPaymentRequest.sm);
-    const nutroot = rawPaymentRequest.nutroot
-      ? {
-          receiverKey: rawPaymentRequest.nutroot.k,
-          leaves: rawPaymentRequest.nutroot.l,
-          blindKeys: rawPaymentRequest.nutroot.b,
-        }
-      : undefined;
-    return new PaymentRequest({
-      nutroot,
-      transport: transports,
-      id: rawPaymentRequest.i ?? undefined,
-      amount: rawPaymentRequest.a ?? undefined,
-      unit: rawPaymentRequest.u ?? undefined,
-      mints: rawPaymentRequest.m ?? undefined,
-      description: rawPaymentRequest.d ?? undefined,
-      singleUse: rawPaymentRequest.s,
->>>>>>> f20db4a (fix(payment-request): read null optional fields as absent in creqA requests and received proofs (#1451))
       nut10,
       rawPaymentRequest.mp,
       readSupportedMethods(rawPaymentRequest.sm),

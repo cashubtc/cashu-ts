@@ -12,6 +12,7 @@ import {
 } from '../../src/index';
 import { encodeUint8ToBase64Url } from '../../src/utils/base64';
 import { encodeBech32m } from '../../src/utils/bech32m';
+import { encodeCBOR } from '../../src/utils/cbor';
 import { encodeTLV } from '../../src/utils/tlv';
 
 describe('payment requests', () => {
@@ -848,7 +849,7 @@ describe('NUT-18 payment payloads', () => {
       expect(proof.secret).toBe('s');
     });
 
-    test.each(['witness', 'p2pk_e', 'spend_info'])('reads a null proof %s as absent', (field) => {
+    test.each(['witness', 'p2pk_e'])('reads a null proof %s as absent', (field) => {
       const body = valid();
       const proofs = [{ ...body.proofs[0], [field]: null }];
       const payload = PaymentRequest.decodePayload(JSON.stringify({ ...body, proofs }));
