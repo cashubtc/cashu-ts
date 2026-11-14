@@ -959,9 +959,19 @@ describe('incomplete DLEQ proofs', () => {
     ['a numeric witness', v3({ witness: 1 })],
     ['a non-string p2pk_e', v3({ p2pk_e: 1 })],
     ['a malformed spend_info', v3({ spend_info: { tree: 'aa' } })],
+    ['a spend_info that is not a map', v3({ spend_info: 'aa' })],
+    ['a spend_info with a numeric key', v3({ spend_info: { k: 1 } })],
     ['a proof that is not an object', v3({}, {}, { proofs: [0] })],
   ])('v3 decode rejects %s', (_name, encoded) => {
     expect(() => utils.getDecodedToken(encoded, [ID])).toThrow(CTSError);
+  });
+
+  test('v3 decode keeps a parsed witness and a well-formed spend_info', () => {
+    const witness = { signatures: ['aa'] };
+    const spend_info = { k: 'aa', tree: ['bb'] };
+    const [proof] = utils.getDecodedToken(v3({ witness, spend_info }), [ID]).proofs;
+    expect(proof.witness).toEqual(witness);
+    expect(proof.spend_info).toEqual(spend_info);
   });
 
   test('v3 decode drops a DLEQ with a non-string field', () => {
