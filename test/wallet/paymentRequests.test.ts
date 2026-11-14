@@ -151,6 +151,23 @@ describe('payment requests', () => {
     },
   );
 
+  test.each([
+    ['a numeric id', { i: 0 }],
+    ['a numeric unit', { u: 1 }],
+    ['a non-string description', { d: {} }],
+    ['a mint list with a number', { m: ['https://mint.example.com', 1] }],
+    ['a transport list that is not a list', { t: 'post' }],
+    ['a transport without a target', { t: [{ t: 'post' }] }],
+    ['transport tags that are not a list', { t: [{ t: 'post', a: 'https://x', g: 'n' }] }],
+    ['a nut10 that is not a map', { nut10: 'P2PK' }],
+    ['a nut10 without data', { nut10: { k: 'P2PK' } }],
+    ['nutroot leaves that are not strings', { nutroot: { k: '02' + 'aa'.repeat(32), l: [{}] } }],
+    ['a request that is not a map', ['sat']],
+  ])('rejects a creqA request with %s', (_name, raw) => {
+    const encoded = 'creqA' + encodeUint8ToBase64Url(encodeCBOR(raw));
+    expect(() => PaymentRequest.fromEncodedRequest(encoded)).toThrow(CTSError);
+  });
+
   test('rejects a creqA request containing duplicate amount keys', () => {
     // CBOR map: { a: 1, a: 1000, u: 'sat' }. A first-wins display and a last-wins decoder
     // would otherwise disagree about the amount the wallet sends.
