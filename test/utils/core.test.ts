@@ -929,6 +929,16 @@ describe('incomplete DLEQ proofs', () => {
     expect(utils.getDecodedToken(encoded, [ID]).proofs[0].dleq).toEqual({ e: E, s: S, r: R });
   });
 
+  test.each(['witness', 'p2pk_e', 'spend_info'])('v3 decode reads a null %s as absent', (field) => {
+    const encoded =
+      'cashuA' +
+      encodeJsonToBase64Url({
+        token: [{ mint: MINT, proofs: [{ amount: 1, id: ID, secret: SECRET, C, [field]: null }] }],
+        unit: 'sat',
+      });
+    expect(utils.getDecodedToken(encoded, [ID]).proofs[0]).not.toHaveProperty(field);
+  });
+
   test('v3 decode drops the DLEQ', () => {
     const encoded =
       'cashuA' +

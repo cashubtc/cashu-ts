@@ -17,6 +17,7 @@ import {
   decodeBase64ToUint8Legacy,
   decodeBase64UrlToUint8,
   decodeCBOR,
+  dropNullProofFields,
   hexToBytes,
   encodeCBOR,
   encodeUint8ToBase64UrlPadded,
@@ -310,7 +311,7 @@ export class PaymentRequest {
       // Same rule as the token decoders: an incomplete DLEQ does not travel.
       const { dleq, ...rest } = p as Omit<Proof, 'amount'>;
       return {
-        ...rest,
+        ...dropNullProofFields(rest),
         amount: Amount.from(amount),
         ...(dleq?.r && dleq.s && dleq.e && { dleq }),
       };
@@ -530,14 +531,14 @@ export class PaymentRequest {
       ? rawPaymentRequest.t.map((t: RawTransport) => ({
           type: t.t,
           target: t.a,
-          tags: t.g,
+          tags: t.g ?? undefined,
         }))
       : undefined;
     const nut10 = rawPaymentRequest.nut10
       ? {
           kind: rawPaymentRequest.nut10.k,
           data: rawPaymentRequest.nut10.d,
-          tags: rawPaymentRequest.nut10.t,
+          tags: rawPaymentRequest.nut10.t ?? undefined,
         }
       : undefined;
     const supportedMethods = readSupportedMethods(rawPaymentRequest.sm);
@@ -551,11 +552,11 @@ export class PaymentRequest {
     return new PaymentRequest({
       nutroot,
       transport: transports,
-      id: rawPaymentRequest.i,
-      amount: rawPaymentRequest.a,
-      unit: rawPaymentRequest.u,
-      mints: rawPaymentRequest.m,
-      description: rawPaymentRequest.d,
+      id: rawPaymentRequest.i ?? undefined,
+      amount: rawPaymentRequest.a ?? undefined,
+      unit: rawPaymentRequest.u ?? undefined,
+      mints: rawPaymentRequest.m ?? undefined,
+      description: rawPaymentRequest.d ?? undefined,
       singleUse: rawPaymentRequest.s,
       nut10,
       mintsPreferred: rawPaymentRequest.mp,
