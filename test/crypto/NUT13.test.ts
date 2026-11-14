@@ -14,6 +14,26 @@ import {
 import { CTSError } from '../../src/model/Errors';
 import { decodeBase64ToUint8Legacy } from '../../src/utils';
 
+describe('createSecretAndBlindingFactorDeriver', () => {
+  const seed64 = (label: string): Uint8Array => {
+    const seed = new Uint8Array(64);
+    seed.set(new TextEncoder().encode(label));
+    return seed;
+  };
+
+  test.each(['01abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567'])(
+    'keeps its own copy of the seed for keyset %s',
+    (keysetId) => {
+      const caller = seed64('deriver seed');
+      const derive = createSecretAndBlindingFactorDeriver(caller, keysetId);
+      caller.fill(0);
+      expect(derive(3)).toEqual(
+        createSecretAndBlindingFactorDeriver(seed64('deriver seed'), keysetId)(3),
+      );
+    },
+  );
+});
+
 describe('deriveBlindingFactor', () => {
   test('preserves 32-byte encoding when reduced scalar has leading zeros', () => {
     const seed = new TextEncoder().encode('test seed for regression');

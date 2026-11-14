@@ -71,6 +71,14 @@ describe('constructor mutants', () => {
     }
   });
 
+  test('keeps its own copy of the seed, so clearing the caller buffer changes nothing', () => {
+    const caller = SEED.slice();
+    const wallet = new Wallet(mint, { unit, bip39seed: caller });
+    caller.fill(0);
+    // v4 has no public seed-derived call without a mint round trip, so read the stored copy.
+    expect((wallet as unknown as { _seed: Uint8Array })._seed).toEqual(SEED);
+  });
+
   test('never logs the rejected seed value', () => {
     // failIf logs its context before throwing, so the value must not appear there.
     const mnemonic = 'abandon abandon abandon abandon about';
