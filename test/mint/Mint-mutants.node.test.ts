@@ -660,3 +660,27 @@ describe('quote responses answer the request', () => {
     ).resolves.toBeDefined();
   });
 });
+
+describe('malformed mint responses', () => {
+  const mintWith = (response: object) =>
+    new Mint(mintUrl, { customRequest: (async () => response) as RequestFn });
+
+  it('rejects an onchain melt quote whose fee option is not a map', async () => {
+    await expect(
+      mintWith({ ...meltOnchainResp, fee_options: [null] }).createMeltQuoteOnchain({
+        request: 'bc1qrecipient',
+        unit: 'sat',
+        amount: 2,
+      }),
+    ).rejects.toThrow('Invalid response from mint');
+  });
+
+  it('rejects a /v1/keys entry with no keys map, or no string id', async () => {
+    await expect(mintWith({ keysets: [{ id: 'abc', unit: 'sat' }] }).getKeys()).rejects.toThrow(
+      "Mint returned no keys for keyset 'abc'",
+    );
+    await expect(
+      mintWith({ keysets: [{ id: 1, unit: 'sat', keys: {} }] }).getKeys(),
+    ).rejects.toThrow('Invalid response from mint');
+  });
+});

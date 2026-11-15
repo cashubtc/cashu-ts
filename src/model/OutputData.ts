@@ -146,11 +146,16 @@ export class OutputData implements OutputDataLike {
     }
     let dleq: DLEQ | undefined;
     if (sig.dleq) {
-      dleq = {
-        s: hexToBytes(sig.dleq.s),
-        e: hexToBytes(sig.dleq.e),
-        r: this.blindingFactor,
-      };
+      // A wrong-typed or non-hex field is a bad mint response, not a raw TypeError.
+      try {
+        dleq = {
+          s: hexToBytes(sig.dleq.s),
+          e: hexToBytes(sig.dleq.e),
+          r: this.blindingFactor,
+        };
+      } catch (cause) {
+        throw new CTSError('Mint returned an invalid DLEQ proof', { cause });
+      }
     }
     const sigAmountKey = sig.amount.toString();
     const A = pointFromHex(keyset.keys[sigAmountKey]);
