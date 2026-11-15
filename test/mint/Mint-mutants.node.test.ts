@@ -593,6 +593,14 @@ describe('quote responses answer the request', () => {
     ).rejects.toThrow('Melt quote is for a different payment request');
   });
 
+  it('checks nothing it was not asked for: no request sent, or no pubkey sent', async () => {
+    const { pubkey: _pubkey, ...unlocked } = mintQuoteOnchainResp;
+    await expect(
+      mintWith(meltBaseResp).createMeltQuote('bank', { unit: 'sat' }),
+    ).resolves.toBeDefined();
+    await expect(mintWith(unlocked).createMintQuoteBolt12({ unit: 'sat' })).resolves.toBeDefined();
+  });
+
   it('compares a bech32 address without case, and a base58 one exactly', async () => {
     const onchain = (asked: string, echoed: string) =>
       mintWith({ ...meltOnchainResp, request: echoed }).createMeltQuoteOnchain({
