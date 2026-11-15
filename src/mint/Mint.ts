@@ -104,6 +104,25 @@ export type MintCallOptions = {
 };
 
 /**
+ * True when a melt quote names the payment target that was asked for (NUT-05 echoes `request`).
+ *
+ * @remarks
+ * A missing or empty `request` means the mint echoed nothing to compare. Bech32 targets (bolt11,
+ * bolt12, segwit addresses) are single-case, so a single-case pair compares without case; anything
+ * else, eg a base58 address or a custom method's target, must match exactly.
+ */
+function answersRequest(returned: unknown, requested: string): boolean {
+  if (typeof returned !== 'string' || returned === '') return true;
+  if (returned === requested) return true;
+  const singleCase = (v: string) => v === v.toLowerCase() || v === v.toUpperCase();
+  return (
+    singleCase(returned) &&
+    singleCase(requested) &&
+    returned.toLowerCase() === requested.toLowerCase()
+  );
+}
+
+/**
  * Class represents Cashu Mint API.
  *
  * @remarks
@@ -332,7 +351,9 @@ class Mint {
     if (mintQuotePayload.amount !== undefined) {
       body.amount = Amount.from(mintQuotePayload.amount).toBigInt();
     }
-    return this.createMintQuote<MintQuoteBolt12Response>('bolt12', body, opts);
+    const response = await this.createMintQuote<MintQuoteBolt12Response>('bolt12', body, opts);
+    this.assertLockedTo(response, mintQuotePayload.pubkey);
+    return response;
   }
 
   /**
@@ -349,7 +370,27 @@ class Mint {
     mintQuotePayload: MintQuoteOnchainRequest,
     opts?: MintCallOptions,
   ): Promise<MintQuoteOnchainResponse> {
-    return this.createMintQuote<MintQuoteOnchainResponse>('onchain', mintQuotePayload, opts);
+    const response = await this.createMintQuote<MintQuoteOnchainResponse>(
+      'onchain',
+      mintQuotePayload,
+      opts,
+    );
+    this.assertLockedTo(response, mintQuotePayload.pubkey);
+    return response;
+  }
+
+  /**
+   * Fails unless a quote is locked to the requested key: NUT-25 and NUT-30 make the lock mandatory,
+   * and a quote locked to another key cannot be redeemed by the caller.
+   */
+  private assertLockedTo(response: { pubkey?: unknown }, requested: string | undefined): void {
+    if (requested === undefined) return;
+    failIf(typeof response.pubkey !== 'string', 'Mint returned unlocked mint quote', this._logger);
+    failIf(
+      (response.pubkey as string).toLowerCase() !== requested.toLowerCase(),
+      'Mint quote is not locked to the requested pubkey',
+      this._logger,
+    );
   }
 
   // -----------------------------------------------------------------
@@ -732,6 +773,13 @@ class Mint {
       { requestBody: payload },
       options,
     );
+    if (typeof payload.request === 'string') {
+      failIf(
+        !answersRequest((response as { request?: unknown }).request, payload.request),
+        'Melt quote is for a different payment request',
+        this._logger,
+      );
+    }
     return this.normalizeMeltQuoteResponse(method, response, options?.normalize);
   }
 
@@ -752,14 +800,6 @@ class Mint {
       'bolt11',
       this.normalizeMeltQuoteRequestOptions(meltQuotePayload),
       opts,
-    );
-    // The quote must be for the invoice that was asked for. Bech32 is case insensitive, and an
-    // empty request means the mint echoed nothing back for the caller to compare.
-    failIf(
-      response.request !== '' &&
-        response.request.toLowerCase() !== meltQuotePayload.request.toLowerCase(),
-      'Melt quote is for a different payment request',
-      this._logger,
     );
     return response;
   }
