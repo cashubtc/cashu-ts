@@ -11,6 +11,7 @@ import {
   type AuthProvider,
   type RequestFn,
 } from '../../src';
+import { NULL_LOGGER } from '../../src/logger';
 
 type ReqArgs = {
   endpoint: string;
@@ -274,7 +275,7 @@ describe('Mint mutation coverage', () => {
       },
       {
         name: 'createMeltQuoteBolt12',
-        response: meltBoltResp,
+        response: { ...meltBoltResp, request: 'lno1...' },
         invoke: (m: Mint, cr: RequestFn) =>
           m.createMeltQuoteBolt12({ request: 'lno1...', unit: 'sat' }, cr),
       },
@@ -592,8 +593,6 @@ describe('Mint mutation coverage', () => {
     });
   });
 });
-<<<<<<< HEAD
-=======
 
 describe('quote responses answer the request', () => {
   const mintWith = (response: object) =>
@@ -605,11 +604,25 @@ describe('quote responses answer the request', () => {
       'onchain',
       (m: Mint) => m.createMeltQuoteOnchain({ request: 'bc1qasked', unit: 'sat', amount: 2 }),
     ],
-    ['a custom method', (m: Mint) => m.createMeltQuote('bank', { request: 'acct-1', unit: 'sat' })],
   ])('rejects a %s melt quote for a different target', async (_name, call) => {
     await expect(
       call(mintWith({ ...meltOnchainResp, request: 'other', fee_reserve: 1 })),
     ).rejects.toThrow('Melt quote is for a different payment request');
+  });
+
+  it('only warns for a custom method melt quote for a different target (v4 LTS)', async () => {
+    const warn = vi.fn();
+    const logger = { ...NULL_LOGGER, warn };
+    const mint = new Mint(mintUrl, {
+      customRequest: (async () => ({ ...meltBaseResp, request: 'other' })) as RequestFn,
+      logger,
+    });
+    await expect(
+      mint.createMeltQuote('bank', { request: 'acct-1', unit: 'sat' }),
+    ).resolves.toBeDefined();
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/different payment request/), {
+      method: 'bank',
+    });
   });
 
   it('checks nothing it was not asked for: no request sent, or no pubkey sent', async () => {
@@ -671,4 +684,3 @@ describe('malformed mint responses', () => {
     ).rejects.toThrow('Invalid response from mint');
   });
 });
->>>>>>> bf7d061 (fix(mint): reject malformed fields in mint responses with CTSError (#1469))

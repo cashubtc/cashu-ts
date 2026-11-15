@@ -487,6 +487,7 @@ describe('Mint normalization', () => {
         request: 'lno1...',
         paid: true,
         expiry: 123,
+        pubkey: '02abcd',
         amount_paid: 5,
         amount_issued: 4,
       };
