@@ -144,6 +144,7 @@ export class OutputData implements OutputDataLike {
         `Mint signature keyset id ${sig.id} does not match output ${this.blindedMessage.id}`,
       );
     }
+<<<<<<< HEAD
     let dleq: DLEQ | undefined;
     if (sig.dleq) {
       dleq = {
@@ -156,6 +157,75 @@ export class OutputData implements OutputDataLike {
     const A = pointFromHex(keyset.keys[sigAmountKey]);
 
     // NUT-12: Verify DLEQ proof if present
+=======
+    if (!requested.isZero() && !sig.amount.equals(requested)) {
+      throw new CTSError(
+        `Mint signature amount ${sig.amount.toString()} does not match requested amount ${requested.toString()}. ${RECOVERY_HINT}`,
+      );
+    }
+
+    // v3 (BLS12-381) path: multiplicative unblinding, then pairing equality
+    // `e(C, G2_gen) == e(Y, K2)` to confirm the mint actually signed this output. v3 carries no
+    // DLEQ — the pairing is the only check that the returned `C_` is a real signature, so it
+    // MUST run here. Without it, a malicious mint can return garbage `C_`, the wallet stores an
+    // invalid `C`, marks inputs spent, and the user loses funds. Mirrors the secp DLEQ check below.
+    if (isBlsKeyset(sig.id)) {
+      let C_: G1Point;
+      let K2: G2Point;
+      try {
+        const K2Hex = keyset.keys[sig.amount.toString()];
+        if (!K2Hex) {
+          throw new CTSError(`Amount ${sig.amount.toString()} not in keyset`);
+        }
+        C_ = pointFromHexG1(sig.C_);
+        K2 = pointFromHexG2(K2Hex);
+      } catch (e) {
+        throw new CTSError(`Mint returned invalid signature or amount. ${RECOVERY_HINT}`, {
+          cause: e,
+        });
+      }
+      const blindSig: BlindSignature = { id: sig.id, C_ };
+      const unblinded = constructUnblindedSignatureBls(blindSig, this.blindingFactor, this.secret);
+      if (!verifyUnblindedSignatureBls(K2, unblinded.C, unblinded.secret)) {
+        throw new CTSError('BLS pairing verification failed on mint response');
+      }
+      const proof: Proof = {
+        id: sig.id,
+        amount: sig.amount,
+        C: unblinded.C.toHex(true),
+        secret: decodeUtf8Field(unblinded.secret),
+      };
+      if (this.ephemeralE) proof.p2pk_e = this.ephemeralE;
+      if (this.spendInfo) proof.spend_info = this.spendInfo;
+      return proof;
+    }
+
+    let A: WeierstrassPoint<bigint>;
+    let C_: WeierstrassPoint<bigint>;
+    let dleq: ProofDLEQ | undefined;
+    try {
+      const AHex = keyset.keys[sig.amount.toString()];
+      if (!AHex) {
+        throw new CTSError(`Amount ${sig.amount.toString()} not in keyset`);
+      }
+      A = pointFromHex(AHex);
+      C_ = pointFromHex(sig.C_);
+      // NUT-12: the mint issues `{e, s}`, the wallet completes it with the `r` it blinded with.
+      if (sig.dleq) {
+        dleq = {
+          s: hexToBytes(sig.dleq.s),
+          e: hexToBytes(sig.dleq.e),
+          r: this.blindingFactor,
+        };
+      }
+    } catch (e) {
+      throw new CTSError(`Mint returned invalid signature or amount. ${RECOVERY_HINT}`, {
+        cause: e,
+      });
+    }
+
+    // NUT-12: Verify DLEQ proof if present. Only secp keysets carry DLEQ.
+>>>>>>> bf7d061 (fix(mint): reject malformed fields in mint responses with CTSError (#1469))
     if (dleq) {
       const B_ = pointFromHex(this.blindedMessage.B_);
       const C_ = pointFromHex(sig.C_);

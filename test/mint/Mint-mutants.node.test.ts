@@ -592,3 +592,83 @@ describe('Mint mutation coverage', () => {
     });
   });
 });
+<<<<<<< HEAD
+=======
+
+describe('quote responses answer the request', () => {
+  const mintWith = (response: object) =>
+    new Mint(mintUrl, { customRequest: (async () => response) as RequestFn });
+
+  it.each([
+    ['bolt12', (m: Mint) => m.createMeltQuoteBolt12({ request: 'lno1asked', unit: 'sat' })],
+    [
+      'onchain',
+      (m: Mint) => m.createMeltQuoteOnchain({ request: 'bc1qasked', unit: 'sat', amount: 2 }),
+    ],
+    ['a custom method', (m: Mint) => m.createMeltQuote('bank', { request: 'acct-1', unit: 'sat' })],
+  ])('rejects a %s melt quote for a different target', async (_name, call) => {
+    await expect(
+      call(mintWith({ ...meltOnchainResp, request: 'other', fee_reserve: 1 })),
+    ).rejects.toThrow('Melt quote is for a different payment request');
+  });
+
+  it('checks nothing it was not asked for: no request sent, or no pubkey sent', async () => {
+    const { pubkey: _pubkey, ...unlocked } = mintQuoteOnchainResp;
+    await expect(
+      mintWith(meltBaseResp).createMeltQuote('bank', { unit: 'sat' }),
+    ).resolves.toBeDefined();
+    await expect(mintWith(unlocked).createMintQuoteBolt12({ unit: 'sat' })).resolves.toBeDefined();
+  });
+
+  it('compares a bech32 address without case, and a base58 one exactly', async () => {
+    const onchain = (asked: string, echoed: string) =>
+      mintWith({ ...meltOnchainResp, request: echoed }).createMeltQuoteOnchain({
+        request: asked,
+        unit: 'sat',
+        amount: 2,
+      });
+    await expect(onchain('bc1qasked', 'BC1QASKED')).resolves.toBeDefined();
+    await expect(
+      onchain('1BoatSLRHtKNngkdXEeobR76b53LETtpyT', '1boatslrhtknngkdxeeobr76b53lettpyt'),
+    ).rejects.toThrow('different payment request');
+  });
+
+  it.each([
+    ['bolt12', (m: Mint) => m.createMintQuoteBolt12({ unit: 'sat', pubkey: '02abcd' })],
+    ['onchain', (m: Mint) => m.createMintQuoteOnchain({ unit: 'sat', pubkey: '02abcd' })],
+  ])('rejects a %s mint quote that is unlocked or locked to another key', async (_name, call) => {
+    const { pubkey: _pubkey, ...unlocked } = mintQuoteOnchainResp;
+    await expect(call(mintWith(unlocked))).rejects.toThrow('Mint returned unlocked mint quote');
+    await expect(call(mintWith({ ...mintQuoteOnchainResp, pubkey: '02ffff' }))).rejects.toThrow(
+      'not locked to the requested pubkey',
+    );
+    await expect(
+      call(mintWith({ ...mintQuoteOnchainResp, pubkey: '02ABCD' })),
+    ).resolves.toBeDefined();
+  });
+});
+
+describe('malformed mint responses', () => {
+  const mintWith = (response: object) =>
+    new Mint(mintUrl, { customRequest: (async () => response) as RequestFn });
+
+  it('rejects an onchain melt quote whose fee option is not a map', async () => {
+    await expect(
+      mintWith({ ...meltOnchainResp, fee_options: [null] }).createMeltQuoteOnchain({
+        request: 'bc1qrecipient',
+        unit: 'sat',
+        amount: 2,
+      }),
+    ).rejects.toThrow('Invalid response from mint');
+  });
+
+  it('rejects a /v1/keys entry with no keys map, or no string id', async () => {
+    await expect(mintWith({ keysets: [{ id: 'abc', unit: 'sat' }] }).getKeys()).rejects.toThrow(
+      "Mint returned no keys for keyset 'abc'",
+    );
+    await expect(
+      mintWith({ keysets: [{ id: 1, unit: 'sat', keys: {} }] }).getKeys(),
+    ).rejects.toThrow('Invalid response from mint');
+  });
+});
+>>>>>>> bf7d061 (fix(mint): reject malformed fields in mint responses with CTSError (#1469))
