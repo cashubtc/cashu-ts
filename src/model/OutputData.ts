@@ -218,6 +218,7 @@ export class OutputData implements OutputDataLike {
 
     let A: WeierstrassPoint<bigint>;
     let C_: WeierstrassPoint<bigint>;
+    let dleq: ProofDLEQ | undefined;
     try {
       const AHex = keyset.keys[sig.amount.toString()];
       if (!AHex) {
@@ -225,20 +226,18 @@ export class OutputData implements OutputDataLike {
       }
       A = pointFromHex(AHex);
       C_ = pointFromHex(sig.C_);
+      // NUT-12: the mint issues `{e, s}`, the wallet completes it with the `r` it blinded with.
+      if (sig.dleq) {
+        dleq = {
+          s: hexToBytes(sig.dleq.s),
+          e: hexToBytes(sig.dleq.e),
+          r: this.blindingFactor,
+        };
+      }
     } catch (e) {
       throw new CTSError(`Mint returned invalid signature or amount. ${RECOVERY_HINT}`, {
         cause: e,
       });
-    }
-
-    // NUT-12: the mint issues `{e, s}`, the wallet completes it with the `r` it blinded with.
-    let dleq: ProofDLEQ | undefined;
-    if (sig.dleq) {
-      dleq = {
-        s: hexToBytes(sig.dleq.s),
-        e: hexToBytes(sig.dleq.e),
-        r: this.blindingFactor,
-      };
     }
 
     // NUT-12: Verify DLEQ proof if present. Only secp keysets carry DLEQ.

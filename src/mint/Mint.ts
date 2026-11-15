@@ -1158,6 +1158,15 @@ class Mint {
       throw new CTSError('Invalid response from mint');
     }
     this.assertKeysetList(data.keysets, 'getKeys');
+    // Every served keyset carries its keys (NUT-01); one without is a broken response, not a gap.
+    for (const keyset of data.keysets) {
+      const { id, keys } = keyset as { id: unknown; keys: unknown };
+      if (typeof id !== 'string') {
+        this._logger.error('Invalid response from mint...', { op: 'getKeys' });
+        throw new CTSError('Invalid response from mint');
+      }
+      if (!isRecord(keys)) throw new CTSError(`Mint returned no keys for keyset '${id}'`);
+    }
 
     return {
       ...data,
@@ -1731,7 +1740,7 @@ class Mint {
     data.fee_options = data.fee_options.map((raw) => {
       const opt = raw as Record<string, unknown>;
       // fee_index is the load-bearing selector for the melt request
-      if (!Number.isSafeInteger(opt.fee_index)) {
+      if (!isRecord(raw) || !Number.isSafeInteger(opt.fee_index)) {
         this._logger.error('Invalid response from mint...', { op: 'onchain melt quote' });
         throw new CTSError('Invalid response from mint');
       }

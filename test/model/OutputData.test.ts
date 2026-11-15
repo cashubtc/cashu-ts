@@ -130,6 +130,19 @@ describe('OutputData secp round-trip (secp256k1 + NUT-12 DLEQ)', () => {
     expect(proof.dleq).toBeUndefined();
   });
 
+  test.each([
+    ['a numeric e', { e: 1 }],
+    ['a non-hex s', { s: 'zz' }],
+  ])('rejects a DLEQ with %s as a CTSError', (_name, field) => {
+    const out = OutputData.createSingleRandomData(2, keyset.id);
+    const sig = signWithMint(out, privKeys, keyset.id);
+    const bad = {
+      ...sig,
+      dleq: { ...sig.dleq!, ...field },
+    } as unknown as SerializedBlindedSignature;
+    expect(() => out.toProof(bad, keyset)).toThrow(CTSError);
+  });
+
   test('rejects a tampered DLEQ proof', () => {
     const out = OutputData.createSingleRandomData(2, keyset.id);
     const sig = signWithMint(out, privKeys, keyset.id);
