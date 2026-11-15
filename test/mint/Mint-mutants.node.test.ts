@@ -251,7 +251,7 @@ describe('Mint mutation coverage', () => {
       },
       {
         name: 'createMeltQuoteBolt12',
-        response: meltBoltResp,
+        response: { ...meltBoltResp, request: 'lno1...' },
         invoke: (m: Mint, cr: RequestFn) =>
           m.createMeltQuoteBolt12({ request: 'lno1...', unit: 'sat' }, { customRequest: cr }),
       },
@@ -573,5 +573,50 @@ describe('Mint mutation coverage', () => {
 
       expect(() => mint.disconnectWebSocket()).not.toThrow();
     });
+  });
+});
+
+describe('quote responses answer the request', () => {
+  const mintWith = (response: object) =>
+    new Mint(mintUrl, { customRequest: (async () => response) as RequestFn });
+
+  it.each([
+    ['bolt12', (m: Mint) => m.createMeltQuoteBolt12({ request: 'lno1asked', unit: 'sat' })],
+    [
+      'onchain',
+      (m: Mint) => m.createMeltQuoteOnchain({ request: 'bc1qasked', unit: 'sat', amount: 2 }),
+    ],
+    ['a custom method', (m: Mint) => m.createMeltQuote('bank', { request: 'acct-1', unit: 'sat' })],
+  ])('rejects a %s melt quote for a different target', async (_name, call) => {
+    await expect(
+      call(mintWith({ ...meltOnchainResp, request: 'other', fee_reserve: 1 })),
+    ).rejects.toThrow('Melt quote is for a different payment request');
+  });
+
+  it('compares a bech32 address without case, and a base58 one exactly', async () => {
+    const onchain = (asked: string, echoed: string) =>
+      mintWith({ ...meltOnchainResp, request: echoed }).createMeltQuoteOnchain({
+        request: asked,
+        unit: 'sat',
+        amount: 2,
+      });
+    await expect(onchain('bc1qasked', 'BC1QASKED')).resolves.toBeDefined();
+    await expect(
+      onchain('1BoatSLRHtKNngkdXEeobR76b53LETtpyT', '1boatslrhtknngkdxeeobr76b53lettpyt'),
+    ).rejects.toThrow('different payment request');
+  });
+
+  it.each([
+    ['bolt12', (m: Mint) => m.createMintQuoteBolt12({ unit: 'sat', pubkey: '02abcd' })],
+    ['onchain', (m: Mint) => m.createMintQuoteOnchain({ unit: 'sat', pubkey: '02abcd' })],
+  ])('rejects a %s mint quote that is unlocked or locked to another key', async (_name, call) => {
+    const { pubkey: _pubkey, ...unlocked } = mintQuoteOnchainResp;
+    await expect(call(mintWith(unlocked))).rejects.toThrow('Mint returned unlocked mint quote');
+    await expect(call(mintWith({ ...mintQuoteOnchainResp, pubkey: '02ffff' }))).rejects.toThrow(
+      'not locked to the requested pubkey',
+    );
+    await expect(
+      call(mintWith({ ...mintQuoteOnchainResp, pubkey: '02ABCD' })),
+    ).resolves.toBeDefined();
   });
 });
