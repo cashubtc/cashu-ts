@@ -89,19 +89,6 @@ function maskQuoteId(id: unknown): string {
 }
 
 /**
-<<<<<<< HEAD
-=======
- * Per-call options for a mint request: a `customRequest` override, a `signal` that aborts the
- * request (rejects with `CallerAbortError`), and a `requestTimeout` per attempt in milliseconds,
- * overriding any global value.
- */
-export type MintCallOptions = {
-  customRequest?: RequestFn;
-  signal?: AbortSignal;
-  requestTimeout?: number;
-};
-
-/**
  * True when a melt quote names the payment target that was asked for (NUT-05 echoes `request`).
  *
  * @remarks
@@ -121,7 +108,6 @@ function answersRequest(returned: unknown, requested: string): boolean {
 }
 
 /**
->>>>>>> 29e9aea (fix(mint): check that quote responses answer the request (#1467))
  * Class represents Cashu Mint API.
  *
  * @remarks
@@ -356,13 +342,11 @@ class Mint {
     if (mintQuotePayload.amount !== undefined) {
       body.amount = Amount.from(mintQuotePayload.amount).toBigInt();
     }
-<<<<<<< HEAD
-    return this.createMintQuote<MintQuoteBolt12Response>('bolt12', body, { customRequest });
-=======
-    const response = await this.createMintQuote<MintQuoteBolt12Response>('bolt12', body, opts);
+    const response = await this.createMintQuote<MintQuoteBolt12Response>('bolt12', body, {
+      customRequest,
+    });
     this.assertLockedTo(response, mintQuotePayload.pubkey);
     return response;
->>>>>>> 29e9aea (fix(mint): check that quote responses answer the request (#1467))
   }
 
   /**
@@ -379,15 +363,10 @@ class Mint {
     mintQuotePayload: MintQuoteOnchainRequest,
     customRequest?: RequestFn,
   ): Promise<MintQuoteOnchainResponse> {
-<<<<<<< HEAD
-    return this.createMintQuote<MintQuoteOnchainResponse>('onchain', mintQuotePayload, {
-      customRequest,
-    });
-=======
     const response = await this.createMintQuote<MintQuoteOnchainResponse>(
       'onchain',
       mintQuotePayload,
-      opts,
+      { customRequest },
     );
     this.assertLockedTo(response, mintQuotePayload.pubkey);
     return response;
@@ -405,7 +384,6 @@ class Mint {
       'Mint quote is not locked to the requested pubkey',
       this._logger,
     );
->>>>>>> 29e9aea (fix(mint): check that quote responses answer the request (#1467))
   }
 
   // -----------------------------------------------------------------
@@ -784,11 +762,19 @@ class Mint {
       { requestBody: payload },
       options?.customRequest,
     );
-    if (typeof payload.request === 'string') {
+    if (
+      typeof payload.request === 'string' &&
+      !answersRequest((response as { request?: unknown }).request, payload.request)
+    ) {
+      // v4 LTS: custom methods only warn, as their request format is unknown to the wallet.
       failIf(
-        !answersRequest((response as { request?: unknown }).request, payload.request),
+        ['bolt11', 'bolt12', 'onchain'].includes(method),
         'Melt quote is for a different payment request',
         this._logger,
+      );
+      this._logger.warn(
+        'Melt quote is for a different payment request; this will become an error in cashu-ts v5',
+        { method },
       );
     }
     return this.normalizeMeltQuoteResponse(method, response, options?.normalize);
