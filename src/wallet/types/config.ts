@@ -47,7 +47,8 @@ export type OutputType =
        *
        * @remarks
        * Counter: 0 means “auto-assign from wallet’s CounterSource”. Any positive value is used as
-       * the exact starting counter without reservation. Negative values are invalid.
+       * the exact starting counter, and the range is claimed from the CounterSource. Negative
+       * values are invalid.
        */
       type: 'deterministic';
       counter: number;
