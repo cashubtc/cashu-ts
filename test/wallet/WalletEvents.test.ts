@@ -1049,6 +1049,25 @@ describe('WalletEvents', () => {
       vi.useRealTimers();
     });
 
+    it('an abort on the last allowed failure ends the poll without an error', async () => {
+      vi.useFakeTimers();
+      mock.getMintInfo.mockReturnValue(nut17([]));
+      const ac = new AbortController();
+      mock.checkMeltQuote
+        .mockRejectedValueOnce(new Error('rate limited'))
+        .mockRejectedValueOnce(new Error('rate limited'))
+        .mockImplementationOnce(async () => {
+          ac.abort();
+          throw new Error('aborted mid-request');
+        });
+      const err = vi.fn();
+      await events.meltQuoteUpdates(['a'], vi.fn(), err, { pollMs: 10, signal: ac.signal });
+      await vi.advanceTimersByTimeAsync(200);
+      expect(mock.checkMeltQuote).toHaveBeenCalledTimes(3);
+      expect(err).not.toHaveBeenCalled();
+      vi.useRealTimers();
+    });
+
     it('passes the watch signal to the proof-state check', async () => {
       vi.useFakeTimers();
       mock.getMintInfo.mockReturnValue(nut17([]));
