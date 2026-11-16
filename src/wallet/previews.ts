@@ -2,7 +2,7 @@ import { Amount } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { OutputData, type SerializedOutputData } from '../model/OutputData';
 import type { Proof } from '../model/types/proof';
-import { normalizeProofAmounts } from '../utils';
+import { ABSOLUTE_MAX_ARRAY_LENGTH, normalizeProofAmounts } from '../utils';
 
 import {
   type BatchMintPreview,
@@ -77,6 +77,16 @@ function serializeProof(proof: Proof): SerializedProof {
 }
 
 /**
+ * Refuses lists that together exceed what one request array can carry, before any per-entry work.
+ */
+function assertMaxEntries(field: string, ...lists: Array<unknown[] | undefined>): void {
+  const count = lists.reduce((n, list) => n + (list?.length ?? 0), 0);
+  if (count > ABSOLUTE_MAX_ARRAY_LENGTH) {
+    throw new CTSError(`too many ${field}: ${count}, maximum is ${ABSOLUTE_MAX_ARRAY_LENGTH}`);
+  }
+}
+
+/**
  * Converts a swap preview to a JSON-safe form for persistence.
  *
  * @remarks
@@ -109,6 +119,9 @@ export function serializeSwapPreview(preview: SwapPreview): SerializedSwapPrevie
  */
 export function deserializeSwapPreview(serialized: SerializedSwapPreview): SwapPreview {
   try {
+    assertMaxEntries('inputs', serialized.inputs);
+    // Keep and send travel in one outputs array.
+    assertMaxEntries('outputs', serialized.sendOutputs, serialized.keepOutputs);
     const sendOutputs = serialized.sendOutputs?.map((s) => OutputData.deserialize(s));
     return {
       amount: Amount.from(serialized.amount),
@@ -162,15 +175,18 @@ export function serializeMintPreview(
 export function deserializeMintPreview(
   serialized: SerializedMintPreview,
 ): MintPreview<{ quote: string }> {
-  return deserializeWith('SerializedMintPreview', () => ({
-    method: serialized.method,
-    quote: { quote: serialized.quote },
-    outputData: serialized.outputData.map((s) => OutputData.deserialize(s)),
-    ...(serialized.signature !== undefined && { signature: serialized.signature }),
-    ...(serialized.legacySignature !== undefined && {
-      legacySignature: serialized.legacySignature,
-    }),
-  }));
+  return deserializeWith('SerializedMintPreview', () => {
+    assertMaxEntries('outputData', serialized.outputData);
+    return {
+      method: serialized.method,
+      quote: { quote: serialized.quote },
+      outputData: serialized.outputData.map((s) => OutputData.deserialize(s)),
+      ...(serialized.signature !== undefined && { signature: serialized.signature }),
+      ...(serialized.legacySignature !== undefined && {
+        legacySignature: serialized.legacySignature,
+      }),
+    };
+  });
 }
 
 /**
@@ -201,14 +217,21 @@ export function serializeBatchMintPreview(
 export function deserializeBatchMintPreview(
   serialized: SerializedBatchMintPreview,
 ): BatchMintPreview<{ quote: string }> {
-  return deserializeWith('SerializedBatchMintPreview', () => ({
-    method: serialized.method,
-    quotes: serialized.quotes.map((quote) => ({ quote })),
-    amounts: serialized.amounts.map((a) => Amount.from(a)),
-    outputData: serialized.outputData.map((s) => OutputData.deserialize(s)),
-    ...(serialized.signatures && { signatures: serialized.signatures }),
-    ...(serialized.legacySignatures && { legacySignatures: serialized.legacySignatures }),
-  }));
+  return deserializeWith('SerializedBatchMintPreview', () => {
+    assertMaxEntries('quotes', serialized.quotes);
+    assertMaxEntries('amounts', serialized.amounts);
+    assertMaxEntries('outputData', serialized.outputData);
+    assertMaxEntries('signatures', serialized.signatures);
+    assertMaxEntries('legacySignatures', serialized.legacySignatures);
+    return {
+      method: serialized.method,
+      quotes: serialized.quotes.map((quote) => ({ quote })),
+      amounts: serialized.amounts.map((a) => Amount.from(a)),
+      outputData: serialized.outputData.map((s) => OutputData.deserialize(s)),
+      ...(serialized.signatures && { signatures: serialized.signatures }),
+      ...(serialized.legacySignatures && { legacySignatures: serialized.legacySignatures }),
+    };
+  });
 }
 
 /**
@@ -241,13 +264,17 @@ export function serializeMeltPreview(
 export function deserializeMeltPreview(
   serialized: SerializedMeltPreview,
 ): MeltPreview<{ quote: string; amount?: Amount }> {
-  return deserializeWith('SerializedMeltPreview', () => ({
-    method: serialized.method,
-    quote: {
-      quote: serialized.quote,
-      ...(serialized.amount !== undefined && { amount: Amount.from(serialized.amount) }),
-    },
-    inputs: normalizeProofAmounts(serialized.inputs),
-    outputData: serialized.outputData.map((s) => OutputData.deserialize(s)),
-  }));
+  return deserializeWith('SerializedMeltPreview', () => {
+    assertMaxEntries('inputs', serialized.inputs);
+    assertMaxEntries('outputData', serialized.outputData);
+    return {
+      method: serialized.method,
+      quote: {
+        quote: serialized.quote,
+        ...(serialized.amount !== undefined && { amount: Amount.from(serialized.amount) }),
+      },
+      inputs: normalizeProofAmounts(serialized.inputs),
+      outputData: serialized.outputData.map((s) => OutputData.deserialize(s)),
+    };
+  });
 }

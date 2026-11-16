@@ -11,6 +11,7 @@ import {
   deserializeBatchMintPreview,
   deserializeMeltPreview,
   deserializeMintPreview,
+  deserializeSwapPreview,
   serializeBatchMintPreview,
   serializeMeltPreview,
   serializeMintPreview,
@@ -18,7 +19,10 @@ import {
   type MintQuoteBolt11Response,
   type Proof,
   type SerializedMintPreview,
+  type SerializedOutputData,
+  type SerializedProof,
 } from '../../src';
+import { ABSOLUTE_MAX_ARRAY_LENGTH } from '../../src/utils/limits';
 
 import { mint, mintUrl, unit, useTestServer } from './_setup';
 
@@ -247,5 +251,103 @@ describe('melt preview serde', () => {
         outputData: [],
       }),
     ).toThrow(/^Invalid SerializedMeltPreview: /);
+  });
+});
+
+describe('preview array limits', () => {
+  const proof: SerializedProof = { id: KEYSET, amount: '1', secret: 's', C: 'C' };
+  // Never restored: an oversized list is refused before its entries are read.
+  const output = {} as SerializedOutputData;
+  const many = <T>(entry: T, count: number): T[] => new Array<T>(count).fill(entry);
+  const atLimit = ABSOLUTE_MAX_ARRAY_LENGTH;
+  const tooMany = (field: string, count = atLimit + 1) =>
+    new RegExp(`: too many ${field}: ${count}, maximum is ${atLimit}$`);
+
+  test('accepts lists at the limit', () => {
+    const swap = deserializeSwapPreview({ amount: '0', fees: '0', inputs: many(proof, atLimit) });
+    expect(swap.inputs).toHaveLength(atLimit);
+    const batch = deserializeBatchMintPreview({
+      method: 'bolt11',
+      quotes: many('q', atLimit),
+      amounts: many('1', atLimit),
+      outputData: [],
+      signatures: many(null, atLimit),
+      legacySignatures: many(null, atLimit),
+    });
+    expect(batch.quotes).toHaveLength(atLimit);
+    const melt = deserializeMeltPreview({
+      method: 'bolt11',
+      quote: 'q',
+      inputs: many(proof, atLimit),
+      outputData: [],
+    });
+    expect(melt.inputs).toHaveLength(atLimit);
+  });
+
+  test('rejects an oversized swap preview', () => {
+    const base = { amount: '0', fees: '0', inputs: [] };
+    const over = () => deserializeSwapPreview({ ...base, inputs: many(proof, atLimit + 1) });
+    expect(over).toThrow(CTSError);
+    expect(over).toThrow(/^Invalid SerializedSwapPreview: /);
+    expect(over).toThrow(tooMany('inputs'));
+    expect(() =>
+      deserializeSwapPreview({ ...base, sendOutputs: many(output, atLimit + 1) }),
+    ).toThrow(tooMany('outputs'));
+    expect(() =>
+      deserializeSwapPreview({ ...base, keepOutputs: many(output, atLimit + 1) }),
+    ).toThrow(tooMany('outputs'));
+  });
+
+  test('counts keep and send outputs of a swap preview together', () => {
+    expect(() =>
+      deserializeSwapPreview({
+        amount: '0',
+        fees: '0',
+        inputs: [],
+        sendOutputs: many(output, atLimit / 2),
+        keepOutputs: many(output, atLimit / 2 + 1),
+      }),
+    ).toThrow(tooMany('outputs'));
+  });
+
+  test('rejects an oversized mint preview', () => {
+    const over = () =>
+      deserializeMintPreview({
+        method: 'bolt11',
+        quote: 'q',
+        outputData: many(output, atLimit + 1),
+      });
+    expect(over).toThrow(CTSError);
+    expect(over).toThrow(/^Invalid SerializedMintPreview: /);
+    expect(over).toThrow(tooMany('outputData'));
+  });
+
+  test.each(['quotes', 'amounts', 'outputData', 'signatures', 'legacySignatures'] as const)(
+    'rejects a batch mint preview with oversized %s',
+    (field) => {
+      const entry = field === 'outputData' ? output : '1';
+      const over = () =>
+        deserializeBatchMintPreview({
+          method: 'bolt11',
+          quotes: [],
+          amounts: [],
+          outputData: [],
+          [field]: many(entry, atLimit + 1),
+        });
+      expect(over).toThrow(CTSError);
+      expect(over).toThrow(/^Invalid SerializedBatchMintPreview: /);
+      expect(over).toThrow(tooMany(field));
+    },
+  );
+
+  test('rejects an oversized melt preview', () => {
+    const base = { method: 'bolt11', quote: 'q', inputs: [], outputData: [] };
+    const over = () => deserializeMeltPreview({ ...base, inputs: many(proof, atLimit + 1) });
+    expect(over).toThrow(CTSError);
+    expect(over).toThrow(/^Invalid SerializedMeltPreview: /);
+    expect(over).toThrow(tooMany('inputs'));
+    expect(() =>
+      deserializeMeltPreview({ ...base, outputData: many(output, atLimit + 1) }),
+    ).toThrow(tooMany('outputData'));
   });
 });
