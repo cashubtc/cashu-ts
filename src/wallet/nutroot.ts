@@ -479,15 +479,15 @@ const QUOTE_SCAN_HEADROOM = 128;
 const QUOTE_SCAN_MIN_DEPTH = 1024;
 
 /**
- * Scans a mint's quote counter for the key behind a quote lock pubkey; the full contract is
- * documented on `Wallet.recoverQuoteLockKey`. Returns undefined for a pubkey the seed never derived
- * at this mint.
+ * Scans a mint's quote counter for the key behind a quote lock pubkey, returning it with the
+ * counter it sits at; the full contract is documented on `Wallet.recoverQuoteLockKey`. Returns
+ * undefined for a pubkey the seed never derived at this mint.
  */
 export async function scanQuoteLockKey(
   pubkey: string,
   mintPubkey: string,
   state: NutrootWalletState,
-): Promise<string | undefined> {
+): Promise<{ privkey: string; counter: number } | undefined> {
   if (!state.seed) fail('recoverQuoteLockKey requires a seeded wallet', state.logger);
   const seed = state.seed;
   const normalizedPubkey = normalizeSecpPubkey(pubkey);
@@ -496,7 +496,7 @@ export async function scanQuoteLockKey(
   for (let counter = 0; counter < bound; counter++) {
     const privkey = deriveQuoteLockKey(seed, mintPubkey, counter);
     if (bytesToHex(getPubKeyFromPrivKey(privkey)) === normalizedPubkey) {
-      return bytesToHex(privkey);
+      return { privkey: bytesToHex(privkey), counter };
     }
   }
   return undefined;

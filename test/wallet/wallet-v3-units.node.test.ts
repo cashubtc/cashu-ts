@@ -117,6 +117,33 @@ describe('Wallet quote lock keys', () => {
     await expect(wallet.recoverQuoteLockKey(foreign)).resolves.toBeUndefined();
   });
 
+  test('recoverQuoteLockKey moves the quote counter past a key at or beyond it', async () => {
+    const counterKey = quoteCounterKey(MINT_PUBKEY);
+    const wallet = new Wallet(mintUrl, {
+      unit: 'sat',
+      bip39seed: SEED,
+      counterInit: { [counterKey]: 2 },
+    });
+    await wallet.loadMint();
+    const events: OperationCounters[] = [];
+    wallet.on.countersReserved((e) => events.push(e));
+    const pubkeyAt = (counter: number) =>
+      bytesToHex(getPubKeyFromPrivKey(deriveQuoteLockKey(SEED, MINT_PUBKEY, counter)));
+
+    // Below the counter: nothing moves and nothing is reported.
+    await wallet.recoverQuoteLockKey(pubkeyAt(1));
+    expect(events).toEqual([]);
+    expect(await wallet.counters.peekNext(counterKey)).toBe(2);
+
+    await wallet.recoverQuoteLockKey(pubkeyAt(2));
+    await wallet.recoverQuoteLockKey(pubkeyAt(5));
+    expect(events).toEqual([
+      { counterKey, start: 2, count: 1, next: 3 },
+      { counterKey, start: 3, count: 3, next: 6 },
+    ]);
+    expect((await wallet.createQuoteLockKey()).pubkey).toBe(pubkeyAt(6));
+  });
+
   test('recoverQuoteLockKey without a seed throws, not a silent miss', async () => {
     const wallet = new Wallet(mintUrl, { unit: 'sat' });
     await expect(wallet.recoverQuoteLockKey(POINT)).rejects.toThrow(

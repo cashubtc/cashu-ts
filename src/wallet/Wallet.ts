@@ -976,11 +976,18 @@ class Wallet {
     // Claim the manual range up front. Bumping the cursor afterwards would leave a window
     // for a concurrent auto reservation to hand out counters inside the range, and the bump
     // would then silently do nothing because the cursor had already moved past it.
+    let claimed: OperationCounters | undefined;
     if (manual.length > 0) {
       const minManualStart = Math.min(...manual.map((ot) => ot.counter));
       const maxManualEnd = Math.max(...manual.map((ot) => ot.counter + ot.denominations!.length));
 
       await this._counterSource.reserveAt(keysetId, minManualStart, maxManualEnd - minManualStart);
+      claimed = {
+        counterKey: keysetId,
+        start: minManualStart,
+        count: maxManualEnd - minManualStart,
+        next: maxManualEnd,
+      };
       this._logger.debug('Counter source claimed manual deterministic range', {
         keysetId,
         minManualStart,
@@ -990,7 +997,11 @@ class Wallet {
 
     // Reserve counters for deterministic outputTypes with auto counter (counter===0))
     const total = outputTypes.reduce((n, ot) => n + this.countersNeeded(ot), 0);
-    if (total === 0) return { outputTypes };
+    if (total === 0) {
+      // With no auto reservation to follow, the claimed range is what moved the cursor.
+      if (claimed) this.on._emitCountersReserved(claimed);
+      return { outputTypes, used: claimed };
+    }
 
     const range = await this.reserveFor(keysetId, total);
     let cursor = range.start;
@@ -3103,7 +3114,8 @@ class Wallet {
    * Offline disaster recovery for a lost quote `privkey`; the happy path is persisting the key the
    * quote response carries. Targeted, not discovery: one HMAC and one point multiply per counter.
    * Keys are scoped to the mint identity, not a keyset (NUT-13 type `0x04`), so a rotation cannot
-   * strand the key but only this mint's quotes are found.
+   * strand the key but only this mint's quotes are found. A key found at or past the quote counter
+   * moves the counter past it, reported through `countersReserved`.
    * @throws {@link CTSError} On a seedless wallet, which has nothing to scan, or a mint with no
    *   NUT-06 `pubkey`.
    * @experimental The scan follows draft NUT-13 type `0x04` and draft NUT-06 identity scoping and
@@ -3112,7 +3124,17 @@ class Wallet {
   async recoverQuoteLockKey(pubkey: string): Promise<string | undefined> {
     this.failIf(!this._seed, 'recoverQuoteLockKey requires a seeded wallet');
     const mintPubkey = this.requireMintIdentity('recoverQuoteLockKey');
-    return scanQuoteLockKey(pubkey, mintPubkey, this._nutrootState());
+    const found = await scanQuoteLockKey(pubkey, mintPubkey, this._nutrootState());
+    if (!found) return undefined;
+    const counterKey = quoteCounterKey(mintPubkey);
+    const before = await this.counters.peekNext(counterKey);
+    if (found.counter >= before) {
+      // The key was handed out before, so the cursor must not hand it out again.
+      await this._counterSource.advanceToAtLeast(counterKey, found.counter + 1);
+      const next = await this.counters.peekNext(counterKey);
+      this.on._emitCountersReserved({ counterKey, start: before, count: next - before, next });
+    }
+    return found.privkey;
   }
 
   /**
