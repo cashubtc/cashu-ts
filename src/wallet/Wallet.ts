@@ -375,7 +375,12 @@ class Wallet {
    * @param forceRefresh If true, re-fetches data even if cached.
    * @throws If fetching mint info, keysets, or keys fails.
    */
+<<<<<<< HEAD
   async loadMint(forceRefresh?: boolean): Promise<void> {
+=======
+  async loadMint(forceRefresh?: boolean, opts?: AbortOptions): Promise<void> {
+    this.throwIfAborted(opts?.signal);
+>>>>>>> 7b06616 (fix(wallet): stop polling and loading once the caller aborts (#1471))
     const promises = [];
 
     // Load mint info

@@ -22,6 +22,63 @@ export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCancelle
 
 export type SubscribeOpts = { signal?: AbortSignal };
 
+<<<<<<< HEAD
+=======
+/**
+ * Options for a NUT-17 subscription that may fall back to polling.
+ */
+export type WatchOpts = SubscribeOpts & {
+  /**
+   * Poll the mint every this many milliseconds instead of, or after, the websocket: when the mint's
+   * NUT-17 info does not list the subscription kind, when the socket fails, or when no state replay
+   * arrives within `replayTimeoutMs` of subscribing. Unset, the subscription is websocket only and
+   * its failure reaches the error callback.
+   */
+  pollMs?: number;
+  /**
+   * Grace for NUT-17 state replay before the socket counts as dead, in milliseconds. Default 10000.
+   */
+  replayTimeoutMs?: number;
+  /**
+   * Reports the transport in use, once per switch.
+   */
+  onMode?: (mode: 'websocket' | 'polling') => void;
+  /**
+   * Quote subscriptions only: the payment method, which names the NUT-17 kind and the check
+   * endpoint polled. Default 'bolt11'.
+   */
+  method?: string;
+};
+
+/**
+ * Options for {@link WalletEvents.proofStatesStream}.
+ */
+export type ProofStatesStreamOpts<P extends ProofLike = Proof> = WatchOpts & {
+  /**
+   * Maximum queued payloads before `drop` applies.
+   */
+  maxBuffer?: number;
+  /**
+   * Overflow strategy when `maxBuffer` is reached. Default 'oldest'.
+   */
+  drop?: 'oldest' | 'newest';
+  /**
+   * Called with each dropped payload.
+   */
+  onDrop?: (payload: ProofState & { proof: P }) => void;
+};
+
+/**
+ * How to poll for what a subscription would push: `fetch` reads the current items, `key` identifies
+ * one across polls and `state` is the field a change is judged on.
+ */
+type Poller<T> = {
+  fetch: (signal: AbortSignal) => Promise<T[]>;
+  key: (p: T) => string;
+  state: (p: T) => string;
+};
+
+>>>>>>> 7b06616 (fix(wallet): stop polling and loading once the caller aborts (#1471))
 function noop(): void {
   /* noop */
 }
@@ -121,6 +178,186 @@ export class WalletEvents {
     };
   }
 
+<<<<<<< HEAD
+=======
+  // One NUT-17 subscription, cancelled through `signal`
+  private async _subscribe<W>(
+    kind: RpcSubKinds,
+    filters: string[],
+    cb: (wire: W) => void,
+    err: (e: Error) => void,
+    signal?: AbortSignal,
+    onClose?: () => void,
+  ): Promise<SubscriptionCanceller> {
+    // Filters (eg proof Ys) must never reach the wire for a subscription already cancelled, so an
+    // abort is checked both before the connect and again once it settles.
+    if (signal?.aborted) return noop;
+    await this.wallet.mint.connectWebSocket();
+    if (signal?.aborted) return noop;
+    const ws = this.wallet.mint.webSocketConnection;
+    if (!ws) throw new CTSError('Failed to establish WebSocket connection.');
+    const subId = ws.createSubscription<W>({ kind, filters }, cb, err);
+    const removeClose = onClose ? ws.onClose(onClose) : undefined;
+    return this.withAbort(
+      signal,
+      once(() => {
+        removeClose?.();
+        ws.cancelSubscription(subId, cb);
+      }),
+    );
+  }
+
+  // Whether the mint says it pushes `kind` for this wallet's unit. Unknown until mint info is
+  // loaded; then the socket decides
+  // The batched check is only tried where the mint advertises NUT-29 for the method; unknown info
+  // tries it once
+  private _batches(method: string): boolean {
+    try {
+      const nut29 = this.wallet.getMintInfo().isSupported(29);
+      const methods = nut29.params?.methods;
+      return nut29.supported && (!Array.isArray(methods) || methods.includes(method));
+    } catch {
+      return true;
+    }
+  }
+
+  private _pushes(kind: RpcSubKinds): boolean {
+    try {
+      const nut17 = this.wallet.getMintInfo().isSupported(17);
+      const unit = this.wallet.unit;
+      return nut17.params?.some((p) => p.unit === unit && p.commands.includes(kind)) ?? false;
+    } catch {
+      return true;
+    }
+  }
+
+  /**
+   * A NUT-17 subscription with polling behind it.
+   *
+   * @remarks
+   * The socket is tried first unless the mint's info rules `kind` out, and gives way to polling
+   * when it fails to set up, errors later, or stays silent past the replay grace: the mint replays
+   * the current state on subscribe, so silence means a dead socket, which the transport may keep
+   * quietly reconnecting. Polling reports an item only when its state changes, so callers see the
+   * same payloads either way. Without `pollMs` this is the plain subscription.
+   */
+  private async _watch<T, W = T>(
+    socket: { kind: RpcSubKinds; filters: string[]; decode: (wire: W) => T | undefined },
+    poll: Poller<T>,
+    cb: (p: T) => void,
+    err: (e: Error) => void,
+    opts?: WatchOpts,
+  ): Promise<SubscriptionCanceller> {
+    // Already aborted: send nothing, as the filters and polls carry the watched ids.
+    if (opts?.signal?.aborted) return noop;
+    const { kind, filters, decode } = socket;
+    const deliver = (wire: W) => {
+      const p = decode(wire);
+      // cb may be an async consumer callback; a rejection must not escape uncontained, matching
+      // WSConnection's own containment (which never sees it, since this wrapper doesn't return it).
+      if (p !== undefined) safeCallback(cb, p, this.wallet.logger, { event: kind });
+    };
+    const pollMs = opts?.pollMs;
+    const mode = (m: 'websocket' | 'polling') =>
+      safeCallback(opts?.onMode, m, this.wallet.logger, { event: kind });
+    if (pollMs === undefined) {
+      // Websocket only: still report the transport, on the first frame as the fallback path does
+      const live = once(() => mode('websocket'));
+      const onWire = (wire: W) => {
+        live();
+        deliver(wire);
+      };
+      return this._subscribe(kind, filters, onWire, err, opts?.signal);
+    }
+    if (!(pollMs > 0)) throw new CTSError('pollMs must be a positive number');
+
+    const all = new AbortController(); // everything this watch owns
+    const sub = new AbortController(); // the subscription alone, so polling can outlive it
+    let grace: ReturnType<typeof setTimeout> | undefined;
+    all.signal.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(grace);
+        sub.abort();
+      },
+      { once: true },
+    );
+    const startPolling = once(() => {
+      clearTimeout(grace);
+      sub.abort();
+      if (all.signal.aborted) return;
+      mode('polling');
+      this._poll(poll, pollMs, all.signal, cb).catch((e: unknown) =>
+        safeCallback(err, normalizeError(e), this.wallet.logger, { event: kind }),
+      );
+    });
+    const live = once(() => {
+      clearTimeout(grace);
+      mode('websocket');
+    });
+
+    if (this._pushes(kind)) {
+      grace = setTimeout(startPolling, opts?.replayTimeoutMs ?? REPLAY_GRACE_MS);
+      const onWire = (wire: W) => {
+        live();
+        deliver(wire);
+      };
+      this._subscribe(kind, filters, onWire, startPolling, sub.signal, startPolling).catch(
+        startPolling,
+      );
+    } else {
+      startPolling();
+    }
+    return this.withAbort(opts?.signal, () => all.abort());
+  }
+
+  // One request at a time: a burst is what trips a rate limit, and the first refusal ends the poll
+  private async _eachQuote<T>(
+    ids: string[],
+    check: (id: string) => Promise<T>,
+    signal: AbortSignal,
+  ): Promise<T[]> {
+    const out: T[] = [];
+    for (const id of ids) {
+      // Stop between checks once aborted, so no quote id is sent after the caller cancels.
+      if (signal.aborted) break;
+      out.push(await check(id));
+    }
+    return out;
+  }
+
+  // Polling twin of a subscription: the first fetch stands in for the replay, later ones report changes
+  private async _poll<T>(
+    poll: Poller<T>,
+    pollMs: number,
+    signal: AbortSignal,
+    cb: (p: T) => void,
+  ): Promise<void> {
+    const seen = new Map<string, string>();
+    let failures = 0;
+    while (!signal.aborted) {
+      const changed: T[] = [];
+      try {
+        for (const item of await poll.fetch(signal)) {
+          const key = poll.key(item);
+          const state = poll.state(item);
+          if (seen.get(key) === state) continue;
+          seen.set(key, state);
+          changed.push(item);
+        }
+        failures = 0;
+      } catch (e) {
+        if (signal.aborted) return;
+        if (++failures >= POLL_FAILURE_LIMIT) throw normalizeError(e);
+      }
+      if (signal.aborted) return;
+      for (const item of changed) safeCallback(cb, item, this.wallet.logger);
+      // A failed poll is often a rate limit, so back off before the next one
+      await sleep(pollMs * 2 ** failures, signal);
+    }
+  }
+
+>>>>>>> 7b06616 (fix(wallet): stop polling and loading once the caller aborts (#1471))
   // Subscribe to a quote-paid event and resolve when it fires.
   // Supports AbortSignal and timeout, and always cleans up.
   private waitUntilPaid<T>(
@@ -278,6 +515,7 @@ export class WalletEvents {
     if (!ws) throw new CTSError('Failed to establish WebSocket connection.');
 
     const uniq = Array.from(new Set(ids));
+<<<<<<< HEAD
     // A malformed payload reports through err rather than reaching cb with the wrong types
     const handler = (p: MintQuoteBolt11Response) => {
       let quote: MintQuoteBolt11Response;
@@ -289,6 +527,24 @@ export class WalletEvents {
       }
       // cb may be an async consumer callback; a rejection must not escape uncontained.
       safeCallback(cb, quote, this.wallet.logger, { event: 'bolt11_mint_quote' });
+=======
+    let batch = uniq.length > 1 && this._batches(method);
+    const fetch = async (signal: AbortSignal) => {
+      if (batch) {
+        try {
+          return await this.wallet.checkMintQuoteBatch<TRes>(method, uniq, { signal });
+        } catch (e) {
+          // A missing or refused endpoint means the mint cannot batch; anything else is the poll failing
+          if (!(e instanceof HttpResponseError) || (e.status !== 404 && e.status !== 405)) throw e;
+          batch = false;
+        }
+      }
+      return this._eachQuote(
+        uniq,
+        (id) => this.wallet.checkMintQuote<TRes>(method, id, { signal }),
+        signal,
+      );
+>>>>>>> 7b06616 (fix(wallet): stop polling and loading once the caller aborts (#1471))
     };
     const subId = ws.createSubscription({ kind: 'bolt11_mint_quote', filters: uniq }, handler, err);
     const cancel = () => ws.cancelSubscription(subId, handler);
@@ -342,6 +598,7 @@ export class WalletEvents {
     if (!ws) throw new CTSError('Failed to establish WebSocket connection.');
 
     const uniq = Array.from(new Set(ids));
+<<<<<<< HEAD
     const handler = (p: MeltQuoteBolt11Response) => {
       let quote: MeltQuoteBolt11Response;
       try {
@@ -355,6 +612,32 @@ export class WalletEvents {
     const subId = ws.createSubscription({ kind: 'bolt11_melt_quote', filters: uniq }, handler, err);
     const cancel = () => ws.cancelSubscription(subId, handler);
     return this.withAbort(opts?.signal, cancel);
+=======
+    return this._watch<TRes>(
+      {
+        kind: `${method}_melt_quote`,
+        filters: uniq,
+        decode: guarded<TRes>(
+          (p) => normalizeMeltQuoteUpdate(p, method, this.wallet.logger),
+          err,
+          this.wallet.logger,
+        ),
+      },
+      {
+        fetch: (signal) =>
+          this._eachQuote(
+            uniq,
+            (id) => this.wallet.checkMeltQuote<TRes>(method, id, { signal }),
+            signal,
+          ),
+        key: (q) => q.quote,
+        state: (q) => q.state,
+      },
+      cb,
+      err,
+      opts,
+    );
+>>>>>>> 7b06616 (fix(wallet): stop polling and loading once the caller aborts (#1471))
   }
 
   /**
@@ -422,6 +705,7 @@ export class WalletEvents {
       if (proofMap[y]) {
         throw new CTSError('Duplicate proof secret in proofStateUpdates input');
       }
+<<<<<<< HEAD
       proofMap[y] = p;
     }
     const ys = Object.keys(proofMap);
@@ -435,6 +719,32 @@ export class WalletEvents {
     const cancel = () => ws.cancelSubscription(subId, handler);
 
     return this.withAbort(opts?.signal, cancel);
+=======
+      proofMap[y] = proofs[i];
+    });
+    return this._watch<ProofState & { proof: T }, ProofState>(
+      {
+        kind: 'proof_state',
+        filters: Object.keys(proofMap),
+        // an unsolicited Y from a misbehaving mint is dropped
+        decode: (state) => {
+          const proof = proofMap[state.Y];
+          return proof ? { ...state, proof } : undefined;
+        },
+      },
+      {
+        fetch: async (signal) => {
+          const states = await this.wallet.checkProofsStates(proofs, { signal });
+          return states.map((state, i) => ({ ...state, proof: proofs[i] }));
+        },
+        key: (p) => p.proof.secret,
+        state: (p) => p.state,
+      },
+      cb,
+      err,
+      opts,
+    );
+>>>>>>> 7b06616 (fix(wallet): stop polling and loading once the caller aborts (#1471))
   }
 
   /**
