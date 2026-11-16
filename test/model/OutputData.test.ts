@@ -421,9 +421,9 @@ describe('OutputData.createSingleP2PKData tag construction', () => {
     expect(readSecret(out).tags.find(([t]) => t === 'sigflag')).toBeUndefined();
   });
 
-  test('accepts a secret of exactly MAX_SECRET_LENGTH code points', () => {
+  test('accepts a secret of exactly MAX_SECRET_LENGTH bytes', () => {
     // Pad an additional tag value so the JSON secret hits the limit exactly. Each ASCII 'A' adds
-    // one code point with no JSON escaping, so length is linear in the pad size.
+    // one byte with no JSON escaping, so length is linear in the pad size.
     const build = (pad: number): OutputData =>
       OutputData.createSingleP2PKData(
         { kind: 'P2PK', data: pub(0), additionalTags: [['x', 'A'.repeat(pad)]] },
@@ -431,14 +431,26 @@ describe('OutputData.createSingleP2PKData tag construction', () => {
         KEYSET_ID,
       );
     // Measure with a single 'A' (an empty tag value is rejected), then add the rest.
-    const base = [...new TextDecoder().decode(build(1).secret)].length;
+    const base = build(1).secret.length;
     const target = MAX_SECRET_LENGTH - base + 1;
 
     const atLimit = build(target);
     // Exactly MAX_SECRET_LENGTH must be accepted (kills `>` -> `>=`).
-    expect([...new TextDecoder().decode(atLimit.secret)].length).toBe(MAX_SECRET_LENGTH);
+    expect(atLimit.secret.length).toBe(MAX_SECRET_LENGTH);
     // One over must be rejected.
     expect(() => build(target + 1)).toThrowError(/Secret too long/);
+  });
+
+  test('measures the secret in bytes, not characters', () => {
+    // 300 three-byte characters: well under the limit as characters, over it as bytes.
+    const tag = '\u20ac'.repeat(300);
+    expect(() =>
+      OutputData.createSingleP2PKData(
+        { kind: 'P2PK', data: pub(0), additionalTags: [['x', tag]] },
+        1,
+        KEYSET_ID,
+      ),
+    ).toThrowError(/Secret too long \(\d+ bytes\), maximum is 1024/);
   });
 });
 

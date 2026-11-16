@@ -92,6 +92,7 @@ import {
   bytesToHex,
   hexToBytes,
   DEFAULT_MAX_ARRAY_LENGTH,
+  MAX_SECRET_LENGTH,
   getDecodedToken,
   getDecodedTokenBinary,
   invoiceHasAmountInHRP,
@@ -1359,9 +1360,15 @@ class Wallet {
     // blinding factors gives different `B_`, so both get signed. It surfaces only when the first
     // spend burns the shared `Y`, mint-wide and permanently (NUT-10).
     this.assertUniqueOutputSecrets(outputData);
-    // A random v3 output's key rides to the proof as spend info; mirror it for a custom
-    // factory that set only secretKey, so the proof still carries its own key.
-    for (const output of outputData) {
+    for (const [i, output] of outputData.entries()) {
+      // The built-in creators already hold to this; a custom output or factory may not.
+      this.failIf(
+        output.secret.length > MAX_SECRET_LENGTH,
+        `Output secret too long at index ${i} (${output.secret.length} bytes), maximum is ${MAX_SECRET_LENGTH}`,
+        { index: i },
+      );
+      // A random v3 output's key rides to the proof as spend info; mirror it for a custom
+      // factory that set only secretKey, so the proof still carries its own key.
       const data = output as { secretKey?: Uint8Array; spendInfo?: SpendInfo };
       if (data.secretKey && !data.spendInfo) {
         data.spendInfo = { k: bytesToHex(data.secretKey) };

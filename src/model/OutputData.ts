@@ -353,17 +353,14 @@ export class OutputData implements OutputDataLike {
     ];
     const parsed = JSON.stringify(newSecret);
 
-    // Check secret length, counting Unicode code points
-    // Same semantics as Nutshell python: len(str)
-    const charCount = [...parsed].length;
-    if (charCount > MAX_SECRET_LENGTH) {
+    const secretBytes = new TextEncoder().encode(parsed);
+    if (secretBytes.length > MAX_SECRET_LENGTH) {
       throw new CTSError(
-        `Secret too long (${charCount} characters), maximum is ${MAX_SECRET_LENGTH}`,
+        `Secret too long (${secretBytes.length} bytes), maximum is ${MAX_SECRET_LENGTH}`,
       );
     }
 
     // blind the message
-    const secretBytes = new TextEncoder().encode(parsed);
     const { r, B_ } = blindMessageForKeyset(secretBytes, keysetId);
 
     // create OutputData
