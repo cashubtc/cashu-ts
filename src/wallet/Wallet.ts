@@ -866,8 +866,10 @@ class Wallet {
     // "auto" allocations do not reuse counters. Prefer reserveAt (claims up front and
     // detects a range that was already handed out); fall back to the historic bump for
     // sources that do not implement it, with a best-effort peek to report reuse.
+    let manualStart: number | undefined;
     if (manual.length > 0) {
       const minManualStart = Math.min(...manual.map((ot) => ot.counter));
+      manualStart = minManualStart;
       const maxManualEnd = Math.max(...manual.map((ot) => ot.counter + ot.denominations!.length));
 
       if (this._counterSource.reserveAt) {
@@ -905,7 +907,20 @@ class Wallet {
 
     // Reserve counters for deterministic outputTypes with auto counter (counter===0))
     const total = outputTypes.reduce((n, ot) => n + this.countersNeeded(ot), 0);
-    if (total === 0) return { outputTypes };
+    if (total === 0) {
+      if (manualStart === undefined) return { outputTypes };
+      // No auto reservation follows, so the manual claim is what moved the cursor. Read it
+      // back: it sits past the range end when the range was already issued.
+      const { start: next } = await this._counterSource.reserve(keysetId, 0);
+      const claimed: OperationCounters = {
+        keysetId,
+        start: manualStart,
+        count: next - manualStart,
+        next,
+      };
+      this.on._emitCountersReserved(claimed);
+      return { outputTypes, used: claimed };
+    }
 
     const range = await this.reserveFor(keysetId, total);
     let cursor = range.start;
