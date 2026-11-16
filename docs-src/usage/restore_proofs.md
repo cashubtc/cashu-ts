@@ -17,6 +17,8 @@ const { proofs, lastCounters } = await wallet.restoreAll();
 // proofs are unspent (spent ones are filtered out by default) - store them
 for (const [keysetId, last] of Object.entries(lastCounters)) {
   await wallet.counters.advanceToAtLeast(keysetId, last + 1);
+  // advancing fires no countersReserved event, so save the new cursor yourself
+  await saveNextToDb(keysetId, await wallet.counters.peekNext(keysetId));
 }
 ```
 
@@ -74,6 +76,7 @@ const { keep, send } = await wallet.restoreSwapPreview(preview);
 
 - The low-level `restore()` replays **issued signatures** with no state check, so its result includes proofs you have long since spent; `batchRestore` and `restoreAll` drop those for you. Filter a raw `restore()` result before crediting a balance: `wallet.groupProofsByState(proofs)` returns `{ unspent, pending, spent }` in one call and is the same check to run when cleaning a store. `wallet.verifyMintSignatures(proofs, { onProgress })` re-checks the mint signatures the same way, in chunks that yield, so a large store can be audited from a UI thread.
 - Restoring reveals derived values for every scanned counter to the mint. The gap limit exists to bound that reveal; raise it only when you expect large counter gaps.
+- The scan also covers counters past the last one used, and the wallet's next outputs take those counters. Until the cursor passes the end of the scan, new outputs have less privacy toward the mint than usual. A smaller `gapLimit` or `batchSize` shortens that stretch.
 - A mint can only answer for what it has a record of. It stores `B_` when it signs an output and `Y` when a proof is spent, and it cannot connect the two, so a `Y` it has never seen is reported `UNSPENT` whether the proof is live or the counter was never used. That is why the scan cannot rely on the state check alone: it confirms with a restore, which is the only thing that proves a counter was issued.
 - A live demo of the whole flow, with a report of what each scan costs, is in [`examples/restore_example.ts`](https://github.com/cashubtc/cashu-ts/blob/main/examples/restore_example.ts) in the repository (not shipped in the package).
 - Upgrading from v4: `batchRestore` took positional arguments and returned spent proofs. See the [v5 migration guide](https://github.com/cashubtc/cashu-ts/blob/main/migration-5.0.0.md) for the config-object signature.
