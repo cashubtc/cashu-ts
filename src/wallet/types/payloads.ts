@@ -30,6 +30,11 @@ export interface MintPreview<
    * @deprecated Temporary compatibility for legacy mints.
    */
   legacySignature?: string;
+  /**
+   * NUT-06 `pubkey` of the mint this preview was prepared at; completing it on a wallet for another
+   * mint is refused. Absent when the mint publishes none.
+   */
+  mintPubkey?: string;
 }
 
 /**
@@ -63,6 +68,11 @@ export interface BatchMintPreview<
    * @deprecated Temporary compatibility for legacy mints.
    */
   legacySignatures?: Array<string | null>;
+  /**
+   * NUT-06 `pubkey` of the mint this preview was prepared at; completing it on a wallet for another
+   * mint is refused. Absent when the mint publishes none.
+   */
+  mintPubkey?: string;
 }
 
 /**
@@ -88,6 +98,11 @@ export interface MeltPreview<
    * Melt Quote object.
    */
   quote: TQuote;
+  /**
+   * NUT-06 `pubkey` of the mint this preview was prepared at; completing it on a wallet for another
+   * mint is refused. Absent when the mint publishes none.
+   */
+  mintPubkey?: string;
 }
 
 /**
@@ -122,4 +137,9 @@ export type SwapPreview = {
    * Blinding data to construct proofs to keep.
    */
   keepOutputs?: OutputDataLike[];
+  /**
+   * NUT-06 `pubkey` of the mint this preview was prepared at; completing it on a wallet for another
+   * mint is refused. Absent when the mint publishes none.
+   */
+  mintPubkey?: string;
 };

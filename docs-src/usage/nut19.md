@@ -96,6 +96,10 @@ outputs: replaying a persisted preview after a restart posts an identical reques
 hits the mint's cache and returns the original signatures. The window is bounded by the mint
 advertising the endpoint in `cached_endpoints` and by its TTL.
 
+A preview records the NUT-06 `pubkey` of the mint it was prepared at, and `complete*` refuses it
+on a wallet for a different mint, so a multi-mint app that picks the wrong wallet on resume gets
+an error. Load the wallet (`loadMint` or `loadMintFromCache`) before completing.
+
 ### Mint
 
 ```ts

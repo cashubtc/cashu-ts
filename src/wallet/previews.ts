@@ -25,6 +25,7 @@ export type SerializedSwapPreview = {
   inputs: SerializedProof[];
   sendOutputs?: SerializedOutputData[];
   keepOutputs?: SerializedOutputData[];
+  mintPubkey?: string;
 };
 
 /**
@@ -39,6 +40,7 @@ export type SerializedMintPreview = {
   outputData: SerializedOutputData[];
   signature?: string;
   legacySignature?: string;
+  mintPubkey?: string;
 };
 
 /**
@@ -55,6 +57,7 @@ export type SerializedBatchMintPreview = {
   outputData: SerializedOutputData[];
   signatures?: Array<string | null>;
   legacySignatures?: Array<string | null>;
+  mintPubkey?: string;
 };
 
 /**
@@ -70,10 +73,15 @@ export type SerializedMeltPreview = {
   amount?: string;
   inputs: SerializedProof[];
   outputData: SerializedOutputData[];
+  mintPubkey?: string;
 };
 
 function serializeProof(proof: Proof): SerializedProof {
   return { ...proof, amount: proof.amount.toString() };
+}
+
+function mintPubkeyOf(preview: { mintPubkey?: string }): { mintPubkey?: string } {
+  return preview.mintPubkey == null ? {} : { mintPubkey: preview.mintPubkey };
 }
 
 /**
@@ -108,6 +116,7 @@ export function serializeSwapPreview(preview: SwapPreview): SerializedSwapPrevie
     ...(preview.keepOutputs && {
       keepOutputs: preview.keepOutputs.map((o) => OutputData.serialize(o)),
     }),
+    ...mintPubkeyOf(preview),
   };
 }
 
@@ -132,6 +141,7 @@ export function deserializeSwapPreview(serialized: SerializedSwapPreview): SwapP
       ...(serialized.keepOutputs && {
         keepOutputs: serialized.keepOutputs.map((s) => OutputData.deserialize(s)),
       }),
+      ...mintPubkeyOf(serialized),
     };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
@@ -164,6 +174,7 @@ export function serializeMintPreview(
     outputData: preview.outputData.map((o) => OutputData.serialize(o)),
     ...(preview.signature !== undefined && { signature: preview.signature }),
     ...(preview.legacySignature !== undefined && { legacySignature: preview.legacySignature }),
+    ...mintPubkeyOf(preview),
   };
 }
 
@@ -185,6 +196,7 @@ export function deserializeMintPreview(
       ...(serialized.legacySignature !== undefined && {
         legacySignature: serialized.legacySignature,
       }),
+      ...mintPubkeyOf(serialized),
     };
   });
 }
@@ -206,6 +218,7 @@ export function serializeBatchMintPreview(
     outputData: preview.outputData.map((o) => OutputData.serialize(o)),
     ...(preview.signatures && { signatures: preview.signatures }),
     ...(preview.legacySignatures && { legacySignatures: preview.legacySignatures }),
+    ...mintPubkeyOf(preview),
   };
 }
 
@@ -230,6 +243,7 @@ export function deserializeBatchMintPreview(
       outputData: serialized.outputData.map((s) => OutputData.deserialize(s)),
       ...(serialized.signatures && { signatures: serialized.signatures }),
       ...(serialized.legacySignatures && { legacySignatures: serialized.legacySignatures }),
+      ...mintPubkeyOf(serialized),
     };
   });
 }
@@ -253,6 +267,7 @@ export function serializeMeltPreview(
     ...(preview.quote.amount !== undefined && { amount: preview.quote.amount.toString() }),
     inputs: preview.inputs.map(serializeProof),
     outputData: preview.outputData.map((o) => OutputData.serialize(o)),
+    ...mintPubkeyOf(preview),
   };
 }
 
@@ -275,6 +290,7 @@ export function deserializeMeltPreview(
       },
       inputs: normalizeProofAmounts(serialized.inputs),
       outputData: serialized.outputData.map((s) => OutputData.deserialize(s)),
+      ...mintPubkeyOf(serialized),
     };
   });
 }

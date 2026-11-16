@@ -26,7 +26,7 @@ import {
   isV3PointSecret,
 } from '../crypto';
 // Internal transitional fallback — not part of crypto/index.ts
-import { getPubKeyFromPrivKey, normalizeSecpPubkey } from '../crypto/curve_secp';
+import { getPubKeyFromPrivKey, isValidSecpPubkey, normalizeSecpPubkey } from '../crypto/curve_secp';
 import { p2pkOptionsToPRNut10, p2pkToSpendLeaves, type P2PKOptions } from '../crypto/NUT11';
 import { verifyHTLCHash } from '../crypto/NUT14';
 import { mintQuoteDigest, signMintQuoteLegacy } from '../crypto/NUT20';
@@ -1597,6 +1597,7 @@ class Wallet {
       sendTotal: Amount.zero(),
       inputs: preimage === undefined ? proofs : attachHTLCPreimage(proofs, preimage),
       keepOutputs: outputs,
+      ...this.previewMint(),
     };
   }
 
@@ -1905,6 +1906,7 @@ class Wallet {
           preimage === undefined ? selectedProofs : attachHTLCPreimage(selectedProofs, preimage),
         sendOutputs,
         keepOutputs,
+        ...this.previewMint(),
       },
       unselected: unselectedProofs,
     };
@@ -1936,6 +1938,7 @@ class Wallet {
     privkey?: string | string[],
     options?: CompleteSwapOptions,
   ): Promise<SendResponse> {
+    this.assertPreviewMint(swapPreview);
     const keepOutputs: OutputDataLike[] = swapPreview?.keepOutputs ? swapPreview.keepOutputs : [];
     const sendOutputs: OutputDataLike[] = swapPreview.sendOutputs ? swapPreview.sendOutputs : [];
 
@@ -2842,6 +2845,7 @@ class Wallet {
    */
   async restoreSwapPreview(swapPreview: SwapPreview, opts?: AbortOptions): Promise<SendResponse> {
     this.throwIfAborted(opts?.signal);
+    this.assertPreviewMint(swapPreview);
     const keepOutputs: OutputDataLike[] = swapPreview?.keepOutputs ?? [];
     const sendOutputs: OutputDataLike[] = swapPreview?.sendOutputs ?? [];
     const outputData = [...keepOutputs, ...sendOutputs];
@@ -3154,6 +3158,31 @@ class Wallet {
       `${what}: the mint publishes no NUT-06 pubkey to scope quote lock keys to`,
     );
     return normalizeSecpPubkey(pubkey);
+  }
+
+  /**
+   * The `mintPubkey` field for a new preview: the mint's NUT-06 `pubkey` if it publishes a valid
+   * one.
+   */
+  private previewMint(): { mintPubkey?: string } {
+    const pubkey = this._mintInfo?.pubkey ?? '';
+    return isValidSecpPubkey(pubkey) ? { mintPubkey: pubkey.toLowerCase() } : {};
+  }
+
+  /**
+   * Refuses a preview that records a different mint than this wallet's, before anything is sent.
+   *
+   * @remarks
+   * A preview that records no mint is not checked.
+   */
+  private assertPreviewMint(preview: { mintPubkey?: string }): void {
+    if (preview?.mintPubkey == null) return;
+    this.getMintInfo(); // throws on a wallet that has not loaded
+    const { mintPubkey } = this.previewMint();
+    this.failIf(mintPubkey !== preview.mintPubkey, 'Preview was prepared at a different mint', {
+      preview: preview.mintPubkey,
+      wallet: mintPubkey,
+    });
   }
 
   /**
@@ -3744,7 +3773,14 @@ class Wallet {
     }
 
     this.throwIfAborted(config?.signal);
-    return { method, quote: resolvedQuote, outputData: outputs, signature, legacySignature };
+    return {
+      method,
+      quote: resolvedQuote,
+      outputData: outputs,
+      signature,
+      legacySignature,
+      ...this.previewMint(),
+    };
   }
 
   /**
@@ -3788,6 +3824,7 @@ class Wallet {
     mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>,
     opts?: CompleteMintOptions,
   ): Promise<Proof[]> {
+    this.assertPreviewMint(mintPreview);
     const { quote, outputData, method, signature, legacySignature } = mintPreview;
     const request: MintRequest = {
       quote: quote.quote,
@@ -4043,6 +4080,7 @@ class Wallet {
       outputData: outputs,
       // A v3 batch has no legacy message to fall back to.
       ...(hasSignatures ? { signatures, ...(!v3 && { legacySignatures }) } : {}),
+      ...this.previewMint(),
     };
   }
 
@@ -4060,6 +4098,7 @@ class Wallet {
     batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>,
     opts?: CompleteMintOptions,
   ): Promise<Proof[]> {
+    this.assertPreviewMint(batchPreview);
     const { method, quotes, amounts, outputData, signatures, legacySignatures } = batchPreview;
     const request: BatchMintRequest = {
       quotes: quotes.map((q) => q.quote),
@@ -4683,6 +4722,7 @@ class Wallet {
         preimage === undefined ? normalizedProofs : attachHTLCPreimage(normalizedProofs, preimage),
       outputData,
       quote: resolvedQuote,
+      ...this.previewMint(),
     };
 
     this.throwIfAborted(config?.signal);
@@ -4711,6 +4751,7 @@ class Wallet {
   ): Promise<MeltProofsResponse<TQuote>> {
     const completeOptions: CompleteMeltOptions = options ?? {};
 
+    this.assertPreviewMint(meltPreview);
     this.assertUniqueOutputSecrets(meltPreview.outputData);
 
     // Extract vars from MeltPreview
