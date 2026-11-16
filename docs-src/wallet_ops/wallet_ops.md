@@ -24,7 +24,7 @@ You can access `WalletOps` from inside a wallet instance using: `wallet.ops` or 
 ## Notes
 
 - **Counter `0`**
-  `asDeterministic(0)` means "reserve counters automatically" using the wallet’s `CounterSource`. You’ll receive `onCountersReserved` when they’re atomically reserved.
+  `asDeterministic(0)` means "reserve counters automatically" using the wallet’s `CounterSource`. You’ll receive `onCountersReserved` when they’re atomically reserved. An operation whose counters are all caller-chosen reports the range it claimed the same way.
   For lifecycle management, see WalletEvents.
 
 - **Two sides in send**
