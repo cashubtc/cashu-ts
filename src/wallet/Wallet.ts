@@ -470,6 +470,7 @@ class Wallet {
    * @throws If fetching mint info, keysets, or keys fails.
    */
   async loadMint(forceRefresh?: boolean, opts?: AbortOptions): Promise<void> {
+    this.throwIfAborted(opts?.signal);
     const promises = [];
 
     // Load mint info
