@@ -862,22 +862,16 @@ class Wallet {
       }
     }
 
-<<<<<<< HEAD
     // If any deterministic OutputType has a manual counter (> 0), claim the range so
     // "auto" allocations do not reuse counters. Prefer reserveAt (claims up front and
     // detects a range that was already handed out); fall back to the historic bump for
     // sources that do not implement it, with a best-effort peek to report reuse.
-=======
-    // Claim the manual range up front. Bumping the cursor afterwards would leave a window
-    // for a concurrent auto reservation to hand out counters inside the range, and the bump
-    // would then silently do nothing because the cursor had already moved past it.
-    let claimed: OperationCounters | undefined;
->>>>>>> 11918ed (fix(wallet): report caller-chosen counters and recovered quote keys through countersReserved (#1473))
+    let manualStart: number | undefined;
     if (manual.length > 0) {
       const minManualStart = Math.min(...manual.map((ot) => ot.counter));
+      manualStart = minManualStart;
       const maxManualEnd = Math.max(...manual.map((ot) => ot.counter + ot.denominations!.length));
 
-<<<<<<< HEAD
       if (this._counterSource.reserveAt) {
         try {
           await this._counterSource.reserveAt(
@@ -906,16 +900,6 @@ class Wallet {
         await this._counterSource.advanceToAtLeast(keysetId, maxManualEnd);
       }
       this._logger.debug('Counter source advanced to respect manual deterministic counters', {
-=======
-      await this._counterSource.reserveAt(keysetId, minManualStart, maxManualEnd - minManualStart);
-      claimed = {
-        counterKey: keysetId,
-        start: minManualStart,
-        count: maxManualEnd - minManualStart,
-        next: maxManualEnd,
-      };
-      this._logger.debug('Counter source claimed manual deterministic range', {
->>>>>>> 11918ed (fix(wallet): report caller-chosen counters and recovered quote keys through countersReserved (#1473))
         keysetId,
         maxManualEnd,
       });
@@ -924,8 +908,17 @@ class Wallet {
     // Reserve counters for deterministic outputTypes with auto counter (counter===0))
     const total = outputTypes.reduce((n, ot) => n + this.countersNeeded(ot), 0);
     if (total === 0) {
-      // With no auto reservation to follow, the claimed range is what moved the cursor.
-      if (claimed) this.on._emitCountersReserved(claimed);
+      if (manualStart === undefined) return { outputTypes };
+      // No auto reservation follows, so the manual claim is what moved the cursor. Read it
+      // back: it sits past the range end when the range was already issued.
+      const { start: next } = await this._counterSource.reserve(keysetId, 0);
+      const claimed: OperationCounters = {
+        keysetId,
+        start: manualStart,
+        count: next - manualStart,
+        next,
+      };
+      this.on._emitCountersReserved(claimed);
       return { outputTypes, used: claimed };
     }
 
@@ -2470,7 +2463,6 @@ class Wallet {
    * @returns The mint will return a mint quote with a Lightning invoice for minting tokens of the
    *   specified amount and unit. The quote will be locked to the specified `pubkey`.
    */
-<<<<<<< HEAD
   async createLockedMintQuote(
     amount: AmountLike,
     pubkey: string,
@@ -2478,65 +2470,6 @@ class Wallet {
   ): Promise<MintQuoteBolt11Response> {
     this.requireSupport('mint', 'bolt11');
     this.requireMintableKeyset('createLockedMintQuote');
-=======
-  async createQuoteLockKey(opts?: {
-    random?: boolean;
-  }): Promise<{ pubkey: string; privkey: string }> {
-    const seed = opts?.random ? undefined : this._seed;
-    const mintPubkey = seed ? this.requireMintIdentity('createQuoteLockKey') : undefined;
-    return createQuoteLockKeyPair(seed, mintPubkey, async () => {
-      const counterKey = quoteCounterKey(mintPubkey!);
-      const range = await this._counterSource.reserve(counterKey, 1);
-      // Event-persisted sources must see the quote cursor move too, or a restart
-      // re-derives keys already handed out.
-      this.on._emitCountersReserved({
-        counterKey,
-        start: range.start,
-        count: range.count,
-        next: range.start + range.count,
-      });
-      return range.start;
-    });
-  }
-
-  /**
-   * Recovers a seed-derived quote lock key from the quote's lock pubkey by scanning the quote
-   * counter. Returns undefined for a pubkey this seed never derived.
-   *
-   * @remarks
-   * Offline disaster recovery for a lost quote `privkey`; the happy path is persisting the key the
-   * quote response carries. Targeted, not discovery: one HMAC and one point multiply per counter.
-   * Keys are scoped to the mint identity, not a keyset (NUT-13 type `0x04`), so a rotation cannot
-   * strand the key but only this mint's quotes are found. A key found at or past the quote counter
-   * moves the counter past it, reported through `countersReserved`.
-   * @throws {@link CTSError} On a seedless wallet, which has nothing to scan, or a mint with no
-   *   NUT-06 `pubkey`.
-   * @experimental The scan follows draft NUT-13 type `0x04` and draft NUT-06 identity scoping and
-   *   may change before GA, so it finds only keys derived under the current scheme.
-   */
-  async recoverQuoteLockKey(pubkey: string): Promise<string | undefined> {
-    this.failIf(!this._seed, 'recoverQuoteLockKey requires a seeded wallet');
-    const mintPubkey = this.requireMintIdentity('recoverQuoteLockKey');
-    const found = await scanQuoteLockKey(pubkey, mintPubkey, this._nutrootState());
-    if (!found) return undefined;
-    const counterKey = quoteCounterKey(mintPubkey);
-    const before = await this.counters.peekNext(counterKey);
-    if (found.counter >= before) {
-      // The key was handed out before, so the cursor must not hand it out again.
-      await this._counterSource.advanceToAtLeast(counterKey, found.counter + 1);
-      const next = await this.counters.peekNext(counterKey);
-      this.on._emitCountersReserved({ counterKey, start: before, count: next - before, next });
-    }
-    return found.privkey;
-  }
-
-  /**
-   * The mint's NUT-06 identity `pubkey`, which scopes quote lock derivation.
-   */
-  private requireMintIdentity(what: string): string {
-    // The pubkey is taken as published until mint info signatures are verified.
-    const pubkey = this.getMintInfo().pubkey;
->>>>>>> 11918ed (fix(wallet): report caller-chosen counters and recovered quote keys through countersReserved (#1473))
     this.failIf(
       typeof pubkey !== 'string' || pubkey.length === 0,
       'A pubkey is required to lock the mint quote',

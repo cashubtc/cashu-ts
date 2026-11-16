@@ -137,13 +137,9 @@ describe('deterministic counter reservation', () => {
       cfg,
     );
 
-<<<<<<< HEAD
     expect(used).toEqual({ keysetId, start: 12, count: 1, next: 13 });
-=======
-    expect(used).toEqual({ counterKey: keysetId, start: 12, count: 1, next: 13 });
     // One event for the operation: the auto reservation's `next` already covers the manual range.
     expect(events).toEqual([used]);
->>>>>>> 11918ed (fix(wallet): report caller-chosen counters and recovered quote keys through countersReserved (#1473))
     // Send outputs use the manual counters 10,11; the auto keep uses the advanced counter 12.
     expect(proofSecrets(result.send)).toEqual(detSecrets(wallet, 3, 10));
     expect(proofSecrets(result.keep)).toEqual(detSecrets(wallet, 1, 12));
@@ -214,12 +210,30 @@ describe('manual counter range validation', () => {
     );
 
     // Both ranges are manual: the claimed range is reported, as an auto reservation would be.
-    const claimed = { counterKey: keysetId, start: 10, count: 3, next: 13 };
+    const claimed = { keysetId, start: 10, count: 3, next: 13 };
     expect(used).toEqual(claimed);
     expect(events).toEqual([claimed]);
     expect(await wallet.counters.peekNext(keysetId)).toBe(13);
     expect(proofSecrets(result.send)).toEqual(detSecrets(wallet, 3, 10));
     expect(proofSecrets(result.keep)).toEqual(detSecrets(wallet, 1, 12));
+  });
+
+  test('a manual range behind the cursor reports the cursor, not the range end', async () => {
+    echoSwap();
+    const wallet = new Wallet(mint, { unit, bip39seed: seed, counterInit: { [keysetId]: 20 } });
+    await wallet.loadMint();
+
+    const events: OperationCounters[] = [];
+    wallet.on.countersReserved((e) => events.push(e));
+    const cfg: OutputConfig = {
+      send: { type: 'deterministic', counter: 10 },
+      keep: { type: 'deterministic', counter: 12 },
+    };
+    await wallet.send(3, [makeProof(2), makeProof(2)], {}, cfg);
+
+    // The cursor stays at 20, so `next` must not fall back to the range end at 13.
+    expect(events).toEqual([{ keysetId, start: 10, count: 10, next: 20 }]);
+    expect(await wallet.counters.peekNext(keysetId)).toBe(20);
   });
 });
 
