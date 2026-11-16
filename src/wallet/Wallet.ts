@@ -2868,8 +2868,8 @@ class Wallet {
    * @remarks
    * `Y = hash_to_curve(secret)` needs no blinding factor and no unblinding, so the whole range
    * costs one hash per counter. Spent counters are then dropped without ever revealing their `B_`,
-   * which both shrinks the restore and avoids handing the mint a `B_`/`Y` pair it could use to tie
-   * an issuance to its spend.
+   * which shrinks the restore and keeps a passive mint from pairing an issuance with its spend; a
+   * mint answering state checks dishonestly can narrow a batch.
    *
    * `used` reports whether the range was ever issued into, which is what ends a scan: a range can
    * be fully spent, so "no proofs returned" does not mean "never used" here.
@@ -2915,9 +2915,8 @@ class Wallet {
       opts,
     );
 
-    // Spent counters drop out here, so their B_ is never built or sent and the mint never sees
-    // the pair that would tie an issuance to its spend. The rest are blinded through the output
-    // creator, so a custom crypto backend is honoured here as it is in a swap.
+    // Spent counters drop out here, so their B_ is never built or sent. The rest are blinded
+    // through the output creator, so a custom crypto backend is honoured here as it is in a swap.
     let lastIssued = -1;
     const outputCounters: number[] = [];
     states.forEach((state, i) => {
