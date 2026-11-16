@@ -30,11 +30,9 @@ function assertP2PKLockEncodes(lock: LockOptions): void {
   // Blinding swaps keys for same-length points and the nonce is always 64 hex chars, so this
   // layout has the real secret's length.
   const secret = JSON.stringify([p2pk.kind, { nonce: '0'.repeat(64), data: p2pk.data, tags }]);
-  const charCount = [...secret].length;
-  if (charCount > MAX_SECRET_LENGTH) {
-    throw new CTSError(
-      `Secret too long (${charCount} characters), maximum is ${MAX_SECRET_LENGTH}`,
-    );
+  const byteCount = new TextEncoder().encode(secret).length;
+  if (byteCount > MAX_SECRET_LENGTH) {
+    throw new CTSError(`Secret too long (${byteCount} bytes), maximum is ${MAX_SECRET_LENGTH}`);
   }
 }
 

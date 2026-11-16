@@ -538,6 +538,11 @@ describe('P2PKBuilder addTag and addTags', () => {
     }
     expect(() => b.toOptions()).toThrow(/Secret too long/i);
   });
+  it('measures the secret in bytes, not characters', () => {
+    // 300 three-byte characters: well under the limit as characters, over it as bytes.
+    const b = new P2PKBuilder().addMainPubkey(comp('a', '02')).addTag('x', '\u20ac'.repeat(300));
+    expect(() => b.toOptions()).toThrow(/Secret too long \(\d+ bytes\), maximum is 1024/);
+  });
 });
 
 describe('P2PKBuilder.blindKeys()', () => {

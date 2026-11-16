@@ -72,8 +72,9 @@ export const MAX_MINT_INFO_LIST = 1_024;
 
 /**
  * NUT-10: Cap on a serialized secret, applied when creating outputs and before parsing a received
- * proof's secret. Matches the Nutshell default `mint_max_secret_length`. Creation counts code
- * points (as the mint does); the parse-side check counts UTF-16 units, which is never fewer.
+ * proof's secret. Matches the limit mints apply when a proof is spent. Creation counts UTF-8 bytes,
+ * which holds for mints that count bytes and for those that count characters; the parse-side check
+ * counts UTF-16 units, which is never more.
  */
 export const MAX_SECRET_LENGTH = 1024;
 

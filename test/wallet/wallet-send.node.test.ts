@@ -18,6 +18,7 @@ import {
   createHTLCHash,
   createHTLCsecret,
 } from '../../src';
+import { MAX_SECRET_LENGTH } from '../../src/utils/limits';
 
 import { useTestServer, mint, mintUrl, unit, logger, mintInfoResp } from './_setup';
 
@@ -1567,6 +1568,51 @@ describe('deterministic', () => {
       expect(data.blindingFactor).toBe(numberR);
     },
   );
+});
+
+describe('output secret length', () => {
+  async function setup() {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const keyset = wallet.keyChain.getKeyset(wallet.keysetId);
+    const output = (secretBytes: number, fill = 0x61) =>
+      new OutputData(
+        { amount: Amount.from(1), B_: '02'.padEnd(66, 'a'), id: keyset.id },
+        1n,
+        new Uint8Array(secretBytes).fill(fill),
+      );
+    const create = (outputType: unknown) =>
+      (wallet as unknown as { createOutputData: (...a: unknown[]) => unknown }).createOutputData(
+        Amount.from(2),
+        keyset,
+        outputType,
+      );
+    return { output, create };
+  }
+
+  test('accepts custom outputs with secrets at the limit', async () => {
+    const { output, create } = await setup();
+    expect(() =>
+      create({
+        type: 'custom',
+        data: [output(MAX_SECRET_LENGTH), output(MAX_SECRET_LENGTH, 0x62)],
+      }),
+    ).not.toThrow();
+  });
+
+  test('rejects a custom output with a longer secret, naming its index', async () => {
+    const { output, create } = await setup();
+    expect(() =>
+      create({ type: 'custom', data: [output(32), output(MAX_SECRET_LENGTH + 1)] }),
+    ).toThrow('Output secret too long at index 1 (1025 bytes), maximum is 1024');
+  });
+
+  test('rejects a factory output with a longer secret', async () => {
+    const { output, create } = await setup();
+    expect(() => create({ type: 'factory', factory: () => output(MAX_SECRET_LENGTH + 1) })).toThrow(
+      /Output secret too long at index 0/,
+    );
+  });
 });
 
 describe('output secret uniqueness (NUT-10)', () => {
