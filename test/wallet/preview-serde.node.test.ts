@@ -5,6 +5,7 @@ import {
   Amount,
   CTSError,
   MeltQuoteState,
+  Mint,
   MintQuoteState,
   OutputData,
   Wallet,
@@ -15,6 +16,7 @@ import {
   serializeBatchMintPreview,
   serializeMeltPreview,
   serializeMintPreview,
+  serializeSwapPreview,
   type MeltQuoteBolt11Response,
   type MintQuoteBolt11Response,
   type Proof,
@@ -24,7 +26,15 @@ import {
 } from '../../src';
 import { ABSOLUTE_MAX_ARRAY_LENGTH } from '../../src/utils/limits';
 
-import { mint, mintUrl, unit, useTestServer } from './_setup';
+import {
+  dummyKeysResp,
+  dummyKeysetResp,
+  mint,
+  mintInfoResp,
+  mintUrl,
+  unit,
+  useTestServer,
+} from './_setup';
 
 const server = useTestServer();
 const KEYSET = '00bd033559de27d0';
@@ -349,5 +359,132 @@ describe('preview array limits', () => {
     expect(() =>
       deserializeMeltPreview({ ...base, outputData: many(output, atLimit + 1) }),
     ).toThrow(tooMany('outputData'));
+  });
+});
+
+describe('preview mint pubkey', () => {
+  const OTHER_URL = 'https://other.example';
+  const OTHER_PUBKEY = '0283bf290884eed3a7ca2663fc0260de2e2064d6b355ea13f98dec004b7a7ead99';
+  const proof: Proof = {
+    id: KEYSET,
+    amount: Amount.from(3),
+    secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a55',
+    C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+  };
+  const meltQuote: MeltQuoteBolt11Response = {
+    quote: 'melt-q',
+    amount: Amount.from(1),
+    fee_reserve: Amount.from(0),
+    request: 'bolt11request',
+    state: MeltQuoteState.UNPAID,
+    expiry: 1234567890,
+    payment_preimage: null,
+    unit: 'sat',
+    method: 'bolt11',
+  };
+
+  // A second endpoint with the test mint's keys, publishing `pubkey`. Signs and records each POST.
+  function serveOtherMint(pubkey?: string) {
+    const posts: string[] = [];
+    server.use(
+      http.get(OTHER_URL + '/v1/info', () => HttpResponse.json({ ...mintInfoResp, pubkey })),
+      http.get(OTHER_URL + '/v1/keys', () => HttpResponse.json(dummyKeysResp)),
+      http.get(OTHER_URL + '/v1/keys/:id', () => HttpResponse.json(dummyKeysResp)),
+      http.get(OTHER_URL + '/v1/keysets', () => HttpResponse.json(dummyKeysetResp)),
+      http.post(OTHER_URL + '/*', async ({ request }) => {
+        posts.push(new URL(request.url).pathname);
+        const { outputs } = (await request.json()) as { outputs: Array<{ amount: number }> };
+        return HttpResponse.json({
+          signatures: outputs.map((o) => ({ id: KEYSET, amount: o.amount, C_ })),
+        });
+      }),
+    );
+    return posts;
+  }
+
+  async function prepareAll(wallet: Wallet) {
+    return {
+      swap: (await wallet.prepareSwapToSend(1, [proof])).preview,
+      mint: await wallet.prepareMint('bolt11', 3, mintQuote('mint-q', 3)),
+      batch: await wallet.prepareBatchMint('bolt11', [
+        { amount: 1, quote: mintQuote('batch-a', 1) },
+        { amount: 2, quote: mintQuote('batch-b', 2) },
+      ]),
+      melt: await wallet.prepareMelt('bolt11', meltQuote, [proof]),
+    };
+  }
+
+  function completeAll(wallet: Wallet, previews: Awaited<ReturnType<typeof prepareAll>>) {
+    return [
+      () => wallet.completeSwap(previews.swap),
+      () => wallet.restoreSwapPreview(previews.swap),
+      () => wallet.completeMint(previews.mint),
+      () => wallet.completeBatchMint(previews.batch),
+      () => wallet.completeMelt(previews.melt),
+    ];
+  }
+
+  test('every preview records the mint pubkey and keeps it when saved', async () => {
+    const { swap, mint, batch, melt } = await prepareAll(await loadWallet());
+    const revived = [
+      deserializeSwapPreview(roundTrip(serializeSwapPreview(swap))),
+      deserializeMintPreview(roundTrip(serializeMintPreview(mint))),
+      deserializeBatchMintPreview(roundTrip(serializeBatchMintPreview(batch))),
+      deserializeMeltPreview(roundTrip(serializeMeltPreview(melt))),
+    ];
+    for (const preview of [swap, mint, batch, melt, ...revived]) {
+      expect(preview.mintPubkey).toBe(mintInfoResp.pubkey);
+    }
+  });
+
+  test.each([
+    ['a different pubkey', OTHER_PUBKEY],
+    ['no pubkey', undefined],
+  ])('is not completed at a mint that publishes %s', async (_, pubkey) => {
+    const posts = serveOtherMint(pubkey);
+    const previews = await prepareAll(await loadWallet());
+    const other = new Wallet(new Mint(OTHER_URL), { unit });
+    await other.loadMint();
+
+    for (const complete of completeAll(other, previews)) {
+      await expect(complete()).rejects.toThrow('Preview was prepared at a different mint');
+    }
+    expect(posts).toEqual([]);
+  });
+
+  test('is not completed on a wallet that has not loaded its mint', async () => {
+    const posts = serveOtherMint(OTHER_PUBKEY);
+    const previews = await prepareAll(await loadWallet());
+    const other = new Wallet(new Mint(OTHER_URL), { unit });
+
+    for (const complete of completeAll(other, previews)) {
+      await expect(complete()).rejects.toThrow(/Mint info not initialized/);
+    }
+    expect(posts).toEqual([]);
+  });
+
+  test('is completed at the same mint under another URL', async () => {
+    const posts = serveOtherMint(mintInfoResp.pubkey.toUpperCase());
+    const { swap } = await prepareAll(await loadWallet());
+    const other = new Wallet(new Mint(OTHER_URL), { unit });
+    await other.loadMint();
+
+    const { send } = await other.completeSwap(swap);
+    expect(send).toHaveLength(1);
+    expect(posts).toEqual(['/v1/swap']);
+  });
+
+  test('a preview from a mint with no pubkey records none and is not checked', async () => {
+    serveOtherMint();
+    const source = new Wallet(new Mint(OTHER_URL), { unit });
+    await source.loadMint();
+    const { swap } = await prepareAll(source);
+    expect(swap).not.toHaveProperty('mintPubkey');
+    expect(serializeSwapPreview(swap)).not.toHaveProperty('mintPubkey');
+
+    const bodies: string[] = [];
+    server.use(signingHandler('/v1/swap', bodies));
+    await (await loadWallet()).completeSwap(swap);
+    expect(bodies).toHaveLength(1);
   });
 });

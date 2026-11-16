@@ -213,6 +213,7 @@ export interface BatchMintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'qu
     legacySignatures?: Array<string | null>;
     // (undocumented)
     method: string;
+    mintPubkey?: string;
     outputData: OutputDataLike[];
     quotes: TQuote[];
     signatures?: Array<string | null>;
@@ -1121,6 +1122,7 @@ export interface MeltPreview<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'>
     inputs: Proof[];
     // (undocumented)
     method: string;
+    mintPubkey?: string;
     outputData: OutputDataLike[];
     quote: TQuote;
 }
@@ -1566,6 +1568,7 @@ export interface MintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>
     legacySignature?: string;
     // (undocumented)
     method: string;
+    mintPubkey?: string;
     outputData: OutputDataLike[];
     quote: TQuote;
     signature?: string;
@@ -2542,6 +2545,7 @@ export type SerializedBatchMintPreview = {
     outputData: SerializedOutputData[];
     signatures?: Array<string | null>;
     legacySignatures?: Array<string | null>;
+    mintPubkey?: string;
 };
 
 // @public
@@ -2572,6 +2576,7 @@ export type SerializedMeltPreview = {
     amount?: string;
     inputs: SerializedProof[];
     outputData: SerializedOutputData[];
+    mintPubkey?: string;
 };
 
 // @public (undocumented)
@@ -2586,6 +2591,7 @@ export type SerializedMintPreview = {
     outputData: SerializedOutputData[];
     signature?: string;
     legacySignature?: string;
+    mintPubkey?: string;
 };
 
 // @public
@@ -2618,6 +2624,7 @@ export type SerializedSwapPreview = {
     inputs: SerializedProof[];
     sendOutputs?: SerializedOutputData[];
     keepOutputs?: SerializedOutputData[];
+    mintPubkey?: string;
 };
 
 // @public
@@ -2803,6 +2810,7 @@ export type SwapPreview = {
     inputs: Proof[];
     sendOutputs?: OutputDataLike[];
     keepOutputs?: OutputDataLike[];
+    mintPubkey?: string;
 };
 
 // @public
