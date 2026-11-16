@@ -11,12 +11,14 @@ import {
   type CounterSource,
   serializeSwapPreview,
   deserializeSwapPreview,
+  type SerializedOutputData,
   type SerializedProof,
   type SerializedSwapPreview,
   type Proof,
   type ProofLike,
   type OutputConfig,
 } from '../../src';
+import { ABSOLUTE_MAX_ARRAY_LENGTH } from '../../src/utils/limits';
 
 import { useTestServer, mint, mintUrl, unit, logger, mintInfoResp } from './_setup';
 
@@ -384,6 +386,45 @@ describe('send', () => {
     expect(() => deserializeSwapPreview(bad)).toThrow(
       'Invalid SerializedSwapPreview: not-an-error',
     );
+  });
+
+  describe('deserializeSwapPreview array limits', () => {
+    const base = { amount: '0', fees: '0', keysetId: '00bd033559de27d0', inputs: [] };
+    const proof: SerializedProof = { id: base.keysetId, amount: '1', secret: 's', C: 'C' };
+    // Never restored: an oversized list is refused before its entries are read.
+    const output = {} as SerializedOutputData;
+    const many = <T>(entry: T, count: number): T[] => new Array<T>(count).fill(entry);
+    const atLimit = ABSOLUTE_MAX_ARRAY_LENGTH;
+    const tooMany = (field: string) =>
+      new RegExp(`: too many ${field}: ${atLimit + 1}, maximum is ${atLimit}$`);
+
+    test('accepts inputs at the limit', () => {
+      const swap = deserializeSwapPreview({ ...base, inputs: many(proof, atLimit) });
+      expect(swap.inputs).toHaveLength(atLimit);
+    });
+
+    test('rejects oversized lists', () => {
+      const over = () => deserializeSwapPreview({ ...base, inputs: many(proof, atLimit + 1) });
+      expect(over).toThrow(CTSError);
+      expect(over).toThrow(/^Invalid SerializedSwapPreview: /);
+      expect(over).toThrow(tooMany('inputs'));
+      expect(() =>
+        deserializeSwapPreview({ ...base, sendOutputs: many(output, atLimit + 1) }),
+      ).toThrow(tooMany('outputs'));
+      expect(() =>
+        deserializeSwapPreview({ ...base, keepOutputs: many(output, atLimit + 1) }),
+      ).toThrow(tooMany('outputs'));
+    });
+
+    test('counts keep and send outputs together', () => {
+      expect(() =>
+        deserializeSwapPreview({
+          ...base,
+          sendOutputs: many(output, atLimit / 2),
+          keepOutputs: many(output, atLimit / 2 + 1),
+        }),
+      ).toThrow(tooMany('outputs'));
+    });
   });
 
   test('rejects missing DLEQ on swap when mint advertises NUT-12', async () => {
