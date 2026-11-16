@@ -1018,6 +1018,53 @@ describe('WalletEvents', () => {
   });
 
   describe('quote subscriptions polling fallback', () => {
+    it('a watch started already aborted sends nothing', async () => {
+      vi.useFakeTimers();
+      mock.getMintInfo.mockReturnValue(nut17([]));
+      const ac = new AbortController();
+      ac.abort();
+      await events.mintQuoteUpdates(['a'], vi.fn(), vi.fn(), { pollMs: 10, signal: ac.signal });
+      await events.meltQuoteUpdates(['a'], vi.fn(), vi.fn(), { pollMs: 10, signal: ac.signal });
+      await vi.advanceTimersByTimeAsync(25);
+      expect(mock.checkMintQuote).not.toHaveBeenCalled();
+      expect(mock.checkMeltQuote).not.toHaveBeenCalled();
+      expect(mock.mint.connectWebSocket).not.toHaveBeenCalled();
+      vi.useRealTimers();
+    });
+
+    it('stops between quote checks once aborted mid-poll', async () => {
+      vi.useFakeTimers();
+      mock.getMintInfo.mockReturnValue(nut17([]));
+      const ac = new AbortController();
+      mock.checkMeltQuote.mockImplementation(async (_m: string, id: string) => {
+        ac.abort();
+        return { quote: id, state: 'UNPAID' };
+      });
+      await events.meltQuoteUpdates(['a', 'b'], vi.fn(), vi.fn(), {
+        pollMs: 10,
+        signal: ac.signal,
+      });
+      await vi.advanceTimersByTimeAsync(25);
+      expect(mock.checkMeltQuote).toHaveBeenCalledTimes(1);
+      vi.useRealTimers();
+    });
+
+    it('passes the watch signal to the proof-state check', async () => {
+      vi.useFakeTimers();
+      mock.getMintInfo.mockReturnValue(nut17([]));
+      const proofs: Proof[] = [
+        { amount: Amount.from(2), id: '00bd033559de27d0', secret: 's1', C: 'a' },
+      ];
+      const ac = new AbortController();
+      await events.proofStateUpdates(proofs, vi.fn(), vi.fn(), { pollMs: 10, signal: ac.signal });
+      await vi.advanceTimersByTimeAsync(5);
+      ac.abort();
+      expect(mock.checkProofsStates).toHaveBeenCalledWith(proofs, {
+        signal: expect.any(AbortSignal),
+      });
+      vi.useRealTimers();
+    });
+
     it('onceMintPaid polls until PAID when the mint cannot push quotes', async () => {
       vi.useFakeTimers();
       mock.getMintInfo.mockReturnValue(nut17(['proof_state']));
@@ -1091,7 +1138,9 @@ describe('WalletEvents', () => {
       const p = events.onceMintPaid('b12', { method: 'bolt12', pollMs: 10 });
       await vi.advanceTimersByTimeAsync(15);
       await expect(p).resolves.toMatchObject({ quote: 'b12' });
-      expect(mock.checkMintQuote).toHaveBeenCalledWith('bolt12', 'b12');
+      expect(mock.checkMintQuote).toHaveBeenCalledWith('bolt12', 'b12', {
+        signal: expect.any(AbortSignal),
+      });
       expect(mock.mint.connectWebSocket).not.toHaveBeenCalled();
 
       // listed, so the socket is used under its own kind
@@ -1133,7 +1182,9 @@ describe('WalletEvents', () => {
       });
       await vi.advanceTimersByTimeAsync(15);
       ac.abort();
-      expect(mock.checkMintQuoteBatch).toHaveBeenCalledWith('bolt11', ['a', 'b']);
+      expect(mock.checkMintQuoteBatch).toHaveBeenCalledWith('bolt11', ['a', 'b'], {
+        signal: expect.any(AbortSignal),
+      });
       expect(mock.checkMintQuote).not.toHaveBeenCalled();
       expect(cb).toHaveBeenCalledTimes(2);
       vi.useRealTimers();

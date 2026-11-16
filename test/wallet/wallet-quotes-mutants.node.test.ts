@@ -4,6 +4,7 @@ import { test, describe, expect, vi } from 'vitest';
 
 import {
   Wallet,
+  CallerAbortError,
   KeyChain,
   OutputData,
   Amount,
@@ -80,6 +81,15 @@ describe('constructor mutants', () => {
     await reference.loadMint();
     caller.fill(0);
     expect(await wallet.createQuoteLockKey()).toEqual(await reference.createQuoteLockKey());
+  });
+
+  test('loadMint sends nothing when the signal is already aborted', async () => {
+    const wallet = new Wallet(mint, { unit });
+    const fetchInfo = vi.spyOn(wallet.mint, 'fetchMintInfo');
+    const ac = new AbortController();
+    ac.abort();
+    await expect(wallet.loadMint(false, { signal: ac.signal })).rejects.toThrow(CallerAbortError);
+    expect(fetchInfo).not.toHaveBeenCalled();
   });
 
   test('never logs the rejected seed value', () => {

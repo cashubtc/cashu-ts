@@ -77,7 +77,11 @@ export type ProofStatesStreamOpts<P extends ProofLike = Proof> = WatchOpts & {
  * How to poll for what a subscription would push: `fetch` reads the current items, `key` identifies
  * one across polls and `state` is the field a change is judged on.
  */
-type Poller<T> = { fetch: () => Promise<T[]>; key: (p: T) => string; state: (p: T) => string };
+type Poller<T> = {
+  fetch: (signal: AbortSignal) => Promise<T[]>;
+  key: (p: T) => string;
+  state: (p: T) => string;
+};
 
 function noop(): void {
   /* noop */
@@ -331,6 +335,8 @@ export class WalletEvents {
     err: (e: Error) => void,
     opts?: WatchOpts,
   ): Promise<SubscriptionCanceller> {
+    // Already aborted: send nothing, as the filters and polls carry the watched ids.
+    if (opts?.signal?.aborted) return noop;
     const { kind, filters, decode } = socket;
     const deliver = (wire: W) => {
       const p = decode(wire);
@@ -393,9 +399,17 @@ export class WalletEvents {
   }
 
   // One request at a time: a burst is what trips a rate limit, and the first refusal ends the poll
-  private async _eachQuote<T>(ids: string[], check: (id: string) => Promise<T>): Promise<T[]> {
+  private async _eachQuote<T>(
+    ids: string[],
+    check: (id: string) => Promise<T>,
+    signal: AbortSignal,
+  ): Promise<T[]> {
     const out: T[] = [];
-    for (const id of ids) out.push(await check(id));
+    for (const id of ids) {
+      // Stop between checks once aborted, so no quote id is sent after the caller cancels.
+      if (signal.aborted) break;
+      out.push(await check(id));
+    }
     return out;
   }
 
@@ -411,7 +425,7 @@ export class WalletEvents {
     while (!signal.aborted) {
       const changed: T[] = [];
       try {
-        for (const item of await poll.fetch()) {
+        for (const item of await poll.fetch(signal)) {
           const key = poll.key(item);
           const state = poll.state(item);
           if (seen.get(key) === state) continue;
@@ -420,6 +434,7 @@ export class WalletEvents {
         }
         failures = 0;
       } catch (e) {
+        if (signal.aborted) return;
         if (++failures >= POLL_FAILURE_LIMIT) throw normalizeError(e);
       }
       if (signal.aborted) return;
@@ -586,17 +601,21 @@ export class WalletEvents {
     const method = opts?.method ?? 'bolt11';
     const uniq = Array.from(new Set(ids));
     let batch = uniq.length > 1 && this._batches(method);
-    const fetch = async () => {
+    const fetch = async (signal: AbortSignal) => {
       if (batch) {
         try {
-          return await this.wallet.checkMintQuoteBatch<TRes>(method, uniq);
+          return await this.wallet.checkMintQuoteBatch<TRes>(method, uniq, { signal });
         } catch (e) {
           // A missing or refused endpoint means the mint cannot batch; anything else is the poll failing
           if (!(e instanceof HttpResponseError) || (e.status !== 404 && e.status !== 405)) throw e;
           batch = false;
         }
       }
-      return this._eachQuote(uniq, (id) => this.wallet.checkMintQuote<TRes>(method, id));
+      return this._eachQuote(
+        uniq,
+        (id) => this.wallet.checkMintQuote<TRes>(method, id, { signal }),
+        signal,
+      );
     };
     return this._watch<TRes>(
       {
@@ -668,7 +687,12 @@ export class WalletEvents {
         ),
       },
       {
-        fetch: () => this._eachQuote(uniq, (id) => this.wallet.checkMeltQuote<TRes>(method, id)),
+        fetch: (signal) =>
+          this._eachQuote(
+            uniq,
+            (id) => this.wallet.checkMeltQuote<TRes>(method, id, { signal }),
+            signal,
+          ),
         key: (q) => q.quote,
         state: (q) => q.state,
       },
@@ -750,8 +774,8 @@ export class WalletEvents {
         },
       },
       {
-        fetch: async () => {
-          const states = await this.wallet.checkProofsStates(proofs);
+        fetch: async (signal) => {
+          const states = await this.wallet.checkProofsStates(proofs, { signal });
           return states.map((state, i) => ({ ...state, proof: proofs[i] }));
         },
         key: (p) => p.proof.secret,
