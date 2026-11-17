@@ -1585,6 +1585,14 @@ describe('Mint normalization', () => {
       expect(response.quote).toBe('q1');
     });
 
+    it('rejects a quote that is not an object', async () => {
+      const mint = new Mint(mintUrl, { customRequest: makeRequest(null) });
+
+      await expect(
+        mint.createMeltQuoteBolt11({ request: 'lnbc1mine', unit: 'sat' }),
+      ).rejects.toThrow('Invalid response from mint');
+    });
+
     it('rejects a quote that echoes no invoice', async () => {
       const mint = new Mint(mintUrl, { customRequest: makeRequest(quoteResponse('')) });
 
