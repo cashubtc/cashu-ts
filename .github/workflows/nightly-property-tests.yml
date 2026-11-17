@@ -1,0 +1,61 @@
+name: Nightly property tests
+
+# Runs test/property with many more generated cases than the PR run can afford.
+# A failure prints a seed and path; replay it locally with
+#   PROPERTY_SEED=<seed> PROPERTY_PATH=<path> npx vitest run test/property --project node -t '<test>'
+on:
+  schedule:
+    - cron: '45 3 * * *' # daily at 03:45 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  property:
+    if: github.repository == 'cashubtc/cashu-ts'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.x'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Run the property tests at 500 cases each
+        env:
+          PROPERTY_RUNS: 500
+        run: npx vitest run test/property --project node --testTimeout=1800000
+
+      - name: Upload the test report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: property-test-report
+          path: test-results/junit.xml
+          retention-days: 30
+
+      - name: Open an issue on failure
+        if: ${{ failure() }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Nightly property tests failed"
+          # One open issue; comment on it instead of duplicating
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "Still failing: $RUN_URL"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" \
+              --body "The nightly property run found a counterexample. The run log has the seed and path to replay it.
+
+          Run: $RUN_URL"
+          fi
