@@ -773,9 +773,10 @@ class Mint {
       { requestBody: payload },
       options,
     );
-    if (typeof payload.request === 'string') {
+    // A non-object response is refused by the normalizer below.
+    if (isRecord(response) && typeof payload.request === 'string') {
       failIf(
-        !answersRequest((response as { request?: unknown }).request, payload.request),
+        !answersRequest(response.request, payload.request),
         'Melt quote is for a different payment request',
         this._logger,
       );
