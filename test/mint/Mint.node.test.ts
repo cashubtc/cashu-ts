@@ -1943,6 +1943,14 @@ describe('Mint normalization', () => {
       ).rejects.toThrow('Melt quote is for a different payment request');
     });
 
+    it('rejects a quote that is not an object', async () => {
+      const mint = new Mint(mintUrl, { customRequest: makeRequest(null) });
+
+      await expect(
+        mint.createMeltQuoteBolt11({ request: 'lnbc1mine', unit: 'sat' }),
+      ).rejects.toThrow('Invalid response from mint');
+    });
+
     it('accepts a quote that echoes the invoice in a different case', async () => {
       const mint = new Mint(mintUrl, {
         customRequest: makeRequest(quoteResponse('LNBC1MINE')),

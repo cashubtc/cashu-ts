@@ -762,7 +762,9 @@ class Mint {
       { requestBody: payload },
       options?.customRequest,
     );
+    // A non-object response is refused by the normalizer below.
     if (
+      isRecord(response) &&
       typeof payload.request === 'string' &&
       !answersRequest((response as { request?: unknown }).request, payload.request)
     ) {
