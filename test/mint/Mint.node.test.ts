@@ -968,6 +968,23 @@ describe('Mint normalization', () => {
         'Invalid response from mint',
       );
     });
+
+    it('throws when a mint quote pubkey is not a string', async () => {
+      const mint = new Mint(mintUrl, {
+        customRequest: makeRequest({
+          quote: 'q1',
+          request: 'acct:12345',
+          unit: 'usd',
+          amount_paid: 1,
+          amount_issued: 0,
+          pubkey: 1,
+        }),
+      });
+
+      await expect(mint.checkMintQuote('paypal', 'q1')).rejects.toThrow(
+        'Invalid response from mint',
+      );
+    });
   });
 
   describe('method field on quote responses', () => {

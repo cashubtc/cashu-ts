@@ -1555,7 +1555,8 @@ class Mint {
       typeof data.quote !== 'string' ||
       typeof data.request !== 'string' ||
       typeof data.unit !== 'string' ||
-      data.unit === ''
+      data.unit === '' ||
+      (data.pubkey != null && typeof data.pubkey !== 'string')
     ) {
       this._logger.error('Invalid response from mint...', { op });
       throw new CTSError('Invalid response from mint');
