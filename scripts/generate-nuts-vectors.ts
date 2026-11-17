@@ -190,7 +190,6 @@ function nut00Batch() {
     K: hex(K),
     proofs: items.map((it) => ({
       secret: it.secret,
-      r: bytesToHex(numberToBytesBE(it.r, 32)),
       C: hex(it.C),
     })),
     challenge: bytesToHex(challenge),
