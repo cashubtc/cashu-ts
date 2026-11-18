@@ -22,24 +22,7 @@ NUT_IMAGE_RC ?= cashubtc/nutshell:0.18.2
 NUT_IMAGE ?= cashubtc/nutshell:0.22.1
 NUT_NAME ?= cashu-dev-nutshell
 
-# BLS (v3) Nutshell: no published image yet — build from a local checkout that
-# carries v3 support. Default path assumes the worktree sibling layout used
-# during the BLS bring-up (../nutshell on rnd/taproot-v3-rebased, ≥0.21.0
-# which emits v3 keysets by default; see cashu/core/base.py). That branch stacks
-# the nutroot work on PR #999 (feature/bls12-381-v3-keyset); the build uses
-# whatever ../nutshell has checked out, so switch branches there to compare.
-NUT_BLS_PATH ?= ../nutshell
-NUT_BLS_IMAGE ?= cashu-dev-nutshell-bls:local
-NUT_BLS_NAME ?= cashu-dev-nutshell-bls
-# Data volume shared by the seed (stable) and BLS mint runs, so the BLS mint
-# comes up as a mint upgraded into v3: legacy keysets from the database, which
-# serve NUT-10 and plain text secrets, plus its own fresh v3 keyset.
-NUT_BLS_VOLUME ?= cashu-dev-nutshell-bls-data
-# Pre-v3 mint that seeds the volume. Pinned apart from NUT_IMAGE: a seed with
-# newer migrations than the BLS branch makes that mint skip its own.
-NUT_BLS_SEED_IMAGE ?= cashubtc/nutshell:0.21.0
-
-# BLS (v3) CDK: built from a local checkout of cashubtc/cdk#2607 (nutroot).
+# BLS (v3) CDK: built from a local checkout that carries nutroot.
 CDK_BLS_PATH ?= ../cdk
 CDK_BLS_IMAGE ?= cashu-dev-cdk-bls:local
 CDK_BLS_NAME ?= cashu-dev-cdk-bls
@@ -142,7 +125,6 @@ print-mint-images:
 	@echo "CDK_IMAGE_RC=$(CDK_IMAGE_RC)"
 	@echo "NUT_IMAGE=$(NUT_IMAGE)"
 	@echo "NUT_IMAGE_RC=$(NUT_IMAGE_RC)"
-	@echo "NUT_BLS_IMAGE=$(NUT_BLS_IMAGE) (built from $(NUT_BLS_PATH))"
 	@echo "CDK_BLS_IMAGE=$(CDK_BLS_IMAGE) (built from $(CDK_BLS_PATH))"
 
 # ------------------------
@@ -173,42 +155,11 @@ nutshell-rc-down:
 	$(MAKE) nutshell-down NUT_NAME=cashu-dev-nutshell-rc
 
 # ------------------------
-# Nutshell BLS (v3) Targets
-# ------------------------
-# Built natively (no PLATFORM_FLAG): the base image (python:3.10-slim) is
-# multi-arch, and BLS keygen through Rosetta is unusably slow on arm64 hosts.
-.PHONY: nutshell-bls-build nutshell-bls-up nutshell-bls-down
-
-nutshell-bls-build:
-	$(DOCKER) build -t $(NUT_BLS_IMAGE) $(NUT_BLS_PATH)
-
-# A fresh mint on the BLS branch generates v3 keysets only, so the legacy
-# keysets come from the upgrade path instead: seed the volume by running the
-# stable mint once, then start the BLS mint on the same database. One mint
-# then serves both generations, which the mixed-transaction tests need.
-nutshell-bls-up: nutshell-bls-build
-	-$(DOCKER) rm -f -v $(NUT_BLS_NAME) >/dev/null 2>&1 || true
-	-$(DOCKER) volume rm $(NUT_BLS_VOLUME) >/dev/null 2>&1 || true
-	-$(DOCKER) run --rm --name $(NUT_BLS_NAME)-seed \
-		-v $(NUT_BLS_VOLUME):/app/data \
-		$(NUT_ENVS) \
-		--entrypoint sh $(NUT_BLS_SEED_IMAGE) -c "timeout 15 poetry run mint; true"
-	$(DOCKER) run -d --name $(NUT_BLS_NAME) \
-		-p $(BIND_ADDR):$(PORT):3338 \
-		-v $(NUT_BLS_VOLUME):/app/data \
-		$(NUT_ENVS) \
-		-e MINT_DERIVATION_PATH="m/0'/0'/1'" \
-		$(NUT_BLS_IMAGE) poetry run mint
-
-nutshell-bls-down:
-	-$(DOCKER) rm -f -v $(NUT_BLS_NAME)
-	-$(DOCKER) volume rm $(NUT_BLS_VOLUME)
-
-# ------------------------
 # CDK BLS (v3) Targets
 # ------------------------
-# Built natively like the nutshell BLS image. CDK keeps one active keyset per
-# unit, so this mint issues v3 only: no upgrade-path seeding, unlike nutshell.
+# Built natively (no PLATFORM_FLAG): BLS keygen through Rosetta is unusably
+# slow on arm64 hosts. CDK keeps one active keyset per unit, so this mint
+# issues v3 only.
 .PHONY: cdk-bls-build cdk-bls-up cdk-bls-down
 
 # Upstream Dockerfile.arm predates the bindings workspace members and the lockfile.
