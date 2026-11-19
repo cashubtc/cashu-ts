@@ -534,7 +534,7 @@ export class OIDCAuth {
         body: formBody,
         redirect: 'error', // never follow a redirect with a form body
       });
-      const text = await this.readBody(res);
+      const text = await this.readBody(res, signal);
       let json: unknown;
       try {
         json = text ? JSON.parse(text) : undefined;
@@ -553,9 +553,9 @@ export class OIDCAuth {
    * Reads a response body under the shared size cap. Any read failure surfaces as a CTSError
    * prefixed like every other error out of this class.
    */
-  private async readBody(res: Response): Promise<string> {
+  private async readBody(res: Response, signal?: AbortSignal): Promise<string> {
     try {
-      return await readBodyText(res, DEFAULT_MAX_RESPONSE_BYTES);
+      return await readBodyText(res, DEFAULT_MAX_RESPONSE_BYTES, signal);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       throw new CTSError(`OIDCAuth: ${message}`, { cause: err });

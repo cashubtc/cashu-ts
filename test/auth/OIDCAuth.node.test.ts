@@ -508,6 +508,38 @@ describe('OIDCAuth: device flow', () => {
     }
   });
 
+  test('startDeviceAuth: cancel() releases a token response body that never finishes', async () => {
+    // A hand-rolled stalled body (the ReadableStream global is above the declared Node floor).
+    let stalled: ((r: { done: boolean }) => void) | undefined;
+    const release = vi.fn(() => {
+      stalled?.({ done: true });
+      return Promise.resolve();
+    });
+    const reader = { read: () => new Promise((resolve) => (stalled = resolve)), cancel: release };
+    const hung = {
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      body: { getReader: () => reader, cancel: release },
+    } as unknown as Response;
+    const oidc = new OIDCAuth(DISCOVERY, {
+      clientId: 'cashu-client',
+      fetch: async (input, init) => (String(input) === TOKEN_EP ? hung : fetch(input, init)),
+    });
+    vi.spyOn(
+      oidc as unknown as { sleep: (ms: number) => Promise<void> },
+      'sleep',
+    ).mockResolvedValue(undefined);
+
+    const start = await oidc.startDeviceAuth(1);
+    const promise = start.poll();
+    await vi.waitFor(() => expect(stalled).toBeDefined());
+    start.cancel();
+
+    await expect(promise).rejects.toThrow('device polling cancelled');
+    expect(release).toHaveBeenCalled();
+  });
+
   test('startDeviceAuth: cancel() during the poll delay drops a token that arrives after it', async () => {
     let tokenRequests = 0;
     const onTokens = vi.fn();
