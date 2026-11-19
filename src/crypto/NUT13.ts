@@ -5,7 +5,7 @@ import { concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { HDKey, HARDENED_OFFSET } from '@scure/bip32';
 
 import { CTSError } from '../model/Errors';
-import { isBase64String } from '../utils';
+import { isBase64String, isValidHex } from '../utils';
 import { MAX_SEED_BYTES, MIN_SEED_BYTES } from '../utils/limits';
 
 import { getKeysetIdInt, LEGACY_KEYSET_ID_LENGTH } from './core';
@@ -44,6 +44,41 @@ export const deriveBlindingFactor = (
 ): Uint8Array => {
   return deriveSecretAndBlindingFactor(seed, keysetId, counter).blindingFactor;
 };
+
+/**
+ * Groups of distinct legacy keyset IDs (base64 or hex version `00`) that share a truncated BIP-32
+ * path integer. Other ID versions and unrecognized forms are ignored; this never throws.
+ *
+ * @param keysetIds - All known keyset IDs, including inactive keysets.
+ * @returns Colliding groups of distinct IDs, or an empty array when none collide. Handling a
+ *   collision is wallet policy.
+ */
+export function findLegacyDerivationCollisions(keysetIds: readonly string[]): string[][] {
+  const groups = new Map<bigint, string[]>();
+  const seenIds = new Set<string>();
+  for (const keysetId of keysetIds) {
+    let keysetIdInt: bigint;
+    try {
+      if (getDerivationKind(keysetId) !== DerivationKind.DEPRECATED_BIP32) continue;
+      keysetIdInt = getKeysetIdInt(keysetId);
+    } catch {
+      continue;
+    }
+
+    // Hex is case-insensitive; legacy base64 also travelled URL-safe (see getKeysetIdInt).
+    const isHexId = isValidHex(keysetId) && keysetId.length !== LEGACY_KEYSET_ID_LENGTH;
+    const identity = isHexId
+      ? keysetId.toLowerCase()
+      : keysetId.replace(/-/g, '+').replace(/_/g, '/');
+    if (seenIds.has(identity)) continue;
+    seenIds.add(identity);
+
+    const group = groups.get(keysetIdInt);
+    if (group) group.push(keysetId);
+    else groups.set(keysetIdInt, [keysetId]);
+  }
+  return [...groups.values()].filter((group) => group.length > 1);
+}
 
 /**
  * Derives the deterministic secret and blinding factor for one counter.
