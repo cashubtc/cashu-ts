@@ -4829,11 +4829,12 @@ class Wallet {
 
     // Create any change Proofs. The spec is silent on which keyset settles change after a
     // rotation, so take the keyset each signature names. The inputs are spent by now, so a
-    // failure here must hand back what recovery needs.
+    // failure here must hand back what recovery needs. Surplus signatures fail on count below,
+    // before any keyset they name is fetched.
     const changeSigs = meltResponse.change ?? [];
     let change: Proof[];
     try {
-      if (changeSigs.length > 0) {
+      if (changeSigs.length > 0 && changeSigs.length <= meltPreview.outputData.length) {
         await this._ensureOperableKeysets(
           changeSigs.filter((s) => !s.amount.isZero()).map((s) => s.id),
           { implicit: true },
