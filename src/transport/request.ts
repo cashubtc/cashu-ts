@@ -11,7 +11,7 @@ import {
 import { type Nut19Policy } from '../model/types';
 import { bytesToUtf8 } from '../utils/bytes';
 import { JSONInt } from '../utils/JSONInt';
-import { DEFAULT_MAX_RESPONSE_BYTES } from '../utils/limits';
+import { DEFAULT_MAX_RESPONSE_BYTES, MAX_TIMER_DELAY_MS } from '../utils/limits';
 
 /**
  * Pluggable request function used for all mint HTTP calls.
@@ -357,8 +357,8 @@ export type ApiError = {
  * - **delta-seconds**: an integer number of seconds (e.g. `"30"` → 30 000 ms)
  * - **HTTP-date**: an IMF-fixdate string (e.g. `"Sun, 05 Apr 2026 12:00:00 GMT"`)
  *
- * Returns `undefined` when the header is `null`, empty, or unparseable. Negative delays are clamped
- * to `0`.
+ * Returns `undefined` when the header is `null`, empty, or unparseable. The delay is clamped to
+ * `[0, MAX_TIMER_DELAY_MS]`, so it is always safe to pass to `setTimeout`.
  */
 export function parseRetryAfter(header: string | null): number | undefined {
   if (header === null) return undefined;
@@ -368,14 +368,14 @@ export function parseRetryAfter(header: string | null): number | undefined {
 
   //delta-seconds (non-negative integer)
   if (/^\d+$/.test(header_value)) {
-    return Math.max(Number(header_value) * 1000, 0);
+    return Math.min(Number(header_value) * 1000, MAX_TIMER_DELAY_MS);
   }
 
   //HTTP-date (must contain at least one letter, e.g. month name / day name)
   if (/[a-zA-Z]/.test(header_value)) {
     const date = new Date(header_value).getTime();
     if (!Number.isNaN(date)) {
-      return Math.max(date - Date.now(), 0);
+      return Math.min(Math.max(date - Date.now(), 0), MAX_TIMER_DELAY_MS);
     }
   }
 
