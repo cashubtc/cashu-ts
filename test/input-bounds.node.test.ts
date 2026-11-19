@@ -1,6 +1,6 @@
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex } from '@noble/curves/utils.js';
-import { bech32m } from '@scure/base';
+import { bech32, bech32m } from '@scure/base';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import {
@@ -25,10 +25,12 @@ import request, { setRequestLogger } from '../src/transport';
 import {
   ABSOLUTE_MAX_ARRAY_LENGTH,
   DEFAULT_MAX_RESPONSE_BYTES,
+  MAX_BOLT11_LENGTH,
   MAX_KEYSET_DENOMINATIONS,
   MAX_P2PK_PUBKEYS,
   MAX_SECRET_LENGTH,
   MAX_WITNESS_LENGTH,
+  bolt11PaymentHash,
   decodeCBOR,
 } from '../src/utils';
 import { encodeTLV } from '../src/utils/tlv';
@@ -50,6 +52,18 @@ function pubkeyOf(scalar: number): string {
 function p2pkSecretOfLength(length: number): string {
   const shell = `["P2PK",{"nonce":"","data":"${DATA_KEY}"}]`;
   return shell.replace('"nonce":""', `"nonce":"${'a'.repeat(length - shell.length)}"`);
+}
+
+// A bolt11-shaped invoice of exactly `length` characters, padded with filler tagged fields.
+function bolt11OfLength(length: number): string {
+  const words = [...new Array(7).fill(0), 1, 1, 20, ...new Array(52).fill(0)];
+  let filler = length - 11 - words.length - 104; // hrp 'lnbc', separator, checksum
+  while (filler > 0) {
+    const len = Math.min(filler - 3, 1023);
+    words.push(31, len >> 5, len & 31, ...new Array(len).fill(0));
+    filler -= len + 3;
+  }
+  return bech32.encode('lnbc', [...words, ...new Array(104).fill(0)], false);
 }
 
 // Pads a tag so the created secret is exactly `length` bytes.
@@ -137,6 +151,12 @@ const bounds: Bound[] = [
     atLimit: () => createdP2pkSecretOfLength(MAX_SECRET_LENGTH),
     overLimit: () => createdP2pkSecretOfLength(MAX_SECRET_LENGTH + 1),
     error: /Secret too long/,
+  },
+  {
+    name: 'a BOLT11 invoice read for its payment hash',
+    atLimit: () => bolt11PaymentHash(bolt11OfLength(MAX_BOLT11_LENGTH)),
+    overLimit: () => bolt11PaymentHash(bolt11OfLength(MAX_BOLT11_LENGTH + 1)),
+    error: /exceeds/,
   },
   {
     name: 'the inputs of a saved swap preview',

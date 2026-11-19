@@ -156,6 +156,12 @@ export const MAX_CBOR_NODES = 262_144;
 export const MAX_BOLT11_HRP_LENGTH = 100;
 
 /**
+ * Longest BOLT11 invoice whose payment hash is read for preimage checks. Matches LND's decoder
+ * limit; a longer invoice is left unverified rather than refused.
+ */
+export const MAX_BOLT11_LENGTH = 7_089;
+
+/**
  * Cap on frames `WSConnection` will buffer between two drain ticks: each tick empties the whole
  * queue, so this bounds arrivals within a single tick, not messages held overall. Matches
  * {@link ABSOLUTE_MAX_ARRAY_LENGTH}, since a NUT-17 replay sends one frame per subscribed filter and

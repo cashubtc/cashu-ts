@@ -34,6 +34,7 @@ import { decodeCBOR, encodeCBOR } from './cbor';
 import { JSONInt } from './JSONInt';
 import {
   MAX_BOLT11_HRP_LENGTH,
+  MAX_BOLT11_LENGTH,
   MAX_PAYLOAD_DECODE_ATTEMPTS,
   MAX_PAYLOAD_LENGTH,
   MAX_SPLIT_OUTPUTS,
@@ -1217,6 +1218,9 @@ export function bolt11AmountMsat(pr: string): bigint | null {
  */
 export function bolt11PaymentHash(pr: string): string {
   if (typeof pr !== 'string') throw new CTSError('BOLT11 invoice must be a string');
+  if (pr.length > MAX_BOLT11_LENGTH) {
+    throw new CTSError(`BOLT11 invoice exceeds ${MAX_BOLT11_LENGTH} characters`);
+  }
   let words: number[];
   try {
     ({ words } = bech32.decode(pr.toLowerCase(), false));
