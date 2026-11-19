@@ -663,6 +663,16 @@ describe('SigAll — mergeSwapPackage', () => {
     const pkg = SigAll.extractSwapPackage(preview);
     expect(() => SigAll.mergeSwapPackage(pkg, preview)).toThrow('No signatures to merge');
   });
+
+  test('refuses a merge that would take the witness past the signature limit', () => {
+    const sigs = (n: number) => Array.from({ length: n }, () => 'ab'.repeat(64));
+    const preview = makeSwapPreview();
+    const atLimit = { ...SigAll.extractSwapPackage(preview), witness: { signatures: sigs(64) } };
+    expect(SigAll.mergeSwapPackage(atLimit, preview).inputs[0].witness).toBeDefined();
+
+    const held = { ...preview, inputs: [{ ...dummyProof, witness: { signatures: sigs(1) } }] };
+    expect(() => SigAll.mergeSwapPackage(atLimit, held)).toThrow(/signature limit/);
+  });
 });
 
 describe('SigAll — mergeMeltPackage', () => {

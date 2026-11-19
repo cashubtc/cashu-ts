@@ -1,5 +1,5 @@
 import { schnorr } from '@noble/curves/secp256k1.js';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 
 import {
   computeMessageDigest,
@@ -287,6 +287,17 @@ describe('CashuNip07', () => {
       signSchnorr: async () => '00'.repeat(64),
     };
     await expect(CashuNip07.signP2PK(badSig, [proof])).rejects.toThrow('does not verify');
+  });
+
+  test('signP2PK refuses a witness already at the signature limit before prompting', async () => {
+    const full = {
+      ...p2pkProof(createP2PKsecret(PUB)),
+      witness: { signatures: Array.from({ length: 64 }, () => 'ab'.repeat(64)) },
+    };
+    const prompted = vi.fn(signSecret);
+    const nostr: Nip07Like = { getPublicKey: async () => XONLY, nip60: { signSecret: prompted } };
+    await expect(CashuNip07.signP2PK(nostr, [full])).rejects.toThrow(/signature limit/);
+    expect(prompted).not.toHaveBeenCalled();
   });
 
   test('nip60Keys reads privkey and mint tags from the decrypted content', async () => {
