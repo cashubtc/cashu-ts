@@ -13,7 +13,7 @@ import type {
   KeyChainCache,
   KeysetCache,
 } from '../model/types/keyset';
-import { normalizeMintUrl } from '../utils';
+import { MAX_KEYSET_LIST, normalizeMintUrl } from '../utils';
 
 import { Keyset } from './Keyset';
 
@@ -191,6 +191,12 @@ export class KeyChain {
       `KeyChain cache is for a different mint: ${cacheMintUrl} (expected ${this.mint.mintUrl})`,
       this._logger,
       { cacheMintUrl, mintUrl: this.mint.mintUrl },
+    );
+    // The same bound a mint's keyset list gets, applied before any per-keyset work.
+    failIf(
+      !Array.isArray(cache.keysets) || cache.keysets.length > MAX_KEYSET_LIST,
+      `KeyChain cache must hold an array of at most ${MAX_KEYSET_LIST} keysets`,
+      this._logger,
     );
     const { keysets, keys } = KeyChain.cacheToMintDTO(cache);
     this.buildKeychain(keysets, keys);

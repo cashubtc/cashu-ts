@@ -13,7 +13,7 @@ import {
 } from '../../src';
 import { MAX_SUPPORTED_KEYSET_VERSION_BYTE } from '../../src/crypto/curves';
 import { NULL_LOGGER } from '../../src/logger';
-import { deriveKeysetId, isValidHex } from '../../src/utils';
+import { MAX_KEYSET_LIST, deriveKeysetId, isValidHex } from '../../src/utils';
 import { DUMMY_TEST_KEYS, DUMMY_TEST_KEYSET, PUBKEYS } from '../consts';
 
 const mintUrl = 'http://localhost:3338';
@@ -475,6 +475,18 @@ describe('KeyChain initialization', () => {
     await chain.init();
     const foreign = { ...chain.cache, mintUrl: 'https://other-mint.example' };
     expect(() => KeyChain.fromCache(mint, unit, foreign)).toThrow(/different mint/);
+  });
+
+  test('fromCache refuses a cache holding more keysets than a mint list may', async () => {
+    const chain = new KeyChain(mint, unit);
+    await chain.init();
+    const oversized = {
+      ...chain.cache,
+      keysets: Array.from({ length: MAX_KEYSET_LIST + 1 }, () => chain.cache.keysets[0]),
+    };
+    expect(() => KeyChain.fromCache(mint, unit, oversized)).toThrow(/at most 10000 keysets/);
+    expect(() => chain.loadFromCache(oversized)).toThrow(/at most 10000 keysets/);
+    expect(chain.hasKeyset(DUMMY_TEST_KEYSET.id)).toBe(true);
   });
 
   test('fromCache names the missing mint URL on a cache that has none', async () => {
