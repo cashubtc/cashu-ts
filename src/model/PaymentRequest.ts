@@ -26,7 +26,7 @@ import {
 } from '../utils';
 import { decodeBech32m, encodeBech32m } from '../utils/bech32m';
 import { JSONInt } from '../utils/JSONInt';
-import { MAX_P2PK_PUBKEYS } from '../utils/limits';
+import { ABSOLUTE_MAX_ARRAY_LENGTH, MAX_P2PK_PUBKEYS } from '../utils/limits';
 import { decodeTLV, encodeTLV } from '../utils/tlv';
 import type { DecodedTLVPaymentRequest } from '../utils/tlv';
 import { lockToNutrootOptions, lockToP2PKOptions, type LockOptions } from '../wallet/lock';
@@ -325,8 +325,8 @@ export class PaymentRequest {
    * @remarks
    * Validates payload shape only, accepting proof amounts as JSON numbers or canonical decimal
    * strings. To confirm the payment settles the request, pass the result to
-   * {@link Wallet.isPaymentRequestSatisfied}. Imposes no size limit of its own: cap the raw text at
-   * the transport (POST body, DM) before decoding.
+   * {@link Wallet.isPaymentRequestSatisfied}. Caps the proof count at the receive limit but not the
+   * raw text: cap that at the transport (POST body, DM) before decoding.
    * @param json - Raw payload text (POST body or Nostr DM content).
    * @throws {@link CTSError} If the text is not valid JSON or not payload-shaped.
    */
@@ -356,6 +356,11 @@ export class PaymentRequest {
     }
     if (!Array.isArray(proofs) || proofs.length === 0) {
       throw new CTSError('invalid payment payload: missing proofs');
+    }
+    if (proofs.length > ABSOLUTE_MAX_ARRAY_LENGTH) {
+      throw new CTSError(
+        `invalid payment payload: too many proofs: ${proofs.length}, maximum is ${ABSOLUTE_MAX_ARRAY_LENGTH}`,
+      );
     }
     const normalized = proofs.map((p: unknown, i: number) => {
       if (
