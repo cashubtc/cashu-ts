@@ -99,8 +99,8 @@ export function findLegacyDerivationCollisions(keysetIds: readonly string[]): st
  * @param keysetId - Mint keyset ID that selects the derivation method.
  * @param counter - Deterministic counter for the output.
  * @returns The derived secret bytes and blinding factor bytes.
- * @throws {@link CTSError} If the seed is not 16 to 64 bytes, the keyset ID version is unsupported,
- *   or derivation produces an invalid private key.
+ * @throws {@link CTSError} If the seed is not 64 bytes, the keyset ID version is unsupported, or
+ *   derivation produces an invalid private key.
  */
 export function deriveSecretAndBlindingFactor(
   seed: Uint8Array,
@@ -129,8 +129,8 @@ export function deriveSecretAndBlindingFactor(
  * @param purpose - Key purpose (`'P2PK'` or `'QuoteLock'`), which selects the path's purpose index.
  * @param counter - Non-hardened BIP-32 child index.
  * @returns The derived keypair, both hex-encoded: compressed (02/03) `pubkey` and `privkey`.
- * @throws {@link CTSError} If the seed is not 16 to 64 bytes, the counter is not a non-hardened
- *   index (integer below 2^31), or derivation produces an invalid private key.
+ * @throws {@link CTSError} If the seed is not 64 bytes, the counter is not a non-hardened index
+ *   (integer below 2^31), or derivation produces an invalid private key.
  */
 export function deriveKeyPair(
   seed: Uint8Array,
@@ -156,7 +156,7 @@ export function deriveKeyPair(
  * @param seed - Wallet seed used for deterministic derivation.
  * @param purpose - Key purpose, which selects the path's purpose index.
  * @returns A function mapping a non-hardened counter to its hex keypair.
- * @throws {@link CTSError} If the seed is not 16 to 64 bytes.
+ * @throws {@link CTSError} If the seed is not 64 bytes.
  */
 export function createKeyPairDeriver(
   seed: Uint8Array,
@@ -474,7 +474,7 @@ function assertV3Keyset(keysetId: string, what: string): void {
  * @remarks
  * Leaf order is not committed and `i` has no canonical meaning, so position tells you nothing:
  * derive `i = 0, 1, 2…` and match the tree's keys by value, as NUT-28 does for slots. The scan is
- * bounded by the 255-leaf-key slot cap, and stops early once every key is accounted for.
+ * bounded by the slot cap (120 leaf keys), and stops early once every key is accounted for.
  * @param counter - The proof's counter, ie the one its secret key was derived at.
  * @param keysHex - The tree's leaf keys (33-byte compressed hex); foreign keys simply never match.
  * @returns A map of leaf key hex to its 32-byte private key; keys the wallet does not own are

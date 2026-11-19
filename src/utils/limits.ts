@@ -34,12 +34,6 @@ export const DEFAULT_MAX_ARRAY_LENGTH = 500;
 export const ABSOLUTE_MAX_ARRAY_LENGTH = 10_000;
 
 /**
- * Upper bound on the proofs one receive-side verification will check. Every proof costs curve work,
- * so the batch is bounded before any of it; far above any real token or blind-auth batch.
- */
-export const MAX_RECEIVE_PROOFS = 10_000;
-
-/**
  * NUT-02: Hard ceiling on the number of denominations a mint-supplied keyset may carry, checked
  * before any per-key work (id derivation hashes every pubkey). Real keysets carry ~64 keys (powers
  * of two to 2^63), so 256 is ample headroom. Oversized keysets fail id verification.
