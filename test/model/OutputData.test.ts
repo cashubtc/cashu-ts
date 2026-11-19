@@ -478,6 +478,17 @@ describe('OutputData.deserialize', () => {
     expect(restored.blindedMessage.B_).toBe(original.blindedMessage.B_);
   });
 
+  test('refuses a blinding factor longer than any curve scalar before parsing it', () => {
+    const serialized = OutputData.serialize(
+      OutputData.createSingleRandomData(1, '009a1f293253e41e'),
+    );
+    for (const blindingFactor of ['1'.repeat(79), '1'.repeat(1_000_000)]) {
+      expect(() => OutputData.deserialize({ ...serialized, blindingFactor })).toThrow(
+        /below 10\^78/,
+      );
+    }
+  });
+
   test('rejects a blinded message that does not match its secret and blinding factor', () => {
     const original = OutputData.createSingleRandomData(1, '009a1f293253e41e');
     const replacement = OutputData.createSingleRandomData(1, '009a1f293253e41e');
