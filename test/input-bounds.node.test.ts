@@ -19,6 +19,7 @@ import {
   getP2PKExpectedWitnessPubkeys,
   getP2PKWitnessSignatures,
   parseP2PKSecret,
+  parseSecret,
 } from '../src/crypto';
 import { NULL_LOGGER } from '../src/logger';
 import request, { setRequestLogger } from '../src/transport';
@@ -130,6 +131,12 @@ const bounds: Bound[] = [
     name: 'a serialized P2PK secret',
     atLimit: () => parseP2PKSecret(p2pkSecretOfLength(MAX_SECRET_LENGTH)),
     overLimit: () => parseP2PKSecret(p2pkSecretOfLength(MAX_SECRET_LENGTH + 1)),
+    error: /Secret too long/,
+  },
+  {
+    name: 'a serialized NUT-10 secret of another kind',
+    atLimit: () => parseSecret(p2pkSecretOfLength(MAX_SECRET_LENGTH).replace('P2PK', 'XYZW')),
+    overLimit: () => parseSecret(p2pkSecretOfLength(MAX_SECRET_LENGTH + 1).replace('P2PK', 'XYZW')),
     error: /Secret too long/,
   },
   {
