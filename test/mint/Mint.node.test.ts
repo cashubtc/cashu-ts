@@ -15,6 +15,7 @@ import {
   injectWebSocketImpl,
   RateLimitError,
   Amount,
+  CTSError,
   JSONInt,
 } from '../../src';
 import type { AuthProvider, Logger, MintQuoteBaseResponse, Proof, RequestFn } from '../../src';
@@ -697,6 +698,12 @@ describe('Mint normalization', () => {
       actualCount: undefined,
       op: 'checkMintQuoteBatch.bolt11',
     });
+  });
+
+  it('checkMintQuoteBatch rejects a null entry with a CTSError', async () => {
+    const mint = new Mint(mintUrl, { customRequest: makeRequest([null]) });
+
+    await expect(mint.checkMintQuoteBatchBolt11(['q1'])).rejects.toThrow(CTSError);
   });
 
   it('checkMintQuoteBatch accepts a top-level quote array response', async () => {

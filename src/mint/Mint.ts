@@ -531,7 +531,7 @@ class Mint {
     }
 
     return data.map((response, index) => {
-      if (response.quote !== quotes[index]) {
+      if (!isRecord(response) || response.quote !== quotes[index]) {
         this._logger.error('Invalid response from mint...', {
           index,
           op: `checkMintQuoteBatch.${method}`,
