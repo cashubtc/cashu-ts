@@ -427,6 +427,9 @@ export type DLEQ = {
 export type Enumerate<N extends number, Acc extends number[] = []> = Acc['length'] extends N ? Acc[number] : Enumerate<N, [...Acc, Acc['length']]>;
 
 // @public
+export function findLegacyDerivationCollisions(keysetIds: readonly string[]): string[][];
+
+// @public
 export function findSigningKey(pubkey: string, privkeys: string | string[]): string;
 
 // @public
