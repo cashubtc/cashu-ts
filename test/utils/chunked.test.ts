@@ -85,18 +85,26 @@ describe('mapInChunks', () => {
   });
 });
 
+describe('mapInChunks timer fairness', () => {
+  test('a timeout signal stops a long job rather than waiting for it to end', async () => {
+    const spin = () => {
+      const end = performance.now() + 1;
+      while (performance.now() < end) {
+        // busy: one item of curve-sized work
+      }
+    };
+    const items = Array.from({ length: 1_000 }, (_, i) => i);
+    // ~1 s of work; the timer only fires if the yields let timer tasks run.
+    await expect(
+      mapInChunks(items, spin, { signal: AbortSignal.timeout(30) }),
+    ).rejects.toBeInstanceOf(CallerAbortError);
+  });
+});
+
 describe('yieldToEventLoop', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  test('prefers scheduler.yield where the platform has it', async () => {
-    const y = vi.fn(async () => {});
-    vi.stubGlobal('scheduler', { yield: y });
-    await yieldToEventLoop();
-    expect(y).toHaveBeenCalledTimes(1);
-  });
-
-  test('falls back to a timer without scheduler or MessageChannel', async () => {
-    vi.stubGlobal('scheduler', undefined);
+  test('falls back to a timer without MessageChannel', async () => {
     vi.stubGlobal('MessageChannel', undefined);
     await expect(yieldToEventLoop()).resolves.toBeUndefined();
   });

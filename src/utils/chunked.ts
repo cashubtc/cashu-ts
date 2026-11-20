@@ -48,18 +48,16 @@ export function budgetOrThrow(budgetMs: number | undefined): number {
 }
 
 /**
- * Hands the thread back to the event loop as a macrotask, so pending input and paint can run.
+ * Hands the thread back to the event loop as a macrotask, so pending input, paint and timers can
+ * run.
  *
  * @remarks
- * `setTimeout(0)` is the last resort: browsers clamp nested timers to 4 ms, which would cost more
- * than the work being split. A `MessageChannel` message is not clamped.
+ * Not `scheduler.yield()`: its continuation runs ahead of timers, so an abort timer (eg
+ * `AbortSignal.timeout`) would not fire until the whole job ended. `setTimeout(0)` is the last
+ * resort: browsers clamp nested timers to 4 ms. A `MessageChannel` message is not clamped.
  */
 export async function yieldToEventLoop(): Promise<void> {
-  const g = globalThis as {
-    scheduler?: { yield?: () => Promise<void> };
-    MessageChannel?: typeof MessageChannel;
-  };
-  if (typeof g.scheduler?.yield === 'function') return g.scheduler.yield();
+  const g = globalThis as { MessageChannel?: typeof MessageChannel };
   if (typeof g.MessageChannel === 'function') {
     await new Promise<void>((resolve) => {
       const { port1, port2 } = new g.MessageChannel!();
