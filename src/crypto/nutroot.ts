@@ -451,6 +451,10 @@ export function nutrootMerklePath(leafHashes: Uint8Array[], index: number): Uint
   if (!Number.isInteger(index) || index < 0 || index >= leafHashes.length) {
     throw new CTSError(`Leaf index out of range: ${index}`);
   }
+  // Same bound as the root: a path out of an oversized tree is one the mint refuses.
+  if (leafHashes.length > NUTROOT_MAX_TREE_LEAVES) {
+    throw new CTSError(`Tree exceeds depth ${NUTROOT_MAX_TREE_DEPTH}`);
+  }
   const path: Uint8Array[] = [];
   let level = [...leafHashes].sort((a, b) => compareBytes(a, b));
   // Equal hashes are interchangeable under sorted-pair hashing, so first match is enough.
@@ -777,6 +781,9 @@ export function verifyNutrootSpendInfo(
   // Shape rules (NUT-10): a tree holds at least one leaf, and a NUMS key needs one to be spendable.
   if (spendInfo.tree !== undefined && spendInfo.tree.length === 0) {
     throw new CTSError('Spend info tree must hold at least one leaf');
+  }
+  if (spendInfo.tree !== undefined && spendInfo.tree.length > NUTROOT_MAX_TREE_LEAVES) {
+    throw new CTSError(`Tree exceeds depth ${NUTROOT_MAX_TREE_DEPTH}`);
   }
   if (spendInfo.u !== undefined && spendInfo.tree === undefined) {
     throw new CTSError('Spend info carries a NUMS offset without a tree');

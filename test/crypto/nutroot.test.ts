@@ -743,7 +743,7 @@ describe('locked secret construction and spend info cascade', () => {
     ).toThrow(/type/);
   });
 
-  test('an over-large tree is refused when building and when receiving', () => {
+  test('an over-large tree is refused when building, receiving and spending', () => {
     const leaves: NutrootLeaf[] = Array.from({ length: 2 ** NUTROOT_MAX_TREE_DEPTH + 1 }, () => ({
       type: 'threshold' as const,
       n: 1,
@@ -756,6 +756,12 @@ describe('locked secret construction and spend info cascade', () => {
     expect(() => verifyNutrootSpendInfo(vRefund.secret, { K: vRefund.internal_key, tree })).toThrow(
       /depth/,
     );
+    // Without K there is no root to fold, so the leaf count alone must refuse it.
+    expect(() =>
+      verifyNutrootSpendInfo(vRefund.secret, { E: vRefund.ephemeral_pub, tree }),
+    ).toThrow(/depth/);
+    // A stored tree past the cap never yields a witness: its path is one the mint refuses.
+    expect(() => buildScriptPathWitness(tree, 0, vRefund.internal_key, [])).toThrow(/depth/);
   });
 
   test('NUMS base: H is lift_x(SHA256(G uncompressed))', () => {
