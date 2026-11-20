@@ -830,6 +830,55 @@ describe('melt proofs', () => {
     // Carried whatever the cause: this one needs a NUT-09 restore, not a rebuild
     expect(result.outputData.length).toBeGreaterThan(0);
   });
+
+  test('refuses surplus change signatures before loading the keysets they name', async () => {
+    const sig = (id: string) => ({
+      id,
+      amount: 1,
+      C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+    });
+    server.use(
+      http.post(mintUrl + '/v1/melt/bolt11', () =>
+        HttpResponse.json({
+          quote: 'test_melt_quote',
+          amount: 10,
+          unit: 'sat',
+          fee_reserve: 2,
+          state: MeltQuoteState.PAID,
+          expiry: 1234567890,
+          payment_preimage: null,
+          request: 'bolt11request',
+          change: Array.from({ length: 20 }, (_, i) =>
+            sig(`00${i.toString(16).padStart(14, '0')}`),
+          ),
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const fetchKeysets = vi.spyOn(wallet.mint, 'getKeySets');
+
+    const meltQuote: MeltQuoteBolt11Response = {
+      quote: 'test_melt_quote',
+      amount: Amount.from(10),
+      fee_reserve: Amount.from(2),
+      request: 'bolt11request',
+      state: MeltQuoteState.UNPAID,
+      expiry: 1234567890,
+      payment_preimage: null,
+      unit: 'sat',
+      method: 'bolt11',
+    };
+    const proofsToSend: Proof[] = [
+      { id: '00bd033559de27d0', amount: Amount.from(8), secret: 'secret1', C: 'C1' },
+      { id: '00bd033559de27d0', amount: Amount.from(4), secret: 'secret2', C: 'C2' },
+    ];
+    const result = await wallet.meltProofsBolt11(meltQuote, proofsToSend).catch((e) => e);
+
+    expect(result).toBeInstanceOf(MeltChangeError);
+    expect((result.cause as Error).message).toContain('Mint returned 20 signatures');
+    expect(fetchKeysets).not.toHaveBeenCalled();
+  });
 });
 
 describe('async melt preference body', () => {
