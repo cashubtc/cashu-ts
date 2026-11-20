@@ -1,10 +1,12 @@
-import { utf8ToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import {
   assertSigAllInputs,
   assertSignerAuthorised,
   buildP2PKSigAllMessageV0,
+  buildP2PKSigAllMessageV1,
   computeMessageDigest,
+  hashP2PKSigAllMessageV1,
   isValidSecpPubkey,
   pointFromHexAuto,
   schnorrSignDigest,
@@ -40,6 +42,10 @@ export type SigAllDigests = {
    * Unframed concatenation format (CDK >= 0.14.0, Nutshell > 0.20.2).
    */
   v0: string;
+  /**
+   * Length-framed spec format: BIP-340 tagged hash (`Cashu_SigAllSig_v1`) of the framed message.
+   */
+  v1: string;
 };
 
 /**
@@ -84,9 +90,11 @@ function computeDigests(
 ): SigAllDigests {
   const sigAllOutputs = outputs.map((blindedMessage) => ({ blindedMessage }));
   const v0Msg = buildP2PKSigAllMessageV0(inputs, sigAllOutputs, quoteId);
+  const v1Msg = buildP2PKSigAllMessageV1(inputs, sigAllOutputs, quoteId);
 
   return {
     v0: computeMessageDigest(v0Msg, true),
+    v1: bytesToHex(hashP2PKSigAllMessageV1(v1Msg)),
   };
 }
 
@@ -234,8 +242,9 @@ function assertSignable(pkg: SigAllSigningPackage, privkey: string): void {
   if (!PRIVKEY_HEX_RE.test(privkey)) {
     throw new CTSError('Private key must be 64 hex characters');
   }
-  if ((pkg.witness?.signatures.length ?? 0) >= MAX_P2PK_SIGNATURES) {
-    throw new CTSError(`Witness already at the ${MAX_P2PK_SIGNATURES}-signature limit`);
+  // signPackage appends two signatures (v1 + v0).
+  if ((pkg.witness?.signatures.length ?? 0) + 2 > MAX_P2PK_SIGNATURES) {
+    throw new CTSError(`Witness has no room under the ${MAX_P2PK_SIGNATURES}-signature limit`);
   }
   assertSigAllInputs(pkg.inputs);
   pkg.inputs.forEach((input, i) => {
@@ -262,7 +271,7 @@ function signPackage(pkg: SigAllSigningPackage, privkey: string): SigAllSigningP
   // Sign transcripts recomputed from the package contents; a signer only ever
   // signs what the package shows, never a digest chosen elsewhere.
   const digests = computeDigests(pkg.inputs, pkg.outputs, pkg.quote);
-  const newSigs = [schnorrSignDigest(digests.v0, privkey)];
+  const newSigs = [schnorrSignDigest(digests.v1, privkey), schnorrSignDigest(digests.v0, privkey)];
 
   return {
     ...pkg,
@@ -333,6 +342,9 @@ function mergeSignatures(proofs: Proof[], pkg: SigAllSigningPackage): Proof[] {
   const [first, ...rest] = proofs;
   const witnessData = parseWitnessData(first.witness);
   const existingSignatures = witnessData?.signatures ?? [];
+  if (existingSignatures.length + pkg.witness.signatures.length > MAX_P2PK_SIGNATURES) {
+    throw new CTSError(`Merged witness would exceed the ${MAX_P2PK_SIGNATURES}-signature limit`);
+  }
   const updatedFirst: Proof = {
     ...first,
     witness: {

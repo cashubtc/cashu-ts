@@ -9,6 +9,7 @@ import {
   computeMessageDigest,
   createP2PKsecret,
   CTSError,
+  getP2PKWitnessSignatures,
   getPubKeyFromPrivKey,
   schnorrVerifyDigest,
   type OutputDataLike,
@@ -58,6 +59,7 @@ const dummyProof: Proof = {
   C: dummyC,
 };
 
+// B_ must be hex: the v1 message builder decodes it to raw bytes.
 const dummyBlindedMessage: SerializedBlindedMessage = {
   amount: Amount.from(32),
   id: 'bm1',
@@ -122,13 +124,21 @@ describe('SigAll — computeDigests', () => {
       '019218a3-7c4e-7f2b-9a1d-3e5f6a7b8c9d',
     );
     expect(typeof digests.v0).toBe('string');
+    expect(typeof digests.v1).toBe('string');
     expect(digests.v0.length).toBe(64);
+    expect(digests.v1.length).toBe(64);
+  });
+
+  test('v0 and v1 digests differ', () => {
+    const digests = SigAll.computeDigests([dummyProof], [dummyBlindedMessage]);
+    expect(digests.v1).not.toBe(digests.v0);
   });
 
   test('quoteId changes the digests', () => {
     const without = SigAll.computeDigests([dummyProof], [dummyBlindedMessage]);
     const with_ = SigAll.computeDigests([dummyProof], [dummyBlindedMessage], 'somequote');
     expect(without.v0).not.toBe(with_.v0);
+    expect(without.v1).not.toBe(with_.v1);
   });
 });
 
@@ -210,7 +220,11 @@ describe('SigAll — serializePackage / deserializePackage', () => {
 
   test('round-trip preserves large (unsafe integer) output amounts', () => {
     const largeAmount = Amount.from(9007199254740993n); // > MAX_SAFE_INTEGER
-    const largeBm: SerializedBlindedMessage = { amount: largeAmount, id: 'bm-large', B_: 'dummyB' };
+    const largeBm: SerializedBlindedMessage = {
+      amount: largeAmount,
+      id: 'bm-large',
+      B_: '02' + '2'.repeat(64),
+    };
     const pkg: SigAllSigningPackage = {
       version: 'sigallA',
       type: 'swap',
@@ -227,7 +241,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
         version: 'sigallA',
         type: 'swap',
         inputs: [{ secret: 'testsecret', C: '02' + '1'.repeat(64) }],
-        outputs: [{ amount: 32, id: 'bm1', B_: 'dummyB' }],
+        outputs: [{ amount: 32, id: 'bm1', B_: '02' + '2'.repeat(64) }],
       }),
     );
 
@@ -236,7 +250,11 @@ describe('SigAll — serializePackage / deserializePackage', () => {
 
   test('serializePackage emits unquoted integer amounts', () => {
     const largeAmount = Amount.from(9007199254740993n);
-    const largeBm: SerializedBlindedMessage = { amount: largeAmount, id: 'bm-large', B_: 'dummyB' };
+    const largeBm: SerializedBlindedMessage = {
+      amount: largeAmount,
+      id: 'bm-large',
+      B_: '02' + '2'.repeat(64),
+    };
     const pkg: SigAllSigningPackage = {
       version: 'sigallA',
       type: 'swap',
@@ -461,6 +479,12 @@ describe('SigAll — signPackage', () => {
     expect(signed.witness?.signatures.length).toBeGreaterThan(0);
   });
 
+  test('signs one signature per accepted format (v1 + v0)', () => {
+    const pkg = SigAll.extractSwapPackage(makeSwapPreview());
+    const signed = SigAll.signPackage(pkg, dummyPrivkey);
+    expect(signed.witness?.signatures.length).toBe(2);
+  });
+
   test('accumulates signatures across multiple signers (multi-party)', () => {
     const pkg = SigAll.extractSwapPackage(makeSwapPreview());
     const s1 = SigAll.signPackage(pkg, dummyPrivkey);
@@ -537,7 +561,7 @@ describe('SigAll — signPackage', () => {
     };
     const signed = SigAll.signPackage(pkg, dummyPrivkey);
     const digest = SigAll.computeDigests(pkg.inputs, pkg.outputs).v0;
-    expect(schnorrVerifyDigest(signed.witness!.signatures[0], digest, dummyPubkey)).toBe(true);
+    expect(schnorrVerifyDigest(signed.witness!.signatures[1], digest, dummyPubkey)).toBe(true);
   });
 
   test('rejects a v3-length output B_ that is not on the curve', () => {
@@ -552,7 +576,7 @@ describe('SigAll — signPackage', () => {
 
   test('signs a melt package with a UUID quote id', () => {
     const pkg = makeMeltPackage('019218a3-7c4e-7f2b-9a1d-3e5f6a7b8c9d');
-    expect(SigAll.signPackage(pkg, dummyPrivkey).witness!.signatures.length).toBe(1);
+    expect(SigAll.signPackage(pkg, dummyPrivkey).witness!.signatures.length).toBe(2);
   });
 
   test('rejects a melt quote id that is not a UUID', () => {
@@ -576,6 +600,18 @@ describe('SigAll — signPackage', () => {
     expect(() => SigAll.signPackage(pkg, dummyPrivkey)).toThrow(/signature limit/);
   });
 
+  test('refuses a witness one short of the limit, as both signatures would not fit', () => {
+    const base = SigAll.extractSwapPackage(makeSwapPreview());
+    const seeded = (n: number) => ({
+      ...base,
+      witness: { signatures: Array.from({ length: n }, () => 'ab'.repeat(64)) },
+    });
+    expect(() => SigAll.signPackage(seeded(63), dummyPrivkey)).toThrow(/signature limit/);
+    const signed = SigAll.signPackage(seeded(62), dummyPrivkey);
+    expect(signed.witness!.signatures).toHaveLength(64);
+    expect(() => getP2PKWitnessSignatures(signed.witness)).not.toThrow();
+  });
+
   test('rejects a key the lock does not name', () => {
     const pkg = SigAll.extractSwapPackage(makeSwapPreview());
     expect(() => SigAll.signPackage(pkg, otherPrivkey)).toThrow(/Signature not required/);
@@ -595,7 +631,7 @@ describe('SigAll — signPackage', () => {
     };
     const signed = SigAll.signPackage(pkg, otherPrivkey);
     const digest = SigAll.computeDigests(pkg.inputs, pkg.outputs).v0;
-    expect(schnorrVerifyDigest(signed.witness!.signatures[0], digest, otherPubkey)).toBe(true);
+    expect(schnorrVerifyDigest(signed.witness!.signatures[1], digest, otherPubkey)).toBe(true);
   });
 });
 
@@ -662,6 +698,17 @@ describe('SigAll — mergeSwapPackage', () => {
     const preview = makeSwapPreview();
     const pkg = SigAll.extractSwapPackage(preview);
     expect(() => SigAll.mergeSwapPackage(pkg, preview)).toThrow('No signatures to merge');
+  });
+
+  test('refuses a merge that would push the witness past the limit', () => {
+    const preview = makeSwapPreview();
+    const signed = SigAll.signPackage(SigAll.extractSwapPackage(preview), dummyPrivkey);
+    const at = (n: number) => ({
+      ...preview,
+      inputs: [{ ...dummyProof, witness: { signatures: Array.from({ length: n }, () => 'x') } }],
+    });
+    expect(() => SigAll.mergeSwapPackage(signed, at(63))).toThrow(/signature limit/);
+    expect(() => SigAll.mergeSwapPackage(signed, at(62))).not.toThrow();
   });
 });
 
@@ -868,13 +915,18 @@ describe('SigAll — mergeSignatures edge cases', () => {
 describe('SigAll — signing binds to package contents', () => {
   const signerPubkey = () => bytesToHex(getPubKeyFromPrivKey(hexToBytes(dummyPrivkey)));
 
-  test('signPackage emits one signature, verifiable over the recomputed v0 digest', () => {
+  test('signPackage emits signatures verifiable over the recomputed digests (v1, then v0)', () => {
     const pkg = SigAll.extractSwapPackage(makeSwapPreview());
     const signed = SigAll.signPackage(pkg, dummyPrivkey);
 
-    expect(signed.witness?.signatures).toHaveLength(1);
-    const digest = SigAll.computeDigests(pkg.inputs, pkg.outputs).v0;
-    expect(schnorrVerifyDigest(signed.witness!.signatures[0], digest, signerPubkey())).toBe(true);
+    expect(signed.witness?.signatures).toHaveLength(2);
+    const digests = SigAll.computeDigests(pkg.inputs, pkg.outputs);
+    expect(schnorrVerifyDigest(signed.witness!.signatures[0], digests.v1, signerPubkey())).toBe(
+      true,
+    );
+    expect(schnorrVerifyDigest(signed.witness!.signatures[1], digests.v0, signerPubkey())).toBe(
+      true,
+    );
   });
 
   test('signPackage does not sign the amount-blind concat of secrets and B_ values', () => {
@@ -896,9 +948,11 @@ describe('SigAll — signing binds to package contents', () => {
     } as unknown as SigAllSigningPackage;
 
     const signed = SigAll.signPackage(dirty, dummyPrivkey);
-    const digest = SigAll.computeDigests(pkg.inputs, pkg.outputs).v0;
-    expect(signed.witness?.signatures).toHaveLength(1);
-    expect(schnorrVerifyDigest(signed.witness!.signatures[0], digest, signerPubkey())).toBe(true);
+    const digests = SigAll.computeDigests(pkg.inputs, pkg.outputs);
+    expect(signed.witness?.signatures).toHaveLength(2);
+    expect(schnorrVerifyDigest(signed.witness!.signatures[0], digests.v1, signerPubkey())).toBe(
+      true,
+    );
 
     const rounded = SigAll.deserializePackage(SigAll.serializePackage(dirty));
     expect('digests' in rounded).toBe(false);
@@ -908,14 +962,20 @@ describe('SigAll — signing binds to package contents', () => {
     const pkg = SigAll.extractMeltPackage(makeMeltPreview());
     const signed = SigAll.signPackage(pkg, dummyPrivkey);
 
-    const withQuote = SigAll.computeDigests(pkg.inputs, pkg.outputs, pkg.quote).v0;
-    const withoutQuote = SigAll.computeDigests(pkg.inputs, pkg.outputs).v0;
-    expect(schnorrVerifyDigest(signed.witness!.signatures[0], withQuote, signerPubkey())).toBe(
+    const withQuote = SigAll.computeDigests(pkg.inputs, pkg.outputs, pkg.quote);
+    const withoutQuote = SigAll.computeDigests(pkg.inputs, pkg.outputs);
+    expect(schnorrVerifyDigest(signed.witness!.signatures[0], withQuote.v1, signerPubkey())).toBe(
       true,
     );
-    expect(schnorrVerifyDigest(signed.witness!.signatures[0], withoutQuote, signerPubkey())).toBe(
-      false,
+    expect(schnorrVerifyDigest(signed.witness!.signatures[1], withQuote.v0, signerPubkey())).toBe(
+      true,
     );
+    expect(
+      schnorrVerifyDigest(signed.witness!.signatures[0], withoutQuote.v1, signerPubkey()),
+    ).toBe(false);
+    expect(
+      schnorrVerifyDigest(signed.witness!.signatures[1], withoutQuote.v0, signerPubkey()),
+    ).toBe(false);
   });
 });
 
