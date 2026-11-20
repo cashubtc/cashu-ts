@@ -807,7 +807,6 @@ describe('melt proofs', () => {
       expiry: 1234567890,
       payment_preimage: null,
       unit: 'sat',
-      method: 'bolt11',
     };
     const proofsToSend: Proof[] = [
       { id: '00bd033559de27d0', amount: Amount.from(8), secret: 'secret1', C: 'C1' },
