@@ -1319,8 +1319,15 @@ describe('serializeProofs / deserializeProofs / normalizeProofAmounts', () => {
       expect(deserializeProofs([])).toEqual([]);
     });
 
-    test('throws when string input is not a JSON array', () => {
+    test('throws a CTSError when string input is not a JSON array', () => {
+      expect(() => deserializeProofs('{"id":"abc"}')).toThrow(CTSError);
       expect(() => deserializeProofs('{"id":"abc"}')).toThrow('expected a JSON array of proofs');
+    });
+
+    test('throws a CTSError on malformed JSON or entries that are not proofs', () => {
+      for (const input of ['[', ['{"id":'], '[null]', [null], ['7']]) {
+        expect(() => deserializeProofs(input as string | string[])).toThrow(CTSError);
+      }
     });
 
     test('handles empty JSON array string', () => {
