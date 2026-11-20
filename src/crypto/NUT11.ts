@@ -9,7 +9,6 @@ import {
   MAX_P2BK_SLOTS,
   MAX_P2PK_PUBKEYS,
   MAX_P2PK_SIGNATURES,
-  MAX_SECRET_LENGTH,
   MAX_WITNESS_LENGTH,
 } from '../utils/limits';
 import { type NUT10Option } from '../wallet/types/payment-requests';
@@ -194,12 +193,6 @@ export function createP2PKsecret(pubkey: string, tags?: string[][]): string {
  *   sigflag is unrecognised.
  */
 export function parseP2PKSecret(secret: string | Secret): Secret {
-  // Bound the parse work up front; the mint caps secrets at this length too.
-  if (typeof secret === 'string' && secret.length > MAX_SECRET_LENGTH) {
-    throw new CTSError(
-      `Secret too long (${secret.length} characters), maximum is ${MAX_SECRET_LENGTH}`,
-    );
-  }
   // HTLC extends P2PK, so we include it in our expected list.
   const parsed = assertSecretKind(['P2PK', 'HTLC'], secret);
   assertP2PKTagRules(getTags(parsed));
@@ -705,6 +698,9 @@ export function verifyP2PKSpendingConditions(
   logger: Logger = NULL_LOGGER,
   digest?: DigestInput,
 ): P2PKVerificationResult {
+  // Parse once, before hashing: all tag reads below use the pre-parsed Secret (no re-parsing)
+  const secret: Secret = parseP2PKSecret(proof.secret);
+
   // SIG_INPUTS signatures are over the secret; only SIG_ALL verifies against the given digest.
   if (!isP2PKSigAll([proof])) {
     digest = computeMessageDigest(proof.secret);
@@ -712,9 +708,6 @@ export function verifyP2PKSpendingConditions(
     logger.error('Cannot verify a SIG_ALL proof without the digest to sign');
     throw new CTSError('Cannot verify a SIG_ALL proof without the digest to sign');
   }
-
-  // Parse once — all tag reads below use the pre-parsed Secret (no re-parsing)
-  const secret: Secret = parseP2PKSecret(proof.secret);
 
   // Extract keys and validate cross-tag semantics
   const mainKeys = getP2PKWitnessPubkeys(secret);
