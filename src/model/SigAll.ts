@@ -337,6 +337,9 @@ function mergeSignatures(proofs: Proof[], pkg: SigAllSigningPackage): Proof[] {
   const [first, ...rest] = proofs;
   const witnessData = parseWitnessData(first.witness);
   const existingSignatures = witnessData?.signatures ?? [];
+  if (existingSignatures.length + pkg.witness.signatures.length > MAX_P2PK_SIGNATURES) {
+    throw new CTSError(`Merged witness would exceed the ${MAX_P2PK_SIGNATURES}-signature limit`);
+  }
   const updatedFirst: Proof = {
     ...first,
     witness: {
