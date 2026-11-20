@@ -53,6 +53,15 @@ function p2pkSecretOfLength(length: number): string {
   return shell.replace('"nonce":""', `"nonce":"${'a'.repeat(length - shell.length)}"`);
 }
 
+function paymentPayloadWithProofs(count: number): string {
+  const proof = { id: '00bd033559de27d0', amount: 1, secret: 's', C: '02'.padEnd(66, '0') };
+  return JSON.stringify({
+    mint: 'http://localhost:3338',
+    unit: 'sat',
+    proofs: Array(count).fill(proof),
+  });
+}
+
 // Pads a tag so the created secret is exactly `length` bytes.
 function createdP2pkSecretOfLength(length: number): OutputData {
   const build = (pad: number) =>
@@ -144,6 +153,14 @@ const bounds: Bound[] = [
     atLimit: () => createdP2pkSecretOfLength(MAX_SECRET_LENGTH),
     overLimit: () => createdP2pkSecretOfLength(MAX_SECRET_LENGTH + 1),
     error: /Secret too long/,
+  },
+  {
+    name: 'the proofs in a payment payload',
+    atLimit: () =>
+      PaymentRequest.decodePayload(paymentPayloadWithProofs(ABSOLUTE_MAX_ARRAY_LENGTH)),
+    overLimit: () =>
+      PaymentRequest.decodePayload(paymentPayloadWithProofs(ABSOLUTE_MAX_ARRAY_LENGTH + 1)),
+    error: /too many proofs/,
   },
   {
     name: 'the inputs of a saved swap preview',

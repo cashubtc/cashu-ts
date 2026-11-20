@@ -222,6 +222,22 @@ describe('receive', () => {
     expect(JSON.stringify(error.mock.calls)).not.toContain(secret);
   });
 
+  test('receive refuses an oversized proof list before any keyset repair', async () => {
+    const wallet = new Wallet(mint, { unit, logger });
+    await wallet.loadMint();
+    const fetchKeysets = vi.spyOn(wallet.mint, 'getKeySets');
+    // Distinct unknown ids: on its own each would ask the mint for a keyset refresh.
+    const proofs = Array.from({ length: 10_001 }, (_, i) => ({
+      id: `00${i.toString(16).padStart(14, '0')}`,
+      amount: 1,
+      secret: `s${i}`,
+      C: '02'.padEnd(66, '0'),
+    }));
+
+    await expect(wallet.receive(proofs)).rejects.toThrow('Token contains too many proofs: 10001');
+    expect(fetchKeysets).not.toHaveBeenCalled();
+  });
+
   test('test receive token with unsanitized mint url', async () => {
     server.use(
       http.post(mintUrl + '/v1/swap', () => {

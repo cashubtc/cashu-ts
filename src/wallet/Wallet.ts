@@ -1533,6 +1533,11 @@ class Wallet {
       // Token object may come from JSON.parse/localStorage and need runtime rehydration.
       proofs = normalizeProofAmounts(decodedToken.proofs);
     }
+    // Bounded before the per-proof work below (witness stripping, keyset repair, duplicate scan).
+    this.failIf(
+      proofs.length > ABSOLUTE_MAX_ARRAY_LENGTH,
+      `Token contains too many proofs: ${proofs.length}, maximum is ${ABSOLUTE_MAX_ARRAY_LENGTH}`,
+    );
 
     // An incoming proof cannot already carry a witness for the outputs created below. A
     // script-path package for this swap is merged into the completed preview later, so survives.
