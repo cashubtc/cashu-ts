@@ -878,6 +878,13 @@ describe('NUT-18 payment payloads', () => {
       proofs: [{ id: '009a1f293253e41e', amount: 2, secret: 's', C: '02ff' }],
     });
 
+    test('accepts 10,000 proofs and refuses one more', () => {
+      const withProofs = (n: number) =>
+        JSON.stringify({ ...valid(), proofs: Array(n).fill(valid().proofs[0]) });
+      expect(PaymentRequest.decodePayload(withProofs(10_000)).proofs).toHaveLength(10_000);
+      expect(() => PaymentRequest.decodePayload(withProofs(10_001))).toThrow(/too many proofs/);
+    });
+
     test('normalizes small JSON number amounts to Amount', () => {
       const payload = PaymentRequest.decodePayload(JSON.stringify(valid()));
       expect(payload.proofs[0].amount).toBeInstanceOf(Amount);

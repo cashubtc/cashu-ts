@@ -1396,6 +1396,11 @@ class Wallet {
       // Token object may come from JSON.parse/localStorage and need runtime rehydration.
       proofs = normalizeProofAmounts(decodedToken.proofs);
     }
+    // Bounded before the keyset repair below, which works through every proof.
+    this.failIf(
+      proofs.length > ABSOLUTE_MAX_ARRAY_LENGTH,
+      `Token contains too many proofs: ${proofs.length}, maximum is ${ABSOLUTE_MAX_ARRAY_LENGTH}`,
+    );
 
     // Rotation evidence check: repair the snapshot and load any missing keys before
     // any assertion or fee math relies on it.
