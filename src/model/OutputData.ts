@@ -424,7 +424,7 @@ export class OutputData implements OutputDataLike {
    */
   static deserialize(serialized: SerializedOutputData): OutputData {
     try {
-      // A scalar below either curve order has at most 78 digits; the bound keeps BigInt cheap.
+      // A secp256k1 scalar has at most 78 digits; the bound keeps BigInt cheap.
       if (!/^(0|[1-9]\d{0,77})$/.test(serialized.blindingFactor)) {
         throw new CTSError('blindingFactor must be a canonical decimal integer below 10^78');
       }
