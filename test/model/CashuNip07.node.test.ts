@@ -1,5 +1,5 @@
 import { schnorr } from '@noble/curves/secp256k1.js';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 
 import {
   computeMessageDigest,
@@ -7,7 +7,7 @@ import {
   schnorrVerifyMessage,
 } from '../../src/crypto/core';
 import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
-import { createP2PKsecret } from '../../src/crypto/NUT11';
+import { createP2PKsecret, getP2PKWitnessSignatures } from '../../src/crypto/NUT11';
 import type { NutrootLeaf } from '../../src/crypto/nutroot';
 import { inputsForPayload, proofInputContextKey } from '../../src/crypto/transcript';
 import { Amount } from '../../src/model/Amount';
@@ -287,6 +287,35 @@ describe('CashuNip07', () => {
       signSchnorr: async () => '00'.repeat(64),
     };
     await expect(CashuNip07.signP2PK(badSig, [proof])).rejects.toThrow('does not verify');
+  });
+
+  test('signP2PK refuses a witness already at the signature limit before prompting', async () => {
+    const full = {
+      ...p2pkProof(createP2PKsecret(PUB)),
+      witness: { signatures: Array.from({ length: 64 }, () => 'ab'.repeat(64)) },
+    };
+    const prompted = vi.fn(signSecret);
+    const nostr: Nip07Like = { getPublicKey: async () => XONLY, nip60: { signSecret: prompted } };
+    await expect(CashuNip07.signP2PK(nostr, [full])).rejects.toThrow(/signature limit/);
+    expect(prompted).not.toHaveBeenCalled();
+  });
+
+  test('signP2PK keeps a co-signature added to the proof while the prompt was open', async () => {
+    const otherPriv = '22'.repeat(32);
+    const proof = p2pkProof(
+      createP2PKsecret(PUB, [
+        ['pubkeys', OTHER],
+        ['n_sigs', '2'],
+      ]),
+    );
+    const coSign = async (secret: string) => {
+      const sig = schnorrSignDigest(computeMessageDigest(secret, true), otherPriv);
+      proof.witness = { signatures: [sig] };
+      return signSecret(secret);
+    };
+    const nostr: Nip07Like = { getPublicKey: async () => XONLY, nip60: { signSecret: coSign } };
+    const [signed] = await CashuNip07.signP2PK(nostr, [proof]);
+    expect(getP2PKWitnessSignatures(signed.witness)).toHaveLength(2);
   });
 
   test('nip60Keys reads privkey and mint tags from the decrypted content', async () => {

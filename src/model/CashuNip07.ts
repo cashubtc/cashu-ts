@@ -12,6 +12,7 @@ import {
 } from '../crypto/NUT11';
 import { inputDigest, transcriptContainers } from '../crypto/transcript';
 import { bytesToHex, hexToBytes } from '../utils';
+import { MAX_P2PK_SIGNATURES } from '../utils/limits';
 import type { MintProofsConfig, ScriptPathPlan, SpendOption } from '../wallet/types';
 
 import { CTSError } from './Errors';
@@ -204,6 +205,18 @@ export const CashuNip07: CashuNip07Api = {
         out.push(proof);
         continue;
       }
+      // Read once before the extension prompts, so the user is never asked for a signature that
+      // would make the witness unspendable, and again after, as a co-signer may have added to the
+      // shared proof while the prompt was open.
+      const currentWitness = () => {
+        const witness = parseWitnessData(proof.witness);
+        const signatures: string[] = witness?.signatures ?? [];
+        if (signatures.length >= MAX_P2PK_SIGNATURES) {
+          throw new CTSError(`Witness already at the ${MAX_P2PK_SIGNATURES}-signature limit`);
+        }
+        return { witness, signatures };
+      };
+      currentWitness();
       const digestHex = computeMessageDigest(proof.secret, true);
       let sig: string;
       if (signSecret) {
@@ -220,8 +233,7 @@ export const CashuNip07: CashuNip07Api = {
       if (!schnorrVerifyDigest(sig, digestHex, pubkey)) {
         throw new CTSError('NIP-07 signature does not verify for its key');
       }
-      const witness = parseWitnessData(proof.witness);
-      const signatures: string[] = witness?.signatures ?? [];
+      const { witness, signatures } = currentWitness();
       out.push({
         ...proof,
         witness: { ...witness, signatures: [...signatures, sig] },
