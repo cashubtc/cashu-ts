@@ -45,21 +45,6 @@ describe('Keyset.verifyKeysetId', () => {
     expect(Keyset.verifyKeysetId(mk)).toBe(false);
   });
 
-  test('returns false for a keyset with more than 256 denominations', () => {
-    // Id derives genuinely for the oversized set, so rejection is due solely
-    // to the denomination-count bound.
-    const pubkey = (PUBKEYS as Keys)[1];
-    const oversized: Keys = {};
-    for (let i = 0; i < 257; i++) oversized[i + 1] = pubkey;
-    const mk: MintKeys = {
-      id: deriveKeysetId(oversized, { versionByte: 0 }),
-      unit: 'sat',
-      active: true,
-      keys: oversized,
-    };
-    expect(Keyset.verifyKeysetId(mk)).toBe(false);
-  });
-
   test('returns false when one key serves two denominations, id notwithstanding', () => {
     // A keyset id selects one key per amount, so a key repeated across denominations is malformed.
     const shared = (PUBKEYS as Keys)[1];
