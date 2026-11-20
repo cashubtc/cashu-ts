@@ -36,6 +36,9 @@ import { Amount } from '../src/model/Amount';
 import { decodeCBOR, encodeCBOR } from '../src/utils/cbor';
 import {
   buildNutrootSecret,
+  nutrootLeafHash,
+  nutrootMerklePath,
+  nutrootMerkleRoot,
   parseNutrootLeafHex,
   serializeNutrootLeaf,
   type NutrootLeaf,
@@ -580,6 +583,23 @@ const commitHash = bytesToHex(sha256(utf8ToBytes('external data')));
     secret: built.secret,
   };
   d.leaf_forms.leaf_commit_with_n = '0004' + '02000101' + leafCommit.slice(4);
+}
+
+// Five-leaf fold (NUT-10): leaf hashes are sorted once and the levels above keep that order. Five
+// leaves is the smallest count where re-sorting each level changes the root.
+{
+  const leaves = [0, 1, 2, 3, 4].map((i) =>
+    bytesToHex(serializeNutrootLeaf({ type: 'commit', hash: bytesToHex(bigTo32(BigInt(i))) })),
+  );
+  const hashes = leaves.map((l) => nutrootLeafHash(hexToBytes(l)));
+  d.five_leaf_fold = {
+    comment:
+      'NUT-10 fold of five commit leaves, hash = uint256_be(i): sort the leaf hashes once, then pair per level in that order, promoting an unpaired last hash. Paths are per transmitted index.',
+    leaves,
+    leaf_hashes: hashes.map(bytesToHex),
+    merkle_root: bytesToHex(nutrootMerkleRoot(hashes)),
+    paths: leaves.map((_, i) => nutrootMerklePath(hashes, i).map(bytesToHex)),
+  };
 }
 
 // Signing package (NUT-XX): the mint vector with its quote locked to a script-only key, NUMS

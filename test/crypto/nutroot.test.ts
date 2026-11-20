@@ -46,6 +46,7 @@ import {
   type NutrootConditionLeaf,
   selectRequiredLeafSignatures,
 } from '../../src/crypto/nutroot';
+import { compareBytes } from '../../src/utils/bytes';
 import { NUTROOT_MAX_SLOTS } from '../../src/utils/limits';
 import vectors from '../vectors/nutroot-v3.json';
 
@@ -953,6 +954,28 @@ describe('the leaf forms the worked examples never show', () => {
         nutrootMerklePath(hashes, 2),
       ),
     ).toBe(true);
+  });
+
+  test('the five-leaf fold sorts once: upper levels keep the sorted order', () => {
+    const v = vectors.five_leaf_fold;
+    const hashes = v.leaves.map((l) => nutrootLeafHash(hexToBytes(l)));
+    expect(hashes.map(bytesToHex)).toEqual(v.leaf_hashes);
+    expect(bytesToHex(nutrootMerkleRoot(hashes))).toBe(v.merkle_root);
+    v.paths.forEach((path, i) => {
+      expect(nutrootMerklePath(hashes, i).map(bytesToHex)).toEqual(path);
+    });
+    // The vector must distinguish the normative fold from one that re-sorts each level.
+    let level = [...hashes];
+    while (level.length > 1) {
+      level.sort(compareBytes);
+      const next: Uint8Array[] = [];
+      for (let i = 0; i + 1 < level.length; i += 2) {
+        next.push(nutrootBranchHash(level[i], level[i + 1]));
+      }
+      if (level.length % 2 === 1) next.push(level[level.length - 1]);
+      level = next;
+    }
+    expect(bytesToHex(level[0])).not.toBe(v.merkle_root);
   });
 
   test('duplicate leaves fold without deduplication and stay spendable', () => {
