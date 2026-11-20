@@ -2323,7 +2323,7 @@ export type ReceiveConfig = {
 export function recoverV3LeafKeys(seed: Uint8Array, keysetId: string, counter: number, keysHex: string[]): Map<string, Uint8Array>;
 
 // @public
-export function recoverV3SecretKeys(seed: Uint8Array, keysetId: string, secretsHex: string[], maxCounter: number): Map<string, Uint8Array>;
+export function recoverV3SecretKeys(seed: Uint8Array, keysetId: string, secretsHex: string[], maxCounter: number, options?: AbortOptions): Promise<Map<string, Uint8Array>>;
 
 // @public (undocumented)
 export type RequestArgs = {
@@ -3059,7 +3059,7 @@ export class Wallet {
         unselected: Proof[];
     }>;
     receive(token: Token | string | ProofLike[], config?: ReceiveConfig, outputType?: OutputType): Promise<Proof[]>;
-    recoverQuoteLockKey(pubkey: string): Promise<string | undefined>;
+    recoverQuoteLockKey(pubkey: string, options?: AbortOptions): Promise<string | undefined>;
     restore(start: number, count: number, config?: RestoreConfig): Promise<{
         proofs: Proof[];
         lastCounterWithSignature?: number;

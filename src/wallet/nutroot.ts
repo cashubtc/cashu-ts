@@ -28,7 +28,7 @@ import { CTSError } from '../model/Errors';
 import { type MeltRequest } from '../model/types';
 import type { Proof } from '../model/types/proof';
 import { bytesToHex, hexToBytes } from '../utils';
-import { mapInChunks } from '../utils/chunked';
+import { budgetedYield, mapInChunks } from '../utils/chunked';
 
 import { quoteCounterKey } from './CounterSource';
 import type { ScriptPathPlan, SpendOption, SpendOptions } from './types';
@@ -487,13 +487,16 @@ export async function scanQuoteLockKey(
   pubkey: string,
   mintPubkey: string,
   state: NutrootWalletState,
+  signal?: AbortSignal,
 ): Promise<{ privkey: string; counter: number } | undefined> {
   if (!state.seed) fail('recoverQuoteLockKey requires a seeded wallet', state.logger);
   const seed = state.seed;
   const normalizedPubkey = normalizeSecpPubkey(pubkey);
   const next = await state.counters.peekNext(quoteCounterKey(mintPubkey));
   const bound = Math.max(next + QUOTE_SCAN_HEADROOM, QUOTE_SCAN_MIN_DEPTH);
+  const step = budgetedYield(signal);
   for (let counter = 0; counter < bound; counter++) {
+    await step();
     const privkey = deriveQuoteLockKey(seed, mintPubkey, counter);
     if (bytesToHex(getPubKeyFromPrivKey(privkey)) === normalizedPubkey) {
       return { privkey: bytesToHex(privkey), counter };

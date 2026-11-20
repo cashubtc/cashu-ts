@@ -73,6 +73,21 @@ export async function yieldToEventLoop(): Promise<void> {
 }
 
 /**
+ * A per-iteration check for open-ended scans: rejects with `CallerAbortError` once `signal` aborts,
+ * and yields to the event loop when the time budget is spent.
+ */
+export function budgetedYield(signal?: AbortSignal): () => Promise<void> {
+  let chunkStart = performance.now();
+  return async () => {
+    if (signal?.aborted) throw new CallerAbortError('Operation aborted by caller');
+    if (performance.now() - chunkStart < YIELD_BUDGET_MS) return;
+    await yieldToEventLoop();
+    if (signal?.aborted) throw new CallerAbortError('Operation aborted by caller');
+    chunkStart = performance.now();
+  };
+}
+
+/**
  * Maps synchronously over `items`, yielding to the event loop every few frames.
  *
  * @remarks
