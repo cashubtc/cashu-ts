@@ -1514,6 +1514,13 @@ describeXX('NUT-XX transactions', () => {
   const failingInvoice =
     'lnbc20n1p4tcxrapp5up5dw64vr4hf86mxc9x8t2hjsfm380uaduak0r4cj4a587wc070qd9y0v38qcteta5kuan0d93k2hmnw3shgefz8gszy3jpf9xy23pz9sszycmgv43kkhmsv9uk6etww30hxarpw3jjyw3qyfryzj2vg4zzytpqyfcxz72lv4e8yg36ypnxzmrnv5kzqgnrdpjkx66lv4e8yg36ypnxzmrnv47ssp5lvs286q83dpqdwqny66jwnql3r49qsh0pslve2d9yu9haj7un3kqxqxjespsq9qrsgqdnu9g5ht697e6lhzqx55ulzt4z287nqtxm43jnqnxte7dwj2afsnvzg6yhvzmuug0c6gyrdkleqj3aarmk68km0yeh892ptrp4u6c0cp74ckqp';
   const testCdk = mintVersion.startsWith('cdk') ? test : test.skip;
+  const fixedTxout = (mintInfo.nuts?.XX as { fixed_txout_quotes?: boolean } | undefined)
+    ?.fixed_txout_quotes;
+  const testFixed = fixedTxout ? test : test.skip;
+  const listsTemplate = (
+    mintInfo.nuts?.[10] as { leaves?: string[] } | undefined
+  )?.leaves?.includes('0005');
+  const testTemplate = listsTemplate ? test : test.skip;
 
   /**
    * The fee on a lone quote input of `amount` (NUT-XX), from the mint's advertised rate.
@@ -1546,6 +1553,116 @@ describeXX('NUT-XX transactions', () => {
     const states = await wallet.checkProofsStates(proofs);
     expect(states.every((s) => s.state === CheckStateEnum.SPENT)).toBe(true);
   });
+
+  testFixed('proofs park in a fixed txout quote, redeemed once and in full', async () => {
+    const { wallet, proofs } = await funded(64);
+    const total = 64n - wallet.getFeesForProofs(proofs).toBigInt();
+    const lock = await wallet.createQuoteLockKey();
+    const parked = await wallet.completeTransaction(
+      await wallet.prepareTransaction({
+        proofInputs: proofs,
+        mintQuoteOutputs: [{ pubkey: lock.pubkey, amount: total }],
+      }),
+    );
+    expect(parked.response.state).toBe('PAID');
+    const txout = parked.response.mint_quotes[0]!;
+    expect(txout).toMatchObject({ method: 'txout', pubkey: lock.pubkey });
+    expect(txout.amount_paid.toBigInt()).toBe(total);
+    // A partial draw is refused before signing: a txout quote redeems in full.
+    await expect(
+      wallet.prepareTransaction({ mintQuoteInputs: [{ quote: txout, amount: 32 }] }),
+    ).rejects.toThrow('redeems in full');
+    const minted = await wallet.completeMint(
+      await wallet.prepareMint('txout', total, txout, { privkey: lock.privkey }),
+    );
+    expect(sumProofs(minted).toBigInt()).toBe(total);
+    const after = await wallet.mint.checkMintQuote('txout', txout.quote);
+    expect(after.amount_issued.toBigInt()).toBe(total);
+  });
+
+  testFixed('fixed txout quotes split proofs, each under its input-bound id', async () => {
+    const { wallet, proofs } = await funded(64);
+    const fee = wallet.getFeesForProofs(proofs).toBigInt();
+    const fixed = await wallet.createQuoteLockKey();
+    const rest = await wallet.createQuoteLockKey();
+    const preview = await wallet.prepareTransaction({
+      proofInputs: proofs,
+      mintQuoteOutputs: [
+        { pubkey: fixed.pubkey, amount: 3 },
+        { pubkey: rest.pubkey, amount: 64n - fee - 3n },
+      ],
+    });
+    const result = await wallet.completeTransaction(preview);
+    expect(result.response.state).toBe('PAID');
+    const [fixedQuote, restQuote] = result.response.mint_quotes;
+    expect(fixedQuote!.pubkey).toBe(fixed.pubkey);
+    expect(fixedQuote!.quote).toBe(preview.mintQuoteOutputs[0].quote);
+    expect(fixedQuote!.amount_paid.toBigInt()).toBe(3n);
+    expect(restQuote!.pubkey).toBe(rest.pubkey);
+    expect(restQuote!.quote).toBe(preview.mintQuoteOutputs[1].quote);
+    expect(restQuote!.amount_paid.toBigInt()).toBe(64n - fee - 3n);
+    const fetched = await wallet.mint.checkMintQuote('txout', restQuote!.quote);
+    expect(fetched.pubkey).toBe(rest.pubkey);
+  });
+
+  testFixed('a fixed txout quote lock key may repeat, each quote under its own id', async () => {
+    const { wallet, proofs } = await funded(64);
+    const lock = await wallet.createQuoteLockKey();
+    const park = (w: Wallet, p: typeof proofs) =>
+      w.prepareTransaction({
+        proofInputs: p,
+        mintQuoteOutputs: [{ pubkey: lock.pubkey, amount: 64n - w.getFeesForProofs(p).toBigInt() }],
+      });
+    const first = await wallet.completeTransaction(await park(wallet, proofs));
+    expect(first.response.state).toBe('PAID');
+    const other = await funded(64);
+    const second = await other.wallet.completeTransaction(await park(other.wallet, other.proofs));
+    expect(second.response.mint_quotes[0]).toMatchObject({ pubkey: lock.pubkey });
+    expect(second.response.mint_quotes[0]!.quote).not.toBe(first.response.mint_quotes[0]!.quote);
+  });
+
+  testTemplate(
+    'a template covenant spends only into fixed txout quotes to its destinations',
+    async () => {
+      const { wallet, proofs } = await funded(64);
+      const fixed = await wallet.createQuoteLockKey();
+      const rest = await wallet.createQuoteLockKey();
+      const stranger = await wallet.createQuoteLockKey();
+      const holderPriv = bytesToHex(randomBytes(32));
+      const holderPub = bytesToHex(secp256k1.getPublicKey(hexToBytes(holderPriv), true));
+      // NUMS internal key: the template is the holder's only way to move the value.
+      const { send } = await wallet.ops
+        .send(32, proofs)
+        .asLocked({ mainKeys: [holderPub], template: [fixed.pubkey, rest.pubkey] }, [32])
+        .run();
+      expect(send).toHaveLength(1);
+      expect(send[0].spend_info?.u).toBeDefined();
+      const [proof] = send;
+      const plan = { secret: proof.secret, leafIndex: 0 };
+      const value = 32n - wallet.getFeesForProofs([proof]).toBigInt();
+      // A fixed txout quote to a key outside dests: the mint refuses.
+      const wrong = await wallet.prepareTransaction({
+        proofInputs: [proof],
+        mintQuoteOutputs: [{ pubkey: stranger.pubkey, amount: value }],
+      });
+      await expect(
+        wallet.completeTransaction(wrong, holderPriv, { scriptPath: [plan] }),
+      ).rejects.toThrow(MintOperationError);
+      // Any split between the destinations settles.
+      const preview = await wallet.prepareTransaction({
+        proofInputs: [proof],
+        mintQuoteOutputs: [
+          { pubkey: fixed.pubkey, amount: 3 },
+          { pubkey: rest.pubkey, amount: value - 3n },
+        ],
+      });
+      const result = await wallet.completeTransaction(preview, holderPriv, { scriptPath: [plan] });
+      expect(result.response.state).toBe('PAID');
+      const [fixedQuote, restQuote] = result.response.mint_quotes;
+      expect(fixedQuote!.amount_paid.toBigInt()).toBe(3n);
+      expect(restQuote!.amount_paid.toBigInt()).toBe(value - 3n);
+    },
+  );
 
   test('mint-shaped: a quote input for its full amount, proofs out', async () => {
     const wallet = new Wallet(mintUrl, { bip39seed: randomBytes(64) });

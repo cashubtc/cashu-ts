@@ -282,7 +282,8 @@ class Mint {
   // -----------------------------------------------------------------
 
   /**
-   * Posts a NUT-XX transaction: proofs and quote inputs in, blinded messages and a melt out.
+   * Posts a NUT-XX transaction: proofs and quote inputs in, blinded messages, a melt and txout
+   * quotes out.
    *
    * @remarks
    * A pending transaction settles through its melt quote ({@link Mint.checkMeltQuote}); a mint with
@@ -316,7 +317,8 @@ class Mint {
       !isRecord(data) ||
       !['PENDING', 'PAID', 'FAILED'].includes(data.state) ||
       !Array.isArray(data.signatures) ||
-      !Array.isArray(data.melt_quotes)
+      !Array.isArray(data.melt_quotes) ||
+      (data.mint_quotes !== undefined && !Array.isArray(data.mint_quotes))
     ) {
       this._logger.error('Invalid response from mint...', { op: 'transaction' });
       throw new CTSError('Invalid response from mint');
@@ -327,6 +329,10 @@ class Mint {
       signatures: this.normalizeSignatureAmounts(data.signatures),
       melt_quotes: data.melt_quotes.map((m) =>
         this.normalizeMeltQuoteResponse(meltMethod, m, undefined, true),
+      ),
+      // A mint without fixed txout quotes may omit the field.
+      mint_quotes: (data.mint_quotes ?? []).map((q) =>
+        q ? this.normalizeMintQuoteResponse('txout', q) : null,
       ),
     };
   }
