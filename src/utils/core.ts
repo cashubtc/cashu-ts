@@ -984,14 +984,25 @@ export function serializeProofs(proofs: Proof | Proof[]): string[] {
  *     const proofs = deserializeProofs(localStorage.getItem('proofs') ?? '[]');
  */
 export function deserializeProofs(json: string | string[] | ProofLike[]): Proof[] {
+  // NutZap tags come from other people, so malformed input fails as a CTSError like a token does.
+  const parse = (text: string): unknown => {
+    try {
+      return JSONInt.parse(text);
+    } catch (cause) {
+      throw new CTSError('deserializeProofs: invalid JSON', { cause });
+    }
+  };
   if (!Array.isArray(json)) {
-    const parsed = JSONInt.parse(json);
+    const parsed = parse(json);
     if (!Array.isArray(parsed)) {
-      throw new TypeError('deserializeProofs: expected a JSON array of proofs');
+      throw new CTSError('deserializeProofs: expected a JSON array of proofs');
     }
     json = parsed;
   }
-  const raw = json.map((s: unknown) => (typeof s === 'string' ? JSONInt.parse(s) : s));
+  const raw = json.map((s: unknown) => (typeof s === 'string' ? parse(s) : s));
+  if (!raw.every((p) => isRecord(p))) {
+    throw new CTSError('deserializeProofs: expected proof objects');
+  }
   return normalizeProofAmounts(raw as ProofLike[]);
 }
 
