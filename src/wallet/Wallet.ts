@@ -2643,7 +2643,9 @@ class Wallet {
    * @remarks
    * Each batch is state checked first and only unspent counters are restored, so spent proofs are
    * dropped without ever being blinded; pending ones are kept. `lastCounterWithSignature` covers
-   * every issued counter found, spent included. For a raw NUT-09 replay use {@link Wallet.restore}.
+   * every issued counter found, spent included. The scan ends only when the gap closes, at
+   * `maxCounter` or on `signal`, so set one of those when the mint is not trusted to report
+   * honestly. For a raw NUT-09 replay use {@link Wallet.restore}.
    */
   async batchRestore(
     config?: BatchRestoreConfig,
@@ -3130,16 +3132,17 @@ class Wallet {
    * quote response carries. Targeted, not discovery: one HMAC and one point multiply per counter.
    * Keys are scoped to the mint identity, not a keyset (NUT-13 type `0x04`), so a rotation cannot
    * strand the key but only this mint's quotes are found. A key found at or past the quote counter
-   * moves the counter past it, reported through `countersReserved`.
+   * moves the counter past it, reported through `countersReserved`. The scan yields every few
+   * frames; `signal` stops it with `CallerAbortError`.
    * @throws {@link CTSError} On a seedless wallet, which has nothing to scan, or a mint with no
    *   NUT-06 `pubkey`.
    * @experimental The scan follows draft NUT-13 type `0x04` and draft NUT-06 identity scoping and
    *   may change before GA, so it finds only keys derived under the current scheme.
    */
-  async recoverQuoteLockKey(pubkey: string): Promise<string | undefined> {
+  async recoverQuoteLockKey(pubkey: string, options?: AbortOptions): Promise<string | undefined> {
     this.failIf(!this._seed, 'recoverQuoteLockKey requires a seeded wallet');
     const mintPubkey = this.requireMintIdentity('recoverQuoteLockKey');
-    const found = await scanQuoteLockKey(pubkey, mintPubkey, this._nutrootState());
+    const found = await scanQuoteLockKey(pubkey, mintPubkey, this._nutrootState(), options?.signal);
     if (!found) return undefined;
     const counterKey = quoteCounterKey(mintPubkey);
     const before = await this.counters.peekNext(counterKey);

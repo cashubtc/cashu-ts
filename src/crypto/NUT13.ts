@@ -6,7 +6,9 @@ import { HDKey, HARDENED_OFFSET } from '@scure/bip32';
 
 import { CTSError, InvalidScalarError } from '../model/Errors';
 import { isBase64String, isValidHex } from '../utils';
+import { budgetedYield } from '../utils/chunked';
 import { NUTROOT_MAX_SLOTS, SEED_BYTES } from '../utils/limits';
+import type { AbortOptions } from '../wallet/types';
 
 import { BLS_FR_ORDER } from './curve_bls';
 import { getPubKeyFromPrivKey, normalizeSecpPubkey } from './curve_secp';
@@ -504,18 +506,20 @@ export function recoverV3LeafKeys(
  * A self-owned plain v3 proof needs no stored spend info: `k` re-derives from the seed (type
  * `0x00`). Legacy proofs without their bearer key require scanning counters `[0, maxCounter)` and
  * trial-matching each derived `K` against the wanted secrets. Returns a map of secret hex to its
- * 32-byte private key; unmatched secrets are absent.
+ * 32-byte private key; unmatched secrets are absent. Yields every few frames; `signal` stops a long
+ * scan with `CallerAbortError`.
  * @param seed - Wallet seed.
  * @param keysetId - V3 (`02…`) keyset id.
  * @param secretsHex - The 66-char hex secrets to resolve.
  * @param maxCounter - Exclusive scan bound; use the wallet's current counter for the keyset.
  */
-export function recoverV3SecretKeys(
+export async function recoverV3SecretKeys(
   seed: Uint8Array,
   keysetId: string,
   secretsHex: string[],
   maxCounter: number,
-): Map<string, Uint8Array> {
+  options?: AbortOptions,
+): Promise<Map<string, Uint8Array>> {
   if (!isBlsKeyset(keysetId)) {
     throw new CTSError('Secret key recovery is a v3 keyset operation');
   }
@@ -524,7 +528,9 @@ export function recoverV3SecretKeys(
   }
   const wanted = new Set(secretsHex);
   const found = new Map<string, Uint8Array>();
+  const step = budgetedYield(options?.signal);
   for (let counter = 0; counter < maxCounter && found.size < wanted.size; counter++) {
+    await step();
     const secretKey = deriveV3Scalar(seed, keysetId, counter, DERIVATION_TYPE.secretKey);
     const secretHex = bytesToHex(getPubKeyFromPrivKey(secretKey));
     if (wanted.has(secretHex)) {

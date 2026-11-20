@@ -2,7 +2,7 @@ import { hexToBytes, bytesToHex } from '@noble/hashes/utils.js';
 import { HttpResponse, http } from 'msw';
 import { describe, expect, test, vi } from 'vitest';
 
-import { Wallet, quoteCounterKey, type OperationCounters } from '../../src';
+import { CallerAbortError, Wallet, quoteCounterKey, type OperationCounters } from '../../src';
 import { getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import { deriveQuoteLockKey } from '../../src/crypto/NUT13';
 import { Amount } from '../../src/model/Amount';
@@ -115,6 +115,22 @@ describe('Wallet quote lock keys', () => {
     // A pubkey this seed never derived scans to nothing rather than guessing.
     const foreign = bytesToHex(getPubKeyFromPrivKey(hexToBytes('22'.repeat(32))));
     await expect(wallet.recoverQuoteLockKey(foreign)).resolves.toBeUndefined();
+  });
+
+  test('recoverQuoteLockKey stays responsive and stops on abort during a long scan', async () => {
+    // A persisted counter this high puts the scan bound far past anything that finishes.
+    const wallet = new Wallet(mintUrl, {
+      unit: 'sat',
+      bip39seed: SEED,
+      counterInit: { [quoteCounterKey(MINT_PUBKEY)]: 1_000_000_000 },
+    });
+    await wallet.loadMint();
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 20);
+    const foreign = bytesToHex(getPubKeyFromPrivKey(hexToBytes('22'.repeat(32))));
+    await expect(
+      wallet.recoverQuoteLockKey(foreign, { signal: controller.signal }),
+    ).rejects.toBeInstanceOf(CallerAbortError);
   });
 
   test('recoverQuoteLockKey moves the quote counter past a key at or beyond it', async () => {

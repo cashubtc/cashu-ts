@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import { CallerAbortError } from '../../src/model/Errors';
-import { mapInChunks, yieldToEventLoop } from '../../src/utils/chunked';
+import { budgetedYield, mapInChunks, yieldToEventLoop } from '../../src/utils/chunked';
 
 describe('mapInChunks', () => {
   test.each([NaN, Infinity, -1])('rejects budgetMs %s', async (budgetMs) => {
@@ -98,6 +98,12 @@ describe('mapInChunks timer fairness', () => {
     await expect(
       mapInChunks(items, spin, { signal: AbortSignal.timeout(30) }),
     ).rejects.toBeInstanceOf(CallerAbortError);
+  });
+});
+
+describe('budgetedYield', () => {
+  test('rejects at once for a signal that is already aborted', async () => {
+    await expect(budgetedYield(AbortSignal.abort())()).rejects.toBeInstanceOf(CallerAbortError);
   });
 });
 

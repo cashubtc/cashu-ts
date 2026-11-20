@@ -24,6 +24,7 @@ import {
   meltOutputAmount,
 } from '../../src/crypto/transcript';
 import { Amount } from '../../src/model/Amount';
+import { CallerAbortError } from '../../src/model/Errors';
 import vectors from '../vectors/nutroot-v3.json';
 
 // The NUT-13 helpers take the 64-byte BIP-39 seed; pad a label out to that length.
@@ -354,11 +355,11 @@ describe('transaction transcript (vectors)', () => {
     expect(verifyTransactionInputWitness(digest, secret, doubled)).toBe(false);
   });
 
-  test('recoverV3SecretKeys resolves self-owned secrets by counter scan', () => {
+  test('recoverV3SecretKeys resolves self-owned secrets by counter scan', async () => {
     const seed = hexToBytes(vectors.nut13_v3.seed_hex);
     const keysetId = vectors.nut13_v3.keyset_id;
     const secrets = vectors.nut13_v3.outputs.map((o) => o.secret);
-    const found = recoverV3SecretKeys(seed, keysetId, [...secrets, '02'.padEnd(66, 'f')], 16);
+    const found = await recoverV3SecretKeys(seed, keysetId, [...secrets, '02'.padEnd(66, 'f')], 16);
     expect(found.size).toBe(secrets.length);
     for (const output of vectors.nut13_v3.outputs) {
       expect(bytesToHex(found.get(output.secret) as Uint8Array)).toBe(output.secret_key);
@@ -661,16 +662,32 @@ describe('transcript input guards', () => {
     );
   });
 
-  test('recoverV3SecretKeys guards its keyset and scan bound', () => {
+  test('recoverV3SecretKeys guards its keyset and scan bound', async () => {
     const seed = seed64('seed');
-    expect(() => recoverV3SecretKeys(seed, `00${'11'.repeat(32)}`, [], 4)).toThrow(/v3 keyset/);
+    await expect(recoverV3SecretKeys(seed, `00${'11'.repeat(32)}`, [], 4)).rejects.toThrow(
+      /v3 keyset/,
+    );
     const bls = vectors.nut13_v3.keyset_id;
-    expect(() => recoverV3SecretKeys(seed, bls, [], -1)).toThrow(/maxCounter/);
-    expect(() => recoverV3SecretKeys(seed, bls, [], 1.5)).toThrow(/maxCounter/);
-    expect(() => recoverV3SecretKeys(seed, bls, [], (1 << 20) + 1)).not.toThrow();
-    expect(() => recoverV3SecretKeys(seed, bls, [], Number.MAX_SAFE_INTEGER + 1)).toThrow(
+    await expect(recoverV3SecretKeys(seed, bls, [], -1)).rejects.toThrow(/maxCounter/);
+    await expect(recoverV3SecretKeys(seed, bls, [], 1.5)).rejects.toThrow(/maxCounter/);
+    await expect(recoverV3SecretKeys(seed, bls, [], (1 << 20) + 1)).resolves.toEqual(new Map());
+    await expect(recoverV3SecretKeys(seed, bls, [], Number.MAX_SAFE_INTEGER + 1)).rejects.toThrow(
       /maxCounter/,
     );
+  });
+
+  test('recoverV3SecretKeys stays responsive and stops on abort during a long scan', async () => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 20);
+    // A secret no counter derives, so only the abort can end a scan this long.
+    const scan = recoverV3SecretKeys(
+      seed64('seed'),
+      vectors.nut13_v3.keyset_id,
+      ['02'.padEnd(66, 'f')],
+      Number.MAX_SAFE_INTEGER,
+      { signal: controller.signal },
+    );
+    await expect(scan).rejects.toBeInstanceOf(CallerAbortError);
   });
 });
 
