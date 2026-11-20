@@ -30,12 +30,16 @@ import {
   buildTransactionTranscript,
   inputDigest,
   transactionDigest,
+  transcriptContainers,
 } from '../src/crypto/transcript';
 import type { TransactionShape } from '../src/crypto/transcript';
 import { Amount } from '../src/model/Amount';
 import { decodeCBOR, encodeCBOR } from '../src/utils/cbor';
 import {
   buildNutrootSecret,
+  nutrootLeafHash,
+  nutrootMerklePath,
+  nutrootMerkleRoot,
   parseNutrootLeafHex,
   serializeNutrootLeaf,
   type NutrootLeaf,
@@ -457,6 +461,40 @@ d.transcript.comment =
   };
 }
 
+// The batch request with its first quote listed twice: every field decodes and both signatures are
+// real, so the duplicate id is the only defect and the mint rejects before checking any signature.
+// The library refuses to build such a transcript, so it is spliced from two valid ones.
+{
+  const first = d.transcript.batch_mint.tx.mint_quote_inputs[0];
+  const outputs = d.transcript.mint.tx.blinded_outputs;
+  const containersOf = (quotes: unknown[]) =>
+    transcriptContainers(
+      buildTransactionTranscript(
+        fromVectorTx({ mint_quote_inputs: quotes, blinded_outputs: outputs }),
+      ),
+    );
+  const [quote5, output] = containersOf([{ ...first, amount: 5 }]);
+  const [quote3] = containersOf([{ ...first, amount: 3 }]);
+  const transcript = concatBytes(quote5, quote3, output);
+  const digest = sha256(transcript);
+  const lock = d.nut13_v3.quote_locks[0];
+  d.transcript.batch_mint_duplicate_quote = {
+    request: {
+      quotes: [first.quote_id, first.quote_id],
+      quote_amounts: [5, 3],
+      outputs: outputs.map((o: { amount: number; keyset_id: string; B_: string }) => ({
+        amount: o.amount,
+        id: o.keyset_id,
+        B_: o.B_,
+      })),
+      signatures: [quote5, quote3].map((container) =>
+        bytesToHex(schnorr.sign(inputDigest(digest, container), hexToBytes(lock.privkey), AUX0)),
+      ),
+    },
+    error_code: 11016,
+  };
+}
+
 // A partial mint: an 8-sat quote with 3 already issued, issuing 4. The quote input commits the 4
 // this request issues and the 3 before it, so this vector tells amount, quote amount and issued apart.
 {
@@ -580,6 +618,23 @@ const commitHash = bytesToHex(sha256(utf8ToBytes('external data')));
     secret: built.secret,
   };
   d.leaf_forms.leaf_commit_with_n = '0004' + '02000101' + leafCommit.slice(4);
+}
+
+// Five-leaf fold (NUT-10): leaf hashes are sorted once and the levels above keep that order. Five
+// leaves is the smallest count where re-sorting each level changes the root.
+{
+  const leaves = [0, 1, 2, 3, 4].map((i) =>
+    bytesToHex(serializeNutrootLeaf({ type: 'commit', hash: bytesToHex(bigTo32(BigInt(i))) })),
+  );
+  const hashes = leaves.map((l) => nutrootLeafHash(hexToBytes(l)));
+  d.five_leaf_fold = {
+    comment:
+      'NUT-10 fold of five commit leaves, hash = uint256_be(i): sort the leaf hashes once, then pair per level in that order, promoting an unpaired last hash. Paths are per transmitted index.',
+    leaves,
+    leaf_hashes: hashes.map(bytesToHex),
+    merkle_root: bytesToHex(nutrootMerkleRoot(hashes)),
+    paths: leaves.map((_, i) => nutrootMerklePath(hashes, i).map(bytesToHex)),
+  };
 }
 
 // Signing package (NUT-XX): the mint vector with its quote locked to a script-only key, NUMS

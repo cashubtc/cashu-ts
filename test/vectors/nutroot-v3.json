@@ -402,6 +402,24 @@
           "input_id": "efbdd5d14874cb021fc962d93a9848553ca65ae101e9b57f6678aa37ffe1ebd9"
         }
       ]
+    },
+    "batch_mint_duplicate_quote": {
+      "request": {
+        "quotes": ["quote-mint-0002", "quote-mint-0002"],
+        "quote_amounts": [5, 3],
+        "outputs": [
+          {
+            "amount": 8,
+            "id": "022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701",
+            "B_": "b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"
+          }
+        ],
+        "signatures": [
+          "6313ffe3264db058cb7c16046a71c6ee8b7bcaee5bbf86085b432eb6e6450e3f8fd055d8a5926cd268230eb258773e709d2ea3606d075ac3ea2f49886909502a",
+          "406b11f00bd0b82b8967b76220a631f42d1a4869f6f4f5e77c5b106a598a3f0a4b3b4ccd3f45fa6bb9724cff8833d215f328327be247cd6401fd6e5cb6813591"
+        ]
+      },
+      "error_code": 11016
     }
   },
   "tokens_v4": {
@@ -575,5 +593,46 @@
         "1": "8d0273f6bf31ed37c3b8d68083ec3d8e20b5f2cc170fa24b9b5be35b34ed013f9a921f1cad1644d4bdb14674247234c8049cd1dbb2d2c3581e54c088135fef36505a6823d61b859437bfc79b617030dc8b40e32bad1fa85b9c0f368af6d38d3c"
       }
     }
+  },
+  "five_leaf_fold": {
+    "comment": "NUT-10 fold of five commit leaves, hash = uint256_be(i): sort the leaf hashes once, then pair per level in that order, promoting an unpaired last hash. Paths are per transmitted index.",
+    "leaves": [
+      "00040800200000000000000000000000000000000000000000000000000000000000000000",
+      "00040800200000000000000000000000000000000000000000000000000000000000000001",
+      "00040800200000000000000000000000000000000000000000000000000000000000000002",
+      "00040800200000000000000000000000000000000000000000000000000000000000000003",
+      "00040800200000000000000000000000000000000000000000000000000000000000000004"
+    ],
+    "leaf_hashes": [
+      "05b902a6c6e5377ac3a3b93e3462fce75f814c3e408f89145f3cf322a003eb0f",
+      "286e16e868323f95501543ee9aae0da89e34c1dfa167ebcb8e746e9babcaf886",
+      "562fc5b49cf68d9f3d8d9d7ddc3e1f52b4df5cae5258def2bdecc1155b01b4b8",
+      "4c780cd9c644de1942c0704a1b5cff776243a6f088c6f688511e2d94004e86ce",
+      "4a1354e62955e17a4b4bda00ee145acb2088b81f4253acf4d8d274b2282cfa86"
+    ],
+    "merkle_root": "08ded689dfa100f1ef1ad68c4e5696e99670bb5a7d0225f34f2f85f3053cde53",
+    "paths": [
+      [
+        "286e16e868323f95501543ee9aae0da89e34c1dfa167ebcb8e746e9babcaf886",
+        "3b9477ce1bb3e0588966ad6d26ac290bf9838abb32915928f9b1d7317fa7d59a",
+        "562fc5b49cf68d9f3d8d9d7ddc3e1f52b4df5cae5258def2bdecc1155b01b4b8"
+      ],
+      [
+        "05b902a6c6e5377ac3a3b93e3462fce75f814c3e408f89145f3cf322a003eb0f",
+        "3b9477ce1bb3e0588966ad6d26ac290bf9838abb32915928f9b1d7317fa7d59a",
+        "562fc5b49cf68d9f3d8d9d7ddc3e1f52b4df5cae5258def2bdecc1155b01b4b8"
+      ],
+      ["9226021183059036a870b19486aa04579b406f4eddf11f8ba432cf92b7d13aa8"],
+      [
+        "4a1354e62955e17a4b4bda00ee145acb2088b81f4253acf4d8d274b2282cfa86",
+        "99cac68e791a8c74dcd723f39db7cda19170be30ecfa065d803436c1426349f0",
+        "562fc5b49cf68d9f3d8d9d7ddc3e1f52b4df5cae5258def2bdecc1155b01b4b8"
+      ],
+      [
+        "4c780cd9c644de1942c0704a1b5cff776243a6f088c6f688511e2d94004e86ce",
+        "99cac68e791a8c74dcd723f39db7cda19170be30ecfa065d803436c1426349f0",
+        "562fc5b49cf68d9f3d8d9d7ddc3e1f52b4df5cae5258def2bdecc1155b01b4b8"
+      ]
+    ]
   }
 }
