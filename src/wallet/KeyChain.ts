@@ -17,6 +17,10 @@ import { normalizeMintUrl } from '../utils';
 
 import { Keyset } from './Keyset';
 
+// NUT-02 obliges a mint to keep at least one keyset per unit active for this long, so it is the
+// default horizon a keyset must survive to be worth minting onto.
+const ACTIVE_WINDOW_SECONDS = 30 * 24 * 60 * 60;
+
 /**
  * Manages all keysets for a Mint. Queries filter by the wallet's unit.
  *
@@ -122,6 +126,8 @@ export class KeyChain {
       unit: k.unit,
       active: k.active,
       input_fee_ppk: k.input_fee_ppk,
+      active_from: k.active_from,
+      active_until: k.active_until,
       final_expiry: k.final_expiry,
     }));
 
@@ -132,6 +138,8 @@ export class KeyChain {
         unit: k.unit,
         active: k.active,
         input_fee_ppk: k.input_fee_ppk,
+        active_from: k.active_from,
+        active_until: k.active_until,
         final_expiry: k.final_expiry,
         keys: { ...k.keys },
       }));
@@ -270,26 +278,36 @@ export class KeyChain {
   }
 
   /**
-   * Get the cheapest modern active keyset.
+   * Get the cheapest usable active keyset.
    *
    * @remarks
-   * Prefers the highest keyset ID version, then the lowest fee, then the latest `final_expiry` (no
-   * expiry sorts as never expiring).
+   * Newest keyset version only, usable past the horizon, then cheapest, then usable longest. Usable
+   * means before both `active_until` and `final_expiry` (absent = never). With nothing past the
+   * default 30 day horizon (NUT-02), picks cheapest then latest `final_expiry`; an explicit
+   * `usableUntil` throws instead. A keyset past `final_expiry` counts as inactive.
+   * @param usableUntil Optional unix time (seconds) the keyset must still be usable at, eg a
+   *   locktime or the last submission of pre-signed outputs.
    * @returns Active Keyset.
-   * @throws If none found or uninitialized.
+   * @throws If none found, uninitialized, or nothing meets an explicit `usableUntil`.
    */
-  getCheapestKeyset(): Keyset {
+  getCheapestKeyset(usableUntil?: number): Keyset {
     this.assertInitialized();
+    failIf(
+      usableUntil !== undefined && (!Number.isSafeInteger(usableUntil) || usableUntil < 0),
+      'Invalid usableUntil: expected a non-negative safe integer unix time',
+      this._logger,
+      { usableUntil },
+    );
     const unitActive = Object.values(this.keysets).filter(
       (k) => k.unit === this.unit && k.isActive && k.hasHexId,
     );
     // Newest version wins below, so a keyset this build cannot spend must not be a candidate. Its
     // keys are already blanked (the id derivation that `verify()` runs rejects the version), so
     // this is belt and braces; the branch that matters is the diagnosis below.
-    const activeKeysets = unitActive.filter(
+    const candidates = unitActive.filter(
       (k) => k.hasKeys && k.version <= MAX_SUPPORTED_KEYSET_VERSION_BYTE,
     );
-    if (activeKeysets.length === 0) {
+    if (candidates.length === 0) {
       const tooNew = unitActive.filter((k) => k.version > MAX_SUPPORTED_KEYSET_VERSION_BYTE);
       if (tooNew.length > 0) {
         const lowest = Math.min(...tooNew.map((k) => k.version));
@@ -307,10 +325,32 @@ export class KeyChain {
       }
       fail(`No active keyset found for unit: ${this.unit}`, this._logger, { unit: this.unit });
     }
+
+    // Never mint onto a superseded keyset version, whatever it costs.
+    const newest = candidates.reduce((max, k) => (k.version > max ? k.version : max), -1);
+    const current = candidates.filter((k) => k.version === newest);
+
+    // A keyset stops being usable at whichever of active_until and final_expiry comes first.
+    // Zero means no expiry, as in the keyset id.
+    const now = Math.floor(Date.now() / 1000);
     const never = Number.MAX_SAFE_INTEGER;
-    return activeKeysets.sort(
-      (a, b) => b.version - a.version || a.fee - b.fee || (b.expiry ?? never) - (a.expiry ?? never),
-    )[0];
+    const expiresAt = (k: Keyset): number => k.expiry || never;
+    const usableTo = (k: Keyset): number => Math.min(k.activeUntil ?? never, expiresAt(k));
+    const horizon = usableUntil ?? now + ACTIVE_WINDOW_SECONDS;
+    const longLived = current.filter((k) => usableTo(k) >= horizon);
+    failIf(
+      longLived.length === 0 && usableUntil !== undefined,
+      `No active keyset for unit ${this.unit} stays usable until ${usableUntil}`,
+      this._logger,
+      { unit: this.unit, usableUntil },
+    );
+    // Return the cheapest, longest lived
+    if (longLived.length > 0) {
+      return longLived.sort((a, b) => a.fee - b.fee || usableTo(b) - usableTo(a))[0];
+    }
+    // Nothing meets the default horizon, so return the cheapest, last to expire. Proofs stay
+    // redeemable past active_until, but not past final_expiry.
+    return current.sort((a, b) => a.fee - b.fee || expiresAt(b) - expiresAt(a))[0];
   }
 
   /**

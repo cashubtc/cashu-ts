@@ -18,7 +18,7 @@ Keys load lazily because the retired-keyset set only grows: fetching every one u
 an unbounded series of `/v1/keys/{id}` calls per load. Keys are immutable per keyset id and
 verified against it, so loading them late is safe.
 
-The wire shape (`MintKeyset`, what `/v1/keysets` returns and what a cache stores) uses the NUT-02 field names, `active` and `input_fee_ppk`. The `Keyset` object the wallet hands you exposes the same values as `isActive` and `fee`; the wire names appear only on its constructor and `toJSON()`.
+The wire shape (`MintKeyset`, what `/v1/keysets` returns and what a cache stores) uses the NUT-02 field names, `active` and `input_fee_ppk`. The `Keyset` object the wallet hands you exposes the same values as `isActive` and `fee`; the wire names appear only on its constructor and `toJSON()`. `isActive` also turns false from `final_expiry`, whatever the mint reports.
 
 A keyset id is derived from the public keys, so it identifies the keys, not the mint. Seeing one id on two mints means they run the same private keys, which outside test mints on a default seed means the same operator.
 
