@@ -36,6 +36,14 @@ describe('NUT10 module core functions', () => {
     expect(result).toContain('HTLC');
   });
 
+  test('parseSecret applies the secret length limit to any NUT-10 kind', () => {
+    const shell = '["XYZW",{"nonce":"","data":"x"}]';
+    const ofLength = (n: number) =>
+      shell.replace('"nonce":""', `"nonce":"${'a'.repeat(n - shell.length)}"`);
+    expect(parseSecret(ofLength(1024))[0]).toBe('XYZW');
+    expect(() => parseSecret(ofLength(1025))).toThrow(/Secret too long/);
+  });
+
   test('parseSecret throws for invalid NUT-10 secret (bad JSON)', () => {
     const secretStr = `["HTLC",{"nonce":"c9b0fabb8007c0db4bef64d5d128cdcf3c79e8bb780c3294adf4c88e96c32647","bad"data":"028c7651fc36f8c10287833a2ad78c996febf5213dc7aab798f744f86385e28d9a"}]`;
     expect(() => {
