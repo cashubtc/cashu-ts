@@ -187,7 +187,12 @@ export class MintInfo {
     if (!isRecord(nut15)) return MintInfo.dropSection('nuts.15', logger);
     if (!Array.isArray(nut15.methods)) return nut15;
 
-    return { ...nut15, methods: MintInfo.capList(nut15.methods, 'nuts.15.methods', logger) };
+    return {
+      ...nut15,
+      methods: MintInfo.capList(nut15.methods, 'nuts.15.methods', logger).filter((e) =>
+        isRecord(e),
+      ),
+    };
   }
 
   private static normalizeNut17(
@@ -197,7 +202,12 @@ export class MintInfo {
     if (!isRecord(nut17)) return MintInfo.dropSection('nuts.17', logger);
     if (!Array.isArray(nut17.supported)) return nut17;
 
-    return { ...nut17, supported: MintInfo.capList(nut17.supported, 'nuts.17.supported', logger) };
+    return {
+      ...nut17,
+      supported: MintInfo.capList(nut17.supported, 'nuts.17.supported', logger).filter((e) =>
+        isRecord(e),
+      ),
+    };
   }
 
   private static normalizeNut19(
@@ -206,15 +216,16 @@ export class MintInfo {
   ): GetInfoResponse['nuts']['19'] {
     if (!isRecord(nut19)) return MintInfo.dropSection('nuts.19', logger);
 
+    // Every request scans this list, so a malformed one reads as no cached endpoints.
     return {
       ...nut19,
-      ...(Array.isArray(nut19.cached_endpoints)
+      ...(nut19.cached_endpoints !== undefined
         ? {
-            cached_endpoints: MintInfo.capList(
-              nut19.cached_endpoints,
-              'nuts.19.cached_endpoints',
-              logger,
-            ),
+            cached_endpoints: Array.isArray(nut19.cached_endpoints)
+              ? MintInfo.capList(nut19.cached_endpoints, 'nuts.19.cached_endpoints', logger).filter(
+                  (e) => isRecord(e),
+                )
+              : [],
           }
         : {}),
       ttl: normalizeSafeIntegerMetadata(nut19.ttl, 'nuts.19.ttl', null),
@@ -405,15 +416,17 @@ export class MintInfo {
   }
 
   private checkNut17() {
-    if (this._mintInfo.nuts[17] && this._mintInfo.nuts[17].supported.length > 0) {
-      return { supported: true, params: MintInfo.snapshot(this._mintInfo.nuts[17].supported) };
+    const supported = this._mintInfo.nuts[17]?.supported;
+    if (Array.isArray(supported) && supported.length > 0) {
+      return { supported: true, params: MintInfo.snapshot(supported) };
     }
     return { supported: false };
   }
 
   private checkNut15() {
-    if (this._mintInfo.nuts[15] && this._mintInfo.nuts[15].methods.length > 0) {
-      return { supported: true, params: MintInfo.snapshot(this._mintInfo.nuts[15].methods) };
+    const methods = this._mintInfo.nuts[15]?.methods;
+    if (Array.isArray(methods) && methods.length > 0) {
+      return { supported: true, params: MintInfo.snapshot(methods) };
     }
     return { supported: false };
   }
