@@ -14,6 +14,7 @@ import type {
 } from '../model/types';
 import type { KeyChainCache } from '../model/types/keyset';
 import {
+  MAX_TIMER_DELAY_MS,
   deriveMintQuoteAccounting,
   normalizeMeltPreimage,
   normalizeSafeIntegerMetadata,
@@ -213,10 +214,14 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
       clearTimeout(timer);
       resolve();
     };
-    const timer = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }, ms);
+    // Past the timer range setTimeout fires at once, which would turn a long delay into a hot loop.
+    const timer = setTimeout(
+      () => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+      },
+      Math.min(ms, MAX_TIMER_DELAY_MS),
+    );
     signal?.addEventListener('abort', onAbort, { once: true });
   });
 }
@@ -384,7 +389,10 @@ export class WalletEvents {
     });
 
     if (this._pushes(kind)) {
-      grace = setTimeout(startPolling, opts?.replayTimeoutMs ?? REPLAY_GRACE_MS);
+      grace = setTimeout(
+        startPolling,
+        Math.min(opts?.replayTimeoutMs ?? REPLAY_GRACE_MS, MAX_TIMER_DELAY_MS),
+      );
       const onWire = (wire: W) => {
         live();
         deliver(wire);
@@ -487,7 +495,10 @@ export class WalletEvents {
 
       // Start a timeout if requested.
       if (opts?.timeoutMs && opts.timeoutMs > 0) {
-        to = setTimeout(() => cleanup(new CTSError(timeoutMsg)), opts.timeoutMs);
+        to = setTimeout(
+          () => cleanup(new CTSError(timeoutMsg)),
+          Math.min(opts.timeoutMs, MAX_TIMER_DELAY_MS),
+        );
       }
 
       // Subscribe to the actual event. Canceller returned is saved to cancelP.
@@ -903,7 +914,7 @@ export class WalletEvents {
       if (opts?.timeoutMs && opts.timeoutMs > 0) {
         to = setTimeout(
           () => cleanup(new CTSError('Timeout waiting for any mint paid')),
-          opts.timeoutMs,
+          Math.min(opts.timeoutMs, MAX_TIMER_DELAY_MS),
         );
       }
 
