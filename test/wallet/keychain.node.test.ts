@@ -12,7 +12,12 @@ import {
   type KeyChainCache,
 } from '../../src';
 import { NULL_LOGGER } from '../../src/logger';
-import { deriveKeysetId, isValidHex, MAX_SUPPORTED_KEYSET_VERSION_BYTE } from '../../src/utils';
+import {
+  MAX_KEYSET_LIST,
+  deriveKeysetId,
+  isValidHex,
+  MAX_SUPPORTED_KEYSET_VERSION_BYTE,
+} from '../../src/utils';
 import { DUMMY_TEST_KEYS, DUMMY_TEST_KEYSET, PUBKEYS } from '../consts';
 
 const mintUrl = 'http://localhost:3338';
@@ -480,6 +485,18 @@ describe('KeyChain initialization', () => {
       cacheMintUrl: 'https://other-mint.example',
       mintUrl,
     });
+  });
+
+  test('fromCache refuses a cache holding more keysets than a mint list may', async () => {
+    const chain = new KeyChain(mint, unit);
+    await chain.init();
+    const oversized = {
+      ...chain.cache,
+      keysets: Array.from({ length: MAX_KEYSET_LIST + 1 }, () => chain.cache.keysets[0]),
+    };
+    expect(() => KeyChain.fromCache(mint, unit, oversized)).toThrow(/at most 10000 keysets/);
+    expect(() => chain.loadFromCache(oversized)).toThrow(/at most 10000 keysets/);
+    expect(chain.hasKeyset(DUMMY_TEST_KEYSET.id)).toBe(true);
   });
 
   test('fromCache warns about a cache with no mint URL, then loads it', async () => {

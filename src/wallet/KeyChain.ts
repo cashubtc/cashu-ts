@@ -10,6 +10,7 @@ import type {
 } from '../model/types/keyset';
 import {
   assertSpendableVersion,
+  MAX_KEYSET_LIST,
   MAX_SUPPORTED_KEYSET_VERSION_BYTE,
   normalizeMintUrl,
   versionName,
@@ -193,6 +194,12 @@ export class KeyChain {
         { cacheMintUrl: cache.mintUrl, mintUrl: this.mint.mintUrl },
       );
     }
+    // The same bound a mint's keyset list gets, applied before any per-keyset work.
+    failIf(
+      !Array.isArray(cache.keysets) || cache.keysets.length > MAX_KEYSET_LIST,
+      `KeyChain cache must hold an array of at most ${MAX_KEYSET_LIST} keysets`,
+      this._logger,
+    );
     const { keysets, keys } = KeyChain.cacheToMintDTO(cache);
     this.buildKeychain(keysets, keys);
     this.savedAt = cache.savedAt;
