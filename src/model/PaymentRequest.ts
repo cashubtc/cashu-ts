@@ -26,7 +26,7 @@ import {
 } from '../utils';
 import { decodeBech32m, encodeBech32m } from '../utils/bech32m';
 import { JSONInt } from '../utils/JSONInt';
-import { ABSOLUTE_MAX_ARRAY_LENGTH, MAX_P2PK_PUBKEYS } from '../utils/limits';
+import { ABSOLUTE_MAX_ARRAY_LENGTH, MAX_P2PK_PUBKEYS, MAX_PAYLOAD_LENGTH } from '../utils/limits';
 import { decodeTLV, encodeTLV } from '../utils/tlv';
 import type { DecodedTLVPaymentRequest } from '../utils/tlv';
 import { lockToNutrootOptions, lockToP2PKOptions, type LockOptions } from '../wallet/lock';
@@ -672,6 +672,10 @@ export class PaymentRequest {
     if (encodedRequest instanceof Uint8Array) {
       if (BINARY_MAGIC.some((b, i) => encodedRequest[i] !== b)) {
         throw new CTSError('unsupported pr: invalid prefix');
+      }
+      // Same ceiling as every other untrusted decode path, and the NUT-16 message cap.
+      if (encodedRequest.length > MAX_PAYLOAD_LENGTH) {
+        throw new CTSError('invalid pr: binary request too long');
       }
       return this.fromTLVBytes(encodedRequest.subarray(BINARY_MAGIC.length));
     }
