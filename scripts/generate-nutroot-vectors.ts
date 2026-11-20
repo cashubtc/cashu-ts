@@ -30,6 +30,7 @@ import {
   buildTransactionTranscript,
   inputDigest,
   transactionDigest,
+  transcriptContainers,
 } from '../src/crypto/transcript';
 import type { TransactionShape } from '../src/crypto/transcript';
 import { Amount } from '../src/model/Amount';
@@ -457,6 +458,40 @@ d.transcript.comment =
         signature: bytesToHex(schnorr.sign(digestForInput, hexToBytes(lock.privkey), AUX0)),
       };
     }),
+  };
+}
+
+// The batch request with its first quote listed twice: every field decodes and both signatures are
+// real, so the duplicate id is the only defect and the mint rejects before checking any signature.
+// The library refuses to build such a transcript, so it is spliced from two valid ones.
+{
+  const first = d.transcript.batch_mint.tx.mint_quote_inputs[0];
+  const outputs = d.transcript.mint.tx.blinded_outputs;
+  const containersOf = (quotes: unknown[]) =>
+    transcriptContainers(
+      buildTransactionTranscript(
+        fromVectorTx({ mint_quote_inputs: quotes, blinded_outputs: outputs }),
+      ),
+    );
+  const [quote5, output] = containersOf([{ ...first, amount: 5 }]);
+  const [quote3] = containersOf([{ ...first, amount: 3 }]);
+  const transcript = concatBytes(quote5, quote3, output);
+  const digest = sha256(transcript);
+  const lock = d.nut13_v3.quote_locks[0];
+  d.transcript.batch_mint_duplicate_quote = {
+    request: {
+      quotes: [first.quote_id, first.quote_id],
+      quote_amounts: [5, 3],
+      outputs: outputs.map((o: { amount: number; keyset_id: string; B_: string }) => ({
+        amount: o.amount,
+        id: o.keyset_id,
+        B_: o.B_,
+      })),
+      signatures: [quote5, quote3].map((container) =>
+        bytesToHex(schnorr.sign(inputDigest(digest, container), hexToBytes(lock.privkey), AUX0)),
+      ),
+    },
+    error_code: 11016,
   };
 }
 

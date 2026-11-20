@@ -219,6 +219,40 @@ describe('transaction transcript (vectors)', () => {
     expect(vector.inputs[0].input_digest).not.toBe(vector.inputs[1].input_digest);
   });
 
+  test('the duplicate-quote batch vector is well formed and the wallet refuses to build it', () => {
+    const vector = tv.batch_mint_duplicate_quote;
+    const { request } = vector;
+    const first = tv.batch_mint.tx.mint_quote_inputs[0];
+    expect(request.quotes).toEqual([first.quote_id, first.quote_id]);
+    expect(vector.error_code).toBe(11016);
+    expect(() =>
+      buildTransactionTranscript(
+        fromVectorTx({
+          ...tv.batch_mint.tx,
+          mint_quote_inputs: request.quote_amounts.map((amount) => ({ ...first, amount })),
+        }),
+      ),
+    ).toThrow('repeats a mint quote input');
+    // Both signatures are real: each signs its own input digest over the spliced transcript.
+    const containerOf = (amount: number) =>
+      transcriptContainers(
+        buildTransactionTranscript(
+          fromVectorTx({ ...tv.batch_mint.tx, mint_quote_inputs: [{ ...first, amount }] }),
+        ),
+      )[0];
+    const [quote5, quote3] = request.quote_amounts.map(containerOf);
+    const output = transcriptContainers(
+      buildTransactionTranscript(fromVectorTx({ ...tv.batch_mint.tx, mint_quote_inputs: [first] })),
+    )[1];
+    const digest = sha256(new Uint8Array([...quote5, ...quote3, ...output]));
+    const lock = hexToBytes(first.lock_pubkey).subarray(1);
+    [quote5, quote3].forEach((container, i) => {
+      expect(
+        schnorr.verify(hexToBytes(request.signatures[i]), inputDigest(digest, container), lock),
+      ).toBe(true);
+    });
+  });
+
   test('the partial-mint vector commits the amount issued, not the quote amount', () => {
     const vector = tv.partial_mint;
     const quote = vector.tx.mint_quote_inputs[0];
