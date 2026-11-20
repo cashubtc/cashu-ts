@@ -1115,6 +1115,30 @@ describe('MintInfo retained list caps', () => {
     expect(info.nuts[17]?.supported).toBeUndefined();
     expect(info.nuts[19]?.cached_endpoints).toBeUndefined();
     expect(info.nuts[19]?.ttl).toBe(60);
+    expect(info.isSupported(15)).toEqual({ supported: false });
+    expect(info.isSupported(17)).toEqual({ supported: false });
+  });
+
+  it('drops list entries that are not records', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        ...MINTINFORESP.nuts,
+        15: { methods: [null, { method: 'bolt11', unit: 'sat' }] },
+        17: { supported: [7, { method: 'bolt11', unit: 'sat', commands: [] }] },
+        19: { ttl: 60, cached_endpoints: [null, { method: 'POST', path: '/v1/swap' }] },
+      },
+    });
+
+    expect(info.nuts[15]?.methods).toEqual([{ method: 'bolt11', unit: 'sat' }]);
+    expect(info.nuts[17]?.supported).toHaveLength(1);
+    expect(info.nuts[19]?.cached_endpoints).toEqual([{ method: 'POST', path: '/v1/swap' }]);
+
+    const notAList = new MintInfo({
+      ...MINTINFORESP,
+      nuts: { ...MINTINFORESP.nuts, 19: { ttl: 60, cached_endpoints: { path: '/v1/swap' } } },
+    });
+    expect(notAList.nuts[19]?.cached_endpoints).toEqual([]);
   });
 
   it('caps the NUT-29 method list', () => {
