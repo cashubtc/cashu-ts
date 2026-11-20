@@ -516,6 +516,48 @@ describe('deriveBatchWeights (Fiat-Shamir transcript)', () => {
     expect(batchVerifyUnblindedSignatureBls(items)).toBe(true);
   });
 
+  test('matches the NUT-00 batch vector over v3 point secrets', () => {
+    // Same check with 33-byte secrets (the NUT-00 token vectors' bearer and receiver-keyed
+    // secrets), r=5 and r=7 under K = 2·G2. The transcript frames each secret as its decoded
+    // bytes, so a verifier hashing the 66 hex characters lands on another challenge.
+    const aBytes = hexToBytes('0'.repeat(63) + '2');
+    const K = bls12_381.G2.Point.BASE.multiply(2n);
+    const items = (
+      [
+        ['0240c186f3e19f6f8cd00db81c5266d5c74ddca48ff848efd0e3e125b2846f30d9', 5n],
+        ['03a3e12cc077e5605f36441046f50c114fcc883b079a34028bed66732e3a419e51', 7n],
+      ] as Array<[string, bigint]>
+    ).map(([hex, r]) => {
+      const secret = hexToBytes(hex);
+      const { B_ } = blindMessageBls(secret, r);
+      const { C_ } = createBlindSignatureBls(B_, aBytes, 'k');
+      return { K2: K, C: unblindSignatureBls(C_, r), secret };
+    });
+    expect(bytesToHex(items[0].C.toBytes(true))).toBe(
+      'a34dbfad742c0f97cd4b6ca0249b3353a8a0eb4cbdb4d8cf83fe8b22d39b1a6205623ca819b4985238968ad0328caeba',
+    );
+    expect(bytesToHex(items[1].C.toBytes(true))).toBe(
+      'a2bf34cf329d2cffca9442224279c261c6d47f1236d4b6aafd4ddcade73c25f719a55d747b0935c9fc182343067514b7',
+    );
+    const transcript = concatBytes(
+      BLS_BATCH_DST_BYTES,
+      ...items.flatMap((it) => [
+        it.C.toBytes(true),
+        it.K2.toBytes(true),
+        numberToBytesBE(it.secret.length, 4),
+        it.secret,
+      ]),
+    );
+    expect(bytesToHex(sha256(transcript))).toBe(
+      'c8eac68470172516ac2290ccf3b345fca136e2e5d74adaf16b05d6389e3867c9',
+    );
+    expect(deriveBatchWeights(items).map((w) => w.toString(16).padStart(64, '0'))).toEqual([
+      '5b3c830c6690f9494e1b8a3b9e4a75aa21af4d55eb158444aa5e0a4118187851',
+      '26cf70a127f195374a3d0b0086e809592c2624cee02312bdf095a2fed775fa13',
+    ]);
+    expect(batchVerifyUnblindedSignatureBls(items)).toBe(true);
+  });
+
   test('batchVerify result is deterministic across runs', () => {
     // With Fiat-Shamir weights, same input → same boolean by construction (no CSPRNG flakiness
     // to hedge against). A couple of iterations is enough to lock the property without burning
