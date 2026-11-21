@@ -12,6 +12,7 @@ import {
   dummyKeysResp,
   dummyKeysetResp,
   mintUrl,
+  mintInfoResp,
   logger,
 } from './_setup';
 
