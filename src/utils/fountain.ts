@@ -1,7 +1,8 @@
 import { CTSError } from '../model/Errors';
-import { PaymentRequest } from '../model/PaymentRequest';
+import { BINARY_MAGIC, PaymentRequest } from '../model/PaymentRequest';
 import type { Token } from '../model/types/token';
 
+import { decodeBech32mToBytes } from './bech32m';
 import { getEncodedTokenBinary, getTokenBinaryFromString } from './core';
 
 // NUT-16 binary fountain frames: 'NF', version 01, flags 00, then four u32 header fields.
@@ -264,8 +265,8 @@ export class FountainEncoder {
    * Encoder for a payment request, sent as its raw binary form (`creqB` + TLV).
    *
    * @remarks
-   * Takes a `creqA` or `creqb` string, or a `PaymentRequest`. NUT-16 does not map requests yet, so
-   * the message format may change.
+   * Takes a `creqA` or `creqb` string, or a `PaymentRequest`. A `creqb` string keeps its original
+   * TLV bytes. NUT-16 does not map requests yet, so the message format may change.
    * @experimental
    */
   static forPaymentRequest(
@@ -277,7 +278,12 @@ export class FountainEncoder {
     }
     const parsed =
       typeof request === 'string' ? PaymentRequest.fromEncodedRequest(request) : request;
-    return new FountainEncoder(parsed.toEncodedBinary(), options);
+    const message = parsed.toEncodedBinary(); // Validates, whatever bytes are sent
+    if (typeof request === 'string' && request.toLowerCase().startsWith('creqb')) {
+      const tlv = decodeBech32mToBytes(request.toLowerCase());
+      return new FountainEncoder(new Uint8Array([...BINARY_MAGIC, ...tlv]), options);
+    }
+    return new FountainEncoder(message, options);
   }
 
   /**

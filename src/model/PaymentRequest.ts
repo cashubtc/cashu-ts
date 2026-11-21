@@ -46,7 +46,7 @@ import { CTSError } from './Errors';
 import type { Proof } from './types/proof';
 
 // 'creq' + 'B' as bytes, the raw binary request prefix.
-const BINARY_MAGIC = [0x63, 0x72, 0x65, 0x71, 0x42];
+export const BINARY_MAGIC = [0x63, 0x72, 0x65, 0x71, 0x42];
 
 /**
  * Normalizes a wire boolean flag, admitting true/false, the numeric 0/1 form, and null.

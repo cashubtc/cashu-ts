@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest';
 
 import { CTSError } from '../../src/model/Errors';
 import { PaymentRequest } from '../../src/model/PaymentRequest';
+import { encodeBech32m } from '../../src/utils/bech32m';
 import { getDecodedTokenBinary } from '../../src/utils/core';
 import {
   crc32,
@@ -238,6 +239,16 @@ describe('FountainEncoder', () => {
     }
   });
 
+  test('forPaymentRequest keeps the TLV bytes of a creqb string', () => {
+    const known = new PaymentRequest({ id: 'b7a90176', unit: 'sat' }).toEncodedBinary();
+    // An unknown record (tag 0x7f) a newer sender might add.
+    const sent = new Uint8Array([...known, 0x7f, 0x00, 0x01, 0xaa]);
+    const encoder = FountainEncoder.forPaymentRequest(encodeBech32m('creqb', sent.subarray(5)));
+    const decoder = new FountainDecoder();
+    while (!decoder.isComplete) decoder.receive(encoder.nextFrame());
+    expect(decoder.result).toEqual(sent);
+  });
+
   test('forPaymentRequest rejects a token and a non-request', () => {
     expect(() => FountainEncoder.forPaymentRequest(tokenText)).toThrow(CTSError);
     expect(() => FountainEncoder.forPaymentRequest(undefined as never)).toThrow(
@@ -272,6 +283,13 @@ describe('FountainDecoder', () => {
     expect(decoder.receive(textFor(transfer, 5))).toBe(false);
   });
 
+  test('a new frame that adds nothing is not progress', () => {
+    const decoder = decode([2, 4].map((q) => textFor(transfer, q)));
+    // Frame 5 selects fragments 1 and 3, both already known.
+    expect(decoder.receive(textFor(transfer, 5))).toBe(false);
+    expect(decoder.progress).toBe(0.5);
+  });
+
   test('result is a copy', () => {
     const decoder = decode([1, 2, 3, 4].map((q) => textFor(transfer, q)));
     decoder.result![0] ^= 1;
@@ -286,6 +304,9 @@ describe('FountainDecoder', () => {
     decoder.reset();
     expect(decoder.progress).toBe(0);
     expect(decoder.receive(textFor(other, 1))).toBe(true);
+    // Completion does not silence a foreign frame: the caller still learns to reset.
+    const done = decode([1, 2, 3, 4].map((q) => textFor(transfer, q)));
+    expect(() => done.receive(textFor(other, 1))).toThrow('different transfer');
   });
 
   test('resets itself after a reassembly that fails verification', () => {

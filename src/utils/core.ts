@@ -1007,9 +1007,9 @@ export function deserializeProofs(json: string | string[] | ProofLike[]): Proof[
 }
 
 /**
- * Decodes an encoded cashu payment request string into a {@link PaymentRequest}.
+ * Decodes a payment request string, or its raw binary form, into a {@link PaymentRequest}.
  */
-export function decodePaymentRequest(paymentRequest: string) {
+export function decodePaymentRequest(paymentRequest: string | Uint8Array) {
   return PaymentRequest.fromEncodedRequest(paymentRequest);
 }
 

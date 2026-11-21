@@ -486,7 +486,7 @@ export type CurvePoint = {
 };
 
 // @public
-export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
+export function decodePaymentRequest(paymentRequest: string | Uint8Array): PaymentRequest_2;
 
 // @public
 export const DERIVATION_TYPE: {
