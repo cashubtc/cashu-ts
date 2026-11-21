@@ -1509,6 +1509,28 @@ describe('NUT-29 max_batch_size enforcement', () => {
       /batch size 101.*limit of 100/,
     );
   });
+
+  test.each([
+    ['checkMintQuoteBatch', (w: Wallet, ids: string[]) => w.checkMintQuoteBatch('bolt11', ids)],
+    ['checkMintQuoteBatchBolt11', (w: Wallet, ids: string[]) => w.checkMintQuoteBatchBolt11(ids)],
+    ['checkMintQuoteBatchBolt12', (w: Wallet, ids: string[]) => w.checkMintQuoteBatchBolt12(ids)],
+  ])('%s refuses more quotes than max_batch_size without a request', async (op, check) => {
+    overrideMintInfo({ methods: ['bolt11', 'bolt12'], max_batch_size: 2 });
+    let posted = 0;
+    server.use(
+      http.post(mintUrl + '/v1/mint/quote/:method/check', () => {
+        posted++;
+        return HttpResponse.json([]);
+      }),
+    );
+    const wallet = new Wallet(mintUrl, { unit });
+    await wallet.loadMint();
+
+    await expect(check(wallet, ['a', 'b', 'c'])).rejects.toThrow(
+      `${op}: batch size 3 exceeds mint's advertised limit of 2`,
+    );
+    expect(posted).toBe(0);
+  });
 });
 
 // The shared fixture advertises NUT-29 for bolt11 and bolt12; custom methods add themselves

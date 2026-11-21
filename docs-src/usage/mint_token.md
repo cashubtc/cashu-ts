@@ -165,6 +165,7 @@ const newProofs = await wallet.completeBatchMint(preview);
 ```
 
 - `checkMintQuoteBatch*()` returns quote objects in the same order as the request.
+- Both batch calls throw when given more quotes than the mint's `max_batch_size` (100 at most).
 - Custom methods use `wallet.checkMintQuoteBatch(method, quotes)` with the same `normalize`
   callback as `checkMintQuote()` (see section 4).
 - Mints that predate the batch check endpoint return an error; fall back to the per-quote

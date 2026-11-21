@@ -1209,6 +1209,44 @@ describe('WalletEvents', () => {
       vi.useRealTimers();
     });
 
+    it('batched polls stay within the mint max_batch_size', async () => {
+      vi.useFakeTimers();
+      mock.getMintInfo.mockReturnValue({
+        isSupported: (n: number) =>
+          n === 29
+            ? { supported: true, params: { max_batch_size: 2 } }
+            : { supported: true, params: [{ method: 'bolt11', unit: 'sat', commands: [] }] },
+      });
+      // A mint enforcing its limit refuses anything larger
+      mock.checkMintQuoteBatch.mockImplementation(async (_m: string, quotes: string[]) => {
+        if (quotes.length > 2) throw new HttpResponseError('batch too large', 400);
+        return quotes.map((quote) => ({ quote, state: 'UNPAID' }));
+      });
+      const cb = vi.fn();
+      const err = vi.fn();
+      const ac = new AbortController();
+      await events.mintQuoteUpdates(['a', 'b', 'c', 'd', 'e'], cb, err, {
+        pollMs: 10,
+        signal: ac.signal,
+      });
+      await vi.advanceTimersByTimeAsync(5);
+      ac.abort();
+      expect(mock.checkMintQuoteBatch.mock.calls.map(([, quotes]) => quotes)).toEqual([
+        ['a', 'b'],
+        ['c', 'd'],
+        ['e'],
+      ]);
+      expect(cb.mock.calls.map(([q]) => (q as { quote: string }).quote)).toEqual([
+        'a',
+        'b',
+        'c',
+        'd',
+        'e',
+      ]);
+      expect(err).not.toHaveBeenCalled();
+      vi.useRealTimers();
+    });
+
     it('a mint refusing the batch endpoint (405) drops to one request per quote', async () => {
       vi.useFakeTimers();
       mock.getMintInfo.mockReturnValue(nut17([]));

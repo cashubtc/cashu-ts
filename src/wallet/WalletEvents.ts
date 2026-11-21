@@ -14,6 +14,7 @@ import type {
 } from '../model/types';
 import type { KeyChainCache } from '../model/types/keyset';
 import {
+  ABSOLUTE_MAX_BATCH_SIZE,
   MAX_TIMER_DELAY_MS,
   deriveMintQuoteAccounting,
   normalizeMeltPreimage,
@@ -301,15 +302,16 @@ export class WalletEvents {
 
   // Whether the mint says it pushes `kind` for this wallet's unit. Unknown until mint info is
   // loaded; then the socket decides
-  // The batched check is only tried where the mint advertises NUT-29 for the method; unknown info
-  // tries it once
-  private _batches(method: string): boolean {
+  // Quote ids per batched check: the mint's NUT-29 limit, or 0 where it does not batch the method.
+  // Unknown info tries the internal cap once
+  private _batchSize(method: string): number {
     try {
       const nut29 = this.wallet.getMintInfo().isSupported(29);
       const methods = nut29.params?.methods;
-      return nut29.supported && (!Array.isArray(methods) || methods.includes(method));
+      if (!nut29.supported || (Array.isArray(methods) && !methods.includes(method))) return 0;
+      return nut29.params?.max_batch_size ?? ABSOLUTE_MAX_BATCH_SIZE;
     } catch {
-      return true;
+      return ABSOLUTE_MAX_BATCH_SIZE;
     }
   }
 
@@ -594,9 +596,9 @@ export class WalletEvents {
    *
    * @remarks
    * `opts.method` picks the payment method (default bolt11) and with it the NUT-17 kind and the
-   * response type. With `opts.pollMs` the subscription falls back to polling: one batched check per
-   * poll for several quotes, dropping to one request per quote only on a mint without the batch
-   * endpoint; see {@link WatchOpts}.
+   * response type. With `opts.pollMs` the subscription falls back to polling: batched checks of up
+   * to the mint's `max_batch_size` quotes each, dropping to one request per quote only on a mint
+   * without the batch endpoint; see {@link WatchOpts}.
    * @param ids List of mint quote IDs that should be subscribed to.
    * @param cb Callback function that will be called whenever a mint quote state changes.
    * @param err Called when the subscription fails, or when polling keeps failing.
@@ -611,11 +613,17 @@ export class WalletEvents {
   ): Promise<SubscriptionCanceller> {
     const method = opts?.method ?? 'bolt11';
     const uniq = Array.from(new Set(ids));
-    let batch = uniq.length > 1 && this._batches(method);
+    const size = this._batchSize(method);
+    let batch = uniq.length > 1 && size > 0;
     const fetch = async (signal: AbortSignal) => {
       if (batch) {
         try {
-          return await this.wallet.checkMintQuoteBatch<TRes>(method, uniq, { signal });
+          const out: TRes[] = [];
+          for (let i = 0; i < uniq.length && !signal.aborted; i += size) {
+            const chunk = uniq.slice(i, i + size);
+            out.push(...(await this.wallet.checkMintQuoteBatch<TRes>(method, chunk, { signal })));
+          }
+          return out;
         } catch (e) {
           // A missing or refused endpoint means the mint cannot batch; anything else is the poll failing
           if (!(e instanceof HttpResponseError) || (e.status !== 404 && e.status !== 405)) throw e;
