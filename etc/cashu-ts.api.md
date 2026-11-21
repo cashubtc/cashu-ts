@@ -1842,6 +1842,7 @@ export type OIDCAuthOptions = {
     logger?: Logger;
     fetch?: OIDCFetch;
     onTokens?: (t: TokenResponse, origin: TokenOrigin) => void | Promise<void>;
+    requestTimeout?: number;
 };
 
 // @public (undocumented)
