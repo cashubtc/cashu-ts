@@ -6,6 +6,7 @@
 import { bech32 } from '@scure/base';
 import { describe, expect, test } from 'vitest';
 
+import { CTSError } from '../../src/model/Errors';
 import { decodeTLV, encodeTLV } from '../../src/utils/tlv';
 import { PaymentRequestTransportType } from '../../src/wallet/types/payment-requests';
 
@@ -47,6 +48,48 @@ describe('decodeTLV rejects a repeat of a singular tag', () => {
     expect(() => decodeTLV(bytes(rec(0x07, [...kind, ...target, ...target])))).toThrow(
       /multiple transport target/,
     );
+<<<<<<< HEAD
+=======
+    // A nostr target is a raw 32-byte pubkey; anything else cannot become an nprofile.
+    expect(() => decodeTLV(bytes(rec(0x07, [...rec(0x01, [0]), ...rec(0x02, [0xaa])])))).toThrow(
+      /expected 32 bytes/,
+    );
+    // A tag tuple whose length byte overruns its buffer.
+    expect(() =>
+      decodeTLV(bytes(rec(0x07, [...rec(0x01, [1]), ...target, ...rec(0x03, [0x05, 0x61])]))),
+    ).toThrow(/Tag tuple data too short/);
+    // Relays too long in total to rebuild a nostr target as an nprofile.
+    const relay = [40, ...utf8('wss://'.padEnd(40, 'a'))];
+    const relays = rec(0x03, [1, ...utf8('r'), ...Array.from({ length: 20 }, () => relay).flat()]);
+    expect(() =>
+      decodeTLV(bytes(rec(0x07, [...rec(0x01, [0]), ...rec(0x02, KEY33.slice(1)), ...relays]))),
+    ).toThrow(CTSError);
+  });
+
+  test('nut10 structural violations', () => {
+    const data = rec(0x02, utf8('02aa'));
+    // An unknown kind is not a structural violation: it decodes preserved (NUT-26).
+    expect(decodeTLV(bytes(rec(0x08, [...rec(0x01, [9]), ...data]))).nut10?.kind).toBe('9');
+    expect(() => decodeTLV(bytes(rec(0x08, data)))).toThrow(/missing required kind/);
+    expect(() => decodeTLV(bytes(rec(0x08, rec(0x01, [0]))))).toThrow(/missing required data/);
+  });
+
+  test('nutroot option violations', () => {
+    const receiver = rec(0x01, KEY33);
+    expect(() => decodeTLV(bytes(rec(0x0b, receiver), rec(0x0b, receiver)))).toThrow(
+      /multiple nutroot options/,
+    );
+    expect(() => decodeTLV(bytes(rec(0x0b, [...receiver, ...receiver])))).toThrow(
+      /multiple nutroot receiver keys/,
+    );
+    expect(() => decodeTLV(bytes(rec(0x0b, rec(0x01, [0x02, 0xaa]))))).toThrow(/33 bytes/);
+    expect(() => decodeTLV(bytes(rec(0x0b, [...receiver, ...rec(0x03, [0xaa])])))).toThrow(
+      /blind_key must be 33 bytes/,
+    );
+    expect(() => decodeTLV(bytes(rec(0x0b, rec(0x02, [0x00]))))).toThrow(
+      /missing required receiver_key/,
+    );
+>>>>>>> d5c09c2 (fix(utils): throw CTSError when an nprofile cannot be encoded or decoded (#1526))
   });
 });
 
@@ -68,6 +111,11 @@ describe('encodeTLV refuses unencodable requests', () => {
     expect(() => encodeTLV(nostr(nprofile([...key(0x11), ...key(0x22)])))).toThrow(
       /multiple pubkeys/,
     );
+    // Bad checksum, and a valid checksum over words with non-zero padding.
+    const good = nprofile(key(0x11));
+    const badChecksum = good.slice(0, -1) + (good.endsWith('q') ? 'p' : 'q');
+    expect(() => encodeTLV(nostr(badChecksum))).toThrow(CTSError);
+    expect(() => encodeTLV(nostr(bech32.encode('nprofile', [0x00, 0x1f], 1024)))).toThrow(CTSError);
   });
 });
 
