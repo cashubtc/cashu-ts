@@ -2307,3 +2307,31 @@ describe('Mint response shape and cardinality', () => {
     expect(response.states).toHaveLength(0);
   });
 });
+
+describe('NUT-19 cached endpoint entries', () => {
+  it('a cached endpoint with a non-string path does not break requests', async () => {
+    mswServer.use(
+      http.post(mswMintUrl + '/v1/swap', () =>
+        HttpResponse.json({ signatures: [{ amount: 1, C_: '02sig', id: '00' }] }),
+      ),
+    );
+    const mint = new Mint(mswMintUrl);
+    mint.setMintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        ...MINTINFORESP.nuts,
+        // A path that cannot become a string threw from the request matcher on every call.
+        '19': {
+          ttl: 60,
+          cached_endpoints: [
+            { method: 'POST', path: { toString: null, valueOf: null } },
+            { method: 'POST', path: '/v1/swap' },
+          ],
+        },
+      },
+    });
+
+    const response = await mint.swap({ inputs: [], outputs: [blankOutput()] });
+    expect(response.signatures).toHaveLength(1);
+  });
+});
