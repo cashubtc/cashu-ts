@@ -613,10 +613,11 @@ export class WalletEvents {
   ): Promise<SubscriptionCanceller> {
     const method = opts?.method ?? 'bolt11';
     const uniq = Array.from(new Set(ids));
-    const size = this._batchSize(method);
-    let batch = uniq.length > 1 && size > 0;
+    let batch = uniq.length > 1;
     const fetch = async (signal: AbortSignal) => {
-      if (batch) {
+      // Read per poll: mint info can load or change after the watch starts
+      const size = this._batchSize(method);
+      if (batch && size > 0) {
         try {
           const out: TRes[] = [];
           for (let i = 0; i < uniq.length && !signal.aborted; i += size) {
