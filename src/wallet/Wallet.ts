@@ -422,6 +422,16 @@ class Wallet {
     );
     return nut29.params;
   }
+  /**
+   * Fails when a batch is over the mint's `max_batch_size`, or the internal cap before mint info is
+   * loaded.
+   */
+  private assertBatchSize(count: number, nut29: Nut29Info | undefined, op: string): void {
+    const limit = nut29?.max_batch_size ?? ABSOLUTE_MAX_BATCH_SIZE;
+    const source =
+      nut29?.max_batch_size != null ? `mint's advertised limit` : `cashu-ts internal cap`;
+    this.failIf(count > limit, `${op}: batch size ${count} exceeds ${source} of ${limit}`);
+  }
   private throwIfAborted(signal?: AbortSignal): void {
     if (signal?.aborted) throw new CallerAbortError('Operation aborted by caller');
   }
@@ -3371,7 +3381,8 @@ class Wallet {
     quotes: Array<string | Pick<TRes, 'quote'>>,
     options?: AbortOptions & { normalize?: (raw: Record<string, unknown>) => TRes },
   ): Promise<TRes[]> {
-    this.requireNut29(method, 'checkMintQuoteBatch', 'checkMintQuote');
+    const nut29 = this.requireNut29(method, 'checkMintQuoteBatch', 'checkMintQuote');
+    this.assertBatchSize(quotes.length, nut29, 'checkMintQuoteBatch');
     const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
     return this.mint.checkMintQuoteBatch<TRes>(method, quoteIds, {
       normalize: options?.normalize,
@@ -3393,7 +3404,8 @@ class Wallet {
     quotes: Array<string | MintQuoteBolt11Response>,
     opts?: AbortOptions,
   ): Promise<MintQuoteBolt11Response[]> {
-    this.requireNut29('bolt11', 'checkMintQuoteBatchBolt11', 'checkMintQuoteBolt11');
+    const nut29 = this.requireNut29('bolt11', 'checkMintQuoteBatchBolt11', 'checkMintQuoteBolt11');
+    this.assertBatchSize(quotes.length, nut29, 'checkMintQuoteBatchBolt11');
     const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
     const res = await this.mint.checkMintQuoteBatchBolt11(quoteIds, opts);
     for (const quote of res) this.assertBolt11MintQuoteAmount(quote, quote.amount);
@@ -3414,7 +3426,8 @@ class Wallet {
     quotes: Array<string | MintQuoteBolt12Response>,
     opts?: AbortOptions,
   ): Promise<MintQuoteBolt12Response[]> {
-    this.requireNut29('bolt12', 'checkMintQuoteBatchBolt12', 'checkMintQuoteBolt12');
+    const nut29 = this.requireNut29('bolt12', 'checkMintQuoteBatchBolt12', 'checkMintQuoteBolt12');
+    this.assertBatchSize(quotes.length, nut29, 'checkMintQuoteBatchBolt12');
     const quoteIds = quotes.map((quote) => (typeof quote === 'string' ? quote : quote.quote));
     return this.mint.checkMintQuoteBatchBolt12(quoteIds, opts);
   }
@@ -3903,20 +3916,8 @@ class Wallet {
   ): Promise<BatchMintPreview<TQuote>> {
     this.throwIfAborted(config?.signal);
     this.failIf(entries.length === 0, 'prepareBatchMint: no entries provided');
-    // Enforce NUT-29 batch-size limit advertised by the mint, clamped to our absolute cap.
-    // Before mint info is loaded the absolute cap still applies.
     const nut29Params = this.requireNut29(method, 'prepareBatchMint', 'prepareMint');
-    const effectiveLimit = nut29Params?.max_batch_size ?? ABSOLUTE_MAX_BATCH_SIZE;
-
-    if (entries.length > effectiveLimit) {
-      const limitSource =
-        nut29Params?.max_batch_size != null ? `mint's advertised limit` : `cashu-ts internal cap`;
-      this.failIf(
-        true,
-        `prepareBatchMint: batch size ${entries.length} exceeds ` +
-          `${limitSource} of ${effectiveLimit}`,
-      );
-    }
+    this.assertBatchSize(entries.length, nut29Params, 'prepareBatchMint');
 
     const { privkey, keysetId, proofsWeHave, onCountersReserved } = config ?? {};
 
