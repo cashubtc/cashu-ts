@@ -7,6 +7,7 @@
 import { bech32 } from '@scure/base';
 import { describe, expect, test } from 'vitest';
 
+import { CTSError } from '../../src/model/Errors';
 import { decodeTLV, encodeTLV } from '../../src/utils/tlv';
 import { PaymentRequestTransportType } from '../../src/wallet/types/payment-requests';
 
@@ -82,6 +83,12 @@ describe('decodeTLV fails closed on malformed streams', () => {
     expect(() =>
       decodeTLV(bytes(rec(0x07, [...rec(0x01, [1]), ...target, ...rec(0x03, [0x05, 0x61])]))),
     ).toThrow(/Tag tuple data too short/);
+    // Relays too long in total to rebuild a nostr target as an nprofile.
+    const relay = [40, ...utf8('wss://'.padEnd(40, 'a'))];
+    const relays = rec(0x03, [1, ...utf8('r'), ...Array.from({ length: 20 }, () => relay).flat()]);
+    expect(() =>
+      decodeTLV(bytes(rec(0x07, [...rec(0x01, [0]), ...rec(0x02, KEY33.slice(1)), ...relays]))),
+    ).toThrow(CTSError);
   });
 
   test('nut10 structural violations', () => {
@@ -179,6 +186,11 @@ describe('encodeTLV refuses unencodable requests', () => {
     expect(() => encodeTLV(nostr(nprofile([...key(0x11), ...key(0x22)])))).toThrow(
       /multiple pubkeys/,
     );
+    // Bad checksum, and a valid checksum over words with non-zero padding.
+    const good = nprofile(key(0x11));
+    const badChecksum = good.slice(0, -1) + (good.endsWith('q') ? 'p' : 'q');
+    expect(() => encodeTLV(nostr(badChecksum))).toThrow(CTSError);
+    expect(() => encodeTLV(nostr(bech32.encode('nprofile', [0x00, 0x1f], 1024)))).toThrow(CTSError);
   });
 
   test('a leading BOM in a string field is kept as content, not stripped as framing', () => {
