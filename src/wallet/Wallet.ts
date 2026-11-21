@@ -54,7 +54,7 @@ import type {
   MintQuoteBolt12Request,
   SwapRequest,
 } from '../model/types';
-import type { SerializedBlindedSignature } from '../model/types/blinded';
+import type { SerializedBlindedMessage, SerializedBlindedSignature } from '../model/types/blinded';
 import type { KeyChainCache } from '../model/types/keyset';
 import { CheckStateEnum, type ProofState } from '../model/types/NUT07';
 import { type BatchMintRequest, type Nut29Info } from '../model/types/NUT29';
@@ -2269,6 +2269,8 @@ class Wallet {
   /**
    * Regenerates.
    *
+   * @remarks
+   * Sends one request per `max_array_length` outputs (the mint's, or 500 when unadvertised).
    * @param start Set starting point for count (first cycle for each keyset should usually be 0)
    * @param count Set number of blinded messages that should be generated.
    * @param options.keysetId Set a custom keysetId to restore from. @see `keyChain)`
@@ -2301,9 +2303,17 @@ class Wallet {
       zeros,
     );
 
-    const { outputs, signatures } = await this.mint.restore({
-      outputs: outputData.map((d) => d.blindedMessage),
-    });
+    // One request per maxArrayLength outputs, merged so pairing by B_ still covers the whole range
+    let outputs: SerializedBlindedMessage[] = [];
+    let signatures: SerializedBlindedSignature[] = [];
+    const limit = this.maxArrayLength;
+    for (let i = 0; i < outputData.length; i += limit) {
+      const part = await this.mint.restore({
+        outputs: outputData.slice(i, i + limit).map((d) => d.blindedMessage),
+      });
+      outputs = outputs.concat(part.outputs);
+      signatures = signatures.concat(part.signatures);
+    }
     await this._ensureKeysetsForSignatures(signatures);
 
     const signatureMap: { [sig: string]: SerializedBlindedSignature } = {};

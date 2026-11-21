@@ -12,6 +12,7 @@ import {
   dummyKeysResp,
   dummyKeysetResp,
   mintUrl,
+  mintInfoResp,
   logger,
 } from './_setup';
 
@@ -141,6 +142,39 @@ describe('restore', () => {
     expect(res.proofs.length).toBeGreaterThan(0);
     // proofs should be of amount 1 because we overprinted 1 in the signatures
     expect(res.proofs.every((p) => p.amount.equals(Amount.from(1)))).toBe(true);
+  });
+
+  test('splits a range wider than max_array_length into requests the mint accepts', async () => {
+    const VALID_POINT = '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422';
+    const sizes: number[] = [];
+    server.use(
+      http.get(mintUrl + '/v1/info', () =>
+        HttpResponse.json({ ...mintInfoResp, max_array_length: 4 }),
+      ),
+      http.post(mintUrl + '/v1/restore', async ({ request }) => {
+        const { outputs } = (await request.json()) as { outputs: unknown[] };
+        if (outputs.length > 4) return HttpResponse.json({ detail: 'too many' }, { status: 400 });
+        sizes.push(outputs.length);
+        // only the second output of the second request was ever signed: counter 5 + 4 + 1
+        const hit = sizes.length === 2 ? [outputs[1]] : [];
+        return HttpResponse.json({
+          outputs: hit,
+          signatures: hit.map(() => ({
+            id: dummyKeysResp.keysets[0].id,
+            amount: 1,
+            C_: VALID_POINT,
+          })),
+        });
+      }),
+    );
+    const wallet = new Wallet(mintUrl, { unit, bip39seed: randomBytes(64), logger });
+    await wallet.loadMint();
+
+    const res = await wallet.restore(5, 10);
+
+    expect(sizes).toEqual([4, 4, 2]);
+    expect(res.proofs).toHaveLength(1);
+    expect(res.lastCounterWithSignature).toBe(10);
   });
 
   test('unblinds restore signatures with the keyset they name and skips zero-value ones', async () => {
