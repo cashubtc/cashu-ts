@@ -1283,7 +1283,15 @@ describe('MintInfo retained list caps', () => {
         ...MINTINFORESP.nuts,
         15: { methods: [null, { method: 'bolt11', unit: 'sat' }] },
         17: { supported: [7, { method: 'bolt11', unit: 'sat', commands: [] }] },
-        19: { ttl: 60, cached_endpoints: [null, { method: 'POST', path: '/v1/swap' }] },
+        19: {
+          ttl: 60,
+          cached_endpoints: [
+            null,
+            { method: 'POST', path: { toString: null, valueOf: null } },
+            { method: 7, path: '/v1/melt' },
+            { method: 'POST', path: '/v1/swap' },
+          ],
+        },
       },
     });
 
