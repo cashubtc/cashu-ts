@@ -20,6 +20,7 @@ import {
   buildRequestHeaders,
   errorMessage,
 } from '../../src/transport/request';
+import { MAX_TIMER_DELAY_MS } from '../../src/utils/limits';
 import { MINTCACHE } from '../consts';
 
 // Setup mint cache for loadMint()
@@ -1412,6 +1413,12 @@ describe('parseRetryAfter', () => {
 
   test('returns undefined for garbage string', () => {
     expect(parseRetryAfter('not-a-date-or-number')).toBeUndefined();
+  });
+
+  test('clamps a delay past the timer range', () => {
+    expect(parseRetryAfter('9'.repeat(400))).toBe(MAX_TIMER_DELAY_MS);
+    expect(parseRetryAfter('3000000')).toBe(MAX_TIMER_DELAY_MS);
+    expect(parseRetryAfter('Fri, 01 Jan 9999 00:00:00 GMT')).toBe(MAX_TIMER_DELAY_MS);
   });
 });
 
