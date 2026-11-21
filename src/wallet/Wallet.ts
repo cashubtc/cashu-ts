@@ -2794,6 +2794,8 @@ class Wallet {
   /**
    * Regenerates.
    *
+   * @remarks
+   * Sends one request per `max_array_length` outputs (the mint's, or 500 when unadvertised).
    * @param start Set starting point for count (first cycle for each keyset should usually be 0)
    * @param count Set number of blinded messages that should be generated.
    * @param options.keysetId Set a custom keysetId to restore from. @see `keyChain)`
@@ -2835,12 +2837,19 @@ class Wallet {
       }
     }
 
-    const response = await this.mint.restore(
-      {
-        outputs: outputData.map((d) => d.blindedMessage),
-      },
-      { signal: config?.signal },
-    );
+    // One request per maxArrayLength outputs, merged so pairing by B_ still covers the whole range
+    let outputs: SerializedBlindedMessage[] = [];
+    let signatures: SerializedBlindedSignature[] = [];
+    const limit = this.maxArrayLength;
+    for (let i = 0; i < outputData.length; i += limit) {
+      const part = await this.mint.restore(
+        { outputs: outputData.slice(i, i + limit).map((d) => d.blindedMessage) },
+        { signal: config?.signal },
+      );
+      outputs = outputs.concat(part.outputs);
+      signatures = signatures.concat(part.signatures);
+    }
+    const response = { outputs, signatures };
     await this._ensureKeysetsForSignatures(response.signatures);
     // counters here are contiguous from `start`, so the index maps straight onto one
     const { proofs, lastIndex } = await proofsFromRestoreResponse(
