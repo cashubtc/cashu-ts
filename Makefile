@@ -28,6 +28,11 @@ CDK_BLS_IMAGE ?= cashu-dev-cdk-bls:local
 CDK_BLS_NAME ?= cashu-dev-cdk-bls
 # Issuance version for the config document; empty leaves the mint's default.
 CDK_KEYSET_VERSION ?=
+# The BLS mint's issuance version: "v3", or "02" for a checkout that predates the named versions.
+CDK_BLS_KEYSET_VERSION ?= v3
+# NUT-06 identity key (the NUT-06 example's), set with the issuance version: a mint issuing v3
+# keysets will not start without one.
+CDK_MINT_PUBKEY ?= 0338596797cef0627f653cd6568387361b00314add55d9f1ea9c94f46ae421e3da
 
 # ------------------------
 # Docker envs per dependency
@@ -48,6 +53,13 @@ CDK_ENVS = \
 # write it to disk; older images lack the `config` subcommand and keep using
 # the env vars. From 0.18.0-rc.3 `config init` also demands --new-mint (the
 # containers always start on an empty database), hence the un-flagged retry.
+define CDK_MINT_INFO_TOML
+
+
+[mint_info]
+pubkey = "$(CDK_MINT_PUBKEY)"
+endef
+
 define CDK_CONFIG_TOML
 [info]
 listen_host = "0.0.0.0"
@@ -65,7 +77,7 @@ unit = "sat"
 
 [fake_wallet]
 min_delay_time = $(FAKE_DELAY)
-max_delay_time = $(FAKE_DELAY)
+max_delay_time = $(FAKE_DELAY)$(if $(CDK_KEYSET_VERSION),$(CDK_MINT_INFO_TOML))
 endef
 export CDK_CONFIG_TOML
 
@@ -168,7 +180,7 @@ cdk-bls-build:
 		$(CDK_BLS_PATH)/Dockerfile.arm | $(DOCKER) build -f - -t $(CDK_BLS_IMAGE) $(CDK_BLS_PATH)
 
 cdk-bls-up: cdk-bls-build
-	$(MAKE) cdk-up CDK_NAME=$(CDK_BLS_NAME) CDK_IMAGE=$(CDK_BLS_IMAGE) CDK_KEYSET_VERSION=02 PLATFORM= CDK_PULL=never
+	$(MAKE) cdk-up CDK_NAME=$(CDK_BLS_NAME) CDK_IMAGE=$(CDK_BLS_IMAGE) CDK_KEYSET_VERSION=$(CDK_BLS_KEYSET_VERSION) PLATFORM= CDK_PULL=never
 
 cdk-bls-down:
 	$(MAKE) cdk-down CDK_NAME=$(CDK_BLS_NAME)
