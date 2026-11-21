@@ -1,5 +1,72 @@
 # Changelog
 
+## [5.0.0-rc.14](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.13...v5.0.0-rc.14) (2026-11-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **wallet:** yield during recovery counter scans and accept a signal ([#1509](https://github.com/cashubtc/cashu-ts/issues/1509))
+
+### Features
+
+* **wallet:** record the mint pubkey on previews and check it at completion ([#1479](https://github.com/cashubtc/cashu-ts/issues/1479)) ([44b00eb](https://github.com/cashubtc/cashu-ts/commit/44b00eba9e9b7e24468b7e5e8fea959ee2f32663))
+
+
+### Bug Fixes
+
+* **amount:** require a bigint in the Amount constructor ([#1435](https://github.com/cashubtc/cashu-ts/issues/1435)) ([f2752e6](https://github.com/cashubtc/cashu-ts/commit/f2752e69b63ce8d22431d7766f913ee61fa0969e))
+* **auth:** release a pending token body when device polling is cancelled ([#1501](https://github.com/cashubtc/cashu-ts/issues/1501)) ([57e6099](https://github.com/cashubtc/cashu-ts/commit/57e6099d1b62eaeac4f011f65a85b811cff402d2))
+* **auth:** time out OIDC requests, configurable with requestTimeout ([#1528](https://github.com/cashubtc/cashu-ts/issues/1528)) ([691f48e](https://github.com/cashubtc/cashu-ts/commit/691f48e75e33f00e3a8bab7a91b4a5ea58fa87cb))
+* **crypto:** apply the secret length limit to every NUT-10 secret ([#1496](https://github.com/cashubtc/cashu-ts/issues/1496)) ([c421488](https://github.com/cashubtc/cashu-ts/commit/c4214881ecca26b331b29e6d7c68b228c18c44cb))
+* **crypto:** check a nutroot tree's leaf count before reading its leaves ([#1494](https://github.com/cashubtc/cashu-ts/issues/1494)) ([5c8eda6](https://github.com/cashubtc/cashu-ts/commit/5c8eda6847d9eb0bf2407b222421241dcbe1e63f))
+* **crypto:** keep a private copy of the seed in derivers and wallets ([#1465](https://github.com/cashubtc/cashu-ts/issues/1465)) ([90cbd01](https://github.com/cashubtc/cashu-ts/commit/90cbd01693897631332d461b95d6d71fff5f67b0))
+* **crypto:** read refund keys without a locktime as inert ([#1427](https://github.com/cashubtc/cashu-ts/issues/1427)) ([8f03d71](https://github.com/cashubtc/cashu-ts/commit/8f03d711b2ddf093143396b2c8b8d4c983cefc35))
+* **crypto:** reject key-only NUT-11 tags ([#1421](https://github.com/cashubtc/cashu-ts/issues/1421)) ([a034aa5](https://github.com/cashubtc/cashu-ts/commit/a034aa56be769730f9e3c5fd523ef5c06ca2b011))
+* **crypto:** require a string message in computeMessageDigest ([#1436](https://github.com/cashubtc/cashu-ts/issues/1436)) ([76c30a5](https://github.com/cashubtc/cashu-ts/commit/76c30a5e4cbf96915cddc4b31595cf04240e07a0))
+* **mint:** check that quote responses answer the request ([#1467](https://github.com/cashubtc/cashu-ts/issues/1467)) ([29e9aea](https://github.com/cashubtc/cashu-ts/commit/29e9aeab18856b9e48e6284b7ab9255a95b463b5))
+* **mint:** keep NUT-19 cached endpoints only with a string method and path ([#1523](https://github.com/cashubtc/cashu-ts/issues/1523)) ([3dfa59a](https://github.com/cashubtc/cashu-ts/commit/3dfa59a9e877fffb1a1f41b66cf57188afd73f51))
+* **mint:** read malformed mint info entries as absent ([#1499](https://github.com/cashubtc/cashu-ts/issues/1499)) ([72b879d](https://github.com/cashubtc/cashu-ts/commit/72b879d52e93077db831b6301600e84b7a0590c7))
+* **mint:** reject a mint quote whose pubkey is not a string ([#1481](https://github.com/cashubtc/cashu-ts/issues/1481)) ([c46294d](https://github.com/cashubtc/cashu-ts/commit/c46294d52715ce43004f2f5a5243e0d6a295f22b))
+* **mint:** reject a non-object melt quote response with a CTSError ([#1480](https://github.com/cashubtc/cashu-ts/issues/1480)) ([abbe7f2](https://github.com/cashubtc/cashu-ts/commit/abbe7f2259602b384791c4b2b9b50aae5190cc4f))
+* **mint:** reject malformed fields in mint responses with CTSError ([#1469](https://github.com/cashubtc/cashu-ts/issues/1469)) ([bf7d061](https://github.com/cashubtc/cashu-ts/commit/bf7d061b4c5a1a5673417a7a04939ebce906cf2d))
+* **payment-request:** check field types when decoding creqA requests ([#1456](https://github.com/cashubtc/cashu-ts/issues/1456)) ([56c76d0](https://github.com/cashubtc/cashu-ts/commit/56c76d0b40749aecbb210a67a79682dffe225420))
+* **payment-request:** copy arrays in and out of payment requests and their builder ([#1463](https://github.com/cashubtc/cashu-ts/issues/1463)) ([5741518](https://github.com/cashubtc/cashu-ts/commit/5741518b7aad45c4c5311d8cbb2982bbddd7c31c))
+* **payment-request:** omit absent tags from the creqA encoding ([#1428](https://github.com/cashubtc/cashu-ts/issues/1428)) ([a25988e](https://github.com/cashubtc/cashu-ts/commit/a25988ee6f36c161c635fae7d72399097f089b00))
+* **payment-request:** read a null id and memo as absent in payment payloads ([#1437](https://github.com/cashubtc/cashu-ts/issues/1437)) ([20d7e89](https://github.com/cashubtc/cashu-ts/commit/20d7e89dc91d0be6a5d2d9fb9a50e8b084a6a8ad))
+* **payment-request:** read an empty supported-method list as absent ([#1460](https://github.com/cashubtc/cashu-ts/issues/1460)) ([4a19fee](https://github.com/cashubtc/cashu-ts/commit/4a19feea5827e1f189a2652eafb193da3c2b3b74))
+* **payment-request:** read null optional fields as absent in creqA requests and received proofs ([#1451](https://github.com/cashubtc/cashu-ts/issues/1451)) ([f20db4a](https://github.com/cashubtc/cashu-ts/commit/f20db4a73d4fb6fce14f3d7f082ee846d3647ffd))
+* **transport:** clamp Retry-After to the timer range ([#1500](https://github.com/cashubtc/cashu-ts/issues/1500)) ([3aaf729](https://github.com/cashubtc/cashu-ts/commit/3aaf7296127fd0b114552b734bc4196cc635fd48))
+* **utils:** check field types when decoding cashuA tokens ([#1455](https://github.com/cashubtc/cashu-ts/issues/1455)) ([fa1ba07](https://github.com/cashubtc/cashu-ts/commit/fa1ba0790b6bdc66f5b0556ea061c4744abcfda2))
+* **utils:** check proof field types in verifyReceivedProofs ([#1434](https://github.com/cashubtc/cashu-ts/issues/1434)) ([3012efc](https://github.com/cashubtc/cashu-ts/commit/3012efc2bcdb82b5cc8b5ab4a475e7c145616da1))
+* **utils:** let timers run when yielding between chunks ([#1510](https://github.com/cashubtc/cashu-ts/issues/1510)) ([92730ce](https://github.com/cashubtc/cashu-ts/commit/92730ce9da979333a49aa4058045e3ea4d03b222))
+* **utils:** read null spend_info members as absent in cashuA tokens ([#1459](https://github.com/cashubtc/cashu-ts/issues/1459)) ([c98d645](https://github.com/cashubtc/cashu-ts/commit/c98d645ce3cdb6f6258323dac079580076a04259))
+* **utils:** reject malformed proof JSON with CTSError ([#1504](https://github.com/cashubtc/cashu-ts/issues/1504)) ([cc577d4](https://github.com/cashubtc/cashu-ts/commit/cc577d41027bc9af899f7018b173eb9df828b662))
+* **utils:** reject malformed token and request input with CTSError ([#1449](https://github.com/cashubtc/cashu-ts/issues/1449)) ([2ac1b4d](https://github.com/cashubtc/cashu-ts/commit/2ac1b4d69c22b15b981f929b95fc06564a4e618b))
+* **utils:** throw CTSError when an nprofile cannot be encoded or decoded ([#1526](https://github.com/cashubtc/cashu-ts/issues/1526)) ([d5c09c2](https://github.com/cashubtc/cashu-ts/commit/d5c09c2a654041688381509fe719b87494c71380))
+* **utils:** wrap bech32m encode and decode errors in CTSError ([#1453](https://github.com/cashubtc/cashu-ts/issues/1453)) ([91da3aa](https://github.com/cashubtc/cashu-ts/commit/91da3aa38f1b5fb539372370dd1efb26910c558f))
+* **wallet:** bound blindingFactor digits in saved outputs ([#1503](https://github.com/cashubtc/cashu-ts/issues/1503)) ([a25abc4](https://github.com/cashubtc/cashu-ts/commit/a25abc497c921a29c255e997ca9c346c94d4c27e))
+* **wallet:** bound the keyset count in a KeyChain cache ([#1502](https://github.com/cashubtc/cashu-ts/issues/1502)) ([c2a6d87](https://github.com/cashubtc/cashu-ts/commit/c2a6d874203d2da5f7c4493147b5631f296aed34))
+* **wallet:** check secret length in bytes for every output built ([#1478](https://github.com/cashubtc/cashu-ts/issues/1478)) ([8f349be](https://github.com/cashubtc/cashu-ts/commit/8f349bec5532db995187ea6ce8a2bb6a3396f836))
+* **wallet:** check the melt change count before loading keysets ([#1505](https://github.com/cashubtc/cashu-ts/issues/1505)) ([16f3206](https://github.com/cashubtc/cashu-ts/commit/16f3206f828d47381b2001dfb316bbf16e59c869))
+* **wallet:** check the proof count before other receive work ([#1497](https://github.com/cashubtc/cashu-ts/issues/1497)) ([b204d2e](https://github.com/cashubtc/cashu-ts/commit/b204d2ec78e49ee044d12fa6f24c2681b3fc0df1))
+* **wallet:** clamp event timer delays to the timer range ([#1506](https://github.com/cashubtc/cashu-ts/issues/1506)) ([0d65cf6](https://github.com/cashubtc/cashu-ts/commit/0d65cf680f75492d2f862ed2ce02a4815987dc19))
+* **wallet:** keep merged and NIP-07 witnesses within the signature limit ([#1495](https://github.com/cashubtc/cashu-ts/issues/1495)) ([f135b9d](https://github.com/cashubtc/cashu-ts/commit/f135b9d57278e4962269791347ce2862c6441a1c))
+* **wallet:** keep NUT-29 quote checks within max_batch_size ([#1529](https://github.com/cashubtc/cashu-ts/issues/1529)) ([5a9cb23](https://github.com/cashubtc/cashu-ts/commit/5a9cb23f7a017d7ca32b481696622ae7c4d34bbb))
+* **wallet:** keep proofs skipped by requireDleq in sendOffline ([#1433](https://github.com/cashubtc/cashu-ts/issues/1433)) ([ff29497](https://github.com/cashubtc/cashu-ts/commit/ff29497661414a2aba92d57a73b50c7636769bb2))
+* **wallet:** keep the witness on a NUT-10 secret over the length limit ([#1522](https://github.com/cashubtc/cashu-ts/issues/1522)) ([342bdce](https://github.com/cashubtc/cashu-ts/commit/342bdce9bf2fed640c878d98aabd2e9d27416f55))
+* **wallet:** read the NUT-29 batch size on each quote watch poll ([#1533](https://github.com/cashubtc/cashu-ts/issues/1533)) ([0da2255](https://github.com/cashubtc/cashu-ts/commit/0da22559edd19cce2701e6b4d83da05662bbefea))
+* **wallet:** refuse oversized arrays when restoring a saved preview ([#1476](https://github.com/cashubtc/cashu-ts/issues/1476)) ([42abdc9](https://github.com/cashubtc/cashu-ts/commit/42abdc9260193c361d6c666b125def9e5f8c907f))
+* **wallet:** report caller-chosen counters and recovered quote keys through countersReserved ([#1473](https://github.com/cashubtc/cashu-ts/issues/1473)) ([11918ed](https://github.com/cashubtc/cashu-ts/commit/11918edd78996e302f1d91b1aba53ff808f2b8b5))
+* **wallet:** return copies of nested arrays from LockBuilder.toOptions ([#1462](https://github.com/cashubtc/cashu-ts/issues/1462)) ([c95e537](https://github.com/cashubtc/cashu-ts/commit/c95e537ddbaac135a4a546e9b00430392218c8d7))
+* **wallet:** split restore requests at max_array_length ([#1530](https://github.com/cashubtc/cashu-ts/issues/1530)) ([7b48ce8](https://github.com/cashubtc/cashu-ts/commit/7b48ce8c8bbcf7859a41c7baad1d88a99a68dd9b))
+* **wallet:** stop polling and loading once the caller aborts ([#1471](https://github.com/cashubtc/cashu-ts/issues/1471)) ([7b06616](https://github.com/cashubtc/cashu-ts/commit/7b066161e22cdd3274518ecb34b778a76bb0d8a3))
+* **wallet:** yield during recovery counter scans and accept a signal ([#1509](https://github.com/cashubtc/cashu-ts/issues/1509)) ([fba62bd](https://github.com/cashubtc/cashu-ts/commit/fba62bd0e3c5cfb9eb7eddb4e7b7f61d9c536a15))
+
+
+### Continuous Integration
+
+* **codecov:** report once both coverage uploads are in ([#1422](https://github.com/cashubtc/cashu-ts/issues/1422)) ([811335f](https://github.com/cashubtc/cashu-ts/commit/811335f0540a0fb354d9c953557110770ed63e57))
+
 ## [5.0.0-rc.13](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.12...v5.0.0-rc.13) (2026-11-10)
 
 
