@@ -10,6 +10,11 @@ import {
   serializeNutrootLeafHex,
   type NutrootLeaf,
 } from '../../src/crypto/nutroot';
+import {
+  inputsForPayload,
+  proofInputContextKey,
+  verifyTransactionInputWitness,
+} from '../../src/crypto/transcript';
 import { bytesToHex, hexToBytes, deriveKeysetId, verifyReceivedProofs } from '../../src/utils';
 
 const priv = (n: number) => n.toString(16).padStart(64, '0');
@@ -216,6 +221,37 @@ describe('nutroot edge cases', () => {
       expect(melt).not.toHaveBeenCalled();
     },
   );
+
+  test('a melt with fee options signs the selected fee index', async () => {
+    const w = wallet();
+    const proof = { ...proofFor({ secret: pub(4) }), spend_info: { k: priv(4) } };
+    const quote = {
+      quote: 'onchain-1',
+      amount: Amount.from(1),
+      unit: 'sat',
+      state: MeltQuoteState.UNPAID,
+      fee_options: [
+        { fee_index: 0, fee_reserve: Amount.zero(), estimated_blocks: 1 },
+        { fee_index: 1, fee_reserve: Amount.zero(), estimated_blocks: 6 },
+      ],
+    };
+    const preview = await w.prepareMelt('onchain', quote, [proof]);
+    const melt = vi.spyOn(w.mint, 'melt').mockRejectedValue(new Error('stop'));
+    await expect(
+      w.completeMelt(preview, undefined, { extraPayload: { fee_index: 1 } }),
+    ).rejects.toThrow();
+    const [input] = (melt.mock.calls[0][1] as { inputs: Proof[] }).inputs;
+    const digestFor = (feeIndex: number) =>
+      inputsForPayload({
+        inputs: [proof],
+        outputs: [],
+        meltQuote: { quoteId: quote.quote, amount: 1, feeIndex },
+      }).proofs.get(proofInputContextKey({ keysetId: id, secret: proof.secret }))!.digest;
+    const verifies = (feeIndex: number) =>
+      verifyTransactionInputWitness(digestFor(feeIndex), pub(4), input.witness as string);
+    expect(verifies(1)).toBe(true);
+    expect(verifies(0)).toBe(false);
+  });
 
   test.each(['prepare', 'run'] as const)(
     'pins locked-request output encoding across refresh during %s',

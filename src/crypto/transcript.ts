@@ -349,7 +349,7 @@ export function meltQuoteOutput(
   const amount = Amount.from(quote.amount);
   if (quote.fee_options?.length) {
     const option = quote.fee_options.find((o) => o.fee_index === feeIndex);
-    if (!option) {
+    if (feeIndex === undefined || !option) {
       throw new CTSError('A melt quote with fee options needs the selected feeIndex');
     }
     return { amount: amount.add(option.fee_reserve), feeIndex };
@@ -375,9 +375,9 @@ export function digestForPayload(payload: PayloadShape): Uint8Array {
  * A payload wire shape as a {@link TransactionShape}.
  */
 function payloadToTransaction(payload: PayloadShape): TransactionShape {
-  const quote = <T extends { quoteId: string; amount: AmountLike }>(q: T) => ({
-    ...q,
+  const quote = (q: { quoteId: string; amount: AmountLike }): TranscriptQuote => ({
     amount: Amount.from(q.amount).toBigInt(),
+    quoteId: q.quoteId,
   });
   return {
     ...(payload.inputs && {
@@ -402,7 +402,9 @@ function payloadToTransaction(payload: PayloadShape): TransactionShape {
         B_: o.B_,
       })),
     }),
-    ...(payload.meltQuote && { meltQuoteOutputs: [quote(payload.meltQuote)] }),
+    ...(payload.meltQuote && {
+      meltQuoteOutputs: [{ ...quote(payload.meltQuote), feeIndex: payload.meltQuote.feeIndex }],
+    }),
   };
 }
 
