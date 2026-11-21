@@ -223,7 +223,7 @@ export class MintInfo {
         ? {
             cached_endpoints: Array.isArray(nut19.cached_endpoints)
               ? MintInfo.capList(nut19.cached_endpoints, 'nuts.19.cached_endpoints', logger).filter(
-                  (e) => isRecord(e),
+                  (e) => isRecord(e) && typeof e.method === 'string' && typeof e.path === 'string',
                 )
               : [],
           }
