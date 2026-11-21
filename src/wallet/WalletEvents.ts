@@ -11,7 +11,7 @@ import type {
   MintQuoteBolt11Response,
 } from '../model/types';
 import type { KeyChainCache } from '../model/types/keyset';
-import { assertSpendableVersion, normalizeMeltPreimage } from '../utils';
+import { MAX_TIMER_DELAY_MS, assertSpendableVersion, normalizeMeltPreimage } from '../utils';
 
 import { type OperationCounters } from './CounterSource';
 import type { Wallet } from './Wallet';
@@ -164,7 +164,11 @@ export class WalletEvents {
 
       // Start a timeout if requested.
       if (opts?.timeoutMs && opts.timeoutMs > 0) {
-        to = setTimeout(() => cleanup(new CTSError(timeoutMsg)), opts.timeoutMs);
+        // Past the timer range setTimeout fires at once, which would turn a long wait into none.
+        to = setTimeout(
+          () => cleanup(new CTSError(timeoutMsg)),
+          Math.min(opts.timeoutMs, MAX_TIMER_DELAY_MS),
+        );
       }
 
       // Subscribe to the actual event. Canceller returned is saved to cancelP.
@@ -548,7 +552,7 @@ export class WalletEvents {
       if (opts?.timeoutMs && opts.timeoutMs > 0) {
         to = setTimeout(
           () => cleanup(new CTSError('Timeout waiting for any mint paid')),
-          opts.timeoutMs,
+          Math.min(opts.timeoutMs, MAX_TIMER_DELAY_MS),
         );
       }
 

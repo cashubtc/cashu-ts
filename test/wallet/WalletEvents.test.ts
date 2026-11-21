@@ -1147,6 +1147,15 @@ describe('WalletEvents', () => {
   });
 
   describe('waitUntilPaid timeout handling', () => {
+    it('treats a timeout past the timer range as long, not immediate', async () => {
+      // Real timers: setTimeout runs an out-of-range delay at once, which is the case under test.
+      const p = events.onceMintPaid('inf', { timeoutMs: Infinity });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const ws = mock.mint.webSocketConnection!;
+      ws.emit('bolt11_mint_quote', { quote: 'inf', state: 'PAID', amount: 1 });
+      await expect(p).resolves.toMatchObject({ quote: 'inf' });
+    });
+
     it('does not arm a timeout when timeoutMs is non-positive', async () => {
       vi.useFakeTimers();
       const p = events.onceMintPaid('neg', { timeoutMs: -1 });
