@@ -196,6 +196,7 @@ function fromVectorTx(tx: any): TransactionShape {
     meltQuoteOutputs: tx.melt_quote_outputs?.map((q: any) => ({
       amount: BigInt(q.amount),
       quoteId: q.quote_id,
+      feeIndex: q.fee_index,
     })),
   };
 }
@@ -363,7 +364,7 @@ for (const name of ['swap', 'mint', 'melt', 'melt_with_change'] as const) {
 if (d.transcript.swap.input_id !== d.transcript.melt.input_id)
   throw new Error('swap and melt spend the same proof, so their input ids must match');
 d.transcript.comment =
-  'Transaction transcript (NUT-00). digest = SHA256(TLV stream). Each input signs tagged_hash("Cashu_TransactionInput", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers (high nibble is the section, 1 inputs, 2 outputs): 11 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 12 mint quote input (01 amount, 02 quote id utf8, 03 lock key, 04 issued), 21 blinded output (01 amount, 02 keyset id, 03 SHA256(B_)), 22 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.';
+  'Transaction transcript (NUT-00). digest = SHA256(TLV stream). Each input signs tagged_hash("Cashu_TransactionInput", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers (high nibble is the section, 1 inputs, 2 outputs): 11 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 12 mint quote input (01 amount, 02 quote id utf8, 03 lock key, 04 issued), 21 blinded output (01 amount, 02 keyset id, 03 SHA256(B_)), 22 melt quote output (01 amount, 02 quote id utf8, 03 fee index when the quote offers fee options). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.';
 
 // Two proof inputs in one transaction pin the distinction between the shared transaction digest
 // and each input's signing digest.
@@ -527,6 +528,44 @@ d.transcript.comment =
     signature: bytesToHex(schnorr.sign(digestForInput, hexToBytes(lock.privkey), AUX0)),
     blind_signatures: txVector.blinded_outputs.map((o: any) => mintSign(o.amount, o.B_)),
   };
+}
+
+// Fee options (NUT-30): two options share a reserve, so only the committed fee index tells the
+// two selections apart.
+{
+  const quote = {
+    amount: 5,
+    fee_options: [
+      { fee_index: 0, fee_reserve: 3, estimated_blocks: 1 },
+      { fee_index: 1, fee_reserve: 3, estimated_blocks: 6 },
+    ],
+  };
+  const selections = quote.fee_options.map((option) => {
+    const txVector = {
+      proof_inputs: d.transcript.melt.tx.proof_inputs,
+      melt_quote_outputs: [
+        {
+          amount: quote.amount + option.fee_reserve,
+          quote_id: 'quote-melt-0003',
+          fee_index: option.fee_index,
+        },
+      ],
+    };
+    const tx = fromVectorTx(txVector);
+    const transcript = buildTransactionTranscript(tx);
+    const digest = transactionDigest(tx);
+    const container = transcript.subarray(0, 3 + ((transcript[1] << 8) | transcript[2]));
+    return {
+      tx: txVector,
+      transcript: bytesToHex(transcript),
+      digest: bytesToHex(digest),
+      input_id: bytesToHex(sha256(container)),
+      input_digest: bytesToHex(inputDigest(digest, container)),
+    };
+  });
+  if (selections[0].input_digest === selections[1].input_digest)
+    throw new Error('melt_fee_options: the two selections must sign different digests');
+  d.transcript.melt_fee_options = { quote, selections };
 }
 
 // Mixed keysets (NUT-10): a v3 input and a pre-v3 input in one transaction, each container
