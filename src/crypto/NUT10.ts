@@ -2,6 +2,7 @@ import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
 import { hasLoneSurrogate } from '../utils/bytes';
+import { MAX_SECRET_LENGTH } from '../utils/limits';
 
 export type SecretKind = 'P2PK' | 'HTLC' | (string & {}); // union with any string
 
@@ -41,10 +42,16 @@ export function createSecret(kind: SecretKind, data: string, tags?: string[][]):
  *
  * @param secret - The Proof secret.
  * @returns Secret object.
- * @throws If the JSON is invalid or NUT-10 secret is malformed.
+ * @throws If the secret is oversized, the JSON is invalid or the NUT-10 secret is malformed.
  */
 export function parseSecret(secret: string | Secret): Secret {
   let parsed: unknown;
+  // Bound the parse work up front; the mint caps secrets at this length too.
+  if (typeof secret === 'string' && secret.length > MAX_SECRET_LENGTH) {
+    throw new CTSError(
+      `Secret too long (${secret.length} characters), maximum is ${MAX_SECRET_LENGTH}`,
+    );
+  }
   // Ill-formed UTF-16 would alias this secret with the one spelling its U+FFFD replacement.
   if (typeof secret === 'string' && hasLoneSurrogate(secret)) {
     throw new CTSError('Invalid NUT-10 secret Unicode');
