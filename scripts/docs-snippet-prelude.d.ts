@@ -89,6 +89,7 @@ declare const walletB: Wallet;
 declare const myKeyChain: import('@cashu/cashu-ts').KeyChain;
 declare const offer: string;
 declare const tokenString: string;
+declare const requestString: string;
 declare const pastedText: string;
 declare const state: Awaited<ReturnType<Wallet['checkProofsStates']>>[number];
 declare const ohttpFetch: import('@cashu/cashu-ts').RequestFetch;
@@ -110,3 +111,7 @@ declare const db: { incrementAndGetPrevious(key: string, n: number): Promise<num
 
 // UI hook used by the restore recipe.
 declare function render(...args: unknown[]): void;
+
+// QR hooks used by the animated QR recipe.
+declare function showQr(frame: string): void;
+declare function onQrScanned(callback: (text: string) => void): void;
