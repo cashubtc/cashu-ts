@@ -46,7 +46,14 @@ export type OIDCAuthOptions = {
    * Observe provider tokens and whether they came from a sign-in or refresh.
    */
   onTokens?: (t: TokenResponse, origin: TokenOrigin) => void | Promise<void>;
+  /**
+   * Per-request timeout in milliseconds for discovery and token requests, default 300000 (5
+   * minutes). Covers the body read too. `Infinity` disables it.
+   */
+  requestTimeout?: number;
 };
+
+const DEFAULT_REQUEST_TIMEOUT_MS = 300_000;
 
 /**
  * Assert a provider-supplied URL uses an http(s) scheme.
@@ -71,6 +78,11 @@ export class OIDCAuth {
   private readonly discoveryUrl: string;
   private readonly secureDiscovery: boolean;
   private readonly logger: Logger;
+<<<<<<< HEAD
+=======
+  private readonly fetch: OIDCFetch;
+  private readonly requestTimeout: number;
+>>>>>>> 691f48e (fix(auth): time out OIDC requests, configurable with requestTimeout (#1528))
 
   private clientId: string;
   private scope: string;
@@ -106,6 +118,11 @@ export class OIDCAuth {
     this.clientId = opts?.clientId ?? 'cashu-client';
     this.scope = opts?.scope ?? 'openid';
     this.onTokens = opts?.onTokens;
+    const timeout: unknown = opts?.requestTimeout ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    if (typeof timeout !== 'number' || !(timeout > 0)) {
+      throw new CTSError('OIDCAuth: requestTimeout must be a positive number');
+    }
+    this.requestTimeout = timeout;
   }
 
   setClient(id: string): void {
@@ -134,11 +151,18 @@ export class OIDCAuth {
 
   async loadConfig(): Promise<OIDCConfig> {
     if (this.config) return this.config;
+<<<<<<< HEAD
     const res = await fetch(this.discoveryUrl, {
       method: 'GET',
       headers: { Accept: 'application/json' },
     });
     const text = await res.text();
+=======
+    const { res, text } = await this.fetchText(this.discoveryUrl, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+>>>>>>> 691f48e (fix(auth): time out OIDC requests, configurable with requestTimeout (#1528))
     let json: unknown;
     let parseError: unknown;
     try {
@@ -491,7 +515,11 @@ export class OIDCAuth {
   ): Promise<TSuccess> {
     try {
       // this.logger.debug('OIDCAuth Request', { endpoint });
+<<<<<<< HEAD
       const res = await fetch(endpoint, {
+=======
+      const { res, text } = await this.fetchText(endpoint, {
+>>>>>>> 691f48e (fix(auth): time out OIDC requests, configurable with requestTimeout (#1528))
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -500,7 +528,10 @@ export class OIDCAuth {
         body: formBody,
         redirect: 'error', // never follow a redirect with a form body
       });
+<<<<<<< HEAD
       const text = await res.text();
+=======
+>>>>>>> 691f48e (fix(auth): time out OIDC requests, configurable with requestTimeout (#1528))
       let json: unknown;
       let parseError: unknown;
       try {
@@ -530,6 +561,7 @@ export class OIDCAuth {
   ): Promise<T | TokenResponse> {
     try {
       // this.logger.debug('OIDCAuth Request', { endpoint });
+<<<<<<< HEAD
       const res = await fetch(endpoint, {
         method: 'POST',
         signal,
@@ -541,6 +573,21 @@ export class OIDCAuth {
         redirect: 'error', // never follow a redirect with a form body
       });
       const text = await res.text();
+=======
+      const { res, text } = await this.fetchText(
+        endpoint,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Accept: 'application/json',
+          },
+          body: formBody,
+          redirect: 'error', // never follow a redirect with a form body
+        },
+        signal,
+      );
+>>>>>>> 691f48e (fix(auth): time out OIDC requests, configurable with requestTimeout (#1528))
       let json: unknown;
       try {
         json = text ? JSON.parse(text) : undefined;
@@ -556,6 +603,58 @@ export class OIDCAuth {
   }
 
   /**
+<<<<<<< HEAD
+=======
+   * Fetches and reads the body under `requestTimeout`; `signal` can end it sooner.
+   */
+  private async fetchText(
+    url: string,
+    init: RequestInit,
+    signal?: AbortSignal,
+  ): Promise<{ res: Response; text: string }> {
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    if (signal?.aborted) abort();
+    signal?.addEventListener('abort', abort, { once: true });
+    let timedOut = false;
+    const timer = Number.isFinite(this.requestTimeout)
+      ? setTimeout(
+          () => {
+            timedOut = true;
+            abort();
+          },
+          Math.min(this.requestTimeout, MAX_TIMER_DELAY_MS),
+        )
+      : undefined;
+    try {
+      const res = await this.fetch(url, { ...init, signal: controller.signal });
+      return { res, text: await this.readBody(res, controller.signal) };
+    } catch (err) {
+      if (!timedOut) throw err;
+      throw new CTSError(`OIDCAuth: request timed out after ${this.requestTimeout}ms`, {
+        cause: err,
+      });
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', abort);
+    }
+  }
+
+  /**
+   * Reads a response body under the shared size cap. Any read failure surfaces as a CTSError
+   * prefixed like every other error out of this class.
+   */
+  private async readBody(res: Response, signal?: AbortSignal): Promise<string> {
+    try {
+      return await readBodyText(res, DEFAULT_MAX_RESPONSE_BYTES, signal);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new CTSError(`OIDCAuth: ${message}`, { cause: err });
+    }
+  }
+
+  /**
+>>>>>>> 691f48e (fix(auth): time out OIDC requests, configurable with requestTimeout (#1528))
    * Waits ms. `onEnd` receives a callback that ends the wait early and clears the timer.
    */
   private sleep(ms: number, onEnd?: (end: () => void) => void): Promise<void> {

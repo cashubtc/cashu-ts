@@ -1030,10 +1030,170 @@ describe('OIDCAuth: request policy', () => {
     return redirects;
   }
 
+<<<<<<< HEAD
   /**
    * Records every setTimeout delay and fires the callback at once.
    */
   function recordTimeouts(): number[] {
+=======
+  test('token endpoint requests fail rather than follow a redirect', async () => {
+    const DEVICE = 'http://oidc/device';
+    const { fetch, inits } = captureFetch({
+      [DISC]: JSON.stringify({ token_endpoint: TOKEN, device_authorization_endpoint: DEVICE }),
+      [DEVICE]: JSON.stringify({
+        device_code: 'dev',
+        user_code: 'U',
+        verification_uri: 'http://oidc/verify',
+      }),
+      [TOKEN]: JSON.stringify({ access_token: 'ok' }),
+    });
+    const oidc = new OIDCAuth(DISC, { fetch });
+    vi.spyOn(oidc as unknown as { sleep: () => Promise<void> }, 'sleep').mockResolvedValue();
+
+    await oidc.passwordGrant('user', 'pass'); // strict path
+    await (await oidc.startDeviceAuth(0)).poll(); // strict start, loose poll
+
+    const posts = inits.filter((i) => i?.method === 'POST');
+    expect(posts).toHaveLength(3);
+    for (const init of posts) expect(init?.redirect).toBe('error');
+  });
+
+  test('loadConfig rejects a discovery response larger than the body cap', async () => {
+    const { fetch } = captureFetch(
+      { [DISC]: JSON.stringify({ token_endpoint: TOKEN }) },
+      { 'Content-Length': OVERSIZED },
+    );
+    const oidc = new OIDCAuth(DISC, { fetch });
+    await expect(oidc.loadConfig()).rejects.toThrow('OIDCAuth: response body exceeds');
+  });
+
+  test.each([
+    ['an Error', new Error('socket closed')],
+    ['a non-Error value', 'socket closed'],
+  ])('a body read that throws %s surfaces as a prefixed CTSError', async (_name, thrownByRead) => {
+    const fetch = (async () => {
+      const res = new Response('{}', { status: 200 });
+      Object.defineProperty(res, 'body', {
+        get() {
+          // eslint-disable-next-line @typescript-eslint/only-throw-error -- the non-Error arm is the case under test
+          throw thrownByRead;
+        },
+      });
+      return res;
+    }) as typeof globalThis.fetch;
+    const oidc = new OIDCAuth(DISC, { fetch });
+    const thrown = await oidc.loadConfig().catch((e: unknown) => e);
+    expect(thrown).toBeInstanceOf(CTSError);
+    expect((thrown as Error).message).toBe('OIDCAuth: socket closed');
+  });
+
+  test('postFormStrict rejects a token response larger than the body cap', async () => {
+    const { fetch } = captureFetch(
+      { [TOKEN]: JSON.stringify({ access_token: 'ok' }) },
+      { 'Content-Length': OVERSIZED },
+    );
+    const oidc = new OIDCAuth(DISC, { fetch });
+    await expect(oidc['postFormStrict'](TOKEN, 'grant_type=x')).rejects.toThrow(
+      'OIDCAuth: response body exceeds',
+    );
+  });
+
+  test('postFormLoose reports a response larger than the body cap as a network error', async () => {
+    const { fetch } = captureFetch(
+      { [TOKEN]: JSON.stringify({ access_token: 'ok' }) },
+      { 'Content-Length': OVERSIZED },
+    );
+    const oidc = new OIDCAuth(DISC, { fetch });
+    const res = await oidc['postFormLoose'](TOKEN, 'grant_type=x');
+    expect(res).toMatchObject({ error: 'network_error' });
+  });
+
+  /**
+   * Fetch stub whose request to `hang` never answers until its signal aborts.
+   */
+  function hangOn(hang: string, bodies: Record<string, string> = {}): typeof fetch {
+    return async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      if (String(input) !== hang) return new Response(bodies[String(input)], { status: 200 });
+      return new Promise<Response>((_, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+      });
+    };
+  }
+
+  test('loadConfig times out when discovery never answers', async () => {
+    const oidc = new OIDCAuth(DISC, { fetch: hangOn(DISC), requestTimeout: 20 });
+    await expect(oidc.loadConfig()).rejects.toThrow('OIDCAuth: request timed out after 20ms');
+  });
+
+  test('a token request times out when its body never finishes', async () => {
+    let stalled: ((r: { done: boolean }) => void) | undefined;
+    const release = vi.fn(() => {
+      stalled?.({ done: true });
+      return Promise.resolve();
+    });
+    const reader = { read: () => new Promise((resolve) => (stalled = resolve)), cancel: release };
+    const hung = {
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      body: { getReader: () => reader, cancel: release },
+    } as unknown as Response;
+    const { fetch: answer } = captureFetch({ [DISC]: JSON.stringify({ token_endpoint: TOKEN }) });
+    const oidc = new OIDCAuth(DISC, {
+      fetch: async (input, init) => (String(input) === TOKEN ? hung : answer(input, init)),
+      requestTimeout: 20,
+    });
+
+    await expect(oidc.passwordGrant('user', 'pass')).rejects.toThrow(
+      'OIDCAuth: request timed out after 20ms',
+    );
+    expect(release).toHaveBeenCalled();
+  });
+
+  test('device polling fails once a token request times out', async () => {
+    const DEVICE = 'http://oidc/device';
+    const fetch = hangOn(TOKEN, {
+      [DISC]: JSON.stringify({ token_endpoint: TOKEN, device_authorization_endpoint: DEVICE }),
+      [DEVICE]: JSON.stringify({
+        device_code: 'dev',
+        user_code: 'U',
+        verification_uri: 'http://oidc/verify',
+      }),
+    });
+    const oidc = new OIDCAuth(DISC, { fetch, requestTimeout: 20 });
+    vi.spyOn(oidc as unknown as { sleep: () => Promise<void> }, 'sleep').mockResolvedValue();
+
+    const start = await oidc.startDeviceAuth(0);
+    await expect(start.poll()).rejects.toThrow('request timed out after 20ms');
+  });
+
+  test('a token poll with an already-aborted signal is never sent', async () => {
+    let sent = false;
+    const fetch = (async (_input: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) => {
+      if (init?.signal?.aborted) throw new Error('aborted');
+      sent = true;
+      return new Response('{}', { status: 200 });
+    }) as typeof globalThis.fetch;
+    const oidc = new OIDCAuth(DISC, { fetch });
+    const ac = new AbortController();
+    ac.abort();
+
+    const res = await oidc['postFormLoose'](TOKEN, 'grant_type=x', ac.signal);
+    expect(res).toMatchObject({ error: 'network_error' });
+    expect(sent).toBe(false);
+  });
+
+  test.each([0, -1, Number.NaN, '5' as unknown as number])(
+    'rejects requestTimeout %s',
+    (requestTimeout) => {
+      expect(() => new OIDCAuth(DISC, { requestTimeout })).toThrow(
+        'OIDCAuth: requestTimeout must be a positive number',
+      );
+    },
+  );
+
+  test('sleep keeps the scheduled delay within the timer range', async () => {
+>>>>>>> 691f48e (fix(auth): time out OIDC requests, configurable with requestTimeout (#1528))
     const delays: number[] = [];
     vi.spyOn(globalThis, 'setTimeout').mockImplementation(((cb: () => void, ms?: number) => {
       delays.push(ms ?? 0);
@@ -1065,10 +1225,32 @@ describe('OIDCAuth: request policy', () => {
   });
 
   test('startDeviceAuth keeps an oversized provider interval within the timer range', async () => {
+<<<<<<< HEAD
     useProvider();
     server.use(http.post(DEVICE, () => HttpResponse.json({ ...deviceStart, interval: 2_147_484 })));
     const delays = recordTimeouts();
     const oidc = new OIDCAuth(DISC);
+=======
+    const DEVICE = 'http://oidc/device';
+    const { fetch } = captureFetch({
+      [DISC]: JSON.stringify({ token_endpoint: TOKEN, device_authorization_endpoint: DEVICE }),
+      [DEVICE]: JSON.stringify({
+        device_code: 'dev',
+        user_code: 'UCODE',
+        verification_uri: 'http://oidc/verify',
+        interval: 2_147_484,
+      }),
+      [TOKEN]: JSON.stringify({ access_token: 'ok' }),
+    });
+    const delays: number[] = [];
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((cb: () => void, ms?: number) => {
+      delays.push(ms ?? 0);
+      cb();
+      return 0;
+    }) as unknown as typeof setTimeout);
+    // The stub fires every timer at once, so keep the request timeout out of it.
+    const oidc = new OIDCAuth(DISC, { fetch, requestTimeout: Infinity });
+>>>>>>> 691f48e (fix(auth): time out OIDC requests, configurable with requestTimeout (#1528))
 
     const start = await oidc.startDeviceAuth();
     await start.poll();
@@ -1081,9 +1263,30 @@ describe('OIDCAuth: request policy', () => {
     ['a non-numeric caller interval falls back to the default', 'abc' as unknown as number, 5000],
     ['a huge caller interval stays within the timer range', 2_147_484, 2_147_483_647],
   ])('startDeviceAuth: %s', async (_name, intervalSec, expectedMs) => {
+<<<<<<< HEAD
     useProvider();
     const delays = recordTimeouts();
     const oidc = new OIDCAuth(DISC);
+=======
+    const DEVICE = 'http://oidc/device';
+    const { fetch } = captureFetch({
+      [DISC]: JSON.stringify({ token_endpoint: TOKEN, device_authorization_endpoint: DEVICE }),
+      [DEVICE]: JSON.stringify({
+        device_code: 'dev',
+        user_code: 'U',
+        verification_uri: 'http://oidc/verify',
+      }),
+      [TOKEN]: JSON.stringify({ access_token: 'ok' }),
+    });
+    const delays: number[] = [];
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((cb: () => void, ms?: number) => {
+      delays.push(ms ?? 0);
+      cb();
+      return 0;
+    }) as unknown as typeof setTimeout);
+    // The stub fires every timer at once, so keep the request timeout out of it.
+    const oidc = new OIDCAuth(DISC, { fetch, requestTimeout: Infinity });
+>>>>>>> 691f48e (fix(auth): time out OIDC requests, configurable with requestTimeout (#1528))
 
     await (await oidc.startDeviceAuth(intervalSec)).poll();
 
