@@ -1,6 +1,6 @@
 {
   "name": "@cashu/cashu-ts",
-  "version": "5.0.0-rc.13",
+  "version": "5.0.0-rc.14",
   "description": "cashu library for communicating with a cashu mint",
   "type": "module",
   "sideEffects": false,
