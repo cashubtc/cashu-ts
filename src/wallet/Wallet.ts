@@ -2269,6 +2269,8 @@ class Wallet {
   /**
    * Regenerates.
    *
+   * @remarks
+   * Sends one request per `max_array_length` outputs (the mint's, or 500 when unadvertised).
    * @param start Set starting point for count (first cycle for each keyset should usually be 0)
    * @param count Set number of blinded messages that should be generated.
    * @param options.keysetId Set a custom keysetId to restore from. @see `keyChain)`
@@ -2290,6 +2292,7 @@ class Wallet {
     }
     const keyset = this.getKeyset(scanId);
 
+<<<<<<< HEAD
     // create deterministic blank outputs for unknown restore amounts
     // Note: zero amount + zero denomination passes splitAmount validation
     const zeros = Array(count).fill(0);
@@ -2299,6 +2302,47 @@ class Wallet {
       start,
       keyset,
       zeros,
+=======
+    // create deterministic blank outputs for unknown restore amounts, a chunk at a time so a
+    // BLS range does not hold the thread. Zero amount + zero denomination passes splitAmount.
+    const outputData: OutputDataLike[] = [];
+    for (let offset = 0; offset < count; offset += YIELD_CHUNK_SIZE) {
+      this.throwIfAborted(config?.signal);
+      if (offset > 0) await yieldToEventLoop();
+      this.throwIfAborted(config?.signal);
+      const zeros = Array(Math.min(YIELD_CHUNK_SIZE, count - offset)).fill(0);
+      for (const d of this._outputDataCreator.createDeterministicData(
+        0,
+        seed,
+        start + offset,
+        keyset,
+        zeros,
+      )) {
+        outputData.push(d);
+      }
+    }
+
+    // One request per maxArrayLength outputs, merged so pairing by B_ still covers the whole range
+    let outputs: SerializedBlindedMessage[] = [];
+    let signatures: SerializedBlindedSignature[] = [];
+    const limit = this.maxArrayLength;
+    for (let i = 0; i < outputData.length; i += limit) {
+      const part = await this.mint.restore(
+        { outputs: outputData.slice(i, i + limit).map((d) => d.blindedMessage) },
+        { signal: config?.signal },
+      );
+      outputs = outputs.concat(part.outputs);
+      signatures = signatures.concat(part.signatures);
+    }
+    const response = { outputs, signatures };
+    await this._ensureKeysetsForSignatures(response.signatures);
+    // counters here are contiguous from `start`, so the index maps straight onto one
+    const { proofs, lastIndex } = await proofsFromRestoreResponse(
+      outputData,
+      response,
+      (id) => this.keysetForSignature(id),
+      { signal: config?.signal },
+>>>>>>> 7b48ce8 (fix(wallet): split restore requests at max_array_length (#1530))
     );
 
     const { outputs, signatures } = await this.mint.restore({
