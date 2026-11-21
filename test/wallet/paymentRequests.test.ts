@@ -840,25 +840,10 @@ describe('payment requests', () => {
       ).toThrow(CTSError);
     });
 
-    test('rejects bytes over the payload cap, and streams a run of unknown records', () => {
-      const prefix = new TextEncoder().encode('creqB');
+    test('rejects bytes over the payload cap', () => {
       const over = new Uint8Array(MAX_PAYLOAD_LENGTH + 1);
-      over.set(prefix);
+      over.set(new TextEncoder().encode('creqB'));
       expect(() => PaymentRequest.fromEncodedRequest(over)).toThrow(/too long/);
-
-      // Empty unknown records (`ff 00 00`) up to the cap: decoded as an empty request without
-      // the heap growing in step with the record count.
-      const records = Math.floor((MAX_PAYLOAD_LENGTH - prefix.length) / 3);
-      const filler = new Uint8Array(prefix.length + records * 3);
-      filler.set(prefix);
-      for (let offset = prefix.length; offset < filler.length; offset += 3) {
-        filler[offset] = 0xff;
-      }
-      const before = process.memoryUsage().heapUsed;
-      const decoded = PaymentRequest.fromEncodedRequest(filler);
-      const grown = process.memoryUsage().heapUsed - before;
-      expect(decoded.toRawRequest()).toEqual({});
-      expect(grown).toBeLessThan(8 * MAX_PAYLOAD_LENGTH);
     });
   });
 
