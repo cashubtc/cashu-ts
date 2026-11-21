@@ -1407,6 +1407,7 @@ export type OIDCAuthOptions = {
     scope?: string;
     logger?: Logger;
     onTokens?: (t: TokenResponse, origin: TokenOrigin) => void | Promise<void>;
+    requestTimeout?: number;
 };
 
 // @public (undocumented)

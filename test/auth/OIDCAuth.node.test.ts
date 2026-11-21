@@ -1031,7 +1031,8 @@ describe('OIDCAuth: request policy', () => {
   }
 
   /**
-   * Records every setTimeout delay and fires the callback at once.
+   * Records every setTimeout delay and fires the callback at once, so callers disable the request
+   * timeout.
    */
   function recordTimeouts(): number[] {
     const delays: number[] = [];
@@ -1056,7 +1057,7 @@ describe('OIDCAuth: request policy', () => {
 
   test('sleep keeps the scheduled delay within the timer range', async () => {
     const delays = recordTimeouts();
-    const oidc = new OIDCAuth(DISC);
+    const oidc = new OIDCAuth(DISC, { requestTimeout: Infinity });
 
     await oidc['sleep'](2_147_484 * 1000);
     await oidc['sleep'](1000);
@@ -1068,7 +1069,7 @@ describe('OIDCAuth: request policy', () => {
     useProvider();
     server.use(http.post(DEVICE, () => HttpResponse.json({ ...deviceStart, interval: 2_147_484 })));
     const delays = recordTimeouts();
-    const oidc = new OIDCAuth(DISC);
+    const oidc = new OIDCAuth(DISC, { requestTimeout: Infinity });
 
     const start = await oidc.startDeviceAuth();
     await start.poll();
@@ -1083,7 +1084,7 @@ describe('OIDCAuth: request policy', () => {
   ])('startDeviceAuth: %s', async (_name, intervalSec, expectedMs) => {
     useProvider();
     const delays = recordTimeouts();
-    const oidc = new OIDCAuth(DISC);
+    const oidc = new OIDCAuth(DISC, { requestTimeout: Infinity });
 
     await (await oidc.startDeviceAuth(intervalSec)).poll();
 
@@ -1096,12 +1097,75 @@ describe('OIDCAuth: request policy', () => {
   ])('devicePoll: %s', async (_name, intervalSec, expectedMs) => {
     useProvider();
     const delays = recordTimeouts();
-    const oidc = new OIDCAuth(DISC);
+    const oidc = new OIDCAuth(DISC, { requestTimeout: Infinity });
 
     await oidc.devicePoll('dev', intervalSec);
 
     expect(delays).toEqual([expectedMs]);
   });
+
+  /**
+   * Global fetch stub whose request to `hang` never answers until its signal aborts.
+   */
+  function hangOn(hang: string): void {
+    const real = globalThis.fetch;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      if (String(input) !== hang) return real(input, init);
+      return new Promise<Response>((_, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+      });
+    });
+  }
+
+  test('loadConfig times out when discovery never answers', async () => {
+    hangOn(DISC);
+    const oidc = new OIDCAuth(DISC, { requestTimeout: 20 });
+    await expect(oidc.loadConfig()).rejects.toThrow('OIDCAuth: request timed out after 20ms');
+  });
+
+  test('a token request times out when the provider never answers', async () => {
+    useProvider();
+    hangOn(TOKEN);
+    const oidc = new OIDCAuth(DISC, { requestTimeout: 20 });
+    await expect(oidc.passwordGrant('user', 'pass')).rejects.toThrow(
+      'OIDCAuth: request timed out after 20ms',
+    );
+  });
+
+  test('device polling fails once a token request times out', async () => {
+    useProvider();
+    hangOn(TOKEN);
+    const oidc = new OIDCAuth(DISC, { requestTimeout: 20 });
+    vi.spyOn(oidc as unknown as { sleep: () => Promise<void> }, 'sleep').mockResolvedValue();
+
+    const start = await oidc.startDeviceAuth(0);
+    await expect(start.poll()).rejects.toThrow('request timed out after 20ms');
+  });
+
+  test('a token poll with an already-aborted signal is never sent', async () => {
+    let sent = false;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      if (init?.signal?.aborted) throw new Error('aborted');
+      sent = true;
+      return new Response('{}', { status: 200 });
+    });
+    const oidc = new OIDCAuth(DISC);
+    const ac = new AbortController();
+    ac.abort();
+
+    const res = await oidc['postFormLoose'](TOKEN, 'grant_type=x', ac.signal);
+    expect(res).toMatchObject({ error: 'network_error' });
+    expect(sent).toBe(false);
+  });
+
+  test.each([0, -1, Number.NaN, '5' as unknown as number])(
+    'rejects requestTimeout %s',
+    (requestTimeout) => {
+      expect(() => new OIDCAuth(DISC, { requestTimeout })).toThrow(
+        'OIDCAuth: requestTimeout must be a positive number',
+      );
+    },
+  );
 
   test('buildAuthCodeUrl warns about a PKCE method other than S256 and still sends it', async () => {
     useProvider();
