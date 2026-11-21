@@ -65,6 +65,20 @@ The result is the token's raw binary form (`craw` + `B` + CBOR). `getTokenMetada
 
 ## When `receive` throws
 
-`receive` throws a `CTSError` for a frame it cannot use: corrupt, from an unsupported format version, or from a different transfer. Usually you keep scanning. Never pass text that `isFrame` accepted to your token parser instead, even after a throw: NUT-16 forbids that fallback. For an unsupported version, tell the user the format is not supported. To switch to a new transfer, for example when the sender restarts with another token, call `decoder.reset()` first.
+`receive` throws a `CTSError` for a frame it cannot use: corrupt, from an unsupported format version, or from a different transfer. Usually you keep scanning. Never pass text that `isFrame` accepted to your token parser instead, even after a throw: NUT-16 forbids that fallback. A sender on a newer format version fails every frame, so if frames keep throwing, tell the user the code could not be read. To switch to a new transfer, for example when the sender restarts with another token, call `decoder.reset()` first.
 
 If the frames reassemble into a message that fails its checksum, `receive` throws and the decoder resets itself, so the next frames start the transfer again.
+
+## Payment requests
+
+`FountainEncoder.forPaymentRequest` takes a `creqA` or `creqb` string, or a `PaymentRequest`, and sends its raw binary form (`creqB` + TLV); a `creqb` string keeps its original bytes. The receiver passes the result to `decodePaymentRequest`, which accepts that form as well as a string. This is experimental: NUT-16 does not map payment requests yet, so the message format may change.
+
+```ts
+import { decodePaymentRequest, FountainDecoder, FountainEncoder } from '@cashu/cashu-ts';
+
+const encoder = FountainEncoder.forPaymentRequest(requestString, { fragmentSize: 183 });
+
+// Receiver, once the decoder is complete
+const decoder = new FountainDecoder();
+const request = decodePaymentRequest(decoder.result!);
+```

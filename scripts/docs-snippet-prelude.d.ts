@@ -89,6 +89,7 @@ declare const walletB: Wallet;
 declare const myKeyChain: import('@cashu/cashu-ts').KeyChain;
 declare const offer: string;
 declare const tokenString: string;
+declare const requestString: string;
 declare const pastedText: string;
 declare const state: Awaited<ReturnType<Wallet['checkProofsStates']>>[number];
 declare const ohttpFetch: import('@cashu/cashu-ts').RequestFetch;
