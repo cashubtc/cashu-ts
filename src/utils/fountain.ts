@@ -76,12 +76,12 @@ function setBit(bits: Uint32Array, index: number): void {
   bits[index >>> 5] |= 1 << (index & 31);
 }
 
-function xorInto(
-  target: Uint8Array | Uint32Array,
-  source: Uint8Array | Uint32Array,
-  from = 0,
-): void {
-  for (let i = from; i < target.length; i++) target[i] ^= source[i];
+function hasBit(bits: Uint32Array, index: number): boolean {
+  return (bits[index >>> 5] & (1 << (index & 31))) !== 0;
+}
+
+function xorInto(target: Uint8Array | Uint32Array, source: Uint8Array | Uint32Array): void {
+  for (let i = 0; i < target.length; i++) target[i] ^= source[i];
 }
 
 /**
@@ -302,7 +302,7 @@ export class FountainEncoder {
     const payload = frame.subarray(HEADER_LENGTH, HEADER_LENGTH + size);
     const selected = selectFragments(sequence, this.fragmentCount);
     for (let i = 0; i < this.fragmentCount; i++) {
-      if (selected[i >>> 5] & (1 << (i & 31))) {
+      if (hasBit(selected, i)) {
         xorInto(payload, this.fragments.subarray(i * size, (i + 1) * size));
       }
     }
@@ -376,22 +376,29 @@ export class FountainDecoder {
       this.transfer = transfer;
       this.equations = new Array<Equation | undefined>(transfer.count);
     }
-    const coefficients = selectFragments(sequence, transfer.count);
-    // Reduce against stored rows, lowest pivot first; a row only has bits at or above its pivot.
-    for (let w = 0; w < coefficients.length; w++) {
-      while (coefficients[w] !== 0) {
-        const pivot = (w << 5) + 31 - Math.clz32(coefficients[w] & -coefficients[w]);
-        const row = this.equations[pivot];
-        if (!row) {
-          this.equations[pivot] = { coefficients, data: payload };
-          if (++this.rank === transfer.count) this.solve();
-          return true;
-        }
-        xorInto(coefficients, row.coefficients, w);
+    const { count } = transfer;
+    const coefficients = selectFragments(sequence, count);
+    // Rows stay fully reduced (none holds another row's pivot), so the solving work is spread
+    // across frames and completion is a copy.
+    for (let i = 0; i < count; i++) {
+      const row = this.equations[i];
+      if (row && hasBit(coefficients, i)) {
+        xorInto(coefficients, row.coefficients);
         xorInto(payload, row.data);
       }
     }
-    return false;
+    let pivot = 0;
+    while (pivot < count && !hasBit(coefficients, pivot)) pivot++;
+    if (pivot === count) return false;
+    for (const row of this.equations) {
+      if (row && hasBit(row.coefficients, pivot)) {
+        xorInto(row.coefficients, coefficients);
+        xorInto(row.data, payload);
+      }
+    }
+    this.equations[pivot] = { coefficients, data: payload };
+    if (++this.rank === count) this.assemble();
+    return true;
   }
 
   /**
@@ -404,19 +411,11 @@ export class FountainDecoder {
     this.message = undefined;
   }
 
-  private solve(): void {
+  private assemble(): void {
     const { count, size, length, checksum } = this.transfer!;
     const fragments = new Uint8Array(count * size);
-    for (let i = count - 1; i >= 0; i--) {
-      const row = this.equations[i]!;
-      const fragment = fragments.subarray(i * size, (i + 1) * size);
-      fragment.set(row.data);
-      for (let j = i + 1; j < count; j++) {
-        if (row.coefficients[j >>> 5] & (1 << (j & 31))) {
-          xorInto(fragment, fragments.subarray(j * size, (j + 1) * size));
-        }
-      }
-    }
+    // At full rank each row is exactly its own fragment.
+    for (let i = 0; i < count; i++) fragments.set(this.equations[i]!.data, i * size);
     const message = fragments.slice(0, length);
     if (crc32(message) !== checksum || fragments.subarray(length).some((b) => b !== 0)) {
       this.reset();
