@@ -89,6 +89,28 @@ describe('sendOffline witness normalization', () => {
     expect(send[0].witness).toBe(witnessStr);
   });
 
+  test('keeps the witness on a NUT-10 secret over the length limit', async () => {
+    // A mint configured for longer secrets still enforces this lock, so its signature must travel.
+    const wallet = new Wallet(mint, { unit, requireSigDleq: true });
+    await wallet.loadMint();
+    const witnessStr = JSON.stringify({ signatures: ['cafebabe'] });
+    const longLock = JSON.stringify([
+      'P2PK',
+      { nonce: 'n'.repeat(1100), data: '02' + 'aa'.repeat(32) },
+    ]);
+    const longPlain = 'p'.repeat(1100);
+    const proof = (secret: string): Proof => ({
+      id: '00bd033559de27d0',
+      amount: Amount.from(1),
+      secret,
+      C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+      witness: witnessStr,
+    });
+
+    expect(wallet.sendOffline(1, [proof(longLock)]).send[0].witness).toBe(witnessStr);
+    expect(wallet.sendOffline(1, [proof(longPlain)]).send[0].witness).toBeUndefined();
+  });
+
   test('serializes object witness on NUT-10 secret to JSON string', async () => {
     const wallet = new Wallet(mint, { unit, requireSigDleq: true });
     await wallet.loadMint();

@@ -2609,12 +2609,17 @@ class Wallet {
     if (isBlsKeyset(proof.id) && isV3PointSecret(proof.secret)) {
       return typeof proof.witness !== 'string' ? JSON.stringify(proof.witness) : proof.witness;
     }
+    const witness =
+      typeof proof.witness !== 'string' ? JSON.stringify(proof.witness) : proof.witness;
     try {
       parseSecret(proof.secret);
     } catch {
-      return undefined; // plain secret — strip stray witness
+      // Over our length limit a lock still binds at a mint that allows longer secrets: keep it.
+      const longLock =
+        proof.secret.length > MAX_SECRET_LENGTH && proof.secret.trimStart().startsWith('[');
+      return longLock ? witness : undefined; // plain secret: strip stray witness
     }
-    return typeof proof.witness !== 'string' ? JSON.stringify(proof.witness) : proof.witness;
+    return witness;
   }
 
   /**
