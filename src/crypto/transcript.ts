@@ -62,6 +62,12 @@ export type TranscriptQuote = {
  */
 export type TranscriptQuoteInput = TranscriptQuote & { lockKey: string; issued: bigint };
 
+/**
+ * A melt quote output: the quote, plus the `fee_index` the request selects when the quote offers
+ * `fee_options` (NUT-30).
+ */
+export type TranscriptMeltQuoteOutput = TranscriptQuote & { feeIndex?: number };
+
 export type TranscriptBlindedOutput = {
   amount: bigint;
   keysetId: string;
@@ -75,7 +81,7 @@ export type TransactionShape = {
   proofInputs?: TranscriptProofInput[];
   mintQuoteInputs?: TranscriptQuoteInput[];
   blindedOutputs?: TranscriptBlindedOutput[];
-  meltQuoteOutputs?: TranscriptQuote[];
+  meltQuoteOutputs?: TranscriptMeltQuoteOutput[];
 };
 
 /**
@@ -170,8 +176,17 @@ function mintQuoteInputContainer(quote: TranscriptQuoteInput): Uint8Array {
   );
 }
 
-function meltQuoteOutputContainer(quote: TranscriptQuote): Uint8Array {
-  return tlvRecord(CONTAINER_MELT_QUOTE_OUTPUT, quoteFields(quote));
+function meltQuoteOutputContainer(quote: TranscriptMeltQuoteOutput): Uint8Array {
+  if (quote.feeIndex === undefined) {
+    return tlvRecord(CONTAINER_MELT_QUOTE_OUTPUT, quoteFields(quote));
+  }
+  if (!Number.isSafeInteger(quote.feeIndex) || quote.feeIndex < 0) {
+    throw new CTSError('Transcript fee index must be a non-negative integer');
+  }
+  return tlvRecord(
+    CONTAINER_MELT_QUOTE_OUTPUT,
+    concatBytes(quoteFields(quote), tlvRecord(0x03, minimalBE(BigInt(quote.feeIndex)))),
+  );
 }
 
 function blindedOutputContainer(output: TranscriptBlindedOutput): Uint8Array {
@@ -315,30 +330,34 @@ type PayloadShape = {
   inputs?: PayloadProofInput[];
   mintQuotes?: Array<{ quoteId: string; amount: AmountLike; lockKey: string; issued: AmountLike }>;
   outputs?: Array<{ amount: AmountLike; id: string; B_: string }>;
-  meltQuote?: { quoteId: string; amount: AmountLike };
+  meltQuote?: { quoteId: string; amount: AmountLike; feeIndex?: number };
 };
 
 /**
- * The melt quote output's amount (NUT-00): the quote's `amount` plus the fee reserve the request
- * selects.
+ * What the melt quote output commits beside the quote id (NUT-00): the quote's `amount` plus the
+ * fee reserve the request selects, and the selected `fee_index` where the quote offers options.
  *
  * @remarks
  * A quote offering `fee_options` (NUT-30) needs the request's `feeIndex`; any other quote carries
- * one reserve, or none. The mint derives the same value from its own quote state.
+ * one reserve, or none, and commits no index. The mint derives the same values from its own quote
+ * state.
  */
-export function meltOutputAmount(quote: MeltOutputAmountSource, feeIndex?: number): Amount {
+export function meltQuoteOutput(
+  quote: MeltQuoteOutputSource,
+  feeIndex?: number,
+): { amount: Amount; feeIndex?: number } {
   const amount = Amount.from(quote.amount);
   if (quote.fee_options?.length) {
     const option = quote.fee_options.find((o) => o.fee_index === feeIndex);
     if (!option) {
       throw new CTSError('A melt quote with fee options needs the selected feeIndex');
     }
-    return amount.add(option.fee_reserve);
+    return { amount: amount.add(option.fee_reserve), feeIndex };
   }
-  return amount.add(quote.fee_reserve ?? 0);
+  return { amount: amount.add(quote.fee_reserve ?? 0) };
 }
 
-type MeltOutputAmountSource = {
+type MeltQuoteOutputSource = {
   amount: AmountLike;
   fee_reserve?: AmountLike;
   fee_options?: Array<{ fee_index: number; fee_reserve: AmountLike }>;
@@ -356,9 +375,9 @@ export function digestForPayload(payload: PayloadShape): Uint8Array {
  * A payload wire shape as a {@link TransactionShape}.
  */
 function payloadToTransaction(payload: PayloadShape): TransactionShape {
-  const quote = (q: { quoteId: string; amount: AmountLike }): TranscriptQuote => ({
+  const quote = <T extends { quoteId: string; amount: AmountLike }>(q: T) => ({
+    ...q,
     amount: Amount.from(q.amount).toBigInt(),
-    quoteId: q.quoteId,
   });
   return {
     ...(payload.inputs && {

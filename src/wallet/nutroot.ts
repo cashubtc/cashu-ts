@@ -87,7 +87,7 @@ export function dropTransactionWitnesses(proofs: Proof[]): Proof[] {
  */
 export async function attachTransactionWitnesses(
   payload: Pick<MeltRequest, 'inputs' | 'outputs'>,
-  meltQuote: { quoteId: string; amount: Amount } | undefined,
+  meltQuote: { quoteId: string; amount: Amount; feeIndex?: number } | undefined,
   extraKeys: Map<string, Uint8Array> | undefined,
   scriptSpends: Map<string, ScriptPathSpend> | undefined,
   state: NutrootWalletState,

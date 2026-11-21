@@ -22,7 +22,7 @@ import {
 } from '../crypto/nutroot';
 import {
   inputDigest,
-  meltOutputAmount,
+  meltQuoteOutput,
   messageForPayload,
   transcriptContainers,
 } from '../crypto/transcript';
@@ -121,7 +121,7 @@ export type ScriptPathSigningPackage = {
 function payloadTranscript(
   inputs: Proof[],
   outputs: SerializedBlindedMessage[],
-  meltQuote?: { quoteId: string; amount: bigint },
+  meltQuote?: { quoteId: string; amount: Amount; feeIndex?: number },
 ): Uint8Array {
   return messageForPayload({ inputs, outputs, ...(meltQuote && { meltQuote }) });
 }
@@ -290,7 +290,7 @@ function meltTranscript<TQuote extends Pick<MeltQuoteBaseResponse, 'quote' | 'am
   return payloadTranscript(
     preview.inputs,
     preview.outputData.map((d) => d.blindedMessage),
-    { quoteId: preview.quote.quote, amount: meltOutputAmount(preview.quote, feeIndex).toBigInt() },
+    { quoteId: preview.quote.quote, ...meltQuoteOutput(preview.quote, feeIndex) },
   );
 }
 
