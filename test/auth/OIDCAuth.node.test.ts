@@ -1174,6 +1174,22 @@ describe('OIDCAuth: request policy', () => {
     await expect(start.poll()).rejects.toThrow('request timed out after 20ms');
   });
 
+  test('a token poll with an already-aborted signal is never sent', async () => {
+    let sent = false;
+    const fetch = (async (_input: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) => {
+      if (init?.signal?.aborted) throw new Error('aborted');
+      sent = true;
+      return new Response('{}', { status: 200 });
+    }) as typeof globalThis.fetch;
+    const oidc = new OIDCAuth(DISC, { fetch });
+    const ac = new AbortController();
+    ac.abort();
+
+    const res = await oidc['postFormLoose'](TOKEN, 'grant_type=x', ac.signal);
+    expect(res).toMatchObject({ error: 'network_error' });
+    expect(sent).toBe(false);
+  });
+
   test.each([0, -1, Number.NaN, '5' as unknown as number])(
     'rejects requestTimeout %s',
     (requestTimeout) => {
