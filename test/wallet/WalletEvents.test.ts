@@ -3,7 +3,7 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { bech32 } from '@scure/base';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { Amount, CheckStateEnum, HttpResponseError } from '../../src';
+import { Amount, CheckStateEnum, CTSError, HttpResponseError } from '../../src';
 import { hashToCurve, hashToCurveBls, hashToCurveHex } from '../../src/crypto';
 import type { Proof } from '../../src/model/types';
 import type { KeyChainCache } from '../../src/model/types/keyset';
@@ -1243,6 +1243,65 @@ describe('WalletEvents', () => {
         'd',
         'e',
       ]);
+      expect(err).not.toHaveBeenCalled();
+      vi.useRealTimers();
+    });
+
+    // Loaded info with no NUT-17 push, so the watch polls; `nut29` is what the mint advertises now
+    const pollingInfo = (nut29: () => { supported: boolean; params?: object }) => ({
+      isSupported: (n: number) =>
+        n === 29
+          ? nut29()
+          : { supported: true, params: [{ method: 'bolt11', unit: 'sat', commands: [] }] },
+    });
+
+    it('batched polls follow a max_batch_size lowered after the watch starts', async () => {
+      vi.useFakeTimers();
+      let limit = 3;
+      mock.getMintInfo.mockReturnValue(
+        pollingInfo(() => ({ supported: true, params: { max_batch_size: limit } })),
+      );
+      // Like the wallet, refuse a batch over the current limit
+      mock.checkMintQuoteBatch.mockImplementation(async (_m: string, quotes: string[]) => {
+        if (quotes.length > limit) throw new CTSError('batch too large');
+        return quotes.map((quote) => ({ quote, state: 'UNPAID' }));
+      });
+      const err = vi.fn();
+      const ac = new AbortController();
+      await events.mintQuoteUpdates(['a', 'b', 'c'], vi.fn(), err, {
+        pollMs: 10,
+        signal: ac.signal,
+      });
+      await vi.advanceTimersByTimeAsync(5);
+      limit = 2;
+      await vi.advanceTimersByTimeAsync(10);
+      ac.abort();
+      expect(mock.checkMintQuoteBatch.mock.calls.map(([, quotes]) => quotes)).toEqual([
+        ['a', 'b', 'c'],
+        ['a', 'b'],
+        ['c'],
+      ]);
+      expect(err).not.toHaveBeenCalled();
+      vi.useRealTimers();
+    });
+
+    it('polls per quote once refreshed mint info drops NUT-29', async () => {
+      vi.useFakeTimers();
+      let nut29 = true;
+      mock.getMintInfo.mockReturnValue(pollingInfo(() => ({ supported: nut29 })));
+      mock.checkMintQuoteBatch.mockImplementation(async (_m: string, quotes: string[]) => {
+        if (!nut29) throw new CTSError('mint does not advertise NUT-29');
+        return quotes.map((quote) => ({ quote, state: 'UNPAID' }));
+      });
+      const err = vi.fn();
+      const ac = new AbortController();
+      await events.mintQuoteUpdates(['a', 'b'], vi.fn(), err, { pollMs: 10, signal: ac.signal });
+      await vi.advanceTimersByTimeAsync(5);
+      nut29 = false;
+      await vi.advanceTimersByTimeAsync(10);
+      ac.abort();
+      expect(mock.checkMintQuoteBatch).toHaveBeenCalledTimes(1);
+      expect(mock.checkMintQuote.mock.calls.map(([, id]) => id)).toEqual(['a', 'b']);
       expect(err).not.toHaveBeenCalled();
       vi.useRealTimers();
     });
