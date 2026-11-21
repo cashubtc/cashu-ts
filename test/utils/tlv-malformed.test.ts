@@ -6,6 +6,7 @@
 import { bech32 } from '@scure/base';
 import { describe, expect, test } from 'vitest';
 
+import { CTSError } from '../../src/model/Errors';
 import { decodeTLV, encodeTLV } from '../../src/utils/tlv';
 import { PaymentRequestTransportType } from '../../src/wallet/types/payment-requests';
 
@@ -47,6 +48,16 @@ describe('decodeTLV rejects a repeat of a singular tag', () => {
     expect(() => decodeTLV(bytes(rec(0x07, [...kind, ...target, ...target])))).toThrow(
       /multiple transport target/,
     );
+    // Relays too long in total to rebuild a nostr target as an nprofile.
+    const relay = [40, ...utf8('wss://'.padEnd(40, 'a'))];
+    const relays = rec(0x03, [1, ...utf8('r'), ...Array.from({ length: 20 }, () => relay).flat()]);
+    const pubkey = rec(
+      0x02,
+      Array.from({ length: 32 }, () => 0xab),
+    );
+    expect(() => decodeTLV(bytes(rec(0x07, [...rec(0x01, [0]), ...pubkey, ...relays])))).toThrow(
+      CTSError,
+    );
   });
 });
 
@@ -68,6 +79,11 @@ describe('encodeTLV refuses unencodable requests', () => {
     expect(() => encodeTLV(nostr(nprofile([...key(0x11), ...key(0x22)])))).toThrow(
       /multiple pubkeys/,
     );
+    // Bad checksum, and a valid checksum over words with non-zero padding.
+    const good = nprofile(key(0x11));
+    const badChecksum = good.slice(0, -1) + (good.endsWith('q') ? 'p' : 'q');
+    expect(() => encodeTLV(nostr(badChecksum))).toThrow(CTSError);
+    expect(() => encodeTLV(nostr(bech32.encode('nprofile', [0x00, 0x1f], 1024)))).toThrow(CTSError);
   });
 });
 

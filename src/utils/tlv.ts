@@ -763,14 +763,18 @@ function encodeTagTuple(tuple: string[]): Uint8Array {
  * @returns Object containing pubkey (32 bytes) and array of relay URLs.
  */
 export function decodeNprofile(nprofile: string): { pubkey: Uint8Array; relays: string[] } {
-  // Decode bech32m
-  const decoded = bech32.decode(nprofile as `${string}1${string}`, 1024);
-  if (decoded.prefix !== 'nprofile') {
-    throw new CTSError(`Invalid nprofile: expected prefix 'nprofile', got '${decoded.prefix}'`);
+  let prefix: string;
+  let data: Uint8Array;
+  try {
+    const decoded = bech32.decode(nprofile as `${string}1${string}`, 1024);
+    prefix = decoded.prefix;
+    data = new Uint8Array(bech32.fromWords(decoded.words));
+  } catch (cause) {
+    throw new CTSError('Invalid nprofile: not a valid bech32 string', { cause });
   }
-
-  const tlvData = bech32.fromWords(decoded.words);
-  const data = new Uint8Array(tlvData);
+  if (prefix !== 'nprofile') {
+    throw new CTSError(`Invalid nprofile: expected prefix 'nprofile', got '${prefix}'`);
+  }
 
   // Parse TLV structure (1-byte T, 1-byte L format)
   let pubkey: Uint8Array | undefined;
@@ -825,8 +829,11 @@ export function decodeNprofile(nprofile: string): { pubkey: Uint8Array; relays: 
  */
 export function encodeNprofile(pubkey: Uint8Array, relays: string[]): string {
   const tlv = encodePubkeyRelaysTLV(pubkey, relays);
-  const words = bech32.toWords(tlv);
-  return bech32.encode('nprofile', words, 1024);
+  try {
+    return bech32.encode('nprofile', bech32.toWords(tlv), 1024);
+  } catch (cause) {
+    throw new CTSError('Cannot encode as nprofile', { cause });
+  }
 }
 
 /**
