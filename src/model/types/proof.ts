@@ -67,6 +67,9 @@ export type Proof = {
  * `E` (33-byte point hex) means "derive your key" (receiver-keyed). `tree` lists serialized leaves
  * (hex) in slot-map order. Fund-critical for locked proofs: belongs in storage and backups, and
  * until the proof is swept it is the only thing that can spend it.
+ *
+ * Fields of a decoded cashuB token that this library does not read are written back when the same
+ * object is re-encoded, but are not part of its JSON form: a stored proof loses them.
  */
 export type SpendInfo = {
   k?: string;
