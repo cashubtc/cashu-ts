@@ -39,7 +39,7 @@ import {
   verifyNutrootSpendInfo,
   type ParsedNutrootOption,
 } from '../crypto/nutroot';
-import { inputsForPayload, meltOutputAmount } from '../crypto/transcript';
+import { inputsForPayload, meltQuoteOutput } from '../crypto/transcript';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
@@ -4809,8 +4809,8 @@ class Wallet {
     };
 
     // Attach nutroot transaction witnesses (v3 keysets). The digest binds the melt output's
-    // amount (quote amount plus the selected fee reserve), so a slim quote object cannot sign v3
-    // inputs: fail fast rather than send them unsigned.
+    // amount (quote amount plus the selected fee reserve) and any selected fee index, so a slim
+    // quote object cannot sign v3 inputs: fail fast rather than send them unsigned.
     const quoteAmount =
       'amount' in meltPreview.quote ? (meltPreview.quote.amount as AmountLike) : undefined;
     this.failIf(
@@ -4824,7 +4824,7 @@ class Wallet {
         meltPayload,
         {
           quoteId: quote,
-          amount: meltOutputAmount({ ...meltPreview.quote, amount: quoteAmount }, feeIndex),
+          ...meltQuoteOutput({ ...meltPreview.quote, amount: quoteAmount }, feeIndex),
         },
         collectSpendInfoKeys(meltPreview.inputs, privkey, this._logger),
         completeOptions.scriptPath?.length

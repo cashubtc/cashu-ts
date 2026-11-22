@@ -631,15 +631,15 @@ describe('ScriptPath melt packages', () => {
     expect(melt.transcript).toContain(bytesToHex(utf8ToBytes('quote-1')));
   });
 
-  test('the transcript carries the melt output amount: quote amount plus the selected fee reserve', () => {
+  test('the transcript carries the melt output amount and any selected fee index', () => {
     const { meltPreview, proof } = meltFixture();
     const plans = [{ secret: proof.secret, leafIndex: 1 }];
-    const transcriptFor = (amount: bigint) =>
+    const transcriptFor = (amount: bigint, feeIndex?: number) =>
       bytesToHex(
         messageForPayload({
           inputs: meltPreview.inputs,
           outputs: meltPreview.outputData.map((d) => d.blindedMessage),
-          meltQuote: { quoteId: 'quote-1', amount },
+          meltQuote: { quoteId: 'quote-1', amount, feeIndex },
         }),
       );
     const bolt11 = { ...meltPreview, quote: { ...meltPreview.quote, fee_reserve: Amount.from(2) } };
@@ -654,7 +654,7 @@ describe('ScriptPath melt packages', () => {
         ],
       },
     };
-    expect(ScriptPath.extractMeltPackage(onchain, plans, 1).transcript).toBe(transcriptFor(51n));
+    expect(ScriptPath.extractMeltPackage(onchain, plans, 1).transcript).toBe(transcriptFor(51n, 1));
     expect(() => ScriptPath.extractMeltPackage(onchain, plans)).toThrow(/feeIndex/);
   });
 

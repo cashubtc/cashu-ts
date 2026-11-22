@@ -21,7 +21,7 @@ import {
   transactionInputs,
   verifyTransactionInputWitness,
   type TransactionShape,
-  meltOutputAmount,
+  meltQuoteOutput,
 } from '../../src/crypto/transcript';
 import { Amount } from '../../src/model/Amount';
 import { CallerAbortError } from '../../src/model/Errors';
@@ -45,7 +45,7 @@ function fromVectorTx(tx: {
     issued: number;
   }>;
   blinded_outputs?: Array<{ amount: number; keyset_id: string; B_: string }>;
-  melt_quote_outputs?: Array<{ amount: number; quote_id: string }>;
+  melt_quote_outputs?: Array<{ amount: number; quote_id: string; fee_index?: number }>;
 }): TransactionShape {
   return {
     proofInputs: tx.proof_inputs?.map((p) => ({
@@ -68,6 +68,7 @@ function fromVectorTx(tx: {
     meltQuoteOutputs: tx.melt_quote_outputs?.map((q) => ({
       amount: BigInt(q.amount),
       quoteId: q.quote_id,
+      feeIndex: q.fee_index,
     })),
   };
 }
@@ -275,6 +276,30 @@ describe('transaction transcript (vectors)', () => {
     expect(schnorr.verify(signature, faceDigest, lock)).toBe(false);
   });
 
+  test('the fee options vector tells two same-reserve selections apart by fee index', () => {
+    const [fast, slow] = tv.melt_fee_options.selections;
+    for (const selection of [fast, slow]) {
+      const tx = fromVectorTx(selection.tx);
+      const [context] = transactionInputs(tx).proofs.values();
+      expect(bytesToHex(buildTransactionTranscript(tx))).toBe(selection.transcript);
+      expect(bytesToHex(transactionDigest(tx))).toBe(selection.digest);
+      expect(bytesToHex(context.digest)).toBe(selection.input_digest);
+    }
+    expect(fast.tx.melt_quote_outputs[0].amount).toBe(slow.tx.melt_quote_outputs[0].amount);
+    expect(fast.input_digest).not.toBe(slow.input_digest);
+    // Index zero is committed as an empty field, not left out.
+    expect(fast.transcript.endsWith('030000')).toBe(true);
+    expect(slow.transcript.endsWith('03000101')).toBe(true);
+  });
+
+  test('a fee index must be a non-negative integer', () => {
+    const [{ tx }] = tv.melt_fee_options.selections;
+    for (const fee_index of [-1, 1.5, 2 ** 53]) {
+      const bad = { ...tx, melt_quote_outputs: [{ ...tx.melt_quote_outputs[0], fee_index }] };
+      expect(() => buildTransactionTranscript(fromVectorTx(bad))).toThrow(/fee index/);
+    }
+  });
+
   test('the signing package vector uses a complete transaction context', () => {
     const sp = vectors.signing_package;
     const quote = { ...tv.mint.tx.mint_quote_inputs[0], lock_pubkey: sp.lock_key };
@@ -423,10 +448,10 @@ describe('transaction transcript (vectors)', () => {
   });
 });
 
-describe('meltOutputAmount', () => {
-  test('is the amount plus the fee reserve the request selects', () => {
-    expect(meltOutputAmount({ amount: 10, fee_reserve: 2 }).toBigInt()).toBe(12n);
-    expect(meltOutputAmount({ amount: 10 }).toBigInt()).toBe(10n);
+describe('meltQuoteOutput', () => {
+  test('is the amount plus the fee reserve the request selects, with any selected index', () => {
+    expect(meltQuoteOutput({ amount: 10, fee_reserve: 2 })).toEqual({ amount: Amount.from(12) });
+    expect(meltQuoteOutput({ amount: 10 }, 1)).toEqual({ amount: Amount.from(10) });
     const onchain = {
       amount: 10,
       fee_options: [
@@ -434,10 +459,10 @@ describe('meltOutputAmount', () => {
         { fee_index: 1, fee_reserve: 50 },
       ],
     };
-    expect(meltOutputAmount(onchain, 0).toBigInt()).toBe(12n);
-    expect(meltOutputAmount(onchain, 1).toBigInt()).toBe(60n);
-    expect(() => meltOutputAmount(onchain)).toThrow(/feeIndex/);
-    expect(() => meltOutputAmount(onchain, 2)).toThrow(/feeIndex/);
+    expect(meltQuoteOutput(onchain, 0)).toEqual({ amount: Amount.from(12), feeIndex: 0 });
+    expect(meltQuoteOutput(onchain, 1)).toEqual({ amount: Amount.from(60), feeIndex: 1 });
+    expect(() => meltQuoteOutput(onchain)).toThrow(/feeIndex/);
+    expect(() => meltQuoteOutput(onchain, 2)).toThrow(/feeIndex/);
   });
 });
 
