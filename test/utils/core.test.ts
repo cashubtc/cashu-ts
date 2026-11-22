@@ -34,8 +34,12 @@ import {
   sortProofsById,
   normalizeMintUrl,
 } from '../../src/utils';
-import { encodeJsonToBase64Url, encodeUint8ToBase64Url } from '../../src/utils/base64';
-import { encodeCBOR } from '../../src/utils/cbor';
+import {
+  decodeBase64UrlToUint8,
+  encodeJsonToBase64Url,
+  encodeUint8ToBase64Url,
+} from '../../src/utils/base64';
+import { decodeCBOR, encodeCBOR } from '../../src/utils/cbor';
 import { MAX_PAYLOAD_DECODE_ATTEMPTS, MAX_PAYLOAD_LENGTH } from '../../src/utils/limits';
 import {
   NUT02_V1_VECTOR1_KEYS,
@@ -2560,6 +2564,96 @@ describe('nutroot spend_info token serialization', () => {
     const token: Token = { mint: 'https://mint.test', proofs: [proof], unit: 'sat' };
     const decoded = utils.getDecodedToken(utils.getEncodedToken(token), [proof.id]);
     expect(decoded.proofs[0].spend_info).toBeUndefined();
+  });
+
+  describe('si fields this library does not read', () => {
+    const id = '02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd';
+    const k = hexToBytes('38b91aa1635556d47ce92d99c1a92a2ffb82e57bc292c039d1d7b84c13bd75c6');
+    const extra = { zz: 1, yy: hexToBytes('beef'), xx: { n: [2n ** 60n, 'a'] } };
+    const cashuB = (si: Record<string, unknown>) =>
+      'cashuB' +
+      encodeUint8ToBase64Url(
+        encodeCBOR({
+          m: 'https://mint.test',
+          u: 'sat',
+          t: [
+            {
+              i: hexToBytes(id.slice(0, 16)),
+              p: [
+                {
+                  a: 8,
+                  s: '02595a333ef377a29f6756365bd46bf3b5e571dd7a44081822f3bd0bf03b358075',
+                  c: hexToBytes(
+                    '84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327',
+                  ),
+                  si,
+                },
+              ],
+            },
+          ],
+        }),
+      );
+    // The `si` map as it sits on the wire, so the assertion does not go through the decoder.
+    const wireSi = (proof: Proof) => {
+      const encoded = utils.getEncodedToken({ mint: 'https://mint.test', proofs: [proof] });
+      const template = decodeCBOR(decodeBase64UrlToUint8(encoded.slice(6))) as {
+        t: Array<{ p: Array<{ si: unknown }> }>;
+      };
+      return template.t[0].p[0].si;
+    };
+    const decode = (si: Record<string, unknown>) => utils.getDecodedToken(cashuB(si), [id]).proofs;
+
+    test('are written back when the decoded proof is re-encoded', () => {
+      const [proof] = decode({ k, ...extra });
+      // A copy, as the wallet makes: the fields follow the spread.
+      const copy = { ...proof, spend_info: { ...proof.spend_info } };
+      expect(wireSi(copy)).toEqual({ k, ...extra });
+    });
+
+    test('stay out of the JSON form, so a stored proof re-encodes without them', () => {
+      const [proof] = decode({ k, ...extra });
+      expect(Object.keys(proof.spend_info!)).toEqual(['k']);
+      expect(JSON.stringify(proof)).not.toMatch(/zz|beef/);
+      const [json] = utils.serializeProofs(proof);
+      expect(json).not.toMatch(/zz|beef/);
+      const [stored] = utils.deserializeProofs([json]);
+      expect(stored.spend_info).toEqual({ k: bytesToHex(k) });
+      expect(wireSi(stored)).toEqual({ k });
+    });
+
+    test('leave a proof without them unmarked', () => {
+      const [proof] = decode({ k });
+      expect(Object.getOwnPropertySymbols(proof.spend_info!)).toEqual([]);
+      expect(wireSi(proof)).toEqual({ k });
+    });
+
+    test('do not excuse a malformed field beside them', () => {
+      expect(() => decode({ k: 5, ...extra })).toThrow(/spend_info k/);
+      expect(() => decode({ k, t: 5, ...extra })).toThrow(/spend_info tree/);
+    });
+
+    test('are dropped, without throwing, when a cashuA proof is re-encoded', () => {
+      const cashuA =
+        'cashuA' +
+        encodeJsonToBase64Url({
+          token: [
+            {
+              mint: 'https://mint.test',
+              proofs: [
+                {
+                  id,
+                  amount: 8,
+                  secret: '02595a333ef377a29f6756365bd46bf3b5e571dd7a44081822f3bd0bf03b358075',
+                  C: '84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327',
+                  spend_info: { k: bytesToHex(k), zz: 1 },
+                },
+              ],
+            },
+          ],
+        });
+      const [proof] = utils.getDecodedToken(cashuA, [id]).proofs;
+      expect(wireSi(proof)).toEqual({ k });
+    });
   });
 });
 

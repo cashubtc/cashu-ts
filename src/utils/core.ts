@@ -314,6 +314,18 @@ function toV4CborDleq(dleq: SerializedProofDLEQ): V4DLEQTemplate {
   return { e: hexToBytes(dleq.e), s: hexToBytes(dleq.s), r: hexToBytes(dleq.r) };
 }
 
+/**
+ * Holds the `si` fields of a decoded cashuB proof that this library does not read, so a re-encode
+ * writes them back (NUT-00).
+ *
+ * @remarks
+ * In memory only: a symbol key survives object spread but no JSON or structured-clone form, so the
+ * fields end at storage. They have no JSON translation to store.
+ */
+const UNKNOWN_SI = Symbol('unknownSi');
+const V4_SI_KEYS = ['k', 'e', 'i', 'u', 't'];
+type HeldSpendInfo = SpendInfo & { [UNKNOWN_SI]?: Record<string, unknown> };
+
 function toV4CborTemplate(token: Token): TokenV4Template {
   // Keyed by token-supplied IDs, so a plain object would resolve `__proto__` etc. to inherited members.
   const idMap = Object.create(null) as { [id: string]: Proof[] };
@@ -354,6 +366,7 @@ function toV4CborTemplate(token: Token): TokenV4Template {
             ...(p.spend_info.K && { i: hexToBytes(p.spend_info.K) }),
             ...(p.spend_info.u && { u: hexToBytes(p.spend_info.u) }),
             ...(p.spend_info.tree && { t: p.spend_info.tree.map(hexToBytes) }),
+            ...(p.spend_info as HeldSpendInfo)[UNKNOWN_SI],
           },
         }),
       })),
@@ -452,6 +465,12 @@ function readCashuASpendInfo(v: unknown): SpendInfo {
   return out;
 }
 
+function unknownSi(si: unknown): HeldSpendInfo {
+  if (!isRecord(si)) return {};
+  const unknown = Object.entries(si).filter(([key]) => !V4_SI_KEYS.includes(key));
+  return unknown.length ? { [UNKNOWN_SI]: Object.fromEntries(unknown) } : {};
+}
+
 function fromV4CborTemplate(template: TokenV4Template): Token {
   if (!template || !Array.isArray(template.t)) {
     throw new CTSError('Invalid token');
@@ -500,6 +519,7 @@ function fromV4CborTemplate(template: TokenV4Template): Token {
             ...(p.si.t && {
               tree: p.si.t.map((leaf) => templateHex(leaf, 'spend_info tree leaf')),
             }),
+            ...unknownSi(p.si),
           },
         }),
       });
