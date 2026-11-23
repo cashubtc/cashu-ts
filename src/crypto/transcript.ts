@@ -339,8 +339,8 @@ type PayloadShape = {
  *
  * @remarks
  * A quote offering `fee_options` (NUT-30) needs the request's `feeIndex`; any other quote carries
- * one reserve, or none, and commits no index. The mint derives the same values from its own quote
- * state.
+ * one reserve, or none, commits no index, and refuses a `feeIndex`. The mint derives the same
+ * values from its own quote state.
  */
 export function meltQuoteOutput(
   quote: MeltQuoteOutputSource,
@@ -353,6 +353,9 @@ export function meltQuoteOutput(
       throw new CTSError('A melt quote with fee options needs the selected feeIndex');
     }
     return { amount: amount.add(option.fee_reserve), feeIndex };
+  }
+  if (feeIndex !== undefined) {
+    throw new CTSError('A feeIndex needs the melt quote fee options; pass the full quote object');
   }
   return { amount: amount.add(quote.fee_reserve ?? 0) };
 }

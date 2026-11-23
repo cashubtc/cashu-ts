@@ -233,7 +233,11 @@ describe('melt preview serde', () => {
 
     const revived = deserializeMeltPreview(roundTrip(serializeMeltPreview(preview)));
     expect(revived.inputs[0].amount).toBeInstanceOf(Amount);
-    expect(revived.quote).toEqual({ quote: 'melt-q', amount: Amount.from(10) });
+    expect(revived.quote).toEqual({
+      quote: 'melt-q',
+      amount: Amount.from(10),
+      fee_reserve: Amount.from(3),
+    });
 
     await wallet.completeMelt(preview);
     await wallet.completeMelt(revived);
