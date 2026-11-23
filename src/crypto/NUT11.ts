@@ -541,14 +541,31 @@ export function signP2PKProofs(
   // Convert to hex strings for maybeDeriveP2BKPrivateKeys
   const toHex = (k: PrivKey): string => (typeof k === 'string' ? k : bytesToHex(k));
   const privateKeyHex = Array.isArray(privateKey) ? privateKey.map(toHex) : toHex(privateKey);
+  // Derived once per call: a key costs one derivation however many proofs it is tried on.
+  const xOnlyOf = new Map<string, string>();
+  const xOnly = (priv: string): string => {
+    let pubkey = xOnlyOf.get(priv);
+    if (pubkey === undefined) {
+      pubkey = bytesToHex(schnorr.getPublicKey(hexToBytes(priv)));
+      xOnlyOf.set(priv, pubkey);
+    }
+    return pubkey;
+  };
   return proofs.map((proof, index) => {
     // A v3 point secret carries no NUT-11 conditions and signs the transaction
     // instead (NUT-10), so parsing it here would only log a failure per proof
     if (isV3PointSecret(proof.secret)) return proof;
     const privateKeys: string[] = maybeDeriveP2BKPrivateKeys(privateKeyHex, proof);
+    let expected: Set<string> | undefined;
     let signedProof = proof;
     for (const priv of privateKeys) {
       try {
+        expected ??= new Set(getP2PKExpectedWitnessPubkeys(proof.secret).map((k) => k.slice(2)));
+        const pubkey = xOnly(priv);
+        if (!expected.has(pubkey)) {
+          logger.warn(`Proof #${index + 1}: Signature not required from [02|03]${pubkey}`);
+          continue;
+        }
         signedProof = signP2PKProof(signedProof, priv, digest);
       } catch (error: unknown) {
         // Log signature failures only - these are not fatal, just informational
