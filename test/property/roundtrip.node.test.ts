@@ -109,7 +109,17 @@ describe('preview round trip', () => {
     fc.assert(
       fc.property(
         text,
-        fc.record({ quote: text, amount }, { requiredKeys: ['quote'] }),
+        fc.record(
+          {
+            quote: text,
+            amount,
+            fee_reserve: amount,
+            fee_options: fc.array(fc.record({ fee_index: fc.nat(), fee_reserve: amount }), {
+              maxLength: 2,
+            }),
+          },
+          { requiredKeys: ['quote'] },
+        ),
         proofs,
         outputs,
         mintPubkey,

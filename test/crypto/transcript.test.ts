@@ -451,7 +451,7 @@ describe('transaction transcript (vectors)', () => {
 describe('meltQuoteOutput', () => {
   test('is the amount plus the fee reserve the request selects, with any selected index', () => {
     expect(meltQuoteOutput({ amount: 10, fee_reserve: 2 })).toEqual({ amount: Amount.from(12) });
-    expect(meltQuoteOutput({ amount: 10 }, 1)).toEqual({ amount: Amount.from(10) });
+    expect(() => meltQuoteOutput({ amount: 10 }, 1)).toThrow(/fee options/);
     const onchain = {
       amount: 10,
       fee_options: [

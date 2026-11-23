@@ -1,7 +1,16 @@
 import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { describe, expect, test, vi } from 'vitest';
 
-import { Amount, OutputData, PaymentRequest, Wallet, type Proof, MeltQuoteState } from '../../src';
+import {
+  Amount,
+  OutputData,
+  PaymentRequest,
+  Wallet,
+  type Proof,
+  MeltQuoteState,
+  deserializeMeltPreview,
+  serializeMeltPreview,
+} from '../../src';
 import { hashToCurveBls } from '../../src/crypto/curve_bls';
 import { blindMessage, getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import {
@@ -251,6 +260,69 @@ describe('nutroot edge cases', () => {
       verifyTransactionInputWitness(digestFor(feeIndex), pub(4), input.witness as string);
     expect(verifies(1)).toBe(true);
     expect(verifies(0)).toBe(false);
+  });
+
+  describe('a restored melt preview signs the fee reserve', () => {
+    const base = { amount: Amount.from(1), unit: 'sat', state: MeltQuoteState.UNPAID };
+    const cases = [
+      { method: 'bolt11', quote: { ...base, quote: 'b', fee_reserve: Amount.from(2) } },
+      {
+        method: 'onchain',
+        quote: {
+          ...base,
+          quote: 'o',
+          fee_options: [
+            { fee_index: 0, fee_reserve: Amount.from(1), estimated_blocks: 6 },
+            { fee_index: 1, fee_reserve: Amount.from(3), estimated_blocks: 1 },
+          ],
+        },
+        feeIndex: 1,
+        signed: 4,
+      },
+    ];
+    test.each(cases)('$method', async ({ method, quote, feeIndex, signed = 3 }) => {
+      const w = wallet();
+      const proof = { ...proofFor({ secret: pub(4) }), spend_info: { k: priv(4) } };
+      const preview = await w.prepareMelt(method, quote, [proof]);
+      const restored = deserializeMeltPreview(
+        JSON.parse(JSON.stringify(serializeMeltPreview(preview))),
+      );
+      const melt = vi.spyOn(w.mint, 'melt').mockRejectedValue(new Error('stop'));
+      await expect(
+        w.completeMelt(restored, undefined, {
+          extraPayload: feeIndex === undefined ? undefined : { fee_index: feeIndex },
+        }),
+      ).rejects.toThrow('stop');
+      const sent = melt.mock.calls[0][1];
+      const verifies = (amount: number) => {
+        const { digest } = inputsForPayload({
+          inputs: [proof],
+          outputs: sent.outputs,
+          meltQuote: { quoteId: quote.quote, amount, feeIndex },
+        }).proofs.get(proofInputContextKey({ keysetId: id, secret: proof.secret }))!;
+        return verifyTransactionInputWitness(digest, pub(4), sent.inputs[0].witness as string);
+      };
+      expect(verifies(signed)).toBe(true);
+      expect(verifies(1)).toBe(false);
+    });
+
+    test('refuses a fee index the preview has no fee options for', async () => {
+      const w = wallet();
+      const proof = { ...proofFor({ secret: pub(4) }), spend_info: { k: priv(4) } };
+      // A preview persisted before fee options were kept.
+      const preview = deserializeMeltPreview({
+        method: 'onchain',
+        quote: 'o',
+        amount: '1',
+        inputs: [{ ...proof, amount: '1' }],
+        outputData: [],
+      });
+      const melt = vi.spyOn(w.mint, 'melt');
+      await expect(
+        w.completeMelt(preview, undefined, { extraPayload: { fee_index: 1 } }),
+      ).rejects.toThrow(/fee options/);
+      expect(melt).not.toHaveBeenCalled();
+    });
   });
 
   test.each(['prepare', 'run'] as const)(

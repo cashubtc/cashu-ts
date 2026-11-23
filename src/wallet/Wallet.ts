@@ -4811,14 +4811,13 @@ class Wallet {
     // Attach nutroot transaction witnesses (v3 keysets). The digest binds the melt output's
     // amount (quote amount plus the selected fee reserve) and any selected fee index, so a slim
     // quote object cannot sign v3 inputs: fail fast rather than send them unsigned.
-    const quoteAmount =
-      'amount' in meltPreview.quote ? (meltPreview.quote.amount as AmountLike) : undefined;
-    this.failIf(
-      quoteAmount === undefined &&
-        inputs.some((p) => isBlsKeyset(p.id) && isV3PointSecret(p.secret)),
-      'melting v3 inputs needs the melt quote amount; pass the full quote object',
-    );
-    if (quoteAmount !== undefined) {
+    if (inputs.some((p) => isBlsKeyset(p.id) && isV3PointSecret(p.secret))) {
+      const quoteAmount =
+        'amount' in meltPreview.quote ? (meltPreview.quote.amount as AmountLike) : undefined;
+      this.failIfNullish(
+        quoteAmount,
+        'melting v3 inputs needs the melt quote amount; pass the full quote object',
+      );
       const feeIndex = typeof extra?.fee_index === 'number' ? extra.fee_index : undefined;
       await attachTransactionWitnesses(
         meltPayload,

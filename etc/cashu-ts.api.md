@@ -567,6 +567,11 @@ export function deserializeBatchMintPreview(serialized: SerializedBatchMintPrevi
 export function deserializeMeltPreview(serialized: SerializedMeltPreview): MeltPreview<{
     quote: string;
     amount?: Amount;
+    fee_reserve?: Amount;
+    fee_options?: Array<{
+        fee_index: number;
+        fee_reserve: Amount;
+    }>;
 }>;
 
 // @public (undocumented)
@@ -2575,6 +2580,11 @@ export type SerializedMeltPreview = {
     method: string;
     quote: string;
     amount?: string;
+    fee_reserve?: string;
+    fee_options?: Array<{
+        fee_index: number;
+        fee_reserve: string;
+    }>;
     inputs: SerializedProof[];
     outputData: SerializedOutputData[];
     mintPubkey?: string;
@@ -2632,6 +2642,11 @@ export type SerializedSwapPreview = {
 export function serializeMeltPreview(preview: MeltPreview<{
     quote: string;
     amount?: Amount;
+    fee_reserve?: Amount;
+    fee_options?: Array<{
+        fee_index: number;
+        fee_reserve: Amount;
+    }>;
 }>): SerializedMeltPreview;
 
 // @public (undocumented)

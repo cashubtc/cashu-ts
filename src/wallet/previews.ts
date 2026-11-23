@@ -64,13 +64,15 @@ export type SerializedBatchMintPreview = {
  * JSON-safe representation of a {@link MeltPreview}.
  *
  * @remarks
- * Keeps the quote id and, when the quote states it, the quote amount as a decimal string: v3 inputs
- * sign over it in `completeMelt`. `inputs` are spendable bearer material.
+ * Keeps the quote id and, where the quote states them, its amount and fee reserves as decimal
+ * strings: v3 inputs sign over them in `completeMelt`. `inputs` are spendable bearer material.
  */
 export type SerializedMeltPreview = {
   method: string;
   quote: string;
   amount?: string;
+  fee_reserve?: string;
+  fee_options?: Array<{ fee_index: number; fee_reserve: string }>;
   inputs: SerializedProof[];
   outputData: SerializedOutputData[];
   mintPubkey?: string;
@@ -252,19 +254,33 @@ export function deserializeBatchMintPreview(
  * Converts a melt preview to a JSON-safe form for persistence.
  *
  * @remarks
- * Persist the result before `completeMelt` to support NUT-19 replay safety: a preview rehydrated
- * with {@link deserializeMeltPreview} replays a byte-identical melt request.
+ * Persist the result before `completeMelt` to support NUT-19 replay safety. A preview rehydrated
+ * with {@link deserializeMeltPreview} replays the same melt request, except that `completeMelt`
+ * signs v3 inputs (and P2PK inputs, given a key) afresh, so those replays miss the mint's cache.
  *
  * The result holds `inputs` in the clear, so it is spendable bearer material: store it as carefully
  * as the proof database.
  */
 export function serializeMeltPreview(
-  preview: MeltPreview<{ quote: string; amount?: Amount }>,
+  preview: MeltPreview<{
+    quote: string;
+    amount?: Amount;
+    fee_reserve?: Amount;
+    fee_options?: Array<{ fee_index: number; fee_reserve: Amount }>;
+  }>,
 ): SerializedMeltPreview {
+  const { amount, fee_reserve, fee_options } = preview.quote;
   return {
     method: preview.method,
     quote: preview.quote.quote,
-    ...(preview.quote.amount !== undefined && { amount: preview.quote.amount.toString() }),
+    ...(amount !== undefined && { amount: amount.toString() }),
+    ...(fee_reserve !== undefined && { fee_reserve: fee_reserve.toString() }),
+    ...(fee_options && {
+      fee_options: fee_options.map((o) => ({
+        fee_index: o.fee_index,
+        fee_reserve: o.fee_reserve.toString(),
+      })),
+    }),
     inputs: preview.inputs.map(serializeProof),
     outputData: preview.outputData.map((o) => OutputData.serialize(o)),
     ...mintPubkeyOf(preview),
@@ -276,17 +292,29 @@ export function serializeMeltPreview(
  *
  * @throws {@link CTSError} If any amount, proof or output data fails validation.
  */
-export function deserializeMeltPreview(
-  serialized: SerializedMeltPreview,
-): MeltPreview<{ quote: string; amount?: Amount }> {
+export function deserializeMeltPreview(serialized: SerializedMeltPreview): MeltPreview<{
+  quote: string;
+  amount?: Amount;
+  fee_reserve?: Amount;
+  fee_options?: Array<{ fee_index: number; fee_reserve: Amount }>;
+}> {
   return deserializeWith('SerializedMeltPreview', () => {
+    const { amount, fee_reserve, fee_options } = serialized;
     assertMaxEntries('inputs', serialized.inputs);
     assertMaxEntries('outputData', serialized.outputData);
+    assertMaxEntries('fee_options', fee_options);
     return {
       method: serialized.method,
       quote: {
         quote: serialized.quote,
-        ...(serialized.amount !== undefined && { amount: Amount.from(serialized.amount) }),
+        ...(amount !== undefined && { amount: Amount.from(amount) }),
+        ...(fee_reserve !== undefined && { fee_reserve: Amount.from(fee_reserve) }),
+        ...(fee_options && {
+          fee_options: fee_options.map((o) => ({
+            fee_index: o.fee_index,
+            fee_reserve: Amount.from(o.fee_reserve),
+          })),
+        }),
       },
       inputs: normalizeProofAmounts(serialized.inputs),
       outputData: serialized.outputData.map((s) => OutputData.deserialize(s)),

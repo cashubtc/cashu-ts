@@ -143,6 +143,8 @@ const stored = JSON.stringify({
 const result = await wallet.completeMelt(meltPreview);
 ```
 
+`completeMelt` signs v3 inputs afresh on every call, and P2PK inputs too when you pass it a key, so replaying a preview with such inputs posts a new request body and misses the mint's cache. No funds are at risk: the mint never spends the inputs twice, and the quote id plus the blanks still recover the change.
+
 See [Melt § 4 (async melt change recovery)](../wallet_ops/melt.md) for the full
 recover-after-restart lifecycle.
 
