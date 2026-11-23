@@ -2433,6 +2433,25 @@ describe('signing edge cases', () => {
     expect(result.witness).toBeUndefined();
   });
 
+  test('each proof is signed by the key it expects, out of many supplied', () => {
+    const keys = Array.from({ length: 5 }, () => bytesToHex(createRandomSecretKey()));
+    // Six proofs, each locked to one of the five keys.
+    const proofs = Array.from({ length: 6 }, (_, i) =>
+      mkProof(createP2PKsecret(bytesToHex(getPubKeyFromPrivKey(hexToBytes(keys[i % 5]))))),
+    );
+    const signed = signP2PKProofs(proofs, keys);
+    expect(signed.every((p) => isP2PKSpendAuthorised(p))).toBe(true);
+    expect(signed.every((p) => (p.witness as P2PKWitness).signatures?.length === 1)).toBe(true);
+  });
+
+  test('a malformed key is skipped without stopping the other keys', () => {
+    const warn = vi.fn();
+    const logger: Logger = { ...NULL_LOGGER, warn };
+    const [signed] = signP2PKProofs([mkProof(secretStr)], ['zz', bytesToHex(PRIVKEY)], logger);
+    expect(isP2PKSpendAuthorised(signed)).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
   test('maybeDeriveP2BKPrivateKeys falls back to legacy slot 0 indexing for HTLC proofs', () => {
     // Pre-fix senders blinded HTLC lock keys from slot 0; those proofs must stay spendable.
     const privBytes = createRandomSecretKey();
