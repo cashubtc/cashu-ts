@@ -38,7 +38,7 @@ const { privkey: recovered } = deriveKeyPair(seed, 'P2PK', counter);
 const receiveProofs = await wallet.receive(token, { privkey: recovered });
 ```
 
-Receiving a token locked to one of your keys is the reverse lookup: read the pubkeys the proof expects off its secret, then derive the key for the counter that produced one of them. For v3 (nutroot) proofs use `wallet.spendOptions(proof, { privkeys })` instead, see [Spending locked proofs](../wallet_ops/spend_locked.md).
+Receiving a token locked to one of your keys is the reverse lookup: read the pubkeys the proof expects off its secret, then derive the key for the counter that produced one of them. For v3 (nutroot) proofs use `wallet.spendOptions(proofs, { privkeys })` instead, see [Spending locked proofs](../wallet_ops/spend_locked.md).
 
 ```ts
 import { getP2PKExpectedWitnessPubkeys } from '@cashu/cashu-ts';

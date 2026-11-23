@@ -132,16 +132,16 @@ describe('nutroot edge cases', () => {
     expect(() =>
       w.isPaymentRequestSatisfied(requestFor(NUTROOT_NUMS_KEY, [leaf]), [mismatched]),
     ).toThrow(/reconstruct/);
-    expect(() => w.spendOptions(mismatched, { privkeys: priv(1) })).toThrow(/reconstruct/);
-    expect(w.spendOptions(honest, { privkeys: priv(1) }).spendable).toBe(true);
+    expect(() => w.spendOptions([mismatched], { privkeys: priv(1) })).toThrow(/reconstruct/);
+    expect(w.spendOptions([honest], { privkeys: priv(1) })[0].spendable).toBe(true);
   });
 
   test('requires a verified internal key before evaluating an E-only disclosed tree', () => {
     const w = wallet();
     const keyed = proofFor(deriveReceiverKeyedSecret(pub(2), { leaves: [leaf] }));
     delete keyed.spend_info!.K;
-    expect(() => w.spendOptions(keyed, { privkeys: priv(1) })).toThrow(/internal key/);
-    expect(w.spendOptions(keyed, { privkeys: [priv(1), priv(2)] }).spendable).toBe(true);
+    expect(() => w.spendOptions([keyed], { privkeys: priv(1) })).toThrow(/internal key/);
+    expect(w.spendOptions([keyed], { privkeys: [priv(1), priv(2)] })[0].spendable).toBe(true);
   });
 
   test.each(['direct', 'builder'] as const)(

@@ -1747,7 +1747,8 @@ class Wallet {
         requireDleq: false, // safety
       });
       // Plain throws: the catch below falls back to a swap, so none of these is an error.
-      if (send.some((p) => !isBlsKeyset(p.id) && !this.spendOptions(p).keyPath)) {
+      const legacy = send.filter((p) => !isBlsKeyset(p.id));
+      if (this.spendOptions(legacy).some((o) => !o.keyPath)) {
         throw new CTSError('A locked legacy proof requires a swap');
       }
       // Only bearer material can be forwarded to a new holder without a v3 swap.
@@ -2224,9 +2225,8 @@ class Wallet {
     } else {
       // An unlocked request asks only for value the payee can spend: proofs locked to the payer sum
       // to the amount and transfer nothing, while proofs locked to a key the payee holds still pay.
-      for (const p of proofs) {
-        // `spendOptions` reads only the fields the Pick carries; the cast keeps its signature.
-        const { spendable, blockedBy } = this.spendOptions(p as Proof, opts);
+      // `spendOptions` reads only the fields the Pick carries; the cast keeps its signature.
+      for (const { spendable, blockedBy } of this.spendOptions(proofs as Proof[], opts)) {
         this.failIf(!spendable, `unlocked request: the payee cannot spend a proof (${blockedBy})`);
       }
     }
@@ -2538,7 +2538,7 @@ class Wallet {
   }
 
   /**
-   * Reports what this wallet can do with a proof, it's available spending options.
+   * Reports what this wallet can do with each proof: its available spending options.
    *
    * @remarks
    * Offline, and it changes nothing. Use it to triage received proofs of either lock family, decide
@@ -2552,16 +2552,24 @@ class Wallet {
    * `satisfiable` is this wallet's own assessment from what it holds. The mint compares an `after`
    * leaf against its own clock, so a leaf that unlocked seconds ago may still be refused, and a
    * hashlock leaf is never satisfiable from the wallet alone: its preimage comes from the caller.
-   * @param proof Any proof, with its spend info when it has one.
+   *
+   * One result per proof, in input order. Pass a whole token's proofs in one call: for legacy locks
+   * the supplied keys are derived once per call.
+   * @param proofs Any proofs, each with its spend info when it has one.
    * @param opts.privkeys Static keys to trial-match, for receiver-keyed proofs and leaf keys.
    * @param opts.now Unix seconds to judge locktimes against. Defaults to the current time.
-   * @throws If a v3 keyset proof is not a point secret, a NUT-10 secret is malformed or of a kind
-   *   this wallet cannot spend, a NUT-11 tag is malformed (a non-integer `n_sigs`, or a scalar tag
-   *   with more than one value), or a disclosed tree holds a leaf it cannot parse (unknown version,
-   *   type or constraint field): the same fail-closed rule the receive cascade applies.
+   * @throws If `proofs` is not an array, a v3 keyset proof is not a point secret, a NUT-10 secret
+   *   is malformed or of a kind this wallet cannot spend, a NUT-11 tag is malformed (a non-integer
+   *   `n_sigs`, or a scalar tag with more than one value), or a disclosed tree holds a leaf it
+   *   cannot parse (unknown version, type or constraint field): the same fail-closed rule the
+   *   receive cascade applies.
    */
-  spendOptions(proof: Proof, opts?: { privkeys?: string | string[]; now?: number }): SpendOptions {
-    return proofSpendOptions(proof, opts, this._nutrootState());
+  spendOptions(
+    proofs: Proof[],
+    opts?: { privkeys?: string | string[]; now?: number },
+  ): SpendOptions[] {
+    this.failIf(!Array.isArray(proofs), 'spendOptions takes an array of proofs');
+    return proofSpendOptions(proofs, opts, this._nutrootState());
   }
 
   /**
@@ -2588,7 +2596,7 @@ class Wallet {
     const plans: ScriptPathPlan[] = [];
     for (const proof of proofs) {
       if (!isBlsKeyset(proof.id) || !isV3PointSecret(proof.secret)) continue;
-      const spend = proofSpendOptions(proof, opts, this._nutrootState());
+      const [spend] = proofSpendOptions([proof], opts, this._nutrootState());
       if (spend.keyPath) continue;
       const open = spend.script.find((o) => o.satisfiable);
       if (open) {

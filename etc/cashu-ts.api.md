@@ -3090,10 +3090,10 @@ export class Wallet {
     sendOffline(amount: AmountLike, proofs: ProofLike[], config?: SendOfflineConfig): SendResponse;
     signP2PKProofs(proofs: ProofLike[], privkey: string | string[], outputData?: OutputDataLike[], quoteId?: string): Proof[];
     signSwapPreview(swapPreview: SwapPreview, privkey?: string | string[], options?: CompleteSwapOptions): Promise<SwapPreview>;
-    spendOptions(proof: Proof, opts?: {
+    spendOptions(proofs: Proof[], opts?: {
         privkeys?: string | string[];
         now?: number;
-    }): SpendOptions;
+    }): SpendOptions[];
     get unit(): string;
     verifyMintSignatures<T extends ProofLike = Proof>(proofs: T[], opts?: VerifyProofsOptions): Promise<ProofVerification<T>>;
     withKeyset(id: string, opts?: {
