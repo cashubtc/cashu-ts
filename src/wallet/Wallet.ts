@@ -104,6 +104,7 @@ import {
   getDecodedTokenBinary,
   invoiceHasAmountInHRP,
   SEED_BYTES,
+  normalizeMeltPreimage,
   normalizeMintUrl,
   normalizeProofAmounts,
   verifyMintSignatures,
@@ -4253,6 +4254,21 @@ class Wallet {
   }
 
   /**
+   * Keeps the invoice of a bolt11 quote the caller holds on the mint's answer, and checks the
+   * preimage against it.
+   *
+   * @remarks
+   * The held invoice is the one being paid, so it outranks any echo. No-op for other methods and
+   * for a held quote without a string `request`.
+   */
+  private bindHeldInvoice(method: string, held: object, res: MeltQuoteBaseResponse): void {
+    const request = (held as { request?: unknown }).request;
+    if (method !== 'bolt11' || typeof request !== 'string') return;
+    res.request = request;
+    normalizeMeltPreimage(res, method, this._logger, `${method} melt quote`);
+  }
+
+  /**
    * Requests a melt quote from the mint. Response returns amount and fees for a given unit in order
    * to pay a Lightning invoice.
    *
@@ -4441,16 +4457,21 @@ class Wallet {
     options?: AbortOptions & { normalize?: (raw: Record<string, unknown>) => TRes },
   ): Promise<TRes> {
     const quoteId = typeof quote === 'string' ? quote : (quote as { quote: string }).quote;
-    return this.mint.checkMeltQuote<TRes>(method, quoteId, {
+    const res = await this.mint.checkMeltQuote<TRes>(method, quoteId, {
       normalize: options?.normalize,
       signal: options?.signal,
     });
+    if (typeof quote !== 'string') this.bindHeldInvoice(method, quote, res);
+    return res;
   }
 
   /**
    * Returns an existing bolt11 melt quote from the mint.
    *
-   * @param quote ID of the melt quote.
+   * @remarks
+   * Pass the quote you hold rather than its id: the result then keeps your invoice, and the payment
+   * preimage is checked against it.
+   * @param quote ID of the melt quote, or the quote object you hold.
    * @returns The mint will return an existing melt quote.
    */
   async checkMeltQuoteBolt11(
@@ -4469,6 +4490,7 @@ class Wallet {
       }
       this.assertBolt11MeltQuoteAmount(res, expectedMsat);
     }
+    if (typeof quote !== 'string') this.bindHeldInvoice('bolt11', quote, res);
     return res;
   }
 
@@ -4888,6 +4910,7 @@ class Wallet {
 
     // Merge preview quote with response to protect against incomplete response.
     const mergedQuote = { ...meltPreview.quote, ...meltResponse };
+    this.bindHeldInvoice(meltPreview.method, meltPreview.quote, mergedQuote);
 
     // Create any change Proofs. The spec is silent on which keyset settles change after a
     // rotation, so take the keyset each signature names. The inputs are spent by now, so a

@@ -2599,7 +2599,7 @@ describe('generic mint/melt methods', () => {
       expect(quote.amount).toBeInstanceOf(Amount);
     });
 
-    test('checkMeltQuoteBolt11 does not merge caller fields over mint response', async () => {
+    test('checkMeltQuoteBolt11 keeps the held invoice but no other caller field', async () => {
       server.use(
         http.get(mintUrl + '/v1/melt/quote/bolt11/bolt11-melt-merge', () =>
           HttpResponse.json({
@@ -2628,7 +2628,7 @@ describe('generic mint/melt methods', () => {
         payment_preimage: null,
       });
 
-      expect(quote.request).toBe('lnbc50u1premote');
+      expect(quote.request).toBe('lnbc-local');
       expect(quote.unit).toBe('sat');
     });
 
