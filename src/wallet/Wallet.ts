@@ -74,6 +74,7 @@ import {
   MAX_SECRET_LENGTH,
   MAX_SEED_BYTES,
   MIN_SEED_BYTES,
+  normalizeMeltPreimage,
   normalizeMintUrl,
   normalizeProofAmounts,
   splitAmount,
@@ -3353,6 +3354,20 @@ class Wallet {
   }
 
   /**
+   * Bolt11 only: puts the caller's own invoice back on `res` and rechecks the preimage against it.
+   */
+  private bindHeldInvoice(
+    method: string,
+    held: object,
+    res: MeltQuoteBaseResponse & { request?: unknown },
+  ): void {
+    const request = (held as { request?: unknown }).request;
+    if (method !== 'bolt11' || typeof request !== 'string') return;
+    res.request = request;
+    normalizeMeltPreimage(res, method, this._logger, `${method} melt quote`);
+  }
+
+  /**
    * Requests a melt quote from the mint. Response returns amount and fees for a given unit in order
    * to pay a Lightning invoice.
    *
@@ -3542,15 +3557,19 @@ class Wallet {
     options?: { normalize?: (raw: Record<string, unknown>) => TRes },
   ): Promise<TRes> {
     const quoteId = typeof quote === 'string' ? quote : (quote as { quote: string }).quote;
-    return this.mint.checkMeltQuote<TRes>(method, quoteId, {
+    const res = await this.mint.checkMeltQuote<TRes>(method, quoteId, {
       normalize: options?.normalize,
     });
+    if (typeof quote !== 'string') this.bindHeldInvoice(method, quote, res);
+    return res;
   }
 
   /**
    * Returns an existing bolt11 melt quote from the mint.
    *
-   * @param quote ID of the melt quote.
+   * @remarks
+   * Pass the quote object to have the preimage checked against your own invoice.
+   * @param quote ID of the melt quote, or the quote object.
    * @returns The mint will return an existing melt quote.
    */
   async checkMeltQuoteBolt11(
@@ -3568,6 +3587,7 @@ class Wallet {
       }
       this.assertBolt11MeltQuoteAmount(res, expectedMsat);
     }
+    if (typeof quote !== 'string') this.bindHeldInvoice('bolt11', quote, res);
     return res;
   }
 
@@ -3925,6 +3945,7 @@ class Wallet {
 
     // Merge preview quote with response to protect against incomplete response.
     const mergedQuote = { ...meltPreview.quote, ...meltResponse };
+    this.bindHeldInvoice(meltPreview.method, meltPreview.quote, mergedQuote);
 
     // Create any change Proofs. The spec is silent on which keyset settles change after a
     // rotation, so take the keyset each signature names. The inputs are spent by now, so a
