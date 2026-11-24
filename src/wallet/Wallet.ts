@@ -2053,13 +2053,10 @@ class Wallet {
       undefined,
       collectSpendInfoKeys(inputs, privkey, this._logger, cache),
       scriptPath?.length
-        ? prepareScriptPathSpends(
-            inputs,
-            scriptPath,
-            privkeys,
+        ? prepareScriptPathSpends(inputs, scriptPath, privkeys, {
             cache,
-            this._mintInfo?.nutrootLeafTypes,
-          )
+            listed: this._mintInfo?.nutrootLeafTypes,
+          })
         : undefined,
       this._nutrootState(),
       options?.signal,
@@ -4856,8 +4853,7 @@ class Wallet {
               meltPreview.inputs,
               completeOptions.scriptPath,
               privkey === undefined ? [] : [privkey].flat(),
-              cache,
-              this._mintInfo?.nutrootLeafTypes,
+              { cache, listed: this._mintInfo?.nutrootLeafTypes },
             )
           : undefined,
         this._nutrootState(),

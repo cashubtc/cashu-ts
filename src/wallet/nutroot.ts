@@ -322,14 +322,17 @@ function withVerdict(keyPath: boolean, script: SpendOption[]): SpendOptions {
  * Runs on the original proofs, not the mint payload: `_prepareInputsForMint` strips spend_info, and
  * the tree and internal key live there. Everything except the signature is settled here, so a plan
  * that cannot be honoured fails before the request is built rather than at the mint.
+ * @param opts.cache - Key trials to share with the caller's other lookups.
+ * @param opts.listed - The leaf types the mint lists (NUT-10); unchecked when omitted.
  */
 export function prepareScriptPathSpends(
   inputs: Proof[],
   plans: ScriptPathPlan[],
   privkeys: string[],
-  cache: KeyTrialCache = keyTrialCache(),
-  listed?: string[],
+  opts?: { cache?: KeyTrialCache; listed?: string[] },
 ): Map<string, ScriptPathSpend> {
+  const cache = opts?.cache ?? keyTrialCache();
+  const listed = opts?.listed;
   const out = new Map<string, ScriptPathSpend>();
   for (const plan of plans) {
     // Same-text legacy and v3 secrets are different proofs (NUT-10): only a v3 input can carry
