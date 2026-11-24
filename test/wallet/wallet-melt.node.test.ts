@@ -1,4 +1,6 @@
-import { randomBytes } from '@noble/hashes/utils.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { hexToBytes, randomBytes } from '@noble/hashes/utils.js';
+import { bech32 } from '@scure/base';
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect, vi } from 'vitest';
 
@@ -817,6 +819,127 @@ describe('melt proofs', () => {
     expect(result).toBeInstanceOf(MeltChangeError);
     expect((result.cause as Error).message).toContain('Mint returned 20 signatures');
     expect(fetchKeysets).not.toHaveBeenCalled();
+  });
+});
+
+describe('melt preimage and the held invoice', () => {
+  const preimage = 'ab'.repeat(32);
+  const other = '11'.repeat(32);
+  // Timestamp, one tagged field (p = payment hash, 52 words), and an unchecked signature.
+  const invoiceFor = (preimageHex: string) =>
+    bech32.encode(
+      'lnbc',
+      [
+        ...new Array<number>(7).fill(0),
+        1,
+        1,
+        20,
+        ...bech32.toWords(sha256(hexToBytes(preimageHex))),
+      ].concat(new Array<number>(104).fill(0)),
+      false,
+    );
+  const heldInvoice = invoiceFor(preimage);
+  const heldQuote: MeltQuoteBolt11Response = {
+    quote: 'test_melt_quote',
+    amount: Amount.from(10),
+    fee_reserve: Amount.from(2),
+    request: heldInvoice,
+    state: MeltQuoteState.UNPAID,
+    expiry: 1234567890,
+    payment_preimage: null,
+    unit: 'sat',
+  };
+
+  // Melts a quote held for `heldInvoice` against a mint that answers PAID with `reply` on top.
+  async function meltWith(reply: Record<string, unknown>) {
+    server.use(
+      http.post(mintUrl + '/v1/melt/bolt11', () =>
+        HttpResponse.json({
+          quote: 'test_melt_quote',
+          amount: 10,
+          unit: 'sat',
+          state: MeltQuoteState.PAID,
+          expiry: 1234567890,
+          ...reply,
+        }),
+      ),
+    );
+    const warn = vi.fn();
+    const wallet = new Wallet(mint, {
+      unit,
+      logger: { error: vi.fn(), warn, info: vi.fn(), debug: vi.fn(), trace: vi.fn(), log: vi.fn() },
+    });
+    await wallet.loadMint();
+    const proofsToSend: Proof[] = [
+      { id: '00bd033559de27d0', amount: Amount.from(8), secret: 'secret1', C: 'C1' },
+      { id: '00bd033559de27d0', amount: Amount.from(4), secret: 'secret2', C: 'C2' },
+    ];
+    const { quote } = await wallet.meltProofsBolt11(heldQuote, proofsToSend);
+    return { quote, warn };
+  }
+
+  test('keeps a preimage that matches the held invoice when the response omits the request', async () => {
+    const { quote, warn } = await meltWith({ payment_preimage: preimage });
+    expect(quote.request).toBe(heldInvoice);
+    expect(quote.payment_preimage).toBe(preimage);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  test('nulls a preimage that does not match the held invoice when the response omits the request', async () => {
+    const { quote, warn } = await meltWith({ payment_preimage: other });
+    expect(quote.request).toBe(heldInvoice);
+    expect(quote.payment_preimage).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      'Mint returned a payment_preimage that does not match the invoice',
+      { op: 'bolt11 melt quote' },
+    );
+  });
+
+  test.each([
+    ['another invoice', invoiceFor(other)],
+    ['an unparseable request', 'lnbc1notaninvoice'],
+  ])(
+    'keeps the held invoice and checks against it when the response names %s',
+    async (_, request) => {
+      const { quote, warn } = await meltWith({ request, fee_reserve: 2, payment_preimage: other });
+      expect(quote.request).toBe(heldInvoice);
+      expect(quote.payment_preimage).toBeNull();
+      expect(warn).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  test.each([
+    ['checkMeltQuoteBolt11', (w: Wallet) => w.checkMeltQuoteBolt11(heldQuote)],
+    [
+      'checkMeltQuote',
+      (w: Wallet) => w.checkMeltQuote<MeltQuoteBolt11Response>('bolt11', heldQuote),
+    ],
+  ])('%s keeps the held invoice and checks against it', async (_, check) => {
+    server.use(
+      http.get(mintUrl + '/v1/melt/quote/bolt11/test_melt_quote', () =>
+        HttpResponse.json({
+          quote: 'test_melt_quote',
+          amount: 10,
+          unit: 'sat',
+          fee_reserve: 2,
+          state: MeltQuoteState.PAID,
+          expiry: 1234567890,
+          request: invoiceFor(other),
+          payment_preimage: other,
+        }),
+      ),
+    );
+    const warn = vi.fn();
+    const wallet = new Wallet(mint, {
+      unit,
+      logger: { error: vi.fn(), warn, info: vi.fn(), debug: vi.fn(), trace: vi.fn(), log: vi.fn() },
+    });
+    await wallet.loadMint();
+    const quote = await check(wallet);
+    expect(quote.request).toBe(heldInvoice);
+    expect(quote.payment_preimage).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(1);
   });
 });
 
