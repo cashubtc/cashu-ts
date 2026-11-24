@@ -1904,6 +1904,11 @@ describe('serializeProofs / deserializeProofs / normalizeProofAmounts', () => {
   });
 
   describe('deserializeProofs', () => {
+    test('refuses a proof that repeats a member (NUT-00)', () => {
+      const repeated = serializeProofs(proofs)[0].replace('{', '{"secret":"00",');
+      expect(() => deserializeProofs([repeated])).toThrow(/invalid JSON/);
+    });
+
     test('restores Amount objects from string[] (NutZap / DB)', async () => {
       const strings = serializeProofs(proofs);
       const restored = deserializeProofs(strings);

@@ -77,6 +77,19 @@ describe('BLS constants', () => {
   });
 });
 
+describe('point parsing rejects uppercase hex', () => {
+  test('G1 and G2 points parse from lowercase hex only (NUT-00)', () => {
+    expect(() => pointFromHexG1(NUTS_C_HEX)).not.toThrow();
+    expect(() => pointFromHexG1(NUTS_C_HEX.toUpperCase())).toThrow(
+      /G1 point hex must be lowercase/,
+    );
+    expect(() => pointFromHexG2(NUTS_G2_HEX)).not.toThrow();
+    expect(() => pointFromHexG2(NUTS_G2_HEX.toUpperCase())).toThrow(
+      /G2 point hex must be lowercase/,
+    );
+  });
+});
+
 describe('point parsing rejects the identity', () => {
   // Compressed identity encodings per IETF: top bit set + infinity bit set, rest zero.
   // G1: 48 bytes / 96 hex chars; G2: 96 bytes / 192 hex chars.

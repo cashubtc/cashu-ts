@@ -380,6 +380,24 @@ describe('transaction transcript (vectors)', () => {
     expect(verifyTransactionInputWitness(digest, secret, doubled)).toBe(false);
   });
 
+  test('rejects a key-path witness carrying script-path members', () => {
+    // NUT-00: `leaf` selects the script path, and `control` or `preimage` without it is rejected.
+    const digest = hexToBytes(tv.swap.input_digest);
+    const secret = tv.swap.tx.proof_inputs[0].secret;
+    for (const member of ['leaf', 'control', 'preimage']) {
+      const witness = JSON.stringify({ signatures: [tv.swap.signature], [member]: '00' });
+      expect(verifyTransactionInputWitness(digest, secret, witness)).toBe(false);
+    }
+  });
+
+  test('rejects a witness that repeats a member', () => {
+    // NUT-00: a JSON object that repeats a member name is malformed.
+    const digest = hexToBytes(tv.swap.input_digest);
+    const secret = tv.swap.tx.proof_inputs[0].secret;
+    const repeated = `{"signatures":[],"signatures":["${tv.swap.signature}"]}`;
+    expect(verifyTransactionInputWitness(digest, secret, repeated)).toBe(false);
+  });
+
   test('recoverV3SecretKeys resolves self-owned secrets by counter scan', async () => {
     const seed = hexToBytes(vectors.nut13_v3.seed_hex);
     const keysetId = vectors.nut13_v3.keyset_id;

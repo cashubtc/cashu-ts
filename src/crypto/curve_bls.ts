@@ -154,6 +154,8 @@ function assertCanonicalCoordinates(
 }
 
 export function pointFromHexG1(hex: string): G1Point {
+  // NUT-00: hex encodings MUST be lowercase, and uppercase is rejected.
+  if (hex !== hex.toLowerCase()) throw new CTSError('G1 point hex must be lowercase');
   // Spec NUT-00 Point Validation: enforce canonical field-coordinate range before noble's decoder
   // silently mod-reduces. See `assertCanonicalCoordinates` for the rationale.
   assertCanonicalCoordinates(hexToBytes(hex), 48, 1, 'G1');
@@ -169,6 +171,8 @@ export function pointFromHexG1(hex: string): G1Point {
 }
 
 export function pointFromHexG2(hex: string): G2Point {
+  // NUT-00: hex encodings MUST be lowercase, and uppercase is rejected.
+  if (hex !== hex.toLowerCase()) throw new CTSError('G2 point hex must be lowercase');
   // G2 compressed: c1 || c0, 48 bytes each. Both must be in [0, p).
   assertCanonicalCoordinates(hexToBytes(hex), 96, 2, 'G2');
   // @noble/curves permits parsing the identity; never valid as a Cashu mint pubkey.

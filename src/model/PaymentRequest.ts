@@ -572,6 +572,10 @@ export class PaymentRequest {
     // Every blind-me key must be a leaf key, so the tree's own key count (at most
     // NUTROOT_MAX_SLOTS) bounds the list before any EC decompression.
     const treeKeys = new Set(leaves.filter(isConditionLeaf).flatMap((leaf) => leaf.keys));
+    // NUT-18: a payer MUST refuse a NUMS request without a spendable leaf.
+    if (receiverKey === NUTROOT_NUMS_KEY && treeKeys.size === 0) {
+      throw new CTSError('malformed request: a NUMS receiver key requires a spendable leaf');
+    }
     const requestedBlindKeys = nutroot.blindKeys ?? [];
     if (requestedBlindKeys.length > treeKeys.size) {
       throw new CTSError(`Too many blind-me keys: ${requestedBlindKeys.length}`);
@@ -950,8 +954,9 @@ export class PaymentRequestBuilder {
         throw new CTSError(`blind-me key is not in the requested tree: ${key}`);
       }
     }
-    if (nutroot.receiverKey === NUTROOT_NUMS_KEY && !nutroot.leaves?.length) {
-      throw new CTSError('A NUMS receiver key requires leaves');
+    // NUT-18: with a NUMS key, `l` MUST hold at least one spendable leaf.
+    if (nutroot.receiverKey === NUTROOT_NUMS_KEY && treeKeys.size === 0) {
+      throw new CTSError('A NUMS receiver key requires a spendable leaf');
     }
     this._nutroot = nutroot;
     return this;

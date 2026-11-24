@@ -932,8 +932,11 @@ export function deriveReceiverKeyedSecret(
   opts?: { leaves?: NutrootLeaf[]; eBytes?: Uint8Array; blindKeys?: string[] },
 ): { secret: string; E?: string; tree?: string[]; K?: string; u?: string } {
   if (receiverPubHex.toLowerCase() === NUTROOT_NUMS_KEY) {
-    if (!opts?.leaves?.length) {
-      throw new CTSError('A NUMS receiver key requires leaves: nothing else could spend the proof');
+    // NUT-18: a NUMS request MUST hold at least one spendable leaf, which a commit leaf is not.
+    if (!opts?.leaves?.some(isConditionLeaf)) {
+      throw new CTSError(
+        'A NUMS receiver key requires a spendable leaf: nothing else could spend the proof',
+      );
     }
     if (!opts.blindKeys?.length) {
       return buildNutrootSecret(NUTROOT_NUMS_KEY, opts.leaves);

@@ -1318,7 +1318,7 @@ describe('nutroot (v3) request marking', () => {
     const numsKey = '0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0';
     // Authoring: refused without leaves, since nothing else could spend a proof with no key path.
     expect(() => PaymentRequest.builder().requestNutroot({ receiverKey: numsKey })).toThrow(
-      /requires leaves/,
+      /requires a spendable leaf/,
     );
     // The payer's per-output offset supplies uniqueness, so no blind-me tag is needed.
     const pr = PaymentRequest.builder()
@@ -1331,6 +1331,16 @@ describe('nutroot (v3) request marking', () => {
     expect(() =>
       new PaymentRequest({ nutroot: { receiverKey: numsKey } }).toNutrootOptions(),
     ).toThrow(/requires leaves/);
+    // A commit leaf is no spend path, so a tree of only those is refused the same way (NUT-18).
+    const commitLeaf = '0004' + '080020' + '11'.repeat(32);
+    expect(() =>
+      PaymentRequest.builder().requestNutroot({ receiverKey: numsKey, leaves: [commitLeaf] }),
+    ).toThrow(/requires a spendable leaf/);
+    expect(() =>
+      new PaymentRequest({
+        nutroot: { receiverKey: numsKey, leaves: [commitLeaf] },
+      }).toNutrootOptions(),
+    ).toThrow(/requires a spendable leaf/);
   });
 
   test('creqA carries the option under the nutroot key, pinned to the spec vector', () => {
