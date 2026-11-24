@@ -186,6 +186,17 @@ describe('prepareScriptPathSpends', () => {
     ).toThrow(/not a spend path/);
   });
 
+  test('refuses a plan naming a leaf type the mint does not list', () => {
+    // NUT-10: a mint treats a leaf type it does not list as unsatisfiable.
+    const plan = { secret: built.secret, leafIndex: 0, extraKeys: [PRIV_B] };
+    expect(() => prepareScriptPathSpends([lockedProof()], [plan], [], undefined, ['0002'])).toThrow(
+      /mint does not list the threshold leaf type/,
+    );
+    expect(() =>
+      prepareScriptPathSpends([lockedProof()], [plan], [], undefined, ['0001']),
+    ).not.toThrow();
+  });
+
   test('takes the internal key from explicit spend_info.K when no scalar is present', () => {
     const proof = v3Proof(built.secret, { K: PUB_A.toUpperCase(), tree: built.tree });
     const out = prepareScriptPathSpends(

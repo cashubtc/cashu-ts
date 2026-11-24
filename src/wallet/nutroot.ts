@@ -328,6 +328,7 @@ export function prepareScriptPathSpends(
   plans: ScriptPathPlan[],
   privkeys: string[],
   cache: KeyTrialCache = keyTrialCache(),
+  listed?: string[],
 ): Map<string, ScriptPathSpend> {
   const out = new Map<string, ScriptPathSpend>();
   for (const plan of plans) {
@@ -347,6 +348,12 @@ export function prepareScriptPathSpends(
     const leaf = parseNutrootLeaf(hexToBytes(tree[plan.leafIndex]));
     if (leaf.type === 'commit') {
       throw new CTSError('Script path plan names a commit leaf, which is not a spend path');
+    }
+    // NUT-10: a mint treats a leaf type it does not list as unsatisfiable.
+    if (listed && !listed.includes(nutrootLeafTypeHex(NUTROOT_LEAF_TYPE[leaf.type]))) {
+      throw new CTSError(
+        `Script path plan names leaf ${plan.leafIndex}, but the mint does not list the ${leaf.type} leaf type`,
+      );
     }
     if (leaf.type === 'hashlock' && plan.preimage === undefined) {
       throw new CTSError('Script path plan for a hashlock leaf needs a preimage');
