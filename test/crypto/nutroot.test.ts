@@ -852,8 +852,14 @@ describe('receiver-keyed derivation (NUT-28, vectors 6.1)', () => {
     expect(again.secret).not.toBe(out.secret);
     // Leaves are still required: with no key path, nothing else could spend the proof.
     expect(() => deriveReceiverKeyedSecret(NUTROOT_NUMS_KEY, { eBytes })).toThrow(
-      /requires leaves/,
+      /requires a spendable leaf/,
     );
+    // A commit leaf is no spend path, so a tree of only those is refused too (NUT-18).
+    expect(() =>
+      deriveReceiverKeyedSecret(NUTROOT_NUMS_KEY, {
+        leaves: [{ type: 'commit', hash: '11'.repeat(32) }],
+      }),
+    ).toThrow(/requires a spendable leaf/);
   });
 
   test('trial-match recovers the pinned key-path key', () => {

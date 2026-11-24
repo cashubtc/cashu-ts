@@ -4,7 +4,7 @@ import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
-import { bytesToHex, hexToBytes, isValidHex } from '../utils';
+import { bytesToHex, hexToBytes, isValidHex, JSONInt } from '../utils';
 
 import { taggedHash } from './core';
 import { hashToCurveHex, isBlsKeyset } from './curves';
@@ -486,7 +486,14 @@ export function verifyTransactionInputWitness(
   if (secret.length !== 33) return false;
   let signatures: unknown;
   try {
-    signatures = (JSON.parse(witnessJson) as { signatures?: unknown }).signatures;
+    // NUT-00: a JSON object that repeats a member name is malformed and MUST be rejected.
+    const witness = JSONInt.parse(witnessJson, undefined, { strict: true }) as {
+      signatures?: unknown;
+    };
+    // NUT-00: a key-path witness carrying `control` or `preimage` MUST be rejected; `leaf` selects
+    // the script path (NUT-10).
+    if ('leaf' in witness || 'control' in witness || 'preimage' in witness) return false;
+    signatures = witness.signatures;
   } catch {
     return false;
   }

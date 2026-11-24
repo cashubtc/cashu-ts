@@ -1007,7 +1007,8 @@ export function deserializeProofs(json: string | string[] | ProofLike[]): Proof[
   // NutZap tags come from other people, so malformed input fails as a CTSError like a token does.
   const parse = (text: string): unknown => {
     try {
-      return JSONInt.parse(text);
+      // NUT-00: a JSON object that repeats a member name is malformed and MUST be rejected.
+      return JSONInt.parse(text, undefined, { strict: true });
     } catch (cause) {
       throw new CTSError('deserializeProofs: invalid JSON', { cause });
     }
