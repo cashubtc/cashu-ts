@@ -5,6 +5,8 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import { Amount, type OutputDataLike } from '../../src';
 import {
+  createHTLCHash,
+  createHTLCsecret,
   createP2PKsecret,
   signP2PKProof,
   signP2PKProofs,
@@ -31,6 +33,7 @@ import {
   maybeDeriveP2BKPrivateKeys,
   normalizeP2PKOptions,
   parseWitnessData,
+  verifyHTLCSpendingConditions,
   verifyP2PKSpendingConditions,
 } from '../../src/crypto';
 import { ConsoleLogger, type Logger, NULL_LOGGER } from '../../src/logger';
@@ -2287,6 +2290,115 @@ describe('signing edge cases', () => {
   test('maybeDeriveP2BKPrivateKeys tolerates a missing proof', () => {
     const priv = bytesToHex(createRandomSecretKey());
     expect(maybeDeriveP2BKPrivateKeys(priv, undefined as unknown as Proof)).toStrictEqual([priv]);
+  });
+});
+
+describe('signing stops once a path has its threshold', () => {
+  const keys = (n: number) => Array.from({ length: n }, () => createRandomSecretKey());
+  const pub = (key: Uint8Array) => bytesToHex(getPubKeyFromPrivKey(key));
+  const hex = (ks: Uint8Array[]) => ks.map((key) => bytesToHex(key));
+  const lock = (main: Uint8Array[], tags: string[][] = []): Proof => ({
+    amount: Amount.from(1),
+    id: '00000000000',
+    C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+    secret: createP2PKsecret(pub(main[0]), [
+      ...(main.length > 1 ? [['pubkeys', ...main.slice(1).map(pub)]] : []),
+      ...tags,
+    ]),
+  });
+  const signatures = (proof: Proof) => (proof.witness as P2PKWitness | undefined)?.signatures ?? [];
+
+  test('holding every key of a 1-of-8 lock adds one signature', () => {
+    const main = keys(8);
+    const [signed] = signP2PKProofs([lock(main)], hex(main));
+    expect(signatures(signed)).toHaveLength(1);
+    expect(verifyP2PKSpendingConditions(signed)).toMatchObject({ success: true, path: 'MAIN' });
+  });
+
+  test('holding every key of a 2-of-3 lock adds two', () => {
+    const main = keys(3);
+    const [signed] = signP2PKProofs([lock(main, [['n_sigs', '2']])], hex(main));
+    expect(signatures(signed)).toHaveLength(2);
+    expect(verifyP2PKSpendingConditions(signed).success).toBe(true);
+  });
+
+  test('a signature already in the witness counts towards the threshold', () => {
+    const main = keys(3);
+    const [first] = signP2PKProofs([lock(main, [['n_sigs', '2']])], hex([main[0]]));
+    expect(signatures(first)).toHaveLength(1);
+    const [second] = signP2PKProofs([first], hex([main[1], main[2]]));
+    expect(signatures(second)).toHaveLength(2);
+    // Already met: a further key adds nothing.
+    expect(signatures(signP2PKProofs([second], hex([main[2]]))[0])).toHaveLength(2);
+  });
+
+  test('after the locktime, a refund key that meets its path ends the signing', () => {
+    const [main, refund] = [keys(2), keys(1)];
+    const tags = [
+      ['n_sigs', '2'],
+      ['locktime', '100'],
+      ['refund', pub(refund[0])],
+    ];
+    // The refund key alone is enough, so the lone main key is not asked.
+    const [refundFirst] = signP2PKProofs([lock(main, tags)], hex([refund[0], main[0]]));
+    expect(signatures(refundFirst)).toHaveLength(1);
+    expect(verifyP2PKSpendingConditions(refundFirst).path).toBe('REFUND');
+    // Tried in the other order, the main key signs first and the refund key still completes it.
+    const [mainFirst] = signP2PKProofs([lock(main, tags)], hex([main[0], refund[0]]));
+    expect(signatures(mainFirst)).toHaveLength(2);
+    expect(verifyP2PKSpendingConditions(mainFirst).path).toBe('REFUND');
+  });
+
+  test('an HTLC main threshold does not end the signing: the refund key still signs', () => {
+    const [receiver, refund] = keys(2);
+    const { hash } = createHTLCHash();
+    const secret = createHTLCsecret(hash, [
+      ['pubkeys', pub(receiver)],
+      ['locktime', '100'],
+      ['refund', pub(refund)],
+    ]);
+    const proof: Proof = { ...lock([receiver]), secret };
+    // No preimage is held, so only the refund path can spend this.
+    const [both] = signP2PKProofs([proof], hex([receiver, refund]));
+    expect(signatures(both)).toHaveLength(2);
+    expect(verifyHTLCSpendingConditions(both)).toMatchObject({ success: true, path: 'REFUND' });
+    // Arriving already signed by the receiver, the refund key still adds its signature.
+    const [receiverOnly] = signP2PKProofs([proof], hex([receiver]));
+    const [refunded] = signP2PKProofs([receiverOnly], hex([refund]));
+    expect(verifyHTLCSpendingConditions(refunded)).toMatchObject({ success: true, path: 'REFUND' });
+    // Once the refund path is met, a further key adds nothing.
+    expect(signatures(signP2PKProofs([refunded], hex([receiver, refund]))[0])).toHaveLength(2);
+  });
+
+  test('a digest given for a SIG_INPUTS proof is still reported once a path is met', () => {
+    const main = keys(1);
+    const [signed] = signP2PKProofs([lock(main)], hex(main));
+    const warn = vi.fn();
+    const digest = computeMessageDigest('not a SIG_ALL digest');
+    signP2PKProofs([signed], hex(main), { ...NULL_LOGGER, warn }, digest);
+    expect(warn).toHaveBeenCalledWith(
+      'Proof #1: A digest override is only valid for SIG_ALL proofs',
+    );
+  });
+
+  test('a witness holding more signatures than the lock has keys is signed as before', () => {
+    const main = keys(2);
+    const proof = lock(main);
+    // Three well-formed signatures that belong to no key on a two-key lock.
+    const stuffed = {
+      ...proof,
+      witness: { signatures: ['aa', 'bb', 'cc'].map((b) => b.repeat(64)) },
+    };
+    const [signed] = signP2PKProofs([stuffed], hex(main));
+    expect(signatures(signed)).toHaveLength(5);
+    expect(verifyP2PKSpendingConditions(signed).success).toBe(true);
+  });
+
+  test('a lock whose threshold cannot be judged is signed with every key, as before', () => {
+    const main = keys(2);
+    const proof = lock(main, [['n_sigs', '5']]);
+    expect(() => verifyP2PKSpendingConditions(proof)).toThrow();
+    expect(signatures(signP2PKProofs([proof], hex(main))[0])).toHaveLength(2);
   });
 });
 

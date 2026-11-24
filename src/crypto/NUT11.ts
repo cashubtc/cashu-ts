@@ -470,7 +470,13 @@ export function signP2PKProofs(
           logger.warn(`Proof #${index + 1}: Signature not required from [02|03]${pubkey}`);
           continue;
         }
+<<<<<<< HEAD
         signedProof = signP2PKProof(signedProof, priv, message);
+=======
+        // A path that has its threshold needs no more signatures, however many keys are held.
+        if (isSpendPathMet(signedProof, digest)) break;
+        signedProof = signP2PKProof(signedProof, priv, digest);
+>>>>>>> 0617622 (fix(crypto): stop signing a proof once a path has its threshold (#1545))
       } catch (error: unknown) {
         // Log signature failures only - these are not fatal, just informational
         // as not all keys will be needed for some proofs (eg P2BK, NIP60 etc)
@@ -480,6 +486,30 @@ export function signP2PKProofs(
     }
     return signedProof;
   });
+}
+
+/**
+ * Whether the witness already meets one of the lock's paths; false when that cannot be judged.
+ *
+ * @remarks
+ * An HTLC's main path also needs its preimage, which signatures cannot show, so there only the
+ * refund path counts. A digest given for a SIG_INPUTS proof, or a witness holding more signatures
+ * than the lock has keys, is not judged here: signing handles both as it always has.
+ */
+function isSpendPathMet(proof: Proof, digest?: DigestInput): boolean {
+  try {
+    if (digest !== undefined && !isP2PKSigAll([proof])) return false;
+    const secret = parseP2PKSecret(proof.secret);
+    // More signatures than keys cannot all count, so checking each against each key is wasted.
+    const keys = getP2PKWitnessPubkeys(secret).length + getP2PKWitnessRefundkeys(secret).length;
+    if (getP2PKWitnessSignatures(proof.witness).length > keys) return false;
+    const { success, path, refund } = verifyP2PKSpendingConditions(proof, NULL_LOGGER, digest);
+    if (!success) return false;
+    if (path !== 'MAIN' || getSecretKind(secret) !== 'HTLC') return true;
+    return refund.requiredSigners > 0 && refund.receivedSigners.length >= refund.requiredSigners;
+  } catch {
+    return false;
+  }
 }
 
 /**
