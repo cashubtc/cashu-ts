@@ -1003,6 +1003,30 @@ describe('melt preimage and the held invoice', () => {
     expect(quote.payment_preimage).toBeNull();
     expect(warn).toHaveBeenCalledTimes(1);
   });
+
+  test('prepareMelt keeps the invoice of a partial quote it reads from the mint', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/melt/quote/bolt11/test_melt_quote', () =>
+        HttpResponse.json({
+          quote: 'test_melt_quote',
+          amount: 10,
+          unit: 'sat',
+          fee_reserve: 2,
+          state: MeltQuoteState.UNPAID,
+          expiry: 1234567890,
+          request: invoiceFor(other),
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const partial = { quote: 'test_melt_quote', amount: Amount.from(10), request: heldInvoice };
+    const preview = await wallet.prepareMelt('bolt11', partial, [
+      { id: '00bd033559de27d0', amount: Amount.from(8), secret: 'secret1', C: 'C1' },
+      { id: '00bd033559de27d0', amount: Amount.from(4), secret: 'secret2', C: 'C2' },
+    ]);
+    expect(preview.quote.request).toBe(heldInvoice);
+  });
 });
 
 describe('async melt preference body', () => {

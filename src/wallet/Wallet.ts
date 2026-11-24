@@ -4474,7 +4474,8 @@ class Wallet {
   ): Promise<MeltQuoteBolt11Response> {
     const quoteId = typeof quote === 'string' ? quote : quote.quote;
     const res = await this.mint.checkMeltQuoteBolt11(quoteId, opts);
-    // No caller-side expectation here, so check the quote against its own invoice.
+    if (typeof quote !== 'string') this.bindHeldInvoice('bolt11', quote, res);
+    // Check the amount against the caller's invoice when given a quote, else the quote's own.
     if (this._unit === 'sat' || this._unit === 'msat') {
       let expectedMsat: bigint | null = null;
       try {
@@ -4484,7 +4485,6 @@ class Wallet {
       }
       this.assertBolt11MeltQuoteAmount(res, expectedMsat);
     }
-    if (typeof quote !== 'string') this.bindHeldInvoice('bolt11', quote, res);
     return res;
   }
 
@@ -4702,7 +4702,8 @@ class Wallet {
     let resolvedQuote: TQuote & Partial<MeltQuoteBaseResponse> = meltQuote;
     // As in prepareMint, fetch any missing fields required on a mint response (NUT-05).
     if (resolvedQuote.unit == null || resolvedQuote.state == null) {
-      const fetched = await this.checkMeltQuote<MeltQuoteBaseResponse>(method, meltQuote.quote, {
+      // Pass the quote, not its id, so a bolt11 invoice the caller holds survives the merge.
+      const fetched = await this.checkMeltQuote<MeltQuoteBaseResponse>(method, meltQuote, {
         signal: config?.signal,
       });
       resolvedQuote = { ...meltQuote, ...definedOnly(fetched) };
