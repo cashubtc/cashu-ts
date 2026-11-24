@@ -2759,7 +2759,7 @@ export type SpendOption = {
         blinded: boolean;
     }>;
     satisfiable: boolean;
-    blockedBy?: 'threshold' | 'locktime' | 'preimage' | 'commit';
+    blockedBy?: 'threshold' | 'locktime' | 'preimage' | 'commit' | 'unlisted';
     availableAt?: number;
 };
 
@@ -2768,7 +2768,7 @@ export type SpendOptions = {
     keyPath: boolean;
     script: SpendOption[];
     spendable: boolean;
-    blockedBy?: 'not-keyed-to-you' | 'locktime' | 'threshold' | 'preimage';
+    blockedBy?: 'not-keyed-to-you' | 'locktime' | 'threshold' | 'preimage' | 'unlisted';
     availableAt?: number;
 };
 

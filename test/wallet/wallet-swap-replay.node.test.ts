@@ -33,6 +33,8 @@ const mintInfo = {
   nuts: {
     '4': { methods: [], disabled: false },
     '5': { methods: [], disabled: false },
+    // Leaf types are optional (NUT-10), so the script path spends below need them listed.
+    '10': { supported: true, leaves: ['0001', '0002', '0003', '0004'] },
     '11': { supported: true },
   },
 };

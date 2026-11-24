@@ -44,13 +44,6 @@ export const NUTROOT_LEAF_TYPE = {
 } as const;
 
 /**
- * The core leaf types as `leaf_version || leaf_type` hex, the form a mint lists them in (NUT-10).
- */
-export const NUTROOT_CORE_LEAF_TYPES: readonly string[] = Object.values(NUTROOT_LEAF_TYPE).map(
-  (type) => nutrootLeafTypeHex(type),
-);
-
-/**
  * A leaf type as `leaf_version || leaf_type` hex, as a mint lists it (NUT-10).
  */
 export function nutrootLeafTypeHex(type: number): string {

@@ -398,7 +398,10 @@ describe('nutrootToLockOptions (readable conditions)', () => {
 describe('Wallet.createOutputData lock chokepoint', () => {
   const mintUrl = 'http://localhost:3338';
   // Pre-v3 locks are refused unless the mint advertises the NUT that enforces them.
-  const walletFor = (nuts: Record<string, { supported: boolean }>, logger?: Logger) => {
+  const walletFor = (
+    nuts: Record<string, { supported: boolean; leaves?: string[] }>,
+    logger?: Logger,
+  ) => {
     const w = new Wallet(mintUrl, { unit: 'sat', logger });
     w.loadMintFromCache(
       {
@@ -416,7 +419,12 @@ describe('Wallet.createOutputData lock chokepoint', () => {
     );
     return w;
   };
-  let wallet = walletFor({ '11': { supported: true }, '14': { supported: true } });
+  // Leaf types are optional (NUT-10), so the v3 locks below need the mint to list them.
+  let wallet = walletFor({
+    '10': { supported: true, leaves: ['0001', '0002', '0003', '0004'] },
+    '11': { supported: true },
+    '14': { supported: true },
+  });
   const V3_KEYSET = { id: `02${'ab'.repeat(32)}`, keys: { '1': 'x', '2': 'x' } };
   const LEGACY_KEYSET = { id: `00${'cd'.repeat(16)}`, keys: { '1': 'x', '2': 'x' } };
   const create = (keyset: { id: string; keys: Record<string, string> }, ot: OutputType) =>
@@ -503,11 +511,13 @@ describe('Wallet.createOutputData lock chokepoint', () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
-  test('a v3 lock needs no info flag: the keyset version enforces it', () => {
+  test('a script-only v3 lock needs its leaf type listed, not a NUT-14 flag', () => {
+    const hashlock = { type: 'lock' as const, options: { mainKeys: [PUB_A], hashlock: HASH } };
+    // NUT-10: leaf types are optional, so a mint that lists none takes key-path spends only.
     wallet = walletFor({});
-    expect(() =>
-      create(V3_KEYSET, { type: 'lock', options: { mainKeys: [PUB_A], hashlock: HASH } }),
-    ).not.toThrow();
+    expect(() => create(V3_KEYSET, hashlock)).toThrow(/does not list the hashlock leaf type/);
+    wallet = walletFor({ '10': { supported: true, leaves: ['0003'] } });
+    expect(() => create(V3_KEYSET, hashlock)).not.toThrow();
   });
 });
 

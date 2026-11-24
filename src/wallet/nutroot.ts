@@ -11,6 +11,8 @@ import { deriveQuoteLockKey } from '../crypto/NUT13';
 import {
   assertPreimageOpensLeaf,
   buildScriptPathWitness,
+  NUTROOT_LEAF_TYPE,
+  nutrootLeafTypeHex,
   parseNutrootLeaf,
   type NutrootLeaf,
   type KeyTrialCache,
@@ -47,6 +49,10 @@ export type NutrootWalletState = {
   seed?: Uint8Array;
   counters: { peekNext(counterKey: string): Promise<number> };
   logger: Logger;
+  /**
+   * Leaf types the mint lists (NUT-10), once its info is loaded.
+   */
+  listedLeafTypes?: string[];
 };
 
 /**
@@ -209,7 +215,7 @@ function spendOptionsOf(
   // Parses every leaf, so an unknown one throws here rather than being reported as spendable.
   const leaves = tree.map((leaf) => parseNutrootLeaf(hexToBytes(leaf)));
   const hits = recoverLeafKeySecretKeys(tree, proof.spend_info?.E, privkeys, cache);
-  return withVerdict(keyPath, scriptOptions(leaves, hits, now));
+  return withVerdict(keyPath, scriptOptions(leaves, hits, now, state.listedLeafTypes));
 }
 
 /**
@@ -251,6 +257,7 @@ function scriptOptions(
   leaves: NutrootLeaf[],
   hits: Array<{ leafIndex: number; keyIndex: number; blinded: boolean }>,
   now: number,
+  listed?: string[],
 ): SpendOption[] {
   return leaves.map((leaf, leafIndex) => {
     if (leaf.type === 'commit') {
@@ -268,7 +275,10 @@ function scriptOptions(
     if (leaf.type === 'after') option.availableAt = leaf.time;
     // Order matters: a locktime is absolute; then the key shortfall, which the leaf itself does
     // not show; a hashlock's preimage need is readable off leaf.type, so it reports last.
-    if (leaf.type === 'after' && leaf.time !== undefined && now < leaf.time) {
+    // NUT-00: a disclosed leaf counts only when the mint lists its type.
+    if (listed && !listed.includes(nutrootLeafTypeHex(NUTROOT_LEAF_TYPE[leaf.type]))) {
+      option.blockedBy = 'unlisted';
+    } else if (leaf.type === 'after' && leaf.time !== undefined && now < leaf.time) {
       option.blockedBy = 'locktime';
     } else if (keys.length < leaf.n) {
       option.blockedBy = 'threshold';
@@ -296,6 +306,10 @@ function withVerdict(keyPath: boolean, script: SpendOption[]): SpendOptions {
     const availableAt = Math.min(...waiting.map((o) => o.availableAt as number));
     return { ...stuck, blockedBy: 'locktime', availableAt };
   }
+  const covered = (o: SpendOption) => o.leaf.type !== 'commit' && o.keys.length >= o.leaf.n;
+  if (script.some((o) => o.blockedBy === 'unlisted' && covered(o))) {
+    return { ...stuck, blockedBy: 'unlisted' };
+  }
   if (script.some((o) => o.blockedBy === 'preimage')) return { ...stuck, blockedBy: 'preimage' };
   if (script.some((o) => o.keys.length > 0)) return { ...stuck, blockedBy: 'threshold' };
   return { ...stuck, blockedBy: 'not-keyed-to-you' };
@@ -308,13 +322,17 @@ function withVerdict(keyPath: boolean, script: SpendOption[]): SpendOptions {
  * Runs on the original proofs, not the mint payload: `_prepareInputsForMint` strips spend_info, and
  * the tree and internal key live there. Everything except the signature is settled here, so a plan
  * that cannot be honoured fails before the request is built rather than at the mint.
+ * @param opts.cache - Key trials to share with the caller's other lookups.
+ * @param opts.listed - The leaf types the mint lists (NUT-10); unchecked when omitted.
  */
 export function prepareScriptPathSpends(
   inputs: Proof[],
   plans: ScriptPathPlan[],
   privkeys: string[],
-  cache: KeyTrialCache = keyTrialCache(),
+  opts?: { cache?: KeyTrialCache; listed?: string[] },
 ): Map<string, ScriptPathSpend> {
+  const cache = opts?.cache ?? keyTrialCache();
+  const listed = opts?.listed;
   const out = new Map<string, ScriptPathSpend>();
   for (const plan of plans) {
     // Same-text legacy and v3 secrets are different proofs (NUT-10): only a v3 input can carry
@@ -333,6 +351,12 @@ export function prepareScriptPathSpends(
     const leaf = parseNutrootLeaf(hexToBytes(tree[plan.leafIndex]));
     if (leaf.type === 'commit') {
       throw new CTSError('Script path plan names a commit leaf, which is not a spend path');
+    }
+    // NUT-10: a mint treats a leaf type it does not list as unsatisfiable.
+    if (listed && !listed.includes(nutrootLeafTypeHex(NUTROOT_LEAF_TYPE[leaf.type]))) {
+      throw new CTSError(
+        `Script path plan names leaf ${plan.leafIndex}, but the mint does not list the ${leaf.type} leaf type`,
+      );
     }
     if (leaf.type === 'hashlock' && plan.preimage === undefined) {
       throw new CTSError('Script path plan for a hashlock leaf needs a preimage');

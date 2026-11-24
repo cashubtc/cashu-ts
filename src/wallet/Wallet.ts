@@ -2053,7 +2053,12 @@ class Wallet {
       payload,
       undefined,
       collectSpendInfoKeys(inputs, privkey, this._logger, cache),
-      scriptPath?.length ? prepareScriptPathSpends(inputs, scriptPath, privkeys, cache) : undefined,
+      scriptPath?.length
+        ? prepareScriptPathSpends(inputs, scriptPath, privkeys, {
+            cache,
+            listed: this._mintInfo?.nutrootLeafTypes,
+          })
+        : undefined,
       this._nutrootState(),
       options?.signal,
     );
@@ -2260,20 +2265,20 @@ class Wallet {
   }
 
   /**
-   * Refuses a script-only lock using a leaf type the mint does not list (NUT-10).
+   * Refuses a lock using a leaf type the mint does not list (NUT-10).
    *
    * @remarks
-   * With no key path, a leaf the mint cannot evaluate leaves the value with no way out.
+   * A mint treats an unlisted leaf type as unsatisfiable, so that path could never be spent.
    */
   private listedLeavesOnly(option: ParsedNutrootOption): ParsedNutrootOption {
-    if (option.receiverKey.toLowerCase() !== NUTROOT_NUMS_KEY) return option;
+    // NUT-10: a wallet MUST only build a lock from leaf types the mint lists.
     const listed = this.getMintInfo().nutrootLeafTypes;
     const unlisted = (option.leaves ?? []).find(
       (leaf) => !listed.includes(nutrootLeafTypeHex(NUTROOT_LEAF_TYPE[leaf.type])),
     );
     this.failIf(
       unlisted !== undefined,
-      `Mint does not list the ${unlisted?.type} leaf type (NUT-10): a script-only lock using it could not be spent`,
+      `Mint does not list the ${unlisted?.type} leaf type (NUT-10): that path of the lock could not be spent`,
     );
     return option;
   }
@@ -2540,6 +2545,7 @@ class Wallet {
       seed: this._seed,
       counters: this.counters,
       logger: this._logger,
+      ...(this._mintInfo && { listedLeafTypes: this._mintInfo.nutrootLeafTypes }),
     };
   }
 
@@ -4848,7 +4854,7 @@ class Wallet {
               meltPreview.inputs,
               completeOptions.scriptPath,
               privkey === undefined ? [] : [privkey].flat(),
-              cache,
+              { cache, listed: this._mintInfo?.nutrootLeafTypes },
             )
           : undefined,
         this._nutrootState(),
