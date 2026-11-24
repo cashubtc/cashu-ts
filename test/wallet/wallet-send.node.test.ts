@@ -73,7 +73,7 @@ describe('sendOffline witness normalization', () => {
     const wallet = new Wallet(mint, { unit, requireSigDleq: true });
     await wallet.loadMint();
 
-    const witnessStr = JSON.stringify({ signatures: ['cafebabe'] });
+    const witnessStr = JSON.stringify({ signatures: ['cafebabe'.repeat(16)] });
     const proofs: Proof[] = [
       {
         id: '00bd033559de27d0',
@@ -89,11 +89,30 @@ describe('sendOffline witness normalization', () => {
     expect(send[0].witness).toBe(witnessStr);
   });
 
+  test('sends a P2PK witness as its signatures only', async () => {
+    const wallet = new Wallet(mint, { unit, requireSigDleq: true });
+    await wallet.loadMint();
+
+    const signature = 'cafebabe'.repeat(16);
+    const proofs: Proof[] = [
+      {
+        id: '00bd033559de27d0',
+        amount: Amount.from(1),
+        secret: p2pkSecret,
+        C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+        witness: JSON.stringify({ note: 'dropped', signatures: ['junk', signature, 7] }),
+      },
+    ];
+
+    const { send } = wallet.sendOffline(1, proofs);
+    expect(send[0].witness).toBe(JSON.stringify({ signatures: [signature] }));
+  });
+
   test('keeps the witness on a NUT-10 secret over the length limit', async () => {
     // A mint configured for longer secrets still enforces this lock, so its signature must travel.
     const wallet = new Wallet(mint, { unit, requireSigDleq: true });
     await wallet.loadMint();
-    const witnessStr = JSON.stringify({ signatures: ['cafebabe'] });
+    const witnessStr = JSON.stringify({ signatures: ['cafebabe'.repeat(16)] });
     const longLock = JSON.stringify([
       'P2PK',
       { nonce: 'n'.repeat(1100), data: '02' + 'aa'.repeat(32) },
@@ -109,13 +128,24 @@ describe('sendOffline witness normalization', () => {
 
     expect(wallet.sendOffline(1, [proof(longLock)]).send[0].witness).toBe(witnessStr);
     expect(wallet.sendOffline(1, [proof(longPlain)]).send[0].witness).toBeUndefined();
+    // The long lock's witness is cleaned like any other P2PK witness.
+    const untidy = { ...proof(longLock), witness: '{"signatures":["junk"],"extra":1}' };
+    expect(wallet.sendOffline(1, [untidy]).send[0].witness).toBe('{"signatures":[]}');
+    // So is one whose kind is spelt with a JSON escape.
+    const escaped = { ...untidy, secret: longLock.replace('"P2PK"', '"P\\u0032PK"') };
+    expect(JSON.parse(escaped.secret)[0]).toBe('P2PK');
+    expect(wallet.sendOffline(1, [escaped]).send[0].witness).toBe('{"signatures":[]}');
+    // A long lock of another kind keeps its witness as it came.
+    const otherKind = JSON.stringify(['OTHER', { nonce: 'n'.repeat(1100), data: 'aa' }]);
+    const kept = { ...proof(otherKind), witness: '{"signatures":["junk"],"extra":1}' };
+    expect(wallet.sendOffline(1, [kept]).send[0].witness).toBe(kept.witness);
   });
 
   test('serializes object witness on NUT-10 secret to JSON string', async () => {
     const wallet = new Wallet(mint, { unit, requireSigDleq: true });
     await wallet.loadMint();
 
-    const witnessObj = { signatures: ['cafebabe'] };
+    const witnessObj = { signatures: ['cafebabe'.repeat(16)] };
     const proofs: Proof[] = [
       {
         id: '00bd033559de27d0',
@@ -217,7 +247,7 @@ describe('sendOffline witness normalization', () => {
     const wallet = new Wallet(mint, { unit, requireSigDleq: true });
     await wallet.loadMint();
 
-    const witnessStr = JSON.stringify({ signatures: ['cafebabe'] });
+    const witnessStr = JSON.stringify({ signatures: ['cafebabe'.repeat(16)] });
     const proofs: Proof[] = [
       {
         id: '00bd033559de27d0',
@@ -237,7 +267,7 @@ describe('sendOffline witness normalization', () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
 
-    const witnessStr = JSON.stringify({ signatures: ['cafebabe'] });
+    const witnessStr = JSON.stringify({ signatures: ['cafebabe'.repeat(16)] });
     const proofs: Proof[] = [
       {
         id: '00bd033559de27d0',

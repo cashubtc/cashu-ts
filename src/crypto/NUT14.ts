@@ -192,7 +192,7 @@ export function isHTLCSpendAuthorised(
  *
  * @param witness From a Proof.
  * @returns Preimage if present.
- * @throws If a serialized witness is oversized.
+ * @throws If the witness is oversized.
  */
 export function getHTLCWitnessPreimage(witness: Proof['witness']): string | undefined {
   return parseWitnessData(witness)?.preimage;
@@ -202,11 +202,12 @@ export function getHTLCWitnessPreimage(witness: Proof['witness']): string | unde
  * Puts `preimage` on the witness of every HTLC proof whose hashlock it opens.
  *
  * @remarks
- * Other proofs pass through untouched. Existing signatures are kept, and signing keeps the
- * preimage, so this composes with {@link signP2PKProofs} in either order.
+ * Other proofs pass through untouched. Existing signatures are kept (entries that are not 64 bytes
+ * of hex are not), and signing keeps the preimage, so this composes with {@link signP2PKProofs} in
+ * either order.
  * @param proofs Proofs to stamp.
  * @param preimage 64 hex characters.
- * @throws If `preimage` is malformed.
+ * @throws If `preimage` is malformed, or an existing witness is oversized.
  */
 export function attachHTLCPreimage<T extends ProofLike>(proofs: T[], preimage: string): T[] {
   if (!/^[0-9a-f]{64}$/i.test(preimage)) {

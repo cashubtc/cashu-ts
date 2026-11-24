@@ -466,8 +466,11 @@ export function getP2PKSigFlag(secretStr: string | Secret): SigFlag {
 /**
  * Gets witness signatures as an array.
  *
+ * @remarks
+ * Entries that are not 64 bytes of hex are left out.
  * @param witness From Proof.
  * @returns Array of witness signatures.
+ * @throws If the witness is oversized, or holds more signatures than a lock can use.
  */
 export function getP2PKWitnessSignatures(witness: Proof['witness']): string[] {
   const signatures = parseWitnessData(witness)?.signatures ?? [];
@@ -478,11 +481,48 @@ export function getP2PKWitnessSignatures(witness: Proof['witness']): string[] {
 }
 
 /**
+ * Whether a witness entry is shaped like a signature: 64 bytes of hex. Says nothing of validity.
+ *
+ * @internal
+ */
+export function isSignatureHex(entry: unknown): entry is string {
+  return typeof entry === 'string' && /^[0-9a-f]{128}$/i.test(entry);
+}
+
+/**
+ * Serializes a P2PK or HTLC witness for a mint from the fields NUT-11 and NUT-14 define.
+ *
+ * @remarks
+ * Rebuilt as `preimage` and signature-shaped `signatures` only, so nothing else in the witness is
+ * forwarded. An oversized or unreadable witness is left as it is, for the mint to refuse.
+ * @internal
+ */
+export function serializeWitnessForMint(witness: NonNullable<Proof['witness']>): string {
+  let data: WitnessData | undefined;
+  try {
+    data = parseWitnessData(witness);
+  } catch {
+    data = undefined;
+  }
+  if (!data) return typeof witness === 'string' ? witness : JSON.stringify(witness);
+  const { preimage, signatures } = data;
+  // A preimage alone is a whole witness (a keyless HTLC), so no empty signature list beside it.
+  return JSON.stringify(
+    preimage === undefined
+      ? { signatures }
+      : { preimage, ...(signatures.length && { signatures }) },
+  );
+}
+
+/**
  * Normalize Proof.witness into a WitnessData object.
  *
+ * @remarks
+ * Signature entries that are not 64 bytes of hex are dropped, so they are never verified, counted
+ * or written back.
  * @param witness From Proof.
  * @returns WitnessData object or undefined.
- * @throws If a serialized witness is oversized.
+ * @throws If a serialized witness is oversized, or an object one holds more entries than that.
  * @internal
  */
 export function parseWitnessData(witness: Proof['witness']): WitnessData | undefined {
@@ -504,9 +544,14 @@ export function parseWitnessData(witness: Proof['witness']): WitnessData | undef
   }
   // A parsed primitive (eg "null", "1", "true") is not a witness; treat it as absent.
   if (!parsed || typeof parsed !== 'object') return undefined;
+  // always normalize signatures to an array (untrusted witness may carry a non-array value)
+  const entries: unknown[] = Array.isArray(parsed.signatures) ? parsed.signatures : [];
+  // An object witness gets the bound a string one has: none under the length cap holds more.
+  if (entries.length > MAX_WITNESS_LENGTH) {
+    throw new CTSError(`Too many witness signatures: ${entries.length}`);
+  }
   const data: WitnessData = {
-    // always normalize signatures to an array (untrusted witness may carry a non-array value)
-    signatures: Array.isArray(parsed.signatures) ? parsed.signatures : [],
+    signatures: entries.filter(isSignatureHex),
   };
 
   // Only set preimage if it is a non empty string

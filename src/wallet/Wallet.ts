@@ -27,7 +27,12 @@ import {
 } from '../crypto';
 // Internal transitional fallback — not part of crypto/index.ts
 import { getPubKeyFromPrivKey, isValidSecpPubkey, normalizeSecpPubkey } from '../crypto/curve_secp';
-import { p2pkOptionsToPRNut10, p2pkToSpendLeaves, type P2PKOptions } from '../crypto/NUT11';
+import {
+  p2pkOptionsToPRNut10,
+  p2pkToSpendLeaves,
+  serializeWitnessForMint,
+  type P2PKOptions,
+} from '../crypto/NUT11';
 import { verifyHTLCHash } from '../crypto/NUT14';
 import { mintQuoteDigest, signMintQuoteLegacy } from '../crypto/NUT20';
 import {
@@ -2632,8 +2637,9 @@ class Wallet {
   /**
    * Normalizes a proof's witness for the mint payload.
    *
-   * Serializes object witnesses to JSON and strips witnesses from non-NUT-10 secrets (plain secrets
-   * with a witness field are rejected by mints).
+   * Serializes object witnesses to JSON, strips witnesses from non-NUT-10 secrets (plain secrets
+   * with a witness field are rejected by mints), and rebuilds a P2PK or HTLC witness from its
+   * defined fields.
    */
   private _normalizeWitness(proof: Proof): string | undefined {
     if (!proof.witness) return undefined;
@@ -2643,15 +2649,25 @@ class Wallet {
     }
     const witness =
       typeof proof.witness !== 'string' ? JSON.stringify(proof.witness) : proof.witness;
+    let kind: string | undefined;
     try {
-      parseSecret(proof.secret);
+      [kind] = parseSecret(proof.secret);
     } catch {
       // Over our length limit a lock still binds at a mint that allows longer secrets: keep it.
       const longLock =
         proof.secret.length > MAX_SECRET_LENGTH && proof.secret.trimStart().startsWith('[');
-      return longLock ? witness : undefined; // plain secret: strip stray witness
+      if (!longLock) return undefined; // plain secret: strip stray witness
+      // Too long to parse here, so the kind is read off the front, as the JSON string it is.
+      const first = /^\s*\[\s*("(?:[^"\\]|\\.)*")/.exec(proof.secret)?.[1] ?? 'null';
+      try {
+        const parsed: unknown = JSON.parse(first);
+        kind = typeof parsed === 'string' ? parsed : undefined;
+      } catch {
+        kind = undefined;
+      }
     }
-    return witness;
+    // A P2PK or HTLC witness goes out as its defined fields only (NUT-11, NUT-14).
+    return kind === 'P2PK' || kind === 'HTLC' ? serializeWitnessForMint(witness) : witness;
   }
 
   /**
