@@ -7,7 +7,8 @@ import { bolt11PreimageMatches } from './core';
  *
  * @remarks
  * Per NUT-23 it is `<str | null>`: undefined reads as null, any other type warns and reads as null.
- * A bolt11 preimage is also checked against its invoice.
+ * A bolt11 preimage is also checked against its invoice and nulled on a mismatch. The null is the
+ * signal, not the warning: callers treat a non-null preimage as proof of payment (eg L402).
  */
 export function normalizeMeltPreimage(
   data: Record<string, unknown>,
