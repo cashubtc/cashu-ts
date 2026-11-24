@@ -4254,12 +4254,7 @@ class Wallet {
   }
 
   /**
-   * Keeps the invoice of a bolt11 quote the caller holds on the mint's answer, and checks the
-   * preimage against it.
-   *
-   * @remarks
-   * The held invoice is the one being paid, so it outranks any echo. No-op for other methods and
-   * for a held quote without a string `request`.
+   * Bolt11 only: puts the caller's own invoice back on `res` and rechecks the preimage against it.
    */
   private bindHeldInvoice(method: string, held: object, res: MeltQuoteBaseResponse): void {
     const request = (held as { request?: unknown }).request;
@@ -4469,9 +4464,8 @@ class Wallet {
    * Returns an existing bolt11 melt quote from the mint.
    *
    * @remarks
-   * Pass the quote you hold rather than its id: the result then keeps your invoice, and the payment
-   * preimage is checked against it.
-   * @param quote ID of the melt quote, or the quote object you hold.
+   * Pass the quote object to have the preimage checked against your own invoice.
+   * @param quote ID of the melt quote, or the quote object.
    * @returns The mint will return an existing melt quote.
    */
   async checkMeltQuoteBolt11(
