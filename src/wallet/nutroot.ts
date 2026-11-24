@@ -11,6 +11,8 @@ import { deriveQuoteLockKey } from '../crypto/NUT13';
 import {
   assertPreimageOpensLeaf,
   buildScriptPathWitness,
+  NUTROOT_LEAF_TYPE,
+  nutrootLeafTypeHex,
   parseNutrootLeaf,
   type NutrootLeaf,
   type KeyTrialCache,
@@ -47,6 +49,10 @@ export type NutrootWalletState = {
   seed?: Uint8Array;
   counters: { peekNext(counterKey: string): Promise<number> };
   logger: Logger;
+  /**
+   * Leaf types the mint lists (NUT-10), once its info is loaded.
+   */
+  listedLeafTypes?: string[];
 };
 
 /**
@@ -209,7 +215,7 @@ function spendOptionsOf(
   // Parses every leaf, so an unknown one throws here rather than being reported as spendable.
   const leaves = tree.map((leaf) => parseNutrootLeaf(hexToBytes(leaf)));
   const hits = recoverLeafKeySecretKeys(tree, proof.spend_info?.E, privkeys, cache);
-  return withVerdict(keyPath, scriptOptions(leaves, hits, now));
+  return withVerdict(keyPath, scriptOptions(leaves, hits, now, state.listedLeafTypes));
 }
 
 /**
@@ -251,6 +257,7 @@ function scriptOptions(
   leaves: NutrootLeaf[],
   hits: Array<{ leafIndex: number; keyIndex: number; blinded: boolean }>,
   now: number,
+  listed?: string[],
 ): SpendOption[] {
   return leaves.map((leaf, leafIndex) => {
     if (leaf.type === 'commit') {
@@ -268,7 +275,10 @@ function scriptOptions(
     if (leaf.type === 'after') option.availableAt = leaf.time;
     // Order matters: a locktime is absolute; then the key shortfall, which the leaf itself does
     // not show; a hashlock's preimage need is readable off leaf.type, so it reports last.
-    if (leaf.type === 'after' && leaf.time !== undefined && now < leaf.time) {
+    // NUT-00: a disclosed leaf counts only when the mint lists its type.
+    if (listed && !listed.includes(nutrootLeafTypeHex(NUTROOT_LEAF_TYPE[leaf.type]))) {
+      option.blockedBy = 'unlisted';
+    } else if (leaf.type === 'after' && leaf.time !== undefined && now < leaf.time) {
       option.blockedBy = 'locktime';
     } else if (keys.length < leaf.n) {
       option.blockedBy = 'threshold';
@@ -295,6 +305,10 @@ function withVerdict(keyPath: boolean, script: SpendOption[]): SpendOptions {
   if (waiting.length) {
     const availableAt = Math.min(...waiting.map((o) => o.availableAt as number));
     return { ...stuck, blockedBy: 'locktime', availableAt };
+  }
+  const covered = (o: SpendOption) => o.leaf.type !== 'commit' && o.keys.length >= o.leaf.n;
+  if (script.some((o) => o.blockedBy === 'unlisted' && covered(o))) {
+    return { ...stuck, blockedBy: 'unlisted' };
   }
   if (script.some((o) => o.blockedBy === 'preimage')) return { ...stuck, blockedBy: 'preimage' };
   if (script.some((o) => o.keys.length > 0)) return { ...stuck, blockedBy: 'threshold' };

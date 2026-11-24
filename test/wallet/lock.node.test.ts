@@ -398,7 +398,10 @@ describe('nutrootToLockOptions (readable conditions)', () => {
 describe('Wallet.createOutputData lock chokepoint', () => {
   const mintUrl = 'http://localhost:3338';
   // Pre-v3 locks are refused unless the mint advertises the NUT that enforces them.
-  const walletFor = (nuts: Record<string, { supported: boolean }>, logger?: Logger) => {
+  const walletFor = (
+    nuts: Record<string, { supported: boolean; leaves?: string[] }>,
+    logger?: Logger,
+  ) => {
     const w = new Wallet(mintUrl, { unit: 'sat', logger });
     w.loadMintFromCache(
       {
@@ -503,11 +506,13 @@ describe('Wallet.createOutputData lock chokepoint', () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
-  test('a v3 lock needs no info flag: the keyset version enforces it', () => {
+  test('a script-only v3 lock needs its leaf type listed, not a NUT-14 flag', () => {
+    const hashlock = { type: 'lock' as const, options: { mainKeys: [PUB_A], hashlock: HASH } };
+    // NUT-10: leaf types are optional, so a mint that lists none takes key-path spends only.
     wallet = walletFor({});
-    expect(() =>
-      create(V3_KEYSET, { type: 'lock', options: { mainKeys: [PUB_A], hashlock: HASH } }),
-    ).not.toThrow();
+    expect(() => create(V3_KEYSET, hashlock)).toThrow(/does not list the hashlock leaf type/);
+    wallet = walletFor({ '10': { supported: true, leaves: ['0003'] } });
+    expect(() => create(V3_KEYSET, hashlock)).not.toThrow();
   });
 });
 

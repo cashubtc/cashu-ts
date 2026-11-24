@@ -1369,9 +1369,10 @@ describe('MintInfo nutroot leaf types (NUT-10)', () => {
     ]);
   });
 
-  it('takes a mint with no list to understand the core leaves', () => {
-    expect(withLeaves(undefined).nutrootLeafTypes).toEqual(['0001', '0002', '0003', '0004']);
-    expect(withLeaves([]).nutrootLeafTypes).toEqual(['0001', '0002', '0003', '0004']);
+  it('takes a mint with no list to understand no leaf type', () => {
+    // NUT-10: leaf types are optional, and a mint that lists none accepts key-path witnesses only.
+    expect(withLeaves(undefined).nutrootLeafTypes).toEqual([]);
+    expect(withLeaves([]).nutrootLeafTypes).toEqual([]);
   });
 
   it('caps a hostile list', () => {

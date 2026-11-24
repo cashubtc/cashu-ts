@@ -15,6 +15,7 @@ import { hashToCurveBls } from '../../src/crypto/curve_bls';
 import { blindMessage, getPubKeyFromPrivKey } from '../../src/crypto/curve_secp';
 import {
   NUTROOT_NUMS_KEY,
+  buildNutrootSecret,
   deriveReceiverKeyedSecret,
   serializeNutrootLeafHex,
   type NutrootLeaf,
@@ -37,6 +38,8 @@ const mintInfo = {
   nuts: {
     '4': { methods: [], disabled: false },
     '5': { methods: [], disabled: false },
+    // Leaf types are optional (NUT-10), so the locks below need the mint to list them.
+    '10': { supported: true, leaves: ['0001', '0002', '0003', '0004'] },
     // The legacy-keyset locks below need the mint to enforce P2PK.
     '11': { supported: true },
   },
@@ -380,5 +383,35 @@ describe('nutroot edge cases', () => {
     ).toThrow(/does not list the after leaf type/);
     // A key path remains, so an unlisted leaf only disables that path.
     expect(() => build({ mainKeys: [pub(1)], ...refund })).not.toThrow();
+  });
+
+  test('a disclosed leaf counts as a spend path only when the mint lists its type', () => {
+    // NUT-00 receive check 2: keys satisfying a leaf the mint does not list spend nothing.
+    const { secret, tree } = buildNutrootSecret(pub(2), [
+      { type: 'threshold', n: 1, keys: [pub(1)] },
+    ]);
+    const proof = {
+      id,
+      amount: Amount.from(1),
+      secret,
+      C: 'aa'.repeat(48),
+      spend_info: { K: pub(2), tree },
+    };
+    const loaded = (leaves: string[]) => {
+      const w = new Wallet(mintUrl);
+      w.loadMintFromCache(
+        { ...mintInfo, nuts: { ...mintInfo.nuts, '10': { supported: true, leaves } } },
+        cache(),
+      );
+      return w.spendOptions([proof], { privkeys: priv(1) })[0];
+    };
+    expect(loaded(['0001'])).toMatchObject({ spendable: true });
+    const unlisted = loaded(['0002']);
+    expect(unlisted).toMatchObject({ spendable: false, blockedBy: 'unlisted' });
+    expect(unlisted.script[0]).toMatchObject({ satisfiable: false, blockedBy: 'unlisted' });
+    // Offline, with no mint info loaded, the leaf is judged on its keys alone.
+    expect(new Wallet(mintUrl).spendOptions([proof], { privkeys: priv(1) })[0]).toMatchObject({
+      spendable: true,
+    });
   });
 });

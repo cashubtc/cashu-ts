@@ -2539,6 +2539,7 @@ class Wallet {
       seed: this._seed,
       counters: this.counters,
       logger: this._logger,
+      ...(this._mintInfo && { listedLeafTypes: this._mintInfo.nutrootLeafTypes }),
     };
   }
 

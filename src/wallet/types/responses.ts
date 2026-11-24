@@ -60,11 +60,12 @@ export type SpendOption = {
   keys: Array<{ keyIndex: number; pubkey: string; blinded: boolean }>;
   satisfiable: boolean;
   /**
-   * Why the leaf is not satisfiable from what this wallet holds: an unexpired locktime, then a key
-   * shortfall, then `preimage`, meaning a hashlock leaf whose keys are covered and which only needs
-   * the caller-supplied preimage. `commit` is a commitment leaf, which no one can spend through.
+   * Why the leaf is not satisfiable from what this wallet holds: `unlisted` when the loaded mint
+   * does not list its leaf type, then an unexpired locktime, then a key shortfall, then `preimage`,
+   * meaning a hashlock leaf whose keys are covered and which only needs the caller-supplied
+   * preimage. `commit` is a commitment leaf, which no one can spend through.
    */
-  blockedBy?: 'threshold' | 'locktime' | 'preimage' | 'commit';
+  blockedBy?: 'threshold' | 'locktime' | 'preimage' | 'commit' | 'unlisted';
   /**
    * Unix seconds an `after` leaf unlocks.
    */
@@ -91,10 +92,11 @@ export type SpendOptions = {
   spendable: boolean;
   /**
    * Why nothing spends it, when `spendable` is false: `locktime` when a leaf this wallet covers is
-   * only waiting (see `availableAt`), then `preimage`, then `threshold` when it holds some but not
-   * enough keys, else `not-keyed-to-you`, meaning none of its keys are held.
+   * only waiting (see `availableAt`), then `unlisted` when a leaf it covers is of a type the mint
+   * does not list, then `preimage`, then `threshold` when it holds some but not enough keys, else
+   * `not-keyed-to-you`, meaning none of its keys are held.
    */
-  blockedBy?: 'not-keyed-to-you' | 'locktime' | 'threshold' | 'preimage';
+  blockedBy?: 'not-keyed-to-you' | 'locktime' | 'threshold' | 'preimage' | 'unlisted';
   /**
    * Unix seconds the earliest waiting leaf unlocks, with `blockedBy: 'locktime'`.
    */
