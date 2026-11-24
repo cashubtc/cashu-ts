@@ -447,11 +447,29 @@ export function signP2PKProofs(
   // Convert to hex strings for maybeDeriveP2BKPrivateKeys
   const toHex = (k: PrivKey): string => (typeof k === 'string' ? k : bytesToHex(k));
   const privateKeyHex = Array.isArray(privateKey) ? privateKey.map(toHex) : toHex(privateKey);
+  // Derived once per call: a key costs one derivation however many proofs it is tried on.
+  const xOnlyOf = new Map<string, string>();
+  const xOnly = (priv: string): string => {
+    let pubkey = xOnlyOf.get(priv);
+    if (pubkey === undefined) {
+      pubkey = bytesToHex(schnorr.getPublicKey(hexToBytes(priv)));
+      xOnlyOf.set(priv, pubkey);
+    }
+    return pubkey;
+  };
   return proofs.map((proof, index) => {
     const privateKeys: string[] = maybeDeriveP2BKPrivateKeys(privateKeyHex, proof);
+    let secret: Secret | undefined;
     let signedProof = proof;
     for (const priv of privateKeys) {
       try {
+        secret ??= parseP2PKSecret(proof.secret);
+        const pubkey = xOnly(priv);
+        // Read per key, not once per proof: who may sign follows the clock.
+        if (!getP2PKExpectedWitnessPubkeys(secret).some((k) => k.slice(2) === pubkey)) {
+          logger.warn(`Proof #${index + 1}: Signature not required from [02|03]${pubkey}`);
+          continue;
+        }
         signedProof = signP2PKProof(signedProof, priv, message);
       } catch (error: unknown) {
         // Log signature failures only - these are not fatal, just informational

@@ -2249,6 +2249,41 @@ describe('signing edge cases', () => {
     expect(result.witness).toBeUndefined();
   });
 
+  test('each proof is signed by the key it expects, out of many supplied', () => {
+    const keys = Array.from({ length: 5 }, () => bytesToHex(createRandomSecretKey()));
+    // Six proofs, each locked to one of the five keys.
+    const proofs = Array.from({ length: 6 }, (_, i) =>
+      mkProof(createP2PKsecret(bytesToHex(getPubKeyFromPrivKey(hexToBytes(keys[i % 5]))))),
+    );
+    const signed = signP2PKProofs(proofs, keys);
+    expect(signed.every((p) => isP2PKSpendAuthorised(p))).toBe(true);
+    expect(signed.every((p) => (p.witness as P2PKWitness).signatures?.length === 1)).toBe(true);
+  });
+
+  test('a lock that expires between two keys still takes the refund signature', () => {
+    const [alice, bob, refund] = [0, 1, 2].map(() => createRandomSecretKey());
+    const pub = (key: Uint8Array) => bytesToHex(getPubKeyFromPrivKey(key));
+    const secret = createP2PKsecret(pub(alice), [
+      ['pubkeys', pub(bob)],
+      ['n_sigs', '2'],
+      ['locktime', '100'],
+      ['refund', pub(refund)],
+    ]);
+    // The clock reads the locktime for the first check and one second later from then on.
+    vi.spyOn(Date, 'now').mockReturnValueOnce(100_000).mockReturnValue(101_000);
+    const [signed] = signP2PKProofs([mkProof(secret)], [bytesToHex(alice), bytesToHex(refund)]);
+    expect((signed.witness as P2PKWitness).signatures).toHaveLength(2);
+    expect(verifyP2PKSpendingConditions(signed)).toMatchObject({ success: true, path: 'REFUND' });
+  });
+
+  test('a malformed key is skipped without stopping the other keys', () => {
+    const warn = vi.fn();
+    const logger: Logger = { ...NULL_LOGGER, warn };
+    const [signed] = signP2PKProofs([mkProof(secretStr)], ['zz', bytesToHex(PRIVKEY)], logger);
+    expect(isP2PKSpendAuthorised(signed)).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
   test('maybeDeriveP2BKPrivateKeys tolerates a missing proof', () => {
     const priv = bytesToHex(createRandomSecretKey());
     expect(maybeDeriveP2BKPrivateKeys(priv, undefined as unknown as Proof)).toStrictEqual([priv]);
