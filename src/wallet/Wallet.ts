@@ -1488,6 +1488,7 @@ class Wallet {
   sendOffline(amount: AmountLike, proofs: ProofLike[], config?: SendOfflineConfig): SendResponse {
     const sendAmount = this.parseAmount(amount, 'sendOffline');
     let normalizedProofs = normalizeProofAmounts(proofs);
+    this.assertNoDuplicateProofs(normalizedProofs);
     const { requireDleq = false, includeFees = false, exactMatch = true } = config || {};
     let skipped: Proof[] = [];
     if (requireDleq) {
