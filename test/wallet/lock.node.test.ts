@@ -419,7 +419,12 @@ describe('Wallet.createOutputData lock chokepoint', () => {
     );
     return w;
   };
-  let wallet = walletFor({ '11': { supported: true }, '14': { supported: true } });
+  // Leaf types are optional (NUT-10), so the v3 locks below need the mint to list them.
+  let wallet = walletFor({
+    '10': { supported: true, leaves: ['0001', '0002', '0003', '0004'] },
+    '11': { supported: true },
+    '14': { supported: true },
+  });
   const V3_KEYSET = { id: `02${'ab'.repeat(32)}`, keys: { '1': 'x', '2': 'x' } };
   const LEGACY_KEYSET = { id: `00${'cd'.repeat(16)}`, keys: { '1': 'x', '2': 'x' } };
   const create = (keyset: { id: string; keys: Record<string, string> }, ot: OutputType) =>

@@ -363,7 +363,7 @@ describe('nutroot edge cases', () => {
     },
   );
 
-  test('refuses a script-only lock with a leaf type the mint does not list', () => {
+  test('refuses a lock with a leaf type the mint does not list', () => {
     const w = new Wallet(mintUrl);
     w.loadMintFromCache(
       { ...mintInfo, nuts: { ...mintInfo.nuts, '10': { supported: true, leaves: ['0001'] } } },
@@ -377,12 +377,15 @@ describe('nutroot edge cases', () => {
         { type: 'lock', options },
       );
     const refund = { locktime: 4_000_000_000, refundKeys: [pub(3)] };
-    // 2-of-2 has no key path, so its refund leaf must be a listed type.
+    // NUT-10: a lock is built only from leaf types the mint lists, key path or not.
     expect(() =>
       build({ mainKeys: [pub(1), pub(2)], requiredMainSignatures: 2, ...refund }),
     ).toThrow(/does not list the after leaf type/);
-    // A key path remains, so an unlisted leaf only disables that path.
-    expect(() => build({ mainKeys: [pub(1)], ...refund })).not.toThrow();
+    expect(() => build({ mainKeys: [pub(1)], ...refund })).toThrow(
+      /does not list the after leaf type/,
+    );
+    // A lock with no leaves needs nothing listed.
+    expect(() => build({ mainKeys: [pub(1)] })).not.toThrow();
   });
 
   test('a disclosed leaf counts as a spend path only when the mint lists its type', () => {
