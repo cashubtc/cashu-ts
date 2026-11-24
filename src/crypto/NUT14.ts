@@ -193,7 +193,7 @@ export function isHTLCSpendAuthorised(
  *
  * @param witness From a Proof.
  * @returns Preimage if present.
- * @throws If a serialized witness is oversized.
+ * @throws If the witness is oversized.
  */
 export function getHTLCWitnessPreimage(witness: Proof['witness']): string | undefined {
   return parseWitnessData(witness)?.preimage;

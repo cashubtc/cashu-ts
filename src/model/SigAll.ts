@@ -8,7 +8,7 @@ import {
   pointFromHex,
   schnorrSignDigest,
 } from '../crypto';
-import { parseWitnessData } from '../crypto/NUT11';
+import { isSignatureHex, parseWitnessData } from '../crypto/NUT11';
 import {
   JSONInt,
   MAX_P2PK_SIGNATURES,
@@ -97,7 +97,7 @@ function serializePackage(pkg: SigAllSigningPackage): string {
   ordered.inputs = pkg.inputs;
   ordered.outputs = pkg.outputs;
 
-  if (pkg.witness) ordered.witness = pkg.witness;
+  if (pkg.witness) ordered.witness = { signatures: packageSignatures(pkg) };
 
   const json = JSONInt.stringify(ordered) ?? '{}';
   const base64url = encodeUint8ToBase64Url(utf8ToBytes(json));
@@ -200,9 +200,9 @@ function deserializePackage(input: string): SigAllSigningPackage {
       !witness ||
       typeof witness !== 'object' ||
       !Array.isArray(witness.signatures) ||
-      witness.signatures.some((s) => typeof s !== 'string')
+      !witness.signatures.every(isSignatureHex)
     ) {
-      throw new CTSError('Signing package witness.signatures must be a string array');
+      throw new CTSError('Signing package witness.signatures must be 64-byte hex signatures');
     }
   }
 
@@ -244,7 +244,7 @@ function assertSignable(pkg: SigAllSigningPackage, privkey: string): void {
   if (!PRIVKEY_HEX_RE.test(privkey)) {
     throw new CTSError('Private key must be 64 hex characters');
   }
-  if ((pkg.witness?.signatures.length ?? 0) >= MAX_P2PK_SIGNATURES) {
+  if (packageSignatures(pkg).length >= MAX_P2PK_SIGNATURES) {
     throw new CTSError(`Witness already at the ${MAX_P2PK_SIGNATURES}-signature limit`);
   }
   assertSigAllInputs(pkg.inputs);
@@ -274,8 +274,21 @@ function signPackage(pkg: SigAllSigningPackage, privkey: string): SigAllSigningP
 
   return {
     ...pkg,
-    witness: { signatures: [...(pkg.witness?.signatures || []), ...newSigs] },
+    witness: { signatures: [...packageSignatures(pkg), ...newSigs] },
   };
+}
+
+/**
+ * A package's signatures, without entries that are not shaped like one.
+ *
+ * @throws If `witness.signatures` is not an array.
+ */
+function packageSignatures(pkg: SigAllSigningPackage): string[] {
+  const entries: unknown = pkg.witness?.signatures ?? [];
+  if (!Array.isArray(entries)) {
+    throw new CTSError('Signing package witness.signatures must be an array');
+  }
+  return entries.filter(isSignatureHex);
 }
 
 function extractSwapPackage(preview: SwapPreview): SigAllSigningPackage {
@@ -328,7 +341,8 @@ function mergeMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'>>(
 }
 
 function mergeSignatures(proofs: Proof[], pkg: SigAllSigningPackage): Proof[] {
-  if (!pkg.witness?.signatures.length) {
+  const incoming = packageSignatures(pkg);
+  if (!incoming.length) {
     throw new CTSError('No signatures to merge');
   }
 
@@ -337,14 +351,14 @@ function mergeSignatures(proofs: Proof[], pkg: SigAllSigningPackage): Proof[] {
   const [first, ...rest] = proofs;
   const witnessData = parseWitnessData(first.witness);
   const existingSignatures = witnessData?.signatures ?? [];
-  if (existingSignatures.length + pkg.witness.signatures.length > MAX_P2PK_SIGNATURES) {
+  if (existingSignatures.length + incoming.length > MAX_P2PK_SIGNATURES) {
     throw new CTSError(`Merged witness would exceed the ${MAX_P2PK_SIGNATURES}-signature limit`);
   }
   const updatedFirst: Proof = {
     ...first,
     witness: {
       ...(witnessData ?? {}),
-      signatures: [...existingSignatures, ...pkg.witness.signatures],
+      signatures: [...existingSignatures, ...incoming],
     },
   };
 
