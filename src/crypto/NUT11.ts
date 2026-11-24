@@ -459,21 +459,18 @@ export function signP2PKProofs(
   };
   return proofs.map((proof, index) => {
     const privateKeys: string[] = maybeDeriveP2BKPrivateKeys(privateKeyHex, proof);
-    let expected: Set<string> | undefined;
+    let secret: Secret | undefined;
     let signedProof = proof;
     for (const priv of privateKeys) {
       try {
-<<<<<<< HEAD
-        signedProof = signP2PKProof(signedProof, priv, message);
-=======
-        expected ??= new Set(getP2PKExpectedWitnessPubkeys(proof.secret).map((k) => k.slice(2)));
+        secret ??= parseP2PKSecret(proof.secret);
         const pubkey = xOnly(priv);
-        if (!expected.has(pubkey)) {
+        // Read per key, not once per proof: who may sign follows the clock.
+        if (!getP2PKExpectedWitnessPubkeys(secret).some((k) => k.slice(2) === pubkey)) {
           logger.warn(`Proof #${index + 1}: Signature not required from [02|03]${pubkey}`);
           continue;
         }
-        signedProof = signP2PKProof(signedProof, priv, digest);
->>>>>>> a37d386 (perf(crypto): derive each key once per signP2PKProofs call (#1538))
+        signedProof = signP2PKProof(signedProof, priv, message);
       } catch (error: unknown) {
         // Log signature failures only - these are not fatal, just informational
         // as not all keys will be needed for some proofs (eg P2BK, NIP60 etc)

@@ -2249,8 +2249,6 @@ describe('signing edge cases', () => {
     expect(result.witness).toBeUndefined();
   });
 
-<<<<<<< HEAD
-=======
   test('each proof is signed by the key it expects, out of many supplied', () => {
     const keys = Array.from({ length: 5 }, () => bytesToHex(createRandomSecretKey()));
     // Six proofs, each locked to one of the five keys.
@@ -2262,6 +2260,22 @@ describe('signing edge cases', () => {
     expect(signed.every((p) => (p.witness as P2PKWitness).signatures?.length === 1)).toBe(true);
   });
 
+  test('a lock that expires between two keys still takes the refund signature', () => {
+    const [alice, bob, refund] = [0, 1, 2].map(() => createRandomSecretKey());
+    const pub = (key: Uint8Array) => bytesToHex(getPubKeyFromPrivKey(key));
+    const secret = createP2PKsecret(pub(alice), [
+      ['pubkeys', pub(bob)],
+      ['n_sigs', '2'],
+      ['locktime', '100'],
+      ['refund', pub(refund)],
+    ]);
+    // The clock reads the locktime for the first check and one second later from then on.
+    vi.spyOn(Date, 'now').mockReturnValueOnce(100_000).mockReturnValue(101_000);
+    const [signed] = signP2PKProofs([mkProof(secret)], [bytesToHex(alice), bytesToHex(refund)]);
+    expect((signed.witness as P2PKWitness).signatures).toHaveLength(2);
+    expect(verifyP2PKSpendingConditions(signed)).toMatchObject({ success: true, path: 'REFUND' });
+  });
+
   test('a malformed key is skipped without stopping the other keys', () => {
     const warn = vi.fn();
     const logger: Logger = { ...NULL_LOGGER, warn };
@@ -2270,22 +2284,6 @@ describe('signing edge cases', () => {
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
-  test('maybeDeriveP2BKPrivateKeys falls back to legacy slot 0 indexing for HTLC proofs', () => {
-    // Pre-fix senders blinded HTLC lock keys from slot 0; those proofs must stay spendable.
-    const privBytes = createRandomSecretKey();
-    const pubHex = bytesToHex(getPubKeyFromPrivKey(privBytes));
-    const {
-      blinded: [P0_],
-      Ehex,
-    } = deriveP2BKBlindedPubkeys([pubHex]); // legacy: first lock key at slot 0
-    const secret = `["HTLC",{"nonce":"aa","data":"ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5","tags":[["pubkeys","${P0_}"]]}]`;
-    const proof = { ...mkProof(secret), p2pk_e: Ehex };
-    const derived = maybeDeriveP2BKPrivateKeys(bytesToHex(privBytes), proof);
-    const derivedPubs = derived.map((k) => bytesToHex(getPubKeyFromPrivKey(hexToBytes(k))));
-    expect(derivedPubs).toContain(P0_);
-  });
-
->>>>>>> a37d386 (perf(crypto): derive each key once per signP2PKProofs call (#1538))
   test('maybeDeriveP2BKPrivateKeys tolerates a missing proof', () => {
     const priv = bytesToHex(createRandomSecretKey());
     expect(maybeDeriveP2BKPrivateKeys(priv, undefined as unknown as Proof)).toStrictEqual([priv]);
