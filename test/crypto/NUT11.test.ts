@@ -2444,6 +2444,22 @@ describe('signing edge cases', () => {
     expect(signed.every((p) => (p.witness as P2PKWitness).signatures?.length === 1)).toBe(true);
   });
 
+  test('a lock that expires between two keys still takes the refund signature', () => {
+    const [alice, bob, refund] = [0, 1, 2].map(() => createRandomSecretKey());
+    const pub = (key: Uint8Array) => bytesToHex(getPubKeyFromPrivKey(key));
+    const secret = createP2PKsecret(pub(alice), [
+      ['pubkeys', pub(bob)],
+      ['n_sigs', '2'],
+      ['locktime', '100'],
+      ['refund', pub(refund)],
+    ]);
+    // The clock reads the locktime for the first check and one second later from then on.
+    vi.spyOn(Date, 'now').mockReturnValueOnce(100_000).mockReturnValue(101_000);
+    const [signed] = signP2PKProofs([mkProof(secret)], [bytesToHex(alice), bytesToHex(refund)]);
+    expect((signed.witness as P2PKWitness).signatures).toHaveLength(2);
+    expect(verifyP2PKSpendingConditions(signed)).toMatchObject({ success: true, path: 'REFUND' });
+  });
+
   test('a malformed key is skipped without stopping the other keys', () => {
     const warn = vi.fn();
     const logger: Logger = { ...NULL_LOGGER, warn };

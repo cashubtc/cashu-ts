@@ -556,13 +556,14 @@ export function signP2PKProofs(
     // instead (NUT-10), so parsing it here would only log a failure per proof
     if (isV3PointSecret(proof.secret)) return proof;
     const privateKeys: string[] = maybeDeriveP2BKPrivateKeys(privateKeyHex, proof);
-    let expected: Set<string> | undefined;
+    let secret: Secret | undefined;
     let signedProof = proof;
     for (const priv of privateKeys) {
       try {
-        expected ??= new Set(getP2PKExpectedWitnessPubkeys(proof.secret).map((k) => k.slice(2)));
+        secret ??= parseP2PKSecret(proof.secret);
         const pubkey = xOnly(priv);
-        if (!expected.has(pubkey)) {
+        // Read per key, not once per proof: who may sign follows the clock.
+        if (!getP2PKExpectedWitnessPubkeys(secret).some((k) => k.slice(2) === pubkey)) {
           logger.warn(`Proof #${index + 1}: Signature not required from [02|03]${pubkey}`);
           continue;
         }
