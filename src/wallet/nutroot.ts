@@ -7,7 +7,7 @@ import {
 import { hashToCurveHex } from '../crypto/curves';
 import { parseSecret } from '../crypto/NUT10';
 import { maybeDeriveP2BKPrivateKeys, p2pkToSpendLeaves } from '../crypto/NUT11';
-import { deriveQuoteLockKey } from '../crypto/NUT13';
+import { createKeyPairDeriver, deriveKeyPair, deriveQuoteLockKey } from '../crypto/NUT13';
 import {
   assertPreimageOpensLeaf,
   buildScriptPathWitness,
@@ -494,15 +494,16 @@ export function collectSpendInfoKeys(
  * Creates a quote lock keypair; the full contract is documented on `Wallet.createQuoteLockKey`.
  *
  * @remarks
- * Seed-derived under `mintPubkey` from a freshly reserved quote counter when seeded, random
- * otherwise. Reserving (and any persistence events it fires) is the caller's, via
- * `reserveQuoteCounter`.
+ * Seed-derived from a freshly reserved quote counter when seeded (under `mintPubkey`, or on the
+ * NUT-20 path without one), random otherwise. Reserving (and any persistence events it fires) is
+ * the caller's, via `reserveQuoteCounter`.
  */
 export async function createQuoteLockKeyPair(
   seed: Uint8Array | undefined,
   mintPubkey: string | undefined,
   reserveQuoteCounter: () => Promise<number>,
 ): Promise<{ pubkey: string; privkey: string }> {
+  if (seed && !mintPubkey) return deriveKeyPair(seed, 'QuoteLock', await reserveQuoteCounter());
   const privkey =
     seed && mintPubkey
       ? deriveQuoteLockKey(seed, mintPubkey, await reserveQuoteCounter())
@@ -529,22 +530,26 @@ const QUOTE_SCAN_MIN_DEPTH = 1024;
  */
 export async function scanQuoteLockKey(
   pubkey: string,
-  mintPubkey: string,
+  mintPubkey: string | undefined,
   state: NutrootWalletState,
   signal?: AbortSignal,
 ): Promise<{ privkey: string; counter: number } | undefined> {
   if (!state.seed) fail('recoverQuoteLockKey requires a seeded wallet', state.logger);
   const seed = state.seed;
+  const derive = mintPubkey
+    ? (counter: number) => {
+        const privkey = deriveQuoteLockKey(seed, mintPubkey, counter);
+        return { pubkey: bytesToHex(getPubKeyFromPrivKey(privkey)), privkey: bytesToHex(privkey) };
+      }
+    : createKeyPairDeriver(seed, 'QuoteLock');
   const normalizedPubkey = normalizeSecpPubkey(pubkey);
   const next = await state.counters.peekNext(quoteCounterKey(mintPubkey));
   const bound = Math.max(next + QUOTE_SCAN_HEADROOM, QUOTE_SCAN_MIN_DEPTH);
   const step = budgetedYield(signal);
   for (let counter = 0; counter < bound; counter++) {
     await step();
-    const privkey = deriveQuoteLockKey(seed, mintPubkey, counter);
-    if (bytesToHex(getPubKeyFromPrivKey(privkey)) === normalizedPubkey) {
-      return { privkey: bytesToHex(privkey), counter };
-    }
+    const key = derive(counter);
+    if (key.pubkey === normalizedPubkey) return { privkey: key.privkey, counter };
   }
   return undefined;
 }

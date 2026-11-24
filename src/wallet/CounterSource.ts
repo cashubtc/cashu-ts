@@ -13,21 +13,18 @@ export interface CounterRange {
 }
 
 /**
- * The counter key for mint quote lock keys (NUT-13 derivation type `0x04`) at one mint:
- * `mint-quote-lock:<NUT-06 pubkey>`.
+ * The counter key for mint quote lock keys: `mint-quote-lock:<NUT-06 pubkey>` at a mint that
+ * publishes one (NUT-13 derivation type `0x04`), or `mint-quote-lock` for the NUT-20 BIP-32 path.
  *
  * @remarks
- * One cursor per mint identity, not per keyset: a mint quote is requested before any keyset is
- * chosen, so its lock key derives under the mint's NUT-06 pubkey instead. It is a counter of its
- * own because a quote may mint nothing, and because a lock key may be handed over for delegated
- * minting and so must never collide with a proof secret key. A `CounterSource` sees it as just
- * another key to persist, so nothing implementing the interface needs to know about purposes; do
- * not assume every key is a keyset id.
- * @experimental The key format follows draft NUT-13 type `0x04` and draft NUT-06 identity scoping
- *   and may change before GA.
+ * A cursor of its own, not a keyset's: a mint quote is requested before any keyset is chosen and
+ * may mint nothing. The NUT-20 path has no mint in it, so share its one cursor across the wallets
+ * of a seed, or the same key locks quotes at several mints. A `CounterSource` sees either as just
+ * another key to persist; do not assume every key is a keyset id.
+ * @experimental The per-mint key follows draft NUT-13 type `0x04` and may change before GA.
  */
-export function quoteCounterKey(mintPubkey: string): string {
-  return `mint-quote-lock:${normalizeSecpPubkey(mintPubkey)}`;
+export function quoteCounterKey(mintPubkey?: string): string {
+  return mintPubkey ? `mint-quote-lock:${normalizeSecpPubkey(mintPubkey)}` : 'mint-quote-lock';
 }
 
 // CounterSource.ts

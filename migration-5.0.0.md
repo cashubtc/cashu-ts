@@ -154,7 +154,7 @@ const proofs = await wallet.mintProofsBolt11(64, quote, { privkey });
 
 `createLockedMintQuote` callers rename the method and keep their arguments. A seedless wallet that drops the key has lost the quote, the same way it loses a dropped proof; a seeded wallet can call `recoverQuoteLockKey(quote.pubkey)`.
 
-The seed derivation behind `createQuoteLockKey` and `recoverQuoteLockKey` is experimental: it follows draft NUT-13 (type `0x04`) and draft NUT-06 identity scoping, and may change before GA, in which case keys derived earlier are no longer found by scan. Persist the `privkey` with its quote regardless; the scan is disaster recovery, not storage.
+The seed derivation behind `createQuoteLockKey` and `recoverQuoteLockKey` is experimental at a mint that publishes a NUT-06 `pubkey`: it follows draft NUT-13 (type `0x04`) and may change before GA, in which case keys derived earlier are no longer found by scan. At a mint without one it is the NUT-20 BIP-32 path. Persist the `privkey` with its quote regardless; the scan is disaster recovery, not storage.
 
 ---
 
@@ -454,7 +454,7 @@ wallet.on.countersReserved(({ keysetId, next }) => saveNextToDb(keysetId, next))
 wallet.on.countersReserved(({ counterKey, next }) => saveNextToDb(counterKey, next));
 ```
 
-A custom `CounterSource` that validates its keys as keyset ids, or joins them against a keysets table, must accept these `mint-quote-lock:` keys too: every seeded wallet reserves from one on its first mint quote at a mint. Quote lock keys are scoped to the mint's NUT-06 `pubkey`, so a seeded wallet at a mint that publishes none must pass `{ random: true }` to `createQuoteLockKey`.
+A custom `CounterSource` that validates its keys as keyset ids, or joins them against a keysets table, must accept these `mint-quote-lock:` keys too: every seeded wallet reserves from one on its first mint quote at a mint. At a mint that publishes no NUT-06 `pubkey`, quote lock keys come from the NUT-20 BIP-32 path under the single key `quoteCounterKey()` (`'mint-quote-lock'`): share that cursor across the wallets of a seed, or the same key locks quotes at several mints.
 
 ---
 
