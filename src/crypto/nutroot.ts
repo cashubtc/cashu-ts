@@ -12,7 +12,8 @@ import { getPubKeyFromPrivKey, pointFromBytes, pointFromHex } from './curve_secp
 import {
   deriveP2BKBlindedPubkeyAtSlot,
   deriveP2BKBlindedPubkeys,
-  deriveP2BKSlotSecretKeyCandidates,
+  p2bkSharedX,
+  p2bkSlotCandidatesFromSharedX,
 } from './NUT28';
 
 /**
@@ -1002,6 +1003,7 @@ export function verifyNutrootRequestTree(
   option: ParsedNutrootOption,
   spendInfo: { k?: string; E?: string; K?: string; tree?: string[]; u?: string } | undefined,
   privkeys: string[] = [],
+  cache: KeyTrialCache = keyTrialCache(),
 ): void {
   if (!spendInfo) {
     throw new CTSError('Nutroot request: proof carries no spend info');
@@ -1068,11 +1070,11 @@ export function verifyNutrootRequestTree(
   const owned = new Map<string, Set<string>>();
   const slots = enumerateLeafKeySlots(requested).length;
   for (const priv of new Set(privkeys.map((key) => key.toLowerCase()))) {
-    const pub = bytesToHex(getPubKeyFromPrivKey(hexToBytes(priv)));
+    const pub = cache.pubkey(priv);
     const flipped = (pub.startsWith('02') ? '03' : '02') + pub.slice(2);
     const tagged = [pub, flipped].filter((key) => blind.has(key));
     if (tagged.length && spendInfo.E !== undefined) {
-      const keys = new Set(slotKeysByBlindedPubkey(spendInfo.E, priv, slots).keys());
+      const keys = new Set(slotKeysByBlindedPubkey(spendInfo.E, priv, slots, cache).keys());
       for (const key of tagged) owned.set(key, keys);
     }
   }
@@ -1146,6 +1148,64 @@ function assignmentExists(candidates: number[][], requestedCount: number): boole
   return candidates.every((_, i) => augment(i, new Array<boolean>(requestedCount).fill(false)));
 }
 
+type ReceiverKeyedHit = { secretKey: string; internalKey: string };
+
+/**
+ * Cache for trial-matching held keys: each key's pubkey, its ECDH against each ephemeral, and the
+ * outcome of each receiver-keyed trial.
+ *
+ * @remarks
+ * Holds key material, so create one per wallet call and let it go with the call.
+ */
+export type KeyTrialCache = {
+  /**
+   * The compressed public key for a private key.
+   */
+  pubkey(privHex: string): string;
+  /**
+   * The ECDH x coordinate for an ephemeral `E` and a private key (NUT-28).
+   */
+  sharedX(EHex: string, privHex: string): Uint8Array;
+  /**
+   * The outcome of a receiver-keyed trial, worked out once per distinct `trial`.
+   */
+  receiverTrial(
+    trial: string,
+    run: () => ReceiverKeyedHit | undefined,
+  ): ReceiverKeyedHit | undefined;
+};
+
+export function keyTrialCache(): KeyTrialCache {
+  const pubkeys = new Map<string, string>();
+  const shared = new Map<string, Uint8Array>();
+  const trials = new Map<string, ReceiverKeyedHit | undefined>();
+  return {
+    pubkey(privHex) {
+      let pub = pubkeys.get(privHex);
+      if (pub === undefined) {
+        pub = bytesToHex(getPubKeyFromPrivKey(hexToBytes(privHex)));
+        pubkeys.set(privHex, pub);
+      }
+      return pub;
+    },
+    sharedX(EHex, privHex) {
+      const pair = `${EHex}:${privHex}`;
+      let x = shared.get(pair);
+      if (x === undefined) {
+        x = p2bkSharedX(EHex, privHex);
+        shared.set(pair, x);
+      }
+      return x;
+    },
+    receiverTrial(trial, run) {
+      if (trials.has(trial)) return trials.get(trial);
+      const hit = run();
+      trials.set(trial, hit);
+      return hit;
+    },
+  };
+}
+
 /**
  * Every slot key a static key could hold, by the blinded pubkey it produces (NUT-28).
  *
@@ -1162,14 +1222,23 @@ export function slotKeysByBlindedPubkey(
   EHex: string,
   privHex: string,
   slots: number | Iterable<number>,
+  cache: KeyTrialCache = keyTrialCache(),
 ): Map<string, { slot: number; secretKey: string }> {
   const bySlot = new Map<string, { slot: number; secretKey: string }>();
   const candidatesSlots =
-    typeof slots === 'number' ? Array.from({ length: slots }, (_, i) => i + 1) : slots;
+    typeof slots === 'number' ? Array.from({ length: slots }, (_, i) => i + 1) : [...slots];
+  if (candidatesSlots.length === 0) return bySlot;
+  // One ECDH serves every slot: only the index hashed with it differs.
+  let sharedX: Uint8Array;
+  try {
+    sharedX = cache.sharedX(EHex, privHex);
+  } catch {
+    return bySlot; // an unusable `E` or key holds no slot
+  }
   for (const slot of candidatesSlots) {
     let candidates: [string, string];
     try {
-      candidates = deriveP2BKSlotSecretKeyCandidates(EHex, privHex, slot);
+      candidates = p2bkSlotCandidatesFromSharedX(sharedX, privHex, slot);
       /* v8 ignore start -- rejection sampling: an invalid derived scalar is improbable */
     } catch {
       continue; // not a usable slot key for this static key
@@ -1199,6 +1268,7 @@ export function recoverLeafKeySecretKeys(
   tree: string[],
   EHex: string | undefined,
   privkeysHex: string[],
+  cache: KeyTrialCache = keyTrialCache(),
 ): Array<{
   leafIndex: number;
   keyIndex: number;
@@ -1209,11 +1279,11 @@ export function recoverLeafKeySecretKeys(
   const slots = enumerateLeafKeySlots(tree.map((leaf) => parseNutrootLeaf(hexToBytes(leaf))));
   const hits = [];
   for (const privHex of privkeysHex) {
-    const pub = bytesToHex(getPubKeyFromPrivKey(hexToBytes(privHex)));
+    const pub = cache.pubkey(privHex);
     const blindedKeys =
       EHex === undefined
         ? new Map<string, { slot: number; secretKey: string }>()
-        : slotKeysByBlindedPubkey(EHex, privHex, slots.length);
+        : slotKeysByBlindedPubkey(EHex, privHex, slots.length, cache);
     // The negated point is the same hex with the parity prefix flipped, so an x-only import that
     // holds n - p still byte-matches its published verbatim key (NUT-28).
     const pubNeg = (pub.startsWith('02') ? '03' : '02') + pub.slice(2);
@@ -1251,10 +1321,12 @@ export function recoverReceiverKeyedSecretKey(
   EHex: string,
   receiverPrivHex: string,
   tree?: string[],
-): { secretKey: string; internalKey: string } | undefined {
+  cache: KeyTrialCache = keyTrialCache(),
+): ReceiverKeyedHit | undefined {
   let candidates: [string, string];
   try {
-    candidates = deriveP2BKSlotSecretKeyCandidates(EHex, receiverPrivHex, 0);
+    const sharedX = cache.sharedX(EHex, receiverPrivHex);
+    candidates = p2bkSlotCandidatesFromSharedX(sharedX, receiverPrivHex, 0);
   } catch {
     return undefined;
   }
@@ -1262,18 +1334,22 @@ export function recoverReceiverKeyedSecretKey(
     tree && tree.length > 0
       ? nutrootMerkleRoot(tree.map((leaf) => nutrootLeafHash(hexToBytes(leaf))))
       : undefined;
-  for (const internalSeckey of candidates) {
-    const internalKey = bytesToHex(getPubKeyFromPrivKey(hexToBytes(internalSeckey)));
-    if (root === undefined) {
-      if (internalKey === secretHex) return { secretKey: internalSeckey, internalKey };
-      continue;
+  // The outcome depends on the tree only through its root.
+  const trial = [secretHex, EHex, receiverPrivHex, root ? bytesToHex(root) : ''].join(':');
+  return cache.receiverTrial(trial, () => {
+    for (const internalSeckey of candidates) {
+      const internalKey = bytesToHex(getPubKeyFromPrivKey(hexToBytes(internalSeckey)));
+      if (root === undefined) {
+        if (internalKey === secretHex) return { secretKey: internalSeckey, internalKey };
+        continue;
+      }
+      const tweaked = nutrootTweakSeckey(hexToBytes(internalSeckey), root);
+      if (bytesToHex(getPubKeyFromPrivKey(tweaked)) === secretHex) {
+        return { secretKey: bytesToHex(tweaked), internalKey };
+      }
     }
-    const tweaked = nutrootTweakSeckey(hexToBytes(internalSeckey), root);
-    if (bytesToHex(getPubKeyFromPrivKey(tweaked)) === secretHex) {
-      return { secretKey: bytesToHex(tweaked), internalKey };
-    }
-  }
-  return undefined;
+    return undefined;
+  });
 }
 
 /**

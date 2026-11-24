@@ -13,6 +13,8 @@ import {
   buildScriptPathWitness,
   parseNutrootLeaf,
   type NutrootLeaf,
+  type KeyTrialCache,
+  keyTrialCache,
   recoverLeafKeySecretKeys,
   recoverReceiverKeyedSecretKey,
   selectRequiredLeafSignatures,
@@ -178,36 +180,35 @@ export function proofSpendOptions(
 ): SpendOptions[] {
   const privkeys = opts?.privkeys === undefined ? [] : [opts.privkeys].flat();
   const now = opts?.now ?? Math.floor(Date.now() / 1000);
-  // Derived on first use, then shared by every unblinded legacy proof in the call.
-  let held: Set<string> | undefined;
-  const heldKeys = () => (held ??= xCoordinatesOf(privkeys));
-  return proofs.map((proof) => spendOptionsOf(proof, privkeys, now, heldKeys, state));
+  // One cache for the call: a key is derived once however many proofs it is tried on.
+  const cache = keyTrialCache();
+  return proofs.map((proof) => spendOptionsOf(proof, privkeys, now, cache, state));
 }
 
 function spendOptionsOf(
   proof: Proof,
   privkeys: string[],
   now: number,
-  heldKeys: () => Set<string>,
+  cache: KeyTrialCache,
   state: NutrootWalletState,
 ): SpendOptions {
-  if (!isBlsKeyset(proof.id)) return legacySpendOptions(proof, privkeys, now, heldKeys);
+  if (!isBlsKeyset(proof.id)) return legacySpendOptions(proof, privkeys, now, cache);
   assertV3PointSecret(proof.secret);
 
   // Key path: the spend-info key, bearer or receiver-keyed. Nothing scans the seed: every v3
   // output this wallet makes keeps its key in spend info, and a lost one is a NUT-09 restore.
-  const keyPath = collectSpendInfoKeys([proof], privkeys, state.logger).has(proof.secret);
+  const keyPath = collectSpendInfoKeys([proof], privkeys, state.logger, cache).has(proof.secret);
 
   const tree = proof.spend_info?.tree;
   if (!tree || tree.length === 0) return withVerdict(keyPath, []);
 
-  const K = proof.spend_info?.K ?? internalKeyOf(proof, privkeys);
+  const K = proof.spend_info?.K ?? internalKeyOf(proof, privkeys, cache);
   if (!K) throw new CTSError('Disclosed tree needs an internal key to verify the proof secret');
   verifyNutrootSpendInfo(proof.secret, { ...proof.spend_info, K });
 
   // Parses every leaf, so an unknown one throws here rather than being reported as spendable.
   const leaves = tree.map((leaf) => parseNutrootLeaf(hexToBytes(leaf)));
-  const hits = recoverLeafKeySecretKeys(tree, proof.spend_info?.E, privkeys);
+  const hits = recoverLeafKeySecretKeys(tree, proof.spend_info?.E, privkeys, cache);
   return withVerdict(keyPath, scriptOptions(leaves, hits, now));
 }
 
@@ -219,7 +220,7 @@ function legacySpendOptions(
   proof: Proof,
   privkeys: string[],
   now: number,
-  heldKeys: () => Set<string>,
+  cache: KeyTrialCache,
 ): SpendOptions {
   try {
     parseSecret(proof.secret);
@@ -233,20 +234,14 @@ function legacySpendOptions(
   // Held keys by x coordinate, so an x-only import matches either parity (NUT-11 signatures are
   // x-only). A P2BK proof's keys are blinded, so the held keys are their derivations (NUT-28).
   const blinded = proof.p2pk_e !== undefined;
-  const held = blinded ? xCoordinatesOf(maybeDeriveP2BKPrivateKeys(privkeys, proof)) : heldKeys();
+  const scalars = blinded ? maybeDeriveP2BKPrivateKeys(privkeys, proof) : privkeys;
+  const held = new Set(scalars.map((k) => cache.pubkey(k).slice(2)));
   const hits = leaves.flatMap((leaf, leafIndex) =>
     leaf.keys.flatMap((key, keyIndex) =>
       held.has(key.slice(2)) ? [{ leafIndex, keyIndex, blinded }] : [],
     ),
   );
   return withVerdict(false, scriptOptions(leaves, hits, now));
-}
-
-/**
- * The public key x coordinate of each secret key.
- */
-function xCoordinatesOf(secretKeys: string[]): Set<string> {
-  return new Set(secretKeys.map((k) => bytesToHex(getPubKeyFromPrivKey(hexToBytes(k))).slice(2)));
 }
 
 /**
@@ -318,6 +313,7 @@ export function prepareScriptPathSpends(
   inputs: Proof[],
   plans: ScriptPathPlan[],
   privkeys: string[],
+  cache: KeyTrialCache = keyTrialCache(),
 ): Map<string, ScriptPathSpend> {
   const out = new Map<string, ScriptPathSpend>();
   for (const plan of plans) {
@@ -343,11 +339,11 @@ export function prepareScriptPathSpends(
     }
     assertPreimageOpensLeaf(leaf, plan.preimage);
     // The control block's internal key, from whichever source the spend info offers (NUT-10).
-    const K = internalKeyOf(proof, privkeys);
+    const K = internalKeyOf(proof, privkeys, cache);
     if (!K) {
       throw new CTSError('Script path spend needs the internal key, which the spend info lacks');
     }
-    const recovered = recoverLeafKeySecretKeys(tree, proof.spend_info?.E, privkeys)
+    const recovered = recoverLeafKeySecretKeys(tree, proof.spend_info?.E, privkeys, cache)
       .filter((h) => h.leafIndex === plan.leafIndex)
       .map((h) => h.secretKey);
     const keys = [
@@ -377,7 +373,7 @@ export function prepareScriptPathSpends(
  * The internal key `K` behind a proof's secret, from its spend info: explicit, from a bearer
  * scalar, or trial-matched from a receiver-keyed ephemeral. Undefined when none applies.
  */
-function internalKeyOf(proof: Proof, privkeys: string[]): string | undefined {
+function internalKeyOf(proof: Proof, privkeys: string[], cache: KeyTrialCache): string | undefined {
   const info = proof.spend_info;
   if (!info) return undefined;
   if (info.k && /^[0-9a-f]{64}$/.test(info.k)) {
@@ -389,7 +385,7 @@ function internalKeyOf(proof: Proof, privkeys: string[]): string | undefined {
   }
   if (info.E) {
     for (const priv of privkeys) {
-      const hit = recoverReceiverKeyedSecretKey(proof.secret, info.E, priv, info.tree);
+      const hit = recoverReceiverKeyedSecretKey(proof.secret, info.E, priv, info.tree, cache);
       if (hit) return hit.internalKey;
     }
   }
@@ -415,6 +411,7 @@ export function collectSpendInfoKeys(
   inputs: Proof[],
   privkeys: string | string[] | undefined,
   logger: Logger,
+  cache: KeyTrialCache = keyTrialCache(),
 ): Map<string, Uint8Array> {
   const keys = new Map<string, Uint8Array>();
   const statics = privkeys === undefined ? [] : [privkeys].flat();
@@ -430,7 +427,8 @@ export function collectSpendInfoKeys(
     }
     if (E && statics.length > 0) {
       for (const priv of statics) {
-        const hit = recoverReceiverKeyedSecretKey(proof.secret, E, priv, proof.spend_info?.tree);
+        const tree = proof.spend_info?.tree;
+        const hit = recoverReceiverKeyedSecretKey(proof.secret, E, priv, tree, cache);
         if (hit) {
           keys.set(proof.secret, hexToBytes(hit.secretKey));
           break;

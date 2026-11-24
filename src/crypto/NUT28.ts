@@ -67,7 +67,8 @@ export function deriveP2BKBlindedPubkeyAtSlot(
 ): string {
   const e = secp256k1.Point.Fn.fromBytes(eBytes); // bigint in [1..n-1]
   const P = pointFromHex(pubkeyHex);
-  const r = deriveP2BKBlindingTweakFromECDH(P, e, slotIndex);
+  assertP2BKSlotIndex(slotIndex);
+  const r = deriveP2BKBlindingTweak(ecdhSharedX(P, e), slotIndex);
   const P_ = P.add(secp256k1.Point.BASE.multiply(r));
   if (P_.equals(secp256k1.Point.ZERO)) throw new CTSError('Blinded key at infinity');
   return P_.toHex(true);
@@ -105,8 +106,10 @@ export function deriveP2BKSecretKeys(
   for (const privHex of privs) {
     const p = secp256k1.Point.Fn.fromBytes(hexToBytes(privHex));
     const P = secp256k1.getPublicKey(hexToBytes(privHex), true); // 33 bytes, validates on curve
+    if (!pubs.length) continue;
+    const Zx = ecdhSharedX(E, p); // one ECDH per key: every slot hashes the same shared point
     pubs.forEach((hexP_, i) => {
-      const r = deriveP2BKBlindingTweakFromECDH(E, p, i + slotOffset);
+      const r = deriveP2BKBlindingTweak(Zx, i + slotOffset);
       const P_ = hexToBytes(hexP_);
       const kHex = deriveP2BKSecretKey(privHex, r, P_, P);
       if (kHex) out.add(kHex); // add only when this priv matches this P′
@@ -176,39 +179,46 @@ export function deriveP2BKSecretKey(
 }
 
 /**
- * Internal helper, derive P2BK blinding tweak using ECDH.
+ * Internal helper, rejects a slot index outside the slot space.
+ */
+function assertP2BKSlotIndex(slotIndex: number): void {
+  // The index byte is masked, so an out-of-range slot would silently alias onto another one.
+  if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= NUTROOT_MAX_SLOTS) {
+    throw new CTSError(`P2BK: slot index must be an integer in [0, ${NUTROOT_MAX_SLOTS - 1}]`);
+  }
+}
+
+/**
+ * Internal helper, the x coordinate (Zx) of the ECDH shared point Z = scalar·point.
  *
  * @remarks
- * Computes the shared point Z = scalar·point, takes its 32 byte x coordinate Zx, then derives:
+ * Symmetric: the receiver's private key (p) with the sender's ephemeral public key (E), or the
+ * sender's ephemeral secret (e) with the receiver's public key (P), yield the same Z. Every slot
+ * tweak for that pair hashes this one value, so compute it once per pair.
+ * @param point Ephemeral public key (E) or recipient public key (P)
+ * @param scalar Private scalar (p) or ephemeral scalar (e) in [1, n − 1]
+ */
+function ecdhSharedX(point: WeierstrassPoint<bigint>, scalar: bigint): Uint8Array {
+  return point.multiply(scalar).toBytes(true).slice(1);
+}
+
+/**
+ * Internal helper, derive the P2BK blinding tweak for a slot from the ECDH x coordinate.
+ *
+ * @remarks
+ * Hashes the shared x coordinate with the slot index:
  *
  *     rᵢ = SHA - 256(P2BK_DST || Zx || i); // all inputs as raw bytes
  *
  * If the result reduces to zero, or is >= curve order (n), retries once with an extra 0xff byte
  * appended to the message. Throws if the retry also reduces to zero.
- *
- * This function is symmetric. It can be called with either.
- *
- * - The receiver's private key (p) and the sender's ephemeral public key (E)
- * - The sender's ephemeral secret (e) and the receiver's public key (P)
- *
- * Both yield the same Z and therefore the same r thanks to the magic of ECDH!
- * @param point Ephemeral public key (E) or recipient public key (P)
- * @param scalar Private scalar (p) or ephemeral scalar (e) in [1, n − 1]
+ * @param Zx The 32 byte ECDH x coordinate, see `ecdhSharedX`.
  * @param slotIndex Zero based slot index, below {@link NUTROOT_MAX_SLOTS}.
  * @returns Tweak (r) in [1, n − 1]
  * @throws If the slot index is out of range, or r reduces to zero after the retry.
  */
-function deriveP2BKBlindingTweakFromECDH(
-  point: WeierstrassPoint<bigint>, // E or P
-  scalar: bigint, // p or e
-  slotIndex: number, // i
-): bigint {
-  // The index byte is masked, so an out-of-range slot would silently alias onto another one.
-  if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= NUTROOT_MAX_SLOTS) {
-    throw new CTSError(`P2BK: slot index must be an integer in [0, ${NUTROOT_MAX_SLOTS - 1}]`);
-  }
-  // Calculate x-only ECDH shared point (Zx)
-  const Zx = point.multiply(scalar).toBytes(true).slice(1);
+function deriveP2BKBlindingTweak(Zx: Uint8Array, slotIndex: number): bigint {
+  assertP2BKSlotIndex(slotIndex);
   const iByte = new Uint8Array([slotIndex & 0xff]);
   // Derive deterministic blinding factor (r):
   // Note: bytesToNumberBE is safe here because we explicitly guard against
@@ -239,11 +249,37 @@ export function deriveP2BKSlotSecretKeyCandidates(
   privkeyHex: string,
   slotIndex = 0,
 ): [string, string] {
+  return p2bkSlotCandidatesFromSharedX(p2bkSharedX(Ehex, privkeyHex), privkeyHex, slotIndex);
+}
+
+/**
+ * The ECDH x coordinate a receiver's slot keys derive from: one per private key and ephemeral,
+ * whatever the slot (NUT-28).
+ *
+ * @throws If `Ehex` is not a point or the private key is out of range.
+ * @internal
+ */
+export function p2bkSharedX(Ehex: string, privkeyHex: string): Uint8Array {
   const E = pointFromHex(Ehex);
+  const p = hexToNumber(privkeyHex);
+  if (p <= 0n || p >= secp256k1.Point.CURVE().n) throw new CTSError('Invalid private key');
+  return ecdhSharedX(E, p);
+}
+
+/**
+ * `deriveP2BKSlotSecretKeyCandidates` from a `p2bkSharedX` result, so many slots share one ECDH.
+ *
+ * @internal
+ */
+export function p2bkSlotCandidatesFromSharedX(
+  sharedX: Uint8Array,
+  privkeyHex: string,
+  slotIndex: number,
+): [string, string] {
   const p = hexToNumber(privkeyHex);
   const n = secp256k1.Point.CURVE().n;
   if (p <= 0n || p >= n) throw new CTSError('Invalid private key');
-  const r = deriveP2BKBlindingTweakFromECDH(E, p, slotIndex);
+  const r = deriveP2BKBlindingTweak(sharedX, slotIndex);
   const std = (p + r) % n;
   const neg = (n - p + r) % n;
   /* c8 ignore next — zero requires r = n - p or r = p, rejection-sampled away. */

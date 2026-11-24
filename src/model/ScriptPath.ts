@@ -10,6 +10,7 @@ import {
   assertPreimageOpensLeaf,
   buildScriptPathWitness,
   enumerateLeafKeySlots,
+  keyTrialCache,
   nutrootLeafHash,
   nutrootMerklePath,
   parseNutrootLeaf,
@@ -426,6 +427,7 @@ function signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPath
   const leaves = assertValidPackage(pkg);
   const digests = packageInputDigests(pkg);
   const pub = bytesToHex(getPubKeyFromPrivKey(hexToBytes(privkey)));
+  const cache = keyTrialCache();
   const spends = pkg.spends.map((spend, i) => {
     const leaf = leaves[i];
     const keys: string[] = [];
@@ -436,7 +438,7 @@ function signPackage(pkg: ScriptPathSigningPackage, privkey: string): ScriptPath
       // The slot hint is trust-free: a wrong slot simply fails to match, and the fallback matches
       // by value over the whole slot space, which no leaf order or tree shape can defeat.
       const matches = (slots: number | number[]) => {
-        const blinded = slotKeysByBlindedPubkey(spend.E!, privkey, slots);
+        const blinded = slotKeysByBlindedPubkey(spend.E!, privkey, slots, cache);
         return leaf.keys.flatMap((key) => blinded.get(key)?.secretKey ?? []);
       };
       const hinted = spend.slots ? matches(spend.slots) : [];

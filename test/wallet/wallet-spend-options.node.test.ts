@@ -209,6 +209,35 @@ describe('wallet.spendOptions: the script path', () => {
     expect(script[0].keys[0].pubkey).not.toBe(pub(ALICE));
   });
 
+  test('keyed proofs in one call report as each would alone', async () => {
+    const blindLeaf = (seed: number) => {
+      const out = deriveReceiverKeyedSecret(pub(BOB), {
+        leaves: [threshold([pub(ALICE)])],
+        blindKeys: [pub(ALICE)],
+        eBytes: new Uint8Array(32).fill(seed),
+      });
+      return v3Proof(out.secret, { E: out.E, tree: out.tree });
+    };
+    const keyed = deriveReceiverKeyedSecret(pub(BOB));
+    const proofs = [
+      blindLeaf(5),
+      blindLeaf(6),
+      v3Proof(keyed.secret, { E: keyed.E }),
+      locked([threshold([pub(ALICE)])]),
+      locked([threshold([pub(STRANGER)])]),
+    ];
+    const opts = { privkeys: [priv(STRANGER + 1), priv(ALICE), priv(BOB)] };
+    const batch = wallet().spendOptions(proofs, opts);
+    expect(batch).toEqual(proofs.map((p) => spendOptions(p, opts)));
+    expect(batch.map((o) => [o.keyPath, o.spendable])).toEqual([
+      [true, true],
+      [true, true],
+      [true, true],
+      [false, true],
+      [false, false],
+    ]);
+  });
+
   test('a commit leaf is reported as commit, satisfiable by no one', async () => {
     const commit: NutrootLeaf = { type: 'commit', hash: 'cc'.repeat(32) };
     const proof = locked([threshold([pub(ALICE)]), commit]);
