@@ -185,7 +185,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
       type: 'swap',
       inputs: [{ secret: 'testsecret', C: '02' + '1'.repeat(64) }],
       outputs: [dummyBlindedMessage],
-      witness: { signatures: ['sig1'] },
+      witness: { signatures: ['ab'.repeat(64)] },
     };
     const encoded = SigAll.serializePackage(pkg);
     // console.log('[serialize output]', encoded);
@@ -198,7 +198,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
     expect(parsed.type).toBe(pkg.type);
     expect(parsed.inputs.length).toBe(1);
     expect(parsed.outputs.length).toBe(1);
-    expect(parsed.witness?.signatures[0]).toBe('sig1');
+    expect(parsed.witness?.signatures[0]).toBe('ab'.repeat(64));
   });
 
   test('round-trip preserves melt quote', () => {
@@ -470,9 +470,42 @@ describe('SigAll — signPackage', () => {
 
   test('preserves existing witness signatures', () => {
     const pkg = SigAll.extractSwapPackage(makeSwapPreview());
-    const withWitness = { ...pkg, witness: { signatures: ['existing'] } };
+    const existing = 'ab'.repeat(64);
+    const withWitness = { ...pkg, witness: { signatures: [existing, 'not-a-signature'] } };
     const signed = SigAll.signPackage(withWitness, dummyPrivkey);
-    expect(signed.witness!.signatures).toContain('existing');
+    expect(signed.witness!.signatures).toContain(existing);
+    expect(signed.witness!.signatures).not.toContain('not-a-signature');
+  });
+
+  test('a package built in memory serializes only its signature-shaped entries', () => {
+    const signed = SigAll.signPackage(SigAll.extractSwapPackage(makeSwapPreview()), dummyPrivkey);
+    const [ours] = signed.witness!.signatures;
+    const padded = { ...signed, witness: { signatures: ['junk', ours] } };
+    const parsed = SigAll.deserializePackage(SigAll.serializePackage(padded));
+    expect(parsed.witness?.signatures).toEqual([ours]);
+  });
+
+  test('a package whose signatures are not an array is refused', () => {
+    const pkg = SigAll.extractSwapPackage(makeSwapPreview());
+    const broken = { ...pkg, witness: { signatures: 'junk' } } as unknown as typeof pkg;
+    for (const use of [
+      () => SigAll.signPackage(broken, dummyPrivkey),
+      () => SigAll.mergeSwapPackage(broken, makeSwapPreview()),
+      () => SigAll.serializePackage(broken),
+    ]) {
+      expect(use).toThrow('witness.signatures must be an array');
+    }
+  });
+
+  test('a package built in memory merges only its signature-shaped entries', () => {
+    const preview = makeSwapPreview();
+    const signed = SigAll.signPackage(SigAll.extractSwapPackage(preview), dummyPrivkey);
+    const [ours] = signed.witness!.signatures;
+    const padded = { ...signed, witness: { signatures: ['junk', ours] } };
+    const merged = SigAll.mergeSwapPackage(padded, preview);
+    expect((merged.inputs[0].witness as P2PKWitness).signatures).toEqual([ours]);
+    const onlyJunk = { ...signed, witness: { signatures: ['junk'] } };
+    expect(() => SigAll.mergeSwapPackage(onlyJunk, preview)).toThrow('No signatures to merge');
   });
 
   test('does not mutate original package', () => {
@@ -628,26 +661,29 @@ describe('SigAll — mergeSwapPackage', () => {
   });
 
   test('appends to existing proof witness signatures', () => {
-    const existingWitness: P2PKWitness = { signatures: ['pre-existing'] };
+    const existing = 'ab'.repeat(64);
+    const existingWitness: P2PKWitness = { signatures: [existing, 'not-a-signature'] };
     const proofWithWitness: Proof = { ...dummyProof, witness: existingWitness };
     const preview = { ...makeSwapPreview(), inputs: [proofWithWitness] };
     const pkg = SigAll.extractSwapPackage(preview);
     const signed = SigAll.signPackage(pkg, dummyPrivkey);
     const merged = SigAll.mergeSwapPackage(signed, preview);
     const sigs = (merged.inputs[0].witness as P2PKWitness).signatures;
-    expect(sigs).toContain('pre-existing');
+    expect(sigs).toContain(existing);
+    expect(sigs).not.toContain('not-a-signature');
     expect(sigs!.length).toBeGreaterThan(1);
   });
 
   test('handles string-encoded existing witness', () => {
-    const witnessStr = JSON.stringify({ signatures: ['str-encoded'] });
+    const existing = 'cd'.repeat(64);
+    const witnessStr = JSON.stringify({ signatures: [existing] });
     const proofWithStringWitness: Proof = { ...dummyProof, witness: witnessStr };
     const preview = { ...makeSwapPreview(), inputs: [proofWithStringWitness] };
     const pkg = SigAll.extractSwapPackage(preview);
     const signed = SigAll.signPackage(pkg, dummyPrivkey);
     const merged = SigAll.mergeSwapPackage(signed, preview);
     const sigs = (merged.inputs[0].witness as P2PKWitness).signatures;
-    expect(sigs).toContain('str-encoded');
+    expect(sigs).toContain(existing);
   });
 
   test('handles malformed string witness gracefully', () => {
@@ -813,7 +849,7 @@ describe('SigAll — deserializePackage input/output shape guards', () => {
     ).toThrow('id invalid');
   });
 
-  test('rejects a non-string-array witness.signatures', () => {
+  test('rejects a non-string witness.signatures entry', () => {
     expect(() =>
       SigAll.deserializePackage(
         encodeRaw({
@@ -824,7 +860,23 @@ describe('SigAll — deserializePackage input/output shape guards', () => {
           witness: { signatures: [123] },
         }),
       ),
-    ).toThrow('witness.signatures must be a string array');
+    ).toThrow('witness.signatures must be 64-byte hex signatures');
+  });
+
+  test('rejects a witness.signatures entry that is not a signature', () => {
+    for (const entry of ['junk', 'ab'.repeat(63), ` ${'ab'.repeat(64)}`]) {
+      expect(() =>
+        SigAll.deserializePackage(
+          encodeRaw({
+            version: 'sigallA',
+            type: 'swap',
+            inputs: [],
+            outputs: [],
+            witness: { signatures: [entry] },
+          }),
+        ),
+      ).toThrow('witness.signatures must be 64-byte hex signatures');
+    }
   });
 });
 

@@ -432,6 +432,19 @@ describe('attachHTLCPreimage', () => {
     }
   });
 
+  test('drops existing entries that are not signatures', () => {
+    const cosigned = 'ab'.repeat(64);
+    const locked = proof(createHTLCsecret(hash, [['pubkeys', PUBKEY]]), {
+      signatures: ['junk', cosigned],
+    });
+    expect(attachHTLCPreimage([locked], preimage)[0].witness).toEqual({
+      preimage,
+      signatures: [cosigned],
+    });
+    const onlyJunk = proof(createHTLCsecret(hash), JSON.stringify({ signatures: ['junk'] }));
+    expect(attachHTLCPreimage([onlyJunk], preimage)[0].witness).toEqual({ preimage });
+  });
+
   test('rejects a malformed preimage', () => {
     expect(() => attachHTLCPreimage([], 'nope')).toThrow(/64 character/);
   });

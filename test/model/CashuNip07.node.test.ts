@@ -257,6 +257,17 @@ describe('CashuNip07', () => {
     expect(CashuNip07.canSignP2PK({ getPublicKey: async () => XONLY })).toBe(false);
   });
 
+  test('signP2PK drops existing witness entries that are not signatures', async () => {
+    const cosigned = 'ab'.repeat(64);
+    const proof = {
+      ...p2pkProof(createP2PKsecret(PUB)),
+      witness: { signatures: ['junk', cosigned] },
+    };
+    const [signed] = await CashuNip07.signP2PK(secretSigner, [proof]);
+    expect(signaturesOf(signed)).toHaveLength(2);
+    expect(signaturesOf(signed)[0]).toBe(cosigned);
+  });
+
   test('signP2PK leaves alone what it should not touch', async () => {
     const mine = p2pkProof(createP2PKsecret(PUB));
     const [once] = await CashuNip07.signP2PK(secretSigner, [mine]);
