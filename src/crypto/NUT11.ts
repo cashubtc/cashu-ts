@@ -470,6 +470,8 @@ export function signP2PKProofs(
           logger.warn(`Proof #${index + 1}: Signature not required from [02|03]${pubkey}`);
           continue;
         }
+        // A path that has its threshold needs no more signatures, however many keys are held.
+        if (isSpendPathMet(signedProof, message)) break;
         signedProof = signP2PKProof(signedProof, priv, message);
       } catch (error: unknown) {
         // Log signature failures only - these are not fatal, just informational
@@ -480,6 +482,30 @@ export function signP2PKProofs(
     }
     return signedProof;
   });
+}
+
+/**
+ * Whether the witness already meets one of the lock's paths; false when that cannot be judged.
+ *
+ * @remarks
+ * An HTLC's main path also needs its preimage, which signatures cannot show, so there only the
+ * refund path counts. A message given for a SIG_INPUTS proof, or a witness holding more signatures
+ * than the lock has keys, is not judged here: signing handles both as it always has.
+ */
+function isSpendPathMet(proof: Proof, message?: string): boolean {
+  try {
+    if (message !== undefined && !isP2PKSigAll([proof])) return false;
+    const secret = parseP2PKSecret(proof.secret);
+    // More signatures than keys cannot all count, so checking each against each key is wasted.
+    const keys = getP2PKWitnessPubkeys(secret).length + getP2PKWitnessRefundkeys(secret).length;
+    if (getP2PKWitnessSignatures(proof.witness).length > keys) return false;
+    const { success, path, refund } = verifyP2PKSpendingConditions(proof, NULL_LOGGER, message);
+    if (!success) return false;
+    if (path !== 'MAIN' || getSecretKind(secret) !== 'HTLC') return true;
+    return refund.requiredSigners > 0 && refund.receivedSigners.length >= refund.requiredSigners;
+  } catch {
+    return false;
+  }
 }
 
 /**
