@@ -33,6 +33,8 @@ import { mintQuoteDigest, signMintQuoteLegacy } from '../crypto/NUT20';
 import {
   NUTROOT_LEAF_TYPE,
   NUTROOT_NUMS_KEY,
+  type KeyTrialCache,
+  keyTrialCache,
   nutrootLeafTypeHex,
   recoverReceiverKeyedSecretKey,
   verifyNutrootRequestTree,
@@ -2045,11 +2047,12 @@ class Wallet {
     );
     const { payload } = this.createSwapTransaction(inputs, keepOutputs, sendOutputs);
     const privkeys = privkey === undefined ? [] : [privkey].flat();
+    const cache = keyTrialCache();
     await attachTransactionWitnesses(
       payload,
       undefined,
-      collectSpendInfoKeys(inputs, privkey, this._logger),
-      scriptPath?.length ? prepareScriptPathSpends(inputs, scriptPath, privkeys) : undefined,
+      collectSpendInfoKeys(inputs, privkey, this._logger, cache),
+      scriptPath?.length ? prepareScriptPathSpends(inputs, scriptPath, privkeys, cache) : undefined,
       this._nutrootState(),
       options?.signal,
     );
@@ -2209,14 +2212,15 @@ class Wallet {
         !!pr.nut10 && !nut10Lock,
         `cannot check the request's nut10 lock kind '${pr.nut10?.kind}'`,
       );
+      const cache = keyTrialCache();
       for (const p of proofs) {
         // The keyset alone picks the family: a v3 keyset spends only point secrets.
         if (isBlsKeyset(p.id)) {
           this.failIf(!isV3PointSecret(p.secret), 'v3 proof: the secret is not a v3 point secret');
           this.failIfNullish(nutrootOption, 'v3 proof: the request carries no nutroot option');
-          verifyNutrootRequestTree(nutrootOption, p.spend_info, privkeys);
+          verifyNutrootRequestTree(nutrootOption, p.spend_info, privkeys, cache);
           verifyNutrootSpendInfo(p.secret, p.spend_info!);
-          this.assertKeyedToReceiver(nutrootOption, p, privkeys);
+          this.assertKeyedToReceiver(nutrootOption, p, privkeys, cache);
           continue;
         }
         this.failIfNullish(nut10Lock, 'legacy proof: the request is for v3 proofs only');
@@ -2321,12 +2325,11 @@ class Wallet {
     option: ParsedNutrootOption,
     proof: Pick<Proof, 'secret' | 'spend_info'>,
     privkeys: string[],
+    cache: KeyTrialCache,
   ): void {
     if (privkeys.length === 0 || option.receiverKey.toLowerCase() === NUTROOT_NUMS_KEY) return;
     const receiverX = option.receiverKey.slice(2).toLowerCase();
-    const receiverPrivs = privkeys.filter(
-      (priv) => bytesToHex(getPubKeyFromPrivKey(hexToBytes(priv))).slice(2) === receiverX,
-    );
+    const receiverPrivs = privkeys.filter((priv) => cache.pubkey(priv).slice(2) === receiverX);
     this.failIf(
       receiverPrivs.length === 0,
       'Nutroot request: opts.privkeys holds no key for the requested receiver key',
@@ -2335,7 +2338,9 @@ class Wallet {
     const E = proof.spend_info?.E as string;
     const tree = proof.spend_info?.tree;
     this.failIf(
-      !receiverPrivs.some((priv) => recoverReceiverKeyedSecretKey(proof.secret, E, priv, tree)),
+      !receiverPrivs.some((priv) =>
+        recoverReceiverKeyedSecretKey(proof.secret, E, priv, tree, cache),
+      ),
       'Nutroot request: proof is not keyed to the requested receiver key',
     );
   }
@@ -2553,8 +2558,9 @@ class Wallet {
    * leaf against its own clock, so a leaf that unlocked seconds ago may still be refused, and a
    * hashlock leaf is never satisfiable from the wallet alone: its preimage comes from the caller.
    *
-   * One result per proof, in input order. Pass a whole token's proofs in one call: for legacy locks
-   * the supplied keys are derived once per call.
+   * One result per proof, in input order. Pass a whole token's proofs in one call: each supplied
+   * key's public key is derived once. Proofs keyed through an ephemeral (receiver-keyed, a blinded
+   * leaf key, or legacy P2BK) are still matched one by one, at an ECDH per key (NUT-28).
    * @param proofs Any proofs, each with its spend info when it has one.
    * @param opts.privkeys Static keys to trial-match, for receiver-keyed proofs and leaf keys.
    * @param opts.now Unix seconds to judge locktimes against. Defaults to the current time.
@@ -2594,9 +2600,10 @@ class Wallet {
       'planScriptPaths: preimage must be 64 hex characters',
     );
     const plans: ScriptPathPlan[] = [];
-    for (const proof of proofs) {
-      if (!isBlsKeyset(proof.id) || !isV3PointSecret(proof.secret)) continue;
-      const [spend] = proofSpendOptions([proof], opts, this._nutrootState());
+    const v3 = proofs.filter((p) => isBlsKeyset(p.id) && isV3PointSecret(p.secret));
+    const spends = proofSpendOptions(v3, opts, this._nutrootState());
+    for (const [i, proof] of v3.entries()) {
+      const spend = spends[i];
       if (spend.keyPath) continue;
       const open = spend.script.find((o) => o.satisfiable);
       if (open) {
@@ -4827,18 +4834,20 @@ class Wallet {
         'melting v3 inputs needs the melt quote amount; pass the full quote object',
       );
       const feeIndex = typeof extra?.fee_index === 'number' ? extra.fee_index : undefined;
+      const cache = keyTrialCache();
       await attachTransactionWitnesses(
         meltPayload,
         {
           quoteId: quote,
           ...meltQuoteOutput({ ...meltPreview.quote, amount: quoteAmount }, feeIndex),
         },
-        collectSpendInfoKeys(meltPreview.inputs, privkey, this._logger),
+        collectSpendInfoKeys(meltPreview.inputs, privkey, this._logger, cache),
         completeOptions.scriptPath?.length
           ? prepareScriptPathSpends(
               meltPreview.inputs,
               completeOptions.scriptPath,
               privkey === undefined ? [] : [privkey].flat(),
+              cache,
             )
           : undefined,
         this._nutrootState(),

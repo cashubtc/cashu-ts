@@ -12,8 +12,10 @@ import {
   countLeafSigners,
   deriveReceiverKeyedSecret,
   enumerateLeafKeySlots,
+  keyTrialCache,
   recoverLeafKeySecretKeys,
   recoverReceiverKeyedSecretKey,
+  slotKeysByBlindedPubkey,
   type NutrootLeaf,
   NUTROOT_NUMS_KEY,
   NUTROOT_MAX_LEAF_BYTES,
@@ -1149,6 +1151,75 @@ describe('leaf-key blinding: the positional slot map (NUT-28)', () => {
     expect(recoverLeafKeySecretKeys(plain, undefined, [bobPriv, strangerPriv])).toEqual([
       { leafIndex: 0, keyIndex: 0, slot: 1, secretKey: bobPriv, blinded: false },
     ]);
+  });
+
+  test('an unusable ephemeral or private key holds no blinded slot', () => {
+    const leaves: NutrootLeaf[] = [{ type: 'threshold', n: 1, keys: [bobPub] }];
+    const out = deriveReceiverKeyedSecret(carolPub, { leaves, eBytes, blindKeys: [bobPub] });
+    const notAPoint = `02${'ff'.repeat(32)}`;
+    expect(recoverLeafKeySecretKeys(out.tree!, notAPoint, [bobPriv])).toEqual([]);
+    expect(slotKeysByBlindedPubkey(out.E!, '00'.repeat(32), 1).size).toBe(0);
+    expect(slotKeysByBlindedPubkey(out.E!, bobPriv, 1).size).toBe(2); // both parity candidates
+  });
+
+  test('every slot shares one ECDH per key and ephemeral', () => {
+    const leaves: NutrootLeaf[] = [{ type: 'threshold', n: 1, keys: [bobPub] }];
+    const out = deriveReceiverKeyedSecret(carolPub, { leaves, eBytes, blindKeys: [bobPub] });
+    const real = keyTrialCache();
+    let ecdhs = 0;
+    const counting = {
+      ...real,
+      sharedX: (E: string, priv: string) => {
+        ecdhs++;
+        return real.sharedX(E, priv);
+      },
+    };
+    expect(slotKeysByBlindedPubkey(out.E!, bobPriv, 4, counting).size).toBe(8);
+    expect(ecdhs).toBe(1);
+    // No slots to try, so no ECDH at all.
+    expect(slotKeysByBlindedPubkey(out.E!, bobPriv, 0, counting).size).toBe(0);
+    expect(slotKeysByBlindedPubkey(out.E!, bobPriv, [], counting).size).toBe(0);
+    expect(ecdhs).toBe(1);
+  });
+
+  test('a repeated receiver-keyed trial is worked out once', () => {
+    const leaves: NutrootLeaf[] = [{ type: 'threshold', n: 1, keys: [bobPub] }];
+    const out = deriveReceiverKeyedSecret(carolPub, { leaves, eBytes });
+    const cache = keyTrialCache();
+    const { receiverTrial } = cache;
+    let runs = 0;
+    cache.receiverTrial = (trial, run) => receiverTrial(trial, () => (runs++, run()));
+    const trial = (priv: string, tree = out.tree) =>
+      recoverReceiverKeyedSecretKey(out.secret, out.E!, priv, tree, cache);
+    // A hit and a miss, each asked twice: one run apiece.
+    expect(trial(vRefund.carol_priv)).toEqual(trial(vRefund.carol_priv));
+    expect(trial(bobPriv)).toBeUndefined();
+    expect(trial(bobPriv)).toBeUndefined();
+    expect(runs).toBe(2);
+    // A different tree is a different trial: without the tree the same key no longer matches.
+    expect(trial(vRefund.carol_priv, [])).toBeUndefined();
+    expect(runs).toBe(3);
+  });
+
+  test('a cache shared across proofs and keys changes no result', () => {
+    const leaves: NutrootLeaf[] = [{ type: 'threshold', n: 1, keys: [bobPub] }];
+    const other = new Uint8Array(32).fill(7);
+    const a = deriveReceiverKeyedSecret(carolPub, { leaves, eBytes, blindKeys: [bobPub] });
+    const b = deriveReceiverKeyedSecret(carolPub, { leaves, eBytes: other, blindKeys: [bobPub] });
+    const strangerPriv = bytesToHex(secp256k1.utils.randomSecretKey());
+    const privs = [strangerPriv, bobPriv, vRefund.carol_priv];
+    const cache = keyTrialCache();
+    // Visit `a` twice, so the second pass is served wholly from the cache.
+    for (const out of [a, b, a]) {
+      const leafHits = recoverLeafKeySecretKeys(out.tree!, out.E, privs, cache);
+      expect(leafHits).toEqual(recoverLeafKeySecretKeys(out.tree!, out.E, privs));
+      expect(leafHits.map((h) => h.blinded)).toEqual([true]);
+      for (const priv of privs) {
+        const hit = recoverReceiverKeyedSecretKey(out.secret, out.E!, priv, out.tree, cache);
+        expect(hit).toEqual(recoverReceiverKeyedSecretKey(out.secret, out.E!, priv, out.tree));
+        expect(hit !== undefined).toBe(priv === vRefund.carol_priv);
+      }
+    }
   });
 
   test('an odd-parity import matches blinded and verbatim leaf keys alike (NUT-28)', () => {

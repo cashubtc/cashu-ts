@@ -43,7 +43,7 @@ const [{ spendable, blockedBy, keyPath, script }] = wallet.spendOptions([proof],
 
 A legacy proof reports in the same shape. A NUT-11 P2PK or HTLC lock reads as a main leaf (`threshold` or `hashlock`) and, given a locktime, its refund path as an `after` leaf at index 1; keys match across parity, so an x-only import (any nostr key) is found under either prefix, and a blinded (P2BK) key through `p2pk_e`. An unlocked bearer proof is `keyPath: true` with no leaves. An unknown NUT-10 kind throws. So a wallet receiving mixed proofs asks one question of each, with no `isBlsKeyset` branch of its own.
 
-Triage a whole token in one call rather than proof by proof: for legacy locks the supplied keys are derived once per call, so it costs little to hand over every key the wallet holds.
+Triage a whole token in one call rather than proof by proof: each supplied key's public key is derived once per call. Proofs keyed through an ephemeral (receiver-keyed, a blinded leaf key, or legacy P2BK) are still matched one by one, at an ECDH per supplied key (NUT-28), so a wallet holding many static keys pays for each of them on every such proof.
 
 ```ts
 const options = wallet.spendOptions(proofs, { privkeys: [myStaticPrivkey] });
