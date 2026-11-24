@@ -3577,7 +3577,8 @@ class Wallet {
   ): Promise<MeltQuoteBolt11Response> {
     const quoteId = typeof quote === 'string' ? quote : quote.quote;
     const res = await this.mint.checkMeltQuoteBolt11(quoteId);
-    // No caller-side expectation here, so check the quote against its own invoice.
+    if (typeof quote !== 'string') this.bindHeldInvoice('bolt11', quote, res);
+    // Check the amount against the caller's invoice when given a quote, else the quote's own.
     if (this._unit === 'sat' || this._unit === 'msat') {
       let expectedMsat: bigint | null = null;
       try {
@@ -3587,7 +3588,6 @@ class Wallet {
       }
       this.assertBolt11MeltQuoteAmount(res, expectedMsat);
     }
-    if (typeof quote !== 'string') this.bindHeldInvoice('bolt11', quote, res);
     return res;
   }
 
