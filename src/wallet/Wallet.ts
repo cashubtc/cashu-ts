@@ -18,34 +18,10 @@ import {
   canSpendP2PKWithKeys,
   getP2PKExpectedWitnessPubkeys,
   normalizeP2PKOptions,
-  type P2PKOptions,
-} from '../crypto';
-<<<<<<< HEAD
-import { signMintQuoteAmended } from '../crypto/NUT20';
-=======
-// Internal transitional fallback — not part of crypto/index.ts
-import { getPubKeyFromPrivKey, isValidSecpPubkey, normalizeSecpPubkey } from '../crypto/curve_secp';
-import {
-  p2pkOptionsToPRNut10,
-  p2pkToSpendLeaves,
   serializeWitnessForMint,
   type P2PKOptions,
-} from '../crypto/NUT11';
-import { verifyHTLCHash } from '../crypto/NUT14';
-import { mintQuoteDigest, signMintQuoteLegacy } from '../crypto/NUT20';
-import {
-  NUTROOT_LEAF_TYPE,
-  NUTROOT_NUMS_KEY,
-  type KeyTrialCache,
-  keyTrialCache,
-  nutrootLeafTypeHex,
-  recoverReceiverKeyedSecretKey,
-  verifyNutrootRequestTree,
-  verifyNutrootSpendInfo,
-  type ParsedNutrootOption,
-} from '../crypto/nutroot';
-import { inputsForPayload, meltQuoteOutput } from '../crypto/transcript';
->>>>>>> 3ad5bc9 (fix(crypto): drop witness entries that are not signatures (#1550))
+} from '../crypto';
+import { signMintQuoteAmended } from '../crypto/NUT20';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';

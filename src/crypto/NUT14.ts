@@ -198,38 +198,3 @@ export function isHTLCSpendAuthorised(
 export function getHTLCWitnessPreimage(witness: Proof['witness']): string | undefined {
   return parseWitnessData(witness)?.preimage;
 }
-<<<<<<< HEAD
-=======
-
-/**
- * Puts `preimage` on the witness of every HTLC proof whose hashlock it opens.
- *
- * @remarks
- * Other proofs pass through untouched. Existing signatures are kept (entries that are not 64 bytes
- * of hex are not), and signing keeps the preimage, so this composes with {@link signP2PKProofs} in
- * either order.
- * @param proofs Proofs to stamp.
- * @param preimage 64 hex characters.
- * @throws If `preimage` is malformed, or an existing witness is oversized.
- */
-export function attachHTLCPreimage<T extends ProofLike>(proofs: T[], preimage: string): T[] {
-  if (!/^[0-9a-f]{64}$/i.test(preimage)) {
-    throw new CTSError('Preimage must be a 64 character hexadecimal string (32 bytes).');
-  }
-  const hex = preimage.toLowerCase();
-  return proofs.map((proof) => {
-    let secret: Secret;
-    try {
-      secret = parseP2PKSecret(proof.secret);
-    } catch {
-      return proof;
-    }
-    if (getSecretKind(secret) !== 'HTLC' || !verifyHTLCHash(hex, getDataField(secret))) {
-      return proof;
-    }
-    const signatures = parseWitnessData(proof.witness)?.signatures ?? [];
-    const witness: HTLCWitness = { preimage: hex, ...(signatures.length && { signatures }) };
-    return { ...proof, witness };
-  });
-}
->>>>>>> 3ad5bc9 (fix(crypto): drop witness entries that are not signatures (#1550))
