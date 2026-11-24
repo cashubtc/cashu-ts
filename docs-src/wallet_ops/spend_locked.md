@@ -24,10 +24,10 @@ Two stateless helpers dispatch on this without a wallet: `isBlsProof(proof)` gat
 
 ## Inspecting: `wallet.spendOptions()`
 
-Reports what this wallet can do with a proof. Offline (apart from a counter lookup) and changes nothing; use it to triage received proofs, pick a leaf for a script path plan, or show a user why a proof is stuck. Safely handles legacy P2PK/HTLC proofs too.
+Reports what this wallet can do with each proof, one result per proof in input order. Offline (apart from a counter lookup) and changes nothing; use it to triage received proofs, pick a leaf for a script path plan, or show a user why a proof is stuck. Safely handles legacy P2PK/HTLC proofs too.
 
 ```ts
-const { spendable, blockedBy, keyPath, script } = wallet.spendOptions(proof, {
+const [{ spendable, blockedBy, keyPath, script }] = wallet.spendOptions([proof], {
   privkeys: myStaticPrivkey, // optional: trial-matched against E, blinded keys and leaf keys
   now: 1_712_345_678, // optional: unix seconds for locktime checks, defaults to now
 });
@@ -42,6 +42,13 @@ const { spendable, blockedBy, keyPath, script } = wallet.spendOptions(proof, {
 `spendable` and `blockedBy` are the one-line answer, worded for the caller to phrase: `'locktime'` only when a leaf this wallet covers is merely waiting (a stranger's refund leaf is `'not-keyed-to-you'`), `'threshold'` when it holds some but not enough keys, `'not-keyed-to-you'` when none. Per leaf, `satisfiable` is this wallet's own assessment from what it holds and `blockedBy` names the first obstacle: `'locktime'` (see `availableAt`), `'threshold'` (key shortfall), or `'preimage'` (a hashlock leaf whose keys are covered; the preimage comes from the caller, so a hashlock leaf is never satisfiable from the wallet alone). The mint judges an `after` leaf against its own clock, so a leaf that unlocked seconds ago may still be refused. A leaf the wallet cannot parse throws rather than reporting as spendable, the same fail-closed rule the receive cascade applies. A disclosed v3 tree must reconstruct the proof secret before its leaves are evaluated; mismatched metadata or an internal key that is neither disclosed nor recoverable throws.
 
 A legacy proof reports in the same shape. A NUT-11 P2PK or HTLC lock reads as a main leaf (`threshold` or `hashlock`) and, given a locktime, its refund path as an `after` leaf at index 1; keys match across parity, so an x-only import (any nostr key) is found under either prefix, and a blinded (P2BK) key through `p2pk_e`. An unlocked bearer proof is `keyPath: true` with no leaves. An unknown NUT-10 kind throws. So a wallet receiving mixed proofs asks one question of each, with no `isBlsKeyset` branch of its own.
+
+Triage a whole token in one call rather than proof by proof: for legacy locks the supplied keys are derived once per call, so it costs little to hand over every key the wallet holds.
+
+```ts
+const options = wallet.spendOptions(proofs, { privkeys: [myStaticPrivkey] });
+const canReceive = options.every((o) => o.spendable);
+```
 
 ## Key path: receiving is the sweep
 
@@ -80,7 +87,7 @@ type ScriptPathPlan = {
 
 ```ts
 // A refund leaf after its locktime:
-const { script } = wallet.spendOptions(proof, { privkeys: refundPrivkey });
+const [{ script }] = wallet.spendOptions([proof], { privkeys: refundPrivkey });
 const leafIndex = script.findIndex((o) => o.satisfiable);
 const fresh = await wallet.ops
   .receive([proof])

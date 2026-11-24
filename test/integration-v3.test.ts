@@ -297,7 +297,7 @@ describeV3('M2 roundtrip', () => {
       // Restore re-derives each key: the proofs are spendable without their original spend info.
       for (const p of restoredProofs) {
         expect(p.spend_info?.k).toMatch(/^[0-9a-f]{64}$/);
-        expect(restoreWallet.spendOptions(p).spendable).toBe(true);
+        expect(restoreWallet.spendOptions([p])[0].spendable).toBe(true);
       }
       // Every keep-side proof is recovered from seed and still unspent (the melt may leave
       // send-side proofs pending under the fakewallet's delayed external payment).
@@ -1133,7 +1133,7 @@ describeV3('M8 tokens end to end with spend_info', () => {
       // the plan is the only way it moves.
       const spender = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
       await spender.loadMint();
-      const options = spender.spendOptions(proof, { privkeys: bytesToHex(ownerPriv) });
+      const [options] = spender.spendOptions([proof], { privkeys: bytesToHex(ownerPriv) });
       expect(options.keyPath).toBe(false);
       expect(options.script[0]).toMatchObject({ satisfiable: true, leafIndex: 0 });
       const received = await spender.receive([proof], {
@@ -1226,7 +1226,7 @@ describeV3('M9 script path through the wallet API', () => {
       // Alice asks what she can do with it, then does exactly that.
       const alice = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
       await alice.loadMint();
-      const options = alice.spendOptions(proof, { privkeys: alicePriv });
+      const [options] = alice.spendOptions([proof], { privkeys: alicePriv });
       expect(options.keyPath).toBe(false); // the key path is Carol's
       expect(options.script).toHaveLength(1);
       expect(options.script[0]).toMatchObject({ satisfiable: true, leafIndex: 0 });
@@ -1257,7 +1257,7 @@ describeV3('M9 script path through the wallet API', () => {
 
       const alice = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
       await alice.loadMint();
-      const options = alice.spendOptions(proof, { privkeys: alicePriv });
+      const [options] = alice.spendOptions([proof], { privkeys: alicePriv });
       expect(options.script[0]).toMatchObject({
         satisfiable: false,
         blockedBy: 'locktime',
@@ -1294,7 +1294,7 @@ describeV3('M9 script path through the wallet API', () => {
       const alice = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
       await alice.loadMint();
       // Alice alone cannot meet the threshold, and the wallet says so before it builds anything.
-      expect(alice.spendOptions(proof, { privkeys: alicePriv }).script[0]).toMatchObject({
+      expect(alice.spendOptions([proof], { privkeys: alicePriv })[0].script[0]).toMatchObject({
         satisfiable: false,
         blockedBy: 'threshold',
       });
@@ -1430,7 +1430,9 @@ describeV3('M9 script path through the wallet API', () => {
 
     const alice = new Wallet(mintUrl, { bip39seed: randomBytes(64) });
     await alice.loadMint();
-    expect(alice.spendOptions(proof, { privkeys: alicePriv }).script[0].blockedBy).toBe('preimage');
+    expect(alice.spendOptions([proof], { privkeys: alicePriv })[0].script[0].blockedBy).toBe(
+      'preimage',
+    );
     // No preimage in the plan: refused before a request is built.
     await expect(
       alice.receive([proof], {
