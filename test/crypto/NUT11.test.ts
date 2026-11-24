@@ -2370,14 +2370,13 @@ describe('signing stops once a path has its threshold', () => {
     expect(signatures(signP2PKProofs([refunded], hex([receiver, refund]))[0])).toHaveLength(2);
   });
 
-  test('a digest given for a SIG_INPUTS proof is still reported once a path is met', () => {
+  test('a message given for a SIG_INPUTS proof is still reported once a path is met', () => {
     const main = keys(1);
     const [signed] = signP2PKProofs([lock(main)], hex(main));
     const warn = vi.fn();
-    const digest = computeMessageDigest('not a SIG_ALL digest');
-    signP2PKProofs([signed], hex(main), { ...NULL_LOGGER, warn }, digest);
+    signP2PKProofs([signed], hex(main), { ...NULL_LOGGER, warn }, 'not a SIG_ALL message');
     expect(warn).toHaveBeenCalledWith(
-      'Proof #1: A digest override is only valid for SIG_ALL proofs',
+      'Proof #1: A message override is only valid for SIG_ALL proofs',
     );
   });
 
