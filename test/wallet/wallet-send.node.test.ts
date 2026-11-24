@@ -375,6 +375,22 @@ describe('sendOffline requireDleq', () => {
     expect(keep.map((p) => p.secret)).toEqual([withoutDleq.secret]);
   });
 
+  test('rejects a duplicate proof when only one copy has a DLEQ', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const proof: Proof = {
+      id: '00bd033559de27d0',
+      amount: Amount.from(1),
+      secret: plainSecret,
+      C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+    };
+    const dleq = { e: '00'.repeat(32), s: '00'.repeat(32), r: '00'.repeat(32) };
+
+    expect(() => wallet.sendOffline(1, [{ ...proof, dleq }, proof], { requireDleq: true })).toThrow(
+      'Duplicate proof at index 1',
+    );
+  });
+
   test('rejects v1/v2 proofs without DLEQ when requireDleq is true', async () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
