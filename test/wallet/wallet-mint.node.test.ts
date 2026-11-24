@@ -2624,12 +2624,44 @@ describe('generic mint/melt methods', () => {
         state: MeltQuoteState.UNPAID,
         expiry: 1,
         fee_reserve: Amount.from(1),
-        request: 'lnbc-local',
+        request: 'lnbc50u1plocal',
         payment_preimage: null,
       });
 
-      expect(quote.request).toBe('lnbc-local');
+      expect(quote.request).toBe('lnbc50u1plocal');
       expect(quote.unit).toBe('sat');
+    });
+
+    test('checkMeltQuoteBolt11 checks the amount against the held invoice', async () => {
+      server.use(
+        http.get(mintUrl + '/v1/melt/quote/bolt11/bolt11-melt-held', () =>
+          HttpResponse.json({
+            quote: 'bolt11-melt-held',
+            amount: 6000,
+            unit: 'sat',
+            state: MeltQuoteState.UNPAID,
+            expiry: 3600,
+            fee_reserve: 50,
+            request: 'lnbc60u1premote', // matches the amount the mint now quotes
+          }),
+        ),
+      );
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+
+      await expect(
+        wallet.checkMeltQuoteBolt11({
+          quote: 'bolt11-melt-held',
+          amount: Amount.from(5000),
+          unit: 'sat',
+          method: 'bolt11',
+          state: MeltQuoteState.UNPAID,
+          expiry: 3600,
+          fee_reserve: Amount.from(50),
+          request: 'lnbc50u1plocal', // HRP encodes 5,000 sat
+          payment_preimage: null,
+        }),
+      ).rejects.toThrow('Melt quote amount exceeds the requested amount');
     });
 
     test('checkMeltQuote accepts quote object', async () => {
