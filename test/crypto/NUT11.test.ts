@@ -14,6 +14,7 @@ import {
   getP2PKExpectedWitnessPubkeys,
   getP2PKSigFlag,
   getP2PKWitnessSignatures,
+  serializeWitnessForMint,
   type Secret,
   isP2PKSpendAuthorised,
   getPubKeyFromPrivKey,
@@ -2279,6 +2280,47 @@ describe('signing edge cases', () => {
     expect(verifyP2PKSpendingConditions(signed)).toMatchObject({ success: true, path: 'REFUND' });
   });
 
+  test('signing carries over only well-formed witness signatures', () => {
+    // A 2-of-2 lock: the co-signer's signature must survive for ours to complete it.
+    const cosigner = createRandomSecretKey();
+    const secret = createP2PKsecret(PUBKEY, [
+      ['pubkeys', bytesToHex(getPubKeyFromPrivKey(cosigner))],
+      ['n_sigs', '2'],
+    ]);
+    const [cosigned] = (signP2PKProof(mkProof(secret), cosigner).witness as P2PKWitness)
+      .signatures!;
+    for (const theirs of [cosigned, cosigned.toUpperCase()]) {
+      const entries = ['junk', 'ab'.repeat(10), theirs, 7, [theirs], null, ` ${theirs}`];
+      for (const witness of [{ signatures: entries }, JSON.stringify({ signatures: entries })]) {
+        const signed = signP2PKProof(mkProof(secret, witness as Proof['witness']), PRIVKEY);
+        const { signatures } = signed.witness as P2PKWitness;
+        expect(signatures).toHaveLength(2);
+        expect(signatures?.[0]).toBe(theirs);
+        expect(isP2PKSpendAuthorised(signed)).toBe(true);
+      }
+    }
+  });
+
+  test('a witness object with more entries than a string could hold is refused', () => {
+    const witness = { signatures: Array.from({ length: 16_385 }, () => 'junk') };
+    expect(() =>
+      signP2PKProof(mkProof(secretStr, witness as Proof['witness']), bytesToHex(PRIVKEY)),
+    ).toThrow('Too many witness signatures: 16385');
+  });
+
+  test('entries that are not signatures do not count towards the signature limit', () => {
+    const witness = JSON.stringify({ signatures: Array.from({ length: 64 }, () => 'junk') });
+    const signed = signP2PKProof(mkProof(secretStr, witness), bytesToHex(PRIVKEY));
+    expect((signed.witness as P2PKWitness).signatures).toHaveLength(1);
+  });
+
+  test('a preimage survives when malformed signatures are dropped', () => {
+    const witness = JSON.stringify({ preimage: '11'.repeat(32), signatures: ['junk'] });
+    const signed = signP2PKProof(mkProof(secretStr, witness), bytesToHex(PRIVKEY));
+    expect(signed.witness).toMatchObject({ preimage: '11'.repeat(32) });
+    expect((signed.witness as P2PKWitness).signatures).toHaveLength(1);
+  });
+
   test('a malformed key is skipped without stopping the other keys', () => {
     const warn = vi.fn();
     const logger: Logger = { ...NULL_LOGGER, warn };
@@ -2398,6 +2440,54 @@ describe('signing stops once a path has its threshold', () => {
     const proof = lock(main, [['n_sigs', '5']]);
     expect(() => verifyP2PKSpendingConditions(proof)).toThrow();
     expect(signatures(signP2PKProofs([proof], hex(main))[0])).toHaveLength(2);
+  });
+});
+
+describe('witness entries that are not signatures', () => {
+  const sig = 'ab'.repeat(64);
+
+  test('getP2PKWitnessSignatures leaves them out', () => {
+    const mixed = { signatures: ['junk', sig, sig.toUpperCase(), ` ${sig}`] };
+    expect(getP2PKWitnessSignatures(mixed)).toEqual([sig, sig.toUpperCase()]);
+    expect(getP2PKWitnessSignatures(JSON.stringify({ signatures: [7, null, [sig]] }))).toEqual([]);
+  });
+
+  test('a witness goes to the mint as its defined fields only', () => {
+    const clean = `{"signatures":["${sig}"]}`;
+    expect(serializeWitnessForMint(clean)).toBe(clean);
+    expect(serializeWitnessForMint({ signatures: [sig] })).toBe(clean);
+    // Odd spacing, an unknown field and entries that are not signatures all go.
+    const untidy = `{ "extra": 1, "signatures" : ["junk", "${sig}", 7] }`;
+    expect(serializeWitnessForMint(untidy)).toBe(clean);
+    // The last of a repeated key is the one read, and only it is written.
+    expect(serializeWitnessForMint(`{"signatures":["junk"],"signatures":["${sig}"]}`)).toBe(clean);
+    expect(serializeWitnessForMint('{"signatures":["junk"]}')).toBe('{"signatures":[]}');
+  });
+
+  test('an HTLC preimage is kept, with no empty signature list beside it', () => {
+    const withBoth = JSON.stringify({ signatures: ['junk', sig], preimage: 'aa' });
+    expect(serializeWitnessForMint(withBoth)).toBe(`{"preimage":"aa","signatures":["${sig}"]}`);
+    expect(serializeWitnessForMint('{"preimage":"aa"}')).toBe('{"preimage":"aa"}');
+    expect(serializeWitnessForMint('{"preimage":"aa","signatures":["junk"]}')).toBe(
+      '{"preimage":"aa"}',
+    );
+  });
+
+  test('a deeply nested unknown field is dropped without being walked', () => {
+    const nested = `${'['.repeat(7000)}0${']'.repeat(7000)}`;
+    const witness = `{"signatures":["junk","${sig}"],"nested":${nested}}`;
+    expect(serializeWitnessForMint(witness)).toBe(`{"signatures":["${sig}"]}`);
+  });
+
+  test('a witness that cannot be read is left as it is', () => {
+    for (const unreadable of ['not json', '7', 'null']) {
+      expect(serializeWitnessForMint(unreadable)).toBe(unreadable);
+    }
+  });
+
+  test('an oversized witness is left for the mint to judge', () => {
+    const oversized = JSON.stringify({ signatures: Array.from({ length: 4000 }, () => 'junk') });
+    expect(serializeWitnessForMint(oversized)).toBe(oversized);
   });
 });
 
