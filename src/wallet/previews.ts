@@ -65,7 +65,8 @@ export type SerializedBatchMintPreview = {
  *
  * @remarks
  * Keeps the quote id and, where the quote states them, its amount and fee reserves as decimal
- * strings: v3 inputs sign over them in `completeMelt`. `inputs` are spendable bearer material.
+ * strings (v3 inputs sign over them in `completeMelt`) and its `request`, which `completeMelt`
+ * checks a bolt11 preimage against. `inputs` are spendable bearer material.
  */
 export type SerializedMeltPreview = {
   method: string;
@@ -73,6 +74,7 @@ export type SerializedMeltPreview = {
   amount?: string;
   fee_reserve?: string;
   fee_options?: Array<{ fee_index: number; fee_reserve: string }>;
+  request?: string;
   inputs: SerializedProof[];
   outputData: SerializedOutputData[];
   mintPubkey?: string;
@@ -267,9 +269,10 @@ export function serializeMeltPreview(
     amount?: Amount;
     fee_reserve?: Amount;
     fee_options?: Array<{ fee_index: number; fee_reserve: Amount }>;
+    request?: string;
   }>,
 ): SerializedMeltPreview {
-  const { amount, fee_reserve, fee_options } = preview.quote;
+  const { amount, fee_reserve, fee_options, request } = preview.quote;
   return {
     method: preview.method,
     quote: preview.quote.quote,
@@ -281,6 +284,7 @@ export function serializeMeltPreview(
         fee_reserve: o.fee_reserve.toString(),
       })),
     }),
+    ...(typeof request === 'string' && { request }),
     inputs: preview.inputs.map(serializeProof),
     outputData: preview.outputData.map((o) => OutputData.serialize(o)),
     ...mintPubkeyOf(preview),
@@ -297,9 +301,10 @@ export function deserializeMeltPreview(serialized: SerializedMeltPreview): MeltP
   amount?: Amount;
   fee_reserve?: Amount;
   fee_options?: Array<{ fee_index: number; fee_reserve: Amount }>;
+  request?: string;
 }> {
   return deserializeWith('SerializedMeltPreview', () => {
-    const { amount, fee_reserve, fee_options } = serialized;
+    const { amount, fee_reserve, fee_options, request } = serialized;
     assertMaxEntries('inputs', serialized.inputs);
     assertMaxEntries('outputData', serialized.outputData);
     assertMaxEntries('fee_options', fee_options);
@@ -315,6 +320,7 @@ export function deserializeMeltPreview(serialized: SerializedMeltPreview): MeltP
             fee_reserve: Amount.from(o.fee_reserve),
           })),
         }),
+        ...(typeof request === 'string' && { request }),
       },
       inputs: normalizeProofAmounts(serialized.inputs),
       outputData: serialized.outputData.map((s) => OutputData.deserialize(s)),

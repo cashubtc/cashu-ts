@@ -117,6 +117,7 @@ describe('preview round trip', () => {
             fee_options: fc.array(fc.record({ fee_index: fc.nat(), fee_reserve: amount }), {
               maxLength: 2,
             }),
+            request: text,
           },
           { requiredKeys: ['quote'] },
         ),
