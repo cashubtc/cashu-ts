@@ -2632,6 +2632,12 @@ describe('nutroot spend_info token serialization', () => {
       expect(wireSi(proof)).toEqual({ k });
     });
 
+    test('are not read from an si that is a byte string', () => {
+      const [proof] = decode(new Uint8Array(4) as unknown as Record<string, unknown>);
+      expect(proof.spend_info).toEqual({});
+      expect(Object.getOwnPropertySymbols(proof.spend_info!)).toEqual([]);
+    });
+
     test('do not excuse a malformed field beside them', () => {
       expect(() => decode({ k: 5, ...extra })).toThrow(/spend_info k/);
       expect(() => decode({ k, t: 5, ...extra })).toThrow(/spend_info tree/);

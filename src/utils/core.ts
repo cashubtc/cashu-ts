@@ -466,7 +466,8 @@ function readCashuASpendInfo(v: unknown): SpendInfo {
 }
 
 function unknownSi(si: unknown): HeldSpendInfo {
-  if (!isRecord(si)) return {};
+  // A CBOR byte string is an object with an entry per byte, not a map of fields.
+  if (!isRecord(si) || si instanceof Uint8Array) return {};
   const unknown = Object.entries(si).filter(([key]) => !V4_SI_KEYS.includes(key));
   return unknown.length ? { [UNKNOWN_SI]: Object.fromEntries(unknown) } : {};
 }
