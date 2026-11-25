@@ -151,7 +151,19 @@ A **locked** request needs a fourth: the private key it locks to. The check then
 wallet.isPaymentRequestSatisfied(pr, payload.proofs, undefined, { privkeys: myPrivkey });
 ```
 
-The check covers the amount, the requested lock, and this mint's admissibility: it throws when the mint is outside a strict mint list, or cannot melt the request unit via any method the request accepts. An unlocked request takes only proofs you can spend, bearer or locked to a key you pass as `privkeys`, so it also throws on proofs the payer locked to themselves. What it cannot cover is a blind-me leaf key belonging to someone else: only that key's owner can resolve its blinding, so a cosigner checks their own. Proof integrity (DLEQ) remains a separate check, as does, for a locked request, whether a script-path leaf is satisfiable today: ask `wallet.spendOptions(proofs, { privkeys })` for that.
+What the check covers:
+
+- **Amount**: `sum(proofs) - inputFees >= amount + mf`, with input fees from this wallet's keysets and `mf` priced from this mint's NUT-05 melt methods for the wallet unit. Underpaid returns `false`; everything below throws.
+- **Mint**: it must be inside a strict mint list, and able to melt the request unit via a method the request accepts.
+- **Requested lock**: each proof carries exactly the requested tree for a nutroot request, and exactly the requested condition for a `nut10` one.
+- **Blind-me leaf keys**: one is checked only when its owner's private key is in `privkeys`; without it any substituted key passes, so pass every blind-me key you hold. A key belonging to someone else is theirs to check: only its owner can resolve the blinding.
+- **Unlocked requests**: only proofs you can spend count, bearer or locked to a key you pass as `privkeys`, so a payer cannot settle with proofs locked to themselves.
+
+What it leaves to you:
+
+- Proof integrity (pairing or DLEQ) is a separate check.
+- For a locked request, whether a script-path leaf is satisfiable today: ask `wallet.spendOptions(proofs, { privkeys })`.
+- Finality. Until you receive (swap) the proofs, the payer may still hold a spend path: a bearer key, or a leaf of their own. `wallet.spendOptions()` reports them, as `keyPathHeldBy` and `othersCanSpendAt` ([Spending locked proofs](../wallet_ops/spend_locked.md#inspecting-walletspendoptions)).
 
 ## Manual control
 

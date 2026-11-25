@@ -6,6 +6,7 @@ import { Amount, Wallet, createHTLCHash, createHTLCsecret, createP2PKsecret } fr
 import { deriveP2BKBlindedPubkeys } from '../../src/crypto/NUT28';
 import {
   buildNutrootSecret,
+  numsOffsetKey,
   deriveReceiverKeyedSecret,
   serializeNutrootLeaf,
   type NutrootLeaf,
@@ -17,6 +18,7 @@ import { mint, useTestServer } from './_setup';
 useTestServer();
 
 const V3_KEYSET = '02' + 'ab'.repeat(32);
+const LEGACY_KEYSET = `00${'11'.repeat(16)}`;
 const priv = (seed: number) => bytesToHex(new Uint8Array(32).fill(seed));
 const pub = (seed: number) => bytesToHex(secp256k1.getPublicKey(hexToBytes(priv(seed)), true));
 
@@ -41,6 +43,17 @@ const wallet = () => new Wallet(mint);
 const spendOptions = (proof: Proof, opts?: { privkeys?: string | string[]; now?: number }) =>
   wallet().spendOptions([proof], opts)[0];
 
+/**
+ * A pre-v3 proof with the given secret.
+ */
+const legacy = (secret: string, extra?: Partial<Proof>): Proof => ({
+  id: LEGACY_KEYSET,
+  amount: Amount.from(8),
+  secret,
+  C: 'aa'.repeat(33),
+  ...extra,
+});
+
 describe('wallet.spendOptions: the key path', () => {
   test('rejects anything that is not a v3 point secret', async () => {
     // On a v3 keyset the secret must be a point: anything else is not a proof this mint issued.
@@ -56,12 +69,15 @@ describe('wallet.spendOptions: the key path', () => {
     const bare = v3Proof(pub(ALICE), { k });
     expect(spendOptions(bare)).toEqual({
       keyPath: true,
+      keyPathHeldBy: 'bearer',
       script: [],
       spendable: true,
     });
     // Same proof with no spend info at all, and no seed to derive from: nothing to spend with.
     expect(spendOptions(v3Proof(pub(ALICE)))).toEqual({
       keyPath: false,
+      keyPathHeldBy: 'other',
+      othersCanSpendAt: 0,
       script: [],
       spendable: false,
       blockedBy: 'not-keyed-to-you',
@@ -69,6 +85,8 @@ describe('wallet.spendOptions: the key path', () => {
     // A bearer key that does not match the secret is not a key path.
     expect(spendOptions(v3Proof(pub(BOB), { k }))).toEqual({
       keyPath: false,
+      keyPathHeldBy: 'other',
+      othersCanSpendAt: 0,
       script: [],
       spendable: false,
       blockedBy: 'not-keyed-to-you',
@@ -324,19 +342,12 @@ describe('wallet.spendOptions: the verdict', () => {
 });
 
 describe('wallet.spendOptions: legacy and bearer proofs', () => {
-  const LEGACY_KEYSET = `00${'11'.repeat(16)}`;
-  const legacy = (secret: string, extra?: Partial<Proof>): Proof => ({
-    id: LEGACY_KEYSET,
-    amount: Amount.from(8),
-    secret,
-    C: 'aa'.repeat(33),
-    ...extra,
-  });
   const unlockAt = 4102444800;
 
   test('an unlocked bearer proof spends as it stands', async () => {
     expect(spendOptions(legacy('plain-secret'))).toEqual({
       keyPath: true,
+      keyPathHeldBy: 'bearer',
       script: [],
       spendable: true,
     });
@@ -484,6 +495,101 @@ describe('wallet.spendOptions: legacy and bearer proofs', () => {
     const unknown = legacy(JSON.stringify(['FOO', { nonce: 'ab', data: 'cd' }]));
     expect(() => wallet().spendOptions([legacy('plain-secret'), unknown])).toThrow(/kind/i);
     expect(() => wallet().spendOptions(legacy('plain-secret') as any)).toThrow(/array of proofs/);
+  });
+});
+
+describe('wallet.spendOptions: who else can spend', () => {
+  const threshold = (keys: string[], n = 1): NutrootLeaf => ({ type: 'threshold', n, keys });
+  const after = (time: number, keys: string[]): NutrootLeaf => ({
+    type: 'after',
+    n: 1,
+    keys,
+    time,
+  });
+  const commit: NutrootLeaf = { type: 'commit', hash: 'cc'.repeat(32) };
+  const now = 1_000_000;
+
+  /**
+   * A script-only proof over `leaves`: the internal key is a NUMS offset nobody can sign for.
+   */
+  const nums = (leaves: NutrootLeaf[]) => {
+    const u = 'ab'.repeat(32);
+    const K = bytesToHex(numsOffsetKey(hexToBytes(u)));
+    const { secret, tree } = buildNutrootSecret(K, leaves);
+    return v3Proof(secret, { K, u, tree });
+  };
+  const mine = { privkeys: priv(BOB), now };
+
+  test('a bearer key is held by whoever has the token', async () => {
+    const bearer = spendOptions(v3Proof(pub(ALICE), { k: priv(ALICE) }));
+    expect(bearer.keyPathHeldBy).toBe('bearer');
+    // Whether anyone else knows `k` depends on where the proof came from: the caller's to judge.
+    expect(bearer.othersCanSpendAt).toBeUndefined();
+    expect(spendOptions(legacy('plain-secret')).keyPathHeldBy).toBe('bearer');
+  });
+
+  test('a receiver-keyed proof is held by this wallet alone', async () => {
+    const out = deriveReceiverKeyedSecret(pub(BOB));
+    const proof = v3Proof(out.secret, { E: out.E });
+    expect(spendOptions(proof, mine).keyPathHeldBy).toBe('you');
+    // Without the receiver's key the ephemeral proves nothing: the key is someone else's.
+    expect(spendOptions(proof, { privkeys: priv(STRANGER) }).keyPathHeldBy).toBe('other');
+  });
+
+  test('a disclosed internal key this wallet cannot derive is held by another party', async () => {
+    const { secret, tree } = buildNutrootSecret(pub(ALICE), [threshold([pub(BOB)])]);
+    const options = spendOptions(v3Proof(secret, { K: pub(ALICE), tree }), mine);
+    expect(options).toMatchObject({ spendable: true, keyPath: false, keyPathHeldBy: 'other' });
+    // Its holder can spend at any time, whatever the leaves say.
+    expect(options.othersCanSpendAt).toBe(0);
+    // A proof with no spend info is keyed to whoever made it.
+    expect(spendOptions(v3Proof(pub(ALICE)))).toMatchObject({
+      keyPathHeldBy: 'other',
+      othersCanSpendAt: 0,
+    });
+  });
+
+  test('nobody holds a NUMS key path or a legacy lock', async () => {
+    expect(spendOptions(nums([threshold([pub(BOB)])]), mine).keyPathHeldBy).toBe('nobody');
+    const p2pk = legacy(createP2PKsecret(pub(BOB)));
+    expect(spendOptions(p2pk, mine).keyPathHeldBy).toBe('nobody');
+  });
+
+  test('no other party can spend through a leaf that needs this wallet', async () => {
+    expect(spendOptions(nums([threshold([pub(BOB)])]), mine).othersCanSpendAt).toBeUndefined();
+    // One key of a 2-of-2: the other signer cannot move it alone.
+    const shared = nums([threshold([pub(BOB), pub(STRANGER)], 2)]);
+    expect(spendOptions(shared, mine).othersCanSpendAt).toBeUndefined();
+    // A commit leaf is no spend path.
+    expect(
+      spendOptions(nums([threshold([pub(BOB)]), commit]), mine).othersCanSpendAt,
+    ).toBeUndefined();
+  });
+
+  test('a leaf others can satisfy without this wallet reports when it opens', async () => {
+    const refund = nums([threshold([pub(BOB)]), after(now + 90, [pub(STRANGER)])]);
+    expect(spendOptions(refund, mine)).toMatchObject({
+      spendable: true,
+      othersCanSpendAt: now + 90,
+    });
+    // A threshold leaf has no clock: open now.
+    const open = nums([threshold([pub(BOB)]), threshold([pub(STRANGER)])]);
+    expect(spendOptions(open, mine).othersCanSpendAt).toBe(0);
+    // 1-of-2 with a stranger: the stranger needs no one.
+    const either = nums([threshold([pub(BOB), pub(STRANGER)])]);
+    expect(spendOptions(either, mine).othersCanSpendAt).toBe(0);
+    // The earliest foreign leaf wins.
+    const two = nums([after(now + 500, [pub(STRANGER)]), after(now + 90, [pub(ALICE)])]);
+    expect(spendOptions(two, mine).othersCanSpendAt).toBe(now + 90);
+  });
+
+  test('a legacy refund path reports its locktime', async () => {
+    const secret = createP2PKsecret(pub(BOB), [
+      ['locktime', String(now + 3600)],
+      ['refund', pub(STRANGER)],
+    ]);
+    // NUT-11 opens the refund path the second after the locktime.
+    expect(spendOptions(legacy(secret), mine).othersCanSpendAt).toBe(now + 3601);
   });
 });
 

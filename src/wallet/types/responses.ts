@@ -83,6 +83,19 @@ export type SpendOptions = {
    */
   keyPath: boolean;
   /**
+   * Who can sign the key path: `you` for a receiver-keyed proof matched to a supplied key, `bearer`
+   * for a key that travels with the proof (its sender knows it too), `other` for a key this wallet
+   * cannot derive, `nobody` for a NUMS key or a legacy lock.
+   */
+  keyPathHeldBy: 'you' | 'bearer' | 'other' | 'nobody';
+  /**
+   * Unix seconds from which another party can spend without this wallet: 0 when one can now (a key
+   * path held by `other`, or a leaf with no locktime), else the earliest `after` leaf's time.
+   * Absent when none can. A hashlock counts as open, and a `bearer` key is not counted: it is
+   * shared with whoever sent the proof, which only the caller knows.
+   */
+  othersCanSpendAt?: number;
+  /**
    * One entry per disclosed leaf, in tree order. Empty when the proof discloses no tree.
    */
   script: SpendOption[];

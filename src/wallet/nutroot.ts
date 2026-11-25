@@ -11,6 +11,7 @@ import { deriveQuoteLockKey } from '../crypto/NUT13';
 import {
   assertPreimageOpensLeaf,
   buildScriptPathWitness,
+  isConditionLeaf,
   NUTROOT_LEAF_TYPE,
   nutrootLeafTypeHex,
   parseNutrootLeaf,
@@ -177,7 +178,7 @@ export async function attachTransactionWitnesses(
 }
 
 /**
- * What each proof can be spent through; the full contract is documented on `Wallet.spendOptions`.
+ * What each proof can be spent through; see `Wallet.spendOptions`.
  */
 export function proofSpendOptions(
   proofs: Proof[],
@@ -205,8 +206,10 @@ function spendOptionsOf(
   // output this wallet makes keeps its key in spend info, and a lost one is a NUT-09 restore.
   const keyPath = collectSpendInfoKeys([proof], privkeys, state.logger, cache).has(proof.secret);
 
-  const tree = proof.spend_info?.tree;
-  if (!tree || tree.length === 0) return withVerdict(keyPath, []);
+  const info = proof.spend_info;
+  const mine = info?.k !== undefined ? 'bearer' : 'you';
+  const tree = info?.tree;
+  if (!tree || tree.length === 0) return withVerdict(keyPath, [], keyPath ? mine : 'other');
 
   const K = proof.spend_info?.K ?? internalKeyOf(proof, privkeys, cache);
   if (!K) throw new CTSError('Disclosed tree needs an internal key to verify the proof secret');
@@ -215,7 +218,10 @@ function spendOptionsOf(
   // Parses every leaf, so an unknown one throws here rather than being reported as spendable.
   const leaves = tree.map((leaf) => parseNutrootLeaf(hexToBytes(leaf)));
   const hits = recoverLeafKeySecretKeys(tree, proof.spend_info?.E, privkeys, cache);
-  return withVerdict(keyPath, scriptOptions(leaves, hits, now, state.listedLeafTypes));
+  // `u` was checked against `K` above, so a NUMS key is one nobody signs for.
+  const unkeyed = info?.u !== undefined ? 'nobody' : 'other';
+  const script = scriptOptions(leaves, hits, now, state.listedLeafTypes);
+  return withVerdict(keyPath, script, keyPath ? mine : unkeyed);
 }
 
 /**
@@ -234,7 +240,7 @@ function legacySpendOptions(
     // A JSON array this wallet cannot read is not a bearer secret: a mint with a laxer parser may
     // still enforce it as a lock, so it fails closed like any other condition it cannot judge.
     if (typeof proof.secret !== 'string' || proof.secret.trimStart().startsWith('[')) throw e;
-    return withVerdict(true, []); // not a NUT-10 secret: a bearer proof anyone can spend
+    return withVerdict(true, [], 'bearer'); // not a NUT-10 secret: a bearer proof anyone can spend
   }
   const leaves = p2pkToSpendLeaves(proof.secret);
   // Held keys by x coordinate, so an x-only import matches either parity (NUT-11 signatures are
@@ -247,7 +253,7 @@ function legacySpendOptions(
       held.has(key.slice(2)) ? [{ leafIndex, keyIndex, blinded }] : [],
     ),
   );
-  return withVerdict(false, scriptOptions(leaves, hits, now));
+  return withVerdict(false, scriptOptions(leaves, hits, now), 'nobody');
 }
 
 /**
@@ -294,9 +300,30 @@ function scriptOptions(
 /**
  * The one-line answer over the key path and every leaf; see `SpendOptions.blockedBy`.
  */
-function withVerdict(keyPath: boolean, script: SpendOption[]): SpendOptions {
-  if (keyPath || script.some((o) => o.satisfiable)) return { keyPath, script, spendable: true };
-  const stuck = { keyPath, script, spendable: false };
+function withVerdict(
+  keyPath: boolean,
+  script: SpendOption[],
+  keyPathHeldBy: SpendOptions['keyPathHeldBy'],
+): SpendOptions {
+  // A leaf is open to others when the keys this wallet does not hold meet its threshold. A leaf
+  // type the mint does not list is no spend path (NUT-10).
+  const foreign = script.filter(
+    (o) =>
+      isConditionLeaf(o.leaf) &&
+      o.blockedBy !== 'unlisted' &&
+      o.leaf.keys.length - o.keys.length >= o.leaf.n,
+  );
+  const opens = foreign.map((o) => o.availableAt ?? 0);
+  // A key path another party holds spends at any time (NUT-00 receive check 2).
+  if (keyPathHeldBy === 'other') opens.push(0);
+  const base = {
+    keyPath,
+    keyPathHeldBy,
+    ...(opens.length > 0 && { othersCanSpendAt: Math.min(...opens) }),
+    script,
+  };
+  if (keyPath || script.some((o) => o.satisfiable)) return { ...base, spendable: true };
+  const stuck = { ...base, spendable: false };
   // A locktime counts only on a leaf this wallet otherwise covers: a stranger's refund leaf is
   // not "unlocks later".
   const waiting = script.filter(

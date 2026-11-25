@@ -2168,33 +2168,17 @@ class Wallet {
   }
 
   /**
-   * Payee-side NUT-18 settlement check: do these received proofs net the requested amount?
+   * Payee-side NUT-18 check: do these received proofs pay the request?
    *
    * @remarks
-   * Verifies `sum(proofs) - inputFees >= amount + mf`, with input fees from this wallet's keysets
-   * and `mf` priced from this mint's NUT-05 melt methods for the wallet unit. This mint must also
-   * be admissible: inside a strict mint list, and able to melt via a method the request accepts. A
-   * locked request also checks that each proof carries the lock that was asked for: exactly the
-   * requested tree for a nutroot request, and exactly the requested condition for a nut10 one. A
-   * receiver-keyed nutroot request needs `opts.privkeys`, because binding a proof to the receiver
-   * key is an ECDH trial-match only that key can do (NUT-28); without it there is nothing to check
-   * and the call throws rather than passing a payment the payee cannot spend. A blind-me leaf key
-   * is checked only when its owner's private key is in `opts.privkeys`. Without it, any substituted
-   * key passes, so include every key the request tags as blind-me that you hold. An unlocked
-   * request takes only proofs the payee can spend, bearer or locked to one of `opts.privkeys`, so a
-   * payer cannot settle it with proofs locked to themselves. Proof integrity (pairing/DLEQ) remains
-   * a separate check.
-   * @param pr - The payment request being settled.
-   * @param proofs - The received proofs (from this wallet's mint), with spend info when present.
-   * @param expectedAmount - Expected amount for amountless requests; ignored when the request sets
-   *   `a`.
-   * @param opts.privkeys - The payee's key(s). Required for a receiver-keyed nutroot request; on an
-   *   unlocked request, proofs locked to one of them still count.
-   * @throws If no amount is available to check against, this wallet's mint is not admissible for
-   *   the request (unit, strict mint list, or no accepted melt method), a proof keyset is unknown,
-   *   the request is invalid per NUT-18, a receiver-keyed nutroot request is checked without its
-   *   key, a proof does not carry the requested lock, or an unlocked request is paid with a proof
-   *   the payee cannot spend or `spendOptions` cannot read.
+   * Checks the net amount (after fees), the requested lock, and that this mint may settle the
+   * request; the rules are in `docs-src/usage/payment_requests.md`. Satisfied is not final: receive
+   * the proofs before treating the payment as settled.
+   * @param expectedAmount - For an amountless request; ignored when the request sets `a`.
+   * @param opts.privkeys - The payee's key(s). Required when the request keys anything to them.
+   * @returns False when the proofs fall short of the amount.
+   * @throws If the request is invalid, this mint cannot settle it, or a proof does not carry the
+   *   requested lock or cannot be spent by the payee.
    */
   isPaymentRequestSatisfied(
     pr: PaymentRequest,
@@ -2556,32 +2540,15 @@ class Wallet {
   }
 
   /**
-   * Reports what this wallet can do with each proof: its available spending options.
+   * Reports how this wallet can spend each proof: the key path, the script path, or neither.
    *
    * @remarks
-   * Offline, and it changes nothing. Use it to triage received proofs of either lock family, decide
-   * which leaf a script path plan should name, or show a user why a proof is stuck: `spendable` is
-   * the one-line answer and `blockedBy` the why.
-   *
-   * A legacy NUT-11 lock is read into the same leaf shape (main path, then the refund path as an
-   * `after` leaf), matched across key parity and through `p2pk_e` for blinded keys; an unlocked
-   * legacy proof reports `keyPath: true`, since it spends with no witness at all.
-   *
-   * `satisfiable` is this wallet's own assessment from what it holds. The mint compares an `after`
-   * leaf against its own clock, so a leaf that unlocked seconds ago may still be refused, and a
-   * hashlock leaf is never satisfiable from the wallet alone: its preimage comes from the caller.
-   *
-   * One result per proof, in input order. Pass a whole token's proofs in one call: each supplied
-   * key's public key is derived once. Proofs keyed through an ephemeral (receiver-keyed, a blinded
-   * leaf key, or legacy P2BK) are still matched one by one, at an ECDH per key (NUT-28).
-   * @param proofs Any proofs, each with its spend info when it has one.
+   * Offline, and it changes nothing; one result per proof, in input order. It fails closed: a proof
+   * or leaf it cannot read throws. `spendable` is not sole control (see `othersCanSpendAt`). The
+   * full contract is in `docs-src/wallet_ops/spend_locked.md`.
    * @param opts.privkeys Static keys to trial-match, for receiver-keyed proofs and leaf keys.
    * @param opts.now Unix seconds to judge locktimes against. Defaults to the current time.
-   * @throws If `proofs` is not an array, a v3 keyset proof is not a point secret, a NUT-10 secret
-   *   is malformed or of a kind this wallet cannot spend, a NUT-11 tag is malformed (a non-integer
-   *   `n_sigs`, or a scalar tag with more than one value), or a disclosed tree holds a leaf it
-   *   cannot parse (unknown version, type or constraint field): the same fail-closed rule the
-   *   receive cascade applies.
+   * @throws If `proofs` is not an array, or a proof, its lock or a disclosed leaf cannot be read.
    */
   spendOptions(
     proofs: Proof[],

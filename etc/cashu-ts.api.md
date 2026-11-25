@@ -2769,6 +2769,8 @@ export type SpendOption = {
 // @public
 export type SpendOptions = {
     keyPath: boolean;
+    keyPathHeldBy: 'you' | 'bearer' | 'other' | 'nobody';
+    othersCanSpendAt?: number;
     script: SpendOption[];
     spendable: boolean;
     blockedBy?: 'not-keyed-to-you' | 'locktime' | 'threshold' | 'preimage' | 'unlisted';
