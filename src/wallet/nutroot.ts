@@ -209,7 +209,11 @@ function spendOptionsOf(
   const info = proof.spend_info;
   const mine = info?.k !== undefined ? 'bearer' : 'you';
   const tree = info?.tree;
-  if (!tree || tree.length === 0) return withVerdict(keyPath, [], keyPath ? mine : 'other');
+  if (!tree || tree.length === 0) {
+    // NUT-00: a NUMS offset without a tree is malformed.
+    if (info?.u !== undefined) verifyNutrootSpendInfo(proof.secret, info);
+    return withVerdict(keyPath, [], keyPath ? mine : 'other');
+  }
 
   const K = proof.spend_info?.K ?? internalKeyOf(proof, privkeys, cache);
   if (!K) throw new CTSError('Disclosed tree needs an internal key to verify the proof secret');
@@ -305,8 +309,9 @@ function withVerdict(
   script: SpendOption[],
   keyPathHeldBy: SpendOptions['keyPathHeldBy'],
 ): SpendOptions {
-  // A leaf is open to others when the keys this wallet does not hold meet its threshold. A leaf
-  // type the mint does not list is no spend path (NUT-10).
+  // A leaf is open to others when the keys this wallet does not hold meet its threshold; leaf keys
+  // are distinct, as the leaf parsers reject duplicates. A leaf type the mint does not list is no
+  // spend path (NUT-10).
   const foreign = script.filter(
     (o) =>
       isConditionLeaf(o.leaf) &&

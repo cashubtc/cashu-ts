@@ -24,7 +24,7 @@ Two stateless helpers dispatch on this without a wallet: `isBlsProof(proof)` gat
 
 ## Inspecting: `wallet.spendOptions()`
 
-Reports what this wallet can do with each proof, one result per proof in input order. Offline (apart from a counter lookup) and changes nothing; use it to triage received proofs, pick a leaf for a script path plan, or show a user why a proof is stuck. Safely handles legacy P2PK/HTLC proofs too.
+Reports what this wallet can do with each proof, one result per proof in input order. Offline and changes nothing; use it to triage received proofs, pick a leaf for a script path plan, or show a user why a proof is stuck. Safely handles legacy P2PK/HTLC proofs too.
 
 ```ts
 const [{ spendable, blockedBy, keyPath, script }] = wallet.spendOptions([proof], {
@@ -54,10 +54,10 @@ const canReceive = options.every((o) => o.spendable);
 
 `spendable` says you can spend a proof, not that you alone can. Two fields report who else can, for a wallet that keeps a proof instead of swapping it (eg an offline receive):
 
-- `othersCanSpendAt`: unix seconds from which another party can spend without you. `0` means now: a key path someone else holds, or a leaf they can satisfy that has no locktime (including a hashlock, whose preimage may already be known). Otherwise it is the earliest `after` leaf they can satisfy. Absent when nobody else can.
-- `keyPathHeldBy`: `'you'` for a receiver-keyed proof matched to one of your keys, `'bearer'` for a `k` that travels with the proof, `'other'` for a key you cannot derive, `'nobody'` for a NUMS key or a legacy lock.
+- `othersCanSpendAt`: unix seconds from which another party can spend without you. `0` means now: a key path someone else holds, or a leaf they can satisfy that has no locktime (including a hashlock, whose preimage may already be known). Otherwise it is the earliest `after` leaf they can satisfy. Absent when nobody else is known to: see the bearer note below.
+- `keyPathHeldBy`: `'you'` for a receiver-keyed proof matched to one of your keys, `'bearer'` for a `k` that travels with the proof or an unlocked pre-v3 secret, `'other'` for a key not derived from the keys you passed, `'nobody'` for a NUMS key or a legacy lock. `'other'` is judged from `privkeys` alone: a receiver-keyed proof checked without its key, or an aggregated key you cosign, also reads as `'other'`.
 
-A bearer key is shared with whoever sent it, and only you know where a proof came from, so `'bearer'` does not count towards `othersCanSpendAt`: a received bearer proof is its sender's to race until you swap it.
+A bearer proof spends for whoever has it, and only you know where a proof came from, so `'bearer'` does not count towards `othersCanSpendAt`: a received bearer proof is its sender's to race until you swap it.
 
 The policy is yours. A wallet that swaps on receive needs neither field; one that holds a received proof might require sole control up to its own horizon:
 

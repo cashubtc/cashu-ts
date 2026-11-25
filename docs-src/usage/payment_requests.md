@@ -153,7 +153,7 @@ wallet.isPaymentRequestSatisfied(pr, payload.proofs, undefined, { privkeys: myPr
 
 What the check covers:
 
-- **Amount**: `sum(proofs) - inputFees >= amount + mf`, with input fees from this wallet's keysets and `mf` priced from this mint's NUT-05 melt methods for the wallet unit. Underpaid returns `false`; everything below throws.
+- **Amount**: `sum(proofs) - inputFees >= amount + mf`, with input fees from this wallet's keysets and `mf` priced from this mint's NUT-05 melt methods for the wallet unit. Underpaid returns `false`; everything below throws, as does an amountless request checked without an expected amount, or a proof on a keyset this wallet does not know.
 - **Mint**: it must be inside a strict mint list, and able to melt the request unit via a method the request accepts.
 - **Requested lock**: each proof carries exactly the requested tree for a nutroot request, and exactly the requested condition for a `nut10` one.
 - **Blind-me leaf keys**: one is checked only when its owner's private key is in `privkeys`; without it any substituted key passes, so pass every blind-me key you hold. A key belonging to someone else is theirs to check: only its owner can resolve the blinding.

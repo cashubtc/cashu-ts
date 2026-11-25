@@ -583,6 +583,43 @@ describe('wallet.spendOptions: who else can spend', () => {
     expect(spendOptions(two, mine).othersCanSpendAt).toBe(now + 90);
   });
 
+  test('a NUMS offset without a tree is malformed and throws', async () => {
+    // NUT-00: `u` without a `tree` is malformed, so it is not reported as anyone's key.
+    const u = 'ab'.repeat(32);
+    const K = bytesToHex(numsOffsetKey(hexToBytes(u)));
+    expect(() => spendOptions(v3Proof(K, { K, u }))).toThrow(/NUMS offset without a tree/);
+  });
+
+  test('a key path of this wallet still reports a leaf open to others', async () => {
+    const out = deriveReceiverKeyedSecret(pub(BOB));
+    const { secret, tree } = buildNutrootSecret(out.secret, [after(now + 90, [pub(STRANGER)])]);
+    const options = spendOptions(v3Proof(secret, { E: out.E, tree }), mine);
+    expect(options).toMatchObject({ keyPathHeldBy: 'you', othersCanSpendAt: now + 90 });
+  });
+
+  test('a hashlock or an expired after leaf held by others counts as open', async () => {
+    const hashlock: NutrootLeaf = {
+      type: 'hashlock',
+      n: 1,
+      keys: [pub(STRANGER)],
+      hash: 'bb'.repeat(32),
+    };
+    // The preimage may already be known, so a hashlock has no clock.
+    expect(spendOptions(nums([threshold([pub(BOB)]), hashlock]), mine).othersCanSpendAt).toBe(0);
+    // A locktime in the past reports its own time, which is at or before now.
+    const expired = nums([threshold([pub(BOB)]), after(now - 10, [pub(STRANGER)])]);
+    expect(spendOptions(expired, mine).othersCanSpendAt).toBe(now - 10);
+  });
+
+  test('a legacy path with no keys is open to anyone', async () => {
+    // A locktime with no refund keys: anyone spends the second after it.
+    const timed = legacy(createP2PKsecret(pub(BOB), [['locktime', String(now + 3600)]]));
+    expect(spendOptions(timed, mine).othersCanSpendAt).toBe(now + 3601);
+    // A keyless HTLC: anyone with the preimage spends now.
+    const { hash } = createHTLCHash();
+    expect(spendOptions(legacy(createHTLCsecret(hash)), mine).othersCanSpendAt).toBe(0);
+  });
+
   test('a legacy refund path reports its locktime', async () => {
     const secret = createP2PKsecret(pub(BOB), [
       ['locktime', String(now + 3600)],
