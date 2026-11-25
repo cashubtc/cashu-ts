@@ -572,6 +572,7 @@ export function deserializeMeltPreview(serialized: SerializedMeltPreview): MeltP
         fee_index: number;
         fee_reserve: Amount;
     }>;
+    request?: string;
 }>;
 
 // @public (undocumented)
@@ -2585,6 +2586,7 @@ export type SerializedMeltPreview = {
         fee_index: number;
         fee_reserve: string;
     }>;
+    request?: string;
     inputs: SerializedProof[];
     outputData: SerializedOutputData[];
     mintPubkey?: string;
@@ -2647,6 +2649,7 @@ export function serializeMeltPreview(preview: MeltPreview<{
         fee_index: number;
         fee_reserve: Amount;
     }>;
+    request?: string;
 }>): SerializedMeltPreview;
 
 // @public (undocumented)

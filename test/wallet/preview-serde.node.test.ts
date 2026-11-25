@@ -237,6 +237,7 @@ describe('melt preview serde', () => {
       quote: 'melt-q',
       amount: Amount.from(10),
       fee_reserve: Amount.from(3),
+      request: 'bolt11request',
     });
 
     await wallet.completeMelt(preview);

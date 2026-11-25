@@ -24,6 +24,9 @@ import {
   Amount,
   createHTLCHash,
   createHTLCsecret,
+  deserializeMeltPreview,
+  serializeMeltPreview,
+  type SerializedMeltPreview,
 } from '../../src';
 import { DUMMY_TEST_KEYSET, MINTCACHE, PUBKEYS } from '../consts';
 
@@ -1026,6 +1029,34 @@ describe('melt preimage and the held invoice', () => {
       { id: '00bd033559de27d0', amount: Amount.from(4), secret: 'secret2', C: 'C2' },
     ]);
     expect(preview.quote.request).toBe(heldInvoice);
+  });
+
+  test('a preview restored from its serialized form keeps the held invoice and checks against it', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/melt/bolt11', () =>
+        HttpResponse.json({
+          quote: 'test_melt_quote',
+          amount: 10,
+          unit: 'sat',
+          fee_reserve: 2,
+          state: MeltQuoteState.PAID,
+          expiry: 1234567890,
+          request: invoiceFor(other),
+          payment_preimage: other,
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const preview = await wallet.prepareMelt('bolt11', heldQuote, [
+      { id: '00bd033559de27d0', amount: Amount.from(8), secret: 'secret1', C: 'C1' },
+      { id: '00bd033559de27d0', amount: Amount.from(4), secret: 'secret2', C: 'C2' },
+    ]);
+    const restored = deserializeMeltPreview(
+      JSON.parse(JSON.stringify(serializeMeltPreview(preview))) as SerializedMeltPreview,
+    );
+    const { quote } = await wallet.completeMelt(restored);
+    expect(quote).toMatchObject({ request: heldInvoice, payment_preimage: null });
   });
 });
 
