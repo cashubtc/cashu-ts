@@ -25,6 +25,10 @@ export type GetInfoResponse = {
    * Max length the mint accepts for any array in a request (`inputs`, `outputs`, `Ys`).
    */
   max_array_length?: number;
+  /**
+   * `true` if the mint's ecash is not backed by real funds (eg a fake or regtest backend).
+   */
+  demo?: boolean;
   contact: MintContactInfo[];
   nuts: {
     '4': {

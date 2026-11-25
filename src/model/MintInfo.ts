@@ -63,6 +63,7 @@ export class MintInfo {
     const log = logger ?? NULL_LOGGER;
     this._mintInfo = MintInfo.normalizeInfo(info, log);
     this._maxArrayLength = MintInfo.resolveMaxArrayLength(info.max_array_length, log);
+    if (this.demo) log.warn('MintInfo: demo mint, its ecash is not backed by real funds');
 
     const pe22 = this.toEndpoints(this._mintInfo?.nuts?.[22]?.protected_endpoints, log);
     this._protected22 = this.buildIndex(pe22);
@@ -622,6 +623,13 @@ export class MintInfo {
    */
   get maxArrayLength(): number {
     return this._maxArrayLength;
+  }
+  /**
+   * NUT-06: `true` if the mint says its ecash is not backed by real funds (eg a fake or regtest
+   * backend). Warn the user before using such a mint.
+   */
+  get demo(): boolean {
+    return this._mintInfo.demo === true;
   }
 
   /**

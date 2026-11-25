@@ -663,6 +663,7 @@ export type GetInfoResponse = {
     time?: number;
     tos_url?: string;
     max_array_length?: number;
+    demo?: boolean;
     contact: MintContactInfo[];
     nuts: {
         '4': {
@@ -1405,6 +1406,7 @@ export class MintInfo {
     get cache(): GetInfoResponse;
     // (undocumented)
     get contact(): MintContactInfo[];
+    get demo(): boolean;
     // (undocumented)
     get description(): string | undefined;
     // (undocumented)
