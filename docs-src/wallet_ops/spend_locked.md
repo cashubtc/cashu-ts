@@ -68,7 +68,7 @@ The same `.privkey(...)` serves send and melt when spending a still-locked proof
 
 ## Script path: `.scriptPath(plans)`
 
-Available on the send, receive, and melt builders. Each plan spends one input through one leaf of its disclosed tree:
+Available on the send, receive, and melt builders. A melt refuses a plan that carries a `preimage` (NUT-05): swap a hashlock proof first, then melt the result. Each plan spends one input through one leaf of its disclosed tree:
 
 ```ts
 type ScriptPathPlan = {

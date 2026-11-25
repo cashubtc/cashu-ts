@@ -1094,7 +1094,6 @@ export class MeltBuilder<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | '
     asRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
-    preimage(preimage: string): this;
     prepare(): Promise<MeltPreview<TQuote>>;
     privkey(k: string | string[]): this;
     run(): Promise<MeltProofsResponse<TQuote>>;
@@ -1116,7 +1115,6 @@ export class MeltOnchainBuilder {
     constructor(wallet: Wallet, quote: MeltQuoteOnchainResponse, proofs: ProofLike[]);
     feeIndex(index: number): this;
     keyset(id: string): this;
-    preimage(preimage: string): this;
     privkey(k: string | string[]): this;
     run(): Promise<MeltProofsResponse<MeltQuoteOnchainResponse>>;
     scriptPath(plans: ScriptPathPlan[]): this;
@@ -1138,7 +1136,6 @@ export type MeltProofsConfig = {
     keysetId?: string;
     privkey?: string | string[];
     scriptPath?: ScriptPathPlan[];
-    preimage?: string;
     onCountersReserved?: OnCountersReserved;
     nut08Change?: boolean;
     signal?: AbortSignal;

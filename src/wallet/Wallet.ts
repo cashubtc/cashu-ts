@@ -22,6 +22,7 @@ import {
   assertSigAllInputs,
   parseSecret,
   attachHTLCPreimage,
+  getHTLCWitnessPreimage,
   createSecretAndBlindingFactorDeriver,
   isV3PointSecret,
 } from '../crypto';
@@ -4699,6 +4700,7 @@ class Wallet {
       typeof meltQuote.quote !== 'string' || meltQuote.quote.length === 0,
       'prepareMelt: the quote needs its id',
     );
+    this.failIfMeltRevealsPreimage(proofsToSend, config);
     let resolvedQuote: TQuote & Partial<MeltQuoteBaseResponse> = meltQuote;
     // As in prepareMint, fetch any missing fields required on a mint response (NUT-05).
     if (resolvedQuote.unit == null || resolvedQuote.state == null) {
@@ -4710,7 +4712,7 @@ class Wallet {
     }
     assertQuoteUnit(resolvedQuote, this.unit, this._logger);
     outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
-    const { keysetId, onCountersReserved, nut08Change = true, preimage } = config || {};
+    const { keysetId, onCountersReserved, nut08Change = true } = config || {};
 
     // Rotation evidence check: repair the snapshot so the output binding is current.
     // bolt11/bolt12 melts never consult the input keyset (no keys, no fee metadata), so an
@@ -4796,8 +4798,7 @@ class Wallet {
     // Create melt preview
     const meltPreview: MeltPreview<TQuote> = {
       method,
-      inputs:
-        preimage === undefined ? normalizedProofs : attachHTLCPreimage(normalizedProofs, preimage),
+      inputs: normalizedProofs,
       outputData,
       quote: resolvedQuote,
       ...this.previewMint(),
@@ -4805,6 +4806,26 @@ class Wallet {
 
     this.throwIfAborted(config?.signal);
     return meltPreview;
+  }
+
+  /**
+   * Refuses a melt that would spend through a hashlock.
+   *
+   * @remarks
+   * NUT-05: A wallet SHOULD swap a proof it spends through a `hashlock` leaf before melting.
+   */
+  private failIfMeltRevealsPreimage(
+    inputs: Array<Pick<ProofLike, 'witness'>>,
+    config?: { scriptPath?: ScriptPathPlan[] },
+  ): void {
+    // The melt config takes no `preimage`; a plain JS caller may still pass one.
+    const stray = config !== undefined && 'preimage' in config && config.preimage !== undefined;
+    this.failIf(
+      stray ||
+        config?.scriptPath?.some((plan) => plan.preimage !== undefined) ||
+        inputs.some((p) => getHTLCWitnessPreimage(p.witness) !== undefined),
+      'Melt would reveal a hashlock preimage: swap the proof first, then melt the result',
+    );
   }
 
   /**
@@ -4828,6 +4849,7 @@ class Wallet {
     options?: CompleteMeltOptions,
   ): Promise<MeltProofsResponse<TQuote>> {
     const completeOptions: CompleteMeltOptions = options ?? {};
+    this.failIfMeltRevealsPreimage(meltPreview.inputs, completeOptions);
 
     this.assertPreviewMint(meltPreview);
     this.assertUniqueOutputSecrets(meltPreview.outputData);
