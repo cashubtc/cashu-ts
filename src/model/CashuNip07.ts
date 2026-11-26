@@ -10,6 +10,7 @@ import {
   hasP2PKSignedProof,
   parseWitnessData,
 } from '../crypto/NUT11';
+import { nutrootScriptDigest, parseNutrootLeaf, serializeNutrootLeafHex } from '../crypto/nutroot';
 import { inputDigest, transcriptContainers } from '../crypto/transcript';
 import { bytesToHex, hexToBytes } from '../utils';
 import type { MintProofsConfig, ScriptPathPlan, SpendOption } from '../wallet/types';
@@ -48,9 +49,14 @@ export type Nip07Like = {
     /**
      * Sign one input of a nutroot transaction (NUT-10): the signer derives the input digest from
      * the TLV transcript and the input's own container record, so it can refuse anything that is
-     * not a transcript carrying that container. See {@link CashuNip07Api.signTransaction}.
+     * not a transcript carrying that container. With `leafHex` it signs that leaf's script digest.
+     * See {@link CashuNip07Api.signTransaction}.
      */
-    signTransaction?: (messageHex: string, inputContainerHex: string) => Promise<Nip07SignedHash>;
+    signTransaction?: (
+      messageHex: string,
+      inputContainerHex: string,
+      leafHex?: string,
+    ) => Promise<Nip07SignedHash>;
   };
 };
 
@@ -118,13 +124,14 @@ export type CashuNip07Api = {
    * @remarks
    * Takes the private key, which a page never has: this is the extension's side of the contract,
    * not a substitute for calling the extension. Refuses any message that is not a well-formed
-   * transcript carrying the container, so an event id (or anything else) can never pass through
-   * it.
+   * transcript carrying the container, so an event id (or anything else) can never pass through it.
+   * With `leafHex` (a script-path spend) it signs that leaf's script digest.
    */
   signTransaction(
     messageHex: string,
     inputContainerHex: string,
     secretKey: string | Uint8Array,
+    leafHex?: string,
   ): Nip07SignedHash;
 };
 
@@ -133,8 +140,9 @@ export type CashuNip07Api = {
 const xOnly = (pubkey: string): string => pubkey.toLowerCase().slice(-64);
 
 /**
- * One input digest through the extension: `nip60.signTransaction` when the transcript and input
- * container are known (the signer derives and checks the digest itself), else `signSchnorr`.
+ * One digest through the extension: `nip60.signTransaction` when the transcript and input container
+ * are known (the signer derives and checks the digest itself), else `signSchnorr`. `leafHex` is the
+ * revealed leaf of a script-path spend.
  */
 async function signDigest(
   nostr: Nip07Like,
@@ -142,12 +150,14 @@ async function signDigest(
   transactionMessage: Uint8Array | undefined,
   inputContainer: Uint8Array | undefined,
   what: string,
+  leafHex?: string,
 ): Promise<string> {
   const digestHex = bytesToHex(digest);
   if (transactionMessage && inputContainer && nostr.nip60?.signTransaction) {
     const signed = await nostr.nip60.signTransaction(
       bytesToHex(transactionMessage),
       bytesToHex(inputContainer),
+      ...(leafHex === undefined ? [] : [leafHex]),
     );
     if (signed.hash.toLowerCase() !== digestHex) {
       throw new CTSError('NIP-07 signer signed a different message');
@@ -231,8 +241,15 @@ export const CashuNip07: CashuNip07Api = {
   },
 
   cosign(nostr) {
-    return async ({ digest, transactionMessage, inputContainer }) => [
-      await signDigest(nostr, digest, transactionMessage, inputContainer, 'a nutroot transaction'),
+    return async ({ digest, transactionMessage, inputContainer, leaf }) => [
+      await signDigest(
+        nostr,
+        digest,
+        transactionMessage,
+        inputContainer,
+        'a nutroot transaction',
+        serializeNutrootLeafHex(leaf),
+      ),
     ];
   },
 
@@ -271,7 +288,7 @@ export const CashuNip07: CashuNip07Api = {
     return { privkeys: values('privkey'), mints: values('mint') };
   },
 
-  signTransaction(messageHex, inputContainerHex, secretKey) {
+  signTransaction(messageHex, inputContainerHex, secretKey, leafHex) {
     const message = hexToBytes(messageHex);
     let records: Uint8Array[];
     try {
@@ -285,7 +302,17 @@ export const CashuNip07: CashuNip07Api = {
     if (!records.some((record) => equalBytes(record, container))) {
       throw new CTSError('Refusing to sign: input container is not part of this transaction');
     }
-    const hash = inputDigest(sha256(message), container);
+    let hash = inputDigest(sha256(message), container);
+    if (leafHex !== undefined) {
+      const leaf = hexToBytes(leafHex);
+      try {
+        parseNutrootLeaf(leaf);
+      } catch {
+        throw new CTSError('Refusing to sign: not a nutroot leaf');
+      }
+      // NUT-10: script-path signatures sign the script digest, which binds the revealed leaf.
+      hash = nutrootScriptDigest(hash, leaf);
+    }
     const key = typeof secretKey === 'string' ? hexToBytes(secretKey) : secretKey;
     return {
       hash: bytesToHex(hash),

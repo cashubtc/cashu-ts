@@ -298,7 +298,7 @@ export type CashuNip07Api = {
         privkeys: string[];
         mints: string[];
     }>;
-    signTransaction(messageHex: string, inputContainerHex: string, secretKey: string | Uint8Array): Nip07SignedHash;
+    signTransaction(messageHex: string, inputContainerHex: string, secretKey: string | Uint8Array, leafHex?: string): Nip07SignedHash;
 };
 
 // @public
@@ -1721,7 +1721,7 @@ export type Nip07Like = {
     };
     nip60?: {
         signSecret?: (secret: string) => Promise<Nip07SignedHash>;
-        signTransaction?: (messageHex: string, inputContainerHex: string) => Promise<Nip07SignedHash>;
+        signTransaction?: (messageHex: string, inputContainerHex: string, leafHex?: string) => Promise<Nip07SignedHash>;
     };
 };
 
