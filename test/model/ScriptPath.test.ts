@@ -227,6 +227,46 @@ describe('ScriptPath signing packages', () => {
     expect(() => ScriptPath.mergeSwapPackage(pkg, preview)).toThrow(/valid signatures/);
   });
 
+  test('each spend of a package signs its own leaf', () => {
+    const lock = (key: string): Proof => {
+      const built = buildNutrootSecret(pub(4), [{ type: 'threshold', n: 1, keys: [key] }]);
+      return {
+        id: keysetId,
+        amount: Amount.from(1),
+        secret: built.secret,
+        C: '11'.repeat(48),
+        spend_info: { K: pub(4), tree: built.tree },
+      };
+    };
+    const inputs = [lock(pub(3)), lock(pub(5))];
+    const preview: SwapPreview = {
+      amount: Amount.from(2),
+      fees: Amount.from(0),
+      sendTotal: Amount.from(0),
+      inputs,
+      keepOutputs: [OutputData.createSingleRandomData(2, keysetId)],
+    };
+    const plans = inputs.map((p) => ({ secret: p.secret, leafIndex: 0 }));
+    const pkg = ScriptPath.extractSwapPackage(preview, plans);
+    const signed = [3, 5].reduce((p, n) => ScriptPath.signPackage(p, bytesToHex(sk(n))), pkg);
+    expect(bytesToHex(spendDigest(signed, 0))).not.toBe(bytesToHex(spendDigest(signed, 1)));
+    signed.spends.forEach((spend, i) => {
+      const [key] = (parseNutrootLeaf(hexToBytes(spend.leaf)) as NutrootConditionLeaf).keys;
+      const verifies = (digest: Uint8Array) =>
+        schnorr.verify(hexToBytes(spend.signatures[0]), digest, hexToBytes(key).subarray(1));
+      expect(spend.signatures).toHaveLength(1);
+      expect(verifies(spendDigest(signed, i))).toBe(true);
+      expect(verifies(spendDigest(signed, 1 - i))).toBe(false);
+    });
+    expect(ScriptPath.mergeSwapPackage(signed, preview, plans).inputs).toHaveLength(2);
+    // One spend's signature does not complete the other.
+    const [first, second] = signed.spends;
+    const crossed = { ...signed, spends: [{ ...first, signatures: second.signatures }, second] };
+    expect(() => ScriptPath.mergeSwapPackage(crossed, preview, plans)).toThrow(
+      /needs 1 valid signatures, 0 produced/,
+    );
+  });
+
   // Each signPackage on a receiver-keyed proof trial-matches 255 blinding slots, so these
   // stay one call per test to fit slow CI runners inside the default timeout.
   test('signs a verbatim leaf key', () => {

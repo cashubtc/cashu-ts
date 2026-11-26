@@ -236,8 +236,8 @@ export type ScriptPathQuotePlan = {
  * @remarks
  * `digest` is what gets signed: the leaf's script digest, `tagged_hash("Cashu_NutrootScript",
  * input_digest || leaf_hash)` (NUT-10). `transactionMessage` is the TLV transcript and
- * `inputContainer` the input's own TLV container record, which give the input digest, so a signer
- * can recompute the digest and refuse anything it cannot verify.
+ * `inputContainer` the input's own TLV container record, which give the input digest, and `leaf`
+ * gives the leaf hash, so a signer can recompute the digest and refuse anything it cannot verify.
  */
 export type CosignRequest = {
   digest: Uint8Array;

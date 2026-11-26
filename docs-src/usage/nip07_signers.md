@@ -33,7 +33,7 @@ Adds the extension's signature to every `SIG_INPUTS` proof that lists its key an
 
 ## Nutroot proofs (v3 keysets): `completes` and `cosign`
 
-A nutroot witness signs its input's digest, so the extension can help only where its key appears verbatim in a leaf, eg an unblinded refund or multisig leaf. Blinded leaf keys and the key path (receiver-keyed or tweaked) never match.
+The extension signs with its own key only, so it can help only where that key appears verbatim in a leaf, eg an unblinded refund or multisig leaf. Blinded leaf keys and the key path (receiver-keyed or tweaked) never match.
 
 ```ts
 const { script } = wallet.spendOptions(proof);
@@ -48,9 +48,9 @@ if (leaf) {
 }
 ```
 
-`cosign` is a [`ScriptPathPlan.cosign`](../wallet_ops/spend_locked.md#script-path-scriptpathplans) hook. It prefers `nip60.signTransaction(messageHex, containerHex, leafHex)`: the extension receives the TLV transcript, the input's own container record and the leaf being spent, derives the script digest itself, and can refuse anything that is not a transcript carrying that container, so an event id can never pass through it. The reply's `hash` must equal the script digest cts computed. Without it, the hook falls back to `signSchnorr` over the digest.
+`cosign` is a [`ScriptPathPlan.cosign`](../wallet_ops/spend_locked.md#script-path-scriptpathplans) hook. It prefers `nip60.signTransaction(messageHex, containerHex, leafHex)`: the extension receives the TLV transcript, the input's own container record and the leaf being spent, derives the script digest itself, and can refuse anything that is not a transcript carrying that container, so an event id can never pass through it. The reply's `hash` must equal the script digest cts computed, so an extension that ignores `leafHex` and signs the bare input digest is refused. Without it, the hook falls back to `signSchnorr` over the digest.
 
-`CashuNip07.signTransaction(messageHex, containerHex, secretKey, leafHex?)` is the reference implementation of `nip60.signTransaction`, for the extension side of that contract and for tests: it takes the private key, which the page never has, so a page cannot use it in place of the extension's method. It refuses any message that is not a well-formed transcript and any container the transcript does not carry, then derives the input digest (the script digest when `leafHex` is given), signs BIP-340 and returns `{ hash, sig, pubkey }`, the shape `nip60.signSecret` already uses.
+`CashuNip07.signTransaction(messageHex, containerHex, secretKey, leafHex?)` is the reference implementation of `nip60.signTransaction`, for the extension side of that contract and for tests: it takes the private key, which the page never has, so a page cannot use it in place of the extension's method. It refuses any message that is not a well-formed transcript and any container the transcript does not carry, refuses a `leafHex` that is not a leaf listing its key, then derives the input digest (the script digest when `leafHex` is given), signs BIP-340 and returns `{ hash, sig, pubkey }`, the shape `nip60.signSecret` already uses.
 
 ## Locked mint quotes: `signQuote`
 

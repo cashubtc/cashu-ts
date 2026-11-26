@@ -239,9 +239,18 @@ describe('CashuNip07', () => {
       LEAF_HEX,
     );
     expect(forLeaf.hash).toBe(bytesToHex(SCRIPT_DIGEST));
-    expect(() =>
-      CashuNip07.signTransaction(bytesToHex(MESSAGE), inputContainerHex, PRIV, '00ff'),
-    ).toThrow('not a nutroot leaf');
+    const refuses = (leafHex: string, why: string) =>
+      expect(() =>
+        CashuNip07.signTransaction(bytesToHex(MESSAGE), inputContainerHex, PRIV, leafHex),
+      ).toThrow(why);
+    refuses('00ff', 'not a nutroot leaf');
+    refuses('zz', 'not a nutroot leaf');
+    // A leaf this key cannot spend gets no signature: a commit leaf, or one listing another key.
+    refuses(`0004080020${'11'.repeat(32)}`, 'does not list this key');
+    refuses(
+      bytesToHex(serializeNutrootLeaf({ type: 'threshold', n: 1, keys: [OTHER] })),
+      'does not list this key',
+    );
   });
 
   test('completes: listed, not held, one short of n, and only then', () => {

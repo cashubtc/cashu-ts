@@ -81,10 +81,11 @@ export function dropTransactionWitnesses(proofs: Proof[]): Proof[] {
  * Attaches nutroot transaction witnesses to v3 point-secret inputs (NUT-10).
  *
  * @remarks
- * Builds the transcript from the request's own inputs and outputs, then signs its digest with each
- * input's spend-info key, delivered in `extraKeys`. Signing is per input, so a mixed transaction
- * signs its v3 inputs and leaves v0-v2 inputs to their own rules (NUT-10). Inputs whose key is not
- * recoverable are left unsigned and the mint rejects them.
+ * Builds the transcript from the request's own inputs and outputs, then signs each input's digest
+ * with its spend-info key, delivered in `extraKeys`, or its script digest for a script path spend.
+ * Signing is per input, so a mixed transaction signs its v3 inputs and leaves v0-v2 inputs to their
+ * own rules (NUT-10). Inputs whose key is not recoverable are left unsigned and the mint rejects
+ * them.
  */
 export async function attachTransactionWitnesses(
   payload: Pick<MeltRequest, 'inputs' | 'outputs'> & {
@@ -98,7 +99,7 @@ export async function attachTransactionWitnesses(
 ): Promise<void> {
   const v3Inputs = payload.inputs.filter((p) => isBlsKeyset(p.id) && isV3PointSecret(p.secret));
   if (v3Inputs.length === 0) return;
-  // Each input signs its own input digest over the shared transcript (NUT-10), which names
+  // Each input has its own input digest over the shared transcript (NUT-00), which names
   // inputs by Y, so hash each v3 secret once here.
   // Hashing and signing are curve work per input, so both yield; nothing is posted yet, so an
   // abort here is safe.
